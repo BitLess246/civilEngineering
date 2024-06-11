@@ -233,6 +233,7 @@ function displayResults(volumeConc, materials, mainSteel, reinforcementSteel, ti
     //resultDiv.appendChild(buttonDownload);
 
     console.log("append");
+    document.getElementById('saveButton').style.display = 'block';
 
     return resultsContent1;
 
