@@ -30,31 +30,22 @@ document.addEventListener("DOMContentLoaded", () => {
       console.log("tie wire")
       
       // Call the displayResults function
-      const results = displayResults(volumeConc, materials, mainSteel, reinforcementSteel, tieWire);
-      resContent = results;
+      /* const results = */displayResults(volumeConc, materials, mainSteel, reinforcementSteel, tieWire);
+      // resContent = results;
     } catch (error) {
       console.log(`An error occured:${error}`)
       alert(`An error occured:${error}`)
     } 
   });
 
-  //setTimeout(() => { document.getElementById('formColumn').removeEventListener('submit', function(event){});}, 1000); // after 1 sec remove event listener
-  const saveButtonElement = document.getElementById("saveButton");
-  saveButtonElement.addEventListener("click", () => {
-  let defaultFileName = "file.xml"
-    // Prompt the user for a filename
-  let fileName = window.prompt("Enter a filename:", defaultFileName);
-  // If the user cancels or enters an empty filename, do nothing
-  if (!fileName) return;
-  downloadTextFile(resContent, fileName)
-});
-function downloadTextFile(textContent, fileName){
+function downloadTextFile(content, fileName){
+  const text = content
   fetch('/download',{
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ xml: resContent })
+    body: JSON.stringify({xml: text})
   })
   .then(response => response.blob())
   .then(blob => {
@@ -145,30 +136,35 @@ function displayResults(volumeConc, materials, mainSteel, reinforcementSteel, ti
       <p>Net Length: ${tieWire.netLength} meters</p>
       <p>No. of Rolls: ${tieWire.noRolls} roll/s</p>
     `;
-    const xmlContent = `
+    const xmlContent = 
+    `<?xml version="1.0" encoding="UTF-8"?>
     <summary>
-      <volume>${volumeConc} cubic meter</volume>
+      <description>Summary</description>
+      <volume>Volume: ${volumeConc} cubic meter</volume>
       <concreteMaterials>
-        <cement>${materials.cement} Bags</cement>
-        <sand>${materials.sand} cubic meter</sand>
-        <gravel>${materials.gravel} cubic meter</gravel>
+        <description>Concrete Materials:</description>
+        <cement>Cement: ${materials.cement} Bags</cement>
+        <sand>Sand: ${materials.sand} cubic meter</sand>
+        <gravel>Gravel: ${materials.gravel} cubic meter</gravel>
       </concreteMaterials>
       <mainReinforcements>
-        <netLength>${mainSteel.netLength} meters</netLength>
-        <area>${mainSteel.area.toFixed(6)} square meters</area>
-        <steelWeight diameter="${mainSteel.dia*1000}mm">${mainSteel.steelWeight} kilograms</steelWeight>
+        <description>Main Reinforcements:</description>
+        <netLength>Net Length: ${mainSteel.netLength} meters</netLength>
+        <area>Area: ${mainSteel.area.toFixed(6)} square meters</area>
+        <steelWeight> Steel Weight diameter (${mainSteel.dia*1000}mm): ${mainSteel.steelWeight} kilograms</steelWeight>
       </mainReinforcements>
       <lateralTies>
-        <netLength>${reinforcementSteel.netLength} meters</netLength>
-        <area>${reinforcementSteel.area.toFixed(6)} square meters</area>
-        <steelWeight diameter="${reinforcementSteel.lateralTieDiameter*1000}mm">${reinforcementSteel.steelWeight} kilograms</steelWeight>
+        <description>Lateral Ties:</description>
+        <netLength>Net Length: ${reinforcementSteel.netLength} meters</netLength>
+        <area>Area: ${reinforcementSteel.area.toFixed(6)} square meters</area>
+        <steelWeight> Steel Weight diameter (${reinforcementSteel.lateralTieDiameter*1000}mm): ${reinforcementSteel.steelWeight} kilograms</steelWeight>
       </lateralTies>
       <tieWire>
-        <netLength>${tieWire.netLength} meters</netLength>
-        <rolls>${tieWire.noRolls} roll/s</rolls>
+        <description>Tie Wire:</description>
+        <netLength>Net Length: ${tieWire.netLength} meters</netLength>
+        <rolls>Rolls: ${tieWire.noRolls} roll/s</rolls>
       </tieWire>
-    </summary>
-    `;
+    </summary>`;
     // buttonDownload.innerHTML =`
     // <button id="saveButton">Save</button>
     // `
@@ -182,7 +178,18 @@ function displayResults(volumeConc, materials, mainSteel, reinforcementSteel, ti
     //resultDiv.appendChild(buttonDownload);
     console.log("append");
     
-    return xmlContent;
+    const saveButtonElement = document.getElementById("saveButton");
+    saveButtonElement.addEventListener("click", () => {
+      let defaultFileName = "file.txt"
+        // Prompt the user for a filename
+      let fileName = window.prompt("Enter a filename:", defaultFileName);
+      // If the user cancels or enters an empty filename, do nothing
+      if (!fileName) return;
+      //downloadTextFile(resultDiv, fileName)
+      downloadTextFile(xmlContent, fileName)
+    });
+
+    //return resultsContent1;
     
   }
 

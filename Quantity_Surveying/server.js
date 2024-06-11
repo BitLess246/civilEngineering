@@ -37,9 +37,9 @@ app.post('/download', (req, res) => {
     try {
         const xmlContent = req.body.xml;
         // Set headers to prompt download
-        res.setHeader('Content-Type', 'application/xml');
+        res.setHeader('Content-Type', 'application/json');
         res.setHeader('Content-Disposition', 'attachment; filename=file.xml');
-        // Send the XML content
+        // Send the text content
         res.send(xmlContent);
     } catch (error) {
         // Handle unexpected errors
