@@ -34,7 +34,7 @@ h4 {
     text-align: center;
 }
 
-h5.inline {
+h5.inline, p.inline {
     display: inline;
 }
 h5{

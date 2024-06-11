@@ -135,7 +135,7 @@ function displayResults(volumeConc, materials, mainSteel, reinforcementSteel, ti
       </ol>
       <h3>Summary:</h3>
       <ol>
-      <li><h5 class="inline">Volume:</h5><p> ${volumeConc.volume} cubic meter</p></li>
+      <li><h5 class="inline">Volume:</h5><p class="inline"> ${volumeConc.volume} cubic meter</p></li>
       <li><h5>Concrete Materials:</h5></li>
       <ul>
         <li><p>Cement: ${materials.cement} Bags</p></li>
@@ -145,13 +145,11 @@ function displayResults(volumeConc, materials, mainSteel, reinforcementSteel, ti
       <li><h5>Steel Weight:</h5></li>
       <p><h5>Main Reinforcements:</h5></p>
       <p>Net Length: ${mainSteel.netLength} meters</p>
-      <p>Area: ${mainSteel.area.toFixed(6)} square meters</p>
       <p>Steel Weight (⌀${mainSteel.dia*1000}mm): ${mainSteel.steelWeight} kilograms</p>
       <p><h5>Lateral Ties:</h5></p>
       <p>Net Length: ${reinforcementSteel.netLength} meters</p>
-      <p>Area: ${reinforcementSteel.area.toFixed(6)} square meters</p>
       <p>Steel Weight (⌀${reinforcementSteel.lateralTieDiameter*1000}mm): ${reinforcementSteel.steelWeight} kilograms</p>
-      <li><h5>Tie Wire</h5></li>
+      <li><h5>Tie Wire:</h5></li>
       <p>Net Length: ${tieWire.netLength} meters</p>
       <p>No. of Rolls: ${tieWire.noRolls} roll/s</p>
       </ol>
