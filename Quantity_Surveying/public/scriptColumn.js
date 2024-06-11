@@ -1,4 +1,3 @@
-
 document.addEventListener("DOMContentLoaded", () => {
   let resContent;
   document.getElementById('formColumn').addEventListener('submit', function(event) {
@@ -30,35 +29,57 @@ document.addEventListener("DOMContentLoaded", () => {
       console.log("tie wire")
       
       // Call the displayResults function
-      /* const results = */displayResults(volumeConc, materials, mainSteel, reinforcementSteel, tieWire);
-      // resContent = results;
+      const results = displayResults(volumeConc, materials, mainSteel, reinforcementSteel, tieWire);
+      resContent = results.innerText;
+      console.log(results);
+      console.log(resContent);
     } catch (error) {
       console.log(`An error occured:${error}`)
       alert(`An error occured:${error}`)
     } 
   });
+  
+
+  const saveButtonElement = document.getElementById("saveButton");
+  saveButtonElement.addEventListener("click", function() {
+    let defaultFileName = "file.txt"
+    // Prompt the user for a filename
+    let fileName = window.prompt("Enter a filename:", defaultFileName);
+    // If the user cancels or enters an empty filename, do nothing
+    if (!fileName) return;
+    //downloadTextFile(resultDiv, fileName)
+    downloadTextFile(resContent, fileName)
+  });
 
 function downloadTextFile(content, fileName){
-  const text = content
-  fetch('/download',{
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({xml: text})
-  })
-  .then(response => response.blob())
-  .then(blob => {
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.style.display = 'none';
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-  })
-  .catch(error => console.error('Error:', error));
+  // fetch('/download',{
+  //   method: 'POST',
+  //   headers: {
+  //     'Content-Type': 'text/plain'
+  //   },
+  //   body: JSON.stringify({ text: content})
+  // })
+  // .then(response => response.blob())
+  // .then(blob => {
+  //   const url = window.URL.createObjectURL(blob);
+  //   const a = document.createElement('a');
+  //   a.style.display = 'none';
+  //   a.href = url;
+  //   a.download = fileName;
+  //   document.body.appendChild(a);
+  //   a.click();
+  //   window.URL.revokeObjectURL(url);
+  // })
+  // .catch(error => console.error('Error:', error));
+  const blob = new Blob([content], { type: 'text/plain' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.style.display = 'none';
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
 }
 
 function calculateConcreteVolume(length, width, height, numStructures) {
@@ -177,19 +198,8 @@ function displayResults(volumeConc, materials, mainSteel, reinforcementSteel, ti
     resultDiv.appendChild(resultsContent1);
     //resultDiv.appendChild(buttonDownload);
     console.log("append");
-    
-    const saveButtonElement = document.getElementById("saveButton");
-    saveButtonElement.addEventListener("click", () => {
-      let defaultFileName = "file.txt"
-        // Prompt the user for a filename
-      let fileName = window.prompt("Enter a filename:", defaultFileName);
-      // If the user cancels or enters an empty filename, do nothing
-      if (!fileName) return;
-      //downloadTextFile(resultDiv, fileName)
-      downloadTextFile(xmlContent, fileName)
-    });
 
-    //return resultsContent1;
+    return resultsContent1;
     
   }
 

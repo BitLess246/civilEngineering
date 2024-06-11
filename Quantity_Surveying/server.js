@@ -35,21 +35,19 @@ app.get('/foundation.html', (req, res) => {
 });
 app.post('/download', (req, res) => {
     try {
-        const xmlContent = req.body.xml;
+        const textContent = req.body.text;
         // Set headers to prompt download
-        res.setHeader('Content-Type', 'application/json');
-        res.setHeader('Content-Disposition', 'attachment; filename=file.xml');
+        res.setHeader(`Content-Type`, `text/plain`);
+        res.setHeader(`Content-Disposition`, `attachment; filename=file.txt`);
         // Send the text content
-        res.send(xmlContent);
+        console.log(textContent);
+        res.send(textContent);
     } catch (error) {
         // Handle unexpected errors
         console.error('Error retrieving user data:', error);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
-
-
-
 
 
 server.listen(port, () => {
