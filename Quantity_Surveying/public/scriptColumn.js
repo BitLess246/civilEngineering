@@ -30,8 +30,8 @@ document.addEventListener("DOMContentLoaded", () => {
       console.log("tie wire")
       
       // Call the displayResults function
-      const resultsContent1 = displayResults(volumeConc, materials, mainSteel, reinforcementSteel, tieWire);
-      resContent = resultsContent1.innerText;
+      const results = displayResults(volumeConc, materials, mainSteel, reinforcementSteel, tieWire);
+      resContent = results;
     } catch (error) {
       console.log(`An error occured:${error}`)
       alert(`An error occured:${error}`)
@@ -40,38 +40,35 @@ document.addEventListener("DOMContentLoaded", () => {
 
   //setTimeout(() => { document.getElementById('formColumn').removeEventListener('submit', function(event){});}, 1000); // after 1 sec remove event listener
   const saveButtonElement = document.getElementById("saveButton");
-  saveButtonElement.addEventListener("click", (resContent, defaultFileName = "file.txt") => {
+  saveButtonElement.addEventListener("click", () => {
+  let defaultFileName = "file.xml"
     // Prompt the user for a filename
   let fileName = window.prompt("Enter a filename:", defaultFileName);
-  
   // If the user cancels or enters an empty filename, do nothing
   if (!fileName) return;
-
-  // Create a Blob object with the text content
-  let blob = new Blob([textToSave], {type: "text/plain"});
-
-  // Create a temporary URL for the Blob
-  let url = URL.createObjectURL(blob);
-
-  // Create an <a> element to trigger the download
-  let a = document.createElement("a");
-  a.href = url;
-  a.download = fileName;
-
-  // Append the <a> element to the document and trigger the download
-  document.body.appendChild(a);
-  a.click();
-
-  // Cleanup: revoke the temporary URL and remove the <a> element
-  window.URL.revokeObjectURL(url);
-  document.body.removeChild(a);
-
-  });
-// function saveTextAsFile(textToSave, defaultFileName = "file.txt") {
-//   }
-
-
-
+  downloadTextFile(resContent, fileName)
+});
+function downloadTextFile(textContent, fileName){
+  fetch('/download',{
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ xml: resContent })
+  })
+  .then(response => response.blob())
+  .then(blob => {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+  })
+  .catch(error => console.error('Error:', error));
+}
 
 function calculateConcreteVolume(length, width, height, numStructures) {
     volume = length * width * height * numStructures 
@@ -148,21 +145,44 @@ function displayResults(volumeConc, materials, mainSteel, reinforcementSteel, ti
       <p>Net Length: ${tieWire.netLength} meters</p>
       <p>No. of Rolls: ${tieWire.noRolls} roll/s</p>
     `;
+    const xmlContent = `
+    <summary>
+      <volume>${volumeConc} cubic meter</volume>
+      <concreteMaterials>
+        <cement>${materials.cement} Bags</cement>
+        <sand>${materials.sand} cubic meter</sand>
+        <gravel>${materials.gravel} cubic meter</gravel>
+      </concreteMaterials>
+      <mainReinforcements>
+        <netLength>${mainSteel.netLength} meters</netLength>
+        <area>${mainSteel.area.toFixed(6)} square meters</area>
+        <steelWeight diameter="${mainSteel.dia*1000}mm">${mainSteel.steelWeight} kilograms</steelWeight>
+      </mainReinforcements>
+      <lateralTies>
+        <netLength>${reinforcementSteel.netLength} meters</netLength>
+        <area>${reinforcementSteel.area.toFixed(6)} square meters</area>
+        <steelWeight diameter="${reinforcementSteel.lateralTieDiameter*1000}mm">${reinforcementSteel.steelWeight} kilograms</steelWeight>
+      </lateralTies>
+      <tieWire>
+        <netLength>${tieWire.netLength} meters</netLength>
+        <rolls>${tieWire.noRolls} roll/s</rolls>
+      </tieWire>
+    </summary>
+    `;
     // buttonDownload.innerHTML =`
     // <button id="saveButton">Save</button>
     // `
-    console.log("display")
+    console.log("display");
     // Clear previous results if any
     const resultDiv = document.getElementById("result");
     resultDiv.innerHTML = '';
-    console.log("cleared")
+    console.log("cleared");
     // Insert the results content into the result div
     resultDiv.appendChild(resultsContent1);
     //resultDiv.appendChild(buttonDownload);
-    console.log("append")
+    console.log("append");
     
-    const resultsContentText = resultsContent1.innerText;
-    return resultsContent1
+    return xmlContent;
     
   }
 
