@@ -1,3 +1,4 @@
+import { SaveFile } from './script.js';
 document.addEventListener("DOMContentLoaded", () => {
   let resContent;
   document.getElementById('formColumn').addEventListener('submit', function(event) {
@@ -16,10 +17,10 @@ document.addEventListener("DOMContentLoaded", () => {
       let lateralTieDiameter = parseFloat(document.getElementById('lateralTieDiameter3').value);
       let lengthPerCut = parseFloat(document.getElementById('lengthPerCut3').value);
       let numIntersections = parseInt(document.getElementById('numIntersections3').value);
-
+      
       let volumeConc= calculateConcreteVolume(length,width,height,numStructures)
       console.log("volume")
-      let materials = calculateConcreteMaterials(volume,concreteClass)
+      let materials = calculateConcreteMaterials(volumeConc.volume,concreteClass)
       console.log("conc materials")
       let mainSteel = calculateSteelWeight (lengthPerPiece,numPieces,diameter,numStructures)
       console.log("steel weight")
@@ -43,49 +44,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
   const saveButtonElement = document.getElementById("saveButton");
-  saveButtonElement.addEventListener("click", function() {
-    let defaultFileName = "file.txt"
-    // Prompt the user for a filename
-    let fileName = window.prompt("Enter a filename:", defaultFileName);
-    // If the user cancels or enters an empty filename, do nothing
-    if (!fileName) return;
-    //downloadTextFile(resultDiv, fileName)
-    downloadTextFile(resContent, fileName)
+  saveButtonElement.addEventListener("click", function(){
+    SaveFile(resContent);
   });
 
-function downloadTextFile(content, fileName){
-  // fetch('/download',{
-  //   method: 'POST',
-  //   headers: {
-  //     'Content-Type': 'text/plain'
-  //   },
-  //   body: JSON.stringify({ text: content})
-  // })
-  // .then(response => response.blob())
-  // .then(blob => {
-  //   const url = window.URL.createObjectURL(blob);
-  //   const a = document.createElement('a');
-  //   a.style.display = 'none';
-  //   a.href = url;
-  //   a.download = fileName;
-  //   document.body.appendChild(a);
-  //   a.click();
-  //   window.URL.revokeObjectURL(url);
-  // })
-  // .catch(error => console.error('Error:', error));
-  const blob = new Blob([content], { type: 'text/plain' });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.style.display = 'none';
-  a.href = url;
-  a.download = fileName;
-  document.body.appendChild(a);
-  a.click();
-  window.URL.revokeObjectURL(url);
-}
 
 function calculateConcreteVolume(length, width, height, numStructures) {
-    volume = (length * width * height * numStructures).toFixed(2) 
+    const volume = (length * width * height * numStructures).toFixed(2) 
     return {volume , length, width, height};
   }
 
@@ -113,25 +78,25 @@ function calculateConcreteMaterials(volumeInCubicMeters, concreteClass) {
   }
 
 function calculateSteelWeight(lengthPerPiece, num, dia, numStructures) {
-    netLength = (lengthPerPiece * num  * numStructures).toFixed(2)
-    area = (((Math.PI)/4)*dia**2)
-    noOfPcs= Math.ceil(netLength/5.6) 
-    steelWeight = (noOfPcs * 6 * area * 7850).toFixed(2)
+    const netLength = (lengthPerPiece * num  * numStructures).toFixed(2)
+    const area = (((Math.PI)/4)*dia**2)
+    const noOfPcs= Math.ceil(netLength/5.6) 
+    const steelWeight = (noOfPcs * 6 * area * 7850).toFixed(2)
     return {steelWeight, area, netLength, dia, noOfPcs, lengthPerPiece, num, numStructures };
   }
 
 function calculateLateralTieWeight(lengthPerSet, noShearReinforcement, lateralTieDiameter, numStructures) {
-    netLength = (lengthPerSet * noShearReinforcement  * numStructures).toFixed(2)
-    area = (((Math.PI)/4)*lateralTieDiameter**2)
-    noOfPcs= Math.ceil(netLength/5.6) 
-    steelWeight = (noOfPcs * 6 * area * 7850).toFixed(2)
+    const netLength = (lengthPerSet * noShearReinforcement  * numStructures).toFixed(2)
+    const area = (((Math.PI)/4)*lateralTieDiameter**2)
+    const noOfPcs= Math.ceil(netLength/5.6) 
+    const steelWeight = (noOfPcs * 6 * area * 7850).toFixed(2)
     return {steelWeight, area, netLength, lateralTieDiameter, noOfPcs, lengthPerSet, noShearReinforcement, numStructures };
   }
 
 
 function calculateTieWire(lengthPerCut, numIntersections, numStructures) {
-    netLength = (lengthPerCut * numIntersections  * numStructures).toFixed(2)
-    noRolls = Math.ceil(netLength/2385)
+    const netLength = (lengthPerCut * numIntersections  * numStructures).toFixed(2)
+    const noRolls = Math.ceil(netLength/2385)
     return {netLength, noRolls, lengthPerCut, numIntersections, numStructures};
   }  
 
@@ -220,17 +185,15 @@ function displayResults(volumeConc, materials, mainSteel, reinforcementSteel, ti
         <rolls>Rolls: ${tieWire.noRolls} roll/s</rolls>
       </tieWire>
     </summary>`;
-    // buttonDownload.innerHTML =`
-    // <button id="saveButton">Save</button>
-    // `
+
     console.log("display");
     // Clear previous results if any
     const resultDiv = document.getElementById("result");
     resultDiv.innerHTML = '';
     console.log("cleared");
-    // Insert the results content into the result div
+ 
     resultDiv.appendChild(resultsContent1);
-    //resultDiv.appendChild(buttonDownload);
+   
 
     console.log("append");
     document.getElementById('saveButton').style.display = 'block';
@@ -238,32 +201,5 @@ function displayResults(volumeConc, materials, mainSteel, reinforcementSteel, ti
     return resultsContent1;
 
   }
-
-//   function saveTextAsFile(textToSave, defaultFileName = "file.txt") {
-//     // Prompt the user for a filename
-//     var fileName = window.prompt("Enter a filename:", defaultFileName);
-    
-//     // If the user cancels or enters an empty filename, do nothing
-//     if (!fileName) return;
-
-//     // Create a Blob object with the text content
-//     var blob = new Blob([textToSave], {type: "text/plain"});
-
-//     // Create a temporary URL for the Blob
-//     var url = URL.createObjectURL(blob);
-
-//     // Create an <a> element to trigger the download
-//     var a = document.createElement("a");
-//     a.href = url;
-//     a.download = fileName;
-
-//     // Append the <a> element to the document and trigger the download
-//     document.body.appendChild(a);
-//     a.click();
-
-//     // Cleanup: revoke the temporary URL and remove the <a> element
-//     window.URL.revokeObjectURL(url);
-//     document.body.removeChild(a);
-// }
 
 });
