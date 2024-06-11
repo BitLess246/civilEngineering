@@ -4,7 +4,18 @@ body {
     margin: 0;
     padding: 0;
 }
-
+p {
+    font-size: 12px;
+    line-height: 1.2; /* Adjust the line height */
+    margin-top: 0; /* Remove top margin */
+    margin-bottom: 0.2em; /* Adjust bottom margin */
+}
+li {
+    
+    line-height: 0.5; /* Adjust the line height */
+    margin-top: 0; /* Remove top margin */
+    margin-bottom: 0;
+}
 .container {
     width: 90%;
     max-width: 600px;
@@ -22,6 +33,15 @@ h1 {
 h4 {
     text-align: center;
 }
+
+h5.inline {
+    display: inline;
+}
+h5{
+    margin-top: 10px; /* Adjust the top margin to 20 pixels */
+    margin-bottom: 10px;
+}
+
 .form-group {
     margin-bottom: 15px;
 }

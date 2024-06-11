@@ -3,11 +3,11 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById('formColumn').addEventListener('submit', function(event) {
     event.preventDefault();
     try {
-      const length = parseFloat(document.getElementById('length3').value);
-      const width = parseFloat(document.getElementById('width3').value);
-      const height = parseFloat(document.getElementById('height3').value);
-      const numStructures = parseInt(document.getElementById('numStructures3').value);
-      const concreteClass = document.getElementById('concreteClass3').value;
+      let length = parseFloat(document.getElementById('length3').value);
+      let width = parseFloat(document.getElementById('width3').value);
+      let height = parseFloat(document.getElementById('height3').value);
+      let numStructures = parseInt(document.getElementById('numStructures3').value);
+      let concreteClass = document.getElementById('concreteClass3').value;
       let lengthPerPiece = parseFloat(document.getElementById('lengthPerPiece3').value);
       let numPieces = parseInt(document.getElementById('numPieces3').value);
       let diameter = parseFloat(document.getElementById('diameter3').value);
@@ -17,18 +17,19 @@ document.addEventListener("DOMContentLoaded", () => {
       let lengthPerCut = parseFloat(document.getElementById('lengthPerCut3').value);
       let numIntersections = parseInt(document.getElementById('numIntersections3').value);
 
-      const volumeConc= calculateConcreteVolume(length,width,height,numStructures)
+      let volumeConc= calculateConcreteVolume(length,width,height,numStructures)
       console.log("volume")
-      const materials = calculateConcreteMaterials(volume,concreteClass)
+      let materials = calculateConcreteMaterials(volume,concreteClass)
       console.log("conc materials")
-      const mainSteel = calculateSteelWeight (lengthPerPiece,numPieces,diameter,numStructures)
+      let mainSteel = calculateSteelWeight (lengthPerPiece,numPieces,diameter,numStructures)
       console.log("steel weight")
-      const reinforcementSteel = calculateLateralTieWeight (lengthPerSet, noShearReinforcement, lateralTieDiameter,numStructures)
+      let reinforcementSteel = calculateLateralTieWeight (lengthPerSet, noShearReinforcement, lateralTieDiameter,numStructures)
       console.log("reinf steel weight")
-      const tieWire = calculateTieWire(lengthPerCut, numIntersections, numStructures)
+      let tieWire = calculateTieWire(lengthPerCut, numIntersections, numStructures)
       console.log("tie wire")
       
       // Call the displayResults function
+
       const results = displayResults(volumeConc, materials, mainSteel, reinforcementSteel, tieWire);
       resContent = results.innerText;
       console.log(results);
@@ -39,6 +40,7 @@ document.addEventListener("DOMContentLoaded", () => {
     } 
   });
   
+
 
   const saveButtonElement = document.getElementById("saveButton");
   saveButtonElement.addEventListener("click", function() {
@@ -83,8 +85,8 @@ function downloadTextFile(content, fileName){
 }
 
 function calculateConcreteVolume(length, width, height, numStructures) {
-    volume = length * width * height * numStructures 
-    return volume.toFixed(2);
+    volume = (length * width * height * numStructures).toFixed(2) 
+    return {volume , length, width, height};
   }
 
 function calculateConcreteMaterials(volumeInCubicMeters, concreteClass) {
@@ -113,22 +115,24 @@ function calculateConcreteMaterials(volumeInCubicMeters, concreteClass) {
 function calculateSteelWeight(lengthPerPiece, num, dia, numStructures) {
     netLength = (lengthPerPiece * num  * numStructures).toFixed(2)
     area = (((Math.PI)/4)*dia**2)
-    steelWeight = (netLength * area * 7850).toFixed(2)
-    return {steelWeight, area, netLength, dia };
+    noOfPcs= Math.ceil(netLength/5.6) 
+    steelWeight = (noOfPcs * 6 * area * 7850).toFixed(2)
+    return {steelWeight, area, netLength, dia, noOfPcs, lengthPerPiece, num, numStructures };
   }
 
 function calculateLateralTieWeight(lengthPerSet, noShearReinforcement, lateralTieDiameter, numStructures) {
     netLength = (lengthPerSet * noShearReinforcement  * numStructures).toFixed(2)
     area = (((Math.PI)/4)*lateralTieDiameter**2)
-    steelWeight = (netLength * area * 7850).toFixed(2)
-    return {steelWeight, area, netLength, lateralTieDiameter };
+    noOfPcs= Math.ceil(netLength/5.6) 
+    steelWeight = (noOfPcs * 6 * area * 7850).toFixed(2)
+    return {steelWeight, area, netLength, lateralTieDiameter, noOfPcs, lengthPerSet, noShearReinforcement, numStructures };
   }
 
 
 function calculateTieWire(lengthPerCut, numIntersections, numStructures) {
     netLength = (lengthPerCut * numIntersections  * numStructures).toFixed(2)
     noRolls = Math.ceil(netLength/2385)
-    return {netLength, noRolls};
+    return {netLength, noRolls, lengthPerCut, numIntersections, numStructures};
   }  
 
 
@@ -137,25 +141,55 @@ function displayResults(volumeConc, materials, mainSteel, reinforcementSteel, ti
     const resultsContent1 = document.createElement('div');
     const buttonDownload = document.createElement('div')
     resultsContent1.innerHTML = `
-      <h3>Summary:</h3>
-      <p>Volume: ${volumeConc} cubic meter</p>
-      <p>Concrete Materials:</p>
-      <ul>
-        <li>Cement: ${materials.cement} Bags</li>
-        <li>Sand: ${materials.sand} cubic meter</li>
-        <li>Gravel: ${materials.gravel} cubic meter</li>
+      <h3>Solution:</h3>
+      <ol>
+        <li><h5>Concrete Volume Calculation</h5></li>
+          <p>Volume = ${volumeConc.length} * ${volumeConc.width} * ${volumeConc.height} = ${volumeConc.volume} cubic meter</p>
+        <li><h5>Concrete Materials Calculation</h5></li>
+        <ul>
+        <li><p>Cement = ${volumeConc.volume} * ${materials.factorOfCement} = ${materials.cement} Bags</p></li>
+        <li><p>Sand = ${volumeConc.volume} * 0.5 = ${materials.sand} cubic meter</p></li>
+        <li><p>Gravel = ${volumeConc.volume} * 1 = ${materials.gravel} cubic meter</p></li>
       </ul>
-      <p>Main Reinforcements:</p>
+        <li><h5>Steel Weight Calculation</h5></li>
+          <p><h5>Main Reinforcements:</h5></p>
+          <p>Net length = ${mainSteel.lengthPerPiece} * ${mainSteel.num} *${mainSteel.numStructures} = ${mainSteel.netLength} meters </p>
+          <p>Area = (π/4) * ${mainSteel.dia}^2 = ${mainSteel.area.toFixed(6)} square meters</p>
+          <p>No. of Bars = ${mainSteel.netLength} / 5.6 ≈ ${mainSteel.noOfPcs} pieces</p>
+          <p>Steel Weight = ${mainSteel.noOfPcs} * 6 * ${mainSteel.area.toFixed(6)} * 7850 = ${mainSteel.steelWeight} kilograms</p>
+          <p><h5>Lateral Ties:</h5></p>
+          <p>Net length = ${reinforcementSteel.lengthPerSet} * ${reinforcementSteel.noShearReinforcement} *${reinforcementSteel.numStructures} = ${reinforcementSteel.netLength} meters </p>
+          <p>Area = (π/4) * ${reinforcementSteel.lateralTieDiameter}^2 = ${reinforcementSteel.area.toFixed(6)} square meters</p>
+          <p>No. of Bars = ${reinforcementSteel.netLength} / 5.6 ≈ ${reinforcementSteel.noOfPcs} pieces</p>
+          <p>Steel Weight = ${reinforcementSteel.noOfPcs} * 6 * ${reinforcementSteel.area.toFixed(6)} * 7850 = ${reinforcementSteel.steelWeight} kilograms</p>
+        <li><h5>G.I. Tie Wire Calculation</h5></li>
+          <p>Total Length = length per cut * number of intersections * number of structures</p>
+          <p>Number of Rolls = total length / 2385</p>
+          <p>Total Length =  ${tieWire.lengthPerCut} * ${tieWire.numIntersections} * ${tieWire.numStructures} = ${tieWire.netLength} meters</p>
+          <p>Number of Rolls = ${tieWire.netLength} / 2385 = ${tieWire.netLength/2385} ≈ ${tieWire.noRolls} roll/s</p>
+      </ol>
+      <h3>Summary:</h3>
+      <ol>
+      <li><h5 class="inline">Volume:</h5><p> ${volumeConc.volume} cubic meter</p></li>
+      <li><h5>Concrete Materials:</h5></li>
+      <ul>
+        <li><p>Cement: ${materials.cement} Bags</p></li>
+        <li><p>Sand: ${materials.sand} cubic meter</p></li>
+        <li><p>Gravel: ${materials.gravel} cubic meter</p></li>
+      </ul>
+      <li><h5>Steel Weight:</h5></li>
+      <p><h5>Main Reinforcements:</h5></p>
       <p>Net Length: ${mainSteel.netLength} meters</p>
       <p>Area: ${mainSteel.area.toFixed(6)} square meters</p>
       <p>Steel Weight (⌀${mainSteel.dia*1000}mm): ${mainSteel.steelWeight} kilograms</p>
-      <p>Lateral Ties:</p>
+      <p><h5>Lateral Ties:</h5></p>
       <p>Net Length: ${reinforcementSteel.netLength} meters</p>
       <p>Area: ${reinforcementSteel.area.toFixed(6)} square meters</p>
       <p>Steel Weight (⌀${reinforcementSteel.lateralTieDiameter*1000}mm): ${reinforcementSteel.steelWeight} kilograms</p>
-      <p>Tie Wire</p>
+      <li><h5>Tie Wire</h5></li>
       <p>Net Length: ${tieWire.netLength} meters</p>
       <p>No. of Rolls: ${tieWire.noRolls} roll/s</p>
+      </ol>
     `;
     const xmlContent = 
     `<?xml version="1.0" encoding="UTF-8"?>
@@ -197,10 +231,11 @@ function displayResults(volumeConc, materials, mainSteel, reinforcementSteel, ti
     // Insert the results content into the result div
     resultDiv.appendChild(resultsContent1);
     //resultDiv.appendChild(buttonDownload);
+
     console.log("append");
 
     return resultsContent1;
-    
+
   }
 
 //   function saveTextAsFile(textToSave, defaultFileName = "file.txt") {
