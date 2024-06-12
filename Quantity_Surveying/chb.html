@@ -25,14 +25,25 @@
             </select>
             <form id="formChb">
                 <div id="CHBInputs" class="form-group">
-                    <div id="concreteWorks" class="container">
+                    <div id="masonryWorks" class="container">
                         <h4>Masonry Works</h4>
+                        <select id="chbType" name="chbType">
+                            <option value="" disabled selected>Select The Type Of Concrete Hollow Block</option>
+                            <option value="4">4"</option>
+                            <option value="6">6"</option>
+                            <option value="8">8"</option>
+                        </select>
                         <label for="wallArea">Gross Wall Area (in square meter):</label>
                         <input type="number" id="wallArea" step="0.01"  >
-
+                        <label for="holeArea">Gross Hole Area (in square meter):</label>
+                        <input type="number" id="holeArea" step="0.01"  >
                     </div>
                 </div>
+                <button type="submit">Calculate</button>
             </form>
+            <div id="result"></div>
+            <button id="saveButton" style="display: none;">Save</button>
+            <script src="/scriptChb.js" defer></script>
         </div>
     </div>
 </body>
