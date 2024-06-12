@@ -193,7 +193,7 @@ function netLengthCalculation(lengthPerPiece, numBars, numStructures) {
 function displayResults(volumeConc, materials, reinforcementSteel, tieWire, text1, text2) {
   // Create HTML elements or text to display results
   const resultsContent1 = document.createElement('div');
-  const buttonDownload = document.createElement('div')
+  const buttonDownload = document.createElement('div');// Pwede ata wala na to
   resultsContent1.innerHTML = `
     <h3>Solution:</h3>
     <ol>
@@ -239,9 +239,7 @@ function displayResults(volumeConc, materials, reinforcementSteel, tieWire, text
     <p>Net Length: ${tieWire.netLength} meters</p>
     <p>No. of Rolls: ${tieWire.noRolls} roll/s</p>
     </ol>
-  `;// buttonDownload.innerHTML =`
-  // <button id="saveButton">Save</button>
-  // `
+  `;
   console.log("display");
   // Clear previous results if any
   const resultDiv = document.getElementById("result");
