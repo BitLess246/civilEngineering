@@ -10,6 +10,8 @@ document.addEventListener("DOMContentLoaded", () => {
             window.location.href = 'beam.html';
         } else if (selectedOption === 'foundation') {
             window.location.href = 'foundation.html';
+        } else if (selectedOption === 'chb') {
+            window.location.href = 'chb.html';
         }
     }catch (error)
         {console.error('Error loading content:', error)}
