@@ -49,7 +49,7 @@ document.addEventListener("DOMContentLoaded", () => {
         let longSteelWeight = calculateSteelWeight(longSpanLength,numLongSpanPieces,longSpanDiameter,numStructures);
         let shortSteelWeight = calculateSteelWeight(shortSpanLength,numShortSpanPieces,shortSpanDiameter,numStructures);
         let text2 =`
-        <h5>@ Long Span</h5>
+        <p><h5>@ Long Span</h5></p>
         <p>Net length = ${longSteelWeight.lengthPerPiece} * ${longSteelWeight.num} *${longSteelWeight.numStructures} = ${longSteelWeight.netLength} meters </p>
         <p>Area = (π/4) * ${longSteelWeight.dia}^2 = ${longSteelWeight.area.toFixed(6)} square meters</p>
         <p>No. of Bars = ${longSteelWeight.netLength} / 5.6 ≈ ${longSteelWeight.noOfPcs} pieces</p>
@@ -61,7 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <p>Steel Weight = ${shortSteelWeight.noOfPcs} * 6 * ${shortSteelWeight.area.toFixed(6)} * 7850 = ${shortSteelWeight.steelWeight} kilograms</p>
         `;
         let text4 = `
-        <h5>@ Long Span</h5>
+        <p><h5>@ Long Span</h5></p>
         <p>Net Length: ${longSteelWeight.netLength} meters</p>
         <p>Steel Weight (⌀${longSteelWeight.dia*1000}mm): ${longSteelWeight.steelWeight} kilograms</p>
         <h5>@ Short Span</h5>
@@ -124,7 +124,7 @@ document.addEventListener("DOMContentLoaded", () => {
     
 function calculateConcreteVolume(length, width, height, numStructures) {
     const volume = (length * width * height * numStructures).toFixed(2) 
-    return {volume , length, width, height};
+    return {volume , length, width, height, numStructures};
 }
   
 function calculateConcreteMaterials(volumeInCubicMeters, concreteClass) {
@@ -173,7 +173,7 @@ function displayResults(volumeConc, materials, text, text2, tieWire) {
       <h3>Solution:</h3>
       <ol>
         <li><h5>Concrete Volume Calculation</h5></li>
-          <p>Volume = ${volumeConc.length} * ${volumeConc.width} * ${volumeConc.height} = ${volumeConc.volume} cubic meter</p>
+          <p>Volume = ${volumeConc.length} * ${volumeConc.width} * ${volumeConc.height} * ${volumeConc.numStructures} = ${volumeConc.volume} cubic meter</p>
         <li><h5>Concrete Materials Calculation</h5></li>
         <ul>
         <li><p>Cement = ${volumeConc.volume} * ${materials.factorOfCement} = ${materials.cement} Bags</p></li>

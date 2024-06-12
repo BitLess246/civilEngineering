@@ -135,7 +135,7 @@ saveButtonElement.addEventListener("click", function(){
 
 function calculateConcreteVolume(length, width, height, numStructures) {
   const volume = (length * width * height * numStructures).toFixed(2) 
-  return {volume , length, width, height};
+  return {volume , length, width, height, numStructures};
 }
 
 function calculateConcreteMaterials(volumeInCubicMeters, concreteClass) {
@@ -198,7 +198,7 @@ function displayResults(volumeConc, materials, reinforcementSteel, tieWire, text
     <h3>Solution:</h3>
     <ol>
       <li><h5>Concrete Volume Calculation</h5></li>
-        <p>Volume = ${volumeConc.length} * ${volumeConc.width} * ${volumeConc.height} = ${volumeConc.volume} cubic meter</p>
+        <p>Volume = ${volumeConc.length} * ${volumeConc.width} * ${volumeConc.height} * ${volumeConc.numStructures} = ${volumeConc.volume} cubic meter</p>
       <li><h5>Concrete Materials Calculation</h5></li>
       <ul>
       <li><p>Cement = ${volumeConc.volume} * ${materials.factorOfCement} = ${materials.cement} Bags</p></li>
