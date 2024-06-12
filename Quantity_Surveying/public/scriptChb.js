@@ -92,7 +92,7 @@ function displayResults(wallArea, holeArea, netArea, piecesCHB, plaster, mortar,
         <li><p>Cement = ${netArea} * 0.3 = ${plaster.cement} Bags</p></li>
         <li><p>Sand = ${netArea} * 0.025 = ${plaster.sand} cubic meter</p></li> 
         </ul>
-        <li><p>No. of CHB = ${netArea} * 12.5 = ${netArea*12.5} ≈ ${piecesCHB} pieces, ${size}inches CHB</p></li>
+        <li><h5>No. of CHB = ${netArea} * 12.5 = ${netArea*12.5} ≈ ${piecesCHB} pieces, ${size}inches CHB</h5></li>
       </ol>
       <h3>Summary:</h3>
       <ol>
@@ -102,7 +102,7 @@ function displayResults(wallArea, holeArea, netArea, piecesCHB, plaster, mortar,
         <li><p>Cement: ${mortar.cement} + ${plaster.cement} = ${parseInt(mortar.cement) + parseInt(plaster.cement)}Bags</p></li>
         <li><p>Sand: ${mortar.sand} + ${plaster.sand} = ${parseFloat(mortar.sand) + parseFloat(plaster.sand)} cubic meter</p></li>
       </ul>
-      <li><p>No. of CHB: ${piecesCHB} pieces, ${size}inches CHB</p></li>
+      <li><h5>No. of CHB: ${piecesCHB} pieces, ${size}inches CHB</h5></li>
       </ol>
     `;
     
