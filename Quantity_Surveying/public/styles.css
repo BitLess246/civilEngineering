@@ -42,6 +42,11 @@ h5{
     margin-bottom: 10px;
 }
 
+h6{
+    margin-top: 2px; /* Adjust the top margin to 20 pixels */
+    margin-bottom: 2px;
+}
+
 .form-group {
     margin-bottom: 15px;
 }

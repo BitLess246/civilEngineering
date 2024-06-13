@@ -11,12 +11,14 @@ document.addEventListener("DOMContentLoaded", () => {
         let concreteClass = document.getElementById('concreteClass').value;
         //Steel Works
         console.log(`2`);
+        let spliceLength = parseFloat(document.getElementById('lengthPerSplice').value);
         let longSpanLength = parseFloat(document.getElementById('longSpanLength').value);
         let numLongSpanPieces = parseInt(document.getElementById('numLongSpanPieces').value);
         let shortSpanLength = parseFloat(document.getElementById('shortSpanLength').value);
         let numShortSpanPieces = parseInt(document.getElementById('numShortSpanPieces').value);
         let longSpanDiameter = parseFloat(document.getElementById('longSpanDiameter').value);
         let shortSpanDiameter = parseFloat(document.getElementById('shortSpanDiameter').value);
+        let cementFactorSpecific = parseFloat(document.getElementById('cementFactor').value);
         //Tie Wire
         console.log(`3`);
         let lengthPerCut = parseFloat(document.getElementById('lengthPerCut1').value);
@@ -24,9 +26,9 @@ document.addEventListener("DOMContentLoaded", () => {
         //Calculations
         console.log(`4`);
         let volumeConc = calculateConcreteVolume(slabArea,thickness,numStructures);
-        let materials = calculateConcreteMaterials(volumeConc.volume,concreteClass);
-        let mainSteel1 = calculateSteelWeight(longSpanLength,numLongSpanPieces,longSpanDiameter,numStructures);
-        let mainSteel2 = calculateSteelWeight(shortSpanLength,numShortSpanPieces,shortSpanDiameter,numStructures);
+        let materials = calculateConcreteMaterials(volumeConc.volume,concreteClass,cementFactorSpecific);
+        let mainSteel1 = calculateSteelWeight(longSpanLength,numLongSpanPieces,longSpanDiameter,numStructures,spliceLength);
+        let mainSteel2 = calculateSteelWeight(shortSpanLength,numShortSpanPieces,shortSpanDiameter,numStructures,spliceLength);
         let totalSteelWeight = parseFloat(mainSteel1.steelWeight) + parseFloat(mainSteel2.steelWeight);
         let tieWire = calculateTieWire(lengthPerCut,numIntersections,numStructures);
         //Display
@@ -54,7 +56,7 @@ function calculateConcreteVolume(area, thickness, numStructures) {
     return {volume , area, thickness, numStructures};
   }
 
-function calculateConcreteMaterials(volumeInCubicMeters, concreteClass) {
+function calculateConcreteMaterials(volumeInCubicMeters, concreteClass, factor) {
     const factors = {
       "AA": 12,
       "A": 9,
@@ -62,9 +64,9 @@ function calculateConcreteMaterials(volumeInCubicMeters, concreteClass) {
       "C": 6,
     };
   
-    const factorOfCement = factors[concreteClass.toUpperCase()] || 0; // Use get or default to 0
+    let factorOfCement = factors[concreteClass.toUpperCase()] || 0; // Use get or default to 0
     if (factorOfCement === 0) {
-      throw new Error("Invalid concrete class. Choose from AA, A, B, or C.");
+      factorOfCement = factor;
     }
   
     const factorOfSand = 0.5;
@@ -77,12 +79,13 @@ function calculateConcreteMaterials(volumeInCubicMeters, concreteClass) {
     return {cement, sand, gravel, factorOfCement};
   }
 
-function calculateSteelWeight(lengthPerPiece, num, dia, numStructures) {
-    const netLength = (lengthPerPiece * num  * numStructures).toFixed(2)
-    const area = (((Math.PI)/4)*dia**2)
-    const noOfPcs= Math.ceil(netLength/5.6) 
-    const steelWeight = (noOfPcs * 6 * area * 7850).toFixed(2)
-    return {steelWeight, area, netLength, dia, noOfPcs, lengthPerPiece, num, numStructures };
+  function calculateSteelWeight(lengthPerPiece, num, dia, numStructures, spliceLength) {
+    const netLength = (lengthPerPiece * num  * numStructures).toFixed(2);  
+    let area = (((Math.PI)/4)*dia**2);
+    let splice = 6 - spliceLength;
+    let noOfPcs= Math.ceil(netLength/splice);
+    let steelWeight = (noOfPcs * 6 * area * 7850).toFixed(2);
+    return {steelWeight, area, netLength, dia, noOfPcs, lengthPerPiece, num,splice,numStructures };
   }
 
 
@@ -114,12 +117,12 @@ function displayResults(volumeConc, materials, mainSteel1,mainSteel2,totalSteelW
           <h5>@ Long Span</h5> 
           <p>Net length = ${mainSteel1.lengthPerPiece} * ${mainSteel1.num} *${mainSteel1.numStructures} = ${mainSteel1.netLength} meters </p>
           <p>Area = (π/4) * ${mainSteel1.dia}^2 = ${mainSteel1.area.toFixed(6)} square meters</p>
-          <p>No. of Bars = ${mainSteel1.netLength} / 5.6 ≈ ${mainSteel1.noOfPcs} pieces</p>
+          <p>No. of Bars = ${mainSteel1.netLength} / ${mainSteel1.splice} ≈ ${mainSteel1.noOfPcs} pieces</p>
           <p>Steel Weight = ${mainSteel1.noOfPcs} * 6 * ${mainSteel1.area.toFixed(6)} * 7850 = ${mainSteel1.steelWeight} kilograms</p>
           <h5>@ Short Span</h5> 
           <p>Net length = ${mainSteel2.lengthPerPiece} * ${mainSteel2.num} *${mainSteel2.numStructures} = ${mainSteel2.netLength} meters </p>
           <p>Area = (π/4) * ${mainSteel2.dia}^2 = ${mainSteel2.area.toFixed(6)} square meters</p>
-          <p>No. of Bars = ${mainSteel2.netLength} / 5.6 ≈ ${mainSteel2.noOfPcs} pieces</p>
+          <p>No. of Bars = ${mainSteel2.netLength} / ${mainSteel2.splice} ≈ ${mainSteel2.noOfPcs} pieces</p>
           <p>Steel Weight = ${mainSteel2.noOfPcs} * 6 * ${mainSteel2.area.toFixed(6)} * 7850 = ${mainSteel2.steelWeight} kilograms</p>
           <p>Total Steel Weight = ${mainSteel1.steelWeight} + ${mainSteel2.steelWeight} = ${totalSteelWeight} kilograms</p>
          <li><h5>G.I. Tie Wire Calculation</h5></li>

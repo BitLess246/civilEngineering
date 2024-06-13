@@ -9,6 +9,7 @@ document.addEventListener("DOMContentLoaded", () => {
       let height = parseFloat(document.getElementById('height3').value);
       let numStructures = parseInt(document.getElementById('numStructures3').value);
       let concreteClass = document.getElementById('concreteClass').value;
+      let cementFactorSpecific = parseFloat(document.getElementById('cementFactor').value);
       let lengthPerPiece = parseFloat(document.getElementById('lengthPerPiece3').value);
       let numPieces = parseInt(document.getElementById('numPieces3').value);
       let diameter = parseFloat(document.getElementById('diameter3').value);
@@ -20,7 +21,7 @@ document.addEventListener("DOMContentLoaded", () => {
       
       let volumeConc= calculateConcreteVolume(length,width,height,numStructures)
       console.log("volume")
-      let materials = calculateConcreteMaterials(volumeConc.volume,concreteClass)
+      let materials = calculateConcreteMaterials(volumeConc.volume,concreteClass,cementFactorSpecific)
       console.log("conc materials")
       let mainSteel = calculateSteelWeight (lengthPerPiece,numPieces,diameter,numStructures)
       console.log("steel weight")
@@ -54,7 +55,7 @@ function calculateConcreteVolume(length, width, height, numStructures) {
     return {volume , length, width, height, numStructures};
   }
 
-function calculateConcreteMaterials(volumeInCubicMeters, concreteClass) {
+function calculateConcreteMaterials(volumeInCubicMeters, concreteClass, factor) {
     const factors = {
       "AA": 12,
       "A": 9,
@@ -62,9 +63,9 @@ function calculateConcreteMaterials(volumeInCubicMeters, concreteClass) {
       "C": 6,
     };
   
-    const factorOfCement = factors[concreteClass.toUpperCase()] || 0; // Use get or default to 0
+    let factorOfCement = factors[concreteClass.toUpperCase()] || 0; // Use get or default to 0
     if (factorOfCement === 0) {
-      throw new Error("Invalid concrete class. Choose from AA, A, B, or C.");
+      factorOfCement = factor;  
     }
   
     const factorOfSand = 0.5;
