@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Material Quantity Estimator</title>
+
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/layout_script.js" defer></script>
+    <script src="/specificCementFactor.js" defer></script>
+    <script type="module" src="/scriptBoxCulvert.js" defer ></script>
+    
+</head>
+<body>
+    <div class="container">
+        <h1>Material Quantity Estimator</h1>
+        <div class="form-group">
+            <label for="structureType">Select Structure Type:</label>
+            <select id="structureType" name="structureType">
+		        <option value="" disabled>Select The Type Of Structure</option>
+                <option value="slab">Slab</option>
+                <option value="column" selected>Column</option>
+                <option value="beam">Beam</option>
+                <option value="foundation">Foundation</option>
+                <option value="chb">CHB Wall</option>
+                <option value="BoxCulvert">Box Culvert</option>
+            </select>
+            <form id="formColumn">
+            <div id="columnInputs" class="form-group">
+                <div id="concreteWorks" class="container">
+                    <h4>Concrete Works</h4>
+                    <label for="grossArea">Gross Area of Concrete (in square meters):</label>
+                    <input type="number" id="grossArea" step="0.01"  >
+                    <label for="holeArea">Hole Area (in square meters):</label>
+                    <input type="number" id="holeArea" step="0.01"  >
+                    <label for="length">Length (in meters):</label>
+                    <input type="number" id="length" step="0.01"  >
+                    <label for="numStructures">Number of Structures:</label>
+                    <input type="number" id="numStructures" step="1"  >
+                    <label for="concreteClass">Concrete Class:</label>
+                    <select id="concreteClass" name="concreteClass">
+                        <option value="AA">AA</option>
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                        <option value="0">Other</option>
+                    </select>
+                    <label for="cementFactor" id="cementFactorLabel" style="display: none;">Please specify the Cement Factor to be used:</label>
+                    <input type="number" id="cementFactor" step="0.1" style="display: none;" >
+                </div>
+                
+                <div id="steelWorks" class="container">
+                    <h4>Steel Works</h4>
+                    <label for="lengthPerLongitudinalBar">Length per piece of Longitudinal Bar (in meters):</label>
+                    <input type="number" id="lengthPerLongitudinalBar" step="0.01"  >
+                    <label for="numPieces3">Number of pieces per structure:</label>
+                    <input type="number" id="numPieces3" step="1"  >
+                    <label for="diameter3">Diameter of the steel (in meters):</label>
+                    <input type="number" id="diameter3" step="0.001"  >
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="useLateralTies3">Does the structure use lateral ties or stirrups? (yes/no):</label>
+                <select id="useLateralTies3" name="useLateralTies3">
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                </select>
+            </div>
+
+            <div id="lateralTiesInputs3" class="form-group">
+                <label for="noShearReinforcement3">Number of shear reinforcement per structure:</label>
+                <input type="number" id="noShearReinforcement3" step="1"  >
+                <label for="lengthPerSet3">Total length of 1 set of reinforcement (in meters):</label>
+                <input type="number" id="lengthPerSet3" step="0.01"  >
+                <label for="lateralTieDiameter3">Diameter of the lateral tie steel (in meters):</label>
+                <input type="number" id="lateralTieDiameter3" step="0.001"  >
+            </div>
+
+            <div class="form-group">
+                <label for="lengthPerCut3">Length per cut of tie (in meters):</label>
+                <input type="number" id="lengthPerCut3" step="0.01"  >
+                <label for="numIntersections3">Number of intersections:</label>
+                <input type="number" id="numIntersections3" step="1"  >
+            </div>
+
+            <button type="submit" id="calc">Calculate</button>
+            
+        </form>
+        <div id="result"></div>
+        <button id="saveButton" style="display: none;">Save</button>
+        <script src="/scriptBoxCulvert.js" defer></script>
+    </div>
+</div>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+                    

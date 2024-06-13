@@ -12,6 +12,8 @@ document.addEventListener("DOMContentLoaded", () => {
             window.location.href = 'foundation.html';
         } else if (selectedOption === 'chb') {
             window.location.href = 'chb.html';
+        } else if (selectedOption === 'boxCulvert') {
+            window.location.href = 'boxCulvert.html';
         }
     }catch (error)
         {console.error('Error loading content:', error)}
