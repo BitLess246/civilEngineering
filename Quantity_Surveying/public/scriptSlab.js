@@ -8,7 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
         let slabArea = parseFloat(document.getElementById('slabArea').value);
         let thickness = parseFloat(document.getElementById('thickness').value);
         let numStructures = parseInt(document.getElementById('numStructures1').value);
-        let concreteClass = document.getElementById('concreteClass1').value;
+        let concreteClass = document.getElementById('concreteClass').value;
         //Steel Works
         console.log(`2`);
         let longSpanLength = parseFloat(document.getElementById('longSpanLength').value);
