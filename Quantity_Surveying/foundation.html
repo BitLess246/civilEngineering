@@ -74,21 +74,19 @@
                             <label for="shortSpanDiameter">Diameter of steel along the Short Span:</label>
                             <input type="number" id="shortSpanDiameter" step="0.001"  >
                         </div>
+                        <div class="container">
+                            <h3>Others</h3>
+                            <label for="lengthPerCut">Length per cut of tie (in meters):</label>
+                            <input type="number" id="lengthPerCut" step="0.01"  >
+                            <label for="numIntersections">Number of intersections:</label>
+                            <input type="number" id="numIntersections" step="1"  >
+                        </div>
                     </div>
                 </div>
-    
-                <div class="form-group">
-                    <label for="lengthPerCut">Length per cut of tie (in meters):</label>
-                    <input type="number" id="lengthPerCut" step="0.01"  >
-                    <label for="numIntersections">Number of intersections:</label>
-                    <input type="number" id="numIntersections" step="1"  >
-                </div>
-    
                 <button type="submit">Calculate</button>
             </form>
             <div id="result"></div>
             <button id="saveButton" style="display: none;">Save</button>
-            
         </div>
     </div>
 </body>

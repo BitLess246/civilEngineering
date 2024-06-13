@@ -10,6 +10,8 @@ document.addEventListener("DOMContentLoaded", () => {
       let height = parseFloat(document.getElementById('height2').value);
       let numStructures = parseInt(document.getElementById('numStructures2').value);
       let concreteClass = document.getElementById('concreteClass').value;
+      let cementFactorSpecific = parseFloat(document.getElementById('cementFactor').value);
+      
       let spliceLength = parseFloat(document.getElementById('lengthPerSplice').value);
       console.log("2")
       let topLengthPerPieceSupport = parseFloat(document.getElementById('topLengthPerPieceSupport').value);
@@ -102,7 +104,7 @@ document.addEventListener("DOMContentLoaded", () => {
         console.log("11");
         let volumeConc= calculateConcreteVolume(length,width,height,numStructures);
         console.log("volume");
-        let materials = calculateConcreteMaterials(volumeConc.volume,concreteClass);
+        let materials = calculateConcreteMaterials(volumeConc.volume,concreteClass,cementFactorSpecific);
         console.log("conc materials");
         
         let reinforcementSteel = calculateLateralTieWeight (lengthPerSet, noShearReinforcement, lateralTieDiameter,numStructures);
@@ -134,7 +136,7 @@ saveButtonElement.addEventListener("click", function(){
 
 
 
-function calculateConcreteVolume(length, width, height, numStructures) {
+function calculateConcreteVolume(length, width, height, numStructures, faactor) {
   const volume = (length * width * height * numStructures).toFixed(2) 
   return {volume , length, width, height, numStructures};
 }
@@ -147,9 +149,9 @@ function calculateConcreteMaterials(volumeInCubicMeters, concreteClass) {
     "C": 6,
   };
 
-  const factorOfCement = factors[concreteClass.toUpperCase()] || 0; // Use get or default to 0
+  let factorOfCement = factors[concreteClass.toUpperCase()] || 0; // Use get or default to 0
   if (factorOfCement === 0) {
-    throw new Error("Invalid concrete class. Choose from AA, A, B, or C.");
+    factorOfCement = factor;
   }
 
   const factorOfSand = 0.5;

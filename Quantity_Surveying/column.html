@@ -57,27 +57,19 @@
                         <input type="number" id="numPieces3" step="1"  >
                         <label for="diameter3">Diameter of the steel (in meters):</label>
                         <input type="number" id="diameter3" step="0.001"  >
+                        <label for="noShearReinforcement3">Number of shear reinforcement per structure:</label>
+                        <input type="number" id="noShearReinforcement3" step="1"  >
+                        <label for="lengthPerSet3">Total length of 1 set of reinforcement (in meters):</label>
+                        <input type="number" id="lengthPerSet3" step="0.01"  >
+                        <label for="lateralTieDiameter3">Diameter of the lateral tie steel (in meters):</label>
+                        <input type="number" id="lateralTieDiameter3" step="0.001"  >
+                        <label for="lengthPerCut3">Length per cut of tie (in meters):</label>
+                        <input type="number" id="lengthPerCut3" step="0.01"  >
+                        <label for="numIntersections3">Number of intersections:</label>
+                        <input type="number" id="numIntersections3" step="1"  >
+                        </div>
                     </div>
-                </div>
-              
-                <div id="lateralTiesInputs3" class="form-group">
-                    <label for="noShearReinforcement3">Number of shear reinforcement per structure:</label>
-                    <input type="number" id="noShearReinforcement3" step="1"  >
-                    <label for="lengthPerSet3">Total length of 1 set of reinforcement (in meters):</label>
-                    <input type="number" id="lengthPerSet3" step="0.01"  >
-                    <label for="lateralTieDiameter3">Diameter of the lateral tie steel (in meters):</label>
-                    <input type="number" id="lateralTieDiameter3" step="0.001"  >
-                </div>
-
-                <div class="form-group">
-                    <label for="lengthPerCut3">Length per cut of tie (in meters):</label>
-                    <input type="number" id="lengthPerCut3" step="0.01"  >
-                    <label for="numIntersections3">Number of intersections:</label>
-                    <input type="number" id="numIntersections3" step="1"  >
-                </div>
-
                 <button type="submit" id="calc">Calculate</button>
-                
             </form>
             <div id="result"></div>
             <button id="saveButton" style="display: none;">Save</button>
