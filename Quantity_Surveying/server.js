@@ -36,6 +36,9 @@ app.get('/foundation.html', (req, res) => {
 app.get('/chb.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'chb.html'));
 });
+app.get('/boxCulvert.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'boxCulvert.html'));
+});
 app.post('/download', (req, res) => {
     try {
         const textContent = req.body.text;

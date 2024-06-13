@@ -7,6 +7,7 @@
 
     <link rel="stylesheet" href="/styles.css">
     <script src="/layout_script.js" defer></script>
+    <script src="/specificCementFactor.js" defer></script>
     <script type="module" src="/scriptColumn.js" defer ></script>
     
 </head>
@@ -22,7 +23,8 @@
                 <option value="beam">Beam</option>
                 <option value="foundation">Foundation</option>
                 <option value="chb">CHB Wall</option>
-            </select>
+                <option value="BoxCulvert">Box Culvert</option>
+            </select>    
             <form id="formColumn">
                 <div id="columnInputs" class="form-group">
                     <div id="concreteWorks" class="container">
@@ -41,7 +43,11 @@
                             <option value="A">A</option>
                             <option value="B">B</option>
                             <option value="C">C</option>
+                            <option value="0">Other</option>
                         </select>
+                        <label for="cementFactor" id="cementFactorLabel" style="display: none;">Please specify the Cement Factor to be used:</label>
+                        <input type="number" id="cementFactor" step="0.1" style="display: none;" >
+                    
                     </div>
                     <div id="steelWorks" class="container">
                         <h4>Steel Works</h4>
@@ -53,14 +59,7 @@
                         <input type="number" id="diameter3" step="0.001"  >
                     </div>
                 </div>
-                <div class="form-group">
-                    <label for="useLateralTies3">Does the structure use lateral ties or stirrups? (yes/no):</label>
-                    <select id="useLateralTies3" name="useLateralTies3">
-                        <option value="yes">Yes</option>
-                        <option value="no">No</option>
-                    </select>
-                </div>
-
+              
                 <div id="lateralTiesInputs3" class="form-group">
                     <label for="noShearReinforcement3">Number of shear reinforcement per structure:</label>
                     <input type="number" id="noShearReinforcement3" step="1"  >
