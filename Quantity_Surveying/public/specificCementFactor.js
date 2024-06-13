@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", function() {
-    const selectElement = document.getElementById("concreteClass1");
+    const selectElement = document.getElementById("concreteClass");
     const cementFactorLabel = document.getElementById("cementFactorLabel");
     const cementFactorInput = document.getElementById("cementFactor");
 

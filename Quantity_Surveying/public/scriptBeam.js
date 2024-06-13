@@ -9,7 +9,7 @@ document.addEventListener("DOMContentLoaded", () => {
       let width = parseFloat(document.getElementById('width2').value);
       let height = parseFloat(document.getElementById('height2').value);
       let numStructures = parseInt(document.getElementById('numStructures2').value);
-      let concreteClass = document.getElementById('concreteClass2').value;
+      let concreteClass = document.getElementById('concreteClass').value;
       let spliceLength = parseFloat(document.getElementById('lengthPerSplice').value);
       console.log("2")
       let topLengthPerPieceSupport = parseFloat(document.getElementById('topLengthPerPieceSupport').value);
