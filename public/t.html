@@ -1,0 +1,37 @@
+<link rel="stylesheet" href="styles.css">
+<h3>Solution:</h3>
+      <ol>
+        <li>Concrete Volume Calculation</li>
+          <p>Volume: </p>
+        <li>Concrete Materials Calculation</li>
+        <ul>
+        <li>Cement: ${materials.cement} Bags</li>
+        <li>Sand: ${materials.sand} cubic meter</li>
+        <li>Gravel: ${materials.gravel} cubic meter</li>
+      </ul>
+        <li>Steel Weight Calculation</li>
+        <li>Lateral Tie Weight Calculation</li>
+        <li>G.I. Tie Wire Calculation</li>
+      </ol>
+      <h3>Summary:</h3>
+      <ol>
+      <li>Volume: ${volumeConc} cubic meter</li>
+      <li>Concrete Materials:</li>
+      <ul>
+        <li>Cement: ${materials.cement} Bags</li>
+        <li>Sand: ${materials.sand} cubic meter</li>
+        <li>Gravel: ${materials.gravel} cubic meter</li>
+      </ul>
+      <li>Steel Weight:</li>
+      <p>Main Reinforcements:</p>
+      <p>Net Length: ${mainSteel.netLength} meters</p>
+      <p>Area: ${mainSteel.area.toFixed(6)} square meters</p>
+      <p>Steel Weight (⌀${mainSteel.dia*1000}mm): ${mainSteel.steelWeight} kilograms</p>
+      <p>Lateral Ties:</p>
+      <p>Net Length: ${reinforcementSteel.netLength} meters</p>
+      <p>Area: ${reinforcementSteel.area.toFixed(6)} square meters</p>
+      <p>Steel Weight (⌀${reinforcementSteel.lateralTieDiameter*1000}mm): ${reinforcementSteel.steelWeight} kilograms</p>
+      <li>Tie Wire</li>
+      <p>Net Length: ${tieWire.netLength} meters</p>
+      <p>No. of Rolls: ${tieWire.noRolls} roll/s</p>
+      </ol>

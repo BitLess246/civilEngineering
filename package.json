@@ -1,0 +1,33 @@
+{
+  "name": "quantity_surveying",
+  "version": "1.0.0",
+  "description": "Quantity Surveying - Material Quantity Estimator app for civil engineering",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BitLess246/civilEngineering.git"
+  },
+  "keywords": [
+    "Quantity",
+    "Surveying",
+    "Material",
+    "Quantity",
+    "Estimator",
+    "Civil",
+    "Engineering"
+  ],
+  "author": "Raymart Valdepeñas",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/BitLess246/civilEngineering/issues"
+  },
+  "homepage": "https://github.com/BitLess246/civilEngineering#readme",
+  "dependencies": {
+    "body-parser": "^1.20.2",
+    "express": "^4.19.2"
+  }
+}

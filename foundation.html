@@ -1,0 +1,94 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Material Quantity Estimator</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/layout_script.js" defer></script>
+    <script src="/specificCementFactor.js" defer></script>
+    <script type="module" src="/scriptFoundation.js" defer></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Material Quantity Estimator</h1>
+        <div class="form-group">
+            <label for="structureType">Select Structure Type:</label>
+            <select id="structureType" name="structureType">
+		        <option value="" disabled>Select The Type Of Structure</option>
+                <option value="slab">Slab</option>
+                <option value="column">Column</option>
+                <option value="beam">Beam</option>
+                <option value="foundation" selected>Foundation</option>
+                <option value="chb">CHB Wall</option>
+                <option value="boxCulvert">Box Culvert</option>
+            </select>
+            <form id="formFoundation">
+        
+                <div id="foundationInputs" class="form-group">
+                    <div id="concreteWorks" class="container">
+                        <h4>Concrete Works</h4>
+                        <label for="length">Length (in meters):</label>
+                        <input type="number" id="length" step="0.01"  >
+                        <label for="width">Width (in meters):</label>
+                        <input type="number" id="width" step="0.01"  >
+                        <label for="height">Height (in meters):</label>
+                        <input type="number" id="height" step="0.01"  >
+                        <label for="numStructures">Number of Structures:</label>
+                        <input type="number" id="numStructures" step="1"  >
+                        <label for="concreteClass">Concrete Class:</label>
+                        <select id="concreteClass" name="concreteClass">
+                            <option value="AA">AA</option>
+                            <option value="A">A</option>
+                            <option value="B">B</option>
+                            <option value="C">C</option>
+                            <option value="0">Other</option>
+                        </select>
+                        <label for="cementFactor" id="cementFactorLabel" style="display: none;">Please specify the Cement Factor to be used:</label>
+                        <input type="number" id="cementFactor" step="0.1" style="display: none;" >
+                    </div>
+                    <div id="steelWorks" class="container">
+                        <h4>Steel Works</h4>
+                        <div class="foundation-card" id="squareFoundationCard">
+                            <h3 class="card-title">Square Foundation</h3>
+                            <label for="lengthPerPiece">Length per piece of steel (in meters):</label>
+                            <input type="number" id="lengthPerPiece" step="0.01"  >
+                            <label for="numPieces">Number of pieces per structure:</label>
+                            <input type="number" id="numPieces" step="1"  >
+                            <label for="diameter">Diameter of the steel (in meters):</label>
+                            <input type="number" id="diameter" step="0.001"  >
+                        </div>
+                        <div class="foundation-card" id="rectangularFoundationCard">
+                            <h3 class="card-title">Rectangular Foundation</h3>
+                            <label for="longSpanLength">Length of Long Span (in meters):</label>
+                            <input type="number" id="longSpanLength" step="0.01"  >
+                            <label for="numLongSpanPieces">Number of Steel along the Long Span:</label>
+                            <input type="number" id="numLongSpanPieces" step="1"  >
+                            <label for="shortSpanLength">Length of Short Span (in meters):</label>
+                            <input type="number" id="shortSpanLength" step="0.01"  >
+                            <label for="numShortSpanPieces">Number of Steel along the Short Span:</label>
+                            <input type="number" id="numShortSpanPieces" step="1"  >
+                            <label for="longSpanDiameter">Diameter of steel along the Long Span:</label>
+                            <input type="number" id="longSpanDiameter" step="0.001"  >
+                            <label for="shortSpanDiameter">Diameter of steel along the Short Span:</label>
+                            <input type="number" id="shortSpanDiameter" step="0.001"  >
+                        </div>
+                        <div class="container">
+                            <h3>Others</h3>
+                            <label for="lengthPerCut">Length per cut of tie (in meters):</label>
+                            <input type="number" id="lengthPerCut" step="0.01"  >
+                            <label for="numIntersections">Number of intersections:</label>
+                            <input type="number" id="numIntersections" step="1"  >
+                        </div>
+                    </div>
+                </div>
+                <button type="submit">Calculate</button>
+            </form>
+            <div id="result"></div>
+            <button id="saveButton" style="display: none;">Save</button>
+        </div>
+    </div>
+</body>
+</html>
+

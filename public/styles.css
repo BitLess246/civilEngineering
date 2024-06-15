@@ -1,0 +1,119 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f0f0f0;
+    margin: 0;
+    padding: 0;
+}
+p {
+    font-size: 12px;
+    line-height: 1.2; /* Adjust the line height */
+    margin-top: 0; /* Remove top margin */
+    margin-bottom: 0.2em; /* Adjust bottom margin */
+}
+li {
+    
+    line-height: 0.5; /* Adjust the line height */
+    margin-top: 0; /* Remove top margin */
+    margin-bottom: 0;
+}
+.container {
+    width: 90%;
+    max-width: 600px;
+    margin: 50px auto;
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+    text-align: center;
+}
+
+h4 {
+    text-align: center;
+}
+
+h5.inline, p.inline {
+    display: inline;
+}
+h5{
+    margin-top: 10px; /* Adjust the top margin to 20 pixels */
+    margin-bottom: 10px;
+}
+
+h6{
+    margin-top: 2px; /* Adjust the top margin to 20 pixels */
+    margin-bottom: 2px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+input, select {
+    width: 100%;
+    padding: 8px;
+    box-sizing: border-box;
+}
+
+
+button {
+    width: 100%;
+    padding: 10px;
+    background: #007BFF;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+button:hover {
+    background: #0056b3;
+}
+
+#results {
+    margin-top: 20px;
+    padding: 10px;
+    background: #e9ecef;
+    border-radius: 4px;
+}
+.beam-section, .foundation-section {
+    margin-bottom: 20px;
+}
+
+.beam-section label, .foundation-section label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.beam-section input, .foundation-section input {
+    width: 100%;
+    padding: 8px;
+    box-sizing: border-box;
+    margin-bottom: 10px;
+}
+
+.foundation-card {
+    border: 1px solid #ccc;
+    padding: 15px;
+    margin-bottom: 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease; /* Add transition for hover effect */
+}
+
+.foundation-card.selected {
+    background-color: #f0f0f0; /* Light gray background for selected card */
+    border-color: #007BFF; /* Blue border for selected card */
+}
+
+.card-title {
+    margin-bottom: 10px;
+}
