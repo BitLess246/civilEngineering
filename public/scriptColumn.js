@@ -18,12 +18,12 @@ document.addEventListener("DOMContentLoaded", () => {
       let lateralTieDiameter = parseFloat(document.getElementById('lateralTieDiameter3').value);
       let lengthPerCut = parseFloat(document.getElementById('lengthPerCut3').value);
       let numIntersections = parseInt(document.getElementById('numIntersections3').value);
-      
+      let spliceLength = parseFloat(document.getElementById('lengthPerSplice').value);
       let volumeConc= calculateConcreteVolume(length,width,height,numStructures)
       console.log("volume")
       let materials = calculateConcreteMaterials(volumeConc.volume,concreteClass,cementFactorSpecific)
       console.log("conc materials")
-      let mainSteel = calculateSteelWeight (lengthPerPiece,numPieces,diameter,numStructures)
+      let mainSteel = calculateSteelWeight (lengthPerPiece,numPieces,diameter,numStructures,spliceLength)
       console.log("steel weight")
       let reinforcementSteel = calculateLateralTieWeight (lengthPerSet, noShearReinforcement, lateralTieDiameter,numStructures)
       console.log("reinf steel weight")
@@ -78,21 +78,36 @@ function calculateConcreteMaterials(volumeInCubicMeters, concreteClass, factor) 
     return {cement, sand, gravel, factorOfCement};
   }
 
-function calculateSteelWeight(lengthPerPiece, num, dia, numStructures) {
+function calculateSteelWeight(lengthPerPiece, num, dia, numStructures,spliceLength) {
     const netLength = (lengthPerPiece * num  * numStructures).toFixed(2)
-    const area = (((Math.PI)/4)*dia**2)
-    const noOfPcs= Math.ceil(netLength/5.6) 
-    const steelWeight = (noOfPcs * 6 * area * 7850).toFixed(2)
-    return {steelWeight, area, netLength, dia, noOfPcs, lengthPerPiece, num, numStructures };
+    /*const area = (((Math.PI)/4)*dia**2)
+    const noOfPcs= Math.ceil(netLength/) 
+    const steelWeight = (noOfPcs * 6 * area * 7850).toFixed(2)*/
+    let area = (((Math.PI)/4)*dia**2);
+    let splice = 6 - spliceLength;
+    let noOfPcs= Math.ceil(netLength/splice);
+    let steelWeight = (noOfPcs * 6 * area * 7850).toFixed(2);
+    return {steelWeight, area, netLength, dia, noOfPcs, lengthPerPiece, num, numStructures, spliceLength, splice };
   }
-
+/*
 function calculateLateralTieWeight(lengthPerSet, noShearReinforcement, lateralTieDiameter, numStructures) {
     const netLength = (lengthPerSet * noShearReinforcement  * numStructures).toFixed(2)
     const area = (((Math.PI)/4)*lateralTieDiameter**2)
     const noOfPcs= Math.ceil(netLength/5.6) 
     const steelWeight = (noOfPcs * 6 * area * 7850).toFixed(2)
+    
     return {steelWeight, area, netLength, lateralTieDiameter, noOfPcs, lengthPerSet, noShearReinforcement, numStructures };
-  }
+  }*/
+
+    
+function calculateLateralTieWeight(lengthPerSet, noShearReinforcement, lateralTieDiameter, numStructures) {
+  const cutsPer6m = Math.floor(6/lengthPerSet);
+  const totalNoShearReinforcement = noShearReinforcement * numStructures;
+  let area = (Math.PI/4) * lateralTieDiameter ** 2;
+  const noOfPcs= Math.ceil(totalNoShearReinforcement/cutsPer6m) ;
+  const steelWeight = (noOfPcs * 6 * area * 7850).toFixed(2);
+  return {cutsPer6m, totalNoShearReinforcement,steelWeight, area, lateralTieDiameter, noOfPcs, lengthPerSet, noShearReinforcement, numStructures };
+}
 
 
 function calculateTieWire(lengthPerCut, numIntersections, numStructures) {
@@ -121,13 +136,16 @@ function displayResults(volumeConc, materials, mainSteel, reinforcementSteel, ti
           <p><h5>Main Reinforcements:</h5></p>
           <p>Net length = ${mainSteel.lengthPerPiece} * ${mainSteel.num} *${mainSteel.numStructures} = ${mainSteel.netLength} meters </p>
           <p>Area = (π/4) * ${mainSteel.dia}^2 = ${mainSteel.area.toFixed(6)} square meters</p>
-          <p>No. of Bars = ${mainSteel.netLength} / 5.6 ≈ ${mainSteel.noOfPcs} pieces</p>
+          <p>Effective Length = 6 - ${mainSteel.spliceLength} = ${mainSteel.splice} meters</p>
+          <p>No. of Bars = ${mainSteel.netLength} / ${mainSteel.splice} ≈ ${mainSteel.noOfPcs} pieces</p>
           <p>Steel Weight = ${mainSteel.noOfPcs} * 6 * ${mainSteel.area.toFixed(6)} * 7850 = ${mainSteel.steelWeight} kilograms</p>
           <p><h5>Lateral Ties:</h5></p>
-          <p>Net length = ${reinforcementSteel.lengthPerSet} * ${reinforcementSteel.noShearReinforcement} *${reinforcementSteel.numStructures} = ${reinforcementSteel.netLength} meters </p>
+          <p>No. of Cuts per 6m = 6 / ${reinforcementSteel.lengthPerSet} ≈ ${reinforcementSteel.cutsPer6m} pieces </p>
+          <p>Total No. of Stirrups = ${reinforcementSteel.noShearReinforcement} * ${reinforcementSteel.numStructures} = ${reinforcementSteel.totalNoShearReinforcement} pieces</p>
           <p>Area = (π/4) * ${reinforcementSteel.lateralTieDiameter}^2 = ${reinforcementSteel.area.toFixed(6)} square meters</p>
-          <p>No. of Bars = ${reinforcementSteel.netLength} / 5.6 ≈ ${reinforcementSteel.noOfPcs} pieces</p>
+          <p>No. of Bars = ${reinforcementSteel.totalNoShearReinforcement} / ${reinforcementSteel.cutsPer6m} ≈ ${reinforcementSteel.noOfPcs} pieces</p>
           <p>Steel Weight = ${reinforcementSteel.noOfPcs} * 6 * ${reinforcementSteel.area.toFixed(6)} * 7850 = ${reinforcementSteel.steelWeight} kilograms</p>
+
         <li><h5>G.I. Tie Wire Calculation</h5></li>
           <p>Total Length = length per cut * number of intersections * number of structures</p>
           <p>Number of Rolls = total length / 2385</p>
@@ -148,7 +166,7 @@ function displayResults(volumeConc, materials, mainSteel, reinforcementSteel, ti
       <p>Net Length: ${mainSteel.netLength} meters</p>
       <p>Steel Weight (⌀${mainSteel.dia*1000}mm): ${mainSteel.steelWeight} kilograms</p>
       <p><h5>Lateral Ties:</h5></p>
-      <p>Net Length: ${reinforcementSteel.netLength} meters</p>
+      <p>No. of 6m bars: ${reinforcementSteel.noOfPcs} pieces</p>
       <p>Steel Weight (⌀${reinforcementSteel.lateralTieDiameter*1000}mm): ${reinforcementSteel.steelWeight} kilograms</p>
       <li><h5>Tie Wire:</h5></li>
       <p>Net Length: ${tieWire.netLength} meters</p>
