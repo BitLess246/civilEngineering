@@ -30,6 +30,7 @@ document.addEventListener("DOMContentLoaded", () => {
         let mainSteel1 = calculateSteelWeight(longSpanLength,numLongSpanPieces,longSpanDiameter,numStructures,spliceLength);
         let mainSteel2 = calculateSteelWeight(shortSpanLength,numShortSpanPieces,shortSpanDiameter,numStructures,spliceLength);
         let totalSteelWeight = parseFloat(mainSteel1.steelWeight) + parseFloat(mainSteel2.steelWeight);
+        totalSteelWeight = totalSteelWeight.toFixed(2);
         let tieWire = calculateTieWire(lengthPerCut,numIntersections,numStructures);
         //Display
         console.log(`5`);
@@ -51,8 +52,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     
 function calculateConcreteVolume(area, thickness, numStructures) {
-    const volume = parseFloat(area) * parseFloat(thickness) * parseInt(numStructures) 
-    volume.toFixed(2);
+    let volume = parseFloat(area) * parseFloat(thickness) * parseInt(numStructures); 
+    volume = volume.toFixed(2);
     return {volume , area, thickness, numStructures};
   }
 
@@ -90,8 +91,8 @@ function calculateConcreteMaterials(volumeInCubicMeters, concreteClass, factor) 
 
 
 function calculateTieWire(lengthPerCut, numIntersections, numStructures) {
-    const netLength = parseFloat(lengthPerCut) * parseInt(numIntersections)  * parseFloat(numStructures)
-    netLength.toFixed(2)
+    let netLength = parseFloat(lengthPerCut) * parseInt(numIntersections)  * parseFloat(numStructures);
+    netLength = netLength.toFixed(2)
     const noRolls = Math.ceil(netLength/2385)
     return {netLength, noRolls, lengthPerCut, numIntersections, numStructures};
   }  
