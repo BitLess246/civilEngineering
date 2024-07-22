@@ -30,11 +30,11 @@
                 <div id="concreteWorks" class="container">
                     <h4>Concrete Works</h4>
                     <label for="grossArea">Gross Area of Concrete (in square meters):</label>
-                    <input type="number" id="grossArea" step="0.01"  >
+                    <input type="number" id="grossArea" step="0.001"  >
                     <label for="holeArea">Hole Area (in square meters):</label>
-                    <input type="number" id="holeArea" step="0.01"  >
+                    <input type="number" id="holeArea" step="0.001"  >
                     <label for="length">Length of Structure (in meters):</label>
-                    <input type="number" id="length" step="0.01"  >
+                    <input type="number" id="length" step="0.001"  >
                     <label for="concreteClass">Concrete Class:</label>
                     <select id="concreteClass" name="concreteClass">
                         <option value="AA">AA</option>
@@ -50,10 +50,14 @@
                 <div id="steelWorks" class="container">
                     <h4>Steel Works</h4>
                     <h5>Longitudinal Bars</h5>
-                    <label for="numLongitudinal">Number of Long Bars:</label>
-                    <input type="number" id="numLongitudinal" step="1"  >
-                    <label for="diameterMain">Diameter of the steel (in meters):</label>
-                    <input type="number" id="diameterMain" step="0.001"  >
+                    <label for="numLongitudinalTop">Number of Top Longitudinal Bars:</label>
+                    <input type="number" id="numLongitudinalTop" step="1"  >
+                    <label for="numLongitudinalU">Number of Bottom Longitudinal Bars:</label>
+                    <input type="number" id="numLongitudinalU" step="1"  >
+                    <label for="diameterMainTop">Diameter of the Top Longitudinal Bar (in meters):</label>
+                    <input type="number" id="diameterMainTop" step="0.001"  >
+                    <label for="diameterMainU">Diameter of the Bottom Longitudinal Bar (in meters):</label>
+                    <input type="number" id="diameterMainU" step="0.001"  >
                     <label for="lengthPerSplice">Length per Splice of Main Bar(in meters):</label>
                     <input type="number" id="lengthPerSplice" step="0.01"  >
                     <label for="spacing">Spacing of reinforcement (in meters):</label>

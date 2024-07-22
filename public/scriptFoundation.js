@@ -17,6 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
         let lengthPerPiece = parseFloat(document.getElementById('lengthPerPiece').value);
         let numPieces = parseInt(document.getElementById('numPieces').value);
         let diameter = parseFloat(document.getElementById('diameter').value);
+        let spliceSquare = parseFloat(document.getElementById('lengthPerSpliceSqu').value);
         //rectangularFoundation
         let longSpanLength = parseFloat(document.getElementById('longSpanLength').value);
         let numLongSpanPieces = parseInt(document.getElementById('numLongSpanPieces').value);
@@ -24,6 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
         let numShortSpanPieces = parseInt(document.getElementById('numShortSpanPieces').value);
         let longSpanDiameter = parseFloat(document.getElementById('longSpanDiameter').value);
         let shortSpanDiameter = parseFloat(document.getElementById('shortSpanDiameter').value);   
+        let spliceRectangular = parseFloat(document.getElementById('lengthPerSpliceRec').value);
         //Tie Wire
         let lengthPerCut = parseFloat(document.getElementById('lengthPerCut').value);
         let numIntersections = parseInt(document.getElementById('numIntersections').value);
@@ -38,7 +40,7 @@ document.addEventListener("DOMContentLoaded", () => {
         let text1 =`
         <p>Net length = ${mainSteel.lengthPerPiece} * ${mainSteel.num} *${mainSteel.numStructures} = ${mainSteel.netLength} meters </p>
         <p>Area = (π/4) * ${mainSteel.dia}^2 = ${mainSteel.area.toFixed(6)} square meters</p>
-        <p>No. of Bars = ${mainSteel.netLength} / 5.6 ≈ ${mainSteel.noOfPcs} pieces</p>
+        <p>No. of Bars = ${mainSteel.netLength} / ${6-spliceSquare} ≈ ${mainSteel.noOfPcs} pieces</p>
         <p>Steel Weight = ${mainSteel.noOfPcs} * 6 * ${mainSteel.area.toFixed(6)} * 7850 = ${mainSteel.steelWeight} kilograms</p>
         `;
         let text3 =`
@@ -53,12 +55,12 @@ document.addEventListener("DOMContentLoaded", () => {
         <p><h5>@ Long Span</h5></p>
         <p>Net length = ${longSteelWeight.lengthPerPiece} * ${longSteelWeight.num} *${longSteelWeight.numStructures} = ${longSteelWeight.netLength} meters </p>
         <p>Area = (π/4) * ${longSteelWeight.dia}^2 = ${longSteelWeight.area.toFixed(6)} square meters</p>
-        <p>No. of Bars = ${longSteelWeight.netLength} / 5.6 ≈ ${longSteelWeight.noOfPcs} pieces</p>
+        <p>No. of Bars = ${longSteelWeight.netLength} / ${6-spliceRectangular} ≈ ${longSteelWeight.noOfPcs} pieces</p>
         <p>Steel Weight = ${longSteelWeight.noOfPcs} * 6 * ${longSteelWeight.area.toFixed(6)} * 7850 = ${longSteelWeight.steelWeight} kilograms</p>
         <h5>@ Short Span</h5>
         <p>Net length = ${shortSteelWeight.lengthPerPiece} * ${shortSteelWeight.num} *${shortSteelWeight.numStructures} = ${shortSteelWeight.netLength} meters </p>
         <p>Area = (π/4) * ${shortSteelWeight.dia}^2 = ${shortSteelWeight.area.toFixed(6)} square meters</p>
-        <p>No. of Bars = ${shortSteelWeight.netLength} / 5.6 ≈ ${shortSteelWeight.noOfPcs} pieces</p>
+        <p>No. of Bars = ${shortSteelWeight.netLength} / ${6-spliceRectangular} ≈ ${shortSteelWeight.noOfPcs} pieces</p>
         <p>Steel Weight = ${shortSteelWeight.noOfPcs} * 6 * ${shortSteelWeight.area.toFixed(6)} * 7850 = ${shortSteelWeight.steelWeight} kilograms</p>
         `;
         let text4 = `
@@ -84,7 +86,7 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById('saveButton').style.display = 'none';
         } else {
         if(isNaN(mainSteel.steelWeight) && !isNaN(longSteelWeight.steelWeight) && !isNaN(shortSteelWeight.steelWeight)){
-            const results = displayResults(volumeConc, materials,text2, text4, tieWire);
+            const results = displayResults(volumeConc, materials,text2, text4, tieWire,spliceSquare,spliceRectangular);
             resContent = results.innerText;
             console.log(results);
             console.log(resContent);
@@ -98,12 +100,16 @@ document.addEventListener("DOMContentLoaded", () => {
             console.log("6");
             console.log(mainSteel);
         } else if (isNaN(mainSteel.steelWeight) && isNaN(longSteelWeight.steelWeight) && isNaN(shortSteelWeight.steelWeight)){
+            console.log(mainSteel.steelWeight)  
+            console.log(longSteelWeight.steelWeight)
+            console.log("99")
             alert(`Please fill all appropriate fields`);
             const resultDiv = document.getElementById("result");
             resultDiv.innerHTML = '';
             document.getElementById('saveButton').style.display = 'none';
         } else if (!isNaN(mainSteel.steelWeight) && !isNaN(longSteelWeight.steelWeight) && !isNaN(shortSteelWeight.steelWeight)){
             alert(`Please select only one. Square or Rectangular Footing`);
+            console.log("991") 
             const resultDiv = document.getElementById("result");
             resultDiv.innerHTML = '';
             document.getElementById('saveButton').style.display = 'none';
@@ -151,10 +157,10 @@ function calculateConcreteMaterials(volumeInCubicMeters, concreteClass,factor) {
     return {cement, sand, gravel, factorOfCement};
     };
 
-function calculateSteelWeight(lengthPerPiece, num, dia, numStructures) {
+function calculateSteelWeight(lengthPerPiece, num, dia, numStructures,splice) {
     const netLength = (lengthPerPiece * num  * numStructures).toFixed(2)
     const area = (((Math.PI)/4)*dia**2)
-    const noOfPcs= Math.ceil(netLength/5.6) 
+    const noOfPcs= Math.ceil(netLength/(6-splice)) 
     const steelWeight = (noOfPcs * 6 * area * 7850).toFixed(2)
     return {steelWeight, area, netLength, dia, noOfPcs, lengthPerPiece, num, numStructures };
     };
@@ -166,7 +172,7 @@ function calculateSteelWeight(lengthPerPiece, num, dia, numStructures) {
     };  
 
     
-function displayResults(volumeConc, materials, text, text2, tieWire) {
+function displayResults(volumeConc, materials, text, text2, tieWire,spliceSquare,spliceRectangular) {
     // Create HTML elements or text to display results
     const resultsContent1 = document.createElement('div');
     const buttonDownload = document.createElement('div')
