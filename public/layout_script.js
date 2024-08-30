@@ -14,8 +14,13 @@ document.addEventListener("DOMContentLoaded", () => {
             window.location.href = 'chb.html';
         } else if (selectedOption === 'boxCulvert') {
             window.location.href = 'boxCulvert.html';
-        }
-    }catch (error)
+        } else if (selectedOption === 'columnDesign') {
+            window.location.href = 'columnDesign.html';
+        } else if (selectedOption === 'beamDesign') {
+            window.location.href = 'beamDesign.html';
+        } else if (selectedOption === 'foundationDesign')
+            window.location.href = 'foundationDesign.html';
+        }catch (error)
         {console.error('Error loading content:', error)}
         
     });
