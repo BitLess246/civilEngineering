@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reinforced Concrete Estimator</title>
+
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/layout_script.js" defer></script>
+    <script src="/scriptColumnDesign.js" defer type="module"></script>
+    <script src="/scriptBeamDesign.js" defer type="module"></script>
+    <script src="/scriptFoundationDesign.js" defer type="module"></script>
+    <script src="/script.js" defer></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Reinforced Concrete Estimator</h1>
+        <div class="form-group">
+            <label for="structureType">Select Structure Type:</label>
+            <select id="structureType" name="structureType">
+		        <option value="" disabled selected>Select The Type Of Structure</option>
+                <option value="beamDesign">Beam</option>
+                <option value="columnDesign">Column</option>
+                <option value="foundationDesign">Foundation</option>
+            </select>
+        </div>
+    </div>
+</body>
+</html>

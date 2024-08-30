@@ -1,0 +1,94 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Foundation Design</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/layout_script.js" defer></script>
+    <script type="module" src="/scriptFoundationDesign.js" defer></script>
+    
+
+</head>
+<body>
+    <div class="container">
+        <h1>Foundation Design</h1>
+        <div class="form-group">
+            <label for="structureType">Select Foundation Type:</label>
+            <select id="structureType" name="structureType">
+		        <option value="" disabled>Select The Type Of Structure</option>
+                <option value="Isolated Square">Isolated Square</option>
+                <option value="Isolated Rectangular">Isolated Rectangular</option>
+                <option value="Strip">Strip</option>
+            </select>
+            <form id="formFoundation">
+        
+                <div id="foundationInputs" class="form-group">
+                    <div id="GivenParameters" class="container">
+                        <h4>Parameters Given</h4>
+                        <label for="DeadLoad">Dead Load (in KN):</label>
+                        <input type="number" id="DeadLoad" step="0.01"  >
+                        <label for="LiveLoad">Live Load (in KN):</label>
+                        <input type="number" id="LiveLoad" step="0.01"  >
+                        <label for="Depth">Depth (in meters):</label>
+                        <input type="number" id="Depth" step="0.01"  >
+                        <label for="BarDiameter">Bar Diameter (in Millimeters):</label>
+                        <input type="number" id="BarDiameter" step="1"  >
+                        <label for="Method">Method:</label>
+                        <select id="Method" name="Method">
+                            <option value="1">Iteration</option>
+                            <option value="2">Approximate (Initial Dc)</option>
+                            <option value="3">Approximate (Initial Qnet)</option>
+                        </select>
+                        <label for="ColumnWidth">Column Width (in Millimeters):</label>
+                        <input type="number" id="ColumnWidth" step="1"  >
+                        <label for="SoilBearingCapacity">Soil Bearing Capacity (in KPa):</label>
+                        <input type="number" id="SoilBearingCapacity" step="0.01"  >
+                        <label for="fc">Concrete Compressive Strength (in MPa):</label>
+                        <input type="number" id="fc" step="0.01"  >
+                        <label for="fy">Yield Strength of Reinforcement (in MPa):</label>
+                        <input type="number" id="fy" step="0.01"  >
+                        <label for="UnitWeightSoil">Unit Weight of Soil (in KN/m3):</label>
+                        <input type="number" id="UnitWeightSoil" step="0.01"  >
+                        <label for="UnitWeightConcrete">Unit Weight of Concrete (in KN/m3):</label>
+                        <input type="number" id="UnitWeightConcrete" step="0.01"  >
+                        </div>
+                    </div>
+                </div>
+                <button type="submit">Calculate</button>
+            </form>
+            <div id="result"></div>
+            <button id="saveButton" style="display: none;">Save</button>
+        </div>
+    </div>
+    <script>
+        // Function to save input and select values to localStorage
+        function saveFieldValues() {
+            document.querySelectorAll('input, select').forEach(field => {
+                localStorage.setItem(field.id, field.value);
+            });
+        }
+
+        // Function to load values from localStorage
+        function loadFieldValues() {
+            document.querySelectorAll('input, select').forEach(field => {
+                const savedValue = localStorage.getItem(field.id);
+                if (savedValue) {
+                    field.value = savedValue;
+                }
+            });
+        }
+
+        // Load field values when the page loads
+        window.addEventListener('load', loadFieldValues);
+
+        // Save values when any input or select field changes
+        document.querySelectorAll('input, select').forEach(field => {
+            field.addEventListener('input', saveFieldValues);
+            field.addEventListener('change', saveFieldValues);
+        });
+    </script>
+</body>
+</html>
+

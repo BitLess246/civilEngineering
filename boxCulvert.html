@@ -80,6 +80,33 @@
         <script src="/scriptBoxCulvert.js" defer></script>
     </div>
 </div>
+<script>
+    // Function to save input and select values to localStorage
+    function saveFieldValues() {
+        document.querySelectorAll('input, select').forEach(field => {
+            localStorage.setItem(field.id, field.value);
+        });
+    }
+
+    // Function to load values from localStorage
+    function loadFieldValues() {
+        document.querySelectorAll('input, select').forEach(field => {
+            const savedValue = localStorage.getItem(field.id);
+            if (savedValue) {
+                field.value = savedValue;
+            }
+        });
+    }
+
+    // Load field values when the page loads
+    window.addEventListener('load', loadFieldValues);
+
+    // Save values when any input or select field changes
+    document.querySelectorAll('input, select').forEach(field => {
+        field.addEventListener('input', saveFieldValues);
+        field.addEventListener('change', saveFieldValues);
+    });
+</script>
 </body>
 </html>
 
