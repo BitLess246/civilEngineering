@@ -5,8 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Foundation Design</title>
-    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/styles1.css">
     <script src="/layout_script.js" defer></script>
+    
     <script type="module" src="/scriptFoundationDesign.js" defer></script>
     
 
@@ -15,18 +16,30 @@
     <div class="container">
         <h1>Foundation Design</h1>
         <div class="form-group">
-            <label for="structureType">Select Foundation Type:</label>
-            <select id="structureType" name="structureType">
-		        <option value="" disabled>Select The Type Of Structure</option>
-                <option value="Isolated Square">Isolated Square</option>
-                <option value="Isolated Rectangular">Isolated Rectangular</option>
-                <option value="Strip">Strip</option>
-            </select>
+            
             <form id="formFoundation">
         
                 <div id="foundationInputs" class="form-group">
                     <div id="GivenParameters" class="container">
                         <h4>Parameters Given</h4>
+                        <label for="structureType">Select Foundation Type:</label>
+                        <select id="structureType" name="structureType">
+		                    <option value="" disabled>Select The Type Of Structure</option>
+                            <option value="Isolated Square">Isolated Square</option>
+                            <option value="Isolated Rectangular">Isolated Rectangular</option>
+                            <option value="Strip">Strip</option>
+                        </select>
+                        <label for="LengthRestriction" id="LengthRestriction" style="display: none;">Restriction:</label>
+                        <select id="LengthRestriction1" name="LengthRestriction1" style="display: none;">
+                            <option value="0">None</option>
+                            <option value="1">Ratio</option>
+                            <option value="2">Limitation</option>
+                        </select>
+                        <label for="Ratio" id="RatioLabel" style="display: none;">Ratio (_L:_B)</label>
+                        <input type="number" id="RatioL" step="1"  placeholder="L" style="display: none;">
+                        <input type="number" id="RatioB" step="1"  placeholder="B" style="display: none;">
+                        <label for="LimitationLabel" id="LimitationLabel" style="display: none;">Length Limitation (in Meters):</label>
+                        <input type="number" id="Limitation" step="0.01"  style="display: none;">
                         <label for="DeadLoad">Dead Load (in KN):</label>
                         <input type="number" id="DeadLoad" step="0.01"  >
                         <label for="LiveLoad">Live Load (in KN):</label>
@@ -39,12 +52,22 @@
                         <select id="Method" name="Method">
                             <option value="1">Iteration</option>
                             <option value="2">Approximate (Initial Dc)</option>
-                            <option value="3">Approximate (Initial Qnet)</option>
+                            
                         </select>
                         <label for="ColumnWidth">Column Width (in Millimeters):</label>
                         <input type="number" id="ColumnWidth" step="1"  >
+                        <label for="ColumnLocation">Column Location:</label>
+                        <select id="ColumnLocation" name="ColumnLocation">
+                            <option value="1">Interior</option>
+                            <option value="2">Edge</option>
+                            <option value="3">Corner</option>
+                        </select>
                         <label for="SoilBearingCapacity">Soil Bearing Capacity (in KPa):</label>
                         <input type="number" id="SoilBearingCapacity" step="0.01"  >
+                        <label for="Surcharge">Surcharge (in KPa):</label>
+                        <input type="number" id="Surcharge" step="0.01"  >
+                        <label for="λ">Concrete Modification Factor λ:</label>
+                        <input type="number" id="λ" step="0.01"  >
                         <label for="fc">Concrete Compressive Strength (in MPa):</label>
                         <input type="number" id="fc" step="0.01"  >
                         <label for="fy">Yield Strength of Reinforcement (in MPa):</label>
@@ -66,29 +89,102 @@
         // Function to save input and select values to localStorage
         function saveFieldValues() {
             document.querySelectorAll('input, select').forEach(field => {
-                localStorage.setItem(field.id, field.value);
+                localStorage.setItem(field.id, field.value); // Save values directly
             });
         }
-
-        // Function to load values from localStorage
+    
+        // Function to load values from localStorage and ensure events trigger correctly
         function loadFieldValues() {
+            // Original script handling UI changes based on select values
+            const selectStructure = document.getElementById("structureType");
+            const ratioLabel = document.getElementById("RatioLabel");
+            const ratioInputL = document.getElementById("RatioL");
+            const ratioInputB = document.getElementById("RatioB");
+            const lengthRestriction = document.getElementById("LengthRestriction1");
+            const LengthRestrictionLabel = document.getElementById("LengthRestriction");
+            const limitationLabel = document.getElementById("LimitationLabel");
+            const limitation = document.getElementById("Limitation");
+            console.log("4");
+            // Add change event listener to the structure type select element
+            selectStructure.addEventListener("change", function () {
+                if (selectStructure.value === "Isolated Rectangular") {
+                    LengthRestrictionLabel.style.display = "block";
+                    lengthRestriction.style.display = "block";
+                    console.log("5");
+                } else {
+                    LengthRestrictionLabel.style.display = "none";
+                    lengthRestriction.style.display = "none";
+                    lengthRestriction.value = "0";
+                    ratioLabel.style.display = "none";
+                    ratioInputL.style.display = "none";
+                    ratioInputB.style.display = "none";
+                    limitationLabel.style.display = "none";
+                    limitation.style.display = "none";
+                    console.log("6");
+                }
+            });
+            
+            // Add change event listener to the length restriction select element
+            lengthRestriction.addEventListener("change", function () {
+                if (lengthRestriction.value === "2") {
+                    limitationLabel.style.display = "block";
+                    limitation.style.display = "block";
+                    ratioLabel.style.display = "none";
+                    ratioInputL.style.display = "none";
+                    ratioInputB.style.display = "none";
+                    console.log("7");
+                } else if (lengthRestriction.value === "1") {
+                    limitationLabel.style.display = "none";
+                    limitation.style.display = "none";
+                    ratioLabel.style.display = "block";
+                    ratioInputL.style.display = "block";
+                    ratioInputB.style.display = "block";
+                    console.log("8");
+                } else {
+                    limitationLabel.style.display = "none";
+                    limitation.style.display = "none";
+                    ratioLabel.style.display = "none";
+                    ratioInputL.style.display = "none";
+                    ratioInputB.style.display = "none";
+                    console.log("9");
+                }
+            });
+
             document.querySelectorAll('input, select').forEach(field => {
                 const savedValue = localStorage.getItem(field.id);
-                if (savedValue) {
+                if (savedValue !== null) {
                     field.value = savedValue;
+                    console.log("0");
+
+
+                    
+                    // Trigger the change event programmatically to update display logic
+                    const changeEvent = new Event('change', { bubbles: true });
+                    field.dispatchEvent(changeEvent); // Ensure the change event fires
+                    console.log("901");
                 }
             });
         }
-
-        // Load field values when the page loads
-        window.addEventListener('load', loadFieldValues);
-
-        // Save values when any input or select field changes
-        document.querySelectorAll('input, select').forEach(field => {
-            field.addEventListener('input', saveFieldValues);
-            field.addEventListener('change', saveFieldValues);
+    
+        // Attach listeners after DOM content is fully loaded
+        console.log("1");
+        document.addEventListener('DOMContentLoaded', () => {
+            // Load saved values on page load
+            loadFieldValues();
+            console.log("2");
+            // Save field values when any input or select field changes
+            document.querySelectorAll('input, select').forEach(field => {
+                field.addEventListener('input', saveFieldValues);
+                field.addEventListener('change', saveFieldValues);
+                console.log("3");
+            });
+    
+            
         });
     </script>
+    
+    
+    
 </body>
 </html>
 

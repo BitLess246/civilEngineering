@@ -1,0 +1,152 @@
+/* General Styles */
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f0f0f0;
+    margin: 0;
+    padding: 0;
+    color: #333;
+}
+
+.container {
+    width: 90%;
+    max-width: 600px;
+    margin: 50px auto;
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+h1, h4 {
+    text-align: center;
+}
+
+h3 {
+    font-size: 1.5em;
+    margin-top: 1em;
+    border-bottom: 2px solid #ccc;
+    padding-bottom: 0.5em;
+    color: #2c3e50;
+}
+
+h5 {
+    font-size: 1.2em;
+    margin-top: 1em;
+    margin-bottom: 0em;
+    padding-bottom: 0.5em;
+    color: #34495e;
+}
+
+h6 {
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+p, li {
+    font-size: 12px;
+    line-height: 1.2;
+    margin-top: 0;
+    margin-bottom: 0.2em;
+}
+
+li {
+    line-height: 1.2; /* Adjusted line height */
+    margin-top: 0;
+    margin-bottom: 0.5em; /* Added bottom margin for spacing */
+}
+
+strong {
+    font-weight: bold;
+}
+
+/* Styles for Inline Elements */
+h5.inline, p.inline {
+    display: inline;
+}
+
+/* Form Elements */
+.form-group {
+    margin-bottom: 15px;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+input, select {
+    width: 100%;
+    padding: 8px;
+    box-sizing: border-box;
+}
+
+button {
+    width: 100%;
+    padding: 10px;
+    background: #007BFF;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+button:hover {
+    background: #0056b3;
+}
+
+/* Results Box */
+#results {
+    margin-top: 20px;
+    padding: 10px;
+    background: #e9ecef;
+    border-radius: 4px;
+}
+
+/* Sections */
+.beam-section, .foundation-section {
+    margin-bottom: 20px;
+}
+
+.beam-section label, .foundation-section label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.beam-section input, .foundation-section input {
+    width: 100%;
+    padding: 8px;
+    box-sizing: border-box;
+    margin-bottom: 10px;
+}
+
+.foundation-card {
+    border: 1px solid #ccc;
+    padding: 15px;
+    margin-bottom: 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.foundation-card.selected {
+    background-color: #f0f0f0;
+    border-color: #007BFF;
+}
+
+.card-title {
+    margin-bottom: 10px;
+}
+
+/* Additional Styles */
+.calculation-result {
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    padding: 0.5em;
+    margin-top: 0.5em;
+}
+
+ol.summary {
+    margin-left: 20px;
+    font-weight: bold;
+}
