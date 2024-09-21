@@ -6,7 +6,9 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('formFoundation').addEventListener('submit', function(event) {
         event.preventDefault();
         try {
+            console.log("retrieved data");
             // Retrieve input values
+            let constraints = 1;
             const type = document.getElementById('structureType').value;
             const deadLoad = parseFloat(document.getElementById('DeadLoad').value);
             const liveLoad = parseFloat(document.getElementById('LiveLoad').value);
@@ -25,8 +27,9 @@ document.addEventListener("DOMContentLoaded", () => {
             const limitLength = parseFloat(document.getElementById('Limitation').value);
             const ratioLengthL = parseFloat(document.getElementById('RatioL').value);
             const ratioLengthB = parseFloat(document.getElementById('RatioB').value); 
-            const constraints = parseInt(document.getElementById('LengthRestriction1').value);
+            constraints = parseInt(document.getElementById('LengthRestriction1').value);
             // Initialize default values
+            console.log("initialize values");
             let dc = 250;
             let dc1 = 250;
             let dc2 = 250;
@@ -42,199 +45,105 @@ document.addEventListener("DOMContentLoaded", () => {
             resultDiv.innerHTML = ''; // Clear previous results
             if (solution === 11) {
                 // Logic for solution Isolated Square - Iteration Method
+                console.log("Isolated Square - Iteration Method");
                 let bRatio = 1;
                 squareDimension = calculateDimensionSquare(depth, dc, deadLoad, liveLoad, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity);
-
+                console.log("calculated dimension");
                 punchingShearVu = calculatePunchingShear(dc, clearCover, barDia, deadLoad, liveLoad, columnWidth, squareDimension.B2, squareDimension.B2,unitWeightSoil, unitWeightConcrete, surcharge,squareDimension.ds);
+                console.log("calculated Vu");
                 let as = columnLoc(columnLocation);
                 punchingShearVn = calculatePunchingShearVn(punchingShearVu.d, punchingShearVu.side, fc, λ, bRatio, as);
-
+                console.log("calculated Vn");
                 document.getElementById('result').appendChild(createHeader3(`Solution:`));
                 document.getElementById('result').appendChild(createHeader5(`Punching Shear Calculation`));
-                document.getElementById('result').appendChild(createDimension(dc, depth, soilBearingCapacity,unitWeightConcrete,unitWeightSoil,squareDimension,liveLoad,deadLoad,clearCover,barDia,punchingShearVu,surcharge,columnWidth,λ,fc,ddd,dc1,dc2,rectangularDimension1,punchingShearVu1,constraints));
-                document.getElementById('result').appendChild(punchingShear(dc, depth, soilBearingCapacity,unitWeightConcrete,unitWeightSoil,squareDimension,liveLoad,deadLoad,clearCover,barDia,punchingShearVu,surcharge,columnWidth,λ,fc,ddd,dc1,dc2,rectangularDimension1,punchingShearVu1,constraints));
+                
+                document.getElementById('result').appendChild(createParagraph(`D<sub>c</sub> = ${dc} mm`));
+                document.getElementById('result').appendChild(createParagraph(`D<sub>s</sub> = H - D<sub>c</sub> = ${depth} - ${dc} = ${depth - dc} mm`));
+                document.getElementById('result').appendChild(createParagraph(`q<sub>net</sub> = q<sub>a</sub> - γ<sub>c</sub> D<sub>c</sub> - γ<sub>s</sub> D<sub>s</sub> - q`));
+                document.getElementById('result').appendChild(createParagraph(`q<sub>net</sub> = ${soilBearingCapacity} kPa - (${unitWeightConcrete} kN/m<sup>3</sup> x ${dc / 1000} m) - (${unitWeightSoil} kN/m<sup>3</sup> x ${squareDimension.ds / 1000} m) - ${surcharge} kN/m<sup>2</sup>`));
+                document.getElementById('result').appendChild(createParagraph(`q<sub>net</sub> = ${squareDimension.qnet} kPa`));
+                document.getElementById('result').appendChild(createParagraph(`P = Live Load + Dead Load = ${liveLoad} kN + ${deadLoad} kN = ${liveLoad + deadLoad} kN`));
+                document.getElementById('result').appendChild(createParagraph(`A<sub>f</sub> = P / q<sub>net</sub> = ${squareDimension.P} kN / ${squareDimension.qnet} kPa = ${squareDimension.Af.toFixed(2)} m<sup>2</sup>`));
+                document.getElementById('result').appendChild(createParagraph(`B = √Af = √${squareDimension.Af} = ${squareDimension.B1.toFixed(2)} = ${squareDimension.B2}m`));
                 
                 
-                /*
-                document.getElementById('result').appendChild(createHeader3(`Solution:`));
-                document.getElementById('result').appendChild(createHeader5(`Punching Shear Calculation `));
-                document.getElementById('result').appendChild(createParagraph(`D<sub>s</sub> = H - D<sub>c</sub> = ${depth} mm - ${dc} mm = ${squareDimension.ds} mm`));
-                //qnet = soilBearingCapacity - (unitWeightConcrete * dc / 1000) - (unitWeightSoil * ds / 1000) - surcharge;
-                document.getElementById('result').appendChild(createParagraph(`q<sub>net</sub> = q<sub>a</sub> - (γ<sub>c</sub> x d<sub>c</sub>) - (γ<sub>s</sub> x d<sub>s</sub>) - σ = ${soilBearingCapacity} - (${unitWeightConcrete} * ${dc} / 1000) - (${unitWeightSoil} * ${squareDimension.ds} / 1000) - ${surcharge} = ${squareDimension.qnet}`));
-                //P = deadLoad + liveLoad
-                document.getElementById('result').appendChild(createParagraph(`P = DL + LL = ${deadLoad} + ${liveLoad} = ${squareDimension.P}`));
-                //Af = P / qnet
-                document.getElementById('result').appendChild(createParagraph(`Af = P / q<sub>net</sub> = ${squareDimension.P} / ${squareDimension.qnet} = ${toFixed(squareDimension.Af,4)} mm<sup>2</sup>`));
-                //B1 = Math.sqrt(Af) approximate B2
-                document.getElementById('result').appendChild(createParagraph(`B = √Af = ${toFixed(squareDimension.B1,4)} mm = ${squareDimension.B2} mm`));
-                //d = Dc - Cc - db
-                document.getElementById('result').appendChild(createParagraph(`d = D<sub>c</sub> - C<sub>c</sub> - d<sub>b</sub>`));
-                document.getElementById('result').appendChild(createParagraph(`d = ${dc}mm - ${clearCover}mm - ${barDia}mm = ${punchingShearVu.d}mm`));
-                //Pu = (1.2 * deadLoad) + (1.6 * liveLoad) + (1.2*((unitWeightSoil*ds/1000)+(unitWeightConcrete*dc/1000) + surcharge))*B*L;
-                document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> = (1.2 * DL) + (1.6 * LL) + (1.2 * ((γ<sub>s</sub> x d<sub>s</sub>) + (γ<sub>c</sub> x d<sub>c</sub>) + σ)) * B * L = (1.2 x ${deadLoad}) + (1.6 x ${liveLoad}) + (1.2 x (${unitWeightSoil} x ${squareDimension.ds} / 1000 + ${unitWeightConcrete} x ${dc} / 1000 + ${surcharge})) =${toFixed(punchingShearVu.Pu,4)}`));
-                //qu = Pu / (L * B)
-                document.getElementById('result').appendChild(createParagraph(`q<sub>u</sub> = P<sub>u</sub> / (L x B) = ${punchingShearVu.Pu} / (${squareDimension.B2} x ${squareDimension.B2}) =${toFixed(punchingShearVu.Pu / (squareDimension.B2 * squareDimension.B2),4)}`));
-                //Bo = d + columnWidth;
-                document.getElementById('result').appendChild(createParagraph(`B<sub>o</sub> = d + C = ${punchingShearVu.d} + ${columnWidth} = ${punchingShearVu.Bo} mm`));
-                //Vu = Pu - (qu * (side * side / 1000000));
-                document.getElementById('result').appendChild(createParagraph(`V<sub>u</sub> = P<sub>u</sub> - (q<sub>u</sub> x (B<sub>o</sub> x B<sub>o</sub> )) = ${punchingShearVu.Pu} - (${punchingShearVu.qu} / (${punchingShearVu.side} x ${punchingShearVu.side} / 1000000)) = ${toFixed(punchingShearVu.Vu,4)}`));
-                //phi Vn1 = 0.75 * (1 / 3) * λ * Math.sqrt(fc) * 4 * side * d / 1000;
-                document.getElementById('result').appendChild(createParagraph(`φ V<sub>n<sub>1</sub></sub> = 0.75 * (1 / 3) * λ * √fc * 4 * B * d  = 0.75 * (1 / 3) * ${λ} * ${fc} * 4 * ${punchingShearVu.side} * ${punchingShearVu.d} / 1000 = ${toFixed(punchingShearVn.Vn1,4)}`));
-*/
+                document.getElementById('result').appendChild(createParagraph(`d (effective depth) = D<sub>c</sub> - C<sub>c</sub> - d<sub>b</sub> = ${dc} mm - ${clearCover} mm - ${barDia} mm = ${punchingShearVu.d} mm`));
+                document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> (Ultimate Load) = 1.2 Dead Load + 1.6 Live Load + 1.2 [(γ<sub>s</sub> x d<sub>s</sub>) + (γ<sub>c</sub> x d<sub>c</sub>) + q ] x B x L`));
+                document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> (Ultimate Load) = 1.2(${deadLoad} kN) + 1.6(${liveLoad} kN) + 1.2 [( ${unitWeightSoil} x ${(depth - dc) / 1000} ) + ( ${unitWeightConcrete} x ${dc / 1000} ) + ${surcharge} ] x ${squareDimension.B2} x ${squareDimension.B2} = ${punchingShearVu.Pu.toFixed(2)} kN`));
+                document.getElementById('result').appendChild(createParagraph(`q<sub>u</sub> (Ultimate Bearing Pressure): P<sub>u</sub> / A<sub>f</sub> = ${punchingShearVu.Pu.toFixed(2)} kN / (${squareDimension.B2} meters x ${squareDimension.B2} meters) = ${punchingShearVu.qu.toFixed(2)} kPa`));
+                document.getElementById('result').appendChild(createParagraph(`C + d = ${columnWidth} mm + ${punchingShearVu.d} mm = ${punchingShearVu.side} mm`));
+                document.getElementById('result').appendChild(createParagraph(`b<sub>o</sub> = 4 x (C + d) = 4 x (${columnWidth}mm + ${punchingShearVu.d}mm) = ${4*(punchingShearVu.d+columnWidth)}mm`));
+                document.getElementById('result').appendChild(createParagraph(`V<sub>u</sub> (Punching Shear) = P<sub>u</sub> - q<sub>u</sub>(C + d)<sup>2</sup> = ${punchingShearVu.Pu.toFixed(2)} kN - ${punchingShearVu.qu.toFixed(2)} (${punchingShearVu.side / 1000} meter)<sup>2</sup> = ${punchingShearVu.Vu.toFixed(2)} kN`));
+                document.getElementById('result').appendChild(createParagraph(`ΦV<sub>n1</sub> (Punching Shear) = 0.75 x (1/3) x λ x √f'c x b<sub>o</sub> x d`));
+                document.getElementById('result').appendChild(createParagraph(`ΦV<sub>n1</sub> (Punching Shear) = 0.75 x (1/3) x ${λ} x √${fc}MPa x ${4*(punchingShearVu.d+columnWidth)}mm x ${punchingShearVu.d}mm = ${punchingShearVn.Vn1}KN`));
+                document.getElementById('result').appendChild(createParagraph(`ΦV<sub>n2</sub> (Punching Shear) = 0.75 x (1/6) x (1 + 2/β) x λ x √f'c x b<sub>o</sub> x d`));
+                document.getElementById('result').appendChild(createParagraph(`ΦV<sub>n2</sub> (Punching Shear) = 0.75 x (1/6) x (1 + 2/1) x${λ} x √${fc}MPa x ${4*(punchingShearVu.d+columnWidth)}mm x ${punchingShearVu.d}mm = ${punchingShearVn.Vn2}KN`));
+                document.getElementById('result').appendChild(createParagraph(`ΦV<sub>n3</sub> (Punching Shear) = 0.75 x (1/12) x (2 + a<sub>s</sub>d/b<sub>o</sub>) x λ x √f'c x b<sub>o</sub> x d`));
+                document.getElementById('result').appendChild(createParagraph(`ΦV<sub>n2</sub> (Punching Shear) = 0.75 x (1/12) x (2 + (${as}x${punchingShearVu.d})/${4*(punchingShearVu.d+columnWidth)}) x${λ} x √${fc}MPa x ${4*(punchingShearVu.d+columnWidth)}mm x ${punchingShearVu.d}mm = ${punchingShearVn.Vn3}KN`));
+                document.getElementById('result').appendChild(createParagraph(`ΦV<sub>n</sub> = ${punchingShearVn.minVn.toFixed(2)}KN`));
+                document.getElementById('result').appendChild(createParagraph(`ΦV<sub>n</sub> ${punchingShearVn.minVntoFixed(2) > punchingShearVu.Vu.toFixed(2) ?">":"<" } V<sub>u</sub>`));
+                document.getElementById('result').appendChild(createParagraph(`∴ ${punchingShearVn.minVntoFixed(2) > punchingShearVu.Vu.toFixed(2) ?"Passed":"Failed" } `));
+                
 
+
+
+
+
+                console.log("displayed first trial");
                
-                // Iteration process
                 while (punchingShearVu.Vu > punchingShearVn.minVn) {
-                    dc1 += 25;
-                    totalIterations++;
-                    squareDimension = calculateDimensionSquare(depth, dc1, deadLoad, liveLoad, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity);
-                    punchingShearVu = calculatePunchingShear(dc1, clearCover, barDia, deadLoad, liveLoad, columnWidth, squareDimension.B2, squareDimension.B2,unitWeightSoil, unitWeightConcrete, surcharge,squareDimension.ds);
+                    console.log("iterating");
+                    dc += 25;
+                
+                    squareDimension = calculateDimensionSquare(depth, dc, deadLoad, liveLoad, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity);
+                    console.log("calculated dimension");
+                    punchingShearVu = calculatePunchingShear(dc, clearCover, barDia, deadLoad, liveLoad, columnWidth, squareDimension.B2, squareDimension.B2,unitWeightSoil, unitWeightConcrete, surcharge,squareDimension.ds);
+                    console.log("calculated Vu");
+                    
                     punchingShearVn = calculatePunchingShearVn(punchingShearVu.d, punchingShearVu.side, fc, λ, bRatio, as);
+                    console.log("calculated Vn");
+                    document.getElementById('result').appendChild(createHeader3(`Solution:`));
+                    document.getElementById('result').appendChild(createHeader5(`Punching Shear Calculation`));
+                    
+                    document.getElementById('result').appendChild(createParagraph(`D<sub>c</sub> = ${dc} mm`));
+                    document.getElementById('result').appendChild(createParagraph(`D<sub>s</sub> = H - D<sub>c</sub> = ${depth} - ${dc} = ${depth - dc} mm`));
+                    document.getElementById('result').appendChild(createParagraph(`q<sub>net</sub> = q<sub>a</sub> - γ<sub>c</sub> D<sub>c</sub> - γ<sub>s</sub> D<sub>s</sub> - q`));
+                    document.getElementById('result').appendChild(createParagraph(`q<sub>net</sub> = ${soilBearingCapacity} kPa - (${unitWeightConcrete} kN/m<sup>3</sup> x ${dc / 1000} m) - (${unitWeightSoil} kN/m<sup>3</sup> x ${squareDimension.ds / 1000} m) - ${surcharge} kN/m<sup>2</sup>`));
+                    document.getElementById('result').appendChild(createParagraph(`q<sub>net</sub> = ${squareDimension.qnet} kPa`));
+                    document.getElementById('result').appendChild(createParagraph(`P = Live Load + Dead Load = ${liveLoad} kN + ${deadLoad} kN = ${liveLoad + deadLoad} kN`));
+                    document.getElementById('result').appendChild(createParagraph(`A<sub>f</sub> = P / q<sub>net</sub> = ${squareDimension.P} kN / ${squareDimension.qnet} kPa = ${squareDimension.Af.toFixed(2)} m<sup>2</sup>`));
+                    document.getElementById('result').appendChild(createParagraph(`B = √Af = √${squareDimension.Af} = ${toFixed(squareDimension.B1,2)} = ${squareDimension.B2}m`));
+                    
+                    
+                    document.getElementById('result').appendChild(createParagraph(`d (effective depth) = D<sub>c</sub> - C<sub>c</sub> - d<sub>b</sub> = ${dc} mm - ${clearCover} mm - ${barDia} mm = ${punchingShearVu.d} mm`));
+                    document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> (Ultimate Load) = 1.2 Dead Load + 1.6 Live Load + 1.2 [(γ<sub>s</sub> x d<sub>s</sub>) + (γ<sub>c</sub> x d<sub>c</sub>) + q ] x B x L`));
+                    document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> (Ultimate Load) = 1.2(${deadLoad} kN) + 1.6(${liveLoad} kN) + 1.2 [( ${unitWeightSoil} x ${(depth - dc) / 1000} ) + ( ${unitWeightConcrete} x ${dc / 1000} ) + ${surcharge} ] x ${squareDimension.B2} x ${squareDimension.B2} = ${punchingShearVu.Pu.toFixed(2)} kN`));
+                    document.getElementById('result').appendChild(createParagraph(`q<sub>u</sub> (Ultimate Bearing Pressure): P<sub>u</sub> / A<sub>f</sub> = ${punchingShearVu.Pu.toFixed(2)} kN / (${squareDimension.B2} meters x ${squareDimension.B2} meters) = ${punchingShearVu.qu.toFixed(2)} kPa`));
+                    document.getElementById('result').appendChild(createParagraph(`C + d = ${columnWidth} mm + ${punchingShearVu.d} mm = ${punchingShearVu.side} mm`));
+                    document.getElementById('result').appendChild(createParagraph(`b<sub>o</sub> = 4 x (C + d) = 4 x (${columnWidth}mm + ${punchingShearVu.d}mm) = ${4*(punchingShearVu.d+columnWidth)}mm`));
+                    document.getElementById('result').appendChild(createParagraph(`V<sub>u</sub> (Punching Shear) = P<sub>u</sub> - q<sub>u</sub>(C + d)<sup>2</sup> = ${punchingShearVu.Pu.toFixed(2)} kN - ${punchingShearVu.qu.toFixed(2)} (${punchingShearVu.side / 1000} meter)<sup>2</sup> = ${punchingShearVu.Vu.toFixed(2)} kN`));
+                    document.getElementById('result').appendChild(createParagraph(`ΦV<sub>n1</sub> (Punching Shear) = 0.75 x (1/3) x λ x √f'c x b<sub>o</sub> x d`));
+                    document.getElementById('result').appendChild(createParagraph(`ΦV<sub>n1</sub> (Punching Shear) = 0.75 x (1/3) x ${λ} x √${fc}MPa x ${4*(punchingShearVu.d+columnWidth)}mm x ${punchingShearVu.d}mm = ${punchingShearVn.Vn1}KN`));
+                    document.getElementById('result').appendChild(createParagraph(`ΦV<sub>n2</sub> (Punching Shear) = 0.75 x (1/6) x (1 + 2/β) x λ x √f'c x b<sub>o</sub> x d`));
+                    document.getElementById('result').appendChild(createParagraph(`ΦV<sub>n2</sub> (Punching Shear) = 0.75 x (1/6) x (1 + 2/1) x${λ} x √${fc}MPa x ${4*(punchingShearVu.d+columnWidth)}mm x ${punchingShearVu.d}mm = ${punchingShearVn.Vn2}KN`));
+                    document.getElementById('result').appendChild(createParagraph(`ΦV<sub>n3</sub> (Punching Shear) = 0.75 x (1/12) x (2 + a<sub>s</sub>d/b<sub>o</sub>) x λ x √f'c x b<sub>o</sub> x d`));
+                    document.getElementById('result').appendChild(createParagraph(`ΦV<sub>n2</sub> (Punching Shear) = 0.75 x (1/12) x (2 + (${as}x${punchingShearVu.d})/${4*(punchingShearVu.d+columnWidth)}) x${λ} x √${fc}MPa x ${4*(punchingShearVu.d+columnWidth)}mm x ${punchingShearVu.d}mm = ${punchingShearVn.Vn3}KN`));
+                    document.getElementById('result').appendChild(createParagraph(`ΦV<sub>n</sub> = ${punchingShearVn.minVn.toFixed(2)}KN`));
+                    document.getElementById('result').appendChild(createParagraph(`ΦV<sub>n</sub> ${punchingShearVn.minVntoFixed(2) > punchingShearVu.Vu.toFixed(2) ?">":"<" } V<sub>u</sub>`));
+                    document.getElementById('result').appendChild(createParagraph(`∴ ${punchingShearVn.minVntoFixed(2) > punchingShearVu.Vu.toFixed(2) ?"Passed":"Failed" } `));
+                    
+                
                 }
-                beamShearResult = calculateBeamShearBothAxes("square", dc1, clearCover, barDia, squareDimension.B2 * 1000, squareDimension.B2 * 1000, columnWidth, punchingShearVu.qu, fc, λ);
-
-                // Display results
-                const results =displayPunchingShearResults1(dc, clearCover, barDia, deadLoad, liveLoad, columnWidth, unitWeightSoil, unitWeightConcrete, soilBearingCapacity, surcharge, fc, λ, squareDimension, punchingShearVu, punchingShearVn, totalIterations);
-                resContent = results.innerText;
-
+                console.log("ended iteration");
+                beamShearResult = calculateBeamShearBothAxes("square", dc, clearCover, barDia, squareDimension.B2 * 1000, squareDimension.B2 * 1000, columnWidth, punchingShearVu.qu, fc, λ);
+                document.getElementById('result').appendChild(beamShear(dc,clearCover,barDia,beamShearResult,squareDimension,columnWidth,punchingShearVu,λ,fc));
+               
             } else if (solution === 12) {
-                // Logic for solution Isolated Square Footing - Approximation Method
                
-                squareDimension = calculateDimensionSquare(depth, dc, deadLoad, liveLoad, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity);
-
-                punchingShearVu = calculatePunchingShear(dc, clearCover, barDia, deadLoad, liveLoad, columnWidth, squareDimension.B2, squareDimension.B2,unitWeightSoil, unitWeightConcrete, surcharge,squareDimension.ds);
-                ddd = solveForD(columnWidth, punchingShearVu.Vu, λ, fc);
-                dc1 = ddd+ clearCover +barDia;
-                dc2 = Math.ceil(dc1 / 25) * 25;
-                squareDimension1 = calculateDimensionSquare(depth, dc2, deadLoad, liveLoad, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity);
-                punchingShearVu1 = calculatePunchingShear(dc2, clearCover, barDia, deadLoad, liveLoad, columnWidth, squareDimension1.B2, squareDimension1.B2,unitWeightSoil, unitWeightConcrete, surcharge,squareDimension1.ds);
-                
-                beamShearResult = calculateBeamShearBothAxes("square", dc2, clearCover, barDia, squareDimension1.B2 * 1000, squareDimension1.B2 * 1000, columnWidth, punchingShearVu1.qu, fc, λ);
-               
-                // Display results
-                const results = displayPunchingShearResults2(dc, depth, soilBearingCapacity, unitWeightConcrete, unitWeightSoil, surcharge, liveLoad, deadLoad, punchingShearVu, columnWidth, squareDimension, squareDimension1, ddd, dc1, dc2, clearCover, barDia,λ,fc, beamShearResult, punchingShearVu1);
-                resContent = results.innerText;
-
-           
             } else if (solution === 21) {
-                // Logic for solution Isolated Rectangular Footing - Iteration Method
-                
-                rectangularDimension = calculateDimensionRectangular(depth, dc, deadLoad, liveLoad, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity, limitLength, ratioLengthL, ratioLengthB, constraints);
-                let bRatio = rectangularDimension.L / rectangularDimension.B4;
-                punchingShearVu = calculatePunchingShear(dc, clearCover, barDia, deadLoad, liveLoad,  columnWidth, rectangularDimension.B4, rectangularDimension.L, unitWeightSoil, unitWeightConcrete, surcharge,rectangularDimension.ds);
-                let as = columnLoc(columnLocation);
-                punchingShearVn = calculatePunchingShearVn(punchingShearVu.d, punchingShearVu.side, fc, λ, bRatio, as);
-                document.getElementById('result').appendChild(createHeader3(`Solution:`));
-                document.getElementById('result').appendChild(createHeader5(`Punching Shear Calculation`));
-                
-                
-                // Iteration process
-                while (punchingShearVu.Vu > punchingShearVn.minVn) {
-                    dc1 += 25;
-                    totalIterations++;
-                    rectangularDimension = calculateDimensionRectangular(depth, dc1, deadLoad, liveLoad, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity, limitLength, ratioLengthL, ratioLengthB, constraints);
-                    punchingShearVu = calculatePunchingShear(dc1, clearCover, barDia, deadLoad, liveLoad,  columnWidth, rectangularDimension.B4, rectangularDimension.L, unitWeightSoil, unitWeightConcrete, surcharge,rectangularDimension.ds);
-                    punchingShearVn = calculatePunchingShearVn(punchingShearVu.d, punchingShearVu.side, fc, λ, bRatio, as);
-                }
-                beamShearResult = calculateBeamShearBothAxes("rectangular", dc1, clearCover, barDia, rectangularDimension.B4 * 1000, rectangularDimension.L * 1000, columnWidth, punchingShearVu.qu, fc, λ);
-
-                // Display results
-                const results = displayPunchingShearResults1(dc ,rectangularDimension, punchingShearVu, punchingShearVn, totalIterations);
-                resContent = results.innerText;
-
-            
+               
             } else if (solution === 22) {
-                // Logic for solution Isolated Rectangular Footing - Approximation Method
-                console.log("22-1"); 
-                let dfinal1=0;
-                rectangularDimension = calculateDimensionRectangular(depth, dc, deadLoad, liveLoad, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity, limitLength, ratioLengthL, ratioLengthB, constraints);
-                console.log("22-2");    
-                punchingShearVu = calculatePunchingShear(dc, clearCover, barDia, deadLoad, liveLoad, columnWidth, rectangularDimension.B4, rectangularDimension.L,unitWeightSoil, unitWeightConcrete, surcharge,rectangularDimension.ds);
-                console.log("22-3"); 
-                ddd = solveForD(columnWidth, punchingShearVu.Vu, λ, fc);
-                console.log("22-4"); 
-                dc1 = ddd+ clearCover +barDia;
-                console.log("22-5");
-                dc2 = Math.ceil(dc1 / 25) * 25;
-                dfinal1=dc2
-                console.log("22-6");
-                let bRatio = rectangularDimension.L / rectangularDimension.B4;
-                rectangularDimension1 = calculateDimensionRectangular(depth, dc2, deadLoad, liveLoad, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity, limitLength, ratioLengthL, ratioLengthB, constraints);
-                console.log("22-7");
-                punchingShearVu1 = calculatePunchingShear(dc2, clearCover, barDia, deadLoad, liveLoad, columnWidth, rectangularDimension1.B4, rectangularDimension1.L,unitWeightSoil, unitWeightConcrete, surcharge,rectangularDimension1.ds);
-                console.log("22-8");
-
-                document.getElementById('result').appendChild(createHeader3(`Solution:`));
-                document.getElementById('result').appendChild(createHeader5(`Punching Shear Calculation`));
-                document.getElementById('result').appendChild(createDimension(dc, depth, soilBearingCapacity,unitWeightConcrete,unitWeightSoil,rectangularDimension,liveLoad,deadLoad,clearCover,barDia,punchingShearVu,surcharge,columnWidth,λ,fc,ddd,dc1,dc2,rectangularDimension1,punchingShearVu1,constraints));
-                document.getElementById('result').appendChild(punchingShear(dc, depth, soilBearingCapacity,unitWeightConcrete,unitWeightSoil,rectangularDimension,liveLoad,deadLoad,clearCover,barDia,punchingShearVu,surcharge,columnWidth,λ,fc,ddd,dc1,dc2,rectangularDimension1,punchingShearVu1,constraints));
-                /*
-                solutionContent += createHeader3(`Solution:`).outerHTML;
-                solutionContent += createHeader5(`Punching Shear Calculation`).outerHTML;
-                solutionContent += createDimension(dc, depth, soilBearingCapacity, unitWeightConcrete, unitWeightSoil, rectangularDimension, liveLoad, deadLoad, clearCover, barDia, punchingShearVu, surcharge, columnWidth, λ, fc, ddd, dc1, dc2, rectangularDimension1, punchingShearVu1, constraints).outerHTML;
-                solutionContent += punchingShear(dc, depth, soilBearingCapacity, unitWeightConcrete, unitWeightSoil, rectangularDimension, liveLoad, deadLoad, clearCover, barDia, punchingShearVu, surcharge, columnWidth, λ, fc, ddd, dc1, dc2, rectangularDimension1, punchingShearVu1, constraints).outerHTML;
-                */
-                beamShearResult = calculateBeamShearBothAxes("rectangular", dc2, clearCover, barDia, rectangularDimension1.B4 * 1000, rectangularDimension1.L * 1000, columnWidth, punchingShearVu1.qu, fc, λ);
-                console.log("22-9"); 
-                document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation`));
-                document.getElementById('result').appendChild(beamShear(dc2,clearCover,barDia,beamShearResult,rectangularDimension1,columnWidth,punchingShearVu1,λ,fc));
-                /*
-                solutionContent += createHeader5(`Beam Shear Calculation`).outerHTML;
-                solutionContent += beamShear(dc2, clearCover, barDia, beamShearResult, rectangularDimension1, columnWidth, punchingShearVu1, λ, fc).outerHTML;
-                */
-                while((beamShearResult.xAxis.Vu/1000000) > (beamShearResult.xAxis.ΦVn/1000) || (beamShearResult.yAxis.Vu/1000000) > (beamShearResult.yAxis.ΦVn/1000)){
-                    dc2 += 25;
-                    rectangularDimension1 = calculateDimensionRectangular(depth, dc2, deadLoad, liveLoad, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity, limitLength, ratioLengthL, ratioLengthB, constraints);
-                    punchingShearVu1 = calculatePunchingShear(dc2, clearCover, barDia, deadLoad, liveLoad, columnWidth, rectangularDimension1.B4, rectangularDimension1.L,unitWeightSoil, unitWeightConcrete, surcharge,rectangularDimension1.ds);
-                    console.log("22-8");
-                    beamShearResult = calculateBeamShearBothAxes("rectangular", dc2, clearCover, barDia, rectangularDimension1.B4 * 1000, rectangularDimension1.L * 1000, columnWidth, punchingShearVu1.qu, fc, λ);
-                    console.log("22-9");
-                    document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation`));
-                    /*
-                    solutionContent += createHeader5(`Beam Shear Calculation`).outerHTML;
-                    */
-                    document.getElementById('result').appendChild(beamShear(dc2,clearCover,barDia,beamShearResult,rectangularDimension1,columnWidth,punchingShearVu1,λ,fc));
-                    /*
-                    solutionContent += beamShear(dc2, clearCover, barDia, beamShearResult, rectangularDimension1, columnWidth, punchingShearVu1, λ, fc).outerHTML;
-                    */
-                }
-                if(dc2===dfinal1){
-                } else {
-                    document.getElementById('result').appendChild(createHeader5(`Recalculate Beam Dimension With new Dc`));
-                    document.getElementById('result').appendChild(createDimension(dc2, depth, soilBearingCapacity,unitWeightConcrete,unitWeightSoil,rectangularDimension,liveLoad,deadLoad,clearCover,barDia,punchingShearVu,surcharge,columnWidth,λ,fc,ddd,dc1,dc2,rectangularDimension1,punchingShearVu1,constraints));
-                    /*
-                    solutionContent += createHeader5(`Recalculate Beam Dimension With new Dc`).outerHTML;
-                    solutionContent += createDimension(dc2, depth, soilBearingCapacity, unitWeightConcrete, unitWeightSoil, rectangularDimension, liveLoad, deadLoad, clearCover, barDia, punchingShearVu, surcharge, columnWidth, λ, fc, ddd, dc1, dc2, rectangularDimension1, punchingShearVu1, constraints).outerHTML;
-                    */
-                }
-                let rebars = designRebars(rectangularDimension1.B4, rectangularDimension1.L, dc2,clearCover, barDia, barDia, columnWidth, punchingShearVu.qu, fc, fy, 0.5,bRatio);
-                document.getElementById('result').appendChild(createHeader5(`Reinforcement Design Calculation Along Long Span`));
-                document.getElementById('result').appendChild(rebarDisplay(rectangularDimension1.B4, rectangularDimension1.L, dc2,clearCover, barDia, barDia, columnWidth, punchingShearVu1.qu, fc, fy,rebars.b, rebars.bp, rebars.d, rebars.aa, rebars.Mu, rebars.ct, bRatio, rebars.num, rebars.at, rebars.reductionFactor, rebars.muMax, rebars.SRRB, rebars.Rn, rebars.rho, rebars.rhoMin1, rebars.rhoMin2, rebars.rhoMin, rebars.as1, rebars.as, rebars.asMin,rebars.asMin1, rebars.asMin2,rebars.ab,rebars.nInitial,rebars.nRounded,rebars.sc,rebars.scMin,rebars.message,rebars.centerBand,rebars.nCenterBand,rebars.nCenterBandRounded, rebars.Ag,rebars.beta1 ));
-                
-                
-                summaryContent += createParagraph(`Dc = ${dc2} mm`).outerHTML;
-                summaryContent += createParagraph(`L = ${rectangularDimension1.L} mm`).outerHTML;
-                summaryContent += createParagraph(`B = ${rectangularDimension1.B4} mm`).outerHTML;
-                summaryContent += createParagraph(`No. of rebars = ${rebars.nRounded} pcs`).outerHTML;  
-
-                /*
-                solutionContent += createHeader5(`Reinforcement Design Calculation Along Long Span`).outerHTML;
-                solutionContent += rebarDisplay(rectangularDimension1.B4, rectangularDimension1.L, dc2, clearCover, barDia, barDia, columnWidth, punchingShearVu1.qu, fc, fy, rebars.b, rebars.bp, rebars.d, rebars.aa, rebars.Mu, rebars.ct, bRatio, rebars.num, rebars.at, rebars.reductionFactor, rebars.muMax, rebars.SRRB, rebars.Rn, rebars.rho, rebars.rhoMin1, rebars.rhoMin2, rebars.rhoMin, rebars.as1, rebars.as, rebars.asMin, rebars.asMin1, rebars.asMin2, rebars.ab, rebars.nInitial, rebars.nRounded, rebars.sc, rebars.scMin, rebars.message, rebars.centerBand, rebars.nCenterBand, rebars.nCenterBandRounded, rebars.Ag, rebars.beta1).outerHTML;
-                */
-                rebars = designRebars(rectangularDimension1.L, rectangularDimension1.B4, dc2,clearCover, barDia, barDia, columnWidth, punchingShearVu.qu, fc, fy, 1.5,bRatio);
-                document.getElementById('result').appendChild(createHeader5(`Reinforcement Design Calculation Along Short Span`));
-                document.getElementById('result').appendChild(rebarDisplay(rectangularDimension1.L, rectangularDimension1.B4, dc2,clearCover, barDia, barDia, columnWidth, punchingShearVu1.qu, fc, fy,rebars.b, rebars.bp, rebars.d, rebars.aa, rebars.Mu, rebars.ct, bRatio, rebars.num, rebars.at, rebars.reductionFactor, rebars.muMax, rebars.SRRB, rebars.Rn, rebars.rho, rebars.rhoMin1, rebars.rhoMin2, rebars.rhoMin, rebars.as1, rebars.as, rebars.asMin,rebars.asMin1, rebars.asMin2,rebars.ab,rebars.nInitial,rebars.nRounded,rebars.sc,rebars.scMin,rebars.message,rebars.centerBand,rebars.nCenterBand,rebars.nCenterBandRounded, rebars.Ag,rebars.beta1 ));
-                
-                
-                document.getElementById('Summary').innerHTML = `<p>${summaryContent}</p>`;
-                openTab(null, 'Summary');
-                /*
-                solutionContent += createHeader5(`Reinforcement Design Calculation Along Short Span`).outerHTML;
-                solutionContent += rebarDisplay(rectangularDimension1.L, rectangularDimension1.B4, dc2, clearCover, barDia, barDia, columnWidth, punchingShearVu1.qu, fc, fy, rebars.b, rebars.bp, rebars.d, rebars.aa, rebars.Mu, rebars.ct, bRatio, rebars.num, rebars.at, rebars.reductionFactor, rebars.muMax, rebars.SRRB, rebars.Rn, rebars.rho, rebars.rhoMin1, rebars.rhoMin2, rebars.rhoMin, rebars.as1, rebars.as, rebars.asMin, rebars.asMin1, rebars.asMin2, rebars.ab, rebars.nInitial, rebars.nRounded, rebars.sc, rebars.scMin, rebars.message, rebars.centerBand, rebars.nCenterBand, rebars.nCenterBandRounded, rebars.Ag, rebars.beta1).outerHTML;
-                
-                displayResults(summaryContent, solutionContent);
-                openTab(null, 'Solution');  // Switch to the Solution tab
-                  */
+                     
             } 
         } catch (error) {
             console.error(`An error occurred: ${error}`);
@@ -247,21 +156,8 @@ document.addEventListener("DOMContentLoaded", () => {
     saveButtonElement.addEventListener("click", function() {
         SaveFile(resContent);
     });
-
-    function displayResults(summaryContent, solutionContent) {
-        // Display Summary
-        document.getElementById('Summary').innerHTML = `<h3>Summary</h3><p>${summaryContent}</p>`;
-      
-        // Display Solution
-        document.getElementById('Solution').innerHTML = `<h3>Solution</h3><p>${solutionContent}</p>`;
-      
-        // Automatically open the "Summary" tab after calculation
-        openTab(null, 'Summary');
-      }
     
       
-      
-
     function calculateDimensionSquare(depth, dc, deadLoad, liveLoad, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity) {
         const ds = depth - dc;
         const qnet = soilBearingCapacity - (unitWeightConcrete * dc / 1000) - (unitWeightSoil * ds / 1000) - surcharge;
@@ -656,167 +552,7 @@ function rebarDisplay(B,L,Dc,Cc,db,diaBar, c, qu, fc, fy, b, bp, d, aa, Mu, ct, 
     return resultsContent;
 }
  
-function compileDisplay(beamshear, punchingshear, finalDC, finalB, finalL) {
-    const resultDiv = document.getElementById("result");
-    resultDiv.innerHTML = ''; // Clear previous results
 
-    // Append punching shear results
-    resultDiv.appendChild(punchingshear);
-
-    // Append beam shear results
-    resultDiv.appendChild(beamshear);
-
-    // Create and append summary content
-    const summaryContent = document.createElement('div');
-    summaryContent.innerHTML = `
-        <h3>Summary:</h3>
-        <ol>
-            <li><p>Final Depth (D<sub>c</sub>) : ${finalDC} mm</p></li>
-            <li><p>B : ${finalB} meters</p></li>
-            <li><p>L : ${finalL} meters</p></li>
-        </ol>
-    `;
-    resultDiv.appendChild(summaryContent);
-
-    // Show save button
-    document.getElementById('saveButton').style.display = 'block';
-}
-
-
-    function displayPunchingShearResults1(dc, clearCover, barDia, deadLoad, liveLoad, columnWidth, fc, λ, squareDimension, punchingShearVu, punchingShearVn,dc1, dc2, beamShearResult, squareDimension1) {
-        // Ensure all variables are defined
-        const qu = punchingShearVu.qu !== undefined ? punchingShearVu.qu.toFixed(2) : 'N/A';
-        const Vu = punchingShearVu.Vu !== undefined ? punchingShearVu.Vu.toFixed(2) : 'N/A';
-        const minVn = punchingShearVn.minVn !== undefined ? punchingShearVn.minVn.toFixed(2) : 'N/A';
-        const xAxisAA = beamShearResult?.xAxis?.aa !== undefined ? beamShearResult.xAxis.aa.toFixed(2) : 'N/A';
-        const xAxisVu = beamShearResult?.xAxis?.Vu !== undefined ? (beamShearResult.xAxis.Vu / 1000000).toFixed(2) : 'N/A';
-        const xAxisΦVn = beamShearResult?.xAxis?.ΦVn !== undefined ? (beamShearResult.xAxis.ΦVn / 1000).toFixed(2) : 'N/A';
-        const yAxisAA = beamShearResult?.yAxis?.aa !== undefined ? beamShearResult.yAxis.aa.toFixed(2) : 'N/A';
-        const yAxisVu = beamShearResult?.yAxis?.Vu !== undefined ? (beamShearResult.yAxis.Vu / 1000000).toFixed(2) : 'N/A';
-        const yAxisΦVn = beamShearResult?.yAxis?.ΦVn !== undefined ? (beamShearResult.yAxis.ΦVn / 1000).toFixed(2) : 'N/A';
-        const dkkVal = dc1 !== undefined ? (dc1 - clearCover - barDia).toFixed(2) : 'N/A';
-        const dc1Val = dc1 !== undefined ? dc1.toFixed(2) : 'N/A';
-    
-        // Create a container for the results
-        const resultsContent = document.createElement('div');
-    
-        // Populate the results with formatted content
-        resultsContent.innerHTML = `
-            <h3>Solution:</h3>
-            <h5>Punching Shear Calculation</h5>
-            <ul>
-                <li><p><strong>Effective Depth (d):</strong> The effective depth is calculated using the formula:</p>
-                    <p>d = D<sub>c</sub> - C<sub>c</sub> - d<sub>b</sub></p>
-                    <p>Given:</p>
-                    <ul>
-                        <li>D<sub>c</sub> (Total depth of the slab): ${dc} mm</li>
-                        <li>C<sub>c</sub> (Clear cover to reinforcement): ${clearCover} mm</li>
-                        <li>d<sub>b</sub> (Bar diameter): ${barDia} mm</li>
-                    </ul>
-                    <p>Substituting these values:</p>
-                    <p>d = ${dc} mm - ${clearCover} mm - ${barDia} mm = ${punchingShearVu.d} mm</p>
-                </li>
-    
-                <li><p><strong>Ultimate Load (P<sub>u</sub>):</strong> The ultimate load is computed using the following formula:</p>
-                    <p>P<sub>u</sub> = 1.2 Dead Load + 1.6 Live Load</p>
-                    <p>Where:</p>
-                    <ul>
-                        <li>Dead Load = ${deadLoad} kN</li>
-                        <li>Live Load = ${liveLoad} kN</li>
-                    </ul>
-                    <p>Thus:</p>
-                    <p>P<sub>u</sub> = 1.2(${deadLoad} kN) + 1.6(${liveLoad} kN) = ${punchingShearVu.Pu} kN</p>
-                </li>
-    
-                <li><p><strong>Ultimate Bearing Pressure (q<sub>u</sub>):</strong> The ultimate bearing pressure is calculated using:</p>
-                    <p>q<sub>u</sub> = P<sub>u</sub> / A<sub>f</sub></p>
-                    <p>Where:</p>
-                    <ul>
-                        <li>P<sub>u</sub> = ${punchingShearVu.Pu} kN</li>
-                        <li>A<sub>f</sub> (Footing area) = (${squareDimension.B2} meters)<sup>2</sup></li>
-                    </ul>
-                    <p>Thus:</p>
-                    <p>q<sub>u</sub> = ${qu} kPa</p>
-                </li>
-    
-                <li><p><strong>Punching Shear Force (V<sub>u</sub>):</strong> The punching shear force is determined using the equation:</p>
-                    <p>V<sub>u</sub> = P<sub>u</sub> - q<sub>u</sub>(C + d)<sup>2</sup></p>
-                    <p>Where:</p>
-                    <ul>
-                        <li>C = ${columnWidth} mm</li>
-                        <li>d = ${punchingShearVu.d} mm</li>
-                    </ul>
-                    <p>Thus:</p>
-                    <p>V<sub>u</sub> = ${Vu} kN</p>
-                </li>
-    
-                <li><p><strong>Punching Shear Strength (ΦV<sub>n</sub>):</strong> The nominal shear strength, considering a strength reduction factor, is calculated using:</p>
-                    <p>ΦV<sub>n</sub> = 0.75 x 0.33 x λ x √f'c x 4 x (C + d) x d</p>
-                    <p>Where:</p>
-                    <ul>
-                        <li>λ = ${λ}</li>
-                        <li>f'c (Concrete compressive strength) = ${fc} MPa</li>
-                    </ul>
-                    <p>Thus:</p>
-                    <p>${Vu * 1000} N = 0.75 x 0.33 x ${λ} x √${fc} x 4 x (${columnWidth} mm + d) x d</p>
-                    <p>From the equation, solving for d gives:</p>
-                    <p>d = ${dkkVal} mm</p>
-                </li>
-    
-                <li><p><strong>Revised Total Depth (D<sub>c</sub>):</strong> After determining the required effective depth, the total depth is revised as:</p>
-                    <p>D<sub>c</sub> = d + C<sub>c</sub> + d<sub>b</sub></p>
-                    <p>Substituting values:</p>
-                    <p>D<sub>c</sub> = ${dkkVal} mm + ${clearCover} mm + ${barDia} mm = ${dc1Val} mm</p>
-                    <p>Approximate value:</p>
-                    <p>D<sub>c</sub> ≈ ${dc2} mm</p>
-                </li>
-            </ul>
-    
-            <h5>Beam Shear Calculation</h5>
-            <ul>
-                <li><p><strong>Shear Along x-axis:</strong></p>
-                    <ul>
-                        <li><strong>Effective Depth (d):</strong></li>
-                        <p>d = D<sub>c</sub> - C<sub>c</sub> - 0.5d<sub>b</sub> = ${dc2} mm - ${clearCover} mm - 0.5(${barDia} mm) = ${beamShearResult.xAxis.d} mm</p>
-                        <li><strong>Shear Span (aa):</strong></li>
-                        <p>aa = (B - c - 2d) / 2 = (${squareDimension1.B2 * 1000} mm - ${columnWidth} mm - 2(${beamShearResult.xAxis.d} mm)) / 2 = ${xAxisAA} mm</p>
-                        <li><strong>Shear Force (V<sub>u</sub>):</strong></li>
-                        <p>V<sub>u</sub> = q<sub>u</sub> * B * aa = ${qu} kPa * ${squareDimension1.B2} m * ${xAxisAA / 1000} m = ${xAxisVu} kN</p>
-                        <li><strong>Shear Strength (ΦV<sub>n</sub>):</strong></li>
-                        <p>ΦV<sub>n</sub> = (1/6) * λ * √f'c * B * d = (1/6) * ${λ} * √${fc} * ${squareDimension1.B2 * 1000} mm * ${beamShearResult.xAxis.d} mm = ${xAxisΦVn} kN</p>
-                        <li><strong>Status:</strong></li>
-                        <p>Status: ${xAxisVu > xAxisΦVn ? 'Failed' : 'Passed'}</p>
-                    </ul>
-                </li>
-    
-                <li><p><strong>Shear Along y-axis:</strong></p>
-                    <ul>
-                        <li><strong>Effective Depth (d):</strong></li>
-                        <p>d = D<sub>c</sub> - C<sub>c</sub> - 1.5d<sub>b</sub> = ${dc2} mm - ${clearCover} mm - 1.5(${barDia} mm) = ${beamShearResult.yAxis.d} mm</p>
-                        <li><strong>Shear Span (aa):</strong></li>
-                        <p>aa = (B - c - 2d) / 2 = (${squareDimension1.B2 * 1000} mm - ${columnWidth} mm - 2(${beamShearResult.yAxis.d} mm)) / 2 = ${yAxisAA} mm</p>
-                        <li><strong>Shear Force (V<sub>u</sub>):</strong></li>
-                        <p>V<sub>u</sub> = q<sub>u</sub> * B * aa = ${qu} kPa * ${squareDimension1.B2} m * ${yAxisAA / 1000} m = ${yAxisVu} kN</p>
-                        <li><strong>Shear Strength (ΦV<sub>n</sub>):</strong></li>
-                        <p>ΦV<sub>n</sub> = (1/6) * λ * √f'c * B * d = (1/6) * ${λ} * √${fc} * ${squareDimension1.B2 * 1000} mm * ${beamShearResult.yAxis.d} mm = ${yAxisΦVn} kN</p>
-                        <li><strong>Status:</strong></li>
-                        <p>Status: ${yAxisVu > yAxisΦVn ? 'Failed' : 'Passed'}</p>
-                    </ul>
-                </li>
-            </ul>
-        `;
-    
-        // Clear previous results if any
-        const resultDiv = document.getElementById("result");
-        resultDiv.innerHTML = '';
-    
-        // Append the new results to the result div
-        resultDiv.appendChild(resultsContent);
-        
-        // Optionally, return the result content element
-        return resultsContent;
-    }
-    
     
     function displayPunchingShearResults2(dc, depth, soilBearingCapacity, unitWeightConcrete, unitWeightSoil, surcharge, liveLoad, deadLoad, punchingShearVu, columnWidth, squareDimension, squareDimension1, dkk, dc1, dc2, clearCover, barDia, λ,fc, beamShearResult,punchingShearVu1) {
         // Create a container for the results

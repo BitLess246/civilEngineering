@@ -6,9 +6,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Foundation Design</title>
     <link rel="stylesheet" href="/styles1.css">
+    <style>
+        .tab-button.active {
+    background-color: #007BFF;
+    color: #fff;}
+    </style>
     <script src="/layout_script.js" defer></script>
     
-    <script type="module" src="/scriptFoundationDesign.js" defer></script>
+    <script type="module" src="/scriptFoundationDesign1.js" defer></script>
     
 
 </head>
@@ -77,14 +82,43 @@
                         <label for="UnitWeightConcrete">Unit Weight of Concrete (in KN/m3):</label>
                         <input type="number" id="UnitWeightConcrete" step="0.01"  >
                         </div>
+    
+                        <button id="calculate" type="submit" onclick="openTab(event, 'Solution')">Calculate</button>
                     </div>
-                </div>
-                <button type="submit">Calculate</button>
+
+                    </div>
             </form>
-            <div id="result"></div>
+                    
+    <div class="tab" id="tab" style="display: none;">
+        <button class="tab-button" id="Summarybutton" onclick="openTab(event, 'Summary')">Summary</button>
+        <button class="tab-button" id="Solutionbutton" onclick="openTab(event, 'Solution')">Solution</button>
+      </div>
+  
+      <div id="Summary" class="tab-content">
+        
+      </div>
+  
+      <div id="Solution" class="tab-content">
+        <div id="result">
+        
+        </div>
+      </div>
+            
             <button id="saveButton" style="display: none;">Save</button>
         </div>
     </div>
+
+    <script>
+        // Get the buttons
+        const calculateButton = document.getElementById('calculate');
+        const solutionsButton = document.getElementById('Solutionbutton');
+
+        // Add an event listener to the "Calculate" button
+        calculateButton.addEventListener('click', function() {
+            // Add the "active" class to the "Solutions" button
+            solutionsButton.classList.add('active');
+        });
+    </script>
     <script>
         // Function to save input and select values to localStorage
         function saveFieldValues() {
@@ -181,6 +215,27 @@
     
             
         });
+        function openTab(evt, tabName) {
+        // Get all elements with class="tab-content" and hide them
+        let tabContents = document.getElementsByClassName("tab-content");
+        for (let i = 0; i < tabContents.length; i++) {
+            tabContents[i].style.display = "none";  // Hide all tab contents
+        }
+    
+        // Get all elements with class="tab-button" and remove the "active" class
+        let tabButtons = document.getElementsByClassName("tab-button");
+        for (let i = 0; i < tabButtons.length; i++) {
+            tabButtons[i].className = tabButtons[i].className.replace(" active", "");  // Remove active state
+        }
+    
+        // Show the current tab
+        document.getElementById(tabName).style.display = "block";
+    
+        // Only add the "active" class if the event exists
+        if (evt) {
+            evt.currentTarget.className += " active";  // Add active class to the clicked button
+        }
+    }
     </script>
     
     
