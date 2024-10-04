@@ -13,7 +13,7 @@
     </style>
     <script src="/layout_script.js" defer></script>
     
-    <script type="module" src="/scriptFoundationDesign1.js" defer></script>
+    <script type="module" src="/scriptFoundationDesign5.js" defer></script>
     
 
 </head>
@@ -34,23 +34,35 @@
                             <option value="Isolated Rectangular">Isolated Rectangular</option>
                             <option value="Strip">Strip</option>
                         </select>
+                        <label for="centricity">Select Type of Centricity:</label>
+                        <select id="centricity">
+                            <option value="" disabled>Select Centricity</option>
+                            <option value="concentric">Concentric</option>
+                            <option value="eccentric">Eccentric</option>
+                        </select>
+                        <label for="mx" id="mxLabel" style="display: none;">M<sub>x</sub>  (in KNm)</label>
+                        <input type="number" id="mx" step="0.001" style="display: none;" >
+                        <label for="my" id="myLabel" style="display: none;">M<sub>y</sub>  (in KNm)</label>
+                        <input type="number" id="my" step="0.001" style="display: none;" >
+                        <label for="mz" id="mzLabel" style="display: none;">M<sub>z</sub>  (in KNm)</label>
+                        <input type="number" id="mz" step="0.001" style="display: none;" >
                         <label for="LengthRestriction" id="LengthRestriction" style="display: none;">Restriction:</label>
                         <select id="LengthRestriction1" name="LengthRestriction1" style="display: none;">
                             <option value="0">None</option>
                             <option value="1">Ratio</option>
-                            <option value="2">Limitation</option>
+                            <option value="2">Constricted</option>
                         </select>
                         <label for="Ratio" id="RatioLabel" style="display: none;">Ratio (_L:_B)</label>
                         <input type="number" id="RatioL" step="1"  placeholder="L" style="display: none;">
                         <input type="number" id="RatioB" step="1"  placeholder="B" style="display: none;">
-                        <label for="LimitationLabel" id="LimitationLabel" style="display: none;">Length Limitation (in Meters):</label>
+                        <label for="LimitationLabel" id="LimitationLabel" style="display: none;">Length of Constriction (in Meters):</label>
                         <input type="number" id="Limitation" step="0.01"  style="display: none;">
                         <label for="DeadLoad">Dead Load (in KN):</label>
-                        <input type="number" id="DeadLoad" step="0.01"  >
+                        <input type="number" id="DeadLoad" step="0.001"  >
                         <label for="LiveLoad">Live Load (in KN):</label>
-                        <input type="number" id="LiveLoad" step="0.01"  >
+                        <input type="number" id="LiveLoad" step="0.001"  >
                         <label for="Depth">Depth (in meters):</label>
-                        <input type="number" id="Depth" step="0.01"  >
+                        <input type="number" id="Depth" step="0.001"  >
                         <label for="BarDiameter">Bar Diameter (in Millimeters):</label>
                         <input type="number" id="BarDiameter" step="1"  >
                         <label for="Method">Method:</label>
@@ -59,7 +71,19 @@
                             <option value="2">Approximate (Initial Dc)</option>
                             
                         </select>
-                        <label for="ColumnWidth">Column Width (in Millimeters):</label>
+                        <label for="columnShape">Select Shape of column:</label>
+                        <select name="columnShape" id="columnShape">
+                            <option value="" disabled>Select the Shape of Column</option>
+                            <option value="square">Square</option>
+                            <option value="circle">Circular</option>
+                            <option value="rectangular">Rectangular</option>
+                        </select>
+                        <label for="ColumnWidthX" id="cxLabel" style="display: none;">Column Width X (in Millimeters):</label>
+                        <input type="number" id="ColumnWidthX" step="1" style="display: none;" >
+                        <label for="ColumnWidthY" id="cyLabel" style="display: none;">Column Width Y (in Millimeters):</label>
+                        <input type="number" id="ColumnWidthY" step="1" style="display: none;" >
+                        <label for="ColumnWidth" id="cLabel">Column Width (in Millimeters):</label>
+                        <label for="ColumnWidth" id="ccLabel" style="display: none;">Column Diameter (in Millimeters):</label>
                         <input type="number" id="ColumnWidth" step="1"  >
                         <label for="ColumnLocation">Column Location:</label>
                         <select id="ColumnLocation" name="ColumnLocation">
@@ -138,6 +162,23 @@
             const LengthRestrictionLabel = document.getElementById("LengthRestriction");
             const limitationLabel = document.getElementById("LimitationLabel");
             const limitation = document.getElementById("Limitation");
+            const centricity = document.getElementById("centricity");
+            const columnShape = document.getElementById("columnShape");
+            const mxL = document.getElementById("mxLabel");
+            const myL = document.getElementById("myLabel");
+            const mzL = document.getElementById("mzLabel");
+            const mx = document.getElementById("mx");
+            const my = document.getElementById("my");
+            const mz = document.getElementById("mz");
+            const cxLabel = document.getElementById("cxLabel");
+            const cyLabel = document.getElementById("cyLabel");
+            const cLabel = document.getElementById("cLabel");
+            const ccLabel = document.getElementById("ccLabel");
+            const cx = document.getElementById("ColumnWidthX");
+            const cy = document.getElementById("ColumnWidthY");
+            const c = document.getElementById("ColumnWidth");
+            
+            
             console.log("4");
             // Add change event listener to the structure type select element
             selectStructure.addEventListener("change", function () {
@@ -157,7 +198,57 @@
                     console.log("6");
                 }
             });
-            
+
+             centricity.addEventListener("change", function () { 
+                if(centricity.value === "concentric" ) {
+                    mxL.style.display = "none";
+                    myL.style.display = "none";
+                    mzL.style.display = "none";
+                    mx.style.display = "none";
+                    my.style.display = "none";
+                    mz.style.display = "none";
+                } else if ( centricity.value === "eccentric" ) {
+                    mxL.style.display = "block";
+                    myL.style.display = "block";
+                    mzL.style.display = "block";
+                    mx.style.display = "block";
+                    my.style.display = "block";
+                    mz.style.display = "block";
+                }
+            });
+                columnShape.addEventListener("change" , function (){
+                    if(columnShape.value === "circle") {
+                        cLabel.style.display = "none";
+                        c.style.display = "block";
+                        ccLabel.style.display = "block";
+                        cxLabel.style.display = "none";
+                        cyLabel.style.display = "none";
+                        cx.style.display = "none";
+                        cy.style.display = "none";
+                    } else if (columnShape.value === "square") {
+                        cLabel.style.display = "block";
+                        c.style.display = "block";
+                        ccLabel.style.display = "none";
+                        cxLabel.style.display = "none";
+                        cyLabel.style.display = "none";
+                        cx.style.display = "none";
+                        cy.style.display = "none";
+                        
+                    } else if (columnShape.value === "rectangular"){
+                        cLabel.style.display = "none";
+                        ccLabel.style.display = "none";
+                        c.style.display = "none";
+                        cxLabel.style.display = "block";
+                        cyLabel.style.display = "block";
+                        cx.style.display = "block";
+                        cy.style.display = "block";
+                        
+                    }
+                });
+
+             
+
+
             // Add change event listener to the length restriction select element
             lengthRestriction.addEventListener("change", function () {
                 if (lengthRestriction.value === "2") {
