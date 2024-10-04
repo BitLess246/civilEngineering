@@ -45,6 +45,7 @@ document.addEventListener("DOMContentLoaded", () => {
             resultDiv.innerHTML = ''; // Clear previous results
             const summaryDiv = document.getElementById("Summary");
             summaryDiv.innerHTML = ''; // Clear previous results
+
             if (solution === 11) {
                 // Logic for solution Isolated Square - Iteration Method
                 console.log("Isolated Square - Iteration Method");
@@ -157,6 +158,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation`));
                 beamShearResult = calculateBeamShearBothAxes("square", dc, clearCover, barDia, squareDimension.B2 * 1000, squareDimension.B2 * 1000, columnWidth, punchingShearVu.qu, fc, λ);
                 document.getElementById('result').appendChild(beamShear(dc,clearCover,barDia,beamShearResult,squareDimension,columnWidth,punchingShearVu,λ,fc));
+                
                 while((beamShearResult.xAxis.Vu/1000000) > (beamShearResult.xAxis.ΦVn/1000) || (beamShearResult.yAxis.Vu/1000000) > (beamShearResult.yAxis.ΦVn/1000)){
                     dc+=25;
                     b+=1;
@@ -191,19 +193,19 @@ document.addEventListener("DOMContentLoaded", () => {
                     document.getElementById('result').appendChild(createParagraph(`A<sub>f</sub> = P / q<sub>net</sub> = ${squareDimension.P} kN / ${squareDimension.qnet} kPa = ${squareDimension.Af.toFixed(2)} m<sup>2</sup>`));
                     document.getElementById('result').appendChild(createParagraph(`B = √Af = √${squareDimension.Af} = ${squareDimension.B1.toFixed(2)} = ${squareDimension.B2}m`));
                     document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> (Ultimate Load) = 1.2 Dead Load + 1.6 Live Load + 1.2 [(γ<sub>s</sub> x d<sub>s</sub>) + (γ<sub>c</sub> x d<sub>c</sub>) + q ] x B x L`));
-                document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> (Ultimate Load) = 1.2(${deadLoad} kN) + 1.6(${liveLoad} kN) + 1.2 [( ${unitWeightSoil} x ${(depth - dc) / 1000} ) + ( ${unitWeightConcrete} x ${dc / 1000} ) + ${surcharge} ] x ${squareDimension.B4} x ${squareDimension.L} = ${punchingShearVu.Pu.toFixed(2)} kN`));
-                document.getElementById('result').appendChild(createParagraph(`q<sub>u</sub> (Ultimate Bearing Pressure): P<sub>u</sub> / A<sub>f</sub> = ${punchingShearVu.Pu.toFixed(2)} kN / (${squareDimension.B4} meters x ${squareDimension.L} meters) = ${punchingShearVu.qu.toFixed(2)} kPa`));
+                    document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> (Ultimate Load) = 1.2(${deadLoad} kN) + 1.6(${liveLoad} kN) + 1.2 [( ${unitWeightSoil} x ${(depth - dc) / 1000} ) + ( ${unitWeightConcrete} x ${dc / 1000} ) + ${surcharge} ] x ${squareDimension.B4} x ${squareDimension.L} = ${punchingShearVu.Pu.toFixed(2)} kN`));
+                    document.getElementById('result').appendChild(createParagraph(`q<sub>u</sub> (Ultimate Bearing Pressure): P<sub>u</sub> / A<sub>f</sub> = ${punchingShearVu.Pu.toFixed(2)} kN / (${squareDimension.B4} meters x ${squareDimension.L} meters) = ${punchingShearVu.qu.toFixed(2)} kPa`));
                 
                 }
                 let rebars = designRebars(squareDimension.B4,squareDimension.L,dc,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,0.5,1);
                 console.log("sc after init:",rebars.sc);
                 document.getElementById('result').appendChild(createHeader5(`Reinforcement Design Calculation`));
                 document.getElementById('result').appendChild(rebarDisplay(squareDimension.B4,squareDimension.L,dc,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,rebars.b,rebars.bp,rebars.d,rebars.aa,rebars.Mu,rebars.ct,1,rebars.num,rebars.at,rebars.reductionFactor,rebars.muMax,rebars.SRRB,rebars.Rn,rebars.rho,rebars.rhoMin1,rebars.rhoMin2,rebars.rhoMin,rebars.as1,rebars.as,rebars.asMin,rebars.asMin1,rebars.asMin2,rebars.ab,rebars.nInitial,rebars.nRounded,rebars.sc,rebars.scMin,rebars.message,rebars.centerBand,rebars.nCenterBand,rebars.nCenterBandRounded,rebars.Ag,rebars.beta1));
-                    document.getElementById('Summary').appendChild(createHeader3(`Summary:`));
-                
-                    document.getElementById('Summary').appendChild(createParagraph(`Dc = ${dc}mm`));
-                    document.getElementById('Summary').appendChild(createParagraph(`B = ${squareDimension.B4}m`));
-                    document.getElementById('Summary').appendChild(createParagraph(`No. Rebars, Bothway = ${rebars.nRounded}pcs`));
+                document.getElementById('Summary').appendChild(createHeader3(`Summary:`));
+            
+                document.getElementById('Summary').appendChild(createParagraph(`Dc = ${dc}mm`));
+                document.getElementById('Summary').appendChild(createParagraph(`B = ${squareDimension.B4}m`));
+                document.getElementById('Summary').appendChild(createParagraph(`No. Rebars, Bothway = ${rebars.nRounded}pcs`));
                
                 } else if (solution === 12) {
                     //isolated square approximate dc
@@ -250,25 +252,26 @@ document.addEventListener("DOMContentLoaded", () => {
                     document.getElementById('result').appendChild(createParagraph(`B = √Af = √${squareDimension.Af.toFixed(2)} = ${squareDimension.B1.toFixed(2)} = ${squareDimension.B2}m`));
                     
                     document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation`));
-                beamShearResult = calculateBeamShearBothAxes("square", dc, clearCover, barDia, squareDimension.B2 * 1000, squareDimension.B2 * 1000, columnWidth, punchingShearVu.qu, fc, λ);
-                document.getElementById('result').appendChild(beamShear(dc,clearCover,barDia,beamShearResult,squareDimension,columnWidth,punchingShearVu,λ,fc));
-                while((beamShearResult.xAxis.Vu/1000000) > (beamShearResult.xAxis.ΦVn/1000) || (beamShearResult.yAxis.Vu/1000000) > (beamShearResult.yAxis.ΦVn/1000)){
-                    dc2+=25;
-                    b+=1;
-                    squareDimension = calculateDimensionSquare(depth, dc2, deadLoad, liveLoad, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity);
-                    console.log("calculated dimension");
-                    document.getElementById('result').appendChild(createParagraph(`D<sub>c</sub> = ${dc2} mm`));
-                    document.getElementById('result').appendChild(createParagraph(`D<sub>s</sub> = H - D<sub>c</sub> = ${depth} - ${dc2} = ${depth - dc2} mm`));
-                    document.getElementById('result').appendChild(createParagraph(`q<sub>net</sub> = q<sub>a</sub> - γ<sub>c</sub> D<sub>c</sub> - γ<sub>s</sub> D<sub>s</sub> - q`));
-                    document.getElementById('result').appendChild(createParagraph(`q<sub>net</sub> = ${soilBearingCapacity} kPa - (${unitWeightConcrete} kN/m<sup>3</sup> x ${dc2 / 1000} m) - (${unitWeightSoil} kN/m<sup>3</sup> x ${squareDimension.ds / 1000} m) - ${surcharge} kN/m<sup>2</sup>`));
-                    document.getElementById('result').appendChild(createParagraph(`q<sub>net</sub> = ${squareDimension.qnet} kPa`));
-                    document.getElementById('result').appendChild(createParagraph(`P = Live Load + Dead Load = ${liveLoad} kN + ${deadLoad} kN = ${liveLoad + deadLoad} kN`));
-                    document.getElementById('result').appendChild(createParagraph(`A<sub>f</sub> = P / q<sub>net</sub> = ${squareDimension.P} kN / ${squareDimension.qnet} kPa = ${squareDimension.Af.toFixed(2)} m<sup>2</sup>`));
-                    document.getElementById('result').appendChild(createParagraph(`B = √Af = √${squareDimension.Af} = ${squareDimension.B1.toFixed(2)} = ${squareDimension.B2}m`));
-                    
-                    document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation Trial ${b}`));
-                    beamShearResult = calculateBeamShearBothAxes("square", dc2, clearCover, barDia, squareDimension.B2 * 1000, squareDimension.B2 * 1000, columnWidth, punchingShearVu.qu, fc, λ);
-                    document.getElementById('result').appendChild(beamShear(dc2,clearCover,barDia,beamShearResult,squareDimension,columnWidth,punchingShearVu,λ,fc));
+                    beamShearResult = calculateBeamShearBothAxes("square", dc, clearCover, barDia, squareDimension.B2 * 1000, squareDimension.B2 * 1000, columnWidth, punchingShearVu.qu, fc, λ);
+                    document.getElementById('result').appendChild(beamShear(dc,clearCover,barDia,beamShearResult,squareDimension,columnWidth,punchingShearVu,λ,fc));
+               
+                    while((beamShearResult.xAxis.Vu/1000000) > (beamShearResult.xAxis.ΦVn/1000) || (beamShearResult.yAxis.Vu/1000000) > (beamShearResult.yAxis.ΦVn/1000)){
+                        dc2+=25;
+                        b+=1;
+                        squareDimension = calculateDimensionSquare(depth, dc2, deadLoad, liveLoad, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity);
+                        console.log("calculated dimension");
+                        document.getElementById('result').appendChild(createParagraph(`D<sub>c</sub> = ${dc2} mm`));
+                        document.getElementById('result').appendChild(createParagraph(`D<sub>s</sub> = H - D<sub>c</sub> = ${depth} - ${dc2} = ${depth - dc2} mm`));
+                        document.getElementById('result').appendChild(createParagraph(`q<sub>net</sub> = q<sub>a</sub> - γ<sub>c</sub> D<sub>c</sub> - γ<sub>s</sub> D<sub>s</sub> - q`));
+                        document.getElementById('result').appendChild(createParagraph(`q<sub>net</sub> = ${soilBearingCapacity} kPa - (${unitWeightConcrete} kN/m<sup>3</sup> x ${dc2 / 1000} m) - (${unitWeightSoil} kN/m<sup>3</sup> x ${squareDimension.ds / 1000} m) - ${surcharge} kN/m<sup>2</sup>`));
+                        document.getElementById('result').appendChild(createParagraph(`q<sub>net</sub> = ${squareDimension.qnet} kPa`));
+                        document.getElementById('result').appendChild(createParagraph(`P = Live Load + Dead Load = ${liveLoad} kN + ${deadLoad} kN = ${liveLoad + deadLoad} kN`));
+                        document.getElementById('result').appendChild(createParagraph(`A<sub>f</sub> = P / q<sub>net</sub> = ${squareDimension.P} kN / ${squareDimension.qnet} kPa = ${squareDimension.Af.toFixed(2)} m<sup>2</sup>`));
+                        document.getElementById('result').appendChild(createParagraph(`B = √Af = √${squareDimension.Af} = ${squareDimension.B1.toFixed(2)} = ${squareDimension.B2}m`));
+                        
+                        document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation Trial ${b}`));
+                        beamShearResult = calculateBeamShearBothAxes("square", dc2, clearCover, barDia, squareDimension.B2 * 1000, squareDimension.B2 * 1000, columnWidth, punchingShearVu.qu, fc, λ);
+                        document.getElementById('result').appendChild(beamShear(dc2,clearCover,barDia,beamShearResult,squareDimension,columnWidth,punchingShearVu,λ,fc));
                 
                 }
                 if(dc2===dc1){}else{
@@ -294,12 +297,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 console.log("sc after init:",rebars.sc);
                 document.getElementById('result').appendChild(createHeader5(`Reinforcement Design Calculation`));
                 document.getElementById('result').appendChild(rebarDisplay(squareDimension.B4,squareDimension.L,dc2,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,rebars.b,rebars.bp,rebars.d,rebars.aa,rebars.Mu,rebars.ct,1,rebars.num,rebars.at,rebars.reductionFactor,rebars.muMax,rebars.SRRB,rebars.Rn,rebars.rho,rebars.rhoMin1,rebars.rhoMin2,rebars.rhoMin,rebars.as1,rebars.as,rebars.asMin,rebars.asMin1,rebars.asMin2,rebars.ab,rebars.nInitial,rebars.nRounded,rebars.sc,rebars.scMin,rebars.message,rebars.centerBand,rebars.nCenterBand,rebars.nCenterBandRounded,rebars.Ag,rebars.beta1));
-                    document.getElementById('Summary').appendChild(createHeader3(`Summary:`));
-                
-                    document.getElementById('Summary').appendChild(createParagraph(`Dc = ${dc2}mm`));
-                    document.getElementById('Summary').appendChild(createParagraph(`B = ${squareDimension.B4}m`));
-                    document.getElementById('Summary').appendChild(createParagraph(`No. Rebars, Bothway = ${rebars.nRounded}pcs`));
-               
+                document.getElementById('Summary').appendChild(createHeader3(`Summary:`));
+            
+                document.getElementById('Summary').appendChild(createParagraph(`Dc = ${dc2}mm`));
+                document.getElementById('Summary').appendChild(createParagraph(`B = ${squareDimension.B4}m`));
+                document.getElementById('Summary').appendChild(createParagraph(`No. Rebars, Bothway = ${rebars.nRounded}pcs`));
+            
                 
 
             } else if (solution === 21) {
@@ -321,7 +324,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 
             
                 if (constraints === 2) {
-                    //limited base
+                //limited base
                 document.getElementById('result').appendChild(createParagraph(`L = A<sub>f</sub> / B = ${squareDimension.Af.toFixed(2)} kN / ${limitLength} kPa = ${squareDimension.B3.toFixed(3)} m = ${squareDimension.L} m`));
                
                 document.getElementById('result').appendChild(createParagraph(`d (effective depth) = D<sub>c</sub> - C<sub>c</sub> - d<sub>b</sub> = ${dc} mm - ${clearCover} mm - ${barDia} mm = ${punchingShearVu.d} mm`));
@@ -342,6 +345,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.getElementById('result').appendChild(createParagraph(`∴ ${punchingShearVn.minVn.toFixed(2) < punchingShearVu.Vu.toFixed(2) ?"Passed":"Failed" } `));
                 console.log("409 min Vn = ",punchingShearVn.minVn);
                 console.log("409 Vu = ",punchingShearVu.Vu); 
+
                 while (punchingShearVu.Vu > punchingShearVn.minVn) {
                     console.log("iterating");
                     dc += 25;
@@ -392,11 +396,13 @@ document.addEventListener("DOMContentLoaded", () => {
                     console.log(`${v} Vu = `,punchingShearVu.Vu); 
                 
                 }
+
                 dc1=dc;
                 console.log("ended iteration");
                 document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation`));
                 beamShearResult = calculateBeamShearBothAxes("square", dc, clearCover, barDia, squareDimension.B2 * 1000, squareDimension.B2 * 1000, columnWidth, punchingShearVu.qu, fc, λ);
                 document.getElementById('result').appendChild(beamShear(dc,clearCover,barDia,beamShearResult,squareDimension,columnWidth,punchingShearVu,λ,fc));
+                
                 while((beamShearResult.xAxis.Vu/1000000) > (beamShearResult.xAxis.ΦVn/1000) || (beamShearResult.yAxis.Vu/1000000) > (beamShearResult.yAxis.ΦVn/1000)){
                     dc+=25;
                     b+=1;
@@ -431,26 +437,26 @@ document.addEventListener("DOMContentLoaded", () => {
                     document.getElementById('result').appendChild(createParagraph(`A<sub>f</sub> = P / q<sub>net</sub> = ${squareDimension.P} kN / ${squareDimension.qnet.toFixed(2)} kPa = ${squareDimension.Af.toFixed(2)} m<sup>2</sup>`));
                     document.getElementById('result').appendChild(createParagraph(`L = A<sub>f</sub> / B = ${squareDimension.Af.toFixed(2)} kN / ${limitLength} kPa = ${squareDimension.B3.toFixed(3)} m = ${squareDimension.L} m`));
                     document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> (Ultimate Load) = 1.2 Dead Load + 1.6 Live Load + 1.2 [(γ<sub>s</sub> x d<sub>s</sub>) + (γ<sub>c</sub> x d<sub>c</sub>) + q ] x B x L`));
-                document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> (Ultimate Load) = 1.2(${deadLoad} kN) + 1.6(${liveLoad} kN) + 1.2 [( ${unitWeightSoil} x ${(depth - dc) / 1000} ) + ( ${unitWeightConcrete} x ${dc / 1000} ) + ${surcharge} ] x ${squareDimension.B4} x ${squareDimension.L} = ${punchingShearVu.Pu.toFixed(2)} kN`));
-                document.getElementById('result').appendChild(createParagraph(`q<sub>u</sub> (Ultimate Bearing Pressure): P<sub>u</sub> / A<sub>f</sub> = ${punchingShearVu.Pu.toFixed(2)} kN / (${squareDimension.B4} meters x ${squareDimension.L} meters) = ${punchingShearVu.qu.toFixed(2)} kPa`));
+                    document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> (Ultimate Load) = 1.2(${deadLoad} kN) + 1.6(${liveLoad} kN) + 1.2 [( ${unitWeightSoil} x ${(depth - dc) / 1000} ) + ( ${unitWeightConcrete} x ${dc / 1000} ) + ${surcharge} ] x ${squareDimension.B4} x ${squareDimension.L} = ${punchingShearVu.Pu.toFixed(2)} kN`));
+                    document.getElementById('result').appendChild(createParagraph(`q<sub>u</sub> (Ultimate Bearing Pressure): P<sub>u</sub> / A<sub>f</sub> = ${punchingShearVu.Pu.toFixed(2)} kN / (${squareDimension.B4} meters x ${squareDimension.L} meters) = ${punchingShearVu.qu.toFixed(2)} kPa`));
                 
                 }
                 let rebars = designRebars(squareDimension.B4,squareDimension.L,dc,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,0.5,bRatio);
                 console.log("sc after init:",rebars.sc);
-                document.getElementById('result').appendChild(createHeader5(`Reinforcement Design Calculation`));
+                document.getElementById('result').appendChild(createHeader5(`Reinforcement Design Calculation Along Long Span`));
                 document.getElementById('result').appendChild(rebarDisplay(squareDimension.B4,squareDimension.L,dc,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,rebars.b,rebars.bp,rebars.d,rebars.aa,rebars.Mu,rebars.ct,bRatio, rebars.num,rebars.at,rebars.reductionFactor,rebars.muMax,rebars.SRRB,rebars.Rn,rebars.rho,rebars.rhoMin1,rebars.rhoMin2,rebars.rhoMin,rebars.as1,rebars.as,rebars.asMin,rebars.asMin1,rebars.asMin2,rebars.ab,rebars.nInitial,rebars.nRounded,rebars.sc,rebars.scMin,rebars.message,rebars.centerBand,rebars.nCenterBand,rebars.nCenterBandRounded,rebars.Ag,rebars.beta1));
                 let rebars2 = designRebars(squareDimension.L,squareDimension.B4,dc,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,1.5,bRatio);
                 console.log("sc after init:",rebars.sc);
-                document.getElementById('result').appendChild(createHeader5(`Reinforcement Design Calculation`));
+                document.getElementById('result').appendChild(createHeader5(`Reinforcement Design Calculation Along Short Span`));
                 document.getElementById('result').appendChild(rebarDisplay(squareDimension.L,squareDimension.B4,dc,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,rebars2.b,rebars2.bp,rebars2.d,rebars2.aa,rebars2.Mu,rebars2.ct,bRatio, rebars2.num,rebars2.at,rebars2.reductionFactor,rebars2.muMax,rebars2.SRRB,rebars2.Rn,rebars2.rho,rebars2.rhoMin1,rebars2.rhoMin2,rebars2.rhoMin,rebars2.as1,rebars2.as,rebars2.asMin,rebars2.asMin1,rebars2.asMin2,rebars2.ab,rebars2.nInitial,rebars2.nRounded,rebars2.sc,rebars2.scMin,rebars2.message,rebars2.centerBand,rebars2.nCenterBand,rebars2.nCenterBandRounded,rebars2.Ag,rebars2.beta1));
-                    document.getElementById('Summary').appendChild(createHeader3(`Summary:`));
+                document.getElementById('Summary').appendChild(createHeader3(`Summary:`));
+            
+                document.getElementById('Summary').appendChild(createParagraph(`Dc = ${dc}mm`));
+                document.getElementById('Summary').appendChild(createParagraph(`B = ${squareDimension.B4}m`));
+                document.getElementById('Summary').appendChild(createParagraph(`L = ${squareDimension.L}m`));
                 
-                    document.getElementById('Summary').appendChild(createParagraph(`Dc = ${dc}mm`));
-                    document.getElementById('Summary').appendChild(createParagraph(`B = ${squareDimension.B4}m`));
-                    document.getElementById('Summary').appendChild(createParagraph(`L = ${squareDimension.L}m`));
-                    
-                    document.getElementById('Summary').appendChild(createParagraph(`No. Rebars= ${rebars.nRounded}pcs`));
-                    document.getElementById('Summary').appendChild(createParagraph(`No. Rebars= ${rebars2.nRounded}pcs`));
+                document.getElementById('Summary').appendChild(createParagraph(`No. Rebars= ${rebars.nRounded}pcs`));
+                document.getElementById('Summary').appendChild(createParagraph(`No. Rebars= ${rebars2.nRounded}pcs`));
                    
 
                 } else if (constraints === 1){
@@ -487,6 +493,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     document.getElementById('result').appendChild(createParagraph(`∴ ${roundedMinVn < roundedVu ? "Failed" : "Passed"} `));
                     console.log(`${v} min Vn = `,punchingShearVn.minVn);
                     console.log(`${v} Vu = `,punchingShearVu.Vu);  
+
                 while (punchingShearVu.Vu > punchingShearVn.minVn) {
                     console.log("iterating");
                     dc += 25;
@@ -539,11 +546,13 @@ document.addEventListener("DOMContentLoaded", () => {
                     console.log(`${v} Vu = `,punchingShearVu.Vu); 
                 
                 }
+
                 dc1=dc;
                 console.log("ended iteration");
                 document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation`));
                 beamShearResult = calculateBeamShearBothAxes("square", dc, clearCover, barDia, squareDimension.B2 * 1000, squareDimension.B2 * 1000, columnWidth, punchingShearVu.qu, fc, λ);
                 document.getElementById('result').appendChild(beamShear(dc,clearCover,barDia,beamShearResult,squareDimension,columnWidth,punchingShearVu,λ,fc));
+                
                 while((beamShearResult.xAxis.Vu/1000000) > (beamShearResult.xAxis.ΦVn/1000) || (beamShearResult.yAxis.Vu/1000000) > (beamShearResult.yAxis.ΦVn/1000)){
                     dc+=25;
                     b+=1;
@@ -585,21 +594,28 @@ document.addEventListener("DOMContentLoaded", () => {
                     document.getElementById('result').appendChild(createParagraph(`${squareDimension.Af.toFixed(2)}m<sup>2</sup> = BL = (${ratioLengthB}/${ratioLengthL})B<sup>2</sup> `));
                     
                     document.getElementById('result').appendChild(createParagraph(`B = ${squareDimension.B3.toFixed(2)}m = ${squareDimension.B4}m ; L = ${squareDimension.L}m`));
-                 document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> (Ultimate Load) = 1.2 Dead Load + 1.6 Live Load + 1.2 [(γ<sub>s</sub> x d<sub>s</sub>) + (γ<sub>c</sub> x d<sub>c</sub>) + q ] x B x L`));
-                document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> (Ultimate Load) = 1.2(${deadLoad} kN) + 1.6(${liveLoad} kN) + 1.2 [( ${unitWeightSoil} x ${(depth - dc) / 1000} ) + ( ${unitWeightConcrete} x ${dc / 1000} ) + ${surcharge} ] x ${squareDimension.B4} x ${squareDimension.L} = ${punchingShearVu.Pu.toFixed(2)} kN`));
-                document.getElementById('result').appendChild(createParagraph(`q<sub>u</sub> (Ultimate Bearing Pressure): P<sub>u</sub> / A<sub>f</sub> = ${punchingShearVu.Pu.toFixed(2)} kN / (${squareDimension.B4} meters x ${squareDimension.L} meters) = ${punchingShearVu.qu.toFixed(2)} kPa`));
+                    document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> (Ultimate Load) = 1.2 Dead Load + 1.6 Live Load + 1.2 [(γ<sub>s</sub> x d<sub>s</sub>) + (γ<sub>c</sub> x d<sub>c</sub>) + q ] x B x L`));
+                    document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> (Ultimate Load) = 1.2(${deadLoad} kN) + 1.6(${liveLoad} kN) + 1.2 [( ${unitWeightSoil} x ${(depth - dc) / 1000} ) + ( ${unitWeightConcrete} x ${dc / 1000} ) + ${surcharge} ] x ${squareDimension.B4} x ${squareDimension.L} = ${punchingShearVu.Pu.toFixed(2)} kN`));
+                    document.getElementById('result').appendChild(createParagraph(`q<sub>u</sub> (Ultimate Bearing Pressure): P<sub>u</sub> / A<sub>f</sub> = ${punchingShearVu.Pu.toFixed(2)} kN / (${squareDimension.B4} meters x ${squareDimension.L} meters) = ${punchingShearVu.qu.toFixed(2)} kPa`));
                 
                 }
                 let rebars = designRebars(squareDimension.B4,squareDimension.L,dc,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,0.5,bRatio);
                 console.log("sc after init:",rebars.sc);
-                document.getElementById('result').appendChild(createHeader5(`Reinforcement Design Calculation`));
-                document.getElementById('result').appendChild(rebarDisplay(squareDimension.B4,squareDimension.L,dc,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,rebars.b,rebars.bp,rebars.d,rebars.aa,rebars.Mu,rebars.ct,bRatio,rebars.num,rebars.at,rebars.reductionFactor,rebars.muMax,rebars.SRRB,rebars.Rn,rebars.rho,rebars.rhoMin1,rebars.rhoMin2,rebars.rhoMin,rebars.as1,rebars.as,rebars.asMin,rebars.asMin1,rebars.asMin2,rebars.ab,rebars.nInitial,rebars.nRounded,rebars.sc,rebars.scMin,rebars.message,rebars.centerBand,rebars.nCenterBand,rebars.nCenterBandRounded,rebars.Ag,rebars.beta1));
-                    document.getElementById('Summary').appendChild(createHeader3(`Summary:`));
+                document.getElementById('result').appendChild(createHeader5(`Reinforcement Design Calculation Along Long Span`));
+                document.getElementById('result').appendChild(rebarDisplay(squareDimension.B4,squareDimension.L,dc,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,rebars.b,rebars.bp,rebars.d,rebars.aa,rebars.Mu,rebars.ct,bRatio, rebars.num,rebars.at,rebars.reductionFactor,rebars.muMax,rebars.SRRB,rebars.Rn,rebars.rho,rebars.rhoMin1,rebars.rhoMin2,rebars.rhoMin,rebars.as1,rebars.as,rebars.asMin,rebars.asMin1,rebars.asMin2,rebars.ab,rebars.nInitial,rebars.nRounded,rebars.sc,rebars.scMin,rebars.message,rebars.centerBand,rebars.nCenterBand,rebars.nCenterBandRounded,rebars.Ag,rebars.beta1));
+                let rebars2 = designRebars(squareDimension.L,squareDimension.B4,dc,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,1.5,bRatio);
+                console.log("sc after init:",rebars.sc);
+                document.getElementById('result').appendChild(createHeader5(`Reinforcement Design Calculation Along Short Span`));
+                document.getElementById('result').appendChild(rebarDisplay(squareDimension.L,squareDimension.B4,dc,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,rebars2.b,rebars2.bp,rebars2.d,rebars2.aa,rebars2.Mu,rebars2.ct,bRatio, rebars2.num,rebars2.at,rebars2.reductionFactor,rebars2.muMax,rebars2.SRRB,rebars2.Rn,rebars2.rho,rebars2.rhoMin1,rebars2.rhoMin2,rebars2.rhoMin,rebars2.as1,rebars2.as,rebars2.asMin,rebars2.asMin1,rebars2.asMin2,rebars2.ab,rebars2.nInitial,rebars2.nRounded,rebars2.sc,rebars2.scMin,rebars2.message,rebars2.centerBand,rebars2.nCenterBand,rebars2.nCenterBandRounded,rebars2.Ag,rebars2.beta1));
+                document.getElementById('Summary').appendChild(createHeader3(`Summary:`));
+            
+                document.getElementById('Summary').appendChild(createParagraph(`Dc = ${dc}mm`));
+                document.getElementById('Summary').appendChild(createParagraph(`B = ${squareDimension.B4}m`));
+                document.getElementById('Summary').appendChild(createParagraph(`L = ${squareDimension.L}m`));
                 
-                    document.getElementById('Summary').appendChild(createParagraph(`Dc = ${dc}mm`));
-                    document.getElementById('Summary').appendChild(createParagraph(`B = ${squareDimension.B4}m`));
-                    document.getElementById('Summary').appendChild(createParagraph(`No. Rebars, Along = ${rebars.nRounded}pcs`));
-                   
+                document.getElementById('Summary').appendChild(createParagraph(`No. Rebars= ${rebars.nRounded}pcs`));
+                document.getElementById('Summary').appendChild(createParagraph(`No. Rebars= ${rebars2.nRounded}pcs`));
+                
 
                 }        
                 
@@ -652,6 +668,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation`));
                 beamShearResult = calculateBeamShearBothAxes("square", dc2, clearCover, barDia, squareDimension.B4 * 1000, squareDimension.L * 1000, columnWidth, punchingShearVu.qu, fc, λ);
                 document.getElementById('result').appendChild(beamShear(dc2,clearCover,barDia,beamShearResult,squareDimension,columnWidth,punchingShearVu,λ,fc));
+                
                 while((beamShearResult.xAxis.Vu/1000000) > (beamShearResult.xAxis.ΦVn/1000) || (beamShearResult.yAxis.Vu/1000000) > (beamShearResult.yAxis.ΦVn/1000)){
                     dc2+=25;
                     b+=1;
@@ -672,7 +689,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     document.getElementById('result').appendChild(beamShear(dc2,clearCover,barDia,beamShearResult,squareDimension,columnWidth,punchingShearVu,λ,fc));
                 
                 }
-                if(dc===dc1){}else{
+                if(dc===dc2){
+
+                }else{
                     document.getElementById('result').appendChild(createHeader5(`Recalculate Beam Dimension With new Dc`));
                     squareDimension = calculateDimensionRectangular(depth, dc2, deadLoad, liveLoad, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity, limitLength, ratioLengthL, ratioLengthB, constraints);
                     console.log("calculated dimension");
@@ -685,29 +704,30 @@ document.addEventListener("DOMContentLoaded", () => {
                     document.getElementById('result').appendChild(createParagraph(`q<sub>net</sub> = ${squareDimension.qnet} kPa`));
                     document.getElementById('result').appendChild(createParagraph(`P = Live Load + Dead Load = ${liveLoad} kN + ${deadLoad} kN = ${liveLoad + deadLoad} kN`));
                     document.getElementById('result').appendChild(createParagraph(`A<sub>f</sub> = P / q<sub>net</sub> = ${squareDimension.P} kN / ${squareDimension.qnet} kPa = ${squareDimension.Af.toFixed(2)} m<sup>2</sup>`));
-                    document.getElementById('result').appendChild(createParagraph(`L = A<sub>f</sub> / B = ${squareDimension.Af.toFixed(2)} kN / ${limitLength} kPa = ${squareDimension.B1.toFixed(3)} m = ${squareDimension.L} m`));
+                    document.getElementById('result').appendChild(createParagraph(`L = A<sub>f</sub> / B = ${squareDimension.Af.toFixed(2)} kN / ${limitLength} kPa = ${squareDimension.B3.toFixed(3)} m = ${squareDimension.L} m`));
                     document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> (Ultimate Load) = 1.2 Dead Load + 1.6 Live Load + 1.2 [(γ<sub>s</sub> x d<sub>s</sub>) + (γ<sub>c</sub> x d<sub>c</sub>) + q ] x B x L`));
-                document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> (Ultimate Load) = 1.2(${deadLoad} kN) + 1.6(${liveLoad} kN) + 1.2 [( ${unitWeightSoil} x ${(depth - dc) / 1000} ) + ( ${unitWeightConcrete} x ${dc / 1000} ) + ${surcharge} ] x ${squareDimension.B4} x ${squareDimension.L} = ${punchingShearVu.Pu.toFixed(2)} kN`));
-                document.getElementById('result').appendChild(createParagraph(`q<sub>u</sub> (Ultimate Bearing Pressure): P<sub>u</sub> / A<sub>f</sub> = ${punchingShearVu.Pu.toFixed(2)} kN / (${squareDimension.B4} meters x ${squareDimension.L} meters) = ${punchingShearVu.qu.toFixed(2)} kPa`));
+                    document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> (Ultimate Load) = 1.2(${deadLoad} kN) + 1.6(${liveLoad} kN) + 1.2 [( ${unitWeightSoil} x ${(depth - dc) / 1000} ) + ( ${unitWeightConcrete} x ${dc / 1000} ) + ${surcharge} ] x ${squareDimension.B4} x ${squareDimension.L} = ${punchingShearVu.Pu.toFixed(2)} kN`));
+                    document.getElementById('result').appendChild(createParagraph(`q<sub>u</sub> (Ultimate Bearing Pressure): P<sub>u</sub> / A<sub>f</sub> = ${punchingShearVu.Pu.toFixed(2)} kN / (${squareDimension.B4} meters x ${squareDimension.L} meters) = ${punchingShearVu.qu.toFixed(2)} kPa`));
                 
                 
                 }
-                let rebars = designRebars(squareDimension.B4,squareDimension.L,dc,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,0.5,bRatio);
+
+                let rebars = designRebars(squareDimension.B4,squareDimension.L,dc2,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,0.5,bRatio);
                 console.log("sc after init:",rebars.sc);
                 document.getElementById('result').appendChild(createHeader5(`Reinforcement Design Calculation`));
-                document.getElementById('result').appendChild(rebarDisplay(squareDimension.B4,squareDimension.L,dc,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,rebars.b,rebars.bp,rebars.d,rebars.aa,rebars.Mu,rebars.ct, bRatio, rebars.num, rebars.at, rebars.reductionFactor,rebars.muMax,rebars.SRRB,rebars.Rn,rebars.rho,rebars.rhoMin1,rebars.rhoMin2,rebars.rhoMin,rebars.as1,rebars.as,rebars.asMin,rebars.asMin1, rebars.asMin2, rebars.ab,  rebars.nInitial, rebars.nRounded, rebars.sc, rebars.scMin, rebars.message, rebars.centerBand, rebars.nCenterBand, rebars.nCenterBandRounded,rebars.Ag,rebars.beta1));
-                let rebars2 = designRebars(squareDimension.L,squareDimension.B4,dc,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,1.5,bRatio);
+                document.getElementById('result').appendChild(rebarDisplay(squareDimension.B4,squareDimension.L,dc2,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,rebars.b,rebars.bp,rebars.d,rebars.aa,rebars.Mu,rebars.ct, bRatio, rebars.num, rebars.at, rebars.reductionFactor,rebars.muMax,rebars.SRRB,rebars.Rn,rebars.rho,rebars.rhoMin1,rebars.rhoMin2,rebars.rhoMin,rebars.as1,rebars.as,rebars.asMin,rebars.asMin1, rebars.asMin2, rebars.ab,  rebars.nInitial, rebars.nRounded, rebars.sc, rebars.scMin, rebars.message, rebars.centerBand, rebars.nCenterBand, rebars.nCenterBandRounded,rebars.Ag,rebars.beta1));
+                let rebars2 = designRebars(squareDimension.L,squareDimension.B4,dc2,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,1.5,bRatio);
                 console.log("sc after init:",rebars2.sc);
                 document.getElementById('result').appendChild(createHeader5(`Reinforcement Design Calculation`));
-                document.getElementById('result').appendChild(rebarDisplay(squareDimension.L,squareDimension.B4,dc, clearCover, barDia, barDia,columnWidth, punchingShearVu.qu,fc,fy, rebars2.b,rebars2.bp,rebars2.d,rebars2.aa, rebars2.Mu,rebars2.ct, bRatio, rebars2.num,rebars2.at,rebars2.reductionFactor,rebars2.muMax, rebars2.SRRB,rebars2.Rn, rebars2.rho,rebars2.rhoMin1,rebars2.rhoMin2,rebars2.rhoMin, rebars2.as1,rebars2.as,rebars2.asMin,rebars2.asMin1,rebars2.asMin2,rebars2.ab, rebars2.nInitial,rebars2.nRounded, rebars2.sc,rebars2.scMin,rebars2.message,rebars2.centerBand,rebars2.nCenterBand,rebars2.nCenterBandRounded,rebars2.Ag, rebars2.beta1));
-                    document.getElementById('Summary').appendChild(createHeader3(`Summary:`));
+                document.getElementById('result').appendChild(rebarDisplay(squareDimension.L,squareDimension.B4,dc2, clearCover, barDia, barDia,columnWidth, punchingShearVu.qu,fc,fy, rebars2.b,rebars2.bp,rebars2.d,rebars2.aa, rebars2.Mu,rebars2.ct, bRatio, rebars2.num,rebars2.at,rebars2.reductionFactor,rebars2.muMax, rebars2.SRRB,rebars2.Rn, rebars2.rho,rebars2.rhoMin1,rebars2.rhoMin2,rebars2.rhoMin, rebars2.as1,rebars2.as,rebars2.asMin,rebars2.asMin1,rebars2.asMin2,rebars2.ab, rebars2.nInitial,rebars2.nRounded, rebars2.sc,rebars2.scMin,rebars2.message,rebars2.centerBand,rebars2.nCenterBand,rebars2.nCenterBandRounded,rebars2.Ag, rebars2.beta1));
+                document.getElementById('Summary').appendChild(createHeader3(`Summary:`));
+            
+                document.getElementById('Summary').appendChild(createParagraph(`Dc = ${dc2}mm`));
+                document.getElementById('Summary').appendChild(createParagraph(`B = ${squareDimension.B4}m`));
+                document.getElementById('Summary').appendChild(createParagraph(`L = ${squareDimension.L}m`));
                 
-                    document.getElementById('Summary').appendChild(createParagraph(`Dc = ${dc}mm`));
-                    document.getElementById('Summary').appendChild(createParagraph(`B = ${squareDimension.B4}m`));
-                    document.getElementById('Summary').appendChild(createParagraph(`L = ${squareDimension.L}m`));
-                    
-                    document.getElementById('Summary').appendChild(createParagraph(`No. Rebars= ${rebars.nRounded}pcs`));
-                    document.getElementById('Summary').appendChild(createParagraph(`No. Rebars= ${rebars2.nRounded}pcs`));
+                document.getElementById('Summary').appendChild(createParagraph(`No. Rebars= ${rebars.nRounded}pcs`));
+                document.getElementById('Summary').appendChild(createParagraph(`No. Rebars= ${rebars2.nRounded}pcs`));
                    
     
 
@@ -739,7 +759,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     while((beamShearResult.xAxis.Vu/1000000) > (beamShearResult.xAxis.ΦVn/1000) || (beamShearResult.yAxis.Vu/1000000) > (beamShearResult.yAxis.ΦVn/1000)){
                         dc2+=25;
                         b+=1;
-                        squareDimension = calculateDimensionRectangular(depth, dc2, deadLoad, liveLoad, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity);
+                        squareDimension = calculateDimensionRectangular(depth, dc2, deadLoad, liveLoad, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity, limitLength, ratioLengthL, ratioLengthB, constraints);
                         console.log("calculated dimension");
                         document.getElementById('result').appendChild(createParagraph(`D<sub>c</sub> = ${dc2} mm`));
                         document.getElementById('result').appendChild(createParagraph(`D<sub>s</sub> = H - D<sub>c</sub> = ${depth} - ${dc2} = ${depth - dc2} mm`));
@@ -756,9 +776,9 @@ document.addEventListener("DOMContentLoaded", () => {
                         document.getElementById('result').appendChild(beamShear(dc2,clearCover,barDia,beamShearResult,squareDimension,columnWidth,punchingShearVu,λ,fc));
                     
                     }
-                    if(dc===dc1){}else{
+                    if(dc===dc2){}else{
                         document.getElementById('result').appendChild(createHeader5(`Recalculate Beam Dimension With new Dc`));
-                        squareDimension = calculateDimensionRectangular(depth, dc2, deadLoad, liveLoad, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity);
+                        squareDimension = calculateDimensionRectangular(depth, dc2, deadLoad, liveLoad, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity, limitLength, ratioLengthL, ratioLengthB, constraints);
                         console.log("calculated dimension");
                         punchingShearVu = calculatePunchingShear(dc2, clearCover, barDia, deadLoad, liveLoad, columnWidth, squareDimension.B4, squareDimension.L,unitWeightSoil, unitWeightConcrete, surcharge,squareDimension.ds);
                         console.log("calculated Vu");
@@ -769,29 +789,31 @@ document.addEventListener("DOMContentLoaded", () => {
                         document.getElementById('result').appendChild(createParagraph(`q<sub>net</sub> = ${squareDimension.qnet} kPa`));
                         document.getElementById('result').appendChild(createParagraph(`P = Live Load + Dead Load = ${liveLoad} kN + ${deadLoad} kN = ${liveLoad + deadLoad} kN`));
                         document.getElementById('result').appendChild(createParagraph(`A<sub>f</sub> = P / q<sub>net</sub> = ${squareDimension.P} kN / ${squareDimension.qnet} kPa = ${squareDimension.Af.toFixed(2)} m<sup>2</sup>`));
-                        document.getElementById('result').appendChild(createParagraph(`L = A<sub>f</sub> / B = ${squareDimension.Af.toFixed(2)} kN / ${limitLength} kPa = ${squareDimension.B1.toFixed(3)} m = ${squareDimension.L} m`));
+                        document.getElementById('result').appendChild(createParagraph(`L = A<sub>f</sub> / B = ${squareDimension.Af.toFixed(2)} kN / ${limitLength} kPa = ${squareDimension.B3.toFixed(3)} m = ${squareDimension.L} m`));
                         document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> (Ultimate Load) = 1.2 Dead Load + 1.6 Live Load + 1.2 [(γ<sub>s</sub> x d<sub>s</sub>) + (γ<sub>c</sub> x d<sub>c</sub>) + q ] x B x L`));
-                    document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> (Ultimate Load) = 1.2(${deadLoad} kN) + 1.6(${liveLoad} kN) + 1.2 [( ${unitWeightSoil} x ${(depth - dc) / 1000} ) + ( ${unitWeightConcrete} x ${dc / 1000} ) + ${surcharge} ] x ${squareDimension.B4} x ${squareDimension.L} = ${punchingShearVu.Pu.toFixed(2)} kN`));
-                    document.getElementById('result').appendChild(createParagraph(`q<sub>u</sub> (Ultimate Bearing Pressure): P<sub>u</sub> / A<sub>f</sub> = ${punchingShearVu.Pu.toFixed(2)} kN / (${squareDimension.B4} meters x ${squareDimension.L} meters) = ${punchingShearVu.qu.toFixed(2)} kPa`));
+                        document.getElementById('result').appendChild(createParagraph(`P<sub>u</sub> (Ultimate Load) = 1.2(${deadLoad} kN) + 1.6(${liveLoad} kN) + 1.2 [( ${unitWeightSoil} x ${(depth - dc) / 1000} ) + ( ${unitWeightConcrete} x ${dc / 1000} ) + ${surcharge} ] x ${squareDimension.B4} x ${squareDimension.L} = ${punchingShearVu.Pu.toFixed(2)} kN`));
+                        document.getElementById('result').appendChild(createParagraph(`q<sub>u</sub> (Ultimate Bearing Pressure): P<sub>u</sub> / A<sub>f</sub> = ${punchingShearVu.Pu.toFixed(2)} kN / (${squareDimension.B4} meters x ${squareDimension.L} meters) = ${punchingShearVu.qu.toFixed(2)} kPa`));
                     
                     
                     }
-                    let rebars = designRebars(squareDimension.B4,squareDimension.L,dc,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,0.5,bRatio);
+                    let rebars = designRebars(squareDimension.B4,squareDimension.L,dc2,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,0.5,bRatio);
                     console.log("sc after init:",rebars.sc);
-                    document.getElementById('result').appendChild(createHeader5(`Reinforcement Design Calculation`));
-                    document.getElementById('result').appendChild(rebarDisplay(squareDimension.B4,squareDimension.L, dc,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,rebars.b,rebars.bp,rebars.d,rebars.aa,rebars.Mu,rebars.ct,bRatio, rebars.num, rebars.at,rebars.reductionFactor,rebars.muMax,rebars.SRRB,rebars.Rn,rebars.rho,rebars.rhoMin1,rebars.rhoMin2,rebars.rhoMin,rebars.as1,rebars.as,rebars.asMin, rebars.asMin1,rebars.asMin2,rebars.ab,rebars.nInitial,rebars.nRounded,rebars.sc,rebars.scMin,rebars.message,rebars.centerBand,rebars.nCenterBand,rebars.nCenterBandRounded,rebars.Ag,rebars.beta1));
-                        let rebars2 = designRebars(squareDimension.L,squareDimension.B4,dc,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,1.5,bRatio);
-                    console.log("sc after init:",rebars.sc);
-                    document.getElementById('result').appendChild(createHeader5(`Reinforcement Design Calculation`));
-                    document.getElementById('result').appendChild(rebarDisplay(squareDimension.L,squareDimension.B4,dc,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,rebars2.b,rebars2.bp,rebars2.d,rebars2.aa,rebars2.Mu,rebars2.ct,bRatio,rebars2.num,rebars2.at,rebars2.reductionFactor,rebars2.muMax,rebars2.SRRB,rebars2.Rn,rebars2.rho,rebars2.rhoMin1,rebars2.rhoMin2,rebars2.rhoMin,rebars2.as1,rebars2.as,rebars2.asMin,rebars2.asMin1,rebars2.asMin2,rebars2.ab,rebars2.nInitial,rebars2.nRounded,rebars2.sc,rebars2.scMin,rebars2.message,rebars2.centerBand,rebars2.nCenterBand,rebars2.nCenterBandRounded,rebars2.Ag,rebars2.beta1));
-                        document.getElementById('Summary').appendChild(createHeader3(`Summary:`));
+                    document.getElementById('result').appendChild(createHeader5(`Reinforcement Design Calculation Along Long Span`));
+                    document.getElementById('result').appendChild(rebarDisplay(squareDimension.B4,squareDimension.L, dc2,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,rebars.b,rebars.bp,rebars.d,rebars.aa,rebars.Mu,rebars.ct,bRatio, rebars.num, rebars.at,rebars.reductionFactor,rebars.muMax,rebars.SRRB,rebars.Rn,rebars.rho,rebars.rhoMin1,rebars.rhoMin2,rebars.rhoMin,rebars.as1,rebars.as,rebars.asMin, rebars.asMin1,rebars.asMin2,rebars.ab,rebars.nInitial,rebars.nRounded,rebars.sc,rebars.scMin,rebars.message,rebars.centerBand,rebars.nCenterBand,rebars.nCenterBandRounded,rebars.Ag,rebars.beta1));
                     
-                        document.getElementById('Summary').appendChild(createParagraph(`Dc = ${dc}mm`));
-                        document.getElementById('Summary').appendChild(createParagraph(`B = ${squareDimension.B4}m`));
-                        document.getElementById('Summary').appendChild(createParagraph(`L = ${squareDimension.L}m`));
+                    let rebars2 = designRebars(squareDimension.L,squareDimension.B4,dc2,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,1.5,bRatio);
+                    console.log("sc after init:",rebars.sc);
+                    document.getElementById('result').appendChild(createHeader5(`Reinforcement Design Calculation Along Short Span`));
+                    document.getElementById('result').appendChild(rebarDisplay(squareDimension.L,squareDimension.B4,dc2,clearCover,barDia,barDia,columnWidth,punchingShearVu.qu,fc,fy,rebars2.b,rebars2.bp,rebars2.d,rebars2.aa,rebars2.Mu,rebars2.ct,bRatio,rebars2.num,rebars2.at,rebars2.reductionFactor,rebars2.muMax,rebars2.SRRB,rebars2.Rn,rebars2.rho,rebars2.rhoMin1,rebars2.rhoMin2,rebars2.rhoMin,rebars2.as1,rebars2.as,rebars2.asMin,rebars2.asMin1,rebars2.asMin2,rebars2.ab,rebars2.nInitial,rebars2.nRounded,rebars2.sc,rebars2.scMin,rebars2.message,rebars2.centerBand,rebars2.nCenterBand,rebars2.nCenterBandRounded,rebars2.Ag,rebars2.beta1));
+                
+                    document.getElementById('Summary').appendChild(createHeader3(`Summary:`));
+                    
+                    document.getElementById('Summary').appendChild(createParagraph(`Dc = ${dc2}mm`));
+                    document.getElementById('Summary').appendChild(createParagraph(`B = ${squareDimension.B4}m`));
+                    document.getElementById('Summary').appendChild(createParagraph(`L = ${squareDimension.L}m`));
                         
-                        document.getElementById('Summary').appendChild(createParagraph(`No. Rebars= ${rebars.nRounded}pcs`));
-                        document.getElementById('Summary').appendChild(createParagraph(`No. Rebars= ${rebars2.nRounded}pcs`));
+                    document.getElementById('Summary').appendChild(createParagraph(`No. Rebars= ${rebars.nRounded}pcs`));
+                    document.getElementById('Summary').appendChild(createParagraph(`No. Rebars= ${rebars2.nRounded}pcs`));
                        
                 }
                 
@@ -837,7 +859,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const qnet = soilBearingCapacity - (unitWeightConcrete * dc / 1000) - (unitWeightSoil * ds / 1000) - surcharge;
         const P = deadLoad + liveLoad;
         const Af = P / qnet;
-        let B1, B2 = 0
+        let B1 = 0;
+        let B2 = 0
         if (constraints === 2) {
         B1 = Math.sqrt(Af);
         B2 = Math.ceil(B1 * 10) / 10;
@@ -858,7 +881,8 @@ document.addEventListener("DOMContentLoaded", () => {
     } else if (constraints === 1) {
         const B3 = (Math.sqrt(ratioLengthB*ratioLengthL*Af))/ratioLengthB;
         const B4 = Math.ceil(B3 * 10) / 10;
-        const L = (ratioLengthB/ratioLengthL)*B4;
+        let L = (ratioLengthB/ratioLengthL)*B3;
+        L = Math.ceil(L * 10) / 10;
         return { ds, qnet, P, Af, B1, B2, length, B3, B4, L, limitLength,ratioLengthL, ratioLengthB };
     } else if (constraints === 0) {
         throw new Error('No restrictions specified');
@@ -1200,7 +1224,7 @@ function rebarDisplay(B,L,Dc,Cc,db,diaBar, c, qu, fc, fy, b, bp, d, aa, Mu, ct, 
     resultsContent.appendChild(createParagraph(`β = ${beta1}`));
     resultsContent.appendChild(createParagraph(`at = β x ct = ${beta1} x ${ct} = ${at} mm`));
     resultsContent.appendChild(createParagraph(`Reduction Factor = 0.9`));
-    resultsContent.appendChild(createParagraph(`Mu<sub>max</sub> = 0.85 x ${fc}MPa x ${at}mm x ${b*1000}mm x (${d}mm - (${at}mm / 2)) = ${(muMax).toFixed(2)} kNm`));
+    resultsContent.appendChild(createParagraph(`Mu<sub>max</sub> = 0.9 x ${beta1.toFixed(4)} x ${fc}MPa x ${at}mm x ${b*1000}mm x (${d}mm - (${at}mm / 2)) = ${(muMax).toFixed(2)} kNm`));
     resultsContent.appendChild(createParagraph(`Mu ${Mu > muMax ? `>`:`<`} Mu<sub>max</sub>`));
     resultsContent.appendChild(createParagraph(`∴ ${Mu < muMax ? "SRRB":"DRRB"}`));
     resultsContent.appendChild(createParagraph(``));
