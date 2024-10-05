@@ -15,7 +15,16 @@ document.addEventListener("DOMContentLoaded", () => {
             const depth = parseFloat(document.getElementById('Depth').value) * 1000;
             const barDia = parseInt(document.getElementById('BarDiameter').value);
             const method = parseInt(document.getElementById('Method').value);
-            const columnWidth = parseInt(document.getElementById('ColumnWidth').value);
+            const columnShape = document.getElementById('columnShape').value;
+            if ( columnShape === "rectangular" ){
+                let columnWidthX = parseInt(document.getElementById('ColumnWidthX').value); 
+                let columnWidthY = parseInt(document.getElementById('ColumnWidthY').value);
+            } else if ( columnShape === "square" ){
+                let columnWidth = parseInt(document.getElementById('ColumnWidth').value);
+            } else if ( columnShape === "circle" ){
+                let columnWidth1 = parseInt(document.getElementById('ColumnWidth').value);
+                let columnWidth = columnWidth1 * Math.sqrt(Math.PI/4);
+            }
             const columnLocation = parseInt(document.getElementById('ColumnLocation').value);
             const soilBearingCapacity = parseFloat(document.getElementById('SoilBearingCapacity').value);
             const surcharge = parseFloat(document.getElementById('Surcharge').value);
@@ -28,6 +37,13 @@ document.addEventListener("DOMContentLoaded", () => {
             const ratioLengthL = parseFloat(document.getElementById('RatioL').value);
             const ratioLengthB = parseFloat(document.getElementById('RatioB').value); 
             constraints = parseInt(document.getElementById('LengthRestriction1').value);
+            const centricity = document.getElementById('centricity').value;
+            if ( centricity === "eccentric" ) {
+                const mx = parseInt(document.getElementById('mx').value);
+                const my = parseInt(document.getElementById('my').value);
+                const mz = parseInt(document.getElementById('mz').value);
+            }
+            
             // Initialize default values
             console.log("initialize values");
             let v=1;
@@ -927,7 +943,15 @@ function columnLoc(columnLocation) {
 }
     function solutionMethod(method, structureType) {
         if (structureType === "Isolated Square") {
-            if (method === 1) return 11;
+            if (method === 1) { 
+                if (columnShape === "square") {
+                    return 111; 
+                } else if (columnShape === "circle") {
+                    return 112; 
+                } else if (columnShape === "rectangular") {
+                    return 113;    
+                }
+            }
             if (method === 2) return 12;
           
         } else if (structureType === "Isolated Rectangular") {
