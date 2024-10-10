@@ -2,23 +2,13 @@ import { SaveFile } from './script.js';
 
 document.addEventListener("DOMContentLoaded", () => {
     let resContent;
-    let columnWidthX;
-    let columnWidthY;
-    let columnWidth;
-    let columnWidth1;
-    let Mdlx;
-    let Mllx;
-    let Mdly;
-    let Mlly;
-    let Mdlz;
-    let Mllz;
+
     document.getElementById('formFoundation').addEventListener('submit', function(event) {
         event.preventDefault();
         try {
             console.log("retrieved data");
             // Retrieve input values
             let constraints = 1;
-            
             const type = document.getElementById('structureType').value;
             const deadLoad = parseFloat(document.getElementById('DeadLoad').value);
             const liveLoad = parseFloat(document.getElementById('LiveLoad').value);
@@ -27,16 +17,13 @@ document.addEventListener("DOMContentLoaded", () => {
             const method = parseInt(document.getElementById('Method').value);
             const columnShape = document.getElementById('columnShape').value;
             if ( columnShape === "rectangular" ){
-                columnWidthX = parseInt(document.getElementById('ColumnWidthX').value); 
-                columnWidthY = parseInt(document.getElementById('ColumnWidthY').value);
-                console.log("defined Width");
+                let columnWidthX = parseInt(document.getElementById('ColumnWidthX').value); 
+                let columnWidthY = parseInt(document.getElementById('ColumnWidthY').value);
             } else if ( columnShape === "square" ){
-                columnWidth = parseInt(document.getElementById('ColumnWidth').value);
-                console.log("defined Width");
+                let columnWidth = parseInt(document.getElementById('ColumnWidth').value);
             } else if ( columnShape === "circle" ){
-                columnWidth1 = parseInt(document.getElementById('ColumnWidth').value);
-                columnWidth = columnWidth1 * Math.sqrt(Math.PI/4);
-                console.log("defined Width");
+                let columnWidth1 = parseInt(document.getElementById('ColumnWidth').value);
+                let columnWidth = columnWidth1 * Math.sqrt(Math.PI/4);
             }
             const columnLocation = parseInt(document.getElementById('ColumnLocation').value);
             const soilBearingCapacity = parseFloat(document.getElementById('SoilBearingCapacity').value);
@@ -49,15 +36,12 @@ document.addEventListener("DOMContentLoaded", () => {
             const limitLength = parseFloat(document.getElementById('Limitation').value);
             const ratioLengthL = parseFloat(document.getElementById('RatioL').value);
             const ratioLengthB = parseFloat(document.getElementById('RatioB').value); 
-            constraints = parseInt(document.getElementById('LengthRestriction').value);
+            constraints = parseInt(document.getElementById('LengthRestriction1').value);
             const centricity = document.getElementById('centricity').value;
             if ( centricity === "eccentric" ) {
-                Mdlx = parseInt(document.getElementById('mdlx').value); 
-                Mllx = parseInt(document.getElementById('mllx').value);
-                Mdly = parseInt(document.getElementById('mdly').value); 
-                Mlly = parseInt(document.getElementById('mlly').value);
-               
-                console.log(`Mdlx = `,Mdlx);
+                const Mdl = parseInt(document.getElementById('mdl').value);
+                const Mll = parseInt(document.getElementById('mll').value);
+              
             }
             
             // Initialize default values
@@ -68,7 +52,7 @@ document.addEventListener("DOMContentLoaded", () => {
             let dc1 = 250;
             let dc2 = 250;
             const clearCover = 75;
-            const solution = solutionMethod(method, type, columnShape);
+            const solution = solutionMethod(method, type);
             
             // Display the results
 
@@ -78,95 +62,12 @@ document.addEventListener("DOMContentLoaded", () => {
             const summaryDiv = document.getElementById("Summary");
             summaryDiv.innerHTML = ''; // Clear previous results
 
-            console.log(`columnShape :`, columnShape);
-            console.log(`centricity: ` , centricity);
-            console.log(`solution: `, solution);
-            if ( centricity === "eccentric") {
+            if ( centricity === "eccentric ") {
 
-                if (solution === 111) {
-                    // Logic for solution Eccentric Isolated Square Iteration Method
-
-
-                } else if (solution === 121) {
-                    // Logic for solution Eccentric Isolated Square Approximate Method
-                } else if (solution === 211) {
-                    // Logic for solution Eccentric Isolated Rectangular Iteration Method
-                } else if (solution === 221) {
-                    // Logic for solution Eccentric Isolated Rectangular Approximate Method
-    
-                    let dimension = calculateDimension(depth, dc, deadLoad, liveLoad, Mdlx, Mllx, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity, ratioLengthB, ratioLengthL,limitLength, constraints); 
-                    console.log(`Dimension : B4=${dimension.B4}, L=${dimension.L}, e=${dimension.e}`);
-                    let e = eccentricity(deadLoad,liveLoad,Mdlx,Mllx);
-                    console.log(`Eu = `,e.Eu);
-
-                    //Dimension
-                    document.getElementById('result').appendChild(createHeader3(`Solution:`));
-                    document.getElementById('result').appendChild(createHeader5(`Dimension Calculation`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( \D_c = ${dc} mm\\)`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( \D_s = H - D_c = ${depth} - ${dc} = ${depth - dc} mm\\)`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( \q_{net} = q_a - \\gamma_c D_c - \\gamma_s D_s - q\\)`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( \q_{net} = ${soilBearingCapacity} kPa - (${unitWeightConcrete} kN/ \m^{3} \\times ${dc / 1000} m) - (${unitWeightSoil} kN/m^{3} \\times ${dimension.ds / 1000} m) - ${surcharge} kN/m^{2}\\)`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( \q_{net} = ${dimension.qnet.toFixed(2)} kPa\\)`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( P = P_{LL} + P_{DL} = ${liveLoad} kN + ${deadLoad} kN = ${liveLoad + deadLoad} kN\\)`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( M = M_{LL} + M_{DL} = ${Mllx} kNm + ${Mdlx} kNm = ${Mllx+Mdlx} kNm\\)`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( e = \\frac{M}{P} = \\frac{${dimension.M} kNm}{${dimension.P} kN} = ${(dimension.e*1000).toFixed(2)} mm\\)`));
-                    document.getElementById('result').appendChild(createParagraph(`\\(q_{net} = \\frac{P}{B_{y}B_{x}} \\times [1 + (\\frac{6e}{B_{x}})]\\)`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( \\frac{${dimension.qnet.toFixed(2)}}{1000}\\) = (\\( \\frac{${dimension.P*1000}N}{${dimension.k.toFixed(4)}B_{x}^{2}}\\) ) x [1 + (\\( \\frac{6 \\times ${dimension.e}m}{B_x}\\))]`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( B_x = ${dimension.B3.toFixed(4)} m \\approx ${dimension.L} m\\)`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( B_y = ${dimension.B3.toFixed(4)} m \\times ${dimension.k.toFixed(4)} = ${dimension.B2.toFixed(4)} m \\approx ${dimension.B4} m \\)`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( P_{u1} = 1.4P_{DL} = 1.4(${deadLoad}) kN = ${1.4*deadLoad} kN \\)`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( P_{u2} = 1.2P_{DL} + 1.6P_{LL} = 1.2(${deadLoad}) kN + 1.6(${liveLoad}) kN = ${1.2*deadLoad+1.6*liveLoad} kN \\)`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( P_u = ${e.Pu} kN \\)`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( M_{u1} = 1.4M_{DL} = 1.4(${Mdlx}) kNm = ${1.4*Mdlx} kNm \\)`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( M_{u2} = 1.2M_{DL} + 1.6M_{LL} = 1.2(${Mdlx}) kNm + 1.6(${Mllx}) kNm = ${1.2*Mdlx+1.6*Mllx} kNm \\)`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( M_u = ${e.Mu} kNm \\)`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( e_u = \\frac{M_u}{P_u} = \\frac{${e.Mu} kNm}{${e.Pu} kNm}= ${(e.Eu*1000).toFixed(2)} mm  \\)`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( \\frac{B_{x}}{6} = \\frac{${dimension.L*1000} mm }{6} = ${((dimension.L*1000)/6).toFixed(2)} mm  \\)`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( e_u ${e.Eu < (dimension.L/6) ? "<" : ">"} \\frac{B_{x}}{6} \\)`));
-                    document.getElementById('result').appendChild(createParagraph(`\\( \\therefore ${e.Eu < (dimension.L/6) ? "\\text{Case 2 - No Tension}" : "\\text{Case 1 - With Tension}"}  \\)`));
-                    
-                    //Punching Shear Test
-                    document.getElementById('result').appendChild(createHeader5(`Punching Shear Calculation`));
-                    
-                    
-
-                    
-
-
-                    if (e.Eu < (dimension.L/6)){
-                        console.log(`eu < Bx/6`);
-                       let d = dc - clearCover - barDia;
-                        let punchingShearTest = punchingShearWithMoment(e.Pu,dimension.L,dimension.B4,d,columnWidthX,columnWidthY,e.Eu,λ,fc);
-                        dc = punchingShearTest.d2 + clearCover + barDia;
-                        dc = Math.ceil(dc/25)*25;
-                        let beamShearTest = beamShearWithMoment(dc, clearCover,barDia,punchingShearTest.ax,punchingShearTest.qua,dimension.L,dimension.B4,columnWidthX,λ,fc,columnWidthY);
-                        document.getElementById('result').appendChild(createParagraph(`\\( d  = D_c - C_c - d_b = ${dc} mm - ${clearCover} mm - ${barDia} mm = ${d} mm\\)`));
-                        document.getElementById('result').appendChild(createParagraph(`\\( q_{uA}  = \\frac{P_u}{B_y\\times B_x}\\times(1 - \\frac{6\\times e_u}{B_X}) \\)`));
-                        document.getElementById('result').appendChild(createParagraph(`\\( q_{uA}  = \\frac{${e.Pu} kN}{${dimension.L}m\\times ${dimension.B4}m}\\times(1 - \\frac{6\\times ${e.Eu.toFixed(6)}m}{${dimension.L}m}) = ${punchingShearTest.qua.toFixed(3)}kPa \\)`));
-                        document.getElementById('result').appendChild(createParagraph(`\\( q_{uB}  = \\frac{${e.Pu} kN}{${dimension.L}m\\times ${dimension.B4}m}\\times(1 + \\frac{6\\times ${e.Eu.toFixed(6)}m}{${dimension.L}m}) = ${punchingShearTest.qub.toFixed(3)}kPa \\)`));
-                        document.getElementById('result').appendChild(createParagraph(`\\( V_{u}  = ${punchingShearTest.Vu} \\)`));
-                       
-                        let punchingShear =  punchingShearAll(e.Pu,columnWidthX,columnWidthY,d,dimension.L,dimension.B4,λ,fc);
-                    
-                        document.getElementById('result').appendChild(createParagraph(`\\( d  = D_c - C_c - d_b = ${dc} mm - ${clearCover} mm - ${barDia} mm = ${d} mm\\)`));
-                        document.getElementById('result').appendChild(createParagraph(`\\( A_{o}  = (c_y + d) \\times (c_x + d) = (${columnWidthY}+ ${d}) \\times (${columnWidthX}+ ${d}) = ${punchingShear.ao}m\\)`));
-                        document.getElementById('result').appendChild(createParagraph(`\\( V_u = P_u - P_u \\times\\frac{A_o}{A_f} = ${e.Pu} - ${e.Pu} \\times\\frac{${punchingShear.ao}m}{${punchingShear.af.toFixed(2)}m^2} = ${punchingShear.Vu.toFixed(3)}kN\\)`));
-                        document.getElementById('result').appendChild(createParagraph(`\\( V_u = \\phi \\times \\frac{1}{3} \\times \\lambda \\times \\sqrt{fc'} \\times [(2 \\times (d + C_x))+(2 \\times (d + C_y))]\\times d\\)`));
-                        document.getElementById('result').appendChild(createParagraph(`\\( ${punchingShear.Vu.toFixed(3)}kN = ${0.75} \\times \\frac{1}{3} \\times (${λ}) \\times \\sqrt{${fc}} \\times [(2 \\times (d + ${columnWidthX}))+(2 \\times (d + ${columnWidthY}))]\\times d\\)`));
-                        document.getElementById('result').appendChild(createParagraph(`\\( d = ${punchingShear.d1.toFixed(2)}mm\\)`));
-                        dc = punchingShear.d1 +clearCover+barDia;
-                        document.getElementById('result').appendChild(createParagraph(`\\( D_c  = d + C_c + d_b = ${punchingShear.d1.toFixed(2)} mm + ${clearCover} mm + ${barDia} mm = ${dc.toFixed(2)} mm \\approx ${Math.ceil(dc/25)*25}mm\\)`));
-                        dc =Math.ceil(dc/25)*25;
-                        d = dc - clearCover - barDia;
-                       // let beamShear = beamShearAll(columnWidthX+d,(dimension.L/2)+columnWidthX+d,-dimension.B4/2,dimension.B4/2,dimension.L*dimension.B4,dimension.B4,dimension.L,ultimate(Mdly,Mlly),ultimate(Mdlx,Mllx),ultimate(deadLoad,liveLoad));
-                    }  else {
-                      console.log(`eu > Bx/6`);
-                    }
-                }
             } else {
                     
                 if (solution === 112) {
-                    // Logic for solution Concentric Isolated Square - Iteration Method
+                    // Logic for solution Isolated Square - Iteration Method
                     console.log("Isolated Square - Iteration Method");
                     let bRatio = 1;
                     squareDimension = calculateDimensionSquare(depth, dc, deadLoad, liveLoad, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity);
@@ -936,8 +837,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         
                     }
                 }
-            } 
-            document.getElementById('saveButton').style.display = 'block';
+            } document.getElementById('saveButton').style.display = 'block';
             document.getElementById('tab').style.display = 'flex';
             
     // Save button functionality
@@ -948,19 +848,11 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("Summary Content: ",summary);
     resContent = results + summary;
     ;
-    MathJax.typeset();            
-    function printDiv(divId) {
-        const originalContent = document.body.innerHTML;
-        const printContent = document.getElementById(divId).outerHTML;
-
-        document.body.innerHTML = printContent;
-        window.print();
-        document.body.innerHTML = originalContent;
-    }
+        
     const saveButtonElement = document.getElementById("saveButton");
     saveButtonElement.addEventListener("click", function() {
-        printDiv("print");
-        //SaveFile(resContent);
+        
+        SaveFile(resContent);
 
     });
         } catch (error) {
@@ -968,268 +860,69 @@ document.addEventListener("DOMContentLoaded", () => {
             alert(`An error occurred: ${error}`);
         } 
     });
-    //functions
-    function calculateDimension(depth, dc, deadLoad, liveLoad, Mdl, Mll, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity, ratioLengthB, ratioLengthL, limitLength , constraints){
-        console.log(`start dimension`);
-        let k = (ratioLengthL/ratioLengthB);
+
+    function calculateDimension(depth, dc, deadLoad, liveLoad, Mdl, Mll, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity, ratioLengthB, ratioLengthL) {
         const ds = depth - dc;
-        const qnet = soilBearingCapacity - (unitWeightConcrete * dc / 1000) - (unitWeightSoil * ds / 1000) - surcharge; //c= qnet
+        const qnet = soilBearingCapacity - (unitWeightConcrete * dc / 1000) - (unitWeightSoil * ds / 1000) - surcharge;
         const P = deadLoad + liveLoad;
         const M = Mdl + Mll;
-        const e = M/P; 
+        const e = M/P;
         let Af = P/qnet;
         let B1 = 0;
         let B2 = 0;
         if (constraints === 2) {
-            B1 = Math.sqrt(Af);
-            B2 = Math.ceil(B1 * 10) / 10;
-            const length = Math.min(B2, limitLength);
+        B1 = Math.sqrt(Af);
+        B2 = Math.ceil(B1 * 10) / 10;
+        const length = Math.min(B2, limitLength);
+        
             if (limitLength < B2) {
-                console.log(`c = `,qnet);
-                console.log(`P = `,P);
-                console.log(`a = `,e);
-                console.log(`k = `,limitLength);
-                const B3 = ( (P*1000) + Math.sqrt(((P*1000)**2) + (4*limitLength*qnet*e*P*6000000)))/(2*limitLength*qnet)/1000;
-                const B4 = limitLength;
+                const B3 = Af/limitLength;
+                const B4 = limitLength
                 const L = Math.ceil(B3 * 10) / 10;
-                console.log(`Bx = `,B3);
-                console.log(`By = `,B4);
-                return { k,ds, qnet, P, Af, B1, B2, length, B3, B4 ,L, limitLength,ratioLengthL, ratioLengthB,e,M }; 
+                return { ds, qnet, P, Af, B1, B2, length, B3, B4 ,L, limitLength,ratioLengthL, ratioLengthB };
             } else {
-                //Double check:
-                console.log(`limitLength > B2`)
                 const B3 = B1;
                 const B4 = B2;
-                console.log(`Bx = `,B3);
-                console.log(`By = `,B3);
                 const L = B2;
-                return { k,ds, qnet, P, Af, B1, B2, length, B3, B4, L, limitLength,ratioLengthL, ratioLengthB,e,M }; 
+                return { ds, qnet, P, Af, B1, B2, length, B3, B4, L, limitLength,ratioLengthL, ratioLengthB };
             } 
-            
-        } else if (constraints === 1) {
-            console.log(`c = `,qnet);
-            console.log(`P = `,P);
-            console.log(`a = `,e);
-            console.log(`k = `,k);
-            const B3 = newtonRaphson(1)/1000;
-            let L = Math.ceil(B3 * 10) / 10;
-            console.log(`Bx = `,B3);
-            const B2 = B3*k;
-            console.log(`By = `,B2);
-            const B4 = Math.ceil(B2 * 10) / 10;
-            return { k, ds, qnet, P, Af, B1, B2, length, B3, B4, L, limitLength,ratioLengthL, ratioLengthB, e,M };
         
-            } 
-        function f(x) { 
-            return (qnet/1000) * k * Math.pow(x, 3) - (P*1000) * x - 6 * (e*1000) * (P*1000);
-        }
-        
-        // Derivative of the function
-        function f_prime(x) {
-           return 3 * (qnet/1000) * k * Math.pow(x, 2) - (P*1000);
-        }
-        
-        // Newton-Raphson implementation
-        function newtonRaphson(x0, tol = 1e-6, maxIter = 10000) {
-            let x = x0;
-            for (let i = 0; i < maxIter; i++) {
-                const fx = f(x);
-                const fpx = f_prime(x);
-                if (Math.abs(fpx) < 1e-8) { // Avoid division by very small numbers
-                    break;
-                }
-                const x_new = x - fx / fpx;
-                if (Math.abs(x_new - x) < tol) {
-                    return x_new;
-                }
-                x = x_new;
-                console.log(`x: `,x);
+    } else if (constraints === 1) {
+        const B3 = (Math.cbrt((P*(1+(6*e)))/(qnet*(ratioLengthB/ratioLengthL))));
+        const B4 = Math.ceil(B3 * 10) / 10;
+        let L = (ratioLengthB/ratioLengthL)*B3;
+        L = Math.ceil(L * 10) / 10;
+        return { ds, qnet, P, Af, B1, B2, length, B3, B4, L, limitLength,ratioLengthL, ratioLengthB, e,M };
+    } 
+    }
+     
+    function f(x) {
+        return c * k * Math.pow(x, 3) - P * x - 6 * a * P;
+    }
+    
+    // Derivative of the function
+    function f_prime(x) {
+        return 3 * c * k * Math.pow(x, 2) - P;
+    }
+    
+    // Newton-Raphson implementation
+    function newtonRaphson(x0, tol = 1e-6, maxIter = 1000) {
+        let x = x0;
+        for (let i = 0; i < maxIter; i++) {
+            const fx = f(x);
+            const fpx = f_prime(x);
+            if (Math.abs(fpx) < 1e-8) { // Avoid division by very small numbers
+                break;
             }
-            
-            return x; 
-        }
-        
-        
-    }
-    function eccentricity (deadLoad,liveLoad,Mdl,Mll){
-        let Pu1 = 1.4 * deadLoad;
-        let Pu2 = (1.2 * deadLoad) + (1.6 * liveLoad);
-        let Pu = Math.max(Pu1,Pu2);
-        let Mu1 = 1.4 * Mdl;
-        let Mu2 = (1.2 * Mdl) + (1.6 * Mll);
-        let Mu = Math.max(Mu1,Mu2);
-        let Eu = Mu/Pu;
-        console.log(`Pu = `,Pu);
-        console.log(`Mu = `,Mu);
-        return {Pu1,Pu2,Pu,Mu1,Mu2,Mu,Eu};
-    }
-    function beamShearWithMoment(dc,cc,db,ax,qua,bx,by,cx,λ,fc,cy){
-                                            console.log(`dc = `,dc);
-        //transverse
-        let d=dc+25-cc-0.5*db;              console.log(`d = `,d);
-        let aax = (bx*1000-cx-2*d)/2;       console.log(`aax = `,aax);
-        const f = (x) => (ax*x)+(qua);      console.log(`lower limit = `,bx-aax/1000);
-        let vuTransverseCut = by * trapezoidalRule(f,bx-aax/1000,bx,10000);
-                                            console.log(`Vu transverse = `,vuTransverseCut);
-        let d1 = (vuTransverseCut*1000)/(0.125*λ*Math.sqrt(fc)*by*1000);
-        console.log(`d = `,d1);
-        let dc2 = d1 + cc + 0.5*db;
-        let dc2Rounded = Math.ceil(dc2*25)/25;
-        //longitudinal
-        let d2=dc+25-cc-1.5*db;             console.log(`d = `,d2);
-        let aay = (by*1000-cy-2*d2)/2;      console.log(`aay = `,aay);
-       
-        let vuLongitudinalCut = aay/1000 * trapezoidalRule(f,0,bx,10000);
-                                            console.log(`Vu longitudinal = `,vuLongitudinalCut);
-        let d3 = (vuLongitudinalCut*1000)/(0.125*λ*Math.sqrt(fc)*bx*1000);
-                                            console.log(`d = `,d3);
-        let dc3 = d3 + cc + 1.5*db;         console.log(`dc = `,dc3);
-        let dc3Rounded = Math.ceil(dc3*25)/25;
-                                            console.log(`dc3 Rounded = `,dc3Rounded);
-        let finalDc = Math.max(dc3Rounded,dc2Rounded,dc);
-                                            console.log(`final dc  = `,finalDc);
-        function trapezoidalRule(func, a, b, n) {
-            let h = (b - a) / n;
-            let sum = 0.5 * (func(a) + func(b));
-          
-            for (let i = 1; i < n; i++) {
-                sum += func(a + i * h);
+            const x_new = x - fx / fpx;
+            if (Math.abs(x_new - x) < tol) {
+                return x_new;
             }
-            
-            return sum * h;
-
+            x = x_new;
         }
-        return {d,aax,vuLongitudinalCut,vuTransverseCut,d1,dc2,dc2Rounded,d2,aay,d3,dc3,dc3Rounded,finalDc};
+        return x;
     }
-
-    function punchingShearAll(pu,cx,cy,d,by,bx,λ,fc){
-        let ao = ((cy+d) * (cx+d))/1000000;
-        let af = by*bx;
-        let Vu = pu - pu*(ao/af);
-        let d1 = newtonRaphson(1);
-        console.log(`d = `,d1);
-        
-        function f(x) { 
-            return 4*Math.pow(x,2) + 2*x*(columnWidthX+columnWidthY) - ((Vu*1000)/(0.75*(1/3)*λ*Math.sqrt(fc)));
-        }
-        
-        // Derivative of the function
-        function f_prime(x) {
-           return 8*x + 2*(columnWidthX+columnWidthY);
-        }
-        
-        // Newton-Raphson implementation
-        function newtonRaphson(x0, tol = 1e-6, maxIter = 10000) {
-            let x = x0;
-            for (let i = 0; i < maxIter; i++) {
-                const fx = f(x);
-                const fpx = f_prime(x);
-                if (Math.abs(fpx) < 1e-8) { // Avoid division by very small numbers
-                    break;
-                }
-                const x_new = x - fx / fpx;
-                if (Math.abs(x_new - x) < tol) {
-                    return x_new;
-                }
-                x = x_new;
-                console.log(`x: `,x);
-            }
-            
-            return x; 
-        }
-
-        return {ao,af,Vu,d1};
-    }
-    function ultimate(dl,ll){
-        let u1 = 1.4*dl;
-        let u2 = 1.2*dl + 1.6*ll;
-        let u = Math.max(u1,u2);
-        return {u1,u2,u};
-    }
-    function beamShearAll(x1,x2,y1,y2,A,by,bx,Muy,Mux,Pu){
-        let I_y = (1/12)*by*bx^3;
-        let I_x = (1/12)*bx*by^3;
-        let numSteps = 100000;
-        const deltaY = (y2 - y1) / numSteps;
-        const deltaX = (x2 - x1) / numSteps;
-
-        let VBeam = 0;
-
-        // Outer integral for y
-        for (let i = 0; i < numSteps; i++) {
-            const y = y1 + i * deltaY;
-            
-            let innerSum = 0;
-            
-            // Inner integral for x
-            for (let j = 0; j < numSteps; j++) {
-            const x = x1 + j * deltaX;
-
-            // Function to integrate
-            const value = (Pu / A) + (Muy * x / I_y) + (Mux * y / I_x);
-            
-            // Accumulate the inner sum
-            innerSum += value * deltaX;
-            }
-            
-            // Accumulate the outer sum
-            VBeam += innerSum * deltaY;
-        }
-        console.log(`Vu beam = `,VBeam);
-        return VBeam;
-    }
-
-    function punchingShearWithMoment(pu,bx,by,d,cx,cy,eu,λ,fc){
-        let qua = pu*(1-((6*eu)/bx))/(bx*by);
-        let qub = pu*(1+((6*eu)/bx))/(bx*by);
-        let ax = (qub-qua)/bx;
-        let dcx = d + cx;
-        let dcy = d + cy;
-        console.log(`qua = `,qua);
-        console.log(`qub = `,qub);
-        console.log(`ax = `,ax);
-        console.log(`dcx = `,dcx);
-        console.log(`dcy = `,dcy);
-        console.log(`bx = `,bx);
-        console.log(`by = `,by);
-        const f = (x) => (ax*x)+(qua); // f(x) = x^2
-        let Vu = (by*trapezoidalRule(f, 0, bx, 100000000))- (dcy/1000)*trapezoidalRule(f,(bx-(dcx/1000))/2,(bx+(dcx/1000))/2,10000000);
-        console.log(`Vu = `,Vu);
-        let a  = 4;
-        let b = ((2*cx)+(2*cy));
-        let c = (-((Vu*1000)/(0.25*λ*Math.sqrt(fc))));
-        console.log(`a = `,a);
-        console.log(`b = `,b);
-        console.log(`c = `,c);
-        let d2 = quadratic(a,b,c);
-        console.log(`d = `,d2);
-
-        function quadratic(a,b,c){
-            let discriminant = b * b - 4 * a * c;
-
-            // Check if the discriminant is non-negative
-            if (discriminant < 0) {
-                return null; // No real roots
-            }
-            let d = (-b + Math.sqrt(discriminant)) / (2 * a);
-            return d;
-        }
-
-        function trapezoidalRule(func, a, b, n) {
-            let h = (b - a) / n;
-            let sum = 0.5 * (func(a) + func(b));
-          
-            for (let i = 1; i < n; i++) {
-                sum += func(a + i * h);
-            }
-            
-            return sum * h;
-
-        }
-        
-        return {d2,qua,qub,ax,dcy,dcx,Vu} ;
-
-    }
+    
 
     function calculateDimensionSquare(depth, dc, deadLoad, liveLoad, unitWeightSoil, unitWeightConcrete, surcharge, soilBearingCapacity) {
         const ds = depth - dc;
@@ -1313,7 +1006,7 @@ function columnLoc(columnLocation) {
             throw new Error('Invalid column location');
     }
 }
-    function solutionMethod(method, structureType,columnShape) {
+    function solutionMethod(method, structureType) {
         if (structureType === "Isolated Square") {
             if (method === 1) { 
                 if (columnShape === "rectangular") {
@@ -1680,4 +1373,3 @@ function rebarDisplay(B,L,Dc,Cc,db,diaBar, c, qu, fc, fy, b, bp, d, aa, Mu, ct, 
     
     
 });
-

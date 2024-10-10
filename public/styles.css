@@ -10,6 +10,34 @@ p {
     margin-top: 0; /* Remove top margin */
     margin-bottom: 0.2em; /* Adjust bottom margin */
 }
+*{
+    margin: 0;
+    padding: 0;
+}
+nav{
+    background: #0056b3;
+    padding: 1rem;
+}
+nav ul{
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: space-around;
+}
+nav ul li{
+    display: inline;
+}
+nav ul li a {
+    color: white;
+    text-decoration: none;
+    padding: 0.5rem 1 rem;
+    display: block;
+}
+nav ul li a:hover{
+    background-color: #007BFF;
+    border-radius: 5px;
+}
 li {
     
     line-height: 0.5; /* Adjust the line height */

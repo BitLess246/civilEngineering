@@ -13,20 +13,32 @@
     </style>
     <script src="/layout_script.js" defer></script>
     
-    <script type="module" src="/scriptFoundationDesign5.js" defer></script>
+    <script type="text/javascript" async
+        src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+</script>
+<script type="module" src="/scriptFoundationDesign6.js" defer></script>
     
 
 </head>
 <body>
-    <div class="container">
+    <nav>
+        <ul>
+            <li><a href="QuantitySurveying.html">QUANTITY SURVEYING</a></li>
+            <li><a href="ReinforcedConcrete.html">REINFORCED CONCRETE</a></li>
+            <li><a href="#">STEEL DESIGN</a></li>
+        </ul>
+    </nav>
+    <!--<script type="module" src="https://unpkg.com/@splinetool/viewer@1.9.29/build/spline-viewer.js"></script>
+<spline-viewer url="https://prod.spline.design/yMXK50GKAqpmjpQS/scene.splinecode"></spline-viewer>-->
+    <div class="container1">
         <h1>Foundation Design</h1>
         <div class="form-group">
-            
+           
             <form id="formFoundation">
         
                 <div id="foundationInputs" class="form-group">
                     <div id="GivenParameters" class="container">
-                        <h4>Parameters Given</h4>
+                        <h4 class="title1">Parameters Given</h4>
                         <label for="structureType">Select Foundation Type:</label>
                         <select id="structureType" name="structureType">
 		                    <option value="" disabled>Select The Type Of Structure</option>
@@ -34,33 +46,69 @@
                             <option value="Isolated Rectangular">Isolated Rectangular</option>
                             <option value="Strip">Strip</option>
                         </select>
+                        <label for="LengthRestriction" id="LengthRestriction1" style="display: none;">Restriction:</label>
+                        <select id="LengthRestriction" name="LengthRestriction1" style="display: none;">
+                            <option value="0">None</option>
+                            <option value="1">Ratio</option>
+                            <option value="2">Constricted</option>
+                        </select>
+                        <label for="RatioL" id="RatioLabelL" style="display: none;">Ratio (_)\(B_y\)</label>
+                        <input type="number" id="RatioL" step="1"  placeholder="L" style="display: none;">
+                        <label for="RatioB" id="RatioLabelB" style="display: none;">Ratio (_)\(B_x\)</label>
+                        <input type="number" id="RatioB" step="1"  placeholder="B" style="display: none;">
+                        <label for="Limitation" id="LimitationLabel" style="display: none;">Length of Constriction (in Meters):</label>
+                        <input type="number" id="Limitation" step="0.01"  style="display: none;">
                         <label for="centricity">Select Type of Centricity:</label>
                         <select id="centricity">
                             <option value="" disabled>Select Centricity</option>
                             <option value="concentric">Concentric</option>
                             <option value="eccentric">Eccentric</option>
                         </select>
-                        <label for="mx" id="mxLabel" style="display: none;">M<sub>x</sub>  (in KNm)</label>
-                        <input type="number" id="mx" step="0.001" style="display: none;" >
-                        <label for="my" id="myLabel" style="display: none;">M<sub>y</sub>  (in KNm)</label>
-                        <input type="number" id="my" step="0.001" style="display: none;" >
-                        <label for="mz" id="mzLabel" style="display: none;">M<sub>z</sub>  (in KNm)</label>
-                        <input type="number" id="mz" step="0.001" style="display: none;" >
-                        <label for="LengthRestriction" id="LengthRestriction" style="display: none;">Restriction:</label>
-                        <select id="LengthRestriction1" name="LengthRestriction1" style="display: none;">
-                            <option value="0">None</option>
-                            <option value="1">Ratio</option>
-                            <option value="2">Constricted</option>
+                        
+                        <label for="loadType">Select Load Type:</label>
+                        <select id="loadType" name="loadType">
+                            <option value="" disabled selected>Select Load Type</option>
+                            <option value="ultimate">Ultimate Load</option>
+                            <option value="individual">Individual Loads (Dead Load & Live Load)</option>
                         </select>
-                        <label for="Ratio" id="RatioLabel" style="display: none;">Ratio (_L:_B)</label>
-                        <input type="number" id="RatioL" step="1"  placeholder="L" style="display: none;">
-                        <input type="number" id="RatioB" step="1"  placeholder="B" style="display: none;">
-                        <label for="LimitationLabel" id="LimitationLabel" style="display: none;">Length of Constriction (in Meters):</label>
-                        <input type="number" id="Limitation" step="0.01"  style="display: none;">
-                        <label for="DeadLoad">Dead Load (in KN):</label>
-                        <input type="number" id="DeadLoad" step="0.001"  >
-                        <label for="LiveLoad">Live Load (in KN):</label>
-                        <input type="number" id="LiveLoad" step="0.001"  >
+                    
+            
+            
+                        <label for="AllowableLoad">Allowable Load P (in KN):</label>
+                        <input type="number" id="AllowableLoad" step="0.001">
+                        <label for="AllowableMx">Allowable Load Mx (in KNm):</label>
+                        <input type="number" id="AllowableMx" step="0.001">
+                        <label for="AllowableMy">Allowable Load My (in KNm):</label>
+                        <input type="number" id="AllowableMy" step="0.001">
+                    
+                        <label for="UltimateLoad">Ultimate Load P<sub>u</sub> (in KN):</label>
+                        <input type="number" id="UltimateLoad" step="0.001">
+                    
+                    
+                        <label for="UltimateMx">Ultimate Load M<sub>ux</sub> (in KN):</label>
+                        <input type="number" id="UltimateMx" step="0.001">
+                
+                        <label for="UltimateMy">Ultimate Load M<sub>uy</sub> (in KN):</label>
+                        <input type="number" id="UltimateMy" step="0.001">
+                
+            
+                    
+                        <label for="DeadLoad">P<sub>DL</sub> (in KN):</label>
+                        <input type="number" id="DeadLoad" step="0.001">
+                    
+                        <label for="LiveLoad">P<sub>LL</sub> (in KN):</label>
+                        <input type="number" id="LiveLoad" step="0.001">
+                        <label for="mdlx" id="mdxLabel" style="display: none;">M<sub><sub>x</sub>DL</sub>  (in KNm)</label>
+                        <input type="number" id="mdlx" step="0.001" style="display: none;" >
+                        <label for="mllx" id="mlxLabel" style="display: none;">M<sub><sub>x</sub>LL</sub>  (in KNm)</label>
+                        <input type="number" id="mllx" step="0.001" style="display: none;" >
+
+                        <label for="mdly" id="mdyLabel" style="display: none;">M<sub><sub>y</sub>DL</sub>  (in KNm)</label>
+                        <input type="number" id="mdly" step="0.001" style="display: none;" >
+                        <label for="mlly" id="mlyLabel" style="display: none;">M<sub><sub>y</sub>LL</sub>  (in KNm)</label>
+                        <input type="number" id="mlly" step="0.001" style="display: none;" >
+                        
+                    
                         <label for="Depth">Depth (in meters):</label>
                         <input type="number" id="Depth" step="0.001"  >
                         <label for="BarDiameter">Bar Diameter (in Millimeters):</label>
@@ -105,32 +153,38 @@
                         <input type="number" id="UnitWeightSoil" step="0.01"  >
                         <label for="UnitWeightConcrete">Unit Weight of Concrete (in KN/m3):</label>
                         <input type="number" id="UnitWeightConcrete" step="0.01"  >
-                        </div>
+                        <label for="pu">Consider Weight of Soil?</label>
+                        <select name="considerSoil" id="considerSoil">
+                            <option value="yes">Yes</option>
+                            <option value="no">No</option>
+                        </select>
+                            
+                    </div>
     
                         <button id="calculate" type="submit" onclick="openTab(event, 'Solution')">Calculate</button>
                     </div>
 
                     </div>
             </form>
-                    
+        
     <div class="tab" id="tab" style="display: none;">
         <button class="tab-button" id="Summarybutton" onclick="openTab(event, 'Summary')">Summary</button>
         <button class="tab-button" id="Solutionbutton" onclick="openTab(event, 'Solution')">Solution</button>
-      </div>
-  
-      <div id="Summary" class="tab-content">
+    </div>
+  <div id="print">
+    <div id="Summary" class="tab-content">
         
-      </div>
+    </div>
   
-      <div id="Solution" class="tab-content">
-        <div id="result">
+    <div id="Solution" class="tab-content">
+        <div id="result" class="latex-container">
         
-        </div>
-      </div>
-            
-            <button id="saveButton" style="display: none;">Save</button>
         </div>
     </div>
+</div>     
+            <button id="saveButton" style="display: none;">Save</button>
+        </div>
+   
 
     <script>
         // Get the buttons
@@ -155,21 +209,41 @@
         function loadFieldValues() {
             // Original script handling UI changes based on select values
             const selectStructure = document.getElementById("structureType");
-            const ratioLabel = document.getElementById("RatioLabel");
+            const ratioLabelL = document.getElementById("RatioLabelL");
+            const ratioLabelB = document.getElementById("RatioLabelB");
             const ratioInputL = document.getElementById("RatioL");
             const ratioInputB = document.getElementById("RatioB");
-            const lengthRestriction = document.getElementById("LengthRestriction1");
-            const LengthRestrictionLabel = document.getElementById("LengthRestriction");
+            const lengthRestriction = document.getElementById("LengthRestriction");
+            const LengthRestrictionLabel = document.getElementById("LengthRestriction1");
             const limitationLabel = document.getElementById("LimitationLabel");
             const limitation = document.getElementById("Limitation");
             const centricity = document.getElementById("centricity");
             const columnShape = document.getElementById("columnShape");
-            const mxL = document.getElementById("mxLabel");
-            const myL = document.getElementById("myLabel");
-            const mzL = document.getElementById("mzLabel");
-            const mx = document.getElementById("mx");
-            const my = document.getElementById("my");
-            const mz = document.getElementById("mz");
+            const loadType = document.getElementById("loadType");
+            const puLabel = document.querySelector('label[for="UltimateLoad"]');
+            const muxLabel = document.querySelector('label[for="UltimateMx"]');
+            const muyLabel = document.querySelector('label[for="UltimateMy"]');
+            const p = document.getElementById("AllowableLoad");
+            const mx = document.getElementById("AllowableMx");
+            const my = document.getElementById("AllowableMy");
+            const pLabel = document.querySelector('label[for="AllowableLoad"]');
+            const mxLabel = document.querySelector('label[for="AllowableMx"]');
+            const myLabel = document.querySelector('label[for="AllowableMy"]');
+            const pu = document.getElementById("UltimateLoad");
+            const mux = document.getElementById("UltimateMx");
+            const muy = document.getElementById("UltimateMy");
+            const pdl = document.getElementById("DeadLoad");
+            const pll = document.getElementById("LiveLoad");
+            const pdlLabel = document.querySelector('label[for="DeadLoad"]');
+            const pllLabel = document.querySelector('label[for="LiveLoad"]');
+            const mdlxLabel = document.getElementById("mdxLabel");
+            const mllxLabel = document.getElementById("mlxLabel");
+            const mdlx = document.getElementById("mdlx");
+            const mllx = document.getElementById("mllx");
+            const mdlyLabel = document.getElementById("mdyLabel");
+            const mllyLabel = document.getElementById("mlyLabel");
+            const mdly = document.getElementById("mdly");
+            const mlly = document.getElementById("mlly");
             const cxLabel = document.getElementById("cxLabel");
             const cyLabel = document.getElementById("cyLabel");
             const cLabel = document.getElementById("cLabel");
@@ -179,7 +253,7 @@
             const c = document.getElementById("ColumnWidth");
             
             
-            console.log("4");
+            console.log("Loaded Field Values");
             // Add change event listener to the structure type select element
             selectStructure.addEventListener("change", function () {
                 if (selectStructure.value === "Isolated Rectangular") {
@@ -190,7 +264,8 @@
                     LengthRestrictionLabel.style.display = "none";
                     lengthRestriction.style.display = "none";
                     lengthRestriction.value = "0";
-                    ratioLabel.style.display = "none";
+                    ratioLabelL.style.display = "none";
+                    ratioLabelB.style.display = "none";
                     ratioInputL.style.display = "none";
                     ratioInputB.style.display = "none";
                     limitationLabel.style.display = "none";
@@ -199,23 +274,123 @@
                 }
             });
 
-             centricity.addEventListener("change", function () { 
-                if(centricity.value === "concentric" ) {
-                    mxL.style.display = "none";
-                    myL.style.display = "none";
-                    mzL.style.display = "none";
-                    mx.style.display = "none";
-                    my.style.display = "none";
-                    mz.style.display = "none";
-                } else if ( centricity.value === "eccentric" ) {
-                    mxL.style.display = "block";
-                    myL.style.display = "block";
-                    mzL.style.display = "block";
-                    mx.style.display = "block";
-                    my.style.display = "block";
-                    mz.style.display = "block";
-                }
-            });
+
+            // Function to handle changes for 'centricity'
+function handleCentricityChange(loadTypeValue) {
+    if (loadTypeValue === "ultimate") {
+        if (centricity.value === "concentric") {
+            muxLabel.style.display = "none";
+            muyLabel.style.display = "none";
+            mux.style.display = "none";
+            muy.style.display = "none";
+            myLabel.style.display = "none";
+            mxLabel.style.display = "none";
+            my.style.display = "none";
+            mx.style.display = "none";
+            mdlxLabel.style.display = "none";
+            mllxLabel.style.display = "none";
+            mdlx.style.display = "none";
+            mllx.style.display = "none";
+            mdlyLabel.style.display = "none";
+            mllyLabel.style.display = "none";
+            mdly.style.display = "none";
+            mlly.style.display = "none";
+        } else if (centricity.value === "eccentric") {
+            muxLabel.style.display = "block";
+            muyLabel.style.display = "block";
+            mux.style.display = "block";
+            muy.style.display = "block";
+            myLabel.style.display = "block";
+            mxLabel.style.display = "block";
+            my.style.display = "block";
+            mx.style.display = "block";
+            mdlxLabel.style.display = "none";
+            mllxLabel.style.display = "none";
+            mdlx.style.display = "none";
+            mllx.style.display = "none";
+            mdlyLabel.style.display = "none";
+            mllyLabel.style.display = "none";
+            mdly.style.display = "none";
+            mlly.style.display = "none";
+        }
+    } else if (loadTypeValue === "individual") {
+        if (centricity.value === "concentric") {
+            mdlxLabel.style.display = "none";
+            mllxLabel.style.display = "none";
+            mdlx.style.display = "none";
+            mllx.style.display = "none";
+            mdlyLabel.style.display = "none";
+            mllyLabel.style.display = "none";
+            mdly.style.display = "none";
+            mlly.style.display = "none";
+            muxLabel.style.display = "none";
+            muyLabel.style.display = "none";
+            mux.style.display = "none";
+            muy.style.display = "none";
+            myLabel.style.display = "none";
+            mxLabel.style.display = "none";
+            my.style.display = "none";
+            mx.style.display = "none";
+        } else if (centricity.value === "eccentric") {
+            mdlxLabel.style.display = "block";
+            mllxLabel.style.display = "block";
+            mdlx.style.display = "block";
+            mllx.style.display = "block";
+            mdlyLabel.style.display = "block";
+            mllyLabel.style.display = "block";
+            mdly.style.display = "block";
+            mlly.style.display = "block";
+            muxLabel.style.display = "none";
+            muyLabel.style.display = "none";
+            mux.style.display = "none";
+            muy.style.display = "none";
+            myLabel.style.display = "none";
+            mxLabel.style.display = "none";
+            my.style.display = "none";
+            mx.style.display = "none";
+        }
+    }
+}
+
+// Function to handle changes for 'loadType'
+function handleLoadTypeChange() {
+    if (loadType.value === "ultimate") {
+        puLabel.style.display = "block";
+        pu.style.display = "block";
+        p.style.display = "block";
+        pLabel.style.display = "block";
+        pdl.style.display = "none";
+        pll.style.display = "none";
+        pdlLabel.style.display = "none";
+        pllLabel.style.display = "none";
+    } else if (loadType.value === "individual") {
+        puLabel.style.display = "none";
+        pu.style.display = "none";
+        p.style.display = "none";
+        pLabel.style.display = "none";
+        pdl.style.display = "block";
+        pll.style.display = "block";
+        pdlLabel.style.display = "block";
+        pllLabel.style.display = "block";
+    }
+
+    // Call centricity handler when loadType changes
+    handleCentricityChange(loadType.value);
+}
+
+// Event listeners
+loadType.addEventListener("change", function() {
+    handleLoadTypeChange();
+});
+
+// Initial check for centricity change on page load
+centricity.addEventListener("change", function() {
+    handleCentricityChange(loadType.value);
+});
+
+// Optional: Trigger the initial display update (if necessary)
+handleLoadTypeChange(); // This ensures the display is set correctly on page load
+
                 columnShape.addEventListener("change" , function (){
                     if(columnShape.value === "circle") {
                         cLabel.style.display = "none";
@@ -254,24 +429,27 @@
                 if (lengthRestriction.value === "2") {
                     limitationLabel.style.display = "block";
                     limitation.style.display = "block";
-                    ratioLabel.style.display = "none";
+                    ratioLabelL.style.display = "none";
+                    ratioLabelB.style.display = "none";
                     ratioInputL.style.display = "none";
                     ratioInputB.style.display = "none";
-                    console.log("7");
+                    console.log("rectangular-square");
                 } else if (lengthRestriction.value === "1") {
                     limitationLabel.style.display = "none";
                     limitation.style.display = "none";
-                    ratioLabel.style.display = "block";
+                    ratioLabelL.style.display = "block";
+                    ratioLabelB.style.display = "block";
                     ratioInputL.style.display = "block";
                     ratioInputB.style.display = "block";
-                    console.log("8");
+                    console.log("rectangular-ratio");
                 } else {
                     limitationLabel.style.display = "none";
                     limitation.style.display = "none";
-                    ratioLabel.style.display = "none";
+                    ratioLabelL.style.display = "none";
+                    ratioLabelB.style.display = "none";
                     ratioInputL.style.display = "none";
                     ratioInputB.style.display = "none";
-                    console.log("9");
+                    console.log("square");
                 }
             });
 
@@ -279,14 +457,14 @@
                 const savedValue = localStorage.getItem(field.id);
                 if (savedValue !== null) {
                     field.value = savedValue;
-                    console.log("0");
+                    console.log("get saved value");
 
 
                     
                     // Trigger the change event programmatically to update display logic
                     const changeEvent = new Event('change', { bubbles: true });
                     field.dispatchEvent(changeEvent); // Ensure the change event fires
-                    console.log("901");
+                    console.log("update display");
                 }
             });
         }
@@ -296,12 +474,12 @@
         document.addEventListener('DOMContentLoaded', () => {
             // Load saved values on page load
             loadFieldValues();
-            console.log("2");
+            console.log("load values");
             // Save field values when any input or select field changes
             document.querySelectorAll('input, select').forEach(field => {
                 field.addEventListener('input', saveFieldValues);
                 field.addEventListener('change', saveFieldValues);
-                console.log("3");
+             
             });
     
             
