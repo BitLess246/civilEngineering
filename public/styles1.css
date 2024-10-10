@@ -5,16 +5,124 @@ body {
     margin: 0;
     padding: 0;
     color: #333;
+    min-width:fit-content ;
+}
+.container1 {
+    
+    gap: 8px;
+    background: white;
+    padding: 20px;  
+    min-width: 800px;
+   
+}
+.latex-container {
+    font-size: 1.2em;  /* Base font size for all LaTeX content */
+    line-height:1em;  /* Line height ensures text is readable */
+    display: inline-block;
+    text-align: left;
+    width:min-content ;
 }
 
+.latex-container p {
+    margin: -0.3em;  /* Adds spacing between paragraphs within the container */
+    margin-right: 100%;
+    font-size: 1em;
+    display: inline-block;
+    text-align: left;
+}
+
+.latex-container .mjx-mfrac { /* This targets fractions in MathJax */
+    display: inline-block;
+    font-size: 12px; /* Inherit font size from parent */
+    vertical-align: middle; /* Align fractions properly */
+    line-height:inherit;
+
+}
+
+
+.latex-container .stacked { /* This targets stacked elements (like superscripts or subscripts) */
+    font-size: inherit; /* Inherit font size to keep consistency */
+    line-height: normal; /* Reset line-height for stacked elements */
+}
+
+@media (max-width: 768px) {
+    .latex-container {
+        font-size: 1.1em; /* Slightly smaller font for smaller screens */
+        line-height: 1.5em;
+    }
+}
+
+@media (max-width: 480px) {
+    .latex-container {
+        font-size: 1em; /* Adjust font size for mobile devices */
+        line-height: 1.4em;
+    }
+}
+nav{
+    background: #0056b3;
+   
+}
+nav ul{
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: space-around;
+}
+nav ul li{
+    display: inline;
+}
+nav ul li a {
+    color: white;
+    text-decoration: none;
+    align-content: center;
+    display: block;
+    height: 4rem;
+    
+}
+
+nav ul li a:focus{
+    background: #0056b3;
+    animation: ease 1s;
+    
+}
+.MathJax {
+    font-size: 3vw;
+}
 .container {
     width: 90%;
-    max-width: 600px;
+    min-width: fit-content;
     margin: 50px auto;
+    margin-top: 1em;
     background: #fff;
-    padding: 20px;
+    padding: 8px;
     border-radius: 8px;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    align-items: center;
+    display: grid;
+    grid-template-rows: 40px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px;
+    grid-template-columns: 200px 200px 200px 200px;
+    justify-content: space-around;
+    
+}
+.title1{
+    grid-row-start: 1;
+    grid-row-end: 1;
+    grid-column-start: 1;
+    grid-column-end: 5;
+    
+}
+.mid1{
+    grid-row-start: 2;
+    grid-row-end: 2;
+    grid-column-start: 1;
+    grid-column-end: 5;
+}
+.mid2{
+    grid-row-start: 3;
+    grid-row-end: 3;
+    grid-column-start: 1;
+    grid-column-end: 5;
 }
 .tab {
     overflow: hidden;
@@ -22,6 +130,7 @@ body {
     background-color: #ffff;
     display: flex; /* Use flexbox to align items horizontally */
     border-bottom: 1px solid #007BFF; /* Optional: for a tab-like appearance */
+    margin-bottom: 20px;
 
   }
 .tab-content {
@@ -38,7 +147,8 @@ body {
     transition: background-color 0.5s;
     font-size: 16px;
     border-radius: 0px 0px 0 0; /* Round top corners */
-    margin-right: 5px; /* Add space between tabs */
+    margin-right: 0px; /* Add space between tabs */
+    
     display: inline-block;
     color: #007BFF;
   }
@@ -84,10 +194,17 @@ h6 {
     margin-top: 2px;
     margin-bottom: 2px;
 }
+h7 {
+    font-size: 1em;
+    margin-top: 1em;
+    margin-bottom: 0em;
+    padding-bottom: 0.5em;
+    color: #34495e;
+}
 
 p, li {
-    font-size: 12px;
-    line-height: 1.2;
+    font-size: 16px;
+    line-height: 2;
     margin-top: 0;
     margin-bottom: 0.2em;
 }
@@ -111,19 +228,27 @@ h5.inline, p.inline {
 .form-group {
     margin-bottom: 15px;
     display: flex;
-    flex-direction: column;
+    flex-direction:column;
    
 }
 
 label {
-    display: block;
+    display: inline;
     margin-bottom: 5px;
+    margin-left: 8px;
+    margin-right: 8px;
+    width: 100%;
 }
 
 input, select {
-    width: 100%;
+    width:90%;
     padding: 8px;
+    margin-left: 10px;;
+    flex: 1 0 100%;
     box-sizing: border-box;
+    display: block;
+    
+    
 }
 
 button {

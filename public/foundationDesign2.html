@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Foundation Design</title>
+    <link rel="stylesheet" href="/styles1.css">
+    <style>
+        .tab-button.active {
+            background-color: #007BFF;
+            color: #fff;
+        }
+
+        .container1 {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .form-group label {
+            display: inline-block;
+            width: 180px;
+            margin-right: 10px;
+        }
+
+        .form-group input, .form-group select {
+            width: calc(100% - 200px);
+            margin-bottom: 10px;
+        }
+
+        .form-group div {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+        }
+
+        .form-group .compact-row {
+            flex: 1 0 48%; /* Two elements per row */
+            margin-bottom: 10px;
+        }
+        .hidden {
+            display: none;
+        }
+
+        /* Reduce input field size for number inputs */
+        input[type="number"] {
+            width: 48%;
+        }
+        
+        
+        /* Adjust button */
+        button {
+            padding: 8px 12px;
+            margin: 5px;
+            font-size: 14px;
+        }
+
+        /* Keep the active button style */
+        .tab-button {
+            margin-right: 5px;
+        }
+    </style>
+    <script src="/layout_script.js" defer></script>
+    <script>function toggleLoadFields() {
+        const loadType = document.getElementById('loadType').value;
+        const ultimateLoadRow = document.getElementById('ultimateLoadRow');
+        const individualLoadsRow = document.getElementById('individualLoadsRow');
+    
+        // Hide both initially
+        ultimateLoadRow.classList.add('hidden');
+        individualLoadsRow.classList.add('hidden');
+    
+        // Show relevant fields based on selection
+        if (loadType === 'ultimate') {
+            ultimateLoadRow.classList.remove('hidden');
+        } else if (loadType === 'individual') {
+            individualLoadsRow.classList.remove('hidden');
+        }
+    }
+    </script>
+    <script type="text/javascript" async
+        src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+    </script>
+    <script type="module" src="/scriptFoundationDesign5.js" defer></script>
+</head>
+<body>
+    <div class="container1">
+        <h1>Foundation Design</h1>
+        <div class="form-group">
+            <form id="formFoundation">
+                <div id="foundationInputs" class="form-group">
+                    <h4>Parameters Given</h4>
+                
+                    <!-- Row: Load Type Selection -->
+                    <div class="row">
+                        <div class="col">
+                            <label for="loadType">Select Load Type:</label>
+                            <select id="loadType" name="loadType" onchange="toggleLoadFields()">
+                                <option value="" disabled selected>Select Load Type</option>
+                                <option value="ultimate">Ultimate Load</option>
+                                <option value="individual">Individual Loads (Dead Load & Live Load)</option>
+                            </select>
+                        </div>
+                    </div>
+                
+                    <!-- Row: Ultimate Load Input -->
+                    <div class="row hidden" id="ultimateLoadRow">
+                        <div class="col">
+                            <label for="UltimateLoad">Ultimate Load P<sub>u</sub> (in KN):</label>
+                            <input type="number" id="UltimateLoad" step="0.001">
+                        </div>
+                    </div>
+                
+                    <!-- Row: Dead and Live Load Inputs (shown if individual loads are selected) -->
+                    <div class="row hidden" id="individualLoadsRow">
+                        <div class="col">
+                            <label for="DeadLoad">P<sub>DL</sub> (in KN):</label>
+                            <input type="number" id="DeadLoad" step="0.001">
+                        </div>
+                        <div class="col">
+                            <label for="LiveLoad">P<sub>LL</sub> (in KN):</label>
+                            <input type="number" id="LiveLoad" step="0.001">
+                        </div>
+                    </div>
+                
+                    <!-- Other fields follow here, unchanged -->
+                </div>
+                
+                    <!-- Row 1: Foundation Type and Centricity -->
+                    <div class="row">
+                        <div class="col">
+                            <label for="structureType">Select Foundation Type:</label>
+                            <select id="structureType" name="structureType">
+                                <option value="" disabled>Select The Type Of Structure</option>
+                                <option value="Isolated Square">Isolated Square</option>
+                                <option value="Isolated Rectangular">Isolated Rectangular</option>
+                                <option value="Strip">Strip</option>
+                            </select>
+                        </div>
+                        <div class="col">
+                            <label for="centricity">Select Type of Centricity:</label>
+                            <select id="centricity">
+                                <option value="" disabled>Select Centricity</option>
+                                <option value="concentric">Concentric</option>
+                                <option value="eccentric">Eccentric</option>
+                            </select>
+                        </div>
+                    </div>
+                
+                    <!-- Row 2: Load Inputs -->
+                    <div class="row">
+                        <div class="col">
+                            <label for="DeadLoad">P<sub>DL</sub> (in KN):</label>
+                            <input type="number" id="DeadLoad" step="0.001">
+                        </div>
+                        <div class="col">
+                            <label for="LiveLoad">P<sub>LL</sub> (in KN):</label>
+                            <input type="number" id="LiveLoad" step="0.001">
+                        </div>
+                    </div>
+                
+                    <!-- Row 3: Depth and Bar Diameter -->
+                    <div class="row">
+                        <div class="col">
+                            <label for="Depth">Depth (in meters):</label>
+                            <input type="number" id="Depth" step="0.001">
+                        </div>
+                        <div class="col">
+                            <label for="BarDiameter">Bar Diameter (in Millimeters):</label>
+                            <input type="number" id="BarDiameter" step="1">
+                        </div>
+                    </div>
+                
+                    <!-- Row 4: Method and Column Shape -->
+                    <div class="row">
+                        <div class="col">
+                            <label for="Method">Method:</label>
+                            <select id="Method" name="Method">
+                                <option value="1">Iteration</option>
+                                <option value="2">Approximate (Initial Dc)</option>
+                            </select>
+                        </div>
+                        <div class="col">
+                            <label for="columnShape">Select Shape of Column:</label>
+                            <select name="columnShape" id="columnShape">
+                                <option value="" disabled>Select the Shape of Column</option>
+                                <option value="square">Square</option>
+                                <option value="circle">Circular</option>
+                                <option value="rectangular">Rectangular</option>
+                            </select>
+                        </div>
+                    </div>
+                
+                    <!-- Row 5: Column Dimensions (conditional on shape) -->
+                    <div class="row">
+                        <div class="col" id="columnDimensionX" style="display: none;">
+                            <label for="ColumnWidthX">Column Width X (in Millimeters):</label>
+                            <input type="number" id="ColumnWidthX" step="1">
+                        </div>
+                        <div class="col" id="columnDimensionY" style="display: none;">
+                            <label for="ColumnWidthY">Column Width Y (in Millimeters):</label>
+                            <input type="number" id="ColumnWidthY" step="1">
+                        </div>
+                        <div class="col" id="columnWidth" style="display: none;">
+                            <label for="ColumnWidth">Column Diameter (in Millimeters):</label>
+                            <input type="number" id="ColumnWidth" step="1">
+                        </div>
+                    </div>
+                
+                    <!-- Row 6: Soil Bearing Capacity and Surcharge -->
+                    <div class="row">
+                        <div class="col">
+                            <label for="SoilBearingCapacity">Soil Bearing Capacity (in KPa):</label>
+                            <input type="number" id="SoilBearingCapacity" step="0.01">
+                        </div>
+                        <div class="col">
+                            <label for="Surcharge">Surcharge (in KPa):</label>
+                            <input type="number" id="Surcharge" step="0.01">
+                        </div>
+                    </div>
+                
+                    <!-- Row 7: Concrete Modification Factor and Compressive Strength -->
+                    <div class="row">
+                        <div class="col">
+                            <label for="λ">Concrete Modification Factor λ:</label>
+                            <input type="number" id="λ" step="0.01">
+                        </div>
+                        <div class="col">
+                            <label for="fc">Concrete Compressive Strength (in MPa):</label>
+                            <input type="number" id="fc" step="0.01">
+                        </div>
+                    </div>
+                
+                    <!-- Row 8: Yield Strength and Unit Weights -->
+                    <div class="row">
+                        <div class="col">
+                            <label for="fy">Yield Strength of Reinforcement (in MPa):</label>
+                            <input type="number" id="fy" step="0.01">
+                        </div>
+                        <div class="col">
+                            <label for="UnitWeightSoil">Unit Weight of Soil (in KN/m3):</label>
+                            <input type="number" id="UnitWeightSoil" step="0.01">
+                        </div>
+                    </div>
+                
+                    <!-- Row 9: Unit Weight of Concrete and Weight of Soil -->
+                    <div class="row">
+                        <div class="col">
+                            <label for="UnitWeightConcrete">Unit Weight of Concrete (in KN/m3):</label>
+                            <input type="number" id="UnitWeightConcrete" step="0.01">
+                        </div>
+                        <div class="col">
+                            <label for="pu">Consider Weight of Soil?</label>
+                            <select name="pu" id="pu">
+                                <option value="yes">Yes</option>
+                                <option value="no">No</option>
+                            </select>
+                        </div>
+                    </div>
+                
+                    <!-- Submit Button -->
+                    <div class="row">
+                        <div class="col-full">
+                            <button id="calculate" type="submit" onclick="openTab(event, 'Solution')">Calculate</button>
+                        </div>
+                    </div>
+                </div>
+                
+            </form>
+
+            <div class="tab" id="tab" style="display: none;">
+                <button class="tab-button" id="Summarybutton" onclick="openTab(event, 'Summary')">Summary</button>
+                <button class="tab-button" id="Solutionbutton" onclick="openTab(event, 'Solution')">Solution</button>
+            </div>
+
+            <div id="print">
+                <div id="Summary" class="tab-content"></div>
+                <div id="Solution" class="tab-content">
+                    <div id="result"></div>
+                </div>
+            </div>
+
+            <button id="saveButton" style="display: none;">Save</button>
+        </div>
+    </div>
+
+    <script>
+        function toggleLoadFields() {
+    const loadType = document.getElementById('loadType').value;
+    const ultimateLoadRow = document.getElementById('ultimateLoadRow');
+    const individualLoadsRow = document.getElementById('individualLoadsRow');
+
+    // Hide both initially
+    ultimateLoadRow.classList.add('hidden');
+    individualLoadsRow.classList.add('hidden');
+
+    // Show relevant fields based on selection
+    if (loadType === 'ultimate') {
+        ultimateLoadRow.classList.remove('hidden');
+    } else if (loadType === 'individual') {
+        individualLoadsRow.classList.remove('hidden');
+    }
+}
+
+        // Get the buttons
+        const calculateButton = document.getElementById('calculate');
+        const solutionsButton = document.getElementById('Solutionbutton');
+
+        // Add an event listener to the "Calculate" button
+        calculateButton.addEventListener('click', function() {
+            // Add the "active" class to the "Solutions" button
+            solutionsButton.classList.add('active');
+        });
+
+        // Event listeners and localStorage functionality...
+    
+        // Function to save input and select values to localStorage
+        function saveFieldValues() {
+            document.querySelectorAll('input, select').forEach(field => {
+                localStorage.setItem(field.id, field.value); // Save values directly
+            });
+        }
+    
+        // Function to load values from localStorage and ensure events trigger correctly
+        function loadFieldValues() {
+            // Original script handling UI changes based on select values
+            const selectStructure = document.getElementById("structureType");
+            const ratioLabelL = document.getElementById("RatioLabelL");
+            const ratioLabelB = document.getElementById("RatioLabelB");
+            const ratioInputL = document.getElementById("RatioL");
+            const ratioInputB = document.getElementById("RatioB");
+            const lengthRestriction = document.getElementById("LengthRestriction");
+            const LengthRestrictionLabel = document.getElementById("LengthRestriction1");
+            const limitationLabel = document.getElementById("LimitationLabel");
+            const limitation = document.getElementById("Limitation");
+            const centricity = document.getElementById("centricity");
+            const columnShape = document.getElementById("columnShape");
+
+            const mdLx = document.getElementById("mdxLabel");
+            const mlLx = document.getElementById("mlxLabel");
+            const mdlx = document.getElementById("mdlx");
+            const mllx = document.getElementById("mllx");
+
+            const mdLy = document.getElementById("mdyLabel");
+            const mlLy = document.getElementById("mlyLabel");
+            const mdly = document.getElementById("mdly");
+            const mlly = document.getElementById("mlly");
+
+            const cxLabel = document.getElementById("cxLabel");
+            const cyLabel = document.getElementById("cyLabel");
+            const cLabel = document.getElementById("cLabel");
+            const ccLabel = document.getElementById("ccLabel");
+            const cx = document.getElementById("ColumnWidthX");
+            const cy = document.getElementById("ColumnWidthY");
+            const c = document.getElementById("ColumnWidth");
+            
+            
+            console.log("Loaded Field Values");
+            // Add change event listener to the structure type select element
+            selectStructure.addEventListener("change", function () {
+                if (selectStructure.value === "Isolated Rectangular") {
+                    LengthRestrictionLabel.style.display = "block";
+                    lengthRestriction.style.display = "block";
+                    console.log("5");
+                } else {
+                    LengthRestrictionLabel.style.display = "none";
+                    lengthRestriction.style.display = "none";
+                    lengthRestriction.value = "0";
+                    ratioLabelL.style.display = "none";
+                    ratioLabelB.style.display = "none";
+                    ratioInputL.style.display = "none";
+                    ratioInputB.style.display = "none";
+                    limitationLabel.style.display = "none";
+                    limitation.style.display = "none";
+                    console.log("6");
+                }
+            });
+
+             centricity.addEventListener("change", function () { 
+                if(centricity.value === "concentric" ) {
+                    mdLx.style.display = "none";
+                    mlLx.style.display = "none";
+                    mdlx.style.display = "none";
+                    mllx.style.display = "none";
+                    
+                    mdLy.style.display = "none";
+                    mlLy.style.display = "none";
+                    mdly.style.display = "none";
+                    mlly.style.display = "none";
+
+                } else if ( centricity.value === "eccentric" ) {
+                    mdLx.style.display = "block";
+                    mlLx.style.display = "block";
+                    mdlx.style.display = "block";
+                    mllx.style.display = "block";
+
+                    mdLy.style.display = "block";
+                    mlLy.style.display = "block";
+                    mdly.style.display = "block";
+                    mlly.style.display = "block";
+
+                }
+            });
+                columnShape.addEventListener("change" , function (){
+                    if(columnShape.value === "circle") {
+                        cLabel.style.display = "none";
+                        c.style.display = "block";
+                        ccLabel.style.display = "block";
+                        cxLabel.style.display = "none";
+                        cyLabel.style.display = "none";
+                        cx.style.display = "none";
+                        cy.style.display = "none";
+                    } else if (columnShape.value === "square") {
+                        cLabel.style.display = "block";
+                        c.style.display = "block";
+                        ccLabel.style.display = "none";
+                        cxLabel.style.display = "none";
+                        cyLabel.style.display = "none";
+                        cx.style.display = "none";
+                        cy.style.display = "none";
+                        
+                    } else if (columnShape.value === "rectangular"){
+                        cLabel.style.display = "none";
+                        ccLabel.style.display = "none";
+                        c.style.display = "none";
+                        cxLabel.style.display = "block";
+                        cyLabel.style.display = "block";
+                        cx.style.display = "block";
+                        cy.style.display = "block";
+                        
+                    }
+                });
+
+             
+
+
+            // Add change event listener to the length restriction select element
+            lengthRestriction.addEventListener("change", function () {
+                if (lengthRestriction.value === "2") {
+                    limitationLabel.style.display = "block";
+                    limitation.style.display = "block";
+                    ratioLabelL.style.display = "none";
+                    ratioLabelB.style.display = "none";
+                    ratioInputL.style.display = "none";
+                    ratioInputB.style.display = "none";
+                    console.log("rectangular-square");
+                } else if (lengthRestriction.value === "1") {
+                    limitationLabel.style.display = "none";
+                    limitation.style.display = "none";
+                    ratioLabelL.style.display = "block";
+                    ratioLabelB.style.display = "block";
+                    ratioInputL.style.display = "block";
+                    ratioInputB.style.display = "block";
+                    console.log("rectangular-ratio");
+                } else {
+                    limitationLabel.style.display = "none";
+                    limitation.style.display = "none";
+                    ratioLabelL.style.display = "none";
+                    ratioLabelB.style.display = "none";
+                    ratioInputL.style.display = "none";
+                    ratioInputB.style.display = "none";
+                    console.log("square");
+                }
+            });
+
+            document.querySelectorAll('input, select').forEach(field => {
+                const savedValue = localStorage.getItem(field.id);
+                if (savedValue !== null) {
+                    field.value = savedValue;
+                    console.log("get saved value");
+
+
+                    
+                    // Trigger the change event programmatically to update display logic
+                    const changeEvent = new Event('change', { bubbles: true });
+                    field.dispatchEvent(changeEvent); // Ensure the change event fires
+                    console.log("update display");
+                }
+            });
+        }
+    
+        // Attach listeners after DOM content is fully loaded
+        console.log("1");
+        document.addEventListener('DOMContentLoaded', () => {
+            // Load saved values on page load
+            loadFieldValues();
+            console.log("load values");
+            // Save field values when any input or select field changes
+            document.querySelectorAll('input, select').forEach(field => {
+                field.addEventListener('input', saveFieldValues);
+                field.addEventListener('change', saveFieldValues);
+             
+            });
+    
+            
+        });
+        function openTab(evt, tabName) {
+        // Get all elements with class="tab-content" and hide them
+        let tabContents = document.getElementsByClassName("tab-content");
+        for (let i = 0; i < tabContents.length; i++) {
+            tabContents[i].style.display = "none";  // Hide all tab contents
+        }
+    
+        // Get all elements with class="tab-button" and remove the "active" class
+        let tabButtons = document.getElementsByClassName("tab-button");
+        for (let i = 0; i < tabButtons.length; i++) {
+            tabButtons[i].className = tabButtons[i].className.replace(" active", "");  // Remove active state
+        }
+    
+        // Show the current tab
+        document.getElementById(tabName).style.display = "block";
+    
+        // Only add the "active" class if the event exists
+        if (evt) {
+            evt.currentTarget.className += " active";  // Add active class to the clicked button
+        }
+    }
+    </script>
+</body>
+</html>
