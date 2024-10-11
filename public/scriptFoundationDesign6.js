@@ -83,6 +83,8 @@ document.addEventListener("DOMContentLoaded", () => {
             let mux2;
             let muy1;
             let muy2;
+            let muy;
+            let mux;
             document.getElementById('result').appendChild(createHeader5(`Dimensions Calculation`));       
             document.getElementById('result').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ D_s = H - D_c = ${h*1000}mm - ${dc}mm = ${ds}mm \$$`));
@@ -182,6 +184,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy2} = 1.2 \\times M_{yDL} + 1.6 \\times M_{yLL} = 1.2 \\times ${mdly}kNm + 1.6 \\times ${mlly}kNm = ${muy2.toFixed(2)}kNm \$$`));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy} = ${Math.max(muy1,muy2).toFixed(2)}kNm - GOVERN\$$`));
                 document.getElementById('result').appendChild(createHeader7(`Solve for Ultimate Eccentricity`));
+                muy = Math.max(muy1,muy2);
+                mux = Math.max(mux1,mux2);
                 euy = mux/pu;
                 eux = muy/pu;
                 con = (6*euy/by)+(6*eux/bx);
