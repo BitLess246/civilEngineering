@@ -112,7 +112,16 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById('result').appendChild(createParagraph(`$$\\ e_y = \\frac {M_x}{P} = \\frac {${mx}kNm}{${p}kN} = ${(ey*1000).toFixed(2)}mm   \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{B_y\\times B_x}\\times (1 + \\frac{6\\times e_x}{B_x} + \\frac{6\\times e_y}{B_y}) \$$`));
             
-            document.getElementById('result').appendChild(createHeader7(`Solve for \\( B_x \\)`)); 
+            document.getElementById('result').appendChild(createHeader7(`Solve for \\( B\\)`)); 
+            if (structureType==="Isolated Square"){
+                document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{B^2}\\times (1 + \\frac{6\\times (e_x + e_y)}{B} \$$`));
+                document.getElementById('result').appendChild(createParagraph(`$$\\ ${qnet.toFixed(2)}kPa = \\frac {${p}kN}{B^2}\\times (1 + \\frac{6\\times (${ex.toFixed(3)}m+${ey.toFixed(3)}m)}{B})  \$$`));
+                let Bx_solution = newtonRaphson(0, 0, 1,0,qnet,by,p,ex,ey);
+                console.log(`Solution for B: ${Bx_solution}`);
+                document.getElementById('result').appendChild(createParagraph(`$$\\ B = ${(Bx_solution*1000).toFixed(2)}mm \\approx ${Math.ceil(Bx_solution*10)/10}m \$$`));
+                bx = Math.ceil(Bx_solution*10)/10;
+                by = bx;
+            } else if (structureType==="Isolated Rectangular"){
             if (restrictionType === "1"){
                 //Ratio
                 let k = ratioLengthB/ratioLengthL;
@@ -125,8 +134,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 console.log(`Solution for B_x: ${Bx_solution}`);
                 document.getElementById('result').appendChild(createParagraph(`$$\\ B_x = ${(Bx_solution*1000).toFixed(2)}mm \\approx ${Math.ceil(Bx_solution*10)/10}m \$$`));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ B_y = k \\times B_x = ${k.toFixed(3)} \\times ${(Bx_solution*1000).toFixed(2)}mm \\approx ${Math.ceil(k*Bx_solution*10)/10}m \$$`));
-                bx = Math.ceil(Bx_solution*100)/100;
-                by = Math.ceil(k*Bx_solution*100)/100;
+                bx = Math.ceil(Bx_solution*10)/10;
+                by = Math.ceil(k*Bx_solution*10)/10;
             } else if ( restrictionType === "2"){
                 //Limited
                 by = limitLength;
@@ -138,6 +147,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.getElementById('result').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
                 bx = Math.ceil(Bx_solution*10)/10;
             }
+        }
             document.getElementById('result').appendChild(createHeader7(`Solve for Ultimate Loads`));
             if(loadType==="ultimate"){
                 document.getElementById('result').appendChild(createParagraph(`$$\\ Pu = ${pu}kN \$$`));
@@ -172,14 +182,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy2} = 1.2 \\times M_{yDL} + 1.6 \\times M_{yLL} = 1.2 \\times ${mdly}kNm + 1.6 \\times ${mlly}kNm = ${muy2.toFixed(2)}kNm \$$`));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy} = ${Math.max(muy1,muy2).toFixed(2)}kNm - GOVERN\$$`));
                 document.getElementById('result').appendChild(createHeader7(`Solve for Ultimate Eccentricity`));
-                let euy = mux/pu;
-                let eux = muy/pu;
-                let con = (6*euy/by)+(6*eux/bx);
+                euy = mux/pu;
+                eux = muy/pu;
+                con = (6*euy/by)+(6*eux/bx);
                 document.getElementById('result').appendChild(createParagraph(`$$\\ e_{ux} = \\frac{M_{uy}}{P} = \\frac{${muy.toFixed(2)}kNm}{${pu.toFixed(2)}kN} = ${(eux*1000).toFixed(2)}mm\$$`));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ e_{uy} = \\frac{M_{ux}}{P} = \\frac{${mux.toFixed(2)}kNm}{${pu.toFixed(2)}kN} = ${(euy*1000).toFixed(2)}mm\$$`));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ 6 \\times \\frac{e_{ux}}{B_x} + 6 \\times \\frac{e_{uy}}{B_y} \\le 1 \$$`));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ 6 \\times \\frac{${(eux*1000).toFixed(2)}mm}{${(bx*1000).toFixed(2)}mm} + 6 \\times \\frac {${(euy*1000).toFixed(2)}mm}{${(by*1000).toFixed(2)}mm} \\le 1 \$$`));
-                document.getElementById('result').appendChild(createParagraph(`$$\\ ${con.toFixed(6)} ${con > 1 ? "> 1 \\therefore Case 1, With Tension":"< 1 \\therefore Case 2, Without Tension"} \$$`));
+                document.getElementById('result').appendChild(createParagraph(`$$\\ ${con.toFixed(6)} ${con > 1 ? "> 1 \\therefore \\text{Case 1, With Tension}":"< 1 \\therefore \\text{Case 2, Without Tension}"} \$$`));
+                
                 
 
             }
@@ -188,15 +199,25 @@ document.addEventListener("DOMContentLoaded", () => {
                 let Bx = initialGuess; // Initial guess for Bx
                 let f_Bx;
                 let f_prime_Bx;
+                const factor = 6 * (ex + ey);
                 for (let i = 0; i < maxIterations; i++) {
-                   
+                    if (structureType==="Isolated Square"){
+                        // f(Bx) = (P / Bx^2) * (1 + (6 * (ex + ey) / Bx)) - qa_max
+                        // f(Bx) = (P / Bx^2) * (1 + (factor / Bx)) - qa_max
+                        f_Bx = (p / Math.pow(Bx, 2)) * (1 + (factor / Bx)) - q_a_max;
+        
+                        // f'(Bx) = -2 * (P / Bx^3) * (1 + (factor / Bx)) + (factor * P / Bx^4)
+                        f_prime_Bx = (-2 * (p / Math.pow(Bx, 3))) * (1 + (factor / Bx)) + (factor * p / Math.pow(Bx, 4));
+
+
+                    } else if (structureType==="Isolated Rectangular"){
                     if (restrictionType === "1" ){
                         f_Bx = A * Math.pow(Bx, 3) - Bx - C;
                         f_prime_Bx = 3 * A * Math.pow(Bx, 2) - 1;
                     } else if (restrictionType === "2"){
                         f_Bx = (q_a_max * by * Bx) - (p * (1 + (6 * ex / Bx))) - (p * 6 * ey / by);
                         f_prime_Bx = (q_a_max * by) + (p * 6 * ex / Math.pow(Bx, 2));
-                    }
+                    }}
                     // Update Bx using Newton-Raphson formula
                     let next_Bx = Bx - f_Bx / f_prime_Bx;
             
@@ -226,74 +247,235 @@ document.addEventListener("DOMContentLoaded", () => {
             let Af = (by*1000)*(bx*1000);
             let Vu = pu - pu *(Ao/Af);
             let print = "";
-            let vn;
+            let vn=0;
             console.log(`Ao = `,Ao);
             console.log(`Punching Shear Vu = `,Vu);
             document.getElementById('result').appendChild(createHeader5(`Punching Shear Calculation`));       
             document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - d_b = ${dc}mm - ${cc}mm - ${barDia}mm = ${d}mm \$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ A_o = (d + c_x)\\times (d + c_y) = (${d}mm + ${cx})\\times (${d}mm + ${cy}) = ${Ao.toFixed(2)}mm^2 \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ A_o = (d + c_x)\\times (d + c_y) = (${d}mm + ${cx.toFixed(2)}mm)\\times (${d}mm + ${cy.toFixed(2)}mm) = ${Ao.toFixed(2)}mm^2 \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ A_f = B_y \\times B_x = ${by*1000}mm \\times ${bx*1000}mm = ${Af.toFixed(2)}mm^2 \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = P_u - P_u \\times (\\frac{A_o}{A_f} ) = ${pu}kN - ${pu}kN \\times (\\frac{${Ao.toFixed(2)}mm^2}{${Af.toFixed(2)}mm^2} ) = ${Vu.toFixed(2)}kN \$$`));
-            /*vn = phiVn()
-            function phiVn(B,text){
-                console.log(fc)
-                let vn = 0.75 * (1/6) * lambda * Math.sqrt(fc) *(2*(d+cx)+2*(d+cy))*depth/1000;
-                document.getElementById('result').appendChild(createParagraph(`$$\\phi V_n = \\phi \\times \\frac {1}{6} \\times \\lambda \\times \\sqrt{fc'} \\times ${text} \\times d = 0.75 \\times \\frac {1}{6} \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${B}mm \\times ${depth}mm = ${(vn*1000).toFixed(2)}N \\approx ${(vn).toFixed(2)}kN\$$`));
+            vn = phiVn();
+            function phiVn(){
+               
+                let vn1;
+                let vn2;
+                let vn3;
+                
+                let beta;
+                let as;
+                let bo;
+                console.log(`Method = `,method);
+
+                if( method === 1){
+                    console.log("phivn Method 1")
+                    if (cx<cy){
+                        beta = cy/cx;
+                        bo = (2*(d+cx))+(2*(d+cy));
+                        document.getElementById('result').appendChild(createParagraph(`$$\\ \\beta = \\frac{c_y}{c_x} = \\frac{${cy.toFixed(2)}mm}{${cx.toFixed(2)}mm} = ${beta.toFixed(3)}\$$`));
+                        document.getElementById('result').appendChild(createParagraph(`$$\\ B_o = [2 \\times (d + c_x)]+[2 \\times (d + c_y)] = [2 \\times (${d}mm + ${cx.toFixed(2)}mm)]+[2 \\times (${d}mm + ${cy.toFixed(2)}mm)] = ${bo.toFixed(3)}mm\$$`));
+                        
+                    } else if (cy<cx){
+                        beta = cx/cy;
+                        document.getElementById('result').appendChild(createParagraph(`$$\\ \\beta = \\frac{c_x}{c_y} = \\frac{${cx.toFixed(2)}mm}{${cy.toFixed(2)}mm} = ${beta.toFixed(3)}\$$`));
+                        bo = (2*(d+cx))+(2*(d+cy));
+                        document.getElementById('result').appendChild(createParagraph(`$$\\ B_o = [2 \\times (d + c_x)]+[2 \\times (d + c_y)] = [2 \\times (${d}mm + ${cx.toFixed(2)}mm)]+[2 \\times (${d}mm + ${cy.toFixed(2)}mm)] = ${bo.toFixed(3)}mm\$$`));
+                       
+                    } else if (cx===cy){
+                        beta = 1;
+                        document.getElementById('result').appendChild(createParagraph(`$$\\ \\beta = \\frac{c_y}{c_x} = \\frac{${cy.toFixed(2)}mm}{${cx.toFixed(2)}mm} = ${beta}\$$`));
+                        bo = (2*(d+cx))+(2*(d+cy));
+                        document.getElementById('result').appendChild(createParagraph(`$$\\ B_o = 4 \\times (d + c) = 4 \\times (${d}mm + ${cx.toFixed(2)}mm) = ${bo.toFixed(3)}mm\$$`));
+                       
+                    }
+                    if (columnLocation===1){
+                        as = 40;
+                        document.getElementById('result').appendChild(createParagraph(`$$\\ a_s = ${as} ,(\\text{Interior Column})\$$`));
+                    
+                    } else if (columnLocation===2){
+                        as = 30;
+                        document.getElementById('result').appendChild(createParagraph(`$$\\ a_s = ${as} ,(\\text{Edge Column})\$$`));
+
+                    } else if (columnLocation===3){
+                        as = 20;
+                        document.getElementById('result').appendChild(createParagraph(`$$\\ a_s = ${as} ,(\\text{Corner Column})\$$`));
+
+                    }
+
+                    vn1 = 0.75 * (1/3) * lambda * Math.sqrt(fc) *bo*d/1000;
+                    vn2 = 0.75 * (1/6) * (1+(2/beta)) * lambda * Math.sqrt(fc) *bo*d/1000;
+                    vn3 = 0.75 * (1/12) * (1+(as*d/bo))* lambda * Math.sqrt(fc) *bo*d/1000;
+                    vn = Math.min(vn1,vn2,vn3);
+                    document.getElementById('result').appendChild(createParagraph(`\\(\\phi V_n = \\phi V_c = \\text{least of}\\left\\{\\begin{array}{l}\\phi \\times \\frac {1}{3} \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d  \\,  \\\\\\phi \\times \\frac {1}{6} \\times ( 1 + \\frac{2}{\\beta}) \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d \\, \\\\\\phi \\times \\frac {1}{12} \\times ( 1 + \\frac{a_s \\times d}{B_o}) \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d \\, \\end{array}\\right. \\)`));
+                    document.getElementById('result').appendChild(createParagraph(``));
+                    document.getElementById('result').appendChild(createParagraph(`\\(\\phi V_n = \\left\\{\\begin{array}{l}0.75 \\times \\frac {1}{3} \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo}mm \\times ${d}mm = ${(vn1*1000).toFixed(2)}N \\approx ${(vn1).toFixed(2)}kN \\, \\\\0.75 \\times \\frac {1}{6} \\times (1+ \\frac{2}{${beta}}) \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo}mm \\times ${d}mm = ${(vn2*1000).toFixed(2)}N \\approx ${(vn2).toFixed(2)}kN \\, \\\\ 0.75 \\times \\frac {1}{12} \\times (1+ \\frac{${as} \\times ${d}}{${bo}}) \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo}mm \\times ${d}mm = ${(vn3*1000).toFixed(2)}N \\approx ${(vn3).toFixed(2)}kN \\, \\end{array}\\right. = ${vn.toFixed(2)}kN \\, \\)`));
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = ${Vu.toFixed(2)}kN ${Vu<vn ? "< \\phi V_n    \\therefore \\text{SAFE}":"> \\phi V_{n}\\therefore \\text{FAIL}"}\$$`));
+                    
+                    /* document.getElementById('result').appendChild(createParagraph(`$$\\phi V_{n1} = \\phi \\times \\frac {1}{3} \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d = 0.75 \\times \\frac {1}{3} \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo}mm \\times ${d}mm = ${(vn1*1000).toFixed(2)}N \\approx ${(vn1).toFixed(2)}kN\$$`));
+                    document.getElementById('result').appendChild(createParagraph(`$$\\phi V_{n2} = \\phi \\times \\frac {1}{6} \\times ( 1 + \\frac{2}{\\beta}) \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d = 0.75 \\times \\frac {1}{6} \\times (1+ \\frac{2}{${beta}}) \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo}mm \\times ${d}mm = ${(vn2*1000).toFixed(2)}N \\approx ${(vn2).toFixed(2)}kN\$$`));
+                    document.getElementById('result').appendChild(createParagraph(`$$\\phi V_{n3} = \\phi \\times \\frac {1}{12} \\times ( 1 + \\frac{a_s \\times d}{B_o}) \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d = 0.75 \\times \\frac {1}{12} \\times (1+ \\frac{${as} \\times ${d}}{${bo}}) \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo}mm \\times ${d}mm = ${(vn3*1000).toFixed(2)}N \\approx ${(vn3).toFixed(2)}kN\$$`));
+                   */ 
+                } else {
+                    console.log("phivn Method 2")
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ V_{u} = \\phi \\times \\frac {1}{3} \\times \\lambda \\times \\sqrt{fc'} \\times (2 \\times (d + c_x) + 2 \\times (d + c_y) \\times d  \$$`));
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ ${Vu.toFixed(2)}kN = 0.75 \\times \\frac {1}{3} \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times (2 \\times (d + ${cx.toFixed(2)}mm) + 2 \\times (d + ${cy.toFixed(2)}mm) \\times d  \$$`));
+                    d = newtonRaphson(100);
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ d = ${d.toFixed(2)} \\approx ${(Math.ceil(d/25)*25).toFixed(2)}\$$`));
+                    dc = d + 75 + barDia;
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ D_c = ${d.toFixed(2)} + ${cc}mm + ${barDia}mm = ${dc.toFixed(2)}mm \\approx ${(Math.ceil(dc/25)*25).toFixed(2)}mm\$$`));
+                    dc = Math.ceil(dc/25)*25;
+                }
+                function newtonRaphson(initialGuess, tolerance = 1e-6, maxIterations = 100000) {
+                    let d = initialGuess; // Initial guess for d
+                    let f_d, f_prime_d;
+                
+                    for (let i = 0; i < maxIterations; i++) {
+                        // Calculate the function f(d)
+                        f_d = 0.75 * (1 / 3) * lambda * Math.sqrt(fc) * (2 * (d + cx) + 2 * (d + cy)) * d - (Vu*1000);
+                
+                        // Calculate the derivative f'(d)
+                        f_prime_d = 0.75 * (1 / 3) * lambda * Math.sqrt(fc) * (4 * d + 2 * (d + cx) + 2 * (d + cy));
+                
+                        // Newton-Raphson formula to update d
+                        let next_d = d - f_d / f_prime_d;
+                
+                        // Check if the difference is within tolerance
+                        if (Math.abs(next_d - d) < tolerance) {
+                            console.log(`Converged to d = ${next_d} after ${i+1} iterations.`);
+                            return next_d; // Return the result when converged
+                        }
+                
+                        // Update d for the next iteration
+                        d = next_d;
+                    }
+                
+                    console.log(`Did not converge within the maximum number of iterations.`, d);
+                    return d; // Return the last approximation if not converged
+                }
+
+                return vn ;
+
+            }
             
-                return vn;
-            }*/
-            return {Ao,Af,Vu};
+            return {dc,vn,Vu};
         }
-        function beamShear(axis){
+        function beamShear(axis,dc){
             let x1;
             let x2;
             let y1;
             let y2;
             let vn;
+            let longer;
+            let shorter;
             let depth;
+            if(bx<by){
+                longer ="y";
+                shorter ="x";
+            } else if (bx>by){
+                longer ="x";
+                shorter="y";
+            } 
             if(axis === "y"){
             //ACROSS X AXIS or ALONG Y AXIS
-            depth = dc - cc - (1.5*barDia);
+            if( longer === axis ){
+                console.log(`y is longer`);
+                r = 0.5;
+                depth = dc - cc - (0.5*barDia);
+            } else if ( shorter === axis ){
+                console.log(`y is shorter`);
+                depth = dc - cc - (1.5*barDia);
+                r = 1.5;
+            } else if ( bx === by){
+                console.log(`y is equal to x`);
+                depth = dc - cc - (1.5*barDia);
+                r = 1.5;
+            }
+            
             x1 = (cx/2)+depth;      console.log(`x1 = `,x1);
             x2 = ((bx*1000)/2);            console.log(`x2 = `,x2);
             y1 = -((by*1000)/2);           console.log(`y1 = `,y1);
             y2 = (by*1000)/2;              console.log(`y2 = `,y2);
             
-            document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation Along Y-axis (Cut Across X-axis)`));       
-            document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 1.5d_b = ${dc}mm - ${cc}mm - 1.5(${barDia}mm) = ${depth}mm \$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac {c_x}{2} + d = \\frac {${cx}mm}{2} + {${depth}mm} = ${x1}mm \$$`));
+            document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation Along Y-axis (Cut Across Y-axis)`));       
+            if( longer === axis ){
+                document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 0.5d_b = ${dc}mm - ${cc}mm - 0.5(${barDia}mm) = ${depth}mm \$$`));
+            } else if ( shorter === axis ){
+                document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 1.5d_b = ${dc}mm - ${cc}mm - 1.5(${barDia}mm) = ${depth}mm \$$`));
+            } else {
+                document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 1.5d_b = ${dc}mm - ${cc}mm - 1.5(${barDia}mm) = ${depth}mm \$$`));
+            }
+            document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac {c_x}{2} + d = \\frac {${cx.toFixed(2)}mm}{2} + {${depth}mm} = ${x1.toFixed(2)}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ x_2 = \\frac {B_x}{2} = \\frac {${bx*1000}mm}{2} = ${x2}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ y_1 = \\frac {-B_y}{2} = \\frac {${-by*1000}mm}{2} = ${y1}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ y_2 = \\frac {B_y}{2} = \\frac {${by*1000}mm}{2} = ${y2}mm\$$`));
-            vn = phiVn(by*1000,"B_y");       
+                  
             } else if (axis === "x"){
             //ACROSS X AXIS or ALONG Y AXIS
-            depth = dc - cc - (0.5*barDia);
+            if( longer === axis ){
+                depth = dc - cc - (0.5*barDia);
+                r = 0.5;
+            } else if ( shorter === axis ){
+                depth = dc - cc - (1.5*barDia);
+                r = 1.5;
+            } else if ( bx === by){
+                console.log(`y is equal to x`);
+                depth = dc - cc - (0.5*barDia);
+                r = 0.5;
+            }
             x1 = -((bx*1000)/2);           console.log(`x1 = `,x1);
             x2 = (bx*1000)/2;              console.log(`x2 = `,x2);
             y1 = (cy/2)+depth;      console.log(`y1 = `,y1);
             y2 = ((by*1000)/2);            console.log(`y2 = `,y2);
-            document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation Along X-axis (Cut Across Y-axis)`));       
-            document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 1.5d_b = ${dc}mm - ${cc}mm - 1.5(${barDia}mm) = ${depth}mm \$$`));
+            document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation Along X-axis (Cut Across X-axis)`));       
+            if( longer === axis ){
+                document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 0.5d_b = ${dc}mm - ${cc}mm - 0.5(${barDia}mm) = ${depth}mm \$$`));
+            } else if ( shorter === axis ){
+                document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 1.5d_b = ${dc}mm - ${cc}mm - 1.5(${barDia}mm) = ${depth}mm \$$`));
+            } else {
+                document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 0.5d_b = ${dc}mm - ${cc}mm - 0.5(${barDia}mm) = ${depth}mm \$$`));
+            }
             document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac {-B_x}{2} = \\frac {${-bx*1000}mm}{2} = ${x1}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ x_2 = \\frac {B_x}{2} = \\frac {${bx*1000}mm}{2} = ${x2}mm \$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ y_1 = \\frac {c_y}{2} + d = \\frac {${cy}mm}{2} + ${depth}mm = ${y1}mm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ y_1 = \\frac {c_y}{2} + d = \\frac {${cy.toFixed(2)}mm}{2} + ${depth}mm = ${y1.toFixed(2)}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ y_2 = \\frac {B_y}{2} = \\frac {${by*1000}mm}{2} = ${y2}mm\$$`));
-            
-            vn = phiVn(bx*1000,"B_x");
+           
             }
             let a = x2 - x1;            console.log(`a = `,a);
             let b = y2 - y1;            console.log(`b = `,b);    
             let c = x2 + x1;            console.log(`c = `,c);
             let d = y2 + y1;            console.log(`d = `,d);
             let Vu = ((a*b)/(by*bx*1000*1000))*(pu+((6*c*muy)/Math.pow(bx*1000,2))+((6*d*mux)/Math.pow(by*1000,2)));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ x_2 - x_1 = ${x2}mm - (${x1})mm = ${a}mm\$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ y_2 - y_1 = ${y2}mm - (${y1})mm = ${b}mm\$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ x_2 + x_1 = ${x2}mm + (${x1})mm = ${c}mm\$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ y_2 + y_1 = ${y2}mm + (${y1})mm = ${d}mm\$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ x_2 - x_1 = ${x2.toFixed(2)}mm - (${x1.toFixed(2)})mm = ${a.toFixed(2)}mm\$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ y_2 - y_1 = ${y2.toFixed(2)}mm - (${y1.toFixed(2)})mm = ${b.toFixed(2)}mm\$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ x_2 + x_1 = ${x2.toFixed(2)}mm + (${x1.toFixed(2)})mm = ${c.toFixed(2)}mm\$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ y_2 + y_1 = ${y2.toFixed(2)}mm + (${y1.toFixed(2)})mm = ${d.toFixed(2)}mm\$$`));
+            if (method === 1){
+                if (axis === "x"){
+                vn = phiVn(bx*1000,"B_x");
+                } else if (axis === "y"){
+                vn = phiVn(by*1000,"B_y"); 
+                }
+            } 
             document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = \\frac{(x_2 - x_1)\\times(y_2 - y_1)}{B_y \\times B_x}\\times (P_u + \\frac{6 \\times (x_2 + x_1) \\times M_{uy}}{B_x^2} + \\frac{6 \\times (y_2 + y_1) \\times M_{ux}}{B_y^2} ) \$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = \\frac{(${a}mm)\\times(${b}mm)}{${by*1000}mm \\times ${bx*1000}mm}\\times (${pu}kN + \\frac{6 \\times (${c}mm) \\times ${muy}kNm}{(${bx*1000}mm)^2} + \\frac{6 \\times (${d}mm) \\times ${mux}kNm}{(${by*1000}mm)^2} ) \$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = ${Vu.toFixed(2)}kN ${Vu<vn ? "< \\phi V_n    \\therefore SAFE":"> \\phi V_{n}\\therefore FAIL"}\$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = \\frac{(${a.toFixed(2)}mm)\\times(${b.toFixed(2)}mm)}{${by*1000}mm \\times ${bx*1000}mm}\\times (${pu.toFixed(2)}kN + \\frac{6 \\times (${c.toFixed(2)}mm) \\times ${muy.toFixed(2)}kNm}{(${bx*1000}mm)^2} + \\frac{6 \\times (${d.toFixed(2)}mm) \\times ${mux.toFixed(2)}kNm}{(${by*1000}mm)^2} ) \$$`));
+            if (method === 1){
+                document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = ${Vu.toFixed(2)}kN ${Vu<vn ? "< \\phi V_n    \\therefore \\text{SAFE}":"> \\phi V_{n}\\therefore \\text{FAIL}"}\$$`));
+                
+            } else if (method === 2){
+                document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = ${Vu.toFixed(2)}kN\$$`));
+
+                if (axis === "x"){
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = \\phi \\times \\frac {1}{6} \\times \\lambda \\times \\sqrt{fc'} \\times B_x \\times d \$$`));
+                    d = newtonRaphson(100,bx*1000)  
+                } else if (axis === "y"){
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = \\phi \\times \\frac {1}{6} \\times \\lambda \\times \\sqrt{fc'} \\times B_y \\times d \$$`));
+                    d = newtonRaphson(100,by*1000)     
+                }
+                document.getElementById('result').appendChild(createParagraph(`$$\\ d = ${d.toFixed(2)}mm\$$`));
+                dc1 = d + 75 + (r*barDia);
+                document.getElementById('result').appendChild(createParagraph(`$$\\ D_c = ${d.toFixed(2)} + ${cc}mm + (${r} \\times ${barDia}mm) = ${dc1.toFixed(2)}mm \\approx ${(Math.ceil(dc1/25)*25).toFixed(2)}mm\$$`));
+                dc1 = Math.ceil(dc1/25)*25;
+            }
             function phiVn(B,text){
                 console.log(fc)
                 let vn = 0.75 * (1/6) * lambda * Math.sqrt(fc) *B *depth/1000;
@@ -301,13 +483,46 @@ document.addEventListener("DOMContentLoaded", () => {
             
                 return vn;
             }
+           
+            
+            function newtonRaphson(initialGuess,B, tolerance = 1e-6, maxIterations = 100000000) {
+                const K = 0.75 * (1/6) * lambda * Math.sqrt(fc) * B;
+                console.log(`k = `,K);
+                let d = initialGuess; // Initial guess for d
+                let f_d, f_prime_d;
+                let i = 0;
+                while (i < maxIterations) {
+                    // Calculate the function f(d)
+                    f_d =  (Vu*1000) - K * d;
+                    // Calculate the derivative f'(d)
+                    f_prime_d = -K;
+                    // Newton-Raphson formula to update d
+                    let next_d = d - f_d / f_prime_d;
+            
+                    // Check if the difference is within tolerance
+                    if (Math.abs(next_d - d) < tolerance) {
+                        console.log(`Converged to d = ${next_d} after ${i+1} iterations.`);
+                        return next_d; // Return the result when converged
+                    }
+                    i++;
+                    // Update d for the next iteration
+                    d = next_d;
+                    
+                }
+            
+                console.log("Did not converge within the maximum number of iterations.");
+                return d; // Return the last approximation if not converged
+            }
             console.log(`Beam Shear Vu = `,Vu);
             console.log(`Beam Shear phi Vn = `,vn);
+            return {vn,Vu,d,dc1};
+        }
+        function rebarDesign(){
 
         }
-        
-        
-        
+        function delay(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
         //GET PARAMETERS
         const structureType = document.getElementById('structureType').value;
         const restrictionType = document.getElementById('LengthRestriction').value;
@@ -334,9 +549,25 @@ document.addEventListener("DOMContentLoaded", () => {
         const barDia = parseInt(document.getElementById('BarDiameter').value);
         const method = parseInt(document.getElementById('Method').value);
         const columnShape = document.getElementById('columnShape').value;
-        let C = parseInt(document.getElementById('ColumnWidth').value);
-        let cx = parseInt(document.getElementById('ColumnWidthX').value);
-        let cy = parseInt(document.getElementById('ColumnWidthY').value);
+        let cx;
+        let cy;
+        if (columnShape==="square"){
+            cx = parseInt(document.getElementById('ColumnWidth').value);
+            cy = cx;
+            document.getElementById('result').appendChild(createParagraph(`$$\\ c = ${cx}mm , \\text{Square Column} \$$`));
+
+        } else if (columnShape==="rectangular"){
+            cx = parseInt(document.getElementById('ColumnWidthX').value);
+            cy = parseInt(document.getElementById('ColumnWidthY').value);
+            document.getElementById('result').appendChild(createParagraph(`$$\\ c_x = ${cx}mm  \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ c_y = ${cy}mm , \\text{Rectangular Column} \$$`));
+            
+        } else if (columnShape==="circle"){
+            cx = parseInt(document.getElementById('ColumnWidth').value)*Math.sqrt(Math.PI/4);
+            cy = cx;
+            document.getElementById('result').appendChild(createParagraph(`$$\\ c = ${(cx/Math.sqrt(Math.PI/4)).toFixed(0)}mm \\times \\sqrt{\\frac{\\pi}{4}} = ${cx.toFixed(2)}mm , \\text{Spiral Column} \$$`));
+            
+        }
         let columnLocation = parseInt(document.getElementById('ColumnLocation').value);
         const qa = parseFloat(document.getElementById('SoilBearingCapacity').value);
         const q = parseFloat(document.getElementById('Surcharge').value);
@@ -347,20 +578,53 @@ document.addEventListener("DOMContentLoaded", () => {
         const yc = parseFloat(document.getElementById('UnitWeightConcrete').value);
         const considerSoil = document.getElementById('considerSoil').value;
         let dc= 250;
+        let dc1;
+        let dc2;
         let cc = 75;
         let by;
         let bx;
+        let r;
+        let calc;
+        let beamShearX;
+        let beamShearY;
+        let punchingV;
+        let euy;
+        let eux;
+        let con;
         let logic = determineMethod(structureType,loadType,columnShape,centricity,method);
         console.log(`logic: `, logic);
-        let dim = dimension(400);
-        let vuPunching = punchingShear ();
-        let vuBeamX = beamShear ("x");
-        let vuBeamY = beamShear ("y");
+        calc = dimension(dc);
+        
+        punchingV = punchingShear ();
+        
+        if(method === 1){
+            console.log(`Punching Vu = `,punchingV.Vu);
+            console.log(`Punching Vn = `,punchingV.vn);
+            while(punchingV.vn<punchingV.Vu){
+                console.log("iterating Punching Shear");    
+                dc+=25;
+                punchingV =punchingShear ();
+            }
+            beamShearX=beamShear ("x",dc+25);
+            beamShearY=beamShear ("y",dc+25);
+            while (beamShearX.Vu>beamShearX.vn ||beamShearY.Vu>beamShearY.vn  ){
+                dc += 25;
+                beamShearX=beamShear ("x",dc+25);
+                beamShearY=beamShear ("y",dc+25);
+            }
+        } else if (method === 2){
+            beamShearX=beamShear ("x",dc+25);
+            beamShearY=beamShear ("y",dc+25);
+            dc2 = Math.max(dc, beamShearX.dc1, beamShearY.dc1);
+            
+        }/*
         if (logic === "IS-UL-SQ-CC-1") {
             // your code here
+
         } else if (logic === "IS-UL-SQ-CC-2") {
             // your code here
         } else if (logic === "IS-UL-SQ-EC-1") {
+
             // your code here
         } else if (logic === "IS-UL-SQ-EC-2") {
             // your code here
@@ -386,14 +650,46 @@ document.addEventListener("DOMContentLoaded", () => {
             // your code here
         } else if (logic === "IS-SW-SQ-EC-1") {
             // your code here
+            console.log(`Punching Vu = `,punchingV.Vu);
+            console.log(`Punching Vn = `,punchingV.vn);
+            while(punchingV.vn<punchingV.Vu){
+                console.log("iterating Punching Shear");    
+                dc+=25;
+                punchingV =punchingShear ();
+            }
+            beamShearX=beamShear ("x",dc1+25);
+            beamShearY=beamShear ("y",dc1+25);
+            while (beamShearX.Vu>beamShearX.vn ||beamShearY.Vu>beamShearY.vn  ){
+                dc1 += 25;
+                beamShearX=beamShear ("x",dc1+25);
+                beamShearY=beamShear ("y",dc1+25);
+            }
         } else if (logic === "IS-SW-SQ-EC-2") {
             // your code here
+            beamShearX=beamShear ("x",dc+25);
+            beamShearY=beamShear ("y",dc+25);
         } else if (logic === "IS-SW-RC-CC-1") {
             // your code here
         } else if (logic === "IS-SW-RC-CC-2") {
             // your code here
         } else if (logic === "IS-SW-RC-EC-1") {
             // your code here
+            console.log(`Punching Vu = `,punchingV.Vu);
+            console.log(`Punching Vn = `,punchingV.vn);
+            while(punchingV.vn<punchingV.Vu){
+                console.log("iterating Punching Shear");    
+                dc+=25;
+                punchingV =punchingShear ();
+            }
+            console.log("Beam Shear");
+            beamShearX=beamShear ("x",dc+25);
+            beamShearY=beamShear ("y",dc+25);
+            while(beamShearX.vn<beamShearX.Vu || beamShearY.vn<beamShearY.Vu ){
+                console.log("iterating Beam Shear"); 
+                beamShearX=beamShear ("x",dc+25);
+                beamShearY=beamShear ("y",dc+25);
+            }
+        
         } else if (logic === "IS-SW-RC-EC-2") {
             // your code here
         } else if (logic === "IS-SW-CR-CC-1") {
@@ -404,6 +700,14 @@ document.addEventListener("DOMContentLoaded", () => {
             // your code here
         } else if (logic === "IS-SW-CR-EC-2") {
             // your code here
+            console.log("Beam Shear");
+            beamShearX=beamShear ("x",dc+25);
+            beamShearY=beamShear ("y",dc+25);
+            while(beamShearX.vn<beamShearX.Vu || beamShearY.vn<beamShearY.Vu ){
+                console.log("iterating Beam Shear"); 
+                beamShearX=beamShear ("x",dc+25);
+                beamShearY=beamShear ("y",dc+25);
+            }
         } else if (logic === "IR-UL-SQ-CC-1") {
             // your code here
         } else if (logic === "IR-UL-SQ-CC-2") {
@@ -500,7 +804,7 @@ document.addEventListener("DOMContentLoaded", () => {
             // your code here
         } else if (logic === "ST-SW-CR-EC-2") {
             // your code here
-        }
+        }*/
         MathJax.typeset();     
    } catch {
 
