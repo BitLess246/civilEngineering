@@ -6,6 +6,7 @@ body {
     padding: 0;
     color: #333;
     min-width:fit-content ;
+    overflow-x: hidden;
 }
 .container1 {
     
@@ -100,7 +101,7 @@ nav ul li a:focus{
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
     align-items: center;
     display: grid;
-    grid-template-rows: 40px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px;
+    grid-template-rows: 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px 50px;
     grid-template-columns: 200px 200px 200px 200px;
     justify-content: space-around;
     
@@ -113,16 +114,20 @@ nav ul li a:focus{
     
 }
 .mid1{
+   
     grid-row-start: 2;
     grid-row-end: 2;
     grid-column-start: 1;
     grid-column-end: 5;
+    width:500%;
 }
 .mid2{
+    
     grid-row-start: 3;
     grid-row-end: 3;
     grid-column-start: 1;
     grid-column-end: 5;
+    min-width:max-content;
 }
 .tab {
     overflow: hidden;
