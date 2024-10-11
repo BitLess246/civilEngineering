@@ -83,8 +83,7 @@ document.addEventListener("DOMContentLoaded", () => {
             let mux2;
             let muy1;
             let muy2;
-            let muy;
-            let mux;
+           
             document.getElementById('result').appendChild(createHeader5(`Dimensions Calculation`));       
             document.getElementById('result').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ D_s = H - D_c = ${h*1000}mm - ${dc}mm = ${ds}mm \$$`));
@@ -535,14 +534,21 @@ document.addEventListener("DOMContentLoaded", () => {
         const limitLength =  parseFloat(document.getElementById('Limitation').value);
         const centricity =  document.getElementById('centricity').value;
         const loadType = document.getElementById('loadType').value;
+        let muy;
+        let mux;
+        let p;
+        let mx;
+        let my;
 
-        let p = parseFloat(document.getElementById('AllowableLoad').value);
-        let mx = parseFloat(document.getElementById('AllowableMx').value);
-        let my = parseFloat(document.getElementById('AllowableMy').value);
-
-        let pu = parseFloat(document.getElementById('UltimateLoad').value);
-        let mux = parseFloat(document.getElementById('UltimateMx').value);
-        let muy = parseFloat(document.getElementById('UltimateMy').value);
+        if (loadType === "ultimate" ){
+        p = parseFloat(document.getElementById('AllowableLoad').value);
+        mx = parseFloat(document.getElementById('AllowableMx').value);
+        my = parseFloat(document.getElementById('AllowableMy').value);
+        
+        pu = parseFloat(document.getElementById('UltimateLoad').value);
+        mux = parseFloat(document.getElementById('UltimateMx').value);
+        muy = parseFloat(document.getElementById('UltimateMy').value);
+    }
         const pdl = parseFloat(document.getElementById('DeadLoad').value);
         const pll = parseFloat(document.getElementById('LiveLoad').value);
         const mdlx = parseFloat(document.getElementById('mdlx').value);
