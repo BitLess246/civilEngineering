@@ -93,26 +93,33 @@ document.addEventListener("DOMContentLoaded", () => {
             
             if(loadType==="ultimate"){
                 document.getElementById('result').appendChild(createParagraph(`$$\\ P = ${p}kN \$$`));
+                if (centricity === "eccentric"){
                 document.getElementById('result').appendChild(createParagraph(`$$\\ M_x = ${mx}kNm \$$`));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ M_y = ${my}kNm   \$$`));
-                
+                }
             } else if (loadType==="individual"){
                 p = pdl + pll;
+                if (centricity === "eccentric"){
                 mx = mdlx + mllx;
                 my = mdly + mlly;
+            }
                 document.getElementById('result').appendChild(createParagraph(`$$\\ P = P_{DL} + P{LL} = ${pdl}kN + ${pll}kN = ${p}kN \$$`));
+                if (centricity === "eccentric"){
                 document.getElementById('result').appendChild(createParagraph(`$$\\ M_x = M_{xDL} + M_{xLL} = ${mdlx}kNm + ${mllx}kNm = ${mx}kNm \$$`));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ M_y = M_{yDL} + M_{yLL} = ${mdly}kNm + ${mlly}kNm = ${my}kNm   \$$`));
-                
-            }
+                }
+            } if (centricity === "eccentric"){
             document.getElementById('result').appendChild(createHeader7(`Solve Service Eccentricity`));       
             
-            let ey = my / p;
-            let ex = mx / p;
+            ey = my / p;
+            ex = mx / p;
             document.getElementById('result').appendChild(createParagraph(`$$\\ e_x = \\frac {M_y}{P} = \\frac {${my}kNm}{${p}kN} = ${(ex*1000).toFixed(2)}mm   \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ e_y = \\frac {M_x}{P} = \\frac {${mx}kNm}{${p}kN} = ${(ey*1000).toFixed(2)}mm   \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{B_y\\times B_x}\\times (1 + \\frac{6\\times e_x}{B_x} + \\frac{6\\times e_y}{B_y}) \$$`));
-            
+            } else if (centricity === "concentric"){
+            document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{B_y\\times B_x} \$$`));
+
+            }
             document.getElementById('result').appendChild(createHeader7(`Solve for \\( B\\)`)); 
             if (structureType==="Isolated Square"){
                 document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{B^2}\\times (1 + \\frac{6\\times (e_x + e_y)}{B} \$$`));
@@ -152,9 +159,10 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById('result').appendChild(createHeader7(`Solve for Ultimate Loads`));
             if(loadType==="ultimate"){
                 document.getElementById('result').appendChild(createParagraph(`$$\\ Pu = ${pu}kN \$$`));
+                if  (centricity === "eccentric"){
                 document.getElementById('result').appendChild(createParagraph(`$$\\ M_{ux} = ${mux}kNm \$$`));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy} = ${muy}kNm   \$$`));
-                
+                }
             } else if (loadType==="individual"){
                 if (considerSoil==="yes"){
                     pu1 = 1.4*(pdl)+1.4*(ys*(ds/1000)+yc*(dc/1000)+q)*bx*by;
@@ -172,6 +180,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     document.getElementById('result').appendChild(createParagraph(`$$\\ P_{u} = ${Math.max(pu1,pu2).toFixed(2)}kN - GOVERN\$$`));
                     pu = Math.max(pu1,pu2); 
                      }
+                     if  (centricity === "eccentric"){
                 mux1 = 1.4*(mdlx);
                 mux2 = 1.2*mdlx +1.6*mllx;
                 muy1 = 1.4*(mdly);
@@ -193,7 +202,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.getElementById('result').appendChild(createParagraph(`$$\\ 6 \\times \\frac{e_{ux}}{B_x} + 6 \\times \\frac{e_{uy}}{B_y} \\le 1 \$$`));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ 6 \\times \\frac{${(eux*1000).toFixed(2)}mm}{${(bx*1000).toFixed(2)}mm} + 6 \\times \\frac {${(euy*1000).toFixed(2)}mm}{${(by*1000).toFixed(2)}mm} \\le 1 \$$`));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ ${con.toFixed(6)} ${con > 1 ? "> 1 \\therefore \\text{Case 1, With Tension}":"< 1 \\therefore \\text{Case 2, Without Tension}"} \$$`));
-                
+                }
                 
 
             }
@@ -251,6 +260,7 @@ document.addEventListener("DOMContentLoaded", () => {
             let Vu = pu - pu *(Ao/Af);
             let print = "";
             let vn=0;
+            let dc1=0;
             console.log(`Ao = `,Ao);
             console.log(`Punching Shear Vu = `,Vu);
             document.getElementById('result').appendChild(createHeader5(`Punching Shear Calculation`));       
@@ -258,7 +268,9 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById('result').appendChild(createParagraph(`$$\\ A_o = (d + c_x)\\times (d + c_y) = (${d}mm + ${cx.toFixed(2)}mm)\\times (${d}mm + ${cy.toFixed(2)}mm) = ${Ao.toFixed(2)}mm^2 \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ A_f = B_y \\times B_x = ${by*1000}mm \\times ${bx*1000}mm = ${Af.toFixed(2)}mm^2 \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = P_u - P_u \\times (\\frac{A_o}{A_f} ) = ${pu}kN - ${pu}kN \\times (\\frac{${Ao.toFixed(2)}mm^2}{${Af.toFixed(2)}mm^2} ) = ${Vu.toFixed(2)}kN \$$`));
-            vn = phiVn();
+            vn = phiVn().vn;
+            dc1 = phiVn().dc;
+            console.log(`V,..,.h dc = `,dc1);
             function phiVn(){
                
                 let vn1;
@@ -327,6 +339,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     dc = d + 75 + barDia;
                     document.getElementById('result').appendChild(createParagraph(`$$\\ D_c = ${d.toFixed(2)} + ${cc}mm + ${barDia}mm = ${dc.toFixed(2)}mm \\approx ${(Math.ceil(dc/25)*25).toFixed(2)}mm\$$`));
                     dc = Math.ceil(dc/25)*25;
+                    console.log(`V dc method2 = `,dc);
                 }
                 function newtonRaphson(initialGuess, tolerance = 1e-6, maxIterations = 100000) {
                     let d = initialGuess; // Initial guess for d
@@ -355,12 +368,12 @@ document.addEventListener("DOMContentLoaded", () => {
                     console.log(`Did not converge within the maximum number of iterations.`, d);
                     return d; // Return the last approximation if not converged
                 }
-
-                return vn ;
+                console.log(`Vm2 dc = `,dc);
+                return {vn,dc} ;
 
             }
             
-            return {dc,vn,Vu};
+            return {dc,dc1,vn,Vu};
         }
         function beamShear(axis,dc){
             let x1;
@@ -469,10 +482,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 if (axis === "x"){
                     document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = \\phi \\times \\frac {1}{6} \\times \\lambda \\times \\sqrt{fc'} \\times B_x \\times d \$$`));
-                    d = newtonRaphson(100,bx*1000)  
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ ${(Vu*1000).toFixed(2)}N = 0.75 \\times \\frac {1}{6} \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bx*1000}mm \\times d \$$`));
+                    d = newtonRaphson(100,bx*1000);  
                 } else if (axis === "y"){
                     document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = \\phi \\times \\frac {1}{6} \\times \\lambda \\times \\sqrt{fc'} \\times B_y \\times d \$$`));
-                    d = newtonRaphson(100,by*1000)     
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ ${(Vu*1000).toFixed(2)}N = 0.75 \\times \\frac {1}{6} \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bx*1000}mm \\times d \$$`));
+                    d = newtonRaphson(100,by*1000);     
                 }
                 document.getElementById('result').appendChild(createParagraph(`$$\\ d = ${d.toFixed(2)}mm\$$`));
                 dc1 = d + 75 + (r*barDia);
@@ -534,33 +549,38 @@ document.addEventListener("DOMContentLoaded", () => {
         const limitLength =  parseFloat(document.getElementById('Limitation').value);
         const centricity =  document.getElementById('centricity').value;
         const loadType = document.getElementById('loadType').value;
-        let muy;
-        let mux;
-        let p;
-        let mx;
-        let my;
-
+        let muy=0;
+        let mux=0;
+        let p=0;
+        let pu=0;
+        let mx=0;
+        let my=0;
+        let ey=0;
+        let ex=0;
         if (loadType === "ultimate" ){
-        p = parseFloat(document.getElementById('AllowableLoad').value);
-        mx = parseFloat(document.getElementById('AllowableMx').value);
-        my = parseFloat(document.getElementById('AllowableMy').value);
-        
-        pu = parseFloat(document.getElementById('UltimateLoad').value);
-        mux = parseFloat(document.getElementById('UltimateMx').value);
-        muy = parseFloat(document.getElementById('UltimateMy').value);
-    }
+            p = parseFloat(document.getElementById('AllowableLoad').value);
+            pu = parseFloat(document.getElementById('UltimateLoad').value);
+            if  (centricity === "eccentric"){
+                mx = parseFloat(document.getElementById('AllowableMx').value);
+                my = parseFloat(document.getElementById('AllowableMy').value);
+                mux = parseFloat(document.getElementById('UltimateMx').value);
+                muy = parseFloat(document.getElementById('UltimateMy').value);
+            }
+        }
         const pdl = parseFloat(document.getElementById('DeadLoad').value);
         const pll = parseFloat(document.getElementById('LiveLoad').value);
+        if  (centricity === "eccentric"){
         const mdlx = parseFloat(document.getElementById('mdlx').value);
         const mllx = parseFloat(document.getElementById('mllx').value);
         const mdly = parseFloat(document.getElementById('mdly').value);
         const mlly = parseFloat(document.getElementById('mlly').value);
+    }
         const h = parseFloat(document.getElementById('Depth').value);
         const barDia = parseInt(document.getElementById('BarDiameter').value);
         const method = parseInt(document.getElementById('Method').value);
         const columnShape = document.getElementById('columnShape').value;
-        let cx;
-        let cy;
+        let cx=0;
+        let cy=0;
         if (columnShape==="square"){
             cx = parseInt(document.getElementById('ColumnWidth').value);
             cy = cx;
@@ -588,19 +608,21 @@ document.addEventListener("DOMContentLoaded", () => {
         const yc = parseFloat(document.getElementById('UnitWeightConcrete').value);
         const considerSoil = document.getElementById('considerSoil').value;
         let dc= 250;
-        let dc1;
-        let dc2;
+        let dc1=0;
+        let dc2=0;
+        let dc3=0;
+        let finalDc=0;
         let cc = 75;
-        let by;
-        let bx;
-        let r;
+        let by=0;
+        let bx=0;
+        let r=0;
         let calc;
         let beamShearX;
         let beamShearY;
         let punchingV;
-        let euy;
-        let eux;
-        let con;
+        let euy=0;
+        let eux=0;
+        let con=0;
         let logic = determineMethod(structureType,loadType,columnShape,centricity,method);
         console.log(`logic: `, logic);
         calc = dimension(dc);
@@ -623,9 +645,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 beamShearY=beamShear ("y",dc+25);
             }
         } else if (method === 2){
+            
             beamShearX=beamShear ("x",dc+25);
+            dc2=beamShearX.dc1;
             beamShearY=beamShear ("y",dc+25);
-            dc2 = Math.max(dc, beamShearX.dc1, beamShearY.dc1);
+            dc3=beamShearY.dc1;
+            finalDc = Math.max(punchingV.dc1,dc2,dc3);
+            console.log(`dc: ${punchingV.dc1}, ${dc2}, ${dc3}  `)
+            calc = dimension(finalDc);
             
         }/*
         if (logic === "IS-UL-SQ-CC-1") {
