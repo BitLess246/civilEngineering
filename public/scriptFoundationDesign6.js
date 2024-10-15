@@ -111,8 +111,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 } if (centricity === "eccentric"){
                 document.getElementById('result').appendChild(createHeader7(`Solve Service Eccentricity`));       
                 
-                ey = my / p;
-                ex = mx / p;
+                ey = mx / p;
+                ex = my / p;
                 document.getElementById('result').appendChild(createParagraph(`$$\\ e_x = \\frac {M_y}{P} = \\frac {${my}kNm}{${p}kN} = ${(ex*1000).toFixed(2)}mm   \$$`));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ e_y = \\frac {M_x}{P} = \\frac {${mx}kNm}{${p}kN} = ${(ey*1000).toFixed(2)}mm   \$$`));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{B_y\\times B_x}\\times (1 + \\frac{6\\times e_x}{B_x} + \\frac{6\\times e_y}{B_y}) \$$`));
