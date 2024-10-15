@@ -499,7 +499,7 @@ document.addEventListener("DOMContentLoaded", () => {
             x2 = ((bx*1000)/2);            console.log(`x2 = `,x2);
             y1 = -((by*1000)/2);           console.log(`y1 = `,y1);
             y2 = (by*1000)/2;              console.log(`y2 = `,y2);
-            
+           
             document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation Along Y-axis (Cut Across Y-axis)`));       
             if( longer === axis ){
                 document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 0.5d_b = ${dc}mm - ${cc}mm - 0.5(${barDia}mm) = ${depth}mm \$$`));
@@ -623,9 +623,76 @@ document.addEventListener("DOMContentLoaded", () => {
             console.log(`Beam Shear phi Vn = `,vn);
             return {vn,Vu,d,dc1};
         }
-        function rebarDesign(){
+        function rebarDesign(axis){
+            console.log(100);
+            let x1;
+            let x2;
+            let y1;
+            let y2;
+            let longer;
+            let shorter;
+            let depth;
+            if(bx<by){
+                longer ="y";
+                shorter ="x";
+            } else if (bx>by){
+                longer ="x";
+                shorter="y";
+            } 
+            console.log(200);
+            if(axis === "y"){
+            //ACROSS X AXIS or ALONG Y AXIS
+            if( longer === axis ){
+                console.log(`y is longer`);
+                r = 0.5;
+                depth = dc - cc - (0.5*barDia);
+            } else if ( shorter === axis ){
+                console.log(`y is shorter`);
+                depth = dc - cc - (1.5*barDia);
+                r = 1.5;
+            } else if ( bx === by){
+                console.log(`y is equal to x`);
+                depth = dc - cc - (1.5*barDia);
+                r = 1.5;
+            }
+            document.getElementById('result').appendChild(createHeader5(`Rebar Design Calculation Along Y-axis (Cut Across Y-axis)`));       
+            
+            x1 = (cx/2)+depth;             console.log(`x1 = `,x1);
+            x2 = ((bx*1000)/2);            console.log(`x2 = `,x2);
+            y1 = -((by*1000)/2);           console.log(`y1 = `,y1);
+            y2 = (by*1000)/2;              console.log(`y2 = `,y2);
+            
+            document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac {c_x}{2} + d = \\frac {${cx.toFixed(2)}mm}{2} + {${depth}mm} = ${x1.toFixed(2)}mm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ x_2 = \\frac {B_x}{2} = \\frac {${bx*1000}mm}{2} = ${x2}mm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ y_1 = \\frac {-B_y}{2} = \\frac {${-by*1000}mm}{2} = ${y1}mm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ y_2 = \\frac {B_y}{2} = \\frac {${by*1000}mm}{2} = ${y2}mm\$$`));
+           
+            if( longer === axis ){
+                document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 0.5d_b = ${dc}mm - ${cc}mm - 0.5(${barDia}mm) = ${depth}mm \$$`));
+            } else if ( shorter === axis ){
+                document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 1.5d_b = ${dc}mm - ${cc}mm - 1.5(${barDia}mm) = ${depth}mm \$$`));
+            } else {
+                document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 1.5d_b = ${dc}mm - ${cc}mm - 1.5(${barDia}mm) = ${depth}mm \$$`));
+            }
+
+            let a = x2 - x1;            console.log(`a = `,a);
+            let b = y2 - y1;            console.log(`b = `,b);    
+            let c = x2 + x1;            console.log(`c = `,c);
+            let d = y2 + y1;            console.log(`d = `,d);
+            
+            console.log(`by = `,by);
+            console.log(`bx = `,bx);
+            console.log(`pu = `,pu);
+            console.log(`muy = `,muy);
+            console.log(`mux = `,mux);
+            let muyShortcut = (((x2/1000)-(x1/1000))*Math.pow(((y2/1000)-(y1/1000)),2)/(2*by*bx))*(pu+(6*((x2/1000)+(x1/1000))*muy/Math.pow(bx,2))+(4*((2*y2/1000)+(y1/1000))*mux/Math.pow(by,2)));
+            console.log(`Muy(shortcut) = `,muyShortcut);
+            document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy(shortcut)} = \\frac{(x_2-x_1) \\times (y_2-y_1)^2}{2 \\times A_f} \\times (P_u + \\frac{6 \\times (x_2 + x_1 ) \\times M_{uy}}{B_x^2} + \\frac{4 \\times (2 \\times y_2 + y_1) \\times M_{ux}}{B_y^2})  \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy(shortcut)} = \\frac{(${a/1000}m) \\times (${b/1000}m)^2}{2 \\times ${by}m\\times${bx}m} \\times (${pu}kN + \\frac{6 \\times (${c/1000}m ) \\times ${muy.toFixed(2)}kNm}{(${bx}m)^2} + \\frac{4 \\times (2 \\times ${y2/1000} + (${y1/1000})) \\times ${mux.toFixed(2)}kNm}{(${by}m)^2}) = ${muyShortcut.toFixed(2)}kNm  \$$`));
+            
 
         }
+    }
         function delay(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
         }
@@ -747,6 +814,7 @@ document.addEventListener("DOMContentLoaded", () => {
             console.log(`dc: ${punchingV.dc1}, ${dc2}, ${dc3}  `);
             recheck += 1;
             calc = dimension(finalDc);
+            rebarDesign("y");
             
         }/*
         if (logic === "IS-UL-SQ-CC-1") {
