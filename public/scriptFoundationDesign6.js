@@ -495,10 +495,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 r = 1.5;
             }
             
-            x1 = (cx/2)+depth;      console.log(`x1 = `,x1);
-            x2 = ((bx*1000)/2);            console.log(`x2 = `,x2);
-            y1 = -((by*1000)/2);           console.log(`y1 = `,y1);
-            y2 = (by*1000)/2;              console.log(`y2 = `,y2);
+           
+
+            x1 = -((bx*1000)/2);           console.log(`x1 = `,x1);
+            x2 = (bx*1000)/2;              console.log(`x2 = `,x2);
+            y1 = (cy/2)+depth;      console.log(`y1 = `,y1);
+            y2 = ((by*1000)/2);            console.log(`y2 = `,y2);
            
             document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation Along Y-axis (Cut Across Y-axis)`));       
             if( longer === axis ){
@@ -508,9 +510,11 @@ document.addEventListener("DOMContentLoaded", () => {
             } else {
                 document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 1.5d_b = ${dc}mm - ${cc}mm - 1.5(${barDia}mm) = ${depth}mm \$$`));
             }
-            document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac {c_x}{2} + d = \\frac {${cx.toFixed(2)}mm}{2} + {${depth}mm} = ${x1.toFixed(2)}mm \$$`));
+            
+
+document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac {-B_x}{2} = \\frac {${-bx*1000}mm}{2} = ${x1}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ x_2 = \\frac {B_x}{2} = \\frac {${bx*1000}mm}{2} = ${x2}mm \$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ y_1 = \\frac {-B_y}{2} = \\frac {${-by*1000}mm}{2} = ${y1}mm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ y_1 = \\frac {c_y}{2} + d = \\frac {${cy.toFixed(2)}mm}{2} + ${depth}mm = ${y1.toFixed(2)}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ y_2 = \\frac {B_y}{2} = \\frac {${by*1000}mm}{2} = ${y2}mm\$$`));
                   
             } else if (axis === "x"){
@@ -526,10 +530,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 depth = dc - cc - (0.5*barDia);
                 r = 0.5;
             }
-            x1 = -((bx*1000)/2);           console.log(`x1 = `,x1);
-            x2 = (bx*1000)/2;              console.log(`x2 = `,x2);
-            y1 = (cy/2)+depth;      console.log(`y1 = `,y1);
-            y2 = ((by*1000)/2);            console.log(`y2 = `,y2);
+            
+            x1 = (cx/2)+depth;      console.log(`x1 = `,x1);
+            x2 = ((bx*1000)/2);            console.log(`x2 = `,x2);
+            y1 = -((by*1000)/2);           console.log(`y1 = `,y1);
+            y2 = (by*1000)/2;              console.log(`y2 = `,y2);
             document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation Along X-axis (Cut Across X-axis)`));       
             if( longer === axis ){
                 document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 0.5d_b = ${dc}mm - ${cc}mm - 0.5(${barDia}mm) = ${depth}mm \$$`));
@@ -538,9 +543,11 @@ document.addEventListener("DOMContentLoaded", () => {
             } else {
                 document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 0.5d_b = ${dc}mm - ${cc}mm - 0.5(${barDia}mm) = ${depth}mm \$$`));
             }
-            document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac {-B_x}{2} = \\frac {${-bx*1000}mm}{2} = ${x1}mm \$$`));
+            
+
+document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac {c_x}{2} + d = \\frac {${cx.toFixed(2)}mm}{2} + {${depth}mm} = ${x1.toFixed(2)}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ x_2 = \\frac {B_x}{2} = \\frac {${bx*1000}mm}{2} = ${x2}mm \$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ y_1 = \\frac {c_y}{2} + d = \\frac {${cy.toFixed(2)}mm}{2} + ${depth}mm = ${y1.toFixed(2)}mm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ y_1 = \\frac {-B_y}{2} = \\frac {${-by*1000}mm}{2} = ${y1}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ y_2 = \\frac {B_y}{2} = \\frac {${by*1000}mm}{2} = ${y2}mm\$$`));
            
             }
