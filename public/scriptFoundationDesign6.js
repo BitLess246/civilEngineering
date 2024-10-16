@@ -169,6 +169,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         pu1 = 1.4*(pdl)+1.4*(ys*(ds/1000)+yc*(dc/1000)+q)*bx*by;
                         pu2 = 1.2*pdl +1.6*pll + 1.2*(ys*(ds/1000)+yc*(dc/1000)+q)*bx*by;
                         document.getElementById('result').appendChild(createParagraph(``));
+                        document.getElementById('result').appendChild(createParagraph(``));
                         document.getElementById('result').appendChild(createParagraph(`\\( P_u = \\text{Greatest of}\\left\\{\\begin{array}{l}1.4 \\times P_{DL} + 1.4 \\times [(\\gamma_s \\times D_s) + (\\gamma_c \\times D_c) + q] \\times B_y \\times B_x \\,  \\\\ 1.2 \\times P_{DL} + 1.6 \\times P_{LL} + 1.2 \\times [(\\gamma_s \\times D_s) + (\\gamma_c \\times D_c) + q] \\times B_y \\times B_x \\,  \\end{array}\\right. \\)`));
                         document.getElementById('result').appendChild(createParagraph(``));
                         document.getElementById('result').appendChild(createParagraph(``));
@@ -179,7 +180,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     } else {
                         pu1 = 1.4*pdl;
                         pu2 = 1.2*pdl +1.6*pll;
-                        
+                        document.getElementById('result').appendChild(createParagraph(``));
                         document.getElementById('result').appendChild(createParagraph(`\\( P_u = \\text{Greatest of}\\left\\{\\begin{array}{l}1.4 \\times P_{DL}\\ = 1.4 \\times ${pdl}kN = ${pu1.toFixed(2)}kN\\,  \\\\ 1.2 \\times P_{DL} + 1.6 \\times P_{LL} = 1.2 \\times ${pdl}kN + 1.6 \\times ${pll}kN = ${pu2.toFixed(2)}kN  \\,  \\end{array}\\right. = ${Math.max(pu1,pu2).toFixed(2)}kN \\)`));
                         
                         pu = Math.max(pu1,pu2); 
