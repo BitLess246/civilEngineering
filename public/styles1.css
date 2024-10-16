@@ -27,7 +27,7 @@ body {
 .latex-container p {
     margin: -0.3em;  /* Adds spacing between paragraphs within the container */
     margin-right: 100%;
-    font-size: 1em;
+    font-size: inherit;
     display: inline-block;
     text-align: left;
 }
@@ -48,15 +48,15 @@ body {
 
 @media (max-width: 768px) {
     .latex-container {
-        font-size: 1.1em; /* Slightly smaller font for smaller screens */
-        line-height: 1.5em;
+        font-size: 1em; /* Slightly smaller font for smaller screens */
+        line-height: 0.8em;
     }
 }
 
 @media (max-width: 480px) {
     .latex-container {
-        font-size: 1em; /* Adjust font size for mobile devices */
-        line-height: 1.4em;
+        font-size: 0.9em; /* Adjust font size for mobile devices */
+        line-height: 0.7em;
     }
 }
 nav{
@@ -119,7 +119,7 @@ nav ul li a:focus{
     grid-row-end: 2;
     grid-column-start: 1;
     grid-column-end: 5;
-    width:500%;
+    width:100%;
 }
 .mid2{
     
@@ -200,7 +200,7 @@ h6 {
     margin-bottom: 2px;
 }
 h7 {
-    font-size: 1em;
+    font-size: 1.1em;
     margin-top: 1em;
     margin-bottom: 0em;
     padding-bottom: 0.5em;

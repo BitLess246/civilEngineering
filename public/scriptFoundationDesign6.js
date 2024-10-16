@@ -84,13 +84,14 @@ document.addEventListener("DOMContentLoaded", () => {
             let muy1;
             let muy2;
            
-            document.getElementById('result').appendChild(createHeader5(`Dimensions Calculation`));       
-            document.getElementById('result').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ D_s = H - D_c = ${h*1000}mm - ${dc}mm = ${ds}mm \$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = q_{all} - (\\gamma_s \\times D_s) - (\\gamma_c \\times D_c) - q =  ${qa}kPa - (${ys}\\frac{kN}{m^3} \\times ${ds/1000}m) - (${yc}\\frac{kN}{m^3} \\times ${dc/1000}m) - ${q}kPa = ${qnet.toFixed(2)}kPa  \$$`));
-            console.log(`qnet = ${qnet}`);
-            document.getElementById('result').appendChild(createHeader7(`Service Load Calculation`));       
+                   
             if(recheck===0){
+                document.getElementById('result').appendChild(createHeader5(`Dimensions Calculation`));       
+                document.getElementById('result').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
+                document.getElementById('result').appendChild(createParagraph(`$$\\ D_s = H - D_c = ${h*1000}mm - ${dc}mm = ${ds}mm \$$`));
+                document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = q_{all} - (\\gamma_s \\times D_s) - (\\gamma_c \\times D_c) - q =  ${qa}kPa - (${ys}\\frac{kN}{m^3} \\times ${ds/1000}m) - (${yc}\\frac{kN}{m^3} \\times ${dc/1000}m) - ${q}kPa = ${qnet.toFixed(2)}kPa  \$$`));
+                console.log(`qnet = ${qnet}`);
+                document.getElementById('result').appendChild(createHeader7(`Service Load Calculation`));
                 if(loadType==="ultimate"){
                     document.getElementById('result').appendChild(createParagraph(`$$\\ P = ${p}kN \$$`));
                     if (centricity === "eccentric"){
@@ -116,121 +117,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.getElementById('result').appendChild(createParagraph(`$$\\ e_x = \\frac {M_y}{P} = \\frac {${my}kNm}{${p}kN} = ${(ex*1000).toFixed(2)}mm   \$$`));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ e_y = \\frac {M_x}{P} = \\frac {${mx}kNm}{${p}kN} = ${(ey*1000).toFixed(2)}mm   \$$`));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{B_y\\times B_x}\\times (1 + \\frac{6\\times e_x}{B_x} + \\frac{6\\times e_y}{B_y}) \$$`));
-                } else if (centricity === "concentric"){
-                document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{B_y\\times B_x} \$$`));
-
-                }
-                document.getElementById('result').appendChild(createHeader7(`Solve for \\( B\\)`)); 
-                if (structureType==="Isolated Square"){
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{B^2}\\times (1 + \\frac{6\\times (e_x + e_y)}{B} \$$`));
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ ${qnet.toFixed(2)}kPa = \\frac {${p}kN}{B^2}\\times (1 + \\frac{6\\times (${ex.toFixed(3)}m+${ey.toFixed(3)}m)}{B})  \$$`));
-                    let Bx_solution = newtonRaphson(0, 0, 1,0,qnet,by,p,ex,ey);
-                    console.log(`Solution for B: ${Bx_solution}`);
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ B = ${(Bx_solution*1000).toFixed(2)}mm \\approx ${Math.ceil(Bx_solution*10)/10}m \$$`));
-                    bx = Math.ceil(Bx_solution*10)/10;
-                    by = bx;
-                } else if (structureType==="Isolated Rectangular"){
-                if (restrictionType === "1"){
-                    //Ratio
-                    let k = ratioLengthB/ratioLengthL;
-                    let A = qnet*k/p;
-                    let C = (6*ex)+((6*ey)/k);   
-                    let initialGuess = 1; 
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{k \\times B_x^2}\\times (1 + \\frac{6\\times e_x}{B_x} + \\frac{6\\times e_y}{k \\times B_x}) \$$`));
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ ${qnet.toFixed(2)}kPa = \\frac {${p}kN}{${k.toFixed(3)} \\times B_x^2}\\times (1 + \\frac{6\\times ${ex.toFixed(3)}m}{B_x} + \\frac{6\\times ${ey.toFixed(3)}m}{${k.toFixed(3)} \\times B_x}) \$$`));
-                    let Bx_solution = newtonRaphson(A, C, initialGuess,"1");
-                    console.log(`Solution for B_x: ${Bx_solution}`);
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ B_x = ${(Bx_solution*1000).toFixed(2)}mm \\approx ${Math.ceil(Bx_solution*10)/10}m \$$`));
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ B_y = k \\times B_x = ${k.toFixed(3)} \\times ${(Bx_solution*1000).toFixed(2)}mm \\approx ${Math.ceil(k*Bx_solution*10)/10}m \$$`));
-                    bx = Math.ceil(Bx_solution*10)/10;
-                    by = Math.ceil(k*Bx_solution*10)/10;
-                } else if ( restrictionType === "2"){
-                    //Limited
-                    by = limitLength;
-                    let initialGuess = 1; 
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ ${qnet.toFixed(2)}kPa = \\frac {${p}kN}{${by.toFixed(2)}m \\times B_x}\\times (1 + \\frac{6\\times ${ex.toFixed(3)}m}{B_x} + \\frac{6\\times ${ey.toFixed(3)}m}{${by.toFixed(2)}m \\times B_x}) \$$`));
-                    let Bx_solution = newtonRaphson(0, 0, initialGuess,"2",qnet,by,p,ex,ey);
-                    console.log(`Solution for B_x: ${Bx_solution}`);
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ B_x = ${(Bx_solution*1000).toFixed(2)}mm \\approx ${Math.ceil(Bx_solution*10)/10}m \$$`));
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
-                    bx = Math.ceil(Bx_solution*10)/10;
-                }
-                }
-                document.getElementById('result').appendChild(createHeader7(`Solve for Ultimate Loads`));
-                if(loadType==="ultimate"){
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ Pu = ${pu}kN \$$`));
-                    if  (centricity === "eccentric"){
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_{ux} = ${mux}kNm \$$`));
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy} = ${muy}kNm   \$$`));
-                    }
-                } else if (loadType==="individual"){
-                    if (considerSoil==="yes"){
-                        pu1 = 1.4*(pdl)+1.4*(ys*(ds/1000)+yc*(dc/1000)+q)*bx*by;
-                        pu2 = 1.2*pdl +1.6*pll + 1.2*(ys*(ds/1000)+yc*(dc/1000)+q)*bx*by;
-                        document.getElementById('result').appendChild(createParagraph(`$$\\ P_{u1} = 1.4 \\times P_{DL} + 1.4 \\times [(\\gamma_s \\times D_s) + (\\gamma_c \\times D_c) + q] \\times B_y \\times B_x = 1.4 \\times ${pdl}kN + 1.4 \\times [(${ys} \\frac{kN}{m^3} \\times ${ds/1000}m) + (${yc} \\frac{kN}{m^3} \\times ${dc/1000}m) + ${q}kPa] \\times ${by}m \\times ${bx}m = ${pu1.toFixed(2)}kN \$$`));
-                        document.getElementById('result').appendChild(createParagraph(`$$\\ P_{u2} = 1.2 \\times P_{DL} + 1.6 \\times P_{LL} + 1.2 \\times [(\\gamma_s \\times D_s) + (\\gamma_c \\times D_c) + q] \\times B_y \\times B_x = 1.2 \\times ${pdl}kN + 1.6 \\times ${pll}kN + 1.2 \\times [(${ys} \\frac{kN}{m^3} \\times ${ds/1000}m) + (${yc} \\frac{kN}{m^3} \\times ${dc/1000}m) + ${q}kPa] \\times ${by}m \\times ${bx}m  = ${pu2.toFixed(2)}kN \$$`));
-                        document.getElementById('result').appendChild(createParagraph(`$$\\ P_{u} = ${Math.max(pu1,pu2).toFixed(2)}kN - GOVERN\$$`));
-                        pu = Math.max(pu1,pu2); 
-                    } else {
-                        pu1 = 1.4*pdl;
-                        pu2 = 1.2*pdl +1.6*pll;
-                        
-                        document.getElementById('result').appendChild(createParagraph(`$$\\ P_{u1} = 1.4 \\times P_{DL} = 1.4 \\times ${pdl}kN = ${pu1.toFixed(2)}kN \$$`));
-                        document.getElementById('result').appendChild(createParagraph(`$$\\ P_{u2} = 1.2 \\times P_{DL} + 1.6 \\times P_{LL} = 1.2 \\times ${pdl}kN + 1.6 \\times ${pll}kN = ${pu2.toFixed(2)}kN \$$`));
-                        document.getElementById('result').appendChild(createParagraph(`$$\\ P_{u} = ${Math.max(pu1,pu2).toFixed(2)}kN - GOVERN\$$`));
-                        pu = Math.max(pu1,pu2); 
-                        }
-                        if  (centricity === "eccentric"){
-                    mux1 = 1.4*(mdlx);
-                    mux2 = 1.2*mdlx +1.6*mllx;
-                    muy1 = 1.4*(mdly);
-                    muy2 = 1.2*mdly +1.6*mlly;
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_{ux1} = 1.4 \\times M_{xDL} = 1.4 \\times ${mdlx}kNm = ${mux1.toFixed(2)}kNm \$$`));
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_{ux2} = 1.2 \\times M_{xDL} + 1.6 \\times M_{xLL} = 1.2 \\times ${mdlx}kNm + 1.6 \\times ${mllx}kNm = ${mux2.toFixed(2)}kNm \$$`));
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_{ux} = ${Math.max(mux1,mux2).toFixed(2)}kNm - GOVERN\$$`));
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy1} = 1.4 \\times M_{yDL} = 1.4 \\times ${mdly}kNm = ${muy1.toFixed(2)}kNm \$$`));
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy2} = 1.2 \\times M_{yDL} + 1.6 \\times M_{yLL} = 1.2 \\times ${mdly}kNm + 1.6 \\times ${mlly}kNm = ${muy2.toFixed(2)}kNm \$$`));
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy} = ${Math.max(muy1,muy2).toFixed(2)}kNm - GOVERN\$$`));
-                    document.getElementById('result').appendChild(createHeader7(`Solve for Ultimate Eccentricity`));
-                    muy = Math.max(muy1,muy2);
-                    mux = Math.max(mux1,mux2);
-                    euy = mux/pu;
-                    eux = muy/pu;
-                    con = (6*euy/by)+(6*eux/bx);
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ e_{ux} = \\frac{M_{uy}}{P} = \\frac{${muy.toFixed(2)}kNm}{${pu.toFixed(2)}kN} = ${(eux*1000).toFixed(2)}mm\$$`));
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ e_{uy} = \\frac{M_{ux}}{P} = \\frac{${mux.toFixed(2)}kNm}{${pu.toFixed(2)}kN} = ${(euy*1000).toFixed(2)}mm\$$`));
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ 6 \\times \\frac{e_{ux}}{B_x} + 6 \\times \\frac{e_{uy}}{B_y} \\le 1 \$$`));
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ 6 \\times \\frac{${(eux*1000).toFixed(2)}mm}{${(bx*1000).toFixed(2)}mm} + 6 \\times \\frac {${(euy*1000).toFixed(2)}mm}{${(by*1000).toFixed(2)}mm} \\le 1 \$$`));
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ ${con.toFixed(6)} ${con > 1 ? "> 1 \\therefore \\text{Case 1, With Tension}":"< 1 \\therefore \\text{Case 2, Without Tension}"} \$$`));
-                    }
-                    
-
-                }
-            } else if (recheck===1){
-                if(loadType==="ultimate"){
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ P = ${p}kN \$$`));
-                    if (centricity === "eccentric"){
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_x = ${mx}kNm \$$`));
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_y = ${my}kNm   \$$`));
-                    }
-                } else if (loadType==="individual"){
-                    p = pdl + pll;
-                    if (centricity === "eccentric"){
-                    mx = mdlx + mllx;
-                    my = mdly + mlly;
-                }
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ P = ${p}kN \$$`));
-                    if (centricity === "eccentric"){
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_x = ${mx}kNm \$$`));
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_y = ${my}kNm \$$`));
-                    }
-                } if (centricity === "eccentric"){
-                document.getElementById('result').appendChild(createHeader7(`Solve Service Eccentricity`));       
-                
-                ey = my / p;
-                ex = mx / p;
-                document.getElementById('result').appendChild(createParagraph(`$$\\ e_x = \\frac {M_y}{P} = ${(ex*1000).toFixed(2)}mm   \$$`));
-                document.getElementById('result').appendChild(createParagraph(`$$\\ e_y = \\frac {M_x}{P} = ${(ey*1000).toFixed(2)}mm   \$$`));
                 } else if (centricity === "concentric"){
                 document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{B_y\\times B_x} \$$`));
 
@@ -282,14 +168,151 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (considerSoil==="yes"){
                         pu1 = 1.4*(pdl)+1.4*(ys*(ds/1000)+yc*(dc/1000)+q)*bx*by;
                         pu2 = 1.2*pdl +1.6*pll + 1.2*(ys*(ds/1000)+yc*(dc/1000)+q)*bx*by;
-                        document.getElementById('result').appendChild(createParagraph(`$$\\ P_{u} = ${Math.max(pu1,pu2).toFixed(2)}kN - GOVERN\$$`));
+                        document.getElementById('result').appendChild(createParagraph(``));
+                        document.getElementById('result').appendChild(createParagraph(``));
+                        document.getElementById('result').appendChild(createParagraph(`\\( P_u = \\text{Greatest of}\\left\\{\\begin{array}{l}1.4 \\times P_{DL} + 1.4 \\times [(\\gamma_s \\times D_s) + (\\gamma_c \\times D_c) + q] \\times B_y \\times B_x \\,  \\\\ 1.2 \\times P_{DL} + 1.6 \\times P_{LL} + 1.2 \\times [(\\gamma_s \\times D_s) + (\\gamma_c \\times D_c) + q] \\times B_y \\times B_x \\,  \\end{array}\\right. \\)`));
+                        document.getElementById('result').appendChild(createParagraph(``));
+                        document.getElementById('result').appendChild(createParagraph(``));
+
+                        document.getElementById('result').appendChild(createParagraph(`\\( P_u = \\text{Greatest of}\\left\\{\\begin{array}{l}1.4 \\times ${pdl}kN + 1.4 \\times [(${ys} \\frac{kN}{m^3} \\times ${ds/1000}m) + (${yc} \\frac{kN}{m^3} \\times ${dc/1000}m) + ${q}kPa] \\times ${by}m \\times ${bx}m = ${pu1.toFixed(2)}kN \\,  \\\\  1.2 \\times ${pdl}kN + 1.6 \\times ${pll}kN + 1.2 \\times [(${ys} \\frac{kN}{m^3} \\times ${ds/1000}m) + (${yc} \\frac{kN}{m^3} \\times ${dc/1000}m) + ${q}kPa] \\times ${by}m \\times ${bx}m  = ${pu2.toFixed(2)}kN \\,  \\end{array}\\right. = ${Math.max(pu1,pu2).toFixed(2)}kN \\)`));
+                        
                         pu = Math.max(pu1,pu2); 
                     } else {
                         pu1 = 1.4*pdl;
                         pu2 = 1.2*pdl +1.6*pll;
+                        document.getElementById('result').appendChild(createParagraph(``));
+                        document.getElementById('result').appendChild(createParagraph(`\\( P_u = \\text{Greatest of}\\left\\{\\begin{array}{l}1.4 \\times P_{DL}\\ = 1.4 \\times ${pdl}kN = ${pu1.toFixed(2)}kN\\,  \\\\ 1.2 \\times P_{DL} + 1.6 \\times P_{LL} = 1.2 \\times ${pdl}kN + 1.6 \\times ${pll}kN = ${pu2.toFixed(2)}kN  \\,  \\end{array}\\right. = ${Math.max(pu1,pu2).toFixed(2)}kN \\)`));
                         
-                        document.getElementById('result').appendChild(createParagraph(`$$\\ P_{u} = ${Math.max(pu1,pu2).toFixed(2)}kN - GOVERN\$$`));
                         pu = Math.max(pu1,pu2); 
+                        }
+                        if  (centricity === "eccentric"){
+                    mux1 = 1.4*(mdlx);
+                    mux2 = 1.2*mdlx +1.6*mllx;
+                    muy1 = 1.4*(mdly);
+                    muy2 = 1.2*mdly +1.6*mlly;
+                    document.getElementById('result').appendChild(createParagraph(``));
+                    document.getElementById('result').appendChild(createParagraph(``));
+
+                    document.getElementById('result').appendChild(createParagraph(`\\( M_{ux} = \\text{Greatest of}\\left\\{\\begin{array}{l}1.4 \\times M_{xDL} = 1.4 \\times ${mdlx}kNm = ${mux1.toFixed(2)}kNm \\,  \\\\ 1.2 \\times M_{xDL} + 1.6 \\times M_{xLL} = 1.2 \\times ${mdlx}kNm + 1.6 \\times ${mllx}kNm = ${mux2.toFixed(2)}kNm \\,  \\end{array}\\right. = ${Math.max(mux1,mux2).toFixed(2)}kNm \\)`));
+                    document.getElementById('result').appendChild(createParagraph(``));
+                    document.getElementById('result').appendChild(createParagraph(``));
+
+                    document.getElementById('result').appendChild(createParagraph(`\\( M_{uy} = \\text{Greatest of}\\left\\{\\begin{array}{l}1.4 \\times M_{yDL} = 1.4 \\times ${mdly}kNm = ${muy1.toFixed(2)}kNm \\,  \\\\ 1.2 \\times M_{yDL} + 1.6 \\times M_{yLL} = 1.2 \\times ${mdly}kNm + 1.6 \\times ${mlly}kNm = ${muy2.toFixed(2)}kNm \\,  \\end{array}\\right. = ${Math.max(muy1,muy2).toFixed(2)}kNm \\)`));
+                    document.getElementById('result').appendChild(createParagraph(``));
+                    document.getElementById('result').appendChild(createParagraph(``));
+
+                    
+                    document.getElementById('result').appendChild(createHeader7(`Solve for Ultimate Eccentricity`));
+                    muy = Math.max(muy1,muy2);
+                    mux = Math.max(mux1,mux2);
+                    euy = mux/pu;
+                    eux = muy/pu;
+                    con = (6*euy/by)+(6*eux/bx);
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ e_{ux} = \\frac{M_{uy}}{P} = \\frac{${muy.toFixed(2)}kNm}{${pu.toFixed(2)}kN} = ${(eux*1000).toFixed(2)}mm\$$`));
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ e_{uy} = \\frac{M_{ux}}{P} = \\frac{${mux.toFixed(2)}kNm}{${pu.toFixed(2)}kN} = ${(euy*1000).toFixed(2)}mm\$$`));
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ 6 \\times \\frac{e_{ux}}{B_x} + 6 \\times \\frac{e_{uy}}{B_y} \\le 1 \$$`));
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ 6 \\times \\frac{${(eux*1000).toFixed(2)}mm}{${(bx*1000).toFixed(2)}mm} + 6 \\times \\frac {${(euy*1000).toFixed(2)}mm}{${(by*1000).toFixed(2)}mm} \\le 1 \$$`));
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ ${con.toFixed(6)} ${con > 1 ? "> 1 \\therefore \\text{Case 1, With Tension}":"< 1 \\therefore \\text{Case 2, Without Tension}"} \$$`));
+                    }
+                    
+
+                }
+            } else if (recheck===1){
+                document.getElementById('result').appendChild(createHeader5(`Recompute Dimensions`));       
+                document.getElementById('result').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
+                document.getElementById('result').appendChild(createParagraph(`$$\\ D_s = H - D_c = ${h*1000}mm - ${dc}mm = ${ds}mm \$$`));
+                document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = q_{all} - (\\gamma_s \\times D_s) - (\\gamma_c \\times D_c) - q =  ${qa}kPa - (${ys}\\frac{kN}{m^3} \\times ${ds/1000}m) - (${yc}\\frac{kN}{m^3} \\times ${dc/1000}m) - ${q}kPa = ${qnet.toFixed(2)}kPa  \$$`));
+                console.log(`qnet = ${qnet}`);
+                document.getElementById('result').appendChild(createHeader7(`Service Load Calculation`));
+                if(loadType==="ultimate"){
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ P = ${p}kN \$$`));
+                    if (centricity === "eccentric"){
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_x = ${mx}kNm \$$`));
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_y = ${my}kNm   \$$`));
+                    }
+                } else if (loadType==="individual"){
+                    p = pdl + pll;
+                    if (centricity === "eccentric"){
+                    mx = mdlx + mllx;
+                    my = mdly + mlly;
+                }
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ P = ${p}kN \$$`));
+                    if (centricity === "eccentric"){
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_x = ${mx}kNm \$$`));
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_y = ${my}kNm \$$`));
+                    }
+                } if (centricity === "eccentric"){
+                document.getElementById('result').appendChild(createHeader7(`Solve Service Eccentricity`));       
+                
+                ey = mx / p;
+                ex = my / p;
+                document.getElementById('result').appendChild(createParagraph(`$$\\ e_x = \\frac {M_y}{P} = ${(ex*1000).toFixed(2)}mm   \$$`));
+                document.getElementById('result').appendChild(createParagraph(`$$\\ e_y = \\frac {M_x}{P} = ${(ey*1000).toFixed(2)}mm   \$$`));
+                } else if (centricity === "concentric"){
+                document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{B_y\\times B_x} \$$`));
+
+                }
+                document.getElementById('result').appendChild(createHeader7(`Solve for \\( B\\)`)); 
+                if (structureType==="Isolated Square"){
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{B^2}\\times (1 + \\frac{6\\times (e_x + e_y)}{B}) \$$`));
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ ${qnet.toFixed(2)}kPa = \\frac {${p}kN}{B^2}\\times (1 + \\frac{6\\times (${ex.toFixed(3)}m+${ey.toFixed(3)}m)}{B})  \$$`));
+                    let Bx_solution = newtonRaphson(0, 0, 1,0,qnet,by,p,ex,ey);
+                    console.log(`Solution for B: ${Bx_solution}`);
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ B = ${(Bx_solution*1000).toFixed(2)}mm \\approx ${Math.ceil(Bx_solution*10)/10}m \$$`));
+                    bx = Math.ceil(Bx_solution*10)/10;
+                    by = bx;
+                } else if (structureType==="Isolated Rectangular"){
+                if (restrictionType === "1"){
+                    //Ratio
+                    let k = ratioLengthB/ratioLengthL;
+                    let A = qnet*k/p;
+                    let C = (6*ex)+((6*ey)/k);   
+                    let initialGuess = 1; 
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{k \\times B_x^2}\\times (1 + \\frac{6\\times e_x}{B_x} + \\frac{6\\times e_y}{k \\times B_x}) \$$`));
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ ${qnet.toFixed(2)}kPa = \\frac {${p}kN}{${k.toFixed(3)} \\times B_x^2}\\times (1 + \\frac{6\\times ${ex.toFixed(3)}m}{B_x} + \\frac{6\\times ${ey.toFixed(3)}m}{${k.toFixed(3)} \\times B_x}) \$$`));
+                    let Bx_solution = newtonRaphson(A, C, initialGuess,"1");
+                    console.log(`Solution for B_x: ${Bx_solution}`);
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ B_x = ${(Bx_solution*1000).toFixed(2)}mm \\approx ${Math.ceil(Bx_solution*10)/10}m \$$`));
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ B_y = k \\times B_x = ${k.toFixed(3)} \\times ${(Bx_solution*1000).toFixed(2)}mm \\approx ${Math.ceil(k*Bx_solution*10)/10}m \$$`));
+                    bx = Math.ceil(Bx_solution*10)/10;
+                    by = Math.ceil(k*Bx_solution*10)/10;
+                } else if ( restrictionType === "2"){
+                    //Limited
+                    by = limitLength;
+                    let initialGuess = 1; 
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ ${qnet.toFixed(2)}kPa = \\frac {${p}kN}{${by.toFixed(2)}m \\times B_x}\\times (1 + \\frac{6\\times ${ex.toFixed(3)}m}{B_x} + \\frac{6\\times ${ey.toFixed(3)}m}{${by.toFixed(2)}m \\times B_x}) \$$`));
+                    let Bx_solution = newtonRaphson(0, 0, initialGuess,"2",qnet,by,p,ex,ey);
+                    console.log(`Solution for B_x: ${Bx_solution}`);
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ B_x = ${(Bx_solution*1000).toFixed(2)}mm \\approx ${Math.ceil(Bx_solution*10)/10}m \$$`));
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
+                    bx = Math.ceil(Bx_solution*10)/10;
+                }
+                }
+                document.getElementById('result').appendChild(createHeader7(`Solve for Ultimate Load Combinations`));
+                if(loadType==="ultimate"){
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ Pu = ${pu}kN \$$`));
+                    if  (centricity === "eccentric"){
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_{ux} = ${mux.toFixed(2)}kNm \$$`));
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy} = ${muy.toFixed(2)}kNm   \$$`));
+                    }
+                } else if (loadType==="individual"){
+                    if (considerSoil==="yes"){
+                        pu1 = 1.4*(pdl)+1.4*(ys*(ds/1000)+yc*(dc/1000)+q)*bx*by;
+                        pu2 = 1.2*pdl +1.6*pll + 1.2*(ys*(ds/1000)+yc*(dc/1000)+q)*bx*by;
+                        document.getElementById('result').appendChild(createParagraph(`$$\\ P_{u} = ${Math.max(pu1,pu2).toFixed(2)}kN\$$`));
+                        pu = Math.max(pu1,pu2); 
+                        document.getElementById('result').appendChild(createParagraph(`$$\\ M_{ux} = ${mux.toFixed(2)}kNm \$$`));
+                        document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy} = ${muy.toFixed(2)}kNm   \$$`));
+                    
+                    } else {
+                        pu1 = 1.4*pdl;
+                        pu2 = 1.2*pdl +1.6*pll;
+                        
+                        document.getElementById('result').appendChild(createParagraph(`$$\\ P_{u} = ${Math.max(pu1,pu2).toFixed(2)}kN\$$`));
+                        pu = Math.max(pu1,pu2);
+                        document.getElementById('result').appendChild(createParagraph(`$$\\ M_{ux} = ${mux.toFixed(2)}kNm \$$`));
+                        document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy} = ${muy.toFixed(2)}kNm   \$$`));
+                     
                         }
 
                 }
@@ -495,8 +518,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 r = 1.5;
             }
             
-           
-
             x1 = -((bx*1000)/2);           console.log(`x1 = `,x1);
             x2 = (bx*1000)/2;              console.log(`x2 = `,x2);
             y1 = (cy/2)+depth;      console.log(`y1 = `,y1);
@@ -509,14 +530,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 1.5d_b = ${dc}mm - ${cc}mm - 1.5(${barDia}mm) = ${depth}mm \$$`));
             } else {
                 document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 1.5d_b = ${dc}mm - ${cc}mm - 1.5(${barDia}mm) = ${depth}mm \$$`));
-            }
+            }     
             
-
-document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac {-B_x}{2} = \\frac {${-bx*1000}mm}{2} = ${x1}mm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac {-B_x}{2} = \\frac {${-bx*1000}mm}{2} = ${x1}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ x_2 = \\frac {B_x}{2} = \\frac {${bx*1000}mm}{2} = ${x2}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ y_1 = \\frac {c_y}{2} + d = \\frac {${cy.toFixed(2)}mm}{2} + ${depth}mm = ${y1.toFixed(2)}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ y_2 = \\frac {B_y}{2} = \\frac {${by*1000}mm}{2} = ${y2}mm\$$`));
-                  
+           
             } else if (axis === "x"){
             //ACROSS X AXIS or ALONG Y AXIS
             if( longer === axis ){
@@ -530,11 +550,12 @@ document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac
                 depth = dc - cc - (0.5*barDia);
                 r = 0.5;
             }
-            
             x1 = (cx/2)+depth;      console.log(`x1 = `,x1);
             x2 = ((bx*1000)/2);            console.log(`x2 = `,x2);
             y1 = -((by*1000)/2);           console.log(`y1 = `,y1);
             y2 = (by*1000)/2;              console.log(`y2 = `,y2);
+
+            
             document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation Along X-axis (Cut Across X-axis)`));       
             if( longer === axis ){
                 document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 0.5d_b = ${dc}mm - ${cc}mm - 0.5(${barDia}mm) = ${depth}mm \$$`));
@@ -544,12 +565,11 @@ document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac
                 document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 0.5d_b = ${dc}mm - ${cc}mm - 0.5(${barDia}mm) = ${depth}mm \$$`));
             }
             
-
-document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac {c_x}{2} + d = \\frac {${cx.toFixed(2)}mm}{2} + {${depth}mm} = ${x1.toFixed(2)}mm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac {c_x}{2} + d = \\frac {${cx.toFixed(2)}mm}{2} + {${depth}mm} = ${x1.toFixed(2)}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ x_2 = \\frac {B_x}{2} = \\frac {${bx*1000}mm}{2} = ${x2}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ y_1 = \\frac {-B_y}{2} = \\frac {${-by*1000}mm}{2} = ${y1}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ y_2 = \\frac {B_y}{2} = \\frac {${by*1000}mm}{2} = ${y2}mm\$$`));
-           
+             
             }
             let a = x2 - x1;            console.log(`a = `,a);
             let b = y2 - y1;            console.log(`b = `,b);    
@@ -647,6 +667,20 @@ document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac
                 shorter="y";
             } 
             console.log(200);
+            document.getElementById('result').appendChild(createHeader5(`Solve Preliminary Values for Design`));       
+
+            let beta1 = 0;
+            if ((0.85-(0.5/7)*(fc-28))>=0.85){
+                beta1 = 0.85;
+            } else if ((0.85-(0.5/7)*(fc-28))<0.65) {
+                beta1 = 0.65;
+            } else {
+                beta1 = 0.85-(0.5/7)*(fc-28);
+            }
+            document.getElementById('result').appendChild(createParagraph(`$$\\ \\beta_1 : 0.65 < [0.85 - (\\frac{0.05}{7})\\times (f'_c - 28)] \\le 0.85 \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ \\beta_1 = 0.85 - (\\frac{0.05}{7})\\times (${fc} - 28) = ${beta1.toFixed(3)} \$$`));
+            
+
             if(axis === "y"){
             //ACROSS X AXIS or ALONG Y AXIS
             if( longer === axis ){
@@ -674,13 +708,9 @@ document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac
             document.getElementById('result').appendChild(createParagraph(`$$\\ y_1 = \\frac {-B_y}{2} = \\frac {${-by*1000}mm}{2} = ${y1}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ y_2 = \\frac {B_y}{2} = \\frac {${by*1000}mm}{2} = ${y2}mm\$$`));
            
-            if( longer === axis ){
-                document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 0.5d_b = ${dc}mm - ${cc}mm - 0.5(${barDia}mm) = ${depth}mm \$$`));
-            } else if ( shorter === axis ){
-                document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 1.5d_b = ${dc}mm - ${cc}mm - 1.5(${barDia}mm) = ${depth}mm \$$`));
-            } else {
-                document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 1.5d_b = ${dc}mm - ${cc}mm - 1.5(${barDia}mm) = ${depth}mm \$$`));
-            }
+            
+            document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - ${r}d_b = ${dc}mm - ${cc}mm - ${r}(${barDia}mm) = ${depth}mm \$$`));
+            
 
             let a = x2 - x1;            console.log(`a = `,a);
             let b = y2 - y1;            console.log(`b = `,b);    
@@ -696,7 +726,7 @@ document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac
             console.log(`Muy(shortcut) = `,muyShortcut);
             document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy(shortcut)} = \\frac{(x_2-x_1) \\times (y_2-y_1)^2}{2 \\times A_f} \\times (P_u + \\frac{6 \\times (x_2 + x_1 ) \\times M_{uy}}{B_x^2} + \\frac{4 \\times (2 \\times y_2 + y_1) \\times M_{ux}}{B_y^2})  \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy(shortcut)} = \\frac{(${a/1000}m) \\times (${b/1000}m)^2}{2 \\times ${by}m\\times${bx}m} \\times (${pu}kN + \\frac{6 \\times (${c/1000}m ) \\times ${muy.toFixed(2)}kNm}{(${bx}m)^2} + \\frac{4 \\times (2 \\times ${y2/1000} + (${y1/1000})) \\times ${mux.toFixed(2)}kNm}{(${by}m)^2}) = ${muyShortcut.toFixed(2)}kNm  \$$`));
-            
+
 
         }
     }
@@ -819,6 +849,7 @@ document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac
             dc3=beamShearY.dc1;
             finalDc = Math.max(punchingV.dc1,dc2,dc3);
             console.log(`dc: ${punchingV.dc1}, ${dc2}, ${dc3}  `);
+            document.getElementById('result').appendChild(createParagraph(`\\( D_c = \\text {Greatest of} \\left\\{\\begin{array}{l} ${punchingV.dc1}mm \\, \\\\ ${dc2}mm \\, \\\\ ${dc3}mm \\, \\end{array}\\right. = ${finalDc}mm \\, \\)`));
             recheck += 1;
             calc = dimension(finalDc);
             rebarDesign("y");
