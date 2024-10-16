@@ -84,8 +84,6 @@ document.addEventListener("DOMContentLoaded", () => {
             let muy1;
             let muy2;
            
-            document.getElementById('result').appendChild(createHeader5(`Dimensions Calculation`));       
-            document.getElementById('result').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
                    
             if(recheck===0){
                 document.getElementById('result').appendChild(createHeader5(`Dimensions Calculation`));       
