@@ -698,14 +698,14 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             document.getElementById('result').appendChild(createHeader5(`Rebar Design Calculation Along Y-axis (Cut Across Y-axis)`));       
             
-            x1 = (cx/2)+depth;             console.log(`x1 = `,x1);
+            x1 = -(bx*1000/2);             console.log(`x1 = `,x1);
             x2 = ((bx*1000)/2);            console.log(`x2 = `,x2);
-            y1 = -((by*1000)/2);           console.log(`y1 = `,y1);
+            y1 = -((cy)/2);           console.log(`y1 = `,y1);
             y2 = (by*1000)/2;              console.log(`y2 = `,y2);
             
-            document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac {c_x}{2} + d = \\frac {${cx.toFixed(2)}mm}{2} + {${depth}mm} = ${x1.toFixed(2)}mm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac {-B_x}{2} = \\frac {${-bx*1000}mm}{2} = ${x1.toFixed(2)}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ x_2 = \\frac {B_x}{2} = \\frac {${bx*1000}mm}{2} = ${x2}mm \$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ y_1 = \\frac {-B_y}{2} = \\frac {${-by*1000}mm}{2} = ${y1}mm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ y_1 = \\frac {-c_y}{2} = \\frac {${-cy.toFixed(2)}mm}{2} = ${y1}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ y_2 = \\frac {B_y}{2} = \\frac {${by*1000}mm}{2} = ${y2}mm\$$`));
            
             
@@ -726,7 +726,27 @@ document.addEventListener("DOMContentLoaded", () => {
             console.log(`Muy(shortcut) = `,muyShortcut);
             document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy(shortcut)} = \\frac{(x_2-x_1) \\times (y_2-y_1)^2}{2 \\times A_f} \\times (P_u + \\frac{6 \\times (x_2 + x_1 ) \\times M_{uy}}{B_x^2} + \\frac{4 \\times (2 \\times y_2 + y_1) \\times M_{ux}}{B_y^2})  \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy(shortcut)} = \\frac{(${a/1000}m) \\times (${b/1000}m)^2}{2 \\times ${by}m\\times${bx}m} \\times (${pu}kN + \\frac{6 \\times (${c/1000}m ) \\times ${muy.toFixed(2)}kNm}{(${bx}m)^2} + \\frac{4 \\times (2 \\times ${y2/1000} + (${y1/1000})) \\times ${mux.toFixed(2)}kNm}{(${by}m)^2}) = ${muyShortcut.toFixed(2)}kNm  \$$`));
-
+            let rn = (muyShortcut*1000)/(0.9*bx*Math.pow(depth,2));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ R_{n} = \\frac{M_{uy}}{\\phi B_x d^2} = \\frac{${(muyShortcut*1000).toFixed(2)}Nm}{${0.9}\\times  ${bx}m \\times  (${depth}mm)^2}  = ${rn.toFixed(3)}\\frac{N}{mm^2} \$$`));
+            let rho = 0.85 * (fc/fy)*(1-Math.sqrt(1-(2*rn/(0.85*fc))));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ \\rho = 0.85 \\times (\\frac{f'c}{fy}) \\times (1- \\sqrt{1 - 2 \\times \\frac{R_n}{0.85 \\times f'c} }) = 0.85 \\times (\\frac{${fc}MPa}{${fy}MPa}) \\times (1- \\sqrt{1 - 2 \\times \\frac{${rn.toFixed(3)}MPa}{0.85 \\times ${fc}MPa} }) = ${rho.toFixed(6)} \$$`));
+            let rhomin1 = 1.4/fy;
+            let rhomin2 = Math.sqrt(fc)/(4*fy);
+            let rhomin = Math.max(rhomin1,rhomin2);
+            document.getElementById('result').appendChild(createParagraph(`\\( \\rho_{min} = \\text {Greatest of} \\left\\{\\begin{array}{l} \\frac{1.4}{fy} = \\frac{1.4}{${fy}MPa} = ${rhomin1.toFixed(6)}\\, \\\\ \\frac{f'c}{4 \\times fy} = \\frac{${fc}MPa}{4 \\times ${fy}MPa} = ${rhomin2.toFixed(6)} \\, \\end{array}\\right. = ${rhomin.toFixed(6)} \\, \\)`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ \\therefore \\rho = ${rho>rhomin ? rho.toFixed(6):rhomin.toFixed(6)} \$$`));
+            rho = Math.max(rho,rhomin);
+            let as = rho*bx*1000*depth;
+            let asmin = 0.002*dc*1000*bx;
+            document.getElementById('result').appendChild(createParagraph(`$$\\ A_s = \\rho \\times B_x \\times d = ${rho.toFixed(6)}\\times ${bx*1000}mm \\times ${depth.toFixed(2)}mm = ${as.toFixed(2)}mm^2 \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ A_{smin} = 0.002 \\times A_g = 0.002 \\times B_x \\times D_c =  0.002 \\times ${bx*1000}mm \\times ${dc}mm = ${asmin}mm^2  \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\  ${as>asmin ? "A_s > A_{smin}":"A_s < A_{smin}"} \$$`));
+            as = Math.max(as,asmin);
+            document.getElementById('result').appendChild(createParagraph(`$$\\ \\therefore A_s = ${as.toFixed(2)}mm^2 \$$`));
+            let ab = (Math.PI/4)*Math.pow(barDia,2);
+            let n = as/ab;
+            document.getElementById('result').appendChild(createParagraph(``));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ n = \\frac{A_s}{A_b} = \\frac{${as.toFixed(2)}mm}{\\frac{\\pi}{4} \\times (${barDia}mm)^2} = ${n.toFixed(2)} \\approx ${Math.ceil(n)}pcs \$$`));
 
         }
     }
