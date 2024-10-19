@@ -301,18 +301,20 @@ document.addEventListener("DOMContentLoaded", () => {
                         pu2 = 1.2*pdl +1.6*pll + 1.2*(ys*(ds/1000)+yc*(dc/1000)+q)*bx*by;
                         document.getElementById('result').appendChild(createParagraph(`$$\\ P_{u} = ${Math.max(pu1,pu2).toFixed(2)}kN\$$`));
                         pu = Math.max(pu1,pu2); 
+                        if (centricity === "eccentric"){
                         document.getElementById('result').appendChild(createParagraph(`$$\\ M_{ux} = ${mux.toFixed(2)}kNm \$$`));
                         document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy} = ${muy.toFixed(2)}kNm   \$$`));
-                    
+                        }
                     } else {
                         pu1 = 1.4*pdl;
                         pu2 = 1.2*pdl +1.6*pll;
                         
                         document.getElementById('result').appendChild(createParagraph(`$$\\ P_{u} = ${Math.max(pu1,pu2).toFixed(2)}kN\$$`));
                         pu = Math.max(pu1,pu2);
+                        if (centricity === "eccentric"){
                         document.getElementById('result').appendChild(createParagraph(`$$\\ M_{ux} = ${mux.toFixed(2)}kNm \$$`));
                         document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy} = ${muy.toFixed(2)}kNm   \$$`));
-                     
+                        }
                         }
 
                 }
@@ -372,6 +374,7 @@ document.addEventListener("DOMContentLoaded", () => {
             let print = "";
             let vn=0;
             let dc1=0;
+            let test;
             console.log(`Ao = `,Ao);
             console.log(`Punching Shear Vu = `,Vu);
             document.getElementById('result').appendChild(createHeader5(`Punching Shear Calculation`));       
@@ -379,8 +382,9 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById('result').appendChild(createParagraph(`$$\\ A_o = (d + c_x)\\times (d + c_y) = (${d}mm + ${cx.toFixed(2)}mm)\\times (${d}mm + ${cy.toFixed(2)}mm) = ${Ao.toFixed(2)}mm^2 \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ A_f = B_y \\times B_x = ${by*1000}mm \\times ${bx*1000}mm = ${Af.toFixed(2)}mm^2 \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = P_u - P_u \\times (\\frac{A_o}{A_f} ) = ${pu}kN - ${pu}kN \\times (\\frac{${Ao.toFixed(2)}mm^2}{${Af.toFixed(2)}mm^2} ) = ${Vu.toFixed(2)}kN \$$`));
-            vn = phiVn().vn;
-            dc1 = phiVn().dc;
+            test = phiVn();
+            vn =test.vn;
+            dc1 = test.dc;
             console.log(`V,..,.h dc = `,dc1);
             function phiVn(){
                
@@ -575,16 +579,16 @@ document.addEventListener("DOMContentLoaded", () => {
             let b = y2 - y1;            console.log(`b = `,b);    
             let c = x2 + x1;            console.log(`c = `,c);
             let d = y2 + y1;            console.log(`d = `,d);
-            let Vu = ((a*b)/(by*bx*1000*1000))*(pu+((6*c*muy)/Math.pow(bx*1000,2))+((6*d*mux)/Math.pow(by*1000,2)));
+            let Vu = ((a*b)/(by*bx*1000*1000))*(pu+((6*c*muy*1000)/Math.pow(bx*1000,2))+((6*d*mux*1000)/Math.pow(by*1000,2)));
             document.getElementById('result').appendChild(createParagraph(`$$\\ x_2 - x_1 = ${x2.toFixed(2)}mm - (${x1.toFixed(2)})mm = ${a.toFixed(2)}mm\$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ y_2 - y_1 = ${y2.toFixed(2)}mm - (${y1.toFixed(2)})mm = ${b.toFixed(2)}mm\$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ x_2 + x_1 = ${x2.toFixed(2)}mm + (${x1.toFixed(2)})mm = ${c.toFixed(2)}mm\$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ y_2 + y_1 = ${y2.toFixed(2)}mm + (${y1.toFixed(2)})mm = ${d.toFixed(2)}mm\$$`));
             if (method === 1){
                 if (axis === "x"){
-                vn = phiVn(bx*1000,"B_x");
+                vn = phiVn(by*1000,"B_y");
                 } else if (axis === "y"){
-                vn = phiVn(by*1000,"B_y"); 
+                vn = phiVn(bx*1000,"B_x"); 
                 }
             } 
             document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = \\frac{(x_2 - x_1)\\times(y_2 - y_1)}{B_y \\times B_x}\\times (P_u + \\frac{6 \\times (x_2 + x_1) \\times M_{uy}}{B_x^2} + \\frac{6 \\times (y_2 + y_1) \\times M_{ux}}{B_y^2} ) \$$`));
@@ -596,13 +600,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = ${Vu.toFixed(2)}kN\$$`));
 
                 if (axis === "x"){
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = \\phi \\times \\frac {1}{6} \\times \\lambda \\times \\sqrt{fc'} \\times B_y \\times d \$$`));
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ ${(Vu*1000).toFixed(2)}N = 0.75 \\times \\frac {1}{6} \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${by*1000}mm \\times d \$$`));
+                    d = newtonRaphson(100,by*1000);  
+                } else if (axis === "y"){
                     document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = \\phi \\times \\frac {1}{6} \\times \\lambda \\times \\sqrt{fc'} \\times B_x \\times d \$$`));
                     document.getElementById('result').appendChild(createParagraph(`$$\\ ${(Vu*1000).toFixed(2)}N = 0.75 \\times \\frac {1}{6} \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bx*1000}mm \\times d \$$`));
-                    d = newtonRaphson(100,bx*1000);  
-                } else if (axis === "y"){
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = \\phi \\times \\frac {1}{6} \\times \\lambda \\times \\sqrt{fc'} \\times B_y \\times d \$$`));
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ ${(Vu*1000).toFixed(2)}N = 0.75 \\times \\frac {1}{6} \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bx*1000}mm \\times d \$$`));
-                    d = newtonRaphson(100,by*1000);     
+                    d = newtonRaphson(100,bx*1000);     
                 }
                 document.getElementById('result').appendChild(createParagraph(`$$\\ d = ${d.toFixed(2)}mm\$$`));
                 dc1 = d + 75 + (r*barDia);
@@ -680,7 +684,7 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById('result').appendChild(createParagraph(`$$\\ \\beta_1 : 0.65 < [0.85 - (\\frac{0.05}{7})\\times (f'_c - 28)] \\le 0.85 \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ \\beta_1 = 0.85 - (\\frac{0.05}{7})\\times (${fc} - 28) = ${beta1.toFixed(3)} \$$`));
             
-
+            
             if(axis === "y"){
             //ACROSS X AXIS or ALONG Y AXIS
             if( longer === axis ){
@@ -700,12 +704,12 @@ document.addEventListener("DOMContentLoaded", () => {
             
             x1 = -(bx*1000/2);             console.log(`x1 = `,x1);
             x2 = ((bx*1000)/2);            console.log(`x2 = `,x2);
-            y1 = -((cy)/2);           console.log(`y1 = `,y1);
+            y1 = ((cy)/2);           console.log(`y1 = `,y1);
             y2 = (by*1000)/2;              console.log(`y2 = `,y2);
             
-            document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac {-B_x}{2} = \\frac {${-bx*1000}mm}{2} = ${x1.toFixed(2)}mm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac {-B_x}{2} = \\frac {${-bx*1000}mm}{2} = ${x1}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ x_2 = \\frac {B_x}{2} = \\frac {${bx*1000}mm}{2} = ${x2}mm \$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ y_1 = \\frac {-c_y}{2} = \\frac {${-cy.toFixed(2)}mm}{2} = ${y1}mm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ y_1 = \\frac {c_y}{2} = \\frac {${cy.toFixed(2)}mm}{2} = ${y1.toFixed(2)}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ y_2 = \\frac {B_y}{2} = \\frac {${by*1000}mm}{2} = ${y2}mm\$$`));
            
             
@@ -722,12 +726,90 @@ document.addEventListener("DOMContentLoaded", () => {
             console.log(`pu = `,pu);
             console.log(`muy = `,muy);
             console.log(`mux = `,mux);
-            let muyShortcut = (((x2/1000)-(x1/1000))*Math.pow(((y2/1000)-(y1/1000)),2)/(2*by*bx))*(pu+(6*((x2/1000)+(x1/1000))*muy/Math.pow(bx,2))+(4*((2*y2/1000)+(y1/1000))*mux/Math.pow(by,2)));
-            console.log(`Muy(shortcut) = `,muyShortcut);
-            document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy(shortcut)} = \\frac{(x_2-x_1) \\times (y_2-y_1)^2}{2 \\times A_f} \\times (P_u + \\frac{6 \\times (x_2 + x_1 ) \\times M_{uy}}{B_x^2} + \\frac{4 \\times (2 \\times y_2 + y_1) \\times M_{ux}}{B_y^2})  \$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy(shortcut)} = \\frac{(${a/1000}m) \\times (${b/1000}m)^2}{2 \\times ${by}m\\times${bx}m} \\times (${pu}kN + \\frac{6 \\times (${c/1000}m ) \\times ${muy.toFixed(2)}kNm}{(${bx}m)^2} + \\frac{4 \\times (2 \\times ${y2/1000} + (${y1/1000})) \\times ${mux.toFixed(2)}kNm}{(${by}m)^2}) = ${muyShortcut.toFixed(2)}kNm  \$$`));
-            let rn = (muyShortcut*1000)/(0.9*bx*Math.pow(depth,2));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ R_{n} = \\frac{M_{uy}}{\\phi B_x d^2} = \\frac{${(muyShortcut*1000).toFixed(2)}Nm}{${0.9}\\times  ${bx}m \\times  (${depth}mm)^2}  = ${rn.toFixed(3)}\\frac{N}{mm^2} \$$`));
+            let muyShortcut;
+            if (centricity === "eccentric"){
+                muyShortcut = (((x2/1000)-(x1/1000))*Math.pow(((y2/1000)-(y1/1000)),2)/(2*by*bx))*(pu+(6*((x2/1000)+(x1/1000))*muy/Math.pow(bx,2))+(4*((2*y2/1000)+(y1/1000))*mux/Math.pow(by,2)));
+                console.log(`Muy(shortcut) = `,muyShortcut);
+                document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy(shortcut)} = \\frac{(x_2-x_1) \\times (y_2-y_1)^2}{2 \\times A_f} \\times (P_u + \\frac{6 \\times (x_2 + x_1 ) \\times M_{uy}}{B_x^2} + \\frac{4 \\times (2 \\times y_2 + y_1) \\times M_{ux}}{B_y^2})  \$$`));
+                document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy(shortcut)} = \\frac{(${a/1000}m) \\times (${b.toFixed(2)/1000}m)^2}{2 \\times ${by}m\\times${bx}m} \\times (${pu}kN + \\frac{6 \\times (${c/1000}m ) \\times ${muy.toFixed(2)}kNm}{(${bx}m)^2} + \\frac{4 \\times (2 \\times ${y2/1000}m + (${(y1/1000).toFixed(2)}m)) \\times ${mux.toFixed(2)}kNm}{(${by}m)^2}) = ${muyShortcut.toFixed(2)}kNm  \$$`));
+            } else {
+                muyShortcut = (((x2/1000)-(x1/1000))*Math.pow(((y2/1000)-(y1/1000)),2)/(2*by*bx))*(pu);
+                console.log(`Muy(shortcut) = `,muyShortcut);
+                document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy(shortcut)} = \\frac{(x_2-x_1) \\times (y_2-y_1)^2}{2 \\times A_f} \\times (P_u)\$$`));
+                document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy(shortcut)} = \\frac{(${a/1000}m) \\times (${b.toFixed(2)/1000}m)^2}{2 \\times ${by}m\\times${bx}m} \\times (${pu}kN) = ${muyShortcut.toFixed(2)}kNm  \$$`));           
+            }
+            checkSRRB(bx*1000,muyShortcut,"x");
+
+            
+        } else if(axis === "x"){
+            //ACROSS Y AXIS or ALONG X AXIS
+            if( longer === axis ){
+                console.log(`x is longer`);
+                r = 0.5;
+                depth = dc - cc - (0.5*barDia);
+            } else if ( shorter === axis ){
+                console.log(`x is shorter`);
+                depth = dc - cc - (1.5*barDia);
+                r = 1.5;
+            } else if ( bx === by){
+                console.log(`x is equal to y`);
+                depth = dc - cc - (0.5*barDia);
+                r = 0.5;
+            }
+            document.getElementById('result').appendChild(createHeader5(`Rebar Design Calculation Along X-axis (Cut Across X-axis)`));       
+            
+            x1 = cx/2;             console.log(`x1 = `,x1);
+            x2 = ((bx*1000)/2);            console.log(`x2 = `,x2);
+            y1 = -(by*1000/2);           console.log(`y1 = `,y1);
+            y2 = (by*1000)/2;              console.log(`y2 = `,y2);
+            
+            document.getElementById('result').appendChild(createParagraph(`$$\\ x_1 = \\frac {c_x}{2} = \\frac {${cx.toFixed(2)}mm}{2} = ${x1.toFixed(2)}mm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ x_2 = \\frac {B_x}{2} = \\frac {${bx*1000}mm}{2} = ${x2}mm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ y_1 = \\frac {-B_y}{2} = \\frac {${(-by*1000)}mm}{2} = ${y1}mm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ y_2 = \\frac {B_y}{2} = \\frac {${by*1000}mm}{2} = ${y2}mm\$$`));
+           
+            
+            document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - ${r}d_b = ${dc}mm - ${cc}mm - ${r}(${barDia}mm) = ${depth}mm \$$`));
+            
+
+            let a = x2 - x1;            console.log(`a = `,a);
+            let b = y2 - y1;            console.log(`b = `,b);    
+            let c = x2 + x1;            console.log(`c = `,c);
+            let d = y2 + y1;            console.log(`d = `,d);
+            
+            console.log(`by = `,by);
+            console.log(`bx = `,bx);
+            console.log(`pu = `,pu);
+            console.log(`muy = `,muy);
+            console.log(`mux = `,mux);
+            let muxShortcut;
+            if (centricity === "eccentric"){
+            muxShortcut = (Math.pow(((x2/1000)-(x1/1000)),2)*((y2/1000)-(y1/1000))/(2*by*bx))*(pu+(4*((2*x2/1000)+(x1/1000))*muy/Math.pow(bx,2))+(6*((y2/1000)+(y1/1000))*mux/Math.pow(by,2)));
+            console.log(`Mux(shortcut) = `,muxShortcut);
+            document.getElementById('result').appendChild(createParagraph(`$$\\ M_{ux(shortcut)} = \\frac{(x_2-x_1)^2 \\times (y_2-y_1)}{2 \\times A_f} \\times (P_u + \\frac{4 \\times (2 \\times x_2 + x_1 ) \\times M_{uy}}{B_x^2} + \\frac{6 \\times (y_2 + y_1) \\times M_{ux}}{B_y^2})  \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ M_{ux(shortcut)} = \\frac{(${a.toFixed(2)/1000}m)^2 \\times (${b/1000}m)}{2 \\times ${by}m\\times${bx}m} \\times (${pu}kN + \\frac{4 \\times (2 \\times ${(x2/1000).toFixed(2)}m +${(x1/1000).toFixed(2)}m) \\times ${muy.toFixed(2)}kNm}{(${bx}m)^2} + \\frac{6 \\times (${y2/1000}m + (${y1/1000}m)) \\times ${mux.toFixed(2)}kNm}{(${by}m)^2}) = ${muxShortcut.toFixed(2)}kNm  \$$`));
+            } else {
+                muxShortcut = (Math.pow(((x2/1000)-(x1/1000)),2)*((y2/1000)-(y1/1000))/(2*by*bx))*(pu) ;
+                console.log(`Mux(shortcut) = `,muxShortcut);
+                document.getElementById('result').appendChild(createParagraph(`$$\\ M_{ux(shortcut)} = \\frac{(x_2-x_1)^2 \\times (y_2-y_1)}{2 \\times A_f} \\times (P_u) \$$`));
+                document.getElementById('result').appendChild(createParagraph(`$$\\ M_{ux(shortcut)} = \\frac{(${a.toFixed(2)/1000}m)^2 \\times (${b/1000}m)}{2 \\times ${by}m\\times${bx}m} \\times (${pu}kN) = ${muxShortcut.toFixed(2)}kNm  \$$`));
+            
+            }
+            checkSRRB(by*1000,muxShortcut,"y");
+
+            
+        }
+        function checkSRRB (b,mu,text){
+            let ct = 3*depth/8;
+            let at = ct*beta1;
+            let muMax = 0.9 * 0.85 * fc * at * b *(depth-(at/2))/1000000;
+            document.getElementById('result').appendChild(createHeader7(`Check if SRRB`));       
+            document.getElementById('result').appendChild(createParagraph(`$$\\ c_t = 3 \\times \\frac{d}{8} = 3 \\times \\frac{${depth}}{8} = ${ct.toFixed(2)}mm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ a_t = \\beta_1 \\times  c_t   = ${beta1} \\times ${ct.toFixed(2)}mm = ${at.toFixed(2)}mm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ M_{u(max)} = \\phi \\times 0.85 \\times f'c \\times a_t \\times b \\times (d - \\frac{a_t}{2}) = 0.9 \\times 0.85 \\times ${fc}MPa \\times ${at.toFixed(2)}mm \\times ${b}mm \\times (${depth}mm - \\frac{${at.toFixed(2)}mm}{2}) = ${muMax.toFixed(2)}kNm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ M_u ${mu < muMax ? "< M_{u(max)} \\therefore \\text{ SRRB}":"> M_{u(max)} \\therefore  \\text{ DRRB}"} \$$`));
+            let rn = (mu*1000000)/(0.9*b*Math.pow(depth,2));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ R_{n} = \\frac{M_{uy}}{\\phi B_${text} d^2} = \\frac{${(mu*1000).toFixed(2)}Nm}{${0.9}\\times  ${b}m \\times  (${depth}mm)^2}  = ${rn.toFixed(3)}\\frac{N}{mm^2} \$$`));
             let rho = 0.85 * (fc/fy)*(1-Math.sqrt(1-(2*rn/(0.85*fc))));
             document.getElementById('result').appendChild(createParagraph(`$$\\ \\rho = 0.85 \\times (\\frac{f'c}{fy}) \\times (1- \\sqrt{1 - 2 \\times \\frac{R_n}{0.85 \\times f'c} }) = 0.85 \\times (\\frac{${fc}MPa}{${fy}MPa}) \\times (1- \\sqrt{1 - 2 \\times \\frac{${rn.toFixed(3)}MPa}{0.85 \\times ${fc}MPa} }) = ${rho.toFixed(6)} \$$`));
             let rhomin1 = 1.4/fy;
@@ -736,10 +818,10 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById('result').appendChild(createParagraph(`\\( \\rho_{min} = \\text {Greatest of} \\left\\{\\begin{array}{l} \\frac{1.4}{fy} = \\frac{1.4}{${fy}MPa} = ${rhomin1.toFixed(6)}\\, \\\\ \\frac{f'c}{4 \\times fy} = \\frac{${fc}MPa}{4 \\times ${fy}MPa} = ${rhomin2.toFixed(6)} \\, \\end{array}\\right. = ${rhomin.toFixed(6)} \\, \\)`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ \\therefore \\rho = ${rho>rhomin ? rho.toFixed(6):rhomin.toFixed(6)} \$$`));
             rho = Math.max(rho,rhomin);
-            let as = rho*bx*1000*depth;
-            let asmin = 0.002*dc*1000*bx;
-            document.getElementById('result').appendChild(createParagraph(`$$\\ A_s = \\rho \\times B_x \\times d = ${rho.toFixed(6)}\\times ${bx*1000}mm \\times ${depth.toFixed(2)}mm = ${as.toFixed(2)}mm^2 \$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ A_{smin} = 0.002 \\times A_g = 0.002 \\times B_x \\times D_c =  0.002 \\times ${bx*1000}mm \\times ${dc}mm = ${asmin}mm^2  \$$`));
+            let as = rho*b*depth;
+            let asmin = 0.002*dc*b;
+            document.getElementById('result').appendChild(createParagraph(`$$\\ A_s = \\rho \\times B_${text} \\times d = ${rho.toFixed(6)}\\times ${b*1000}mm \\times ${depth.toFixed(2)}mm = ${as.toFixed(2)}mm^2 \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ A_{smin} = 0.002 \\times A_g = 0.002 \\times B_${text} \\times D_c =  0.002 \\times ${b}mm \\times ${dc}mm = ${asmin}mm^2  \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\  ${as>asmin ? "A_s > A_{smin}":"A_s < A_{smin}"} \$$`));
             as = Math.max(as,asmin);
             document.getElementById('result').appendChild(createParagraph(`$$\\ \\therefore A_s = ${as.toFixed(2)}mm^2 \$$`));
@@ -747,7 +829,25 @@ document.addEventListener("DOMContentLoaded", () => {
             let n = as/ab;
             document.getElementById('result').appendChild(createParagraph(``));
             document.getElementById('result').appendChild(createParagraph(`$$\\ n = \\frac{A_s}{A_b} = \\frac{${as.toFixed(2)}mm}{\\frac{\\pi}{4} \\times (${barDia}mm)^2} = ${n.toFixed(2)} \\approx ${Math.ceil(n)}pcs \$$`));
-
+            n = Math.ceil(n);
+            let sc = (b-150-(n*barDia))/(n-1);
+            let scmin = Math.max(50,barDia,(4/3)*dAgg);
+            document.getElementById('result').appendChild(createParagraph(`$$\\ S_c = \\frac{B_${text} - (2 \\times C_c) - (n \\times d_b)}{n - 1} = \\frac{${b}mm - (2 \\times 75mm) - (${n} \\times ${barDia}mm)}{${n} - 1} = ${sc.toFixed(2)}mm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`\\( S_{c(min)} = \\text {Greatest of} \\left\\{\\begin{array}{l} 50mm\\, \\\\  d_b = ${barDia}mm \\, \\\\  d_{agg} = ${dAgg}mm \\,\\end{array}\\right. = ${scmin}mm \\, \\)`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\  ${sc>scmin ? "S_c > S_{c(min)} \\therefore \\text{Okay}":"S_c < S_{c(min)} \\therefore \\text{Insufficient Spacing, add layer}"} \$$`));
+            let centerbandRatio;
+            let beta;
+            if (by>bx){
+                beta = by/bx;
+            } else if (bx>by){
+                beta = bx/by;
+            } else {
+                beta = 1;
+            }
+            centerbandRatio = 2 / (beta+1);
+            document.getElementById('result').appendChild(createParagraph(`$$\\ \\Upsilon_s = \\frac{2}{\\beta + 1} = \\frac{2}{${beta.toFixed(2)} + 1} = ${centerbandRatio.toFixed(2)}\$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ n_{centerband} = n \\times \\Upsilon_s = ${n} \\times ${centerbandRatio.toFixed(2)} = ${(n*centerbandRatio).toFixed(2)}pcs \\approx ${Math.ceil(n*centerbandRatio)}pcs \$$`));
+            return {sc,n}
         }
     }
         function delay(ms) {
@@ -824,6 +924,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const ys = parseFloat(document.getElementById('UnitWeightSoil').value);
         const yc = parseFloat(document.getElementById('UnitWeightConcrete').value);
         const considerSoil = document.getElementById('considerSoil').value;
+        const dAgg = parseInt(document.getElementById('aggDiameter').value);
         let dc= 250;
         let dc1=0;
         let dc2=0;
@@ -869,12 +970,16 @@ document.addEventListener("DOMContentLoaded", () => {
             dc3=beamShearY.dc1;
             finalDc = Math.max(punchingV.dc1,dc2,dc3);
             console.log(`dc: ${punchingV.dc1}, ${dc2}, ${dc3}  `);
+            console.log(`final dc: ${finalDc}mm  `);
             document.getElementById('result').appendChild(createParagraph(`\\( D_c = \\text {Greatest of} \\left\\{\\begin{array}{l} ${punchingV.dc1}mm \\, \\\\ ${dc2}mm \\, \\\\ ${dc3}mm \\, \\end{array}\\right. = ${finalDc}mm \\, \\)`));
             recheck += 1;
             calc = dimension(finalDc);
+            dc = finalDc;
+            rebarDesign("x");
             rebarDesign("y");
             
-        }/*
+        }
+/*
         if (logic === "IS-UL-SQ-CC-1") {
             // your code here
 
