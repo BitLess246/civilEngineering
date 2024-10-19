@@ -39,6 +39,10 @@ body {
     line-height:inherit;
 
 }
+.draw{
+    width:min-content;
+    height: min-content;
+}
 
 
 .latex-container .stacked { /* This targets stacked elements (like superscripts or subscripts) */
