@@ -16,6 +16,8 @@
     <script type="text/javascript" async
         src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
 <script type="module" src="/scriptFoundationDesign6.js" defer></script>
     
 <style>
@@ -184,30 +186,43 @@
         </div>
     </div>
   
-    <div id="Solution" class="tab-content">
-        <div id="result" class="latex-container">
-        
-        </div>
-        <div id="Summary1" class="latex-container">
-
-</div>
-        
+    <div id="Solution" class="tab-content avoid-page-break-if-space">
+        <div id="GivenParameters1" class="container2 avoid-page-break-if-space"></div>
+        <div id="result" class="latex-container avoid-page-break-if-space"></div>
+        <div id="Summary1" class="latex-container avoid-page-break-if-space"></div>
     </div>
+    
 </div>     
             <button id="saveButton" style="display: none;">Save</button>
         </div>
-   
+        <iframe id="print-frame" style="display: none;"></iframe>
 
     <script>
         // Get the buttons
         const calculateButton = document.getElementById('calculate');
         const solutionsButton = document.getElementById('Solutionbutton');
+        const saveButton = document.getElementById('saveButton');
 
         // Add an event listener to the "Calculate" button
         calculateButton.addEventListener('click', function() {
             // Add the "active" class to the "Solutions" button
             solutionsButton.classList.add('active');
         });
+
+        saveButton.addEventListener('click', function() {
+            printLaTeXContent;
+  function printLaTeXContent() {
+    const iframe = document.getElementById('print-frame').contentWindow;
+    const content = document.querySelector('.latex-container').innerHTML;
+
+    iframe.document.open();
+    iframe.document.write('<html><body>' + content + '</body></html>');
+    iframe.document.close();
+
+    iframe.focus();
+    iframe.print();  // This will trigger printing the iframe content
+  }
+});
     </script>
     <script>
         // Function to save input and select values to localStorage

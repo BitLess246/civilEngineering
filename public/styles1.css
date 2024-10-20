@@ -22,6 +22,8 @@ body {
     display: inline-block;
     text-align: left;
     width:min-content ;
+    page-break-inside: avoid; /* Avoid breaking inside LaTeX content */
+    break-inside: avoid;
 }
 
 .latex-container p {
@@ -30,13 +32,57 @@ body {
     font-size: inherit;
     display: inline-block;
     text-align: left;
+    page-break-inside: avoid;
 }
+
+.container2 h8 {
+    margin: -0.3em;  /* Adds spacing between paragraphs within the container */
+    margin-right: 100%;
+    font-size: inherit ;
+    display: inline-block;
+    text-align: left;
+    page-break-inside: avoid;
+    
+}@media print {
+    .avoid-page-break-if-space {
+        page-break-inside: avoid; /* Avoid breaking the content inside */
+        break-inside: avoid;      /* Compatibility for other browsers */
+        page-break-before: auto;  /* Allow natural flow */
+        break-before: auto;
+        page-break-after: auto;   /* Allow breaks after if needed */
+        break-after: auto;
+    }
+    .container2, .latex-container {
+        
+        max-height: 100vh; /* Avoid overflowing beyond the page */
+        overflow: visible; /* Allow content to break naturally */
+        page-break-inside: avoid; /* Prevent breaks inside latex block */
+        break-inside: avoid;
+    }
+
+    .result-content {
+        page-break-inside: avoid;
+        break-inside: avoid;
+        margin-bottom: 20px;
+    }
+    .latex-container p {
+        orphans: 3; /* Minimum lines at the top of the page */
+        widows: -2;  /* Minimum lines at the bottom of the page */
+        page-break-inside: avoid;
+        break-inside: avoid;
+        
+    }
+        
+}
+
 
 .latex-container .mjx-mfrac { /* This targets fractions in MathJax */
     display: inline-block;
     font-size: 12px; /* Inherit font size from parent */
     vertical-align: middle; /* Align fractions properly */
     line-height:inherit;
+    page-break-inside: avoid;
+    break-inside: avoid;
 
 }
 .draw{
@@ -48,6 +94,8 @@ body {
 .latex-container .stacked { /* This targets stacked elements (like superscripts or subscripts) */
     font-size: inherit; /* Inherit font size to keep consistency */
     line-height: normal; /* Reset line-height for stacked elements */
+    page-break-inside: avoid;
+        break-inside: avoid;
 }
 
 @media (max-width: 768px) {
@@ -109,6 +157,22 @@ nav ul li a:focus{
     grid-template-columns: 200px 200px 200px 200px;
     justify-content: space-around;
     
+}
+
+.container2 {
+    width: 100%;
+    min-width: fit-content;
+    
+    margin-top: 1em;
+    background: #fff;
+    padding: 8px;
+    
+    align-items: left;
+    display: grid;
+    grid-template-columns: 50% 50%;
+    justify-content:left;
+    page-break-inside: avoid;
+        break-inside: avoid;
 }
 .title1{
     grid-row-start: 1;
