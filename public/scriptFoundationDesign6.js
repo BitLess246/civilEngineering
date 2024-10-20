@@ -8,6 +8,8 @@ document.addEventListener("DOMContentLoaded", () => {
             resultDiv.innerHTML = ''; // Clear previous results
             const summaryDiv = document.getElementById("Summary");
             summaryDiv.innerHTML = ''; // Clear previous results
+            const summary1Div = document.getElementById("Summary1");
+            summary1Div.innerHTML = ''; // Clear previous results
 
         
 
