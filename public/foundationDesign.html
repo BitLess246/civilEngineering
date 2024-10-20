@@ -174,18 +174,24 @@
             </form>
         
     <div class="tab" id="tab" style="display: none;">
-        <button class="tab-button" id="Summarybutton" onclick="openTab(event, 'Summary')">Summary</button>
+        <button class="tab-button" id="Summarybutton" onclick="openTab(event, 'summary')">Summary</button>
         <button class="tab-button" id="Solutionbutton" onclick="openTab(event, 'Solution')">Solution</button>
     </div>
   <div id="print">
-    <div id="Summary" class="tab-content">
-       
+    <div id="summary" class="tab-content">
+        <div id="Summary" class="latex-container">
+
+        </div>
     </div>
   
     <div id="Solution" class="tab-content">
         <div id="result" class="latex-container">
         
         </div>
+        <div id="Summary1" class="latex-container">
+
+</div>
+        
     </div>
 </div>     
             <button id="saveButton" style="display: none;">Save</button>
