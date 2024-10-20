@@ -159,10 +159,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
                 document.getElementById('result').appendChild(createHeader7(`Solve for Ultimate Loads`));
                 if(loadType==="ultimate"){
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ Pu = ${pu}kN \$$`));
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ Pu = ${pu.toFixed(2)}kN \$$`));
                     if  (centricity === "eccentric"){
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_{ux} = ${mux}kNm \$$`));
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy} = ${muy}kNm   \$$`));
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_{ux} = ${mux.toFixed(2)}kNm \$$`));
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy} = ${muy.toFixed(2)}kNm   \$$`));
                     }
                 } else if (loadType==="individual"){
                     if (considerSoil==="yes"){
@@ -381,7 +381,7 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - d_b = ${dc}mm - ${cc}mm - ${barDia}mm = ${d}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ A_o = (d + c_x)\\times (d + c_y) = (${d}mm + ${cx.toFixed(2)}mm)\\times (${d}mm + ${cy.toFixed(2)}mm) = ${Ao.toFixed(2)}mm^2 \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ A_f = B_y \\times B_x = ${by*1000}mm \\times ${bx*1000}mm = ${Af.toFixed(2)}mm^2 \$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = P_u - P_u \\times (\\frac{A_o}{A_f} ) = ${pu}kN - ${pu}kN \\times (\\frac{${Ao.toFixed(2)}mm^2}{${Af.toFixed(2)}mm^2} ) = ${Vu.toFixed(2)}kN \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = P_u - P_u \\times (\\frac{A_o}{A_f} ) = ${pu.toFixed(2)}kN - ${pu.toFixed(2)}kN \\times (\\frac{${Ao.toFixed(2)}mm^2}{${Af.toFixed(2)}mm^2} ) = ${Vu.toFixed(2)}kN \$$`));
             test = phiVn();
             vn =test.vn;
             dc1 = test.dc;
@@ -441,10 +441,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     document.getElementById('result').appendChild(createParagraph(`\\(\\phi V_n = \\left\\{\\begin{array}{l}0.75 \\times \\frac {1}{3} \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo}mm \\times ${d}mm = ${(vn1*1000).toFixed(2)}N \\approx ${(vn1).toFixed(2)}kN \\, \\\\0.75 \\times \\frac {1}{6} \\times (1+ \\frac{2}{${beta}}) \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo}mm \\times ${d}mm = ${(vn2*1000).toFixed(2)}N \\approx ${(vn2).toFixed(2)}kN \\, \\\\ 0.75 \\times \\frac {1}{12} \\times (1+ \\frac{${as} \\times ${d}}{${bo}}) \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo}mm \\times ${d}mm = ${(vn3*1000).toFixed(2)}N \\approx ${(vn3).toFixed(2)}kN \\, \\end{array}\\right. = ${vn.toFixed(2)}kN \\, \\)`));
                     document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = ${Vu.toFixed(2)}kN ${Vu<vn ? "< \\phi V_n    \\therefore \\text{SAFE}":"> \\phi V_{n}\\therefore \\text{FAIL}"}\$$`));
                     
-                    /* document.getElementById('result').appendChild(createParagraph(`$$\\phi V_{n1} = \\phi \\times \\frac {1}{3} \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d = 0.75 \\times \\frac {1}{3} \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo}mm \\times ${d}mm = ${(vn1*1000).toFixed(2)}N \\approx ${(vn1).toFixed(2)}kN\$$`));
-                    document.getElementById('result').appendChild(createParagraph(`$$\\phi V_{n2} = \\phi \\times \\frac {1}{6} \\times ( 1 + \\frac{2}{\\beta}) \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d = 0.75 \\times \\frac {1}{6} \\times (1+ \\frac{2}{${beta}}) \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo}mm \\times ${d}mm = ${(vn2*1000).toFixed(2)}N \\approx ${(vn2).toFixed(2)}kN\$$`));
-                    document.getElementById('result').appendChild(createParagraph(`$$\\phi V_{n3} = \\phi \\times \\frac {1}{12} \\times ( 1 + \\frac{a_s \\times d}{B_o}) \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d = 0.75 \\times \\frac {1}{12} \\times (1+ \\frac{${as} \\times ${d}}{${bo}}) \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo}mm \\times ${d}mm = ${(vn3*1000).toFixed(2)}N \\approx ${(vn3).toFixed(2)}kN\$$`));
-                   */ 
                 } else {
                     console.log("phivn Method 2")
                     document.getElementById('result').appendChild(createParagraph(`$$\\ V_{u} = \\phi \\times \\frac {1}{3} \\times \\lambda \\times \\sqrt{fc'} \\times (2 \\times (d + c_x) + 2 \\times (d + c_y) \\times d  \$$`));
@@ -663,6 +659,8 @@ document.addEventListener("DOMContentLoaded", () => {
             let longer;
             let shorter;
             let depth;
+            
+
             if(bx<by){
                 longer ="y";
                 shorter ="x";
@@ -691,14 +689,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 console.log(`y is longer`);
                 r = 0.5;
                 depth = dc - cc - (0.5*barDia);
+                level = "lower";
             } else if ( shorter === axis ){
                 console.log(`y is shorter`);
                 depth = dc - cc - (1.5*barDia);
                 r = 1.5;
+                level = "upper";
             } else if ( bx === by){
                 console.log(`y is equal to x`);
                 depth = dc - cc - (1.5*barDia);
                 r = 1.5;
+                level = "upper";
             }
             document.getElementById('result').appendChild(createHeader5(`Rebar Design Calculation Along Y-axis (Cut Across Y-axis)`));       
             
@@ -731,7 +732,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 muyShortcut = (((x2/1000)-(x1/1000))*Math.pow(((y2/1000)-(y1/1000)),2)/(2*by*bx))*(pu+(6*((x2/1000)+(x1/1000))*muy/Math.pow(bx,2))+(4*((2*y2/1000)+(y1/1000))*mux/Math.pow(by,2)));
                 console.log(`Muy(shortcut) = `,muyShortcut);
                 document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy(shortcut)} = \\frac{(x_2-x_1) \\times (y_2-y_1)^2}{2 \\times A_f} \\times (P_u + \\frac{6 \\times (x_2 + x_1 ) \\times M_{uy}}{B_x^2} + \\frac{4 \\times (2 \\times y_2 + y_1) \\times M_{ux}}{B_y^2})  \$$`));
-                document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy(shortcut)} = \\frac{(${a/1000}m) \\times (${b.toFixed(2)/1000}m)^2}{2 \\times ${by}m\\times${bx}m} \\times (${pu}kN + \\frac{6 \\times (${c/1000}m ) \\times ${muy.toFixed(2)}kNm}{(${bx}m)^2} + \\frac{4 \\times (2 \\times ${y2/1000}m + (${(y1/1000).toFixed(2)}m)) \\times ${mux.toFixed(2)}kNm}{(${by}m)^2}) = ${muyShortcut.toFixed(2)}kNm  \$$`));
+                document.getElementById('result').appendChild(createParagraph(`$$\\ M_{uy(shortcut)} = \\frac{(${a/1000}m) \\times (${b.toFixed(2)/1000}m)^2}{2 \\times ${by}m\\times${bx}m} \\times (${pu}kN +  \\frac{4 \\times (2 \\times ${y2/1000}m + (${(y1/1000).toFixed(2)}m)) \\times ${mux.toFixed(2)}kNm}{(${by}m)^2}) = ${muyShortcut.toFixed(2)}kNm  \$$`));
             } else {
                 muyShortcut = (((x2/1000)-(x1/1000))*Math.pow(((y2/1000)-(y1/1000)),2)/(2*by*bx))*(pu);
                 console.log(`Muy(shortcut) = `,muyShortcut);
@@ -747,14 +748,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 console.log(`x is longer`);
                 r = 0.5;
                 depth = dc - cc - (0.5*barDia);
+                level = "lower";
             } else if ( shorter === axis ){
                 console.log(`x is shorter`);
                 depth = dc - cc - (1.5*barDia);
                 r = 1.5;
+                level = "upper";
             } else if ( bx === by){
                 console.log(`x is equal to y`);
                 depth = dc - cc - (0.5*barDia);
                 r = 0.5;
+                level = "lower";
             }
             document.getElementById('result').appendChild(createHeader5(`Rebar Design Calculation Along X-axis (Cut Across X-axis)`));       
             
@@ -787,7 +791,7 @@ document.addEventListener("DOMContentLoaded", () => {
             muxShortcut = (Math.pow(((x2/1000)-(x1/1000)),2)*((y2/1000)-(y1/1000))/(2*by*bx))*(pu+(4*((2*x2/1000)+(x1/1000))*muy/Math.pow(bx,2))+(6*((y2/1000)+(y1/1000))*mux/Math.pow(by,2)));
             console.log(`Mux(shortcut) = `,muxShortcut);
             document.getElementById('result').appendChild(createParagraph(`$$\\ M_{ux(shortcut)} = \\frac{(x_2-x_1)^2 \\times (y_2-y_1)}{2 \\times A_f} \\times (P_u + \\frac{4 \\times (2 \\times x_2 + x_1 ) \\times M_{uy}}{B_x^2} + \\frac{6 \\times (y_2 + y_1) \\times M_{ux}}{B_y^2})  \$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ M_{ux(shortcut)} = \\frac{(${a.toFixed(2)/1000}m)^2 \\times (${b/1000}m)}{2 \\times ${by}m\\times${bx}m} \\times (${pu}kN + \\frac{4 \\times (2 \\times ${(x2/1000).toFixed(2)}m +${(x1/1000).toFixed(2)}m) \\times ${muy.toFixed(2)}kNm}{(${bx}m)^2} + \\frac{6 \\times (${y2/1000}m + (${y1/1000}m)) \\times ${mux.toFixed(2)}kNm}{(${by}m)^2}) = ${muxShortcut.toFixed(2)}kNm  \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ M_{ux(shortcut)} = \\frac{(${a.toFixed(2)/1000}m)^2 \\times (${b/1000}m)}{2 \\times ${by}m\\times${bx}m} \\times (${pu}kN + \\frac{4 \\times (2 \\times ${(x2/1000).toFixed(2)}m +${(x1/1000).toFixed(2)}m) \\times ${muy.toFixed(2)}kNm}{(${bx}m)^2}) = ${muxShortcut.toFixed(2)}kNm  \$$`));
             } else {
                 muxShortcut = (Math.pow(((x2/1000)-(x1/1000)),2)*((y2/1000)-(y1/1000))/(2*by*bx))*(pu) ;
                 console.log(`Mux(shortcut) = `,muxShortcut);
@@ -806,7 +810,9 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById('result').appendChild(createHeader7(`Check if SRRB`));       
             document.getElementById('result').appendChild(createParagraph(`$$\\ c_t = 3 \\times \\frac{d}{8} = 3 \\times \\frac{${depth}}{8} = ${ct.toFixed(2)}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ a_t = \\beta_1 \\times  c_t   = ${beta1} \\times ${ct.toFixed(2)}mm = ${at.toFixed(2)}mm \$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ M_{u(max)} = \\phi \\times 0.85 \\times f'c \\times a_t \\times b \\times (d - \\frac{a_t}{2}) = 0.9 \\times 0.85 \\times ${fc}MPa \\times ${at.toFixed(2)}mm \\times ${b}mm \\times (${depth}mm - \\frac{${at.toFixed(2)}mm}{2}) = ${muMax.toFixed(2)}kNm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ M_{u(max)} = \\phi \\times 0.85 \\times f'c \\times a_t \\times b \\times (d - \\frac{a_t}{2}) \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ M_{u(max)} = 0.9 \\times 0.85 \\times ${fc}MPa \\times ${at.toFixed(2)}mm \\times ${b}mm \\times (${depth}mm - \\frac{${at.toFixed(2)}mm}{2}) = ${muMax.toFixed(2)}kNm \$$`));
+            
             document.getElementById('result').appendChild(createParagraph(`$$\\ M_u ${mu < muMax ? "< M_{u(max)} \\therefore \\text{ SRRB}":"> M_{u(max)} \\therefore  \\text{ DRRB}"} \$$`));
             let rn = (mu*1000000)/(0.9*b*Math.pow(depth,2));
             document.getElementById('result').appendChild(createParagraph(`$$\\ R_{n} = \\frac{M_{uy}}{\\phi B_${text} d^2} = \\frac{${(mu*1000).toFixed(2)}Nm}{${0.9}\\times  ${b}m \\times  (${depth}mm)^2}  = ${rn.toFixed(3)}\\frac{N}{mm^2} \$$`));
@@ -821,16 +827,16 @@ document.addEventListener("DOMContentLoaded", () => {
             let as = rho*b*depth;
             let asmin = 0.002*dc*b;
             document.getElementById('result').appendChild(createParagraph(`$$\\ A_s = \\rho \\times B_${text} \\times d = ${rho.toFixed(6)}\\times ${b}mm \\times ${depth.toFixed(2)}mm = ${as.toFixed(2)}mm^2 \$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ A_{smin} = 0.002 \\times A_g = 0.002 \\times B_${text} \\times D_c =  0.002 \\times ${b}mm \\times ${dc}mm = ${asmin}mm^2  \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ A_{smin} = 0.002 \\times A_g = 0.002 \\times B_${text} \\times D_c =  0.002 \\times ${b}mm \\times ${dc}mm = ${asmin.toFixed(2)}mm^2  \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\  ${as>asmin ? "A_s > A_{smin}":"A_s < A_{smin}"} \$$`));
             as = Math.max(as,asmin);
             document.getElementById('result').appendChild(createParagraph(`$$\\ \\therefore A_s = ${as.toFixed(2)}mm^2 \$$`));
             let ab = (Math.PI/4)*Math.pow(barDia,2);
-            let n = as/ab;
+            n = as/ab;
             document.getElementById('result').appendChild(createParagraph(``));
             document.getElementById('result').appendChild(createParagraph(`$$\\ n = \\frac{A_s}{A_b} = \\frac{${as.toFixed(2)}mm}{\\frac{\\pi}{4} \\times (${barDia}mm)^2} = ${n.toFixed(2)} \\approx ${Math.ceil(n)}pcs \$$`));
             n = Math.ceil(n);
-            let sc = (b-150-(n*barDia))/(n-1);
+            sc = (b-150-(n*barDia))/(n-1);
             let scmin = Math.max(50,barDia,(4/3)*dAgg);
             document.getElementById('result').appendChild(createParagraph(`$$\\ S_c = \\frac{B_${text} - (2 \\times C_c) - (n \\times d_b)}{n - 1} = \\frac{${b}mm - (2 \\times 75mm) - (${n} \\times ${barDia}mm)}{${n} - 1} = ${sc.toFixed(2)}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`\\( S_{c(min)} = \\text {Greatest of} \\left\\{\\begin{array}{l} 50mm\\, \\\\  d_b = ${barDia}mm \\, \\\\  d_{agg} = ${dAgg}mm \\,\\end{array}\\right. = ${scmin}mm \\, \\)`));
@@ -845,15 +851,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 beta = 1;
             }
             centerbandRatio = 2 / (beta+1);
+            m = Math.ceil(n*centerbandRatio);
             document.getElementById('result').appendChild(createParagraph(`$$\\ \\Upsilon_s = \\frac{2}{\\beta + 1} = \\frac{2}{${beta.toFixed(2)} + 1} = ${centerbandRatio.toFixed(2)}\$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ n_{centerband} = n \\times \\Upsilon_s = ${n} \\times ${centerbandRatio.toFixed(2)} = ${(n*centerbandRatio).toFixed(2)}pcs \\approx ${Math.ceil(n*centerbandRatio)}pcs \$$`));
-            return {sc,n}
+            
         }
-    }
+        
+        }
         function delay(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
         }
-        //GET PARAMETERS
+        //GET PARAMETERS AND INITIALIZE VALUES
         const structureType = document.getElementById('structureType').value;
         const restrictionType = document.getElementById('LengthRestriction').value;
         const ratioLengthL = parseFloat(document.getElementById('RatioL').value);
@@ -941,13 +949,18 @@ document.addEventListener("DOMContentLoaded", () => {
         let euy=0;
         let eux=0;
         let con=0;
+        let m;
+        let n;
+        let sc;
+        let level;
+        //START SOLUTION
         let logic = determineMethod(structureType,loadType,columnShape,centricity,method);
         console.log(`logic: `, logic);
         calc = dimension(dc);
-        
         punchingV = punchingShear ();
         
         if(method === 1){
+            //ITERATION METHOD
             console.log(`Punching Vu = `,punchingV.Vu);
             console.log(`Punching Vn = `,punchingV.vn);
             while(punchingV.vn<punchingV.Vu){
@@ -962,8 +975,38 @@ document.addEventListener("DOMContentLoaded", () => {
                 beamShearX=beamShear ("x",dc+25);
                 beamShearY=beamShear ("y",dc+25);
             }
+            recheck += 1;
+            calc = dimension(dc+25);
+            document.getElementById('Summary').appendChild(createHeader3(`Summary:`));
+            document.getElementById('Summary').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
+            document.getElementById('Summary').appendChild(createParagraph(`$$\\ B_x = ${bx}m \$$`));
+            document.getElementById('Summary').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
+
+            document.getElementById('Summary1').appendChild(createHeader3(`Summary:`));
+            document.getElementById('Summary1').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
+            document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_x = ${bx}m \$$`));
+            document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
+            rebarDesign("x");
+            document.getElementById('Summary').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along X-axis (${level})} = ${n}pcs \\text{  @  }${sc.toFixed(2)}mm \$$`));
+            document.getElementById('Summary1').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along X-axis (${level})} = ${n}pcs \\text{  @  }${sc.toFixed(2)}mm \$$`));
+
+            if (structureType==="Isolated Rectangular"){            
+            document.getElementById('Summary').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
+            document.getElementById('Summary1').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
+
+            }
+            rebarDesign("y");
+            document.getElementById('Summary').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along Y-axis (${level})} = ${n}pcs \\text{  @  }${sc.toFixed(2)}mm \$$`));
+            document.getElementById('Summary1').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along Y-axis (${level})} = ${n}pcs \\text{  @  }${sc.toFixed(2)}mm \$$`));
+
+            if (structureType==="Isolated Rectangular"){ 
+            document.getElementById('Summary').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
+            document.getElementById('Summary1').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
+
+            }
+
         } else if (method === 2){
-            
+            //APPROXIMATION METHOD
             beamShearX=beamShear ("x",dc+25);
             dc2=beamShearX.dc1;
             beamShearY=beamShear ("y",dc+25);
@@ -975,198 +1018,37 @@ document.addEventListener("DOMContentLoaded", () => {
             recheck += 1;
             calc = dimension(finalDc);
             dc = finalDc;
-            rebarDesign("x");
-            rebarDesign("y");
             
+            document.getElementById('Summary').appendChild(createHeader3(`Summary:`));            
+            document.getElementById('Summary').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
+            document.getElementById('Summary').appendChild(createParagraph(`$$\\ B_x = ${bx}m \$$`));
+            document.getElementById('Summary').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
+
+            document.getElementById('Summary1').appendChild(createHeader3(`Summary:`));            
+            document.getElementById('Summary1').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
+            document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_x = ${bx}m \$$`));
+            document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
+            
+            rebarDesign("x");
+            document.getElementById('Summary').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along X-axis (${level})} = ${n}pcs \\text{  @  }${sc.toFixed(2)}mm \$$`));
+            document.getElementById('Summary1').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along X-axis (${level})} = ${n}pcs \\text{  @  }${sc.toFixed(2)}mm \$$`));
+            
+            if (structureType==="Isolated Rectangular"){ 
+                document.getElementById('Summary').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
+                document.getElementById('Summary1').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
+
+                }
+            rebarDesign("y");
+            document.getElementById('Summary').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along Y-axis (${level})} = ${n}pcs \\text{  @  }${sc.toFixed(2)}mm \$$`));
+            document.getElementById('Summary1').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along Y-axis (${level})} = ${n}pcs \\text{  @  }${sc.toFixed(2)}mm \$$`));
+
+            if (structureType==="Isolated Rectangular"){ 
+                document.getElementById('Summary').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
+                document.getElementById('Summary1').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
+
+                }
         }
-/*
-        if (logic === "IS-UL-SQ-CC-1") {
-            // your code here
-
-        } else if (logic === "IS-UL-SQ-CC-2") {
-            // your code here
-        } else if (logic === "IS-UL-SQ-EC-1") {
-
-            // your code here
-        } else if (logic === "IS-UL-SQ-EC-2") {
-            // your code here
-        } else if (logic === "IS-UL-RC-CC-1") {
-            // your code here
-        } else if (logic === "IS-UL-RC-CC-2") {
-            // your code here
-        } else if (logic === "IS-UL-RC-EC-1") {
-            // your code here
-        } else if (logic === "IS-UL-RC-EC-2") {
-            // your code here
-        } else if (logic === "IS-UL-CR-CC-1") {
-            // your code here
-        } else if (logic === "IS-UL-CR-CC-2") {
-            // your code here
-        } else if (logic === "IS-UL-CR-EC-1") {
-            // your code here
-        } else if (logic === "IS-UL-CR-EC-2") {
-            // your code here
-        } else if (logic === "IS-SW-SQ-CC-1") {
-            // your code here
-        } else if (logic === "IS-SW-SQ-CC-2") {
-            // your code here
-        } else if (logic === "IS-SW-SQ-EC-1") {
-            // your code here
-            console.log(`Punching Vu = `,punchingV.Vu);
-            console.log(`Punching Vn = `,punchingV.vn);
-            while(punchingV.vn<punchingV.Vu){
-                console.log("iterating Punching Shear");    
-                dc+=25;
-                punchingV =punchingShear ();
-            }
-            beamShearX=beamShear ("x",dc1+25);
-            beamShearY=beamShear ("y",dc1+25);
-            while (beamShearX.Vu>beamShearX.vn ||beamShearY.Vu>beamShearY.vn  ){
-                dc1 += 25;
-                beamShearX=beamShear ("x",dc1+25);
-                beamShearY=beamShear ("y",dc1+25);
-            }
-        } else if (logic === "IS-SW-SQ-EC-2") {
-            // your code here
-            beamShearX=beamShear ("x",dc+25);
-            beamShearY=beamShear ("y",dc+25);
-        } else if (logic === "IS-SW-RC-CC-1") {
-            // your code here
-        } else if (logic === "IS-SW-RC-CC-2") {
-            // your code here
-        } else if (logic === "IS-SW-RC-EC-1") {
-            // your code here
-            console.log(`Punching Vu = `,punchingV.Vu);
-            console.log(`Punching Vn = `,punchingV.vn);
-            while(punchingV.vn<punchingV.Vu){
-                console.log("iterating Punching Shear");    
-                dc+=25;
-                punchingV =punchingShear ();
-            }
-            console.log("Beam Shear");
-            beamShearX=beamShear ("x",dc+25);
-            beamShearY=beamShear ("y",dc+25);
-            while(beamShearX.vn<beamShearX.Vu || beamShearY.vn<beamShearY.Vu ){
-                console.log("iterating Beam Shear"); 
-                beamShearX=beamShear ("x",dc+25);
-                beamShearY=beamShear ("y",dc+25);
-            }
-        
-        } else if (logic === "IS-SW-RC-EC-2") {
-            // your code here
-        } else if (logic === "IS-SW-CR-CC-1") {
-            // your code here
-        } else if (logic === "IS-SW-CR-CC-2") {
-            // your code here
-        } else if (logic === "IS-SW-CR-EC-1") {
-            // your code here
-        } else if (logic === "IS-SW-CR-EC-2") {
-            // your code here
-            console.log("Beam Shear");
-            beamShearX=beamShear ("x",dc+25);
-            beamShearY=beamShear ("y",dc+25);
-            while(beamShearX.vn<beamShearX.Vu || beamShearY.vn<beamShearY.Vu ){
-                console.log("iterating Beam Shear"); 
-                beamShearX=beamShear ("x",dc+25);
-                beamShearY=beamShear ("y",dc+25);
-            }
-        } else if (logic === "IR-UL-SQ-CC-1") {
-            // your code here
-        } else if (logic === "IR-UL-SQ-CC-2") {
-            // your code here
-        } else if (logic === "IR-UL-SQ-EC-1") {
-            // your code here
-        } else if (logic === "IR-UL-SQ-EC-2") {
-            // your code here
-        } else if (logic === "IR-UL-RC-CC-1") {
-            // your code here
-        } else if (logic === "IR-UL-RC-CC-2") {
-            // your code here
-        } else if (logic === "IR-UL-RC-EC-1") {
-            // your code here
-        } else if (logic === "IR-UL-RC-EC-2") {
-            // your code here
-        } else if (logic === "IR-UL-CR-CC-1") {
-            // your code here
-        } else if (logic === "IR-UL-CR-CC-2") {
-            // your code here
-        } else if (logic === "IR-UL-CR-EC-1") {
-            // your code here
-        } else if (logic === "IR-UL-CR-EC-2") {
-            // your code here
-        } else if (logic === "IR-SW-SQ-CC-1") {
-            // your code here
-        } else if (logic === "IR-SW-SQ-CC-2") {
-            // your code here
-        } else if (logic === "IR-SW-SQ-EC-1") {
-            // your code here
-        } else if (logic === "IR-SW-SQ-EC-2") {
-            // your code here
-        } else if (logic === "IR-SW-RC-CC-1") {
-            // your code here
-        } else if (logic === "IR-SW-RC-CC-2") {
-            // your code here
-        } else if (logic === "IR-SW-RC-EC-1") {
-            // your code here
-        } else if (logic === "IR-SW-RC-EC-2") {
-            // your code here
-        } else if (logic === "IR-SW-CR-CC-1") {
-            // your code here
-        } else if (logic === "IR-SW-CR-CC-2") {
-            // your code here
-        } else if (logic === "IR-SW-CR-EC-1") {
-            // your code here
-        } else if (logic === "IR-SW-CR-EC-2") {
-            // your code here
-        } else if (logic === "ST-UL-SQ-CC-1") {
-            // your code here
-        } else if (logic === "ST-UL-SQ-CC-2") {
-            // your code here
-        } else if (logic === "ST-UL-SQ-EC-1") {
-            // your code here
-        } else if (logic === "ST-UL-SQ-EC-2") {
-            // your code here
-        } else if (logic === "ST-UL-RC-CC-1") {
-            // your code here
-        } else if (logic === "ST-UL-RC-CC-2") {
-            // your code here
-        } else if (logic === "ST-UL-RC-EC-1") {
-            // your code here
-        } else if (logic === "ST-UL-RC-EC-2") {
-            // your code here
-        } else if (logic === "ST-UL-CR-CC-1") {
-            // your code here
-        } else if (logic === "ST-UL-CR-CC-2") {
-            // your code here
-        } else if (logic === "ST-UL-CR-EC-1") {
-            // your code here
-        } else if (logic === "ST-UL-CR-EC-2") {
-            // your code here
-        } else if (logic === "ST-SW-SQ-CC-1") {
-            // your code here
-        } else if (logic === "ST-SW-SQ-CC-2") {
-            // your code here
-        } else if (logic === "ST-SW-SQ-EC-1") {
-            // your code here
-        } else if (logic === "ST-SW-SQ-EC-2") {
-            // your code here
-        } else if (logic === "ST-SW-RC-CC-1") {
-            // your code here
-        } else if (logic === "ST-SW-RC-CC-2") {
-            // your code here
-        } else if (logic === "ST-SW-RC-EC-1") {
-            // your code here
-        } else if (logic === "ST-SW-RC-EC-2") {
-            // your code here
-        } else if (logic === "ST-SW-CR-CC-1") {
-            // your code here
-        } else if (logic === "ST-SW-CR-CC-2") {
-            // your code here
-        } else if (logic === "ST-SW-CR-EC-1") {
-            // your code here
-        } else if (logic === "ST-SW-CR-EC-2") {
-            // your code here
-        }*/
+        document.getElementById('tab').style.display = 'flex';
         MathJax.typeset();     
    } catch {
 
