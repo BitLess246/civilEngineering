@@ -170,7 +170,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.getElementById('result').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
                 bx = Math.ceil(Bx_solution*10)/10;
             }
-            }}
+            }} else {
+                qact = (p/(by*bx))*(1+(6*ex/bx)+(6*ey*by));
+                document.getElementById('result').appendChild(createParagraph(`$$\\ q_{actual} = \\frac {P}{B_y\\times B_x}\\times (1 + \\frac{6\\times e_x}{B_x} + \\frac{6\\times e_y}{B_y}) \$$`));
+                document.getElementById('result').appendChild(createParagraph(`$$\\ q_{actual} = \\frac {${p}kN}{${by}m\\times ${bx}m}\\times (1 + \\frac{6\\times ${ex}}{${bx}m} + \\frac{6\\times ${ey}m}{${by}m}) = ${qact}kPa \$$`));
+                document.getElementById('result').appendChild(createParagraph(`$$\\ ${qact.toFixed(3)} ${qact > qnet ? "> q_{net} \\therefore \\text{Increase Size}":"< q_{net} \\therefore \\text{Safe}"} \$$`));
+
+            }
             document.getElementById('result').appendChild(createHeader7(`Solve for Ultimate Loads`));
             if(loadType==="ultimate"){
                 document.getElementById('result').appendChild(createParagraph(`$$\\ Pu = ${pu.toFixed(2)}kN \$$`));
@@ -377,7 +383,7 @@ document.addEventListener("DOMContentLoaded", () => {
         
            
         
-        
+        return qnet;
     }
 
     function punchingShear(){
@@ -920,7 +926,7 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById('GivenParameters1').appendChild(createHeader8(`$$\\ Eccentric \$$`));
 
     }
-
+    let qact = 0;
     let dc=250;
     let dc1=0;
     let dc2=0;
@@ -1132,16 +1138,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
         }
     } else {
-        
-    
-            beamShearX=beamShear ("x",dc);
-            beamShearY=beamShear ("y",dc);
-            document.getElementById('Summary').appendChild(createHeader3(`Summary:`));
+        document.getElementById('Summary').appendChild(createHeader3(`Summary:`));
         document.getElementById('Summary').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
         document.getElementById('Summary').appendChild(createParagraph(`$$\\ B_x = ${bx}m \$$`));
         document.getElementById('Summary').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
+        
+        document.getElementById('Summary').appendChild(createParagraph(`$$\\ q_{actual} = ${qact.toFixed(3)}kPa ${qact > calc ? "> ":"< "} q_{net} = ${calc.toFixed(3)}kPa ${qact > calc ? "\\therefore \\text{Increase Size}":"\\therefore \\text{Safe}"} \$$`));
+    
         document.getElementById('Summary').appendChild(createParagraph(`$$\\ V_{u(Punching Shear)} = ${punchingV.Vu.toFixed(2)}kN \\, \\,${punchingV.Vu<punchingV.vn ? "<":">"} \\, \\, \\phi V_{n(Punching Shear)} = ${punchingV.vn.toFixed(2)}kN \\, \\, ${punchingV.Vu<punchingV.vn ? "\\therefore \\text{SAFE}":"\\therefore \\text{FAIL}"}\$$`));
         
+            beamShearX=beamShear ("x",dc);
+            beamShearY=beamShear ("y",dc);
+          
         document.getElementById('Summary').appendChild(createParagraph(`$$\\ V_{u(Beam Shear - x)} = ${beamShearX.Vu.toFixed(2)}kN \\, \\, ${beamShearX.Vu<beamShearX.vn ? "<":">"} \\, \\phi V_{n(Beam Shear)} = ${beamShearX.vn.toFixed(2)}kN \\, \\, ${beamShearX.Vu<beamShearX.vn ? "\\therefore \\text{SAFE}":"\\therefore \\text{FAIL}"}\$$`));
         document.getElementById('Summary').appendChild(createParagraph(`$$\\ V_{u(Beam Shear - y)} = ${beamShearY.Vu.toFixed(2)}kN \\, \\, ${beamShearY.Vu<beamShearY.vn ? "<":">"} \\, \\phi V_{n(Beam Shear)} = ${beamShearY.vn.toFixed(2)}kN \\, \\, ${beamShearY.Vu<beamShearY.vn ? "\\therefore \\text{SAFE}":"\\therefore \\text{FAIL}"}\$$`));
 
@@ -1151,6 +1159,8 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById('Summary1').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
         document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_x = ${bx}m \$$`));
         document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
+        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ q_{actual} = ${qact.toFixed(3)}kPa ${qact > calc ? "> ":"< "} q_{net} = ${calc.toFixed(3)}kPa ${qact > calc ? "\\therefore \\text{Increase Size}":"\\therefore \\text{Safe}"} \$$`));
+
         document.getElementById('Summary1').appendChild(createParagraph(`$$\\ V_{u(Punching Shear)} = ${punchingV.Vu.toFixed(2)}kN \\, \\,${punchingV.Vu<punchingV.vn ? "<":">"} \\, \\, \\phi V_{n(Punching Shear)} = ${punchingV.vn.toFixed(2)}kN \\, \\, ${punchingV.Vu<punchingV.vn ? "\\therefore \\text{SAFE}":"\\therefore \\text{FAIL}"}\$$`));
 
         document.getElementById('Summary1').appendChild(createParagraph(`$$\\ V_{u(Beam Shear - x)} = ${beamShearX.Vu.toFixed(2)}kN \\, \\, ${beamShearX.Vu<beamShearX.vn ? "<":">"} \\, \\phi V_{n(Beam Shear)} = ${beamShearX.vn.toFixed(2)}kN \\, \\, ${beamShearX.Vu<beamShearX.vn ? "\\therefore \\text{SAFE}":"\\therefore \\text{FAIL}"}\$$`));
