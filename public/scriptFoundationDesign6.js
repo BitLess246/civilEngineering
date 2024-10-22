@@ -171,10 +171,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 bx = Math.ceil(Bx_solution*10)/10;
             }
             }} else {
-                qact = (p/(by*bx))*(1+(6*ex/bx)+(6*ey*by));
+                qact = (p/(by*bx))*(1+(6*ex/bx)+(6*ey/by));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ q_{actual} = \\frac {P}{B_y\\times B_x}\\times (1 + \\frac{6\\times e_x}{B_x} + \\frac{6\\times e_y}{B_y}) \$$`));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ q_{actual} = \\frac {${p}kN}{${by}m\\times ${bx}m}\\times (1 + \\frac{6\\times ${ex}}{${bx}m} + \\frac{6\\times ${ey}m}{${by}m}) = ${qact}kPa \$$`));
-                document.getElementById('result').appendChild(createParagraph(`$$\\ ${qact.toFixed(3)} ${qact > qnet ? "> q_{net} \\therefore \\text{Increase Size}":"< q_{net} \\therefore \\text{Safe}"} \$$`));
+                document.getElementById('result').appendChild(createParagraph(`$$\\ ${qact.toFixed(3)} ${qact > qnet ? "> q_{net} \\therefore \\text{Increase Size}":"< q_{net} \\therefore \\text{SAFE}"} \$$`));
 
             }
             document.getElementById('result').appendChild(createHeader7(`Solve for Ultimate Loads`));
@@ -1143,7 +1143,7 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById('Summary').appendChild(createParagraph(`$$\\ B_x = ${bx}m \$$`));
         document.getElementById('Summary').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
         
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ q_{actual} = ${qact.toFixed(3)}kPa ${qact > calc ? "> ":"< "} q_{net} = ${calc.toFixed(3)}kPa ${qact > calc ? "\\therefore \\text{Increase Size}":"\\therefore \\text{Safe}"} \$$`));
+        document.getElementById('Summary').appendChild(createParagraph(`$$\\ q_{actual} = ${qact.toFixed(3)}kPa ${qact > calc ? "> ":"< "} q_{net} = ${calc.toFixed(3)}kPa ${qact > calc ? "\\therefore \\text{Increase Size}":"\\therefore \\text{SAFE}"} \$$`));
     
         document.getElementById('Summary').appendChild(createParagraph(`$$\\ V_{u(Punching Shear)} = ${punchingV.Vu.toFixed(2)}kN \\, \\,${punchingV.Vu<punchingV.vn ? "<":">"} \\, \\, \\phi V_{n(Punching Shear)} = ${punchingV.vn.toFixed(2)}kN \\, \\, ${punchingV.Vu<punchingV.vn ? "\\therefore \\text{SAFE}":"\\therefore \\text{FAIL}"}\$$`));
         
@@ -1159,7 +1159,7 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById('Summary1').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
         document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_x = ${bx}m \$$`));
         document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ q_{actual} = ${qact.toFixed(3)}kPa ${qact > calc ? "> ":"< "} q_{net} = ${calc.toFixed(3)}kPa ${qact > calc ? "\\therefore \\text{Increase Size}":"\\therefore \\text{Safe}"} \$$`));
+        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ q_{actual} = ${qact.toFixed(3)}kPa ${qact > calc ? "> ":"< "} q_{net} = ${calc.toFixed(3)}kPa ${qact > calc ? "\\therefore \\text{Increase Size}":"\\therefore \\text{SAFE}"} \$$`));
 
         document.getElementById('Summary1').appendChild(createParagraph(`$$\\ V_{u(Punching Shear)} = ${punchingV.Vu.toFixed(2)}kN \\, \\,${punchingV.Vu<punchingV.vn ? "<":">"} \\, \\, \\phi V_{n(Punching Shear)} = ${punchingV.vn.toFixed(2)}kN \\, \\, ${punchingV.Vu<punchingV.vn ? "\\therefore \\text{SAFE}":"\\therefore \\text{FAIL}"}\$$`));
 
