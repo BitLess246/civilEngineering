@@ -13,6 +13,8 @@ document.addEventListener("DOMContentLoaded", () => {
         summaryDiv.innerHTML = ''; // Clear previous results
         const summary1Div = document.getElementById("Summary1");
         summary1Div.innerHTML = ''; // Clear previous results
+        const parametersDiv = document.getElementById("GivenParameters1");
+        parametersDiv.innerHTML = ''; // Clear previous results
 
     
 
@@ -126,11 +128,13 @@ document.addEventListener("DOMContentLoaded", () => {
             ex = my / p;
             document.getElementById('result').appendChild(createParagraph(`$$\\ e_x = \\frac {M_y}{P} = \\frac {${my}kNm}{${p}kN} = ${(ex*1000).toFixed(2)}mm   \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ e_y = \\frac {M_x}{P} = \\frac {${mx}kNm}{${p}kN} = ${(ey*1000).toFixed(2)}mm   \$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{B_y\\times B_x}\\times (1 + \\frac{6\\times e_x}{B_x} + \\frac{6\\times e_y}{B_y}) \$$`));
+                if (analysisMethod ==="design"){
+                document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{B_y\\times B_x}\\times (1 + \\frac{6\\times e_x}{B_x} + \\frac{6\\times e_y}{B_y}) \$$`));
+                }
             } else if (centricity === "concentric"){
-            document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{B_y\\times B_x} \$$`));
-
+                document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{B_y\\times B_x} \$$`));
             }
+            if (analysisMethod ==="design"){
             document.getElementById('result').appendChild(createHeader7(`Solve for \\( B\\)`)); 
             if (structureType==="Isolated Square"){
                 document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{B^2}\\times (1 + \\frac{6\\times (e_x + e_y)}{B}) \$$`));
@@ -166,7 +170,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.getElementById('result').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
                 bx = Math.ceil(Bx_solution*10)/10;
             }
-            }
+            }}
             document.getElementById('result').appendChild(createHeader7(`Solve for Ultimate Loads`));
             if(loadType==="ultimate"){
                 document.getElementById('result').appendChild(createParagraph(`$$\\ Pu = ${pu.toFixed(2)}kN \$$`));
@@ -897,26 +901,68 @@ document.addEventListener("DOMContentLoaded", () => {
     //GET PARAMETERS AND INITIALIZE VALUES
     document.getElementById('GivenParameters1').appendChild(createHeader5(`Parameters Given:`));       
     document.getElementById('GivenParameters1').appendChild(createHeader5(``));       
+    const analysisMethod = document.getElementById('analysisMethod').value;
+    let method = parseInt(document.getElementById('Method').value);
+    
+    
 
-    const structureType = document.getElementById('structureType').value;
+
+    let structureType = document.getElementById('structureType').value;
     const restrictionType = document.getElementById('LengthRestriction').value;
     const ratioLengthL = parseFloat(document.getElementById('RatioL').value);
     const ratioLengthB = parseFloat(document.getElementById('RatioB').value); 
     const limitLength =  parseFloat(document.getElementById('Limitation').value);
     const centricity =  document.getElementById('centricity').value;
-    if (structureType==="Isolated Rectangular"){
-    if (restrictionType === "1"){
-            //Ratio
-            document.getElementById('GivenParameters1').appendChild(createHeader8(`$$\\ ${ratioLengthL}B_{y} = ${ratioLengthB}B_x  \$$`));
+    if (centricity === "concentric") {
+        document.getElementById('GivenParameters1').appendChild(createHeader8(`$$\\ Concentric \$$`));
 
-        }else{
-            //limited
-            document.getElementById('GivenParameters1').appendChild(createHeader8(`$$\\ B_y = ${limitLength}m  \$$`));
-            document.getElementById('GivenParameters1').appendChild(createHeader8(`$$\\ \$$`));
-            
-            
-        }
+    } else if (centricity === "eccentric") {
+        document.getElementById('GivenParameters1').appendChild(createHeader8(`$$\\ Eccentric \$$`));
+
     }
+
+    let dc=250;
+    let dc1=0;
+    let dc2=0;
+    let dc3=0;
+    let finalDc=0;
+    let cc = 75;
+    let by=0;
+    let bx=0;
+    if (analysisMethod === "analyze"){
+        bx = parseFloat(document.getElementById('bx').value);
+        by = parseFloat(document.getElementById('by').value);
+        dc = parseFloat(document.getElementById('dc').value);
+        document.getElementById('GivenParameters1').appendChild(createHeader8(`$$\\ B_x = ${bx}m  \$$`));
+        document.getElementById('GivenParameters1').appendChild(createHeader8(`$$\\ B_y = ${by}m  \$$`));
+        document.getElementById('GivenParameters1').appendChild(createHeader8(`$$\\ D_c = ${dc}mm  \$$`));
+        console.log(`0bx: `, bx);
+        console.log(`0by: `, by);
+        method = 1;
+        if(by === bx){
+            structureType = "Isolated Square";
+        } else {
+            structureType = "Isolated Rectangular";
+        }
+        console.log(`11bx: `, bx);
+        console.log(`11by: `, by);
+    } else {
+
+    if (structureType==="Isolated Rectangular"){
+        if (restrictionType === "1"){
+                //Ratio
+                document.getElementById('GivenParameters1').appendChild(createHeader8(`$$\\ ${ratioLengthL}B_{y} = ${ratioLengthB}B_x  \$$`));
+
+            }else if (restrictionType === "2"){
+                //limited
+                document.getElementById('GivenParameters1').appendChild(createHeader8(`$$\\ B_y = ${limitLength}m  \$$`));
+                document.getElementById('GivenParameters1').appendChild(createHeader8(`$$\\ \$$`));
+                
+                
+            }
+    }}
+    console.log(`1bx: `, bx);
+    console.log(`1by: `, by);
     const loadType = document.getElementById('loadType').value;
     let muy=0;
     let mux=0;
@@ -970,7 +1016,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const h = parseFloat(document.getElementById('Depth').value);
     const barDia = parseInt(document.getElementById('BarDiameter').value);
     const dAgg = parseInt(document.getElementById('aggDiameter').value);
-    const method = parseInt(document.getElementById('Method').value);
     document.getElementById('GivenParameters1').appendChild(createHeader8(`$$\\ H = ${h*1000}mm  \$$`));
     document.getElementById('GivenParameters1').appendChild(createHeader8(`$$\\ d_b = ${barDia}mm  \$$`));
     document.getElementById('GivenParameters1').appendChild(createHeader8(`$$\\ d_{agg} = ${dAgg}mm  \$$`));
@@ -995,6 +1040,8 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById('GivenParameters1').appendChild(createHeader8(`$$\\ c = ${(cx/Math.sqrt(Math.PI/4)).toFixed(0)}mm \\times \\sqrt{\\frac{\\pi}{4}} = ${cx.toFixed(2)}mm , \\text{Spiral Column} \$$`));
         
     }
+    console.log(`bx: `, bx);
+    console.log(`by: `, by);
     let columnLocation = parseInt(document.getElementById('ColumnLocation').value);
     const qa = parseFloat(document.getElementById('SoilBearingCapacity').value);
     const q = parseFloat(document.getElementById('Surcharge').value);
@@ -1013,16 +1060,9 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('GivenParameters1').appendChild(createHeader8(`$$\\ \\gamma_s = ${ys}\\frac{kN}{m^3}  \$$`));
     document.getElementById('GivenParameters1').appendChild(createHeader8(`$$\\ \\gamma_c = ${yc}\\frac{kN}{m^3}  \$$`));
 
+    console.log(`bx: `, bx);
+    console.log(`by: `, by);
 
-
-    let dc= 250;
-    let dc1=0;
-    let dc2=0;
-    let dc3=0;
-    let finalDc=0;
-    let cc = 75;
-    let by=0;
-    let bx=0;
     let r=0;
     let calc;
     let beamShearX;
@@ -1038,11 +1078,16 @@ document.addEventListener("DOMContentLoaded", () => {
     //START SOLUTION
     let logic = determineMethod(structureType,loadType,columnShape,centricity,method);
     console.log(`logic: `, logic);
+    console.log(`bx: `, bx);
+    console.log(`by: `, by);
     calc = dimension(dc);
+    console.log(`bx after: `, bx);
+    console.log(`by after: `, by);
     punchingV = punchingShear ();
     
     if(method === 1){
         //ITERATION METHOD
+        if (analysisMethod==="design"){
         console.log(`Punching Vu = `,punchingV.Vu);
         console.log(`Punching Vn = `,punchingV.vn);
         while(punchingV.vn<punchingV.Vu){
@@ -1069,8 +1114,8 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_x = ${bx}m \$$`));
         document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
         rebarDesign("x");
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along X-axis (${level})} = ${n}pcs \\text{  @  }${sc.toFixed(2)}mm \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along X-axis (${level})} = ${n}pcs \\text{  @  }${sc.toFixed(2)}mm \$$`));
+        document.getElementById('Summary').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along X-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
+        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along X-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
 
         if (structureType==="Isolated Rectangular"){            
         document.getElementById('Summary').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
@@ -1078,13 +1123,44 @@ document.addEventListener("DOMContentLoaded", () => {
 
         }
         rebarDesign("y");
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along Y-axis (${level})} = ${n}pcs \\text{  @  }${sc.toFixed(2)}mm \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along Y-axis (${level})} = ${n}pcs \\text{  @  }${sc.toFixed(2)}mm \$$`));
+        document.getElementById('Summary').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along Y-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
+        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along Y-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
 
         if (structureType==="Isolated Rectangular"){ 
         document.getElementById('Summary').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
         document.getElementById('Summary1').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
 
+        }
+    } else {
+            beamShearX=beamShear ("x",dc+25);
+            beamShearY=beamShear ("y",dc+25);
+            document.getElementById('Summary').appendChild(createHeader3(`Summary:`));
+        document.getElementById('Summary').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
+        document.getElementById('Summary').appendChild(createParagraph(`$$\\ B_x = ${bx}m \$$`));
+        document.getElementById('Summary').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
+
+        document.getElementById('Summary1').appendChild(createHeader3(`Summary:`));
+        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
+        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_x = ${bx}m \$$`));
+        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
+        rebarDesign("x");
+        document.getElementById('Summary').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along X-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
+        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along X-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
+
+        if (structureType==="Isolated Rectangular"){            
+        document.getElementById('Summary').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
+        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
+
+        }
+        rebarDesign("y");
+        document.getElementById('Summary').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along Y-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
+        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along Y-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
+
+        if (structureType==="Isolated Rectangular"){ 
+        document.getElementById('Summary').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
+        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
+
+        }
         }
 
     } else if (method === 2){
@@ -1112,8 +1188,8 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
         
         rebarDesign("x");
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along X-axis (${level})} = ${n}pcs \\text{  @  }${sc.toFixed(2)}mm \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along X-axis (${level})} = ${n}pcs \\text{  @  }${sc.toFixed(2)}mm \$$`));
+        document.getElementById('Summary').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along X-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
+        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along X-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
         
         if (structureType==="Isolated Rectangular"){ 
             document.getElementById('Summary').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
@@ -1121,8 +1197,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
             }
         rebarDesign("y");
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along Y-axis (${level})} = ${n}pcs \\text{  @  }${sc.toFixed(2)}mm \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along Y-axis (${level})} = ${n}pcs \\text{  @  }${sc.toFixed(2)}mm \$$`));
+        document.getElementById('Summary').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along Y-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
+        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along Y-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
 
         if (structureType==="Isolated Rectangular"){ 
             document.getElementById('Summary').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
@@ -1147,6 +1223,7 @@ document.addEventListener("DOMContentLoaded", () => {
 }
 
  });
+
 
 
 });
