@@ -1132,8 +1132,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         }
     } else {
-            beamShearX=beamShear ("x",dc+25);
-            beamShearY=beamShear ("y",dc+25);
+            beamShearX=beamShear ("x",dc);
+            beamShearY=beamShear ("y",dc);
             document.getElementById('Summary').appendChild(createHeader3(`Summary:`));
         document.getElementById('Summary').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
         document.getElementById('Summary').appendChild(createParagraph(`$$\\ B_x = ${bx}m \$$`));
