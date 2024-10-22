@@ -185,7 +185,7 @@
                     </div>
                    
 
-                        <button id="calculate" type="submit" onclick="openTab(event, 'Solution')">Calculate</button>
+                        <button id="calculate" type="submit" onclick="openTab(event, 'summary')">Calculate</button>
                     </div>
 
                     </div>
@@ -217,12 +217,13 @@
         // Get the buttons
         const calculateButton = document.getElementById('calculate');
         const solutionsButton = document.getElementById('Solutionbutton');
+        const summaryButton = document.getElementById('Summarybutton');
         const saveButton = document.getElementById('saveButton');
 
         // Add an event listener to the "Calculate" button
         calculateButton.addEventListener('click', function() {
             // Add the "active" class to the "Solutions" button
-            solutionsButton.classList.add('active');
+            summaryButton.classList.add('active');
         });
 
         saveButton.addEventListener('click', function() {
