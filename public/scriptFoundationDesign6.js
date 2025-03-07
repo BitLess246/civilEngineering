@@ -595,7 +595,7 @@ document.addEventListener("DOMContentLoaded", () => {
         let b = y2 - y1;            console.log(`b = `,b);    
         let c = x2 + x1;            console.log(`c = `,c);
         let d = y2 + y1;            console.log(`d = `,d);
-        let Vu = ((a*b)/(by*bx*1000*1000))*(pu+((6*c*muy*1000)/Math.pow(bx*1000,2))+((6*d*mux*1000)/Math.pow(by*1000,2)));
+        let Vu = (Math.abs((a*b))/(by*bx*1000*1000))*(pu+((6*c*muy*1000)/Math.pow(bx*1000,2))+((6*d*mux*1000)/Math.pow(by*1000,2)));
         document.getElementById('result').appendChild(createParagraph(`$$\\ x_2 - x_1 = ${x2.toFixed(2)}mm - (${x1.toFixed(2)})mm = ${a.toFixed(2)}mm\$$`));
         document.getElementById('result').appendChild(createParagraph(`$$\\ y_2 - y_1 = ${y2.toFixed(2)}mm - (${y1.toFixed(2)})mm = ${b.toFixed(2)}mm\$$`));
         document.getElementById('result').appendChild(createParagraph(`$$\\ x_2 + x_1 = ${x2.toFixed(2)}mm + (${x1.toFixed(2)})mm = ${c.toFixed(2)}mm\$$`));
@@ -1211,10 +1211,10 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById('Summary').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
         document.getElementById('Summary').appendChild(createParagraph(`$$\\ d_{bar} = ${barDia}mm \$$`));
 
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ V_{u(Punching Shear)} = ${punchingV.Vu.toFixed(2)}kN \\, \\,${punchingV.Vu<punchingV.vn ? "<":">"} \\, \\, \\phi V_{n(Punching Shear)} = ${punchingV.vn.toFixed(2)}kN \\, \\, ${punchingV.Vu<punchingV.vn ? "\\therefore \\text{SAFE}":"\\therefore \\text{FAIL}"}\$$`));
+        document.getElementById('Summary').appendChild(createParagraph(`$$\\ V_{u(Punching Shear)} = ${punchingV.Vu.toFixed(2)}kN \$$`));
 
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ V_{u(Beam Shear - x)} = ${beamShearX.Vu.toFixed(2)}kN \\, \\, ${beamShearX.Vu<beamShearX.vn ? "<":">"} \\, \\phi V_{n(Beam Shear)} = ${beamShearX.vn.toFixed(2)}kN \\, \\, ${beamShearX.Vu<beamShearX.vn ? "\\therefore \\text{SAFE}":"\\therefore \\text{FAIL}"}\$$`));
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ V_{u(Beam Shear - y)} = ${beamShearY.Vu.toFixed(2)}kN \\, \\, ${beamShearY.Vu<beamShearY.vn ? "<":">"} \\, \\phi V_{n(Beam Shear)} = ${beamShearY.vn.toFixed(2)}kN \\, \\, ${beamShearY.Vu<beamShearY.vn ? "\\therefore \\text{SAFE}":"\\therefore \\text{FAIL}"}\$$`));
+        document.getElementById('Summary').appendChild(createParagraph(`$$\\ V_{u(Beam Shear - x)} = ${beamShearX.Vu.toFixed(2)}kN \$$`));
+        document.getElementById('Summary').appendChild(createParagraph(`$$\\ V_{u(Beam Shear - y)} = ${beamShearY.Vu.toFixed(2)}kN \$$`));
 
 
         document.getElementById('Summary1').appendChild(createHeader3(`Summary:`));            
@@ -1222,10 +1222,10 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_x = ${bx}m \$$`));
         document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
         document.getElementById('Summary1').appendChild(createParagraph(`$$\\ d_{bar} = ${barDia}mm \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ V_{u(Punching Shear)} = ${punchingV.Vu.toFixed(2)}kN \\, \\,${punchingV.Vu<punchingV.vn ? "<":">"} \\, \\, \\phi V_{n(Punching Shear)} = ${punchingV.vn.toFixed(2)}kN \\, \\, ${punchingV.Vu<punchingV.vn ? "\\therefore \\text{SAFE}":"\\therefore \\text{FAIL}"}\$$`));
+        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ V_{u(Punching Shear)} = ${punchingV.Vu.toFixed(2)}kN \$$`));
 
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ V_{u(Beam Shear - x)} = ${beamShearX.Vu.toFixed(2)}kN \\, \\, ${beamShearX.Vu<beamShearX.vn ? "<":">"} \\, \\phi V_{n(Beam Shear)} = ${beamShearX.vn.toFixed(2)}kN \\, \\, ${beamShearX.Vu<beamShearX.vn ? "\\therefore \\text{SAFE}":"\\therefore \\text{FAIL}"}\$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ V_{u(Beam Shear - y)} = ${beamShearY.Vu.toFixed(2)}kN \\, \\, ${beamShearY.Vu<beamShearY.vn ? "<":">"} \\, \\phi V_{n(Beam Shear)} = ${beamShearY.vn.toFixed(2)}kN \\, \\, ${beamShearY.Vu<beamShearY.vn ? "\\therefore \\text{SAFE}":"\\therefore \\text{FAIL}"}\$$`));
+        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ V_{u(Beam Shear - x)} = ${beamShearX.Vu.toFixed(2)}kN \$$`));
+        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ V_{u(Beam Shear - y)} = ${beamShearY.Vu.toFixed(2)}kN \$$`));
 
         
         rebarDesign("x");
