@@ -20,3 +20,8 @@ npm start
 ```
 
 Then open `http://localhost:3000`.
+
+
+## Notes
+
+Legacy duplicate server files were removed to avoid route/source-of-truth conflicts.

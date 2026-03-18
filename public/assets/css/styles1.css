@@ -403,3 +403,21 @@ ol.summary {
     margin-left: 20px;
     font-weight: bold;
 }
+
+
+/* Quantity Surveying sub-pages */
+.quantity-subpage {
+    margin-top: 16px;
+}
+
+.quantity-subpage .form-group {
+    grid-column: 1 / -1;
+}
+
+.quantity-subpage h1 {
+    grid-column: 1 / -1;
+}
+
+nav ul li a:hover {
+    background: #003f86;
+}
