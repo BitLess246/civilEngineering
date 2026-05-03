@@ -403,3 +403,60 @@ ol.summary {
     margin-left: 20px;
     font-weight: bold;
 }
+
+
+/* Quantity Surveying sub-pages */
+.quantity-subpage {
+    margin-top: 16px;
+}
+
+.quantity-subpage .form-group {
+    grid-column: 1 / -1;
+}
+
+.quantity-subpage h1 {
+    grid-column: 1 / -1;
+}
+
+nav ul li a:hover {
+    background: #003f86;
+}
+
+
+.section-card {
+    width: 100%;
+    margin: 0 0 16px;
+    padding: 12px;
+    border: 1px solid #e3e7ef;
+    border-radius: 8px;
+    background: #fafcff;
+    box-shadow: none;
+    display: block;
+}
+
+.section-card h3,
+.section-card h4,
+.section-card h5 {
+    text-align: left;
+}
+
+.quantity-subpage {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+}
+
+.quantity-subpage label {
+    display: block;
+    width: auto;
+    margin: 6px 0;
+}
+
+.quantity-subpage input,
+.quantity-subpage select {
+    width: 100%;
+    margin: 0 0 10px;
+}
+
+.quantity-subpage button {
+    margin-top: 8px;
+}
