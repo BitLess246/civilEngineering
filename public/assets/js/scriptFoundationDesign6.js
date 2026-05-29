@@ -85,6 +85,13 @@ document.addEventListener("DOMContentLoaded", () => {
         h3.innerHTML = content;
         return h3;
     }
+    // Small italic badge under a step header naming the code clause / method
+    function createClause(content) {
+        const p = document.createElement('p');
+        p.className = 'fd-clause';
+        p.innerHTML = content;
+        return p;
+    }
     function dimension(DC){
         let dc = DC;
         let ds = (h*1000) - dc;
@@ -98,7 +105,8 @@ document.addEventListener("DOMContentLoaded", () => {
        
                
         if(recheck===0){
-            document.getElementById('result').appendChild(createHeader5(`Calculation of Dimensions`));       
+            document.getElementById('result').appendChild(createHeader5(`Calculation of Dimensions`));
+            document.getElementById('result').appendChild(createClause(`Per NSCP 2015 §420.6.1.3 / ACI 318-14 §20.6.1.3 — minimum cover 75 mm for concrete cast against and permanently in contact with earth.`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ D_s = H - D_c = ${h*1000}mm - ${dc}mm = ${ds}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = q_{all} - (\\gamma_s \\times D_s) - (\\gamma_c \\times D_c) - q =  ${qa}kPa - (${ys}\\frac{kN}{m^3} \\times ${ds/1000}m) - (${yc}\\frac{kN}{m^3} \\times ${dc/1000}m) - ${q}kPa = ${qnet.toFixed(2)}kPa  \$$`));
@@ -178,6 +186,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             }
             document.getElementById('result').appendChild(createHeader7(`Solve for Ultimate Loads`));
+            document.getElementById('result').appendChild(createClause(`Per NSCP 2015 §203.3.1 / ACI 318-14 §5.3.1 — factored load \\(P_u\\) is the larger of \\(1.4 D\\) and \\(1.2 D + 1.6 L\\).`));
             if(loadType==="ultimate"){
                 document.getElementById('result').appendChild(createParagraph(`$$\\ Pu = ${pu.toFixed(2)}kN \$$`));
                 if  (centricity === "eccentric"){
@@ -309,6 +318,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             }
             document.getElementById('result').appendChild(createHeader7(`Solve for Ultimate Load Combinations`));
+                document.getElementById('result').appendChild(createClause(`Per NSCP 2015 §203.3.1 / ACI 318-14 §5.3.1 — factored load \\(P_u\\) is the larger of \\(1.4 D\\) and \\(1.2 D + 1.6 L\\).`));
             if(loadType==="ultimate"){
                 document.getElementById('result').appendChild(createParagraph(`$$\\ Pu = ${pu}kN \$$`));
                 if  (centricity === "eccentric"){
@@ -397,7 +407,8 @@ document.addEventListener("DOMContentLoaded", () => {
         let test;
         console.log(`Ao = `,Ao);
         console.log(`Punching Shear Vu = `,Vu);
-        document.getElementById('result').appendChild(createHeader5(`Punching Shear Calculation`));       
+        document.getElementById('result').appendChild(createHeader5(`Punching Shear Calculation`));
+        document.getElementById('result').appendChild(createClause(`Per NSCP 2015 §422.6.5.2 / ACI 318-14 §22.6.5.2 — two-way (punching) shear; \\(\\phi V_n\\) is the LEAST of three expressions. Strength reduction \\(\\phi = 0.75\\) per §421.2.1.`));
         document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - d_b = ${dc}mm - ${cc}mm - ${barDia}mm = ${d}mm \$$`));
         document.getElementById('result').appendChild(createParagraph(`$$\\ A_o = (d + c_x)\\times (d + c_y) = (${d}mm + ${cx.toFixed(2)}mm)\\times (${d}mm + ${cy.toFixed(2)}mm) = ${Ao.toFixed(2)}mm^2 \$$`));
         document.getElementById('result').appendChild(createParagraph(`$$\\ A_f = B_y \\times B_x = ${by*1000}mm \\times ${bx*1000}mm = ${Af.toFixed(2)}mm^2 \$$`));
@@ -411,6 +422,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Max shear stress on critical section: v_max = Vu/Ac + gamma_v * Mu * c / Jc <= phi * vc
         if (method === 1 && centricity === "eccentric" && (Math.abs(mux) > 0 || Math.abs(muy) > 0)) {
             document.getElementById('result').appendChild(createHeader7(`Unbalanced Moment Transfer (Eccentric Punching)`));
+            document.getElementById('result').appendChild(createClause(`Per NSCP 2015 §408.4.4.2 / ACI 318-14 §8.4.4.2 — fraction of unbalanced moment transferred by shear: \\(\\gamma_v = 1 - 1/(1 + \\tfrac{2}{3}\\sqrt{b_1/b_2})\\). Stress check: \\(v_{max} = V_u/A_c + \\gamma_v M_u c / J_c \\le \\phi v_c\\).`));
             if (columnLocation !== 1) {
                 document.getElementById('result').appendChild(createParagraph(`$$\\ \\text{Note: } \\gamma_v \\text{ check below assumes an interior column. Edge/corner critical sections require separate hand check per ACI 318 §8.4.4.}\$$`));
             }
@@ -583,7 +595,8 @@ document.addEventListener("DOMContentLoaded", () => {
         y1 = (cy/2)+depth;      console.log(`y1 = `,y1);
         y2 = ((by*1000)/2);            console.log(`y2 = `,y2);
        
-        document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation Along Y-axis (Cut Across Y-axis)`));       
+        document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation Along Y-axis (Cut Across Y-axis)`));
+        document.getElementById('result').appendChild(createClause(`Per NSCP 2015 §422.5.5 / ACI 318-14 §22.5.5 — one-way (beam) shear: \\(\\phi V_c = \\phi \\cdot \\tfrac{1}{6}\\lambda\\sqrt{f'_c}\\,b_w\\,d\\) with \\(\\phi = 0.75\\).`));
         if( longer === axis ){
             document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 0.5d_b = ${dc}mm - ${cc}mm - 0.5(${barDia}mm) = ${depth}mm \$$`));
         } else if ( shorter === axis ){
@@ -616,7 +629,8 @@ document.addEventListener("DOMContentLoaded", () => {
         y2 = (by*1000)/2;              console.log(`y2 = `,y2);
 
         
-        document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation Along X-axis (Cut Across X-axis)`));       
+        document.getElementById('result').appendChild(createHeader5(`Beam Shear Calculation Along X-axis (Cut Across X-axis)`));
+        document.getElementById('result').appendChild(createClause(`Per NSCP 2015 §422.5.5 / ACI 318-14 §22.5.5 — one-way (beam) shear: \\(\\phi V_c = \\phi \\cdot \\tfrac{1}{6}\\lambda\\sqrt{f'_c}\\,b_w\\,d\\) with \\(\\phi = 0.75\\).`));
         if( longer === axis ){
             document.getElementById('result').appendChild(createParagraph(`$$\\ d = D_c - C_c - 0.5d_b = ${dc}mm - ${cc}mm - 0.5(${barDia}mm) = ${depth}mm \$$`));
         } else if ( shorter === axis ){
@@ -729,7 +743,8 @@ document.addEventListener("DOMContentLoaded", () => {
             shorter="y";
         } 
         console.log(200);
-        document.getElementById('result').appendChild(createHeader5(`Solve Preliminary Values for Design`));       
+        document.getElementById('result').appendChild(createHeader5(`Solve Preliminary Values for Design`));
+        document.getElementById('result').appendChild(createClause(`Per NSCP 2015 §422.2.2.4.3 / ACI 318-14 §22.2.2.4.3 — Whitney stress-block factor \\(\\beta_1\\): \\(0.85\\) for \\(f'_c \\le 28\\,\\text{MPa}\\), reduces by \\(0.05/7\\) per MPa above 28, with a floor of \\(0.65\\).`));
 
         // ACI 318-14 / NSCP 2015 §22.2.2.4.3: beta1 step-down coefficient is 0.05/7, not 0.5/7
         let beta1 = 0;
@@ -868,7 +883,8 @@ document.addEventListener("DOMContentLoaded", () => {
         let ct = 3*depth/8;
         let at = ct*beta1;
         let muMax = 0.9 * 0.85 * fc * at * b *(depth-(at/2))/1000000;
-        document.getElementById('result').appendChild(createHeader7(`Check if SRRB`));       
+        document.getElementById('result').appendChild(createHeader7(`Check if SRRB`));
+        document.getElementById('result').appendChild(createClause(`Per NSCP 2015 §421.2.2 / ACI 318-14 §21.2.2 — tension-controlled limit \\(c_t = 3d/8\\) gives steel strain \\(\\varepsilon_t = 0.005\\) and \\(\\phi = 0.90\\); below this, the section is Singly-Reinforced (SRRB), above it requires compression steel (DRRB).`));
         document.getElementById('result').appendChild(createParagraph(`$$\\ c_t = 3 \\times \\frac{d}{8} = 3 \\times \\frac{${depth}}{8} = ${ct.toFixed(2)}mm \$$`));
         document.getElementById('result').appendChild(createParagraph(`$$\\ a_t = \\beta_1 \\times  c_t   = ${beta1} \\times ${ct.toFixed(2)}mm = ${at.toFixed(2)}mm \$$`));
         document.getElementById('result').appendChild(createParagraph(`$$\\ M_{u(max)} = \\phi \\times 0.85 \\times f'c \\times a_t \\times b \\times (d - \\frac{a_t}{2}) \$$`));
@@ -882,6 +898,7 @@ document.addEventListener("DOMContentLoaded", () => {
         let rhomin1 = 1.4/fy;
         let rhomin2 = Math.sqrt(fc)/(4*fy);
         let rhomin = Math.max(rhomin1,rhomin2);
+        document.getElementById('result').appendChild(createClause(`Per NSCP 2015 §409.6.1.2 / ACI 318-14 §9.6.1.2 — minimum flexural reinforcement ratio \\(\\rho_{min}\\) is the larger of \\(1.4/f_y\\) and \\(\\sqrt{f'_c}/(4 f_y)\\).`));
         document.getElementById('result').appendChild(createParagraph(`\\( \\rho_{min} = \\text {Greatest of} \\left\\{\\begin{array}{l} \\frac{1.4}{fy} = \\frac{1.4}{${fy}MPa} = ${rhomin1.toFixed(6)}\\, \\\\ \\frac{f'c}{4 \\times fy} = \\frac{${fc}MPa}{4 \\times ${fy}MPa} = ${rhomin2.toFixed(6)} \\, \\end{array}\\right. = ${rhomin.toFixed(6)} \\, \\)`));
         document.getElementById('result').appendChild(createParagraph(`$$\\ \\therefore \\rho = ${rho>rhomin ? rho.toFixed(6):rhomin.toFixed(6)} \$$`));
         rho = Math.max(rho,rhomin);
@@ -891,6 +908,7 @@ document.addEventListener("DOMContentLoaded", () => {
         let rhoST = (fy >= 414) ? 0.0018 : 0.0020;
         let asmin = rhoST*dc*b;
         document.getElementById('result').appendChild(createParagraph(`$$\\ A_s = \\rho \\times B_${text} \\times d = ${rho.toFixed(6)}\\times ${b}mm \\times ${depth.toFixed(2)}mm = ${as.toFixed(2)}mm^2 \$$`));
+        document.getElementById('result').appendChild(createClause(`Per NSCP 2015 §425.6.1.1 / ACI 318-14 §24.4.3.2 — shrinkage-and-temperature ratio \\(\\rho_{ST}\\): \\(0.0018\\) for Grade 414+ deformed bars, \\(0.0020\\) otherwise. Selected here based on the entered \\(f_y\\).`));
         document.getElementById('result').appendChild(createParagraph(`$$\\ A_{s,min} = \\rho_{ST} \\times A_g = ${rhoST.toFixed(4)} \\times B_${text} \\times D_c =  ${rhoST.toFixed(4)} \\times ${b}mm \\times ${dc}mm = ${asmin.toFixed(2)}mm^2  \\, ,\\, \\rho_{ST} = ${rhoST.toFixed(4)} \\text{ (f_y ${fy >= 414 ? "\\ge" : "<"} 414\\,MPa)}\$$`));
         document.getElementById('result').appendChild(createParagraph(`$$\\  ${as>asmin ? "A_s > A_{smin}":"A_s < A_{smin}"} \$$`));
         as = Math.max(as,asmin);
@@ -916,6 +934,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         centerbandRatio = 2 / (beta+1);
         m = Math.ceil(n*centerbandRatio);
+        document.getElementById('result').appendChild(createClause(`Per NSCP 2015 §413.3.3.3 / ACI 318-14 §13.3.3.3 — in rectangular footings, a portion \\(\\Upsilon_s = 2/(\\beta+1)\\) of the short-direction reinforcement is concentrated in a center band of width equal to the short side, where \\(\\beta\\) = long / short.`));
         document.getElementById('result').appendChild(createParagraph(`$$\\ \\Upsilon_s = \\frac{2}{\\beta + 1} = \\frac{2}{${beta.toFixed(2)} + 1} = ${centerbandRatio.toFixed(2)}\$$`));
         document.getElementById('result').appendChild(createParagraph(`$$\\ n_{centerband} = n \\times \\Upsilon_s = ${n} \\times ${centerbandRatio.toFixed(2)} = ${(n*centerbandRatio).toFixed(2)}pcs \\approx ${Math.ceil(n*centerbandRatio)}pcs \$$`));
         
