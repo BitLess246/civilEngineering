@@ -134,10 +134,15 @@ nav ul li a {
     
 }
 
-nav ul li a:focus{
-    background: #0056b3;
-    animation: ease 1s;
-    
+nav ul li a {
+    padding: 0 1.25rem;
+    line-height: 4rem;
+    transition: background 0.2s ease;
+}
+
+nav ul li a:focus {
+    background: #003f86;
+    outline: none;
 }
 .MathJax {
     font-size: 3vw;
@@ -405,19 +410,160 @@ ol.summary {
 }
 
 
-/* Quantity Surveying sub-pages */
-.quantity-subpage {
-    margin-top: 16px;
-}
-
-.quantity-subpage .form-group {
-    grid-column: 1 / -1;
-}
-
-.quantity-subpage h1 {
-    grid-column: 1 / -1;
-}
-
 nav ul li a:hover {
     background: #003f86;
+}
+
+/* ============================================================
+   Quantity Surveying pages
+   The base .container uses a rigid 4-col x 50px-row grid that
+   is meant for the Reinforced Concrete / Design pages. QS pages
+   need a clean flowing layout, so we override here.
+   ============================================================ */
+
+/* Outer wrapper override — turn off the rigid grid */
+.container.quantity-subpage,
+.container.qs-landing {
+    display: block;
+    width: 100%;
+    max-width: 1100px;
+    margin: 1em auto;
+    padding: 20px;
+    grid-template-rows: none;
+    grid-template-columns: none;
+}
+
+.quantity-subpage h1,
+.qs-landing h1 {
+    margin: 0 0 1rem;
+    font-size: 1.6em;
+}
+
+/* Top-level form-group on QS pages — labels/inputs flow vertically */
+.container.quantity-subpage > .form-group,
+.container.qs-landing > .form-group {
+    display: block;
+    margin: 0;
+}
+
+.container.quantity-subpage > .form-group > label,
+.container.qs-landing > .form-group > label {
+    display: block;
+    margin: 0 0 6px;
+    font-weight: 600;
+}
+
+.container.quantity-subpage > .form-group > select,
+.container.qs-landing > .form-group > select {
+    width: 100%;
+    max-width: 420px;
+    margin: 0 0 1rem;
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+/* Side-by-side Concrete Works + Steel Works cards on subpages */
+.quantity-subpage #concreteWorks,
+.quantity-subpage #steelWorks,
+.quantity-subpage #masonryWorks {
+    display: block;
+    width: 100%;
+    margin: 0 0 16px;
+    padding: 16px;
+    background: #fff;
+    border: 1px solid #d6d9de;
+    border-radius: 8px;
+    box-shadow: none;
+    box-sizing: border-box;
+    /* Cancel inherited rigid grid */
+    grid-template-rows: none;
+    grid-template-columns: none;
+    min-width: 0;
+}
+
+.quantity-subpage [id$="Inputs"] {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+    margin: 0 0 16px;
+}
+
+.quantity-subpage #concreteWorks h4,
+.quantity-subpage #steelWorks h4,
+.quantity-subpage #masonryWorks h4 {
+    text-align: left;
+    margin: 0 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #007BFF;
+    color: #0056b3;
+}
+
+/* Inputs and selects inside QS cards: full-width, sane spacing */
+.quantity-subpage label {
+    display: block;
+    width: auto;
+    margin: 10px 0 4px;
+    font-size: 0.95em;
+}
+
+.quantity-subpage input,
+.quantity-subpage select {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 8px 10px;
+    box-sizing: border-box;
+    border: 1px solid #c5c9d0;
+    border-radius: 4px;
+}
+
+.quantity-subpage input:focus,
+.quantity-subpage select:focus {
+    outline: none;
+    border-color: #007BFF;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.15);
+}
+
+/* Foundation sub-cards (Square / Rectangular) and beam sections */
+.quantity-subpage .foundation-card,
+.quantity-subpage .beam-section {
+    background: #fafbfc;
+    border: 1px solid #e1e4e8;
+    padding: 12px;
+    margin: 0 0 12px;
+    border-radius: 6px;
+}
+
+.quantity-subpage .foundation-card .card-title,
+.quantity-subpage .beam-section h5 {
+    margin: 0 0 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #e1e4e8;
+}
+
+/* Calculate button — give it room, center it */
+.quantity-subpage button[type="submit"],
+.quantity-subpage #saveButton {
+    display: block;
+    width: 220px;
+    margin: 12px auto;
+    padding: 12px;
+}
+
+.quantity-subpage #result {
+    margin-top: 16px;
+    padding: 12px;
+    background: #f6f8fa;
+    border-radius: 6px;
+    min-height: 0;
+}
+
+/* QS landing page — a column of large nav buttons / a centered select */
+.qs-landing {
+    text-align: center;
+}
+
+.qs-landing .form-group {
+    max-width: 420px;
+    margin: 0 auto;
 }
