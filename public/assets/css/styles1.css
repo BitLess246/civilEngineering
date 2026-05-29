@@ -648,8 +648,12 @@ nav ul li a:hover {
     flex: 0 0 auto !important;
 }
 
+/* Note: do NOT use `display: block !important` here. The inline show/hide
+   logic toggles `style.display = "none" | "block"` on individual labels and
+   inputs, and !important CSS beats inline style. Keep display unimportant
+   so the JS toggles continue to work. */
 .fd-page .fd-field label {
-    display: block !important;
+    display: block;
     width: auto !important;
     margin: 0 0 6px !important;
     padding: 0;
@@ -660,7 +664,7 @@ nav ul li a:hover {
 
 .fd-page .fd-field input,
 .fd-page .fd-field select {
-    display: block !important;
+    display: block;
     width: 100% !important;
     height: auto;
     margin: 0 !important;
@@ -732,6 +736,15 @@ nav ul li a:hover {
     font-size: 0.85em;
     color: #6a737d;
     margin: 4px 0 0;
+}
+
+/* When the inline show/hide JS sets display:none on EVERY direct child of an
+   .fd-field, hide the wrapper too — otherwise an empty grid cell remains and
+   pushes the next visible field into the wrong slot (the original "dropdown
+   bleed" symptom). This rule was lost during a merge conflict and is being
+   restored here. */
+.fd-page .fd-field:not(:has(> *:not([style*="display: none"]))) {
+    display: none;
 }
 
 /* ============================================================
@@ -1024,6 +1037,60 @@ nav ul li a:hover {
 .fd-page #GivenParameters1 h8 .katex,
 .fd-page #GivenParameters1 .katex {
     font-size: 1em !important;
+}
+
+/* Parameter-recap container (#GivenParameters1).
+   The container has class="container2" too, and the legacy rule
+   `.container2 h8 { margin: -0.3em; margin-right: 100%; display: inline-block }`
+   was collapsing every value into a vertical sliver. Defeat all of it. */
+.fd-page #GivenParameters1.container2,
+.fd-page #GivenParameters1 {
+    background: #f6f8fa !important;
+    border: 1px solid #e1e4e8 !important;
+    border-radius: 8px !important;
+    padding: 16px 20px !important;
+    margin: 0 0 20px !important;
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 6px 24px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box;
+}
+
+.fd-page #GivenParameters1 h5 {
+    grid-column: 1 / -1 !important;
+    margin: 0 0 8px !important;
+    padding: 0 0 8px !important;
+    border: none !important;
+    border-bottom: 2px solid #007BFF !important;
+    color: #0056b3 !important;
+    font-size: 1em !important;
+    background: none !important;
+    text-align: left !important;
+    counter-increment: none !important;
+}
+
+.fd-page #GivenParameters1 h5::before {
+    /* No step badge in the parameter recap. */
+    content: none !important;
+    display: none !important;
+}
+
+.fd-page #GivenParameters1 h8,
+.fd-page .container2 h8 {
+    display: block !important;
+    margin: 0 !important;
+    padding: 3px 0 !important;
+    font-size: 0.95em !important;
+    color: #1f2933 !important;
+    width: auto !important;
+    max-width: 100% !important;
+    text-align: left !important;
+    white-space: normal !important;
+    overflow-wrap: break-word;
+    line-height: 1.4;
 }
 
 .rc-page .rc-grid {
