@@ -648,8 +648,12 @@ nav ul li a:hover {
     flex: 0 0 auto !important;
 }
 
+/* Note: do NOT use `display: block !important` here. The inline show/hide
+   logic toggles `style.display = "none" | "block"` on individual labels and
+   inputs, and !important CSS beats inline style. Keep display unimportant
+   so the JS toggles continue to work. */
 .fd-page .fd-field label {
-    display: block !important;
+    display: block;
     width: auto !important;
     margin: 0 0 6px !important;
     padding: 0;
@@ -660,7 +664,7 @@ nav ul li a:hover {
 
 .fd-page .fd-field input,
 .fd-page .fd-field select {
-    display: block !important;
+    display: block;
     width: 100% !important;
     height: auto;
     margin: 0 !important;
@@ -732,6 +736,15 @@ nav ul li a:hover {
     font-size: 0.85em;
     color: #6a737d;
     margin: 4px 0 0;
+}
+
+/* When the inline show/hide JS sets display:none on EVERY direct child of an
+   .fd-field, hide the wrapper too — otherwise an empty grid cell remains and
+   pushes the next visible field into the wrong slot (the original "dropdown
+   bleed" symptom). This rule was lost during a merge conflict and is being
+   restored here. */
+.fd-page .fd-field:not(:has(> *:not([style*="display: none"]))) {
+    display: none;
 }
 
 /* ============================================================
