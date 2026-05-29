@@ -686,10 +686,39 @@ handleLoadTypeChange(); // This ensures the display is set correctly on page loa
             document.querySelectorAll('input, select').forEach(field => {
                 field.addEventListener('input', saveFieldValues);
                 field.addEventListener('change', saveFieldValues);
-             
+
             });
-    
-            
+
+            // Render KaTeX in the form labels (e.g. \(B_x\), \(P_u\), \(\gamma_c\)).
+            // Without this, labels show raw "\(B_x\) (in meters)" text because
+            // KaTeX auto-render only runs when explicitly invoked.
+            function renderFormMath() {
+                if (typeof renderMathInElement === 'undefined') {
+                    setTimeout(renderFormMath, 80);
+                    return;
+                }
+                const target = document.querySelector('.fd-page') || document.body;
+                try {
+                    renderMathInElement(target, {
+                        delimiters: [
+                            { left: '$$', right: '$$', display: true },
+                            { left: '\\[', right: '\\]', display: true },
+                            { left: '\\(', right: '\\)', display: false }
+                        ],
+                        throwOnError: false,
+                        errorColor: '#cc0000',
+                        strict: false,
+                        trust: true,
+                        // Skip elements that would break if we touched their text
+                        // nodes (the calculator's output panels handle their own
+                        // rendering after Calculate runs).
+                        ignoredClasses: ['katex', 'fd-clause']
+                    });
+                } catch (e) {
+                    console.error('KaTeX render (form) failed:', e);
+                }
+            }
+            renderFormMath();
         });
         function openTab(evt, tabName) {
         // Get all elements with class="tab-content" and hide them
@@ -1612,7 +1641,7 @@ function handleFile(event) {
             let rhoST = (fy >= 414) ? 0.0018 : 0.0020;
             let asmin = rhoST*dc*b;
             document.getElementById('result').appendChild(createParagraph(`$$\\ A_s = \\rho \\times B_${text} \\times d = ${rho.toFixed(6)}\\times ${b}mm \\times ${depth.toFixed(2)}mm = ${as.toFixed(2)}mm^2 \$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ A_{s,min} = \\rho_{ST} \\times A_g = ${rhoST.toFixed(4)} \\times B_${text} \\times D_c =  ${rhoST.toFixed(4)} \\times ${b}mm \\times ${dc}mm = ${asmin.toFixed(2)}mm^2  \\, ,\\, \\rho_{ST} = ${rhoST.toFixed(4)} \\text{ (f_y ${fy >= 414 ? "\\ge" : "<"} 414\\,MPa)}\$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ A_{s,min} = \\rho_{ST} \\times A_g = ${rhoST.toFixed(4)} \\times B_${text} \\times D_c = ${rhoST.toFixed(4)} \\times ${b}\\,\\text{mm} \\times ${dc}\\,\\text{mm} = ${asmin.toFixed(2)}\\,\\text{mm}^2 \\quad (\\rho_{ST} = ${rhoST.toFixed(4)},\\; f_y ${fy >= 414 ? "\\geq" : "<"} 414\\,\\mathrm{MPa}) \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\  ${as>asmin ? "A_s > A_{smin}":"A_s < A_{smin}"} \$$`));
             as = Math.max(as,asmin);
             document.getElementById('result').appendChild(createParagraph(`$$\\ \\therefore A_s = ${as.toFixed(2)}mm^2 \$$`));

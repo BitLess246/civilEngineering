@@ -962,7 +962,10 @@ document.addEventListener("DOMContentLoaded", () => {
         let asmin = rhoST*dc*b;
         document.getElementById('result').appendChild(createParagraph(`$$\\ A_s = \\rho \\times B_${text} \\times d = ${rho.toFixed(6)}\\times ${b}mm \\times ${depth.toFixed(2)}mm = ${as.toFixed(2)}mm^2 \$$`));
         document.getElementById('result').appendChild(createClause(`Per NSCP 2015 §425.6.1.1 / ACI 318-14 §24.4.3.2 — shrinkage-and-temperature ratio \\(\\rho_{ST}\\): \\(0.0018\\) for Grade 414+ deformed bars, \\(0.0020\\) otherwise. Selected here based on the entered \\(f_y\\).`));
-        document.getElementById('result').appendChild(createParagraph(`$$\\ A_{s,min} = \\rho_{ST} \\times A_g = ${rhoST.toFixed(4)} \\times B_${text} \\times D_c =  ${rhoST.toFixed(4)} \\times ${b}mm \\times ${dc}mm = ${asmin.toFixed(2)}mm^2  \\, ,\\, \\rho_{ST} = ${rhoST.toFixed(4)} \\text{ (f_y ${fy >= 414 ? "\\ge" : "<"} 414\\,MPa)}\$$`));
+        // Note: keep \geq / < OUTSIDE any \text{} — math operators don't parse
+        // inside text mode in KaTeX, which was causing this line to fall back
+        // to raw markup on the deployed page.
+        document.getElementById('result').appendChild(createParagraph(`$$\\ A_{s,min} = \\rho_{ST} \\times A_g = ${rhoST.toFixed(4)} \\times B_${text} \\times D_c = ${rhoST.toFixed(4)} \\times ${b}\\,\\text{mm} \\times ${dc}\\,\\text{mm} = ${asmin.toFixed(2)}\\,\\text{mm}^2 \\quad (\\rho_{ST} = ${rhoST.toFixed(4)},\\; f_y ${fy >= 414 ? "\\geq" : "<"} 414\\,\\mathrm{MPa}) \$$`));
         document.getElementById('result').appendChild(createParagraph(`$$\\  ${as>asmin ? "A_s > A_{smin}":"A_s < A_{smin}"} \$$`));
         as = Math.max(as,asmin);
         document.getElementById('result').appendChild(createParagraph(`$$\\ \\therefore A_s = ${as.toFixed(2)}mm^2 \$$`));
