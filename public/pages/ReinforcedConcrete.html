@@ -7,29 +7,82 @@
 
     <link rel="stylesheet" href="/assets/css/styles1.css">
     <script src="/assets/js/layout_script.js" defer></script>
-    <script src="/assets/js/script.js" defer></script>
 </head>
 <body>
     <nav>
         <ul>
+            <li><a href="index.html">HOME</a></li>
             <li><a href="QuantitySurveying.html">QUANTITY SURVEYING</a></li>
             <li><a href="ReinforcedConcrete.html">REINFORCED CONCRETE</a></li>
             <li><a href="#">STEEL DESIGN</a></li>
         </ul>
     </nav>
-    <div class="container1">
-        <div class="container">
-        <h1 class="title1">Reinforced Concrete Design</h1>
-        <div>
-            <label for="structureType" class="mid1">Select Structure Type:</label>
-            <select id="structureType" name="structureType" class="mid2">
-		        <option value="" disabled selected>Select The Type Of Structure</option>
-                <option value="beamDesign">Beam</option>
-                <option value="columnDesign">Column</option>
-                <option value="foundationDesign">Foundation</option>
+
+    <div class="container rc-page">
+
+        <header class="rc-hero">
+            <h1>Reinforced Concrete Design</h1>
+            <p>
+                Choose a structural element below. Foundation Design is the full ACI 318 / NSCP 2015
+                workflow with iterative shear and flexural checks. Beam and Column are placeholder
+                pages for now.
+            </p>
+        </header>
+
+        <div class="rc-quickselect">
+            <label for="structureType">Quick select:</label>
+            <select id="structureType" name="structureType">
+                <option value="" disabled selected>Jump to a calculator&hellip;</option>
+                <option value="beamDesign">Beam Design</option>
+                <option value="columnDesign">Column Design</option>
+                <option value="foundationDesign">Foundation Design</option>
             </select>
         </div>
+
+        <div class="rc-grid">
+
+            <a href="foundationDesign.html" class="rc-card">
+                <h3 class="rc-card__title">Foundation Design</h3>
+                <p class="rc-card__description">
+                    Isolated square, isolated rectangular, and combined footings. Solves
+                    dimensions, punching shear, beam shear, and flexural reinforcement
+                    iteratively. Supports eccentric loads with moment-transfer check.
+                </p>
+                <div class="rc-card__footer">
+                    <span class="rc-badge rc-badge--full">Full calculator</span>
+                    <span class="rc-card__cta">Open &rarr;</span>
+                </div>
+            </a>
+
+            <a href="beamDesign.html" class="rc-card">
+                <h3 class="rc-card__title">Beam Design</h3>
+                <p class="rc-card__description">
+                    Singly and doubly reinforced beam design with shear stirrup spacing.
+                    Currently a placeholder &mdash; the page redirects you to the foundation
+                    workflow.
+                </p>
+                <div class="rc-card__footer">
+                    <span class="rc-badge rc-badge--stub">Placeholder</span>
+                    <span class="rc-card__cta">Open &rarr;</span>
+                </div>
+            </a>
+
+            <a href="columnDesign.html" class="rc-card">
+                <h3 class="rc-card__title">Column Design</h3>
+                <p class="rc-card__description">
+                    Axially loaded and uniaxial-bending column design with tie spacing.
+                    Currently a placeholder &mdash; the page redirects you to the foundation
+                    workflow.
+                </p>
+                <div class="rc-card__footer">
+                    <span class="rc-badge rc-badge--stub">Placeholder</span>
+                    <span class="rc-card__cta">Open &rarr;</span>
+                </div>
+            </a>
+
+        </div>
+
     </div>
-    </div>
+
 </body>
 </html>

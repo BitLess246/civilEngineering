@@ -713,214 +713,141 @@ nav ul li a:hover {
     margin: 4px 0 0;
 }
 
-/* When the inline show/hide JS sets display:none on BOTH the label and the
-   input/select inside an .fd-field, the wrapper itself stays visible and
-   claims a grid cell — pushing the next visible field into the wrong slot
-   and creating the dropdown-bleed effect. Hide the wrapper when every direct
-   child is hidden via inline style. */
-.fd-page .fd-field:not(:has(> *:not([style*="display: none"]))) {
-    display: none;
-}
-
 /* ============================================================
-   Foundation Design — Solution / Summary card layout
-   The JS appends h5 (major step) / h7 (sub-step) / p (math) into
-   #result and #Solution. Style those tags so the flat list reads
-   as a stepped report.
+   Reinforced Concrete landing page (scoped via .rc-page)
+   Disables the rigid .container grid only for this page.
    ============================================================ */
-.fd-page #print {
-    margin-top: 24px;
-}
 
-.fd-page .tab {
-    border-radius: 8px 8px 0 0;
-    border: 1px solid #007BFF;
-    border-bottom: none;
-    margin-bottom: 0;
-    overflow: hidden;
-}
-
-.fd-page .tab-button {
-    flex: 1 1 50%;
-    text-align: center;
-    font-weight: 600;
-    border-bottom: 3px solid transparent;
-}
-
-.fd-page .tab-button.active {
-    border-bottom-color: #003f86;
-}
-
-.fd-page #summary,
-.fd-page #Solution {
-    background: #fff;
-    border: 1px solid #007BFF;
-    border-top: none;
-    border-radius: 0 0 8px 8px;
-    padding: 20px 24px;
-    margin: 0 0 24px;
-}
-
-/* Parameter-recap grid at the top of the Solution tab */
-.fd-page #GivenParameters1 {
-    background: #f6f8fa;
-    border: 1px solid #e1e4e8;
-    border-radius: 8px;
-    padding: 16px 20px;
-    margin: 0 0 20px;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px 24px;
-}
-
-.fd-page #GivenParameters1 h5 {
-    grid-column: 1 / -1;
-    margin: 0 0 6px;
-    padding-bottom: 8px;
-    border-bottom: 2px solid #007BFF;
-    color: #0056b3;
-    font-size: 1em;
-}
-
-.fd-page #GivenParameters1 h8 {
+.container.rc-page {
     display: block;
-    margin: 0;
-    font-size: 0.95em;
+    width: 100%;
+    max-width: 960px;
+    margin: 1.5em auto;
+    padding: 28px 28px 32px;
+    grid-template-rows: none;
+    grid-template-columns: none;
+}
+
+.rc-page .rc-hero {
+    text-align: center;
+    margin: 0 0 24px;
+    padding: 0 8px 18px;
+    border-bottom: 1px solid #e1e4e8;
+}
+
+.rc-page .rc-hero h1 {
+    margin: 0 0 8px;
+    font-size: 1.7em;
     color: #1f2933;
 }
 
-/* Reset the legacy negative-margin hacks on result paragraphs that were
-   making LaTeX bleed sideways. */
-.fd-page #result.latex-container,
-.fd-page #Summary.latex-container,
-.fd-page #Summary1.latex-container {
-    display: block;
-    width: 100%;
-    font-size: 1em;
-    line-height: 1.5;
+.rc-page .rc-hero p {
+    margin: 0;
+    color: #5c6773;
+    font-size: 0.95em;
+    max-width: 580px;
+    margin: 0 auto;
 }
 
-.fd-page #result.latex-container p,
-.fd-page #Summary.latex-container p,
-.fd-page #Summary1.latex-container p {
-    display: block;
-    margin: 0 0 10px;
-    text-align: left;
-    overflow-x: auto;
-    overflow-y: hidden;
-}
-
-/* h3 (Summary title) — section banner */
-.fd-page #Summary.latex-container h3,
-.fd-page #Summary1.latex-container h3,
-.fd-page #result.latex-container h3 {
-    margin: 0 0 18px;
-    padding: 12px 16px;
-    background: linear-gradient(135deg, #0056b3 0%, #003f86 100%);
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    font-size: 1.15em;
-    text-align: left;
-}
-
-/* h5 — major calculation step. Render as a card header with a step bar */
-.fd-page #result.latex-container h5 {
-    counter-increment: fd-step;
-    margin: 24px 0 12px;
-    padding: 10px 16px 10px 56px;
+.rc-page .rc-quickselect {
+    margin: 0 0 28px;
+    padding: 14px 16px;
     background: #f6f8fa;
-    border: 1px solid #d6d9de;
-    border-left: 4px solid #0056b3;
-    border-radius: 6px;
-    color: #0056b3;
-    font-size: 1.1em;
-    font-weight: 700;
-    position: relative;
-    page-break-after: avoid;
-}
-
-.fd-page #result.latex-container h5::before {
-    content: counter(fd-step);
-    position: absolute;
-    left: 14px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    background: #0056b3;
-    color: #fff;
+    border: 1px solid #e1e4e8;
+    border-radius: 8px;
     display: flex;
     align-items: center;
-    justify-content: center;
-    font-size: 0.9em;
-    font-weight: 700;
+    gap: 12px;
+    flex-wrap: wrap;
 }
 
-.fd-page #result.latex-container {
-    counter-reset: fd-step;
-}
-
-/* h7 — sub-step header (custom tag the JS uses) */
-.fd-page #result.latex-container h7,
-.fd-page #Summary.latex-container h7,
-.fd-page #Summary1.latex-container h7 {
-    display: block;
-    margin: 16px 0 8px;
-    padding: 6px 12px;
-    background: #e8f1fb;
-    border-left: 3px solid #007BFF;
-    color: #0056b3;
-    font-size: 1em;
+.rc-page .rc-quickselect label {
+    width: auto;
+    margin: 0;
     font-weight: 600;
-    border-radius: 0 4px 4px 0;
+    color: #2c3e50;
+    white-space: nowrap;
 }
 
-/* h8 — atomic value line inside the parameters block */
-.fd-page #result.latex-container h8,
-.fd-page #Summary.latex-container h8,
-.fd-page #Summary1.latex-container h8 {
-    display: block;
-    margin: 4px 0;
-    font-size: 0.95em;
-}
-
-/* Group consecutive math paragraphs under each h5/h7 into a soft card
-   without changing JS. The CSS uses :has() to detect "this h5/h7 is the
-   start of a section" and applies a left border on following <p>. */
-.fd-page #result.latex-container > p {
-    padding: 8px 14px;
-    background: #fcfcfd;
-    border-left: 2px solid #e1e4e8;
-    border-radius: 0 4px 4px 0;
-    margin-left: 8px;
-}
-
-/* Standout style for the code-reference annotation paragraphs the JS
-   appends (they all start with "Per ..."). Uses :has() on the inner span. */
-.fd-page #result.latex-container p.fd-clause,
-.fd-page #Summary.latex-container p.fd-clause,
-.fd-page #Summary1.latex-container p.fd-clause {
-    display: inline-block;
-    margin: 4px 0 14px;
-    padding: 4px 10px;
-    background: rgba(31, 138, 58, 0.10);
-    border: 1px solid rgba(31, 138, 58, 0.25);
-    color: #1f6f30;
-    font-size: 0.85em;
+.rc-page .rc-quickselect select {
+    width: auto;
+    flex: 1 1 220px;
+    margin: 0;
+    padding: 8px 10px;
+    border: 1px solid #c5c9d0;
     border-radius: 4px;
-    font-style: italic;
-    text-align: left;
-    border-left: 3px solid #1f8a3a;
+    background: #fff;
 }
 
-/* Summary block on the Summary tab — keep it tight */
-.fd-page #Summary.latex-container p,
-.fd-page #Summary1.latex-container p {
-    padding: 6px 12px;
-    background: #fcfcfd;
-    border-left: 2px solid #007BFF;
-    border-radius: 0 4px 4px 0;
-    margin: 4px 0;
+.rc-page .rc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+}
+
+.rc-page .rc-card {
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid #d6d9de;
+    border-radius: 10px;
+    padding: 18px 20px 16px;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    min-height: 170px;
+}
+
+.rc-page .rc-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+    border-color: #007BFF;
+    text-decoration: none;
+}
+
+.rc-page .rc-card__title {
+    margin: 0 0 6px;
+    font-size: 1.1em;
+    font-weight: 700;
+    color: #1f2933;
+}
+
+.rc-page .rc-card__description {
+    margin: 0 0 14px;
+    color: #5c6773;
+    font-size: 0.92em;
+    flex: 1;
+}
+
+.rc-page .rc-card__footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: auto;
+    font-size: 0.85em;
+}
+
+.rc-page .rc-card__cta {
+    color: #0056b3;
+    font-weight: 600;
+}
+
+.rc-page .rc-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.7em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.rc-page .rc-badge--full {
+    background: rgba(31, 138, 58, 0.12);
+    color: #1f8a3a;
+}
+
+.rc-page .rc-badge--stub {
+    background: rgba(176, 119, 0, 0.12);
+    color: #b07700;
 }
