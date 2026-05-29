@@ -975,6 +975,57 @@ nav ul li a:hover {
     vertical-align: middle;
 }
 
+/* ============================================================
+   KaTeX output (replaces MathJax). KaTeX wraps display math in
+   <span class="katex-display"><span class="katex">...</span></span>
+   and inline math in <span class="katex">.  Style them to fit the
+   solution-card layout cleanly.
+   ============================================================ */
+.fd-page .katex,
+.fd-page #result.latex-container .katex,
+.fd-page #Summary.latex-container .katex,
+.fd-page #Summary1.latex-container .katex,
+.fd-page #GivenParameters1 .katex {
+    font-size: 1.05em !important;
+    text-rendering: auto;
+    color: #1f2933;
+    line-height: 1.2;
+    white-space: normal !important;
+}
+
+.fd-page .katex-display,
+.fd-page #result.latex-container .katex-display,
+.fd-page #Summary.latex-container .katex-display,
+.fd-page #Summary1.latex-container .katex-display {
+    display: block !important;
+    margin: 6px 0 !important;
+    padding: 4px 2px !important;
+    text-align: left !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    /* KaTeX's default `.katex-display > .katex` centers — override to left. */
+}
+
+.fd-page .katex-display > .katex {
+    text-align: left !important;
+    display: inline-block;
+}
+
+/* Inside the green clause callout, render inline math without extra spacing. */
+.fd-page #result.latex-container p.fd-clause .katex,
+.fd-page #Summary.latex-container p.fd-clause .katex,
+.fd-page #Summary1.latex-container p.fd-clause .katex {
+    color: #1f6f30 !important;
+    font-size: 0.95em !important;
+    font-style: normal;
+}
+
+/* Parameter-recap atomic value lines (h8 tag — non-standard but used by the JS) */
+.fd-page #GivenParameters1 h8 .katex,
+.fd-page #GivenParameters1 .katex {
+    font-size: 1em !important;
+}
+
 .rc-page .rc-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));

@@ -1,10 +1,63 @@
 import { SaveFile } from './script.js';
 
+// Render KaTeX math in an element after the JS has appended its content.
+// KaTeX is synchronous (unlike MathJax) so this just works without promises.
+// Falls back gracefully if KaTeX auto-render hasn't finished loading.
+function renderMath(element) {
+    if (!element) return;
+    if (typeof renderMathInElement === 'undefined') {
+        setTimeout(() => renderMath(element), 80);
+        return;
+    }
+    try {
+        renderMathInElement(element, {
+            delimiters: [
+                { left: '$$', right: '$$', display: true },
+                { left: '\\[', right: '\\]', display: true },
+                { left: '\\(', right: '\\)', display: false }
+            ],
+            throwOnError: false,
+            errorColor: '#cc0000',
+            strict: false,
+            trust: true,
+            macros: {
+                "\\kN":  "\\,\\text{kN}",
+                "\\kNm": "\\,\\text{kN·m}",
+                "\\mm":  "\\,\\text{mm}",
+                "\\MPa": "\\,\\text{MPa}",
+                "\\kPa": "\\,\\text{kPa}"
+            }
+        });
+    } catch (e) {
+        console.error('KaTeX render failed:', e);
+    }
+}
+
+// Render math in every output panel after the calculation has appended content.
+function renderAllMath() {
+    ['result', 'Summary', 'Summary1', 'GivenParameters1'].forEach(id => {
+        renderMath(document.getElementById(id));
+    });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('formFoundation').addEventListener('submit',function(event){
         event.preventDefault();
-       
-        
+
+        // Validate critical combinations before running the calculator.
+        // (Isolated Rectangular without a Length Restriction makes dimension()
+        //  skip its solver, leaving B_x and B_y at 0 and cascading NaN through
+        //  every downstream check.)
+        const _structureType = document.getElementById('structureType').value;
+        const _restrictionType = document.getElementById('LengthRestriction').value;
+        if (_structureType === 'Isolated Rectangular' && (_restrictionType === '0' || _restrictionType === '')) {
+            alert(
+                'Isolated Rectangular footings need a Length Restriction.\n\n' +
+                'Pick "Ratio" (and enter the ratio L:B) or "Constricted" (and enter the constraint length).\n' +
+                'Without it the solver cannot determine both B_x and B_y.'
+            );
+            return;
+        }
 
     try {
         const resultDiv = document.getElementById("result");
@@ -1315,7 +1368,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     document.getElementById('saveButton').style.display = 'block';
     document.getElementById('tab').style.display = 'flex';
-    MathJax.typesetPromise(); 
+    // Render all math now that every paragraph has been appended.
+    renderAllMath();
     const saveButtonElement = document.getElementById("saveButton");
     saveButtonElement.addEventListener("click", function() {
         printDiv("Solution");
