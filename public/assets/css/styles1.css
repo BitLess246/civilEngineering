@@ -624,20 +624,35 @@ nav ul li a:hover {
 .fd-page .fd-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 10px 18px;
+    /* row gap must be large enough that the input never visually touches the
+       label of the field below, even if the global `flex: 1 0 100%` leaks. */
+    gap: 22px 20px;
     margin-top: 8px;
+    align-items: start;
 }
 
 .fd-page .fd-field {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    /* Field is content-sized; defeats vertical stretching from grid defaults. */
+    align-self: start;
+}
+
+.fd-page .fd-field > * {
+    /* The global `input, select { flex: 1 0 100% }` would otherwise make the
+       input's flex-basis 100% of the column-flex container's main-axis
+       (= the .fd-field height), causing the input to grow and the label of
+       the NEXT row to render inside the previous row's input. Pin every
+       child to content size. */
+    flex: 0 0 auto !important;
 }
 
 .fd-page .fd-field label {
-    display: block;
-    width: auto;
-    margin: 0 0 4px;
+    display: block !important;
+    width: auto !important;
+    margin: 0 0 6px !important;
+    padding: 0;
     font-size: 0.9em;
     color: #2c3e50;
     line-height: 1.3;
@@ -645,14 +660,20 @@ nav ul li a:hover {
 
 .fd-page .fd-field input,
 .fd-page .fd-field select {
-    width: 100%;
-    margin: 0;
-    padding: 8px 10px;
+    display: block !important;
+    width: 100% !important;
+    height: auto;
+    margin: 0 !important;
+    padding: 9px 11px;
     box-sizing: border-box;
     border: 1px solid #c5c9d0;
     border-radius: 4px;
     background: #fff;
     font-size: 0.95em;
+    line-height: 1.3;
+    /* Keep the select control from stretching beyond a normal control height
+       when the global input rule's flex-basis: 100% would otherwise win. */
+    min-height: auto;
 }
 
 .fd-page .fd-field input:focus,
@@ -777,6 +798,232 @@ nav ul li a:hover {
     border: 1px solid #c5c9d0;
     border-radius: 4px;
     background: #fff;
+}
+
+/* ============================================================
+   Foundation Design — strong overrides for the LaTeX panels.
+   The original .latex-container is { display: inline-block;
+   width: min-content }, which collapses content to its narrowest
+   possible width — that was making citation paragraphs render one
+   word per line. The legacy `.latex-container p` rule also sets
+   `display: inline-block; margin-right: 100%`. Force block layout
+   with full width using !important so neither legacy rule wins.
+   ============================================================ */
+.fd-page #result.latex-container,
+.fd-page #Summary.latex-container,
+.fd-page #Summary1.latex-container {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    font-size: 1em;
+    line-height: 1.55;
+    text-align: left;
+    box-sizing: border-box;
+}
+
+.fd-page #result.latex-container p,
+.fd-page #Summary.latex-container p,
+.fd-page #Summary1.latex-container p {
+    display: block !important;
+    width: auto !important;
+    max-width: 100% !important;
+    margin: 0 0 10px !important;
+    padding: 0;
+    text-align: left;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: normal !important;
+    word-break: normal;
+    overflow-wrap: break-word;
+}
+
+/* h3 (Summary title) — section banner */
+.fd-page #Summary.latex-container h3,
+.fd-page #Summary1.latex-container h3,
+.fd-page #result.latex-container h3 {
+    display: block !important;
+    width: 100% !important;
+    box-sizing: border-box;
+    margin: 0 0 18px !important;
+    padding: 14px 18px !important;
+    background: linear-gradient(135deg, #0056b3 0%, #003f86 100%) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 6px !important;
+    font-size: 1.2em !important;
+    font-weight: 700 !important;
+    text-align: left !important;
+}
+
+/* h5 — major calculation step. Render as a card header with a step bar */
+.fd-page #result.latex-container h5 {
+    counter-increment: fd-step;
+    display: block !important;
+    width: 100% !important;
+    box-sizing: border-box;
+    margin: 24px 0 12px !important;
+    padding: 12px 16px 12px 56px !important;
+    background: #f6f8fa !important;
+    border: 1px solid #d6d9de !important;
+    border-left: 4px solid #0056b3 !important;
+    border-radius: 6px !important;
+    color: #0056b3 !important;
+    font-size: 1.1em !important;
+    font-weight: 700 !important;
+    position: relative;
+    page-break-after: avoid;
+    text-align: left !important;
+    line-height: 1.4 !important;
+}
+
+.fd-page #result.latex-container h5::before {
+    content: counter(fd-step);
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #0056b3;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9em;
+    font-weight: 700;
+}
+
+.fd-page #result.latex-container {
+    counter-reset: fd-step;
+}
+
+/* h7 — sub-step header (custom tag the JS uses) */
+.fd-page #result.latex-container h7,
+.fd-page #Summary.latex-container h7,
+.fd-page #Summary1.latex-container h7 {
+    display: block !important;
+    width: 100% !important;
+    box-sizing: border-box;
+    margin: 18px 0 8px 8px !important;
+    padding: 8px 12px !important;
+    background: #e8f1fb !important;
+    border-left: 3px solid #007BFF !important;
+    color: #0056b3 !important;
+    font-size: 1em !important;
+    font-weight: 600 !important;
+    border-radius: 0 4px 4px 0 !important;
+    text-align: left !important;
+}
+
+/* h8 — atomic value line inside the parameters block */
+.fd-page #result.latex-container h8,
+.fd-page #Summary.latex-container h8,
+.fd-page #Summary1.latex-container h8 {
+    display: block;
+    margin: 4px 0;
+    font-size: 0.95em;
+}
+
+/* Soft card treatment for the equation paragraphs that follow a step
+   header. The .fd-clause rule below overrides this with a more specific
+   selector so callouts get the green note styling instead. */
+.fd-page #result.latex-container > p {
+    padding: 10px 14px !important;
+    background: #fcfcfd;
+    border-left: 2px solid #e1e4e8;
+    border-radius: 0 4px 4px 0;
+    margin-left: 8px !important;
+    overflow-x: auto;
+}
+
+/* Code-reference annotation paragraphs the JS appends after each step header.
+   Render as a full-width "callout note" block so the text flows naturally
+   instead of inheriting the LaTeX container's shrink-to-fit width and
+   breaking one-word-per-line. */
+.fd-page #result.latex-container p.fd-clause,
+.fd-page #Summary.latex-container p.fd-clause,
+.fd-page #Summary1.latex-container p.fd-clause {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 4px 0 16px 8px !important;
+    padding: 10px 14px !important;
+    background: rgba(31, 138, 58, 0.08) !important;
+    border: 1px solid rgba(31, 138, 58, 0.22) !important;
+    border-left: 3px solid #1f8a3a !important;
+    border-radius: 0 4px 4px 0 !important;
+    color: #1f6f30 !important;
+    font-size: 0.9em !important;
+    font-style: italic !important;
+    text-align: left !important;
+    line-height: 1.55 !important;
+    white-space: normal !important;
+    word-break: normal;
+    overflow-wrap: break-word;
+    box-sizing: border-box;
+}
+
+/* MathJax renders display equations inside the clause as inline pieces so
+   they don't break the paragraph flow. */
+.fd-page #result.latex-container p.fd-clause mjx-container,
+.fd-page #Summary.latex-container p.fd-clause mjx-container,
+.fd-page #Summary1.latex-container p.fd-clause mjx-container {
+    display: inline-block !important;
+    margin: 0 2px !important;
+    vertical-align: middle;
+}
+
+/* ============================================================
+   KaTeX output (replaces MathJax). KaTeX wraps display math in
+   <span class="katex-display"><span class="katex">...</span></span>
+   and inline math in <span class="katex">.  Style them to fit the
+   solution-card layout cleanly.
+   ============================================================ */
+.fd-page .katex,
+.fd-page #result.latex-container .katex,
+.fd-page #Summary.latex-container .katex,
+.fd-page #Summary1.latex-container .katex,
+.fd-page #GivenParameters1 .katex {
+    font-size: 1.05em !important;
+    text-rendering: auto;
+    color: #1f2933;
+    line-height: 1.2;
+    white-space: normal !important;
+}
+
+.fd-page .katex-display,
+.fd-page #result.latex-container .katex-display,
+.fd-page #Summary.latex-container .katex-display,
+.fd-page #Summary1.latex-container .katex-display {
+    display: block !important;
+    margin: 6px 0 !important;
+    padding: 4px 2px !important;
+    text-align: left !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    /* KaTeX's default `.katex-display > .katex` centers — override to left. */
+}
+
+.fd-page .katex-display > .katex {
+    text-align: left !important;
+    display: inline-block;
+}
+
+/* Inside the green clause callout, render inline math without extra spacing. */
+.fd-page #result.latex-container p.fd-clause .katex,
+.fd-page #Summary.latex-container p.fd-clause .katex,
+.fd-page #Summary1.latex-container p.fd-clause .katex {
+    color: #1f6f30 !important;
+    font-size: 0.95em !important;
+    font-style: normal;
+}
+
+/* Parameter-recap atomic value lines (h8 tag — non-standard but used by the JS) */
+.fd-page #GivenParameters1 h8 .katex,
+.fd-page #GivenParameters1 .katex {
+    font-size: 1em !important;
 }
 
 .rc-page .rc-grid {

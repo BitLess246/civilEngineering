@@ -12,14 +12,16 @@
     color: #fff;}
     </style>
     <script src="/assets/js/layout_script.js" defer></script>
-    
-    <script type="text/javascript" async
-        src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
-</script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js"></script>
 
-<script type="module" src="/assets/js/scriptFoundationDesign6.js" defer></script>
+    <!-- KaTeX: synchronous, deterministic math typesetting (replaces MathJax) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" crossorigin="anonymous">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" crossorigin="anonymous"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js"></script>
+
+    <script type="module" src="/assets/js/scriptFoundationDesign6.js" defer></script>
     
 <style>
     canvas {
@@ -713,6 +715,38 @@ handleLoadTypeChange(); // This ensures the display is set correctly on page loa
 
     
  document.getElementById('uploadExcel').addEventListener('change', handleFile);
+
+// Shared KaTeX renderer for the Excel-upload code path (the inline script
+// below mirrors the same calculation engine and needs the same renderer).
+function renderMathHere(element) {
+    if (!element) return;
+    if (typeof renderMathInElement === 'undefined') {
+        setTimeout(() => renderMathHere(element), 80);
+        return;
+    }
+    try {
+        renderMathInElement(element, {
+            delimiters: [
+                { left: '$$', right: '$$', display: true },
+                { left: '\\[', right: '\\]', display: true },
+                { left: '\\(', right: '\\)', display: false }
+            ],
+            throwOnError: false,
+            errorColor: '#cc0000',
+            strict: false,
+            trust: true,
+            macros: {
+                "\\kN":  "\\,\\text{kN}",
+                "\\kNm": "\\,\\text{kN·m}",
+                "\\mm":  "\\,\\text{mm}",
+                "\\MPa": "\\,\\text{MPa}",
+                "\\kPa": "\\,\\text{kPa}"
+            }
+        });
+    } catch (e) {
+        console.error('KaTeX render failed:', e);
+    }
+}
 
 function handleFile(event) {
     const file = event.target.files[0];
@@ -1870,7 +1904,9 @@ function handleFile(event) {
     }
     document.getElementById('saveButton').style.display = 'block';
     document.getElementById('tab').style.display = 'flex';
-    MathJax.typesetPromise(); 
+    ['result', 'Summary', 'Summary1', 'GivenParameters1'].forEach(id => {
+        renderMathHere(document.getElementById(id));
+    });
     const saveButtonElement = document.getElementById("saveButton");
     saveButtonElement.addEventListener("click", function() {
         printDiv("Solution");
