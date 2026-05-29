@@ -406,14 +406,52 @@ document.addEventListener("DOMContentLoaded", () => {
         vn =test.vn;
         dc1 = test.dc;
         console.log(`V,..,.h dc = `,dc1);
+
+        // ACI 318-14 / NSCP 2015 §8.4.4.2 / §22.6.5.4 - Unbalanced moment transfer for eccentric punching
+        // Max shear stress on critical section: v_max = Vu/Ac + gamma_v * Mu * c / Jc <= phi * vc
+        if (method === 1 && centricity === "eccentric" && (Math.abs(mux) > 0 || Math.abs(muy) > 0)) {
+            document.getElementById('result').appendChild(createHeader7(`Unbalanced Moment Transfer (Eccentric Punching)`));
+            if (columnLocation !== 1) {
+                document.getElementById('result').appendChild(createParagraph(`$$\\ \\text{Note: } \\gamma_v \\text{ check below assumes an interior column. Edge/corner critical sections require separate hand check per ACI 318 §8.4.4.}\$$`));
+            }
+            // Critical section dimensions at d/2 from column face (interior column - full perimeter)
+            const b1x = cx + d;                                // perp. to Y-axis bending (shear from Muy)
+            const b2x = cy + d;
+            const b1y = cy + d;                                // perp. to X-axis bending (shear from Mux)
+            const b2y = cx + d;
+            const Ac = (2*(d+cx) + 2*(d+cy)) * d;              // bo * d
+            const JcMuy = (d*Math.pow(b1x,3))/6 + (Math.pow(d,3)*b1x)/6 + (d*b2x*Math.pow(b1x,2))/2;
+            const JcMux = (d*Math.pow(b1y,3))/6 + (Math.pow(d,3)*b1y)/6 + (d*b2y*Math.pow(b1y,2))/2;
+            const gammaF_x = 1 / (1 + (2/3)*Math.sqrt(b1x/b2x));
+            const gammaF_y = 1 / (1 + (2/3)*Math.sqrt(b1y/b2y));
+            const gammaV_x = 1 - gammaF_x;
+            const gammaV_y = 1 - gammaF_y;
+            const cABx = b1x/2;
+            const cABy = b1y/2;
+            // Convert to N and N*mm
+            const Vu_N   = Vu * 1000;
+            const Mux_Nmm = mux * 1e6;
+            const Muy_Nmm = muy * 1e6;
+            const vmax  = Vu_N/Ac + (gammaV_y*Mux_Nmm*cABy)/JcMux + (gammaV_x*Muy_Nmm*cABx)/JcMuy;
+            const phivc = (vn*1000)/Ac;                        // governing phi*Vn / Ac
+
+            document.getElementById('result').appendChild(createParagraph(`$$\\ A_c = B_o \\times d = ${(2*(d+cx)+2*(d+cy)).toFixed(2)}mm \\times ${d.toFixed(2)}mm = ${Ac.toFixed(2)}mm^2 \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ \\gamma_{v,x} = 1 - \\frac{1}{1 + \\tfrac{2}{3}\\sqrt{b_{1x}/b_{2x}}} = 1 - \\frac{1}{1 + \\tfrac{2}{3}\\sqrt{${b1x.toFixed(1)}/${b2x.toFixed(1)}}} = ${gammaV_x.toFixed(4)} \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ \\gamma_{v,y} = 1 - \\frac{1}{1 + \\tfrac{2}{3}\\sqrt{b_{1y}/b_{2y}}} = 1 - \\frac{1}{1 + \\tfrac{2}{3}\\sqrt{${b1y.toFixed(1)}/${b2y.toFixed(1)}}} = ${gammaV_y.toFixed(4)} \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ J_{c,Muy} = \\frac{d\\,b_{1x}^3}{6} + \\frac{d^3 b_{1x}}{6} + \\frac{d\\,b_{2x}\\,b_{1x}^2}{2} = ${JcMuy.toExponential(3)}\\,mm^4 \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ J_{c,Mux} = \\frac{d\\,b_{1y}^3}{6} + \\frac{d^3 b_{1y}}{6} + \\frac{d\\,b_{2y}\\,b_{1y}^2}{2} = ${JcMux.toExponential(3)}\\,mm^4 \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ v_{max} = \\frac{V_u}{A_c} + \\frac{\\gamma_{v,y}\\,M_{ux}\\,c_{AB,y}}{J_{c,Mux}} + \\frac{\\gamma_{v,x}\\,M_{uy}\\,c_{AB,x}}{J_{c,Muy}} = ${vmax.toFixed(3)}\\,MPa \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ \\phi v_c = \\frac{\\phi V_n}{A_c} = ${phivc.toFixed(3)}\\,MPa \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ v_{max} ${vmax < phivc ? "< \\phi v_c \\therefore \\text{SAFE for combined shear + moment transfer}" : "> \\phi v_c \\therefore \\text{FAIL — increase } D_c \\text{ or column size}"} \$$`));
+        }
         function phiVn(){
            
             let vn1;
             let vn2;
             let vn3;
-            
+
             let beta;
-            let as;
+            let alphaS;
             let bo;
             console.log(`Method = `,method);
 
@@ -439,26 +477,27 @@ document.addEventListener("DOMContentLoaded", () => {
                    
                 }
                 if (columnLocation===1){
-                    as = 40;
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ a_s = ${as} ,(\\text{Interior Column})\$$`));
-                
+                    alphaS = 40;
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ \\alpha_s = ${alphaS} ,(\\text{Interior Column})\$$`));
+
                 } else if (columnLocation===2){
-                    as = 30;
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ a_s = ${as} ,(\\text{Edge Column})\$$`));
+                    alphaS = 30;
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ \\alpha_s = ${alphaS} ,(\\text{Edge Column})\$$`));
 
                 } else if (columnLocation===3){
-                    as = 20;
-                    document.getElementById('result').appendChild(createParagraph(`$$\\ a_s = ${as} ,(\\text{Corner Column})\$$`));
+                    alphaS = 20;
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ \\alpha_s = ${alphaS} ,(\\text{Corner Column})\$$`));
 
                 }
 
+                // ACI 318-14 / NSCP 2015 §422.6.5.2: Vc shall be the least of these three expressions
                 vn1 = 0.75 * (1/3) * lambda * Math.sqrt(fc) *bo*d/1000;
                 vn2 = 0.75 * (1/6) * (1+(2/beta)) * lambda * Math.sqrt(fc) *bo*d/1000;
-                vn3 = 0.75 * (1/12) * (1+(as*d/bo))* lambda * Math.sqrt(fc) *bo*d/1000;
+                vn3 = 0.75 * (1/12) * (2+(alphaS*d/bo))* lambda * Math.sqrt(fc) *bo*d/1000;
                 vn = Math.min(vn1,vn2,vn3);
-                document.getElementById('result').appendChild(createParagraph(`\\(\\phi V_n = \\phi V_c = \\text{least of}\\left\\{\\begin{array}{l}\\phi \\times \\frac {1}{3} \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d  \\,  \\\\\\phi \\times \\frac {1}{6} \\times ( 1 + \\frac{2}{\\beta}) \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d \\, \\\\\\phi \\times \\frac {1}{12} \\times ( 1 + \\frac{a_s \\times d}{B_o}) \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d \\, \\end{array}\\right. \\)`));
+                document.getElementById('result').appendChild(createParagraph(`\\(\\phi V_n = \\phi V_c = \\text{least of}\\left\\{\\begin{array}{l}\\phi \\times \\frac {1}{3} \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d  \\,  \\\\\\phi \\times \\frac {1}{6} \\times ( 1 + \\frac{2}{\\beta}) \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d \\, \\\\\\phi \\times \\frac {1}{12} \\times ( 2 + \\frac{\\alpha_s \\times d}{B_o}) \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d \\, \\end{array}\\right. \\)`));
                 document.getElementById('result').appendChild(createParagraph(``));
-                document.getElementById('result').appendChild(createParagraph(`\\(\\phi V_n = \\left\\{\\begin{array}{l}0.75 \\times \\frac {1}{3} \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo.toFixed(2)}mm \\times ${d.toFixed(2)}mm = ${(vn1*1000).toFixed(2)}N \\approx ${(vn1).toFixed(2)}kN \\, \\\\0.75 \\times \\frac {1}{6} \\times (1+ \\frac{2}{${beta}}) \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo.toFixed(2)}mm \\times ${d.toFixed(2)}mm = ${(vn2*1000).toFixed(2)}N \\approx ${(vn2).toFixed(2)}kN \\, \\\\ 0.75 \\times \\frac {1}{12} \\times (1+ \\frac{${as} \\times ${d.toFixed(2)}}{${bo.toFixed(2)}}) \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo.toFixed(2)}mm \\times ${d}mm = ${(vn3*1000).toFixed(2)}N \\approx ${(vn3).toFixed(2)}kN \\, \\end{array}\\right. = ${vn.toFixed(2)}kN \\, \\)`));
+                document.getElementById('result').appendChild(createParagraph(`\\(\\phi V_n = \\left\\{\\begin{array}{l}0.75 \\times \\frac {1}{3} \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo.toFixed(2)}mm \\times ${d.toFixed(2)}mm = ${(vn1*1000).toFixed(2)}N \\approx ${(vn1).toFixed(2)}kN \\, \\\\0.75 \\times \\frac {1}{6} \\times (1+ \\frac{2}{${beta}}) \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo.toFixed(2)}mm \\times ${d.toFixed(2)}mm = ${(vn2*1000).toFixed(2)}N \\approx ${(vn2).toFixed(2)}kN \\, \\\\ 0.75 \\times \\frac {1}{12} \\times (2+ \\frac{${alphaS} \\times ${d.toFixed(2)}}{${bo.toFixed(2)}}) \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo.toFixed(2)}mm \\times ${d}mm = ${(vn3*1000).toFixed(2)}N \\approx ${(vn3).toFixed(2)}kN \\, \\end{array}\\right. = ${vn.toFixed(2)}kN \\, \\)`));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = ${Vu.toFixed(2)}kN ${Vu<vn ? "< \\phi V_n    \\therefore \\text{SAFE}":"> \\phi V_{n}\\therefore \\text{FAIL}"}\$$`));
                 
             } else {
@@ -467,7 +506,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.getElementById('result').appendChild(createParagraph(`$$\\ ${Vu.toFixed(2)}kN = 0.75 \\times \\frac {1}{3} \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times (2 \\times (d + ${cx.toFixed(2)}mm) + 2 \\times (d + ${cy.toFixed(2)}mm) \\times d  \$$`));
                 d = newtonRaphson(100);
                 document.getElementById('result').appendChild(createParagraph(`$$\\ d = ${d.toFixed(2)} \\approx ${(Math.ceil(d/25)*25).toFixed(2)}\$$`));
-                dc = d + 75 + barDia;
+                document.getElementById('result').appendChild(createParagraph(`$$\\ \\text{(Approximate: V_u held constant at the initial geometry; refine via iteration for a tight design.)}\$$`));
+                dc = d + cc + barDia;
                 document.getElementById('result').appendChild(createParagraph(`$$\\ D_c = ${d.toFixed(2)} + ${cc}mm + ${barDia}mm = ${dc.toFixed(2)}mm \\approx ${(Math.ceil(dc/25)*25).toFixed(2)}mm\$$`));
                 dc = Math.ceil(dc/25)*25;
                 console.log(`V dc method2 = `,dc);
@@ -625,7 +665,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 d = newtonRaphson(100,bx*1000);     
             }
             document.getElementById('result').appendChild(createParagraph(`$$\\ d = ${d.toFixed(2)}mm\$$`));
-            dc1 = d + 75 + (r*barDia);
+            dc1 = d + cc + (r*barDia);
             document.getElementById('result').appendChild(createParagraph(`$$\\ D_c = ${d.toFixed(2)} + ${cc}mm + (${r} \\times ${barDia}mm) = ${dc1.toFixed(2)}mm \\approx ${(Math.ceil(dc1/25)*25).toFixed(2)}mm\$$`));
             dc1 = Math.ceil(dc1/25)*25;
         }
@@ -691,13 +731,14 @@ document.addEventListener("DOMContentLoaded", () => {
         console.log(200);
         document.getElementById('result').appendChild(createHeader5(`Solve Preliminary Values for Design`));       
 
+        // ACI 318-14 / NSCP 2015 §22.2.2.4.3: beta1 step-down coefficient is 0.05/7, not 0.5/7
         let beta1 = 0;
-        if ((0.85-(0.5/7)*(fc-28))>=0.85){
+        if ((0.85-(0.05/7)*(fc-28))>=0.85){
             beta1 = 0.85;
-        } else if ((0.85-(0.5/7)*(fc-28))<0.65) {
+        } else if ((0.85-(0.05/7)*(fc-28))<0.65) {
             beta1 = 0.65;
         } else {
-            beta1 = 0.85-(0.5/7)*(fc-28);
+            beta1 = 0.85-(0.05/7)*(fc-28);
         }
         document.getElementById('result').appendChild(createParagraph(`$$\\ \\beta_1 : 0.65 < [0.85 - (\\frac{0.05}{7})\\times (f'_c - 28)] \\le 0.85 \$$`));
         document.getElementById('result').appendChild(createParagraph(`$$\\ \\beta_1 = 0.85 - (\\frac{0.05}{7})\\times (${fc} - 28) = ${beta1.toFixed(3)} \$$`));
@@ -845,9 +886,12 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById('result').appendChild(createParagraph(`$$\\ \\therefore \\rho = ${rho>rhomin ? rho.toFixed(6):rhomin.toFixed(6)} \$$`));
         rho = Math.max(rho,rhomin);
         let as = rho*b*depth;
-        let asmin = 0.002*dc*b;
+        // ACI 24.4.3.2 / NSCP 425.6.1.1: shrinkage-and-temperature reinforcement
+        //  rhoST = 0.0018 for Grade 414 and higher deformed bars; 0.0020 otherwise.
+        let rhoST = (fy >= 414) ? 0.0018 : 0.0020;
+        let asmin = rhoST*dc*b;
         document.getElementById('result').appendChild(createParagraph(`$$\\ A_s = \\rho \\times B_${text} \\times d = ${rho.toFixed(6)}\\times ${b}mm \\times ${depth.toFixed(2)}mm = ${as.toFixed(2)}mm^2 \$$`));
-        document.getElementById('result').appendChild(createParagraph(`$$\\ A_{smin} = 0.002 \\times A_g = 0.002 \\times B_${text} \\times D_c =  0.002 \\times ${b}mm \\times ${dc}mm = ${asmin.toFixed(2)}mm^2  \$$`));
+        document.getElementById('result').appendChild(createParagraph(`$$\\ A_{s,min} = \\rho_{ST} \\times A_g = ${rhoST.toFixed(4)} \\times B_${text} \\times D_c =  ${rhoST.toFixed(4)} \\times ${b}mm \\times ${dc}mm = ${asmin.toFixed(2)}mm^2  \\, ,\\, \\rho_{ST} = ${rhoST.toFixed(4)} \\text{ (f_y ${fy >= 414 ? "\\ge" : "<"} 414\\,MPa)}\$$`));
         document.getElementById('result').appendChild(createParagraph(`$$\\  ${as>asmin ? "A_s > A_{smin}":"A_s < A_{smin}"} \$$`));
         as = Math.max(as,asmin);
         document.getElementById('result').appendChild(createParagraph(`$$\\ \\therefore A_s = ${as.toFixed(2)}mm^2 \$$`));
@@ -856,9 +900,9 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById('result').appendChild(createParagraph(``));
         document.getElementById('result').appendChild(createParagraph(`$$\\ n = \\frac{A_s}{A_b} = \\frac{${as.toFixed(2)}mm}{\\frac{\\pi}{4} \\times (${barDia}mm)^2} = ${n.toFixed(2)} \\approx ${Math.ceil(n)}pcs \$$`));
         n = Math.ceil(n);
-        sc = (b-150-(n*barDia))/(n-1);
+        sc = (b - 2*cc - (n*barDia))/(n-1);
         let scmin = Math.max(50,barDia,(4/3)*dAgg);
-        document.getElementById('result').appendChild(createParagraph(`$$\\ S_c = \\frac{B_${text} - (2 \\times C_c) - (n \\times d_b)}{n - 1} = \\frac{${b}mm - (2 \\times 75mm) - (${n} \\times ${barDia}mm)}{${n} - 1} = ${sc.toFixed(2)}mm \$$`));
+        document.getElementById('result').appendChild(createParagraph(`$$\\ S_c = \\frac{B_${text} - (2 \\times C_c) - (n \\times d_b)}{n - 1} = \\frac{${b}mm - (2 \\times ${cc}mm) - (${n} \\times ${barDia}mm)}{${n} - 1} = ${sc.toFixed(2)}mm \$$`));
         document.getElementById('result').appendChild(createParagraph(`\\( S_{c(min)} = \\text {Greatest of} \\left\\{\\begin{array}{l} 50mm\\, \\\\  d_b = ${barDia}mm \\, \\\\  d_{agg} = ${dAgg}mm \\,\\end{array}\\right. = ${scmin}mm \\, \\)`));
         document.getElementById('result').appendChild(createParagraph(`$$\\  ${sc>scmin ? "S_c > S_{c(min)} \\therefore \\text{Okay}":"S_c < S_{c(min)} \\therefore \\text{Insufficient Spacing, add layer}"} \$$`));
         let centerbandRatio;
@@ -932,7 +976,10 @@ document.addEventListener("DOMContentLoaded", () => {
     let dc2=0;
     let dc3=0;
     let finalDc=0;
-    let cc = 75;
+    // Concrete cover Cc (mm). Default 75 mm matches ACI 20.6.1.3.1 for concrete cast against earth.
+    let cc = parseFloat(document.getElementById('Cover').value);
+    if (!Number.isFinite(cc) || cc <= 0) { cc = 75; }
+    document.getElementById('GivenParameters1').appendChild(createHeader8(`$$\\ C_c = ${cc}mm  \$$`));
     let by=0;
     let bx=0;
     if (analysisMethod === "analyze"){

@@ -37,158 +37,275 @@
     </nav>
     <!--<script type="module" src="https://unpkg.com/@splinetool/viewer@1.9.29/build/spline-viewer.js"></script>
 <spline-viewer url="https://prod.spline.design/yMXK50GKAqpmjpQS/scene.splinecode"></spline-viewer>-->
-    <div class="container1">
+    <div class="container1 fd-page">
         <h1>Foundation Design</h1>
         <div class="form-group">
-           
+
+            <div class="fd-import-row">
+                <label for="uploadExcel">Import from Excel:</label>
+                <input type="file" id="uploadExcel" accept=".xlsx,.xls" />
+                <span class="fd-hint">Optional &mdash; expects a sheet named &ldquo;DESIGN PARAMETERS&rdquo;.</span>
+            </div>
+
             <form id="formFoundation">
-        
+
                 <div id="foundationInputs" class="form-group">
                     <div id="GivenParameters" class="container">
                         <h4 class="title1">Parameters Given</h4>
-                        <label for="analysisMethod">Analysis Method:</label>
 
-                        <select id="analysisMethod" name="analysis">
-		                    <option value="design">Detailed Design</option>
-                            <option value="analyze">Analyze with specified dimensions</option>
-                        </select>
-                        <label for="bx" id="bxL" style="display: none;">\(B_x \,\text{(in Meters)}:\)</label>
-                        <input type="number" id="bx" step="0.1"  style="display: none;">
-                        <label for="by" id="byL" style="display: none;">\(B_y \,\text{(in Meters)}:\)</label>
-                        <input type="number" id="by" step="0.1"  style="display: none;">
-                        <label for="dc" id="dcL" style="display: none;">\(D_c \,\text{(in Millimeters)}:\)</label>
-                        <input type="number" id="dc" step="1"  style="display: none;">
+                        <!-- ============ Analysis &amp; Geometry ============ -->
+                        <fieldset class="fd-section">
+                            <legend>Analysis &amp; Geometry</legend>
+                            <div class="fd-grid">
+                                <div class="fd-field">
+                                    <label for="analysisMethod">Analysis Method</label>
+                                    <select id="analysisMethod" name="analysis">
+                                        <option value="design">Detailed Design</option>
+                                        <option value="analyze">Analyze with specified dimensions</option>
+                                    </select>
+                                </div>
+                                <div class="fd-field">
+                                    <label for="bx" id="bxL" style="display: none;">\(B_x\) (in meters)</label>
+                                    <input type="number" id="bx" step="0.1" inputmode="decimal" style="display: none;">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="by" id="byL" style="display: none;">\(B_y\) (in meters)</label>
+                                    <input type="number" id="by" step="0.1" inputmode="decimal" style="display: none;">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="dc" id="dcL" style="display: none;">\(D_c\) (in millimeters)</label>
+                                    <input type="number" id="dc" step="1" inputmode="numeric" style="display: none;">
+                                </div>
 
+                                <div class="fd-field">
+                                    <label for="structureType" id="strucType">Foundation Type</label>
+                                    <select id="structureType" name="structureType">
+                                        <option value="" disabled>Select the type of footing</option>
+                                        <option value="Isolated Square">Isolated Square</option>
+                                        <option value="Isolated Rectangular">Isolated Rectangular</option>
+                                        <option value="Strip">Combined Footing</option>
+                                    </select>
+                                </div>
+                                <div class="fd-field">
+                                    <label for="LengthRestriction" id="LengthRestriction1" style="display: none;">Restriction</label>
+                                    <select id="LengthRestriction" name="LengthRestriction1" style="display: none;">
+                                        <option value="0">None</option>
+                                        <option value="1">Ratio</option>
+                                        <option value="2">Constricted</option>
+                                    </select>
+                                </div>
+                                <div class="fd-field">
+                                    <label for="RatioL" id="RatioLabelL" style="display: none;">Ratio ( _ ) \(B_y\)</label>
+                                    <input type="number" id="RatioL" step="1" inputmode="numeric" placeholder="L" style="display: none;">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="RatioB" id="RatioLabelB" style="display: none;">Ratio ( _ ) \(B_x\)</label>
+                                    <input type="number" id="RatioB" step="1" inputmode="numeric" placeholder="B" style="display: none;">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="Limitation" id="LimitationLabel" style="display: none;">Length of constriction (in meters)</label>
+                                    <input type="number" id="Limitation" step="0.01" inputmode="decimal" style="display: none;">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="Method" id="methodL">Solution Method</label>
+                                    <select id="Method" name="Method">
+                                        <option value="1">Iteration</option>
+                                        <option value="2">Approximate (Initial \(D_c\))</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </fieldset>
 
-                        <label for="structureType" id="strucType">Select Foundation Type:</label>
-                        <select id="structureType" name="structureType">
-		                    <option value="" disabled>Select The Type Of Footing</option>
-                            <option value="Isolated Square">Isolated Square</option>
-                            <option value="Isolated Rectangular">Isolated Rectangular</option>
-                            <option value="Strip">Combined Footing</option>
-                        </select>
-                        <label for="LengthRestriction" id="LengthRestriction1" style="display: none;">Restriction:</label>
-                        <select id="LengthRestriction" name="LengthRestriction1" style="display: none;">
-                            <option value="0">None</option>
-                            <option value="1">Ratio</option>
-                            <option value="2">Constricted</option>
-                        </select>
-                        <label for="RatioL" id="RatioLabelL" style="display: none;">Ratio ( _ )\(B_y\)</label>
-                        <input type="number" id="RatioL" step="1"  placeholder="L" style="display: none;">
-                        <label for="RatioB" id="RatioLabelB" style="display: none;">Ratio ( _ )\(B_x\)</label>
-                        <input type="number" id="RatioB" step="1"  placeholder="B" style="display: none;">
-                        <label for="Limitation" id="LimitationLabel" style="display: none;">Length of Constriction (in Meters):</label>
-                        <input type="number" id="Limitation" step="0.01"  style="display: none;">
-                        <label for="centricity">Select Type of Centricity:</label>
-                        <select id="centricity">
-                            <option value="" disabled>Select Centricity</option>
-                            <option value="concentric">Concentric</option>
-                            <option value="eccentric">Eccentric</option>
-                        </select>
-                        
-                        <label for="loadType">Select Load Type:</label>
-                        <select id="loadType" name="loadType">
-                            <option value="" disabled selected>Select Load Type</option>
-                            <option value="ultimate">Ultimate and Allowable Load</option>
-                            <option value="individual">Individual Loads (Dead Load & Live Load)</option>
-                        </select>
-                    
-            
-            
-                        <label for="AllowableLoad">Allowable Load P (in KN):</label>
-                        <input type="number" id="AllowableLoad" step="0.001">
-                        <label for="AllowableMx">Allowable Load Mx (in KNm):</label>
-                        <input type="number" id="AllowableMx" step="0.001">
-                        <label for="AllowableMy">Allowable Load My (in KNm):</label>
-                        <input type="number" id="AllowableMy" step="0.001">
-                    
-                        <label for="UltimateLoad">Ultimate Load P<sub>u</sub> (in KN):</label>
-                        <input type="number" id="UltimateLoad" step="0.001">
-                    
-                    
-                        <label for="UltimateMx">Ultimate Load M<sub>ux</sub> (in KNm):</label>
-                        <input type="number" id="UltimateMx" step="0.001">
-                
-                        <label for="UltimateMy">Ultimate Load M<sub>uy</sub> (in KNm):</label>
-                        <input type="number" id="UltimateMy" step="0.001">
-                
-            
-                    
-                        <label for="DeadLoad">P<sub>DL</sub> (in KN):</label>
-                        <input type="number" id="DeadLoad" step="0.001">
-                    
-                        <label for="LiveLoad">P<sub>LL</sub> (in KN):</label>
-                        <input type="number" id="LiveLoad" step="0.001">
-                        <label for="mdlx" id="mdxLabel" style="display: none;">M<sub><sub>x</sub>DL</sub>  (in KNm)</label>
-                        <input type="number" id="mdlx" step="0.001" style="display: none;" >
-                        <label for="mllx" id="mlxLabel" style="display: none;">M<sub><sub>x</sub>LL</sub>  (in KNm)</label>
-                        <input type="number" id="mllx" step="0.001" style="display: none;" >
+                        <!-- ============ Loading ============ -->
+                        <fieldset class="fd-section">
+                            <legend>Loading</legend>
+                            <div class="fd-grid">
+                                <div class="fd-field">
+                                    <label for="loadType">Load Type</label>
+                                    <select id="loadType" name="loadType">
+                                        <option value="" disabled>Select load type</option>
+                                        <option value="ultimate" selected>Ultimate and Allowable Load</option>
+                                        <option value="individual">Individual Loads (DL &amp; LL)</option>
+                                    </select>
+                                </div>
+                                <div class="fd-field">
+                                    <label for="centricity">Centricity</label>
+                                    <select id="centricity">
+                                        <option value="" disabled>Select centricity</option>
+                                        <option value="concentric" selected>Concentric</option>
+                                        <option value="eccentric">Eccentric</option>
+                                    </select>
+                                </div>
 
-                        <label for="mdly" id="mdyLabel" style="display: none;">M<sub><sub>y</sub>DL</sub>  (in KNm)</label>
-                        <input type="number" id="mdly" step="0.001" style="display: none;" >
-                        <label for="mlly" id="mlyLabel" style="display: none;">M<sub><sub>y</sub>LL</sub>  (in KNm)</label>
-                        <input type="number" id="mlly" step="0.001" style="display: none;" >
-                        
-                    
-                        <label for="Depth">Depth (in meters):</label>
-                        <input type="number" id="Depth" step="0.001"  >
-                        <label for="BarDiameter">Bar Diameter (in Millimeters):</label>
-                        <input type="number" id="BarDiameter" step="1"  >
-                        <label for="aggDiameter">Aggregate Diameter (in Millimeters):</label>
-                        <input type="number" id="aggDiameter" step="1"  >
-                        <label for="Method" id="methodL">Method:</label>
-                        <select id="Method" name="Method">
-                            <option value="1">Iteration</option>
-                            <option value="2">Approximate (Initial Dc)</option>
-                            
-                        </select>
-                        <label for="columnShape">Select Shape of column:</label>
-                        <select name="columnShape" id="columnShape">
-                            <option value="" disabled>Select the Shape of Column</option>
-                            <option value="square">Square</option>
-                            <option value="circle">Circular</option>
-                            <option value="rectangular">Rectangular</option>
-                        </select>
-                        <label for="ColumnWidthX" id="cxLabel" style="display: none;">Column Width X (in Millimeters):</label>
-                        <input type="number" id="ColumnWidthX" step="1" style="display: none;" >
-                        <label for="ColumnWidthY" id="cyLabel" style="display: none;">Column Width Y (in Millimeters):</label>
-                        <input type="number" id="ColumnWidthY" step="1" style="display: none;" >
-                        <label for="ColumnWidth" id="cLabel">Column Width (in Millimeters):</label>
-                        <label for="ColumnWidth" id="ccLabel" style="display: none;">Column Diameter (in Millimeters):</label>
-                        <input type="number" id="ColumnWidth" step="1"  >
-                        <label for="ColumnLocation">Column Location:</label>
-                        <select id="ColumnLocation" name="ColumnLocation">
-                            <option value="1">Interior</option>
-                            <option value="2">Edge</option>
-                            <option value="3">Corner</option>
-                        </select>
-                        <label for="SoilBearingCapacity">Soil Bearing Capacity (in KPa):</label>
-                        <input type="number" id="SoilBearingCapacity" step="0.01"  >
-                        <label for="Surcharge">Surcharge (in KPa):</label>
-                        <input type="number" id="Surcharge" step="0.01"  >
-                        <label for="λ">Concrete Modification Factor λ:</label>
-                        <input type="number" id="λ" step="0.01"  >
-                        <label for="fc">Concrete Compressive Strength (in MPa):</label>
-                        <input type="number" id="fc" step="0.01"  >
-                        <label for="fy">Yield Strength of Reinforcement (in MPa):</label>
-                        <input type="number" id="fy" step="0.01"  >
-                        <label for="UnitWeightSoil">Unit Weight of Soil (in KN/m3):</label>
-                        <input type="number" id="UnitWeightSoil" step="0.01"  >
-                        <label for="UnitWeightConcrete">Unit Weight of Concrete (in KN/m3):</label>
-                        <input type="number" id="UnitWeightConcrete" step="0.01"  >
-                        <label for="pu">Consider Weight of Soil?</label>
-                        <select name="considerSoil" id="considerSoil">
-                            <option value="yes">Yes</option>
-                            <option value="no">No</option>
-                        </select>
-                            
+                                <div class="fd-field">
+                                    <label for="AllowableLoad">Allowable Load \(P\) (in kN)</label>
+                                    <input type="number" id="AllowableLoad" step="0.001" inputmode="decimal">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="UltimateLoad">Ultimate Load \(P_u\) (in kN)</label>
+                                    <input type="number" id="UltimateLoad" step="0.001" inputmode="decimal">
+                                </div>
+
+                                <div class="fd-field">
+                                    <label for="AllowableMx">Allowable \(M_x\) (in kN&middot;m)</label>
+                                    <input type="number" id="AllowableMx" step="0.001" inputmode="decimal">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="AllowableMy">Allowable \(M_y\) (in kN&middot;m)</label>
+                                    <input type="number" id="AllowableMy" step="0.001" inputmode="decimal">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="UltimateMx">Ultimate \(M_{ux}\) (in kN&middot;m)</label>
+                                    <input type="number" id="UltimateMx" step="0.001" inputmode="decimal">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="UltimateMy">Ultimate \(M_{uy}\) (in kN&middot;m)</label>
+                                    <input type="number" id="UltimateMy" step="0.001" inputmode="decimal">
+                                </div>
+
+                                <div class="fd-field">
+                                    <label for="DeadLoad">\(P_{DL}\) (in kN)</label>
+                                    <input type="number" id="DeadLoad" step="0.001" inputmode="decimal">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="LiveLoad">\(P_{LL}\) (in kN)</label>
+                                    <input type="number" id="LiveLoad" step="0.001" inputmode="decimal">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="mdlx" id="mdxLabel" style="display: none;">\(M_{x,DL}\) (in kN&middot;m)</label>
+                                    <input type="number" id="mdlx" step="0.001" inputmode="decimal" style="display: none;">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="mllx" id="mlxLabel" style="display: none;">\(M_{x,LL}\) (in kN&middot;m)</label>
+                                    <input type="number" id="mllx" step="0.001" inputmode="decimal" style="display: none;">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="mdly" id="mdyLabel" style="display: none;">\(M_{y,DL}\) (in kN&middot;m)</label>
+                                    <input type="number" id="mdly" step="0.001" inputmode="decimal" style="display: none;">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="mlly" id="mlyLabel" style="display: none;">\(M_{y,LL}\) (in kN&middot;m)</label>
+                                    <input type="number" id="mlly" step="0.001" inputmode="decimal" style="display: none;">
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        <!-- ============ Column ============ -->
+                        <fieldset class="fd-section">
+                            <legend>Column</legend>
+                            <div class="fd-grid">
+                                <div class="fd-field">
+                                    <label for="columnShape">Column Shape</label>
+                                    <select name="columnShape" id="columnShape">
+                                        <option value="" disabled>Select column shape</option>
+                                        <option value="square" selected>Square</option>
+                                        <option value="circle">Circular</option>
+                                        <option value="rectangular">Rectangular</option>
+                                    </select>
+                                </div>
+                                <div class="fd-field">
+                                    <label for="ColumnLocation">Column Location</label>
+                                    <select id="ColumnLocation" name="ColumnLocation">
+                                        <option value="1">Interior</option>
+                                        <option value="2">Edge</option>
+                                        <option value="3">Corner</option>
+                                    </select>
+                                </div>
+                                <div class="fd-field">
+                                    <label for="ColumnWidth" id="cLabel">Column Width (in millimeters)</label>
+                                    <label for="ColumnWidth" id="ccLabel" style="display: none;">Column Diameter (in millimeters)</label>
+                                    <input type="number" id="ColumnWidth" step="1" inputmode="numeric">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="ColumnWidthX" id="cxLabel" style="display: none;">Column Width \(c_x\) (in millimeters)</label>
+                                    <input type="number" id="ColumnWidthX" step="1" inputmode="numeric" style="display: none;">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="ColumnWidthY" id="cyLabel" style="display: none;">Column Width \(c_y\) (in millimeters)</label>
+                                    <input type="number" id="ColumnWidthY" step="1" inputmode="numeric" style="display: none;">
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        <!-- ============ Reinforcement &amp; Footing ============ -->
+                        <fieldset class="fd-section">
+                            <legend>Reinforcement &amp; Footing</legend>
+                            <div class="fd-grid">
+                                <div class="fd-field">
+                                    <label for="Depth">Total Footing Thickness \(H\) (in meters)</label>
+                                    <input type="number" id="Depth" step="0.001" inputmode="decimal">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="BarDiameter">Bar Diameter \(d_b\) (in millimeters)</label>
+                                    <input type="number" id="BarDiameter" step="1" inputmode="numeric">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="aggDiameter">Aggregate Diameter \(d_{agg}\) (in millimeters)</label>
+                                    <input type="number" id="aggDiameter" step="1" inputmode="numeric">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="Cover">Concrete Cover \(C_c\) (in millimeters)</label>
+                                    <input type="number" id="Cover" step="1" inputmode="numeric" value="75">
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        <!-- ============ Materials ============ -->
+                        <fieldset class="fd-section">
+                            <legend>Material Properties</legend>
+                            <div class="fd-grid">
+                                <div class="fd-field">
+                                    <label for="fc">Concrete Compressive Strength \(f'_c\) (in MPa)</label>
+                                    <input type="number" id="fc" step="0.01" inputmode="decimal">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="fy">Steel Yield Strength \(f_y\) (in MPa)</label>
+                                    <input type="number" id="fy" step="0.01" inputmode="decimal">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="λ">Concrete Modification Factor \(\lambda\)</label>
+                                    <input type="number" id="λ" step="0.01" inputmode="decimal">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="UnitWeightConcrete">Unit Weight of Concrete \(\gamma_c\) (in kN/m³)</label>
+                                    <input type="number" id="UnitWeightConcrete" step="0.01" inputmode="decimal">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="UnitWeightSoil">Unit Weight of Soil \(\gamma_s\) (in kN/m³)</label>
+                                    <input type="number" id="UnitWeightSoil" step="0.01" inputmode="decimal">
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        <!-- ============ Soil &amp; Site ============ -->
+                        <fieldset class="fd-section">
+                            <legend>Soil &amp; Site</legend>
+                            <div class="fd-grid">
+                                <div class="fd-field">
+                                    <label for="SoilBearingCapacity">Allowable Soil Bearing \(q_a\) (in kPa)</label>
+                                    <input type="number" id="SoilBearingCapacity" step="0.01" inputmode="decimal">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="Surcharge">Surcharge \(q\) (in kPa)</label>
+                                    <input type="number" id="Surcharge" step="0.01" inputmode="decimal">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="considerSoil">Consider Weight of Soil?</label>
+                                    <select name="considerSoil" id="considerSoil">
+                                        <option value="yes">Yes</option>
+                                        <option value="no">No</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </fieldset>
+
                     </div>
-                   
 
+                    <div class="fd-actions">
                         <button id="calculate" type="submit" onclick="openTab(event, 'summary')">Calculate</button>
                     </div>
 
-                    </div>
+                </div>
             </form>
         
     <div class="tab" id="tab" style="display: none;">
@@ -1020,12 +1137,12 @@ function handleFile(event) {
                 let vn1;
                 let vn2;
                 let vn3;
-                
+
                 let beta;
-                let as;
+                let alphaS;
                 let bo;
                 console.log(`Method = `,method);
-    
+
                 if( method === 1){
                     console.log("phivn Method 1")
                     if (cx<cy){
@@ -1033,50 +1150,52 @@ function handleFile(event) {
                         bo = (2*(d+cx))+(2*(d+cy));
                         document.getElementById('result').appendChild(createParagraph(`$$\\ \\beta = \\frac{c_y}{c_x} = \\frac{${cy.toFixed(2)}mm}{${cx.toFixed(2)}mm} = ${beta.toFixed(3)}\$$`));
                         document.getElementById('result').appendChild(createParagraph(`$$\\ B_o = [2 \\times (d + c_x)]+[2 \\times (d + c_y)] = [2 \\times (${d}mm + ${cx.toFixed(2)}mm)]+[2 \\times (${d}mm + ${cy.toFixed(2)}mm)] = ${bo.toFixed(3)}mm\$$`));
-                        
+
                     } else if (cy<cx){
                         beta = cx/cy;
                         document.getElementById('result').appendChild(createParagraph(`$$\\ \\beta = \\frac{c_x}{c_y} = \\frac{${cx.toFixed(2)}mm}{${cy.toFixed(2)}mm} = ${beta.toFixed(3)}\$$`));
                         bo = (2*(d+cx))+(2*(d+cy));
                         document.getElementById('result').appendChild(createParagraph(`$$\\ B_o = [2 \\times (d + c_x)]+[2 \\times (d + c_y)] = [2 \\times (${d}mm + ${cx.toFixed(2)}mm)]+[2 \\times (${d}mm + ${cy.toFixed(2)}mm)] = ${bo.toFixed(3)}mm\$$`));
-                       
+
                     } else if (cx===cy){
                         beta = 1;
                         document.getElementById('result').appendChild(createParagraph(`$$\\ \\beta = \\frac{c_y}{c_x} = \\frac{${cy.toFixed(2)}mm}{${cx.toFixed(2)}mm} = ${beta}\$$`));
                         bo = (2*(d+cx))+(2*(d+cy));
                         document.getElementById('result').appendChild(createParagraph(`$$\\ B_o = 4 \\times (d + c) = 4 \\times (${d}mm + ${cx.toFixed(2)}mm) = ${bo.toFixed(3)}mm\$$`));
-                       
+
                     }
                     if (columnLocation===1){
-                        as = 40;
-                        document.getElementById('result').appendChild(createParagraph(`$$\\ a_s = ${as} ,(\\text{Interior Column})\$$`));
-                    
+                        alphaS = 40;
+                        document.getElementById('result').appendChild(createParagraph(`$$\\ \\alpha_s = ${alphaS} ,(\\text{Interior Column})\$$`));
+
                     } else if (columnLocation===2){
-                        as = 30;
-                        document.getElementById('result').appendChild(createParagraph(`$$\\ a_s = ${as} ,(\\text{Edge Column})\$$`));
-    
+                        alphaS = 30;
+                        document.getElementById('result').appendChild(createParagraph(`$$\\ \\alpha_s = ${alphaS} ,(\\text{Edge Column})\$$`));
+
                     } else if (columnLocation===3){
-                        as = 20;
-                        document.getElementById('result').appendChild(createParagraph(`$$\\ a_s = ${as} ,(\\text{Corner Column})\$$`));
-    
+                        alphaS = 20;
+                        document.getElementById('result').appendChild(createParagraph(`$$\\ \\alpha_s = ${alphaS} ,(\\text{Corner Column})\$$`));
+
                     }
-    
+
+                    // ACI 318-14 / NSCP 2015 §422.6.5.2: Vc shall be the least of these three expressions
                     vn1 = 0.75 * (1/3) * lambda * Math.sqrt(fc) *bo*d/1000;
                     vn2 = 0.75 * (1/6) * (1+(2/beta)) * lambda * Math.sqrt(fc) *bo*d/1000;
-                    vn3 = 0.75 * (1/12) * (1+(as*d/bo))* lambda * Math.sqrt(fc) *bo*d/1000;
+                    vn3 = 0.75 * (1/12) * (2+(alphaS*d/bo))* lambda * Math.sqrt(fc) *bo*d/1000;
                     vn = Math.min(vn1,vn2,vn3);
-                    document.getElementById('result').appendChild(createParagraph(`\\(\\phi V_n = \\phi V_c = \\text{least of}\\left\\{\\begin{array}{l}\\phi \\times \\frac {1}{3} \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d  \\,  \\\\\\phi \\times \\frac {1}{6} \\times ( 1 + \\frac{2}{\\beta}) \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d \\, \\\\\\phi \\times \\frac {1}{12} \\times ( 1 + \\frac{a_s \\times d}{B_o}) \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d \\, \\end{array}\\right. \\)`));
+                    document.getElementById('result').appendChild(createParagraph(`\\(\\phi V_n = \\phi V_c = \\text{least of}\\left\\{\\begin{array}{l}\\phi \\times \\frac {1}{3} \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d  \\,  \\\\\\phi \\times \\frac {1}{6} \\times ( 1 + \\frac{2}{\\beta}) \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d \\, \\\\\\phi \\times \\frac {1}{12} \\times ( 2 + \\frac{\\alpha_s \\times d}{B_o}) \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d \\, \\end{array}\\right. \\)`));
                     document.getElementById('result').appendChild(createParagraph(``));
-                    document.getElementById('result').appendChild(createParagraph(`\\(\\phi V_n = \\left\\{\\begin{array}{l}0.75 \\times \\frac {1}{3} \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo.toFixed(2)}mm \\times ${d.toFixed(2)}mm = ${(vn1*1000).toFixed(2)}N \\approx ${(vn1).toFixed(2)}kN \\, \\\\0.75 \\times \\frac {1}{6} \\times (1+ \\frac{2}{${beta}}) \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo.toFixed(2)}mm \\times ${d.toFixed(2)}mm = ${(vn2*1000).toFixed(2)}N \\approx ${(vn2).toFixed(2)}kN \\, \\\\ 0.75 \\times \\frac {1}{12} \\times (1+ \\frac{${as} \\times ${d.toFixed(2)}}{${bo.toFixed(2)}}) \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo.toFixed(2)}mm \\times ${d}mm = ${(vn3*1000).toFixed(2)}N \\approx ${(vn3).toFixed(2)}kN \\, \\end{array}\\right. = ${vn.toFixed(2)}kN \\, \\)`));
+                    document.getElementById('result').appendChild(createParagraph(`\\(\\phi V_n = \\left\\{\\begin{array}{l}0.75 \\times \\frac {1}{3} \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo.toFixed(2)}mm \\times ${d.toFixed(2)}mm = ${(vn1*1000).toFixed(2)}N \\approx ${(vn1).toFixed(2)}kN \\, \\\\0.75 \\times \\frac {1}{6} \\times (1+ \\frac{2}{${beta}}) \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo.toFixed(2)}mm \\times ${d.toFixed(2)}mm = ${(vn2*1000).toFixed(2)}N \\approx ${(vn2).toFixed(2)}kN \\, \\\\ 0.75 \\times \\frac {1}{12} \\times (2+ \\frac{${alphaS} \\times ${d.toFixed(2)}}{${bo.toFixed(2)}}) \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo.toFixed(2)}mm \\times ${d}mm = ${(vn3*1000).toFixed(2)}N \\approx ${(vn3).toFixed(2)}kN \\, \\end{array}\\right. = ${vn.toFixed(2)}kN \\, \\)`));
                     document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = ${Vu.toFixed(2)}kN ${Vu<vn ? "< \\phi V_n    \\therefore \\text{SAFE}":"> \\phi V_{n}\\therefore \\text{FAIL}"}\$$`));
-                    
+
                 } else {
                     console.log("phivn Method 2")
                     document.getElementById('result').appendChild(createParagraph(`$$\\ V_{u} = \\phi \\times \\frac {1}{3} \\times \\lambda \\times \\sqrt{fc'} \\times (2 \\times (d + c_x) + 2 \\times (d + c_y) \\times d  \$$`));
                     document.getElementById('result').appendChild(createParagraph(`$$\\ ${Vu.toFixed(2)}kN = 0.75 \\times \\frac {1}{3} \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times (2 \\times (d + ${cx.toFixed(2)}mm) + 2 \\times (d + ${cy.toFixed(2)}mm) \\times d  \$$`));
                     d = newtonRaphson(100);
                     document.getElementById('result').appendChild(createParagraph(`$$\\ d = ${d.toFixed(2)} \\approx ${(Math.ceil(d/25)*25).toFixed(2)}\$$`));
-                    dc = d + 75 + barDia;
+                    document.getElementById('result').appendChild(createParagraph(`$$\\ \\text{(Approximate: V_u held constant at the initial geometry; refine via iteration for a tight design.)}\$$`));
+                    dc = d + cc + barDia;
                     document.getElementById('result').appendChild(createParagraph(`$$\\ D_c = ${d.toFixed(2)} + ${cc}mm + ${barDia}mm = ${dc.toFixed(2)}mm \\approx ${(Math.ceil(dc/25)*25).toFixed(2)}mm\$$`));
                     dc = Math.ceil(dc/25)*25;
                     console.log(`V dc method2 = `,dc);
@@ -1234,7 +1353,7 @@ function handleFile(event) {
                     d = newtonRaphson(100,bx*1000);     
                 }
                 document.getElementById('result').appendChild(createParagraph(`$$\\ d = ${d.toFixed(2)}mm\$$`));
-                dc1 = d + 75 + (r*barDia);
+                dc1 = d + cc + (r*barDia);
                 document.getElementById('result').appendChild(createParagraph(`$$\\ D_c = ${d.toFixed(2)} + ${cc}mm + (${r} \\times ${barDia}mm) = ${dc1.toFixed(2)}mm \\approx ${(Math.ceil(dc1/25)*25).toFixed(2)}mm\$$`));
                 dc1 = Math.ceil(dc1/25)*25;
             }
@@ -1300,13 +1419,14 @@ function handleFile(event) {
             console.log(200);
             document.getElementById('result').appendChild(createHeader5(`Solve Preliminary Values for Design`));       
     
+            // ACI 318-14 / NSCP 2015 §22.2.2.4.3: beta1 step-down coefficient is 0.05/7, not 0.5/7
             let beta1 = 0;
-            if ((0.85-(0.5/7)*(fc-28))>=0.85){
+            if ((0.85-(0.05/7)*(fc-28))>=0.85){
                 beta1 = 0.85;
-            } else if ((0.85-(0.5/7)*(fc-28))<0.65) {
+            } else if ((0.85-(0.05/7)*(fc-28))<0.65) {
                 beta1 = 0.65;
             } else {
-                beta1 = 0.85-(0.5/7)*(fc-28);
+                beta1 = 0.85-(0.05/7)*(fc-28);
             }
             document.getElementById('result').appendChild(createParagraph(`$$\\ \\beta_1 : 0.65 < [0.85 - (\\frac{0.05}{7})\\times (f'_c - 28)] \\le 0.85 \$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\ \\beta_1 = 0.85 - (\\frac{0.05}{7})\\times (${fc} - 28) = ${beta1.toFixed(3)} \$$`));
@@ -1454,9 +1574,11 @@ function handleFile(event) {
             document.getElementById('result').appendChild(createParagraph(`$$\\ \\therefore \\rho = ${rho>rhomin ? rho.toFixed(6):rhomin.toFixed(6)} \$$`));
             rho = Math.max(rho,rhomin);
             let as = rho*b*depth;
-            let asmin = 0.002*dc*b;
+            // ACI 24.4.3.2 / NSCP 425.6.1.1: rho_ST = 0.0018 for Grade 414+ deformed bars, 0.0020 otherwise.
+            let rhoST = (fy >= 414) ? 0.0018 : 0.0020;
+            let asmin = rhoST*dc*b;
             document.getElementById('result').appendChild(createParagraph(`$$\\ A_s = \\rho \\times B_${text} \\times d = ${rho.toFixed(6)}\\times ${b}mm \\times ${depth.toFixed(2)}mm = ${as.toFixed(2)}mm^2 \$$`));
-            document.getElementById('result').appendChild(createParagraph(`$$\\ A_{smin} = 0.002 \\times A_g = 0.002 \\times B_${text} \\times D_c =  0.002 \\times ${b}mm \\times ${dc}mm = ${asmin.toFixed(2)}mm^2  \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ A_{s,min} = \\rho_{ST} \\times A_g = ${rhoST.toFixed(4)} \\times B_${text} \\times D_c =  ${rhoST.toFixed(4)} \\times ${b}mm \\times ${dc}mm = ${asmin.toFixed(2)}mm^2  \\, ,\\, \\rho_{ST} = ${rhoST.toFixed(4)} \\text{ (f_y ${fy >= 414 ? "\\ge" : "<"} 414\\,MPa)}\$$`));
             document.getElementById('result').appendChild(createParagraph(`$$\\  ${as>asmin ? "A_s > A_{smin}":"A_s < A_{smin}"} \$$`));
             as = Math.max(as,asmin);
             document.getElementById('result').appendChild(createParagraph(`$$\\ \\therefore A_s = ${as.toFixed(2)}mm^2 \$$`));
@@ -1465,9 +1587,9 @@ function handleFile(event) {
             document.getElementById('result').appendChild(createParagraph(``));
             document.getElementById('result').appendChild(createParagraph(`$$\\ n = \\frac{A_s}{A_b} = \\frac{${as.toFixed(2)}mm}{\\frac{\\pi}{4} \\times (${barDia}mm)^2} = ${n.toFixed(2)} \\approx ${Math.ceil(n)}pcs \$$`));
             n = Math.ceil(n);
-            sc = (b-150-(n*barDia))/(n-1);
+            sc = (b - 2*cc - (n*barDia))/(n-1);
             let scmin = Math.max(50,barDia,(4/3)*dAgg);
-            document.getElementById('result').appendChild(createParagraph(`$$\\ S_c = \\frac{B_${text} - (2 \\times C_c) - (n \\times d_b)}{n - 1} = \\frac{${b}mm - (2 \\times 75mm) - (${n} \\times ${barDia}mm)}{${n} - 1} = ${sc.toFixed(2)}mm \$$`));
+            document.getElementById('result').appendChild(createParagraph(`$$\\ S_c = \\frac{B_${text} - (2 \\times C_c) - (n \\times d_b)}{n - 1} = \\frac{${b}mm - (2 \\times ${cc}mm) - (${n} \\times ${barDia}mm)}{${n} - 1} = ${sc.toFixed(2)}mm \$$`));
             document.getElementById('result').appendChild(createParagraph(`\\( S_{c(min)} = \\text {Greatest of} \\left\\{\\begin{array}{l} 50mm\\, \\\\  d_b = ${barDia}mm \\, \\\\  d_{agg} = ${dAgg}mm \\,\\end{array}\\right. = ${scmin}mm \\, \\)`));
             document.getElementById('result').appendChild(createParagraph(`$$\\  ${sc>scmin ? "S_c > S_{c(min)} \\therefore \\text{Okay}":"S_c < S_{c(min)} \\therefore \\text{Insufficient Spacing, add layer}"} \$$`));
             let centerbandRatio;
@@ -1634,7 +1756,9 @@ function handleFile(event) {
             let dc2 = 0;
             let dc3 = 0;
             let finalDc = 0;
-            let cc = 75;
+            // Concrete cover Cc (mm). Default 75 mm per ACI 20.6.1.3.1 (cast against earth).
+            let cc = parseFloat(document.getElementById('Cover').value);
+            if (!Number.isFinite(cc) || cc <= 0) { cc = 75; }
             let by = 0;
             let bx = 0;
             let r = 0;
