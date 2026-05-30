@@ -214,6 +214,135 @@
 
         .bd-page .bd-hint { font-size: 0.78em; color: #6a737d; margin: 4px 0 0; font-style: italic; }
 
+        /* ─── Theory section (foundation-design styling) ─────────────────── */
+        .bd-page .bd-theory {
+            padding: 4px 0 0;
+        }
+        .bd-page .bd-theory-step {
+            margin: 0 0 18px;
+        }
+        .bd-page .bd-theory-step:last-child { margin-bottom: 0; }
+        /* Step banner — matches the .fd-page #result h5 numbered card */
+        .bd-page .bd-theory-step h4 {
+            counter-increment: bd-th-step;
+            display: block;
+            margin: 0 0 10px;
+            padding: 10px 16px 10px 50px;
+            background: #f6f8fa;
+            border: 1px solid #d6d9de;
+            border-left: 4px solid #0056b3;
+            border-radius: 6px;
+            color: #0056b3;
+            font-size: 1em;
+            font-weight: 700;
+            position: relative;
+            text-align: left;
+            line-height: 1.4;
+        }
+        .bd-page .bd-theory-step h4::before {
+            content: counter(bd-th-step);
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: #0056b3;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85em;
+            font-weight: 700;
+        }
+        .bd-page .bd-theory { counter-reset: bd-th-step; }
+
+        /* Green code-reference callout — matches .fd-clause */
+        .bd-page .bd-theory-clause {
+            display: block;
+            margin: 6px 0 10px 8px;
+            padding: 8px 12px;
+            background: rgba(31, 138, 58, 0.08);
+            border: 1px solid rgba(31, 138, 58, 0.22);
+            border-left: 3px solid #1f8a3a;
+            border-radius: 0 4px 4px 0;
+            color: #1f6f30;
+            font-size: 0.85em;
+            font-style: italic;
+            line-height: 1.5;
+        }
+
+        /* Formula paragraph — soft card */
+        .bd-page .bd-theory-formula {
+            margin: 6px 0 6px 8px;
+            padding: 10px 14px;
+            background: #fcfcfd;
+            border-left: 2px solid #e1e4e8;
+            border-radius: 0 4px 4px 0;
+            overflow-x: auto;
+        }
+        .bd-page .bd-theory-formula .katex-display {
+            margin: 4px 0 !important;
+            text-align: left !important;
+        }
+        .bd-page .bd-theory-formula .katex-display > .katex { text-align: left !important; }
+
+        /* Plain explanatory paragraph */
+        .bd-page .bd-theory-explain {
+            margin: 6px 0 6px 8px;
+            padding: 0 6px;
+            color: #495057;
+            font-size: 0.92em;
+            line-height: 1.55;
+        }
+        .bd-page .bd-theory-explain strong { color: #1f2933; }
+
+        /* Sub-headings (h5-equivalent pill) */
+        .bd-page .bd-theory-sub {
+            display: block;
+            margin: 12px 0 8px 8px;
+            padding: 6px 12px;
+            background: #e8f1fb;
+            border-left: 3px solid #007BFF;
+            color: #0056b3;
+            font-size: 0.92em;
+            font-weight: 600;
+            border-radius: 0 4px 4px 0;
+        }
+
+        /* Example block — amber */
+        .bd-page .bd-theory-example {
+            margin: 8px 0 8px 8px;
+            padding: 10px 14px;
+            background: rgba(176, 119, 0, 0.08);
+            border: 1px solid rgba(176, 119, 0, 0.22);
+            border-left: 3px solid #b07700;
+            border-radius: 0 4px 4px 0;
+            color: #6e4a00;
+            font-size: 0.9em;
+            line-height: 1.55;
+        }
+        .bd-page .bd-theory-example strong { color: #b07700; }
+
+        /* Ordered/unordered lists in theory */
+        .bd-page .bd-theory ol,
+        .bd-page .bd-theory ul {
+            margin: 6px 0 6px 8px;
+            padding-left: 28px;
+            color: #495057;
+            font-size: 0.92em;
+            line-height: 1.55;
+        }
+        .bd-page .bd-theory ol li,
+        .bd-page .bd-theory ul li { margin: 3px 0; }
+
+        /* The expander summary, styled like a section title */
+        .bd-page details.bd-expander.bd-theory-expander summary {
+            font-size: 1em;
+            color: #0056b3;
+        }
+
         @media (max-width: 540px) {
             .container.bd-page { padding: 16px 14px 24px; }
             .bd-page .bd-grid { grid-template-columns: 1fr; }
@@ -404,6 +533,133 @@
                     </div>
                 </div>
             </div>
+
+            <details class="bd-expander bd-theory-expander" id="rc-shear-theory">
+                <summary>Shear Design Theory — Members with shear and flexure only (NSCP 2015 §422.5)</summary>
+                <div class="bd-theory">
+
+                    <div class="bd-theory-step">
+                        <h4>Strength reduction &amp; nominal shear</h4>
+                        <p class="bd-theory-clause">NSCP 2015 §421.2.1 — strength reduction factor for one-way shear (ACI 318-19 §21.2.1).</p>
+                        <p class="bd-theory-formula">$$\phi = 0.75 \;\;\text{(NSCP 2010 / 2015)} \qquad \phi = 0.85 \;\;\text{(NSCP 2001 — deprecated)}$$</p>
+                        <p class="bd-theory-formula">$$V_n = V_c + V_s \qquad V_u = \phi \, V_n$$</p>
+                        <p class="bd-theory-explain">
+                            <strong>\(V_u\)</strong> is the factored shear at the section being checked,
+                            <strong>\(V_n\)</strong> is the nominal shear strength of the member.
+                            \(V_n\) splits between the concrete (\(V_c\)) and the transverse reinforcement (\(V_s\)).
+                        </p>
+                    </div>
+
+                    <div class="bd-theory-step">
+                        <h4>Critical section — \(V_u\) at \(d\) or at the face?</h4>
+                        <p class="bd-theory-clause">NSCP 2015 §409.4.3 — when the critical section may be taken at \(d\) from the face of the support.</p>
+                        <p class="bd-theory-explain">
+                            Take \(V_u\) at distance \(d\) from the face of the support when <strong>all three</strong>
+                            conditions are met:
+                        </p>
+                        <ol>
+                            <li>Support reactions introduce <strong>compression</strong> into the end regions of the member.</li>
+                            <li>Loads are applied at or <strong>near the top</strong> of the member.</li>
+                            <li>No <strong>concentrated load</strong> is applied between the face of the support and distance \(d\).</li>
+                        </ol>
+                        <p class="bd-theory-formula">$$V_u = \frac{w_u\,(\ell_n - 2d)}{2} \;=\; R - w_u\,d$$</p>
+                        <p class="bd-theory-explain">
+                            If any condition fails (planted column, tension-hanging load, etc.) — take \(V_u\) at the
+                            <strong>face of the support</strong>, no reduction.
+                        </p>
+                    </div>
+
+                    <div class="bd-theory-step">
+                        <h4>Concrete shear strength \(V_c\)</h4>
+                        <p class="bd-theory-clause">NSCP 2015 §422.5.5.1 — non-prestressed members, no axial load.</p>
+                        <p class="bd-theory-formula">$$V_c = 0.17 \, \lambda \, \sqrt{f'_c} \, b_w \, d$$</p>
+                        <p class="bd-theory-explain">
+                            \(0.17 \, \lambda \, \sqrt{f'_c}\) is the concrete shear-stress strength;
+                            \(b_w \, d\) is the effective concrete area at the cracked section.
+                            \(\lambda\) is the lightweight-concrete modification factor:
+                            1.0 normal-weight, 0.85 sand-LW, 0.75 all-LW (§419.2.4).
+                        </p>
+                    </div>
+
+                    <div class="bd-theory-step">
+                        <h4>One-way shear strength of transverse reinforcement \(V_s\)</h4>
+                        <p class="bd-theory-clause">NSCP 2015 §422.5.10.5.3 — vertical stirrups perpendicular to the longitudinal axis.</p>
+                        <p class="bd-theory-formula">$$V_s = \frac{A_v \, f_{yt} \, d}{s} \quad \Longleftrightarrow \quad s \le \frac{A_v \, f_{yt} \, d}{V_s}$$</p>
+                        <p class="bd-theory-explain">
+                            \(A_v\) is the cross-sectional area of all stirrup legs in one cross-section,
+                            \(f_{yt}\) is the yield strength of the transverse reinforcement
+                            (capped at 420 MPa by §422.5.10.2), \(s\) is the centre-to-centre spacing.
+                        </p>
+                    </div>
+
+                    <div class="bd-theory-step">
+                        <h4>Minimum stirrup area \(A_{v,\min}\)</h4>
+                        <p class="bd-theory-clause">NSCP 2015 §409.6.3.3 — minimum shear reinforcement.</p>
+                        <p class="bd-theory-formula">$$A_{v,\min} = 0.35 \, \frac{b_w \, s}{f_{yt}} \qquad \text{use if } f'_c &lt; 31.87 \; \text{MPa}$$</p>
+                        <p class="bd-theory-formula">$$A_{v,\min} = 0.062 \, \sqrt{f'_c} \, \frac{b_w \, s}{f_{yt}} \qquad \text{use if } f'_c \ge 31.87 \; \text{MPa}$$</p>
+                        <p class="bd-theory-explain">
+                            The crossover \(f'_c = 31.87\) MPa is where \(0.062\sqrt{f'_c} = 0.35\)
+                            (i.e. \(f'_c = (0.35/0.062)^2\)). Take the larger of the two expressions in code.
+                        </p>
+                    </div>
+
+                    <div class="bd-theory-step">
+                        <h4>Maximum spacing from \(A_{v,\min}\)</h4>
+                        <p class="bd-theory-formula">$$s \le \frac{A_v \, f_{yt}}{0.35 \, b_w} \qquad \text{use if } f'_c &lt; 31.87 \; \text{MPa}$$</p>
+                        <p class="bd-theory-formula">$$s \le \frac{A_v \, f_{yt}}{0.062 \, \sqrt{f'_c} \, b_w} \qquad \text{use if } f'_c \ge 31.87 \; \text{MPa}$$</p>
+                        <p class="bd-theory-explain">
+                            These are the algebraic inverse of the \(A_{v,\min}\) expressions above —
+                            given the actual \(A_v\) you've selected, this is the largest spacing that still
+                            satisfies the minimum-steel rule.
+                        </p>
+                    </div>
+
+                    <div class="bd-theory-step">
+                        <h4>Maximum spacing from \(V_s\) vs \(0.33\sqrt{f'_c}\,b_w\,d\)</h4>
+                        <p class="bd-theory-clause">NSCP 2015 §409.7.6.2.2 — spacing limits depend on \(V_s\).</p>
+                        <p class="bd-theory-sub">Case A — \(V_s \le 0.33\sqrt{f'_c}\,b_w\,d\)</p>
+                        <p class="bd-theory-formula">$$s \le \frac{d}{2} \qquad \text{and} \qquad s \le 600 \; \text{mm}$$</p>
+                        <p class="bd-theory-sub">Case B — \(V_s &gt; 0.33\sqrt{f'_c}\,b_w\,d\)</p>
+                        <p class="bd-theory-formula">$$s \le \frac{d}{4} \qquad \text{and} \qquad s \le 300 \; \text{mm}$$</p>
+                    </div>
+
+                    <div class="bd-theory-step">
+                        <h4>When stirrups are <strong>not</strong> required</h4>
+                        <p class="bd-theory-clause">NSCP 2015 §409.6.3.1 — \(A_{v,\min}\) and \(s_{\max}\) not required.</p>
+                        <p class="bd-theory-formula">$$V_u \le \tfrac{1}{2} \, \phi \, V_c$$</p>
+                        <div class="bd-theory-example">
+                            <strong>Example.</strong> \(V_u = 50\) kN, \(V_c = 350\) kN, \(\phi V_c = 0.75 \times 350 = 263\) kN,
+                            \(\tfrac{1}{2}\phi V_c = 131\) kN. Since \(V_u = 50 &lt; 131\) kN, the concrete alone is more than
+                            enough — no stirrups needed (provide minimum per good practice anyway).
+                        </div>
+                    </div>
+
+                    <div class="bd-theory-step">
+                        <h4>Beam dimensions <strong>not</strong> adequate</h4>
+                        <p class="bd-theory-clause">NSCP 2015 §422.5.1.2 — upper bound on \(V_s\).</p>
+                        <p class="bd-theory-formula">$$V_s &gt; 0.66 \, \sqrt{f'_c} \, b_w \, d$$</p>
+                        <p class="bd-theory-explain">
+                            Even at the maximum shear strength the stirrups can provide, the section is not economical
+                            or adequate to resist the demand. Increase \(b\) or \(h\).
+                        </p>
+                    </div>
+
+                    <div class="bd-theory-step">
+                        <h4>Summary of the design procedure</h4>
+                        <p class="bd-theory-explain">Apply in order:</p>
+                        <ol>
+                            <li>Solve for the support reactions \(R\).</li>
+                            <li>Determine \(V_u\) — at \(d\) from the face if the three conditions are satisfied, else at the face.</li>
+                            <li>Determine \(V_c\), \(\phi V_c\), and \(\tfrac{1}{2}\phi V_c\).</li>
+                            <li>Determine \(0.33\sqrt{f'_c}\,b_w\,d\) and \(0.66\sqrt{f'_c}\,b_w\,d\); compute \(V_s = V_u/\phi - V_c\).</li>
+                            <li>Compare \(\phi V_c\) and \(\tfrac{1}{2}\phi V_c\) with \(V_u\) — classifies the case (none / minimum / designed).</li>
+                            <li>Compare \(0.33\sqrt{f'_c}\,b_w\,d\) and \(0.66\sqrt{f'_c}\,b_w\,d\) with \(V_s\) — picks the spacing rule (d/2 or d/4) and confirms the section is not overloaded.</li>
+                            <li>Solve for the maximum spacing \(s\) or the minimum area \(A_v\).</li>
+                        </ol>
+                    </div>
+
+                </div>
+            </details>
 
             <button type="button" class="bd-calc-btn" id="rc-calc-btn">Design Section</button>
 
