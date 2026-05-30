@@ -12,354 +12,213 @@
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
 
     <style>
-        /* Beam Design scoped layout — disables the rigid .container grid
-           and adopts the same card / grid pattern as foundationDesign. */
+        /* ─── Layout scope ───────────────────────────────────────────────── */
         .container.bd-page {
-            display: block;
-            width: 100%;
-            max-width: 1180px;
-            margin: 1.5em auto;
-            padding: 24px 28px 32px;
-            grid-template-rows: none;
-            grid-template-columns: none;
+            display: block; width: 100%; max-width: 1180px;
+            margin: 1.5em auto; padding: 24px 28px 32px;
+            grid-template-rows: none; grid-template-columns: none;
         }
-        .bd-page h1 {
-            text-align: center;
-            margin: 0 0 16px;
-            font-size: 1.9em;
-            color: #1f2933;
-        }
-        .bd-page .bd-subtitle {
-            text-align: center;
-            margin: 0 0 24px;
-            color: #5c6773;
-            font-size: 0.95em;
-        }
-        .bd-page .bd-tabs {
-            display: flex;
-            gap: 4px;
-            margin: 0 0 18px;
-            border-bottom: 2px solid #d6d9de;
-        }
+        .bd-page h1 { text-align: center; margin: 0 0 16px; font-size: 1.9em; color: #1f2933; }
+        .bd-page .bd-subtitle { text-align: center; margin: 0 0 24px; color: #5c6773; font-size: 0.95em; }
+
+        /* ─── Tabs ───────────────────────────────────────────────────────── */
+        .bd-page .bd-tabs { display: flex; gap: 4px; margin: 0 0 18px; border-bottom: 2px solid #d6d9de; }
         .bd-page .bd-tab {
-            padding: 10px 20px;
-            background: transparent;
-            border: none;
-            border-bottom: 3px solid transparent;
-            color: #5c6773;
-            font-weight: 600;
-            font-size: 0.95em;
-            cursor: pointer;
-            transition: all 0.18s ease;
-            border-radius: 4px 4px 0 0;
+            padding: 10px 20px; background: transparent; border: none;
+            border-bottom: 3px solid transparent; color: #5c6773;
+            font-weight: 600; font-size: 0.95em; cursor: pointer;
+            transition: all 0.18s ease; border-radius: 4px 4px 0 0;
+            width: auto; margin: 0;
         }
-        .bd-page .bd-tab:hover {
-            background: #f6f8fa;
-            color: #0056b3;
-        }
-        .bd-page .bd-tab.is-active {
-            color: #0056b3;
-            border-bottom-color: #0056b3;
-            background: #f6f8fa;
-        }
+        .bd-page .bd-tab:hover { background: #f6f8fa; color: #0056b3; transform: none; }
+        .bd-page .bd-tab.is-active { color: #0056b3; border-bottom-color: #0056b3; background: #f6f8fa; }
         .bd-page .bd-panel { display: none; }
         .bd-page .bd-panel.is-active { display: block; }
 
+        /* ─── Section cards ──────────────────────────────────────────────── */
         .bd-page .bd-section {
-            background: #fff;
-            border: 1px solid #d6d9de;
-            border-radius: 8px;
-            padding: 16px 20px 18px;
-            margin: 0 0 18px;
+            background: #fff; border: 1px solid #d6d9de; border-radius: 8px;
+            padding: 16px 20px 18px; margin: 0 0 18px;
             box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
         }
         .bd-page .bd-section-title {
-            font-weight: 700;
-            color: #0056b3;
-            font-size: 1.05em;
-            margin: 0 0 12px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid #e1e4e8;
+            font-weight: 700; color: #0056b3; font-size: 1.05em;
+            margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid #e1e4e8;
+            display: flex; justify-content: space-between; align-items: center;
         }
+        .bd-page .bd-section-title small { font-weight: 400; font-size: 0.78em; color: #5c6773; }
+
+        /* ─── Field grid ─────────────────────────────────────────────────── */
         .bd-page .bd-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 14px 18px;
-            align-items: start;
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 12px 16px; align-items: start;
         }
-        .bd-page .bd-field {
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-        }
+        .bd-page .bd-field { display: flex; flex-direction: column; min-width: 0; }
         .bd-page .bd-field label {
-            display: block;
-            width: auto;
-            margin: 0 0 4px;
-            font-size: 0.85em;
-            color: #2c3e50;
-            line-height: 1.3;
+            display: block; width: auto; margin: 0 0 4px;
+            font-size: 0.82em; color: #2c3e50; line-height: 1.3;
         }
         .bd-page .bd-field input,
         .bd-page .bd-field select {
-            display: block;
-            width: 100%;
-            margin: 0;
-            padding: 8px 10px;
-            box-sizing: border-box;
-            border: 1px solid #c5c9d0;
-            border-radius: 4px;
-            background: #fff;
-            font-size: 0.92em;
+            display: block; width: 100%; margin: 0;
+            padding: 7px 9px; box-sizing: border-box;
+            border: 1px solid #c5c9d0; border-radius: 4px;
+            background: #fff; font-size: 0.9em;
         }
-        .bd-page .bd-field input:focus,
-        .bd-page .bd-field select:focus {
-            outline: none;
-            border-color: #007BFF;
-            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.15);
+        .bd-page .bd-field input:focus, .bd-page .bd-field select:focus {
+            outline: none; border-color: #007BFF; box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.15);
         }
 
+        /* ─── Add buttons + remove buttons ───────────────────────────────── */
         .bd-page .bd-add-row {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin: 0 0 12px;
+            display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 12px;
         }
         .bd-page .bd-add-btn {
-            flex: 1 1 120px;
-            padding: 10px 12px;
-            background: #fff;
-            border: 1px dashed #007BFF;
-            border-radius: 6px;
-            color: #0056b3;
-            font-weight: 600;
-            font-size: 0.9em;
-            cursor: pointer;
-            transition: all 0.18s ease;
-            width: auto;
-            margin: 0;
+            flex: 1 1 100px; padding: 9px 12px; background: #fff;
+            border: 1px dashed #007BFF; border-radius: 6px;
+            color: #0056b3; font-weight: 600; font-size: 0.85em;
+            cursor: pointer; transition: all 0.18s ease;
+            width: auto; margin: 0;
         }
-        .bd-page .bd-add-btn:hover {
-            background: #f0f6ff;
-            border-style: solid;
-            transform: none;
-        }
-
-        .bd-page .bd-load-card {
-            background: #fafbfc;
-            border: 1px solid #e1e4e8;
-            border-radius: 6px;
-            padding: 12px 14px;
-            margin: 0 0 10px;
-        }
-        .bd-page .bd-load-card-head {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin: 0 0 10px;
-        }
-        .bd-page .bd-load-type {
-            font-weight: 600;
-            color: #1f2933;
-            font-size: 0.95em;
-        }
+        .bd-page .bd-add-btn:hover { background: #f0f6ff; border-style: solid; transform: none; }
         .bd-page .bd-remove-btn {
-            padding: 4px 10px;
-            background: #fff;
-            border: 1px solid #d6d9de;
-            border-radius: 4px;
-            color: #993C1D;
-            font-size: 0.8em;
-            cursor: pointer;
-            width: auto;
-            margin: 0;
+            padding: 3px 9px; background: #fff; border: 1px solid #d6d9de;
+            border-radius: 4px; color: #993C1D; font-size: 0.78em;
+            cursor: pointer; width: auto; margin: 0;
         }
-        .bd-page .bd-remove-btn:hover {
-            background: #fef0ed;
-            border-color: #993C1D;
-            transform: none;
+        .bd-page .bd-remove-btn:hover { background: #fef0ed; border-color: #993C1D; transform: none; }
+
+        /* ─── Item cards (support / load) ────────────────────────────────── */
+        .bd-page .bd-item {
+            background: #fafbfc; border: 1px solid #e1e4e8; border-radius: 6px;
+            padding: 10px 12px; margin: 0 0 8px;
+        }
+        .bd-page .bd-item-head {
+            display: flex; justify-content: space-between; align-items: center;
+            margin: 0 0 8px; gap: 8px;
+        }
+        .bd-page .bd-item-tag {
+            font-weight: 600; color: #1f2933; font-size: 0.9em;
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+        .bd-page .bd-cat-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 999px;
+            font-size: 0.7em; font-weight: 700; color: #fff;
         }
         .bd-page .bd-empty {
-            text-align: center;
-            color: #5c6773;
-            padding: 24px;
-            font-style: italic;
-            font-size: 0.9em;
+            text-align: center; color: #5c6773; padding: 18px;
+            font-style: italic; font-size: 0.88em;
+            background: #fafbfc; border-radius: 6px; border: 1px dashed #d6d9de;
         }
 
+        /* ─── CTA button ─────────────────────────────────────────────────── */
         .bd-page .bd-calc-btn {
-            display: block;
-            width: 240px;
-            margin: 16px auto 8px;
-            padding: 12px;
-            background: #007BFF;
-            color: #fff;
-            border: none;
-            border-radius: 6px;
-            font-weight: 700;
-            font-size: 1em;
+            display: block; width: 240px; margin: 16px auto 8px;
+            padding: 12px; background: #007BFF; color: #fff;
+            border: none; border-radius: 6px; font-weight: 700; font-size: 1em;
             cursor: pointer;
         }
-        .bd-page .bd-calc-btn:hover {
-            background: #0056b3;
-            transform: translateY(-1px);
-        }
+        .bd-page .bd-calc-btn:hover { background: #0056b3; transform: translateY(-1px); }
 
+        /* ─── Results metrics ─────────────────────────────────────────────── */
         .bd-page .bd-results-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 14px;
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px;
         }
         .bd-page .bd-metric {
-            background: #f6f8fa;
-            border: 1px solid #e1e4e8;
-            border-radius: 6px;
-            padding: 12px 16px;
-            text-align: left;
+            background: #f6f8fa; border: 1px solid #e1e4e8; border-radius: 6px;
+            padding: 12px 16px; text-align: left;
         }
         .bd-page .bd-metric-label {
-            font-size: 0.78em;
-            color: #5c6773;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            margin: 0 0 4px;
+            font-size: 0.76em; color: #5c6773; text-transform: uppercase;
+            letter-spacing: 0.04em; margin: 0 0 4px;
         }
-        .bd-page .bd-metric-value {
-            font-size: 1.3em;
-            font-weight: 700;
-            color: #0056b3;
-        }
+        .bd-page .bd-metric-value { font-size: 1.25em; font-weight: 700; color: #0056b3; }
 
+        /* ─── Diagrams ───────────────────────────────────────────────────── */
         .bd-page .bd-diagram {
-            background: #fff;
-            border: 1px solid #e1e4e8;
-            border-radius: 6px;
-            padding: 8px;
-            margin: 12px 0 0;
+            background: #fff; border: 1px solid #e1e4e8; border-radius: 6px;
+            padding: 8px; margin: 8px 0 0;
         }
-        .bd-page .bd-diagram svg {
-            width: 100%;
-            height: auto;
-            display: block;
-        }
-        .bd-page .bd-diagram-title {
-            font-weight: 600;
-            color: #2c3e50;
-            margin: 0 0 6px;
-            font-size: 0.95em;
-        }
+        .bd-page .bd-diagram svg { width: 100%; height: auto; display: block; }
 
+        /* ─── Calculation rows ────────────────────────────────────────────── */
         .bd-page .bd-calc-row {
-            display: flex;
-            font-size: 0.88em;
+            display: flex; font-size: 0.86em;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
-            border-bottom: 1px solid #f1f3f5;
-            padding: 4px 0;
+            border-bottom: 1px solid #f1f3f5; padding: 4px 0; flex-wrap: wrap;
         }
         .bd-page .bd-calc-row:last-child { border-bottom: none; }
-        .bd-page .bd-calc-row .bd-calc-label {
-            flex: 0 0 260px;
-            color: #495057;
-        }
-        .bd-page .bd-calc-row .bd-calc-value {
-            flex: 1;
-            font-weight: 500;
-            color: #1f2933;
-        }
-        .bd-page .bd-calc-row .bd-calc-note {
-            color: #6c757d;
-            font-size: 0.82em;
-            margin-left: 8px;
-        }
+        .bd-page .bd-calc-row .bd-calc-label { flex: 0 0 260px; color: #495057; }
+        .bd-page .bd-calc-row .bd-calc-value { flex: 1 1 140px; font-weight: 500; color: #1f2933; }
+        .bd-page .bd-calc-row .bd-calc-note { color: #6c757d; font-size: 0.8em; flex: 1 1 100%; padding-left: 260px; }
         .bd-page .bd-calc-value.ok { color: #0F6E56; }
         .bd-page .bd-calc-value.fail { color: #993C1D; }
 
+        /* ─── Alerts ──────────────────────────────────────────────────────── */
         .bd-page .bd-alert {
-            padding: 10px 14px;
-            border-radius: 6px;
-            margin: 12px 0;
-            font-size: 0.92em;
+            padding: 10px 14px; border-radius: 6px; margin: 12px 0; font-size: 0.92em;
         }
-        .bd-page .bd-alert-ok {
-            background: #e8f9f1;
-            border: 1px solid #b3e0c9;
-            color: #0F6E56;
-        }
-        .bd-page .bd-alert-fail {
-            background: #fef0ed;
-            border: 1px solid #f0c0b3;
-            color: #993C1D;
-        }
-        .bd-page .bd-alert-info {
-            background: #e7f3ff;
-            border: 1px solid #b3d4f0;
-            color: #0056b3;
-        }
-        .bd-page .bd-alert-warn {
-            background: #fff7e6;
-            border: 1px solid #f0d9a3;
-            color: #b07700;
-        }
+        .bd-page .bd-alert-ok   { background: #e8f9f1; border: 1px solid #b3e0c9; color: #0F6E56; }
+        .bd-page .bd-alert-fail { background: #fef0ed; border: 1px solid #f0c0b3; color: #993C1D; }
+        .bd-page .bd-alert-info { background: #e7f3ff; border: 1px solid #b3d4f0; color: #0056b3; }
+        .bd-page .bd-alert-warn { background: #fff7e6; border: 1px solid #f0d9a3; color: #b07700; }
 
+        /* ─── Combo table ────────────────────────────────────────────────── */
         .bd-page .bd-combo-table {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
-            font-size: 0.85em;
+            font-size: 0.86em; width: 100%; border-collapse: collapse;
         }
-        .bd-page .bd-combo-row {
-            display: flex;
-            padding: 4px 10px;
-            margin: 2px 0;
-            border-radius: 4px;
+        .bd-page .bd-combo-table th,
+        .bd-page .bd-combo-table td {
+            text-align: left; padding: 6px 10px; border-bottom: 1px solid #e1e4e8;
         }
-        .bd-page .bd-combo-row.is-gov {
-            background: #e8f9f1;
-            color: #0F6E56;
-            font-weight: 600;
+        .bd-page .bd-combo-table th {
+            background: #f6f8fa; font-weight: 700; color: #495057; font-size: 0.82em;
+            text-transform: uppercase; letter-spacing: 0.04em;
         }
-        .bd-page .bd-combo-name {
-            flex: 1;
-            color: #495057;
-        }
-        .bd-page .bd-combo-row.is-gov .bd-combo-name { color: #0F6E56; }
+        .bd-page .bd-combo-table tr.is-gov { background: #e8f9f1; }
+        .bd-page .bd-combo-table tr.is-gov td { color: #0F6E56; font-weight: 600; }
 
+        /* ─── Live beam viz ──────────────────────────────────────────────── */
+        .bd-page .bd-viz {
+            background: #fff; border: 1px solid #e1e4e8; border-radius: 6px;
+            padding: 12px 16px; min-height: 220px;
+        }
+        .bd-page .bd-viz svg { width: 100%; height: auto; display: block; }
+        .bd-page .bd-viz-legend {
+            display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px;
+            font-size: 0.78em; color: #5c6773;
+        }
+        .bd-page .bd-viz-legend span { display: inline-flex; align-items: center; gap: 4px; }
+        .bd-page .bd-viz-legend i {
+            display: inline-block; width: 12px; height: 12px;
+            border-radius: 3px; vertical-align: middle;
+        }
+
+        /* ─── Expander ───────────────────────────────────────────────────── */
         .bd-page details.bd-expander {
-            margin: 0 0 16px;
-            border: 1px solid #e1e4e8;
-            border-radius: 6px;
+            margin: 0 0 16px; border: 1px solid #e1e4e8; border-radius: 6px;
             background: #fff;
         }
         .bd-page details.bd-expander summary {
-            padding: 10px 16px;
-            cursor: pointer;
-            font-weight: 600;
-            color: #0056b3;
-            list-style: none;
-            user-select: none;
+            padding: 10px 16px; cursor: pointer; font-weight: 600;
+            color: #0056b3; list-style: none; user-select: none;
         }
         .bd-page details.bd-expander summary::-webkit-details-marker { display: none; }
         .bd-page details.bd-expander summary::before {
-            content: '▸';
-            display: inline-block;
-            margin-right: 8px;
+            content: '▸'; display: inline-block; margin-right: 8px;
             transition: transform 0.18s ease;
         }
-        .bd-page details.bd-expander[open] summary::before {
-            transform: rotate(90deg);
-        }
-        .bd-page details.bd-expander > div {
-            padding: 0 16px 14px;
-        }
+        .bd-page details.bd-expander[open] summary::before { transform: rotate(90deg); }
+        .bd-page details.bd-expander > div { padding: 0 16px 14px; }
 
-        .bd-page .bd-hint {
-            font-size: 0.8em;
-            color: #6a737d;
-            margin: 4px 0 0;
-            font-style: italic;
-        }
+        .bd-page .bd-hint { font-size: 0.78em; color: #6a737d; margin: 4px 0 0; font-style: italic; }
 
         @media (max-width: 540px) {
             .container.bd-page { padding: 16px 14px 24px; }
             .bd-page .bd-grid { grid-template-columns: 1fr; }
+            .bd-page .bd-calc-row .bd-calc-label { flex: 0 0 100%; }
+            .bd-page .bd-calc-row .bd-calc-note { padding-left: 0; }
         }
     </style>
 </head>
@@ -376,8 +235,9 @@
     <div class="container bd-page">
         <h1>Beam Design</h1>
         <p class="bd-subtitle">
-            Simply-supported beam analysis with NSCP 2015 reinforced concrete section design
-            (flexure &amp; shear). Units: kN, m, MPa.
+            FEM beam analysis with NSCP 2015 load combinations &amp; reinforced concrete section
+            design (flexure &amp; shear). Supports pin / roller / fixed / spring at any position.
+            Units: kN, m, MPa.
         </p>
 
         <div class="bd-tabs" role="tablist">
@@ -385,7 +245,7 @@
             <button class="bd-tab" data-tab="rc" type="button">RC Section Design</button>
         </div>
 
-        <!-- ═══════════════════════════ TAB 1 — BEAM ANALYSIS ═══════════════════════════ -->
+        <!-- ═══════════════════ TAB 1 — BEAM ANALYSIS ═══════════════════ -->
         <section class="bd-panel is-active" data-panel="analysis">
 
             <div class="bd-section">
@@ -398,61 +258,104 @@
                     <div class="bd-field">
                         <label for="ba-E">Modulus \(E\) (MPa)</label>
                         <input type="number" id="ba-E" value="25000" step="500" min="1" inputmode="decimal">
-                        <p class="bd-hint">RC ≈ 4700·√f'c; steel ≈ 200000</p>
+                        <p class="bd-hint">RC ≈ 4700·√f'c</p>
                     </div>
                     <div class="bd-field">
                         <label for="ba-I">Inertia \(I\) (mm\(^4\))</label>
                         <input type="number" id="ba-I" value="3.125e9" step="1e7" min="1" inputmode="decimal">
-                        <p class="bd-hint">Rectangular: b·h³/12</p>
+                        <p class="bd-hint">Rect: b·h³/12</p>
                     </div>
+                </div>
+            </div>
+
+            <div class="bd-section">
+                <div class="bd-section-title">Supports</div>
+                <div class="bd-add-row">
+                    <button type="button" class="bd-add-btn" data-add-supp="pin">+ Pin</button>
+                    <button type="button" class="bd-add-btn" data-add-supp="roller">+ Roller</button>
+                    <button type="button" class="bd-add-btn" data-add-supp="fixed">+ Fixed</button>
+                    <button type="button" class="bd-add-btn" data-add-supp="spring">+ Spring</button>
+                </div>
+                <div id="ba-supps-list">
+                    <div class="bd-empty">No supports — add at least 2 (or a single Fixed) to make the beam stable.</div>
                 </div>
             </div>
 
             <div class="bd-section">
                 <div class="bd-section-title">Applied Loads</div>
                 <div class="bd-add-row">
-                    <button type="button" class="bd-add-btn" data-add="point">+ Point Load</button>
-                    <button type="button" class="bd-add-btn" data-add="udl">+ UDL</button>
-                    <button type="button" class="bd-add-btn" data-add="vdl">+ VDL (Trapezoidal)</button>
-                    <button type="button" class="bd-add-btn" data-add="moment">+ Moment</button>
+                    <button type="button" class="bd-add-btn" data-add-load="point">+ Point</button>
+                    <button type="button" class="bd-add-btn" data-add-load="udl">+ UDL</button>
+                    <button type="button" class="bd-add-btn" data-add-load="vdl">+ VDL (Trapezoidal)</button>
+                    <button type="button" class="bd-add-btn" data-add-load="moment">+ Moment</button>
                 </div>
                 <div id="ba-loads-list">
-                    <div class="bd-empty">No loads added yet — click a button above to add one.</div>
+                    <div class="bd-empty">No loads — click a button above to add one. Each load is classified for NSCP combinations.</div>
+                </div>
+            </div>
+
+            <div class="bd-section">
+                <div class="bd-section-title">Structural Model <small>updates live as you edit</small></div>
+                <div class="bd-viz" id="ba-viz"></div>
+                <div class="bd-viz-legend">
+                    <span><i style="background:#185FA5"></i> Pin/Roller</span>
+                    <span><i style="background:#993C1D"></i> Fixed</span>
+                    <span><i style="background:#2D7A5A"></i> Spring</span>
+                    <span><i style="background:#c33"></i> D (Dead)</span>
+                    <span><i style="background:#06c"></i> L (Live)</span>
+                    <span><i style="background:#0a8"></i> Lr / S / R</span>
+                    <span><i style="background:#e80"></i> W (Wind)</span>
+                    <span><i style="background:#83c"></i> E (Earthquake)</span>
                 </div>
             </div>
 
             <button type="button" class="bd-calc-btn" id="ba-calc-btn">Analyze Beam</button>
 
             <section id="ba-results" style="display:none;">
+
                 <div class="bd-section">
-                    <div class="bd-section-title">Support Reactions</div>
+                    <div class="bd-section-title">
+                        NSCP 2015 Load Combinations <small>Section 203.3.1 — governing highlighted</small>
+                    </div>
+                    <table class="bd-combo-table">
+                        <thead><tr>
+                            <th>Combination</th>
+                            <th style="text-align:right;">|V|<sub>max</sub> (kN)</th>
+                            <th style="text-align:right;">|M|<sub>max</sub> (kN·m)</th>
+                            <th style="text-align:right;">|δ|<sub>max</sub> (mm)</th>
+                            <th>Diagrams</th>
+                        </tr></thead>
+                        <tbody id="ba-combos-body"></tbody>
+                    </table>
+                    <p class="bd-hint">
+                        Each combination scales every load by the factor for its category, runs an FEM
+                        re-analysis, and reports the maximum demands. The selected combination's
+                        diagrams are shown below.
+                    </p>
+                </div>
+
+                <div class="bd-section">
+                    <div class="bd-section-title">Support Reactions <small id="ba-reactions-combo"></small></div>
                     <div class="bd-results-grid" id="ba-reactions"></div>
                 </div>
 
                 <div class="bd-section">
-                    <div class="bd-section-title">Summary</div>
-                    <div class="bd-results-grid" id="ba-summary"></div>
+                    <div class="bd-section-title">Diagrams <small id="ba-diagrams-combo"></small></div>
                     <div id="ba-deflection-check"></div>
-                </div>
-
-                <div class="bd-section">
-                    <div class="bd-section-title">Shear Force Diagram (SFD)</div>
                     <div class="bd-diagram" id="ba-sfd"></div>
-                </div>
-
-                <div class="bd-section">
-                    <div class="bd-section-title">Bending Moment Diagram (BMD)</div>
                     <div class="bd-diagram" id="ba-bmd"></div>
-                </div>
-
-                <div class="bd-section">
-                    <div class="bd-section-title">Deflection Diagram</div>
                     <div class="bd-diagram" id="ba-defl"></div>
                 </div>
+
+                <div class="bd-section" id="ba-tmt-section" style="display:none;">
+                    <div class="bd-section-title">Three-Moment Theorem Check <small>Clapeyron — interior support moments</small></div>
+                    <div id="ba-tmt"></div>
+                </div>
+
             </section>
         </section>
 
-        <!-- ═══════════════════════════ TAB 2 — RC SECTION DESIGN ═══════════════════════════ -->
+        <!-- ═══════════════════ TAB 2 — RC SECTION DESIGN ═══════════════════ -->
         <section class="bd-panel" data-panel="rc">
 
             <div class="bd-section">
@@ -461,7 +364,7 @@
                     <div class="bd-field">
                         <label for="rc-source">Use values from</label>
                         <select id="rc-source">
-                            <option value="analysis">Beam Analysis (max |V|, |M|)</option>
+                            <option value="analysis">Beam Analysis — governing combination</option>
                             <option value="manual" selected>Manual entry</option>
                         </select>
                     </div>
@@ -479,83 +382,35 @@
             <div class="bd-section">
                 <div class="bd-section-title">Section &amp; Material</div>
                 <div class="bd-grid">
+                    <div class="bd-field"><label for="rc-b">\(b\) (mm)</label><input type="number" id="rc-b" value="300" step="25" min="100" inputmode="decimal"></div>
+                    <div class="bd-field"><label for="rc-h">\(h\) (mm)</label><input type="number" id="rc-h" value="500" step="25" min="150" inputmode="decimal"></div>
+                    <div class="bd-field"><label for="rc-fc">\(f'_c\) (MPa)</label><input type="number" id="rc-fc" value="28" step="1" min="17" inputmode="decimal"></div>
+                    <div class="bd-field"><label for="rc-fyl">\(f_y\) long. (MPa)</label><input type="number" id="rc-fyl" value="415" step="5" min="200" inputmode="decimal"></div>
+                    <div class="bd-field"><label for="rc-fyt">\(f_y\) trans. (MPa)</label><input type="number" id="rc-fyt" value="275" step="5" min="200" inputmode="decimal"></div>
+                    <div class="bd-field"><label for="rc-db">Main \(\varnothing\) (mm)</label><input type="number" id="rc-db" value="20" step="2" min="10" inputmode="decimal"></div>
+                    <div class="bd-field"><label for="rc-ds">Stirrup \(\varnothing\) (mm)</label><input type="number" id="rc-ds" value="10" step="2" min="8" inputmode="decimal"></div>
+                    <div class="bd-field"><label for="rc-cover">Cover (mm)</label><input type="number" id="rc-cover" value="40" step="5" min="20" inputmode="decimal"></div>
+                    <div class="bd-field"><label for="rc-legs">Stirrup legs</label><input type="number" id="rc-legs" value="2" step="1" min="2" max="6" inputmode="numeric"></div>
                     <div class="bd-field">
-                        <label for="rc-b">\(b\) (mm)</label>
-                        <input type="number" id="rc-b" value="300" step="25" min="100" inputmode="decimal">
-                    </div>
-                    <div class="bd-field">
-                        <label for="rc-h">\(h\) (mm)</label>
-                        <input type="number" id="rc-h" value="500" step="25" min="150" inputmode="decimal">
-                    </div>
-                    <div class="bd-field">
-                        <label for="rc-fc">\(f'_c\) (MPa)</label>
-                        <input type="number" id="rc-fc" value="28" step="1" min="17" inputmode="decimal">
-                    </div>
-                    <div class="bd-field">
-                        <label for="rc-fyl">\(f_y\) longitudinal (MPa)</label>
-                        <input type="number" id="rc-fyl" value="415" step="5" min="200" inputmode="decimal">
-                    </div>
-                    <div class="bd-field">
-                        <label for="rc-fyt">\(f_y\) transverse (MPa)</label>
-                        <input type="number" id="rc-fyt" value="275" step="5" min="200" inputmode="decimal">
-                    </div>
-                    <div class="bd-field">
-                        <label for="rc-db">Main bar \(\varnothing\) (mm)</label>
-                        <input type="number" id="rc-db" value="20" step="2" min="10" inputmode="decimal">
-                    </div>
-                    <div class="bd-field">
-                        <label for="rc-ds">Stirrup \(\varnothing\) (mm)</label>
-                        <input type="number" id="rc-ds" value="10" step="2" min="8" inputmode="decimal">
-                    </div>
-                    <div class="bd-field">
-                        <label for="rc-cover">Cover \(C_c\) (mm)</label>
-                        <input type="number" id="rc-cover" value="40" step="5" min="20" inputmode="decimal">
-                    </div>
-                    <div class="bd-field">
-                        <label for="rc-legs">Stirrup legs</label>
-                        <input type="number" id="rc-legs" value="2" step="1" min="2" max="6" inputmode="numeric">
-                    </div>
-                    <div class="bd-field">
-                        <label for="rc-lambda">\(\lambda\) (concrete weight)</label>
+                        <label for="rc-lambda">\(\lambda\)</label>
                         <select id="rc-lambda">
                             <option value="1.0" selected>1.0 — Normal weight</option>
-                            <option value="0.85">0.85 — Sand-lightweight</option>
-                            <option value="0.75">0.75 — All-lightweight</option>
+                            <option value="0.85">0.85 — Sand-LW</option>
+                            <option value="0.75">0.75 — All-LW</option>
                         </select>
                     </div>
                 </div>
             </div>
 
-            <details class="bd-expander">
-                <summary>NSCP 2015 Load Combinations (Section 203.3.1)</summary>
-                <div>
-                    <p class="bd-hint">
-                        Enter unfactored service loads (any unit — kN, kN·m, kPa, etc.) to see all
-                        NSCP combinations. The governing combination is highlighted.
-                    </p>
-                    <div class="bd-grid">
-                        <div class="bd-field"><label for="lc-D">D — Dead</label><input type="number" id="lc-D" value="0" step="1" inputmode="decimal"></div>
-                        <div class="bd-field"><label for="lc-L">L — Live</label><input type="number" id="lc-L" value="0" step="1" inputmode="decimal"></div>
-                        <div class="bd-field"><label for="lc-Lr">Lr — Roof Live</label><input type="number" id="lc-Lr" value="0" step="1" inputmode="decimal"></div>
-                        <div class="bd-field"><label for="lc-S">S — Snow</label><input type="number" id="lc-S" value="0" step="1" inputmode="decimal"></div>
-                        <div class="bd-field"><label for="lc-W">W — Wind</label><input type="number" id="lc-W" value="0" step="1" inputmode="decimal"></div>
-                        <div class="bd-field"><label for="lc-E">E — Earthquake</label><input type="number" id="lc-E" value="0" step="1" inputmode="decimal"></div>
-                        <div class="bd-field"><label for="lc-R">R — Rain</label><input type="number" id="lc-R" value="0" step="1" inputmode="decimal"></div>
-                    </div>
-                    <div class="bd-combo-table" id="lc-output" style="margin-top:12px;"></div>
-                </div>
-            </details>
-
             <button type="button" class="bd-calc-btn" id="rc-calc-btn">Design Section</button>
 
             <section id="rc-results" style="display:none;">
                 <div class="bd-section">
-                    <div class="bd-section-title">Flexure Design <span style="font-weight:400;font-size:0.85em;color:#5c6773;">— NSCP 2015 §406</span></div>
+                    <div class="bd-section-title">Flexure Design <small>NSCP 2015 §406</small></div>
                     <div id="rc-flexure"></div>
                 </div>
-
                 <div class="bd-section">
-                    <div class="bd-section-title">Shear Design <span style="font-weight:400;font-size:0.85em;color:#5c6773;">— NSCP 2015 §422</span></div>
+                    <div class="bd-section-title">Shear Design <small>NSCP 2015 §422</small></div>
                     <div id="rc-shear"></div>
                 </div>
             </section>
@@ -565,9 +420,10 @@
     <!-- ═══════════════════════════════════════════════════════════════════════════════
          CALCULATION SCRIPTS
          Ported from C:\Users\raymv\Documents\Structure (Streamlit beam calculator)
-         - calculations/beam.py    -> reactionsSS, shearMomentAt, diagramsSS, deflectionSS
-         - calculations/loads.py   -> nscpLoadCombinations
-         - rc_design.py            -> beta1, rhoBalanced/Min/Max, designFlexure, designShear
+         - app.py FEM solver (Euler-Bernoulli, Hermite cubic, Gauss-5)
+         - calculations/beam.py reactions_ss, three_moment_theorem
+         - calculations/loads.py NSCPLoadCombinations
+         - rc_design.py beta1, rho_*, design_flexure, design_shear
          ═══════════════════════════════════════════════════════════════════════════════ -->
     <script>
     'use strict';
@@ -575,10 +431,7 @@
     // ─── KaTeX render helper ──────────────────────────────────────────────
     function renderMath(element) {
         if (!element) return;
-        if (typeof renderMathInElement === 'undefined') {
-            setTimeout(() => renderMath(element), 80);
-            return;
-        }
+        if (typeof renderMathInElement === 'undefined') { setTimeout(() => renderMath(element), 80); return; }
         try {
             renderMathInElement(element, {
                 delimiters: [
@@ -586,21 +439,47 @@
                     { left: '\\[', right: '\\]', display: true },
                     { left: '\\(', right: '\\)', display: false }
                 ],
-                throwOnError: false,
-                strict: false,
-                trust: true,
-                ignoredClasses: ['katex']
+                throwOnError: false, strict: false, trust: true, ignoredClasses: ['katex']
             });
         } catch (e) { console.error('KaTeX render failed:', e); }
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  BEAM ANALYSIS  (port of calculations/beam.py)
-    //  Sign convention: forces upward+, sagging moment+, CCW couple+
+    //  LINEAR ALGEBRA — Gaussian elimination with partial pivoting
     // ════════════════════════════════════════════════════════════════════════
+    function solveLinear(A, b) {
+        const n = b.length;
+        const M = A.map((row, i) => [...row, b[i]]);
+        for (let k = 0; k < n; k++) {
+            let piv = k;
+            for (let i = k + 1; i < n; i++) if (Math.abs(M[i][k]) > Math.abs(M[piv][k])) piv = i;
+            if (piv !== k) [M[k], M[piv]] = [M[piv], M[k]];
+            if (Math.abs(M[k][k]) < 1e-14) return null;
+            for (let i = k + 1; i < n; i++) {
+                const f = M[i][k] / M[k][k];
+                for (let j = k; j <= n; j++) M[i][j] -= f * M[k][j];
+            }
+        }
+        const x = new Array(n).fill(0);
+        for (let i = n - 1; i >= 0; i--) {
+            let s = M[i][n];
+            for (let j = i + 1; j < n; j++) s -= M[i][j] * x[j];
+            x[i] = s / M[i][i];
+        }
+        return x;
+    }
 
+    function matVec(K, d) {
+        const n = K.length;
+        const r = new Array(n).fill(0);
+        for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) r[i] += K[i][j] * d[j];
+        return r;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  LOAD HELPERS
+    // ════════════════════════════════════════════════════════════════════════
     function loadResultant(ld) {
-        // Returns {W, xc}: total downward force and its centroid.
         if (ld.type === 'point') return { W: ld.P, xc: ld.x };
         if (ld.type === 'udl')   return { W: ld.w * (ld.x2 - ld.x1), xc: (ld.x1 + ld.x2) / 2 };
         if (ld.type === 'vdl') {
@@ -610,465 +489,997 @@
             const num = ld.w1 * t * t / 2 + (ld.w2 - ld.w1) * t * t / 3;
             return { W, xc: ld.x1 + num / W };
         }
-        return { W: 0, xc: 0 };  // moment loads have no net vertical force
+        return { W: 0, xc: 0 };
     }
 
+    function scaleLoad(ld, f) {
+        const c = { ...ld };
+        if (ld.type === 'point')  c.P  = ld.P  * f;
+        if (ld.type === 'udl')    c.w  = ld.w  * f;
+        if (ld.type === 'vdl')   { c.w1 = ld.w1 * f; c.w2 = ld.w2 * f; }
+        if (ld.type === 'moment') c.M  = ld.M  * f;
+        return c;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  FEM SOLVER — Euler-Bernoulli, Hermite cubic, Gauss-5 quadrature
+    //  Ported from app.py solve_fem()
+    // ════════════════════════════════════════════════════════════════════════
+    function hermite(xi, le) {
+        return [
+            1 - 3*xi*xi + 2*xi*xi*xi,
+            le * xi * (1 - xi) * (1 - xi),
+            3*xi*xi - 2*xi*xi*xi,
+            le * xi * xi * (xi - 1)
+        ];
+    }
+    function loadIntensity(ld, x) {
+        if (ld.type === 'udl') return (ld.x1 <= x && x <= ld.x2) ? ld.w : 0;
+        if (ld.type === 'vdl') {
+            if (!(ld.x1 <= x && x <= ld.x2)) return 0;
+            const span = Math.max(ld.x2 - ld.x1, 1e-9);
+            const t = (x - ld.x1) / span;
+            return ld.w1 + (ld.w2 - ld.w1) * t;
+        }
+        return 0;
+    }
+    function gauss5Vec(f, a, b) {
+        const gp = [-0.90618, -0.53847, 0, 0.53847, 0.90618];
+        const gw = [ 0.23693,  0.47863, 0.56889, 0.47863, 0.23693];
+        const mid = (a + b) / 2, half = (b - a) / 2;
+        const acc = [0, 0, 0, 0];
+        for (let i = 0; i < 5; i++) {
+            const xg = mid + half * gp[i];
+            const fi = f(xg);
+            for (let j = 0; j < 4; j++) acc[j] += gw[i] * fi[j];
+        }
+        return acc.map(v => half * v);
+    }
+    function roundX(x, dec = 8) {
+        return Math.round(x * 10**dec) / 10**dec;
+    }
+    function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+
+    function solveFEM(supports, loads, L, E_MPa, I_mm4) {
+        const EI = E_MPa * I_mm4 * 1e-9;  // kN·m²
+
+        // ── Build node set ─────────────────────────────────────────────
+        const nodeSet = new Set([roundX(0), roundX(L)]);
+        supports.forEach(s => nodeSet.add(roundX(clamp(s.x, 0, L))));
+        loads.forEach(ld => {
+            if (ld.type === 'point' || ld.type === 'moment') {
+                nodeSet.add(roundX(clamp(ld.x, 0, L)));
+            } else {
+                nodeSet.add(roundX(clamp(ld.x1, 0, L)));
+                nodeSet.add(roundX(clamp(ld.x2, 0, L)));
+            }
+        });
+        // Subdivide spans with N_INT intermediate nodes
+        const anchor = [...nodeSet].sort((a, b) => a - b);
+        const N_INT = 25;
+        for (let i = 0; i < anchor.length - 1; i++) {
+            const xa = anchor[i], xb = anchor[i+1];
+            for (let j = 1; j < N_INT; j++) nodeSet.add(roundX(xa + (xb - xa) * j / N_INT));
+        }
+        const nodes = [...nodeSet].sort((a, b) => a - b);
+        const n = nodes.length;
+        const ndof = 2 * n;
+        const nm = new Map();
+        nodes.forEach((x, i) => nm.set(x, i));
+
+        // ── Assemble K, F ───────────────────────────────────────────────
+        const K = Array.from({ length: ndof }, () => new Array(ndof).fill(0));
+        const F = new Array(ndof).fill(0);
+
+        for (let e = 0; e < n - 1; e++) {
+            const x1n = nodes[e], x2n = nodes[e+1];
+            const le = x2n - x1n;
+            if (le < 1e-10) continue;
+            // Element stiffness
+            const c = EI / (le*le*le);
+            const ke = [
+                [12*c,      6*le*c,     -12*c,       6*le*c     ],
+                [6*le*c,    4*le*le*c,  -6*le*c,     2*le*le*c  ],
+                [-12*c,    -6*le*c,      12*c,      -6*le*c     ],
+                [6*le*c,    2*le*le*c,  -6*le*c,     4*le*le*c  ]
+            ];
+            const i1 = nm.get(x1n), i2 = nm.get(x2n);
+            const dofs = [2*i1, 2*i1+1, 2*i2, 2*i2+1];
+            for (let a = 0; a < 4; a++)
+                for (let b = 0; b < 4; b++) K[dofs[a]][dofs[b]] += ke[a][b];
+
+            // Distributed-load consistent nodal loads (Gauss integration)
+            for (const ld of loads) {
+                if (ld.type !== 'udl' && ld.type !== 'vdl') continue;
+                const la = Math.max(x1n, roundX(ld.x1));
+                const lb = Math.min(x2n, roundX(ld.x2));
+                if (lb <= la) continue;
+                const integrand = xg => {
+                    const w = loadIntensity(ld, xg);
+                    const xi = (xg - x1n) / le;
+                    const N = hermite(xi, le);
+                    return N.map(v => -w * v);
+                };
+                const fe = gauss5Vec(integrand, la, lb);
+                for (let j = 0; j < 4; j++) F[dofs[j]] += fe[j];
+            }
+        }
+
+        // Point loads (snap to nodes)
+        for (const ld of loads) {
+            if (ld.type !== 'point') continue;
+            const px = roundX(clamp(ld.x, 0, L));
+            const i = nm.get(px);
+            if (i !== undefined) F[2*i] -= ld.P;
+        }
+        // Applied moments
+        for (const ld of loads) {
+            if (ld.type !== 'moment') continue;
+            const mx = roundX(clamp(ld.x, 0, L));
+            const i = nm.get(mx);
+            if (i !== undefined) F[2*i + 1] += ld.M;
+        }
+
+        // ── Boundary conditions ────────────────────────────────────────
+        const constrained = new Set();
+        for (const s of supports) {
+            const sx = roundX(clamp(s.x, 0, L));
+            const i = nm.get(sx);
+            if (i === undefined) continue;
+            if (s.type === 'spring') {
+                const k_s = Math.max(s.k || 1000, 1e-3);
+                K[2*i][2*i] += k_s;
+            } else {
+                constrained.add(2*i);
+                if (s.type === 'fixed') constrained.add(2*i + 1);
+            }
+        }
+        const free = [];
+        for (let d = 0; d < ndof; d++) if (!constrained.has(d)) free.push(d);
+
+        const d = new Array(ndof).fill(0);
+        if (free.length > 0) {
+            const Kff = free.map(i => free.map(j => K[i][j]));
+            const Ff  = free.map(i => F[i]);
+            const dFree = solveLinear(Kff, Ff);
+            if (dFree === null) return null;
+            free.forEach((dof, idx) => d[dof] = dFree[idx]);
+        }
+
+        // Reactions
+        const Kd = matVec(K, d);
+        const Rfull = Kd.map((v, i) => v - F[i]);
+        const react = [];
+        for (const s of supports) {
+            const sx = roundX(clamp(s.x, 0, L));
+            const i = nm.get(sx);
+            if (i === undefined) continue;
+            let Rv, Rm;
+            if (s.type === 'spring') {
+                Rv = Math.max(s.k || 1000, 1e-3) * d[2*i];
+                Rm = 0;
+            } else {
+                Rv = Rfull[2*i];
+                Rm = (s.type === 'fixed') ? -Rfull[2*i + 1] : 0;
+            }
+            react.push({ ...s, x: sx, Rv, Rm });
+        }
+
+        // ── Equilibrium correction (cubic FEM leaves tiny residuals) ──
+        let Wtot = 0, Mw = 0;
+        for (const ld of loads) {
+            if (ld.type === 'point')  { Wtot += ld.P; Mw += ld.P * ld.x; }
+            else if (ld.type === 'moment') { Mw -= ld.M; }
+            else if (ld.type === 'udl') {
+                const W = ld.w * (ld.x2 - ld.x1);
+                Wtot += W; Mw += W * (ld.x1 + ld.x2) / 2;
+            } else if (ld.type === 'vdl') {
+                const t = ld.x2 - ld.x1;
+                const W = ld.w1 * t + (ld.w2 - ld.w1) * t / 2;
+                const num = ld.w1 * t*t / 2 + (ld.w2 - ld.w1) * t*t / 3;
+                const xc = ld.x1 + (W > 1e-9 ? num / W : t / 2);
+                Wtot += W; Mw += W * xc;
+            }
+        }
+        const Rvsum = react.reduce((a, r) => a + r.Rv, 0);
+        const RMsum = react.reduce((a, r) => a + r.Rv * r.x - r.Rm, 0);
+        const resV = Wtot - Rvsum, resM = Mw - RMsum;
+        if (react.length >= 2) {
+            const x0 = react[0].x, xN = react[react.length-1].x;
+            const dx = xN - x0;
+            if (Math.abs(dx) > 1e-6) {
+                const dN = (resM - resV * x0) / dx;
+                const d0 = resV - dN;
+                react[0].Rv += d0;
+                react[react.length-1].Rv += dN;
+            }
+        }
+
+        // ── Sample diagrams ────────────────────────────────────────────
+        const xsSet = new Set();
+        const Nsample = 500;
+        for (let i = 0; i <= Nsample; i++) xsSet.add(roundX((i * L) / Nsample));
+        const eps = Math.max(L / 120, 0.02);
+        for (const s of supports) {
+            const sx = roundX(clamp(s.x, 0, L));
+            xsSet.add(Math.max(0, sx - eps));
+            xsSet.add(sx);
+            xsSet.add(Math.min(L, sx + eps));
+        }
+        for (const ld of loads) {
+            if (ld.type === 'point' || ld.type === 'moment') {
+                const px = roundX(clamp(ld.x, 0, L));
+                xsSet.add(Math.max(0, px - 1e-4));
+                xsSet.add(px);
+                xsSet.add(Math.min(L, px + 1e-4));
+            } else {
+                xsSet.add(roundX(clamp(ld.x1, 0, L)));
+                xsSet.add(roundX(clamp(ld.x2, 0, L)));
+            }
+        }
+        const xs = [...xsSet].filter(x => x >= 0 && x <= L).sort((a, b) => a - b);
+
+        const V = new Array(xs.length).fill(0);
+        const M = new Array(xs.length).fill(0);
+        for (let k = 0; k < xs.length; k++) {
+            const x = xs[k];
+            let v = 0, m = 0;
+            for (const r of react) {
+                if (r.x <= x) v += r.Rv;
+                if (r.x < x) m += r.Rv * (x - r.x) + r.Rm;
+                else if (r.x <= x) {
+                    if (Math.abs(r.x) < 1e-9) m += r.Rm;
+                }
+            }
+            for (const ld of loads) {
+                if (ld.type === 'point') {
+                    if (ld.x <= x) { v -= ld.P; m -= ld.P * (x - ld.x); }
+                } else if (ld.type === 'udl') {
+                    if (ld.x1 < x) {
+                        const seg = Math.min(x, ld.x2) - ld.x1;
+                        const W = ld.w * seg;
+                        const xc = ld.x1 + seg / 2;
+                        v -= W; m -= W * (x - xc);
+                    }
+                } else if (ld.type === 'vdl') {
+                    if (ld.x1 < x) {
+                        const span = Math.max(ld.x2 - ld.x1, 1e-9);
+                        const t = Math.min(x, ld.x2) - ld.x1;
+                        const W = ld.w1 * t + (ld.w2 - ld.w1) * t*t / (2*span);
+                        const num = ld.w1 * t*t / 2 + (ld.w2 - ld.w1) * t*t*t / (3*span);
+                        const xc = ld.x1 + (W > 1e-9 ? num / W : t / 2);
+                        v -= W; m -= W * (x - xc);
+                    }
+                } else if (ld.type === 'moment') {
+                    if (ld.x <= x) m += ld.M;
+                }
+            }
+            V[k] = v; M[k] = m;
+        }
+
+        // Deflection via Hermite interpolation from FEM solution
+        function interpDelta(x) {
+            x = clamp(x, 0, L);
+            for (let e = 0; e < n - 1; e++) {
+                const x1n = nodes[e], x2n = nodes[e+1];
+                if (x1n - 1e-9 <= x && x <= x2n + 1e-9) {
+                    const le = x2n - x1n;
+                    if (le < 1e-10) return d[2*nm.get(x1n)];
+                    const xi = (x - x1n) / le;
+                    const i1 = nm.get(x1n), i2 = nm.get(x2n);
+                    const N = hermite(xi, le);
+                    const dv = [2*i1, 2*i1+1, 2*i2, 2*i2+1];
+                    return N[0]*d[dv[0]] + N[1]*d[dv[1]] + N[2]*d[dv[2]] + N[3]*d[dv[3]];
+                }
+            }
+            return 0;
+        }
+        const D = xs.map(x => interpDelta(x) * 1000);  // mm
+        const Vmax = Math.max(...V.map(Math.abs));
+        const Mmax = Math.max(...M.map(Math.abs));
+        const Dmax = Math.max(...D.map(Math.abs));
+        return { xs, V, M, D, reactions: react, Vmax, Mmax, Dmax };
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  THREE-MOMENT THEOREM (Clapeyron) — multi-span continuous beam
+    //  Ported from beam.py three_moment_theorem()
+    // ════════════════════════════════════════════════════════════════════════
     function reactionsSS(L, loads) {
-        // ΣM_A = 0  (CW+):  -Rb·L + Σ(Wi·xi) − Σ(Mj) = 0
-        // ΣFy   = 0      :  Ra + Rb = Σ Wi
         let sumW = 0, sumMx = 0, sumMc = 0;
         for (const ld of loads) {
-            if (ld.type === 'moment') {
-                sumMc += ld.M;
-            } else {
+            if (ld.type === 'moment') sumMc += ld.M;
+            else {
                 const { W, xc } = loadResultant(ld);
-                sumW  += W;
-                sumMx += W * xc;
+                sumW  += W; sumMx += W * xc;
             }
         }
         const Rb = (sumMx - sumMc) / L;
-        const Ra = sumW - Rb;
-        return { Ra, Rb };
+        return { Ra: sumW - Rb, Rb };
     }
-
-    function shearMomentAt(x, Ra, loads) {
-        // Left-side free-body: sum contributions of loads with their action
-        // point at or to the LEFT of section x.
-        let v = Ra;
-        let m = Ra * x;
+    function shearMomentAtSS(x, Ra, loads) {
+        let v = Ra, m = Ra * x;
         for (const ld of loads) {
             if (ld.type === 'point') {
                 if (ld.x <= x) { v -= ld.P; m -= ld.P * (x - ld.x); }
             } else if (ld.type === 'udl' || ld.type === 'vdl') {
                 if (ld.x1 < x) {
-                    const xEnd = Math.min(x, ld.x2);
-                    const seg  = xEnd - ld.x1;
+                    const seg = Math.min(x, ld.x2) - ld.x1;
                     let W, xc;
-                    if (ld.type === 'udl') {
-                        W  = ld.w * seg;
-                        xc = ld.x1 + seg / 2;
-                    } else {
+                    if (ld.type === 'udl') { W = ld.w * seg; xc = ld.x1 + seg / 2; }
+                    else {
                         const t = seg;
-                        W  = ld.w1 * t + (ld.w2 - ld.w1) * t / 2;
-                        const num = ld.w1 * t * t / 2 + (ld.w2 - ld.w1) * t * t / 3;
+                        W = ld.w1 * t + (ld.w2 - ld.w1) * t / 2;
+                        const num = ld.w1 * t*t / 2 + (ld.w2 - ld.w1) * t*t / 3;
                         xc = ld.x1 + (Math.abs(W) > 1e-12 ? num / W : t / 2);
                     }
-                    v -= W;
-                    m -= W * (x - xc);
+                    v -= W; m -= W * (x - xc);
                 }
-            } else if (ld.type === 'moment') {
-                if (ld.x <= x) m += ld.M;
-            }
+            } else if (ld.type === 'moment') { if (ld.x <= x) m += ld.M; }
         }
         return { V: v, M: m };
     }
-
-    function diagramsSS(L, loads, nPoints = 400) {
-        const { Ra, Rb } = reactionsSS(L, loads);
-        // Build x-array that includes discontinuity points
-        const xsSet = new Set();
-        for (let i = 0; i <= nPoints; i++) xsSet.add((i * L) / nPoints);
-        for (const ld of loads) {
-            ['x', 'x1', 'x2'].forEach(k => {
-                if (ld[k] !== undefined) xsSet.add(Number(ld[k]));
-            });
-        }
-        const xs = [...xsSet].filter(x => x >= 0 && x <= L).sort((a, b) => a - b);
-        const V  = xs.map(x => shearMomentAt(x, Ra, loads).V);
-        const M  = xs.map(x => shearMomentAt(x, Ra, loads).M);
-        const Vmax = Math.max(...V.map(Math.abs));
-        const Mmax = Math.max(...M.map(Math.abs));
-        return { Ra, Rb, xs, V, M, Vmax, Mmax };
+    function trapz(y, x) {
+        let s = 0;
+        for (let i = 1; i < x.length; i++) s += 0.5 * (y[i] + y[i-1]) * (x[i] - x[i-1]);
+        return s;
     }
-
-    function deflectionSS(L, xs, M, E_MPa, I_mm4) {
-        // Double-integrate M(x)/EI with end conditions δ(0) = δ(L) = 0.
-        // Units: M in kN·m = 1e6 N·mm; E in MPa = N/mm²; I in mm⁴ -> EI in N·mm².
-        // Convert x to mm to keep δ in mm.
-        const EI = E_MPa * I_mm4;          // N·mm²
-        if (EI <= 0) return xs.map(() => 0);
-        const n = xs.length;
-        const xMm = xs.map(x => x * 1000); // mm
-        const Mn  = M.map(m => m * 1e6);   // N·mm
-        // Cumulative trapezoidal integration of (M/EI) -> slope
-        const slope_unc = new Array(n).fill(0);
-        for (let i = 1; i < n; i++) {
-            const dx = xMm[i] - xMm[i - 1];
-            slope_unc[i] = slope_unc[i - 1] + 0.5 * (Mn[i] + Mn[i - 1]) / EI * dx;
+    function threeMoment(spans, loadsPerSpan) {
+        const n = spans.length;
+        if (n === 1) {
+            const { Ra, Rb } = reactionsSS(spans[0], loadsPerSpan[0]);
+            return { supportMoments: [0, 0], reactions: [Ra, Rb] };
         }
-        // Integrate slope to get unc. deflection
-        const defl_unc = new Array(n).fill(0);
-        for (let i = 1; i < n; i++) {
-            const dx = xMm[i] - xMm[i - 1];
-            defl_unc[i] = defl_unc[i - 1] + 0.5 * (slope_unc[i] + slope_unc[i - 1]) * dx;
+        function sixQm(L, lds, fromRight) {
+            const { Ra } = reactionsSS(L, lds);
+            const N = 200;
+            const xs = []; for (let i = 0; i <= N; i++) xs.push(i * L / N);
+            const Mss = xs.map(x => shearMomentAtSS(x, Ra, lds).M);
+            const kernel = xs.map(x => fromRight ? (L - x) : x);
+            const integrand = Mss.map((m, i) => m * kernel[i]);
+            return (6 / L) * trapz(integrand, xs);
         }
-        // Enforce δ(L) = 0 by subtracting a linear ramp
-        const Llocal = xMm[n - 1];
-        const slopeCorr = defl_unc[n - 1] / Llocal;
-        return defl_unc.map((d, i) => d - slopeCorr * xMm[i]);  // mm
+        const sixL = spans.map((L, i) => sixQm(L, loadsPerSpan[i], false));
+        const sixR = spans.map((L, i) => sixQm(L, loadsPerSpan[i], true));
+        const size = n - 1;
+        const A = Array.from({length: size}, () => new Array(size).fill(0));
+        const b = new Array(size).fill(0);
+        for (let k = 0; k < size; k++) {
+            const LL = spans[k], LR = spans[k+1];
+            A[k][k] = 2 * (LL + LR);
+            if (k > 0) A[k][k-1] = LL;
+            if (k < size - 1) A[k][k+1] = LR;
+            b[k] = -(sixL[k] + sixR[k+1]);
+        }
+        const Mint = solveLinear(A, b);
+        if (!Mint) return null;
+        const supportMoments = [0, ...Mint, 0];
+        const reactions = new Array(n + 1).fill(0);
+        for (let i = 0; i < n; i++) {
+            const L = spans[i];
+            const Mi = supportMoments[i], Mj = supportMoments[i+1];
+            const { Ra: Rass, Rb: Rbss } = reactionsSS(L, loadsPerSpan[i]);
+            reactions[i]   += Rass + (Mj - Mi) / L;
+            reactions[i+1] += Rbss + (Mi - Mj) / L;
+        }
+        return { supportMoments, reactions };
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  RC SECTION DESIGN  (port of rc_design.py, NSCP 2015 / ACI 318-14)
+    //  NSCP 2015 LOAD COMBINATIONS — categorized loads
+    //  Each combo is a map from category -> factor.
     // ════════════════════════════════════════════════════════════════════════
-
-    function beta1(fc) {
-        return fc > 28 ? Math.max(0.65, 0.85 - 0.05 * (fc - 28) / 7) : 0.85;
+    const NSCP_COMBOS = [
+        { name: '1.4D',                              f: { D: 1.4 } },
+        { name: '1.2D + 1.6L + 0.5(Lr|S|R)',         f: { D: 1.2, L: 1.6, Lr: 0.5, S: 0.5, R: 0.5 } },
+        { name: '1.2D + 1.6(Lr|S|R) + (L|0.5W)',     f: { D: 1.2, Lr: 1.6, S: 1.6, R: 1.6, L: 1.0, W: 0.5 } },
+        { name: '1.2D + 1.0W + L + 0.5(Lr|S|R)',     f: { D: 1.2, W: 1.0, L: 1.0, Lr: 0.5, S: 0.5, R: 0.5 } },
+        { name: '0.9D + 1.0W',                       f: { D: 0.9, W: 1.0 } },
+        { name: '1.2D + 1.0E + L + 0.2S',            f: { D: 1.2, E: 1.0, L: 1.0, S: 0.2 } },
+        { name: '0.9D + 1.0E',                       f: { D: 0.9, E: 1.0 } }
+    ];
+    function applyCombo(loads, factors) {
+        return loads.map(ld => scaleLoad(ld, factors[ld.cat] || 0)).filter(ld => {
+            if (ld.type === 'point')  return Math.abs(ld.P)  > 1e-9;
+            if (ld.type === 'udl')    return Math.abs(ld.w)  > 1e-9;
+            if (ld.type === 'vdl')    return Math.abs(ld.w1) + Math.abs(ld.w2) > 1e-9;
+            if (ld.type === 'moment') return Math.abs(ld.M)  > 1e-9;
+            return false;
+        });
     }
 
-    function rhoBalanced(fc, fy) {
-        return (0.85 * beta1(fc) * fc / fy) * (600 / (600 + fy));
-    }
-
-    function rhoMax(fc, fy) { return 0.75 * rhoBalanced(fc, fy); }
-
-    function rhoMin(fc, fy) {
-        return Math.max(Math.sqrt(fc) / (4 * fy), 1.4 / fy);
-    }
-
-    function effDepth(h, cover, ds, db) {
-        return h - cover - ds - db / 2;
-    }
+    // ════════════════════════════════════════════════════════════════════════
+    //  RC SECTION DESIGN  (NSCP 2015 / ACI 318-14)
+    // ════════════════════════════════════════════════════════════════════════
+    function beta1(fc)        { return fc > 28 ? Math.max(0.65, 0.85 - 0.05 * (fc - 28) / 7) : 0.85; }
+    function rhoBalanced(fc, fy) { return (0.85 * beta1(fc) * fc / fy) * (600 / (600 + fy)); }
+    function rhoMax(fc, fy)   { return 0.75 * rhoBalanced(fc, fy); }
+    function rhoMin(fc, fy)   { return Math.max(Math.sqrt(fc) / (4 * fy), 1.4 / fy); }
+    function effDepth(h, cover, ds, db) { return h - cover - ds - db / 2; }
 
     function designFlexure(Mu_kNm, b, h, fc, fy, db, ds, cover) {
         const d = effDepth(h, cover, ds, db);
         if (d <= 0) return { error: 'Effective depth ≤ 0 — check section dimensions and cover.' };
-
-        const phi    = 0.90;
-        const Mu_Nmm = Math.abs(Mu_kNm) * 1e6;
-        const b1     = beta1(fc);
-        const rb     = rhoBalanced(fc, fy);
-        const r_max  = rhoMax(fc, fy);
-        const r_min  = rhoMin(fc, fy);
-        const Ab     = Math.PI / 4 * db * db;
-
-        const Rn   = Mu_Nmm / (phi * b * d * d);
+        const phi = 0.90, Mu_Nmm = Math.abs(Mu_kNm) * 1e6;
+        const b1 = beta1(fc), rb = rhoBalanced(fc, fy);
+        const r_max = rhoMax(fc, fy), r_min = rhoMin(fc, fy);
+        const Ab = Math.PI / 4 * db * db;
+        const Rn = Mu_Nmm / (phi * b * d * d);
         const disc = 1 - (2 * Rn) / (0.85 * fc);
-        if (disc < 0) {
-            return {
-                error: `Section is too small — Rn = ${Rn.toFixed(2)} MPa exceeds capacity. Increase b or h.`,
-                d, Rn
-            };
-        }
+        if (disc < 0) return { error: `Section is too small — Rn = ${Rn.toFixed(2)} MPa exceeds capacity.`, d, Rn };
         const rho_calc = (0.85 * fc / fy) * (1 - Math.sqrt(disc));
-
         let rho_use, checks = [];
         if (rho_calc < r_min) {
             checks.push(`ρ_calc = ${rho_calc.toFixed(5)} < ρ_min = ${r_min.toFixed(5)} → use ρ_min`);
             rho_use = r_min;
         } else if (rho_calc > r_max) {
             checks.push(`ρ_calc = ${rho_calc.toFixed(5)} > ρ_max = ${r_max.toFixed(5)} → over-reinforced`);
-            checks.push('⚠ Increase beam section. Results below are indicative.');
             rho_use = r_max;
-        } else {
-            checks.push('ρ_min ≤ ρ_calc ≤ ρ_max  ✓');
-            rho_use = rho_calc;
-        }
-
-        const As_req  = rho_use * b * d;
-        const n_bars  = Math.ceil(As_req / Ab);
+        } else { checks.push('ρ_min ≤ ρ_calc ≤ ρ_max  ✓'); rho_use = rho_calc; }
+        const As_req = rho_use * b * d;
+        const n_bars = Math.ceil(As_req / Ab);
         const As_prov = n_bars * Ab;
-        const a       = As_prov * fy / (0.85 * fc * b);
-        const phi_Mn  = phi * As_prov * fy * (d - a / 2) / 1e6;
-        const cap_ok  = phi_Mn >= Math.abs(Mu_kNm);
-
-        return {
-            d, b, h, cover, fc, fy, db, Ab, beta1: b1,
-            rho_b: rb, rho_max: r_max, rho_min: r_min,
-            phi_flex: phi, Mu_kNm: Math.abs(Mu_kNm), Rn,
-            rho_calc, rho_use, checks,
-            As_req, n_bars, As_prov, a,
-            phi_Mn_kNm: phi_Mn, capacity_ok: cap_ok,
-            over_reinforced: rho_calc > r_max
-        };
+        const a = As_prov * fy / (0.85 * fc * b);
+        const phi_Mn = phi * As_prov * fy * (d - a / 2) / 1e6;
+        return { d, b, h, cover, fc, fy, db, Ab, beta1: b1, rho_b: rb, rho_max: r_max, rho_min: r_min,
+                 phi_flex: phi, Mu_kNm: Math.abs(Mu_kNm), Rn, rho_calc, rho_use, checks,
+                 As_req, n_bars, As_prov, a, phi_Mn_kNm: phi_Mn,
+                 capacity_ok: phi_Mn >= Math.abs(Mu_kNm), over_reinforced: rho_calc > r_max };
     }
-
-    function roundSpacing(s) {
-        return Math.max(25, Math.floor(s / 25) * 25);
-    }
-
+    function roundSpacing(s) { return Math.max(25, Math.floor(s / 25) * 25); }
     function designShear(Vu_kN, b, h, fc, fy_t, ds, db, cover, lam, legs) {
-        const d   = effDepth(h, cover, ds, db);
-        const phi = 0.75;
-        const Vu  = Math.abs(Vu_kN);
-        fy_t = Math.min(fy_t, 420);   // NSCP 2015 §422.5.10.2 cap
-
-        const Vc_N  = 0.17 * lam * Math.sqrt(fc) * b * d;
-        const Vc_kN = Vc_N / 1e3;
+        const d = effDepth(h, cover, ds, db), phi = 0.75, Vu = Math.abs(Vu_kN);
+        fy_t = Math.min(fy_t, 420);
+        const Vc_kN = 0.17 * lam * Math.sqrt(fc) * b * d / 1e3;
         const phiVc = phi * Vc_kN;
-
-        const Av  = legs * (Math.PI / 4 * ds * ds);
-        const need_min = Vu > phiVc / 2;
-        const need_des = Vu > phiVc;
-
+        const Av = legs * (Math.PI / 4 * ds * ds);
+        const need_min = Vu > phiVc / 2, need_des = Vu > phiVc;
         const Avs_min = Math.max(0.062 * Math.sqrt(fc) * b / fy_t, 0.35 * b / fy_t);
         const Vs_lim1 = 0.33 * Math.sqrt(fc) * b * d / 1e3;
         const Vs_lim2 = 0.66 * Math.sqrt(fc) * b * d / 1e3;
-
         const base = { d, phi_shear: phi, Vu_kN: Vu, Vc_kN, phiVc, Av_mm2: Av, legs, ds,
                        Avs_min, Vs_lim1, Vs_lim2, need_min, need_des, fc, fy_t, lam };
-
-        if (!need_min) {
-            return { ...base, mode: 'none', Vs_kN: 0, s_final: null,
-                     note: 'Vu ≤ φVc/2 — stirrups not required by analysis, but provide minimum per good practice.' };
-        }
+        if (!need_min) return { ...base, mode: 'none', Vs_kN: 0, s_final: null,
+                                note: 'Vu ≤ φVc/2 — stirrups not required by analysis.' };
         if (!need_des) {
             const s_from_min = Av / Avs_min;
             const s_max_spac = roundSpacing(Math.min(d / 2, 600));
-            const s_final    = roundSpacing(Math.min(s_from_min, s_max_spac));
-            return { ...base, mode: 'minimum', Vs_kN: 0,
-                     s_from_min, s_max_spac, s_final,
-                     note: 'φVc/2 < Vu ≤ φVc — minimum stirrups required (NSCP 2015 §409.6.3.1).' };
+            const s_final = roundSpacing(Math.min(s_from_min, s_max_spac));
+            return { ...base, mode: 'minimum', Vs_kN: 0, s_from_min, s_max_spac, s_final,
+                     note: 'φVc/2 < Vu ≤ φVc — minimum stirrups required (§409.6.3.1).' };
         }
         const Vs_kN = Vu / phi - Vc_kN;
-        if (Vs_kN > Vs_lim2) {
-            return { ...base, mode: 'overloaded', Vs_kN,
-                     error: `Vs = ${Vs_kN.toFixed(2)} kN exceeds Vs_max = ${Vs_lim2.toFixed(2)} kN (0.66√f'c·b·d). Increase beam section.` };
-        }
+        if (Vs_kN > Vs_lim2) return { ...base, mode: 'overloaded', Vs_kN,
+                                       error: `Vs = ${Vs_kN.toFixed(2)} kN > Vs_max = ${Vs_lim2.toFixed(2)} kN. Increase section.` };
         const s_calc = Av * fy_t * d / (Vs_kN * 1e3);
         let s_max_spac, spac_note;
-        if (Vs_kN <= Vs_lim1) {
-            s_max_spac = roundSpacing(Math.min(d / 2, 600));
-            spac_note  = "Vs ≤ 0.33√f'c·b·d  →  s_max = min(d/2, 600 mm)";
-        } else {
-            s_max_spac = roundSpacing(Math.min(d / 4, 300));
-            spac_note  = "Vs > 0.33√f'c·b·d  →  s_max = min(d/4, 300 mm)";
-        }
+        if (Vs_kN <= Vs_lim1) { s_max_spac = roundSpacing(Math.min(d / 2, 600)); spac_note = "Vs ≤ 0.33√f'c·b·d → s_max = min(d/2, 600 mm)"; }
+        else                  { s_max_spac = roundSpacing(Math.min(d / 4, 300)); spac_note = "Vs > 0.33√f'c·b·d → s_max = min(d/4, 300 mm)"; }
         const s_from_min = Av / Avs_min;
         let s_final = roundSpacing(Math.min(s_calc, s_max_spac, s_from_min));
         s_final = Math.max(s_final, 50);
         const Vs_prov_kN = Av * fy_t * d / (s_final * 1e3);
-        const Vn_prov_kN = Vc_kN + Vs_prov_kN;
-        const phiVn_kN   = phi * Vn_prov_kN;
+        const phiVn_kN = phi * (Vc_kN + Vs_prov_kN);
         return { ...base, mode: 'designed', Vs_kN, s_calc, s_max_spac, s_from_min, s_final,
-                 spac_note, Vs_prov_kN, Vn_prov_kN, phiVn_kN, capacity_ok: phiVn_kN >= Vu };
+                 spac_note, Vs_prov_kN, Vn_prov_kN: Vc_kN + Vs_prov_kN, phiVn_kN,
+                 capacity_ok: phiVn_kN >= Vu };
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  NSCP 2015 LOAD COMBINATIONS  (port of calculations/loads.py)
+    //  SVG DIAGRAMS — V, M, δ
     // ════════════════════════════════════════════════════════════════════════
-
-    function nscpLoadCombinations({ D = 0, L = 0, Lr = 0, S = 0, W = 0, E = 0, R = 0 }) {
-        const combos = {
-            '1.4D':                              1.4 * D,
-            '1.2D + 1.6L + 0.5(Lr|S|R)':        1.2 * D + 1.6 * L + 0.5 * Math.max(Lr, S, R),
-            '1.2D + 1.6(Lr|S|R) + (L|0.5W)':    1.2 * D + 1.6 * Math.max(Lr, S, R) + Math.max(L, 0.5 * W),
-            '1.2D + 1.0W + L + 0.5(Lr|S|R)':    1.2 * D + 1.0 * W + L + 0.5 * Math.max(Lr, S, R),
-            '0.9D + 1.0W':                       0.9 * D + 1.0 * W,
-            '1.2D + 1.0E + L + 0.2S':           1.2 * D + 1.0 * E + L + 0.2 * S,
-            '0.9D + 1.0E':                       0.9 * D + 1.0 * E
-        };
-        let govName = null, govVal = -Infinity;
-        for (const [n, v] of Object.entries(combos)) {
-            if (v > govVal) { govVal = v; govName = n; }
-        }
-        return { combos, govName, govVal };
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
-    //  SVG DIAGRAMS
-    // ════════════════════════════════════════════════════════════════════════
-
     function drawDiagram(container, xs, ys, opts = {}) {
-        const { color = '#0056b3', fillColor = 'rgba(0, 86, 179, 0.15)',
+        const { color = '#0056b3', fillColor = 'rgba(0,86,179,0.15)',
                 yLabel = '', unit = '', title = '' } = opts;
-        const W = 900, H = 260;
-        const padL = 70, padR = 24, padT = 30, padB = 40;
-        const innerW = W - padL - padR;
-        const innerH = H - padT - padB;
-
+        const W = 900, H = 240;
+        const padL = 70, padR = 24, padT = 28, padB = 40;
+        const iW = W - padL - padR, iH = H - padT - padB;
         const xMin = 0, xMax = Math.max(...xs);
         let yMin = Math.min(...ys, 0), yMax = Math.max(...ys, 0);
         if (yMin === yMax) { yMin -= 1; yMax += 1; }
-        const yRange = yMax - yMin;
-        // Add a bit of padding
-        yMin -= yRange * 0.08;
-        yMax += yRange * 0.08;
-
-        const sx = x => padL + (x - xMin) / (xMax - xMin) * innerW;
-        const sy = y => padT + (yMax - y) / (yMax - yMin) * innerH;
-
+        const yr = yMax - yMin; yMin -= yr * 0.08; yMax += yr * 0.08;
+        const sx = x => padL + (x - xMin) / (xMax - xMin) * iW;
+        const sy = y => padT + (yMax - y) / (yMax - yMin) * iH;
         const yZero = sy(0);
-
-        // Polygon path filling from zero to curve
-        const pathPoints = xs.map((x, i) => `${sx(x)},${sy(ys[i])}`).join(' ');
-        const fillPath = `${sx(xs[0])},${yZero} ${pathPoints} ${sx(xs[xs.length - 1])},${yZero}`;
-
-        // Critical value markers
-        const maxAbsIdx = ys.reduce((iMax, v, i, arr) =>
-            Math.abs(v) > Math.abs(arr[iMax]) ? i : iMax, 0);
-        const critX = xs[maxAbsIdx], critY = ys[maxAbsIdx];
-
-        // Axis ticks
-        const xTicks = 6, yTicks = 4;
-        let xTickHtml = '';
-        for (let i = 0; i <= xTicks; i++) {
-            const xt = xMin + (xMax - xMin) * i / xTicks;
-            const px = sx(xt);
-            xTickHtml += `<line x1="${px}" y1="${padT + innerH}" x2="${px}" y2="${padT + innerH + 4}" stroke="#5c6773"/>` +
-                         `<text x="${px}" y="${padT + innerH + 18}" font-size="11" fill="#5c6773" text-anchor="middle">${xt.toFixed(2)}</text>`;
+        const path = xs.map((x, i) => `${sx(x)},${sy(ys[i])}`).join(' ');
+        const fill = `${sx(xs[0])},${yZero} ${path} ${sx(xs[xs.length-1])},${yZero}`;
+        const cIdx = ys.reduce((iMax, v, i, a) => Math.abs(v) > Math.abs(a[iMax]) ? i : iMax, 0);
+        let xt = '', yt = '';
+        for (let i = 0; i <= 6; i++) {
+            const v = xMin + (xMax - xMin) * i / 6, px = sx(v);
+            xt += `<line x1="${px}" y1="${padT + iH}" x2="${px}" y2="${padT + iH + 4}" stroke="#5c6773"/>
+                   <text x="${px}" y="${padT + iH + 16}" font-size="10" fill="#5c6773" text-anchor="middle">${v.toFixed(2)}</text>`;
         }
-        let yTickHtml = '';
-        for (let i = 0; i <= yTicks; i++) {
-            const yt = yMin + (yMax - yMin) * i / yTicks;
-            const py = sy(yt);
-            yTickHtml += `<line x1="${padL - 4}" y1="${py}" x2="${padL}" y2="${py}" stroke="#5c6773"/>` +
-                         `<text x="${padL - 8}" y="${py + 4}" font-size="11" fill="#5c6773" text-anchor="end">${yt.toFixed(2)}</text>`;
+        for (let i = 0; i <= 4; i++) {
+            const v = yMin + (yMax - yMin) * i / 4, py = sy(v);
+            yt += `<line x1="${padL - 4}" y1="${py}" x2="${padL}" y2="${py}" stroke="#5c6773"/>
+                   <text x="${padL - 7}" y="${py + 3}" font-size="10" fill="#5c6773" text-anchor="end">${v.toFixed(2)}</text>`;
         }
-
-        const svg =
-            `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
-                ${title ? `<text x="${W/2}" y="18" font-size="13" font-weight="600" fill="#1f2933" text-anchor="middle">${title}</text>` : ''}
-                <rect x="${padL}" y="${padT}" width="${innerW}" height="${innerH}" fill="#fafbfc" stroke="#e1e4e8"/>
-                <line x1="${padL}" y1="${yZero}" x2="${padL + innerW}" y2="${yZero}" stroke="#adb5bd" stroke-dasharray="3,3"/>
-                <polygon points="${fillPath}" fill="${fillColor}"/>
-                <polyline points="${pathPoints}" stroke="${color}" stroke-width="2" fill="none"/>
-                ${xTickHtml}
-                ${yTickHtml}
-                <text x="${padL + innerW/2}" y="${H - 6}" font-size="11" fill="#5c6773" text-anchor="middle">x (m)</text>
-                <text x="14" y="${padT + innerH/2}" font-size="11" fill="#5c6773" text-anchor="middle" transform="rotate(-90 14 ${padT + innerH/2})">${yLabel}${unit ? ` (${unit})` : ''}</text>
-                <circle cx="${sx(critX)}" cy="${sy(critY)}" r="4" fill="${color}"/>
-                <text x="${sx(critX)}" y="${sy(critY) - 8}" font-size="11" font-weight="600" fill="${color}" text-anchor="middle">${critY.toFixed(2)}</text>
-            </svg>`;
-        container.innerHTML = svg;
+        container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+            ${title ? `<text x="${W/2}" y="16" font-size="13" font-weight="600" fill="#1f2933" text-anchor="middle">${title}</text>` : ''}
+            <rect x="${padL}" y="${padT}" width="${iW}" height="${iH}" fill="#fafbfc" stroke="#e1e4e8"/>
+            <line x1="${padL}" y1="${yZero}" x2="${padL + iW}" y2="${yZero}" stroke="#adb5bd" stroke-dasharray="3,3"/>
+            <polygon points="${fill}" fill="${fillColor}"/>
+            <polyline points="${path}" stroke="${color}" stroke-width="2" fill="none"/>
+            ${xt}${yt}
+            <text x="${padL + iW/2}" y="${H - 6}" font-size="10" fill="#5c6773" text-anchor="middle">x (m)</text>
+            <text x="14" y="${padT + iH/2}" font-size="10" fill="#5c6773" text-anchor="middle" transform="rotate(-90 14 ${padT + iH/2})">${yLabel}${unit ? ` (${unit})` : ''}</text>
+            <circle cx="${sx(xs[cIdx])}" cy="${sy(ys[cIdx])}" r="3.5" fill="${color}"/>
+            <text x="${sx(xs[cIdx])}" y="${sy(ys[cIdx]) - 7}" font-size="11" font-weight="600" fill="${color}" text-anchor="middle">${ys[cIdx].toFixed(2)}</text>
+        </svg>`;
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  STATE & UI — TAB 1 (BEAM ANALYSIS)
+    //  LIVE BEAM VISUALIZATION
     // ════════════════════════════════════════════════════════════════════════
+    const CAT_COLOR = { D:'#c33', L:'#06c', Lr:'#0a8', S:'#0a8', R:'#0a8', W:'#e80', E:'#83c' };
+    const SUPP_COLOR = { pin:'#185FA5', roller:'#185FA5', fixed:'#993C1D', spring:'#2D7A5A' };
 
+    function drawBeamViz(container, L, supports, loads) {
+        const W = 900, H = 220;
+        const padL = 50, padR = 30, padT = 70, padB = 80;
+        const iW = W - padL - padR;
+        const beamY = H - padB;     // y-coordinate of the beam line
+        const beamH = 14;
+        const sx = x => padL + (x / Math.max(L, 1e-9)) * iW;
+
+        // Beam rectangle
+        let parts = [];
+        parts.push(`<rect x="${padL}" y="${beamY - beamH/2}" width="${iW}" height="${beamH}" fill="#e8f4fd" stroke="#185FA5" stroke-width="2"/>`);
+
+        // X-axis ticks
+        const nTicks = Math.min(8, Math.max(2, Math.round(L)));
+        for (let i = 0; i <= nTicks; i++) {
+            const xv = i * L / nTicks, px = sx(xv);
+            parts.push(`<line x1="${px}" y1="${beamY + beamH/2}" x2="${px}" y2="${beamY + beamH/2 + 4}" stroke="#adb5bd"/>
+                        <text x="${px}" y="${beamY + beamH/2 + 16}" font-size="10" fill="#5c6773" text-anchor="middle">${xv.toFixed(1)} m</text>`);
+        }
+
+        // ── Supports ────────────────────────────────────────────────
+        for (const s of supports) {
+            const cx = sx(clamp(s.x, 0, L));
+            const cy = beamY + beamH/2;
+            const col = SUPP_COLOR[s.type] || '#999';
+            if (s.type === 'pin' || s.type === 'roller') {
+                // Triangle
+                parts.push(`<polygon points="${cx},${cy} ${cx-10},${cy+18} ${cx+10},${cy+18}" fill="${col}" opacity="0.85"/>`);
+                if (s.type === 'roller') {
+                    parts.push(`<circle cx="${cx-5}" cy="${cy+22}" r="2.5" fill="${col}"/>
+                                <circle cx="${cx+5}" cy="${cy+22}" r="2.5" fill="${col}"/>`);
+                }
+                // Hatched ground
+                const gy = cy + (s.type === 'roller' ? 28 : 21);
+                parts.push(`<line x1="${cx-14}" y1="${gy}" x2="${cx+14}" y2="${gy}" stroke="${col}" stroke-width="1.5"/>`);
+                for (let i = -3; i <= 3; i++) parts.push(`<line x1="${cx + i*4 - 2}" y1="${gy + 4}" x2="${cx + i*4 + 2}" y2="${gy}" stroke="${col}" stroke-width="1"/>`);
+            } else if (s.type === 'fixed') {
+                // Vertical wall with hatching
+                const wallSide = (s.x <= L / 2) ? -1 : 1;  // wall to the left or right
+                const wx0 = cx + wallSide * 0;
+                const wy0 = cy - 18;
+                parts.push(`<line x1="${wx0}" y1="${wy0 - 16}" x2="${wx0}" y2="${wy0 + 50}" stroke="${col}" stroke-width="3"/>`);
+                for (let i = -3; i <= 7; i++) {
+                    parts.push(`<line x1="${wx0 + wallSide*0}" y1="${wy0 + i*5}" x2="${wx0 + wallSide*8}" y2="${wy0 + i*5 - 5}" stroke="${col}" stroke-width="1"/>`);
+                }
+            } else if (s.type === 'spring') {
+                // Zigzag spring symbol
+                const segs = 6, sH = 30;
+                let path = `M ${cx} ${cy} L ${cx} ${cy + 5}`;
+                for (let i = 0; i < segs; i++) {
+                    const y0 = cy + 5 + (i * sH / segs);
+                    const y1 = cy + 5 + ((i+1) * sH / segs);
+                    const off = (i % 2 === 0 ? 7 : -7);
+                    path += ` L ${cx + off} ${(y0 + y1)/2} L ${cx} ${y1}`;
+                }
+                parts.push(`<path d="${path}" stroke="${col}" stroke-width="1.5" fill="none"/>`);
+                const gy = cy + 5 + sH + 2;
+                parts.push(`<line x1="${cx-12}" y1="${gy}" x2="${cx+12}" y2="${gy}" stroke="${col}" stroke-width="1.5"/>`);
+                for (let i = -2; i <= 2; i++) parts.push(`<line x1="${cx + i*4 - 2}" y1="${gy + 4}" x2="${cx + i*4 + 2}" y2="${gy}" stroke="${col}" stroke-width="1"/>`);
+            }
+            // Position label
+            parts.push(`<text x="${cx}" y="${cy + 55}" font-size="9" fill="${col}" font-weight="600" text-anchor="middle">x=${s.x.toFixed(2)}</text>`);
+        }
+
+        // ── Loads ──────────────────────────────────────────────────
+        for (const ld of loads) {
+            const col = CAT_COLOR[ld.cat] || '#999';
+            const top = beamY - beamH/2;
+            if (ld.type === 'point') {
+                const px = sx(clamp(ld.x, 0, L));
+                const ay = top - 50;
+                parts.push(`<line x1="${px}" y1="${ay}" x2="${px}" y2="${top - 2}" stroke="${col}" stroke-width="2"/>
+                            <polygon points="${px-5},${top-6} ${px+5},${top-6} ${px},${top}" fill="${col}"/>
+                            <text x="${px}" y="${ay - 4}" font-size="10" fill="${col}" font-weight="600" text-anchor="middle">${ld.cat}: ${ld.P.toFixed(0)} kN</text>`);
+            } else if (ld.type === 'udl') {
+                const x1p = sx(clamp(ld.x1, 0, L)), x2p = sx(clamp(ld.x2, 0, L));
+                const ay = top - 36;
+                parts.push(`<line x1="${x1p}" y1="${ay}" x2="${x2p}" y2="${ay}" stroke="${col}" stroke-width="2"/>`);
+                const n = Math.max(4, Math.floor((x2p - x1p) / 18));
+                for (let i = 0; i <= n; i++) {
+                    const px = x1p + (x2p - x1p) * i / n;
+                    parts.push(`<line x1="${px}" y1="${ay}" x2="${px}" y2="${top - 2}" stroke="${col}" stroke-width="1.5"/>
+                                <polygon points="${px-3},${top-4} ${px+3},${top-4} ${px},${top}" fill="${col}"/>`);
+                }
+                parts.push(`<text x="${(x1p + x2p)/2}" y="${ay - 4}" font-size="10" fill="${col}" font-weight="600" text-anchor="middle">${ld.cat}: ${ld.w.toFixed(1)} kN/m</text>`);
+            } else if (ld.type === 'vdl') {
+                const x1p = sx(clamp(ld.x1, 0, L)), x2p = sx(clamp(ld.x2, 0, L));
+                const wMax = Math.max(Math.abs(ld.w1), Math.abs(ld.w2), 1);
+                const h1 = 12 + 24 * Math.abs(ld.w1) / wMax;
+                const h2 = 12 + 24 * Math.abs(ld.w2) / wMax;
+                const ay1 = top - h1, ay2 = top - h2;
+                parts.push(`<polygon points="${x1p},${top} ${x1p},${ay1} ${x2p},${ay2} ${x2p},${top}" fill="${col}" opacity="0.18" stroke="${col}" stroke-width="1.5"/>`);
+                const n = Math.max(4, Math.floor((x2p - x1p) / 18));
+                for (let i = 0; i <= n; i++) {
+                    const t = i / n, px = x1p + (x2p - x1p) * t;
+                    const ah = ay1 + (ay2 - ay1) * t;
+                    parts.push(`<line x1="${px}" y1="${ah}" x2="${px}" y2="${top - 2}" stroke="${col}" stroke-width="1"/>
+                                <polygon points="${px-3},${top-4} ${px+3},${top-4} ${px},${top}" fill="${col}"/>`);
+                }
+                parts.push(`<text x="${(x1p + x2p)/2}" y="${Math.min(ay1, ay2) - 4}" font-size="10" fill="${col}" font-weight="600" text-anchor="middle">${ld.cat}: ${ld.w1.toFixed(1)}→${ld.w2.toFixed(1)} kN/m</text>`);
+            } else if (ld.type === 'moment') {
+                const px = sx(clamp(ld.x, 0, L));
+                const cy = top - 28;
+                // Curved arrow
+                const r = 14;
+                const dir = ld.M >= 0 ? 1 : -1;  // CCW positive
+                const sweep = dir > 0 ? 1 : 0;
+                parts.push(`<path d="M ${px - r} ${cy} A ${r} ${r} 0 1 ${sweep} ${px + r} ${cy}" stroke="${col}" stroke-width="2" fill="none"/>`);
+                const ax = px + r * dir, ay = cy - 2;
+                parts.push(`<polygon points="${ax - dir*4},${ay - 4} ${ax + dir*4},${ay - 4} ${ax + dir*0},${ay + 4}" fill="${col}"/>`);
+                parts.push(`<text x="${px}" y="${cy - r - 4}" font-size="10" fill="${col}" font-weight="600" text-anchor="middle">${ld.cat}: ${ld.M.toFixed(0)} kN·m</text>`);
+            }
+        }
+
+        // Span dimension line
+        parts.push(`<line x1="${sx(0)}" y1="${padT + 5}" x2="${sx(L)}" y2="${padT + 5}" stroke="#5c6773" stroke-width="1"/>
+                    <line x1="${sx(0)}" y1="${padT}" x2="${sx(0)}" y2="${padT + 10}" stroke="#5c6773" stroke-width="1"/>
+                    <line x1="${sx(L)}" y1="${padT}" x2="${sx(L)}" y2="${padT + 10}" stroke="#5c6773" stroke-width="1"/>
+                    <text x="${sx(L/2)}" y="${padT}" font-size="11" font-weight="600" fill="#5c6773" text-anchor="middle">L = ${L.toFixed(2)} m</text>`);
+
+        container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+            ${parts.join('\n')}
+        </svg>`;
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  STATE & UI
+    // ════════════════════════════════════════════════════════════════════════
     const state = {
+        supports: [{ id: 1, type: 'pin', x: 0 }, { id: 2, type: 'roller', x: 6 }],
         loads: [],
-        nextId: 1,
-        lastResult: null
+        nextId: 3,
+        lastResults: null,         // { perCombo: [...], govIdx: i }
+        selectedComboIdx: null
     };
 
+    function getL() { return parseFloat(document.getElementById('ba-L').value) || 6; }
+
+    function newSupport(type) {
+        const L = getL();
+        const base = { id: state.nextId++, type, x: Math.round(L * 10) / 20 };
+        if (type === 'spring') base.k = 1000;
+        return base;
+    }
     function newLoad(type) {
-        const L = Number(document.getElementById('ba-L').value) || 6;
+        const L = getL();
         const id = state.nextId++;
-        const defaults = {
-            point:  { id, type: 'point',  P: 50, x: L / 2 },
-            udl:    { id, type: 'udl',    w: 20, x1: 0, x2: L },
-            vdl:    { id, type: 'vdl',    w1: 0, w2: 30, x1: 0, x2: L },
-            moment: { id, type: 'moment', M: 50, x: L / 2 }
+        const def = {
+            point:  { id, type: 'point',  cat: 'D', P: 20, x: L / 2 },
+            udl:    { id, type: 'udl',    cat: 'D', w: 10, x1: 0, x2: L },
+            vdl:    { id, type: 'vdl',    cat: 'D', w1: 0, w2: 15, x1: 0, x2: L },
+            moment: { id, type: 'moment', cat: 'D', M: 20, x: L / 2 }
         };
-        return defaults[type];
+        return def[type];
     }
 
-    function renderLoadsList() {
-        const list = document.getElementById('ba-loads-list');
+    const CATS = ['D','L','Lr','S','W','E','R'];
+    const CAT_NAMES = { D:'Dead', L:'Live', Lr:'Roof Live', S:'Snow', W:'Wind', E:'Earthquake', R:'Rain' };
+
+    function renderSupports() {
+        const div = document.getElementById('ba-supps-list');
+        if (state.supports.length === 0) {
+            div.innerHTML = `<div class="bd-empty">No supports — add at least 2 (or a single Fixed) to make the beam stable.</div>`;
+            return;
+        }
+        const typeNames = { pin: 'Pin', roller: 'Roller', fixed: 'Fixed', spring: 'Spring' };
+        div.innerHTML = state.supports.map(s => `
+            <div class="bd-item" data-id="${s.id}">
+                <div class="bd-item-head">
+                    <span class="bd-item-tag" style="color:${SUPP_COLOR[s.type]}">${typeNames[s.type]}</span>
+                    <button type="button" class="bd-remove-btn" data-remove-supp="${s.id}">✕</button>
+                </div>
+                <div class="bd-grid">
+                    <div class="bd-field">
+                        <label>Type</label>
+                        <select data-supp-id="${s.id}" data-supp-key="type">
+                            ${['pin','roller','fixed','spring'].map(t => `<option value="${t}" ${s.type===t?'selected':''}>${typeNames[t]}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="bd-field">
+                        <label>x (m)</label>
+                        <input type="number" data-supp-id="${s.id}" data-supp-key="x" value="${s.x}" step="0.05" min="0" inputmode="decimal">
+                    </div>
+                    ${s.type === 'spring' ? `<div class="bd-field"><label>k (kN/m)</label><input type="number" data-supp-id="${s.id}" data-supp-key="k" value="${s.k || 1000}" step="100" min="1" inputmode="decimal"></div>` : ''}
+                </div>
+            </div>`).join('');
+    }
+
+    function renderLoads() {
+        const div = document.getElementById('ba-loads-list');
         if (state.loads.length === 0) {
-            list.innerHTML = '<div class="bd-empty">No loads added yet — click a button above to add one.</div>';
+            div.innerHTML = `<div class="bd-empty">No loads — click a button above to add one. Each load is classified for NSCP combinations.</div>`;
             return;
         }
         const typeNames = { point: '↓ Point Load', udl: '▬ UDL', vdl: '◤ VDL', moment: '↺ Moment' };
-        list.innerHTML = state.loads.map(ld => {
+        div.innerHTML = state.loads.map(ld => {
             const fields = loadFields(ld);
             return `
-                <div class="bd-load-card" data-id="${ld.id}">
-                    <div class="bd-load-card-head">
-                        <span class="bd-load-type">${typeNames[ld.type]}</span>
-                        <button type="button" class="bd-remove-btn" data-remove="${ld.id}">✕ Remove</button>
+                <div class="bd-item" data-id="${ld.id}">
+                    <div class="bd-item-head">
+                        <span class="bd-item-tag">
+                            ${typeNames[ld.type]}
+                            <span class="bd-cat-badge" style="background:${CAT_COLOR[ld.cat]}">${ld.cat}</span>
+                        </span>
+                        <button type="button" class="bd-remove-btn" data-remove-load="${ld.id}">✕</button>
                     </div>
-                    <div class="bd-grid">${fields}</div>
+                    <div class="bd-grid">
+                        <div class="bd-field">
+                            <label>Category</label>
+                            <select data-ld-id="${ld.id}" data-ld-key="cat">
+                                ${CATS.map(c => `<option value="${c}" ${ld.cat===c?'selected':''}>${c} — ${CAT_NAMES[c]}</option>`).join('')}
+                            </select>
+                        </div>
+                        ${fields}
+                    </div>
                 </div>`;
         }).join('');
     }
 
     function loadFields(ld) {
         const num = (key, label, step = 0.1) =>
-            `<div class="bd-field">
-                <label>${label}</label>
-                <input type="number" data-id="${ld.id}" data-key="${key}" value="${ld[key]}" step="${step}" inputmode="decimal">
-             </div>`;
+            `<div class="bd-field"><label>${label}</label>
+                <input type="number" data-ld-id="${ld.id}" data-ld-key="${key}" value="${ld[key]}" step="${step}" inputmode="decimal"></div>`;
         if (ld.type === 'point')  return num('P', 'P (kN)', 1) + num('x', 'x (m)');
         if (ld.type === 'udl')    return num('w', 'w (kN/m)', 1) + num('x1', 'x₁ (m)') + num('x2', 'x₂ (m)');
         if (ld.type === 'vdl')    return num('w1', 'w₁ (kN/m)', 1) + num('w2', 'w₂ (kN/m)', 1) + num('x1', 'x₁ (m)') + num('x2', 'x₂ (m)');
-        if (ld.type === 'moment') return num('M', 'M (kN·m)  ↺ CCW+', 1) + num('x', 'x (m)');
+        if (ld.type === 'moment') return num('M', 'M (kN·m) CCW+', 1) + num('x', 'x (m)');
         return '';
     }
 
-    document.querySelectorAll('[data-add]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            state.loads.push(newLoad(btn.dataset.add));
-            renderLoadsList();
-        });
-    });
+    function refreshAll() {
+        renderSupports();
+        renderLoads();
+        const L = getL();
+        drawBeamViz(document.getElementById('ba-viz'), L, state.supports, state.loads);
+    }
 
+    // ── Event handlers ────────────────────────────────────────────────
+    document.querySelectorAll('[data-add-supp]').forEach(btn => {
+        btn.addEventListener('click', () => { state.supports.push(newSupport(btn.dataset.addSupp)); refreshAll(); });
+    });
+    document.querySelectorAll('[data-add-load]').forEach(btn => {
+        btn.addEventListener('click', () => { state.loads.push(newLoad(btn.dataset.addLoad)); refreshAll(); });
+    });
+    document.getElementById('ba-supps-list').addEventListener('input', e => {
+        const t = e.target;
+        if (t.dataset.suppId) {
+            const s = state.supports.find(x => x.id === Number(t.dataset.suppId));
+            if (!s) return;
+            const key = t.dataset.suppKey;
+            s[key] = key === 'type' ? t.value : (parseFloat(t.value) || 0);
+            if (key === 'type' && t.value === 'spring' && s.k === undefined) s.k = 1000;
+            refreshAll();
+        }
+    });
+    document.getElementById('ba-supps-list').addEventListener('change', e => {
+        if (e.target.dataset.suppKey === 'type') {
+            // Type change might affect available fields, re-render
+            refreshAll();
+        }
+    });
+    document.getElementById('ba-supps-list').addEventListener('click', e => {
+        const id = e.target.dataset.removeSupp;
+        if (id) { state.supports = state.supports.filter(s => s.id !== Number(id)); refreshAll(); }
+    });
     document.getElementById('ba-loads-list').addEventListener('input', e => {
         const t = e.target;
-        if (t.dataset.id && t.dataset.key) {
-            const ld = state.loads.find(l => l.id === Number(t.dataset.id));
-            if (ld) ld[t.dataset.key] = parseFloat(t.value) || 0;
+        if (t.dataset.ldId) {
+            const ld = state.loads.find(x => x.id === Number(t.dataset.ldId));
+            if (!ld) return;
+            const key = t.dataset.ldKey;
+            ld[key] = (key === 'cat') ? t.value : (parseFloat(t.value) || 0);
+            refreshAll();
         }
     });
-
+    document.getElementById('ba-loads-list').addEventListener('change', e => {
+        if (e.target.dataset.ldKey === 'cat') refreshAll();
+    });
     document.getElementById('ba-loads-list').addEventListener('click', e => {
-        const id = e.target.dataset.remove;
-        if (id) {
-            state.loads = state.loads.filter(l => l.id !== Number(id));
-            renderLoadsList();
-        }
+        const id = e.target.dataset.removeLoad;
+        if (id) { state.loads = state.loads.filter(l => l.id !== Number(id)); refreshAll(); }
+    });
+    document.getElementById('ba-L').addEventListener('input', () => {
+        drawBeamViz(document.getElementById('ba-viz'), getL(), state.supports, state.loads);
     });
 
+    // ── Calculate ─────────────────────────────────────────────────────
     document.getElementById('ba-calc-btn').addEventListener('click', () => {
-        const L = parseFloat(document.getElementById('ba-L').value);
+        const L = getL();
         const E = parseFloat(document.getElementById('ba-E').value);
         const I = parseFloat(document.getElementById('ba-I').value);
         if (!(L > 0)) { alert('Span L must be > 0.'); return; }
+
+        // Stability check: count constraints
+        let constraints = 0;
+        for (const s of state.supports) {
+            if (s.type === 'fixed') constraints += 2;
+            else if (s.type !== 'spring') constraints += 1;
+        }
+        if (constraints < 2) {
+            alert('Beam is unstable — add at least 2 supports (or 1 Fixed support).');
+            return;
+        }
         if (state.loads.length === 0) { alert('Add at least one load.'); return; }
 
-        const result = diagramsSS(L, state.loads);
-        const D = (E > 0 && I > 0) ? deflectionSS(L, result.xs, result.M, E, I) : null;
-        state.lastResult = { ...result, D, L };
-
-        // Reactions
-        document.getElementById('ba-reactions').innerHTML = `
-            <div class="bd-metric"><div class="bd-metric-label">R<sub>A</sub> @ x = 0</div><div class="bd-metric-value">${result.Ra.toFixed(2)} kN</div></div>
-            <div class="bd-metric"><div class="bd-metric-label">R<sub>B</sub> @ x = ${L.toFixed(2)} m</div><div class="bd-metric-value">${result.Rb.toFixed(2)} kN</div></div>
-            <div class="bd-metric"><div class="bd-metric-label">Sum of reactions</div><div class="bd-metric-value">${(result.Ra + result.Rb).toFixed(2)} kN</div></div>
-        `;
-
-        // Summary
-        const Dmax = D ? Math.max(...D.map(Math.abs)) : NaN;
-        document.getElementById('ba-summary').innerHTML = `
-            <div class="bd-metric"><div class="bd-metric-label">|V|<sub>max</sub></div><div class="bd-metric-value">${result.Vmax.toFixed(2)} kN</div></div>
-            <div class="bd-metric"><div class="bd-metric-label">|M|<sub>max</sub></div><div class="bd-metric-value">${result.Mmax.toFixed(2)} kN·m</div></div>
-            ${D ? `<div class="bd-metric"><div class="bd-metric-label">|δ|<sub>max</sub></div><div class="bd-metric-value">${Dmax.toFixed(2)} mm</div></div>` : ''}
-        `;
-
-        // Deflection check (L/360)
-        const dCheck = document.getElementById('ba-deflection-check');
-        if (D) {
-            const allow = L * 1000 / 360;
-            if (Dmax <= allow) {
-                dCheck.innerHTML = `<div class="bd-alert bd-alert-ok">✓ Deflection OK — ${Dmax.toFixed(2)} mm ≤ L/360 = ${allow.toFixed(2)} mm</div>`;
-            } else {
-                dCheck.innerHTML = `<div class="bd-alert bd-alert-fail">✗ Deflection exceeds L/360 — ${Dmax.toFixed(2)} mm > ${allow.toFixed(2)} mm</div>`;
+        // Run FEM for every NSCP combo
+        const perCombo = [];
+        let govIdx = -1, govM = -1;
+        for (let i = 0; i < NSCP_COMBOS.length; i++) {
+            const combo = NSCP_COMBOS[i];
+            const factored = applyCombo(state.loads, combo.f);
+            if (factored.length === 0) {
+                perCombo.push({ combo, result: null, skipped: true });
+                continue;
             }
-        } else { dCheck.innerHTML = ''; }
-
-        // Diagrams
-        drawDiagram(document.getElementById('ba-sfd'),
-                    result.xs, result.V,
-                    { color: '#1f77b4', fillColor: 'rgba(31, 119, 180, 0.18)', yLabel: 'V', unit: 'kN', title: 'Shear Force' });
-        drawDiagram(document.getElementById('ba-bmd'),
-                    result.xs, result.M,
-                    { color: '#d62728', fillColor: 'rgba(214, 39, 40, 0.18)', yLabel: 'M', unit: 'kN·m', title: 'Bending Moment' });
-        if (D) {
-            drawDiagram(document.getElementById('ba-defl'),
-                        result.xs, D,
-                        { color: '#2ca02c', fillColor: 'rgba(44, 160, 44, 0.18)', yLabel: 'δ', unit: 'mm', title: 'Deflection' });
+            const r = solveFEM(state.supports, factored, L, E, I);
+            if (!r) { perCombo.push({ combo, result: null, error: 'singular' }); continue; }
+            perCombo.push({ combo, result: r, factored });
+            if (r.Mmax > govM) { govM = r.Mmax; govIdx = i; }
         }
+        if (govIdx < 0) { alert('No valid combination produced loads. Check load categories.'); return; }
+
+        state.lastResults = { perCombo, govIdx };
+        state.selectedComboIdx = govIdx;
+        renderResults();
+
+        // Three-moment theorem for simply-supported multi-span configurations
+        renderThreeMoment(L);
 
         document.getElementById('ba-results').style.display = '';
-        renderMath(document.getElementById('ba-results'));
+        document.getElementById('ba-results').scrollIntoView({ behavior: 'smooth' });
     });
 
-    // ════════════════════════════════════════════════════════════════════════
-    //  STATE & UI — TAB 2 (RC SECTION DESIGN)
-    // ════════════════════════════════════════════════════════════════════════
+    function renderResults() {
+        const { perCombo, govIdx } = state.lastResults;
+        // Combo table
+        const tbody = document.getElementById('ba-combos-body');
+        tbody.innerHTML = perCombo.map((pc, i) => {
+            if (pc.skipped) return `<tr><td>${pc.combo.name}</td><td colspan="3" style="color:#999;">— no loads in these categories —</td><td>—</td></tr>`;
+            if (!pc.result) return `<tr><td>${pc.combo.name}</td><td colspan="3" style="color:#993C1D;">solver failed (${pc.error || 'unknown'})</td><td>—</td></tr>`;
+            const r = pc.result;
+            const isGov = i === govIdx;
+            const isSel = i === state.selectedComboIdx;
+            return `<tr class="${isGov ? 'is-gov' : ''}">
+                <td>${pc.combo.name}${isGov ? '  ← Governing' : ''}</td>
+                <td style="text-align:right;">${r.Vmax.toFixed(2)}</td>
+                <td style="text-align:right;">${r.Mmax.toFixed(2)}</td>
+                <td style="text-align:right;">${r.Dmax.toFixed(2)}</td>
+                <td><button type="button" class="bd-remove-btn" data-sel-combo="${i}" style="color:${isSel ? '#0056b3' : '#5c6773'};border-color:${isSel ? '#0056b3' : '#d6d9de'};">${isSel ? '✓ Showing' : 'Show'}</button></td>
+            </tr>`;
+        }).join('');
+        tbody.querySelectorAll('[data-sel-combo]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                state.selectedComboIdx = Number(btn.dataset.selCombo);
+                renderResults();
+            });
+        });
 
+        // Selected combo: reactions, diagrams
+        const sel = perCombo[state.selectedComboIdx];
+        const lbl = ` — showing: ${sel.combo.name}`;
+        document.getElementById('ba-reactions-combo').textContent = lbl;
+        document.getElementById('ba-diagrams-combo').textContent = lbl;
+
+        if (!sel.result) {
+            document.getElementById('ba-reactions').innerHTML = '';
+            document.getElementById('ba-deflection-check').innerHTML = '';
+            ['ba-sfd','ba-bmd','ba-defl'].forEach(id => document.getElementById(id).innerHTML = '');
+            return;
+        }
+        const r = sel.result;
+        document.getElementById('ba-reactions').innerHTML = r.reactions.map((rc, i) => `
+            <div class="bd-metric">
+                <div class="bd-metric-label">Reaction @ x = ${rc.x.toFixed(2)} m (${rc.type})</div>
+                <div class="bd-metric-value">${rc.Rv.toFixed(2)} kN${Math.abs(rc.Rm) > 0.01 ? `<br><span style="font-size:0.7em;color:#5c6773;">M = ${rc.Rm.toFixed(2)} kN·m</span>` : ''}</div>
+            </div>`).join('');
+
+        const L = getL();
+        const allow = L * 1000 / 360;
+        const dCheck = document.getElementById('ba-deflection-check');
+        if (r.Dmax <= allow) dCheck.innerHTML = `<div class="bd-alert bd-alert-ok">✓ Deflection OK — ${r.Dmax.toFixed(2)} mm ≤ L/360 = ${allow.toFixed(2)} mm</div>`;
+        else                 dCheck.innerHTML = `<div class="bd-alert bd-alert-fail">✗ Deflection exceeds L/360 — ${r.Dmax.toFixed(2)} mm > ${allow.toFixed(2)} mm</div>`;
+
+        drawDiagram(document.getElementById('ba-sfd'),  r.xs, r.V, { color: '#1f77b4', fillColor: 'rgba(31,119,180,0.18)', yLabel: 'V', unit: 'kN',   title: 'Shear Force Diagram' });
+        drawDiagram(document.getElementById('ba-bmd'),  r.xs, r.M, { color: '#d62728', fillColor: 'rgba(214,39,40,0.18)',  yLabel: 'M', unit: 'kN·m', title: 'Bending Moment Diagram' });
+        drawDiagram(document.getElementById('ba-defl'), r.xs, r.D, { color: '#2ca02c', fillColor: 'rgba(44,160,44,0.18)',  yLabel: 'δ', unit: 'mm',   title: 'Deflection' });
+    }
+
+    function renderThreeMoment(L) {
+        // Three-moment theorem applies to continuous multi-span beams with simple
+        // supports (pin/roller) only. Build span list and check applicability.
+        const simpleSupps = state.supports
+            .filter(s => s.type === 'pin' || s.type === 'roller')
+            .map(s => clamp(s.x, 0, L))
+            .sort((a, b) => a - b);
+        // Distinct positions
+        const distinct = [];
+        for (const x of simpleSupps) if (!distinct.length || Math.abs(distinct[distinct.length-1] - x) > 1e-6) distinct.push(x);
+        const sec = document.getElementById('ba-tmt-section');
+        if (distinct.length < 3 || state.supports.some(s => s.type === 'fixed' || s.type === 'spring')) {
+            sec.style.display = 'none';
+            return;
+        }
+        // Govern combo's factored loads
+        const { perCombo, govIdx } = state.lastResults;
+        const gov = perCombo[govIdx];
+        if (!gov || !gov.factored) { sec.style.display = 'none'; return; }
+
+        // Build spans and per-span load lists (local coords)
+        const spans = [];
+        const loadsPer = [];
+        for (let i = 0; i < distinct.length - 1; i++) {
+            const xL = distinct[i], xR = distinct[i+1];
+            spans.push(xR - xL);
+            const spanLoads = [];
+            for (const ld of gov.factored) {
+                if (ld.type === 'point' || ld.type === 'moment') {
+                    if (ld.x >= xL - 1e-6 && ld.x <= xR + 1e-6) {
+                        spanLoads.push({ ...ld, x: ld.x - xL });
+                    }
+                } else {
+                    const a = Math.max(ld.x1, xL), b = Math.min(ld.x2, xR);
+                    if (b > a + 1e-9) {
+                        if (ld.type === 'udl') spanLoads.push({ ...ld, x1: a - xL, x2: b - xL });
+                        else {
+                            // VDL local interp at boundaries
+                            const span = Math.max(ld.x2 - ld.x1, 1e-9);
+                            const w_at = (xq) => ld.w1 + (ld.w2 - ld.w1) * (xq - ld.x1) / span;
+                            spanLoads.push({ ...ld, w1: w_at(a), w2: w_at(b), x1: a - xL, x2: b - xL });
+                        }
+                    }
+                }
+            }
+            loadsPer.push(spanLoads);
+        }
+
+        const out = threeMoment(spans, loadsPer);
+        if (!out) { sec.style.display = 'none'; return; }
+
+        sec.style.display = '';
+        let html = `<p class="bd-hint">For the governing combination (${gov.combo.name}), applied to the ${distinct.length-1}-span continuous beam over simple supports:</p>`;
+        html += `<div class="bd-results-grid">`;
+        out.supportMoments.forEach((M, i) => {
+            html += `<div class="bd-metric">
+                <div class="bd-metric-label">M @ Support ${i+1} (x = ${distinct[i].toFixed(2)} m)</div>
+                <div class="bd-metric-value">${M.toFixed(2)} kN·m</div>
+            </div>`;
+        });
+        html += `</div>`;
+        html += `<div class="bd-results-grid" style="margin-top:12px;">`;
+        out.reactions.forEach((R, i) => {
+            html += `<div class="bd-metric">
+                <div class="bd-metric-label">R @ Support ${i+1}</div>
+                <div class="bd-metric-value">${R.toFixed(2)} kN</div>
+            </div>`;
+        });
+        html += `</div>`;
+        html += `<p class="bd-hint">Clapeyron's three-moment equation: \\(M_{i-1}\\,L_i + 2M_i(L_i + L_{i+1}) + M_{i+1}\\,L_{i+1} = -6(Q_{m,L}/L_i + Q_{m,R}/L_{i+1})\\). End-support moments fixed at 0; interior solved via tri-diagonal system.</p>`;
+        document.getElementById('ba-tmt').innerHTML = html;
+        renderMath(document.getElementById('ba-tmt'));
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  TAB 2 — RC SECTION DESIGN
+    // ════════════════════════════════════════════════════════════════════════
     function row(label, value, note = '', cls = '') {
         return `<div class="bd-calc-row">
             <span class="bd-calc-label">${label}</span>
@@ -1077,17 +1488,18 @@
         </div>`;
     }
 
-    // Pre-fill Mu/Vu from beam analysis when user picks that source
     document.getElementById('rc-source').addEventListener('change', () => {
         const src = document.getElementById('rc-source').value;
         if (src === 'analysis') {
-            if (!state.lastResult) {
+            if (!state.lastResults) {
                 alert('Run a Beam Analysis first, then switch back.');
                 document.getElementById('rc-source').value = 'manual';
                 return;
             }
-            document.getElementById('rc-Mu').value = state.lastResult.Mmax.toFixed(3);
-            document.getElementById('rc-Vu').value = state.lastResult.Vmax.toFixed(3);
+            const gov = state.lastResults.perCombo[state.lastResults.govIdx];
+            if (!gov.result) { alert('Governing combination did not solve.'); return; }
+            document.getElementById('rc-Mu').value = gov.result.Mmax.toFixed(3);
+            document.getElementById('rc-Vu').value = gov.result.Vmax.toFixed(3);
             document.getElementById('rc-Mu').readOnly = true;
             document.getElementById('rc-Vu').readOnly = true;
         } else {
@@ -1095,31 +1507,6 @@
             document.getElementById('rc-Vu').readOnly = false;
         }
     });
-
-    // NSCP load combinations — update live
-    const lcInputs = ['lc-D','lc-L','lc-Lr','lc-S','lc-W','lc-E','lc-R'];
-    function updateLoadCombos() {
-        const vals = {
-            D: +document.getElementById('lc-D').value || 0,
-            L: +document.getElementById('lc-L').value || 0,
-            Lr: +document.getElementById('lc-Lr').value || 0,
-            S: +document.getElementById('lc-S').value || 0,
-            W: +document.getElementById('lc-W').value || 0,
-            E: +document.getElementById('lc-E').value || 0,
-            R: +document.getElementById('lc-R').value || 0
-        };
-        const { combos, govName } = nscpLoadCombinations(vals);
-        const out = document.getElementById('lc-output');
-        out.innerHTML = Object.entries(combos).map(([name, val]) => {
-            const isGov = name === govName && val > 0;
-            return `<div class="bd-combo-row ${isGov ? 'is-gov' : ''}">
-                <span class="bd-combo-name">${name}</span>
-                <span>${val.toFixed(3)}${isGov ? '  ← Governing' : ''}</span>
-            </div>`;
-        }).join('');
-    }
-    lcInputs.forEach(id => document.getElementById(id).addEventListener('input', updateLoadCombos));
-    updateLoadCombos();
 
     document.getElementById('rc-calc-btn').addEventListener('click', () => {
         const Mu  = parseFloat(document.getElementById('rc-Mu').value);
@@ -1138,7 +1525,6 @@
         const fl = designFlexure(Mu, b, h, fc, fyl, db, ds, cov);
         const sh = designShear(Vu, b, h, fc, fyt, ds, db, cov, lam, legs);
 
-        // ── Flexure output ─────────────────────────────────────────
         const flx = document.getElementById('rc-flexure');
         if (fl.error && fl.d === undefined) {
             flx.innerHTML = `<div class="bd-alert bd-alert-fail">${fl.error}</div>`;
@@ -1154,7 +1540,7 @@
             html += row('Mu',                     `${fl.Mu_kNm.toFixed(3)} kN·m`);
             html += row('Rn = Mu / (φ·b·d²)',     `${fl.Rn.toFixed(4)} MPa`);
             html += row('ρ_calc',                 `${fl.rho_calc.toFixed(6)}`);
-            html += row('ρ_min',                  `${fl.rho_min.toFixed(6)}`, 'max(√f\'c / 4fy, 1.4/fy) — §406.3.1');
+            html += row('ρ_min',                  `${fl.rho_min.toFixed(6)}`, "max(√f'c / 4fy, 1.4/fy) — §406.3.1");
             html += row('ρ_max',                  `${fl.rho_max.toFixed(6)}`, '0.75 ρ_b — §406.3.3');
             fl.checks.forEach(c => { html += row('Check', c); });
             html += row('ρ_use',                  `${fl.rho_use.toFixed(6)}`);
@@ -1162,68 +1548,51 @@
             html += row('Ab (1 bar)',             `${fl.Ab.toFixed(2)} mm²`,  `∅${db.toFixed(0)} mm`);
             html += row('n = ⌈As_req / Ab⌉',     `${fl.n_bars} bars`);
             html += row('As_prov = n·Ab',         `${fl.As_prov.toFixed(2)} mm²`);
-            html += row('a = As·fy / (0.85·f\'c·b)', `${fl.a.toFixed(2)} mm`);
+            html += row("a = As·fy / (0.85·f'c·b)", `${fl.a.toFixed(2)} mm`);
             html += row('φMn = φ·As·fy·(d − a/2)',
                        `${fl.capacity_ok ? '✓' : '✗'} ${fl.phi_Mn_kNm.toFixed(3)} kN·m`,
                        `${fl.capacity_ok ? '≥' : '<'} Mu = ${fl.Mu_kNm.toFixed(3)} kN·m`,
                        fl.capacity_ok ? 'ok' : 'fail');
-
             if (fl.capacity_ok && !fl.over_reinforced) {
-                html += `<div class="bd-alert bd-alert-ok">
-                    ✓ Use <strong>${fl.n_bars} — ∅${db.toFixed(0)} mm</strong> bars
-                    (As<sub>prov</sub> = ${fl.As_prov.toFixed(0)} mm² &nbsp;|&nbsp; φMn = ${fl.phi_Mn_kNm.toFixed(2)} kN·m)
-                </div>`;
-            } else if (fl.over_reinforced) {
-                html += `<div class="bd-alert bd-alert-fail">✗ Over-reinforced — increase beam section.</div>`;
-            } else {
-                html += `<div class="bd-alert bd-alert-fail">✗ Flexural capacity insufficient — check inputs.</div>`;
-            }
+                html += `<div class="bd-alert bd-alert-ok">✓ Use <strong>${fl.n_bars} — ∅${db.toFixed(0)} mm</strong> bars (As<sub>prov</sub> = ${fl.As_prov.toFixed(0)} mm² &nbsp;|&nbsp; φMn = ${fl.phi_Mn_kNm.toFixed(2)} kN·m)</div>`;
+            } else if (fl.over_reinforced) html += `<div class="bd-alert bd-alert-fail">✗ Over-reinforced — increase beam section.</div>`;
+            else html += `<div class="bd-alert bd-alert-fail">✗ Flexural capacity insufficient.</div>`;
             flx.innerHTML = html;
         }
 
-        // ── Shear output ───────────────────────────────────────────
         const shr = document.getElementById('rc-shear');
         let html = '';
         html += row('d (effective depth)',          `${sh.d.toFixed(1)} mm`);
         html += row('φ (shear)',                    `${sh.phi_shear}`);
-        html += row('λ',                            `${lam}`,                     `${lam === 1 ? 'Normal weight' : lam === 0.85 ? 'Sand-lightweight' : 'All-lightweight'}`);
-        html += row('Vc = 0.17λ√f\'c·b·d',          `${sh.Vc_kN.toFixed(3)} kN`,   'NSCP 2015 §422.5.5.1');
+        html += row('λ',                            `${lam}`, lam === 1 ? 'Normal weight' : lam === 0.85 ? 'Sand-LW' : 'All-LW');
+        html += row("Vc = 0.17λ√f'c·b·d",           `${sh.Vc_kN.toFixed(3)} kN`, 'NSCP 2015 §422.5.5.1');
         html += row('φVc',                          `${sh.phiVc.toFixed(3)} kN`);
         html += row('Vu',                           `${sh.Vu_kN.toFixed(3)} kN`);
         html += row('Av (stirrup area)',            `${sh.Av_mm2.toFixed(2)} mm²`, `${legs}-leg ∅${ds.toFixed(0)} mm`);
         html += row("Vs_lim1 (0.33√f'c·b·d)",       `${sh.Vs_lim1.toFixed(2)} kN`, 'controls max spacing');
         html += row("Vs_lim2 (0.66√f'c·b·d)",       `${sh.Vs_lim2.toFixed(2)} kN`, 'section too small if Vs exceeds');
-
-        if (sh.mode === 'overloaded') {
-            html += `<div class="bd-alert bd-alert-fail">${sh.error}</div>`;
-        } else if (sh.mode === 'none') {
-            html += row("Av/s_min",                  `${sh.Avs_min.toFixed(4)} mm²/mm`, "max(0.062√f'c·b/fyt, 0.35b/fyt)");
+        if (sh.mode === 'overloaded') html += `<div class="bd-alert bd-alert-fail">${sh.error}</div>`;
+        else if (sh.mode === 'none') {
+            html += row("Av/s_min", `${sh.Avs_min.toFixed(4)} mm²/mm`, "max(0.062√f'c·b/fyt, 0.35b/fyt)");
             html += `<div class="bd-alert bd-alert-warn">${sh.note}</div>`;
         } else {
             if (sh.mode === 'designed') {
-                html += row("Vs = Vu/φ − Vc",        `${sh.Vs_kN.toFixed(3)} kN`);
+                html += row("Vs = Vu/φ − Vc",         `${sh.Vs_kN.toFixed(3)} kN`);
                 html += row("s_calc = Av·fyt·d / Vs", `${sh.s_calc.toFixed(1)} mm`);
-                html += row("Spacing rule",          sh.spac_note);
+                html += row("Spacing rule",           sh.spac_note);
             }
-            html += row("Av/s_min",                   `${sh.Avs_min.toFixed(4)} mm²/mm`, "max(0.062√f'c·b/fyt, 0.35b/fyt) — §409.6.3.3");
-            html += row("s from Av/s_min",            `${sh.s_from_min.toFixed(1)} mm`);
-            html += row("s_max (spacing)",            `${sh.s_max_spac.toFixed(0)} mm`);
-
+            html += row("Av/s_min",                    `${sh.Avs_min.toFixed(4)} mm²/mm`, '§409.6.3.3');
+            html += row("s from Av/s_min",             `${sh.s_from_min.toFixed(1)} mm`);
+            html += row("s_max (spacing)",             `${sh.s_max_spac.toFixed(0)} mm`);
             if (sh.mode === 'designed') {
                 html += row("φVn = φ(Vc + Vs_prov)",
                            `${sh.capacity_ok ? '✓' : '✗'} ${sh.phiVn_kN.toFixed(3)} kN`,
                            `${sh.capacity_ok ? '≥' : '<'} Vu = ${sh.Vu_kN.toFixed(3)} kN`,
                            sh.capacity_ok ? 'ok' : 'fail');
             }
-
             const modeLbl = sh.mode === 'minimum' ? 'min. stirrups' : 'designed stirrups';
-            html += `<div class="bd-alert bd-alert-ok">
-                ✓ Use <strong>∅${ds.toFixed(0)} mm stirrups @ ${sh.s_final.toFixed(0)} mm</strong>
-                (${modeLbl})
-            </div>`;
-            if (sh.mode === 'minimum') {
-                html += `<div class="bd-alert bd-alert-info">${sh.note}</div>`;
-            }
+            html += `<div class="bd-alert bd-alert-ok">✓ Use <strong>∅${ds.toFixed(0)} mm stirrups @ ${sh.s_final.toFixed(0)} mm</strong> (${modeLbl})</div>`;
+            if (sh.mode === 'minimum') html += `<div class="bd-alert bd-alert-info">${sh.note}</div>`;
         }
         shr.innerHTML = html;
 
@@ -1234,7 +1603,6 @@
     // ════════════════════════════════════════════════════════════════════════
     //  TAB SWITCHING & INITIAL RENDER
     // ════════════════════════════════════════════════════════════════════════
-
     document.querySelectorAll('.bd-tab').forEach(btn => {
         btn.addEventListener('click', () => {
             document.querySelectorAll('.bd-tab').forEach(b => b.classList.remove('is-active'));
@@ -1245,8 +1613,11 @@
     });
 
     document.addEventListener('DOMContentLoaded', () => {
+        refreshAll();
         renderMath(document.querySelector('.bd-page'));
     });
+    // Render immediately too (defer scripts have already loaded KaTeX by here)
+    refreshAll();
     </script>
 </body>
 </html>
