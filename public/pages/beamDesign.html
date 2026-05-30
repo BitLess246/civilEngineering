@@ -2348,8 +2348,19 @@
 
     // Per-section flexure rendering — returns an HTML string for ONE section's
     // flexure design panel given the design result object and the materials.
-    function flexureHtmlFor(fl, m) {
+    function flexureHtmlFor(fl, m, signedMu) {
         const { b, h, fc, fyl, db, dbC, cov } = m;
+        // Sagging vs hogging — drives where tension and compression steel sit
+        // in the section. Sagging (positive M) → tension at the BOTTOM of the
+        // beam (typical midspan). Hogging (negative M) → tension at the TOP
+        // (typical at supports of continuous and fixed beams).
+        const isSagging   = (signedMu === undefined) ? true : (signedMu >= 0);
+        const tensionLoc  = isSagging ? 'BOTTOM' : 'TOP';
+        const comprLoc    = isSagging ? 'TOP'    : 'BOTTOM';
+        const momentType  = isSagging ? 'sagging (+M)' : 'hogging (−M)';
+        const tensSubscr  = isSagging ? 'b' : 't';   // bottom or top
+        const comprSubscr = isSagging ? 't' : 'b';
+
         if (fl.error && fl.d === undefined) {
             return `<div class="bd-alert bd-alert-fail">${fl.error}</div>`;
         }
@@ -2364,7 +2375,8 @@
         html += row('\\(d\\) (effective depth)',      `${fl.d.toFixed(1)} mm`, '\\(h - c_c - \\varnothing_s - \\varnothing_b/2\\)');
         html += row('\\(\\phi\\) (flexure)',          `${fl.phi_flex}`);
         html += row('\\(\\beta_1\\)',                 `${fl.beta1.toFixed(4)}`, 'NSCP 2015 §422.2.2.4.3');
-        html += row('\\(M_u\\)',                      `${fl.Mu_kNm.toFixed(3)} kN·m`);
+        html += row('\\(M_u\\)',                      `${fl.Mu_kNm.toFixed(3)} kN·m`,
+                   `${momentType} → tension fiber at the <strong>${tensionLoc}</strong>`);
         html += row('\\(R_n = \\dfrac{M_u}{\\phi \\cdot b \\cdot d^2}\\)', `${fl.Rn.toFixed(4)} MPa`);
 
         html += sectionHeader('Step 2 — ρ limits & singly-reinforced ceiling');
@@ -2398,7 +2410,14 @@
             html += row('\\(\\rho_{use}\\)', `${fl.rho_use.toFixed(6)}`);
             html += row('\\(A_{s,req} = \\rho \\cdot b \\cdot d\\)', `${fl.As_req.toFixed(2)} mm²`);
             html += row('\\(A_b\\) (1 bar)', `${fl.Ab.toFixed(2)} mm²`, `\\(\\varnothing\\,${db.toFixed(0)}\\) mm`);
-            html += row('\\(n = \\lceil A_{s,req} / A_b \\rceil\\)', `${fl.n_bars} bars`);
+            // The "2 bars at the corners" floor — designFlexure already returns
+            // max(2, ceil(As_req/Ab)), so any 1-bar result is rounded up to 2.
+            const ceilRaw = Math.ceil(fl.As_req / fl.Ab);
+            const rawNote = ceilRaw < 2
+                ? `raw \\(\\lceil A_{s,req}/A_b \\rceil = ${ceilRaw}\\) → bumped to <strong>2</strong> (corner-bar minimum)`
+                : '';
+            html += row('\\(n = \\max\\!\\left(2,\\,\\lceil A_{s,req} / A_b \\rceil\\right)\\)',
+                       `${fl.n_bars} bars`, rawNote);
             html += row('\\(A_{s,prov} = n \\cdot A_b\\)', `${fl.As_prov.toFixed(2)} mm²`);
             html += row('\\(a = \\dfrac{A_{s,prov}\\,f_y}{0.85\\,f\'_c\\,b}\\)', `${fl.a.toFixed(2)} mm`);
             if (fl.Sc !== null) {
@@ -2412,7 +2431,7 @@
                        `${fl.capacity_ok ? '≥' : '<'} \\(M_u = ${fl.Mu_kNm.toFixed(3)}\\) kN·m`,
                        fl.capacity_ok ? 'ok' : 'fail');
             html += (fl.capacity_ok)
-                ? `<div class="bd-alert bd-alert-ok">✓ <strong>SRRB</strong> — use <strong>${fl.n_bars} – ∅${db.toFixed(0)} mm</strong> bars (\\(A_{s,prov}\\) = ${fl.As_prov.toFixed(0)} mm² &nbsp;|&nbsp; \\(\\phi M_n\\) = ${fl.phi_Mn_kNm.toFixed(2)} kN·m)</div>`
+                ? `<div class="bd-alert bd-alert-ok">✓ <strong>SRRB</strong> — use <strong>${fl.n_bars} – ∅${db.toFixed(0)} mm</strong> bars at the <strong>${tensionLoc}</strong> of the section <small style="color:#0F6E56;">(${momentType})</small> &nbsp;|&nbsp; \\(A_{s,prov}\\) = ${fl.As_prov.toFixed(0)} mm² &nbsp;|&nbsp; \\(\\phi M_n\\) = ${fl.phi_Mn_kNm.toFixed(2)} kN·m</div>`
                 : `<div class="bd-alert bd-alert-fail">✗ Flexural capacity insufficient — increase section.</div>`;
             return html;
         }
@@ -2453,10 +2472,18 @@
         html += sectionHeader('Step 6 — Bar counts & capacity verification');
         html += row('\\(A_b\\) (tension)',  `${fl.Ab.toFixed(2)} mm²`, `\\(\\varnothing\\,${db.toFixed(0)}\\) mm`);
         html += row('\\(A\'_b\\) (compression)', `${fl.Ab_compr.toFixed(2)} mm²`, `\\(\\varnothing\'\\,${(dbC || db).toFixed(0)}\\) mm`);
-        html += row('\\(n_{tension} = \\lceil A_{s,total} / A_b \\rceil\\)', `${fl.n_tension} bars`);
-        html += row('\\(n_{compr.} = \\lceil A\'_{s,req} / A\'_b \\rceil\\)', `${fl.n_compression} bars`);
-        html += row('\\(A_{s,prov}\\) (tension)', `${fl.As_prov_t.toFixed(2)} mm²`);
-        html += row('\\(A\'_{s,prov}\\) (compression)', `${fl.As_prov_c.toFixed(2)} mm²`);
+        // 2-bar corner-minimum floor for both layers — designFlexure already
+        // returns max(2, ceil), so flag the bump in the note when it kicks in.
+        const ceilTRaw = Math.ceil(fl.As_total / fl.Ab);
+        const ceilCRaw = Math.ceil(fl.As_p_req / fl.Ab_compr);
+        const tNote = (ceilTRaw < 2 ? `raw \\(\\lceil ... \\rceil = ${ceilTRaw}\\) → bumped to <strong>2</strong> (corner-bar minimum). ` : '')
+                    + `at the <strong>${tensionLoc}</strong> of the section (${momentType})`;
+        const cNote = (ceilCRaw < 2 ? `raw \\(\\lceil ... \\rceil = ${ceilCRaw}\\) → bumped to <strong>2</strong> (corner-bar minimum). ` : '')
+                    + `at the <strong>${comprLoc}</strong> of the section`;
+        html += row('\\(n_{tension} = \\max\\!\\left(2,\\,\\lceil A_{s,total} / A_b \\rceil\\right)\\)', `${fl.n_tension} bars`, tNote);
+        html += row('\\(n_{compr.} = \\max\\!\\left(2,\\,\\lceil A\'_{s,req} / A\'_b \\rceil\\right)\\)', `${fl.n_compression} bars`, cNote);
+        html += row('\\(A_{s,prov}\\) (tension)', `${fl.As_prov_t.toFixed(2)} mm²`, `at the <strong>${tensionLoc}</strong>`);
+        html += row('\\(A\'_{s,prov}\\) (compression)', `${fl.As_prov_c.toFixed(2)} mm²`, `at the <strong>${comprLoc}</strong>`);
         html += row('\\(a = \\dfrac{A_s f_y - A\'_s f\'_s}{0.85\\,f\'_c\\,b}\\)', `${fl.a.toFixed(2)} mm`,
                    'force equilibrium with provided steel');
         if (fl.Sc_t !== null) {
@@ -2474,7 +2501,12 @@
                    `${fl.capacity_ok ? '≥' : '<'} \\(M_u = ${fl.Mu_kNm.toFixed(3)}\\) kN·m`,
                    fl.capacity_ok ? 'ok' : 'fail');
         html += (fl.capacity_ok)
-            ? `<div class="bd-alert bd-alert-ok">✓ <strong>DRRB</strong> — use <strong>${fl.n_tension} – ∅${db.toFixed(0)} mm tension</strong> and <strong>${fl.n_compression} – ∅${(dbC||db).toFixed(0)} mm compression</strong> bars (\\(\\phi M_n\\) = ${fl.phi_Mn_kNm.toFixed(2)} kN·m)</div>`
+            ? `<div class="bd-alert bd-alert-ok">
+                 ✓ <strong>DRRB</strong> <small style="color:#0F6E56;">(${momentType})</small>
+                 &nbsp;|&nbsp; <strong>${fl.n_tension} – ∅${db.toFixed(0)} mm</strong> at the <strong>${tensionLoc}</strong> (tension)
+                 &nbsp;|&nbsp; <strong>${fl.n_compression} – ∅${(dbC||db).toFixed(0)} mm</strong> at the <strong>${comprLoc}</strong> (compression)
+                 &nbsp;|&nbsp; \\(\\phi M_n\\) = ${fl.phi_Mn_kNm.toFixed(2)} kN·m
+               </div>`
             : `<div class="bd-alert bd-alert-fail">✗ DRRB capacity insufficient — increase section.</div>`;
         return html;
     }
@@ -2640,7 +2672,7 @@
                     <span>${i + 1}. ${sec.label || `Section ${i + 1}`}${xLbl}${dem}</span>
                 </div>
                 <div class="bd-step-banner" style="background:linear-gradient(135deg,#1f6f30,#0F6E56);">Flexure Design — NSCP 2015 §406</div>
-                ${flexureHtmlFor(fl, materials)}
+                ${flexureHtmlFor(fl, materials, Mu)}
                 <div class="bd-step-banner" style="background:linear-gradient(135deg,#b07700,#8a5a00);">Shear Design — NSCP 2015 §422</div>
                 ${shearHtmlFor(sh, materials)}
             </div>`;
