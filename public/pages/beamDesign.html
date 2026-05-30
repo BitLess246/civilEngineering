@@ -598,9 +598,8 @@
                     <div class="bd-field"><label for="rc-fc">\(f'_c\) (MPa)</label><input type="number" id="rc-fc" value="28" step="1" min="17" inputmode="decimal"></div>
                     <div class="bd-field"><label for="rc-fyl">\(f_y\) long. (MPa)</label><input type="number" id="rc-fyl" value="415" step="5" min="200" inputmode="decimal"></div>
                     <div class="bd-field"><label for="rc-fyt">\(f_y\) trans. (MPa)</label><input type="number" id="rc-fyt" value="275" step="5" min="200" inputmode="decimal"></div>
-                    <div class="bd-field"><label for="rc-db">Tension bar \(\varnothing\) (mm)</label><input type="number" id="rc-db" value="20" step="2" min="10" inputmode="decimal"></div>
-                    <div class="bd-field"><label for="rc-db-c">Compr. bar \(\varnothing'\) (mm)</label><input type="number" id="rc-db-c" value="20" step="2" min="10" inputmode="decimal"></div>
-                    <div class="bd-field"><label for="rc-d-prime">\(d'\) (mm) — DRRB only</label><input type="number" id="rc-d-prime" value="60" step="5" min="20" inputmode="decimal"><p class="bd-hint">cover + ∅s + ∅'/2</p></div>
+                    <div class="bd-field"><label for="rc-db">Tension bar \(\varnothing\) (mm)</label><input type="number" id="rc-db" value="16" step="2" min="10" inputmode="decimal"></div>
+                    <div class="bd-field"><label for="rc-db-c">Compr. bar \(\varnothing'\) (mm)</label><input type="number" id="rc-db-c" value="16" step="2" min="10" inputmode="decimal"></div>
                     <div class="bd-field"><label for="rc-ds">Stirrup \(\varnothing\) (mm)</label><input type="number" id="rc-ds" value="10" step="2" min="8" inputmode="decimal"></div>
                     <div class="bd-field"><label for="rc-cover">Cover (mm)</label><input type="number" id="rc-cover" value="40" step="5" min="20" inputmode="decimal"></div>
                     <div class="bd-field"><label for="rc-legs">Stirrup legs</label><input type="number" id="rc-legs" value="2" step="1" min="2" max="6" inputmode="numeric"></div>
@@ -1261,143 +1260,241 @@
      *                       f_s'   = min(eps_s' · 200000 , f_y)         (MPa)
      *           If f_s' < f_y, scale A_s' up to  A_s2 · f_y / f_s'.
      */
+    // ─────────────────────────────────────────────────────────────────
+    //  Helper: split N total tension bars into two layers when the
+    //  single-layer clear spacing fails.
+    //
+    //  Rule (from user spec):
+    //    – Layer 2 (the upper tension layer, sitting above layer 1) must
+    //      hold an EVEN number of bars so it can be detailed
+    //      symmetrically.
+    //    – Try layered only after single-layer fails Sc_min.
+    //    – Iterate n2 ∈ {2, 4, 6, …} until layer 1 spacing is OK; layer
+    //      1 always gets the LARGER share (since layer 1 is more
+    //      effective for moment capacity).
+    //    – Both layers must have ≥ 2 bars (corner-bar minimum).
+    // ─────────────────────────────────────────────────────────────────
+    function splitTensionLayers(n_total, b, cover, ds, db) {
+        const Sc_min = Math.max(25, db);                  // NSCP 425.2.1
+        const sc_single = (n_total > 1)
+            ? (b - 2 * cover - 2 * ds - n_total * db) / (n_total - 1)
+            : Infinity;
+        if (n_total <= 1 || sc_single >= Sc_min) {
+            return { n1: n_total, n2: 0, layered: false,
+                     Sc_layer1: sc_single, Sc_min, Sc_single: sc_single };
+        }
+        // Single-layer fails — try 2 layers (n2 even).
+        for (let n2 = 2; n2 <= n_total - 2; n2 += 2) {
+            const n1 = n_total - n2;
+            const sc_n1 = (n1 > 1)
+                ? (b - 2 * cover - 2 * ds - n1 * db) / (n1 - 1)
+                : Infinity;
+            if (sc_n1 >= Sc_min) {
+                return { n1, n2, layered: true,
+                         Sc_layer1: sc_n1, Sc_min, Sc_single: sc_single };
+            }
+        }
+        return { error: `Section is too narrow — even with the bottom layer reduced to 2 bars the spacing in layer 1 cannot meet \\(S_{c,\\min} = ${Sc_min.toFixed(0)}\\) mm. Increase \\(b\\) or use a larger bar.`,
+                 Sc_min, Sc_single: sc_single };
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    //  Helper: effective depth via Varignon's theorem (moments about
+    //  the extreme-compression fiber) for a 1- or 2-layer tension
+    //  bundle. Both layers same bar diameter db.
+    //
+    //    d_1   = h − cover − ds − db/2                (layer 1 centroid)
+    //    d_2   = d_1 − db − clear_layer                (layer 2 centroid)
+    //    d_eff = (n1·d_1 + n2·d_2) / (n1 + n2)         (Varignon)
+    //
+    //  Clear vertical spacing between layers = 25 mm (NSCP 425.2.2 /
+    //  ACI 318-14 25.2.2).
+    // ─────────────────────────────────────────────────────────────────
+    function varignonDepth(h, cover, ds, db, n1, n2) {
+        const clear_layer = 25;
+        const d_1 = h - cover - ds - db / 2;
+        if (n2 === 0) return { d_eff: d_1, d_1, d_2: null, clear_layer };
+        const d_2 = d_1 - db - clear_layer;
+        const d_eff = (n1 * d_1 + n2 * d_2) / (n1 + n2);
+        return { d_eff, d_1, d_2, clear_layer };
+    }
+
     function designFlexure(Mu_kNm, b, h, fc, fy, db, ds, cover, d_prime, dbCompr) {
-        const d = effDepth(h, cover, ds, db);
-        if (d <= 0) return { error: 'Effective depth ≤ 0 — check section dimensions and cover.' };
-        const phi  = 0.90;
-        const Mu   = Math.abs(Mu_kNm);
-        const b1   = beta1(fc);
-        const rb   = rhoBalanced(fc, fy);
+        const phi   = 0.90;
+        const Mu    = Math.abs(Mu_kNm);
+        const b1    = beta1(fc);
+        const rb    = rhoBalanced(fc, fy);
         const r_max = rhoMax(fc, fy);
         const r_min = rhoMin(fc, fy);
-        const Ab     = Math.PI / 4 * db * db;
-        const AbCom  = Math.PI / 4 * (dbCompr || db) * (dbCompr || db);
+        const Ab    = Math.PI / 4 * db * db;
+        const AbCom = Math.PI / 4 * (dbCompr || db) * (dbCompr || db);
 
-        // ── Step 1: Mn_max (singly-reinforced ceiling) ──────────────────
-        const As_max = r_max * b * d;                         // mm²
-        const a_max  = As_max * fy / (0.85 * fc * b);         // mm
-        const Mn_max_kNm    = As_max * fy * (d - a_max / 2) / 1e6;
-        const phiMn_max_kNm = phi * Mn_max_kNm;
-
-        // ── Step 2: classify SRRB vs DRRB ────────────────────────────────
-        const isDRRB = Mu > phiMn_max_kNm + 1e-6;
-        const section_type = isDRRB ? 'DRRB' : 'SRRB';
-
-        // ── Always-useful values ─────────────────────────────────────────
-        const Rn = Mu * 1e6 / (phi * b * d * d);              // MPa
+        // Starting d (single-layer assumption) — may shrink in the
+        // iteration below when the spacing forces a 2-layer split.
+        const d_single = effDepth(h, cover, ds, db);
+        if (d_single <= 0) return { error: 'Effective depth ≤ 0 — check section dimensions and cover.' };
 
         // ─────────────────────────────────────────────────────────────────
-        //  SRRB path
+        //  Iterate: compute As → n_total → split layers → recompute d_eff
+        //  → re-solve. Smaller d_eff means a bigger Rn, so n_total may
+        //  bump up by 1–2 bars in the second iteration. Stops once both
+        //  n_total and (n1, n2) stop changing.
+        // ─────────────────────────────────────────────────────────────────
+        let d = d_single;
+        let prevSig = '';
+        let isDRRB, Rn, rho_calc, rho_use, checks = [], As_req;
+        let n_total, split, geom;
+        let As_max, a_max_iter, Mn_max_kNm, phiMn_max_kNm;
+        let As1, As2, Mn_resid_kNm, c_drrb, eps_sp, fs_p_unc, fs_p, fs_yields, As_p_req;
+        let layer_iters = 0;
+
+        for (let iter = 0; iter < 8; iter++) {
+            layer_iters = iter + 1;
+
+            // Recompute Mn,max and SRRB/DRRB classification at current d.
+            As_max         = r_max * b * d;
+            a_max_iter     = As_max * fy / (0.85 * fc * b);
+            Mn_max_kNm     = As_max * fy * (d - a_max_iter / 2) / 1e6;
+            phiMn_max_kNm  = phi * Mn_max_kNm;
+            Rn             = Mu * 1e6 / (phi * b * d * d);
+            isDRRB         = Mu > phiMn_max_kNm + 1e-6;
+
+            if (!isDRRB) {
+                // ── SRRB tension solve ───────────────────────────────────
+                const disc = 1 - (2 * Rn) / (0.85 * fc);
+                if (disc < 0) {
+                    return { error: `Section is too small — Rn = ${Rn.toFixed(2)} MPa exceeds 0.425·f'c. Increase b or h.`,
+                             d, Rn, section_type: 'SRRB', isDRRB: false };
+                }
+                rho_calc = (0.85 * fc / fy) * (1 - Math.sqrt(disc));
+                checks = [];
+                if (rho_calc < r_min) {
+                    checks.push(`ρ_calc = ${rho_calc.toFixed(5)} < ρ_min = ${r_min.toFixed(5)}  →  use ρ_min`);
+                    rho_use = r_min;
+                } else {
+                    checks.push(`ρ_min ≤ ρ_calc ≤ ρ_max  ✓ → use ρ_calc`);
+                    rho_use = rho_calc;
+                }
+                As_req  = rho_use * b * d;
+                n_total = Math.max(2, Math.ceil(As_req / Ab));
+            } else {
+                // ── DRRB tension solve ──────────────────────────────────
+                if (!(d_prime > 0)) {
+                    return { error: "DRRB needed (Mu exceeds the singly-reinforced ceiling) but d' is not set — d' is derived from cover + ∅s + ∅'_b/2, so check those inputs.",
+                             section_type: 'DRRB', isDRRB: true, d, Rn,
+                             Mu_kNm: Mu, Mn_max_kNm, phiMn_max_kNm };
+                }
+                if (d - d_prime <= 0) {
+                    return { error: `d − d' must be positive — got d = ${d.toFixed(1)} mm, d' = ${d_prime.toFixed(1)} mm. Section is too shallow for DRRB.`,
+                             section_type: 'DRRB', isDRRB: true, d, d_prime, Mu_kNm: Mu };
+                }
+                As1            = r_max * b * d;
+                Mn_resid_kNm   = Mu / phi - Mn_max_kNm;
+                As2            = (Mn_resid_kNm * 1e6) / (fy * (d - d_prime));
+                As_req         = As1 + As2;
+                n_total        = Math.max(2, Math.ceil(As_req / Ab));
+            }
+
+            // ── Layer split + Varignon d_eff ────────────────────────────
+            split = splitTensionLayers(n_total, b, cover, ds, db);
+            if (split.error) {
+                return { error: split.error, d, n_total,
+                         section_type: isDRRB ? 'DRRB' : 'SRRB', isDRRB,
+                         Sc_min: split.Sc_min, Sc_single: split.Sc_single };
+            }
+            geom = varignonDepth(h, cover, ds, db, split.n1, split.n2);
+
+            const sig = `${n_total}|${split.n1}|${split.n2}`;
+            if (sig === prevSig) break;
+            prevSig = sig;
+            d = geom.d_eff;
+        }
+
+        const section_type = isDRRB ? 'DRRB' : 'SRRB';
+        const n_layers     = split.n2 > 0 ? 2 : 1;
+
+        // ─────────────────────────────────────────────────────────────────
+        //  Build the SRRB return
         // ─────────────────────────────────────────────────────────────────
         if (!isDRRB) {
-            const disc = 1 - (2 * Rn) / (0.85 * fc);
-            if (disc < 0) {
-                return { error: `Section is too small — Rn = ${Rn.toFixed(2)} MPa exceeds 0.425·f'c. Increase b or h.`,
-                         d, Rn, section_type, isDRRB };
-            }
-            const rho_calc = (0.85 * fc / fy) * (1 - Math.sqrt(disc));
-            let rho_use, checks = [];
-            if (rho_calc < r_min) {
-                checks.push(`ρ_calc = ${rho_calc.toFixed(5)} < ρ_min = ${r_min.toFixed(5)}  →  use ρ_min`);
-                rho_use = r_min;
-            } else {
-                checks.push(`ρ_min ≤ ρ_calc ≤ ρ_max  ✓ → use ρ_calc`);
-                rho_use = rho_calc;
-            }
-            const As_req  = rho_use * b * d;
-            const n_bars  = Math.max(2, Math.ceil(As_req / Ab));   // 2-bar minimum per practice
-            const As_prov = n_bars * Ab;
+            const As_prov = n_total * Ab;
             const a       = As_prov * fy / (0.85 * fc * b);
             const phi_Mn  = phi * As_prov * fy * (d - a / 2) / 1e6;
-            // Spacing check (single layer): Sc = (b - 2·cover - 2·ds - n·db) / (n-1)
-            const Sc      = (n_bars > 1) ? (b - 2 * cover - 2 * ds - n_bars * db) / (n_bars - 1) : null;
-            const Sc_min  = Math.max(25, db);                  // ACI 25.2.1 / NSCP 425.2.1
             return {
                 section_type, isDRRB,
-                d, b, h, cover, fc, fy, db, Ab, beta1: b1,
+                d, d_single,
+                d_1: geom.d_1, d_2: geom.d_2, clear_layer: geom.clear_layer,
+                b, h, cover, fc, fy, db, Ab, beta1: b1,
                 rho_b: rb, rho_max: r_max, rho_min: r_min,
                 phi_flex: phi, Mu_kNm: Mu, Rn,
                 // SRRB-specific
                 rho_calc, rho_use, checks,
-                As_req, n_bars, As_prov, a, phi_Mn_kNm: phi_Mn,
-                Sc, Sc_min, Sc_ok: (Sc === null) || Sc >= Sc_min,
-                // Reference singly-reinforced ceiling values
-                As_max, a_max, Mn_max_kNm, phiMn_max_kNm,
+                As_req, n_bars: n_total, As_prov, a, phi_Mn_kNm: phi_Mn,
+                // Layer info
+                n1: split.n1, n2: split.n2, n_layers,
+                Sc_single: split.Sc_single, Sc_layer1: split.Sc_layer1, Sc_min: split.Sc_min,
+                // Legacy-compat aliases (older renderers expect Sc + Sc_ok)
+                Sc: n_layers === 1 ? split.Sc_single : split.Sc_layer1,
+                Sc_ok: true,            // by construction (split keeps spacing OK)
+                layer_iters,
+                // Singly-reinforced ceiling
+                As_max, a_max: a_max_iter, Mn_max_kNm, phiMn_max_kNm,
                 capacity_ok: phi_Mn >= Mu
             };
         }
 
         // ─────────────────────────────────────────────────────────────────
-        //  DRRB path  (doubly reinforced)
+        //  Build the DRRB return — recompute compression steel @ final d
         // ─────────────────────────────────────────────────────────────────
-        // Tension steel paired with Mn_max:
-        const As1 = r_max * b * d;                            // mm²
+        c_drrb   = a_max_iter / b1;
+        const Es = 200000;
+        eps_sp   = 0.003 * (c_drrb - d_prime) / c_drrb;
+        fs_p_unc = eps_sp * Es;
+        fs_p     = Math.min(fs_p_unc, fy);
+        fs_yields = fs_p_unc >= fy;
 
-        // Residual nominal moment to be carried by the (As2 ↔ A_s') couple:
-        const Mn_resid_kNm = Mu / phi - Mn_max_kNm;           // kN·m
-        if (!(d_prime > 0)) {
-            return { error: "DRRB needed (Mu exceeds the singly-reinforced ceiling) — please enter d' (compression-bar depth) so the program can solve for the doubly-reinforced section.",
-                     section_type: 'DRRB', isDRRB: true, d, Rn,
-                     Mu_kNm: Mu, Mn_max_kNm, phiMn_max_kNm };
-        }
-        if (d - d_prime <= 0) {
-            return { error: `d - d' must be positive — got d = ${d.toFixed(1)} mm, d' = ${d_prime.toFixed(1)} mm.`,
-                     section_type: 'DRRB', isDRRB: true, d, d_prime, Mu_kNm: Mu };
-        }
-
-        const As2 = (Mn_resid_kNm * 1e6) / (fy * (d - d_prime));   // mm²
-        const As_total = As1 + As2;
-
-        // Compression-steel stress check:
-        //   c       = a_max / β1
-        //   ε_s'    = 0.003 · (c - d') / c
-        //   f_s'    = min( ε_s' · Es ,  f_y )      with Es = 200 000 MPa
-        const c_drrb   = a_max / b1;
-        const Es       = 200000;
-        const eps_sp   = 0.003 * (c_drrb - d_prime) / c_drrb;
-        const fs_p_unc = eps_sp * Es;
-        const fs_p     = Math.min(fs_p_unc, fy);
-        const fs_yields = fs_p_unc >= fy;
-
-        // Required compression steel:
-        //   If f_s' = f_y :  A_s'  = A_s2
-        //   Else            A_s'  = A_s2 · f_y / f_s'   (scale up)
-        const As_p_req      = fs_yields ? As2 : (As2 * fy / fs_p);
-        const n_tension     = Math.max(2, Math.ceil(As_total / Ab));
-        const n_compression = Math.max(2, Math.ceil(As_p_req  / AbCom));
-        const As_prov_t     = n_tension     * Ab;
+        As_p_req = fs_yields ? As2 : (As2 * fy / fs_p);
+        const n_compression = Math.max(2, Math.ceil(As_p_req / AbCom));
+        const As_prov_t     = n_total * Ab;
         const As_prov_c     = n_compression * AbCom;
 
-        // Recover the actual a and φMn with the provided steel (force eq.):
-        //   0.85·f'c·a·b + A_s'·f_s' = A_s_prov_t · f_y    (tension control assumed)
-        const a_drrb   = (As_prov_t * fy - As_prov_c * fs_p) / (0.85 * fc * b);
-        const phi_Mn_drrb = phi * (
+        const a_drrb        = (As_prov_t * fy - As_prov_c * fs_p) / (0.85 * fc * b);
+        const phi_Mn_drrb   = phi * (
             0.85 * fc * a_drrb * b * (d - a_drrb / 2)
             + As_prov_c * fs_p * (d - d_prime)
         ) / 1e6;
 
-        // Bar spacing checks (single layer assumption):
-        const Sc_t = (n_tension     > 1) ? (b - 2 * cover - 2 * ds - n_tension     * db)        / (n_tension     - 1) : null;
-        const Sc_c = (n_compression > 1) ? (b - 2 * cover - 2 * ds - n_compression * (dbCompr || db)) / (n_compression - 1) : null;
-        const Sc_min = Math.max(25, Math.max(db, dbCompr || db));
+        // Compression-bar spacing (single layer for compression).
+        const Sc_c = (n_compression > 1)
+            ? (b - 2 * cover - 2 * ds - n_compression * (dbCompr || db)) / (n_compression - 1)
+            : null;
+        const Sc_min_c = Math.max(25, Math.max(db, dbCompr || db));
 
         return {
             section_type, isDRRB,
-            d, b, h, cover, fc, fy, db, Ab, beta1: b1,
+            d, d_single,
+            d_1: geom.d_1, d_2: geom.d_2, clear_layer: geom.clear_layer,
+            b, h, cover, fc, fy, db, Ab, beta1: b1,
             rho_b: rb, rho_max: r_max, rho_min: r_min,
             phi_flex: phi, Mu_kNm: Mu, Rn,
-            // Singly-reinforced ceiling values (always shown)
-            As_max, a_max, Mn_max_kNm, phiMn_max_kNm,
+            As_max, a_max: a_max_iter, Mn_max_kNm, phiMn_max_kNm,
             // DRRB-specific
             d_prime, db_compr: dbCompr || db, Ab_compr: AbCom,
-            As1, As2, As_total, Mn_resid_kNm,
+            As1, As2, As_total: As_req, Mn_resid_kNm,
             c_drrb, eps_sp, fs_p_unc, fs_p, fs_yields,
             As_p_req,
-            n_tension, n_compression, As_prov_t, As_prov_c,
+            n_tension: n_total, n_compression, As_prov_t, As_prov_c,
             a: a_drrb, phi_Mn_kNm: phi_Mn_drrb,
-            Sc_t, Sc_c, Sc_min,
-            Sc_t_ok: (Sc_t === null) || Sc_t >= Sc_min,
-            Sc_c_ok: (Sc_c === null) || Sc_c >= Sc_min,
+            // Layer info
+            n1: split.n1, n2: split.n2, n_layers,
+            Sc_single: split.Sc_single, Sc_layer1: split.Sc_layer1,
+            Sc_min: split.Sc_min,
+            // Legacy-compat aliases
+            Sc_t: n_layers === 1 ? split.Sc_single : split.Sc_layer1,
+            Sc_c,
+            Sc_t_ok: true,                             // by construction
+            Sc_c_ok: (Sc_c === null) || Sc_c >= Sc_min_c,
+            layer_iters,
             capacity_ok: phi_Mn_drrb >= Mu
         };
     }
@@ -2337,62 +2434,35 @@
         //    high shear even when M ≈ 0 (simple supports).
         supps.forEach((s, i) => {
             const idx = idxAt(s.x);
-            const isEnd = (i === 0 || i === supps.length - 1);
 
             // ── Design shear demand at the support face ────────────────────
             //
-            // V has a step at every support (the FEM reconstruction adds the
-            // reaction the instant x reaches x_support). The shear demand the
-            // beam has to resist AT THE FACE is what's flowing across that
-            // face from the adjacent span.
+            // The FEM V-reconstruction walks left-to-right adding each
+            // reaction the instant x reaches x_support. So V at the SAMPLE
+            // located exactly at the support — call it V_after — already
+            // includes this support's reaction. The pre-reaction value
+            // (just upstream of the face, where the adjacent span is
+            // pushing into the support) is V_before = V_after − Rv.
             //
-            // END SUPPORT — only one span touches the face, and the magnitude
-            //   of the shear right next to the face is exactly the support
-            //   reaction (the in-span shear curve starts at +R on the left end
-            //   and approaches +R on the right end before all reactions
-            //   cancel). Sampling at a sample point a few mm inside the span
-            //   loses a small amount to the UDL between the face and the
-            //   sample (e.g. 210 → 208.3 with w = 140 kN/m and eps = 12 mm).
-            //   To match the reactions panel exactly, use |R| directly.
+            // The design shear demand on EITHER face of the support is the
+            // larger of |V_after| and |V_before|:
             //
-            // INTERIOR SUPPORT — two spans meet at the face and V jumps by R
-            //   across the support. The design shear demand is the larger of
-            //   |V just before| and |V just after|. The reaction itself can
-            //   be larger than either face value (e.g. middle reaction of a
-            //   2-span = 0.625·wL, while each face shear ≈ 0.375·wL), so we
-            //   take the max of the in-span samples — NOT |R|.
-            let Vu;
-            if (isEnd) {
-                Vu = Math.abs(s.Rv || 0);
-                // Safety fallback for an edge case (e.g. a spring with k ≈ 0
-                // that contributes no reaction): use the adjacent in-span
-                // sample so we don't end up with Vu = 0.
-                if (Vu < 1e-9) {
-                    let iAdj = -1;
-                    if (i === 0) {
-                        for (let k = 0; k < xs.length; k++) {
-                            if (xs[k] > s.x + 1e-9) { iAdj = k; break; }
-                        }
-                    } else {
-                        for (let k = 0; k < xs.length; k++) {
-                            if (xs[k] < s.x - 1e-9) iAdj = k; else break;
-                        }
-                    }
-                    if (iAdj >= 0) Vu = Math.abs(V[iAdj]);
-                }
-            } else {
-                let iBefore = -1;
-                for (let k = 0; k < xs.length; k++) {
-                    if (xs[k] < s.x - 1e-9) iBefore = k; else break;
-                }
-                let iAfter = -1;
-                for (let k = 0; k < xs.length; k++) {
-                    if (xs[k] > s.x + 1e-9) { iAfter = k; break; }
-                }
-                const Vleft  = (iBefore >= 0) ? Math.abs(V[iBefore]) : 0;
-                const Vright = (iAfter  >= 0) ? Math.abs(V[iAfter])  : 0;
-                Vu = Math.max(Vleft, Vright);
-            }
+            //   LEFT END  (x = 0):    V_after = +R,   V_before = 0    → Vu = R
+            //   RIGHT END (x = L):    V_after = 0,    V_before = −R   → Vu = R
+            //   INTERIOR  (x = xi):   V_after and V_before are equal-and
+            //                          opposite half-jumps of R, so the
+            //                          design demand is the larger of the
+            //                          two in-span face shears.
+            //
+            // This is the ONLY formulation that simultaneously satisfies
+            //   – left/right end Vu = |R|  (matching the reactions panel)
+            //   – interior Vu = the larger face shear (NOT |R| itself,
+            //     since R = jump across the support, not flow across it)
+            // — and it works without eps offsets that lose UDL contribution.
+            const Vat   = V[idx] || 0;          // V at x = x_support (post-reaction)
+            const Rv    = Number(s.Rv) || 0;
+            const Vbefore = Vat - Rv;            // V just before the face
+            const Vu    = Math.max(Math.abs(Vbefore), Math.abs(Vat));
             const Mu = M[idx] || 0;
             let label;
             if (i === 0)                    label = `Left support (x = ${s.x.toFixed(2)} m)`;
@@ -2460,7 +2530,14 @@
         html += row('\\(h\\) (total depth)',          `${h.toFixed(0)} mm`);
         html += row('\\(b\\) (width)',                `${b.toFixed(0)} mm`);
         html += row('cover \\(c_c\\)',                `${cov.toFixed(0)} mm`,  'NSCP 2015 Table 420.6.1.3.1');
-        html += row('\\(d\\) (effective depth)',      `${fl.d.toFixed(1)} mm`, '\\(h - c_c - \\varnothing_s - \\varnothing_b/2\\)');
+        // Effective-depth row shows the SINGLE-LAYER value here; the
+        // actual (possibly Varignon-averaged) d_eff is reported in Step 4
+        // alongside the layer split if a second layer was needed.
+        const dInitNote = (fl.n_layers === 2)
+            ? '\\(h - c_c - \\varnothing_s - \\varnothing_b/2\\) <small>— single-layer guess; replaced below by Varignon \\(d_{eff}\\)</small>'
+            : '\\(h - c_c - \\varnothing_s - \\varnothing_b/2\\)';
+        const dInitVal = (fl.d_single !== undefined ? fl.d_single : fl.d);
+        html += row('\\(d_1\\) (single-layer eff. depth)', `${dInitVal.toFixed(1)} mm`, dInitNote);
         html += row('\\(\\phi\\) (flexure)',          `${fl.phi_flex}`);
         html += row('\\(\\beta_1\\)',                 `${fl.beta1.toFixed(4)}`, 'NSCP 2015 §422.2.2.4.3');
         html += row('\\(M_u\\)',                      `${fl.Mu_kNm.toFixed(3)} kN·m`,
@@ -2506,20 +2583,52 @@
                 : '';
             html += row('\\(n = \\max\\!\\left(2,\\,\\lceil A_{s,req} / A_b \\rceil\\right)\\)',
                        `${fl.n_bars} bars`, rawNote);
+
+            // ── Spacing & layering ───────────────────────────────────────
+            // Always show the single-layer spacing check first, then if
+            // it failed, show the 2-layer split and Varignon d_eff.
+            const Sc1     = fl.Sc_single;
+            const Sc1_ok  = Sc1 === null || Sc1 >= fl.Sc_min;
+            if (Sc1 !== null && Sc1 !== undefined && isFinite(Sc1)) {
+                html += row('\\(S_{c,\\,single} = \\dfrac{b - 2c_c - 2\\varnothing_s - n\\varnothing}{n - 1}\\)',
+                           `${Sc1.toFixed(1)} mm`,
+                           `\\(S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ${Sc1_ok ? '✓ single layer fits' : '✗ single layer too tight → split into 2 layers'}`,
+                           Sc1_ok ? 'ok' : 'fail');
+            }
+            if (fl.n_layers === 2) {
+                html += row('Layer split (\\(n_1 + n_2 = n\\))',
+                           `\\(${fl.n1} + ${fl.n2} = ${fl.n_bars}\\) bars`,
+                           `\\(n_2\\) is EVEN for symmetric detailing; \\(n_1\\) carries the larger share`);
+                html += row('\\(S_{c,\\,layer\\,1}\\) (with \\(n_1\\) bars)',
+                           `${fl.Sc_layer1.toFixed(1)} mm`,
+                           `\\(\\ge S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ✓`,
+                           'ok');
+                html += row('Clear vertical spacing between layers',
+                           `${fl.clear_layer.toFixed(0)} mm`,
+                           'NSCP 425.2.2 / ACI 318-14 25.2.2');
+                html += row('\\(d_2 = d_1 - \\varnothing_b - 25\\)',
+                           `${fl.d_2.toFixed(1)} mm`, 'layer-2 centroid from top fiber');
+                html += row('\\(d_{eff} = \\dfrac{n_1 d_1 + n_2 d_2}{n_1 + n_2}\\)',
+                           `${fl.d.toFixed(1)} mm`,
+                           `Varignon\'s theorem (moments about extreme compression fiber) — \\(${fl.layer_iters}\\) iter${fl.layer_iters>1?'s':''} to converge`);
+            } else {
+                html += row('\\(d_{eff}\\)', `${fl.d.toFixed(1)} mm`,
+                           '\\(= d_1\\) (single layer)');
+            }
+
             html += row('\\(A_{s,prov} = n \\cdot A_b\\)', `${fl.As_prov.toFixed(2)} mm²`);
             html += row('\\(a = \\dfrac{A_{s,prov}\\,f_y}{0.85\\,f\'_c\\,b}\\)', `${fl.a.toFixed(2)} mm`);
-            if (fl.Sc !== null) {
-                html += row('\\(S_c = \\dfrac{b - 2c_c - 2\\varnothing_s - n\\varnothing}{n - 1}\\)',
-                           `${fl.Sc.toFixed(1)} mm`,
-                           `\\(S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ${fl.Sc_ok ? '✓' : '✗ too tight, add a layer'}`,
-                           fl.Sc_ok ? 'ok' : 'fail');
-            }
-            html += row('\\(\\phi M_n = \\phi A_s f_y \\left(d - \\tfrac{a}{2}\\right)\\)',
+            html += row('\\(\\phi M_n = \\phi A_s f_y \\left(d_{eff} - \\tfrac{a}{2}\\right)\\)',
                        `${fl.capacity_ok ? '✓' : '✗'} ${fl.phi_Mn_kNm.toFixed(3)} kN·m`,
                        `${fl.capacity_ok ? '≥' : '<'} \\(M_u = ${fl.Mu_kNm.toFixed(3)}\\) kN·m`,
                        fl.capacity_ok ? 'ok' : 'fail');
+
+            // Final bar-callout line
+            const layerCallout = (fl.n_layers === 2)
+                ? `arranged as <strong>${fl.n1} (layer 1) + ${fl.n2} (layer 2)</strong> at the <strong>${tensionLoc}</strong>`
+                : `at the <strong>${tensionLoc}</strong> of the section`;
             html += (fl.capacity_ok)
-                ? `<div class="bd-alert bd-alert-ok">✓ <strong>SRRB</strong> — use <strong>${fl.n_bars} – ∅${db.toFixed(0)} mm</strong> bars at the <strong>${tensionLoc}</strong> of the section <small style="color:#0F6E56;">(${momentType})</small> &nbsp;|&nbsp; \\(A_{s,prov}\\) = ${fl.As_prov.toFixed(0)} mm² &nbsp;|&nbsp; \\(\\phi M_n\\) = ${fl.phi_Mn_kNm.toFixed(2)} kN·m</div>`
+                ? `<div class="bd-alert bd-alert-ok">✓ <strong>SRRB</strong> — use <strong>${fl.n_bars} – ∅${db.toFixed(0)} mm</strong> bars ${layerCallout} <small style="color:#0F6E56;">(${momentType})</small> &nbsp;|&nbsp; \\(A_{s,prov}\\) = ${fl.As_prov.toFixed(0)} mm² &nbsp;|&nbsp; \\(\\phi M_n\\) = ${fl.phi_Mn_kNm.toFixed(2)} kN·m</div>`
                 : `<div class="bd-alert bd-alert-fail">✗ Flexural capacity insufficient — increase section.</div>`;
             return html;
         }
@@ -2539,7 +2648,9 @@
         html += row('\\(A_{s,total} = A_{s1} + A_{s2}\\)', `${fl.As_total.toFixed(2)} mm²`);
 
         html += sectionHeader('Step 5 — Compression steel \\(A\'_s\\) (check \\(f\'_s\\))');
-        html += row('\\(d\'\\) (compression-bar depth)', `${fl.d_prime.toFixed(1)} mm`);
+        html += row('\\(d\' = c_c + \\varnothing_s + \\varnothing\'_b/2\\)',
+                   `${fl.d_prime.toFixed(1)} mm`,
+                   'derived — single layer of compression bars sitting against the inside of the stirrup');
         html += row('\\(c = \\dfrac{a_{\\max}}{\\beta_1}\\)', `${fl.c_drrb.toFixed(2)} mm`,
                    'neutral-axis depth at \\(\\rho_{\\max}\\)');
         html += row('\\(\\varepsilon\'_s = 0.003 \\cdot \\dfrac{c - d\'}{c}\\)', `${fl.eps_sp.toFixed(6)}`);
@@ -2557,7 +2668,7 @@
               : '\\(A\'_{s,req} = A_{s2} \\cdot \\dfrac{f_y}{f\'_s}\\)',
             `${fl.As_p_req.toFixed(2)} mm²`);
 
-        html += sectionHeader('Step 6 — Bar counts & capacity verification');
+        html += sectionHeader('Step 6 — Bar counts, layering & capacity verification');
         html += row('\\(A_b\\) (tension)',  `${fl.Ab.toFixed(2)} mm²`, `\\(\\varnothing\\,${db.toFixed(0)}\\) mm`);
         html += row('\\(A\'_b\\) (compression)', `${fl.Ab_compr.toFixed(2)} mm²`, `\\(\\varnothing\'\\,${(dbC || db).toFixed(0)}\\) mm`);
         // 2-bar corner-minimum floor for both layers — designFlexure already
@@ -2570,28 +2681,54 @@
                     + `at the <strong>${comprLoc}</strong> of the section`;
         html += row('\\(n_{tension} = \\max\\!\\left(2,\\,\\lceil A_{s,total} / A_b \\rceil\\right)\\)', `${fl.n_tension} bars`, tNote);
         html += row('\\(n_{compr.} = \\max\\!\\left(2,\\,\\lceil A\'_{s,req} / A\'_b \\rceil\\right)\\)', `${fl.n_compression} bars`, cNote);
+
+        // ── Tension-bar spacing & layering ────────────────────────────
+        const Sct1    = fl.Sc_single;
+        const Sct1_ok = Sct1 === null || Sct1 >= fl.Sc_min;
+        if (Sct1 !== null && Sct1 !== undefined && isFinite(Sct1)) {
+            html += row('\\(S_{c,\\,single}\\) (tension)',
+                       `${Sct1.toFixed(1)} mm`,
+                       `\\(S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ${Sct1_ok ? '✓ single layer fits' : '✗ single layer too tight → split into 2 layers'}`,
+                       Sct1_ok ? 'ok' : 'fail');
+        }
+        if (fl.n_layers === 2) {
+            html += row('Tension layer split (\\(n_1 + n_2 = n_{tension}\\))',
+                       `\\(${fl.n1} + ${fl.n2} = ${fl.n_tension}\\) bars`,
+                       `\\(n_2\\) is EVEN for symmetric detailing`);
+            html += row('\\(S_{c,\\,layer\\,1}\\) (with \\(n_1\\) bars)',
+                       `${fl.Sc_layer1.toFixed(1)} mm`,
+                       `\\(\\ge S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ✓`,
+                       'ok');
+            html += row('Clear vertical spacing between layers',
+                       `${fl.clear_layer.toFixed(0)} mm`,
+                       'NSCP 425.2.2 / ACI 318-14 25.2.2');
+            html += row('\\(d_2 = d_1 - \\varnothing_b - 25\\)',
+                       `${fl.d_2.toFixed(1)} mm`, 'layer-2 centroid from top fiber');
+            html += row('\\(d_{eff} = \\dfrac{n_1 d_1 + n_2 d_2}{n_1 + n_2}\\)',
+                       `${fl.d.toFixed(1)} mm`,
+                       `Varignon\'s theorem — \\(${fl.layer_iters}\\) iter${fl.layer_iters>1?'s':''} to converge`);
+        }
+
         html += row('\\(A_{s,prov}\\) (tension)', `${fl.As_prov_t.toFixed(2)} mm²`, `at the <strong>${tensionLoc}</strong>`);
         html += row('\\(A\'_{s,prov}\\) (compression)', `${fl.As_prov_c.toFixed(2)} mm²`, `at the <strong>${comprLoc}</strong>`);
         html += row('\\(a = \\dfrac{A_s f_y - A\'_s f\'_s}{0.85\\,f\'_c\\,b}\\)', `${fl.a.toFixed(2)} mm`,
                    'force equilibrium with provided steel');
-        if (fl.Sc_t !== null) {
-            html += row('\\(S_c\\) (tension)', `${fl.Sc_t.toFixed(1)} mm`,
-                       `\\(S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ${fl.Sc_t_ok ? '✓' : '✗ too tight'}`,
-                       fl.Sc_t_ok ? 'ok' : 'fail');
-        }
-        if (fl.Sc_c !== null) {
+        if (fl.Sc_c !== null && fl.Sc_c !== undefined) {
             html += row('\\(S\'_c\\) (compression)', `${fl.Sc_c.toFixed(1)} mm`,
                        `\\(S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ${fl.Sc_c_ok ? '✓' : '✗ too tight'}`,
                        fl.Sc_c_ok ? 'ok' : 'fail');
         }
-        html += row('\\(\\phi M_n = \\phi \\left[0.85 f\'_c\\,a\\,b\\,(d - \\tfrac{a}{2}) + A\'_s f\'_s (d - d\')\\right]\\)',
+        html += row('\\(\\phi M_n = \\phi \\left[0.85 f\'_c\\,a\\,b\\,(d_{eff} - \\tfrac{a}{2}) + A\'_s f\'_s (d_{eff} - d\')\\right]\\)',
                    `${fl.capacity_ok ? '✓' : '✗'} ${fl.phi_Mn_kNm.toFixed(3)} kN·m`,
                    `${fl.capacity_ok ? '≥' : '<'} \\(M_u = ${fl.Mu_kNm.toFixed(3)}\\) kN·m`,
                    fl.capacity_ok ? 'ok' : 'fail');
+        const tLayerCallout = (fl.n_layers === 2)
+            ? `arranged as <strong>${fl.n1} (layer 1) + ${fl.n2} (layer 2)</strong> at the <strong>${tensionLoc}</strong>`
+            : `at the <strong>${tensionLoc}</strong>`;
         html += (fl.capacity_ok)
             ? `<div class="bd-alert bd-alert-ok">
                  ✓ <strong>DRRB</strong> <small style="color:#0F6E56;">(${momentType})</small>
-                 &nbsp;|&nbsp; <strong>${fl.n_tension} – ∅${db.toFixed(0)} mm</strong> at the <strong>${tensionLoc}</strong> (tension)
+                 &nbsp;|&nbsp; <strong>${fl.n_tension} – ∅${db.toFixed(0)} mm</strong> ${tLayerCallout} (tension)
                  &nbsp;|&nbsp; <strong>${fl.n_compression} – ∅${(dbC||db).toFixed(0)} mm</strong> at the <strong>${comprLoc}</strong> (compression)
                  &nbsp;|&nbsp; \\(\\phi M_n\\) = ${fl.phi_Mn_kNm.toFixed(2)} kN·m
                </div>`
@@ -2735,10 +2872,14 @@
             if (fl.error) {
                 const tag = fl.isDRRB ? 'DRRB &mdash; needs d&prime;' : 'design error';
                 tensCell = `<span title="${escapeXml(fl.error)}" style="color:#993C1D;">${tag}</span>`;
-            } else if (fl.isDRRB) {
-                tensCell = `${fl.n_tension} &ndash; &#8709;${fl.db.toFixed(0)} (${tensLoc})`;
             } else {
-                tensCell = `${fl.n_bars} &ndash; &#8709;${fl.db.toFixed(0)} (${tensLoc})`;
+                const nTotal = fl.isDRRB ? fl.n_tension : fl.n_bars;
+                // 2-layer split shows as "n1+n2" e.g. "3+2 – ⌀16 (BOT)";
+                // single-layer stays compact "n – ⌀16 (BOT)".
+                const layerTxt = (fl.n_layers === 2)
+                    ? `${fl.n1}+${fl.n2}`
+                    : `${nTotal}`;
+                tensCell = `${layerTxt} &ndash; &#8709;${fl.db.toFixed(0)} (${tensLoc})`;
             }
 
             // ── Compression bars column (DRRB only) ───────────────────────
@@ -2862,9 +3003,13 @@
         const fyt  = parseFloat(document.getElementById('rc-fyt').value);
         const db   = parseFloat(document.getElementById('rc-db').value);
         const dbC  = parseFloat(document.getElementById('rc-db-c').value) || db;
-        const dPr  = parseFloat(document.getElementById('rc-d-prime').value);
         const ds   = parseFloat(document.getElementById('rc-ds').value);
         const cov  = parseFloat(document.getElementById('rc-cover').value);
+        // d′ (distance from extreme compression fiber to centroid of
+        // compression bars) is derived, NOT user-input: a single layer of
+        // compression bars sitting against the inside of the stirrup gives
+        // d′ = cover + ∅_stirrup + ∅_compr / 2.
+        const dPr  = cov + ds + dbC / 2;
         const lam  = parseFloat(document.getElementById('rc-lambda').value);
         const legs = parseInt(document.getElementById('rc-legs').value);
         const Lspan = parseFloat(document.getElementById('rc-L').value);
