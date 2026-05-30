@@ -1523,22 +1523,41 @@
     // ════════════════════════════════════════════════════════════════════════
     //  SVG DIAGRAMS — V, M, δ
     // ════════════════════════════════════════════════════════════════════════
+    // Linear interpolation onto a regularly-sampled (xs, arr) curve.
+    function interpAt(x, xs, arr) {
+        if (x <= xs[0]) return arr[0];
+        if (x >= xs[xs.length - 1]) return arr[arr.length - 1];
+        // Binary search
+        let lo = 0, hi = xs.length - 1;
+        while (hi - lo > 1) {
+            const mid = (lo + hi) >> 1;
+            if (xs[mid] <= x) lo = mid; else hi = mid;
+        }
+        const t = (x - xs[lo]) / (xs[hi] - xs[lo] || 1);
+        return arr[lo] + t * (arr[hi] - arr[lo]);
+    }
+
+    // Ported from app.py `_add_critical()`:
+    //   ◆ Diamond markers at global max, global min, and endpoints
+    //   ○ Open-circle markers at curvature-break positions (supports + load endpoints)
     function drawDiagram(container, xs, ys, opts = {}) {
         const { color = '#0056b3', fillColor = 'rgba(0,86,179,0.15)',
-                yLabel = '', unit = '', title = '' } = opts;
-        const W = 900, H = 240;
+                yLabel = '', unit = '', title = '',
+                curvXs = [] } = opts;
+        const W = 900, H = 260;
         const padL = 70, padR = 24, padT = 28, padB = 40;
         const iW = W - padL - padR, iH = H - padT - padB;
         const xMin = 0, xMax = Math.max(...xs);
         let yMin = Math.min(...ys, 0), yMax = Math.max(...ys, 0);
         if (yMin === yMax) { yMin -= 1; yMax += 1; }
-        const yr = yMax - yMin; yMin -= yr * 0.08; yMax += yr * 0.08;
+        const yr = yMax - yMin; yMin -= yr * 0.14; yMax += yr * 0.14;
         const sx = x => padL + (x - xMin) / (xMax - xMin) * iW;
         const sy = y => padT + (yMax - y) / (yMax - yMin) * iH;
         const yZero = sy(0);
         const path = xs.map((x, i) => `${sx(x)},${sy(ys[i])}`).join(' ');
         const fill = `${sx(xs[0])},${yZero} ${path} ${sx(xs[xs.length-1])},${yZero}`;
-        const cIdx = ys.reduce((iMax, v, i, a) => Math.abs(v) > Math.abs(a[iMax]) ? i : iMax, 0);
+
+        // Axis ticks
         let xt = '', yt = '';
         for (let i = 0; i <= 6; i++) {
             const v = xMin + (xMax - xMin) * i / 6, px = sx(v);
@@ -1550,6 +1569,70 @@
             yt += `<line x1="${padL - 4}" y1="${py}" x2="${padL}" y2="${py}" stroke="#5c6773"/>
                    <text x="${padL - 7}" y="${py + 3}" font-size="10" fill="#5c6773" text-anchor="end">${v.toFixed(2)}</text>`;
         }
+
+        // Critical-point detection — global max, global min, endpoints.
+        // Same logic as the Streamlit `_add_critical`: skip max/min if |y| is
+        // within 0.5% of the peak (essentially zero on this scale).
+        let iMax = 0, iMin = 0;
+        for (let i = 1; i < ys.length; i++) {
+            if (ys[i] > ys[iMax]) iMax = i;
+            if (ys[i] < ys[iMin]) iMin = i;
+        }
+        const peak = Math.max(Math.abs(ys[iMax]), Math.abs(ys[iMin]), 1e-9);
+        const eps  = peak * 0.005 + 1e-6;
+
+        const seen = new Set();
+        const points = [];   // { x, y, label, above }
+        if (ys[iMax] >  eps) {
+            points.push({ x: xs[iMax], y: ys[iMax],
+                          label: `max = ${ys[iMax].toFixed(3)} ${unit}  @  x = ${xs[iMax].toFixed(3)} m`,
+                          above: true });
+            seen.add(iMax);
+        }
+        if (ys[iMin] < -eps) {
+            points.push({ x: xs[iMin], y: ys[iMin],
+                          label: `min = ${ys[iMin].toFixed(3)} ${unit}  @  x = ${xs[iMin].toFixed(3)} m`,
+                          above: false });
+            seen.add(iMin);
+        }
+        [0, ys.length - 1].forEach(ie => {
+            if (!seen.has(ie)) {
+                points.push({ x: xs[ie], y: ys[ie],
+                              label: `${ys[ie].toFixed(3)} ${unit}`,
+                              above: ys[ie] >= 0 });
+                seen.add(ie);
+            }
+        });
+
+        // ─── Render diamonds (max/min/endpoints) ────────────────────────
+        let diamonds = '';
+        let labels   = '';
+        for (const p of points) {
+            const cx = sx(p.x), cy = sy(p.y);
+            const r  = 6;
+            // Hollow diamond (rotated square)
+            diamonds += `<polygon points="${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}"
+                                  fill="#fff" stroke="${color}" stroke-width="2"/>`;
+            const labelY = p.above ? cy - 14 : cy + 22;
+            labels += `<text x="${cx}" y="${labelY}" font-size="10" font-weight="600"
+                             fill="${color}" text-anchor="middle"
+                             paint-order="stroke" stroke="rgba(255,255,255,0.85)" stroke-width="3">
+                         ${escapeXml(p.label)}
+                       </text>`;
+        }
+
+        // ─── Open-circle nodes at curvature-break positions ─────────────
+        let curvDots = '';
+        if (Array.isArray(curvXs)) {
+            for (const cx_val of curvXs) {
+                if (cx_val < xMin - 1e-6 || cx_val > xMax + 1e-6) continue;
+                const cy_val = interpAt(cx_val, xs, ys);
+                const cx = sx(cx_val), cy = sy(cy_val);
+                curvDots += `<circle cx="${cx}" cy="${cy}" r="3.5"
+                                     fill="#fff" stroke="${color}" stroke-width="1.5"/>`;
+            }
+        }
+
         container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
             ${title ? `<text x="${W/2}" y="16" font-size="13" font-weight="600" fill="#1f2933" text-anchor="middle">${title}</text>` : ''}
             <rect x="${padL}" y="${padT}" width="${iW}" height="${iH}" fill="#fafbfc" stroke="#e1e4e8"/>
@@ -1557,11 +1640,16 @@
             <polygon points="${fill}" fill="${fillColor}"/>
             <polyline points="${path}" stroke="${color}" stroke-width="2" fill="none"/>
             ${xt}${yt}
+            ${curvDots}
+            ${diamonds}
+            ${labels}
             <text x="${padL + iW/2}" y="${H - 6}" font-size="10" fill="#5c6773" text-anchor="middle">x (m)</text>
             <text x="14" y="${padT + iH/2}" font-size="10" fill="#5c6773" text-anchor="middle" transform="rotate(-90 14 ${padT + iH/2})">${yLabel}${unit ? ` (${unit})` : ''}</text>
-            <circle cx="${sx(xs[cIdx])}" cy="${sy(ys[cIdx])}" r="3.5" fill="${color}"/>
-            <text x="${sx(xs[cIdx])}" y="${sy(ys[cIdx]) - 7}" font-size="11" font-weight="600" fill="${color}" text-anchor="middle">${ys[cIdx].toFixed(2)}</text>
         </svg>`;
+    }
+
+    function escapeXml(s) {
+        return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -1953,9 +2041,19 @@
         if (r.Dmax <= allow) dCheck.innerHTML = `<div class="bd-alert bd-alert-ok">✓ Deflection OK — ${r.Dmax.toFixed(2)} mm ≤ L/360 = ${allow.toFixed(2)} mm</div>`;
         else                 dCheck.innerHTML = `<div class="bd-alert bd-alert-fail">✗ Deflection exceeds L/360 — ${r.Dmax.toFixed(2)} mm > ${allow.toFixed(2)} mm</div>`;
 
-        drawDiagram(document.getElementById('ba-sfd'),  r.xs, r.V, { color: '#1f77b4', fillColor: 'rgba(31,119,180,0.18)', yLabel: 'V', unit: 'kN',   title: 'Shear Force Diagram' });
-        drawDiagram(document.getElementById('ba-bmd'),  r.xs, r.M, { color: '#d62728', fillColor: 'rgba(214,39,40,0.18)',  yLabel: 'M', unit: 'kN·m', title: 'Bending Moment Diagram' });
-        drawDiagram(document.getElementById('ba-defl'), r.xs, r.D, { color: '#2ca02c', fillColor: 'rgba(44,160,44,0.18)',  yLabel: 'δ', unit: 'mm',   title: 'Deflection' });
+        // Curvature-break positions for open-circle markers — supports + load
+        // endpoints (ported from app.py _curvature_xs()).
+        const curvSet = new Set();
+        state.supports.forEach(s => curvSet.add(clamp(s.x, 0, L)));
+        state.loads.forEach(ld => {
+            if (ld.type === 'point' || ld.type === 'moment') curvSet.add(clamp(ld.x, 0, L));
+            else { curvSet.add(clamp(ld.x1, 0, L)); curvSet.add(clamp(ld.x2, 0, L)); }
+        });
+        const curvXs = [...curvSet].sort((a, b) => a - b);
+
+        drawDiagram(document.getElementById('ba-sfd'),  r.xs, r.V, { color: '#1f77b4', fillColor: 'rgba(31,119,180,0.18)', yLabel: 'V', unit: 'kN',   title: 'Shear Force Diagram',     curvXs });
+        drawDiagram(document.getElementById('ba-bmd'),  r.xs, r.M, { color: '#d62728', fillColor: 'rgba(214,39,40,0.18)',  yLabel: 'M', unit: 'kN·m', title: 'Bending Moment Diagram', curvXs });
+        drawDiagram(document.getElementById('ba-defl'), r.xs, r.D, { color: '#2ca02c', fillColor: 'rgba(44,160,44,0.18)',  yLabel: 'δ', unit: 'mm',   title: 'Deflection',              curvXs });
     }
 
     function renderThreeMoment(L) {
@@ -2112,6 +2210,18 @@
     });
 
     // ── Critical-section auto-detection from the governing FEM result ─────
+    //
+    // Strategy (mirrors what the Streamlit app marks on its diagrams):
+    //   1. Global  max  M  on the whole beam.
+    //   2. Global  min  M  on the whole beam (most-negative — usually a support).
+    //   3. Per-span TRUE moment extrema — find every x where V(x) crosses zero
+    //      (dM/dx = V, so M is extremal exactly where V = 0). This catches the
+    //      midspan peak inside each span and avoids the bug where the old
+    //      "max |M| within span" found a value at the right-support edge.
+    //   4. Each support — for the shear demand (Vu just inside the span).
+    //
+    // Sections are de-duplicated by x position (within 25 mm tolerance) so the
+    // user doesn't see two cards for the same critical cut.
     function rcDetectCriticalSections() {
         if (!state.lastResults) {
             alert('Run a Beam Analysis on Tab 1 first — then come back and auto-detect.');
@@ -2124,70 +2234,88 @@
             return [];
         }
         const { xs, V, M, reactions } = gov.result;
-        const out = [];
+        const supps = [...reactions].sort((a, b) => a.x - b.x);
 
-        // Helper — find the index in xs closest to a given x (exclusive of duplicates)
         const idxAt = (x, dir = 0) => {
             let best = 0, bd = Infinity;
             for (let i = 0; i < xs.length; i++) {
                 const d = Math.abs(xs[i] - x);
                 if (d < bd) { bd = d; best = i; }
             }
-            // dir = -1 → snap to the index just below, +1 → just above
             if (dir < 0 && xs[best] > x && best > 0) best -= 1;
             if (dir > 0 && xs[best] < x && best < xs.length - 1) best += 1;
             return best;
         };
 
-        // Sort supports left-to-right
-        const supps = [...reactions].sort((a, b) => a.x - b.x);
+        // Section accumulator with de-duplication by x (25 mm).
+        const sections = [];
+        const tryAdd = (x, Mu, Vu, label) => {
+            if (sections.some(s => Math.abs(s.x - x) < 0.025)) return;
+            sections.push({
+                id: state.rcNextId++,
+                label, x,
+                Mu: Math.round(Mu * 1000) / 1000,
+                Vu: Math.round(Vu * 1000) / 1000
+            });
+        };
 
-        // 1) Each support → take M(x_support), V from just inside the span
+        // 1+2. Global max / min moment
+        let iMax = 0, iMin = 0;
+        for (let i = 1; i < M.length; i++) {
+            if (M[i] > M[iMax]) iMax = i;
+            if (M[i] < M[iMin]) iMin = i;
+        }
+        const peak = Math.max(Math.abs(M[iMax]), Math.abs(M[iMin]), 1e-9);
+        const eps  = peak * 0.005 + 1e-6;
+        if (M[iMax] >  eps) tryAdd(xs[iMax], M[iMax], Math.abs(V[iMax]),
+                                   `Max +M (x = ${xs[iMax].toFixed(2)} m)`);
+        if (M[iMin] < -eps) tryAdd(xs[iMin], M[iMin], Math.abs(V[iMin]),
+                                   `Max −M (x = ${xs[iMin].toFixed(2)} m)`);
+
+        // 3. Per-span V = 0 crossings — these are TRUE moment extrema
+        //    (since dM/dx = V). Linear interp picks the exact zero between
+        //    sample points; ignore crossings at or very near a support edge
+        //    (they collide with the support's own section).
+        for (let i = 0; i < supps.length - 1; i++) {
+            const xL = supps[i].x, xR = supps[i + 1].x;
+            const iL = idxAt(xL, +1);   // first index strictly inside the span
+            const iR = idxAt(xR, -1);
+            let zeroCount = 0;
+            for (let k = iL; k < iR; k++) {
+                if (V[k] * V[k + 1] < 0) {           // sign change → zero between k and k+1
+                    const x0 = xs[k] - V[k] * (xs[k + 1] - xs[k]) / (V[k + 1] - V[k]);
+                    // Skip if too close to either support
+                    if (x0 - xL < 0.05 || xR - x0 < 0.05) continue;
+                    const M0 = interpAt(x0, xs, M);
+                    zeroCount += 1;
+                    const lbl = supps.length === 2
+                        ? `Midspan @ V=0 (x = ${x0.toFixed(2)} m)`
+                        : `Span ${i + 1} extremum ${zeroCount} (x = ${x0.toFixed(2)} m)`;
+                    tryAdd(x0, M0, Math.abs(interpAt(x0, xs, V)), lbl);
+                }
+            }
+        }
+
+        // 4. Each support → shear demand (max |V| just inside the span on
+        //    either side). Moment at the support is captured by 1/2 above when
+        //    relevant; we still add the support so the user can design for
+        //    high shear even when M ≈ 0 (simple supports).
         supps.forEach((s, i) => {
             const idx     = idxAt(s.x);
             const idxLeft = idxAt(s.x, -1);
             const idxRight= idxAt(s.x,  1);
-            // Use the larger absolute V on either side (shear can step at supports)
-            const Vleft  = Math.abs(V[idxLeft] || 0);
-            const Vright = Math.abs(V[idxRight] || 0);
-            const Vu = Math.max(Vleft, Vright);
+            const Vu = Math.max(Math.abs(V[idxLeft] || 0), Math.abs(V[idxRight] || 0));
             const Mu = M[idx] || 0;
             let label;
-            if (i === 0)               label = `Left support (x = ${s.x.toFixed(2)} m)`;
+            if (i === 0)                    label = `Left support (x = ${s.x.toFixed(2)} m)`;
             else if (i === supps.length - 1) label = `Right support (x = ${s.x.toFixed(2)} m)`;
-            else                       label = `Interior support ${i} (x = ${s.x.toFixed(2)} m)`;
-            // Skip end supports where M ≈ 0 AND the support is a simple pin/roller
-            // (Mu is approximately zero; only Vu matters there — but we still
-            // include them so the user sees shear-only sections.)
-            out.push({
-                id: state.rcNextId++,
-                label, x: s.x,
-                Mu: Math.round(Mu * 1000) / 1000,
-                Vu: Math.round(Vu * 1000) / 1000
-            });
+            else                            label = `Interior support ${i} (x = ${s.x.toFixed(2)} m)`;
+            tryAdd(s.x, Mu, Vu, label);
         });
 
-        // 2) Max |M| within each span (between adjacent supports)
-        for (let i = 0; i < supps.length - 1; i++) {
-            const xL = supps[i].x, xR = supps[i + 1].x;
-            let maxAbs = 0, mIdx = -1;
-            for (let k = 0; k < xs.length; k++) {
-                if (xs[k] > xL + 1e-6 && xs[k] < xR - 1e-6) {
-                    if (Math.abs(M[k]) > maxAbs) { maxAbs = Math.abs(M[k]); mIdx = k; }
-                }
-            }
-            if (mIdx >= 0 && maxAbs > 0.01) {
-                out.push({
-                    id: state.rcNextId++,
-                    label: `Midspan ${i + 1} (x = ${xs[mIdx].toFixed(2)} m)`,
-                    x: xs[mIdx],
-                    Mu: Math.round(M[mIdx] * 1000) / 1000,
-                    Vu: Math.round(Math.abs(V[mIdx]) * 1000) / 1000
-                });
-            }
-        }
-
-        return out;
+        // Sort by x for a clean left-to-right list
+        sections.sort((a, b) => a.x - b.x);
+        return sections;
     }
 
     document.getElementById('rc-auto-detect').addEventListener('click', () => {
