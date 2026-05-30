@@ -141,18 +141,62 @@
         }
         .bd-page .bd-diagram svg { width: 100%; height: auto; display: block; }
 
-        /* ─── Calculation rows ────────────────────────────────────────────── */
+        /* ─── Calculation rows — soft-card style matching foundation ─────── */
         .bd-page .bd-calc-row {
-            display: flex; font-size: 0.86em;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
-            border-bottom: 1px solid #f1f3f5; padding: 4px 0; flex-wrap: wrap;
+            display: flex;
+            align-items: baseline;
+            font-size: 0.92em;
+            padding: 9px 14px;
+            background: #fcfcfd;
+            border-left: 2px solid #e1e4e8;
+            border-radius: 0 4px 4px 0;
+            margin: 4px 0 4px 8px;
+            flex-wrap: wrap;
+            line-height: 1.55;
         }
-        .bd-page .bd-calc-row:last-child { border-bottom: none; }
-        .bd-page .bd-calc-row .bd-calc-label { flex: 0 0 260px; color: #495057; }
-        .bd-page .bd-calc-row .bd-calc-value { flex: 1 1 140px; font-weight: 500; color: #1f2933; }
-        .bd-page .bd-calc-row .bd-calc-note { color: #6c757d; font-size: 0.8em; flex: 1 1 100%; padding-left: 260px; }
-        .bd-page .bd-calc-value.ok { color: #0F6E56; }
+        .bd-page .bd-calc-row .bd-calc-label {
+            flex: 0 0 300px;
+            color: #495057;
+            padding-right: 12px;
+        }
+        .bd-page .bd-calc-row .bd-calc-value {
+            flex: 1 1 160px;
+            font-weight: 600;
+            color: #1f2933;
+        }
+        .bd-page .bd-calc-row .bd-calc-note {
+            color: #6c757d;
+            font-size: 0.86em;
+            flex: 1 1 100%;
+            padding-left: 300px;
+            margin-top: 4px;
+        }
+        .bd-page .bd-calc-value.ok   { color: #0F6E56; }
         .bd-page .bd-calc-value.fail { color: #993C1D; }
+        /* KaTeX should inherit the colour and size of its parent in rows / alerts */
+        .bd-page .bd-calc-row .katex,
+        .bd-page .bd-calc-row .bd-calc-label .katex,
+        .bd-page .bd-calc-row .bd-calc-value .katex,
+        .bd-page .bd-calc-row .bd-calc-note .katex,
+        .bd-page .bd-alert .katex {
+            color: inherit !important;
+            font-size: 1em !important;
+        }
+        /* Step banner — gradient blue card, white KaTeX inside the title */
+        .bd-page .bd-step-banner {
+            margin: 16px 0 6px;
+            padding: 9px 16px;
+            background: linear-gradient(135deg, #0056b3 0%, #003f86 100%);
+            color: #fff;
+            font-weight: 700;
+            border-radius: 6px;
+            font-size: 0.95em;
+            line-height: 1.4;
+        }
+        .bd-page .bd-step-banner .katex {
+            color: #fff !important;
+            font-size: 1em !important;
+        }
 
         /* ─── Alerts ──────────────────────────────────────────────────────── */
         .bd-page .bd-alert {
@@ -2024,7 +2068,7 @@
     });
 
     function sectionHeader(title) {
-        return `<div style="margin: 14px 0 6px; padding: 6px 12px; background: linear-gradient(135deg, #0056b3 0%, #003f86 100%); color: #fff; font-weight: 700; border-radius: 4px; font-size: 0.92em;">${title}</div>`;
+        return `<div class="bd-step-banner">${title}</div>`;
     }
 
     document.getElementById('rc-calc-btn').addEventListener('click', () => {
@@ -2056,120 +2100,150 @@
             if (fl.error && !fl.capacity_ok && fl.As_total === undefined && fl.n_bars === undefined) {
                 html += `<div class="bd-alert bd-alert-fail">${fl.error}</div>`;
             }
-            // Common: section + materials
+            // Step 1 — section, materials, β₁
             html += sectionHeader('Step 1 — Section, materials, β₁');
-            html += row('h (total depth)',       `${h.toFixed(0)} mm`);
-            html += row('b (width)',             `${b.toFixed(0)} mm`);
-            html += row('cover',                 `${cov.toFixed(0)} mm`,  'NSCP 2015 Table 420.6.1.3.1');
-            html += row('d (effective depth)',   `${fl.d.toFixed(1)} mm`, 'h − cover − ∅s − ∅b/2');
-            html += row('φ (flexure)',           `${fl.phi_flex}`);
-            html += row('β₁',                    `${fl.beta1.toFixed(4)}`, 'NSCP 2015 §422.2.2.4.3');
-            html += row('Mu',                    `${fl.Mu_kNm.toFixed(3)} kN·m`);
-            html += row('Rn = Mu / (φ·b·d²)',    `${fl.Rn.toFixed(4)} MPa`);
+            html += row('\\(h\\) (total depth)',          `${h.toFixed(0)} mm`);
+            html += row('\\(b\\) (width)',                `${b.toFixed(0)} mm`);
+            html += row('cover \\(c_c\\)',                `${cov.toFixed(0)} mm`,  'NSCP 2015 Table 420.6.1.3.1');
+            html += row('\\(d\\) (effective depth)',      `${fl.d.toFixed(1)} mm`, '\\(h - c_c - \\varnothing_s - \\varnothing_b/2\\)');
+            html += row('\\(\\phi\\) (flexure)',          `${fl.phi_flex}`);
+            html += row('\\(\\beta_1\\)',                 `${fl.beta1.toFixed(4)}`, 'NSCP 2015 §422.2.2.4.3');
+            html += row('\\(M_u\\)',                      `${fl.Mu_kNm.toFixed(3)} kN·m`);
+            html += row('\\(R_n = \\dfrac{M_u}{\\phi \\cdot b \\cdot d^2}\\)', `${fl.Rn.toFixed(4)} MPa`);
 
-            // ρ limits
+            // Step 2 — ρ limits + singly-reinforced ceiling
             html += sectionHeader('Step 2 — ρ limits & singly-reinforced ceiling');
-            html += row('ρ_b (balanced)',        `${fl.rho_b.toFixed(6)}`,   '(0.85·β₁·f\'c/fy)·600/(600+fy) — §421.2.2');
-            html += row('ρ_max',                 `${fl.rho_max.toFixed(6)}`, '0.75 ρ_b — §406.3.3');
-            html += row('ρ_min',                 `${fl.rho_min.toFixed(6)}`, "max(√f'c / 4fy, 1.4/fy) — §406.3.1");
-            html += row('As_max = ρ_max·b·d',    `${fl.As_max.toFixed(2)} mm²`);
-            html += row("a_max = As_max·fy/(0.85f'c·b)", `${fl.a_max.toFixed(2)} mm`);
-            html += row('Mn_max = As_max·fy·(d − a_max/2)', `${fl.Mn_max_kNm.toFixed(3)} kN·m`,  'singly-reinforced nominal ceiling');
-            html += row('φMn_max',               `${fl.phiMn_max_kNm.toFixed(3)} kN·m`);
+            html += row('\\(\\rho_b\\) (balanced)',
+                       `${fl.rho_b.toFixed(6)}`,
+                       '\\(\\dfrac{0.85 \\beta_1 f\'_c}{f_y} \\cdot \\dfrac{600}{600 + f_y}\\) — §421.2.2');
+            html += row('\\(\\rho_{\\max}\\)',
+                       `${fl.rho_max.toFixed(6)}`,
+                       '\\(0.75\\,\\rho_b\\) — §406.3.3');
+            html += row('\\(\\rho_{\\min}\\)',
+                       `${fl.rho_min.toFixed(6)}`,
+                       '\\(\\max\\!\\left(\\dfrac{\\sqrt{f\'_c}}{4 f_y},\\;\\dfrac{1.4}{f_y}\\right)\\) — §406.3.1');
+            html += row('\\(A_{s,\\max} = \\rho_{\\max} \\cdot b \\cdot d\\)',
+                       `${fl.As_max.toFixed(2)} mm²`);
+            html += row('\\(a_{\\max} = \\dfrac{A_{s,\\max} \\, f_y}{0.85\\,f\'_c\\,b}\\)',
+                       `${fl.a_max.toFixed(2)} mm`);
+            html += row('\\(M_{n,\\max} = A_{s,\\max} \\, f_y \\left(d - \\tfrac{a_{\\max}}{2}\\right)\\)',
+                       `${fl.Mn_max_kNm.toFixed(3)} kN·m`,
+                       'singly-reinforced nominal ceiling');
+            html += row('\\(\\phi M_{n,\\max}\\)', `${fl.phiMn_max_kNm.toFixed(3)} kN·m`);
 
-            // ── SRRB or DRRB classifier ─────────────────────────────────
+            // Step 3 — classification
             html += sectionHeader('Step 3 — SRRB vs DRRB classification');
             if (!fl.isDRRB) {
-                html += row('Compare: Mu vs φMn_max',
+                html += row('Compare \\(M_u\\) vs \\(\\phi M_{n,\\max}\\)',
                            `${fl.Mu_kNm.toFixed(3)} ≤ ${fl.phiMn_max_kNm.toFixed(3)} kN·m`,
                            '→ SRRB (Singly-Reinforced Rectangular Beam)',
                            'ok');
             } else {
-                html += row('Compare: Mu vs φMn_max',
+                html += row('Compare \\(M_u\\) vs \\(\\phi M_{n,\\max}\\)',
                            `${fl.Mu_kNm.toFixed(3)} > ${fl.phiMn_max_kNm.toFixed(3)} kN·m`,
                            '→ DRRB (Doubly-Reinforced — compression steel required)',
                            'fail');
             }
 
-            // ── SRRB PATH ─────────────────────────────────────────────────
+            // Step 4 — SRRB path
             if (!fl.isDRRB) {
                 html += sectionHeader('Step 4 — SRRB: solve ρ, As, bars, capacity');
-                html += row('disc = 1 − 2Rn / (0.85·f\'c)',  `${(1 - 2 * fl.Rn / (0.85 * fc)).toFixed(6)}`);
-                html += row('ρ_calc = (0.85·f\'c/fy)(1 − √disc)', `${fl.rho_calc.toFixed(6)}`);
+                html += row('\\(disc = 1 - \\dfrac{2 R_n}{0.85\\,f\'_c}\\)',
+                           `${(1 - 2 * fl.Rn / (0.85 * fc)).toFixed(6)}`);
+                html += row('\\(\\rho_{calc} = \\dfrac{0.85\\,f\'_c}{f_y}\\left(1 - \\sqrt{disc}\\right)\\)',
+                           `${fl.rho_calc.toFixed(6)}`);
                 fl.checks.forEach(c => { html += row('Check', c); });
-                html += row('ρ_use',                 `${fl.rho_use.toFixed(6)}`);
-                html += row('As_req = ρ·b·d',        `${fl.As_req.toFixed(2)} mm²`);
-                html += row('Ab (1 bar)',            `${fl.Ab.toFixed(2)} mm²`, `∅${db.toFixed(0)} mm`);
-                html += row('n = ⌈As_req / Ab⌉',    `${fl.n_bars} bars`);
-                html += row('As_prov = n·Ab',        `${fl.As_prov.toFixed(2)} mm²`);
-                html += row("a = As_prov·fy / (0.85·f'c·b)", `${fl.a.toFixed(2)} mm`);
+                html += row('\\(\\rho_{use}\\)',          `${fl.rho_use.toFixed(6)}`);
+                html += row('\\(A_{s,req} = \\rho \\cdot b \\cdot d\\)',  `${fl.As_req.toFixed(2)} mm²`);
+                html += row('\\(A_b\\) (1 bar)',          `${fl.Ab.toFixed(2)} mm²`, `\\(\\varnothing\\,${db.toFixed(0)}\\) mm`);
+                html += row('\\(n = \\lceil A_{s,req} / A_b \\rceil\\)',  `${fl.n_bars} bars`);
+                html += row('\\(A_{s,prov} = n \\cdot A_b\\)',            `${fl.As_prov.toFixed(2)} mm²`);
+                html += row('\\(a = \\dfrac{A_{s,prov}\\,f_y}{0.85\\,f\'_c\\,b}\\)', `${fl.a.toFixed(2)} mm`);
                 if (fl.Sc !== null) {
-                    html += row('Sc (bar spacing) = (b − 2c − 2∅s − n∅) / (n − 1)',
+                    html += row('\\(S_c = \\dfrac{b - 2c_c - 2\\varnothing_s - n\\varnothing}{n - 1}\\)',
                                `${fl.Sc.toFixed(1)} mm`,
-                               `min = ${fl.Sc_min.toFixed(0)} mm — ${fl.Sc_ok ? '✓' : '✗ too tight, add a layer'}`,
+                               `\\(S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ${fl.Sc_ok ? '✓' : '✗ too tight, add a layer'}`,
                                fl.Sc_ok ? 'ok' : 'fail');
                 }
-                html += row('φMn = φ·As·fy·(d − a/2)',
+                html += row('\\(\\phi M_n = \\phi A_s f_y \\left(d - \\tfrac{a}{2}\\right)\\)',
                            `${fl.capacity_ok ? '✓' : '✗'} ${fl.phi_Mn_kNm.toFixed(3)} kN·m`,
-                           `${fl.capacity_ok ? '≥' : '<'} Mu = ${fl.Mu_kNm.toFixed(3)} kN·m`,
+                           `${fl.capacity_ok ? '≥' : '<'} \\(M_u = ${fl.Mu_kNm.toFixed(3)}\\) kN·m`,
                            fl.capacity_ok ? 'ok' : 'fail');
 
                 html += (fl.capacity_ok)
-                    ? `<div class="bd-alert bd-alert-ok">✓ <strong>SRRB</strong> — use <strong>${fl.n_bars} — ∅${db.toFixed(0)} mm</strong> bars (As<sub>prov</sub> = ${fl.As_prov.toFixed(0)} mm²&nbsp;|&nbsp; φMn = ${fl.phi_Mn_kNm.toFixed(2)} kN·m)</div>`
+                    ? `<div class="bd-alert bd-alert-ok">✓ <strong>SRRB</strong> — use <strong>${fl.n_bars} – ∅${db.toFixed(0)} mm</strong> bars (\\(A_{s,prov}\\) = ${fl.As_prov.toFixed(0)} mm² &nbsp;|&nbsp; \\(\\phi M_n\\) = ${fl.phi_Mn_kNm.toFixed(2)} kN·m)</div>`
                     : `<div class="bd-alert bd-alert-fail">✗ Flexural capacity insufficient — increase section.</div>`;
             }
 
-            // ── DRRB PATH ─────────────────────────────────────────────────
+            // Step 4–6 — DRRB path
             if (fl.isDRRB) {
                 if (fl.error) {
                     html += `<div class="bd-alert bd-alert-fail">${fl.error}</div>`;
                 } else {
-                    html += sectionHeader('Step 4 — DRRB: tension steel pair A_s1 + A_s2');
-                    html += row('A_s1 = ρ_max·b·d',                 `${fl.As1.toFixed(2)} mm²`,    'tension steel paired with Mn_max');
-                    html += row('Mn_resid = Mu/φ − Mn_max',         `${fl.Mn_resid_kNm.toFixed(3)} kN·m`, 'residual moment to be carried by the couple');
-                    html += row("A_s2 = Mn_resid / (fy·(d − d'))",  `${fl.As2.toFixed(2)} mm²`,    "second tension layer paired with A_s'");
-                    html += row('A_s,total = A_s1 + A_s2',          `${fl.As_total.toFixed(2)} mm²`);
+                    html += sectionHeader('Step 4 — DRRB: tension steel pair \\(A_{s1} + A_{s2}\\)');
+                    html += row('\\(A_{s1} = \\rho_{\\max} \\cdot b \\cdot d\\)',
+                               `${fl.As1.toFixed(2)} mm²`,
+                               'tension steel paired with \\(M_{n,\\max}\\)');
+                    html += row('\\(M_{n,resid} = \\dfrac{M_u}{\\phi} - M_{n,\\max}\\)',
+                               `${fl.Mn_resid_kNm.toFixed(3)} kN·m`,
+                               'residual moment carried by the couple');
+                    html += row('\\(A_{s2} = \\dfrac{M_{n,resid}}{f_y\\,(d - d\')}\\)',
+                               `${fl.As2.toFixed(2)} mm²`,
+                               'second tension layer paired with \\(A\'_s\\)');
+                    html += row('\\(A_{s,total} = A_{s1} + A_{s2}\\)',
+                               `${fl.As_total.toFixed(2)} mm²`);
 
-                    html += sectionHeader("Step 5 — Compression steel A_s' (check f_s')");
-                    html += row("d' (compression-bar depth)",       `${fl.d_prime.toFixed(1)} mm`);
-                    html += row('c = a_max / β₁',                   `${fl.c_drrb.toFixed(2)} mm`, 'neutral-axis depth at ρ_max');
-                    html += row("ε_s' = 0.003·(c − d')/c",          `${fl.eps_sp.toFixed(6)}`);
-                    html += row("f_s'_unc = ε_s'·Es",               `${fl.fs_p_unc.toFixed(2)} MPa`, 'Es = 200 000 MPa');
-                    html += row("f_s' check vs fy",
-                               fl.fs_yields ? `f_s'_unc ≥ fy → use f_s' = fy = ${fyl.toFixed(0)} MPa` :
-                                               `f_s'_unc < fy → A_s' must be scaled up by fy/f_s'`,
+                    html += sectionHeader('Step 5 — Compression steel \\(A\'_s\\) (check \\(f\'_s\\))');
+                    html += row('\\(d\'\\) (compression-bar depth)', `${fl.d_prime.toFixed(1)} mm`);
+                    html += row('\\(c = \\dfrac{a_{\\max}}{\\beta_1}\\)',
+                               `${fl.c_drrb.toFixed(2)} mm`,
+                               'neutral-axis depth at \\(\\rho_{\\max}\\)');
+                    html += row('\\(\\varepsilon\'_s = 0.003 \\cdot \\dfrac{c - d\'}{c}\\)',
+                               `${fl.eps_sp.toFixed(6)}`);
+                    html += row('\\(f\'_{s,unc} = \\varepsilon\'_s \\cdot E_s\\)',
+                               `${fl.fs_p_unc.toFixed(2)} MPa`,
+                               '\\(E_s = 200\\,000\\) MPa');
+                    html += row('Yield check: \\(f\'_{s,unc}\\) vs \\(f_y\\)',
+                               fl.fs_yields
+                                 ? `\\(f\'_{s,unc} \\ge f_y\\) → use \\(f\'_s = f_y = ${fyl.toFixed(0)}\\) MPa`
+                                 : `\\(f\'_{s,unc} < f_y\\) → scale \\(A\'_s\\) by \\(f_y / f\'_s\\)`,
                                '', fl.fs_yields ? 'ok' : 'fail');
-                    html += row("f_s' (used)",                       `${fl.fs_p.toFixed(2)} MPa`);
-                    html += row("A_s'_req = A_s2"+(fl.fs_yields ? "" : " · fy/f_s'"),
-                                                                     `${fl.As_p_req.toFixed(2)} mm²`);
+                    html += row('\\(f\'_s\\) (used)', `${fl.fs_p.toFixed(2)} MPa`);
+                    html += row(
+                        fl.fs_yields
+                          ? '\\(A\'_{s,req} = A_{s2}\\)'
+                          : '\\(A\'_{s,req} = A_{s2} \\cdot \\dfrac{f_y}{f\'_s}\\)',
+                        `${fl.As_p_req.toFixed(2)} mm²`);
 
                     html += sectionHeader('Step 6 — Bar counts & capacity verification');
-                    html += row('Ab (tension, ∅)',                  `${fl.Ab.toFixed(2)} mm²`,    `∅${db.toFixed(0)} mm`);
-                    html += row("Ab' (compression, ∅')",            `${fl.Ab_compr.toFixed(2)} mm²`, `∅${(dbC || db).toFixed(0)} mm`);
-                    html += row('n tension = ⌈A_s,total / Ab⌉',    `${fl.n_tension} bars`);
-                    html += row("n compr. = ⌈A_s'_req / Ab'⌉",     `${fl.n_compression} bars`);
-                    html += row('As_prov_tension',                  `${fl.As_prov_t.toFixed(2)} mm²`);
-                    html += row("As_prov_compr.",                   `${fl.As_prov_c.toFixed(2)} mm²`);
-                    html += row("a = (As·fy − A_s'·f_s') / (0.85·f'c·b)", `${fl.a.toFixed(2)} mm`, 'force equilibrium with provided steel');
+                    html += row('\\(A_b\\) (tension)',  `${fl.Ab.toFixed(2)} mm²`, `\\(\\varnothing\\,${db.toFixed(0)}\\) mm`);
+                    html += row('\\(A\'_b\\) (compression)', `${fl.Ab_compr.toFixed(2)} mm²`, `\\(\\varnothing\'\\,${(dbC || db).toFixed(0)}\\) mm`);
+                    html += row('\\(n_{tension} = \\lceil A_{s,total} / A_b \\rceil\\)', `${fl.n_tension} bars`);
+                    html += row('\\(n_{compr.} = \\lceil A\'_{s,req} / A\'_b \\rceil\\)', `${fl.n_compression} bars`);
+                    html += row('\\(A_{s,prov}\\) (tension)',     `${fl.As_prov_t.toFixed(2)} mm²`);
+                    html += row('\\(A\'_{s,prov}\\) (compression)', `${fl.As_prov_c.toFixed(2)} mm²`);
+                    html += row('\\(a = \\dfrac{A_s f_y - A\'_s f\'_s}{0.85\\,f\'_c\\,b}\\)',
+                               `${fl.a.toFixed(2)} mm`,
+                               'force equilibrium with provided steel');
                     if (fl.Sc_t !== null) {
-                        html += row('Sc tension',
+                        html += row('\\(S_c\\) (tension)',
                                    `${fl.Sc_t.toFixed(1)} mm`,
-                                   `min = ${fl.Sc_min.toFixed(0)} mm — ${fl.Sc_t_ok ? '✓' : '✗ too tight'}`,
+                                   `\\(S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ${fl.Sc_t_ok ? '✓' : '✗ too tight'}`,
                                    fl.Sc_t_ok ? 'ok' : 'fail');
                     }
                     if (fl.Sc_c !== null) {
-                        html += row('Sc compression',
+                        html += row('\\(S\'_c\\) (compression)',
                                    `${fl.Sc_c.toFixed(1)} mm`,
-                                   `min = ${fl.Sc_min.toFixed(0)} mm — ${fl.Sc_c_ok ? '✓' : '✗ too tight'}`,
+                                   `\\(S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ${fl.Sc_c_ok ? '✓' : '✗ too tight'}`,
                                    fl.Sc_c_ok ? 'ok' : 'fail');
                     }
-                    html += row("φMn = φ·[0.85f'c·a·b·(d−a/2) + A_s'·f_s'·(d−d')]",
+                    html += row('\\(\\phi M_n = \\phi \\left[0.85 f\'_c\\,a\\,b\\,(d - \\tfrac{a}{2}) + A\'_s f\'_s (d - d\')\\right]\\)',
                                `${fl.capacity_ok ? '✓' : '✗'} ${fl.phi_Mn_kNm.toFixed(3)} kN·m`,
-                               `${fl.capacity_ok ? '≥' : '<'} Mu = ${fl.Mu_kNm.toFixed(3)} kN·m`,
+                               `${fl.capacity_ok ? '≥' : '<'} \\(M_u = ${fl.Mu_kNm.toFixed(3)}\\) kN·m`,
                                fl.capacity_ok ? 'ok' : 'fail');
 
                     html += (fl.capacity_ok)
-                        ? `<div class="bd-alert bd-alert-ok">✓ <strong>DRRB</strong> — use <strong>${fl.n_tension} — ∅${db.toFixed(0)} mm tension</strong> bars and <strong>${fl.n_compression} — ∅${(dbC||db).toFixed(0)} mm compression</strong> bars (φMn = ${fl.phi_Mn_kNm.toFixed(2)} kN·m)</div>`
+                        ? `<div class="bd-alert bd-alert-ok">✓ <strong>DRRB</strong> — use <strong>${fl.n_tension} – ∅${db.toFixed(0)} mm tension</strong> and <strong>${fl.n_compression} – ∅${(dbC||db).toFixed(0)} mm compression</strong> bars (\\(\\phi M_n\\) = ${fl.phi_Mn_kNm.toFixed(2)} kN·m)</div>`
                         : `<div class="bd-alert bd-alert-fail">✗ DRRB capacity insufficient — increase section.</div>`;
                 }
             }
@@ -2180,35 +2254,44 @@
         // ── SHEAR / STIRRUP SCHEDULE OUTPUT ───────────────────────────────
         const shr = document.getElementById('rc-shear');
         let html = '';
+
+        // Step 1 — Demand at the critical section
         html += sectionHeader('Step 1 — Demand at the critical section');
-        html += row('d (effective depth)',          `${sh.d.toFixed(1)} mm`);
-        html += row('φ (shear)',                    `${sh.phi_shear}`);
-        html += row('λ',                            `${lam}`, lam === 1 ? 'Normal weight' : lam === 0.85 ? 'Sand-LW' : 'All-LW');
-        html += row('V at support',                 `${sh.V_support_kN.toFixed(3)} kN`,    'shear at face of support');
+        html += row('\\(d\\) (effective depth)',     `${sh.d.toFixed(1)} mm`);
+        html += row('\\(\\phi\\) (shear)',           `${sh.phi_shear}`);
+        html += row('\\(\\lambda\\)',                `${lam}`, lam === 1 ? 'Normal weight' : lam === 0.85 ? 'Sand-LW' : 'All-LW');
+        html += row('\\(V\\) at support',            `${sh.V_support_kN.toFixed(3)} kN`, 'shear at face of support');
         if (sh.L_span_m > 0) {
-            html += row('Vu at d',
+            html += row('\\(V_u\\) at \\(d\\)',
                        `${sh.Vu_kN.toFixed(3)} kN`,
-                       `V_support − (V_support·d / (L/2)) = ${sh.V_support_kN.toFixed(2)} − (${sh.V_support_kN.toFixed(2)}·${sh.d.toFixed(0)}/${(sh.L_span_m*500).toFixed(0)})`);
+                       `\\(V_{support} - \\dfrac{V_{support}\\,d}{L/2} = ${sh.V_support_kN.toFixed(2)} - \\dfrac{${sh.V_support_kN.toFixed(2)} \\cdot ${sh.d.toFixed(0)}}{${(sh.L_span_m*500).toFixed(0)}}\\)`);
         } else {
-            html += row('Vu',                       `${sh.Vu_kN.toFixed(3)} kN`, '(no span given → using V at support)');
+            html += row('\\(V_u\\)', `${sh.Vu_kN.toFixed(3)} kN`, '(no span given → using \\(V\\) at support)');
         }
 
+        // Step 2 — Concrete shear capacity
         html += sectionHeader('Step 2 — Concrete shear capacity');
-        html += row("Vc = 0.17·λ·√f'c·b·d",         `${sh.Vc_kN.toFixed(3)} kN`, 'NSCP 2015 §422.5.5.1');
-        html += row('φVc',                          `${sh.phiVc.toFixed(3)} kN`);
-        html += row('0.5·φVc',                      `${sh.phiVc_half.toFixed(3)} kN`);
-        html += row('Av (stirrup area)',            `${sh.Av_mm2.toFixed(2)} mm²`, `${legs}-leg ∅${ds.toFixed(0)} mm`);
+        html += row('\\(V_c = 0.17\\,\\lambda\\,\\sqrt{f\'_c}\\,b\\,d\\)',
+                   `${sh.Vc_kN.toFixed(3)} kN`, 'NSCP 2015 §422.5.5.1');
+        html += row('\\(\\phi V_c\\)',          `${sh.phiVc.toFixed(3)} kN`);
+        html += row('\\(\\tfrac{1}{2}\\,\\phi V_c\\)', `${sh.phiVc_half.toFixed(3)} kN`);
+        html += row('\\(A_v\\) (stirrup area)',
+                   `${sh.Av_mm2.toFixed(2)} mm²`,
+                   `${legs}-leg \\(\\varnothing\\,${ds.toFixed(0)}\\) mm`);
 
-        html += sectionHeader('Step 3 — Required Vs and limits');
+        // Step 3 — Required Vs and limits
+        html += sectionHeader('Step 3 — Required \\(V_s\\) and limits');
         let cond;
-        if      (sh.mode === 'none')      cond = `Vu ≤ 0.5·φVc → stirrups NOT required by analysis`;
-        else if (sh.mode === 'minimum')   cond = `0.5·φVc < Vu ≤ φVc → minimum stirrups required`;
-        else if (sh.mode === 'designed')  cond = `Vu > φVc → design stirrups`;
+        if      (sh.mode === 'none')      cond = '\\(V_u \\le \\tfrac{1}{2}\\phi V_c\\) → stirrups NOT required by analysis';
+        else if (sh.mode === 'minimum')   cond = '\\(\\tfrac{1}{2}\\phi V_c < V_u \\le \\phi V_c\\) → minimum stirrups required';
+        else if (sh.mode === 'designed')  cond = '\\(V_u > \\phi V_c\\) → design stirrups';
         else                              cond = sh.mode;
         html += row('Condition', cond, '', sh.mode === 'none' || sh.mode === 'minimum' ? 'ok' : '');
-        html += row('Vs_req = Vu/φ − Vc',           `${sh.Vs_kN.toFixed(3)} kN`);
-        html += row("Vs_lim1 (0.33·√f'c·b·d)",      `${sh.Vs_lim1.toFixed(2)} kN`, 'governs max spacing');
-        html += row("Vs_lim2 (0.66·√f'c·b·d)",      `${sh.Vs_lim2.toFixed(2)} kN`, 'section too small if Vs > Vs_lim2');
+        html += row('\\(V_{s,req} = \\dfrac{V_u}{\\phi} - V_c\\)', `${sh.Vs_kN.toFixed(3)} kN`);
+        html += row('\\(V_{s,lim1} = 0.33\\,\\sqrt{f\'_c}\\,b\\,d\\)',
+                   `${sh.Vs_lim1.toFixed(2)} kN`, 'governs max spacing');
+        html += row('\\(V_{s,lim2} = 0.66\\,\\sqrt{f\'_c}\\,b\\,d\\)',
+                   `${sh.Vs_lim2.toFixed(2)} kN`, 'section too small if \\(V_s > V_{s,lim2}\\)');
         if (sh.mode === 'overloaded') {
             html += `<div class="bd-alert bd-alert-fail">${sh.error}</div>`;
             shr.innerHTML = html;
@@ -2217,52 +2300,67 @@
             return;
         }
 
+        // Step 4 — Spacing
         html += sectionHeader('Step 4 — Spacing');
-        html += row("Av/s_min",                     `${sh.Avs_min.toFixed(4)} mm²/mm`, "max(0.062·√f'c·b/fyt, 0.35·b/fyt) — §409.6.3.3");
+        html += row('\\(A_v / s_{\\min}\\)',
+                   `${sh.Avs_min.toFixed(4)} mm²/mm`,
+                   '\\(\\max\\!\\left(\\dfrac{0.062\\sqrt{f\'_c}\\,b}{f_{yt}},\\;\\dfrac{0.35\\,b}{f_{yt}}\\right)\\) — §409.6.3.3');
         if (sh.mode === 'designed') {
-            html += row("s_calc = Av·fyt·d / Vs",   `${sh.s_calc.toFixed(1)} mm`);
+            html += row('\\(s_{calc} = \\dfrac{A_v\\,f_{yt}\\,d}{V_s}\\)',
+                       `${sh.s_calc.toFixed(1)} mm`);
         }
-        html += row("Spacing rule", sh.spac_note);
-        html += row("S_max (code)",                  `${sh.Smax_code.toFixed(1)} mm`);
-        html += row("S_max floored to 25 mm",       `${sh.Smax_floor.toFixed(0)} mm`);
-        html += row("S required",                    `${(sh.S_required || sh.Smax_code).toFixed(1)} mm`, "min(s_calc, S_max, Av/(Av/s_min))");
-        html += row("S floored to 25 mm",           `${sh.S_floor.toFixed(0)} mm`);
-        html += row("S governing (50 mm floor)",    `<strong>${sh.S_gov.toFixed(0)} mm</strong>`);
+        html += row('Spacing rule', sh.spac_note);
+        html += row('\\(S_{\\max}\\) (code)',            `${sh.Smax_code.toFixed(1)} mm`);
+        html += row('\\(S_{\\max}\\) floored to 25 mm', `${sh.Smax_floor.toFixed(0)} mm`);
+        html += row('\\(S_{required}\\)',
+                   `${(sh.S_required || sh.Smax_code).toFixed(1)} mm`,
+                   '\\(\\min\\!\\left(s_{calc},\\;S_{\\max},\\;\\dfrac{A_v}{A_v/s_{\\min}}\\right)\\)');
+        html += row('\\(S\\) floored to 25 mm',         `${sh.S_floor.toFixed(0)} mm`);
+        html += row('\\(S_{gov}\\) (50 mm floor)',      `<strong>${sh.S_gov.toFixed(0)} mm</strong>`);
 
         if (sh.mode === 'designed') {
-            html += row("Vs_prov = Av·fyt·d / S_gov",`${sh.Vs_prov_kN.toFixed(3)} kN`);
-            html += row("φVn = φ(Vc + Vs_prov)",
+            html += row('\\(V_{s,prov} = \\dfrac{A_v\\,f_{yt}\\,d}{S_{gov}}\\)', `${sh.Vs_prov_kN.toFixed(3)} kN`);
+            html += row('\\(\\phi V_n = \\phi (V_c + V_{s,prov})\\)',
                        `${sh.capacity_ok ? '✓' : '✗'} ${sh.phiVn_kN.toFixed(3)} kN`,
-                       `${sh.capacity_ok ? '≥' : '<'} Vu = ${sh.Vu_kN.toFixed(3)} kN`,
+                       `${sh.capacity_ok ? '≥' : '<'} \\(V_u = ${sh.Vu_kN.toFixed(3)}\\) kN`,
                        sh.capacity_ok ? 'ok' : 'fail');
         }
 
-        // ── Stirrup schedule (layout) ─────────────────────────────────────
+        // Step 5 — Stirrup schedule (layout)
         if (sh.layout) {
             const lo = sh.layout;
             html += sectionHeader('Step 5 — Stirrup Schedule (each end of beam)');
-            html += row("L₂ (region needing stirrups)",
+            html += row('\\(L_2\\) (region needing stirrups)',
                        `${(lo.L2_mm / 1000).toFixed(3)} m  (${lo.L2_mm.toFixed(0)} mm)`,
-                       "length where Vu(x) > 0.5·φVc");
-            html += row("n at S_max  (computed)",   `${lo.n_at_Smax_calc.toFixed(2)}`,  `L₂ / S_max_floor = ${lo.L2_mm.toFixed(0)} / ${lo.Smax_floor.toFixed(0)}`);
-            html += row("n at S_max  (round up)",   `${lo.n_at_Smax} stirrups`);
-            html += row("n at S_gov  (computed)",   `${lo.n_at_S_calc.toFixed(2)}`,     `(L₂ − n_Smax·S_max_floor) / S_gov`);
-            html += row("n at S_gov  (round up)",   `${lo.n_at_S} stirrups`);
-            html += row("Total layout length",      `<strong>${lo.total_length_mm.toFixed(0)} mm</strong>`,
-                                                     `${lo.n_at_Smax} × ${lo.Smax_floor.toFixed(0)} + ${lo.n_at_S} × ${lo.S_gov.toFixed(0)}`);
+                       'length where \\(V_u(x) > \\tfrac{1}{2}\\phi V_c\\)');
+            html += row('\\(n\\) at \\(S_{\\max}\\) (computed)',
+                       `${lo.n_at_Smax_calc.toFixed(2)}`,
+                       `\\(L_2 / S_{\\max,floor} = ${lo.L2_mm.toFixed(0)} / ${lo.Smax_floor.toFixed(0)}\\)`);
+            html += row('\\(n\\) at \\(S_{\\max}\\) (round up)', `${lo.n_at_Smax} stirrups`);
+            html += row('\\(n\\) at \\(S_{gov}\\) (computed)',
+                       `${lo.n_at_S_calc.toFixed(2)}`,
+                       '\\(\\dfrac{L_2 - n_{S_{\\max}}\\,S_{\\max,floor}}{S_{gov}}\\)');
+            html += row('\\(n\\) at \\(S_{gov}\\) (round up)', `${lo.n_at_S} stirrups`);
+            html += row('Total layout length',
+                       `<strong>${lo.total_length_mm.toFixed(0)} mm</strong>`,
+                       `\\(${lo.n_at_Smax} \\times ${lo.Smax_floor.toFixed(0)} + ${lo.n_at_S} \\times ${lo.S_gov.toFixed(0)}\\)`);
         }
 
         if (sh.mode === 'none') {
-            html += `<div class="bd-alert bd-alert-warn">${sh.note}</div>`;
+            html += `<div class="bd-alert bd-alert-warn">${sh.note || 'Stirrups not required by analysis.'}</div>`;
         } else {
             const modeLbl = sh.mode === 'minimum' ? 'minimum-stirrup region' : 'designed-stirrup region';
             html += `<div class="bd-alert bd-alert-ok">
                 ✓ Use <strong>${legs}-leg ∅${ds.toFixed(0)} mm stirrups</strong> &nbsp;|&nbsp;
-                <strong>S_gov = ${sh.S_gov.toFixed(0)} mm</strong> near support, transitioning to
-                <strong>S_max = ${sh.Smax_floor.toFixed(0)} mm</strong> in the middle of the L₂ region${sh.layout ? `&nbsp;(total layout ${sh.layout.total_length_mm.toFixed(0)} mm per end)` : ''}
+                <strong>\\(S_{gov}\\) = ${sh.S_gov.toFixed(0)} mm</strong> near support, transitioning to
+                <strong>\\(S_{\\max}\\) = ${sh.Smax_floor.toFixed(0)} mm</strong> in the middle of the \\(L_2\\) region${sh.layout ? `&nbsp;(total layout ${sh.layout.total_length_mm.toFixed(0)} mm per end)` : ''}
                 <br><small style="color:#5c6773;">${modeLbl}</small>
             </div>`;
-            if (sh.mode === 'minimum') html += `<div class="bd-alert bd-alert-info">${sh.note}</div>`;
+            // Only emit the explanatory info alert if a note actually exists
+            // (the 'minimum' branch in designShear didn't set one — silently skip).
+            if (sh.mode === 'minimum' && sh.note) {
+                html += `<div class="bd-alert bd-alert-info">${sh.note}</div>`;
+            }
         }
 
         shr.innerHTML = html;
