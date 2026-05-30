@@ -532,24 +532,27 @@
         <section class="bd-panel" data-panel="rc">
 
             <div class="bd-section">
-                <div class="bd-section-title">Source of Demands</div>
+                <div class="bd-section-title">Critical Sections</div>
                 <div class="bd-grid">
                     <div class="bd-field">
                         <label for="rc-source">Use values from</label>
                         <select id="rc-source">
-                            <option value="analysis">Beam Analysis — governing combination</option>
+                            <option value="analysis">Beam Analysis — auto-detect</option>
                             <option value="manual" selected>Manual entry</option>
                         </select>
                     </div>
-                    <div class="bd-field">
-                        <label for="rc-Mu">\(M_u\) (kN·m)</label>
-                        <input type="number" id="rc-Mu" value="150" step="1" inputmode="decimal">
-                    </div>
-                    <div class="bd-field">
-                        <label for="rc-Vu">\(V_u\) (kN)</label>
-                        <input type="number" id="rc-Vu" value="100" step="1" inputmode="decimal">
-                    </div>
                 </div>
+                <div class="bd-add-row" style="margin-top:12px;">
+                    <button type="button" class="bd-add-btn" id="rc-add-section">+ Add Section</button>
+                    <button type="button" class="bd-add-btn" id="rc-auto-detect">⚡ Auto-detect from analysis</button>
+                </div>
+                <div id="rc-sections-list">
+                    <div class="bd-empty">No sections yet — add one or auto-detect from the Beam Analysis tab.</div>
+                </div>
+                <p class="bd-hint" style="margin-top:8px;">
+                    Each section is designed independently using the section &amp; material below.
+                    Use negative \(M_u\) for hogging (top tension at supports); positive for sagging (bottom tension at midspan).
+                </p>
             </div>
 
             <div class="bd-section">
@@ -705,17 +708,10 @@
                 </div>
             </details>
 
-            <button type="button" class="bd-calc-btn" id="rc-calc-btn">Design Section</button>
+            <button type="button" class="bd-calc-btn" id="rc-calc-btn">Design All Sections</button>
 
             <section id="rc-results" style="display:none;">
-                <div class="bd-section">
-                    <div class="bd-section-title">Flexure Design <small>NSCP 2015 §406</small></div>
-                    <div id="rc-flexure"></div>
-                </div>
-                <div class="bd-section">
-                    <div class="bd-section-title">Shear Design <small>NSCP 2015 §422</small></div>
-                    <div id="rc-shear"></div>
-                </div>
+                <div id="rc-results-list"></div>
             </section>
         </section>
     </div>
@@ -2047,256 +2043,336 @@
         </div>`;
     }
 
-    document.getElementById('rc-source').addEventListener('change', () => {
-        const src = document.getElementById('rc-source').value;
-        if (src === 'analysis') {
-            if (!state.lastResults) {
-                alert('Run a Beam Analysis first, then switch back.');
-                document.getElementById('rc-source').value = 'manual';
-                return;
-            }
-            const gov = state.lastResults.perCombo[state.lastResults.govIdx];
-            if (!gov.result) { alert('Governing combination did not solve.'); return; }
-            document.getElementById('rc-Mu').value = gov.result.Mmax.toFixed(3);
-            document.getElementById('rc-Vu').value = gov.result.Vmax.toFixed(3);
-            document.getElementById('rc-Mu').readOnly = true;
-            document.getElementById('rc-Vu').readOnly = true;
-        } else {
-            document.getElementById('rc-Mu').readOnly = false;
-            document.getElementById('rc-Vu').readOnly = false;
-        }
-    });
-
     function sectionHeader(title) {
         return `<div class="bd-step-banner">${title}</div>`;
     }
 
-    document.getElementById('rc-calc-btn').addEventListener('click', () => {
-      try {
-        const Mu   = parseFloat(document.getElementById('rc-Mu').value);
-        const Vu   = parseFloat(document.getElementById('rc-Vu').value);
-        const b    = parseFloat(document.getElementById('rc-b').value);
-        const h    = parseFloat(document.getElementById('rc-h').value);
-        const fc   = parseFloat(document.getElementById('rc-fc').value);
-        const fyl  = parseFloat(document.getElementById('rc-fyl').value);
-        const fyt  = parseFloat(document.getElementById('rc-fyt').value);
-        const db   = parseFloat(document.getElementById('rc-db').value);
-        const dbC  = parseFloat(document.getElementById('rc-db-c').value) || db;
-        const dPr  = parseFloat(document.getElementById('rc-d-prime').value);
-        const ds   = parseFloat(document.getElementById('rc-ds').value);
-        const cov  = parseFloat(document.getElementById('rc-cover').value);
-        const lam  = parseFloat(document.getElementById('rc-lambda').value);
-        const legs = parseInt(document.getElementById('rc-legs').value);
-        const Lspan = parseFloat(document.getElementById('rc-L').value);
+    // ══════════════════════════════════════════════════════════════════════
+    //  Critical-section list — state and rendering
+    // ══════════════════════════════════════════════════════════════════════
+    state.rcSections = state.rcSections || [{ id: 1001, label: 'Section 1', x: null, Mu: 150, Vu: 100 }];
+    state.rcNextId   = state.rcNextId   || 1002;
 
-        // Validate required inputs before running the calculators — designShear()
-        // and designFlexure() return NaN-laden results if any of these are bad,
-        // which made the click look like a no-op on the deployed page.
-        const need = { Mu, Vu, b, h, fc, fyl, fyt, db, ds, cov, lam, legs };
-        const bad = Object.entries(need)
-            .filter(([k, v]) => !Number.isFinite(v))
-            .map(([k]) => k);
-        if (bad.length) {
-            const errBox = document.getElementById('rc-flexure');
-            const msg = `Cannot run the section design — these inputs are blank or invalid: ${bad.join(', ')}. Please fill them in and click Design Section again.`;
-            errBox.innerHTML = `<div class="bd-alert bd-alert-fail">${msg}</div>`;
-            document.getElementById('rc-shear').innerHTML = '';
-            document.getElementById('rc-results').style.display = '';
+    function rcRenderSections() {
+        const div = document.getElementById('rc-sections-list');
+        if (!div) return;
+        if (state.rcSections.length === 0) {
+            div.innerHTML = `<div class="bd-empty">No sections yet — add one or auto-detect from the Beam Analysis tab.</div>`;
             return;
         }
+        div.innerHTML = state.rcSections.map((s, i) => `
+            <div class="bd-item" data-rcid="${s.id}">
+                <div class="bd-item-head">
+                    <span class="bd-item-tag">${i + 1}. ${s.label || `Section ${i + 1}`}</span>
+                    <button type="button" class="bd-remove-btn" data-rc-remove="${s.id}">✕</button>
+                </div>
+                <div class="bd-grid">
+                    <div class="bd-field">
+                        <label>Label</label>
+                        <input type="text" data-rc-id="${s.id}" data-rc-key="label" value="${(s.label || '').replace(/"/g, '&quot;')}">
+                    </div>
+                    <div class="bd-field">
+                        <label>x (m) — optional</label>
+                        <input type="number" step="0.05" data-rc-id="${s.id}" data-rc-key="x" value="${s.x === null || s.x === undefined ? '' : s.x}" placeholder="location">
+                    </div>
+                    <div class="bd-field">
+                        <label>\\(M_u\\) (kN·m)</label>
+                        <input type="number" step="0.5" data-rc-id="${s.id}" data-rc-key="Mu" value="${s.Mu}">
+                    </div>
+                    <div class="bd-field">
+                        <label>\\(V_u\\) (kN)</label>
+                        <input type="number" step="0.5" data-rc-id="${s.id}" data-rc-key="Vu" value="${s.Vu}">
+                    </div>
+                </div>
+            </div>`).join('');
+        if (typeof renderMath === 'function') renderMath(div);
+    }
 
-        const fl = designFlexure(Mu, b, h, fc, fyl, db, ds, cov, dPr, dbC);
-        const sh = designShear(Vu, b, h, fc, fyt, ds, db, cov, lam, legs, Lspan);
+    // Wire add/edit/remove for the section list
+    document.getElementById('rc-add-section').addEventListener('click', () => {
+        const id = state.rcNextId++;
+        const n = state.rcSections.length + 1;
+        state.rcSections.push({ id, label: `Section ${n}`, x: null, Mu: 50, Vu: 30 });
+        rcRenderSections();
+    });
+    document.getElementById('rc-sections-list').addEventListener('input', e => {
+        const id = Number(e.target.dataset.rcId), key = e.target.dataset.rcKey;
+        if (!id || !key) return;
+        const s = state.rcSections.find(x => x.id === id);
+        if (!s) return;
+        if (key === 'label')        s.label = e.target.value;
+        else if (key === 'x')       s.x  = e.target.value === '' ? null : parseFloat(e.target.value);
+        else                        s[key] = parseFloat(e.target.value) || 0;
+    });
+    document.getElementById('rc-sections-list').addEventListener('click', e => {
+        const id = Number(e.target.dataset.rcRemove);
+        if (!id) return;
+        state.rcSections = state.rcSections.filter(x => x.id !== id);
+        rcRenderSections();
+    });
 
-        // ── FLEXURE OUTPUT ────────────────────────────────────────────────
-        const flx = document.getElementById('rc-flexure');
-        if (fl.error && fl.d === undefined) {
-            flx.innerHTML = `<div class="bd-alert bd-alert-fail">${fl.error}</div>`;
-        } else {
-            let html = '';
-            if (fl.error && !fl.capacity_ok && fl.As_total === undefined && fl.n_bars === undefined) {
-                html += `<div class="bd-alert bd-alert-fail">${fl.error}</div>`;
+    // ── Critical-section auto-detection from the governing FEM result ─────
+    function rcDetectCriticalSections() {
+        if (!state.lastResults) {
+            alert('Run a Beam Analysis on Tab 1 first — then come back and auto-detect.');
+            return [];
+        }
+        const { perCombo, govIdx } = state.lastResults;
+        const gov = perCombo[govIdx];
+        if (!gov || !gov.result) {
+            alert('Governing combination did not produce a valid solution.');
+            return [];
+        }
+        const { xs, V, M, reactions } = gov.result;
+        const out = [];
+
+        // Helper — find the index in xs closest to a given x (exclusive of duplicates)
+        const idxAt = (x, dir = 0) => {
+            let best = 0, bd = Infinity;
+            for (let i = 0; i < xs.length; i++) {
+                const d = Math.abs(xs[i] - x);
+                if (d < bd) { bd = d; best = i; }
             }
-            // Step 1 — section, materials, β₁
-            html += sectionHeader('Step 1 — Section, materials, β₁');
-            html += row('\\(h\\) (total depth)',          `${h.toFixed(0)} mm`);
-            html += row('\\(b\\) (width)',                `${b.toFixed(0)} mm`);
-            html += row('cover \\(c_c\\)',                `${cov.toFixed(0)} mm`,  'NSCP 2015 Table 420.6.1.3.1');
-            html += row('\\(d\\) (effective depth)',      `${fl.d.toFixed(1)} mm`, '\\(h - c_c - \\varnothing_s - \\varnothing_b/2\\)');
-            html += row('\\(\\phi\\) (flexure)',          `${fl.phi_flex}`);
-            html += row('\\(\\beta_1\\)',                 `${fl.beta1.toFixed(4)}`, 'NSCP 2015 §422.2.2.4.3');
-            html += row('\\(M_u\\)',                      `${fl.Mu_kNm.toFixed(3)} kN·m`);
-            html += row('\\(R_n = \\dfrac{M_u}{\\phi \\cdot b \\cdot d^2}\\)', `${fl.Rn.toFixed(4)} MPa`);
+            // dir = -1 → snap to the index just below, +1 → just above
+            if (dir < 0 && xs[best] > x && best > 0) best -= 1;
+            if (dir > 0 && xs[best] < x && best < xs.length - 1) best += 1;
+            return best;
+        };
 
-            // Step 2 — ρ limits + singly-reinforced ceiling
-            html += sectionHeader('Step 2 — ρ limits & singly-reinforced ceiling');
-            html += row('\\(\\rho_b\\) (balanced)',
-                       `${fl.rho_b.toFixed(6)}`,
-                       '\\(\\dfrac{0.85 \\beta_1 f\'_c}{f_y} \\cdot \\dfrac{600}{600 + f_y}\\) — §421.2.2');
-            html += row('\\(\\rho_{\\max}\\)',
-                       `${fl.rho_max.toFixed(6)}`,
-                       '\\(0.75\\,\\rho_b\\) — §406.3.3');
-            html += row('\\(\\rho_{\\min}\\)',
-                       `${fl.rho_min.toFixed(6)}`,
-                       '\\(\\max\\!\\left(\\dfrac{\\sqrt{f\'_c}}{4 f_y},\\;\\dfrac{1.4}{f_y}\\right)\\) — §406.3.1');
-            html += row('\\(A_{s,\\max} = \\rho_{\\max} \\cdot b \\cdot d\\)',
-                       `${fl.As_max.toFixed(2)} mm²`);
-            html += row('\\(a_{\\max} = \\dfrac{A_{s,\\max} \\, f_y}{0.85\\,f\'_c\\,b}\\)',
-                       `${fl.a_max.toFixed(2)} mm`);
-            html += row('\\(M_{n,\\max} = A_{s,\\max} \\, f_y \\left(d - \\tfrac{a_{\\max}}{2}\\right)\\)',
-                       `${fl.Mn_max_kNm.toFixed(3)} kN·m`,
-                       'singly-reinforced nominal ceiling');
-            html += row('\\(\\phi M_{n,\\max}\\)', `${fl.phiMn_max_kNm.toFixed(3)} kN·m`);
+        // Sort supports left-to-right
+        const supps = [...reactions].sort((a, b) => a.x - b.x);
 
-            // Step 3 — classification
-            html += sectionHeader('Step 3 — SRRB vs DRRB classification');
-            if (!fl.isDRRB) {
-                html += row('Compare \\(M_u\\) vs \\(\\phi M_{n,\\max}\\)',
-                           `${fl.Mu_kNm.toFixed(3)} ≤ ${fl.phiMn_max_kNm.toFixed(3)} kN·m`,
-                           '→ SRRB (Singly-Reinforced Rectangular Beam)',
-                           'ok');
-            } else {
-                html += row('Compare \\(M_u\\) vs \\(\\phi M_{n,\\max}\\)',
-                           `${fl.Mu_kNm.toFixed(3)} > ${fl.phiMn_max_kNm.toFixed(3)} kN·m`,
-                           '→ DRRB (Doubly-Reinforced — compression steel required)',
-                           'fail');
-            }
+        // 1) Each support → take M(x_support), V from just inside the span
+        supps.forEach((s, i) => {
+            const idx     = idxAt(s.x);
+            const idxLeft = idxAt(s.x, -1);
+            const idxRight= idxAt(s.x,  1);
+            // Use the larger absolute V on either side (shear can step at supports)
+            const Vleft  = Math.abs(V[idxLeft] || 0);
+            const Vright = Math.abs(V[idxRight] || 0);
+            const Vu = Math.max(Vleft, Vright);
+            const Mu = M[idx] || 0;
+            let label;
+            if (i === 0)               label = `Left support (x = ${s.x.toFixed(2)} m)`;
+            else if (i === supps.length - 1) label = `Right support (x = ${s.x.toFixed(2)} m)`;
+            else                       label = `Interior support ${i} (x = ${s.x.toFixed(2)} m)`;
+            // Skip end supports where M ≈ 0 AND the support is a simple pin/roller
+            // (Mu is approximately zero; only Vu matters there — but we still
+            // include them so the user sees shear-only sections.)
+            out.push({
+                id: state.rcNextId++,
+                label, x: s.x,
+                Mu: Math.round(Mu * 1000) / 1000,
+                Vu: Math.round(Vu * 1000) / 1000
+            });
+        });
 
-            // Step 4 — SRRB path
-            if (!fl.isDRRB) {
-                html += sectionHeader('Step 4 — SRRB: solve ρ, As, bars, capacity');
-                html += row('\\(disc = 1 - \\dfrac{2 R_n}{0.85\\,f\'_c}\\)',
-                           `${(1 - 2 * fl.Rn / (0.85 * fc)).toFixed(6)}`);
-                html += row('\\(\\rho_{calc} = \\dfrac{0.85\\,f\'_c}{f_y}\\left(1 - \\sqrt{disc}\\right)\\)',
-                           `${fl.rho_calc.toFixed(6)}`);
-                fl.checks.forEach(c => { html += row('Check', c); });
-                html += row('\\(\\rho_{use}\\)',          `${fl.rho_use.toFixed(6)}`);
-                html += row('\\(A_{s,req} = \\rho \\cdot b \\cdot d\\)',  `${fl.As_req.toFixed(2)} mm²`);
-                html += row('\\(A_b\\) (1 bar)',          `${fl.Ab.toFixed(2)} mm²`, `\\(\\varnothing\\,${db.toFixed(0)}\\) mm`);
-                html += row('\\(n = \\lceil A_{s,req} / A_b \\rceil\\)',  `${fl.n_bars} bars`);
-                html += row('\\(A_{s,prov} = n \\cdot A_b\\)',            `${fl.As_prov.toFixed(2)} mm²`);
-                html += row('\\(a = \\dfrac{A_{s,prov}\\,f_y}{0.85\\,f\'_c\\,b}\\)', `${fl.a.toFixed(2)} mm`);
-                if (fl.Sc !== null) {
-                    html += row('\\(S_c = \\dfrac{b - 2c_c - 2\\varnothing_s - n\\varnothing}{n - 1}\\)',
-                               `${fl.Sc.toFixed(1)} mm`,
-                               `\\(S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ${fl.Sc_ok ? '✓' : '✗ too tight, add a layer'}`,
-                               fl.Sc_ok ? 'ok' : 'fail');
-                }
-                html += row('\\(\\phi M_n = \\phi A_s f_y \\left(d - \\tfrac{a}{2}\\right)\\)',
-                           `${fl.capacity_ok ? '✓' : '✗'} ${fl.phi_Mn_kNm.toFixed(3)} kN·m`,
-                           `${fl.capacity_ok ? '≥' : '<'} \\(M_u = ${fl.Mu_kNm.toFixed(3)}\\) kN·m`,
-                           fl.capacity_ok ? 'ok' : 'fail');
-
-                html += (fl.capacity_ok)
-                    ? `<div class="bd-alert bd-alert-ok">✓ <strong>SRRB</strong> — use <strong>${fl.n_bars} – ∅${db.toFixed(0)} mm</strong> bars (\\(A_{s,prov}\\) = ${fl.As_prov.toFixed(0)} mm² &nbsp;|&nbsp; \\(\\phi M_n\\) = ${fl.phi_Mn_kNm.toFixed(2)} kN·m)</div>`
-                    : `<div class="bd-alert bd-alert-fail">✗ Flexural capacity insufficient — increase section.</div>`;
-            }
-
-            // Step 4–6 — DRRB path
-            if (fl.isDRRB) {
-                if (fl.error) {
-                    html += `<div class="bd-alert bd-alert-fail">${fl.error}</div>`;
-                } else {
-                    html += sectionHeader('Step 4 — DRRB: tension steel pair \\(A_{s1} + A_{s2}\\)');
-                    html += row('\\(A_{s1} = \\rho_{\\max} \\cdot b \\cdot d\\)',
-                               `${fl.As1.toFixed(2)} mm²`,
-                               'tension steel paired with \\(M_{n,\\max}\\)');
-                    html += row('\\(M_{n,resid} = \\dfrac{M_u}{\\phi} - M_{n,\\max}\\)',
-                               `${fl.Mn_resid_kNm.toFixed(3)} kN·m`,
-                               'residual moment carried by the couple');
-                    html += row('\\(A_{s2} = \\dfrac{M_{n,resid}}{f_y\\,(d - d\')}\\)',
-                               `${fl.As2.toFixed(2)} mm²`,
-                               'second tension layer paired with \\(A\'_s\\)');
-                    html += row('\\(A_{s,total} = A_{s1} + A_{s2}\\)',
-                               `${fl.As_total.toFixed(2)} mm²`);
-
-                    html += sectionHeader('Step 5 — Compression steel \\(A\'_s\\) (check \\(f\'_s\\))');
-                    html += row('\\(d\'\\) (compression-bar depth)', `${fl.d_prime.toFixed(1)} mm`);
-                    html += row('\\(c = \\dfrac{a_{\\max}}{\\beta_1}\\)',
-                               `${fl.c_drrb.toFixed(2)} mm`,
-                               'neutral-axis depth at \\(\\rho_{\\max}\\)');
-                    html += row('\\(\\varepsilon\'_s = 0.003 \\cdot \\dfrac{c - d\'}{c}\\)',
-                               `${fl.eps_sp.toFixed(6)}`);
-                    html += row('\\(f\'_{s,unc} = \\varepsilon\'_s \\cdot E_s\\)',
-                               `${fl.fs_p_unc.toFixed(2)} MPa`,
-                               '\\(E_s = 200\\,000\\) MPa');
-                    html += row('Yield check: \\(f\'_{s,unc}\\) vs \\(f_y\\)',
-                               fl.fs_yields
-                                 ? `\\(f\'_{s,unc} \\ge f_y\\) → use \\(f\'_s = f_y = ${fyl.toFixed(0)}\\) MPa`
-                                 : `\\(f\'_{s,unc} < f_y\\) → scale \\(A\'_s\\) by \\(f_y / f\'_s\\)`,
-                               '', fl.fs_yields ? 'ok' : 'fail');
-                    html += row('\\(f\'_s\\) (used)', `${fl.fs_p.toFixed(2)} MPa`);
-                    html += row(
-                        fl.fs_yields
-                          ? '\\(A\'_{s,req} = A_{s2}\\)'
-                          : '\\(A\'_{s,req} = A_{s2} \\cdot \\dfrac{f_y}{f\'_s}\\)',
-                        `${fl.As_p_req.toFixed(2)} mm²`);
-
-                    html += sectionHeader('Step 6 — Bar counts & capacity verification');
-                    html += row('\\(A_b\\) (tension)',  `${fl.Ab.toFixed(2)} mm²`, `\\(\\varnothing\\,${db.toFixed(0)}\\) mm`);
-                    html += row('\\(A\'_b\\) (compression)', `${fl.Ab_compr.toFixed(2)} mm²`, `\\(\\varnothing\'\\,${(dbC || db).toFixed(0)}\\) mm`);
-                    html += row('\\(n_{tension} = \\lceil A_{s,total} / A_b \\rceil\\)', `${fl.n_tension} bars`);
-                    html += row('\\(n_{compr.} = \\lceil A\'_{s,req} / A\'_b \\rceil\\)', `${fl.n_compression} bars`);
-                    html += row('\\(A_{s,prov}\\) (tension)',     `${fl.As_prov_t.toFixed(2)} mm²`);
-                    html += row('\\(A\'_{s,prov}\\) (compression)', `${fl.As_prov_c.toFixed(2)} mm²`);
-                    html += row('\\(a = \\dfrac{A_s f_y - A\'_s f\'_s}{0.85\\,f\'_c\\,b}\\)',
-                               `${fl.a.toFixed(2)} mm`,
-                               'force equilibrium with provided steel');
-                    if (fl.Sc_t !== null) {
-                        html += row('\\(S_c\\) (tension)',
-                                   `${fl.Sc_t.toFixed(1)} mm`,
-                                   `\\(S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ${fl.Sc_t_ok ? '✓' : '✗ too tight'}`,
-                                   fl.Sc_t_ok ? 'ok' : 'fail');
-                    }
-                    if (fl.Sc_c !== null) {
-                        html += row('\\(S\'_c\\) (compression)',
-                                   `${fl.Sc_c.toFixed(1)} mm`,
-                                   `\\(S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ${fl.Sc_c_ok ? '✓' : '✗ too tight'}`,
-                                   fl.Sc_c_ok ? 'ok' : 'fail');
-                    }
-                    html += row('\\(\\phi M_n = \\phi \\left[0.85 f\'_c\\,a\\,b\\,(d - \\tfrac{a}{2}) + A\'_s f\'_s (d - d\')\\right]\\)',
-                               `${fl.capacity_ok ? '✓' : '✗'} ${fl.phi_Mn_kNm.toFixed(3)} kN·m`,
-                               `${fl.capacity_ok ? '≥' : '<'} \\(M_u = ${fl.Mu_kNm.toFixed(3)}\\) kN·m`,
-                               fl.capacity_ok ? 'ok' : 'fail');
-
-                    html += (fl.capacity_ok)
-                        ? `<div class="bd-alert bd-alert-ok">✓ <strong>DRRB</strong> — use <strong>${fl.n_tension} – ∅${db.toFixed(0)} mm tension</strong> and <strong>${fl.n_compression} – ∅${(dbC||db).toFixed(0)} mm compression</strong> bars (\\(\\phi M_n\\) = ${fl.phi_Mn_kNm.toFixed(2)} kN·m)</div>`
-                        : `<div class="bd-alert bd-alert-fail">✗ DRRB capacity insufficient — increase section.</div>`;
+        // 2) Max |M| within each span (between adjacent supports)
+        for (let i = 0; i < supps.length - 1; i++) {
+            const xL = supps[i].x, xR = supps[i + 1].x;
+            let maxAbs = 0, mIdx = -1;
+            for (let k = 0; k < xs.length; k++) {
+                if (xs[k] > xL + 1e-6 && xs[k] < xR - 1e-6) {
+                    if (Math.abs(M[k]) > maxAbs) { maxAbs = Math.abs(M[k]); mIdx = k; }
                 }
             }
-
-            flx.innerHTML = html;
+            if (mIdx >= 0 && maxAbs > 0.01) {
+                out.push({
+                    id: state.rcNextId++,
+                    label: `Midspan ${i + 1} (x = ${xs[mIdx].toFixed(2)} m)`,
+                    x: xs[mIdx],
+                    Mu: Math.round(M[mIdx] * 1000) / 1000,
+                    Vu: Math.round(Math.abs(V[mIdx]) * 1000) / 1000
+                });
+            }
         }
 
-        // ── SHEAR / STIRRUP SCHEDULE OUTPUT ───────────────────────────────
-        const shr = document.getElementById('rc-shear');
-        let html = '';
+        return out;
+    }
 
-        // Step 1 — Demand at the critical section
+    document.getElementById('rc-auto-detect').addEventListener('click', () => {
+        const detected = rcDetectCriticalSections();
+        if (detected.length === 0) return;
+        // Replace current list with detected; keep any custom sections marked manual? — simple replacement
+        state.rcSections = detected;
+        rcRenderSections();
+    });
+
+    document.getElementById('rc-source').addEventListener('change', () => {
+        const src = document.getElementById('rc-source').value;
+        if (src === 'analysis') {
+            if (!state.lastResults) {
+                alert('Run a Beam Analysis on Tab 1 first, then switch back.');
+                document.getElementById('rc-source').value = 'manual';
+                return;
+            }
+            // Auto-fill: replace current list with detected critical sections
+            const detected = rcDetectCriticalSections();
+            if (detected.length > 0) {
+                state.rcSections = detected;
+                rcRenderSections();
+            }
+        }
+        // Manual: keep current list (user-editable). Nothing to do.
+    });
+
+    rcRenderSections();
+
+    // Per-section flexure rendering — returns an HTML string for ONE section's
+    // flexure design panel given the design result object and the materials.
+    function flexureHtmlFor(fl, m) {
+        const { b, h, fc, fyl, db, dbC, cov } = m;
+        if (fl.error && fl.d === undefined) {
+            return `<div class="bd-alert bd-alert-fail">${fl.error}</div>`;
+        }
+        let html = '';
+        if (fl.error && !fl.capacity_ok && fl.As_total === undefined && fl.n_bars === undefined) {
+            html += `<div class="bd-alert bd-alert-fail">${fl.error}</div>`;
+        }
+        html += sectionHeader('Step 1 — Section, materials, β₁');
+        html += row('\\(h\\) (total depth)',          `${h.toFixed(0)} mm`);
+        html += row('\\(b\\) (width)',                `${b.toFixed(0)} mm`);
+        html += row('cover \\(c_c\\)',                `${cov.toFixed(0)} mm`,  'NSCP 2015 Table 420.6.1.3.1');
+        html += row('\\(d\\) (effective depth)',      `${fl.d.toFixed(1)} mm`, '\\(h - c_c - \\varnothing_s - \\varnothing_b/2\\)');
+        html += row('\\(\\phi\\) (flexure)',          `${fl.phi_flex}`);
+        html += row('\\(\\beta_1\\)',                 `${fl.beta1.toFixed(4)}`, 'NSCP 2015 §422.2.2.4.3');
+        html += row('\\(M_u\\)',                      `${fl.Mu_kNm.toFixed(3)} kN·m`);
+        html += row('\\(R_n = \\dfrac{M_u}{\\phi \\cdot b \\cdot d^2}\\)', `${fl.Rn.toFixed(4)} MPa`);
+
+        html += sectionHeader('Step 2 — ρ limits & singly-reinforced ceiling');
+        html += row('\\(\\rho_b\\) (balanced)', `${fl.rho_b.toFixed(6)}`,
+                   '\\(\\dfrac{0.85 \\beta_1 f\'_c}{f_y} \\cdot \\dfrac{600}{600 + f_y}\\) — §421.2.2');
+        html += row('\\(\\rho_{\\max}\\)', `${fl.rho_max.toFixed(6)}`, '\\(0.75\\,\\rho_b\\) — §406.3.3');
+        html += row('\\(\\rho_{\\min}\\)', `${fl.rho_min.toFixed(6)}`,
+                   '\\(\\max\\!\\left(\\dfrac{\\sqrt{f\'_c}}{4 f_y},\\;\\dfrac{1.4}{f_y}\\right)\\) — §406.3.1');
+        html += row('\\(A_{s,\\max} = \\rho_{\\max} \\cdot b \\cdot d\\)', `${fl.As_max.toFixed(2)} mm²`);
+        html += row('\\(a_{\\max} = \\dfrac{A_{s,\\max} \\, f_y}{0.85\\,f\'_c\\,b}\\)', `${fl.a_max.toFixed(2)} mm`);
+        html += row('\\(M_{n,\\max} = A_{s,\\max} \\, f_y \\left(d - \\tfrac{a_{\\max}}{2}\\right)\\)',
+                   `${fl.Mn_max_kNm.toFixed(3)} kN·m`, 'singly-reinforced nominal ceiling');
+        html += row('\\(\\phi M_{n,\\max}\\)', `${fl.phiMn_max_kNm.toFixed(3)} kN·m`);
+
+        html += sectionHeader('Step 3 — SRRB vs DRRB classification');
+        if (!fl.isDRRB) {
+            html += row('Compare \\(M_u\\) vs \\(\\phi M_{n,\\max}\\)',
+                       `${fl.Mu_kNm.toFixed(3)} ≤ ${fl.phiMn_max_kNm.toFixed(3)} kN·m`,
+                       '→ SRRB (Singly-Reinforced Rectangular Beam)', 'ok');
+        } else {
+            html += row('Compare \\(M_u\\) vs \\(\\phi M_{n,\\max}\\)',
+                       `${fl.Mu_kNm.toFixed(3)} > ${fl.phiMn_max_kNm.toFixed(3)} kN·m`,
+                       '→ DRRB (Doubly-Reinforced — compression steel required)', 'fail');
+        }
+
+        if (!fl.isDRRB) {
+            html += sectionHeader('Step 4 — SRRB: solve ρ, As, bars, capacity');
+            html += row('\\(disc = 1 - \\dfrac{2 R_n}{0.85\\,f\'_c}\\)', `${(1 - 2 * fl.Rn / (0.85 * fc)).toFixed(6)}`);
+            html += row('\\(\\rho_{calc} = \\dfrac{0.85\\,f\'_c}{f_y}\\left(1 - \\sqrt{disc}\\right)\\)', `${fl.rho_calc.toFixed(6)}`);
+            fl.checks.forEach(c => { html += row('Check', c); });
+            html += row('\\(\\rho_{use}\\)', `${fl.rho_use.toFixed(6)}`);
+            html += row('\\(A_{s,req} = \\rho \\cdot b \\cdot d\\)', `${fl.As_req.toFixed(2)} mm²`);
+            html += row('\\(A_b\\) (1 bar)', `${fl.Ab.toFixed(2)} mm²`, `\\(\\varnothing\\,${db.toFixed(0)}\\) mm`);
+            html += row('\\(n = \\lceil A_{s,req} / A_b \\rceil\\)', `${fl.n_bars} bars`);
+            html += row('\\(A_{s,prov} = n \\cdot A_b\\)', `${fl.As_prov.toFixed(2)} mm²`);
+            html += row('\\(a = \\dfrac{A_{s,prov}\\,f_y}{0.85\\,f\'_c\\,b}\\)', `${fl.a.toFixed(2)} mm`);
+            if (fl.Sc !== null) {
+                html += row('\\(S_c = \\dfrac{b - 2c_c - 2\\varnothing_s - n\\varnothing}{n - 1}\\)',
+                           `${fl.Sc.toFixed(1)} mm`,
+                           `\\(S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ${fl.Sc_ok ? '✓' : '✗ too tight, add a layer'}`,
+                           fl.Sc_ok ? 'ok' : 'fail');
+            }
+            html += row('\\(\\phi M_n = \\phi A_s f_y \\left(d - \\tfrac{a}{2}\\right)\\)',
+                       `${fl.capacity_ok ? '✓' : '✗'} ${fl.phi_Mn_kNm.toFixed(3)} kN·m`,
+                       `${fl.capacity_ok ? '≥' : '<'} \\(M_u = ${fl.Mu_kNm.toFixed(3)}\\) kN·m`,
+                       fl.capacity_ok ? 'ok' : 'fail');
+            html += (fl.capacity_ok)
+                ? `<div class="bd-alert bd-alert-ok">✓ <strong>SRRB</strong> — use <strong>${fl.n_bars} – ∅${db.toFixed(0)} mm</strong> bars (\\(A_{s,prov}\\) = ${fl.As_prov.toFixed(0)} mm² &nbsp;|&nbsp; \\(\\phi M_n\\) = ${fl.phi_Mn_kNm.toFixed(2)} kN·m)</div>`
+                : `<div class="bd-alert bd-alert-fail">✗ Flexural capacity insufficient — increase section.</div>`;
+            return html;
+        }
+
+        // DRRB path
+        if (fl.error) {
+            html += `<div class="bd-alert bd-alert-fail">${fl.error}</div>`;
+            return html;
+        }
+        html += sectionHeader('Step 4 — DRRB: tension steel pair \\(A_{s1} + A_{s2}\\)');
+        html += row('\\(A_{s1} = \\rho_{\\max} \\cdot b \\cdot d\\)', `${fl.As1.toFixed(2)} mm²`,
+                   'tension steel paired with \\(M_{n,\\max}\\)');
+        html += row('\\(M_{n,resid} = \\dfrac{M_u}{\\phi} - M_{n,\\max}\\)', `${fl.Mn_resid_kNm.toFixed(3)} kN·m`,
+                   'residual moment carried by the couple');
+        html += row('\\(A_{s2} = \\dfrac{M_{n,resid}}{f_y\\,(d - d\')}\\)', `${fl.As2.toFixed(2)} mm²`,
+                   'second tension layer paired with \\(A\'_s\\)');
+        html += row('\\(A_{s,total} = A_{s1} + A_{s2}\\)', `${fl.As_total.toFixed(2)} mm²`);
+
+        html += sectionHeader('Step 5 — Compression steel \\(A\'_s\\) (check \\(f\'_s\\))');
+        html += row('\\(d\'\\) (compression-bar depth)', `${fl.d_prime.toFixed(1)} mm`);
+        html += row('\\(c = \\dfrac{a_{\\max}}{\\beta_1}\\)', `${fl.c_drrb.toFixed(2)} mm`,
+                   'neutral-axis depth at \\(\\rho_{\\max}\\)');
+        html += row('\\(\\varepsilon\'_s = 0.003 \\cdot \\dfrac{c - d\'}{c}\\)', `${fl.eps_sp.toFixed(6)}`);
+        html += row('\\(f\'_{s,unc} = \\varepsilon\'_s \\cdot E_s\\)', `${fl.fs_p_unc.toFixed(2)} MPa`,
+                   '\\(E_s = 200\\,000\\) MPa');
+        html += row('Yield check: \\(f\'_{s,unc}\\) vs \\(f_y\\)',
+                   fl.fs_yields
+                     ? `\\(f\'_{s,unc} \\ge f_y\\) → use \\(f\'_s = f_y = ${fyl.toFixed(0)}\\) MPa`
+                     : `\\(f\'_{s,unc} < f_y\\) → scale \\(A\'_s\\) by \\(f_y / f\'_s\\)`,
+                   '', fl.fs_yields ? 'ok' : 'fail');
+        html += row('\\(f\'_s\\) (used)', `${fl.fs_p.toFixed(2)} MPa`);
+        html += row(
+            fl.fs_yields
+              ? '\\(A\'_{s,req} = A_{s2}\\)'
+              : '\\(A\'_{s,req} = A_{s2} \\cdot \\dfrac{f_y}{f\'_s}\\)',
+            `${fl.As_p_req.toFixed(2)} mm²`);
+
+        html += sectionHeader('Step 6 — Bar counts & capacity verification');
+        html += row('\\(A_b\\) (tension)',  `${fl.Ab.toFixed(2)} mm²`, `\\(\\varnothing\\,${db.toFixed(0)}\\) mm`);
+        html += row('\\(A\'_b\\) (compression)', `${fl.Ab_compr.toFixed(2)} mm²`, `\\(\\varnothing\'\\,${(dbC || db).toFixed(0)}\\) mm`);
+        html += row('\\(n_{tension} = \\lceil A_{s,total} / A_b \\rceil\\)', `${fl.n_tension} bars`);
+        html += row('\\(n_{compr.} = \\lceil A\'_{s,req} / A\'_b \\rceil\\)', `${fl.n_compression} bars`);
+        html += row('\\(A_{s,prov}\\) (tension)', `${fl.As_prov_t.toFixed(2)} mm²`);
+        html += row('\\(A\'_{s,prov}\\) (compression)', `${fl.As_prov_c.toFixed(2)} mm²`);
+        html += row('\\(a = \\dfrac{A_s f_y - A\'_s f\'_s}{0.85\\,f\'_c\\,b}\\)', `${fl.a.toFixed(2)} mm`,
+                   'force equilibrium with provided steel');
+        if (fl.Sc_t !== null) {
+            html += row('\\(S_c\\) (tension)', `${fl.Sc_t.toFixed(1)} mm`,
+                       `\\(S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ${fl.Sc_t_ok ? '✓' : '✗ too tight'}`,
+                       fl.Sc_t_ok ? 'ok' : 'fail');
+        }
+        if (fl.Sc_c !== null) {
+            html += row('\\(S\'_c\\) (compression)', `${fl.Sc_c.toFixed(1)} mm`,
+                       `\\(S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ${fl.Sc_c_ok ? '✓' : '✗ too tight'}`,
+                       fl.Sc_c_ok ? 'ok' : 'fail');
+        }
+        html += row('\\(\\phi M_n = \\phi \\left[0.85 f\'_c\\,a\\,b\\,(d - \\tfrac{a}{2}) + A\'_s f\'_s (d - d\')\\right]\\)',
+                   `${fl.capacity_ok ? '✓' : '✗'} ${fl.phi_Mn_kNm.toFixed(3)} kN·m`,
+                   `${fl.capacity_ok ? '≥' : '<'} \\(M_u = ${fl.Mu_kNm.toFixed(3)}\\) kN·m`,
+                   fl.capacity_ok ? 'ok' : 'fail');
+        html += (fl.capacity_ok)
+            ? `<div class="bd-alert bd-alert-ok">✓ <strong>DRRB</strong> — use <strong>${fl.n_tension} – ∅${db.toFixed(0)} mm tension</strong> and <strong>${fl.n_compression} – ∅${(dbC||db).toFixed(0)} mm compression</strong> bars (\\(\\phi M_n\\) = ${fl.phi_Mn_kNm.toFixed(2)} kN·m)</div>`
+            : `<div class="bd-alert bd-alert-fail">✗ DRRB capacity insufficient — increase section.</div>`;
+        return html;
+    }
+
+    // Per-section shear rendering
+    function shearHtmlFor(sh, m) {
+        const { lam, legs, ds } = m;
+        let html = '';
         html += sectionHeader('Step 1 — Demand at the critical section');
-        html += row('\\(d\\) (effective depth)',     `${sh.d.toFixed(1)} mm`);
-        html += row('\\(\\phi\\) (shear)',           `${sh.phi_shear}`);
-        html += row('\\(\\lambda\\)',                `${lam}`, lam === 1 ? 'Normal weight' : lam === 0.85 ? 'Sand-LW' : 'All-LW');
-        html += row('\\(V\\) at support',            `${sh.V_support_kN.toFixed(3)} kN`, 'shear at face of support');
+        html += row('\\(d\\) (effective depth)', `${sh.d.toFixed(1)} mm`);
+        html += row('\\(\\phi\\) (shear)',       `${sh.phi_shear}`);
+        html += row('\\(\\lambda\\)', `${lam}`, lam === 1 ? 'Normal weight' : lam === 0.85 ? 'Sand-LW' : 'All-LW');
+        html += row('\\(V\\) at support', `${sh.V_support_kN.toFixed(3)} kN`, 'shear at face of support');
         if (sh.L_span_m > 0) {
-            html += row('\\(V_u\\) at \\(d\\)',
-                       `${sh.Vu_kN.toFixed(3)} kN`,
+            html += row('\\(V_u\\) at \\(d\\)', `${sh.Vu_kN.toFixed(3)} kN`,
                        `\\(V_{support} - \\dfrac{V_{support}\\,d}{L/2} = ${sh.V_support_kN.toFixed(2)} - \\dfrac{${sh.V_support_kN.toFixed(2)} \\cdot ${sh.d.toFixed(0)}}{${(sh.L_span_m*500).toFixed(0)}}\\)`);
         } else {
             html += row('\\(V_u\\)', `${sh.Vu_kN.toFixed(3)} kN`, '(no span given → using \\(V\\) at support)');
         }
 
-        // Step 2 — Concrete shear capacity
         html += sectionHeader('Step 2 — Concrete shear capacity');
-        html += row('\\(V_c = 0.17\\,\\lambda\\,\\sqrt{f\'_c}\\,b\\,d\\)',
-                   `${sh.Vc_kN.toFixed(3)} kN`, 'NSCP 2015 §422.5.5.1');
-        html += row('\\(\\phi V_c\\)',          `${sh.phiVc.toFixed(3)} kN`);
+        html += row('\\(V_c = 0.17\\,\\lambda\\,\\sqrt{f\'_c}\\,b\\,d\\)', `${sh.Vc_kN.toFixed(3)} kN`, 'NSCP 2015 §422.5.5.1');
+        html += row('\\(\\phi V_c\\)', `${sh.phiVc.toFixed(3)} kN`);
         html += row('\\(\\tfrac{1}{2}\\,\\phi V_c\\)', `${sh.phiVc_half.toFixed(3)} kN`);
-        html += row('\\(A_v\\) (stirrup area)',
-                   `${sh.Av_mm2.toFixed(2)} mm²`,
-                   `${legs}-leg \\(\\varnothing\\,${ds.toFixed(0)}\\) mm`);
+        html += row('\\(A_v\\) (stirrup area)', `${sh.Av_mm2.toFixed(2)} mm²`, `${legs}-leg \\(\\varnothing\\,${ds.toFixed(0)}\\) mm`);
 
-        // Step 3 — Required Vs and limits
         html += sectionHeader('Step 3 — Required \\(V_s\\) and limits');
         let cond;
         if      (sh.mode === 'none')      cond = '\\(V_u \\le \\tfrac{1}{2}\\phi V_c\\) → stirrups NOT required by analysis';
@@ -2305,38 +2381,25 @@
         else                              cond = sh.mode;
         html += row('Condition', cond, '', sh.mode === 'none' || sh.mode === 'minimum' ? 'ok' : '');
         html += row('\\(V_{s,req} = \\dfrac{V_u}{\\phi} - V_c\\)', `${sh.Vs_kN.toFixed(3)} kN`);
-        html += row('\\(V_{s,lim1} = 0.33\\,\\sqrt{f\'_c}\\,b\\,d\\)',
-                   `${sh.Vs_lim1.toFixed(2)} kN`, 'governs max spacing');
-        html += row('\\(V_{s,lim2} = 0.66\\,\\sqrt{f\'_c}\\,b\\,d\\)',
-                   `${sh.Vs_lim2.toFixed(2)} kN`, 'section too small if \\(V_s > V_{s,lim2}\\)');
+        html += row('\\(V_{s,lim1} = 0.33\\,\\sqrt{f\'_c}\\,b\\,d\\)', `${sh.Vs_lim1.toFixed(2)} kN`, 'governs max spacing');
+        html += row('\\(V_{s,lim2} = 0.66\\,\\sqrt{f\'_c}\\,b\\,d\\)', `${sh.Vs_lim2.toFixed(2)} kN`, 'section too small if \\(V_s > V_{s,lim2}\\)');
         if (sh.mode === 'overloaded') {
             html += `<div class="bd-alert bd-alert-fail">${sh.error}</div>`;
-            shr.innerHTML = html;
-            document.getElementById('rc-results').style.display = '';
-            renderMath(document.getElementById('rc-results'));
-            return;
+            return html;
         }
 
-        // Step 4 — Spacing
-        // For mode === 'none' the designShear() return only includes the base
-        // values plus `note`. Every spacing field (Smax_code, Smax_floor,
-        // S_required, S_floor, S_gov) is undefined, so we must guard each
-        // toFixed() and short-circuit the section when stirrups aren't needed.
         if (sh.mode !== 'none') {
             html += sectionHeader('Step 4 — Spacing');
-            html += row('\\(A_v / s_{\\min}\\)',
-                       `${sh.Avs_min.toFixed(4)} mm²/mm`,
+            html += row('\\(A_v / s_{\\min}\\)', `${sh.Avs_min.toFixed(4)} mm²/mm`,
                        '\\(\\max\\!\\left(\\dfrac{0.062\\sqrt{f\'_c}\\,b}{f_{yt}},\\;\\dfrac{0.35\\,b}{f_{yt}}\\right)\\) — §409.6.3.3');
             if (sh.mode === 'designed') {
-                html += row('\\(s_{calc} = \\dfrac{A_v\\,f_{yt}\\,d}{V_s}\\)',
-                           `${sh.s_calc.toFixed(1)} mm`);
+                html += row('\\(s_{calc} = \\dfrac{A_v\\,f_{yt}\\,d}{V_s}\\)', `${sh.s_calc.toFixed(1)} mm`);
             }
             if (sh.spac_note) html += row('Spacing rule', sh.spac_note);
-            if (sh.Smax_code  !== undefined) html += row('\\(S_{\\max}\\) (code)',           `${sh.Smax_code.toFixed(1)} mm`);
+            if (sh.Smax_code  !== undefined) html += row('\\(S_{\\max}\\) (code)', `${sh.Smax_code.toFixed(1)} mm`);
             if (sh.Smax_floor !== undefined) html += row('\\(S_{\\max}\\) floored to 25 mm', `${sh.Smax_floor.toFixed(0)} mm`);
             if (sh.S_required !== undefined || sh.Smax_code !== undefined) {
-                html += row('\\(S_{required}\\)',
-                           `${(sh.S_required || sh.Smax_code).toFixed(1)} mm`,
+                html += row('\\(S_{required}\\)', `${(sh.S_required || sh.Smax_code).toFixed(1)} mm`,
                            '\\(\\min\\!\\left(s_{calc},\\;S_{\\max},\\;\\dfrac{A_v}{A_v/s_{\\min}}\\right)\\)');
             }
             if (sh.S_floor !== undefined) html += row('\\(S\\) floored to 25 mm', `${sh.S_floor.toFixed(0)} mm`);
@@ -2351,23 +2414,19 @@
             }
         }
 
-        // Step 5 — Stirrup schedule (layout)
         if (sh.layout) {
             const lo = sh.layout;
             html += sectionHeader('Step 5 — Stirrup Schedule (each end of beam)');
             html += row('\\(L_2\\) (region needing stirrups)',
                        `${(lo.L2_mm / 1000).toFixed(3)} m  (${lo.L2_mm.toFixed(0)} mm)`,
                        'length where \\(V_u(x) > \\tfrac{1}{2}\\phi V_c\\)');
-            html += row('\\(n\\) at \\(S_{\\max}\\) (computed)',
-                       `${lo.n_at_Smax_calc.toFixed(2)}`,
+            html += row('\\(n\\) at \\(S_{\\max}\\) (computed)', `${lo.n_at_Smax_calc.toFixed(2)}`,
                        `\\(L_2 / S_{\\max,floor} = ${lo.L2_mm.toFixed(0)} / ${lo.Smax_floor.toFixed(0)}\\)`);
             html += row('\\(n\\) at \\(S_{\\max}\\) (round up)', `${lo.n_at_Smax} stirrups`);
-            html += row('\\(n\\) at \\(S_{gov}\\) (computed)',
-                       `${lo.n_at_S_calc.toFixed(2)}`,
+            html += row('\\(n\\) at \\(S_{gov}\\) (computed)', `${lo.n_at_S_calc.toFixed(2)}`,
                        '\\(\\dfrac{L_2 - n_{S_{\\max}}\\,S_{\\max,floor}}{S_{gov}}\\)');
             html += row('\\(n\\) at \\(S_{gov}\\) (round up)', `${lo.n_at_S} stirrups`);
-            html += row('Total layout length',
-                       `<strong>${lo.total_length_mm.toFixed(0)} mm</strong>`,
+            html += row('Total layout length', `<strong>${lo.total_length_mm.toFixed(0)} mm</strong>`,
                        `\\(${lo.n_at_Smax} \\times ${lo.Smax_floor.toFixed(0)} + ${lo.n_at_S} \\times ${lo.S_gov.toFixed(0)}\\)`);
         }
 
@@ -2381,31 +2440,97 @@
                 <strong>\\(S_{\\max}\\) = ${sh.Smax_floor.toFixed(0)} mm</strong> in the middle of the \\(L_2\\) region${sh.layout ? `&nbsp;(total layout ${sh.layout.total_length_mm.toFixed(0)} mm per end)` : ''}
                 <br><small style="color:#5c6773;">${modeLbl}</small>
             </div>`;
-            // Only emit the explanatory info alert if a note actually exists
-            // (the 'minimum' branch in designShear didn't set one — silently skip).
             if (sh.mode === 'minimum' && sh.note) {
                 html += `<div class="bd-alert bd-alert-info">${sh.note}</div>`;
             }
         }
+        return html;
+    }
 
-        shr.innerHTML = html;
+    document.getElementById('rc-calc-btn').addEventListener('click', () => {
+      try {
+        const b    = parseFloat(document.getElementById('rc-b').value);
+        const h    = parseFloat(document.getElementById('rc-h').value);
+        const fc   = parseFloat(document.getElementById('rc-fc').value);
+        const fyl  = parseFloat(document.getElementById('rc-fyl').value);
+        const fyt  = parseFloat(document.getElementById('rc-fyt').value);
+        const db   = parseFloat(document.getElementById('rc-db').value);
+        const dbC  = parseFloat(document.getElementById('rc-db-c').value) || db;
+        const dPr  = parseFloat(document.getElementById('rc-d-prime').value);
+        const ds   = parseFloat(document.getElementById('rc-ds').value);
+        const cov  = parseFloat(document.getElementById('rc-cover').value);
+        const lam  = parseFloat(document.getElementById('rc-lambda').value);
+        const legs = parseInt(document.getElementById('rc-legs').value);
+        const Lspan = parseFloat(document.getElementById('rc-L').value);
 
+        // Validate the shared material/geometry inputs (per-section Mu/Vu are
+        // validated inside the loop below).
+        const need = { b, h, fc, fyl, fyt, db, ds, cov, lam, legs };
+        const bad = Object.entries(need)
+            .filter(([k, v]) => !Number.isFinite(v))
+            .map(([k]) => k);
+        if (bad.length) {
+            const msg = `Cannot run the section design — these inputs are blank or invalid: ${bad.join(', ')}.`;
+            document.getElementById('rc-results-list').innerHTML = `<div class="bd-alert bd-alert-fail">${msg}</div>`;
+            document.getElementById('rc-results').style.display = '';
+            return;
+        }
+
+        if (state.rcSections.length === 0) {
+            document.getElementById('rc-results-list').innerHTML =
+                `<div class="bd-alert bd-alert-warn">No critical sections to design — add one or auto-detect from the Beam Analysis tab.</div>`;
+            document.getElementById('rc-results').style.display = '';
+            return;
+        }
+
+        const materials = { b, h, fc, fyl, fyt, db, dbC, dPr, ds, cov, lam, legs };
+
+        // Build one big HTML string with a card per critical section.
+        const sectionsHtml = state.rcSections.map((sec, i) => {
+            // Per-section validation
+            const Mu = Number(sec.Mu);
+            const Vu = Number(sec.Vu);
+            if (!Number.isFinite(Mu) || !Number.isFinite(Vu)) {
+                return `<div class="bd-section">
+                    <div class="bd-section-title">${i + 1}. ${sec.label || `Section ${i + 1}`}</div>
+                    <div class="bd-alert bd-alert-fail">Mu and Vu must be numbers. Got Mu=${sec.Mu}, Vu=${sec.Vu}.</div>
+                </div>`;
+            }
+
+            // Run the actual designs (designFlexure uses |Mu| internally, so a
+            // negative Mu at a support is OK — the magnitude drives the bar count).
+            const fl = designFlexure(Mu, b, h, fc, fyl, db, ds, cov, dPr, dbC);
+            const sh = designShear(Vu, b, h, fc, fyt, ds, db, cov, lam, legs, Lspan);
+
+            const sign  = Mu >= 0 ? 'sagging (+)' : 'hogging (−)';
+            const xLbl  = (sec.x !== null && sec.x !== undefined && !Number.isNaN(sec.x))
+                            ? ` &nbsp;|&nbsp; x = ${Number(sec.x).toFixed(2)} m` : '';
+            const dem   = ` &nbsp;|&nbsp; \\(M_u\\) = ${Math.abs(Mu).toFixed(3)} kN·m, ${sign} &nbsp;|&nbsp; \\(V_u\\) = ${Math.abs(Vu).toFixed(3)} kN`;
+
+            return `<div class="bd-section">
+                <div class="bd-section-title">
+                    <span>${i + 1}. ${sec.label || `Section ${i + 1}`}${xLbl}${dem}</span>
+                </div>
+                <div class="bd-step-banner" style="background:linear-gradient(135deg,#1f6f30,#0F6E56);">Flexure Design — NSCP 2015 §406</div>
+                ${flexureHtmlFor(fl, materials)}
+                <div class="bd-step-banner" style="background:linear-gradient(135deg,#b07700,#8a5a00);">Shear Design — NSCP 2015 §422</div>
+                ${shearHtmlFor(sh, materials)}
+            </div>`;
+        }).join('');
+
+        document.getElementById('rc-results-list').innerHTML = sectionsHtml;
         document.getElementById('rc-results').style.display = '';
         renderMath(document.getElementById('rc-results'));
+
       } catch (err) {
-        // Make any runtime error visible — previously the click would just
-        // silently abort if anything in the pipeline (designFlexure, designShear,
-        // or HTML assembly) threw, and the user would see no response.
-        console.error('Design Section failed:', err);
-        const errBox = document.getElementById('rc-flexure');
+        console.error('Design All Sections failed:', err);
+        const errBox = document.getElementById('rc-results-list');
         if (errBox) {
             errBox.innerHTML = `<div class="bd-alert bd-alert-fail">
-                <strong>Design Section error:</strong> ${err && err.message ? err.message : err}
+                <strong>Design error:</strong> ${err && err.message ? err.message : err}
                 <br><small style="color:#5c6773;">Check the browser console for the full stack trace.</small>
             </div>`;
         }
-        const shrBox = document.getElementById('rc-shear');
-        if (shrBox) shrBox.innerHTML = '';
         const results = document.getElementById('rc-results');
         if (results) results.style.display = '';
       }
