@@ -2301,10 +2301,30 @@
         //    relevant; we still add the support so the user can design for
         //    high shear even when M ≈ 0 (simple supports).
         supps.forEach((s, i) => {
-            const idx     = idxAt(s.x);
-            const idxLeft = idxAt(s.x, -1);
-            const idxRight= idxAt(s.x,  1);
-            const Vu = Math.max(Math.abs(V[idxLeft] || 0), Math.abs(V[idxRight] || 0));
+            const idx = idxAt(s.x);
+            // V has a step at every support (the reaction is added when the
+            // walk reaches x_support). To get the design shear demand we want
+            // the value JUST INSIDE the adjacent span(s) — NOT the post-all-
+            // reactions value at exactly x_support, which can be 0 at the
+            // right end of the beam.
+            //
+            //   idxStrictBefore(x) → last index with xs[i] < x      (left span value)
+            //   idxStrictAfter(x)  → first index with xs[i] > x     (right span value)
+            //
+            // The FEM sampler always seeds xs at x_support ± eps (with
+            // eps = max(L/120, 0.02)), so a sample just inside the span is
+            // guaranteed to exist for non-trivial spans.
+            let iBefore = -1;
+            for (let k = 0; k < xs.length; k++) {
+                if (xs[k] < s.x - 1e-9) iBefore = k; else break;
+            }
+            let iAfter = -1;
+            for (let k = 0; k < xs.length; k++) {
+                if (xs[k] > s.x + 1e-9) { iAfter = k; break; }
+            }
+            const Vleft  = (iBefore >= 0) ? Math.abs(V[iBefore]) : 0;
+            const Vright = (iAfter  >= 0) ? Math.abs(V[iAfter])  : 0;
+            const Vu = Math.max(Vleft, Vright);
             const Mu = M[idx] || 0;
             let label;
             if (i === 0)                    label = `Left support (x = ${s.x.toFixed(2)} m)`;
