@@ -2318,29 +2318,37 @@
         }
 
         // Step 4 — Spacing
-        html += sectionHeader('Step 4 — Spacing');
-        html += row('\\(A_v / s_{\\min}\\)',
-                   `${sh.Avs_min.toFixed(4)} mm²/mm`,
-                   '\\(\\max\\!\\left(\\dfrac{0.062\\sqrt{f\'_c}\\,b}{f_{yt}},\\;\\dfrac{0.35\\,b}{f_{yt}}\\right)\\) — §409.6.3.3');
-        if (sh.mode === 'designed') {
-            html += row('\\(s_{calc} = \\dfrac{A_v\\,f_{yt}\\,d}{V_s}\\)',
-                       `${sh.s_calc.toFixed(1)} mm`);
-        }
-        html += row('Spacing rule', sh.spac_note);
-        html += row('\\(S_{\\max}\\) (code)',            `${sh.Smax_code.toFixed(1)} mm`);
-        html += row('\\(S_{\\max}\\) floored to 25 mm', `${sh.Smax_floor.toFixed(0)} mm`);
-        html += row('\\(S_{required}\\)',
-                   `${(sh.S_required || sh.Smax_code).toFixed(1)} mm`,
-                   '\\(\\min\\!\\left(s_{calc},\\;S_{\\max},\\;\\dfrac{A_v}{A_v/s_{\\min}}\\right)\\)');
-        html += row('\\(S\\) floored to 25 mm',         `${sh.S_floor.toFixed(0)} mm`);
-        html += row('\\(S_{gov}\\) (50 mm floor)',      `<strong>${sh.S_gov.toFixed(0)} mm</strong>`);
+        // For mode === 'none' the designShear() return only includes the base
+        // values plus `note`. Every spacing field (Smax_code, Smax_floor,
+        // S_required, S_floor, S_gov) is undefined, so we must guard each
+        // toFixed() and short-circuit the section when stirrups aren't needed.
+        if (sh.mode !== 'none') {
+            html += sectionHeader('Step 4 — Spacing');
+            html += row('\\(A_v / s_{\\min}\\)',
+                       `${sh.Avs_min.toFixed(4)} mm²/mm`,
+                       '\\(\\max\\!\\left(\\dfrac{0.062\\sqrt{f\'_c}\\,b}{f_{yt}},\\;\\dfrac{0.35\\,b}{f_{yt}}\\right)\\) — §409.6.3.3');
+            if (sh.mode === 'designed') {
+                html += row('\\(s_{calc} = \\dfrac{A_v\\,f_{yt}\\,d}{V_s}\\)',
+                           `${sh.s_calc.toFixed(1)} mm`);
+            }
+            if (sh.spac_note) html += row('Spacing rule', sh.spac_note);
+            if (sh.Smax_code  !== undefined) html += row('\\(S_{\\max}\\) (code)',           `${sh.Smax_code.toFixed(1)} mm`);
+            if (sh.Smax_floor !== undefined) html += row('\\(S_{\\max}\\) floored to 25 mm', `${sh.Smax_floor.toFixed(0)} mm`);
+            if (sh.S_required !== undefined || sh.Smax_code !== undefined) {
+                html += row('\\(S_{required}\\)',
+                           `${(sh.S_required || sh.Smax_code).toFixed(1)} mm`,
+                           '\\(\\min\\!\\left(s_{calc},\\;S_{\\max},\\;\\dfrac{A_v}{A_v/s_{\\min}}\\right)\\)');
+            }
+            if (sh.S_floor !== undefined) html += row('\\(S\\) floored to 25 mm', `${sh.S_floor.toFixed(0)} mm`);
+            if (sh.S_gov   !== undefined) html += row('\\(S_{gov}\\) (50 mm floor)', `<strong>${sh.S_gov.toFixed(0)} mm</strong>`);
 
-        if (sh.mode === 'designed') {
-            html += row('\\(V_{s,prov} = \\dfrac{A_v\\,f_{yt}\\,d}{S_{gov}}\\)', `${sh.Vs_prov_kN.toFixed(3)} kN`);
-            html += row('\\(\\phi V_n = \\phi (V_c + V_{s,prov})\\)',
-                       `${sh.capacity_ok ? '✓' : '✗'} ${sh.phiVn_kN.toFixed(3)} kN`,
-                       `${sh.capacity_ok ? '≥' : '<'} \\(V_u = ${sh.Vu_kN.toFixed(3)}\\) kN`,
-                       sh.capacity_ok ? 'ok' : 'fail');
+            if (sh.mode === 'designed') {
+                html += row('\\(V_{s,prov} = \\dfrac{A_v\\,f_{yt}\\,d}{S_{gov}}\\)', `${sh.Vs_prov_kN.toFixed(3)} kN`);
+                html += row('\\(\\phi V_n = \\phi (V_c + V_{s,prov})\\)',
+                           `${sh.capacity_ok ? '✓' : '✗'} ${sh.phiVn_kN.toFixed(3)} kN`,
+                           `${sh.capacity_ok ? '≥' : '<'} \\(V_u = ${sh.Vu_kN.toFixed(3)}\\) kN`,
+                           sh.capacity_ok ? 'ok' : 'fail');
+            }
         }
 
         // Step 5 — Stirrup schedule (layout)
