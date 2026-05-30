@@ -223,6 +223,41 @@
         .bd-page .bd-combo-table tr.is-gov { background: #e8f9f1; }
         .bd-page .bd-combo-table tr.is-gov td { color: #0F6E56; font-weight: 600; }
 
+        /* ─── Beam schedule (final summary table) ─────────────────────────── */
+        .bd-page .bd-schedule-wrap { overflow-x: auto; }
+        .bd-page .bd-schedule {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+            font-size: 0.82em; width: 100%; border-collapse: collapse;
+            min-width: 920px;
+        }
+        .bd-page .bd-schedule th,
+        .bd-page .bd-schedule td {
+            text-align: center; padding: 8px 10px; border: 1px solid #e1e4e8;
+            white-space: nowrap;
+        }
+        .bd-page .bd-schedule th {
+            background: #f6f8fa; font-weight: 700; color: #495057; font-size: 0.78em;
+            text-transform: uppercase; letter-spacing: 0.04em;
+            position: sticky; top: 0;
+        }
+        .bd-page .bd-schedule td.bd-sched-label { text-align: left; font-weight: 600; }
+        .bd-page .bd-schedule td.bd-sched-num   { font-variant-numeric: tabular-nums; }
+        .bd-page .bd-schedule td.bd-sched-ok    { background: #f0faf5; color: #0F6E56; font-weight: 600; }
+        .bd-page .bd-schedule td.bd-sched-bad   { background: #fef2ef; color: #993C1D; font-weight: 600; }
+        .bd-page .bd-schedule td.bd-sched-warn  { background: #fff7e6; color: #b07700; font-weight: 600; }
+        .bd-page .bd-schedule tr:nth-child(even) td:not(.bd-sched-ok):not(.bd-sched-bad):not(.bd-sched-warn) {
+            background: #fafbfc;
+        }
+        .bd-page .bd-schedule-legend {
+            margin-top: 10px; font-size: 0.78em; color: #5c6773;
+            display: flex; flex-wrap: wrap; gap: 16px;
+        }
+        .bd-page .bd-schedule-legend span { display: inline-flex; align-items: center; gap: 4px; }
+        .bd-page .bd-schedule-legend i {
+            display: inline-block; width: 12px; height: 12px; border-radius: 2px;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+
         /* ─── Live beam viz ──────────────────────────────────────────────── */
         .bd-page .bd-viz {
             background: #fff; border: 1px solid #e1e4e8; border-radius: 6px;
@@ -2302,29 +2337,62 @@
         //    high shear even when M ≈ 0 (simple supports).
         supps.forEach((s, i) => {
             const idx = idxAt(s.x);
-            // V has a step at every support (the reaction is added when the
-            // walk reaches x_support). To get the design shear demand we want
-            // the value JUST INSIDE the adjacent span(s) — NOT the post-all-
-            // reactions value at exactly x_support, which can be 0 at the
-            // right end of the beam.
+            const isEnd = (i === 0 || i === supps.length - 1);
+
+            // ── Design shear demand at the support face ────────────────────
             //
-            //   idxStrictBefore(x) → last index with xs[i] < x      (left span value)
-            //   idxStrictAfter(x)  → first index with xs[i] > x     (right span value)
+            // V has a step at every support (the FEM reconstruction adds the
+            // reaction the instant x reaches x_support). The shear demand the
+            // beam has to resist AT THE FACE is what's flowing across that
+            // face from the adjacent span.
             //
-            // The FEM sampler always seeds xs at x_support ± eps (with
-            // eps = max(L/120, 0.02)), so a sample just inside the span is
-            // guaranteed to exist for non-trivial spans.
-            let iBefore = -1;
-            for (let k = 0; k < xs.length; k++) {
-                if (xs[k] < s.x - 1e-9) iBefore = k; else break;
+            // END SUPPORT — only one span touches the face, and the magnitude
+            //   of the shear right next to the face is exactly the support
+            //   reaction (the in-span shear curve starts at +R on the left end
+            //   and approaches +R on the right end before all reactions
+            //   cancel). Sampling at a sample point a few mm inside the span
+            //   loses a small amount to the UDL between the face and the
+            //   sample (e.g. 210 → 208.3 with w = 140 kN/m and eps = 12 mm).
+            //   To match the reactions panel exactly, use |R| directly.
+            //
+            // INTERIOR SUPPORT — two spans meet at the face and V jumps by R
+            //   across the support. The design shear demand is the larger of
+            //   |V just before| and |V just after|. The reaction itself can
+            //   be larger than either face value (e.g. middle reaction of a
+            //   2-span = 0.625·wL, while each face shear ≈ 0.375·wL), so we
+            //   take the max of the in-span samples — NOT |R|.
+            let Vu;
+            if (isEnd) {
+                Vu = Math.abs(s.Rv || 0);
+                // Safety fallback for an edge case (e.g. a spring with k ≈ 0
+                // that contributes no reaction): use the adjacent in-span
+                // sample so we don't end up with Vu = 0.
+                if (Vu < 1e-9) {
+                    let iAdj = -1;
+                    if (i === 0) {
+                        for (let k = 0; k < xs.length; k++) {
+                            if (xs[k] > s.x + 1e-9) { iAdj = k; break; }
+                        }
+                    } else {
+                        for (let k = 0; k < xs.length; k++) {
+                            if (xs[k] < s.x - 1e-9) iAdj = k; else break;
+                        }
+                    }
+                    if (iAdj >= 0) Vu = Math.abs(V[iAdj]);
+                }
+            } else {
+                let iBefore = -1;
+                for (let k = 0; k < xs.length; k++) {
+                    if (xs[k] < s.x - 1e-9) iBefore = k; else break;
+                }
+                let iAfter = -1;
+                for (let k = 0; k < xs.length; k++) {
+                    if (xs[k] > s.x + 1e-9) { iAfter = k; break; }
+                }
+                const Vleft  = (iBefore >= 0) ? Math.abs(V[iBefore]) : 0;
+                const Vright = (iAfter  >= 0) ? Math.abs(V[iAfter])  : 0;
+                Vu = Math.max(Vleft, Vright);
             }
-            let iAfter = -1;
-            for (let k = 0; k < xs.length; k++) {
-                if (xs[k] > s.x + 1e-9) { iAfter = k; break; }
-            }
-            const Vleft  = (iBefore >= 0) ? Math.abs(V[iBefore]) : 0;
-            const Vright = (iAfter  >= 0) ? Math.abs(V[iAfter])  : 0;
-            const Vu = Math.max(Vleft, Vright);
             const Mu = M[idx] || 0;
             let label;
             if (i === 0)                    label = `Left support (x = ${s.x.toFixed(2)} m)`;
@@ -2627,6 +2695,164 @@
         return html;
     }
 
+    // ════════════════════════════════════════════════════════════════════════
+    //  BEAM SCHEDULE — final summary table compiling every section's design
+    // ════════════════════════════════════════════════════════════════════════
+    //
+    // One row per critical section with:
+    //   #, Label, x, Mu, Vu, SRRB/DRRB, Tension bars (n–∅, TOP/BOT),
+    //   Compression bars (DRRB only), φMn (✓/✗), Stirrup spec, φVn (✓/✗).
+    //
+    // Bar position is derived from sign(Mu):
+    //   Sagging (+M) → tension at BOTTOM, compression at TOP   (typical midspan)
+    //   Hogging (−M) → tension at TOP,    compression at BOTTOM (typical at supports)
+    function buildBeamSchedule(rows, m) {
+        if (!rows || rows.length === 0) return '';
+
+        const trHtml = rows.map((r, i) => {
+            const sec = r.sec || {};
+            const labelTxt = sec.label || `Section ${i + 1}`;
+
+            // ── Invalid / missing-input rows: show one-line stub ──────────
+            if (r.invalid || !r.fl || !r.sh) {
+                return `<tr>
+                    <td>${i + 1}</td>
+                    <td class="bd-sched-label">${escapeXml(labelTxt)}</td>
+                    <td colspan="9" class="bd-sched-bad">Invalid input — Mu / Vu not numeric.</td>
+                </tr>`;
+            }
+
+            const { Mu, Vu, fl, sh } = r;
+            const isSagging = Mu >= 0;
+            const tensLoc  = isSagging ? 'BOT' : 'TOP';
+            const comprLoc = isSagging ? 'TOP' : 'BOT';
+
+            // ── Type column ──────────────────────────────────────────────
+            const typeTxt = fl.error ? '—' : (fl.section_type || '?');
+
+            // ── Tension bars column ──────────────────────────────────────
+            let tensCell;
+            if (fl.error) {
+                const tag = fl.isDRRB ? 'DRRB &mdash; needs d&prime;' : 'design error';
+                tensCell = `<span title="${escapeXml(fl.error)}" style="color:#993C1D;">${tag}</span>`;
+            } else if (fl.isDRRB) {
+                tensCell = `${fl.n_tension} &ndash; &#8709;${fl.db.toFixed(0)} (${tensLoc})`;
+            } else {
+                tensCell = `${fl.n_bars} &ndash; &#8709;${fl.db.toFixed(0)} (${tensLoc})`;
+            }
+
+            // ── Compression bars column (DRRB only) ───────────────────────
+            let comprCell = '—';
+            if (!fl.error && fl.isDRRB) {
+                comprCell = `${fl.n_compression} – &#8709;${fl.db_compr.toFixed(0)} (${comprLoc})`;
+            }
+
+            // ── φMn column with capacity verdict ──────────────────────────
+            let phiMnCell, phiMnCls;
+            if (fl.error || fl.phi_Mn_kNm === undefined) {
+                phiMnCell = '—';
+                phiMnCls  = 'bd-sched-bad';
+            } else {
+                const ok = !!fl.capacity_ok;
+                phiMnCell = `${ok ? '&#10003;' : '&#10007;'} ${fl.phi_Mn_kNm.toFixed(2)}`;
+                phiMnCls  = ok ? 'bd-sched-ok' : 'bd-sched-bad';
+            }
+
+            // ── Stirrups column ──────────────────────────────────────────
+            let stirCell, stirCls = 'bd-sched-num';
+            const dsTxt = m.ds.toFixed(0);
+            if (sh.mode === 'none') {
+                stirCell = `Not req. (provide min.)`;
+                stirCls  = 'bd-sched-warn';
+            } else if (sh.mode === 'overloaded' || sh.error) {
+                stirCell = `Section ↑ overloaded`;
+                stirCls  = 'bd-sched-bad';
+            } else {
+                const tag = sh.mode === 'minimum' ? ' (min)' : '';
+                stirCell = `${m.legs}L &#8709;${dsTxt} @ ${sh.S_gov.toFixed(0)}${tag}`;
+            }
+
+            // ── φVn column ───────────────────────────────────────────────
+            let phiVnCell, phiVnCls;
+            if (sh.error || sh.mode === 'overloaded') {
+                phiVnCell = '&mdash;';
+                phiVnCls  = 'bd-sched-bad';
+            } else if (sh.mode === 'none') {
+                // Vu ≤ 0.5·φVc — section capacity is φVc alone and is OK.
+                phiVnCell = `&#10003; ${sh.phiVc.toFixed(2)}`;
+                phiVnCls  = 'bd-sched-ok';
+            } else {
+                const ok = !!sh.capacity_ok;
+                phiVnCell = `${ok ? '&#10003;' : '&#10007;'} ${sh.phiVn_kN.toFixed(2)}`;
+                phiVnCls  = ok ? 'bd-sched-ok' : 'bd-sched-bad';
+            }
+
+            // ── Other cells ──────────────────────────────────────────────
+            const xStr = (sec.x !== null && sec.x !== undefined && Number.isFinite(Number(sec.x)))
+                            ? Number(sec.x).toFixed(2) : '—';
+            const muSign = Mu >= 0 ? '+' : '−';
+
+            return `<tr>
+                <td>${i + 1}</td>
+                <td class="bd-sched-label">${escapeXml(labelTxt)}</td>
+                <td class="bd-sched-num">${xStr}</td>
+                <td class="bd-sched-num">${muSign}${Math.abs(Mu).toFixed(2)}</td>
+                <td class="bd-sched-num">${Math.abs(Vu).toFixed(2)}</td>
+                <td>${typeTxt}</td>
+                <td>${tensCell}</td>
+                <td>${comprCell}</td>
+                <td class="${phiMnCls}">${phiMnCell}</td>
+                <td class="${stirCls}">${stirCell}</td>
+                <td class="${phiVnCls}">${phiVnCell}</td>
+            </tr>`;
+        }).join('');
+
+        const dEff = (m.h - m.cov - m.ds - m.db / 2).toFixed(0);
+
+        return `<div class="bd-section">
+            <div class="bd-section-title">
+                <span>Beam Schedule — Summary</span>
+                <small>compiles every section's final design</small>
+            </div>
+            <div style="font-size:0.82em;color:#5c6773;margin-bottom:10px;">
+                Section: <strong>b &times; h = ${m.b} &times; ${m.h} mm</strong> &nbsp;|&nbsp;
+                d &asymp; <strong>${dEff} mm</strong> &nbsp;|&nbsp;
+                cover = ${m.cov} mm &nbsp;|&nbsp;
+                <strong>f&prime;<sub>c</sub> = ${m.fc} MPa</strong>,
+                f<sub>y,long</sub> = ${m.fyl} MPa,
+                f<sub>y,trans</sub> = ${m.fyt} MPa &nbsp;|&nbsp;
+                long. bars &#8709;${m.db.toFixed(0)} mm,
+                stirrups ${m.legs}-leg &#8709;${m.ds.toFixed(0)} mm.
+            </div>
+            <div class="bd-schedule-wrap">
+            <table class="bd-schedule">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Section</th>
+                        <th>x<br><small>(m)</small></th>
+                        <th>M<sub>u</sub><br><small>(kN&middot;m)</small></th>
+                        <th>V<sub>u</sub><br><small>(kN)</small></th>
+                        <th>Type</th>
+                        <th>Tension bars</th>
+                        <th>Compression bars</th>
+                        <th>&phi;M<sub>n</sub><br><small>(kN&middot;m)</small></th>
+                        <th>Stirrups<br><small>(mm o.c.)</small></th>
+                        <th>&phi;V<sub>n</sub><br><small>(kN)</small></th>
+                    </tr>
+                </thead>
+                <tbody>${trHtml}</tbody>
+            </table>
+            </div>
+            <div class="bd-schedule-legend">
+                <span><i style="background:#f0faf5;border-color:#b3e0c9;"></i> &#10003; Capacity OK (&phi;R<sub>n</sub> &ge; R<sub>u</sub>)</span>
+                <span><i style="background:#fef2ef;border-color:#f0c0b3;"></i> &#10007; Capacity NOT OK / section overloaded</span>
+                <span><i style="background:#fff7e6;border-color:#f0d9a3;"></i> No stirrups required by analysis (provide minimum per practice)</span>
+                <span>TOP / BOT = bar location, from sign of M<sub>u</sub></span>
+            </div>
+        </div>`;
+    }
+
     document.getElementById('rc-calc-btn').addEventListener('click', () => {
       try {
         const b    = parseFloat(document.getElementById('rc-b').value);
@@ -2665,12 +2891,16 @@
 
         const materials = { b, h, fc, fyl, fyt, db, dbC, dPr, ds, cov, lam, legs };
 
-        // Build one big HTML string with a card per critical section.
+        // Build one big HTML string with a card per critical section, AND
+        // collect per-section design results so we can stitch together a
+        // summary "Beam Schedule" table at the bottom.
+        const scheduleRows = [];
         const sectionsHtml = state.rcSections.map((sec, i) => {
             // Per-section validation
             const Mu = Number(sec.Mu);
             const Vu = Number(sec.Vu);
             if (!Number.isFinite(Mu) || !Number.isFinite(Vu)) {
+                scheduleRows.push({ sec, Mu, Vu, fl: null, sh: null, invalid: true });
                 return `<div class="bd-section">
                     <div class="bd-section-title">${i + 1}. ${sec.label || `Section ${i + 1}`}</div>
                     <div class="bd-alert bd-alert-fail">Mu and Vu must be numbers. Got Mu=${sec.Mu}, Vu=${sec.Vu}.</div>
@@ -2681,6 +2911,7 @@
             // negative Mu at a support is OK — the magnitude drives the bar count).
             const fl = designFlexure(Mu, b, h, fc, fyl, db, ds, cov, dPr, dbC);
             const sh = designShear(Vu, b, h, fc, fyt, ds, db, cov, lam, legs, Lspan);
+            scheduleRows.push({ sec, Mu, Vu, fl, sh, invalid: false });
 
             const sign  = Mu >= 0 ? 'sagging (+)' : 'hogging (−)';
             const xLbl  = (sec.x !== null && sec.x !== undefined && !Number.isNaN(sec.x))
@@ -2698,7 +2929,11 @@
             </div>`;
         }).join('');
 
-        document.getElementById('rc-results-list').innerHTML = sectionsHtml;
+        // Append the Beam Schedule summary table — one row per section with
+        // the final bar layout, stirrup spec, and capacity verdicts.
+        const scheduleHtml = buildBeamSchedule(scheduleRows, materials);
+
+        document.getElementById('rc-results-list').innerHTML = sectionsHtml + scheduleHtml;
         document.getElementById('rc-results').style.display = '';
         renderMath(document.getElementById('rc-results'));
 
