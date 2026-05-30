@@ -2072,6 +2072,7 @@
     }
 
     document.getElementById('rc-calc-btn').addEventListener('click', () => {
+      try {
         const Mu   = parseFloat(document.getElementById('rc-Mu').value);
         const Vu   = parseFloat(document.getElementById('rc-Vu').value);
         const b    = parseFloat(document.getElementById('rc-b').value);
@@ -2087,6 +2088,22 @@
         const lam  = parseFloat(document.getElementById('rc-lambda').value);
         const legs = parseInt(document.getElementById('rc-legs').value);
         const Lspan = parseFloat(document.getElementById('rc-L').value);
+
+        // Validate required inputs before running the calculators — designShear()
+        // and designFlexure() return NaN-laden results if any of these are bad,
+        // which made the click look like a no-op on the deployed page.
+        const need = { Mu, Vu, b, h, fc, fyl, fyt, db, ds, cov, lam, legs };
+        const bad = Object.entries(need)
+            .filter(([k, v]) => !Number.isFinite(v))
+            .map(([k]) => k);
+        if (bad.length) {
+            const errBox = document.getElementById('rc-flexure');
+            const msg = `Cannot run the section design — these inputs are blank or invalid: ${bad.join(', ')}. Please fill them in and click Design Section again.`;
+            errBox.innerHTML = `<div class="bd-alert bd-alert-fail">${msg}</div>`;
+            document.getElementById('rc-shear').innerHTML = '';
+            document.getElementById('rc-results').style.display = '';
+            return;
+        }
 
         const fl = designFlexure(Mu, b, h, fc, fyl, db, ds, cov, dPr, dbC);
         const sh = designShear(Vu, b, h, fc, fyt, ds, db, cov, lam, legs, Lspan);
@@ -2367,6 +2384,23 @@
 
         document.getElementById('rc-results').style.display = '';
         renderMath(document.getElementById('rc-results'));
+      } catch (err) {
+        // Make any runtime error visible — previously the click would just
+        // silently abort if anything in the pipeline (designFlexure, designShear,
+        // or HTML assembly) threw, and the user would see no response.
+        console.error('Design Section failed:', err);
+        const errBox = document.getElementById('rc-flexure');
+        if (errBox) {
+            errBox.innerHTML = `<div class="bd-alert bd-alert-fail">
+                <strong>Design Section error:</strong> ${err && err.message ? err.message : err}
+                <br><small style="color:#5c6773;">Check the browser console for the full stack trace.</small>
+            </div>`;
+        }
+        const shrBox = document.getElementById('rc-shear');
+        if (shrBox) shrBox.innerHTML = '';
+        const results = document.getElementById('rc-results');
+        if (results) results.style.display = '';
+      }
     });
 
     // ════════════════════════════════════════════════════════════════════════
