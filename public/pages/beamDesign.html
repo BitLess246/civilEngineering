@@ -387,10 +387,13 @@
                     <div class="bd-field"><label for="rc-fc">\(f'_c\) (MPa)</label><input type="number" id="rc-fc" value="28" step="1" min="17" inputmode="decimal"></div>
                     <div class="bd-field"><label for="rc-fyl">\(f_y\) long. (MPa)</label><input type="number" id="rc-fyl" value="415" step="5" min="200" inputmode="decimal"></div>
                     <div class="bd-field"><label for="rc-fyt">\(f_y\) trans. (MPa)</label><input type="number" id="rc-fyt" value="275" step="5" min="200" inputmode="decimal"></div>
-                    <div class="bd-field"><label for="rc-db">Main \(\varnothing\) (mm)</label><input type="number" id="rc-db" value="20" step="2" min="10" inputmode="decimal"></div>
+                    <div class="bd-field"><label for="rc-db">Tension bar \(\varnothing\) (mm)</label><input type="number" id="rc-db" value="20" step="2" min="10" inputmode="decimal"></div>
+                    <div class="bd-field"><label for="rc-db-c">Compr. bar \(\varnothing'\) (mm)</label><input type="number" id="rc-db-c" value="20" step="2" min="10" inputmode="decimal"></div>
+                    <div class="bd-field"><label for="rc-d-prime">\(d'\) (mm) — DRRB only</label><input type="number" id="rc-d-prime" value="60" step="5" min="20" inputmode="decimal"><p class="bd-hint">cover + ∅s + ∅'/2</p></div>
                     <div class="bd-field"><label for="rc-ds">Stirrup \(\varnothing\) (mm)</label><input type="number" id="rc-ds" value="10" step="2" min="8" inputmode="decimal"></div>
                     <div class="bd-field"><label for="rc-cover">Cover (mm)</label><input type="number" id="rc-cover" value="40" step="5" min="20" inputmode="decimal"></div>
                     <div class="bd-field"><label for="rc-legs">Stirrup legs</label><input type="number" id="rc-legs" value="2" step="1" min="2" max="6" inputmode="numeric"></div>
+                    <div class="bd-field"><label for="rc-L">Span \(L\) (m) — stirrup layout</label><input type="number" id="rc-L" value="6" step="0.1" min="0.5" inputmode="decimal"><p class="bd-hint">used for Vu @ d and L₂</p></div>
                     <div class="bd-field">
                         <label for="rc-lambda">\(\lambda\)</label>
                         <select id="rc-lambda">
@@ -897,72 +900,328 @@
     function rhoMin(fc, fy)   { return Math.max(Math.sqrt(fc) / (4 * fy), 1.4 / fy); }
     function effDepth(h, cover, ds, db) { return h - cover - ds - db / 2; }
 
-    function designFlexure(Mu_kNm, b, h, fc, fy, db, ds, cover) {
+    /**
+     * SRRB / DRRB classifier + full design (ported from the user's
+     * "Reinforced Concrete LAB FINALS" Excel sheet).
+     *
+     * Step 1 — Compute the singly-reinforced "maximum capacity" at rho_max:
+     *           As_max  = rho_max · b · d
+     *           a_max   = As_max · fy / (0.85 · f'c · b)
+     *           Mn_max  = As_max · fy · (d - a_max / 2)        (kN·m)
+     *           phiMn_max = phi · Mn_max                       (kN·m)
+     *
+     * Step 2 — Compare Mu to phiMn_max:
+     *           Mu  <=  phi · Mn_max  →  SRRB  (singly reinforced)
+     *           Mu  >   phi · Mn_max  →  DRRB  (doubly reinforced; need A_s')
+     *
+     * Step 3 — SRRB path: solve for rho_calc from Rn (Method A) and provide bars.
+     *
+     * Step 4 — DRRB path:
+     *           A_s1 = rho_max · b · d                          (tension steel
+     *                                                            paired with Mn_max)
+     *           Mn1  = Mu / phi  -  Mn_max                      (residual nominal
+     *                                                            moment to carry)
+     *           A_s2 = Mn1 · 1e6 / ( fy · (d - d') )            (tension steel for
+     *                                                            the couple with A_s')
+     *           A_s_total = A_s1 + A_s2
+     *           Tentatively A_s' = A_s2 (assume f_s' = f_y)
+     *           Check fs':  c   = a_max / beta1
+     *                       eps_s' = 0.003 · (c - d') / c
+     *                       f_s'   = min(eps_s' · 200000 , f_y)         (MPa)
+     *           If f_s' < f_y, scale A_s' up to  A_s2 · f_y / f_s'.
+     */
+    function designFlexure(Mu_kNm, b, h, fc, fy, db, ds, cover, d_prime, dbCompr) {
         const d = effDepth(h, cover, ds, db);
         if (d <= 0) return { error: 'Effective depth ≤ 0 — check section dimensions and cover.' };
-        const phi = 0.90, Mu_Nmm = Math.abs(Mu_kNm) * 1e6;
-        const b1 = beta1(fc), rb = rhoBalanced(fc, fy);
-        const r_max = rhoMax(fc, fy), r_min = rhoMin(fc, fy);
-        const Ab = Math.PI / 4 * db * db;
-        const Rn = Mu_Nmm / (phi * b * d * d);
-        const disc = 1 - (2 * Rn) / (0.85 * fc);
-        if (disc < 0) return { error: `Section is too small — Rn = ${Rn.toFixed(2)} MPa exceeds capacity.`, d, Rn };
-        const rho_calc = (0.85 * fc / fy) * (1 - Math.sqrt(disc));
-        let rho_use, checks = [];
-        if (rho_calc < r_min) {
-            checks.push(`ρ_calc = ${rho_calc.toFixed(5)} < ρ_min = ${r_min.toFixed(5)} → use ρ_min`);
-            rho_use = r_min;
-        } else if (rho_calc > r_max) {
-            checks.push(`ρ_calc = ${rho_calc.toFixed(5)} > ρ_max = ${r_max.toFixed(5)} → over-reinforced`);
-            rho_use = r_max;
-        } else { checks.push('ρ_min ≤ ρ_calc ≤ ρ_max  ✓'); rho_use = rho_calc; }
-        const As_req = rho_use * b * d;
-        const n_bars = Math.ceil(As_req / Ab);
-        const As_prov = n_bars * Ab;
-        const a = As_prov * fy / (0.85 * fc * b);
-        const phi_Mn = phi * As_prov * fy * (d - a / 2) / 1e6;
-        return { d, b, h, cover, fc, fy, db, Ab, beta1: b1, rho_b: rb, rho_max: r_max, rho_min: r_min,
-                 phi_flex: phi, Mu_kNm: Math.abs(Mu_kNm), Rn, rho_calc, rho_use, checks,
-                 As_req, n_bars, As_prov, a, phi_Mn_kNm: phi_Mn,
-                 capacity_ok: phi_Mn >= Math.abs(Mu_kNm), over_reinforced: rho_calc > r_max };
+        const phi  = 0.90;
+        const Mu   = Math.abs(Mu_kNm);
+        const b1   = beta1(fc);
+        const rb   = rhoBalanced(fc, fy);
+        const r_max = rhoMax(fc, fy);
+        const r_min = rhoMin(fc, fy);
+        const Ab     = Math.PI / 4 * db * db;
+        const AbCom  = Math.PI / 4 * (dbCompr || db) * (dbCompr || db);
+
+        // ── Step 1: Mn_max (singly-reinforced ceiling) ──────────────────
+        const As_max = r_max * b * d;                         // mm²
+        const a_max  = As_max * fy / (0.85 * fc * b);         // mm
+        const Mn_max_kNm    = As_max * fy * (d - a_max / 2) / 1e6;
+        const phiMn_max_kNm = phi * Mn_max_kNm;
+
+        // ── Step 2: classify SRRB vs DRRB ────────────────────────────────
+        const isDRRB = Mu > phiMn_max_kNm + 1e-6;
+        const section_type = isDRRB ? 'DRRB' : 'SRRB';
+
+        // ── Always-useful values ─────────────────────────────────────────
+        const Rn = Mu * 1e6 / (phi * b * d * d);              // MPa
+
+        // ─────────────────────────────────────────────────────────────────
+        //  SRRB path
+        // ─────────────────────────────────────────────────────────────────
+        if (!isDRRB) {
+            const disc = 1 - (2 * Rn) / (0.85 * fc);
+            if (disc < 0) {
+                return { error: `Section is too small — Rn = ${Rn.toFixed(2)} MPa exceeds 0.425·f'c. Increase b or h.`,
+                         d, Rn, section_type, isDRRB };
+            }
+            const rho_calc = (0.85 * fc / fy) * (1 - Math.sqrt(disc));
+            let rho_use, checks = [];
+            if (rho_calc < r_min) {
+                checks.push(`ρ_calc = ${rho_calc.toFixed(5)} < ρ_min = ${r_min.toFixed(5)}  →  use ρ_min`);
+                rho_use = r_min;
+            } else {
+                checks.push(`ρ_min ≤ ρ_calc ≤ ρ_max  ✓ → use ρ_calc`);
+                rho_use = rho_calc;
+            }
+            const As_req  = rho_use * b * d;
+            const n_bars  = Math.max(2, Math.ceil(As_req / Ab));   // 2-bar minimum per practice
+            const As_prov = n_bars * Ab;
+            const a       = As_prov * fy / (0.85 * fc * b);
+            const phi_Mn  = phi * As_prov * fy * (d - a / 2) / 1e6;
+            // Spacing check (single layer): Sc = (b - 2·cover - 2·ds - n·db) / (n-1)
+            const Sc      = (n_bars > 1) ? (b - 2 * cover - 2 * ds - n_bars * db) / (n_bars - 1) : null;
+            const Sc_min  = Math.max(25, db);                  // ACI 25.2.1 / NSCP 425.2.1
+            return {
+                section_type, isDRRB,
+                d, b, h, cover, fc, fy, db, Ab, beta1: b1,
+                rho_b: rb, rho_max: r_max, rho_min: r_min,
+                phi_flex: phi, Mu_kNm: Mu, Rn,
+                // SRRB-specific
+                rho_calc, rho_use, checks,
+                As_req, n_bars, As_prov, a, phi_Mn_kNm: phi_Mn,
+                Sc, Sc_min, Sc_ok: (Sc === null) || Sc >= Sc_min,
+                // Reference singly-reinforced ceiling values
+                As_max, a_max, Mn_max_kNm, phiMn_max_kNm,
+                capacity_ok: phi_Mn >= Mu
+            };
+        }
+
+        // ─────────────────────────────────────────────────────────────────
+        //  DRRB path  (doubly reinforced)
+        // ─────────────────────────────────────────────────────────────────
+        // Tension steel paired with Mn_max:
+        const As1 = r_max * b * d;                            // mm²
+
+        // Residual nominal moment to be carried by the (As2 ↔ A_s') couple:
+        const Mn_resid_kNm = Mu / phi - Mn_max_kNm;           // kN·m
+        if (!(d_prime > 0)) {
+            return { error: "DRRB needed (Mu exceeds the singly-reinforced ceiling) — please enter d' (compression-bar depth) so the program can solve for the doubly-reinforced section.",
+                     section_type: 'DRRB', isDRRB: true, d, Rn,
+                     Mu_kNm: Mu, Mn_max_kNm, phiMn_max_kNm };
+        }
+        if (d - d_prime <= 0) {
+            return { error: `d - d' must be positive — got d = ${d.toFixed(1)} mm, d' = ${d_prime.toFixed(1)} mm.`,
+                     section_type: 'DRRB', isDRRB: true, d, d_prime, Mu_kNm: Mu };
+        }
+
+        const As2 = (Mn_resid_kNm * 1e6) / (fy * (d - d_prime));   // mm²
+        const As_total = As1 + As2;
+
+        // Compression-steel stress check:
+        //   c       = a_max / β1
+        //   ε_s'    = 0.003 · (c - d') / c
+        //   f_s'    = min( ε_s' · Es ,  f_y )      with Es = 200 000 MPa
+        const c_drrb   = a_max / b1;
+        const Es       = 200000;
+        const eps_sp   = 0.003 * (c_drrb - d_prime) / c_drrb;
+        const fs_p_unc = eps_sp * Es;
+        const fs_p     = Math.min(fs_p_unc, fy);
+        const fs_yields = fs_p_unc >= fy;
+
+        // Required compression steel:
+        //   If f_s' = f_y :  A_s'  = A_s2
+        //   Else            A_s'  = A_s2 · f_y / f_s'   (scale up)
+        const As_p_req      = fs_yields ? As2 : (As2 * fy / fs_p);
+        const n_tension     = Math.max(2, Math.ceil(As_total / Ab));
+        const n_compression = Math.max(2, Math.ceil(As_p_req  / AbCom));
+        const As_prov_t     = n_tension     * Ab;
+        const As_prov_c     = n_compression * AbCom;
+
+        // Recover the actual a and φMn with the provided steel (force eq.):
+        //   0.85·f'c·a·b + A_s'·f_s' = A_s_prov_t · f_y    (tension control assumed)
+        const a_drrb   = (As_prov_t * fy - As_prov_c * fs_p) / (0.85 * fc * b);
+        const phi_Mn_drrb = phi * (
+            0.85 * fc * a_drrb * b * (d - a_drrb / 2)
+            + As_prov_c * fs_p * (d - d_prime)
+        ) / 1e6;
+
+        // Bar spacing checks (single layer assumption):
+        const Sc_t = (n_tension     > 1) ? (b - 2 * cover - 2 * ds - n_tension     * db)        / (n_tension     - 1) : null;
+        const Sc_c = (n_compression > 1) ? (b - 2 * cover - 2 * ds - n_compression * (dbCompr || db)) / (n_compression - 1) : null;
+        const Sc_min = Math.max(25, Math.max(db, dbCompr || db));
+
+        return {
+            section_type, isDRRB,
+            d, b, h, cover, fc, fy, db, Ab, beta1: b1,
+            rho_b: rb, rho_max: r_max, rho_min: r_min,
+            phi_flex: phi, Mu_kNm: Mu, Rn,
+            // Singly-reinforced ceiling values (always shown)
+            As_max, a_max, Mn_max_kNm, phiMn_max_kNm,
+            // DRRB-specific
+            d_prime, db_compr: dbCompr || db, Ab_compr: AbCom,
+            As1, As2, As_total, Mn_resid_kNm,
+            c_drrb, eps_sp, fs_p_unc, fs_p, fs_yields,
+            As_p_req,
+            n_tension, n_compression, As_prov_t, As_prov_c,
+            a: a_drrb, phi_Mn_kNm: phi_Mn_drrb,
+            Sc_t, Sc_c, Sc_min,
+            Sc_t_ok: (Sc_t === null) || Sc_t >= Sc_min,
+            Sc_c_ok: (Sc_c === null) || Sc_c >= Sc_min,
+            capacity_ok: phi_Mn_drrb >= Mu
+        };
     }
     function roundSpacing(s) { return Math.max(25, Math.floor(s / 25) * 25); }
-    function designShear(Vu_kN, b, h, fc, fy_t, ds, db, cover, lam, legs) {
-        const d = effDepth(h, cover, ds, db), phi = 0.75, Vu = Math.abs(Vu_kN);
+
+    /**
+     * Stirrup schedule (ported from the user's RC LAB FINALS Excel).
+     *
+     * Inputs:
+     *   V_support_kN   Shear at the face of the support (kN). Required.
+     *   L_span_m       Span length (m), for the L₂ stirrup-region calc. Optional.
+     *
+     * Steps:
+     *   d              = h - cover - ds - db/2                                      (mm)
+     *   Vu_at_d        = V_support - (V_support / (L/2)) · (d/1000)                 (kN)
+     *                     (linear shear taper from V_support at x=0 to 0 at midspan;
+     *                      good approximation for UDL-dominated beams)
+     *   Vc             = 0.17 · λ · √f'c · b · d                                    (N)
+     *   φVc            = φ · Vc          (φ = 0.75)
+     *
+     *   Condition:
+     *     Vu ≤ 0.5·φVc      → no stirrups required (provide minimum per practice).
+     *     0.5·φVc < Vu ≤ φVc → minimum stirrups; Vs_req = 0.
+     *     Vu > φVc          → design stirrups; Vs_req = Vu/φ - Vc.
+     *
+     *   Vs limits (mm-units: kN):
+     *     Vs_lim1 = 0.33 · √f'c · b · d / 1000   (governs s_max)
+     *     Vs_lim2 = 0.66 · √f'c · b · d / 1000   (section limit)
+     *
+     *   Smax (code):  if Vs_req ≤ Vs_lim1 → min(d/2, 600 mm)
+     *                 if Vs_req >  Vs_lim1 → min(d/4, 300 mm)
+     *   Smax floor   = roundSpacing(Smax)  (round DOWN to 25 mm increment)
+     *
+     *   S_required = Av · fyt · d / (Vs_req · 1000)
+     *   S_floor    = roundSpacing(S_required)
+     *   S_governing = min(S_floor, Smax floor),  with a 50 mm practical floor.
+     *
+     *   L₂ — length of beam needing stirrups (each end):
+     *     x where Vu(x) = 0.5·φVc → L₂ = (V_support - 0.5·φVc) · (L/2) / V_support
+     *
+     *   Layout (each end):
+     *     n_at_Smax  = ceil(L₂_mm / Smax_floor) - 1     ← stirrups at code Smax
+     *     n_at_S     = (L₂_mm - n_at_Smax · Smax_floor) / S_governing → ceil
+     *     Total layout length = n_at_Smax · Smax_floor + n_at_S · S_governing
+     *
+     *     A common practical scheme (used in the Excel) is to lay out the FIRST
+     *     stretch near the support at the tighter S_governing, then transition to
+     *     the looser Smax_floor in the middle of the L₂ region. The function
+     *     reports both counts so the user can see the full schedule.
+     */
+    function designShear(V_support_kN, b, h, fc, fy_t, ds, db, cover, lam, legs, L_span_m) {
+        const d = effDepth(h, cover, ds, db);
+        const phi = 0.75;
         fy_t = Math.min(fy_t, 420);
-        const Vc_kN = 0.17 * lam * Math.sqrt(fc) * b * d / 1e3;
-        const phiVc = phi * Vc_kN;
-        const Av = legs * (Math.PI / 4 * ds * ds);
-        const need_min = Vu > phiVc / 2, need_des = Vu > phiVc;
+
+        const Vsup = Math.abs(V_support_kN);
+        // Shear at d-from-face (linear taper to zero at midspan); fall back to
+        // V_support if no span is given.
+        const halfSpan_mm = (L_span_m > 0) ? L_span_m * 500 : null;   // L/2 in mm
+        const d_mm        = d;                                        // already mm
+        const Vu = halfSpan_mm
+                    ? Math.max(0, Vsup - (Vsup / halfSpan_mm) * d_mm)
+                    : Vsup;
+
+        // Concrete and stirrups
+        const Vc_kN  = 0.17 * lam * Math.sqrt(fc) * b * d / 1e3;
+        const phiVc  = phi * Vc_kN;
+        const phiVc_half = phiVc / 2;
+        const Av     = legs * (Math.PI / 4 * ds * ds);
+
+        const need_min = Vu > phiVc_half, need_des = Vu > phiVc;
+
         const Avs_min = Math.max(0.062 * Math.sqrt(fc) * b / fy_t, 0.35 * b / fy_t);
         const Vs_lim1 = 0.33 * Math.sqrt(fc) * b * d / 1e3;
         const Vs_lim2 = 0.66 * Math.sqrt(fc) * b * d / 1e3;
-        const base = { d, phi_shear: phi, Vu_kN: Vu, Vc_kN, phiVc, Av_mm2: Av, legs, ds,
-                       Avs_min, Vs_lim1, Vs_lim2, need_min, need_des, fc, fy_t, lam };
-        if (!need_min) return { ...base, mode: 'none', Vs_kN: 0, s_final: null,
-                                note: 'Vu ≤ φVc/2 — stirrups not required by analysis.' };
-        if (!need_des) {
-            const s_from_min = Av / Avs_min;
-            const s_max_spac = roundSpacing(Math.min(d / 2, 600));
-            const s_final = roundSpacing(Math.min(s_from_min, s_max_spac));
-            return { ...base, mode: 'minimum', Vs_kN: 0, s_from_min, s_max_spac, s_final,
-                     note: 'φVc/2 < Vu ≤ φVc — minimum stirrups required (§409.6.3.1).' };
+
+        // Stirrup layout region (each end):
+        //   x where Vu(x) = 0.5 · φVc  →  L₂ = (V_support - 0.5·φVc) · (L/2) / V_support
+        const L2_m = (halfSpan_mm && Vsup > phiVc_half)
+                    ? Math.max(0, (Vsup - phiVc_half) * (halfSpan_mm / 1000) / Vsup)
+                    : null;
+
+        const base = {
+            d, phi_shear: phi, V_support_kN: Vsup, Vu_kN: Vu,
+            Vc_kN, phiVc, phiVc_half,
+            Av_mm2: Av, legs, ds,
+            Avs_min, Vs_lim1, Vs_lim2, need_min, need_des,
+            fc, fy_t, lam, L_span_m,
+            L2_m
+        };
+
+        // ── Case: no stirrups needed (still report minimum schedule) ────
+        if (!need_min) {
+            return { ...base, mode: 'none', Vs_kN: 0, s_final: null,
+                     note: `Vu = ${Vu.toFixed(2)} kN ≤ 0.5·φVc = ${phiVc_half.toFixed(2)} kN — stirrups not required by analysis (provide minimum per good practice).` };
         }
-        const Vs_kN = Vu / phi - Vc_kN;
-        if (Vs_kN > Vs_lim2) return { ...base, mode: 'overloaded', Vs_kN,
-                                       error: `Vs = ${Vs_kN.toFixed(2)} kN > Vs_max = ${Vs_lim2.toFixed(2)} kN. Increase section.` };
-        const s_calc = Av * fy_t * d / (Vs_kN * 1e3);
-        let s_max_spac, spac_note;
-        if (Vs_kN <= Vs_lim1) { s_max_spac = roundSpacing(Math.min(d / 2, 600)); spac_note = "Vs ≤ 0.33√f'c·b·d → s_max = min(d/2, 600 mm)"; }
-        else                  { s_max_spac = roundSpacing(Math.min(d / 4, 300)); spac_note = "Vs > 0.33√f'c·b·d → s_max = min(d/4, 300 mm)"; }
-        const s_from_min = Av / Avs_min;
-        let s_final = roundSpacing(Math.min(s_calc, s_max_spac, s_from_min));
-        s_final = Math.max(s_final, 50);
-        const Vs_prov_kN = Av * fy_t * d / (s_final * 1e3);
-        const phiVn_kN = phi * (Vc_kN + Vs_prov_kN);
-        return { ...base, mode: 'designed', Vs_kN, s_calc, s_max_spac, s_from_min, s_final,
-                 spac_note, Vs_prov_kN, Vn_prov_kN: Vc_kN + Vs_prov_kN, phiVn_kN,
-                 capacity_ok: phiVn_kN >= Vu };
+
+        // ── Compute spacing constraints ─────────────────────────────────
+        let Vs_kN = 0, s_calc = Infinity, mode = 'minimum';
+        let Smax_code = Math.min(d / 2, 600);
+        let spac_note = "Vs = 0 (min. stirrups) → S_max = min(d/2, 600 mm)";
+
+        if (need_des) {
+            Vs_kN = Vu / phi - Vc_kN;
+            if (Vs_kN > Vs_lim2) {
+                return { ...base, mode: 'overloaded', Vs_kN,
+                         error: `Vs = ${Vs_kN.toFixed(2)} kN > Vs_max = ${Vs_lim2.toFixed(2)} kN (0.66·√f'c·b·d). Increase beam section.` };
+            }
+            s_calc = Av * fy_t * d / (Vs_kN * 1e3);
+            if (Vs_kN <= Vs_lim1) {
+                Smax_code = Math.min(d / 2, 600);
+                spac_note = "Vs ≤ 0.33·√f'c·b·d  →  S_max = min(d/2, 600 mm)";
+            } else {
+                Smax_code = Math.min(d / 4, 300);
+                spac_note = "Vs > 0.33·√f'c·b·d  →  S_max = min(d/4, 300 mm)";
+            }
+            mode = 'designed';
+        }
+
+        const Smax_floor = roundSpacing(Smax_code);
+        const S_from_min = Av / Avs_min;
+
+        const S_required = Math.min(s_calc, Smax_code, S_from_min);
+        const S_floor    = roundSpacing(S_required);
+        const S_gov      = Math.max(50, S_floor);
+
+        // Capacity at the chosen spacing
+        const Vs_prov_kN = Av * fy_t * d / (S_gov * 1e3);
+        const phiVn_kN   = phi * (Vc_kN + Vs_prov_kN);
+        const capacity_ok = phiVn_kN >= Vu;
+
+        // ── Stirrup layout (per end of the beam) ────────────────────────
+        let layout = null;
+        if (L2_m !== null) {
+            const L2_mm = L2_m * 1000;
+            // n at Smax (computed) — code-max spaced stirrups across L₂
+            const n_at_Smax_calc   = L2_mm / Smax_floor;
+            const n_at_Smax        = Math.max(0, Math.ceil(n_at_Smax_calc) - 1);   // minus the first one
+            // n at S (tighter governing spacing) — fills the rest
+            const n_at_S_calc      = (L2_mm - n_at_Smax * Smax_floor) / S_gov;
+            const n_at_S           = Math.max(0, Math.ceil(n_at_S_calc));
+            const total_length_mm  = n_at_Smax * Smax_floor + n_at_S * S_gov;
+            layout = {
+                L2_mm,
+                n_at_Smax_calc, n_at_Smax,
+                n_at_S_calc,    n_at_S,
+                total_length_mm,
+                Smax_floor, S_gov
+            };
+        }
+
+        return { ...base, mode, Vs_kN, s_calc,
+                 Smax_code, Smax_floor, S_from_min, S_required, S_floor, S_gov,
+                 spac_note, Vs_prov_kN, phiVn_kN, capacity_ok,
+                 layout };
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -1508,92 +1767,248 @@
         }
     });
 
+    function sectionHeader(title) {
+        return `<div style="margin: 14px 0 6px; padding: 6px 12px; background: linear-gradient(135deg, #0056b3 0%, #003f86 100%); color: #fff; font-weight: 700; border-radius: 4px; font-size: 0.92em;">${title}</div>`;
+    }
+
     document.getElementById('rc-calc-btn').addEventListener('click', () => {
-        const Mu  = parseFloat(document.getElementById('rc-Mu').value);
-        const Vu  = parseFloat(document.getElementById('rc-Vu').value);
-        const b   = parseFloat(document.getElementById('rc-b').value);
-        const h   = parseFloat(document.getElementById('rc-h').value);
-        const fc  = parseFloat(document.getElementById('rc-fc').value);
-        const fyl = parseFloat(document.getElementById('rc-fyl').value);
-        const fyt = parseFloat(document.getElementById('rc-fyt').value);
-        const db  = parseFloat(document.getElementById('rc-db').value);
-        const ds  = parseFloat(document.getElementById('rc-ds').value);
-        const cov = parseFloat(document.getElementById('rc-cover').value);
-        const lam = parseFloat(document.getElementById('rc-lambda').value);
+        const Mu   = parseFloat(document.getElementById('rc-Mu').value);
+        const Vu   = parseFloat(document.getElementById('rc-Vu').value);
+        const b    = parseFloat(document.getElementById('rc-b').value);
+        const h    = parseFloat(document.getElementById('rc-h').value);
+        const fc   = parseFloat(document.getElementById('rc-fc').value);
+        const fyl  = parseFloat(document.getElementById('rc-fyl').value);
+        const fyt  = parseFloat(document.getElementById('rc-fyt').value);
+        const db   = parseFloat(document.getElementById('rc-db').value);
+        const dbC  = parseFloat(document.getElementById('rc-db-c').value) || db;
+        const dPr  = parseFloat(document.getElementById('rc-d-prime').value);
+        const ds   = parseFloat(document.getElementById('rc-ds').value);
+        const cov  = parseFloat(document.getElementById('rc-cover').value);
+        const lam  = parseFloat(document.getElementById('rc-lambda').value);
         const legs = parseInt(document.getElementById('rc-legs').value);
+        const Lspan = parseFloat(document.getElementById('rc-L').value);
 
-        const fl = designFlexure(Mu, b, h, fc, fyl, db, ds, cov);
-        const sh = designShear(Vu, b, h, fc, fyt, ds, db, cov, lam, legs);
+        const fl = designFlexure(Mu, b, h, fc, fyl, db, ds, cov, dPr, dbC);
+        const sh = designShear(Vu, b, h, fc, fyt, ds, db, cov, lam, legs, Lspan);
 
+        // ── FLEXURE OUTPUT ────────────────────────────────────────────────
         const flx = document.getElementById('rc-flexure');
         if (fl.error && fl.d === undefined) {
             flx.innerHTML = `<div class="bd-alert bd-alert-fail">${fl.error}</div>`;
         } else {
             let html = '';
-            if (fl.error) html += `<div class="bd-alert bd-alert-fail">${fl.error}</div>`;
-            html += row('h (total depth)',        `${h.toFixed(0)} mm`);
-            html += row('b (width)',              `${b.toFixed(0)} mm`);
-            html += row('cover',                  `${cov.toFixed(0)} mm`,  'NSCP 2015 Table 420.6.1.3.1');
-            html += row('d (effective depth)',    `${fl.d.toFixed(1)} mm`, 'h − cover − ∅s − ∅b/2');
-            html += row('φ (flexure)',            `${fl.phi_flex}`);
-            html += row('β₁',                     `${fl.beta1.toFixed(4)}`, 'NSCP 2015 §422.2.2.4.3');
-            html += row('Mu',                     `${fl.Mu_kNm.toFixed(3)} kN·m`);
-            html += row('Rn = Mu / (φ·b·d²)',     `${fl.Rn.toFixed(4)} MPa`);
-            html += row('ρ_calc',                 `${fl.rho_calc.toFixed(6)}`);
-            html += row('ρ_min',                  `${fl.rho_min.toFixed(6)}`, "max(√f'c / 4fy, 1.4/fy) — §406.3.1");
-            html += row('ρ_max',                  `${fl.rho_max.toFixed(6)}`, '0.75 ρ_b — §406.3.3');
-            fl.checks.forEach(c => { html += row('Check', c); });
-            html += row('ρ_use',                  `${fl.rho_use.toFixed(6)}`);
-            html += row('As_req = ρ·b·d',         `${fl.As_req.toFixed(2)} mm²`);
-            html += row('Ab (1 bar)',             `${fl.Ab.toFixed(2)} mm²`,  `∅${db.toFixed(0)} mm`);
-            html += row('n = ⌈As_req / Ab⌉',     `${fl.n_bars} bars`);
-            html += row('As_prov = n·Ab',         `${fl.As_prov.toFixed(2)} mm²`);
-            html += row("a = As·fy / (0.85·f'c·b)", `${fl.a.toFixed(2)} mm`);
-            html += row('φMn = φ·As·fy·(d − a/2)',
-                       `${fl.capacity_ok ? '✓' : '✗'} ${fl.phi_Mn_kNm.toFixed(3)} kN·m`,
-                       `${fl.capacity_ok ? '≥' : '<'} Mu = ${fl.Mu_kNm.toFixed(3)} kN·m`,
-                       fl.capacity_ok ? 'ok' : 'fail');
-            if (fl.capacity_ok && !fl.over_reinforced) {
-                html += `<div class="bd-alert bd-alert-ok">✓ Use <strong>${fl.n_bars} — ∅${db.toFixed(0)} mm</strong> bars (As<sub>prov</sub> = ${fl.As_prov.toFixed(0)} mm² &nbsp;|&nbsp; φMn = ${fl.phi_Mn_kNm.toFixed(2)} kN·m)</div>`;
-            } else if (fl.over_reinforced) html += `<div class="bd-alert bd-alert-fail">✗ Over-reinforced — increase beam section.</div>`;
-            else html += `<div class="bd-alert bd-alert-fail">✗ Flexural capacity insufficient.</div>`;
+            if (fl.error && !fl.capacity_ok && fl.As_total === undefined && fl.n_bars === undefined) {
+                html += `<div class="bd-alert bd-alert-fail">${fl.error}</div>`;
+            }
+            // Common: section + materials
+            html += sectionHeader('Step 1 — Section, materials, β₁');
+            html += row('h (total depth)',       `${h.toFixed(0)} mm`);
+            html += row('b (width)',             `${b.toFixed(0)} mm`);
+            html += row('cover',                 `${cov.toFixed(0)} mm`,  'NSCP 2015 Table 420.6.1.3.1');
+            html += row('d (effective depth)',   `${fl.d.toFixed(1)} mm`, 'h − cover − ∅s − ∅b/2');
+            html += row('φ (flexure)',           `${fl.phi_flex}`);
+            html += row('β₁',                    `${fl.beta1.toFixed(4)}`, 'NSCP 2015 §422.2.2.4.3');
+            html += row('Mu',                    `${fl.Mu_kNm.toFixed(3)} kN·m`);
+            html += row('Rn = Mu / (φ·b·d²)',    `${fl.Rn.toFixed(4)} MPa`);
+
+            // ρ limits
+            html += sectionHeader('Step 2 — ρ limits & singly-reinforced ceiling');
+            html += row('ρ_b (balanced)',        `${fl.rho_b.toFixed(6)}`,   '(0.85·β₁·f\'c/fy)·600/(600+fy) — §421.2.2');
+            html += row('ρ_max',                 `${fl.rho_max.toFixed(6)}`, '0.75 ρ_b — §406.3.3');
+            html += row('ρ_min',                 `${fl.rho_min.toFixed(6)}`, "max(√f'c / 4fy, 1.4/fy) — §406.3.1");
+            html += row('As_max = ρ_max·b·d',    `${fl.As_max.toFixed(2)} mm²`);
+            html += row("a_max = As_max·fy/(0.85f'c·b)", `${fl.a_max.toFixed(2)} mm`);
+            html += row('Mn_max = As_max·fy·(d − a_max/2)', `${fl.Mn_max_kNm.toFixed(3)} kN·m`,  'singly-reinforced nominal ceiling');
+            html += row('φMn_max',               `${fl.phiMn_max_kNm.toFixed(3)} kN·m`);
+
+            // ── SRRB or DRRB classifier ─────────────────────────────────
+            html += sectionHeader('Step 3 — SRRB vs DRRB classification');
+            if (!fl.isDRRB) {
+                html += row('Compare: Mu vs φMn_max',
+                           `${fl.Mu_kNm.toFixed(3)} ≤ ${fl.phiMn_max_kNm.toFixed(3)} kN·m`,
+                           '→ SRRB (Singly-Reinforced Rectangular Beam)',
+                           'ok');
+            } else {
+                html += row('Compare: Mu vs φMn_max',
+                           `${fl.Mu_kNm.toFixed(3)} > ${fl.phiMn_max_kNm.toFixed(3)} kN·m`,
+                           '→ DRRB (Doubly-Reinforced — compression steel required)',
+                           'fail');
+            }
+
+            // ── SRRB PATH ─────────────────────────────────────────────────
+            if (!fl.isDRRB) {
+                html += sectionHeader('Step 4 — SRRB: solve ρ, As, bars, capacity');
+                html += row('disc = 1 − 2Rn / (0.85·f\'c)',  `${(1 - 2 * fl.Rn / (0.85 * fc)).toFixed(6)}`);
+                html += row('ρ_calc = (0.85·f\'c/fy)(1 − √disc)', `${fl.rho_calc.toFixed(6)}`);
+                fl.checks.forEach(c => { html += row('Check', c); });
+                html += row('ρ_use',                 `${fl.rho_use.toFixed(6)}`);
+                html += row('As_req = ρ·b·d',        `${fl.As_req.toFixed(2)} mm²`);
+                html += row('Ab (1 bar)',            `${fl.Ab.toFixed(2)} mm²`, `∅${db.toFixed(0)} mm`);
+                html += row('n = ⌈As_req / Ab⌉',    `${fl.n_bars} bars`);
+                html += row('As_prov = n·Ab',        `${fl.As_prov.toFixed(2)} mm²`);
+                html += row("a = As_prov·fy / (0.85·f'c·b)", `${fl.a.toFixed(2)} mm`);
+                if (fl.Sc !== null) {
+                    html += row('Sc (bar spacing) = (b − 2c − 2∅s − n∅) / (n − 1)',
+                               `${fl.Sc.toFixed(1)} mm`,
+                               `min = ${fl.Sc_min.toFixed(0)} mm — ${fl.Sc_ok ? '✓' : '✗ too tight, add a layer'}`,
+                               fl.Sc_ok ? 'ok' : 'fail');
+                }
+                html += row('φMn = φ·As·fy·(d − a/2)',
+                           `${fl.capacity_ok ? '✓' : '✗'} ${fl.phi_Mn_kNm.toFixed(3)} kN·m`,
+                           `${fl.capacity_ok ? '≥' : '<'} Mu = ${fl.Mu_kNm.toFixed(3)} kN·m`,
+                           fl.capacity_ok ? 'ok' : 'fail');
+
+                html += (fl.capacity_ok)
+                    ? `<div class="bd-alert bd-alert-ok">✓ <strong>SRRB</strong> — use <strong>${fl.n_bars} — ∅${db.toFixed(0)} mm</strong> bars (As<sub>prov</sub> = ${fl.As_prov.toFixed(0)} mm²&nbsp;|&nbsp; φMn = ${fl.phi_Mn_kNm.toFixed(2)} kN·m)</div>`
+                    : `<div class="bd-alert bd-alert-fail">✗ Flexural capacity insufficient — increase section.</div>`;
+            }
+
+            // ── DRRB PATH ─────────────────────────────────────────────────
+            if (fl.isDRRB) {
+                if (fl.error) {
+                    html += `<div class="bd-alert bd-alert-fail">${fl.error}</div>`;
+                } else {
+                    html += sectionHeader('Step 4 — DRRB: tension steel pair A_s1 + A_s2');
+                    html += row('A_s1 = ρ_max·b·d',                 `${fl.As1.toFixed(2)} mm²`,    'tension steel paired with Mn_max');
+                    html += row('Mn_resid = Mu/φ − Mn_max',         `${fl.Mn_resid_kNm.toFixed(3)} kN·m`, 'residual moment to be carried by the couple');
+                    html += row("A_s2 = Mn_resid / (fy·(d − d'))",  `${fl.As2.toFixed(2)} mm²`,    "second tension layer paired with A_s'");
+                    html += row('A_s,total = A_s1 + A_s2',          `${fl.As_total.toFixed(2)} mm²`);
+
+                    html += sectionHeader("Step 5 — Compression steel A_s' (check f_s')");
+                    html += row("d' (compression-bar depth)",       `${fl.d_prime.toFixed(1)} mm`);
+                    html += row('c = a_max / β₁',                   `${fl.c_drrb.toFixed(2)} mm`, 'neutral-axis depth at ρ_max');
+                    html += row("ε_s' = 0.003·(c − d')/c",          `${fl.eps_sp.toFixed(6)}`);
+                    html += row("f_s'_unc = ε_s'·Es",               `${fl.fs_p_unc.toFixed(2)} MPa`, 'Es = 200 000 MPa');
+                    html += row("f_s' check vs fy",
+                               fl.fs_yields ? `f_s'_unc ≥ fy → use f_s' = fy = ${fyl.toFixed(0)} MPa` :
+                                               `f_s'_unc < fy → A_s' must be scaled up by fy/f_s'`,
+                               '', fl.fs_yields ? 'ok' : 'fail');
+                    html += row("f_s' (used)",                       `${fl.fs_p.toFixed(2)} MPa`);
+                    html += row("A_s'_req = A_s2"+(fl.fs_yields ? "" : " · fy/f_s'"),
+                                                                     `${fl.As_p_req.toFixed(2)} mm²`);
+
+                    html += sectionHeader('Step 6 — Bar counts & capacity verification');
+                    html += row('Ab (tension, ∅)',                  `${fl.Ab.toFixed(2)} mm²`,    `∅${db.toFixed(0)} mm`);
+                    html += row("Ab' (compression, ∅')",            `${fl.Ab_compr.toFixed(2)} mm²`, `∅${(dbC || db).toFixed(0)} mm`);
+                    html += row('n tension = ⌈A_s,total / Ab⌉',    `${fl.n_tension} bars`);
+                    html += row("n compr. = ⌈A_s'_req / Ab'⌉",     `${fl.n_compression} bars`);
+                    html += row('As_prov_tension',                  `${fl.As_prov_t.toFixed(2)} mm²`);
+                    html += row("As_prov_compr.",                   `${fl.As_prov_c.toFixed(2)} mm²`);
+                    html += row("a = (As·fy − A_s'·f_s') / (0.85·f'c·b)", `${fl.a.toFixed(2)} mm`, 'force equilibrium with provided steel');
+                    if (fl.Sc_t !== null) {
+                        html += row('Sc tension',
+                                   `${fl.Sc_t.toFixed(1)} mm`,
+                                   `min = ${fl.Sc_min.toFixed(0)} mm — ${fl.Sc_t_ok ? '✓' : '✗ too tight'}`,
+                                   fl.Sc_t_ok ? 'ok' : 'fail');
+                    }
+                    if (fl.Sc_c !== null) {
+                        html += row('Sc compression',
+                                   `${fl.Sc_c.toFixed(1)} mm`,
+                                   `min = ${fl.Sc_min.toFixed(0)} mm — ${fl.Sc_c_ok ? '✓' : '✗ too tight'}`,
+                                   fl.Sc_c_ok ? 'ok' : 'fail');
+                    }
+                    html += row("φMn = φ·[0.85f'c·a·b·(d−a/2) + A_s'·f_s'·(d−d')]",
+                               `${fl.capacity_ok ? '✓' : '✗'} ${fl.phi_Mn_kNm.toFixed(3)} kN·m`,
+                               `${fl.capacity_ok ? '≥' : '<'} Mu = ${fl.Mu_kNm.toFixed(3)} kN·m`,
+                               fl.capacity_ok ? 'ok' : 'fail');
+
+                    html += (fl.capacity_ok)
+                        ? `<div class="bd-alert bd-alert-ok">✓ <strong>DRRB</strong> — use <strong>${fl.n_tension} — ∅${db.toFixed(0)} mm tension</strong> bars and <strong>${fl.n_compression} — ∅${(dbC||db).toFixed(0)} mm compression</strong> bars (φMn = ${fl.phi_Mn_kNm.toFixed(2)} kN·m)</div>`
+                        : `<div class="bd-alert bd-alert-fail">✗ DRRB capacity insufficient — increase section.</div>`;
+                }
+            }
+
             flx.innerHTML = html;
         }
 
+        // ── SHEAR / STIRRUP SCHEDULE OUTPUT ───────────────────────────────
         const shr = document.getElementById('rc-shear');
         let html = '';
+        html += sectionHeader('Step 1 — Demand at the critical section');
         html += row('d (effective depth)',          `${sh.d.toFixed(1)} mm`);
         html += row('φ (shear)',                    `${sh.phi_shear}`);
         html += row('λ',                            `${lam}`, lam === 1 ? 'Normal weight' : lam === 0.85 ? 'Sand-LW' : 'All-LW');
-        html += row("Vc = 0.17λ√f'c·b·d",           `${sh.Vc_kN.toFixed(3)} kN`, 'NSCP 2015 §422.5.5.1');
+        html += row('V at support',                 `${sh.V_support_kN.toFixed(3)} kN`,    'shear at face of support');
+        if (sh.L_span_m > 0) {
+            html += row('Vu at d',
+                       `${sh.Vu_kN.toFixed(3)} kN`,
+                       `V_support − (V_support·d / (L/2)) = ${sh.V_support_kN.toFixed(2)} − (${sh.V_support_kN.toFixed(2)}·${sh.d.toFixed(0)}/${(sh.L_span_m*500).toFixed(0)})`);
+        } else {
+            html += row('Vu',                       `${sh.Vu_kN.toFixed(3)} kN`, '(no span given → using V at support)');
+        }
+
+        html += sectionHeader('Step 2 — Concrete shear capacity');
+        html += row("Vc = 0.17·λ·√f'c·b·d",         `${sh.Vc_kN.toFixed(3)} kN`, 'NSCP 2015 §422.5.5.1');
         html += row('φVc',                          `${sh.phiVc.toFixed(3)} kN`);
-        html += row('Vu',                           `${sh.Vu_kN.toFixed(3)} kN`);
+        html += row('0.5·φVc',                      `${sh.phiVc_half.toFixed(3)} kN`);
         html += row('Av (stirrup area)',            `${sh.Av_mm2.toFixed(2)} mm²`, `${legs}-leg ∅${ds.toFixed(0)} mm`);
-        html += row("Vs_lim1 (0.33√f'c·b·d)",       `${sh.Vs_lim1.toFixed(2)} kN`, 'controls max spacing');
-        html += row("Vs_lim2 (0.66√f'c·b·d)",       `${sh.Vs_lim2.toFixed(2)} kN`, 'section too small if Vs exceeds');
-        if (sh.mode === 'overloaded') html += `<div class="bd-alert bd-alert-fail">${sh.error}</div>`;
-        else if (sh.mode === 'none') {
-            html += row("Av/s_min", `${sh.Avs_min.toFixed(4)} mm²/mm`, "max(0.062√f'c·b/fyt, 0.35b/fyt)");
+
+        html += sectionHeader('Step 3 — Required Vs and limits');
+        let cond;
+        if      (sh.mode === 'none')      cond = `Vu ≤ 0.5·φVc → stirrups NOT required by analysis`;
+        else if (sh.mode === 'minimum')   cond = `0.5·φVc < Vu ≤ φVc → minimum stirrups required`;
+        else if (sh.mode === 'designed')  cond = `Vu > φVc → design stirrups`;
+        else                              cond = sh.mode;
+        html += row('Condition', cond, '', sh.mode === 'none' || sh.mode === 'minimum' ? 'ok' : '');
+        html += row('Vs_req = Vu/φ − Vc',           `${sh.Vs_kN.toFixed(3)} kN`);
+        html += row("Vs_lim1 (0.33·√f'c·b·d)",      `${sh.Vs_lim1.toFixed(2)} kN`, 'governs max spacing');
+        html += row("Vs_lim2 (0.66·√f'c·b·d)",      `${sh.Vs_lim2.toFixed(2)} kN`, 'section too small if Vs > Vs_lim2');
+        if (sh.mode === 'overloaded') {
+            html += `<div class="bd-alert bd-alert-fail">${sh.error}</div>`;
+            shr.innerHTML = html;
+            document.getElementById('rc-results').style.display = '';
+            renderMath(document.getElementById('rc-results'));
+            return;
+        }
+
+        html += sectionHeader('Step 4 — Spacing');
+        html += row("Av/s_min",                     `${sh.Avs_min.toFixed(4)} mm²/mm`, "max(0.062·√f'c·b/fyt, 0.35·b/fyt) — §409.6.3.3");
+        if (sh.mode === 'designed') {
+            html += row("s_calc = Av·fyt·d / Vs",   `${sh.s_calc.toFixed(1)} mm`);
+        }
+        html += row("Spacing rule", sh.spac_note);
+        html += row("S_max (code)",                  `${sh.Smax_code.toFixed(1)} mm`);
+        html += row("S_max floored to 25 mm",       `${sh.Smax_floor.toFixed(0)} mm`);
+        html += row("S required",                    `${(sh.S_required || sh.Smax_code).toFixed(1)} mm`, "min(s_calc, S_max, Av/(Av/s_min))");
+        html += row("S floored to 25 mm",           `${sh.S_floor.toFixed(0)} mm`);
+        html += row("S governing (50 mm floor)",    `<strong>${sh.S_gov.toFixed(0)} mm</strong>`);
+
+        if (sh.mode === 'designed') {
+            html += row("Vs_prov = Av·fyt·d / S_gov",`${sh.Vs_prov_kN.toFixed(3)} kN`);
+            html += row("φVn = φ(Vc + Vs_prov)",
+                       `${sh.capacity_ok ? '✓' : '✗'} ${sh.phiVn_kN.toFixed(3)} kN`,
+                       `${sh.capacity_ok ? '≥' : '<'} Vu = ${sh.Vu_kN.toFixed(3)} kN`,
+                       sh.capacity_ok ? 'ok' : 'fail');
+        }
+
+        // ── Stirrup schedule (layout) ─────────────────────────────────────
+        if (sh.layout) {
+            const lo = sh.layout;
+            html += sectionHeader('Step 5 — Stirrup Schedule (each end of beam)');
+            html += row("L₂ (region needing stirrups)",
+                       `${(lo.L2_mm / 1000).toFixed(3)} m  (${lo.L2_mm.toFixed(0)} mm)`,
+                       "length where Vu(x) > 0.5·φVc");
+            html += row("n at S_max  (computed)",   `${lo.n_at_Smax_calc.toFixed(2)}`,  `L₂ / S_max_floor = ${lo.L2_mm.toFixed(0)} / ${lo.Smax_floor.toFixed(0)}`);
+            html += row("n at S_max  (round up)",   `${lo.n_at_Smax} stirrups`);
+            html += row("n at S_gov  (computed)",   `${lo.n_at_S_calc.toFixed(2)}`,     `(L₂ − n_Smax·S_max_floor) / S_gov`);
+            html += row("n at S_gov  (round up)",   `${lo.n_at_S} stirrups`);
+            html += row("Total layout length",      `<strong>${lo.total_length_mm.toFixed(0)} mm</strong>`,
+                                                     `${lo.n_at_Smax} × ${lo.Smax_floor.toFixed(0)} + ${lo.n_at_S} × ${lo.S_gov.toFixed(0)}`);
+        }
+
+        if (sh.mode === 'none') {
             html += `<div class="bd-alert bd-alert-warn">${sh.note}</div>`;
         } else {
-            if (sh.mode === 'designed') {
-                html += row("Vs = Vu/φ − Vc",         `${sh.Vs_kN.toFixed(3)} kN`);
-                html += row("s_calc = Av·fyt·d / Vs", `${sh.s_calc.toFixed(1)} mm`);
-                html += row("Spacing rule",           sh.spac_note);
-            }
-            html += row("Av/s_min",                    `${sh.Avs_min.toFixed(4)} mm²/mm`, '§409.6.3.3');
-            html += row("s from Av/s_min",             `${sh.s_from_min.toFixed(1)} mm`);
-            html += row("s_max (spacing)",             `${sh.s_max_spac.toFixed(0)} mm`);
-            if (sh.mode === 'designed') {
-                html += row("φVn = φ(Vc + Vs_prov)",
-                           `${sh.capacity_ok ? '✓' : '✗'} ${sh.phiVn_kN.toFixed(3)} kN`,
-                           `${sh.capacity_ok ? '≥' : '<'} Vu = ${sh.Vu_kN.toFixed(3)} kN`,
-                           sh.capacity_ok ? 'ok' : 'fail');
-            }
-            const modeLbl = sh.mode === 'minimum' ? 'min. stirrups' : 'designed stirrups';
-            html += `<div class="bd-alert bd-alert-ok">✓ Use <strong>∅${ds.toFixed(0)} mm stirrups @ ${sh.s_final.toFixed(0)} mm</strong> (${modeLbl})</div>`;
+            const modeLbl = sh.mode === 'minimum' ? 'minimum-stirrup region' : 'designed-stirrup region';
+            html += `<div class="bd-alert bd-alert-ok">
+                ✓ Use <strong>${legs}-leg ∅${ds.toFixed(0)} mm stirrups</strong> &nbsp;|&nbsp;
+                <strong>S_gov = ${sh.S_gov.toFixed(0)} mm</strong> near support, transitioning to
+                <strong>S_max = ${sh.Smax_floor.toFixed(0)} mm</strong> in the middle of the L₂ region${sh.layout ? `&nbsp;(total layout ${sh.layout.total_length_mm.toFixed(0)} mm per end)` : ''}
+                <br><small style="color:#5c6773;">${modeLbl}</small>
+            </div>`;
             if (sh.mode === 'minimum') html += `<div class="bd-alert bd-alert-info">${sh.note}</div>`;
         }
+
         shr.innerHTML = html;
 
         document.getElementById('rc-results').style.display = '';
