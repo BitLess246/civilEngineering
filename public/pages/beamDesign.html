@@ -2768,6 +2768,45 @@
         html += row('\\(V_{s,req} = \\dfrac{V_u}{\\phi} - V_c\\)', `${sh.Vs_kN.toFixed(3)} kN`);
         html += row('\\(V_{s,lim1} = 0.33\\,\\sqrt{f\'_c}\\,b\\,d\\)', `${sh.Vs_lim1.toFixed(2)} kN`, 'governs max spacing');
         html += row('\\(V_{s,lim2} = 0.66\\,\\sqrt{f\'_c}\\,b\\,d\\)', `${sh.Vs_lim2.toFixed(2)} kN`, 'section too small if \\(V_s > V_{s,lim2}\\)');
+
+        // ── Governing Vs (what actually drives the spacing) ──────────────
+        //
+        // Three regimes (NSCP §409.6.3 / §422.5.10):
+        //   mode = 'none'       — Vu ≤ 0.5·φVc          → no stirrups required
+        //   mode = 'minimum'    — 0.5·φVc < Vu ≤ φVc    → Vs_used = 0; spacing from Av_min
+        //   mode = 'designed'   — Vu > φVc              → Vs_used = Vs,req
+        //     and within 'designed':
+        //       Vs,req ≤ Vs,lim1  → S_max = min(d/2, 600 mm)
+        //       Vs,lim1 < Vs,req ≤ Vs,lim2  → S_max = min(d/4, 300 mm)
+        //   mode = 'overloaded' — Vs,req > Vs,lim2     → section too small
+        let govLabel, govValue, govNote, govCls;
+        if (sh.mode === 'none') {
+            govLabel = 'Governing \\(V_s\\)';
+            govValue = 'N/A — \\(V_c\\) alone suffices';
+            govNote  = 'no stirrups required by analysis; provide minimum per practice';
+            govCls   = 'ok';
+        } else if (sh.mode === 'minimum') {
+            govLabel = 'Governing \\(V_s\\)';
+            govValue = '\\(V_s = 0\\) kN <small>(use minimum-stirrup rule)</small>';
+            govNote  = '\\(V_u\\) is in the \\(\\tfrac{1}{2}\\phi V_c < V_u \\le \\phi V_c\\) band — spacing comes from \\(A_v/s_{\\min}\\), NOT \\(V_{s,req}\\)';
+            govCls   = 'ok';
+        } else if (sh.mode === 'overloaded') {
+            govLabel = 'Governing \\(V_s\\)';
+            govValue = `\\(V_{s,req} = ${sh.Vs_kN.toFixed(2)}\\) kN \\(>\\) \\(V_{s,lim2} = ${sh.Vs_lim2.toFixed(2)}\\) kN`;
+            govNote  = 'section is too small — increase \\(b\\) or \\(d\\); stirrups cannot fix this';
+            govCls   = 'fail';
+        } else {
+            // 'designed' — Vs,req drives the design; pick the spacing band
+            const within1 = sh.Vs_kN <= sh.Vs_lim1 + 1e-6;
+            govLabel = 'Governing \\(V_s\\) <small>(used in \\(s_{calc}\\))</small>';
+            govValue = `\\(V_s = V_{s,req} = ${sh.Vs_kN.toFixed(3)}\\) kN`;
+            govNote  = within1
+                ? `\\(V_{s,req} \\le V_{s,lim1}\\) → use \\(S_{\\max} = \\min(d/2,\\,600\\text{ mm})\\)`
+                : `\\(V_{s,lim1} < V_{s,req} \\le V_{s,lim2}\\) → use stricter \\(S_{\\max} = \\min(d/4,\\,300\\text{ mm})\\)`;
+            govCls   = 'ok';
+        }
+        html += row(govLabel, govValue, govNote, govCls);
+
         if (sh.mode === 'overloaded') {
             html += `<div class="bd-alert bd-alert-fail">${sh.error}</div>`;
             return html;
