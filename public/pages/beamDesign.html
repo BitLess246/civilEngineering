@@ -1264,15 +1264,21 @@
     //  Helper: split N total tension bars into two layers when the
     //  single-layer clear spacing fails.
     //
-    //  Rule (from user spec):
-    //    – Layer 2 (the upper tension layer, sitting above layer 1) must
-    //      hold an EVEN number of bars so it can be detailed
-    //      symmetrically.
-    //    – Try layered only after single-layer fails Sc_min.
-    //    – Iterate n2 ∈ {2, 4, 6, …} until layer 1 spacing is OK; layer
-    //      1 always gets the LARGER share (since layer 1 is more
-    //      effective for moment capacity).
+    //  Rules:
+    //    – Layer 1 is the OUTER tension layer (closest to the tension
+    //      face — bottom for sagging, top for hogging). It has the
+    //      larger moment arm, so loading it up first is the most
+    //      efficient use of steel.
+    //    – HARD: n1 > n2 (layer 1 always carries the larger share).
+    //    – SOFT: n2 EVEN — preferred for symmetric detailing without a
+    //      centerline bar in layer 2. If no valid even split exists, an
+    //      odd n2 (with a center bar) is allowed as a fallback rather
+    //      than failing the whole design.
     //    – Both layers must have ≥ 2 bars (corner-bar minimum).
+    //    – Try smallest n2 first → maximizes n1 → maximizes Varignon
+    //      d_eff (more bars in the deeper layer pulls the centroid down).
+    //    – If no split satisfies the rules, return an error so the user
+    //      knows to widen the section.
     // ─────────────────────────────────────────────────────────────────
     function splitTensionLayers(n_total, b, cover, ds, db) {
         const Sc_min = Math.max(25, db);                  // NSCP 425.2.1
@@ -1283,18 +1289,32 @@
             return { n1: n_total, n2: 0, layered: false,
                      Sc_layer1: sc_single, Sc_min, Sc_single: sc_single };
         }
-        // Single-layer fails — try 2 layers (n2 even).
-        for (let n2 = 2; n2 <= n_total - 2; n2 += 2) {
+        // Need 2 layers. n2 must be < n_total/2 so that n1 > n2 strictly.
+        // For integer n: n2 ≤ floor((n_total - 1) / 2).
+        const n2_max = Math.floor((n_total - 1) / 2);
+        const Sc_at = (n1) => (n1 > 1)
+            ? (b - 2 * cover - 2 * ds - n1 * db) / (n1 - 1)
+            : Infinity;
+
+        // Pass 1 — EVEN n2 (preferred for symmetric detailing).
+        for (let n2 = 2; n2 <= n2_max; n2 += 2) {
             const n1 = n_total - n2;
-            const sc_n1 = (n1 > 1)
-                ? (b - 2 * cover - 2 * ds - n1 * db) / (n1 - 1)
-                : Infinity;
+            const sc_n1 = Sc_at(n1);
             if (sc_n1 >= Sc_min) {
-                return { n1, n2, layered: true,
+                return { n1, n2, layered: true, n2_even: true,
                          Sc_layer1: sc_n1, Sc_min, Sc_single: sc_single };
             }
         }
-        return { error: `Section is too narrow — even with the bottom layer reduced to 2 bars the spacing in layer 1 cannot meet \\(S_{c,\\min} = ${Sc_min.toFixed(0)}\\) mm. Increase \\(b\\) or use a larger bar.`,
+        // Pass 2 — ODD n2 fallback (still keeps n1 > n2 and Sc OK).
+        for (let n2 = 3; n2 <= n2_max; n2 += 2) {
+            const n1 = n_total - n2;
+            const sc_n1 = Sc_at(n1);
+            if (sc_n1 >= Sc_min) {
+                return { n1, n2, layered: true, n2_even: false,
+                         Sc_layer1: sc_n1, Sc_min, Sc_single: sc_single };
+            }
+        }
+        return { error: `Section is too narrow — cannot split ${n_total} bars into 2 layers with \\(n_1 > n_2\\) AND \\(S_{c,\\min} = ${Sc_min.toFixed(0)}\\) mm. Increase \\(b\\) or use a smaller \\(\\varnothing_b\\).`,
                  Sc_min, Sc_single: sc_single };
     }
 
@@ -2596,9 +2616,14 @@
                            Sc1_ok ? 'ok' : 'fail');
             }
             if (fl.n_layers === 2) {
-                html += row('Layer split (\\(n_1 + n_2 = n\\))',
-                           `\\(${fl.n1} + ${fl.n2} = ${fl.n_bars}\\) bars`,
-                           `\\(n_2\\) is EVEN for symmetric detailing; \\(n_1\\) carries the larger share`);
+                {
+                    const evenTxt = (fl.n2 % 2 === 0)
+                        ? '\\(n_2\\) is EVEN (symmetric detailing); '
+                        : '\\(n_2\\) is ODD — no valid even split fits, so a centerline bar is used in layer 2; ';
+                    html += row('Layer split (\\(n_1 + n_2 = n\\))',
+                               `\\(${fl.n1} + ${fl.n2} = ${fl.n_bars}\\) bars`,
+                               `${evenTxt}\\(n_1 > n_2\\) — layer 1 (outer / deeper) carries the larger share`);
+                }
                 html += row('\\(S_{c,\\,layer\\,1}\\) (with \\(n_1\\) bars)',
                            `${fl.Sc_layer1.toFixed(1)} mm`,
                            `\\(\\ge S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ✓`,
@@ -2692,9 +2717,14 @@
                        Sct1_ok ? 'ok' : 'fail');
         }
         if (fl.n_layers === 2) {
-            html += row('Tension layer split (\\(n_1 + n_2 = n_{tension}\\))',
-                       `\\(${fl.n1} + ${fl.n2} = ${fl.n_tension}\\) bars`,
-                       `\\(n_2\\) is EVEN for symmetric detailing`);
+            {
+                const evenTxtD = (fl.n2 % 2 === 0)
+                    ? '\\(n_2\\) is EVEN (symmetric detailing); '
+                    : '\\(n_2\\) is ODD — no valid even split fits, so a centerline bar is used in layer 2; ';
+                html += row('Tension layer split (\\(n_1 + n_2 = n_{tension}\\))',
+                           `\\(${fl.n1} + ${fl.n2} = ${fl.n_tension}\\) bars`,
+                           `${evenTxtD}\\(n_1 > n_2\\) — layer 1 (outer / deeper) carries the larger share`);
+            }
             html += row('\\(S_{c,\\,layer\\,1}\\) (with \\(n_1\\) bars)',
                        `${fl.Sc_layer1.toFixed(1)} mm`,
                        `\\(\\ge S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ✓`,
