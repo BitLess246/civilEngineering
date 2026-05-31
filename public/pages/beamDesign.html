@@ -2452,42 +2452,67 @@
         //    either side). Moment at the support is captured by 1/2 above when
         //    relevant; we still add the support so the user can design for
         //    high shear even when M ≈ 0 (simple supports).
+        // ── Beam extent (for overhang detection) ──────────────────────────
+        // xs is sampled over the full beam length, so xs[0] = left edge and
+        // xs[last] = right edge of the beam itself (NOT necessarily a support).
+        const xLeftEdge  = xs[0];
+        const xRightEdge = xs[xs.length - 1];
+        const overhangTol = 1e-3;     // 1 mm — anything farther than this counts as a true overhang
+
         supps.forEach((s, i) => {
             const idx = idxAt(s.x);
+            const Rv  = Number(s.Rv) || 0;
+            const isLeftEnd  = (i === 0);
+            const isRightEnd = (i === supps.length - 1);
+            // Overhang exists if the beam edge is BEYOND the end support.
+            const hasLeftOverhang  = isLeftEnd  && (s.x - xLeftEdge  > overhangTol);
+            const hasRightOverhang = isRightEnd && (xRightEdge - s.x > overhangTol);
 
             // ── Design shear demand at the support face ────────────────────
             //
-            // The FEM V-reconstruction walks left-to-right adding each
-            // reaction the instant x reaches x_support. So V at the SAMPLE
-            // located exactly at the support — call it V_after — already
-            // includes this support's reaction. The pre-reaction value
-            // (just upstream of the face, where the adjacent span is
-            // pushing into the support) is V_before = V_after − Rv.
+            // CASE A — END SUPPORT, NO OVERHANG  →  Vu = |R| (exact).
             //
-            // The design shear demand on EITHER face of the support is the
-            // larger of |V_after| and |V_before|:
+            //   For a simply supported / continuous beam with the beam ending
+            //   right at the end support, the in-span face shear right next
+            //   to the support equals the support reaction. Use the
+            //   reaction magnitude directly so it matches the Support
+            //   Reactions panel exactly (e.g. R=210 → Vu=210.000), without
+            //   any eps-offset truncation from the FEM sampler.
             //
-            //   LEFT END  (x = 0):    V_after = +R,   V_before = 0    → Vu = R
-            //   RIGHT END (x = L):    V_after = 0,    V_before = −R   → Vu = R
-            //   INTERIOR  (x = xi):   V_after and V_before are equal-and
-            //                          opposite half-jumps of R, so the
-            //                          design demand is the larger of the
-            //                          two in-span face shears.
+            // CASE B — END SUPPORT WITH OVERHANG, or INTERIOR SUPPORT.
             //
-            // This is the ONLY formulation that simultaneously satisfies
-            //   – left/right end Vu = |R|  (matching the reactions panel)
-            //   – interior Vu = the larger face shear (NOT |R| itself,
-            //     since R = jump across the support, not flow across it)
-            // — and it works without eps offsets that lose UDL contribution.
-            const Vat   = V[idx] || 0;          // V at x = x_support (post-reaction)
-            const Rv    = Number(s.Rv) || 0;
-            const Vbefore = Vat - Rv;            // V just before the face
-            const Vu    = Math.max(Math.abs(Vbefore), Math.abs(Vat));
+            //   With an overhang there can be shear flowing in from BEYOND
+            //   the support (cantilever moment + load on the overhang), so
+            //   |R| alone is not the face demand. Fall back to the unified
+            //   V_after / V_before algorithm: V at the sample exactly at
+            //   the support includes this support's reaction; backing out
+            //   the reaction gives the pre-face value. The larger of
+            //   |V_after| and |V_before| is the design shear demand.
+            //
+            //     LEFT END w/ overhang:  V_before = shear from the cantilever
+            //                            V_after  = V_before + R
+            //     RIGHT END w/ overhang: V_before = R₀+R₁+…−w·L (in-span)
+            //                            V_after  = above + R_right (heads
+            //                                       into the overhang)
+            //     INTERIOR (always):     V jumps by R across the face; take
+            //                            the larger of the two in-span sides.
+            let Vu;
+            if ((isLeftEnd && !hasLeftOverhang) || (isRightEnd && !hasRightOverhang)) {
+                Vu = Math.abs(Rv);
+            } else {
+                const Vat     = V[idx] || 0;
+                const Vbefore = Vat - Rv;
+                Vu = Math.max(Math.abs(Vbefore), Math.abs(Vat));
+            }
             const Mu = M[idx] || 0;
             let label;
-            if (i === 0)                    label = `Left support (x = ${s.x.toFixed(2)} m)`;
-            else if (i === supps.length - 1) label = `Right support (x = ${s.x.toFixed(2)} m)`;
-            else                            label = `Interior support ${i} (x = ${s.x.toFixed(2)} m)`;
+            if (isLeftEnd)       label = hasLeftOverhang
+                                            ? `Left support (x = ${s.x.toFixed(2)} m, w/ overhang)`
+                                            : `Left support (x = ${s.x.toFixed(2)} m)`;
+            else if (isRightEnd) label = hasRightOverhang
+                                            ? `Right support (x = ${s.x.toFixed(2)} m, w/ overhang)`
+                                            : `Right support (x = ${s.x.toFixed(2)} m)`;
+            else                 label = `Interior support ${i} (x = ${s.x.toFixed(2)} m)`;
             tryAdd(s.x, Mu, Vu, label);
         });
 
