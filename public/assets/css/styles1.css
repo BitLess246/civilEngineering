@@ -1165,3 +1165,90 @@ nav ul li a:hover {
     background: rgba(176, 119, 0, 0.12);
     color: #b07700;
 }
+
+/* ============================================================
+   Foundation Design — tabular schedule (replaces the old
+   paragraph-per-value Summary panel). Mirrors the beam-design
+   .bd-schedule layout so the two calculators feel consistent.
+   Lives under #Summary / #Summary1 so it inherits .latex-container
+   from the markup; the inline-block / min-content rules from that
+   class are reset to let the table use full width.
+   ============================================================ */
+#Summary.latex-container,
+#Summary1.latex-container {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    font-size: 1em;
+}
+#Summary .fd-schedule-wrap,
+#Summary1 .fd-schedule-wrap { overflow-x: auto; margin-top: 6px; }
+
+.fd-schedule {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+    font-size: 0.92em;
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 560px;
+    background: #fff;
+}
+.fd-schedule th,
+.fd-schedule td {
+    text-align: left;
+    padding: 8px 12px;
+    border: 1px solid #e1e4e8;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+.fd-schedule th {
+    background: #f6f8fa;
+    font-weight: 700;
+    color: #495057;
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.fd-schedule td.fd-sched-num   { font-variant-numeric: tabular-nums; }
+.fd-schedule td.fd-sched-ok    { background: #f0faf5; color: #0F6E56; font-weight: 600; }
+.fd-schedule td.fd-sched-bad   { background: #fef2ef; color: #993C1D; font-weight: 600; }
+.fd-schedule tr.fd-sched-header > td {
+    background: #eef3f8;
+    color: #0056b3;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.82em;
+}
+.fd-schedule tr:nth-child(even) > td:not(.fd-sched-ok):not(.fd-sched-bad):not(.fd-sched-header) {
+    background: #fafbfc;
+}
+
+.fd-schedule-title {
+    font-size: 1.05em;
+    font-weight: 700;
+    color: #0056b3;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e1e4e8;
+    margin-bottom: 12px;
+}
+.fd-schedule-legend {
+    margin-top: 10px;
+    font-size: 0.82em;
+    color: #5c6773;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+.fd-schedule-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.fd-schedule-legend i {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    border: 1px solid rgba(0,0,0,0.1);
+}
+
+@media print {
+    .fd-schedule-wrap { overflow: visible; }
+    .fd-schedule      { font-size: 0.85em; }
+}
