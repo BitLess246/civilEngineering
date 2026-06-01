@@ -143,14 +143,25 @@ document.addEventListener("DOMContentLoaded", () => {
         return n;
     }
             
+    // Returns true when the content reduces to nothing visible after
+    // stripping LaTeX delimiters / control chars. The DOM helpers below
+    // tag these with the .fd-empty-p class so CSS can hide them — under
+    // the soft-card paragraph styling, an empty <p> rendered as a
+    // visible blank chip with a left border and no content.
+    function _isVisuallyEmpty(content) {
+        return String(content == null ? '' : content)
+            .replace(/[$\\`\s ]/g, '') === '';
+    }
     function createParagraph(content) {
         const p = document.createElement('p');
         p.innerHTML = content;
+        if (_isVisuallyEmpty(content)) p.className = 'fd-empty-p';
         return p;
-    }        
+    }
     function createHeader8(content) {
         const h8 = document.createElement('h8');
         h8.innerHTML = content;
+        if (_isVisuallyEmpty(content)) h8.className = 'fd-empty-p';
         return h8;
     }
     function createHeader7(content) {
@@ -751,7 +762,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 vn3 = 0.75 * (1/12) * (2+(alphaS*d/bo))* lambda * Math.sqrt(fc) *bo*d/1000;
                 vn = Math.min(vn1,vn2,vn3);
                 document.getElementById('result').appendChild(createParagraph(`\\(\\phi V_n = \\phi V_c = \\text{least of}\\left\\{\\begin{array}{l}\\phi \\times \\frac {1}{3} \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d  \\,  \\\\\\phi \\times \\frac {1}{6} \\times ( 1 + \\frac{2}{\\beta}) \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d \\, \\\\\\phi \\times \\frac {1}{12} \\times ( 2 + \\frac{\\alpha_s \\times d}{B_o}) \\times \\lambda \\times \\sqrt{fc'} \\times B_o \\times d \\, \\end{array}\\right. \\)`));
-                document.getElementById('result').appendChild(createParagraph(``));
+                // Removed an empty createParagraph("") that used to sit
+                // between the symbolic and numeric phi*Vn blocks for
+                // spacing — under the new soft-card paragraph styling
+                // it rendered as a visible blank chip in the user's
+                // screenshots.
                 document.getElementById('result').appendChild(createParagraph(`\\(\\phi V_n = \\left\\{\\begin{array}{l}0.75 \\times \\frac {1}{3} \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo.toFixed(2)}mm \\times ${d.toFixed(2)}mm = ${(vn1*1000).toFixed(2)}N \\approx ${(vn1).toFixed(2)}kN \\, \\\\0.75 \\times \\frac {1}{6} \\times (1+ \\frac{2}{${beta}}) \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo.toFixed(2)}mm \\times ${d.toFixed(2)}mm = ${(vn2*1000).toFixed(2)}N \\approx ${(vn2).toFixed(2)}kN \\, \\\\ 0.75 \\times \\frac {1}{12} \\times (2+ \\frac{${alphaS} \\times ${d.toFixed(2)}}{${bo.toFixed(2)}}) \\times ${lambda} \\times \\sqrt{${fc}MPa} \\times ${bo.toFixed(2)}mm \\times ${d}mm = ${(vn3*1000).toFixed(2)}N \\approx ${(vn3).toFixed(2)}kN \\, \\end{array}\\right. = ${vn.toFixed(2)}kN \\, \\)`));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ V_u = ${Vu.toFixed(2)}kN ${Vu<vn ? "< \\phi V_n    \\therefore \\text{SAFE}":"> \\phi V_{n}\\therefore \\text{FAIL}"}\$$`));
                 
