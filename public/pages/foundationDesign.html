@@ -50,16 +50,24 @@
                     &#8595; Download blank template
                 </button>
                 <details class="fd-import-help">
-                    <summary>What format?</summary>
+                    <summary>What format? (one row = one foundation)</summary>
                     <div class="fd-import-help-body">
-                        The uploaded file must contain a sheet named <strong>DESIGN PARAMETERS</strong> with two columns:
+                        The uploaded file must contain a sheet named <strong>DESIGN PARAMETERS</strong>.
+                        Each row is one foundation, so you can design any number of footings in a single upload.
                         <ul>
-                            <li><strong>Column A</strong> &mdash; parameter label (e.g. <code>Allowable Load P (kN)</code>)</li>
-                            <li><strong>Column B</strong> &mdash; numeric value or text option</li>
+                            <li><strong>Row 1</strong> &mdash; parameter headers. Add an optional <code>Label</code>
+                                column at the start to name each footing (otherwise they're auto-numbered).</li>
+                            <li><strong>Rows 2+</strong> &mdash; one row per foundation. Cells map by header
+                                name; unknown headers are ignored and listed in the result banner.</li>
+                            <li>Sample headers: <code>Structure Type</code>, <code>Allowable Load P (kN)</code>,
+                                <code>f'c (MPa)</code>, <code>Bar Diameter (mm)</code>, &hellip;
+                                (40 supported labels &mdash; see the <strong>PARAMETER GUIDE</strong> sheet in
+                                the template for the full list and allowed values).</li>
                         </ul>
-                        Row 1 is treated as a header. Unknown labels are ignored. Hit the
-                        <em>Download blank template</em> link above to get a ready-to-fill copy
-                        with every supported label and a Notes column explaining allowed values.
+                        Hit the <em>Download blank template</em> link above for a ready-to-fill copy
+                        with three sample footings (one of each structure type) and a guide sheet.
+                        After upload, every footing runs through the full design pipeline and a
+                        consolidated schedule is shown at the bottom.
                     </div>
                 </details>
             </div>
@@ -863,15 +871,22 @@ function downloadFoundationExcelTemplate() {
         return;
     }
     const M = window.FOUNDATION_EXCEL_PARAM_MAP || {};
-    const sampleValues = {
+    // Wide format: row 1 = parameter headers, each subsequent row = one
+    // foundation. The first column is a free-text Label / ID column so
+    // the user can name each footing (F1, F2, "Column A-3", etc.). The
+    // consolidated schedule shown at the end of the batch run uses
+    // these labels.
+    const paramLabels = Object.keys(M);
+    const headerRow = ['Label'].concat(paramLabels);
+
+    // Three ready-to-edit sample footings covering the three structure
+    // types so the user immediately sees how to fill the rows.
+    const sample = (overrides) => Object.assign({
         'Analysis Method':              'design',
-        'Structure Type':               'Isolated Rectangular',
         'Solution Method':              1,
         'Length Restriction':           0,
         'Load Type':                    'ultimate',
         'Centricity':                   'concentric',
-        'Allowable Load P (kN)':        800,
-        'Ultimate Load Pu (kN)':        1200,
         'Column Shape':                 'square',
         'Column Location':              'interior',
         'Column Width (mm)':            500,
@@ -886,7 +901,37 @@ function downloadFoundationExcelTemplate() {
         'Allowable Soil Bearing (kPa)': 192,
         'Surcharge (kPa)':              0,
         'Consider Soil Weight':         'yes'
-    };
+    }, overrides);
+    const samples = [
+        Object.assign({ 'Label': 'F1' }, sample({
+            'Structure Type':         'Isolated Square',
+            'Allowable Load P (kN)':  800,
+            'Ultimate Load Pu (kN)':  1200
+        })),
+        Object.assign({ 'Label': 'F2' }, sample({
+            'Structure Type':         'Isolated Rectangular',
+            'Length Restriction':     1,
+            'Ratio L':                4,
+            'Ratio B':                3,
+            'Allowable Load P (kN)':  1100,
+            'Ultimate Load Pu (kN)':  1680
+        })),
+        Object.assign({ 'Label': 'F3' }, sample({
+            'Structure Type':         'Strip',
+            'Allowable Load P (kN)':  600,
+            'Ultimate Load Pu (kN)':  900
+        }))
+    ];
+    const rows = [headerRow];
+    for (const s of samples) {
+        const row = [s['Label'] || ''];
+        for (const label of paramLabels) row.push(s[label] !== undefined ? s[label] : '');
+        rows.push(row);
+    }
+
+    // Guidance sheet — explains every label so the user doesn't have to
+    // memorize allowed values. Kept on a separate sheet so the main
+    // sheet stays a clean table for batch entry.
     const guidance = {
         'Analysis Method':              'design  |  analyze',
         'Structure Type':               'Isolated Square  |  Isolated Rectangular  |  Strip',
@@ -916,14 +961,20 @@ function downloadFoundationExcelTemplate() {
         'Column Width Y (mm)':          'rectangular only',
         'Consider Soil Weight':         'yes  |  no'
     };
-    const rows = [['Parameter', 'Value', 'Notes / units / allowed values']];
-    for (const label of Object.keys(M)) {
-        rows.push([label, sampleValues[label] !== undefined ? sampleValues[label] : '', guidance[label] || '']);
-    }
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws['!cols'] = [{ wch: 32 }, { wch: 22 }, { wch: 58 }];
+    const guideRows = [['Parameter', 'Notes / units / allowed values']];
+    for (const label of paramLabels) guideRows.push([label, guidance[label] || '']);
+
+    const ws  = XLSX.utils.aoa_to_sheet(rows);
+    const ws2 = XLSX.utils.aoa_to_sheet(guideRows);
+    // Column widths — keep Label narrow, Parameter columns at a uniform
+    // 16-char width so the sheet reads as a proper table.
+    ws['!cols']  = [{ wch: 14 }].concat(paramLabels.map(() => ({ wch: 16 })));
+    ws2['!cols'] = [{ wch: 32 }, { wch: 58 }];
+    // Freeze the header row + label column on the main sheet for usability.
+    ws['!freeze'] = { xSplit: 1, ySplit: 1 };
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'DESIGN PARAMETERS');
+    XLSX.utils.book_append_sheet(wb, ws,  'DESIGN PARAMETERS');
+    XLSX.utils.book_append_sheet(wb, ws2, 'PARAMETER GUIDE');
     XLSX.writeFile(wb, 'foundation-design-template.xlsx');
 }
 
@@ -933,7 +984,11 @@ function downloadFoundationExcelTemplate() {
 // Defined here at top-level so scriptFoundationDesign6.js (an ES
 // module) can still reach it via the global scope.
 function printDiv(divId) {
-    const target = document.getElementById(divId);
+    // In Excel-batch mode the renderer points us at #batchOutput so
+    // Save / Print captures every footing's calc + the consolidated
+    // schedule in one PDF instead of just the single-foundation tab.
+    const targetId = window._foundationPrintTargetId || divId;
+    const target   = document.getElementById(targetId);
     if (!target) {
         alert("Nothing to print yet — click Calculate first.");
         return;
@@ -942,20 +997,22 @@ function printDiv(divId) {
     document.body.innerHTML = target.outerHTML;
     window.print();
     document.body.innerHTML = originalContent;
-    // After restore, the inline event listeners are gone — reload so
-    // the page is interactive again. (Cheap; matches the original
-    // post-print behavior users were used to.)
+    // Inline listeners are gone after the swap — reload so the page
+    // is interactive again. Matches the original post-print behavior.
     window.location.reload();
 }
 
+// ─────────────────────────────────────────────────────────────────
+//  Excel import — wide format, BATCH-AWARE.
+//    Row 1 of the DESIGN PARAMETERS sheet is a header row of parameter
+//    labels (plus an optional "Label" / "ID" column for naming each
+//    foundation). Each subsequent non-empty row is one foundation.
+//    The handler iterates, populating the form and triggering the
+//    engine once per row, captures each foundation's converged data,
+//    then renders the full per-foundation solutions on the page along
+//    with a consolidated schedule comparing every footing side-by-side.
+// ─────────────────────────────────────────────────────────────────
 function handleFile(event) {
-    // Clean, label-driven Excel import. The DESIGN PARAMETERS sheet
-    // should be a 2-column table  [Parameter, Value]; the loader maps
-    // each Parameter to its form-field id and writes the value into
-    // the matching input/select, then dispatches change so the
-    // existing show/hide handlers fire. The user reviews the form and
-    // clicks Calculate — the engine is exactly the same code path as
-    // a manually filled form, so there's no duplicated logic to drift.
     const file = event.target.files[0];
     if (!file) return;
     const reader = new FileReader();
@@ -968,38 +1025,312 @@ function handleFile(event) {
                 alert("The uploaded file has no 'DESIGN PARAMETERS' sheet. Download the template with the button next to the upload control and fill it in.");
                 return;
             }
-            const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
-            const map = window.FOUNDATION_EXCEL_PARAM_MAP || {};
-            let filled = 0, skipped = [];
-            for (let i = 0; i < rows.length; i++) {
-                const row = rows[i];
-                if (!row || row.length < 2) continue;
-                const label = String(row[0] || '').trim();
-                const value = row[1];
-                if (!label || value === '' || value === undefined || value === null) continue;
-                const fieldId = map[label];
-                if (!fieldId) { skipped.push(label); continue; }
-                const el = document.getElementById(fieldId);
-                if (!el) { skipped.push(label); continue; }
-                el.value = String(value);
-                // Fire both change AND input so the listener-driven UI
-                // (hide/show of conditional fields) refreshes the same
-                // way a human-edited field would.
-                el.dispatchEvent(new Event('change',  { bubbles: true }));
-                el.dispatchEvent(new Event('input',   { bubbles: true }));
-                filled++;
+            const raw = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+            if (raw.length < 2) {
+                alert('The DESIGN PARAMETERS sheet has no data rows. Row 1 should be the parameter headers; row 2 onward should be one foundation per row.');
+                return;
             }
-            const tail = skipped.length
-                ? "\n\nIgnored labels (no matching field): " + skipped.slice(0, 10).join(', ')
-                  + (skipped.length > 10 ? ", ..." : '')
-                : '';
-            alert("Filled " + filled + " field" + (filled === 1 ? '' : 's') + " from the Excel sheet. Review the form and click Calculate." + tail);
+            const headers  = raw[0].map(h => String(h || '').trim());
+            const dataRows = raw.slice(1).filter(r => r.some(c => c !== '' && c !== undefined && c !== null));
+            if (dataRows.length === 0) {
+                alert('The DESIGN PARAMETERS sheet has no non-empty data rows.');
+                return;
+            }
+            runFoundationBatch(headers, dataRows);
         } catch (err) {
             console.error('Excel import failed:', err);
             alert('Could not read the Excel file: ' + (err && err.message ? err.message : err));
         }
     };
     reader.readAsArrayBuffer(file);
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  Batch runner — populates the form once per row, triggers the
+//  engine's submit handler, captures the rendered #result and the
+//  structured summary data (via window._foundationBatchCapture, set
+//  by renderFoundationSummary in scriptFoundationDesign6.js), then
+//  hands everything to renderFoundationBatchOutput.
+// ─────────────────────────────────────────────────────────────────
+function runFoundationBatch(headers, dataRows) {
+    const map = window.FOUNDATION_EXCEL_PARAM_MAP || {};
+    const labelColIdx = headers.findIndex(h => /^(label|id|name)$/i.test(h));
+    const unknownHeaders = headers.filter((h, i) => h && i !== labelColIdx && !map[h]);
+
+    const captured = [];
+    window._foundationBatchCapture = (data) => { captured.push(data); };
+
+    const results = [];
+    for (let i = 0; i < dataRows.length; i++) {
+        const row   = dataRows[i];
+        const label = (labelColIdx >= 0 && row[labelColIdx])
+                        ? String(row[labelColIdx]).trim()
+                        : ('Foundation ' + (i + 1));
+
+        // Populate the form from this row.
+        for (let j = 0; j < headers.length; j++) {
+            if (j === labelColIdx) continue;
+            const fieldId = map[headers[j]];
+            if (!fieldId) continue;
+            const el = document.getElementById(fieldId);
+            if (!el) continue;
+            const val = row[j];
+            if (val === '' || val === undefined || val === null) continue;
+            el.value = String(val);
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            el.dispatchEvent(new Event('input',  { bubbles: true }));
+        }
+
+        // Fire the engine. The engine listens to the form's submit
+        // event; dispatching it directly skips the calc-button's
+        // onclick="openTab(...)" so we don't flip tabs mid-batch.
+        const before = captured.length;
+        try {
+            document.getElementById('formFoundation').dispatchEvent(
+                new Event('submit', { bubbles: true, cancelable: true })
+            );
+        } catch (engineErr) {
+            console.warn('Engine threw for', label, engineErr);
+        }
+        const succeeded = captured.length > before;
+        const data = succeeded ? captured[captured.length - 1] : null;
+
+        // Snapshot the rendered HTML so the per-foundation solution
+        // panel survives the next iteration (the engine clears these
+        // divs on the next submit). KaTeX has already typeset by now,
+        // so the cloned innerHTML preserves the math.
+        const resultEl = document.getElementById('result');
+        const givenEl  = document.getElementById('GivenParameters1');
+        results.push({
+            label,
+            data,
+            error: succeeded ? null : 'Engine did not converge — check the row\'s inputs.',
+            resultHTML: resultEl ? resultEl.innerHTML : '',
+            givenHTML:  givenEl  ? givenEl.innerHTML  : ''
+        });
+    }
+
+    window._foundationBatchCapture = null;
+    renderFoundationBatchOutput(results, unknownHeaders);
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  Renderer — one collapsible card per foundation (Given parameters
+//  + step-by-step solution + the standard schedule), then a
+//  consolidated comparison table at the bottom. Hijacks the
+//  #print container that normally holds the single-foundation
+//  Summary / Solution tabs, and unhides the save button so the
+//  whole batch is printable as one PDF.
+// ─────────────────────────────────────────────────────────────────
+function renderFoundationBatchOutput(results, unknownHeaders) {
+    const printRoot = document.getElementById('print');
+    if (!printRoot) return;
+
+    // Hide the single-foundation tab bar — the batch view replaces it.
+    const tabRow = document.getElementById('tab');
+    if (tabRow) tabRow.style.display = 'none';
+
+    const okCount    = results.filter(r => !r.error).length;
+    const failCount  = results.length - okCount;
+    const unkNote    = unknownHeaders.length
+                        ? ' &nbsp;|&nbsp; <span style="color:#b07700;">Ignored ' + unknownHeaders.length
+                          + ' unknown header' + (unknownHeaders.length === 1 ? '' : 's')
+                          + ': ' + unknownHeaders.slice(0, 5).map(escapeHtmlSimple).join(', ')
+                          + (unknownHeaders.length > 5 ? ', …' : '') + '</span>'
+                        : '';
+
+    let html = '<div id="batchOutput" class="fd-batch">';
+    html += '<div class="fd-batch-title">Batch Foundation Design &mdash; ' + results.length + ' footing'
+          + (results.length === 1 ? '' : 's')
+          + '<small class="fd-batch-tally">'
+          + (okCount  ? '<span class="fd-tally-ok">&#10003; ' + okCount + ' OK</span>'  : '')
+          + (failCount ? '<span class="fd-tally-bad">&#10007; ' + failCount + ' failed</span>' : '')
+          + unkNote + '</small></div>';
+
+    // One details panel per foundation. First foundation is open by
+    // default; the rest are collapsed so the page is scannable.
+    for (let i = 0; i < results.length; i++) {
+        const r = results[i];
+        const isFirst = (i === 0);
+        const verdict = batchVerdict(r);
+        html += '<details class="fd-batch-card"' + (isFirst ? ' open' : '') + '>';
+        html += '<summary>'
+              + '<span class="fd-batch-card-num">' + (i + 1) + '.</span> '
+              + '<span class="fd-batch-card-label">' + escapeHtmlSimple(r.label) + '</span> '
+              + '<span class="fd-batch-card-verdict ' + (verdict.cls) + '">' + verdict.text + '</span>'
+              + '</summary>';
+        if (r.error) {
+            html += '<div class="bd-alert bd-alert-fail" style="margin:14px 16px;">' + escapeHtmlSimple(r.error) + '</div>';
+        } else {
+            html += '<div class="fd-batch-card-body">';
+            // Given parameters card (same HTML the engine produced).
+            if (r.givenHTML) html += '<div class="container2 latex-container">' + r.givenHTML + '</div>';
+            // Full step-by-step solution.
+            if (r.resultHTML) html += '<div class="latex-container">' + r.resultHTML + '</div>';
+            // Standard schedule for this footing.
+            if (r.data) html += buildFoundationSummaryFromData(r.data);
+            html += '</div>';
+        }
+        html += '</details>';
+    }
+
+    // Consolidated comparison schedule.
+    html += renderBatchComparisonTable(results);
+    html += '</div>';
+
+    printRoot.innerHTML = html;
+
+    // Unhide the Download/Print button so the whole batch is a single
+    // print job.
+    const saveBtn = document.getElementById('saveButton');
+    if (saveBtn) saveBtn.style.display = '';
+    // Repoint printDiv at the batch wrapper so save grabs the entire
+    // batch view (replaces the Solution-tab default).
+    window._foundationPrintTargetId = 'batchOutput';
+
+    // Scroll the user to the batch panel and render any new KaTeX.
+    if (typeof renderMathHere === 'function') renderMathHere(printRoot);
+    printRoot.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Aggregate verdict for one foundation — ✓ if every shear / bearing
+// check has Vu ≤ φVn (or qact ≤ qnet), ✗ if any fails, "—" if
+// nothing was checked (e.g. method 2 reports magnitudes only).
+function batchVerdict(r) {
+    if (r.error || !r.data) return { text: 'design error', cls: 'fd-tally-bad' };
+    const d = r.data;
+    const checks = [];
+    if (Number.isFinite(d.qact) && Number.isFinite(d.qnet))
+        checks.push(d.qact <= d.qnet);
+    if (d.punching && Number.isFinite(d.punching.vn))
+        checks.push(d.punching.Vu <= d.punching.vn);
+    if (d.beamShearX && Number.isFinite(d.beamShearX.vn))
+        checks.push(d.beamShearX.Vu <= d.beamShearX.vn);
+    if (d.beamShearY && Number.isFinite(d.beamShearY.vn))
+        checks.push(d.beamShearY.Vu <= d.beamShearY.vn);
+    if (checks.length === 0) return { text: 'reported (no SAFE/FAIL)', cls: 'fd-tally-warn' };
+    return checks.every(Boolean)
+        ? { text: '&#10003; SAFE',     cls: 'fd-tally-ok'  }
+        : { text: '&#10007; CHECK',    cls: 'fd-tally-bad' };
+}
+
+// Trimmed copy of the engine's buildFoundationSummaryHtml — keeps the
+// batch view independent from the IIFE scope where the original lives.
+// Same output structure, same fd-schedule classes.
+function buildFoundationSummaryFromData(d) {
+    const tag = (d && d.method === 2) ? 'Approximation method' : 'Iteration method';
+    let html = '<div class="fd-schedule-title">Design Schedule &mdash; <small style="font-weight:400;color:#5c6773;font-size:0.78em;">(' + tag + ')</small></div>';
+    html += '<div class="fd-schedule-wrap"><table class="fd-schedule">';
+    html += '<thead><tr><th>Parameter</th><th>Value</th><th>Capacity / Check</th></tr></thead><tbody>';
+    const row = (l, v, c, cls) => '<tr><td>' + l + '</td><td class="fd-sched-num">' + v + '</td><td' + (cls ? ' class="' + cls + '"' : '') + '>' + (c == null ? '&mdash;' : c) + '</td></tr>';
+    const hdr = (t) => '<tr class="fd-sched-header"><td colspan="3">' + t + '</td></tr>';
+    html += hdr('Geometry &amp; Bar Size');
+    html += row('Footing depth \\(D_c\\)',         d.dc + ' mm');
+    html += row('Width along X \\(B_x\\)',         Number(d.bx).toFixed(2) + ' m');
+    html += row('Width along Y \\(B_y\\)',         Number(d.by).toFixed(2) + ' m');
+    html += row('Bar diameter \\(d_b\\)',          '&#8709;' + d.barDia + ' mm');
+    if (Number.isFinite(d.qact) && Number.isFinite(d.qnet)) {
+        const ok = d.qact <= d.qnet;
+        html += hdr('Soil Bearing');
+        html += row('Actual pressure \\(q_{act}\\)', d.qact.toFixed(3) + ' kPa',
+                    (ok ? '&#10003;' : '&#10007;') + ' \\(q_{net}\\) = ' + d.qnet.toFixed(3) + ' kPa',
+                    ok ? 'fd-sched-ok' : 'fd-sched-bad');
+    }
+    if (d.punching || d.beamShearX || d.beamShearY) {
+        html += hdr('Shear Checks');
+        const sr = (lab, x) => {
+            const ok = x.Vu <= x.vn;
+            const verdict = Number.isFinite(x.vn)
+                ? (ok ? '&#10003;' : '&#10007;') + ' \\(\\phi V_n\\) = ' + x.vn.toFixed(2) + ' kN'
+                : 'reported (method 2)';
+            const cls = Number.isFinite(x.vn) ? (ok ? 'fd-sched-ok' : 'fd-sched-bad') : '';
+            return row(lab, x.Vu.toFixed(2) + ' kN', verdict, cls);
+        };
+        if (d.punching)   html += sr('Punching shear \\(V_u\\)',           d.punching);
+        if (d.beamShearX) html += sr('Beam shear (X-axis) \\(V_u\\)',      d.beamShearX);
+        if (d.beamShearY) html += sr('Beam shear (Y-axis) \\(V_u\\)',      d.beamShearY);
+    }
+    if (d.rebarX || d.rebarY) {
+        html += hdr('Reinforcement Schedule');
+        if (d.rebarX) {
+            const lvl = d.rebarX.level ? ' (' + d.rebarX.level + ' layer)' : '';
+            html += row('Bars along X-axis' + lvl,
+                        d.rebarX.n + ' pcs &#8709;' + d.barDia + ' mm',
+                        '@ ' + Number(d.rebarX.sc).toFixed(2) + ' mm o.c.');
+            if (d.isRectangular && d.rebarX.m !== undefined && d.rebarX.m !== '')
+                html += row('Center-band bars (X)', d.rebarX.m + ' pcs', 'concentrated within \\(B_x\\) center band');
+        }
+        if (d.rebarY) {
+            const lvl = d.rebarY.level ? ' (' + d.rebarY.level + ' layer)' : '';
+            html += row('Bars along Y-axis' + lvl,
+                        d.rebarY.n + ' pcs &#8709;' + d.barDia + ' mm',
+                        '@ ' + Number(d.rebarY.sc).toFixed(2) + ' mm o.c.');
+            if (d.isRectangular && d.rebarY.m !== undefined && d.rebarY.m !== '')
+                html += row('Center-band bars (Y)', d.rebarY.m + ' pcs', 'concentrated within \\(B_y\\) center band');
+        }
+    }
+    html += '</tbody></table></div>';
+    return html;
+}
+
+// Side-by-side comparison of every foundation in the batch.
+function renderBatchComparisonTable(results) {
+    if (!results.length) return '';
+    let html = '<div class="fd-batch-summary">';
+    html += '<div class="fd-schedule-title" style="margin-top:8px;">Consolidated Foundation Schedule &mdash; ' + results.length + ' footing' + (results.length === 1 ? '' : 's') + '</div>';
+    html += '<div class="fd-schedule-wrap"><table class="fd-schedule fd-batch-table">';
+    html += '<thead><tr>'
+          + '<th>#</th><th>Label</th><th>Type</th>'
+          + '<th>\\(B_x\\) (m)</th><th>\\(B_y\\) (m)</th>'
+          + '<th>\\(D_c\\) (mm)</th><th>Bar \\(\\varnothing\\) (mm)</th>'
+          + '<th>Bars X</th><th>\\(s_X\\) (mm)</th>'
+          + '<th>Bars Y</th><th>\\(s_Y\\) (mm)</th>'
+          + '<th>Verdict</th>'
+          + '</tr></thead><tbody>';
+    for (let i = 0; i < results.length; i++) {
+        const r = results[i];
+        const d = r.data;
+        const v = batchVerdict(r);
+        if (!d) {
+            html += '<tr><td>' + (i + 1) + '</td>'
+                  + '<td class="fd-batch-rowlabel">' + escapeHtmlSimple(r.label) + '</td>'
+                  + '<td colspan="9" class="fd-sched-bad">' + escapeHtmlSimple(r.error || 'No data') + '</td>'
+                  + '<td class="' + v.cls + '">' + v.text + '</td></tr>';
+            continue;
+        }
+        const typeShort = d.isRectangular ? 'Rectangular'
+                       : (d.method === 2 ? 'Approx' : 'Square / Strip');
+        html += '<tr>'
+              + '<td>' + (i + 1) + '</td>'
+              + '<td class="fd-batch-rowlabel">' + escapeHtmlSimple(r.label) + '</td>'
+              + '<td>' + typeShort + '</td>'
+              + '<td>' + Number(d.bx).toFixed(2) + '</td>'
+              + '<td>' + Number(d.by).toFixed(2) + '</td>'
+              + '<td>' + d.dc + '</td>'
+              + '<td>' + d.barDia + '</td>'
+              + '<td>' + (d.rebarX ? d.rebarX.n : '&mdash;') + '</td>'
+              + '<td>' + (d.rebarX ? Number(d.rebarX.sc).toFixed(0) : '&mdash;') + '</td>'
+              + '<td>' + (d.rebarY ? d.rebarY.n : '&mdash;') + '</td>'
+              + '<td>' + (d.rebarY ? Number(d.rebarY.sc).toFixed(0) : '&mdash;') + '</td>'
+              + '<td class="' + v.cls + '">' + v.text + '</td>'
+              + '</tr>';
+    }
+    html += '</tbody></table></div>';
+    html += '<div class="fd-schedule-legend">'
+          + '<span><i style="background:#f0faf5;border-color:#b3e0c9;"></i> &#10003; SAFE</span>'
+          + '<span><i style="background:#fef2ef;border-color:#f0c0b3;"></i> &#10007; capacity not OK</span>'
+          + '<span><i style="background:#fff7e6;border-color:#f0d9a3;"></i> reported / no SAFE-FAIL line</span>'
+          + '<span>Use the per-footing accordions above to see the step-by-step calculations.</span>'
+          + '</div>';
+    html += '</div>';
+    return html;
+}
+
+// Minimal HTML escape for user-supplied labels.
+function escapeHtmlSimple(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 
