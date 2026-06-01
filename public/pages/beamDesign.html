@@ -2564,13 +2564,27 @@
         const tensSubscr  = isSagging ? 'b' : 't';   // bottom or top
         const comprSubscr = isSagging ? 't' : 'b';
 
-        if (fl.error && fl.d === undefined) {
-            return `<div class="bd-alert bd-alert-fail">${fl.error}</div>`;
+        // ── Early exit on any unrecoverable error ─────────────────────────
+        // The "full" return from designFlexure always carries beta1, rho_b
+        // and the other section-property fields. If beta1 is missing the
+        // function bailed out before reaching the final return — show the
+        // diagnostic and stop (otherwise the next row would crash on
+        // .toFixed of undefined).
+        if (fl.error && fl.beta1 === undefined) {
+            const lines = [`<strong>Design error:</strong> ${fl.error}`];
+            const bits = [];
+            if (fl.d !== undefined)            bits.push(`\\(d\\) ≈ ${fl.d.toFixed(1)} mm`);
+            if (fl.n_total !== undefined)      bits.push(`required \\(n \\approx ${fl.n_total}\\) bars at \\(\\varnothing\\,${db.toFixed(0)}\\) mm`);
+            if (fl.Sc_single !== undefined && isFinite(fl.Sc_single))
+                bits.push(`single-layer \\(S_c\\) = ${fl.Sc_single.toFixed(1)} mm \\(\\;<\\;\\) \\(S_{c,\\min}\\) = ${fl.Sc_min.toFixed(0)} mm`);
+            if (fl.Rn !== undefined)           bits.push(`\\(R_n\\) = ${fl.Rn.toFixed(2)} MPa`);
+            if (bits.length) lines.push(`<br><small style="color:#5c6773;">${bits.join(' &nbsp;|&nbsp; ')}</small>`);
+            const hint = fl.n_total !== undefined && fl.n_total >= 6
+                ? `<br><small style="color:#5c6773;">Hint: increase \\(b\\) or \\(h\\), use a larger bar \\(\\varnothing\\), or step up to higher \\(f'_c\\) / \\(f_y\\). The current section cannot fit \\(${fl.n_total}\\) bars of \\(\\varnothing\\,${db.toFixed(0)}\\) mm in 2 layers with \\(n_1 > n_2\\).</small>`
+                : '';
+            return `<div class="bd-alert bd-alert-fail">${lines.join('')}${hint}</div>`;
         }
         let html = '';
-        if (fl.error && !fl.capacity_ok && fl.As_total === undefined && fl.n_bars === undefined) {
-            html += `<div class="bd-alert bd-alert-fail">${fl.error}</div>`;
-        }
         html += sectionHeader('Step 1 — Section, materials, β₁');
         html += row('\\(h\\) (total depth)',          `${h.toFixed(0)} mm`);
         html += row('\\(b\\) (width)',                `${b.toFixed(0)} mm`);
@@ -2964,7 +2978,15 @@
             // ── Tension bars column ──────────────────────────────────────
             let tensCell;
             if (fl.error) {
-                const tag = fl.isDRRB ? 'DRRB &mdash; needs d&prime;' : 'design error';
+                // Pick a short tag matching the error class so the schedule
+                // row reads at a glance; full message stays in the tooltip.
+                const msg = String(fl.error).toLowerCase();
+                let tag;
+                if      (msg.includes('narrow'))   tag = 'section too narrow';
+                else if (msg.includes('too small')) tag = 'section too small';
+                else if (msg.includes("d - d'"))   tag = "d &le; d'";
+                else if (msg.includes("d'"))       tag = "d&prime; missing";
+                else                                tag = 'design error';
                 tensCell = `<span title="${escapeXml(fl.error)}" style="color:#993C1D;">${tag}</span>`;
             } else {
                 const nTotal = fl.isDRRB ? fl.n_tension : fl.n_bars;
