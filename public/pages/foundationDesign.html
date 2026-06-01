@@ -719,36 +719,47 @@ handleLoadTypeChange(); // This ensures the display is set correctly on page loa
 
             });
 
-            // Render KaTeX in the form labels (e.g. \(B_x\), \(P_u\), \(\gamma_c\)).
-            // Without this, labels show raw "\(B_x\) (in meters)" text because
-            // KaTeX auto-render only runs when explicitly invoked.
-            function renderFormMath() {
-                if (typeof renderMathInElement === 'undefined') {
-                    setTimeout(renderFormMath, 80);
-                    return;
-                }
-                const target = document.querySelector('.fd-page') || document.body;
-                try {
-                    renderMathInElement(target, {
-                        delimiters: [
-                            { left: '$$', right: '$$', display: true },
-                            { left: '\\[', right: '\\]', display: true },
-                            { left: '\\(', right: '\\)', display: false }
-                        ],
-                        throwOnError: false,
-                        errorColor: '#cc0000',
-                        strict: false,
-                        trust: true,
-                        // Skip elements that would break if we touched their text
-                        // nodes (the calculator's output panels handle their own
-                        // rendering after Calculate runs).
-                        ignoredClasses: ['katex', 'fd-clause']
-                    });
-                } catch (e) {
-                    console.error('KaTeX render (form) failed:', e);
-                }
-            }
             renderFormMath();
+        });
+        // Render KaTeX in the form labels (e.g. \(B_x\), \(P_u\),
+        // \(\gamma_c\)). Without this the labels show raw "\(B_x\)
+        // (in meters)" text because KaTeX auto-render only fires
+        // when invoked explicitly. Lifted out of DOMContentLoaded so
+        // the window-load safety net below can call it too.
+        function renderFormMath() {
+            if (typeof renderMathInElement === 'undefined') {
+                setTimeout(renderFormMath, 80);
+                return;
+            }
+            const target = document.querySelector('.fd-page') || document.body;
+            try {
+                renderMathInElement(target, {
+                    delimiters: [
+                        { left: '$$', right: '$$', display: true },
+                        { left: '\\[', right: '\\]', display: true },
+                        { left: '\\(', right: '\\)', display: false }
+                    ],
+                    throwOnError: false,
+                    errorColor: '#cc0000',
+                    strict: false,
+                    trust: true,
+                    // Skip elements that would break if we touched their
+                    // text nodes (the calculator's output panels handle
+                    // their own rendering after Calculate runs).
+                    ignoredClasses: ['katex', 'fd-clause']
+                });
+            } catch (e) {
+                console.error('KaTeX render (form) failed:', e);
+            }
+        }
+        // Safety net — if DOMContentLoaded fired BEFORE KaTeX's
+        // auto-render script finished loading (defer-ordering races
+        // do happen with the CDN), the fallbacks below run another
+        // pass once the window-load event fires, plus a 400 ms
+        // backstop in case both fired before KaTeX.
+        window.addEventListener('load', () => {
+            setTimeout(renderFormMath, 50);
+            setTimeout(renderFormMath, 400);
         });
         function openTab(evt, tabName) {
         // Get all elements with class="tab-content" and hide them
@@ -852,6 +863,7 @@ window.FOUNDATION_EXCEL_PARAM_MAP = {
     'Clear Cover (mm)':             'Cover',
     "f'c (MPa)":                    'fc',
     'fy (MPa)':                     'fy',
+    'Concrete Modification Factor (lambda)': 'λ',
     'Concrete Unit Weight (kN/m3)': 'UnitWeightConcrete',
     'Soil Unit Weight (kN/m3)':     'UnitWeightSoil',
     'Allowable Soil Bearing (kPa)': 'SoilBearingCapacity',
@@ -896,6 +908,7 @@ function downloadFoundationExcelTemplate() {
         'Clear Cover (mm)':             75,
         "f'c (MPa)":                    21,
         'fy (MPa)':                     415,
+        'Concrete Modification Factor (lambda)': 1,
         'Concrete Unit Weight (kN/m3)': 23.54,
         'Soil Unit Weight (kN/m3)':     18,
         'Allowable Soil Bearing (kPa)': 192,
@@ -959,6 +972,7 @@ function downloadFoundationExcelTemplate() {
         'Column Width (mm)':            'square / circle (diameter)',
         'Column Width X (mm)':          'rectangular only',
         'Column Width Y (mm)':          'rectangular only',
+        'Concrete Modification Factor (lambda)': '1 = normal-weight  |  0.85 = sand-lightweight  |  0.75 = all-lightweight',
         'Consider Soil Weight':         'yes  |  no'
     };
     const guideRows = [['Parameter', 'Notes / units / allowed values']];

@@ -884,12 +884,47 @@ nav ul li a:hover {
 .fd-batch-card-body {
     padding: 14px 18px;
 }
+/* Override the global .latex-container rules — which use
+   display:inline-block + width:min-content to keep math snippets
+   tight on the standalone Solution tab — so that batch cards lay
+   out as normal block flow. Without this the engine output gets
+   squashed into a narrow leftmost column inside each card. */
 .fd-batch-card-body .latex-container,
 .fd-batch-card-body .container2 {
-    display: block;
-    width: 100%;
-    max-width: 100%;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    text-align: left;
     margin: 10px 0;
+    font-size: 1em;
+    line-height: 1.5;
+}
+/* The .latex-container > p rule has  margin-right: 100%  which
+   forces each paragraph to flush left with effectively zero width.
+   Cancel that here so paragraphs in the batch view fill the card. */
+.fd-batch-card-body .latex-container > p,
+.fd-batch-card-body .container2 > p {
+    display: block !important;
+    margin: 6px 0 !important;
+    width: auto !important;
+}
+/* Headings inside the engine output were also being forced to
+   inline-block min-content, so a long heading like "Solve for
+   Ultimate Loads Per NSCP 2015 §203.3.1 / ACI 318-14 §5.3.1" was
+   wrapping at every space. Block them out and let them flow. */
+.fd-batch-card-body .latex-container > h3,
+.fd-batch-card-body .latex-container > h5,
+.fd-batch-card-body .latex-container > h7,
+.fd-batch-card-body .latex-container > h8,
+.fd-batch-card-body .container2 > h3,
+.fd-batch-card-body .container2 > h5,
+.fd-batch-card-body .container2 > h7,
+.fd-batch-card-body .container2 > h8 {
+    display: block !important;
+    margin: 12px 0 6px !important;
+    width: auto !important;
+    white-space: normal;
 }
 
 .fd-batch-summary { margin: 22px 0 0; }
