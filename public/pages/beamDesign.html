@@ -1261,82 +1261,112 @@
      *           If f_s' < f_y, scale A_s' up to  A_s2 · f_y / f_s'.
      */
     // ─────────────────────────────────────────────────────────────────
-    //  Helper: split N total tension bars into two layers when the
-    //  single-layer clear spacing fails.
+    //  Helper: split N total tension bars into 1, 2, or many layers.
     //
-    //  Rules:
-    //    – Layer 1 is the OUTER tension layer (closest to the tension
-    //      face — bottom for sagging, top for hogging). It has the
-    //      larger moment arm, so loading it up first is the most
-    //      efficient use of steel.
-    //    – HARD: n1 > n2 (layer 1 always carries the larger share).
-    //    – SOFT: n2 EVEN — preferred for symmetric detailing without a
-    //      centerline bar in layer 2. If no valid even split exists, an
-    //      odd n2 (with a center bar) is allowed as a fallback rather
-    //      than failing the whole design.
-    //    – Both layers must have ≥ 2 bars (corner-bar minimum).
-    //    – Try smallest n2 first → maximizes n1 → maximizes Varignon
-    //      d_eff (more bars in the deeper layer pulls the centroid down).
-    //    – If no split satisfies the rules, return an error so the user
-    //      knows to widen the section.
+    //  Strategy:
+    //    – Single layer if Sc_single ≥ Sc_min.
+    //    – Otherwise, prefer a TWO-layer split with the original rule
+    //        (strict n1 > n2, even n2 first, odd n2 fallback) so the
+    //        common case keeps its existing geometry.
+    //    – If TWO layers can't fit (i.e. even the best n1 still
+    //        overflows the layer width), fall through to MULTI-LAYER
+    //        mode: fill greedily bottom-up at n_per_layer bars per
+    //        layer, with the TOP layer taking the remainder. Corner-
+    //        bar fix on the top layer (≥ 2 bars).
+    //
+    //  Caller is responsible for the neutral-axis check on the
+    //  topmost layer (uses c = a / β1) — this helper doesn't know c.
     // ─────────────────────────────────────────────────────────────────
     function splitTensionLayers(n_total, b, cover, ds, db) {
-        const Sc_min = Math.max(25, db);                  // NSCP 425.2.1
-        const sc_single = (n_total > 1)
-            ? (b - 2 * cover - 2 * ds - n_total * db) / (n_total - 1)
-            : Infinity;
+        const Sc_min   = Math.max(25, db);                  // NSCP 425.2.1
+        const usableW  = b - 2 * cover - 2 * ds;
+        const Sc_for_n = (n) => (n > 1) ? (usableW - n * db) / (n - 1) : Infinity;
+        const sc_single = Sc_for_n(n_total);
+
+        // ── 1) Single layer ──────────────────────────────────────
         if (n_total <= 1 || sc_single >= Sc_min) {
-            return { n1: n_total, n2: 0, layered: false,
+            return { n_layers: 1, layers: [n_total],
+                     n1: n_total, n2: 0, layered: false,
                      Sc_layer1: sc_single, Sc_min, Sc_single: sc_single };
         }
-        // Need 2 layers. n2 must be < n_total/2 so that n1 > n2 strictly.
-        // For integer n: n2 ≤ floor((n_total - 1) / 2).
-        const n2_max = Math.floor((n_total - 1) / 2);
-        const Sc_at = (n1) => (n1 > 1)
-            ? (b - 2 * cover - 2 * ds - n1 * db) / (n1 - 1)
-            : Infinity;
 
-        // Pass 1 — EVEN n2 (preferred for symmetric detailing).
+        // Max bars per layer at Sc_min — bounds every subsequent layer.
+        const n_per_layer = Math.floor((usableW + Sc_min) / (db + Sc_min));
+        if (n_per_layer < 2) {
+            return { error: `Section is too narrow — cannot fit even 2 bars in one layer at \\(S_{c,\\min} = ${Sc_min.toFixed(0)}\\) mm. Increase \\(b\\).`,
+                     Sc_min, Sc_single: sc_single, n_per_layer };
+        }
+
+        // ── 2) Two-layer with strict n1 > n2 ─────────────────────
+        const n2_max = Math.floor((n_total - 1) / 2);
+        // Even-n2 pass first (symmetric detailing).
         for (let n2 = 2; n2 <= n2_max; n2 += 2) {
             const n1 = n_total - n2;
-            const sc_n1 = Sc_at(n1);
-            if (sc_n1 >= Sc_min) {
-                return { n1, n2, layered: true, n2_even: true,
-                         Sc_layer1: sc_n1, Sc_min, Sc_single: sc_single };
+            if (n1 <= n_per_layer && Sc_for_n(n1) >= Sc_min) {
+                return { n_layers: 2, layers: [n1, n2], n1, n2,
+                         layered: true, n2_even: true,
+                         Sc_layer1: Sc_for_n(n1), Sc_min, Sc_single: sc_single,
+                         n_per_layer };
             }
         }
-        // Pass 2 — ODD n2 fallback (still keeps n1 > n2 and Sc OK).
+        // Odd-n2 fallback.
         for (let n2 = 3; n2 <= n2_max; n2 += 2) {
             const n1 = n_total - n2;
-            const sc_n1 = Sc_at(n1);
-            if (sc_n1 >= Sc_min) {
-                return { n1, n2, layered: true, n2_even: false,
-                         Sc_layer1: sc_n1, Sc_min, Sc_single: sc_single };
+            if (n1 <= n_per_layer && Sc_for_n(n1) >= Sc_min) {
+                return { n_layers: 2, layers: [n1, n2], n1, n2,
+                         layered: true, n2_even: false,
+                         Sc_layer1: Sc_for_n(n1), Sc_min, Sc_single: sc_single,
+                         n_per_layer };
             }
         }
-        return { error: `Section is too narrow — cannot split ${n_total} bars into 2 layers with \\(n_1 > n_2\\) AND \\(S_{c,\\min} = ${Sc_min.toFixed(0)}\\) mm. Increase \\(b\\) or use a smaller \\(\\varnothing_b\\).`,
-                 Sc_min, Sc_single: sc_single };
+
+        // ── 3) Multi-layer — greedy fill bottom-up ───────────────
+        // Each layer takes n_per_layer; topmost takes the remainder.
+        const layers = [];
+        let remaining = n_total;
+        while (remaining > 0) {
+            const this_layer = Math.min(remaining, n_per_layer);
+            layers.push(this_layer);
+            remaining -= this_layer;
+        }
+        // Corner-bar fix — top layer needs ≥ 2 bars.
+        if (layers.length >= 2 && layers[layers.length - 1] === 1) {
+            layers[layers.length - 2] -= 1;
+            layers[layers.length - 1]  = 2;
+        }
+        return { n_layers: layers.length, layers,
+                 n1: layers[0], n2: layers[1] || 0,
+                 layered: true,
+                 n2_even: layers.length >= 2 ? (layers[1] % 2 === 0) : true,
+                 Sc_layer1: Sc_for_n(layers[0]), Sc_min, Sc_single: sc_single,
+                 n_per_layer };
     }
 
     // ─────────────────────────────────────────────────────────────────
-    //  Helper: effective depth via Varignon's theorem (moments about
-    //  the extreme-compression fiber) for a 1- or 2-layer tension
-    //  bundle. Both layers same bar diameter db.
+    //  Helper: effective depth via Varignon's theorem for an N-layer
+    //  tension bundle (all bars same db).
     //
-    //    d_1   = h − cover − ds − db/2                (layer 1 centroid)
-    //    d_2   = d_1 − db − clear_layer                (layer 2 centroid)
-    //    d_eff = (n1·d_1 + n2·d_2) / (n1 + n2)         (Varignon)
+    //    d_k    = d_1 − (k−1) · (db + 25)              k = 1..N
+    //    d_eff  = Σ(n_k · d_k) / Σ(n_k)               (Varignon)
     //
     //  Clear vertical spacing between layers = 25 mm (NSCP 425.2.2 /
-    //  ACI 318-14 25.2.2).
+    //  ACI 318-14 25.2.2). Caller checks the topmost layer's d_top
+    //  against the neutral-axis depth c.
     // ─────────────────────────────────────────────────────────────────
-    function varignonDepth(h, cover, ds, db, n1, n2) {
+    function varignonDepth(h, cover, ds, db, layers) {
         const clear_layer = 25;
         const d_1 = h - cover - ds - db / 2;
-        if (n2 === 0) return { d_eff: d_1, d_1, d_2: null, clear_layer };
-        const d_2 = d_1 - db - clear_layer;
-        const d_eff = (n1 * d_1 + n2 * d_2) / (n1 + n2);
-        return { d_eff, d_1, d_2, clear_layer };
+        if (!Array.isArray(layers) || layers.length <= 1) {
+            return { d_eff: d_1, d_1, d_2: null, d_top: d_1,
+                     d_layers: [d_1], clear_layer };
+        }
+        const d_layers = layers.map((_, i) => d_1 - i * (db + clear_layer));
+        const totalN   = layers.reduce((a, n) => a + n, 0);
+        const moment   = layers.reduce((a, n, i) => a + n * d_layers[i], 0);
+        const d_eff    = moment / totalN;
+        return { d_eff, d_1, d_2: d_layers[1],
+                 d_top: d_layers[d_layers.length - 1],
+                 d_layers, clear_layer };
     }
 
     function designFlexure(Mu_kNm, b, h, fc, fy, db, ds, cover, d_prime, dbCompr) {
@@ -1422,16 +1452,35 @@
                          section_type: isDRRB ? 'DRRB' : 'SRRB', isDRRB,
                          Sc_min: split.Sc_min, Sc_single: split.Sc_single };
             }
-            geom = varignonDepth(h, cover, ds, db, split.n1, split.n2);
+            geom = varignonDepth(h, cover, ds, db, split.layers);
 
-            const sig = `${n_total}|${split.n1}|${split.n2}`;
+            // ── Neutral-axis check on the TOPMOST tension layer ────────
+            // Tension bars must sit BELOW the neutral axis. The strictest
+            // bound is ρ_max (which gives c = a_max/β1) — for SRRB the
+            // actual c is smaller, and for DRRB the tension steel is
+            // capped at ρ_max so c ≈ c_max as well. If the topmost layer
+            // sits at or above the NA, the section is exhausted for
+            // tension steel and we must error out.
+            const c_NA = a_max_iter / b1;        // mm — conservative bound
+            if (geom.d_top !== undefined && geom.d_top <= c_NA + 1e-6) {
+                return { error: `Section is exhausted — the ${split.n_layers}-layer tension bundle (${split.layers.join(' + ')} bars) reaches the neutral axis. Topmost layer is at \\(d = ${geom.d_top.toFixed(1)}\\) mm, neutral axis at \\(c \\approx ${c_NA.toFixed(1)}\\) mm. Increase \\(b\\), \\(h\\), or step up \\(f'_c\\) / bar size.`,
+                         d, n_total, layers: split.layers,
+                         section_type: isDRRB ? 'DRRB' : 'SRRB', isDRRB,
+                         Sc_min: split.Sc_min, Sc_single: split.Sc_single,
+                         c_NA, d_top: geom.d_top };
+            }
+
+            // Convergence signature includes the full layer vector so
+            // that, e.g., a 4-layer → 5-layer transition triggers another
+            // iteration even if n_total didn't change.
+            const sig = `${n_total}|${split.layers.join(',')}`;
             if (sig === prevSig) break;
             prevSig = sig;
             d = geom.d_eff;
         }
 
         const section_type = isDRRB ? 'DRRB' : 'SRRB';
-        const n_layers     = split.n2 > 0 ? 2 : 1;
+        const n_layers     = split.n_layers;
 
         // ─────────────────────────────────────────────────────────────────
         //  Build the SRRB return
@@ -1439,11 +1488,14 @@
         if (!isDRRB) {
             const As_prov = n_total * Ab;
             const a       = As_prov * fy / (0.85 * fc * b);
+            const c_actual = a / b1;
             const phi_Mn  = phi * As_prov * fy * (d - a / 2) / 1e6;
             return {
                 section_type, isDRRB,
                 d, d_single,
-                d_1: geom.d_1, d_2: geom.d_2, clear_layer: geom.clear_layer,
+                d_1: geom.d_1, d_2: geom.d_2, d_top: geom.d_top,
+                d_layers: geom.d_layers, clear_layer: geom.clear_layer,
+                c_actual,
                 b, h, cover, fc, fy, db, Ab, beta1: b1,
                 rho_b: rb, rho_max: r_max, rho_min: r_min,
                 phi_flex: phi, Mu_kNm: Mu, Rn,
@@ -1452,6 +1504,8 @@
                 As_req, n_bars: n_total, As_prov, a, phi_Mn_kNm: phi_Mn,
                 // Layer info
                 n1: split.n1, n2: split.n2, n_layers,
+                layers: split.layers, n_per_layer: split.n_per_layer,
+                n2_even: split.n2_even,
                 Sc_single: split.Sc_single, Sc_layer1: split.Sc_layer1, Sc_min: split.Sc_min,
                 // Legacy-compat aliases (older renderers expect Sc + Sc_ok)
                 Sc: n_layers === 1 ? split.Sc_single : split.Sc_layer1,
@@ -1493,7 +1547,8 @@
         return {
             section_type, isDRRB,
             d, d_single,
-            d_1: geom.d_1, d_2: geom.d_2, clear_layer: geom.clear_layer,
+            d_1: geom.d_1, d_2: geom.d_2, d_top: geom.d_top,
+            d_layers: geom.d_layers, clear_layer: geom.clear_layer,
             b, h, cover, fc, fy, db, Ab, beta1: b1,
             rho_b: rb, rho_max: r_max, rho_min: r_min,
             phi_flex: phi, Mu_kNm: Mu, Rn,
@@ -1507,6 +1562,8 @@
             a: a_drrb, phi_Mn_kNm: phi_Mn_drrb,
             // Layer info
             n1: split.n1, n2: split.n2, n_layers,
+            layers: split.layers, n_per_layer: split.n_per_layer,
+            n2_even: split.n2_even,
             Sc_single: split.Sc_single, Sc_layer1: split.Sc_layer1,
             Sc_min: split.Sc_min,
             // Legacy-compat aliases
@@ -2654,15 +2711,21 @@
                            `\\(S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ${Sc1_ok ? '✓ single layer fits' : '✗ single layer too tight → split into 2 layers'}`,
                            Sc1_ok ? 'ok' : 'fail');
             }
-            if (fl.n_layers === 2) {
-                {
-                    const evenTxt = (fl.n2 % 2 === 0)
-                        ? '\\(n_2\\) is EVEN (symmetric detailing); '
-                        : '\\(n_2\\) is ODD — no valid even split fits, so a centerline bar is used in layer 2; ';
-                    html += row('Layer split (\\(n_1 + n_2 = n\\))',
-                               `\\(${fl.n1} + ${fl.n2} = ${fl.n_bars}\\) bars`,
-                               `${evenTxt}\\(n_1 > n_2\\) — layer 1 (outer / deeper) carries the larger share`);
+            if (fl.n_layers >= 2) {
+                // Layer split — generalized for any N ≥ 2.
+                const layersSum  = fl.layers.join(' + ');
+                const layersExpr = fl.layers.map((_, i) => `n_${i+1}`).join(' + ');
+                let layerNote;
+                if (fl.n_layers === 2) {
+                    layerNote = (fl.n2 % 2 === 0)
+                        ? '\\(n_2\\) is EVEN (symmetric detailing); \\(n_1 > n_2\\) — layer 1 (outer / deeper) carries the larger share'
+                        : '\\(n_2\\) is ODD — no valid even split fits, so a centerline bar is used in layer 2; \\(n_1 > n_2\\)';
+                } else {
+                    layerNote = `2 layers were not enough — \\(n_{per\\,layer} = ${fl.n_per_layer}\\) bars; \\(${fl.n_layers}\\) layers stacked bottom-up at \\(${fl.n_per_layer}\\) bars each, top layer takes the remainder`;
                 }
+                html += row(`Layer split (\\(${layersExpr} = n\\))`,
+                           `\\(${layersSum} = ${fl.n_bars}\\) bars`,
+                           layerNote);
                 html += row('\\(S_{c,\\,layer\\,1}\\) (with \\(n_1\\) bars)',
                            `${fl.Sc_layer1.toFixed(1)} mm`,
                            `\\(\\ge S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ✓`,
@@ -2670,10 +2733,21 @@
                 html += row('Clear vertical spacing between layers',
                            `${fl.clear_layer.toFixed(0)} mm`,
                            'NSCP 425.2.2 / ACI 318-14 25.2.2');
-                html += row('\\(d_2 = d_1 - \\varnothing_b - 25\\)',
-                           `${fl.d_2.toFixed(1)} mm`, 'layer-2 centroid from top fiber');
-                html += row('\\(d_{eff} = \\dfrac{n_1 d_1 + n_2 d_2}{n_1 + n_2}\\)',
-                           `${fl.d.toFixed(1)} mm`,
+                // Per-layer depths.
+                const dRows = fl.d_layers.map((dk, i) =>
+                    `\\(d_{${i+1}}\\) = ${dk.toFixed(1)} mm` + (i === 0 ? '' : ` <small>= \\(d_1 - ${i}(\\varnothing_b + 25)\\)</small>`)
+                ).join(' &nbsp;|&nbsp; ');
+                html += row('Layer centroid depths', dRows, 'from extreme compression fiber');
+                // Neutral-axis sanity row.
+                if (fl.c_actual !== undefined) {
+                    const margin = (fl.d_top - fl.c_actual);
+                    html += row('\\(d_{top}\\) vs neutral axis \\(c\\)',
+                               `${fl.d_top.toFixed(1)} mm \\(>\\) ${fl.c_actual.toFixed(1)} mm`,
+                               `top layer sits ${margin.toFixed(1)} mm below the NA → all layers carry tension ✓`,
+                               'ok');
+                }
+                const varExpr = `\\(d_{eff} = \\dfrac{${fl.layers.map((_, i) => `n_{${i+1}} d_{${i+1}}`).join(' + ')}}{${fl.layers.map((_, i) => `n_{${i+1}}`).join(' + ')}}\\)`;
+                html += row(varExpr, `${fl.d.toFixed(1)} mm`,
                            `Varignon\'s theorem (moments about extreme compression fiber) — \\(${fl.layer_iters}\\) iter${fl.layer_iters>1?'s':''} to converge`);
             } else {
                 html += row('\\(d_{eff}\\)', `${fl.d.toFixed(1)} mm`,
@@ -2688,8 +2762,8 @@
                        fl.capacity_ok ? 'ok' : 'fail');
 
             // Final bar-callout line
-            const layerCallout = (fl.n_layers === 2)
-                ? `arranged as <strong>${fl.n1} (layer 1) + ${fl.n2} (layer 2)</strong> at the <strong>${tensionLoc}</strong>`
+            const layerCallout = (fl.n_layers >= 2)
+                ? `arranged as <strong>${fl.layers.map((n, i) => `${n} (layer ${i+1})`).join(' + ')}</strong> at the <strong>${tensionLoc}</strong>`
                 : `at the <strong>${tensionLoc}</strong> of the section`;
             html += (fl.capacity_ok)
                 ? `<div class="bd-alert bd-alert-ok">✓ <strong>SRRB</strong> — use <strong>${fl.n_bars} – ∅${db.toFixed(0)} mm</strong> bars ${layerCallout} <small style="color:#0F6E56;">(${momentType})</small> &nbsp;|&nbsp; \\(A_{s,prov}\\) = ${fl.As_prov.toFixed(0)} mm² &nbsp;|&nbsp; \\(\\phi M_n\\) = ${fl.phi_Mn_kNm.toFixed(2)} kN·m</div>`
@@ -2755,15 +2829,19 @@
                        `\\(S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ${Sct1_ok ? '✓ single layer fits' : '✗ single layer too tight → split into 2 layers'}`,
                        Sct1_ok ? 'ok' : 'fail');
         }
-        if (fl.n_layers === 2) {
-            {
-                const evenTxtD = (fl.n2 % 2 === 0)
-                    ? '\\(n_2\\) is EVEN (symmetric detailing); '
-                    : '\\(n_2\\) is ODD — no valid even split fits, so a centerline bar is used in layer 2; ';
-                html += row('Tension layer split (\\(n_1 + n_2 = n_{tension}\\))',
-                           `\\(${fl.n1} + ${fl.n2} = ${fl.n_tension}\\) bars`,
-                           `${evenTxtD}\\(n_1 > n_2\\) — layer 1 (outer / deeper) carries the larger share`);
+        if (fl.n_layers >= 2) {
+            const layersSumD  = fl.layers.join(' + ');
+            const layersExprD = fl.layers.map((_, i) => `n_${i+1}`).join(' + ');
+            let layerNoteD;
+            if (fl.n_layers === 2) {
+                layerNoteD = (fl.n2 % 2 === 0)
+                    ? '\\(n_2\\) is EVEN (symmetric detailing); \\(n_1 > n_2\\) — layer 1 (outer / deeper) carries the larger share'
+                    : '\\(n_2\\) is ODD — no valid even split fits, so a centerline bar is used in layer 2; \\(n_1 > n_2\\)';
+            } else {
+                layerNoteD = `2 layers were not enough — \\(n_{per\\,layer} = ${fl.n_per_layer}\\) bars; \\(${fl.n_layers}\\) layers stacked bottom-up at \\(${fl.n_per_layer}\\) bars each, top layer takes the remainder`;
             }
+            html += row(`Tension layer split (\\(${layersExprD} = n_{tension}\\))`,
+                       `\\(${layersSumD} = ${fl.n_tension}\\) bars`, layerNoteD);
             html += row('\\(S_{c,\\,layer\\,1}\\) (with \\(n_1\\) bars)',
                        `${fl.Sc_layer1.toFixed(1)} mm`,
                        `\\(\\ge S_{c,\\min} = ${fl.Sc_min.toFixed(0)}\\) mm — ✓`,
@@ -2771,10 +2849,21 @@
             html += row('Clear vertical spacing between layers',
                        `${fl.clear_layer.toFixed(0)} mm`,
                        'NSCP 425.2.2 / ACI 318-14 25.2.2');
-            html += row('\\(d_2 = d_1 - \\varnothing_b - 25\\)',
-                       `${fl.d_2.toFixed(1)} mm`, 'layer-2 centroid from top fiber');
-            html += row('\\(d_{eff} = \\dfrac{n_1 d_1 + n_2 d_2}{n_1 + n_2}\\)',
-                       `${fl.d.toFixed(1)} mm`,
+            const dRowsD = fl.d_layers.map((dk, i) =>
+                `\\(d_{${i+1}}\\) = ${dk.toFixed(1)} mm`
+            ).join(' &nbsp;|&nbsp; ');
+            html += row('Layer centroid depths', dRowsD, 'from extreme compression fiber');
+            // Neutral-axis sanity row — for DRRB use a_max/β1 as the bound.
+            const c_NA_drrb = fl.c_drrb;
+            if (c_NA_drrb !== undefined && fl.d_top !== undefined) {
+                const margin = fl.d_top - c_NA_drrb;
+                html += row('\\(d_{top}\\) vs neutral axis \\(c = a_{\\max}/\\beta_1\\)',
+                           `${fl.d_top.toFixed(1)} mm \\(>\\) ${c_NA_drrb.toFixed(1)} mm`,
+                           `top layer sits ${margin.toFixed(1)} mm below the NA → all layers carry tension ✓`,
+                           'ok');
+            }
+            const varExprD = `\\(d_{eff} = \\dfrac{${fl.layers.map((_, i) => `n_{${i+1}} d_{${i+1}}`).join(' + ')}}{${fl.layers.map((_, i) => `n_{${i+1}}`).join(' + ')}}\\)`;
+            html += row(varExprD, `${fl.d.toFixed(1)} mm`,
                        `Varignon\'s theorem — \\(${fl.layer_iters}\\) iter${fl.layer_iters>1?'s':''} to converge`);
         }
 
@@ -2791,8 +2880,8 @@
                    `${fl.capacity_ok ? '✓' : '✗'} ${fl.phi_Mn_kNm.toFixed(3)} kN·m`,
                    `${fl.capacity_ok ? '≥' : '<'} \\(M_u = ${fl.Mu_kNm.toFixed(3)}\\) kN·m`,
                    fl.capacity_ok ? 'ok' : 'fail');
-        const tLayerCallout = (fl.n_layers === 2)
-            ? `arranged as <strong>${fl.n1} (layer 1) + ${fl.n2} (layer 2)</strong> at the <strong>${tensionLoc}</strong>`
+        const tLayerCallout = (fl.n_layers >= 2)
+            ? `arranged as <strong>${fl.layers.map((n, i) => `${n} (layer ${i+1})`).join(' + ')}</strong> at the <strong>${tensionLoc}</strong>`
             : `at the <strong>${tensionLoc}</strong>`;
         html += (fl.capacity_ok)
             ? `<div class="bd-alert bd-alert-ok">
@@ -2990,10 +3079,11 @@
                 tensCell = `<span title="${escapeXml(fl.error)}" style="color:#993C1D;">${tag}</span>`;
             } else {
                 const nTotal = fl.isDRRB ? fl.n_tension : fl.n_bars;
-                // 2-layer split shows as "n1+n2" e.g. "3+2 – ⌀16 (BOT)";
-                // single-layer stays compact "n – ⌀16 (BOT)".
-                const layerTxt = (fl.n_layers === 2)
-                    ? `${fl.n1}+${fl.n2}`
+                // Multi-layer split shows as "n1+n2+...+nk" e.g.
+                // "5+5+5+5+3 – ⌀16 (BOT)"; single-layer stays compact
+                // as "n – ⌀16 (BOT)".
+                const layerTxt = (fl.n_layers >= 2 && Array.isArray(fl.layers))
+                    ? fl.layers.join('+')
                     : `${nTotal}`;
                 tensCell = `${layerTxt} &ndash; &#8709;${fl.db.toFixed(0)} (${tensLoc})`;
             }
