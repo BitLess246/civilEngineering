@@ -888,9 +888,10 @@ nav ul li a:hover {
    display:inline-block + width:min-content to keep math snippets
    tight on the standalone Solution tab — so that batch cards lay
    out as normal block flow. Without this the engine output gets
-   squashed into a narrow leftmost column inside each card. */
-.fd-batch-card-body .latex-container,
-.fd-batch-card-body .container2 {
+   squashed into a narrow leftmost column inside each card.
+   NOTE: .container2 keeps its 2-column grid (the parameters-given
+   block uses it) — we do not block-flow that container. */
+.fd-batch-card-body .latex-container {
     display: block !important;
     width: 100% !important;
     max-width: 100% !important;
@@ -900,29 +901,23 @@ nav ul li a:hover {
     font-size: 1em;
     line-height: 1.5;
 }
-/* The .latex-container > p rule has  margin-right: 100%  which
-   forces each paragraph to flush left with effectively zero width.
-   Cancel that here so paragraphs in the batch view fill the card. */
-.fd-batch-card-body .latex-container > p,
-.fd-batch-card-body .container2 > p {
-    display: block !important;
-    margin: 6px 0 !important;
-    width: auto !important;
+.fd-batch-card-body .container2 {
+    width: 100%;
+    max-width: 100%;
+    margin: 10px 0;
 }
-/* Headings inside the engine output were also being forced to
-   inline-block min-content, so a long heading like "Solve for
-   Ultimate Loads Per NSCP 2015 §203.3.1 / ACI 318-14 §5.3.1" was
-   wrapping at every space. Block them out and let them flow. */
+/* Headings inside .latex-container were forced to inline-block
+   min-content, so long headings like "Solve for Ultimate Loads
+   Per NSCP 2015 §203.3.1 / ACI 318-14 §5.3.1" were wrapping at
+   every space. Block them out and let them flow. The pretty
+   step-banner / sub-step styling comes from the existing
+   #result.latex-container h5 / h7 rules which now ALSO target
+   .fd-batch-card-body .latex-container (twin selectors injected
+   above), so we don't redefine padding/background here. */
 .fd-batch-card-body .latex-container > h3,
 .fd-batch-card-body .latex-container > h5,
 .fd-batch-card-body .latex-container > h7,
-.fd-batch-card-body .latex-container > h8,
-.fd-batch-card-body .container2 > h3,
-.fd-batch-card-body .container2 > h5,
-.fd-batch-card-body .container2 > h7,
-.fd-batch-card-body .container2 > h8 {
-    display: block !important;
-    margin: 12px 0 6px !important;
+.fd-batch-card-body .latex-container > h8 {
     width: auto !important;
     white-space: normal;
 }
@@ -1031,6 +1026,8 @@ nav ul li a:hover {
    `display: inline-block; margin-right: 100%`. Force block layout
    with full width using !important so neither legacy rule wins.
    ============================================================ */
+.fd-page .fd-batch-card-body .latex-container,
+
 .fd-page #result.latex-container,
 .fd-page #Summary.latex-container,
 .fd-page #Summary1.latex-container {
@@ -1043,6 +1040,9 @@ nav ul li a:hover {
     text-align: left;
     box-sizing: border-box;
 }
+
+.fd-page .fd-batch-card-body .latex-container p,
+
 
 .fd-page #result.latex-container p,
 .fd-page #Summary.latex-container p,
@@ -1063,6 +1063,8 @@ nav ul li a:hover {
 /* h3 (Summary title) — section banner */
 .fd-page #Summary.latex-container h3,
 .fd-page #Summary1.latex-container h3,
+.fd-page .fd-batch-card-body .latex-container h3 ,
+
 .fd-page #result.latex-container h3 {
     display: block !important;
     width: 100% !important;
@@ -1079,6 +1081,8 @@ nav ul li a:hover {
 }
 
 /* h5 — major calculation step. Render as a card header with a step bar */
+.fd-page .fd-batch-card-body .latex-container h5 ,
+
 .fd-page #result.latex-container h5 {
     counter-increment: fd-step;
     display: block !important;
@@ -1099,6 +1103,9 @@ nav ul li a:hover {
     line-height: 1.4 !important;
 }
 
+.fd-page .fd-batch-card-body .latex-container h5::before ,
+
+
 .fd-page #result.latex-container h5::before {
     content: counter(fd-step);
     position: absolute;
@@ -1117,11 +1124,16 @@ nav ul li a:hover {
     font-weight: 700;
 }
 
+.fd-page .fd-batch-card-body .latex-container ,
+
+
 .fd-page #result.latex-container {
     counter-reset: fd-step;
 }
 
 /* h7 — sub-step header (custom tag the JS uses) */
+.fd-page .fd-batch-card-body .latex-container h7,
+
 .fd-page #result.latex-container h7,
 .fd-page #Summary.latex-container h7,
 .fd-page #Summary1.latex-container h7 {
@@ -1140,6 +1152,8 @@ nav ul li a:hover {
 }
 
 /* h8 — atomic value line inside the parameters block */
+.fd-page .fd-batch-card-body .latex-container h8,
+
 .fd-page #result.latex-container h8,
 .fd-page #Summary.latex-container h8,
 .fd-page #Summary1.latex-container h8 {
@@ -1151,6 +1165,8 @@ nav ul li a:hover {
 /* Soft card treatment for the equation paragraphs that follow a step
    header. The .fd-clause rule below overrides this with a more specific
    selector so callouts get the green note styling instead. */
+.fd-page .fd-batch-card-body .latex-container > p ,
+
 .fd-page #result.latex-container > p {
     padding: 10px 14px !important;
     background: #fcfcfd;
@@ -1164,6 +1180,8 @@ nav ul li a:hover {
    Render as a full-width "callout note" block so the text flows naturally
    instead of inheriting the LaTeX container's shrink-to-fit width and
    breaking one-word-per-line. */
+.fd-page .fd-batch-card-body .latex-container p.fd-clause,
+
 .fd-page #result.latex-container p.fd-clause,
 .fd-page #Summary.latex-container p.fd-clause,
 .fd-page #Summary1.latex-container p.fd-clause {
@@ -1189,6 +1207,8 @@ nav ul li a:hover {
 
 /* MathJax renders display equations inside the clause as inline pieces so
    they don't break the paragraph flow. */
+.fd-page .fd-batch-card-body .latex-container p.fd-clause mjx-container,
+
 .fd-page #result.latex-container p.fd-clause mjx-container,
 .fd-page #Summary.latex-container p.fd-clause mjx-container,
 .fd-page #Summary1.latex-container p.fd-clause mjx-container {
@@ -1204,6 +1224,8 @@ nav ul li a:hover {
    solution-card layout cleanly.
    ============================================================ */
 .fd-page .katex,
+.fd-page .fd-batch-card-body .latex-container .katex,
+
 .fd-page #result.latex-container .katex,
 .fd-page #Summary.latex-container .katex,
 .fd-page #Summary1.latex-container .katex,
@@ -1216,6 +1238,8 @@ nav ul li a:hover {
 }
 
 .fd-page .katex-display,
+.fd-page .fd-batch-card-body .latex-container .katex-display,
+
 .fd-page #result.latex-container .katex-display,
 .fd-page #Summary.latex-container .katex-display,
 .fd-page #Summary1.latex-container .katex-display {
@@ -1234,6 +1258,8 @@ nav ul li a:hover {
 }
 
 /* Inside the green clause callout, render inline math without extra spacing. */
+.fd-page .fd-batch-card-body .latex-container p.fd-clause .katex,
+
 .fd-page #result.latex-container p.fd-clause .katex,
 .fd-page #Summary.latex-container p.fd-clause .katex,
 .fd-page #Summary1.latex-container p.fd-clause .katex {

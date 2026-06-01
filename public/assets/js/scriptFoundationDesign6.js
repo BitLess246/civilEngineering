@@ -1376,9 +1376,22 @@ document.addEventListener("DOMContentLoaded", () => {
         rebarDesign("y");
         const rebarY_size = { n, sc, level };
         if (structureType === "Isolated Rectangular") rebarY_size.m = m;
+        // Even when the foundation is SIZE-CONTROLLED (the while-loop
+        // grew dc until shear passes), we still want the schedule to
+        // show the actual Vu / phi*Vn for transparency — otherwise the
+        // verdict column reads "reported (no SAFE/FAIL)" with no
+        // diagnostic. punchingV / beamShearX / beamShearY hold the
+        // values at the converged dc; surface them.
         renderFoundationSummary({
             method: 1,
             dc, bx, by, barDia,
+            qact, qnet: calc,
+            punching:   punchingV
+                          ? { Vu: punchingV.Vu,  vn: punchingV.vn  } : null,
+            beamShearX: beamShearX
+                          ? { Vu: beamShearX.Vu, vn: beamShearX.vn } : null,
+            beamShearY: beamShearY
+                          ? { Vu: beamShearY.Vu, vn: beamShearY.vn } : null,
             rebarX: rebarX_size, rebarY: rebarY_size,
             isRectangular: structureType === "Isolated Rectangular"
         });
@@ -1423,17 +1436,15 @@ document.addEventListener("DOMContentLoaded", () => {
         rebarDesign("y");
         const rebarY_appr = { n, sc, level };
         if (structureType === "Isolated Rectangular") rebarY_appr.m = m;
-        // Method 2 doesn't compute φVn against Vu in the same way; we
-        // report Vu only (no pass/fail column) by passing vn = +Infinity
-        // so the ✓ always wins. The user sees the magnitudes for
-        // reference but no SAFE/FAIL verdict (matches the original
-        // approximation-method behavior).
+        // Method 2 solves dc from the equality Vu = phi*Vn, so phi*Vn
+        // is real — surface both sides of the comparison instead of
+        // hiding the verdict behind +Infinity.
         renderFoundationSummary({
             method: 2,
             dc, bx, by, barDia,
-            punching:   { Vu: punchingV.Vu,   vn: Number.POSITIVE_INFINITY },
-            beamShearX: { Vu: beamShearX.Vu,  vn: Number.POSITIVE_INFINITY },
-            beamShearY: { Vu: beamShearY.Vu,  vn: Number.POSITIVE_INFINITY },
+            punching:   { Vu: punchingV.Vu,   vn: punchingV.vn   },
+            beamShearX: { Vu: beamShearX.Vu,  vn: beamShearX.vn  },
+            beamShearY: { Vu: beamShearY.Vu,  vn: beamShearY.vn  },
             rebarX: rebarX_appr, rebarY: rebarY_appr,
             isRectangular: structureType === "Isolated Rectangular"
         });
