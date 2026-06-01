@@ -929,10 +929,19 @@ function downloadFoundationExcelTemplate() {
             'Allowable Load P (kN)':  1100,
             'Ultimate Load Pu (kN)':  1680
         })),
+        // F3 demonstrates the Constricted-length restriction (Isolated
+        // Rectangular with By pinned to a specific value).
+        // NOTE: "Strip" (Combined Footing) detailed-design isn't ported
+        // to the engine yet, so the template can't ship a working Strip
+        // sample. If a user picks Strip in the Excel sheet, the engine
+        // surfaces an explicit "not yet implemented" error instead of
+        // silently producing NaN.
         Object.assign({ 'Label': 'F3' }, sample({
-            'Structure Type':         'Strip',
-            'Allowable Load P (kN)':  600,
-            'Ultimate Load Pu (kN)':  900
+            'Structure Type':                'Isolated Rectangular',
+            'Length Restriction':            2,
+            'Constriction Length (m)':       2.5,
+            'Allowable Load P (kN)':         900,
+            'Ultimate Load Pu (kN)':         1350
         }))
     ];
     const rows = [headerRow];

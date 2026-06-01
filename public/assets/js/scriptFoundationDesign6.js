@@ -41,6 +41,36 @@ function renderAllMath() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+    // printDiv — swap the body for the chosen result block, fire the
+    // browser print dialog, then restore + reload so the page becomes
+    // interactive again. Respects window._foundationPrintTargetId so
+    // the Excel-batch renderer can repoint Save / Print to
+    // #batchOutput (every footing + the consolidated schedule in one
+    // PDF) instead of the hardcoded "Solution" tab.
+    function printDiv(divId) {
+        const targetId = window._foundationPrintTargetId || divId;
+        const target   = document.getElementById(targetId);
+        if (!target) {
+            alert("Nothing to print yet — click Calculate (or upload an Excel) first.");
+            return;
+        }
+        const originalContent = document.body.innerHTML;
+        document.body.innerHTML = target.outerHTML;
+        window.print();
+        document.body.innerHTML = originalContent;
+        // Inline event listeners are wiped by the innerHTML swap;
+        // reload so the page becomes interactive again.
+        window.location.reload();
+    }
+    // Save / Print PDF — attach ONCE at module load. The previous
+    // code re-attached on every form submit, so a 3-row Excel batch
+    // ended up with 3 stacked click handlers all racing through
+    // printDiv (the first reload would kill the others).
+    const _saveBtn = document.getElementById('saveButton');
+    if (_saveBtn) {
+        _saveBtn.addEventListener('click', () => printDiv('Solution'));
+    }
+
     document.getElementById('formFoundation').addEventListener('submit',function(event){
         event.preventDefault();
 
@@ -333,7 +363,19 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             if (analysisMethod ==="design"){
             document.getElementById('result').appendChild(createHeader7(`Solve for \\( B\\)`)); 
-            if (structureType==="Isolated Square"){
+            if (structureType === "Strip") {
+                // Combined / Strip footings need a different solver (column
+                // spacing + service loads on each column → trapezoidal
+                // pressure diagram, not the iso-axial B^2 equation). That
+                // solver isn't ported yet, so surface a clear notice instead
+                // of silently leaving Bx and By at 0 and cascading NaN
+                // through every downstream check.
+                throw new Error(
+                    'Combined Footing ("Strip") detailed design is not yet implemented. ' +
+                    'Switch Analysis Method to "Analyze with specified dimensions" and supply Bx / By / Dc to use the analysis path, ' +
+                    'or pick Isolated Square / Isolated Rectangular for the detailed-design flow.'
+                );
+            } else if (structureType==="Isolated Square"){
                 document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{B^2}\\times (1 + \\frac{6\\times (e_x + e_y)}{B}) \$$`));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ ${qnet.toFixed(2)}kPa = \\frac {${p}kN}{B^2}\\times (1 + \\frac{6\\times (${ex.toFixed(3)}m+${ey.toFixed(3)}m)}{B})  \$$`));
                 let Bx_solution = newtonRaphson(0, 0, 1,0,qnet,by,p,ex,ey);
@@ -471,7 +513,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
             }
             document.getElementById('result').appendChild(createHeader7(`Solve for \\( B\\)`)); 
-            if (structureType==="Isolated Square"){
+            if (structureType === "Strip") {
+                // Combined / Strip footings need a different solver (column
+                // spacing + service loads on each column → trapezoidal
+                // pressure diagram, not the iso-axial B^2 equation). That
+                // solver isn't ported yet, so surface a clear notice instead
+                // of silently leaving Bx and By at 0 and cascading NaN
+                // through every downstream check.
+                throw new Error(
+                    'Combined Footing ("Strip") detailed design is not yet implemented. ' +
+                    'Switch Analysis Method to "Analyze with specified dimensions" and supply Bx / By / Dc to use the analysis path, ' +
+                    'or pick Isolated Square / Isolated Rectangular for the detailed-design flow.'
+                );
+            } else if (structureType==="Isolated Square"){
                 document.getElementById('result').appendChild(createParagraph(`$$\\ q_{net} = \\frac {P}{B^2}\\times (1 + \\frac{6\\times (e_x + e_y)}{B}) \$$`));
                 document.getElementById('result').appendChild(createParagraph(`$$\\ ${qnet.toFixed(2)}kPa = \\frac {${p}kN}{B^2}\\times (1 + \\frac{6\\times (${ex.toFixed(3)}m+${ey.toFixed(3)}m)}{B})  \$$`));
                 let Bx_solution = newtonRaphson(0, 0, 1,0,qnet,by,p,ex,ey);
@@ -1136,14 +1190,8 @@ document.addEventListener("DOMContentLoaded", () => {
     function delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
-    function printDiv(divId) {
-        const originalContent = document.body.innerHTML;
-        const printContent = document.getElementById(divId).outerHTML;
-
-        document.body.innerHTML = printContent;
-        window.print();
-        document.body.innerHTML = originalContent;
-    }
+    // printDiv is hoisted to the outer DOMContentLoaded scope below so
+    // the module-load save-button listener can call it.
 
   window.jsPDF = window.jspdf.jsPDF;
 
@@ -1160,8 +1208,9 @@ document.addEventListener("DOMContentLoaded", () => {
     doc.save('FoundationDesign.pdf');
   }
     //GET PARAMETERS AND INITIALIZE VALUES
-    document.getElementById('GivenParameters1').appendChild(createHeader5(`Parameters Given:`));       
-    document.getElementById('GivenParameters1').appendChild(createHeader5(``));       
+    document.getElementById('GivenParameters1').appendChild(createHeader5(`Parameters Given:`));
+    // (Removed an empty createHeader5("") that was here for spacing — it
+    //  rendered as an empty numbered step-chip in the styled output.)
     const analysisMethod = document.getElementById('analysisMethod').value;
     let method = parseInt(document.getElementById('Method').value);
     
@@ -1453,15 +1502,11 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('tab').style.display = 'flex';
     // Render all math now that every paragraph has been appended.
     renderAllMath();
-    const saveButtonElement = document.getElementById("saveButton");
-    saveButtonElement.addEventListener("click", function() {
-        printDiv("Solution");
-        
-
-
-
-
-    });  
+    // The save-button listener is attached ONCE at module-load below,
+    // not here — the previous code re-attached on every submit, so an
+    // Excel batch of 3 footings ended up with 3 click handlers all
+    // calling printDiv (and the first call's window.location.reload
+    // killed the others before they could finish).
 } catch {
 
 }
