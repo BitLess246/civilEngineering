@@ -145,6 +145,135 @@ document.addEventListener("DOMContentLoaded", () => {
         p.innerHTML = content;
         return p;
     }
+
+    // ────────────────────────────────────────────────────────────────
+    //  Foundation summary — tabular schedule (replaces the long
+    //  paragraph-per-value Summary panel). Mirrors the beam-design
+    //  Beam Schedule so the two calculators feel consistent.
+    //
+    //  Data shape (all fields optional except the geometry block):
+    //    {
+    //      dc, bx, by, barDia,                          (geometry)
+    //      qact, qnet,                                  (bearing)
+    //      punching:    { Vu, vn },                     (shear)
+    //      beamShearX:  { Vu, vn },
+    //      beamShearY:  { Vu, vn },
+    //      rebarX:      { n, sc, level, m? },           (reinforcement)
+    //      rebarY:      { n, sc, level, m? },
+    //      isRectangular: bool,
+    //      method:      1 | 2                           (for the title)
+    //    }
+    // ────────────────────────────────────────────────────────────────
+    function fdScheduleRow(label, value, checkCell = '—', checkCls = '') {
+        const cls = checkCls ? ` class="${checkCls}"` : '';
+        return `<tr><td>${label}</td><td class="fd-sched-num">${value}</td><td${cls}>${checkCell}</td></tr>`;
+    }
+    function fdSectionHeader(title, span = 3) {
+        return `<tr class="fd-sched-header"><td colspan="${span}">${title}</td></tr>`;
+    }
+    function buildFoundationSummaryHtml(data) {
+        const tag = (data && data.method === 2) ? 'Approximation method' : 'Iteration method';
+        let html = `<div class="fd-schedule-title">Design Schedule — Final values <small style="font-weight:400;color:#5c6773;font-size:0.78em;">(${tag})</small></div>`;
+        html += `<div class="fd-schedule-wrap"><table class="fd-schedule">`;
+        html += `<thead><tr><th>Parameter</th><th>Value</th><th>Capacity / Check</th></tr></thead><tbody>`;
+
+        // Geometry & bar size — always present.
+        html += fdSectionHeader('Geometry & Bar Size');
+        html += fdScheduleRow('Footing depth \\(D_c\\)',           `${data.dc} mm`);
+        html += fdScheduleRow('Width along X-axis \\(B_x\\)',      `${Number(data.bx).toFixed(2)} m`);
+        html += fdScheduleRow('Width along Y-axis \\(B_y\\)',      `${Number(data.by).toFixed(2)} m`);
+        html += fdScheduleRow('Bar diameter \\(d_b\\)',            `&#8709;${data.barDia} mm`);
+
+        // Bearing pressure (when computed and reported).
+        if (Number.isFinite(data.qact) && Number.isFinite(data.qnet)) {
+            const ok = data.qact <= data.qnet;
+            const cls = ok ? 'fd-sched-ok' : 'fd-sched-bad';
+            html += fdSectionHeader('Soil Bearing');
+            html += fdScheduleRow('Actual pressure \\(q_{act}\\)',
+                                  `${data.qact.toFixed(3)} kPa`,
+                                  `${ok ? '&#10003;' : '&#10007;'} \\(q_{net}\\) = ${data.qnet.toFixed(3)} kPa`,
+                                  cls);
+        }
+
+        // Shear checks — punching, beam shear (X), beam shear (Y).
+        const hasShear = data.punching || data.beamShearX || data.beamShearY;
+        if (hasShear) {
+            html += fdSectionHeader('Shear Checks');
+            if (data.punching) {
+                const ok = data.punching.Vu <= data.punching.vn;
+                const cls = ok ? 'fd-sched-ok' : 'fd-sched-bad';
+                html += fdScheduleRow('Punching shear \\(V_u\\)',
+                                      `${data.punching.Vu.toFixed(2)} kN`,
+                                      `${ok ? '&#10003;' : '&#10007;'} \\(\\phi V_n\\) = ${data.punching.vn.toFixed(2)} kN`,
+                                      cls);
+            }
+            if (data.beamShearX) {
+                const ok = data.beamShearX.Vu <= data.beamShearX.vn;
+                const cls = ok ? 'fd-sched-ok' : 'fd-sched-bad';
+                html += fdScheduleRow('Beam shear (X-axis) \\(V_u\\)',
+                                      `${data.beamShearX.Vu.toFixed(2)} kN`,
+                                      `${ok ? '&#10003;' : '&#10007;'} \\(\\phi V_n\\) = ${data.beamShearX.vn.toFixed(2)} kN`,
+                                      cls);
+            }
+            if (data.beamShearY) {
+                const ok = data.beamShearY.Vu <= data.beamShearY.vn;
+                const cls = ok ? 'fd-sched-ok' : 'fd-sched-bad';
+                html += fdScheduleRow('Beam shear (Y-axis) \\(V_u\\)',
+                                      `${data.beamShearY.Vu.toFixed(2)} kN`,
+                                      `${ok ? '&#10003;' : '&#10007;'} \\(\\phi V_n\\) = ${data.beamShearY.vn.toFixed(2)} kN`,
+                                      cls);
+            }
+        }
+
+        // Reinforcement schedule — bars per axis + center band for rectangular.
+        if (data.rebarX || data.rebarY) {
+            html += fdSectionHeader('Reinforcement Schedule');
+            if (data.rebarX) {
+                const lvl = data.rebarX.level ? ` (${data.rebarX.level} layer)` : '';
+                html += fdScheduleRow(
+                    `Bars along X-axis${lvl}`,
+                    `${data.rebarX.n} pcs &#8709;${data.barDia} mm`,
+                    `@ ${Number(data.rebarX.sc).toFixed(2)} mm o.c.`);
+                if (data.isRectangular && data.rebarX.m !== undefined && data.rebarX.m !== '') {
+                    html += fdScheduleRow('Center-band bars (X)',
+                                          `${data.rebarX.m} pcs`,
+                                          'concentrated within \\(B_x\\) center band');
+                }
+            }
+            if (data.rebarY) {
+                const lvl = data.rebarY.level ? ` (${data.rebarY.level} layer)` : '';
+                html += fdScheduleRow(
+                    `Bars along Y-axis${lvl}`,
+                    `${data.rebarY.n} pcs &#8709;${data.barDia} mm`,
+                    `@ ${Number(data.rebarY.sc).toFixed(2)} mm o.c.`);
+                if (data.isRectangular && data.rebarY.m !== undefined && data.rebarY.m !== '') {
+                    html += fdScheduleRow('Center-band bars (Y)',
+                                          `${data.rebarY.m} pcs`,
+                                          'concentrated within \\(B_y\\) center band');
+                }
+            }
+        }
+
+        html += `</tbody></table></div>`;
+
+        // Legend mirrors the beam-schedule key.
+        html += `<div class="fd-schedule-legend">
+            <span><i style="background:#f0faf5;border-color:#b3e0c9;"></i> &#10003; Capacity OK</span>
+            <span><i style="background:#fef2ef;border-color:#f0c0b3;"></i> &#10007; Capacity NOT OK / increase size</span>
+            <span>Bar layer: upper = closer to top, lower = closer to bottom of the footing slab.</span>
+        </div>`;
+
+        return html;
+    }
+    function renderFoundationSummary(data) {
+        const html = buildFoundationSummaryHtml(data);
+        for (const id of ['Summary', 'Summary1']) {
+            const el = document.getElementById(id);
+            if (!el) continue;
+            el.innerHTML = html;
+            renderMath(el);
+        }
+    }
     function dimension(DC){
         let dc = DC;
         let ds = (h*1000) - dc;
@@ -1232,85 +1361,39 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         recheck += 1;
         calc = dimension(dc+25);
-        document.getElementById('Summary').appendChild(createHeader3(`Summary:`));
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ B_x = ${bx}m \$$`));
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ d_{bar} = ${barDia}mm \$$`));
-
-        document.getElementById('Summary1').appendChild(createHeader3(`Summary:`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_x = ${bx}m \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ d_{bar} = ${barDia}mm \$$`));
-
+        // Run rebar designs (also appends to #result) and capture the
+        // per-axis n / spacing / layer values for the schedule.
         rebarDesign("x");
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along X-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along X-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
-
-        if (structureType==="Isolated Rectangular"){            
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
-
-        }
+        const rebarX_size = { n, sc, level };
+        if (structureType === "Isolated Rectangular") rebarX_size.m = m;
         rebarDesign("y");
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along Y-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along Y-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
-
-        if (structureType==="Isolated Rectangular"){ 
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
-
-        }
+        const rebarY_size = { n, sc, level };
+        if (structureType === "Isolated Rectangular") rebarY_size.m = m;
+        renderFoundationSummary({
+            method: 1,
+            dc, bx, by, barDia,
+            rebarX: rebarX_size, rebarY: rebarY_size,
+            isRectangular: structureType === "Isolated Rectangular"
+        });
     } else {
-        document.getElementById('Summary').appendChild(createHeader3(`Summary:`));
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ B_x = ${bx}m \$$`));
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ d_{bar} = ${barDia}mm \$$`));
-        
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ q_{actual} = ${qact.toFixed(3)}kPa ${qact > calc ? "> ":"< "} q_{net} = ${calc.toFixed(3)}kPa ${qact > calc ? "\\therefore \\text{Increase Size}":"\\therefore \\text{SAFE}"} \$$`));
-    
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ V_{u(Punching Shear)} = ${punchingV.Vu.toFixed(2)}kN \\, \\,${punchingV.Vu<punchingV.vn ? "<":">"} \\, \\, \\phi V_{n(Punching Shear)} = ${punchingV.vn.toFixed(2)}kN \\, \\, ${punchingV.Vu<punchingV.vn ? "\\therefore \\text{SAFE}":"\\therefore \\text{FAIL}"}\$$`));
-        
-            beamShearX=beamShear ("x",dc);
-            beamShearY=beamShear ("y",dc);
-          
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ V_{u(Beam Shear - x)} = ${beamShearX.Vu.toFixed(2)}kN \\, \\, ${beamShearX.Vu<beamShearX.vn ? "<":">"} \\, \\phi V_{n(Beam Shear)} = ${beamShearX.vn.toFixed(2)}kN \\, \\, ${beamShearX.Vu<beamShearX.vn ? "\\therefore \\text{SAFE}":"\\therefore \\text{FAIL}"}\$$`));
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ V_{u(Beam Shear - y)} = ${beamShearY.Vu.toFixed(2)}kN \\, \\, ${beamShearY.Vu<beamShearY.vn ? "<":">"} \\, \\phi V_{n(Beam Shear)} = ${beamShearY.vn.toFixed(2)}kN \\, \\, ${beamShearY.Vu<beamShearY.vn ? "\\therefore \\text{SAFE}":"\\therefore \\text{FAIL}"}\$$`));
-
-         
-        
-        document.getElementById('Summary1').appendChild(createHeader3(`Summary:`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_x = ${bx}m \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ q_{actual} = ${qact.toFixed(3)}kPa ${qact > calc ? "> ":"< "} q_{net} = ${calc.toFixed(3)}kPa ${qact > calc ? "\\therefore \\text{Increase Size}":"\\therefore \\text{SAFE}"} \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ d_{bar} = ${barDia}mm \$$`));
-
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ V_{u(Punching Shear)} = ${punchingV.Vu.toFixed(2)}kN \\, \\,${punchingV.Vu<punchingV.vn ? "<":">"} \\, \\, \\phi V_{n(Punching Shear)} = ${punchingV.vn.toFixed(2)}kN \\, \\, ${punchingV.Vu<punchingV.vn ? "\\therefore \\text{SAFE}":"\\therefore \\text{FAIL}"}\$$`));
-
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ V_{u(Beam Shear - x)} = ${beamShearX.Vu.toFixed(2)}kN \\, \\, ${beamShearX.Vu<beamShearX.vn ? "<":">"} \\, \\phi V_{n(Beam Shear)} = ${beamShearX.vn.toFixed(2)}kN \\, \\, ${beamShearX.Vu<beamShearX.vn ? "\\therefore \\text{SAFE}":"\\therefore \\text{FAIL}"}\$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ V_{u(Beam Shear - y)} = ${beamShearY.Vu.toFixed(2)}kN \\, \\, ${beamShearY.Vu<beamShearY.vn ? "<":">"} \\, \\phi V_{n(Beam Shear)} = ${beamShearY.vn.toFixed(2)}kN \\, \\, ${beamShearY.Vu<beamShearY.vn ? "\\therefore \\text{SAFE}":"\\therefore \\text{FAIL}"}\$$`));
-
+        beamShearX = beamShear("x", dc);
+        beamShearY = beamShear("y", dc);
         rebarDesign("x");
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along X-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along X-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
-
-        if (structureType==="Isolated Rectangular"){            
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
-
-        }
+        const rebarX_punch = { n, sc, level };
+        if (structureType === "Isolated Rectangular") rebarX_punch.m = m;
         rebarDesign("y");
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along Y-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along Y-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
-
-        if (structureType==="Isolated Rectangular"){ 
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
-
-        }
+        const rebarY_punch = { n, sc, level };
+        if (structureType === "Isolated Rectangular") rebarY_punch.m = m;
+        renderFoundationSummary({
+            method: 1,
+            dc, bx, by, barDia,
+            qact, qnet: calc,
+            punching:   { Vu: punchingV.Vu,   vn: punchingV.vn   },
+            beamShearX: { Vu: beamShearX.Vu,  vn: beamShearX.vn  },
+            beamShearY: { Vu: beamShearY.Vu,  vn: beamShearY.vn  },
+            rebarX: rebarX_punch, rebarY: rebarY_punch,
+            isRectangular: structureType === "Isolated Rectangular"
+        });
         }
 
     } else if (method === 2){
@@ -1327,47 +1410,26 @@ document.addEventListener("DOMContentLoaded", () => {
         calc = dimension(finalDc);
         dc = finalDc;
         
-        document.getElementById('Summary').appendChild(createHeader3(`Summary:`));            
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ B_x = ${bx}m \$$`));
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ d_{bar} = ${barDia}mm \$$`));
-
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ V_{u(Punching Shear)} = ${punchingV.Vu.toFixed(2)}kN \$$`));
-
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ V_{u(Beam Shear - x)} = ${beamShearX.Vu.toFixed(2)}kN \$$`));
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ V_{u(Beam Shear - y)} = ${beamShearY.Vu.toFixed(2)}kN \$$`));
-
-
-        document.getElementById('Summary1').appendChild(createHeader3(`Summary:`));            
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ D_c = ${dc}mm \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_x = ${bx}m \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ B_y = ${by}m \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ d_{bar} = ${barDia}mm \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ V_{u(Punching Shear)} = ${punchingV.Vu.toFixed(2)}kN \$$`));
-
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ V_{u(Beam Shear - x)} = ${beamShearX.Vu.toFixed(2)}kN \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ V_{u(Beam Shear - y)} = ${beamShearY.Vu.toFixed(2)}kN \$$`));
-
-        
         rebarDesign("x");
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along X-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along X-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
-        
-        if (structureType==="Isolated Rectangular"){ 
-            document.getElementById('Summary').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
-            document.getElementById('Summary1').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
-
-            }
+        const rebarX_appr = { n, sc, level };
+        if (structureType === "Isolated Rectangular") rebarX_appr.m = m;
         rebarDesign("y");
-        document.getElementById('Summary').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along Y-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
-        document.getElementById('Summary1').appendChild(createParagraph(`$$\\ \\text{No. of Rebars Along Y-axis (${level})} = ${n}pcs \\text{  spaced @  }${sc.toFixed(2)}mm \$$`));
-
-        if (structureType==="Isolated Rectangular"){ 
-            document.getElementById('Summary').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
-            document.getElementById('Summary1').appendChild(createParagraph(`$$\\ n_{centerband} = ${m}pcs \$$`));
-
-            }
+        const rebarY_appr = { n, sc, level };
+        if (structureType === "Isolated Rectangular") rebarY_appr.m = m;
+        // Method 2 doesn't compute φVn against Vu in the same way; we
+        // report Vu only (no pass/fail column) by passing vn = +Infinity
+        // so the ✓ always wins. The user sees the magnitudes for
+        // reference but no SAFE/FAIL verdict (matches the original
+        // approximation-method behavior).
+        renderFoundationSummary({
+            method: 2,
+            dc, bx, by, barDia,
+            punching:   { Vu: punchingV.Vu,   vn: Number.POSITIVE_INFINITY },
+            beamShearX: { Vu: beamShearX.Vu,  vn: Number.POSITIVE_INFINITY },
+            beamShearY: { Vu: beamShearY.Vu,  vn: Number.POSITIVE_INFINITY },
+            rebarX: rebarX_appr, rebarY: rebarY_appr,
+            isRectangular: structureType === "Isolated Rectangular"
+        });
     }
     document.getElementById('saveButton').style.display = 'block';
     document.getElementById('tab').style.display = 'flex';
