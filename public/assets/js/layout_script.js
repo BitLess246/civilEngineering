@@ -18,8 +18,11 @@ document.addEventListener("DOMContentLoaded", () => {
             window.location.href = 'columnDesign.html';
         } else if (selectedOption === 'beamDesign') {
             window.location.href = 'beamDesign.html';
-        } else if (selectedOption === 'foundationDesign')
+        } else if (selectedOption === 'foundationDesign') {
             window.location.href = 'foundationDesign.html';
+        } else if (selectedOption === 'pileCapDesign') {
+            window.location.href = 'pileCapDesign.html';
+        }
         }catch (error)
         {console.error('Error loading content:', error)}
         
