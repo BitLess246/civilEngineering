@@ -1292,14 +1292,16 @@ nav ul li a:hover {
    `#result.latex-container > p` soft-card so the parameters panel
    reads consistently with the calculation cards underneath. */
 .fd-page #GivenParameters1,
-.fd-page div#GivenParameters1.container2 {
+.fd-page div#GivenParameters1.container2,
+.fd-page .fd-batch-card-body .container2,
+.fd-page .fd-batch-card-body div.container2.latex-container {
     background: transparent !important;
     border: none !important;
     border-radius: 0 !important;
     padding: 0 !important;
     margin: 0 0 20px !important;
     display: grid !important;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 8px 12px !important;
     width: 100% !important;
     max-width: 100% !important;
@@ -1307,7 +1309,8 @@ nav ul li a:hover {
     box-sizing: border-box;
 }
 
-.fd-page #GivenParameters1 h5 {
+.fd-page #GivenParameters1 h5,
+.fd-page .fd-batch-card-body .container2 h5 {
     grid-column: 1 / -1 !important;
     margin: 0 0 6px !important;
     padding: 0 0 8px !important;
@@ -1321,7 +1324,8 @@ nav ul li a:hover {
     display: block !important;
 }
 
-.fd-page #GivenParameters1 h5::before {
+.fd-page #GivenParameters1 h5::before,
+.fd-page .fd-batch-card-body .container2 h5::before {
     /* No step badge in the parameter recap. */
     content: none !important;
     display: none !important;
@@ -1331,9 +1335,14 @@ nav ul li a:hover {
    #result so the two sections read as a single design language.
    The legacy `.container2 h8 { margin-right: 100% }` rule pushed
    every value to a full row even inside the grid; cancelled here
-   with explicit margin-right: 0. */
+   with explicit margin-right: 0. The same selectors target both
+   the standalone single-foundation #GivenParameters1 container AND
+   the batch-card clone (which is wrapped in
+   `<div class="container2 latex-container">` without the id). */
 .fd-page #GivenParameters1 h8,
-.fd-page div#GivenParameters1.container2 h8 {
+.fd-page div#GivenParameters1.container2 h8,
+.fd-page .fd-batch-card-body .container2 h8,
+.fd-page .fd-batch-card-body div.container2.latex-container h8 {
     display: block !important;
     margin: 0 !important;
     margin-right: 0 !important;
