@@ -738,6 +738,91 @@ nav ul li a:hover {
     margin: 4px 0 0;
 }
 
+/* "Download blank template" link-button next to the upload field */
+.fd-page .fd-link-btn {
+    appearance: none;
+    background: #fff;
+    border: 1px solid #b3d4f0;
+    color: #0056b3;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    cursor: pointer;
+    font-weight: 600;
+}
+.fd-page .fd-link-btn:hover {
+    background: #e7f3ff;
+    border-color: #0056b3;
+}
+
+/* Expandable "What format?" help block */
+.fd-page .fd-import-help {
+    width: 100%;
+    margin-top: 6px;
+    font-size: 0.85em;
+}
+.fd-page .fd-import-help > summary {
+    cursor: pointer;
+    color: #0056b3;
+    font-weight: 600;
+    list-style: revert;
+}
+.fd-page .fd-import-help-body {
+    margin-top: 8px;
+    padding: 10px 14px;
+    background: #fff;
+    border: 1px solid #e1e4e8;
+    border-radius: 6px;
+    color: #495057;
+    line-height: 1.5;
+}
+.fd-page .fd-import-help-body ul { margin: 6px 0; padding-left: 22px; }
+.fd-page .fd-import-help-body code {
+    background: #f6f8fa;
+    border: 1px solid #e1e4e8;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 0.92em;
+}
+
+/* Save + Pile Cap row at the bottom of the page */
+.fd-page .fd-save-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin: 18px 0 0;
+}
+.fd-page .fd-save-btn {
+    background: linear-gradient(135deg, #1f6f30, #0F6E56);
+    color: #fff;
+    border: 0;
+    padding: 10px 22px;
+    border-radius: 6px;
+    font-size: 1em;
+    font-weight: 700;
+    cursor: pointer;
+    transition: filter 0.15s;
+}
+.fd-page .fd-save-btn:hover { filter: brightness(1.08); }
+
+.fd-page .fd-pilecap-link {
+    display: inline-block;
+    background: rgba(0, 86, 179, 0.08);
+    color: #0056b3;
+    padding: 10px 18px;
+    border-radius: 6px;
+    border: 1px solid #b3d4f0;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background 0.15s;
+}
+.fd-page .fd-pilecap-link:hover {
+    background: rgba(0, 86, 179, 0.16);
+    text-decoration: none;
+}
+
 /* When the inline show/hide JS sets display:none on EVERY direct child of an
    .fd-field, hide the wrapper too — otherwise an empty grid cell remains and
    pushes the next visible field into the wrong slot (the original "dropdown
