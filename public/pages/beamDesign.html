@@ -2623,48 +2623,26 @@
             });
         };
 
-        // 1+2. Global max / min moment
-        let iMax = 0, iMin = 0;
-        for (let i = 1; i < M.length; i++) {
-            if (M[i] > M[iMax]) iMax = i;
-            if (M[i] < M[iMin]) iMin = i;
-        }
-        const peak = Math.max(Math.abs(M[iMax]), Math.abs(M[iMin]), 1e-9);
-        const eps  = peak * 0.005 + 1e-6;
-        if (M[iMax] >  eps) tryAdd(xs[iMax], M[iMax], Math.abs(V[iMax]),
-                                   `Max +M (x = ${xs[iMax].toFixed(2)} m)`);
-        if (M[iMin] < -eps) tryAdd(xs[iMin], M[iMin], Math.abs(V[iMin]),
-                                   `Max −M (x = ${xs[iMin].toFixed(2)} m)`);
+        // ─────────────────────────────────────────────────────────────────
+        //  ORDER OF PROCESSING — supports FIRST, then moment extrema.
+        //
+        //  Why this order matters:
+        //    For a fixed-end / continuous beam, Max −M typically sits AT a
+        //    support (hogging is maximum at fixed ends). If Max −M is added
+        //    first, it claims the x-slot with Vu = V[idx_at_support]
+        //    = 0 at the right end (post-all-reactions), and the support
+        //    row gets blocked by the 25 mm dedup in tryAdd. Net effect:
+        //    the right support's |R| shear is silently overwritten with 0.
+        //
+        //  Fix: process supports FIRST so they claim every x slot they
+        //  need with the correct Case A / Case B Vu. Moment extrema
+        //  (Max +M, Max −M, per-span V=0) are added afterward — if any
+        //  coincides with a support (within 25 mm), the dedup skips it
+        //  and the support row keeps both the right Vu (from |R|) and
+        //  the right Mu (= M[idx_at_support]).
+        // ─────────────────────────────────────────────────────────────────
 
-        // 3. Per-span V = 0 crossings — these are TRUE moment extrema
-        //    (since dM/dx = V). Linear interp picks the exact zero between
-        //    sample points; ignore crossings at or very near a support edge
-        //    (they collide with the support's own section).
-        for (let i = 0; i < supps.length - 1; i++) {
-            const xL = supps[i].x, xR = supps[i + 1].x;
-            const iL = idxAt(xL, +1);   // first index strictly inside the span
-            const iR = idxAt(xR, -1);
-            let zeroCount = 0;
-            for (let k = iL; k < iR; k++) {
-                if (V[k] * V[k + 1] < 0) {           // sign change → zero between k and k+1
-                    const x0 = xs[k] - V[k] * (xs[k + 1] - xs[k]) / (V[k + 1] - V[k]);
-                    // Skip if too close to either support
-                    if (x0 - xL < 0.05 || xR - x0 < 0.05) continue;
-                    const M0 = interpAt(x0, xs, M);
-                    zeroCount += 1;
-                    const lbl = supps.length === 2
-                        ? `Midspan @ V=0 (x = ${x0.toFixed(2)} m)`
-                        : `Span ${i + 1} extremum ${zeroCount} (x = ${x0.toFixed(2)} m)`;
-                    tryAdd(x0, M0, Math.abs(interpAt(x0, xs, V)), lbl);
-                }
-            }
-        }
-
-        // 4. Each support → shear demand (max |V| just inside the span on
-        //    either side). Moment at the support is captured by 1/2 above when
-        //    relevant; we still add the support so the user can design for
-        //    high shear even when M ≈ 0 (simple supports).
-        // ── Beam extent (for overhang detection) ──────────────────────────
+        // 1. SUPPORTS FIRST (with overhang-aware Case A / Case B).
         // xs is sampled over the full beam length, so xs[0] = left edge and
         // xs[last] = right edge of the beam itself (NOT necessarily a support).
         const xLeftEdge  = xs[0];
@@ -2741,6 +2719,44 @@
 
             tryAdd(s.x, Mu, Vu, label);
         });
+
+        // 2. Global max / min moment (after supports — so a Max −M that
+        //    coincides with a support is harmlessly deduped by tryAdd
+        //    instead of overwriting the support's correct |R| Vu).
+        let iMax = 0, iMin = 0;
+        for (let i = 1; i < M.length; i++) {
+            if (M[i] > M[iMax]) iMax = i;
+            if (M[i] < M[iMin]) iMin = i;
+        }
+        const peak = Math.max(Math.abs(M[iMax]), Math.abs(M[iMin]), 1e-9);
+        const eps  = peak * 0.005 + 1e-6;
+        if (M[iMax] >  eps) tryAdd(xs[iMax], M[iMax], Math.abs(V[iMax]),
+                                   `Max +M (x = ${xs[iMax].toFixed(2)} m)`);
+        if (M[iMin] < -eps) tryAdd(xs[iMin], M[iMin], Math.abs(V[iMin]),
+                                   `Max −M (x = ${xs[iMin].toFixed(2)} m)`);
+
+        // 3. Per-span V = 0 crossings — TRUE moment extrema (dM/dx = V).
+        //    Linear interp picks the exact zero between sample points;
+        //    crossings near a support edge are skipped (they collide with
+        //    the support's own section, which was added in step 1).
+        for (let i = 0; i < supps.length - 1; i++) {
+            const xL = supps[i].x, xR = supps[i + 1].x;
+            const iL = idxAt(xL, +1);   // first index strictly inside the span
+            const iR = idxAt(xR, -1);
+            let zeroCount = 0;
+            for (let k = iL; k < iR; k++) {
+                if (V[k] * V[k + 1] < 0) {           // sign change → zero between k and k+1
+                    const x0 = xs[k] - V[k] * (xs[k + 1] - xs[k]) / (V[k + 1] - V[k]);
+                    if (x0 - xL < 0.05 || xR - x0 < 0.05) continue;
+                    const M0 = interpAt(x0, xs, M);
+                    zeroCount += 1;
+                    const lbl = supps.length === 2
+                        ? `Midspan @ V=0 (x = ${x0.toFixed(2)} m)`
+                        : `Span ${i + 1} extremum ${zeroCount} (x = ${x0.toFixed(2)} m)`;
+                    tryAdd(x0, M0, Math.abs(interpAt(x0, xs, V)), lbl);
+                }
+            }
+        }
 
         // Sort by x for a clean left-to-right list
         sections.sort((a, b) => a.x - b.x);
