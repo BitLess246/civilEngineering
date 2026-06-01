@@ -900,7 +900,7 @@ function downloadFoundationExcelTemplate() {
         'Load Type':                    'ultimate',
         'Centricity':                   'concentric',
         'Column Shape':                 'square',
-        'Column Location':              'interior',
+        'Column Location':              1,
         'Column Width (mm)':            500,
         'Foundation Depth H (m)':       1.5,
         'Bar Diameter (mm)':            20,
@@ -969,6 +969,7 @@ function downloadFoundationExcelTemplate() {
         'MyDL (kN.m)':                  'individual + eccentric',
         'MyLL (kN.m)':                  'individual + eccentric',
         'Column Shape':                 'square  |  rectangular  |  circle',
+        'Column Location':              '1 (Interior)  |  2 (Edge)  |  3 (Corner) — drives alpha_s in punching shear',
         'Column Width (mm)':            'square / circle (diameter)',
         'Column Width X (mm)':          'rectangular only',
         'Column Width Y (mm)':          'rectangular only',
@@ -1066,6 +1067,36 @@ function handleFile(event) {
 //  by renderFoundationSummary in scriptFoundationDesign6.js), then
 //  hands everything to renderFoundationBatchOutput.
 // ─────────────────────────────────────────────────────────────────
+// Friendly-name aliases for select-type fields whose <option value=…>
+// uses a numeric code. Lets users type "interior" / "edge" / "corner"
+// in the Excel sheet and still drive the right engine branch.
+const FOUNDATION_VALUE_ALIASES = {
+    ColumnLocation: {
+        'interior': 1, 'inner': 1, '1': 1,
+        'edge':     2, 'side':  2, '2': 2,
+        'corner':   3, '3': 3
+    },
+    LengthRestriction: {
+        'none': 0, 'no': 0, '0': 0,
+        'ratio': 1, '1': 1,
+        'constricted': 2, 'limited': 2, '2': 2
+    },
+    Method: {
+        'iteration': 1, 'iterative': 1, '1': 1,
+        'approximate': 2, 'approx': 2, 'approximation': 2, '2': 2
+    },
+    considerSoil: {
+        'yes': 'yes', 'y': 'yes', 'true': 'yes', '1': 'yes',
+        'no':  'no',  'n': 'no',  'false': 'no', '0': 'no'
+    }
+};
+function normalizeExcelValue(fieldId, raw) {
+    const table = FOUNDATION_VALUE_ALIASES[fieldId];
+    if (!table) return raw;
+    const key = String(raw).trim().toLowerCase();
+    return (table[key] !== undefined) ? table[key] : raw;
+}
+
 function runFoundationBatch(headers, dataRows) {
     const map = window.FOUNDATION_EXCEL_PARAM_MAP || {};
     const labelColIdx = headers.findIndex(h => /^(label|id|name)$/i.test(h));
@@ -1088,8 +1119,15 @@ function runFoundationBatch(headers, dataRows) {
             if (!fieldId) continue;
             const el = document.getElementById(fieldId);
             if (!el) continue;
-            const val = row[j];
+            let val = row[j];
             if (val === '' || val === undefined || val === null) continue;
+            // Some <select> fields use numeric option values but humans want
+            // to type the readable label. Normalize a handful of friendly
+            // aliases so the engine sees the right code, NOT a NaN. Without
+            // this, "interior" → parseInt("interior") = NaN → alpha_s
+            // stays undefined and the punching-shear formula prints
+            // "undefined × d/Bo".
+            val = normalizeExcelValue(fieldId, val);
             el.value = String(val);
             el.dispatchEvent(new Event('change', { bubbles: true }));
             el.dispatchEvent(new Event('input',  { bubbles: true }));
