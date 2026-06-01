@@ -273,6 +273,13 @@ document.addEventListener("DOMContentLoaded", () => {
             el.innerHTML = html;
             renderMath(el);
         }
+        // Batch hook — the Excel upload uses this to capture each
+        // foundation's converged data (label, geometry, shears, rebars)
+        // without re-parsing the rendered HTML. If no batch is running
+        // the callback is undefined and we no-op.
+        if (typeof window._foundationBatchCapture === 'function') {
+            try { window._foundationBatchCapture(data); } catch (_) {}
+        }
     }
     function dimension(DC){
         let dc = DC;
