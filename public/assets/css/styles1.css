@@ -1535,3 +1535,56 @@ nav ul li a:hover {
     .fd-schedule-wrap { overflow: visible; }
     .fd-schedule      { font-size: 0.85em; }
 }
+
+/* ============================================================
+   Foundation Design — Download / Print PDF
+   When the user clicks the Save button, scriptFoundationDesign6.js
+   adds .fd-printing-solution (single-foundation mode) or
+   .fd-printing-batch (Excel-batch mode) to <body>. The rules below
+   hide everything except the chosen result panel, so the PDF
+   captures only the design output and not the form / nav / chrome.
+   ============================================================ */
+@media print {
+    body.fd-printing-solution nav,
+    body.fd-printing-solution h1,
+    body.fd-printing-solution form#formFoundation,
+    body.fd-printing-solution .fd-import-row,
+    body.fd-printing-solution #tab,
+    body.fd-printing-solution #summary,
+    body.fd-printing-solution .fd-save-row,
+    body.fd-printing-solution #saveButton,
+    body.fd-printing-batch    nav,
+    body.fd-printing-batch    h1,
+    body.fd-printing-batch    form#formFoundation,
+    body.fd-printing-batch    .fd-import-row,
+    body.fd-printing-batch    #tab,
+    body.fd-printing-batch    #summary,
+    body.fd-printing-batch    .fd-save-row,
+    body.fd-printing-batch    #saveButton {
+        display: none !important;
+    }
+    /* Let the result panel take the full page width. */
+    body.fd-printing-solution #print,
+    body.fd-printing-solution #Solution,
+    body.fd-printing-batch    #print,
+    body.fd-printing-batch    #batchOutput {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        display: block !important;
+    }
+    /* Avoid awkward page breaks inside the schedule table and the
+       per-foundation card summaries. */
+    body.fd-printing-solution .fd-schedule,
+    body.fd-printing-batch    .fd-batch-card,
+    body.fd-printing-batch    .fd-schedule {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+    /* The batch view normally hides every closed <details> body;
+       force them open on the print sheet so all foundations appear. */
+    body.fd-printing-batch .fd-batch-card > *:not(summary) {
+        display: block !important;
+    }
+}
