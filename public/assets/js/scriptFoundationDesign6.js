@@ -41,12 +41,25 @@ function renderAllMath() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    // printDiv — swap the body for the chosen result block, fire the
-    // browser print dialog, then restore + reload so the page becomes
-    // interactive again. Respects window._foundationPrintTargetId so
-    // the Excel-batch renderer can repoint Save / Print to
-    // #batchOutput (every footing + the consolidated schedule in one
-    // PDF) instead of the hardcoded "Solution" tab.
+    // printDiv — fire the browser's native print dialog and use the
+    // @media print rules in styles1.css to hide the form / nav / save
+    // button so only the chosen result block prints.
+    //
+    // History: the previous implementation swapped document.body.
+    // innerHTML for `target.outerHTML`, called window.print(), then
+    // restored the body and reloaded. That worked semantically but
+    // DESTROYED the styling context — the outer wrapper classes
+    // (.fd-page) were dropped, so every CSS rule scoped to
+    // `.fd-page #result.latex-container ...` stopped matching. The
+    // bare `.latex-container { display: inline-block; width:
+    // min-content; }` rule then took over and the printout came out
+    // with every word on its own line. The user's "print pdf.pdf"
+    // shows exactly that failure mode.
+    //
+    // Native print preserves the entire DOM + cascade. We add a
+    // body class so @media print can decide what to hide based on
+    // single-foundation vs batch mode, and the result panel is the
+    // only thing that ends up on paper.
     function printDiv(divId) {
         const targetId = window._foundationPrintTargetId || divId;
         const target   = document.getElementById(targetId);
@@ -54,14 +67,25 @@ document.addEventListener("DOMContentLoaded", () => {
             alert("Nothing to print yet — click Calculate (or upload an Excel) first.");
             return;
         }
-        const originalContent = document.body.innerHTML;
-        document.body.innerHTML = target.outerHTML;
-        window.print();
-        document.body.innerHTML = originalContent;
-        // Inline event listeners are wiped by the innerHTML swap;
-        // reload so the page becomes interactive again.
-        window.location.reload();
+        const printingClass = (targetId === 'batchOutput')
+                                ? 'fd-printing-batch'
+                                : 'fd-printing-solution';
+        document.body.classList.add(printingClass);
+        try {
+            window.print();
+        } finally {
+            // Remove the class after print so the page is normal
+            // again. Most browsers block on window.print() until the
+            // user dismisses the dialog, so the cleanup runs at the
+            // right time; the afterprint event also fires the same
+            // listener as a defence-in-depth.
+            document.body.classList.remove(printingClass);
+        }
     }
+    window.addEventListener('afterprint', () => {
+        document.body.classList.remove('fd-printing-batch');
+        document.body.classList.remove('fd-printing-solution');
+    });
     // Save / Print PDF — attach ONCE at module load. The previous
     // code re-attached on every form submit, so a 3-row Excel batch
     // ended up with 3 stacked click handlers all racing through
@@ -1440,6 +1464,14 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         recheck += 1;
         calc = dimension(dc+25);
+        // qact is the actual soil pressure that the chosen Bx × By
+        // produces under the (already-summed) service load P. The
+        // engine only assigned qact in the "analyze with specified
+        // dimensions" branch — in DESIGN mode for concentric loads it
+        // stayed at its default 0, which is why the Soil-Bearing row
+        // was reading "0.000 kPa" in the user's PDF. Compute it here
+        // so every design path reports the same number.
+        qact = (p / (bx * by)) * (1 + (6 * (ex || 0) / bx) + (6 * (ey || 0) / by));
         // Run rebar designs (also appends to #result) and capture the
         // per-axis n / spacing / layer values for the schedule.
         rebarDesign("x");
@@ -1449,11 +1481,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const rebarY_size = { n, sc, level };
         if (structureType === "Isolated Rectangular") rebarY_size.m = m;
         // Even when the foundation is SIZE-CONTROLLED (the while-loop
-        // grew dc until shear passes), we still want the schedule to
-        // show the actual Vu / phi*Vn for transparency — otherwise the
-        // verdict column reads "reported (no SAFE/FAIL)" with no
-        // diagnostic. punchingV / beamShearX / beamShearY hold the
-        // values at the converged dc; surface them.
+        // grew dc until shear passes), surface the actual Vu / phi*Vn
+        // for transparency — otherwise the verdict column reads
+        // "reported (no SAFE/FAIL)" with no diagnostic.
         renderFoundationSummary({
             method: 1,
             dc, bx, by, barDia,
@@ -1470,6 +1500,10 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
         beamShearX = beamShear("x", dc);
         beamShearY = beamShear("y", dc);
+        // Same qact computation as the size-controlled branch above —
+        // the engine never set it for concentric loads in this path
+        // either.
+        qact = (p / (bx * by)) * (1 + (6 * (ex || 0) / bx) + (6 * (ey || 0) / by));
         rebarDesign("x");
         const rebarX_punch = { n, sc, level };
         if (structureType === "Isolated Rectangular") rebarX_punch.m = m;
