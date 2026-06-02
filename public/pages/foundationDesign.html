@@ -19,6 +19,9 @@
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" crossorigin="anonymous"></script>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- html2canvas — used by the Download PDF button to snapshot the
+         already-KaTeX-rendered result block and embed it in jsPDF. -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.16.9/xlsx.full.min.js"></script>
 
     <script type="module" src="/assets/js/scriptFoundationDesign6.js" defer></script>
@@ -353,7 +356,7 @@
 </div>     
             <div class="fd-save-row">
                 <button id="saveButton" type="button" class="fd-save-btn" style="display: none;">
-                    <span aria-hidden="true">&#8595;</span>&nbsp; Download / Print PDF
+                    <span aria-hidden="true">&#8595;</span>&nbsp; Download PDF
                 </button>
                 <a href="pileCapDesign.html" class="fd-pilecap-link">
                     Pile Cap Design &rarr;
