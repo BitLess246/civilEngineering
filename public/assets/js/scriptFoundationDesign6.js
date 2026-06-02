@@ -1179,11 +1179,19 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById('result').appendChild(createParagraph(``));
         document.getElementById('result').appendChild(createParagraph(`$$\\ n = \\frac{A_s}{A_b} = \\frac{${as.toFixed(2)}mm}{\\frac{\\pi}{4} \\times (${barDia}mm)^2} = ${n.toFixed(2)} \\approx ${Math.ceil(n)}pcs \$$`));
         n = Math.ceil(n);
-        sc = (b - 2*cc - (n*barDia))/(n-1);
+        const sc_raw = (b - 2*cc - (n*barDia))/(n-1);
         let scmin = Math.max(50,barDia,(4/3)*dAgg);
-        document.getElementById('result').appendChild(createParagraph(`$$\\ S_c = \\frac{B_${text} - (2 \\times C_c) - (n \\times d_b)}{n - 1} = \\frac{${b}mm - (2 \\times ${cc}mm) - (${n} \\times ${barDia}mm)}{${n} - 1} = ${sc.toFixed(2)}mm \$$`));
+        // Floor the detailing spacing down to the nearest 25 mm increment
+        // (standard rebar layout practice). The raw value still drives
+        // the "Sc > Sc,min" sufficiency check so we never under-flag a
+        // borderline case, but every downstream consumer — schedule,
+        // beam-schedule table, batch comparison — uses the floored
+        // value because that's what actually gets detailed.
+        const sc_floored = Math.max(0, Math.floor(sc_raw / 25) * 25);
+        sc = sc_floored;
+        document.getElementById('result').appendChild(createParagraph(`$$\\ S_c = \\frac{B_${text} - (2 \\times C_c) - (n \\times d_b)}{n - 1} = \\frac{${b}mm - (2 \\times ${cc}mm) - (${n} \\times ${barDia}mm)}{${n} - 1} = ${sc_raw.toFixed(2)}mm \\;\\approx\\; ${sc_floored}mm \\text{ (floor to 25 mm)} \$$`));
         document.getElementById('result').appendChild(createParagraph(`\\( S_{c(min)} = \\text {Greatest of} \\left\\{\\begin{array}{l} 50mm\\, \\\\  d_b = ${barDia}mm \\, \\\\  d_{agg} = ${dAgg}mm \\,\\end{array}\\right. = ${scmin}mm \\, \\)`));
-        document.getElementById('result').appendChild(createParagraph(`$$\\  ${sc>scmin ? "S_c > S_{c(min)} \\therefore \\text{Okay}":"S_c < S_{c(min)} \\therefore \\text{Insufficient Spacing, add layer}"} \$$`));
+        document.getElementById('result').appendChild(createParagraph(`$$\\  ${sc_raw>scmin ? "S_c > S_{c(min)} \\therefore \\text{Okay}":"S_c < S_{c(min)} \\therefore \\text{Insufficient Spacing, add layer}"} \$$`));
         let centerbandRatio;
         let beta;
         if (by>bx){
