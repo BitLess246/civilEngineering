@@ -1647,8 +1647,19 @@ document.addEventListener("DOMContentLoaded", () => {
     // Excel batch of 3 footings ended up with 3 click handlers all
     // calling printDiv (and the first call's window.location.reload
     // killed the others before they could finish).
-} catch {
-
+} catch (engineErr) {
+    // The submit handler used to bury every exception with bare
+    // `catch {}` — which is exactly why the Excel batch could
+    // "silently not calculate": any failed read of an empty field,
+    // any divide-by-zero, any KaTeX render hiccup would throw,
+    // get swallowed, and leave #result empty with no clue why.
+    //
+    // Log it so the user (or me) can paste it from DevTools, and
+    // re-throw so the batch runner's surrounding try/catch hears
+    // about it and marks that row as failed with the real
+    // message instead of the generic "did not converge".
+    console.error('[foundationDesign engine] threw:', engineErr);
+    throw engineErr;
 }
 
  });
