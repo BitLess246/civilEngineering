@@ -41,58 +41,133 @@ function renderAllMath() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    // printDiv — fire the browser's native print dialog and use the
-    // @media print rules in styles1.css to hide the form / nav / save
-    // button so only the chosen result block prints.
+    // exportFoundationPdf — snapshot the chosen result block with
+    // html2canvas, embed in a jsPDF document, save as a real .pdf
+    // file. The output is a duplicate of the on-screen Solution
+    // (Parameters chips, step banners, KaTeX-rendered formulas,
+    // schedule table, …) rendered as a pixel-accurate PDF instead
+    // of relying on the browser print path.
     //
-    // History: the previous implementation swapped document.body.
-    // innerHTML for `target.outerHTML`, called window.print(), then
-    // restored the body and reloaded. That worked semantically but
-    // DESTROYED the styling context — the outer wrapper classes
-    // (.fd-page) were dropped, so every CSS rule scoped to
-    // `.fd-page #result.latex-container ...` stopped matching. The
-    // bare `.latex-container { display: inline-block; width:
-    // min-content; }` rule then took over and the printout came out
-    // with every word on its own line. The user's "print pdf.pdf"
-    // shows exactly that failure mode.
+    // Why this replaced the print-via-window.print() approach:
+    // the print code path had to fight two CSS rules that only
+    // surface on paper — `.latex-container { display: inline-block;
+    // width: min-content }` and `.latex-container p { margin-right:
+    // 100% }`. Even with @media print hides + body-class shielding,
+    // headless print engines (Brave / Chrome Save as PDF) kept
+    // collapsing equation paragraphs into a one-word-per-line stack.
+    // html2canvas captures the LIVE DOM with the screen-media CSS
+    // applied, so the embedded image is exactly what the user sees.
     //
-    // Native print preserves the entire DOM + cascade. We add a
-    // body class so @media print can decide what to hide based on
-    // single-foundation vs batch mode, and the result panel is the
-    // only thing that ends up on paper.
-    function printDiv(divId) {
-        const targetId = window._foundationPrintTargetId || divId;
+    // Respects window._foundationPrintTargetId so the Excel-batch
+    // renderer can point us at #batchOutput (every footing + the
+    // consolidated table in one PDF) instead of #Solution.
+    async function exportFoundationPdf(defaultId) {
+        const targetId = window._foundationPrintTargetId || defaultId;
         const target   = document.getElementById(targetId);
         if (!target) {
-            alert("Nothing to print yet — click Calculate (or upload an Excel) first.");
+            alert("Nothing to export yet — click Calculate (or upload an Excel) first.");
             return;
         }
-        const printingClass = (targetId === 'batchOutput')
-                                ? 'fd-printing-batch'
-                                : 'fd-printing-solution';
-        document.body.classList.add(printingClass);
+        if (typeof html2canvas === 'undefined') {
+            alert("PDF library is still loading — give it a few seconds and try again.");
+            return;
+        }
+        if (!window.jspdf || !window.jspdf.jsPDF) {
+            alert("PDF library failed to load — refresh the page and try again.");
+            return;
+        }
+
+        const btn = document.getElementById('saveButton');
+        const originalLabel = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.innerHTML = '⏳ Generating PDF…';
+            btn.disabled = true;
+        }
+
+        // In batch mode every <details> card needs to be open before
+        // we snapshot, otherwise collapsed cards print as a single
+        // summary line. Force them open, remember which were closed,
+        // restore after capture.
+        const reclose = [];
+        if (targetId === 'batchOutput') {
+            target.querySelectorAll('details:not([open])').forEach(d => {
+                reclose.push(d);
+                d.open = true;
+            });
+        }
+
         try {
-            window.print();
+            const canvas = await html2canvas(target, {
+                scale: 2,                 // crisp output on retina
+                useCORS: true,
+                backgroundColor: '#ffffff',
+                windowWidth: target.scrollWidth,
+                logging: false
+            });
+
+            const pdf = new window.jspdf.jsPDF({
+                unit: 'mm', format: 'a4', orientation: 'p',
+                compress: true
+            });
+
+            const pageW   = pdf.internal.pageSize.getWidth();
+            const pageH   = pdf.internal.pageSize.getHeight();
+            const margin  = 10;
+            const contentW = pageW - 2 * margin;
+            const ratio    = contentW / canvas.width;
+            const fullImgH = canvas.height * ratio;
+
+            const imgData = canvas.toDataURL('image/jpeg', 0.92);
+
+            if (fullImgH <= pageH - 2 * margin) {
+                // Fits one page.
+                pdf.addImage(imgData, 'JPEG', margin, margin, contentW, fullImgH);
+            } else {
+                // Slice across pages — jsPDF's addImage with a
+                // negative-y trick: position the (full-height) image
+                // higher and higher so successive pages show the
+                // next slice.
+                let pageNum = 0;
+                let yShift = margin;
+                let remaining = fullImgH;
+                while (remaining > 0) {
+                    if (pageNum > 0) pdf.addPage();
+                    pdf.addImage(imgData, 'JPEG', margin, yShift, contentW, fullImgH);
+                    // Mask the bottom edge of the previous slice that
+                    // overhangs into the page footer area so it doesn't
+                    // bleed over the page break.
+                    if (remaining > pageH - 2 * margin) {
+                        pdf.setFillColor(255, 255, 255);
+                        pdf.rect(0, pageH - margin, pageW, margin, 'F');
+                    }
+                    pageNum  += 1;
+                    yShift   -= (pageH - 2 * margin);
+                    remaining -= (pageH - 2 * margin);
+                }
+            }
+
+            const fname = (targetId === 'batchOutput')
+                            ? 'foundation-batch-design.pdf'
+                            : 'foundation-design.pdf';
+            pdf.save(fname);
+        } catch (err) {
+            console.error('PDF export failed:', err);
+            alert('Could not generate PDF: ' + (err && err.message ? err.message : err));
         } finally {
-            // Remove the class after print so the page is normal
-            // again. Most browsers block on window.print() until the
-            // user dismisses the dialog, so the cleanup runs at the
-            // right time; the afterprint event also fires the same
-            // listener as a defence-in-depth.
-            document.body.classList.remove(printingClass);
+            reclose.forEach(d => { d.open = false; });
+            if (btn) {
+                btn.innerHTML = originalLabel;
+                btn.disabled = false;
+            }
         }
     }
-    window.addEventListener('afterprint', () => {
-        document.body.classList.remove('fd-printing-batch');
-        document.body.classList.remove('fd-printing-solution');
-    });
     // Save / Print PDF — attach ONCE at module load. The previous
     // code re-attached on every form submit, so a 3-row Excel batch
     // ended up with 3 stacked click handlers all racing through
     // printDiv (the first reload would kill the others).
     const _saveBtn = document.getElementById('saveButton');
     if (_saveBtn) {
-        _saveBtn.addEventListener('click', () => printDiv('Solution'));
+        _saveBtn.addEventListener('click', () => exportFoundationPdf('Solution'));
     }
 
     document.getElementById('formFoundation').addEventListener('submit',function(event){
