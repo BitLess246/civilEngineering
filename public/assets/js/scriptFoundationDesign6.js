@@ -138,7 +138,59 @@ document.addEventListener("DOMContentLoaded", () => {
                 useCORS: true,
                 backgroundColor: '#ffffff',
                 windowWidth: target.scrollWidth,
-                logging: false
+                logging: false,
+                // html2canvas has a long-standing limitation with the
+                // native <details> element: even when the live DOM has
+                // `details[open]`, the captured canvas often renders
+                // only the <summary> (or nothing at all) — which is
+                // why every batch PDF page was coming out blank. The
+                // batch view is built entirely from <details> cards.
+                //
+                // Workaround: in the cloned document html2canvas hands
+                // us via onClone, replace every <details> with a <div>
+                // (preserving classes + children) and turn its
+                // <summary> into a normal <div> so the marker arrow
+                // doesn't leak through. Live DOM is untouched, the
+                // user still sees the regular <details> behaviour.
+                onclone: function (clonedDoc, clonedNode) {
+                    const root = clonedNode || clonedDoc.body;
+                    const detailsList = Array.from(root.querySelectorAll('details'));
+                    for (const det of detailsList) {
+                        const div = clonedDoc.createElement('div');
+                        // Copy attributes (class, id, style, …) onto the div.
+                        for (const attr of det.attributes) {
+                            if (attr.name === 'open') continue;
+                            div.setAttribute(attr.name, attr.value);
+                        }
+                        // Move children across, swapping <summary> for
+                        // an equivalent block <div>.
+                        while (det.firstChild) {
+                            const child = det.firstChild;
+                            if (child.nodeType === 1 && child.tagName === 'SUMMARY') {
+                                const sumDiv = clonedDoc.createElement('div');
+                                for (const attr of child.attributes) sumDiv.setAttribute(attr.name, attr.value);
+                                sumDiv.innerHTML = child.innerHTML;
+                                // Match the look of the original
+                                // <summary> in our batch cards.
+                                sumDiv.style.padding         = '12px 18px';
+                                sumDiv.style.background      = '#eef3f8';
+                                sumDiv.style.color           = '#0056b3';
+                                sumDiv.style.fontWeight      = '600';
+                                sumDiv.style.borderBottom    = '1px solid #e1e4e8';
+                                sumDiv.style.display         = 'flex';
+                                sumDiv.style.alignItems      = 'center';
+                                sumDiv.style.flexWrap        = 'wrap';
+                                sumDiv.style.gap             = '12px';
+                                det.removeChild(child);
+                                div.appendChild(sumDiv);
+                            } else {
+                                det.removeChild(child);
+                                div.appendChild(child);
+                            }
+                        }
+                        det.parentNode.replaceChild(div, det);
+                    }
+                }
             });
 
             // 3) Map the DOM-coordinate break points into canvas
