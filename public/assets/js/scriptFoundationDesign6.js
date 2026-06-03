@@ -87,17 +87,49 @@ document.addEventListener("DOMContentLoaded", () => {
         // In batch mode every <details> card needs to be open before
         // we snapshot, otherwise collapsed cards print as a single
         // summary line. Force them open, remember which were closed,
-        // restore after capture.
+        // restore after capture. Wait two animation frames so the
+        // layout has a chance to settle — otherwise the captured
+        // canvas can include the pre-expansion height for cards that
+        // just opened, which is what was producing blank pages at
+        // the end of the batch PDF.
         const reclose = [];
         if (targetId === 'batchOutput') {
             target.querySelectorAll('details:not([open])').forEach(d => {
                 reclose.push(d);
                 d.open = true;
             });
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
         }
 
         try {
-            // 1) Snapshot the live DOM with html2canvas. The live
+            // 1) Collect natural page-break candidates from the DOM
+            //    BEFORE capture, so the eventual canvas slicing snaps
+            //    to gaps between cards / chips / step banners instead
+            //    of cutting them in half. We walk every element that
+            //    is laid out as a block (display: block / grid /
+            //    flex / table) and remember its BOTTOM y in target-
+            //    local coordinates. Anything wider than 80% of the
+            //    target is treated as a major block (.fd-section,
+            //    .fd-batch-card, etc.); for narrower elements we
+            //    recurse only one level deeper so we get inter-chip
+            //    breaks without descending into KaTeX spans.
+            const targetRect = target.getBoundingClientRect();
+            const breakSet   = new Set([0]);
+            (function collect(el, depth) {
+                for (const child of el.children) {
+                    const r = child.getBoundingClientRect();
+                    if (r.height <= 0) continue;
+                    // Break point goes at the BOTTOM of each child.
+                    const localBot = Math.round(r.bottom - targetRect.top);
+                    breakSet.add(localBot);
+                    if (depth < 3 && r.height > 40 && child.children.length > 0) {
+                        collect(child, depth + 1);
+                    }
+                }
+            })(target, 0);
+            const breaksDom = Array.from(breakSet).sort((a, b) => a - b);
+
+            // 2) Snapshot the live DOM with html2canvas. The live
             //    cascade is intact (no print-media re-evaluation),
             //    so chips, step banners, KaTeX math all render
             //    exactly as on screen.
@@ -109,7 +141,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 logging: false
             });
 
-            // 2) Build the PDF, A4 portrait, 10 mm margins.
+            // 3) Map the DOM-coordinate break points into canvas
+            //    pixel rows (html2canvas captures at `scale * css-px`
+            //    AND scales the whole thing so canvas.width matches
+            //    target.scrollWidth × scale).
+            const domScale  = canvas.width / target.scrollWidth;
+            const breaks    = breaksDom
+                .map(y => Math.round(y * domScale))
+                .filter(y => y > 0 && y <= canvas.height);
+            if (breaks[breaks.length - 1] !== canvas.height) breaks.push(canvas.height);
+
+            // 4) Build the PDF, A4 portrait, 10 mm margins.
             const pdf = new window.jspdf.jsPDF({
                 unit: 'mm', format: 'a4', orientation: 'p',
                 compress: true
@@ -120,13 +162,14 @@ document.addEventListener("DOMContentLoaded", () => {
             const contentW = pageW - 2 * margin;                 // 190
             const contentH = pageH - 2 * margin;                 // 277
             const ratio    = contentW / canvas.width;
-            const sliceHpx = Math.floor(contentH / ratio);       // canvas-px per page
+            const sliceHpx = Math.floor(contentH / ratio);       // max canvas-px per page
 
-            // 3) Slice the source canvas into page-height chunks
-            //    on a scratch canvas, then add each as its OWN
-            //    image to the PDF. This avoids the "negative-y
-            //    offset" trick that overlapped page boundaries by
-            //    one margin width in the previous version.
+            // 5) Slice the source canvas page-by-page, snapping each
+            //    page bottom to the highest natural break that fits.
+            //    Falls back to a hard cut at sliceHpx if no break is
+            //    in the upper 40% of the remaining slice (a single
+            //    chip taller than 60% of a page can't fit anywhere
+            //    else, so we accept the cut).
             const slice    = document.createElement('canvas');
             const sliceCtx = slice.getContext('2d');
             slice.width    = canvas.width;
@@ -135,22 +178,32 @@ document.addEventListener("DOMContentLoaded", () => {
             let pageNum = 0;
             while (yPx < canvas.height) {
                 const remainingPx = canvas.height - yPx;
-                const thisSliceH  = Math.min(sliceHpx, remainingPx);
+                let nextY;
+                if (remainingPx <= sliceHpx) {
+                    // Last slice — take everything that's left, no
+                    // trailing blank page.
+                    nextY = canvas.height;
+                } else {
+                    const hardMax = yPx + sliceHpx;
+                    const softMin = yPx + Math.floor(sliceHpx * 0.4);
+                    const fit = breaks.filter(b => b > softMin && b <= hardMax);
+                    nextY = fit.length ? Math.max(...fit) : hardMax;
+                }
+                const thisSliceH = nextY - yPx;
+                if (thisSliceH <= 0) break;   // safety — shouldn't happen
                 slice.height = thisSliceH;
                 sliceCtx.fillStyle = '#ffffff';
                 sliceCtx.fillRect(0, 0, slice.width, slice.height);
                 sliceCtx.drawImage(
                     canvas,
-                    0, yPx,             // src x, y
-                    canvas.width, thisSliceH,   // src w, h
-                    0, 0,               // dst x, y
-                    canvas.width, thisSliceH    // dst w, h
+                    0, yPx, canvas.width, thisSliceH,
+                    0, 0,   canvas.width, thisSliceH
                 );
                 const sliceImg = slice.toDataURL('image/jpeg', 0.92);
                 if (pageNum > 0) pdf.addPage();
                 pdf.addImage(sliceImg, 'JPEG', margin, margin,
                              contentW, thisSliceH * ratio);
-                yPx     += thisSliceH;
+                yPx     = nextY;
                 pageNum += 1;
             }
 
