@@ -97,53 +97,61 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         try {
+            // 1) Snapshot the live DOM with html2canvas. The live
+            //    cascade is intact (no print-media re-evaluation),
+            //    so chips, step banners, KaTeX math all render
+            //    exactly as on screen.
             const canvas = await html2canvas(target, {
-                scale: 2,                 // crisp output on retina
+                scale: 2,
                 useCORS: true,
                 backgroundColor: '#ffffff',
                 windowWidth: target.scrollWidth,
                 logging: false
             });
 
+            // 2) Build the PDF, A4 portrait, 10 mm margins.
             const pdf = new window.jspdf.jsPDF({
                 unit: 'mm', format: 'a4', orientation: 'p',
                 compress: true
             });
-
-            const pageW   = pdf.internal.pageSize.getWidth();
-            const pageH   = pdf.internal.pageSize.getHeight();
-            const margin  = 10;
-            const contentW = pageW - 2 * margin;
+            const pageW    = pdf.internal.pageSize.getWidth();   // 210
+            const pageH    = pdf.internal.pageSize.getHeight();  // 297
+            const margin   = 10;
+            const contentW = pageW - 2 * margin;                 // 190
+            const contentH = pageH - 2 * margin;                 // 277
             const ratio    = contentW / canvas.width;
-            const fullImgH = canvas.height * ratio;
+            const sliceHpx = Math.floor(contentH / ratio);       // canvas-px per page
 
-            const imgData = canvas.toDataURL('image/jpeg', 0.92);
+            // 3) Slice the source canvas into page-height chunks
+            //    on a scratch canvas, then add each as its OWN
+            //    image to the PDF. This avoids the "negative-y
+            //    offset" trick that overlapped page boundaries by
+            //    one margin width in the previous version.
+            const slice    = document.createElement('canvas');
+            const sliceCtx = slice.getContext('2d');
+            slice.width    = canvas.width;
 
-            if (fullImgH <= pageH - 2 * margin) {
-                // Fits one page.
-                pdf.addImage(imgData, 'JPEG', margin, margin, contentW, fullImgH);
-            } else {
-                // Slice across pages — jsPDF's addImage with a
-                // negative-y trick: position the (full-height) image
-                // higher and higher so successive pages show the
-                // next slice.
-                let pageNum = 0;
-                let yShift = margin;
-                let remaining = fullImgH;
-                while (remaining > 0) {
-                    if (pageNum > 0) pdf.addPage();
-                    pdf.addImage(imgData, 'JPEG', margin, yShift, contentW, fullImgH);
-                    // Mask the bottom edge of the previous slice that
-                    // overhangs into the page footer area so it doesn't
-                    // bleed over the page break.
-                    if (remaining > pageH - 2 * margin) {
-                        pdf.setFillColor(255, 255, 255);
-                        pdf.rect(0, pageH - margin, pageW, margin, 'F');
-                    }
-                    pageNum  += 1;
-                    yShift   -= (pageH - 2 * margin);
-                    remaining -= (pageH - 2 * margin);
-                }
+            let yPx = 0;
+            let pageNum = 0;
+            while (yPx < canvas.height) {
+                const remainingPx = canvas.height - yPx;
+                const thisSliceH  = Math.min(sliceHpx, remainingPx);
+                slice.height = thisSliceH;
+                sliceCtx.fillStyle = '#ffffff';
+                sliceCtx.fillRect(0, 0, slice.width, slice.height);
+                sliceCtx.drawImage(
+                    canvas,
+                    0, yPx,             // src x, y
+                    canvas.width, thisSliceH,   // src w, h
+                    0, 0,               // dst x, y
+                    canvas.width, thisSliceH    // dst w, h
+                );
+                const sliceImg = slice.toDataURL('image/jpeg', 0.92);
+                if (pageNum > 0) pdf.addPage();
+                pdf.addImage(sliceImg, 'JPEG', margin, margin,
+                             contentW, thisSliceH * ratio);
+                yPx     += thisSliceH;
+                pageNum += 1;
             }
 
             const fname = (targetId === 'batchOutput')
@@ -1639,8 +1647,19 @@ document.addEventListener("DOMContentLoaded", () => {
     // Excel batch of 3 footings ended up with 3 click handlers all
     // calling printDiv (and the first call's window.location.reload
     // killed the others before they could finish).
-} catch {
-
+} catch (engineErr) {
+    // The submit handler used to bury every exception with bare
+    // `catch {}` — which is exactly why the Excel batch could
+    // "silently not calculate": any failed read of an empty field,
+    // any divide-by-zero, any KaTeX render hiccup would throw,
+    // get swallowed, and leave #result empty with no clue why.
+    //
+    // Log it so the user (or me) can paste it from DevTools, and
+    // re-throw so the batch runner's surrounding try/catch hears
+    // about it and marks that row as failed with the real
+    // message instead of the generic "did not converge".
+    console.error('[foundationDesign engine] threw:', engineErr);
+    throw engineErr;
 }
 
  });
