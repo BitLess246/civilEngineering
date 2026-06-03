@@ -1114,6 +1114,28 @@ function runFoundationBatch(headers, dataRows) {
     const labelColIdx = headers.findIndex(h => /^(label|id|name)$/i.test(h));
     const unknownHeaders = headers.filter((h, i) => h && i !== labelColIdx && !map[h]);
 
+    // Hoist console diagnostics — the user couldn't tell whether
+    // the batch was running or silently failing. Now the dev-tools
+    // console shows every step.
+    console.log('[fdBatch] headers:', headers);
+    console.log('[fdBatch] labelColIdx:', labelColIdx);
+    console.log('[fdBatch] unknown headers (ignored):', unknownHeaders);
+    console.log('[fdBatch] data rows:', dataRows.length);
+
+    // Suppress alert() while batching — the engine raises blocking
+    // alerts for validation errors (e.g. Isolated Rectangular without
+    // a Length Restriction) and one bad row would freeze the whole
+    // batch behind N modal dialogs. Capture each alert into a
+    // per-row error string instead and restore the native alert
+    // afterwards.
+    const realAlert = window.alert;
+    const alertsByRow = [];
+    let currentRowAlerts = [];
+    window.alert = function(msg) {
+        currentRowAlerts.push(String(msg));
+        console.warn('[fdBatch] alert suppressed:', msg);
+    };
+
     const captured = [];
     window._foundationBatchCapture = (data) => { captured.push(data); };
 
@@ -1124,7 +1146,11 @@ function runFoundationBatch(headers, dataRows) {
                         ? String(row[labelColIdx]).trim()
                         : ('Foundation ' + (i + 1));
 
+        console.log('[fdBatch] row', i + 1, '/', dataRows.length, '→', label);
+        currentRowAlerts = [];
+
         // Populate the form from this row.
+        let filled = 0;
         for (let j = 0; j < headers.length; j++) {
             if (j === labelColIdx) continue;
             const fieldId = map[headers[j]];
@@ -1133,48 +1159,69 @@ function runFoundationBatch(headers, dataRows) {
             if (!el) continue;
             let val = row[j];
             if (val === '' || val === undefined || val === null) continue;
-            // Some <select> fields use numeric option values but humans want
-            // to type the readable label. Normalize a handful of friendly
-            // aliases so the engine sees the right code, NOT a NaN. Without
-            // this, "interior" → parseInt("interior") = NaN → alpha_s
-            // stays undefined and the punching-shear formula prints
-            // "undefined × d/Bo".
+            // Friendly-name normalization for <select> values that
+            // use numeric codes (e.g. ColumnLocation "interior" → 1).
             val = normalizeExcelValue(fieldId, val);
             el.value = String(val);
             el.dispatchEvent(new Event('change', { bubbles: true }));
             el.dispatchEvent(new Event('input',  { bubbles: true }));
+            filled++;
         }
+        console.log('[fdBatch]   populated', filled, 'fields');
 
-        // Fire the engine. The engine listens to the form's submit
-        // event; dispatching it directly skips the calc-button's
-        // onclick="openTab(...)" so we don't flip tabs mid-batch.
+        // Fire the engine via the form's submit event (skips the
+        // calc-button's onclick="openTab(...)" so we don't flip tabs
+        // mid-batch).
         const before = captured.length;
         try {
             document.getElementById('formFoundation').dispatchEvent(
                 new Event('submit', { bubbles: true, cancelable: true })
             );
         } catch (engineErr) {
-            console.warn('Engine threw for', label, engineErr);
+            console.warn('[fdBatch]   engine threw:', engineErr);
+            currentRowAlerts.push(engineErr && engineErr.message ? engineErr.message : String(engineErr));
         }
         const succeeded = captured.length > before;
         const data = succeeded ? captured[captured.length - 1] : null;
+        console.log('[fdBatch]   succeeded:', succeeded, '— captured.length =', captured.length);
 
-        // Snapshot the rendered HTML so the per-foundation solution
-        // panel survives the next iteration (the engine clears these
-        // divs on the next submit). KaTeX has already typeset by now,
-        // so the cloned innerHTML preserves the math.
+        // Snapshot the rendered HTML — KaTeX has already typeset by
+        // now, so cloned innerHTML preserves the math.
         const resultEl = document.getElementById('result');
         const givenEl  = document.getElementById('GivenParameters1');
+        let errorMsg = null;
+        if (!succeeded) {
+            errorMsg = currentRowAlerts.length
+                ? currentRowAlerts.join(' • ')
+                : 'Engine did not converge — check the row\'s inputs.';
+        }
+        alertsByRow.push(currentRowAlerts.slice());
         results.push({
             label,
             data,
-            error: succeeded ? null : 'Engine did not converge — check the row\'s inputs.',
+            error: errorMsg,
             resultHTML: resultEl ? resultEl.innerHTML : '',
             givenHTML:  givenEl  ? givenEl.innerHTML  : ''
         });
     }
 
+    // Restore the native alert and the batch-capture hook.
+    window.alert = realAlert;
     window._foundationBatchCapture = null;
+
+    const okCount  = results.filter(r => !r.error).length;
+    const badCount = results.length - okCount;
+    console.log('[fdBatch] done —', okCount, 'OK,', badCount, 'failed of', results.length);
+
+    if (okCount === 0 && badCount > 0) {
+        // Every row failed — surface the first error so the user
+        // doesn't see an empty batch panel and wonder what happened.
+        const first = results.find(r => r.error);
+        realAlert('Batch ran but every foundation failed:\n\n' +
+                  (first ? first.error : 'unknown error') +
+                  '\n\nOpen DevTools → Console for the full per-row trace.');
+    }
+
     renderFoundationBatchOutput(results, unknownHeaders);
 }
 
