@@ -371,7 +371,329 @@ document.addEventListener("DOMContentLoaded", () => {
         const parametersDiv = document.getElementById("GivenParameters1");
         parametersDiv.innerHTML = ''; // Clear previous results
 
-    
+    // ════════════════════════════════════════════════════════════════
+    //  COMBINED FOOTING (2 columns) — own design flow.
+    //  Intercept early: this does NOT use the isolated-footing
+    //  dimension()/punchingShear()/rebarDesign() path. Handles a
+    //  Rectangular (CRF) or Trapezoidal (CTF) combined footing.
+    //  Methodology after Engr. M. Dumal-is (NSCP 2015 / ACI 318-14).
+    // ════════════════════════════════════════════════════════════════
+    if (document.getElementById('structureType').value === 'Strip') {
+        designCombinedFooting();
+        document.getElementById('saveButton').style.display = 'block';
+        document.getElementById('tab').style.display = 'flex';
+        renderAllMath();
+        return;
+    }
+
+    // ── Pure helpers reused by the combined-footing flow ──────────────
+    function _cfBeta1(fc) { return fc > 28 ? Math.max(0.65, 0.85 - 0.05 * (fc - 28) / 7) : 0.85; }
+    function _cfRoundUp(v, step) { return Math.ceil(v / step) * step; }
+
+    function designCombinedFooting() {
+        const R  = document.getElementById('result');
+        const GP = document.getElementById('GivenParameters1');
+        const P  = (html) => { const p = createParagraph(html); R.appendChild(p); };
+        const H5 = (t)   => R.appendChild(createHeader5(t));
+        const H7 = (t)   => R.appendChild(createHeader7(t));
+        const CL = (t)   => R.appendChild(createClause(t));
+        const GPH8 = (html) => GP.appendChild(createHeader8(html));
+
+        // ── Read inputs ───────────────────────────────────────────────
+        const num = (id) => parseFloat(document.getElementById(id).value);
+        const cx = num('ColumnWidth');                 // mm (square col assumed)
+        const cy = cx;
+        const cxm = cx / 1000, cym = cy / 1000;
+        const sf  = num('cf-sf');                       // c/c spacing, m
+        const Pdl1 = num('DeadLoad'), Pll1 = num('LiveLoad');
+        const Pdl2 = num('cf-pdl2'),  Pll2 = num('cf-pll2');
+        const qa = num('SoilBearingCapacity');
+        const gs = num('UnitWeightSoil'), gc = num('UnitWeightConcrete');
+        const q  = num('Surcharge') || 0;
+        const Hm = num('Depth');                        // total footing depth incl. soil cover, m
+        const fc = num('fc'), fy = num('fy');
+        const db = num('BarDiameter'), dAgg = num('aggDiameter'), cc = num('Cover');
+        const leftRestrict  = document.getElementById('cf-left-restrict').value === '1';
+        const rightRestrict = document.getElementById('cf-right-restrict').value === '1';
+        const leftOh  = (num('cf-left-oh')  || 0) / 1000;   // m
+        const rightOh = (num('cf-right-oh') || 0) / 1000;
+
+        // ── Validate the combined-footing-specific inputs ─────────────
+        const need = { 'Col 1 P_DL': Pdl1, 'Col 1 P_LL': Pll1,
+                       'Col 2 P_DL': Pdl2, 'Col 2 P_LL': Pll2,
+                       'Column spacing s_f': sf, 'Column width': cx,
+                       'q_all': qa, 'γ_soil': gs, 'γ_con': gc,
+                       'H': Hm, "f'c": fc, 'f_y': fy, 'd_b': db, 'Cover': cc };
+        const bad = Object.entries(need).filter(([k, v]) => !Number.isFinite(v)).map(([k]) => k);
+        if (bad.length) {
+            R.appendChild(createParagraph(
+                `<div class="bd-alert bd-alert-fail">Combined Footing needs these inputs: <strong>${bad.join(', ')}</strong>. ` +
+                `Set Load Type to &ldquo;Individual Loads&rdquo; so the Col 1 P<sub>DL</sub>/P<sub>LL</sub> fields are available, ` +
+                `and fill the Combined Footing section.</div>`));
+            return;
+        }
+
+        // ── Given-parameters recap chips ──────────────────────────────
+        GP.appendChild(createHeader5('Parameters Given:'));
+        GPH8(`$$\\ \\text{Combined Footing — 2 columns}\$$`);
+        GPH8(`$$\\ c_x = c_y = ${cx}\\text{ mm} \$$`);
+        GPH8(`$$\\ s_f = ${sf}\\text{ m (c/c)} \$$`);
+        GPH8(`$$\\ P_{dl,1} = ${Pdl1}\\text{ kN}, \\; P_{ll,1} = ${Pll1}\\text{ kN} \$$`);
+        GPH8(`$$\\ P_{dl,2} = ${Pdl2}\\text{ kN}, \\; P_{ll,2} = ${Pll2}\\text{ kN} \$$`);
+        GPH8(`$$\\ q_{all} = ${qa}\\text{ kPa}, \\; q = ${q}\\text{ kPa} \$$`);
+        GPH8(`$$\\ \\gamma_{soil} = ${gs}, \\; \\gamma_{con} = ${gc}\\;\\tfrac{kN}{m^3} \$$`);
+        GPH8(`$$\\ f'_c = ${fc}\\text{ MPa}, \\; f_y = ${fy}\\text{ MPa} \$$`);
+        GPH8(`$$\\ H = ${Hm}\\text{ m}, \\; d_b = ${db}, \\; d_{agg} = ${dAgg}, \\; C_c = ${cc}\\text{ mm} \$$`);
+        GPH8(`$$\\ \\text{Left edge: ${leftRestrict ? 'property line, overhang ' + (leftOh*1000) + ' mm' : 'free'}} \$$`);
+        GPH8(`$$\\ \\text{Right edge: ${rightRestrict ? 'property line, overhang ' + (rightOh*1000) + ' mm' : 'free'}} \$$`);
+
+        // ── Step 1 — Service & factored column loads ──────────────────
+        H5('Service & Factored Column Loads');
+        CL('Per NSCP 2015 §203.3.1 / ACI 318-14 §5.3.1 — factored column load \\(P_u\\) is the larger of \\(1.4 P_{dl}\\) and \\(1.2 P_{dl} + 1.6 P_{ll}\\).');
+        const Pa1 = Pdl1 + Pll1, Pa2 = Pdl2 + Pll2, Pa = Pa1 + Pa2;
+        const Pu1 = Math.max(1.4 * Pdl1, 1.2 * Pdl1 + 1.6 * Pll1);
+        const Pu2 = Math.max(1.4 * Pdl2, 1.2 * Pdl2 + 1.6 * Pll2);
+        const Pu  = Pu1 + Pu2;
+        P(`$$\\ P_{a1} = ${Pdl1} + ${Pll1} = ${Pa1.toFixed(1)}\\text{ kN}, \\quad P_{a2} = ${Pdl2} + ${Pll2} = ${Pa2.toFixed(1)}\\text{ kN} \$$`);
+        P(`$$\\ P_a = P_{a1} + P_{a2} = ${Pa.toFixed(1)}\\text{ kN} \$$`);
+        P(`$$\\ P_{u1} = \\max(${(1.4*Pdl1).toFixed(1)},\\,${(1.2*Pdl1+1.6*Pll1).toFixed(1)}) = ${Pu1.toFixed(1)}\\text{ kN} \$$`);
+        P(`$$\\ P_{u2} = \\max(${(1.4*Pdl2).toFixed(1)},\\,${(1.2*Pdl2+1.6*Pll2).toFixed(1)}) = ${Pu2.toFixed(1)}\\text{ kN} \$$`);
+        P(`$$\\ P_u = ${Pu.toFixed(1)}\\text{ kN} \$$`);
+
+        // ── Step 2 — Net soil pressure ────────────────────────────────
+        H5('Net Soil Bearing Pressure');
+        CL('Assume an initial slab thickness \\(D_c = 250\\) mm to estimate the self-weight deductions.');
+        const Dc0 = 0.25, Ds = Hm - Dc0;
+        const qnet = qa - gs * Ds - gc * Dc0 - q;
+        P(`$$\\ D_c = 250\\text{ mm}, \\quad D_s = H - D_c = ${Hm} - 0.25 = ${Ds.toFixed(3)}\\text{ m} \$$`);
+        P(`$$\\ q_{net} = q_{all} - \\gamma_{soil} D_s - \\gamma_{con} D_c - q = ${qa} - ${gs}(${Ds.toFixed(3)}) - ${gc}(0.25) - ${q} = ${qnet.toFixed(3)}\\text{ kPa} \$$`);
+
+        // ── Step 3 — Footing geometry (CRF vs CTF) ────────────────────
+        H5('Footing Geometry — Resultant must coincide with the slab centroid');
+        const bothRestricted = leftRestrict && rightRestrict;
+        let shape, Bx, By, By1, By2, x1, x2, xbar, edgeOffset;
+        if (!bothRestricted) {
+            shape = 'Rectangular (CRF)';
+            edgeOffset = leftRestrict ? leftOh : 0;       // left edge to PL offset (m)
+            x1 = edgeOffset + cxm / 2;                    // col1 centre from left edge
+            x2 = x1 + sf;
+            xbar = (Pa1 * x1 + Pa2 * x2) / Pa;
+            Bx = _cfRoundUp(2 * xbar, 0.1);
+            By = _cfRoundUp(Pa / (qnet * Bx), 0.1);
+            By1 = By; By2 = By;
+            CL('A rectangular combined footing keeps the resultant centred by setting \\(B_x = 2\\bar{x}\\) (left edge at the property line / free edge).');
+            P(`$$\\ \\bar{x} = \\frac{P_{a1}\\,x_1 + P_{a2}\\,x_2}{P_a} = \\frac{${Pa1.toFixed(1)}(${x1.toFixed(3)}) + ${Pa2.toFixed(1)}(${x2.toFixed(3)})}{${Pa.toFixed(1)}} = ${xbar.toFixed(4)}\\text{ m} \$$`);
+            P(`$$\\ B_x = 2\\bar{x} = ${(2*xbar).toFixed(3)} \\approx ${Bx}\\text{ m} \$$`);
+            P(`$$\\ B_y = \\frac{P_a}{q_{net} B_x} = \\frac{${Pa.toFixed(1)}}{${qnet.toFixed(3)}\\times ${Bx}} = ${(Pa/(qnet*Bx)).toFixed(3)} \\approx ${By}\\text{ m} \$$`);
+        } else {
+            shape = 'Trapezoidal (CTF)';
+            Bx = +(sf + cxm + leftOh + rightOh).toFixed(6);
+            x1 = leftOh + cxm / 2;
+            x2 = x1 + sf;
+            xbar = (Pa1 * x1 + Pa2 * x2) / Pa;
+            const A = Pa / qnet;
+            const Bysum = 2 * A / Bx;
+            const twoBy2plusBy1 = xbar * Bysum / (Bx / 3);
+            let by2 = twoBy2plusBy1 - Bysum;
+            let by1 = Bysum - by2;
+            By2 = _cfRoundUp(by2, 0.1);
+            By1 = _cfRoundUp(by1, 0.1);
+            By = (By1 + By2) / 2;
+            CL('Both edges restricted with unequal loads → a trapezoidal footing aligns the resultant with the slab centroid. \\(B_x\\) is fixed by geometry.');
+            P(`$$\\ B_x = s_f + c_x + oh_L + oh_R = ${sf} + ${cxm} + ${leftOh} + ${rightOh} = ${Bx}\\text{ m} \$$`);
+            P(`$$\\ \\bar{x} = \\frac{P_{a1}\\,x_1 + P_{a2}\\,x_2}{P_a} = ${xbar.toFixed(4)}\\text{ m} \$$`);
+            P(`$$\\ A = \\frac{P_a}{q_{net}} = ${A.toFixed(4)}\\text{ m}^2, \\quad B_{y1}+B_{y2} = \\frac{2A}{B_x} = ${Bysum.toFixed(4)}\\text{ m} \$$`);
+            P(`$$\\ \\bar{x} = \\frac{B_x}{3}\\cdot\\frac{2B_{y2}+B_{y1}}{B_{y2}+B_{y1}} \\;\\Rightarrow\\; B_{y2} = ${by2.toFixed(4)} \\approx ${By2}\\text{ m}, \\; B_{y1} = ${by1.toFixed(4)} \\approx ${By1}\\text{ m} \$$`);
+        }
+
+        // ── Step 4 — Equivalent uniformly-varying ultimate pressure ───
+        H5('Equivalent Uniformly-Varying Ultimate Line Load');
+        CL('Convert the (slightly non-uniform) bearing into an equivalent uniformly-varying line load \\(w_u(x)=w_{u1}+\\alpha x\\) so the V & M diagrams can be drawn by statics.');
+        const wsum = 2 * Pu / Bx;
+        const SPx  = Pu1 * x1 + Pu2 * x2;
+        const w1p2 = 6 * SPx / (Bx * Bx);
+        const wu2 = w1p2 - wsum, wu1 = wsum - wu2;
+        const alpha = (wu2 - wu1) / Bx;
+        P(`$$\\ w_{u1} + w_{u2} = \\frac{2P_u}{B_x} = ${wsum.toFixed(3)}\\;\\tfrac{kN}{m} \$$`);
+        P(`$$\\ w_{u1} + 2w_{u2} = \\frac{6\\sum P_{ui}x_i}{B_x^2} = ${w1p2.toFixed(3)} \$$`);
+        P(`$$\\ w_{u1} = ${wu1.toFixed(3)}\\;\\tfrac{kN}{m}, \\quad w_{u2} = ${wu2.toFixed(3)}\\;\\tfrac{kN}{m}, \\quad \\alpha = ${alpha.toFixed(4)} \$$`);
+
+        // Closed-form V and M along x (origin at left edge).
+        const colX = [x1, x2], colP = [Pu1, Pu2];
+        const Vat = (x) => {
+            let v = wu1 * x + alpha * x * x / 2;
+            for (let i = 0; i < 2; i++) if (colX[i] <= x + 1e-9) v -= colP[i];
+            return v;
+        };
+        const Mat = (x) => {
+            let m = wu1 * x * x / 2 + alpha * x * x * x / 6;
+            for (let i = 0; i < 2; i++) if (colX[i] <= x + 1e-9) m -= colP[i] * (x - colX[i]);
+            return m;
+        };
+        // zero-shear (max moment) between the columns — solve V=0 in (x1,x2)
+        let xpeak = x1, lo = x1, hi = x2;
+        // V just right of col1 is negative → increases toward col2; bisect for V=0.
+        for (let it = 0; it < 60; it++) {
+            const mid = (lo + hi) / 2;
+            if (Vat(mid) < 0) lo = mid; else hi = mid;
+            xpeak = mid;
+        }
+
+        // ── Step 5 — Slab thickness by punching shear (critical column) ─
+        H5('Slab Thickness — Punching (Two-Way) Shear');
+        CL('Per NSCP 2015 §422.6.5.2 — design the critical (heavier-loaded) column. \\(\\phi V_n = \\phi\\tfrac{1}{3}\\sqrt{f\'_c}\\,b_o d\\), \\(\\phi = 0.75\\). Assumes the full punching perimeter is maintained.');
+        const A_foot = (shape[0] === 'R') ? Bx * By : (By1 + By2) * Bx / 2;
+        const qu = Pu / A_foot;                              // kPa
+        const Pcrit = Math.max(Pu1, Pu2);
+        let dP = 0.155;
+        for (let it = 0; it < 60; it++) {
+            const dmm = dP * 1000, cmm = cx;
+            const Ao = (dmm + cmm) * (dmm + cmm) / 1e6;       // m²
+            const Vu = (Pcrit - qu * Ao) * 1000;             // N
+            const f  = 0.75 * (1 / 3) * Math.sqrt(fc) * 4 * (dmm + cmm) * dmm - Vu;
+            const dd = 0.5;
+            const Ao2 = ((dmm + dd) + cmm) * ((dmm + dd) + cmm) / 1e6;
+            const Vu2 = (Pcrit - qu * Ao2) * 1000;
+            const f2 = 0.75 * (1 / 3) * Math.sqrt(fc) * 4 * ((dmm + dd) + cmm) * (dmm + dd) - Vu2;
+            dP = dP - (f / ((f2 - f) / dd)) / 1000;
+        }
+        const dpunch = dP * 1000;
+        const Ao_final = (dpunch + cx) * (dpunch + cx) / 1e6;
+        const Vu_punch = (Pcrit - qu * Ao_final);
+        const Dc_punch = _cfRoundUp(dpunch + cc + db, 25);
+        P(`$$\\ q_u = \\frac{P_u}{A_{foot}} = \\frac{${Pu.toFixed(1)}}{${A_foot.toFixed(4)}} = ${qu.toFixed(3)}\\text{ kPa} \$$`);
+        P(`$$\\ V_u = P_{u,crit} - q_u A_o = ${Pcrit.toFixed(1)} - ${qu.toFixed(3)}(${Ao_final.toFixed(4)}) = ${Vu_punch.toFixed(2)}\\text{ kN} \$$`);
+        P(`$$\\ \\text{set } \\phi V_n = V_u \\;\\Rightarrow\\; d = ${dpunch.toFixed(2)}\\text{ mm} \$$`);
+        P(`$$\\ D_{c,punch} = d + C_c + d_b = ${(dpunch+cc+db).toFixed(1)} \\approx ${Dc_punch}\\text{ mm} \$$`);
+
+        // ── Step 6 — Slab thickness by beam (one-way) shear ───────────
+        H5('Slab Thickness — Beam (One-Way) Shear');
+        CL('Per NSCP 2015 §422.5.5 — \\(\\phi V_n = \\phi\\tfrac{1}{6}\\sqrt{f\'_c}\\,B_y d\\). Critical section at \\(d\\) from the interior face of the more heavily loaded column.');
+        // assume Dc = punching + 25 mm for d
+        const Dc_assume = Dc_punch + 25;
+        const dBeam = Dc_assume - cc - db;                    // mm, longitudinal
+        const dBeam_m = dBeam / 1000;
+        // critical section: d from inner face of heavier column toward the span
+        const heavier2 = Pu2 >= Pu1;
+        const xface = heavier2 ? (x2 - cxm / 2 - dBeam_m) : (x1 + cxm / 2 + dBeam_m);
+        const Vu_beam = Math.abs(Vat(xface));
+        // By at that x (CTF varies)
+        const ByAt = (x) => (shape[0] === 'R') ? By : (By1 + (By2 - By1) * x / Bx);
+        const ByBeam = ByAt(xface);
+        let dB = dBeam_m;
+        // solve d: φ(1/6)√fc·By·d = Vu  (By taken at section, ~constant)
+        dB = (Vu_beam * 1000) / (0.75 * (1 / 6) * Math.sqrt(fc) * (ByBeam * 1000));
+        const Dc_beam = _cfRoundUp(dB + cc + db, 25);
+        P(`$$\\ d = D_c - C_c - d_b = ${Dc_assume} - ${cc} - ${db} = ${dBeam}\\text{ mm} \$$`);
+        P(`$$\\ V_u = ${Vu_beam.toFixed(2)}\\text{ kN at the critical section}, \\quad B_y = ${(ByBeam*1000).toFixed(0)}\\text{ mm} \$$`);
+        P(`$$\\ \\text{set } \\phi V_n = V_u \\;\\Rightarrow\\; d = ${dB.toFixed(2)}\\text{ mm}, \\quad D_{c,beam} = ${(dB+cc+db).toFixed(1)} \\approx ${Dc_beam}\\text{ mm} \$$`);
+
+        // ── Governing thickness ───────────────────────────────────────
+        const Dc = Math.max(Dc_punch, Dc_beam);
+        H7(`Governing slab thickness: \\(D_c = ${Dc}\\) mm`);
+
+        // ── Step 7 — Longitudinal flexure at critical sections ────────
+        H5('Longitudinal Flexure Design (along \\(x\\))');
+        CL('Critical moments: maximum (between columns, tension on TOP) and the column-face moments. Each is designed for the local width \\(B_y\\).');
+        const dFlex = Dc - cc - db / 2;                       // mm
+        const beta1 = _cfBeta1(fc);
+        const phiF = 0.90;
+        const rhoMin = Math.max(1.4 / fy, Math.sqrt(fc) / (4 * fy));
+        const rhoST  = fy < 420 ? 0.002 : 0.0018;
+        const Ab = Math.PI / 4 * db * db;
+        const scMin = Math.max(50, db, (4 / 3) * dAgg);
+        // critical sections
+        const sections = [];
+        const addSec = (label, x, face) => {
+            const Mu = Math.abs(Mat(x));
+            const bmm = ByAt(x) * 1000;
+            sections.push({ label, x, Mu, bmm, top: Mat(x) < 0 });
+        };
+        addSec('Max +M (interior, top steel)', xpeak);
+        addSec('Col 1 inner face', x1 + cxm / 2);
+        addSec('Col 2 inner face', x2 - cxm / 2);
+
+        const flexRows = sections.map(s => {
+            const b = s.bmm, d = dFlex, Mu = s.Mu;
+            const Rn = Mu * 1e6 / (phiF * b * d * d);
+            let rho = (0.85 * fc / fy) * (1 - Math.sqrt(Math.max(0, 1 - 2 * Rn / (0.85 * fc))));
+            const useMin = rho < rhoMin;
+            const rhoUse = useMin ? rhoMin : rho;
+            const As = rhoUse * b * d;
+            const As_st = rhoST * Dc * b;                     // shrinkage/temp floor
+            const Asf = Math.max(As, As_st);
+            const n = Math.max(2, Math.ceil(Asf / Ab));
+            const sc = n > 1 ? (b - 2 * cc - n * db) / (n - 1) : null;
+            return { ...s, Rn, rho, rhoUse, As: Asf, n, sc };
+        });
+        flexRows.forEach(fr => {
+            P(`$$\\ \\textbf{${fr.label}: } M_u = ${fr.Mu.toFixed(1)}\\text{ kN·m}, \\; b = ${fr.bmm.toFixed(0)}\\text{ mm}, \\; d = ${dFlex.toFixed(0)}\\text{ mm} \$$`);
+            P(`$$\\ R_n = \\frac{M_u}{\\phi b d^2} = ${fr.Rn.toFixed(3)}\\text{ MPa}, \\; \\rho = ${fr.rhoUse.toFixed(6)} \\;\\Rightarrow\\; A_s = ${fr.As.toFixed(0)}\\text{ mm}^2 \$$`);
+            P(`$$\\ n = \\lceil A_s/A_b \\rceil = ${fr.n}\\text{ bars } \\varnothing${db}\\text{ mm}, \\; s_c = ${fr.sc ? fr.sc.toFixed(0) : '—'}\\text{ mm}${fr.sc && fr.sc >= scMin ? '\\;✓' : ''} \$$`);
+        });
+
+        // ── Step 8 — Transverse flexure under each column ─────────────
+        H5('Transverse Flexure Design (along \\(y\\), under each column)');
+        CL('Each column spreads its load over a column strip; the cantilever moment about the column face drives the transverse bottom steel.');
+        const transRows = [['Col 1', Pu1, leftRestrict ? By1 : By], ['Col 2', Pu2, rightRestrict ? By2 : By]];
+        transRows.forEach(([lbl, Pcol, Byloc]) => {
+            const stripW = Math.min(Byloc, cym + 2 * (dFlex / 1000));     // column strip width, m
+            const qStrip = Pcol / (Bx * Byloc);                          // kPa (avg)
+            const arm = (Byloc - cym) / 2;                               // cantilever arm, m
+            const Mu = qStrip * Byloc * arm * arm / 2;                   // kN·m over full width (approx)
+            const b = Bx * 1000 * 0;                                     // (use strip per-m design below)
+            const Mu_perm = qStrip * arm * arm / 2;                      // kN·m per metre width
+            const dT = Dc - cc - 1.5 * db;
+            const Rn = Mu_perm * 1e6 / (phiF * 1000 * dT * dT);
+            let rho = (0.85 * fc / fy) * (1 - Math.sqrt(Math.max(0, 1 - 2 * Rn / (0.85 * fc))));
+            const rhoUse = Math.max(rho, rhoMin);
+            const As_perm = rhoUse * 1000 * dT;
+            const sBar = Ab / As_perm * 1000;                           // spacing mm for 1 m
+            P(`$$\\ \\textbf{${lbl}: } B_y = ${(Byloc*1000).toFixed(0)}\\text{ mm}, \\; \\text{arm} = \\tfrac{B_y - c_y}{2} = ${(arm*1000).toFixed(0)}\\text{ mm} \$$`);
+            P(`$$\\ q_{strip} = \\frac{P_u}{B_x B_y} = ${qStrip.toFixed(2)}\\text{ kPa}, \\; M_u = \\tfrac{q\\,arm^2}{2} = ${Mu_perm.toFixed(2)}\\text{ kN·m/m} \$$`);
+            P(`$$\\ \\rho = ${rhoUse.toFixed(6)}, \\; A_s = ${As_perm.toFixed(0)}\\text{ mm}^2/m \\;\\Rightarrow\\; \\varnothing${db}\\text{ @ } ${sBar.toFixed(0)}\\text{ mm o.c.} \$$`);
+        });
+
+        // ── Schedule ──────────────────────────────────────────────────
+        const sched = buildCombinedFootingSchedule({
+            shape, Bx, By, By1, By2, Dc, db, qu, qnet,
+            Vu_punch, Pcrit, flexRows
+        });
+        for (const id of ['Summary', 'Summary1']) {
+            const el = document.getElementById(id);
+            if (el) { el.innerHTML = sched; renderMath(el); }
+        }
+    }
+
+    // Combined-footing schedule (tabular summary, fd-schedule styling).
+    function buildCombinedFootingSchedule(d) {
+        const row = (l, v, c) => `<tr><td>${l}</td><td class="fd-sched-num">${v}</td><td>${c == null ? '&mdash;' : c}</td></tr>`;
+        const hdr = (t) => `<tr class="fd-sched-header"><td colspan="3">${t}</td></tr>`;
+        let h = `<div class="fd-schedule-title">Combined Footing Schedule &mdash; <small style="font-weight:400;color:#5c6773;">${d.shape}</small></div>`;
+        h += `<div class="fd-schedule-wrap"><table class="fd-schedule"><thead><tr><th>Parameter</th><th>Value</th><th>Note</th></tr></thead><tbody>`;
+        h += hdr('Geometry');
+        h += row('Footing length \\(B_x\\)', `${d.Bx} m`);
+        if (d.shape[0] === 'R') {
+            h += row('Footing width \\(B_y\\)', `${d.By} m`);
+        } else {
+            h += row('Width at col 1 \\(B_{y1}\\)', `${d.By1} m`);
+            h += row('Width at col 2 \\(B_{y2}\\)', `${d.By2} m`);
+        }
+        h += row('Slab thickness \\(D_c\\)', `${d.Dc} mm`);
+        h += row('Bar diameter \\(d_b\\)', `&#8709;${d.db} mm`);
+        h += hdr('Bearing & Shear');
+        h += row('Net allowable \\(q_{net}\\)', `${d.qnet.toFixed(2)} kPa`);
+        h += row('Ultimate pressure \\(q_u\\)', `${d.qu.toFixed(2)} kPa`);
+        h += row('Punching \\(V_u\\) (critical col)', `${d.Vu_punch.toFixed(1)} kN`, `governs thickness`);
+        h += hdr('Longitudinal Reinforcement (along \\(x\\))');
+        d.flexRows.forEach(fr => {
+            h += row(fr.label, `${fr.n} pcs &#8709;${d.db} mm`,
+                     `\\(M_u\\) = ${fr.Mu.toFixed(0)} kN·m, ${fr.top ? 'TOP' : 'BOTTOM'}`);
+        });
+        h += `</tbody></table></div>`;
+        h += `<div class="fd-schedule-legend"><span>TOP = tension on top (between columns)</span><span>BOTTOM = tension on bottom (overhangs)</span></div>`;
+        return h;
+    }
 
 
     function determineMethod(structureType, loadType, columnShape, centricity, method) {
