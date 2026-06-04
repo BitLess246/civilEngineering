@@ -112,6 +112,7 @@
                                         <option value="Isolated Square">Isolated Square</option>
                                         <option value="Isolated Rectangular">Isolated Rectangular</option>
                                         <option value="Strip">Combined Footing (2 columns)</option>
+                                        <option value="PileCap">Pile Cap</option>
                                     </select>
                                 </div>
                                 <div class="fd-field">
@@ -260,7 +261,7 @@
                             <legend>Column 2</legend>
                             <div class="fd-grid">
                                 <div class="fd-field">
-                                    <label for="cf-col2-width">Column 2 width \(c_2\) (in mm)</label>
+                                    <label for="cf-col2-width">Column 2 Width (square, in mm)</label>
                                     <input type="number" id="cf-col2-width" step="1" inputmode="numeric" placeholder="defaults to Column 1">
                                 </div>
                                 <div class="fd-field">
@@ -416,9 +417,6 @@
                 <button id="saveButton" type="button" class="fd-save-btn" style="display: none;">
                     <span aria-hidden="true">&#8595;</span>&nbsp; Download PDF
                 </button>
-                <a href="pileCapDesign.html" class="fd-pilecap-link">
-                    Pile Cap Design &rarr;
-                </a>
             </div>
         </div>
         
@@ -553,30 +551,46 @@
                     methodL.style.display = "none";
                 }
             });
+            // Pile Cap lives on its own page — selecting it just navigates
+            // there (only on a real user change, never on initial load).
+            selectStructure.addEventListener('change', function () {
+                if (selectStructure.value === 'PileCap') {
+                    window.location.href = 'pileCapDesign.html';
+                }
+            });
+
             // ── Combined-footing form adaptation ──────────────────────
-            // When "Combined Footing" is chosen we:
-            //   • show the Column 2 + Footing Layout cards,
-            //   • force the load type to "Individual Loads" and HIDE the
-            //     Load Type dropdown (a combined footing always works
-            //     with separate DL/LL per column),
-            //   • force concentric and hide the Centricity dropdown
-            //     (the moment fields are irrelevant here),
-            //   • rename the "Loading" → "Column 1 Loads" and
-            //     "Column" → "Column 1" legends so the cards read as a
-            //     pair with the new Column 2 card.
+            // When "Combined Footing" is chosen we make the two columns read
+            // as an identical pair of cards:
+            //   • force Individual (per-column DL/LL) + concentric loading,
+            //   • hide the whole generic "Loading" card and physically move
+            //     its P_DL / P_LL fields into the "Column 1" card, so Column 1
+            //     and Column 2 share the same [width, P_DL, P_LL] layout,
+            //   • hide "Column Shape" + "Column Location" (square is assumed)
+            //     and label the width explicitly as a square dimension,
+            //   • rename the "Column" legend to "Column 1".
             // Everything is reverted for the other footing types.
             const cfCol2   = document.getElementById('cf-col2-fieldset');
             const cfLayout = document.getElementById('cf-layout-fieldset');
-            const loadTypeField   = document.getElementById('loadType-field');
-            const centricityField = document.getElementById('centricity-field');
-            const loadingLegend   = document.getElementById('loading-legend');
-            const columnLegend    = document.getElementById('column-legend');
+            const columnLegend        = document.getElementById('column-legend');
+            const loadingFieldset     = document.getElementById('loading-fieldset');
+            const columnLocationField = document.getElementById('ColumnLocation').closest('.fd-field');
+            const colShapeField  = columnShape.closest('.fd-field');
+            const colWidthField  = c.closest('.fd-field');
+            const colWidthXField = cx.closest('.fd-field');
+            const colWidthYField = cy.closest('.fd-field');
+            const columnGrid     = colWidthField.parentElement;
+            const pdlField       = pdl.closest('.fd-field');
+            const pllField       = pll.closest('.fd-field');
+            const loadingGrid    = pdlField.parentElement;
+            const mdlxField      = document.getElementById('mdlx').closest('.fd-field');
+            const COL_WIDTH_LABEL_DEFAULT = cLabel.textContent;
             function toggleCombinedFooting() {
                 const isCF = (selectStructure.value === 'Strip');
                 if (cfCol2)   cfCol2.style.display   = isCF ? 'block' : 'none';
                 if (cfLayout) cfLayout.style.display = isCF ? 'block' : 'none';
                 if (isCF) {
-                    // Force the load model and hide the two dropdowns.
+                    // Force the per-column load model.
                     if (loadType.value !== 'individual') {
                         loadType.value = 'individual';
                         if (typeof handleLoadTypeChange === 'function') handleLoadTypeChange();
@@ -585,15 +599,32 @@
                         centricity.value = 'concentric';
                         if (typeof handleCentricityChange === 'function') handleCentricityChange('individual');
                     }
-                    if (loadTypeField)   loadTypeField.style.display   = 'none';
-                    if (centricityField) centricityField.style.display = 'none';
-                    if (loadingLegend)   loadingLegend.textContent = 'Column 1 Loads';
-                    if (columnLegend)    columnLegend.textContent  = 'Column 1';
+                    // Move Column 1's DL/LL into the Column 1 card (after width).
+                    columnGrid.insertBefore(pdlField, colWidthField.nextElementSibling);
+                    columnGrid.insertBefore(pllField, pdlField.nextElementSibling);
+                    // The generic Loading card is now empty → hide it.
+                    if (loadingFieldset) loadingFieldset.style.display = 'none';
+                    // Square assumed → hide shape, location and the X/Y inputs.
+                    colShapeField.style.display = 'none';
+                    columnLocationField.style.display = 'none';
+                    colWidthXField.style.display = 'none';
+                    colWidthYField.style.display = 'none';
+                    cLabel.style.display = ''; ccLabel.style.display = 'none'; c.style.display = '';
+                    cLabel.textContent = 'Column 1 Width (square, in mm)';
+                    columnLegend.textContent = 'Column 1';
                 } else {
-                    if (loadTypeField)   loadTypeField.style.display   = '';
-                    if (centricityField) centricityField.style.display = '';
-                    if (loadingLegend)   loadingLegend.textContent = 'Loading';
-                    if (columnLegend)    columnLegend.textContent  = 'Column';
+                    // Move DL/LL back into the Loading card (original order).
+                    loadingGrid.insertBefore(pdlField, mdlxField);
+                    loadingGrid.insertBefore(pllField, mdlxField);
+                    if (loadingFieldset) loadingFieldset.style.display = '';
+                    colShapeField.style.display = '';
+                    columnLocationField.style.display = '';
+                    colWidthXField.style.display = '';
+                    colWidthYField.style.display = '';
+                    cLabel.textContent = COL_WIDTH_LABEL_DEFAULT;
+                    columnLegend.textContent = 'Column';
+                    // Re-apply the correct labels/inputs for the chosen shape.
+                    columnShape.dispatchEvent(new Event('change'));
                 }
             }
             selectStructure.addEventListener('change', toggleCombinedFooting);
