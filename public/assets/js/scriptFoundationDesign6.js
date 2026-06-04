@@ -84,123 +84,117 @@ document.addEventListener("DOMContentLoaded", () => {
             btn.disabled = true;
         }
 
-        // In batch mode every <details> card needs to be open before
-        // we snapshot, otherwise collapsed cards print as a single
-        // summary line. Force them open, remember which were closed,
-        // restore after capture. Wait two animation frames so the
-        // layout has a chance to settle — otherwise the captured
-        // canvas can include the pre-expansion height for cards that
-        // just opened, which is what was producing blank pages at
-        // the end of the batch PDF.
-        const reclose = [];
+        // In batch mode every <details> card has to be REPLACED by a
+        // <div> in the LIVE DOM before html2canvas runs. The earlier
+        // approach (only mutating in the onclone callback) didn't
+        // produce content in the output — html2canvas v1.4.x's
+        // bounding-box computation on the original <details> still
+        // sees the closed-state geometry even after the clone is
+        // patched. Mutating the live DOM, taking the snapshot, then
+        // restoring the original <details> is what actually shows
+        // every card's contents in the PDF.
+        const restoreOps = [];
         if (targetId === 'batchOutput') {
-            target.querySelectorAll('details:not([open])').forEach(d => {
-                reclose.push(d);
-                d.open = true;
-            });
+            const detailsList = Array.from(target.querySelectorAll('details'));
+            for (const det of detailsList) {
+                const parent      = det.parentNode;
+                const nextSibling = det.nextSibling;
+                const summary     = det.querySelector(':scope > summary');
+                const otherChildren = [];
+                for (const ch of Array.from(det.childNodes)) {
+                    if (ch !== summary) otherChildren.push(ch);
+                }
+                const div = document.createElement('div');
+                for (const attr of det.attributes) {
+                    if (attr.name === 'open') continue;
+                    div.setAttribute(attr.name, attr.value);
+                }
+                if (summary) {
+                    const sumDiv = document.createElement('div');
+                    for (const attr of summary.attributes) sumDiv.setAttribute(attr.name, attr.value);
+                    sumDiv.innerHTML = summary.innerHTML;
+                    sumDiv.style.cssText =
+                        'padding:12px 18px;background:#eef3f8;color:#0056b3;' +
+                        'font-weight:600;border-bottom:1px solid #e1e4e8;' +
+                        'display:flex;align-items:center;flex-wrap:wrap;gap:12px;';
+                    div.appendChild(sumDiv);
+                }
+                for (const c of otherChildren) div.appendChild(c);
+                parent.replaceChild(div, det);
+                restoreOps.push(() => {
+                    // Move children back into the original <details>,
+                    // re-insert <summary> as the first child, restore
+                    // open/closed state, and put <details> back where
+                    // the <div> sits now.
+                    while (det.firstChild) det.removeChild(det.firstChild);
+                    if (summary) det.appendChild(summary);
+                    for (const c of otherChildren) det.appendChild(c);
+                    if (div.parentNode) div.parentNode.replaceChild(det, div);
+                    else parent.insertBefore(det, nextSibling);
+                });
+            }
+            // Let the browser flush layout for the new <div>s.
             await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
         }
 
         try {
-            // 1) Collect natural page-break candidates from the DOM
-            //    BEFORE capture, so the eventual canvas slicing snaps
-            //    to gaps between cards / chips / step banners instead
-            //    of cutting them in half. We walk every element that
-            //    is laid out as a block (display: block / grid /
-            //    flex / table) and remember its BOTTOM y in target-
-            //    local coordinates. Anything wider than 80% of the
-            //    target is treated as a major block (.fd-section,
-            //    .fd-batch-card, etc.); for narrower elements we
-            //    recurse only one level deeper so we get inter-chip
-            //    breaks without descending into KaTeX spans.
-            const targetRect = target.getBoundingClientRect();
-            const breakSet   = new Set([0]);
-            (function collect(el, depth) {
-                for (const child of el.children) {
-                    const r = child.getBoundingClientRect();
-                    if (r.height <= 0) continue;
-                    // Break point goes at the BOTTOM of each child.
-                    const localBot = Math.round(r.bottom - targetRect.top);
-                    breakSet.add(localBot);
-                    if (depth < 3 && r.height > 40 && child.children.length > 0) {
-                        collect(child, depth + 1);
-                    }
-                }
-            })(target, 0);
-            const breaksDom = Array.from(breakSet).sort((a, b) => a - b);
-
-            // 2) Snapshot the live DOM with html2canvas. The live
-            //    cascade is intact (no print-media re-evaluation),
-            //    so chips, step banners, KaTeX math all render
-            //    exactly as on screen.
+            // 1) Snapshot the live DOM with html2canvas. The <details>
+            //    cards have already been converted to <div>s above so
+            //    every card's contents end up in the canvas.
             const canvas = await html2canvas(target, {
                 scale: 2,
                 useCORS: true,
                 backgroundColor: '#ffffff',
                 windowWidth: target.scrollWidth,
-                logging: false,
-                // html2canvas has a long-standing limitation with the
-                // native <details> element: even when the live DOM has
-                // `details[open]`, the captured canvas often renders
-                // only the <summary> (or nothing at all) — which is
-                // why every batch PDF page was coming out blank. The
-                // batch view is built entirely from <details> cards.
-                //
-                // Workaround: in the cloned document html2canvas hands
-                // us via onClone, replace every <details> with a <div>
-                // (preserving classes + children) and turn its
-                // <summary> into a normal <div> so the marker arrow
-                // doesn't leak through. Live DOM is untouched, the
-                // user still sees the regular <details> behaviour.
-                onclone: function (clonedDoc, clonedNode) {
-                    const root = clonedNode || clonedDoc.body;
-                    const detailsList = Array.from(root.querySelectorAll('details'));
-                    for (const det of detailsList) {
-                        const div = clonedDoc.createElement('div');
-                        // Copy attributes (class, id, style, …) onto the div.
-                        for (const attr of det.attributes) {
-                            if (attr.name === 'open') continue;
-                            div.setAttribute(attr.name, attr.value);
-                        }
-                        // Move children across, swapping <summary> for
-                        // an equivalent block <div>.
-                        while (det.firstChild) {
-                            const child = det.firstChild;
-                            if (child.nodeType === 1 && child.tagName === 'SUMMARY') {
-                                const sumDiv = clonedDoc.createElement('div');
-                                for (const attr of child.attributes) sumDiv.setAttribute(attr.name, attr.value);
-                                sumDiv.innerHTML = child.innerHTML;
-                                // Match the look of the original
-                                // <summary> in our batch cards.
-                                sumDiv.style.padding         = '12px 18px';
-                                sumDiv.style.background      = '#eef3f8';
-                                sumDiv.style.color           = '#0056b3';
-                                sumDiv.style.fontWeight      = '600';
-                                sumDiv.style.borderBottom    = '1px solid #e1e4e8';
-                                sumDiv.style.display         = 'flex';
-                                sumDiv.style.alignItems      = 'center';
-                                sumDiv.style.flexWrap        = 'wrap';
-                                sumDiv.style.gap             = '12px';
-                                det.removeChild(child);
-                                div.appendChild(sumDiv);
-                            } else {
-                                det.removeChild(child);
-                                div.appendChild(child);
-                            }
-                        }
-                        det.parentNode.replaceChild(div, det);
-                    }
-                }
+                logging: false
             });
 
-            // 3) Map the DOM-coordinate break points into canvas
-            //    pixel rows (html2canvas captures at `scale * css-px`
-            //    AND scales the whole thing so canvas.width matches
-            //    target.scrollWidth × scale).
-            const domScale  = canvas.width / target.scrollWidth;
-            const breaks    = breaksDom
-                .map(y => Math.round(y * domScale))
-                .filter(y => y > 0 && y <= canvas.height);
+            // 2) Find natural page-break candidates by scanning the
+            //    ACTUAL rendered canvas for rows that are essentially
+            //    blank — i.e. background-coloured. DOM-bound break
+            //    measurement turned out to be wrong for chips that
+            //    contain KaTeX \begin{array} / fraction blocks: the
+            //    DOM box says "ends at y=950" but the rendered glyphs
+            //    extend past that, so a "break at child bottom" cut
+            //    the chip in half. Scanning the rendered pixels is
+            //    self-correcting — we only break at rows where there
+            //    is genuinely nothing drawn.
+            //
+            //    Implementation: scale the wide canvas down to a
+            //    1-pixel-wide column (browser averages each row), then
+            //    read its RGBA buffer. Any row whose averaged colour
+            //    is within 3/255 of white counts as blank. Cheap and
+            //    avoids reading 30+ MB of full-canvas image data.
+            const probe   = document.createElement('canvas');
+            probe.width   = 1;
+            probe.height  = canvas.height;
+            const probeCtx = probe.getContext('2d');
+            probeCtx.imageSmoothingEnabled = true;
+            probeCtx.drawImage(canvas,
+                               0, 0, canvas.width, canvas.height,
+                               0, 0, 1, canvas.height);
+            const probeData = probeCtx.getImageData(0, 0, 1, canvas.height).data;
+            const blankRows = [];
+            for (let y = 0; y < canvas.height; y++) {
+                const r = probeData[y * 4],
+                      g = probeData[y * 4 + 1],
+                      b = probeData[y * 4 + 2];
+                if (r >= 252 && g >= 252 && b >= 252) blankRows.push(y);
+            }
+            // Collapse consecutive blank rows into single "gap" entries
+            // — represent each by the MIDPOINT of the run so the break
+            // sits in the actual whitespace, not on its edge.
+            const breaks = [0];
+            if (blankRows.length) {
+                let runStart = blankRows[0];
+                for (let i = 1; i < blankRows.length; i++) {
+                    if (blankRows[i] !== blankRows[i - 1] + 1) {
+                        breaks.push(Math.floor((runStart + blankRows[i - 1]) / 2));
+                        runStart = blankRows[i];
+                    }
+                }
+                breaks.push(Math.floor((runStart + blankRows[blankRows.length - 1]) / 2));
+            }
             if (breaks[breaks.length - 1] !== canvas.height) breaks.push(canvas.height);
 
             // 4) Build the PDF, A4 portrait, 10 mm margins.
@@ -267,7 +261,11 @@ document.addEventListener("DOMContentLoaded", () => {
             console.error('PDF export failed:', err);
             alert('Could not generate PDF: ' + (err && err.message ? err.message : err));
         } finally {
-            reclose.forEach(d => { d.open = false; });
+            // Restore every <details> we swapped out, in reverse order
+            // so nested cases settle correctly.
+            for (let i = restoreOps.length - 1; i >= 0; i--) {
+                try { restoreOps[i](); } catch (rErr) { console.warn('restore failed:', rErr); }
+            }
             if (btn) {
                 btn.innerHTML = originalLabel;
                 btn.disabled = false;
