@@ -145,10 +145,10 @@
                         </fieldset>
 
                         <!-- ============ Loading ============ -->
-                        <fieldset class="fd-section">
-                            <legend>Loading</legend>
+                        <fieldset class="fd-section" id="loading-fieldset">
+                            <legend id="loading-legend">Loading</legend>
                             <div class="fd-grid">
-                                <div class="fd-field">
+                                <div class="fd-field" id="loadType-field">
                                     <label for="loadType">Load Type</label>
                                     <select id="loadType" name="loadType">
                                         <option value="" disabled>Select load type</option>
@@ -156,7 +156,7 @@
                                         <option value="individual">Individual Loads (DL &amp; LL)</option>
                                     </select>
                                 </div>
-                                <div class="fd-field">
+                                <div class="fd-field" id="centricity-field">
                                     <label for="centricity">Centricity</label>
                                     <select id="centricity">
                                         <option value="" disabled>Select centricity</option>
@@ -219,8 +219,8 @@
                         </fieldset>
 
                         <!-- ============ Column ============ -->
-                        <fieldset class="fd-section">
-                            <legend>Column</legend>
+                        <fieldset class="fd-section" id="column-fieldset">
+                            <legend id="column-legend">Column</legend>
                             <div class="fd-grid">
                                 <div class="fd-field">
                                     <label for="columnShape">Column Shape</label>
@@ -253,6 +253,64 @@
                                     <input type="number" id="ColumnWidthY" step="1" inputmode="numeric" style="display: none;">
                                 </div>
                             </div>
+                        </fieldset>
+
+                        <!-- ===== Combined Footing: Column 2 (shown only for combined footing) ===== -->
+                        <fieldset class="fd-section" id="cf-col2-fieldset" style="display: none;">
+                            <legend>Column 2</legend>
+                            <div class="fd-grid">
+                                <div class="fd-field">
+                                    <label for="cf-col2-width">Column 2 width \(c_2\) (in mm)</label>
+                                    <input type="number" id="cf-col2-width" step="1" inputmode="numeric" placeholder="defaults to Column 1">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="cf-pdl2">Column 2 \(P_{DL,2}\) (in kN)</label>
+                                    <input type="number" id="cf-pdl2" step="0.01" inputmode="decimal">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="cf-pll2">Column 2 \(P_{LL,2}\) (in kN)</label>
+                                    <input type="number" id="cf-pll2" step="0.01" inputmode="decimal">
+                                </div>
+                            </div>
+                            <p class="fd-hint" style="margin: 8px 4px 0;">Leave the width blank to reuse Column 1's size.</p>
+                        </fieldset>
+
+                        <!-- ===== Combined Footing: Footing Layout (shown only for combined footing) ===== -->
+                        <fieldset class="fd-section" id="cf-layout-fieldset" style="display: none;">
+                            <legend>Footing Layout</legend>
+                            <div class="fd-grid">
+                                <div class="fd-field">
+                                    <label for="cf-sf">Column spacing \(s_f\) (c/c, in m)</label>
+                                    <input type="number" id="cf-sf" step="0.01" inputmode="decimal">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="cf-left-restrict">Left edge</label>
+                                    <select id="cf-left-restrict">
+                                        <option value="0">Free (can extend)</option>
+                                        <option value="1">Property line (restricted)</option>
+                                    </select>
+                                </div>
+                                <div class="fd-field" id="cf-left-oh-field" style="display: none;">
+                                    <label for="cf-left-oh">Left overhang past Col 1 face (in mm)</label>
+                                    <input type="number" id="cf-left-oh" step="1" inputmode="numeric" value="0" placeholder="0 = col face on the line">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="cf-right-restrict">Right edge</label>
+                                    <select id="cf-right-restrict">
+                                        <option value="0">Free (can extend)</option>
+                                        <option value="1">Property line (restricted)</option>
+                                    </select>
+                                </div>
+                                <div class="fd-field" id="cf-right-oh-field" style="display: none;">
+                                    <label for="cf-right-oh">Right overhang past Col 2 face (in mm)</label>
+                                    <input type="number" id="cf-right-oh" step="1" inputmode="numeric" value="0" placeholder="0 = col face on the line">
+                                </div>
+                            </div>
+                            <p class="fd-hint" style="margin: 8px 4px 0;">
+                                If one edge is a property line and the other is free, a <strong>Rectangular</strong> footing is
+                                used. If both edges are on property lines, a <strong>Trapezoidal</strong> footing is used. The
+                                overhang is the slab projection past the column face toward the property line; a free edge has none.
+                            </p>
                         </fieldset>
 
                         <!-- ============ Reinforcement &amp; Footing ============ -->
@@ -325,56 +383,6 @@
                                     </select>
                                 </div>
                             </div>
-                        </fieldset>
-
-                        <!-- ============ Combined Footing (2 columns) ============ -->
-                        <!-- Shown only when Foundation Type = Combined Footing.
-                             Column 1 loads reuse the P_DL / P_LL fields in the
-                             Loading section (use the "Individual Loads" load type). -->
-                        <fieldset class="fd-section" id="cf-fieldset" style="display: none;">
-                            <legend>Combined Footing &mdash; Second Column &amp; Layout</legend>
-                            <div class="fd-grid">
-                                <div class="fd-field">
-                                    <label for="cf-pdl2">Col 2 \(P_{DL,2}\) (in kN)</label>
-                                    <input type="number" id="cf-pdl2" step="0.01" inputmode="decimal">
-                                </div>
-                                <div class="fd-field">
-                                    <label for="cf-pll2">Col 2 \(P_{LL,2}\) (in kN)</label>
-                                    <input type="number" id="cf-pll2" step="0.01" inputmode="decimal">
-                                </div>
-                                <div class="fd-field">
-                                    <label for="cf-sf">Column spacing \(s_f\) (c/c, in m)</label>
-                                    <input type="number" id="cf-sf" step="0.01" inputmode="decimal">
-                                </div>
-                                <div class="fd-field">
-                                    <label for="cf-left-restrict">Left edge</label>
-                                    <select id="cf-left-restrict">
-                                        <option value="0">Free (can extend)</option>
-                                        <option value="1">Property line (restricted)</option>
-                                    </select>
-                                </div>
-                                <div class="fd-field">
-                                    <label for="cf-left-oh">Left overhang to PL (in mm)</label>
-                                    <input type="number" id="cf-left-oh" step="1" inputmode="numeric" value="0" placeholder="0 = col face at PL">
-                                </div>
-                                <div class="fd-field">
-                                    <label for="cf-right-restrict">Right edge</label>
-                                    <select id="cf-right-restrict">
-                                        <option value="0">Free (can extend)</option>
-                                        <option value="1">Property line (restricted)</option>
-                                    </select>
-                                </div>
-                                <div class="fd-field">
-                                    <label for="cf-right-oh">Right overhang to PL (in mm)</label>
-                                    <input type="number" id="cf-right-oh" step="1" inputmode="numeric" value="0" placeholder="0 = col face at PL">
-                                </div>
-                            </div>
-                            <p class="fd-hint" style="margin: 8px 4px 0;">
-                                Column 1's loads come from \(P_{DL}\) / \(P_{LL}\) in the Loading section
-                                (set Load Type to &ldquo;Individual Loads&rdquo;). If only one edge is on a property
-                                line, a Rectangular footing is used; if both edges are restricted, a Trapezoidal
-                                footing is used.
-                            </p>
                         </fieldset>
 
                     </div>
@@ -545,13 +553,65 @@
                     methodL.style.display = "none";
                 }
             });
-            // Show the Combined Footing fieldset only when that type is picked.
-            const cfFieldset = document.getElementById('cf-fieldset');
+            // ── Combined-footing form adaptation ──────────────────────
+            // When "Combined Footing" is chosen we:
+            //   • show the Column 2 + Footing Layout cards,
+            //   • force the load type to "Individual Loads" and HIDE the
+            //     Load Type dropdown (a combined footing always works
+            //     with separate DL/LL per column),
+            //   • force concentric and hide the Centricity dropdown
+            //     (the moment fields are irrelevant here),
+            //   • rename the "Loading" → "Column 1 Loads" and
+            //     "Column" → "Column 1" legends so the cards read as a
+            //     pair with the new Column 2 card.
+            // Everything is reverted for the other footing types.
+            const cfCol2   = document.getElementById('cf-col2-fieldset');
+            const cfLayout = document.getElementById('cf-layout-fieldset');
+            const loadTypeField   = document.getElementById('loadType-field');
+            const centricityField = document.getElementById('centricity-field');
+            const loadingLegend   = document.getElementById('loading-legend');
+            const columnLegend    = document.getElementById('column-legend');
             function toggleCombinedFooting() {
-                if (cfFieldset) cfFieldset.style.display =
-                    (selectStructure.value === 'Strip') ? 'block' : 'none';
+                const isCF = (selectStructure.value === 'Strip');
+                if (cfCol2)   cfCol2.style.display   = isCF ? 'block' : 'none';
+                if (cfLayout) cfLayout.style.display = isCF ? 'block' : 'none';
+                if (isCF) {
+                    // Force the load model and hide the two dropdowns.
+                    if (loadType.value !== 'individual') {
+                        loadType.value = 'individual';
+                        if (typeof handleLoadTypeChange === 'function') handleLoadTypeChange();
+                    }
+                    if (centricity.value !== 'concentric') {
+                        centricity.value = 'concentric';
+                        if (typeof handleCentricityChange === 'function') handleCentricityChange('individual');
+                    }
+                    if (loadTypeField)   loadTypeField.style.display   = 'none';
+                    if (centricityField) centricityField.style.display = 'none';
+                    if (loadingLegend)   loadingLegend.textContent = 'Column 1 Loads';
+                    if (columnLegend)    columnLegend.textContent  = 'Column 1';
+                } else {
+                    if (loadTypeField)   loadTypeField.style.display   = '';
+                    if (centricityField) centricityField.style.display = '';
+                    if (loadingLegend)   loadingLegend.textContent = 'Loading';
+                    if (columnLegend)    columnLegend.textContent  = 'Column';
+                }
             }
             selectStructure.addEventListener('change', toggleCombinedFooting);
+
+            // Overhang fields only matter for a restricted (property-line)
+            // edge — a free edge has no property line and no overhang.
+            const cfLeftR  = document.getElementById('cf-left-restrict');
+            const cfRightR = document.getElementById('cf-right-restrict');
+            const cfLeftOhF  = document.getElementById('cf-left-oh-field');
+            const cfRightOhF = document.getElementById('cf-right-oh-field');
+            function toggleOverhangs() {
+                if (cfLeftOhF)  cfLeftOhF.style.display  = (cfLeftR  && cfLeftR.value  === '1') ? 'block' : 'none';
+                if (cfRightOhF) cfRightOhF.style.display = (cfRightR && cfRightR.value === '1') ? 'block' : 'none';
+            }
+            if (cfLeftR)  cfLeftR.addEventListener('change', toggleOverhangs);
+            if (cfRightR) cfRightR.addEventListener('change', toggleOverhangs);
+            toggleOverhangs();
+
             toggleCombinedFooting();   // honour the saved/initial value on load
 
             selectStructure.addEventListener("change", function () {
