@@ -84,38 +84,79 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         if (!canvas.width || !canvas.height) return;
 
-        // Whitespace-row scan for natural page breaks (so chips with
-        // KaTeX fractions / multi-line arrays are never sliced mid-glyph).
-        const probe    = document.createElement('canvas');
-        probe.width    = 1;
-        probe.height   = canvas.height;
-        const probeCtx = probe.getContext('2d');
-        probeCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, 1, canvas.height);
-        const probeData = probeCtx.getImageData(0, 0, 1, canvas.height).data;
-        const blankRows = [];
-        for (let y = 0; y < canvas.height; y++) {
-            if (probeData[y*4] >= 252 && probeData[y*4+1] >= 252 && probeData[y*4+2] >= 252) {
-                blankRows.push(y);
+        // ── Ink-aware page-break detection ────────────────────────────
+        //
+        // Earlier versions averaged each row across the full width and
+        // called it "blank" if the average was near-white. That fails
+        // for tall multi-line equations: a row carrying only sparse
+        // thin strokes (a fraction bar, an `=`, a paren) averages to
+        // near-white over 1900+ px, so the scanner thought it was blank
+        // and sliced THROUGH the equation between its stacked lines.
+        //
+        // Instead, scan for the DARKEST pixel in each row (any actual
+        // text ink). A row is an "ink" row if any sampled pixel is
+        // clearly dark (min channel < INK_DARK). Borders / coloured
+        // backgrounds (≥ ~210) are NOT ink, so we may break across them
+        // — fine. Then a break is only valid in a RUN of consecutive
+        // ink-free rows that is tall enough to be a genuine inter-chip
+        // margin (≥ MIN_GAP_PX), never the thin line-spacing inside an
+        // equation. Read in horizontal strips with column sub-sampling
+        // to bound memory.
+        const INK_DARK   = 150;   // min(r,g,b) below this ⇒ real text
+        const COL_STEP   = 3;     // sample every 3rd column (fast enough)
+        const STRIP_H    = 1500;  // rows per getImageData call
+        const SCALE      = 2;     // matches html2canvas scale above
+        const MIN_GAP_PX = 9 * SCALE;   // ≈ 9 CSS px — bigger than any
+                                        // intra-equation line gap, smaller
+                                        // than a real chip margin
+
+        const tmp    = document.createElement('canvas');
+        const tmpCtx = tmp.getContext('2d', { willReadFrequently: true });
+        const rowHasInk = new Uint8Array(canvas.height);   // 1 = ink row
+        for (let stripY = 0; stripY < canvas.height; stripY += STRIP_H) {
+            const h = Math.min(STRIP_H, canvas.height - stripY);
+            tmp.width  = canvas.width;
+            tmp.height = h;
+            tmpCtx.clearRect(0, 0, canvas.width, h);
+            tmpCtx.drawImage(canvas, 0, stripY, canvas.width, h,
+                                     0, 0,      canvas.width, h);
+            const data = tmpCtx.getImageData(0, 0, canvas.width, h).data;
+            for (let row = 0; row < h; row++) {
+                let ink = 0;
+                const base = row * canvas.width * 4;
+                for (let x = 0; x < canvas.width; x += COL_STEP) {
+                    const i = base + x * 4;
+                    const m = Math.min(data[i], data[i+1], data[i+2]);
+                    if (m < INK_DARK) { ink = 1; break; }
+                }
+                rowHasInk[stripY + row] = ink;
             }
         }
+
+        // Build break candidates from ink-free runs ≥ MIN_GAP_PX.
         const breaks = [0];
-        if (blankRows.length) {
-            let runStart = blankRows[0];
-            for (let i = 1; i < blankRows.length; i++) {
-                if (blankRows[i] !== blankRows[i-1] + 1) {
-                    breaks.push(Math.floor((runStart + blankRows[i-1]) / 2));
-                    runStart = blankRows[i];
+        let runStart = -1;
+        for (let y = 0; y <= canvas.height; y++) {
+            const blank = (y < canvas.height) && rowHasInk[y] === 0;
+            if (blank) {
+                if (runStart < 0) runStart = y;
+            } else if (runStart >= 0) {
+                const runEnd = y - 1;
+                if (runEnd - runStart + 1 >= MIN_GAP_PX) {
+                    breaks.push(Math.floor((runStart + runEnd) / 2));
                 }
+                runStart = -1;
             }
-            breaks.push(Math.floor((runStart + blankRows[blankRows.length-1]) / 2));
         }
         if (breaks[breaks.length-1] !== canvas.height) breaks.push(canvas.height);
 
-        const pageW    = pdf.internal.pageSize.getWidth();
-        const pageH    = pdf.internal.pageSize.getHeight();
-        const margin   = 10;
-        const contentW = pageW - 2 * margin;
-        const contentH = pageH - 2 * margin;
+        const pageW       = pdf.internal.pageSize.getWidth();
+        const pageH       = pdf.internal.pageSize.getHeight();
+        const marginTop   = 8;
+        const marginBot   = 5;    // reduced bottom margin — more rows/page
+        const marginSide  = 10;
+        const contentW = pageW - 2 * marginSide;
+        const contentH = pageH - marginTop - marginBot;
         const ratio    = contentW / canvas.width;
         const sliceHpx = Math.floor(contentH / ratio);
 
@@ -150,7 +191,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const sliceImg = slice.toDataURL('image/jpeg', 0.92);
             if (!pageState.first) pdf.addPage();
             pageState.first = false;
-            pdf.addImage(sliceImg, 'JPEG', margin, margin, contentW, thisSliceH * ratio);
+            pdf.addImage(sliceImg, 'JPEG', marginSide, marginTop, contentW, thisSliceH * ratio);
             yPx = nextY;
         }
     }
