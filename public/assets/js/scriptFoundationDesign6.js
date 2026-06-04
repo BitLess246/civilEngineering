@@ -401,9 +401,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // ── Read inputs ───────────────────────────────────────────────
         const num = (id) => parseFloat(document.getElementById(id).value);
-        const cx = num('ColumnWidth');                 // mm (square col assumed)
-        const cy = cx;
-        const cxm = cx / 1000, cym = cy / 1000;
+        const cx1 = num('ColumnWidth');                // Column 1 size (mm, square)
+        const cx2raw = num('cf-col2-width');
+        const cx2 = Number.isFinite(cx2raw) && cx2raw > 0 ? cx2raw : cx1;  // Column 2 size (defaults to col 1)
+        const cx = cx1;                                // legacy alias (col 1) for the given-params recap
+        const cy = cx1;
+        const cx1m = cx1 / 1000, cx2m = cx2 / 1000, cym = cx1 / 1000;
         const sf  = num('cf-sf');                       // c/c spacing, m
         const Pdl1 = num('DeadLoad'), Pll1 = num('LiveLoad');
         const Pdl2 = num('cf-pdl2'),  Pll2 = num('cf-pll2');
@@ -421,7 +424,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // ── Validate the combined-footing-specific inputs ─────────────
         const need = { 'Col 1 P_DL': Pdl1, 'Col 1 P_LL': Pll1,
                        'Col 2 P_DL': Pdl2, 'Col 2 P_LL': Pll2,
-                       'Column spacing s_f': sf, 'Column width': cx,
+                       'Column spacing s_f': sf, 'Column 1 width': cx1,
                        'q_all': qa, 'γ_soil': gs, 'γ_con': gc,
                        'H': Hm, "f'c": fc, 'f_y': fy, 'd_b': db, 'Cover': cc };
         const bad = Object.entries(need).filter(([k, v]) => !Number.isFinite(v)).map(([k]) => k);
@@ -436,7 +439,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // ── Given-parameters recap chips ──────────────────────────────
         GP.appendChild(createHeader5('Parameters Given:'));
         GPH8(`$$\\ \\text{Combined Footing — 2 columns}\$$`);
-        GPH8(`$$\\ c_x = c_y = ${cx}\\text{ mm} \$$`);
+        GPH8(`$$\\ c_1 = ${cx1}\\text{ mm}, \\; c_2 = ${cx2}\\text{ mm} \$$`);
         GPH8(`$$\\ s_f = ${sf}\\text{ m (c/c)} \$$`);
         GPH8(`$$\\ P_{dl,1} = ${Pdl1}\\text{ kN}, \\; P_{ll,1} = ${Pll1}\\text{ kN} \$$`);
         GPH8(`$$\\ P_{dl,2} = ${Pdl2}\\text{ kN}, \\; P_{ll,2} = ${Pll2}\\text{ kN} \$$`);
@@ -475,7 +478,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!bothRestricted) {
             shape = 'Rectangular (CRF)';
             edgeOffset = leftRestrict ? leftOh : 0;       // left edge to PL offset (m)
-            x1 = edgeOffset + cxm / 2;                    // col1 centre from left edge
+            x1 = edgeOffset + cx1m / 2;                   // col1 centre from left edge
             x2 = x1 + sf;
             xbar = (Pa1 * x1 + Pa2 * x2) / Pa;
             Bx = _cfRoundUp(2 * xbar, 0.1);
@@ -487,8 +490,9 @@ document.addEventListener("DOMContentLoaded", () => {
             P(`$$\\ B_y = \\frac{P_a}{q_{net} B_x} = \\frac{${Pa.toFixed(1)}}{${qnet.toFixed(3)}\\times ${Bx}} = ${(Pa/(qnet*Bx)).toFixed(3)} \\approx ${By}\\text{ m} \$$`);
         } else {
             shape = 'Trapezoidal (CTF)';
-            Bx = +(sf + cxm + leftOh + rightOh).toFixed(6);
-            x1 = leftOh + cxm / 2;
+            // Bx spans both overhangs + the half-widths of each column + the c/c spacing.
+            Bx = +(sf + cx1m / 2 + cx2m / 2 + leftOh + rightOh).toFixed(6);
+            x1 = leftOh + cx1m / 2;
             x2 = x1 + sf;
             xbar = (Pa1 * x1 + Pa2 * x2) / Pa;
             const A = Pa / qnet;
@@ -500,7 +504,7 @@ document.addEventListener("DOMContentLoaded", () => {
             By1 = _cfRoundUp(by1, 0.1);
             By = (By1 + By2) / 2;
             CL('Both edges restricted with unequal loads → a trapezoidal footing aligns the resultant with the slab centroid. \\(B_x\\) is fixed by geometry.');
-            P(`$$\\ B_x = s_f + c_x + oh_L + oh_R = ${sf} + ${cxm} + ${leftOh} + ${rightOh} = ${Bx}\\text{ m} \$$`);
+            P(`$$\\ B_x = s_f + \\tfrac{c_1}{2} + \\tfrac{c_2}{2} + oh_L + oh_R = ${sf} + ${(cx1m/2).toFixed(3)} + ${(cx2m/2).toFixed(3)} + ${leftOh} + ${rightOh} = ${Bx}\\text{ m} \$$`);
             P(`$$\\ \\bar{x} = \\frac{P_{a1}\\,x_1 + P_{a2}\\,x_2}{P_a} = ${xbar.toFixed(4)}\\text{ m} \$$`);
             P(`$$\\ A = \\frac{P_a}{q_{net}} = ${A.toFixed(4)}\\text{ m}^2, \\quad B_{y1}+B_{y2} = \\frac{2A}{B_x} = ${Bysum.toFixed(4)}\\text{ m} \$$`);
             P(`$$\\ \\bar{x} = \\frac{B_x}{3}\\cdot\\frac{2B_{y2}+B_{y1}}{B_{y2}+B_{y1}} \\;\\Rightarrow\\; B_{y2} = ${by2.toFixed(4)} \\approx ${By2}\\text{ m}, \\; B_{y1} = ${by1.toFixed(4)} \\approx ${By1}\\text{ m} \$$`);
@@ -545,9 +549,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const A_foot = (shape[0] === 'R') ? Bx * By : (By1 + By2) * Bx / 2;
         const qu = Pu / A_foot;                              // kPa
         const Pcrit = Math.max(Pu1, Pu2);
+        const cCrit = (Pu2 >= Pu1) ? cx2 : cx1;              // critical column's own size (mm)
         let dP = 0.155;
         for (let it = 0; it < 60; it++) {
-            const dmm = dP * 1000, cmm = cx;
+            const dmm = dP * 1000, cmm = cCrit;
             const Ao = (dmm + cmm) * (dmm + cmm) / 1e6;       // m²
             const Vu = (Pcrit - qu * Ao) * 1000;             // N
             const f  = 0.75 * (1 / 3) * Math.sqrt(fc) * 4 * (dmm + cmm) * dmm - Vu;
@@ -558,7 +563,7 @@ document.addEventListener("DOMContentLoaded", () => {
             dP = dP - (f / ((f2 - f) / dd)) / 1000;
         }
         const dpunch = dP * 1000;
-        const Ao_final = (dpunch + cx) * (dpunch + cx) / 1e6;
+        const Ao_final = (dpunch + cCrit) * (dpunch + cCrit) / 1e6;
         const Vu_punch = (Pcrit - qu * Ao_final);
         const Dc_punch = _cfRoundUp(dpunch + cc + db, 25);
         P(`$$\\ q_u = \\frac{P_u}{A_{foot}} = \\frac{${Pu.toFixed(1)}}{${A_foot.toFixed(4)}} = ${qu.toFixed(3)}\\text{ kPa} \$$`);
@@ -575,7 +580,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const dBeam_m = dBeam / 1000;
         // critical section: d from inner face of heavier column toward the span
         const heavier2 = Pu2 >= Pu1;
-        const xface = heavier2 ? (x2 - cxm / 2 - dBeam_m) : (x1 + cxm / 2 + dBeam_m);
+        const xface = heavier2 ? (x2 - cx2m / 2 - dBeam_m) : (x1 + cx1m / 2 + dBeam_m);
         const Vu_beam = Math.abs(Vat(xface));
         // By at that x (CTF varies)
         const ByAt = (x) => (shape[0] === 'R') ? By : (By1 + (By2 - By1) * x / Bx);
@@ -610,8 +615,8 @@ document.addEventListener("DOMContentLoaded", () => {
             sections.push({ label, x, Mu, bmm, top: Mat(x) < 0 });
         };
         addSec('Max +M (interior, top steel)', xpeak);
-        addSec('Col 1 inner face', x1 + cxm / 2);
-        addSec('Col 2 inner face', x2 - cxm / 2);
+        addSec('Col 1 inner face', x1 + cx1m / 2);
+        addSec('Col 2 inner face', x2 - cx2m / 2);
 
         const flexRows = sections.map(s => {
             const b = s.bmm, d = dFlex, Mu = s.Mu;
@@ -635,11 +640,11 @@ document.addEventListener("DOMContentLoaded", () => {
         // ── Step 8 — Transverse flexure under each column ─────────────
         H5('Transverse Flexure Design (along \\(y\\), under each column)');
         CL('Each column spreads its load over a column strip; the cantilever moment about the column face drives the transverse bottom steel.');
-        const transRows = [['Col 1', Pu1, leftRestrict ? By1 : By], ['Col 2', Pu2, rightRestrict ? By2 : By]];
-        transRows.forEach(([lbl, Pcol, Byloc]) => {
-            const stripW = Math.min(Byloc, cym + 2 * (dFlex / 1000));     // column strip width, m
+        const transRows = [['Col 1', Pu1, leftRestrict ? By1 : By, cx1m], ['Col 2', Pu2, rightRestrict ? By2 : By, cx2m]];
+        transRows.forEach(([lbl, Pcol, Byloc, cColm]) => {
+            const stripW = Math.min(Byloc, cColm + 2 * (dFlex / 1000));   // column strip width, m
             const qStrip = Pcol / (Bx * Byloc);                          // kPa (avg)
-            const arm = (Byloc - cym) / 2;                               // cantilever arm, m
+            const arm = (Byloc - cColm) / 2;                             // cantilever arm, m
             const Mu = qStrip * Byloc * arm * arm / 2;                   // kN·m over full width (approx)
             const b = Bx * 1000 * 0;                                     // (use strip per-m design below)
             const Mu_perm = qStrip * arm * arm / 2;                      // kN·m per metre width
