@@ -61,6 +61,95 @@ document.addEventListener("DOMContentLoaded", () => {
     // Respects window._foundationPrintTargetId so the Excel-batch
     // renderer can point us at #batchOutput (every footing + the
     // consolidated table in one PDF) instead of #Solution.
+    // ── Helper: render ONE element to a canvas and append its
+    //    page-sliced image(s) to an existing jsPDF document. Returns
+    //    the next page number. `startFresh` forces a page break before
+    //    this block (so each batch card starts on its own page).
+    //
+    //    Why per-element: html2canvas allocates a single backing
+    //    canvas sized scale × element-height. Browsers cap canvas
+    //    dimensions (~16384 px in Chrome/Brave); a tall element (the
+    //    13-page batch view) overflows that cap and html2canvas
+    //    returns an all-WHITE bitmap — which is exactly why the batch
+    //    PDF was blank while the shorter single-foundation PDF worked.
+    //    Capturing each block separately keeps every canvas small.
+    async function _addElementToPdf(pdf, el, pageState) {
+        if (!el) return;
+        const canvas = await html2canvas(el, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            windowWidth: el.scrollWidth,
+            logging: false
+        });
+        if (!canvas.width || !canvas.height) return;
+
+        // Whitespace-row scan for natural page breaks (so chips with
+        // KaTeX fractions / multi-line arrays are never sliced mid-glyph).
+        const probe    = document.createElement('canvas');
+        probe.width    = 1;
+        probe.height   = canvas.height;
+        const probeCtx = probe.getContext('2d');
+        probeCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, 1, canvas.height);
+        const probeData = probeCtx.getImageData(0, 0, 1, canvas.height).data;
+        const blankRows = [];
+        for (let y = 0; y < canvas.height; y++) {
+            if (probeData[y*4] >= 252 && probeData[y*4+1] >= 252 && probeData[y*4+2] >= 252) {
+                blankRows.push(y);
+            }
+        }
+        const breaks = [0];
+        if (blankRows.length) {
+            let runStart = blankRows[0];
+            for (let i = 1; i < blankRows.length; i++) {
+                if (blankRows[i] !== blankRows[i-1] + 1) {
+                    breaks.push(Math.floor((runStart + blankRows[i-1]) / 2));
+                    runStart = blankRows[i];
+                }
+            }
+            breaks.push(Math.floor((runStart + blankRows[blankRows.length-1]) / 2));
+        }
+        if (breaks[breaks.length-1] !== canvas.height) breaks.push(canvas.height);
+
+        const pageW    = pdf.internal.pageSize.getWidth();
+        const pageH    = pdf.internal.pageSize.getHeight();
+        const margin   = 10;
+        const contentW = pageW - 2 * margin;
+        const contentH = pageH - 2 * margin;
+        const ratio    = contentW / canvas.width;
+        const sliceHpx = Math.floor(contentH / ratio);
+
+        const slice    = document.createElement('canvas');
+        const sliceCtx = slice.getContext('2d');
+        slice.width    = canvas.width;
+
+        let yPx = 0;
+        while (yPx < canvas.height) {
+            const remainingPx = canvas.height - yPx;
+            let nextY;
+            if (remainingPx <= sliceHpx) {
+                nextY = canvas.height;
+            } else {
+                const hardMax = yPx + sliceHpx;
+                const softMin = yPx + Math.floor(sliceHpx * 0.4);
+                const fit = breaks.filter(b => b > softMin && b <= hardMax);
+                nextY = fit.length ? Math.max(...fit) : hardMax;
+            }
+            const thisSliceH = nextY - yPx;
+            if (thisSliceH <= 0) break;
+            slice.height = thisSliceH;
+            sliceCtx.fillStyle = '#ffffff';
+            sliceCtx.fillRect(0, 0, slice.width, slice.height);
+            sliceCtx.drawImage(canvas, 0, yPx, canvas.width, thisSliceH,
+                                       0, 0,   canvas.width, thisSliceH);
+            const sliceImg = slice.toDataURL('image/jpeg', 0.92);
+            if (!pageState.first) pdf.addPage();
+            pageState.first = false;
+            pdf.addImage(sliceImg, 'JPEG', margin, margin, contentW, thisSliceH * ratio);
+            yPx = nextY;
+        }
+    }
+
     async function exportFoundationPdf(defaultId) {
         const targetId = window._foundationPrintTargetId || defaultId;
         const target   = document.getElementById(targetId);
@@ -84,17 +173,14 @@ document.addEventListener("DOMContentLoaded", () => {
             btn.disabled = true;
         }
 
-        // In batch mode every <details> card has to be REPLACED by a
-        // <div> in the LIVE DOM before html2canvas runs. The earlier
-        // approach (only mutating in the onclone callback) didn't
-        // produce content in the output — html2canvas v1.4.x's
-        // bounding-box computation on the original <details> still
-        // sees the closed-state geometry even after the clone is
-        // patched. Mutating the live DOM, taking the snapshot, then
-        // restoring the original <details> is what actually shows
-        // every card's contents in the PDF.
+        const isBatch = (targetId === 'batchOutput');
+
+        // In batch mode each <details> card is REPLACED by a <div> in
+        // the LIVE DOM before capture. html2canvas v1.4.x measures the
+        // live DOM during layout, so an unconverted <details> renders
+        // only its <summary>. We restore the originals in finally{}.
         const restoreOps = [];
-        if (targetId === 'batchOutput') {
+        if (isBatch) {
             const detailsList = Array.from(target.querySelectorAll('details'));
             for (const det of detailsList) {
                 const parent      = det.parentNode;
@@ -122,10 +208,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 for (const c of otherChildren) div.appendChild(c);
                 parent.replaceChild(div, det);
                 restoreOps.push(() => {
-                    // Move children back into the original <details>,
-                    // re-insert <summary> as the first child, restore
-                    // open/closed state, and put <details> back where
-                    // the <div> sits now.
                     while (det.firstChild) det.removeChild(det.firstChild);
                     if (summary) det.appendChild(summary);
                     for (const c of otherChildren) det.appendChild(c);
@@ -133,136 +215,50 @@ document.addEventListener("DOMContentLoaded", () => {
                     else parent.insertBefore(det, nextSibling);
                 });
             }
-            // Let the browser flush layout for the new <div>s.
             await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
         }
 
         try {
-            // 1) Snapshot the live DOM with html2canvas. The <details>
-            //    cards have already been converted to <div>s above so
-            //    every card's contents end up in the canvas.
-            const canvas = await html2canvas(target, {
-                scale: 2,
-                useCORS: true,
-                backgroundColor: '#ffffff',
-                windowWidth: target.scrollWidth,
-                logging: false
-            });
-
-            // 2) Find natural page-break candidates by scanning the
-            //    ACTUAL rendered canvas for rows that are essentially
-            //    blank — i.e. background-coloured. DOM-bound break
-            //    measurement turned out to be wrong for chips that
-            //    contain KaTeX \begin{array} / fraction blocks: the
-            //    DOM box says "ends at y=950" but the rendered glyphs
-            //    extend past that, so a "break at child bottom" cut
-            //    the chip in half. Scanning the rendered pixels is
-            //    self-correcting — we only break at rows where there
-            //    is genuinely nothing drawn.
-            //
-            //    Implementation: scale the wide canvas down to a
-            //    1-pixel-wide column (browser averages each row), then
-            //    read its RGBA buffer. Any row whose averaged colour
-            //    is within 3/255 of white counts as blank. Cheap and
-            //    avoids reading 30+ MB of full-canvas image data.
-            const probe   = document.createElement('canvas');
-            probe.width   = 1;
-            probe.height  = canvas.height;
-            const probeCtx = probe.getContext('2d');
-            probeCtx.imageSmoothingEnabled = true;
-            probeCtx.drawImage(canvas,
-                               0, 0, canvas.width, canvas.height,
-                               0, 0, 1, canvas.height);
-            const probeData = probeCtx.getImageData(0, 0, 1, canvas.height).data;
-            const blankRows = [];
-            for (let y = 0; y < canvas.height; y++) {
-                const r = probeData[y * 4],
-                      g = probeData[y * 4 + 1],
-                      b = probeData[y * 4 + 2];
-                if (r >= 252 && g >= 252 && b >= 252) blankRows.push(y);
-            }
-            // Collapse consecutive blank rows into single "gap" entries
-            // — represent each by the MIDPOINT of the run so the break
-            // sits in the actual whitespace, not on its edge.
-            const breaks = [0];
-            if (blankRows.length) {
-                let runStart = blankRows[0];
-                for (let i = 1; i < blankRows.length; i++) {
-                    if (blankRows[i] !== blankRows[i - 1] + 1) {
-                        breaks.push(Math.floor((runStart + blankRows[i - 1]) / 2));
-                        runStart = blankRows[i];
-                    }
-                }
-                breaks.push(Math.floor((runStart + blankRows[blankRows.length - 1]) / 2));
-            }
-            if (breaks[breaks.length - 1] !== canvas.height) breaks.push(canvas.height);
-
-            // 4) Build the PDF, A4 portrait, 10 mm margins.
             const pdf = new window.jspdf.jsPDF({
-                unit: 'mm', format: 'a4', orientation: 'p',
-                compress: true
+                unit: 'mm', format: 'a4', orientation: 'p', compress: true
             });
-            const pageW    = pdf.internal.pageSize.getWidth();   // 210
-            const pageH    = pdf.internal.pageSize.getHeight();  // 297
-            const margin   = 10;
-            const contentW = pageW - 2 * margin;                 // 190
-            const contentH = pageH - 2 * margin;                 // 277
-            const ratio    = contentW / canvas.width;
-            const sliceHpx = Math.floor(contentH / ratio);       // max canvas-px per page
+            const pageState = { first: true };
 
-            // 5) Slice the source canvas page-by-page, snapping each
-            //    page bottom to the highest natural break that fits.
-            //    Falls back to a hard cut at sliceHpx if no break is
-            //    in the upper 40% of the remaining slice (a single
-            //    chip taller than 60% of a page can't fit anywhere
-            //    else, so we accept the cut).
-            const slice    = document.createElement('canvas');
-            const sliceCtx = slice.getContext('2d');
-            slice.width    = canvas.width;
-
-            let yPx = 0;
-            let pageNum = 0;
-            while (yPx < canvas.height) {
-                const remainingPx = canvas.height - yPx;
-                let nextY;
-                if (remainingPx <= sliceHpx) {
-                    // Last slice — take everything that's left, no
-                    // trailing blank page.
-                    nextY = canvas.height;
-                } else {
-                    const hardMax = yPx + sliceHpx;
-                    const softMin = yPx + Math.floor(sliceHpx * 0.4);
-                    const fit = breaks.filter(b => b > softMin && b <= hardMax);
-                    nextY = fit.length ? Math.max(...fit) : hardMax;
+            if (isBatch) {
+                // Capture each TOP-LEVEL block of #batchOutput on its
+                // own — the title, every (now-div) foundation card, and
+                // the consolidated comparison table. Each block is at
+                // most a few pages, so no single canvas exceeds the
+                // browser's max-canvas-height limit. This is the whole
+                // fix: the previous code captured the entire 13-page
+                // #batchOutput as ONE oversized canvas, which the
+                // browser refused and returned blank.
+                const blocks = Array.from(target.children);
+                for (const block of blocks) {
+                    await _addElementToPdf(pdf, block, pageState);
                 }
-                const thisSliceH = nextY - yPx;
-                if (thisSliceH <= 0) break;   // safety — shouldn't happen
-                slice.height = thisSliceH;
-                sliceCtx.fillStyle = '#ffffff';
-                sliceCtx.fillRect(0, 0, slice.width, slice.height);
-                sliceCtx.drawImage(
-                    canvas,
-                    0, yPx, canvas.width, thisSliceH,
-                    0, 0,   canvas.width, thisSliceH
-                );
-                const sliceImg = slice.toDataURL('image/jpeg', 0.92);
-                if (pageNum > 0) pdf.addPage();
-                pdf.addImage(sliceImg, 'JPEG', margin, margin,
-                             contentW, thisSliceH * ratio);
-                yPx     = nextY;
-                pageNum += 1;
+            } else {
+                // Single foundation — capture the whole Solution tab as
+                // one block. It's short enough (≈8 pages → ~16 700 px,
+                // under the browser cap) and the continuous flow reads
+                // better than forcing a page break between
+                // #GivenParameters1 / #result / #Summary1. The user has
+                // already confirmed this path produces a clean PDF.
+                await _addElementToPdf(pdf, target, pageState);
             }
 
-            const fname = (targetId === 'batchOutput')
-                            ? 'foundation-batch-design.pdf'
-                            : 'foundation-design.pdf';
-            pdf.save(fname);
+            // Guard: if nothing got added (every block empty), avoid
+            // saving a zero-page file.
+            if (pageState.first) {
+                alert('Nothing to export — the result area is empty. Calculate or upload an Excel first.');
+                return;
+            }
+
+            pdf.save(isBatch ? 'foundation-batch-design.pdf' : 'foundation-design.pdf');
         } catch (err) {
             console.error('PDF export failed:', err);
             alert('Could not generate PDF: ' + (err && err.message ? err.message : err));
         } finally {
-            // Restore every <details> we swapped out, in reverse order
-            // so nested cases settle correctly.
             for (let i = restoreOps.length - 1; i >= 0; i--) {
                 try { restoreOps[i](); } catch (rErr) { console.warn('restore failed:', rErr); }
             }
