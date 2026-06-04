@@ -111,7 +111,7 @@
                                         <option value="" disabled>Select the type of footing</option>
                                         <option value="Isolated Square">Isolated Square</option>
                                         <option value="Isolated Rectangular">Isolated Rectangular</option>
-                                        <option value="Strip">Combined Footing</option>
+                                        <option value="Strip">Combined Footing (2 columns)</option>
                                     </select>
                                 </div>
                                 <div class="fd-field">
@@ -327,6 +327,56 @@
                             </div>
                         </fieldset>
 
+                        <!-- ============ Combined Footing (2 columns) ============ -->
+                        <!-- Shown only when Foundation Type = Combined Footing.
+                             Column 1 loads reuse the P_DL / P_LL fields in the
+                             Loading section (use the "Individual Loads" load type). -->
+                        <fieldset class="fd-section" id="cf-fieldset" style="display: none;">
+                            <legend>Combined Footing &mdash; Second Column &amp; Layout</legend>
+                            <div class="fd-grid">
+                                <div class="fd-field">
+                                    <label for="cf-pdl2">Col 2 \(P_{DL,2}\) (in kN)</label>
+                                    <input type="number" id="cf-pdl2" step="0.01" inputmode="decimal">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="cf-pll2">Col 2 \(P_{LL,2}\) (in kN)</label>
+                                    <input type="number" id="cf-pll2" step="0.01" inputmode="decimal">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="cf-sf">Column spacing \(s_f\) (c/c, in m)</label>
+                                    <input type="number" id="cf-sf" step="0.01" inputmode="decimal">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="cf-left-restrict">Left edge</label>
+                                    <select id="cf-left-restrict">
+                                        <option value="0">Free (can extend)</option>
+                                        <option value="1">Property line (restricted)</option>
+                                    </select>
+                                </div>
+                                <div class="fd-field">
+                                    <label for="cf-left-oh">Left overhang to PL (in mm)</label>
+                                    <input type="number" id="cf-left-oh" step="1" inputmode="numeric" value="0" placeholder="0 = col face at PL">
+                                </div>
+                                <div class="fd-field">
+                                    <label for="cf-right-restrict">Right edge</label>
+                                    <select id="cf-right-restrict">
+                                        <option value="0">Free (can extend)</option>
+                                        <option value="1">Property line (restricted)</option>
+                                    </select>
+                                </div>
+                                <div class="fd-field">
+                                    <label for="cf-right-oh">Right overhang to PL (in mm)</label>
+                                    <input type="number" id="cf-right-oh" step="1" inputmode="numeric" value="0" placeholder="0 = col face at PL">
+                                </div>
+                            </div>
+                            <p class="fd-hint" style="margin: 8px 4px 0;">
+                                Column 1's loads come from \(P_{DL}\) / \(P_{LL}\) in the Loading section
+                                (set Load Type to &ldquo;Individual Loads&rdquo;). If only one edge is on a property
+                                line, a Rectangular footing is used; if both edges are restricted, a Trapezoidal
+                                footing is used.
+                            </p>
+                        </fieldset>
+
                     </div>
 
                     <div class="fd-actions">
@@ -495,6 +545,15 @@
                     methodL.style.display = "none";
                 }
             });
+            // Show the Combined Footing fieldset only when that type is picked.
+            const cfFieldset = document.getElementById('cf-fieldset');
+            function toggleCombinedFooting() {
+                if (cfFieldset) cfFieldset.style.display =
+                    (selectStructure.value === 'Strip') ? 'block' : 'none';
+            }
+            selectStructure.addEventListener('change', toggleCombinedFooting);
+            toggleCombinedFooting();   // honour the saved/initial value on load
+
             selectStructure.addEventListener("change", function () {
                 if (selectStructure.value === "Isolated Rectangular") {
                     LengthRestrictionLabel.style.display = "block";
