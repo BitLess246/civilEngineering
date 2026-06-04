@@ -130,9 +130,14 @@ document.addEventListener("DOMContentLoaded", () => {
             if (remainingPx <= sliceHpx) {
                 nextY = canvas.height;
             } else {
+                // Snap the page bottom to the LARGEST whitespace gap
+                // that still fits on this page. No lower floor: a
+                // slightly short page is always better than slicing a
+                // chip / multi-line equation in half. Only when NO gap
+                // fits (a single element taller than a whole page) do
+                // we hard-cut at the page limit.
                 const hardMax = yPx + sliceHpx;
-                const softMin = yPx + Math.floor(sliceHpx * 0.4);
-                const fit = breaks.filter(b => b > softMin && b <= hardMax);
+                const fit = breaks.filter(b => b > yPx && b <= hardMax);
                 nextY = fit.length ? Math.max(...fit) : hardMax;
             }
             const thisSliceH = nextY - yPx;
@@ -215,6 +220,26 @@ document.addEventListener("DOMContentLoaded", () => {
                     else parent.insertBefore(det, nextSibling);
                 });
             }
+
+            // Move the "Batch Foundation Design — N footings" title bar
+            // INTO the first foundation card so it rides on that card's
+            // opening page, instead of getting a near-empty page of its
+            // own (per-block capture would otherwise give the title its
+            // own page). Restored in finally{}.
+            const titleEl   = target.querySelector(':scope > .fd-batch-title');
+            const firstCard = target.querySelector(':scope > .fd-batch-card');
+            if (titleEl && firstCard) {
+                const tParent = titleEl.parentNode;
+                const tNext   = titleEl.nextSibling;
+                titleEl.style.marginBottom = '14px';
+                firstCard.insertBefore(titleEl, firstCard.firstChild);
+                restoreOps.push(() => {
+                    titleEl.style.marginBottom = '';
+                    if (tNext) tParent.insertBefore(titleEl, tNext);
+                    else tParent.appendChild(titleEl);
+                });
+            }
+
             await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
         }
 
