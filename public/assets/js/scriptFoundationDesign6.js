@@ -22,7 +22,7 @@ function renderMath(element) {
             trust: true,
             macros: {
                 "\\kN":  "\\,\\text{kN}",
-                "\\kNm": "\\,\\text{kN·m}",
+                "\\kNm": "\\,\\text{kN}\\cdot\\text{m}",
                 "\\mm":  "\\,\\text{mm}",
                 "\\MPa": "\\,\\text{MPa}",
                 "\\kPa": "\\,\\text{kPa}"
@@ -632,7 +632,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return { ...s, Rn, rho, rhoUse, As: Asf, n, sc };
         });
         flexRows.forEach(fr => {
-            P(`$$\\ \\textbf{${fr.label}: } M_u = ${fr.Mu.toFixed(1)}\\text{ kN·m}, \\; b = ${fr.bmm.toFixed(0)}\\text{ mm}, \\; d = ${dFlex.toFixed(0)}\\text{ mm} \$$`);
+            P(`$$\\ \\textbf{${fr.label}: } M_u = ${fr.Mu.toFixed(1)}\\text{ kN}\\cdot\\text{m}, \\; b = ${fr.bmm.toFixed(0)}\\text{ mm}, \\; d = ${dFlex.toFixed(0)}\\text{ mm} \$$`);
             P(`$$\\ R_n = \\frac{M_u}{\\phi b d^2} = ${fr.Rn.toFixed(3)}\\text{ MPa}, \\; \\rho = ${fr.rhoUse.toFixed(6)} \\;\\Rightarrow\\; A_s = ${fr.As.toFixed(0)}\\text{ mm}^2 \$$`);
             P(`$$\\ n = \\lceil A_s/A_b \\rceil = ${fr.n}\\text{ bars } \\varnothing${db}\\text{ mm}, \\; s_c = ${fr.sc ? fr.sc.toFixed(0) : '—'}\\text{ mm}${fr.sc && fr.sc >= scMin ? '\\;✓' : ''} \$$`);
         });
@@ -655,7 +655,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const As_perm = rhoUse * 1000 * dT;
             const sBar = Ab / As_perm * 1000;                           // spacing mm for 1 m
             P(`$$\\ \\textbf{${lbl}: } B_y = ${(Byloc*1000).toFixed(0)}\\text{ mm}, \\; \\text{arm} = \\tfrac{B_y - c_y}{2} = ${(arm*1000).toFixed(0)}\\text{ mm} \$$`);
-            P(`$$\\ q_{strip} = \\frac{P_u}{B_x B_y} = ${qStrip.toFixed(2)}\\text{ kPa}, \\; M_u = \\tfrac{q\\,arm^2}{2} = ${Mu_perm.toFixed(2)}\\text{ kN·m/m} \$$`);
+            P(`$$\\ q_{strip} = \\frac{P_u}{B_x B_y} = ${qStrip.toFixed(2)}\\text{ kPa}, \\; M_u = \\tfrac{q\\,arm^2}{2} = ${Mu_perm.toFixed(2)}\\text{ kN}\\cdot\\text{m/m} \$$`);
             P(`$$\\ \\rho = ${rhoUse.toFixed(6)}, \\; A_s = ${As_perm.toFixed(0)}\\text{ mm}^2/m \\;\\Rightarrow\\; \\varnothing${db}\\text{ @ } ${sBar.toFixed(0)}\\text{ mm o.c.} \$$`);
         });
 

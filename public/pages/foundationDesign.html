@@ -193,11 +193,13 @@
                                 </div>
 
                                 <div class="fd-field">
-                                    <label for="DeadLoad">\(P_{DL}\) (in kN)</label>
+                                    <label for="DeadLoad" id="pdlLabel">\(P_{DL}\) (in kN)</label>
+                                    <label for="DeadLoad" id="pdlLabelCF" style="display: none;">\(P_{DL,1}\) (in kN)</label>
                                     <input type="number" id="DeadLoad" step="0.001" inputmode="decimal">
                                 </div>
                                 <div class="fd-field">
-                                    <label for="LiveLoad">\(P_{LL}\) (in kN)</label>
+                                    <label for="LiveLoad" id="pllLabel">\(P_{LL}\) (in kN)</label>
+                                    <label for="LiveLoad" id="pllLabelCF" style="display: none;">\(P_{LL,1}\) (in kN)</label>
                                     <input type="number" id="LiveLoad" step="0.001" inputmode="decimal">
                                 </div>
                                 <div class="fd-field">
@@ -265,11 +267,11 @@
                                     <input type="number" id="cf-col2-width" step="1" inputmode="numeric" placeholder="defaults to Column 1">
                                 </div>
                                 <div class="fd-field">
-                                    <label for="cf-pdl2">Column 2 \(P_{DL,2}\) (in kN)</label>
+                                    <label for="cf-pdl2">\(P_{DL,2}\) (in kN)</label>
                                     <input type="number" id="cf-pdl2" step="0.01" inputmode="decimal">
                                 </div>
                                 <div class="fd-field">
-                                    <label for="cf-pll2">Column 2 \(P_{LL,2}\) (in kN)</label>
+                                    <label for="cf-pll2">\(P_{LL,2}\) (in kN)</label>
                                     <input type="number" id="cf-pll2" step="0.01" inputmode="decimal">
                                 </div>
                             </div>
@@ -584,6 +586,8 @@
             const pllField       = pll.closest('.fd-field');
             const loadingGrid    = pdlField.parentElement;
             const mdlxField      = document.getElementById('mdlx').closest('.fd-field');
+            const pdlLabelCF     = document.getElementById('pdlLabelCF');
+            const pllLabelCF     = document.getElementById('pllLabelCF');
             const COL_WIDTH_LABEL_DEFAULT = cLabel.textContent;
             function toggleCombinedFooting() {
                 const isCF = (selectStructure.value === 'Strip');
@@ -612,6 +616,11 @@
                     cLabel.style.display = ''; ccLabel.style.display = 'none'; c.style.display = '';
                     cLabel.textContent = 'Column 1 Width (square, in mm)';
                     columnLegend.textContent = 'Column 1';
+                    // Show the ",1"-subscripted Column 1 load labels.
+                    if (pdlLabel)   pdlLabel.style.display   = 'none';
+                    if (pllLabel)   pllLabel.style.display   = 'none';
+                    if (pdlLabelCF) pdlLabelCF.style.display = '';
+                    if (pllLabelCF) pllLabelCF.style.display = '';
                 } else {
                     // Move DL/LL back into the Loading card (original order).
                     loadingGrid.insertBefore(pdlField, mdlxField);
@@ -623,6 +632,11 @@
                     colWidthYField.style.display = '';
                     cLabel.textContent = COL_WIDTH_LABEL_DEFAULT;
                     columnLegend.textContent = 'Column';
+                    // Restore the default (unsubscripted) Column 1 load labels.
+                    if (pdlLabelCF) pdlLabelCF.style.display = 'none';
+                    if (pllLabelCF) pllLabelCF.style.display = 'none';
+                    if (pdlLabel)   pdlLabel.style.display   = '';
+                    if (pllLabel)   pllLabel.style.display   = '';
                     // Re-apply the correct labels/inputs for the chosen shape.
                     columnShape.dispatchEvent(new Event('change'));
                 }
