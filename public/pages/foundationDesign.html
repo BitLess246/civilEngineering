@@ -83,7 +83,7 @@
 
                         <!-- ============ Analysis &amp; Geometry ============ -->
                         <fieldset class="fd-section">
-                            <legend>Analysis &amp; Geometry</legend>
+                            <legend id="ag-legend">Analysis &amp; Geometry</legend>
                             <div class="fd-grid">
                                 <div class="fd-field">
                                     <label for="analysisMethod">Analysis Method</label>
@@ -142,7 +142,39 @@
                                         <option value="2">Approximate (Initial \(D_c\))</option>
                                     </select>
                                 </div>
+                                <!-- Combined-footing layout (shown only for Combined Footing) -->
+                                <div class="fd-field" id="cf-sf-field" style="display: none;">
+                                    <label for="cf-sf">Column spacing \(s_f\) (c/c, in m)</label>
+                                    <input type="number" id="cf-sf" step="0.01" inputmode="decimal">
+                                </div>
+                                <div class="fd-field" id="cf-left-restrict-field" style="display: none;">
+                                    <label for="cf-left-restrict">Left edge</label>
+                                    <select id="cf-left-restrict">
+                                        <option value="0">Free (can extend)</option>
+                                        <option value="1">Property line (restricted)</option>
+                                    </select>
+                                </div>
+                                <div class="fd-field" id="cf-left-oh-field" style="display: none;">
+                                    <label for="cf-left-oh">Left overhang past Col 1 face (in mm)</label>
+                                    <input type="number" id="cf-left-oh" step="1" inputmode="numeric" value="0" placeholder="0 = col face on the line">
+                                </div>
+                                <div class="fd-field" id="cf-right-restrict-field" style="display: none;">
+                                    <label for="cf-right-restrict">Right edge</label>
+                                    <select id="cf-right-restrict">
+                                        <option value="0">Free (can extend)</option>
+                                        <option value="1">Property line (restricted)</option>
+                                    </select>
+                                </div>
+                                <div class="fd-field" id="cf-right-oh-field" style="display: none;">
+                                    <label for="cf-right-oh">Right overhang past Col 2 face (in mm)</label>
+                                    <input type="number" id="cf-right-oh" step="1" inputmode="numeric" value="0" placeholder="0 = col face on the line">
+                                </div>
                             </div>
+                            <p class="fd-hint" id="cf-layout-hint" style="display: none; margin: 8px 4px 0;">
+                                If one edge is a property line and the other is free, a <strong>Rectangular</strong> footing is
+                                used. If both edges are on property lines, a <strong>Trapezoidal</strong> footing is used. The
+                                overhang is the slab projection past the column face toward the property line; a free edge has none.
+                            </p>
                         </fieldset>
 
                         <!-- ============ Loading ============ -->
@@ -276,44 +308,6 @@
                                 </div>
                             </div>
                             <p class="fd-hint" style="margin: 8px 4px 0;">Leave the width blank to reuse Column 1's size.</p>
-                        </fieldset>
-
-                        <!-- ===== Combined Footing: Footing Layout (shown only for combined footing) ===== -->
-                        <fieldset class="fd-section" id="cf-layout-fieldset" style="display: none;">
-                            <legend>Footing Layout</legend>
-                            <div class="fd-grid">
-                                <div class="fd-field">
-                                    <label for="cf-sf">Column spacing \(s_f\) (c/c, in m)</label>
-                                    <input type="number" id="cf-sf" step="0.01" inputmode="decimal">
-                                </div>
-                                <div class="fd-field">
-                                    <label for="cf-left-restrict">Left edge</label>
-                                    <select id="cf-left-restrict">
-                                        <option value="0">Free (can extend)</option>
-                                        <option value="1">Property line (restricted)</option>
-                                    </select>
-                                </div>
-                                <div class="fd-field" id="cf-left-oh-field" style="display: none;">
-                                    <label for="cf-left-oh">Left overhang past Col 1 face (in mm)</label>
-                                    <input type="number" id="cf-left-oh" step="1" inputmode="numeric" value="0" placeholder="0 = col face on the line">
-                                </div>
-                                <div class="fd-field">
-                                    <label for="cf-right-restrict">Right edge</label>
-                                    <select id="cf-right-restrict">
-                                        <option value="0">Free (can extend)</option>
-                                        <option value="1">Property line (restricted)</option>
-                                    </select>
-                                </div>
-                                <div class="fd-field" id="cf-right-oh-field" style="display: none;">
-                                    <label for="cf-right-oh">Right overhang past Col 2 face (in mm)</label>
-                                    <input type="number" id="cf-right-oh" step="1" inputmode="numeric" value="0" placeholder="0 = col face on the line">
-                                </div>
-                            </div>
-                            <p class="fd-hint" style="margin: 8px 4px 0;">
-                                If one edge is a property line and the other is free, a <strong>Rectangular</strong> footing is
-                                used. If both edges are on property lines, a <strong>Trapezoidal</strong> footing is used. The
-                                overhang is the slab projection past the column face toward the property line; a free edge has none.
-                            </p>
                         </fieldset>
 
                         <!-- ============ Reinforcement &amp; Footing ============ -->
@@ -573,9 +567,19 @@
             //   • rename the "Column" legend to "Column 1".
             // Everything is reverted for the other footing types.
             const cfCol2   = document.getElementById('cf-col2-fieldset');
-            const cfLayout = document.getElementById('cf-layout-fieldset');
             const columnLegend        = document.getElementById('column-legend');
             const loadingFieldset     = document.getElementById('loading-fieldset');
+            // Geometry card: the Analysis Method + Solution Method dropdowns are
+            // hidden for a Combined Footing (they don't affect that engine path),
+            // and the footing-layout fields (spacing + edges) now live in this
+            // same card so it isn't left with just the Foundation Type dropdown.
+            const agLegend            = document.getElementById('ag-legend');
+            const analysisMethodField = analysisMethod.closest('.fd-field');
+            const methodField         = method.closest('.fd-field');
+            const cfSfField     = document.getElementById('cf-sf-field');
+            const cfLeftRField  = document.getElementById('cf-left-restrict-field');
+            const cfRightRField = document.getElementById('cf-right-restrict-field');
+            const cfLayoutHint  = document.getElementById('cf-layout-hint');
             const columnLocationField = document.getElementById('ColumnLocation').closest('.fd-field');
             const colShapeField  = columnShape.closest('.fd-field');
             const colWidthField  = c.closest('.fd-field');
@@ -591,9 +595,24 @@
             const COL_WIDTH_LABEL_DEFAULT = cLabel.textContent;
             function toggleCombinedFooting() {
                 const isCF = (selectStructure.value === 'Strip');
-                if (cfCol2)   cfCol2.style.display   = isCF ? 'block' : 'none';
-                if (cfLayout) cfLayout.style.display = isCF ? 'block' : 'none';
+                if (cfCol2) cfCol2.style.display = isCF ? 'block' : 'none';
+                // Footing-layout (spacing + edges) fields live in the Geometry card.
+                if (cfSfField)     cfSfField.style.display     = isCF ? '' : 'none';
+                if (cfLeftRField)  cfLeftRField.style.display  = isCF ? '' : 'none';
+                if (cfRightRField) cfRightRField.style.display = isCF ? '' : 'none';
+                if (cfLayoutHint)  cfLayoutHint.style.display  = isCF ? '' : 'none';
                 if (isCF) {
+                    // A Combined Footing is always a detailed design and the
+                    // Analysis/Solution-Method dropdowns don't affect its engine
+                    // path, so force "design" (keeps Foundation Type visible,
+                    // hides the bx/by/dc analyze inputs) and hide both dropdowns.
+                    if (analysisMethod.value !== 'design') {
+                        analysisMethod.value = 'design';
+                        analysisMethod.dispatchEvent(new Event('change'));
+                    }
+                    if (analysisMethodField) analysisMethodField.style.display = 'none';
+                    if (methodField)         methodField.style.display         = 'none';
+                    if (agLegend) agLegend.textContent = 'Geometry';
                     // Force the per-column load model.
                     if (loadType.value !== 'individual') {
                         loadType.value = 'individual';
@@ -621,7 +640,12 @@
                     if (pllLabel)   pllLabel.style.display   = 'none';
                     if (pdlLabelCF) pdlLabelCF.style.display = '';
                     if (pllLabelCF) pllLabelCF.style.display = '';
+                    toggleOverhangs();
                 } else {
+                    // Restore the Analysis/Solution-Method dropdowns + legend.
+                    if (analysisMethodField) analysisMethodField.style.display = '';
+                    if (methodField)         methodField.style.display         = '';
+                    if (agLegend) agLegend.textContent = 'Analysis & Geometry';
                     // Move DL/LL back into the Loading card (original order).
                     loadingGrid.insertBefore(pdlField, mdlxField);
                     loadingGrid.insertBefore(pllField, mdlxField);
@@ -639,6 +663,7 @@
                     if (pllLabel)   pllLabel.style.display   = '';
                     // Re-apply the correct labels/inputs for the chosen shape.
                     columnShape.dispatchEvent(new Event('change'));
+                    toggleOverhangs();
                 }
             }
             selectStructure.addEventListener('change', toggleCombinedFooting);
@@ -650,8 +675,9 @@
             const cfLeftOhF  = document.getElementById('cf-left-oh-field');
             const cfRightOhF = document.getElementById('cf-right-oh-field');
             function toggleOverhangs() {
-                if (cfLeftOhF)  cfLeftOhF.style.display  = (cfLeftR  && cfLeftR.value  === '1') ? 'block' : 'none';
-                if (cfRightOhF) cfRightOhF.style.display = (cfRightR && cfRightR.value === '1') ? 'block' : 'none';
+                const isCF = (selectStructure.value === 'Strip');
+                if (cfLeftOhF)  cfLeftOhF.style.display  = (isCF && cfLeftR  && cfLeftR.value  === '1') ? '' : 'none';
+                if (cfRightOhF) cfRightOhF.style.display = (isCF && cfRightR && cfRightR.value === '1') ? '' : 'none';
             }
             if (cfLeftR)  cfLeftR.addEventListener('change', toggleOverhangs);
             if (cfRightR) cfRightR.addEventListener('change', toggleOverhangs);
