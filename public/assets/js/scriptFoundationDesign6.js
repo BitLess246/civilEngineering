@@ -64,7 +64,7 @@ function cfInterpAt(x, xs, arr) {
 }
 function cfDrawDiagram(container, xs, ys, opts = {}) {
     const { color = '#0056b3', fillColor = 'rgba(0,86,179,0.15)',
-            yLabel = '', unit = '', title = '', curvXs = [] } = opts;
+            yLabel = '', unit = '', title = '', curvXs = [], vlines = [] } = opts;
     const W = 900, H = 260;
     const padL = 70, padR = 24, padT = 28, padB = 40;
     const iW = W - padL - padR, iH = H - padT - padB;
@@ -131,6 +131,17 @@ function cfDrawDiagram(container, xs, ys, opts = {}) {
         }
     }
 
+    // Dashed vertical section markers (e.g. V_u @ d, M_u @ column face).
+    let vmarks = '';
+    if (Array.isArray(vlines)) {
+        for (const vl of vlines) {
+            if (vl.x < xMin - 1e-6 || vl.x > xMax + 1e-6) continue;
+            const px = sx(vl.x);
+            vmarks += `<line x1="${px}" y1="${padT}" x2="${px}" y2="${padT + iH}" stroke="#6b7280" stroke-width="1.2" stroke-dasharray="5,4"/>`;
+            if (vl.label) vmarks += `<text x="${px + 3}" y="${padT + 11}" font-size="9" fill="#475569" text-anchor="start" paint-order="stroke" stroke="rgba(255,255,255,0.9)" stroke-width="3">${cfEscapeXml(vl.label)}</text>`;
+        }
+    }
+
     container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
         ${title ? `<text x="${W / 2}" y="16" font-size="13" font-weight="600" fill="#1f2933" text-anchor="middle">${cfEscapeXml(title)}</text>` : ''}
         <rect x="${padL}" y="${padT}" width="${iW}" height="${iH}" fill="#fafbfc" stroke="#e1e4e8"/>
@@ -138,6 +149,7 @@ function cfDrawDiagram(container, xs, ys, opts = {}) {
         <polygon points="${fill}" fill="${fillColor}"/>
         <polyline points="${path}" stroke="${color}" stroke-width="2" fill="none"/>
         ${xt}${yt}
+        ${vmarks}
         ${curvDots}
         ${diamonds}
         ${labels}
@@ -185,14 +197,33 @@ function cfGaussSolve(A, b) {
     }
     return u;
 }
+// A column is modelled as a UNIFORM LINE LOAD over its width cw (the slide
+// convention) rather than a concentrated point load. These return the part of
+// the column load carried to the LEFT of section x — its shear and moment.
+// cw = 0 degrades gracefully to a point load at xc.
+function cfColV(x, xc, cw, P) {
+    const xL = xc - cw / 2, xR = xc + cw / 2;
+    if (x <= xL) return 0;
+    if (x >= xR) return P;
+    return P * (x - xL) / cw;                  // partial (linear ramp through the width)
+}
+function cfColM(x, xc, cw, P) {
+    const xL = xc - cw / 2, xR = xc + cw / 2;
+    if (x <= xL) return 0;
+    if (x >= xR) return P * (x - xc);          // full load, resultant at the centroid xc
+    return P * (x - xL) * (x - xL) / (2 * cw); // partial block, centroid at (xL+x)/2
+}
 // Solve the footing as a beam on a Winkler foundation.
 //   Bx       : footing length (m)
-//   columns  : [{ x (m, from left edge), P (kN, downward) }, …]
+//   columns  : [{ x (m, from left edge), P (kN, downward), w (m, width) }, …]
 //   EI       : flexural rigidity (kN·m²)
 //   ks       : modulus of subgrade reaction (kN/m³)
 //   widthAt  : (x) => transverse width B_y at x (m)  — handles CTF taper
 //   nElem    : base element count (column stations are added as nodes)
 // Returns { xs, w, q, V, M, qmax, nNodes } with origin at the left edge.
+// Columns are applied as point loads in the FEM (width ≪ characteristic
+// length, so the pressure is unaffected) but recovered as LINE loads over
+// their width, so V steps through a smooth ramp instead of a vertical jump.
 function cfSolveBoEF({ Bx, columns, EI, ks, widthAt, nElem = 160 }) {
     // ── Node mesh: uniform grid + exact column stations ──
     const xset = new Set();
@@ -273,7 +304,7 @@ function cfSolveBoEF({ Bx, columns, EI, ks, widthAt, nElem = 160 }) {
             moment += 0.5 * (pLine[i] * xs[i] + pLine[i - 1] * xs[i - 1]) * dx;
         }
         let vCol = 0, mCol = 0;
-        for (const c of columns) if (c.x <= xs[i] + 1e-9) { vCol += c.P; mCol += c.P * (xs[i] - c.x); }
+        for (const c of columns) { vCol += cfColV(xs[i], c.x, c.w || 0, c.P); mCol += cfColM(xs[i], c.x, c.w || 0, c.P); }
         V[i] = area - vCol;
         M[i] = (area * xs[i] - moment) - mCol;             // ∫(x−s)p ds = x∫p − ∫s·p
     }
@@ -778,7 +809,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // ── Step 4 — Soil-pressure model, then V(x) & M(x) ────────────
-        let Vat, Mat, flexData = null;
+        // wu1/wu2/alpha are hoisted so the (rigid) loading diagram can reuse
+        // them after the thickness steps; columns act as line loads over their
+        // width (cfColV/cfColM), matching the lecture-slide convention.
+        let Vat, Mat, flexData = null, wu1 = 0, wu2 = 0, alpha = 0;
         if (!flexible) {
             // RIGID (conventional) — equivalent uniformly-varying line load.
             H5('Equivalent Uniformly-Varying Ultimate Line Load');
@@ -786,23 +820,15 @@ document.addEventListener("DOMContentLoaded", () => {
             const wsum = 2 * Pu / Bx;
             const SPx  = Pu1 * x1 + Pu2 * x2;
             const w1p2 = 6 * SPx / (Bx * Bx);
-            const wu2 = w1p2 - wsum, wu1 = wsum - wu2;
-            const alpha = (wu2 - wu1) / Bx;
+            wu2 = w1p2 - wsum; wu1 = wsum - wu2;
+            alpha = (wu2 - wu1) / Bx;
             P(`$$\\ w_{u1} + w_{u2} = \\frac{2P_u}{B_x} = ${wsum.toFixed(3)}\\;\\tfrac{kN}{m} \$$`);
             P(`$$\\ w_{u1} + 2w_{u2} = \\frac{6\\sum P_{ui}x_i}{B_x^2} = ${w1p2.toFixed(3)} \$$`);
             P(`$$\\ w_{u1} = ${wu1.toFixed(3)}\\;\\tfrac{kN}{m}, \\quad w_{u2} = ${wu2.toFixed(3)}\\;\\tfrac{kN}{m}, \\quad \\alpha = ${alpha.toFixed(4)} \$$`);
-            // Closed-form V and M along x (origin at left edge).
-            const colX = [x1, x2], colP = [Pu1, Pu2];
-            Vat = (x) => {
-                let v = wu1 * x + alpha * x * x / 2;
-                for (let i = 0; i < 2; i++) if (colX[i] <= x + 1e-9) v -= colP[i];
-                return v;
-            };
-            Mat = (x) => {
-                let m = wu1 * x * x / 2 + alpha * x * x * x / 6;
-                for (let i = 0; i < 2; i++) if (colX[i] <= x + 1e-9) m -= colP[i] * (x - colX[i]);
-                return m;
-            };
+            CL('Each column is taken as a uniform line load over its width (so \\(V\\) ramps through the column instead of a vertical jump) — the convention used in the lecture slides.');
+            // Closed-form V and M along x (origin at left edge); columns as line loads.
+            Vat = (x) => (wu1 * x + alpha * x * x / 2) - cfColV(x, x1, cx1m, Pu1) - cfColV(x, x2, cx2m, Pu2);
+            Mat = (x) => (wu1 * x * x / 2 + alpha * x * x * x / 6) - cfColM(x, x1, cx1m, Pu1) - cfColM(x, x2, cx2m, Pu2);
         } else {
             // FLEXIBLE — beam on a Winkler elastic foundation (FEM).
             H5('Flexible Analysis — Beam on Elastic (Winkler) Foundation');
@@ -813,8 +839,8 @@ document.addEventListener("DOMContentLoaded", () => {
             const A0 = (shape[0] === 'R') ? Bx * By : (By1 + By2) * Bx / 2;
             const dTrial = _cfPunchDepth(Math.max(Pu1, Pu2), Pu / A0, fc, cCritF);
             const DcTrial = Math.max(350, dTrial + cc + db + 25);   // mm
-            const colsS = [{ x: x1, P: Pa1 }, { x: x2, P: Pa2 }];    // service (bearing)
-            const colsU = [{ x: x1, P: Pu1 }, { x: x2, P: Pu2 }];    // factored (structural)
+            const colsS = [{ x: x1, P: Pa1, w: cx1m }, { x: x2, P: Pa2, w: cx2m }];  // service (bearing)
+            const colsU = [{ x: x1, P: Pu1, w: cx1m }, { x: x2, P: Pu2, w: cx2m }];  // factored (structural)
             const widthAt = (x) => (shape[0] === 'R') ? By : (By1 + (By2 - By1) * x / Bx);
             const EIof = () => Ec * ((shape[0] === 'R') ? By : (By1 + By2) / 2) * Math.pow(DcTrial / 1000, 3) / 12;
             // Bearing sizing (SERVICE loads): q ≈ ∝ 1/B_y, so scale up and re-solve.
@@ -852,50 +878,8 @@ document.addEventListener("DOMContentLoaded", () => {
             xpeak = mid;
         }
 
-        // ── Shear & Moment Diagrams (same SVG style as Beam Design) ────
-        H5('Shear &amp; Moment Diagrams');
-        CL(flexData
-            ? 'The footing is an inverted beam on the elastic foundation: the curved soil pressure \\(q(x)=k_s w(x)\\) below pushes up and the two columns push down. \\(V(x)\\) and \\(M(x)\\) are obtained by integrating the FEM pressure (origin at the left edge of the footing).'
-            : 'The footing acts as an inverted beam — the upward soil pressure (\\(w_{u1}\\!\\to\\!w_{u2}\\)) is the distributed load and the two columns are the downward point loads. Because the conventional rigid method fixes the pressure as linear, the system is statically determinate, so \\(V(x)\\) and \\(M(x)\\) below follow directly from statics (origin at the left edge of the footing).');
-        {
-            let xsF, Vsamp, Msamp;
-            if (flexData) {
-                // Use the FEM samples directly (already dense + at column nodes).
-                xsF = flexData.xs; Vsamp = flexData.V; Msamp = flexData.M;
-            } else {
-                const Npts = 200, epsX = 1e-4;
-                const xsamp = [];
-                for (let i = 0; i <= Npts; i++) xsamp.push(Bx * i / Npts);
-                // Insert the column stations twice (±ε) so the shear jump at each
-                // point load renders as a clean vertical step, plus the peak-moment x.
-                [x1, x2].forEach(xc => xsamp.push(xc - epsX, xc, xc + epsX));
-                xsamp.push(xpeak);
-                xsF = xsamp.filter(x => x >= -1e-9 && x <= Bx + 1e-9).sort((a, b) => a - b);
-                Vsamp = xsF.map(Vat);
-                Msamp = xsF.map(Mat);
-            }
-            // Flexible method → show the curved soil-pressure diagram first.
-            if (flexData) {
-                const qDiv = document.createElement('div'); qDiv.className = 'fd-diagram';
-                R.appendChild(qDiv);
-                cfDrawDiagram(qDiv, flexData.xs, flexData.q, {
-                    color: '#2ca02c', fillColor: 'rgba(44,160,44,0.18)',
-                    yLabel: 'q_u', unit: 'kPa', title: 'Factored Soil Pressure q_u(x) — elastic (Winkler)', curvXs: [x1, x2]
-                });
-            }
-            const sfdDiv = document.createElement('div'); sfdDiv.className = 'fd-diagram';
-            const bmdDiv = document.createElement('div'); bmdDiv.className = 'fd-diagram';
-            R.appendChild(sfdDiv);
-            R.appendChild(bmdDiv);
-            cfDrawDiagram(sfdDiv, xsF, Vsamp, {
-                color: '#1f77b4', fillColor: 'rgba(31,119,180,0.18)',
-                yLabel: 'V', unit: 'kN', title: 'Shear Force Diagram (factored)', curvXs: [x1, x2]
-            });
-            cfDrawDiagram(bmdDiv, xsF, Msamp, {
-                color: '#d62728', fillColor: 'rgba(214,39,40,0.18)',
-                yLabel: 'M', unit: 'kN·m', title: 'Bending Moment Diagram (factored)', curvXs: [x1, x2]
-            });
-        }
+        // (Loading / shear / moment diagrams are drawn after the thickness
+        //  steps below, so the V_u@d and M_u@face section lines can be shown.)
 
         // ── Step 5 — Slab thickness by punching shear (critical column) ─
         H5('Slab Thickness — Punching (Two-Way) Shear');
@@ -938,6 +922,74 @@ document.addEventListener("DOMContentLoaded", () => {
         // ── Governing thickness ───────────────────────────────────────
         const Dc = Math.max(Dc_punch, Dc_beam);
         H7(`Governing slab thickness: \\(D_c = ${Dc}\\) mm`);
+
+        // ── Loading, Shear & Moment Diagrams ──────────────────────────
+        // Drawn here (after the thickness steps) so the V_u@d and the
+        // column-face M_u sections can be marked as dashed verticals.
+        H5('Loading, Shear &amp; Moment Diagrams');
+        CL(flexData
+            ? 'The footing is an inverted beam on the elastic foundation: the curved soil pressure \\(q_u(x)=k_s w(x)\\) pushes up and the two columns (taken as line loads over their width) push down. \\(V\\) and \\(M\\) come from integrating the FEM pressure. Dashed lines mark the one-way-shear sections at \\(d\\) from the faces and the column-face moment sections.'
+            : 'The footing is an inverted beam: the upward soil pressure \\(w_u(x)=w_{u1}+\\alpha x\\) is the load and each column is a line load over its width (slide convention), so \\(V\\) ramps through the column. Dashed lines mark the one-way-shear sections at \\(d\\) from the faces and the column-face moment sections.');
+        {
+            const faceL = x1 + cx1m / 2, faceR = x2 - cx2m / 2;       // inner faces (M_u)
+            const dSecL = faceL + dBeam_m, dSecR = faceR - dBeam_m;   // d from faces (V_u)
+            const vSfd = [{ x: dSecL, label: 'V_u @ d' }, { x: dSecR, label: 'V_u @ d' }];
+            const vBmd = [{ x: faceL, label: 'M_u face' }, { x: faceR, label: 'M_u face' }, { x: xpeak, label: 'M_max' }];
+
+            // V / M samples.
+            let xsF, Vsamp, Msamp;
+            if (flexData) {
+                xsF = flexData.xs; Vsamp = flexData.V; Msamp = flexData.M;
+            } else {
+                const N = 240, e = 1e-4, xset = [];
+                for (let i = 0; i <= N; i++) xset.push(Bx * i / N);
+                // column-edge stations (±ε) capture the line-load ramp ends.
+                [[x1, cx1m], [x2, cx2m]].forEach(([xc, cw]) =>
+                    xset.push(xc - cw / 2 - e, xc - cw / 2 + e, xc + cw / 2 - e, xc + cw / 2 + e));
+                xset.push(xpeak, faceL, faceR, dSecL, dSecR);
+                xsF = xset.filter(x => x >= -1e-9 && x <= Bx + 1e-9).sort((a, b) => a - b);
+                Vsamp = xsF.map(Vat);
+                Msamp = xsF.map(Mat);
+            }
+
+            // 1) Loading diagram.
+            const loadDiv = document.createElement('div'); loadDiv.className = 'fd-diagram';
+            R.appendChild(loadDiv);
+            if (flexData) {
+                cfDrawDiagram(loadDiv, flexData.xs, flexData.q, {
+                    color: '#2ca02c', fillColor: 'rgba(44,160,44,0.18)',
+                    yLabel: 'q_u', unit: 'kPa', title: 'Factored Soil Pressure q_u(x) — elastic (Winkler)',
+                    curvXs: [x1, x2]
+                });
+            } else {
+                // Soil line-load trapezoid; columns marked with their load.
+                const N = 160, xsL = [];
+                for (let i = 0; i <= N; i++) xsL.push(Bx * i / N);
+                const wsoil = xsL.map(x => wu1 + alpha * x);
+                cfDrawDiagram(loadDiv, xsL, wsoil, {
+                    color: '#9467bd', fillColor: 'rgba(148,103,189,0.18)',
+                    yLabel: 'w_u', unit: 'kN/m', title: 'Loading Diagram — soil line load w_u(x) (columns act downward)',
+                    curvXs: [x1, x2],
+                    vlines: [
+                        { x: x1, label: `Col 1: ${Pu1.toFixed(0)} kN` },
+                        { x: x2, label: `Col 2: ${Pu2.toFixed(0)} kN` }
+                    ]
+                });
+            }
+            // 2) Shear, 3) Moment with the critical-section verticals.
+            const sfdDiv = document.createElement('div'); sfdDiv.className = 'fd-diagram';
+            const bmdDiv = document.createElement('div'); bmdDiv.className = 'fd-diagram';
+            R.appendChild(sfdDiv);
+            R.appendChild(bmdDiv);
+            cfDrawDiagram(sfdDiv, xsF, Vsamp, {
+                color: '#1f77b4', fillColor: 'rgba(31,119,180,0.18)',
+                yLabel: 'V', unit: 'kN', title: 'Shear Force Diagram (factored)', curvXs: [x1, x2], vlines: vSfd
+            });
+            cfDrawDiagram(bmdDiv, xsF, Msamp, {
+                color: '#d62728', fillColor: 'rgba(214,39,40,0.18)',
+                yLabel: 'M', unit: 'kN·m', title: 'Bending Moment Diagram (factored)', curvXs: [x1, x2], vlines: vBmd
+            });
+        }
 
         // ── Step 7 — Longitudinal flexure at critical sections ────────
         H5('Longitudinal Flexure Design (along \\(x\\))');
