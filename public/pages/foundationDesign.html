@@ -326,7 +326,7 @@
                             <legend>Reinforcement &amp; Footing</legend>
                             <div class="fd-grid">
                                 <div class="fd-field">
-                                    <label for="Depth">Total Footing Thickness \(H\) (in meters)</label>
+                                    <label for="Depth">Total Footing Depth \(H\) (in meters)</label>
                                     <input type="number" id="Depth" step="0.001" inputmode="decimal">
                                 </div>
                                 <div class="fd-field">
@@ -524,47 +524,41 @@
             console.log("Loaded Field Values");
             // Add change event listener to the structure type select element
 
-            analysisMethod.addEventListener("change", function () {
-                if (analysisMethod.value === "design"){
-                    bx.style.display = "none";
-                    by.style.display = "none";
-                    dc.style.display = "none";
-                    bxLabel.style.display = "none";
-                    byLabel.style.display = "none";
-                    dcLabel.style.display = "none";
-                    strucL.style.display = "block";
-                    selectStructure.style.display = "block";
-                    method.style.display = "block";
-                    methodL.style.display = "block";
-                } else if (analysisMethod.value === "analyze"){
-                    bx.style.display = "block";
-                    by.style.display = "block";
-                    dc.style.display = "block";
-                    bxLabel.style.display = "block";
-                    byLabel.style.display = "block";
-                    dcLabel.style.display = "block";
-                    strucL.style.display = "none";
-                    selectStructure.style.display = "none";
-                    LengthRestrictionLabel.style.display = "none";
-                    lengthRestriction.style.display = "none";
-                    lengthRestriction.value = "0";
-                    ratioLabelL.style.display = "none";
-                    ratioLabelB.style.display = "none";
-                    ratioInputL.style.display = "none";
-                    ratioInputB.style.display = "none";
-                    limitationLabel.style.display = "none";
-                    limitation.style.display = "none";
-                    method.style.display = "none";
-                    methodL.style.display = "none";
+            // ── Form-visibility helpers (Analysis Method + Foundation Type) ──
+            // One small helper + a few focused functions replace what used to be
+            // four overlapping change-listeners full of repeated style toggles.
+            const setVis = (els, show) => els.forEach(e => { if (e) e.style.display = show ? 'block' : 'none'; });
+
+            // Length-ratio / constriction inputs apply ONLY to a design-mode
+            // Isolated Rectangular footing.
+            function applyLengthRestriction() {
+                const show = analysisMethod.value !== 'analyze' && selectStructure.value === 'Isolated Rectangular';
+                setVis([LengthRestrictionLabel, lengthRestriction], show);
+                if (!show) {
+                    lengthRestriction.value = '0';
+                    setVis([ratioLabelL, ratioLabelB, ratioInputL, ratioInputB, limitationLabel, limitation], false);
                 }
-            });
-            // Pile Cap lives on its own page — selecting it just navigates
-            // there (only on a real user change, never on initial load).
-            selectStructure.addEventListener('change', function () {
-                if (selectStructure.value === 'PileCap') {
-                    window.location.href = 'pileCapDesign.html';
-                }
-            });
+            }
+
+            // Analysis Method — "Analyze with specified dimensions" swaps the
+            // design flow for given Bx/By/Dc and hides the Foundation-Type +
+            // Solution-Method pickers; "Detailed Design" restores them.
+            function applyAnalysisMethod() {
+                const analyze = analysisMethod.value === 'analyze';
+                setVis([bx, bxLabel, by, byLabel, dc, dcLabel], analyze);
+                setVis([strucL, selectStructure, method, methodL], !analyze);
+                applyLengthRestriction();
+            }
+            analysisMethod.addEventListener('change', applyAnalysisMethod);
+
+            // Foundation Type — Pile Cap navigates to its own page; any other
+            // type just refreshes the combined-footing + restriction visibility.
+            function applyFoundationType() {
+                if (selectStructure.value === 'PileCap') { window.location.href = 'pileCapDesign.html'; return; }
+                toggleCombinedFooting();
+                applyLengthRestriction();
+            }
+            selectStructure.addEventListener('change', applyFoundationType);
 
             // ── Combined-footing form adaptation ──────────────────────
             // When "Combined Footing" is chosen we make the two columns read
@@ -682,7 +676,8 @@
                     toggleOverhangs();
                 }
             }
-            selectStructure.addEventListener('change', toggleCombinedFooting);
+            // (Foundation-Type change is routed through applyFoundationType above,
+            //  which calls toggleCombinedFooting — no separate listener needed.)
 
             // Overhang fields only matter for a restricted (property-line)
             // edge — a free edge has no property line and no overhang.
@@ -710,26 +705,10 @@
             if (cfMethodSel) cfMethodSel.addEventListener('change', toggleCfKs);
             toggleCfKs();
 
-            toggleCombinedFooting();   // honour the saved/initial value on load
-
-            selectStructure.addEventListener("change", function () {
-                if (selectStructure.value === "Isolated Rectangular") {
-                    LengthRestrictionLabel.style.display = "block";
-                    lengthRestriction.style.display = "block";
-                    console.log("5");
-                } else {
-                    LengthRestrictionLabel.style.display = "none";
-                    lengthRestriction.style.display = "none";
-                    lengthRestriction.value = "0";
-                    ratioLabelL.style.display = "none";
-                    ratioLabelB.style.display = "none";
-                    ratioInputL.style.display = "none";
-                    ratioInputB.style.display = "none";
-                    limitationLabel.style.display = "none";
-                    limitation.style.display = "none";
-                    console.log("6");
-                }
-            });
+            // Honour the initial Foundation Type + Analysis Method on load
+            // (without the Pile-Cap navigation, which is user-action only).
+            toggleCombinedFooting();
+            applyLengthRestriction();
 
 
             // Function to handle changes for 'centricity'
