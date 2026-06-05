@@ -309,7 +309,67 @@ function cfSolveBoEF({ Bx, columns, EI, ks, widthAt, nElem = 160 }) {
         M[i] = (area * xs[i] - moment) - mCol;             // ∫(x−s)p ds = x∫p − ∫s·p
     }
     const qmax = Math.max(...q);
-    return { xs, w, q, V, M, qmax, nNodes: nN };
+    return { xs, w, q, pLine, V, M, qmax, nNodes: nN };
+}
+
+// Schematic LOADING diagram (lecture-slide style): the upward soil line load
+// (trapezoid for rigid, curved for flexible) drawn below the beam with up-
+// arrows, and each column drawn ABOVE the beam as a downward line-load block
+// over its own width, labelled P / width = intensity (kN/m). Soil and column
+// loads use independent vertical scales (they differ by ~10×), exactly as the
+// slide draws them — both are labelled so the magnitudes stay unambiguous.
+function cfDrawLoadingDiagram(container, opts = {}) {
+    const { Bx, soilXs, soilYs, columns = [], title = 'Loading Diagram' } = opts;
+    const W = 900, H = 300;
+    const padL = 64, padR = 64;
+    const iW = W - padL - padR;
+    const sx = x => padL + (x / Bx) * iW;
+    const beamY = 152, beamH = 16;
+    const beamTop = beamY - beamH / 2, beamBot = beamY + beamH / 2;
+    const maxCol  = Math.max(...columns.map(c => c.P / c.w), 1e-6);
+    const maxSoil = Math.max(...soilYs.map(Math.abs), 1e-6);
+    const colScale  = 78 / maxCol;     // px per (kN/m), columns
+    const soilScale = 60 / maxSoil;    // px per (kN/m), soil (independent scale)
+    const n = soilXs.length;
+
+    let g = '';
+    // ── soil pressure (upward) below the beam ──
+    let poly = `${sx(soilXs[0])},${beamBot}`;
+    for (let i = 0; i < n; i++) poly += ` ${sx(soilXs[i])},${(beamBot + soilScale * soilYs[i]).toFixed(2)}`;
+    poly += ` ${sx(soilXs[n - 1])},${beamBot}`;
+    g += `<polygon points="${poly}" fill="rgba(31,119,180,0.16)" stroke="#1f77b4" stroke-width="1.5"/>`;
+    const nUp = 26;
+    for (let i = 0; i <= nUp; i++) {
+        const x = soilXs[0] + (soilXs[n - 1] - soilXs[0]) * i / nUp;
+        const yb = beamBot + soilScale * cfInterpAt(x, soilXs, soilYs), px = sx(x);
+        g += `<line x1="${px}" y1="${yb.toFixed(2)}" x2="${px}" y2="${beamBot + 1}" stroke="#1f77b4" stroke-width="0.9"/>`;
+        g += `<path d="M${(px - 2.4).toFixed(1)},${beamBot + 5} L${px},${beamBot + 0.5} L${(px + 2.4).toFixed(1)},${beamBot + 5}" fill="none" stroke="#1f77b4" stroke-width="0.9"/>`;
+    }
+    g += `<text x="${sx(soilXs[0])}" y="${(beamBot + soilScale * soilYs[0] + 15).toFixed(1)}" font-size="11" fill="#1565a6" text-anchor="middle">wᵤ₁ = ${soilYs[0].toFixed(0)} kN/m</text>`;
+    g += `<text x="${sx(soilXs[n - 1])}" y="${(beamBot + soilScale * soilYs[n - 1] + 15).toFixed(1)}" font-size="11" fill="#1565a6" text-anchor="middle">wᵤ₂ = ${soilYs[n - 1].toFixed(0)} kN/m</text>`;
+
+    // ── beam ──
+    g += `<rect x="${sx(0)}" y="${beamTop}" width="${(sx(Bx) - sx(0)).toFixed(1)}" height="${beamH}" fill="#cfe0f1" stroke="#37526e" stroke-width="1.5"/>`;
+
+    // ── column line loads (downward) above the beam ──
+    columns.forEach(c => {
+        const cxl = sx(c.x - c.w / 2), cxr = sx(c.x + c.w / 2);
+        const ll = c.P / c.w, ch = colScale * ll, yTop = beamTop - ch;
+        g += `<rect x="${cxl.toFixed(1)}" y="${yTop.toFixed(1)}" width="${Math.max(2, cxr - cxl).toFixed(1)}" height="${ch.toFixed(1)}" fill="rgba(214,39,40,0.16)" stroke="#d62728" stroke-width="1.5"/>`;
+        const na = Math.max(2, Math.round((cxr - cxl) / 7));
+        for (let i = 0; i <= na; i++) {
+            const x = cxl + (cxr - cxl) * i / na;
+            g += `<line x1="${x.toFixed(1)}" y1="${yTop.toFixed(1)}" x2="${x.toFixed(1)}" y2="${beamTop - 1}" stroke="#d62728" stroke-width="0.9"/>`;
+            g += `<path d="M${(x - 2.4).toFixed(1)},${beamTop - 5} L${x.toFixed(1)},${beamTop - 0.5} L${(x + 2.4).toFixed(1)},${beamTop - 5}" fill="none" stroke="#d62728" stroke-width="0.9"/>`;
+        }
+        g += `<text x="${((cxl + cxr) / 2).toFixed(1)}" y="${(yTop - 6).toFixed(1)}" font-size="10.5" font-weight="600" fill="#b3201f" text-anchor="middle">${c.P.toFixed(0)} / ${c.w.toFixed(2)} = ${ll.toFixed(0)} kN/m</text>`;
+    });
+
+    container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+        <text x="${W / 2}" y="16" font-size="13" font-weight="600" fill="#1f2933" text-anchor="middle">${cfEscapeXml(title)}</text>
+        ${g}
+        <text x="${padL + iW / 2}" y="${H - 6}" font-size="10" fill="#5c6773" text-anchor="middle">x (m) — origin at left edge</text>
+    </svg>`;
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -952,30 +1012,26 @@ document.addEventListener("DOMContentLoaded", () => {
                 Msamp = xsF.map(Mat);
             }
 
-            // 1) Loading diagram.
+            // 1) Loading diagram (schematic, slide style): the upward soil
+            //    line load (trapezoid for rigid, curved for flexible) plus each
+            //    column as a downward line load over its width (P / width).
             const loadDiv = document.createElement('div'); loadDiv.className = 'fd-diagram';
             R.appendChild(loadDiv);
+            const loadCols = [{ x: x1, w: cx1m, P: Pu1 }, { x: x2, w: cx2m, P: Pu2 }];
+            let soilXs, soilYs;
             if (flexData) {
-                cfDrawDiagram(loadDiv, flexData.xs, flexData.q, {
-                    color: '#2ca02c', fillColor: 'rgba(44,160,44,0.18)',
-                    yLabel: 'q_u', unit: 'kPa', title: 'Factored Soil Pressure q_u(x) — elastic (Winkler)',
-                    curvXs: [x1, x2]
-                });
+                soilXs = flexData.xs; soilYs = flexData.pLine;
             } else {
-                // Soil line-load trapezoid; columns marked with their load.
-                const N = 160, xsL = [];
-                for (let i = 0; i <= N; i++) xsL.push(Bx * i / N);
-                const wsoil = xsL.map(x => wu1 + alpha * x);
-                cfDrawDiagram(loadDiv, xsL, wsoil, {
-                    color: '#9467bd', fillColor: 'rgba(148,103,189,0.18)',
-                    yLabel: 'w_u', unit: 'kN/m', title: 'Loading Diagram — soil line load w_u(x) (columns act downward)',
-                    curvXs: [x1, x2],
-                    vlines: [
-                        { x: x1, label: `Col 1: ${Pu1.toFixed(0)} kN` },
-                        { x: x2, label: `Col 2: ${Pu2.toFixed(0)} kN` }
-                    ]
-                });
+                soilXs = []; soilYs = [];
+                const N = 60;
+                for (let i = 0; i <= N; i++) { const x = Bx * i / N; soilXs.push(x); soilYs.push(wu1 + alpha * x); }
             }
+            cfDrawLoadingDiagram(loadDiv, {
+                Bx, soilXs, soilYs, columns: loadCols,
+                title: flexData
+                    ? 'Loading Diagram — elastic soil line load (up) + column line loads (down)'
+                    : 'Loading Diagram — soil line load wᵤ(x) (up) + column line loads (down)'
+            });
             // 2) Shear, 3) Moment with the critical-section verticals.
             const sfdDiv = document.createElement('div'); sfdDiv.className = 'fd-diagram';
             const bmdDiv = document.createElement('div'); bmdDiv.className = 'fd-diagram';
