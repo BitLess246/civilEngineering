@@ -1041,6 +1041,23 @@ nav ul li a:hover {
     box-sizing: border-box;
 }
 
+/* Combined-footing shear/moment SVG diagrams (ported from Beam Design).
+   The diagram is a plain <div class="fd-diagram"> appended into #result;
+   keep it block + full-width so the legacy inline-block .latex-container
+   rules can't squash the SVG, and cap the width so it stays readable. */
+.fd-page .fd-diagram {
+    display: block !important;
+    width: 100% !important;
+    max-width: 760px;
+    margin: 4px auto 18px !important;
+    box-sizing: border-box;
+}
+.fd-page .fd-diagram svg {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
 .fd-page .fd-batch-card-body .latex-container p,
 
 

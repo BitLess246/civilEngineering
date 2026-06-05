@@ -40,6 +40,112 @@ function renderAllMath() {
     });
 }
 
+// ════════════════════════════════════════════════════════════════════════
+//  SVG V / M DIAGRAMS — ported from beamDesign.html drawDiagram() so the
+//  combined-footing solution shows shear/moment diagrams in the same style.
+//  Pure functions: feed regularly(-ish) sampled xs + ys arrays and an
+//  options bag, get back an inline-SVG string injected into `container`.
+// ════════════════════════════════════════════════════════════════════════
+function cfEscapeXml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+// Linear interpolation onto a sampled (xs, arr) curve — used to place the
+// open-circle markers exactly on the polyline at curvature-break positions.
+function cfInterpAt(x, xs, arr) {
+    if (x <= xs[0]) return arr[0];
+    if (x >= xs[xs.length - 1]) return arr[arr.length - 1];
+    let lo = 0, hi = xs.length - 1;
+    while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (xs[mid] <= x) lo = mid; else hi = mid;
+    }
+    const t = (x - xs[lo]) / (xs[hi] - xs[lo] || 1);
+    return arr[lo] + t * (arr[hi] - arr[lo]);
+}
+function cfDrawDiagram(container, xs, ys, opts = {}) {
+    const { color = '#0056b3', fillColor = 'rgba(0,86,179,0.15)',
+            yLabel = '', unit = '', title = '', curvXs = [] } = opts;
+    const W = 900, H = 260;
+    const padL = 70, padR = 24, padT = 28, padB = 40;
+    const iW = W - padL - padR, iH = H - padT - padB;
+    const xMin = 0, xMax = Math.max(...xs);
+    let yMin = Math.min(...ys, 0), yMax = Math.max(...ys, 0);
+    if (yMin === yMax) { yMin -= 1; yMax += 1; }
+    const yr = yMax - yMin; yMin -= yr * 0.14; yMax += yr * 0.14;
+    const sx = x => padL + (x - xMin) / (xMax - xMin) * iW;
+    const sy = y => padT + (yMax - y) / (yMax - yMin) * iH;
+    const yZero = sy(0);
+    const path = xs.map((x, i) => `${sx(x)},${sy(ys[i])}`).join(' ');
+    const fill = `${sx(xs[0])},${yZero} ${path} ${sx(xs[xs.length - 1])},${yZero}`;
+
+    let xt = '', yt = '';
+    for (let i = 0; i <= 6; i++) {
+        const v = xMin + (xMax - xMin) * i / 6, px = sx(v);
+        xt += `<line x1="${px}" y1="${padT + iH}" x2="${px}" y2="${padT + iH + 4}" stroke="#5c6773"/>
+               <text x="${px}" y="${padT + iH + 16}" font-size="10" fill="#5c6773" text-anchor="middle">${v.toFixed(2)}</text>`;
+    }
+    for (let i = 0; i <= 4; i++) {
+        const v = yMin + (yMax - yMin) * i / 4, py = sy(v);
+        yt += `<line x1="${padL - 4}" y1="${py}" x2="${padL}" y2="${py}" stroke="#5c6773"/>
+               <text x="${padL - 7}" y="${py + 3}" font-size="10" fill="#5c6773" text-anchor="end">${v.toFixed(2)}</text>`;
+    }
+
+    let iMax = 0, iMin = 0;
+    for (let i = 1; i < ys.length; i++) {
+        if (ys[i] > ys[iMax]) iMax = i;
+        if (ys[i] < ys[iMin]) iMin = i;
+    }
+    const peak = Math.max(Math.abs(ys[iMax]), Math.abs(ys[iMin]), 1e-9);
+    const eps  = peak * 0.005 + 1e-6;
+    const seen = new Set();
+    const points = [];
+    if (ys[iMax] >  eps) {
+        points.push({ x: xs[iMax], y: ys[iMax], label: `max = ${ys[iMax].toFixed(3)} ${unit}  @  x = ${xs[iMax].toFixed(3)} m`, above: true });
+        seen.add(iMax);
+    }
+    if (ys[iMin] < -eps) {
+        points.push({ x: xs[iMin], y: ys[iMin], label: `min = ${ys[iMin].toFixed(3)} ${unit}  @  x = ${xs[iMin].toFixed(3)} m`, above: false });
+        seen.add(iMin);
+    }
+    [0, ys.length - 1].forEach(ie => {
+        if (!seen.has(ie)) {
+            points.push({ x: xs[ie], y: ys[ie], label: `${ys[ie].toFixed(3)} ${unit}`, above: ys[ie] >= 0 });
+            seen.add(ie);
+        }
+    });
+
+    let diamonds = '', labels = '';
+    for (const p of points) {
+        const cx = sx(p.x), cy = sy(p.y), r = 6;
+        diamonds += `<polygon points="${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}" fill="#fff" stroke="${color}" stroke-width="2"/>`;
+        const labelY = p.above ? cy - 14 : cy + 22;
+        labels += `<text x="${cx}" y="${labelY}" font-size="10" font-weight="600" fill="${color}" text-anchor="middle" paint-order="stroke" stroke="rgba(255,255,255,0.85)" stroke-width="3">${cfEscapeXml(p.label)}</text>`;
+    }
+
+    let curvDots = '';
+    if (Array.isArray(curvXs)) {
+        for (const cx_val of curvXs) {
+            if (cx_val < xMin - 1e-6 || cx_val > xMax + 1e-6) continue;
+            const cy_val = cfInterpAt(cx_val, xs, ys);
+            curvDots += `<circle cx="${sx(cx_val)}" cy="${sy(cy_val)}" r="3.5" fill="#fff" stroke="${color}" stroke-width="1.5"/>`;
+        }
+    }
+
+    container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+        ${title ? `<text x="${W / 2}" y="16" font-size="13" font-weight="600" fill="#1f2933" text-anchor="middle">${cfEscapeXml(title)}</text>` : ''}
+        <rect x="${padL}" y="${padT}" width="${iW}" height="${iH}" fill="#fafbfc" stroke="#e1e4e8"/>
+        <line x1="${padL}" y1="${yZero}" x2="${padL + iW}" y2="${yZero}" stroke="#adb5bd" stroke-dasharray="3,3"/>
+        <polygon points="${fill}" fill="${fillColor}"/>
+        <polyline points="${path}" stroke="${color}" stroke-width="2" fill="none"/>
+        ${xt}${yt}
+        ${curvDots}
+        ${diamonds}
+        ${labels}
+        <text x="${padL + iW / 2}" y="${H - 6}" font-size="10" fill="#5c6773" text-anchor="middle">x (m)</text>
+        <text x="14" y="${padT + iH / 2}" font-size="10" fill="#5c6773" text-anchor="middle" transform="rotate(-90 14 ${padT + iH / 2})">${cfEscapeXml(yLabel)}${unit ? ` (${cfEscapeXml(unit)})` : ''}</text>
+    </svg>`;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     // exportFoundationPdf — snapshot the chosen result block with
     // html2canvas, embed in a jsPDF document, save as a real .pdf
@@ -541,6 +647,34 @@ document.addEventListener("DOMContentLoaded", () => {
             const mid = (lo + hi) / 2;
             if (Vat(mid) < 0) lo = mid; else hi = mid;
             xpeak = mid;
+        }
+
+        // ── Shear & Moment Diagrams (same SVG style as Beam Design) ────
+        H5('Shear &amp; Moment Diagrams');
+        CL('The footing acts as an inverted beam — the upward soil pressure (\\(w_{u1}\\!\\to\\!w_{u2}\\)) is the distributed load and the two columns are the downward point loads. Because the conventional rigid method fixes the pressure as linear, the system is statically determinate, so \\(V(x)\\) and \\(M(x)\\) below follow directly from statics (origin at the left edge of the footing).');
+        {
+            const Npts = 200, epsX = 1e-4;
+            const xsamp = [];
+            for (let i = 0; i <= Npts; i++) xsamp.push(Bx * i / Npts);
+            // Insert the column stations twice (±ε) so the shear jump at each
+            // point load renders as a clean vertical step, plus the peak-moment x.
+            [x1, x2].forEach(xc => xsamp.push(xc - epsX, xc, xc + epsX));
+            xsamp.push(xpeak);
+            const xsF = xsamp.filter(x => x >= -1e-9 && x <= Bx + 1e-9).sort((a, b) => a - b);
+            const Vsamp = xsF.map(Vat);
+            const Msamp = xsF.map(Mat);
+            const sfdDiv = document.createElement('div'); sfdDiv.className = 'fd-diagram';
+            const bmdDiv = document.createElement('div'); bmdDiv.className = 'fd-diagram';
+            R.appendChild(sfdDiv);
+            R.appendChild(bmdDiv);
+            cfDrawDiagram(sfdDiv, xsF, Vsamp, {
+                color: '#1f77b4', fillColor: 'rgba(31,119,180,0.18)',
+                yLabel: 'V', unit: 'kN', title: 'Shear Force Diagram (factored)', curvXs: [x1, x2]
+            });
+            cfDrawDiagram(bmdDiv, xsF, Msamp, {
+                color: '#d62728', fillColor: 'rgba(214,39,40,0.18)',
+                yLabel: 'M', unit: 'kN·m', title: 'Bending Moment Diagram (factored)', curvXs: [x1, x2]
+            });
         }
 
         // ── Step 5 — Slab thickness by punching shear (critical column) ─
