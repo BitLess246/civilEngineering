@@ -146,6 +146,141 @@ function cfDrawDiagram(container, xs, ys, opts = {}) {
     </svg>`;
 }
 
+// ════════════════════════════════════════════════════════════════════════
+//  BEAM ON ELASTIC FOUNDATION (Winkler) — flexible-method analysis for the
+//  combined footing. Euler-Bernoulli beam (Hermite cubic) resting on a bed
+//  of springs of modulus k_s (kN/m³). Unlike the rigid method (which assumes
+//  a straight-line pressure), this solves for the real, curved pressure
+//  q(x) = k_s · w(x), then derives V(x) and M(x) by integrating that pressure
+//  — so the result plugs straight into the same downstream design + diagrams.
+// ════════════════════════════════════════════════════════════════════════
+// Dense Gaussian elimination with partial pivoting. A is row-arrays, b vector.
+function cfGaussSolve(A, b) {
+    const n = b.length;
+    // Work on copies.
+    const M = A.map(r => Float64Array.from(r));
+    const x = Float64Array.from(b);
+    for (let col = 0; col < n; col++) {
+        // pivot
+        let piv = col, best = Math.abs(M[col][col]);
+        for (let r = col + 1; r < n; r++) {
+            const v = Math.abs(M[r][col]);
+            if (v > best) { best = v; piv = r; }
+        }
+        if (piv !== col) { const t = M[piv]; M[piv] = M[col]; M[col] = t; const tb = x[piv]; x[piv] = x[col]; x[col] = tb; }
+        const d = M[col][col] || 1e-30;
+        for (let r = col + 1; r < n; r++) {
+            const f = M[r][col] / d;
+            if (f === 0) continue;
+            for (let c = col; c < n; c++) M[r][c] -= f * M[col][c];
+            x[r] -= f * x[col];
+        }
+    }
+    // back-substitution
+    const u = new Float64Array(n);
+    for (let r = n - 1; r >= 0; r--) {
+        let s = x[r];
+        for (let c = r + 1; c < n; c++) s -= M[r][c] * u[c];
+        u[r] = s / (M[r][r] || 1e-30);
+    }
+    return u;
+}
+// Solve the footing as a beam on a Winkler foundation.
+//   Bx       : footing length (m)
+//   columns  : [{ x (m, from left edge), P (kN, downward) }, …]
+//   EI       : flexural rigidity (kN·m²)
+//   ks       : modulus of subgrade reaction (kN/m³)
+//   widthAt  : (x) => transverse width B_y at x (m)  — handles CTF taper
+//   nElem    : base element count (column stations are added as nodes)
+// Returns { xs, w, q, V, M, qmax, nNodes } with origin at the left edge.
+function cfSolveBoEF({ Bx, columns, EI, ks, widthAt, nElem = 160 }) {
+    // ── Node mesh: uniform grid + exact column stations ──
+    const xset = new Set();
+    for (let i = 0; i <= nElem; i++) xset.add(+(Bx * i / nElem).toFixed(6));
+    columns.forEach(c => xset.add(+Math.min(Math.max(c.x, 0), Bx).toFixed(6)));
+    const nodes = [...xset].filter(x => x >= -1e-9 && x <= Bx + 1e-9).sort((a, b) => a - b);
+    const nN = nodes.length, nDOF = 2 * nN;
+    const K = Array.from({ length: nDOF }, () => new Float64Array(nDOF));
+    const F = new Float64Array(nDOF);
+
+    for (let e = 0; e < nN - 1; e++) {
+        const xa = nodes[e], xb = nodes[e + 1], L = xb - xa;
+        if (L <= 0) continue;
+        const Bavg = (widthAt(xa) + widthAt(xb)) / 2;
+        const kl = ks * Bavg;                              // line foundation modulus (kN/m²)
+        const cb = EI / (L * L * L);
+        const L2 = L * L;
+        // Euler-Bernoulli bending stiffness
+        const Kb = [
+            [12 * cb,      6 * L * cb,    -12 * cb,     6 * L * cb],
+            [6 * L * cb,   4 * L2 * cb,   -6 * L * cb,  2 * L2 * cb],
+            [-12 * cb,    -6 * L * cb,    12 * cb,     -6 * L * cb],
+            [6 * L * cb,   2 * L2 * cb,   -6 * L * cb,  4 * L2 * cb]
+        ];
+        // Consistent Winkler foundation stiffness  (kl·L/420)·[…]
+        const cf = kl * L / 420;
+        const Kf = [
+            [156 * cf,     22 * L * cf,   54 * cf,     -13 * L * cf],
+            [22 * L * cf,  4 * L2 * cf,   13 * L * cf, -3 * L2 * cf],
+            [54 * cf,      13 * L * cf,   156 * cf,    -22 * L * cf],
+            [-13 * L * cf, -3 * L2 * cf, -22 * L * cf,  4 * L2 * cf]
+        ];
+        const map = [2 * e, 2 * e + 1, 2 * e + 2, 2 * e + 3];
+        for (let a = 0; a < 4; a++)
+            for (let bb = 0; bb < 4; bb++)
+                K[map[a]][map[bb]] += Kb[a][bb] + Kf[a][bb];
+    }
+    // ── Column point loads at their nodes (downward positive on the w DOF) ──
+    columns.forEach(c => {
+        let ni = 0, best = Infinity;
+        for (let i = 0; i < nN; i++) { const d = Math.abs(nodes[i] - c.x); if (d < best) { best = d; ni = i; } }
+        F[2 * ni] += c.P;
+    });
+
+    const u = cfGaussSolve(K, F);                          // [w0, θ0, w1, θ1, …]
+
+    // ── Sample w(x) via Hermite cubics; build pressure / shear / moment ──
+    const PPE = 6;                                         // sample points per element
+    const xs = [], w = [];
+    for (let e = 0; e < nN - 1; e++) {
+        const xa = nodes[e], xb = nodes[e + 1], L = xb - xa;
+        if (L <= 0) continue;
+        const w0 = u[2 * e], t0 = u[2 * e + 1], w1 = u[2 * e + 2], t1 = u[2 * e + 3];
+        const last = (e === nN - 2);
+        const steps = last ? PPE : PPE - 1;                // avoid duplicate shared node
+        for (let s = 0; s <= steps; s++) {
+            const xi = s / PPE;                            // local 0..1 (skip ξ=1 except last elem)
+            if (!last && s === PPE) break;
+            const N1 = 1 - 3 * xi * xi + 2 * xi * xi * xi;
+            const N2 = L * (xi - 2 * xi * xi + xi * xi * xi);
+            const N3 = 3 * xi * xi - 2 * xi * xi * xi;
+            const N4 = L * (-xi * xi + xi * xi * xi);
+            xs.push(xa + xi * L);
+            w.push(N1 * w0 + N2 * t0 + N3 * w1 + N4 * t1);
+        }
+    }
+    // Pressure (kPa) and the upward line load p = k_s·B·w (kN/m).
+    const q = w.map(wi => ks * wi);
+    const pLine = xs.map((x, i) => ks * widthAt(x) * w[i]);
+    // V(x) = ∫₀ˣ p ds − Σ P(left)  ;  M(x) = ∫₀ˣ (x−s)p ds − Σ P(left)(x−x_i)
+    const V = new Array(xs.length).fill(0);
+    const M = new Array(xs.length).fill(0);
+    let area = 0, moment = 0;                              // running ∫p and ∫s·p
+    for (let i = 0; i < xs.length; i++) {
+        if (i > 0) {
+            const dx = xs[i] - xs[i - 1];
+            area   += 0.5 * (pLine[i] + pLine[i - 1]) * dx;
+            moment += 0.5 * (pLine[i] * xs[i] + pLine[i - 1] * xs[i - 1]) * dx;
+        }
+        let vCol = 0, mCol = 0;
+        for (const c of columns) if (c.x <= xs[i] + 1e-9) { vCol += c.P; mCol += c.P * (xs[i] - c.x); }
+        V[i] = area - vCol;
+        M[i] = (area * xs[i] - moment) - mCol;             // ∫(x−s)p ds = x∫p − ∫s·p
+    }
+    const qmax = Math.max(...q);
+    return { xs, w, q, V, M, qmax, nNodes: nN };
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     // exportFoundationPdf — snapshot the chosen result block with
     // html2canvas, embed in a jsPDF document, save as a real .pdf
@@ -495,6 +630,23 @@ document.addEventListener("DOMContentLoaded", () => {
     // ── Pure helpers reused by the combined-footing flow ──────────────
     function _cfBeta1(fc) { return fc > 28 ? Math.max(0.65, 0.85 - 0.05 * (fc - 28) / 7) : 0.85; }
     function _cfRoundUp(v, step) { return Math.ceil(v / step) * step; }
+    // Newton-solve the punching (two-way) effective depth d (mm) for a single
+    // critical column: set φ·(1/3)√f'c·b_o·d = V_u with b_o = 4(d + c).
+    function _cfPunchDepth(Pcrit, qu, fc, cCrit) {
+        let dP = 0.155;                                   // m
+        for (let it = 0; it < 60; it++) {
+            const dmm = dP * 1000, cmm = cCrit;
+            const Ao = (dmm + cmm) * (dmm + cmm) / 1e6;   // m²
+            const Vu = (Pcrit - qu * Ao) * 1000;          // N
+            const f  = 0.75 * (1 / 3) * Math.sqrt(fc) * 4 * (dmm + cmm) * dmm - Vu;
+            const dd = 0.5;
+            const Ao2 = ((dmm + dd) + cmm) * ((dmm + dd) + cmm) / 1e6;
+            const Vu2 = (Pcrit - qu * Ao2) * 1000;
+            const f2 = 0.75 * (1 / 3) * Math.sqrt(fc) * 4 * ((dmm + dd) + cmm) * (dmm + dd) - Vu2;
+            dP = dP - (f / ((f2 - f) / dd)) / 1000;
+        }
+        return dP * 1000;                                 // mm
+    }
 
     function designCombinedFooting() {
         const R  = document.getElementById('result');
@@ -526,6 +678,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const rightRestrict = document.getElementById('cf-right-restrict').value === '1';
         const leftOh  = (num('cf-left-oh')  || 0) / 1000;   // m
         const rightOh = (num('cf-right-oh') || 0) / 1000;
+        // Analysis approach: rigid (conventional, straight-line pressure) or
+        // flexible (beam on a Winkler elastic foundation, needs k_s).
+        const cfMethodEl = document.getElementById('cf-method');
+        const cfMethod = cfMethodEl ? cfMethodEl.value : 'rigid';
+        const ksRaw = num('cf-ks');
+        const flexible = (cfMethod === 'flexible') && Number.isFinite(ksRaw) && ksRaw > 0;
+        const ks = flexible ? ksRaw : 0;
 
         // ── Validate the combined-footing-specific inputs ─────────────
         const need = { 'Col 1 P_DL': Pdl1, 'Col 1 P_LL': Pll1,
@@ -555,6 +714,8 @@ document.addEventListener("DOMContentLoaded", () => {
         GPH8(`$$\\ H = ${Hm}\\text{ m}, \\; d_b = ${db}, \\; d_{agg} = ${dAgg}, \\; C_c = ${cc}\\text{ mm} \$$`);
         GPH8(`$$\\ \\text{Left edge: ${leftRestrict ? 'property line, overhang ' + (leftOh*1000) + ' mm' : 'free'}} \$$`);
         GPH8(`$$\\ \\text{Right edge: ${rightRestrict ? 'property line, overhang ' + (rightOh*1000) + ' mm' : 'free'}} \$$`);
+        GPH8(`$$\\ \\text{Analysis: ${flexible ? 'Flexible — beam on elastic foundation' : 'Rigid — conventional'}} \$$`);
+        if (flexible) GPH8(`$$\\ k_s = ${ks}\\;\\tfrac{kN}{m^3} \$$`);
 
         // ── Step 1 — Service & factored column loads ──────────────────
         H5('Service & Factored Column Loads');
@@ -616,30 +777,72 @@ document.addEventListener("DOMContentLoaded", () => {
             P(`$$\\ \\bar{x} = \\frac{B_x}{3}\\cdot\\frac{2B_{y2}+B_{y1}}{B_{y2}+B_{y1}} \\;\\Rightarrow\\; B_{y2} = ${by2.toFixed(4)} \\approx ${By2}\\text{ m}, \\; B_{y1} = ${by1.toFixed(4)} \\approx ${By1}\\text{ m} \$$`);
         }
 
-        // ── Step 4 — Equivalent uniformly-varying ultimate pressure ───
-        H5('Equivalent Uniformly-Varying Ultimate Line Load');
-        CL('Convert the (slightly non-uniform) bearing into an equivalent uniformly-varying line load \\(w_u(x)=w_{u1}+\\alpha x\\) so the V & M diagrams can be drawn by statics.');
-        const wsum = 2 * Pu / Bx;
-        const SPx  = Pu1 * x1 + Pu2 * x2;
-        const w1p2 = 6 * SPx / (Bx * Bx);
-        const wu2 = w1p2 - wsum, wu1 = wsum - wu2;
-        const alpha = (wu2 - wu1) / Bx;
-        P(`$$\\ w_{u1} + w_{u2} = \\frac{2P_u}{B_x} = ${wsum.toFixed(3)}\\;\\tfrac{kN}{m} \$$`);
-        P(`$$\\ w_{u1} + 2w_{u2} = \\frac{6\\sum P_{ui}x_i}{B_x^2} = ${w1p2.toFixed(3)} \$$`);
-        P(`$$\\ w_{u1} = ${wu1.toFixed(3)}\\;\\tfrac{kN}{m}, \\quad w_{u2} = ${wu2.toFixed(3)}\\;\\tfrac{kN}{m}, \\quad \\alpha = ${alpha.toFixed(4)} \$$`);
-
-        // Closed-form V and M along x (origin at left edge).
-        const colX = [x1, x2], colP = [Pu1, Pu2];
-        const Vat = (x) => {
-            let v = wu1 * x + alpha * x * x / 2;
-            for (let i = 0; i < 2; i++) if (colX[i] <= x + 1e-9) v -= colP[i];
-            return v;
-        };
-        const Mat = (x) => {
-            let m = wu1 * x * x / 2 + alpha * x * x * x / 6;
-            for (let i = 0; i < 2; i++) if (colX[i] <= x + 1e-9) m -= colP[i] * (x - colX[i]);
-            return m;
-        };
+        // ── Step 4 — Soil-pressure model, then V(x) & M(x) ────────────
+        let Vat, Mat, flexData = null;
+        if (!flexible) {
+            // RIGID (conventional) — equivalent uniformly-varying line load.
+            H5('Equivalent Uniformly-Varying Ultimate Line Load');
+            CL('Convert the (slightly non-uniform) bearing into an equivalent uniformly-varying line load \\(w_u(x)=w_{u1}+\\alpha x\\) so the V & M diagrams can be drawn by statics.');
+            const wsum = 2 * Pu / Bx;
+            const SPx  = Pu1 * x1 + Pu2 * x2;
+            const w1p2 = 6 * SPx / (Bx * Bx);
+            const wu2 = w1p2 - wsum, wu1 = wsum - wu2;
+            const alpha = (wu2 - wu1) / Bx;
+            P(`$$\\ w_{u1} + w_{u2} = \\frac{2P_u}{B_x} = ${wsum.toFixed(3)}\\;\\tfrac{kN}{m} \$$`);
+            P(`$$\\ w_{u1} + 2w_{u2} = \\frac{6\\sum P_{ui}x_i}{B_x^2} = ${w1p2.toFixed(3)} \$$`);
+            P(`$$\\ w_{u1} = ${wu1.toFixed(3)}\\;\\tfrac{kN}{m}, \\quad w_{u2} = ${wu2.toFixed(3)}\\;\\tfrac{kN}{m}, \\quad \\alpha = ${alpha.toFixed(4)} \$$`);
+            // Closed-form V and M along x (origin at left edge).
+            const colX = [x1, x2], colP = [Pu1, Pu2];
+            Vat = (x) => {
+                let v = wu1 * x + alpha * x * x / 2;
+                for (let i = 0; i < 2; i++) if (colX[i] <= x + 1e-9) v -= colP[i];
+                return v;
+            };
+            Mat = (x) => {
+                let m = wu1 * x * x / 2 + alpha * x * x * x / 6;
+                for (let i = 0; i < 2; i++) if (colX[i] <= x + 1e-9) m -= colP[i] * (x - colX[i]);
+                return m;
+            };
+        } else {
+            // FLEXIBLE — beam on a Winkler elastic foundation (FEM).
+            H5('Flexible Analysis — Beam on Elastic (Winkler) Foundation');
+            CL('Instead of a straight-line pressure, model the slab as an Euler–Bernoulli beam on a bed of springs of modulus \\(k_s\\). The soil pressure \\(q(x)=k_s\\,w(x)\\) is solved by FEM (Hermite-cubic elements + a consistent foundation-stiffness matrix). Bearing is sized from the SERVICE-load peak pressure (\\(\\le q_{net}\\)); the structural \\(V\\) and \\(M\\) come from a second, FACTORED-load solution.');
+            const Ec = 4700 * Math.sqrt(fc) * 1000;          // kPa
+            // Trial slab depth (for EI) from a quick punching check.
+            const cCritF = (Pu2 >= Pu1) ? cx2 : cx1;
+            const A0 = (shape[0] === 'R') ? Bx * By : (By1 + By2) * Bx / 2;
+            const dTrial = _cfPunchDepth(Math.max(Pu1, Pu2), Pu / A0, fc, cCritF);
+            const DcTrial = Math.max(350, dTrial + cc + db + 25);   // mm
+            const colsS = [{ x: x1, P: Pa1 }, { x: x2, P: Pa2 }];    // service (bearing)
+            const colsU = [{ x: x1, P: Pu1 }, { x: x2, P: Pu2 }];    // factored (structural)
+            const widthAt = (x) => (shape[0] === 'R') ? By : (By1 + (By2 - By1) * x / Bx);
+            const EIof = () => Ec * ((shape[0] === 'R') ? By : (By1 + By2) / 2) * Math.pow(DcTrial / 1000, 3) / 12;
+            // Bearing sizing (SERVICE loads): q ≈ ∝ 1/B_y, so scale up and re-solve.
+            let resS, EIuse;
+            for (let it = 0; it < 5; it++) {
+                EIuse = EIof();
+                resS = cfSolveBoEF({ Bx, columns: colsS, EI: EIuse, ks, widthAt });
+                if (resS.qmax <= qnet * 1.0005 || it === 4) break;
+                const sc = resS.qmax / qnet;
+                By  = _cfRoundUp(By  * sc, 0.1);
+                By1 = _cfRoundUp(By1 * sc, 0.1);
+                By2 = _cfRoundUp(By2 * sc, 0.1);
+            }
+            // Structural forces at the adopted size (FACTORED loads).
+            EIuse = EIof();
+            const resU = cfSolveBoEF({ Bx, columns: colsU, EI: EIuse, ks, widthAt });
+            flexData = resU;                                   // V / M / q_u for diagrams + design
+            Vat = (x) => cfInterpAt(x, resU.xs, resU.V);
+            Mat = (x) => cfInterpAt(x, resU.xs, resU.M);
+            const okBear = resS.qmax <= qnet * 1.02;
+            P(`$$\\ E_c = 4700\\sqrt{f'_c} = ${(Ec/1000).toFixed(0)}\\text{ MPa}, \\quad k_s = ${ks}\\;\\tfrac{kN}{m^3} \$$`);
+            P(`$$\\ D_{c,trial} = ${DcTrial.toFixed(0)}\\text{ mm}, \\quad EI = ${(EIuse/1000).toFixed(0)}\\;\\text{MN}\\cdot\\text{m}^2 \$$`);
+            P(`$$\\ B_y\\text{ (adopted)} = ${shape[0]==='R' ? By.toFixed(2)+'\\text{ m}' : 'B_{y1}\\!=\\!'+By1.toFixed(2)+',\\;B_{y2}\\!=\\!'+By2.toFixed(2)+'\\text{ m}'} \$$`);
+            P(`$$\\ q_{max,service} = ${resS.qmax.toFixed(2)}\\text{ kPa} \\;${okBear ? '\\le' : '>'}\\; q_{net} = ${qnet.toFixed(2)}\\text{ kPa} \$$`);
+            CL(okBear
+                ? 'Service peak soil pressure is within the net allowable — the (possibly enlarged) plan size is adequate for bearing. The factored pressure plotted below concentrates under the columns, the effect the rigid method smears into a straight line.'
+                : 'Service peak soil pressure still exceeds the net allowable after enlargement — consider a thicker slab (a stiffer beam spreads the pressure) or larger plan dimensions. Design proceeds on the computed forces.');
+        }
         // zero-shear (max moment) between the columns — solve V=0 in (x1,x2)
         let xpeak = x1, lo = x1, hi = x2;
         // V just right of col1 is negative → increases toward col2; bisect for V=0.
@@ -651,18 +854,35 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // ── Shear & Moment Diagrams (same SVG style as Beam Design) ────
         H5('Shear &amp; Moment Diagrams');
-        CL('The footing acts as an inverted beam — the upward soil pressure (\\(w_{u1}\\!\\to\\!w_{u2}\\)) is the distributed load and the two columns are the downward point loads. Because the conventional rigid method fixes the pressure as linear, the system is statically determinate, so \\(V(x)\\) and \\(M(x)\\) below follow directly from statics (origin at the left edge of the footing).');
+        CL(flexData
+            ? 'The footing is an inverted beam on the elastic foundation: the curved soil pressure \\(q(x)=k_s w(x)\\) below pushes up and the two columns push down. \\(V(x)\\) and \\(M(x)\\) are obtained by integrating the FEM pressure (origin at the left edge of the footing).'
+            : 'The footing acts as an inverted beam — the upward soil pressure (\\(w_{u1}\\!\\to\\!w_{u2}\\)) is the distributed load and the two columns are the downward point loads. Because the conventional rigid method fixes the pressure as linear, the system is statically determinate, so \\(V(x)\\) and \\(M(x)\\) below follow directly from statics (origin at the left edge of the footing).');
         {
-            const Npts = 200, epsX = 1e-4;
-            const xsamp = [];
-            for (let i = 0; i <= Npts; i++) xsamp.push(Bx * i / Npts);
-            // Insert the column stations twice (±ε) so the shear jump at each
-            // point load renders as a clean vertical step, plus the peak-moment x.
-            [x1, x2].forEach(xc => xsamp.push(xc - epsX, xc, xc + epsX));
-            xsamp.push(xpeak);
-            const xsF = xsamp.filter(x => x >= -1e-9 && x <= Bx + 1e-9).sort((a, b) => a - b);
-            const Vsamp = xsF.map(Vat);
-            const Msamp = xsF.map(Mat);
+            let xsF, Vsamp, Msamp;
+            if (flexData) {
+                // Use the FEM samples directly (already dense + at column nodes).
+                xsF = flexData.xs; Vsamp = flexData.V; Msamp = flexData.M;
+            } else {
+                const Npts = 200, epsX = 1e-4;
+                const xsamp = [];
+                for (let i = 0; i <= Npts; i++) xsamp.push(Bx * i / Npts);
+                // Insert the column stations twice (±ε) so the shear jump at each
+                // point load renders as a clean vertical step, plus the peak-moment x.
+                [x1, x2].forEach(xc => xsamp.push(xc - epsX, xc, xc + epsX));
+                xsamp.push(xpeak);
+                xsF = xsamp.filter(x => x >= -1e-9 && x <= Bx + 1e-9).sort((a, b) => a - b);
+                Vsamp = xsF.map(Vat);
+                Msamp = xsF.map(Mat);
+            }
+            // Flexible method → show the curved soil-pressure diagram first.
+            if (flexData) {
+                const qDiv = document.createElement('div'); qDiv.className = 'fd-diagram';
+                R.appendChild(qDiv);
+                cfDrawDiagram(qDiv, flexData.xs, flexData.q, {
+                    color: '#2ca02c', fillColor: 'rgba(44,160,44,0.18)',
+                    yLabel: 'q_u', unit: 'kPa', title: 'Factored Soil Pressure q_u(x) — elastic (Winkler)', curvXs: [x1, x2]
+                });
+            }
             const sfdDiv = document.createElement('div'); sfdDiv.className = 'fd-diagram';
             const bmdDiv = document.createElement('div'); bmdDiv.className = 'fd-diagram';
             R.appendChild(sfdDiv);
@@ -684,19 +904,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const qu = Pu / A_foot;                              // kPa
         const Pcrit = Math.max(Pu1, Pu2);
         const cCrit = (Pu2 >= Pu1) ? cx2 : cx1;              // critical column's own size (mm)
-        let dP = 0.155;
-        for (let it = 0; it < 60; it++) {
-            const dmm = dP * 1000, cmm = cCrit;
-            const Ao = (dmm + cmm) * (dmm + cmm) / 1e6;       // m²
-            const Vu = (Pcrit - qu * Ao) * 1000;             // N
-            const f  = 0.75 * (1 / 3) * Math.sqrt(fc) * 4 * (dmm + cmm) * dmm - Vu;
-            const dd = 0.5;
-            const Ao2 = ((dmm + dd) + cmm) * ((dmm + dd) + cmm) / 1e6;
-            const Vu2 = (Pcrit - qu * Ao2) * 1000;
-            const f2 = 0.75 * (1 / 3) * Math.sqrt(fc) * 4 * ((dmm + dd) + cmm) * (dmm + dd) - Vu2;
-            dP = dP - (f / ((f2 - f) / dd)) / 1000;
-        }
-        const dpunch = dP * 1000;
+        const dpunch = _cfPunchDepth(Pcrit, qu, fc, cCrit);
         const Ao_final = (dpunch + cCrit) * (dpunch + cCrit) / 1e6;
         const Vu_punch = (Pcrit - qu * Ao_final);
         const Dc_punch = _cfRoundUp(dpunch + cc + db, 25);

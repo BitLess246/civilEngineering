@@ -147,6 +147,17 @@
                                     <label for="cf-sf">Column spacing \(s_f\) (c/c, in m)</label>
                                     <input type="number" id="cf-sf" step="0.01" inputmode="decimal">
                                 </div>
+                                <div class="fd-field" id="cf-method-field" style="display: none;">
+                                    <label for="cf-method">Analysis approach</label>
+                                    <select id="cf-method">
+                                        <option value="rigid">Rigid (conventional)</option>
+                                        <option value="flexible">Flexible (beam on elastic foundation)</option>
+                                    </select>
+                                </div>
+                                <div class="fd-field" id="cf-ks-field" style="display: none;">
+                                    <label for="cf-ks">Subgrade modulus \(k_s\) (in kN/m³)</label>
+                                    <input type="number" id="cf-ks" step="1000" inputmode="decimal" value="30000" placeholder="e.g. 30000">
+                                </div>
                                 <div class="fd-field" id="cf-left-restrict-field" style="display: none;">
                                     <label for="cf-left-restrict">Left edge</label>
                                     <select id="cf-left-restrict">
@@ -577,6 +588,9 @@
             const analysisMethodField = analysisMethod.closest('.fd-field');
             const methodField         = method.closest('.fd-field');
             const cfSfField     = document.getElementById('cf-sf-field');
+            const cfMethodField = document.getElementById('cf-method-field');
+            const cfMethodSel   = document.getElementById('cf-method');
+            const cfKsField     = document.getElementById('cf-ks-field');
             const cfLeftRField  = document.getElementById('cf-left-restrict-field');
             const cfRightRField = document.getElementById('cf-right-restrict-field');
             const cfLayoutHint  = document.getElementById('cf-layout-hint');
@@ -598,9 +612,11 @@
                 if (cfCol2) cfCol2.style.display = isCF ? 'block' : 'none';
                 // Footing-layout (spacing + edges) fields live in the Geometry card.
                 if (cfSfField)     cfSfField.style.display     = isCF ? '' : 'none';
+                if (cfMethodField) cfMethodField.style.display = isCF ? '' : 'none';
                 if (cfLeftRField)  cfLeftRField.style.display  = isCF ? '' : 'none';
                 if (cfRightRField) cfRightRField.style.display = isCF ? '' : 'none';
                 if (cfLayoutHint)  cfLayoutHint.style.display  = isCF ? '' : 'none';
+                toggleCfKs();   // k_s field only when CF + Flexible approach
                 if (isCF) {
                     // A Combined Footing is always a detailed design and the
                     // Analysis/Solution-Method dropdowns don't affect its engine
@@ -682,6 +698,17 @@
             if (cfLeftR)  cfLeftR.addEventListener('change', toggleOverhangs);
             if (cfRightR) cfRightR.addEventListener('change', toggleOverhangs);
             toggleOverhangs();
+
+            // The subgrade-modulus k_s field only appears for a Combined
+            // Footing analysed with the Flexible (beam-on-elastic-foundation)
+            // approach.
+            function toggleCfKs() {
+                const isCF = (selectStructure.value === 'Strip');
+                if (cfKsField) cfKsField.style.display =
+                    (isCF && cfMethodSel && cfMethodSel.value === 'flexible') ? '' : 'none';
+            }
+            if (cfMethodSel) cfMethodSel.addEventListener('change', toggleCfKs);
+            toggleCfKs();
 
             toggleCombinedFooting();   // honour the saved/initial value on load
 
