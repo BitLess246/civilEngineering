@@ -706,6 +706,28 @@ nav ul li a:hover {
     margin: 0;
 }
 
+/* Secondary "Autofill last inputs" button next to Calculate. */
+.fd-page #autofillBtn {
+    width: auto;
+    margin: 0;
+    background: #fff;
+    border: 1px solid #b3d4f0;
+    color: #0056b3;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-size: 0.95em;
+    font-weight: 600;
+    cursor: pointer;
+}
+.fd-page #autofillBtn:hover:not(:disabled) {
+    background: #e7f3ff;
+    border-color: #0056b3;
+}
+.fd-page #autofillBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .fd-page .fd-import-row {
     display: flex;
     align-items: center;

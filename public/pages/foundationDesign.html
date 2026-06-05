@@ -397,7 +397,9 @@
 
                     <div class="fd-actions">
                         <button id="calculate" type="submit" onclick="openTab(event, 'summary')">Calculate</button>
+                        <button id="autofillBtn" type="button" title="Restore the inputs from your last calculation" disabled>Autofill last inputs</button>
                     </div>
+                    <p class="fd-hint" style="text-align:center; margin-top:6px;">Pressing <strong>Calculate</strong> saves your inputs on this device. Use <strong>Autofill last inputs</strong> to bring them back later.</p>
 
                 </div>
             </form>
@@ -439,6 +441,8 @@
         calculateButton.addEventListener('click', function() {
             // Add the "active" class to the "Solutions" button
             summaryButton.classList.add('active');
+            // Persist the current inputs so the user can Autofill them later.
+            if (typeof saveFieldValues === 'function') saveFieldValues();
         });
 
         saveButton.addEventListener('click', function() {
@@ -457,14 +461,45 @@
 });
     </script>
     <script>
-        // Function to save input and select values to localStorage
+        // ── Form persistence ──────────────────────────────────────────
+        // Inputs are saved (as one JSON blob) only when the user presses
+        // Calculate, and restored only when the user clicks "Autofill last
+        // inputs" — never silently on page load.
+        const FD_SAVE_KEY = 'fd-saved-inputs';
+
         function saveFieldValues() {
-            document.querySelectorAll('input, select').forEach(field => {
-                localStorage.setItem(field.id, field.value); // Save values directly
+            const data = {};
+            document.querySelectorAll('.fd-page input, .fd-page select').forEach(field => {
+                if (field.id) data[field.id] = field.value;
             });
+            try { localStorage.setItem(FD_SAVE_KEY, JSON.stringify(data)); } catch (e) { /* storage full / disabled */ }
+            updateAutofillButton();
+        }
+
+        function autofillSavedInputs() {
+            let data = null;
+            try { data = JSON.parse(localStorage.getItem(FD_SAVE_KEY) || 'null'); } catch (e) {}
+            if (!data) return;
+            // Set every saved value, then fire change so the conditional
+            // show/hide logic (Foundation Type, Analysis Method, …) re-applies.
+            document.querySelectorAll('.fd-page input, .fd-page select').forEach(field => {
+                if (field.id && data[field.id] !== undefined) {
+                    field.value = data[field.id];
+                    field.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            });
+            if (typeof renderFormMath === 'function') renderFormMath();
+        }
+
+        // The Autofill button is only usable once something has been saved.
+        function updateAutofillButton() {
+            const btn = document.getElementById('autofillBtn');
+            if (btn) btn.disabled = !localStorage.getItem(FD_SAVE_KEY);
         }
     
-        // Function to load values from localStorage and ensure events trigger correctly
+        // Sets up the form: element references, the conditional show/hide
+        // logic, and all the field change-listeners. (Does NOT read saved
+        // values — that is opt-in via autofillSavedInputs / the Autofill button.)
         function loadFieldValues() {
             // Original script handling UI changes based on select values
             const analysisMethod = document.getElementById("analysisMethod");
@@ -889,34 +924,19 @@ handleLoadTypeChange(); // This ensures the display is set correctly on page loa
                 }
             });
 
-            document.querySelectorAll('input, select').forEach(field => {
-                const savedValue = localStorage.getItem(field.id);
-                if (savedValue !== null) {
-                    field.value = savedValue;
-                    console.log("get saved value");
-
-
-                    
-                    // Trigger the change event programmatically to update display logic
-                    const changeEvent = new Event('change', { bubbles: true });
-                    field.dispatchEvent(changeEvent); // Ensure the change event fires
-                    console.log("update display");
-                }
-            });
+            // (Saved values are NOT auto-loaded here any more — the user opts
+            //  in via the "Autofill last inputs" button instead.)
         }
     
         // Attach listeners after DOM content is fully loaded
         console.log("1");
         document.addEventListener('DOMContentLoaded', () => {
-            // Load saved values on page load
+            // Set up the form (element refs, conditional UI, listeners).
             loadFieldValues();
-            console.log("load values");
-            // Save field values when any input or select field changes
-            document.querySelectorAll('input, select').forEach(field => {
-                field.addEventListener('input', saveFieldValues);
-                field.addEventListener('change', saveFieldValues);
-
-            });
+            // Wire the opt-in Autofill button and reflect whether data exists.
+            const autofillBtn = document.getElementById('autofillBtn');
+            if (autofillBtn) autofillBtn.addEventListener('click', autofillSavedInputs);
+            updateAutofillButton();
 
             renderFormMath();
         });
