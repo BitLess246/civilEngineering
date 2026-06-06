@@ -835,16 +835,46 @@ document.addEventListener("DOMContentLoaded", () => {
         let shape, Bx, By, By1, By2, x1, x2, xbar, edgeOffset;
         if (!bothRestricted) {
             shape = 'Rectangular (CRF)';
-            edgeOffset = leftRestrict ? leftOh : 0;       // left edge to PL offset (m)
-            x1 = edgeOffset + cx1m / 2;                   // col1 centre from left edge
-            x2 = x1 + sf;
+            // Resultant of the service loads, measured from column 1 toward column 2.
+            const eRes = Pa2 * sf / Pa;                    // m
+            const aL = eRes + cx1m / 2;                    // resultant → left face of col 1
+            const aR = (sf - eRes) + cx2m / 2;             // resultant → right face of col 2
+            let note;
+            if (leftRestrict && !rightRestrict) {
+                // Left edge pinned to the property line; extend right to cover col 2.
+                x1 = leftOh + cx1m / 2;
+                const xbarPL = x1 + eRes;                  // resultant from the property line
+                const reach  = x1 + sf + cx2m / 2;         // right face of col 2
+                Bx = _cfRoundUp(Math.max(2 * xbarPL, reach), 0.1);
+                x2 = x1 + sf;
+                note = (2 * xbarPL >= reach - 1e-9)
+                    ? 'Left edge on the property line: \\(B_x = 2\\bar{x}\\) centres the slab on the resultant → uniform pressure.'
+                    : 'Left edge on the property line, but the exterior column is the heavier one, so \\(2\\bar{x}\\) would stop short of column 2 — \\(B_x\\) is extended to cover it. Pressure is then non-uniform (handled by \\(w_{u1},w_{u2}\\) below).';
+            } else if (rightRestrict && !leftRestrict) {
+                // Right edge pinned to the property line; extend left to cover col 1.
+                const x2FromR = rightOh + cx2m / 2;        // col 2 centre from the right edge
+                const xbarPL  = x2FromR + (sf - eRes);
+                const reach   = x2FromR + sf + cx1m / 2;
+                Bx = _cfRoundUp(Math.max(2 * xbarPL, reach), 0.1);
+                x2 = Bx - x2FromR;
+                x1 = x2 - sf;
+                note = (2 * xbarPL >= reach - 1e-9)
+                    ? 'Right edge on the property line: \\(B_x = 2\\bar{x}\\) centres the slab on the resultant → uniform pressure.'
+                    : 'Right edge on the property line, but the exterior column is heavier, so \\(B_x\\) is extended to cover column 1. Pressure is non-uniform (handled by \\(w_{u1},w_{u2}\\)).';
+            } else {
+                // Both edges free: centre the slab on the resultant, just long
+                // enough to cover both columns → uniform pressure.
+                Bx = _cfRoundUp(2 * Math.max(aL, aR), 0.1);
+                x1 = Bx / 2 - eRes;                        // places the centroid at the resultant
+                x2 = x1 + sf;
+                note = 'Both edges free: the slab is centred on the load resultant and sized to just cover both columns → uniform pressure.';
+            }
             xbar = (Pa1 * x1 + Pa2 * x2) / Pa;
-            Bx = _cfRoundUp(2 * xbar, 0.1);
             By = _cfRoundUp(Pa / (qnet * Bx), 0.1);
             By1 = By; By2 = By;
-            CL('A rectangular combined footing keeps the resultant centred by setting \\(B_x = 2\\bar{x}\\) (left edge at the property line / free edge).');
-            P(`$$\\ \\bar{x} = \\frac{P_{a1}\\,x_1 + P_{a2}\\,x_2}{P_a} = \\frac{${Pa1.toFixed(1)}(${x1.toFixed(3)}) + ${Pa2.toFixed(1)}(${x2.toFixed(3)})}{${Pa.toFixed(1)}} = ${xbar.toFixed(4)}\\text{ m} \$$`);
-            P(`$$\\ B_x = 2\\bar{x} = ${(2*xbar).toFixed(3)} \\approx ${Bx}\\text{ m} \$$`);
+            CL(note);
+            P(`$$\\ e = \\frac{P_{a2}\\,s_f}{P_a} = ${eRes.toFixed(3)}\\text{ m from col 1}, \\quad \\bar{x} = ${xbar.toFixed(3)}\\text{ m from the left edge} \$$`);
+            P(`$$\\ x_1 = ${x1.toFixed(3)}\\text{ m}, \\; x_2 = ${x2.toFixed(3)}\\text{ m}, \\; B_x = ${Bx}\\text{ m (covers both columns)} \$$`);
             P(`$$\\ B_y = \\frac{P_a}{q_{net} B_x} = \\frac{${Pa.toFixed(1)}}{${qnet.toFixed(3)}\\times ${Bx}} = ${(Pa/(qnet*Bx)).toFixed(3)} \\approx ${By}\\text{ m} \$$`);
         } else {
             shape = 'Trapezoidal (CTF)';
