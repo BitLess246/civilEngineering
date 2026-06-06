@@ -6,3 +6,37 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ════════════════════════════════════════════════════════════════════
+   Light UI refresh — composed from Tailwind utilities via @apply and
+   layered over styles1.css. Selectors match the legacy ones (and load
+   after styles1.css) so they win without touching the page markup.
+   Preflight stays off, so only these specific properties change.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Nav bar — subtle brand gradient + a soft lift. */
+nav {
+    @apply tw-bg-gradient-to-r tw-from-brand tw-to-brand-dark tw-shadow-md;
+}
+
+/* Form section cards — slightly rounder corners, a softer shadow, and a
+   gentle hover lift. */
+.fd-page .fd-section {
+    @apply tw-rounded-xl tw-shadow-sm tw-transition-shadow tw-duration-200;
+}
+.fd-page .fd-section:hover {
+    @apply tw-shadow-md;
+}
+
+/* Right-rail "Design preview" card — match the rounder card style. */
+.fd-page .fd-rail-card {
+    @apply tw-rounded-xl tw-shadow-sm;
+}
+
+/* Primary Calculate button — brand gradient + shadow + smooth hover. */
+.fd-page #calculate {
+    @apply tw-bg-gradient-to-br tw-from-brand tw-to-brand-dark tw-rounded-lg tw-shadow-md tw-transition tw-duration-150;
+}
+.fd-page #calculate:hover {
+    @apply tw-shadow-lg tw-brightness-105;
+}
