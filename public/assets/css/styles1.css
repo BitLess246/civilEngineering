@@ -577,7 +577,9 @@ nav ul li a:hover {
 .fd-page {
     max-width: none;          /* full-bleed white — no grey side strips */
     margin: 0;
-    padding: 0 22px 8px;
+    /* Non-zero top padding stops the <h1> top margin from collapsing out of
+       the card, which otherwise exposed a grey strip below the nav bar. */
+    padding: 14px 22px 8px;
 }
 
 /* Two-column shell: the form/results on the left, a sticky figure rail on
