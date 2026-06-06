@@ -1078,12 +1078,33 @@ handleLoadTypeChange(); // This ensures the display is set correctly on page loa
         // first run, and the restored values must re-fire their visibility
         // handlers (otherwise restored fields render but in the wrong show/hide
         // state — the "invisible field" bug).
+        // Collapse any .fd-field whose CONTROL is hidden, so a hidden input no
+        // longer leaves an empty cell in the grid (the "blank fields" bug —
+        // e.g. P_DL getting pushed to the far column past the hidden Ultimate
+        // Load / moment fields). We key off the control's own inline display,
+        // so wrapper-level toggles (combined-footing cards, analysis method)
+        // are never disturbed; and we only un-collapse fields WE collapsed.
+        function fdCollapseEmptyFields() {
+            document.querySelectorAll('.fd-page .fd-field').forEach(field => {
+                const ctrl = field.querySelector('input, select, textarea');
+                if (!ctrl) return;
+                if (ctrl.style.display === 'none') {
+                    field.dataset.fdCollapsed = '1';
+                    field.style.display = 'none';
+                } else if (field.dataset.fdCollapsed === '1') {
+                    delete field.dataset.fdCollapsed;
+                    field.style.display = '';
+                }
+            });
+        }
+
         function fdResyncVisibility() {
             ['analysisMethod','structureType','loadType','centricity','columnShape',
              'LengthRestriction','cf-method','cf-left-restrict','cf-right-restrict'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el && el.value !== 'PileCap') el.dispatchEvent(new Event('change', { bubbles: true }));
             });
+            fdCollapseEmptyFields();
             drawFoundationSchematic();
         }
 
@@ -1097,8 +1118,12 @@ handleLoadTypeChange(); // This ensures the display is set correctly on page loa
                 f.addEventListener('input', onEdit);
                 f.addEventListener('change', onEdit);
             });
+            // After every change, collapse the cells of any newly-hidden fields.
+            const fdPage = document.querySelector('.fd-page');
+            if (fdPage) fdPage.addEventListener('change', fdCollapseEmptyFields);
 
             fdResyncVisibility();
+            fdCollapseEmptyFields();   // also fix the blanks present on first load
             renderFormMath();
         });
         window.addEventListener('load', fdResyncVisibility);
