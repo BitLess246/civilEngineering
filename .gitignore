@@ -102,3 +102,6 @@ dist
 # VS Code directories
 .vscode/
 .history/
+
+# Vite React build output (served by Express under /app)
+/public/app/
