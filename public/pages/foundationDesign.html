@@ -397,9 +397,8 @@
 
                     <div class="fd-actions">
                         <button id="calculate" type="submit" onclick="openTab(event, 'summary')">Calculate</button>
-                        <button id="autofillBtn" type="button" title="Restore the inputs from your last calculation" disabled>Autofill last inputs</button>
                     </div>
-                    <p class="fd-hint" style="text-align:center; margin-top:6px;">Pressing <strong>Calculate</strong> saves your inputs on this device. Use <strong>Autofill last inputs</strong> to bring them back later.</p>
+                    <p class="fd-hint" style="text-align:center; margin-top:6px;">Pressing <strong>Calculate</strong> remembers your entries on this device — next time, focus a field to pick a saved value from its suggestion list.</p>
 
                 </div>
             </form>
@@ -461,45 +460,57 @@
 });
     </script>
     <script>
-        // ── Form persistence ──────────────────────────────────────────
-        // Inputs are saved (as one JSON blob) only when the user presses
-        // Calculate, and restored only when the user clicks "Autofill last
-        // inputs" — never silently on page load.
-        const FD_SAVE_KEY = 'fd-saved-inputs';
-
+        // ── Form persistence: native autofill-style suggestions ───────
+        // On Calculate, each field's value is appended to a small per-field
+        // history. Every input gets a <datalist> built from that history, so
+        // focusing the field shows the browser's native suggestion dropdown
+        // (like a remembered login form). Nothing is filled automatically —
+        // the user picks a suggestion.
+        const FD_HISTORY_KEY = 'fd-field-history';
+        const FD_HISTORY_MAX = 6;
+        const FD_FIELDS = '.fd-page input:not([type="file"]):not([type="checkbox"]):not([type="radio"])';
+        function fdLoadHistory() {
+            try { return JSON.parse(localStorage.getItem(FD_HISTORY_KEY) || '{}') || {}; }
+            catch (e) { return {}; }
+        }
         function saveFieldValues() {
-            const data = {};
-            document.querySelectorAll('.fd-page input, .fd-page select').forEach(field => {
-                if (field.id) data[field.id] = field.value;
+            const h = fdLoadHistory();
+            document.querySelectorAll(FD_FIELDS).forEach(field => {
+                if (!field.id) return;
+                const v = (field.value || '').trim();
+                if (v === '') return;
+                const arr = (h[field.id] || []).filter(x => x !== v);
+                arr.unshift(v);                       // most-recent first
+                h[field.id] = arr.slice(0, FD_HISTORY_MAX);
             });
-            try { localStorage.setItem(FD_SAVE_KEY, JSON.stringify(data)); } catch (e) { /* storage full / disabled */ }
-            updateAutofillButton();
+            try { localStorage.setItem(FD_HISTORY_KEY, JSON.stringify(h)); } catch (e) {}
+            buildSuggestionLists();
         }
-
-        function autofillSavedInputs() {
-            let data = null;
-            try { data = JSON.parse(localStorage.getItem(FD_SAVE_KEY) || 'null'); } catch (e) {}
-            if (!data) return;
-            // Set every saved value, then fire change so the conditional
-            // show/hide logic (Foundation Type, Analysis Method, …) re-applies.
-            document.querySelectorAll('.fd-page input, .fd-page select').forEach(field => {
-                if (field.id && data[field.id] !== undefined) {
-                    field.value = data[field.id];
-                    field.dispatchEvent(new Event('change', { bubbles: true }));
+        // Attach/refresh a <datalist> of saved values on each field.
+        function buildSuggestionLists() {
+            const h = fdLoadHistory();
+            document.querySelectorAll(FD_FIELDS).forEach(field => {
+                if (!field.id) return;
+                const hist = h[field.id];
+                if (!hist || !hist.length) return;
+                const dlId = 'dl-' + field.id;
+                let dl = document.getElementById(dlId);
+                if (!dl) {
+                    dl = document.createElement('datalist');
+                    dl.id = dlId;
+                    field.insertAdjacentElement('afterend', dl);
+                    field.setAttribute('list', dlId);
+                    field.setAttribute('autocomplete', 'on');
                 }
+                dl.innerHTML = hist.map(v =>
+                    '<option value="' + String(v).replace(/"/g, '&quot;') + '"></option>'
+                ).join('');
             });
-            if (typeof renderFormMath === 'function') renderFormMath();
-        }
-
-        // The Autofill button is only usable once something has been saved.
-        function updateAutofillButton() {
-            const btn = document.getElementById('autofillBtn');
-            if (btn) btn.disabled = !localStorage.getItem(FD_SAVE_KEY);
         }
     
         // Sets up the form: element references, the conditional show/hide
-        // logic, and all the field change-listeners. (Does NOT read saved
-        // values — that is opt-in via autofillSavedInputs / the Autofill button.)
+        // logic, and all the field change-listeners. (Does NOT fill any saved
+        // values — those are offered as native <datalist> suggestions instead.)
         function loadFieldValues() {
             // Original script handling UI changes based on select values
             const analysisMethod = document.getElementById("analysisMethod");
@@ -931,13 +942,8 @@ handleLoadTypeChange(); // This ensures the display is set correctly on page loa
         // Attach listeners after DOM content is fully loaded
         console.log("1");
         document.addEventListener('DOMContentLoaded', () => {
-            // Set up the form (element refs, conditional UI, listeners).
-            loadFieldValues();
-            // Wire the opt-in Autofill button and reflect whether data exists.
-            const autofillBtn = document.getElementById('autofillBtn');
-            if (autofillBtn) autofillBtn.addEventListener('click', autofillSavedInputs);
-            updateAutofillButton();
-
+            loadFieldValues();        // form setup (element refs, conditional UI)
+            buildSuggestionLists();   // offer saved suggestions on field focus
             renderFormMath();
         });
         // Render KaTeX in the form labels (e.g. \(B_x\), \(P_u\),
