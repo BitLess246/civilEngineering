@@ -75,6 +75,8 @@
                 </details>
             </div>
 
+            <div class="fd-shell">
+            <div class="fd-main">
             <form id="formFoundation">
 
                 <div id="foundationInputs" class="form-group">
@@ -426,6 +428,16 @@
                     <span aria-hidden="true">&#8595;</span>&nbsp; Download PDF
                 </button>
             </div>
+            </div><!-- /.fd-main -->
+
+            <aside class="fd-rail">
+                <div class="fd-rail-card">
+                    <h3>Design preview</h3>
+                    <p class="fd-rail-sub">Schematic of the current inputs — plan &amp; section. Updates as you type.</p>
+                    <div id="fd-schematic-figure"></div>
+                </div>
+            </aside>
+            </div><!-- /.fd-shell -->
         </div>
         
 
@@ -941,9 +953,106 @@ handleLoadTypeChange(); // This ensures the display is set correctly on page loa
     
         // Attach listeners after DOM content is fully loaded
         console.log("1");
+        // ── Live design-preview schematic (right rail) ────────────────
+        // Draws a plan + section of the current inputs (column footprint,
+        // layout, depth) and redraws on every field change. The solved
+        // Bx/By/Dc are labelled "solved on Calculate" until the engine
+        // publishes them (a follow-up will redraw to the real dimensions).
+        function drawFoundationSchematic() {
+            const box = document.getElementById('fd-schematic-figure');
+            if (!box) return;
+            const numv = id => { const e = document.getElementById(id); return e ? parseFloat(e.value) : NaN; };
+            const strv = id => { const e = document.getElementById(id); return e ? e.value : ''; };
+            const fmt  = v => Number.isFinite(v) ? Math.round(v).toString() : '?';
+            const fmtM = v => Number.isFinite(v) ? v.toFixed(2) : '?';
+
+            const stype = strv('structureType');
+            const isCombined = stype === 'Strip';
+            const isPile = stype === 'PileCap';
+            const shape = strv('columnShape') || 'square';
+
+            let cw, ch, isCirc = false;
+            if (shape === 'circle')        { cw = ch = numv('ColumnWidth') || 300; isCirc = true; }
+            else if (shape === 'rectangular') { cw = numv('ColumnWidthX') || 300; ch = numv('ColumnWidthY') || 400; }
+            else                           { cw = ch = numv('ColumnWidth') || 300; }
+            const c2v = numv('cf-col2-width');
+            const c2w = (isCombined && Number.isFinite(c2v) && c2v > 0) ? c2v : cw;
+            const Hm = numv('Depth'), Cc = numv('Cover'), sf = numv('cf-sf');
+
+            const W = 360;
+            let g = '', planH = 0;
+            const planTop = 30;
+
+            if (isPile) {
+                g += `<text x="${W/2}" y="${planTop+80}" font-size="12" fill="#5c6773" text-anchor="middle">Pile Cap — see its dedicated page.</text>`;
+                planH = 120;
+            } else if (isCombined) {
+                const leftR = strv('cf-left-restrict') === '1', rightR = strv('cf-right-restrict') === '1';
+                const ohL = leftR ? (numv('cf-left-oh') || 0)/1000 : 0;
+                const ohR = rightR ? (numv('cf-right-oh') || 0)/1000 : 0;
+                const sfm = (Number.isFinite(sf) && sf > 0) ? sf : 1.5;
+                const c1m = cw/1000, c2m = c2w/1000;
+                const Lx = ohL + c1m/2 + sfm + c2m/2 + ohR;
+                const pad = 26, s = (W - 2*pad) / Lx, fy = planTop, footH = 60, fx = pad;
+                g += `<rect x="${fx}" y="${fy}" width="${(Lx*s).toFixed(1)}" height="${footH}" rx="3" fill="#eef3f8" stroke="#37526e" stroke-width="1.4"/>`;
+                const x1 = ohL + c1m/2, x2 = x1 + sfm, cyc = fy + footH/2;
+                [[x1, c1m, fmt(cw)], [x2, c2m, fmt(c2w)]].forEach(([xc, cm, lab]) => {
+                    const wpx = Math.max(6, cm*s), px = fx + xc*s;
+                    g += `<rect x="${(px-wpx/2).toFixed(1)}" y="${(cyc-wpx/2).toFixed(1)}" width="${wpx.toFixed(1)}" height="${wpx.toFixed(1)}" fill="#37526e"/>`;
+                    g += `<text x="${px.toFixed(1)}" y="${(fy+footH+13).toFixed(1)}" font-size="9" fill="#37526e" text-anchor="middle">${lab}</text>`;
+                });
+                const sx1 = fx + x1*s, sx2 = fx + x2*s, dimY = fy - 9;
+                g += `<line x1="${sx1.toFixed(1)}" y1="${dimY}" x2="${sx2.toFixed(1)}" y2="${dimY}" stroke="#9467bd" stroke-width="1"/>`;
+                g += `<text x="${((sx1+sx2)/2).toFixed(1)}" y="${dimY-3}" font-size="9" fill="#9467bd" text-anchor="middle">sf = ${fmtM(sfm)} m</text>`;
+                g += `<text x="${W/2}" y="${(fy+footH+29).toFixed(1)}" font-size="9" fill="#5c6773" text-anchor="middle">Bx ≈ ${fmtM(Lx)} m · By solved on Calculate</text>`;
+                planH = footH + 42;
+            } else {
+                const sc = 86 / Math.max(cw, ch);
+                const colW = cw*sc, colHt = ch*sc;
+                const fW = Math.max(150, colW*2.6), fH = Math.max(150, colHt*2.6);
+                const cx = W/2, cyc = planTop + fH/2;
+                g += `<rect x="${(cx-fW/2).toFixed(1)}" y="${planTop}" width="${fW.toFixed(1)}" height="${fH.toFixed(1)}" rx="3" fill="#eef3f8" stroke="#37526e" stroke-width="1.4" stroke-dasharray="5,4"/>`;
+                if (isCirc) {
+                    g += `<circle cx="${cx}" cy="${cyc.toFixed(1)}" r="${(colW/2).toFixed(1)}" fill="#37526e"/>`;
+                    g += `<text x="${cx}" y="${(planTop+fH+14).toFixed(1)}" font-size="9" fill="#37526e" text-anchor="middle">⌀ ${fmt(cw)} mm</text>`;
+                } else {
+                    g += `<rect x="${(cx-colW/2).toFixed(1)}" y="${(cyc-colHt/2).toFixed(1)}" width="${colW.toFixed(1)}" height="${colHt.toFixed(1)}" fill="#37526e"/>`;
+                    g += `<text x="${cx}" y="${(planTop+fH+14).toFixed(1)}" font-size="9" fill="#37526e" text-anchor="middle">${fmt(cw)} × ${fmt(ch)} mm</text>`;
+                }
+                g += `<text x="${cx}" y="${(planTop+fH+28).toFixed(1)}" font-size="9" fill="#5c6773" text-anchor="middle">Bx × By solved on Calculate</text>`;
+                planH = fH + 36;
+            }
+
+            // SECTION (common): ground + soil, footing slab, column stub.
+            const secTop = planTop + planH + 28;
+            const gl = secTop + 14, pad2 = 30, sW = W - 2*pad2;
+            const slabY = gl + 66, slabH = 26, baseY = slabY + slabH;
+            g += `<line x1="${pad2}" y1="${gl}" x2="${W-pad2}" y2="${gl}" stroke="#8a6d3b" stroke-width="1.2"/>`;
+            for (let x = pad2; x < W-pad2; x += 12) g += `<line x1="${x}" y1="${gl}" x2="${x-6}" y2="${gl+6}" stroke="#caa472" stroke-width="0.8"/>`;
+            g += `<rect x="${pad2}" y="${slabY}" width="${sW}" height="${slabH}" fill="#cfe0f1" stroke="#37526e" stroke-width="1.4"/>`;
+            const stubW = 30;
+            g += `<rect x="${(W/2-stubW/2).toFixed(1)}" y="${gl}" width="${stubW}" height="${(slabY-gl).toFixed(1)}" fill="#37526e"/>`;
+            const midY = ((gl+baseY)/2).toFixed(1);
+            g += `<line x1="${pad2-12}" y1="${gl}" x2="${pad2-12}" y2="${baseY}" stroke="#1f77b4" stroke-width="1"/>`;
+            g += `<text x="${pad2-15}" y="${midY}" font-size="9" fill="#1f77b4" text-anchor="middle" transform="rotate(-90 ${pad2-15} ${midY})">H = ${fmtM(Hm)} m</text>`;
+            g += `<text x="${W-pad2+3}" y="${(slabY+slabH/2+3).toFixed(1)}" font-size="9" fill="#37526e" text-anchor="start">Dc</text>`;
+            g += `<text x="${W/2}" y="${(baseY+16).toFixed(1)}" font-size="9" fill="#5c6773" text-anchor="middle">Dc solved · cover Cc = ${fmt(Cc)} mm</text>`;
+
+            const totalH = baseY + 26;
+            box.innerHTML = `<svg viewBox="0 0 ${W} ${totalH}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="font-family:Arial,sans-serif">`
+                + `<text x="${pad2}" y="20" font-size="11" font-weight="700" fill="#0056b3">PLAN</text>`
+                + `<text x="${pad2}" y="${(secTop-4).toFixed(1)}" font-size="11" font-weight="700" fill="#0056b3">SECTION</text>`
+                + g + `</svg>`;
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             loadFieldValues();        // form setup (element refs, conditional UI)
             buildSuggestionLists();   // offer saved suggestions on field focus
+            drawFoundationSchematic(); // initial design preview
+            document.querySelectorAll('.fd-page input, .fd-page select').forEach(f => {
+                f.addEventListener('input', drawFoundationSchematic);
+                f.addEventListener('change', drawFoundationSchematic);
+            });
             renderFormMath();
         });
         // Render KaTeX in the form labels (e.g. \(B_x\), \(P_u\),
