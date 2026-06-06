@@ -1016,11 +1016,16 @@ handleLoadTypeChange(); // This ensures the display is set correctly on page loa
                     c1m = (cw||300)/1000; const c2 = numv('cf-col2-width'); c2m = ((c2>0?c2:(cw||300)))/1000;
                     x1 = c1m/2 + 0.35; x2 = x1 + sfm; Bx = x2 + c2m/2 + 0.35; By1 = By2 = 1.6; trap = false;
                 }
-                const LM = trap ? 36 : 14, px0 = LM, s = (W - RM - px0) / Bx, midY = planTop + 36;
-                const byS = Math.min(s, 60 / Math.max(By1, By2));
-                const hL = By1*byS, hR = By2*byS, xL = px0, xR = px0 + Bx*s;
-                g += `<polygon points="${xL},${(midY-hL/2).toFixed(1)} ${xR.toFixed(1)},${(midY-hR/2).toFixed(1)} ${xR.toFixed(1)},${(midY+hR/2).toFixed(1)} ${xL},${(midY+hL/2).toFixed(1)}" fill="${fillF}" stroke="${strokeF}" stroke-width="1.4" ${solved?'':'stroke-dasharray="5,4"'}/>`;
-                [[x1,c1m],[x2,c2m]].forEach(([xc,cm]) => { const wpx = Math.max(6, cm*s), pxc = px0 + xc*s;
+                // ONE scale for both directions so the columns, By and Bx stay
+                // in true proportion (a 0.30 m column must read the same size as
+                // a 0.30 m footing edge — not stretched by a width-only scale).
+                const LM = trap ? 36 : 14, px0 = LM;
+                const availW = W - RM - px0, availH = 118;
+                const s = Math.min(availW / Bx, availH / Math.max(By1, By2));
+                const hL = By1*s, hR = By2*s, fwpx = Bx*s;
+                const xL = px0 + (availW - fwpx)/2, xR = xL + fwpx, midY = planTop + Math.max(hL, hR)/2;
+                g += `<polygon points="${xL.toFixed(1)},${(midY-hL/2).toFixed(1)} ${xR.toFixed(1)},${(midY-hR/2).toFixed(1)} ${xR.toFixed(1)},${(midY+hR/2).toFixed(1)} ${xL.toFixed(1)},${(midY+hL/2).toFixed(1)}" fill="${fillF}" stroke="${strokeF}" stroke-width="1.4" ${solved?'':'stroke-dasharray="5,4"'}/>`;
+                [[x1,c1m],[x2,c2m]].forEach(([xc,cm]) => { const wpx = Math.max(4, cm*s), pxc = xL + xc*s;
                     g += `<rect x="${(pxc-wpx/2).toFixed(1)}" y="${(midY-wpx/2).toFixed(1)}" width="${wpx.toFixed(1)}" height="${wpx.toFixed(1)}" fill="${col}"/>`; });
                 const fb = midY + Math.max(hL, hR)/2;
                 g += dimH(xL, xR, fb, fb + 20, lab('Bx', Bx, 'm'));
@@ -1035,8 +1040,8 @@ handleLoadTypeChange(); // This ensures the display is set correctly on page loa
                 const s = Math.min(availW/Bx, availH/By);
                 const fW = Bx*s, fH = By*s, fx = px0 + (availW - fW)/2, cyc = planTop + fH/2, ccx = fx + fW/2;
                 g += `<rect x="${fx.toFixed(1)}" y="${planTop}" width="${fW.toFixed(1)}" height="${fH.toFixed(1)}" rx="2" fill="${fillF}" stroke="${strokeF}" stroke-width="1.4" ${solved?'':'stroke-dasharray="5,4"'}/>`;
-                if (isCirc) { const r = Math.max(5, (c1m*s)/2); g += `<circle cx="${ccx.toFixed(1)}" cy="${cyc.toFixed(1)}" r="${r.toFixed(1)}" fill="${col}"/>`; }
-                else { const wpx = Math.max(8, c1m*s), hpx = Math.max(8, c2m*s); g += `<rect x="${(ccx-wpx/2).toFixed(1)}" y="${(cyc-hpx/2).toFixed(1)}" width="${wpx.toFixed(1)}" height="${hpx.toFixed(1)}" fill="${col}"/>`; }
+                if (isCirc) { const r = Math.max(3, (c1m*s)/2); g += `<circle cx="${ccx.toFixed(1)}" cy="${cyc.toFixed(1)}" r="${r.toFixed(1)}" fill="${col}"/>`; }
+                else { const wpx = Math.max(4, c1m*s), hpx = Math.max(4, c2m*s); g += `<rect x="${(ccx-wpx/2).toFixed(1)}" y="${(cyc-hpx/2).toFixed(1)}" width="${wpx.toFixed(1)}" height="${hpx.toFixed(1)}" fill="${col}"/>`; }
                 g += dimH(fx, fx+fW, planTop+fH, planTop+fH+18, lab('Bx', Bx, 'm'));
                 g += dimVR(planTop, planTop+fH, fx+fW, fx+fW+10, lab('By', By, 'm'));
                 planH = fH + 30;
