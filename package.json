@@ -6,7 +6,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node src/backend/server.js",
-    "dev": "node src/backend/server.js"
+    "dev": "node src/backend/server.js",
+    "build:css": "tailwindcss -i ./src/styles/tailwind.input.css -o ./public/assets/css/tailwind.css --minify",
+    "watch:css": "tailwindcss -i ./src/styles/tailwind.input.css -o ./public/assets/css/tailwind.css --watch"
   },
   "repository": {
     "type": "git",
@@ -21,7 +23,7 @@
     "Civil",
     "Engineering"
   ],
-  "author": "Raymart Valdepe\u00f1as",
+  "author": "Raymart Valdepeñas",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/BitLess246/civilEngineering/issues"
@@ -29,5 +31,8 @@
   "homepage": "https://github.com/BitLess246/civilEngineering#readme",
   "dependencies": {
     "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.19"
   }
 }
