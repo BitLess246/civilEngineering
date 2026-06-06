@@ -978,8 +978,28 @@ handleLoadTypeChange(); // This ensures the display is set correctly on page loa
             else                           { cw = ch = numv('ColumnWidth') || 300; }
             const Hm = numv('Depth');
 
-            const W = 360, planTop = 34;
+            const W = 360;
             const fillF = '#eef3f8', strokeF = '#37526e', col = '#37526e', dimC = '#1f77b4';
+            // ── Dimension helpers: extension lines (with a visible gap from the
+            //    feature) + a dimension line capped with 45° architectural ticks. ──
+            const GAP = 4, EXT = 5, TK = 4;
+            const tick = (x, y) => `<line x1="${(x-TK).toFixed(1)}" y1="${(y+TK).toFixed(1)}" x2="${(x+TK).toFixed(1)}" y2="${(y-TK).toFixed(1)}" stroke="${dimC}" stroke-width="1.2"/>`;
+            const extL = (x1, y1, x2, y2) => `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${dimC}" stroke-width="0.6"/>`;
+            const dtxt = (x, y, t, rot) => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" font-size="9.5" fill="${dimC}" text-anchor="middle"${rot ? ` transform="rotate(-90 ${x.toFixed(1)} ${y.toFixed(1)})"` : ''} paint-order="stroke" stroke="#fff" stroke-width="2.6">${t}</text>`;
+            const dimH = (xA, xB, featY, dY, t) =>            // horizontal dim below the feature
+                extL(xA, featY+GAP, xA, dY+EXT) + extL(xB, featY+GAP, xB, dY+EXT)
+                + `<line x1="${xA.toFixed(1)}" y1="${dY}" x2="${xB.toFixed(1)}" y2="${dY}" stroke="${dimC}" stroke-width="0.9"/>`
+                + tick(xA, dY) + tick(xB, dY) + dtxt((xA+xB)/2, dY-4, t, false);
+            const dimVR = (yA, yB, featX, dX, t) =>           // vertical dim to the right
+                extL(featX+GAP, yA, dX+EXT, yA) + extL(featX+GAP, yB, dX+EXT, yB)
+                + `<line x1="${dX}" y1="${yA.toFixed(1)}" x2="${dX}" y2="${yB.toFixed(1)}" stroke="${dimC}" stroke-width="0.9"/>`
+                + tick(dX, yA) + tick(dX, yB) + dtxt(dX+11, (yA+yB)/2, t, true);
+            const dimVL = (yA, yB, featX, dX, t) =>           // vertical dim to the left
+                extL(featX-GAP, yA, dX-EXT, yA) + extL(featX-GAP, yB, dX-EXT, yB)
+                + `<line x1="${dX}" y1="${yA.toFixed(1)}" x2="${dX}" y2="${yB.toFixed(1)}" stroke="${dimC}" stroke-width="0.9"/>`
+                + tick(dX, yA) + tick(dX, yB) + dtxt(dX-11, (yA+yB)/2, t, true);
+
+            const planTop = 36, RM = 52;
             let g = '', planH;
 
             if (isPile) {
@@ -996,58 +1016,71 @@ handleLoadTypeChange(); // This ensures the display is set correctly on page loa
                     c1m = (cw||300)/1000; const c2 = numv('cf-col2-width'); c2m = ((c2>0?c2:(cw||300)))/1000;
                     x1 = c1m/2 + 0.35; x2 = x1 + sfm; Bx = x2 + c2m/2 + 0.35; By1 = By2 = 1.6; trap = false;
                 }
-                const pad = 30, s = (W - 2*pad) / Bx, fx = pad, midY = planTop + 34;
-                const maxBy = Math.max(By1, By2), byS = Math.min(s, 62/maxBy);
-                const hL = By1*byS, hR = By2*byS;
-                g += `<polygon points="${fx},${(midY-hL/2).toFixed(1)} ${(fx+Bx*s).toFixed(1)},${(midY-hR/2).toFixed(1)} ${(fx+Bx*s).toFixed(1)},${(midY+hR/2).toFixed(1)} ${fx},${(midY+hL/2).toFixed(1)}" fill="${fillF}" stroke="${strokeF}" stroke-width="1.4" ${solved?'':'stroke-dasharray="5,4"'}/>`;
-                [[x1,c1m],[x2,c2m]].forEach(([xc,cm]) => { const wpx = Math.max(6, cm*s), px = fx + xc*s;
-                    g += `<rect x="${(px-wpx/2).toFixed(1)}" y="${(midY-wpx/2).toFixed(1)}" width="${wpx.toFixed(1)}" height="${wpx.toFixed(1)}" fill="${col}"/>`; });
-                const by = planTop + 70;
-                g += `<line x1="${fx}" y1="${by}" x2="${(fx+Bx*s).toFixed(1)}" y2="${by}" stroke="${dimC}" stroke-width="0.8"/>`;
-                g += `<text x="${W/2}" y="${by+12}" font-size="9.5" fill="${dimC}" text-anchor="middle">${lab('Bx',Bx,'m')}</text>`;
-                g += `<text x="${(fx+Bx*s+3).toFixed(1)}" y="${(midY+3).toFixed(1)}" font-size="9" fill="${strokeF}" text-anchor="start">${solved ? (trap ? 'By1/By2='+By1.toFixed(2)+'/'+By2.toFixed(2) : lab('By',By1,'m')) : 'By'}</text>`;
-                planH = 94;
+                const LM = trap ? 36 : 14, px0 = LM, s = (W - RM - px0) / Bx, midY = planTop + 36;
+                const byS = Math.min(s, 60 / Math.max(By1, By2));
+                const hL = By1*byS, hR = By2*byS, xL = px0, xR = px0 + Bx*s;
+                g += `<polygon points="${xL},${(midY-hL/2).toFixed(1)} ${xR.toFixed(1)},${(midY-hR/2).toFixed(1)} ${xR.toFixed(1)},${(midY+hR/2).toFixed(1)} ${xL},${(midY+hL/2).toFixed(1)}" fill="${fillF}" stroke="${strokeF}" stroke-width="1.4" ${solved?'':'stroke-dasharray="5,4"'}/>`;
+                [[x1,c1m],[x2,c2m]].forEach(([xc,cm]) => { const wpx = Math.max(6, cm*s), pxc = px0 + xc*s;
+                    g += `<rect x="${(pxc-wpx/2).toFixed(1)}" y="${(midY-wpx/2).toFixed(1)}" width="${wpx.toFixed(1)}" height="${wpx.toFixed(1)}" fill="${col}"/>`; });
+                const fb = midY + Math.max(hL, hR)/2;
+                g += dimH(xL, xR, fb, fb + 20, lab('Bx', Bx, 'm'));
+                g += dimVR(midY-hR/2, midY+hR/2, xR, xR+10, solved ? (trap ? lab('By2',By2,'m') : lab('By',By1,'m')) : 'By');
+                if (trap) g += dimVL(midY-hL/2, midY+hL/2, xL, xL-10, lab('By1',By1,'m'));
+                planH = (fb - planTop) + 30;
             } else {
                 let Bx, By;
                 if (solved) { Bx = d.Bx; By = d.By; } else { Bx = By = 2.4; }
                 const c1m = (cw||300)/1000, c2m = (ch||cw||300)/1000;
-                const pad = 30, avail = W - 2*pad;
-                const s = solved ? Math.min(avail/Math.max(Bx,By), 150) : avail/Math.max(Bx,By);
-                const fW = Bx*s, fH = By*s, cx = W/2, cyc = planTop + fH/2;
-                g += `<rect x="${(cx-fW/2).toFixed(1)}" y="${planTop}" width="${fW.toFixed(1)}" height="${fH.toFixed(1)}" rx="2" fill="${fillF}" stroke="${strokeF}" stroke-width="1.4" ${solved?'':'stroke-dasharray="5,4"'}/>`;
-                if (isCirc) { const r = Math.max(5, (c1m*s)/2); g += `<circle cx="${cx}" cy="${cyc.toFixed(1)}" r="${r.toFixed(1)}" fill="${col}"/>`; }
-                else { const wpx = Math.max(8, c1m*s), hpx = Math.max(8, c2m*s); g += `<rect x="${(cx-wpx/2).toFixed(1)}" y="${(cyc-hpx/2).toFixed(1)}" width="${wpx.toFixed(1)}" height="${hpx.toFixed(1)}" fill="${col}"/>`; }
-                g += `<text x="${cx}" y="${(planTop+fH+14).toFixed(1)}" font-size="9.5" fill="${dimC}" text-anchor="middle">${lab('Bx',Bx,'m')}</text>`;
-                g += `<text x="${(cx+fW/2+4).toFixed(1)}" y="${cyc.toFixed(1)}" font-size="9.5" fill="${dimC}" text-anchor="start">${lab('By',By,'m')}</text>`;
-                planH = fH + 24;
+                const px0 = 14, availW = W - RM - px0, availH = 110;
+                const s = Math.min(availW/Bx, availH/By);
+                const fW = Bx*s, fH = By*s, fx = px0 + (availW - fW)/2, cyc = planTop + fH/2, ccx = fx + fW/2;
+                g += `<rect x="${fx.toFixed(1)}" y="${planTop}" width="${fW.toFixed(1)}" height="${fH.toFixed(1)}" rx="2" fill="${fillF}" stroke="${strokeF}" stroke-width="1.4" ${solved?'':'stroke-dasharray="5,4"'}/>`;
+                if (isCirc) { const r = Math.max(5, (c1m*s)/2); g += `<circle cx="${ccx.toFixed(1)}" cy="${cyc.toFixed(1)}" r="${r.toFixed(1)}" fill="${col}"/>`; }
+                else { const wpx = Math.max(8, c1m*s), hpx = Math.max(8, c2m*s); g += `<rect x="${(ccx-wpx/2).toFixed(1)}" y="${(cyc-hpx/2).toFixed(1)}" width="${wpx.toFixed(1)}" height="${hpx.toFixed(1)}" fill="${col}"/>`; }
+                g += dimH(fx, fx+fW, planTop+fH, planTop+fH+18, lab('Bx', Bx, 'm'));
+                g += dimVR(planTop, planTop+fH, fx+fW, fx+fW+10, lab('By', By, 'm'));
+                planH = fH + 30;
             }
 
             // SECTION — ground + soil, footing slab, column stub (to scale once solved).
-            const secTop = planTop + planH + 30, gl = secTop + 14, pad2 = 34, sW = W - 2*pad2;
+            const secTop = planTop + planH + 34, gl = secTop + 14, slabX = 46, sW = W - slabX - 40;
             let Hpx = 70, slabH = 24;
             if (solved && Number.isFinite(Hm) && Hm > 0 && Number.isFinite(d.Dc)) {
                 const sV = 96/Hm; Hpx = Math.max(40, Hm*sV); slabH = Math.max(8, (d.Dc/1000)*sV);
             }
             const slabY = gl + (Hpx - slabH), baseY = gl + Hpx;
-            g += `<line x1="${pad2}" y1="${gl}" x2="${W-pad2}" y2="${gl}" stroke="#8a6d3b" stroke-width="1.2"/>`;
-            for (let x = pad2; x < W-pad2; x += 12) g += `<line x1="${x}" y1="${gl}" x2="${x-6}" y2="${gl+6}" stroke="#caa472" stroke-width="0.8"/>`;
-            g += `<rect x="${pad2}" y="${slabY.toFixed(1)}" width="${sW}" height="${slabH.toFixed(1)}" fill="#cfe0f1" stroke="${strokeF}" stroke-width="1.4" ${solved?'':'stroke-dasharray="5,4"'}/>`;
+            g += `<line x1="${slabX}" y1="${gl}" x2="${slabX+sW}" y2="${gl}" stroke="#8a6d3b" stroke-width="1.2"/>`;
+            for (let x = slabX; x < slabX+sW; x += 12) g += `<line x1="${x}" y1="${gl}" x2="${x-6}" y2="${gl+6}" stroke="#caa472" stroke-width="0.8"/>`;
+            g += `<rect x="${slabX}" y="${slabY.toFixed(1)}" width="${sW}" height="${slabH.toFixed(1)}" fill="#cfe0f1" stroke="${strokeF}" stroke-width="1.4" ${solved?'':'stroke-dasharray="5,4"'}/>`;
             const stubW = 28;
-            g += `<rect x="${(W/2-stubW/2).toFixed(1)}" y="${gl}" width="${stubW}" height="${(slabY-gl).toFixed(1)}" fill="${col}"/>`;
-            const midSY = ((gl+baseY)/2).toFixed(1);
-            g += `<line x1="${pad2-12}" y1="${gl}" x2="${pad2-12}" y2="${baseY.toFixed(1)}" stroke="${dimC}" stroke-width="0.9"/>`;
-            g += `<text x="${pad2-15}" y="${midSY}" font-size="9.5" fill="${dimC}" text-anchor="middle" transform="rotate(-90 ${pad2-15} ${midSY})">${lab('H',Hm,'m')}</text>`;
-            g += `<text x="${W-pad2+3}" y="${(slabY+slabH/2+3).toFixed(1)}" font-size="9" fill="${strokeF}" text-anchor="start">${solved && Number.isFinite(d.Dc) ? 'Dc='+Math.round(d.Dc) : 'Dc'}</text>`;
+            g += `<rect x="${(slabX+sW/2-stubW/2).toFixed(1)}" y="${gl}" width="${stubW}" height="${(slabY-gl).toFixed(1)}" fill="${col}"/>`;
+            g += dimVL(gl, baseY, slabX, slabX-12, lab('H', Hm, 'm'));
+            g += dimVR(slabY, baseY, slabX+sW, slabX+sW+8, solved && Number.isFinite(d.Dc) ? ('Dc = '+Math.round(d.Dc)+' mm') : 'Dc');
 
-            const totalH = baseY + 22, fullH = solved ? totalH : totalH + 14;
+            const totalH = baseY + 24, fullH = solved ? totalH : totalH + 14;
             const hint = solved ? '' : `<text x="${W/2}" y="${(totalH+6).toFixed(1)}" font-size="9" fill="#9aa0a6" text-anchor="middle" font-style="italic">Press Calculate to size &amp; scale the footing</text>`;
             box.innerHTML = `<svg viewBox="0 0 ${W} ${fullH}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" style="font-family:Arial,sans-serif">`
-                + `<text x="34" y="20" font-size="11" font-weight="700" fill="#0056b3">PLAN</text>`
-                + `<text x="34" y="${(secTop-4).toFixed(1)}" font-size="11" font-weight="700" fill="#0056b3">SECTION</text>`
+                + `<text x="14" y="22" font-size="11" font-weight="700" fill="#0056b3">PLAN</text>`
+                + `<text x="14" y="${(secTop-4).toFixed(1)}" font-size="11" font-weight="700" fill="#0056b3">SECTION</text>`
                 + g + hint + `</svg>`;
         }
         // Engine publishes converged geometry → redraw to scale.
         window.addEventListener('fd:designed', e => { fdDesignData = e.detail; drawFoundationSchematic(); });
+
+        // Re-apply the conditional show/hide logic to the current select values.
+        // Critically this is re-run on `load` and `pageshow` too: browsers
+        // restore form-control values on a reload / back-forward AFTER scripts
+        // first run, and the restored values must re-fire their visibility
+        // handlers (otherwise restored fields render but in the wrong show/hide
+        // state — the "invisible field" bug).
+        function fdResyncVisibility() {
+            ['analysisMethod','structureType','loadType','centricity','columnShape',
+             'LengthRestriction','cf-method','cf-left-restrict','cf-right-restrict'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el.value !== 'PileCap') el.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            drawFoundationSchematic();
+        }
 
         document.addEventListener('DOMContentLoaded', () => {
             loadFieldValues();        // form setup (element refs, conditional UI)
@@ -1060,18 +1093,11 @@ handleLoadTypeChange(); // This ensures the display is set correctly on page loa
                 f.addEventListener('change', onEdit);
             });
 
-            // Re-sync the conditional show/hide logic with whatever values the
-            // browser restored on reload (selects keep their value across a
-            // reload, but their change-driven visibility must be re-fired).
-            ['analysisMethod','structureType','loadType','centricity','columnShape',
-             'LengthRestriction','cf-method','cf-left-restrict','cf-right-restrict'].forEach(id => {
-                const el = document.getElementById(id);
-                if (el && el.value !== 'PileCap') el.dispatchEvent(new Event('change', { bubbles: true }));
-            });
-
-            drawFoundationSchematic();   // initial skeleton
+            fdResyncVisibility();
             renderFormMath();
         });
+        window.addEventListener('load', fdResyncVisibility);
+        window.addEventListener('pageshow', fdResyncVisibility);
         // Render KaTeX in the form labels (e.g. \(B_x\), \(P_u\),
         // \(\gamma_c\)). Without this the labels show raw "\(B_x\)
         // (in meters)" text because KaTeX auto-render only fires
