@@ -1,0 +1,8 @@
+/* Tailwind source — compiled to public/assets/css/tailwind.css via
+   `npm run build:css`. Loaded AFTER styles1.css on every page so the
+   prefixed (tw-) utilities layer on top of the legacy stylesheet.
+   Preflight is disabled in tailwind.config.js, so this does not reset
+   any existing element styles. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
