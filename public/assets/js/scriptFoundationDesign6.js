@@ -1118,6 +1118,13 @@ document.addEventListener("DOMContentLoaded", () => {
             const el = document.getElementById(id);
             if (el) { el.innerHTML = sched; renderMath(el); }
         }
+        // Publish converged geometry for the right-rail schematic (to scale).
+        try {
+            window.dispatchEvent(new CustomEvent('fd:designed', { detail: {
+                kind: 'combined', shape, Bx, By, By1, By2, Dc,   // Bx/By in m, Dc in mm
+                cols: [{ x: x1, w: cx1 }, { x: x2, w: cx2 }]      // x in m, w in mm
+            } }));
+        } catch (_) {}
     }
 
     // Combined-footing schedule (tabular summary, fd-schedule styling).
@@ -1369,6 +1376,17 @@ document.addEventListener("DOMContentLoaded", () => {
         // the callback is undefined and we no-op.
         if (typeof window._foundationBatchCapture === 'function') {
             try { window._foundationBatchCapture(data); } catch (_) {}
+        }
+        // Publish the converged geometry so the right-rail schematic can redraw
+        // the footing to scale. Single-design flow only (batch sets the hook).
+        else {
+            try {
+                window.dispatchEvent(new CustomEvent('fd:designed', { detail: {
+                    kind: 'isolated',
+                    Bx: data.bx, By: data.by, Dc: data.dc,   // bx/by in m, dc in mm
+                    isRectangular: !!data.isRectangular
+                } }));
+            } catch (_) {}
         }
     }
     function dimension(DC){
