@@ -898,6 +898,42 @@ document.addEventListener("DOMContentLoaded", () => {
             P(`$$\\ \\bar{x} = \\frac{B_x}{3}\\cdot\\frac{2B_{y2}+B_{y1}}{B_{y2}+B_{y1}} \\;\\Rightarrow\\; B_{y2} = ${by2.toFixed(4)} \\approx ${By2}\\text{ m}, \\; B_{y1} = ${by1.toFixed(4)} \\approx ${By1}\\text{ m} \$$`);
         }
 
+        // ── Containment check — every column must sit fully on the slab ──
+        // If a column is wider than the footing beneath it (so it would stick
+        // out past the transverse edge — e.g. a small B_y2 under a trapezoid's
+        // narrow end), widen the footing so it fits with a small projection on
+        // each face. The longitudinal w_u1/w_u2 (and hence V & M) are unchanged;
+        // the extra width only adds bearing area + transverse steel, which is
+        // conservative.
+        {
+            const PROJ = 0.075;                                  // target projection per face (m)
+            const ByAtX = (x) => (shape[0] === 'R') ? By : By1 + (By2 - By1) * x / Bx;
+            const cols  = [{ x: x1, c: cx1m }, { x: x2, c: cx2m }];
+            const wUnder = (cl) => Math.min(ByAtX(cl.x - cl.c / 2), ByAtX(cl.x + cl.c / 2));
+            if (cols.some(cl => wUnder(cl) < cl.c - 1e-9)) {
+                const By1_0 = By1, By2_0 = By2, By_0 = By;
+                for (let guard = 0; guard < 300; guard++) {
+                    let viol = false;
+                    for (const cl of cols) {
+                        if (wUnder(cl) < cl.c + 2 * PROJ - 1e-6) {
+                            viol = true;
+                            if (shape[0] === 'R') { By += 0.05; By1 = By; By2 = By; }
+                            else if (cl.x < Bx / 2) By1 += 0.05; else By2 += 0.05;
+                        }
+                    }
+                    if (!viol) break;
+                }
+                By1 = _cfRoundUp(By1, 0.1); By2 = _cfRoundUp(By2, 0.1); By = (By1 + By2) / 2;
+                H7('&#9888; Column wider than the footing — slab widened to fit');
+                CL(`At least one column came out wider than the slab beneath it, so it would have stuck out past the transverse edge. The footing has been widened so every column sits fully on the slab with a \\(\\ge ${(PROJ*1000).toFixed(0)}\\) mm projection on each face. This only adds bearing area (the soil pressure becomes more conservative) and a little transverse steel — the longitudinal \\(V\\) & \\(M\\) are unchanged. To keep the optimal narrower footing instead, increase the column spacing \\(s_f\\) or use a smaller column.`);
+                if (shape[0] === 'R') {
+                    P(`$$\\ B_y: ${By_0.toFixed(2)} \\to ${By.toFixed(2)}\\text{ m} \$$`);
+                } else {
+                    P(`$$\\ B_{y1}: ${By1_0.toFixed(2)} \\to ${By1.toFixed(2)}\\text{ m}, \\quad B_{y2}: ${By2_0.toFixed(2)} \\to ${By2.toFixed(2)}\\text{ m} \$$`);
+                }
+            }
+        }
+
         // ── Step 4 — Soil-pressure model, then V(x) & M(x) ────────────
         // wu1/wu2/alpha are hoisted so the (rigid) loading diagram can reuse
         // them after the thickness steps; columns act as line loads over their
