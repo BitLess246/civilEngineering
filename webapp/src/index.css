@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+/* App-wide base. Tailwind v4's preflight is included via the import above.
+   This is the NEW React app's stylesheet — independent of the legacy
+   styles1.css / prefixed tw- utilities used by the static pages. */
+:root {
+  --brand: #0056b3;
+  --brand-dark: #003f86;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #1f2933;
+  background: #f5f7fa;
+}
