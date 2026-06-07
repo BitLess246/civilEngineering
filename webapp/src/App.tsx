@@ -1,5 +1,6 @@
 import { Routes, Route, Link } from 'react-router-dom'
 import { factoredLoad, beta1 } from './engine/loads'
+import FoundationDesign from './pages/FoundationDesign'
 
 function Home() {
   return (
@@ -33,26 +34,11 @@ function Home() {
   )
 }
 
-function FoundationPlaceholder() {
-  return (
-    <div className="mx-auto max-w-3xl p-8">
-      <Link to="/" className="text-sm text-[#0056b3] hover:underline">
-        ← Home
-      </Link>
-      <h1 className="mt-2 text-2xl font-bold text-[#0056b3]">Foundation Design</h1>
-      <p className="mt-2 text-slate-600">
-        Pilot migration target (Phase&nbsp;2) — this page will be rebuilt in React on the
-        typed engine.
-      </p>
-    </div>
-  )
-}
-
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
-      <Route path="/foundation" element={<FoundationPlaceholder />} />
+      <Route path="/foundation" element={<FoundationDesign />} />
     </Routes>
   )
 }
