@@ -105,3 +105,6 @@ dist
 
 # Vite React build output (served by Express under /app)
 /public/app/
+
+# Commit the webapp lockfile so CI (Render) installs a deterministic, platform-correct dep tree
+!webapp/package-lock.json
