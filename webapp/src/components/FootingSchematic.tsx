@@ -46,8 +46,10 @@ function DimSide({ yA, yB, featX, dX, label, side }: { yA: number; yB: number; f
 }
 
 export interface SchematicProps {
-  /** Footing side, m. */
-  B: number
+  /** Footing length along x, m. */
+  Bx: number
+  /** Footing width along y, m (= Bx for a square footing). */
+  By: number
   /** Slab thickness D_c, mm. */
   Dc: number
   /** Square column width, mm. */
@@ -56,8 +58,8 @@ export interface SchematicProps {
   H: number
 }
 
-/** Plan + section of a designed square footing, drawn to scale. */
-export function FootingSchematic({ B, Dc, columnWidth, H }: SchematicProps): JSX.Element {
+/** Plan + section of a designed footing, drawn to scale. */
+export function FootingSchematic({ Bx, By, Dc, columnWidth, H }: SchematicProps): JSX.Element {
   const W = 360
   const cm = columnWidth / 1000
 
@@ -67,11 +69,12 @@ export function FootingSchematic({ B, Dc, columnWidth, H }: SchematicProps): JSX
   const px0 = 14
   const availW = W - RM - px0
   const availH = 116
-  const s = Math.min(availW / B, availH / B)
-  const fW = B * s
+  const s = Math.min(availW / Bx, availH / By)
+  const fW = Bx * s
+  const fH = By * s
   const fx = px0 + (availW - fW) / 2
   const fyTop = planTop
-  const fyBot = planTop + fW
+  const fyBot = planTop + fH
   const cxc = fx + fW / 2
   const cyc = (fyTop + fyBot) / 2
   const cpx = Math.max(6, cm * s)
@@ -100,10 +103,10 @@ export function FootingSchematic({ B, Dc, columnWidth, H }: SchematicProps): JSX
       style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
       <text x={14} y={20} fontSize={11} fontWeight={700} fill="#0056b3">PLAN</text>
       {/* footing + column */}
-      <rect x={fx} y={fyTop} width={fW} height={fW} rx={2} fill={FILL} stroke={STROKE} strokeWidth={1.4} />
+      <rect x={fx} y={fyTop} width={fW} height={fH} rx={2} fill={FILL} stroke={STROKE} strokeWidth={1.4} />
       <rect x={cxc - cpx / 2} y={cyc - cpx / 2} width={cpx} height={cpx} fill={COL} />
-      <DimBelow xA={fx} xB={fx + fW} featY={fyBot} dY={fyBot + 20} label={`B = ${B.toFixed(2)} m`} />
-      <DimSide yA={fyTop} yB={fyBot} featX={fx + fW} dX={fx + fW + 10} label={`B = ${B.toFixed(2)} m`} side="right" />
+      <DimBelow xA={fx} xB={fx + fW} featY={fyBot} dY={fyBot + 20} label={`Bx = ${Bx.toFixed(2)} m`} />
+      <DimSide yA={fyTop} yB={fyBot} featX={fx + fW} dX={fx + fW + 10} label={`By = ${By.toFixed(2)} m`} side="right" />
 
       <text x={14} y={secTitleY} fontSize={11} fontWeight={700} fill="#0056b3">SECTION</text>
       {/* ground + soil */}
