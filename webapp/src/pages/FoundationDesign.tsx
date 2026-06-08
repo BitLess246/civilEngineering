@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { designSquareFooting } from '../engine/isolatedFooting'
+import { designRectangularFooting } from '../engine/rectangularFooting'
 import { netBearing } from '../engine/bearing'
 import type { ColumnPosition } from '../engine/shear'
 import { FootingSchematic } from '../components/FootingSchematic'
@@ -8,7 +9,14 @@ import { Math } from '../lib/math'
 import { f0, f2, f3 } from '../lib/format'
 import 'katex/dist/katex.min.css'
 
+type FootingType = 'square' | 'rectangular'
+type SizingMode = 'ratio' | 'fixedWidth'
+
 interface FormState {
+  footingType: FootingType
+  sizingMode: SizingMode
+  ratio: number
+  fixedBy: number
   serviceLoad: number
   ultimateLoad: number
   columnWidth: number
@@ -25,6 +33,10 @@ interface FormState {
 }
 
 const DEFAULTS: FormState = {
+  footingType: 'square',
+  sizingMode: 'ratio',
+  ratio: 1.5,
+  fixedBy: 2,
   serviceLoad: 1000,
   ultimateLoad: 1400,
   columnWidth: 400,
@@ -38,6 +50,15 @@ const DEFAULTS: FormState = {
   cover: 75,
   surcharge: 0,
   position: 'interior',
+}
+
+interface DirSteel { As: number; bars: number; spacing: number; usedMin: boolean; rho: number }
+interface View {
+  type: FootingType
+  Bx: number; By: number; Dc: number; qNet: number; qu: number
+  dPunch: number; dBeamLong: number; dBeamShort: number
+  long: DirSteel
+  short: (DirSteel & { bandBars: number; bandFraction: number }) | null
 }
 
 function NumField({ label, unit, value, onChange, step = 'any' }: {
@@ -57,6 +78,20 @@ function NumField({ label, unit, value, onChange, step = 'any' }: {
   )
 }
 
+function Select<T extends string>({ label, value, onChange, options }: {
+  label: string; value: T; onChange: (v: T) => void; options: [T, string][]
+}) {
+  return (
+    <label className="flex flex-col text-sm">
+      <span className="mb-1 font-medium text-slate-600">{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value as T)}
+        className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none">
+        {options.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+      </select>
+    </label>
+  )
+}
+
 function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
     <fieldset className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -71,45 +106,87 @@ function Row({ label, value, check }: { label: ReactNode; value: ReactNode; chec
     <div className="flex items-baseline justify-between gap-3 border-b border-slate-100 py-1.5 last:border-0">
       <span className="text-sm text-slate-600">{label}</span>
       <span className="text-right text-sm font-semibold text-slate-800">{value}</span>
-      {check ? <span className="w-28 text-right text-xs text-slate-500">{check}</span> : null}
+      {check ? <span className="w-32 text-right text-xs text-slate-500">{check}</span> : null}
     </div>
+  )
+}
+
+function steelRow(label: ReactNode, s: DirSteel, db: number) {
+  return (
+    <Row label={label} value={`${s.bars} ⌀${db} mm @ ${f0(s.spacing)} mm`}
+      check={`As=${f0(s.As)} mm² · ${s.usedMin ? 'ρ_min' : `ρ=${s.rho.toFixed(4)}`}`} />
   )
 }
 
 export default function FoundationDesign() {
   const [form, setForm] = useState<FormState>(DEFAULTS)
   const set = <K extends keyof FormState>(k: K) => (v: FormState[K]) => setForm((s) => ({ ...s, [k]: v }))
+  const rect = form.footingType === 'rectangular'
 
   const qNetTrial = useMemo(
     () => netBearing({ qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc, H: form.H, Dc: 0.25, surcharge: form.surcharge }),
     [form.qAllow, form.gammaSoil, form.gammaConc, form.H, form.surcharge],
   )
+  const sizingOk = !rect || (form.sizingMode === 'ratio' ? form.ratio >= 1 : form.fixedBy > 0)
+  const valid = Object.values(form).every((v) => typeof v === 'string' || Number.isFinite(v as number)) && qNetTrial > 0 && sizingOk
 
-  const valid = Object.values(form).every((v) => typeof v === 'string' || Number.isFinite(v as number)) && qNetTrial > 0
-  const result = useMemo(() => (valid ? designSquareFooting(form) : null), [form, valid])
+  const view: View | null = useMemo(() => {
+    if (!valid) return null
+    const common = {
+      serviceLoad: form.serviceLoad, ultimateLoad: form.ultimateLoad, columnWidth: form.columnWidth,
+      fc: form.fc, fy: form.fy, qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc,
+      H: form.H, barDia: form.barDia, cover: form.cover, surcharge: form.surcharge, position: form.position,
+    }
+    if (!rect) {
+      const r = designSquareFooting(common)
+      return {
+        type: 'square', Bx: r.B, By: r.B, Dc: r.Dc, qNet: r.qNet, qu: r.qu,
+        dPunch: r.dPunch, dBeamLong: r.dBeam, dBeamShort: r.dBeam,
+        long: { As: r.steelArea, bars: r.bars, spacing: r.barSpacing, usedMin: r.usedMinSteel, rho: r.rho },
+        short: null,
+      }
+    }
+    const sizing = form.sizingMode === 'ratio'
+      ? { mode: 'ratio' as const, ratio: form.ratio }
+      : { mode: 'fixedWidth' as const, By: form.fixedBy }
+    const r = designRectangularFooting({ ...common, sizing })
+    return {
+      type: 'rectangular', Bx: r.Bx, By: r.By, Dc: r.Dc, qNet: r.qNet, qu: r.qu,
+      dPunch: r.dPunch, dBeamLong: r.dBeamLong, dBeamShort: r.dBeamShort,
+      long: r.long, short: r.short,
+    }
+  }, [form, valid, rect])
 
   return (
     <div className="mx-auto max-w-6xl p-6">
       <Link to="/" className="text-sm text-[#0056b3] hover:underline">← Home</Link>
       <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">Foundation Design</h1>
-      <p className="mt-1 text-slate-600">Isolated square footing, concentric load — React + typed engine pilot. Results update live.</p>
+      <p className="mt-1 text-slate-600">Isolated footing, concentric load — React + typed engine. Results update live.</p>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
         {/* ── Inputs ── */}
         <div className="space-y-5">
+          <Card title="Footing">
+            <Select label="Type" value={form.footingType} onChange={set('footingType')}
+              options={[['square', 'Isolated Square'], ['rectangular', 'Isolated Rectangular']]} />
+            {rect && (
+              <Select label="Sizing" value={form.sizingMode} onChange={set('sizingMode')}
+                options={[['ratio', 'By aspect ratio (Bx/By)'], ['fixedWidth', 'Fixed width By']]} />
+            )}
+            {rect && form.sizingMode === 'ratio' && (
+              <NumField label="Aspect Bx/By" value={form.ratio} onChange={set('ratio')} />
+            )}
+            {rect && form.sizingMode === 'fixedWidth' && (
+              <NumField label="Width By" unit="m" value={form.fixedBy} onChange={set('fixedBy')} />
+            )}
+          </Card>
+
           <Card title="Loads & Column">
             <NumField label={<Math tex="P" />} unit="kN" value={form.serviceLoad} onChange={set('serviceLoad')} />
             <NumField label={<Math tex="P_u" />} unit="kN" value={form.ultimateLoad} onChange={set('ultimateLoad')} />
             <NumField label={<>Column <Math tex="c" /> (square)</>} unit="mm" value={form.columnWidth} onChange={set('columnWidth')} />
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 font-medium text-slate-600">Column position</span>
-              <select value={form.position} onChange={(e) => set('position')(e.target.value as FormState['position'])}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none">
-                <option value="interior">Interior</option>
-                <option value="edge">Edge</option>
-                <option value="corner">Corner</option>
-              </select>
-            </label>
+            <Select label="Column position" value={form.position} onChange={set('position')}
+              options={[['interior', 'Interior'], ['edge', 'Edge'], ['corner', 'Corner']]} />
           </Card>
 
           <Card title="Materials">
@@ -132,31 +209,44 @@ export default function FoundationDesign() {
         <div className="space-y-5">
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Design preview</h2>
-            {result ? (
-              <FootingSchematic B={result.B} Dc={result.Dc} columnWidth={form.columnWidth} H={form.H} />
+            {view ? (
+              <FootingSchematic Bx={view.Bx} By={view.By} Dc={view.Dc} columnWidth={form.columnWidth} H={form.H} />
             ) : (
               <p className="py-8 text-center text-sm text-slate-400">Enter valid inputs — net bearing must be positive.</p>
             )}
           </div>
 
-          {result && (
+          {view && (
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Results</h2>
-              <Row label={<Math tex="q_{net}" />} value={`${f3(result.qNet)} kPa`} />
-              <Row label="Footing size B" value={`${f2(result.B)} m`} />
-              <Row label={<Math tex="q_u = P_u/B^2" />} value={`${f3(result.qu)} kPa`} />
-              <Row label="Slab thickness Dc" value={`${f0(result.Dc)} mm`} check={`d≈${f0(result.dFlex)} mm`} />
-              <Row label="d — punching / beam" value={`${f0(result.dPunch)} / ${f0(result.dBeam)} mm`} />
-              <Row label="Steel As" value={`${f0(result.steelArea)} mm²`} check={result.usedMinSteel ? 'ρ_min governs' : `ρ=${result.rho.toFixed(4)}`} />
-              <Row label="Reinforcement" value={`${result.bars} ⌀${form.barDia} mm`} check={`@ ${f0(result.barSpacing)} mm o.c.`} />
+              <Row label={<Math tex="q_{net}" />} value={`${f3(view.qNet)} kPa`} />
+              <Row label="Footing size"
+                value={view.type === 'square' ? `B = ${f2(view.Bx)} m` : `${f2(view.Bx)} × ${f2(view.By)} m`} />
+              <Row label={<Math tex="q_u" />} value={`${f3(view.qu)} kPa`} />
+              <Row label="Slab thickness Dc" value={`${f0(view.Dc)} mm`} />
+              <Row label="d — punching"
+                value={`${f0(view.dPunch)} mm`}
+                check={view.type === 'square' ? `beam ${f0(view.dBeamLong)} mm` : `beam x/y ${f0(view.dBeamLong)}/${f0(view.dBeamShort)} mm`} />
+              {view.type === 'square'
+                ? steelRow('Steel (each way)', view.long, form.barDia)
+                : (
+                  <>
+                    {steelRow('Steel — long (x)', view.long, form.barDia)}
+                    {view.short && steelRow('Steel — short (y)', view.short, form.barDia)}
+                    {view.short && (
+                      <Row label="Central band (short)"
+                        value={`${view.short.bandBars} of ${view.short.bars} bars`}
+                        check={`band ≈ ${(view.short.bandFraction * 100).toFixed(0)}% in By`} />
+                    )}
+                  </>
+                )}
             </div>
           )}
 
           <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
             <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Basis</h2>
-            <Math block tex={String.raw`q_{net} = q_a - \gamma_s D_s - \gamma_c D_c - q`} />
-            <Math block tex={String.raw`P_u = \max(1.4D,\ 1.2D + 1.6L),\quad B = \sqrt{P/q_{net}}`} />
-            <p className="mt-1 text-xs text-slate-400">NSCP 2015 / ACI 318-14. φ: shear 0.75, flexure 0.90.</p>
+            <Math block tex={String.raw`q_{net} = q_a - \gamma_s D_s - \gamma_c D_c - q,\quad P_u = \max(1.4D,\ 1.2D + 1.6L)`} />
+            <p className="mt-1 text-xs text-slate-400">NSCP 2015 / ACI 318-14. φ: shear 0.75, flexure 0.90. Short-direction band per §413.3.3.3.</p>
           </div>
         </div>
       </div>
