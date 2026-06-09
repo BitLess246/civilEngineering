@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { designSquareFooting } from '../engine/isolatedFooting'
 import { designRectangularFooting } from '../engine/rectangularFooting'
+import { designEccentricSquareFooting } from '../engine/eccentricFooting'
 import { netBearing } from '../engine/bearing'
 import type { ColumnPosition } from '../engine/shear'
 import { FootingSchematic } from '../components/FootingSchematic'
@@ -11,14 +12,18 @@ import 'katex/dist/katex.min.css'
 
 type FootingType = 'square' | 'rectangular'
 type SizingMode = 'ratio' | 'fixedWidth'
+type LoadingType = 'concentric' | 'eccentric'
 
 interface FormState {
   footingType: FootingType
+  loadingType: LoadingType
   sizingMode: SizingMode
   ratio: number
   fixedBy: number
   serviceLoad: number
   ultimateLoad: number
+  serviceMoment: number
+  ultimateMoment: number
   columnWidth: number
   fc: number
   fy: number
@@ -34,11 +39,14 @@ interface FormState {
 
 const DEFAULTS: FormState = {
   footingType: 'square',
+  loadingType: 'concentric',
   sizingMode: 'ratio',
   ratio: 1.5,
   fixedBy: 2,
   serviceLoad: 1000,
   ultimateLoad: 1400,
+  serviceMoment: 150,
+  ultimateMoment: 210,
   columnWidth: 400,
   fc: 28,
   fy: 415,
@@ -55,10 +63,12 @@ const DEFAULTS: FormState = {
 interface DirSteel { As: number; bars: number; spacing: number; usedMin: boolean; rho: number }
 interface View {
   type: FootingType
+  loading: LoadingType
   Bx: number; By: number; Dc: number; qNet: number; qu: number
   dPunch: number; dBeamLong: number; dBeamShort: number
   long: DirSteel
   short: (DirSteel & { bandBars: number; bandFraction: number }) | null
+  ecc: { e: number; qMax: number; qMin: number; kernOK: boolean } | null
 }
 
 function NumField({ label, unit, value, onChange, step = 'any' }: {
@@ -121,7 +131,8 @@ function steelRow(label: ReactNode, s: DirSteel, db: number) {
 export default function FoundationDesign() {
   const [form, setForm] = useState<FormState>(DEFAULTS)
   const set = <K extends keyof FormState>(k: K) => (v: FormState[K]) => setForm((s) => ({ ...s, [k]: v }))
-  const rect = form.footingType === 'rectangular'
+  const ecc = form.loadingType === 'eccentric'
+  const rect = form.footingType === 'rectangular' && !ecc   // eccentric pilot is square-only
 
   const qNetTrial = useMemo(
     () => netBearing({ qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc, H: form.H, Dc: 0.25, surcharge: form.surcharge }),
@@ -137,13 +148,23 @@ export default function FoundationDesign() {
       fc: form.fc, fy: form.fy, qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc,
       H: form.H, barDia: form.barDia, cover: form.cover, surcharge: form.surcharge, position: form.position,
     }
-    if (!rect) {
-      const r = designSquareFooting(common)
+    if (ecc) {
+      const r = designEccentricSquareFooting({ ...common, serviceMoment: form.serviceMoment, ultimateMoment: form.ultimateMoment })
       return {
-        type: 'square', Bx: r.B, By: r.B, Dc: r.Dc, qNet: r.qNet, qu: r.qu,
+        type: 'square', loading: 'eccentric', Bx: r.B, By: r.B, Dc: r.Dc, qNet: r.qNet, qu: r.quMax,
         dPunch: r.dPunch, dBeamLong: r.dBeam, dBeamShort: r.dBeam,
         long: { As: r.steelArea, bars: r.bars, spacing: r.barSpacing, usedMin: r.usedMinSteel, rho: r.rho },
         short: null,
+        ecc: { e: r.e, qMax: r.qMaxService, qMin: r.qMinService, kernOK: r.kernOK },
+      }
+    }
+    if (!rect) {
+      const r = designSquareFooting(common)
+      return {
+        type: 'square', loading: 'concentric', Bx: r.B, By: r.B, Dc: r.Dc, qNet: r.qNet, qu: r.qu,
+        dPunch: r.dPunch, dBeamLong: r.dBeam, dBeamShort: r.dBeam,
+        long: { As: r.steelArea, bars: r.bars, spacing: r.barSpacing, usedMin: r.usedMinSteel, rho: r.rho },
+        short: null, ecc: null,
       }
     }
     const sizing = form.sizingMode === 'ratio'
@@ -151,17 +172,17 @@ export default function FoundationDesign() {
       : { mode: 'fixedWidth' as const, By: form.fixedBy }
     const r = designRectangularFooting({ ...common, sizing })
     return {
-      type: 'rectangular', Bx: r.Bx, By: r.By, Dc: r.Dc, qNet: r.qNet, qu: r.qu,
+      type: 'rectangular', loading: 'concentric', Bx: r.Bx, By: r.By, Dc: r.Dc, qNet: r.qNet, qu: r.qu,
       dPunch: r.dPunch, dBeamLong: r.dBeamLong, dBeamShort: r.dBeamShort,
-      long: r.long, short: r.short,
+      long: r.long, short: r.short, ecc: null,
     }
-  }, [form, valid, rect])
+  }, [form, valid, rect, ecc])
 
   return (
     <div className="mx-auto max-w-6xl p-6">
       <Link to="/" className="text-sm text-[#0056b3] hover:underline">← Home</Link>
       <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">Foundation Design</h1>
-      <p className="mt-1 text-slate-600">Isolated footing, concentric load — React + typed engine. Results update live.</p>
+      <p className="mt-1 text-slate-600">Isolated footing (square / rectangular, concentric / eccentric) — React + typed engine. Results update live.</p>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
         {/* ── Inputs ── */}
@@ -169,6 +190,8 @@ export default function FoundationDesign() {
           <Card title="Footing">
             <Select label="Type" value={form.footingType} onChange={set('footingType')}
               options={[['square', 'Isolated Square'], ['rectangular', 'Isolated Rectangular']]} />
+            <Select label="Loading" value={form.loadingType} onChange={set('loadingType')}
+              options={[['concentric', 'Concentric'], ['eccentric', 'Eccentric (uniaxial)']]} />
             {rect && (
               <Select label="Sizing" value={form.sizingMode} onChange={set('sizingMode')}
                 options={[['ratio', 'By aspect ratio (Bx/By)'], ['fixedWidth', 'Fixed width By']]} />
@@ -179,11 +202,16 @@ export default function FoundationDesign() {
             {rect && form.sizingMode === 'fixedWidth' && (
               <NumField label="Width By" unit="m" value={form.fixedBy} onChange={set('fixedBy')} />
             )}
+            {ecc && (
+              <p className="col-span-full text-xs text-slate-400">Eccentric is square-only in this pilot; the footing is sized to keep the load in the kern (no uplift).</p>
+            )}
           </Card>
 
           <Card title="Loads & Column">
             <NumField label={<Math tex="P" />} unit="kN" value={form.serviceLoad} onChange={set('serviceLoad')} />
             <NumField label={<Math tex="P_u" />} unit="kN" value={form.ultimateLoad} onChange={set('ultimateLoad')} />
+            {ecc && <NumField label={<Math tex="M" />} unit="kN·m" value={form.serviceMoment} onChange={set('serviceMoment')} />}
+            {ecc && <NumField label={<Math tex="M_u" />} unit="kN·m" value={form.ultimateMoment} onChange={set('ultimateMoment')} />}
             <NumField label={<>Column <Math tex="c" /> (square)</>} unit="mm" value={form.columnWidth} onChange={set('columnWidth')} />
             <Select label="Column position" value={form.position} onChange={set('position')}
               options={[['interior', 'Interior'], ['edge', 'Edge'], ['corner', 'Corner']]} />
@@ -222,7 +250,14 @@ export default function FoundationDesign() {
               <Row label={<Math tex="q_{net}" />} value={`${f3(view.qNet)} kPa`} />
               <Row label="Footing size"
                 value={view.type === 'square' ? `B = ${f2(view.Bx)} m` : `${f2(view.Bx)} × ${f2(view.By)} m`} />
-              <Row label={<Math tex="q_u" />} value={`${f3(view.qu)} kPa`} />
+              {view.ecc && (
+                <>
+                  <Row label={<>Eccentricity <Math tex="e = M/P" /></>} value={`${f3(view.ecc.e)} m`} check={`kern B/6 = ${f3(view.Bx / 6)} m`} />
+                  <Row label={<Math tex="q_{max}/q_{min}" />} value={`${f2(view.ecc.qMax)} / ${f2(view.ecc.qMin)} kPa`}
+                    check={view.ecc.kernOK ? '✓ no uplift, ≤ q_net' : '✗ check uplift'} />
+                </>
+              )}
+              <Row label={view.ecc ? <Math tex="q_{u,max}" /> : <Math tex="q_u" />} value={`${f3(view.qu)} kPa`} />
               <Row label="Slab thickness Dc" value={`${f0(view.Dc)} mm`} />
               <Row label="d — punching"
                 value={`${f0(view.dPunch)} mm`}
