@@ -6,6 +6,7 @@ import { designEccentricSquareFooting } from '../engine/eccentricFooting'
 import { netBearing } from '../engine/bearing'
 import type { ColumnPosition } from '../engine/shear'
 import { FootingSchematic } from '../components/FootingSchematic'
+import { ReportControls } from '../components/ReportControls'
 import { Math } from '../lib/math'
 import { f0, f2, f3 } from '../lib/format'
 import 'katex/dist/katex.min.css'
@@ -180,9 +181,10 @@ export default function FoundationDesign() {
 
   return (
     <div className="mx-auto max-w-6xl p-6">
-      <Link to="/" className="text-sm text-[#0056b3] hover:underline">← Home</Link>
+      <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
       <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">Foundation Design</h1>
-      <p className="mt-1 text-slate-600">Isolated footing (square / rectangular, concentric / eccentric) — React + typed engine. Results update live.</p>
+      <p className="no-print mt-1 text-slate-600">Isolated footing (square / rectangular, concentric / eccentric) — React + typed engine. Results update live.</p>
+      <ReportControls title="Foundation Design Report" />
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
         {/* ── Inputs ── */}

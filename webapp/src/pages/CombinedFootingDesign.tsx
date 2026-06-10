@@ -4,6 +4,7 @@ import { designCombinedFooting, type CombinedFootingInput } from '../engine/comb
 import { designFlexibleCombinedFooting } from '../engine/flexibleCombinedFooting'
 import { CombinedFootingSchematic } from '../components/CombinedFootingSchematic'
 import { Diagram } from '../components/Diagram'
+import { ReportControls } from '../components/ReportControls'
 import { Math } from '../lib/math'
 import { f0, f2, f3 } from '../lib/format'
 import 'katex/dist/katex.min.css'
@@ -160,13 +161,14 @@ export default function CombinedFootingDesign() {
 
   return (
     <div className="mx-auto max-w-6xl p-6">
-      <Link to="/" className="text-sm text-[#0056b3] hover:underline">← Home</Link>
+      <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
       <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">Combined Footing Design</h1>
-      <p className="mt-1 text-slate-600">
+      <p className="no-print mt-1 text-slate-600">
         Two-column combined footing. Rectangular when one edge is free, trapezoidal when both are property-restricted.
         Choose the <b>rigid</b> (linear-pressure) or <b>flexible</b> (Winkler beam-on-elastic-foundation) method —
         geometry is shared; the flexible method recomputes V/M from the settlement field. Results update live.
       </p>
+      <ReportControls title="Combined Footing Design Report" />
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
         {/* ── Inputs ── */}

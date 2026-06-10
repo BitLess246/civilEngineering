@@ -14,3 +14,20 @@ body {
   color: #1f2933;
   background: #f5f7fa;
 }
+
+/* ── Print / PDF export ──────────────────────────────────────────────
+   Screen keeps the interactive chrome; print shows a clean report:
+   nav + buttons hidden, white background, cards kept whole across pages. */
+.print-only { display: none; }
+
+@media print {
+  @page { margin: 14mm; }
+  html, body { background: #fff !important; }
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+  .print-avoid-break { break-inside: avoid; page-break-inside: avoid; }
+  /* flatten the on-screen panels for ink-friendly output */
+  .rounded-xl, .shadow-sm { box-shadow: none !important; }
+  main, .mx-auto { max-width: 100% !important; }
+  a[href]::after { content: ""; }
+}
