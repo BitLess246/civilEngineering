@@ -1,5 +1,4 @@
 import { Routes, Route, Link } from 'react-router-dom'
-import { factoredLoad, beta1 } from './engine/loads'
 import FoundationDesign from './pages/FoundationDesign'
 import PileCapDesign from './pages/PileCapDesign'
 import CombinedFootingDesign from './pages/CombinedFootingDesign'
@@ -22,23 +21,12 @@ function Home() {
   return (
     <div className="mx-auto max-w-4xl p-8">
       <h1 className="text-3xl font-extrabold tracking-tight text-[#0056b3]">
-        Civil Engineering — React preview
+        Civil Engineering Toolkit
       </h1>
       <p className="mt-2 text-slate-600">
-        React&nbsp;+&nbsp;TypeScript app with a typed calculation engine. Structural design tools and
-        material take-off estimators, each with a printable / PDF report.
+        Structural design tools and material take-off estimators built on a typed calculation engine
+        (NSCP&nbsp;2015 / ACI&nbsp;318-14). Every tool computes live and produces a printable / PDF report.
       </p>
-
-      <div className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-800">Engine smoke check</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          P<sub>u</sub> = max(1.4D, 1.2D+1.6L), D=150, L=100 →{' '}
-          <b>{factoredLoad({ dead: 150, live: 100 })} kN</b>
-        </p>
-        <p className="text-sm text-slate-600">
-          β₁ at f′c = 35 MPa → <b>{beta1(35)}</b>
-        </p>
-      </div>
 
       <h2 className="mt-8 text-lg font-semibold text-slate-800">Structural design</h2>
       <div className="mt-3 flex flex-wrap gap-3">
