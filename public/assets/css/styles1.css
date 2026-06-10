@@ -754,27 +754,48 @@ nav ul li a:hover {
 .fd-page .fd-import-row {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px 14px;
     flex-wrap: wrap;
-    padding: 12px 16px;
-    background: #f6f8fa;
-    border: 1px dashed #c5c9d0;
-    border-radius: 6px;
-    margin: 0 0 16px;
+    padding: 10px 14px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    margin: 0 0 18px;
 }
 
 .fd-page .fd-import-row label {
     width: auto;
     margin: 0;
     font-weight: 600;
-    color: #2c3e50;
+    color: #1e293b;
+    font-size: 0.92rem;
 }
 
+/* Compact native file input with a styled picker button. */
 .fd-page .fd-import-row input[type="file"] {
     width: auto;
-    flex: 1 1 240px;
+    flex: 0 1 auto;
     margin: 0;
-    padding: 6px;
+    padding: 0;
+    font-size: 0.85rem;
+    color: #64748b;
+}
+.fd-page .fd-import-row input[type="file"]::file-selector-button {
+    appearance: none;
+    margin-right: 10px;
+    padding: 7px 14px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #fff;
+    color: #0056b3;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.fd-page .fd-import-row input[type="file"]::file-selector-button:hover {
+    background: #eff6ff;
+    border-color: #0056b3;
 }
 
 .fd-page .fd-hint {
@@ -783,27 +804,34 @@ nav ul li a:hover {
     margin: 4px 0 0;
 }
 
-/* "Download blank template" link-button next to the upload field */
+/* "Download blank template" — compact secondary button, pushed to the right.
+   Width/padding/margin explicitly reset the global `button { width:80% }` rule. */
 .fd-page .fd-link-btn {
     appearance: none;
+    width: auto;
+    flex: 0 0 auto;
+    margin: 0 0 0 auto;
     background: #fff;
-    border: 1px solid #b3d4f0;
+    border: 1px solid #cbd5e1;
     color: #0056b3;
-    padding: 6px 12px;
-    border-radius: 4px;
-    font-size: 0.9em;
+    padding: 7px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    line-height: 1.2;
     cursor: pointer;
     font-weight: 600;
+    transition: background 0.15s ease, border-color 0.15s ease;
 }
 .fd-page .fd-link-btn:hover {
-    background: #e7f3ff;
+    background: #eff6ff;
     border-color: #0056b3;
 }
 
-/* Expandable "What format?" help block */
+/* Expandable "What format?" help block — on its own line under the banner. */
 .fd-page .fd-import-help {
+    flex: 1 0 100%;
     width: 100%;
-    margin-top: 6px;
+    margin-top: 2px;
     font-size: 0.85em;
 }
 .fd-page .fd-import-help > summary {
