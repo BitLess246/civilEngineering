@@ -1,6 +1,7 @@
 import { Routes, Route, Link } from 'react-router-dom'
 import { factoredLoad, beta1 } from './engine/loads'
 import FoundationDesign from './pages/FoundationDesign'
+import PileCapDesign from './pages/PileCapDesign'
 
 function Home() {
   return (
@@ -24,12 +25,20 @@ function Home() {
         </p>
       </div>
 
-      <Link
-        to="/foundation"
-        className="mt-6 inline-block rounded-lg bg-gradient-to-br from-[#0056b3] to-[#003f86] px-5 py-2.5 font-semibold text-white shadow-md transition hover:shadow-lg"
-      >
-        Foundation Design →
-      </Link>
+      <div className="mt-6 flex flex-wrap gap-3">
+        <Link
+          to="/foundation"
+          className="inline-block rounded-lg bg-gradient-to-br from-[#0056b3] to-[#003f86] px-5 py-2.5 font-semibold text-white shadow-md transition hover:shadow-lg"
+        >
+          Foundation Design →
+        </Link>
+        <Link
+          to="/pile-cap"
+          className="inline-block rounded-lg bg-gradient-to-br from-[#0056b3] to-[#003f86] px-5 py-2.5 font-semibold text-white shadow-md transition hover:shadow-lg"
+        >
+          Pile Cap Design →
+        </Link>
+      </div>
     </div>
   )
 }
@@ -39,6 +48,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/foundation" element={<FoundationDesign />} />
+      <Route path="/pile-cap" element={<PileCapDesign />} />
     </Routes>
   )
 }
