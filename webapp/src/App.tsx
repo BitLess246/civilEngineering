@@ -2,6 +2,7 @@ import { Routes, Route, Link } from 'react-router-dom'
 import { factoredLoad, beta1 } from './engine/loads'
 import FoundationDesign from './pages/FoundationDesign'
 import PileCapDesign from './pages/PileCapDesign'
+import CombinedFootingDesign from './pages/CombinedFootingDesign'
 
 function Home() {
   return (
@@ -38,6 +39,12 @@ function Home() {
         >
           Pile Cap Design →
         </Link>
+        <Link
+          to="/combined"
+          className="inline-block rounded-lg bg-gradient-to-br from-[#0056b3] to-[#003f86] px-5 py-2.5 font-semibold text-white shadow-md transition hover:shadow-lg"
+        >
+          Combined Footing →
+        </Link>
       </div>
     </div>
   )
@@ -49,6 +56,7 @@ export default function App() {
       <Route path="/" element={<Home />} />
       <Route path="/foundation" element={<FoundationDesign />} />
       <Route path="/pile-cap" element={<PileCapDesign />} />
+      <Route path="/combined" element={<CombinedFootingDesign />} />
     </Routes>
   )
 }
