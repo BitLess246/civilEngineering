@@ -4,11 +4,10 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.tsx'
 
-// basename '/app' — the SPA is served by Express under /app, alongside the
-// legacy pages, during the incremental migration.
+// The SPA is served by Express at the site root, so routes live at "/".
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter basename="/app">
+    <BrowserRouter>
       <App />
     </BrowserRouter>
   </StrictMode>,
