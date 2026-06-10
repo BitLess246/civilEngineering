@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { designPileCap, type PileArrangement } from '../engine/pileCap'
 import { PileCapSchematic } from '../components/PileCapSchematic'
+import { ReportControls } from '../components/ReportControls'
 import { Math as KTex } from '../lib/math'
 import { f0, f2, f3 } from '../lib/format'
 import 'katex/dist/katex.min.css'
@@ -159,11 +160,12 @@ export default function PileCapDesign() {
 
   return (
     <div className="mx-auto max-w-6xl p-6">
-      <Link to="/" className="text-sm text-[#0056b3] hover:underline">← Home</Link>
+      <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
       <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">Pile Cap Design</h1>
-      <p className="mt-1 text-slate-600">
+      <p className="no-print mt-1 text-slate-600">
         ACI 318-14 / NSCP 2015 — pile reactions, column & pile punching, one-way shear, flexure, development length.
       </p>
+      <ReportControls title="Pile Cap Design Report" />
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
         {/* ── Inputs ── */}

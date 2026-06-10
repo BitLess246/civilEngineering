@@ -3,16 +3,30 @@ import { factoredLoad, beta1 } from './engine/loads'
 import FoundationDesign from './pages/FoundationDesign'
 import PileCapDesign from './pages/PileCapDesign'
 import CombinedFootingDesign from './pages/CombinedFootingDesign'
+import SlabEstimate from './pages/SlabEstimate'
+import ChbEstimate from './pages/ChbEstimate'
+import ColumnEstimate from './pages/ColumnEstimate'
+import BeamEstimate from './pages/BeamEstimate'
+import BoxCulvertEstimate from './pages/BoxCulvertEstimate'
+
+function Tile({ to, children }: { to: string; children: string }) {
+  return (
+    <Link to={to}
+      className="inline-block rounded-lg bg-gradient-to-br from-[#0056b3] to-[#003f86] px-5 py-2.5 font-semibold text-white shadow-md transition hover:shadow-lg">
+      {children} →
+    </Link>
+  )
+}
 
 function Home() {
   return (
-    <div className="mx-auto max-w-3xl p-8">
+    <div className="mx-auto max-w-4xl p-8">
       <h1 className="text-3xl font-extrabold tracking-tight text-[#0056b3]">
         Civil Engineering — React preview
       </h1>
       <p className="mt-2 text-slate-600">
-        New React&nbsp;+&nbsp;TypeScript app (Phase&nbsp;0). The calculation engine is being
-        ported to typed modules; the UI migrates page&nbsp;by&nbsp;page.
+        React&nbsp;+&nbsp;TypeScript app with a typed calculation engine. Structural design tools and
+        material take-off estimators, each with a printable / PDF report.
       </p>
 
       <div className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -26,25 +40,20 @@ function Home() {
         </p>
       </div>
 
-      <div className="mt-6 flex flex-wrap gap-3">
-        <Link
-          to="/foundation"
-          className="inline-block rounded-lg bg-gradient-to-br from-[#0056b3] to-[#003f86] px-5 py-2.5 font-semibold text-white shadow-md transition hover:shadow-lg"
-        >
-          Foundation Design →
-        </Link>
-        <Link
-          to="/pile-cap"
-          className="inline-block rounded-lg bg-gradient-to-br from-[#0056b3] to-[#003f86] px-5 py-2.5 font-semibold text-white shadow-md transition hover:shadow-lg"
-        >
-          Pile Cap Design →
-        </Link>
-        <Link
-          to="/combined"
-          className="inline-block rounded-lg bg-gradient-to-br from-[#0056b3] to-[#003f86] px-5 py-2.5 font-semibold text-white shadow-md transition hover:shadow-lg"
-        >
-          Combined Footing →
-        </Link>
+      <h2 className="mt-8 text-lg font-semibold text-slate-800">Structural design</h2>
+      <div className="mt-3 flex flex-wrap gap-3">
+        <Tile to="/foundation">Foundation Design</Tile>
+        <Tile to="/pile-cap">Pile Cap Design</Tile>
+        <Tile to="/combined">Combined Footing</Tile>
+      </div>
+
+      <h2 className="mt-8 text-lg font-semibold text-slate-800">Material estimation (quantity take-off)</h2>
+      <div className="mt-3 flex flex-wrap gap-3">
+        <Tile to="/estimate/slab">Slab</Tile>
+        <Tile to="/estimate/beam">Beam</Tile>
+        <Tile to="/estimate/column">Column</Tile>
+        <Tile to="/estimate/chb">CHB Wall</Tile>
+        <Tile to="/estimate/box-culvert">Box Culvert</Tile>
       </div>
     </div>
   )
@@ -57,6 +66,11 @@ export default function App() {
       <Route path="/foundation" element={<FoundationDesign />} />
       <Route path="/pile-cap" element={<PileCapDesign />} />
       <Route path="/combined" element={<CombinedFootingDesign />} />
+      <Route path="/estimate/slab" element={<SlabEstimate />} />
+      <Route path="/estimate/beam" element={<BeamEstimate />} />
+      <Route path="/estimate/column" element={<ColumnEstimate />} />
+      <Route path="/estimate/chb" element={<ChbEstimate />} />
+      <Route path="/estimate/box-culvert" element={<BoxCulvertEstimate />} />
     </Routes>
   )
 }
