@@ -1,13 +1,18 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { designCombinedFooting, type CombinedFootingInput } from '../engine/combinedFooting'
+import { designFlexibleCombinedFooting } from '../engine/flexibleCombinedFooting'
 import { CombinedFootingSchematic } from '../components/CombinedFootingSchematic'
 import { Diagram } from '../components/Diagram'
 import { Math } from '../lib/math'
 import { f0, f2, f3 } from '../lib/format'
 import 'katex/dist/katex.min.css'
 
+type Method = 'rigid' | 'flexible'
+
 interface FormState {
+  method: Method
+  ksubgrade: number
   col1Width: number
   col2Width: number
   spacing: number
@@ -29,6 +34,8 @@ interface FormState {
 }
 
 const DEFAULTS: FormState = {
+  method: 'rigid',
+  ksubgrade: 40000,
   col1Width: 400,
   col2Width: 400,
   spacing: 4.0,
@@ -76,6 +83,20 @@ function Toggle({ label, value, onChange }: { label: ReactNode; value: boolean; 
   )
 }
 
+function Select<T extends string>({ label, value, onChange, options }: {
+  label: string; value: T; onChange: (v: T) => void; options: [T, string][]
+}) {
+  return (
+    <label className="flex flex-col text-sm">
+      <span className="mb-1 font-medium text-slate-600">{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value as T)}
+        className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none">
+        {options.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+      </select>
+    </label>
+  )
+}
+
 function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
     <fieldset className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -119,6 +140,20 @@ export default function CombinedFootingDesign() {
     }
   }, [form, valid])
 
+  const flex = useMemo(() => {
+    if (!valid || form.method !== 'flexible' || !(form.ksubgrade > 0)) return null
+    try {
+      const r = designFlexibleCombinedFooting({ ...form, ksubgrade: form.ksubgrade })
+      return r.qNet > 0 ? r : null
+    } catch {
+      return null
+    }
+  }, [form, valid])
+
+  const flexible = form.method === 'flexible'
+  // Diagrams & longitudinal steel come from the active method; geometry/plan/transverse from rigid.
+  const samples = flexible && flex ? flex.samples : result?.samples
+  const longSections = flexible && flex ? flex.longSections : result?.longSections
   const vlines = result
     ? [{ x: result.x1, label: 'C1' }, { x: result.x2, label: 'C2' }]
     : []
@@ -128,13 +163,28 @@ export default function CombinedFootingDesign() {
       <Link to="/" className="text-sm text-[#0056b3] hover:underline">← Home</Link>
       <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">Combined Footing Design</h1>
       <p className="mt-1 text-slate-600">
-        Two-column combined footing (rigid / conventional method). Rectangular when one edge is free, trapezoidal
-        when both are property-restricted. Results update live.
+        Two-column combined footing. Rectangular when one edge is free, trapezoidal when both are property-restricted.
+        Choose the <b>rigid</b> (linear-pressure) or <b>flexible</b> (Winkler beam-on-elastic-foundation) method —
+        geometry is shared; the flexible method recomputes V/M from the settlement field. Results update live.
       </p>
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
         {/* ── Inputs ── */}
         <div className="space-y-5">
+          <Card title="Analysis method">
+            <Select label="Method" value={form.method} onChange={set('method')}
+              options={[['rigid', 'Rigid (conventional)'], ['flexible', 'Flexible (Winkler)']]} />
+            {flexible && (
+              <NumField label={<>Subgrade <Math tex="k_s" /></>} unit="kN/m³" value={form.ksubgrade} onChange={set('ksubgrade')} />
+            )}
+            {flexible && (
+              <p className="col-span-full text-xs text-slate-400">
+                Beam-on-elastic-foundation FEM (Hermitian elements + consistent Winkler springs). Soil reaction
+                q(x) = k_s·B·y(x). Typical k_s: loose sand ~10–25, dense sand / stiff clay ~40–120 MN/m³.
+              </p>
+            )}
+          </Card>
+
           <Card title="Geometry">
             <NumField label={<>Column 1 <Math tex="c_1" /></>} unit="mm" value={form.col1Width} onChange={set('col1Width')} />
             <NumField label={<>Column 2 <Math tex="c_2" /></>} unit="mm" value={form.col2Width} onChange={set('col2Width')} />
@@ -206,14 +256,33 @@ export default function CombinedFootingDesign() {
               <Row label={<>Factored loads <Math tex="P_{u1}/P_{u2}" /></>} value={`${f0(result.Pu1)} / ${f0(result.Pu2)} kN`} />
               <Row label="Slab thickness Dc" value={`${f0(result.Dc)} mm`}
                 check={`d punch ${f0(result.dPunch)} · beam ${f0(result.dBeam)} mm`} />
-              <Row label={<>Peak +M <Math tex="M_u" /></>} value={`${f0(result.mPeak)} kN·m`} check={`at x = ${f2(result.xPeak)} m`} />
+              {!flexible && (
+                <Row label={<>Peak +M <Math tex="M_u" /></>} value={`${f0(result.mPeak)} kN·m`} check={`at x = ${f2(result.xPeak)} m`} />
+              )}
+              {flexible && flex && (
+                <>
+                  <Row label={<>Section <Math tex="EI" /></>} value={`${f0(flex.EI / 1000)}×10³ kN·m²`} check={`Ec ${f0(flex.Ec)} MPa`} />
+                  <Row label={<>Rigidity <Math tex="\beta B_x" /></>} value={f2(flex.betaBx)}
+                    check={flex.betaBx < 1 ? 'short → ~rigid' : flex.betaBx > 3 ? 'long → flexible' : 'intermediate'} />
+                  <Row label="Max settlement" value={`${f2(flex.yMax)} mm`}
+                    check={flex.yMin < -1e-3 ? `uplift ${f2(flex.yMin)} mm` : 'full contact'} />
+                  <Row label={<Math tex="q_{soil,max}" />} value={`${f3(flex.qSoilMax)} kPa`}
+                    check={flex.bearingOK ? '✓ ≤ q_net' : '✗ > q_net'} />
+                  <Row label={<>Peak |M| <Math tex="M_u" /></>} value={`${f0(flex.mPeak)} kN·m`} check={`at x = ${f2(flex.xPeak)} m`} />
+                </>
+              )}
+              {flexible && !flex && (
+                <Row label="Flexible solve" value="—" check="check k_s > 0" />
+              )}
             </div>
           )}
 
           {result && (
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Longitudinal flexure</h2>
-              {result.longSections.map((s) => (
+              <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">
+                Longitudinal flexure {flexible && <span className="text-xs font-normal text-slate-400">(from BEF moments)</span>}
+              </h2>
+              {(longSections ?? result.longSections).map((s) => (
                 <Row key={s.label} label={s.label}
                   value={`${s.bars} ⌀${form.barDia} @ ${f0(s.spacing)} mm`}
                   check={`Mu=${f0(s.Mu)} kN·m · ${s.top ? 'top' : 'bottom'}`} />
@@ -230,31 +299,45 @@ export default function CombinedFootingDesign() {
       </div>
 
       {/* ── Diagrams (full width) ── */}
-      {result && (
-        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+      {samples && (
+        <div className={`mt-6 grid grid-cols-1 gap-6 ${flexible && flex ? 'lg:grid-cols-2' : 'lg:grid-cols-3'}`}>
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <Diagram xs={result.samples.x} ys={result.samples.w} title="SOIL REACTION (w)" unit="kN/m"
-              color="#16a34a" vlines={vlines} markExtrema={false} decimals={1} />
+            <Diagram xs={samples.x} ys={samples.w} title="SOIL REACTION (w)" unit="kN/m"
+              color="#16a34a" vlines={vlines} markExtrema={!flexible} decimals={1} />
           </div>
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <Diagram xs={result.samples.x} ys={result.samples.V} title="SHEAR (Vu)" unit="kN"
+            <Diagram xs={samples.x} ys={samples.V} title="SHEAR (Vu)" unit="kN"
               color="#dc2626" vlines={vlines} decimals={0} />
           </div>
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <Diagram xs={result.samples.x} ys={result.samples.M} title="MOMENT (Mu)" unit="kN·m"
+            <Diagram xs={samples.x} ys={samples.M} title="MOMENT (Mu)" unit="kN·m"
               color="#0056b3" vlines={vlines} decimals={0} />
           </div>
+          {flexible && flex && (
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <Diagram xs={flex.samples.x} ys={flex.samples.y} title="SETTLEMENT (y, + down)" unit="mm"
+                color="#7c3aed" vlines={vlines} decimals={2} />
+            </div>
+          )}
         </div>
       )}
 
       <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
         <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Basis</h2>
         <Math block tex={String.raw`q_{net} = q_a - \gamma_s D_s - \gamma_c D_c - q,\qquad P_u = \max(1.4D,\ 1.2D + 1.6L)`} />
-        <p className="mt-1 text-xs text-slate-400">
-          Rigid (conventional) method: equivalent line load varies linearly so its resultant matches the factored
-          column loads; V(x)/M(x) integrated along the footing. NSCP 2015 / ACI 318-14. φ: shear 0.75, flexure 0.90.
-          The Winkler (flexible) method is a planned follow-up.
-        </p>
+        {flexible ? (
+          <p className="mt-1 text-xs text-slate-400">
+            Flexible (Winkler) method: footing modelled as a beam on elastic foundation, EI·y'''' + k_s·B·y = column
+            loads, solved with Hermitian beam elements and consistent foundation springs. Soil pressure and internal
+            V/M follow the settlement field rather than an assumed linear pressure. Geometry/thickness are inherited
+            from the rigid sizing. NSCP 2015 / ACI 318-14. φ: shear 0.75, flexure 0.90.
+          </p>
+        ) : (
+          <p className="mt-1 text-xs text-slate-400">
+            Rigid (conventional) method: equivalent line load varies linearly so its resultant matches the factored
+            column loads; V(x)/M(x) integrated along the footing. NSCP 2015 / ACI 318-14. φ: shear 0.75, flexure 0.90.
+          </p>
+        )}
       </div>
     </div>
   )
