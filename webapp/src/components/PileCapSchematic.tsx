@@ -4,7 +4,6 @@ import type { PileCoord } from '../engine/pileCap'
 const BLUE  = '#0056b3'
 const STEEL = '#37526e'
 const FILL  = '#eef3f8'
-const PILE  = '#8ab4d8'
 const DIM   = '#1f77b4'
 
 interface Props {
