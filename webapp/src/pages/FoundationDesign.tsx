@@ -7,6 +7,8 @@ import { netBearing } from '../engine/bearing'
 import type { ColumnPosition } from '../engine/shear'
 import { FootingSchematic } from '../components/FootingSchematic'
 import { ReportControls } from '../components/ReportControls'
+import { ExcelImport } from '../components/ExcelImport'
+import type { BatchResult } from '../lib/foundationExcel'
 import { Math } from '../lib/math'
 import { f0, f2, f3 } from '../lib/format'
 import 'katex/dist/katex.min.css'
@@ -131,6 +133,7 @@ function steelRow(label: ReactNode, s: DirSteel, db: number) {
 
 export default function FoundationDesign() {
   const [form, setForm] = useState<FormState>(DEFAULTS)
+  const [batch, setBatch] = useState<BatchResult | null>(null)
   const set = <K extends keyof FormState>(k: K) => (v: FormState[K]) => setForm((s) => ({ ...s, [k]: v }))
   const ecc = form.loadingType === 'eccentric'
   const rect = form.footingType === 'rectangular' && !ecc   // eccentric pilot is square-only
@@ -185,6 +188,49 @@ export default function FoundationDesign() {
       <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">Foundation Design</h1>
       <p className="no-print mt-1 text-slate-600">Isolated footing (square / rectangular, concentric / eccentric) — React + typed engine. Results update live.</p>
       <ReportControls title="Foundation Design Report" />
+      <ExcelImport onResult={setBatch} />
+
+      {batch && (
+        <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm print-avoid-break">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-200 px-4 py-2.5">
+            <h2 className="text-[1.02rem] font-bold text-[#0056b3]">
+              Batch schedule <span className="text-sm font-normal text-slate-500">({batch.designed}/{batch.rows.length} designed)</span>
+            </h2>
+            <button type="button" onClick={() => setBatch(null)} className="no-print text-xs text-slate-500 hover:text-slate-700 hover:underline">Clear</button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <th className="px-4 py-2 font-semibold">Label</th>
+                  <th className="px-4 py-2 font-semibold">Type</th>
+                  <th className="px-4 py-2 font-semibold">Plan</th>
+                  <th className="px-4 py-2 font-semibold">Dc</th>
+                  <th className="px-4 py-2 font-semibold">Reinforcement</th>
+                  <th className="px-4 py-2 font-semibold">Note</th>
+                </tr>
+              </thead>
+              <tbody>
+                {batch.rows.map((r, i) => (
+                  <tr key={i} className={`border-t border-slate-100 ${r.ok ? '' : 'bg-red-50/60'}`}>
+                    <td className="px-4 py-2 font-medium text-slate-700">{r.ok ? '✓' : '✗'} {r.label}</td>
+                    <td className="px-4 py-2 text-slate-600">{r.type}</td>
+                    <td className="px-4 py-2 text-slate-800">{r.size}</td>
+                    <td className="px-4 py-2 text-slate-800">{r.thickness}</td>
+                    <td className="px-4 py-2 text-slate-800">{r.steel}</td>
+                    <td className="px-4 py-2 text-xs text-slate-500">{r.note}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {batch.unknownHeaders.length > 0 && (
+            <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-400">
+              Ignored headers: {batch.unknownHeaders.join(', ')}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
         {/* ── Inputs ── */}
