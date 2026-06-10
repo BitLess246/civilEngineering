@@ -6,7 +6,7 @@ const DEFAULTS: SlabInput = {
   slabArea: 20, thickness: 0.125, numStructures: 1, concreteClass: 'A', customFactor: 9, spliceLength: 0.3,
   longSpanLength: 5, numLongPieces: 12, longDiaMm: 12,
   shortSpanLength: 4, numShortPieces: 14, shortDiaMm: 12,
-  lengthPerCut: 0.3, numIntersections: 150,
+  lengthPerCut: 0.3,
 }
 
 export default function SlabEstimate() {
@@ -38,7 +38,6 @@ export default function SlabEstimate() {
         </Card>
         <Card title="Tie wire">
           <Num label="Length / cut" unit="m" value={f.lengthPerCut} onChange={set('lengthPerCut')} />
-          <Num label="No. of intersections" value={f.numIntersections} onChange={set('numIntersections')} />
         </Card>
       </div>
 
@@ -55,6 +54,7 @@ export default function SlabEstimate() {
           <Row label="Total steel weight" value={kg(r.totalSteelWeight)} />
         </ResultCard>
         <ResultCard title="Tie wire">
+          <Row label="Intersections" value={`${r.tieWire.intersections}`} sub={`${f.numLongPieces}×${f.numShortPieces} grid`} />
           <Row label="Net length" value={m(r.tieWire.netLength)} />
           <Row label="Rolls" value={`${r.tieWire.rolls} roll/s`} />
         </ResultCard>

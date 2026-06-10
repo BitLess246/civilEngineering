@@ -9,7 +9,7 @@ const DEFAULTS: BeamInput = {
   topSupport: g(3, 2, 16), topMidspan: g(6, 2, 12),
   bottomSupport: g(3, 2, 12), bottomMidspan: g(6, 3, 20),
   stirrupLengthPerSet: 1.2, numStirrupSets: 30, stirrupDiaMm: 10,
-  lengthPerCut: 0.3, numIntersections: 120,
+  lengthPerCut: 0.3,
 }
 
 export default function BeamEstimate() {
@@ -49,7 +49,6 @@ export default function BeamEstimate() {
           <Num label="Stirrups / beam" value={f.numStirrupSets} onChange={set('numStirrupSets')} />
           <Num label="Stirrup Ø" unit="mm" value={f.stirrupDiaMm} onChange={set('stirrupDiaMm')} />
           <Num label="Tie wire length / cut" unit="m" value={f.lengthPerCut} onChange={set('lengthPerCut')} />
-          <Num label="Tie wire intersections" value={f.numIntersections} onChange={set('numIntersections')} />
         </Card>
       </div>
 
@@ -69,6 +68,7 @@ export default function BeamEstimate() {
         </ResultCard>
         <ResultCard title="Stirrups & tie wire">
           <Row label={`Stirrups (Ø${f.stirrupDiaMm})`} value={kg(r.stirrups.weight)} sub={`${r.stirrups.pieces} bars · ${r.stirrups.totalCuts} ties`} />
+          <Row label="Tie wire intersections" value={`${r.tieWire.intersections}`} sub="long. bars × stirrups" />
           <Row label="Tie wire" value={`${r.tieWire.rolls} roll/s`} sub={m(r.tieWire.netLength)} />
         </ResultCard>
       </div>

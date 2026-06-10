@@ -40,11 +40,12 @@ describe('slab estimate', () => {
       slabArea: 20, thickness: 0.1, numStructures: 1, concreteClass: 'A', spliceLength: 0.3,
       longSpanLength: 5, numLongPieces: 10, longDiaMm: 12,
       shortSpanLength: 4, numShortPieces: 12, shortDiaMm: 12,
-      lengthPerCut: 0.3, numIntersections: 120,
+      lengthPerCut: 0.3,
     });
     expect(r.volume).toBeCloseTo(2);              // 20*0.1
     expect(r.totalSteelWeight).toBeCloseTo(r.longSteel.weight + r.shortSteel.weight);
     expect(r.longSteel.netLength).toBeCloseTo(50);
+    expect(r.tieWire.intersections).toBe(120);    // derived: 10 long × 12 short
   });
 });
 
@@ -64,11 +65,12 @@ describe('column / beam / box culvert', () => {
       length: 0.4, width: 0.4, height: 3, numStructures: 4, concreteClass: 'A', spliceLength: 0.3,
       barLengthPerPiece: 3.5, numBars: 8, barDiaMm: 16,
       tieLengthPerSet: 1.4, numTieSets: 15, tieDiaMm: 10,
-      lengthPerCut: 0.3, numIntersections: 60,
+      lengthPerCut: 0.3,
     });
     expect(r.volume).toBeCloseTo(0.4 * 0.4 * 3 * 4);
     expect(r.lateralTies.pieces).toBeGreaterThan(0);
     expect(r.mainSteel.weight).toBeGreaterThan(0);
+    expect(r.tieWire.intersections).toBe(120);    // derived: 8 bars × 15 ties
   });
   it('beam: four bar groups sum to total', () => {
     const g = (d: number) => ({ lengthPerPiece: 6, numPieces: 2, diaMm: d });
@@ -76,10 +78,12 @@ describe('column / beam / box culvert', () => {
       length: 6, width: 0.25, height: 0.5, numStructures: 1, concreteClass: 'B', spliceLength: 0.3,
       topSupport: g(16), topMidspan: g(12), bottomSupport: g(12), bottomMidspan: g(20),
       stirrupLengthPerSet: 1.2, numStirrupSets: 30, stirrupDiaMm: 10,
-      lengthPerCut: 0.3, numIntersections: 120,
+      lengthPerCut: 0.3,
     });
     expect(r.mainBars).toHaveLength(4);
     expect(r.totalMainWeight).toBeCloseTo(r.mainBars.reduce((s, b) => s + b.takeoff.weight, 0));
+    // intersections = (max top 2 + max bottom 2) × 30 stirrups = 120
+    expect(r.tieWire.intersections).toBe(120);
   });
   it('box culvert RSB count = ceil(L/s)+1', () => {
     const r = estimateBoxCulvert({

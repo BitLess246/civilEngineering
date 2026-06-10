@@ -69,7 +69,8 @@ export interface SlabInput {
   spliceLength: number;
   longSpanLength: number; numLongPieces: number; longDiaMm: number;
   shortSpanLength: number; numShortPieces: number; shortDiaMm: number;
-  lengthPerCut: number; numIntersections: number;
+  /** Wire used per bar crossing (m). Intersections are derived from the bar grid. */
+  lengthPerCut: number;
 }
 export interface SlabResult {
   volume: number; materials: ConcreteMaterials;
@@ -81,10 +82,12 @@ export function estimateSlab(i: SlabInput): SlabResult {
   const materials = concreteMaterials(volume, i.concreteClass, i.customFactor);
   const longSteel = barTakeoff(i.longSpanLength * i.numLongPieces * i.numStructures, i.longDiaMm, i.spliceLength);
   const shortSteel = barTakeoff(i.shortSpanLength * i.numShortPieces * i.numStructures, i.shortDiaMm, i.spliceLength);
+  // Tie wire ties every long×short bar crossing of the orthogonal mat.
+  const intersections = i.numLongPieces * i.numShortPieces;
   return {
     volume, materials, longSteel, shortSteel,
     totalSteelWeight: longSteel.weight + shortSteel.weight,
-    tieWire: tieWire(i.lengthPerCut, i.numIntersections, i.numStructures),
+    tieWire: tieWire(i.lengthPerCut, intersections, i.numStructures),
   };
 }
 
@@ -117,7 +120,8 @@ export interface ColumnInput {
   concreteClass: ConcreteClass; customFactor?: number; spliceLength: number;
   barLengthPerPiece: number; numBars: number; barDiaMm: number;
   tieLengthPerSet: number; numTieSets: number; tieDiaMm: number;
-  lengthPerCut: number; numIntersections: number;
+  /** Wire used per bar crossing (m). Intersections = vertical bars × ties. */
+  lengthPerCut: number;
 }
 export interface ColumnResult {
   volume: number; materials: ConcreteMaterials;
@@ -125,12 +129,14 @@ export interface ColumnResult {
 }
 export function estimateColumn(i: ColumnInput): ColumnResult {
   const volume = i.length * i.width * i.height * i.numStructures;
+  // Each vertical bar is tied to each lateral tie.
+  const intersections = i.numBars * i.numTieSets;
   return {
     volume,
     materials: concreteMaterials(volume, i.concreteClass, i.customFactor),
     mainSteel: barTakeoff(i.barLengthPerPiece * i.numBars * i.numStructures, i.barDiaMm, i.spliceLength),
     lateralTies: lateralTieTakeoff(i.tieLengthPerSet, i.numTieSets, i.tieDiaMm, i.numStructures),
-    tieWire: tieWire(i.lengthPerCut, i.numIntersections, i.numStructures),
+    tieWire: tieWire(i.lengthPerCut, intersections, i.numStructures),
   };
 }
 
@@ -142,7 +148,8 @@ export interface BeamInput {
   topSupport: BeamBarGroup; topMidspan: BeamBarGroup;
   bottomSupport: BeamBarGroup; bottomMidspan: BeamBarGroup;
   stirrupLengthPerSet: number; numStirrupSets: number; stirrupDiaMm: number;
-  lengthPerCut: number; numIntersections: number;
+  /** Wire used per bar crossing (m). Intersections = longitudinal bars × stirrups. */
+  lengthPerCut: number;
 }
 export interface BeamResult {
   volume: number; materials: ConcreteMaterials;
@@ -160,13 +167,18 @@ export function estimateBeam(i: BeamInput): BeamResult {
     grp('Bottom bars @ support', i.bottomSupport),
     grp('Bottom bars @ midspan', i.bottomMidspan),
   ];
+  // Each stirrup ties the longitudinal bars running through it; use the
+  // governing section count (max top + max bottom) crossing each stirrup.
+  const topBars = Math.max(i.topSupport.numPieces, i.topMidspan.numPieces);
+  const bottomBars = Math.max(i.bottomSupport.numPieces, i.bottomMidspan.numPieces);
+  const intersections = (topBars + bottomBars) * i.numStirrupSets;
   return {
     volume,
     materials: concreteMaterials(volume, i.concreteClass, i.customFactor),
     mainBars,
     totalMainWeight: mainBars.reduce((s, b) => s + b.takeoff.weight, 0),
     stirrups: lateralTieTakeoff(i.stirrupLengthPerSet, i.numStirrupSets, i.stirrupDiaMm, i.numStructures),
-    tieWire: tieWire(i.lengthPerCut, i.numIntersections, i.numStructures),
+    tieWire: tieWire(i.lengthPerCut, intersections, i.numStructures),
   };
 }
 

@@ -6,7 +6,7 @@ const DEFAULTS: ColumnInput = {
   length: 0.4, width: 0.4, height: 3, numStructures: 4, concreteClass: 'A', customFactor: 9, spliceLength: 0.3,
   barLengthPerPiece: 3.5, numBars: 8, barDiaMm: 16,
   tieLengthPerSet: 1.4, numTieSets: 16, tieDiaMm: 10,
-  lengthPerCut: 0.3, numIntersections: 64,
+  lengthPerCut: 0.3,
 }
 
 export default function ColumnEstimate() {
@@ -39,7 +39,6 @@ export default function ColumnEstimate() {
         </Card>
         <Card title="Tie wire">
           <Num label="Length / cut" unit="m" value={f.lengthPerCut} onChange={set('lengthPerCut')} />
-          <Num label="No. of intersections" value={f.numIntersections} onChange={set('numIntersections')} />
         </Card>
       </div>
 
@@ -55,6 +54,7 @@ export default function ColumnEstimate() {
           <Row label={`Lateral ties (Ø${f.tieDiaMm})`} value={kg(r.lateralTies.weight)} sub={`${r.lateralTies.pieces} bars · ${r.lateralTies.totalCuts} ties`} />
         </ResultCard>
         <ResultCard title="Tie wire">
+          <Row label="Intersections" value={`${r.tieWire.intersections}`} sub={`${f.numBars} bars × ${f.numTieSets} ties`} />
           <Row label="Net length" value={m(r.tieWire.netLength)} />
           <Row label="Rolls" value={`${r.tieWire.rolls} roll/s`} />
         </ResultCard>
