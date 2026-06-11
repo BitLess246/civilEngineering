@@ -9,6 +9,8 @@ const CENTROID = '#dc2626'
 export interface BeamSchematicProps {
   b: number; h: number; cover: number; barDia: number; stirrupDia: number
   bars: number; d: number
+  /** Compression-steel centroid depth d′, mm — draws its dim line + cross when set. */
+  dPrime?: number
   /** Tension bars per layer, bottom first (default: one layer of `bars`). */
   layers?: number[]
   /** Compression bars per layer, top first ([] / undefined → none). */
@@ -17,14 +19,26 @@ export interface BeamSchematicProps {
   comprBarDia?: number
 }
 
-/** Beam cross-section to scale: stirrup drawn at its real thickness with 135°
- *  hooks, layered tension + compression bars, and a red × on the
- *  tension-steel centroid (where d is measured). */
+/** Small thin × with dashed extension lines out to a dimension line. */
+function CentroidMark({ cx, cy, toX }: { cx: number; cy: number; toX: number }) {
+  const X = 3.5
+  return (
+    <g>
+      <line x1={cx - X} y1={cy - X} x2={cx + X} y2={cy + X} stroke={CENTROID} strokeWidth={1.1} />
+      <line x1={cx - X} y1={cy + X} x2={cx + X} y2={cy - X} stroke={CENTROID} strokeWidth={1.1} />
+      <line x1={cx + X + 2} y1={cy} x2={toX} y2={cy} stroke={CENTROID} strokeWidth={0.7} strokeDasharray="4 3" />
+    </g>
+  )
+}
+
+/** Beam cross-section to scale: open stirrup with two 135° corner hooks at its
+ *  real thickness, layered tension + compression bars, red × centroid marks
+ *  tied to the d / d′ dimension lines with dashed extensions. */
 export function BeamSchematic({
-  b, h, cover, barDia, stirrupDia, bars, d, layers, comprLayers, comprBars = 0, comprBarDia,
+  b, h, cover, barDia, stirrupDia, bars, d, dPrime, layers, comprLayers, comprBars = 0, comprBarDia,
 }: BeamSchematicProps): JSX.Element {
-  const W = 320, H = 312
-  const padL = 60, padT = 30, availW = 150, availH = 210
+  const W = 330, H = 312
+  const padL = 56, padT = 30, availW = 150, availH = 210
   const s = Math.min(availW / b, availH / h)
   const bw = b * s, hh = h * s
   const x0 = padL + (availW - bw) / 2, y0 = padT
@@ -36,10 +50,27 @@ export function BeamSchematic({
   const stW = Math.max(1, stirrupDia * s)
   const sx0 = x0 + inset, sy0 = y0 + inset
   const sw = bw - 2 * inset, sh = hh - 2 * inset
-  const bendR = (2 * stirrupDia) * s            // §407.3.2: inside bend 4ds → centreline radius ≈ 2ds
-  // 135° hooks: from the top corners, into the core at 45°, length max(6ds,75).
-  const hookLen = Math.max(6 * stirrupDia, 75) * s
-  const hk = hookLen / Math.SQRT2
+  const r = Math.max(2, 2 * stirrupDia * s)     // §407.3.2 bend: centreline radius ≈ 2ds
+  // 135° hook: wraps the corner bar and extends into the core at 45°.
+  const ext = Math.max(6 * stirrupDia, 75) * s
+  const e = ext / Math.SQRT2
+
+  // One open path: tip A → wrap top-left corner → full perimeter → wrap the
+  // same corner from the left leg → tip B. Both tips point into the core at 45°.
+  const stirrupPath = [
+    `M ${sx0 + r * 0.9 + e} ${sy0 + r * 0.1 + e}`,                 // tip A (from the top leg)
+    `L ${sx0 + r * 0.9} ${sy0 + r * 0.1}`,
+    `Q ${sx0 + r * 0.45} ${sy0 - stW * 0.15} ${sx0 + r} ${sy0}`,   // wrap onto the top leg
+    `L ${sx0 + sw - r} ${sy0}`,
+    `Q ${sx0 + sw} ${sy0} ${sx0 + sw} ${sy0 + r}`,
+    `L ${sx0 + sw} ${sy0 + sh - r}`,
+    `Q ${sx0 + sw} ${sy0 + sh} ${sx0 + sw - r} ${sy0 + sh}`,
+    `L ${sx0 + r} ${sy0 + sh}`,
+    `Q ${sx0} ${sy0 + sh} ${sx0} ${sy0 + sh - r}`,
+    `L ${sx0} ${sy0 + r}`,
+    `Q ${sx0 - stW * 0.15} ${sy0 + r * 0.45} ${sx0 + r * 0.1} ${sy0 + r * 0.9}`, // wrap from the left leg
+    `L ${sx0 + r * 0.1 + e} ${sy0 + r * 0.9 + e}`,                 // tip B
+  ].join(' ')
 
   const lay = layers && layers.length > 0 ? layers : [Math.max(2, bars)]
   const n = lay.reduce((a, k) => a + k, 0)
@@ -58,10 +89,13 @@ export function BeamSchematic({
   const yTop = y0 + (cover + stirrupDia + dbC / 2) * s
   const pitchC = (dbC + 25) * s
 
-  // Tension-steel centroid (where d is measured) — red ×.
+  // Dimension-line x positions on the right: d′ inner, d outer.
+  const hasDP = nC > 0 && dPrime !== undefined
+  const dxInner = x0 + bw + 14
+  const dxOuter = x0 + bw + (hasDP ? 38 : 16)
   const cxMid = x0 + bw / 2
   const cyD = y0 + dPx
-  const X = 6
+  const cyDP = hasDP ? y0 + (dPrime as number) * s : 0
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
@@ -71,14 +105,9 @@ export function BeamSchematic({
       {/* concrete */}
       <rect x={x0} y={y0} width={bw} height={hh} rx={2} fill={FILL} stroke={STROKE} strokeWidth={1.6} />
 
-      {/* stirrup at real thickness, rounded bends */}
-      <rect x={sx0} y={sy0} width={sw} height={sh} rx={bendR}
-        fill="none" stroke={BAR} strokeWidth={stW} opacity={0.85} />
-      {/* 135° hooks into the core from the top-left corner pair */}
-      <line x1={sx0 + bendR * 0.3} y1={sy0 + bendR * 0.3} x2={sx0 + bendR * 0.3 + hk} y2={sy0 + bendR * 0.3 + hk}
-        stroke={BAR} strokeWidth={stW} strokeLinecap="round" opacity={0.85} />
-      <line x1={sx0 + bendR * 1.1} y1={sy0 - stW * 0.1} x2={sx0 + bendR * 1.1 + hk * 0.55} y2={sy0 + hk * 0.95}
-        stroke={BAR} strokeWidth={stW} strokeLinecap="round" opacity={0.85} />
+      {/* open stirrup with two 135° hooks at the top-left corner */}
+      <path d={stirrupPath} fill="none" stroke={BAR} strokeWidth={stW}
+        strokeLinecap="round" strokeLinejoin="round" opacity={0.8} />
 
       {/* compression bars (hollow), layered downward */}
       {cLay.map((k, li) =>
@@ -94,9 +123,9 @@ export function BeamSchematic({
         )),
       )}
 
-      {/* red × at the tension-steel centroid */}
-      <line x1={cxMid - X} y1={cyD - X} x2={cxMid + X} y2={cyD + X} stroke={CENTROID} strokeWidth={1.8} />
-      <line x1={cxMid - X} y1={cyD + X} x2={cxMid + X} y2={cyD - X} stroke={CENTROID} strokeWidth={1.8} />
+      {/* centroid marks with dashed ties to their dimension lines */}
+      {hasDP && <CentroidMark cx={cxMid} cy={cyDP} toX={dxInner} />}
+      <CentroidMark cx={cxMid} cy={cyD} toX={dxOuter} />
 
       {/* labels: compression on top, tension at the bottom */}
       {nC > 0 && (
@@ -108,10 +137,13 @@ export function BeamSchematic({
         {n} ⌀{barDia} mm{lay.length > 1 ? ` (${lay.join('+')})` : ''}
       </text>
 
-      {/* dimensions: b below, h left, d right (to the red centroid) */}
+      {/* dimensions: b below, h left, d (and d′ for DRRB) right */}
       <DimBelow xA={x0} xB={x0 + bw} featY={y0 + hh + 14} dY={y0 + hh + 30} label={`b = ${Math.round(b)} mm`} />
       <DimSide yA={y0} yB={y0 + hh} featX={x0} dX={x0 - 16} label={`h = ${Math.round(h)} mm`} side="left" />
-      <DimSide yA={y0} yB={cyD} featX={x0 + bw} dX={x0 + bw + 16} label={`d = ${Math.round(d)} mm`} side="right" />
+      {hasDP && (
+        <DimSide yA={y0} yB={cyDP} featX={x0 + bw} dX={dxInner} label={`d' = ${Math.round(dPrime as number)}`} side="right" />
+      )}
+      <DimSide yA={y0} yB={cyD} featX={x0 + bw} dX={dxOuter} label={`d = ${Math.round(d)} mm`} side="right" />
     </svg>
   )
 }

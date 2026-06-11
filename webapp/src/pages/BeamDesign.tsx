@@ -81,7 +81,8 @@ export default function BeamDesign() {
             <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Section preview</h2>
             {r ? (
               <BeamSchematic b={f.b} h={f.h} cover={f.cover} barDia={f.barDia} stirrupDia={f.stirrupDia}
-                bars={r.bars} d={r.d} layers={r.layers} comprLayers={r.comprLayers}
+                bars={r.bars} d={r.d} dPrime={r.comprLayers.length > 0 ? r.dPrime : undefined}
+                layers={r.layers} comprLayers={r.comprLayers}
                 comprBars={r.comprBars} comprBarDia={f.comprBarDia} />
             ) : (
               <p className="py-8 text-center text-sm text-slate-400">Enter a valid section (d must be positive).</p>
@@ -110,6 +111,10 @@ export default function BeamDesign() {
                 <Row label="Compr. layers"
                   value={r.comprLayers.length > 1 ? `${r.comprLayers.length} (${r.comprLayers.join(' + ')})` : '1'}
                   sub={`d'=${f1(r.dPrime)} mm · s'_clear=${f0(r.comprSClear)} ≥ ${f0(r.comprSMinClear)}`} />
+              )}
+              {r.comprLayers.length > 0 && (
+                <Row label="NA check" value={r.comprNAOK ? '✓ above NA' : '✗ crosses NA'}
+                  sub={`deepest d'=${f0(r.dPrimeExtreme)} vs c=${f0(r.cNA)} mm`} />
               )}
               <Row label={<Math tex="\phi V_c" />} value={`${f1(r.phiVc)} kN`} sub={`Vc=${f1(r.Vc)}`} />
               <Row label="Shear" value={REGION[r.region]} />
