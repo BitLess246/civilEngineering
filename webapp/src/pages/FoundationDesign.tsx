@@ -9,7 +9,7 @@ import { FootingSchematic } from '../components/FootingSchematic'
 import { ReportControls } from '../components/ReportControls'
 import { ExcelImport } from '../components/ExcelImport'
 import type { BatchResult } from '../lib/foundationExcel'
-import { FoundationSolution } from '../components/FoundationSolution'
+import { WorkedSolution } from '../components/WorkedSolution'
 import { buildFoundationSolution, type SolutionCtx } from '../lib/foundationSolution'
 import { Math } from '../lib/math'
 import { f0, f2, f3 } from '../lib/format'
@@ -18,10 +18,16 @@ import 'katex/dist/katex.min.css'
 type FootingType = 'square' | 'rectangular'
 type SizingMode = 'ratio' | 'fixedWidth'
 type LoadingType = 'concentric' | 'eccentric'
+type AnalysisMethod = 'design' | 'analyze'
+type SolutionMethod = 'iteration' | 'approximate'
 
 interface FormState {
   footingType: FootingType
   loadingType: LoadingType
+  analysisMethod: AnalysisMethod
+  solutionMethod: SolutionMethod
+  givenB: number
+  givenDc: number
   sizingMode: SizingMode
   ratio: number
   fixedBy: number
@@ -45,6 +51,10 @@ interface FormState {
 const DEFAULTS: FormState = {
   footingType: 'square',
   loadingType: 'concentric',
+  analysisMethod: 'design',
+  solutionMethod: 'iteration',
+  givenB: 2,
+  givenDc: 500,
   sizingMode: 'ratio',
   ratio: 1.5,
   fixedBy: 2,
@@ -69,12 +79,16 @@ interface DirSteel { As: number; bars: number; spacing: number; usedMin: boolean
 interface View {
   type: FootingType
   loading: LoadingType
+  analysis: AnalysisMethod; method: SolutionMethod
   Bx: number; By: number; Dc: number; qNet: number; qu: number
-  dPunch: number; dBeamLong: number; dBeamShort: number
+  dPunch: number; dBeamLong: number; dBeamShort: number; dProvided: number
+  punchOK: boolean; beamOK: boolean
   long: DirSteel
   short: (DirSteel & { bandBars: number; bandFraction: number }) | null
   ecc: { e: number; qMax: number; qMin: number; kernOK: boolean } | null
 }
+
+const designDefaults = { analysis: 'design' as const, method: 'iteration' as const, punchOK: true, beamOK: true }
 
 function NumField({ label, unit, value, onChange, step = 'any' }: {
   label: ReactNode; unit?: string; value: number; onChange: (v: number) => void; step?: string
@@ -139,13 +153,16 @@ export default function FoundationDesign() {
   const set = <K extends keyof FormState>(k: K) => (v: FormState[K]) => setForm((s) => ({ ...s, [k]: v }))
   const ecc = form.loadingType === 'eccentric'
   const rect = form.footingType === 'rectangular' && !ecc   // eccentric pilot is square-only
+  const sq = form.footingType === 'square' && !ecc          // analysis/solution methods apply here
+  const analyze = sq && form.analysisMethod === 'analyze'
 
   const qNetTrial = useMemo(
     () => netBearing({ qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc, H: form.H, Dc: 0.25, surcharge: form.surcharge }),
     [form.qAllow, form.gammaSoil, form.gammaConc, form.H, form.surcharge],
   )
   const sizingOk = !rect || (form.sizingMode === 'ratio' ? form.ratio >= 1 : form.fixedBy > 0)
-  const valid = Object.values(form).every((v) => typeof v === 'string' || Number.isFinite(v as number)) && qNetTrial > 0 && sizingOk
+  const analyzeOk = !analyze || (form.givenB > 0 && form.givenDc > 0)
+  const valid = Object.values(form).every((v) => typeof v === 'string' || Number.isFinite(v as number)) && qNetTrial > 0 && sizingOk && analyzeOk
 
   const view: View | null = useMemo(() => {
     if (!valid) return null
@@ -157,18 +174,23 @@ export default function FoundationDesign() {
     if (ecc) {
       const r = designEccentricSquareFooting({ ...common, serviceMoment: form.serviceMoment, ultimateMoment: form.ultimateMoment })
       return {
-        type: 'square', loading: 'eccentric', Bx: r.B, By: r.B, Dc: r.Dc, qNet: r.qNet, qu: r.quMax,
-        dPunch: r.dPunch, dBeamLong: r.dBeam, dBeamShort: r.dBeam,
+        type: 'square', loading: 'eccentric', ...designDefaults, Bx: r.B, By: r.B, Dc: r.Dc, qNet: r.qNet, qu: r.quMax,
+        dPunch: r.dPunch, dBeamLong: r.dBeam, dBeamShort: r.dBeam, dProvided: r.Dc - form.cover - form.barDia,
         long: { As: r.steelArea, bars: r.bars, spacing: r.barSpacing, usedMin: r.usedMinSteel, rho: r.rho },
         short: null,
         ecc: { e: r.e, qMax: r.qMaxService, qMin: r.qMinService, kernOK: r.kernOK },
       }
     }
     if (!rect) {
-      const r = designSquareFooting(common)
+      const r = designSquareFooting({
+        ...common, analysis: form.analysisMethod, solutionMethod: form.solutionMethod,
+        givenB: form.givenB, givenDc: form.givenDc,
+      })
       return {
-        type: 'square', loading: 'concentric', Bx: r.B, By: r.B, Dc: r.Dc, qNet: r.qNet, qu: r.qu,
-        dPunch: r.dPunch, dBeamLong: r.dBeam, dBeamShort: r.dBeam,
+        type: 'square', loading: 'concentric', analysis: r.analysis, method: r.method,
+        Bx: r.B, By: r.B, Dc: r.Dc, qNet: r.qNet, qu: r.qu,
+        dPunch: r.dPunch, dBeamLong: r.dBeam, dBeamShort: r.dBeam, dProvided: r.dProvided,
+        punchOK: r.punchOK, beamOK: r.beamOK,
         long: { As: r.steelArea, bars: r.bars, spacing: r.barSpacing, usedMin: r.usedMinSteel, rho: r.rho },
         short: null, ecc: null,
       }
@@ -178,8 +200,8 @@ export default function FoundationDesign() {
       : { mode: 'fixedWidth' as const, By: form.fixedBy }
     const r = designRectangularFooting({ ...common, sizing })
     return {
-      type: 'rectangular', loading: 'concentric', Bx: r.Bx, By: r.By, Dc: r.Dc, qNet: r.qNet, qu: r.qu,
-      dPunch: r.dPunch, dBeamLong: r.dBeamLong, dBeamShort: r.dBeamShort,
+      type: 'rectangular', loading: 'concentric', ...designDefaults, Bx: r.Bx, By: r.By, Dc: r.Dc, qNet: r.qNet, qu: r.qu,
+      dPunch: r.dPunch, dBeamLong: r.dBeamLong, dBeamShort: r.dBeamShort, dProvided: r.Dc - form.cover - form.barDia,
       long: r.long, short: r.short, ecc: null,
     }
   }, [form, valid, rect, ecc])
@@ -187,14 +209,15 @@ export default function FoundationDesign() {
   const solutionSteps = useMemo(() => {
     if (!view) return null
     const ctx: SolutionCtx = {
-      type: view.type, loading: view.loading,
+      type: view.type, loading: view.loading, analysis: view.analysis, method: view.method,
       serviceLoad: form.serviceLoad, ultimateLoad: form.ultimateLoad,
       serviceMoment: form.serviceMoment, ultimateMoment: form.ultimateMoment,
       columnWidth: form.columnWidth, fc: form.fc, fy: form.fy,
       qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc, H: form.H,
       barDia: form.barDia, cover: form.cover, surcharge: form.surcharge, position: form.position,
       Bx: view.Bx, By: view.By, Dc: view.Dc, qNet: view.qNet, qu: view.qu,
-      dPunch: view.dPunch, dBeamLong: view.dBeamLong, dBeamShort: view.dBeamShort,
+      dPunch: view.dPunch, dBeamLong: view.dBeamLong, dBeamShort: view.dBeamShort, dProvided: view.dProvided,
+      punchOK: view.punchOK, beamOK: view.beamOK,
       long: view.long, short: view.short, ecc: view.ecc,
     }
     return buildFoundationSolution(ctx)
@@ -258,6 +281,20 @@ export default function FoundationDesign() {
               options={[['square', 'Isolated Square'], ['rectangular', 'Isolated Rectangular']]} />
             <Select label="Loading" value={form.loadingType} onChange={set('loadingType')}
               options={[['concentric', 'Concentric'], ['eccentric', 'Eccentric (uniaxial)']]} />
+            {sq && (
+              <Select label="Analysis method" value={form.analysisMethod} onChange={set('analysisMethod')}
+                options={[['design', 'Detailed design'], ['analyze', 'Analyze given dimensions']]} />
+            )}
+            {sq && !analyze && (
+              <Select label="Solution method" value={form.solutionMethod} onChange={set('solutionMethod')}
+                options={[['iteration', 'Iteration'], ['approximate', 'Approximate (initial Dc)']]} />
+            )}
+            {analyze && (
+              <NumField label="Given B" unit="m" value={form.givenB} onChange={set('givenB')} />
+            )}
+            {analyze && (
+              <NumField label="Given Dc" unit="mm" value={form.givenDc} onChange={set('givenDc')} />
+            )}
             {rect && (
               <Select label="Sizing" value={form.sizingMode} onChange={set('sizingMode')}
                 options={[['ratio', 'By aspect ratio (Bx/By)'], ['fixedWidth', 'Fixed width By']]} />
@@ -313,6 +350,13 @@ export default function FoundationDesign() {
           {view && (
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Results</h2>
+              {view.analysis === 'analyze' && (
+                <Row label="Adequacy" value={view.punchOK && view.beamOK ? '✓ section OK' : '✗ inadequate in shear'}
+                  check={`punching ${view.punchOK ? '✓' : '✗'} · beam ${view.beamOK ? '✓' : '✗'}`} />
+              )}
+              {view.analysis === 'design' && view.type === 'square' && view.loading === 'concentric' && (
+                <Row label="Method" value={view.method === 'iteration' ? 'Iteration' : 'Approximate'} />
+              )}
               <Row label={<Math tex="q_{net}" />} value={`${f3(view.qNet)} kPa`} />
               <Row label="Footing size"
                 value={view.type === 'square' ? `B = ${f2(view.Bx)} m` : `${f2(view.Bx)} × ${f2(view.By)} m`} />
@@ -352,7 +396,7 @@ export default function FoundationDesign() {
         </div>
       </div>
 
-      {solutionSteps && <FoundationSolution steps={solutionSteps} />}
+      {solutionSteps && <WorkedSolution steps={solutionSteps} />}
     </div>
   )
 }

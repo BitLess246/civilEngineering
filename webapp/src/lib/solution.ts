@@ -1,7 +1,7 @@
-// Shared worked-solution types — a step is a titled list of KaTeX lines with
-// an optional plain-text note. Used by the per-tool solution generators and
-// rendered by <WorkedSolution>.
-export interface SolutionLine { tex: string }
+// Shared worked-solution types. A step is a titled list of lines; each line is
+// either a KaTeX equation ({tex}) or an explanatory sentence ({text}, often
+// citing a code clause). Rendered by <WorkedSolution>.
+export type SolutionLine = { tex: string } | { text: string }
 export interface SolutionStep { title: string; lines: SolutionLine[]; note?: string }
 
 export const sn0 = (v: number) => Math.round(v).toString()
