@@ -76,10 +76,16 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
         txt('Stress in the compression steel from strain compatibility at c = a_max/β1: f′s = 600(1 − d′/c) ≤ fy. Equating Cs to T2 with the displaced concrete deducted: A′s(f′s − 0.85f′c) = As2·fy.'),
         eq(String.raw`c = \tfrac{a_{max}}{\beta_1} = ${sn1(r.cNA)}\ \text{mm},\quad f_s' = 600\!\left(1 - \tfrac{${sn1(r.dPrime)}}{${sn1(r.cNA)}}\right) = ${sn1(600 * (1 - r.dPrime / r.cNA))} \to ${sn1(r.fsPrime)}\ \text{MPa}\ ${r.fsYields ? '(\\text{yields})' : '(\\text{does not yield})'}`),
         eq(String.raw`A_s' = \dfrac{A_{s2} f_y}{f_s' - 0.85 f'_c} = \dfrac{${sn0(r.As2)}(${sn0(i.fy)})}{${sn1(r.fsPrime)} - ${sn2(0.85 * i.fc)}} = ${sn0(r.AsPrime)}\ \text{mm}^2`),
+        ...(r.comprLayers.length > 0 ? [
+          txt('Neutral-axis check: every compression bar must lie above the NA to actually be in compression — the deepest layer governs.'),
+          eq(String.raw`d'_{deepest} = ${sn0(r.dPrimeExtreme)}\ \text{mm} \;${r.comprNAOK ? '<' : '\\ge'}\; c = ${sn0(r.cNA)}\ \text{mm}\;${r.comprNAOK ? '\\checkmark' : '\\times'}`),
+        ] : []),
       ],
-      note: r.comprEffective
-        ? `Provide ${r.comprBars} ⌀${dbC} mm compression bars.`
-        : 'f′s ≤ 0.85f′c — compression steel is ineffective; enlarge the section.',
+      note: !r.comprEffective
+        ? 'f′s ≤ 0.85f′c — compression steel is ineffective; enlarge the section.'
+        : r.comprNAOK
+          ? `Provide ${r.comprBars} ⌀${dbC} mm compression bars.`
+          : '⚠ The deepest compression layer crosses the neutral axis — those bars are not in compression. Use a larger compression-bar diameter (fewer layers) or enlarge the section.',
     })
   }
 

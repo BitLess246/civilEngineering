@@ -63,6 +63,10 @@ export interface BeamDesignResult {
   comprLayers: number[]    // bars per layer, top (extreme) first; [] when no compression steel
   comprSClear: number
   comprYBar: number        // centroid drop below the extreme top layer (Varignon), mm
+  /** Depth of the DEEPEST compression layer, mm. */
+  dPrimeExtreme: number
+  /** Deepest compression layer stays above the neutral axis (in compression). */
+  comprNAOK: boolean
   // Stirrup detailing (§407.3.2 bend, §425.3.2 hook)
   stirrupBendDia: number   // inside bend diameter = 4·ds (⌀16 and smaller), mm
   stirrupHookExt: number   // 135° hook extension = max(6·ds, 75), mm
@@ -219,6 +223,11 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
   const nTop = comprLayers[0] ?? 0
   const comprSClear = nTop > 1 ? (bw - nTop * dbC) / (nTop - 1) : bw
 
+  // NA check (legacy): the DEEPEST compression layer must stay above the
+  // neutral axis c — a bar at or below c is not in compression at all.
+  const dPrimeExtreme = comprLayers.length > 0 ? dPrimeBase + (comprLayers.length - 1) * pitchC : 0
+  const comprNAOK = comprLayers.length === 0 || dPrimeExtreme < cNA
+
   // Stirrup detailing — §407.3.2: inside bend ≥ 4ds for ⌀16 and smaller;
   // §425.3.2: 135° stirrup hook extension = max(6ds, 75 mm).
   const stirrupBendDia = 4 * i.stirrupDia
@@ -260,6 +269,7 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
     sMinClear, maxPerLayer, layers, sClear, yBar, layerIters,
     As1, As2, MnResid, cNA, fsPrime, fsYields, AsPrime, comprBars, comprEffective, flexOK,
     comprSMinClear, comprMaxPerLayer, comprLayers, comprSClear, comprYBar,
+    dPrimeExtreme, comprNAOK,
     stirrupBendDia, stirrupHookExt,
     Vc, phiVc, region, Av, VsReq, VsMax, sReq, sMax, sAdopt,
   }

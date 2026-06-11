@@ -140,3 +140,19 @@ describe('beam design — compression-bar layout & stirrup detailing', () => {
     expect(r16.stirrupHookExt).toBe(96)                   // 6·16 = 96 > 75
   })
 })
+
+describe('beam design — compression NA check', () => {
+  it('deepest layer depth = base + (nLayers−1)·pitch; above NA passes', () => {
+    const r = designBeam({ ...base, Mu: 460, comprBarDia: 16 })   // compr layers [5,4]
+    const expected = (40 + 10 + 8) + (r.comprLayers.length - 1) * (16 + 25)
+    expect(r.dPrimeExtreme).toBeCloseTo(expected, 9)
+    expect(r.dPrimeExtreme).toBeLessThan(r.cNA)
+    expect(r.comprNAOK).toBe(true)
+  })
+
+  it('SRRB: NA check is vacuously OK', () => {
+    const r = designBeam(base)
+    expect(r.comprNAOK).toBe(true)
+    expect(r.dPrimeExtreme).toBe(0)
+  })
+})
