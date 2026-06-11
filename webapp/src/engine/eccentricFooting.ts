@@ -25,6 +25,12 @@ export interface EccentricFootingInput {
   surcharge?: number;
   position?: ColumnPosition;
   lambda?: number;
+  /** Detailed design (size B & D_c) or analyze a given section. Default 'design'. */
+  analysis?: 'design' | 'analyze';
+  givenB?: number;       // m, analyze only
+  givenDc?: number;      // mm, analyze only
+  /** 'iteration' (fixed point) or 'approximate' (one pass from D_c = 250 mm). */
+  solutionMethod?: 'iteration' | 'approximate';
 }
 
 export interface EccentricFootingResult {
@@ -46,6 +52,14 @@ export interface EccentricFootingResult {
   usedMinSteel: boolean;
   bars: number;
   barSpacing: number;
+  analysis: 'design' | 'analyze';
+  method: 'iteration' | 'approximate';
+  /** Provided effective depth for shear (D_c − cover − d_b), mm. */
+  dProvided: number;
+  punchOK: boolean;
+  beamOK: boolean;
+  /** Analyze only: peak service pressure within q_net. */
+  bearingOK: boolean;
 }
 
 function roundUp(v: number, step: number): number {
@@ -58,26 +72,58 @@ export function designEccentricSquareFooting(i: EccentricFootingInput): Eccentri
   const cm = i.columnWidth / 1000;
   const surcharge = i.surcharge ?? 0;
 
-  let Dc = 0.25;
-  let B = 0, qNet = 0, quMax = 0, dPunch = 0, dBeam = 0, qMaxService = 0;
-  for (let k = 0; k < 10; k++) {
-    qNet = netBearing({ qAllow: i.qAllow, gammaSoil: i.gammaSoil, gammaConc: i.gammaConc, H: i.H, Dc, surcharge });
-    // Grow B until the peak service pressure fits AND the load stays in the kern.
-    B = roundUp(Math.max(6 * e, Math.sqrt(i.serviceLoad / qNet)), 0.05);
+  const analysis = i.analysis ?? 'design';
+  const method = i.solutionMethod ?? 'iteration';
+  const qNetAt = (Dc: number) =>
+    netBearing({ qAllow: i.qAllow, gammaSoil: i.gammaSoil, gammaConc: i.gammaConc, H: i.H, Dc, surcharge });
+  // Grow B until the peak service pressure fits AND the load stays in the kern.
+  const sizeB = (qNet: number) => {
+    let B = roundUp(Math.max(6 * e, Math.sqrt(i.serviceLoad / qNet)), 0.05);
     for (let g = 0; g < 600; g++) {
       const qm = (i.serviceLoad / (B * B)) * (1 + (6 * e) / B);
       if (qm <= qNet && B >= 6 * e - 1e-9) break;
       B = roundUp(B + 0.05, 0.05);
     }
+    return B;
+  };
+  // Punching uses the average pressure relief; one-way & flexure use the peak.
+  const shearDepths = (B: number, quMax: number) => ({
+    dPunch: punchingDepth({ Pu: i.ultimateLoad, qu: i.ultimateLoad / (B * B), c: i.columnWidth, fc: i.fc, position: i.position, lambda: i.lambda }),
+    dBeam: oneWayShearDepth({ qu: quMax, B, c: cm, fc: i.fc, lambda: i.lambda }),
+  });
+
+  let Dc = 0.25;
+  let B = 0, qNet = 0, quMax = 0, dPunch = 0, dBeam = 0, qMaxService = 0;
+  let punchOK = true, beamOK = true, bearingOK = true;
+  if (analysis === 'analyze') {
+    B = i.givenB ?? 0;
+    Dc = (i.givenDc ?? 250) / 1000;
+    qNet = qNetAt(Dc);
     qMaxService = (i.serviceLoad / (B * B)) * (1 + (6 * e) / B);
     quMax = (i.ultimateLoad / (B * B)) * (1 + (6 * eU) / B);
-    const quAvg = i.ultimateLoad / (B * B);
-    // Punching uses the average pressure relief; one-way & flexure use the peak.
-    dPunch = punchingDepth({ Pu: i.ultimateLoad, qu: quAvg, c: i.columnWidth, fc: i.fc, position: i.position, lambda: i.lambda });
-    dBeam = oneWayShearDepth({ qu: quMax, B, c: cm, fc: i.fc, lambda: i.lambda });
-    const newDc = roundUp(Math.max(dPunch, dBeam) + i.cover + i.barDia, 25) / 1000;
-    if (Math.abs(newDc - Dc) < 1e-4) { Dc = newDc; break; }
-    Dc = newDc;
+    ({ dPunch, dBeam } = shearDepths(B, quMax));
+    const dProv = Dc * 1000 - i.cover - i.barDia;
+    punchOK = dProv >= dPunch;
+    beamOK = dProv >= dBeam;
+    bearingOK = qMaxService <= qNet + 1e-9;
+  } else if (method === 'approximate') {
+    qNet = qNetAt(Dc);
+    B = sizeB(qNet);
+    qMaxService = (i.serviceLoad / (B * B)) * (1 + (6 * e) / B);
+    quMax = (i.ultimateLoad / (B * B)) * (1 + (6 * eU) / B);
+    ({ dPunch, dBeam } = shearDepths(B, quMax));
+    Dc = roundUp(Math.max(dPunch, dBeam) + i.cover + i.barDia, 25) / 1000;
+  } else {
+    for (let k = 0; k < 10; k++) {
+      qNet = qNetAt(Dc);
+      B = sizeB(qNet);
+      qMaxService = (i.serviceLoad / (B * B)) * (1 + (6 * e) / B);
+      quMax = (i.ultimateLoad / (B * B)) * (1 + (6 * eU) / B);
+      ({ dPunch, dBeam } = shearDepths(B, quMax));
+      const newDc = roundUp(Math.max(dPunch, dBeam) + i.cover + i.barDia, 25) / 1000;
+      if (Math.abs(newDc - Dc) < 1e-4) { Dc = newDc; break; }
+      Dc = newDc;
+    }
   }
 
   const DcMm = Dc * 1000;
@@ -93,5 +139,6 @@ export function designEccentricSquareFooting(i: EccentricFootingInput): Eccentri
     B, Dc: DcMm, e, eU, qNet, qMaxService, qMinService, quMax,
     dPunch, dBeam, dFlex, kernOK: e <= B / 6 + 1e-9,
     steelArea: flex.As, rho: flex.rho, usedMinSteel: flex.usedMin, bars: layout.n, barSpacing: layout.spacing,
+    analysis, method, dProvided: DcMm - i.cover - i.barDia, punchOK, beamOK, bearingOK,
   };
 }

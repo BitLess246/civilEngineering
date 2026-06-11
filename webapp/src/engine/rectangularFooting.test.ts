@@ -44,3 +44,26 @@ describe('ratio 1 ≈ square footing', () => {
     expect(rc.Dc).toBe(sq.Dc);
   });
 });
+
+describe('analysis & solution methods', () => {
+  it('approximate gives a one-pass thickness ≥ the iterated one', () => {
+    const it_ = designRectangularFooting({ ...base, sizing: { mode: 'ratio', ratio: 1.5 } });
+    const ap = designRectangularFooting({ ...base, sizing: { mode: 'ratio', ratio: 1.5 }, solutionMethod: 'approximate' });
+    expect(ap.method).toBe('approximate');
+    expect(ap.Dc).toBeGreaterThanOrEqual(it_.Dc - 1e-6);
+  });
+
+  it('analyze: adequate section passes, thin one fails', () => {
+    const d = designRectangularFooting({ ...base, sizing: { mode: 'ratio', ratio: 1.5 } });
+    const ok = designRectangularFooting({
+      ...base, sizing: { mode: 'ratio', ratio: 1.5 },
+      analysis: 'analyze', givenBx: d.Bx, givenBy: d.By, givenDc: d.Dc,
+    });
+    expect(ok.punchOK && ok.beamOK).toBe(true);
+    const thin = designRectangularFooting({
+      ...base, sizing: { mode: 'ratio', ratio: 1.5 },
+      analysis: 'analyze', givenBx: d.Bx, givenBy: d.By, givenDc: 300,
+    });
+    expect(thin.punchOK && thin.beamOK).toBe(false);
+  });
+});
