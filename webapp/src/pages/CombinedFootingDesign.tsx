@@ -1,6 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { designCombinedFooting, type CombinedFootingInput } from '../engine/combinedFooting'
+import { WorkedSolution } from '../components/WorkedSolution'
+import { combinedSolution } from '../lib/combinedSolution'
 import { designFlexibleCombinedFooting } from '../engine/flexibleCombinedFooting'
 import { CombinedFootingSchematic } from '../components/CombinedFootingSchematic'
 import { Diagram } from '../components/Diagram'
@@ -140,6 +142,11 @@ export default function CombinedFootingDesign() {
       return null
     }
   }, [form, valid])
+
+  const solution = useMemo(
+    () => (result ? combinedSolution({ ...form }, result) : null),
+    [form, result],
+  )
 
   const flex = useMemo(() => {
     if (!valid || form.method !== 'flexible' || !(form.ksubgrade > 0)) return null
@@ -341,6 +348,8 @@ export default function CombinedFootingDesign() {
           </p>
         )}
       </div>
+
+      {solution && <WorkedSolution steps={solution} title="Solution — rigid method (step by step)" />}
     </div>
   )
 }
