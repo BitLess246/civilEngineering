@@ -21,6 +21,8 @@ export interface SolutionCtx {
   loads?: { dead: number; live: number } | null
   serviceMoment: number; ultimateMoment: number
   columnWidth: number; fc: number; fy: number
+  /** Present when the column is circular (columnWidth is the equivalent square). */
+  column?: { shape: 'circular'; dia: number } | null
   qAllow: number; gammaSoil: number; gammaConc: number; H: number
   barDia: number; cover: number; surcharge: number; position: ColumnPosition
   Bx: number; By: number; Dc: number; qNet: number; qu: number
@@ -75,13 +77,26 @@ function bearingStep(c: SolutionCtx): SolutionStep {
   }
 }
 
+function columnStep(c: SolutionCtx): SolutionStep | null {
+  if (!c.column) return null
+  return {
+    title: 'Equivalent square column',
+    lines: [
+      txt('A circular (spiral) column is replaced by an equal-area square for the shear and flexure checks — the legacy convention.'),
+      eq(String.raw`c = D\sqrt{\tfrac{\pi}{4}} = ${sn0(c.column.dia)}\times ${sn4(Math.sqrt(Math.PI / 4))} = \mathbf{${sn1(c.columnWidth)}}\ \text{mm}`),
+    ],
+  }
+}
+
 function sizeOrGivenStep(c: SolutionCtx): SolutionStep {
   if (c.analysis === 'analyze') {
     return {
       title: 'Given section',
       lines: [
         txt('Analyze mode — the plan size and thickness are provided; the remaining steps check the section rather than size it.'),
-        eq(String.raw`B = ${sn2(c.Bx)}\ \text{m},\qquad D_c = ${sn0(c.Dc)}\ \text{mm}`),
+        eq(c.type === 'rectangular'
+          ? String.raw`B_x = ${sn2(c.Bx)}\ \text{m},\quad B_y = ${sn2(c.By)}\ \text{m},\qquad D_c = ${sn0(c.Dc)}\ \text{mm}`
+          : String.raw`B = ${sn2(c.Bx)}\ \text{m},\qquad D_c = ${sn0(c.Dc)}\ \text{mm}`),
       ],
     }
   }
@@ -239,7 +254,10 @@ function eccentricityStep(c: SolutionCtx): SolutionStep | null {
 }
 
 export function buildFoundationSolution(c: SolutionCtx): SolutionStep[] {
-  const steps: SolutionStep[] = [loadsStep(c), bearingStep(c)]
+  const steps: SolutionStep[] = [loadsStep(c)]
+  const colS = columnStep(c)
+  if (colS) steps.push(colS)
+  steps.push(bearingStep(c))
   const eccS = eccentricityStep(c)
   if (eccS) steps.push(eccS)
   steps.push(sizeOrGivenStep(c), pressureStep(c), punchingStep(c))

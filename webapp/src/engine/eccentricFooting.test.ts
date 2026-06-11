@@ -34,3 +34,26 @@ describe('designEccentricSquareFooting', () => {
     expect(ec.qMinService).toBeGreaterThanOrEqual(-1e-6);
   });
 });
+
+describe('analysis & solution methods', () => {
+  it('approximate gives a one-pass thickness ≥ the iterated one', () => {
+    const it_ = designEccentricSquareFooting({ ...base, serviceMoment: 200, ultimateMoment: 280 });
+    const ap = designEccentricSquareFooting({ ...base, serviceMoment: 200, ultimateMoment: 280, solutionMethod: 'approximate' });
+    expect(ap.method).toBe('approximate');
+    expect(ap.Dc).toBeGreaterThanOrEqual(it_.Dc - 1e-6);
+  });
+
+  it('analyze: adequate section passes; undersized plan fails bearing', () => {
+    const d = designEccentricSquareFooting({ ...base, serviceMoment: 200, ultimateMoment: 280 });
+    const ok = designEccentricSquareFooting({
+      ...base, serviceMoment: 200, ultimateMoment: 280,
+      analysis: 'analyze', givenB: d.B, givenDc: d.Dc,
+    });
+    expect(ok.punchOK && ok.beamOK && ok.bearingOK).toBe(true);
+    const small = designEccentricSquareFooting({
+      ...base, serviceMoment: 200, ultimateMoment: 280,
+      analysis: 'analyze', givenB: d.B - 0.6, givenDc: d.Dc,
+    });
+    expect(small.bearingOK).toBe(false);
+  });
+});

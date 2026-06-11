@@ -22,6 +22,7 @@ type LoadingType = 'concentric' | 'eccentric'
 type AnalysisMethod = 'design' | 'analyze'
 type SolutionMethod = 'iteration' | 'approximate'
 type LoadInput = 'direct' | 'individual'
+type ColumnShape = 'square' | 'circular'
 
 interface FormState {
   footingType: FootingType
@@ -29,7 +30,9 @@ interface FormState {
   analysisMethod: AnalysisMethod
   solutionMethod: SolutionMethod
   givenB: number
+  givenBy: number
   givenDc: number
+  columnShape: ColumnShape
   sizingMode: SizingMode
   ratio: number
   fixedBy: number
@@ -59,7 +62,9 @@ const DEFAULTS: FormState = {
   analysisMethod: 'design',
   solutionMethod: 'iteration',
   givenB: 2,
+  givenBy: 2,
   givenDc: 500,
+  columnShape: 'square',
   sizingMode: 'ratio',
   ratio: 1.5,
   fixedBy: 2,
@@ -96,7 +101,6 @@ interface View {
   ecc: { e: number; qMax: number; qMin: number; kernOK: boolean } | null
 }
 
-const designDefaults = { analysis: 'design' as const, method: 'iteration' as const, punchOK: true, beamOK: true }
 
 function NumField({ label, unit, value, onChange, step = 'any' }: {
   label: ReactNode; unit?: string; value: number; onChange: (v: number) => void; step?: string
@@ -161,15 +165,18 @@ export default function FoundationDesign() {
   const set = <K extends keyof FormState>(k: K) => (v: FormState[K]) => setForm((s) => ({ ...s, [k]: v }))
   const ecc = form.loadingType === 'eccentric'
   const rect = form.footingType === 'rectangular' && !ecc   // eccentric pilot is square-only
-  const sq = form.footingType === 'square' && !ecc          // analysis/solution methods apply here
-  const analyze = sq && form.analysisMethod === 'analyze'
+  const analyze = form.analysisMethod === 'analyze'
+  // Circular columns use the legacy equivalent-square width c_eq = D·√(π/4).
+  // (globalThis.Math: the KaTeX <Math> import shadows the global in this file.)
+  const circular = form.columnShape === 'circular'
+  const colWidth = circular ? form.columnWidth * globalThis.Math.sqrt(globalThis.Math.PI / 4) : form.columnWidth
 
   const qNetTrial = useMemo(
     () => netBearing({ qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc, H: form.H, Dc: 0.25, surcharge: form.surcharge }),
     [form.qAllow, form.gammaSoil, form.gammaConc, form.H, form.surcharge],
   )
-  const sizingOk = !rect || (form.sizingMode === 'ratio' ? form.ratio >= 1 : form.fixedBy > 0)
-  const analyzeOk = !analyze || (form.givenB > 0 && form.givenDc > 0)
+  const sizingOk = analyze || !rect || (form.sizingMode === 'ratio' ? form.ratio >= 1 : form.fixedBy > 0)
+  const analyzeOk = !analyze || (form.givenB > 0 && form.givenDc > 0 && (!rect || form.givenBy > 0))
   const valid = Object.values(form).every((v) => typeof v === 'string' || Number.isFinite(v as number)) && qNetTrial > 0 && sizingOk && analyzeOk
 
   // Effective loads: entered directly, or derived from DL & LL
@@ -181,25 +188,30 @@ export default function FoundationDesign() {
   const view: View | null = useMemo(() => {
     if (!valid) return null
     const common = {
-      serviceLoad, ultimateLoad, columnWidth: form.columnWidth,
+      serviceLoad, ultimateLoad, columnWidth: colWidth,
       fc: form.fc, fy: form.fy, qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc,
       H: form.H, barDia: form.barDia, cover: form.cover, surcharge: form.surcharge, position: form.position,
     }
+    const methods = {
+      analysis: form.analysisMethod, solutionMethod: form.solutionMethod,
+      givenB: form.givenB, givenDc: form.givenDc,
+    }
     if (ecc) {
-      const r = designEccentricSquareFooting({ ...common, serviceMoment: form.serviceMoment, ultimateMoment: form.ultimateMoment })
+      const r = designEccentricSquareFooting({
+        ...common, ...methods, serviceMoment: form.serviceMoment, ultimateMoment: form.ultimateMoment,
+      })
       return {
-        type: 'square', loading: 'eccentric', ...designDefaults, Bx: r.B, By: r.B, Dc: r.Dc, qNet: r.qNet, qu: r.quMax,
-        dPunch: r.dPunch, dBeamLong: r.dBeam, dBeamShort: r.dBeam, dProvided: r.Dc - form.cover - form.barDia,
+        type: 'square', loading: 'eccentric', analysis: r.analysis, method: r.method,
+        Bx: r.B, By: r.B, Dc: r.Dc, qNet: r.qNet, qu: r.quMax,
+        dPunch: r.dPunch, dBeamLong: r.dBeam, dBeamShort: r.dBeam, dProvided: r.dProvided,
+        punchOK: r.punchOK, beamOK: r.beamOK && r.bearingOK,
         long: { As: r.steelArea, bars: r.bars, spacing: r.barSpacing, usedMin: r.usedMinSteel, rho: r.rho },
         short: null,
         ecc: { e: r.e, qMax: r.qMaxService, qMin: r.qMinService, kernOK: r.kernOK },
       }
     }
     if (!rect) {
-      const r = designSquareFooting({
-        ...common, analysis: form.analysisMethod, solutionMethod: form.solutionMethod,
-        givenB: form.givenB, givenDc: form.givenDc,
-      })
+      const r = designSquareFooting({ ...common, ...methods })
       return {
         type: 'square', loading: 'concentric', analysis: r.analysis, method: r.method,
         Bx: r.B, By: r.B, Dc: r.Dc, qNet: r.qNet, qu: r.qu,
@@ -212,13 +224,17 @@ export default function FoundationDesign() {
     const sizing = form.sizingMode === 'ratio'
       ? { mode: 'ratio' as const, ratio: form.ratio }
       : { mode: 'fixedWidth' as const, By: form.fixedBy }
-    const r = designRectangularFooting({ ...common, sizing })
+    const r = designRectangularFooting({
+      ...common, sizing, ...methods, givenBx: form.givenB, givenBy: form.givenBy,
+    })
     return {
-      type: 'rectangular', loading: 'concentric', ...designDefaults, Bx: r.Bx, By: r.By, Dc: r.Dc, qNet: r.qNet, qu: r.qu,
-      dPunch: r.dPunch, dBeamLong: r.dBeamLong, dBeamShort: r.dBeamShort, dProvided: r.Dc - form.cover - form.barDia,
+      type: 'rectangular', loading: 'concentric', analysis: r.analysis, method: r.method,
+      Bx: r.Bx, By: r.By, Dc: r.Dc, qNet: r.qNet, qu: r.qu,
+      dPunch: r.dPunch, dBeamLong: r.dBeamLong, dBeamShort: r.dBeamShort, dProvided: r.dProvided,
+      punchOK: r.punchOK, beamOK: r.beamOK,
       long: r.long, short: r.short, ecc: null,
     }
-  }, [form, valid, rect, ecc, serviceLoad, ultimateLoad])
+  }, [form, valid, rect, ecc, serviceLoad, ultimateLoad, colWidth])
 
   const solutionSteps = useMemo(() => {
     if (!view) return null
@@ -227,7 +243,8 @@ export default function FoundationDesign() {
       serviceLoad, ultimateLoad,
       loads: individual ? { dead: form.deadLoad, live: form.liveLoad } : null,
       serviceMoment: form.serviceMoment, ultimateMoment: form.ultimateMoment,
-      columnWidth: form.columnWidth, fc: form.fc, fy: form.fy,
+      columnWidth: colWidth, fc: form.fc, fy: form.fy,
+      column: circular ? { shape: 'circular' as const, dia: form.columnWidth } : null,
       qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc, H: form.H,
       barDia: form.barDia, cover: form.cover, surcharge: form.surcharge, position: form.position,
       Bx: view.Bx, By: view.By, Dc: view.Dc, qNet: view.qNet, qu: view.qu,
@@ -296,28 +313,29 @@ export default function FoundationDesign() {
               options={[['square', 'Isolated Square'], ['rectangular', 'Isolated Rectangular']]} />
             <Select label="Loading" value={form.loadingType} onChange={set('loadingType')}
               options={[['concentric', 'Concentric'], ['eccentric', 'Eccentric (uniaxial)']]} />
-            {sq && (
-              <Select label="Analysis method" value={form.analysisMethod} onChange={set('analysisMethod')}
-                options={[['design', 'Detailed design'], ['analyze', 'Analyze given dimensions']]} />
-            )}
-            {sq && !analyze && (
+            <Select label="Analysis method" value={form.analysisMethod} onChange={set('analysisMethod')}
+              options={[['design', 'Detailed design'], ['analyze', 'Analyze given dimensions']]} />
+            {!analyze && (
               <Select label="Solution method" value={form.solutionMethod} onChange={set('solutionMethod')}
                 options={[['iteration', 'Iteration'], ['approximate', 'Approximate (initial Dc)']]} />
             )}
             {analyze && (
-              <NumField label="Given B" unit="m" value={form.givenB} onChange={set('givenB')} />
+              <NumField label={rect ? 'Given Bx' : 'Given B'} unit="m" value={form.givenB} onChange={set('givenB')} />
+            )}
+            {analyze && rect && (
+              <NumField label="Given By" unit="m" value={form.givenBy} onChange={set('givenBy')} />
             )}
             {analyze && (
               <NumField label="Given Dc" unit="mm" value={form.givenDc} onChange={set('givenDc')} />
             )}
-            {rect && (
+            {rect && !analyze && (
               <Select label="Sizing" value={form.sizingMode} onChange={set('sizingMode')}
                 options={[['ratio', 'By aspect ratio (Bx/By)'], ['fixedWidth', 'Fixed width By']]} />
             )}
-            {rect && form.sizingMode === 'ratio' && (
+            {rect && !analyze && form.sizingMode === 'ratio' && (
               <NumField label="Aspect Bx/By" value={form.ratio} onChange={set('ratio')} />
             )}
-            {rect && form.sizingMode === 'fixedWidth' && (
+            {rect && !analyze && form.sizingMode === 'fixedWidth' && (
               <NumField label="Width By" unit="m" value={form.fixedBy} onChange={set('fixedBy')} />
             )}
             {ecc && (
@@ -344,9 +362,17 @@ export default function FoundationDesign() {
             )}
             {ecc && <NumField label={<Math tex="M" />} unit="kN·m" value={form.serviceMoment} onChange={set('serviceMoment')} />}
             {ecc && <NumField label={<Math tex="M_u" />} unit="kN·m" value={form.ultimateMoment} onChange={set('ultimateMoment')} />}
-            <NumField label={<>Column <Math tex="c" /> (square)</>} unit="mm" value={form.columnWidth} onChange={set('columnWidth')} />
+            <Select label="Column shape" value={form.columnShape} onChange={set('columnShape')}
+              options={[['square', 'Square'], ['circular', 'Circular (spiral)']]} />
+            <NumField label={circular ? <>Column Ø <Math tex="D" /></> : <>Column <Math tex="c" /> (square)</>}
+              unit="mm" value={form.columnWidth} onChange={set('columnWidth')} />
             <Select label="Column position" value={form.position} onChange={set('position')}
               options={[['interior', 'Interior'], ['edge', 'Edge'], ['corner', 'Corner']]} />
+            {circular && (
+              <p className="col-span-full text-xs text-slate-400">
+                Circular column → equivalent square c = D·√(π/4) = {f0(colWidth)} mm (equal area, legacy convention).
+              </p>
+            )}
           </Card>
 
           <Card title="Materials">
@@ -370,7 +396,7 @@ export default function FoundationDesign() {
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Design preview</h2>
             {view ? (
-              <FootingSchematic Bx={view.Bx} By={view.By} Dc={view.Dc} columnWidth={form.columnWidth} H={form.H} />
+              <FootingSchematic Bx={view.Bx} By={view.By} Dc={view.Dc} columnWidth={colWidth} H={form.H} />
             ) : (
               <p className="py-8 text-center text-sm text-slate-400">Enter valid inputs — net bearing must be positive.</p>
             )}
@@ -383,7 +409,7 @@ export default function FoundationDesign() {
                 <Row label="Adequacy" value={view.punchOK && view.beamOK ? '✓ section OK' : '✗ inadequate in shear'}
                   check={`punching ${view.punchOK ? '✓' : '✗'} · beam ${view.beamOK ? '✓' : '✗'}`} />
               )}
-              {view.analysis === 'design' && view.type === 'square' && view.loading === 'concentric' && (
+              {view.analysis === 'design' && (
                 <Row label="Method" value={view.method === 'iteration' ? 'Iteration' : 'Approximate'} />
               )}
               <Row label={<Math tex="q_{net}" />} value={`${f3(view.qNet)} kPa`} />
