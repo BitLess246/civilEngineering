@@ -58,12 +58,15 @@ export function ResultCard({ title, children }: { title: string; children: React
   )
 }
 
-export function Row({ label, value, sub }: { label: ReactNode; value: ReactNode; sub?: ReactNode }) {
+export function Row({ label, value, sub, alert }: {
+  label: ReactNode; value: ReactNode; sub?: ReactNode; alert?: boolean
+}) {
   return (
-    <div className="flex items-baseline justify-between gap-3 border-b border-slate-100 py-1.5 last:border-0">
-      <span className="text-sm text-slate-600">{label}</span>
-      <span className="text-right text-sm font-semibold text-slate-800">{value}</span>
-      {sub ? <span className="w-32 text-right text-xs text-slate-500">{sub}</span> : null}
+    <div className={`flex items-baseline justify-between gap-3 border-b py-1.5 last:border-0 ${
+      alert ? 'border-red-100 bg-red-50 px-2 -mx-2 rounded' : 'border-slate-100'}`}>
+      <span className={`text-sm ${alert ? 'text-red-700' : 'text-slate-600'}`}>{label}</span>
+      <span className={`text-right text-sm font-semibold ${alert ? 'text-red-700' : 'text-slate-800'}`}>{value}</span>
+      {sub ? <span className={`w-32 text-right text-xs ${alert ? 'text-red-500' : 'text-slate-500'}`}>{sub}</span> : null}
     </div>
   )
 }
