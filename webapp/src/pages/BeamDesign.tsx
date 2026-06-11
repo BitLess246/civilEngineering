@@ -48,9 +48,9 @@ export default function BeamDesign() {
       <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
       <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">Beam Design</h1>
       <p className="no-print mt-1 text-slate-600">
-        Rectangular RC beam — SRRB/DRRB flexure (compression steel designed automatically when Mu exceeds the
-        singly-reinforced ceiling at ρ_max = 0.75ρ_b) and one-way shear. NSCP 2015 / ACI 318-14.
-        Enter the factored demands; results and the worked solution update live.
+        Rectangular RC beam — SRRB/DRRB flexure (compression steel designed automatically beyond the
+        tension-controlled ceiling at ρ_max = (0.85f′c/fy·β₁)(3/8)(dt/d)), §407.7 bar layout with automatic
+        layering (Varignon d), and one-way shear. NSCP 2015 / ACI 318-14.
       </p>
       <ReportControls title="Beam Design Report" />
 
@@ -80,7 +80,8 @@ export default function BeamDesign() {
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Section preview</h2>
             {r ? (
-              <BeamSchematic b={f.b} h={f.h} cover={f.cover} barDia={f.barDia} stirrupDia={f.stirrupDia} bars={r.bars} d={r.d} />
+              <BeamSchematic b={f.b} h={f.h} cover={f.cover} barDia={f.barDia} stirrupDia={f.stirrupDia}
+                bars={r.bars} d={r.d} layers={r.layers} comprBars={r.comprBars} comprBarDia={f.comprBarDia} />
             ) : (
               <p className="py-8 text-center text-sm text-slate-400">Enter a valid section (d must be positive).</p>
             )}
@@ -88,11 +89,18 @@ export default function BeamDesign() {
 
           {r && (
             <ResultCard title="Results">
-              <Row label="Effective depth d" value={`${f1(r.d)} mm`} />
+              {!r.flexOK && (
+                <Row label="⚠ Section" value="too small for the steel"
+                  sub="layout diverges — enlarge b or h" />
+              )}
+              <Row label="Effective depth d" value={`${f1(r.d)} mm`}
+                sub={r.layers.length > 1 ? `dt=${f1(r.dt)} · ȳ=${f1(r.yBar)} mm` : undefined} />
               <Row label="Flexure mode" value={r.mode}
                 sub={`φMn,max=${f1(r.phiMnMax)} kN·m`} />
               <Row label="Tension steel" value={`${r.bars} ⌀${f.barDia} mm`}
                 sub={`As=${f0(r.As)} mm² · ${r.usedMin ? 'ρ_min' : `ρ=${r.rho.toFixed(4)}`}`} />
+              <Row label="Layers" value={r.layers.length > 1 ? `${r.layers.length} (${r.layers.join(' + ')})` : '1'}
+                sub={`s_clear=${f0(r.sClear)} ≥ ${f0(r.sMinClear)} mm`} />
               {r.mode === 'DRRB' && (
                 <Row label="Compression steel" value={`${r.comprBars} ⌀${f.comprBarDia} mm`}
                   sub={`A's=${f0(r.AsPrime)} mm² · f's=${f1(r.fsPrime)} MPa${r.fsYields ? '' : ' (n.y.)'}`} />

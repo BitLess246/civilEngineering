@@ -6,11 +6,20 @@ const FILL = '#eef3f8'
 const BAR = '#37526e'
 
 export interface BeamSchematicProps {
-  b: number; h: number; cover: number; barDia: number; stirrupDia: number; bars: number; d: number
+  b: number; h: number; cover: number; barDia: number; stirrupDia: number
+  bars: number; d: number
+  /** Tension bars per layer, bottom first (default: one layer of `bars`). */
+  layers?: number[]
+  /** Compression bars (drawn along the top when > 0). */
+  comprBars?: number
+  comprBarDia?: number
 }
 
-/** Beam cross-section: stirrup outline + tension bars, drawn to scale. */
-export function BeamSchematic({ b, h, cover, barDia, stirrupDia, bars, d }: BeamSchematicProps): JSX.Element {
+/** Beam cross-section: stirrup outline, layered tension bars and optional
+ *  compression bars, drawn to scale. */
+export function BeamSchematic({
+  b, h, cover, barDia, stirrupDia, bars, d, layers, comprBars = 0, comprBarDia,
+}: BeamSchematicProps): JSX.Element {
   const W = 320, H = 300
   const padL = 60, padT = 24, availW = 150, availH = 210
   const s = Math.min(availW / b, availH / h)
@@ -20,12 +29,20 @@ export function BeamSchematic({ b, h, cover, barDia, stirrupDia, bars, d }: Beam
   const br = Math.max(3, (barDia / 2) * s)
   const dPx = d * s
 
-  // tension bar centres along the bottom row
-  const barY = y0 + hh - (cover + stirrupDia + barDia / 2) * s
+  const lay = layers && layers.length > 0 ? layers : [Math.max(2, bars)]
+  const n = lay.reduce((a, k) => a + k, 0)
   const x1 = x0 + (cover + stirrupDia + barDia / 2) * s
   const x2 = x0 + bw - (cover + stirrupDia + barDia / 2) * s
-  const n = Math.max(2, bars)
-  const barsX = Array.from({ length: n }, (_, i) => (n === 1 ? (x1 + x2) / 2 : x1 + ((x2 - x1) * i) / (n - 1)))
+  const yBottom = y0 + hh - (cover + stirrupDia + barDia / 2) * s
+  const pitch = (barDia + 25) * s   // layer-to-layer spacing (25 mm clear)
+
+  const rowX = (k: number) => Array.from({ length: k }, (_, i) => (k === 1 ? (x1 + x2) / 2 : x1 + ((x2 - x1) * i) / (k - 1)))
+
+  // compression bars along the top
+  const dbC = comprBarDia ?? barDia
+  const brC = Math.max(3, (dbC / 2) * s)
+  const yTop = y0 + (cover + stirrupDia + dbC / 2) * s
+  const topX = comprBars > 0 ? rowX(Math.max(2, comprBars)) : []
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
@@ -37,15 +54,26 @@ export function BeamSchematic({ b, h, cover, barDia, stirrupDia, bars, d }: Beam
       <rect x={x0 + inset} y={y0 + inset} width={bw - 2 * inset} height={hh - 2 * inset} rx={4}
         fill="none" stroke={BAR} strokeWidth={1.2} />
 
-      {/* tension bars */}
-      {barsX.map((bx, i) => <circle key={i} cx={bx} cy={barY} r={br} fill={BAR} />)}
+      {/* tension bars, layered bottom-up */}
+      {lay.map((k, li) =>
+        rowX(k).map((bx, i) => (
+          <circle key={`t${li}-${i}`} cx={bx} cy={yBottom - li * pitch} r={br} fill={BAR} />
+        )),
+      )}
+
+      {/* compression bars */}
+      {topX.map((bx, i) => (
+        <circle key={`c${i}`} cx={bx} cy={yTop} r={brC} fill="none" stroke={BAR} strokeWidth={1.6} />
+      ))}
 
       {/* dimensions: b below, h left, d right (to the tension-steel centroid) */}
       <DimBelow xA={x0} xB={x0 + bw} featY={y0 + hh} dY={y0 + hh + 18} label={`b = ${Math.round(b)} mm`} />
       <DimSide yA={y0} yB={y0 + hh} featX={x0} dX={x0 - 16} label={`h = ${Math.round(h)} mm`} side="left" />
       <DimSide yA={y0} yB={y0 + dPx} featX={x0 + bw} dX={x0 + bw + 16} label={`d = ${Math.round(d)} mm`} side="right" />
 
-      <text x={x0 + bw / 2} y={barY + br + 12} fontSize={8.5} fill={BAR} textAnchor="middle">{n} ⌀{barDia} mm</text>
+      <text x={x0 + bw / 2} y={yBottom + br + 12} fontSize={8.5} fill={BAR} textAnchor="middle">
+        {n} ⌀{barDia} mm{lay.length > 1 ? ` (${lay.join('+')})` : ''}{comprBars > 0 ? ` · ${comprBars} ⌀${dbC} top` : ''}
+      </text>
     </svg>
   )
 }
