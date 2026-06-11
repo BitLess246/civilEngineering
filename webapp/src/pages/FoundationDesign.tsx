@@ -4,6 +4,7 @@ import { designSquareFooting } from '../engine/isolatedFooting'
 import { designRectangularFooting } from '../engine/rectangularFooting'
 import { designEccentricSquareFooting } from '../engine/eccentricFooting'
 import { netBearing } from '../engine/bearing'
+import { factoredLoad } from '../engine/loads'
 import type { ColumnPosition } from '../engine/shear'
 import { FootingSchematic } from '../components/FootingSchematic'
 import { ReportControls } from '../components/ReportControls'
@@ -20,6 +21,7 @@ type SizingMode = 'ratio' | 'fixedWidth'
 type LoadingType = 'concentric' | 'eccentric'
 type AnalysisMethod = 'design' | 'analyze'
 type SolutionMethod = 'iteration' | 'approximate'
+type LoadInput = 'direct' | 'individual'
 
 interface FormState {
   footingType: FootingType
@@ -31,6 +33,9 @@ interface FormState {
   sizingMode: SizingMode
   ratio: number
   fixedBy: number
+  loadInput: LoadInput
+  deadLoad: number
+  liveLoad: number
   serviceLoad: number
   ultimateLoad: number
   serviceMoment: number
@@ -58,6 +63,9 @@ const DEFAULTS: FormState = {
   sizingMode: 'ratio',
   ratio: 1.5,
   fixedBy: 2,
+  loadInput: 'direct',
+  deadLoad: 600,
+  liveLoad: 400,
   serviceLoad: 1000,
   ultimateLoad: 1400,
   serviceMoment: 150,
@@ -164,10 +172,16 @@ export default function FoundationDesign() {
   const analyzeOk = !analyze || (form.givenB > 0 && form.givenDc > 0)
   const valid = Object.values(form).every((v) => typeof v === 'string' || Number.isFinite(v as number)) && qNetTrial > 0 && sizingOk && analyzeOk
 
+  // Effective loads: entered directly, or derived from DL & LL
+  // (P = D + L, Pu = max(1.4D, 1.2D + 1.6L)).
+  const individual = form.loadInput === 'individual'
+  const serviceLoad = individual ? form.deadLoad + form.liveLoad : form.serviceLoad
+  const ultimateLoad = individual ? factoredLoad({ dead: form.deadLoad, live: form.liveLoad }) : form.ultimateLoad
+
   const view: View | null = useMemo(() => {
     if (!valid) return null
     const common = {
-      serviceLoad: form.serviceLoad, ultimateLoad: form.ultimateLoad, columnWidth: form.columnWidth,
+      serviceLoad, ultimateLoad, columnWidth: form.columnWidth,
       fc: form.fc, fy: form.fy, qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc,
       H: form.H, barDia: form.barDia, cover: form.cover, surcharge: form.surcharge, position: form.position,
     }
@@ -204,13 +218,14 @@ export default function FoundationDesign() {
       dPunch: r.dPunch, dBeamLong: r.dBeamLong, dBeamShort: r.dBeamShort, dProvided: r.Dc - form.cover - form.barDia,
       long: r.long, short: r.short, ecc: null,
     }
-  }, [form, valid, rect, ecc])
+  }, [form, valid, rect, ecc, serviceLoad, ultimateLoad])
 
   const solutionSteps = useMemo(() => {
     if (!view) return null
     const ctx: SolutionCtx = {
       type: view.type, loading: view.loading, analysis: view.analysis, method: view.method,
-      serviceLoad: form.serviceLoad, ultimateLoad: form.ultimateLoad,
+      serviceLoad, ultimateLoad,
+      loads: individual ? { dead: form.deadLoad, live: form.liveLoad } : null,
       serviceMoment: form.serviceMoment, ultimateMoment: form.ultimateMoment,
       columnWidth: form.columnWidth, fc: form.fc, fy: form.fy,
       qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc, H: form.H,
@@ -221,7 +236,7 @@ export default function FoundationDesign() {
       long: view.long, short: view.short, ecc: view.ecc,
     }
     return buildFoundationSolution(ctx)
-  }, [view, form])
+  }, [view, form, serviceLoad, ultimateLoad, individual])
 
   return (
     <div className="mx-auto max-w-6xl p-6">
@@ -311,8 +326,22 @@ export default function FoundationDesign() {
           </Card>
 
           <Card title="Loads & Column">
-            <NumField label={<Math tex="P" />} unit="kN" value={form.serviceLoad} onChange={set('serviceLoad')} />
-            <NumField label={<Math tex="P_u" />} unit="kN" value={form.ultimateLoad} onChange={set('ultimateLoad')} />
+            <Select label="Load entry" value={form.loadInput} onChange={set('loadInput')}
+              options={[['direct', 'Service & ultimate (P, Pu)'], ['individual', 'Individual loads (DL & LL)']]} />
+            {individual ? (
+              <>
+                <NumField label={<>Dead <Math tex="D" /></>} unit="kN" value={form.deadLoad} onChange={set('deadLoad')} />
+                <NumField label={<>Live <Math tex="L" /></>} unit="kN" value={form.liveLoad} onChange={set('liveLoad')} />
+                <p className="col-span-full text-xs text-slate-400">
+                  P = D + L = {f0(serviceLoad)} kN · Pu = max(1.4D, 1.2D+1.6L) = {f0(ultimateLoad)} kN
+                </p>
+              </>
+            ) : (
+              <>
+                <NumField label={<Math tex="P" />} unit="kN" value={form.serviceLoad} onChange={set('serviceLoad')} />
+                <NumField label={<Math tex="P_u" />} unit="kN" value={form.ultimateLoad} onChange={set('ultimateLoad')} />
+              </>
+            )}
             {ecc && <NumField label={<Math tex="M" />} unit="kN·m" value={form.serviceMoment} onChange={set('serviceMoment')} />}
             {ecc && <NumField label={<Math tex="M_u" />} unit="kN·m" value={form.ultimateMoment} onChange={set('ultimateMoment')} />}
             <NumField label={<>Column <Math tex="c" /> (square)</>} unit="mm" value={form.columnWidth} onChange={set('columnWidth')} />
