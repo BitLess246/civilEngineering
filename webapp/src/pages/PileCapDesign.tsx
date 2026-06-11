@@ -1,6 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { designPileCap, type PileArrangement } from '../engine/pileCap'
+import { designPileCap, type PileArrangement, type PileCapInput } from '../engine/pileCap'
+import { WorkedSolution } from '../components/WorkedSolution'
+import { pileCapSolution } from '../lib/pileCapSolution'
 import { PileCapSchematic } from '../components/PileCapSchematic'
 import { ReportControls } from '../components/ReportControls'
 import { Math as KTex } from '../lib/math'
@@ -131,29 +133,29 @@ export default function PileCapDesign() {
     && form.serviceLoad > 0 && form.ultimateLoad > 0
     && form.pileCapacity > 0 && form.spacing > 0 && form.edgeDist > 0
 
-  const result = useMemo(() => {
-    if (!valid) return null
-    return designPileCap({
-      serviceLoad: form.serviceLoad,
-      serviceMomX: form.serviceMomX,
-      serviceMomY: form.serviceMomY,
-      ultimateLoad: form.ultimateLoad,
-      ultimateMomX: form.ultimateMomX,
-      ultimateMomY: form.ultimateMomY,
-      nPiles: form.nPiles,
-      pileDia: form.pileDia,
-      pileCapacity: form.pileCapacity,
-      spacing: form.spacing,
-      edgeDist: form.edgeDist,
-      colX: form.colX,
-      colY: form.colY,
-      fc: form.fc,
-      fy: form.fy,
-      cover: form.cover,
-      barDia: form.barDia,
-      pileEmbed: form.pileEmbed,
-    })
-  }, [form, valid])
+  const input = useMemo<PileCapInput>(() => ({
+    serviceLoad: form.serviceLoad,
+    serviceMomX: form.serviceMomX,
+    serviceMomY: form.serviceMomY,
+    ultimateLoad: form.ultimateLoad,
+    ultimateMomX: form.ultimateMomX,
+    ultimateMomY: form.ultimateMomY,
+    nPiles: form.nPiles,
+    pileDia: form.pileDia,
+    pileCapacity: form.pileCapacity,
+    spacing: form.spacing,
+    edgeDist: form.edgeDist,
+    colX: form.colX,
+    colY: form.colY,
+    fc: form.fc,
+    fy: form.fy,
+    cover: form.cover,
+    barDia: form.barDia,
+    pileEmbed: form.pileEmbed,
+  }), [form])
+
+  const result = useMemo(() => (valid ? designPileCap(input) : null), [input, valid])
+  const solution = useMemo(() => (result ? pileCapSolution(input, result) : null), [input, result])
 
   const allOK = result && result.capacityOK && result.punchColOK && result.punchPileOK
     && result.beamXOK && result.beamYOK && result.ldOK
@@ -317,6 +319,8 @@ export default function PileCapDesign() {
           )}
         </div>
       </div>
+
+      {solution && <WorkedSolution steps={solution} />}
     </div>
   )
 }
