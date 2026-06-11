@@ -10,10 +10,10 @@ import { Math } from '../lib/math'
 import { f0, f1 } from '../lib/format'
 import 'katex/dist/katex.min.css'
 
-interface FormState extends BeamDesignInput { fyt: number; legs: number }
+interface FormState extends BeamDesignInput { fyt: number; legs: number; comprBarDia: number }
 
 const DEFAULTS: FormState = {
-  b: 300, h: 500, cover: 40, barDia: 20, stirrupDia: 10,
+  b: 300, h: 500, cover: 40, barDia: 20, comprBarDia: 16, stirrupDia: 10,
   fc: 28, fy: 415, fyt: 415, Mu: 180, Vu: 150, legs: 2,
 }
 
@@ -48,7 +48,8 @@ export default function BeamDesign() {
       <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
       <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">Beam Design</h1>
       <p className="no-print mt-1 text-slate-600">
-        Rectangular RC beam — singly-reinforced flexure and one-way shear (stirrups). NSCP 2015 / ACI 318-14.
+        Rectangular RC beam — SRRB/DRRB flexure (compression steel designed automatically when Mu exceeds the
+        singly-reinforced ceiling at ρ_max = 0.75ρ_b) and one-way shear. NSCP 2015 / ACI 318-14.
         Enter the factored demands; results and the worked solution update live.
       </p>
       <ReportControls title="Beam Design Report" />
@@ -60,6 +61,7 @@ export default function BeamDesign() {
             <Num label="Total depth h" unit="mm" value={f.h} onChange={set('h')} />
             <Num label="Clear cover" unit="mm" value={f.cover} onChange={set('cover')} />
             <Num label={<>Bar <Math tex="d_b" /></>} unit="mm" value={f.barDia} onChange={set('barDia')} />
+            <Num label={<>Compr. bar <Math tex="d_b'" /></>} unit="mm" value={f.comprBarDia} onChange={set('comprBarDia')} />
             <Num label={<>Stirrup <Math tex="d_s" /></>} unit="mm" value={f.stirrupDia} onChange={set('stirrupDia')} />
             <Num label="Stirrup legs" value={f.legs} onChange={set('legs')} />
           </Card>
@@ -87,10 +89,14 @@ export default function BeamDesign() {
           {r && (
             <ResultCard title="Results">
               <Row label="Effective depth d" value={`${f1(r.d)} mm`} />
-              <Row label="Flexural steel" value={`${r.bars} ⌀${f.barDia} mm`}
+              <Row label="Flexure mode" value={r.mode}
+                sub={`φMn,max=${f1(r.phiMnMax)} kN·m`} />
+              <Row label="Tension steel" value={`${r.bars} ⌀${f.barDia} mm`}
                 sub={`As=${f0(r.As)} mm² · ${r.usedMin ? 'ρ_min' : `ρ=${r.rho.toFixed(4)}`}`} />
-              <Row label="Tension-controlled" value={r.tensionControlled ? '✓ yes' : '✗ no'}
-                sub={`ρ_max=${r.rhoMax.toFixed(4)}`} />
+              {r.mode === 'DRRB' && (
+                <Row label="Compression steel" value={`${r.comprBars} ⌀${f.comprBarDia} mm`}
+                  sub={`A's=${f0(r.AsPrime)} mm² · f's=${f1(r.fsPrime)} MPa${r.fsYields ? '' : ' (n.y.)'}`} />
+              )}
               <Row label={<Math tex="\phi V_c" />} value={`${f1(r.phiVc)} kN`} sub={`Vc=${f1(r.Vc)}`} />
               <Row label="Shear" value={REGION[r.region]} />
               <Row label="Stirrups" value={stirrupText}
