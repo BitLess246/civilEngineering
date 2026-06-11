@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { estimateBeam, type BeamInput, type BeamBarGroup, type ConcreteClass } from '../engine/quantities'
 import { Num, ClassPick, Card, ResultCard, Row, QtyPage, kg, m3, m } from '../components/qty'
+import { WorkedSolution } from '../components/WorkedSolution'
+import { beamQtySolution } from '../lib/quantitySolution'
 
 const g = (lengthPerPiece: number, numPieces: number, diaMm: number): BeamBarGroup => ({ lengthPerPiece, numPieces, diaMm })
 
@@ -18,6 +20,7 @@ export default function BeamEstimate() {
   const setG = (grp: 'topSupport' | 'topMidspan' | 'bottomSupport' | 'bottomMidspan', key: keyof BeamBarGroup) =>
     (v: number) => setF((s) => ({ ...s, [grp]: { ...s[grp], [key]: v } }))
   const r = useMemo(() => estimateBeam(f), [f])
+  const solution = useMemo(() => beamQtySolution(f, r), [f, r])
 
   const barCard = (title: string, grp: 'topSupport' | 'topMidspan' | 'bottomSupport' | 'bottomMidspan') => (
     <Card title={title}>
@@ -29,7 +32,8 @@ export default function BeamEstimate() {
 
   return (
     <QtyPage title="Beam — Material Estimate" reportTitle="Beam Material Estimate"
-      intro="Concrete volume, materials, top/bottom bars at support & midspan, stirrups and tie wire for beams.">
+      intro="Concrete volume, materials, top/bottom bars at support & midspan, stirrups and tie wire for beams."
+      after={<WorkedSolution steps={solution} title="Solution — calculation breakdown" />}>
       <div className="space-y-5">
         <Card title="Geometry & mix">
           <Num label="Length" unit="m" value={f.length} onChange={set('length')} />

@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { estimateChb, type ChbInput, type ChbSize } from '../engine/quantities'
 import { Num, Pick, Card, ResultCard, Row, QtyPage, m3 } from '../components/qty'
+import { WorkedSolution } from '../components/WorkedSolution'
+import { chbSolution } from '../lib/quantitySolution'
 
 const DEFAULTS: ChbInput = { wallArea: 30, holeArea: 4, size: '6' }
 
@@ -8,10 +10,12 @@ export default function ChbEstimate() {
   const [f, setF] = useState<ChbInput>(DEFAULTS)
   const set = <K extends keyof ChbInput>(k: K) => (v: ChbInput[K]) => setF((s) => ({ ...s, [k]: v }))
   const r = useMemo(() => estimateChb(f), [f])
+  const solution = useMemo(() => chbSolution(f, r), [f, r])
 
   return (
     <QtyPage title="CHB Wall — Material Estimate" reportTitle="CHB Wall Material Estimate"
-      intro="Concrete hollow block count, mortar and plaster (cement + sand) for a masonry wall.">
+      intro="Concrete hollow block count, mortar and plaster (cement + sand) for a masonry wall."
+      after={<WorkedSolution steps={solution} title="Solution — calculation breakdown" />}>
       <div className="space-y-5">
         <Card title="Wall">
           <Num label="Gross wall area" unit="m²" value={f.wallArea} onChange={set('wallArea')} />
