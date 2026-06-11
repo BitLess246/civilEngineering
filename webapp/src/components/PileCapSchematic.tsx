@@ -1,10 +1,10 @@
 import type { JSX } from 'react'
 import type { PileCoord } from '../engine/pileCap'
+import { DimBelow, DimSide } from './dims'
 
 const BLUE  = '#0056b3'
 const STEEL = '#37526e'
 const FILL  = '#eef3f8'
-const DIM   = '#1f77b4'
 
 interface Props {
   capBx: number        // mm
@@ -75,28 +75,11 @@ export function PileCapSchematic({ capBx, capBy, coords, pileDia, colX, colY, re
       <rect x={cx - colW / 2} y={cy - colH / 2} width={colW} height={colH}
         fill={STEEL} opacity={0.85} />
 
-      {/* Dimension: cap width Bx */}
-      <line x1={capX} y1={capY + cH + 12} x2={capX + cW} y2={capY + cH + 12}
-        stroke={DIM} strokeWidth={0.9} />
-      <line x1={capX} y1={capY + cH + 6} x2={capX} y2={capY + cH + 18}
-        stroke={DIM} strokeWidth={0.7} />
-      <line x1={capX + cW} y1={capY + cH + 6} x2={capX + cW} y2={capY + cH + 18}
-        stroke={DIM} strokeWidth={0.7} />
-      <text x={cx} y={capY + cH + 24} fontSize={9} fill={DIM} textAnchor="middle">
-        Bx = {(capBx / 1000).toFixed(2)} m
-      </text>
-
-      {/* Dimension: cap height By (right side) */}
-      <line x1={capX + cW + 12} y1={capY} x2={capX + cW + 12} y2={capY + cH}
-        stroke={DIM} strokeWidth={0.9} />
-      <line x1={capX + cW + 6} y1={capY} x2={capX + cW + 18} y2={capY}
-        stroke={DIM} strokeWidth={0.7} />
-      <line x1={capX + cW + 6} y1={capY + cH} x2={capX + cW + 18} y2={capY + cH}
-        stroke={DIM} strokeWidth={0.7} />
-      <text x={capX + cW + 26} y={cy} fontSize={9} fill={DIM} textAnchor="middle"
-        transform={`rotate(90 ${capX + cW + 26} ${cy})`}>
-        By = {(capBy / 1000).toFixed(2)} m
-      </text>
+      {/* Dimensions: Bx below, By right, pile spacing between the first pile pair */}
+      <DimBelow xA={capX} xB={capX + cW} featY={capY + cH} dY={capY + cH + 16}
+        label={`Bx = ${(capBx / 1000).toFixed(2)} m`} />
+      <DimSide yA={capY} yB={capY + cH} featX={capX + cW} dX={capX + cW + 14}
+        label={`By = ${(capBy / 1000).toFixed(2)} m`} side="right" />
 
       {/* N-piles label */}
       <text x={14} y={capY + cH + 44} fontSize={9.5} fill={STEEL}>

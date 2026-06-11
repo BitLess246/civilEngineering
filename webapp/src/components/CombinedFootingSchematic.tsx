@@ -1,9 +1,9 @@
 import type { JSX } from 'react'
+import { DimBelow, DimSide } from './dims'
 
 const STROKE = '#37526e'
 const FILL = '#eef3f8'
 const COL = '#37526e'
-const DIM = '#1f77b4'
 
 export interface CombinedSchematicProps {
   shape: 'Rectangular (CRF)' | 'Trapezoidal (CTF)'
@@ -21,8 +21,8 @@ export interface CombinedSchematicProps {
 export function CombinedFootingSchematic({
   shape, Bx, By, By1, By2, x1, x2, col1Width, col2Width,
 }: CombinedSchematicProps): JSX.Element {
-  const W = 520, H = 200
-  const padL = 24, padR = 24, padT = 40, padB = 44
+  const W = 520, H = 224
+  const padL = 40, padR = 40, padT = 40, padB = 62
   const plotW = W - padL - padR
   const plotH = H - padT - padB
 
@@ -60,21 +60,18 @@ export function CombinedFootingSchematic({
       <text x={c1.cx} y={cy - wL / 2 - 6} fontSize={9} fill={COL} textAnchor="middle" fontWeight={700}>C1</text>
       <text x={c2.cx} y={cy - wR / 2 - 6} fontSize={9} fill={COL} textAnchor="middle" fontWeight={700}>C2</text>
 
-      {/* length dimension */}
-      <g>
-        <line x1={fx} y1={cy + Math.max(wL, wR) / 2 + 14} x2={fx + fW} y2={cy + Math.max(wL, wR) / 2 + 14} stroke={DIM} strokeWidth={0.9} />
-        <text x={fx + fW / 2} y={cy + Math.max(wL, wR) / 2 + 28} fontSize={9.5} fill={DIM} textAnchor="middle">
-          Bx = {Bx.toFixed(2)} m
-        </text>
-      </g>
-
-      {/* width labels */}
-      <text x={fx - 4} y={cy} fontSize={9} fill={DIM} textAnchor="end" dominantBaseline="middle">
-        {(trap ? By1 : By).toFixed(2)} m
-      </text>
-      <text x={fx + fW + 4} y={cy} fontSize={9} fill={DIM} textAnchor="start" dominantBaseline="middle">
-        {(trap ? By2 : By).toFixed(2)} m
-      </text>
+      {/* dimensions: Bx below the deepest edge; end widths on each side;
+          column-centre offsets below the slab */}
+      <DimBelow xA={fx} xB={fx + fW} featY={cy + Math.max(wL, wR) / 2} dY={cy + Math.max(wL, wR) / 2 + 30}
+        label={`Bx = ${Bx.toFixed(2)} m`} />
+      <DimBelow xA={fx} xB={c1.cx} featY={cy + Math.max(wL, wR) / 2} dY={cy + Math.max(wL, wR) / 2 + 14}
+        label={`x₁ = ${x1.toFixed(2)}`} />
+      <DimBelow xA={c1.cx} xB={c2.cx} featY={cy + Math.max(wL, wR) / 2} dY={cy + Math.max(wL, wR) / 2 + 14}
+        label={`s = ${(x2 - x1).toFixed(2)}`} />
+      <DimSide yA={cy - wL / 2} yB={cy + wL / 2} featX={fx} dX={fx - 12}
+        label={`${trap ? 'By₁' : 'By'} = ${(trap ? By1 : By).toFixed(2)} m`} side="left" />
+      <DimSide yA={cy - wR / 2} yB={cy + wR / 2} featX={fx + fW} dX={fx + fW + 12}
+        label={`${trap ? 'By₂' : 'By'} = ${(trap ? By2 : By).toFixed(2)} m`} side="right" />
     </svg>
   )
 }
