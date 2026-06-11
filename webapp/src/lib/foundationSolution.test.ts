@@ -61,4 +61,16 @@ describe('foundation worked solution', () => {
     const bearing = steps.find((s) => s.title.startsWith('Net allowable'))!
     expect(bearing.lines.some((l) => 'text' in l && l.text.includes('Approximate'))).toBe(true)
   })
+
+  it('individual loads: the loads step derives P and Pu from D & L', () => {
+    const ctx = { ...squareCtx(), loads: { dead: 600, live: 400 } }
+    const steps = buildFoundationSolution(ctx)
+    const loads = steps[0]
+    expect(loads.title).toBe('Service & factored loads')
+    const tex = texOf(loads)
+    expect(tex).toContain('D + L = 600 + 400')
+    expect(tex).toContain('840.0')          // 1.4D
+    expect(tex).toContain('1360.0')         // 1.2D + 1.6L (governs)
+    expect(loads.note).toContain('1.2D + 1.6L governs')
+  })
 })

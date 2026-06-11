@@ -17,6 +17,8 @@ export interface SolutionCtx {
   analysis: 'design' | 'analyze'
   method: 'iteration' | 'approximate'
   serviceLoad: number; ultimateLoad: number
+  /** Present when P/Pu were derived from individual dead & live loads. */
+  loads?: { dead: number; live: number } | null
   serviceMoment: number; ultimateMoment: number
   columnWidth: number; fc: number; fy: number
   qAllow: number; gammaSoil: number; gammaConc: number; H: number
@@ -33,6 +35,18 @@ const txt = (text: string): SolutionLine => ({ text })
 const eq = (tex: string): SolutionLine => ({ tex })
 
 function loadsStep(c: SolutionCtx): SolutionStep {
+  if (c.loads) {
+    const { dead, live } = c.loads
+    return {
+      title: 'Service & factored loads',
+      lines: [
+        txt('Individual loads were given: the service load is D + L for the bearing check, and the factored load is the larger of 1.4D and 1.2D + 1.6L for strength design (NSCP 2015 §203 / ACI 318-14 §5.3).'),
+        eq(String.raw`P = D + L = ${sn0(dead)} + ${sn0(live)} = \mathbf{${sn0(c.serviceLoad)}}\ \text{kN}`),
+        eq(String.raw`P_u = \max(1.4D,\ 1.2D + 1.6L) = \max(${sn1(1.4 * dead)},\ ${sn1(1.2 * dead + 1.6 * live)}) = \mathbf{${sn1(c.ultimateLoad)}}\ \text{kN}`),
+      ],
+      note: 1.4 * dead >= 1.2 * dead + 1.6 * live ? '1.4D governs.' : '1.2D + 1.6L governs.',
+    }
+  }
   return {
     title: 'Service & factored loads',
     lines: [
