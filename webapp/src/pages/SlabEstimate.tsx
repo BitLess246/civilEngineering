@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { estimateSlab, type SlabInput, type ConcreteClass } from '../engine/quantities'
 import { Num, ClassPick, Card, ResultCard, Row, QtyPage, kg, m3, m } from '../components/qty'
+import { WorkedSolution } from '../components/WorkedSolution'
+import { slabSolution } from '../lib/quantitySolution'
 
 const DEFAULTS: SlabInput = {
   slabArea: 20, thickness: 0.125, numStructures: 1, concreteClass: 'A', customFactor: 9, spliceLength: 0.3,
@@ -13,10 +15,12 @@ export default function SlabEstimate() {
   const [f, setF] = useState<SlabInput>(DEFAULTS)
   const set = <K extends keyof SlabInput>(k: K) => (v: SlabInput[K]) => setF((s) => ({ ...s, [k]: v }))
   const r = useMemo(() => estimateSlab(f), [f])
+  const solution = useMemo(() => slabSolution(f, r), [f, r])
 
   return (
     <QtyPage title="Slab — Material Estimate" reportTitle="Slab Material Estimate"
-      intro="Concrete volume, cement / sand / gravel, main steel (both spans) and tie wire for a slab.">
+      intro="Concrete volume, cement / sand / gravel, main steel (both spans) and tie wire for a slab."
+      after={<WorkedSolution steps={solution} title="Solution — calculation breakdown" />}>
       <div className="space-y-5">
         <Card title="Geometry & mix">
           <Num label="Slab area" unit="m²" value={f.slabArea} onChange={set('slabArea')} />

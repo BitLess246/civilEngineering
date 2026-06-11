@@ -68,9 +68,10 @@ export function Row({ label, value, sub }: { label: ReactNode; value: ReactNode;
   )
 }
 
-/** Standard page shell: back link, title, intro, report bar. */
-export function QtyPage({ title, reportTitle, intro, children }: {
-  title: string; reportTitle: string; intro: ReactNode; children: ReactNode
+/** Standard page shell: back link, title, intro, report bar. `after` renders
+ *  full-width below the two-column grid (e.g. a worked-solution panel). */
+export function QtyPage({ title, reportTitle, intro, children, after }: {
+  title: string; reportTitle: string; intro: ReactNode; children: ReactNode; after?: ReactNode
 }) {
   return (
     <div className="mx-auto max-w-6xl p-6">
@@ -79,6 +80,7 @@ export function QtyPage({ title, reportTitle, intro, children }: {
       <p className="no-print mt-1 text-slate-600">{intro}</p>
       <ReportControls title={reportTitle} />
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">{children}</div>
+      {after}
     </div>
   )
 }

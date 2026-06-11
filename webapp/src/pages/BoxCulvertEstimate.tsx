@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { estimateBoxCulvert, type BoxCulvertInput, type ConcreteClass } from '../engine/quantities'
 import { Num, ClassPick, Card, ResultCard, Row, QtyPage, kg, m3, m } from '../components/qty'
+import { WorkedSolution } from '../components/WorkedSolution'
+import { boxCulvertSolution } from '../lib/quantitySolution'
 
 const DEFAULTS: BoxCulvertInput = {
   grossArea: 6, holeArea: 2, length: 5, concreteClass: 'A', customFactor: 9, spliceLength: 0.3,
@@ -14,10 +16,12 @@ export default function BoxCulvertEstimate() {
   const set = <K extends keyof BoxCulvertInput>(k: K) => (v: BoxCulvertInput[K]) => setF((s) => ({ ...s, [k]: v }))
   const r = useMemo(() => estimateBoxCulvert(f), [f])
   const rsbWeight = r.rsb.top.weight + r.rsb.u.weight
+  const solution = useMemo(() => boxCulvertSolution(f, r), [f, r])
 
   return (
     <QtyPage title="Box Culvert — Material Estimate" reportTitle="Box Culvert Material Estimate"
-      intro="Concrete volume from net cross-section, materials, longitudinal bars, reinforcing rings (top + U bars) and tie wire.">
+      intro="Concrete volume from net cross-section, materials, longitudinal bars, reinforcing rings (top + U bars) and tie wire."
+      after={<WorkedSolution steps={solution} title="Solution — calculation breakdown" />}>
       <div className="space-y-5">
         <Card title="Section & mix">
           <Num label="Gross x-section area" unit="m²" value={f.grossArea} onChange={set('grossArea')} />

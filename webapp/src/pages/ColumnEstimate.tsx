@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { estimateColumn, type ColumnInput, type ConcreteClass } from '../engine/quantities'
 import { Num, ClassPick, Card, ResultCard, Row, QtyPage, kg, m3, m } from '../components/qty'
+import { WorkedSolution } from '../components/WorkedSolution'
+import { columnSolution } from '../lib/quantitySolution'
 
 const DEFAULTS: ColumnInput = {
   length: 0.4, width: 0.4, height: 3, numStructures: 4, concreteClass: 'A', customFactor: 9, spliceLength: 0.3,
@@ -13,10 +15,12 @@ export default function ColumnEstimate() {
   const [f, setF] = useState<ColumnInput>(DEFAULTS)
   const set = <K extends keyof ColumnInput>(k: K) => (v: ColumnInput[K]) => setF((s) => ({ ...s, [k]: v }))
   const r = useMemo(() => estimateColumn(f), [f])
+  const solution = useMemo(() => columnSolution(f, r), [f, r])
 
   return (
     <QtyPage title="Column — Material Estimate" reportTitle="Column Material Estimate"
-      intro="Concrete volume, cement / sand / gravel, vertical bars, lateral ties and tie wire for columns.">
+      intro="Concrete volume, cement / sand / gravel, vertical bars, lateral ties and tie wire for columns."
+      after={<WorkedSolution steps={solution} title="Solution — calculation breakdown" />}>
       <div className="space-y-5">
         <Card title="Geometry & mix">
           <Num label="Length" unit="m" value={f.length} onChange={set('length')} />
