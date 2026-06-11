@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { designBeam, type BeamDesignInput } from '../engine/beamDesign'
 import { BeamSchematic } from '../components/BeamSchematic'
 import { ReportControls } from '../components/ReportControls'
@@ -25,7 +25,16 @@ const REGION: Record<string, string> = {
 }
 
 export default function BeamDesign() {
-  const [f, setF] = useState<FormState>(DEFAULTS)
+  // Accept demands handed over from Beam Analysis (?mu=…&vu=…).
+  const [params] = useSearchParams()
+  const fromAnalysis = useMemo(() => {
+    const mu = parseFloat(params.get('mu') ?? ''), vu = parseFloat(params.get('vu') ?? '')
+    return {
+      ...(Number.isFinite(mu) ? { Mu: mu } : {}),
+      ...(Number.isFinite(vu) ? { Vu: vu } : {}),
+    }
+  }, [params])
+  const [f, setF] = useState<FormState>({ ...DEFAULTS, ...fromAnalysis })
   const set = <K extends keyof FormState>(k: K) => (v: FormState[K]) => setF((s) => ({ ...s, [k]: v }))
 
   const valid = useMemo(() => {
