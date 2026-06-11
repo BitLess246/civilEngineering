@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   analyzeBeam, type Support, type SupportType, type BeamLoad, type LoadCategory,
 } from '../engine/beamAnalysis'
+import { detectCriticalSections } from '../engine/beamSections'
+import { SECTIONS_HANDOFF_KEY } from './BeamDesign'
 import { BeamElevation } from '../components/BeamElevation'
 import { Diagram } from '../components/Diagram'
 import { ReportControls } from '../components/ReportControls'
@@ -49,6 +51,7 @@ export default function BeamAnalysis() {
   const [supports, setSupports] = useState<SupRow[]>(DEF_SUPPORTS)
   const [loads, setLoads] = useState<LoadRow[]>(DEF_LOADS)
   const [selIdx, setSelIdx] = useState<number | null>(null)
+  const navigate = useNavigate()
 
   const setSup = (id: number, patch: Partial<SupRow>) =>
     setSupports((ss) => ss.map((s) => (s.id === id ? { ...s, ...patch } : s)))
@@ -208,11 +211,22 @@ export default function BeamAnalysis() {
               <Row alert={r.Dmax > allowDefl} label="Deflection vs L/360"
                 value={r.Dmax <= allowDefl ? '✓ OK' : '✗ exceeds'}
                 sub={`${f2(r.Dmax)} ≤ ${f2(allowDefl)} mm`} />
-              <div className="no-print mt-3">
+              <div className="no-print mt-3 flex flex-wrap gap-2">
                 <Link to={`/beam-design?mu=${r.Mmax.toFixed(1)}&vu=${r.Vmax.toFixed(1)}`}
-                  className="inline-block rounded-lg bg-gradient-to-br from-[#0056b3] to-[#003f86] px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:shadow-lg">
-                  Use Mu & Vu in Beam Design →
+                  className="inline-block rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-[#0056b3] transition hover:border-[#0056b3] hover:bg-blue-50">
+                  Use Mmax & Vmax →
                 </Link>
+                <button type="button"
+                  onClick={() => {
+                    const gov = res!.perCombo[res!.govIdx].result!
+                    const secs = detectCriticalSections(gov)
+                    if (!secs.length) return
+                    sessionStorage.setItem(SECTIONS_HANDOFF_KEY, JSON.stringify(secs))
+                    navigate('/beam-design?sections=auto')
+                  }}
+                  className="inline-block rounded-lg bg-gradient-to-br from-[#0056b3] to-[#003f86] px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:shadow-lg">
+                  ⚡ Auto-detect critical sections → design
+                </button>
               </div>
             </ResultCard>
           )}
