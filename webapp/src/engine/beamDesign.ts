@@ -57,6 +57,15 @@ export interface BeamDesignResult {
   AsPrime: number; comprBars: number
   /** False when f's ≤ 0.85f'c (compression steel ineffective) — enlarge the section. */
   comprEffective: boolean
+  // Compression-bar layout (same §407.7 technique, layered downward from the top)
+  comprSMinClear: number
+  comprMaxPerLayer: number
+  comprLayers: number[]    // bars per layer, top (extreme) first; [] when no compression steel
+  comprSClear: number
+  comprYBar: number        // centroid drop below the extreme top layer (Varignon), mm
+  // Stirrup detailing (§407.3.2 bend, §425.3.2 hook)
+  stirrupBendDia: number   // inside bend diameter = 4·ds (⌀16 and smaller), mm
+  stirrupHookExt: number   // 135° hook extension = max(6·ds, 75), mm
   /** False when the bar layout diverges (d collapses toward d') — the section
    *  cannot accommodate the required steel; enlarge it. */
   flexOK: boolean
@@ -102,26 +111,32 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
   const Ab = (Math.PI / 4) * i.barDia * i.barDia
   const AbC = (Math.PI / 4) * dbC * dbC
 
-  // Extreme tension layer & compression-steel depth — fixed by the section.
+  // Extreme tension layer & compression-steel base depth — fixed by the section.
   const dt = i.h - i.cover - i.stirrupDia - i.barDia / 2
-  const dPrime = i.cover + i.stirrupDia + dbC / 2
+  const dPrimeBase = i.cover + i.stirrupDia + dbC / 2
 
   // §407.7.1 — clear spacing ≥ max(db, 25 mm); bars per layer that fit:
-  // n·db + (n−1)·s_min ≤ b − 2(cover + ds).
+  // n·db + (n−1)·s_min ≤ b − 2(cover + ds). Same rule on both faces.
   const bw = i.b - 2 * (i.cover + i.stirrupDia)
   const sMinClear = Math.max(i.barDia, 25)
   const maxPerLayer = Math.max(1, Math.floor((bw + sMinClear) / (i.barDia + sMinClear)))
   const pitch = i.barDia + LAYER_CLEAR     // layer-to-layer centroid distance
+  const comprSMinClear = Math.max(dbC, 25)
+  const comprMaxPerLayer = Math.max(1, Math.floor((bw + comprSMinClear) / (dbC + comprSMinClear)))
+  const pitchC = dbC + LAYER_CLEAR
 
-  // ── Iterate: layout → Varignon d → redesign, until the layers stabilise ──
+  // ── Iterate BOTH faces: layout → Varignon d & d' → redesign, until the
+  //    layer arrangements stabilise ──
   let d = dt
+  let dPrime = dPrimeBase
   let layers: number[] = [0]
+  let comprLayers: number[] = []
   let layerIters = 0
   let mode: FlexureMode = 'SRRB'
   let rhoB = 0, rhoMaxV = 0, AsMax = 0, aMax = 0, MnMax = 0, phiMnMax = 0
-  let As = 0, rho = 0, usedMin = false, bars = 0, yBar = 0
+  let As = 0, rho = 0, usedMin = false, bars = 0, yBar = 0, comprYBar = 0
   let As1 = 0, As2 = 0, MnResid = 0, cNA = 0, fsPrime = i.fy, fsYields = true
-  let AsPrime = 0, comprEffective = true
+  let AsPrime = 0, comprEffective = true, comprBars = 0
   let flexOK = true
 
   for (let iter = 0; iter < 12; iter++) {
@@ -164,31 +179,50 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
       AsPrime = comprEffective ? (As2 * i.fy) / (fsPrime - 0.85 * i.fc) : 0
     }
 
+    // Tension side: bars → layers → Varignon → new d.
     bars = Math.max(2, Math.ceil(As / Ab))
     const newLayers = splitLayers(bars, maxPerLayer)
     yBar = centroidRise(newLayers, pitch)
     const dNew = dt - yBar
 
-    // Divergence guard: each added layer lowers d, which demands more steel,
-    // which adds layers — if d collapses toward d' (or the layer stack keeps
-    // growing), the section physically cannot take the steel.
-    if (dNew <= dPrime + i.barDia || newLayers.length > 6) {
+    // Compression side: same technique, layered downward from the top face —
+    // stacking layers DEEPENS d' (centroid drops), which feeds back into As2.
+    comprBars = mode === 'DRRB' && comprEffective ? Math.max(2, Math.ceil(AsPrime / AbC)) : 0
+    const newComprLayers = comprBars > 0 ? splitLayers(comprBars, comprMaxPerLayer) : []
+    comprYBar = centroidRise(newComprLayers, pitchC)
+    const dPrimeNew = dPrimeBase + comprYBar
+
+    // Divergence guard: each added layer lowers d (and raises d'), which
+    // demands more steel, which adds layers — if the two centroids close in
+    // on each other (or a stack keeps growing), the section can't take it.
+    if (dNew <= dPrimeNew + i.barDia || newLayers.length > 6 || newComprLayers.length > 6) {
       flexOK = false
       layers = newLayers
-      d = Math.max(dNew, dPrime + i.barDia)
+      comprLayers = newComprLayers
+      d = Math.max(dNew, dPrimeNew + i.barDia)
+      dPrime = dPrimeNew
       break
     }
 
-    const stable = newLayers.length === layers.length && newLayers.every((k, j) => k === layers[j])
+    const sameVec = (a: number[], b: number[]) => a.length === b.length && a.every((k, j) => k === b[j])
+    const stable = sameVec(newLayers, layers) && sameVec(newComprLayers, comprLayers)
     layers = newLayers
-    if (stable && Math.abs(dNew - d) < 1e-9) break
+    comprLayers = newComprLayers
+    if (stable && Math.abs(dNew - d) < 1e-9 && Math.abs(dPrimeNew - dPrime) < 1e-9) break
     d = dNew
+    dPrime = dPrimeNew
   }
 
-  // Actual clear spacing in the fullest (bottom) layer.
+  // Actual clear spacing in the fullest layer on each face.
   const nBot = layers[0]
   const sClear = nBot > 1 ? (bw - nBot * i.barDia) / (nBot - 1) : bw
-  const comprBars = mode === 'DRRB' && comprEffective ? Math.max(2, Math.ceil(AsPrime / AbC)) : 0
+  const nTop = comprLayers[0] ?? 0
+  const comprSClear = nTop > 1 ? (bw - nTop * dbC) / (nTop - 1) : bw
+
+  // Stirrup detailing — §407.3.2: inside bend ≥ 4ds for ⌀16 and smaller;
+  // §425.3.2: 135° stirrup hook extension = max(6ds, 75 mm).
+  const stirrupBendDia = 4 * i.stirrupDia
+  const stirrupHookExt = Math.max(6 * i.stirrupDia, 75)
 
   // ── Shear (NSCP 2015 §422.5 / §409.4) ──
   const Vc = (lambda * Math.sqrt(i.fc) * i.b * d) / 6 / 1000
@@ -225,6 +259,8 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
     mode, As, rho, usedMin, bars,
     sMinClear, maxPerLayer, layers, sClear, yBar, layerIters,
     As1, As2, MnResid, cNA, fsPrime, fsYields, AsPrime, comprBars, comprEffective, flexOK,
+    comprSMinClear, comprMaxPerLayer, comprLayers, comprSClear, comprYBar,
+    stirrupBendDia, stirrupHookExt,
     Vc, phiVc, region, Av, VsReq, VsMax, sReq, sMax, sAdopt,
   }
 }

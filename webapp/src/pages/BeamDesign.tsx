@@ -81,7 +81,8 @@ export default function BeamDesign() {
             <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Section preview</h2>
             {r ? (
               <BeamSchematic b={f.b} h={f.h} cover={f.cover} barDia={f.barDia} stirrupDia={f.stirrupDia}
-                bars={r.bars} d={r.d} layers={r.layers} comprBars={r.comprBars} comprBarDia={f.comprBarDia} />
+                bars={r.bars} d={r.d} layers={r.layers} comprLayers={r.comprLayers}
+                comprBars={r.comprBars} comprBarDia={f.comprBarDia} />
             ) : (
               <p className="py-8 text-center text-sm text-slate-400">Enter a valid section (d must be positive).</p>
             )}
@@ -105,10 +106,17 @@ export default function BeamDesign() {
                 <Row label="Compression steel" value={`${r.comprBars} ⌀${f.comprBarDia} mm`}
                   sub={`A's=${f0(r.AsPrime)} mm² · f's=${f1(r.fsPrime)} MPa${r.fsYields ? '' : ' (n.y.)'}`} />
               )}
+              {r.comprLayers.length > 0 && (
+                <Row label="Compr. layers"
+                  value={r.comprLayers.length > 1 ? `${r.comprLayers.length} (${r.comprLayers.join(' + ')})` : '1'}
+                  sub={`d'=${f1(r.dPrime)} mm · s'_clear=${f0(r.comprSClear)} ≥ ${f0(r.comprSMinClear)}`} />
+              )}
               <Row label={<Math tex="\phi V_c" />} value={`${f1(r.phiVc)} kN`} sub={`Vc=${f1(r.Vc)}`} />
               <Row label="Shear" value={REGION[r.region]} />
               <Row label="Stirrups" value={stirrupText}
                 sub={r.region === 'designed' ? `s_req=${f0(r.sReq)} · s_max=${f0(r.sMax)} mm` : undefined} />
+              <Row label="Hooks (135°)" value={`ext ${f0(r.stirrupHookExt)} mm`}
+                sub={`bend Ø ${f0(r.stirrupBendDia)} mm (4ds)`} />
             </ResultCard>
           )}
         </div>

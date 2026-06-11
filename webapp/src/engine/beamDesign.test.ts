@@ -104,3 +104,39 @@ describe('beam design — shear', () => {
     expect(designBeam({ ...base, b: 200, h: 350, Vu: 600 }).region).toBe('inadequate')
   })
 })
+
+describe('beam design — compression-bar layout & stirrup detailing', () => {
+  it("compression bars get the same spacing/layer treatment; d' deepens (Varignon)", () => {
+    // Heavy DRRB → 9 ⌀16 compression bars: two layers [5, 4].
+    const r = designBeam({ ...base, Mu: 460, comprBarDia: 16 })
+    expect(r.mode).toBe('DRRB')
+    expect(r.flexOK).toBe(true)
+    expect(r.comprLayers.length).toBeGreaterThanOrEqual(2)
+    expect(r.comprBars).toBe(r.comprLayers.reduce((s, k) => s + k, 0))
+    expect(r.comprLayers.every((k) => k <= r.comprMaxPerLayer)).toBe(true)
+    expect(r.comprYBar).toBeGreaterThan(0)
+    // d' = base + centroid drop (Varignon on the compression group)
+    expect(r.dPrime).toBeCloseTo(40 + 10 + 16 / 2 + r.comprYBar, 9)
+    expect(r.comprSClear).toBeGreaterThanOrEqual(r.comprSMinClear - 1e-9)
+  })
+
+  it('flags divergence when compression layers run away', () => {
+    const r = designBeam({ ...base, Mu: 520, comprBarDia: 16 })
+    expect(r.flexOK).toBe(false)
+  })
+
+  it('SRRB has no compression layers', () => {
+    const r = designBeam(base)
+    expect(r.comprLayers).toEqual([])
+    expect(r.comprYBar).toBe(0)
+  })
+
+  it('stirrup bend = 4ds and 135° hook extension = max(6ds, 75)', () => {
+    const r10 = designBeam(base)                          // ds = 10
+    expect(r10.stirrupBendDia).toBe(40)
+    expect(r10.stirrupHookExt).toBe(75)                   // 6·10 = 60 < 75
+    const r16 = designBeam({ ...base, stirrupDia: 16 })   // ds = 16
+    expect(r16.stirrupBendDia).toBe(64)
+    expect(r16.stirrupHookExt).toBe(96)                   // 6·16 = 96 > 75
+  })
+})

@@ -94,10 +94,20 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
       ...(multiLayer ? [
         txt('With more than one layer (25 mm clear between layers, §407.7.2) the bar-group centroid rises above the extreme layer — Varignon: ȳ = Σnᵢyᵢ/Σnᵢ — which reduces d, so the design re-runs at the new d until the layer arrangement stops changing.'),
         eq(String.raw`\bar{y} = \dfrac{\sum n_i y_i}{\sum n_i} = ${sn1(r.yBar)}\ \text{mm} \Rightarrow d = d_t - \bar{y} = ${sn1(r.dt)} - ${sn1(r.yBar)} = \mathbf{${sn1(r.d)}}\ \text{mm}`),
-        txt(`Converged after ${r.layerIters} passes — the ρ limits, classification, and steel above are already evaluated at this final d.`),
       ] : [
-        txt('All bars fit in one layer, so d = d_t and no re-iteration is needed.'),
+        txt('All tension bars fit in one layer, so d = d_t for the tension side.'),
       ]),
+      ...(r.comprLayers.length > 0 ? [
+        txt(`Compression side — same rule: s_min = max(d_b′, 25) = ${sn0(r.comprSMinClear)} mm, so at most ${r.comprMaxPerLayer} compression bars fit per layer.`),
+        eq(String.raw`n' = ${r.comprBars}\ \text{bars} \Rightarrow \text{layers: } [${r.comprLayers.join(',\ ')}],\quad s_{clear}' = ${sn0(r.comprSClear)}\ \text{mm} \ge ${sn0(r.comprSMinClear)}\ \checkmark`),
+        ...(r.comprLayers.length > 1 ? [
+          txt('Stacking compression layers drops the compression-steel centroid (Varignon), DEEPENING d′ — which reduces the (d − d′) lever arm and feeds back into As2 and A′s.'),
+          eq(String.raw`\bar{y}' = ${sn1(r.comprYBar)}\ \text{mm} \Rightarrow d' = ${sn1(r.dPrime - r.comprYBar)} + ${sn1(r.comprYBar)} = \mathbf{${sn1(r.dPrime)}}\ \text{mm}`),
+        ] : []),
+      ] : []),
+      ...(multiLayer || r.comprLayers.length > 1 ? [
+        txt(`Both faces converged after ${r.layerIters} passes — the ρ limits, classification, and steel above are already evaluated at the final d and d′.`),
+      ] : []),
     ],
     note: r.flexOK
       ? `Provide ${r.bars} ⌀${i.barDia} mm in ${r.layers.length} layer${r.layers.length > 1 ? 's' : ''} (${r.layers.join(' + ')})${r.mode === 'DRRB' && r.comprEffective ? ` + ${r.comprBars} ⌀${dbC} mm compression bars` : ''}.`
@@ -151,6 +161,16 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
       note: 'Increase b, d, or f′c.',
     })
   }
+
+  steps.push({
+    title: 'Stirrup detailing — bend & hooks (§407.3.2, §425.3.2)',
+    lines: [
+      txt('Inside diameter of bend for stirrups and ties shall not be less than 4d_b for ⌀16 mm bars and smaller (§407.3.2.2). Stirrups close with 135° hooks around a longitudinal bar; the hook extension beyond the bend is 6d_b but not less than 75 mm (§425.3.2).'),
+      eq(String.raw`D_{bend} = 4 d_s = 4(${sn0(i.stirrupDia)}) = ${sn0(r.stirrupBendDia)}\ \text{mm}`),
+      eq(String.raw`\ell_{hook} = \max(6 d_s,\ 75) = \max(${sn0(6 * i.stirrupDia)},\ 75) = ${sn0(r.stirrupHookExt)}\ \text{mm}`),
+    ],
+    note: `Provide 135° seismic hooks, ${sn0(r.stirrupHookExt)} mm extension, bent around a corner bar.`,
+  })
 
   return steps
 }
