@@ -2,6 +2,7 @@ import { Routes, Route, Link } from 'react-router-dom'
 import FoundationDesign from './pages/FoundationDesign'
 import PileCapDesign from './pages/PileCapDesign'
 import CombinedFootingDesign from './pages/CombinedFootingDesign'
+import BeamDesign from './pages/BeamDesign'
 import SlabEstimate from './pages/SlabEstimate'
 import ChbEstimate from './pages/ChbEstimate'
 import ColumnEstimate from './pages/ColumnEstimate'
@@ -33,6 +34,7 @@ function Home() {
         <Tile to="/foundation">Foundation Design</Tile>
         <Tile to="/pile-cap">Pile Cap Design</Tile>
         <Tile to="/combined">Combined Footing</Tile>
+        <Tile to="/beam-design">Beam Design</Tile>
       </div>
 
       <h2 className="mt-8 text-lg font-semibold text-slate-800">Material estimation (quantity take-off)</h2>
@@ -54,6 +56,7 @@ export default function App() {
       <Route path="/foundation" element={<FoundationDesign />} />
       <Route path="/pile-cap" element={<PileCapDesign />} />
       <Route path="/combined" element={<CombinedFootingDesign />} />
+      <Route path="/beam-design" element={<BeamDesign />} />
       <Route path="/estimate/slab" element={<SlabEstimate />} />
       <Route path="/estimate/beam" element={<BeamEstimate />} />
       <Route path="/estimate/column" element={<ColumnEstimate />} />
