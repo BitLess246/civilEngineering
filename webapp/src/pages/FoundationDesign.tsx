@@ -9,6 +9,8 @@ import { FootingSchematic } from '../components/FootingSchematic'
 import { ReportControls } from '../components/ReportControls'
 import { ExcelImport } from '../components/ExcelImport'
 import type { BatchResult } from '../lib/foundationExcel'
+import { FoundationSolution } from '../components/FoundationSolution'
+import { buildFoundationSolution, type SolutionCtx } from '../lib/foundationSolution'
 import { Math } from '../lib/math'
 import { f0, f2, f3 } from '../lib/format'
 import 'katex/dist/katex.min.css'
@@ -182,6 +184,22 @@ export default function FoundationDesign() {
     }
   }, [form, valid, rect, ecc])
 
+  const solutionSteps = useMemo(() => {
+    if (!view) return null
+    const ctx: SolutionCtx = {
+      type: view.type, loading: view.loading,
+      serviceLoad: form.serviceLoad, ultimateLoad: form.ultimateLoad,
+      serviceMoment: form.serviceMoment, ultimateMoment: form.ultimateMoment,
+      columnWidth: form.columnWidth, fc: form.fc, fy: form.fy,
+      qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc, H: form.H,
+      barDia: form.barDia, cover: form.cover, surcharge: form.surcharge, position: form.position,
+      Bx: view.Bx, By: view.By, Dc: view.Dc, qNet: view.qNet, qu: view.qu,
+      dPunch: view.dPunch, dBeamLong: view.dBeamLong, dBeamShort: view.dBeamShort,
+      long: view.long, short: view.short, ecc: view.ecc,
+    }
+    return buildFoundationSolution(ctx)
+  }, [view, form])
+
   return (
     <div className="mx-auto max-w-6xl p-6">
       <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
@@ -333,6 +351,8 @@ export default function FoundationDesign() {
           </div>
         </div>
       </div>
+
+      {solutionSteps && <FoundationSolution steps={solutionSteps} />}
     </div>
   )
 }
