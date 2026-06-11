@@ -83,7 +83,8 @@ export default function BeamDesign() {
               <BeamSchematic b={f.b} h={f.h} cover={f.cover} barDia={f.barDia} stirrupDia={f.stirrupDia}
                 bars={r.bars} d={r.d} dPrime={r.comprLayers.length > 0 ? r.dPrime : undefined}
                 layers={r.layers} comprLayers={r.comprLayers}
-                comprBars={r.comprBars} comprBarDia={f.comprBarDia} />
+                comprBars={r.comprBars} comprBarDia={f.comprBarDia}
+                naDepth={r.cNA} flexOK={r.flexOK} />
             ) : (
               <p className="py-8 text-center text-sm text-slate-400">Enter a valid section (d must be positive).</p>
             )}
@@ -92,7 +93,7 @@ export default function BeamDesign() {
           {r && (
             <ResultCard title="Results">
               {!r.flexOK && (
-                <Row label="⚠ Section" value="too small for the steel"
+                <Row alert label="⚠ Section" value={`${r.bars} bars cannot fit`}
                   sub="layout diverges — enlarge b or h" />
               )}
               <Row label="Effective depth d" value={`${f1(r.d)} mm`}
@@ -104,8 +105,11 @@ export default function BeamDesign() {
               <Row label="Layers" value={r.layers.length > 1 ? `${r.layers.length} (${r.layers.join(' + ')})` : '1'}
                 sub={`s_clear=${f0(r.sClear)} ≥ ${f0(r.sMinClear)} mm`} />
               {r.mode === 'DRRB' && (
-                <Row label="Compression steel" value={`${r.comprBars} ⌀${f.comprBarDia} mm`}
-                  sub={`A's=${f0(r.AsPrime)} mm² · f's=${f1(r.fsPrime)} MPa${r.fsYields ? '' : ' (n.y.)'}`} />
+                <Row alert={!r.comprEffective} label="Compression steel"
+                  value={r.comprEffective ? `${r.comprBars} ⌀${f.comprBarDia} mm` : '✗ ineffective'}
+                  sub={r.comprEffective
+                    ? `A's=${f0(r.AsPrime)} mm² · f's=${f1(r.fsPrime)} MPa${r.fsYields ? '' : ' (n.y.)'}`
+                    : `f's=${f1(r.fsPrime)} ≤ 0.85f'c`} />
               )}
               {r.comprLayers.length > 0 && (
                 <Row label="Compr. layers"
@@ -113,11 +117,11 @@ export default function BeamDesign() {
                   sub={`d'=${f1(r.dPrime)} mm · s'_clear=${f0(r.comprSClear)} ≥ ${f0(r.comprSMinClear)}`} />
               )}
               {r.comprLayers.length > 0 && (
-                <Row label="NA check" value={r.comprNAOK ? '✓ above NA' : '✗ crosses NA'}
+                <Row alert={!r.comprNAOK} label="NA check" value={r.comprNAOK ? '✓ above NA' : '✗ crosses NA'}
                   sub={`deepest d'=${f0(r.dPrimeExtreme)} vs c=${f0(r.cNA)} mm`} />
               )}
               <Row label={<Math tex="\phi V_c" />} value={`${f1(r.phiVc)} kN`} sub={`Vc=${f1(r.Vc)}`} />
-              <Row label="Shear" value={REGION[r.region]} />
+              <Row alert={r.region === 'inadequate'} label="Shear" value={REGION[r.region]} />
               <Row label="Stirrups" value={stirrupText}
                 sub={r.region === 'designed' ? `s_req=${f0(r.sReq)} · s_max=${f0(r.sMax)} mm` : undefined} />
               <Row label="Hooks (135°)" value={`ext ${f0(r.stirrupHookExt)} mm`}
