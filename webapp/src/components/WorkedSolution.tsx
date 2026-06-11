@@ -22,11 +22,11 @@ export function WorkedSolution({ steps, title = 'Solution — step by step' }: {
               <h3 className="mb-1.5 text-sm font-semibold text-slate-800">
                 <span className="text-slate-400">{i + 1}.</span> {s.title}
               </h3>
-              <div className="space-y-1.5 overflow-x-auto pl-4">
+              <div className="space-y-1.5 pl-4">
                 {s.lines.map((ln, j) => (
-                  <div key={j} className="text-[0.95rem] text-slate-700">
-                    <Math block tex={ln.tex} />
-                  </div>
+                  'text' in ln
+                    ? <p key={j} className="text-sm leading-relaxed text-slate-600">{ln.text}</p>
+                    : <div key={j} className="overflow-x-auto text-[0.95rem] text-slate-700"><Math block tex={ln.tex} /></div>
                 ))}
               </div>
               {s.note && <p className="mt-1 pl-4 text-xs text-slate-500">{s.note}</p>}

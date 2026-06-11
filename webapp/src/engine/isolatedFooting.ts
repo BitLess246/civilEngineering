@@ -35,6 +35,17 @@ export interface SquareFootingInput {
   position?: ColumnPosition;
   /** Lightweight-concrete factor λ (default 1). */
   lambda?: number;
+  /** Detailed design (size B & D_c) or analyze a given section. Default 'design'. */
+  analysis?: 'design' | 'analyze';
+  /** Provided footing side B, m — required when analysis = 'analyze'. */
+  givenB?: number;
+  /** Provided slab thickness D_c, mm — required when analysis = 'analyze'. */
+  givenDc?: number;
+  /**
+   * 'iteration' re-solves q_net/B/D_c to a fixed point; 'approximate' does one
+   * pass from an assumed D_c = 250 mm (legacy "Approximate"). Default 'iteration'.
+   */
+  solutionMethod?: 'iteration' | 'approximate';
 }
 
 export interface SquareFootingResult {
@@ -56,6 +67,14 @@ export interface SquareFootingResult {
   usedMinSteel: boolean;
   bars: number;
   barSpacing: number;
+  /** Which paths produced this result. */
+  analysis: 'design' | 'analyze';
+  method: 'iteration' | 'approximate';
+  /** Provided effective depth for shear (D_c − cover − d_b), mm. */
+  dProvided: number;
+  /** Capacity checks — always true for 'design'; meaningful for 'analyze'. */
+  punchOK: boolean;
+  beamOK: boolean;
 }
 
 function roundUp(v: number, step: number): number {
@@ -65,24 +84,50 @@ function roundUp(v: number, step: number): number {
 export function designSquareFooting(i: SquareFootingInput): SquareFootingResult {
   const cm = i.columnWidth / 1000; // column width, m
   const surcharge = i.surcharge ?? 0;
+  const analysis = i.analysis ?? 'design';
+  const method = i.solutionMethod ?? 'iteration';
+  const qNetAt = (Dc: number) =>
+    netBearing({ qAllow: i.qAllow, gammaSoil: i.gammaSoil, gammaConc: i.gammaConc, H: i.H, Dc, surcharge });
+  const reqPunch = (qu: number) =>
+    punchingDepth({ Pu: i.ultimateLoad, qu, c: i.columnWidth, fc: i.fc, position: i.position, lambda: i.lambda });
+  const reqBeam = (qu: number, B: number) =>
+    oneWayShearDepth({ qu, B, c: cm, fc: i.fc, lambda: i.lambda });
 
-  // Size B and depth together — D_c feeds back into q_net, so iterate to a
-  // fixed point (mirrors the legacy "iteration" method).
-  let Dc = 0.25; // m, trial
-  let B = 0;
-  let qNet = 0;
-  let qu = 0;
-  let dPunch = 0;
-  let dBeam = 0;
-  for (let k = 0; k < 8; k++) {
-    qNet = netBearing({ qAllow: i.qAllow, gammaSoil: i.gammaSoil, gammaConc: i.gammaConc, H: i.H, Dc, surcharge });
+  let B = 0, Dc = 0.25, qNet = 0, qu = 0, dPunch = 0, dBeam = 0;
+  let punchOK = true, beamOK = true;
+
+  if (analysis === 'analyze') {
+    // Given B and D_c — compute pressures, then check shear adequacy.
+    B = i.givenB ?? 0;
+    Dc = (i.givenDc ?? 250) / 1000;
+    qNet = qNetAt(Dc);
+    qu = i.ultimateLoad / (B * B);
+    dPunch = reqPunch(qu);
+    dBeam = reqBeam(qu, B);
+    const dProvidedShear = Dc * 1000 - i.cover - i.barDia;
+    punchOK = dProvidedShear >= dPunch;
+    beamOK = dProvidedShear >= dBeam;
+  } else if (method === 'approximate') {
+    // Single pass from an assumed D_c = 250 mm (no re-iteration of q_net/B).
+    Dc = 0.25;
+    qNet = qNetAt(Dc);
     B = squareSize(i.serviceLoad / qNet, 0.05);
     qu = i.ultimateLoad / (B * B);
-    dPunch = punchingDepth({ Pu: i.ultimateLoad, qu, c: i.columnWidth, fc: i.fc, position: i.position, lambda: i.lambda });
-    dBeam = oneWayShearDepth({ qu, B, c: cm, fc: i.fc, lambda: i.lambda });
-    const newDc = roundUp(Math.max(dPunch, dBeam) + i.cover + i.barDia, 25) / 1000;
-    if (Math.abs(newDc - Dc) < 1e-4) { Dc = newDc; break; }
-    Dc = newDc;
+    dPunch = reqPunch(qu);
+    dBeam = reqBeam(qu, B);
+    Dc = roundUp(Math.max(dPunch, dBeam) + i.cover + i.barDia, 25) / 1000;
+  } else {
+    // Iteration — D_c feeds back into q_net, so solve to a fixed point.
+    for (let k = 0; k < 8; k++) {
+      qNet = qNetAt(Dc);
+      B = squareSize(i.serviceLoad / qNet, 0.05);
+      qu = i.ultimateLoad / (B * B);
+      dPunch = reqPunch(qu);
+      dBeam = reqBeam(qu, B);
+      const newDc = roundUp(Math.max(dPunch, dBeam) + i.cover + i.barDia, 25) / 1000;
+      if (Math.abs(newDc - Dc) < 1e-4) { Dc = newDc; break; }
+      Dc = newDc;
+    }
   }
 
   const DcMm = Dc * 1000;
@@ -94,17 +139,9 @@ export function designSquareFooting(i: SquareFootingInput): SquareFootingResult 
   const layout = barLayout({ As: flex.As, db: i.barDia, b, cover: i.cover });
 
   return {
-    B,
-    Dc: DcMm,
-    qNet,
-    qu,
-    dPunch,
-    dBeam,
-    dFlex,
-    steelArea: flex.As,
-    rho: flex.rho,
-    usedMinSteel: flex.usedMin,
-    bars: layout.n,
-    barSpacing: layout.spacing,
+    B, Dc: DcMm, qNet, qu, dPunch, dBeam, dFlex,
+    steelArea: flex.As, rho: flex.rho, usedMinSteel: flex.usedMin,
+    bars: layout.n, barSpacing: layout.spacing,
+    analysis, method, dProvided: DcMm - i.cover - i.barDia, punchOK, beamOK,
   };
 }

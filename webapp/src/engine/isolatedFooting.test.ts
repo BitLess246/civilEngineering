@@ -44,4 +44,25 @@ describe('designSquareFooting (integration)', () => {
     expect(r.bars).toBeGreaterThanOrEqual(2);
     expect(r.barSpacing).toBeGreaterThan(0);
   });
+
+  it('defaults to the iteration design path', () => {
+    expect(r.analysis).toBe('design');
+    expect(r.method).toBe('iteration');
+    expect(r.punchOK && r.beamOK).toBe(true);
+  });
+
+  it('approximate method gives a one-pass (conservative) thickness', () => {
+    const a = designSquareFooting({ ...input, solutionMethod: 'approximate' });
+    expect(a.method).toBe('approximate');
+    expect(a.Dc % 25).toBe(0);
+    expect(a.Dc).toBeGreaterThanOrEqual(r.Dc - 1e-6);
+  });
+
+  it('analyze: an adequate section passes, a thin one fails', () => {
+    const okCase = designSquareFooting({ ...input, analysis: 'analyze', givenB: r.B, givenDc: r.Dc });
+    expect(okCase.analysis).toBe('analyze');
+    expect(okCase.punchOK && okCase.beamOK).toBe(true);
+    const thin = designSquareFooting({ ...input, analysis: 'analyze', givenB: r.B, givenDc: 300 });
+    expect(thin.punchOK && thin.beamOK).toBe(false);
+  });
 });
