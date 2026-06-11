@@ -11,8 +11,10 @@ export interface SquareFootingInput {
   serviceLoad: number;
   /** Ultimate (factored) axial load Pu, kN. */
   ultimateLoad: number;
-  /** Square column width c, mm. */
+  /** Column width c (x-dimension for a rectangular column), mm. */
   columnWidth: number;
+  /** Column y-dimension, mm — defaults to columnWidth (square). */
+  columnWidthY?: number;
   /** f′c, MPa. */
   fc: number;
   /** fy, MPa. */
@@ -82,14 +84,17 @@ function roundUp(v: number, step: number): number {
 }
 
 export function designSquareFooting(i: SquareFootingInput): SquareFootingResult {
-  const cm = i.columnWidth / 1000; // column width, m
+  const cy = i.columnWidthY ?? i.columnWidth;
+  // One-way shear & flexure act both ways on a square footing; the smaller
+  // column dimension gives the longer cantilever, so it governs both.
+  const cm = Math.min(i.columnWidth, cy) / 1000;
   const surcharge = i.surcharge ?? 0;
   const analysis = i.analysis ?? 'design';
   const method = i.solutionMethod ?? 'iteration';
   const qNetAt = (Dc: number) =>
     netBearing({ qAllow: i.qAllow, gammaSoil: i.gammaSoil, gammaConc: i.gammaConc, H: i.H, Dc, surcharge });
   const reqPunch = (qu: number) =>
-    punchingDepth({ Pu: i.ultimateLoad, qu, c: i.columnWidth, fc: i.fc, position: i.position, lambda: i.lambda });
+    punchingDepth({ Pu: i.ultimateLoad, qu, c: i.columnWidth, cy, fc: i.fc, position: i.position, lambda: i.lambda });
   const reqBeam = (qu: number, B: number) =>
     oneWayShearDepth({ qu, B, c: cm, fc: i.fc, lambda: i.lambda });
 

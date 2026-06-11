@@ -21,6 +21,8 @@ export interface SolutionCtx {
   loads?: { dead: number; live: number } | null
   serviceMoment: number; ultimateMoment: number
   columnWidth: number; fc: number; fy: number
+  /** Column y-dimension, mm — equals columnWidth unless rectangular. */
+  columnWidthY?: number
   /** Present when the column is circular (columnWidth is the equivalent square). */
   column?: { shape: 'circular'; dia: number } | null
   qAllow: number; gammaSoil: number; gammaConc: number; H: number
@@ -122,20 +124,28 @@ function pressureStep(c: SolutionCtx): SolutionStep {
 }
 
 function punchingStep(c: SolutionCtx): SolutionStep {
-  const cmm = c.columnWidth, d = c.analysis === 'analyze' ? c.dProvided : c.dPunch
-  const crit = cmm + d, bo = 4 * crit, Ao = crit * crit * 1e-6
+  const cx = c.columnWidth, cyDim = c.columnWidthY ?? c.columnWidth
+  const rectCol = Math.abs(cx - cyDim) > 1e-9
+  const d = c.analysis === 'analyze' ? c.dProvided : c.dPunch
+  const critX = cx + d, critY = cyDim + d
+  const bo = 2 * (critX + critY), Ao = critX * critY * 1e-6
+  const betaC = Math.max(cx, cyDim) / Math.min(cx, cyDim)
   const Vu = c.ultimateLoad - c.qu * Ao
   const base = (Math.sqrt(c.fc) * bo * d) / 1000
-  const vc1 = base / 3, vc2 = base / 2, vc3 = (1 / 12) * (2 + (ALPHA_S[c.position] * d) / bo) * base
+  const vc1 = base / 3, vc2 = (1 / 6) * (1 + 2 / betaC) * base, vc3 = (1 / 12) * (2 + (ALPHA_S[c.position] * d) / bo) * base
   const vc = Math.min(vc1, vc2, vc3)
   const phiVc = 0.75 * vc
   const pass = phiVc >= Vu
   return {
     title: 'Two-way (punching) shear',
     lines: [
-      txt(`Two-way (punching) shear acts on a critical perimeter b₀ at d/2 from the column face (ACI §22.6). V_c is the least of three expressions; α_s = ${ALPHA_S[c.position]} for an ${c.position} column.`),
-      eq(String.raw`b_o = 4(c + d) = 4(${sn0(cmm)} + ${sn0(d)}) = ${sn0(bo)}\ \text{mm},\quad d = ${sn0(d)}\ \text{mm}`),
-      eq(String.raw`V_u = P_u - q_u(c+d)^2 = ${sn0(c.ultimateLoad)} - ${sn2(c.qu)}(${sn3(Ao)}) = ${sn1(Vu)}\ \text{kN}`),
+      txt(`Two-way (punching) shear acts on a critical perimeter b₀ at d/2 from the column face (ACI §22.6). V_c is the least of three expressions; α_s = ${ALPHA_S[c.position]} for an ${c.position} column${rectCol ? `; β = ${betaC.toFixed(2)} for the ${cx}×${cyDim} mm column` : ''}.`),
+      eq(rectCol
+        ? String.raw`b_o = 2(c_x + d) + 2(c_y + d) = 2(${sn0(critX)}) + 2(${sn0(critY)}) = ${sn0(bo)}\ \text{mm},\quad d = ${sn0(d)}\ \text{mm}`
+        : String.raw`b_o = 4(c + d) = 4(${sn0(cx)} + ${sn0(d)}) = ${sn0(bo)}\ \text{mm},\quad d = ${sn0(d)}\ \text{mm}`),
+      eq(rectCol
+        ? String.raw`V_u = P_u - q_u(c_x+d)(c_y+d) = ${sn0(c.ultimateLoad)} - ${sn2(c.qu)}(${sn3(Ao)}) = ${sn1(Vu)}\ \text{kN}`
+        : String.raw`V_u = P_u - q_u(c+d)^2 = ${sn0(c.ultimateLoad)} - ${sn2(c.qu)}(${sn3(Ao)}) = ${sn1(Vu)}\ \text{kN}`),
       eq(String.raw`V_{c} = \min\!\left(\tfrac{1}{3}, \tfrac{1}{6}(1{+}\tfrac{2}{\beta}), \tfrac{1}{12}(2{+}\tfrac{\alpha_s d}{b_o})\right)\sqrt{f'_c}\,b_o d`),
       eq(String.raw`= \min(${sn1(vc1)},\ ${sn1(vc2)},\ ${sn1(vc3)}) = ${sn1(vc)}\ \text{kN}`),
       eq(String.raw`\phi V_c = 0.75 V_c = ${sn1(phiVc)}\ \text{kN} \;${pass ? '\\ge' : '<'}\; V_u = ${sn1(Vu)}\ \text{kN}\;${pass ? '\\checkmark' : '\\times'}`),
@@ -146,8 +156,8 @@ function punchingStep(c: SolutionCtx): SolutionStep {
   }
 }
 
-function oneWayStep(c: SolutionCtx, B: number, dReq: number, label: string): SolutionStep {
-  const cm = c.columnWidth / 1000
+function oneWayStep(c: SolutionCtx, B: number, dReq: number, label: string, cDimMm?: number): SolutionStep {
+  const cm = (cDimMm ?? Math.min(c.columnWidth, c.columnWidthY ?? c.columnWidth)) / 1000
   const d = c.analysis === 'analyze' ? c.dProvided : dReq
   const arm = (B - cm) / 2 - d / 1000
   const Vu = c.qu * B * Math.max(0, arm)
@@ -188,8 +198,8 @@ function thicknessStep(c: SolutionCtx): SolutionStep {
   }
 }
 
-function flexureStep(c: SolutionCtx, span: number, width: number, steel: SteelCtx, label: string): SolutionStep {
-  const cm = c.columnWidth / 1000
+function flexureStep(c: SolutionCtx, span: number, width: number, steel: SteelCtx, label: string, cDimMm?: number): SolutionStep {
+  const cm = (cDimMm ?? Math.min(c.columnWidth, c.columnWidthY ?? c.columnWidth)) / 1000
   const d = c.Dc - c.cover - c.barDia / 2
   const arm = (span - cm) / 2
   const Mu = (c.qu * width * arm * arm) / 2
@@ -226,7 +236,8 @@ function devLengthStep(c: SolutionCtx): SolutionStep {
   // Simplified tension development length (NSCP 425.4.2.3 with ψ = 1,
   // (c_b+K_tr)/d_b = 2.5): l_d = f_y d_b / (1.1 λ √f'c · 2.5), ≥ 300 mm.
   const ld = Math.max(300, (c.fy * c.barDia) / (1.1 * Math.sqrt(c.fc) * 2.5))
-  const avail = ((c.Bx - c.columnWidth / 1000) / 2) * 1000 - 75
+  const cGov = Math.min(c.columnWidth, c.columnWidthY ?? c.columnWidth)
+  const avail = ((c.Bx - cGov / 1000) / 2) * 1000 - 75
   const ok = avail >= ld
   return {
     title: 'Development length (simplified)',
@@ -266,15 +277,16 @@ export function buildFoundationSolution(c: SolutionCtx): SolutionStep[] {
     steps.push(oneWayStep(c, c.Bx, c.dBeamLong, ''), thicknessStep(c))
     steps.push(flexureStep(c, c.Bx, c.Bx, c.long, ''), barsStep(c, c.long, ''), devLengthStep(c))
   } else {
+    const cy = c.columnWidthY ?? c.columnWidth
     steps.push(
-      oneWayStep(c, c.Bx, c.dBeamLong, 'long (x)'),
-      oneWayStep(c, c.By, c.dBeamShort, 'short (y)'),
+      oneWayStep(c, c.Bx, c.dBeamLong, 'long (x)', c.columnWidth),
+      oneWayStep(c, c.By, c.dBeamShort, 'short (y)', cy),
       thicknessStep(c),
-      flexureStep(c, c.Bx, c.By, c.long, 'long (x)'),
+      flexureStep(c, c.Bx, c.By, c.long, 'long (x)', c.columnWidth),
       barsStep(c, c.long, 'long (x)'),
     )
     if (c.short) {
-      steps.push(flexureStep(c, c.By, c.Bx, c.short, 'short (y)'), barsStep(c, c.short, 'short (y)'))
+      steps.push(flexureStep(c, c.By, c.Bx, c.short, 'short (y)', cy), barsStep(c, c.short, 'short (y)'))
       steps.push({
         title: 'Central band (short direction)',
         lines: [
