@@ -16,7 +16,8 @@ export type RectSizing =
 export interface RectFootingInput {
   serviceLoad: number;   // P, kN
   ultimateLoad: number;  // Pu, kN
-  columnWidth: number;   // square column c, mm
+  columnWidth: number;   // column x-dimension cx, mm
+  columnWidthY?: number; // column y-dimension cy, mm (default cx → square)
   fc: number;            // MPa
   fy: number;            // MPa
   qAllow: number;        // kPa
@@ -81,18 +82,20 @@ function sizePlan(area: number, sizing: RectSizing): { Bx: number; By: number } 
 }
 
 export function designRectangularFooting(i: RectFootingInput): RectFootingResult {
-  const cm = i.columnWidth / 1000;
+  const cyMm = i.columnWidthY ?? i.columnWidth;
+  const cxm = i.columnWidth / 1000;   // column dim along x (long cantilever)
+  const cym = cyMm / 1000;            // column dim along y (short cantilever)
   const surcharge = i.surcharge ?? 0;
   const analysis = i.analysis ?? 'design';
   const method = i.solutionMethod ?? 'iteration';
   const qNetAt = (Dc: number) =>
     netBearing({ qAllow: i.qAllow, gammaSoil: i.gammaSoil, gammaConc: i.gammaConc, H: i.H, Dc, surcharge });
   const shearDepths = (qu: number, Bx: number, By: number) => ({
-    dPunch: punchingDepth({ Pu: i.ultimateLoad, qu, c: i.columnWidth, fc: i.fc, position: i.position, lambda: i.lambda }),
+    dPunch: punchingDepth({ Pu: i.ultimateLoad, qu, c: i.columnWidth, cy: cyMm, fc: i.fc, position: i.position, lambda: i.lambda }),
     // One-way shear: d depends on the span dimension only (the perpendicular
     // width cancels), so pass each plan dimension as the span.
-    dBeamLong: oneWayShearDepth({ qu, B: Bx, c: cm, fc: i.fc, lambda: i.lambda }),
-    dBeamShort: oneWayShearDepth({ qu, B: By, c: cm, fc: i.fc, lambda: i.lambda }),
+    dBeamLong: oneWayShearDepth({ qu, B: Bx, c: cxm, fc: i.fc, lambda: i.lambda }),
+    dBeamShort: oneWayShearDepth({ qu, B: By, c: cym, fc: i.fc, lambda: i.lambda }),
   });
 
   let Dc = 0.25;
@@ -131,7 +134,7 @@ export function designRectangularFooting(i: RectFootingInput): RectFootingResult
   const dFlex = DcMm - i.cover - i.barDia / 2;
 
   // Long direction: cantilever in x, bars run along x and spread across By.
-  const armX = (Bx - cm) / 2;
+  const armX = (Bx - cxm) / 2;
   const MuLong = qu * By * (armX * armX) / 2;
   const bLong = By * 1000;
   const flexLong = flexuralSteel({ Mu: MuLong, b: bLong, d: dFlex, fc: i.fc, fy: i.fy });
@@ -139,7 +142,7 @@ export function designRectangularFooting(i: RectFootingInput): RectFootingResult
 
   // Short direction: cantilever in y, bars run along y and spread across Bx,
   // with the central-band concentration.
-  const armY = (By - cm) / 2;
+  const armY = (By - cym) / 2;
   const MuShort = qu * Bx * (armY * armY) / 2;
   const bShort = Bx * 1000;
   const flexShort = flexuralSteel({ Mu: MuShort, b: bShort, d: dFlex, fc: i.fc, fy: i.fy });

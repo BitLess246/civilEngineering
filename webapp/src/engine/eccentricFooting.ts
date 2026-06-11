@@ -13,7 +13,8 @@ export interface EccentricFootingInput {
   ultimateLoad: number;   // Pu, kN
   serviceMoment: number;  // M, kN·m (service, about one axis)
   ultimateMoment: number; // Mu, kN·m (factored)
-  columnWidth: number;    // square column c, mm
+  columnWidth: number;    // column x-dimension (along the eccentricity), mm
+  columnWidthY?: number;  // column y-dimension, mm (default columnWidth)
   fc: number;
   fy: number;
   qAllow: number;
@@ -69,7 +70,9 @@ function roundUp(v: number, step: number): number {
 export function designEccentricSquareFooting(i: EccentricFootingInput): EccentricFootingResult {
   const e = i.serviceLoad > 0 ? Math.abs(i.serviceMoment) / i.serviceLoad : 0;
   const eU = i.ultimateLoad > 0 ? Math.abs(i.ultimateMoment) / i.ultimateLoad : 0;
-  const cm = i.columnWidth / 1000;
+  const cy = i.columnWidthY ?? i.columnWidth;
+  // The smaller column dimension gives the longer (governing) cantilever.
+  const cm = Math.min(i.columnWidth, cy) / 1000;
   const surcharge = i.surcharge ?? 0;
 
   const analysis = i.analysis ?? 'design';
@@ -88,7 +91,7 @@ export function designEccentricSquareFooting(i: EccentricFootingInput): Eccentri
   };
   // Punching uses the average pressure relief; one-way & flexure use the peak.
   const shearDepths = (B: number, quMax: number) => ({
-    dPunch: punchingDepth({ Pu: i.ultimateLoad, qu: i.ultimateLoad / (B * B), c: i.columnWidth, fc: i.fc, position: i.position, lambda: i.lambda }),
+    dPunch: punchingDepth({ Pu: i.ultimateLoad, qu: i.ultimateLoad / (B * B), c: i.columnWidth, cy, fc: i.fc, position: i.position, lambda: i.lambda }),
     dBeam: oneWayShearDepth({ qu: quMax, B, c: cm, fc: i.fc, lambda: i.lambda }),
   });
 

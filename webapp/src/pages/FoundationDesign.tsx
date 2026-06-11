@@ -22,7 +22,7 @@ type LoadingType = 'concentric' | 'eccentric'
 type AnalysisMethod = 'design' | 'analyze'
 type SolutionMethod = 'iteration' | 'approximate'
 type LoadInput = 'direct' | 'individual'
-type ColumnShape = 'square' | 'circular'
+type ColumnShape = 'square' | 'rectangular' | 'circular'
 
 interface FormState {
   footingType: FootingType
@@ -44,6 +44,7 @@ interface FormState {
   serviceMoment: number
   ultimateMoment: number
   columnWidth: number
+  columnWidthY: number
   fc: number
   fy: number
   qAllow: number
@@ -76,6 +77,7 @@ const DEFAULTS: FormState = {
   serviceMoment: 150,
   ultimateMoment: 210,
   columnWidth: 400,
+  columnWidthY: 400,
   fc: 28,
   fy: 415,
   qAllow: 200,
@@ -169,7 +171,9 @@ export default function FoundationDesign() {
   // Circular columns use the legacy equivalent-square width c_eq = D·√(π/4).
   // (globalThis.Math: the KaTeX <Math> import shadows the global in this file.)
   const circular = form.columnShape === 'circular'
+  const rectCol = form.columnShape === 'rectangular'
   const colWidth = circular ? form.columnWidth * globalThis.Math.sqrt(globalThis.Math.PI / 4) : form.columnWidth
+  const colWidthY = rectCol ? form.columnWidthY : colWidth
 
   const qNetTrial = useMemo(
     () => netBearing({ qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc, H: form.H, Dc: 0.25, surcharge: form.surcharge }),
@@ -188,7 +192,7 @@ export default function FoundationDesign() {
   const view: View | null = useMemo(() => {
     if (!valid) return null
     const common = {
-      serviceLoad, ultimateLoad, columnWidth: colWidth,
+      serviceLoad, ultimateLoad, columnWidth: colWidth, columnWidthY: colWidthY,
       fc: form.fc, fy: form.fy, qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc,
       H: form.H, barDia: form.barDia, cover: form.cover, surcharge: form.surcharge, position: form.position,
     }
@@ -234,7 +238,7 @@ export default function FoundationDesign() {
       punchOK: r.punchOK, beamOK: r.beamOK,
       long: r.long, short: r.short, ecc: null,
     }
-  }, [form, valid, rect, ecc, serviceLoad, ultimateLoad, colWidth])
+  }, [form, valid, rect, ecc, serviceLoad, ultimateLoad, colWidth, colWidthY])
 
   const solutionSteps = useMemo(() => {
     if (!view) return null
@@ -243,7 +247,7 @@ export default function FoundationDesign() {
       serviceLoad, ultimateLoad,
       loads: individual ? { dead: form.deadLoad, live: form.liveLoad } : null,
       serviceMoment: form.serviceMoment, ultimateMoment: form.ultimateMoment,
-      columnWidth: colWidth, fc: form.fc, fy: form.fy,
+      columnWidth: colWidth, columnWidthY: colWidthY, fc: form.fc, fy: form.fy,
       column: circular ? { shape: 'circular' as const, dia: form.columnWidth } : null,
       qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc, H: form.H,
       barDia: form.barDia, cover: form.cover, surcharge: form.surcharge, position: form.position,
@@ -363,14 +367,24 @@ export default function FoundationDesign() {
             {ecc && <NumField label={<Math tex="M" />} unit="kN·m" value={form.serviceMoment} onChange={set('serviceMoment')} />}
             {ecc && <NumField label={<Math tex="M_u" />} unit="kN·m" value={form.ultimateMoment} onChange={set('ultimateMoment')} />}
             <Select label="Column shape" value={form.columnShape} onChange={set('columnShape')}
-              options={[['square', 'Square'], ['circular', 'Circular (spiral)']]} />
-            <NumField label={circular ? <>Column Ø <Math tex="D" /></> : <>Column <Math tex="c" /> (square)</>}
+              options={[['square', 'Square'], ['rectangular', 'Rectangular'], ['circular', 'Circular (spiral)']]} />
+            <NumField
+              label={circular ? <>Column Ø <Math tex="D" /></> : rectCol ? <>Column <Math tex="c_x" /></> : <>Column <Math tex="c" /> (square)</>}
               unit="mm" value={form.columnWidth} onChange={set('columnWidth')} />
+            {rectCol && (
+              <NumField label={<>Column <Math tex="c_y" /></>} unit="mm" value={form.columnWidthY} onChange={set('columnWidthY')} />
+            )}
             <Select label="Column position" value={form.position} onChange={set('position')}
               options={[['interior', 'Interior'], ['edge', 'Edge'], ['corner', 'Corner']]} />
             {circular && (
               <p className="col-span-full text-xs text-slate-400">
                 Circular column → equivalent square c = D·√(π/4) = {f0(colWidth)} mm (equal area, legacy convention).
+              </p>
+            )}
+            {rectCol && !rect && (
+              <p className="col-span-full text-xs text-slate-400">
+                Punching uses the full cx × cy perimeter (β = max/min); one-way shear & flexure use the smaller
+                dimension (longer cantilever governs both ways on a square footing).
               </p>
             )}
           </Card>

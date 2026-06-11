@@ -66,3 +66,20 @@ describe('designSquareFooting (integration)', () => {
     expect(thin.punchOK && thin.beamOK).toBe(false);
   });
 });
+
+describe('rectangular columns', () => {
+  const input = {
+    serviceLoad: 1000, ultimateLoad: 1400, columnWidth: 400,
+    fc: 28, fy: 415, qAllow: 200, gammaSoil: 18, gammaConc: 24,
+    H: 1.5, barDia: 20, cover: 75, position: 'interior' as const,
+  };
+  it('punching uses the cx × cy perimeter; one-way uses the smaller dim', () => {
+    const sq600 = designSquareFooting({ ...input, columnWidth: 600 });
+    const r = designSquareFooting({ ...input, columnWidth: 600, columnWidthY: 300 });
+    expect(r.Dc % 25).toBe(0);
+    // smaller cy → longer cantilever → one-way demand can only grow
+    expect(r.dBeam).toBeGreaterThanOrEqual(sq600.dBeam);
+    // smaller perimeter + beta penalty → punching depth can only grow
+    expect(r.dPunch).toBeGreaterThanOrEqual(sq600.dPunch);
+  });
+});

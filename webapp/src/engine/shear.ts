@@ -34,20 +34,23 @@ export function twoWayVc(params: {
 }
 
 /**
- * Smallest effective depth d (mm) that satisfies punching shear for a square
- * column c (mm) under factored column load Pu (kN) on net pressure qu (kPa).
+ * Smallest effective depth d (mm) that satisfies punching shear for a
+ * rectangular column cx × cy (mm; cy defaults to cx → square) under factored
+ * column load Pu (kN) on net pressure qu (kPa).
  */
 export function punchingDepth(params: {
-  Pu: number; qu: number; c: number; fc: number;
+  Pu: number; qu: number; c: number; cy?: number; fc: number;
   position?: ColumnPosition; lambda?: number; phi?: number;
 }): number {
   const phi = params.phi ?? PHI_SHEAR;
+  const cx = params.c, cy = params.cy ?? params.c;
+  const betaC = Math.max(cx, cy) / Math.min(cx, cy);
   for (let d = 50; d <= 3000; d += 1) {
-    const crit = params.c + d;                 // mm (square column → side of critical square)
-    const Ao = crit * crit * 1e-6;             // m²
+    const critX = cx + d, critY = cy + d;       // mm
+    const Ao = critX * critY * 1e-6;            // m²
     const Vu = params.Pu - params.qu * Ao;      // kN
     const cap = phi * twoWayVc({
-      fc: params.fc, bo: 4 * crit, d, betaC: 1,
+      fc: params.fc, bo: 2 * (critX + critY), d, betaC,
       position: params.position, lambda: params.lambda,
     });
     if (cap >= Vu) return d;
