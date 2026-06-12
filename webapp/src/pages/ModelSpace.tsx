@@ -1,0 +1,278 @@
+import { useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Canvas } from '@react-three/fiber'
+import { OrbitControls } from '@react-three/drei'
+import * as THREE from 'three'
+import { generateGridModel, removeElements } from '../engine/modelBuilder'
+import type { StructuralModel, Member, Plate, RectSection } from '../engine/model'
+import { distributePanel } from '../engine/tributary'
+import { Num, Card, ResultCard, Row } from '../components/qty'
+import { f1, f2 } from '../lib/format'
+
+const AUTOSAVE_KEY = 'model-space-autosave'
+
+const ROLE_COLOR: Record<string, string> = {
+  column: '#475569', beam: '#0056b3', girder: '#0e7490',
+}
+const SEL = '#f59e0b'
+
+const parseList = (s: string): number[] =>
+  s.split(/[, ]+/).map(parseFloat).filter((v) => Number.isFinite(v) && v > 0)
+
+// ── 3D primitives ─────────────────────────────────────────────────────────
+function Member3D({ a, b, role, selected, onPick }: {
+  a: THREE.Vector3; b: THREE.Vector3; role: string; selected: boolean; onPick: () => void
+}) {
+  const { mid, quat, len } = useMemo(() => {
+    const dir = new THREE.Vector3().subVectors(b, a)
+    const len = dir.length()
+    const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir.clone().normalize())
+    return { mid: new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5), quat, len }
+  }, [a, b])
+  const t = role === 'column' ? 0.3 : 0.22
+  return (
+    <mesh position={mid} quaternion={quat}
+      onClick={(e) => { e.stopPropagation(); onPick() }}>
+      <boxGeometry args={[len, t, t]} />
+      <meshStandardMaterial color={selected ? SEL : ROLE_COLOR[role] ?? '#64748b'} />
+    </mesh>
+  )
+}
+
+function Slab3D({ corners, selected, onPick }: {
+  corners: THREE.Vector3[]; selected: boolean; onPick: () => void
+}) {
+  const { mid, sx, sz } = useMemo(() => {
+    const mid = corners.reduce((s, c) => s.add(c.clone()), new THREE.Vector3()).multiplyScalar(0.25)
+    const sx = Math.abs(corners[1].x - corners[0].x) || Math.abs(corners[2].x - corners[0].x)
+    const sz = Math.abs(corners[3].z - corners[0].z) || Math.abs(corners[2].z - corners[0].z)
+    return { mid, sx, sz }
+  }, [corners])
+  return (
+    <mesh position={[mid.x, mid.y + 0.05, mid.z]}
+      onClick={(e) => { e.stopPropagation(); onPick() }}>
+      <boxGeometry args={[sx * 0.96, 0.1, sz * 0.96]} />
+      <meshStandardMaterial color={selected ? SEL : '#7ba6d4'} transparent opacity={selected ? 0.85 : 0.45} />
+    </mesh>
+  )
+}
+
+function Support3D({ p }: { p: THREE.Vector3 }) {
+  return (
+    <mesh position={[p.x, p.y - 0.22, p.z]}>
+      <coneGeometry args={[0.28, 0.45, 4]} />
+      <meshStandardMaterial color="#0056b3" />
+    </mesh>
+  )
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────
+export default function ModelSpace() {
+  const [baysX, setBaysX] = useState('6, 6')
+  const [baysZ, setBaysZ] = useState('5')
+  const [storeyH, setStoreyH] = useState('3.5, 3')
+  const [b, setB] = useState(300); const [h, setH] = useState(500); const [fc, setFc] = useState(28)
+  const [qD, setQD] = useState(4.8); const [qL, setQL] = useState(2.4)
+
+  const [model, setModel] = useState<StructuralModel | null>(() => {
+    try {
+      const raw = sessionStorage.getItem(AUTOSAVE_KEY)
+      return raw ? (JSON.parse(raw) as StructuralModel) : null
+    } catch { return null }
+  })
+  const [selected, setSelected] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const save = (m: StructuralModel | null) => {
+    setModel(m)
+    try {
+      if (m) sessionStorage.setItem(AUTOSAVE_KEY, JSON.stringify(m))
+      else sessionStorage.removeItem(AUTOSAVE_KEY)
+    } catch { /* quota — ignore */ }
+  }
+
+  const generate = () => {
+    const section: RectSection = { id: 'S1', name: `${b}×${h}`, b, h, fc, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+    const m = generateGridModel({ baysX: parseList(baysX), baysZ: parseList(baysZ), storeyH: parseList(storeyH), section })
+    // area loads on every slab, categories preserved for the combos downstream
+    m.loads = m.plates.flatMap((p) => [
+      ...(qD > 0 ? [{ kind: 'area' as const, plate: p.id, q: qD, cat: 'D' as const }] : []),
+      ...(qL > 0 ? [{ kind: 'area' as const, plate: p.id, q: qL, cat: 'L' as const }] : []),
+    ])
+    setSelected(null)
+    save(m)
+  }
+
+  const nodePos = useMemo(() => {
+    const map = new Map<string, THREE.Vector3>()
+    model?.nodes.forEach((n) => map.set(n.id, new THREE.Vector3(n.x, n.y, n.z)))
+    return map
+  }, [model])
+
+  const selMember: Member | undefined = model?.members.find((m) => m.id === selected)
+  const selPlate: Plate | undefined = model?.plates.find((p) => p.id === selected)
+
+  const plateInfo = useMemo(() => {
+    if (!selPlate || !model) return null
+    const c = selPlate.corners.map((id) => nodePos.get(id)!)
+    const lx = Math.abs(c[1].x - c[0].x) || Math.abs(c[2].x - c[0].x)
+    const lz = Math.abs(c[3].z - c[0].z) || Math.abs(c[2].z - c[0].z)
+    const areaLoads = model.loads
+      .filter((l) => l.kind === 'area' && l.plate === selPlate.id)
+      .map((l) => ({ q: (l as { q: number }).q, cat: l.cat }))
+    const trib = areaLoads.length ? distributePanel(lx, lz, areaLoads) : null
+    return { lx, lz, areaLoads, trib }
+  }, [selPlate, model, nodePos])
+
+  const memberLen = selMember
+    ? nodePos.get(selMember.i)!.distanceTo(nodePos.get(selMember.j)!)
+    : 0
+
+  const download = () => {
+    if (!model) return
+    const blob = new Blob([JSON.stringify(model, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `${model.name.replace(/\s+/g, '-')}.model.json`; a.click()
+    URL.revokeObjectURL(url)
+  }
+  const upload = async (f: File) => {
+    try {
+      const m = JSON.parse(await f.text()) as StructuralModel
+      if (m.version !== 1 || !Array.isArray(m.nodes)) throw new Error('not a model file')
+      setSelected(null)
+      save(m)
+    } catch { alert('Could not read that file as a structural model (.model.json).') }
+  }
+
+  return (
+    <div className="mx-auto max-w-6xl p-6">
+      <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
+      <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">3D Model Space</h1>
+      <p className="no-print mt-1 text-slate-600">
+        Generate a building frame on a column grid — beams, girders, columns and slab panels with categorised
+        area loads — orbit it in 3D, click any element to inspect or delete it, and save/load the model as JSON.
+        Phase 4 of the roadmap; the 3D solver (Phase 5) and the design pipeline (Phase 6) consume this model.
+      </p>
+
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_2fr]">
+        <div className="space-y-5">
+          <Card title="Column grid">
+            <label className="flex flex-col text-sm">
+              <span className="mb-1 font-medium text-slate-600">Bays X (m, comma-sep)</span>
+              <input value={baysX} onChange={(e) => setBaysX(e.target.value)}
+                className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+            </label>
+            <label className="flex flex-col text-sm">
+              <span className="mb-1 font-medium text-slate-600">Bays Z (m)</span>
+              <input value={baysZ} onChange={(e) => setBaysZ(e.target.value)}
+                className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+            </label>
+            <label className="flex flex-col text-sm">
+              <span className="mb-1 font-medium text-slate-600">Storey heights (m)</span>
+              <input value={storeyH} onChange={(e) => setStoreyH(e.target.value)}
+                className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+            </label>
+          </Card>
+
+          <Card title="Section & slab loads">
+            <Num label="b" unit="mm" value={b} onChange={setB} />
+            <Num label="h" unit="mm" value={h} onChange={setH} />
+            <Num label="f′c" unit="MPa" value={fc} onChange={setFc} />
+            <Num label="q dead" unit="kPa" value={qD} onChange={setQD} />
+            <Num label="q live" unit="kPa" value={qL} onChange={setQL} />
+          </Card>
+
+          <div className="no-print flex flex-wrap gap-2">
+            <button type="button" onClick={generate}
+              className="rounded-lg bg-gradient-to-br from-[#0056b3] to-[#003f86] px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:shadow-lg">
+              ⚙ Generate model
+            </button>
+            <button type="button" onClick={download} disabled={!model}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
+              ⤓ Save JSON
+            </button>
+            <button type="button" onClick={() => fileRef.current?.click()}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">
+              ⤒ Load JSON
+            </button>
+            <input ref={fileRef} type="file" accept=".json" className="sr-only"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f) }} />
+          </div>
+
+          {model && (
+            <ResultCard title="Model">
+              <Row label="Nodes / members" value={`${model.nodes.length} / ${model.members.length}`}
+                sub={`${model.members.filter((m) => m.role === 'column').length} col · ${model.members.filter((m) => m.role !== 'column').length} bm`} />
+              <Row label="Slabs / loads" value={`${model.plates.length} / ${model.loads.length}`} />
+              <Row label="Storeys" value={`${model.storeys.length}`}
+                sub={model.storeys.map((s) => `${s.elevation} m`).join(' · ')} />
+            </ResultCard>
+          )}
+
+          {selMember && model && (
+            <ResultCard title={`Member — ${selMember.id}`}>
+              <Row label="Role" value={selMember.role} />
+              <Row label="Length" value={`${f2(memberLen)} m`} />
+              <Row label="Section" value={model.sections[0]?.name ?? selMember.section} />
+              <button type="button" onClick={() => { save(removeElements(model, new Set([selMember.id]))); setSelected(null) }}
+                className="no-print mt-2 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50">
+                Delete member
+              </button>
+            </ResultCard>
+          )}
+
+          {selPlate && plateInfo && model && (
+            <ResultCard title={`Slab — ${selPlate.id}`}>
+              <Row label="Panel" value={`${f2(plateInfo.lx)} × ${f2(plateInfo.lz)} m`}
+                sub={`t = ${selPlate.thickness} mm`} />
+              {plateInfo.areaLoads.map((l, i) => (
+                <Row key={i} label={`q (${l.cat})`} value={`${f2(l.q)} kPa`} />
+              ))}
+              {plateInfo.trib && (
+                <Row label="Tributary" value={plateInfo.trib.behaviour}
+                  sub={`peak ${f1(plateInfo.trib.edges[0].peak)} kN/m on long edges`} />
+              )}
+              <button type="button" onClick={() => { save(removeElements(model, new Set([selPlate.id]))); setSelected(null) }}
+                className="no-print mt-2 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50">
+                Delete slab
+              </button>
+            </ResultCard>
+          )}
+        </div>
+
+        <div className="h-[560px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          {model ? (
+            <Canvas camera={{ position: [14, 11, 14], fov: 45 }} onPointerMissed={() => setSelected(null)}>
+              <color attach="background" args={['#f8fafc']} />
+              <ambientLight intensity={0.85} />
+              <directionalLight position={[12, 18, 8]} intensity={0.9} />
+              <gridHelper args={[40, 40, '#cbd5e1', '#e2e8f0']} />
+              {model.members.map((m) => {
+                const a = nodePos.get(m.i), bb = nodePos.get(m.j)
+                if (!a || !bb) return null
+                return <Member3D key={m.id} a={a} b={bb} role={m.role}
+                  selected={m.id === selected} onPick={() => setSelected(m.id)} />
+              })}
+              {model.plates.map((p) => {
+                const cs = p.corners.map((c) => nodePos.get(c))
+                if (cs.some((c) => !c)) return null
+                return <Slab3D key={p.id} corners={cs as THREE.Vector3[]}
+                  selected={p.id === selected} onPick={() => setSelected(p.id)} />
+              })}
+              {model.supports.map((s) => {
+                const p = nodePos.get(s.node)
+                return p ? <Support3D key={s.node} p={p} /> : null
+              })}
+              <OrbitControls makeDefault target={[6, 3, 2.5]} />
+            </Canvas>
+          ) : (
+            <div className="flex h-full items-center justify-center text-sm text-slate-400">
+              Set the grid and hit “Generate model”.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

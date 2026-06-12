@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route, Link } from 'react-router-dom'
 import FoundationDesign from './pages/FoundationDesign'
 import PileCapDesign from './pages/PileCapDesign'
@@ -7,6 +8,8 @@ import BeamAnalysis from './pages/BeamAnalysis'
 import ColumnDesign from './pages/ColumnDesign'
 import FrameAnalysis from './pages/FrameAnalysis'
 import LoadPath from './pages/LoadPath'
+// three.js is heavy — the 3D model space loads in its own lazy chunk.
+const ModelSpace = lazy(() => import('./pages/ModelSpace'))
 import SlabEstimate from './pages/SlabEstimate'
 import ChbEstimate from './pages/ChbEstimate'
 import ColumnEstimate from './pages/ColumnEstimate'
@@ -43,6 +46,7 @@ function Home() {
         <Tile to="/column-design">Column Design</Tile>
         <Tile to="/frame">Frame Analysis (2D)</Tile>
         <Tile to="/load-path">Slab Load Path</Tile>
+        <Tile to="/model">3D Model Space</Tile>
       </div>
 
       <h2 className="mt-8 text-lg font-semibold text-slate-800">Material estimation (quantity take-off)</h2>
@@ -69,6 +73,11 @@ export default function App() {
       <Route path="/column-design" element={<ColumnDesign />} />
       <Route path="/frame" element={<FrameAnalysis />} />
       <Route path="/load-path" element={<LoadPath />} />
+      <Route path="/model" element={
+        <Suspense fallback={<p className="p-8 text-center text-sm text-slate-400">Loading 3D model space…</p>}>
+          <ModelSpace />
+        </Suspense>
+      } />
       <Route path="/estimate/slab" element={<SlabEstimate />} />
       <Route path="/estimate/beam" element={<BeamEstimate />} />
       <Route path="/estimate/column" element={<ColumnEstimate />} />
