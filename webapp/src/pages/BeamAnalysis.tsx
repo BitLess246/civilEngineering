@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   analyzeBeam, type Support, type SupportType, type BeamLoad, type LoadCategory,
 } from '../engine/beamAnalysis'
 import { detectCriticalSections } from '../engine/beamSections'
 import { SECTIONS_HANDOFF_KEY } from './BeamDesign'
+import { BEAM_LOADS_HANDOFF_KEY } from './LoadPath'
 import { BeamElevation } from '../components/BeamElevation'
 import { Diagram } from '../components/Diagram'
 import { ReportControls } from '../components/ReportControls'
@@ -47,11 +48,30 @@ function ItemShell({ title, onRemove, children }: {
 }
 
 export default function BeamAnalysis() {
-  const [L, setL] = useState(6)
+  // Handoff from the Load Path page (?handoff=loads): span + edge line loads
+  // arrive via sessionStorage; default supports = pin/roller at the ends.
+  const [params] = useSearchParams()
+  const handoff = useMemo(() => {
+    if (params.get('handoff') !== 'loads') return null
+    try {
+      const raw = sessionStorage.getItem(BEAM_LOADS_HANDOFF_KEY)
+      if (!raw) return null
+      const { L, loads } = JSON.parse(raw) as { L: number; loads: BeamLoad[] }
+      if (!(L > 0) || !loads?.length) return null
+      return {
+        L,
+        supports: [{ id: uid++, type: 'pin', x: 0 }, { id: uid++, type: 'roller', x: L }] as SupRow[],
+        loads: loads.map((ld) => ({ ...ld, id: uid++ })) as LoadRow[],
+      }
+    } catch { return null }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const [L, setL] = useState(handoff?.L ?? 6)
   const [E, setE] = useState(25000)
   const [I, setI] = useState(3.125e9)
-  const [supports, setSupports] = useState<SupRow[]>(DEF_SUPPORTS)
-  const [loads, setLoads] = useState<LoadRow[]>(DEF_LOADS)
+  const [supports, setSupports] = useState<SupRow[]>(handoff?.supports ?? DEF_SUPPORTS)
+  const [loads, setLoads] = useState<LoadRow[]>(handoff?.loads ?? DEF_LOADS)
   const [selIdx, setSelIdx] = useState<number | null>(null)
   const navigate = useNavigate()
 

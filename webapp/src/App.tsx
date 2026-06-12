@@ -6,6 +6,7 @@ import BeamDesign from './pages/BeamDesign'
 import BeamAnalysis from './pages/BeamAnalysis'
 import ColumnDesign from './pages/ColumnDesign'
 import FrameAnalysis from './pages/FrameAnalysis'
+import LoadPath from './pages/LoadPath'
 import SlabEstimate from './pages/SlabEstimate'
 import ChbEstimate from './pages/ChbEstimate'
 import ColumnEstimate from './pages/ColumnEstimate'
@@ -41,6 +42,7 @@ function Home() {
         <Tile to="/beam-analysis">Beam Analysis (FEM)</Tile>
         <Tile to="/column-design">Column Design</Tile>
         <Tile to="/frame">Frame Analysis (2D)</Tile>
+        <Tile to="/load-path">Slab Load Path</Tile>
       </div>
 
       <h2 className="mt-8 text-lg font-semibold text-slate-800">Material estimation (quantity take-off)</h2>
@@ -66,6 +68,7 @@ export default function App() {
       <Route path="/beam-analysis" element={<BeamAnalysis />} />
       <Route path="/column-design" element={<ColumnDesign />} />
       <Route path="/frame" element={<FrameAnalysis />} />
+      <Route path="/load-path" element={<LoadPath />} />
       <Route path="/estimate/slab" element={<SlabEstimate />} />
       <Route path="/estimate/beam" element={<BeamEstimate />} />
       <Route path="/estimate/column" element={<ColumnEstimate />} />
