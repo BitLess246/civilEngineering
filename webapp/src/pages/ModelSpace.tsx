@@ -8,6 +8,7 @@ import type { StructuralModel, Member, Plate, RectSection } from '../engine/mode
 import { distributePanel } from '../engine/tributary'
 import { modelToFrame3D } from '../engine/modelBridge'
 import { analyzeFrame3D, type F3Analysis } from '../engine/frame3d'
+import { designStructure, type StructureDesign } from '../engine/pipeline'
 import { Diagram } from '../components/Diagram'
 import { Num, Card, ResultCard, Row } from '../components/qty'
 import { f1, f2 } from '../lib/format'
@@ -84,6 +85,8 @@ export default function ModelSpace() {
   const [storeyH, setStoreyH] = useState('3.5, 3')
   const [b, setB] = useState(300); const [h, setH] = useState(500); const [fc, setFc] = useState(28)
   const [qD, setQD] = useState(4.8); const [qL, setQL] = useState(2.4)
+  // Soil (for the footing stage of the design pipeline)
+  const [qa, setQa] = useState(200); const [Hf, setHf] = useState(1.5)
 
   const [model, setModel] = useState<StructuralModel | null>(() => {
     try {
@@ -93,12 +96,14 @@ export default function ModelSpace() {
   })
   const [selected, setSelected] = useState<string | null>(null)
   const [analysis, setAnalysis] = useState<F3Analysis | null>(null)
+  const [design, setDesign] = useState<StructureDesign | null>(null)
   const [orphans, setOrphans] = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const save = (m: StructuralModel | null) => {
     setModel(m)
     setAnalysis(null)             // geometry changed — results are stale
+    setDesign(null)
     try {
       if (m) sessionStorage.setItem(AUTOSAVE_KEY, JSON.stringify(m))
       else sessionStorage.removeItem(AUTOSAVE_KEY)
@@ -110,6 +115,11 @@ export default function ModelSpace() {
     const br = modelToFrame3D(model)
     setOrphans(br.orphanEdges.length)
     setAnalysis(analyzeFrame3D(br.nodes, br.members, br.supports, br.loads))
+  }
+
+  const runPipeline = () => {
+    if (!model) return
+    setDesign(designStructure(model, { qAllow: qa, gammaSoil: 18, gammaConc: 24, H: Hf }))
   }
 
   const gov = analysis ? analysis.perCombo[analysis.govIdx] : null
@@ -210,6 +220,8 @@ export default function ModelSpace() {
             <Num label="f′c" unit="MPa" value={fc} onChange={setFc} />
             <Num label="q dead" unit="kPa" value={qD} onChange={setQD} />
             <Num label="q live" unit="kPa" value={qL} onChange={setQL} />
+            <Num label="Soil qa" unit="kPa" value={qa} onChange={setQa} />
+            <Num label="Footing depth H" unit="m" value={Hf} onChange={setHf} />
           </Card>
 
           <div className="no-print flex flex-wrap gap-2">
@@ -220,6 +232,10 @@ export default function ModelSpace() {
             <button type="button" onClick={analyze} disabled={!model}
               className="rounded-lg bg-gradient-to-br from-[#0e7490] to-[#155e75] px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:shadow-lg disabled:opacity-40">
               ▶ Analyze (3D FEM)
+            </button>
+            <button type="button" onClick={runPipeline} disabled={!model}
+              className="rounded-lg bg-gradient-to-br from-[#15803d] to-[#166534] px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:shadow-lg disabled:opacity-40">
+              🏗 Design structure
             </button>
             <button type="button" onClick={download} disabled={!model}
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
@@ -333,6 +349,111 @@ export default function ModelSpace() {
           )}
         </div>
       </div>
+
+      {design && (
+        <div className="mt-6 space-y-6">
+          <h2 className="text-xl font-extrabold tracking-tight text-[#0056b3]">
+            Structure design — {design.govName} governs
+            <span className="ml-3 text-sm font-normal text-slate-500">
+              concrete ≈ {f1(design.totals.concrete)} m³ ({f1(design.totals.concreteMembers)} members + {f1(design.totals.concreteSlabs)} slabs)
+            </span>
+          </h2>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Beam & girder schedule</h3>
+            <table className="w-full border-collapse text-xs">
+              <thead>
+                <tr className="text-left uppercase tracking-wide text-slate-500">
+                  <th className="py-1 pr-2 font-semibold">Member</th>
+                  <th className="py-1 pr-2 font-semibold">Section</th>
+                  <th className="py-1 pr-2 text-right font-semibold">Mu (kN·m)</th>
+                  <th className="py-1 pr-2 text-right font-semibold">Vu (kN)</th>
+                  <th className="py-1 pr-2 font-semibold">Mode</th>
+                  <th className="py-1 pr-2 font-semibold">Tension</th>
+                  <th className="py-1 font-semibold">Stirrups</th>
+                </tr>
+              </thead>
+              <tbody>
+                {design.beams.flatMap((bm) => bm.sections.map((s, k) => {
+                  const d = s.design
+                  const bad = !(d.flexOK && d.comprEffective && d.comprNAOK && d.region !== 'inadequate')
+                  return (
+                    <tr key={`${bm.id}-${k}`} className={`border-t border-slate-100 ${bad ? 'bg-red-50 text-red-700' : ''}`}>
+                      <td className="py-1 pr-2 font-medium">{k === 0 ? `${bm.id} (${bm.role}, ${f1(bm.L)} m)` : ''}</td>
+                      <td className="py-1 pr-2">{s.label}{s.hogging ? ' (hog)' : ''}</td>
+                      <td className="py-1 pr-2 text-right">{f1(Math.abs(s.Mu))}</td>
+                      <td className="py-1 pr-2 text-right">{f1(s.Vu)}</td>
+                      <td className="py-1 pr-2">{d.mode}</td>
+                      <td className="py-1 pr-2">{d.bars}⌀{model?.sections[0]?.barDia}{d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}{s.hogging ? ' top' : ''}</td>
+                      <td className="py-1">{d.sAdopt > 0 ? `@${Math.round(d.sAdopt)}` : d.region === 'none' ? 'none' : '⚠'}</td>
+                    </tr>
+                  )
+                }))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Column schedule</h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Column</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Pu (kN)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Mu</th>
+                    <th className="py-1 pr-2 font-semibold">Bars</th>
+                    <th className="py-1 text-right font-semibold">Util</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {design.columns.map((c) => (
+                    <tr key={c.id} className={`border-t border-slate-100 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                      <td className="py-1 pr-2 font-medium">{c.id}</td>
+                      <td className="py-1 pr-2 text-right">{f1(c.Pu)}</td>
+                      <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
+                      <td className="py-1 pr-2">{c.bars}⌀{model?.sections[0]?.barDia} · ties @{Math.round(c.tieSpacing)}</td>
+                      <td className="py-1 text-right">{(c.util * 100).toFixed(0)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Footing schedule</h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Node</th>
+                    <th className="py-1 pr-2 text-right font-semibold">P / Pu (kN)</th>
+                    <th className="py-1 pr-2 font-semibold">Plan</th>
+                    <th className="py-1 pr-2 font-semibold">Dc</th>
+                    <th className="py-1 font-semibold">Steel</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {design.footings.map((f) => (
+                    <tr key={f.node} className={`border-t border-slate-100 ${f.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                      <td className="py-1 pr-2 font-medium">{f.node}</td>
+                      <td className="py-1 pr-2 text-right">{f1(f.P)} / {f1(f.Pu)}</td>
+                      <td className="py-1 pr-2">B = {f2(f.design.B)} m</td>
+                      <td className="py-1 pr-2">{Math.round(f.design.Dc)} mm</td>
+                      <td className="py-1">{f.design.bars}⌀{model?.sections[0]?.barDia} @ {Math.round(f.design.barSpacing)} e.w.</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <p className="text-xs text-slate-400">
+            Pipeline: slab area loads → tributary line loads → 3D frame FEM (governing NSCP combo) → beam/girder
+            critical sections (SRRB/DRRB) → column P–M → base reactions → isolated footings. Open any standalone
+            page for the full worked solution of a given element.
+          </p>
+        </div>
+      )}
     </div>
   )
 }
