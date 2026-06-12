@@ -9,6 +9,9 @@ import { distributePanel } from '../engine/tributary'
 import { modelToFrame3D } from '../engine/modelBridge'
 import { analyzeFrame3D, type F3Analysis } from '../engine/frame3d'
 import { designStructure, type StructureDesign } from '../engine/pipeline'
+import { computeSeismic, driftCheck, type SeismicResult, type DriftRow } from '../engine/seismic'
+import { solveFrame3D, applyF3Combo } from '../engine/frame3d'
+import { ReportControls } from '../components/ReportControls'
 import { Diagram } from '../components/Diagram'
 import { Num, Card, ResultCard, Row } from '../components/qty'
 import { f1, f2 } from '../lib/format'
@@ -87,6 +90,12 @@ export default function ModelSpace() {
   const [qD, setQD] = useState(4.8); const [qL, setQL] = useState(2.4)
   // Soil (for the footing stage of the design pipeline)
   const [qa, setQa] = useState(200); const [Hf, setHf] = useState(1.5)
+  // Seismic (NSCP 208 static lateral force)
+  const [Ca, setCa] = useState(0.44); const [Cv, setCv] = useState(0.64)
+  const [Rw, setRw] = useState(8.5); const [Ie, setIe] = useState(1.0)
+  const [eDir, setEDir] = useState<'x' | 'z'>('x')
+  const [seis, setSeis] = useState<SeismicResult | null>(null)
+  const [drift, setDrift] = useState<DriftRow[] | null>(null)
 
   const [model, setModel] = useState<StructuralModel | null>(() => {
     try {
@@ -104,6 +113,7 @@ export default function ModelSpace() {
     setModel(m)
     setAnalysis(null)             // geometry changed — results are stale
     setDesign(null)
+    setDrift(null)
     try {
       if (m) sessionStorage.setItem(AUTOSAVE_KEY, JSON.stringify(m))
       else sessionStorage.removeItem(AUTOSAVE_KEY)
@@ -115,6 +125,21 @@ export default function ModelSpace() {
     const br = modelToFrame3D(model)
     setOrphans(br.orphanEdges.length)
     setAnalysis(analyzeFrame3D(br.nodes, br.members, br.supports, br.loads))
+    // Storey drift from the E-only elastic solution (NSCP 208.5.10).
+    if (seis) {
+      const eOnly = applyF3Combo(br.loads, { E: 1 })
+      const sol = eOnly.length ? solveFrame3D(br.nodes, br.members, br.supports, eOnly) : null
+      setDrift(sol ? driftCheck(model, br.nodes, sol.d, Rw, seis.T, eDir) : null)
+    } else setDrift(null)
+  }
+
+  const generateE = () => {
+    if (!model) return
+    const r = computeSeismic(model, { Ca, Cv, I: Ie, R: Rw, dir: eDir })
+    if (!r) return
+    setSeis(r)
+    // replace any previous E node loads with the new set
+    save({ ...model, loads: [...model.loads.filter((l) => !(l.cat === 'E' && l.kind === 'node')), ...r.loads] })
   }
 
   const runPipeline = () => {
@@ -139,6 +164,7 @@ export default function ModelSpace() {
       ...(qL > 0 ? [{ kind: 'area' as const, plate: p.id, q: qL, cat: 'L' as const }] : []),
     ])
     setSelected(null)
+    setSeis(null)
     save(m)
   }
 
@@ -190,9 +216,10 @@ export default function ModelSpace() {
       <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">3D Model Space</h1>
       <p className="no-print mt-1 text-slate-600">
         Generate a building frame on a column grid — beams, girders, columns and slab panels with categorised
-        area loads — orbit it in 3D, click any element to inspect or delete it, and save/load the model as JSON.
-        Phase 4 of the roadmap; the 3D solver (Phase 5) and the design pipeline (Phase 6) consume this model.
+        area loads — orbit it in 3D, analyze it (3D FEM, NSCP combos, seismic E loads + drift), design every
+        element down the load path, and print the schedules as a report.
       </p>
+      <ReportControls title="Structure Design Report" />
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_2fr]">
         <div className="space-y-5">
@@ -222,6 +249,33 @@ export default function ModelSpace() {
             <Num label="q live" unit="kPa" value={qL} onChange={setQL} />
             <Num label="Soil qa" unit="kPa" value={qa} onChange={setQa} />
             <Num label="Footing depth H" unit="m" value={Hf} onChange={setHf} />
+          </Card>
+
+          <Card title="Seismic — NSCP 208 static force">
+            <Num label="Ca" value={Ca} onChange={setCa} />
+            <Num label="Cv" value={Cv} onChange={setCv} />
+            <Num label="R" value={Rw} onChange={setRw} />
+            <Num label="I" value={Ie} onChange={setIe} />
+            <label className="flex flex-col text-sm">
+              <span className="mb-1 font-medium text-slate-600">Direction</span>
+              <select value={eDir} onChange={(e) => setEDir(e.target.value as 'x' | 'z')}
+                className="rounded-md border border-slate-300 px-2.5 py-1.5">
+                <option value="x">X</option><option value="z">Z</option>
+              </select>
+            </label>
+            <div className="col-span-full">
+              <button type="button" onClick={generateE} disabled={!model}
+                className="no-print rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
+                ⚡ Generate E loads
+              </button>
+              {seis && (
+                <p className="mt-1 text-xs text-slate-500">
+                  T = {seis.T.toFixed(3)} s · W = {f1(seis.W)} kN · V = {f1(seis.V)} kN
+                  {seis.V === seis.Vmax ? ' (2.5CaIW/R cap governs)' : seis.V === seis.Vmin ? ' (0.11CaIW floor governs)' : ''}
+                  {seis.Ft > 0 ? ` · Ft = ${f1(seis.Ft)} kN` : ''} — applied as cat-E node loads ({eDir.toUpperCase()}).
+                </p>
+              )}
+            </div>
           </Card>
 
           <div className="no-print flex flex-wrap gap-2">
@@ -271,6 +325,20 @@ export default function ModelSpace() {
             </ResultCard>
           )}
 
+          {drift && seis && (
+            <ResultCard title={`Storey drift — ${eDir.toUpperCase()} (ΔM = 0.7·R·Δs)`}>
+              {drift.map((row) => (
+                <Row key={row.elevation} alert={!row.ok}
+                  label={`Level ${f1(row.elevation)} m`}
+                  value={`ΔM = ${row.dM.toFixed(1)} mm ${row.ok ? '✓' : '✗'}`}
+                  sub={`Δs ${row.ds.toFixed(2)} · limit ${row.limit.toFixed(0)} mm`} />
+              ))}
+              <p className="mt-1 text-[11px] text-slate-400">
+                Limit {seis.T < 0.7 ? '0.025' : '0.020'}·hs (T {seis.T < 0.7 ? '<' : '≥'} 0.7 s) — NSCP 208.5.10.
+              </p>
+            </ResultCard>
+          )}
+
           {selMember && model && (
             <ResultCard title={`Member — ${selMember.id}`}>
               <Row label="Role" value={selMember.role} />
@@ -315,7 +383,7 @@ export default function ModelSpace() {
           )}
         </div>
 
-        <div className="h-[560px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="no-print h-[560px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           {model ? (
             <Canvas camera={{ position: [14, 11, 14], fov: 45 }} onPointerMissed={() => setSelected(null)}>
               <color attach="background" args={['#f8fafc']} />
@@ -359,7 +427,7 @@ export default function ModelSpace() {
             </span>
           </h2>
 
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Beam & girder schedule</h3>
             <table className="w-full border-collapse text-xs">
               <thead>
@@ -394,7 +462,7 @@ export default function ModelSpace() {
           </div>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Column schedule</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
@@ -420,7 +488,7 @@ export default function ModelSpace() {
               </table>
             </div>
 
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Footing schedule</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
