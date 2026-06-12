@@ -46,8 +46,8 @@ export function hermite(xi: number, le: number): [number, number, number, number
 
 /** 5-point Gauss quadrature of a vector-valued integrand over [a, b]. */
 export function gauss5Vec(f: (x: number) => number[], a: number, b: number, size = 4): number[] {
-  const gp = [-0.90618, -0.53847, 0, 0.53847, 0.90618]
-  const gw = [0.23693, 0.47863, 0.56889, 0.47863, 0.23693]
+  const gp = [-0.906179845938664, -0.5384693101056831, 0, 0.5384693101056831, 0.906179845938664]
+  const gw = [0.23692688505618908, 0.47862867049936647, 0.5688888888888889, 0.47862867049936647, 0.23692688505618908]
   const mid = (a + b) / 2, half = (b - a) / 2
   const acc = new Array(size).fill(0)
   for (let i = 0; i < 5; i++) {

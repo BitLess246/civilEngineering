@@ -6,6 +6,9 @@ import * as THREE from 'three'
 import { generateGridModel, removeElements } from '../engine/modelBuilder'
 import type { StructuralModel, Member, Plate, RectSection } from '../engine/model'
 import { distributePanel } from '../engine/tributary'
+import { modelToFrame3D } from '../engine/modelBridge'
+import { analyzeFrame3D, type F3Analysis } from '../engine/frame3d'
+import { Diagram } from '../components/Diagram'
 import { Num, Card, ResultCard, Row } from '../components/qty'
 import { f1, f2 } from '../lib/format'
 
@@ -20,8 +23,11 @@ const parseList = (s: string): number[] =>
   s.split(/[, ]+/).map(parseFloat).filter((v) => Number.isFinite(v) && v > 0)
 
 // ── 3D primitives ─────────────────────────────────────────────────────────
-function Member3D({ a, b, role, selected, onPick }: {
-  a: THREE.Vector3; b: THREE.Vector3; role: string; selected: boolean; onPick: () => void
+function Member3D({ a, b, role, selected, tint = 0, onPick }: {
+  a: THREE.Vector3; b: THREE.Vector3; role: string; selected: boolean
+  /** 0–1 utilisation tint (|M| relative to the model max) after analysis. */
+  tint?: number
+  onPick: () => void
 }) {
   const { mid, quat, len } = useMemo(() => {
     const dir = new THREE.Vector3().subVectors(b, a)
@@ -30,11 +36,16 @@ function Member3D({ a, b, role, selected, onPick }: {
     return { mid: new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5), quat, len }
   }, [a, b])
   const t = role === 'column' ? 0.3 : 0.22
+  const color = useMemo(() => {
+    if (selected) return SEL
+    const base = new THREE.Color(ROLE_COLOR[role] ?? '#64748b')
+    return tint > 0 ? `#${base.lerp(new THREE.Color('#dc2626'), tint).getHexString()}` : `#${base.getHexString()}`
+  }, [selected, role, tint])
   return (
     <mesh position={mid} quaternion={quat}
       onClick={(e) => { e.stopPropagation(); onPick() }}>
       <boxGeometry args={[len, t, t]} />
-      <meshStandardMaterial color={selected ? SEL : ROLE_COLOR[role] ?? '#64748b'} />
+      <meshStandardMaterial color={color} />
     </mesh>
   )
 }
@@ -81,15 +92,33 @@ export default function ModelSpace() {
     } catch { return null }
   })
   const [selected, setSelected] = useState<string | null>(null)
+  const [analysis, setAnalysis] = useState<F3Analysis | null>(null)
+  const [orphans, setOrphans] = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const save = (m: StructuralModel | null) => {
     setModel(m)
+    setAnalysis(null)             // geometry changed — results are stale
     try {
       if (m) sessionStorage.setItem(AUTOSAVE_KEY, JSON.stringify(m))
       else sessionStorage.removeItem(AUTOSAVE_KEY)
     } catch { /* quota — ignore */ }
   }
+
+  const analyze = () => {
+    if (!model) return
+    const br = modelToFrame3D(model)
+    setOrphans(br.orphanEdges.length)
+    setAnalysis(analyzeFrame3D(br.nodes, br.members, br.supports, br.loads))
+  }
+
+  const gov = analysis ? analysis.perCombo[analysis.govIdx] : null
+  const govRes = gov?.result ?? null
+  const memForce = useMemo(() => {
+    const map = new Map<string, { Mmax: number; Vmax: number; Nmax: number }>()
+    govRes?.members.forEach((m) => map.set(m.id, { Mmax: m.Mmax, Vmax: m.Vmax, Nmax: m.Nmax }))
+    return map
+  }, [govRes])
 
   const generate = () => {
     const section: RectSection = { id: 'S1', name: `${b}×${h}`, b, h, fc, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
@@ -188,6 +217,10 @@ export default function ModelSpace() {
               className="rounded-lg bg-gradient-to-br from-[#0056b3] to-[#003f86] px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:shadow-lg">
               ⚙ Generate model
             </button>
+            <button type="button" onClick={analyze} disabled={!model}
+              className="rounded-lg bg-gradient-to-br from-[#0e7490] to-[#155e75] px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:shadow-lg disabled:opacity-40">
+              ▶ Analyze (3D FEM)
+            </button>
             <button type="button" onClick={download} disabled={!model}
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
               ⤓ Save JSON
@@ -210,11 +243,36 @@ export default function ModelSpace() {
             </ResultCard>
           )}
 
+          {gov && govRes && (
+            <ResultCard title={`Analysis — ${gov.combo.name} governs`}>
+              <Row label="ΣRy (gravity)" value={`${f1(govRes.reactions.reduce((s, q) => s + q.F[1], 0))} kN`} />
+              <Row label="Extremes" value={`M ${f1(govRes.Mmax)} kN·m`}
+                sub={`V ${f1(govRes.Vmax)} · N ${f1(govRes.Nmax)} kN`} />
+              {orphans > 0 && <Row alert label="⚠ Orphan edges" value={`${orphans}`} sub="slab edges with no member" />}
+              <p className="mt-1 text-[11px] text-slate-400">
+                Members tinted red by |M| relative to the model max. Click one for its diagrams.
+              </p>
+            </ResultCard>
+          )}
+
           {selMember && model && (
             <ResultCard title={`Member — ${selMember.id}`}>
               <Row label="Role" value={selMember.role} />
               <Row label="Length" value={`${f2(memberLen)} m`} />
               <Row label="Section" value={model.sections[0]?.name ?? selMember.section} />
+              {(() => {
+                const mr = govRes?.members.find((m) => m.id === selMember.id)
+                if (!mr) return null
+                return (
+                  <div className="mt-2 space-y-2">
+                    <Row label="Forces (governing)" value={`M ${f1(mr.Mmax)} kN·m`}
+                      sub={`V ${f1(mr.Vmax)} · N ${f1(mr.Nmax)} kN`} />
+                    <Diagram xs={mr.xs} ys={mr.Mz} title="Mz" unit="kN·m" color="#d62728" decimals={1} />
+                    <Diagram xs={mr.xs} ys={mr.Vy} title="Vy" unit="kN" color="#1f77b4" decimals={1} />
+                    <Diagram xs={mr.xs} ys={mr.N} title="N (+tension)" unit="kN" color="#7c3aed" decimals={1} />
+                  </div>
+                )
+              })()}
               <button type="button" onClick={() => { save(removeElements(model, new Set([selMember.id]))); setSelected(null) }}
                 className="no-print mt-2 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50">
                 Delete member
@@ -251,7 +309,9 @@ export default function ModelSpace() {
               {model.members.map((m) => {
                 const a = nodePos.get(m.i), bb = nodePos.get(m.j)
                 if (!a || !bb) return null
-                return <Member3D key={m.id} a={a} b={bb} role={m.role}
+                const tint = govRes && govRes.Mmax > 1e-9
+                  ? (memForce.get(m.id)?.Mmax ?? 0) / govRes.Mmax : 0
+                return <Member3D key={m.id} a={a} b={bb} role={m.role} tint={tint * 0.85}
                   selected={m.id === selected} onPick={() => setSelected(m.id)} />
               })}
               {model.plates.map((p) => {
