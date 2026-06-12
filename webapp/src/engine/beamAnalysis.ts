@@ -36,31 +36,10 @@ export const NSCP_COMBOS: Combo[] = [
   { name: '0.9D + 1.0E', f: { D: 0.9, E: 1.0 } },
 ]
 
+import { solveLinear } from './fem'
+
 const roundX = (x: number, dec = 8) => Math.round(x * 10 ** dec) / 10 ** dec
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x))
-
-// ── Linear algebra ────────────────────────────────────────────────────────
-function solveLinear(A: number[][], b: number[]): number[] | null {
-  const n = b.length
-  const M = A.map((row, i) => [...row, b[i]])
-  for (let k = 0; k < n; k++) {
-    let piv = k
-    for (let i = k + 1; i < n; i++) if (Math.abs(M[i][k]) > Math.abs(M[piv][k])) piv = i
-    if (piv !== k) [M[k], M[piv]] = [M[piv], M[k]]
-    if (Math.abs(M[k][k]) < 1e-14) return null
-    for (let i = k + 1; i < n; i++) {
-      const f = M[i][k] / M[k][k]
-      for (let j = k; j <= n; j++) M[i][j] -= f * M[k][j]
-    }
-  }
-  const x = new Array(n).fill(0)
-  for (let i = n - 1; i >= 0; i--) {
-    let s = M[i][n]
-    for (let j = i + 1; j < n; j++) s -= M[i][j] * x[j]
-    x[i] = s / M[i][i]
-  }
-  return x
-}
 
 // ── Load helpers ──────────────────────────────────────────────────────────
 export function loadResultant(ld: BeamLoad): { W: number; xc: number } {
