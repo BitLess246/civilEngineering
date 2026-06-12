@@ -4,6 +4,7 @@ import PileCapDesign from './pages/PileCapDesign'
 import CombinedFootingDesign from './pages/CombinedFootingDesign'
 import BeamDesign from './pages/BeamDesign'
 import BeamAnalysis from './pages/BeamAnalysis'
+import ColumnDesign from './pages/ColumnDesign'
 import SlabEstimate from './pages/SlabEstimate'
 import ChbEstimate from './pages/ChbEstimate'
 import ColumnEstimate from './pages/ColumnEstimate'
@@ -37,6 +38,7 @@ function Home() {
         <Tile to="/combined">Combined Footing</Tile>
         <Tile to="/beam-design">Beam Design</Tile>
         <Tile to="/beam-analysis">Beam Analysis (FEM)</Tile>
+        <Tile to="/column-design">Column Design</Tile>
       </div>
 
       <h2 className="mt-8 text-lg font-semibold text-slate-800">Material estimation (quantity take-off)</h2>
@@ -60,6 +62,7 @@ export default function App() {
       <Route path="/combined" element={<CombinedFootingDesign />} />
       <Route path="/beam-design" element={<BeamDesign />} />
       <Route path="/beam-analysis" element={<BeamAnalysis />} />
+      <Route path="/column-design" element={<ColumnDesign />} />
       <Route path="/estimate/slab" element={<SlabEstimate />} />
       <Route path="/estimate/beam" element={<BeamEstimate />} />
       <Route path="/estimate/column" element={<ColumnEstimate />} />
