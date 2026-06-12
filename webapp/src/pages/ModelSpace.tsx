@@ -3,12 +3,12 @@ import { Link } from 'react-router-dom'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
-import { generateGridModel, removeElements } from '../engine/modelBuilder'
-import type { StructuralModel, Member, Plate, RectSection } from '../engine/model'
+import { generateGridModel, removeElements, removeNode, buildGravityLoads } from '../engine/modelBuilder'
+import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole } from '../engine/model'
 import { distributePanel } from '../engine/tributary'
 import { modelToFrame3D } from '../engine/modelBridge'
 import { analyzeFrame3D, type F3Analysis } from '../engine/frame3d'
-import { designStructure, type StructureDesign } from '../engine/pipeline'
+import { designStructure, optimizeStructure, type StructureDesign, type FootingPlan, type OptimizeResult } from '../engine/pipeline'
 import { computeSeismic, driftCheck, type SeismicResult, type DriftRow } from '../engine/seismic'
 import { solveFrame3D, applyF3Combo } from '../engine/frame3d'
 import { ReportControls } from '../components/ReportControls'
@@ -106,13 +106,20 @@ export default function ModelSpace() {
   const [selected, setSelected] = useState<string | null>(null)
   const [analysis, setAnalysis] = useState<F3Analysis | null>(null)
   const [design, setDesign] = useState<StructureDesign | null>(null)
+  const [opt, setOpt] = useState<OptimizeResult | null>(null)
   const [orphans, setOrphans] = useState(0)
+  // footing plan: base node → '' (isolated) or partner node id (combined)
+  const [planSel, setPlanSel] = useState<Record<string, string>>({})
+  // frame-editor add-member picks
+  const [newI, setNewI] = useState(''); const [newJ, setNewJ] = useState('')
+  const [newRole, setNewRole] = useState<MemberRole>('beam')
   const fileRef = useRef<HTMLInputElement>(null)
 
   const save = (m: StructuralModel | null) => {
     setModel(m)
     setAnalysis(null)             // geometry changed — results are stale
     setDesign(null)
+    setOpt(null)
     setDrift(null)
     try {
       if (m) sessionStorage.setItem(AUTOSAVE_KEY, JSON.stringify(m))
@@ -142,9 +149,87 @@ export default function ModelSpace() {
     save({ ...model, loads: [...model.loads.filter((l) => !(l.cat === 'E' && l.kind === 'node')), ...r.loads] })
   }
 
+  const soil = { qAllow: qa, gammaSoil: 18, gammaConc: 24, H: Hf }
+  const footingPlan = (): FootingPlan => {
+    const plan: FootingPlan = {}
+    for (const [node, partner] of Object.entries(planSel)) {
+      if (partner) plan[node] = { type: 'combined', with: partner }
+    }
+    return plan
+  }
+
   const runPipeline = () => {
     if (!model) return
-    setDesign(designStructure(model, { qAllow: qa, gammaSoil: 18, gammaConc: 24, H: Hf }))
+    setOpt(null)
+    setDesign(designStructure(model, soil, footingPlan()))
+  }
+
+  const optimize = () => {
+    if (!model) return
+    const r = optimizeStructure(model, soil, footingPlan())
+    if (!r) return
+    // adopt the optimised section in the model + the grid inputs
+    const m2 = { ...model, sections: [r.section] }
+    save(m2)
+    setB(r.section.b); setH(r.section.h)
+    setOpt(r)
+    setDesign(r.design)
+  }
+
+  // ── Frame-editor helpers (all immutable via save) ──
+  const updNode = (id: string, k: 'x' | 'y' | 'z', v: number) => {
+    if (!model || !Number.isFinite(v)) return
+    save({ ...model, nodes: model.nodes.map((n) => (n.id === id ? { ...n, [k]: v } : n)) })
+  }
+  const addNode = () => {
+    if (!model) return
+    let k = model.nodes.length
+    while (model.nodes.some((n) => n.id === `n${k}`)) k++
+    save({ ...model, nodes: [...model.nodes, { id: `n${k}`, x: 0, y: 0, z: 0 }] })
+  }
+  const toggleSupport = (id: string) => {
+    if (!model) return
+    const has = model.supports.some((s) => s.node === id)
+    save({
+      ...model,
+      supports: has ? model.supports.filter((s) => s.node !== id)
+        : [...model.supports, { node: id, fixity: 'fixed' as const }],
+    })
+  }
+  const updMember = (id: string, patch: Partial<Member>) => {
+    if (!model) return
+    save({ ...model, members: model.members.map((m) => (m.id === id ? { ...m, ...patch } : m)) })
+  }
+  const addMember = () => {
+    if (!model || !newI || !newJ || newI === newJ) return
+    let k = model.members.length
+    while (model.members.some((m) => m.id === `m${k}`)) k++
+    save({
+      ...model,
+      members: [...model.members, { id: `m${k}`, i: newI, j: newJ, role: newRole, section: model.sections[0]?.id ?? 'S1' }],
+    })
+  }
+  const updLoad = (idx: number, v: number) => {
+    if (!model || !Number.isFinite(v)) return
+    save({
+      ...model,
+      loads: model.loads.map((l, i) => {
+        if (i !== idx) return l
+        if (l.kind === 'area') return { ...l, q: v }
+        if (l.kind === 'member-udl') return { ...l, w: v }
+        if (l.kind === 'member-point') return { ...l, P: v }
+        return l
+      }),
+    })
+  }
+  const delLoad = (idx: number) => {
+    if (!model) return
+    save({ ...model, loads: model.loads.filter((_, i) => i !== idx) })
+  }
+  const rebuildGravity = () => {
+    if (!model) return
+    // self-weight + SDL (D) and LL (L) regenerated; E loads survive untouched
+    save({ ...model, loads: buildGravityLoads(model, qD, qL) })
   }
 
   const gov = analysis ? analysis.perCombo[analysis.govIdx] : null
@@ -158,13 +243,11 @@ export default function ModelSpace() {
   const generate = () => {
     const section: RectSection = { id: 'S1', name: `${b}×${h}`, b, h, fc, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
     const m = generateGridModel({ baysX: parseList(baysX), baysZ: parseList(baysZ), storeyH: parseList(storeyH), section })
-    // area loads on every slab, categories preserved for the combos downstream
-    m.loads = m.plates.flatMap((p) => [
-      ...(qD > 0 ? [{ kind: 'area' as const, plate: p.id, q: qD, cat: 'D' as const }] : []),
-      ...(qL > 0 ? [{ kind: 'area' as const, plate: p.id, q: qL, cat: 'L' as const }] : []),
-    ])
+    // gravity loads: member self-weight (D), slab self-weight + SDL (D), LL (L)
+    m.loads = buildGravityLoads(m, qD, qL)
     setSelected(null)
     setSeis(null)
+    setPlanSel({})
     save(m)
   }
 
@@ -245,8 +328,8 @@ export default function ModelSpace() {
             <Num label="b" unit="mm" value={b} onChange={setB} />
             <Num label="h" unit="mm" value={h} onChange={setH} />
             <Num label="f′c" unit="MPa" value={fc} onChange={setFc} />
-            <Num label="q dead" unit="kPa" value={qD} onChange={setQD} />
-            <Num label="q live" unit="kPa" value={qL} onChange={setQL} />
+            <Num label="SDL (superimposed)" unit="kPa" value={qD} onChange={setQD} />
+            <Num label="Live load" unit="kPa" value={qL} onChange={setQL} />
             <Num label="Soil qa" unit="kPa" value={qa} onChange={setQa} />
             <Num label="Footing depth H" unit="m" value={Hf} onChange={setHf} />
           </Card>
@@ -290,6 +373,11 @@ export default function ModelSpace() {
             <button type="button" onClick={runPipeline} disabled={!model}
               className="rounded-lg bg-gradient-to-br from-[#15803d] to-[#166534] px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:shadow-lg disabled:opacity-40">
               🏗 Design structure
+            </button>
+            <button type="button" onClick={optimize} disabled={!model}
+              className="rounded-lg bg-gradient-to-br from-[#b45309] to-[#92400e] px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:shadow-lg disabled:opacity-40"
+              title="Loop the design, growing the shared section until nothing fails, then trim it back">
+              🏁 Optimize design
             </button>
             <button type="button" onClick={download} disabled={!model}
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
@@ -418,6 +506,248 @@ export default function ModelSpace() {
         </div>
       </div>
 
+      {model && (
+        <div className="no-print mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {/* ── Nodes ── */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-[1.02rem] font-bold text-[#0056b3]">Nodes</h3>
+              <button type="button" onClick={addNode}
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">
+                + Add node
+              </button>
+            </div>
+            <div className="max-h-72 overflow-y-auto">
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Id</th>
+                    <th className="py-1 pr-1 font-semibold">x</th>
+                    <th className="py-1 pr-1 font-semibold">y</th>
+                    <th className="py-1 pr-1 font-semibold">z</th>
+                    <th className="py-1 pr-1 font-semibold" title="Fixed base support">Sup</th>
+                    <th className="py-1" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {model.nodes.map((n) => (
+                    <tr key={n.id} className="border-t border-slate-100">
+                      <td className="py-0.5 pr-2 font-medium">{n.id}</td>
+                      {(['x', 'y', 'z'] as const).map((k) => (
+                        <td key={k} className="py-0.5 pr-1">
+                          <input type="number" step="0.5" value={n[k]}
+                            onChange={(e) => updNode(n.id, k, parseFloat(e.target.value))}
+                            className="w-14 rounded border border-slate-200 px-1 py-0.5" />
+                        </td>
+                      ))}
+                      <td className="py-0.5 pr-1 text-center">
+                        <input type="checkbox" checked={model.supports.some((s) => s.node === n.id)}
+                          onChange={() => toggleSupport(n.id)} />
+                      </td>
+                      <td className="py-0.5 text-right">
+                        <button type="button" onClick={() => { save(removeNode(model, n.id)); if (selected) setSelected(null) }}
+                          className="rounded px-1.5 text-red-500 hover:bg-red-50" title="Remove node + attached members/plates/loads">✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-1 text-[11px] text-slate-400">Coordinates in m (y = up). Removing a node also removes everything attached to it.</p>
+          </div>
+
+          {/* ── Members ── */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Beams & columns</h3>
+            <div className="max-h-72 overflow-y-auto">
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Id</th>
+                    <th className="py-1 pr-1 font-semibold">Role</th>
+                    <th className="py-1 pr-1 font-semibold">Node i</th>
+                    <th className="py-1 pr-1 font-semibold">Node j</th>
+                    <th className="py-1" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {model.members.map((m) => (
+                    <tr key={m.id} className={`border-t border-slate-100 ${m.id === selected ? 'bg-amber-50' : ''}`}>
+                      <td className="py-0.5 pr-2 font-medium cursor-pointer" onClick={() => setSelected(m.id)}>{m.id}</td>
+                      <td className="py-0.5 pr-1">
+                        <select value={m.role} onChange={(e) => updMember(m.id, { role: e.target.value as MemberRole })}
+                          className="rounded border border-slate-200 px-1 py-0.5">
+                          <option value="beam">beam</option><option value="girder">girder</option>
+                          <option value="column">column</option><option value="brace">brace</option>
+                        </select>
+                      </td>
+                      {(['i', 'j'] as const).map((end) => (
+                        <td key={end} className="py-0.5 pr-1">
+                          <select value={m[end]} onChange={(e) => updMember(m.id, { [end]: e.target.value })}
+                            className="max-w-[5.5rem] rounded border border-slate-200 px-1 py-0.5">
+                            {model.nodes.map((n) => <option key={n.id} value={n.id}>{n.id}</option>)}
+                          </select>
+                        </td>
+                      ))}
+                      <td className="py-0.5 text-right">
+                        <button type="button" onClick={() => { save(removeElements(model, new Set([m.id]))); if (selected === m.id) setSelected(null) }}
+                          className="rounded px-1.5 text-red-500 hover:bg-red-50">✕</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-slate-100 pt-2 text-xs">
+              <select value={newRole} onChange={(e) => setNewRole(e.target.value as MemberRole)}
+                className="rounded border border-slate-200 px-1 py-0.5">
+                <option value="beam">beam</option><option value="girder">girder</option>
+                <option value="column">column</option><option value="brace">brace</option>
+              </select>
+              <select value={newI} onChange={(e) => setNewI(e.target.value)} className="max-w-[5.5rem] rounded border border-slate-200 px-1 py-0.5">
+                <option value="">node i…</option>
+                {model.nodes.map((n) => <option key={n.id} value={n.id}>{n.id}</option>)}
+              </select>
+              <span className="text-slate-400">→</span>
+              <select value={newJ} onChange={(e) => setNewJ(e.target.value)} className="max-w-[5.5rem] rounded border border-slate-200 px-1 py-0.5">
+                <option value="">node j…</option>
+                {model.nodes.map((n) => <option key={n.id} value={n.id}>{n.id}</option>)}
+              </select>
+              <button type="button" onClick={addMember} disabled={!newI || !newJ || newI === newJ}
+                className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
+                + Add member
+              </button>
+            </div>
+          </div>
+
+          {/* ── Loads ── */}
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-[1.02rem] font-bold text-[#0056b3]">Loads</h3>
+              <button type="button" onClick={rebuildGravity}
+                title="Regenerate dead (member self-weight + slab self-weight + SDL) and live loads from the inputs; keeps E loads"
+                className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">
+                ↻ Rebuild D + L
+              </button>
+            </div>
+            <div className="max-h-72 overflow-y-auto">
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Cat</th>
+                    <th className="py-1 pr-2 font-semibold">Target</th>
+                    <th className="py-1 pr-1 font-semibold">Value</th>
+                    <th className="py-1" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {model.loads.map((l: ModelLoad, idx) => {
+                    const target = l.kind === 'node' ? l.node : l.kind === 'area' ? l.plate : l.member
+                    const val = l.kind === 'area' ? l.q : l.kind === 'member-udl' ? l.w : l.kind === 'member-point' ? l.P : null
+                    const unit = l.kind === 'area' ? 'kPa' : l.kind === 'member-udl' ? 'kN/m' : 'kN'
+                    return (
+                      <tr key={idx} className="border-t border-slate-100">
+                        <td className={`py-0.5 pr-2 font-semibold ${l.cat === 'D' ? 'text-slate-600' : l.cat === 'L' ? 'text-emerald-700' : 'text-purple-700'}`}>{l.cat}</td>
+                        <td className="py-0.5 pr-2">{l.kind === 'node' ? '·' : l.kind === 'area' ? '▦' : '—'} {target}</td>
+                        <td className="py-0.5 pr-1 whitespace-nowrap">
+                          {val !== null ? (
+                            <>
+                              <input type="number" step="0.1" value={val}
+                                onChange={(e) => updLoad(idx, parseFloat(e.target.value))}
+                                className="w-16 rounded border border-slate-200 px-1 py-0.5" /> {unit}
+                            </>
+                          ) : (
+                            <span className="text-slate-500">
+                              {l.kind === 'node' ? ['Fx' as const, 'Fy' as const, 'Fz' as const]
+                                .filter((k) => (l[k] ?? 0) !== 0).map((k) => `${k}=${f1(l[k]!)}`).join(' ') + ' kN' : ''}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-0.5 text-right">
+                          <button type="button" onClick={() => delLoad(idx)}
+                            className="rounded px-1.5 text-red-500 hover:bg-red-50">✕</button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Dead = self-weight (members from b×h, slabs from t, γc = 24 kN/m³) + the SDL input; live = the LL input.
+              “Rebuild” regenerates both after you edit the frame.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {model && model.supports.length > 0 && (
+        <div className="no-print mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Footing plan</h3>
+          <p className="mb-2 text-xs text-slate-500">
+            Each base support gets an isolated square footing by default — pick a partner node to design the pair
+            as one combined footing instead (close columns / property-line situations).
+          </p>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3 lg:grid-cols-4">
+            {model.supports.map((s) => {
+              const partner = planSel[s.node] ?? ''
+              const takenBy = Object.entries(planSel).find(([n, p]) => p === s.node && n !== s.node)?.[0]
+              return (
+                <label key={s.node} className="flex items-center gap-2 text-xs">
+                  <span className="w-16 font-medium">{s.node}</span>
+                  {takenBy ? (
+                    <span className="text-slate-400">combined with {takenBy}</span>
+                  ) : (
+                    <select value={partner}
+                      onChange={(e) => setPlanSel((p) => ({ ...p, [s.node]: e.target.value }))}
+                      className="flex-1 rounded border border-slate-200 px-1 py-0.5">
+                      <option value="">isolated</option>
+                      {model.supports.filter((o) => o.node !== s.node && !planSel[o.node])
+                        .map((o) => <option key={o.node} value={o.node}>combine with {o.node}</option>)}
+                    </select>
+                  )}
+                </label>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {opt && (
+        <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">
+            Optimization — {opt.converged
+              ? `converged at ${opt.section.b}×${opt.section.h} in ${opt.steps.length} iteration${opt.steps.length === 1 ? '' : 's'}`
+              : 'did NOT converge (iteration cap hit — check spans/loads)'}
+          </h3>
+          <table className="w-auto border-collapse text-xs">
+            <thead>
+              <tr className="text-left uppercase tracking-wide text-slate-500">
+                <th className="py-1 pr-4 font-semibold">#</th>
+                <th className="py-1 pr-4 font-semibold">Section</th>
+                <th className="py-1 pr-4 text-right font-semibold">Failing</th>
+                <th className="py-1 font-semibold">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {opt.steps.map((s, i) => (
+                <tr key={i} className={`border-t border-slate-100 ${s.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                  <td className="py-0.5 pr-4">{i + 1}</td>
+                  <td className="py-0.5 pr-4 font-medium">{s.b} × {s.h}</td>
+                  <td className="py-0.5 pr-4 text-right">{s.fails}</td>
+                  <td className="py-0.5">{s.ok ? '✓ all pass' : '✗ grow'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-1 text-[11px] text-slate-400">
+            Grow h +50 mm while anything fails (b +50 once h ≥ 3b), then shrink h −25 mm while everything still
+            passes. Each step re-runs the full analysis + design pipeline (self-weight is NOT auto-updated — hit
+            “Rebuild D + L” and re-optimize if the section moved a lot).
+          </p>
+        </div>
+      )}
+
       {design && (
         <div className="mt-6 space-y-6">
           <h2 className="text-xl font-extrabold tracking-tight text-[#0056b3]">
@@ -513,6 +843,42 @@ export default function ModelSpace() {
                 </tbody>
               </table>
             </div>
+
+            {design.combined.length > 0 && (
+              <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Combined footing schedule</h3>
+                <table className="w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="text-left uppercase tracking-wide text-slate-500">
+                      <th className="py-1 pr-2 font-semibold">Nodes</th>
+                      <th className="py-1 pr-2 text-right font-semibold">Spacing</th>
+                      <th className="py-1 pr-2 text-right font-semibold">DL / LL (kN)</th>
+                      <th className="py-1 pr-2 font-semibold">Shape</th>
+                      <th className="py-1 pr-2 font-semibold">Plan</th>
+                      <th className="py-1 font-semibold">Dc</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {design.combined.map((c) => (
+                      <tr key={c.nodes.join('-')} className={`border-t border-slate-100 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                        <td className="py-1 pr-2 font-medium">{c.nodes[0]} + {c.nodes[1]}</td>
+                        <td className="py-1 pr-2 text-right">{f2(c.spacing)} m</td>
+                        <td className="py-1 pr-2 text-right">
+                          {f1(c.dl1)}/{f1(c.ll1)} · {f1(c.dl2)}/{f1(c.ll2)}
+                        </td>
+                        <td className="py-1 pr-2">{c.design.shape}</td>
+                        <td className="py-1 pr-2">{f2(c.design.Bx)} × {f2(c.design.By)} m</td>
+                        <td className="py-1">{Math.round(c.design.Dc)} mm</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Column loads split from D-only / L-only frame solves; open the Combined Footing page for the full
+                  worked solution of a pair.
+                </p>
+              </div>
+            )}
           </div>
 
           <p className="text-xs text-slate-400">

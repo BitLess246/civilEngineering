@@ -92,3 +92,41 @@ export function removeElements(model: StructuralModel, ids: Set<string>): Struct
           : !ids.has(l.member)),
   }
 }
+
+/** Remove a node and everything attached to it: members, plates, supports
+ *  and loads (immutably, cascading). */
+export function removeNode(model: StructuralModel, nodeId: string): StructuralModel {
+  const deadMembers = new Set(model.members.filter((m) => m.i === nodeId || m.j === nodeId).map((m) => m.id))
+  const deadPlates = new Set(model.plates.filter((p) => p.corners.includes(nodeId)).map((p) => p.id))
+  const cascaded = removeElements(model, new Set([...deadMembers, ...deadPlates]))
+  return {
+    ...cascaded,
+    nodes: cascaded.nodes.filter((n) => n.id !== nodeId),
+    supports: cascaded.supports.filter((s) => s.node !== nodeId),
+    loads: cascaded.loads.filter((l) => (l.kind === 'node' ? l.node !== nodeId : true)),
+  }
+}
+
+const GAMMA_C = 24 // kN/m³
+
+/**
+ * Build the gravity load set: member SELF-WEIGHT (D, kN/m from the section),
+ * slab SELF-WEIGHT + superimposed dead load (D, kPa), and live load (L, kPa).
+ * Loads of other categories (e.g. seismic E) are preserved from the model.
+ */
+export function buildGravityLoads(model: StructuralModel, sdl: number, ll: number): StructuralModel['loads'] {
+  const sec = model.sections[0]
+  const wSelf = sec ? (sec.b / 1000) * (sec.h / 1000) * GAMMA_C : 0
+  const kept = model.loads.filter((l) => l.cat !== 'D' && l.cat !== 'L')
+  const memberSW: StructuralModel['loads'] = wSelf > 0
+    ? model.members.map((m) => ({ kind: 'member-udl' as const, member: m.id, w: wSelf, cat: 'D' as const }))
+    : []
+  const plateLoads: StructuralModel['loads'] = model.plates.flatMap((p) => {
+    const qSW = (p.thickness / 1000) * GAMMA_C
+    return [
+      { kind: 'area' as const, plate: p.id, q: qSW + sdl, cat: 'D' as const },
+      ...(ll > 0 ? [{ kind: 'area' as const, plate: p.id, q: ll, cat: 'L' as const }] : []),
+    ]
+  })
+  return [...memberSW, ...plateLoads, ...kept]
+}
