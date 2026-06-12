@@ -232,12 +232,9 @@ export default function BeamDesign() {
                 bars={r.bars} d={r.d} dPrime={r.comprLayers.length > 0 ? r.dPrime : undefined}
                 layers={r.layers} comprLayers={r.comprLayers}
                 comprBars={r.comprBars} comprBarDia={f.comprBarDia}
-                naDepth={r.cNA} flexOK={r.flexOK} />
+                naDepth={r.cNA} flexOK={r.flexOK} hogging={hogging} />
             ) : (
               <p className="py-8 text-center text-sm text-slate-400">Enter a valid section (d must be positive).</p>
-            )}
-            {hogging && r && (
-              <p className="mt-1 text-xs text-slate-500">Hogging section — drawn bars apply mirrored: tension steel at the TOP.</p>
             )}
           </div>
 
