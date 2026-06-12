@@ -22,6 +22,9 @@ export interface BeamSchematicProps {
   /** When false the section can't fit the steel: bars are clipped at the NA and
    *  an explicit warning is drawn. */
   flexOK?: boolean
+  /** Hogging (−Mu): the whole arrangement mirrors — tension steel at the TOP,
+   *  compression at the bottom, d measured from the bottom (compression) face. */
+  hogging?: boolean
 }
 
 /** Thin + mark with a dashed extension line out to a dimension line. */
@@ -42,7 +45,7 @@ function CentroidMark({ cx, cy, toX }: { cx: number; cy: number; toX: number }) 
  *  d / d′ dimension lines. */
 export function BeamSchematic({
   b, h, cover, barDia, stirrupDia, bars, d, dPrime, layers, comprLayers,
-  comprBars = 0, comprBarDia, naDepth = 0, flexOK = true,
+  comprBars = 0, comprBarDia, naDepth = 0, flexOK = true, hogging = false,
 }: BeamSchematicProps): JSX.Element {
   const W = 330, H = 322
   const padL = 56, padT = 30, availW = 150, availH = 210
@@ -79,7 +82,6 @@ export function BeamSchematic({
   const n = lay.reduce((a, q) => a + q, 0)
   const x1 = x0 + (cover + stirrupDia + barDia / 2) * s
   const x2 = x0 + bw - (cover + stirrupDia + barDia / 2) * s
-  const yBottom = y0 + hh - (cover + stirrupDia + barDia / 2) * s
   const pitch = (barDia + 25) * s
 
   const rowX = (q: number) => Array.from({ length: q }, (_, i) => (q === 1 ? (x1 + x2) / 2 : x1 + ((x2 - x1) * i) / (q - 1)))
@@ -88,14 +90,29 @@ export function BeamSchematic({
   const brC = Math.max(3, (dbC / 2) * s)
   const cLay = comprLayers && comprLayers.length > 0 ? comprLayers : (comprBars > 0 ? [comprBars] : [])
   const nC = cLay.reduce((a, q) => a + q, 0)
-  const yTop = y0 + (cover + stirrupDia + dbC / 2) * s
   const pitchC = (dbC + 25) * s
 
-  // When the layout diverges, clip the drawing at the neutral axis: tension
-  // layers stay below it, compression layers above it.
-  const yNA = naDepth > 0 ? y0 + naDepth * s : sy0 + r
-  const maxTen = flexOK ? lay.length : Math.max(1, Math.floor((yBottom - yNA - br) / pitch) + 1)
-  const maxCom = flexOK ? cLay.length : Math.max(nC > 0 ? 1 : 0, Math.floor((yNA - brC - yTop) / pitchC) + 1)
+  // Hogging mirrors everything: tension anchors at the TOP and stacks down,
+  // compression anchors at the bottom and stacks up; depths measure from the
+  // compression face (bottom).
+  const sgn = hogging ? -1 : 1
+  const yTen = hogging
+    ? y0 + (cover + stirrupDia + barDia / 2) * s
+    : y0 + hh - (cover + stirrupDia + barDia / 2) * s
+  const yCom = hogging
+    ? y0 + hh - (cover + stirrupDia + dbC / 2) * s
+    : y0 + (cover + stirrupDia + dbC / 2) * s
+  const tenY = (li: number) => yTen + sgn * li * pitch          // toward mid-depth
+  const comY = (li: number) => yCom - sgn * li * pitchC
+
+  // When the layout diverges, clip the drawing at the neutral axis (measured
+  // from the compression face): tension layers stay on their side, compression
+  // layers on theirs.
+  const yNA = naDepth > 0
+    ? (hogging ? y0 + hh - naDepth * s : y0 + naDepth * s)
+    : (hogging ? sy0 + sh - r : sy0 + r)
+  const maxTen = flexOK ? lay.length : Math.max(1, Math.floor((Math.abs(yTen - yNA) - br) / pitch) + 1)
+  const maxCom = flexOK ? cLay.length : Math.max(nC > 0 ? 1 : 0, Math.floor((Math.abs(yNA - yCom) - brC) / pitchC) + 1)
   const layDrawn = lay.slice(0, maxTen)
   const cLayDrawn = cLay.slice(0, maxCom)
 
@@ -103,8 +120,8 @@ export function BeamSchematic({
   const dxInner = x0 + bw + 14
   const dxOuter = x0 + bw + (hasDP ? 38 : 16)
   const cxMid = x0 + bw / 2
-  const cyD = y0 + dPx
-  const cyDP = hasDP ? y0 + (dPrime as number) * s : 0
+  const cyD = hogging ? y0 + hh - dPx : y0 + dPx
+  const cyDP = hasDP ? (hogging ? y0 + hh - (dPrime as number) * s : y0 + (dPrime as number) * s) : 0
 
   const tenLabel = lay.length > 3
     ? `${n} ⌀${barDia} mm — ${lay.length} layers`
@@ -124,17 +141,17 @@ export function BeamSchematic({
       <path d={hook1} fill="none" stroke={BAR} strokeWidth={stW} strokeLinecap="round" opacity={0.8} />
       <path d={hook2} fill="none" stroke={BAR} strokeWidth={stW} strokeLinecap="round" opacity={0.8} />
 
-      {/* compression bars (hollow), layered downward */}
+      {/* compression bars (hollow), stacking away from their face */}
       {cLayDrawn.map((q, li) =>
         rowX(q).map((bx, i) => (
-          <circle key={`c${li}-${i}`} cx={bx} cy={yTop + li * pitchC} r={brC} fill="#fff" stroke={BAR} strokeWidth={1.6} />
+          <circle key={`c${li}-${i}`} cx={bx} cy={comY(li)} r={brC} fill="#fff" stroke={BAR} strokeWidth={1.6} />
         )),
       )}
 
-      {/* tension bars (solid), layered upward */}
+      {/* tension bars (solid), stacking toward mid-depth */}
       {layDrawn.map((q, li) =>
         rowX(q).map((bx, i) => (
-          <circle key={`t${li}-${i}`} cx={bx} cy={yBottom - li * pitch} r={br} fill={BAR} />
+          <circle key={`t${li}-${i}`} cx={bx} cy={tenY(li)} r={br} fill={BAR} />
         )),
       )}
 
@@ -154,21 +171,26 @@ export function BeamSchematic({
       {hasDP && <CentroidMark cx={cxMid} cy={cyDP} toX={dxInner} />}
       <CentroidMark cx={cxMid} cy={cyD} toX={dxOuter} />
 
-      {/* labels: compression on top, tension at the bottom */}
+      {/* labels: each group labelled at its own face */}
       {nC > 0 && (
-        <text x={x0 + bw / 2} y={y0 - 6} fontSize={8.5} fill={BAR} textAnchor="middle">
-          {nC} ⌀{dbC} mm{cLay.length > 1 ? (cLay.length > 3 ? ` — ${cLay.length} layers` : ` (${cLay.join('+')})`) : ''} top
+        <text x={x0 + bw / 2} y={hogging ? y0 + hh + 12 : y0 - 6} fontSize={8.5} fill={BAR} textAnchor="middle">
+          {nC} ⌀{dbC} mm{cLay.length > 1 ? (cLay.length > 3 ? ` — ${cLay.length} layers` : ` (${cLay.join('+')})`) : ''}{hogging ? ' bottom' : ' top'}
         </text>
       )}
-      <text x={x0 + bw / 2} y={y0 + hh + 12} fontSize={8.5} fill={BAR} textAnchor="middle">{tenLabel}</text>
+      <text x={x0 + bw / 2} y={hogging ? y0 - 6 : y0 + hh + 12} fontSize={8.5} fill={BAR} textAnchor="middle">
+        {tenLabel}{hogging ? ' top' : ''}
+      </text>
 
-      {/* dimensions: b below, h left, d (and d′ for DRRB) right */}
+      {/* dimensions: b below, h left, d (and d′ for DRRB) right — measured
+          from the compression face (top for sagging, bottom for hogging) */}
       <DimBelow xA={x0} xB={x0 + bw} featY={y0 + hh + 14} dY={y0 + hh + 30} label={`b = ${Math.round(b)} mm`} />
       <DimSide yA={y0} yB={y0 + hh} featX={x0} dX={x0 - 16} label={`h = ${Math.round(h)} mm`} side="left" />
       {hasDP && (
-        <DimSide yA={y0} yB={cyDP} featX={x0 + bw} dX={dxInner} label={`d' = ${Math.round(dPrime as number)} mm`} side="right" />
+        <DimSide yA={hogging ? cyDP : y0} yB={hogging ? y0 + hh : cyDP} featX={x0 + bw} dX={dxInner}
+          label={`d' = ${Math.round(dPrime as number)} mm`} side="right" />
       )}
-      <DimSide yA={y0} yB={cyD} featX={x0 + bw} dX={dxOuter} label={`d = ${Math.round(d)} mm`} side="right" />
+      <DimSide yA={hogging ? cyD : y0} yB={hogging ? y0 + hh : cyD} featX={x0 + bw} dX={dxOuter}
+        label={`d = ${Math.round(d)} mm`} side="right" />
     </svg>
   )
 }

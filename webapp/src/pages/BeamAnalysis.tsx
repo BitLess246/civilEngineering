@@ -39,7 +39,9 @@ function ItemShell({ title, onRemove, children }: {
         <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{title}</span>
         <button type="button" onClick={onRemove} className="text-xs text-red-500 hover:underline">remove</button>
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{children}</div>
+      {/* fields take only the width they need — no wide blank area on
+          one-field cards like pin/roller */}
+      <div className="flex flex-wrap gap-3 [&>label]:w-36">{children}</div>
     </div>
   )
 }
