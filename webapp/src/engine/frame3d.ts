@@ -1,0 +1,338 @@
+// ─────────────────────────────────────────────────────────────────────────
+// 3D space-frame analysis — Phase 5 of the 3D roadmap. 12-DOF members
+// (axial + St-Venant torsion + biaxial Hermite bending) on the shared
+// fem.ts core. DOF order per node: [ux, uy, uz, θx, θy, θz]; y is UP
+// (matching the model space). Local axes: x′ along the member; y′ as close
+// to global up as possible (global Z for verticals); z′ = x′ × y′.
+// Loads: nodal (F/M all axes) and member gravity loads (global −Y): UDL,
+// trapezoid (vdl) and point — converted to consistent local fixed-end
+// vectors (Gauss + Hermite for the distributed ones).
+// Units: coordinates m; E,G MPa; A mm²; I,J mm⁴; forces kN, kN·m.
+// ─────────────────────────────────────────────────────────────────────────
+import { solveLinear, matVec, hermite, gauss5Vec } from './fem'
+import { NSCP_COMBOS, type Combo, type LoadCategory } from './beamAnalysis'
+
+export interface F3Node { id: string; x: number; y: number; z: number }
+export interface F3Member {
+  id: string; i: string; j: string
+  E: number; G: number      // MPa
+  A: number                 // mm²
+  Iy: number; Iz: number    // mm⁴ (Iz: bending under gravity for horizontal members)
+  J: number                 // mm⁴
+}
+export type F3Fixity = 'pin' | 'fixed'
+export interface F3Support { node: string; fixity: F3Fixity }
+
+export type F3Load =
+  | { kind: 'node'; node: string; Fx?: number; Fy?: number; Fz?: number; Mx?: number; My?: number; Mz?: number; cat: LoadCategory }
+  | { kind: 'member-udl'; member: string; w: number; cat: LoadCategory }                       // kN/m, global −Y
+  | { kind: 'member-vdl'; member: string; x1: number; x2: number; w1: number; w2: number; cat: LoadCategory } // global −Y
+  | { kind: 'member-point'; member: string; a: number; P: number; cat: LoadCategory }          // kN, global −Y at a from i
+
+export interface F3MemberResult {
+  id: string; L: number
+  f: number[]                 // local end forces ON the member (12)
+  xs: number[]
+  N: number[]; Vy: number[]; Vz: number[]; T: number[]; My: number[]; Mz: number[]
+  Nmax: number; Vmax: number; Mmax: number; Tmax: number
+}
+export interface F3Reaction { node: string; fixity: F3Fixity; F: [number, number, number]; M: [number, number, number] }
+export interface F3Result {
+  d: number[]
+  reactions: F3Reaction[]
+  members: F3MemberResult[]
+  Mmax: number; Vmax: number; Nmax: number
+}
+
+/** St-Venant torsional constant for a solid rectangle b×h (mm). */
+export function rectJ(b: number, h: number): number {
+  const a = Math.max(b, h) / 2, c = Math.min(b, h) / 2
+  return a * c ** 3 * (16 / 3 - 3.36 * (c / a) * (1 - c ** 4 / (12 * a ** 4)))
+}
+
+function scaleF3(ld: F3Load, f: number): F3Load {
+  if (ld.kind === 'node') return { ...ld, Fx: (ld.Fx ?? 0) * f, Fy: (ld.Fy ?? 0) * f, Fz: (ld.Fz ?? 0) * f, Mx: (ld.Mx ?? 0) * f, My: (ld.My ?? 0) * f, Mz: (ld.Mz ?? 0) * f }
+  if (ld.kind === 'member-udl') return { ...ld, w: ld.w * f }
+  if (ld.kind === 'member-vdl') return { ...ld, w1: ld.w1 * f, w2: ld.w2 * f }
+  return { ...ld, P: ld.P * f }
+}
+
+export function applyF3Combo(loads: F3Load[], factors: Partial<Record<LoadCategory, number>>): F3Load[] {
+  return loads
+    .map((ld) => scaleF3(ld, factors[ld.cat] ?? 0))
+    .filter((ld) => {
+      if (ld.kind === 'node') return [ld.Fx, ld.Fy, ld.Fz, ld.Mx, ld.My, ld.Mz].some((v) => Math.abs(v ?? 0) > 1e-9)
+      if (ld.kind === 'member-udl') return Math.abs(ld.w) > 1e-9
+      if (ld.kind === 'member-vdl') return Math.abs(ld.w1) + Math.abs(ld.w2) > 1e-9
+      return Math.abs(ld.P) > 1e-9
+    })
+}
+
+/** Local 12×12 stiffness. */
+function kLocal(EA: number, GJ: number, EIy: number, EIz: number, L: number): number[][] {
+  const k = Array.from({ length: 12 }, () => new Array(12).fill(0))
+  const set = (r: number, c: number, v: number) => { k[r][c] = v; k[c][r] = v }
+  set(0, 0, EA / L); set(0, 6, -EA / L); set(6, 6, EA / L)
+  set(3, 3, GJ / L); set(3, 9, -GJ / L); set(9, 9, GJ / L)
+  // bending about z′ (uy, θz)
+  const az = (12 * EIz) / L ** 3, bz = (6 * EIz) / L ** 2, cz = (4 * EIz) / L, dz = (2 * EIz) / L
+  set(1, 1, az); set(1, 5, bz); set(1, 7, -az); set(1, 11, bz)
+  set(5, 5, cz); set(5, 7, -bz); set(5, 11, dz)
+  set(7, 7, az); set(7, 11, -bz)
+  set(11, 11, cz)
+  // bending about y′ (uz, θy) — mirrored signs
+  const ay = (12 * EIy) / L ** 3, by = (6 * EIy) / L ** 2, cy = (4 * EIy) / L, dy = (2 * EIy) / L
+  set(2, 2, ay); set(2, 4, -by); set(2, 8, -ay); set(2, 10, -by)
+  set(4, 4, cy); set(4, 8, by); set(4, 10, dy)
+  set(8, 8, ay); set(8, 10, by)
+  set(10, 10, cy)
+  return k
+}
+
+type V3 = [number, number, number]
+const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+const dot = (a: V3, b: V3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+const norm = (a: V3): V3 => { const l = Math.hypot(...a); return [a[0] / l, a[1] / l, a[2] / l] }
+
+/** Rotation matrix rows = local axes (x′, y′, z′) in global components. */
+function localAxes(dir: V3): [V3, V3, V3] {
+  const xp = norm(dir)
+  const up: V3 = Math.abs(dot(xp, [0, 1, 0])) > 0.999 ? [0, 0, 1] : [0, 1, 0]
+  const proj = dot(up, xp)
+  const yp = norm([up[0] - proj * xp[0], up[1] - proj * xp[1], up[2] - proj * xp[2]])
+  const zp = cross(xp, yp)
+  return [xp, yp, zp]
+}
+
+function tMatrix(R: [V3, V3, V3]): number[][] {
+  const T = Array.from({ length: 12 }, () => new Array(12).fill(0))
+  for (let blk = 0; blk < 4; blk++)
+    for (let r = 0; r < 3; r++)
+      for (let c = 0; c < 3; c++) T[3 * blk + r][3 * blk + c] = R[r][c]
+  return T
+}
+
+const mul = (A: number[][], B: number[][]): number[][] =>
+  A.map((row) => B[0].map((_, j) => row.reduce((s, v, k) => s + v * B[k][j], 0)))
+const transpose = (A: number[][]): number[][] => A[0].map((_, j) => A.map((row) => row[j]))
+
+interface Prep {
+  L: number; R: [V3, V3, V3]
+  kl: number[][]; T: number[][]; kg: number[][]
+  dofs: number[]
+  feq: number[]
+  // local gravity components for diagram sampling
+  qy: (x: number) => number; qz: (x: number) => number; p: (x: number) => number
+  pts: { a: number; Py: number; Pz: number; Pa: number }[]
+}
+
+function prepMember(m: F3Member, nm: Map<string, F3Node>, idx: Map<string, number>, loads: F3Load[]): Prep {
+  const ni = nm.get(m.i)!, nj = nm.get(m.j)!
+  const dir: V3 = sub([nj.x, nj.y, nj.z], [ni.x, ni.y, ni.z])
+  const L = Math.hypot(...dir)
+  const R = localAxes(dir)
+  const EA = (m.E * m.A) / 1000
+  const GJ = m.G * m.J * 1e-9
+  const EIy = m.E * m.Iy * 1e-9
+  const EIz = m.E * m.Iz * 1e-9
+  const kl = kLocal(EA, GJ, EIy, EIz, L)
+  const T = tMatrix(R)
+  const kg = mul(mul(transpose(T), kl), T)
+  const ii = idx.get(m.i)!, jj = idx.get(m.j)!
+  const dofs = [...Array.from({ length: 6 }, (_, k) => 6 * ii + k), ...Array.from({ length: 6 }, (_, k) => 6 * jj + k)]
+
+  // gravity unit vector in local coords: g_local = R · (0, −1, 0)
+  const gl: V3 = [R[0][1] * -1, R[1][1] * -1, R[2][1] * -1]
+
+  const feq = new Array(12).fill(0)
+  const dists: { x1: number; x2: number; w1: number; w2: number }[] = []
+  const pts: Prep['pts'] = []
+
+  for (const ld of loads) {
+    if (ld.kind === 'member-udl' && ld.member === m.id) dists.push({ x1: 0, x2: L, w1: ld.w, w2: ld.w })
+    else if (ld.kind === 'member-vdl' && ld.member === m.id) dists.push({ x1: Math.max(0, ld.x1), x2: Math.min(L, ld.x2), w1: ld.w1, w2: ld.w2 })
+    else if (ld.kind === 'member-point' && ld.member === m.id) {
+      const a = Math.max(0, Math.min(L, ld.a))
+      pts.push({ a, Py: ld.P * gl[1], Pz: ld.P * gl[2], Pa: ld.P * gl[0] })
+      const xi = a / L
+      const N = hermite(xi, L)
+      feq[0] += ld.P * gl[0] * (1 - xi); feq[6] += ld.P * gl[0] * xi
+      feq[1] += ld.P * gl[1] * N[0]; feq[5] += ld.P * gl[1] * N[1]
+      feq[7] += ld.P * gl[1] * N[2]; feq[11] += ld.P * gl[1] * N[3]
+      feq[2] += ld.P * gl[2] * N[0]; feq[4] -= ld.P * gl[2] * N[1]
+      feq[8] += ld.P * gl[2] * N[2]; feq[10] -= ld.P * gl[2] * N[3]
+    }
+  }
+  // distributed gravity: consistent vectors by Gauss over each segment
+  for (const dd of dists) {
+    if (dd.x2 <= dd.x1) continue
+    const wAt = (x: number) => dd.w1 + ((dd.w2 - dd.w1) * (x - dd.x1)) / Math.max(dd.x2 - dd.x1, 1e-12)
+    const fe = gauss5Vec((x) => {
+      const w = wAt(x)
+      const xi = x / L
+      const N = hermite(xi, L)
+      return [
+        w * gl[0] * (1 - xi), w * gl[0] * xi,                       // axial i, j
+        w * gl[1] * N[0], w * gl[1] * N[1], w * gl[1] * N[2], w * gl[1] * N[3],  // y-plane
+        w * gl[2] * N[0], -w * gl[2] * N[1], w * gl[2] * N[2], -w * gl[2] * N[3], // z-plane (θy sign)
+      ]
+    }, dd.x1, dd.x2, 10)
+    feq[0] += fe[0]; feq[6] += fe[1]
+    feq[1] += fe[2]; feq[5] += fe[3]; feq[7] += fe[4]; feq[11] += fe[5]
+    feq[2] += fe[6]; feq[4] += fe[7]; feq[8] += fe[8]; feq[10] += fe[9]
+  }
+
+  const intensity = (x: number, comp: number) => {
+    let s = 0
+    for (const dd of dists) if (dd.x1 <= x && x <= dd.x2) {
+      const w = dd.w1 + ((dd.w2 - dd.w1) * (x - dd.x1)) / Math.max(dd.x2 - dd.x1, 1e-12)
+      s += w * gl[comp]
+    }
+    return s
+  }
+  return {
+    L, R, kl, T, kg, dofs, feq,
+    p: (x) => intensity(x, 0), qy: (x) => intensity(x, 1), qz: (x) => intensity(x, 2),
+    pts,
+  }
+}
+
+export function solveFrame3D(
+  nodes: F3Node[], members: F3Member[], supports: F3Support[], loads: F3Load[],
+): F3Result | null {
+  const nm = new Map(nodes.map((n) => [n.id, n]))
+  const idx = new Map(nodes.map((n, i) => [n.id, i]))
+  const ndof = 6 * nodes.length
+
+  const preps = members.map((m) => prepMember(m, nm, idx, loads))
+  const K: number[][] = Array.from({ length: ndof }, () => new Array(ndof).fill(0))
+  const F = new Array(ndof).fill(0)
+  preps.forEach((pr) => {
+    const fg = matVec(transpose(pr.T), pr.feq)
+    for (let a = 0; a < 12; a++) {
+      F[pr.dofs[a]] += fg[a]
+      for (let b = 0; b < 12; b++) K[pr.dofs[a]][pr.dofs[b]] += pr.kg[a][b]
+    }
+  })
+  for (const ld of loads) {
+    if (ld.kind !== 'node') continue
+    const i = idx.get(ld.node)
+    if (i === undefined) continue
+    const v = [ld.Fx ?? 0, ld.Fy ?? 0, ld.Fz ?? 0, ld.Mx ?? 0, ld.My ?? 0, ld.Mz ?? 0]
+    for (let k = 0; k < 6; k++) F[6 * i + k] += v[k]
+  }
+
+  const constrained = new Set<number>()
+  for (const s of supports) {
+    const i = idx.get(s.node)
+    if (i === undefined) continue
+    for (let k = 0; k < (s.fixity === 'fixed' ? 6 : 3); k++) constrained.add(6 * i + k)
+  }
+  const free: number[] = []
+  for (let d0 = 0; d0 < ndof; d0++) if (!constrained.has(d0)) free.push(d0)
+  const d = new Array(ndof).fill(0)
+  if (free.length > 0) {
+    const Kff = free.map((i) => free.map((j) => K[i][j]))
+    const dF = solveLinear(Kff, free.map((i) => F[i]))
+    if (dF === null) return null
+    free.forEach((dof, k) => (d[dof] = dF[k]))
+  }
+
+  const R = matVec(K, d).map((v, i) => v - F[i])
+  const reactions: F3Reaction[] = supports
+    .filter((s) => idx.has(s.node))
+    .map((s) => {
+      const i = idx.get(s.node)!
+      return {
+        node: s.node, fixity: s.fixity,
+        F: [R[6 * i], R[6 * i + 1], R[6 * i + 2]],
+        M: s.fixity === 'fixed' ? [R[6 * i + 3], R[6 * i + 4], R[6 * i + 5]] : [0, 0, 0],
+      }
+    })
+
+  const results: F3MemberResult[] = members.map((m, mi) => {
+    const pr = preps[mi]
+    const de = pr.dofs.map((dof) => d[dof])
+    const dl = matVec(pr.T, de)
+    const f = matVec(pr.kl, dl).map((v, k) => v - pr.feq[k])
+
+    const NS = 24
+    const xsSet = new Set<number>()
+    for (let k = 0; k <= NS; k++) xsSet.add((pr.L * k) / NS)
+    pr.pts.forEach((pt) => { xsSet.add(Math.max(0, pt.a - 1e-6)); xsSet.add(pt.a); xsSet.add(Math.min(pr.L, pt.a + 1e-6)) })
+    const xs = [...xsSet].sort((a, b) => a - b)
+
+    const NN: number[] = [], Vy: number[] = [], Vz: number[] = [], TT: number[] = [], My: number[] = [], Mz: number[] = []
+    const STEPS = 60
+    const integ = (fn: (x: number) => number, x: number) => {
+      // simple trapezoid over [0, x] — intensities are piecewise linear
+      let s = 0
+      const n = Math.max(2, Math.ceil((x / Math.max(pr.L, 1e-9)) * STEPS))
+      for (let k = 1; k <= n; k++) {
+        const x0 = (x * (k - 1)) / n, x1 = (x * k) / n
+        s += 0.5 * (fn(x0) + fn(x1)) * (x1 - x0)
+      }
+      return s
+    }
+    const integM = (fn: (x: number) => number, x: number) => {
+      let s = 0
+      const n = Math.max(2, Math.ceil((x / Math.max(pr.L, 1e-9)) * STEPS))
+      for (let k = 1; k <= n; k++) {
+        const x0 = (x * (k - 1)) / n, x1 = (x * k) / n
+        const mid = (x0 + x1) / 2
+        s += fn(mid) * (x - mid) * (x1 - x0)
+      }
+      return s
+    }
+    for (const x of xs) {
+      let n = -(f[0] + integ(pr.p, x))
+      let vy = f[1] + integ(pr.qy, x)
+      let vz = f[2] + integ(pr.qz, x)
+      let mz = -f[5] + f[1] * x + integM(pr.qy, x)
+      let my = f[4] - f[2] * x - integM(pr.qz, x)
+      for (const pt of pr.pts) {
+        if (pt.a <= x) {
+          n -= pt.Pa
+          vy += pt.Py; vz += pt.Pz
+          mz += pt.Py * (x - pt.a)
+          my -= pt.Pz * (x - pt.a)
+        }
+      }
+      NN.push(n); Vy.push(vy); Vz.push(vz); TT.push(-f[3]); My.push(my); Mz.push(mz)
+    }
+    return {
+      id: m.id, L: pr.L, f, xs, N: NN, Vy, Vz, T: TT, My, Mz,
+      Nmax: Math.max(...NN.map(Math.abs)),
+      Vmax: Math.max(...Vy.map(Math.abs), ...Vz.map(Math.abs)),
+      Mmax: Math.max(...My.map(Math.abs), ...Mz.map(Math.abs)),
+      Tmax: Math.max(...TT.map(Math.abs)),
+    }
+  })
+
+  return {
+    d, reactions, members: results,
+    Mmax: Math.max(...results.map((r) => r.Mmax), 0),
+    Vmax: Math.max(...results.map((r) => r.Vmax), 0),
+    Nmax: Math.max(...results.map((r) => r.Nmax), 0),
+  }
+}
+
+// ── NSCP combination orchestration ────────────────────────────────────────
+export interface F3ComboRun { combo: Combo; result: F3Result | null; factored: F3Load[]; skipped: boolean }
+export interface F3Analysis { perCombo: F3ComboRun[]; govIdx: number }
+
+export function analyzeFrame3D(
+  nodes: F3Node[], members: F3Member[], supports: F3Support[], loads: F3Load[],
+): F3Analysis | null {
+  const perCombo: F3ComboRun[] = []
+  let govIdx = -1, govM = -1
+  for (const combo of NSCP_COMBOS) {
+    const factored = applyF3Combo(loads, combo.f)
+    if (factored.length === 0) { perCombo.push({ combo, result: null, factored, skipped: true }); continue }
+    const r = solveFrame3D(nodes, members, supports, factored)
+    perCombo.push({ combo, result: r, factored, skipped: false })
+    if (r && r.Mmax > govM) { govM = r.Mmax; govIdx = perCombo.length - 1 }
+  }
+  return govIdx < 0 ? null : { perCombo, govIdx }
+}
