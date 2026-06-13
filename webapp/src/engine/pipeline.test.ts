@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel, buildGravityLoads, removeNode } from './modelBuilder'
-import { designStructure, optimizeStructure, designOK } from './pipeline'
-import type { RectSection } from './model'
+import { designStructure, optimizeStructure, designOK, type LateralCase } from './pipeline'
+import { computeSeismic } from './seismic'
+import type { RectSection, ModelLoad } from './model'
 
 const section: RectSection = { id: 'S1', name: '300×500', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
 const soil = { qAllow: 200, gammaSoil: 18, gammaConc: 24, H: 1.5 }
@@ -100,6 +101,36 @@ describe('combined footing plan', () => {
     expect(c.dl2).toBeGreaterThan(c.ll2)
     expect(c.design.Bx).toBeGreaterThan(c.spacing)  // footing spans both columns
     expect(c.ok).toBe(true)
+  })
+})
+
+describe('directional lateral load cases (STAAD-style envelope)', () => {
+  // four seismic directions, scaled large so lateral governs the columns
+  const dirCases = (): LateralCase[] => {
+    const m = makeModel()
+    const base = computeSeismic(m, { Ca: 0.44, Cv: 0.64, I: 1, R: 8.5, dir: 'x' })!.loads
+    const mag = (l: ModelLoad) => Math.abs((l as { Fx?: number }).Fx ?? 0) * 40
+    const mk = (name: string, axis: 'Fx' | 'Fz', sign: number): LateralCase => ({
+      name, kind: 'E',
+      loads: base.map((l) => ({ kind: 'node', node: (l as { node: string }).node, [axis]: sign * mag(l), cat: 'E' })),
+    })
+    return [mk('E+X', 'Fx', 1), mk('E-X', 'Fx', -1), mk('E+Z', 'Fz', 1), mk('E-Z', 'Fz', -1)]
+  }
+
+  it('expands the two E-combos over four directions (13 runs) and envelopes per member', () => {
+    const r = designStructure(makeModel(), soil, {}, { lateral: dirCases() })!
+    // 7 combos: 2 with E → ×4 = 8; 3 with W (no W cases) → 3; 2 gravity → 2  = 13
+    expect(r.cases).toHaveLength(13)
+    expect(r.cases.some((c) => c.includes('E+X'))).toBe(true)
+    expect(r.cases.some((c) => c.includes('E-Z'))).toBe(true)
+    // a column is governed by a seismic direction, recorded on the row
+    expect(r.columns.some((c) => /E[+-][XZ]/.test(c.gov ?? ''))).toBe(true)
+  })
+
+  it('gravity-only model still runs exactly the 7 NSCP combinations', () => {
+    const r = designStructure(makeModel(), soil)!
+    expect(r.cases).toHaveLength(7)
+    expect(r.beams.every((b) => (b.gov ?? '').length > 0)).toBe(true)
   })
 })
 

@@ -7,9 +7,10 @@
 //   factored reactions → isolated footing) → concrete totals.
 // Every stage reuses the existing engines unchanged.
 // ─────────────────────────────────────────────────────────────────────────
-import type { StructuralModel, RectSection } from './model'
+import type { StructuralModel, RectSection, ModelLoad } from './model'
 import { modelToFrame3D } from './modelBridge'
-import { analyzeFrame3D, solveFrame3D, applyF3Combo, type F3Result, type F3MemberResult } from './frame3d'
+import { solveFrame3D, applyF3Combo, type F3Result, type F3MemberResult, type F3Load } from './frame3d'
+import { nscpCombos } from './beamAnalysis'
 import { designBeam, type BeamDesignResult } from './beamDesign'
 import { designAxialColumn, capacityAtEccentricity, interaction } from './columnDesign'
 import { designSquareFooting, type SquareFootingResult } from './isolatedFooting'
@@ -19,12 +20,20 @@ export interface SoilOptions {
   qAllow: number; gammaSoil: number; gammaConc: number; H: number
 }
 
+/** A directional lateral load case (one of +X/−X/+Z/−Z for E or W): a set of
+ *  category-E or category-W node loads applied as one primary case. */
+export interface LateralCase { name: string; kind: 'E' | 'W'; loads: ModelLoad[] }
+
 /** Analysis options threaded into the frame solve. */
 export interface AnalyzeOptions {
   /** NSCP §203.3.1 live-load factor f₁ (1.0 / 0.5). */
   f1?: number
   /** Run the second-order P-Δ iteration. */
   pDelta?: boolean
+  /** Directional lateral cases (E/W in ±X/±Z). When given, every combination
+   *  with an E (or W) factor is run once per E (or W) case and the design is
+   *  enveloped per member — STAAD-style. */
+  lateral?: LateralCase[]
 }
 
 export interface BeamSectionDesign {
@@ -35,6 +44,7 @@ export interface BeamScheduleRow {
   id: string; role: string; L: number
   sections: BeamSectionDesign[]
   ok: boolean
+  gov?: string   // governing load case (envelope)
 }
 export interface ColumnScheduleRow {
   id: string; L: number
@@ -42,11 +52,13 @@ export interface ColumnScheduleRow {
   bars: number; phiPn: number; util: number
   tieSpacing: number
   ok: boolean
+  gov?: string
 }
 export interface FootingScheduleRow {
   node: string; P: number; Pu: number
   design: SquareFootingResult
   ok: boolean
+  gov?: string
 }
 export interface CombinedScheduleRow {
   nodes: [string, string]
@@ -60,6 +72,7 @@ export type FootingPlan = Record<string, { type: 'isolated' } | { type: 'combine
 
 export interface StructureDesign {
   govName: string
+  cases: string[]   // every load case (combo × direction) run for the envelope
   beams: BeamScheduleRow[]
   columns: ColumnScheduleRow[]
   footings: FootingScheduleRow[]
@@ -94,82 +107,153 @@ function memberSections(mr: F3MemberResult): { label: string; x: number; Mu: num
   return out
 }
 
+/** Design one beam/girder member from a single run's member result. */
+function designBeamRow(mr: F3MemberResult, role: string, sec: RectSection): BeamScheduleRow {
+  const sections: BeamSectionDesign[] = memberSections(mr)
+    .filter((s) => Math.abs(s.Mu) > 1e-6 || s.Vu > 1e-6)
+    .map((s) => ({
+      label: s.label, Mu: s.Mu, Vu: s.Vu, hogging: s.Mu < 0,
+      design: designBeam({
+        b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia,
+        comprBarDia: 16, stirrupDia: sec.tieDia,
+        fc: sec.fc, fy: sec.fy, Mu: Math.abs(s.Mu), Vu: s.Vu,
+      }),
+    }))
+  return { id: mr.id, role, L: mr.L, sections, ok: sections.every((s) => beamOK(s.design)) }
+}
+
+/** Design one column from a single run's member result. */
+function designColumnRow(mr: F3MemberResult, sec: RectSection): ColumnScheduleRow {
+  const Pu = Math.max(0, -Math.min(...mr.N))           // compression (N < 0)
+  const Mu = mr.Mmax
+  const ax = designAxialColumn({
+    shape: 'tied', b: sec.b, h: sec.h, cover: sec.cover,
+    barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, Pu,
+  })
+  let phiPn = ax.phiPnMax
+  const e = Pu > 1e-9 ? Mu / Pu : 0
+  if (e > 1e-4) {
+    const cap = capacityAtEccentricity(
+      { b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, numBars: ax.bars },
+      e,
+    )
+    const inter = interaction({ b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, numBars: ax.bars })
+    phiPn = Math.min(cap.phi * cap.Pn, 0.65 * inter.PnMax)
+  }
+  const util = phiPn > 1e-9 ? Pu / phiPn : Infinity
+  return {
+    id: mr.id, L: mr.L, Pu, Mu, e, bars: ax.bars, phiPn, util,
+    tieSpacing: ax.tieSpacing, ok: util <= 1 + 1e-9 && ax.rhoOK,
+  }
+}
+
+const beamSeverity = (r: BeamScheduleRow) =>
+  (r.ok ? 0 : 1e9) + Math.max(0, ...r.sections.map((s) => Math.abs(s.Mu)))
+
+interface FrameRun { name: string; result: F3Result }
+
+/** Build the load cases to envelope: every NSCP combination, expanded once per
+ *  directional lateral case (E/W) when the combination carries that factor. */
+function buildRuns(model: StructuralModel, opts: AnalyzeOptions) {
+  // gravity (everything except lateral E/W) is bridged once — includes the
+  // slab tributary line loads and member self-weight; lateral cases are pure
+  // node loads applied on top per direction.
+  const gravityModel = { ...model, loads: model.loads.filter((l) => l.cat !== 'E' && l.cat !== 'W') }
+  const br = modelToFrame3D(gravityModel)
+
+  let lateral = opts.lateral ?? []
+  if (lateral.length === 0) {
+    const eL = model.loads.filter((l) => l.kind === 'node' && l.cat === 'E')
+    const wL = model.loads.filter((l) => l.kind === 'node' && l.cat === 'W')
+    if (eL.length) lateral = [...lateral, { name: 'E', kind: 'E', loads: eL }]
+    if (wL.length) lateral = [...lateral, { name: 'W', kind: 'W', loads: wL }]
+  }
+  const toF3 = (l: ModelLoad): F3Load =>
+    ({ kind: 'node', node: (l as { node: string }).node, Fx: (l as { Fx?: number }).Fx, Fy: (l as { Fy?: number }).Fy, Fz: (l as { Fz?: number }).Fz, cat: l.cat })
+  const eCases = lateral.filter((c) => c.kind === 'E')
+  const wCases = lateral.filter((c) => c.kind === 'W')
+
+  const runs: FrameRun[] = []
+  for (const combo of nscpCombos(opts.f1 ?? 1.0)) {
+    const hasE = (combo.f.E ?? 0) !== 0
+    const hasW = (combo.f.W ?? 0) !== 0
+    const variants: { tag: string; lat: F3Load[] }[] =
+      hasE && eCases.length ? eCases.map((c) => ({ tag: c.name, lat: c.loads.map(toF3) }))
+        : hasW && wCases.length ? wCases.map((c) => ({ tag: c.name, lat: c.loads.map(toF3) }))
+          : [{ tag: '', lat: [] }]
+    for (const v of variants) {
+      const factored = applyF3Combo([...br.loads, ...v.lat], combo.f)
+      if (!factored.length) continue
+      const result = solveFrame3D(br.nodes, br.members, br.supports, factored, opts)
+      if (result) runs.push({ name: combo.name + (v.tag ? ` · ${v.tag}` : ''), result })
+    }
+  }
+  return { br, runs }
+}
+
 export function designStructure(
   model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}, opts: AnalyzeOptions = {},
 ): StructureDesign | null {
   const sec: RectSection | undefined = model.sections[0]
   if (!sec) return null
 
-  const br = modelToFrame3D(model)
-  const analysis = analyzeFrame3D(br.nodes, br.members, br.supports, br.loads, opts)
-  if (!analysis) return null
-  const gov = analysis.perCombo[analysis.govIdx]
-  const govRes = gov.result
-  if (!govRes) return null
+  const { br, runs } = buildRuns(model, opts)
+  if (runs.length === 0) return null
+  // headline governing run = largest overall bending response
+  let govIdx = 0
+  runs.forEach((r, i) => { if (r.result.Mmax > runs[govIdx].result.Mmax) govIdx = i })
 
-  // Service (unfactored gravity) solve for the footing bearing check, plus
-  // D-only / L-only solves so combined footings get their dl/ll split.
+  // Service (unfactored gravity) + D-only / L-only solves for the footing
+  // bearing check and the combined-footing dl/ll split (direction-independent).
   const serviceLoads = applyF3Combo(br.loads, { D: 1, L: 1, Lr: 1, S: 1, R: 1 })
   const serviceRes: F3Result | null = serviceLoads.length
-    ? solveFrame3D(br.nodes, br.members, br.supports, serviceLoads, opts)
-    : null
+    ? solveFrame3D(br.nodes, br.members, br.supports, serviceLoads, opts) : null
   const dLoads = applyF3Combo(br.loads, { D: 1 })
   const lLoads = applyF3Combo(br.loads, { L: 1 })
   const dRes = dLoads.length ? solveFrame3D(br.nodes, br.members, br.supports, dLoads, opts) : null
   const lRes = lLoads.length ? solveFrame3D(br.nodes, br.members, br.supports, lLoads, opts) : null
+  const serviceAt = (node: string) => {
+    const i = serviceRes?.reactions.findIndex((r) => r.node === node) ?? -1
+    return i >= 0 ? Math.max(0, serviceRes!.reactions[i].F[1]) : 0
+  }
+  const reactAt = (res: F3Result | null, node: string) => {
+    const i = res?.reactions.findIndex((r) => r.node === node) ?? -1
+    return i >= 0 ? Math.max(0, res!.reactions[i].F[1]) : 0
+  }
   const dAt = new Map<string, number>()
   const lAt = new Map<string, number>()
-  govRes.reactions.forEach((r, i) => {
-    dAt.set(r.node, Math.max(0, dRes?.reactions[i]?.F[1] ?? 0))
-    lAt.set(r.node, Math.max(0, lRes?.reactions[i]?.F[1] ?? 0))
-  })
-
-  const roleOf = new Map(model.members.map((m) => [m.id, m.role]))
-
-  // ── Beams & girders ──
-  const beams: BeamScheduleRow[] = []
-  for (const mr of govRes.members) {
-    const role = roleOf.get(mr.id)
-    if (role !== 'beam' && role !== 'girder') continue
-    const sections: BeamSectionDesign[] = memberSections(mr)
-      .filter((s) => Math.abs(s.Mu) > 1e-6 || s.Vu > 1e-6)
-      .map((s) => ({
-        label: s.label, Mu: s.Mu, Vu: s.Vu, hogging: s.Mu < 0,
-        design: designBeam({
-          b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia,
-          comprBarDia: 16, stirrupDia: sec.tieDia,
-          fc: sec.fc, fy: sec.fy, Mu: Math.abs(s.Mu), Vu: s.Vu,
-        }),
-      }))
-    beams.push({ id: mr.id, role, L: mr.L, sections, ok: sections.every((s) => beamOK(s.design)) })
+  for (const r of runs[govIdx].result.reactions) {
+    dAt.set(r.node, reactAt(dRes, r.node))
+    lAt.set(r.node, reactAt(lRes, r.node))
   }
 
-  // ── Columns ──
+  const roleOf = new Map(model.members.map((m) => [m.id, m.role]))
+  const memberOf = (run: FrameRun, id: string) => run.result.members.find((m) => m.id === id)
+
+  // ── Beams & girders — per-member worst case across all runs ──
+  const beams: BeamScheduleRow[] = []
   const columns: ColumnScheduleRow[] = []
-  for (const mr of govRes.members) {
-    if (roleOf.get(mr.id) !== 'column') continue
-    const Pu = Math.max(0, -Math.min(...mr.N))           // compression (N < 0)
-    const Mu = mr.Mmax
-    const ax = designAxialColumn({
-      shape: 'tied', b: sec.b, h: sec.h, cover: sec.cover,
-      barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, Pu,
-    })
-    let phiPn = ax.phiPnMax
-    const e = Pu > 1e-9 ? Mu / Pu : 0
-    if (e > 1e-4) {
-      const cap = capacityAtEccentricity(
-        { b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, numBars: ax.bars },
-        e,
-      )
-      // axial cap still applies near pure compression
-      const inter = interaction({ b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, numBars: ax.bars })
-      phiPn = Math.min(cap.phi * cap.Pn, 0.65 * inter.PnMax)
+  for (const m of model.members) {
+    const role = roleOf.get(m.id)
+    if (role === 'beam' || role === 'girder') {
+      let best: BeamScheduleRow | null = null, bestSev = -1, gov = ''
+      for (const run of runs) {
+        const mr = memberOf(run, m.id); if (!mr) continue
+        const row = designBeamRow(mr, role, sec)
+        if (row.sections.length === 0) continue
+        const sev = beamSeverity(row)
+        if (sev > bestSev) { bestSev = sev; best = row; gov = run.name }
+      }
+      if (best) beams.push({ ...best, gov })
+    } else if (role === 'column') {
+      let best: ColumnScheduleRow | null = null, bestUtil = -1, gov = ''
+      for (const run of runs) {
+        const mr = memberOf(run, m.id); if (!mr) continue
+        const row = designColumnRow(mr, sec)
+        if (row.util > bestUtil) { bestUtil = row.util; best = row; gov = run.name }
+      }
+      if (best) columns.push({ ...best, gov })
     }
-    const util = phiPn > 1e-9 ? Pu / phiPn : Infinity
-    columns.push({
-      id: mr.id, L: mr.L, Pu, Mu, e, bars: ax.bars, phiPn, util,
-      tieSpacing: ax.tieSpacing, ok: util <= 1 + 1e-9 && ax.rhoOK,
-    })
   }
 
   // ── Footings (base supports) — isolated by default, combined per plan ──
@@ -204,20 +288,24 @@ export function designStructure(
   }
 
   const footings: FootingScheduleRow[] = []
-  for (let i = 0; i < govRes.reactions.length; i++) {
-    const ru = govRes.reactions[i]
+  for (const ru of runs[govIdx].result.reactions) {
     if (paired.has(ru.node)) continue
-    const rs = serviceRes?.reactions[i]
-    const Pu = Math.max(0, ru.F[1])
-    const P = Math.max(0, rs?.F[1] ?? Pu / 1.4)
+    // envelope the factored axial reaction across all runs (a lateral combo may
+    // load a base more than gravity); service load from the gravity solve.
+    let Pu = 0, gov = ''
+    for (const run of runs) {
+      const p = reactAt(run.result, ru.node)
+      if (p > Pu) { Pu = p; gov = run.name }
+    }
     if (Pu < 1e-6) continue
+    const P = Math.max(serviceAt(ru.node), Pu / 1.4)
     const d = designSquareFooting({
       serviceLoad: P, ultimateLoad: Pu, columnWidth: Math.min(sec.b, sec.h),
       fc: sec.fc, fy: sec.fy, qAllow: soil.qAllow,
       gammaSoil: soil.gammaSoil, gammaConc: soil.gammaConc, H: soil.H,
       barDia: sec.barDia, cover: 75,
     })
-    footings.push({ node: ru.node, P, Pu, design: d, ok: d.qNet > 0 && d.punchOK && d.beamOK })
+    footings.push({ node: ru.node, P, Pu, design: d, ok: d.qNet > 0 && d.punchOK && d.beamOK, gov })
   }
 
   // ── Concrete totals ──
@@ -240,7 +328,8 @@ export function designStructure(
   }
 
   return {
-    govName: gov.combo.name,
+    govName: runs[govIdx].name,
+    cases: runs.map((r) => r.name),
     beams, columns, footings, combined,
     totals: { concreteMembers, concreteSlabs, concrete: concreteMembers + concreteSlabs },
     orphanEdges: br.orphanEdges.length,
