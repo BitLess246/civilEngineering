@@ -93,9 +93,13 @@ export default function ModelSpace() {
   // Seismic (NSCP 208 static lateral force)
   const [Ca, setCa] = useState(0.44); const [Cv, setCv] = useState(0.64)
   const [Rw, setRw] = useState(8.5); const [Ie, setIe] = useState(1.0)
+  const [Zf, setZf] = useState(0.4); const [Nv, setNv] = useState(1.0)   // Zone factor + near-source (208-11)
   const [eDir, setEDir] = useState<'x' | 'z'>('x')
   const [seis, setSeis] = useState<SeismicResult | null>(null)
   const [drift, setDrift] = useState<DriftRow[] | null>(null)
+  // Analysis options: f₁ live-load factor (§203.3.1) and P-Δ second order
+  const [assembly, setAssembly] = useState(false)
+  const [pDelta, setPDelta] = useState(false)
 
   const [model, setModel] = useState<StructuralModel | null>(() => {
     try {
@@ -127,22 +131,26 @@ export default function ModelSpace() {
     } catch { /* quota — ignore */ }
   }
 
+  // §203.3.1: f₁ = 1.0 for assembly/garage or live load > 4.8 kPa, else 0.5.
+  const fLive = assembly || qL > 4.8 ? 1.0 : 0.5
+  const anaOpts = { f1: fLive, pDelta }
+
   const analyze = () => {
     if (!model) return
     const br = modelToFrame3D(model)
     setOrphans(br.orphanEdges.length)
-    setAnalysis(analyzeFrame3D(br.nodes, br.members, br.supports, br.loads))
+    setAnalysis(analyzeFrame3D(br.nodes, br.members, br.supports, br.loads, anaOpts))
     // Storey drift from the E-only elastic solution (NSCP 208.5.10).
     if (seis) {
       const eOnly = applyF3Combo(br.loads, { E: 1 })
-      const sol = eOnly.length ? solveFrame3D(br.nodes, br.members, br.supports, eOnly) : null
+      const sol = eOnly.length ? solveFrame3D(br.nodes, br.members, br.supports, eOnly, { pDelta }) : null
       setDrift(sol ? driftCheck(model, br.nodes, sol.d, Rw, seis.T, eDir) : null)
     } else setDrift(null)
   }
 
   const generateE = () => {
     if (!model) return
-    const r = computeSeismic(model, { Ca, Cv, I: Ie, R: Rw, dir: eDir })
+    const r = computeSeismic(model, { Ca, Cv, I: Ie, R: Rw, Z: Zf, Nv, dir: eDir })
     if (!r) return
     setSeis(r)
     // replace any previous E node loads with the new set
@@ -161,12 +169,12 @@ export default function ModelSpace() {
   const runPipeline = () => {
     if (!model) return
     setOpt(null)
-    setDesign(designStructure(model, soil, footingPlan()))
+    setDesign(designStructure(model, soil, footingPlan(), anaOpts))
   }
 
   const optimize = () => {
     if (!model) return
-    const r = optimizeStructure(model, soil, footingPlan())
+    const r = optimizeStructure(model, soil, footingPlan(), 24, anaOpts)
     if (!r) return
     // adopt the optimised section in the model + the grid inputs
     const m2 = { ...model, sections: [r.section] }
@@ -339,6 +347,8 @@ export default function ModelSpace() {
             <Num label="Cv" value={Cv} onChange={setCv} />
             <Num label="R" value={Rw} onChange={setRw} />
             <Num label="I" value={Ie} onChange={setIe} />
+            <Num label="Z (zone)" value={Zf} onChange={setZf} />
+            <Num label="Nv (near-source)" value={Nv} onChange={setNv} />
             <label className="flex flex-col text-sm">
               <span className="mb-1 font-medium text-slate-600">Direction</span>
               <select value={eDir} onChange={(e) => setEDir(e.target.value as 'x' | 'z')}
@@ -354,11 +364,30 @@ export default function ModelSpace() {
               {seis && (
                 <p className="mt-1 text-xs text-slate-500">
                   T = {seis.T.toFixed(3)} s · W = {f1(seis.W)} kN · V = {f1(seis.V)} kN
-                  {seis.V === seis.Vmax ? ' (2.5CaIW/R cap governs)' : seis.V === seis.Vmin ? ' (0.11CaIW floor governs)' : ''}
+                  {seis.V === seis.Vmax ? ' (2.5CaIW/R cap governs)'
+                    : seis.Vsrc > 0 && seis.V === seis.Vsrc ? ' (Zone-4 0.8ZNvIW/R floor governs)'
+                    : seis.V === seis.Vmin ? ' (0.11CaIW floor governs)' : ''}
                   {seis.Ft > 0 ? ` · Ft = ${f1(seis.Ft)} kN` : ''} — applied as cat-E node loads ({eDir.toUpperCase()}).
+                  {Zf >= 0.4 ? ` Zone-4 floor = ${f1(seis.Vsrc)} kN.` : ' (Zone-4 floor off: Z < 0.4)'}
                 </p>
               )}
             </div>
+          </Card>
+
+          <Card title="Analysis options">
+            <label className="col-span-full flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={assembly} onChange={(e) => setAssembly(e.target.checked)} />
+              <span>Public assembly / garage (f₁ = 1.0)</span>
+            </label>
+            <label className="col-span-full flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={pDelta} onChange={(e) => setPDelta(e.target.checked)} />
+              <span>P-Δ second-order analysis</span>
+            </label>
+            <p className="col-span-full text-[11px] text-slate-500">
+              §203.3.1 live-load factor f₁ = <b>{fLive.toFixed(1)}</b>
+              {fLive === 1 ? (assembly ? ' (assembly/garage)' : ' (Lo > 4.8 kPa)') : ' (ordinary occupancy)'}.
+              {pDelta ? ' Frame solved with the geometric-stiffness P-Δ iteration.' : ' First-order (linear) frame solve.'}
+            </p>
           </Card>
 
           <div className="no-print flex flex-wrap gap-2">

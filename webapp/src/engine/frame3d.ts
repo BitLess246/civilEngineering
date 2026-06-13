@@ -10,7 +10,10 @@
 // Units: coordinates m; E,G MPa; A mm²; I,J mm⁴; forces kN, kN·m.
 // ─────────────────────────────────────────────────────────────────────────
 import { solveLinear, matVec, hermite, gauss5Vec } from './fem'
-import { NSCP_COMBOS, type Combo, type LoadCategory } from './beamAnalysis'
+import { nscpCombos, type Combo, type LoadCategory } from './beamAnalysis'
+
+/** Second-order (P-Δ) options for the frame solve. */
+export interface PDeltaOpts { pDelta?: boolean; maxIter?: number; tol?: number }
 
 export interface F3Node { id: string; x: number; y: number; z: number }
 export interface F3Member {
@@ -86,6 +89,27 @@ function kLocal(EA: number, GJ: number, EIy: number, EIz: number, L: number): nu
   set(4, 4, cy); set(4, 8, by); set(4, 10, dy)
   set(8, 8, ay); set(8, 10, by)
   set(10, 10, cy)
+  return k
+}
+
+/** Local 12×12 geometric (initial-stress) stiffness for member axial force N
+ *  (tension positive): adds stiffness in tension, removes it in compression —
+ *  the basis of the P-Δ second-order iteration. Axial and torsion DOFs carry
+ *  none; the two bending planes mirror kLocal's sign convention. */
+function kgLocal(N: number, L: number): number[][] {
+  const k = Array.from({ length: 12 }, () => new Array(12).fill(0))
+  const set = (r: number, c: number, v: number) => { k[r][c] = v; k[c][r] = v }
+  const a = (6 * N) / (5 * L), b = N / 10, c = (2 * N * L) / 15, e = -(N * L) / 30
+  // x′-y′ plane (uy, θz at 1,5,7,11)
+  set(1, 1, a); set(1, 5, b); set(1, 7, -a); set(1, 11, b)
+  set(5, 5, c); set(5, 7, -b); set(5, 11, e)
+  set(7, 7, a); set(7, 11, -b)
+  set(11, 11, c)
+  // x′-z′ plane (uz, θy at 2,4,8,10) — mirrored coupling signs
+  set(2, 2, a); set(2, 4, -b); set(2, 8, -a); set(2, 10, -b)
+  set(4, 4, c); set(4, 8, b); set(4, 10, e)
+  set(8, 8, a); set(8, 10, b)
+  set(10, 10, c)
   return k
 }
 
@@ -200,6 +224,7 @@ function prepMember(m: F3Member, nm: Map<string, F3Node>, idx: Map<string, numbe
 
 export function solveFrame3D(
   nodes: F3Node[], members: F3Member[], supports: F3Support[], loads: F3Load[],
+  opts?: PDeltaOpts,
 ): F3Result | null {
   const nm = new Map(nodes.map((n) => [n.id, n]))
   const idx = new Map(nodes.map((n, i) => [n.id, i]))
@@ -232,11 +257,39 @@ export function solveFrame3D(
   const free: number[] = []
   for (let d0 = 0; d0 < ndof; d0++) if (!constrained.has(d0)) free.push(d0)
   const d = new Array(ndof).fill(0)
-  if (free.length > 0) {
-    const Kff = free.map((i) => free.map((j) => K[i][j]))
-    const dF = solveLinear(Kff, free.map((i) => F[i]))
-    if (dF === null) return null
-    free.forEach((dof, k) => (d[dof] = dF[k]))
+  const solveFree = (Mat: number[][]): number[] | null => {
+    if (free.length === 0) return []
+    const Mff = free.map((i) => free.map((j) => Mat[i][j]))
+    return solveLinear(Mff, free.map((i) => F[i]))
+  }
+  // First-order (linear elastic) solve.
+  const d0 = solveFree(K)
+  if (d0 === null) return null
+  free.forEach((dof, k) => (d[dof] = d0[k]))
+
+  // Second-order: iterate K + Kg(N) where N is each member's current axial
+  // force (tension +), re-solving until the displacements settle. A singular
+  // tangent (det → 0) signals elastic instability — keep the last solution.
+  if (opts?.pDelta && free.length > 0) {
+    const maxIter = opts.maxIter ?? 20
+    const tol = opts.tol ?? 1e-5
+    for (let it = 0; it < maxIter; it++) {
+      const Kt = K.map((row) => row.slice())
+      for (const pr of preps) {
+        const de = pr.dofs.map((dof) => d[dof])
+        const dl = matVec(pr.T, de)
+        const f = matVec(pr.kl, dl).map((v, k) => v - pr.feq[k])
+        const N = (f[6] - f[0]) / 2                       // representative axial, tension +
+        const kgg = mul(mul(transpose(pr.T), kgLocal(N, pr.L)), pr.T)
+        for (let a = 0; a < 12; a++) for (let b = 0; b < 12; b++) Kt[pr.dofs[a]][pr.dofs[b]] += kgg[a][b]
+      }
+      const dn = solveFree(Kt)
+      if (dn === null) break                              // instability — retain last d
+      let num = 0, den = 0
+      free.forEach((dof, k) => { num += (dn[k] - d[dof]) ** 2; den += dn[k] ** 2 })
+      free.forEach((dof, k) => (d[dof] = dn[k]))
+      if (den === 0 || Math.sqrt(num / den) < tol) break
+    }
   }
 
   const R = matVec(K, d).map((v, i) => v - F[i])
@@ -322,15 +375,21 @@ export function solveFrame3D(
 export interface F3ComboRun { combo: Combo; result: F3Result | null; factored: F3Load[]; skipped: boolean }
 export interface F3Analysis { perCombo: F3ComboRun[]; govIdx: number }
 
+export interface F3AnalyzeOpts extends PDeltaOpts {
+  /** NSCP §203.3.1 live-load factor f₁ (1.0 assembly/garage/Lo>4.8 kPa, else 0.5). */
+  f1?: number
+}
+
 export function analyzeFrame3D(
   nodes: F3Node[], members: F3Member[], supports: F3Support[], loads: F3Load[],
+  opts?: F3AnalyzeOpts,
 ): F3Analysis | null {
   const perCombo: F3ComboRun[] = []
   let govIdx = -1, govM = -1
-  for (const combo of NSCP_COMBOS) {
+  for (const combo of nscpCombos(opts?.f1 ?? 1.0)) {
     const factored = applyF3Combo(loads, combo.f)
     if (factored.length === 0) { perCombo.push({ combo, result: null, factored, skipped: true }); continue }
-    const r = solveFrame3D(nodes, members, supports, factored)
+    const r = solveFrame3D(nodes, members, supports, factored, opts)
     perCombo.push({ combo, result: r, factored, skipped: false })
     if (r && r.Mmax > govM) { govM = r.Mmax; govIdx = perCombo.length - 1 }
   }

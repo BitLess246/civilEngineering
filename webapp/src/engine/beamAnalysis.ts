@@ -26,15 +26,28 @@ export interface FemResult {
 }
 
 export interface Combo { name: string; f: Partial<Record<LoadCategory, number>> }
-export const NSCP_COMBOS: Combo[] = [
-  { name: '1.4D', f: { D: 1.4 } },
-  { name: '1.2D + 1.6L + 0.5(Lr|S|R)', f: { D: 1.2, L: 1.6, Lr: 0.5, S: 0.5, R: 0.5 } },
-  { name: '1.2D + 1.6(Lr|S|R) + (L|0.5W)', f: { D: 1.2, Lr: 1.6, S: 1.6, R: 1.6, L: 1.0, W: 0.5 } },
-  { name: '1.2D + 1.0W + L + 0.5(Lr|S|R)', f: { D: 1.2, W: 1.0, L: 1.0, Lr: 0.5, S: 0.5, R: 0.5 } },
-  { name: '0.9D + 1.0W', f: { D: 0.9, W: 1.0 } },
-  { name: '1.2D + 1.0E + L + 0.2S', f: { D: 1.2, E: 1.0, L: 1.0, S: 0.2 } },
-  { name: '0.9D + 1.0E', f: { D: 0.9, E: 1.0 } },
-]
+
+/**
+ * NSCP 2015 §203.3.1 strength-design (LRFD) combinations, eqs (203-1)…(203-7).
+ * The live-load factor f₁ (eqs 203-3, 203-4, 203-5) is **1.0** for floors of
+ * public assembly, live loads > 4.8 kPa, and garages; **0.5** otherwise.
+ * (S is carried for ASCE-7 parity but is zero in the Philippines — no snow.)
+ */
+export function nscpCombos(f1 = 1.0): Combo[] {
+  const lf = f1 === 1 ? '1.0L' : `${f1}L`
+  return [
+    { name: '1.4D', f: { D: 1.4 } },                                                          // 203-1
+    { name: '1.2D + 1.6L + 0.5(Lr|S|R)', f: { D: 1.2, L: 1.6, Lr: 0.5, S: 0.5, R: 0.5 } },     // 203-2
+    { name: `1.2D + 1.6(Lr|S|R) + (${lf}|0.5W)`, f: { D: 1.2, Lr: 1.6, S: 1.6, R: 1.6, L: f1, W: 0.5 } }, // 203-3
+    { name: `1.2D + 1.0W + ${lf} + 0.5(Lr|S|R)`, f: { D: 1.2, W: 1.0, L: f1, Lr: 0.5, S: 0.5, R: 0.5 } }, // 203-4
+    { name: '0.9D + 1.0W', f: { D: 0.9, W: 1.0 } },                                            // 203-6
+    { name: `1.2D + 1.0E + ${lf} + 0.2S`, f: { D: 1.2, E: 1.0, L: f1, S: 0.2 } },              // 203-5
+    { name: '0.9D + 1.0E', f: { D: 0.9, E: 1.0 } },                                            // 203-7
+  ]
+}
+
+/** Default combination set (f₁ = 1.0 — conservative for ordinary occupancies). */
+export const NSCP_COMBOS: Combo[] = nscpCombos(1.0)
 
 import { solveLinear } from './fem'
 
