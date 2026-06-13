@@ -8,7 +8,7 @@ import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole
 import { distributePanel } from '../engine/tributary'
 import { modelToFrame3D } from '../engine/modelBridge'
 import { analyzeFrame3D, type F3Analysis } from '../engine/frame3d'
-import { designStructure, optimizeStructure, type StructureDesign, type FootingPlan, type OptimizeResult } from '../engine/pipeline'
+import { designStructure, optimizeStructure, type StructureDesign, type FootingPlan, type OptimizeResult, type LateralCase } from '../engine/pipeline'
 import { computeSeismic, driftCheck, type SeismicResult, type DriftRow } from '../engine/seismic'
 import { computeWind, type WindResult } from '../engine/wind'
 import { solveFrame3D, applyF3Combo } from '../engine/frame3d'
@@ -162,6 +162,24 @@ function Loads3D({ model, nodePos }: { model: StructuralModel; nodePos: Map<stri
   return <group>{glyphs}</group>
 }
 
+const LAT_DIRS = ['+X', '-X', '+Z', '-Z']
+/** Multi-select of lateral directions to envelope (+X/−X/+Z/−Z). */
+function DirPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const toggle = (d: string) => onChange(value.includes(d) ? value.filter((x) => x !== d) : [...value, d])
+  return (
+    <div className="col-span-full flex flex-col text-sm">
+      <span className="mb-1 font-medium text-slate-600">Directions to envelope</span>
+      <div className="flex gap-1.5">
+        {LAT_DIRS.map((d) => (
+          <label key={d} className={`inline-flex cursor-pointer items-center gap-1 rounded border px-2 py-0.5 text-xs ${value.includes(d) ? 'border-[#0056b3] bg-blue-50 text-[#0056b3]' : 'border-slate-200 text-slate-500'}`}>
+            <input type="checkbox" className="sr-only" checked={value.includes(d)} onChange={() => toggle(d)} />{d}
+          </label>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────
 export default function ModelSpace() {
   const [baysX, setBaysX] = useState('6, 6')
@@ -175,13 +193,16 @@ export default function ModelSpace() {
   const [Ca, setCa] = useState(0.44); const [Cv, setCv] = useState(0.64)
   const [Rw, setRw] = useState(8.5); const [Ie, setIe] = useState(1.0)
   const [Zf, setZf] = useState(0.4); const [Nv, setNv] = useState(1.0)   // Zone factor + near-source (208-11)
-  const [eDir, setEDir] = useState<'x' | 'z'>('x')
+  const [eDirs, setEDirs] = useState<string[]>(['+X', '-X', '+Z', '-Z'])  // directional E cases to envelope
   const [seis, setSeis] = useState<SeismicResult | null>(null)
   const [drift, setDrift] = useState<DriftRow[] | null>(null)
   // Wind (NSCP 207B directional procedure, MWFRS)
   const [Vw, setVw] = useState(50); const [expo, setExpo] = useState<'B' | 'C' | 'D'>('C')
-  const [Kzt, setKzt] = useState(1.0); const [wDir, setWDir] = useState<'x' | 'z'>('x')
+  const [Kzt, setKzt] = useState(1.0)
+  const [wDirs, setWDirs] = useState<string[]>(['+X', '-X', '+Z', '-Z'])  // directional W cases
   const [wind, setWind] = useState<WindResult | null>(null)
+  const [eCases, setECases] = useState<LateralCase[]>([])
+  const [wCases, setWCases] = useState<LateralCase[]>([])
   // Analysis options: f₁ live-load factor (§203.3.1) and P-Δ second order
   const [assembly, setAssembly] = useState(false)
   const [pDelta, setPDelta] = useState(false)
@@ -219,37 +240,65 @@ export default function ModelSpace() {
 
   // §203.3.1: f₁ = 1.0 for assembly/garage or live load > 4.8 kPa, else 0.5.
   const fLive = assembly || qL > 4.8 ? 1.0 : 0.5
-  const anaOpts = { f1: fLive, pDelta }
+  const lateral = [...eCases, ...wCases]
+  const anaOpts = { f1: fLive, pDelta, lateral }
 
   const analyze = () => {
     if (!model) return
     const br = modelToFrame3D(model)
     setOrphans(br.orphanEdges.length)
     setAnalysis(analyzeFrame3D(br.nodes, br.members, br.supports, br.loads, anaOpts))
-    // Storey drift from the E-only elastic solution (NSCP 208.5.10).
+    // Storey drift from the E-only elastic solution (NSCP 208.5.10), along the
+    // primary committed direction.
     if (seis) {
       const eOnly = applyF3Combo(br.loads, { E: 1 })
       const sol = eOnly.length ? solveFrame3D(br.nodes, br.members, br.supports, eOnly, { pDelta }) : null
-      setDrift(sol ? driftCheck(model, br.nodes, sol.d, Rw, seis.T, eDir) : null)
+      const driftAxis = (eDirs[0] ?? '+X').includes('X') ? 'x' : 'z'
+      setDrift(sol ? driftCheck(model, br.nodes, sol.d, Rw, seis.T, driftAxis) : null)
     } else setDrift(null)
+  }
+
+  // Re-sign / re-axis a base node-load set into a directional case.
+  const dirCase = (base: ModelLoad[], kind: 'E' | 'W', d: string): LateralCase => {
+    const axis = d.includes('X') ? 'Fx' : 'Fz'
+    const sign = d.startsWith('-') ? -1 : 1
+    return {
+      name: `${kind}${d}`, kind,
+      loads: base.map((l) => {
+        const mag = Math.abs((l as { Fx?: number }).Fx ?? 0) || Math.abs((l as { Fz?: number }).Fz ?? 0)
+        return { kind: 'node', node: (l as { node: string }).node, [axis]: sign * mag, cat: kind }
+      }),
+    }
   }
 
   const generateE = () => {
     if (!model) return
-    const r = computeSeismic(model, { Ca, Cv, I: Ie, R: Rw, Z: Zf, Nv, dir: eDir })
+    // base magnitude is direction-independent (storey force per node), so one
+    // solve gives every ±X/±Z case.
+    const r = computeSeismic(model, { Ca, Cv, I: Ie, R: Rw, Z: Zf, Nv, dir: 'x' })
     if (!r) return
     setSeis(r)
-    // replace any previous E node loads with the new set
-    save({ ...model, loads: [...model.loads.filter((l) => !(l.cat === 'E' && l.kind === 'node')), ...r.loads] })
+    setECases(eDirs.map((d) => dirCase(r.loads, 'E', d)))
+    // commit the primary direction for the load-diagram overlay + drift check
+    const primary = dirCase(r.loads, 'E', eDirs[0] ?? '+X')
+    save({ ...model, loads: [...model.loads.filter((l) => !(l.cat === 'E' && l.kind === 'node')), ...primary.loads] })
   }
 
   const generateW = () => {
     if (!model) return
-    const r = computeWind(model, { V: Vw, exposure: expo, Kzt, dir: wDir })
-    if (!r) return
-    setWind(r)
-    // replace any previous W node loads with the new set
-    save({ ...model, loads: [...model.loads.filter((l) => !(l.cat === 'W' && l.kind === 'node')), ...r.loads] })
+    // wind magnitude IS axis-dependent (B, L differ), so solve each axis used.
+    const needX = wDirs.some((d) => d.includes('X')), needZ = wDirs.some((d) => d.includes('Z'))
+    const rx = needX ? computeWind(model, { V: Vw, exposure: expo, Kzt, dir: 'x' }) : null
+    const rz = needZ ? computeWind(model, { V: Vw, exposure: expo, Kzt, dir: 'z' }) : null
+    const primaryRes = rx ?? rz
+    if (!primaryRes) return
+    setWind(primaryRes)
+    setWCases(wDirs.map((d) => {
+      const base = (d.includes('X') ? rx : rz)?.loads ?? []
+      return dirCase(base, 'W', d)
+    }))
+    const primary = dirCase(primaryRes.loads, 'W', wDirs[0] ?? '+X')
+    save({ ...model, loads: [...model.loads.filter((l) => !(l.cat === 'W' && l.kind === 'node')), ...primary.loads] })
   }
 
   const soil = { qAllow: qa, gammaSoil: 18, gammaConc: 24, H: Hf }
@@ -351,6 +400,8 @@ export default function ModelSpace() {
     setSelected(null)
     setSeis(null)
     setWind(null)
+    setECases([])
+    setWCases([])
     setPlanSel({})
     save(m)
   }
@@ -445,17 +496,11 @@ export default function ModelSpace() {
             <Num label="I" value={Ie} onChange={setIe} />
             <Num label="Z (zone)" value={Zf} onChange={setZf} />
             <Num label="Nv (near-source)" value={Nv} onChange={setNv} />
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 font-medium text-slate-600">Direction</span>
-              <select value={eDir} onChange={(e) => setEDir(e.target.value as 'x' | 'z')}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5">
-                <option value="x">X</option><option value="z">Z</option>
-              </select>
-            </label>
+            <DirPicker value={eDirs} onChange={setEDirs} />
             <div className="col-span-full">
-              <button type="button" onClick={generateE} disabled={!model}
+              <button type="button" onClick={generateE} disabled={!model || eDirs.length === 0}
                 className="no-print rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
-                ⚡ Generate E loads
+                ⚡ Generate E cases
               </button>
               {seis && (
                 <p className="mt-1 text-xs text-slate-500">
@@ -463,7 +508,7 @@ export default function ModelSpace() {
                   {seis.V === seis.Vmax ? ' (2.5CaIW/R cap governs)'
                     : seis.Vsrc > 0 && seis.V === seis.Vsrc ? ' (Zone-4 0.8ZNvIW/R floor governs)'
                     : seis.V === seis.Vmin ? ' (0.11CaIW floor governs)' : ''}
-                  {seis.Ft > 0 ? ` · Ft = ${f1(seis.Ft)} kN` : ''} — applied as cat-E node loads ({eDir.toUpperCase()}).
+                  {seis.Ft > 0 ? ` · Ft = ${f1(seis.Ft)} kN` : ''} — {eCases.length} cat-E case{eCases.length === 1 ? '' : 's'} ({eDirs.join(', ') || 'none'}).
                   {Zf >= 0.4 ? ` Zone-4 floor = ${f1(seis.Vsrc)} kN.` : ' (Zone-4 floor off: Z < 0.4)'}
                 </p>
               )}
@@ -482,23 +527,17 @@ export default function ModelSpace() {
                 <option value="D">D (flat/coastal)</option>
               </select>
             </label>
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 font-medium text-slate-600">Direction</span>
-              <select value={wDir} onChange={(e) => setWDir(e.target.value as 'x' | 'z')}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5">
-                <option value="x">X</option><option value="z">Z</option>
-              </select>
-            </label>
+            <DirPicker value={wDirs} onChange={setWDirs} />
             <div className="col-span-full">
-              <button type="button" onClick={generateW} disabled={!model}
+              <button type="button" onClick={generateW} disabled={!model || wDirs.length === 0}
                 className="no-print rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
-                🌬 Generate W loads
+                🌬 Generate W cases
               </button>
               {wind && (
                 <p className="mt-1 text-xs text-slate-500">
                   qh = {f2(wind.qh)} kPa · B×L = {f1(wind.B)}×{f1(wind.L)} m (L/B {f2(wind.LB)}) ·
-                  Cp,lee {f2(wind.CpLee)} · base shear V = {f1(wind.baseShear)} kN — applied as cat-W
-                  node loads ({wDir.toUpperCase()}). Windward Cp = 0.8, G = {wind.G}, Kd = {wind.Kd}.
+                  Cp,lee {f2(wind.CpLee)} · base shear V = {f1(wind.baseShear)} kN — {wCases.length} cat-W
+                  case{wCases.length === 1 ? '' : 's'} ({wDirs.join(', ') || 'none'}). Windward Cp = 0.8, G = {wind.G}, Kd = {wind.Kd}.
                 </p>
               )}
             </div>
@@ -587,7 +626,7 @@ export default function ModelSpace() {
           )}
 
           {drift && seis && (
-            <ResultCard title={`Storey drift — ${eDir.toUpperCase()} (ΔM = 0.7·R·Δs)`}>
+            <ResultCard title={`Storey drift — ${(eDirs[0] ?? '+X').replace(/[+-]/, '')} (ΔM = 0.7·R·Δs)`}>
               {drift.map((row) => (
                 <Row key={row.elevation} alert={!row.ok}
                   label={`Level ${f1(row.elevation)} m`}
@@ -930,6 +969,10 @@ export default function ModelSpace() {
               concrete ≈ {f1(design.totals.concrete)} m³ ({f1(design.totals.concreteMembers)} members + {f1(design.totals.concreteSlabs)} slabs)
             </span>
           </h2>
+          <p className="-mt-3 text-xs text-slate-500">
+            Envelope of <b>{design.cases.length}</b> load case{design.cases.length === 1 ? '' : 's'} (NSCP combinations × lateral directions).
+            Each element is designed for its own governing case, shown in the “Case” column.
+          </p>
 
           <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Beam & girder schedule</h3>
@@ -942,7 +985,8 @@ export default function ModelSpace() {
                   <th className="py-1 pr-2 text-right font-semibold">Vu (kN)</th>
                   <th className="py-1 pr-2 font-semibold">Mode</th>
                   <th className="py-1 pr-2 font-semibold">Tension</th>
-                  <th className="py-1 font-semibold">Stirrups</th>
+                  <th className="py-1 pr-2 font-semibold">Stirrups</th>
+                  <th className="py-1 font-semibold">Case</th>
                 </tr>
               </thead>
               <tbody>
@@ -957,7 +1001,8 @@ export default function ModelSpace() {
                       <td className="py-1 pr-2 text-right">{f1(s.Vu)}</td>
                       <td className="py-1 pr-2">{d.mode}</td>
                       <td className="py-1 pr-2">{d.bars}⌀{model?.sections[0]?.barDia}{d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}{s.hogging ? ' top' : ''}</td>
-                      <td className="py-1">{d.sAdopt > 0 ? `@${Math.round(d.sAdopt)}` : d.region === 'none' ? 'none' : '⚠'}</td>
+                      <td className="py-1 pr-2">{d.sAdopt > 0 ? `@${Math.round(d.sAdopt)}` : d.region === 'none' ? 'none' : '⚠'}</td>
+                      <td className="py-1 text-slate-400">{k === 0 ? bm.gov : ''}</td>
                     </tr>
                   )
                 }))}
@@ -975,7 +1020,8 @@ export default function ModelSpace() {
                     <th className="py-1 pr-2 text-right font-semibold">Pu (kN)</th>
                     <th className="py-1 pr-2 text-right font-semibold">Mu</th>
                     <th className="py-1 pr-2 font-semibold">Bars</th>
-                    <th className="py-1 text-right font-semibold">Util</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Util</th>
+                    <th className="py-1 font-semibold">Case</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -985,7 +1031,8 @@ export default function ModelSpace() {
                       <td className="py-1 pr-2 text-right">{f1(c.Pu)}</td>
                       <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
                       <td className="py-1 pr-2">{c.bars}⌀{model?.sections[0]?.barDia} · ties @{Math.round(c.tieSpacing)}</td>
-                      <td className="py-1 text-right">{(c.util * 100).toFixed(0)}%</td>
+                      <td className="py-1 pr-2 text-right">{(c.util * 100).toFixed(0)}%</td>
+                      <td className="py-1 text-slate-400">{c.gov}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1001,7 +1048,8 @@ export default function ModelSpace() {
                     <th className="py-1 pr-2 text-right font-semibold">P / Pu (kN)</th>
                     <th className="py-1 pr-2 font-semibold">Plan</th>
                     <th className="py-1 pr-2 font-semibold">Dc</th>
-                    <th className="py-1 font-semibold">Steel</th>
+                    <th className="py-1 pr-2 font-semibold">Steel</th>
+                    <th className="py-1 font-semibold">Case</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1011,7 +1059,8 @@ export default function ModelSpace() {
                       <td className="py-1 pr-2 text-right">{f1(f.P)} / {f1(f.Pu)}</td>
                       <td className="py-1 pr-2">B = {f2(f.design.B)} m</td>
                       <td className="py-1 pr-2">{Math.round(f.design.Dc)} mm</td>
-                      <td className="py-1">{f.design.bars}⌀{model?.sections[0]?.barDia} @ {Math.round(f.design.barSpacing)} e.w.</td>
+                      <td className="py-1 pr-2">{f.design.bars}⌀{model?.sections[0]?.barDia} @ {Math.round(f.design.barSpacing)} e.w.</td>
+                      <td className="py-1 text-slate-400">{f.gov}</td>
                     </tr>
                   ))}
                 </tbody>
