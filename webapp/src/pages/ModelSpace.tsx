@@ -10,6 +10,7 @@ import { modelToFrame3D } from '../engine/modelBridge'
 import { analyzeFrame3D, type F3Analysis } from '../engine/frame3d'
 import { designStructure, optimizeStructure, type StructureDesign, type FootingPlan, type OptimizeResult } from '../engine/pipeline'
 import { computeSeismic, driftCheck, type SeismicResult, type DriftRow } from '../engine/seismic'
+import { computeWind, type WindResult } from '../engine/wind'
 import { solveFrame3D, applyF3Combo } from '../engine/frame3d'
 import { ReportControls } from '../components/ReportControls'
 import { Diagram } from '../components/Diagram'
@@ -97,6 +98,10 @@ export default function ModelSpace() {
   const [eDir, setEDir] = useState<'x' | 'z'>('x')
   const [seis, setSeis] = useState<SeismicResult | null>(null)
   const [drift, setDrift] = useState<DriftRow[] | null>(null)
+  // Wind (NSCP 207B directional procedure, MWFRS)
+  const [Vw, setVw] = useState(50); const [expo, setExpo] = useState<'B' | 'C' | 'D'>('C')
+  const [Kzt, setKzt] = useState(1.0); const [wDir, setWDir] = useState<'x' | 'z'>('x')
+  const [wind, setWind] = useState<WindResult | null>(null)
   // Analysis options: f₁ live-load factor (§203.3.1) and P-Δ second order
   const [assembly, setAssembly] = useState(false)
   const [pDelta, setPDelta] = useState(false)
@@ -155,6 +160,15 @@ export default function ModelSpace() {
     setSeis(r)
     // replace any previous E node loads with the new set
     save({ ...model, loads: [...model.loads.filter((l) => !(l.cat === 'E' && l.kind === 'node')), ...r.loads] })
+  }
+
+  const generateW = () => {
+    if (!model) return
+    const r = computeWind(model, { V: Vw, exposure: expo, Kzt, dir: wDir })
+    if (!r) return
+    setWind(r)
+    // replace any previous W node loads with the new set
+    save({ ...model, loads: [...model.loads.filter((l) => !(l.cat === 'W' && l.kind === 'node')), ...r.loads] })
   }
 
   const soil = { qAllow: qa, gammaSoil: 18, gammaConc: 24, H: Hf }
@@ -255,6 +269,7 @@ export default function ModelSpace() {
     m.loads = buildGravityLoads(m, qD, qL)
     setSelected(null)
     setSeis(null)
+    setWind(null)
     setPlanSel({})
     save(m)
   }
@@ -369,6 +384,40 @@ export default function ModelSpace() {
                     : seis.V === seis.Vmin ? ' (0.11CaIW floor governs)' : ''}
                   {seis.Ft > 0 ? ` · Ft = ${f1(seis.Ft)} kN` : ''} — applied as cat-E node loads ({eDir.toUpperCase()}).
                   {Zf >= 0.4 ? ` Zone-4 floor = ${f1(seis.Vsrc)} kN.` : ' (Zone-4 floor off: Z < 0.4)'}
+                </p>
+              )}
+            </div>
+          </Card>
+
+          <Card title="Wind — NSCP 207B MWFRS (directional)">
+            <Num label="V (basic speed)" unit="m/s" value={Vw} onChange={setVw} />
+            <Num label="Kzt (topographic)" value={Kzt} onChange={setKzt} />
+            <label className="flex flex-col text-sm">
+              <span className="mb-1 font-medium text-slate-600">Exposure</span>
+              <select value={expo} onChange={(e) => setExpo(e.target.value as 'B' | 'C' | 'D')}
+                className="rounded-md border border-slate-300 px-2.5 py-1.5">
+                <option value="B">B (suburban)</option>
+                <option value="C">C (open)</option>
+                <option value="D">D (flat/coastal)</option>
+              </select>
+            </label>
+            <label className="flex flex-col text-sm">
+              <span className="mb-1 font-medium text-slate-600">Direction</span>
+              <select value={wDir} onChange={(e) => setWDir(e.target.value as 'x' | 'z')}
+                className="rounded-md border border-slate-300 px-2.5 py-1.5">
+                <option value="x">X</option><option value="z">Z</option>
+              </select>
+            </label>
+            <div className="col-span-full">
+              <button type="button" onClick={generateW} disabled={!model}
+                className="no-print rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
+                🌬 Generate W loads
+              </button>
+              {wind && (
+                <p className="mt-1 text-xs text-slate-500">
+                  qh = {f2(wind.qh)} kPa · B×L = {f1(wind.B)}×{f1(wind.L)} m (L/B {f2(wind.LB)}) ·
+                  Cp,lee {f2(wind.CpLee)} · base shear V = {f1(wind.baseShear)} kN — applied as cat-W
+                  node loads ({wDir.toUpperCase()}). Windward Cp = 0.8, G = {wind.G}, Kd = {wind.Kd}.
                 </p>
               )}
             </div>
