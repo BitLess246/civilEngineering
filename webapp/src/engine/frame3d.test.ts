@@ -130,3 +130,50 @@ describe('frame3d — full model bridge (grid + slab loads)', () => {
     expect(sumRy).toBeCloseTo(wu * area, 1)
   })
 })
+
+describe('frame3d — P-Δ second order (vertical cantilever, L = 4)', () => {
+  const L = 4
+  const colNodes = [{ id: 'base', x: 0, y: 0, z: 0 }, { id: 'top', x: 0, y: L, z: 0 }] as F3Node[]
+  const colMem = [{ id: 'c', i: 'base', j: 'top', ...sec }] as F3Member[]
+  const sup = [{ node: 'base', fixity: 'fixed' }] as F3Support[]
+  const H = 10
+  const lat: F3Load[] = [{ kind: 'node', node: 'top', Fx: H, cat: 'D' }]
+
+  // first-order lateral drift (exact for a tip point load — cubic Hermite)
+  const lin = solveFrame3D(colNodes, colMem, sup, lat)!
+  const d1 = Math.abs(lin.d[6 + 0])
+  // effective Euler buckling load of the cantilever from the linear stiffness
+  const EIeff = (H * L ** 3) / (3 * d1)
+  const Pe = (Math.PI ** 2 * EIeff) / (4 * L ** 2)
+
+  it('compression amplifies drift ≈ 1/(1−P/Pe) and converges', () => {
+    const P = 0.25 * Pe
+    const r = solveFrame3D(colNodes, colMem, sup,
+      [...lat, { kind: 'node', node: 'top', Fy: -P, cat: 'D' }], { pDelta: true })!
+    const d2 = Math.abs(r.d[6 + 0])
+    expect(d2).toBeGreaterThan(d1)
+    // one-element consistent Pcr is within ~1% of π²EI/4L², so the amplifier matches
+    expect(d2 / d1).toBeCloseTo(1 / (1 - 0.25), 1)
+  })
+
+  it('tension stiffens the column (drift below first order)', () => {
+    const P = 0.25 * Pe
+    const r = solveFrame3D(colNodes, colMem, sup,
+      [...lat, { kind: 'node', node: 'top', Fy: +P, cat: 'D' }], { pDelta: true })!
+    expect(Math.abs(r.d[6 + 0])).toBeLessThan(d1)
+  })
+
+  it('negligible axial → P-Δ collapses to the first-order result', () => {
+    const r = solveFrame3D(colNodes, colMem, sup,
+      [...lat, { kind: 'node', node: 'top', Fy: -1e-3 * Pe, cat: 'D' }], { pDelta: true })!
+    expect(Math.abs(r.d[6 + 0]) / d1).toBeCloseTo(1, 2)   // within 0.5% of linear
+  })
+
+  it('base moment is amplified in step with the drift', () => {
+    const P = 0.25 * Pe
+    const r = solveFrame3D(colNodes, colMem, sup,
+      [...lat, { kind: 'node', node: 'top', Fy: -P, cat: 'D' }], { pDelta: true })!
+    // second-order base moment = H·L + P·Δ > first-order H·L
+    expect(Math.abs(r.members[0].My[0])).toBeGreaterThan(H * L)
+  })
+})

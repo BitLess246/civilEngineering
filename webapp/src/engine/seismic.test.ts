@@ -72,6 +72,27 @@ describe('NSCP 208 static lateral force', () => {
   })
 })
 
+describe('NSCP 208-11 — Seismic Zone 4 base shear floor', () => {
+  it('0.8·Z·Nv·I·W/R governs a long-period building near a fault', () => {
+    const tall = generateGridModel({ baysX: [6], baysZ: [5], storeyH: Array(12).fill(3), section })
+    tall.loads = tall.plates.map((p) => ({ kind: 'area' as const, plate: p.id, q: 5, cat: 'D' as const }))
+    const base = computeSeismic(tall, params)!                       // no Z → floor disabled
+    const z4 = computeSeismic(tall, { ...params, Z: 0.4, Nv: 2.0 })! // near-source Zone 4
+    const expected = (0.8 * 0.4 * 2.0 * params.I * z4.W) / params.R
+    expect(z4.Vsrc).toBeCloseTo(expected, 6)
+    expect(z4.Vsrc).toBeGreaterThan(z4.Vmin)
+    expect(z4.Vsrc).toBeGreaterThan(z4.Vraw)                          // raw shear below the floor
+    expect(z4.V).toBeCloseTo(z4.Vsrc, 6)                              // 208-11 governs
+    expect(base.Vsrc).toBe(0)                                         // disabled without Z
+    expect(z4.V).toBeGreaterThan(base.V)                              // floor raised the design shear
+  })
+
+  it('floor is inactive outside Zone 4 (Z < 0.4)', () => {
+    const r = computeSeismic(makeModel(), { ...params, Z: 0.2, Nv: 1.5 })!
+    expect(r.Vsrc).toBe(0)
+  })
+})
+
 describe('drift check', () => {
   it('ΔM = 0.7RΔs against the elastic frame solution', () => {
     const m = makeModel()

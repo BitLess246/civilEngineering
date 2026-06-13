@@ -1,5 +1,18 @@
 import { describe, it, expect } from 'vitest'
-import { solveFEM, analyzeBeam, threeMoment, type Support, type BeamLoad } from './beamAnalysis'
+import { solveFEM, analyzeBeam, threeMoment, nscpCombos, NSCP_COMBOS, type Support, type BeamLoad } from './beamAnalysis'
+
+describe('NSCP §203.3.1 — f₁ live-load factor', () => {
+  it('f₁ scales L in eqs 203-3/4/5 only; default export is the 1.0 set', () => {
+    const c1 = nscpCombos(1.0), c05 = nscpCombos(0.5)
+    expect(c1).toHaveLength(7)
+    expect(c05[1].f.L).toBe(1.6)                         // 203-2 always 1.6L
+    expect(c1[2].f.L).toBe(1.0); expect(c05[2].f.L).toBe(0.5)   // 203-3
+    expect(c1[3].f.L).toBe(1.0); expect(c05[3].f.L).toBe(0.5)   // 203-4
+    expect(c1[5].f.L).toBe(1.0); expect(c05[5].f.L).toBe(0.5)   // 203-5 (seismic)
+    expect(c05[4].f.L).toBeUndefined()                  // 203-6 (0.9D+1.0W) has no L
+    expect(NSCP_COMBOS[2].f.L).toBe(1.0)                // conservative default
+  })
+})
 
 const E = 25000      // MPa
 const I = 3.125e9    // mm⁴ (≈ 250×500 gross)

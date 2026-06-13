@@ -19,6 +19,14 @@ export interface SoilOptions {
   qAllow: number; gammaSoil: number; gammaConc: number; H: number
 }
 
+/** Analysis options threaded into the frame solve. */
+export interface AnalyzeOptions {
+  /** NSCP §203.3.1 live-load factor f₁ (1.0 / 0.5). */
+  f1?: number
+  /** Run the second-order P-Δ iteration. */
+  pDelta?: boolean
+}
+
 export interface BeamSectionDesign {
   label: string; Mu: number; Vu: number; hogging: boolean
   design: BeamDesignResult
@@ -86,12 +94,14 @@ function memberSections(mr: F3MemberResult): { label: string; x: number; Mu: num
   return out
 }
 
-export function designStructure(model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}): StructureDesign | null {
+export function designStructure(
+  model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}, opts: AnalyzeOptions = {},
+): StructureDesign | null {
   const sec: RectSection | undefined = model.sections[0]
   if (!sec) return null
 
   const br = modelToFrame3D(model)
-  const analysis = analyzeFrame3D(br.nodes, br.members, br.supports, br.loads)
+  const analysis = analyzeFrame3D(br.nodes, br.members, br.supports, br.loads, opts)
   if (!analysis) return null
   const gov = analysis.perCombo[analysis.govIdx]
   const govRes = gov.result
@@ -101,12 +111,12 @@ export function designStructure(model: StructuralModel, soil: SoilOptions, plan:
   // D-only / L-only solves so combined footings get their dl/ll split.
   const serviceLoads = applyF3Combo(br.loads, { D: 1, L: 1, Lr: 1, S: 1, R: 1 })
   const serviceRes: F3Result | null = serviceLoads.length
-    ? solveFrame3D(br.nodes, br.members, br.supports, serviceLoads)
+    ? solveFrame3D(br.nodes, br.members, br.supports, serviceLoads, opts)
     : null
   const dLoads = applyF3Combo(br.loads, { D: 1 })
   const lLoads = applyF3Combo(br.loads, { L: 1 })
-  const dRes = dLoads.length ? solveFrame3D(br.nodes, br.members, br.supports, dLoads) : null
-  const lRes = lLoads.length ? solveFrame3D(br.nodes, br.members, br.supports, lLoads) : null
+  const dRes = dLoads.length ? solveFrame3D(br.nodes, br.members, br.supports, dLoads, opts) : null
+  const lRes = lLoads.length ? solveFrame3D(br.nodes, br.members, br.supports, lLoads, opts) : null
   const dAt = new Map<string, number>()
   const lAt = new Map<string, number>()
   govRes.reactions.forEach((r, i) => {
@@ -262,12 +272,13 @@ const withSection = (model: StructuralModel, sec: RectSection): StructuralModel 
  */
 export function optimizeStructure(
   model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}, maxIter = 24,
+  opts: AnalyzeOptions = {},
 ): OptimizeResult | null {
   if (!model.sections[0]) return null
   let sec: RectSection = { ...model.sections[0] }
   const steps: OptimizeStep[] = []
 
-  let design = designStructure(withSection(model, sec), soil, plan)
+  let design = designStructure(withSection(model, sec), soil, plan, opts)
   if (!design) return null
   steps.push({ b: sec.b, h: sec.h, fails: countFails(design), ok: designOK(design) })
 
@@ -277,7 +288,7 @@ export function optimizeStructure(
     if (sec.h >= 3 * sec.b) sec = { ...sec, b: sec.b + 50, name: '' }
     else sec = { ...sec, h: sec.h + 50, name: '' }
     sec.name = `${sec.b}×${sec.h}`
-    const d = designStructure(withSection(model, sec), soil, plan)
+    const d = designStructure(withSection(model, sec), soil, plan, opts)
     if (!d) break
     design = d
     steps.push({ b: sec.b, h: sec.h, fails: countFails(design), ok: designOK(design) })
@@ -287,7 +298,7 @@ export function optimizeStructure(
   // shrink back while still passing (find the lean edge)
   while (converged && sec.h - 25 >= 300) {
     const trial: RectSection = { ...sec, h: sec.h - 25, name: `${sec.b}×${sec.h - 25}` }
-    const d = designStructure(withSection(model, trial), soil, plan)
+    const d = designStructure(withSection(model, trial), soil, plan, opts)
     if (!d || !designOK(d)) break
     sec = trial
     design = d

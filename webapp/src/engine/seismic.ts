@@ -17,6 +17,8 @@ import type { StructuralModel, ModelLoad } from './model'
 export interface SeismicParams {
   Ca: number; Cv: number
   I: number; R: number
+  Z?: number                // seismic zone factor (0.4 = Zone 4); enables eq 208-11
+  Nv?: number               // near-source velocity factor (default 1.0)
   Ct?: number               // default 0.0731 (RC moment frame, metres)
   dir: 'x' | 'z'
 }
@@ -27,7 +29,7 @@ export interface StoreyForce {
 
 export interface SeismicResult {
   hn: number; T: number; W: number
-  Vraw: number; Vmax: number; Vmin: number; V: number
+  Vraw: number; Vmax: number; Vmin: number; Vsrc: number; V: number
   Ft: number
   storeys: StoreyForce[]
   loads: ModelLoad[]        // node loads, cat 'E'
@@ -87,9 +89,11 @@ export function computeSeismic(model: StructuralModel, p: SeismicParams): Seismi
   const Ct = p.Ct ?? 0.0731
   const T = Ct * Math.pow(hn, 0.75)
   const Vraw = (p.Cv * p.I * W) / (p.R * T)
-  const Vmax = (2.5 * p.Ca * p.I * W) / p.R
-  const Vmin = 0.11 * p.Ca * p.I * W
-  const V = Math.max(Vmin, Math.min(Vraw, Vmax))
+  const Vmax = (2.5 * p.Ca * p.I * W) / p.R          // 208-9 upper bound
+  const Vmin = 0.11 * p.Ca * p.I * W                  // 208-10 lower bound
+  // 208-11: in Seismic Zone 4 the base shear shall also be ≥ 0.8·Z·Nv·I·W/R.
+  const Vsrc = (p.Z ?? 0) >= 0.4 ? (0.8 * (p.Z ?? 0.4) * (p.Nv ?? 1.0) * p.I * W) / p.R : 0
+  const V = Math.max(Vmin, Vsrc, Math.min(Vraw, Vmax))
   const Ft = T > 0.7 ? Math.min(0.07 * T * V, 0.25 * V) : 0
 
   const sumWH = storeyW.reduce((s, q) => s + q.w * q.elevation, 0)
@@ -113,7 +117,7 @@ export function computeSeismic(model: StructuralModel, p: SeismicParams): Seismi
     }
   }
 
-  return { hn, T, W, Vraw, Vmax, Vmin, V, Ft, storeys, loads }
+  return { hn, T, W, Vraw, Vmax, Vmin, Vsrc, V, Ft, storeys, loads }
 }
 
 // ── Storey drift (NSCP 208.5.10) ─────────────────────────────────────────
