@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
@@ -23,6 +23,11 @@ const ROLE_COLOR: Record<string, string> = {
   column: '#475569', beam: '#0056b3', girder: '#0e7490',
 }
 const SEL = '#f59e0b'
+
+// Load-diagram colours by NSCP category (dead, live, wind, seismic, …).
+const LOAD_COLOR: Record<string, string> = {
+  D: '#64748b', L: '#15803d', Lr: '#15803d', S: '#0891b2', R: '#0891b2', W: '#0ea5e9', E: '#7c3aed',
+}
 
 const parseList = (s: string): number[] =>
   s.split(/[, ]+/).map(parseFloat).filter((v) => Number.isFinite(v) && v > 0)
@@ -82,6 +87,81 @@ function Support3D({ p }: { p: THREE.Vector3 }) {
   )
 }
 
+// ── Load glyphs ─────────────────────────────────────────────────────────────
+const UP = new THREE.Vector3(0, 1, 0)
+/** A single force arrow with its head at `tip`, drawn back along −`dir`. */
+function Arrow({ tip, dir, len, color }: { tip: THREE.Vector3; dir: THREE.Vector3; len: number; color: string }) {
+  const helper = useMemo(() => {
+    const d = dir.clone().normalize()
+    const origin = tip.clone().addScaledVector(d, -len)        // tail, so the head sits at `tip`
+    return new THREE.ArrowHelper(d, origin, len, new THREE.Color(color).getHex(),
+      Math.min(0.35, len * 0.4), Math.min(0.2, len * 0.22))
+  }, [tip, dir, len, color])
+  return <primitive object={helper} />
+}
+
+/** Loading diagrams drawn on the elements: member UDL (a bar of arrows), member
+ *  point loads, slab area pressure (a grid of arrows) and node loads (E/W). */
+function Loads3D({ model, nodePos }: { model: StructuralModel; nodePos: Map<string, THREE.Vector3> }) {
+  const DOWN = useMemo(() => new THREE.Vector3(0, -1, 0), [])
+  // per-type magnitude maxima for gentle length scaling
+  const max = { udl: 1e-9, point: 1e-9, area: 1e-9, node: 1e-9 }
+  for (const l of model.loads) {
+    if (l.kind === 'member-udl') max.udl = Math.max(max.udl, Math.abs(l.w))
+    else if (l.kind === 'member-point') max.point = Math.max(max.point, Math.abs(l.P))
+    else if (l.kind === 'area') max.area = Math.max(max.area, Math.abs(l.q))
+    else if (l.kind === 'node') max.node = Math.max(max.node, Math.hypot(l.Fx ?? 0, l.Fy ?? 0, l.Fz ?? 0))
+  }
+  const lenOf = (mag: number, m: number) => 0.5 + 0.7 * Math.min(1, mag / m)   // 0.5–1.2 m
+
+  const glyphs: ReactNode[] = []
+  for (let i = 0; i < model.loads.length; i++) {
+    const l = model.loads[i]
+    const color = LOAD_COLOR[l.cat] ?? '#64748b'
+    if (l.kind === 'member-udl') {
+      const m = model.members.find((mm) => mm.id === l.member)
+      const a = m && nodePos.get(m.i), b = m && nodePos.get(m.j)
+      if (!a || !b) continue
+      const len = lenOf(Math.abs(l.w), max.udl)
+      const n = Math.max(2, Math.min(7, Math.round(a.distanceTo(b) / 0.8)))
+      for (let k = 0; k <= n; k++) {
+        const tip = a.clone().lerp(b, k / n)
+        glyphs.push(<Arrow key={`u${i}-${k}`} tip={tip} dir={DOWN} len={len} color={color} />)
+      }
+      // bar joining the arrow tails
+      const barA = a.clone().addScaledVector(UP, len), barB = b.clone().addScaledVector(UP, len)
+      const geo = new THREE.BufferGeometry().setFromPoints([barA, barB])
+      glyphs.push(<primitive key={`ub${i}`} object={new THREE.Line(geo, new THREE.LineBasicMaterial({ color }))} />)
+    } else if (l.kind === 'member-point') {
+      const m = model.members.find((mm) => mm.id === l.member)
+      const a = m && nodePos.get(m.i), b = m && nodePos.get(m.j)
+      if (!a || !b) continue
+      const tip = a.clone().lerp(b, Math.max(0, Math.min(1, l.t)))
+      glyphs.push(<Arrow key={`p${i}`} tip={tip} dir={DOWN} len={lenOf(Math.abs(l.P), max.point)} color={color} />)
+    } else if (l.kind === 'area') {
+      const p = model.plates.find((pp) => pp.id === l.plate)
+      const cs = p?.corners.map((c) => nodePos.get(c))
+      if (!cs || cs.some((c) => !c)) continue
+      const c = cs as THREE.Vector3[]
+      const len = lenOf(Math.abs(l.q), max.area)
+      const nu = 3, nv = 3
+      for (let u = 1; u < nu; u++) for (let v = 1; v < nv; v++) {
+        // bilinear point on the quad
+        const top = c[0].clone().lerp(c[1], u / nu)
+        const bot = c[3].clone().lerp(c[2], u / nu)
+        const tip = top.lerp(bot, v / nv)
+        glyphs.push(<Arrow key={`a${i}-${u}-${v}`} tip={tip} dir={DOWN} len={len} color={color} />)
+      }
+    } else if (l.kind === 'node') {
+      const pos = nodePos.get(l.node)
+      const dir = new THREE.Vector3(l.Fx ?? 0, l.Fy ?? 0, l.Fz ?? 0)
+      if (!pos || dir.length() < 1e-9) continue
+      glyphs.push(<Arrow key={`n${i}`} tip={pos.clone()} dir={dir} len={lenOf(dir.length(), max.node)} color={color} />)
+    }
+  }
+  return <group>{glyphs}</group>
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────
 export default function ModelSpace() {
   const [baysX, setBaysX] = useState('6, 6')
@@ -105,6 +185,7 @@ export default function ModelSpace() {
   // Analysis options: f₁ live-load factor (§203.3.1) and P-Δ second order
   const [assembly, setAssembly] = useState(false)
   const [pDelta, setPDelta] = useState(false)
+  const [showLoads, setShowLoads] = useState(true)   // load-diagram overlay
 
   const [model, setModel] = useState<StructuralModel | null>(() => {
     try {
@@ -432,6 +513,20 @@ export default function ModelSpace() {
               <input type="checkbox" checked={pDelta} onChange={(e) => setPDelta(e.target.checked)} />
               <span>P-Δ second-order analysis</span>
             </label>
+            <label className="col-span-full flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={showLoads} onChange={(e) => setShowLoads(e.target.checked)} />
+              <span>Show load diagrams on the model</span>
+            </label>
+            {showLoads && model && model.loads.length > 0 && (
+              <div className="col-span-full flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+                {[...new Set(model.loads.map((l) => l.cat))].map((cat) => (
+                  <span key={cat} className="inline-flex items-center gap-1">
+                    <span className="inline-block h-2 w-3 rounded-sm" style={{ background: LOAD_COLOR[cat] ?? '#64748b' }} />
+                    {cat}
+                  </span>
+                ))}
+              </div>
+            )}
             <p className="col-span-full text-[11px] text-slate-500">
               §203.3.1 live-load factor f₁ = <b>{fLive.toFixed(1)}</b>
               {fLive === 1 ? (assembly ? ' (assembly/garage)' : ' (Lo > 4.8 kPa)') : ' (ordinary occupancy)'}.
@@ -574,6 +669,7 @@ export default function ModelSpace() {
                 const p = nodePos.get(s.node)
                 return p ? <Support3D key={s.node} p={p} /> : null
               })}
+              {showLoads && <Loads3D model={model} nodePos={nodePos} />}
               <OrbitControls makeDefault target={[6, 3, 2.5]} />
             </Canvas>
           ) : (
