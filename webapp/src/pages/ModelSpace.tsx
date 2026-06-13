@@ -13,6 +13,8 @@ import { computeSeismic, driftCheck, type SeismicResult, type DriftRow } from '.
 import { computeWind, type WindResult } from '../engine/wind'
 import { solveFrame3D, applyF3Combo } from '../engine/frame3d'
 import { ReportControls } from '../components/ReportControls'
+import { WorkedSolution } from '../components/WorkedSolution'
+import { beamSectionSolution, columnRowSolution, footingRowSolution } from '../lib/modelSpaceSolutions'
 import { Diagram } from '../components/Diagram'
 import { Num, Card, ResultCard, Row } from '../components/qty'
 import { f1, f2 } from '../lib/format'
@@ -218,6 +220,7 @@ export default function ModelSpace() {
   const [analysis, setAnalysis] = useState<F3Analysis | null>(null)
   const [design, setDesign] = useState<StructureDesign | null>(null)
   const [opt, setOpt] = useState<OptimizeResult | null>(null)
+  const [expanded, setExpanded] = useState<string | null>(null)   // open schedule-row solution
   const [orphans, setOrphans] = useState(0)
   // footing plan: base node → '' (isolated) or partner node id (combined)
   const [planSel, setPlanSel] = useState<Record<string, string>>({})
@@ -231,6 +234,7 @@ export default function ModelSpace() {
     setAnalysis(null)             // geometry changed — results are stale
     setDesign(null)
     setOpt(null)
+    setExpanded(null)
     setDrift(null)
     try {
       if (m) sessionStorage.setItem(AUTOSAVE_KEY, JSON.stringify(m))
@@ -972,6 +976,7 @@ export default function ModelSpace() {
           <p className="-mt-3 text-xs text-slate-500">
             Envelope of <b>{design.cases.length}</b> load case{design.cases.length === 1 ? '' : 's'} (NSCP combinations × lateral directions).
             Each element is designed for its own governing case, shown in the “Case” column.
+            <span className="no-print"> Click any row to expand its step-by-step solution.</span>
           </p>
 
           <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -990,12 +995,15 @@ export default function ModelSpace() {
                 </tr>
               </thead>
               <tbody>
-                {design.beams.flatMap((bm) => bm.sections.map((s, k) => {
+                {design.beams.flatMap((bm) => bm.sections.flatMap((s, k) => {
                   const d = s.design
                   const bad = !(d.flexOK && d.comprEffective && d.comprNAOK && d.region !== 'inadequate')
-                  return (
-                    <tr key={`${bm.id}-${k}`} className={`border-t border-slate-100 ${bad ? 'bg-red-50 text-red-700' : ''}`}>
-                      <td className="py-1 pr-2 font-medium">{k === 0 ? `${bm.id} (${bm.role}, ${f1(bm.L)} m)` : ''}</td>
+                  const key = `beam:${bm.id}:${k}`
+                  const open = expanded === key
+                  return [
+                    <tr key={key} onClick={() => setExpanded(open ? null : key)}
+                      className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${bad ? 'bg-red-50 text-red-700' : ''}`}>
+                      <td className="py-1 pr-2 font-medium">{k === 0 ? `${open ? '▾' : '▸'} ${bm.id} (${bm.role}, ${f1(bm.L)} m)` : ''}</td>
                       <td className="py-1 pr-2">{s.label}{s.hogging ? ' (hog)' : ''}</td>
                       <td className="py-1 pr-2 text-right">{f1(Math.abs(s.Mu))}</td>
                       <td className="py-1 pr-2 text-right">{f1(s.Vu)}</td>
@@ -1003,8 +1011,15 @@ export default function ModelSpace() {
                       <td className="py-1 pr-2">{d.bars}⌀{model?.sections[0]?.barDia}{d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}{s.hogging ? ' top' : ''}</td>
                       <td className="py-1 pr-2">{d.sAdopt > 0 ? `@${Math.round(d.sAdopt)}` : d.region === 'none' ? 'none' : '⚠'}</td>
                       <td className="py-1 text-slate-400">{k === 0 ? bm.gov : ''}</td>
-                    </tr>
-                  )
+                    </tr>,
+                    open && model && (
+                      <tr key={`${key}:sol`}>
+                        <td colSpan={8} className="bg-slate-50/60 px-2 pb-2">
+                          <WorkedSolution steps={beamSectionSolution(model.sections[0], s)} title={`${bm.id} · ${s.label} — worked solution`} />
+                        </td>
+                      </tr>
+                    ),
+                  ]
                 }))}
               </tbody>
             </table>
@@ -1025,16 +1040,27 @@ export default function ModelSpace() {
                   </tr>
                 </thead>
                 <tbody>
-                  {design.columns.map((c) => (
-                    <tr key={c.id} className={`border-t border-slate-100 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
-                      <td className="py-1 pr-2 font-medium">{c.id}</td>
-                      <td className="py-1 pr-2 text-right">{f1(c.Pu)}</td>
-                      <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
-                      <td className="py-1 pr-2">{c.bars}⌀{model?.sections[0]?.barDia} · ties @{Math.round(c.tieSpacing)}</td>
-                      <td className="py-1 pr-2 text-right">{(c.util * 100).toFixed(0)}%</td>
-                      <td className="py-1 text-slate-400">{c.gov}</td>
-                    </tr>
-                  ))}
+                  {design.columns.flatMap((c) => {
+                    const key = `col:${c.id}`, open = expanded === key
+                    return [
+                      <tr key={key} onClick={() => setExpanded(open ? null : key)}
+                        className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                        <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {c.id}</td>
+                        <td className="py-1 pr-2 text-right">{f1(c.Pu)}</td>
+                        <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
+                        <td className="py-1 pr-2">{c.bars}⌀{model?.sections[0]?.barDia} · ties @{Math.round(c.tieSpacing)}</td>
+                        <td className="py-1 pr-2 text-right">{(c.util * 100).toFixed(0)}%</td>
+                        <td className="py-1 text-slate-400">{c.gov}</td>
+                      </tr>,
+                      open && model && (
+                        <tr key={`${key}:sol`}>
+                          <td colSpan={6} className="bg-slate-50/60 px-2 pb-2">
+                            <WorkedSolution steps={columnRowSolution(model.sections[0], c)} title={`${c.id} — worked solution`} />
+                          </td>
+                        </tr>
+                      ),
+                    ]
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1053,16 +1079,27 @@ export default function ModelSpace() {
                   </tr>
                 </thead>
                 <tbody>
-                  {design.footings.map((f) => (
-                    <tr key={f.node} className={`border-t border-slate-100 ${f.ok ? '' : 'bg-red-50 text-red-700'}`}>
-                      <td className="py-1 pr-2 font-medium">{f.node}</td>
-                      <td className="py-1 pr-2 text-right">{f1(f.P)} / {f1(f.Pu)}</td>
-                      <td className="py-1 pr-2">B = {f2(f.design.B)} m</td>
-                      <td className="py-1 pr-2">{Math.round(f.design.Dc)} mm</td>
-                      <td className="py-1 pr-2">{f.design.bars}⌀{model?.sections[0]?.barDia} @ {Math.round(f.design.barSpacing)} e.w.</td>
-                      <td className="py-1 text-slate-400">{f.gov}</td>
-                    </tr>
-                  ))}
+                  {design.footings.flatMap((f) => {
+                    const key = `ftg:${f.node}`, open = expanded === key
+                    return [
+                      <tr key={key} onClick={() => setExpanded(open ? null : key)}
+                        className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${f.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                        <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {f.node}</td>
+                        <td className="py-1 pr-2 text-right">{f1(f.P)} / {f1(f.Pu)}</td>
+                        <td className="py-1 pr-2">B = {f2(f.design.B)} m</td>
+                        <td className="py-1 pr-2">{Math.round(f.design.Dc)} mm</td>
+                        <td className="py-1 pr-2">{f.design.bars}⌀{model?.sections[0]?.barDia} @ {Math.round(f.design.barSpacing)} e.w.</td>
+                        <td className="py-1 text-slate-400">{f.gov}</td>
+                      </tr>,
+                      open && model && (
+                        <tr key={`${key}:sol`}>
+                          <td colSpan={6} className="bg-slate-50/60 px-2 pb-2">
+                            <WorkedSolution steps={footingRowSolution(model.sections[0], soil, f)} title={`Footing ${f.node} — worked solution`} />
+                          </td>
+                        </tr>
+                      ),
+                    ]
+                  })}
                 </tbody>
               </table>
             </div>
