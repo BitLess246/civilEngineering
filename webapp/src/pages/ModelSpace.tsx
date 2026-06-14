@@ -106,6 +106,33 @@ function Support3D({ p }: { p: THREE.Vector3 }) {
   )
 }
 
+/** Wall panel between the beam nodes (tA,tB) and the nodes below (bA,bB).
+ *  Shear walls show the equivalent X-strut; gravity walls are a plain panel. */
+function Wall3D({ tA, tB, bA, bB, shear }: { tA: THREE.Vector3; tB: THREE.Vector3; bA: THREE.Vector3; bB: THREE.Vector3; shear: boolean }) {
+  const { fill, x1, x2 } = useMemo(() => {
+    const pos = [bA, bB, tB, bA, tB, tA].flatMap((p) => [p.x, p.y, p.z])
+    const fill = new THREE.BufferGeometry()
+    fill.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    return {
+      fill,
+      x1: new THREE.BufferGeometry().setFromPoints([bA, tB]),
+      x2: new THREE.BufferGeometry().setFromPoints([bB, tA]),
+    }
+  }, [tA, tB, bA, bB])
+  const color = shear ? '#7c3aed' : '#94a3b8'
+  return (
+    <group>
+      <mesh geometry={fill}>
+        <meshBasicMaterial color={color} transparent opacity={shear ? 0.22 : 0.14} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
+      {shear && <>
+        <primitive object={new THREE.Line(x1, new THREE.LineBasicMaterial({ color }))} />
+        <primitive object={new THREE.Line(x2, new THREE.LineBasicMaterial({ color }))} />
+      </>}
+    </group>
+  )
+}
+
 // ── Load glyphs ─────────────────────────────────────────────────────────────
 const UP = new THREE.Vector3(0, 1, 0)
 /** A single force arrow with its head at `tip`, drawn back along −`dir`. */
@@ -714,6 +741,22 @@ export default function ModelSpace() {
                   const p = nodePos.get(s.node)
                   return p ? <Support3D key={s.node} p={p} /> : null
                 })}
+                {(model.walls ?? []).map((w) => {
+                  const m = model.members.find((mm) => mm.id === w.member)
+                  const tA = m && nodePos.get(m.i), tB = m && nodePos.get(m.j)
+                  if (!tA || !tB) return null
+                  const below = (p: THREE.Vector3) => {
+                    let best: THREE.Vector3 | null = null
+                    for (const n of model.nodes) {
+                      const q = nodePos.get(n.id)!
+                      if (Math.abs(q.x - p.x) < 1e-4 && Math.abs(q.z - p.z) < 1e-4 && q.y < p.y - 1e-4 && (!best || q.y > best.y)) best = q
+                    }
+                    return best
+                  }
+                  const bA = below(tA), bB = below(tB)
+                  if (!bA || !bB) return null
+                  return <Wall3D key={w.id} tA={tA} tB={tB} bA={bA} bB={bB} shear={w.shearWall} />
+                })}
                 {showLoads && <Loads3D model={model} nodePos={nodePos} />}
                 <OrbitControls makeDefault target={[6, 3, 2.5]} />
               </Canvas>
@@ -986,7 +1029,7 @@ export default function ModelSpace() {
                     <button type="button" onClick={addWall} disabled={!wallMember}
                       className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">+ Add wall</button>
                   </div>
-                  <p className="mt-1 text-[11px] text-slate-400">A wall adds its self-weight (t·h·γc) as a line load on the chosen beam. “Shear wall” is tagged for the lateral system (stiffness handled in a later step).</p>
+                  <p className="mt-1 text-[11px] text-slate-400">A wall adds its self-weight (t·h·γc) as a line load on the chosen beam. A “shear wall” also braces the storey below it — modelled as an equivalent X of diagonal struts (shear + flexure stiffness) so it carries seismic/wind in the analysis.</p>
                 </div>
               )}
             </div>

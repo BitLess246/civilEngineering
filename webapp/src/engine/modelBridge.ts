@@ -31,6 +31,53 @@ function sectionProps(s: RectSection) {
   }
 }
 
+/**
+ * Shear walls → equivalent diagonal struts that carry the panel's lateral
+ * (in-plane) stiffness. A wall tagged `shearWall` on a beam (i,j) braces the
+ * storey BELOW it: the panel is bounded by the beam nodes and the nodes
+ * directly beneath them. Its combined shear + cantilever-flexure stiffness
+ *   K = [ 1/(G·t·Lw/H) + 1/(3E·I_w/H³) ]⁻¹
+ * is reproduced by an X of two pin-like struts (large A, ~0 I) whose axial
+ * stiffness, projected horizontally (2·(EA/Ld)·cos²θ), equals K. Derived in the
+ * bridge so the walls stay walls and the design pipeline ignores the struts.
+ */
+function wallStruts(model: StructuralModel, nm: Map<string, F3Node>): F3Member[] {
+  const walls = (model.walls ?? []).filter((w) => w.shearWall)
+  if (walls.length === 0) return []
+  const fcOf = new Map(model.sections.map((s) => [s.id, s.fc]))
+  const belowOf = (id: string): F3Node | null => {
+    const n = nm.get(id); if (!n) return null
+    let best: F3Node | null = null
+    for (const q of nm.values()) {
+      if (q.id === id || q.y >= n.y - 1e-4) continue
+      if (Math.abs(q.x - n.x) < 1e-4 && Math.abs(q.z - n.z) < 1e-4 && (!best || q.y > best.y)) best = q
+    }
+    return best
+  }
+  const out: F3Member[] = []
+  for (const w of walls) {
+    const m = model.members.find((mm) => mm.id === w.member); if (!m) continue
+    const a = nm.get(m.i), b = nm.get(m.j); if (!a || !b) continue
+    const aD = belowOf(m.i), bD = belowOf(m.j); if (!aD || !bD) continue
+    const Lw = Math.hypot(b.x - a.x, b.z - a.z) * 1000      // mm, horizontal panel length
+    const H = (a.y - aD.y) * 1000                            // mm, panel height
+    if (!(Lw > 0 && H > 0)) continue
+    const fc = fcOf.get(m.section) ?? 28
+    const E = 4700 * Math.sqrt(Math.max(fc, 1)), G = E / 2.4
+    const Kshear = (G * w.thickness * Lw) / H                // N/mm
+    const Kflex = (3 * E * (w.thickness * Lw ** 3 / 12)) / H ** 3
+    const K = 1 / (1 / Kshear + 1 / Kflex)                   // N/mm ≡ kN/m
+    const Ldm = Math.hypot(Lw, H) / 1000                     // m
+    const cos = Lw / Math.hypot(Lw, H)
+    const Ad = (K * 1000 * Ldm) / (2 * E * cos * cos)        // mm² (matches solver EA=E·A/1000 over L)
+    const tiny = Math.max(1, Ad * 1e-6)
+    const strut = (id: string, i: string, j: string): F3Member =>
+      ({ id, i, j, E, G, A: Ad, Iy: tiny, Iz: tiny, J: tiny })
+    out.push(strut(`wallstrut_${w.id}_1`, aD.id, m.j), strut(`wallstrut_${w.id}_2`, bD.id, m.i))
+  }
+  return out
+}
+
 /** Map a BeamLoad (x from edge start) onto a member that may run either way. */
 function edgeLoadToMember(ld: BeamLoad, memberId: string, sameDir: boolean, L: number): F3Load | null {
   if (ld.type === 'udl') {
@@ -54,6 +101,8 @@ export function modelToFrame3D(model: StructuralModel): BridgeResult {
   const members: F3Member[] = model.members.map((m) => ({
     id: m.id, i: m.i, j: m.j, ...(secById.get(m.section) ?? fallback),
   }))
+  // shear walls → equivalent diagonal struts (lateral stiffness only)
+  members.push(...wallStruts(model, nm))
   const memberByPair = new Map<string, { id: string; i: string; j: string }>()
   for (const m of model.members) {
     memberByPair.set(`${m.i}|${m.j}`, m)
