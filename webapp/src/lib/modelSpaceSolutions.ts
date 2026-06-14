@@ -2,11 +2,13 @@
 // schedules from the design rows, reusing the same builders the standalone
 // calculator pages use (beam / column / isolated footing).
 import type { RectSection } from '../engine/model'
-import type { BeamSectionDesign, ColumnScheduleRow, FootingScheduleRow, SoilOptions } from '../engine/pipeline'
+import type { BeamSectionDesign, ColumnScheduleRow, FootingScheduleRow, CombinedScheduleRow, SoilOptions } from '../engine/pipeline'
+import type { CombinedFootingInput } from '../engine/combinedFooting'
 import { designAxialColumn, interaction, capacityAtEccentricity } from '../engine/columnDesign'
 import { buildBeamSolution } from './beamSolution'
 import { axialColumnSolution, eccentricColumnSolution } from './columnSolution'
 import { buildFoundationSolution, type SolutionCtx } from './foundationSolution'
+import { buildCombinedFootingSolution } from './combinedFootingSolution'
 import type { SolutionStep } from './solution'
 
 /** Worked solution for one beam/girder critical section. */
@@ -53,4 +55,17 @@ export function footingRowSolution(sec: RectSection, soil: SoilOptions, row: Foo
     short: null, ecc: null,
   }
   return buildFoundationSolution(ctx)
+}
+
+/** Worked solution for a combined-footing pair row (rigid method). */
+export function combinedRowSolution(sec: RectSection, soil: SoilOptions, row: CombinedScheduleRow): SolutionStep[] {
+  const cw = Math.min(sec.b, sec.h)
+  const input: CombinedFootingInput = {
+    col1Width: cw, col2Width: cw, spacing: row.spacing,
+    dl1: row.dl1, ll1: row.ll1, dl2: row.dl2, ll2: row.ll2,
+    leftRestrict: false, rightRestrict: false, leftOverhang: 0, rightOverhang: 0,
+    fc: sec.fc, fy: sec.fy, qAllow: soil.qAllow, gammaSoil: soil.gammaSoil, gammaConc: soil.gammaConc,
+    surcharge: 0, H: soil.H, barDia: sec.barDia, cover: 75,
+  }
+  return buildCombinedFootingSolution(input, row.design)
 }

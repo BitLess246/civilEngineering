@@ -14,7 +14,7 @@ import { computeWind, type WindResult } from '../engine/wind'
 import { solveFrame3D, applyF3Combo } from '../engine/frame3d'
 import { ReportControls } from '../components/ReportControls'
 import { WorkedSolution } from '../components/WorkedSolution'
-import { beamSectionSolution, columnRowSolution, footingRowSolution } from '../lib/modelSpaceSolutions'
+import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution } from '../lib/modelSpaceSolutions'
 import { Diagram } from '../components/Diagram'
 import { Num, Card, ResultCard, Row } from '../components/qty'
 import { f1, f2 } from '../lib/format'
@@ -1119,23 +1119,33 @@ export default function ModelSpace() {
                     </tr>
                   </thead>
                   <tbody>
-                    {design.combined.map((c) => (
-                      <tr key={c.nodes.join('-')} className={`border-t border-slate-100 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
-                        <td className="py-1 pr-2 font-medium">{c.nodes[0]} + {c.nodes[1]}</td>
-                        <td className="py-1 pr-2 text-right">{f2(c.spacing)} m</td>
-                        <td className="py-1 pr-2 text-right">
-                          {f1(c.dl1)}/{f1(c.ll1)} · {f1(c.dl2)}/{f1(c.ll2)}
-                        </td>
-                        <td className="py-1 pr-2">{c.design.shape}</td>
-                        <td className="py-1 pr-2">{f2(c.design.Bx)} × {f2(c.design.By)} m</td>
-                        <td className="py-1">{Math.round(c.design.Dc)} mm</td>
-                      </tr>
-                    ))}
+                    {design.combined.flatMap((c) => {
+                      const key = `comb:${c.nodes.join('-')}`, open = expanded === key
+                      return [
+                        <tr key={key} onClick={() => setExpanded(open ? null : key)}
+                          className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                          <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {c.nodes[0]} + {c.nodes[1]}</td>
+                          <td className="py-1 pr-2 text-right">{f2(c.spacing)} m</td>
+                          <td className="py-1 pr-2 text-right">
+                            {f1(c.dl1)}/{f1(c.ll1)} · {f1(c.dl2)}/{f1(c.ll2)}
+                          </td>
+                          <td className="py-1 pr-2">{c.design.shape}</td>
+                          <td className="py-1 pr-2">{f2(c.design.Bx)} × {f2(c.design.By)} m</td>
+                          <td className="py-1">{Math.round(c.design.Dc)} mm</td>
+                        </tr>,
+                        open && model && (
+                          <tr key={`${key}:sol`}>
+                            <td colSpan={6} className="bg-slate-50/60 px-2 pb-2">
+                              <WorkedSolution steps={combinedRowSolution(model.sections[0], soil, c)} title={`Combined footing ${c.nodes.join(' + ')} — worked solution`} />
+                            </td>
+                          </tr>
+                        ),
+                      ]
+                    })}
                   </tbody>
                 </table>
                 <p className="mt-1 text-[11px] text-slate-400">
-                  Column loads split from D-only / L-only frame solves; open the Combined Footing page for the full
-                  worked solution of a pair.
+                  Column loads split from D-only / L-only frame solves. Click a row for the full worked solution.
                 </p>
               </div>
             )}
