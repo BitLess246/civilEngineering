@@ -19,6 +19,7 @@ import { Diagram } from '../components/Diagram'
 import { BeamSchematic } from '../components/BeamSchematic'
 import { ColumnSchematic } from '../components/ColumnSchematic'
 import { FootingSchematic } from '../components/FootingSchematic'
+import { DimBelow, DimSide } from '../components/dims'
 import { Num, Card, ResultCard, Row } from '../components/qty'
 import { f1, f2 } from '../lib/format'
 
@@ -274,58 +275,66 @@ function TabBtn({ id, label, active, onClick }: { id: Tab; label: string; active
 function BeamRebarElevation({ L, h, sections }: {
   L: number; h: number; sections: { x: number; hogging: boolean; design: { bars: number; sAdopt: number } }[]
 }): ReactNode {
-  const W = 480, PAD = 30, top = 20, bh = 74
-  const x0 = PAD, x1 = W - PAD, yTop = top, yBot = top + bh
+  // viewBox width matches BeamSchematic (330) so text renders the same size.
+  const W = 330, padL = 44, padR = 18, top = 22, bh = 62
+  const x0 = padL, x1 = W - padR, yTop = top, yBot = top + bh
+  const dimY = yBot + 22, H = dimY + 14
   const sx = (x: number) => x0 + (x1 - x0) * (L > 0 ? Math.max(0, Math.min(1, x / L)) : 0)
   const sList = sections.map((s) => s.design.sAdopt).filter((v) => v > 0)
   const sm = sList.length ? Math.min(...sList) / 1000 : 0
   const nStir = sm > 0 ? Math.min(40, Math.max(2, Math.round(L / sm))) : 0
   return (
-    <svg viewBox={`0 0 ${W} ${yBot + 36}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
+    <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
       style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
-      <text x={x0} y={13} fontSize={11} fontWeight={700} fill="#0056b3">ELEVATION — rebar (h = {h} mm)</text>
+      <text x={x0} y={13} fontSize={11} fontWeight={700} fill="#0056b3">ELEVATION — rebar{sm > 0 ? ` (stirrups @${Math.round(sm * 1000)})` : ''}</text>
       <rect x={x0} y={yTop} width={x1 - x0} height={bh} fill="#fff" stroke="#37526e" strokeWidth={1.4} />
       {Array.from({ length: nStir + 1 }, (_, k) => {
         const x = sx((L * k) / Math.max(nStir, 1))
         return <line key={k} x1={x} y1={yTop + 4} x2={x} y2={yBot - 4} stroke="#94a3b8" strokeWidth={0.7} />
       })}
       {sections.map((s, i) => {
-        const y = s.hogging ? yTop + 6 : yBot - 6
+        const y = s.hogging ? yTop + 7 : yBot - 7
         const c = sx(s.x), half = (x1 - x0) * (s.hogging ? 0.16 : 0.3)
         const xa = Math.max(x0 + 3, c - half), xb = Math.min(x1 - 3, c + half)
         return (
           <g key={i}>
-            <line x1={xa} y1={y} x2={xb} y2={y} stroke="#dc2626" strokeWidth={1.9} />
-            <text x={(xa + xb) / 2} y={s.hogging ? y - 3 : y + 10} fontSize={8.5} fill="#dc2626" textAnchor="middle">
+            <line x1={xa} y1={y} x2={xb} y2={y} stroke="#dc2626" strokeWidth={2} />
+            <text x={(xa + xb) / 2} y={s.hogging ? y - 3 : y + 9} fontSize={8.5} fill="#dc2626" textAnchor="middle">
               {s.design.bars}⌀ {s.hogging ? 'top' : 'bot'}
             </text>
           </g>
         )
       })}
-      <text x={x0} y={yBot + 15} fontSize={9} fill="#37526e">0</text>
-      <text x={x1} y={yBot + 15} fontSize={9} fill="#37526e" textAnchor="end">L = {L} m{sm > 0 ? ` · stirrups @${Math.round(sm * 1000)}` : ''}</text>
+      <DimBelow xA={x0} xB={x1} featY={yBot} dY={dimY} label={`L = ${L} m`} />
+      <DimSide yA={yTop} yB={yBot} featX={x0} dX={x0 - 16} label={`h = ${h}`} side="left" />
     </svg>
   )
 }
 
-/** Rebar elevation of a column: outline, longitudinal bars and ties at spacing. */
-function ColumnElevation({ Lh, bars, tieSpacing }: { Lh: number; bars: number; tieSpacing: number }): ReactNode {
-  const W = 150, H = 300, pad = 26, colW = 56
-  const cx = W / 2, x0 = cx - colW / 2, x1 = cx + colW / 2, y0 = pad, y1 = H - pad
+/** Rebar elevation of a column, drawn to scale (height ∝ Lh, width ∝ b), with
+ *  longitudinal bars, ties at spacing and dimension lines. viewBox width
+ *  matches ColumnSchematic (320) so its text matches the section below it. */
+function ColumnElevation({ Lh, b, bars, tieSpacing }: { Lh: number; b: number; bars: number; tieSpacing: number }): ReactNode {
+  const W = 320, top = 24, availH = 230
+  const scl = availH / Math.max(Lh, 0.5)                 // px per metre
+  const colW = Math.max(30, (b / 1000) * scl)            // to scale with height
+  const cx = W * 0.46, x0 = cx - colW / 2, x1 = cx + colW / 2, y0 = top, y1 = top + availH
+  const dimY = y1 + 20, H = dimY + 16
   const sm = tieSpacing / 1000
-  const n = sm > 0 ? Math.min(30, Math.max(2, Math.round(Lh / sm))) : 0
+  const n = sm > 0 ? Math.min(40, Math.max(2, Math.round(Lh / sm))) : 0
   return (
     <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
       style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
-      <text x={8} y={14} fontSize={11} fontWeight={700} fill="#0056b3">ELEVATION</text>
-      <rect x={x0} y={y0} width={colW} height={y1 - y0} fill="#fff" stroke="#37526e" strokeWidth={1.4} />
-      <line x1={x0 + 7} y1={y0} x2={x0 + 7} y2={y1} stroke="#dc2626" strokeWidth={1.6} />
-      <line x1={x1 - 7} y1={y0} x2={x1 - 7} y2={y1} stroke="#dc2626" strokeWidth={1.6} />
+      <text x={12} y={14} fontSize={11} fontWeight={700} fill="#0056b3">ELEVATION — {bars}⌀ · ties @{Math.round(tieSpacing)}</text>
+      <rect x={x0} y={y0} width={colW} height={availH} fill="#fff" stroke="#37526e" strokeWidth={1.4} />
+      <line x1={x0 + 6} y1={y0} x2={x0 + 6} y2={y1} stroke="#dc2626" strokeWidth={1.6} />
+      <line x1={x1 - 6} y1={y0} x2={x1 - 6} y2={y1} stroke="#dc2626" strokeWidth={1.6} />
       {Array.from({ length: n + 1 }, (_, k) => {
-        const y = y0 + ((y1 - y0) * k) / n
+        const y = y0 + (availH * k) / n
         return <line key={k} x1={x0 + 3} y1={y} x2={x1 - 3} y2={y} stroke="#94a3b8" strokeWidth={0.7} />
       })}
-      <text x={cx} y={y1 + 16} fontSize={8.5} fill="#37526e" textAnchor="middle">{bars}⌀ · ties @{Math.round(tieSpacing)}</text>
+      <DimSide yA={y0} yB={y1} featX={x0} dX={x0 - 14} label={`H = ${Lh} m`} side="left" />
+      <DimBelow xA={x0} xB={x1} featY={y1} dY={dimY} label={`b = ${b}`} />
     </svg>
   )
 }
@@ -1255,21 +1264,19 @@ export default function ModelSpace() {
                     open && model && sec && (
                       <tr key={`${key}:sol`}>
                         <td colSpan={8} className="bg-slate-50/60 px-2 pb-2">
-                          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.7fr_1fr]">
-                            <div>
-                              {bm.diag && (
-                                <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-                                  <Diagram xs={bm.diag.xs} ys={loadFromShear(bm.diag.xs, bm.diag.Vy)} title="LOAD w (≈ −dV/dx)" unit="kN/m"
-                                    color="#475569" vlines={[{ x: s.x, label: s.label.split(' ')[0] }]} />
-                                  <Diagram xs={bm.diag.xs} ys={bm.diag.Vy} title="SHEAR Vy" unit="kN"
-                                    color="#1f77b4" vlines={[{ x: s.x, label: s.label.split(' ')[0] }]} />
-                                  <Diagram xs={bm.diag.xs} ys={bm.diag.Mz} title="MOMENT Mz (+sag)" unit="kN·m"
-                                    color="#d62728" vlines={[{ x: s.x, label: s.label.split(' ')[0] }]} />
-                                </div>
-                              )}
-                              <WorkedSolution steps={beamSectionSolution(sec, s)} title={`${bm.id} · ${s.label} — worked solution`} />
+                          {bm.diag && (
+                            <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                              <Diagram xs={bm.diag.xs} ys={loadFromShear(bm.diag.xs, bm.diag.Vy)} title="LOAD w (≈ −dV/dx)" unit="kN/m"
+                                color="#475569" vlines={[{ x: s.x, label: s.label.split(' ')[0] }]} />
+                              <Diagram xs={bm.diag.xs} ys={bm.diag.Vy} title="SHEAR Vy" unit="kN"
+                                color="#1f77b4" vlines={[{ x: s.x, label: s.label.split(' ')[0] }]} />
+                              <Diagram xs={bm.diag.xs} ys={bm.diag.Mz} title="MOMENT Mz (+sag)" unit="kN·m"
+                                color="#d62728" vlines={[{ x: s.x, label: s.label.split(' ')[0] }]} />
                             </div>
-                            <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-3">
+                          )}
+                          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.7fr_1fr]">
+                            <WorkedSolution steps={beamSectionSolution(sec, s)} title={`${bm.id} · ${s.label} — worked solution`} />
+                            <div className="space-y-3 self-start rounded-lg border border-slate-200 bg-white p-3">
                               <BeamRebarElevation L={bm.L} h={sec.h} sections={bm.sections} />
                               <div className="border-t border-slate-100 pt-2">
                                 <p className="mb-1 text-[11px] font-semibold text-[#0056b3]">SECTION — {s.label}</p>
@@ -1324,10 +1331,13 @@ export default function ModelSpace() {
                         <td colSpan={7} className="bg-slate-50/60 px-2 pb-2">
                           <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.7fr_1fr]">
                             <WorkedSolution steps={columnRowSolution(cs, c)} title={`${c.id} — worked solution`} />
-                            <div className="grid grid-cols-2 gap-3 rounded-lg border border-slate-200 bg-white p-3">
-                              <ColumnElevation Lh={c.L} bars={c.bars} tieSpacing={c.tieSpacing} />
-                              <ColumnSchematic shape="tied" b={cs.b} h={cs.h} cover={cs.cover}
-                                barDia={cs.barDia} tieDia={cs.tieDia} bars={c.bars} tieSpacing={c.tieSpacing} />
+                            <div className="space-y-3 self-start rounded-lg border border-slate-200 bg-white p-3">
+                              <ColumnElevation Lh={c.L} b={cs.b} bars={c.bars} tieSpacing={c.tieSpacing} />
+                              <div className="border-t border-slate-100 pt-2">
+                                <p className="mb-1 text-[11px] font-semibold text-[#0056b3]">SECTION</p>
+                                <ColumnSchematic shape="tied" b={cs.b} h={cs.h} cover={cs.cover}
+                                  barDia={cs.barDia} tieDia={cs.tieDia} bars={c.bars} tieSpacing={c.tieSpacing} />
+                              </div>
                             </div>
                           </div>
                         </td>
