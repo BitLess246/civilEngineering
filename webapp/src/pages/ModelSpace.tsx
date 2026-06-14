@@ -35,10 +35,12 @@ const parseList = (s: string): number[] =>
   s.split(/[, ]+/).map(parseFloat).filter((v) => Number.isFinite(v) && v > 0)
 
 // ── 3D primitives ─────────────────────────────────────────────────────────
-function Member3D({ a, b, role, selected, tint = 0, onPick }: {
+function Member3D({ a, b, role, selected, tint = 0, sec, onPick }: {
   a: THREE.Vector3; b: THREE.Vector3; role: string; selected: boolean
   /** 0–1 utilisation tint (|M| relative to the model max) after analysis. */
   tint?: number
+  /** the member's own section, drawn to scale (mm → m). */
+  sec?: { b: number; h: number }
   onPick: () => void
 }) {
   const { mid, quat, len } = useMemo(() => {
@@ -47,7 +49,9 @@ function Member3D({ a, b, role, selected, tint = 0, onPick }: {
     const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir.clone().normalize())
     return { mid: new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5), quat, len }
   }, [a, b])
-  const t = role === 'column' ? 0.3 : 0.22
+  // cross-section drawn to scale: width (b) and depth (h) in metres
+  const ty = sec ? sec.h / 1000 : role === 'column' ? 0.3 : 0.22
+  const tz = sec ? sec.b / 1000 : role === 'column' ? 0.3 : 0.22
   const color = useMemo(() => {
     if (selected) return SEL
     const base = new THREE.Color(ROLE_COLOR[role] ?? '#64748b')
@@ -56,7 +60,7 @@ function Member3D({ a, b, role, selected, tint = 0, onPick }: {
   return (
     <mesh position={mid} quaternion={quat}
       onClick={(e) => { e.stopPropagation(); onPick() }}>
-      <boxGeometry args={[len, t, t]} />
+      <boxGeometry args={[len, ty, tz]} />
       <meshStandardMaterial color={color} />
     </mesh>
   )
@@ -187,7 +191,11 @@ export default function ModelSpace() {
   const [baysX, setBaysX] = useState('6, 6')
   const [baysZ, setBaysZ] = useState('5')
   const [storeyH, setStoreyH] = useState('3.5, 3')
-  const [b, setB] = useState(300); const [h, setH] = useState(500); const [fc, setFc] = useState(28)
+  // Per-role initial sizes (column ≥ girder ≥ beam to start the hierarchy satisfied).
+  const [colB, setColB] = useState(400); const [colH, setColH] = useState(400)
+  const [girB, setGirB] = useState(300); const [girH, setGirH] = useState(500)
+  const [beaB, setBeaB] = useState(250); const [beaH, setBeaH] = useState(450)
+  const [fc, setFc] = useState(28)
   const [qD, setQD] = useState(4.8); const [qL, setQL] = useState(2.4)
   // Soil (for the footing stage of the design pipeline)
   const [qa, setQa] = useState(200); const [Hf, setHf] = useState(1.5)
@@ -322,12 +330,10 @@ export default function ModelSpace() {
 
   const optimize = () => {
     if (!model) return
-    const r = optimizeStructure(model, soil, footingPlan(), 24, anaOpts)
+    const r = optimizeStructure(model, soil, footingPlan(), 30, anaOpts)
     if (!r) return
-    // adopt the optimised section in the model + the grid inputs
-    const m2 = { ...model, sections: [r.section] }
-    save(m2)
-    setB(r.section.b); setH(r.section.h)
+    // adopt the optimised per-member sections
+    save(r.model)
     setOpt(r)
     setDesign(r.design)
   }
@@ -356,13 +362,33 @@ export default function ModelSpace() {
     if (!model) return
     save({ ...model, members: model.members.map((m) => (m.id === id ? { ...m, ...patch } : m)) })
   }
+  const sectionFor = (memberId: string): RectSection | undefined => {
+    const m = model?.members.find((x) => x.id === memberId)
+    return m ? model?.sections.find((s) => s.id === m.section) : undefined
+  }
+  const colSectionAt = (node: string): RectSection | undefined => {
+    const c = model?.members.find((m) => m.role === 'column' && (m.i === node || m.j === node))
+    return c ? sectionFor(c.id) : undefined
+  }
+  const updMemberSize = (memberId: string, k: 'b' | 'h', v: number) => {
+    if (!model || !Number.isFinite(v)) return
+    const mm = model.members.find((x) => x.id === memberId); if (!mm) return
+    save({
+      ...model,
+      sections: model.sections.map((s) => (s.id === mm.section
+        ? { ...s, [k]: v, name: k === 'b' ? `${v}×${s.h}` : `${s.b}×${v}` } : s)),
+    })
+  }
   const addMember = () => {
     if (!model || !newI || !newJ || newI === newJ) return
     let k = model.members.length
     while (model.members.some((m) => m.id === `m${k}`)) k++
+    const id = `m${k}`
+    const tmpl = model.sections[0] ?? { b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 } as RectSection
     save({
       ...model,
-      members: [...model.members, { id: `m${k}`, i: newI, j: newJ, role: newRole, section: model.sections[0]?.id ?? 'S1' }],
+      sections: [...model.sections, { ...tmpl, id, name: `${tmpl.b}×${tmpl.h}` }],
+      members: [...model.members, { id, i: newI, j: newJ, role: newRole, section: id }],
     })
   }
   const updLoad = (idx: number, v: number) => {
@@ -397,8 +423,12 @@ export default function ModelSpace() {
   }, [govRes])
 
   const generate = () => {
-    const section: RectSection = { id: 'S1', name: `${b}×${h}`, b, h, fc, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
-    const m = generateGridModel({ baysX: parseList(baysX), baysZ: parseList(baysZ), storeyH: parseList(storeyH), section })
+    const mat = { fc, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+    const role = (b: number, h: number, id: string): RectSection => ({ id, name: `${b}×${h}`, b, h, ...mat })
+    const m = generateGridModel({
+      baysX: parseList(baysX), baysZ: parseList(baysZ), storeyH: parseList(storeyH),
+      column: role(colB, colH, 'COL'), girder: role(girB, girH, 'GIR'), beam: role(beaB, beaH, 'BEA'),
+    })
     // gravity loads: member self-weight (D), slab self-weight + SDL (D), LL (L)
     m.loads = buildGravityLoads(m, qD, qL)
     setSelected(null)
@@ -483,10 +513,21 @@ export default function ModelSpace() {
             </label>
           </Card>
 
-          <Card title="Section & slab loads">
-            <Num label="b" unit="mm" value={b} onChange={setB} />
-            <Num label="h" unit="mm" value={h} onChange={setH} />
+          <Card title="Initial member sizes (mm)">
+            <p className="col-span-full -mb-1 text-[11px] text-slate-500">
+              Each member starts from its role size and grows independently when optimised;
+              columns are kept ≥ girders ≥ beams in width (strong-column / weak-beam).
+            </p>
+            <Num label="Column b" unit="mm" value={colB} onChange={setColB} />
+            <Num label="Column h" unit="mm" value={colH} onChange={setColH} />
+            <Num label="Girder b" unit="mm" value={girB} onChange={setGirB} />
+            <Num label="Girder h" unit="mm" value={girH} onChange={setGirH} />
+            <Num label="Beam b" unit="mm" value={beaB} onChange={setBeaB} />
+            <Num label="Beam h" unit="mm" value={beaH} onChange={setBeaH} />
             <Num label="f′c" unit="MPa" value={fc} onChange={setFc} />
+          </Card>
+
+          <Card title="Loads & soil">
             <Num label="SDL (superimposed)" unit="kPa" value={qD} onChange={setQD} />
             <Num label="Live load" unit="kPa" value={qL} onChange={setQL} />
             <Num label="Soil qa" unit="kPa" value={qa} onChange={setQa} />
@@ -647,7 +688,7 @@ export default function ModelSpace() {
             <ResultCard title={`Member — ${selMember.id}`}>
               <Row label="Role" value={selMember.role} />
               <Row label="Length" value={`${f2(memberLen)} m`} />
-              <Row label="Section" value={model.sections[0]?.name ?? selMember.section} />
+              <Row label="Section" value={sectionFor(selMember.id)?.name ?? selMember.section} />
               {(() => {
                 const mr = govRes?.members.find((m) => m.id === selMember.id)
                 if (!mr) return null
@@ -700,7 +741,7 @@ export default function ModelSpace() {
                 const tint = govRes && govRes.Mmax > 1e-9
                   ? (memForce.get(m.id)?.Mmax ?? 0) / govRes.Mmax : 0
                 return <Member3D key={m.id} a={a} b={bb} role={m.role} tint={tint * 0.85}
-                  selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                  sec={sectionFor(m.id)} selected={m.id === selected} onPick={() => setSelected(m.id)} />
               })}
               {model.plates.map((p) => {
                 const cs = p.corners.map((c) => nodePos.get(c))
@@ -782,13 +823,17 @@ export default function ModelSpace() {
                   <tr className="text-left uppercase tracking-wide text-slate-500">
                     <th className="py-1 pr-2 font-semibold">Id</th>
                     <th className="py-1 pr-1 font-semibold">Role</th>
-                    <th className="py-1 pr-1 font-semibold">Node i</th>
-                    <th className="py-1 pr-1 font-semibold">Node j</th>
+                    <th className="py-1 pr-1 font-semibold">b</th>
+                    <th className="py-1 pr-1 font-semibold">h</th>
+                    <th className="py-1 pr-1 font-semibold">i</th>
+                    <th className="py-1 pr-1 font-semibold">j</th>
                     <th className="py-1" />
                   </tr>
                 </thead>
                 <tbody>
-                  {model.members.map((m) => (
+                  {model.members.map((m) => {
+                    const ms = sectionFor(m.id)
+                    return (
                     <tr key={m.id} className={`border-t border-slate-100 ${m.id === selected ? 'bg-amber-50' : ''}`}>
                       <td className="py-0.5 pr-2 font-medium cursor-pointer" onClick={() => setSelected(m.id)}>{m.id}</td>
                       <td className="py-0.5 pr-1">
@@ -798,10 +843,17 @@ export default function ModelSpace() {
                           <option value="column">column</option><option value="brace">brace</option>
                         </select>
                       </td>
+                      {(['b', 'h'] as const).map((k) => (
+                        <td key={k} className="py-0.5 pr-1">
+                          <input type="number" step="50" value={ms?.[k] ?? 0}
+                            onChange={(e) => updMemberSize(m.id, k, parseFloat(e.target.value))}
+                            className="w-12 rounded border border-slate-200 px-1 py-0.5" />
+                        </td>
+                      ))}
                       {(['i', 'j'] as const).map((end) => (
                         <td key={end} className="py-0.5 pr-1">
                           <select value={m[end]} onChange={(e) => updMember(m.id, { [end]: e.target.value })}
-                            className="max-w-[5.5rem] rounded border border-slate-200 px-1 py-0.5">
+                            className="max-w-[5rem] rounded border border-slate-200 px-1 py-0.5">
                             {model.nodes.map((n) => <option key={n.id} value={n.id}>{n.id}</option>)}
                           </select>
                         </td>
@@ -811,7 +863,7 @@ export default function ModelSpace() {
                           className="rounded px-1.5 text-red-500 hover:bg-red-50">✕</button>
                       </td>
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>
@@ -930,40 +982,50 @@ export default function ModelSpace() {
         </div>
       )}
 
-      {opt && (
-        <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">
-            Optimization — {opt.converged
-              ? `converged at ${opt.section.b}×${opt.section.h} in ${opt.steps.length} iteration${opt.steps.length === 1 ? '' : 's'}`
-              : 'did NOT converge (iteration cap hit — check spans/loads)'}
-          </h3>
-          <table className="w-auto border-collapse text-xs">
-            <thead>
-              <tr className="text-left uppercase tracking-wide text-slate-500">
-                <th className="py-1 pr-4 font-semibold">#</th>
-                <th className="py-1 pr-4 font-semibold">Section</th>
-                <th className="py-1 pr-4 text-right font-semibold">Failing</th>
-                <th className="py-1 font-semibold">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {opt.steps.map((s, i) => (
-                <tr key={i} className={`border-t border-slate-100 ${s.ok ? '' : 'bg-red-50 text-red-700'}`}>
-                  <td className="py-0.5 pr-4">{i + 1}</td>
-                  <td className="py-0.5 pr-4 font-medium">{s.b} × {s.h}</td>
-                  <td className="py-0.5 pr-4 text-right">{s.fails}</td>
-                  <td className="py-0.5">{s.ok ? '✓ all pass' : '✗ grow'}</td>
+      {opt && (() => {
+        const sizesFor = (role: MemberRole) => {
+          const ids = new Set(opt.model.members.filter((m) => m.role === role).map((m) => m.section))
+          return [...new Set(opt.model.sections.filter((s) => ids.has(s.id)).map((s) => s.name))].join(', ') || '—'
+        }
+        return (
+          <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-1 text-[1.02rem] font-bold text-[#0056b3]">
+              Optimization — {opt.converged
+                ? `converged in ${opt.steps.length} step${opt.steps.length === 1 ? '' : 's'}`
+                : 'did NOT converge (iteration cap hit — check spans/loads)'}
+            </h3>
+            <p className="mb-2 text-xs text-slate-500">
+              Final sizes — <b>columns</b> {sizesFor('column')} · <b>girders</b> {sizesFor('girder')} · <b>beams</b> {sizesFor('beam')}
+            </p>
+            <table className="w-auto border-collapse text-xs">
+              <thead>
+                <tr className="text-left uppercase tracking-wide text-slate-500">
+                  <th className="py-1 pr-4 font-semibold">Step</th>
+                  <th className="py-1 pr-4 text-right font-semibold">Members grown</th>
+                  <th className="py-1 pr-4 text-right font-semibold">Failing</th>
+                  <th className="py-1 font-semibold">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="mt-1 text-[11px] text-slate-400">
-            Grow h +50 mm while anything fails (b +50 once h ≥ 3b), then shrink h −25 mm while everything still
-            passes. Each step re-runs the full analysis + design pipeline (self-weight is NOT auto-updated — hit
-            “Rebuild D + L” and re-optimize if the section moved a lot).
-          </p>
-        </div>
-      )}
+              </thead>
+              <tbody>
+                {opt.steps.map((s, i) => (
+                  <tr key={i} className={`border-t border-slate-100 ${s.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                    <td className="py-0.5 pr-4">{i + 1}</td>
+                    <td className="py-0.5 pr-4 text-right">{s.grown || '—'}</td>
+                    <td className="py-0.5 pr-4 text-right">{s.fails}</td>
+                    <td className="py-0.5">{s.ok ? '✓ all pass' : '✗ grow failing'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Each failing beam/girder/column grows its OWN section (h +50 mm; b +50 once h ≥ 3b); the
+              strong-column/weak-beam width hierarchy is re-enforced after every step, then depths are trimmed
+              while the structure still passes. Self-weight is not auto-updated — hit “Rebuild D + L” and
+              re-optimize if sizes moved a lot.
+            </p>
+          </div>
+        )
+      })()}
 
       {design && (
         <div className="mt-6 space-y-6">
@@ -1003,7 +1065,7 @@ export default function ModelSpace() {
                   return [
                     <tr key={key} onClick={() => setExpanded(open ? null : key)}
                       className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${bad ? 'bg-red-50 text-red-700' : ''}`}>
-                      <td className="py-1 pr-2 font-medium">{k === 0 ? `${open ? '▾' : '▸'} ${bm.id} (${bm.role}, ${f1(bm.L)} m)` : ''}</td>
+                      <td className="py-1 pr-2 font-medium">{k === 0 ? `${open ? '▾' : '▸'} ${bm.id} (${bm.role} ${sectionFor(bm.id)?.name ?? ''}, ${f1(bm.L)} m)` : ''}</td>
                       <td className="py-1 pr-2">{s.label}{s.hogging ? ' (hog)' : ''}</td>
                       <td className="py-1 pr-2 text-right">{f1(Math.abs(s.Mu))}</td>
                       <td className="py-1 pr-2 text-right">{f1(s.Vu)}</td>
@@ -1015,7 +1077,7 @@ export default function ModelSpace() {
                     open && model && (
                       <tr key={`${key}:sol`}>
                         <td colSpan={8} className="bg-slate-50/60 px-2 pb-2">
-                          <WorkedSolution steps={beamSectionSolution(model.sections[0], s)} title={`${bm.id} · ${s.label} — worked solution`} />
+                          <WorkedSolution steps={beamSectionSolution(sectionFor(bm.id) ?? model.sections[0], s)} title={`${bm.id} · ${s.label} — worked solution`} />
                         </td>
                       </tr>
                     ),
@@ -1032,6 +1094,7 @@ export default function ModelSpace() {
                 <thead>
                   <tr className="text-left uppercase tracking-wide text-slate-500">
                     <th className="py-1 pr-2 font-semibold">Column</th>
+                    <th className="py-1 pr-2 font-semibold">Section</th>
                     <th className="py-1 pr-2 text-right font-semibold">Pu (kN)</th>
                     <th className="py-1 pr-2 text-right font-semibold">Mu</th>
                     <th className="py-1 pr-2 font-semibold">Bars</th>
@@ -1042,10 +1105,12 @@ export default function ModelSpace() {
                 <tbody>
                   {design.columns.flatMap((c) => {
                     const key = `col:${c.id}`, open = expanded === key
+                    const cs = sectionFor(c.id)
                     return [
                       <tr key={key} onClick={() => setExpanded(open ? null : key)}
                         className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
                         <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {c.id}</td>
+                        <td className="py-1 pr-2">{cs?.name}</td>
                         <td className="py-1 pr-2 text-right">{f1(c.Pu)}</td>
                         <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
                         <td className="py-1 pr-2">{c.bars}⌀{model?.sections[0]?.barDia} · ties @{Math.round(c.tieSpacing)}</td>
@@ -1054,8 +1119,8 @@ export default function ModelSpace() {
                       </tr>,
                       open && model && (
                         <tr key={`${key}:sol`}>
-                          <td colSpan={6} className="bg-slate-50/60 px-2 pb-2">
-                            <WorkedSolution steps={columnRowSolution(model.sections[0], c)} title={`${c.id} — worked solution`} />
+                          <td colSpan={7} className="bg-slate-50/60 px-2 pb-2">
+                            <WorkedSolution steps={columnRowSolution(cs ?? model.sections[0], c)} title={`${c.id} — worked solution`} />
                           </td>
                         </tr>
                       ),
@@ -1094,7 +1159,7 @@ export default function ModelSpace() {
                       open && model && (
                         <tr key={`${key}:sol`}>
                           <td colSpan={6} className="bg-slate-50/60 px-2 pb-2">
-                            <WorkedSolution steps={footingRowSolution(model.sections[0], soil, f)} title={`Footing ${f.node} — worked solution`} />
+                            <WorkedSolution steps={footingRowSolution(colSectionAt(f.node) ?? model.sections[0], soil, f)} title={`Footing ${f.node} — worked solution`} />
                           </td>
                         </tr>
                       ),
@@ -1136,7 +1201,7 @@ export default function ModelSpace() {
                         open && model && (
                           <tr key={`${key}:sol`}>
                             <td colSpan={6} className="bg-slate-50/60 px-2 pb-2">
-                              <WorkedSolution steps={combinedRowSolution(model.sections[0], soil, c)} title={`Combined footing ${c.nodes.join(' + ')} — worked solution`} />
+                              <WorkedSolution steps={combinedRowSolution(colSectionAt(c.nodes[0]) ?? model.sections[0], colSectionAt(c.nodes[1]) ?? model.sections[0], soil, c)} title={`Combined footing ${c.nodes.join(' + ')} — worked solution`} />
                             </td>
                           </tr>
                         ),

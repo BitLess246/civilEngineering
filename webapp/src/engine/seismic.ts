@@ -40,8 +40,11 @@ const GAMMA_C = 24 // kN/m³
 /** Seismic weight per elevated level: slab dead loads + member self-weight. */
 export function storeyWeights(model: StructuralModel): { elevation: number; w: number }[] {
   const nm = new Map(model.nodes.map((n) => [n.id, n]))
-  const sec = model.sections[0]
-  const aSec = sec ? (sec.b / 1000) * (sec.h / 1000) : 0
+  const secMap = new Map(model.sections.map((s) => [s.id, s]))
+  const aSecOf = (mSection: string) => {
+    const s = secMap.get(mSection) ?? model.sections[0]
+    return s ? (s.b / 1000) * (s.h / 1000) : 0
+  }
   const levels = [...new Set(model.storeys.map((s) => s.elevation))].sort((a, b) => a - b)
   const w = new Map<number, number>(levels.map((e) => [e, 0]))
   const closest = (y: number) => levels.reduce((best, e) => (Math.abs(e - y) < Math.abs(best - y) ? e : best), levels[0])
@@ -64,7 +67,7 @@ export function storeyWeights(model: StructuralModel): { elevation: number; w: n
     const a = nm.get(m.i), b = nm.get(m.j)
     if (!a || !b) continue
     const L = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)
-    const wSelf = aSec * L * GAMMA_C
+    const wSelf = aSecOf(m.section) * L * GAMMA_C
     if (m.role === 'column') {
       const top = Math.max(a.y, b.y), bot = Math.min(a.y, b.y)
       const topLvl = levels.includes(top) ? top : closest(top)

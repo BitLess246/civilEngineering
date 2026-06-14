@@ -8,6 +8,7 @@
 // Every stage reuses the existing engines unchanged.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, RectSection, ModelLoad } from './model'
+import { enforceSectionHierarchy } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
 import { solveFrame3D, applyF3Combo, type F3Result, type F3MemberResult, type F3Load } from './frame3d'
 import { nscpCombos } from './beamAnalysis'
@@ -194,8 +195,16 @@ function buildRuns(model: StructuralModel, opts: AnalyzeOptions) {
 export function designStructure(
   model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}, opts: AnalyzeOptions = {},
 ): StructureDesign | null {
-  const sec: RectSection | undefined = model.sections[0]
-  if (!sec) return null
+  if (model.members.length === 0) return null
+  // each member designs with its OWN section; footings use the section of the
+  // column that lands on the support node.
+  const fallbackSec: RectSection = model.sections[0]
+    ?? { id: '', name: '', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+  const secById = new Map(model.sections.map((s) => [s.id, s]))
+  const memSec = new Map(model.members.map((m) => [m.id, secById.get(m.section) ?? fallbackSec]))
+  const secOf = (id: string) => memSec.get(id) ?? fallbackSec
+  const colAtNode = (node: string) => model.members.find((m) => m.role === 'column' && (m.i === node || m.j === node))
+  const footSec = (node: string) => { const c = colAtNode(node); return c ? secOf(c.id) : fallbackSec }
 
   const { br, runs } = buildRuns(model, opts)
   if (runs.length === 0) return null
@@ -239,7 +248,7 @@ export function designStructure(
       let best: BeamScheduleRow | null = null, bestSev = -1, gov = ''
       for (const run of runs) {
         const mr = memberOf(run, m.id); if (!mr) continue
-        const row = designBeamRow(mr, role, sec)
+        const row = designBeamRow(mr, role, secOf(m.id))
         if (row.sections.length === 0) continue
         const sev = beamSeverity(row)
         if (sev > bestSev) { bestSev = sev; best = row; gov = run.name }
@@ -249,7 +258,7 @@ export function designStructure(
       let best: ColumnScheduleRow | null = null, bestUtil = -1, gov = ''
       for (const run of runs) {
         const mr = memberOf(run, m.id); if (!mr) continue
-        const row = designColumnRow(mr, sec)
+        const row = designColumnRow(mr, secOf(m.id))
         if (row.util > bestUtil) { bestUtil = row.util; best = row; gov = run.name }
       }
       if (best) columns.push({ ...best, gov })
@@ -267,18 +276,19 @@ export function designStructure(
     if (!a || !b2) continue
     const spacing = Math.hypot(b2.x - a.x, b2.z - a.z)
     if (spacing < 1e-6) continue
+    const fsA = footSec(nodeA), fsB = footSec(nodeB)
     const row: CombinedScheduleRow = {
       nodes: [nodeA, nodeB], spacing,
       dl1: dAt.get(nodeA) ?? 0, ll1: lAt.get(nodeA) ?? 0,
       dl2: dAt.get(nodeB) ?? 0, ll2: lAt.get(nodeB) ?? 0,
       design: designCombinedFooting({
-        col1Width: Math.min(sec.b, sec.h), col2Width: Math.min(sec.b, sec.h), spacing,
+        col1Width: Math.min(fsA.b, fsA.h), col2Width: Math.min(fsB.b, fsB.h), spacing,
         dl1: dAt.get(nodeA) ?? 0, ll1: lAt.get(nodeA) ?? 0,
         dl2: dAt.get(nodeB) ?? 0, ll2: lAt.get(nodeB) ?? 0,
         leftRestrict: false, rightRestrict: false, leftOverhang: 0, rightOverhang: 0,
-        fc: sec.fc, fy: sec.fy, qAllow: soil.qAllow,
+        fc: fsA.fc, fy: fsA.fy, qAllow: soil.qAllow,
         gammaSoil: soil.gammaSoil, gammaConc: soil.gammaConc, surcharge: 0,
-        H: soil.H, barDia: sec.barDia, cover: 75,
+        H: soil.H, barDia: fsA.barDia, cover: 75,
       }),
       ok: false,
     }
@@ -299,11 +309,12 @@ export function designStructure(
     }
     if (Pu < 1e-6) continue
     const P = Math.max(serviceAt(ru.node), Pu / 1.4)
+    const fs = footSec(ru.node)
     const d = designSquareFooting({
-      serviceLoad: P, ultimateLoad: Pu, columnWidth: Math.min(sec.b, sec.h),
-      fc: sec.fc, fy: sec.fy, qAllow: soil.qAllow,
+      serviceLoad: P, ultimateLoad: Pu, columnWidth: Math.min(fs.b, fs.h),
+      fc: fs.fc, fy: fs.fy, qAllow: soil.qAllow,
       gammaSoil: soil.gammaSoil, gammaConc: soil.gammaConc, H: soil.H,
-      barDia: sec.barDia, cover: 75,
+      barDia: fs.barDia, cover: 75,
     })
     footings.push({ node: ru.node, P, Pu, design: d, ok: d.qNet > 0 && d.punchOK && d.beamOK, gov })
   }
@@ -315,7 +326,8 @@ export function designStructure(
     const a = nm.get(m.i), b2 = nm.get(m.j)
     if (!a || !b2) continue
     const L = Math.hypot(b2.x - a.x, b2.y - a.y, b2.z - a.z)
-    concreteMembers += (sec.b / 1000) * (sec.h / 1000) * L
+    const s = secOf(m.id)
+    concreteMembers += (s.b / 1000) * (s.h / 1000) * L
   }
   let concreteSlabs = 0
   for (const p of model.plates) {
@@ -337,10 +349,10 @@ export function designStructure(
 }
 
 // ── Optimisation loop ─────────────────────────────────────────────────────
-export interface OptimizeStep { b: number; h: number; fails: number; ok: boolean }
+export interface OptimizeStep { iter: number; grown: number; fails: number; ok: boolean }
 export interface OptimizeResult {
   design: StructureDesign
-  section: RectSection
+  model: StructuralModel   // model carrying the optimised per-member sections
   steps: OptimizeStep[]
   converged: boolean
 }
@@ -349,50 +361,64 @@ const countFails = (d: StructureDesign): number =>
   d.beams.filter((x) => !x.ok).length + d.columns.filter((x) => !x.ok).length
   + d.footings.filter((x) => !x.ok).length + d.combined.filter((x) => !x.ok).length
 
-const withSection = (model: StructuralModel, sec: RectSection): StructuralModel =>
-  ({ ...model, sections: [sec] })
+const withSizes = (model: StructuralModel, sizes: Map<string, RectSection>): StructuralModel =>
+  ({ ...model, sections: model.sections.map((s) => sizes.get(s.id) ?? s) })
+
+const growOne = (s: RectSection): RectSection =>
+  s.h >= 3 * s.b ? { ...s, b: s.b + 50, name: `${s.b + 50}×${s.h}` } : { ...s, h: s.h + 50, name: `${s.b}×${s.h + 50}` }
 
 /**
- * Iterate the design until no section fails, then trim back: GROW the shared
- * b×h (h in 50-mm steps; b joins once h reaches 3b) while anything fails,
- * then SHRINK h in 25-mm steps as long as everything still passes — the
- * smallest passing section the search visits. Stiffness changes re-analyze
- * the frame on every step (designStructure runs the full pipeline).
+ * Per-member sizing search. Each beam/girder/column carries its own section, so
+ * only the FAILING members grow (h in 50-mm steps; b joins once h ≥ 3b) — one
+ * at a time — until nothing fails, with the strong-column/weak-beam width
+ * hierarchy re-enforced after every growth. Then each member's h is trimmed in
+ * 25-mm steps while the whole structure still passes. The frame is re-analysed
+ * on every step (stiffness changes feed back into the demands).
  */
 export function optimizeStructure(
-  model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}, maxIter = 24,
+  model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}, maxIter = 30,
   opts: AnalyzeOptions = {},
 ): OptimizeResult | null {
-  if (!model.sections[0]) return null
-  let sec: RectSection = { ...model.sections[0] }
+  if (model.members.length === 0) return null
+  const memSecId = new Map(model.members.map((m) => [m.id, m.section]))
+  let work = enforceSectionHierarchy(model)          // start width-consistent
   const steps: OptimizeStep[] = []
 
-  let design = designStructure(withSection(model, sec), soil, plan, opts)
+  let design = designStructure(work, soil, plan, opts)
   if (!design) return null
-  steps.push({ b: sec.b, h: sec.h, fails: countFails(design), ok: designOK(design) })
+  steps.push({ iter: 0, grown: 0, fails: countFails(design), ok: designOK(design) })
 
-  // grow until clean
+  // GROW: bump every failing member's own section, then re-enforce the hierarchy
   let iter = 0
   while (!designOK(design) && iter++ < maxIter) {
-    if (sec.h >= 3 * sec.b) sec = { ...sec, b: sec.b + 50, name: '' }
-    else sec = { ...sec, h: sec.h + 50, name: '' }
-    sec.name = `${sec.b}×${sec.h}`
-    const d = designStructure(withSection(model, sec), soil, plan, opts)
+    const failSids = new Set<string>()
+    for (const b of design.beams) if (!b.ok) { const s = memSecId.get(b.id); if (s) failSids.add(s) }
+    for (const c of design.columns) if (!c.ok) { const s = memSecId.get(c.id); if (s) failSids.add(s) }
+    if (failSids.size === 0) break                   // only footings fail — not a section problem
+    const sizes = new Map(work.sections.map((s) => [s.id, failSids.has(s.id) ? growOne(s) : s]))
+    work = enforceSectionHierarchy(withSizes(work, sizes))
+    const d = designStructure(work, soil, plan, opts)
     if (!d) break
     design = d
-    steps.push({ b: sec.b, h: sec.h, fails: countFails(design), ok: designOK(design) })
+    steps.push({ iter, grown: failSids.size, fails: countFails(design), ok: designOK(design) })
   }
   const converged = designOK(design)
 
-  // shrink back while still passing (find the lean edge)
-  while (converged && sec.h - 25 >= 300) {
-    const trial: RectSection = { ...sec, h: sec.h - 25, name: `${sec.b}×${sec.h - 25}` }
-    const d = designStructure(withSection(model, trial), soil, plan, opts)
-    if (!d || !designOK(d)) break
-    sec = trial
-    design = d
-    steps.push({ b: sec.b, h: sec.h, fails: 0, ok: true })
+  // SHRINK: trim each member's depth while the whole structure still passes.
+  if (converged) {
+    let improved = true, guard = 0
+    while (improved && guard++ < 4) {
+      improved = false
+      for (const s0 of work.sections) {
+        if (s0.h - 25 < 300) continue
+        const trialSec: RectSection = { ...s0, h: s0.h - 25, name: `${s0.b}×${s0.h - 25}` }
+        const trial = enforceSectionHierarchy(withSizes(work, new Map([[s0.id, trialSec]])))
+        const d = designStructure(trial, soil, plan, opts)
+        if (d && designOK(d)) { work = trial; design = d; improved = true }
+      }
+    }
+    steps.push({ iter: iter + 1, grown: 0, fails: 0, ok: true })
   }
 
-  return { design, section: sec, steps, converged }
+  return { design, model: work, steps, converged }
 }

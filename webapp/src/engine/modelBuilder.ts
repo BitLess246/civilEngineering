@@ -6,13 +6,21 @@
 // Coordinates: x = plan east, z = plan north, y = elevation (up) — matching
 // the three.js viewport.
 // ─────────────────────────────────────────────────────────────────────────
-import type { StructuralModel, RectSection, Node, Member, Plate, NodeSupport } from './model'
+import type { StructuralModel, RectSection, Node, Member, Plate, NodeSupport, MemberRole } from './model'
 
 export interface GridSpec {
   baysX: number[]      // bay widths along x, m
   baysZ: number[]      // bay widths along z, m
   storeyH: number[]    // storey heights bottom-up, m
-  section: RectSection
+  /** Shorthand: one template applied to every role. */
+  section?: RectSection
+  /** Per-role starting templates (material + initial b×h). Every member gets
+   *  its OWN section clone (id = member id) so columns, girders and beams size
+   *  independently and can be grown one at a time during optimisation. Each
+   *  falls back to `section` when omitted. */
+  column?: RectSection
+  girder?: RectSection
+  beam?: RectSection
 }
 
 const acc = (bays: number[]): number[] => {
@@ -36,19 +44,35 @@ export function generateGridModel(spec: GridSpec, name = 'Grid frame'): Structur
         nodes.push({ id: nodeId(i, j, k), x: xs[i], y: ys[k], z: zs[j] })
 
   const members: Member[] = []
+  const sections: RectSection[] = []
+  const colT = spec.column ?? spec.section!
+  const girT = spec.girder ?? spec.section!
+  const beaT = spec.beam ?? spec.section!
+  // each member owns a section whose id IS the member id, cloned from the role
+  // template so the three roles (and every individual member) size separately.
+  const own = (tmpl: RectSection, id: string): string => {
+    sections.push({ ...tmpl, id, name: `${tmpl.b}×${tmpl.h}` })
+    return id
+  }
   // columns between consecutive levels at every grid point
   for (let k = 0; k < ny - 1; k++)
     for (let j = 0; j < nz; j++)
-      for (let i = 0; i < nx; i++)
-        members.push({ id: `c${i}.${j}.${k}`, i: nodeId(i, j, k), j: nodeId(i, j, k + 1), role: 'column', section: spec.section.id })
+      for (let i = 0; i < nx; i++) {
+        const id = `c${i}.${j}.${k}`
+        members.push({ id, i: nodeId(i, j, k), j: nodeId(i, j, k + 1), role: 'column', section: own(colT, id) })
+      }
   // beams along X and girders along Z at every elevated level
   for (let k = 1; k < ny; k++) {
     for (let j = 0; j < nz; j++)
-      for (let i = 0; i < nx - 1; i++)
-        members.push({ id: `bx${i}.${j}.${k}`, i: nodeId(i, j, k), j: nodeId(i + 1, j, k), role: 'beam', section: spec.section.id })
+      for (let i = 0; i < nx - 1; i++) {
+        const id = `bx${i}.${j}.${k}`
+        members.push({ id, i: nodeId(i, j, k), j: nodeId(i + 1, j, k), role: 'beam', section: own(beaT, id) })
+      }
     for (let j = 0; j < nz - 1; j++)
-      for (let i = 0; i < nx; i++)
-        members.push({ id: `bz${i}.${j}.${k}`, i: nodeId(i, j, k), j: nodeId(i, j + 1, k), role: 'girder', section: spec.section.id })
+      for (let i = 0; i < nx; i++) {
+        const id = `bz${i}.${j}.${k}`
+        members.push({ id, i: nodeId(i, j, k), j: nodeId(i, j + 1, k), role: 'girder', section: own(girT, id) })
+      }
   }
 
   const plates: Plate[] = []
@@ -71,7 +95,7 @@ export function generateGridModel(spec: GridSpec, name = 'Grid frame'): Structur
     version: 1,
     name,
     nodes,
-    sections: [spec.section],
+    sections,
     members,
     plates,
     supports,
@@ -115,12 +139,16 @@ const GAMMA_C = 24 // kN/m³
  * Loads of other categories (e.g. seismic E) are preserved from the model.
  */
 export function buildGravityLoads(model: StructuralModel, sdl: number, ll: number): StructuralModel['loads'] {
-  const sec = model.sections[0]
-  const wSelf = sec ? (sec.b / 1000) * (sec.h / 1000) * GAMMA_C : 0
+  const secMap = new Map(model.sections.map((s) => [s.id, s]))
   const kept = model.loads.filter((l) => l.cat !== 'D' && l.cat !== 'L')
-  const memberSW: StructuralModel['loads'] = wSelf > 0
-    ? model.members.map((m) => ({ kind: 'member-udl' as const, member: m.id, w: wSelf, cat: 'D' as const }))
-    : []
+  // member self-weight from each member's OWN section
+  const memberSW: StructuralModel['loads'] = model.members
+    .map((m) => {
+      const sec = secMap.get(m.section) ?? model.sections[0]
+      const w = sec ? (sec.b / 1000) * (sec.h / 1000) * GAMMA_C : 0
+      return { kind: 'member-udl' as const, member: m.id, w, cat: 'D' as const }
+    })
+    .filter((l) => l.w > 0)
   const plateLoads: StructuralModel['loads'] = model.plates.flatMap((p) => {
     const qSW = (p.thickness / 1000) * GAMMA_C
     return [
@@ -129,4 +157,43 @@ export function buildGravityLoads(model: StructuralModel, sdl: number, ll: numbe
     ]
   })
   return [...memberSW, ...plateLoads, ...kept]
+}
+
+/**
+ * Strong-column / weak-beam geometry: at every node a supporting member must be
+ * at least as WIDE (cross-section b) as the members it supports, so reinforcement
+ * passes through. Enforces, at each node, girder.b ≥ beam.b and column.b ≥
+ * max(beam, girder).b (columns kept at least square). Widths only grow — returns
+ * a new model with the bumped per-member sections. Idempotent.
+ */
+export function enforceSectionHierarchy(model: StructuralModel): StructuralModel {
+  const sec = new Map(model.sections.map((s) => [s.id, { ...s }]))
+  const secOf = (m: Member) => sec.get(m.section)
+  const atNode = new Map<string, Member[]>()
+  for (const m of model.members)
+    for (const n of [m.i, m.j]) {
+      const list = atNode.get(n); if (list) list.push(m); else atNode.set(n, [m])
+    }
+  const widthOf = (mem: Member[], roles: MemberRole[]) =>
+    Math.max(0, ...mem.filter((m) => roles.includes(m.role)).map((m) => secOf(m)?.b ?? 0))
+
+  for (let iter = 0; iter < 12; iter++) {
+    let changed = false
+    for (const mem of atNode.values()) {
+      const beamW = widthOf(mem, ['beam', 'brace'])
+      // girders ≥ the beams they meet
+      for (const m of mem) if (m.role === 'girder') {
+        const s = secOf(m)!; if (s.b < beamW) { s.b = beamW; changed = true }
+      }
+      const flexW = Math.max(beamW, widthOf(mem, ['girder']))
+      // columns ≥ the widest beam/girder at the joint, kept square-or-taller
+      for (const m of mem) if (m.role === 'column') {
+        const s = secOf(m)!
+        if (s.b < flexW) { s.b = flexW; changed = true }
+        if (s.h < s.b) { s.h = s.b; changed = true }
+      }
+    }
+    if (!changed) break
+  }
+  return { ...model, sections: model.sections.map((s) => { const u = sec.get(s.id)!; return { ...u, name: `${u.b}×${u.h}` } }) }
 }

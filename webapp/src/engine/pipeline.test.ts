@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { generateGridModel, buildGravityLoads, removeNode } from './modelBuilder'
+import { generateGridModel, buildGravityLoads, removeNode, enforceSectionHierarchy } from './modelBuilder'
 import { designStructure, optimizeStructure, designOK, type LateralCase } from './pipeline'
 import { computeSeismic } from './seismic'
 import type { RectSection, ModelLoad } from './model'
@@ -135,28 +135,66 @@ describe('directional lateral load cases (STAAD-style envelope)', () => {
 })
 
 describe('optimizeStructure', () => {
-  it('passing start → converges and shrinks to a leaner passing section', () => {
+  it('passing start → converges and never grows a passing design', () => {
     const m = makeModel()
     const r = optimizeStructure(m, soil)!
     expect(r.converged).toBe(true)
     expect(designOK(r.design)).toBe(true)
-    expect(r.section.h).toBeLessThanOrEqual(500)    // never grows a passing design
+    expect(r.model.sections.every((s) => s.h <= 500)).toBe(true)
     expect(r.steps[0].ok).toBe(true)
     expect(r.steps[r.steps.length - 1].ok).toBe(true)
   })
 
-  it('failing start → grows the section until everything passes', () => {
+  it('failing start → grows the sections until everything passes', () => {
     const m = makeModel()
-    // undersized shared section
-    m.sections = [{ ...section, b: 200, h: 250, name: '200×250' }]
-    m.members = m.members.map((x) => ({ ...x, section: m.sections[0].id }))
+    // shrink every member section to an undersized start
+    m.sections = m.sections.map((s) => ({ ...s, b: 200, h: 250, name: '200×250' }))
     const first = designStructure(m, soil)!
     expect(designOK(first)).toBe(false)
     const r = optimizeStructure(m, soil)!
     expect(r.converged).toBe(true)
     expect(designOK(r.design)).toBe(true)
-    expect(r.section.h).toBeGreaterThan(250)
+    expect(r.model.sections.some((s) => s.h > 250 || s.b > 200)).toBe(true)
     expect(r.steps.some((s) => !s.ok)).toBe(true)   // log shows the failing iterations
+  })
+
+  it('grows only the failing members, leaving the others alone', () => {
+    const m = makeModel()
+    // undersize ONLY the beams; columns & girders stay 300×500
+    const beamSecs = new Set(m.members.filter((x) => x.role === 'beam').map((x) => x.section))
+    m.sections = m.sections.map((s) => (beamSecs.has(s.id) ? { ...s, b: 200, h: 250, name: '200×250' } : s))
+    const r = optimizeStructure(m, soil)!
+    expect(r.converged).toBe(true)
+    // the column was never GROWN by the beam failures (width/height ≤ start);
+    // shrink may trim it, but beam failures must not enlarge it.
+    const col = r.model.sections.find((s) => s.id === m.members.find((x) => x.role === 'column')!.section)!
+    expect(col.b).toBe(300)
+    expect(col.h).toBeLessThanOrEqual(500)
+    expect(designOK(r.design)).toBe(true)
+  })
+})
+
+describe('strong column–weak beam hierarchy', () => {
+  it('bumps widths so column ≥ girder ≥ beam at every shared node', () => {
+    // start with a girder WIDER than the column (violates the hierarchy)
+    const m = generateGridModel({
+      baysX: [6], baysZ: [5], storeyH: [3],
+      column: { ...section, b: 300, h: 300, name: '300×300' },
+      girder: { ...section, b: 350, h: 500, name: '350×500' },
+      beam: { ...section, b: 250, h: 450, name: '250×450' },
+    })
+    const e = enforceSectionHierarchy(m)
+    const secOf = (id: string) => e.sections.find((s) => s.id === id)!
+    for (const col of e.members.filter((x) => x.role === 'column')) {
+      const cb = secOf(col.section).b
+      const conn = e.members.filter((x) =>
+        (x.role === 'girder' || x.role === 'beam') && (x.i === col.i || x.j === col.i || x.i === col.j || x.j === col.j))
+      for (const x of conn) expect(cb).toBeGreaterThanOrEqual(secOf(x.section).b)
+    }
+    // a column picked up the 350 girder width and stayed square-or-taller
+    const anyCol = secOf(e.members.find((x) => x.role === 'column')!.section)
+    expect(anyCol.b).toBeGreaterThanOrEqual(350)
+    expect(anyCol.h).toBeGreaterThanOrEqual(anyCol.b)
   })
 })
 
