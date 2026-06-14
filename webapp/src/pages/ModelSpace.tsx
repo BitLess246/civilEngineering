@@ -1510,6 +1510,86 @@ export default function ModelSpace() {
             </table>
           </div>
 
+          {/* Slab schedule (full width) — two-way DDM */}
+          {design.slabs.length > 0 && (
+            <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Slab schedule (two-way DDM)</h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Panel</th>
+                    <th className="py-1 pr-2 font-semibold">lx × ly (m)</th>
+                    <th className="py-1 pr-2 font-semibold">h (mm)</th>
+                    <th className="py-1 pr-2 font-semibold">Behaviour</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Mo,x / Mo,y (kN·m)</th>
+                    <th className="py-1 font-semibold">DDM</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {design.slabs.flatMap((sl) => {
+                    const key = `slab:${sl.plate}`, open = expanded === key
+                    const dd = sl.design
+                    return [
+                      <tr key={key} onClick={() => setExpanded(open ? null : key)}
+                        className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${dd.applicable ? '' : 'bg-amber-50 text-amber-800'}`}>
+                        <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {sl.plate}</td>
+                        <td className="py-1 pr-2">{f1(sl.lx)} × {f1(sl.ly)}</td>
+                        <td className="py-1 pr-2">{Math.round(dd.h)}{dd.h < dd.hmin ? ` (< ${Math.round(dd.hmin)} min)` : ''}</td>
+                        <td className="py-1 pr-2">{dd.twoWay ? 'two-way' : 'one-way'}</td>
+                        <td className="py-1 pr-2 text-right">{f1(dd.x.Mo)} / {f1(dd.y.Mo)}</td>
+                        <td className="py-1">{dd.applicable ? '✓' : '⚠ check'}</td>
+                      </tr>,
+                      open && (
+                        <tr key={`${key}:sol`}>
+                          <td colSpan={6} className="bg-slate-50/60 px-3 pb-3">
+                            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                              {[dd.x, dd.y].map((dr) => (
+                                <div key={dr.dir}>
+                                  <p className="mb-1 mt-2 text-[12px] font-bold text-[#0056b3]">
+                                    {dr.dir.toUpperCase()}-direction — ℓ1 = {f1(dr.l1)} m, ℓn = {f1(dr.ln)} m, Mo = {f1(dr.Mo)} kN·m
+                                  </p>
+                                  <table className="w-full border-collapse text-[11px]">
+                                    <thead>
+                                      <tr className="text-left text-slate-500">
+                                        <th className="py-0.5 pr-2">Location</th>
+                                        <th className="py-0.5 pr-2 text-right">M (kN·m)</th>
+                                        <th className="py-0.5 pr-2">Column strip</th>
+                                        <th className="py-0.5">Middle strip</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {dr.locations.map((loc, li) => (
+                                        <tr key={li} className="border-t border-slate-100">
+                                          <td className="py-0.5 pr-2">{loc.name} <span className="text-slate-400">({loc.coeff.toFixed(2)})</span></td>
+                                          <td className="py-0.5 pr-2 text-right">{f1(loc.M)}</td>
+                                          <td className="py-0.5 pr-2">⌀12 @ {Math.round(loc.column.spacing)}{loc.column.usedMin ? ' (min)' : ''}</td>
+                                          <td className="py-0.5">{loc.middle.b > 1 ? `⌀12 @ ${Math.round(loc.middle.spacing)}${loc.middle.usedMin ? ' (min)' : ''}` : '—'}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              ))}
+                            </div>
+                            {dd.notes.length > 0 && (
+                              <ul className="mt-2 list-disc pl-5 text-[11px] text-slate-500">
+                                {dd.notes.map((n, ni) => <li key={ni}>{n}</li>)}
+                              </ul>
+                            )}
+                          </td>
+                        </tr>
+                      ),
+                    ]
+                  })}
+                </tbody>
+              </table>
+              <p className="mt-1 text-[11px] text-slate-400">
+                NSCP §408.10 Direct Design Method: Mo = wu·ℓ2·ℓn²/8 split into negative/positive then column/middle
+                strips (αf neglected → conservative slab steel). Column-strip width = 2·min(0.25ℓ1, 0.25ℓ2).
+              </p>
+            </div>
+          )}
+
           {/* Footing schedule (full width) */}
           <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Footing schedule</h3>
