@@ -57,15 +57,15 @@ export function footingRowSolution(sec: RectSection, soil: SoilOptions, row: Foo
   return buildFoundationSolution(ctx)
 }
 
-/** Worked solution for a combined-footing pair row (rigid method). */
-export function combinedRowSolution(sec: RectSection, soil: SoilOptions, row: CombinedScheduleRow): SolutionStep[] {
-  const cw = Math.min(sec.b, sec.h)
+/** Worked solution for a combined-footing pair row (rigid method); secA/secB
+ *  are the sections of the two columns landing on the paired support nodes. */
+export function combinedRowSolution(secA: RectSection, secB: RectSection, soil: SoilOptions, row: CombinedScheduleRow): SolutionStep[] {
   const input: CombinedFootingInput = {
-    col1Width: cw, col2Width: cw, spacing: row.spacing,
+    col1Width: Math.min(secA.b, secA.h), col2Width: Math.min(secB.b, secB.h), spacing: row.spacing,
     dl1: row.dl1, ll1: row.ll1, dl2: row.dl2, ll2: row.ll2,
     leftRestrict: false, rightRestrict: false, leftOverhang: 0, rightOverhang: 0,
-    fc: sec.fc, fy: sec.fy, qAllow: soil.qAllow, gammaSoil: soil.gammaSoil, gammaConc: soil.gammaConc,
-    surcharge: 0, H: soil.H, barDia: sec.barDia, cover: 75,
+    fc: secA.fc, fy: secA.fy, qAllow: soil.qAllow, gammaSoil: soil.gammaSoil, gammaConc: soil.gammaConc,
+    surcharge: 0, H: soil.H, barDia: secA.barDia, cover: 75,
   }
   return buildCombinedFootingSolution(input, row.design)
 }
