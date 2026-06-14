@@ -16,6 +16,9 @@ import { ReportControls } from '../components/ReportControls'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution } from '../lib/modelSpaceSolutions'
 import { Diagram } from '../components/Diagram'
+import { BeamSchematic } from '../components/BeamSchematic'
+import { ColumnSchematic } from '../components/ColumnSchematic'
+import { FootingSchematic } from '../components/FootingSchematic'
 import { Num, Card, ResultCard, Row } from '../components/qty'
 import { f1, f2 } from '../lib/format'
 
@@ -58,7 +61,6 @@ function Member3D({ a, b, role, selected, tint = 0, sec, onPick }: {
     const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir.clone().normalize())
     return { mid: new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5), quat, len }
   }, [a, b])
-  // cross-section drawn to scale: width (b) and depth (h) in metres
   const ty = sec ? sec.h / 1000 : role === 'column' ? 0.3 : 0.22
   const tz = sec ? sec.b / 1000 : role === 'column' ? 0.3 : 0.22
   const color = useMemo(() => {
@@ -247,6 +249,87 @@ function DirPicker({ value, onChange }: { value: string[]; onChange: (v: string[
   )
 }
 
+// ── Right-panel tabs ────────────────────────────────────────────────────────
+type Tab = 'geometry' | 'properties' | 'supports' | 'loading' | 'analysis' | 'design'
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'geometry', label: 'Geometry' },
+  { id: 'properties', label: 'Properties' },
+  { id: 'supports', label: 'Supports' },
+  { id: 'loading', label: 'Loading' },
+  { id: 'analysis', label: 'Analysis' },
+  { id: 'design', label: 'Design' },
+]
+function TabBtn({ id, label, active, onClick }: { id: Tab; label: string; active: boolean; onClick: (t: Tab) => void }) {
+  return (
+    <button type="button" onClick={() => onClick(id)}
+      className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${active ? 'bg-[#0056b3] text-white shadow-sm' : 'text-slate-600 hover:bg-blue-50'}`}>
+      {label}
+    </button>
+  )
+}
+
+// ── Element drawings for the schedule accordions ─────────────────────────────
+/** Rebar elevation of a beam/girder: outline, stirrup ticks, top steel over the
+ *  hogging ends and bottom steel over the sagging mid-span. */
+function BeamRebarElevation({ L, h, sections }: {
+  L: number; h: number; sections: { x: number; hogging: boolean; design: { bars: number; sAdopt: number } }[]
+}): ReactNode {
+  const W = 480, PAD = 30, top = 20, bh = 74
+  const x0 = PAD, x1 = W - PAD, yTop = top, yBot = top + bh
+  const sx = (x: number) => x0 + (x1 - x0) * (L > 0 ? Math.max(0, Math.min(1, x / L)) : 0)
+  const sList = sections.map((s) => s.design.sAdopt).filter((v) => v > 0)
+  const sm = sList.length ? Math.min(...sList) / 1000 : 0
+  const nStir = sm > 0 ? Math.min(40, Math.max(2, Math.round(L / sm))) : 0
+  return (
+    <svg viewBox={`0 0 ${W} ${yBot + 36}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
+      style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
+      <text x={x0} y={13} fontSize={11} fontWeight={700} fill="#0056b3">ELEVATION — rebar (h = {h} mm)</text>
+      <rect x={x0} y={yTop} width={x1 - x0} height={bh} fill="#fff" stroke="#37526e" strokeWidth={1.4} />
+      {Array.from({ length: nStir + 1 }, (_, k) => {
+        const x = sx((L * k) / Math.max(nStir, 1))
+        return <line key={k} x1={x} y1={yTop + 4} x2={x} y2={yBot - 4} stroke="#94a3b8" strokeWidth={0.7} />
+      })}
+      {sections.map((s, i) => {
+        const y = s.hogging ? yTop + 6 : yBot - 6
+        const c = sx(s.x), half = (x1 - x0) * (s.hogging ? 0.16 : 0.3)
+        const xa = Math.max(x0 + 3, c - half), xb = Math.min(x1 - 3, c + half)
+        return (
+          <g key={i}>
+            <line x1={xa} y1={y} x2={xb} y2={y} stroke="#dc2626" strokeWidth={1.9} />
+            <text x={(xa + xb) / 2} y={s.hogging ? y - 3 : y + 10} fontSize={8.5} fill="#dc2626" textAnchor="middle">
+              {s.design.bars}⌀ {s.hogging ? 'top' : 'bot'}
+            </text>
+          </g>
+        )
+      })}
+      <text x={x0} y={yBot + 15} fontSize={9} fill="#37526e">0</text>
+      <text x={x1} y={yBot + 15} fontSize={9} fill="#37526e" textAnchor="end">L = {L} m{sm > 0 ? ` · stirrups @${Math.round(sm * 1000)}` : ''}</text>
+    </svg>
+  )
+}
+
+/** Rebar elevation of a column: outline, longitudinal bars and ties at spacing. */
+function ColumnElevation({ Lh, bars, tieSpacing }: { Lh: number; bars: number; tieSpacing: number }): ReactNode {
+  const W = 150, H = 300, pad = 26, colW = 56
+  const cx = W / 2, x0 = cx - colW / 2, x1 = cx + colW / 2, y0 = pad, y1 = H - pad
+  const sm = tieSpacing / 1000
+  const n = sm > 0 ? Math.min(30, Math.max(2, Math.round(Lh / sm))) : 0
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
+      style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
+      <text x={8} y={14} fontSize={11} fontWeight={700} fill="#0056b3">ELEVATION</text>
+      <rect x={x0} y={y0} width={colW} height={y1 - y0} fill="#fff" stroke="#37526e" strokeWidth={1.4} />
+      <line x1={x0 + 7} y1={y0} x2={x0 + 7} y2={y1} stroke="#dc2626" strokeWidth={1.6} />
+      <line x1={x1 - 7} y1={y0} x2={x1 - 7} y2={y1} stroke="#dc2626" strokeWidth={1.6} />
+      {Array.from({ length: n + 1 }, (_, k) => {
+        const y = y0 + ((y1 - y0) * k) / n
+        return <line key={k} x1={x0 + 3} y1={y} x2={x1 - 3} y2={y} stroke="#94a3b8" strokeWidth={0.7} />
+      })}
+      <text x={cx} y={y1 + 16} fontSize={8.5} fill="#37526e" textAnchor="middle">{bars}⌀ · ties @{Math.round(tieSpacing)}</text>
+    </svg>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────
 export default function ModelSpace() {
   const [baysX, setBaysX] = useState('6, 6')
@@ -291,6 +374,7 @@ export default function ModelSpace() {
   const [design, setDesign] = useState<StructureDesign | null>(null)
   const [opt, setOpt] = useState<OptimizeResult | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)   // open schedule-row solution
+  const [tab, setTab] = useState<Tab>('geometry')                 // right-panel tab
   const [orphans, setOrphans] = useState(0)
   // footing plan: base node → '' (isolated) or partner node id (combined)
   const [planSel, setPlanSel] = useState<Record<string, string>>({})
@@ -544,506 +628,541 @@ export default function ModelSpace() {
     } catch { alert('Could not read that file as a structural model (.model.json).') }
   }
 
+  const btn = (color: string) =>
+    `rounded-lg bg-gradient-to-br ${color} px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:shadow-lg disabled:opacity-40`
+
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
-      <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">3D Model Space</h1>
-      <p className="no-print mt-1 text-slate-600">
-        Generate a building frame on a column grid — beams, girders, columns and slab panels with categorised
-        area loads — orbit it in 3D, analyze it (3D FEM, NSCP combos, seismic E loads + drift), design every
-        element down the load path, and print the schedules as a report.
-      </p>
-      <ReportControls title="Structure Design Report" />
+    <div className="mx-auto max-w-[1700px] p-4">
+      {/* ── Header + toolbar ── */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
+          <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-[#0056b3]">3D Model Space</h1>
+        </div>
+        <div className="no-print flex flex-wrap items-center gap-2">
+          <button type="button" onClick={download} disabled={!model}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
+            ⤓ Save JSON
+          </button>
+          <button type="button" onClick={() => fileRef.current?.click()}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">
+            ⤒ Load JSON
+          </button>
+          <input ref={fileRef} type="file" accept=".json" className="sr-only"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f) }} />
+          <ReportControls title="Structure Design Report" />
+        </div>
+      </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_2fr]">
-        <div className="space-y-5">
-          <Card title="Column grid">
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 font-medium text-slate-600">Bays X (m, comma-sep)</span>
-              <input value={baysX} onChange={(e) => setBaysX(e.target.value)}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5" />
-            </label>
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 font-medium text-slate-600">Bays Z (m)</span>
-              <input value={baysZ} onChange={(e) => setBaysZ(e.target.value)}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5" />
-            </label>
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 font-medium text-slate-600">Storey heights (m)</span>
-              <input value={storeyH} onChange={(e) => setStoreyH(e.target.value)}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5" />
-            </label>
-          </Card>
-
-          <Card title="Initial member sizes (mm)">
-            <p className="col-span-full -mb-1 text-[11px] text-slate-500">
-              Each member starts from its role size and grows independently when optimised;
-              columns are kept ≥ girders ≥ beams in width (strong-column / weak-beam).
-            </p>
-            <Num label="Column b" unit="mm" value={colB} onChange={setColB} />
-            <Num label="Column h" unit="mm" value={colH} onChange={setColH} />
-            <Num label="Girder b" unit="mm" value={girB} onChange={setGirB} />
-            <Num label="Girder h" unit="mm" value={girH} onChange={setGirH} />
-            <Num label="Beam b" unit="mm" value={beaB} onChange={setBeaB} />
-            <Num label="Beam h" unit="mm" value={beaH} onChange={setBeaH} />
-            <Num label="f′c" unit="MPa" value={fc} onChange={setFc} />
-          </Card>
-
-          <Card title="Loads & soil">
-            <Num label="SDL (superimposed)" unit="kPa" value={qD} onChange={setQD} />
-            <Num label="Live load" unit="kPa" value={qL} onChange={setQL} />
-            <Num label="Soil qa" unit="kPa" value={qa} onChange={setQa} />
-            <Num label="Footing depth H" unit="m" value={Hf} onChange={setHf} />
-          </Card>
-
-          <Card title="Seismic — NSCP 208 static force">
-            <Num label="Ca" value={Ca} onChange={setCa} />
-            <Num label="Cv" value={Cv} onChange={setCv} />
-            <Num label="R" value={Rw} onChange={setRw} />
-            <Num label="I" value={Ie} onChange={setIe} />
-            <Num label="Z (zone)" value={Zf} onChange={setZf} />
-            <Num label="Nv (near-source)" value={Nv} onChange={setNv} />
-            <DirPicker value={eDirs} onChange={setEDirs} />
-            <div className="col-span-full">
-              <button type="button" onClick={generateE} disabled={!model || eDirs.length === 0}
-                className="no-print rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
-                ⚡ Generate E cases
-              </button>
-              {seis && (
-                <p className="mt-1 text-xs text-slate-500">
-                  T = {seis.T.toFixed(3)} s · W = {f1(seis.W)} kN · V = {f1(seis.V)} kN
-                  {seis.V === seis.Vmax ? ' (2.5CaIW/R cap governs)'
-                    : seis.Vsrc > 0 && seis.V === seis.Vsrc ? ' (Zone-4 0.8ZNvIW/R floor governs)'
-                    : seis.V === seis.Vmin ? ' (0.11CaIW floor governs)' : ''}
-                  {seis.Ft > 0 ? ` · Ft = ${f1(seis.Ft)} kN` : ''} — {eCases.length} cat-E case{eCases.length === 1 ? '' : 's'} ({eDirs.join(', ') || 'none'}).
-                  {Zf >= 0.4 ? ` Zone-4 floor = ${f1(seis.Vsrc)} kN.` : ' (Zone-4 floor off: Z < 0.4)'}
-                </p>
-              )}
-            </div>
-          </Card>
-
-          <Card title="Wind — NSCP 207B MWFRS (directional)">
-            <Num label="V (basic speed)" unit="m/s" value={Vw} onChange={setVw} />
-            <Num label="Kzt (topographic)" value={Kzt} onChange={setKzt} />
-            <label className="flex flex-col text-sm">
-              <span className="mb-1 font-medium text-slate-600">Exposure</span>
-              <select value={expo} onChange={(e) => setExpo(e.target.value as 'B' | 'C' | 'D')}
-                className="rounded-md border border-slate-300 px-2.5 py-1.5">
-                <option value="B">B (suburban)</option>
-                <option value="C">C (open)</option>
-                <option value="D">D (flat/coastal)</option>
-              </select>
-            </label>
-            <DirPicker value={wDirs} onChange={setWDirs} />
-            <div className="col-span-full">
-              <button type="button" onClick={generateW} disabled={!model || wDirs.length === 0}
-                className="no-print rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
-                🌬 Generate W cases
-              </button>
-              {wind && (
-                <p className="mt-1 text-xs text-slate-500">
-                  qh = {f2(wind.qh)} kPa · B×L = {f1(wind.B)}×{f1(wind.L)} m (L/B {f2(wind.LB)}) ·
-                  Cp,lee {f2(wind.CpLee)} · base shear V = {f1(wind.baseShear)} kN — {wCases.length} cat-W
-                  case{wCases.length === 1 ? '' : 's'} ({wDirs.join(', ') || 'none'}). Windward Cp = 0.8, G = {wind.G}, Kd = {wind.Kd}.
-                </p>
-              )}
-            </div>
-          </Card>
-
-          <Card title="Analysis options">
-            <label className="col-span-full flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={assembly} onChange={(e) => setAssembly(e.target.checked)} />
-              <span>Public assembly / garage (f₁ = 1.0)</span>
-            </label>
-            <label className="col-span-full flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={pDelta} onChange={(e) => setPDelta(e.target.checked)} />
-              <span>P-Δ second-order analysis</span>
-            </label>
-            <label className="col-span-full flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={showLoads} onChange={(e) => setShowLoads(e.target.checked)} />
-              <span>Show load diagrams on the model</span>
-            </label>
-            {showLoads && model && model.loads.length > 0 && (
-              <div className="col-span-full flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
-                {[...new Set(model.loads.map((l) => l.cat))].map((cat) => (
-                  <span key={cat} className="inline-flex items-center gap-1">
-                    <span className="inline-block h-2 w-3 rounded-sm" style={{ background: LOAD_COLOR[cat] ?? '#64748b' }} />
-                    {cat}
-                  </span>
-                ))}
+      {/* ── Main split: sticky 3D (60%) | tabbed controls (40%) ── */}
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr] lg:items-start">
+        {/* LEFT — sticky 3D viewport */}
+        <div className="no-print lg:sticky lg:top-4">
+          <div className="h-[80vh] min-h-[460px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            {model ? (
+              <Canvas camera={{ position: [14, 11, 14], fov: 45 }} onPointerMissed={() => setSelected(null)}>
+                <color attach="background" args={['#f8fafc']} />
+                <ambientLight intensity={0.85} />
+                <directionalLight position={[12, 18, 8]} intensity={0.9} />
+                <gridHelper args={[40, 40, '#cbd5e1', '#e2e8f0']} />
+                {model.members.map((m) => {
+                  const a = nodePos.get(m.i), bb = nodePos.get(m.j)
+                  if (!a || !bb) return null
+                  const tint = govRes && govRes.Mmax > 1e-9
+                    ? (memForce.get(m.id)?.Mmax ?? 0) / govRes.Mmax : 0
+                  return <Member3D key={m.id} a={a} b={bb} role={m.role} tint={tint * 0.85}
+                    sec={sectionFor(m.id)} selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                })}
+                {model.plates.map((p) => {
+                  const cs = p.corners.map((c) => nodePos.get(c))
+                  if (cs.some((c) => !c)) return null
+                  return <Slab3D key={p.id} corners={cs as THREE.Vector3[]}
+                    selected={p.id === selected} onPick={() => setSelected(p.id)} />
+                })}
+                {model.supports.map((s) => {
+                  const p = nodePos.get(s.node)
+                  return p ? <Support3D key={s.node} p={p} /> : null
+                })}
+                {showLoads && <Loads3D model={model} nodePos={nodePos} />}
+                <OrbitControls makeDefault target={[6, 3, 2.5]} />
+              </Canvas>
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-slate-400">
+                Set the grid and hit “Generate model”.
               </div>
             )}
-            <p className="col-span-full text-[11px] text-slate-500">
-              §203.3.1 live-load factor f₁ = <b>{fLive.toFixed(1)}</b>
-              {fLive === 1 ? (assembly ? ' (assembly/garage)' : ' (Lo > 4.8 kPa)') : ' (ordinary occupancy)'}.
-              {pDelta ? ' Frame solved with the geometric-stiffness P-Δ iteration.' : ' First-order (linear) frame solve.'}
-            </p>
-          </Card>
-
-          <div className="no-print flex flex-wrap gap-2">
-            <button type="button" onClick={generate}
-              className="rounded-lg bg-gradient-to-br from-[#0056b3] to-[#003f86] px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:shadow-lg">
-              ⚙ Generate model
-            </button>
-            <button type="button" onClick={analyze} disabled={!model}
-              className="rounded-lg bg-gradient-to-br from-[#0e7490] to-[#155e75] px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:shadow-lg disabled:opacity-40">
-              ▶ Analyze (3D FEM)
-            </button>
-            <button type="button" onClick={runPipeline} disabled={!model}
-              className="rounded-lg bg-gradient-to-br from-[#15803d] to-[#166534] px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:shadow-lg disabled:opacity-40">
-              🏗 Design structure
-            </button>
-            <button type="button" onClick={optimize} disabled={!model}
-              className="rounded-lg bg-gradient-to-br from-[#b45309] to-[#92400e] px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:shadow-lg disabled:opacity-40"
-              title="Loop the design, growing the shared section until nothing fails, then trim it back">
-              🏁 Optimize design
-            </button>
-            <button type="button" onClick={download} disabled={!model}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
-              ⤓ Save JSON
-            </button>
-            <button type="button" onClick={() => fileRef.current?.click()}
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">
-              ⤒ Load JSON
-            </button>
-            <input ref={fileRef} type="file" accept=".json" className="sr-only"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f) }} />
           </div>
-
-          {model && (
-            <ResultCard title="Model">
-              <Row label="Nodes / members" value={`${model.nodes.length} / ${model.members.length}`}
-                sub={`${model.members.filter((m) => m.role === 'column').length} col · ${model.members.filter((m) => m.role !== 'column').length} bm`} />
-              <Row label="Slabs / loads" value={`${model.plates.length} / ${model.loads.length}`} />
-              <Row label="Storeys" value={`${model.storeys.length}`}
-                sub={model.storeys.map((s) => `${s.elevation} m`).join(' · ')} />
-            </ResultCard>
-          )}
-
-          {gov && govRes && (
-            <ResultCard title={`Analysis — ${gov.combo.name} governs`}>
-              <Row label="ΣRy (gravity)" value={`${f1(govRes.reactions.reduce((s, q) => s + q.F[1], 0))} kN`} />
-              <Row label="Extremes" value={`M ${f1(govRes.Mmax)} kN·m`}
-                sub={`V ${f1(govRes.Vmax)} · N ${f1(govRes.Nmax)} kN`} />
-              {orphans > 0 && <Row alert label="⚠ Orphan edges" value={`${orphans}`} sub="slab edges with no member" />}
-              <p className="mt-1 text-[11px] text-slate-400">
-                Members tinted red by |M| relative to the model max. Click one for its diagrams.
-              </p>
-            </ResultCard>
-          )}
-
-          {drift && seis && (
-            <ResultCard title={`Storey drift — ${(eDirs[0] ?? '+X').replace(/[+-]/, '')} (ΔM = 0.7·R·Δs)`}>
-              {drift.map((row) => (
-                <Row key={row.elevation} alert={!row.ok}
-                  label={`Level ${f1(row.elevation)} m`}
-                  value={`ΔM = ${row.dM.toFixed(1)} mm ${row.ok ? '✓' : '✗'}`}
-                  sub={`Δs ${row.ds.toFixed(2)} · limit ${row.limit.toFixed(0)} mm`} />
-              ))}
-              <p className="mt-1 text-[11px] text-slate-400">
-                Limit {seis.T < 0.7 ? '0.025' : '0.020'}·hs (T {seis.T < 0.7 ? '<' : '≥'} 0.7 s) — NSCP 208.5.10.
-              </p>
-            </ResultCard>
-          )}
-
-          {selMember && model && (
-            <ResultCard title={`Member — ${selMember.id}`}>
-              <Row label="Role" value={selMember.role} />
-              <Row label="Length" value={`${f2(memberLen)} m`} />
-              <Row label="Section" value={sectionFor(selMember.id)?.name ?? selMember.section} />
-              {(() => {
-                const mr = govRes?.members.find((m) => m.id === selMember.id)
-                if (!mr) return null
-                return (
-                  <div className="mt-2 space-y-2">
-                    <Row label="Forces (governing)" value={`M ${f1(mr.Mmax)} kN·m`}
-                      sub={`V ${f1(mr.Vmax)} · N ${f1(mr.Nmax)} kN`} />
-                    <Diagram xs={mr.xs} ys={mr.Mz} title="Mz" unit="kN·m" color="#d62728" decimals={1} />
-                    <Diagram xs={mr.xs} ys={mr.Vy} title="Vy" unit="kN" color="#1f77b4" decimals={1} />
-                    <Diagram xs={mr.xs} ys={mr.N} title="N (+tension)" unit="kN" color="#7c3aed" decimals={1} />
-                  </div>
-                )
-              })()}
-              <button type="button" onClick={() => { save(removeElements(model, new Set([selMember.id]))); setSelected(null) }}
-                className="no-print mt-2 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50">
-                Delete member
-              </button>
-            </ResultCard>
-          )}
-
-          {selPlate && plateInfo && model && (
-            <ResultCard title={`Slab — ${selPlate.id}`}>
-              <Row label="Panel" value={`${f2(plateInfo.lx)} × ${f2(plateInfo.lz)} m`}
-                sub={`t = ${selPlate.thickness} mm`} />
-              {plateInfo.areaLoads.map((l, i) => (
-                <Row key={i} label={`q (${l.cat})`} value={`${f2(l.q)} kPa`} />
-              ))}
-              {plateInfo.trib && (
-                <Row label="Tributary" value={plateInfo.trib.behaviour}
-                  sub={`peak ${f1(plateInfo.trib.edges[0].peak)} kN/m on long edges`} />
-              )}
-              <button type="button" onClick={() => { save(removeElements(model, new Set([selPlate.id]))); setSelected(null) }}
-                className="no-print mt-2 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50">
-                Delete slab
-              </button>
-            </ResultCard>
-          )}
+          <label className="no-print mt-2 flex items-center gap-2 text-xs text-slate-600">
+            <input type="checkbox" checked={showLoads} onChange={(e) => setShowLoads(e.target.checked)} />
+            Show load diagrams on the model
+            {showLoads && model && model.loads.length > 0 && (
+              <span className="ml-2 flex flex-wrap gap-x-2 gap-y-0.5">
+                {[...new Set(model.loads.map((l) => l.cat))].map((cat) => (
+                  <span key={cat} className="inline-flex items-center gap-1">
+                    <span className="inline-block h-2 w-3 rounded-sm" style={{ background: LOAD_COLOR[cat] ?? '#64748b' }} />{cat}
+                  </span>
+                ))}
+              </span>
+            )}
+          </label>
         </div>
 
-        <div className="no-print h-[560px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          {model ? (
-            <Canvas camera={{ position: [14, 11, 14], fov: 45 }} onPointerMissed={() => setSelected(null)}>
-              <color attach="background" args={['#f8fafc']} />
-              <ambientLight intensity={0.85} />
-              <directionalLight position={[12, 18, 8]} intensity={0.9} />
-              <gridHelper args={[40, 40, '#cbd5e1', '#e2e8f0']} />
-              {model.members.map((m) => {
-                const a = nodePos.get(m.i), bb = nodePos.get(m.j)
-                if (!a || !bb) return null
-                const tint = govRes && govRes.Mmax > 1e-9
-                  ? (memForce.get(m.id)?.Mmax ?? 0) / govRes.Mmax : 0
-                return <Member3D key={m.id} a={a} b={bb} role={m.role} tint={tint * 0.85}
-                  sec={sectionFor(m.id)} selected={m.id === selected} onPick={() => setSelected(m.id)} />
-              })}
-              {model.plates.map((p) => {
-                const cs = p.corners.map((c) => nodePos.get(c))
-                if (cs.some((c) => !c)) return null
-                return <Slab3D key={p.id} corners={cs as THREE.Vector3[]}
-                  selected={p.id === selected} onPick={() => setSelected(p.id)} />
-              })}
-              {model.supports.map((s) => {
-                const p = nodePos.get(s.node)
-                return p ? <Support3D key={s.node} p={p} /> : null
-              })}
-              {showLoads && <Loads3D model={model} nodePos={nodePos} />}
-              <OrbitControls makeDefault target={[6, 3, 2.5]} />
-            </Canvas>
-          ) : (
-            <div className="flex h-full items-center justify-center text-sm text-slate-400">
-              Set the grid and hit “Generate model”.
+        {/* RIGHT — tabbed controls */}
+        <div className="no-print space-y-4">
+          <div className="flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+            {TABS.map((t) => <TabBtn key={t.id} id={t.id} label={t.label} active={tab === t.id} onClick={setTab} />)}
+          </div>
+
+          {/* ── GEOMETRY ── */}
+          {tab === 'geometry' && (
+            <div className="space-y-4">
+              <Card title="Column grid">
+                <label className="flex flex-col text-sm">
+                  <span className="mb-1 font-medium text-slate-600">Bays X (m, comma-sep)</span>
+                  <input value={baysX} onChange={(e) => setBaysX(e.target.value)}
+                    className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+                </label>
+                <label className="flex flex-col text-sm">
+                  <span className="mb-1 font-medium text-slate-600">Bays Z (m)</span>
+                  <input value={baysZ} onChange={(e) => setBaysZ(e.target.value)}
+                    className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+                </label>
+                <label className="flex flex-col text-sm">
+                  <span className="mb-1 font-medium text-slate-600">Storey heights (m)</span>
+                  <input value={storeyH} onChange={(e) => setStoreyH(e.target.value)}
+                    className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+                </label>
+                <div className="col-span-full">
+                  <button type="button" onClick={generate} className={btn('from-[#0056b3] to-[#003f86]')}>⚙ Generate model</button>
+                </div>
+              </Card>
+
+              {model && (
+                <ResultCard title="Model">
+                  <Row label="Nodes / members" value={`${model.nodes.length} / ${model.members.length}`}
+                    sub={`${model.members.filter((m) => m.role === 'column').length} col · ${model.members.filter((m) => m.role !== 'column').length} bm`} />
+                  <Row label="Slabs / loads" value={`${model.plates.length} / ${model.loads.length}`} />
+                  <Row label="Storeys" value={`${model.storeys.length}`}
+                    sub={model.storeys.map((s) => `${s.elevation} m`).join(' · ')} />
+                </ResultCard>
+              )}
+
+              {model && (
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h3 className="text-[1.02rem] font-bold text-[#0056b3]">Nodes</h3>
+                    <button type="button" onClick={addNode}
+                      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">+ Add node</button>
+                  </div>
+                  <div className="max-h-72 overflow-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="text-left uppercase tracking-wide text-slate-500">
+                          <th className="py-1 pr-2 font-semibold">Id</th>
+                          <th className="py-1 pr-1 font-semibold">x</th>
+                          <th className="py-1 pr-1 font-semibold">y</th>
+                          <th className="py-1 pr-1 font-semibold">z</th>
+                          <th className="py-1 pr-1 font-semibold" title="Fixed base support">Sup</th>
+                          <th className="py-1" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {model.nodes.map((n) => (
+                          <tr key={n.id} className="border-t border-slate-100">
+                            <td className="py-0.5 pr-2 font-medium">{n.id}</td>
+                            {(['x', 'y', 'z'] as const).map((k) => (
+                              <td key={k} className="py-0.5 pr-1">
+                                <input type="number" step="0.5" value={n[k]}
+                                  onChange={(e) => updNode(n.id, k, parseFloat(e.target.value))}
+                                  className="w-14 rounded border border-slate-200 px-1 py-0.5" />
+                              </td>
+                            ))}
+                            <td className="py-0.5 pr-1 text-center">
+                              <input type="checkbox" checked={model.supports.some((s) => s.node === n.id)}
+                                onChange={() => toggleSupport(n.id)} />
+                            </td>
+                            <td className="py-0.5 text-right">
+                              <button type="button" onClick={() => { save(removeNode(model, n.id)); if (selected) setSelected(null) }}
+                                className="rounded px-1.5 text-red-500 hover:bg-red-50" title="Remove node + attached members/plates/loads">✕</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-400">Coordinates in m (y = up). Removing a node also removes everything attached to it.</p>
+                </div>
+              )}
+
+              {model && (
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Beams &amp; columns</h3>
+                  <div className="max-h-72 overflow-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="text-left uppercase tracking-wide text-slate-500">
+                          <th className="py-1 pr-2 font-semibold">Id</th>
+                          <th className="py-1 pr-1 font-semibold">Role</th>
+                          <th className="py-1 pr-1 font-semibold">b</th>
+                          <th className="py-1 pr-1 font-semibold">h</th>
+                          <th className="py-1 pr-1 font-semibold">i</th>
+                          <th className="py-1 pr-1 font-semibold">j</th>
+                          <th className="py-1" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {model.members.map((m) => {
+                          const ms = sectionFor(m.id)
+                          return (
+                            <tr key={m.id} className={`border-t border-slate-100 ${m.id === selected ? 'bg-amber-50' : ''}`}>
+                              <td className="py-0.5 pr-2 font-medium cursor-pointer" onClick={() => setSelected(m.id)}>{m.id}</td>
+                              <td className="py-0.5 pr-1">
+                                <select value={m.role} onChange={(e) => updMember(m.id, { role: e.target.value as MemberRole })}
+                                  className="rounded border border-slate-200 px-1 py-0.5">
+                                  <option value="beam">beam</option><option value="girder">girder</option>
+                                  <option value="column">column</option><option value="brace">brace</option>
+                                </select>
+                              </td>
+                              {(['b', 'h'] as const).map((k) => (
+                                <td key={k} className="py-0.5 pr-1">
+                                  <input type="number" step="50" value={ms?.[k] ?? 0}
+                                    onChange={(e) => updMemberSize(m.id, k, parseFloat(e.target.value))}
+                                    className="w-12 rounded border border-slate-200 px-1 py-0.5" />
+                                </td>
+                              ))}
+                              {(['i', 'j'] as const).map((end) => (
+                                <td key={end} className="py-0.5 pr-1">
+                                  <select value={m[end]} onChange={(e) => updMember(m.id, { [end]: e.target.value })}
+                                    className="max-w-[5rem] rounded border border-slate-200 px-1 py-0.5">
+                                    {model.nodes.map((n) => <option key={n.id} value={n.id}>{n.id}</option>)}
+                                  </select>
+                                </td>
+                              ))}
+                              <td className="py-0.5 text-right">
+                                <button type="button" onClick={() => { save(removeElements(model, new Set([m.id]))); if (selected === m.id) setSelected(null) }}
+                                  className="rounded px-1.5 text-red-500 hover:bg-red-50">✕</button>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-slate-100 pt-2 text-xs">
+                    <select value={newRole} onChange={(e) => setNewRole(e.target.value as MemberRole)}
+                      className="rounded border border-slate-200 px-1 py-0.5">
+                      <option value="beam">beam</option><option value="girder">girder</option>
+                      <option value="column">column</option><option value="brace">brace</option>
+                    </select>
+                    <select value={newI} onChange={(e) => setNewI(e.target.value)} className="max-w-[5.5rem] rounded border border-slate-200 px-1 py-0.5">
+                      <option value="">node i…</option>
+                      {model.nodes.map((n) => <option key={n.id} value={n.id}>{n.id}</option>)}
+                    </select>
+                    <span className="text-slate-400">→</span>
+                    <select value={newJ} onChange={(e) => setNewJ(e.target.value)} className="max-w-[5.5rem] rounded border border-slate-200 px-1 py-0.5">
+                      <option value="">node j…</option>
+                      {model.nodes.map((n) => <option key={n.id} value={n.id}>{n.id}</option>)}
+                    </select>
+                    <button type="button" onClick={addMember} disabled={!newI || !newJ || newI === newJ}
+                      className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">+ Add member</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── PROPERTIES ── */}
+          {tab === 'properties' && (
+            <div className="space-y-4">
+              <Card title="Initial member sizes (mm)">
+                <p className="col-span-full -mb-1 text-[11px] text-slate-500">
+                  Each member starts from its role size and grows independently when optimised;
+                  columns are kept ≥ girders ≥ beams in width (strong-column / weak-beam).
+                </p>
+                <Num label="Column b" unit="mm" value={colB} onChange={setColB} />
+                <Num label="Column h" unit="mm" value={colH} onChange={setColH} />
+                <Num label="Girder b" unit="mm" value={girB} onChange={setGirB} />
+                <Num label="Girder h" unit="mm" value={girH} onChange={setGirH} />
+                <Num label="Beam b" unit="mm" value={beaB} onChange={setBeaB} />
+                <Num label="Beam h" unit="mm" value={beaH} onChange={setBeaH} />
+                <Num label="f′c" unit="MPa" value={fc} onChange={setFc} />
+              </Card>
+              <p className="text-[11px] text-slate-400">
+                Per-member b×h are editable in the Geometry → Beams &amp; columns table; these are the defaults
+                used when you generate a new grid. Material (f′c, fy = 415, ⌀20 bars) is shared.
+              </p>
+            </div>
+          )}
+
+          {/* ── SUPPORTS ── */}
+          {tab === 'supports' && (
+            <div className="space-y-4">
+              <Card title="Soil (footing design)">
+                <Num label="Soil qa" unit="kPa" value={qa} onChange={setQa} />
+                <Num label="Footing depth H" unit="m" value={Hf} onChange={setHf} />
+                <p className="col-span-full text-[11px] text-slate-400">
+                  Base supports are toggled per node in the Geometry → Nodes table (“Sup” column).
+                </p>
+              </Card>
+              {model && model.supports.length > 0 && (
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Footing plan</h3>
+                  <p className="mb-2 text-xs text-slate-500">
+                    Each base support gets an isolated square footing by default — pick a partner node to design the
+                    pair as one combined footing instead (close columns / property-line situations).
+                  </p>
+                  <div className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+                    {model.supports.map((s) => {
+                      const partner = planSel[s.node] ?? ''
+                      const takenBy = Object.entries(planSel).find(([n, p]) => p === s.node && n !== s.node)?.[0]
+                      return (
+                        <label key={s.node} className="flex items-center gap-2 text-xs">
+                          <span className="w-16 font-medium">{s.node}</span>
+                          {takenBy ? (
+                            <span className="text-slate-400">combined with {takenBy}</span>
+                          ) : (
+                            <select value={partner}
+                              onChange={(e) => setPlanSel((p) => ({ ...p, [s.node]: e.target.value }))}
+                              className="flex-1 rounded border border-slate-200 px-1 py-0.5">
+                              <option value="">isolated</option>
+                              {model.supports.filter((o) => o.node !== s.node && !planSel[o.node])
+                                .map((o) => <option key={o.node} value={o.node}>combine with {o.node}</option>)}
+                            </select>
+                          )}
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── LOADING ── */}
+          {tab === 'loading' && (
+            <div className="space-y-4">
+              <Card title="Slab loads">
+                <Num label="SDL (superimposed)" unit="kPa" value={qD} onChange={setQD} />
+                <Num label="Live load" unit="kPa" value={qL} onChange={setQL} />
+              </Card>
+
+              {model && (
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h3 className="text-[1.02rem] font-bold text-[#0056b3]">Loads</h3>
+                    <button type="button" onClick={rebuildGravity}
+                      title="Regenerate dead (member self-weight + slab self-weight + SDL) and live loads from the inputs; keeps E loads"
+                      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">↻ Rebuild D + L</button>
+                  </div>
+                  <div className="max-h-72 overflow-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="text-left uppercase tracking-wide text-slate-500">
+                          <th className="py-1 pr-2 font-semibold">Cat</th>
+                          <th className="py-1 pr-2 font-semibold">Target</th>
+                          <th className="py-1 pr-1 font-semibold">Value</th>
+                          <th className="py-1" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {model.loads.map((l: ModelLoad, idx) => {
+                          const target = l.kind === 'node' ? l.node : l.kind === 'area' ? l.plate : l.member
+                          const val = l.kind === 'area' ? l.q : l.kind === 'member-udl' ? l.w : l.kind === 'member-point' ? l.P : null
+                          const unit = l.kind === 'area' ? 'kPa' : l.kind === 'member-udl' ? 'kN/m' : 'kN'
+                          return (
+                            <tr key={idx} className="border-t border-slate-100">
+                              <td className={`py-0.5 pr-2 font-semibold ${l.cat === 'D' ? 'text-slate-600' : l.cat === 'L' ? 'text-emerald-700' : 'text-purple-700'}`}>{l.cat}</td>
+                              <td className="py-0.5 pr-2">{l.kind === 'node' ? '·' : l.kind === 'area' ? '▦' : '—'} {target}</td>
+                              <td className="py-0.5 pr-1 whitespace-nowrap">
+                                {val !== null ? (
+                                  <>
+                                    <input type="number" step="0.1" value={val}
+                                      onChange={(e) => updLoad(idx, parseFloat(e.target.value))}
+                                      className="w-16 rounded border border-slate-200 px-1 py-0.5" /> {unit}
+                                  </>
+                                ) : (
+                                  <span className="text-slate-500">
+                                    {l.kind === 'node' ? ['Fx' as const, 'Fy' as const, 'Fz' as const]
+                                      .filter((k) => (l[k] ?? 0) !== 0).map((k) => `${k}=${f1(l[k]!)}`).join(' ') + ' kN' : ''}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-0.5 text-right">
+                                <button type="button" onClick={() => delLoad(idx)}
+                                  className="rounded px-1.5 text-red-500 hover:bg-red-50">✕</button>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    Dead = self-weight (members from b×h, slabs from t, γc = 24 kN/m³) + the SDL input; live = the LL
+                    input. “Rebuild” regenerates both after you edit the frame.
+                  </p>
+                </div>
+              )}
+
+              <Card title="Seismic — NSCP 208 static force">
+                <Num label="Ca" value={Ca} onChange={setCa} />
+                <Num label="Cv" value={Cv} onChange={setCv} />
+                <Num label="R" value={Rw} onChange={setRw} />
+                <Num label="I" value={Ie} onChange={setIe} />
+                <Num label="Z (zone)" value={Zf} onChange={setZf} />
+                <Num label="Nv (near-source)" value={Nv} onChange={setNv} />
+                <DirPicker value={eDirs} onChange={setEDirs} />
+                <div className="col-span-full">
+                  <button type="button" onClick={generateE} disabled={!model || eDirs.length === 0}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">⚡ Generate E cases</button>
+                  {seis && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      T = {seis.T.toFixed(3)} s · W = {f1(seis.W)} kN · V = {f1(seis.V)} kN
+                      {seis.V === seis.Vmax ? ' (2.5CaIW/R cap governs)'
+                        : seis.Vsrc > 0 && seis.V === seis.Vsrc ? ' (Zone-4 0.8ZNvIW/R floor governs)'
+                          : seis.V === seis.Vmin ? ' (0.11CaIW floor governs)' : ''}
+                      {seis.Ft > 0 ? ` · Ft = ${f1(seis.Ft)} kN` : ''} — {eCases.length} cat-E case{eCases.length === 1 ? '' : 's'} ({eDirs.join(', ') || 'none'}).
+                      {Zf >= 0.4 ? ` Zone-4 floor = ${f1(seis.Vsrc)} kN.` : ' (Zone-4 floor off: Z < 0.4)'}
+                    </p>
+                  )}
+                </div>
+              </Card>
+
+              <Card title="Wind — NSCP 207B MWFRS (directional)">
+                <Num label="V (basic speed)" unit="m/s" value={Vw} onChange={setVw} />
+                <Num label="Kzt (topographic)" value={Kzt} onChange={setKzt} />
+                <label className="flex flex-col text-sm">
+                  <span className="mb-1 font-medium text-slate-600">Exposure</span>
+                  <select value={expo} onChange={(e) => setExpo(e.target.value as 'B' | 'C' | 'D')}
+                    className="rounded-md border border-slate-300 px-2.5 py-1.5">
+                    <option value="B">B (suburban)</option>
+                    <option value="C">C (open)</option>
+                    <option value="D">D (flat/coastal)</option>
+                  </select>
+                </label>
+                <DirPicker value={wDirs} onChange={setWDirs} />
+                <div className="col-span-full">
+                  <button type="button" onClick={generateW} disabled={!model || wDirs.length === 0}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">🌬 Generate W cases</button>
+                  {wind && (
+                    <p className="mt-1 text-xs text-slate-500">
+                      qh = {f2(wind.qh)} kPa · B×L = {f1(wind.B)}×{f1(wind.L)} m (L/B {f2(wind.LB)}) ·
+                      Cp,lee {f2(wind.CpLee)} · base shear V = {f1(wind.baseShear)} kN — {wCases.length} cat-W
+                      case{wCases.length === 1 ? '' : 's'} ({wDirs.join(', ') || 'none'}). Windward Cp = 0.8, G = {wind.G}, Kd = {wind.Kd}.
+                    </p>
+                  )}
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {/* ── ANALYSIS ── */}
+          {tab === 'analysis' && (
+            <div className="space-y-4">
+              <Card title="Analysis options">
+                <label className="col-span-full flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={assembly} onChange={(e) => setAssembly(e.target.checked)} />
+                  <span>Public assembly / garage (f₁ = 1.0)</span>
+                </label>
+                <label className="col-span-full flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={pDelta} onChange={(e) => setPDelta(e.target.checked)} />
+                  <span>P-Δ second-order analysis</span>
+                </label>
+                <p className="col-span-full text-[11px] text-slate-500">
+                  §203.3.1 live-load factor f₁ = <b>{fLive.toFixed(1)}</b>
+                  {fLive === 1 ? (assembly ? ' (assembly/garage)' : ' (Lo > 4.8 kPa)') : ' (ordinary occupancy)'}.
+                  {pDelta ? ' Frame solved with the geometric-stiffness P-Δ iteration.' : ' First-order (linear) frame solve.'}
+                </p>
+                <div className="col-span-full">
+                  <button type="button" onClick={analyze} disabled={!model} className={btn('from-[#0e7490] to-[#155e75]')}>▶ Analyze (3D FEM)</button>
+                </div>
+              </Card>
+
+              {gov && govRes && (
+                <ResultCard title={`Analysis — ${gov.combo.name} governs`}>
+                  <Row label="ΣRy (gravity)" value={`${f1(govRes.reactions.reduce((s, q) => s + q.F[1], 0))} kN`} />
+                  <Row label="Extremes" value={`M ${f1(govRes.Mmax)} kN·m`}
+                    sub={`V ${f1(govRes.Vmax)} · N ${f1(govRes.Nmax)} kN`} />
+                  {orphans > 0 && <Row alert label="⚠ Orphan edges" value={`${orphans}`} sub="slab edges with no member" />}
+                  <p className="mt-1 text-[11px] text-slate-400">Members tinted red by |M| relative to the model max. Click one for its diagrams.</p>
+                </ResultCard>
+              )}
+
+              {drift && seis && (
+                <ResultCard title={`Storey drift — ${(eDirs[0] ?? '+X').replace(/[+-]/, '')} (ΔM = 0.7·R·Δs)`}>
+                  {drift.map((row) => (
+                    <Row key={row.elevation} alert={!row.ok}
+                      label={`Level ${f1(row.elevation)} m`}
+                      value={`ΔM = ${row.dM.toFixed(1)} mm ${row.ok ? '✓' : '✗'}`}
+                      sub={`Δs ${row.ds.toFixed(2)} · limit ${row.limit.toFixed(0)} mm`} />
+                  ))}
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    Limit {seis.T < 0.7 ? '0.025' : '0.020'}·hs (T {seis.T < 0.7 ? '<' : '≥'} 0.7 s) — NSCP 208.5.10.
+                  </p>
+                </ResultCard>
+              )}
+
+              {selMember && model && (
+                <ResultCard title={`Member — ${selMember.id}`}>
+                  <Row label="Role" value={selMember.role} />
+                  <Row label="Length" value={`${f2(memberLen)} m`} />
+                  <Row label="Section" value={sectionFor(selMember.id)?.name ?? selMember.section} />
+                  {(() => {
+                    const mr = govRes?.members.find((m) => m.id === selMember.id)
+                    if (!mr) return null
+                    return (
+                      <div className="mt-2 space-y-2">
+                        <Row label="Forces (governing)" value={`M ${f1(mr.Mmax)} kN·m`}
+                          sub={`V ${f1(mr.Vmax)} · N ${f1(mr.Nmax)} kN`} />
+                        <Diagram xs={mr.xs} ys={mr.Mz} title="Mz" unit="kN·m" color="#d62728" decimals={1} />
+                        <Diagram xs={mr.xs} ys={mr.Vy} title="Vy" unit="kN" color="#1f77b4" decimals={1} />
+                        <Diagram xs={mr.xs} ys={mr.N} title="N (+tension)" unit="kN" color="#7c3aed" decimals={1} />
+                      </div>
+                    )
+                  })()}
+                  <button type="button" onClick={() => { save(removeElements(model, new Set([selMember.id]))); setSelected(null) }}
+                    className="mt-2 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50">Delete member</button>
+                </ResultCard>
+              )}
+
+              {selPlate && plateInfo && model && (
+                <ResultCard title={`Slab — ${selPlate.id}`}>
+                  <Row label="Panel" value={`${f2(plateInfo.lx)} × ${f2(plateInfo.lz)} m`}
+                    sub={`t = ${selPlate.thickness} mm`} />
+                  {plateInfo.areaLoads.map((l, i) => (
+                    <Row key={i} label={`q (${l.cat})`} value={`${f2(l.q)} kPa`} />
+                  ))}
+                  {plateInfo.trib && (
+                    <Row label="Tributary" value={plateInfo.trib.behaviour}
+                      sub={`peak ${f1(plateInfo.trib.edges[0].peak)} kN/m on long edges`} />
+                  )}
+                  <button type="button" onClick={() => { save(removeElements(model, new Set([selPlate.id]))); setSelected(null) }}
+                    className="mt-2 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50">Delete slab</button>
+                </ResultCard>
+              )}
+            </div>
+          )}
+
+          {/* ── DESIGN ── */}
+          {tab === 'design' && (
+            <div className="space-y-4">
+              <Card title="Design & optimise">
+                <div className="col-span-full flex flex-wrap gap-2">
+                  <button type="button" onClick={runPipeline} disabled={!model} className={btn('from-[#15803d] to-[#166534]')}>🏗 Design structure</button>
+                  <button type="button" onClick={optimize} disabled={!model} className={btn('from-[#b45309] to-[#92400e]')}
+                    title="Grow each failing member's own section until nothing fails, then trim back">🏁 Optimize design</button>
+                </div>
+                <p className="col-span-full text-[11px] text-slate-500">
+                  The full schedules (beam/girder, column, footing) render below, each the full width of the page.
+                  Click any schedule row for its step-by-step solution and plan/elevation drawings.
+                </p>
+              </Card>
             </div>
           )}
         </div>
       </div>
 
-      {model && (
-        <div className="no-print mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* ── Nodes ── */}
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-[1.02rem] font-bold text-[#0056b3]">Nodes</h3>
-              <button type="button" onClick={addNode}
-                className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">
-                + Add node
-              </button>
-            </div>
-            <div className="max-h-72 overflow-y-auto">
-              <table className="w-full border-collapse text-xs">
-                <thead>
-                  <tr className="text-left uppercase tracking-wide text-slate-500">
-                    <th className="py-1 pr-2 font-semibold">Id</th>
-                    <th className="py-1 pr-1 font-semibold">x</th>
-                    <th className="py-1 pr-1 font-semibold">y</th>
-                    <th className="py-1 pr-1 font-semibold">z</th>
-                    <th className="py-1 pr-1 font-semibold" title="Fixed base support">Sup</th>
-                    <th className="py-1" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {model.nodes.map((n) => (
-                    <tr key={n.id} className="border-t border-slate-100">
-                      <td className="py-0.5 pr-2 font-medium">{n.id}</td>
-                      {(['x', 'y', 'z'] as const).map((k) => (
-                        <td key={k} className="py-0.5 pr-1">
-                          <input type="number" step="0.5" value={n[k]}
-                            onChange={(e) => updNode(n.id, k, parseFloat(e.target.value))}
-                            className="w-14 rounded border border-slate-200 px-1 py-0.5" />
-                        </td>
-                      ))}
-                      <td className="py-0.5 pr-1 text-center">
-                        <input type="checkbox" checked={model.supports.some((s) => s.node === n.id)}
-                          onChange={() => toggleSupport(n.id)} />
-                      </td>
-                      <td className="py-0.5 text-right">
-                        <button type="button" onClick={() => { save(removeNode(model, n.id)); if (selected) setSelected(null) }}
-                          className="rounded px-1.5 text-red-500 hover:bg-red-50" title="Remove node + attached members/plates/loads">✕</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p className="mt-1 text-[11px] text-slate-400">Coordinates in m (y = up). Removing a node also removes everything attached to it.</p>
-          </div>
-
-          {/* ── Members ── */}
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Beams & columns</h3>
-            <div className="max-h-72 overflow-y-auto">
-              <table className="w-full border-collapse text-xs">
-                <thead>
-                  <tr className="text-left uppercase tracking-wide text-slate-500">
-                    <th className="py-1 pr-2 font-semibold">Id</th>
-                    <th className="py-1 pr-1 font-semibold">Role</th>
-                    <th className="py-1 pr-1 font-semibold">b</th>
-                    <th className="py-1 pr-1 font-semibold">h</th>
-                    <th className="py-1 pr-1 font-semibold">i</th>
-                    <th className="py-1 pr-1 font-semibold">j</th>
-                    <th className="py-1" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {model.members.map((m) => {
-                    const ms = sectionFor(m.id)
-                    return (
-                    <tr key={m.id} className={`border-t border-slate-100 ${m.id === selected ? 'bg-amber-50' : ''}`}>
-                      <td className="py-0.5 pr-2 font-medium cursor-pointer" onClick={() => setSelected(m.id)}>{m.id}</td>
-                      <td className="py-0.5 pr-1">
-                        <select value={m.role} onChange={(e) => updMember(m.id, { role: e.target.value as MemberRole })}
-                          className="rounded border border-slate-200 px-1 py-0.5">
-                          <option value="beam">beam</option><option value="girder">girder</option>
-                          <option value="column">column</option><option value="brace">brace</option>
-                        </select>
-                      </td>
-                      {(['b', 'h'] as const).map((k) => (
-                        <td key={k} className="py-0.5 pr-1">
-                          <input type="number" step="50" value={ms?.[k] ?? 0}
-                            onChange={(e) => updMemberSize(m.id, k, parseFloat(e.target.value))}
-                            className="w-12 rounded border border-slate-200 px-1 py-0.5" />
-                        </td>
-                      ))}
-                      {(['i', 'j'] as const).map((end) => (
-                        <td key={end} className="py-0.5 pr-1">
-                          <select value={m[end]} onChange={(e) => updMember(m.id, { [end]: e.target.value })}
-                            className="max-w-[5rem] rounded border border-slate-200 px-1 py-0.5">
-                            {model.nodes.map((n) => <option key={n.id} value={n.id}>{n.id}</option>)}
-                          </select>
-                        </td>
-                      ))}
-                      <td className="py-0.5 text-right">
-                        <button type="button" onClick={() => { save(removeElements(model, new Set([m.id]))); if (selected === m.id) setSelected(null) }}
-                          className="rounded px-1.5 text-red-500 hover:bg-red-50">✕</button>
-                      </td>
-                    </tr>
-                  )})}
-                </tbody>
-              </table>
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-slate-100 pt-2 text-xs">
-              <select value={newRole} onChange={(e) => setNewRole(e.target.value as MemberRole)}
-                className="rounded border border-slate-200 px-1 py-0.5">
-                <option value="beam">beam</option><option value="girder">girder</option>
-                <option value="column">column</option><option value="brace">brace</option>
-              </select>
-              <select value={newI} onChange={(e) => setNewI(e.target.value)} className="max-w-[5.5rem] rounded border border-slate-200 px-1 py-0.5">
-                <option value="">node i…</option>
-                {model.nodes.map((n) => <option key={n.id} value={n.id}>{n.id}</option>)}
-              </select>
-              <span className="text-slate-400">→</span>
-              <select value={newJ} onChange={(e) => setNewJ(e.target.value)} className="max-w-[5.5rem] rounded border border-slate-200 px-1 py-0.5">
-                <option value="">node j…</option>
-                {model.nodes.map((n) => <option key={n.id} value={n.id}>{n.id}</option>)}
-              </select>
-              <button type="button" onClick={addMember} disabled={!newI || !newJ || newI === newJ}
-                className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
-                + Add member
-              </button>
-            </div>
-          </div>
-
-          {/* ── Loads ── */}
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-[1.02rem] font-bold text-[#0056b3]">Loads</h3>
-              <button type="button" onClick={rebuildGravity}
-                title="Regenerate dead (member self-weight + slab self-weight + SDL) and live loads from the inputs; keeps E loads"
-                className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">
-                ↻ Rebuild D + L
-              </button>
-            </div>
-            <div className="max-h-72 overflow-y-auto">
-              <table className="w-full border-collapse text-xs">
-                <thead>
-                  <tr className="text-left uppercase tracking-wide text-slate-500">
-                    <th className="py-1 pr-2 font-semibold">Cat</th>
-                    <th className="py-1 pr-2 font-semibold">Target</th>
-                    <th className="py-1 pr-1 font-semibold">Value</th>
-                    <th className="py-1" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {model.loads.map((l: ModelLoad, idx) => {
-                    const target = l.kind === 'node' ? l.node : l.kind === 'area' ? l.plate : l.member
-                    const val = l.kind === 'area' ? l.q : l.kind === 'member-udl' ? l.w : l.kind === 'member-point' ? l.P : null
-                    const unit = l.kind === 'area' ? 'kPa' : l.kind === 'member-udl' ? 'kN/m' : 'kN'
-                    return (
-                      <tr key={idx} className="border-t border-slate-100">
-                        <td className={`py-0.5 pr-2 font-semibold ${l.cat === 'D' ? 'text-slate-600' : l.cat === 'L' ? 'text-emerald-700' : 'text-purple-700'}`}>{l.cat}</td>
-                        <td className="py-0.5 pr-2">{l.kind === 'node' ? '·' : l.kind === 'area' ? '▦' : '—'} {target}</td>
-                        <td className="py-0.5 pr-1 whitespace-nowrap">
-                          {val !== null ? (
-                            <>
-                              <input type="number" step="0.1" value={val}
-                                onChange={(e) => updLoad(idx, parseFloat(e.target.value))}
-                                className="w-16 rounded border border-slate-200 px-1 py-0.5" /> {unit}
-                            </>
-                          ) : (
-                            <span className="text-slate-500">
-                              {l.kind === 'node' ? ['Fx' as const, 'Fy' as const, 'Fz' as const]
-                                .filter((k) => (l[k] ?? 0) !== 0).map((k) => `${k}=${f1(l[k]!)}`).join(' ') + ' kN' : ''}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-0.5 text-right">
-                          <button type="button" onClick={() => delLoad(idx)}
-                            className="rounded px-1.5 text-red-500 hover:bg-red-50">✕</button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <p className="mt-1 text-[11px] text-slate-400">
-              Dead = self-weight (members from b×h, slabs from t, γc = 24 kN/m³) + the SDL input; live = the LL input.
-              “Rebuild” regenerates both after you edit the frame.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {model && model.supports.length > 0 && (
-        <div className="no-print mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Footing plan</h3>
-          <p className="mb-2 text-xs text-slate-500">
-            Each base support gets an isolated square footing by default — pick a partner node to design the pair
-            as one combined footing instead (close columns / property-line situations).
-          </p>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3 lg:grid-cols-4">
-            {model.supports.map((s) => {
-              const partner = planSel[s.node] ?? ''
-              const takenBy = Object.entries(planSel).find(([n, p]) => p === s.node && n !== s.node)?.[0]
-              return (
-                <label key={s.node} className="flex items-center gap-2 text-xs">
-                  <span className="w-16 font-medium">{s.node}</span>
-                  {takenBy ? (
-                    <span className="text-slate-400">combined with {takenBy}</span>
-                  ) : (
-                    <select value={partner}
-                      onChange={(e) => setPlanSel((p) => ({ ...p, [s.node]: e.target.value }))}
-                      className="flex-1 rounded border border-slate-200 px-1 py-0.5">
-                      <option value="">isolated</option>
-                      {model.supports.filter((o) => o.node !== s.node && !planSel[o.node])
-                        .map((o) => <option key={o.node} value={o.node}>combine with {o.node}</option>)}
-                    </select>
-                  )}
-                </label>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
+      {/* ── Optimisation log (full width) ── */}
       {opt && (() => {
         const sizesFor = (role: MemberRole) => {
           const ids = new Set(opt.model.members.filter((m) => m.role === role).map((m) => m.section))
@@ -1079,16 +1198,11 @@ export default function ModelSpace() {
                 ))}
               </tbody>
             </table>
-            <p className="mt-1 text-[11px] text-slate-400">
-              Each failing beam/girder/column grows its OWN section (h +50 mm; b +50 once h ≥ 3b); the
-              strong-column/weak-beam width hierarchy is re-enforced after every step, then depths are trimmed
-              while the structure still passes. Self-weight is not auto-updated — hit “Rebuild D + L” and
-              re-optimize if sizes moved a lot.
-            </p>
           </div>
         )
       })()}
 
+      {/* ── Schedules (full width, stacked) ── */}
       {design && (
         <div className="mt-6 space-y-6">
           <h2 className="text-xl font-extrabold tracking-tight text-[#0056b3]">
@@ -1100,9 +1214,10 @@ export default function ModelSpace() {
           <p className="-mt-3 text-xs text-slate-500">
             Envelope of <b>{design.cases.length}</b> load case{design.cases.length === 1 ? '' : 's'} (NSCP combinations × lateral directions).
             Each element is designed for its own governing case, shown in the “Case” column.
-            <span className="no-print"> Click any row to expand its step-by-step solution.</span>
+            <span className="no-print"> Click any row to expand its solution + plan/elevation drawings.</span>
           </p>
 
+          {/* Beam & girder schedule */}
           <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Beam & girder schedule</h3>
             <table className="w-full border-collapse text-xs">
@@ -1124,32 +1239,47 @@ export default function ModelSpace() {
                   const bad = !(d.flexOK && d.comprEffective && d.comprNAOK && d.region !== 'inadequate')
                   const key = `beam:${bm.id}:${k}`
                   const open = expanded === key
+                  const sec = sectionFor(bm.id)
                   return [
                     <tr key={key} onClick={() => setExpanded(open ? null : key)}
                       className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${bad ? 'bg-red-50 text-red-700' : ''}`}>
-                      <td className="py-1 pr-2 font-medium">{k === 0 ? `${open ? '▾' : '▸'} ${bm.id} (${bm.role} ${sectionFor(bm.id)?.name ?? ''}, ${f1(bm.L)} m)` : ''}</td>
+                      <td className="py-1 pr-2 font-medium">{k === 0 ? `${open ? '▾' : '▸'} ${bm.id} (${bm.role} ${sec?.name ?? ''}, ${f1(bm.L)} m)` : ''}</td>
                       <td className="py-1 pr-2">{s.label}{s.hogging ? ' (hog)' : ''}</td>
                       <td className="py-1 pr-2 text-right">{f1(Math.abs(s.Mu))}</td>
                       <td className="py-1 pr-2 text-right">{f1(s.Vu)}</td>
                       <td className="py-1 pr-2">{d.mode}</td>
-                      <td className="py-1 pr-2">{d.bars}⌀{model?.sections[0]?.barDia}{d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}{s.hogging ? ' top' : ''}</td>
+                      <td className="py-1 pr-2">{d.bars}⌀{sec?.barDia}{d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}{s.hogging ? ' top' : ''}</td>
                       <td className="py-1 pr-2">{d.sAdopt > 0 ? `@${Math.round(d.sAdopt)}` : d.region === 'none' ? 'none' : '⚠'}</td>
                       <td className="py-1 text-slate-400">{k === 0 ? bm.gov : ''}</td>
                     </tr>,
-                    open && model && (
+                    open && model && sec && (
                       <tr key={`${key}:sol`}>
                         <td colSpan={8} className="bg-slate-50/60 px-2 pb-2">
-                          {bm.diag && (
-                            <div className="mt-2 grid grid-cols-1 gap-3 lg:grid-cols-3">
-                              <Diagram xs={bm.diag.xs} ys={loadFromShear(bm.diag.xs, bm.diag.Vy)} title="LOAD w (≈ −dV/dx)" unit="kN/m"
-                                color="#475569" vlines={[{ x: s.x, label: s.label.split(' ')[0] }]} />
-                              <Diagram xs={bm.diag.xs} ys={bm.diag.Vy} title="SHEAR Vy" unit="kN"
-                                color="#1f77b4" vlines={[{ x: s.x, label: s.label.split(' ')[0] }]} />
-                              <Diagram xs={bm.diag.xs} ys={bm.diag.Mz} title="MOMENT Mz (+sag)" unit="kN·m"
-                                color="#d62728" vlines={[{ x: s.x, label: s.label.split(' ')[0] }]} />
+                          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.7fr_1fr]">
+                            <div>
+                              {bm.diag && (
+                                <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                                  <Diagram xs={bm.diag.xs} ys={loadFromShear(bm.diag.xs, bm.diag.Vy)} title="LOAD w (≈ −dV/dx)" unit="kN/m"
+                                    color="#475569" vlines={[{ x: s.x, label: s.label.split(' ')[0] }]} />
+                                  <Diagram xs={bm.diag.xs} ys={bm.diag.Vy} title="SHEAR Vy" unit="kN"
+                                    color="#1f77b4" vlines={[{ x: s.x, label: s.label.split(' ')[0] }]} />
+                                  <Diagram xs={bm.diag.xs} ys={bm.diag.Mz} title="MOMENT Mz (+sag)" unit="kN·m"
+                                    color="#d62728" vlines={[{ x: s.x, label: s.label.split(' ')[0] }]} />
+                                </div>
+                              )}
+                              <WorkedSolution steps={beamSectionSolution(sec, s)} title={`${bm.id} · ${s.label} — worked solution`} />
                             </div>
-                          )}
-                          <WorkedSolution steps={beamSectionSolution(sectionFor(bm.id) ?? model.sections[0], s)} title={`${bm.id} · ${s.label} — worked solution`} />
+                            <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-3">
+                              <BeamRebarElevation L={bm.L} h={sec.h} sections={bm.sections} />
+                              <div className="border-t border-slate-100 pt-2">
+                                <p className="mb-1 text-[11px] font-semibold text-[#0056b3]">SECTION — {s.label}</p>
+                                <BeamSchematic b={sec.b} h={sec.h} cover={sec.cover} barDia={sec.barDia} stirrupDia={sec.tieDia}
+                                  bars={d.bars} d={d.d} dPrime={d.comprLayers.length > 0 ? d.dPrime : undefined}
+                                  layers={d.layers} comprLayers={d.comprLayers} comprBars={d.comprBars} comprBarDia={16}
+                                  naDepth={d.cNA} flexOK={d.flexOK} hogging={s.hogging} />
+                              </div>
+                            </div>
+                          </div>
                         </td>
                       </tr>
                     ),
@@ -1159,79 +1289,135 @@ export default function ModelSpace() {
             </table>
           </div>
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* Column schedule (full width) */}
+          <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Column schedule</h3>
+            <table className="w-full border-collapse text-xs">
+              <thead>
+                <tr className="text-left uppercase tracking-wide text-slate-500">
+                  <th className="py-1 pr-2 font-semibold">Column</th>
+                  <th className="py-1 pr-2 font-semibold">Section</th>
+                  <th className="py-1 pr-2 text-right font-semibold">Pu (kN)</th>
+                  <th className="py-1 pr-2 text-right font-semibold">Mu</th>
+                  <th className="py-1 pr-2 font-semibold">Bars</th>
+                  <th className="py-1 pr-2 text-right font-semibold">Util</th>
+                  <th className="py-1 font-semibold">Case</th>
+                </tr>
+              </thead>
+              <tbody>
+                {design.columns.flatMap((c) => {
+                  const key = `col:${c.id}`, open = expanded === key
+                  const cs = sectionFor(c.id)
+                  return [
+                    <tr key={key} onClick={() => setExpanded(open ? null : key)}
+                      className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                      <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {c.id}</td>
+                      <td className="py-1 pr-2">{cs?.name}</td>
+                      <td className="py-1 pr-2 text-right">{f1(c.Pu)}</td>
+                      <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
+                      <td className="py-1 pr-2">{c.bars}⌀{cs?.barDia} · ties @{Math.round(c.tieSpacing)}</td>
+                      <td className="py-1 pr-2 text-right">{(c.util * 100).toFixed(0)}%</td>
+                      <td className="py-1 text-slate-400">{c.gov}</td>
+                    </tr>,
+                    open && model && cs && (
+                      <tr key={`${key}:sol`}>
+                        <td colSpan={7} className="bg-slate-50/60 px-2 pb-2">
+                          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.7fr_1fr]">
+                            <WorkedSolution steps={columnRowSolution(cs, c)} title={`${c.id} — worked solution`} />
+                            <div className="grid grid-cols-2 gap-3 rounded-lg border border-slate-200 bg-white p-3">
+                              <ColumnElevation Lh={c.L} bars={c.bars} tieSpacing={c.tieSpacing} />
+                              <ColumnSchematic shape="tied" b={cs.b} h={cs.h} cover={cs.cover}
+                                barDia={cs.barDia} tieDia={cs.tieDia} bars={c.bars} tieSpacing={c.tieSpacing} />
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ),
+                  ]
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Footing schedule (full width) */}
+          <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Footing schedule</h3>
+            <table className="w-full border-collapse text-xs">
+              <thead>
+                <tr className="text-left uppercase tracking-wide text-slate-500">
+                  <th className="py-1 pr-2 font-semibold">Node</th>
+                  <th className="py-1 pr-2 text-right font-semibold">P / Pu (kN)</th>
+                  <th className="py-1 pr-2 font-semibold">Plan</th>
+                  <th className="py-1 pr-2 font-semibold">Dc</th>
+                  <th className="py-1 pr-2 font-semibold">Steel</th>
+                  <th className="py-1 font-semibold">Case</th>
+                </tr>
+              </thead>
+              <tbody>
+                {design.footings.flatMap((f) => {
+                  const key = `ftg:${f.node}`, open = expanded === key
+                  const cs = colSectionAt(f.node)
+                  return [
+                    <tr key={key} onClick={() => setExpanded(open ? null : key)}
+                      className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${f.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                      <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {f.node}</td>
+                      <td className="py-1 pr-2 text-right">{f1(f.P)} / {f1(f.Pu)}</td>
+                      <td className="py-1 pr-2">B = {f2(f.design.B)} m</td>
+                      <td className="py-1 pr-2">{Math.round(f.design.Dc)} mm</td>
+                      <td className="py-1 pr-2">{f.design.bars}⌀{cs?.barDia} @ {Math.round(f.design.barSpacing)} e.w.</td>
+                      <td className="py-1 text-slate-400">{f.gov}</td>
+                    </tr>,
+                    open && model && (
+                      <tr key={`${key}:sol`}>
+                        <td colSpan={6} className="bg-slate-50/60 px-2 pb-2">
+                          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.7fr_1fr]">
+                            <WorkedSolution steps={footingRowSolution(cs ?? model.sections[0], soil, f)} title={`Footing ${f.node} — worked solution`} />
+                            <div className="rounded-lg border border-slate-200 bg-white p-3">
+                              <FootingSchematic Bx={f.design.B} By={f.design.B} Dc={f.design.Dc}
+                                columnWidth={cs ? Math.min(cs.b, cs.h) : 400} H={Hf} />
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ),
+                  ]
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Combined footing schedule (full width) */}
+          {design.combined.length > 0 && (
             <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Column schedule</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Combined footing schedule</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="text-left uppercase tracking-wide text-slate-500">
-                    <th className="py-1 pr-2 font-semibold">Column</th>
-                    <th className="py-1 pr-2 font-semibold">Section</th>
-                    <th className="py-1 pr-2 text-right font-semibold">Pu (kN)</th>
-                    <th className="py-1 pr-2 text-right font-semibold">Mu</th>
-                    <th className="py-1 pr-2 font-semibold">Bars</th>
-                    <th className="py-1 pr-2 text-right font-semibold">Util</th>
-                    <th className="py-1 font-semibold">Case</th>
+                    <th className="py-1 pr-2 font-semibold">Nodes</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Spacing</th>
+                    <th className="py-1 pr-2 text-right font-semibold">DL / LL (kN)</th>
+                    <th className="py-1 pr-2 font-semibold">Shape</th>
+                    <th className="py-1 pr-2 font-semibold">Plan</th>
+                    <th className="py-1 font-semibold">Dc</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {design.columns.flatMap((c) => {
-                    const key = `col:${c.id}`, open = expanded === key
-                    const cs = sectionFor(c.id)
+                  {design.combined.flatMap((c) => {
+                    const key = `comb:${c.nodes.join('-')}`, open = expanded === key
                     return [
                       <tr key={key} onClick={() => setExpanded(open ? null : key)}
                         className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
-                        <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {c.id}</td>
-                        <td className="py-1 pr-2">{cs?.name}</td>
-                        <td className="py-1 pr-2 text-right">{f1(c.Pu)}</td>
-                        <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
-                        <td className="py-1 pr-2">{c.bars}⌀{model?.sections[0]?.barDia} · ties @{Math.round(c.tieSpacing)}</td>
-                        <td className="py-1 pr-2 text-right">{(c.util * 100).toFixed(0)}%</td>
-                        <td className="py-1 text-slate-400">{c.gov}</td>
-                      </tr>,
-                      open && model && (
-                        <tr key={`${key}:sol`}>
-                          <td colSpan={7} className="bg-slate-50/60 px-2 pb-2">
-                            <WorkedSolution steps={columnRowSolution(cs ?? model.sections[0], c)} title={`${c.id} — worked solution`} />
-                          </td>
-                        </tr>
-                      ),
-                    ]
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Footing schedule</h3>
-              <table className="w-full border-collapse text-xs">
-                <thead>
-                  <tr className="text-left uppercase tracking-wide text-slate-500">
-                    <th className="py-1 pr-2 font-semibold">Node</th>
-                    <th className="py-1 pr-2 text-right font-semibold">P / Pu (kN)</th>
-                    <th className="py-1 pr-2 font-semibold">Plan</th>
-                    <th className="py-1 pr-2 font-semibold">Dc</th>
-                    <th className="py-1 pr-2 font-semibold">Steel</th>
-                    <th className="py-1 font-semibold">Case</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {design.footings.flatMap((f) => {
-                    const key = `ftg:${f.node}`, open = expanded === key
-                    return [
-                      <tr key={key} onClick={() => setExpanded(open ? null : key)}
-                        className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${f.ok ? '' : 'bg-red-50 text-red-700'}`}>
-                        <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {f.node}</td>
-                        <td className="py-1 pr-2 text-right">{f1(f.P)} / {f1(f.Pu)}</td>
-                        <td className="py-1 pr-2">B = {f2(f.design.B)} m</td>
-                        <td className="py-1 pr-2">{Math.round(f.design.Dc)} mm</td>
-                        <td className="py-1 pr-2">{f.design.bars}⌀{model?.sections[0]?.barDia} @ {Math.round(f.design.barSpacing)} e.w.</td>
-                        <td className="py-1 text-slate-400">{f.gov}</td>
+                        <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {c.nodes[0]} + {c.nodes[1]}</td>
+                        <td className="py-1 pr-2 text-right">{f2(c.spacing)} m</td>
+                        <td className="py-1 pr-2 text-right">{f1(c.dl1)}/{f1(c.ll1)} · {f1(c.dl2)}/{f1(c.ll2)}</td>
+                        <td className="py-1 pr-2">{c.design.shape}</td>
+                        <td className="py-1 pr-2">{f2(c.design.Bx)} × {f2(c.design.By)} m</td>
+                        <td className="py-1">{Math.round(c.design.Dc)} mm</td>
                       </tr>,
                       open && model && (
                         <tr key={`${key}:sol`}>
                           <td colSpan={6} className="bg-slate-50/60 px-2 pb-2">
-                            <WorkedSolution steps={footingRowSolution(colSectionAt(f.node) ?? model.sections[0], soil, f)} title={`Footing ${f.node} — worked solution`} />
+                            <WorkedSolution steps={combinedRowSolution(colSectionAt(c.nodes[0]) ?? model.sections[0], colSectionAt(c.nodes[1]) ?? model.sections[0], soil, c)} title={`Combined footing ${c.nodes.join(' + ')} — worked solution`} />
                           </td>
                         </tr>
                       ),
@@ -1239,54 +1425,11 @@ export default function ModelSpace() {
                   })}
                 </tbody>
               </table>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Column loads split from D-only / L-only frame solves. Click a row for the full worked solution.
+              </p>
             </div>
-
-            {design.combined.length > 0 && (
-              <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Combined footing schedule</h3>
-                <table className="w-full border-collapse text-xs">
-                  <thead>
-                    <tr className="text-left uppercase tracking-wide text-slate-500">
-                      <th className="py-1 pr-2 font-semibold">Nodes</th>
-                      <th className="py-1 pr-2 text-right font-semibold">Spacing</th>
-                      <th className="py-1 pr-2 text-right font-semibold">DL / LL (kN)</th>
-                      <th className="py-1 pr-2 font-semibold">Shape</th>
-                      <th className="py-1 pr-2 font-semibold">Plan</th>
-                      <th className="py-1 font-semibold">Dc</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {design.combined.flatMap((c) => {
-                      const key = `comb:${c.nodes.join('-')}`, open = expanded === key
-                      return [
-                        <tr key={key} onClick={() => setExpanded(open ? null : key)}
-                          className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
-                          <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {c.nodes[0]} + {c.nodes[1]}</td>
-                          <td className="py-1 pr-2 text-right">{f2(c.spacing)} m</td>
-                          <td className="py-1 pr-2 text-right">
-                            {f1(c.dl1)}/{f1(c.ll1)} · {f1(c.dl2)}/{f1(c.ll2)}
-                          </td>
-                          <td className="py-1 pr-2">{c.design.shape}</td>
-                          <td className="py-1 pr-2">{f2(c.design.Bx)} × {f2(c.design.By)} m</td>
-                          <td className="py-1">{Math.round(c.design.Dc)} mm</td>
-                        </tr>,
-                        open && model && (
-                          <tr key={`${key}:sol`}>
-                            <td colSpan={6} className="bg-slate-50/60 px-2 pb-2">
-                              <WorkedSolution steps={combinedRowSolution(colSectionAt(c.nodes[0]) ?? model.sections[0], colSectionAt(c.nodes[1]) ?? model.sections[0], soil, c)} title={`Combined footing ${c.nodes.join(' + ')} — worked solution`} />
-                            </td>
-                          </tr>
-                        ),
-                      ]
-                    })}
-                  </tbody>
-                </table>
-                <p className="mt-1 text-[11px] text-slate-400">
-                  Column loads split from D-only / L-only frame solves. Click a row for the full worked solution.
-                </p>
-              </div>
-            )}
-          </div>
+          )}
 
           <p className="text-xs text-slate-400">
             Pipeline: slab area loads → tributary line loads → 3D frame FEM (governing NSCP combo) → beam/girder
