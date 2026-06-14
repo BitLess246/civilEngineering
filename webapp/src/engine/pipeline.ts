@@ -16,6 +16,7 @@ import { designBeam, type BeamDesignResult } from './beamDesign'
 import { designAxialColumn, capacityAtEccentricity, interaction } from './columnDesign'
 import { designSquareFooting, type SquareFootingResult } from './isolatedFooting'
 import { designCombinedFooting, type CombinedFootingResult } from './combinedFooting'
+import { designSlabDDM, type SlabDesignResult } from './slabDDM'
 
 export interface SoilOptions {
   qAllow: number; gammaSoil: number; gammaConc: number; H: number
@@ -70,6 +71,12 @@ export interface CombinedScheduleRow {
   design: CombinedFootingResult
   ok: boolean
 }
+export interface SlabScheduleRow {
+  plate: string
+  lx: number; ly: number
+  design: SlabDesignResult
+  ok: boolean
+}
 /** Per-support footing choice: isolated (default) or combined with another node. */
 export type FootingPlan = Record<string, { type: 'isolated' } | { type: 'combined'; with: string }>
 
@@ -78,6 +85,7 @@ export interface StructureDesign {
   cases: string[]   // every load case (combo × direction) run for the envelope
   beams: BeamScheduleRow[]
   columns: ColumnScheduleRow[]
+  slabs: SlabScheduleRow[]
   footings: FootingScheduleRow[]
   combined: CombinedScheduleRow[]
   totals: { concreteMembers: number; concreteSlabs: number; concrete: number }
@@ -346,10 +354,35 @@ export function designStructure(
     concreteSlabs += lx * lz * (p.thickness / 1000)
   }
 
+  // ── Slabs — two-way Direct Design Method ──
+  const xMin = Math.min(...model.nodes.map((n) => n.x)), xMax = Math.max(...model.nodes.map((n) => n.x))
+  const zMin = Math.min(...model.nodes.map((n) => n.z)), zMax = Math.max(...model.nodes.map((n) => n.z))
+  const slabs: SlabScheduleRow[] = []
+  for (const p of model.plates) {
+    if (p.role === 'wall') continue
+    const c = p.corners.map((id) => nm.get(id)); if (c.some((q) => !q)) continue
+    const cc = c as { x: number; y: number; z: number }[]
+    const lx = Math.hypot(cc[1].x - cc[0].x, cc[1].z - cc[0].z)
+    const lz = Math.hypot(cc[3].x - cc[0].x, cc[3].z - cc[0].z)
+    if (!(lx > 0 && lz > 0)) continue
+    const areaD = model.loads.filter((l) => l.kind === 'area' && l.plate === p.id && l.cat === 'D').reduce((s, l) => s + (l as { q: number }).q, 0)
+    const areaL = model.loads.filter((l) => l.kind === 'area' && l.plate === p.id && l.cat === 'L').reduce((s, l) => s + (l as { q: number }).q, 0)
+    if (areaD + areaL < 1e-9) continue
+    const cs = footSec(p.corners[0])
+    const extX = cc.some((q) => Math.abs(q.x - xMin) < 1e-4) || cc.some((q) => Math.abs(q.x - xMax) < 1e-4)
+    const extZ = cc.some((q) => Math.abs(q.z - zMin) < 1e-4) || cc.some((q) => Math.abs(q.z - zMax) < 1e-4)
+    const design = designSlabDDM({
+      lx, ly: lz, colWidth: Math.min(cs.b, cs.h), D: areaD, L: areaL,
+      fc: cs.fc, fy: cs.fy, h: p.thickness, cover: 20, barDia: 12,
+      exterior: { x: extX, y: extZ }, withBeams: true,
+    })
+    slabs.push({ plate: p.id, lx, ly: lz, design, ok: design.applicable })
+  }
+
   return {
     govName: runs[govIdx].name,
     cases: runs.map((r) => r.name),
-    beams, columns, footings, combined,
+    beams, columns, slabs, footings, combined,
     totals: { concreteMembers, concreteSlabs, concrete: concreteMembers + concreteSlabs },
     orphanEdges: br.orphanEdges.length,
   }
