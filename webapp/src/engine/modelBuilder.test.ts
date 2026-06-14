@@ -1,8 +1,23 @@
 import { describe, it, expect } from 'vitest'
-import { generateGridModel, removeElements, nodeId } from './modelBuilder'
+import { generateGridModel, removeElements, nodeId, buildGravityLoads } from './modelBuilder'
 import type { RectSection } from './model'
 
 const sec: RectSection = { id: 'S1', name: '300×500', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+
+describe('wall self-weight as a beam line load', () => {
+  it('adds a member-udl D of t·h·γc on the wall’s member', () => {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section: sec })
+    const beam = m.members.find((x) => x.role === 'beam')!
+    m.walls = [{ id: 'w0', member: beam.id, height: 3, thickness: 150, shearWall: false }]
+    const loads = buildGravityLoads(m, 0, 0)
+    const wall = loads.filter((l) => l.kind === 'member-udl' && l.member === beam.id && l.cat === 'D')
+    // beam self-weight (0.3·0.5·24 = 3.6) + wall (0.15·3·24 = 10.8)
+    const total = wall.reduce((s, l) => s + (l as { w: number }).w, 0)
+    expect(total).toBeCloseTo(0.3 * 0.5 * 24 + 0.15 * 3 * 24, 6)
+    expect(wall.some((l) => Math.abs((l as { w: number }).w - 10.8) < 1e-6)).toBe(true)  // the wall udl
+    expect(wall).toHaveLength(2)   // beam self-weight + wall
+  })
+})
 
 describe('grid model generator', () => {
   // 2 bays × 1 bay × 2 storeys → 3×2 grid points, 3 levels

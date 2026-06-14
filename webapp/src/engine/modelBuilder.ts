@@ -135,7 +135,8 @@ const GAMMA_C = 24 // kN/m³
 
 /**
  * Build the gravity load set: member SELF-WEIGHT (D, kN/m from the section),
- * slab SELF-WEIGHT + superimposed dead load (D, kPa), and live load (L, kPa).
+ * WALL self-weight on its supporting member (D, kN/m = t·h·γc), slab
+ * SELF-WEIGHT + superimposed dead load (D, kPa), and live load (L, kPa).
  * Loads of other categories (e.g. seismic E) are preserved from the model.
  */
 export function buildGravityLoads(model: StructuralModel, sdl: number, ll: number): StructuralModel['loads'] {
@@ -149,14 +150,20 @@ export function buildGravityLoads(model: StructuralModel, sdl: number, ll: numbe
       return { kind: 'member-udl' as const, member: m.id, w, cat: 'D' as const }
     })
     .filter((l) => l.w > 0)
-  const plateLoads: StructuralModel['loads'] = model.plates.flatMap((p) => {
-    const qSW = (p.thickness / 1000) * GAMMA_C
-    return [
-      { kind: 'area' as const, plate: p.id, q: qSW + sdl, cat: 'D' as const },
-      ...(ll > 0 ? [{ kind: 'area' as const, plate: p.id, q: ll, cat: 'L' as const }] : []),
-    ]
-  })
-  return [...memberSW, ...plateLoads, ...kept]
+  // wall self-weight as a line load on its supporting member
+  const wallSW: StructuralModel['loads'] = (model.walls ?? [])
+    .map((wl) => ({ kind: 'member-udl' as const, member: wl.member, w: (wl.thickness / 1000) * wl.height * GAMMA_C, cat: 'D' as const }))
+    .filter((l) => l.w > 0)
+  const plateLoads: StructuralModel['loads'] = model.plates
+    .filter((p) => p.role !== 'wall')
+    .flatMap((p) => {
+      const qSW = (p.thickness / 1000) * GAMMA_C
+      return [
+        { kind: 'area' as const, plate: p.id, q: qSW + sdl, cat: 'D' as const },
+        ...(ll > 0 ? [{ kind: 'area' as const, plate: p.id, q: ll, cat: 'L' as const }] : []),
+      ]
+    })
+  return [...memberSW, ...wallSW, ...plateLoads, ...kept]
 }
 
 /**
