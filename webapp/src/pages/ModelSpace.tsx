@@ -35,12 +35,12 @@ const parseList = (s: string): number[] =>
   s.split(/[, ]+/).map(parseFloat).filter((v) => Number.isFinite(v) && v > 0)
 
 /** Distributed load along a member derived from the shear, w ≈ −dV/dx
- *  (central difference), for the loading diagram in the worked solution. */
+ *  (central difference; one-sided at the ends so a UDL reads flat). */
 const loadFromShear = (xs: number[], Vy: number[]): number[] =>
   xs.map((_, i) => {
-    if (i === 0 || i === xs.length - 1) return 0
-    const dx = xs[i + 1] - xs[i - 1]
-    return dx !== 0 ? -(Vy[i + 1] - Vy[i - 1]) / dx : 0
+    const lo = Math.max(0, i - 1), hi = Math.min(xs.length - 1, i + 1)
+    const dx = xs[hi] - xs[lo]
+    return dx !== 0 ? -(Vy[hi] - Vy[lo]) / dx : 0
   })
 
 // ── 3D primitives ─────────────────────────────────────────────────────────
@@ -115,8 +115,63 @@ function Arrow({ tip, dir, len, color }: { tip: THREE.Vector3; dir: THREE.Vector
   return <primitive object={helper} />
 }
 
+// Colours for the tributary footprint by shape (= which beam carries it).
+const TRIB_COLOR = { triangle: '#0e7490', trapezoid: '#0056b3', rect: '#15803d' } as const
+type TribKind = keyof typeof TRIB_COLOR
+
+/** Tributary footprint of a slab on its edge beams: 45° triangles (short
+ *  edges) + trapezoids (long edges) for two-way panels, or two rectangles for
+ *  one-way (long/short ≥ 2). Returned as filled polygons just above the slab. */
+function slabTributaryPolys(c: THREE.Vector3[]): { pts: THREE.Vector3[]; kind: TribKind }[] {
+  const O = c[0]
+  const e1 = c[1].clone().sub(c[0]), e3 = c[3].clone().sub(c[0])
+  const d1 = e1.length(), d3 = e3.length()
+  const longAlong1 = d1 >= d3
+  const U = (longAlong1 ? e1 : e3).clone().normalize()
+  const V = (longAlong1 ? e3 : e1).clone().normalize()
+  const L = Math.max(d1, d3), S = Math.min(d1, d3)
+  const lift = new THREE.Vector3(0, 0.13, 0)
+  const P = (u: number, v: number) => O.clone().addScaledVector(U, u).addScaledVector(V, v).add(lift)
+  if (L / Math.max(S, 1e-9) >= 2) {
+    const h = S / 2   // one-way: split between the two long edges
+    return [
+      { kind: 'rect', pts: [P(0, 0), P(L, 0), P(L, h), P(0, h)] },
+      { kind: 'rect', pts: [P(0, h), P(L, h), P(L, S), P(0, S)] },
+    ]
+  }
+  const m = S / 2     // two-way: 45° tributary
+  return [
+    { kind: 'triangle', pts: [P(0, 0), P(0, S), P(m, m)] },
+    { kind: 'triangle', pts: [P(L, 0), P(L - m, m), P(L, S)] },
+    { kind: 'trapezoid', pts: [P(0, 0), P(L, 0), P(L - m, m), P(m, m)] },
+    { kind: 'trapezoid', pts: [P(0, S), P(m, m), P(L - m, m), P(L, S)] },
+  ]
+}
+
+function TribPoly({ pts, kind }: { pts: THREE.Vector3[]; kind: TribKind }) {
+  const { fill, line } = useMemo(() => {
+    const pos: number[] = []
+    for (let k = 1; k < pts.length - 1; k++)
+      pos.push(pts[0].x, pts[0].y, pts[0].z, pts[k].x, pts[k].y, pts[k].z, pts[k + 1].x, pts[k + 1].y, pts[k + 1].z)
+    const fill = new THREE.BufferGeometry()
+    fill.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    const line = new THREE.BufferGeometry().setFromPoints([...pts, pts[0]])
+    return { fill, line }
+  }, [pts])
+  const color = TRIB_COLOR[kind]
+  return (
+    <group>
+      <mesh geometry={fill}>
+        <meshBasicMaterial color={color} transparent opacity={0.22} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
+      <primitive object={new THREE.Line(line, new THREE.LineBasicMaterial({ color }))} />
+    </group>
+  )
+}
+
 /** Loading diagrams drawn on the elements: member UDL (a bar of arrows), member
- *  point loads, slab area pressure (a grid of arrows) and node loads (E/W). */
+ *  point loads, slab tributary footprints (triangle/trapezoid/rectangle) and
+ *  node loads (E/W). */
 function Loads3D({ model, nodePos }: { model: StructuralModel; nodePos: Map<string, THREE.Vector3> }) {
   const DOWN = useMemo(() => new THREE.Vector3(0, -1, 0), [])
   // per-type magnitude maxima for gentle length scaling
@@ -130,6 +185,17 @@ function Loads3D({ model, nodePos }: { model: StructuralModel; nodePos: Map<stri
   const lenOf = (mag: number, m: number) => 0.5 + 0.7 * Math.min(1, mag / m)   // 0.5–1.2 m
 
   const glyphs: ReactNode[] = []
+
+  // slab tributary footprints — once per loaded plate (not per area load)
+  const loadedPlates = new Set(model.loads.filter((l) => l.kind === 'area').map((l) => (l as { plate: string }).plate))
+  for (const pid of loadedPlates) {
+    const p = model.plates.find((pp) => pp.id === pid)
+    const cs = p?.corners.map((c) => nodePos.get(c))
+    if (!cs || cs.some((c) => !c)) continue
+    slabTributaryPolys(cs as THREE.Vector3[]).forEach((poly, k) =>
+      glyphs.push(<TribPoly key={`trib-${pid}-${k}`} pts={poly.pts} kind={poly.kind} />))
+  }
+
   for (let i = 0; i < model.loads.length; i++) {
     const l = model.loads[i]
     const color = LOAD_COLOR[l.cat] ?? '#64748b'
@@ -153,20 +219,6 @@ function Loads3D({ model, nodePos }: { model: StructuralModel; nodePos: Map<stri
       if (!a || !b) continue
       const tip = a.clone().lerp(b, Math.max(0, Math.min(1, l.t)))
       glyphs.push(<Arrow key={`p${i}`} tip={tip} dir={DOWN} len={lenOf(Math.abs(l.P), max.point)} color={color} />)
-    } else if (l.kind === 'area') {
-      const p = model.plates.find((pp) => pp.id === l.plate)
-      const cs = p?.corners.map((c) => nodePos.get(c))
-      if (!cs || cs.some((c) => !c)) continue
-      const c = cs as THREE.Vector3[]
-      const len = lenOf(Math.abs(l.q), max.area)
-      const nu = 3, nv = 3
-      for (let u = 1; u < nu; u++) for (let v = 1; v < nv; v++) {
-        // bilinear point on the quad
-        const top = c[0].clone().lerp(c[1], u / nu)
-        const bot = c[3].clone().lerp(c[2], u / nu)
-        const tip = top.lerp(bot, v / nv)
-        glyphs.push(<Arrow key={`a${i}-${u}-${v}`} tip={tip} dir={DOWN} len={len} color={color} />)
-      }
     } else if (l.kind === 'node') {
       const pos = nodePos.get(l.node)
       const dir = new THREE.Vector3(l.Fx ?? 0, l.Fy ?? 0, l.Fz ?? 0)

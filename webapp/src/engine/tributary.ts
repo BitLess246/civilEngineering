@@ -1,14 +1,18 @@
 // ─────────────────────────────────────────────────────────────────────────
 // Tributary (load-path) engine — Phase 3 of the 3D roadmap. A slab panel's
-// area loads are distributed to its edge beams:
-//   · one-way  (long/short ≥ 2): the two LONG edges each carry a uniform
-//     line load w = q·lx/2 over their length; the short edges carry none.
-//   · two-way (45° tributary lines): the short edges carry a TRIANGLE
-//     (0 → q·lx/2 → 0), the long edges a TRAPEZOID (45° ramps over lx/2 at
-//     each end, flat q·lx/2 in between).
-// The edge loads are emitted as the SAME BeamLoad shapes (udl / vdl, with
-// their NSCP category preserved) that the beam & frame solvers consume —
-// the load path needs no new load machinery downstream.
+// area loads are distributed to its edge beams as EQUIVALENT UNIFORM LINE
+// LOADS (NSCP two-way slab simplification), so each beam sees a clean UDL —
+// linear shear, parabolic moment, no meshing artefacts:
+//   · one-way (long/short ≥ 2): the two LONG edges carry w = q·lx/2; the
+//     short edges carry none.
+//   · two-way (45° tributary): the actual load is a TRIANGLE on the short
+//     edges (peak q·lx/2) and a TRAPEZOID on the long edges. Each is replaced
+//     by the load-conserving equivalent uniform load:
+//       – short (triangle):  w = q·lx/4              (= peak/2)
+//       – long  (trapezoid): w = (q·lx/2)(1 − lx/2ly)
+//     These reproduce the exact edge TOTAL (so reactions, columns and
+//     footings stay in equilibrium) while keeping the line load uniform.
+// Loads carry their NSCP category and feed the beam & frame solvers directly.
 // Units: spans m; q kPa (kN/m²); line loads kN/m.
 // ─────────────────────────────────────────────────────────────────────────
 import type { BeamLoad, LoadCategory } from './beamAnalysis'
@@ -63,14 +67,9 @@ export function distributePanel(a: number, b: number, areaLoads: AreaLoad[]): Tr
     for (const al of areaLoads) {
       const p = (al.q * lx) / 2
       if (Math.abs(p) < 1e-12) continue
-      if (behaviour === 'one-way') {
-        loads.push({ type: 'udl', x1: 0, x2: ly, w: p, cat: al.cat })
-      } else {
-        // trapezoid: 45° ramps over lx/2 at each end, flat in between
-        loads.push({ type: 'vdl', x1: 0, x2: lx / 2, w1: 0, w2: p, cat: al.cat })
-        if (ly - lx > 1e-9) loads.push({ type: 'udl', x1: lx / 2, x2: ly - lx / 2, w: p, cat: al.cat })
-        loads.push({ type: 'vdl', x1: ly - lx / 2, x2: ly, w1: p, w2: 0, cat: al.cat })
-      }
+      // one-way → full q·lx/2; two-way → load-conserving trapezoid EUL
+      const w = behaviour === 'one-way' ? p : p * (1 - lx / (2 * ly))
+      loads.push({ type: 'udl', x1: 0, x2: ly, w, cat: al.cat })
     }
     return { edge, kind: 'long', length: ly, peak, loads, total: sumW(loads) }
   }
@@ -81,9 +80,8 @@ export function distributePanel(a: number, b: number, areaLoads: AreaLoad[]): Tr
       for (const al of areaLoads) {
         const p = (al.q * lx) / 2
         if (Math.abs(p) < 1e-12) continue
-        // triangle: 0 at the corners, peak at midspan
-        loads.push({ type: 'vdl', x1: 0, x2: lx / 2, w1: 0, w2: p, cat: al.cat })
-        loads.push({ type: 'vdl', x1: lx / 2, x2: lx, w1: p, w2: 0, cat: al.cat })
+        // load-conserving triangle EUL: w = q·lx/4 (= peak/2)
+        loads.push({ type: 'udl', x1: 0, x2: lx, w: p / 2, cat: al.cat })
       }
     }
     return { edge, kind: 'short', length: lx, peak: behaviour === 'two-way' ? peak : 0, loads, total: sumW(loads) }
