@@ -391,6 +391,9 @@ export default function ModelSpace() {
   // frame-editor add-member picks
   const [newI, setNewI] = useState(''); const [newJ, setNewJ] = useState('')
   const [newRole, setNewRole] = useState<MemberRole>('beam')
+  // wall-add form
+  const [wallMember, setWallMember] = useState(''); const [wallH, setWallH] = useState(3)
+  const [wallT, setWallT] = useState(150); const [wallShear, setWallShear] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const save = (m: StructuralModel | null) => {
@@ -546,6 +549,24 @@ export default function ModelSpace() {
       sections: [...model.sections, { ...tmpl, id, name: `${tmpl.b}×${tmpl.h}` }],
       members: [...model.members, { id, i: newI, j: newJ, role: newRole, section: id }],
     })
+  }
+  const updPlateThickness = (id: string, t: number) => {
+    if (!model || !Number.isFinite(t)) return
+    const m2 = { ...model, plates: model.plates.map((p) => (p.id === id ? { ...p, thickness: t } : p)) }
+    save({ ...m2, loads: buildGravityLoads(m2, qD, qL) })
+  }
+  const addWall = () => {
+    if (!model || !wallMember) return
+    let k = model.walls?.length ?? 0
+    while ((model.walls ?? []).some((w) => w.id === `w${k}`)) k++
+    const walls = [...(model.walls ?? []), { id: `w${k}`, member: wallMember, height: wallH, thickness: wallT, shearWall: wallShear }]
+    const m2 = { ...model, walls }
+    save({ ...m2, loads: buildGravityLoads(m2, qD, qL) })
+  }
+  const removeWall = (id: string) => {
+    if (!model) return
+    const m2 = { ...model, walls: (model.walls ?? []).filter((w) => w.id !== id) }
+    save({ ...m2, loads: buildGravityLoads(m2, qD, qL) })
   }
   const updLoad = (idx: number, v: number) => {
     if (!model || !Number.isFinite(v)) return
@@ -876,6 +897,96 @@ export default function ModelSpace() {
                     <button type="button" onClick={addMember} disabled={!newI || !newJ || newI === newJ}
                       className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">+ Add member</button>
                   </div>
+                </div>
+              )}
+
+              {/* ── Plates (slabs) ── */}
+              {model && (
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Slabs / plates</h3>
+                  {model.plates.filter((p) => p.role !== 'wall').length === 0 ? (
+                    <p className="text-xs text-slate-400">No slabs — generate a grid or add members forming closed panels.</p>
+                  ) : (
+                    <div className="max-h-60 overflow-auto">
+                      <table className="w-full border-collapse text-xs">
+                        <thead>
+                          <tr className="text-left uppercase tracking-wide text-slate-500">
+                            <th className="py-1 pr-2 font-semibold">Slab</th>
+                            <th className="py-1 pr-2 font-semibold">Corners</th>
+                            <th className="py-1 pr-1 font-semibold">t (mm)</th>
+                            <th className="py-1" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {model.plates.filter((p) => p.role !== 'wall').map((p) => (
+                            <tr key={p.id} className={`border-t border-slate-100 ${p.id === selected ? 'bg-amber-50' : ''}`}>
+                              <td className="py-0.5 pr-2 font-medium cursor-pointer" onClick={() => setSelected(p.id)}>{p.id}</td>
+                              <td className="py-0.5 pr-2 text-slate-500">{p.corners.join(', ')}</td>
+                              <td className="py-0.5 pr-1">
+                                <input type="number" step="10" value={p.thickness}
+                                  onChange={(e) => updPlateThickness(p.id, parseFloat(e.target.value))}
+                                  className="w-16 rounded border border-slate-200 px-1 py-0.5" />
+                              </td>
+                              <td className="py-0.5 text-right">
+                                <button type="button" onClick={() => { save(removeElements(model, new Set([p.id]))); if (selected === p.id) setSelected(null) }}
+                                  className="rounded px-1.5 text-red-500 hover:bg-red-50">✕</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <p className="mt-1 text-[11px] text-slate-400">Thickness drives slab self-weight (t·γc) → tributary line loads on the edge beams.</p>
+                </div>
+              )}
+
+              {/* ── Walls ── */}
+              {model && (
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Walls (on beams)</h3>
+                  {(model.walls ?? []).length > 0 && (
+                    <div className="mb-2 max-h-48 overflow-auto">
+                      <table className="w-full border-collapse text-xs">
+                        <thead>
+                          <tr className="text-left uppercase tracking-wide text-slate-500">
+                            <th className="py-1 pr-2 font-semibold">On</th>
+                            <th className="py-1 pr-1 font-semibold">h (m)</th>
+                            <th className="py-1 pr-1 font-semibold">t (mm)</th>
+                            <th className="py-1 pr-1 font-semibold">w (kN/m)</th>
+                            <th className="py-1 pr-1 font-semibold">Type</th>
+                            <th className="py-1" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(model.walls ?? []).map((w) => (
+                            <tr key={w.id} className="border-t border-slate-100">
+                              <td className="py-0.5 pr-2 font-medium">{w.member}</td>
+                              <td className="py-0.5 pr-1">{f1(w.height)}</td>
+                              <td className="py-0.5 pr-1">{w.thickness}</td>
+                              <td className="py-0.5 pr-1">{f1((w.thickness / 1000) * w.height * 24)}</td>
+                              <td className="py-0.5 pr-1">{w.shearWall ? <span className="font-semibold text-purple-700">shear</span> : 'gravity'}</td>
+                              <td className="py-0.5 text-right">
+                                <button type="button" onClick={() => removeWall(w.id)} className="rounded px-1.5 text-red-500 hover:bg-red-50">✕</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <div className="flex flex-wrap items-center gap-1 border-t border-slate-100 pt-2 text-xs">
+                    <select value={wallMember} onChange={(e) => setWallMember(e.target.value)} className="max-w-[6rem] rounded border border-slate-200 px-1 py-0.5">
+                      <option value="">on beam…</option>
+                      {model.members.filter((m) => m.role === 'beam' || m.role === 'girder').map((m) => <option key={m.id} value={m.id}>{m.id}</option>)}
+                    </select>
+                    <label className="inline-flex items-center gap-1">h <input type="number" step="0.5" value={wallH} onChange={(e) => setWallH(parseFloat(e.target.value) || 0)} className="w-12 rounded border border-slate-200 px-1 py-0.5" /></label>
+                    <label className="inline-flex items-center gap-1">t <input type="number" step="10" value={wallT} onChange={(e) => setWallT(parseFloat(e.target.value) || 0)} className="w-14 rounded border border-slate-200 px-1 py-0.5" /></label>
+                    <label className="inline-flex items-center gap-1"><input type="checkbox" checked={wallShear} onChange={(e) => setWallShear(e.target.checked)} /> shear wall</label>
+                    <button type="button" onClick={addWall} disabled={!wallMember}
+                      className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">+ Add wall</button>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-400">A wall adds its self-weight (t·h·γc) as a line load on the chosen beam. “Shear wall” is tagged for the lateral system (stiffness handled in a later step).</p>
                 </div>
               )}
             </div>

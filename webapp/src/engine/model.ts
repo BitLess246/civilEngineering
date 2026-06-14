@@ -32,6 +32,17 @@ export interface Plate {
   thickness: number             // mm
 }
 
+/** A wall sitting on a member: its self-weight is applied to that member as a
+ *  line load (D). `shearWall` tags it as a reinforced shear wall (lateral
+ *  system) for downstream design; gravity-only otherwise. */
+export interface Wall {
+  id: string
+  member: string                // supporting member id
+  height: number                // m
+  thickness: number             // mm
+  shearWall: boolean
+}
+
 export type SupportFixity = 'pin' | 'fixed' | 'roller' | 'spring'
 export interface NodeSupport { node: string; fixity: SupportFixity; k?: number }
 
@@ -50,11 +61,12 @@ export interface StructuralModel {
   sections: RectSection[]
   members: Member[]
   plates: Plate[]
+  walls?: Wall[]
   supports: NodeSupport[]
   loads: ModelLoad[]
   storeys: Storey[]
 }
 
 export function emptyModel(name = 'Untitled'): StructuralModel {
-  return { version: 1, name, nodes: [], sections: [], members: [], plates: [], supports: [], loads: [], storeys: [] }
+  return { version: 1, name, nodes: [], sections: [], members: [], plates: [], walls: [], supports: [], loads: [], storeys: [] }
 }
