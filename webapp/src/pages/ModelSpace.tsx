@@ -20,6 +20,7 @@ import { BeamSchematic } from '../components/BeamSchematic'
 import { ColumnSchematic } from '../components/ColumnSchematic'
 import { FootingSchematic } from '../components/FootingSchematic'
 import { DimBelow, DimSide } from '../components/dims'
+import { HintButton, SeismicHint, WindHint } from '../components/LoadHints'
 import { Num, Card, ResultCard, Row } from '../components/qty'
 import { f1, f2 } from '../lib/format'
 
@@ -1014,6 +1015,9 @@ export default function ModelSpace() {
               )}
 
               <Card title="Seismic — NSCP 208 static force">
+                <div className="col-span-full -mt-1 flex justify-end">
+                  <HintButton title="Seismic input guide — NSCP 208"><SeismicHint /></HintButton>
+                </div>
                 <Num label="Ca" value={Ca} onChange={setCa} />
                 <Num label="Cv" value={Cv} onChange={setCv} />
                 <Num label="R" value={Rw} onChange={setRw} />
@@ -1038,6 +1042,9 @@ export default function ModelSpace() {
               </Card>
 
               <Card title="Wind — NSCP 207B MWFRS (directional)">
+                <div className="col-span-full -mt-1 flex justify-end">
+                  <HintButton title="Wind input guide — NSCP 207"><WindHint /></HintButton>
+                </div>
                 <Num label="V (basic speed)" unit="m/s" value={Vw} onChange={setVw} />
                 <Num label="Kzt (topographic)" value={Kzt} onChange={setKzt} />
                 <label className="flex flex-col text-sm">
