@@ -11,6 +11,11 @@ import { type SolutionStep, type SolutionLine, sn0, sn1, sn2, sn3, sn4 } from '.
 const txt = (text: string): SolutionLine => ({ text })
 const eq = (tex: string): SolutionLine => ({ tex })
 
+/** KaTeX-safe label for the governing tie-spacing term (underscores would
+ *  break inside \text, so render as proper math subscripts). */
+const tieGovernTex = (g: string): string =>
+  g === '16d_b' ? '16d_b' : g === '48d_tie' ? '48d_{tie}' : String.raw`\text{least dim.}`
+
 export function axialColumnSolution(i: AxialColumnInput, r: AxialColumnResult): SolutionStep[] {
   const tied = i.shape === 'tied'
   const steps: SolutionStep[] = []
@@ -56,8 +61,8 @@ export function axialColumnSolution(i: AxialColumnInput, r: AxialColumnResult): 
     steps.push({
       title: 'Tie detailing (§425.7.2)',
       lines: [
-        txt(`Ties at least ⌀${r.tieDiaMin} mm for ⌀${i.barDia} longitudinal bars; spacing the least of 16d_b, 48d_tie, and the least column dimension.`),
-        eq(String.raw`s \le \min(16\times ${i.barDia},\ 48\times ${i.tieDia},\ ${sn0(Math.min(i.b ?? 0, i.h ?? 0))}) = ${sn0(r.tieSpacing)}\ \text{mm}\ (\text{${r.tieGovern}})`),
+        txt(`Ties at least ⌀${r.tieDiaMin} mm for ⌀${i.barDia} longitudinal bars; spacing the least of 16·d_b, 48·d_tie, and the least column dimension.`),
+        eq(String.raw`s \le \min(16\times ${i.barDia},\ 48\times ${i.tieDia},\ ${sn0(Math.min(i.b ?? 0, i.h ?? 0))}) = ${sn0(r.tieSpacing)}\ \text{mm}\quad(${tieGovernTex(r.tieGovern)})`),
       ],
       note: `Provide ⌀${Math.max(i.tieDia, r.tieDiaMin)} mm ties @ ${sn0(r.tieSpacing)} mm.`,
     })

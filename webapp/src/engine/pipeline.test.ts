@@ -77,6 +77,25 @@ describe('design pipeline — single-bay single-storey grid', () => {
   })
 })
 
+describe('beam critical sections — interior is the sagging peak', () => {
+  it('a continuous multi-bay frame still sags at mid-span (not all hogging)', () => {
+    const m = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3.5, 3], section })
+    m.loads = buildGravityLoads(m, 1.5, 2.4)
+    const r = designStructure(m, soil)!
+    const withInterior = r.beams.filter((b) => b.sections.some((s) => s.label.startsWith('Interior')))
+    expect(withInterior.length).toBeGreaterThan(0)
+    for (const b of withInterior) {
+      const interior = b.sections.find((s) => s.label.startsWith('Interior'))!
+      expect(interior.Mu).toBeGreaterThan(0)     // sagging (+M), bottom steel
+      expect(interior.hogging).toBe(false)
+      const ends = b.sections.filter((s) => s.label.startsWith('End'))
+      expect(ends.some((s) => s.hogging)).toBe(true)   // ends still hog
+    }
+    // governing-case diagrams are carried for the worked solution
+    expect(r.beams.every((b) => b.diag && b.diag.xs.length > 2)).toBe(true)
+  })
+})
+
 describe('combined footing plan', () => {
   const plan = { 'n0.0.0': { type: 'combined' as const, with: 'n1.0.0' } }
   const r = designStructure(makeModel(), soil, plan)!
