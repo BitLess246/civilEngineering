@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { generateGridModel, buildGravityLoads, removeNode, enforceSectionHierarchy } from './modelBuilder'
+import { generateGridModel, buildGravityLoads, removeNode, enforceSectionHierarchy, refreshSelfWeight, splitSharedSections } from './modelBuilder'
 import { designStructure, optimizeStructure, designOK, type LateralCase } from './pipeline'
 import { computeSeismic } from './seismic'
 import type { RectSection, ModelLoad } from './model'
@@ -171,6 +171,39 @@ describe('optimizeStructure', () => {
     expect(col.b).toBe(300)
     expect(col.h).toBeLessThanOrEqual(500)
     expect(designOK(r.design)).toBe(true)
+  })
+})
+
+describe('self-weight refresh', () => {
+  it('recomputes member-udl D from the current section, keeping other loads', () => {
+    const m = makeModel()                       // area D/L only (no member SW yet)
+    expect(refreshSelfWeight(m)).toBe(m)        // no-op when there is no member SW
+    const withSW = { ...m, loads: buildGravityLoads(m, 1.5, 2.4) }
+    // grow every section and refresh — self-weight must scale with b·h
+    const big = { ...withSW, sections: withSW.sections.map((s) => ({ ...s, b: 600, h: 800 })) }
+    const r = refreshSelfWeight(big)
+    const sw = r.loads.filter((l) => l.kind === 'member-udl' && l.cat === 'D')
+    expect(sw.length).toBe(m.members.length)
+    for (const l of sw) expect((l as { w: number }).w).toBeCloseTo(0.6 * 0.8 * 24, 9)
+    // area + live loads survive untouched
+    expect(r.loads.filter((l) => l.kind === 'area').length)
+      .toBe(withSW.loads.filter((l) => l.kind === 'area').length)
+  })
+})
+
+describe('splitSharedSections (pre-per-member migration)', () => {
+  it('gives every member its own section cloned from the shared one', () => {
+    // emulate an old model: one section shared by all members
+    const m = makeModel()
+    const shared = { ...section, id: 'S1', name: '300×500' }
+    const old = { ...m, sections: [shared], members: m.members.map((x) => ({ ...x, section: 'S1' })) }
+    const split = splitSharedSections(old)
+    expect(split.sections.length).toBe(old.members.length)
+    expect(split.members.every((x) => x.section === x.id)).toBe(true)
+    // dimensions preserved from the shared section
+    expect(split.sections.every((s) => s.b === 300 && s.h === 500)).toBe(true)
+    // now optimisation can move members independently
+    expect(splitSharedSections(split)).toBe(split)   // idempotent
   })
 })
 

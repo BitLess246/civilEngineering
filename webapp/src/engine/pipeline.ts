@@ -8,7 +8,7 @@
 // Every stage reuses the existing engines unchanged.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, RectSection, ModelLoad } from './model'
-import { enforceSectionHierarchy } from './modelBuilder'
+import { enforceSectionHierarchy, refreshSelfWeight } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
 import { solveFrame3D, applyF3Combo, type F3Result, type F3MemberResult, type F3Load } from './frame3d'
 import { nscpCombos } from './beamAnalysis'
@@ -381,14 +381,17 @@ export function optimizeStructure(
 ): OptimizeResult | null {
   if (model.members.length === 0) return null
   const memSecId = new Map(model.members.map((m) => [m.id, m.section]))
-  let work = enforceSectionHierarchy(model)          // start width-consistent
+  // sizes & self-weight kept consistent at every step
+  const settle = (m: StructuralModel) => refreshSelfWeight(enforceSectionHierarchy(m))
+  let work = settle(model)                            // start width-consistent
   const steps: OptimizeStep[] = []
 
   let design = designStructure(work, soil, plan, opts)
   if (!design) return null
   steps.push({ iter: 0, grown: 0, fails: countFails(design), ok: designOK(design) })
 
-  // GROW: bump every failing member's own section, then re-enforce the hierarchy
+  // GROW: bump every failing member's own section, re-enforce the hierarchy and
+  // refresh self-weight so the heavier members feed back into the demands.
   let iter = 0
   while (!designOK(design) && iter++ < maxIter) {
     const failSids = new Set<string>()
@@ -396,7 +399,7 @@ export function optimizeStructure(
     for (const c of design.columns) if (!c.ok) { const s = memSecId.get(c.id); if (s) failSids.add(s) }
     if (failSids.size === 0) break                   // only footings fail — not a section problem
     const sizes = new Map(work.sections.map((s) => [s.id, failSids.has(s.id) ? growOne(s) : s]))
-    work = enforceSectionHierarchy(withSizes(work, sizes))
+    work = settle(withSizes(work, sizes))
     const d = designStructure(work, soil, plan, opts)
     if (!d) break
     design = d
@@ -412,7 +415,7 @@ export function optimizeStructure(
       for (const s0 of work.sections) {
         if (s0.h - 25 < 300) continue
         const trialSec: RectSection = { ...s0, h: s0.h - 25, name: `${s0.b}×${s0.h - 25}` }
-        const trial = enforceSectionHierarchy(withSizes(work, new Map([[s0.id, trialSec]])))
+        const trial = settle(withSizes(work, new Map([[s0.id, trialSec]])))
         const d = designStructure(trial, soil, plan, opts)
         if (d && designOK(d)) { work = trial; design = d; improved = true }
       }

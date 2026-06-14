@@ -160,6 +160,44 @@ export function buildGravityLoads(model: StructuralModel, sdl: number, ll: numbe
 }
 
 /**
+ * Recompute member SELF-WEIGHT (member-udl, category D) from each member's
+ * CURRENT section, leaving every other load untouched. No-op when the model
+ * carries no member self-weight (so user models without it are not altered).
+ */
+export function refreshSelfWeight(model: StructuralModel): StructuralModel {
+  const hasSW = model.loads.some((l) => l.kind === 'member-udl' && l.cat === 'D')
+  if (!hasSW) return model
+  const secMap = new Map(model.sections.map((s) => [s.id, s]))
+  const others = model.loads.filter((l) => !(l.kind === 'member-udl' && l.cat === 'D'))
+  const sw: StructuralModel['loads'] = model.members
+    .map((m) => {
+      const sec = secMap.get(m.section) ?? model.sections[0]
+      const w = sec ? (sec.b / 1000) * (sec.h / 1000) * GAMMA_C : 0
+      return { kind: 'member-udl' as const, member: m.id, w, cat: 'D' as const }
+    })
+    .filter((l) => l.w > 0)
+  return { ...model, loads: [...sw, ...others] }
+}
+
+/**
+ * Migration: ensure every member owns its OWN section (id = member id). Models
+ * generated before per-member sizing shared a single section, so optimisation
+ * moved them all together — splitting restores independent sizing. Idempotent.
+ */
+export function splitSharedSections(model: StructuralModel): StructuralModel {
+  if (model.members.every((m) => m.section === m.id)) return model
+  const secMap = new Map(model.sections.map((s) => [s.id, s]))
+  const fallback = model.sections[0]
+  const sections: RectSection[] = []
+  const members = model.members.map((m) => {
+    const base = secMap.get(m.section) ?? fallback
+    sections.push({ ...(base ?? { fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40, b: 300, h: 500 }), id: m.id, name: base ? `${base.b}×${base.h}` : '300×500' })
+    return { ...m, section: m.id }
+  })
+  return { ...model, sections, members }
+}
+
+/**
  * Strong-column / weak-beam geometry: at every node a supporting member must be
  * at least as WIDE (cross-section b) as the members it supports, so reinforcement
  * passes through. Enforces, at each node, girder.b ≥ beam.b and column.b ≥
