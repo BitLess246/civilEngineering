@@ -5,6 +5,8 @@ import { designFlexibleCombinedFooting } from '../engine/flexibleCombinedFooting
 import { CombinedFootingSchematic } from '../components/CombinedFootingSchematic'
 import { Diagram } from '../components/Diagram'
 import { ReportControls } from '../components/ReportControls'
+import { WorkedSolution } from '../components/WorkedSolution'
+import { buildCombinedFootingSolution } from '../lib/combinedFootingSolution'
 import { Math } from '../lib/math'
 import { f0, f2, f3 } from '../lib/format'
 import 'katex/dist/katex.min.css'
@@ -150,6 +152,11 @@ export default function CombinedFootingDesign() {
       return null
     }
   }, [form, valid])
+
+  const solutionSteps = useMemo(
+    () => (result ? buildCombinedFootingSolution({ ...form }, result) : null),
+    [form, result],
+  )
 
   const flexible = form.method === 'flexible'
   // Diagrams & longitudinal steel come from the active method; geometry/plan/transverse from rigid.
@@ -341,6 +348,10 @@ export default function CombinedFootingDesign() {
           </p>
         )}
       </div>
+
+      {solutionSteps && (
+        <WorkedSolution steps={solutionSteps} title="Combined footing — worked solution (rigid method)" />
+      )}
     </div>
   )
 }
