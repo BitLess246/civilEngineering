@@ -38,7 +38,7 @@ export interface AnalyzeOptions {
 }
 
 export interface BeamSectionDesign {
-  label: string; Mu: number; Vu: number; hogging: boolean
+  label: string; x: number; Mu: number; Vu: number; hogging: boolean
   design: BeamDesignResult
 }
 export interface BeamScheduleRow {
@@ -46,6 +46,8 @@ export interface BeamScheduleRow {
   sections: BeamSectionDesign[]
   ok: boolean
   gov?: string   // governing load case (envelope)
+  /** Governing-case force diagrams along the member (for the worked solution). */
+  diag?: { xs: number[]; Vy: number[]; Mz: number[] }
 }
 export interface ColumnScheduleRow {
   id: string; L: number
@@ -90,17 +92,19 @@ export function designOK(d: StructureDesign): boolean {
 const beamOK = (d: BeamDesignResult) =>
   d.flexOK && d.comprEffective && d.comprNAOK && d.region !== 'inadequate'
 
-/** Critical sections of a frame member: both ends + the interior |M| peak
- *  between V-zero crossings (signed Mz; negative = hogging → top steel). */
+/** Critical sections of a frame member: the two ends (which carry the hogging
+ *  moments, top steel) plus the interior SAGGING peak — the most positive Mz
+ *  strictly inside (bottom steel). Using the signed peak rather than |Mz| keeps
+ *  the midspan section from latching onto a near-support hogging point. */
 function memberSections(mr: F3MemberResult): { label: string; x: number; Mu: number; Vu: number }[] {
   const out: { label: string; x: number; Mu: number; Vu: number }[] = []
   const n = mr.xs.length - 1
   out.push({ label: 'End i', x: 0, Mu: mr.Mz[0], Vu: Math.abs(mr.Vy[0]) })
   out.push({ label: 'End j', x: mr.L, Mu: mr.Mz[n], Vu: Math.abs(mr.Vy[n]) })
-  // interior extremum: largest |Mz| strictly inside
-  let best = -1, bestM = 0
+  // interior sagging peak: most positive Mz strictly inside the span
+  let best = -1, bestM = -Infinity
   for (let k = 1; k < n; k++) {
-    if (Math.abs(mr.Mz[k]) > Math.abs(bestM)) { bestM = mr.Mz[k]; best = k }
+    if (mr.Mz[k] > bestM) { bestM = mr.Mz[k]; best = k }
   }
   if (best > 0 && mr.xs[best] > 0.02 * mr.L && mr.xs[best] < 0.98 * mr.L) {
     out.push({ label: `Interior (x = ${mr.xs[best].toFixed(2)} m)`, x: mr.xs[best], Mu: bestM, Vu: Math.abs(mr.Vy[best]) })
@@ -113,14 +117,17 @@ function designBeamRow(mr: F3MemberResult, role: string, sec: RectSection): Beam
   const sections: BeamSectionDesign[] = memberSections(mr)
     .filter((s) => Math.abs(s.Mu) > 1e-6 || s.Vu > 1e-6)
     .map((s) => ({
-      label: s.label, Mu: s.Mu, Vu: s.Vu, hogging: s.Mu < 0,
+      label: s.label, x: s.x, Mu: s.Mu, Vu: s.Vu, hogging: s.Mu < 0,
       design: designBeam({
         b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia,
         comprBarDia: 16, stirrupDia: sec.tieDia,
         fc: sec.fc, fy: sec.fy, Mu: Math.abs(s.Mu), Vu: s.Vu,
       }),
     }))
-  return { id: mr.id, role, L: mr.L, sections, ok: sections.every((s) => beamOK(s.design)) }
+  return {
+    id: mr.id, role, L: mr.L, sections, ok: sections.every((s) => beamOK(s.design)),
+    diag: { xs: mr.xs, Vy: mr.Vy, Mz: mr.Mz },
+  }
 }
 
 /** Design one column from a single run's member result. */

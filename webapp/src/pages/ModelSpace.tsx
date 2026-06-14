@@ -34,6 +34,15 @@ const LOAD_COLOR: Record<string, string> = {
 const parseList = (s: string): number[] =>
   s.split(/[, ]+/).map(parseFloat).filter((v) => Number.isFinite(v) && v > 0)
 
+/** Distributed load along a member derived from the shear, w ≈ −dV/dx
+ *  (central difference), for the loading diagram in the worked solution. */
+const loadFromShear = (xs: number[], Vy: number[]): number[] =>
+  xs.map((_, i) => {
+    if (i === 0 || i === xs.length - 1) return 0
+    const dx = xs[i + 1] - xs[i - 1]
+    return dx !== 0 ? -(Vy[i + 1] - Vy[i - 1]) / dx : 0
+  })
+
 // ── 3D primitives ─────────────────────────────────────────────────────────
 function Member3D({ a, b, role, selected, tint = 0, sec, onPick }: {
   a: THREE.Vector3; b: THREE.Vector3; role: string; selected: boolean
@@ -1078,6 +1087,16 @@ export default function ModelSpace() {
                     open && model && (
                       <tr key={`${key}:sol`}>
                         <td colSpan={8} className="bg-slate-50/60 px-2 pb-2">
+                          {bm.diag && (
+                            <div className="mt-2 grid grid-cols-1 gap-3 lg:grid-cols-3">
+                              <Diagram xs={bm.diag.xs} ys={loadFromShear(bm.diag.xs, bm.diag.Vy)} title="LOAD w (≈ −dV/dx)" unit="kN/m"
+                                color="#475569" vlines={[{ x: s.x, label: s.label.split(' ')[0] }]} />
+                              <Diagram xs={bm.diag.xs} ys={bm.diag.Vy} title="SHEAR Vy" unit="kN"
+                                color="#1f77b4" vlines={[{ x: s.x, label: s.label.split(' ')[0] }]} />
+                              <Diagram xs={bm.diag.xs} ys={bm.diag.Mz} title="MOMENT Mz (+sag)" unit="kN·m"
+                                color="#d62728" vlines={[{ x: s.x, label: s.label.split(' ')[0] }]} />
+                            </div>
+                          )}
                           <WorkedSolution steps={beamSectionSolution(sectionFor(bm.id) ?? model.sections[0], s)} title={`${bm.id} · ${s.label} — worked solution`} />
                         </td>
                       </tr>
