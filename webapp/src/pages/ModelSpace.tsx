@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
-import { generateGridModel, removeElements, removeNode, buildGravityLoads } from '../engine/modelBuilder'
+import { generateGridModel, removeElements, removeNode, buildGravityLoads, splitSharedSections } from '../engine/modelBuilder'
 import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole } from '../engine/model'
 import { distributePanel } from '../engine/tributary'
 import { modelToFrame3D } from '../engine/modelBridge'
@@ -221,7 +221,8 @@ export default function ModelSpace() {
   const [model, setModel] = useState<StructuralModel | null>(() => {
     try {
       const raw = sessionStorage.getItem(AUTOSAVE_KEY)
-      return raw ? (JSON.parse(raw) as StructuralModel) : null
+      // migrate pre-per-member models so each member owns its section
+      return raw ? splitSharedSections(JSON.parse(raw) as StructuralModel) : null
     } catch { return null }
   })
   const [selected, setSelected] = useState<string | null>(null)
@@ -478,7 +479,7 @@ export default function ModelSpace() {
       const m = JSON.parse(await f.text()) as StructuralModel
       if (m.version !== 1 || !Array.isArray(m.nodes)) throw new Error('not a model file')
       setSelected(null)
-      save(m)
+      save(splitSharedSections(m))   // migrate shared-section models to per-member
     } catch { alert('Could not read that file as a structural model (.model.json).') }
   }
 
