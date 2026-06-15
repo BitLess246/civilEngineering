@@ -1537,7 +1537,7 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2">{Math.round(dd.h)}{dd.h < dd.hmin ? ` (< ${Math.round(dd.hmin)} min)` : ''}</td>
                         <td className="py-1 pr-2">{dd.twoWay ? 'two-way' : 'one-way'}</td>
                         <td className="py-1 pr-2 text-right">{f1(dd.x.Mo)} / {f1(dd.y.Mo)}</td>
-                        <td className="py-1">{dd.applicable ? '✓' : '⚠ check'}</td>
+                        <td className="py-1">{dd.applicable ? (dd.deflection.totalOK ? '✓' : '⚠ defl') : '⚠ check'}</td>
                       </tr>,
                       open && (
                         <tr key={`${key}:sol`}>
@@ -1571,6 +1571,33 @@ export default function ModelSpace() {
                                 </div>
                               ))}
                             </div>
+                            {/* Deflection (Branson Ie + crossing-strip) */}
+                            <div className="mt-3 rounded-lg border border-slate-200 bg-white p-2">
+                              <p className="mb-1 text-[12px] font-bold text-[#0056b3]">Deflection (NSCP §424.2)</p>
+                              <table className="w-full border-collapse text-[11px]">
+                                <tbody>
+                                  <tr className="border-t border-slate-100">
+                                    <td className="py-0.5 pr-2 text-slate-500">Immediate (D+L)</td>
+                                    <td className="py-0.5 pr-2 text-right">{dd.deflection.immediate.toFixed(1)} mm</td>
+                                    <td className="py-0.5 pr-2 text-slate-500">{dd.deflection.cracked ? 'section cracked (Ie < Ig)' : 'uncracked (Ie = Ig)'}</td>
+                                  </tr>
+                                  <tr className="border-t border-slate-100">
+                                    <td className="py-0.5 pr-2 text-slate-500">Immediate live</td>
+                                    <td className="py-0.5 pr-2 text-right">{dd.deflection.immLive.toFixed(1)} mm</td>
+                                    <td className={`py-0.5 pr-2 ${dd.deflection.liveOK ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                      ≤ ℓn/360 = {dd.deflection.limitLive.toFixed(1)} mm {dd.deflection.liveOK ? '✓' : '✗'}
+                                    </td>
+                                  </tr>
+                                  <tr className="border-t border-slate-100">
+                                    <td className="py-0.5 pr-2 text-slate-500">Long-term + live (λΔ = {dd.deflection.lambdaDelta.toFixed(1)})</td>
+                                    <td className="py-0.5 pr-2 text-right">{dd.deflection.total.toFixed(1)} mm</td>
+                                    <td className={`py-0.5 pr-2 ${dd.deflection.totalOK ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                      ≤ ℓn/240 = {dd.deflection.limitTotal.toFixed(1)} mm {dd.deflection.totalOK ? '✓' : '✗'}
+                                    </td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
                             {dd.notes.length > 0 && (
                               <ul className="mt-2 list-disc pl-5 text-[11px] text-slate-500">
                                 {dd.notes.map((n, ni) => <li key={ni}>{n}</li>)}
@@ -1586,6 +1613,73 @@ export default function ModelSpace() {
               <p className="mt-1 text-[11px] text-slate-400">
                 NSCP §408.10 Direct Design Method: Mo = wu·ℓ2·ℓn²/8 split into negative/positive then column/middle
                 strips (αf neglected → conservative slab steel). Column-strip width = 2·min(0.25ℓ1, 0.25ℓ2).
+                Deflection per §424.2 (Branson Ie + crossing-strip; λΔ = 2.0).
+              </p>
+            </div>
+          )}
+
+          {/* Shear-wall schedule (full width) — in-plane reinforcement */}
+          {design.walls.length > 0 && (
+            <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Shear-wall schedule (in-plane)</h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Wall</th>
+                    <th className="py-1 pr-2 font-semibold">ℓw × hw (m)</th>
+                    <th className="py-1 pr-2 font-semibold">t (mm)</th>
+                    <th className="py-1 pr-2 font-semibold">hw/ℓw</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Vu / φVn (kN)</th>
+                    <th className="py-1 pr-2 font-semibold">Horiz ρt</th>
+                    <th className="py-1 pr-2 font-semibold">Vert ρℓ</th>
+                    <th className="py-1 font-semibold">OK</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {design.walls.flatMap((wl) => {
+                    const key = `wall:${wl.id}`, open = expanded === key
+                    const wd = wl.design
+                    const curt = wd.twoCurtains ? '2 curtains' : '1 curtain'
+                    return [
+                      <tr key={key} onClick={() => setExpanded(open ? null : key)}
+                        className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${wl.ok ? '' : 'bg-rose-50 text-rose-700'}`}>
+                        <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {wl.id} <span className="text-slate-400">({wl.member})</span></td>
+                        <td className="py-1 pr-2">{f1(wl.lw)} × {f1(wl.hw)}</td>
+                        <td className="py-1 pr-2">{Math.round(wl.thickness)}</td>
+                        <td className="py-1 pr-2">{wd.aspect.toFixed(2)}</td>
+                        <td className="py-1 pr-2 text-right">{f1(wl.Vu)} / {f1(wd.phiVn)}</td>
+                        <td className="py-1 pr-2">⌀12 @ {Math.round(wd.horiz.spacing)}{wd.horiz.usedMin ? ' (min)' : ''}</td>
+                        <td className="py-1 pr-2">⌀12 @ {Math.round(wd.vert.spacing)}{wd.vert.usedMin ? ' (min)' : ''}</td>
+                        <td className="py-1">{wl.ok ? '✓' : '✗'}</td>
+                      </tr>,
+                      open && (
+                        <tr key={`${key}:sol`}>
+                          <td colSpan={8} className="bg-slate-50/60 px-3 pb-3">
+                            <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 text-[11px] sm:grid-cols-3">
+                              <div><span className="text-slate-500">Acv</span> = {Math.round(wd.Acv)} mm²</div>
+                              <div><span className="text-slate-500">αc</span> = {wd.alphaC.toFixed(2)}</div>
+                              <div><span className="text-slate-500">Curtains</span>: {curt}</div>
+                              <div><span className="text-slate-500">Vn cap (0.83·Acv√fc)</span> = {f1(wd.VnCap)} kN</div>
+                              <div><span className="text-slate-500">ρt req</span> = {wd.horiz.rhoReq.toFixed(4)}</div>
+                              <div><span className="text-slate-500">s,max</span> = {Math.round(wd.sMax)} mm</div>
+                              <div><span className="text-slate-500">Boundary elements</span>: {wd.boundaryElement ? 'required' : 'not indicated'}</div>
+                              <div><span className="text-slate-500">Governing case</span>: {wl.gov || '—'}</div>
+                            </div>
+                            {wd.notes.length > 0 && (
+                              <ul className="mt-2 list-disc pl-5 text-[11px] text-slate-500">
+                                {wd.notes.map((n, ni) => <li key={ni}>{n}</li>)}
+                              </ul>
+                            )}
+                          </td>
+                        </tr>
+                      ),
+                    ]
+                  })}
+                </tbody>
+              </table>
+              <p className="mt-1 text-[11px] text-slate-400">
+                NSCP §418.10: Vn = Acv(αc·λ√f′c + ρt·fy), φ = 0.75, capped at 0.83·Acv·√f′c. In-plane shear from the
+                enveloped strut forces; distributed web steel ρt, ρℓ ≥ 0.0025. Flexural boundary reinforcement designed separately.
               </p>
             </div>
           )}

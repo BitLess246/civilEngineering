@@ -17,6 +17,7 @@ import { designAxialColumn, capacityAtEccentricity, interaction } from './column
 import { designSquareFooting, type SquareFootingResult } from './isolatedFooting'
 import { designCombinedFooting, type CombinedFootingResult } from './combinedFooting'
 import { designSlabDDM, type SlabDesignResult } from './slabDDM'
+import { designShearWall, type ShearWallResult } from './shearWallDesign'
 
 export interface SoilOptions {
   qAllow: number; gammaSoil: number; gammaConc: number; H: number
@@ -77,6 +78,15 @@ export interface SlabScheduleRow {
   design: SlabDesignResult
   ok: boolean
 }
+export interface WallScheduleRow {
+  id: string
+  member: string
+  lw: number; hw: number; thickness: number
+  Vu: number
+  design: ShearWallResult
+  ok: boolean
+  gov?: string
+}
 /** Per-support footing choice: isolated (default) or combined with another node. */
 export type FootingPlan = Record<string, { type: 'isolated' } | { type: 'combined'; with: string }>
 
@@ -86,6 +96,7 @@ export interface StructureDesign {
   beams: BeamScheduleRow[]
   columns: ColumnScheduleRow[]
   slabs: SlabScheduleRow[]
+  walls: WallScheduleRow[]
   footings: FootingScheduleRow[]
   combined: CombinedScheduleRow[]
   totals: { concreteMembers: number; concreteSlabs: number; concrete: number }
@@ -379,10 +390,38 @@ export function designStructure(
     slabs.push({ plate: p.id, lx, ly: lz, design, ok: design.applicable })
   }
 
+  // ── Shear walls — in-plane reinforcement ──
+  // The bridge models each shear wall as an X of two diagonal struts
+  // (wallstrut_<id>_1/2). The panel's in-plane shear is the horizontal
+  // projection of the two strut axial forces, enveloped across all runs.
+  const walls: WallScheduleRow[] = []
+  for (const w of (model.walls ?? []).filter((x) => x.shearWall)) {
+    const m = model.members.find((mm) => mm.id === w.member); if (!m) continue
+    const a = nm.get(m.i), b2 = nm.get(m.j); if (!a || !b2) continue
+    const lw = Math.hypot(b2.x - a.x, b2.z - a.z)         // horizontal length, m
+    const hw = w.height
+    if (!(lw > 0 && hw > 0)) continue
+    const cos = lw / Math.hypot(lw, hw)
+    const strutAxial = (run: FrameRun, id: string) => {
+      const mr = run.result.members.find((x) => x.id === id)
+      return mr ? Math.max(...mr.N.map(Math.abs)) : 0
+    }
+    let Vu = 0, gov = ''
+    for (const run of runs) {
+      const v = (strutAxial(run, `wallstrut_${w.id}_1`) + strutAxial(run, `wallstrut_${w.id}_2`)) * cos
+      if (v > Vu) { Vu = v; gov = run.name }
+    }
+    const sec = secOf(m.id)
+    const design = designShearWall({
+      lw, hw, thickness: w.thickness, fc: sec.fc, fy: sec.fy, Vu, barDia: 12,
+    })
+    walls.push({ id: w.id, member: w.member, lw, hw, thickness: w.thickness, Vu, design, ok: design.shearOK, gov })
+  }
+
   return {
     govName: runs[govIdx].name,
     cases: runs.map((r) => r.name),
-    beams, columns, slabs, footings, combined,
+    beams, columns, slabs, walls, footings, combined,
     totals: { concreteMembers, concreteSlabs, concrete: concreteMembers + concreteSlabs },
     orphanEdges: br.orphanEdges.length,
   }
