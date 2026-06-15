@@ -10,6 +10,7 @@
 // Units: spans m; loads kPa; h/cover/db mm; moments kN·m; steel mm².
 // ─────────────────────────────────────────────────────────────────────────
 import { flexuralSteel } from './flexure'
+import { slabPanelDeflection, type SlabDeflectionResult } from './slabDeflection'
 
 export interface SlabInput {
   lx: number; ly: number          // centre-to-centre spans, m (lx ≤ ly used as short/long)
@@ -41,6 +42,7 @@ export interface SlabDirResult {
   dir: 'x' | 'y'
   l1: number; l2: number; ln: number
   Mo: number
+  d: number                       // effective depth used for this direction, mm
   csWidth: number; msWidth: number   // m
   locations: SlabLocation[]
 }
@@ -52,6 +54,7 @@ export interface SlabDesignResult {
   notes: string[]
   x: SlabDirResult
   y: SlabDirResult
+  deflection: SlabDeflectionResult
 }
 
 const interp = (r: number, a: number, b: number, c: number): number =>
@@ -120,12 +123,34 @@ export function designSlabDDM(i: SlabInput): SlabDesignResult {
         middle: steel((1 - csFrac) * M, msWidth * 1000),
       }
     })
-    return { dir: which, l1, l2, ln, Mo, csWidth, msWidth, locations }
+    return { dir: which, l1, l2, ln, Mo, d, csWidth, msWidth, locations }
   }
+
+  const x = dir('x'), y = dir('y')
+
+  // ── Deflection (Branson Ie + crossing-strip method) ──
+  // Positive-moment section drives mid-panel deflection; scale the factored
+  // design moment back to the SERVICE level for the cracking check.
+  const wService = i.D + i.L
+  const scale = wu > 1e-9 ? wService / wu : 0
+  const posOf = (dr: typeof x) => dr.locations.find((l) => l.name === '+M') ?? dr.locations[dr.locations.length - 1]
+  const dirParam = (dr: typeof x) => {
+    const pos = posOf(dr)
+    return {
+      ln: dr.ln, csW: dr.csWidth, msW: dr.msWidth, h, d: dr.d,
+      AsCol: pos.column.As, AsMid: pos.middle.As,
+      MaCol: pos.column.M * scale, MaMid: pos.middle.M * scale,
+      exterior: dr.dir === 'x' ? (i.exterior?.x ?? false) : (i.exterior?.y ?? false),
+    }
+  }
+  const deflection = slabPanelDeflection({
+    x: dirParam(x), y: dirParam(y), wD: i.D, wL: i.L, fc: i.fc,
+  })
+  if (!deflection.totalOK) notes.push(`Long-term + live deflection ${deflection.total.toFixed(1)} mm > ℓn/240 = ${deflection.limitTotal.toFixed(1)} mm — increase thickness.`)
 
   return {
     h, hmin, wu, ratio, twoWay,
     applicable: twoWay && i.L <= 2 * i.D,
-    notes, x: dir('x'), y: dir('y'),
+    notes, x, y, deflection,
   }
 }
