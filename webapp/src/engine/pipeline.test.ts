@@ -16,6 +16,38 @@ function makeModel() {
   return m
 }
 
+// big +X seismic case so the lateral system is exercised
+function seismicXcase(m: ReturnType<typeof makeModel>): LateralCase {
+  const base = computeSeismic(m, { Ca: 0.44, Cv: 0.64, I: 1, R: 8.5, dir: 'x' })!.loads
+  return {
+    name: 'E+X', kind: 'E',
+    loads: base.map((l) => ({ kind: 'node', node: (l as { node: string }).node, Fx: Math.abs((l as { Fx?: number }).Fx ?? 0) * 40, cat: 'E' })),
+  }
+}
+
+describe('shear-wall schedule (in-plane shear from struts)', () => {
+  it('designs a tagged shear wall and Vu stays within the applied story shear', () => {
+    const m = makeModel()
+    m.walls = [{ id: 'w0', member: 'bx0.0.1', height: 3, thickness: 200, shearWall: true }]
+    const eX = seismicXcase(m)
+    const r = designStructure(m, soil, {}, { lateral: [eX] })!
+    expect(r.walls).toHaveLength(1)
+    const w = r.walls[0]
+    const totalE = eX.loads.reduce((s, l) => s + Math.abs((l as { Fx?: number }).Fx ?? 0), 0)
+    expect(w.Vu).toBeGreaterThan(0)
+    expect(w.Vu).toBeLessThanOrEqual(totalE + 1e-6)   // a single wall can't exceed the story shear
+    expect(w.design.horiz.rho).toBeGreaterThanOrEqual(0.0025)
+    expect(typeof w.design.shearOK).toBe('boolean')
+  })
+
+  it('a non-shear wall produces no wall-design row', () => {
+    const m = makeModel()
+    m.walls = [{ id: 'w0', member: 'bx0.0.1', height: 3, thickness: 200, shearWall: false }]
+    const r = designStructure(m, soil)!
+    expect(r.walls).toHaveLength(0)
+  })
+})
+
 describe('design pipeline — single-bay single-storey grid', () => {
   const r = designStructure(makeModel(), soil)!
 

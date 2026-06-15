@@ -401,14 +401,17 @@ export function designStructure(
     const lw = Math.hypot(b2.x - a.x, b2.z - a.z)         // horizontal length, m
     const hw = w.height
     if (!(lw > 0 && hw > 0)) continue
-    const cos = lw / Math.hypot(lw, hw)
-    const strutAxial = (run: FrameRun, id: string) => {
+    // in-plane shear = horizontal projection of the strut axials, taken from
+    // each strut's ACTUAL geometry (cos = lw / strut length) so it stays
+    // consistent with the bridge whatever the wall's nominal height.
+    const strutShear = (run: FrameRun, id: string) => {
       const mr = run.result.members.find((x) => x.id === id)
-      return mr ? Math.max(...mr.N.map(Math.abs)) : 0
+      if (!mr || mr.L <= 0) return 0
+      return Math.max(...mr.N.map(Math.abs)) * (lw / mr.L)
     }
     let Vu = 0, gov = ''
     for (const run of runs) {
-      const v = (strutAxial(run, `wallstrut_${w.id}_1`) + strutAxial(run, `wallstrut_${w.id}_2`)) * cos
+      const v = strutShear(run, `wallstrut_${w.id}_1`) + strutShear(run, `wallstrut_${w.id}_2`)
       if (v > Vu) { Vu = v; gov = run.name }
     }
     const sec = secOf(m.id)
