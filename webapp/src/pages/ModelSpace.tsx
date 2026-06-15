@@ -411,6 +411,7 @@ export default function ModelSpace() {
   const [design, setDesign] = useState<StructureDesign | null>(null)
   const [opt, setOpt] = useState<OptimizeResult | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)   // open schedule-row solution
+  const [report, setReport] = useState<'' | 'schedules' | 'drawings' | 'solutions' | 'full'>('')  // consolidated report template
   const [tab, setTab] = useState<Tab>('geometry')                 // right-panel tab
   const [orphans, setOrphans] = useState(0)
   // footing plan: base node → '' (isolated) or partner node id (combined)
@@ -567,6 +568,8 @@ export default function ModelSpace() {
   }
   const addMember = () => {
     if (!model || !newI || !newJ || newI === newJ) return
+    // no second member on a node pair that already has one
+    if (model.members.some((m) => (m.i === newI && m.j === newJ) || (m.i === newJ && m.j === newI))) return
     let k = model.members.length
     while (model.members.some((m) => m.id === `m${k}`)) k++
     const id = `m${k}`
@@ -584,6 +587,7 @@ export default function ModelSpace() {
   }
   const addWall = () => {
     if (!model || !wallMember) return
+    if ((model.walls ?? []).some((w) => w.member === wallMember)) return   // one wall per member
     let k = model.walls?.length ?? 0
     while ((model.walls ?? []).some((w) => w.id === `w${k}`)) k++
     const walls = [...(model.walls ?? []), { id: `w${k}`, member: wallMember, height: wallH, thickness: wallT, shearWall: wallShear }]
@@ -937,8 +941,16 @@ export default function ModelSpace() {
                       <option value="">node j…</option>
                       {model.nodes.map((n) => <option key={n.id} value={n.id}>{n.id}</option>)}
                     </select>
-                    <button type="button" onClick={addMember} disabled={!newI || !newJ || newI === newJ}
-                      className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">+ Add member</button>
+                    {(() => {
+                      const dup = !!newI && !!newJ && model.members.some((m) => (m.i === newI && m.j === newJ) || (m.i === newJ && m.j === newI))
+                      return (
+                        <button type="button" onClick={addMember} disabled={!newI || !newJ || newI === newJ || dup}
+                          title={dup ? 'A member already connects these two nodes' : undefined}
+                          className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
+                          {dup ? 'Member exists' : '+ Add member'}
+                        </button>
+                      )
+                    })()}
                   </div>
                 </div>
               )}
@@ -1026,8 +1038,16 @@ export default function ModelSpace() {
                     <label className="inline-flex items-center gap-1">h <input type="number" step="0.5" value={wallH} onChange={(e) => setWallH(parseFloat(e.target.value) || 0)} className="w-12 rounded border border-slate-200 px-1 py-0.5" /></label>
                     <label className="inline-flex items-center gap-1">t <input type="number" step="10" value={wallT} onChange={(e) => setWallT(parseFloat(e.target.value) || 0)} className="w-14 rounded border border-slate-200 px-1 py-0.5" /></label>
                     <label className="inline-flex items-center gap-1"><input type="checkbox" checked={wallShear} onChange={(e) => setWallShear(e.target.checked)} /> shear wall</label>
-                    <button type="button" onClick={addWall} disabled={!wallMember}
-                      className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">+ Add wall</button>
+                    {(() => {
+                      const dup = !!wallMember && (model.walls ?? []).some((w) => w.member === wallMember)
+                      return (
+                        <button type="button" onClick={addWall} disabled={!wallMember || dup}
+                          title={dup ? 'This beam already carries a wall' : undefined}
+                          className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
+                          {dup ? 'Wall exists' : '+ Add wall'}
+                        </button>
+                      )
+                    })()}
                   </div>
                   <p className="mt-1 text-[11px] text-slate-400">A wall adds its self-weight (t·h·γc) as a line load on the chosen beam. A “shear wall” also braces the storey below it — modelled as an equivalent X of diagonal struts (shear + flexure stiffness) so it carries seismic/wind in the analysis.</p>
                 </div>
@@ -1373,7 +1393,12 @@ export default function ModelSpace() {
       })()}
 
       {/* ── Schedules (full width, stacked) ── */}
-      {design && (
+      {design && (() => {
+        // consolidated-report templates expand every row, filtering content
+        const reportOpen = report !== '' && report !== 'schedules'
+        const wantSol = report === '' || report === 'full' || report === 'solutions'
+        const wantDraw = report === '' || report === 'full' || report === 'drawings'
+        return (
         <div className="mt-6 space-y-6">
           <h2 className="text-xl font-extrabold tracking-tight text-[#0056b3]">
             Structure design — {design.govName} governs
@@ -1381,10 +1406,24 @@ export default function ModelSpace() {
               concrete ≈ {f1(design.totals.concrete)} m³ ({f1(design.totals.concreteMembers)} members + {f1(design.totals.concreteSlabs)} slabs)
             </span>
           </h2>
+          <div className="no-print flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+            <span className="text-sm font-semibold text-[#0056b3]">Consolidated report</span>
+            <select value={report} onChange={(e) => setReport(e.target.value as typeof report)}
+              className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm">
+              <option value="">Interactive (click a row)</option>
+              <option value="schedules">Schedules only</option>
+              <option value="drawings">Schedules + drawings</option>
+              <option value="solutions">Schedules + solutions</option>
+              <option value="full">Full — solutions + drawings</option>
+            </select>
+            <span className="text-xs text-slate-500">
+              {report === '' ? 'rows expand one at a time' : 'every row expanded for printing'}
+            </span>
+          </div>
           <p className="-mt-3 text-xs text-slate-500">
             Envelope of <b>{design.cases.length}</b> load case{design.cases.length === 1 ? '' : 's'} (NSCP combinations × lateral directions).
             Each element is designed for its own governing case, shown in the “Case” column.
-            <span className="no-print"> Click any row to expand its solution + plan/elevation drawings.</span>
+            <span className="no-print"> Pick a report template above, or click any row to expand its solution + drawings.</span>
           </p>
 
           {/* Beam & girder schedule */}
@@ -1408,10 +1447,10 @@ export default function ModelSpace() {
                   const d = s.design
                   const bad = !(d.flexOK && d.comprEffective && d.comprNAOK && d.region !== 'inadequate')
                   const key = `beam:${bm.id}:${k}`
-                  const open = expanded === key
+                  const open = expanded === key || reportOpen
                   const sec = sectionFor(bm.id)
                   return [
-                    <tr key={key} onClick={() => setExpanded(open ? null : key)}
+                    <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
                       className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${bad ? 'bg-red-50 text-red-700' : ''}`}>
                       <td className="py-1 pr-2 font-medium">{k === 0 ? `${open ? '▾' : '▸'} ${bm.id} (${bm.role} ${sec?.name ?? ''}, ${f1(bm.L)} m)` : ''}</td>
                       <td className="py-1 pr-2">{s.label}{s.hogging ? ' (hog)' : ''}</td>
@@ -1425,7 +1464,7 @@ export default function ModelSpace() {
                     open && model && sec && (
                       <tr key={`${key}:sol`}>
                         <td colSpan={8} className="bg-slate-50/60 px-2 pb-2">
-                          {bm.diag && (
+                          {wantDraw && bm.diag && (
                             <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                               <Diagram xs={bm.diag.xs} ys={loadFromShear(bm.diag.xs, bm.diag.Vy)} title="LOAD w (≈ −dV/dx)" unit="kN/m"
                                 color="#475569" vlines={[{ x: s.x, label: s.label.split(' ')[0] }]} />
@@ -1436,7 +1475,8 @@ export default function ModelSpace() {
                             </div>
                           )}
                           <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.7fr_1fr]">
-                            <WorkedSolution steps={beamSectionSolution(sec, s)} title={`${bm.id} · ${s.label} — worked solution`} />
+                            {wantSol && <WorkedSolution steps={beamSectionSolution(sec, s)} title={`${bm.id} · ${s.label} — worked solution`} />}
+                            {wantDraw && (
                             <div className="space-y-3 self-start rounded-lg border border-slate-200 bg-white p-3">
                               <BeamRebarElevation L={bm.L} h={sec.h} sections={bm.sections} />
                               <div className="border-t border-slate-100 pt-2">
@@ -1447,6 +1487,7 @@ export default function ModelSpace() {
                                   naDepth={d.cNA} flexOK={d.flexOK} hogging={s.hogging} />
                               </div>
                             </div>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1474,10 +1515,10 @@ export default function ModelSpace() {
               </thead>
               <tbody>
                 {design.columns.flatMap((c) => {
-                  const key = `col:${c.id}`, open = expanded === key
+                  const key = `col:${c.id}`, open = expanded === key || reportOpen
                   const cs = sectionFor(c.id)
                   return [
-                    <tr key={key} onClick={() => setExpanded(open ? null : key)}
+                    <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
                       className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
                       <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {c.id}</td>
                       <td className="py-1 pr-2">{cs?.name}</td>
@@ -1491,7 +1532,8 @@ export default function ModelSpace() {
                       <tr key={`${key}:sol`}>
                         <td colSpan={7} className="bg-slate-50/60 px-2 pb-2">
                           <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.7fr_1fr]">
-                            <WorkedSolution steps={columnRowSolution(cs, c)} title={`${c.id} — worked solution`} />
+                            {wantSol && <WorkedSolution steps={columnRowSolution(cs, c)} title={`${c.id} — worked solution`} />}
+                            {wantDraw && (
                             <div className="space-y-3 self-start rounded-lg border border-slate-200 bg-white p-3">
                               <ColumnElevation Lh={c.L} b={cs.b} bars={c.bars} tieSpacing={c.tieSpacing} />
                               <div className="border-t border-slate-100 pt-2">
@@ -1500,6 +1542,7 @@ export default function ModelSpace() {
                                   barDia={cs.barDia} tieDia={cs.tieDia} bars={c.bars} tieSpacing={c.tieSpacing} />
                               </div>
                             </div>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1527,10 +1570,10 @@ export default function ModelSpace() {
                 </thead>
                 <tbody>
                   {design.slabs.flatMap((sl) => {
-                    const key = `slab:${sl.plate}`, open = expanded === key
+                    const key = `slab:${sl.plate}`, open = expanded === key || (reportOpen && wantSol)
                     const dd = sl.design
                     return [
-                      <tr key={key} onClick={() => setExpanded(open ? null : key)}
+                      <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
                         className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${dd.applicable ? '' : 'bg-amber-50 text-amber-800'}`}>
                         <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {sl.plate}</td>
                         <td className="py-1 pr-2">{f1(sl.lx)} × {f1(sl.ly)}</td>
@@ -1637,11 +1680,11 @@ export default function ModelSpace() {
                 </thead>
                 <tbody>
                   {design.walls.flatMap((wl) => {
-                    const key = `wall:${wl.id}`, open = expanded === key
+                    const key = `wall:${wl.id}`, open = expanded === key || (reportOpen && wantSol)
                     const wd = wl.design
                     const curt = wd.twoCurtains ? '2 curtains' : '1 curtain'
                     return [
-                      <tr key={key} onClick={() => setExpanded(open ? null : key)}
+                      <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
                         className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${wl.ok ? '' : 'bg-rose-50 text-rose-700'}`}>
                         <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {wl.id} <span className="text-slate-400">({wl.member})</span></td>
                         <td className="py-1 pr-2">{f1(wl.lw)} × {f1(wl.hw)}</td>
@@ -1700,10 +1743,10 @@ export default function ModelSpace() {
               </thead>
               <tbody>
                 {design.footings.flatMap((f) => {
-                  const key = `ftg:${f.node}`, open = expanded === key
+                  const key = `ftg:${f.node}`, open = expanded === key || reportOpen
                   const cs = colSectionAt(f.node)
                   return [
-                    <tr key={key} onClick={() => setExpanded(open ? null : key)}
+                    <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
                       className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${f.ok ? '' : 'bg-red-50 text-red-700'}`}>
                       <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {f.node}</td>
                       <td className="py-1 pr-2 text-right">{f1(f.P)} / {f1(f.Pu)}</td>
@@ -1716,11 +1759,13 @@ export default function ModelSpace() {
                       <tr key={`${key}:sol`}>
                         <td colSpan={6} className="bg-slate-50/60 px-2 pb-2">
                           <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.7fr_1fr]">
-                            <WorkedSolution steps={footingRowSolution(cs ?? model.sections[0], soil, f)} title={`Footing ${f.node} — worked solution`} />
+                            {wantSol && <WorkedSolution steps={footingRowSolution(cs ?? model.sections[0], soil, f)} title={`Footing ${f.node} — worked solution`} />}
+                            {wantDraw && (
                             <div className="rounded-lg border border-slate-200 bg-white p-3">
                               <FootingSchematic Bx={f.design.B} By={f.design.B} Dc={f.design.Dc}
                                 columnWidth={cs ? Math.min(cs.b, cs.h) : 400} H={Hf} />
                             </div>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1748,9 +1793,9 @@ export default function ModelSpace() {
                 </thead>
                 <tbody>
                   {design.combined.flatMap((c) => {
-                    const key = `comb:${c.nodes.join('-')}`, open = expanded === key
+                    const key = `comb:${c.nodes.join('-')}`, open = expanded === key || (reportOpen && wantSol)
                     return [
-                      <tr key={key} onClick={() => setExpanded(open ? null : key)}
+                      <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
                         className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
                         <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {c.nodes[0]} + {c.nodes[1]}</td>
                         <td className="py-1 pr-2 text-right">{f2(c.spacing)} m</td>
@@ -1782,7 +1827,8 @@ export default function ModelSpace() {
             page for the full worked solution of a given element.
           </p>
         </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
