@@ -6,17 +6,16 @@ import * as THREE from 'three'
 import { generateGridModel, removeElements, removeNode, buildGravityLoads, splitSharedSections } from '../engine/modelBuilder'
 import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole } from '../engine/model'
 import { distributePanel } from '../engine/tributary'
-import { modelToFrame3D } from '../engine/modelBridge'
-import { analyzeFrame3D, type F3Analysis } from '../engine/frame3d'
-import { designStructure, optimizeStructure, selectBarDiameters, type StructureDesign, type FootingPlan, type OptimizeResult, type LateralCase } from '../engine/pipeline'
+import { type F3Analysis } from '../engine/frame3d'
+import { type StructureDesign, type FootingPlan, type OptimizeResult, type LateralCase } from '../engine/pipeline'
 import { estimateTakeoff, costBill, type PriceList } from '../engine/takeoff'
 import { footingLayout } from '../engine/footingLayout'
+import { useSolver } from '../lib/useSolver'
 import { TABLE_204_1, TABLE_204_2, sdlItemKPa, sdlTotal, type SdlItem } from '../engine/deadLoads'
 import { TABLE_205_1, TABLE_206 } from '../engine/liveLoads'
 import type { ConcreteClass } from '../engine/quantities'
-import { computeSeismic, driftCheck, type SeismicResult, type DriftRow } from '../engine/seismic'
+import { computeSeismic, type SeismicResult, type DriftRow } from '../engine/seismic'
 import { computeWind, type WindResult } from '../engine/wind'
-import { solveFrame3D, applyF3Combo } from '../engine/frame3d'
 import { ReportControls } from '../components/ReportControls'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution } from '../lib/modelSpaceSolutions'
@@ -467,6 +466,7 @@ export default function ModelSpace() {
   const [wallMember, setWallMember] = useState(''); const [wallH, setWallH] = useState(3)
   const [wallT, setWallT] = useState(150); const [wallShear, setWallShear] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const { busy, run } = useSolver()   // off-thread FEM/design/optimise
 
   const save = (m: StructuralModel | null) => {
     setModel(m)
@@ -487,18 +487,17 @@ export default function ModelSpace() {
   const anaOpts = { f1: fLive, pDelta, lateral }
 
   const analyze = () => {
-    if (!model) return
-    const br = modelToFrame3D(model)
-    setOrphans(br.orphanEdges.length)
-    setAnalysis(analyzeFrame3D(br.nodes, br.members, br.supports, br.loads, anaOpts))
-    // Storey drift from the E-only elastic solution (NSCP 208.5.10), along the
-    // primary committed direction.
-    if (seis) {
-      const eOnly = applyF3Combo(br.loads, { E: 1 })
-      const sol = eOnly.length ? solveFrame3D(br.nodes, br.members, br.supports, eOnly, { pDelta }) : null
-      const driftAxis = (eDirs[0] ?? '+X').includes('X') ? 'x' : 'z'
-      setDrift(sol ? driftCheck(model, br.nodes, sol.d, Rw, seis.T, driftAxis) : null)
-    } else setDrift(null)
+    if (!model || busy) return
+    const axis: 'x' | 'z' = (eDirs[0] ?? '+X').includes('X') ? 'x' : 'z'
+    // 3D FEM + storey drift run in the worker so the UI stays responsive.
+    run('analyze', {
+      model, opts: anaOpts, drift: { hasSeis: !!seis, T: seis?.T ?? 0, R: Rw, axis, pDelta },
+    }).then((r) => {
+      const res = r as { analysis: F3Analysis | null; orphans: number; drift: DriftRow[] | null }
+      setOrphans(res.orphans)
+      setAnalysis(res.analysis)
+      setDrift(res.drift)
+    }).catch((e) => console.error('analyze failed', e))
   }
 
   // Re-sign / re-axis a base node-load set into a directional case.
@@ -604,28 +603,32 @@ export default function ModelSpace() {
   }
 
   const runPipeline = () => {
-    if (!model) return
+    if (!model || busy) return
     setOpt(null)
-    const plan = footingPlan()
-    const base = applyMaterial(model)
-    // when bar-trying is on, pick the economical bar Ø per member first, then
-    // design and persist those sections so schedules/drawings stay consistent.
-    const m = tryBars ? selectBarDiameters(base, soil, plan, anaOpts) : base
-    const d = designStructure(m, soil, plan, anaOpts)
-    save(m)
-    setDesign(d)
-    requestAnimationFrame(captureModel)   // refresh the printable 3D snapshot
+    // material is applied on the main thread (cheap); the FEM + bar selection +
+    // designStructure run in the worker so the page never freezes.
+    run('design', {
+      model: applyMaterial(model), soil, plan: footingPlan(), opts: anaOpts, tryBars,
+    }).then((r) => {
+      const res = r as { model: StructuralModel; design: StructureDesign | null }
+      save(res.model)
+      setDesign(res.design)
+      requestAnimationFrame(captureModel)   // refresh the printable 3D snapshot
+    }).catch((e) => console.error('design failed', e))
   }
 
   const optimize = () => {
-    if (!model) return
-    const r = optimizeStructure(applyMaterial(model), soil, footingPlan(), 30, anaOpts, tryBars)
-    if (!r) return
-    // adopt the optimised per-member sections
-    save(r.model)
-    setOpt(r)
-    setDesign(r.design)
-    requestAnimationFrame(captureModel)   // refresh the printable 3D snapshot
+    if (!model || busy) return
+    run('optimize', {
+      model: applyMaterial(model), soil, plan: footingPlan(), opts: anaOpts, tryBars, maxIter: 30,
+    }).then((raw) => {
+      const r = raw as OptimizeResult | null
+      if (!r) return
+      save(r.model)        // adopt the optimised per-member sections
+      setOpt(r)
+      setDesign(r.design)
+      requestAnimationFrame(captureModel)
+    }).catch((e) => console.error('optimize failed', e))
   }
 
   /** Snapshot the live 3D canvas as a PNG for the printed report's first page. */
@@ -1569,7 +1572,9 @@ export default function ModelSpace() {
                   {pDelta ? ' Frame solved with the geometric-stiffness P-Δ iteration.' : ' First-order (linear) frame solve.'}
                 </p>
                 <div className="col-span-full">
-                  <button type="button" onClick={analyze} disabled={!model} className={btn('from-[#0e7490] to-[#155e75]')}>▶ Analyze (3D FEM)</button>
+                  <button type="button" onClick={analyze} disabled={!model || !!busy} className={btn('from-[#0e7490] to-[#155e75]')}>
+                    {busy === 'analyze' ? '⏳ Analyzing…' : '▶ Analyze (3D FEM)'}
+                  </button>
                 </div>
               </Card>
 
@@ -1643,10 +1648,19 @@ export default function ModelSpace() {
             <div className="space-y-4">
               <Card title="Design & optimise">
                 <div className="col-span-full flex flex-wrap gap-2">
-                  <button type="button" onClick={runPipeline} disabled={!model} className={btn('from-[#15803d] to-[#166534]')}>🏗 Design structure</button>
-                  <button type="button" onClick={optimize} disabled={!model} className={btn('from-[#b45309] to-[#92400e]')}
-                    title="Grow each failing member's own section until nothing fails, then trim back">🏁 Optimize design</button>
+                  <button type="button" onClick={runPipeline} disabled={!model || !!busy} className={btn('from-[#15803d] to-[#166534]')}>
+                    {busy === 'design' ? '⏳ Designing…' : '🏗 Design structure'}
+                  </button>
+                  <button type="button" onClick={optimize} disabled={!model || !!busy} className={btn('from-[#b45309] to-[#92400e]')}
+                    title="Grow each failing member's own section until nothing fails, then trim back">
+                    {busy === 'optimize' ? '⏳ Optimizing…' : '🏁 Optimize design'}
+                  </button>
                 </div>
+                {busy && (
+                  <p className="col-span-full text-[11px] font-medium text-[#0056b3]">
+                    Running in the background — the page stays responsive; results appear when ready.
+                  </p>
+                )}
                 <p className="col-span-full text-[11px] text-slate-500">
                   The full schedules (beam/girder, column, footing) render below, each the full width of the page.
                   Click any schedule row for its step-by-step solution and plan/elevation drawings.
