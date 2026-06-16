@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Text } from '@react-three/drei'
@@ -30,6 +30,16 @@ import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { f1, f2 } from '../lib/format'
 
 const AUTOSAVE_KEY = 'model-space-autosave'
+const INPUTS_KEY = 'model-space-inputs'
+
+/** The design inputs persisted alongside the autosaved model so a reload keeps
+ *  the Geometry/Properties/Loading/etc. fields consistent with the 3D model
+ *  (soil, seismic, wind & γc aren't part of the model, so they'd otherwise reset
+ *  to defaults while the model stays loaded). */
+function loadInputs(): Record<string, unknown> {
+  try { const raw = sessionStorage.getItem(INPUTS_KEY); return raw ? JSON.parse(raw) as Record<string, unknown> : {} }
+  catch { return {} }
+}
 
 const ROLE_COLOR: Record<string, string> = {
   column: '#475569', beam: '#0056b3', girder: '#0e7490',
@@ -418,40 +428,47 @@ function ColumnElevation({ Lh, b, bars, tieSpacing }: { Lh: number; b: number; b
 
 // ── Page ──────────────────────────────────────────────────────────────────
 export default function ModelSpace() {
-  const [baysX, setBaysX] = useState('6, 6')
-  const [baysZ, setBaysZ] = useState('5')
-  const [storeyH, setStoreyH] = useState('3.5, 3')
+  // design inputs restored from the last session (so they match the autosaved
+  // 3D model after a reload), with the factory defaults as fallback.
+  const [si] = useState(loadInputs)
+  const n = (k: string, d: number) => (typeof si[k] === 'number' ? si[k] as number : d)
+  const s = (k: string, d: string) => (typeof si[k] === 'string' ? si[k] as string : d)
+  const b = (k: string, d: boolean) => (typeof si[k] === 'boolean' ? si[k] as boolean : d)
+
+  const [baysX, setBaysX] = useState(s('baysX', '6, 6'))
+  const [baysZ, setBaysZ] = useState(s('baysZ', '5'))
+  const [storeyH, setStoreyH] = useState(s('storeyH', '3.5, 3'))
   // Per-role initial sizes (column ≥ girder ≥ beam to start the hierarchy satisfied).
-  const [colB, setColB] = useState(400); const [colH, setColH] = useState(400)
-  const [girB, setGirB] = useState(300); const [girH, setGirH] = useState(500)
-  const [beaB, setBeaB] = useState(250); const [beaH, setBeaH] = useState(450)
+  const [colB, setColB] = useState(n('colB', 400)); const [colH, setColH] = useState(n('colH', 400))
+  const [girB, setGirB] = useState(n('girB', 300)); const [girH, setGirH] = useState(n('girH', 500))
+  const [beaB, setBeaB] = useState(n('beaB', 250)); const [beaH, setBeaH] = useState(n('beaH', 450))
   // Concrete & reinforcement (shared material applied to every generated section)
-  const [fc, setFc] = useState(28); const [fy, setFy] = useState(415)
-  const [barDia, setBarDia] = useState(20); const [tieDia, setTieDia] = useState(10)
-  const [cover, setCover] = useState(40); const [slabThk, setSlabThk] = useState(150)
-  const [gammaC, setGammaC] = useState(24)            // concrete unit weight, kN/m³
-  const [qD, setQD] = useState(4.8); const [qL, setQL] = useState(2.4)
+  const [fc, setFc] = useState(n('fc', 28)); const [fy, setFy] = useState(n('fy', 415))
+  const [barDia, setBarDia] = useState(n('barDia', 20)); const [tieDia, setTieDia] = useState(n('tieDia', 10))
+  const [cover, setCover] = useState(n('cover', 40)); const [slabThk, setSlabThk] = useState(n('slabThk', 150))
+  const [gammaC, setGammaC] = useState(n('gammaC', 24))            // concrete unit weight, kN/m³
+  const [qD, setQD] = useState(n('qD', 4.8)); const [qL, setQL] = useState(n('qL', 2.4))
   // Soil (for the footing stage of the design pipeline)
-  const [qa, setQa] = useState(200); const [Hf, setHf] = useState(1.5)
-  const [gammaSoil, setGammaSoil] = useState(18)      // soil unit weight (overburden), kN/m³
+  const [qa, setQa] = useState(n('qa', 200)); const [Hf, setHf] = useState(n('Hf', 1.5))
+  const [gammaSoil, setGammaSoil] = useState(n('gammaSoil', 18))      // soil unit weight (overburden), kN/m³
   // Seismic (NSCP 208 static lateral force)
-  const [Ca, setCa] = useState(0.44); const [Cv, setCv] = useState(0.64)
-  const [Rw, setRw] = useState(8.5); const [Ie, setIe] = useState(1.0)
-  const [Zf, setZf] = useState(0.4); const [Nv, setNv] = useState(1.0)   // Zone factor + near-source (208-11)
-  const [eDirs, setEDirs] = useState<string[]>(['+X', '-X', '+Z', '-Z'])  // directional E cases to envelope
+  const [Ca, setCa] = useState(n('Ca', 0.44)); const [Cv, setCv] = useState(n('Cv', 0.64))
+  const [Rw, setRw] = useState(n('Rw', 8.5)); const [Ie, setIe] = useState(n('Ie', 1.0))
+  const [Zf, setZf] = useState(n('Zf', 0.4)); const [Nv, setNv] = useState(n('Nv', 1.0))   // Zone factor + near-source (208-11)
+  const [eDirs, setEDirs] = useState<string[]>((si.eDirs as string[]) ?? ['+X', '-X', '+Z', '-Z'])  // directional E cases to envelope
   const [seis, setSeis] = useState<SeismicResult | null>(null)
   const [drift, setDrift] = useState<DriftRow[] | null>(null)
   // Wind (NSCP 207B directional procedure, MWFRS)
-  const [Vw, setVw] = useState(50); const [expo, setExpo] = useState<'B' | 'C' | 'D'>('C')
-  const [Kzt, setKzt] = useState(1.0)
-  const [wDirs, setWDirs] = useState<string[]>(['+X', '-X', '+Z', '-Z'])  // directional W cases
+  const [Vw, setVw] = useState(n('Vw', 50)); const [expo, setExpo] = useState<'B' | 'C' | 'D'>((si.expo as 'B' | 'C' | 'D') ?? 'C')
+  const [Kzt, setKzt] = useState(n('Kzt', 1.0))
+  const [wDirs, setWDirs] = useState<string[]>((si.wDirs as string[]) ?? ['+X', '-X', '+Z', '-Z'])  // directional W cases
   const [wind, setWind] = useState<WindResult | null>(null)
   const [eCases, setECases] = useState<LateralCase[]>([])
   const [wCases, setWCases] = useState<LateralCase[]>([])
   // Analysis options: f₁ live-load factor (§203.3.1) and P-Δ second order
-  const [assembly, setAssembly] = useState(false)
-  const [pDelta, setPDelta] = useState(false)
-  const [tryBars, setTryBars] = useState(true)        // let design/optimize pick bar Ø from a ladder
+  const [assembly, setAssembly] = useState(b('assembly', false))
+  const [pDelta, setPDelta] = useState(b('pDelta', false))
+  const [tryBars, setTryBars] = useState(b('tryBars', true))        // let design/optimize pick bar Ø from a ladder
   const [showLoads, setShowLoads] = useState(true)   // load-diagram overlay
   const [showFootings, setShowFootings] = useState(true)   // designed footing footprints
 
@@ -469,8 +486,8 @@ export default function ModelSpace() {
   const [expanded, setExpanded] = useState<string | null>(null)   // open schedule-row solution
   const [report, setReport] = useState<'' | 'schedules' | 'drawings' | 'solutions' | 'full' | 'sol-only' | 'draw-only'>('')  // consolidated report template
   const [modelImg, setModelImg] = useState<string | null>(null)   // 3D snapshot for the printed report
-  const [concreteClass, setConcreteClass] = useState<ConcreteClass>('A')   // mix class for the take-off
-  const [prices, setPrices] = useState<PriceList>({   // unit prices for the costed bill (PHP)
+  const [concreteClass, setConcreteClass] = useState<ConcreteClass>((si.concreteClass as ConcreteClass) ?? 'A')   // mix class for the take-off
+  const [prices, setPrices] = useState<PriceList>((si.prices as PriceList) ?? {   // unit prices for the costed bill (PHP)
     cementBag: 260, sandM3: 1500, gravelM3: 1600, steelKg: 65, tieWireRoll: 2500, plywoodSheet: 700, lumberM: 25,
   })
   const [sdlDraft, setSdlDraft] = useState<SdlItem[]>([])          // NSCP-204 SDL composition being built
@@ -480,7 +497,7 @@ export default function ModelSpace() {
   const [tab, setTab] = useState<Tab>('geometry')                 // right-panel tab
   const [orphans, setOrphans] = useState(0)
   // footing plan: base node → '' (isolated) or partner node id (combined)
-  const [planSel, setPlanSel] = useState<Record<string, string>>({})
+  const [planSel, setPlanSel] = useState<Record<string, string>>((si.planSel as Record<string, string>) ?? {})
   // frame-editor add-member picks
   const [newI, setNewI] = useState(''); const [newJ, setNewJ] = useState('')
   const [newRole, setNewRole] = useState<MemberRole>('beam')
@@ -489,6 +506,24 @@ export default function ModelSpace() {
   const [wallT, setWallT] = useState(150); const [wallShear, setWallShear] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const { busy, run, progress } = useSolver()   // off-thread FEM/design/optimise
+
+  // Persist the design inputs so a reload restores them alongside the autosaved
+  // model (keeps the Geometry/Properties tabs + report inputs in sync with it).
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(INPUTS_KEY, JSON.stringify({
+        baysX, baysZ, storeyH, colB, colH, girB, girH, beaB, beaH,
+        fc, fy, barDia, tieDia, cover, slabThk, gammaC, qD, qL,
+        qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs,
+        Vw, expo, Kzt, wDirs, assembly, pDelta, tryBars,
+        concreteClass, prices, planSel,
+      }))
+    } catch { /* quota — ignore */ }
+  }, [baysX, baysZ, storeyH, colB, colH, girB, girH, beaB, beaH,
+    fc, fy, barDia, tieDia, cover, slabThk, gammaC, qD, qL,
+    qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs,
+    Vw, expo, Kzt, wDirs, assembly, pDelta, tryBars,
+    concreteClass, prices, planSel])
 
   const save = (m: StructuralModel | null) => {
     setModel(m)
