@@ -11,6 +11,7 @@ import { analyzeFrame3D, type F3Analysis } from '../engine/frame3d'
 import { designStructure, optimizeStructure, selectBarDiameters, type StructureDesign, type FootingPlan, type OptimizeResult, type LateralCase } from '../engine/pipeline'
 import { estimateTakeoff } from '../engine/takeoff'
 import { TABLE_204_1, TABLE_204_2, sdlItemKPa, sdlTotal, type SdlItem } from '../engine/deadLoads'
+import { TABLE_205_1, TABLE_206 } from '../engine/liveLoads'
 import type { ConcreteClass } from '../engine/quantities'
 import { computeSeismic, driftCheck, type SeismicResult, type DriftRow } from '../engine/seismic'
 import { computeWind, type WindResult } from '../engine/wind'
@@ -426,6 +427,7 @@ export default function ModelSpace() {
   const [sdlDraft, setSdlDraft] = useState<SdlItem[]>([])          // NSCP-204 SDL composition being built
   const [sdlMatId, setSdlMatId] = useState(TABLE_204_2[0].id)      // 204-2 material add-row
   const [sdlMatT, setSdlMatT] = useState(50)                       // 204-2 thickness, mm
+  const [liveOccId, setLiveOccId] = useState('')                   // NSCP 205-1 occupancy ('' = default LL)
   const [tab, setTab] = useState<Tab>('geometry')                 // right-panel tab
   const [orphans, setOrphans] = useState(0)
   // footing plan: base node → '' (isolated) or partner node id (combined)
@@ -542,14 +544,35 @@ export default function ModelSpace() {
     setSdlDraft((d) => [...d, { id: `${mtl.id}@${sdlMatT}`, kind: '204-2', label: `${mtl.label} (${sdlMatT} mm)`, gamma: mtl.gamma, thicknessMm: sdlMatT }])
   }
   const removeSdlItem = (idx: number) => setSdlDraft((d) => d.filter((_, i) => i !== idx))
+  const commitPlates = (plates: Plate[]) => {
+    const m2 = { ...model!, plates }
+    save({ ...m2, loads: buildGravityLoads(m2, qD, qL, gammaC) })
+  }
   /** Write the composed SDL to all slabs (or just the selected plate). */
   const applySdl = (toAll: boolean) => {
     if (!model) return
     const items = sdlDraft.length ? sdlDraft : undefined
-    const plates = model.plates.map((p) =>
-      p.role !== 'wall' && (toAll || p.id === selected) ? { ...p, sdlItems: items } : p)
-    const m2 = { ...model, plates }
-    save({ ...m2, loads: buildGravityLoads(m2, qD, qL, gammaC) })
+    commitPlates(model.plates.map((p) =>
+      p.role !== 'wall' && (toAll || p.id === selected) ? { ...p, sdlItems: items } : p))
+  }
+  // ── NSCP 205-1 live load (per slab) ──
+  const occById = (id: string) => [...TABLE_205_1, ...TABLE_206].find((o) => o.id === id)
+  const liveOf = (id: string) => { const o = occById(id); return o ? { id: o.id, label: o.label, kPa: o.kPa } : undefined }
+  const applyLive = (toAll: boolean) => {
+    if (!model) return
+    const live = liveOf(liveOccId)
+    commitPlates(model.plates.map((p) =>
+      p.role !== 'wall' && (toAll || p.id === selected) ? { ...p, live } : p))
+  }
+  // ── Persistent per-panel editor row actions ──
+  const setSlabSdl = (plateId: string, clear: boolean) => {
+    if (!model) return
+    const items = clear ? undefined : (sdlDraft.length ? sdlDraft : undefined)
+    commitPlates(model.plates.map((p) => (p.id === plateId ? { ...p, sdlItems: items } : p)))
+  }
+  const setSlabLive = (plateId: string, occId: string) => {
+    if (!model) return
+    commitPlates(model.plates.map((p) => (p.id === plateId ? { ...p, live: liveOf(occId) } : p)))
   }
 
   const runPipeline = () => {
@@ -1278,32 +1301,86 @@ export default function ModelSpace() {
                   </button>
                   <span className="text-[11px] text-slate-400">Empty composition clears a slab back to the default SDL.</span>
                 </div>
-                {model && model.plates.filter((p) => p.role !== 'wall').length > 0 && (
-                  <div className="mt-3 max-h-40 overflow-auto">
+              </div>
+
+              {/* NSCP 205-1 / 206 live-load occupancy (per slab) */}
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h3 className="mb-1 text-[1.02rem] font-bold text-[#0056b3]">Live load — NSCP 205 / 206</h3>
+                <p className="mb-2 text-[11px] text-slate-500">
+                  Pick the occupancy (Table 205-1) or other minimum load (§206); its uniform live load overrides the
+                  default LL for the chosen slabs.
+                </p>
+                <div className="flex flex-wrap items-end gap-2">
+                  <select value={liveOccId} onChange={(e) => setLiveOccId(e.target.value)}
+                    className="min-w-[16rem] flex-1 rounded-md border border-slate-300 px-2 py-1 text-xs">
+                    <option value="">— default LL ({qL} kPa) —</option>
+                    {['Residential', 'Office', 'School', 'Assembly', 'Mercantile', 'Storage', 'Institutional', 'Parking'].map((g) => (
+                      <optgroup key={g} label={`205-1 · ${g}`}>
+                        {TABLE_205_1.filter((o) => o.group === g).map((o) => <option key={o.id} value={o.id}>{o.label} — {o.kPa} kPa</option>)}
+                      </optgroup>
+                    ))}
+                    <optgroup label="§206 · other minimum loads">
+                      {TABLE_206.map((o) => <option key={o.id} value={o.id}>{o.label} — {o.kPa} kPa</option>)}
+                    </optgroup>
+                  </select>
+                  <button type="button" onClick={() => applyLive(true)} disabled={!model}
+                    className="rounded-md bg-[#0056b3] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">Apply to all slabs</button>
+                  <button type="button" onClick={() => applyLive(false)} disabled={!selPlate || selPlate.role === 'wall'}
+                    className="rounded-md border border-[#0056b3] px-3 py-1.5 text-xs font-semibold text-[#0056b3] disabled:opacity-40">
+                    Apply to selected{selPlate && selPlate.role !== 'wall' ? ` (${selPlate.id})` : ''}
+                  </button>
+                </div>
+              </div>
+
+              {/* Persistent per-panel editor — every slab's SDL & live load */}
+              {model && model.plates.filter((p) => p.role !== 'wall').length > 0 && (
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Per-panel loads</h3>
+                  <div className="max-h-64 overflow-auto">
                     <table className="w-full border-collapse text-[11px]">
                       <thead>
                         <tr className="text-left uppercase tracking-wide text-slate-500">
                           <th className="py-1 pr-2 font-semibold">Slab</th>
-                          <th className="py-1 pr-2 text-right font-semibold">SDL (kPa)</th>
-                          <th className="py-1 font-semibold">Source</th>
+                          <th className="py-1 pr-2 text-right font-semibold">SDL</th>
+                          <th className="py-1 pr-2 font-semibold">SDL source</th>
+                          <th className="py-1 pr-2 text-right font-semibold">LL</th>
+                          <th className="py-1 pr-2 font-semibold">Occupancy (205-1 / 206)</th>
+                          <th className="py-1 font-semibold" />
                         </tr>
                       </thead>
                       <tbody>
                         {model.plates.filter((p) => p.role !== 'wall').map((p) => {
-                          const composed = p.sdlItems && p.sdlItems.length > 0
+                          const composed = !!(p.sdlItems && p.sdlItems.length > 0)
                           return (
                             <tr key={p.id} className={`border-t border-slate-100 ${selected === p.id ? 'bg-blue-50/60' : ''}`}>
-                              <td className="py-0.5 pr-2 font-medium">{p.id}</td>
+                              <td className="py-0.5 pr-2 font-medium cursor-pointer hover:text-[#0056b3]" onClick={() => setSelected(p.id)}>{p.id}</td>
                               <td className="py-0.5 pr-2 text-right">{(composed ? sdlTotal(p.sdlItems) : qD).toFixed(2)}</td>
-                              <td className="py-0.5 text-slate-500">{composed ? `NSCP-204 (${p.sdlItems!.length} item${p.sdlItems!.length === 1 ? '' : 's'})` : 'default'}</td>
+                              <td className="py-0.5 pr-2 text-slate-500">{composed ? `204 (${p.sdlItems!.length})` : 'default'}</td>
+                              <td className="py-0.5 pr-2 text-right">{(p.live ? p.live.kPa : qL).toFixed(2)}</td>
+                              <td className="py-0.5 pr-2">
+                                <select value={p.live?.id ?? ''} onChange={(e) => setSlabLive(p.id, e.target.value)}
+                                  className="w-full rounded border border-slate-200 px-1 py-0.5 text-[11px]">
+                                  <option value="">default ({qL})</option>
+                                  {[...TABLE_205_1, ...TABLE_206].map((o) => <option key={o.id} value={o.id}>{o.label} — {o.kPa}</option>)}
+                                </select>
+                              </td>
+                              <td className="py-0.5 whitespace-nowrap text-right">
+                                <button type="button" onClick={() => setSlabSdl(p.id, false)} title="Apply the composed SDL above to this slab"
+                                  className="rounded px-1.5 text-[#0056b3] hover:bg-blue-50">set SDL</button>
+                                <button type="button" onClick={() => setSlabSdl(p.id, true)} title="Clear to default SDL"
+                                  className="rounded px-1.5 text-red-500 hover:bg-red-50">clear</button>
+                              </td>
                             </tr>
                           )
                         })}
                       </tbody>
                     </table>
                   </div>
-                )}
-              </div>
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    “set SDL” writes the composition built above to that panel; the occupancy dropdown sets its NSCP-205 live load. Click a slab id to select it in 3D.
+                  </p>
+                </div>
+              )}
 
               {model && (
                 <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -2087,8 +2164,8 @@ export default function ModelSpace() {
               ['Cement', `${takeoff.concrete.cement} bags`],
               ['Sand', `${f2(takeoff.concrete.sand)} m³`],
               ['Gravel', `${f2(takeoff.concrete.gravel)} m³`],
-              ['Formwork', `${f1(takeoff.formworkM2)} m²`],
-              ['Reinf. steel', `${f1(takeoff.totalSteelKg)} kg`],
+              ['Steel (bought)', `${f1(takeoff.totalSteelPurchasedKg)} kg`],
+              ['Tie wire', `${takeoff.tieWire.rolls} roll${takeoff.tieWire.rolls === 1 ? '' : 's'}`],
             ].map(([k, v]) => (
               <div key={k} className="rounded-lg border border-slate-200 bg-white p-2 text-center shadow-sm">
                 <div className="text-[11px] uppercase tracking-wide text-slate-500">{k}</div>
@@ -2121,15 +2198,16 @@ export default function ModelSpace() {
               </table>
             </div>
 
-            {/* Steel by diameter (BOM) */}
+            {/* Steel by diameter (BOM) — 6 m commercial bars with lap + waste */}
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Reinforcement by bar Ø</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Reinforcement by bar Ø (6 m bars)</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="text-left uppercase tracking-wide text-slate-500">
                     <th className="py-1 pr-2 font-semibold">Bar</th>
-                    <th className="py-1 pr-2 text-right font-semibold">Length (m)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Net (m)</th>
                     <th className="py-1 pr-2 text-right font-semibold">6 m pcs</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Waste (m)</th>
                     <th className="py-1 text-right font-semibold">Weight (kg)</th>
                   </tr>
                 </thead>
@@ -2137,22 +2215,65 @@ export default function ModelSpace() {
                   {takeoff.steelByDia.map((d) => (
                     <tr key={d.dia} className="border-t border-slate-100">
                       <td className="py-0.5 pr-2 font-medium">⌀{d.dia}</td>
-                      <td className="py-0.5 pr-2 text-right">{f1(d.lengthM)}</td>
+                      <td className="py-0.5 pr-2 text-right">{f1(d.netLengthM)}</td>
                       <td className="py-0.5 pr-2 text-right">{d.pieces6m}</td>
+                      <td className="py-0.5 pr-2 text-right">{f1(d.wasteM)}</td>
                       <td className="py-0.5 text-right">{f1(d.weightKg)}</td>
                     </tr>
                   ))}
                   <tr className="border-t border-slate-200 font-semibold">
                     <td className="py-1 pr-2">Total</td>
                     <td />
+                    <td className="py-1 text-right">{takeoff.steelByDia.reduce((s, d) => s + d.pieces6m, 0)}</td>
                     <td />
-                    <td className="py-1 text-right">{f1(takeoff.totalSteelKg)}</td>
+                    <td className="py-1 text-right">{f1(takeoff.totalSteelPurchasedKg)}</td>
                   </tr>
                 </tbody>
               </table>
               <p className="mt-1 text-[11px] text-slate-400">
+                Continuous bars spliced (usable 6 − 0.30 m lap); stirrups/ties nested (cuts per 6 m). Fabricated net
+                {' '}{f1(takeoff.totalSteelNetKg)} kg → bought {f1(takeoff.totalSteelPurchasedKg)} kg.
                 Class {concreteClass}: {takeoff.concrete.factor} cement bags/m³ · sand 0.5, gravel 1.0 m³/m³ (NSCP mix).
               </p>
+            </div>
+          </div>
+
+          {/* Formwork + tie wire */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Formwork</h3>
+              <table className="w-full border-collapse text-xs">
+                <tbody>
+                  {[
+                    ['Contact area', `${f1(takeoff.formwork.areaM2)} m²`],
+                    [`Plywood (${takeoff.formwork.sheetM2.toFixed(2)} m²/sheet, ${takeoff.formwork.uses} uses)`, `${takeoff.formwork.plywoodSheets} sheets`],
+                    ['Lumber (studs / walers / braces)', `${f1(takeoff.formwork.lumberM)} lin·m`],
+                  ].map(([k, v]) => (
+                    <tr key={k} className="border-t border-slate-100">
+                      <td className="py-1 pr-2 text-slate-600">{k}</td>
+                      <td className="py-1 text-right font-semibold">{v}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Tie wire (#16 G.I.)</h3>
+              <table className="w-full border-collapse text-xs">
+                <tbody>
+                  {[
+                    ['Bar intersections', `${takeoff.tieWire.intersections}`],
+                    ['Net length (0.30 m / tie)', `${f1(takeoff.tieWire.netM)} m`],
+                    ['Rolls (2385 m / roll)', `${takeoff.tieWire.rolls}`],
+                    ['Weight', `${f1(takeoff.tieWire.weightKg)} kg`],
+                  ].map(([k, v]) => (
+                    <tr key={k} className="border-t border-slate-100">
+                      <td className="py-1 pr-2 text-slate-600">{k}</td>
+                      <td className="py-1 text-right font-semibold">{v}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -2187,7 +2308,7 @@ export default function ModelSpace() {
             </table>
             <p className="mt-1 text-[11px] text-slate-400">
               Cut lengths include a 40·d_b lap/anchorage allowance on straight bars and a 2·max(6·d_t, 75 mm) hook
-              allowance on stirrups/ties. {takeoff.slabSteelApprox ? 'Slab steel is an estimated bottom + top mat at the positive-moment spacing (approximate).' : ''}
+              allowance on stirrups/ties. {takeoff.slabSteelDDM ? 'Slab steel follows the DDM column/middle-strip layout: +M bottom bars span-long, −M top bars cut off 0.3·ℓn over supports.' : ''}
             </p>
           </div>
         </div>

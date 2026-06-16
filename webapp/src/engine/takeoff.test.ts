@@ -50,18 +50,47 @@ describe('structure take-off / BOM-BOQ', () => {
 
   it('produces a non-empty cut list and steel grouped by bar Ø', () => {
     expect(t.cutList.length).toBeGreaterThan(0)
-    expect(t.totalSteelKg).toBeGreaterThan(0)
+    expect(t.totalSteelPurchasedKg).toBeGreaterThan(0)
     const sumByDia = t.steelByDia.reduce((s, d) => s + d.weightKg, 0)
-    expect(sumByDia).toBeCloseTo(t.totalSteelKg, 6)
+    expect(sumByDia).toBeCloseTo(t.totalSteelPurchasedKg, 6)
     expect(t.steelByDia).toEqual([...t.steelByDia].sort((a, b) => a.dia - b.dia))
     expect(t.steelByDia.every((d) => d.pieces6m >= 1)).toBe(true)
   })
 
-  it('BOQ lists concrete + formwork per element kind and flags slab steel as approx', () => {
+  it('6 m commercial bars: splice lap, waste, and purchased ≥ fabricated', () => {
+    for (const d of t.steelByDia) {
+      expect(d.purchasedM).toBeCloseTo(d.pieces6m * 6, 9)        // bought as whole 6 m bars
+      expect(d.purchasedM).toBeGreaterThanOrEqual(d.netLengthM - 1e-6)
+      expect(d.wasteM).toBeCloseTo(d.purchasedM - d.netLengthM, 6)
+    }
+    expect(t.totalSteelPurchasedKg).toBeGreaterThanOrEqual(t.totalSteelNetKg - 1e-6)
+  })
+
+  it('formwork in plywood sheets + lumber lm, and tie wire from intersections', () => {
+    expect(t.formwork.plywoodSheets).toBe(Math.ceil(t.formwork.areaM2 / (t.formwork.sheetM2 * t.formwork.uses)))
+    expect(t.formwork.lumberM).toBeGreaterThan(0)
+    expect(t.tieWire.intersections).toBeGreaterThan(0)
+    expect(t.tieWire.rolls).toBeGreaterThanOrEqual(1)
+  })
+
+  it('combined footings contribute reinforcement (longitudinal + transverse)', () => {
+    const cm = makeModel()
+    const plan = { 'n0.0.0': { type: 'combined' as const, with: 'n1.0.0' } }
+    const cd = designStructure(cm, soil, plan)!
+    expect(cd.combined.length).toBe(1)
+    const ct = estimateTakeoff(cm, cd, { concreteClass: 'A' })
+    const comb = ct.byElement.find((e) => e.kind === 'Combined footing')!
+    expect(comb).toBeTruthy()
+    expect(comb.steelKg).toBeGreaterThan(0)
+    expect(ct.cutList.some((c) => /^Combined/.test(c.element) && c.mark === 'Longitudinal')).toBe(true)
+  })
+
+  it('BOQ lists concrete + formwork per element kind; slab steel from DDM strips', () => {
     expect(t.boq.some((r) => /Beam — concrete/.test(r.item) && r.unit === 'm³')).toBe(true)
     expect(t.boq.some((r) => /formwork/.test(r.item) && r.unit === 'm²')).toBe(true)
-    expect(t.slabSteelApprox).toBe(true)
-    // every element-quantity is finite & non-negative
+    expect(t.slabSteelDDM).toBe(true)
+    // slab cut list carries +M bottom and −M top marks (real DDM locations)
+    expect(t.cutList.some((c) => /^Slab/.test(c.element) && /Bottom \+M/.test(c.mark))).toBe(true)
     for (const e of t.byElement) {
       expect(e.concreteM3).toBeGreaterThanOrEqual(0)
       expect(Number.isFinite(e.steelKg)).toBe(true)

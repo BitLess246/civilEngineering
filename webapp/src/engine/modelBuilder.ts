@@ -165,9 +165,11 @@ export function buildGravityLoads(model: StructuralModel, sdl: number, ll: numbe
       const qSW = (p.thickness / 1000) * gammaC
       // per-slab NSCP-204 SDL when composed, else the global SDL argument
       const slabSdl = p.sdlItems && p.sdlItems.length > 0 ? sdlTotal(p.sdlItems) : sdl
+      // per-slab NSCP 205-1 live load when chosen, else the global LL argument
+      const slabLl = p.live ? p.live.kPa : ll
       return [
         { kind: 'area' as const, plate: p.id, q: qSW + slabSdl, cat: 'D' as const },
-        ...(ll > 0 ? [{ kind: 'area' as const, plate: p.id, q: ll, cat: 'L' as const }] : []),
+        ...(slabLl > 0 ? [{ kind: 'area' as const, plate: p.id, q: slabLl, cat: 'L' as const }] : []),
       ]
     })
   return [...memberSW, ...wallSW, ...plateLoads, ...kept]
