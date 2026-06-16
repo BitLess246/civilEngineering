@@ -446,6 +446,17 @@ export function designStructure(
 export const BAR_LADDER_BEAM = [16, 20, 25, 28, 32]
 export const BAR_LADDER_COLUMN = [20, 25, 28, 32]
 
+/** §425.2.1 — do `bars` of Ø `db` fit one face of the column at the minimum
+ *  clear spacing max(1.5db, 40 mm)? Bars split evenly over the two faces ⟂ to h
+ *  (the interaction model's layout), spread across width b. */
+function columnBarsFit(sec: RectSection, db: number, bars: number): boolean {
+  const perFace = Math.ceil(bars / 2)
+  if (perFace <= 1) return true
+  const clearWidth = sec.b - 2 * (sec.cover + sec.tieDia) - perFace * db
+  const sClear = clearWidth / (perFace - 1)
+  return sClear >= Math.max(1.5 * db, 40) - 1e-6
+}
+
 /**
  * Pick the most economical bar diameter for every beam/girder and column from a
  * candidate ladder: the smallest-steel size that still passes, falling back to
@@ -462,37 +473,30 @@ export function selectBarDiameters(
   const secById = new Map(model.sections.map((s) => [s.id, s]))
   const memSecId = new Map(model.members.map((m) => [m.id, m.section]))
   const chosen = new Map<string, number>()
+  // candidate sizes, SMALLEST first — we adopt the first one that passes.
   const ladder = (cands: number[], current: number) => [...new Set([current, ...cands])].sort((a, b) => a - b)
 
-  // beams/girders: minimise total tension steel across the member's sections,
-  // among bar sizes where every section is adequate.
+  // beams/girders: smallest bar Ø whose every section passes capacity AND the
+  // §407.7.1 clear-spacing / layer-fit check (both folded into beamOK).
   for (const row of design.beams) {
     const sec = secById.get(memSecId.get(row.id) ?? ''); if (!sec) continue
-    let best: { db: number; As: number } | null = null
     for (const db of ladder(BAR_LADDER_BEAM, sec.barDia)) {
-      let allOK = true, totalAs = 0
-      for (const s of row.sections) {
-        const d = designBeam({
-          b: sec.b, h: sec.h, cover: sec.cover, barDia: db, comprBarDia: 16,
-          stirrupDia: sec.tieDia, fc: sec.fc, fy: sec.fy, Mu: Math.abs(s.Mu), Vu: s.Vu,
-        })
-        if (!beamOK(d)) { allOK = false; break }
-        totalAs += d.As
-      }
-      if (allOK && (!best || totalAs < best.As - 1e-6)) best = { db, As: totalAs }
+      const allOK = row.sections.every((s) => beamOK(designBeam({
+        b: sec.b, h: sec.h, cover: sec.cover, barDia: db, comprBarDia: 16,
+        stirrupDia: sec.tieDia, fc: sec.fc, fy: sec.fy, Mu: Math.abs(s.Mu), Vu: s.Vu,
+      })))
+      if (allOK) { if (db !== sec.barDia) chosen.set(sec.id, db); break }
     }
-    if (best && best.db !== sec.barDia) chosen.set(sec.id, best.db)
   }
 
-  // columns: minimise provided steel Ast among bar sizes that pass P–M + ρ.
+  // columns: smallest bar Ø that passes P–M + ρ AND fits the §425.2.1 minimum
+  // clear bar spacing across the section face (≥ max(1.5db, 40 mm)).
   for (const row of design.columns) {
     const sec = secById.get(memSecId.get(row.id) ?? ''); if (!sec) continue
-    let best: { db: number; ast: number } | null = null
     for (const db of ladder(BAR_LADDER_COLUMN, sec.barDia)) {
       const r = designColumnFromPM({ ...sec, barDia: db }, row.Pu, row.Mu)
-      if (r.ok && (!best || r.Ast < best.ast - 1e-6)) best = { db, ast: r.Ast }
+      if (r.ok && columnBarsFit(sec, db, r.bars)) { if (db !== sec.barDia) chosen.set(sec.id, db); break }
     }
-    if (best && best.db !== sec.barDia) chosen.set(sec.id, best.db)
   }
 
   if (chosen.size === 0) return model

@@ -7,6 +7,7 @@
 // the three.js viewport.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, RectSection, Node, Member, Plate, NodeSupport, MemberRole } from './model'
+import { sdlTotal } from './deadLoads'
 
 export interface GridSpec {
   baysX: number[]      // bay widths along x, m
@@ -162,8 +163,10 @@ export function buildGravityLoads(model: StructuralModel, sdl: number, ll: numbe
     .filter((p) => p.role !== 'wall')
     .flatMap((p) => {
       const qSW = (p.thickness / 1000) * gammaC
+      // per-slab NSCP-204 SDL when composed, else the global SDL argument
+      const slabSdl = p.sdlItems && p.sdlItems.length > 0 ? sdlTotal(p.sdlItems) : sdl
       return [
-        { kind: 'area' as const, plate: p.id, q: qSW + sdl, cat: 'D' as const },
+        { kind: 'area' as const, plate: p.id, q: qSW + slabSdl, cat: 'D' as const },
         ...(ll > 0 ? [{ kind: 'area' as const, plate: p.id, q: ll, cat: 'L' as const }] : []),
       ]
     })
