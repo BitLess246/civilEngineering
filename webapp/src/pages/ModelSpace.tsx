@@ -411,7 +411,8 @@ export default function ModelSpace() {
   const [design, setDesign] = useState<StructureDesign | null>(null)
   const [opt, setOpt] = useState<OptimizeResult | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)   // open schedule-row solution
-  const [report, setReport] = useState<'' | 'schedules' | 'drawings' | 'solutions' | 'full'>('')  // consolidated report template
+  const [report, setReport] = useState<'' | 'schedules' | 'drawings' | 'solutions' | 'full' | 'sol-only' | 'draw-only'>('')  // consolidated report template
+  const [modelImg, setModelImg] = useState<string | null>(null)   // 3D snapshot for the printed report
   const [tab, setTab] = useState<Tab>('geometry')                 // right-panel tab
   const [orphans, setOrphans] = useState(0)
   // footing plan: base node → '' (isolated) or partner node id (combined)
@@ -513,6 +514,7 @@ export default function ModelSpace() {
     if (!model) return
     setOpt(null)
     setDesign(designStructure(model, soil, footingPlan(), anaOpts))
+    requestAnimationFrame(captureModel)   // refresh the printable 3D snapshot
   }
 
   const optimize = () => {
@@ -523,6 +525,14 @@ export default function ModelSpace() {
     save(r.model)
     setOpt(r)
     setDesign(r.design)
+    requestAnimationFrame(captureModel)   // refresh the printable 3D snapshot
+  }
+
+  /** Snapshot the live 3D canvas as a PNG for the printed report's first page. */
+  const captureModel = () => {
+    const c = document.querySelector('canvas') as HTMLCanvasElement | null
+    if (!c) return
+    try { setModelImg(c.toDataURL('image/png')) } catch { /* tainted / no context — skip */ }
   }
 
   // ── Frame-editor helpers (all immutable via save) ──
@@ -722,7 +732,7 @@ export default function ModelSpace() {
         <div className="no-print lg:sticky lg:top-4">
           <div className="h-[80vh] min-h-[460px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             {model ? (
-              <Canvas camera={{ position: [14, 11, 14], fov: 45 }} onPointerMissed={() => setSelected(null)}>
+              <Canvas camera={{ position: [14, 11, 14], fov: 45 }} gl={{ preserveDrawingBuffer: true }} onPointerMissed={() => setSelected(null)}>
                 <color attach="background" args={['#f8fafc']} />
                 <ambientLight intensity={0.85} />
                 <directionalLight position={[12, 18, 8]} intensity={0.9} />
@@ -1396,10 +1406,33 @@ export default function ModelSpace() {
       {design && (() => {
         // consolidated-report templates expand every row, filtering content
         const reportOpen = report !== '' && report !== 'schedules'
-        const wantSol = report === '' || report === 'full' || report === 'solutions'
-        const wantDraw = report === '' || report === 'full' || report === 'drawings'
+        const wantSol = report === '' || report === 'full' || report === 'solutions' || report === 'sol-only'
+        const wantDraw = report === '' || report === 'full' || report === 'drawings' || report === 'draw-only'
+        const tablesHidden = report === 'sol-only' || report === 'draw-only'   // *-only: no schedule tables
+        const mat = model?.sections[0]
+        const distinct = (role: MemberRole) => {
+          const ids = new Set((model?.members ?? []).filter((m) => m.role === role).map((m) => m.section))
+          return [...new Set((model?.sections ?? []).filter((s) => ids.has(s.id)).map((s) => s.name))].join(', ') || '—'
+        }
+        const slabT = [...new Set((model?.plates ?? []).filter((p) => p.role !== 'wall').map((p) => p.thickness))].join(', ')
+        const props: [string, string][] = [
+          ['Column grid', `bays X ${baysX} m · bays Z ${baysZ} m · storeys ${storeyH} m`],
+          ['Material', mat ? `f′c ${mat.fc} MPa · fy ${mat.fy} MPa · ⌀${mat.barDia} bars · ⌀${mat.tieDia} ties · cover ${mat.cover} mm` : '—'],
+          ['Columns', distinct('column')],
+          ['Girders', distinct('girder')],
+          ['Beams', distinct('beam')],
+          ['Slabs', `t = ${slabT || '—'} mm`],
+          ['Loads', `SDL ${qD} kPa · LL ${qL} kPa · γc 24 kN/m³`],
+          ['Soil / footing', `qa ${qa} kPa · depth H ${Hf} m`],
+          ['Seismic (NSCP 208)', `Ca ${Ca} · Cv ${Cv} · R ${Rw} · I ${Ie} · Z ${Zf} · Nv ${Nv}`],
+          ['Wind (NSCP 207B)', `V ${Vw} m/s · exposure ${expo} · Kzt ${Kzt}`],
+          ['Model', `${model?.nodes.length ?? 0} nodes · ${model?.members.length ?? 0} members · ${model?.plates.length ?? 0} slabs · ${(model?.walls ?? []).length} walls · ${model?.supports.length ?? 0} supports`],
+          ['Governing case', design.govName],
+          ['Concrete', `${f1(design.totals.concrete)} m³ (${f1(design.totals.concreteMembers)} members + ${f1(design.totals.concreteSlabs)} slabs)`],
+        ]
         return (
-        <div className="mt-6 space-y-6">
+        <div className={`mt-6 space-y-6 ${tablesHidden ? 'report-no-tables' : ''}`}>
+          {/* PAGE 1 — header + 3D model snapshot */}
           <h2 className="text-xl font-extrabold tracking-tight text-[#0056b3]">
             Structure design — {design.govName} governs
             <span className="ml-3 text-sm font-normal text-slate-500">
@@ -1408,30 +1441,57 @@ export default function ModelSpace() {
           </h2>
           <div className="no-print flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
             <span className="text-sm font-semibold text-[#0056b3]">Consolidated report</span>
-            <select value={report} onChange={(e) => setReport(e.target.value as typeof report)}
+            <select value={report} onChange={(e) => { setReport(e.target.value as typeof report); requestAnimationFrame(captureModel) }}
               className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm">
               <option value="">Interactive (click a row)</option>
               <option value="schedules">Schedules only</option>
               <option value="drawings">Schedules + drawings</option>
               <option value="solutions">Schedules + solutions</option>
               <option value="full">Full — solutions + drawings</option>
+              <option value="sol-only">Solutions only (no tables)</option>
+              <option value="draw-only">Drawing sections only (no tables)</option>
             </select>
+            <button type="button" onClick={captureModel}
+              className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">
+              ⟳ Update 3D snapshot
+            </button>
             <span className="text-xs text-slate-500">
-              {report === '' ? 'rows expand one at a time' : 'every row expanded for printing'}
+              {report === '' ? 'rows expand one at a time' : 'every row expanded — 3D + inputs lead the print'}
             </span>
           </div>
+          {modelImg && (
+            <div className="print-only">
+              <img src={modelImg} alt="3D structural model" className="mx-auto w-full max-w-3xl rounded-lg border border-slate-200" style={{ maxHeight: '150mm', objectFit: 'contain' }} />
+              <p className="mt-1 text-center text-xs text-slate-500">3D structural model — orbit/print snapshot.</p>
+            </div>
+          )}
           <p className="-mt-3 text-xs text-slate-500">
             Envelope of <b>{design.cases.length}</b> load case{design.cases.length === 1 ? '' : 's'} (NSCP combinations × lateral directions).
             Each element is designed for its own governing case, shown in the “Case” column.
             <span className="no-print"> Pick a report template above, or click any row to expand its solution + drawings.</span>
           </p>
 
+          {/* PAGE 2+ — project & design inputs (every template) */}
+          <div className="break-before-page rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Project &amp; design inputs</h3>
+            <table className="w-full border-collapse text-xs">
+              <tbody>
+                {props.map(([k, v]) => (
+                  <tr key={k} className="border-t border-slate-100">
+                    <td className="w-44 py-1 pr-3 font-semibold text-slate-600">{k}</td>
+                    <td className="py-1 text-slate-700">{v}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
           {/* Beam & girder schedule */}
-          <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Beam & girder schedule</h3>
             <table className="w-full border-collapse text-xs">
               <thead>
-                <tr className="text-left uppercase tracking-wide text-slate-500">
+                <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
                   <th className="py-1 pr-2 font-semibold">Member</th>
                   <th className="py-1 pr-2 font-semibold">Section</th>
                   <th className="py-1 pr-2 text-right font-semibold">Mu (kN·m)</th>
@@ -1451,7 +1511,7 @@ export default function ModelSpace() {
                   const sec = sectionFor(bm.id)
                   return [
                     <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
-                      className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${bad ? 'bg-red-50 text-red-700' : ''}`}>
+                      className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${bad ? 'bg-red-50 text-red-700' : ''}`}>
                       <td className="py-1 pr-2 font-medium">{k === 0 ? `${open ? '▾' : '▸'} ${bm.id} (${bm.role} ${sec?.name ?? ''}, ${f1(bm.L)} m)` : ''}</td>
                       <td className="py-1 pr-2">{s.label}{s.hogging ? ' (hog)' : ''}</td>
                       <td className="py-1 pr-2 text-right">{f1(Math.abs(s.Mu))}</td>
@@ -1499,11 +1559,11 @@ export default function ModelSpace() {
           </div>
 
           {/* Column schedule (full width) */}
-          <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Column schedule</h3>
             <table className="w-full border-collapse text-xs">
               <thead>
-                <tr className="text-left uppercase tracking-wide text-slate-500">
+                <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
                   <th className="py-1 pr-2 font-semibold">Column</th>
                   <th className="py-1 pr-2 font-semibold">Section</th>
                   <th className="py-1 pr-2 text-right font-semibold">Pu (kN)</th>
@@ -1519,7 +1579,7 @@ export default function ModelSpace() {
                   const cs = sectionFor(c.id)
                   return [
                     <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
-                      className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                      className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
                       <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {c.id}</td>
                       <td className="py-1 pr-2">{cs?.name}</td>
                       <td className="py-1 pr-2 text-right">{f1(c.Pu)}</td>
@@ -1554,12 +1614,12 @@ export default function ModelSpace() {
           </div>
 
           {/* Slab schedule (full width) — two-way DDM */}
-          {design.slabs.length > 0 && (
-            <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          {design.slabs.length > 0 && report !== 'draw-only' && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Slab schedule (two-way DDM)</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
                     <th className="py-1 pr-2 font-semibold">Panel</th>
                     <th className="py-1 pr-2 font-semibold">lx × ly (m)</th>
                     <th className="py-1 pr-2 font-semibold">h (mm)</th>
@@ -1574,7 +1634,7 @@ export default function ModelSpace() {
                     const dd = sl.design
                     return [
                       <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
-                        className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${dd.applicable ? '' : 'bg-amber-50 text-amber-800'}`}>
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${dd.applicable ? '' : 'bg-amber-50 text-amber-800'}`}>
                         <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {sl.plate}</td>
                         <td className="py-1 pr-2">{f1(sl.lx)} × {f1(sl.ly)}</td>
                         <td className="py-1 pr-2">{Math.round(dd.h)}{dd.h < dd.hmin ? ` (< ${Math.round(dd.hmin)} min)` : ''}</td>
@@ -1662,12 +1722,12 @@ export default function ModelSpace() {
           )}
 
           {/* Shear-wall schedule (full width) — in-plane reinforcement */}
-          {design.walls.length > 0 && (
-            <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          {design.walls.length > 0 && report !== 'draw-only' && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Shear-wall schedule (in-plane)</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
                     <th className="py-1 pr-2 font-semibold">Wall</th>
                     <th className="py-1 pr-2 font-semibold">ℓw × hw (m)</th>
                     <th className="py-1 pr-2 font-semibold">t (mm)</th>
@@ -1685,7 +1745,7 @@ export default function ModelSpace() {
                     const curt = wd.twoCurtains ? '2 curtains' : '1 curtain'
                     return [
                       <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
-                        className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${wl.ok ? '' : 'bg-rose-50 text-rose-700'}`}>
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${wl.ok ? '' : 'bg-rose-50 text-rose-700'}`}>
                         <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {wl.id} <span className="text-slate-400">({wl.member})</span></td>
                         <td className="py-1 pr-2">{f1(wl.lw)} × {f1(wl.hw)}</td>
                         <td className="py-1 pr-2">{Math.round(wl.thickness)}</td>
@@ -1728,11 +1788,11 @@ export default function ModelSpace() {
           )}
 
           {/* Footing schedule (full width) */}
-          <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Footing schedule</h3>
             <table className="w-full border-collapse text-xs">
               <thead>
-                <tr className="text-left uppercase tracking-wide text-slate-500">
+                <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
                   <th className="py-1 pr-2 font-semibold">Node</th>
                   <th className="py-1 pr-2 text-right font-semibold">P / Pu (kN)</th>
                   <th className="py-1 pr-2 font-semibold">Plan</th>
@@ -1747,7 +1807,7 @@ export default function ModelSpace() {
                   const cs = colSectionAt(f.node)
                   return [
                     <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
-                      className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${f.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                      className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${f.ok ? '' : 'bg-red-50 text-red-700'}`}>
                       <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {f.node}</td>
                       <td className="py-1 pr-2 text-right">{f1(f.P)} / {f1(f.Pu)}</td>
                       <td className="py-1 pr-2">B = {f2(f.design.B)} m</td>
@@ -1777,12 +1837,12 @@ export default function ModelSpace() {
           </div>
 
           {/* Combined footing schedule (full width) */}
-          {design.combined.length > 0 && (
-            <div className="print-avoid-break overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          {design.combined.length > 0 && report !== 'draw-only' && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Combined footing schedule</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
                     <th className="py-1 pr-2 font-semibold">Nodes</th>
                     <th className="py-1 pr-2 text-right font-semibold">Spacing</th>
                     <th className="py-1 pr-2 text-right font-semibold">DL / LL (kN)</th>
@@ -1796,7 +1856,7 @@ export default function ModelSpace() {
                     const key = `comb:${c.nodes.join('-')}`, open = expanded === key || (reportOpen && wantSol)
                     return [
                       <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
-                        className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
                         <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {c.nodes[0]} + {c.nodes[1]}</td>
                         <td className="py-1 pr-2 text-right">{f2(c.spacing)} m</td>
                         <td className="py-1 pr-2 text-right">{f1(c.dl1)}/{f1(c.ll1)} · {f1(c.dl2)}/{f1(c.ll2)}</td>
