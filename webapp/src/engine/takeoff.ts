@@ -80,6 +80,30 @@ export interface TakeoffResult {
   slabSteelDDM: boolean                   // slab steel from the DDM strip layout
 }
 
+// ── Pricing — turn the take-off into a costed Bill of Materials ──
+export interface PriceList {
+  cementBag: number; sandM3: number; gravelM3: number; steelKg: number
+  tieWireRoll: number; plywoodSheet: number; lumberM: number
+}
+export interface BillRow { item: string; qty: number; unit: string; unitPrice: number; amount: number }
+export interface CostedBill { rows: BillRow[]; total: number }
+
+/** Price the take-off aggregates against a unit-price list → line amounts + total. */
+export function costBill(t: TakeoffResult, p: PriceList): CostedBill {
+  const row = (item: string, qty: number, unit: string, unitPrice: number): BillRow =>
+    ({ item, qty, unit, unitPrice, amount: qty * unitPrice })
+  const rows: BillRow[] = [
+    row('Cement', t.concrete.cement, 'bag', p.cementBag),
+    row('Sand', t.concrete.sand, 'm³', p.sandM3),
+    row('Gravel', t.concrete.gravel, 'm³', p.gravelM3),
+    row('Reinforcing steel', t.totalSteelPurchasedKg, 'kg', p.steelKg),
+    row('Tie wire (#16 G.I.)', t.tieWire.rolls, 'roll', p.tieWireRoll),
+    row('Formwork — plywood', t.formwork.plywoodSheets, 'sheet', p.plywoodSheet),
+    row('Formwork — lumber', t.formwork.lumberM, 'lin·m', p.lumberM),
+  ]
+  return { rows, total: rows.reduce((s, r) => s + r.amount, 0) }
+}
+
 export interface TakeoffOptions {
   concreteClass?: ConcreteClass; customFactor?: number
   lapLengthM?: number                     // splice lap deducted from each 6 m bar (default 0.30)

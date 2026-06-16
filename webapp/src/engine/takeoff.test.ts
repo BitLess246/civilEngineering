@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { designStructure } from './pipeline'
-import { estimateTakeoff } from './takeoff'
+import { estimateTakeoff, costBill, type PriceList } from './takeoff'
 import { sdlItemKPa, sdlTotal, type SdlItem } from './deadLoads'
 import type { RectSection } from './model'
 
@@ -71,6 +71,17 @@ describe('structure take-off / BOM-BOQ', () => {
     expect(t.formwork.lumberM).toBeGreaterThan(0)
     expect(t.tieWire.intersections).toBeGreaterThan(0)
     expect(t.tieWire.rolls).toBeGreaterThanOrEqual(1)
+  })
+
+  it('costBill prices the aggregates into line amounts + a grand total', () => {
+    const prices: PriceList = { cementBag: 260, sandM3: 1500, gravelM3: 1600, steelKg: 65, tieWireRoll: 2500, plywoodSheet: 700, lumberM: 25 }
+    const bill = costBill(t, prices)
+    const cement = bill.rows.find((r) => r.item === 'Cement')!
+    expect(cement.amount).toBeCloseTo(t.concrete.cement * 260, 6)
+    const steel = bill.rows.find((r) => r.item === 'Reinforcing steel')!
+    expect(steel.amount).toBeCloseTo(t.totalSteelPurchasedKg * 65, 6)
+    expect(bill.total).toBeCloseTo(bill.rows.reduce((s, r) => s + r.amount, 0), 6)
+    expect(bill.total).toBeGreaterThan(0)
   })
 
   it('combined footings contribute reinforcement (longitudinal + transverse)', () => {
