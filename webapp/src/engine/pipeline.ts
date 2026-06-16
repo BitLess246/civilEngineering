@@ -11,7 +11,8 @@ import type { StructuralModel, RectSection, ModelLoad } from './model'
 import { enforceSectionHierarchy, refreshSelfWeight } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
 import { solveFrame3D, applyF3Combo, type F3Result, type F3MemberResult, type F3Load } from './frame3d'
-import { nscpCombos } from './beamAnalysis'
+import { nscpCombos, type Combo } from './beamAnalysis'
+import type { ProgressFn } from './progress'
 import { designBeam, type BeamDesignResult } from './beamDesign'
 import { designAxialColumn, capacityAtEccentricity, interaction } from './columnDesign'
 import { designSquareFooting, type SquareFootingResult } from './isolatedFooting'
@@ -188,7 +189,7 @@ interface FrameRun { name: string; result: F3Result }
 
 /** Build the load cases to envelope: every NSCP combination, expanded once per
  *  directional lateral case (E/W) when the combination carries that factor. */
-function buildRuns(model: StructuralModel, opts: AnalyzeOptions) {
+function buildRuns(model: StructuralModel, opts: AnalyzeOptions, onProgress?: ProgressFn) {
   // gravity (everything except lateral E/W) is bridged once — includes the
   // slab tributary line loads and member self-weight; lateral cases are pure
   // node loads applied on top per direction.
@@ -207,7 +208,8 @@ function buildRuns(model: StructuralModel, opts: AnalyzeOptions) {
   const eCases = lateral.filter((c) => c.kind === 'E')
   const wCases = lateral.filter((c) => c.kind === 'W')
 
-  const runs: FrameRun[] = []
+  // expand every combo into its directional variants up front so progress has a total
+  const tasks: { name: string; combo: Combo; lat: F3Load[] }[] = []
   for (const combo of nscpCombos(opts.f1 ?? 1.0)) {
     const hasE = (combo.f.E ?? 0) !== 0
     const hasW = (combo.f.W ?? 0) !== 0
@@ -215,18 +217,23 @@ function buildRuns(model: StructuralModel, opts: AnalyzeOptions) {
       hasE && eCases.length ? eCases.map((c) => ({ tag: c.name, lat: c.loads.map(toF3) }))
         : hasW && wCases.length ? wCases.map((c) => ({ tag: c.name, lat: c.loads.map(toF3) }))
           : [{ tag: '', lat: [] }]
-    for (const v of variants) {
-      const factored = applyF3Combo([...br.loads, ...v.lat], combo.f)
-      if (!factored.length) continue
-      const result = solveFrame3D(br.nodes, br.members, br.supports, factored, opts)
-      if (result) runs.push({ name: combo.name + (v.tag ? ` · ${v.tag}` : ''), result })
-    }
+    for (const v of variants) tasks.push({ name: combo.name + (v.tag ? ` · ${v.tag}` : ''), combo, lat: v.lat })
   }
+
+  const runs: FrameRun[] = []
+  tasks.forEach((t, i) => {
+    onProgress?.({ phase: 'Solving load cases', current: i + 1, total: tasks.length, detail: t.name })
+    const factored = applyF3Combo([...br.loads, ...t.lat], t.combo.f)
+    if (!factored.length) return
+    const result = solveFrame3D(br.nodes, br.members, br.supports, factored, opts)
+    if (result) runs.push({ name: t.name, result })
+  })
   return { br, runs }
 }
 
 export function designStructure(
   model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}, opts: AnalyzeOptions = {},
+  onProgress?: ProgressFn,
 ): StructureDesign | null {
   if (model.members.length === 0) return null
   // each member designs with its OWN section; footings use the section of the
@@ -239,7 +246,7 @@ export function designStructure(
   const colAtNode = (node: string) => model.members.find((m) => m.role === 'column' && (m.i === node || m.j === node))
   const footSec = (node: string) => { const c = colAtNode(node); return c ? secOf(c.id) : fallbackSec }
 
-  const { br, runs } = buildRuns(model, opts)
+  const { br, runs } = buildRuns(model, opts, onProgress)
   if (runs.length === 0) return null
   // headline governing run = largest overall bending response
   let govIdx = 0
@@ -273,6 +280,7 @@ export function designStructure(
   const memberOf = (run: FrameRun, id: string) => run.result.members.find((m) => m.id === id)
 
   // ── Beams & girders — per-member worst case across all runs ──
+  onProgress?.({ phase: 'Designing beams & columns', detail: `${model.members.length} members` })
   const beams: BeamScheduleRow[] = []
   const columns: ColumnScheduleRow[] = []
   for (const m of model.members) {
@@ -299,6 +307,7 @@ export function designStructure(
   }
 
   // ── Footings (base supports) — isolated by default, combined per plan ──
+  onProgress?.({ phase: 'Designing footings & slabs' })
   const nodeXYZ = new Map(model.nodes.map((n) => [n.id, n]))
   const paired = new Set<string>()
   const combined: CombinedScheduleRow[] = []
@@ -535,26 +544,30 @@ const growOne = (s: RectSection): RectSection =>
  */
 export function optimizeStructure(
   model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}, maxIter = 30,
-  opts: AnalyzeOptions = {}, tryBars = false,
+  opts: AnalyzeOptions = {}, tryBars = false, onProgress?: ProgressFn,
 ): OptimizeResult | null {
   if (model.members.length === 0) return null
   const memSecId = new Map(model.members.map((m) => [m.id, m.section]))
   // sizes & self-weight kept consistent at every step (self-weight uses the
   // footing concrete unit weight so a custom γc feeds the gravity demands).
   const settle = (m: StructuralModel) => refreshSelfWeight(enforceSectionHierarchy(m), soil.gammaConc)
+  // wrap the per-solve progress with the current optimise phase so the bar shows
+  // the load-case sweep happening inside each iteration.
+  const sub = (label: string): ProgressFn | undefined =>
+    onProgress && ((p) => onProgress({ ...p, phase: `${label} · ${p.phase}` }))
   // re-detail the bars (cheapest design variable) before measuring fails, so a
   // member that only needs a bigger bar is not grown unnecessarily.
-  const detail = (m: StructuralModel, d: StructureDesign): { m: StructuralModel; d: StructureDesign } => {
+  const detail = (m: StructuralModel, d: StructureDesign, label: string): { m: StructuralModel; d: StructureDesign } => {
     if (!tryBars) return { m, d }
     const m2 = selectBarDiameters(m, soil, plan, opts, d)
-    return m2 === m ? { m, d } : { m: m2, d: designStructure(m2, soil, plan, opts) ?? d }
+    return m2 === m ? { m, d } : { m: m2, d: designStructure(m2, soil, plan, opts, sub(label)) ?? d }
   }
   let work = settle(model)                            // start width-consistent
   const steps: OptimizeStep[] = []
 
-  let design = designStructure(work, soil, plan, opts)
+  let design = designStructure(work, soil, plan, opts, sub('Optimize · initial'))
   if (!design) return null
-  ;({ m: work, d: design } = detail(work, design))
+  ;({ m: work, d: design } = detail(work, design, 'Optimize · initial'))
   steps.push({ iter: 0, grown: 0, fails: countFails(design), ok: designOK(design) })
 
   // GROW: bump every failing member's own section, re-enforce the hierarchy and
@@ -565,17 +578,19 @@ export function optimizeStructure(
     for (const b of design.beams) if (!b.ok) { const s = memSecId.get(b.id); if (s) failSids.add(s) }
     for (const c of design.columns) if (!c.ok) { const s = memSecId.get(c.id); if (s) failSids.add(s) }
     if (failSids.size === 0) break                   // only footings fail — not a section problem
+    onProgress?.({ phase: 'Optimizing — growing sections', current: iter, total: maxIter, detail: `iteration ${iter}: ${failSids.size} member(s) grown, ${countFails(design)} failing` })
     const sizes = new Map(work.sections.map((s) => [s.id, failSids.has(s.id) ? growOne(s) : s]))
     work = settle(withSizes(work, sizes))
-    const d = designStructure(work, soil, plan, opts)
+    const d = designStructure(work, soil, plan, opts, sub(`Optimize iter ${iter}`))
     if (!d) break
-    ;({ m: work, d: design } = detail(work, d))
+    ;({ m: work, d: design } = detail(work, d, `Optimize iter ${iter}`))
     steps.push({ iter, grown: failSids.size, fails: countFails(design), ok: designOK(design) })
   }
   const converged = designOK(design)
 
   // SHRINK: trim each member's depth while the whole structure still passes.
   if (converged) {
+    onProgress?.({ phase: 'Optimizing — trimming sections', detail: 'shrinking depths while the design still passes' })
     let improved = true, guard = 0
     while (improved && guard++ < 4) {
       improved = false
