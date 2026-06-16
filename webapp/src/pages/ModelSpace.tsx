@@ -21,7 +21,7 @@ import { ColumnSchematic } from '../components/ColumnSchematic'
 import { FootingSchematic } from '../components/FootingSchematic'
 import { DimBelow, DimSide } from '../components/dims'
 import { HintButton, SeismicHint, WindHint } from '../components/LoadHints'
-import { Num, Card, ResultCard, Row } from '../components/qty'
+import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { f1, f2 } from '../lib/format'
 
 const AUTOSAVE_KEY = 'model-space-autosave'
@@ -376,7 +376,10 @@ export default function ModelSpace() {
   const [colB, setColB] = useState(400); const [colH, setColH] = useState(400)
   const [girB, setGirB] = useState(300); const [girH, setGirH] = useState(500)
   const [beaB, setBeaB] = useState(250); const [beaH, setBeaH] = useState(450)
-  const [fc, setFc] = useState(28)
+  // Concrete & reinforcement (shared material applied to every generated section)
+  const [fc, setFc] = useState(28); const [fy, setFy] = useState(415)
+  const [barDia, setBarDia] = useState(20); const [tieDia, setTieDia] = useState(10)
+  const [cover, setCover] = useState(40); const [slabThk, setSlabThk] = useState(150)
   const [qD, setQD] = useState(4.8); const [qL, setQL] = useState(2.4)
   // Soil (for the footing stage of the design pipeline)
   const [qa, setQa] = useState(200); const [Hf, setHf] = useState(1.5)
@@ -641,11 +644,12 @@ export default function ModelSpace() {
   }, [govRes])
 
   const generate = () => {
-    const mat = { fc, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+    const mat = { fc, fy, barDia, tieDia, cover }
     const role = (b: number, h: number, id: string): RectSection => ({ id, name: `${b}×${h}`, b, h, ...mat })
     const m = generateGridModel({
       baysX: parseList(baysX), baysZ: parseList(baysZ), storeyH: parseList(storeyH),
       column: role(colB, colH, 'COL'), girder: role(girB, girH, 'GIR'), beam: role(beaB, beaH, 'BEA'),
+      slabThickness: slabThk,
     })
     // gravity loads: member self-weight (D), slab self-weight + SDL (D), LL (L)
     m.loads = buildGravityLoads(m, qD, qL)
@@ -1079,11 +1083,25 @@ export default function ModelSpace() {
                 <Num label="Girder h" unit="mm" value={girH} onChange={setGirH} />
                 <Num label="Beam b" unit="mm" value={beaB} onChange={setBeaB} />
                 <Num label="Beam h" unit="mm" value={beaH} onChange={setBeaH} />
-                <Num label="f′c" unit="MPa" value={fc} onChange={setFc} />
+                <Num label="Slab thickness" unit="mm" value={slabThk} onChange={setSlabThk} />
+              </Card>
+              <Card title="Concrete & reinforcement">
+                <p className="col-span-full -mb-1 text-[11px] text-slate-500">
+                  Shared material applied to every section when you generate the grid. f′c drives Ec and the
+                  flexural/shear capacities; fy the steel; ⌀ and cover the bar layout and effective depth.
+                </p>
+                <Num label="Concrete f′c" unit="MPa" value={fc} onChange={setFc} step="0.5" />
+                <Num label="Steel fy" unit="MPa" value={fy} onChange={setFy} step="5" />
+                <Pick label="Main bar ⌀ (mm)" value={String(barDia)} onChange={(v) => setBarDia(+v)}
+                  options={[['12', '⌀12'], ['16', '⌀16'], ['20', '⌀20'], ['25', '⌀25'], ['28', '⌀28'], ['32', '⌀32'], ['36', '⌀36']]} />
+                <Pick label="Tie / stirrup ⌀ (mm)" value={String(tieDia)} onChange={(v) => setTieDia(+v)}
+                  options={[['10', '⌀10'], ['12', '⌀12'], ['16', '⌀16']]} />
+                <Num label="Clear cover" unit="mm" value={cover} onChange={setCover} step="5" />
               </Card>
               <p className="text-[11px] text-slate-400">
-                Per-member b×h are editable in the Geometry → Beams &amp; columns table; these are the defaults
-                used when you generate a new grid. Material (f′c, fy = 415, ⌀20 bars) is shared.
+                Per-member b×h are editable in the Geometry → Beams &amp; columns table; slab thickness per panel
+                in Geometry → Slabs. These are the defaults applied when you generate a new grid — regenerate (or
+                edit per element) to apply changes. Concrete unit weight γc = 24 kN/m³.
               </p>
             </div>
           )}

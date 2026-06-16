@@ -21,6 +21,8 @@ export interface GridSpec {
   column?: RectSection
   girder?: RectSection
   beam?: RectSection
+  /** Initial slab thickness for every generated panel, mm (default 150). */
+  slabThickness?: number
 }
 
 const acc = (bays: number[]): number[] => {
@@ -76,6 +78,7 @@ export function generateGridModel(spec: GridSpec, name = 'Grid frame'): Structur
   }
 
   const plates: Plate[] = []
+  const slabT = spec.slabThickness ?? 150
   for (let k = 1; k < ny; k++)
     for (let j = 0; j < nz - 1; j++)
       for (let i = 0; i < nx - 1; i++)
@@ -83,7 +86,7 @@ export function generateGridModel(spec: GridSpec, name = 'Grid frame'): Structur
           id: `s${i}.${j}.${k}`,
           corners: [nodeId(i, j, k), nodeId(i + 1, j, k), nodeId(i + 1, j + 1, k), nodeId(i, j + 1, k)],
           role: 'slab',
-          thickness: 150,
+          thickness: slabT,
         })
 
   const supports: NodeSupport[] = []
