@@ -134,33 +134,34 @@ export function removeNode(model: StructuralModel, nodeId: string): StructuralMo
   }
 }
 
-const GAMMA_C = 24 // kN/m³
+const GAMMA_C = 24 // kN/m³, default concrete unit weight
 
 /**
  * Build the gravity load set: member SELF-WEIGHT (D, kN/m from the section),
  * WALL self-weight on its supporting member (D, kN/m = t·h·γc), slab
  * SELF-WEIGHT + superimposed dead load (D, kPa), and live load (L, kPa).
  * Loads of other categories (e.g. seismic E) are preserved from the model.
+ * `gammaC` is the concrete unit weight (kN/m³, default 24).
  */
-export function buildGravityLoads(model: StructuralModel, sdl: number, ll: number): StructuralModel['loads'] {
+export function buildGravityLoads(model: StructuralModel, sdl: number, ll: number, gammaC = GAMMA_C): StructuralModel['loads'] {
   const secMap = new Map(model.sections.map((s) => [s.id, s]))
   const kept = model.loads.filter((l) => l.cat !== 'D' && l.cat !== 'L')
   // member self-weight from each member's OWN section
   const memberSW: StructuralModel['loads'] = model.members
     .map((m) => {
       const sec = secMap.get(m.section) ?? model.sections[0]
-      const w = sec ? (sec.b / 1000) * (sec.h / 1000) * GAMMA_C : 0
+      const w = sec ? (sec.b / 1000) * (sec.h / 1000) * gammaC : 0
       return { kind: 'member-udl' as const, member: m.id, w, cat: 'D' as const }
     })
     .filter((l) => l.w > 0)
   // wall self-weight as a line load on its supporting member
   const wallSW: StructuralModel['loads'] = (model.walls ?? [])
-    .map((wl) => ({ kind: 'member-udl' as const, member: wl.member, w: (wl.thickness / 1000) * wl.height * GAMMA_C, cat: 'D' as const }))
+    .map((wl) => ({ kind: 'member-udl' as const, member: wl.member, w: (wl.thickness / 1000) * wl.height * gammaC, cat: 'D' as const }))
     .filter((l) => l.w > 0)
   const plateLoads: StructuralModel['loads'] = model.plates
     .filter((p) => p.role !== 'wall')
     .flatMap((p) => {
-      const qSW = (p.thickness / 1000) * GAMMA_C
+      const qSW = (p.thickness / 1000) * gammaC
       return [
         { kind: 'area' as const, plate: p.id, q: qSW + sdl, cat: 'D' as const },
         ...(ll > 0 ? [{ kind: 'area' as const, plate: p.id, q: ll, cat: 'L' as const }] : []),
@@ -174,7 +175,7 @@ export function buildGravityLoads(model: StructuralModel, sdl: number, ll: numbe
  * CURRENT section, leaving every other load untouched. No-op when the model
  * carries no member self-weight (so user models without it are not altered).
  */
-export function refreshSelfWeight(model: StructuralModel): StructuralModel {
+export function refreshSelfWeight(model: StructuralModel, gammaC = GAMMA_C): StructuralModel {
   const hasSW = model.loads.some((l) => l.kind === 'member-udl' && l.cat === 'D')
   if (!hasSW) return model
   const secMap = new Map(model.sections.map((s) => [s.id, s]))
@@ -182,7 +183,7 @@ export function refreshSelfWeight(model: StructuralModel): StructuralModel {
   const sw: StructuralModel['loads'] = model.members
     .map((m) => {
       const sec = secMap.get(m.section) ?? model.sections[0]
-      const w = sec ? (sec.b / 1000) * (sec.h / 1000) * GAMMA_C : 0
+      const w = sec ? (sec.b / 1000) * (sec.h / 1000) * gammaC : 0
       return { kind: 'member-udl' as const, member: m.id, w, cat: 'D' as const }
     })
     .filter((l) => l.w > 0)

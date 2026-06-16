@@ -149,10 +149,9 @@ function designBeamRow(mr: F3MemberResult, role: string, sec: RectSection): Beam
   }
 }
 
-/** Design one column from a single run's member result. */
-function designColumnRow(mr: F3MemberResult, sec: RectSection): ColumnScheduleRow {
-  const Pu = Math.max(0, -Math.min(...mr.N))           // compression (N < 0)
-  const Mu = mr.Mmax
+/** Column capacity for a given section and a known factored P/M demand (no frame
+ *  solve — bar diameter does not change demands, so this is reused for bar trials). */
+function designColumnFromPM(sec: RectSection, Pu: number, Mu: number) {
   const ax = designAxialColumn({
     shape: 'tied', b: sec.b, h: sec.h, cover: sec.cover,
     barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, Pu,
@@ -168,9 +167,17 @@ function designColumnRow(mr: F3MemberResult, sec: RectSection): ColumnScheduleRo
     phiPn = Math.min(cap.phi * cap.Pn, 0.65 * inter.PnMax)
   }
   const util = phiPn > 1e-9 ? Pu / phiPn : Infinity
+  return { e, bars: ax.bars, Ast: ax.Ast, phiPn, util, tieSpacing: ax.tieSpacing, ok: util <= 1 + 1e-9 && ax.rhoOK }
+}
+
+/** Design one column from a single run's member result. */
+function designColumnRow(mr: F3MemberResult, sec: RectSection): ColumnScheduleRow {
+  const Pu = Math.max(0, -Math.min(...mr.N))           // compression (N < 0)
+  const Mu = mr.Mmax
+  const r = designColumnFromPM(sec, Pu, Mu)
   return {
-    id: mr.id, L: mr.L, Pu, Mu, e, bars: ax.bars, phiPn, util,
-    tieSpacing: ax.tieSpacing, ok: util <= 1 + 1e-9 && ax.rhoOK,
+    id: mr.id, L: mr.L, Pu, Mu, e: r.e, bars: r.bars, phiPn: r.phiPn, util: r.util,
+    tieSpacing: r.tieSpacing, ok: r.ok,
   }
 }
 
@@ -430,6 +437,71 @@ export function designStructure(
   }
 }
 
+// ── Bar-diameter selection ────────────────────────────────────────────────
+// Standard NSCP bar sizes the design/optimise engines may try. Bar diameter
+// changes neither stiffness nor self-weight (both gross-concrete), so it never
+// alters the frame demands — selection is a pure per-member detailing pass that
+// rewrites each member's section.barDia, keeping every schedule/drawing/solution
+// (which all read sec.barDia) consistent for free.
+export const BAR_LADDER_BEAM = [16, 20, 25, 28, 32]
+export const BAR_LADDER_COLUMN = [20, 25, 28, 32]
+
+/**
+ * Pick the most economical bar diameter for every beam/girder and column from a
+ * candidate ladder: the smallest-steel size that still passes, falling back to
+ * the section's current bar when none of the candidates work (so the section can
+ * grow instead). Returns a new model with the chosen per-member section.barDia.
+ * Pass `base` (an already-computed design of `model`) to skip the internal solve.
+ */
+export function selectBarDiameters(
+  model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}, opts: AnalyzeOptions = {},
+  base?: StructureDesign | null,
+): StructuralModel {
+  const design = base ?? designStructure(model, soil, plan, opts)
+  if (!design) return model
+  const secById = new Map(model.sections.map((s) => [s.id, s]))
+  const memSecId = new Map(model.members.map((m) => [m.id, m.section]))
+  const chosen = new Map<string, number>()
+  const ladder = (cands: number[], current: number) => [...new Set([current, ...cands])].sort((a, b) => a - b)
+
+  // beams/girders: minimise total tension steel across the member's sections,
+  // among bar sizes where every section is adequate.
+  for (const row of design.beams) {
+    const sec = secById.get(memSecId.get(row.id) ?? ''); if (!sec) continue
+    let best: { db: number; As: number } | null = null
+    for (const db of ladder(BAR_LADDER_BEAM, sec.barDia)) {
+      let allOK = true, totalAs = 0
+      for (const s of row.sections) {
+        const d = designBeam({
+          b: sec.b, h: sec.h, cover: sec.cover, barDia: db, comprBarDia: 16,
+          stirrupDia: sec.tieDia, fc: sec.fc, fy: sec.fy, Mu: Math.abs(s.Mu), Vu: s.Vu,
+        })
+        if (!beamOK(d)) { allOK = false; break }
+        totalAs += d.As
+      }
+      if (allOK && (!best || totalAs < best.As - 1e-6)) best = { db, As: totalAs }
+    }
+    if (best && best.db !== sec.barDia) chosen.set(sec.id, best.db)
+  }
+
+  // columns: minimise provided steel Ast among bar sizes that pass P–M + ρ.
+  for (const row of design.columns) {
+    const sec = secById.get(memSecId.get(row.id) ?? ''); if (!sec) continue
+    let best: { db: number; ast: number } | null = null
+    for (const db of ladder(BAR_LADDER_COLUMN, sec.barDia)) {
+      const r = designColumnFromPM({ ...sec, barDia: db }, row.Pu, row.Mu)
+      if (r.ok && (!best || r.Ast < best.ast - 1e-6)) best = { db, ast: r.Ast }
+    }
+    if (best && best.db !== sec.barDia) chosen.set(sec.id, best.db)
+  }
+
+  if (chosen.size === 0) return model
+  return {
+    ...model,
+    sections: model.sections.map((s) => (chosen.has(s.id) ? { ...s, barDia: chosen.get(s.id)! } : s)),
+  }
+}
+
 // ── Optimisation loop ─────────────────────────────────────────────────────
 export interface OptimizeStep { iter: number; grown: number; fails: number; ok: boolean }
 export interface OptimizeResult {
@@ -459,17 +531,26 @@ const growOne = (s: RectSection): RectSection =>
  */
 export function optimizeStructure(
   model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}, maxIter = 30,
-  opts: AnalyzeOptions = {},
+  opts: AnalyzeOptions = {}, tryBars = false,
 ): OptimizeResult | null {
   if (model.members.length === 0) return null
   const memSecId = new Map(model.members.map((m) => [m.id, m.section]))
-  // sizes & self-weight kept consistent at every step
-  const settle = (m: StructuralModel) => refreshSelfWeight(enforceSectionHierarchy(m))
+  // sizes & self-weight kept consistent at every step (self-weight uses the
+  // footing concrete unit weight so a custom γc feeds the gravity demands).
+  const settle = (m: StructuralModel) => refreshSelfWeight(enforceSectionHierarchy(m), soil.gammaConc)
+  // re-detail the bars (cheapest design variable) before measuring fails, so a
+  // member that only needs a bigger bar is not grown unnecessarily.
+  const detail = (m: StructuralModel, d: StructureDesign): { m: StructuralModel; d: StructureDesign } => {
+    if (!tryBars) return { m, d }
+    const m2 = selectBarDiameters(m, soil, plan, opts, d)
+    return m2 === m ? { m, d } : { m: m2, d: designStructure(m2, soil, plan, opts) ?? d }
+  }
   let work = settle(model)                            // start width-consistent
   const steps: OptimizeStep[] = []
 
   let design = designStructure(work, soil, plan, opts)
   if (!design) return null
+  ;({ m: work, d: design } = detail(work, design))
   steps.push({ iter: 0, grown: 0, fails: countFails(design), ok: designOK(design) })
 
   // GROW: bump every failing member's own section, re-enforce the hierarchy and
@@ -484,7 +565,7 @@ export function optimizeStructure(
     work = settle(withSizes(work, sizes))
     const d = designStructure(work, soil, plan, opts)
     if (!d) break
-    design = d
+    ;({ m: work, d: design } = detail(work, d))
     steps.push({ iter, grown: failSids.size, fails: countFails(design), ok: designOK(design) })
   }
   const converged = designOK(design)
@@ -501,6 +582,11 @@ export function optimizeStructure(
         const d = designStructure(trial, soil, plan, opts)
         if (d && designOK(d)) { work = trial; design = d; improved = true }
       }
+    }
+    // final bar re-detail at the trimmed sizes for the most economical layout
+    if (tryBars) {
+      const m2 = selectBarDiameters(work, soil, plan, opts, design)
+      if (m2 !== work) { const d = designStructure(m2, soil, plan, opts); if (d) { work = m2; design = d } }
     }
     steps.push({ iter: iter + 1, grown: 0, fails: 0, ok: true })
   }

@@ -8,7 +8,7 @@ import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole
 import { distributePanel } from '../engine/tributary'
 import { modelToFrame3D } from '../engine/modelBridge'
 import { analyzeFrame3D, type F3Analysis } from '../engine/frame3d'
-import { designStructure, optimizeStructure, type StructureDesign, type FootingPlan, type OptimizeResult, type LateralCase } from '../engine/pipeline'
+import { designStructure, optimizeStructure, selectBarDiameters, type StructureDesign, type FootingPlan, type OptimizeResult, type LateralCase } from '../engine/pipeline'
 import { computeSeismic, driftCheck, type SeismicResult, type DriftRow } from '../engine/seismic'
 import { computeWind, type WindResult } from '../engine/wind'
 import { solveFrame3D, applyF3Combo } from '../engine/frame3d'
@@ -380,9 +380,11 @@ export default function ModelSpace() {
   const [fc, setFc] = useState(28); const [fy, setFy] = useState(415)
   const [barDia, setBarDia] = useState(20); const [tieDia, setTieDia] = useState(10)
   const [cover, setCover] = useState(40); const [slabThk, setSlabThk] = useState(150)
+  const [gammaC, setGammaC] = useState(24)            // concrete unit weight, kN/m³
   const [qD, setQD] = useState(4.8); const [qL, setQL] = useState(2.4)
   // Soil (for the footing stage of the design pipeline)
   const [qa, setQa] = useState(200); const [Hf, setHf] = useState(1.5)
+  const [gammaSoil, setGammaSoil] = useState(18)      // soil unit weight (overburden), kN/m³
   // Seismic (NSCP 208 static lateral force)
   const [Ca, setCa] = useState(0.44); const [Cv, setCv] = useState(0.64)
   const [Rw, setRw] = useState(8.5); const [Ie, setIe] = useState(1.0)
@@ -400,6 +402,7 @@ export default function ModelSpace() {
   // Analysis options: f₁ live-load factor (§203.3.1) and P-Δ second order
   const [assembly, setAssembly] = useState(false)
   const [pDelta, setPDelta] = useState(false)
+  const [tryBars, setTryBars] = useState(true)        // let design/optimize pick bar Ø from a ladder
   const [showLoads, setShowLoads] = useState(true)   // load-diagram overlay
 
   const [model, setModel] = useState<StructuralModel | null>(() => {
@@ -478,7 +481,7 @@ export default function ModelSpace() {
     if (!model) return
     // base magnitude is direction-independent (storey force per node), so one
     // solve gives every ±X/±Z case.
-    const r = computeSeismic(model, { Ca, Cv, I: Ie, R: Rw, Z: Zf, Nv, dir: 'x' })
+    const r = computeSeismic(model, { Ca, Cv, I: Ie, R: Rw, Z: Zf, Nv, gammaC, dir: 'x' })
     if (!r) return
     setSeis(r)
     setECases(eDirs.map((d) => dirCase(r.loads, 'E', d)))
@@ -504,7 +507,7 @@ export default function ModelSpace() {
     save({ ...model, loads: [...model.loads.filter((l) => !(l.cat === 'W' && l.kind === 'node')), ...primary.loads] })
   }
 
-  const soil = { qAllow: qa, gammaSoil: 18, gammaConc: 24, H: Hf }
+  const soil = { qAllow: qa, gammaSoil, gammaConc: gammaC, H: Hf }
   const footingPlan = (): FootingPlan => {
     const plan: FootingPlan = {}
     for (const [node, partner] of Object.entries(planSel)) {
@@ -516,13 +519,19 @@ export default function ModelSpace() {
   const runPipeline = () => {
     if (!model) return
     setOpt(null)
-    setDesign(designStructure(model, soil, footingPlan(), anaOpts))
+    const plan = footingPlan()
+    // when bar-trying is on, pick the economical bar Ø per member first, then
+    // design and persist those sections so schedules/drawings stay consistent.
+    const m = tryBars ? selectBarDiameters(model, soil, plan, anaOpts) : model
+    const d = designStructure(m, soil, plan, anaOpts)
+    if (m !== model) save(m)
+    setDesign(d)
     requestAnimationFrame(captureModel)   // refresh the printable 3D snapshot
   }
 
   const optimize = () => {
     if (!model) return
-    const r = optimizeStructure(model, soil, footingPlan(), 30, anaOpts)
+    const r = optimizeStructure(model, soil, footingPlan(), 30, anaOpts, tryBars)
     if (!r) return
     // adopt the optimised per-member sections
     save(r.model)
@@ -596,7 +605,7 @@ export default function ModelSpace() {
   const updPlateThickness = (id: string, t: number) => {
     if (!model || !Number.isFinite(t)) return
     const m2 = { ...model, plates: model.plates.map((p) => (p.id === id ? { ...p, thickness: t } : p)) }
-    save({ ...m2, loads: buildGravityLoads(m2, qD, qL) })
+    save({ ...m2, loads: buildGravityLoads(m2, qD, qL, gammaC) })
   }
   const addWall = () => {
     if (!model || !wallMember) return
@@ -605,12 +614,12 @@ export default function ModelSpace() {
     while ((model.walls ?? []).some((w) => w.id === `w${k}`)) k++
     const walls = [...(model.walls ?? []), { id: `w${k}`, member: wallMember, height: wallH, thickness: wallT, shearWall: wallShear }]
     const m2 = { ...model, walls }
-    save({ ...m2, loads: buildGravityLoads(m2, qD, qL) })
+    save({ ...m2, loads: buildGravityLoads(m2, qD, qL, gammaC) })
   }
   const removeWall = (id: string) => {
     if (!model) return
     const m2 = { ...model, walls: (model.walls ?? []).filter((w) => w.id !== id) }
-    save({ ...m2, loads: buildGravityLoads(m2, qD, qL) })
+    save({ ...m2, loads: buildGravityLoads(m2, qD, qL, gammaC) })
   }
   const updLoad = (idx: number, v: number) => {
     if (!model || !Number.isFinite(v)) return
@@ -632,7 +641,7 @@ export default function ModelSpace() {
   const rebuildGravity = () => {
     if (!model) return
     // self-weight + SDL (D) and LL (L) regenerated; E loads survive untouched
-    save({ ...model, loads: buildGravityLoads(model, qD, qL) })
+    save({ ...model, loads: buildGravityLoads(model, qD, qL, gammaC) })
   }
 
   const gov = analysis ? analysis.perCombo[analysis.govIdx] : null
@@ -652,7 +661,7 @@ export default function ModelSpace() {
       slabThickness: slabThk,
     })
     // gravity loads: member self-weight (D), slab self-weight + SDL (D), LL (L)
-    m.loads = buildGravityLoads(m, qD, qL)
+    m.loads = buildGravityLoads(m, qD, qL, gammaC)
     setSelected(null)
     setSeis(null)
     setWind(null)
@@ -1097,11 +1106,14 @@ export default function ModelSpace() {
                 <Pick label="Tie / stirrup ⌀ (mm)" value={String(tieDia)} onChange={(v) => setTieDia(+v)}
                   options={[['10', '⌀10'], ['12', '⌀12'], ['16', '⌀16']]} />
                 <Num label="Clear cover" unit="mm" value={cover} onChange={setCover} step="5" />
+                <Num label="Concrete unit wt γc" unit="kN/m³" value={gammaC} onChange={setGammaC} step="0.5" />
               </Card>
               <p className="text-[11px] text-slate-400">
                 Per-member b×h are editable in the Geometry → Beams &amp; columns table; slab thickness per panel
-                in Geometry → Slabs. These are the defaults applied when you generate a new grid — regenerate (or
-                edit per element) to apply changes. Concrete unit weight γc = 24 kN/m³.
+                in Geometry → Slabs. f′c, fy, ⌀, cover and slab thickness are applied when you generate a new grid;
+                γc feeds self-weight (members + slabs) and seismic mass — change it, then “Rebuild D + L” (Loading)
+                or regenerate. Bar Ø here is the starting size — the design/optimise engines may pick another when
+                “try alternative bar sizes” is on (Analysis).
               </p>
             </div>
           )}
@@ -1112,8 +1124,11 @@ export default function ModelSpace() {
               <Card title="Soil (footing design)">
                 <Num label="Soil qa" unit="kPa" value={qa} onChange={setQa} />
                 <Num label="Footing depth H" unit="m" value={Hf} onChange={setHf} />
+                <Num label="Soil unit wt γsoil" unit="kN/m³" value={gammaSoil} onChange={setGammaSoil} step="0.5" />
                 <p className="col-span-full text-[11px] text-slate-400">
                   Base supports are toggled per node in the Geometry → Nodes table (“Sup” column).
+                  qa is the allowable bearing; γsoil is the overburden weight deducted for the net bearing
+                  (q_net = qa − γsoil·Ds − γc·Dc). Applied on the next Design / Optimize.
                 </p>
               </Card>
               {model && model.supports.length > 0 && (
@@ -1286,6 +1301,10 @@ export default function ModelSpace() {
                   <input type="checkbox" checked={pDelta} onChange={(e) => setPDelta(e.target.checked)} />
                   <span>P-Δ second-order analysis</span>
                 </label>
+                <label className="col-span-full flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={tryBars} onChange={(e) => setTryBars(e.target.checked)} />
+                  <span>Try alternative bar sizes (Design / Optimize pick ⌀16–⌀32 beams, ⌀20–⌀32 columns)</span>
+                </label>
                 <p className="col-span-full text-[11px] text-slate-500">
                   §203.3.1 live-load factor f₁ = <b>{fLive.toFixed(1)}</b>
                   {fLive === 1 ? (assembly ? ' (assembly/garage)' : ' (Lo > 4.8 kPa)') : ' (ordinary occupancy)'}.
@@ -1433,15 +1452,16 @@ export default function ModelSpace() {
           return [...new Set((model?.sections ?? []).filter((s) => ids.has(s.id)).map((s) => s.name))].join(', ') || '—'
         }
         const slabT = [...new Set((model?.plates ?? []).filter((p) => p.role !== 'wall').map((p) => p.thickness))].join(', ')
+        const barsUsed = [...new Set((model?.sections ?? []).map((s) => s.barDia))].sort((a, b) => a - b)
         const props: [string, string][] = [
           ['Column grid', `bays X ${baysX} m · bays Z ${baysZ} m · storeys ${storeyH} m`],
-          ['Material', mat ? `f′c ${mat.fc} MPa · fy ${mat.fy} MPa · ⌀${mat.barDia} bars · ⌀${mat.tieDia} ties · cover ${mat.cover} mm` : '—'],
+          ['Material', mat ? `f′c ${mat.fc} MPa · fy ${mat.fy} MPa · main ⌀${barsUsed.join('/⌀') || mat.barDia} · ties ⌀${mat.tieDia} · cover ${mat.cover} mm` : '—'],
           ['Columns', distinct('column')],
           ['Girders', distinct('girder')],
           ['Beams', distinct('beam')],
           ['Slabs', `t = ${slabT || '—'} mm`],
-          ['Loads', `SDL ${qD} kPa · LL ${qL} kPa · γc 24 kN/m³`],
-          ['Soil / footing', `qa ${qa} kPa · depth H ${Hf} m`],
+          ['Loads', `SDL ${qD} kPa · LL ${qL} kPa · γc ${gammaC} kN/m³`],
+          ['Soil / footing', `qa ${qa} kPa · γsoil ${gammaSoil} kN/m³ · depth H ${Hf} m`],
           ['Seismic (NSCP 208)', `Ca ${Ca} · Cv ${Cv} · R ${Rw} · I ${Ie} · Z ${Zf} · Nv ${Nv}`],
           ['Wind (NSCP 207B)', `V ${Vw} m/s · exposure ${expo} · Kzt ${Kzt}`],
           ['Model', `${model?.nodes.length ?? 0} nodes · ${model?.members.length ?? 0} members · ${model?.plates.length ?? 0} slabs · ${(model?.walls ?? []).length} walls · ${model?.supports.length ?? 0} supports`],

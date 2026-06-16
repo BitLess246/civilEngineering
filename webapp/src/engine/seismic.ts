@@ -20,6 +20,7 @@ export interface SeismicParams {
   Z?: number                // seismic zone factor (0.4 = Zone 4); enables eq 208-11
   Nv?: number               // near-source velocity factor (default 1.0)
   Ct?: number               // default 0.0731 (RC moment frame, metres)
+  gammaC?: number           // concrete unit weight for member self-weight (default 24)
   dir: 'x' | 'z'
 }
 
@@ -35,10 +36,10 @@ export interface SeismicResult {
   loads: ModelLoad[]        // node loads, cat 'E'
 }
 
-const GAMMA_C = 24 // kN/m³
+const GAMMA_C = 24 // kN/m³, default concrete unit weight
 
 /** Seismic weight per elevated level: slab dead loads + member self-weight. */
-export function storeyWeights(model: StructuralModel): { elevation: number; w: number }[] {
+export function storeyWeights(model: StructuralModel, gammaC = GAMMA_C): { elevation: number; w: number }[] {
   const nm = new Map(model.nodes.map((n) => [n.id, n]))
   const secMap = new Map(model.sections.map((s) => [s.id, s]))
   const aSecOf = (mSection: string) => {
@@ -67,7 +68,7 @@ export function storeyWeights(model: StructuralModel): { elevation: number; w: n
     const a = nm.get(m.i), b = nm.get(m.j)
     if (!a || !b) continue
     const L = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)
-    const wSelf = aSecOf(m.section) * L * GAMMA_C
+    const wSelf = aSecOf(m.section) * L * gammaC
     if (m.role === 'column') {
       const top = Math.max(a.y, b.y), bot = Math.min(a.y, b.y)
       const topLvl = levels.includes(top) ? top : closest(top)
@@ -83,7 +84,7 @@ export function storeyWeights(model: StructuralModel): { elevation: number; w: n
 }
 
 export function computeSeismic(model: StructuralModel, p: SeismicParams): SeismicResult | null {
-  const storeyW = storeyWeights(model)
+  const storeyW = storeyWeights(model, p.gammaC ?? GAMMA_C)
   if (storeyW.length === 0) return null
   const hn = Math.max(...storeyW.map((s) => s.elevation))
   const W = storeyW.reduce((s, q) => s + q.w, 0)
