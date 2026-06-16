@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { LoadCategory } from './beamAnalysis'
 import type { SdlItem } from './deadLoads'
+import type { LiveItem } from './liveLoads'
 
 export interface Node { id: string; x: number; y: number; z: number }
 
@@ -34,6 +35,8 @@ export interface Plate {
   /** Per-slab superimposed dead load composed from NSCP Table 204-1/204-2.
    *  When present, overrides the global SDL for this panel's area dead load. */
   sdlItems?: SdlItem[]
+  /** Per-slab live load from NSCP Table 205-1 occupancy (overrides global LL). */
+  live?: LiveItem
 }
 
 /** A wall sitting on a member: its self-weight is applied to that member as a
