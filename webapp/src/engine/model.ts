@@ -5,6 +5,7 @@
 // Units: coordinates m; sections mm; loads kN, kN/m, kPa.
 // ─────────────────────────────────────────────────────────────────────────
 import type { LoadCategory } from './beamAnalysis'
+import type { SdlItem } from './deadLoads'
 
 export interface Node { id: string; x: number; y: number; z: number }
 
@@ -30,6 +31,9 @@ export interface Plate {
   corners: [string, string, string, string]  // node ids, CCW
   role: PlateRole
   thickness: number             // mm
+  /** Per-slab superimposed dead load composed from NSCP Table 204-1/204-2.
+   *  When present, overrides the global SDL for this panel's area dead load. */
+  sdlItems?: SdlItem[]
 }
 
 /** A wall sitting on a member: its self-weight is applied to that member as a

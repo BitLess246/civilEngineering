@@ -9,6 +9,9 @@ import { distributePanel } from '../engine/tributary'
 import { modelToFrame3D } from '../engine/modelBridge'
 import { analyzeFrame3D, type F3Analysis } from '../engine/frame3d'
 import { designStructure, optimizeStructure, selectBarDiameters, type StructureDesign, type FootingPlan, type OptimizeResult, type LateralCase } from '../engine/pipeline'
+import { estimateTakeoff } from '../engine/takeoff'
+import { TABLE_204_1, TABLE_204_2, sdlItemKPa, sdlTotal, type SdlItem } from '../engine/deadLoads'
+import type { ConcreteClass } from '../engine/quantities'
 import { computeSeismic, driftCheck, type SeismicResult, type DriftRow } from '../engine/seismic'
 import { computeWind, type WindResult } from '../engine/wind'
 import { solveFrame3D, applyF3Combo } from '../engine/frame3d'
@@ -419,6 +422,10 @@ export default function ModelSpace() {
   const [expanded, setExpanded] = useState<string | null>(null)   // open schedule-row solution
   const [report, setReport] = useState<'' | 'schedules' | 'drawings' | 'solutions' | 'full' | 'sol-only' | 'draw-only'>('')  // consolidated report template
   const [modelImg, setModelImg] = useState<string | null>(null)   // 3D snapshot for the printed report
+  const [concreteClass, setConcreteClass] = useState<ConcreteClass>('A')   // mix class for the take-off
+  const [sdlDraft, setSdlDraft] = useState<SdlItem[]>([])          // NSCP-204 SDL composition being built
+  const [sdlMatId, setSdlMatId] = useState(TABLE_204_2[0].id)      // 204-2 material add-row
+  const [sdlMatT, setSdlMatT] = useState(50)                       // 204-2 thickness, mm
   const [tab, setTab] = useState<Tab>('geometry')                 // right-panel tab
   const [orphans, setOrphans] = useState(0)
   // footing plan: base node → '' (isolated) or partner node id (combined)
@@ -516,22 +523,52 @@ export default function ModelSpace() {
     return plan
   }
 
+  /** Apply the current Properties material (f′c, fy, ⌀, ties, cover) to every
+   *  section and refresh the gravity loads with the current SDL/LL and γc — so
+   *  Design/Optimize reflect Properties edits without regenerating the grid. */
+  const applyMaterial = (m: StructuralModel): StructuralModel => {
+    const sections = m.sections.map((s) => ({ ...s, fc, fy, barDia, tieDia, cover }))
+    const withMat = { ...m, sections }
+    return { ...withMat, loads: buildGravityLoads(withMat, qD, qL, gammaC) }
+  }
+
+  // ── NSCP-204 SDL composer ──
+  const toggleSdl204_1 = (c: typeof TABLE_204_1[number]) =>
+    setSdlDraft((d) => d.some((x) => x.id === c.id)
+      ? d.filter((x) => x.id !== c.id)
+      : [...d, { id: c.id, kind: '204-1', label: c.label, kPa: c.kPa }])
+  const addSdl204_2 = () => {
+    const mtl = TABLE_204_2.find((x) => x.id === sdlMatId); if (!mtl || !(sdlMatT > 0)) return
+    setSdlDraft((d) => [...d, { id: `${mtl.id}@${sdlMatT}`, kind: '204-2', label: `${mtl.label} (${sdlMatT} mm)`, gamma: mtl.gamma, thicknessMm: sdlMatT }])
+  }
+  const removeSdlItem = (idx: number) => setSdlDraft((d) => d.filter((_, i) => i !== idx))
+  /** Write the composed SDL to all slabs (or just the selected plate). */
+  const applySdl = (toAll: boolean) => {
+    if (!model) return
+    const items = sdlDraft.length ? sdlDraft : undefined
+    const plates = model.plates.map((p) =>
+      p.role !== 'wall' && (toAll || p.id === selected) ? { ...p, sdlItems: items } : p)
+    const m2 = { ...model, plates }
+    save({ ...m2, loads: buildGravityLoads(m2, qD, qL, gammaC) })
+  }
+
   const runPipeline = () => {
     if (!model) return
     setOpt(null)
     const plan = footingPlan()
+    const base = applyMaterial(model)
     // when bar-trying is on, pick the economical bar Ø per member first, then
     // design and persist those sections so schedules/drawings stay consistent.
-    const m = tryBars ? selectBarDiameters(model, soil, plan, anaOpts) : model
+    const m = tryBars ? selectBarDiameters(base, soil, plan, anaOpts) : base
     const d = designStructure(m, soil, plan, anaOpts)
-    if (m !== model) save(m)
+    save(m)
     setDesign(d)
     requestAnimationFrame(captureModel)   // refresh the printable 3D snapshot
   }
 
   const optimize = () => {
     if (!model) return
-    const r = optimizeStructure(model, soil, footingPlan(), 30, anaOpts, tryBars)
+    const r = optimizeStructure(applyMaterial(model), soil, footingPlan(), 30, anaOpts, tryBars)
     if (!r) return
     // adopt the optimised per-member sections
     save(r.model)
@@ -643,6 +680,12 @@ export default function ModelSpace() {
     // self-weight + SDL (D) and LL (L) regenerated; E loads survive untouched
     save({ ...model, loads: buildGravityLoads(model, qD, qL, gammaC) })
   }
+
+  // material take-off / BOM-BOQ for the current design + mix class
+  const takeoff = useMemo(
+    () => (design && model ? estimateTakeoff(model, design, { concreteClass }) : null),
+    [design, model, concreteClass],
+  )
 
   const gov = analysis ? analysis.perCombo[analysis.govIdx] : null
   const govRes = gov?.result ?? null
@@ -1169,9 +1212,98 @@ export default function ModelSpace() {
           {tab === 'loading' && (
             <div className="space-y-4">
               <Card title="Slab loads">
-                <Num label="SDL (superimposed)" unit="kPa" value={qD} onChange={setQD} />
+                <Num label="Default SDL" unit="kPa" value={qD} onChange={setQD} />
                 <Num label="Live load" unit="kPa" value={qL} onChange={setQL} />
+                <p className="col-span-full text-[11px] text-slate-400">
+                  “Default SDL” applies to any slab without a composed NSCP-204 SDL below. Live load is shared.
+                </p>
               </Card>
+
+              {/* NSCP 204 superimposed-dead-load composer (per slab) */}
+              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h3 className="mb-1 text-[1.02rem] font-bold text-[#0056b3]">Superimposed dead load — NSCP 204</h3>
+                <p className="mb-2 text-[11px] text-slate-500">
+                  Build the SDL from finishes/ceilings/partitions (Table 204-1, kPa) and material layers
+                  (Table 204-2, γ × thickness). Then apply it to every slab, or to the slab selected in the 3D view.
+                </p>
+                <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                  {/* Table 204-1 components */}
+                  <div>
+                    <p className="mb-1 text-[11px] font-semibold text-slate-600">Table 204-1 — components (kPa)</p>
+                    <div className="max-h-44 space-y-0.5 overflow-auto pr-1">
+                      {TABLE_204_1.map((c) => (
+                        <label key={c.id} className="flex items-center gap-2 text-[11px]">
+                          <input type="checkbox" checked={sdlDraft.some((x) => x.id === c.id)} onChange={() => toggleSdl204_1(c)} />
+                          <span className="flex-1">{c.label}</span>
+                          <span className="text-slate-400">{c.kPa.toFixed(2)}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Table 204-2 material layers + the running composition */}
+                  <div>
+                    <p className="mb-1 text-[11px] font-semibold text-slate-600">Table 204-2 — material layer (γ × t)</p>
+                    <div className="flex flex-wrap items-end gap-2">
+                      <select value={sdlMatId} onChange={(e) => setSdlMatId(e.target.value)}
+                        className="flex-1 rounded-md border border-slate-300 px-2 py-1 text-xs">
+                        {TABLE_204_2.map((mtl) => <option key={mtl.id} value={mtl.id}>{mtl.label} ({mtl.gamma})</option>)}
+                      </select>
+                      <input type="number" value={sdlMatT} onChange={(e) => setSdlMatT(parseFloat(e.target.value))}
+                        className="w-20 rounded-md border border-slate-300 px-2 py-1 text-xs" /> <span className="text-[11px] text-slate-400">mm</span>
+                      <button type="button" onClick={addSdl204_2}
+                        className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">+ Add</button>
+                    </div>
+                    <div className="mt-2 space-y-0.5">
+                      {sdlDraft.length === 0 && <p className="text-[11px] text-slate-400">No components selected.</p>}
+                      {sdlDraft.map((it, i) => (
+                        <div key={i} className="flex items-center gap-2 text-[11px]">
+                          <span className="flex-1">{it.label}</span>
+                          <span className="text-slate-500">{sdlItemKPa(it).toFixed(2)} kPa</span>
+                          <button type="button" onClick={() => removeSdlItem(i)} className="rounded px-1 text-red-500 hover:bg-red-50">✕</button>
+                        </div>
+                      ))}
+                      <div className="mt-1 border-t border-slate-100 pt-1 text-[11px] font-semibold">
+                        Composed SDL = <span className="text-[#0056b3]">{sdlTotal(sdlDraft).toFixed(2)} kPa</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button type="button" onClick={() => applySdl(true)} disabled={!model}
+                    className="rounded-md bg-[#0056b3] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">Apply to all slabs</button>
+                  <button type="button" onClick={() => applySdl(false)} disabled={!selPlate || selPlate.role === 'wall'}
+                    className="rounded-md border border-[#0056b3] px-3 py-1.5 text-xs font-semibold text-[#0056b3] disabled:opacity-40"
+                    title="Select a slab panel in the 3D view first">
+                    Apply to selected slab{selPlate && selPlate.role !== 'wall' ? ` (${selPlate.id})` : ''}
+                  </button>
+                  <span className="text-[11px] text-slate-400">Empty composition clears a slab back to the default SDL.</span>
+                </div>
+                {model && model.plates.filter((p) => p.role !== 'wall').length > 0 && (
+                  <div className="mt-3 max-h-40 overflow-auto">
+                    <table className="w-full border-collapse text-[11px]">
+                      <thead>
+                        <tr className="text-left uppercase tracking-wide text-slate-500">
+                          <th className="py-1 pr-2 font-semibold">Slab</th>
+                          <th className="py-1 pr-2 text-right font-semibold">SDL (kPa)</th>
+                          <th className="py-1 font-semibold">Source</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {model.plates.filter((p) => p.role !== 'wall').map((p) => {
+                          const composed = p.sdlItems && p.sdlItems.length > 0
+                          return (
+                            <tr key={p.id} className={`border-t border-slate-100 ${selected === p.id ? 'bg-blue-50/60' : ''}`}>
+                              <td className="py-0.5 pr-2 font-medium">{p.id}</td>
+                              <td className="py-0.5 pr-2 text-right">{(composed ? sdlTotal(p.sdlItems) : qD).toFixed(2)}</td>
+                              <td className="py-0.5 text-slate-500">{composed ? `NSCP-204 (${p.sdlItems!.length} item${p.sdlItems!.length === 1 ? '' : 's'})` : 'default'}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
 
               {model && (
                 <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -1446,21 +1578,22 @@ export default function ModelSpace() {
         const wantSol = report === '' || report === 'full' || report === 'solutions' || report === 'sol-only'
         const wantDraw = report === '' || report === 'full' || report === 'drawings' || report === 'draw-only'
         const tablesHidden = report === 'sol-only' || report === 'draw-only'   // *-only: no schedule tables
-        const mat = model?.sections[0]
         const distinct = (role: MemberRole) => {
           const ids = new Set((model?.members ?? []).filter((m) => m.role === role).map((m) => m.section))
           return [...new Set((model?.sections ?? []).filter((s) => ids.has(s.id)).map((s) => s.name))].join(', ') || '—'
         }
         const slabT = [...new Set((model?.plates ?? []).filter((p) => p.role !== 'wall').map((p) => p.thickness))].join(', ')
         const barsUsed = [...new Set((model?.sections ?? []).map((s) => s.barDia))].sort((a, b) => a - b)
+        const slabSdls = [...new Set((model?.plates ?? []).filter((p) => p.role !== 'wall')
+          .map((p) => (p.sdlItems && p.sdlItems.length ? sdlTotal(p.sdlItems) : qD)))].sort((a, b) => a - b)
         const props: [string, string][] = [
           ['Column grid', `bays X ${baysX} m · bays Z ${baysZ} m · storeys ${storeyH} m`],
-          ['Material', mat ? `f′c ${mat.fc} MPa · fy ${mat.fy} MPa · main ⌀${barsUsed.join('/⌀') || mat.barDia} · ties ⌀${mat.tieDia} · cover ${mat.cover} mm` : '—'],
+          ['Material', `f′c ${fc} MPa · fy ${fy} MPa · main ⌀${barsUsed.join('/⌀') || barDia} · ties ⌀${tieDia} · cover ${cover} mm`],
           ['Columns', distinct('column')],
           ['Girders', distinct('girder')],
           ['Beams', distinct('beam')],
-          ['Slabs', `t = ${slabT || '—'} mm`],
-          ['Loads', `SDL ${qD} kPa · LL ${qL} kPa · γc ${gammaC} kN/m³`],
+          ['Slabs', `t = ${slabT || '—'} mm · SDL ${slabSdls.map((v) => v.toFixed(2)).join(' / ')} kPa`],
+          ['Loads', `default SDL ${qD} kPa · LL ${qL} kPa · γc ${gammaC} kN/m³`],
           ['Soil / footing', `qa ${qa} kPa · γsoil ${gammaSoil} kN/m³ · depth H ${Hf} m`],
           ['Seismic (NSCP 208)', `Ca ${Ca} · Cv ${Cv} · R ${Rw} · I ${Ie} · Z ${Zf} · Nv ${Nv}`],
           ['Wind (NSCP 207B)', `V ${Vw} m/s · exposure ${expo} · Kzt ${Kzt}`],
@@ -1927,6 +2060,138 @@ export default function ModelSpace() {
         </div>
         )
       })()}
+
+      {/* ── Material take-off — BOM / BOQ (full width) ── */}
+      {design && takeoff && (
+        <div className="mt-6 space-y-4 break-before-page">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-xl font-extrabold tracking-tight text-[#0056b3]">
+              Material take-off — Bill of Quantities &amp; Materials
+            </h2>
+            <label className="no-print flex items-center gap-2 text-sm">
+              <span className="font-medium text-slate-600">Concrete class</span>
+              <select value={concreteClass} onChange={(e) => setConcreteClass(e.target.value as ConcreteClass)}
+                className="rounded-md border border-slate-300 px-2 py-1 text-sm">
+                <option value="AA">AA (12 bags/m³)</option>
+                <option value="A">A (9)</option>
+                <option value="B">B (7.5)</option>
+                <option value="C">C (6)</option>
+              </select>
+            </label>
+          </div>
+
+          {/* BOM summary */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            {[
+              ['Concrete', `${f2(takeoff.totalConcreteM3)} m³`],
+              ['Cement', `${takeoff.concrete.cement} bags`],
+              ['Sand', `${f2(takeoff.concrete.sand)} m³`],
+              ['Gravel', `${f2(takeoff.concrete.gravel)} m³`],
+              ['Formwork', `${f1(takeoff.formworkM2)} m²`],
+              ['Reinf. steel', `${f1(takeoff.totalSteelKg)} kg`],
+            ].map(([k, v]) => (
+              <div key={k} className="rounded-lg border border-slate-200 bg-white p-2 text-center shadow-sm">
+                <div className="text-[11px] uppercase tracking-wide text-slate-500">{k}</div>
+                <div className="text-sm font-bold text-[#0056b3]">{v}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {/* BOQ */}
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Bill of Quantities (by element)</h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Item</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Qty</th>
+                    <th className="py-1 font-semibold">Unit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {takeoff.boq.map((r) => (
+                    <tr key={r.item} className="border-t border-slate-100">
+                      <td className="py-0.5 pr-2">{r.item}</td>
+                      <td className="py-0.5 pr-2 text-right">{f2(r.qty)}</td>
+                      <td className="py-0.5 text-slate-500">{r.unit}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Steel by diameter (BOM) */}
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Reinforcement by bar Ø</h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Bar</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Length (m)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">6 m pcs</th>
+                    <th className="py-1 text-right font-semibold">Weight (kg)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {takeoff.steelByDia.map((d) => (
+                    <tr key={d.dia} className="border-t border-slate-100">
+                      <td className="py-0.5 pr-2 font-medium">⌀{d.dia}</td>
+                      <td className="py-0.5 pr-2 text-right">{f1(d.lengthM)}</td>
+                      <td className="py-0.5 pr-2 text-right">{d.pieces6m}</td>
+                      <td className="py-0.5 text-right">{f1(d.weightKg)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t border-slate-200 font-semibold">
+                    <td className="py-1 pr-2">Total</td>
+                    <td />
+                    <td />
+                    <td className="py-1 text-right">{f1(takeoff.totalSteelKg)}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Class {concreteClass}: {takeoff.concrete.factor} cement bags/m³ · sand 0.5, gravel 1.0 m³/m³ (NSCP mix).
+              </p>
+            </div>
+          </div>
+
+          {/* Detailed cut list */}
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Reinforcement cut list</h3>
+            <table className="w-full border-collapse text-xs">
+              <thead>
+                <tr className="text-left uppercase tracking-wide text-slate-500">
+                  <th className="py-1 pr-2 font-semibold">Element</th>
+                  <th className="py-1 pr-2 font-semibold">Mark</th>
+                  <th className="py-1 pr-2 text-right font-semibold">Bar</th>
+                  <th className="py-1 pr-2 text-right font-semibold">No.</th>
+                  <th className="py-1 pr-2 text-right font-semibold">Cut (m)</th>
+                  <th className="py-1 pr-2 text-right font-semibold">Total (m)</th>
+                  <th className="py-1 text-right font-semibold">kg</th>
+                </tr>
+              </thead>
+              <tbody>
+                {takeoff.cutList.map((c, i) => (
+                  <tr key={i} className="border-t border-slate-100">
+                    <td className="py-0.5 pr-2">{c.element}</td>
+                    <td className="py-0.5 pr-2">{c.mark}</td>
+                    <td className="py-0.5 pr-2 text-right">⌀{c.dia}</td>
+                    <td className="py-0.5 pr-2 text-right">{c.count}</td>
+                    <td className="py-0.5 pr-2 text-right">{f2(c.cutLengthM)}</td>
+                    <td className="py-0.5 pr-2 text-right">{f1(c.totalM)}</td>
+                    <td className="py-0.5 text-right">{f1(c.weightKg)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="mt-1 text-[11px] text-slate-400">
+              Cut lengths include a 40·d_b lap/anchorage allowance on straight bars and a 2·max(6·d_t, 75 mm) hook
+              allowance on stirrups/ties. {takeoff.slabSteelApprox ? 'Slab steel is an estimated bottom + top mat at the positive-moment spacing (approximate).' : ''}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
