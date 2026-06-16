@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
+import { OrbitControls, Text } from '@react-three/drei'
 import * as THREE from 'three'
 import { generateGridModel, removeElements, removeNode, buildGravityLoads, splitSharedSections } from '../engine/modelBuilder'
 import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole } from '../engine/model'
@@ -9,7 +9,8 @@ import { distributePanel } from '../engine/tributary'
 import { modelToFrame3D } from '../engine/modelBridge'
 import { analyzeFrame3D, type F3Analysis } from '../engine/frame3d'
 import { designStructure, optimizeStructure, selectBarDiameters, type StructureDesign, type FootingPlan, type OptimizeResult, type LateralCase } from '../engine/pipeline'
-import { estimateTakeoff } from '../engine/takeoff'
+import { estimateTakeoff, costBill, type PriceList } from '../engine/takeoff'
+import { footingLayout } from '../engine/footingLayout'
 import { TABLE_204_1, TABLE_204_2, sdlItemKPa, sdlTotal, type SdlItem } from '../engine/deadLoads'
 import { TABLE_205_1, TABLE_206 } from '../engine/liveLoads'
 import type { ConcreteClass } from '../engine/quantities'
@@ -107,6 +108,29 @@ function Support3D({ p }: { p: THREE.Vector3 }) {
       <coneGeometry args={[0.28, 0.45, 4]} />
       <meshStandardMaterial color="#0056b3" />
     </mesh>
+  )
+}
+
+/** A designed footing drawn to ACTUAL plan size below grade, so overlapping
+ *  footprints are visible. bx/bz = plan dimensions (m), dc = depth (m), angle =
+ *  plan rotation about Y (combined footings follow the column axis). Overlapping
+ *  footings are tinted red. */
+function Footing3D({ cx, cz, bx, bz, dc, angle = 0, overlap = false, label }: {
+  cx: number; cz: number; bx: number; bz: number; dc: number; angle?: number; overlap?: boolean; label?: string
+}) {
+  return (
+    <group position={[cx, -dc / 2, cz]} rotation={[0, -angle, 0]}>
+      <mesh>
+        <boxGeometry args={[bx, dc, bz]} />
+        <meshStandardMaterial color={overlap ? '#dc2626' : '#b45309'} transparent opacity={overlap ? 0.6 : 0.45} />
+      </mesh>
+      {label && (
+        <Text position={[0, dc / 2 + 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.32}
+          color={overlap ? '#991b1b' : '#7c2d12'} anchorX="center" anchorY="middle" outlineWidth={0.012} outlineColor="#ffffff">
+          {label}
+        </Text>
+      )}
+    </group>
   )
 }
 
@@ -408,6 +432,7 @@ export default function ModelSpace() {
   const [pDelta, setPDelta] = useState(false)
   const [tryBars, setTryBars] = useState(true)        // let design/optimize pick bar Ø from a ladder
   const [showLoads, setShowLoads] = useState(true)   // load-diagram overlay
+  const [showFootings, setShowFootings] = useState(true)   // designed footing footprints
 
   const [model, setModel] = useState<StructuralModel | null>(() => {
     try {
@@ -424,6 +449,9 @@ export default function ModelSpace() {
   const [report, setReport] = useState<'' | 'schedules' | 'drawings' | 'solutions' | 'full' | 'sol-only' | 'draw-only'>('')  // consolidated report template
   const [modelImg, setModelImg] = useState<string | null>(null)   // 3D snapshot for the printed report
   const [concreteClass, setConcreteClass] = useState<ConcreteClass>('A')   // mix class for the take-off
+  const [prices, setPrices] = useState<PriceList>({   // unit prices for the costed bill (PHP)
+    cementBag: 260, sandM3: 1500, gravelM3: 1600, steelKg: 65, tieWireRoll: 2500, plywoodSheet: 700, lumberM: 25,
+  })
   const [sdlDraft, setSdlDraft] = useState<SdlItem[]>([])          // NSCP-204 SDL composition being built
   const [sdlMatId, setSdlMatId] = useState(TABLE_204_2[0].id)      // 204-2 material add-row
   const [sdlMatT, setSdlMatT] = useState(50)                       // 204-2 thickness, mm
@@ -709,6 +737,8 @@ export default function ModelSpace() {
     () => (design && model ? estimateTakeoff(model, design, { concreteClass }) : null),
     [design, model, concreteClass],
   )
+  const bill = useMemo(() => (takeoff ? costBill(takeoff, prices) : null), [takeoff, prices])
+  const peso = (v: number) => `₱${v.toLocaleString('en-PH', { maximumFractionDigits: 0 })}`
 
   const gov = analysis ? analysis.perCombo[analysis.govIdx] : null
   const govRes = gov?.result ?? null
@@ -834,6 +864,17 @@ export default function ModelSpace() {
                   const p = nodePos.get(s.node)
                   return p ? <Support3D key={s.node} p={p} /> : null
                 })}
+                {showFootings && design && (() => {
+                  const xz = new Map([...nodePos].map(([id, p]) => [id, { x: p.x, z: p.z }]))
+                  const { items, overlaps } = footingLayout(
+                    design.footings.map((f) => ({ node: f.node, B: f.design.B, Dc: f.design.Dc })),
+                    design.combined.map((cf) => ({ nodes: cf.nodes, Bx: cf.design.Bx, By: cf.design.By, Dc: cf.design.Dc, trapezoid: cf.design.shape.startsWith('Trap') })),
+                    xz,
+                  )
+                  return <group>{items.map((f) => (
+                    <Footing3D key={f.key} cx={f.cx} cz={f.cz} bx={f.bx} bz={f.bz} dc={f.dc} angle={f.angle} overlap={overlaps.has(f.key)} label={f.label} />
+                  ))}</group>
+                })()}
                 {(model.walls ?? []).map((w) => {
                   const m = model.members.find((mm) => mm.id === w.member)
                   const tA = m && nodePos.get(m.i), tB = m && nodePos.get(m.j)
@@ -859,6 +900,14 @@ export default function ModelSpace() {
               </div>
             )}
           </div>
+          {design && (
+            <label className="no-print mt-2 flex items-center gap-2 text-xs text-slate-600">
+              <input type="checkbox" checked={showFootings} onChange={(e) => setShowFootings(e.target.checked)} />
+              Show designed footings to scale
+              <span className="ml-1 inline-flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm" style={{ background: '#b45309' }} />ok</span>
+              <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm" style={{ background: '#dc2626' }} />overlap</span>
+            </label>
+          )}
           <label className="no-print mt-2 flex items-center gap-2 text-xs text-slate-600">
             <input type="checkbox" checked={showLoads} onChange={(e) => setShowLoads(e.target.checked)} />
             Show load diagrams on the model
@@ -2173,6 +2222,55 @@ export default function ModelSpace() {
               </div>
             ))}
           </div>
+
+          {/* Priced Bill of Materials — unit prices make it an actual Bill */}
+          {bill && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-[1.02rem] font-bold text-[#0056b3]">Bill of Materials (priced)</h3>
+                <span className="text-sm font-bold text-[#0056b3]">Grand total: {peso(bill.total)}</span>
+              </div>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Material</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Qty</th>
+                    <th className="py-1 pr-2 font-semibold">Unit</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Unit price (₱)</th>
+                    <th className="py-1 text-right font-semibold">Amount (₱)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bill.rows.map((r, i) => {
+                    const keys: (keyof PriceList)[] = ['cementBag', 'sandM3', 'gravelM3', 'steelKg', 'tieWireRoll', 'plywoodSheet', 'lumberM']
+                    const key = keys[i]
+                    return (
+                      <tr key={r.item} className="border-t border-slate-100">
+                        <td className="py-0.5 pr-2">{r.item}</td>
+                        <td className="py-0.5 pr-2 text-right">{f2(r.qty)}</td>
+                        <td className="py-0.5 pr-2 text-slate-500">{r.unit}</td>
+                        <td className="py-0.5 pr-2 text-right">
+                          <input type="number" value={prices[key]}
+                            onChange={(e) => setPrices((p) => ({ ...p, [key]: parseFloat(e.target.value) || 0 }))}
+                            className="no-print w-24 rounded border border-slate-200 px-1 py-0.5 text-right" />
+                          <span className="print-only">{prices[key].toLocaleString('en-PH')}</span>
+                        </td>
+                        <td className="py-0.5 text-right font-medium">{peso(r.amount)}</td>
+                      </tr>
+                    )
+                  })}
+                  <tr className="border-t border-slate-200 font-bold text-[#0056b3]">
+                    <td className="py-1 pr-2" colSpan={4}>Grand total</td>
+                    <td className="py-1 text-right">{peso(bill.total)}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Edit the unit prices to your local rates (PHP). Steel priced on the purchased (6 m-bar) weight incl. lap/waste;
+                concrete via cement/sand/gravel. Labour, hauling and contingencies not included.
+              </p>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {/* BOQ */}
