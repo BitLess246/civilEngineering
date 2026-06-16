@@ -39,6 +39,12 @@ select:focus {
    nav + buttons hidden, white background, cards kept whole across pages. */
 .print-only { display: none; }
 
+/* Consolidated report — the "Solutions only" / "Drawing sections only" templates
+   drop the schedule listing (header + clickable summary rows) on screen AND in
+   print, leaving just the expanded worked solutions / drawings. */
+.report-no-tables tr.sched-head,
+.report-no-tables tr.sched-row { display: none; }
+
 @media print {
   @page { margin: 14mm; }
   html, body { background: #fff !important; }
