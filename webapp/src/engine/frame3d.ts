@@ -11,6 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { solveLinear, matVec, hermite, gauss5Vec } from './fem'
 import { nscpCombos, type Combo, type LoadCategory } from './beamAnalysis'
+import type { ProgressFn } from './progress'
 
 /** Second-order (P-Δ) options for the frame solve. */
 export interface PDeltaOpts { pDelta?: boolean; maxIter?: number; tol?: number }
@@ -382,16 +383,18 @@ export interface F3AnalyzeOpts extends PDeltaOpts {
 
 export function analyzeFrame3D(
   nodes: F3Node[], members: F3Member[], supports: F3Support[], loads: F3Load[],
-  opts?: F3AnalyzeOpts,
+  opts?: F3AnalyzeOpts, onProgress?: ProgressFn,
 ): F3Analysis | null {
   const perCombo: F3ComboRun[] = []
   let govIdx = -1, govM = -1
-  for (const combo of nscpCombos(opts?.f1 ?? 1.0)) {
+  const combos = nscpCombos(opts?.f1 ?? 1.0)
+  combos.forEach((combo, i) => {
+    onProgress?.({ phase: 'Analyzing load cases', current: i + 1, total: combos.length, detail: combo.name })
     const factored = applyF3Combo(loads, combo.f)
-    if (factored.length === 0) { perCombo.push({ combo, result: null, factored, skipped: true }); continue }
+    if (factored.length === 0) { perCombo.push({ combo, result: null, factored, skipped: true }); return }
     const r = solveFrame3D(nodes, members, supports, factored, opts)
     perCombo.push({ combo, result: r, factored, skipped: false })
     if (r && r.Mmax > govM) { govM = r.Mmax; govIdx = perCombo.length - 1 }
-  }
+  })
   return govIdx < 0 ? null : { perCombo, govIdx }
 }

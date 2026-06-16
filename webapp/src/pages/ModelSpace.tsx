@@ -11,6 +11,7 @@ import { type StructureDesign, type FootingPlan, type OptimizeResult, type Later
 import { estimateTakeoff, costBill, type PriceList } from '../engine/takeoff'
 import { footingLayout } from '../engine/footingLayout'
 import { useSolver } from '../lib/useSolver'
+import type { SolveProgress } from '../engine/progress'
 import { TABLE_204_1, TABLE_204_2, sdlItemKPa, sdlTotal, type SdlItem } from '../engine/deadLoads'
 import { TABLE_205_1, TABLE_206 } from '../engine/liveLoads'
 import type { ConcreteClass } from '../engine/quantities'
@@ -98,6 +99,27 @@ function Slab3D({ corners, selected, onPick }: {
       <boxGeometry args={[sx * 0.96, 0.1, sz * 0.96]} />
       <meshStandardMaterial color={selected ? SEL : '#7ba6d4'} transparent opacity={selected ? 0.85 : 0.45} />
     </mesh>
+  )
+}
+
+/** Live solver-progress card: phase, detail, and a determinate (current/total)
+ *  or indeterminate bar. Renders nothing when idle. */
+function SolverProgress({ p }: { p: SolveProgress | null }) {
+  if (!p) return null
+  const pct = p.total && p.current ? Math.min(100, Math.round((p.current / p.total) * 100)) : null
+  return (
+    <div className="col-span-full rounded-lg border border-[#0056b3]/30 bg-blue-50/60 p-2.5">
+      <div className="flex items-center justify-between text-[11px] font-semibold text-[#0056b3]">
+        <span>⏳ {p.phase}{p.total && p.current ? ` — ${p.current}/${p.total}` : ''}</span>
+        {pct !== null && <span>{pct}%</span>}
+      </div>
+      {p.detail && <div className="mt-0.5 truncate text-[11px] text-slate-500">{p.detail}</div>}
+      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-blue-100">
+        {pct !== null
+          ? <div className="h-full rounded-full bg-[#0056b3] transition-all duration-150" style={{ width: `${pct}%` }} />
+          : <div className="h-full w-1/3 animate-pulse rounded-full bg-[#0056b3]" />}
+      </div>
+    </div>
   )
 }
 
@@ -466,7 +488,7 @@ export default function ModelSpace() {
   const [wallMember, setWallMember] = useState(''); const [wallH, setWallH] = useState(3)
   const [wallT, setWallT] = useState(150); const [wallShear, setWallShear] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
-  const { busy, run } = useSolver()   // off-thread FEM/design/optimise
+  const { busy, run, progress } = useSolver()   // off-thread FEM/design/optimise
 
   const save = (m: StructuralModel | null) => {
     setModel(m)
@@ -1576,6 +1598,7 @@ export default function ModelSpace() {
                     {busy === 'analyze' ? '⏳ Analyzing…' : '▶ Analyze (3D FEM)'}
                   </button>
                 </div>
+                {busy === 'analyze' && <SolverProgress p={progress} />}
               </Card>
 
               {gov && govRes && (
@@ -1656,6 +1679,7 @@ export default function ModelSpace() {
                     {busy === 'optimize' ? '⏳ Optimizing…' : '🏁 Optimize design'}
                   </button>
                 </div>
+                {busy && <SolverProgress p={progress} />}
                 {busy && (
                   <p className="col-span-full text-[11px] font-medium text-[#0056b3]">
                     Running in the background — the page stays responsive; results appear when ready.
