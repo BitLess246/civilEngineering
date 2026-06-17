@@ -505,7 +505,22 @@ export default function ModelSpace() {
   const [wallMember, setWallMember] = useState(''); const [wallH, setWallH] = useState(3)
   const [wallT, setWallT] = useState(150); const [wallShear, setWallShear] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const controlsRef = useRef<React.ComponentRef<typeof OrbitControls>>(null)
   const { busy, run, progress } = useSolver()   // off-thread FEM/design/optimise
+
+  // Hold Shift to PAN with a left-drag (otherwise left-drag orbits); right-drag
+  // pans too. Toggles the OrbitControls left-button mode on Shift down/up.
+  useEffect(() => {
+    const setPan = (on: boolean) => (e: KeyboardEvent) => {
+      if (e.key !== 'Shift') return
+      const c = controlsRef.current
+      if (c) c.mouseButtons.LEFT = on ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE
+    }
+    const down = setPan(true), up = setPan(false)
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up) }
+  }, [])
 
   // Persist the design inputs so a reload restores them alongside the autosaved
   // model (keeps the Geometry/Properties tabs + report inputs in sync with it).
@@ -836,6 +851,34 @@ export default function ModelSpace() {
   const selMember: Member | undefined = model?.members.find((m) => m.id === selected)
   const selPlate: Plate | undefined = model?.plates.find((p) => p.id === selected)
 
+  // immediate grid-neighbour base supports (share an x- or z-line and are the
+  // nearest column either side, nothing between) — the only sensible partners
+  // for a combined footing.
+  const adjacentBases = (nodeA: string): Set<string> => {
+    const out = new Set<string>()
+    const A = nodePos.get(nodeA); if (!A || !model) return out
+    const others = model.supports.map((s) => s.node).filter((id) => id !== nodeA && nodePos.has(id))
+    for (const [axis, other] of [['x', 'z'], ['z', 'x']] as const) {
+      const onLine = others.filter((id) => Math.abs(nodePos.get(id)![axis] - A[axis]) < 1e-4)
+      for (const dir of [1, -1]) {
+        let best: string | null = null, bestD = Infinity
+        for (const id of onLine) {
+          const d = (nodePos.get(id)![other] - A[other]) * dir
+          if (d > 1e-4 && d < bestD) { bestD = d; best = id }
+        }
+        if (best) out.add(best)
+      }
+    }
+    return out
+  }
+
+  // human-readable label for the currently-selected element (shown on the 3D view)
+  const selInfo: { kind: string; id: string; extra?: string } | null = !selected ? null
+    : selMember ? { kind: selMember.role, id: selMember.id, extra: sectionFor(selMember.id)?.name }
+      : selPlate ? { kind: selPlate.role, id: selPlate.id, extra: `t = ${selPlate.thickness} mm` }
+        : model?.nodes.some((nn) => nn.id === selected) ? { kind: 'node', id: selected }
+          : { kind: 'element', id: selected }
+
   const plateInfo = useMemo(() => {
     if (!selPlate || !model) return null
     const c = selPlate.corners.map((id) => nodePos.get(id)!)
@@ -899,7 +942,7 @@ export default function ModelSpace() {
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr] lg:items-start">
         {/* LEFT — sticky 3D viewport */}
         <div className="no-print lg:sticky lg:top-4">
-          <div className="h-[80vh] min-h-[460px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="relative h-[80vh] min-h-[460px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             {model ? (
               <Canvas camera={{ position: [14, 11, 14], fov: 45 }} gl={{ preserveDrawingBuffer: true }} onPointerMissed={() => setSelected(null)}>
                 <color attach="background" args={['#f8fafc']} />
@@ -952,11 +995,23 @@ export default function ModelSpace() {
                   return <Wall3D key={w.id} tA={tA} tB={tB} bA={bA} bB={bB} shear={w.shearWall} />
                 })}
                 {showLoads && <Loads3D model={model} nodePos={nodePos} />}
-                <OrbitControls makeDefault target={[6, 3, 2.5]} />
+                <OrbitControls ref={controlsRef} makeDefault enablePan target={[6, 3, 2.5]} />
               </Canvas>
             ) : (
               <div className="flex h-full items-center justify-center text-sm text-slate-400">
                 Set the grid and hit “Generate model”.
+              </div>
+            )}
+            {model && selInfo && (
+              <div className="no-print absolute left-3 top-3 flex items-center gap-2 rounded-lg border border-[#0056b3]/30 bg-white/90 px-2.5 py-1 text-xs shadow-sm backdrop-blur">
+                <span className="font-semibold text-[#0056b3]">▣ {selInfo.kind} {selInfo.id}</span>
+                {selInfo.extra && <span className="text-slate-500">{selInfo.extra}</span>}
+                <button type="button" onClick={() => setSelected(null)} className="ml-0.5 text-slate-400 hover:text-red-500" title="Deselect">✕</button>
+              </div>
+            )}
+            {model && (
+              <div className="no-print pointer-events-none absolute bottom-2 left-3 text-[10px] text-slate-400">
+                drag to orbit · scroll to zoom · hold <b>Shift</b> (or right-drag) to pan
               </div>
             )}
           </div>
@@ -1317,6 +1372,7 @@ export default function ModelSpace() {
                     {model.supports.map((s) => {
                       const partner = planSel[s.node] ?? ''
                       const takenBy = Object.entries(planSel).find(([n, p]) => p === s.node && n !== s.node)?.[0]
+                      const adj = adjacentBases(s.node)            // only neighbours can be combined
                       return (
                         <label key={s.node} className="flex items-center gap-2 text-xs">
                           <span className="w-16 font-medium">{s.node}</span>
@@ -1327,7 +1383,7 @@ export default function ModelSpace() {
                               onChange={(e) => setPlanSel((p) => ({ ...p, [s.node]: e.target.value }))}
                               className="flex-1 rounded border border-slate-200 px-1 py-0.5">
                               <option value="">isolated</option>
-                              {model.supports.filter((o) => o.node !== s.node && !planSel[o.node])
+                              {model.supports.filter((o) => o.node !== s.node && !planSel[o.node] && adj.has(o.node))
                                 .map((o) => <option key={o.node} value={o.node}>combine with {o.node}</option>)}
                             </select>
                           )}
