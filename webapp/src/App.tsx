@@ -8,8 +8,9 @@ import BeamAnalysis from './pages/BeamAnalysis'
 import ColumnDesign from './pages/ColumnDesign'
 import FrameAnalysis from './pages/FrameAnalysis'
 import LoadPath from './pages/LoadPath'
-// three.js is heavy — the 3D model space loads in its own lazy chunk.
+// three.js is heavy — the 3D pages load in their own lazy chunks.
 const ModelSpace = lazy(() => import('./pages/ModelSpace'))
+const TrussSpace = lazy(() => import('./pages/TrussSpace'))
 import SlabEstimate from './pages/SlabEstimate'
 import ChbEstimate from './pages/ChbEstimate'
 import ColumnEstimate from './pages/ColumnEstimate'
@@ -47,6 +48,7 @@ function Home() {
         <Tile to="/frame">Frame Analysis (2D)</Tile>
         <Tile to="/load-path">Slab Load Path</Tile>
         <Tile to="/model">3D Model Space</Tile>
+        <Tile to="/truss">Truss Space</Tile>
       </div>
 
       <h2 className="mt-8 text-lg font-semibold text-slate-800">Material estimation (quantity take-off)</h2>
@@ -76,6 +78,11 @@ export default function App() {
       <Route path="/model" element={
         <Suspense fallback={<p className="p-8 text-center text-sm text-slate-400">Loading 3D model space…</p>}>
           <ModelSpace />
+        </Suspense>
+      } />
+      <Route path="/truss" element={
+        <Suspense fallback={<p className="p-8 text-center text-sm text-slate-400">Loading truss space…</p>}>
+          <TrussSpace />
         </Suspense>
       } />
       <Route path="/estimate/slab" element={<SlabEstimate />} />
