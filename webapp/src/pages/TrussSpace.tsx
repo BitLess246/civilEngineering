@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Text } from '@react-three/drei'
 import * as THREE from 'three'
-import { generateTruss, solveTruss, type TrussType } from '../engine/truss'
+import { generateTruss, solveTrussEnvelope, selfWeightLoads, type TrussType } from '../engine/truss'
 import { designTruss, type MemberDesign, type TrussSection } from '../engine/trussDesign'
 import { FAMILIES, shapesOf, shapeByName, effectiveSection, type SectionFamily } from '../engine/aiscSections'
 import { SectionShape } from '../components/SectionShape'
+import { FitView } from '../components/FitView'
 import { buildSectionShapes } from '../lib/sectionShapes3d'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
@@ -69,7 +70,10 @@ export default function TrussSpace() {
   const [span, setSpan] = useState(12)
   const [height, setHeight] = useState(2)
   const [panels, setPanels] = useState(4)
-  const [panelLoad, setPanelLoad] = useState(15)
+  // joint loads (kN at each loaded chord node) + self-weight (auto from section)
+  const [deadLoad, setDeadLoad] = useState(3)
+  const [liveLoad, setLiveLoad] = useState(15)
+  const [includeSW, setIncludeSW] = useState(true)
   // section & material (steel, AISC LRFD)
   const [E, setE] = useState(200000); const [Fy, setFy] = useState(248); const [K, setK] = useState(1.0)
   const [family, setFamily] = useState<SectionFamily>('L')
@@ -91,13 +95,22 @@ export default function TrussSpace() {
     return () => { window.removeEventListener('keydown', d); window.removeEventListener('keyup', u) }
   }, [])
 
-  const model = useMemo(() => generateTruss({ type, span, height, panels, panelLoad }), [type, span, height, panels, panelLoad])
-  const result = useMemo(() => solveTruss(model), [model])
+  const model = useMemo(() => generateTruss({ type, span, height, panels, panelLoad: liveLoad }), [type, span, height, panels, liveLoad])
   const eff = useMemo(() => {
     const shp = shapeByName(shapeName) ?? shapesOf(family)[0]
     return effectiveSection(shp, double && shp.family === 'L', gap)
   }, [shapeName, family, double, gap])
   const section: TrussSection = useMemo(() => ({ A: eff.A, r: eff.rmin, E, Fy, K }), [eff, E, Fy, K])
+
+  // load cases: Dead = self-weight (section-derived) + dead joint loads; Live =
+  // live joint loads. Envelope over the NSCP gravity combinations.
+  const loadedNodes = useMemo(() => [...new Set(model.loads.map((l) => l.node))], [model])
+  const dead = useMemo(() => [
+    ...(includeSW ? selfWeightLoads(model, eff.A) : []),
+    ...loadedNodes.map((n) => ({ node: n, fx: 0, fy: -deadLoad })),
+  ], [model, includeSW, eff.A, loadedNodes, deadLoad])
+  const live = useMemo(() => loadedNodes.map((n) => ({ node: n, fx: 0, fy: -liveLoad })), [loadedNodes, liveLoad])
+  const result = useMemo(() => solveTrussEnvelope(model, dead, live), [model, dead, live])
   const design = useMemo(() => (result ? designTruss(result.forces, section) : null), [result, section])
   const shapes3d = useMemo(() => buildSectionShapes(eff), [eff])   // true-scale section profiles for the 3D extrusion
 
@@ -106,11 +119,16 @@ export default function TrussSpace() {
     model.nodes.forEach((nd) => map.set(nd.id, new THREE.Vector3(nd.x, nd.y, 0)))
     return map
   }, [model])
+  const box = useMemo(() => {
+    const xs = model.nodes.map((n) => n.x), ys = model.nodes.map((n) => n.y)
+    return { min: [Math.min(...xs), Math.min(...ys), 0] as [number, number, number], max: [Math.max(...xs), Math.max(...ys), 0] as [number, number, number] }
+  }, [model])
   const designById = useMemo(() => new Map((design?.members ?? []).map((d) => [d.id, d])), [design])
 
   const cx = span / 2, cyc = height / 2
   const selForce = result?.forces.find((f) => f.id === selected)
   const selDes = selForce ? designById.get(selForce.id) : undefined
+  const serviceLoad = deadLoad + liveLoad
 
   return (
     <div className="mx-auto max-w-[1700px] p-4">
@@ -131,6 +149,7 @@ export default function TrussSpace() {
               <color attach="background" args={['#f8fafc']} />
               <ambientLight intensity={0.9} />
               <directionalLight position={[6, 12, 10]} intensity={0.8} />
+              <FitView box={box} dir={[-0.45, 0.4, 1]} />
               {model.members.map((mb) => {
                 const a = pos.get(mb.i), b = pos.get(mb.j); if (!a || !b) return null
                 const N = result?.forces.find((f) => f.id === mb.id)?.N ?? 0
@@ -141,7 +160,7 @@ export default function TrussSpace() {
                 <mesh key={nd.id} position={p}><sphereGeometry args={[0.07, 12, 12]} /><meshStandardMaterial color="#334155" /></mesh>
               ) })}
               {model.supports.map((s) => { const p = pos.get(s.node); return p ? <Support3D key={s.node} p={p} roller={!s.ux} /> : null })}
-              {model.loads.map((l, i) => { const p = pos.get(l.node); return p && Math.abs(l.fy) > 1e-6 ? <Load3D key={i} p={p} mag={Math.abs(l.fy)} /> : null })}
+              {serviceLoad > 1e-6 && loadedNodes.map((n) => { const p = pos.get(n); return p ? <Load3D key={n} p={p} mag={serviceLoad} /> : null })}
               {selForce && pos.get(selForce.i) && pos.get(selForce.j) && (
                 <Text position={[(pos.get(selForce.i)!.x + pos.get(selForce.j)!.x) / 2, (pos.get(selForce.i)!.y + pos.get(selForce.j)!.y) / 2 + 0.25, 0]}
                   fontSize={0.3} color="#0f172a" anchorX="center" anchorY="middle" outlineWidth={0.012} outlineColor="#ffffff">
@@ -174,7 +193,18 @@ export default function TrussSpace() {
             <Num label="Span" unit="m" value={span} onChange={setSpan} step="0.5" />
             <Num label="Height" unit="m" value={height} onChange={setHeight} step="0.25" />
             <Num label="Panels" value={panels} onChange={(v) => setPanels(Math.max(2, Math.round(v)))} step="1" />
-            <Num label="Joint load" unit="kN" value={panelLoad} onChange={setPanelLoad} step="1" />
+          </Card>
+
+          <Card title="Loads (NSCP combinations)">
+            <Num label="Dead joint load" unit="kN" value={deadLoad} onChange={setDeadLoad} step="1" />
+            <Num label="Live joint load" unit="kN" value={liveLoad} onChange={setLiveLoad} step="1" />
+            <label className="col-span-full flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={includeSW} onChange={(e) => setIncludeSW(e.target.checked)} />
+              <span>Add member self-weight (from the section) to Dead</span>
+            </label>
+            <p className="col-span-full text-[11px] text-slate-400">
+              Members are enveloped over <b>1.4D</b> and <b>1.2D + 1.6L</b>; each is designed for its governing combination.
+            </p>
           </Card>
 
           <Card title="Section & material (AISC steel)">
@@ -207,11 +237,12 @@ export default function TrussSpace() {
             <ResultCard title={`Analysis — ${result.determinacy.status}`}>
               <Row label="Determinacy m + r − 2j" value={`${result.determinacy.value}`}
                 sub={`m ${result.determinacy.m} · r ${result.determinacy.r} · j ${result.determinacy.j}`} alert={result.determinacy.status === 'unstable'} />
-              <Row label="Max tension" value={`${f1(result.maxTension)} kN`} />
-              <Row label="Max compression" value={`${f1(result.maxCompression)} kN`} />
+              <Row label="Max tension (factored)" value={`${f1(result.maxTension)} kN`} />
+              <Row label="Max compression (factored)" value={`${f1(result.maxCompression)} kN`} />
               {result.reactions.map((r2) => (
                 <Row key={r2.node} label={`Reaction @ ${r2.node}`} value={`${f1(r2.fy)} kN ↑`} sub={r2.fx ? `H ${f1(r2.fx)} kN` : undefined} />
               ))}
+              <Row label="Reactions / forces from" value={result.reactionCombo} sub="member forces enveloped over 1.4D & 1.2D+1.6L" />
               {design && <Row alert={!design.allOK} label="Design" value={design.allOK ? `OK · max util ${(design.maxUtil * 100).toFixed(0)}%` : `✗ max util ${(design.maxUtil * 100).toFixed(0)}%`} />}
             </ResultCard>
           )}
@@ -236,6 +267,7 @@ export default function TrussSpace() {
                   <th className="py-1 pr-2 text-right font-semibold">L (m)</th>
                   <th className="py-1 pr-2 text-right font-semibold">Force (kN)</th>
                   <th className="py-1 pr-2 font-semibold">Sense</th>
+                  <th className="py-1 pr-2 font-semibold">Combo</th>
                   <th className="py-1 pr-2 text-right font-semibold">KL/r</th>
                   <th className="py-1 pr-2 text-right font-semibold">φPn (kN)</th>
                   <th className="py-1 text-right font-semibold">Util</th>
@@ -253,6 +285,7 @@ export default function TrussSpace() {
                       <td className="py-1 pr-2 text-right">{f2(f.L)}</td>
                       <td className="py-1 pr-2 text-right">{f1(Math.abs(f.N))}</td>
                       <td className={`py-1 pr-2 ${f.N >= 0 ? 'text-blue-700' : 'text-red-600'}`}>{d.mode === 'zero' ? '—' : f.N >= 0 ? 'T' : 'C'}</td>
+                      <td className="py-1 pr-2 text-slate-500">{f.combo}</td>
                       <td className="py-1 pr-2 text-right">{d.mode === 'compression' ? Math.round(d.slenderness) + (d.slenderOK ? '' : ' ⚠') : '—'}</td>
                       <td className="py-1 pr-2 text-right">{f1(d.phiPn)}</td>
                       <td className="py-1 text-right">{(d.util * 100).toFixed(0)}%</td>

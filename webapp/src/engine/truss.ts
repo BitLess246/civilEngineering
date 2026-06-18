@@ -170,3 +170,71 @@ export function solveTruss(model: TrussModel): TrussResult | null {
   const status: Determinacy['status'] = value < 0 ? 'unstable' : value === 0 ? 'determinate' : 'indeterminate'
   return { forces, reactions, determinacy: { m: members.length, r, j, value, status }, maxTension, maxCompression, stable: true }
 }
+
+// ── Phase 2: self-weight + NSCP load combinations ──────────────────────────
+const STEEL_UNIT_WT = 77.0   // kN/m³ (7850 kg/m³ · g)
+
+/** Member self-weight (kN) lumped half to each end joint as a downward load (D).
+ *  `areaMm2` = the chosen section area. */
+export function selfWeightLoads(model: TrussModel, areaMm2: number, gamma = STEEL_UNIT_WT): TLoad[] {
+  const nm = new Map(model.nodes.map((n) => [n.id, n]))
+  const w = new Map<string, number>()
+  for (const m of model.members) {
+    const a = nm.get(m.i), b = nm.get(m.j); if (!a || !b) continue
+    const wt = (areaMm2 / 1e6) * len(a, b) * gamma   // kN over the member
+    w.set(m.i, (w.get(m.i) ?? 0) + wt / 2)
+    w.set(m.j, (w.get(m.j) ?? 0) + wt / 2)
+  }
+  return [...w].map(([node, mag]) => ({ node, fx: 0, fy: -mag }))
+}
+
+/** Gravity NSCP load combinations applicable to a truss (D, L only). */
+export const TRUSS_COMBOS: { name: string; D: number; L: number }[] = [
+  { name: '1.4D', D: 1.4, L: 0 },
+  { name: '1.2D + 1.6L', D: 1.2, L: 1.6 },
+]
+
+export interface EnvForce extends MemberForce { combo: string }
+export interface TrussEnvelope {
+  forces: EnvForce[]                 // governing (max |N|) per member, with the combo
+  reactions: Reaction[]              // for the governing-gravity combo
+  reactionCombo: string
+  determinacy: Determinacy
+  maxTension: number; maxCompression: number
+  stable: boolean
+}
+
+/**
+ * Envelope a truss over the NSCP gravity combinations. Solves the Dead and Live
+ * cases once each (linear superposition) and, per member, keeps the combination
+ * giving the largest |axial force|. Reactions are reported for the combo with
+ * the greatest total vertical reaction.
+ */
+export function solveTrussEnvelope(model: TrussModel, dead: TLoad[], live: TLoad[]): TrussEnvelope | null {
+  const rD = solveTruss({ ...model, loads: dead })
+  const rL = solveTruss({ ...model, loads: live })
+  if (!rD || !rL) return null
+  if (!rD.stable) return { forces: [], reactions: [], reactionCombo: '', determinacy: rD.determinacy, maxTension: 0, maxCompression: 0, stable: false }
+
+  const forces: EnvForce[] = rD.forces.map((fD, i) => {
+    const fL = rL.forces[i]
+    let bestN = 0, bestCombo = TRUSS_COMBOS[0].name
+    for (const c of TRUSS_COMBOS) {
+      const N = c.D * fD.N + c.L * fL.N
+      if (Math.abs(N) > Math.abs(bestN)) { bestN = N; bestCombo = c.name }
+    }
+    return { ...fD, N: bestN, combo: bestCombo }
+  })
+  const maxTension = Math.max(0, ...forces.map((f) => f.N))
+  const maxCompression = Math.max(0, ...forces.map((f) => -f.N))
+
+  // reactions for the combo with the largest total vertical reaction
+  let bestTotal = -Infinity, reactions: Reaction[] = rD.reactions, reactionCombo = TRUSS_COMBOS[0].name
+  for (const c of TRUSS_COMBOS) {
+    const rx = rD.reactions.map((r, k) => ({ node: r.node, fx: c.D * r.fx + c.L * rL.reactions[k].fx, fy: c.D * r.fy + c.L * rL.reactions[k].fy }))
+    const total = rx.reduce((s, r) => s + r.fy, 0)
+    if (total > bestTotal) { bestTotal = total; reactions = rx; reactionCombo = c.name }
+  }
+
+  return { forces, reactions, reactionCombo, determinacy: rD.determinacy, maxTension, maxCompression, stable: true }
+}

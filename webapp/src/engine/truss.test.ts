@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { generateTruss, solveTruss, type TrussModel } from './truss'
+import { generateTruss, solveTruss, selfWeightLoads, solveTrussEnvelope, TRUSS_COMBOS, type TrussModel } from './truss'
 import { designTruss, designTrussMember } from './trussDesign'
 
 describe('truss solver — statics', () => {
@@ -49,6 +49,37 @@ describe('truss solver — statics', () => {
       expect(r, type).not.toBeNull()
       expect(r!.stable, type).toBe(true)
     }
+  })
+})
+
+describe('truss self-weight + NSCP load combinations', () => {
+  const m = generateTruss({ type: 'pratt', span: 12, height: 2, panels: 4, panelLoad: 0 })
+
+  it('self-weight lumps the total member weight half to each end joint', () => {
+    const sw = selfWeightLoads(m, 3000)   // A = 3000 mm² = 0.003 m²
+    const total = sw.reduce((s, l) => s - l.fy, 0)   // all downward
+    const memberLen = m.members.reduce((s, mb) => {
+      const a = m.nodes.find((n) => n.id === mb.i)!, b = m.nodes.find((n) => n.id === mb.j)!
+      return s + Math.hypot(b.x - a.x, b.y - a.y)
+    }, 0)
+    expect(total).toBeCloseTo(0.003 * memberLen * 77.0, 6)   // Σ joint loads = Σ member weight
+  })
+
+  it('envelope picks the governing combo and balances the factored load', () => {
+    const loaded = [...new Set(m.loads.map((l) => l.node))]   // top-chord nodes
+    const dead = loaded.map((n) => ({ node: n, fx: 0, fy: -4 }))
+    const live = loaded.map((n) => ({ node: n, fx: 0, fy: -10 }))
+    const env = solveTrussEnvelope(m, dead, live)!
+    expect(env.stable).toBe(true)
+    // 1.2D+1.6L (1.6·10 dominates) should govern the reactions over 1.4D
+    expect(env.reactionCombo).toBe('1.2D + 1.6L')
+    const Ry = env.reactions.reduce((s, r) => s + r.fy, 0)
+    const factored = loaded.length * (1.2 * 4 + 1.6 * 10)
+    expect(Ry).toBeCloseTo(factored, 3)
+    // every member carries a combo label from the set
+    const names = TRUSS_COMBOS.map((c) => c.name)
+    expect(env.forces.every((f) => names.includes(f.combo))).toBe(true)
+    expect(env.forces).toHaveLength(m.members.length)
   })
 })
 

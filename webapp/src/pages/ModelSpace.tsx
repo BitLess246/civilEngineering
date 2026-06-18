@@ -27,6 +27,7 @@ import { FootingSchematic } from '../components/FootingSchematic'
 import { DimBelow, DimSide } from '../components/dims'
 import { HintButton, SeismicHint, WindHint } from '../components/LoadHints'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
+import { FitView } from '../components/FitView'
 import { f1, f2 } from '../lib/format'
 
 const AUTOSAVE_KEY = 'model-space-autosave'
@@ -847,6 +848,12 @@ export default function ModelSpace() {
     model?.nodes.forEach((n) => map.set(n.id, new THREE.Vector3(n.x, n.y, n.z)))
     return map
   }, [model])
+  // model bounds → zoom-to-extents on load / after generate
+  const modelBox = useMemo(() => {
+    if (!model || model.nodes.length === 0) return null
+    const xs = model.nodes.map((n) => n.x), ys = model.nodes.map((n) => n.y), zs = model.nodes.map((n) => n.z)
+    return { min: [Math.min(...xs), Math.min(...ys), Math.min(...zs)] as [number, number, number], max: [Math.max(...xs), Math.max(...ys), Math.max(...zs)] as [number, number, number] }
+  }, [model])
 
   const selMember: Member | undefined = model?.members.find((m) => m.id === selected)
   const selPlate: Plate | undefined = model?.plates.find((p) => p.id === selected)
@@ -948,6 +955,7 @@ export default function ModelSpace() {
                 <color attach="background" args={['#f8fafc']} />
                 <ambientLight intensity={0.85} />
                 <directionalLight position={[12, 18, 8]} intensity={0.9} />
+                <FitView box={modelBox} dir={[1, 0.8, 1]} />
                 <gridHelper args={[40, 40, '#cbd5e1', '#e2e8f0']} />
                 {model.members.map((m) => {
                   const a = nodePos.get(m.i), bb = nodePos.get(m.j)
