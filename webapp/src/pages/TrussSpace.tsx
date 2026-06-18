@@ -5,6 +5,8 @@ import { OrbitControls, Text } from '@react-three/drei'
 import * as THREE from 'three'
 import { generateTruss, solveTruss, type TrussType } from '../engine/truss'
 import { designTruss, type MemberDesign, type TrussSection } from '../engine/trussDesign'
+import { FAMILIES, shapesOf, shapeByName, effectiveSection, type SectionFamily } from '../engine/aiscSections'
+import { SectionShape } from '../components/SectionShape'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
 import { f1, f2 } from '../lib/format'
@@ -38,13 +40,15 @@ function Support3D({ p, roller }: { p: THREE.Vector3; roller: boolean }) {
   )
 }
 
-/** Downward load arrow at a loaded joint. */
+/** Downward load arrow at a loaded joint — head at the bottom, pointing DOWN. */
 function Load3D({ p, mag }: { p: THREE.Vector3; mag: number }) {
   const h = Math.min(1.4, 0.4 + mag / 20)
+  const head = 0.18
   return (
-    <group position={[p.x, p.y + h / 2 + 0.18, p.z]}>
-      <mesh><cylinderGeometry args={[0.03, 0.03, h, 8]} /><meshStandardMaterial color="#16a34a" /></mesh>
-      <mesh position={[0, -h / 2, 0]}><coneGeometry args={[0.1, 0.18, 12]} /><meshStandardMaterial color="#16a34a" /></mesh>
+    <group position={[p.x, p.y + 0.18, p.z]}>
+      {/* shaft sits above the joint; arrowhead at the joint, apex pointing down */}
+      <mesh position={[0, head + (h - head) / 2, 0]}><cylinderGeometry args={[0.03, 0.03, h - head, 8]} /><meshStandardMaterial color="#16a34a" /></mesh>
+      <mesh position={[0, head / 2, 0]} rotation={[Math.PI, 0, 0]}><coneGeometry args={[0.1, head, 12]} /><meshStandardMaterial color="#16a34a" /></mesh>
     </group>
   )
 }
@@ -56,8 +60,11 @@ export default function TrussSpace() {
   const [panels, setPanels] = useState(4)
   const [panelLoad, setPanelLoad] = useState(15)
   // section & material (steel, AISC LRFD)
-  const [E, setE] = useState(200000); const [Fy, setFy] = useState(248)
-  const [A, setA] = useState(1500); const [rg, setRg] = useState(25); const [K, setK] = useState(1.0)
+  const [E, setE] = useState(200000); const [Fy, setFy] = useState(248); const [K, setK] = useState(1.0)
+  const [family, setFamily] = useState<SectionFamily>('L')
+  const [shapeName, setShapeName] = useState('L102x102x9.5')
+  const [double, setDouble] = useState(true)        // double angle (2L) when family = L
+  const [gap, setGap] = useState(10)                // gusset gap, mm
   const [selected, setSelected] = useState<string | null>(null)
   const controlsRef = useRef<React.ComponentRef<typeof OrbitControls>>(null)
 
@@ -75,7 +82,11 @@ export default function TrussSpace() {
 
   const model = useMemo(() => generateTruss({ type, span, height, panels, panelLoad }), [type, span, height, panels, panelLoad])
   const result = useMemo(() => solveTruss(model), [model])
-  const section: TrussSection = useMemo(() => ({ A, r: rg, E, Fy, K }), [A, rg, E, Fy, K])
+  const eff = useMemo(() => {
+    const shp = shapeByName(shapeName) ?? shapesOf(family)[0]
+    return effectiveSection(shp, double && shp.family === 'L', gap)
+  }, [shapeName, family, double, gap])
+  const section: TrussSection = useMemo(() => ({ A: eff.A, r: eff.rmin, E, Fy, K }), [eff, E, Fy, K])
   const design = useMemo(() => (result ? designTruss(result.forces, section) : null), [result, section])
 
   const pos = useMemo(() => {
@@ -156,12 +167,30 @@ export default function TrussSpace() {
             <Num label="Joint load" unit="kN" value={panelLoad} onChange={setPanelLoad} step="1" />
           </Card>
 
-          <Card title="Section & material (steel)">
-            <Num label="Area A" unit="mm²" value={A} onChange={setA} step="50" />
-            <Num label="Radius of gyration r" unit="mm" value={rg} onChange={setRg} step="1" />
-            <Num label="E" unit="MPa" value={E} onChange={setE} step="1000" />
+          <Card title="Section & material (AISC steel)">
+            <Pick label="Family" value={family} onChange={(v) => { const fam = v as SectionFamily; setFamily(fam); setShapeName(shapesOf(fam)[0].name) }}
+              options={FAMILIES.map((f) => [f.id, f.label])} />
+            <Pick label="Shape" value={shapeName} onChange={setShapeName}
+              options={shapesOf(family).map((s) => [s.name, s.name])} />
+            {family === 'L' && (
+              <label className="col-span-full flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={double} onChange={(e) => setDouble(e.target.checked)} />
+                <span>Double angle (2L, back-to-back)</span>
+              </label>
+            )}
+            {family === 'L' && double && <Num label="Gusset gap" unit="mm" value={gap} onChange={setGap} step="1" />}
             <Num label="Fy" unit="MPa" value={Fy} onChange={setFy} step="5" />
+            <Num label="E" unit="MPa" value={E} onChange={setE} step="1000" />
             <Num label="Effective length K" value={K} onChange={setK} step="0.05" />
+            <div className="col-span-full flex items-center gap-3 border-t border-slate-100 pt-2">
+              <SectionShape sec={eff} />
+              <div className="text-[11px] text-slate-500">
+                <div className="font-semibold text-[#0056b3]">{eff.label}</div>
+                <div>A = {Math.round(eff.A)} mm²</div>
+                <div>rx {eff.rx.toFixed(1)} · ry {eff.ry.toFixed(1)} mm</div>
+                <div>r_min = {eff.rmin.toFixed(1)} mm (governs buckling)</div>
+              </div>
+            </div>
           </Card>
 
           {result && (
@@ -185,7 +214,7 @@ export default function TrussSpace() {
           <h2 className="text-xl font-extrabold tracking-tight text-[#0056b3]">
             Truss member schedule — {type} · {f1(span)} m span
             <span className="ml-3 text-sm font-normal text-slate-500">
-              {result.determinacy.status} · A {A} mm² · Fy {Fy} MPa · max util {(design.maxUtil * 100).toFixed(0)}%
+              {result.determinacy.status} · {eff.label} · Fy {Fy} MPa · max util {(design.maxUtil * 100).toFixed(0)}%
             </span>
           </h2>
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
