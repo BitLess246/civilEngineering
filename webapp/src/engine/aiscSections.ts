@@ -112,8 +112,9 @@ export interface EffectiveSection {
 }
 
 /** Back-to-back double angle: A doubles; rx unchanged; ry grows by the
- *  parallel-axis shift of each leg's centroid across the gap. */
-export function doubleAngle(angle: AiscShape, gap = 10): EffectiveSection {
+ *  parallel-axis shift of each leg's centroid across the gap (= separator/gusset
+ *  plate thickness, 0 = angles touching). */
+export function doubleAngle(angle: AiscShape, gap = 0): EffectiveSection {
   const xbar = angle.xbar ?? 0
   const ry2 = Math.sqrt(angle.ry * angle.ry + (xbar + gap / 2) ** 2)
   const rx2 = angle.rx
@@ -125,7 +126,7 @@ export function doubleAngle(angle: AiscShape, gap = 10): EffectiveSection {
 }
 
 /** Resolve a chosen shape (optionally doubled) into the effective section. */
-export function effectiveSection(shape: AiscShape, double = false, gap = 10): EffectiveSection {
+export function effectiveSection(shape: AiscShape, double = false, gap = 0): EffectiveSection {
   if (double && shape.family === 'L') return doubleAngle(shape, gap)
   const rmin = shape.family === 'L' ? Math.min(shape.rz ?? shape.rx, shape.rx) : Math.min(shape.rx, shape.ry)
   return { label: shape.name, family: shape.family, A: shape.A, rx: shape.rx, ry: shape.ry, rmin, double: false, base: shape }

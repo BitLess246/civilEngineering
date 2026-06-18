@@ -8,12 +8,13 @@ const FILL = '#94a3b8', EDGE = '#37526e', BLUE = '#0056b3'
 export function SectionShape({ sec }: { sec: EffectiveSection }) {
   const VB = 150, pad = 22
   const s = sec.base
+  // for angles: longer leg = connected (drawn vertical), shorter = outstanding
+  const legV = Math.max(s.leg1 ?? 50, s.leg2 ?? 50), legH = Math.min(s.leg1 ?? 50, s.leg2 ?? 50)
   // overall bounding box (mm) of what we draw
   const box = (() => {
-    if (sec.double && s.leg1) return { w: 2 * (s.leg1 ?? 0) + (sec.gap ?? 10), h: s.leg2 ?? 0 }
+    if (s.family === 'L') return sec.double ? { w: 2 * legH + (sec.gap ?? 0), h: legV } : { w: legH, h: legV }
     if (s.family === 'W' || s.family === 'WT') return { w: s.bf ?? 100, h: s.d ?? 100 }
     if (s.family === 'C') return { w: (s.bf ?? 60) + (s.tw ?? 10), h: s.d ?? 100 }
-    if (s.family === 'L') return { w: s.leg1 ?? 50, h: s.leg2 ?? 50 }
     if (s.family === 'HSS') return { w: s.b ?? 100, h: s.h ?? 100 }
     return { w: s.D ?? 100, h: s.D ?? 100 }   // pipe
   })()
@@ -47,12 +48,16 @@ export function SectionShape({ sec }: { sec: EffectiveSection }) {
       </>
     }
     if (s.family === 'L') {
-      const t = px(s.t ?? 8), l1 = px(s.leg1 ?? 50), l2 = px(s.leg2 ?? 50), g = px(sec.gap ?? 10)
-      const angle = (x0: number, flip = false) => flip
-        ? <path d={`M ${x0 + l1} ${oy} h ${-t} v ${l2 - t} h ${-(l1 - t)} v ${t} h ${l1} Z`} fill={FILL} stroke={EDGE} />
-        : <path d={`M ${x0} ${oy} h ${t} v ${l2 - t} h ${l1 - t} v ${t} h ${-l1} Z`} fill={FILL} stroke={EDGE} />
-      if (sec.double) return <>{angle(ox)}{angle(ox + l1 + g, true)}</>
-      return angle(ox)
+      // vertical (connected) leg of length legV at the heel; outstanding leg of
+      // length legH along the bottom. dir = +1 → leg extends right, −1 → left.
+      const t = px(s.t ?? 8), lv = px(legV), lh = px(legH), bot = oy + H
+      const angle = (heelX: number, dir: 1 | -1) =>
+        <path d={`M ${heelX} ${bot} h ${dir * lh} v ${-t} h ${-dir * (lh - t)} v ${-(lv - t)} h ${-dir * t} Z`} fill={FILL} stroke={EDGE} />
+      if (sec.double) {
+        const g = px(sec.gap ?? 0), cxL = ox + W / 2
+        return <>{angle(cxL - g / 2, -1)}{angle(cxL + g / 2, 1)}</>   // long legs back-to-back at centre
+      }
+      return angle(ox, 1)
     }
     if (s.family === 'HSS') {
       const t = px(s.t ?? 6)

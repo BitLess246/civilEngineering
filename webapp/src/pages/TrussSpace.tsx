@@ -7,27 +7,38 @@ import { generateTruss, solveTruss, type TrussType } from '../engine/truss'
 import { designTruss, type MemberDesign, type TrussSection } from '../engine/trussDesign'
 import { FAMILIES, shapesOf, shapeByName, effectiveSection, type SectionFamily } from '../engine/aiscSections'
 import { SectionShape } from '../components/SectionShape'
+import { buildSectionShapes } from '../lib/sectionShapes3d'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
 import { f1, f2 } from '../lib/format'
 
 const TENSION = '#1d4ed8', COMPRESSION = '#dc2626', ZERO = '#94a3b8', SEL = '#f59e0b'
-const UP = new THREE.Vector3(0, 1, 0)
+const WORLD_Z = new THREE.Vector3(0, 0, 1)
 
-/** A truss member drawn as a coloured cylinder (blue = tension, red = compression). */
-function Member3D({ a, b, color, thick, selected, onPick }: {
-  a: THREE.Vector3; b: THREE.Vector3; color: string; thick: number; selected: boolean; onPick: () => void
+/** A truss member drawn as its ACTUAL cross-section extruded along the member,
+ *  coloured blue = tension / red = compression. */
+function Member3D({ a, b, shapes, color, selected, onPick }: {
+  a: THREE.Vector3; b: THREE.Vector3; shapes: THREE.Shape[]; color: string; selected: boolean; onPick: () => void
 }) {
-  const dir = useMemo(() => new THREE.Vector3().subVectors(b, a), [a, b])
-  const len = dir.length()
-  const mid = useMemo(() => new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5), [a, b])
-  const quat = useMemo(() => new THREE.Quaternion().setFromUnitVectors(UP, dir.clone().normalize()), [dir])
-  const r = (selected ? 1.6 : 1) * thick
+  const len = useMemo(() => a.distanceTo(b), [a, b])
+  // basis: extrude along the member axis; section "height" points out of plane.
+  const quat = useMemo(() => {
+    const z = new THREE.Vector3().subVectors(b, a).normalize()
+    let x = new THREE.Vector3().crossVectors(z, WORLD_Z)
+    if (x.lengthSq() < 1e-9) x = new THREE.Vector3(1, 0, 0)
+    x.normalize()
+    const y = new THREE.Vector3().crossVectors(z, x).normalize()
+    return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z))
+  }, [a, b])
   return (
-    <mesh position={mid} quaternion={quat} onClick={(e) => { e.stopPropagation(); onPick() }}>
-      <cylinderGeometry args={[r, r, len, 10]} />
-      <meshStandardMaterial color={selected ? SEL : color} />
-    </mesh>
+    <group position={a} quaternion={quat} onClick={(e) => { e.stopPropagation(); onPick() }}>
+      {shapes.map((sh, i) => (
+        <mesh key={i}>
+          <extrudeGeometry args={[sh, { depth: len, bevelEnabled: false, steps: 1 }]} />
+          <meshStandardMaterial color={selected ? SEL : color} metalness={0.1} roughness={0.65} />
+        </mesh>
+      ))}
+    </group>
   )
 }
 
@@ -64,7 +75,7 @@ export default function TrussSpace() {
   const [family, setFamily] = useState<SectionFamily>('L')
   const [shapeName, setShapeName] = useState('L102x102x9.5')
   const [double, setDouble] = useState(true)        // double angle (2L) when family = L
-  const [gap, setGap] = useState(10)                // gusset gap, mm
+  const [gap, setGap] = useState(0)                 // separator/gusset plate thickness, mm (0 = touching)
   const [selected, setSelected] = useState<string | null>(null)
   const controlsRef = useRef<React.ComponentRef<typeof OrbitControls>>(null)
 
@@ -88,13 +99,13 @@ export default function TrussSpace() {
   }, [shapeName, family, double, gap])
   const section: TrussSection = useMemo(() => ({ A: eff.A, r: eff.rmin, E, Fy, K }), [eff, E, Fy, K])
   const design = useMemo(() => (result ? designTruss(result.forces, section) : null), [result, section])
+  const shapes3d = useMemo(() => buildSectionShapes(eff), [eff])   // true-scale section profiles for the 3D extrusion
 
   const pos = useMemo(() => {
     const map = new Map<string, THREE.Vector3>()
     model.nodes.forEach((nd) => map.set(nd.id, new THREE.Vector3(nd.x, nd.y, 0)))
     return map
   }, [model])
-  const maxAbs = Math.max(1e-6, ...(result?.forces.map((f) => Math.abs(f.N)) ?? [1]))
   const designById = useMemo(() => new Map((design?.members ?? []).map((d) => [d.id, d])), [design])
 
   const cx = span / 2, cyc = height / 2
@@ -116,7 +127,7 @@ export default function TrussSpace() {
         {/* 3D viewport */}
         <div className="no-print lg:sticky lg:top-4">
           <div className="relative h-[70vh] min-h-[420px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <Canvas camera={{ position: [cx, cyc + height * 0.5 + 1, Math.max(span, 6) * 1.25], fov: 45 }} onPointerMissed={() => setSelected(null)}>
+            <Canvas camera={{ position: [cx - span * 0.35, cyc + height + span * 0.22, Math.max(span, 6) * 1.0], fov: 45 }} onPointerMissed={() => setSelected(null)}>
               <color attach="background" args={['#f8fafc']} />
               <ambientLight intensity={0.9} />
               <directionalLight position={[6, 12, 10]} intensity={0.8} />
@@ -124,8 +135,7 @@ export default function TrussSpace() {
                 const a = pos.get(mb.i), b = pos.get(mb.j); if (!a || !b) return null
                 const N = result?.forces.find((f) => f.id === mb.id)?.N ?? 0
                 const color = Math.abs(N) < 1e-6 ? ZERO : N > 0 ? TENSION : COMPRESSION
-                const thick = 0.03 + 0.06 * (Math.abs(N) / maxAbs)
-                return <Member3D key={mb.id} a={a} b={b} color={color} thick={thick} selected={mb.id === selected} onPick={() => setSelected(mb.id)} />
+                return <Member3D key={mb.id} a={a} b={b} shapes={shapes3d} color={color} selected={mb.id === selected} onPick={() => setSelected(mb.id)} />
               })}
               {model.nodes.map((nd) => { const p = pos.get(nd.id)!; return (
                 <mesh key={nd.id} position={p}><sphereGeometry args={[0.07, 12, 12]} /><meshStandardMaterial color="#334155" /></mesh>
@@ -178,7 +188,7 @@ export default function TrussSpace() {
                 <span>Double angle (2L, back-to-back)</span>
               </label>
             )}
-            {family === 'L' && double && <Num label="Gusset gap" unit="mm" value={gap} onChange={setGap} step="1" />}
+            {family === 'L' && double && <Num label="Separator plate thickness" unit="mm" value={gap} onChange={setGap} step="1" />}
             <Num label="Fy" unit="MPa" value={Fy} onChange={setFy} step="5" />
             <Num label="E" unit="MPa" value={E} onChange={setE} step="1000" />
             <Num label="Effective length K" value={K} onChange={setK} step="0.05" />
