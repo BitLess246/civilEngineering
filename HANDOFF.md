@@ -35,7 +35,7 @@ npm run build    # typecheck + production build
 ```
 
 ## Current state (all merged to `main`)
-Latest merged work — PRs **#178, #179, #180**:
+Latest merged work — PRs **#178, #179, #180** (main); **Truss Phase 3** open PR:
 - **Truss Space** (`/truss`): planar pin-jointed truss — generate (Pratt / Howe /
   Warren / pitched-roof), analyse axial forces, AISC-LRFD member design.
 - **AISC section library** (`webapp/src/engine/aiscSections.ts`) — W/C/L/HSS/Pipe/
@@ -46,6 +46,16 @@ Latest merged work — PRs **#178, #179, #180**:
 - **Zoom-to-extents on load** for both 3D pages (`components/FitView.tsx`).
 - **Truss Phase 2**: member self-weight from the section + NSCP gravity
   combinations (1.4D, 1.2D+1.6L) enveloped per member (`engine/truss.ts`).
+- **Truss Phase 3** (`engine/trussTakeoff.ts` + `TrussSpace.tsx`): per-member
+  steel weight (A × L × 7850 kg/m³), subtotals by chord kind, gusset/connection
+  plate allowance (editable %), priced Bill of Materials (₱/kg, live totals).
+- **Truss Phase 4** (same PR): two more roof types — **Fink** (W-web) and
+  **scissor** (raised tie) in `engine/truss.ts` (determinate for n = 4/6/8,
+  tested); **free-form editor** (`components/TrussEditor.tsx`) to edit nodes /
+  members / supports / loaded joints live; **custom section** input (enter A, rₓ,
+  r_y directly); expanded **AISC HSS/Pipe** sizes (computed nominal geometry,
+  documented) in `engine/aiscSections.ts`. PDF export already works via the
+  browser-print path in `components/ReportControls.tsx`.
 
 ## Key paths
 - 3D RC frame page: `webapp/src/pages/ModelSpace.tsx` (route `/model`)
@@ -56,11 +66,10 @@ Latest merged work — PRs **#178, #179, #180**:
 - Routes + home tiles: `webapp/src/App.tsx`
 
 ## Next up — roadmap
-- **Truss Phase 3**: truss material take-off + **priced Bill of Materials**
-  (steel weight by section + connection/gusset allowance), mirroring the frame
-  page's BOM/BOQ.
-- Optional: bulk-load the **full AISC v15 shape database** (current set is a
-  representative subset, structured to drop the full table straight in).
-- Optional: free-form truss node/member editor; more roof types (Fink, scissor).
+- Optional: bulk-import the **full official AISC v15 metric table** as data
+  (CSV/JSON drop-in). Current library is a curated real-value set plus computed
+  nominal HSS/Pipe sizes; a custom-section input covers anything not tabulated.
+- Optional: save / load custom trusses (localStorage or file); drag nodes in 3D.
+- Optional: more roof forms (Fink fan/double-Fink, gambrel), wind/uplift cases.
 
-_Tests at last handoff: 253 passing; `tsc -b` clean._
+_Tests at last handoff: 264 passing; `tsc -b` clean; production build OK._

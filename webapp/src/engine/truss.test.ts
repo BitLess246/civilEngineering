@@ -44,11 +44,26 @@ describe('truss solver — statics', () => {
   })
 
   it('every generator produces a stable, determinate truss', () => {
-    for (const type of ['pratt', 'howe', 'warren', 'roof'] as const) {
-      const r = solveTruss(generateTruss({ type, span: 10, height: 2.5, panels: 4, panelLoad: 8 }))
-      expect(r, type).not.toBeNull()
-      expect(r!.stable, type).toBe(true)
+    for (const type of ['pratt', 'howe', 'warren', 'roof', 'fink', 'scissor'] as const) {
+      for (const panels of [4, 6, 8]) {
+        const r = solveTruss(generateTruss({ type, span: 10, height: 2.5, panels, panelLoad: 8 }))
+        expect(r, `${type} n=${panels}`).not.toBeNull()
+        expect(r!.stable, `${type} n=${panels}`).toBe(true)
+        expect(r!.determinacy.status, `${type} n=${panels}`).toBe('determinate')
+        const Ry = r!.reactions.reduce((s, x) => s + x.fy, 0)
+        const load = generateTruss({ type, span: 10, height: 2.5, panels, panelLoad: 8 }).loads.reduce((s, l) => s - l.fy, 0)
+        expect(Ry, `${type} n=${panels}`).toBeCloseTo(load, 3)   // statics balance
+      }
     }
+  })
+
+  it('scissor raises the bottom-chord tie to a mid-span apex', () => {
+    const m = generateTruss({ type: 'scissor', span: 12, height: 3, panels: 6, panelLoad: 10 })
+    const ends = m.nodes.filter((n) => n.id === 'b0' || n.id === 'b6')
+    expect(ends.every((n) => n.y === 0)).toBe(true)             // supports stay at y = 0
+    const apexBottom = m.nodes.find((n) => n.id === 'b3')!       // mid-span tie node
+    expect(apexBottom.y).toBeGreaterThan(0)                      // raised (vaulted ceiling)
+    expect(apexBottom.y).toBeLessThan(3)                         // below the top apex
   })
 })
 

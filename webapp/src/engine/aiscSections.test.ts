@@ -40,4 +40,21 @@ describe('AISC section library', () => {
     expect(w.double).toBe(false)
     expect(w.A).toBe(4190)
   })
+
+  it('computed nominal tubes match the sharp-corner geometry formulas', () => {
+    // square HSS127x127x9.5: A = b² − (b−2t)²
+    const sq = shapeByName('HSS127x127x9.5')!
+    const bi = 127 - 2 * 9.5
+    expect(sq.A).toBe(Math.round(127 * 127 - bi * bi))
+    expect(sq.rx).toBeCloseTo(sq.ry!, 6)                 // square → rx = ry
+    // rectangular HSS254x152x9.5: deeper section is stiffer about x (rx > ry)
+    const rect = shapeByName('HSS254x152x9.5')!
+    expect(rect.h).toBe(254); expect(rect.b).toBe(152)
+    expect(rect.rx).toBeGreaterThan(rect.ry!)
+    // round pipe: A = π/4·(D² − (D−2t)²)
+    const p = shapeByName('PIPE 8 STD')!
+    const Di = 219.1 - 2 * 8.2
+    expect(p.A).toBe(Math.round((Math.PI / 4) * (219.1 ** 2 - Di ** 2)))
+    expect(p.rx).toBeCloseTo(Math.sqrt(219.1 ** 2 + Di ** 2) / 4, 1)
+  })
 })

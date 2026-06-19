@@ -17,7 +17,7 @@ export interface TrussModel {
   E: number; A: number       // uniform material/section: MPa, mm²
 }
 
-export type TrussType = 'pratt' | 'howe' | 'warren' | 'roof'
+export type TrussType = 'pratt' | 'howe' | 'warren' | 'roof' | 'fink' | 'scissor'
 export interface TrussSpec {
   type: TrussType
   span: number; height: number; panels: number      // m, m, count
@@ -25,6 +25,12 @@ export interface TrussSpec {
 }
 
 const len = (a: TNode, b: TNode) => Math.hypot(b.x - a.x, b.y - a.y)
+
+/** Roof (gable) types: apex at mid-span, end top nodes coincide with the
+ *  supports. `scissor` additionally raises the bottom chord toward mid-span. */
+const isGable = (t: TrussType) => t === 'roof' || t === 'fink' || t === 'scissor'
+/** Scissor tie raised at mid-span as a fraction of the truss height. */
+const SCISSOR_RISE = 0.45
 
 /** Parametric truss generator. Pin at the left support, roller at the right;
  *  a downward `panelLoad` is seeded at every loaded (top-chord) joint. */
@@ -35,16 +41,19 @@ export function generateTruss(spec: TrussSpec): TrussModel {
   const members: TMember[] = []
   const add = (i: string, j: string, kind: ChordKind) => members.push({ id: `m${members.length}`, i, j, kind })
 
-  const roof = spec.type === 'roof'
+  const gable = isGable(spec.type)
   const mid = n / 2
-  // bottom chord b0..bn (y = 0)
-  for (let i = 0; i <= n; i++) nodes.push({ id: `b${i}`, x: i * p, y: 0 })
-  // top chord: parallel types get a node above every panel point; the roof
-  // (gable, apex at mid-span) gets INTERIOR top nodes only — its end top nodes
+  // bottom chord b0..bn. Flat for parallel/roof trusses; a SCISSOR raises the
+  // tie to a mid-span apex (vaulted ceiling), supports staying at y = 0.
+  const botY = (i: number) =>
+    spec.type === 'scissor' ? SCISSOR_RISE * H * (1 - Math.abs(i * p - L / 2) / (L / 2)) : 0
+  for (let i = 0; i <= n; i++) nodes.push({ id: `b${i}`, x: i * p, y: botY(i) })
+  // top chord: parallel types get a node above every panel point; gable types
+  // (apex at mid-span) get INTERIOR top nodes only — their end top nodes
   // coincide with the supports, so the top chord springs from b0 / bn.
-  const topY = (i: number) => roof ? H * (1 - Math.abs(i * p - L / 2) / (L / 2)) : H
-  for (let i = 0; i <= n; i++) { if (roof && (i === 0 || i === n)) continue; nodes.push({ id: `t${i}`, x: i * p, y: topY(i) }) }
-  const top = (i: number) => (roof && i === 0) ? 'b0' : (roof && i === n) ? `b${n}` : `t${i}`
+  const topY = (i: number) => gable ? H * (1 - Math.abs(i * p - L / 2) / (L / 2)) : H
+  for (let i = 0; i <= n; i++) { if (gable && (i === 0 || i === n)) continue; nodes.push({ id: `t${i}`, x: i * p, y: topY(i) }) }
+  const top = (i: number) => (gable && i === 0) ? 'b0' : (gable && i === n) ? `b${n}` : `t${i}`
 
   // chords
   for (let i = 0; i < n; i++) add(`b${i}`, `b${i + 1}`, 'bottom')
@@ -53,18 +62,19 @@ export function generateTruss(spec: TrussSpec): TrussModel {
   // verticals: every interior panel point (and the ends for parallel types);
   // Warren keeps full verticals so the parallel truss stays determinate.
   for (let i = 0; i <= n; i++) {
-    if (roof && (i === 0 || i === n)) continue   // top coincides with the support
+    if (gable && (i === 0 || i === n)) continue   // top coincides with the support
     add(`b${i}`, top(i), 'vertical')
   }
 
-  // diagonals: one per panel; the roof skips the two END panels (already a
+  // diagonals: one per panel; gable types skip the two END panels (already a
   // triangle b–b–t), keeping every generated truss statically determinate.
   for (let i = 0; i < n; i++) {
-    if (roof && (i === 0 || i === n - 1)) continue
+    if (gable && (i === 0 || i === n - 1)) continue
     let a: string, b: string
     if (spec.type === 'warren') { (i % 2 === 0) ? (a = `b${i}`, b = top(i + 1)) : (a = top(i), b = `b${i + 1}`) }
+    else if (spec.type === 'fink') { (i % 2 === 0) ? (a = `b${i}`, b = top(i + 1)) : (a = top(i), b = `b${i + 1}`) }  // W-pattern web
     else if (spec.type === 'howe') { (i < mid) ? (a = top(i), b = `b${i + 1}`) : (a = `b${i}`, b = top(i + 1)) }
-    else { (i < mid) ? (a = `b${i}`, b = top(i + 1)) : (a = top(i), b = `b${i + 1}`) }   // pratt + roof
+    else { (i < mid) ? (a = `b${i}`, b = top(i + 1)) : (a = top(i), b = `b${i + 1}`) }   // pratt + roof + scissor
     add(a, b, 'diagonal')
   }
 
@@ -73,8 +83,8 @@ export function generateTruss(spec: TrussSpec): TrussModel {
     { node: `b${n}`, ux: false, uy: true },        // roller
   ]
   // downward joint loads at the loaded chord (top chord; its end nodes coincide
-  // with the supports on a roof, so load the interior top nodes there).
-  const loaded = nodes.filter((nd) => nd.id.startsWith('t') && !(roof && (nd.id === 't0' || nd.id === `t${n}`)))
+  // with the supports on a gable, so load the interior top nodes there).
+  const loaded = nodes.filter((nd) => nd.id.startsWith('t') && !(gable && (nd.id === 't0' || nd.id === `t${n}`)))
   const loads: TLoad[] = loaded.map((nd) => ({ node: nd.id, fx: 0, fy: -Math.abs(spec.panelLoad) }))
 
   return { nodes, members, supports, loads, E: 200000, A: 1500 }

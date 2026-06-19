@@ -58,7 +58,31 @@ const L: AiscShape[] = [
   { name: 'L152x152x19', family: 'L', A: 5410, rx: 46.9, ry: 46.9, rz: 29.8, xbar: 43.4, leg1: 152, leg2: 152, t: 19.0 },
 ]
 
-/** Square & rectangular HSS. */
+// ── Computed (nominal-geometry) tube generators ─────────────────────────────
+// Sharp-corner thin-wall model: A, I and r from the nominal outer dimensions and
+// wall thickness (no corner radii). Values run a few % over a real cold-formed
+// HSS of the same call-out, but give a consistent, table-free way to extend the
+// square / rectangular / round families. Use the tabulated rows above when an
+// exact match exists; these fill the gaps.
+const r1 = (v: number) => Math.round(v * 10) / 10
+/** Rectangular (or square) HSS h(deep)×b(wide)×t, all mm. */
+function hssRect(h: number, b: number, t: number): AiscShape {
+  const hi = h - 2 * t, bi = b - 2 * t
+  const A = b * h - bi * hi
+  const Ix = (b * h ** 3 - bi * hi ** 3) / 12          // about the strong (depth) axis
+  const Iy = (h * b ** 3 - hi * bi ** 3) / 12
+  return { name: `HSS${h}x${b}x${t}`, family: 'HSS', A: Math.round(A), rx: r1(Math.sqrt(Ix / A)), ry: r1(Math.sqrt(Iy / A)), b, h, t }
+}
+const hssSq = (b: number, t: number) => hssRect(b, b, t)
+/** Round HSS / pipe, outer diameter D and wall t, mm. */
+function pipe(name: string, D: number, t: number): AiscShape {
+  const Di = D - 2 * t
+  const A = (Math.PI / 4) * (D * D - Di * Di)
+  const r = Math.sqrt(D * D + Di * Di) / 4
+  return { name, family: 'PIPE', A: Math.round(A), rx: r1(r), ry: r1(r), D, t }
+}
+
+/** Square & rectangular HSS — tabulated (real) rows plus computed nominal sizes. */
 const HSS: AiscShape[] = [
   { name: 'HSS76x76x6.4', family: 'HSS', A: 1600, rx: 28.2, ry: 28.2, b: 76, h: 76, t: 6.4 },
   { name: 'HSS102x102x6.4', family: 'HSS', A: 2230, rx: 38.6, ry: 38.6, b: 102, h: 102, t: 6.4 },
@@ -67,15 +91,21 @@ const HSS: AiscShape[] = [
   { name: 'HSS152x152x9.5', family: 'HSS', A: 4920, rx: 57.6, ry: 57.6, b: 152, h: 152, t: 9.5 },
   { name: 'HSS152x102x6.4', family: 'HSS', A: 2860, rx: 53.0, ry: 38.0, b: 102, h: 152, t: 6.4 },
   { name: 'HSS203x102x6.4', family: 'HSS', A: 3550, rx: 68.0, ry: 39.0, b: 102, h: 203, t: 6.4 },
+  // computed nominal extensions (square + rectangular)
+  hssSq(64, 4.8), hssSq(89, 6.4), hssSq(127, 9.5), hssSq(178, 9.5), hssSq(203, 12.7),
+  hssRect(127, 76, 6.4), hssRect(203, 102, 9.5), hssRect(254, 152, 9.5),
 ]
 
-/** Round HSS / standard pipe. */
+/** Round HSS / standard pipe — tabulated rows plus computed nominal diameters. */
 const PIPE: AiscShape[] = [
   { name: 'PIPE 3 STD', family: 'PIPE', A: 1390, rx: 29.5, ry: 29.5, D: 88.9, t: 5.5 },
   { name: 'PIPE 4 STD', family: 'PIPE', A: 2010, rx: 38.4, ry: 38.4, D: 114.3, t: 6.0 },
   { name: 'PIPE 5 STD', family: 'PIPE', A: 2700, rx: 47.8, ry: 47.8, D: 141.3, t: 6.6 },
   { name: 'PIPE 6 STD', family: 'PIPE', A: 3470, rx: 57.2, ry: 57.2, D: 168.3, t: 7.1 },
   { name: 'HSS114x6.4', family: 'PIPE', A: 2150, rx: 38.0, ry: 38.0, D: 114, t: 6.4 },
+  // computed nominal extensions
+  pipe('PIPE 8 STD', 219.1, 8.2), pipe('PIPE 10 STD', 273.0, 9.3),
+  pipe('HSS168x6.4', 168, 6.4), pipe('HSS219x6.4', 219, 6.4),
 ]
 
 /** Structural tees (WT). */

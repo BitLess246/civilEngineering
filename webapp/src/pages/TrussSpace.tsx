@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Text } from '@react-three/drei'
 import * as THREE from 'three'
-import { generateTruss, solveTrussEnvelope, selfWeightLoads, type TrussType } from '../engine/truss'
+import { generateTruss, solveTrussEnvelope, selfWeightLoads, type TrussType, type TrussModel } from '../engine/truss'
 import { designTruss, type MemberDesign, type TrussSection } from '../engine/trussDesign'
-import { FAMILIES, shapesOf, shapeByName, effectiveSection, type SectionFamily } from '../engine/aiscSections'
+import { FAMILIES, shapesOf, shapeByName, effectiveSection, type SectionFamily, type EffectiveSection } from '../engine/aiscSections'
+import { trussTakeoff, costTrussBill } from '../engine/trussTakeoff'
 import { SectionShape } from '../components/SectionShape'
+import { TrussEditor } from '../components/TrussEditor'
 import { FitView } from '../components/FitView'
 import { buildSectionShapes } from '../lib/sectionShapes3d'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
@@ -81,6 +83,13 @@ export default function TrussSpace() {
   const [double, setDouble] = useState(true)        // double angle (2L) when family = L
   const [gap, setGap] = useState(0)                 // separator/gusset plate thickness, mm (0 = touching)
   const [selected, setSelected] = useState<string | null>(null)
+  const [steelUnitPrice, setSteelUnitPrice] = useState(80)       // ₱ per kg
+  const [gussetPct, setGussetPct] = useState(10)                 // % connection allowance
+  // free-form editor: when non-null, this model replaces the parametric one
+  const [custom, setCustom] = useState<TrussModel | null>(null)
+  // custom section: enter A & radii directly instead of picking an AISC shape
+  const [customSec, setCustomSec] = useState(false)
+  const [csA, setCsA] = useState(1500); const [csRx, setCsRx] = useState(30); const [csRy, setCsRy] = useState(30)
   const controlsRef = useRef<React.ComponentRef<typeof OrbitControls>>(null)
 
   // hold Shift to pan with a left-drag (right-drag also pans)
@@ -95,11 +104,18 @@ export default function TrussSpace() {
     return () => { window.removeEventListener('keydown', d); window.removeEventListener('keyup', u) }
   }, [])
 
-  const model = useMemo(() => generateTruss({ type, span, height, panels, panelLoad: liveLoad }), [type, span, height, panels, liveLoad])
-  const eff = useMemo(() => {
+  const generated = useMemo(() => generateTruss({ type, span, height, panels, panelLoad: liveLoad }), [type, span, height, panels, liveLoad])
+  const model = custom ?? generated
+  const eff: EffectiveSection = useMemo(() => {
+    if (customSec) {
+      const A = Math.max(1, csA), rx = Math.max(0.1, csRx), ry = Math.max(0.1, csRy)
+      const side = Math.sqrt(A)   // illustrative square profile (drawing only)
+      return { label: `Custom (A ${Math.round(A)} mm²)`, family: 'HSS', A, rx, ry, rmin: Math.min(rx, ry), double: false,
+        base: { name: 'custom', family: 'HSS', A, rx, ry, b: side, h: side, t: side / 2 } }
+    }
     const shp = shapeByName(shapeName) ?? shapesOf(family)[0]
     return effectiveSection(shp, double && shp.family === 'L', gap)
-  }, [shapeName, family, double, gap])
+  }, [customSec, csA, csRx, csRy, shapeName, family, double, gap])
   const section: TrussSection = useMemo(() => ({ A: eff.A, r: eff.rmin, E, Fy, K }), [eff, E, Fy, K])
 
   // load cases: Dead = self-weight (section-derived) + dead joint loads; Live =
@@ -112,7 +128,23 @@ export default function TrussSpace() {
   const live = useMemo(() => loadedNodes.map((n) => ({ node: n, fx: 0, fy: -liveLoad })), [loadedNodes, liveLoad])
   const result = useMemo(() => solveTrussEnvelope(model, dead, live), [model, dead, live])
   const design = useMemo(() => (result ? designTruss(result.forces, section) : null), [result, section])
-  const shapes3d = useMemo(() => buildSectionShapes(eff), [eff])   // true-scale section profiles for the 3D extrusion
+  const shapes3d = useMemo(() => {
+    if (customSec) {   // illustrative solid square (no real profile for a custom section)
+      const h = Math.sqrt(eff.A) / 1000 / 2
+      const sq = new THREE.Shape(); sq.moveTo(-h, -h); sq.lineTo(h, -h); sq.lineTo(h, h); sq.lineTo(-h, h); sq.closePath()
+      return [sq]
+    }
+    return buildSectionShapes(eff)   // true-scale section profiles for the 3D extrusion
+  }, [eff, customSec])
+  const takeoff = useMemo(
+    () => result ? trussTakeoff(result.forces, eff, { gussetFraction: gussetPct / 100 }) : null,
+    [result, eff, gussetPct],
+  )
+  const bill = useMemo(
+    () => takeoff ? costTrussBill(takeoff, { steelKg: steelUnitPrice }) : null,
+    [takeoff, steelUnitPrice],
+  )
+  const peso = (v: number) => `₱${v.toLocaleString('en-PH', { maximumFractionDigits: 0 })}`
 
   const pos = useMemo(() => {
     const map = new Map<string, THREE.Vector3>()
@@ -125,7 +157,7 @@ export default function TrussSpace() {
   }, [model])
   const designById = useMemo(() => new Map((design?.members ?? []).map((d) => [d.id, d])), [design])
 
-  const cx = span / 2, cyc = height / 2
+  const cx = (box.min[0] + box.max[0]) / 2, cyc = (box.min[1] + box.max[1]) / 2   // orbit target = model centre
   const selForce = result?.forces.find((f) => f.id === selected)
   const selDes = selForce ? designById.get(selForce.id) : undefined
   const serviceLoad = deadLoad + liveLoad
@@ -187,13 +219,21 @@ export default function TrussSpace() {
 
         {/* controls + results */}
         <div className="space-y-4">
-          <Card title="Truss geometry">
-            <Pick label="Type" value={type} onChange={(v) => setType(v as TrussType)}
-              options={[['pratt', 'Pratt'], ['howe', 'Howe'], ['warren', 'Warren'], ['roof', 'Pitched roof (gable)']]} />
-            <Num label="Span" unit="m" value={span} onChange={setSpan} step="0.5" />
-            <Num label="Height" unit="m" value={height} onChange={setHeight} step="0.25" />
-            <Num label="Panels" value={panels} onChange={(v) => setPanels(Math.max(2, Math.round(v)))} step="1" />
-          </Card>
+          {custom ? (
+            <TrussEditor model={custom} onChange={setCustom} onReset={() => { setCustom(null); setSelected(null) }} />
+          ) : (
+            <Card title="Truss geometry">
+              <Pick label="Type" value={type} onChange={(v) => setType(v as TrussType)}
+                options={[['pratt', 'Pratt'], ['howe', 'Howe'], ['warren', 'Warren'], ['roof', 'Pitched roof (gable)'], ['fink', 'Fink (W-web)'], ['scissor', 'Scissor (raised tie)']]} />
+              <Num label="Span" unit="m" value={span} onChange={setSpan} step="0.5" />
+              <Num label="Height" unit="m" value={height} onChange={setHeight} step="0.25" />
+              <Num label="Panels" value={panels} onChange={(v) => setPanels(Math.max(2, Math.round(v)))} step="1" />
+              <button type="button" onClick={() => { setCustom(structuredClone(generated)); setSelected(null) }}
+                className="col-span-full mt-1 rounded-md border border-[#0056b3]/40 bg-[#0056b3]/5 px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:bg-[#0056b3]/10">
+                ✎ Customize this truss (free-form editor)
+              </button>
+            </Card>
+          )}
 
           <Card title="Loads (NSCP combinations)">
             <Num label="Dead joint load" unit="kN" value={deadLoad} onChange={setDeadLoad} step="1" />
@@ -208,22 +248,36 @@ export default function TrussSpace() {
           </Card>
 
           <Card title="Section & material (AISC steel)">
-            <Pick label="Family" value={family} onChange={(v) => { const fam = v as SectionFamily; setFamily(fam); setShapeName(shapesOf(fam)[0].name) }}
-              options={FAMILIES.map((f) => [f.id, f.label])} />
-            <Pick label="Shape" value={shapeName} onChange={setShapeName}
-              options={shapesOf(family).map((s) => [s.name, s.name])} />
-            {family === 'L' && (
-              <label className="col-span-full flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={double} onChange={(e) => setDouble(e.target.checked)} />
-                <span>Double angle (2L, back-to-back)</span>
-              </label>
+            <label className="col-span-full flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={customSec} onChange={(e) => setCustomSec(e.target.checked)} />
+              <span>Custom section (enter area &amp; radii directly)</span>
+            </label>
+            {customSec ? (
+              <>
+                <Num label="Area A" unit="mm²" value={csA} onChange={setCsA} step="50" />
+                <Num label="r_x" unit="mm" value={csRx} onChange={setCsRx} step="1" />
+                <Num label="r_y" unit="mm" value={csRy} onChange={setCsRy} step="1" />
+              </>
+            ) : (
+              <>
+                <Pick label="Family" value={family} onChange={(v) => { const fam = v as SectionFamily; setFamily(fam); setShapeName(shapesOf(fam)[0].name) }}
+                  options={FAMILIES.map((f) => [f.id, f.label])} />
+                <Pick label="Shape" value={shapeName} onChange={setShapeName}
+                  options={shapesOf(family).map((s) => [s.name, s.name])} />
+                {family === 'L' && (
+                  <label className="col-span-full flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={double} onChange={(e) => setDouble(e.target.checked)} />
+                    <span>Double angle (2L, back-to-back)</span>
+                  </label>
+                )}
+                {family === 'L' && double && <Num label="Separator plate thickness" unit="mm" value={gap} onChange={setGap} step="1" />}
+              </>
             )}
-            {family === 'L' && double && <Num label="Separator plate thickness" unit="mm" value={gap} onChange={setGap} step="1" />}
             <Num label="Fy" unit="MPa" value={Fy} onChange={setFy} step="5" />
             <Num label="E" unit="MPa" value={E} onChange={setE} step="1000" />
             <Num label="Effective length K" value={K} onChange={setK} step="0.05" />
             <div className="col-span-full flex items-center gap-3 border-t border-slate-100 pt-2">
-              <SectionShape sec={eff} />
+              {!customSec && <SectionShape sec={eff} />}
               <div className="text-[11px] text-slate-500">
                 <div className="font-semibold text-[#0056b3]">{eff.label}</div>
                 <div>A = {Math.round(eff.A)} mm²</div>
@@ -253,7 +307,7 @@ export default function TrussSpace() {
       {result && design && (
         <div className="mt-6 space-y-4">
           <h2 className="text-xl font-extrabold tracking-tight text-[#0056b3]">
-            Truss member schedule — {type} · {f1(span)} m span
+            Truss member schedule — {custom ? 'custom truss' : `${type} · ${f1(span)} m span`}
             <span className="ml-3 text-sm font-normal text-slate-500">
               {result.determinacy.status} · {eff.label} · Fy {Fy} MPa · max util {(design.maxUtil * 100).toFixed(0)}%
             </span>
@@ -298,6 +352,156 @@ export default function TrussSpace() {
               Pin-jointed planar truss (axial only). Tension yielding φPn = 0.9·Fy·Ag; compression flexural buckling per AISC §E3
               (Fcr from KL/r, φ = 0.90). KL/r &gt; 200 flagged (⚠). Reactions: pin at the left support, roller at the right.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Material take-off / priced Bill of Materials ── */}
+      {takeoff && bill && (
+        <div className="mt-6 space-y-4 break-before-page">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-xl font-extrabold tracking-tight text-[#0056b3]">
+              Material Take-off &amp; Bill of Materials
+              <span className="ml-3 text-sm font-normal text-slate-500">{takeoff.section}</span>
+            </h2>
+          </div>
+
+          {/* Summary tiles */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {[
+              ['Members', `${takeoff.byMember.length}`],
+              ['Section A', `${Math.round(takeoff.areaMm2)} mm²`],
+              ['Net steel', `${f1(takeoff.netSteelKg)} kg`],
+              [`Gusset (${gussetPct}%)`, `${f1(takeoff.gussetKg)} kg`],
+              ['Total steel', `${f1(takeoff.totalKg)} kg`],
+            ].map(([k, v]) => (
+              <div key={k} className="rounded-lg border border-slate-200 bg-white p-2 text-center shadow-sm">
+                <div className="text-[11px] uppercase tracking-wide text-slate-500">{k}</div>
+                <div className="text-base font-bold text-[#0056b3]">{v}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {/* Per-member table */}
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Steel by member</h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Member</th>
+                    <th className="py-1 pr-2 font-semibold">Kind</th>
+                    <th className="py-1 pr-2 text-right font-semibold">L (m)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">kg/m</th>
+                    <th className="py-1 text-right font-semibold">Net (kg)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {takeoff.byMember.map((m) => (
+                    <tr key={m.id} className="border-t border-slate-100">
+                      <td className="py-0.5 pr-2 font-medium">{m.id}</td>
+                      <td className="py-0.5 pr-2 capitalize text-slate-500">{m.kind}</td>
+                      <td className="py-0.5 pr-2 text-right">{f2(m.L)}</td>
+                      <td className="py-0.5 pr-2 text-right">{f2(m.kgPerM)}</td>
+                      <td className="py-0.5 text-right">{f2(m.netWeightKg)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t border-slate-200 font-semibold">
+                    <td colSpan={4} className="py-1 pr-2">Total</td>
+                    <td className="py-1 text-right">{f1(takeoff.netSteelKg)} kg</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* By-kind subtotals + priced BOM */}
+            <div className="space-y-4">
+              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">By element kind</h3>
+                <table className="w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="text-left uppercase tracking-wide text-slate-500">
+                      <th className="py-1 pr-2 font-semibold">Kind</th>
+                      <th className="py-1 pr-2 text-right font-semibold">Members</th>
+                      <th className="py-1 pr-2 text-right font-semibold">Length (m)</th>
+                      <th className="py-1 text-right font-semibold">Net (kg)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {takeoff.byKind.map((k) => (
+                      <tr key={k.kind} className="border-t border-slate-100">
+                        <td className="py-0.5 pr-2 capitalize font-medium">{k.kind}</td>
+                        <td className="py-0.5 pr-2 text-right">{k.members}</td>
+                        <td className="py-0.5 pr-2 text-right">{f2(k.lengthM)}</td>
+                        <td className="py-0.5 text-right">{f2(k.netKg)}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t border-slate-200 font-semibold">
+                      <td className="py-1 pr-2">Total</td>
+                      <td className="py-1 pr-2 text-right">{takeoff.byMember.length}</td>
+                      <td className="py-1 pr-2 text-right">{f2(takeoff.byKind.reduce((s, k) => s + k.lengthM, 0))}</td>
+                      <td className="py-1 text-right">{f1(takeoff.netSteelKg)} kg</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Priced BOM */}
+              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-[1.02rem] font-bold text-[#0056b3]">Priced Bill of Materials</h3>
+                  <div className="flex flex-wrap items-center gap-3 text-xs">
+                    <label className="flex items-center gap-1 text-slate-600">
+                      Steel price
+                      <input type="number" value={steelUnitPrice} min={1} step={5}
+                        onChange={(e) => setSteelUnitPrice(Math.max(1, Number(e.target.value)))}
+                        className="no-print ml-1 w-20 rounded border border-slate-300 px-1 py-0.5 text-right text-xs"
+                      />
+                      <span>₱/kg</span>
+                    </label>
+                    <label className="flex items-center gap-1 text-slate-600">
+                      Gusset
+                      <input type="number" value={gussetPct} min={0} max={50} step={1}
+                        onChange={(e) => setGussetPct(Math.min(50, Math.max(0, Number(e.target.value))))}
+                        className="no-print ml-1 w-16 rounded border border-slate-300 px-1 py-0.5 text-right text-xs"
+                      />
+                      <span>%</span>
+                    </label>
+                  </div>
+                </div>
+                <table className="w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="text-left uppercase tracking-wide text-slate-500">
+                      <th className="py-1 pr-2 font-semibold">Item</th>
+                      <th className="py-1 pr-2 text-right font-semibold">Qty</th>
+                      <th className="py-1 pr-2 font-semibold">Unit</th>
+                      <th className="py-1 pr-2 text-right font-semibold">Unit price</th>
+                      <th className="py-1 text-right font-semibold">Amount (₱)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bill.rows.map((r) => (
+                      <tr key={r.item} className="border-t border-slate-100">
+                        <td className="py-0.5 pr-2">{r.item}</td>
+                        <td className="py-0.5 pr-2 text-right">{f1(r.qty)}</td>
+                        <td className="py-0.5 pr-2">{r.unit}</td>
+                        <td className="py-0.5 pr-2 text-right">{peso(r.unitPrice)}</td>
+                        <td className="py-0.5 text-right">{peso(r.amount)}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t-2 border-slate-300 font-bold">
+                      <td colSpan={4} className="py-1 pr-2">Total</td>
+                      <td className="py-1 text-right">{peso(bill.total)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Section steel weight = A × L × 7850 kg/m³ per member.
+                  Gusset / connection plate allowance added as a fraction of the section steel.
+                  Prices in Philippine Peso (₱); edit to match current market rates.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       )}
