@@ -35,7 +35,7 @@ npm run build    # typecheck + production build
 ```
 
 ## Current state (all merged to `main`)
-Latest merged work — PRs **#178, #179, #180**:
+Latest merged work — PRs **#178, #179, #180** (main); **Truss Phase 3** open PR:
 - **Truss Space** (`/truss`): planar pin-jointed truss — generate (Pratt / Howe /
   Warren / pitched-roof), analyse axial forces, AISC-LRFD member design.
 - **AISC section library** (`webapp/src/engine/aiscSections.ts`) — W/C/L/HSS/Pipe/
@@ -46,6 +46,9 @@ Latest merged work — PRs **#178, #179, #180**:
 - **Zoom-to-extents on load** for both 3D pages (`components/FitView.tsx`).
 - **Truss Phase 2**: member self-weight from the section + NSCP gravity
   combinations (1.4D, 1.2D+1.6L) enveloped per member (`engine/truss.ts`).
+- **Truss Phase 3** (`engine/trussTakeoff.ts` + `TrussSpace.tsx`): per-member
+  steel weight (A × L × 7850 kg/m³), subtotals by chord kind, gusset/connection
+  plate allowance (editable %), priced Bill of Materials (₱/kg, live totals).
 
 ## Key paths
 - 3D RC frame page: `webapp/src/pages/ModelSpace.tsx` (route `/model`)
@@ -56,11 +59,9 @@ Latest merged work — PRs **#178, #179, #180**:
 - Routes + home tiles: `webapp/src/App.tsx`
 
 ## Next up — roadmap
-- **Truss Phase 3**: truss material take-off + **priced Bill of Materials**
-  (steel weight by section + connection/gusset allowance), mirroring the frame
-  page's BOM/BOQ.
 - Optional: bulk-load the **full AISC v15 shape database** (current set is a
   representative subset, structured to drop the full table straight in).
 - Optional: free-form truss node/member editor; more roof types (Fink, scissor).
+- Optional: PDF export for the truss report (member schedule + BOM).
 
-_Tests at last handoff: 253 passing; `tsc -b` clean._
+_Tests at last handoff: 262 passing; `tsc -b` clean._

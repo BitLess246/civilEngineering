@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import { generateTruss, solveTrussEnvelope, selfWeightLoads, type TrussType } from '../engine/truss'
 import { designTruss, type MemberDesign, type TrussSection } from '../engine/trussDesign'
 import { FAMILIES, shapesOf, shapeByName, effectiveSection, type SectionFamily } from '../engine/aiscSections'
+import { trussTakeoff, costTrussBill } from '../engine/trussTakeoff'
 import { SectionShape } from '../components/SectionShape'
 import { FitView } from '../components/FitView'
 import { buildSectionShapes } from '../lib/sectionShapes3d'
@@ -81,6 +82,8 @@ export default function TrussSpace() {
   const [double, setDouble] = useState(true)        // double angle (2L) when family = L
   const [gap, setGap] = useState(0)                 // separator/gusset plate thickness, mm (0 = touching)
   const [selected, setSelected] = useState<string | null>(null)
+  const [steelUnitPrice, setSteelUnitPrice] = useState(80)       // ₱ per kg
+  const [gussetPct, setGussetPct] = useState(10)                 // % connection allowance
   const controlsRef = useRef<React.ComponentRef<typeof OrbitControls>>(null)
 
   // hold Shift to pan with a left-drag (right-drag also pans)
@@ -113,6 +116,15 @@ export default function TrussSpace() {
   const result = useMemo(() => solveTrussEnvelope(model, dead, live), [model, dead, live])
   const design = useMemo(() => (result ? designTruss(result.forces, section) : null), [result, section])
   const shapes3d = useMemo(() => buildSectionShapes(eff), [eff])   // true-scale section profiles for the 3D extrusion
+  const takeoff = useMemo(
+    () => result ? trussTakeoff(result.forces, eff, { gussetFraction: gussetPct / 100 }) : null,
+    [result, eff, gussetPct],
+  )
+  const bill = useMemo(
+    () => takeoff ? costTrussBill(takeoff, { steelKg: steelUnitPrice }) : null,
+    [takeoff, steelUnitPrice],
+  )
+  const peso = (v: number) => `₱${v.toLocaleString('en-PH', { maximumFractionDigits: 0 })}`
 
   const pos = useMemo(() => {
     const map = new Map<string, THREE.Vector3>()
@@ -298,6 +310,156 @@ export default function TrussSpace() {
               Pin-jointed planar truss (axial only). Tension yielding φPn = 0.9·Fy·Ag; compression flexural buckling per AISC §E3
               (Fcr from KL/r, φ = 0.90). KL/r &gt; 200 flagged (⚠). Reactions: pin at the left support, roller at the right.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Material take-off / priced Bill of Materials ── */}
+      {takeoff && bill && (
+        <div className="mt-6 space-y-4 break-before-page">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-xl font-extrabold tracking-tight text-[#0056b3]">
+              Material Take-off &amp; Bill of Materials
+              <span className="ml-3 text-sm font-normal text-slate-500">{takeoff.section}</span>
+            </h2>
+          </div>
+
+          {/* Summary tiles */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {[
+              ['Members', `${takeoff.byMember.length}`],
+              ['Section A', `${Math.round(takeoff.areaMm2)} mm²`],
+              ['Net steel', `${f1(takeoff.netSteelKg)} kg`],
+              [`Gusset (${gussetPct}%)`, `${f1(takeoff.gussetKg)} kg`],
+              ['Total steel', `${f1(takeoff.totalKg)} kg`],
+            ].map(([k, v]) => (
+              <div key={k} className="rounded-lg border border-slate-200 bg-white p-2 text-center shadow-sm">
+                <div className="text-[11px] uppercase tracking-wide text-slate-500">{k}</div>
+                <div className="text-base font-bold text-[#0056b3]">{v}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {/* Per-member table */}
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Steel by member</h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Member</th>
+                    <th className="py-1 pr-2 font-semibold">Kind</th>
+                    <th className="py-1 pr-2 text-right font-semibold">L (m)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">kg/m</th>
+                    <th className="py-1 text-right font-semibold">Net (kg)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {takeoff.byMember.map((m) => (
+                    <tr key={m.id} className="border-t border-slate-100">
+                      <td className="py-0.5 pr-2 font-medium">{m.id}</td>
+                      <td className="py-0.5 pr-2 capitalize text-slate-500">{m.kind}</td>
+                      <td className="py-0.5 pr-2 text-right">{f2(m.L)}</td>
+                      <td className="py-0.5 pr-2 text-right">{f2(m.kgPerM)}</td>
+                      <td className="py-0.5 text-right">{f2(m.netWeightKg)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t border-slate-200 font-semibold">
+                    <td colSpan={4} className="py-1 pr-2">Total</td>
+                    <td className="py-1 text-right">{f1(takeoff.netSteelKg)} kg</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* By-kind subtotals + priced BOM */}
+            <div className="space-y-4">
+              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">By element kind</h3>
+                <table className="w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="text-left uppercase tracking-wide text-slate-500">
+                      <th className="py-1 pr-2 font-semibold">Kind</th>
+                      <th className="py-1 pr-2 text-right font-semibold">Members</th>
+                      <th className="py-1 pr-2 text-right font-semibold">Length (m)</th>
+                      <th className="py-1 text-right font-semibold">Net (kg)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {takeoff.byKind.map((k) => (
+                      <tr key={k.kind} className="border-t border-slate-100">
+                        <td className="py-0.5 pr-2 capitalize font-medium">{k.kind}</td>
+                        <td className="py-0.5 pr-2 text-right">{k.members}</td>
+                        <td className="py-0.5 pr-2 text-right">{f2(k.lengthM)}</td>
+                        <td className="py-0.5 text-right">{f2(k.netKg)}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t border-slate-200 font-semibold">
+                      <td className="py-1 pr-2">Total</td>
+                      <td className="py-1 pr-2 text-right">{takeoff.byMember.length}</td>
+                      <td className="py-1 pr-2 text-right">{f2(takeoff.byKind.reduce((s, k) => s + k.lengthM, 0))}</td>
+                      <td className="py-1 text-right">{f1(takeoff.netSteelKg)} kg</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Priced BOM */}
+              <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-[1.02rem] font-bold text-[#0056b3]">Priced Bill of Materials</h3>
+                  <div className="flex flex-wrap items-center gap-3 text-xs">
+                    <label className="flex items-center gap-1 text-slate-600">
+                      Steel price
+                      <input type="number" value={steelUnitPrice} min={1} step={5}
+                        onChange={(e) => setSteelUnitPrice(Math.max(1, Number(e.target.value)))}
+                        className="no-print ml-1 w-20 rounded border border-slate-300 px-1 py-0.5 text-right text-xs"
+                      />
+                      <span>₱/kg</span>
+                    </label>
+                    <label className="flex items-center gap-1 text-slate-600">
+                      Gusset
+                      <input type="number" value={gussetPct} min={0} max={50} step={1}
+                        onChange={(e) => setGussetPct(Math.min(50, Math.max(0, Number(e.target.value))))}
+                        className="no-print ml-1 w-16 rounded border border-slate-300 px-1 py-0.5 text-right text-xs"
+                      />
+                      <span>%</span>
+                    </label>
+                  </div>
+                </div>
+                <table className="w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="text-left uppercase tracking-wide text-slate-500">
+                      <th className="py-1 pr-2 font-semibold">Item</th>
+                      <th className="py-1 pr-2 text-right font-semibold">Qty</th>
+                      <th className="py-1 pr-2 font-semibold">Unit</th>
+                      <th className="py-1 pr-2 text-right font-semibold">Unit price</th>
+                      <th className="py-1 text-right font-semibold">Amount (₱)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bill.rows.map((r) => (
+                      <tr key={r.item} className="border-t border-slate-100">
+                        <td className="py-0.5 pr-2">{r.item}</td>
+                        <td className="py-0.5 pr-2 text-right">{f1(r.qty)}</td>
+                        <td className="py-0.5 pr-2">{r.unit}</td>
+                        <td className="py-0.5 pr-2 text-right">{peso(r.unitPrice)}</td>
+                        <td className="py-0.5 text-right">{peso(r.amount)}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t-2 border-slate-300 font-bold">
+                      <td colSpan={4} className="py-1 pr-2">Total</td>
+                      <td className="py-1 text-right">{peso(bill.total)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Section steel weight = A × L × 7850 kg/m³ per member.
+                  Gusset / connection plate allowance added as a fraction of the section steel.
+                  Prices in Philippine Peso (₱); edit to match current market rates.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       )}
