@@ -49,6 +49,13 @@ Latest merged work — PRs **#178, #179, #180** (main); **Truss Phase 3** open P
 - **Truss Phase 3** (`engine/trussTakeoff.ts` + `TrussSpace.tsx`): per-member
   steel weight (A × L × 7850 kg/m³), subtotals by chord kind, gusset/connection
   plate allowance (editable %), priced Bill of Materials (₱/kg, live totals).
+- **Truss Phase 4** (same PR): two more roof types — **Fink** (W-web) and
+  **scissor** (raised tie) in `engine/truss.ts` (determinate for n = 4/6/8,
+  tested); **free-form editor** (`components/TrussEditor.tsx`) to edit nodes /
+  members / supports / loaded joints live; **custom section** input (enter A, rₓ,
+  r_y directly); expanded **AISC HSS/Pipe** sizes (computed nominal geometry,
+  documented) in `engine/aiscSections.ts`. PDF export already works via the
+  browser-print path in `components/ReportControls.tsx`.
 
 ## Key paths
 - 3D RC frame page: `webapp/src/pages/ModelSpace.tsx` (route `/model`)
@@ -59,9 +66,10 @@ Latest merged work — PRs **#178, #179, #180** (main); **Truss Phase 3** open P
 - Routes + home tiles: `webapp/src/App.tsx`
 
 ## Next up — roadmap
-- Optional: bulk-load the **full AISC v15 shape database** (current set is a
-  representative subset, structured to drop the full table straight in).
-- Optional: free-form truss node/member editor; more roof types (Fink, scissor).
-- Optional: PDF export for the truss report (member schedule + BOM).
+- Optional: bulk-import the **full official AISC v15 metric table** as data
+  (CSV/JSON drop-in). Current library is a curated real-value set plus computed
+  nominal HSS/Pipe sizes; a custom-section input covers anything not tabulated.
+- Optional: save / load custom trusses (localStorage or file); drag nodes in 3D.
+- Optional: more roof forms (Fink fan/double-Fink, gambrel), wind/uplift cases.
 
-_Tests at last handoff: 262 passing; `tsc -b` clean._
+_Tests at last handoff: 264 passing; `tsc -b` clean; production build OK._

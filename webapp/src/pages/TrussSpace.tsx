@@ -3,11 +3,12 @@ import { Link } from 'react-router-dom'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Text } from '@react-three/drei'
 import * as THREE from 'three'
-import { generateTruss, solveTrussEnvelope, selfWeightLoads, type TrussType } from '../engine/truss'
+import { generateTruss, solveTrussEnvelope, selfWeightLoads, type TrussType, type TrussModel } from '../engine/truss'
 import { designTruss, type MemberDesign, type TrussSection } from '../engine/trussDesign'
-import { FAMILIES, shapesOf, shapeByName, effectiveSection, type SectionFamily } from '../engine/aiscSections'
+import { FAMILIES, shapesOf, shapeByName, effectiveSection, type SectionFamily, type EffectiveSection } from '../engine/aiscSections'
 import { trussTakeoff, costTrussBill } from '../engine/trussTakeoff'
 import { SectionShape } from '../components/SectionShape'
+import { TrussEditor } from '../components/TrussEditor'
 import { FitView } from '../components/FitView'
 import { buildSectionShapes } from '../lib/sectionShapes3d'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
@@ -84,6 +85,11 @@ export default function TrussSpace() {
   const [selected, setSelected] = useState<string | null>(null)
   const [steelUnitPrice, setSteelUnitPrice] = useState(80)       // ₱ per kg
   const [gussetPct, setGussetPct] = useState(10)                 // % connection allowance
+  // free-form editor: when non-null, this model replaces the parametric one
+  const [custom, setCustom] = useState<TrussModel | null>(null)
+  // custom section: enter A & radii directly instead of picking an AISC shape
+  const [customSec, setCustomSec] = useState(false)
+  const [csA, setCsA] = useState(1500); const [csRx, setCsRx] = useState(30); const [csRy, setCsRy] = useState(30)
   const controlsRef = useRef<React.ComponentRef<typeof OrbitControls>>(null)
 
   // hold Shift to pan with a left-drag (right-drag also pans)
@@ -98,11 +104,18 @@ export default function TrussSpace() {
     return () => { window.removeEventListener('keydown', d); window.removeEventListener('keyup', u) }
   }, [])
 
-  const model = useMemo(() => generateTruss({ type, span, height, panels, panelLoad: liveLoad }), [type, span, height, panels, liveLoad])
-  const eff = useMemo(() => {
+  const generated = useMemo(() => generateTruss({ type, span, height, panels, panelLoad: liveLoad }), [type, span, height, panels, liveLoad])
+  const model = custom ?? generated
+  const eff: EffectiveSection = useMemo(() => {
+    if (customSec) {
+      const A = Math.max(1, csA), rx = Math.max(0.1, csRx), ry = Math.max(0.1, csRy)
+      const side = Math.sqrt(A)   // illustrative square profile (drawing only)
+      return { label: `Custom (A ${Math.round(A)} mm²)`, family: 'HSS', A, rx, ry, rmin: Math.min(rx, ry), double: false,
+        base: { name: 'custom', family: 'HSS', A, rx, ry, b: side, h: side, t: side / 2 } }
+    }
     const shp = shapeByName(shapeName) ?? shapesOf(family)[0]
     return effectiveSection(shp, double && shp.family === 'L', gap)
-  }, [shapeName, family, double, gap])
+  }, [customSec, csA, csRx, csRy, shapeName, family, double, gap])
   const section: TrussSection = useMemo(() => ({ A: eff.A, r: eff.rmin, E, Fy, K }), [eff, E, Fy, K])
 
   // load cases: Dead = self-weight (section-derived) + dead joint loads; Live =
@@ -115,7 +128,14 @@ export default function TrussSpace() {
   const live = useMemo(() => loadedNodes.map((n) => ({ node: n, fx: 0, fy: -liveLoad })), [loadedNodes, liveLoad])
   const result = useMemo(() => solveTrussEnvelope(model, dead, live), [model, dead, live])
   const design = useMemo(() => (result ? designTruss(result.forces, section) : null), [result, section])
-  const shapes3d = useMemo(() => buildSectionShapes(eff), [eff])   // true-scale section profiles for the 3D extrusion
+  const shapes3d = useMemo(() => {
+    if (customSec) {   // illustrative solid square (no real profile for a custom section)
+      const h = Math.sqrt(eff.A) / 1000 / 2
+      const sq = new THREE.Shape(); sq.moveTo(-h, -h); sq.lineTo(h, -h); sq.lineTo(h, h); sq.lineTo(-h, h); sq.closePath()
+      return [sq]
+    }
+    return buildSectionShapes(eff)   // true-scale section profiles for the 3D extrusion
+  }, [eff, customSec])
   const takeoff = useMemo(
     () => result ? trussTakeoff(result.forces, eff, { gussetFraction: gussetPct / 100 }) : null,
     [result, eff, gussetPct],
@@ -137,7 +157,7 @@ export default function TrussSpace() {
   }, [model])
   const designById = useMemo(() => new Map((design?.members ?? []).map((d) => [d.id, d])), [design])
 
-  const cx = span / 2, cyc = height / 2
+  const cx = (box.min[0] + box.max[0]) / 2, cyc = (box.min[1] + box.max[1]) / 2   // orbit target = model centre
   const selForce = result?.forces.find((f) => f.id === selected)
   const selDes = selForce ? designById.get(selForce.id) : undefined
   const serviceLoad = deadLoad + liveLoad
@@ -199,13 +219,21 @@ export default function TrussSpace() {
 
         {/* controls + results */}
         <div className="space-y-4">
-          <Card title="Truss geometry">
-            <Pick label="Type" value={type} onChange={(v) => setType(v as TrussType)}
-              options={[['pratt', 'Pratt'], ['howe', 'Howe'], ['warren', 'Warren'], ['roof', 'Pitched roof (gable)']]} />
-            <Num label="Span" unit="m" value={span} onChange={setSpan} step="0.5" />
-            <Num label="Height" unit="m" value={height} onChange={setHeight} step="0.25" />
-            <Num label="Panels" value={panels} onChange={(v) => setPanels(Math.max(2, Math.round(v)))} step="1" />
-          </Card>
+          {custom ? (
+            <TrussEditor model={custom} onChange={setCustom} onReset={() => { setCustom(null); setSelected(null) }} />
+          ) : (
+            <Card title="Truss geometry">
+              <Pick label="Type" value={type} onChange={(v) => setType(v as TrussType)}
+                options={[['pratt', 'Pratt'], ['howe', 'Howe'], ['warren', 'Warren'], ['roof', 'Pitched roof (gable)'], ['fink', 'Fink (W-web)'], ['scissor', 'Scissor (raised tie)']]} />
+              <Num label="Span" unit="m" value={span} onChange={setSpan} step="0.5" />
+              <Num label="Height" unit="m" value={height} onChange={setHeight} step="0.25" />
+              <Num label="Panels" value={panels} onChange={(v) => setPanels(Math.max(2, Math.round(v)))} step="1" />
+              <button type="button" onClick={() => { setCustom(structuredClone(generated)); setSelected(null) }}
+                className="col-span-full mt-1 rounded-md border border-[#0056b3]/40 bg-[#0056b3]/5 px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:bg-[#0056b3]/10">
+                ✎ Customize this truss (free-form editor)
+              </button>
+            </Card>
+          )}
 
           <Card title="Loads (NSCP combinations)">
             <Num label="Dead joint load" unit="kN" value={deadLoad} onChange={setDeadLoad} step="1" />
@@ -220,22 +248,36 @@ export default function TrussSpace() {
           </Card>
 
           <Card title="Section & material (AISC steel)">
-            <Pick label="Family" value={family} onChange={(v) => { const fam = v as SectionFamily; setFamily(fam); setShapeName(shapesOf(fam)[0].name) }}
-              options={FAMILIES.map((f) => [f.id, f.label])} />
-            <Pick label="Shape" value={shapeName} onChange={setShapeName}
-              options={shapesOf(family).map((s) => [s.name, s.name])} />
-            {family === 'L' && (
-              <label className="col-span-full flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={double} onChange={(e) => setDouble(e.target.checked)} />
-                <span>Double angle (2L, back-to-back)</span>
-              </label>
+            <label className="col-span-full flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={customSec} onChange={(e) => setCustomSec(e.target.checked)} />
+              <span>Custom section (enter area &amp; radii directly)</span>
+            </label>
+            {customSec ? (
+              <>
+                <Num label="Area A" unit="mm²" value={csA} onChange={setCsA} step="50" />
+                <Num label="r_x" unit="mm" value={csRx} onChange={setCsRx} step="1" />
+                <Num label="r_y" unit="mm" value={csRy} onChange={setCsRy} step="1" />
+              </>
+            ) : (
+              <>
+                <Pick label="Family" value={family} onChange={(v) => { const fam = v as SectionFamily; setFamily(fam); setShapeName(shapesOf(fam)[0].name) }}
+                  options={FAMILIES.map((f) => [f.id, f.label])} />
+                <Pick label="Shape" value={shapeName} onChange={setShapeName}
+                  options={shapesOf(family).map((s) => [s.name, s.name])} />
+                {family === 'L' && (
+                  <label className="col-span-full flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={double} onChange={(e) => setDouble(e.target.checked)} />
+                    <span>Double angle (2L, back-to-back)</span>
+                  </label>
+                )}
+                {family === 'L' && double && <Num label="Separator plate thickness" unit="mm" value={gap} onChange={setGap} step="1" />}
+              </>
             )}
-            {family === 'L' && double && <Num label="Separator plate thickness" unit="mm" value={gap} onChange={setGap} step="1" />}
             <Num label="Fy" unit="MPa" value={Fy} onChange={setFy} step="5" />
             <Num label="E" unit="MPa" value={E} onChange={setE} step="1000" />
             <Num label="Effective length K" value={K} onChange={setK} step="0.05" />
             <div className="col-span-full flex items-center gap-3 border-t border-slate-100 pt-2">
-              <SectionShape sec={eff} />
+              {!customSec && <SectionShape sec={eff} />}
               <div className="text-[11px] text-slate-500">
                 <div className="font-semibold text-[#0056b3]">{eff.label}</div>
                 <div>A = {Math.round(eff.A)} mm²</div>
@@ -265,7 +307,7 @@ export default function TrussSpace() {
       {result && design && (
         <div className="mt-6 space-y-4">
           <h2 className="text-xl font-extrabold tracking-tight text-[#0056b3]">
-            Truss member schedule — {type} · {f1(span)} m span
+            Truss member schedule — {custom ? 'custom truss' : `${type} · ${f1(span)} m span`}
             <span className="ml-3 text-sm font-normal text-slate-500">
               {result.determinacy.status} · {eff.label} · Fy {Fy} MPa · max util {(design.maxUtil * 100).toFixed(0)}%
             </span>
