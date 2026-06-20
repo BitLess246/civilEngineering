@@ -11,6 +11,7 @@ import LoadPath from './pages/LoadPath'
 // three.js is heavy — the 3D pages load in their own lazy chunks.
 const ModelSpace = lazy(() => import('./pages/ModelSpace'))
 const TrussSpace = lazy(() => import('./pages/TrussSpace'))
+import SteelDesign from './pages/SteelDesign'
 import SlabEstimate from './pages/SlabEstimate'
 import ChbEstimate from './pages/ChbEstimate'
 import ColumnEstimate from './pages/ColumnEstimate'
@@ -49,6 +50,7 @@ function Home() {
         <Tile to="/load-path">Slab Load Path</Tile>
         <Tile to="/model">3D Model Space</Tile>
         <Tile to="/truss">Truss Space</Tile>
+        <Tile to="/steel">Steel Design</Tile>
       </div>
 
       <h2 className="mt-8 text-lg font-semibold text-slate-800">Material estimation (quantity take-off)</h2>
@@ -85,6 +87,7 @@ export default function App() {
           <TrussSpace />
         </Suspense>
       } />
+      <Route path="/steel" element={<SteelDesign />} />
       <Route path="/estimate/slab" element={<SlabEstimate />} />
       <Route path="/estimate/beam" element={<BeamEstimate />} />
       <Route path="/estimate/column" element={<ColumnEstimate />} />
