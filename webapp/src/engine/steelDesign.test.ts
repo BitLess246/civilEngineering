@@ -4,7 +4,7 @@ import {
   deriveWSection, beamFlexure, beamShear,
   columnAxial, weakAxisFlexure, combinedLoading,
   boltShear, weldStrength, beamLoadingSimple, E_STEEL,
-  boltGroupGeom, eccentricBoltGroup, shearTabBlockShear,
+  boltGroupGeom, eccentricBoltGroup, shearTabBlockShear, outOfPlaneBoltGroup,
 } from './steelDesign'
 
 const W250x33 = shapeByName('W250x33')!
@@ -224,5 +224,51 @@ describe('shearTabBlockShear §J4.3', () => {
     const cA = shearTabBlockShear(3, 70, 40, 40, 35, 20, 10, 248, 400)
     const cB = shearTabBlockShear(4, 70, 40, 40, 35, 20, 10, 248, 400)
     expect(cB[0].phiRn).toBeGreaterThan(cA[0].phiRn)
+  })
+})
+
+describe('outOfPlaneBoltGroup §J3.7', () => {
+  const g = boltGroupGeom(3, 1, 70, 70, 40, 40)   // 3 bolts in vertical column
+  // dummy in-plane bolts with fv = 0 for isolation of tension calc
+  const zeroShear = g.bolts.map(b => ({
+    id: b.id, x: b.x, y: b.y, Vx: 0, Vy: 0, R: 0, utilShear: 0, fbr: 0, fv: 0
+  }))
+
+  it('zero e_out → all T = 0', () => {
+    const r = outOfPlaneBoltGroup(g, zeroShear, 0, 100, 'A325M', 20, true)
+    r.bolts.forEach(b => expect(b.T).toBe(0))
+    expect(r.M_op).toBe(0)
+  })
+
+  it('top bolt gets maximum tension (largest yi)', () => {
+    const r = outOfPlaneBoltGroup(g, zeroShear, 50, 100, 'A325M', 20, true)
+    // bolts ordered B1(bottom) to B3(top); top bolt yi is largest
+    const top = r.bolts.reduce((a, b) => b.yi > a.yi ? b : a, r.bolts[0])
+    expect(top.T).toBeCloseTo(r.Tmax, 6)
+    expect(r.critical).toBe(top.id)
+  })
+
+  it('T_i = M_op * yi / sumYi2 formula', () => {
+    const Vu = 80, e_out = 75
+    const r = outOfPlaneBoltGroup(g, zeroShear, e_out, Vu, 'A325M', 22, false)
+    const M_op = Vu * e_out
+    r.bolts.forEach(b => {
+      const expected = r.sumYi2 > 0 ? M_op * b.yi / r.sumYi2 : 0
+      expect(b.T).toBeCloseTo(expected, 6)
+    })
+  })
+
+  it('§J3.7 reduced tensile strength decreases with shear stress', () => {
+    const phi = 0.75, Fnt = 620, Fnv = 310
+    const withShear = [{ id: 'B3', x: 0, y: 70, Vx: 0, Vy: 0, R: 50, utilShear: 0, fbr: 0,
+      fv: 50 * 1000 / ((Math.PI/4)*20**2) }]
+    // top bolt only — provide fv for it
+    const mixed = g.bolts.map(b =>
+      b.id === 'B3' ? withShear[0] : { ...b, Vx: 0, Vy: 0, R: 0, utilShear: 0, fbr: 0, fv: 0 }
+    )
+    const r = outOfPlaneBoltGroup(g, mixed, 50, 100, 'A325M', 20, true)
+    const critB = r.bolts.find(b => b.id === 'B3')!
+    const expected = Math.min(1.3 * Fnt - (Fnt / (phi * Fnv)) * critB.frv, Fnt)
+    expect(critB.phiFnt_prime).toBeCloseTo(Math.max(0, expected), 4)
   })
 })

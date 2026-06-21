@@ -6,6 +6,7 @@ import {
   deriveWSection, beamFlexure, beamShear, columnAxial,
   weakAxisFlexure, combinedLoading, boltShear, weldStrength,
   beamLoadingSimple, boltGroupGeom, eccentricBoltGroup, shearTabBlockShear,
+  outOfPlaneBoltGroup,
 } from '../engine/steelDesign'
 import type { BoltGrade, ElectrodeClass } from '../engine/steelDesign'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
@@ -306,8 +307,9 @@ function ConnectionTab() {
   const [tPlate,     setTPlate]     = useState(10)
   const [FuPlate,    setFuPlate]    = useState(400)
   const [FyPlate,    setFyPlate]    = useState(248)
-  const [ex_load,    setExLoad]     = useState(0)   // eccentricity from bolt centroid
+  const [ex_load,    setExLoad]     = useState(0)   // in-plane eccentricity from bolt centroid
   const [ey_load,    setEyLoad]     = useState(0)
+  const [e_out,      setEOut]       = useState(0)   // out-of-plane eccentricity (perpendicular to plate)
   // weld
   const [electrode,  setElectrode]  = useState<ElectrodeClass>('E70')
   const [wSize,      setWSize]      = useState(8)
@@ -324,6 +326,12 @@ function ConnectionTab() {
   const eccentric = useMemo(() =>
     eccentricBoltGroup(geom, Vu, Hu, ex_load, ey_load, phiRnBolt.phiRn, db, tPlate),
     [geom, Vu, Hu, ex_load, ey_load, phiRnBolt, db, tPlate]
+  )
+  const outOfPlane = useMemo(() =>
+    e_out > 0
+      ? outOfPlaneBoltGroup(geom, eccentric.bolts, e_out, Vu, boltGrade, db, threads === 'yes')
+      : null,
+    [geom, eccentric.bolts, e_out, Vu, boltGrade, db, threads]
   )
   const blockShearCases = useMemo(() =>
     shearTabBlockShear(nRows, sy, ey, ey, ex_edge, db, tPlate, FyPlate, FuPlate),
@@ -377,6 +385,19 @@ function ConnectionTab() {
           ]
         })(),
       },
+      ...(outOfPlane ? [{
+        title: `Out-of-plane eccentricity §J3.7 — e_out = ${e_out} mm`,
+        lines: [
+          { tex: `M_{op} = V_u \\cdot e_{out} = ${Vu} \\times ${e_out} = ${outOfPlane.M_op.toFixed(0)}\\text{ kN·mm}` },
+          { tex: `\\text{Neutral axis at bottom bolt. }\\sum y_i^2 = ${outOfPlane.sumYi2.toFixed(0)}\\text{ mm}^2` },
+          { tex: `T_i = \\frac{M_{op} \\cdot y_i}{\\sum y_i^2}\\quad (y_i \\text{ measured from lowest bolt})` },
+          { tex: `T_{\\max} = ${f2(outOfPlane.Tmax)}\\text{ kN on bolt }\\textit{${outOfPlane.critical}}` },
+          { tex: `\\text{AISC Table J3.2: } F_{nt} = ${outOfPlane.Fnt}\\text{ MPa},\\; F_{nv} = ${outOfPlane.Fnv}\\text{ MPa}` },
+          { tex: `\\phi F_{nt}' = \\min\\!\\left(1.3 F_{nt} - \\frac{F_{nt}}{\\phi F_{nv}} f_{rv},\\; F_{nt}\\right) \\geq 0\\quad \\S J3.7` },
+          { tex: `\\phi T_n = \\phi F_{nt}' A_b / 1000 = ${f2(outOfPlane.phiTn_crit)}\\text{ kN/bolt}` },
+          { tex: `\\text{Utilisation} = T_{\\max} / (\\phi T_n) = ${(outOfPlane.Tmax / outOfPlane.phiTn_crit * 100).toFixed(0)}\\%\\quad ${outOfPlane.ok ? '\\checkmark' : '\\times'}` },
+        ],
+      }] : []),
       {
         title: 'Block shear §J4.3 (shear tab, single bolt line)',
         lines: blockShearCases.flatMap(c => [
@@ -388,7 +409,7 @@ function ConnectionTab() {
         ]),
       },
     ]
-  }, [phiRnBolt, geom, eccentric, blockShearCases, boltGrade, db, nRows, nCols, tPlate, FuPlate, FyPlate, threads, Vu, Hu, ex_load, ey_load])
+  }, [phiRnBolt, geom, eccentric, outOfPlane, blockShearCases, boltGrade, db, nRows, nCols, tPlate, FuPlate, FyPlate, threads, Vu, Hu, ex_load, ey_load, e_out])
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_0.9fr_1fr]">
@@ -418,9 +439,13 @@ function ConnectionTab() {
             <Num label="Edge dist horiz ex" unit="mm" value={ex_edge} onChange={setExEdge} />
           </Card>
           <Card title="Eccentricity (load point from bolt centroid)">
-            <Num label="Horizontal e_x" unit="mm" value={ex_load} onChange={setExLoad} />
-            <Num label="Vertical e_y" unit="mm" value={ey_load} onChange={setEyLoad} />
-            <p className="col-span-full text-[10px] text-slate-400">Positive e_x = load is to the RIGHT of the bolt centroid.</p>
+            <Num label="In-plane e_x" unit="mm" value={ex_load} onChange={setExLoad} />
+            <Num label="In-plane e_y" unit="mm" value={ey_load} onChange={setEyLoad} />
+            <Num label="Out-of-plane e_out" unit="mm" value={e_out} onChange={setEOut} />
+            <p className="col-span-full text-[10px] text-slate-400">
+              e_x/e_y: in-plane offset (→ moment in bolt group plane, §J3.6/elastic method).{' '}
+              e_out: perpendicular distance from plate face to load (→ bolt tension + §J3.7 interaction).
+            </p>
           </Card>
           <Card title="Plate / connected part">
             <Num label="Plate thickness t" unit="mm" value={tPlate} onChange={setTPlate} />
@@ -502,6 +527,42 @@ function ConnectionTab() {
               label="Governing block shear"
               value={ok(Vu <= govBlockShear.phiRn, `${f1(govBlockShear.phiRn)} kN`)} />
           </ResultCard>
+
+          {outOfPlane && (
+            <ResultCard title="Out-of-plane eccentricity §J3.7">
+              <Row label="M_op = Vu·e_out" value={`${outOfPlane.M_op.toFixed(0)} kN·mm`} />
+              <Row label="Σyi²" value={`${outOfPlane.sumYi2.toFixed(0)} mm²`} />
+              <Row label="Critical bolt (max T)" value={outOfPlane.critical}
+                sub={`T = ${f2(outOfPlane.Tmax)} kN`} />
+              <Row label="φTn (reduced)" value={`${f2(outOfPlane.phiTn_crit)} kN`}
+                sub={`φFnt' = ${outOfPlane.bolts.find(b=>b.id===outOfPlane.critical)?.phiFnt_prime.toFixed(0)} MPa`} />
+              <Row alert={!outOfPlane.ok}
+                label="Combined check (§J3.7)"
+                value={ok(outOfPlane.ok, outOfPlane.ok ? 'PASS' : 'FAIL')} />
+              <div className="col-span-full overflow-x-auto">
+                <table className="mt-1 w-full text-xs">
+                  <thead><tr className="text-left text-slate-400">
+                    <th className="pr-2 pb-1">id</th>
+                    <th className="pr-2 pb-1">yi mm</th>
+                    <th className="pr-2 pb-1">T kN</th>
+                    <th className="pr-2 pb-1">frv MPa</th>
+                    <th className="pb-1">util</th>
+                  </tr></thead>
+                  <tbody>
+                    {outOfPlane.bolts.map(b => (
+                      <tr key={b.id} className={b.id === outOfPlane.critical ? 'font-semibold text-amber-700' : ''}>
+                        <td className="pr-2">{b.id}</td>
+                        <td className="pr-2">{b.yi.toFixed(0)}</td>
+                        <td className="pr-2">{f2(b.T)}</td>
+                        <td className="pr-2">{f1(b.frv)}</td>
+                        <td className={b.util > 1 ? 'text-red-600' : ''}>{(b.util*100).toFixed(0)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </ResultCard>
+          )}
         </>) : (
           <ResultCard title="Fillet weld §J2.4">
             <Row label="φRnw / mm" value={`${f3(weld.phiRnw)} kN/mm`} />

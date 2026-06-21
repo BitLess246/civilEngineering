@@ -373,3 +373,77 @@ export function shearTabBlockShear(
     mkCase('§J4.3 Case B — shear path from top edge', (nRows - 1) * sy + ey_top),
   ]
 }
+
+// ─── Out-of-plane eccentricity §J3.7 ─────────────────────────────────────
+// Load Vu applied at perpendicular distance e_out from the bolt group plane
+// produces out-of-plane moment M_op = Vu·e_out (kN·mm).
+// Neutral axis at the bottom bolt row (plate bearing against column flange).
+// Bolt tension: T_i = M_op · yi / Σyi²  (yi = height above lowest bolt, mm).
+// Combined shear + tension interaction per §J3.7 (LRFD):
+//   φFnt' = min(1.3·Fnt − (Fnt/(φ·Fnv))·frv, Fnt) ≥ 0
+//   utilisation = T_i / (φ·Fnt'·Ab/1000) ≤ 1.0
+
+const BOLT_Fnt: Record<BoltGrade, number> = { A325M: 620, A490M: 780 }
+
+export interface OutOfPlaneBolt {
+  id: string
+  yi: number           // mm from lowest bolt (neutral axis)
+  T: number            // kN, bolt tension
+  frt: number          // MPa, tension stress = T·1000/Ab
+  frv: number          // MPa, shear stress from in-plane analysis
+  phiFnt_prime: number // MPa, reduced tensile strength (§J3.7)
+  phiTn: number        // kN, available bolt tension capacity
+  util: number         // T / phiTn
+  ok: boolean
+}
+
+export interface OutOfPlaneResult {
+  M_op: number
+  Fnt: number; Fnv: number; Ab: number
+  sumYi2: number       // mm², Σyi²
+  bolts: OutOfPlaneBolt[]
+  critical: string     // bolt id with maximum tension
+  Tmax: number; phiTn_crit: number
+  ok: boolean
+}
+
+export function outOfPlaneBoltGroup(
+  geom: BoltGroupGeom,
+  inPlaneBolts: BoltForce[],
+  e_out: number,        // mm, perpendicular to bolt group plane
+  Vu: number,           // kN, applied shear
+  boltGrade: BoltGrade,
+  db: number,           // mm
+  threadInPlane: boolean
+): OutOfPlaneResult {
+  const phi = PHI_J
+  const Fnt = BOLT_Fnt[boltGrade]
+  const Fnv = boltGrade === 'A325M'
+    ? (threadInPlane ? 310 : 372)
+    : (threadInPlane ? 372 : 457)
+  const Ab = (Math.PI / 4) * db * db
+  const M_op = Vu * e_out   // kN·mm
+
+  const absYs = geom.bolts.map(b => b.y + geom.Cy)
+  const yMin  = Math.min(...absYs)
+  const yis   = absYs.map(y => y - yMin)
+  const sumYi2 = yis.reduce((s, yi) => s + yi * yi, 0)
+
+  const bolts: OutOfPlaneBolt[] = geom.bolts.map((b, i) => {
+    const yi  = yis[i]
+    const T   = sumYi2 > 0 ? (M_op * yi) / sumYi2 : 0
+    const frv = inPlaneBolts.find(ip => ip.id === b.id)?.fv ?? 0
+    const frt = (T * 1000) / Ab
+    const phiFnt_prime = Math.max(0, Math.min(1.3 * Fnt - (Fnt / (phi * Fnv)) * frv, Fnt))
+    const phiTn = (phi * phiFnt_prime * Ab) / 1000
+    const util = phiTn > 0 ? T / phiTn : (T > 0 ? Infinity : 0)
+    return { id: b.id, yi, T, frt, frv, phiFnt_prime, phiTn, util, ok: util <= 1.0 }
+  })
+
+  const ci = bolts.reduce((mi, _, i) => bolts[i].T > bolts[mi].T ? i : mi, 0)
+  return {
+    M_op, Fnt, Fnv, Ab, sumYi2, bolts,
+    critical: bolts[ci].id, Tmax: bolts[ci].T, phiTn_crit: bolts[ci].phiTn,
+    ok: bolts.every(b => b.ok),
+  }
+}
