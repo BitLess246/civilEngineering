@@ -258,3 +258,118 @@ export function beamLoadingSimple(bl: BeamLoadInput, Ix_mm4: number): BeamLoadsR
     limL240: Lmm / 240,
   }
 }
+
+// ─── Bolt group geometry ──────────────────────────────────────────────────
+// Bolt positions relative to the group centroid (mm).
+// Grid is nRows (vertical) × nCols (horizontal), spacing sx / sy,
+// edge distances ex (horizontal) and ey (vertical) from plate edges.
+
+export interface BoltPos { id: string; x: number; y: number }
+
+export interface BoltGroupGeom {
+  bolts: BoltPos[]   // positions relative to centroid, mm
+  n: number
+  Cx: number; Cy: number   // centroid distance from bottom-left origin, mm
+  Ip: number               // Σ(x² + y²), mm²
+  plateW: number; plateH: number   // minimum plate size, mm
+}
+
+export function boltGroupGeom(
+  nRows: number, nCols: number,
+  sx: number, sy: number,
+  ex: number, ey: number
+): BoltGroupGeom {
+  const abs: BoltPos[] = []
+  for (let r = 0; r < nRows; r++)
+    for (let c = 0; c < nCols; c++)
+      abs.push({ id: `B${r * nCols + c + 1}`, x: ex + c * sx, y: ey + r * sy })
+  const n   = abs.length
+  const Cx  = abs.reduce((s, b) => s + b.x, 0) / n
+  const Cy  = abs.reduce((s, b) => s + b.y, 0) / n
+  const bolts = abs.map(b => ({ id: b.id, x: b.x - Cx, y: b.y - Cy }))
+  const Ip  = bolts.reduce((s, b) => s + b.x ** 2 + b.y ** 2, 0)
+  return { bolts, n, Cx, Cy, Ip, plateW: 2 * ex + (nCols - 1) * sx, plateH: 2 * ey + (nRows - 1) * sy }
+}
+
+// ─── In-plane eccentric bolt group — elastic (vector) method ─────────────
+// Forces Pu (+Y = up) and Hu (+X = right) applied at offset (ex_load, ey_load)
+// from the bolt centroid. Positive ex_load → load is to the RIGHT of centroid.
+// M (CCW +) = Pu·ex_load − Hu·ey_load  [kN·mm]
+// Each bolt force: direct V/n + moment contribution M·(-yi, xi)/Ip.
+
+export interface BoltForce {
+  id: string; x: number; y: number
+  Vx: number; Vy: number   // kN, force components
+  R: number                // kN, resultant
+  utilShear: number        // R / phiRn_bolt
+  fbr: number              // MPa, bearing stress = R·1000 / (db·t)
+  fv: number               // MPa, average shear stress = R·1000 / Ab
+}
+
+export interface EccentricBoltResult {
+  bolts: BoltForce[]
+  critical: string   // bolt id of max resultant
+  Rmax: number       // kN
+  M: number          // kN·mm
+}
+
+export function eccentricBoltGroup(
+  geom: BoltGroupGeom,
+  Pu: number, Hu: number,
+  ex_load: number, ey_load: number,
+  phiRn: number,
+  db: number, t_plate: number
+): EccentricBoltResult {
+  const { bolts, n, Ip } = geom
+  const Ab = (Math.PI / 4) * db * db
+  const M  = Pu * ex_load - Hu * ey_load
+  const bf: BoltForce[] = bolts.map(b => {
+    const Vx = Hu / n - M * b.y / Ip
+    const Vy = Pu / n + M * b.x / Ip
+    const R  = Math.sqrt(Vx ** 2 + Vy ** 2)
+    return { ...b, Vx, Vy, R, utilShear: phiRn > 0 ? R / phiRn : Infinity,
+             fbr: (R * 1000) / (db * t_plate), fv: (R * 1000) / Ab }
+  })
+  const ci = bf.reduce((mi, _, i) => bf[i].R > bf[mi].R ? i : mi, 0)
+  return { bolts: bf, critical: bf[ci].id, Rmax: bf[ci].R, M }
+}
+
+// ─── Block shear §J4.3 ────────────────────────────────────────────────────
+// Rn = min(0.6·Fu·Anv + Ubs·Fu·Ant,  0.6·Fy·Agv + Ubs·Fu·Ant)  φ = 0.75
+// Two standard paths for a shear tab / single bolt column are returned.
+
+export interface BlockShearCase {
+  label: string
+  Agv: number; Anv: number; Agt: number; Ant: number; Ubs: number
+  Rn_fract: number   // shear fracture + tension fracture, kN
+  Rn_cap: number     // shear yield cap, kN
+  Rn: number; phiRn: number   // kN
+}
+
+// shear tab: nRows bolts in one vertical column, spacing sy, edge distances
+// ey_top (top) / ey_bot (bottom) / ex_edge (horizontal to free edge).
+export function shearTabBlockShear(
+  nRows: number, sy: number,
+  ey_top: number, ey_bot: number, ex_edge: number,
+  db: number, t: number,
+  Fy: number, Fu: number
+): BlockShearCase[] {
+  const dh  = db + 2   // hole diameter (+2 mm oversize)
+  const Agt = t * ex_edge
+  const Ant = Agt - 0.5 * dh * t
+
+  const mkCase = (label: string, Lv: number): BlockShearCase => {
+    const Agv = t * Lv
+    const Anv = Agv - (nRows - 0.5) * dh * t
+    const Ubs = 1.0
+    const Rn_fract = (0.6 * Fu * Math.max(0, Anv) + Ubs * Fu * Math.max(0, Ant)) / 1000
+    const Rn_cap   = (0.6 * Fy * Agv                + Ubs * Fu * Math.max(0, Ant)) / 1000
+    const Rn = Math.min(Rn_fract, Rn_cap)
+    return { label, Agv, Anv: Math.max(0, Anv), Agt, Ant: Math.max(0, Ant), Ubs, Rn_fract, Rn_cap, Rn, phiRn: 0.75 * Rn }
+  }
+
+  return [
+    mkCase('§J4.3 Case A — shear path from bottom edge (governs for short end distance at bottom)', (nRows - 1) * sy + ey_bot),
+    mkCase('§J4.3 Case B — shear path from top edge', (nRows - 1) * sy + ey_top),
+  ]
+}

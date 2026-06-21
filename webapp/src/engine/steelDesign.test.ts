@@ -4,6 +4,7 @@ import {
   deriveWSection, beamFlexure, beamShear,
   columnAxial, weakAxisFlexure, combinedLoading,
   boltShear, weldStrength, beamLoadingSimple, E_STEEL,
+  boltGroupGeom, eccentricBoltGroup, shearTabBlockShear,
 } from './steelDesign'
 
 const W250x33 = shapeByName('W250x33')!
@@ -165,5 +166,63 @@ describe('beamLoadingSimple', () => {
     const coef = 5 * Lmm ** 4 / (384 * E_STEEL * p.Ix)
     expect(r.deltaD).toBeCloseTo(15 * coef, 8)
     expect(r.deltaL).toBeCloseTo(25 * coef, 8)
+  })
+})
+
+describe('boltGroupGeom', () => {
+  it('2×1 single column: centroid mid-height, Ip correct', () => {
+    const g = boltGroupGeom(2, 1, 70, 70, 40, 40)
+    expect(g.n).toBe(2)
+    expect(g.Cx).toBeCloseTo(40, 6)
+    expect(g.Cy).toBeCloseTo(75, 6)   // (40+110)/2
+    // bolts at y = ±35 from centroid
+    expect(g.bolts[0].y).toBeCloseTo(-35, 6)
+    expect(g.bolts[1].y).toBeCloseTo(35, 6)
+    expect(g.Ip).toBeCloseTo(2 * 35 ** 2, 6)   // all x=0
+  })
+  it('2×2 grid: Ip = 4 * (sx/2)² + 4 * (sy/2)²', () => {
+    const sx = 70, sy = 70, ex = 40, ey = 40
+    const g = boltGroupGeom(2, 2, sx, sy, ex, ey)
+    expect(g.n).toBe(4)
+    expect(g.Ip).toBeCloseTo(4 * (sx/2)**2 + 4 * (sy/2)**2, 3)
+  })
+})
+
+describe('eccentricBoltGroup', () => {
+  it('zero eccentricity: all bolts equal force V/n', () => {
+    const g = boltGroupGeom(3, 1, 70, 70, 40, 40)
+    const Vu = 90, n = 3
+    const r = eccentricBoltGroup(g, Vu, 0, 0, 0, 100, 20, 10)
+    r.bolts.forEach(b => expect(b.R).toBeCloseTo(Vu / n, 4))
+    expect(r.M).toBeCloseTo(0, 10)
+  })
+  it('critical bolt has max resultant', () => {
+    const g = boltGroupGeom(3, 1, 70, 70, 40, 40)
+    const r = eccentricBoltGroup(g, 100, 0, 50, 0, 100, 20, 10)
+    expect(r.Rmax).toBeGreaterThanOrEqual(Math.max(...r.bolts.map(b => b.R)) - 1e-9)
+  })
+  it('bearing stress = R·1000 / (db·t)', () => {
+    const g = boltGroupGeom(2, 1, 70, 70, 40, 40)
+    const db = 20, t = 10
+    const r = eccentricBoltGroup(g, 60, 0, 0, 0, 100, db, t)
+    r.bolts.forEach(b => expect(b.fbr).toBeCloseTo(b.R * 1000 / (db * t), 6))
+  })
+})
+
+describe('shearTabBlockShear §J4.3', () => {
+  it('returns two cases', () => {
+    const cases = shearTabBlockShear(3, 70, 40, 40, 35, 20, 10, 248, 400)
+    expect(cases).toHaveLength(2)
+  })
+  it('phiRn = 0.75 * min(Rn_fract, Rn_cap)', () => {
+    const cases = shearTabBlockShear(3, 70, 40, 40, 35, 20, 10, 248, 400)
+    for (const c of cases) {
+      expect(c.phiRn).toBeCloseTo(0.75 * Math.min(c.Rn_fract, c.Rn_cap), 6)
+    }
+  })
+  it('longer shear path → larger phiRn', () => {
+    const cA = shearTabBlockShear(3, 70, 40, 40, 35, 20, 10, 248, 400)
+    const cB = shearTabBlockShear(4, 70, 40, 40, 35, 20, 10, 248, 400)
+    expect(cB[0].phiRn).toBeGreaterThan(cA[0].phiRn)
   })
 })
