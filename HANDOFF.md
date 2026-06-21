@@ -35,7 +35,7 @@ npm run build    # typecheck + production build
 ```
 
 ## Current state (all merged to `main`)
-Latest merged work — PRs **#178, #179, #180** (main); **Truss Phase 3** open PR:
+Latest merged work — PRs **#178–#183** (main); **Steel Design** open PR:
 - **Truss Space** (`/truss`): planar pin-jointed truss — generate (Pratt / Howe /
   Warren / pitched-roof), analyse axial forces, AISC-LRFD member design.
 - **AISC section library** (`webapp/src/engine/aiscSections.ts`) — W/C/L/HSS/Pipe/
@@ -65,11 +65,21 @@ Latest merged work — PRs **#178, #179, #180** (main); **Truss Phase 3** open P
   `liveLoads.ts`, …) — each with a `*.test.ts`.
 - Routes + home tiles: `webapp/src/App.tsx`
 
+- **Steel Design** (`/steel`): new page covering three AISC 360-16 LRFD tools:
+  - **Beam design** (§F2 flexure with LTB zone badge, §G2.1 shear, service deflection L/360 & L/240).
+  - **Column design** (§E3 axial Fcr, both KL/rx and KL/ry, §F6 weak-axis flexure, §H1-1 combined ratio).
+  - **Connection design** (§J3.6 bolt shear + §J3.10 bearing for A325M/A490M; §J2.4 fillet weld
+    per mm for E70–E100 electrodes). Required count / required length shown live.
+  - Pure engine: `webapp/src/engine/steelDesign.ts` + 26 tests.
+  - Uses the existing AISC W-shape library; section properties (Ix, Sx, Zx, J, rts) derived from geometry.
+
 ## Next up — roadmap
 - Optional: bulk-import the **full official AISC v15 metric table** as data
   (CSV/JSON drop-in). Current library is a curated real-value set plus computed
   nominal HSS/Pipe sizes; a custom-section input covers anything not tabulated.
 - Optional: save / load custom trusses (localStorage or file); drag nodes in 3D.
 - Optional: more roof forms (Fink fan/double-Fink, gambrel), wind/uplift cases.
+- Optional: custom section input on Steel Design page (enter Sx, Zx, ry directly).
+- Optional: point-load + moment diagram for beams; stiffened web shear (§G2.2).
 
-_Tests at last handoff: 264 passing; `tsc -b` clean; production build OK._
+_Tests at last handoff: 290 passing; `tsc -b` clean; production build OK._
