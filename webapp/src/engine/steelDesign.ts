@@ -447,3 +447,79 @@ export function outOfPlaneBoltGroup(
     ok: bolts.every(b => b.ok),
   }
 }
+
+// ─── Prying action §J3.9 — AISC Manual Part 9 T-stub model ──────────────
+// Applied to the critical bolt of a bolted fitting (bracket plate, angle, tee).
+// Prying force Q amplifies the required bolt tension T_req → T_total = T+Q.
+//
+// Geometry (mm):
+//   b  = bolt CL to face of the connecting web/stem (fitting gage distance)
+//   a  = bolt CL to free edge of the fitting flange (= horizontal edge distance)
+//   p  = tributary bolt pitch (bolt spacing along fitting; use sy for interior bolts)
+//   tf = fitting plate/flange thickness
+//   db = bolt diameter; dh = db + 2 (standard hole, +2 mm oversize)
+//
+// α = 0 → no prying (thick plate);  α = 1 → full prying (thin plate).
+// Required plate thickness to sustain T_req including prying:
+//   t_req = √(4·T_req·b' / (φ_f·Fy·p·(1 + δ·α)))   φ_f = 0.90 (plate flexure)
+// Minimum thickness to eliminate prying entirely:
+//   t_0   = √(4·φBn·b'  / (φ_f·Fy·p))
+
+export interface PryingResult {
+  b_prime: number      // mm  b − db/2
+  a_prime: number      // mm  min(a, 1.25b)
+  rho: number          // b'/a'
+  delta: number        // 1 − dh/p
+  beta: number         // prying potential = (1/ρ)(φBn/T − 1)
+  alpha: number        // 0 to 1, prying fraction
+  Q: number            // kN, prying force on critical bolt
+  T_total: number      // kN, T_req + Q
+  t_req: number        // mm, required plate thickness
+  t_no_prying: number  // mm, minimum t to eliminate prying
+  ok: boolean          // T_total ≤ φBn
+}
+
+// T_req: required bolt tension (kN); phi_Bn: available bolt tension (kN, φFnt'·Ab/1000)
+export function pryingAction(
+  T_req: number, phi_Bn: number,
+  b: number, a: number, p: number,
+  _tf: number, db: number, Fy: number
+): PryingResult {
+  const phi_f = 0.90
+  const dh     = db + 2
+  const b_prime = b - db / 2
+  const a_prime = Math.min(a, 1.25 * b)
+  const rho   = b_prime / a_prime
+  const delta = Math.max(0, 1 - dh / p)
+
+  let beta = 0, alpha = 0
+  if (T_req <= 0) {
+    // no tension — no prying
+  } else if (T_req >= phi_Bn) {
+    // bolt already overstressed; worst-case prying
+    alpha = 1.0
+    beta  = 0
+  } else {
+    beta = (1 / rho) * (phi_Bn / T_req - 1)
+    if (beta >= 1.0) {
+      alpha = 1.0
+    } else {
+      const denom = delta * (1 - beta)
+      alpha = denom > 0 ? Math.min(beta / denom, 1.0) : 1.0
+    }
+  }
+
+  const Q       = alpha * delta * rho * T_req
+  const T_total = T_req + Q
+
+  // plate thickness formulas (kN → N: ×1000)
+  const factor       = phi_f * Fy * p
+  const t_req        = factor > 0 && (1 + delta * alpha) > 0
+    ? Math.sqrt((4 * T_req * 1000 * b_prime) / (factor * (1 + delta * alpha)))
+    : Infinity
+  const t_no_prying  = factor > 0
+    ? Math.sqrt((4 * phi_Bn * 1000 * b_prime) / factor)
+    : Infinity
+
+  return { b_prime, a_prime, rho, delta, beta, alpha, Q, T_total, t_req, t_no_prying, ok: T_total <= phi_Bn }
+}

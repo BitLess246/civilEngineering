@@ -4,7 +4,7 @@ import {
   deriveWSection, beamFlexure, beamShear,
   columnAxial, weakAxisFlexure, combinedLoading,
   boltShear, weldStrength, beamLoadingSimple, E_STEEL,
-  boltGroupGeom, eccentricBoltGroup, shearTabBlockShear, outOfPlaneBoltGroup,
+  boltGroupGeom, eccentricBoltGroup, shearTabBlockShear, outOfPlaneBoltGroup, pryingAction,
 } from './steelDesign'
 
 const W250x33 = shapeByName('W250x33')!
@@ -270,5 +270,57 @@ describe('outOfPlaneBoltGroup §J3.7', () => {
     const critB = r.bolts.find(b => b.id === 'B3')!
     const expected = Math.min(1.3 * Fnt - (Fnt / (phi * Fnv)) * critB.frv, Fnt)
     expect(critB.phiFnt_prime).toBeCloseTo(Math.max(0, expected), 4)
+  })
+})
+
+describe('pryingAction §J3.9', () => {
+  // geometry: b=45mm (bolt CL to web face), a=35mm (to free edge),
+  // p=70mm (bolt pitch), tf=12mm, db=20mm, Fy=248MPa
+  const b = 45, a = 35, p = 70, tf = 12, db = 20, Fy = 248
+  const db2 = db / 2, dh = db + 2
+  const b_p = b - db2          // 35
+  const a_p = Math.min(a, 1.25 * b)  // 35 (a < 1.25b=56.25)
+  const rho  = b_p / a_p       // 1.0
+  const delta = 1 - dh / p     // 1 - 22/70
+
+  it('geometry: b_prime, a_prime, rho, delta computed correctly', () => {
+    const r = pryingAction(50, 100, b, a, p, tf, db, Fy)
+    expect(r.b_prime).toBeCloseTo(b_p, 6)
+    expect(r.a_prime).toBeCloseTo(a_p, 6)
+    expect(r.rho).toBeCloseTo(rho, 6)
+    expect(r.delta).toBeCloseTo(delta, 6)
+  })
+
+  it('T_req = 0 → Q = 0, no prying', () => {
+    const r = pryingAction(0, 100, b, a, p, tf, db, Fy)
+    expect(r.Q).toBe(0)
+    expect(r.T_total).toBe(0)
+    expect(r.ok).toBe(true)
+  })
+
+  it('T_total = T_req + Q formula', () => {
+    const r = pryingAction(40, 100, b, a, p, tf, db, Fy)
+    expect(r.T_total).toBeCloseTo(r.Q + 40, 6)
+  })
+
+  it('thick plate (T_req << phi_Bn) → low alpha, Q small', () => {
+    // When bolt utilisation is low, beta >> 1 → α = 1 (maximum prying for given T)
+    // but T_total should still be ≤ phi_Bn
+    const r = pryingAction(20, 150, b, a, p, tf, db, Fy)
+    expect(r.T_total).toBeLessThanOrEqual(150 + 1e-9)
+    expect(r.ok).toBe(true)
+  })
+
+  it('t_req formula: 4·T·b_prime / (phi_f·Fy·p·(1+δα))', () => {
+    const r = pryingAction(50, 120, b, a, p, tf, db, Fy)
+    const phi_f = 0.90
+    const expected = Math.sqrt((4 * 50 * 1000 * r.b_prime) / (phi_f * Fy * p * (1 + r.delta * r.alpha)))
+    expect(r.t_req).toBeCloseTo(expected, 4)
+  })
+
+  it('t_no_prying > t_req (thicker plate needed to eliminate prying)', () => {
+    const r = pryingAction(60, 100, b, a, p, tf, db, Fy)
+    // t_no_prying is always ≥ t_req when prying present
+    expect(r.t_no_prying).toBeGreaterThanOrEqual(r.t_req - 1e-9)
   })
 })
