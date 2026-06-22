@@ -19,7 +19,8 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { beta1 } from './loads'
 
-export type ColumnShape = 'tied' | 'spiral'
+export type ColumnShape  = 'tied' | 'spiral'
+export type LateralSystem = 'gravity' | 'imf' | 'smf'
 
 // ── Axial (short, concentric) ────────────────────────────────────────────
 export interface AxialColumnInput {
@@ -34,6 +35,10 @@ export interface AxialColumnInput {
   Pu: number                   // factored axial demand, kN
   /** Provide to ANALYZE a chosen bar count; omit to DESIGN the steel. */
   numBars?: number
+  /** Lateral system — drives seismic tie requirements. Default: 'gravity'. */
+  system?: LateralSystem
+  columnLength?: number        // mm, clear height (needed for SMF lo; §418.7.5.1)
+  hx?: number                  // mm, max horiz. spacing of laterally restrained bars
 }
 
 export interface AxialColumnResult {
@@ -54,8 +59,14 @@ export interface AxialColumnResult {
   axialOK: boolean             // φPn,max ≥ Pu
   // Tie detailing (tied)
   tieDiaMin: number
-  tieSpacing: number           // governing s, mm
+  tieSpacing: number           // governing §425.7.2 s, mm
   tieGovern: string
+  // Seismic tie detailing (when system !== 'gravity')
+  seismicLoZone?: number       // mm, required confinement zone length
+  seismicSConf?: number        // mm, max spacing within confinement zone
+  seismicSOut?: number         // mm, max spacing outside confinement zone
+  tieSpacingFinal: number      // mm, min(tieSpacing, seismicSConf if seismic)
+  tieSpacingLabel: string      // human-readable governing clause
   // Spiral detailing (spiral)
   Ach: number
   rhoS: number                 // required volumetric ratio
@@ -88,15 +99,51 @@ export function designAxialColumn(i: AxialColumnInput): AxialColumnResult {
   const PnMax = alpha * Po
   const phiPnMax = phi * PnMax
 
-  // §425.7.2 ties
+  // §425.7.2 ties (gravity / upper bound)
   const tieDiaMin = i.barDia <= 32 ? 10 : 12
   const least = tied ? Math.min(i.b ?? 0, i.h ?? 0) : (i.D ?? 0)
   const sCands: [number, string][] = [
     [16 * i.barDia, '16d_b'],
     [48 * i.tieDia, '48d_tie'],
-    [least, 'least dimension'],
+    [least, 'least dim'],
   ]
   const [tieSpacing, tieGovern] = sCands.reduce((a, c) => (c[0] < a[0] ? c : a))
+
+  // Seismic confinement (tied columns)
+  const system = i.system ?? 'gravity'
+  const bDim = i.b ?? least, hDim = i.h ?? least   // column cross-section dims
+  const bMin = Math.min(bDim, hDim), bMax = Math.max(bDim, hDim)
+  let seismicLoZone: number | undefined
+  let seismicSConf: number | undefined
+  let seismicSOut:  number | undefined
+
+  if (tied && system !== 'gravity') {
+    if (system === 'smf') {
+      // §418.7.5.1 — confinement zone length lo
+      const Lu = i.columnLength ?? 3000   // default 3 m if not given
+      seismicLoZone = Math.max(bMax, Lu / 6, 450)
+
+      // §418.7.5.3/4 — spacing within lo
+      const hx = Math.min(i.hx ?? bMin, 350)   // max lateral spacing ≤ 350
+      const so  = Math.min(Math.max(100 + (350 - hx) / 3, 100), 150)
+      seismicSConf = Math.min(bMin / 4, 6 * i.barDia, so)
+
+      // §418.7.5.5 — spacing outside lo
+      seismicSOut = Math.min(6 * i.barDia, 150)
+    } else {
+      // IMF §418.4.3 — hinge zone = max(bMax, 450); s ≤ min(8db, 24dt, bMin/2, 300)
+      seismicLoZone = Math.max(bMax, 450)
+      seismicSConf  = Math.min(8 * i.barDia, 24 * i.tieDia, bMin / 2, 300)
+      seismicSOut   = tieSpacing   // outside hinge: ordinary §425.7.2 applies
+    }
+  }
+
+  const tieSpacingFinal = seismicSConf !== undefined
+    ? Math.min(tieSpacing, seismicSConf)
+    : tieSpacing
+  const tieSpacingLabel = seismicSConf !== undefined && seismicSConf < tieSpacing
+    ? (system === 'smf' ? '§418.7.5 SMF conf.' : '§418.4.3 IMF conf.')
+    : `§425.7.2 (${tieGovern})`
 
   // §425.7.3 spiral
   const Dch = (i.D ?? 0) - 2 * i.cover
@@ -117,6 +164,8 @@ export function designAxialColumn(i: AxialColumnInput): AxialColumnResult {
     bars, Ast, rho, rhoOK, minBars,
     Po, PnMax, phiPnMax, axialOK: phiPnMax >= i.Pu - 1e-9,
     tieDiaMin, tieSpacing, tieGovern,
+    seismicLoZone, seismicSConf, seismicSOut,
+    tieSpacingFinal, tieSpacingLabel,
     Ach, rhoS, spiralPitch, pitchClearOK,
   }
 }

@@ -19,9 +19,63 @@ describe('axial — tied (review Concrete 7, Problem 2)', () => {
     expect(r.rhoOK).toBe(true)
   })
 
-  it('10 mm tie spacing = min(16db, 48dt, least) = 400 mm', () => {
+  it('§425.7.2 spacing = min(16×28=448, 48×10=480, 400) = 400 mm', () => {
     expect(r.tieSpacing).toBe(400)
-    expect(r.tieGovern).toBe('least dimension')
+    expect(r.tieGovern).toBe('least dim')
+    expect(r.tieSpacingFinal).toBe(400)   // gravity → same as §425.7.2
+  })
+})
+
+describe('axial — tied, SMF seismic §418.7.5', () => {
+  // 500×500 column, barDia=25, tieDia=10, Lu=3000 mm, hx=200 (lateral tie spacing)
+  const r = designAxialColumn({
+    shape: 'tied', b: 500, h: 500, cover: 40, barDia: 25, tieDia: 10,
+    fc: 28, fy: 415, Pu: 2000,
+    system: 'smf', columnLength: 3000, hx: 200,
+  })
+
+  it('§425.7.2 gives ≥300 mm but SMF conf. governs', () => {
+    expect(r.tieSpacing).toBeGreaterThanOrEqual(300)
+    expect(r.seismicSConf).toBeDefined()
+    expect(r.tieSpacingFinal).toBeLessThan(r.tieSpacing)
+    expect(r.tieSpacingLabel).toContain('SMF')
+  })
+
+  it('SMF conf. spacing ≤ min(bMin/4, 6db, so)', () => {
+    const bMin = 500, db = 25, hx = 200
+    const so = Math.min(Math.max(100 + (350 - hx) / 3, 100), 150)
+    const expected = Math.min(bMin / 4, 6 * db, so)
+    expect(r.seismicSConf).toBeCloseTo(expected, 6)
+  })
+
+  it('so = clamp(100 + (350−hx)/3, 100, 150) for hx = 200', () => {
+    // so = 100 + (350-200)/3 = 100 + 50 = 150 mm
+    expect(r.seismicSConf!).toBeCloseTo(Math.min(500 / 4, 6 * 25, 150), 6)
+  })
+
+  it('SMF confinement zone lo ≥ max(bMax, Lu/6, 450)', () => {
+    // max(500, 3000/6=500, 450) = 500
+    expect(r.seismicLoZone).toBeCloseTo(Math.max(500, 3000 / 6, 450), 6)
+  })
+
+  it('outside confinement zone: s ≤ min(6db, 150)', () => {
+    expect(r.seismicSOut).toBeCloseTo(Math.min(6 * 25, 150), 6)
+  })
+})
+
+describe('axial — tied, IMF seismic §418.4.3', () => {
+  const r = designAxialColumn({
+    shape: 'tied', b: 400, h: 400, cover: 40, barDia: 25, tieDia: 10,
+    fc: 28, fy: 415, Pu: 1500, system: 'imf',
+  })
+
+  it('IMF conf. spacing = min(8db, 24dt, bMin/2, 300)', () => {
+    const expected = Math.min(8 * 25, 24 * 10, 400 / 2, 300)
+    expect(r.seismicSConf).toBeCloseTo(expected, 6)
+  })
+
+  it('IMF hinge zone lo = max(bMax, 450)', () => {
+    expect(r.seismicLoZone).toBeCloseTo(Math.max(400, 450), 6)
   })
 })
 
