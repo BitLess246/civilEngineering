@@ -87,13 +87,16 @@ Latest merged work — PRs **#178–#183** (main); **Steel Design** open PR:
   - Pure engine: `webapp/src/engine/steelDesign.ts` + 26 tests.
   - Uses the existing AISC W-shape library; section properties (Ix, Sx, Zx, J, rts) derived from geometry.
 
+## AISC shape library (completed)
+`webapp/src/engine/aiscSections.ts` now contains the full AISC 14th-edition metric dataset:
+~195 W-shapes (W100–W920), 28 C, 42 L, 55 HSS rect/sq, 13 round HSS/Pipe, 25 WT.
+Shape names corrected to exact AISC designations (e.g. W310x38.7 not W310x39).
+
 ## Next up — roadmap
-- Optional: bulk-import the **full official AISC v15 metric table** as data
-  (CSV/JSON drop-in). Current library is a curated real-value set plus computed
-  nominal HSS/Pipe sizes; a custom-section input covers anything not tabulated.
 - Optional: save / load custom trusses (localStorage or file); drag nodes in 3D.
 - Optional: more roof forms (Fink fan/double-Fink, gambrel), wind/uplift cases.
 - Optional: custom section input on Steel Design page (enter Sx, Zx, ry directly).
 - Optional: point-load + moment diagram for beams; stiffened web shear (§G2.2).
+- Optional: steel section auto-optimization in 3D model space (shape-ladder search).
 
 _Tests at last handoff: 330 passing; `tsc -b` clean; production build OK._
