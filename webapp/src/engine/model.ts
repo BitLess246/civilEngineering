@@ -10,12 +10,21 @@ import type { LiveItem } from './liveLoads'
 
 export interface Node { id: string; x: number; y: number; z: number }
 
+export type SectionMaterial = 'concrete' | 'steel'
+
 export interface RectSection {
   id: string
   name: string
-  b: number; h: number          // mm
+  b: number; h: number          // mm  (concrete; for steel a bounding box ≈ bf × d)
   fc: number; fy: number
   barDia: number; tieDia: number; cover: number
+  /** Material of the member. Absent ⇒ 'concrete' (back-compatible). */
+  material?: SectionMaterial
+  /** AISC shape name (steel only), e.g. 'W310x39'. Resolved via aiscSections. */
+  shape?: string
+  /** Steel grade yield/ultimate (steel only). Defaults: Fy 248, Fu 400 (A36). */
+  steelFy?: number
+  steelFu?: number
 }
 
 export type MemberRole = 'beam' | 'girder' | 'column' | 'brace'

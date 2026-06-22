@@ -19,6 +19,9 @@ import { designSquareFooting, type SquareFootingResult } from './isolatedFooting
 import { designCombinedFooting, type CombinedFootingResult } from './combinedFooting'
 import { designSlabDDM, type SlabDesignResult } from './slabDDM'
 import { designShearWall, type ShearWallResult } from './shearWallDesign'
+import { shapeByName } from './aiscSections'
+import { deriveWSection, beamFlexure, beamShear, columnAxial, combinedLoading } from './steelDesign'
+import { designBasePlate, adoptPlateThickness, type BasePlateResult } from './baseplate'
 
 export interface SoilOptions {
   qAllow: number; gammaSoil: number; gammaConc: number; H: number
@@ -91,22 +94,96 @@ export interface WallScheduleRow {
 /** Per-support footing choice: isolated (default) or combined with another node. */
 export type FootingPlan = Record<string, { type: 'isolated' } | { type: 'combined'; with: string }>
 
+// ── Steel schedule rows (AISC 360-16 LRFD) ──────────────────────────────────
+export interface SteelBeamScheduleRow {
+  id: string; role: string; L: number; shape: string
+  Mu: number; Vu: number          // kN·m, kN
+  phiMn: number; phiVn: number     // kN·m, kN
+  ltbZone: string
+  utilM: number; utilV: number
+  ok: boolean
+  gov?: string
+}
+export interface SteelColumnScheduleRow {
+  id: string; L: number; shape: string
+  Pu: number; Mu: number
+  phiPn: number; phiMn: number
+  slenderness: number
+  ratio: number; equation: string  // §H1-1
+  ok: boolean
+  gov?: string
+}
+export interface BasePlateScheduleRow {
+  node: string; shape: string
+  Pu: number; Tu: number
+  design: BasePlateResult
+  tAdopt: number                   // adopted plate thickness, mm
+  ok: boolean
+}
+
 export interface StructureDesign {
   govName: string
   cases: string[]   // every load case (combo × direction) run for the envelope
   beams: BeamScheduleRow[]
   columns: ColumnScheduleRow[]
+  steelBeams: SteelBeamScheduleRow[]
+  steelColumns: SteelColumnScheduleRow[]
+  basePlates: BasePlateScheduleRow[]
   slabs: SlabScheduleRow[]
   walls: WallScheduleRow[]
   footings: FootingScheduleRow[]
   combined: CombinedScheduleRow[]
-  totals: { concreteMembers: number; concreteSlabs: number; concrete: number }
+  totals: { concreteMembers: number; concreteSlabs: number; concrete: number; steelKg: number }
   orphanEdges: number
 }
 
 export function designOK(d: StructureDesign): boolean {
   return d.beams.every((b) => b.ok) && d.columns.every((c) => c.ok)
+    && d.steelBeams.every((b) => b.ok) && d.steelColumns.every((c) => c.ok)
+    && d.basePlates.every((p) => p.ok)
     && d.footings.every((f) => f.ok) && d.combined.every((c) => c.ok)
+}
+
+// ── Steel member design (reuses steelDesign engine) ──────────────────────────
+/** Design a steel beam/girder from a member result. Lb = full length
+ *  (conservative; the slab braces the top flange for sagging but support
+ *  hogging puts the bottom flange in compression). */
+function designSteelBeamRow(mr: F3MemberResult, role: string, sec: RectSection): SteelBeamScheduleRow | null {
+  const shape = sec.shape ? shapeByName(sec.shape) : undefined
+  if (!shape || (shape.family !== 'W' && shape.family !== 'WT')) return null
+  const Fy = sec.steelFy ?? 248
+  const p = deriveWSection(shape)
+  const Mu = mr.Mmax, Vu = mr.Vmax
+  const flex = beamFlexure(shape, p, Fy, mr.L * 1000, 1.0)
+  const shear = beamShear(shape, p, Fy)
+  const utilM = flex.phiMn > 1e-9 ? Mu / flex.phiMn : Infinity
+  const utilV = shear.phiVn > 1e-9 ? Vu / shear.phiVn : Infinity
+  return {
+    id: mr.id, role, L: mr.L, shape: shape.name, Mu, Vu,
+    phiMn: flex.phiMn, phiVn: shear.phiVn, ltbZone: flex.ltbZone,
+    utilM, utilV, ok: utilM <= 1 + 1e-9 && utilV <= 1 + 1e-9,
+  }
+}
+
+/** Design a steel column from a member result (§E3 axial + §H1-1 combined). */
+function designSteelColumnRow(mr: F3MemberResult, sec: RectSection): SteelColumnScheduleRow | null {
+  const shape = sec.shape ? shapeByName(sec.shape) : undefined
+  if (!shape) return null
+  const Fy = sec.steelFy ?? 248
+  const Pu = Math.max(0, -Math.min(...mr.N))   // compression (N < 0)
+  const Mu = mr.Mmax
+  const axial = columnAxial(shape, Fy, mr.L, 1.0, 1.0)
+  let phiMn = Infinity
+  if (shape.family === 'W' || shape.family === 'WT') {
+    phiMn = beamFlexure(shape, deriveWSection(shape), Fy, mr.L * 1000, 1.0).phiMn
+  }
+  const comb = combinedLoading(Pu, axial.phiPn, Mu, phiMn)
+  return {
+    id: mr.id, L: mr.L, shape: shape.name, Pu, Mu,
+    phiPn: axial.phiPn, phiMn: Number.isFinite(phiMn) ? phiMn : 0,
+    slenderness: axial.slenderness, ratio: comb.ratio, equation: comb.equation,
+    ok: comb.ok && axial.slenderOK,
+  }
 }
 
 const beamOK = (d: BeamDesignResult) =>
@@ -283,26 +360,51 @@ export function designStructure(
   onProgress?.({ phase: 'Designing beams & columns', detail: `${model.members.length} members` })
   const beams: BeamScheduleRow[] = []
   const columns: ColumnScheduleRow[] = []
+  const steelBeams: SteelBeamScheduleRow[] = []
+  const steelColumns: SteelColumnScheduleRow[] = []
   for (const m of model.members) {
     const role = roleOf.get(m.id)
+    const sec = secOf(m.id)
+    const isSteel = sec.material === 'steel'
     if (role === 'beam' || role === 'girder') {
-      let best: BeamScheduleRow | null = null, bestSev = -1, gov = ''
-      for (const run of runs) {
-        const mr = memberOf(run, m.id); if (!mr) continue
-        const row = designBeamRow(mr, role, secOf(m.id))
-        if (row.sections.length === 0) continue
-        const sev = beamSeverity(row)
-        if (sev > bestSev) { bestSev = sev; best = row; gov = run.name }
+      if (isSteel) {
+        let best: SteelBeamScheduleRow | null = null, bestSev = -1, gov = ''
+        for (const run of runs) {
+          const mr = memberOf(run, m.id); if (!mr) continue
+          const row = designSteelBeamRow(mr, role, sec); if (!row) continue
+          const sev = (row.ok ? 0 : 1e9) + row.Mu
+          if (sev > bestSev) { bestSev = sev; best = row; gov = run.name }
+        }
+        if (best) steelBeams.push({ ...best, gov })
+      } else {
+        let best: BeamScheduleRow | null = null, bestSev = -1, gov = ''
+        for (const run of runs) {
+          const mr = memberOf(run, m.id); if (!mr) continue
+          const row = designBeamRow(mr, role, sec)
+          if (row.sections.length === 0) continue
+          const sev = beamSeverity(row)
+          if (sev > bestSev) { bestSev = sev; best = row; gov = run.name }
+        }
+        if (best) beams.push({ ...best, gov })
       }
-      if (best) beams.push({ ...best, gov })
     } else if (role === 'column') {
-      let best: ColumnScheduleRow | null = null, bestUtil = -1, gov = ''
-      for (const run of runs) {
-        const mr = memberOf(run, m.id); if (!mr) continue
-        const row = designColumnRow(mr, secOf(m.id))
-        if (row.util > bestUtil) { bestUtil = row.util; best = row; gov = run.name }
+      if (isSteel) {
+        let best: SteelColumnScheduleRow | null = null, bestRatio = -1, gov = ''
+        for (const run of runs) {
+          const mr = memberOf(run, m.id); if (!mr) continue
+          const row = designSteelColumnRow(mr, sec); if (!row) continue
+          if (row.ratio > bestRatio) { bestRatio = row.ratio; best = row; gov = run.name }
+        }
+        if (best) steelColumns.push({ ...best, gov })
+      } else {
+        let best: ColumnScheduleRow | null = null, bestUtil = -1, gov = ''
+        for (const run of runs) {
+          const mr = memberOf(run, m.id); if (!mr) continue
+          const row = designColumnRow(mr, sec)
+          if (row.util > bestUtil) { bestUtil = row.util; best = row; gov = run.name }
+        }
+        if (best) columns.push({ ...best, gov })
       }
-      if (best) columns.push({ ...best, gov })
     }
   }
 
@@ -361,15 +463,46 @@ export function designStructure(
     footings.push({ node: ru.node, P, Pu, design: d, ok: d.qNet > 0 && d.punchOK && d.beamOK, gov })
   }
 
-  // ── Concrete totals ──
+  // ── Base plates (steel columns landing on a base support) ──
+  const basePlates: BasePlateScheduleRow[] = []
+  for (const ru of runs[govIdx].result.reactions) {
+    const col = colAtNode(ru.node)
+    const fs = col ? secOf(col.id) : undefined
+    if (!col || !fs || fs.material !== 'steel') continue
+    const shape = fs.shape ? shapeByName(fs.shape) : undefined
+    if (!shape) continue
+    // envelope factored compression (max) and net uplift (most tension) across runs
+    let Pu = 0, Tu = 0
+    for (const run of runs) {
+      const i = run.result.reactions.findIndex((r) => r.node === ru.node)
+      if (i < 0) continue
+      const Fy = run.result.reactions[i].F[1]
+      if (Fy > Pu) Pu = Fy
+      if (-Fy > Tu) Tu = -Fy
+    }
+    if (Pu < 1e-6 && Tu < 1e-6) continue
+    const design = designBasePlate({
+      Pu, Tu, d: shape.d ?? Math.max(fs.b, fs.h), bf: shape.bf ?? Math.min(fs.b, fs.h),
+      fc: fs.fc, Fy: fs.steelFy ?? 248,
+    })
+    const tAdopt = adoptPlateThickness(design.tReq)
+    basePlates.push({ node: ru.node, shape: shape.name, Pu, Tu, design, tAdopt, ok: design.bearingOK && design.anchorOK })
+  }
+
+  // ── Concrete & steel totals ──
   const nm = new Map(model.nodes.map((n) => [n.id, n]))
-  let concreteMembers = 0
+  let concreteMembers = 0, steelKg = 0
   for (const m of model.members) {
     const a = nm.get(m.i), b2 = nm.get(m.j)
     if (!a || !b2) continue
     const L = Math.hypot(b2.x - a.x, b2.y - a.y, b2.z - a.z)
     const s = secOf(m.id)
-    concreteMembers += (s.b / 1000) * (s.h / 1000) * L
+    if (s.material === 'steel') {
+      const shape = s.shape ? shapeByName(s.shape) : undefined
+      if (shape) steelKg += (shape.A / 1e6) * L * 7850   // A m² × L × ρ
+    } else {
+      concreteMembers += (s.b / 1000) * (s.h / 1000) * L
+    }
   }
   let concreteSlabs = 0
   for (const p of model.plates) {
@@ -440,8 +573,8 @@ export function designStructure(
   return {
     govName: runs[govIdx].name,
     cases: runs.map((r) => r.name),
-    beams, columns, slabs, walls, footings, combined,
-    totals: { concreteMembers, concreteSlabs, concrete: concreteMembers + concreteSlabs },
+    beams, columns, steelBeams, steelColumns, basePlates, slabs, walls, footings, combined,
+    totals: { concreteMembers, concreteSlabs, concrete: concreteMembers + concreteSlabs, steelKg },
     orphanEdges: br.orphanEdges.length,
   }
 }
@@ -526,6 +659,8 @@ export interface OptimizeResult {
 
 const countFails = (d: StructureDesign): number =>
   d.beams.filter((x) => !x.ok).length + d.columns.filter((x) => !x.ok).length
+  + d.steelBeams.filter((x) => !x.ok).length + d.steelColumns.filter((x) => !x.ok).length
+  + d.basePlates.filter((x) => !x.ok).length
   + d.footings.filter((x) => !x.ok).length + d.combined.filter((x) => !x.ok).length
 
 const withSizes = (model: StructuralModel, sizes: Map<string, RectSection>): StructuralModel =>
