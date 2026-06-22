@@ -2,13 +2,11 @@ import { lazy, Suspense, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { shapesOf, shapeByName } from '../engine/aiscSections'
 import type { AiscShape } from '../engine/aiscSections'
-import {
-  deriveWSection, beamFlexure, beamShear, columnAxial,
-  weakAxisFlexure, combinedLoading, boltShear, weldStrength,
-  beamLoadingSimple, boltGroupGeom, eccentricBoltGroup, shearTabBlockShear,
-  outOfPlaneBoltGroup, pryingAction,
-} from '../engine/steelDesign'
+// type-only imports — no engine code bundled into the browser from here
 import type { BoltGrade, ElectrodeClass } from '../engine/steelDesign'
+import { calcBeam, calcColumn, calcConnection } from '../lib/calcApi'
+import type { BeamCalcResult, ColumnCalcResult, ConnectionCalcResult } from '../lib/calcApi'
+import { useCalcResult } from '../lib/useCalcResult'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
 import { WorkedSolution } from '../components/WorkedSolution'
@@ -17,12 +15,12 @@ import type { SolutionStep } from '../lib/solution'
 import { f1, f2, f3 } from '../lib/format'
 import { sn1, sn2, sn3 } from '../lib/solution'
 
-const BeamViewer3D      = lazy(() => import('../components/SteelViewer3D').then(m => ({ default: m.BeamViewer3D })))
-const ColumnViewer3D    = lazy(() => import('../components/SteelViewer3D').then(m => ({ default: m.ColumnViewer3D })))
+const BeamViewer3D       = lazy(() => import('../components/SteelViewer3D').then(m => ({ default: m.BeamViewer3D })))
+const ColumnViewer3D     = lazy(() => import('../components/SteelViewer3D').then(m => ({ default: m.ColumnViewer3D })))
 const ConnectionViewer3D = lazy(() => import('../components/SteelViewer3D').then(m => ({ default: m.ConnectionViewer3D })))
 
-type Tab   = 'beam' | 'column' | 'connection'
-type Grade = 'A36' | 'A572G50'
+type Tab      = 'beam' | 'column' | 'connection'
+type Grade    = 'A36' | 'A572G50'
 type ConnType = 'bolt' | 'weld'
 
 const GRADES: Record<Grade, { Fy: number; Fu: number; label: string }> = {
@@ -40,7 +38,12 @@ const badge = (zone: string) => {
   const cls = zone === 'plastic' ? 'bg-green-100 text-green-800' : zone === 'inelastic' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
   return <span className={`ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${cls}`}>{zone}</span>
 }
-const Spinner = () => <div className="flex h-72 items-center justify-center rounded-xl border border-slate-200 bg-slate-900 text-sm text-slate-400">Loading 3D…</div>
+const Spinner    = () => <div className="flex h-72 items-center justify-center rounded-xl border border-slate-200 bg-slate-900 text-sm text-slate-400">Loading 3D…</div>
+const CalcBadge  = ({ loading, error }: { loading: boolean; error: string | null }) => {
+  if (error)   return <span className="ml-2 rounded bg-red-100 px-2 py-0.5 text-xs text-red-700">API error — check console</span>
+  if (loading) return <span className="ml-2 rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-500">computing…</span>
+  return null
+}
 const ShapePick = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
   <label className="col-span-full flex flex-col text-sm">
     <span className="mb-1 font-medium text-slate-600">W-shape</span>
@@ -63,15 +66,23 @@ function BeamTab() {
   const [wL,    setWL]            = useState(25)
 
   const { Fy } = GRADES[grade]
-  const shape  = useMemo(() => shapeOrFirst(shapeName), [shapeName])
-  const props  = useMemo(() => deriveWSection(shape), [shape])
-  const flex   = useMemo(() => beamFlexure(shape, props, Fy, Lb * 1000, Cb), [shape, props, Fy, Lb, Cb])
-  const shear  = useMemo(() => beamShear(shape, props, Fy), [shape, props, Fy])
-  const loads  = useMemo(() => beamLoadingSimple({ wDead: wD, wLive: wL, L: span }, props.Ix), [wD, wL, span, props])
+  // Shape geometry stays client-side: needed by 3D viewer and section dimensions in steps.
+  const shape = useMemo(() => shapeOrFirst(shapeName), [shapeName])
 
-  const utilM = loads.Mu / flex.phiMn, utilV = loads.Vu / shear.phiVn
+  const input = useMemo(
+    () => ({ shapeName, Fy, span, Lb, Cb, wDead: wD, wLive: wL }),
+    [shapeName, Fy, span, Lb, Cb, wD, wL]
+  )
+  const { data: res, loading, error } = useCalcResult<BeamCalcResult>(
+    () => calcBeam(input), [input]
+  )
+
+  const utilM = res ? res.loads.Mu / res.flex.phiMn : 0
+  const utilV = res ? res.loads.Vu / res.shear.phiVn : 0
 
   const steps = useMemo((): SolutionStep[] => {
+    if (!res) return []
+    const { props, flex, shear, loads } = res
     const E = 200000
     return [
       {
@@ -118,12 +129,12 @@ function BeamTab() {
         ],
       },
     ]
-  }, [shape, props, flex, shear, loads, Fy, wD, wL, span, Lb, utilM])
+  }, [res, shape, Fy, wD, wL, span, Lb, utilM])
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
       <div className="space-y-5">
-        <Card title="Section & grade">
+        <Card title={<>Section & grade<CalcBadge loading={loading} error={error} /></>}>
           <ShapePick value={shapeName} onChange={setShapeName} />
           <Pick label="Steel grade" value={grade} onChange={v => setGrade(v as Grade)}
             options={Object.entries(GRADES).map(([k, v]) => [k as Grade, v.label])} />
@@ -144,30 +155,34 @@ function BeamTab() {
           <BeamViewer3D shape={shape} span={span} wDead={wD} wLive={wL} />
         </Suspense>
 
-        <ResultCard title="Section properties">
-          <Row label="A"  value={`${shape.A.toLocaleString()} mm²`} />
-          <Row label="Ix" value={`${(props.Ix/1e6).toFixed(1)} ×10⁶ mm⁴`} />
-          <Row label="Sx" value={`${(props.Sx/1e3).toFixed(0)} ×10³ mm³`} />
-          <Row label="Zx" value={`${(props.Zx/1e3).toFixed(0)} ×10³ mm³`} />
-          <Row label="Lp / Lr" value={`${f2(flex.Lp/1000)} / ${f2(flex.Lr/1000)} m`} />
-        </ResultCard>
-        <ResultCard title={`Flexure §F2 ${badge(flex.ltbZone)}`}>
-          <Row label="φMn" value={`${f1(flex.phiMn)} kN·m`} />
-          <Row alert={utilM>1} label="Mu / φMn" value={ok(utilM<=1, `${(utilM*100).toFixed(0)} %`)} />
-        </ResultCard>
-        <ResultCard title="Shear §G2.1">
-          <Row label="φVn" value={`${f1(shear.phiVn)} kN`} sub={`Cv1=${shear.Cv1.toFixed(2)}`} />
-          <Row alert={utilV>1} label="Vu / φVn" value={ok(utilV<=1, `${(utilV*100).toFixed(0)} %`)} />
-        </ResultCard>
-        <ResultCard title="Deflection">
-          <Row alert={loads.deltaL>loads.limL360} label="δL ≤ L/360" value={ok(loads.deltaL<=loads.limL360, `${f2(loads.deltaL)} mm`)} />
-          <Row alert={loads.deltaD+loads.deltaL>loads.limL240} label="δtotal ≤ L/240" value={ok(loads.deltaD+loads.deltaL<=loads.limL240, `${f2(loads.deltaD+loads.deltaL)} mm`)} />
-        </ResultCard>
+        {res && (<>
+          <ResultCard title="Section properties">
+            <Row label="A"  value={`${shape.A.toLocaleString()} mm²`} />
+            <Row label="Ix" value={`${(res.props.Ix/1e6).toFixed(1)} ×10⁶ mm⁴`} />
+            <Row label="Sx" value={`${(res.props.Sx/1e3).toFixed(0)} ×10³ mm³`} />
+            <Row label="Zx" value={`${(res.props.Zx/1e3).toFixed(0)} ×10³ mm³`} />
+            <Row label="Lp / Lr" value={`${f2(res.flex.Lp/1000)} / ${f2(res.flex.Lr/1000)} m`} />
+          </ResultCard>
+          <ResultCard title={<>Flexure §F2 {badge(res.flex.ltbZone)}</>}>
+            <Row label="φMn" value={`${f1(res.flex.phiMn)} kN·m`} />
+            <Row alert={utilM>1} label="Mu / φMn" value={ok(utilM<=1, `${(utilM*100).toFixed(0)} %`)} />
+          </ResultCard>
+          <ResultCard title="Shear §G2.1">
+            <Row label="φVn" value={`${f1(res.shear.phiVn)} kN`} sub={`Cv1=${res.shear.Cv1.toFixed(2)}`} />
+            <Row alert={utilV>1} label="Vu / φVn" value={ok(utilV<=1, `${(utilV*100).toFixed(0)} %`)} />
+          </ResultCard>
+          <ResultCard title="Deflection">
+            <Row alert={res.loads.deltaL>res.loads.limL360} label="δL ≤ L/360" value={ok(res.loads.deltaL<=res.loads.limL360, `${f2(res.loads.deltaL)} mm`)} />
+            <Row alert={res.loads.deltaD+res.loads.deltaL>res.loads.limL240} label="δtotal ≤ L/240" value={ok(res.loads.deltaD+res.loads.deltaL<=res.loads.limL240, `${f2(res.loads.deltaD+res.loads.deltaL)} mm`)} />
+          </ResultCard>
+        </>)}
       </div>
 
-      <div className="col-span-full">
-        <WorkedSolution steps={steps} title="Beam Design — step-by-step (AISC 360-16 §F, §G)" />
-      </div>
+      {res && (
+        <div className="col-span-full">
+          <WorkedSolution steps={steps} title="Beam Design — step-by-step (AISC 360-16 §F, §G)" />
+        </div>
+      )}
     </div>
   )
 }
@@ -189,15 +204,20 @@ function ColumnTab() {
 
   const { Fy } = GRADES[grade]
   const shape  = useMemo(() => shapeOrFirst(shapeName), [shapeName])
-  const props  = useMemo(() => deriveWSection(shape), [shape])
-  const Pu = dlMode === 'DL' ? Math.max(1.4*dead, 1.2*dead+1.6*live) : PuDir
+  // Factor axial demand client-side (trivial arithmetic, not proprietary)
+  const Pu     = dlMode === 'DL' ? Math.max(1.4*dead, 1.2*dead+1.6*live) : PuDir
 
-  const axial  = useMemo(() => columnAxial(shape, Fy, L, Kx, Ky), [shape, Fy, L, Kx, Ky])
-  const flexX  = useMemo(() => beamFlexure(shape, props, Fy, L*1000, 1.0), [shape, props, Fy, L])
-  const flexY  = useMemo(() => weakAxisFlexure(shape, props, Fy), [shape, props, Fy])
-  const comb   = useMemo(() => combinedLoading(Pu, axial.phiPn, Mux, flexX.phiMn, Muy, flexY.phiMny), [Pu, axial, Mux, flexX, Muy, flexY])
+  const input = useMemo(
+    () => ({ shapeName, Fy, L, Kx, Ky, Pu, Mux, Muy }),
+    [shapeName, Fy, L, Kx, Ky, Pu, Mux, Muy]
+  )
+  const { data: res, loading, error } = useCalcResult<ColumnCalcResult>(
+    () => calcColumn(input), [input]
+  )
 
   const steps = useMemo((): SolutionStep[] => {
+    if (!res) return []
+    const { axial, flexX, weak, comb } = res
     const E = 200000
     return [
       {
@@ -220,26 +240,26 @@ function ColumnTab() {
         title: 'Flexural capacities',
         lines: [
           { tex: `\\phi M_{nx} = ${sn1(flexX.phiMn)}\\text{ kN·m}\\quad (\\text{${flexX.ltbZone} zone, §F2})` },
-          { tex: `\\phi M_{ny} = 0.90 F_y Z_y = ${sn1(flexY.phiMny)}\\text{ kN·m}\\quad (\\text{§F6, weak-axis})` },
+          { tex: `\\phi M_{ny} = 0.90 F_y Z_y = ${sn1(weak.phiMny)}\\text{ kN·m}\\quad (\\text{§F6, weak-axis})` },
         ],
       },
       {
         title: `Combined loading §H1-1 (equation ${comb.equation})`,
         lines: comb.equation === 'H1-1a' ? [
           { tex: `P_u/\\phi P_n = ${sn3(Pu/axial.phiPn)} \\geq 0.2 \\Rightarrow \\text{use §H1-1a}` },
-          { tex: `\\frac{P_u}{\\phi P_n} + \\frac{8}{9}\\!\\left(\\frac{M_{ux}}{\\phi M_{nx}} + \\frac{M_{uy}}{\\phi M_{ny}}\\right) = ${sn3(Pu/axial.phiPn)} + \\frac{8}{9}(${sn3(Mux/flexX.phiMn)} + ${sn3(Muy > 0 ? Muy/flexY.phiMny : 0)}) = ${sn3(comb.ratio)}\\quad${comb.ok?'\\checkmark':'\\times'}` },
+          { tex: `\\frac{P_u}{\\phi P_n} + \\frac{8}{9}\\!\\left(\\frac{M_{ux}}{\\phi M_{nx}} + \\frac{M_{uy}}{\\phi M_{ny}}\\right) = ${sn3(Pu/axial.phiPn)} + \\frac{8}{9}(${sn3(Mux/flexX.phiMn)} + ${sn3(Muy > 0 ? Muy/weak.phiMny : 0)}) = ${sn3(comb.ratio)}\\quad${comb.ok?'\\checkmark':'\\times'}` },
         ] : [
           { tex: `P_u/\\phi P_n = ${sn3(Pu/axial.phiPn)} < 0.2 \\Rightarrow \\text{use §H1-1b}` },
           { tex: `\\frac{P_u}{2\\phi P_n} + \\left(\\frac{M_{ux}}{\\phi M_{nx}} + \\frac{M_{uy}}{\\phi M_{ny}}\\right) = ${sn3(comb.ratio)}\\quad${comb.ok?'\\checkmark':'\\times'}` },
         ],
       },
     ]
-  }, [shape, axial, flexX, flexY, comb, Pu, Mux, Muy, Kx, Ky, L, Fy, dead, live, dlMode])
+  }, [res, shape, Pu, Mux, Muy, Kx, Ky, L, Fy, dead, live, dlMode])
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
       <div className="space-y-5">
-        <Card title="Section & grade">
+        <Card title={<>Section & grade<CalcBadge loading={loading} error={error} /></>}>
           <ShapePick value={shapeName} onChange={setShapeName} />
           <Pick label="Steel grade" value={grade} onChange={v => setGrade(v as Grade)}
             options={Object.entries(GRADES).map(([k, v]) => [k as Grade, v.label])} />
@@ -265,25 +285,29 @@ function ColumnTab() {
         <Suspense fallback={<Spinner />}>
           <ColumnViewer3D shape={shape} L={L} Pu={Pu} Mux={Mux} />
         </Suspense>
-        <ResultCard title="Axial §E3">
-          <Row label="KL/rx" value={f1(axial.slendernessX)} />
-          <Row label="KL/ry" value={f1(axial.slendernessY)} sub="governing" />
-          <Row alert={!axial.slenderOK} label="KL/r" value={`${f1(axial.slenderness)}${axial.slenderOK?'':' > 200 ✗'}`} />
-          <Row label="Fcr" value={`${f1(axial.Fcr)} MPa`} />
-          <Row label="φPn" value={`${f1(axial.phiPn)} kN`} />
-        </ResultCard>
-        <ResultCard title="Flexure">
-          <Row label="φMnx" value={`${f1(flexX.phiMn)} kN·m`} sub={flexX.ltbZone} />
-          <Row label="φMny §F6" value={`${f1(flexY.phiMny)} kN·m`} />
-        </ResultCard>
-        <ResultCard title={`Combined §${comb.equation}`}>
-          <Row alert={!comb.ok} label="Combined ratio" value={ok(comb.ok, `${(comb.ratio*100).toFixed(0)} %`)} />
-        </ResultCard>
+        {res && (<>
+          <ResultCard title="Axial §E3">
+            <Row label="KL/rx" value={f1(res.axial.slendernessX)} />
+            <Row label="KL/ry" value={f1(res.axial.slendernessY)} sub="governing" />
+            <Row alert={!res.axial.slenderOK} label="KL/r" value={`${f1(res.axial.slenderness)}${res.axial.slenderOK?'':' > 200 ✗'}`} />
+            <Row label="Fcr" value={`${f1(res.axial.Fcr)} MPa`} />
+            <Row label="φPn" value={`${f1(res.axial.phiPn)} kN`} />
+          </ResultCard>
+          <ResultCard title="Flexure">
+            <Row label="φMnx" value={`${f1(res.flexX.phiMn)} kN·m`} sub={res.flexX.ltbZone} />
+            <Row label="φMny §F6" value={`${f1(res.weak.phiMny)} kN·m`} />
+          </ResultCard>
+          <ResultCard title={`Combined §${res.comb.equation}`}>
+            <Row alert={!res.comb.ok} label="Combined ratio" value={ok(res.comb.ok, `${(res.comb.ratio*100).toFixed(0)} %`)} />
+          </ResultCard>
+        </>)}
       </div>
 
-      <div className="col-span-full">
-        <WorkedSolution steps={steps} title="Column Design — step-by-step (AISC 360-16 §E3, §H1-1)" />
-      </div>
+      {res && (
+        <div className="col-span-full">
+          <WorkedSolution steps={steps} title="Column Design — step-by-step (AISC 360-16 §E3, §H1-1)" />
+        </div>
+      )}
     </div>
   )
 }
@@ -294,7 +318,6 @@ function ConnectionTab() {
   const [connType,   setConnType]   = useState<ConnType>('bolt')
   const [Vu,         setVu]         = useState(150)
   const [Hu,         setHu]         = useState(0)
-  // bolt layout
   const [boltGrade,  setBoltGrade]  = useState<BoltGrade>('A325M')
   const [db,         setDb]         = useState(20)
   const [nRows,      setNRows]      = useState(3)
@@ -302,54 +325,41 @@ function ConnectionTab() {
   const [sy,         setSy]         = useState(70)
   const [sx,         setSx]         = useState(70)
   const [ey,         setEy]         = useState(40)
-  const [ex_edge,    setExEdge]     = useState(35)  // horizontal edge distance
+  const [ex_edge,    setExEdge]     = useState(35)
   const [threads,    setThreads]    = useState<'yes'|'no'>('yes')
   const [tPlate,     setTPlate]     = useState(10)
   const [FuPlate,    setFuPlate]    = useState(400)
   const [FyPlate,    setFyPlate]    = useState(248)
-  const [ex_load,    setExLoad]     = useState(0)   // in-plane eccentricity from bolt centroid
+  const [ex_load,    setExLoad]     = useState(0)
   const [ey_load,    setEyLoad]     = useState(0)
-  const [e_out,      setEOut]       = useState(0)   // out-of-plane eccentricity (perpendicular to plate)
-  const [b_gage,     setBGage]      = useState(0)   // prying: bolt CL to face of web/stem (0 = skip)
-  // weld
+  const [e_out,      setEOut]       = useState(0)
+  const [b_gage,     setBGage]      = useState(0)
   const [electrode,  setElectrode]  = useState<ElectrodeClass>('E70')
   const [wSize,      setWSize]      = useState(8)
 
-  // bolt calcs
-  const phiRnBolt = useMemo(() =>
-    boltShear(boltGrade, db, Vu, tPlate, FuPlate, threads === 'yes'),
-    [boltGrade, db, Vu, tPlate, FuPlate, threads]
+  const input = useMemo(
+    () => ({
+      Vu, Hu,
+      boltGrade, db, nRows, nCols, sy, sx, ey, ex_edge,
+      threads: threads === 'yes',
+      tPlate, FuPlate, FyPlate,
+      ex_load, ey_load, e_out, b_gage,
+      electrode, wSize,
+    }),
+    [Vu, Hu, boltGrade, db, nRows, nCols, sy, sx, ey, ex_edge, threads,
+     tPlate, FuPlate, FyPlate, ex_load, ey_load, e_out, b_gage, electrode, wSize]
   )
-  const geom = useMemo(() =>
-    boltGroupGeom(nRows, nCols, sx, sy, ex_edge, ey),
-    [nRows, nCols, sx, sy, ex_edge, ey]
+  const { data: res, loading, error } = useCalcResult<ConnectionCalcResult>(
+    () => calcConnection(input), [input]
   )
-  const eccentric = useMemo(() =>
-    eccentricBoltGroup(geom, Vu, Hu, ex_load, ey_load, phiRnBolt.phiRn, db, tPlate),
-    [geom, Vu, Hu, ex_load, ey_load, phiRnBolt, db, tPlate]
-  )
-  const outOfPlane = useMemo(() =>
-    e_out > 0
-      ? outOfPlaneBoltGroup(geom, eccentric.bolts, e_out, Vu, boltGrade, db, threads === 'yes')
-      : null,
-    [geom, eccentric.bolts, e_out, Vu, boltGrade, db, threads]
-  )
-  const prying = useMemo(() =>
-    outOfPlane && b_gage > 0
-      ? pryingAction(outOfPlane.Tmax, outOfPlane.phiTn_crit, b_gage, ex_edge, sy, tPlate, db, FyPlate)
-      : null,
-    [outOfPlane, b_gage, ex_edge, sy, tPlate, db, FyPlate]
-  )
-  const blockShearCases = useMemo(() =>
-    shearTabBlockShear(nRows, sy, ey, ey, ex_edge, db, tPlate, FyPlate, FuPlate),
-    [nRows, sy, ey, ex_edge, db, tPlate, FyPlate, FuPlate]
-  )
-  const weld = useMemo(() => weldStrength(electrode, wSize, Vu), [electrode, wSize, Vu])
-  const weldCapacity = useMemo(() => geom.plateH * weld.phiRnw, [geom, weld])
 
-  const govBlockShear = blockShearCases.reduce((mn, c) => c.phiRn < mn.phiRn ? c : mn, blockShearCases[0])
+  const govBlockShear = res
+    ? res.blockShear.reduce((mn, c) => c.phiRn < mn.phiRn ? c : mn, res.blockShear[0])
+    : null
 
   const boltSteps = useMemo((): SolutionStep[] => {
+    if (!res) return []
+    const { phiRnBolt, geom, eccentric, outOfPlane, prying, blockShear } = res
     const { Fnv, Ab, phiRn_shear, phiRn_bearing, phiRn } = phiRnBolt
     const { n, Ip } = geom
     const M = eccentric.M
@@ -385,10 +395,10 @@ function ConnectionTab() {
         lines: (() => {
           const crit = eccentric.bolts.find(b => b.id === eccentric.critical)
           if (!crit) return []
-          const Ab = (Math.PI/4)*db*db
+          const Ab2 = (Math.PI/4)*db*db
           return [
             { tex: `f_{br} = \\frac{R_{\\max}}{d_b \\cdot t} = \\frac{${sn2(eccentric.Rmax)} \\times 1000}{${db} \\times ${tPlate}} = ${sn1(crit.fbr)}\\text{ MPa}\\quad \\phi F_{br} = 0.75 \\times 2.4 \\times ${FuPlate} = ${sn1(0.75*2.4*FuPlate)}\\text{ MPa}\\quad ${crit.fbr <= 0.75*2.4*FuPlate ? '\\checkmark':'\\times'}` },
-            { tex: `f_v = \\frac{R_{\\max}}{A_b} = \\frac{${sn2(eccentric.Rmax)} \\times 1000}{${Ab.toFixed(0)}} = ${sn1(crit.fv)}\\text{ MPa}\\quad \\phi F_{nv} = 0.75 \\times ${Fnv} = ${sn1(0.75*Fnv)}\\text{ MPa}\\quad ${crit.fv <= 0.75*Fnv ? '\\checkmark':'\\times'}` },
+            { tex: `f_v = \\frac{R_{\\max}}{A_b} = \\frac{${sn2(eccentric.Rmax)} \\times 1000}{${Ab2.toFixed(0)}} = ${sn1(crit.fv)}\\text{ MPa}\\quad \\phi F_{nv} = 0.75 \\times ${Fnv} = ${sn1(0.75*Fnv)}\\text{ MPa}\\quad ${crit.fv <= 0.75*Fnv ? '\\checkmark':'\\times'}` },
           ]
         })(),
       },
@@ -419,7 +429,7 @@ function ConnectionTab() {
       }] : [])] : []),
       {
         title: 'Block shear §J4.3 (shear tab, single bolt line)',
-        lines: blockShearCases.flatMap(c => [
+        lines: blockShear.flatMap(c => [
           { text: c.label },
           { tex: `A_{gv} = ${c.Agv.toFixed(0)}\\text{ mm}^2\\quad A_{nv} = ${c.Anv.toFixed(0)}\\text{ mm}^2\\quad A_{nt} = ${c.Ant.toFixed(0)}\\text{ mm}^2` },
           { tex: `R_{n,\\text{fract}} = 0.6 F_u A_{nv} + U_{bs} F_u A_{nt} = ${sn1(c.Rn_fract)}\\text{ kN}` },
@@ -428,13 +438,13 @@ function ConnectionTab() {
         ]),
       },
     ]
-  }, [phiRnBolt, geom, eccentric, outOfPlane, prying, blockShearCases, boltGrade, db, nRows, nCols, sy, ex_edge, tPlate, FuPlate, FyPlate, threads, Vu, Hu, ex_load, ey_load, e_out, b_gage])
+  }, [res, boltGrade, db, nRows, nCols, sy, ex_edge, tPlate, FuPlate, FyPlate, threads, Vu, Hu, ex_load, ey_load, e_out, b_gage])
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_0.9fr_1fr]">
       {/* ── inputs ── */}
       <div className="space-y-5">
-        <Card title="Connection">
+        <Card title={<>Connection<CalcBadge loading={loading} error={error} /></>}>
           <Pick label="Type" value={connType} onChange={v => setConnType(v as ConnType)}
             options={[['bolt','Bolted (§J3)'],['weld','Fillet weld (§J2.4)']]} />
           <Num label="Applied Vu" unit="kN" value={Vu} onChange={setVu} />
@@ -496,33 +506,37 @@ function ConnectionTab() {
 
       {/* ── 2D drawing + 3D ── */}
       <div className="space-y-4">
-        <ConnectionDrawing
-          geom={geom} db={db}
-          boltForces={connType === 'bolt' ? eccentric.bolts : undefined}
-          critical={connType === 'bolt' ? eccentric.critical : undefined}
-          Vu={Vu} Hu={Hu} ex_load={geom.Cx + ex_load} ey_load={geom.Cy + ey_load}
-          connType={connType}
-        />
-        <Suspense fallback={<Spinner />}>
-          <ConnectionViewer3D geom={geom} db={db} t_plate={tPlate} critical={connType === 'bolt' ? eccentric.critical : ''} />
-        </Suspense>
+        {res && (
+          <ConnectionDrawing
+            geom={res.geom} db={db}
+            boltForces={connType === 'bolt' ? res.eccentric.bolts : undefined}
+            critical={connType === 'bolt' ? res.eccentric.critical : undefined}
+            Vu={Vu} Hu={Hu} ex_load={res.geom.Cx + ex_load} ey_load={res.geom.Cy + ey_load}
+            connType={connType}
+          />
+        )}
+        {res && (
+          <Suspense fallback={<Spinner />}>
+            <ConnectionViewer3D geom={res.geom} db={db} t_plate={tPlate} critical={connType === 'bolt' ? res.eccentric.critical : ''} />
+          </Suspense>
+        )}
       </div>
 
       {/* ── results ── */}
       <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
-        {connType === 'bolt' ? (<>
+        {res && connType === 'bolt' && (<>
           <ResultCard title="Bolt capacity / bolt">
-            <Row label="φRn shear" value={`${f2(phiRnBolt.phiRn_shear)} kN`} />
-            <Row label="φRn bearing" value={`${f2(phiRnBolt.phiRn_bearing)} kN`} />
-            <Row label="φRn governing" value={<b>{f2(phiRnBolt.phiRn)} kN</b>} />
+            <Row label="φRn shear" value={`${f2(res.phiRnBolt.phiRn_shear)} kN`} />
+            <Row label="φRn bearing" value={`${f2(res.phiRnBolt.phiRn_bearing)} kN`} />
+            <Row label="φRn governing" value={<b>{f2(res.phiRnBolt.phiRn)} kN</b>} />
           </ResultCard>
-          <ResultCard title={`Eccentric group (${geom.n} bolts)`}>
-            <Row label="Ip" value={`${geom.Ip.toFixed(0)} mm²`} />
-            <Row label="In-plane M" value={`${eccentric.M.toFixed(0)} kN·mm`} />
-            <Row label="Critical bolt" value={eccentric.critical} sub={`R = ${f2(eccentric.Rmax)} kN`} />
-            <Row alert={eccentric.Rmax > phiRnBolt.phiRn}
+          <ResultCard title={`Eccentric group (${res.geom.n} bolts)`}>
+            <Row label="Ip" value={`${res.geom.Ip.toFixed(0)} mm²`} />
+            <Row label="In-plane M" value={`${res.eccentric.M.toFixed(0)} kN·mm`} />
+            <Row label="Critical bolt" value={res.eccentric.critical} sub={`R = ${f2(res.eccentric.Rmax)} kN`} />
+            <Row alert={res.eccentric.Rmax > res.phiRnBolt.phiRn}
               label="Rmax / φRn"
-              value={ok(eccentric.Rmax <= phiRnBolt.phiRn, `${(eccentric.Rmax/phiRnBolt.phiRn*100).toFixed(0)} %`)} />
+              value={ok(res.eccentric.Rmax <= res.phiRnBolt.phiRn, `${(res.eccentric.Rmax/res.phiRnBolt.phiRn*100).toFixed(0)} %`)} />
           </ResultCard>
           <ResultCard title="Per-bolt forces">
             <div className="overflow-x-auto">
@@ -532,8 +546,8 @@ function ConnectionTab() {
                   <th className="pr-2 pb-1">R kN</th><th className="pb-1">fbr MPa</th>
                 </tr></thead>
                 <tbody>
-                  {eccentric.bolts.map(b => (
-                    <tr key={b.id} className={b.id === eccentric.critical ? 'font-semibold text-amber-700' : ''}>
+                  {res.eccentric.bolts.map(b => (
+                    <tr key={b.id} className={b.id === res.eccentric.critical ? 'font-semibold text-amber-700' : ''}>
                       <td className="pr-2">{b.id}</td>
                       <td className="pr-2">{f2(b.Vx)}</td>
                       <td className="pr-2">{f2(b.Vy)}</td>
@@ -546,39 +560,38 @@ function ConnectionTab() {
             </div>
           </ResultCard>
           <ResultCard title="Block shear §J4.3">
-            {blockShearCases.map(c => (
+            {res.blockShear.map(c => (
               <Row key={c.label} alert={Vu > c.phiRn}
                 label={<span className="text-[10px]">{c.label.replace('§J4.3 ', '')}</span>}
                 value={ok(Vu <= c.phiRn, `φRn = ${f1(c.phiRn)} kN`)} />
             ))}
-            <Row alert={Vu > govBlockShear.phiRn}
-              label="Governing block shear"
-              value={ok(Vu <= govBlockShear.phiRn, `${f1(govBlockShear.phiRn)} kN`)} />
+            {govBlockShear && (
+              <Row alert={Vu > govBlockShear.phiRn}
+                label="Governing block shear"
+                value={ok(Vu <= govBlockShear.phiRn, `${f1(govBlockShear.phiRn)} kN`)} />
+            )}
           </ResultCard>
 
-          {outOfPlane && (
+          {res.outOfPlane && (
             <ResultCard title="Out-of-plane eccentricity §J3.7 (critical bolt)">
-              <Row label="M_op = Vu·e_out" value={`${outOfPlane.M_op.toFixed(0)} kN·mm`} />
-              <Row label="Σyi²" value={`${outOfPlane.sumYi2.toFixed(0)} mm²`} />
-              <Row label="Critical bolt (max T)" value={outOfPlane.critical}
-                sub={`T = ${f2(outOfPlane.Tmax)} kN`} />
-              <Row label="φTn (reduced)" value={`${f2(outOfPlane.phiTn_crit)} kN`}
-                sub={`φFnt' = ${outOfPlane.bolts.find(b=>b.id===outOfPlane.critical)?.phiFnt_prime.toFixed(0)} MPa`} />
-              <Row alert={!outOfPlane.ok}
+              <Row label="M_op = Vu·e_out" value={`${res.outOfPlane.M_op.toFixed(0)} kN·mm`} />
+              <Row label="Σyi²" value={`${res.outOfPlane.sumYi2.toFixed(0)} mm²`} />
+              <Row label="Critical bolt (max T)" value={res.outOfPlane.critical}
+                sub={`T = ${f2(res.outOfPlane.Tmax)} kN`} />
+              <Row label="φTn (reduced)" value={`${f2(res.outOfPlane.phiTn_crit)} kN`}
+                sub={`φFnt' = ${res.outOfPlane.bolts.find(b=>b.id===res.outOfPlane!.critical)?.phiFnt_prime.toFixed(0)} MPa`} />
+              <Row alert={!res.outOfPlane.ok}
                 label="Combined check (§J3.7)"
-                value={ok(outOfPlane.ok, outOfPlane.ok ? 'PASS' : 'FAIL')} />
+                value={ok(res.outOfPlane.ok, res.outOfPlane.ok ? 'PASS' : 'FAIL')} />
               <div className="col-span-full overflow-x-auto">
                 <table className="mt-1 w-full text-xs">
                   <thead><tr className="text-left text-slate-400">
-                    <th className="pr-2 pb-1">id</th>
-                    <th className="pr-2 pb-1">yi mm</th>
-                    <th className="pr-2 pb-1">T kN</th>
-                    <th className="pr-2 pb-1">frv MPa</th>
-                    <th className="pb-1">util</th>
+                    <th className="pr-2 pb-1">id</th><th className="pr-2 pb-1">yi mm</th>
+                    <th className="pr-2 pb-1">T kN</th><th className="pr-2 pb-1">frv MPa</th><th className="pb-1">util</th>
                   </tr></thead>
                   <tbody>
-                    {outOfPlane.bolts.map(b => (
-                      <tr key={b.id} className={b.id === outOfPlane.critical ? 'font-semibold text-amber-700' : ''}>
+                    {res.outOfPlane.bolts.map(b => (
+                      <tr key={b.id} className={b.id === res.outOfPlane!.critical ? 'font-semibold text-amber-700' : ''}>
                         <td className="pr-2">{b.id}</td>
                         <td className="pr-2">{b.yi.toFixed(0)}</td>
                         <td className="pr-2">{f2(b.T)}</td>
@@ -592,36 +605,38 @@ function ConnectionTab() {
             </ResultCard>
           )}
 
-          {prying && (
+          {res.prying && (
             <ResultCard title="Prying action §J3.9 (critical bolt)">
-              <Row label="b' = b − db/2" value={`${prying.b_prime.toFixed(1)} mm`} />
-              <Row label="a' = min(a, 1.25b)" value={`${prying.a_prime.toFixed(1)} mm`} />
-              <Row label="ρ = b'/a'" value={f3(prying.rho)} />
-              <Row label="δ = 1 − dh/p" value={f3(prying.delta)} />
-              <Row label="β (prying potential)" value={f3(prying.beta)} />
-              <Row label="α (prying fraction)" value={f3(prying.alpha)} sub="0 = none, 1 = full" />
-              <Row label="Prying force Q" value={`${f2(prying.Q)} kN`} />
-              <Row label="T_total = T + Q" value={`${f2(prying.T_total)} kN`} />
-              <Row label="Required plate t" value={`${prying.t_req.toFixed(1)} mm`}
-                sub={`t_no_prying = ${prying.t_no_prying.toFixed(1)} mm`} />
-              <Row alert={!prying.ok}
+              <Row label="b' = b − db/2" value={`${res.prying.b_prime.toFixed(1)} mm`} />
+              <Row label="a' = min(a, 1.25b)" value={`${res.prying.a_prime.toFixed(1)} mm`} />
+              <Row label="ρ = b'/a'" value={f3(res.prying.rho)} />
+              <Row label="δ = 1 − dh/p" value={f3(res.prying.delta)} />
+              <Row label="β (prying potential)" value={f3(res.prying.beta)} />
+              <Row label="α (prying fraction)" value={f3(res.prying.alpha)} sub="0 = none, 1 = full" />
+              <Row label="Prying force Q" value={`${f2(res.prying.Q)} kN`} />
+              <Row label="T_total = T + Q" value={`${f2(res.prying.T_total)} kN`} />
+              <Row label="Required plate t" value={`${res.prying.t_req.toFixed(1)} mm`}
+                sub={`t_no_prying = ${res.prying.t_no_prying.toFixed(1)} mm`} />
+              <Row alert={!res.prying.ok}
                 label="T_total ≤ φTn (§J3.9)"
-                value={ok(prying.ok, prying.ok ? 'PASS' : 'FAIL')} />
+                value={ok(res.prying.ok, res.prying.ok ? 'PASS' : 'FAIL')} />
             </ResultCard>
           )}
-        </>) : (
+        </>)}
+
+        {res && connType === 'weld' && (
           <ResultCard title="Fillet weld §J2.4">
-            <Row label="φRnw / mm" value={`${f3(weld.phiRnw)} kN/mm`} />
-            <Row label="Required length" value={`${f1(weld.L_reqd)} mm`} sub={`plate H = ${f1(geom.plateH)} mm`} />
-            <Row alert={Vu > weldCapacity}
+            <Row label="φRnw / mm" value={`${f3(res.weld.phiRnw)} kN/mm`} />
+            <Row label="Required length" value={`${f1(res.weld.L_reqd)} mm`} sub={`plate H = ${f1(res.geom.plateH)} mm`} />
+            <Row alert={Vu > res.weldCapacity}
               label="Vu vs capacity"
-              value={ok(Vu <= weldCapacity, `${f1(weldCapacity)} kN`)}
-              sub={`2 × ${geom.plateH.toFixed(0)} mm` } />
+              value={ok(Vu <= res.weldCapacity, `${f1(res.weldCapacity)} kN`)}
+              sub={`2 × ${res.geom.plateH.toFixed(0)} mm`} />
           </ResultCard>
         )}
       </div>
 
-      {connType === 'bolt' && (
+      {res && connType === 'bolt' && (
         <div className="col-span-full">
           <WorkedSolution steps={boltSteps} title="Connection Design — step-by-step (AISC 360-16 §J3, §J4)" />
         </div>

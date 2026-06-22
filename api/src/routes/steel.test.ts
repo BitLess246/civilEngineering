@@ -29,14 +29,59 @@ describe('POST /api/steel/beam', () => {
 })
 
 describe('POST /api/steel/column', () => {
-  it('returns axial + weak-axis results for a valid request', async () => {
-    const res = await request(app)
-      .post('/api/steel/column')
-      .send({ shapeName: 'W250x67', Fy: 345, L: 4, Kx: 1, Ky: 1 })
+  const body = { shapeName: 'W250x67', Fy: 345, L: 4, Kx: 1, Ky: 1, Pu: 500, Mux: 80, Muy: 0 }
+
+  it('returns axial + flexure + combined results for a valid request', async () => {
+    const res = await request(app).post('/api/steel/column').send(body)
     expect(res.status).toBe(200)
     expect(res.body.axial.phiPn).toBeGreaterThan(0)
     expect(res.body.axial.slenderness).toBeGreaterThan(0)
+    expect(res.body.flexX.phiMn).toBeGreaterThan(0)
     expect(res.body.weak.phiMny).toBeGreaterThan(0)
+    expect(res.body.comb.ratio).toBeGreaterThan(0)
+  })
+
+  it('rejects missing Pu/Mux with 400', async () => {
+    const res = await request(app).post('/api/steel/column')
+      .send({ shapeName: 'W250x67', Fy: 345, L: 4, Kx: 1, Ky: 1 })
+    expect(res.status).toBe(400)
+  })
+})
+
+describe('POST /api/steel/connection', () => {
+  const body = {
+    Vu: 200, Hu: 0,
+    boltGrade: 'A325M', db: 19, nRows: 3, nCols: 1,
+    sy: 75, sx: 75, ey: 38, ex_edge: 38,
+    threads: true,
+    tPlate: 10, FuPlate: 400, FyPlate: 248,
+    ex_load: 0, ey_load: 0, e_out: 0, b_gage: 0,
+    electrode: 'E70', wSize: 8,
+  }
+
+  it('returns bolt group + weld results for a valid request', async () => {
+    const res = await request(app).post('/api/steel/connection').send(body)
+    expect(res.status).toBe(200)
+    expect(res.body.geom.n).toBe(3)
+    expect(res.body.phiRnBolt.phiRn).toBeGreaterThan(0)
+    expect(res.body.eccentric.Rmax).toBeGreaterThan(0)
+    expect(res.body.weld.phiRnw).toBeGreaterThan(0)
+    expect(res.body.weldCapacity).toBeGreaterThan(0)
+    expect(res.body.outOfPlane).toBeNull()
+    expect(res.body.prying).toBeNull()
+    expect(Array.isArray(res.body.blockShear)).toBe(true)
+  })
+
+  it('rejects invalid boltGrade with 400', async () => {
+    const res = await request(app).post('/api/steel/connection').send({ ...body, boltGrade: 'A307' })
+    expect(res.status).toBe(400)
+    expect(res.body.error).toMatch(/boltGrade/)
+  })
+
+  it('rejects non-boolean threads with 400', async () => {
+    const res = await request(app).post('/api/steel/connection').send({ ...body, threads: 'yes' })
+    expect(res.status).toBe(400)
+    expect(res.body.error).toMatch(/threads/)
   })
 })
 

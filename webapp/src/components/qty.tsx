@@ -40,7 +40,7 @@ export function ClassPick({ value, onChange }: { value: ConcreteClass; onChange:
   )
 }
 
-export function Card({ title, children }: { title: string; children: ReactNode }) {
+export function Card({ title, children }: { title: ReactNode; children: ReactNode }) {
   return (
     <fieldset className="print-avoid-break rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <legend className="px-2 text-[1.02rem] font-bold text-[#0056b3]">{title}</legend>
@@ -49,7 +49,7 @@ export function Card({ title, children }: { title: string; children: ReactNode }
   )
 }
 
-export function ResultCard({ title, children }: { title: string; children: ReactNode }) {
+export function ResultCard({ title, children }: { title: ReactNode; children: ReactNode }) {
   return (
     <div className="print-avoid-break rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">{title}</h2>
