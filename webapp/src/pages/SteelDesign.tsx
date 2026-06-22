@@ -54,7 +54,7 @@ const ShapePick = ({ value, onChange }: { value: string; onChange: (v: string) =
 // ─── Beam Tab ─────────────────────────────────────────────────────────────
 
 function BeamTab() {
-  const [shapeName, setShapeName] = useState('W310x39')
+  const [shapeName, setShapeName] = useState('W310x38.7')
   const [grade, setGrade]         = useState<Grade>('A572G50')
   const [span,  setSpan]          = useState(6)
   const [Lb,    setLb]            = useState(2)

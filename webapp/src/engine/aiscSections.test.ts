@@ -36,7 +36,7 @@ describe('AISC section library', () => {
   })
 
   it('effectiveSection only doubles angle families', () => {
-    const w = effectiveSection(shapeByName('W250x33')!, true)   // double flag ignored for W
+    const w = effectiveSection(shapeByName('W250x32.7')!, true)   // double flag ignored for W
     expect(w.double).toBe(false)
     expect(w.A).toBe(4190)
   })

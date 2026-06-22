@@ -497,7 +497,7 @@ export default function ModelSpace() {
   const [material, setMaterial] = useState<'concrete' | 'steel'>((si.material as 'concrete' | 'steel') ?? 'concrete')
   const [colShape, setColShape] = useState(s('colShape', 'W310x79'))
   const [girShape, setGirShape] = useState(s('girShape', 'W360x51'))
-  const [beaShape, setBeaShape] = useState(s('beaShape', 'W310x39'))
+  const [beaShape, setBeaShape] = useState(s('beaShape', 'W310x38.7'))
   const [steelFy, setSteelFy] = useState(n('steelFy', 345)); const [steelFu, setSteelFu] = useState(n('steelFu', 448))
   const [qD, setQD] = useState(n('qD', 4.8)); const [qL, setQL] = useState(n('qL', 2.4))
   // Soil (for the footing stage of the design pipeline)
