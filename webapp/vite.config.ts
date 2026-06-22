@@ -8,16 +8,26 @@ import tailwindcss from '@tailwindcss/vite'
 // go under /static (not /assets) to avoid colliding with the legacy
 // /assets mount, so the old .html pages keep working alongside it.
 // https://vite.dev/config/
-export default defineConfig({
+//
+// `command` is 'build' for production (`vite build`) and 'serve' for dev and
+// for the Vitest run, so the production-only hardening below never affects dev
+// ergonomics or the test pipeline.
+export default defineConfig(({ command }) => ({
   base: '/',
   plugins: [react(), tailwindcss()],
+  // Production hardening: strip console/debugger so the shipped engine bundle
+  // leaks nothing at runtime and is harder to read. Source maps are off (the
+  // default, set explicitly) so the original TypeScript is never published.
+  esbuild: command === 'build' ? { drop: ['console', 'debugger'] } : {},
   build: {
     outDir: '../public/app',
     assetsDir: 'static',
     emptyOutDir: true,
+    sourcemap: false,
+    minify: 'esbuild',
   },
   test: {
     environment: 'node',
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
   },
-})
+}))
