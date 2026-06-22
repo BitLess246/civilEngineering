@@ -109,6 +109,59 @@ describe('design pipeline — single-bay single-storey grid', () => {
   })
 })
 
+describe('steel design pipeline (AISC routing + base plates)', () => {
+  // all members steel: W310x79 (a stocky W that passes a single-bay grid)
+  function steelModel() {
+    const m = makeModel()
+    m.sections = m.sections.map((s) => ({ ...s, material: 'steel' as const, shape: 'W310x79', steelFy: 345, steelFu: 448 }))
+    return m
+  }
+  const r = designStructure(steelModel(), soil)!
+
+  it('routes members to the steel schedules, not the concrete ones', () => {
+    expect(r.beams).toHaveLength(0)
+    expect(r.columns).toHaveLength(0)
+    expect(r.steelBeams).toHaveLength(4)     // 2 beams + 2 girders
+    expect(r.steelColumns).toHaveLength(4)
+  })
+
+  it('steel beams carry φMn/φVn and an LTB zone', () => {
+    for (const b of r.steelBeams) {
+      expect(b.shape).toBe('W310x79')
+      expect(b.phiMn).toBeGreaterThan(0)
+      expect(b.phiVn).toBeGreaterThan(0)
+      expect(['plastic', 'inelastic', 'elastic']).toContain(b.ltbZone)
+      expect(b.Mu).toBeGreaterThan(0)
+    }
+  })
+
+  it('steel columns use §H1-1 combined interaction', () => {
+    for (const c of r.steelColumns) {
+      expect(c.phiPn).toBeGreaterThan(0)
+      expect(['H1-1a', 'H1-1b']).toContain(c.equation)
+      expect(c.Pu).toBeGreaterThan(0)
+      expect(c.ratio).toBeGreaterThan(0)
+    }
+  })
+
+  it('designs a base plate under every steel column support', () => {
+    expect(r.basePlates).toHaveLength(4)
+    for (const p of r.basePlates) {
+      expect(p.shape).toBe('W310x79')
+      expect(p.Pu).toBeGreaterThan(0)
+      expect(p.design.N).toBeGreaterThanOrEqual(306)   // ≥ column depth
+      expect(p.tAdopt).toBeGreaterThanOrEqual(p.design.tReq)
+    }
+  })
+
+  it('reports steel tonnage and no concrete member volume', () => {
+    expect(r.totals.steelKg).toBeGreaterThan(0)
+    expect(r.totals.concreteMembers).toBeCloseTo(0, 6)
+    // 34 m of W310x79 (A = 10000 mm²) at 7850 kg/m³
+    expect(r.totals.steelKg).toBeCloseTo(34 * (10000 / 1e6) * 7850, 0)
+  })
+})
+
 describe('beam critical sections — interior is the sagging peak', () => {
   it('a continuous multi-bay frame still sags at mid-span (not all hogging)', () => {
     const m = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3.5, 3], section })

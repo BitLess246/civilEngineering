@@ -28,10 +28,15 @@ import { DimBelow, DimSide } from '../components/dims'
 import { HintButton, SeismicHint, WindHint } from '../components/LoadHints'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { FitView } from '../components/FitView'
+import { shapeByName, shapesOf, effectiveSection } from '../engine/aiscSections'
+import { buildSectionShapes } from '../lib/sectionShapes3d'
 import { f1, f2 } from '../lib/format'
 
 const AUTOSAVE_KEY = 'model-space-autosave'
 const INPUTS_KEY = 'model-space-inputs'
+
+// AISC W-shape picker options for the steel material path.
+const W_SHAPE_OPTS: [string, string][] = shapesOf('W').map((s) => [s.name, s.name])
 
 /** The design inputs persisted alongside the autosaved model so a reload keeps
  *  the Geometry/Properties/Loading/etc. fields consistent with the 3D model
@@ -92,6 +97,46 @@ function Member3D({ a, b, role, selected, tint = 0, sec, onPick }: {
       <boxGeometry args={[len, ty, tz]} />
       <meshStandardMaterial color={color} />
     </mesh>
+  )
+}
+
+/** Steel member drawn as its true AISC cross-section, extruded along the member
+ *  axis (i→j). The profile is built in the local XY plane then oriented so its
+ *  extrude (+Z) runs along the member and its strong axis (depth d) stays
+ *  vertical for beams/girders. Falls back to the box Member3D if the shape is
+ *  unknown. */
+function MemberSteel3D({ a, b, role, shapeName, selected, tint = 0, onPick }: {
+  a: THREE.Vector3; b: THREE.Vector3; role: string; shapeName: string
+  selected: boolean; tint?: number; onPick: () => void
+}) {
+  const { shapes, quat, pos, len } = useMemo(() => {
+    const shape = shapeByName(shapeName)
+    const dir = new THREE.Vector3().subVectors(b, a)
+    const len = dir.length()
+    const shapes = shape ? buildSectionShapes(effectiveSection(shape, false)) : []
+    // orient local +Z (extrude dir) onto the member axis; group placed at node i
+    const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.clone().normalize())
+    return { shapes, quat, pos: a.clone(), len }
+  }, [a, b, shapeName])
+
+  const color = useMemo(() => {
+    if (selected) return SEL
+    const base = new THREE.Color('#64748b')   // steel grey
+    return tint > 0 ? `#${base.lerp(new THREE.Color('#dc2626'), tint).getHexString()}` : `#${base.getHexString()}`
+  }, [selected, tint])
+
+  if (shapes.length === 0) {
+    return <Member3D a={a} b={b} role={role} selected={selected} tint={tint} onPick={onPick} />
+  }
+  return (
+    <group position={pos} quaternion={quat} onClick={(e) => { e.stopPropagation(); onPick() }}>
+      {shapes.map((sh, i) => (
+        <mesh key={i}>
+          <extrudeGeometry args={[sh, { depth: len, bevelEnabled: false, steps: 1 }]} />
+          <meshStandardMaterial color={color} metalness={0.35} roughness={0.5} />
+        </mesh>
+      ))}
+    </group>
   )
 }
 
@@ -448,6 +493,12 @@ export default function ModelSpace() {
   const [barDia, setBarDia] = useState(n('barDia', 20)); const [tieDia, setTieDia] = useState(n('tieDia', 10))
   const [cover, setCover] = useState(n('cover', 40)); const [slabThk, setSlabThk] = useState(n('slabThk', 150))
   const [gammaC, setGammaC] = useState(n('gammaC', 24))            // concrete unit weight, kN/m³
+  // Material: 'concrete' (RC) or 'steel' (AISC W-shapes) for the frame members.
+  const [material, setMaterial] = useState<'concrete' | 'steel'>((si.material as 'concrete' | 'steel') ?? 'concrete')
+  const [colShape, setColShape] = useState(s('colShape', 'W310x79'))
+  const [girShape, setGirShape] = useState(s('girShape', 'W360x51'))
+  const [beaShape, setBeaShape] = useState(s('beaShape', 'W310x39'))
+  const [steelFy, setSteelFy] = useState(n('steelFy', 345)); const [steelFu, setSteelFu] = useState(n('steelFu', 448))
   const [qD, setQD] = useState(n('qD', 4.8)); const [qL, setQL] = useState(n('qL', 2.4))
   // Soil (for the footing stage of the design pipeline)
   const [qa, setQa] = useState(n('qa', 200)); const [Hf, setHf] = useState(n('Hf', 1.5))
@@ -533,13 +584,15 @@ export default function ModelSpace() {
         qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs,
         Vw, expo, Kzt, wDirs, assembly, pDelta, tryBars,
         concreteClass, prices, planSel,
+        material, colShape, girShape, beaShape, steelFy, steelFu,
       }))
     } catch { /* quota — ignore */ }
   }, [baysX, baysZ, storeyH, colB, colH, girB, girH, beaB, beaH,
     fc, fy, barDia, tieDia, cover, slabThk, gammaC, qD, qL,
     qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs,
     Vw, expo, Kzt, wDirs, assembly, pDelta, tryBars,
-    concreteClass, prices, planSel])
+    concreteClass, prices, planSel,
+    material, colShape, girShape, beaShape, steelFy, steelFu])
 
   const save = (m: StructuralModel | null) => {
     setModel(m)
@@ -827,9 +880,19 @@ export default function ModelSpace() {
   const generate = () => {
     const mat = { fc, fy, barDia, tieDia, cover }
     const role = (b: number, h: number, id: string): RectSection => ({ id, name: `${b}×${h}`, b, h, ...mat })
+    // steel role: bounding box b = bf, h = d from the chosen AISC shape, tagged
+    // material/shape so the bridge, design pipeline and 3D extrusion pick it up.
+    const steelRole = (shapeName: string, id: string): RectSection => {
+      const sh = shapeByName(shapeName)
+      const bf = sh?.bf ?? sh?.b ?? sh?.D ?? 200, d = sh?.d ?? sh?.h ?? sh?.D ?? 300
+      return { id, name: shapeName, b: bf, h: d, ...mat, material: 'steel', shape: shapeName, steelFy, steelFu }
+    }
+    const steel = material === 'steel'
     const m = generateGridModel({
       baysX: parseList(baysX), baysZ: parseList(baysZ), storeyH: parseList(storeyH),
-      column: role(colB, colH, 'COL'), girder: role(girB, girH, 'GIR'), beam: role(beaB, beaH, 'BEA'),
+      column: steel ? steelRole(colShape, 'COL') : role(colB, colH, 'COL'),
+      girder: steel ? steelRole(girShape, 'GIR') : role(girB, girH, 'GIR'),
+      beam: steel ? steelRole(beaShape, 'BEA') : role(beaB, beaH, 'BEA'),
       slabThickness: slabThk,
     })
     // gravity loads: member self-weight (D), slab self-weight + SDL (D), LL (L)
@@ -962,8 +1025,13 @@ export default function ModelSpace() {
                   if (!a || !bb) return null
                   const tint = govRes && govRes.Mmax > 1e-9
                     ? (memForce.get(m.id)?.Mmax ?? 0) / govRes.Mmax : 0
+                  const sec = sectionFor(m.id)
+                  if (sec?.material === 'steel' && sec.shape) {
+                    return <MemberSteel3D key={m.id} a={a} b={bb} role={m.role} shapeName={sec.shape}
+                      tint={tint * 0.85} selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                  }
                   return <Member3D key={m.id} a={a} b={bb} role={m.role} tint={tint * 0.85}
-                    sec={sectionFor(m.id)} selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                    sec={sec} selected={m.id === selected} onPick={() => setSelected(m.id)} />
                 })}
                 {model.plates.map((p) => {
                   const cs = p.corners.map((c) => nodePos.get(c))
@@ -1319,23 +1387,51 @@ export default function ModelSpace() {
           {/* ── PROPERTIES ── */}
           {tab === 'properties' && (
             <div className="space-y-4">
-              <Card title="Initial member sizes (mm)">
-                <p className="col-span-full -mb-1 text-[11px] text-slate-500">
-                  Each member starts from its role size and grows independently when optimised;
-                  columns are kept ≥ girders ≥ beams in width (strong-column / weak-beam).
+              <Card title="Frame material">
+                <Pick label="Members" value={material} onChange={(v) => setMaterial(v as 'concrete' | 'steel')}
+                  options={[['concrete', 'Reinforced concrete'], ['steel', 'Structural steel (AISC W)']]} />
+                <p className="col-span-full -mt-1 text-[11px] text-slate-500">
+                  {material === 'steel'
+                    ? 'Members become AISC W-shapes designed to AISC 360-16 LRFD (§F flexure, §G shear, §E/§H1 columns); base plates per §J8. Slabs/footings stay reinforced concrete.'
+                    : 'Members are reinforced concrete designed to NSCP 2015 / ACI 318-14.'}
                 </p>
-                <Num label="Column b" unit="mm" value={colB} onChange={setColB} />
-                <Num label="Column h" unit="mm" value={colH} onChange={setColH} />
-                <Num label="Girder b" unit="mm" value={girB} onChange={setGirB} />
-                <Num label="Girder h" unit="mm" value={girH} onChange={setGirH} />
-                <Num label="Beam b" unit="mm" value={beaB} onChange={setBeaB} />
-                <Num label="Beam h" unit="mm" value={beaH} onChange={setBeaH} />
-                <Num label="Slab thickness" unit="mm" value={slabThk} onChange={setSlabThk} />
               </Card>
+              {material === 'steel' ? (
+                <Card title="Steel sections (AISC W)">
+                  <Pick label="Column" value={colShape} onChange={setColShape}
+                    options={W_SHAPE_OPTS} />
+                  <Pick label="Girder" value={girShape} onChange={setGirShape}
+                    options={W_SHAPE_OPTS} />
+                  <Pick label="Beam" value={beaShape} onChange={setBeaShape}
+                    options={W_SHAPE_OPTS} />
+                  <Num label="Steel Fy" unit="MPa" value={steelFy} onChange={setSteelFy} step="5" />
+                  <Num label="Steel Fu" unit="MPa" value={steelFu} onChange={setSteelFu} step="5" />
+                  <Num label="Slab thickness" unit="mm" value={slabThk} onChange={setSlabThk} />
+                  <p className="col-span-full text-[11px] text-slate-400">
+                    Applied on the next “Generate model”. The 3D view extrudes each member's true
+                    cross-section. Concrete f′c below is still used for the base-plate bearing check.
+                  </p>
+                </Card>
+              ) : (
+                <Card title="Initial member sizes (mm)">
+                  <p className="col-span-full -mb-1 text-[11px] text-slate-500">
+                    Each member starts from its role size and grows independently when optimised;
+                    columns are kept ≥ girders ≥ beams in width (strong-column / weak-beam).
+                  </p>
+                  <Num label="Column b" unit="mm" value={colB} onChange={setColB} />
+                  <Num label="Column h" unit="mm" value={colH} onChange={setColH} />
+                  <Num label="Girder b" unit="mm" value={girB} onChange={setGirB} />
+                  <Num label="Girder h" unit="mm" value={girH} onChange={setGirH} />
+                  <Num label="Beam b" unit="mm" value={beaB} onChange={setBeaB} />
+                  <Num label="Beam h" unit="mm" value={beaH} onChange={setBeaH} />
+                  <Num label="Slab thickness" unit="mm" value={slabThk} onChange={setSlabThk} />
+                </Card>
+              )}
               <Card title="Concrete & reinforcement">
                 <p className="col-span-full -mb-1 text-[11px] text-slate-500">
                   Shared material applied to every section when you generate the grid. f′c drives Ec and the
                   flexural/shear capacities; fy the steel; ⌀ and cover the bar layout and effective depth.
+                  {material === 'steel' && ' (Used for slabs, footings and base-plate bearing.)'}
                 </p>
                 <Num label="Concrete f′c" unit="MPa" value={fc} onChange={setFc} step="0.5" />
                 <Num label="Steel fy" unit="MPa" value={fy} onChange={setFy} step="5" />
@@ -1863,6 +1959,9 @@ export default function ModelSpace() {
           ['Model', `${model?.nodes.length ?? 0} nodes · ${model?.members.length ?? 0} members · ${model?.plates.length ?? 0} slabs · ${(model?.walls ?? []).length} walls · ${model?.supports.length ?? 0} supports`],
           ['Governing case', design.govName],
           ['Concrete', `${f1(design.totals.concrete)} m³ (${f1(design.totals.concreteMembers)} members + ${f1(design.totals.concreteSlabs)} slabs)`],
+          ...(design.totals.steelKg > 0
+            ? [['Structural steel', `${f1(design.totals.steelKg)} kg (${f2(design.totals.steelKg / 1000)} t)`] as [string, string]]
+            : []),
         ]
         return (
         <div className={`mt-6 space-y-6 ${tablesHidden ? 'report-no-tables' : ''}`}>
@@ -2217,6 +2316,124 @@ export default function ModelSpace() {
               <p className="mt-1 text-[11px] text-slate-400">
                 NSCP §418.10: Vn = Acv(αc·λ√f′c + ρt·fy), φ = 0.75, capped at 0.83·Acv·√f′c. In-plane shear from the
                 enveloped strut forces; distributed web steel ρt, ρℓ ≥ 0.0025. Flexural boundary reinforcement designed separately.
+              </p>
+            </div>
+          )}
+
+          {/* Steel beam schedule (full width) — only when steel members exist */}
+          {design.steelBeams.length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Steel beam / girder schedule — AISC 360-16 LRFD</h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Member</th>
+                    <th className="py-1 pr-2 font-semibold">Shape</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Mu (kN·m)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">φMn</th>
+                    <th className="py-1 pr-2 font-semibold">LTB</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Vu (kN)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">φVn</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Util</th>
+                    <th className="py-1 font-semibold">Case</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {design.steelBeams.map((b) => (
+                    <tr key={b.id} className={`sched-row border-t border-slate-100 ${b.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                      <td className="py-1 pr-2 font-medium">{b.id}</td>
+                      <td className="py-1 pr-2">{b.shape}</td>
+                      <td className="py-1 pr-2 text-right">{f1(b.Mu)}</td>
+                      <td className="py-1 pr-2 text-right">{f1(b.phiMn)}</td>
+                      <td className="py-1 pr-2">{b.ltbZone}</td>
+                      <td className="py-1 pr-2 text-right">{f1(b.Vu)}</td>
+                      <td className="py-1 pr-2 text-right">{f1(b.phiVn)}</td>
+                      <td className="py-1 pr-2 text-right">{(Math.max(b.utilM, b.utilV) * 100).toFixed(0)}%</td>
+                      <td className="py-1 text-[11px] text-slate-500">{b.gov}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-1 text-[11px] text-slate-400">
+                §F2 flexure (Lb = full member length, conservative; Cb = 1.0), §G2.1 shear. Util = max(Mu/φMn, Vu/φVn).
+              </p>
+            </div>
+          )}
+
+          {/* Steel column schedule (full width) */}
+          {design.steelColumns.length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Steel column schedule — AISC §E3 + §H1-1</h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Column</th>
+                    <th className="py-1 pr-2 font-semibold">Shape</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Pu (kN)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">φPn</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Mu (kN·m)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">KL/r</th>
+                    <th className="py-1 pr-2 font-semibold">Eq.</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Ratio</th>
+                    <th className="py-1 font-semibold">Case</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {design.steelColumns.map((c) => (
+                    <tr key={c.id} className={`sched-row border-t border-slate-100 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                      <td className="py-1 pr-2 font-medium">{c.id}</td>
+                      <td className="py-1 pr-2">{c.shape}</td>
+                      <td className="py-1 pr-2 text-right">{f1(c.Pu)}</td>
+                      <td className="py-1 pr-2 text-right">{f1(c.phiPn)}</td>
+                      <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
+                      <td className="py-1 pr-2 text-right">{c.slenderness.toFixed(0)}</td>
+                      <td className="py-1 pr-2">{c.equation}</td>
+                      <td className="py-1 pr-2 text-right">{(c.ratio * 100).toFixed(0)}%</td>
+                      <td className="py-1 text-[11px] text-slate-500">{c.gov}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-1 text-[11px] text-slate-400">
+                §E3 axial buckling (governing KL/r, K = 1.0), §H1-1 combined axial + flexure. Ratio ≤ 100% passes.
+              </p>
+            </div>
+          )}
+
+          {/* Base-plate schedule (full width) */}
+          {design.basePlates.length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Base-plate schedule — AISC §J8 / Design Guide 1</h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Node</th>
+                    <th className="py-1 pr-2 font-semibold">Column</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Pu (kN)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Tu (kN)</th>
+                    <th className="py-1 pr-2 font-semibold">Plate B×N×t (mm)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Bearing</th>
+                    <th className="py-1 font-semibold">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {design.basePlates.map((p) => (
+                    <tr key={p.node} className={`sched-row border-t border-slate-100 ${p.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                      <td className="py-1 pr-2 font-medium">{p.node}</td>
+                      <td className="py-1 pr-2">{p.shape}</td>
+                      <td className="py-1 pr-2 text-right">{f1(p.Pu)}</td>
+                      <td className="py-1 pr-2 text-right">{p.Tu > 0 ? f1(p.Tu) : '—'}</td>
+                      <td className="py-1 pr-2">{f1(p.design.B)} × {f1(p.design.N)} × {p.tAdopt}</td>
+                      <td className="py-1 pr-2 text-right">{(p.design.bearingUtil * 100).toFixed(0)}%</td>
+                      <td className="py-1">{p.ok ? '✓ OK' : '✗ check'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Bearing §J8: φc·0.85f′c·√(A2/A1), φc = 0.65. Plate thickness from cantilever bending
+                t = ℓ√(2fp/(0.9Fy)); ℓ = max(m, n, n′). Uplift sizes anchor rods (φt·0.75·Fu).
+                Adopted t rounded to plate stock.
               </p>
             </div>
           )}

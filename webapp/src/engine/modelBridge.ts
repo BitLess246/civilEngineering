@@ -9,6 +9,8 @@ import type { F3Node, F3Member, F3Support, F3Load } from './frame3d'
 import { rectJ } from './frame3d'
 import { distributePanel, type AreaLoad } from './tributary'
 import type { BeamLoad } from './beamAnalysis'
+import { shapeByName } from './aiscSections'
+import { deriveWSection, E_STEEL } from './steelDesign'
 
 export interface BridgeResult {
   nodes: F3Node[]
@@ -20,6 +22,7 @@ export interface BridgeResult {
 }
 
 function sectionProps(s: RectSection) {
+  if (s.material === 'steel') return steelSectionProps(s)
   const E = 4700 * Math.sqrt(Math.max(s.fc, 1))
   return {
     E,
@@ -29,6 +32,26 @@ function sectionProps(s: RectSection) {
     Iy: (s.h * s.b ** 3) / 12,
     J: rectJ(s.b, s.h),
   }
+}
+
+/** Steel member stiffness from its AISC shape (E = 200 GPa, G = E/2.6, ν = 0.3).
+ *  Iz (strong axis) is the section's Ix; Iy is the weak axis. Falls back to the
+ *  rectangular bounding box if the shape is unknown. */
+function steelSectionProps(s: RectSection) {
+  const E = E_STEEL, G = E / 2.6
+  const shape = s.shape ? shapeByName(s.shape) : undefined
+  if (!shape) return { E, G, A: s.b * s.h, Iz: (s.b * s.h ** 3) / 12, Iy: (s.h * s.b ** 3) / 12, J: rectJ(s.b, s.h) }
+  let Iz: number, Iy: number, J: number
+  if (shape.family === 'W' || shape.family === 'WT') {
+    const d = deriveWSection(shape)
+    Iz = d.Ix; Iy = d.Iy; J = d.J
+  } else {
+    // generic: I = A·r² about each axis; torsion ≈ box approximation
+    Iz = shape.A * shape.rx ** 2
+    Iy = shape.A * shape.ry ** 2
+    J = Iz + Iy   // polar (conservative for open shapes; exact for closed tubes)
+  }
+  return { E, G, A: shape.A, Iz, Iy, J }
 }
 
 /**

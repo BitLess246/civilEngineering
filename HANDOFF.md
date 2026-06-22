@@ -65,7 +65,21 @@ Latest merged work — PRs **#178–#183** (main); **Steel Design** open PR:
   `liveLoads.ts`, …) — each with a `*.test.ts`.
 - Routes + home tiles: `webapp/src/App.tsx`
 
-- **Steel Design** (`/steel`): new page covering three AISC 360-16 LRFD tools:
+- **3D model — steel option** (`/model`): the model space now builds either
+  **reinforced concrete** (NSCP/ACI, default) **or structural steel** (AISC W).
+  Pick the material + per-role W-shapes in Properties → Frame material. Steel:
+  - FEM bridge uses AISC A/Ix/Iy/J and E = 200 GPa (`modelBridge.steelSectionProps`).
+  - Design routes steel beams/girders → §F2 flexure + §G2.1 shear; steel columns
+    → §E3 axial + §H1-1 combined (`pipeline.designSteelBeamRow/ColumnRow`).
+  - Base plates designed under every steel column support per **AISC §J8 / DG1**
+    (`engine/baseplate.ts`): concrete bearing, plate thickness, anchor-rod uplift.
+  - 3D view extrudes each steel member's true cross-section (`MemberSteel3D`).
+  - Steel tonnage in the totals; slabs/footings stay reinforced concrete.
+  - Schedules: steel beam / steel column / base-plate tables in the Design report.
+  - **Phase-2 TODO**: steel section auto-optimization (the optimizer currently only
+    grows concrete sections — steel needs a shape-ladder search), structural-steel
+    BOM line items in the costed take-off, beam connections + Lb bracing inputs.
+- **Steel Design** (`/steel`): page covering three AISC 360-16 LRFD tools:
   - **Beam design** (§F2 flexure with LTB zone badge, §G2.1 shear, service deflection L/360 & L/240).
   - **Column design** (§E3 axial Fcr, both KL/rx and KL/ry, §F6 weak-axis flexure, §H1-1 combined ratio).
   - **Connection design** (§J3.6 bolt shear + §J3.10 bearing for A325M/A490M; §J2.4 fillet weld
@@ -82,4 +96,4 @@ Latest merged work — PRs **#178–#183** (main); **Steel Design** open PR:
 - Optional: custom section input on Steel Design page (enter Sx, Zx, ry directly).
 - Optional: point-load + moment diagram for beams; stiffened web shear (§G2.2).
 
-_Tests at last handoff: 290 passing; `tsc -b` clean; production build OK._
+_Tests at last handoff: 330 passing; `tsc -b` clean; production build OK._
