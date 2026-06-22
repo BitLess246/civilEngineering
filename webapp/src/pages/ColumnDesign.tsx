@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   designAxialColumn, interaction, capacityAtEccentricity, momentMagnificationNonsway,
-  type ColumnShape,
+  type ColumnShape, type LateralSystem,
 } from '../engine/columnDesign'
 import { factoredLoad } from '../engine/loads'
 import { ColumnSchematic } from '../components/ColumnSchematic'
@@ -33,6 +33,10 @@ export default function ColumnDesign() {
   const [Mu, setMu] = useState(200)
   const [barMode, setBarMode] = useState<BarMode>('design')
   const [numBars, setNumBars] = useState(8)
+  // Seismic / lateral system
+  const [system, setSystem] = useState<LateralSystem>('gravity')
+  const [colLen, setColLen] = useState(3000)  // mm clear height
+  const [hx, setHx]         = useState(0)     // mm, max lateral tie spacing (0 = use bMin)
   // Slenderness (nonsway)
   const [slenderOn, setSlenderOn] = useState(false)
   const [kEff, setKEff] = useState(1.0); const [Lu, setLu] = useState(3.0)
@@ -49,9 +53,10 @@ export default function ColumnDesign() {
       return designAxialColumn({
         shape: tied ? 'tied' : 'spiral', b, h, D, cover, barDia, tieDia, fc, fy, fyt, Pu,
         numBars: barMode === 'analyze' || eccentric ? numBars : undefined,
+        system, columnLength: colLen, hx: hx > 0 ? hx : undefined,
       })
     } catch { return null }
-  }, [tied, b, h, D, cover, barDia, tieDia, fc, fy, fyt, Pu, barMode, numBars, eccentric])
+  }, [tied, b, h, D, cover, barDia, tieDia, fc, fy, fyt, Pu, barMode, numBars, eccentric, system, colLen, hx])
 
   const slender = useMemo(() => {
     if (!eccentric || !slenderOn) return null
@@ -125,6 +130,27 @@ export default function ColumnDesign() {
             <Num label={<KTex tex="f_{yt}" />} unit="MPa" value={fyt} onChange={setFyt} />
           </Card>
 
+          <Card title="Lateral system / seismic">
+            <Pick label="System" value={system} onChange={v => setSystem(v as LateralSystem)}
+              options={[
+                ['gravity', 'Gravity only (§425.7.2)'],
+                ['imf', 'IMF — Intermediate MF (§418.4.3)'],
+                ['smf', 'SMF — Special MF (§418.7.5)'],
+              ]} />
+            {system !== 'gravity' && (
+              <Num label="Clear height Lu" unit="mm" value={colLen} onChange={setColLen} />
+            )}
+            {system === 'smf' && (
+              <>
+                <Num label="Max lateral bar spacing hx" unit="mm" value={hx} onChange={setHx} />
+                <p className="col-span-full text-[10px] text-slate-400">
+                  hx = centre-to-centre of outermost laterally restrained bars (≤ 350 mm).
+                  Set 0 to use the column least dimension as the default.
+                </p>
+              </>
+            )}
+          </Card>
+
           <Card title="Loads">
             <Pick label="Load entry" value={loadInput} onChange={(v) => setLoadInput(v as LoadInput)}
               options={[['individual', 'Individual (D & L)'], ['direct', 'Factored Pu']]} />
@@ -161,7 +187,7 @@ export default function ColumnDesign() {
             <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Section</h2>
             <ColumnSchematic shape={tied ? 'tied' : 'spiral'} b={b} h={h} D={D} cover={cover}
               barDia={barDia} tieDia={tieDia} bars={axial?.bars ?? numBars}
-              tieSpacing={axial ? (tied ? axial.tieSpacing : axial.spiralPitch) : undefined} />
+              tieSpacing={axial ? (tied ? axial.tieSpacingFinal : axial.spiralPitch) : undefined} />
           </div>
 
           {axial && (
@@ -179,10 +205,19 @@ export default function ColumnDesign() {
               <Row alert={!axial.axialOK && !eccentric} label={<KTex tex="\phi P_{n,max}" />}
                 value={`${f1(axial.phiPnMax)} kN`}
                 sub={`Po=${f1(axial.Po)} · ${axial.alpha.toFixed(2)}Po cap`} />
-              {tied ? (
-                <Row label="Ties" value={`⌀${Math.max(tieDia, axial.tieDiaMin)} @ ${f0(axial.tieSpacing)} mm`}
-                  sub={axial.tieGovern} />
-              ) : (
+              {tied ? (<>
+                <Row label="Ties" value={`⌀${Math.max(tieDia, axial.tieDiaMin)} @ ${f0(axial.tieSpacingFinal)} mm`}
+                  sub={axial.tieSpacingLabel} />
+                {system !== 'gravity' && axial.seismicSConf !== undefined && (<>
+                  <Row label="Conf. zone length lo" value={`${f0(axial.seismicLoZone ?? 0)} mm`}
+                    sub={system === 'smf' ? '§418.7.5.1' : '§418.4.3'} />
+                  <Row label="s (in conf. zone)" value={`${f0(axial.seismicSConf)} mm`}
+                    sub={system === 'smf' ? '§418.7.5.4' : '§418.4.3'} />
+                  {system === 'smf' && axial.seismicSOut !== undefined && (
+                    <Row label="s (outside lo)" value={`${f0(axial.seismicSOut)} mm`} sub="§418.7.5.5" />
+                  )}
+                </>)}
+              </>) : (
                 <Row alert={!axial.pitchClearOK} label="Spiral" value={`⌀${tieDia} @ ${f0(axial.spiralPitch)} mm pitch`}
                   sub={`ρs=${axial.rhoS.toFixed(4)}`} />
               )}
