@@ -7,7 +7,7 @@ import {
   boltGroupGeom, eccentricBoltGroup, shearTabBlockShear, outOfPlaneBoltGroup, pryingAction,
 } from './steelDesign'
 
-const W250x33 = shapeByName('W250x33')!
+const W250x33 = shapeByName('W250x32.7')!
 const p = deriveWSection(W250x33)
 
 describe('deriveWSection', () => {

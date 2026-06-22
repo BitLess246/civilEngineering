@@ -20,7 +20,7 @@ export interface RectSection {
   barDia: number; tieDia: number; cover: number
   /** Material of the member. Absent ⇒ 'concrete' (back-compatible). */
   material?: SectionMaterial
-  /** AISC shape name (steel only), e.g. 'W310x39'. Resolved via aiscSections. */
+  /** AISC shape name (steel only), e.g. 'W310x38.7'. Resolved via aiscSections. */
   shape?: string
   /** Steel grade yield/ultimate (steel only). Defaults: Fy 248, Fu 400 (A36). */
   steelFy?: number
