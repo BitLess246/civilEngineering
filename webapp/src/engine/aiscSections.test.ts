@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { AISC_SHAPES, shapesOf, shapeByName, effectiveSection, doubleAngle } from './aiscSections'
+import { AISC_SHAPES, shapesOf, shapeByName, effectiveSection, doubleAngle, W_SORTED, nextHeavierW, nextLighterW } from './aiscSections'
 
 describe('AISC section library', () => {
   it('every shape has area + radii and a unique name', () => {
@@ -56,5 +56,44 @@ describe('AISC section library', () => {
     const Di = 219.1 - 2 * 8.2
     expect(p.A).toBe(Math.round((Math.PI / 4) * (219.1 ** 2 - Di ** 2)))
     expect(p.rx).toBeCloseTo(Math.sqrt(219.1 ** 2 + Di ** 2) / 4, 1)
+  })
+})
+
+describe('W-shape optimizer helpers', () => {
+  it('W_SORTED covers all W-shapes, sorted ascending by area', () => {
+    expect(W_SORTED.length).toBe(shapesOf('W').length)
+    expect(W_SORTED.every((s) => s.family === 'W')).toBe(true)
+    for (let i = 1; i < W_SORTED.length; i++) expect(W_SORTED[i].A).toBeGreaterThanOrEqual(W_SORTED[i - 1].A)
+  })
+
+  it('nextHeavierW returns a shape with strictly larger area', () => {
+    const s = shapeByName('W310x79')!
+    const next = nextHeavierW('W310x79')!
+    expect(next).toBeDefined()
+    expect(next.A).toBeGreaterThan(s.A)
+  })
+
+  it('nextLighterW returns a shape with strictly smaller area', () => {
+    const s = shapeByName('W310x79')!
+    const prev = nextLighterW('W310x79')!
+    expect(prev).toBeDefined()
+    expect(prev.A).toBeLessThan(s.A)
+  })
+
+  it('nextHeavierW on the heaviest shape returns undefined', () => {
+    const heaviest = W_SORTED[W_SORTED.length - 1]
+    expect(nextHeavierW(heaviest.name)).toBeUndefined()
+  })
+
+  it('nextLighterW on the lightest shape returns undefined', () => {
+    const lightest = W_SORTED[0]
+    expect(nextLighterW(lightest.name)).toBeUndefined()
+  })
+
+  it('round-trip: nextLighterW(nextHeavierW(name)) = original shape', () => {
+    const name = 'W250x67'
+    const heavier = nextHeavierW(name)!
+    const back = nextLighterW(heavier.name)!
+    expect(back.name).toBe(name)
   })
 })

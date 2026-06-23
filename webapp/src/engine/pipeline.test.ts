@@ -278,6 +278,44 @@ describe('optimizeStructure', () => {
   })
 })
 
+describe('optimizeStructure — steel sections', () => {
+  function steelModel(shape: string) {
+    const m = makeModel()
+    m.sections = m.sections.map((s) => ({
+      ...s, material: 'steel' as const, shape, steelFy: 345, steelFu: 448,
+    }))
+    return m
+  }
+
+  it('grows undersized steel shapes (W150x13) until the design passes', () => {
+    const start = steelModel('W150x13')
+    const first = designStructure(start, soil)!
+    expect(designOK(first)).toBe(false)           // W150x13 fails a 6 m loaded beam
+    const r = optimizeStructure(start, soil)!
+    expect(r.converged).toBe(true)
+    expect(designOK(r.design)).toBe(true)
+    expect(r.model.sections.some((s) => s.shape !== 'W150x13')).toBe(true)
+    expect(r.steps.some((s) => !s.ok)).toBe(true) // at least one failing iteration logged
+  })
+
+  it('shrinks an oversized steel shape (W310x342) while the design stays OK', () => {
+    const start = steelModel('W310x342')
+    const first = designStructure(start, soil)!
+    expect(designOK(first)).toBe(true)            // W310x342 passes easily
+    const r = optimizeStructure(start, soil)!
+    expect(r.converged).toBe(true)
+    // shrink must have stepped at least one section down from the starting shape
+    expect(r.model.sections.some((s) => s.shape !== 'W310x342')).toBe(true)
+  })
+
+  it('steel self-weight uses shape area × 78.5 kN/m³, not bounding box × 24', () => {
+    // W310x79: A = 10000 mm². Self-weight = 10000/1e6 × 78.5 = 0.785 kN/m
+    const r = designStructure(steelModel('W310x79'), soil)!
+    // 34 m of W310x79 (A=10 000 mm²) at 7850 kg/m³ ≈ 2669 kg
+    expect(r.totals.steelKg).toBeCloseTo(34 * (10000 / 1e6) * 7850, 0)
+  })
+})
+
 describe('self-weight refresh', () => {
   it('recomputes member-udl D from the current section, keeping other loads', () => {
     const m = makeModel()                       // area D/L only (no member SW yet)

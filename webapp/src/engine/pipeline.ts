@@ -19,7 +19,7 @@ import { designSquareFooting, type SquareFootingResult } from './isolatedFooting
 import { designCombinedFooting, type CombinedFootingResult } from './combinedFooting'
 import { designSlabDDM, type SlabDesignResult } from './slabDDM'
 import { designShearWall, type ShearWallResult } from './shearWallDesign'
-import { shapeByName } from './aiscSections'
+import { shapeByName, nextHeavierW, nextLighterW, type AiscShape } from './aiscSections'
 import { deriveWSection, beamFlexure, beamShear, columnAxial, combinedLoading } from './steelDesign'
 import { designBasePlate, adoptPlateThickness, type BasePlateResult } from './baseplate'
 
@@ -666,8 +666,20 @@ const countFails = (d: StructureDesign): number =>
 const withSizes = (model: StructuralModel, sizes: Map<string, RectSection>): StructuralModel =>
   ({ ...model, sections: model.sections.map((s) => sizes.get(s.id) ?? s) })
 
-const growOne = (s: RectSection): RectSection =>
-  s.h >= 3 * s.b ? { ...s, b: s.b + 50, name: `${s.b + 50}×${s.h}` } : { ...s, h: s.h + 50, name: `${s.b}×${s.h + 50}` }
+/** Copy shape geometry into the section's bounding-box fields so metadata stays consistent. */
+const applyShape = (s: RectSection, sh: AiscShape): RectSection =>
+  ({ ...s, shape: sh.name, name: sh.name, b: sh.bf ?? s.b, h: sh.d ?? s.h })
+
+const growSection = (s: RectSection): RectSection => {
+  if (s.material === 'steel' && s.shape) {
+    const next = nextHeavierW(s.shape)
+    return next ? applyShape(s, next) : s    // already the heaviest in the catalog
+  }
+  // concrete: grow depth (or width once very deep)
+  return s.h >= 3 * s.b
+    ? { ...s, b: s.b + 50, name: `${s.b + 50}×${s.h}` }
+    : { ...s, h: s.h + 50, name: `${s.b}×${s.h + 50}` }
+}
 
 /**
  * Per-member sizing search. Each beam/girder/column carries its own section, so
@@ -710,11 +722,13 @@ export function optimizeStructure(
   let iter = 0
   while (!designOK(design) && iter++ < maxIter) {
     const failSids = new Set<string>()
-    for (const b of design.beams) if (!b.ok) { const s = memSecId.get(b.id); if (s) failSids.add(s) }
-    for (const c of design.columns) if (!c.ok) { const s = memSecId.get(c.id); if (s) failSids.add(s) }
+    for (const b of design.beams)        if (!b.ok) { const s = memSecId.get(b.id); if (s) failSids.add(s) }
+    for (const c of design.columns)      if (!c.ok) { const s = memSecId.get(c.id); if (s) failSids.add(s) }
+    for (const b of design.steelBeams)   if (!b.ok) { const s = memSecId.get(b.id); if (s) failSids.add(s) }
+    for (const c of design.steelColumns) if (!c.ok) { const s = memSecId.get(c.id); if (s) failSids.add(s) }
     if (failSids.size === 0) break                   // only footings fail — not a section problem
     onProgress?.({ phase: 'Optimizing — growing sections', current: iter, total: maxIter, detail: `iteration ${iter}: ${failSids.size} member(s) grown, ${countFails(design)} failing` })
-    const sizes = new Map(work.sections.map((s) => [s.id, failSids.has(s.id) ? growOne(s) : s]))
+    const sizes = new Map(work.sections.map((s) => [s.id, failSids.has(s.id) ? growSection(s) : s]))
     work = settle(withSizes(work, sizes))
     const d = designStructure(work, soil, plan, opts, sub(`Optimize iter ${iter}`))
     if (!d) break
@@ -730,8 +744,15 @@ export function optimizeStructure(
     while (improved && guard++ < 4) {
       improved = false
       for (const s0 of work.sections) {
-        if (s0.h - 25 < 300) continue
-        const trialSec: RectSection = { ...s0, h: s0.h - 25, name: `${s0.b}×${s0.h - 25}` }
+        let trialSec: RectSection | null = null
+        if (s0.material === 'steel' && s0.shape) {
+          const lighter = nextLighterW(s0.shape)
+          if (lighter) trialSec = applyShape(s0, lighter)
+        } else {
+          if (s0.h - 25 < 300) continue
+          trialSec = { ...s0, h: s0.h - 25, name: `${s0.b}×${s0.h - 25}` }
+        }
+        if (!trialSec) continue
         const trial = settle(withSizes(work, new Map([[s0.id, trialSec]])))
         const d = designStructure(trial, soil, plan, opts)
         if (d && designOK(d)) { work = trial; design = d; improved = true }

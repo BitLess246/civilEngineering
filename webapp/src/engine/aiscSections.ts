@@ -525,3 +525,20 @@ export function effectiveSection(shape: AiscShape, double = false, gap = 0): Eff
   const rmin = shape.family === 'L' ? Math.min(shape.rz ?? shape.rx, shape.rx) : Math.min(shape.rx, shape.ry)
   return { label: shape.name, family: shape.family, A: shape.A, rx: shape.rx, ry: shape.ry, rmin, double: false, base: shape }
 }
+
+// ── W-shape optimizer helpers ─────────────────────────────────────────────
+// Sorted by gross area (≈ weight per metre) for grow / shrink stepping.
+
+export const W_SORTED: AiscShape[] = shapesOf('W').slice().sort((a, b) => a.A - b.A)
+
+/** Next heavier W-shape in the catalog; undefined if already the heaviest. */
+export function nextHeavierW(name: string): AiscShape | undefined {
+  const i = W_SORTED.findIndex((s) => s.name === name)
+  return i >= 0 && i < W_SORTED.length - 1 ? W_SORTED[i + 1] : undefined
+}
+
+/** Next lighter W-shape in the catalog; undefined if already the lightest. */
+export function nextLighterW(name: string): AiscShape | undefined {
+  const i = W_SORTED.findIndex((s) => s.name === name)
+  return i > 0 ? W_SORTED[i - 1] : undefined
+}
