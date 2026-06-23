@@ -22,6 +22,7 @@
 import type { StructuralModel, RectSection } from './model'
 import type { StructureDesign } from './pipeline'
 import { concreteMaterials, type ConcreteClass, type ConcreteMaterials } from './quantities'
+import { shapeByName } from './aiscSections'
 
 const STEEL_DENSITY = 7850            // kg/m³
 const BAR_LENGTH = 6                  // m, commercial length
@@ -66,6 +67,8 @@ export interface FormworkResult { areaM2: number; plywoodSheets: number; lumberM
 export interface TieWireResult { intersections: number; netM: number; rolls: number; weightKg: number }
 export interface BoqRow { item: string; unit: string; qty: number }
 
+export interface SteelShapeQty { shape: string; kg: number; L: number }
+
 export interface TakeoffResult {
   byElement: ElementQty[]
   cutList: CutItem[]
@@ -73,34 +76,42 @@ export interface TakeoffResult {
   concrete: ConcreteMaterials
   formwork: FormworkResult
   tieWire: TieWireResult
-  totalSteelNetKg: number                 // fabricated
-  totalSteelPurchasedKg: number           // bought (incl. lap/waste)
+  totalSteelNetKg: number                 // fabricated reinforcing steel
+  totalSteelPurchasedKg: number           // bought reinforcing (incl. lap/waste)
   totalConcreteM3: number
   boq: BoqRow[]
   slabSteelDDM: boolean                   // slab steel from the DDM strip layout
+  structuralSteelKg: number               // W-shape structural steel, net kg
+  steelByShape: SteelShapeQty[]           // per W-shape breakdown
 }
 
 // ── Pricing — turn the take-off into a costed Bill of Materials ──
 export interface PriceList {
   cementBag: number; sandM3: number; gravelM3: number; steelKg: number
   tieWireRoll: number; plywoodSheet: number; lumberM: number
+  structuralSteelKg?: number              // W-shape sections, default ₱120/kg
 }
-export interface BillRow { item: string; qty: number; unit: string; unitPrice: number; amount: number }
+export interface BillRow {
+  item: string; qty: number; unit: string; unitPrice: number; amount: number
+  priceKey?: keyof PriceList              // which PriceList key drives the unit price (for editable input)
+}
 export interface CostedBill { rows: BillRow[]; total: number }
 
 /** Price the take-off aggregates against a unit-price list → line amounts + total. */
 export function costBill(t: TakeoffResult, p: PriceList): CostedBill {
-  const row = (item: string, qty: number, unit: string, unitPrice: number): BillRow =>
-    ({ item, qty, unit, unitPrice, amount: qty * unitPrice })
+  const row = (item: string, qty: number, unit: string, unitPrice: number, priceKey?: keyof PriceList): BillRow =>
+    ({ item, qty, unit, unitPrice, amount: qty * unitPrice, priceKey })
   const rows: BillRow[] = [
-    row('Cement', t.concrete.cement, 'bag', p.cementBag),
-    row('Sand', t.concrete.sand, 'm³', p.sandM3),
-    row('Gravel', t.concrete.gravel, 'm³', p.gravelM3),
-    row('Reinforcing steel', t.totalSteelPurchasedKg, 'kg', p.steelKg),
-    row('Tie wire (#16 G.I.)', t.tieWire.rolls, 'roll', p.tieWireRoll),
-    row('Formwork — plywood', t.formwork.plywoodSheets, 'sheet', p.plywoodSheet),
-    row('Formwork — lumber', t.formwork.lumberM, 'lin·m', p.lumberM),
+    row('Cement', t.concrete.cement, 'bag', p.cementBag, 'cementBag'),
+    row('Sand', t.concrete.sand, 'm³', p.sandM3, 'sandM3'),
+    row('Gravel', t.concrete.gravel, 'm³', p.gravelM3, 'gravelM3'),
+    row('Reinforcing steel', t.totalSteelPurchasedKg, 'kg', p.steelKg, 'steelKg'),
+    row('Tie wire (#16 G.I.)', t.tieWire.rolls, 'roll', p.tieWireRoll, 'tieWireRoll'),
+    row('Formwork — plywood', t.formwork.plywoodSheets, 'sheet', p.plywoodSheet, 'plywoodSheet'),
+    row('Formwork — lumber', t.formwork.lumberM, 'lin·m', p.lumberM, 'lumberM'),
   ]
+  if (t.structuralSteelKg > 0)
+    rows.push(row('Structural steel (W-shapes)', t.structuralSteelKg, 'kg', p.structuralSteelKg ?? 120, 'structuralSteelKg'))
   return { rows, total: rows.reduce((s, r) => s + r.amount, 0) }
 }
 
@@ -303,8 +314,36 @@ export function estimateTakeoff(
     if (sk > 0) boq.push({ item: `${k} — reinforcing steel`, unit: 'kg', qty: sk })
   }
 
+  // ── Structural steel members (W-shapes) ──
+  const nodeXYZ = new Map(model.nodes.map((n) => [n.id, n]))
+  const shapeMap = new Map<string, { kg: number; L: number }>()
+  let structuralSteelKg = 0
+  for (const mem of model.members) {
+    const sec = secById.get(memSecId.get(mem.id) ?? '')
+    if (sec?.material !== 'steel' || !sec.shape) continue
+    const shape = shapeByName(sec.shape); if (!shape) continue
+    const ni = nodeXYZ.get(mem.i), nj = nodeXYZ.get(mem.j); if (!ni || !nj) continue
+    const L = Math.hypot(nj.x - ni.x, nj.y - ni.y, nj.z - ni.z)
+    const kg = (shape.A / 1e6) * L * STEEL_DENSITY
+    structuralSteelKg += kg
+    const prev = shapeMap.get(sec.shape) ?? { kg: 0, L: 0 }
+    shapeMap.set(sec.shape, { kg: prev.kg + kg, L: prev.L + L })
+    boq.push({ item: `Structural steel — ${sec.shape}`, unit: 'm', qty: L })
+  }
+  // consolidate duplicate BOQ shape entries
+  const shapeBoq = new Map<string, number>()
+  for (const r of boq.filter((r) => r.item.startsWith('Structural steel — '))) {
+    shapeBoq.set(r.item, (shapeBoq.get(r.item) ?? 0) + r.qty)
+  }
+  const boqFinal = [
+    ...boq.filter((r) => !r.item.startsWith('Structural steel — ')),
+    ...[...shapeBoq.entries()].map(([item, qty]) => ({ item, unit: 'm', qty })),
+  ]
+
   return {
     byElement, cutList, steelByDia, concrete, formwork, tieWire,
-    totalSteelNetKg, totalSteelPurchasedKg, totalConcreteM3, boq, slabSteelDDM,
+    totalSteelNetKg, totalSteelPurchasedKg, totalConcreteM3, boq: boqFinal, slabSteelDDM,
+    structuralSteelKg,
+    steelByShape: [...shapeMap.entries()].map(([shape, v]) => ({ shape, ...v })),
   }
 }

@@ -472,6 +472,50 @@ function ColumnElevation({ Lh, b, bars, tieSpacing }: { Lh: number; b: number; b
   )
 }
 
+/** W-shape cross-section SVG: top flange + web + bottom flange, scaled to fit
+ *  a fixed viewbox so all dimensions are labelled. d/bf/tf/tw all in mm. */
+function WShapeSection({ shape, d, bf, tf, tw }: { shape: string; d: number; bf: number; tf: number; tw: number }): ReactNode {
+  const VW = 200, VH = 200
+  const pad = 28          // room for labels
+  const scale = Math.min((VW - pad * 2) / bf, (VH - pad * 2) / d)
+  const sw = bf * scale   // scaled width
+  const sh = d * scale    // scaled height
+  const stf = tf * scale  // flange thickness
+  const stw = tw * scale  // web thickness
+  const x0 = (VW - sw) / 2, y0 = (VH - sh) / 2
+  const webX = (VW - stw) / 2
+  const textStyle = { fontSize: 9, fontFamily: 'Arial, sans-serif', fill: '#334155' }
+  return (
+    <svg viewBox={`0 0 ${VW} ${VH}`} xmlns="http://www.w3.org/2000/svg"
+      style={{ width: 200, height: 200 }}>
+      {/* label */}
+      <text x={VW / 2} y={10} textAnchor="middle" fontSize={10} fontWeight={700} fill="#0056b3" fontFamily="Arial, sans-serif">{shape}</text>
+      {/* top flange */}
+      <rect x={x0} y={y0} width={sw} height={stf} fill="#bfdbfe" stroke="#0056b3" strokeWidth={0.8} />
+      {/* web */}
+      <rect x={webX} y={y0 + stf} width={stw} height={sh - 2 * stf} fill="#dbeafe" stroke="#0056b3" strokeWidth={0.8} />
+      {/* bottom flange */}
+      <rect x={x0} y={y0 + sh - stf} width={sw} height={stf} fill="#bfdbfe" stroke="#0056b3" strokeWidth={0.8} />
+      {/* bf dim arrow */}
+      <line x1={x0} y1={VH - 10} x2={x0 + sw} y2={VH - 10} stroke="#64748b" strokeWidth={0.8} markerStart="url(#arr)" markerEnd="url(#arr)" />
+      <text x={VW / 2} y={VH - 2} textAnchor="middle" {...textStyle}>bf={Math.round(bf)}</text>
+      {/* d dim arrow */}
+      <line x1={VW - 10} y1={y0} x2={VW - 10} y2={y0 + sh} stroke="#64748b" strokeWidth={0.8} />
+      <text x={VW - 2} y={(y0 + y0 + sh) / 2} textAnchor="middle" {...textStyle} transform={`rotate(-90,${VW - 2},${(y0 + y0 + sh) / 2})`}>d={Math.round(d)}</text>
+      {/* tf label */}
+      <text x={x0 - 2} y={y0 + stf / 2 + 3} textAnchor="end" {...textStyle}>tf={tf.toFixed(1)}</text>
+      {/* tw label */}
+      <text x={webX - 2} y={(VH) / 2 + 3} textAnchor="end" {...textStyle}>tw={tw.toFixed(1)}</text>
+      {/* arrow marker def */}
+      <defs>
+        <marker id="arr" markerWidth={4} markerHeight={4} refX={2} refY={2} orient="auto">
+          <path d="M4,0 L0,2 L4,4" fill="none" stroke="#64748b" strokeWidth={0.8} />
+        </marker>
+      </defs>
+    </svg>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────
 export default function ModelSpace() {
   // design inputs restored from the last session (so they match the autosaved
@@ -540,7 +584,7 @@ export default function ModelSpace() {
   const [modelImg, setModelImg] = useState<string | null>(null)   // 3D snapshot for the printed report
   const [concreteClass, setConcreteClass] = useState<ConcreteClass>((si.concreteClass as ConcreteClass) ?? 'A')   // mix class for the take-off
   const [prices, setPrices] = useState<PriceList>((si.prices as PriceList) ?? {   // unit prices for the costed bill (PHP)
-    cementBag: 260, sandM3: 1500, gravelM3: 1600, steelKg: 65, tieWireRoll: 2500, plywoodSheet: 700, lumberM: 25,
+    cementBag: 260, sandM3: 1500, gravelM3: 1600, steelKg: 65, tieWireRoll: 2500, plywoodSheet: 700, lumberM: 25, structuralSteelKg: 120,
   })
   const [sdlDraft, setSdlDraft] = useState<SdlItem[]>([])          // NSCP-204 SDL composition being built
   const [sdlMatId, setSdlMatId] = useState(TABLE_204_2[0].id)      // 204-2 material add-row
@@ -877,7 +921,7 @@ export default function ModelSpace() {
     return map
   }, [govRes])
 
-  const generate = () => {
+  const generate = (matOverride?: 'concrete' | 'steel') => {
     const mat = { fc, fy, barDia, tieDia, cover }
     const role = (b: number, h: number, id: string): RectSection => ({ id, name: `${b}×${h}`, b, h, ...mat })
     // steel role: bounding box b = bf, h = d from the chosen AISC shape, tagged
@@ -887,7 +931,7 @@ export default function ModelSpace() {
       const bf = sh?.bf ?? sh?.b ?? sh?.D ?? 200, d = sh?.d ?? sh?.h ?? sh?.D ?? 300
       return { id, name: shapeName, b: bf, h: d, ...mat, material: 'steel', shape: shapeName, steelFy, steelFu }
     }
-    const steel = material === 'steel'
+    const steel = (matOverride ?? material) === 'steel'
     const m = generateGridModel({
       baysX: parseList(baysX), baysZ: parseList(baysZ), storeyH: parseList(storeyH),
       column: steel ? steelRole(colShape, 'COL') : role(colB, colH, 'COL'),
@@ -1140,7 +1184,7 @@ export default function ModelSpace() {
                     className="rounded-md border border-slate-300 px-2.5 py-1.5" />
                 </label>
                 <div className="col-span-full">
-                  <button type="button" onClick={generate} className={btn('from-[#0056b3] to-[#003f86]')}>⚙ Generate model</button>
+                  <button type="button" onClick={() => generate()} className={btn('from-[#0056b3] to-[#003f86]')}>⚙ Generate model</button>
                 </div>
               </Card>
 
@@ -1388,7 +1432,11 @@ export default function ModelSpace() {
           {tab === 'properties' && (
             <div className="space-y-4">
               <Card title="Frame material">
-                <Pick label="Members" value={material} onChange={(v) => setMaterial(v as 'concrete' | 'steel')}
+                <Pick label="Members" value={material} onChange={(v) => {
+                  const next = v as 'concrete' | 'steel'
+                  setMaterial(next)
+                  if (model) generate(next)          // auto-regenerate grid with new frame material
+                }}
                   options={[['concrete', 'Reinforced concrete'], ['steel', 'Structural steel (AISC W)']]} />
                 <p className="col-span-full -mt-1 text-[11px] text-slate-500">
                   {material === 'steel'
@@ -2362,23 +2410,100 @@ export default function ModelSpace() {
                   </tr>
                 </thead>
                 <tbody>
-                  {design.steelBeams.map((b) => (
-                    <tr key={b.id} className={`sched-row border-t border-slate-100 ${b.ok ? '' : 'bg-red-50 text-red-700'}`}>
-                      <td className="py-1 pr-2 font-medium">{b.id}</td>
-                      <td className="py-1 pr-2">{b.shape}</td>
-                      <td className="py-1 pr-2 text-right">{f1(b.Mu)}</td>
-                      <td className="py-1 pr-2 text-right">{f1(b.phiMn)}</td>
-                      <td className="py-1 pr-2">{b.ltbZone}</td>
-                      <td className="py-1 pr-2 text-right">{f1(b.Vu)}</td>
-                      <td className="py-1 pr-2 text-right">{f1(b.phiVn)}</td>
-                      <td className="py-1 pr-2 text-right">{(Math.max(b.utilM, b.utilV) * 100).toFixed(0)}%</td>
-                      <td className="py-1 text-[11px] text-slate-500">{b.gov}</td>
-                    </tr>
-                  ))}
+                  {design.steelBeams.flatMap((b) => {
+                    const key = `beam-${b.id}`
+                    const open = expanded === key
+                    const util = Math.max(b.utilM, b.utilV)
+                    const rows = [
+                      <tr key={b.id}
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50 ${b.ok ? '' : 'bg-red-50 text-red-700'}`}
+                        onClick={() => setExpanded(open ? null : key)}>
+                        <td className="py-1 pr-2 font-medium">{b.id} <span className="text-slate-400">{open ? '▲' : '▼'}</span></td>
+                        <td className="py-1 pr-2 font-mono">{b.shape}</td>
+                        <td className="py-1 pr-2 text-right">{f1(b.Mu)}</td>
+                        <td className="py-1 pr-2 text-right">{f1(b.phiMn)}</td>
+                        <td className="py-1 pr-2">{b.ltbZone}</td>
+                        <td className="py-1 pr-2 text-right">{f1(b.Vu)}</td>
+                        <td className="py-1 pr-2 text-right">{f1(b.phiVn)}</td>
+                        <td className={`py-1 pr-2 text-right font-semibold ${util > 1 ? 'text-red-600' : util > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(util * 100).toFixed(0)}%</td>
+                        <td className="py-1 text-[11px] text-slate-500">{b.gov}</td>
+                      </tr>,
+                    ]
+                    if (open) rows.push(
+                      <tr key={`${b.id}-sol`}>
+                        <td colSpan={9} className="bg-slate-50 px-4 py-3">
+                          <div className="flex flex-wrap gap-6">
+                            {/* W-shape cross-section drawing */}
+                            <div className="shrink-0">
+                              <WShapeSection shape={b.shape} d={b.d} bf={b.bf} tf={b.tf} tw={b.tw} />
+                            </div>
+                            {/* Section properties */}
+                            <div className="min-w-[160px]">
+                              <p className="mb-1 text-[11px] font-bold text-slate-600 uppercase tracking-wide">Section properties</p>
+                              <table className="text-[11px] leading-5">
+                                <tbody>
+                                  {[['d', `${b.d.toFixed(1)} mm`], ['bf', `${b.bf.toFixed(1)} mm`], ['tf', `${b.tf.toFixed(1)} mm`], ['tw', `${b.tw.toFixed(1)} mm`],
+                                    ['Ix', `${(b.Ix / 1e6).toFixed(1)} ×10⁶ mm⁴`], ['Sx', `${(b.Sx / 1e3).toFixed(0)} ×10³ mm³`],
+                                    ['Zx', `${(b.Zx / 1e3).toFixed(0)} ×10³ mm³`], ['Iy', `${(b.Iy / 1e6).toFixed(1)} ×10⁶ mm⁴`], ['ry', `${b.ry.toFixed(1)} mm`],
+                                  ].map(([lbl, val]) => (
+                                    <tr key={lbl}><td className="pr-3 text-slate-500">{lbl}</td><td className="font-mono">{val}</td></tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                            {/* §F2 Flexure check */}
+                            <div className="min-w-[200px]">
+                              <p className="mb-1 text-[11px] font-bold text-slate-600 uppercase tracking-wide">§F2 Flexure</p>
+                              <table className="text-[11px] leading-5">
+                                <tbody>
+                                  {[
+                                    ['Mp = Fy·Zx', `${f1(b.Mp / 1e6)} kN·m`],
+                                    ['Lp', `${(b.Lp / 1000).toFixed(2)} m`],
+                                    ['Lr', `${(b.Lr / 1000).toFixed(2)} m`],
+                                    ['Lb', `${(b.Lb / 1000).toFixed(2)} m`],
+                                    ['LTB zone', b.ltbZone],
+                                    ['Mn', `${f1(b.Mn / 1e6)} kN·m`],
+                                    ['φMn (φ=0.9)', `${f1(b.phiMn)} kN·m`],
+                                    ['Mu', `${f1(b.Mu)} kN·m`],
+                                    ['Util (M)', `${(b.utilM * 100).toFixed(1)}%`],
+                                    ['Compact flange?', b.compactFlange ? `✓  λf=${b.lambdaF.toFixed(1)} ≤ λpf=${b.lambdaPF.toFixed(1)}` : `✗  λf=${b.lambdaF.toFixed(1)} > λpf=${b.lambdaPF.toFixed(1)}`],
+                                    ['Compact web?', b.compactWeb ? `✓  λw=${b.lambdaW.toFixed(1)} ≤ λpw=${b.lambdaPW.toFixed(1)}` : `✗  λw=${b.lambdaW.toFixed(1)} > λpw=${b.lambdaPW.toFixed(1)}`],
+                                  ].map(([lbl, val]) => (
+                                    <tr key={lbl}><td className="pr-3 text-slate-500">{lbl}</td><td className="font-mono">{val}</td></tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                            {/* §G2.1 Shear check */}
+                            <div className="min-w-[180px]">
+                              <p className="mb-1 text-[11px] font-bold text-slate-600 uppercase tracking-wide">§G2.1 Shear</p>
+                              <table className="text-[11px] leading-5">
+                                <tbody>
+                                  {[
+                                    ['Aw = d·tw', `${(b.Aw).toFixed(0)} mm²`],
+                                    ['h/tw', `${b.hwTw.toFixed(1)}`],
+                                    ['Cv1', `${b.Cv1.toFixed(3)}`],
+                                    ['φV (φ=1.0)', b.phiV.toFixed(2)],
+                                    ['φVn', `${f1(b.phiVn)} kN`],
+                                    ['Vu', `${f1(b.Vu)} kN`],
+                                    ['Util (V)', `${(b.utilV * 100).toFixed(1)}%`],
+                                  ].map(([lbl, val]) => (
+                                    <tr key={lbl}><td className="pr-3 text-slate-500">{lbl}</td><td className="font-mono">{val}</td></tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                          <p className="mt-2 text-[10px] text-slate-400">Lb = full member length (conservative unbraced). Cb = 1.0. φ = 0.9 (flexure), 1.0 (shear, doubly-symmetric I).</p>
+                        </td>
+                      </tr>
+                    )
+                    return rows
+                  })}
                 </tbody>
               </table>
               <p className="mt-1 text-[11px] text-slate-400">
-                §F2 flexure (Lb = full member length, conservative; Cb = 1.0), §G2.1 shear. Util = max(Mu/φMn, Vu/φVn).
+                §F2 flexure (Lb = full member length, conservative; Cb = 1.0), §G2.1 shear. Util = max(Mu/φMn, Vu/φVn). Click a row to expand the worked solution.
               </p>
             </div>
           )}
@@ -2402,23 +2527,96 @@ export default function ModelSpace() {
                   </tr>
                 </thead>
                 <tbody>
-                  {design.steelColumns.map((c) => (
-                    <tr key={c.id} className={`sched-row border-t border-slate-100 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
-                      <td className="py-1 pr-2 font-medium">{c.id}</td>
-                      <td className="py-1 pr-2">{c.shape}</td>
-                      <td className="py-1 pr-2 text-right">{f1(c.Pu)}</td>
-                      <td className="py-1 pr-2 text-right">{f1(c.phiPn)}</td>
-                      <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
-                      <td className="py-1 pr-2 text-right">{c.slenderness.toFixed(0)}</td>
-                      <td className="py-1 pr-2">{c.equation}</td>
-                      <td className="py-1 pr-2 text-right">{(c.ratio * 100).toFixed(0)}%</td>
-                      <td className="py-1 text-[11px] text-slate-500">{c.gov}</td>
-                    </tr>
-                  ))}
+                  {design.steelColumns.flatMap((c) => {
+                    const key = `col-${c.id}`
+                    const open = expanded === key
+                    const E_STEEL = 200000
+                    const rows = [
+                      <tr key={c.id}
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}
+                        onClick={() => setExpanded(open ? null : key)}>
+                        <td className="py-1 pr-2 font-medium">{c.id} <span className="text-slate-400">{open ? '▲' : '▼'}</span></td>
+                        <td className="py-1 pr-2 font-mono">{c.shape}</td>
+                        <td className="py-1 pr-2 text-right">{f1(c.Pu)}</td>
+                        <td className="py-1 pr-2 text-right">{f1(c.phiPn)}</td>
+                        <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
+                        <td className="py-1 pr-2 text-right">{c.slenderness.toFixed(0)}</td>
+                        <td className="py-1 pr-2">{c.equation}</td>
+                        <td className={`py-1 pr-2 text-right font-semibold ${c.ratio > 1 ? 'text-red-600' : c.ratio > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(c.ratio * 100).toFixed(0)}%</td>
+                        <td className="py-1 text-[11px] text-slate-500">{c.gov}</td>
+                      </tr>,
+                    ]
+                    if (open) rows.push(
+                      <tr key={`${c.id}-sol`}>
+                        <td colSpan={9} className="bg-slate-50 px-4 py-3">
+                          <div className="flex flex-wrap gap-6">
+                            {/* W-shape cross-section drawing */}
+                            <div className="shrink-0">
+                              <WShapeSection shape={c.shape} d={c.d} bf={c.bf} tf={c.tf} tw={c.tw} />
+                            </div>
+                            {/* Section properties */}
+                            <div className="min-w-[160px]">
+                              <p className="mb-1 text-[11px] font-bold text-slate-600 uppercase tracking-wide">Section properties</p>
+                              <table className="text-[11px] leading-5">
+                                <tbody>
+                                  {[['d', `${c.d.toFixed(1)} mm`], ['bf', `${c.bf.toFixed(1)} mm`], ['tf', `${c.tf.toFixed(1)} mm`], ['tw', `${c.tw.toFixed(1)} mm`],
+                                    ['A', `${c.A.toFixed(0)} mm²`], ['rx', `${c.rx.toFixed(1)} mm`], ['ry', `${c.ry.toFixed(1)} mm`],
+                                  ].map(([lbl, val]) => (
+                                    <tr key={lbl}><td className="pr-3 text-slate-500">{lbl}</td><td className="font-mono">{val}</td></tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                            {/* §E3 Axial check */}
+                            <div className="min-w-[210px]">
+                              <p className="mb-1 text-[11px] font-bold text-slate-600 uppercase tracking-wide">§E3 Axial compression</p>
+                              <table className="text-[11px] leading-5">
+                                <tbody>
+                                  {[
+                                    ['KLx/rx', c.slendernessX.toFixed(1)],
+                                    ['KLy/ry', c.slendernessY.toFixed(1)],
+                                    ['Governing KL/r', c.slenderness.toFixed(1)],
+                                    ['Fe = π²E/(KL/r)²', `${c.Fe.toFixed(1)} MPa`],
+                                    ['4.71√(E/Fy)', `${(4.71 * Math.sqrt(E_STEEL / (c.Fcr > 0 ? c.Pu / (c.phiPn / 0.9 / c.A || 1) : 345))).toFixed(1)}`],
+                                    ['Fcr', `${c.Fcr.toFixed(1)} MPa`],
+                                    ['φPn (φ=0.9)', `${f1(c.phiPn)} kN`],
+                                    ['Pu', `${f1(c.Pu)} kN`],
+                                    ['Pu/φPn', `${(c.Pu / (c.phiPn || 1) * 100).toFixed(1)}%`],
+                                  ].map(([lbl, val]) => (
+                                    <tr key={lbl}><td className="pr-3 text-slate-500">{lbl}</td><td className="font-mono">{val}</td></tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                            {/* §H1-1 Combined */}
+                            <div className="min-w-[180px]">
+                              <p className="mb-1 text-[11px] font-bold text-slate-600 uppercase tracking-wide">§H1-1 Combined</p>
+                              <table className="text-[11px] leading-5">
+                                <tbody>
+                                  {[
+                                    ['Pu/φPn', `${(c.Pu / (c.phiPn || 1)).toFixed(3)}`],
+                                    ['Mu', `${f1(c.Mu)} kN·m`],
+                                    ['φMn', `${f1(c.phiMn)} kN·m`],
+                                    ['Equation', c.equation],
+                                    ['Interaction ratio', `${(c.ratio * 100).toFixed(1)}%`],
+                                    ['Status', c.ok ? '✓ OK' : '✗ NG'],
+                                  ].map(([lbl, val]) => (
+                                    <tr key={lbl}><td className="pr-3 text-slate-500">{lbl}</td><td className={`font-mono ${lbl === 'Status' ? (c.ok ? 'text-green-700' : 'text-red-600') : ''}`}>{val}</td></tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                          <p className="mt-2 text-[10px] text-slate-400">K = 1.0 (conservative). §E3: 4.71√(E/Fy) threshold. §H1-1a when Pu/φPn ≥ 0.2, else §H1-1b.</p>
+                        </td>
+                      </tr>
+                    )
+                    return rows
+                  })}
                 </tbody>
               </table>
               <p className="mt-1 text-[11px] text-slate-400">
-                §E3 axial buckling (governing KL/r, K = 1.0), §H1-1 combined axial + flexure. Ratio ≤ 100% passes.
+                §E3 axial buckling (governing KL/r, K = 1.0), §H1-1 combined axial + flexure. Ratio ≤ 100% passes. Click a row to expand the worked solution.
               </p>
             </div>
           )}
@@ -2586,13 +2784,14 @@ export default function ModelSpace() {
           {/* BOM summary */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
             {[
-              ['Concrete', `${f2(takeoff.totalConcreteM3)} m³`],
-              ['Cement', `${takeoff.concrete.cement} bags`],
-              ['Sand', `${f2(takeoff.concrete.sand)} m³`],
-              ['Gravel', `${f2(takeoff.concrete.gravel)} m³`],
-              ['Steel (bought)', `${f1(takeoff.totalSteelPurchasedKg)} kg`],
-              ['Tie wire', `${takeoff.tieWire.rolls} roll${takeoff.tieWire.rolls === 1 ? '' : 's'}`],
-            ].map(([k, v]) => (
+              takeoff.totalConcreteM3 > 0 && ['Concrete', `${f2(takeoff.totalConcreteM3)} m³`],
+              takeoff.totalConcreteM3 > 0 && ['Cement', `${takeoff.concrete.cement} bags`],
+              takeoff.totalConcreteM3 > 0 && ['Sand', `${f2(takeoff.concrete.sand)} m³`],
+              takeoff.totalConcreteM3 > 0 && ['Gravel', `${f2(takeoff.concrete.gravel)} m³`],
+              takeoff.totalSteelPurchasedKg > 0 && ['Rebar (bought)', `${f1(takeoff.totalSteelPurchasedKg)} kg`],
+              takeoff.tieWire.rolls > 0 && ['Tie wire', `${takeoff.tieWire.rolls} roll${takeoff.tieWire.rolls === 1 ? '' : 's'}`],
+              takeoff.structuralSteelKg > 0 && ['Structural steel', `${(takeoff.structuralSteelKg / 1000).toFixed(2)} t`],
+            ].filter(Boolean as unknown as (v: unknown) => v is [string, string]).map(([k, v]) => (
               <div key={k} className="rounded-lg border border-slate-200 bg-white p-2 text-center shadow-sm">
                 <div className="text-[11px] uppercase tracking-wide text-slate-500">{k}</div>
                 <div className="text-sm font-bold text-[#0056b3]">{v}</div>
@@ -2618,19 +2817,23 @@ export default function ModelSpace() {
                   </tr>
                 </thead>
                 <tbody>
-                  {bill.rows.map((r, i) => {
-                    const keys: (keyof PriceList)[] = ['cementBag', 'sandM3', 'gravelM3', 'steelKg', 'tieWireRoll', 'plywoodSheet', 'lumberM']
-                    const key = keys[i]
+                  {bill.rows.map((r) => {
+                    const key = r.priceKey
+                    const pv = key ? (prices[key] ?? r.unitPrice) : r.unitPrice
                     return (
                       <tr key={r.item} className="border-t border-slate-100">
                         <td className="py-0.5 pr-2">{r.item}</td>
                         <td className="py-0.5 pr-2 text-right">{f2(r.qty)}</td>
                         <td className="py-0.5 pr-2 text-slate-500">{r.unit}</td>
                         <td className="py-0.5 pr-2 text-right">
-                          <input type="number" value={prices[key]}
-                            onChange={(e) => setPrices((p) => ({ ...p, [key]: parseFloat(e.target.value) || 0 }))}
-                            className="no-print w-24 rounded border border-slate-200 px-1 py-0.5 text-right" />
-                          <span className="print-only">{prices[key].toLocaleString('en-PH')}</span>
+                          {key ? (
+                            <>
+                              <input type="number" value={pv}
+                                onChange={(e) => setPrices((p) => ({ ...p, [key]: parseFloat(e.target.value) || 0 }))}
+                                className="no-print w-24 rounded border border-slate-200 px-1 py-0.5 text-right" />
+                              <span className="print-only">{pv.toLocaleString('en-PH')}</span>
+                            </>
+                          ) : pv.toLocaleString('en-PH')}
                         </td>
                         <td className="py-0.5 text-right font-medium">{peso(r.amount)}</td>
                       </tr>
@@ -2712,6 +2915,37 @@ export default function ModelSpace() {
               </p>
             </div>
           </div>
+
+          {/* Structural steel by shape — only when W-shapes are present */}
+          {takeoff.structuralSteelKg > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Structural steel by shape</h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Shape</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Length (m)</th>
+                    <th className="py-1 text-right font-semibold">Mass (kg)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {takeoff.steelByShape.sort((a, b) => a.shape.localeCompare(b.shape)).map((s) => (
+                    <tr key={s.shape} className="border-t border-slate-100">
+                      <td className="py-0.5 pr-2 font-medium">{s.shape}</td>
+                      <td className="py-0.5 pr-2 text-right">{f1(s.L)}</td>
+                      <td className="py-0.5 text-right">{Math.round(s.kg)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t border-slate-200 font-semibold">
+                    <td className="py-1 pr-2">Total</td>
+                    <td className="py-1 pr-2 text-right">{f1(takeoff.steelByShape.reduce((s, r) => s + r.L, 0))}</td>
+                    <td className="py-1 text-right">{Math.round(takeoff.structuralSteelKg)} kg ({(takeoff.structuralSteelKg / 1000).toFixed(2)} t)</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="mt-1 text-[11px] text-slate-400">Net mass: ρ = 7 850 kg/m³ · A (mm²) × L (m). Connections, base plates and field splices not included.</p>
+            </div>
+          )}
 
           {/* Formwork + tie wire */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

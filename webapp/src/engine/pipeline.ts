@@ -103,6 +103,13 @@ export interface SteelBeamScheduleRow {
   utilM: number; utilV: number
   ok: boolean
   gov?: string
+  // solution detail (section props + AISC check steps)
+  d: number; bf: number; tf: number; tw: number
+  Ix: number; Sx: number; Zx: number; Iy: number; ry: number
+  Mp: number; Lp: number; Lr: number; Lb: number; Mn: number
+  compact: boolean; compactFlange: boolean; compactWeb: boolean
+  lambdaF: number; lambdaPF: number; lambdaW: number; lambdaPW: number
+  Aw: number; Cv1: number; phiV: number; hwTw: number
 }
 export interface SteelColumnScheduleRow {
   id: string; L: number; shape: string
@@ -112,6 +119,10 @@ export interface SteelColumnScheduleRow {
   ratio: number; equation: string  // §H1-1
   ok: boolean
   gov?: string
+  // solution detail
+  d: number; bf: number; tf: number; tw: number; A: number; rx: number; ry: number
+  Fcr: number; Fe: number
+  slendernessX: number; slendernessY: number
 }
 export interface BasePlateScheduleRow {
   node: string; shape: string
@@ -153,15 +164,23 @@ function designSteelBeamRow(mr: F3MemberResult, role: string, sec: RectSection):
   if (!shape || (shape.family !== 'W' && shape.family !== 'WT')) return null
   const Fy = sec.steelFy ?? 248
   const p = deriveWSection(shape)
-  const Mu = mr.Mmax, Vu = mr.Vmax
-  const flex = beamFlexure(shape, p, Fy, mr.L * 1000, 1.0)
+  const Lb = mr.L * 1000
+  const flex = beamFlexure(shape, p, Fy, Lb, 1.0)
   const shear = beamShear(shape, p, Fy)
+  const Mu = mr.Mmax, Vu = mr.Vmax
   const utilM = flex.phiMn > 1e-9 ? Mu / flex.phiMn : Infinity
   const utilV = shear.phiVn > 1e-9 ? Vu / shear.phiVn : Infinity
+  const { d = 0, bf = 0, tf = 0, tw = 0, ry } = shape
   return {
     id: mr.id, role, L: mr.L, shape: shape.name, Mu, Vu,
     phiMn: flex.phiMn, phiVn: shear.phiVn, ltbZone: flex.ltbZone,
     utilM, utilV, ok: utilM <= 1 + 1e-9 && utilV <= 1 + 1e-9,
+    d, bf: bf ?? 0, tf: tf ?? 0, tw: tw ?? 0,
+    Ix: p.Ix, Sx: p.Sx, Zx: p.Zx, Iy: p.Iy, ry,
+    Mp: flex.Mp, Lp: flex.Lp, Lr: flex.Lr, Lb, Mn: flex.Mn,
+    compact: flex.compact, compactFlange: flex.compactFlange, compactWeb: flex.compactWeb,
+    lambdaF: flex.lambdaF, lambdaPF: flex.lambdaPF, lambdaW: flex.lambdaW, lambdaPW: flex.lambdaPW,
+    Aw: shear.Aw, Cv1: shear.Cv1, phiV: shear.phiV, hwTw: shear.hwTw,
   }
 }
 
@@ -178,11 +197,17 @@ function designSteelColumnRow(mr: F3MemberResult, sec: RectSection): SteelColumn
     phiMn = beamFlexure(shape, deriveWSection(shape), Fy, mr.L * 1000, 1.0).phiMn
   }
   const comb = combinedLoading(Pu, axial.phiPn, Mu, phiMn)
+  const E_STEEL = 200000
+  const Fe = axial.slenderness > 0 ? (Math.PI ** 2 * E_STEEL) / axial.slenderness ** 2 : Infinity
+  const { d = 0, bf = 0, tf = 0, tw = 0, A, rx, ry } = shape
   return {
     id: mr.id, L: mr.L, shape: shape.name, Pu, Mu,
     phiPn: axial.phiPn, phiMn: Number.isFinite(phiMn) ? phiMn : 0,
     slenderness: axial.slenderness, ratio: comb.ratio, equation: comb.equation,
     ok: comb.ok && axial.slenderOK,
+    d, bf: bf ?? 0, tf: tf ?? 0, tw: tw ?? 0, A, rx, ry,
+    Fcr: axial.Fcr, Fe,
+    slendernessX: axial.slendernessX, slendernessY: axial.slendernessY,
   }
 }
 
