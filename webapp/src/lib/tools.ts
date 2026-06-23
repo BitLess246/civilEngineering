@@ -23,7 +23,8 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/torsion',       name: 'Torsion Design',     sub: 'RC torsion · ACI 318-14' },
       { to: '/dev-length',    name: 'Dev & Splice',       sub: 'ACI 318-14 §25.4–25.5'   },
       { to: '/punching-shear', name: 'Punching Shear',   sub: 'Two-way §22.6 · ACI 318' },
-      { to: '/retaining-wall', name: 'Retaining Wall',  sub: 'Cantilever · Rankine'     },
+      { to: '/retaining-wall',   name: 'Retaining Wall',   sub: 'Cantilever · Rankine'     },
+      { to: '/load-combinations', name: 'Load Combinations', sub: 'NSCP 2015 §203.3 LRFD'   },
     ],
   },
   {
