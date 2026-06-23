@@ -662,7 +662,11 @@ export default function ModelSpace() {
   // §203.3.1: f₁ = 1.0 for assembly/garage or live load > 4.8 kPa, else 0.5.
   const fLive = assembly || qL > 4.8 ? 1.0 : 0.5
   const lateral = [...eCases, ...wCases]
-  const anaOpts = { f1: fLive, pDelta, lateral }
+  // Infer seismic lateral system from R for column tie-detailing.
+  // Only applies when E loads are present (user clicked "Generate E cases").
+  const hasELoads = model?.loads.some((l) => l.cat === 'E') ?? false
+  const seismicSystem: 'gravity' | 'imf' | 'smf' = hasELoads ? (Rw >= 8 ? 'smf' : Rw >= 5 ? 'imf' : 'gravity') : 'gravity'
+  const anaOpts = { f1: fLive, pDelta, lateral, seismicSystem }
 
   const analyze = () => {
     if (!model || busy) return
@@ -1780,14 +1784,39 @@ export default function ModelSpace() {
                   <button type="button" onClick={generateE} disabled={!model || eDirs.length === 0}
                     className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">⚡ Generate E cases</button>
                   {seis && (
-                    <p className="mt-1 text-xs text-slate-500">
-                      T = {seis.T.toFixed(3)} s · W = {f1(seis.W)} kN · V = {f1(seis.V)} kN
-                      {seis.V === seis.Vmax ? ' (2.5CaIW/R cap governs)'
-                        : seis.Vsrc > 0 && seis.V === seis.Vsrc ? ' (Zone-4 0.8ZNvIW/R floor governs)'
-                          : seis.V === seis.Vmin ? ' (0.11CaIW floor governs)' : ''}
-                      {seis.Ft > 0 ? ` · Ft = ${f1(seis.Ft)} kN` : ''} — {eCases.length} cat-E case{eCases.length === 1 ? '' : 's'} ({eDirs.join(', ') || 'none'}).
-                      {Zf >= 0.4 ? ` Zone-4 floor = ${f1(seis.Vsrc)} kN.` : ' (Zone-4 floor off: Z < 0.4)'}
-                    </p>
+                    <div className="mt-1 space-y-1">
+                      <p className="text-xs text-slate-500">
+                        T = {seis.T.toFixed(3)} s · W = {f1(seis.W)} kN · V = {f1(seis.V)} kN
+                        {seis.V === seis.Vmax ? ' (2.5CaIW/R cap governs)'
+                          : seis.Vsrc > 0 && seis.V === seis.Vsrc ? ' (Zone-4 0.8ZNvIW/R floor governs)'
+                            : seis.V === seis.Vmin ? ' (0.11CaIW floor governs)' : ''}
+                        {seis.Ft > 0 ? ` · Ft = ${f1(seis.Ft)} kN` : ''} — {eCases.length} cat-E case{eCases.length === 1 ? '' : 's'} ({eDirs.join(', ') || 'none'}).
+                        {Zf >= 0.4 ? ` Zone-4 floor = ${f1(seis.Vsrc)} kN.` : ' (Zone-4 floor off: Z < 0.4)'}
+                      </p>
+                      <table className="w-full border-collapse text-xs">
+                        <thead>
+                          <tr className="text-left uppercase tracking-wide text-slate-400">
+                            <th className="py-0.5 pr-2 font-semibold">Level (m)</th>
+                            <th className="py-0.5 pr-2 text-right font-semibold">wx (kN)</th>
+                            <th className="py-0.5 pr-2 text-right font-semibold">Fx (kN)</th>
+                            <th className="py-0.5 text-right font-semibold">Nodes</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {seis.storeys.map((s) => (
+                            <tr key={s.elevation} className="border-t border-slate-100">
+                              <td className="py-0.5 pr-2">{f1(s.elevation)}</td>
+                              <td className="py-0.5 pr-2 text-right">{f1(s.wx)}</td>
+                              <td className="py-0.5 pr-2 text-right font-medium text-[#7c3aed]">{f1(s.Fx)}</td>
+                              <td className="py-0.5 text-right text-slate-400">{s.nodes}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <p className="text-[10px] text-slate-400">
+                        System: <b>{seismicSystem.toUpperCase()}</b> (R = {Rw}) — column tie detailing uses {seismicSystem === 'smf' ? 'NSCP §418.7.5 SMF confinement' : seismicSystem === 'imf' ? 'NSCP §418.4.3 IMF hinge zone' : '§425.7.2 gravity ties only'}.
+                      </p>
+                    </div>
                   )}
                 </div>
               </Card>
@@ -2196,7 +2225,7 @@ export default function ModelSpace() {
                       <td className="py-1 pr-2">{cs?.name}</td>
                       <td className="py-1 pr-2 text-right">{f1(c.Pu)}</td>
                       <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
-                      <td className="py-1 pr-2">{c.bars}⌀{cs?.barDia} · ties @{Math.round(c.tieSpacing)}</td>
+                      <td className="py-1 pr-2">{c.bars}⌀{cs?.barDia} · ties @{Math.round(c.tieSpacingFinal)}{c.seismicSConf !== undefined ? ' ✱' : ''}</td>
                       <td className="py-1 pr-2 text-right">{(c.util * 100).toFixed(0)}%</td>
                       <td className="py-1 text-slate-400">{c.gov}</td>
                     </tr>,
@@ -2207,12 +2236,23 @@ export default function ModelSpace() {
                             {wantSol && <WorkedSolution steps={columnRowSolution(cs, c)} title={`${c.id} — worked solution`} />}
                             {wantDraw && (
                             <div className="space-y-3 self-start rounded-lg border border-slate-200 bg-white p-3">
-                              <ColumnElevation Lh={c.L} b={cs.b} bars={c.bars} tieSpacing={c.tieSpacing} />
+                              <ColumnElevation Lh={c.L} b={cs.b} bars={c.bars} tieSpacing={c.tieSpacingFinal} />
                               <div className="border-t border-slate-100 pt-2">
                                 <p className="mb-1 text-[11px] font-semibold text-[#0056b3]">SECTION</p>
                                 <ColumnSchematic shape="tied" b={cs.b} h={cs.h} cover={cs.cover}
-                                  barDia={cs.barDia} tieDia={cs.tieDia} bars={c.bars} tieSpacing={c.tieSpacing} />
+                                  barDia={cs.barDia} tieDia={cs.tieDia} bars={c.bars} tieSpacing={c.tieSpacingFinal} />
                               </div>
+                              {c.seismicSConf !== undefined && (
+                                <div className="border-t border-slate-100 pt-2 text-[11px] text-slate-600">
+                                  <p className="mb-0.5 font-semibold text-[#0056b3]">Seismic confinement ({seismicSystem.toUpperCase()})</p>
+                                  <p>Confinement zone ℓo = {Math.round(c.seismicLoZone!)} mm</p>
+                                  <p>Ties within ℓo @ {Math.round(c.seismicSConf)} mm <span className="text-slate-400">({c.tieSpacingLabel})</span></p>
+                                  {c.seismicSOut !== undefined && c.seismicSOut !== c.tieSpacing && (
+                                    <p>Ties outside ℓo @ {Math.round(c.seismicSOut)} mm</p>
+                                  )}
+                                  <p className="mt-0.5 text-slate-400">✱ Seismic controls over §425.7.2 gravity tie spacing ({Math.round(c.tieSpacing)} mm)</p>
+                                </div>
+                              )}
                             </div>
                             )}
                           </div>
