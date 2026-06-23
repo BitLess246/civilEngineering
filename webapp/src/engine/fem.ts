@@ -27,6 +27,44 @@ export function solveLinear(A: number[][], b: number[]): number[] | null {
   return x
 }
 
+// ── LU factorisation for multiple-RHS solves ─────────────────────────────
+// Stored compact: L below the diagonal (unit diagonal implied), U on and
+// above; rows are permuted by `piv` (partial pivoting for stability).
+// Use `luFactor` once per stiffness matrix, then `luSolve` for each RHS —
+// O(n³) once, O(n²) per load case.
+
+export interface LUFactor { LU: number[][]; piv: number[]; n: number }
+
+/** LU-factor A with partial pivoting. Returns null if A is (near-)singular. */
+export function luFactor(A: number[][]): LUFactor | null {
+  const n = A.length
+  if (n === 0) return { LU: [], piv: [], n: 0 }
+  const LU = A.map((row) => [...row])
+  const piv = Array.from({ length: n }, (_, i) => i)
+  for (let k = 0; k < n; k++) {
+    let pivIdx = k
+    for (let i = k + 1; i < n; i++) if (Math.abs(LU[i][k]) > Math.abs(LU[pivIdx][k])) pivIdx = i
+    if (pivIdx !== k) { [LU[k], LU[pivIdx]] = [LU[pivIdx], LU[k]]; [piv[k], piv[pivIdx]] = [piv[pivIdx], piv[k]] }
+    if (Math.abs(LU[k][k]) < 1e-14) return null
+    for (let i = k + 1; i < n; i++) {
+      LU[i][k] /= LU[k][k]                                    // L factor
+      for (let j = k + 1; j < n; j++) LU[i][j] -= LU[i][k] * LU[k][j]  // update U
+    }
+  }
+  return { LU, piv, n }
+}
+
+/** Solve LU·x = b using a pre-factored matrix. O(n²). */
+export function luSolve({ LU, piv, n }: LUFactor, b: number[]): number[] {
+  const x = piv.map((i) => b[i])                              // apply row permutation
+  for (let i = 1; i < n; i++) for (let j = 0; j < i; j++) x[i] -= LU[i][j] * x[j]  // forward (L)
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = i + 1; j < n; j++) x[i] -= LU[i][j] * x[j]
+    x[i] /= LU[i][i]                                          // back-sub (U)
+  }
+  return x
+}
+
 export function matVec(K: number[][], d: number[]): number[] {
   const n = K.length
   const r = new Array(n).fill(0)

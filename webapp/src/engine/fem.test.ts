@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { solveLinear, matVec, hermite, gauss5Vec } from './fem'
+import { solveLinear, luFactor, luSolve, matVec, hermite, gauss5Vec } from './fem'
 
 describe('solveLinear — Gaussian elimination with partial pivoting', () => {
   it('solves a 1×1 system', () => {
@@ -39,6 +39,73 @@ describe('solveLinear — Gaussian elimination with partial pivoting', () => {
     const Ax = matVec(A, x)
     expect(Ax[0]).toBeCloseTo(b[0], 9)
     expect(Ax[1]).toBeCloseTo(b[1], 9)
+  })
+})
+
+describe('luFactor / luSolve — LU factorisation with multiple-RHS solves', () => {
+  it('returns {n:0} for an empty matrix', () => {
+    const f = luFactor([])
+    expect(f).not.toBeNull()
+    expect(f!.n).toBe(0)
+  })
+
+  it('factors and solves a 1×1 system', () => {
+    const f = luFactor([[5]])!
+    expect(f).not.toBeNull()
+    const x = luSolve(f, [10])
+    expect(x[0]).toBeCloseTo(2, 10)
+  })
+
+  it('factors and solves a 2×2 system', () => {
+    const A = [[2, 1], [5, 7]]
+    const b = [11, 13]
+    const f = luFactor(A)!
+    expect(f).not.toBeNull()
+    const x = luSolve(f, b)
+    // Ax should equal b
+    expect(2 * x[0] + x[1]).toBeCloseTo(11, 9)
+    expect(5 * x[0] + 7 * x[1]).toBeCloseTo(13, 9)
+  })
+
+  it('solves the same 3×3 system as solveLinear', () => {
+    const A = [[2, 1, 0], [4, 3, 2], [1, 1, 3]]
+    const b = [5, 14, 12]
+    const f = luFactor(A)!
+    const x = luSolve(f, b)
+    expect(x[0]).toBeCloseTo(4.25, 9)
+    expect(x[1]).toBeCloseTo(-3.5, 9)
+    expect(x[2]).toBeCloseTo(3.75, 9)
+  })
+
+  it('returns null for a singular matrix', () => {
+    expect(luFactor([[1, 2], [2, 4]])).toBeNull()
+  })
+
+  it('reuses one factorisation for two different RHS', () => {
+    const A = [[4, 1], [2, 3]]
+    const f = luFactor(A)!
+    const x1 = luSolve(f, [9, 8])
+    const x2 = luSolve(f, [1, 0])
+    // first RHS: verify A·x1 = [9, 8]
+    expect(4 * x1[0] + x1[1]).toBeCloseTo(9, 9)
+    expect(2 * x1[0] + 3 * x1[1]).toBeCloseTo(8, 9)
+    // second RHS: verify A·x2 = [1, 0]
+    expect(4 * x2[0] + x2[1]).toBeCloseTo(1, 9)
+    expect(2 * x2[0] + 3 * x2[1]).toBeCloseTo(0, 9)
+  })
+
+  it('matches solveLinear on a 4×4 symmetric positive-definite system', () => {
+    const A = [
+      [10, 2, 1, 0],
+      [2, 8, 3, 1],
+      [1, 3, 12, 2],
+      [0, 1, 2, 6],
+    ]
+    const b = [13, 14, 18, 9]
+    const ref = solveLinear(A, b)!
+    const f = luFactor(A)!
+    const x = luSolve(f, b)
+    for (let i = 0; i < 4; i++) expect(x[i]).toBeCloseTo(ref[i], 9)
   })
 })
 
