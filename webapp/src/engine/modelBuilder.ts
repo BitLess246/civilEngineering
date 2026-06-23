@@ -8,6 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, RectSection, Node, Member, Plate, NodeSupport, MemberRole } from './model'
 import { sdlTotal } from './deadLoads'
+import { shapeByName } from './aiscSections'
 
 export interface GridSpec {
   baysX: number[]      // bay widths along x, m
@@ -135,7 +136,8 @@ export function removeNode(model: StructuralModel, nodeId: string): StructuralMo
   }
 }
 
-const GAMMA_C = 24 // kN/m³, default concrete unit weight
+const GAMMA_C = 24    // kN/m³, default concrete unit weight
+const GAMMA_S = 78.5  // kN/m³, structural steel
 
 /**
  * Build the gravity load set: member SELF-WEIGHT (D, kN/m from the section),
@@ -188,7 +190,15 @@ export function refreshSelfWeight(model: StructuralModel, gammaC = GAMMA_C): Str
   const sw: StructuralModel['loads'] = model.members
     .map((m) => {
       const sec = secMap.get(m.section) ?? model.sections[0]
-      const w = sec ? (sec.b / 1000) * (sec.h / 1000) * gammaC : 0
+      let w = 0
+      if (sec) {
+        if (sec.material === 'steel') {
+          const shape = sec.shape ? shapeByName(sec.shape) : undefined
+          w = shape ? (shape.A / 1e6) * GAMMA_S : (sec.b / 1000) * (sec.h / 1000) * GAMMA_S
+        } else {
+          w = (sec.b / 1000) * (sec.h / 1000) * gammaC
+        }
+      }
       return { kind: 'member-udl' as const, member: m.id, w, cat: 'D' as const }
     })
     .filter((l) => l.w > 0)
@@ -235,14 +245,17 @@ export function enforceSectionHierarchy(model: StructuralModel): StructuralModel
     let changed = false
     for (const mem of atNode.values()) {
       const beamW = widthOf(mem, ['beam', 'brace'])
-      // girders ≥ the beams they meet
+      // girders ≥ the beams they meet (concrete only — steel sections own their shape)
       for (const m of mem) if (m.role === 'girder') {
-        const s = secOf(m)!; if (s.b < beamW) { s.b = beamW; changed = true }
+        const s = secOf(m)!
+        if (s.material === 'steel') continue
+        if (s.b < beamW) { s.b = beamW; changed = true }
       }
       const flexW = Math.max(beamW, widthOf(mem, ['girder']))
       // columns ≥ the widest beam/girder at the joint, kept square-or-taller
       for (const m of mem) if (m.role === 'column') {
         const s = secOf(m)!
+        if (s.material === 'steel') continue
         if (s.b < flexW) { s.b = flexW; changed = true }
         if (s.h < s.b) { s.h = s.b; changed = true }
       }
