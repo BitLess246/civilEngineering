@@ -8,6 +8,7 @@ import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole
 import { distributePanel } from '../engine/tributary'
 import { type F3Analysis } from '../engine/frame3d'
 import { type StructureDesign, type FootingPlan, type OptimizeResult, type LateralCase } from '../engine/pipeline'
+import type { SteelJoint } from '../engine/steelConnections'
 import { estimateTakeoff, costBill, type PriceList } from '../engine/takeoff'
 import { footingLayout } from '../engine/footingLayout'
 import { useSolver } from '../lib/useSolver'
@@ -116,8 +117,15 @@ function MemberSteel3D({ a, b, role, shapeName, selected, tint = 0, onPick }: {
     const shapes = shape ? buildSectionShapes(effectiveSection(shape, false)) : []
     // orient local +Z (extrude dir) onto the member axis; group placed at node i
     const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.clone().normalize())
+    // For columns (primarily vertical), pre-rotate the section 90° around local Z
+    // so the depth d aligns with global X and the flanges face ±X.
+    // X-direction girders then frame into the column FLANGE FACE (strong-axis connection).
+    if (role === 'column') {
+      const rPre = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2)
+      quat.multiply(rPre)
+    }
     return { shapes, quat, pos: a.clone(), len }
-  }, [a, b, shapeName])
+  }, [a, b, shapeName, role])
 
   const color = useMemo(() => {
     if (selected) return SEL
@@ -2655,6 +2663,78 @@ export default function ModelSpace() {
                 Bearing §J8: φc·0.85f′c·√(A2/A1), φc = 0.65. Plate thickness from cantilever bending
                 t = ℓ√(2fp/(0.9Fy)); ℓ = max(m, n, n′). Uplift sizes anchor rods (φt·0.75·Fu).
                 Adopted t rounded to plate stock.
+              </p>
+            </div>
+          )}
+
+          {/* Steel connection schedule — only for steel frames */}
+          {design.joints.length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Steel connection schedule — AISC SCM</h3>
+              <p className="mb-2 text-[11px] text-slate-500">
+                Columns oriented with depth <em>d</em> in X (flanges face ±X); X-direction girders land on the column <strong>flange</strong> face (strong-axis moment connection), Z-direction beams land on the column <strong>web</strong> face (shear tab). Bolts: M20 A325 single-shear (φRₙ = 116.5 kN/bolt). Welds: E70XX fillet, both sides of plate.
+              </p>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Node</th>
+                    <th className="py-1 pr-2 font-semibold">Col. shape</th>
+                    <th className="py-1 pr-2 font-semibold">Beam</th>
+                    <th className="py-1 pr-2 font-semibold">Dir</th>
+                    <th className="py-1 pr-2 font-semibold">Face</th>
+                    <th className="py-1 pr-2 font-semibold">Type</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Vu (kN)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Mu (kN·m)</th>
+                    <th className="py-1 pr-2 font-semibold">Bolts</th>
+                    <th className="py-1 pr-2 font-semibold">Plate t×h</th>
+                    <th className="py-1 pr-2 font-semibold">Weld</th>
+                    <th className="py-1 font-semibold">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(design.joints as SteelJoint[]).flatMap((j) =>
+                    j.connections.map((c, ci) => (
+                      <tr key={`${j.nodeId}-${c.beamId}`}
+                        className={`border-t border-slate-100 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                        {ci === 0 && (
+                          <td className="py-1 pr-2 font-medium align-top" rowSpan={j.connections.length}>
+                            {j.nodeId}
+                            <div className="text-[10px] text-slate-400">{j.strongAxisDir.toUpperCase()}-axis</div>
+                          </td>
+                        )}
+                        {ci === 0 && (
+                          <td className="py-1 pr-2 font-mono align-top" rowSpan={j.connections.length}>{j.columnShape}</td>
+                        )}
+                        <td className="py-1 pr-2 font-medium">{c.beamId}</td>
+                        <td className="py-1 pr-2 uppercase">{c.spanDir}</td>
+                        <td className={`py-1 pr-2 font-semibold ${c.faceType === 'flange' ? 'text-blue-700' : 'text-slate-600'}`}>
+                          {c.faceType}
+                        </td>
+                        <td className="py-1 pr-2 text-[11px]">
+                          {c.connType === 'moment-flange-weld' ? 'Moment (CJP flange)' : 'Shear tab'}
+                        </td>
+                        <td className="py-1 pr-2 text-right">{f1(c.Vu)}</td>
+                        <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
+                        <td className="py-1 pr-2 text-[11px]">{c.bolts.n} × M{c.bolts.dia} A325</td>
+                        <td className="py-1 pr-2 text-[11px]">{c.tab.t}×{Math.round(c.tab.hMm)} mm</td>
+                        <td className="py-1 pr-2 text-[11px]">
+                          {c.tab.weldSizeMm}mm E70
+                          {c.flange && <span className="ml-1 text-blue-600">+ CJP flg</span>}
+                        </td>
+                        <td className="py-1 text-[11px]">
+                          <span className={c.ok ? 'text-green-700' : 'text-red-600'}>{c.ok ? '✓ OK' : '✗ NG'}</span>
+                          {c.flange && (
+                            <div className="text-[10px] text-slate-400">Tf={f1(c.flange.Tf)} kN</div>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Shear tab: A36 plate (Fy=248, Fu=400 MPa), M20 A325 bolts @ 75 mm pitch, 40 mm edge. Plate shear yielding φ=1.0 (§J4.2).
+                Moment connection: CJP groove weld at beam flanges, φFu·A_flange (§J2.6). Weld = E70XX fillet both sides of shear tab.
               </p>
             </div>
           )}

@@ -22,6 +22,7 @@ import { designShearWall, type ShearWallResult } from './shearWallDesign'
 import { shapeByName, nextHeavierW, nextLighterW, type AiscShape } from './aiscSections'
 import { deriveWSection, beamFlexure, beamShear, columnAxial, combinedLoading } from './steelDesign'
 import { designBasePlate, adoptPlateThickness, type BasePlateResult } from './baseplate'
+import { designSteelJoints, type SteelJoint } from './steelConnections'
 
 export interface SoilOptions {
   qAllow: number; gammaSoil: number; gammaConc: number; H: number
@@ -140,6 +141,7 @@ export interface StructureDesign {
   steelBeams: SteelBeamScheduleRow[]
   steelColumns: SteelColumnScheduleRow[]
   basePlates: BasePlateScheduleRow[]
+  joints: SteelJoint[]               // beam-to-column connections (steel frames only)
   slabs: SlabScheduleRow[]
   walls: WallScheduleRow[]
   footings: FootingScheduleRow[]
@@ -595,13 +597,17 @@ export function designStructure(
     walls.push({ id: w.id, member: w.member, lw, hw, thickness: w.thickness, Vu, design, ok: design.shearOK, gov })
   }
 
-  return {
+  const partialDesign = {
     govName: runs[govIdx].name,
     cases: runs.map((r) => r.name),
-    beams, columns, steelBeams, steelColumns, basePlates, slabs, walls, footings, combined,
+    beams, columns, steelBeams, steelColumns, basePlates,
+    joints: [] as SteelJoint[],
+    slabs, walls, footings, combined,
     totals: { concreteMembers, concreteSlabs, concrete: concreteMembers + concreteSlabs, steelKg },
     orphanEdges: br.orphanEdges.length,
   }
+  partialDesign.joints = designSteelJoints(model, partialDesign)
+  return partialDesign
 }
 
 // ── Bar-diameter selection ────────────────────────────────────────────────
