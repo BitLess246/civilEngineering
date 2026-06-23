@@ -1894,8 +1894,14 @@ export default function ModelSpace() {
       {opt && (() => {
         const sizesFor = (role: MemberRole) => {
           const ids = new Set(opt.model.members.filter((m) => m.role === role).map((m) => m.section))
-          return [...new Set(opt.model.sections.filter((s) => ids.has(s.id)).map((s) => s.name))].join(', ') || '—'
+          return [...new Set(opt.model.sections.filter((s) => ids.has(s.id) && s.material !== 'steel').map((s) => s.name))].join(', ') || '—'
         }
+        const steelColShapes  = [...new Set(opt.design.steelColumns.map((c) => c.shape))].join(', ')
+        const steelBeamShapes = [...new Set(opt.design.steelBeams.map((b) => b.shape))].join(', ')
+        const hasSteelCols    = opt.design.steelColumns.length > 0
+        const hasSteelBeams   = opt.design.steelBeams.length > 0
+        const steelOK         = opt.design.steelBeams.every((b) => b.ok) && opt.design.steelColumns.every((c) => c.ok)
+        const steelKg         = opt.design.totals.steelKg
         return (
           <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h3 className="mb-1 text-[1.02rem] font-bold text-[#0056b3]">
@@ -1903,9 +1909,22 @@ export default function ModelSpace() {
                 ? `converged in ${opt.steps.length} step${opt.steps.length === 1 ? '' : 's'}`
                 : 'did NOT converge (iteration cap hit — check spans/loads)'}
             </h3>
-            <p className="mb-2 text-xs text-slate-500">
-              Final sizes — <b>columns</b> {sizesFor('column')} · <b>girders</b> {sizesFor('girder')} · <b>beams</b> {sizesFor('beam')}
-            </p>
+            <div className="mb-2 space-y-0.5 text-xs text-slate-500">
+              <p>Concrete — <b>columns</b> {sizesFor('column')} · <b>girders</b> {sizesFor('girder')} · <b>beams</b> {sizesFor('beam')}</p>
+              {(hasSteelBeams || hasSteelCols) && (
+                <p>
+                  {'Structural steel — '}
+                  {[
+                    hasSteelCols  ? `columns: ${steelColShapes}` : '',
+                    hasSteelBeams ? `beams/girders: ${steelBeamShapes}` : '',
+                  ].filter(Boolean).join(' · ')}
+                  {` · ${(steelKg / 1000).toFixed(2)} t · `}
+                  <span className={steelOK ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                    {steelOK ? '✓ all steel OK' : '✗ steel check fails'}
+                  </span>
+                </p>
+              )}
+            </div>
             <table className="w-auto border-collapse text-xs">
               <thead>
                 <tr className="text-left uppercase tracking-wide text-slate-500">
@@ -1970,6 +1989,7 @@ export default function ModelSpace() {
             Structure design — {design.govName} governs
             <span className="ml-3 text-sm font-normal text-slate-500">
               concrete ≈ {f1(design.totals.concrete)} m³ ({f1(design.totals.concreteMembers)} members + {f1(design.totals.concreteSlabs)} slabs)
+              {design.totals.steelKg > 0 && ` · steel ${(design.totals.steelKg / 1000).toFixed(2)} t`}
             </span>
           </h2>
           <div className="no-print flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
