@@ -9,7 +9,8 @@
 // vectors (Gauss + Hermite for the distributed ones).
 // Units: coordinates m; E,G MPa; A mm²; I,J mm⁴; forces kN, kN·m.
 // ─────────────────────────────────────────────────────────────────────────
-import { solveLinear, matVec, hermite, gauss5Vec } from './fem'
+import { luFactor, luSolve, matVec, hermite, gauss5Vec } from './fem'
+import type { LUFactor } from './fem'
 import { nscpCombos, type Combo, type LoadCategory } from './beamAnalysis'
 import type { ProgressFn } from './progress'
 
@@ -142,17 +143,41 @@ const mul = (A: number[][], B: number[][]): number[][] =>
   A.map((row) => B[0].map((_, j) => row.reduce((s, v, k) => s + v * B[k][j], 0)))
 const transpose = (A: number[][]): number[][] => A[0].map((_, j) => A.map((row) => row[j]))
 
-interface Prep {
+// ── Geometry-only member data (load-independent) ──────────────────────────
+interface MemberGeom {
   L: number; R: [V3, V3, V3]
   kl: number[][]; T: number[][]; kg: number[][]
   dofs: number[]
+  gl: V3   // gravity unit vector in local coords: R · (0, −1, 0)
+}
+
+// ── Load-dependent member data ─────────────────────────────────────────────
+interface MemberLoads {
   feq: number[]
-  // local gravity components for diagram sampling
-  qy: (x: number) => number; qz: (x: number) => number; p: (x: number) => number
+  qy: (x: number) => number
+  qz: (x: number) => number
+  p: (x: number) => number
   pts: { a: number; Py: number; Pz: number; Pa: number }[]
 }
 
-function prepMember(m: F3Member, nm: Map<string, F3Node>, idx: Map<string, number>, loads: F3Load[]): Prep {
+/** Pre-factored frame: assemble K once and LU-factor it; reuse for every load case.
+ *  K is geometry-only (first-order elastic). P-Δ rebuilds Kt = K+Kg per iteration
+ *  using Kff_raw as the elastic baseline, so both paths benefit. */
+export interface FramePrecomp {
+  nm: Map<string, F3Node>
+  idx: Map<string, number>
+  nodes: F3Node[]
+  members: F3Member[]
+  supports: F3Support[]
+  geoms: MemberGeom[]
+  ndof: number
+  free: number[]
+  freeIdx: Map<number, number>   // global DOF → position in free[]
+  Kff: LUFactor | null           // null = singular or no free DOFs
+  Kff_raw: number[][]            // un-factored Kff; needed as P-Δ elastic baseline
+}
+
+function prepMemberGeom(m: F3Member, nm: Map<string, F3Node>, idx: Map<string, number>): MemberGeom {
   const ni = nm.get(m.i)!, nj = nm.get(m.j)!
   const dir: V3 = sub([nj.x, nj.y, nj.z], [ni.x, ni.y, ni.z])
   const L = Math.hypot(...dir)
@@ -166,13 +191,15 @@ function prepMember(m: F3Member, nm: Map<string, F3Node>, idx: Map<string, numbe
   const kg = mul(mul(transpose(T), kl), T)
   const ii = idx.get(m.i)!, jj = idx.get(m.j)!
   const dofs = [...Array.from({ length: 6 }, (_, k) => 6 * ii + k), ...Array.from({ length: 6 }, (_, k) => 6 * jj + k)]
-
-  // gravity unit vector in local coords: g_local = R · (0, −1, 0)
   const gl: V3 = [R[0][1] * -1, R[1][1] * -1, R[2][1] * -1]
+  return { L, R, kl, T, kg, dofs, gl }
+}
 
+function computeMemberLoads(geom: MemberGeom, m: F3Member, loads: F3Load[]): MemberLoads {
+  const { L, gl } = geom
   const feq = new Array(12).fill(0)
   const dists: { x1: number; x2: number; w1: number; w2: number }[] = []
-  const pts: Prep['pts'] = []
+  const pts: MemberLoads['pts'] = []
 
   for (const ld of loads) {
     if (ld.kind === 'member-udl' && ld.member === m.id) dists.push({ x1: 0, x2: L, w1: ld.w, w2: ld.w })
@@ -189,7 +216,6 @@ function prepMember(m: F3Member, nm: Map<string, F3Node>, idx: Map<string, numbe
       feq[8] += ld.P * gl[2] * N[2]; feq[10] -= ld.P * gl[2] * N[3]
     }
   }
-  // distributed gravity: consistent vectors by Gauss over each segment
   for (const dd of dists) {
     if (dd.x2 <= dd.x1) continue
     const wAt = (x: number) => dd.w1 + ((dd.w2 - dd.w1) * (x - dd.x1)) / Math.max(dd.x2 - dd.x1, 1e-12)
@@ -198,9 +224,9 @@ function prepMember(m: F3Member, nm: Map<string, F3Node>, idx: Map<string, numbe
       const xi = x / L
       const N = hermite(xi, L)
       return [
-        w * gl[0] * (1 - xi), w * gl[0] * xi,                       // axial i, j
-        w * gl[1] * N[0], w * gl[1] * N[1], w * gl[1] * N[2], w * gl[1] * N[3],  // y-plane
-        w * gl[2] * N[0], -w * gl[2] * N[1], w * gl[2] * N[2], -w * gl[2] * N[3], // z-plane (θy sign)
+        w * gl[0] * (1 - xi), w * gl[0] * xi,
+        w * gl[1] * N[0], w * gl[1] * N[1], w * gl[1] * N[2], w * gl[1] * N[3],
+        w * gl[2] * N[0], -w * gl[2] * N[1], w * gl[2] * N[2], -w * gl[2] * N[3],
       ]
     }, dd.x1, dd.x2, 10)
     feq[0] += fe[0]; feq[6] += fe[1]
@@ -217,29 +243,124 @@ function prepMember(m: F3Member, nm: Map<string, F3Node>, idx: Map<string, numbe
     return s
   }
   return {
-    L, R, kl, T, kg, dofs, feq,
-    p: (x) => intensity(x, 0), qy: (x) => intensity(x, 1), qz: (x) => intensity(x, 2),
+    feq,
+    p: (x) => intensity(x, 0),
+    qy: (x) => intensity(x, 1),
+    qz: (x) => intensity(x, 2),
     pts,
   }
 }
 
-export function solveFrame3D(
-  nodes: F3Node[], members: F3Member[], supports: F3Support[], loads: F3Load[],
-  opts?: PDeltaOpts,
-): F3Result | null {
+/** Assemble K from member geometry, find free DOFs, LU-factor Kff.
+ *  Call once per geometry/support change; reuse for every load case. */
+export function precomputeFrame(
+  nodes: F3Node[], members: F3Member[], supports: F3Support[],
+): FramePrecomp {
   const nm = new Map(nodes.map((n) => [n.id, n]))
   const idx = new Map(nodes.map((n, i) => [n.id, i]))
   const ndof = 6 * nodes.length
 
-  const preps = members.map((m) => prepMember(m, nm, idx, loads))
-  const K: number[][] = Array.from({ length: ndof }, () => new Array(ndof).fill(0))
-  const F = new Array(ndof).fill(0)
-  preps.forEach((pr) => {
-    const fg = matVec(transpose(pr.T), pr.feq)
+  const geoms = members.map((m) => prepMemberGeom(m, nm, idx))
+
+  const constrained = new Set<number>()
+  for (const s of supports) {
+    const i = idx.get(s.node)
+    if (i === undefined) continue
+    for (let k = 0; k < (s.fixity === 'fixed' ? 6 : 3); k++) constrained.add(6 * i + k)
+  }
+  const free: number[] = []
+  for (let d = 0; d < ndof; d++) if (!constrained.has(d)) free.push(d)
+  const freeIdx = new Map(free.map((dof, k) => [dof, k]))
+
+  const nf = free.length
+  const Kff_raw: number[][] = Array.from({ length: nf }, () => new Array(nf).fill(0))
+  for (const g of geoms) {
     for (let a = 0; a < 12; a++) {
-      F[pr.dofs[a]] += fg[a]
-      for (let b = 0; b < 12; b++) K[pr.dofs[a]][pr.dofs[b]] += pr.kg[a][b]
+      const ia = freeIdx.get(g.dofs[a])
+      if (ia === undefined) continue
+      for (let b = 0; b < 12; b++) {
+        const ib = freeIdx.get(g.dofs[b])
+        if (ib === undefined) continue
+        Kff_raw[ia][ib] += g.kg[a][b]
+      }
     }
+  }
+
+  const Kff = luFactor(Kff_raw)   // null if singular; {n:0} if nf===0
+  return { nm, idx, nodes, members, supports, geoms, ndof, free, freeIdx, Kff, Kff_raw }
+}
+
+function postprocessMember(m: F3Member, g: MemberGeom, ml: MemberLoads, d: number[]): F3MemberResult {
+  const de = g.dofs.map((dof) => d[dof])
+  const dl = matVec(g.T, de)
+  const f = matVec(g.kl, dl).map((v, k) => v - ml.feq[k])
+
+  const NS = 24
+  const xsSet = new Set<number>()
+  for (let k = 0; k <= NS; k++) xsSet.add((g.L * k) / NS)
+  ml.pts.forEach((pt) => { xsSet.add(Math.max(0, pt.a - 1e-6)); xsSet.add(pt.a); xsSet.add(Math.min(g.L, pt.a + 1e-6)) })
+  const xs = [...xsSet].sort((a, b) => a - b)
+
+  const NN: number[] = [], Vy: number[] = [], Vz: number[] = [], TT: number[] = [], My: number[] = [], Mz: number[] = []
+  const STEPS = 60
+  const integ = (fn: (x: number) => number, x: number) => {
+    let s = 0
+    const n = Math.max(2, Math.ceil((x / Math.max(g.L, 1e-9)) * STEPS))
+    for (let k = 1; k <= n; k++) {
+      const x0 = (x * (k - 1)) / n, x1 = (x * k) / n
+      s += 0.5 * (fn(x0) + fn(x1)) * (x1 - x0)
+    }
+    return s
+  }
+  const integM = (fn: (x: number) => number, x: number) => {
+    let s = 0
+    const n = Math.max(2, Math.ceil((x / Math.max(g.L, 1e-9)) * STEPS))
+    for (let k = 1; k <= n; k++) {
+      const x0 = (x * (k - 1)) / n, x1 = (x * k) / n
+      const mid = (x0 + x1) / 2
+      s += fn(mid) * (x - mid) * (x1 - x0)
+    }
+    return s
+  }
+  for (const x of xs) {
+    let n = -(f[0] + integ(ml.p, x))
+    let vy = f[1] + integ(ml.qy, x)
+    let vz = f[2] + integ(ml.qz, x)
+    let mz = -f[5] + f[1] * x + integM(ml.qy, x)
+    let my = f[4] - f[2] * x - integM(ml.qz, x)
+    for (const pt of ml.pts) {
+      if (pt.a <= x) {
+        n -= pt.Pa
+        vy += pt.Py; vz += pt.Pz
+        mz += pt.Py * (x - pt.a)
+        my -= pt.Pz * (x - pt.a)
+      }
+    }
+    NN.push(n); Vy.push(vy); Vz.push(vz); TT.push(-f[3]); My.push(my); Mz.push(mz)
+  }
+  return {
+    id: m.id, L: g.L, f, xs, N: NN, Vy, Vz, T: TT, My, Mz,
+    Nmax: Math.max(...NN.map(Math.abs)),
+    Vmax: Math.max(...Vy.map(Math.abs), ...Vz.map(Math.abs)),
+    Mmax: Math.max(...My.map(Math.abs), ...Mz.map(Math.abs)),
+    Tmax: Math.max(...TT.map(Math.abs)),
+  }
+}
+
+/** Solve one load case using a pre-factored frame — O(n²) first-order solve;
+ *  P-Δ re-factors the tangent stiffness per iteration (unchanged cost vs. before). */
+export function solveWithGeometry(
+  precomp: FramePrecomp, loads: F3Load[], opts?: PDeltaOpts,
+): F3Result | null {
+  const { idx, members, geoms, ndof, free, freeIdx, Kff, Kff_raw, supports } = precomp
+
+  const mloads = members.map((m, i) => computeMemberLoads(geoms[i], m, loads))
+
+  // Assemble global load vector F
+  const F = new Array(ndof).fill(0)
+  geoms.forEach((g, i) => {
+    const fg = matVec(transpose(g.T), mloads[i].feq)
+    for (let a = 0; a < 12; a++) F[g.dofs[a]] += fg[a]
   })
   for (const ld of loads) {
     if (ld.kind !== 'node') continue
@@ -249,120 +370,71 @@ export function solveFrame3D(
     for (let k = 0; k < 6; k++) F[6 * i + k] += v[k]
   }
 
-  const constrained = new Set<number>()
-  for (const s of supports) {
-    const i = idx.get(s.node)
-    if (i === undefined) continue
-    for (let k = 0; k < (s.fixity === 'fixed' ? 6 : 3); k++) constrained.add(6 * i + k)
-  }
-  const free: number[] = []
-  for (let d0 = 0; d0 < ndof; d0++) if (!constrained.has(d0)) free.push(d0)
   const d = new Array(ndof).fill(0)
-  const solveFree = (Mat: number[][]): number[] | null => {
-    if (free.length === 0) return []
-    const Mff = free.map((i) => free.map((j) => Mat[i][j]))
-    return solveLinear(Mff, free.map((i) => F[i]))
-  }
-  // First-order (linear elastic) solve.
-  const d0 = solveFree(K)
-  if (d0 === null) return null
-  free.forEach((dof, k) => (d[dof] = d0[k]))
+  if (free.length > 0) {
+    if (!Kff) return null   // singular stiffness
+    const Ff = free.map((dof) => F[dof])
+    const d0 = luSolve(Kff, Ff)
+    free.forEach((dof, k) => (d[dof] = d0[k]))
 
-  // Second-order: iterate K + Kg(N) where N is each member's current axial
-  // force (tension +), re-solving until the displacements settle. A singular
-  // tangent (det → 0) signals elastic instability — keep the last solution.
-  if (opts?.pDelta && free.length > 0) {
-    const maxIter = opts.maxIter ?? 20
-    const tol = opts.tol ?? 1e-5
-    for (let it = 0; it < maxIter; it++) {
-      const Kt = K.map((row) => row.slice())
-      for (const pr of preps) {
-        const de = pr.dofs.map((dof) => d[dof])
-        const dl = matVec(pr.T, de)
-        const f = matVec(pr.kl, dl).map((v, k) => v - pr.feq[k])
-        const N = (f[6] - f[0]) / 2                       // representative axial, tension +
-        const kgg = mul(mul(transpose(pr.T), kgLocal(N, pr.L)), pr.T)
-        for (let a = 0; a < 12; a++) for (let b = 0; b < 12; b++) Kt[pr.dofs[a]][pr.dofs[b]] += kgg[a][b]
+    // P-Δ: iterate K + Kg(N); Kg depends on load-case axial forces so Kff_raw
+    // is the elastic baseline and we re-factor Ktff each iteration.
+    if (opts?.pDelta) {
+      const maxIter = opts.maxIter ?? 20
+      const tol = opts.tol ?? 1e-5
+      const nf = free.length
+      for (let it = 0; it < maxIter; it++) {
+        const Ktff: number[][] = Array.from({ length: nf }, (_, i) => [...Kff_raw[i]])
+        for (let mi = 0; mi < geoms.length; mi++) {
+          const g = geoms[mi], ml = mloads[mi]
+          const de = g.dofs.map((dof) => d[dof])
+          const dl = matVec(g.T, de)
+          const f = matVec(g.kl, dl).map((v, k) => v - ml.feq[k])
+          const N = (f[6] - f[0]) / 2                     // representative axial, tension +
+          const kgg = mul(mul(transpose(g.T), kgLocal(N, g.L)), g.T)
+          for (let a = 0; a < 12; a++) {
+            const ia = freeIdx.get(g.dofs[a])
+            if (ia === undefined) continue
+            for (let b = 0; b < 12; b++) {
+              const ib = freeIdx.get(g.dofs[b])
+              if (ib === undefined) continue
+              Ktff[ia][ib] += kgg[a][b]
+            }
+          }
+        }
+        const Ktff_fac = luFactor(Ktff)
+        if (!Ktff_fac) break                               // elastic instability — retain last d
+        const dn = luSolve(Ktff_fac, Ff)
+        let num = 0, den = 0
+        free.forEach((dof, k) => { num += (dn[k] - d[dof]) ** 2; den += dn[k] ** 2 })
+        free.forEach((dof, k) => (d[dof] = dn[k]))
+        if (den === 0 || Math.sqrt(num / den) < tol) break
       }
-      const dn = solveFree(Kt)
-      if (dn === null) break                              // instability — retain last d
-      let num = 0, den = 0
-      free.forEach((dof, k) => { num += (dn[k] - d[dof]) ** 2; den += dn[k] ** 2 })
-      free.forEach((dof, k) => (d[dof] = dn[k]))
-      if (den === 0 || Math.sqrt(num / den) < tol) break
     }
   }
 
-  const R = matVec(K, d).map((v, i) => v - F[i])
+  // Reactions: compute K·d via member contributions (avoids storing full K)
+  const Kd = new Array(ndof).fill(0)
+  for (const g of geoms) {
+    const de = g.dofs.map((dof) => d[dof])
+    const gde = matVec(g.kg, de)
+    for (let a = 0; a < 12; a++) Kd[g.dofs[a]] += gde[a]
+  }
+  const Rv = Kd.map((v, i) => v - F[i])
+
   const reactions: F3Reaction[] = supports
     .filter((s) => idx.has(s.node))
     .map((s) => {
       const i = idx.get(s.node)!
       return {
         node: s.node, fixity: s.fixity,
-        F: [R[6 * i], R[6 * i + 1], R[6 * i + 2]],
-        M: s.fixity === 'fixed' ? [R[6 * i + 3], R[6 * i + 4], R[6 * i + 5]] : [0, 0, 0],
+        F: [Rv[6 * i], Rv[6 * i + 1], Rv[6 * i + 2]] as [number, number, number],
+        M: s.fixity === 'fixed' ? [Rv[6 * i + 3], Rv[6 * i + 4], Rv[6 * i + 5]] as [number, number, number] : [0, 0, 0] as [number, number, number],
       }
     })
 
-  const results: F3MemberResult[] = members.map((m, mi) => {
-    const pr = preps[mi]
-    const de = pr.dofs.map((dof) => d[dof])
-    const dl = matVec(pr.T, de)
-    const f = matVec(pr.kl, dl).map((v, k) => v - pr.feq[k])
-
-    const NS = 24
-    const xsSet = new Set<number>()
-    for (let k = 0; k <= NS; k++) xsSet.add((pr.L * k) / NS)
-    pr.pts.forEach((pt) => { xsSet.add(Math.max(0, pt.a - 1e-6)); xsSet.add(pt.a); xsSet.add(Math.min(pr.L, pt.a + 1e-6)) })
-    const xs = [...xsSet].sort((a, b) => a - b)
-
-    const NN: number[] = [], Vy: number[] = [], Vz: number[] = [], TT: number[] = [], My: number[] = [], Mz: number[] = []
-    const STEPS = 60
-    const integ = (fn: (x: number) => number, x: number) => {
-      // simple trapezoid over [0, x] — intensities are piecewise linear
-      let s = 0
-      const n = Math.max(2, Math.ceil((x / Math.max(pr.L, 1e-9)) * STEPS))
-      for (let k = 1; k <= n; k++) {
-        const x0 = (x * (k - 1)) / n, x1 = (x * k) / n
-        s += 0.5 * (fn(x0) + fn(x1)) * (x1 - x0)
-      }
-      return s
-    }
-    const integM = (fn: (x: number) => number, x: number) => {
-      let s = 0
-      const n = Math.max(2, Math.ceil((x / Math.max(pr.L, 1e-9)) * STEPS))
-      for (let k = 1; k <= n; k++) {
-        const x0 = (x * (k - 1)) / n, x1 = (x * k) / n
-        const mid = (x0 + x1) / 2
-        s += fn(mid) * (x - mid) * (x1 - x0)
-      }
-      return s
-    }
-    for (const x of xs) {
-      let n = -(f[0] + integ(pr.p, x))
-      let vy = f[1] + integ(pr.qy, x)
-      let vz = f[2] + integ(pr.qz, x)
-      let mz = -f[5] + f[1] * x + integM(pr.qy, x)
-      let my = f[4] - f[2] * x - integM(pr.qz, x)
-      for (const pt of pr.pts) {
-        if (pt.a <= x) {
-          n -= pt.Pa
-          vy += pt.Py; vz += pt.Pz
-          mz += pt.Py * (x - pt.a)
-          my -= pt.Pz * (x - pt.a)
-        }
-      }
-      NN.push(n); Vy.push(vy); Vz.push(vz); TT.push(-f[3]); My.push(my); Mz.push(mz)
-    }
-    return {
-      id: m.id, L: pr.L, f, xs, N: NN, Vy, Vz, T: TT, My, Mz,
-      Nmax: Math.max(...NN.map(Math.abs)),
-      Vmax: Math.max(...Vy.map(Math.abs), ...Vz.map(Math.abs)),
-      Mmax: Math.max(...My.map(Math.abs), ...Mz.map(Math.abs)),
-      Tmax: Math.max(...TT.map(Math.abs)),
-    }
-  })
+  const results: F3MemberResult[] = members.map((m, mi) =>
+    postprocessMember(m, geoms[mi], mloads[mi], d))
 
   return {
     d, reactions, members: results,
@@ -370,6 +442,14 @@ export function solveFrame3D(
     Vmax: Math.max(...results.map((r) => r.Vmax), 0),
     Nmax: Math.max(...results.map((r) => r.Nmax), 0),
   }
+}
+
+/** Backward-compatible single-solve entry point. */
+export function solveFrame3D(
+  nodes: F3Node[], members: F3Member[], supports: F3Support[], loads: F3Load[],
+  opts?: PDeltaOpts,
+): F3Result | null {
+  return solveWithGeometry(precomputeFrame(nodes, members, supports), loads, opts)
 }
 
 // ── NSCP combination orchestration ────────────────────────────────────────
@@ -381,6 +461,7 @@ export interface F3AnalyzeOpts extends PDeltaOpts {
   f1?: number
 }
 
+/** Analyze all NSCP combinations, sharing one K factorization across every combo. */
 export function analyzeFrame3D(
   nodes: F3Node[], members: F3Member[], supports: F3Support[], loads: F3Load[],
   opts?: F3AnalyzeOpts, onProgress?: ProgressFn,
@@ -388,11 +469,12 @@ export function analyzeFrame3D(
   const perCombo: F3ComboRun[] = []
   let govIdx = -1, govM = -1
   const combos = nscpCombos(opts?.f1 ?? 1.0)
+  const precomp = precomputeFrame(nodes, members, supports)   // factor K once
   combos.forEach((combo, i) => {
     onProgress?.({ phase: 'Analyzing load cases', current: i + 1, total: combos.length, detail: combo.name })
     const factored = applyF3Combo(loads, combo.f)
     if (factored.length === 0) { perCombo.push({ combo, result: null, factored, skipped: true }); return }
-    const r = solveFrame3D(nodes, members, supports, factored, opts)
+    const r = solveWithGeometry(precomp, factored, opts)
     perCombo.push({ combo, result: r, factored, skipped: false })
     if (r && r.Mmax > govM) { govM = r.Mmax; govIdx = perCombo.length - 1 }
   })

@@ -10,7 +10,7 @@
 import type { StructuralModel, RectSection, ModelLoad } from './model'
 import { enforceSectionHierarchy, refreshSelfWeight } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
-import { solveFrame3D, applyF3Combo, type F3Result, type F3MemberResult, type F3Load } from './frame3d'
+import { precomputeFrame, solveWithGeometry, applyF3Combo, type F3Result, type F3MemberResult, type F3Load } from './frame3d'
 import { nscpCombos, type Combo } from './beamAnalysis'
 import type { ProgressFn } from './progress'
 import { designBeam, type BeamDesignResult } from './beamDesign'
@@ -361,15 +361,16 @@ function buildRuns(model: StructuralModel, opts: AnalyzeOptions, onProgress?: Pr
     for (const v of variants) tasks.push({ name: combo.name + (v.tag ? ` · ${v.tag}` : ''), combo, lat: v.lat })
   }
 
+  const precomp = precomputeFrame(br.nodes, br.members, br.supports)
   const runs: FrameRun[] = []
   tasks.forEach((t, i) => {
     onProgress?.({ phase: 'Solving load cases', current: i + 1, total: tasks.length, detail: t.name })
     const factored = applyF3Combo([...br.loads, ...t.lat], t.combo.f)
     if (!factored.length) return
-    const result = solveFrame3D(br.nodes, br.members, br.supports, factored, opts)
+    const result = solveWithGeometry(precomp, factored, opts)
     if (result) runs.push({ name: t.name, result })
   })
-  return { br, runs }
+  return { br, runs, precomp }
 }
 
 export function designStructure(
@@ -387,7 +388,7 @@ export function designStructure(
   const colAtNode = (node: string) => model.members.find((m) => m.role === 'column' && (m.i === node || m.j === node))
   const footSec = (node: string) => { const c = colAtNode(node); return c ? secOf(c.id) : fallbackSec }
 
-  const { br, runs } = buildRuns(model, opts, onProgress)
+  const { br, runs, precomp } = buildRuns(model, opts, onProgress)
   if (runs.length === 0) return null
   // headline governing run = largest overall bending response
   let govIdx = 0
@@ -395,13 +396,14 @@ export function designStructure(
 
   // Service (unfactored gravity) + D-only / L-only solves for the footing
   // bearing check and the combined-footing dl/ll split (direction-independent).
+  // All reuse the same pre-factored K from buildRuns (same geometry).
   const serviceLoads = applyF3Combo(br.loads, { D: 1, L: 1, Lr: 1, S: 1, R: 1 })
   const serviceRes: F3Result | null = serviceLoads.length
-    ? solveFrame3D(br.nodes, br.members, br.supports, serviceLoads, opts) : null
+    ? solveWithGeometry(precomp, serviceLoads, opts) : null
   const dLoads = applyF3Combo(br.loads, { D: 1 })
   const lLoads = applyF3Combo(br.loads, { L: 1 })
-  const dRes = dLoads.length ? solveFrame3D(br.nodes, br.members, br.supports, dLoads, opts) : null
-  const lRes = lLoads.length ? solveFrame3D(br.nodes, br.members, br.supports, lLoads, opts) : null
+  const dRes = dLoads.length ? solveWithGeometry(precomp, dLoads, opts) : null
+  const lRes = lLoads.length ? solveWithGeometry(precomp, lLoads, opts) : null
   const serviceAt = (node: string) => {
     const i = serviceRes?.reactions.findIndex((r) => r.node === node) ?? -1
     return i >= 0 ? Math.max(0, serviceRes!.reactions[i].F[1]) : 0
