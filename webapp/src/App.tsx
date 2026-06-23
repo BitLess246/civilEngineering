@@ -18,6 +18,7 @@ import SteelDesign from './pages/SteelDesign'
 import SlabDesign from './pages/SlabDesign'
 import TorsionDesign from './pages/TorsionDesign'
 import DevLength from './pages/DevLength'
+import PunchingShear from './pages/PunchingShear'
 import SlabEstimate from './pages/SlabEstimate'
 import ChbEstimate from './pages/ChbEstimate'
 import ColumnEstimate from './pages/ColumnEstimate'
@@ -54,6 +55,7 @@ export default function App() {
         <Route path="/slab-design" element={<SlabDesign />} />
         <Route path="/torsion" element={<TorsionDesign />} />
         <Route path="/dev-length" element={<DevLength />} />
+        <Route path="/punching-shear" element={<PunchingShear />} />
         <Route path="/estimate/slab" element={<SlabEstimate />} />
         <Route path="/estimate/beam" element={<BeamEstimate />} />
         <Route path="/estimate/column" element={<ColumnEstimate />} />
