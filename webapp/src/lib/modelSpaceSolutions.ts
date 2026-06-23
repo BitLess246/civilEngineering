@@ -6,7 +6,7 @@ import type { BeamSectionDesign, ColumnScheduleRow, FootingScheduleRow, Combined
 import type { CombinedFootingInput } from '../engine/combinedFooting'
 import { designAxialColumn, interaction, capacityAtEccentricity } from '../engine/columnDesign'
 import { buildBeamSolution } from './beamSolution'
-import { axialColumnSolution, eccentricColumnSolution } from './columnSolution'
+import { axialColumnSolution, eccentricColumnSolution, type SeismicTieOverride } from './columnSolution'
 import { buildFoundationSolution, type SolutionCtx } from './foundationSolution'
 import { buildCombinedFootingSolution } from './combinedFootingSolution'
 import type { SolutionStep } from './solution'
@@ -33,7 +33,19 @@ export function columnRowSolution(sec: RectSection, row: ColumnScheduleRow): Sol
     const ic = { b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, numBars: ax.bars }
     steps.push(...eccentricColumnSolution(ic, interaction(ic), row.Pu, row.Mu, capacityAtEccentricity(ic, row.e)))
   }
-  steps.push(...axialColumnSolution(base, ax))
+  const seismic: SeismicTieOverride | undefined =
+    row.seismicSConf !== undefined && row.seismicLoZone !== undefined
+      ? {
+          system: row.tieSpacingLabel.toLowerCase().includes('smf') ? 'smf' : 'imf',
+          tieSpacingFinal: row.tieSpacingFinal,
+          seismicSConf: row.seismicSConf,
+          seismicLoZone: row.seismicLoZone,
+          tieSpacingLabel: row.tieSpacingLabel,
+          seismicSOut: row.seismicSOut,
+          gravitySpacing: row.tieSpacing,
+        }
+      : undefined
+  steps.push(...axialColumnSolution(base, ax, seismic))
   return steps
 }
 

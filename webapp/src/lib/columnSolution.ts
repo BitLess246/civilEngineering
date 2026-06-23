@@ -16,7 +16,19 @@ const eq = (tex: string): SolutionLine => ({ tex })
 const tieGovernTex = (g: string): string =>
   g === '16d_b' ? '16d_b' : g === '48d_tie' ? '48d_{tie}' : String.raw`\text{least dim.}`
 
-export function axialColumnSolution(i: AxialColumnInput, r: AxialColumnResult): SolutionStep[] {
+/** Optional seismic override data passed to axialColumnSolution. When present,
+ *  the tie-detailing step shows the governing (seismic) spacing instead of gravity. */
+export interface SeismicTieOverride {
+  system: 'smf' | 'imf'
+  tieSpacingFinal: number   // governing final spacing (mm)
+  seismicSConf: number      // within confinement zone (mm)
+  seismicLoZone: number     // confinement zone length (mm)
+  tieSpacingLabel: string   // clause label
+  seismicSOut?: number      // outside confinement zone (mm)
+  gravitySpacing: number    // §425.7.2 baseline, for the override note
+}
+
+export function axialColumnSolution(i: AxialColumnInput, r: AxialColumnResult, seismic?: SeismicTieOverride): SolutionStep[] {
   const tied = i.shape === 'tied'
   const steps: SolutionStep[] = []
 
@@ -58,14 +70,23 @@ export function axialColumnSolution(i: AxialColumnInput, r: AxialColumnResult): 
   })
 
   if (tied) {
-    steps.push({
-      title: 'Tie detailing (§425.7.2)',
-      lines: [
-        txt(`Ties at least ⌀${r.tieDiaMin} mm for ⌀${i.barDia} longitudinal bars; spacing the least of 16·d_b, 48·d_tie, and the least column dimension.`),
-        eq(String.raw`s \le \min(16\times ${i.barDia},\ 48\times ${i.tieDia},\ ${sn0(Math.min(i.b ?? 0, i.h ?? 0))}) = ${sn0(r.tieSpacing)}\ \text{mm}\quad(${tieGovernTex(r.tieGovern)})`),
-      ],
-      note: `Provide ⌀${Math.max(i.tieDia, r.tieDiaMin)} mm ties @ ${sn0(r.tieSpacing)} mm.`,
-    })
+    if (seismic) {
+      // Seismic system governs — show both the §425.7.2 gravity baseline and the
+      // seismic confinement requirement that supersedes it.
+      const sysRef = seismic.system === 'smf' ? '§418.7.5 SMF' : '§418.4.3 IMF'
+      const outside = seismic.seismicSOut !== undefined && seismic.seismicSOut !== seismic.gravitySpacing
+        ? ` @ ${sn0(seismic.seismicSOut)} mm outside ℓo` : ''
+      steps.push({
+        title: `Tie detailing — ${seismic.system.toUpperCase()} governs (§425.7.2 + ${sysRef})`,
+        lines: [
+          txt(`§425.7.2 gravity tie check: ties at least ⌀${r.tieDiaMin} mm; spacing the least of 16·d_b, 48·d_tie, and the least column dimension.`),
+          eq(String.raw`s_{grav} \le \min(16\times ${i.barDia},\ 48\times ${i.tieDia},\ ${sn0(Math.min(i.b ?? 0, i.h ?? 0))}) = ${sn0(seismic.gravitySpacing)}\ \text{mm}\quad(${tieGovernTex(r.tieGovern)})`),
+          txt(`${sysRef} confinement zone ℓo = ${sn0(seismic.seismicLoZone)} mm controls — seismic spacing replaces gravity spacing.`),
+          eq(String.raw`s_{conf} = ${sn0(seismic.seismicSConf)}\ \text{mm within}\ \ell_o\quad(${seismic.tieSpacingLabel})`),
+        ],
+        note: `⌀${Math.max(i.tieDia, r.tieDiaMin)} mm ties @ ${sn0(seismic.seismicSConf)} mm within ℓo = ${sn0(seismic.seismicLoZone)} mm${outside}. (${sysRef} controls over §425.7.2 @ ${sn0(seismic.gravitySpacing)} mm)`,
+      })
+    }
   } else {
     steps.push({
       title: 'Spiral detailing (§425.7.3)',

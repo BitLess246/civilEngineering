@@ -415,7 +415,8 @@ function designFromRuns(
   const memberOf = (run: FrameRun, id: string) => run.result.members.find((m) => m.id === id)
 
   // ── Beams & girders — per-member worst case across all runs ──
-  onProgress?.({ phase: 'Designing beams & columns', detail: `${model.members.length} members` })
+  const totalMems = model.members.length
+  let memDone = 0
   const beams: BeamScheduleRow[] = []
   const columns: ColumnScheduleRow[] = []
   const steelBeams: SteelBeamScheduleRow[] = []
@@ -424,6 +425,8 @@ function designFromRuns(
     const role = roleOf.get(m.id)
     const sec = secOf(m.id)
     const isSteel = sec.material === 'steel'
+    const roleLabel = role === 'beam' ? 'beam' : role === 'girder' ? 'girder' : role === 'column' ? 'column' : role ?? ''
+    onProgress?.({ phase: 'Designing members', current: ++memDone, total: totalMems, detail: `${m.id} (${roleLabel} ${sec.b}×${sec.h})` })
     if (role === 'beam' || role === 'girder') {
       if (isSteel) {
         let best: SteelBeamScheduleRow | null = null, bestSev = -1, gov = ''
