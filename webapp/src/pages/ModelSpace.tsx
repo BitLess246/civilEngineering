@@ -1961,12 +1961,15 @@ export default function ModelSpace() {
           return [...new Set((model?.sections ?? []).filter((s) => ids.has(s.id)).map((s) => s.name))].join(', ') || '—'
         }
         const slabT = [...new Set((model?.plates ?? []).filter((p) => p.role !== 'wall').map((p) => p.thickness))].join(', ')
-        const barsUsed = [...new Set((model?.sections ?? []).map((s) => s.barDia))].sort((a, b) => a - b)
+        const barsUsed = [...new Set((model?.sections ?? []).filter((s) => s.material !== 'steel').map((s) => s.barDia))].sort((a, b) => a - b)
+        const hasConcreteMems = design.beams.length > 0 || design.columns.length > 0
+        const hasSteelMems    = design.steelBeams.length > 0 || design.steelColumns.length > 0
         const slabSdls = [...new Set((model?.plates ?? []).filter((p) => p.role !== 'wall')
           .map((p) => (p.sdlItems && p.sdlItems.length ? sdlTotal(p.sdlItems) : qD)))].sort((a, b) => a - b)
         const props: [string, string][] = [
           ['Column grid', `bays X ${baysX} m · bays Z ${baysZ} m · storeys ${storeyH} m`],
-          ['Material', `f′c ${fc} MPa · fy ${fy} MPa · main ⌀${barsUsed.join('/⌀') || barDia} · ties ⌀${tieDia} · cover ${cover} mm`],
+          ...(hasConcreteMems ? [['RC material', `f′c ${fc} MPa · fy ${fy} MPa · main ⌀${barsUsed.join('/⌀') || barDia} · ties ⌀${tieDia} · cover ${cover} mm`]] as [string, string][] : []),
+          ...(hasSteelMems    ? [['Steel grade',  `Fy ${steelFy} MPa · Fu ${steelFu} MPa (AISC W-shapes)`]] as [string, string][] : []),
           ['Columns', distinct('column')],
           ['Girders', distinct('girder')],
           ['Beams', distinct('beam')],
@@ -2039,9 +2042,9 @@ export default function ModelSpace() {
             </table>
           </div>
 
-          {/* Beam & girder schedule */}
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Beam & girder schedule</h3>
+          {/* Beam & girder schedule — RC only */}
+          {design.beams.length > 0 && <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">RC beam & girder schedule</h3>
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -2109,11 +2112,11 @@ export default function ModelSpace() {
                 }))}
               </tbody>
             </table>
-          </div>
+          </div>}
 
-          {/* Column schedule (full width) */}
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Column schedule</h3>
+          {/* Column schedule (full width) — RC only */}
+          {design.columns.length > 0 && <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">RC column schedule</h3>
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -2164,7 +2167,7 @@ export default function ModelSpace() {
                 })}
               </tbody>
             </table>
-          </div>
+          </div>}
 
           {/* Slab schedule (full width) — two-way DDM */}
           {design.slabs.length > 0 && report !== 'draw-only' && (
