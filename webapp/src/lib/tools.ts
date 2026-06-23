@@ -19,6 +19,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/model',         name: '3D Model Space',     sub: 'BIM-lite viewer'       },
       { to: '/truss',         name: 'Truss Space',        sub: 'Plane truss solver'    },
       { to: '/steel',         name: 'Steel Design',       sub: 'AISC 360-16 LRFD'      },
+      { to: '/slab-design',   name: 'Slab Design',        sub: 'Two-way DDM · ACI 318'  },
     ],
   },
   {

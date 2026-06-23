@@ -15,6 +15,7 @@ import LoadPath from './pages/LoadPath'
 const ModelSpace = lazy(() => import('./pages/ModelSpace'))
 const TrussSpace = lazy(() => import('./pages/TrussSpace'))
 import SteelDesign from './pages/SteelDesign'
+import SlabDesign from './pages/SlabDesign'
 import SlabEstimate from './pages/SlabEstimate'
 import ChbEstimate from './pages/ChbEstimate'
 import ColumnEstimate from './pages/ColumnEstimate'
@@ -48,6 +49,7 @@ export default function App() {
           </Suspense>
         } />
         <Route path="/steel" element={<SteelDesign />} />
+        <Route path="/slab-design" element={<SlabDesign />} />
         <Route path="/estimate/slab" element={<SlabEstimate />} />
         <Route path="/estimate/beam" element={<BeamEstimate />} />
         <Route path="/estimate/column" element={<ColumnEstimate />} />
