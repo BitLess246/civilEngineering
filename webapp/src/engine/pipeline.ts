@@ -42,6 +42,10 @@ export interface AnalyzeOptions {
    *  with an E (or W) factor is run once per E (or W) case and the design is
    *  enveloped per member — STAAD-style. */
   lateral?: LateralCase[]
+  /** Seismic lateral resisting system — drives column tie detailing per NSCP 2015 §418.
+   *  'smf' = Special Moment Frame (§418.7.5), 'imf' = Intermediate (§418.4.3).
+   *  Default 'gravity' (ordinary ties only, §425.7.2). */
+  seismicSystem?: 'gravity' | 'imf' | 'smf'
 }
 
 export interface BeamSectionDesign {
@@ -60,7 +64,18 @@ export interface ColumnScheduleRow {
   id: string; L: number
   Pu: number; Mu: number; e: number
   bars: number; phiPn: number; util: number
+  /** Gravity-only tie spacing (§425.7.2), mm. */
   tieSpacing: number
+  /** Final governing tie spacing (seismic confinement if applicable), mm. */
+  tieSpacingFinal: number
+  /** Human-readable label for the governing tie-spacing clause. */
+  tieSpacingLabel: string
+  /** Seismic confinement zone length ℓo, mm (smf/imf only). */
+  seismicLoZone?: number
+  /** Max tie spacing within confinement zone, mm (smf/imf only). */
+  seismicSConf?: number
+  /** Max tie spacing outside confinement zone, mm (smf only). */
+  seismicSOut?: number
   ok: boolean
   gov?: string
 }
@@ -256,10 +271,14 @@ function designBeamRow(mr: F3MemberResult, role: string, sec: RectSection): Beam
 
 /** Column capacity for a given section and a known factored P/M demand (no frame
  *  solve — bar diameter does not change demands, so this is reused for bar trials). */
-function designColumnFromPM(sec: RectSection, Pu: number, Mu: number) {
+function designColumnFromPM(
+  sec: RectSection, Pu: number, Mu: number,
+  system: 'gravity' | 'imf' | 'smf' = 'gravity', columnLength?: number,
+) {
   const ax = designAxialColumn({
     shape: 'tied', b: sec.b, h: sec.h, cover: sec.cover,
     barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, Pu,
+    system, columnLength,
   })
   let phiPn = ax.phiPnMax
   const e = Pu > 1e-9 ? Mu / Pu : 0
@@ -272,17 +291,35 @@ function designColumnFromPM(sec: RectSection, Pu: number, Mu: number) {
     phiPn = Math.min(cap.phi * cap.Pn, 0.65 * inter.PnMax)
   }
   const util = phiPn > 1e-9 ? Pu / phiPn : Infinity
-  return { e, bars: ax.bars, Ast: ax.Ast, phiPn, util, tieSpacing: ax.tieSpacing, ok: util <= 1 + 1e-9 && ax.rhoOK }
+  return {
+    e, bars: ax.bars, Ast: ax.Ast, phiPn, util,
+    tieSpacing: ax.tieSpacing,
+    tieSpacingFinal: ax.tieSpacingFinal,
+    tieSpacingLabel: ax.tieSpacingLabel,
+    seismicLoZone: ax.seismicLoZone,
+    seismicSConf: ax.seismicSConf,
+    seismicSOut: ax.seismicSOut,
+    ok: util <= 1 + 1e-9 && ax.rhoOK,
+  }
 }
 
 /** Design one column from a single run's member result. */
-function designColumnRow(mr: F3MemberResult, sec: RectSection): ColumnScheduleRow {
+function designColumnRow(
+  mr: F3MemberResult, sec: RectSection,
+  system: 'gravity' | 'imf' | 'smf' = 'gravity',
+): ColumnScheduleRow {
   const Pu = Math.max(0, -Math.min(...mr.N))           // compression (N < 0)
   const Mu = mr.Mmax
-  const r = designColumnFromPM(sec, Pu, Mu)
+  const r = designColumnFromPM(sec, Pu, Mu, system, mr.L * 1000)   // L m → mm
   return {
     id: mr.id, L: mr.L, Pu, Mu, e: r.e, bars: r.bars, phiPn: r.phiPn, util: r.util,
-    tieSpacing: r.tieSpacing, ok: r.ok,
+    tieSpacing: r.tieSpacing,
+    tieSpacingFinal: r.tieSpacingFinal,
+    tieSpacingLabel: r.tieSpacingLabel,
+    seismicLoZone: r.seismicLoZone,
+    seismicSConf: r.seismicSConf,
+    seismicSOut: r.seismicSOut,
+    ok: r.ok,
   }
 }
 
@@ -425,9 +462,10 @@ export function designStructure(
         if (best) steelColumns.push({ ...best, gov })
       } else {
         let best: ColumnScheduleRow | null = null, bestUtil = -1, gov = ''
+        const sysOpts = opts.seismicSystem ?? 'gravity'
         for (const run of runs) {
           const mr = memberOf(run, m.id); if (!mr) continue
-          const row = designColumnRow(mr, sec)
+          const row = designColumnRow(mr, sec, sysOpts)
           if (row.util > bestUtil) { bestUtil = row.util; best = row; gov = run.name }
         }
         if (best) columns.push({ ...best, gov })
