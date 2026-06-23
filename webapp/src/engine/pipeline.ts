@@ -10,7 +10,9 @@
 import type { StructuralModel, RectSection, ModelLoad } from './model'
 import { enforceSectionHierarchy, refreshSelfWeight } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
-import { precomputeFrame, solveWithGeometry, applyF3Combo, type F3Result, type F3MemberResult, type F3Load } from './frame3d'
+import { precomputeFrame, solveWithGeometry, applyF3Combo, serializePrecomp, type F3Result, type F3MemberResult, type F3Load } from './frame3d'
+import type { BridgeResult } from './modelBridge'
+import { FramePool } from './framePool'
 import { nscpCombos, type Combo } from './beamAnalysis'
 import type { ProgressFn } from './progress'
 import { designBeam, type BeamDesignResult } from './beamDesign'
@@ -373,13 +375,15 @@ function buildRuns(model: StructuralModel, opts: AnalyzeOptions, onProgress?: Pr
   return { br, runs, precomp }
 }
 
-export function designStructure(
-  model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}, opts: AnalyzeOptions = {},
+/** All member/footing/slab design given pre-solved FEM results. Shared by the
+ *  synchronous and async paths to avoid code duplication. */
+function designFromRuns(
+  model: StructuralModel, soil: SoilOptions, plan: FootingPlan, opts: AnalyzeOptions,
+  br: BridgeResult, runs: FrameRun[],
+  serviceRes: F3Result | null, dRes: F3Result | null, lRes: F3Result | null,
   onProgress?: ProgressFn,
 ): StructureDesign | null {
-  if (model.members.length === 0) return null
-  // each member designs with its OWN section; footings use the section of the
-  // column that lands on the support node.
+  if (runs.length === 0) return null
   const fallbackSec: RectSection = model.sections[0]
     ?? { id: '', name: '', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
   const secById = new Map(model.sections.map((s) => [s.id, s]))
@@ -388,22 +392,10 @@ export function designStructure(
   const colAtNode = (node: string) => model.members.find((m) => m.role === 'column' && (m.i === node || m.j === node))
   const footSec = (node: string) => { const c = colAtNode(node); return c ? secOf(c.id) : fallbackSec }
 
-  const { br, runs, precomp } = buildRuns(model, opts, onProgress)
-  if (runs.length === 0) return null
   // headline governing run = largest overall bending response
   let govIdx = 0
   runs.forEach((r, i) => { if (r.result.Mmax > runs[govIdx].result.Mmax) govIdx = i })
 
-  // Service (unfactored gravity) + D-only / L-only solves for the footing
-  // bearing check and the combined-footing dl/ll split (direction-independent).
-  // All reuse the same pre-factored K from buildRuns (same geometry).
-  const serviceLoads = applyF3Combo(br.loads, { D: 1, L: 1, Lr: 1, S: 1, R: 1 })
-  const serviceRes: F3Result | null = serviceLoads.length
-    ? solveWithGeometry(precomp, serviceLoads, opts) : null
-  const dLoads = applyF3Combo(br.loads, { D: 1 })
-  const lLoads = applyF3Combo(br.loads, { L: 1 })
-  const dRes = dLoads.length ? solveWithGeometry(precomp, dLoads, opts) : null
-  const lRes = lLoads.length ? solveWithGeometry(precomp, lLoads, opts) : null
   const serviceAt = (node: string) => {
     const i = serviceRes?.reactions.findIndex((r) => r.node === node) ?? -1
     return i >= 0 ? Math.max(0, serviceRes!.reactions[i].F[1]) : 0
@@ -648,6 +640,203 @@ export function designStructure(
   }
   partialDesign.joints = designSteelJoints(model, partialDesign)
   return partialDesign
+}
+
+export function designStructure(
+  model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}, opts: AnalyzeOptions = {},
+  onProgress?: ProgressFn,
+): StructureDesign | null {
+  if (model.members.length === 0) return null
+  const { br, runs, precomp } = buildRuns(model, opts, onProgress)
+  const serviceLoads = applyF3Combo(br.loads, { D: 1, L: 1, Lr: 1, S: 1, R: 1 })
+  const serviceRes = serviceLoads.length ? solveWithGeometry(precomp, serviceLoads, opts) : null
+  const dLoads = applyF3Combo(br.loads, { D: 1 })
+  const lLoads = applyF3Combo(br.loads, { L: 1 })
+  const dRes = dLoads.length ? solveWithGeometry(precomp, dLoads, opts) : null
+  const lRes = lLoads.length ? solveWithGeometry(precomp, lLoads, opts) : null
+  return designFromRuns(model, soil, plan, opts, br, runs, serviceRes, dRes, lRes, onProgress)
+}
+
+/** Solve load cases in parallel using a pre-initialised FramePool.
+ *  Returns the same `{ br, runs }` as buildRuns but with solves fanned across workers. */
+async function buildRunsParallel(
+  model: StructuralModel, opts: AnalyzeOptions, pool: FramePool, onProgress?: ProgressFn,
+): Promise<{ br: BridgeResult; runs: FrameRun[] }> {
+  const gravityModel = { ...model, loads: model.loads.filter((l) => l.cat !== 'E' && l.cat !== 'W') }
+  const br = modelToFrame3D(gravityModel)
+
+  let lateral = opts.lateral ?? []
+  if (lateral.length === 0) {
+    const eL = model.loads.filter((l) => l.kind === 'node' && l.cat === 'E')
+    const wL = model.loads.filter((l) => l.kind === 'node' && l.cat === 'W')
+    if (eL.length) lateral = [...lateral, { name: 'E', kind: 'E' as const, loads: eL }]
+    if (wL.length) lateral = [...lateral, { name: 'W', kind: 'W' as const, loads: wL }]
+  }
+  const toF3 = (l: ModelLoad): F3Load =>
+    ({ kind: 'node', node: (l as { node: string }).node, Fx: (l as { Fx?: number }).Fx, Fy: (l as { Fy?: number }).Fy, Fz: (l as { Fz?: number }).Fz, cat: l.cat })
+  const eCases = lateral.filter((c) => c.kind === 'E')
+  const wCases = lateral.filter((c) => c.kind === 'W')
+
+  const tasks: { name: string; combo: Combo; lat: F3Load[] }[] = []
+  for (const combo of nscpCombos(opts.f1 ?? 1.0)) {
+    const hasE = (combo.f.E ?? 0) !== 0
+    const hasW = (combo.f.W ?? 0) !== 0
+    const variants: { tag: string; lat: F3Load[] }[] =
+      hasE && eCases.length ? eCases.map((c) => ({ tag: c.name, lat: c.loads.map(toF3) }))
+        : hasW && wCases.length ? wCases.map((c) => ({ tag: c.name, lat: c.loads.map(toF3) }))
+          : [{ tag: '', lat: [] }]
+    for (const v of variants) tasks.push({ name: combo.name + (v.tag ? ` · ${v.tag}` : ''), combo, lat: v.lat })
+  }
+
+  const precomp = precomputeFrame(br.nodes, br.members, br.supports)
+  await pool.init(serializePrecomp(precomp))
+
+  onProgress?.({ phase: 'Solving load cases', current: 0, total: tasks.length })
+  let done = 0
+  const promises = tasks.map(async (t) => {
+    const factored = applyF3Combo([...br.loads, ...t.lat], t.combo.f)
+    if (!factored.length) return null
+    const result = await pool.solve(factored, opts)
+    onProgress?.({ phase: 'Solving load cases', current: ++done, total: tasks.length, detail: t.name })
+    return result ? { name: t.name, result } satisfies FrameRun : null
+  })
+  const settled = await Promise.all(promises)
+  const runs = settled.filter((r): r is FrameRun => r !== null)
+  return { br, runs }
+}
+
+async function designStructureWithPool(
+  model: StructuralModel, soil: SoilOptions, plan: FootingPlan, opts: AnalyzeOptions,
+  pool: FramePool, onProgress?: ProgressFn,
+): Promise<StructureDesign | null> {
+  if (model.members.length === 0) return null
+  const { br, runs } = await buildRunsParallel(model, opts, pool, onProgress)
+
+  // Service / D / L solves also go through the pool (workers already hold the precomp)
+  const serviceLoads = applyF3Combo(br.loads, { D: 1, L: 1, Lr: 1, S: 1, R: 1 })
+  const dLoads = applyF3Combo(br.loads, { D: 1 })
+  const lLoads = applyF3Combo(br.loads, { L: 1 })
+  const [serviceRes, dRes, lRes] = await Promise.all([
+    serviceLoads.length ? pool.solve(serviceLoads, opts) : Promise.resolve(null),
+    dLoads.length ? pool.solve(dLoads, opts) : Promise.resolve(null),
+    lLoads.length ? pool.solve(lLoads, opts) : Promise.resolve(null),
+  ])
+
+  return designFromRuns(model, soil, plan, opts, br, runs, serviceRes, dRes, lRes, onProgress)
+}
+
+/** Async (Worker-pool) version of designStructure. Spawns N frame-solve workers
+ *  and fans the 20–30 load-case solves across them for near-linear speed-up. */
+export async function designStructureAsync(
+  model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}, opts: AnalyzeOptions = {},
+  onProgress?: ProgressFn,
+): Promise<StructureDesign | null> {
+  const pool = new FramePool()
+  try {
+    return await designStructureWithPool(model, soil, plan, opts, pool, onProgress)
+  } finally {
+    pool.terminate()
+  }
+}
+
+/** Async version of optimizeStructure. Reuses a single FramePool across all
+ *  iterations to amortise worker-spawn cost (~100 ms). */
+export async function optimizeStructureAsync(
+  model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}, maxIter = 30,
+  opts: AnalyzeOptions = {}, tryBars = false, onProgress?: ProgressFn,
+): Promise<OptimizeResult | null> {
+  if (model.members.length === 0) return null
+  const pool = new FramePool()
+  try {
+    const memSecId = new Map(model.members.map((m) => [m.id, m.section]))
+    const secRole = new Map<string, string>(model.members.map((m) => [m.section, m.role]))
+    const settle = (m: StructuralModel) => refreshSelfWeight(enforceSectionHierarchy(m), soil.gammaConc)
+    const sub = (label: string): ProgressFn | undefined =>
+      onProgress && ((p) => onProgress({ ...p, phase: `${label} · ${p.phase}` }))
+    const detail = async (m: StructuralModel, d: StructureDesign, label: string): Promise<{ m: StructuralModel; d: StructureDesign }> => {
+      if (!tryBars) return { m, d }
+      const m2 = selectBarDiameters(m, soil, plan, opts, d)
+      if (m2 === m) return { m, d }
+      const d2 = await designStructureWithPool(m2, soil, plan, opts, pool, sub(label))
+      return { m: m2, d: d2 ?? d }
+    }
+
+    let work = settle(model)
+    const steps: OptimizeStep[] = []
+
+    let design = await designStructureWithPool(work, soil, plan, opts, pool, sub('Optimize · initial'))
+    if (!design) return null
+    ;({ m: work, d: design } = await detail(work, design, 'Optimize · initial'))
+    steps.push({ iter: 0, grown: 0, fails: countFails(design), ok: designOK(design) })
+
+    let iter = 0
+    while (!designOK(design) && iter++ < maxIter) {
+      const utils = buildUtilMap(design, memSecId)
+      if (utils.size === 0) break
+      onProgress?.({ phase: 'Optimizing — growing sections', current: iter, total: maxIter, detail: `iteration ${iter}: ${utils.size} member(s) grown, ${countFails(design)} failing` })
+      const sizes = new Map(work.sections.map((s) => {
+        const u = utils.get(s.id)
+        return [s.id, u !== undefined ? jumpSection(s, u, secRole.get(s.id) ?? '') : s]
+      }))
+      work = settle(withSizes(work, sizes))
+      const d = await designStructureWithPool(work, soil, plan, opts, pool, sub(`Optimize iter ${iter}`))
+      if (!d) break
+      ;({ m: work, d: design } = await detail(work, d, `Optimize iter ${iter}`))
+      steps.push({ iter, grown: utils.size, fails: countFails(design), ok: designOK(design) })
+    }
+    const converged = designOK(design)
+
+    if (converged) {
+      onProgress?.({ phase: 'Optimizing — trimming sections', detail: 'batch-shrinking all sections' })
+      let batchOk = true
+      while (batchOk) {
+        const batchSizes = new Map<string, RectSection>()
+        for (const s0 of work.sections) {
+          if (s0.material === 'steel' && s0.shape) {
+            const lighter = nextLighterW(s0.shape)
+            if (lighter) batchSizes.set(s0.id, applyShape(s0, lighter))
+          } else if (s0.h - 25 >= 300) {
+            batchSizes.set(s0.id, { ...s0, h: s0.h - 25, name: `${s0.b}×${s0.h - 25}` })
+          }
+        }
+        if (batchSizes.size === 0) break
+        const trial = settle(withSizes(work, batchSizes))
+        const d = await designStructureWithPool(trial, soil, plan, opts, pool)
+        if (d && designOK(d)) { work = trial; design = d } else { batchOk = false }
+      }
+
+      let improved = true, guard = 0
+      while (improved && guard++ < 4) {
+        improved = false
+        for (const s0 of work.sections) {
+          let trialSec: RectSection | null = null
+          if (s0.material === 'steel' && s0.shape) {
+            const lighter = nextLighterW(s0.shape)
+            if (lighter) trialSec = applyShape(s0, lighter)
+          } else {
+            if (s0.h - 25 < 300) continue
+            trialSec = { ...s0, h: s0.h - 25, name: `${s0.b}×${s0.h - 25}` }
+          }
+          if (!trialSec) continue
+          const trial = settle(withSizes(work, new Map([[s0.id, trialSec]])))
+          const d = await designStructureWithPool(trial, soil, plan, opts, pool)
+          if (d && designOK(d)) { work = trial; design = d; improved = true }
+        }
+      }
+      if (tryBars) {
+        const m2 = selectBarDiameters(work, soil, plan, opts, design)
+        if (m2 !== work) {
+          const d = await designStructureWithPool(m2, soil, plan, opts, pool)
+          if (d) { work = m2; design = d }
+        }
+      }
+      steps.push({ iter: iter + 1, grown: 0, fails: 0, ok: true })
+    }
+
+    return { design, model: work, steps, converged }
+  } finally {
+    pool.terminate()
+  }
 }
 
 // ── Bar-diameter selection ────────────────────────────────────────────────

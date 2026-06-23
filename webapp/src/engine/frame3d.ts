@@ -115,7 +115,7 @@ function kgLocal(N: number, L: number): number[][] {
   return k
 }
 
-type V3 = [number, number, number]
+export type V3 = [number, number, number]
 const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
 const dot = (a: V3, b: V3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
@@ -144,7 +144,7 @@ const mul = (A: number[][], B: number[][]): number[][] =>
 const transpose = (A: number[][]): number[][] => A[0].map((_, j) => A.map((row) => row[j]))
 
 // ── Geometry-only member data (load-independent) ──────────────────────────
-interface MemberGeom {
+export interface MemberGeom {
   L: number; R: [V3, V3, V3]
   kl: number[][]; T: number[][]; kg: number[][]
   dofs: number[]
@@ -288,6 +288,39 @@ export function precomputeFrame(
 
   const Kff = luFactor(Kff_raw)   // null if singular; {n:0} if nf===0
   return { nm, idx, nodes, members, supports, geoms, ndof, free, freeIdx, Kff, Kff_raw }
+}
+
+/** Plain-JSON-serializable form of FramePrecomp — Maps become entry arrays for postMessage. */
+export interface FramePrecompSerial {
+  nodes: F3Node[]
+  members: F3Member[]
+  supports: F3Support[]
+  geoms: MemberGeom[]
+  ndof: number
+  free: number[]
+  freeIdxEntries: [number, number][]
+  Kff: LUFactor | null
+  Kff_raw: number[][]
+}
+
+export function serializePrecomp(p: FramePrecomp): FramePrecompSerial {
+  return {
+    nodes: p.nodes, members: p.members, supports: p.supports,
+    geoms: p.geoms, ndof: p.ndof, free: p.free,
+    freeIdxEntries: [...p.freeIdx],
+    Kff: p.Kff, Kff_raw: p.Kff_raw,
+  }
+}
+
+export function deserializePrecomp(s: FramePrecompSerial): FramePrecomp {
+  return {
+    nm: new Map(s.nodes.map((n) => [n.id, n])),
+    idx: new Map(s.nodes.map((n, i) => [n.id, i])),
+    nodes: s.nodes, members: s.members, supports: s.supports,
+    geoms: s.geoms, ndof: s.ndof, free: s.free,
+    freeIdx: new Map(s.freeIdxEntries),
+    Kff: s.Kff, Kff_raw: s.Kff_raw,
+  }
 }
 
 function postprocessMember(m: F3Member, g: MemberGeom, ml: MemberLoads, d: number[]): F3MemberResult {
