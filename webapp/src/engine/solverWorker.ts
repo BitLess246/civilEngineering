@@ -10,7 +10,7 @@ import type { StructuralModel } from './model'
 import { modelToFrame3D } from './modelBridge'
 import { analyzeFrame3D, solveFrame3D, applyF3Combo, type F3AnalyzeOpts } from './frame3d'
 import { driftCheck } from './seismic'
-import { designStructure, optimizeStructure, selectBarDiameters, type SoilOptions, type FootingPlan, type AnalyzeOptions } from './pipeline'
+import { designStructureAsync, optimizeStructureAsync, selectBarDiameters, type SoilOptions, type FootingPlan, type AnalyzeOptions } from './pipeline'
 import type { SolveProgress } from './progress'
 
 type DriftReq = { hasSeis: boolean; T: number; R: number; axis: 'x' | 'z'; pDelta: boolean }
@@ -21,7 +21,7 @@ export type SolverRequest =
 
 const ctx = self as unknown as Worker
 
-ctx.onmessage = (e: MessageEvent<SolverRequest>) => {
+ctx.onmessage = async (e: MessageEvent<SolverRequest>) => {
   const msg = e.data
   // forward progress ticks to the main thread (delivered while the worker runs)
   const onProgress = (p: SolveProgress) => ctx.postMessage({ id: msg.id, progress: p })
@@ -40,10 +40,10 @@ ctx.onmessage = (e: MessageEvent<SolverRequest>) => {
     } else if (msg.kind === 'design') {
       let m = msg.model
       if (msg.tryBars) { onProgress({ phase: 'Selecting bar sizes' }); m = selectBarDiameters(msg.model, msg.soil, msg.plan, msg.opts) }
-      const design = designStructure(m, msg.soil, msg.plan, msg.opts, onProgress)
+      const design = await designStructureAsync(m, msg.soil, msg.plan, msg.opts, onProgress)
       ctx.postMessage({ id: msg.id, ok: true, result: { model: m, design } })
     } else {
-      const result = optimizeStructure(msg.model, msg.soil, msg.plan, msg.maxIter, msg.opts, msg.tryBars, onProgress)
+      const result = await optimizeStructureAsync(msg.model, msg.soil, msg.plan, msg.maxIter, msg.opts, msg.tryBars, onProgress)
       ctx.postMessage({ id: msg.id, ok: true, result })
     }
   } catch (err) {

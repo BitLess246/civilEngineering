@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { solveFrame3D, analyzeFrame3D, rectJ, type F3Node, type F3Member, type F3Support, type F3Load } from './frame3d'
+import { solveFrame3D, analyzeFrame3D, rectJ, precomputeFrame, solveWithGeometry, serializePrecomp, deserializePrecomp, type F3Node, type F3Member, type F3Support, type F3Load } from './frame3d'
 import { solveFrame2D } from './frame2d'
 import { generateGridModel } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
@@ -175,5 +175,51 @@ describe('frame3d — P-Δ second order (vertical cantilever, L = 4)', () => {
       [...lat, { kind: 'node', node: 'top', Fy: -P, cat: 'D' }], { pDelta: true })!
     // second-order base moment = H·L + P·Δ > first-order H·L
     expect(Math.abs(r.members[0].My[0])).toBeGreaterThan(H * L)
+  })
+})
+
+describe('serializePrecomp / deserializePrecomp — postMessage roundtrip', () => {
+  const nodes: F3Node[] = [
+    { id: 'a', x: 0, y: 0, z: 0 },
+    { id: 'b', x: 0, y: 3, z: 0 },
+    { id: 'c', x: 4, y: 3, z: 0 },
+  ]
+  const E2 = 25000, G2 = E2 / 2.4
+  const members: F3Member[] = [
+    { id: 'm1', i: 'a', j: 'b', E: E2, G: G2, A: 150000, Iz: 10416666667, Iy: 3750000000, J: 4e9 },
+    { id: 'm2', i: 'b', j: 'c', E: E2, G: G2, A: 150000, Iz: 10416666667, Iy: 3750000000, J: 4e9 },
+  ]
+  const supports: F3Support[] = [{ node: 'a', fixity: 'fixed' }]
+  const loads: F3Load[] = [{ kind: 'node', node: 'c', Fy: -50, cat: 'D' }]
+
+  it('roundtrip preserves all scalar fields', () => {
+    const p = precomputeFrame(nodes, members, supports)
+    const s = serializePrecomp(p)
+    const q = deserializePrecomp(s)
+    expect(q.ndof).toBe(p.ndof)
+    expect(q.free).toEqual(p.free)
+    expect(q.nodes).toEqual(p.nodes)
+    expect(q.members).toEqual(p.members)
+    expect(q.supports).toEqual(p.supports)
+    expect(q.Kff_raw).toEqual(p.Kff_raw)
+    expect(q.Kff?.n).toBe(p.Kff?.n)
+  })
+
+  it('freeIdx Map is reconstructed correctly', () => {
+    const p = precomputeFrame(nodes, members, supports)
+    const q = deserializePrecomp(serializePrecomp(p))
+    for (const [k, v] of p.freeIdx) expect(q.freeIdx.get(k)).toBe(v)
+    expect(q.freeIdx.size).toBe(p.freeIdx.size)
+  })
+
+  it('solveWithGeometry gives identical results on the deserialized precomp', () => {
+    const p = precomputeFrame(nodes, members, supports)
+    const q = deserializePrecomp(serializePrecomp(p))
+    const r1 = solveWithGeometry(p, loads)!
+    const r2 = solveWithGeometry(q, loads)!
+    expect(r1).not.toBeNull()
+    expect(r2).not.toBeNull()
+    for (let i = 0; i < r1.d.length; i++) expect(r2.d[i]).toBeCloseTo(r1.d[i], 9)
+    expect(r2.Mmax).toBeCloseTo(r1.Mmax, 9)
   })
 })
