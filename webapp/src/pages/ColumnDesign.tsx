@@ -90,6 +90,27 @@ export default function ColumnDesign() {
 
   const util = cap && cap.phi * cap.Pn > 1e-9 ? Pu / (cap.phi * cap.Pn) : null
 
+  // ~12 representative rows for the P-M table, balanced point always included.
+  const tableRows = useMemo(() => {
+    if (!inter) return []
+    const { curve, PnMax } = inter
+    const compCap = 0.65 * PnMax
+    const balIdx = curve.reduce(
+      (b, _, i) => Math.abs(curve[i].c - inter.balanced.c) < Math.abs(curve[b].c - inter.balanced.c) ? i : b, 0,
+    )
+    const selected = new Set([80, 72, 63, 54, balIdx, 45, 36, 27, 18, 9, 2, 0])
+    return [...selected]
+      .sort((a, z) => z - a)   // high c first (compression at top of table)
+      .map((idx) => ({
+        ...curve[idx],
+        phiPn: Math.min(curve[idx].phi * curve[idx].Pn, compCap),
+        phiMn: curve[idx].phi * curve[idx].Mn,
+        isBalanced: idx === balIdx,
+        label: idx === 80 ? 'Pure axial' : idx === balIdx ? 'Balanced' : idx === 0 ? 'Pure flexure' : '—',
+      }))
+      .filter((p) => p.Pn > -100)   // drop deep-tension rows
+  }, [inter])
+
   return (
     <div className="mx-auto max-w-6xl p-6">
       <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
@@ -235,6 +256,68 @@ export default function ColumnDesign() {
           )}
         </div>
       </div>
+
+      {eccentric && inter && tableRows.length > 0 && (
+        <div className="mt-6 print-avoid-break rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="mb-3 text-[1.02rem] font-bold text-[#0056b3]">P–M Interaction Table — Design Envelope (φP<sub>n</sub>, φM<sub>n</sub>)</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 text-left uppercase tracking-wide text-slate-500">
+                  <th className="pb-1.5 pr-3 font-semibold">Point</th>
+                  <th className="pb-1.5 pr-3 font-semibold">c (mm)</th>
+                  <th className="pb-1.5 pr-3 font-semibold">εt</th>
+                  <th className="pb-1.5 pr-3 font-semibold">φ</th>
+                  <th className="pb-1.5 pr-3 font-semibold">Pn (kN)</th>
+                  <th className="pb-1.5 pr-3 font-semibold">Mn (kN·m)</th>
+                  <th className="pb-1.5 pr-3 font-semibold">φPn (kN)</th>
+                  <th className="pb-1.5 font-semibold">φMn (kN·m)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {/* Compression cap */}
+                <tr className="border-b border-slate-100 bg-slate-50">
+                  <td className="py-1 pr-3 font-semibold text-slate-600">Max. axial cap</td>
+                  <td className="py-1 pr-3 text-slate-500">—</td>
+                  <td className="py-1 pr-3 text-slate-500">—</td>
+                  <td className="py-1 pr-3 text-slate-500">0.65</td>
+                  <td className="py-1 pr-3 text-slate-500">{f1(inter.PnMax)}</td>
+                  <td className="py-1 pr-3 text-slate-500">0</td>
+                  <td className="py-1 pr-3 font-semibold text-slate-800">{f1(0.65 * inter.PnMax)}</td>
+                  <td className="py-1 font-semibold text-slate-800">0</td>
+                </tr>
+                {tableRows.map((row, i) => (
+                  <tr key={i}
+                    className={`border-b border-slate-100 last:border-0 ${row.isBalanced ? 'bg-purple-50' : ''}`}>
+                    <td className={`py-1 pr-3 ${row.isBalanced ? 'font-semibold text-purple-700' : 'text-slate-600'}`}>
+                      {row.label}
+                    </td>
+                    <td className="py-1 pr-3 text-slate-600">{f0(row.c)}</td>
+                    <td className="py-1 pr-3 text-slate-600">{row.et.toFixed(4)}</td>
+                    <td className="py-1 pr-3 text-slate-600">{row.phi.toFixed(2)}</td>
+                    <td className="py-1 pr-3 text-slate-600">{f1(row.Pn)}</td>
+                    <td className="py-1 pr-3 text-slate-600">{f1(Math.abs(row.Mn))}</td>
+                    <td className={`py-1 pr-3 font-semibold ${row.isBalanced ? 'text-purple-700' : 'text-slate-800'}`}>
+                      {f1(Math.max(0, row.phiPn))}
+                    </td>
+                    <td className={`py-1 font-semibold ${row.isBalanced ? 'text-purple-700' : 'text-slate-800'}`}>
+                      {f1(Math.max(0, row.phiMn))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {cap && (
+            <p className="mt-2 text-[11px] text-slate-500">
+              Demand: P<sub>u</sub>={f1(Pu)} kN · M<sub>u</sub>={f1(MuEff)} kN·m —
+              capacity at e={f0((MuEff / Pu) * 1000)} mm: φP<sub>n</sub>={f1(cap.phi * cap.Pn)} kN,
+              utilisation {util !== null ? `${(util * 100).toFixed(0)}%` : '—'}.
+              Balanced: P<sub>b</sub>={f1(inter.balanced.Pb)} kN, M<sub>b</sub>={f1(inter.balanced.Mb)} kN·m.
+            </p>
+          )}
+        </div>
+      )}
 
       {solution.length > 0 && <WorkedSolution steps={solution} />}
     </div>
