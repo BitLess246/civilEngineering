@@ -274,3 +274,80 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
     Vc, phiVc, region, Av, VsReq, VsMax, sReq, sMax, sAdopt,
   }
 }
+
+// ─── Service deflection (simple span) — ACI 318-14 §24.2 ──────────────────
+// Branson effective Ie at full service moment; long-term multiplier §24.2.4.
+// Kept separate so deflection inputs stay optional in the UI.
+
+export interface BeamDeflectionInput {
+  b: number; h: number; d: number   // section, mm
+  As: number                        // tension steel area, mm²
+  AsPrime?: number                  // compression steel area for λΔ, mm² (default 0)
+  fc: number                        // MPa
+  lambda?: number                   // lightweight factor (default 1)
+  span: number                      // simple span, m
+  wD: number; wL: number           // unfactored service loads, kN/m
+}
+
+export interface BeamDeflectionResult {
+  Ig: number; Icr: number; Mcr: number; Ie: number   // mm⁴
+  deltaD: number; deltaL: number                       // immediate, mm
+  lambdaDelta: number; deltaLong: number               // long-term dead, mm
+  deltaTotal: number                                   // long-term dead + immediate live, mm
+  limitL360: number; limitL240: number                 // mm
+  liveOK: boolean; totalOK: boolean
+}
+
+export function beamServiceDeflection(i: BeamDeflectionInput): BeamDeflectionResult {
+  const { b, h, d, As, fc, span } = i
+  const lambda = i.lambda ?? 1
+  const AsPrime = i.AsPrime ?? 0
+  const Lmm = span * 1000
+
+  // Ec = 4700√f'c (MPa), n = Es/Ec
+  const Ec = 4700 * Math.sqrt(Math.max(fc, 1))
+  const n = 200_000 / Ec
+  const Ig = (b * h ** 3) / 12
+
+  // Cracked transformed Icr (singly-reinforced — conservative when A's > 0)
+  const rhoN = (n * As) / (b * d)
+  const kNA = Math.sqrt(2 * rhoN + rhoN ** 2) - rhoN
+  const kd = kNA * d
+  const Icr = (b * kd ** 3) / 3 + n * As * (d - kd) ** 2
+
+  // Cracking moment: fr = 0.62λ√f'c (§419.2.3.1); Mcr = fr·Ig/yt
+  const fr = 0.62 * lambda * Math.sqrt(Math.max(fc, 1))
+  const Mcr = (fr * Ig) / (h / 2) / 1e6   // kN·m
+
+  // Service moment at full load (simple span): Ma = w·L²/8
+  const Ma = ((i.wD + i.wL) * span ** 2) / 8   // kN·m
+
+  // Branson effective Ie (§24.2.3.5)
+  const Ie = (() => {
+    if (Ma <= 0 || Ma <= Mcr) return Ig
+    const r = (Mcr / Ma) ** 3
+    return Math.min(Ig, r * Ig + (1 - r) * Icr)
+  })()
+
+  // Immediate deflections: δ = 5wL⁴/(384EI)
+  // w [kN/m] = w [N/mm] numerically; E [MPa = N/mm²]; I [mm⁴]; L [mm] → δ [mm]
+  const coef = (5 * Lmm ** 4) / (384 * 200_000 * Ie)
+  const deltaD = i.wD * coef
+  const deltaL = i.wL * coef
+
+  // Long-term multiplier: §24.2.4.1.1  λΔ = ξ/(1+50ρ')  ξ = 2.0 (≥5yr)
+  const rhoP = AsPrime > 0 ? AsPrime / (b * d) : 0
+  const lambdaDelta = 2.0 / (1 + 50 * rhoP)
+  const deltaLong = lambdaDelta * deltaD
+  const deltaTotal = deltaLong + deltaL   // §24.2.2 Table R24.2.2
+
+  const limitL360 = Lmm / 360
+  const limitL240 = Lmm / 240
+
+  return {
+    Ig, Icr, Mcr, Ie,
+    deltaD, deltaL, lambdaDelta, deltaLong, deltaTotal,
+    limitL360, limitL240,
+    liveOK: deltaL <= limitL360, totalOK: deltaTotal <= limitL240,
+  }
+}

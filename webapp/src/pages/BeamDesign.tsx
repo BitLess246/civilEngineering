@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { designBeam, type BeamDesignInput, type BeamDesignResult } from '../engine/beamDesign'
+import { designBeam, beamServiceDeflection, type BeamDesignInput, type BeamDesignResult } from '../engine/beamDesign'
 import type { CriticalSection } from '../engine/beamSections'
 import { BeamSchematic } from '../components/BeamSchematic'
 import { ReportControls } from '../components/ReportControls'
@@ -66,6 +66,9 @@ export default function BeamDesign() {
   }, [params])
 
   const [f, setF] = useState<FormState>({ ...DEFAULTS, ...(handoff.multi ? {} : handoff.single) })
+  const [span, setSpan] = useState<number>(NaN)
+  const [svcWD, setSvcWD] = useState<number>(NaN)
+  const [svcWL, setSvcWL] = useState<number>(NaN)
   const [multi, setMulti] = useState<boolean>(handoff.multi)
   const [sections, setSections] = useState<SecRow[]>(handoff.multi ? handoff.sections : DEF_SECTIONS)
   const [selId, setSelId] = useState<number | null>(handoff.multi ? handoff.sections[0].id : null)
@@ -106,6 +109,15 @@ export default function BeamDesign() {
     [r, f, demand.Mu, demand.Vu],
   )
 
+  const deflection = useMemo(() => {
+    if (!r || !Number.isFinite(span) || !Number.isFinite(svcWD) || !Number.isFinite(svcWL)) return null
+    return beamServiceDeflection({
+      b: f.b, h: f.h, d: r.d, As: r.As,
+      AsPrime: r.mode === 'DRRB' ? r.AsPrime : 0,
+      fc: f.fc, span, wD: svcWD, wL: svcWL,
+    })
+  }, [r, f.b, f.h, f.fc, span, svcWD, svcWL])
+
   const stirrupText = (rr: BeamDesignResult) =>
     rr.region === 'designed' || rr.region === 'minimum'
       ? `⌀${f.stirrupDia} ${f.legs}-leg @ ${f0(rr.sAdopt)} mm`
@@ -137,6 +149,12 @@ export default function BeamDesign() {
             <Num label={<KTex tex="f'_c" />} unit="MPa" value={f.fc} onChange={set('fc')} />
             <Num label={<KTex tex="f_y" />} unit="MPa" value={f.fy} onChange={set('fy')} />
             <Num label={<KTex tex="f_{yt}" />} unit="MPa" value={f.fyt} onChange={set('fyt')} />
+          </Card>
+
+          <Card title="Serviceability (optional)">
+            <Num label="Simple span" unit="m" value={span} onChange={setSpan} />
+            <Num label={<>Dead load <KTex tex="w_D" /></>} unit="kN/m" value={svcWD} onChange={setSvcWD} />
+            <Num label={<>Live load <KTex tex="w_L" /></>} unit="kN/m" value={svcWL} onChange={setSvcWL} />
           </Card>
 
           <Card title="Factored demands">
@@ -251,6 +269,9 @@ export default function BeamDesign() {
                 sub={`φMn,max=${f1(r.phiMnMax)} kN·m`} />
               <Row label="Tension steel" value={`${r.bars} ⌀${f.barDia} mm`}
                 sub={`As=${f0(r.As)} mm² · ${r.usedMin ? 'ρ_min' : `ρ=${r.rho.toFixed(4)}`}`} />
+              <Row label="ρ limits"
+                value={`ρ=${r.rho.toFixed(4)}`}
+                sub={`ρ_min=${r.rhoMin.toFixed(4)} · ρ_b=${r.rhoB.toFixed(4)} · ρ_max=${r.rhoMax.toFixed(4)}`} />
               <Row label="Layers" value={r.layers.length > 1 ? `${r.layers.length} (${r.layers.join(' + ')})` : '1'}
                 sub={`s_clear=${f0(r.sClear)} ≥ ${f0(r.sMinClear)} mm`} />
               {r.mode === 'DRRB' && (
@@ -275,6 +296,25 @@ export default function BeamDesign() {
                 sub={r.region === 'designed' ? `s_req=${f0(r.sReq)} · s_max=${f0(r.sMax)} mm` : undefined} />
               <Row label="Hooks (135°)" value={`ext ${f0(r.stirrupHookExt)} mm`}
                 sub={`bend Ø ${f0(r.stirrupBendDia)} mm (4ds)`} />
+            </ResultCard>
+          )}
+          {deflection && (
+            <ResultCard title="Serviceability — ACI 318-14 §24.2">
+              <Row label={<><KTex tex="I_g" /> (gross)</>} value={`${(deflection.Ig / 1e6).toFixed(0)} ×10⁶ mm⁴`} />
+              <Row label={<><KTex tex="I_{cr}" /> (cracked)</>} value={`${(deflection.Icr / 1e6).toFixed(0)} ×10⁶ mm⁴`} />
+              <Row label={<><KTex tex="M_{cr}" /></>} value={`${deflection.Mcr.toFixed(1)} kN·m`} />
+              <Row label={<><KTex tex="I_e" /> (Branson)</>} value={`${(deflection.Ie / 1e6).toFixed(0)} ×10⁶ mm⁴`} />
+              <Row label={<>Immed. dead <KTex tex="\delta_D" /></>} value={`${deflection.deltaD.toFixed(1)} mm`} />
+              <Row label={<>Immed. live <KTex tex="\delta_L" /></>} value={`${deflection.deltaL.toFixed(1)} mm`}
+                alert={!deflection.liveOK}
+                sub={`L/360 = ${deflection.limitL360.toFixed(1)} mm${deflection.liveOK ? ' ✓' : ' ✗'}`} />
+              <Row label={<>Long-term <KTex tex="\lambda_\Delta" /></>}
+                value={deflection.lambdaDelta.toFixed(3)}
+                sub="ξ=2.0 (≥5 yr), §24.2.4.1.1" />
+              <Row label={<>Total <KTex tex="\delta_{total}" /></>}
+                value={`${deflection.deltaTotal.toFixed(1)} mm`}
+                alert={!deflection.totalOK}
+                sub={`L/240 = ${deflection.limitL240.toFixed(1)} mm${deflection.totalOK ? ' ✓' : ' ✗'}`} />
             </ResultCard>
           )}
         </div>
