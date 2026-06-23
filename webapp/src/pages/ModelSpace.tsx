@@ -174,11 +174,18 @@ function SolverProgress({ p }: { p: SolveProgress | null }) {
   return (
     <div className="col-span-full rounded-lg border border-[#0056b3]/30 bg-blue-50/60 p-2.5">
       <div className="flex items-center justify-between text-[11px] font-semibold text-[#0056b3]">
-        <span>⏳ {p.phase}{p.total && p.current ? ` — ${p.current}/${p.total}` : ''}</span>
-        {pct !== null && <span>{pct}%</span>}
+        <span>⏳ {p.phase}</span>
+        <span className="tabular-nums text-slate-500">
+          {p.total && p.current ? `${p.current} / ${p.total}` : ''}{pct !== null ? ` · ${pct}%` : ''}
+        </span>
       </div>
-      {p.detail && <div className="mt-0.5 truncate text-[11px] text-slate-500">{p.detail}</div>}
-      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-blue-100">
+      {p.detail && (
+        <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-600">
+          <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[#0056b3] opacity-70" />
+          <span className="truncate font-mono">{p.detail}</span>
+        </div>
+      )}
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-blue-100">
         {pct !== null
           ? <div className="h-full rounded-full bg-[#0056b3] transition-all duration-150" style={{ width: `${pct}%` }} />
           : <div className="h-full w-1/3 animate-pulse rounded-full bg-[#0056b3]" />}
@@ -455,7 +462,7 @@ function BeamRebarElevation({ L, h, sections }: {
 /** Rebar elevation of a column, drawn to scale (height ∝ Lh, width ∝ b), with
  *  longitudinal bars, ties at spacing and dimension lines. viewBox width
  *  matches ColumnSchematic (320) so its text matches the section below it. */
-function ColumnElevation({ Lh, b, bars, tieSpacing }: { Lh: number; b: number; bars: number; tieSpacing: number }): ReactNode {
+function ColumnElevation({ Lh, b, barDia, tieDia, bars, tieSpacing }: { Lh: number; b: number; barDia: number; tieDia: number; bars: number; tieSpacing: number }): ReactNode {
   const W = 320, top = 24, availH = 230
   const scl = availH / Math.max(Lh, 0.5)                 // px per metre
   const colW = Math.max(30, (b / 1000) * scl)            // to scale with height
@@ -466,7 +473,7 @@ function ColumnElevation({ Lh, b, bars, tieSpacing }: { Lh: number; b: number; b
   return (
     <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
       style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
-      <text x={12} y={14} fontSize={11} fontWeight={700} fill="#0056b3">ELEVATION — {bars}⌀ · ties @{Math.round(tieSpacing)}</text>
+      <text x={12} y={14} fontSize={11} fontWeight={700} fill="#0056b3">ELEVATION — {bars}⌀{barDia} · ties ⌀{tieDia} @{Math.round(tieSpacing)} mm</text>
       <rect x={x0} y={y0} width={colW} height={availH} fill="#fff" stroke="#37526e" strokeWidth={1.4} />
       <line x1={x0 + 6} y1={y0} x2={x0 + 6} y2={y1} stroke="#dc2626" strokeWidth={1.6} />
       <line x1={x1 - 6} y1={y0} x2={x1 - 6} y2={y1} stroke="#dc2626" strokeWidth={1.6} />
@@ -475,7 +482,7 @@ function ColumnElevation({ Lh, b, bars, tieSpacing }: { Lh: number; b: number; b
         return <line key={k} x1={x0 + 3} y1={y} x2={x1 - 3} y2={y} stroke="#94a3b8" strokeWidth={0.7} />
       })}
       <DimSide yA={y0} yB={y1} featX={x0} dX={x0 - 14} label={`H = ${Lh} m`} side="left" />
-      <DimBelow xA={x0} xB={x1} featY={y1} dY={dimY} label={`b = ${b}`} />
+      <DimBelow xA={x0} xB={x1} featY={y1} dY={dimY} label={`b = ${b} mm`} />
     </svg>
   )
 }
@@ -506,14 +513,14 @@ function WShapeSection({ shape, d, bf, tf, tw }: { shape: string; d: number; bf:
       <rect x={x0} y={y0 + sh - stf} width={sw} height={stf} fill="#bfdbfe" stroke="#0056b3" strokeWidth={0.8} />
       {/* bf dim arrow */}
       <line x1={x0} y1={VH - 10} x2={x0 + sw} y2={VH - 10} stroke="#64748b" strokeWidth={0.8} markerStart="url(#arr)" markerEnd="url(#arr)" />
-      <text x={VW / 2} y={VH - 2} textAnchor="middle" {...textStyle}>bf={Math.round(bf)}</text>
+      <text x={VW / 2} y={VH - 2} textAnchor="middle" {...textStyle}>bf={Math.round(bf)} mm</text>
       {/* d dim arrow */}
       <line x1={VW - 10} y1={y0} x2={VW - 10} y2={y0 + sh} stroke="#64748b" strokeWidth={0.8} />
-      <text x={VW - 2} y={(y0 + y0 + sh) / 2} textAnchor="middle" {...textStyle} transform={`rotate(-90,${VW - 2},${(y0 + y0 + sh) / 2})`}>d={Math.round(d)}</text>
+      <text x={VW - 2} y={(y0 + y0 + sh) / 2} textAnchor="middle" {...textStyle} transform={`rotate(-90,${VW - 2},${(y0 + y0 + sh) / 2})`}>d={Math.round(d)} mm</text>
       {/* tf label */}
-      <text x={x0 - 2} y={y0 + stf / 2 + 3} textAnchor="end" {...textStyle}>tf={tf.toFixed(1)}</text>
+      <text x={x0 - 2} y={y0 + stf / 2 + 3} textAnchor="end" {...textStyle}>tf={tf.toFixed(1)} mm</text>
       {/* tw label */}
-      <text x={webX - 2} y={(VH) / 2 + 3} textAnchor="end" {...textStyle}>tw={tw.toFixed(1)}</text>
+      <text x={webX - 2} y={(VH) / 2 + 3} textAnchor="end" {...textStyle}>tw={tw.toFixed(1)} mm</text>
       {/* arrow marker def */}
       <defs>
         <marker id="arr" markerWidth={4} markerHeight={4} refX={2} refY={2} orient="auto">
@@ -2236,7 +2243,7 @@ export default function ModelSpace() {
                             {wantSol && <WorkedSolution steps={columnRowSolution(cs, c)} title={`${c.id} — worked solution`} />}
                             {wantDraw && (
                             <div className="space-y-3 self-start rounded-lg border border-slate-200 bg-white p-3">
-                              <ColumnElevation Lh={c.L} b={cs.b} bars={c.bars} tieSpacing={c.tieSpacingFinal} />
+                              <ColumnElevation Lh={c.L} b={cs.b} barDia={cs.barDia} tieDia={cs.tieDia} bars={c.bars} tieSpacing={c.tieSpacingFinal} />
                               <div className="border-t border-slate-100 pt-2">
                                 <p className="mb-1 text-[11px] font-semibold text-[#0056b3]">SECTION</p>
                                 <ColumnSchematic shape="tied" b={cs.b} h={cs.h} cover={cs.cover}
