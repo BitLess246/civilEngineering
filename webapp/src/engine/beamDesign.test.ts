@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { designBeam, type BeamDesignInput } from './beamDesign'
+import { designBeam, beamServiceDeflection, type BeamDesignInput, type BeamDeflectionInput } from './beamDesign'
 import { beta1 } from './loads'
 
 const base: BeamDesignInput = {
@@ -138,6 +138,60 @@ describe('beam design — compression-bar layout & stirrup detailing', () => {
     const r16 = designBeam({ ...base, stirrupDia: 16 })   // ds = 16
     expect(r16.stirrupBendDia).toBe(64)
     expect(r16.stirrupHookExt).toBe(96)                   // 6·16 = 96 > 75
+  })
+})
+
+describe('beamServiceDeflection — ACI 318-14 §24.2', () => {
+  const base: BeamDeflectionInput = {
+    b: 300, h: 500, d: 440,
+    As: 1884,   // 6⌀20 mm bars
+    fc: 28, span: 6, wD: 20, wL: 15,
+  }
+
+  it('computes positive immediate and total deflections', () => {
+    const r = beamServiceDeflection(base)
+    expect(r.deltaD).toBeGreaterThan(0)
+    expect(r.deltaL).toBeGreaterThan(0)
+    expect(r.deltaTotal).toBeGreaterThan(r.deltaL)
+  })
+
+  it('Ie = Ig when section is uncracked (Ma ≤ Mcr)', () => {
+    const r = beamServiceDeflection({ ...base, wD: 0.1, wL: 0.1 })
+    expect(r.Ie).toBeCloseTo(r.Ig, 0)
+  })
+
+  it('Icr < Ig always', () => {
+    const r = beamServiceDeflection(base)
+    expect(r.Icr).toBeLessThan(r.Ig)
+  })
+
+  it('limits are L/360 and L/240', () => {
+    const r = beamServiceDeflection(base)
+    expect(r.limitL360).toBeCloseTo(6000 / 360, 6)
+    expect(r.limitL240).toBeCloseTo(6000 / 240, 6)
+  })
+
+  it('λΔ = 2.0 with no compression steel (§24.2.4.1.1)', () => {
+    const r = beamServiceDeflection(base)
+    expect(r.lambdaDelta).toBeCloseTo(2.0, 9)
+  })
+
+  it('λΔ decreases with compression steel', () => {
+    const noCompr = beamServiceDeflection(base)
+    const withCompr = beamServiceDeflection({ ...base, AsPrime: 942 })  // 3⌀20
+    expect(withCompr.lambdaDelta).toBeLessThan(noCompr.lambdaDelta)
+    const rhoP = 942 / (300 * 440)
+    expect(withCompr.lambdaDelta).toBeCloseTo(2.0 / (1 + 50 * rhoP), 9)
+  })
+
+  it('live-load check: liveOK = (deltaL ≤ L/360)', () => {
+    const r = beamServiceDeflection(base)
+    expect(r.liveOK).toBe(r.deltaL <= r.limitL360)
+  })
+
+  it('total check: totalOK = (deltaTotal ≤ L/240)', () => {
+    const r = beamServiceDeflection(base)
+    expect(r.totalOK).toBe(r.deltaTotal <= r.limitL240)
   })
 })
 
