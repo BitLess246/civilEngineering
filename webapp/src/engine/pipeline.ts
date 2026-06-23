@@ -701,15 +701,65 @@ const withSizes = (model: StructuralModel, sizes: Map<string, RectSection>): Str
 const applyShape = (s: RectSection, sh: AiscShape): RectSection =>
   ({ ...s, shape: sh.name, name: sh.name, b: sh.bf ?? s.b, h: sh.d ?? s.h })
 
-const growSection = (s: RectSection): RectSection => {
-  if (s.material === 'steel' && s.shape) {
-    const next = nextHeavierW(s.shape)
-    return next ? applyShape(s, next) : s    // already the heaviest in the catalog
+/** Demand/capacity utilisation per section-id; only failing members are included. */
+function buildUtilMap(
+  design: StructureDesign,
+  memSecId: Map<string, string>,
+): Map<string, number> {
+  const out = new Map<string, number>()
+  const bump = (sid: string | undefined, u: number) => {
+    if (sid) out.set(sid, Math.max(out.get(sid) ?? 0, u))
   }
-  // concrete: grow depth (or width once very deep)
-  return s.h >= 3 * s.b
-    ? { ...s, b: s.b + 50, name: `${s.b + 50}×${s.h}` }
-    : { ...s, h: s.h + 50, name: `${s.b}×${s.h + 50}` }
+  for (const b of design.beams) {
+    if (!b.ok) {
+      const sid = memSecId.get(b.id)
+      const u = b.sections.reduce((mx, sec) => {
+        const mn = sec.design.phiMnMax
+        return Math.max(mx, mn > 1e-9 ? Math.abs(sec.Mu) / mn : 4)
+      }, 2)
+      bump(sid, u)
+    }
+  }
+  for (const c of design.columns)      if (!c.ok) bump(memSecId.get(c.id), Math.max(2, c.util))
+  for (const b of design.steelBeams)   if (!b.ok) bump(memSecId.get(b.id), Math.max(2, b.utilM, b.utilV))
+  for (const c of design.steelColumns) if (!c.ok) bump(memSecId.get(c.id), Math.max(2, c.ratio))
+  return out
+}
+
+/**
+ * Grow a section by the estimated number of steps to satisfy a given demand/capacity
+ * ratio (util = Mu/φMn ≥ 1).
+ *   RC capacity ≈ h²  → target h = h·√util → steps = ⌈(√util − 1)·h/50⌉, cap 10
+ *   Steel: jump ⌈√util − 0.5⌉ catalog positions, cap 8
+ *   Square RC columns (b/h ∈ [0.75, 1.33]) grow both b and h together to preserve
+ *   aspect ratio; all others switch to width growth at h ≥ 2.5b.
+ */
+function jumpSection(s: RectSection, util: number, role: string): RectSection {
+  if (util <= 1 + 1e-9) return s
+  if (s.material === 'steel' && s.shape) {
+    const n = Math.max(1, Math.min(8, Math.ceil(Math.sqrt(util) - 0.5)))
+    let cur = s
+    for (let i = 0; i < n; i++) {
+      const next = nextHeavierW(cur.shape!)
+      if (!next) break
+      cur = applyShape(cur, next)
+    }
+    return cur
+  }
+  const nSteps = Math.max(1, Math.min(10, Math.ceil((Math.sqrt(util) - 1) * s.h / 50)))
+  const ratio = s.b / s.h
+  const isSquareCol = role === 'column' && ratio > 0.75 && ratio < 1.33
+  let sec = s
+  for (let i = 0; i < nSteps; i++) {
+    if (isSquareCol) {
+      sec = { ...sec, b: sec.b + 50, h: sec.h + 50, name: `${sec.b + 50}×${sec.h + 50}` }
+    } else if (sec.h >= 2.5 * sec.b) {
+      sec = { ...sec, b: sec.b + 50, name: `${sec.b + 50}×${sec.h}` }
+    } else {
+      sec = { ...sec, h: sec.h + 50, name: `${sec.b}×${sec.h + 50}` }
+    }
+  }
+  return sec
 }
 
 /**
@@ -726,6 +776,8 @@ export function optimizeStructure(
 ): OptimizeResult | null {
   if (model.members.length === 0) return null
   const memSecId = new Map(model.members.map((m) => [m.id, m.section]))
+  // sectionId → member role (valid after splitSharedSections: 1-to-1 mapping)
+  const secRole = new Map<string, string>(model.members.map((m) => [m.section, m.role]))
   // sizes & self-weight kept consistent at every step (self-weight uses the
   // footing concrete unit weight so a custom γc feeds the gravity demands).
   const settle = (m: StructuralModel) => refreshSelfWeight(enforceSectionHierarchy(m), soil.gammaConc)
@@ -748,29 +800,51 @@ export function optimizeStructure(
   ;({ m: work, d: design } = detail(work, design, 'Optimize · initial'))
   steps.push({ iter: 0, grown: 0, fails: countFails(design), ok: designOK(design) })
 
-  // GROW: bump every failing member's own section, re-enforce the hierarchy and
-  // refresh self-weight so the heavier members feed back into the demands.
+  // GROW: jump each failing section by the estimated steps needed to satisfy
+  // demand/capacity, re-enforce the hierarchy and refresh self-weight so the
+  // heavier sections feed back into the demands on the next iteration.
   let iter = 0
   while (!designOK(design) && iter++ < maxIter) {
-    const failSids = new Set<string>()
-    for (const b of design.beams)        if (!b.ok) { const s = memSecId.get(b.id); if (s) failSids.add(s) }
-    for (const c of design.columns)      if (!c.ok) { const s = memSecId.get(c.id); if (s) failSids.add(s) }
-    for (const b of design.steelBeams)   if (!b.ok) { const s = memSecId.get(b.id); if (s) failSids.add(s) }
-    for (const c of design.steelColumns) if (!c.ok) { const s = memSecId.get(c.id); if (s) failSids.add(s) }
-    if (failSids.size === 0) break                   // only footings fail — not a section problem
-    onProgress?.({ phase: 'Optimizing — growing sections', current: iter, total: maxIter, detail: `iteration ${iter}: ${failSids.size} member(s) grown, ${countFails(design)} failing` })
-    const sizes = new Map(work.sections.map((s) => [s.id, failSids.has(s.id) ? growSection(s) : s]))
+    const utils = buildUtilMap(design, memSecId)
+    if (utils.size === 0) break                      // only footings fail — not a section problem
+    onProgress?.({ phase: 'Optimizing — growing sections', current: iter, total: maxIter, detail: `iteration ${iter}: ${utils.size} member(s) grown, ${countFails(design)} failing` })
+    const sizes = new Map(work.sections.map((s) => {
+      const u = utils.get(s.id)
+      return [s.id, u !== undefined ? jumpSection(s, u, secRole.get(s.id) ?? '') : s]
+    }))
     work = settle(withSizes(work, sizes))
     const d = designStructure(work, soil, plan, opts, sub(`Optimize iter ${iter}`))
     if (!d) break
     ;({ m: work, d: design } = detail(work, d, `Optimize iter ${iter}`))
-    steps.push({ iter, grown: failSids.size, fails: countFails(design), ok: designOK(design) })
+    steps.push({ iter, grown: utils.size, fails: countFails(design), ok: designOK(design) })
   }
   const converged = designOK(design)
 
-  // SHRINK: trim each member's depth while the whole structure still passes.
+  // SHRINK: first try trimming all sections simultaneously (batch pass) — much
+  // faster for large models when most sections are over-sized by several steps.
+  // Then fall back to individual 25-mm fine-tune for sections that couldn't be
+  // batch-trimmed (typically the critical ones controlling the design).
   if (converged) {
-    onProgress?.({ phase: 'Optimizing — trimming sections', detail: 'shrinking depths while the design still passes' })
+    onProgress?.({ phase: 'Optimizing — trimming sections', detail: 'batch-shrinking all sections' })
+
+    let batchOk = true
+    while (batchOk) {
+      const batchSizes = new Map<string, RectSection>()
+      for (const s0 of work.sections) {
+        if (s0.material === 'steel' && s0.shape) {
+          const lighter = nextLighterW(s0.shape)
+          if (lighter) batchSizes.set(s0.id, applyShape(s0, lighter))
+        } else if (s0.h - 25 >= 300) {
+          batchSizes.set(s0.id, { ...s0, h: s0.h - 25, name: `${s0.b}×${s0.h - 25}` })
+        }
+      }
+      if (batchSizes.size === 0) break
+      const trial = settle(withSizes(work, batchSizes))
+      const d = designStructure(trial, soil, plan, opts)
+      if (d && designOK(d)) { work = trial; design = d } else { batchOk = false }
+    }
+
+    // Individual fine-tune: catch sections the batch couldn't trim
     let improved = true, guard = 0
     while (improved && guard++ < 4) {
       improved = false
