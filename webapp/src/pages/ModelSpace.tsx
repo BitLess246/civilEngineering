@@ -9,6 +9,7 @@ import { distributePanel } from '../engine/tributary'
 import { type F3Analysis } from '../engine/frame3d'
 import { validateMesh, hasMeshErrors } from '../engine/meshValidation'
 import { type ModalResult } from '../engine/modal'
+import { computeResponseSpectrum, type ResponseSpectrumResult } from '../engine/responseSpectrum'
 import { type StructureDesign, type FootingPlan, type OptimizeResult, type LateralCase } from '../engine/pipeline'
 import type { SteelJoint } from '../engine/steelConnections'
 import { estimateTakeoff, costBill, type PriceList } from '../engine/takeoff'
@@ -29,6 +30,7 @@ import { ReactionsPanel } from '../components/ReactionsPanel'
 import { DisplacementTable } from '../components/DisplacementTable'
 import { ValidationPanel } from '../components/ValidationPanel'
 import { ModalPanel } from '../components/ModalPanel'
+import { ResponseSpectrumPanel } from '../components/ResponseSpectrumPanel'
 import { BeamSchematic } from '../components/BeamSchematic'
 import { ColumnSchematic } from '../components/ColumnSchematic'
 import { FootingSchematic } from '../components/FootingSchematic'
@@ -601,6 +603,7 @@ export default function ModelSpace() {
   const [selected, setSelected] = useState<string | null>(null)
   const [analysis, setAnalysis] = useState<F3Analysis | null>(null)
   const [modal, setModal] = useState<ModalResult | null>(null)
+  const [rsa, setRsa] = useState<ResponseSpectrumResult | null>(null)
   const [nModes, setNModes] = useState(12)
   const [design, setDesign] = useState<StructureDesign | null>(null)
   const [opt, setOpt] = useState<OptimizeResult | null>(null)
@@ -667,6 +670,7 @@ export default function ModelSpace() {
     setModel(m)
     setAnalysis(null)             // geometry changed — results are stale
     setModal(null)
+    setRsa(null)
     setDesign(null)
     setOpt(null)
     setExpanded(null)
@@ -703,7 +707,16 @@ export default function ModelSpace() {
   const runModal = () => {
     if (!model || busy || meshErrors) return
     run('modal', { model, nModes }).then((r) => {
-      setModal((r as { modal: ModalResult | null }).modal)
+      const m = (r as { modal: ModalResult | null }).modal
+      setModal(m)
+      if (m && m.modes.length > 0) {
+        setRsa(computeResponseSpectrum(m, {
+          Ca, Cv, I: Ie, R: Rw,
+          staticV: seis ? [seis.V, 0, seis.V] : undefined,
+        }))
+      } else {
+        setRsa(null)
+      }
     }).catch((e) => console.error('modal failed', e))
   }
 
@@ -2032,6 +2045,7 @@ export default function ModelSpace() {
                   <p className="text-sm text-slate-600">No modes found — the model has no lumped mass (add members/slabs with self-weight).</p>
                 </ResultCard>
               )}
+              {rsa && <ResponseSpectrumPanel result={rsa} seismicT={seis?.T} />}
             </div>
           )}
 
