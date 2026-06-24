@@ -21,6 +21,7 @@ import { TABLE_204_1, TABLE_204_2, sdlItemKPa, sdlTotal, type SdlItem } from '..
 import { TABLE_205_1, TABLE_206 } from '../engine/liveLoads'
 import type { ConcreteClass } from '../engine/quantities'
 import { computeSeismic, type SeismicResult, type DriftRow } from '../engine/seismic'
+import { columnKFactors, type ColumnK } from '../engine/effectiveLength'
 import { computeWind, type WindResult } from '../engine/wind'
 import { ReportControls } from '../components/ReportControls'
 import { WorkedSolution } from '../components/WorkedSolution'
@@ -1112,6 +1113,12 @@ export default function ModelSpace() {
 
   const selMember: Member | undefined = model?.members.find((m) => m.id === selected)
   const selPlate: Plate | undefined = model?.plates.find((p) => p.id === selected)
+
+  // Alignment-chart K-factors per column (AISC Commentary C-C2), keyed by member.
+  const columnKs = useMemo(() => {
+    if (!model) return new Map<string, ColumnK>()
+    return new Map(columnKFactors(model).map((k) => [k.memberId, k]))
+  }, [model])
 
   // immediate grid-neighbour base supports (share an x- or z-line and are the
   // nearest column either side, nothing between) — the only sensible partners
@@ -2221,6 +2228,21 @@ export default function ModelSpace() {
                         <Diagram xs={mr.xs} ys={mr.Vz} title="Vz — shear (x′-z′)" unit="kN" color="#0e7490" decimals={1} />
                         <Diagram xs={mr.xs} ys={mr.N} title="N — axial (+tension)" unit="kN" color="#7c3aed" decimals={1} />
                         <Diagram xs={mr.xs} ys={mr.T} title="T — torsion" unit="kN·m" color="#b45309" decimals={1} />
+                      </div>
+                    )
+                  })()}
+                  {selMember.role === 'column' && columnKs.get(selMember.id) && (() => {
+                    const k = columnKs.get(selMember.id)!
+                    return (
+                      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                        <p className="mb-1 text-[11px] font-semibold text-[#0056b3]">Effective length K — AISC alignment chart (C-C2)</p>
+                        <Row label="K — X-sway" value={`sway ${f2(k.Kx.sway)} · braced ${f2(k.Kx.braced)}`}
+                          sub={`G: ${f2(k.Gi.x)} (i) · ${f2(k.Gj.x)} (j)`} />
+                        <Row label="K — Z-sway" value={`sway ${f2(k.Kz.sway)} · braced ${f2(k.Kz.braced)}`}
+                          sub={`G: ${f2(k.Gi.z)} (i) · ${f2(k.Gj.z)} (j)`} />
+                        <p className="mt-1 text-[10px] text-slate-400">
+                          G = Σ(EI/L)<sub>col</sub> / Σ(EI/L)<sub>beam</sub> at each joint; fixed base G = 1.0, pinned/no-beam G = 10.
+                        </p>
                       </div>
                     )
                   })()}
