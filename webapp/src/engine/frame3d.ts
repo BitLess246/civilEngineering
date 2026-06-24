@@ -37,6 +37,16 @@ export interface F3Support {
   kx?: number; ky?: number; kz?: number
 }
 
+/**
+ * Rigid floor diaphragm group: one master node and its slave nodes at the same
+ * storey level. The constraint ties the in-plane DOFs {ux, uz, θy} of each
+ * slave to the master via rigid body kinematics (arm effect included).
+ */
+export interface F3DiaphragmGroup {
+  masterNode: string
+  slaveNodes: string[]
+}
+
 export type F3Load =
   | { kind: 'node'; node: string; Fx?: number; Fy?: number; Fz?: number; Mx?: number; My?: number; Mz?: number; cat: LoadCategory }
   | { kind: 'member-udl'; member: string; w: number; cat: LoadCategory }                       // kN/m, global −Y
@@ -210,8 +220,13 @@ export interface FramePrecomp {
   ndof: number
   free: number[]
   freeIdx: Map<number, number>   // global DOF → position in free[]
-  Kff: LUFactor | null           // null = singular or no free DOFs
-  Kff_raw: number[][]            // un-factored Kff; needed as P-Δ elastic baseline
+  Kff: LUFactor | null           // factored K (K_ind when diaphragm active)
+  Kff_raw: number[][]            // un-factored nf×nf elastic stiffness (P-Δ baseline)
+  /** Diaphragm constraint transformation rows (present when rigid floor diaphragm active).
+   *  diaT[k] = sparse row of T for the k-th free DOF; T maps free→independent DOFs. */
+  diaT?: { ind: number; coeff: number }[][]
+  /** Number of independent DOFs (< free.length when diaphragm active). */
+  diaNi?: number
 }
 
 /**
@@ -368,10 +383,123 @@ function computeMemberLoads(geom: MemberGeom, m: F3Member, loads: F3Load[]): Mem
   }
 }
 
+type TEntry = { ind: number; coeff: number }
+
+/**
+ * Build the diaphragm constraint transformation T (nf × ni). Each row represents
+ * one free DOF: identity for independent DOFs, rigid-body expression for slaves.
+ *
+ * Constraint (y is up; in-plane DOFs are ux=0, uz=2, θy=4):
+ *   ux_slave = ux_m − (z_s−z_m)·θy_m
+ *   uz_slave = uz_m + (x_s−x_m)·θy_m
+ *   θy_slave = θy_m
+ *
+ * Returns null if no constraints could be applied (e.g., master DOFs are constrained).
+ */
+function buildDiaphragmT(
+  nodes: F3Node[], idx: Map<string, number>, freeIdx: Map<number, number>,
+  diaphragms: F3DiaphragmGroup[], nf: number,
+): { Trow: TEntry[][]; ni: number } | null {
+  const isSlave = new Uint8Array(nf)
+  // slaveRow[k] = expression in terms of master fpos values (will be remapped to ind below)
+  const slaveExpr: ({ masterFpos: number; coeff: number }[] | null)[] = new Array(nf).fill(null)
+
+  for (const dia of diaphragms) {
+    const mi = idx.get(dia.masterNode)
+    if (mi === undefined) continue
+    const mn = nodes[mi]
+    const fp_ux_m = freeIdx.get(6 * mi + 0)
+    const fp_uz_m = freeIdx.get(6 * mi + 2)
+    const fp_θy_m = freeIdx.get(6 * mi + 4)
+    // If master's lateral DOFs are constrained, skip this floor
+    if (fp_ux_m === undefined || fp_uz_m === undefined || fp_θy_m === undefined) continue
+
+    for (const slaveId of dia.slaveNodes) {
+      const si = idx.get(slaveId)
+      if (si === undefined || si === mi) continue
+      const sn = nodes[si]
+      const dx = sn.x - mn.x, dz = sn.z - mn.z
+
+      const fp_ux_s = freeIdx.get(6 * si + 0)
+      if (fp_ux_s !== undefined && !isSlave[fp_ux_s]) {
+        isSlave[fp_ux_s] = 1
+        slaveExpr[fp_ux_s] = [
+          { masterFpos: fp_ux_m, coeff: 1 },
+          ...(Math.abs(dz) > 1e-9 ? [{ masterFpos: fp_θy_m, coeff: -dz }] : []),
+        ]
+      }
+      const fp_uz_s = freeIdx.get(6 * si + 2)
+      if (fp_uz_s !== undefined && !isSlave[fp_uz_s]) {
+        isSlave[fp_uz_s] = 1
+        slaveExpr[fp_uz_s] = [
+          { masterFpos: fp_uz_m, coeff: 1 },
+          ...(Math.abs(dx) > 1e-9 ? [{ masterFpos: fp_θy_m, coeff: dx }] : []),
+        ]
+      }
+      const fp_θy_s = freeIdx.get(6 * si + 4)
+      if (fp_θy_s !== undefined && !isSlave[fp_θy_s]) {
+        isSlave[fp_θy_s] = 1
+        slaveExpr[fp_θy_s] = [{ masterFpos: fp_θy_m, coeff: 1 }]
+      }
+    }
+  }
+
+  if (!isSlave.some((v) => v)) return null
+
+  // Assign independent indices (in-order, skipping slaves)
+  const indOf = new Int32Array(nf).fill(-1)
+  let ni = 0
+  for (let k = 0; k < nf; k++) if (!isSlave[k]) indOf[k] = ni++
+
+  // Build final Trow with proper independent indices
+  const Trow: TEntry[][] = []
+  for (let k = 0; k < nf; k++) {
+    if (!isSlave[k]) {
+      Trow.push([{ ind: indOf[k], coeff: 1 }])
+    } else {
+      Trow.push(
+        (slaveExpr[k] ?? [])
+          .map(({ masterFpos, coeff }) => ({ ind: indOf[masterFpos], coeff }))
+          .filter((e) => e.ind >= 0),
+      )
+    }
+  }
+  return { Trow, ni }
+}
+
+/** Apply constraint transformation: K_ind[a,b] = Σ_{i,j} T[i,a]·Kff[i][j]·T[j,b] */
+function applyTtoK(Kff: number[][], Trow: TEntry[][], ni: number): number[][] {
+  const nf = Kff.length
+  const K = Array.from({ length: ni }, () => new Array(ni).fill(0))
+  for (let i = 0; i < nf; i++) {
+    for (const { ind: a, coeff: ca } of Trow[i]) {
+      for (let j = 0; j < nf; j++) {
+        const kij = Kff[i][j]
+        if (kij === 0) continue
+        for (const { ind: b, coeff: cb } of Trow[j]) K[a][b] += ca * kij * cb
+      }
+    }
+  }
+  return K
+}
+
+/** Transform load vector: Ff_ind[a] = Σ_i T^T[a,i]·Ff[i] = Σ_i T[i,a]·Ff[i] */
+function applyTtoLoad(Ff: number[], Trow: TEntry[][], ni: number): number[] {
+  const Ff_ind = new Array(ni).fill(0)
+  Ff.forEach((v, i) => { for (const { ind, coeff } of Trow[i]) Ff_ind[ind] += coeff * v })
+  return Ff_ind
+}
+
+/** Recover free DOF displacements: d_f[i] = Σ_a T[i,a]·d_ind[a] */
+function applyTrecover(d_ind: number[], Trow: TEntry[][]): number[] {
+  return Trow.map((row) => row.reduce((s, { ind, coeff }) => s + coeff * d_ind[ind], 0))
+}
+
 /** Assemble K from member geometry, find free DOFs, LU-factor Kff.
  *  Call once per geometry/support change; reuse for every load case. */
 export function precomputeFrame(
   nodes: F3Node[], members: F3Member[], supports: F3Support[],
+  diaphragms?: F3DiaphragmGroup[],
 ): FramePrecomp {
   const nm = new Map(nodes.map((n) => [n.id, n]))
   const idx = new Map(nodes.map((n, i) => [n.id, i]))
@@ -417,6 +545,15 @@ export function precomputeFrame(
     })
   }
 
+  if (diaphragms && diaphragms.length > 0) {
+    const dia = buildDiaphragmT(nodes, idx, freeIdx, diaphragms, nf)
+    if (dia) {
+      const K_ind = applyTtoK(Kff_raw, dia.Trow, dia.ni)
+      const Kff_ind = luFactor(K_ind)
+      return { nm, idx, nodes, members, supports, geoms, ndof, free, freeIdx,
+               Kff: Kff_ind, Kff_raw, diaT: dia.Trow, diaNi: dia.ni }
+    }
+  }
   const Kff = luFactor(Kff_raw)   // null if singular; {n:0} if nf===0
   return { nm, idx, nodes, members, supports, geoms, ndof, free, freeIdx, Kff, Kff_raw }
 }
@@ -432,6 +569,8 @@ export interface FramePrecompSerial {
   freeIdxEntries: [number, number][]
   Kff: LUFactor | null
   Kff_raw: number[][]
+  diaT?: { ind: number; coeff: number }[][]
+  diaNi?: number
 }
 
 export function serializePrecomp(p: FramePrecomp): FramePrecompSerial {
@@ -440,6 +579,7 @@ export function serializePrecomp(p: FramePrecomp): FramePrecompSerial {
     geoms: p.geoms, ndof: p.ndof, free: p.free,
     freeIdxEntries: [...p.freeIdx],
     Kff: p.Kff, Kff_raw: p.Kff_raw,
+    ...(p.diaT ? { diaT: p.diaT, diaNi: p.diaNi } : {}),
   }
 }
 
@@ -451,6 +591,7 @@ export function deserializePrecomp(s: FramePrecompSerial): FramePrecomp {
     geoms: s.geoms, ndof: s.ndof, free: s.free,
     freeIdx: new Map(s.freeIdxEntries),
     Kff: s.Kff, Kff_raw: s.Kff_raw,
+    ...(s.diaT ? { diaT: s.diaT, diaNi: s.diaNi } : {}),
   }
 }
 
@@ -530,7 +671,7 @@ function postprocessMember(m: F3Member, g: MemberGeom, ml: MemberLoads, d: numbe
 export function solveWithGeometry(
   precomp: FramePrecomp, loads: F3Load[], opts?: PDeltaOpts,
 ): F3Result | null {
-  const { idx, members, geoms, ndof, free, freeIdx, Kff, Kff_raw, supports } = precomp
+  const { idx, members, geoms, ndof, free, freeIdx, Kff, Kff_raw, supports, diaT, diaNi } = precomp
 
   const mloads = members.map((m, i) => computeMemberLoads(geoms[i], m, loads))
 
@@ -552,41 +693,86 @@ export function solveWithGeometry(
   if (free.length > 0) {
     if (!Kff) return null   // singular stiffness
     const Ff = free.map((dof) => F[dof])
-    const d0 = luSolve(Kff, Ff)
-    free.forEach((dof, k) => (d[dof] = d0[k]))
 
-    // P-Δ: iterate K + Kg(N); Kg depends on load-case axial forces so Kff_raw
-    // is the elastic baseline and we re-factor Ktff each iteration.
-    if (opts?.pDelta) {
-      const maxIter = opts.maxIter ?? 20
-      const tol = opts.tol ?? 1e-5
-      const nf = free.length
-      for (let it = 0; it < maxIter; it++) {
-        const Ktff: number[][] = Array.from({ length: nf }, (_, i) => [...Kff_raw[i]])
-        for (let mi = 0; mi < geoms.length; mi++) {
-          const g = geoms[mi], ml = mloads[mi]
-          const de = g.dofs.map((dof) => d[dof])
-          const dl = matVec(g.T, de)
-          const f = matVec(g.kl, dl).map((v, k) => v - ml.feq[k])
-          const N = (f[6] - f[0]) / 2                     // representative axial, tension +
-          const kgg = mul(mul(transpose(g.T), kgLocal(N, g.L)), g.T)
-          for (let a = 0; a < 12; a++) {
-            const ia = freeIdx.get(g.dofs[a])
-            if (ia === undefined) continue
-            for (let b = 0; b < 12; b++) {
-              const ib = freeIdx.get(g.dofs[b])
-              if (ib === undefined) continue
-              Ktff[ia][ib] += kgg[a][b]
+    if (diaT && diaNi !== undefined) {
+      // Constrained solve: transform load to independent DOFs, solve, recover full d_f
+      const Ff_ind = applyTtoLoad(Ff, diaT, diaNi)
+      const d_ind = luSolve(Kff, Ff_ind)   // Kff is already K_ind = T^T K T
+      const d0 = applyTrecover(d_ind, diaT)
+      free.forEach((dof, k) => (d[dof] = d0[k]))
+
+      // P-Δ with diaphragm: transform tangent K to independent space each iteration
+      if (opts?.pDelta) {
+        const maxIter = opts.maxIter ?? 20
+        const tol = opts.tol ?? 1e-5
+        const nf = free.length
+        for (let it = 0; it < maxIter; it++) {
+          const Ktff: number[][] = Array.from({ length: nf }, (_, i) => [...Kff_raw[i]])
+          for (let mi = 0; mi < geoms.length; mi++) {
+            const g = geoms[mi], ml = mloads[mi]
+            const de = g.dofs.map((dof) => d[dof])
+            const dl = matVec(g.T, de)
+            const f = matVec(g.kl, dl).map((v, k) => v - ml.feq[k])
+            const N = (f[6] - f[0]) / 2
+            const kgg = mul(mul(transpose(g.T), kgLocal(N, g.L)), g.T)
+            for (let a = 0; a < 12; a++) {
+              const ia = freeIdx.get(g.dofs[a])
+              if (ia === undefined) continue
+              for (let b = 0; b < 12; b++) {
+                const ib = freeIdx.get(g.dofs[b])
+                if (ib === undefined) continue
+                Ktff[ia][ib] += kgg[a][b]
+              }
             }
           }
+          const Kt_ind = applyTtoK(Ktff, diaT, diaNi)
+          const Ktff_fac = luFactor(Kt_ind)
+          if (!Ktff_fac) break
+          const dn_ind = luSolve(Ktff_fac, Ff_ind)
+          const dn = applyTrecover(dn_ind, diaT)
+          let num = 0, den = 0
+          free.forEach((dof, k) => { num += (dn[k] - d[dof]) ** 2; den += dn[k] ** 2 })
+          free.forEach((dof, k) => (d[dof] = dn[k]))
+          if (den === 0 || Math.sqrt(num / den) < tol) break
         }
-        const Ktff_fac = luFactor(Ktff)
-        if (!Ktff_fac) break                               // elastic instability — retain last d
-        const dn = luSolve(Ktff_fac, Ff)
-        let num = 0, den = 0
-        free.forEach((dof, k) => { num += (dn[k] - d[dof]) ** 2; den += dn[k] ** 2 })
-        free.forEach((dof, k) => (d[dof] = dn[k]))
-        if (den === 0 || Math.sqrt(num / den) < tol) break
+      }
+    } else {
+      const d0 = luSolve(Kff, Ff)
+      free.forEach((dof, k) => (d[dof] = d0[k]))
+
+      // P-Δ: iterate K + Kg(N); Kg depends on load-case axial forces so Kff_raw
+      // is the elastic baseline and we re-factor Ktff each iteration.
+      if (opts?.pDelta) {
+        const maxIter = opts.maxIter ?? 20
+        const tol = opts.tol ?? 1e-5
+        const nf = free.length
+        for (let it = 0; it < maxIter; it++) {
+          const Ktff: number[][] = Array.from({ length: nf }, (_, i) => [...Kff_raw[i]])
+          for (let mi = 0; mi < geoms.length; mi++) {
+            const g = geoms[mi], ml = mloads[mi]
+            const de = g.dofs.map((dof) => d[dof])
+            const dl = matVec(g.T, de)
+            const f = matVec(g.kl, dl).map((v, k) => v - ml.feq[k])
+            const N = (f[6] - f[0]) / 2                     // representative axial, tension +
+            const kgg = mul(mul(transpose(g.T), kgLocal(N, g.L)), g.T)
+            for (let a = 0; a < 12; a++) {
+              const ia = freeIdx.get(g.dofs[a])
+              if (ia === undefined) continue
+              for (let b = 0; b < 12; b++) {
+                const ib = freeIdx.get(g.dofs[b])
+                if (ib === undefined) continue
+                Ktff[ia][ib] += kgg[a][b]
+              }
+            }
+          }
+          const Ktff_fac = luFactor(Ktff)
+          if (!Ktff_fac) break                               // elastic instability — retain last d
+          const dn = luSolve(Ktff_fac, Ff)
+          let num = 0, den = 0
+          free.forEach((dof, k) => { num += (dn[k] - d[dof]) ** 2; den += dn[k] ** 2 })
+          free.forEach((dof, k) => (d[dof] = dn[k]))
+          if (den === 0 || Math.sqrt(num / den) < tol) break
+        }
       }
     }
   }
@@ -655,11 +841,12 @@ export interface F3AnalyzeOpts extends PDeltaOpts {
 export function analyzeFrame3D(
   nodes: F3Node[], members: F3Member[], supports: F3Support[], loads: F3Load[],
   opts?: F3AnalyzeOpts, onProgress?: ProgressFn,
+  diaphragms?: F3DiaphragmGroup[],
 ): F3Analysis | null {
   const perCombo: F3ComboRun[] = []
   let govIdx = -1, govM = -1
   const combos = nscpCombos(opts?.f1 ?? 1.0)
-  const precomp = precomputeFrame(nodes, members, supports)   // factor K once
+  const precomp = precomputeFrame(nodes, members, supports, diaphragms)   // factor K once
   combos.forEach((combo, i) => {
     onProgress?.({ phase: 'Analyzing load cases', current: i + 1, total: combos.length, detail: combo.name })
     const factored = applyF3Combo(loads, combo.f)

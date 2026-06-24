@@ -5,8 +5,9 @@
 // preserved) — the load path, automated.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, RectSection, MemberReleases } from './model'
-import type { F3Node, F3Member, F3Support, F3Load } from './frame3d'
+import type { F3Node, F3Member, F3Support, F3Load, F3DiaphragmGroup } from './frame3d'
 import { rectJ } from './frame3d'
+import { buildDiaphragmGroups } from './diaphragm'
 import { distributePanel, type AreaLoad } from './tributary'
 import type { BeamLoad } from './beamAnalysis'
 import { shapeByName } from './aiscSections'
@@ -19,6 +20,8 @@ export interface BridgeResult {
   loads: F3Load[]
   /** Edges whose loads could not be attached (no matching member). */
   orphanEdges: string[]
+  /** Rigid floor diaphragm groups (one per storey); empty when diaphragm disabled. */
+  diaphragmGroups: F3DiaphragmGroup[]
 }
 
 function sectionProps(s: RectSection) {
@@ -205,5 +208,6 @@ export function modelToFrame3D(model: StructuralModel): BridgeResult {
     }
   }
 
-  return { nodes, members, supports, loads, orphanEdges }
+  const diaphragmGroups = model.diaphragm ? buildDiaphragmGroups(model) : []
+  return { nodes, members, supports, loads, orphanEdges, diaphragmGroups }
 }

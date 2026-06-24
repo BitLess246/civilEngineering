@@ -2065,6 +2065,11 @@ export default function ModelSpace() {
                   <span>P-Δ second-order analysis</span>
                 </label>
                 <label className="col-span-full flex items-center gap-2 text-sm">
+                  <input type="checkbox" disabled={!model} checked={model?.diaphragm ?? false}
+                    onChange={(e) => model && save({ ...model, diaphragm: e.target.checked })} />
+                  <span>Rigid floor diaphragm (ties in-plane lateral DOFs per storey)</span>
+                </label>
+                <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={tryBars} onChange={(e) => setTryBars(e.target.checked)} />
                   <span>Try alternative bar sizes (Design / Optimize pick ⌀16–⌀32 beams, ⌀20–⌀32 columns)</span>
                 </label>

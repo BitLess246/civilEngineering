@@ -95,6 +95,8 @@ export interface StructuralModel {
   supports: NodeSupport[]
   loads: ModelLoad[]
   storeys: Storey[]
+  /** Treat each storey as a rigid floor diaphragm (ties in-plane lateral DOFs). */
+  diaphragm?: boolean
 }
 
 export function emptyModel(name = 'Untitled'): StructuralModel {
