@@ -40,15 +40,14 @@ import { DimBelow, DimSide } from '../components/dims'
 import { HintButton, SeismicHint, WindHint } from '../components/LoadHints'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { FitView } from '../components/FitView'
-import { shapeByName, shapesOf, effectiveSection } from '../engine/aiscSections'
+import { shapeByName, shapesOf, effectiveSection, sectionBoundingBox, FAMILIES, type SectionFamily } from '../engine/aiscSections'
 import { buildSectionShapes } from '../lib/sectionShapes3d'
+import { SectionShape } from '../components/SectionShape'
 import { f1, f2 } from '../lib/format'
 
 const AUTOSAVE_KEY = 'model-space-autosave'
 const INPUTS_KEY = 'model-space-inputs'
 
-// AISC W-shape picker options for the steel material path.
-const W_SHAPE_OPTS: [string, string][] = shapesOf('W').map((s) => [s.name, s.name])
 
 /** The design inputs persisted alongside the autosaved model so a reload keeps
  *  the Geometry/Properties/Loading/etc. fields consistent with the 3D model
@@ -642,6 +641,9 @@ export default function ModelSpace() {
   const [gammaC, setGammaC] = useState(n('gammaC', 24))            // concrete unit weight, kN/m³
   // Material: 'concrete' (RC) or 'steel' (AISC W-shapes) for the frame members.
   const [material, setMaterial] = useState<'concrete' | 'steel'>((si.material as 'concrete' | 'steel') ?? 'concrete')
+  const [colFam, setColFam] = useState<SectionFamily>((s('colFam', 'W')) as SectionFamily)
+  const [girFam, setGirFam] = useState<SectionFamily>((s('girFam', 'W')) as SectionFamily)
+  const [beaFam, setBeaFam] = useState<SectionFamily>((s('beaFam', 'W')) as SectionFamily)
   const [colShape, setColShape] = useState(s('colShape', 'W310x79'))
   const [girShape, setGirShape] = useState(s('girShape', 'W360x51'))
   const [beaShape, setBeaShape] = useState(s('beaShape', 'W310x38.7'))
@@ -738,7 +740,7 @@ export default function ModelSpace() {
         qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs,
         Vw, expo, Kzt, wDirs, assembly, pDelta, tryBars,
         concreteClass, prices, planSel,
-        material, colShape, girShape, beaShape, steelFy, steelFu,
+        material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu,
       }))
     } catch { /* quota — ignore */ }
   }, [baysX, baysZ, storeyH, colB, colH, girB, girH, beaB, beaH,
@@ -746,7 +748,7 @@ export default function ModelSpace() {
     qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs,
     Vw, expo, Kzt, wDirs, assembly, pDelta, tryBars,
     concreteClass, prices, planSel,
-    material, colShape, girShape, beaShape, steelFy, steelFu])
+    material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu])
 
   const save = (m: StructuralModel | null) => {
     setModel(m)
@@ -1065,8 +1067,8 @@ export default function ModelSpace() {
     // material/shape so the bridge, design pipeline and 3D extrusion pick it up.
     const steelRole = (shapeName: string, id: string): RectSection => {
       const sh = shapeByName(shapeName)
-      const bf = sh?.bf ?? sh?.b ?? sh?.D ?? 200, d = sh?.d ?? sh?.h ?? sh?.D ?? 300
-      return { id, name: shapeName, b: bf, h: d, ...mat, material: 'steel', shape: shapeName, steelFy, steelFu }
+      const { b, h } = sh ? sectionBoundingBox(sh) : { b: 200, h: 300 }
+      return { id, name: shapeName, b, h, ...mat, material: 'steel', shape: shapeName, steelFy, steelFu }
     }
     const steel = (matOverride ?? material) === 'steel'
     const m = generateGridModel({
@@ -1694,19 +1696,26 @@ export default function ModelSpace() {
                 </p>
               </Card>
               {material === 'steel' ? (
-                <Card title="Steel sections (AISC W)">
-                  <Pick label="Column" value={colShape} onChange={setColShape}
-                    options={W_SHAPE_OPTS} />
-                  <Pick label="Girder" value={girShape} onChange={setGirShape}
-                    options={W_SHAPE_OPTS} />
-                  <Pick label="Beam" value={beaShape} onChange={setBeaShape}
-                    options={W_SHAPE_OPTS} />
+                <Card title="Steel sections (AISC)">
+                  <Pick label="Column family" value={colFam} onChange={(v) => { const f = v as SectionFamily; setColFam(f); setColShape(shapesOf(f)[0].name) }}
+                    options={FAMILIES.map((f) => [f.id, f.label])} />
+                  <Pick label="Column shape" value={colShape} onChange={setColShape}
+                    options={shapesOf(colFam).map((sh) => [sh.name, sh.name])} />
+                  <Pick label="Girder family" value={girFam} onChange={(v) => { const f = v as SectionFamily; setGirFam(f); setGirShape(shapesOf(f)[0].name) }}
+                    options={FAMILIES.map((f) => [f.id, f.label])} />
+                  <Pick label="Girder shape" value={girShape} onChange={setGirShape}
+                    options={shapesOf(girFam).map((sh) => [sh.name, sh.name])} />
+                  <Pick label="Beam family" value={beaFam} onChange={(v) => { const f = v as SectionFamily; setBeaFam(f); setBeaShape(shapesOf(f)[0].name) }}
+                    options={FAMILIES.map((f) => [f.id, f.label])} />
+                  <Pick label="Beam shape" value={beaShape} onChange={setBeaShape}
+                    options={shapesOf(beaFam).map((sh) => [sh.name, sh.name])} />
                   <Num label="Steel Fy" unit="MPa" value={steelFy} onChange={setSteelFy} step="5" />
                   <Num label="Steel Fu" unit="MPa" value={steelFu} onChange={setSteelFu} step="5" />
                   <Num label="Slab thickness" unit="mm" value={slabThk} onChange={setSlabThk} />
                   <p className="col-span-full text-[11px] text-slate-400">
-                    Applied on the next “Generate model”. The 3D view extrudes each member's true
-                    cross-section. Concrete f′c below is still used for the base-plate bearing check.
+                    All AISC families (W/C/L/HSS/Pipe/WT) — analysis & 3D extrusion use the true section.
+                    HSS/angles suit braces. Auto-design covers W/WT flexure + axial for any family; detailed
+                    HSS/angle/channel flexure checks are not yet automated. Concrete f′c is still used for base-plate bearing.
                   </p>
                 </Card>
               ) : (
@@ -2984,9 +2993,13 @@ export default function ModelSpace() {
                       <tr key={`${c.id}-sol`}>
                         <td colSpan={9} className="bg-slate-50 px-4 py-3">
                           <div className="flex flex-wrap gap-6">
-                            {/* W-shape cross-section drawing */}
+                            {/* cross-section drawing — W/WT as flanged section, others via the universal drawer */}
                             <div className="shrink-0">
-                              <WShapeSection shape={c.shape} d={c.d} bf={c.bf} tf={c.tf} tw={c.tw} />
+                              {(() => {
+                                const sh = shapeByName(c.shape)
+                                if (sh && sh.family !== 'W' && sh.family !== 'WT') return <SectionShape sec={effectiveSection(sh, false)} />
+                                return <WShapeSection shape={c.shape} d={c.d} bf={c.bf} tf={c.tf} tw={c.tw} />
+                              })()}
                             </div>
                             {/* Section properties */}
                             <div className="min-w-[160px]">

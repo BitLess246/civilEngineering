@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { AISC_SHAPES, shapesOf, shapeByName, effectiveSection, doubleAngle, W_SORTED, nextHeavierW, nextLighterW } from './aiscSections'
+import { AISC_SHAPES, shapesOf, shapeByName, effectiveSection, doubleAngle, W_SORTED, nextHeavierW, nextLighterW, sectionBoundingBox, FAMILIES } from './aiscSections'
 
 describe('AISC section library', () => {
   it('every shape has area + radii and a unique name', () => {
@@ -95,5 +95,30 @@ describe('W-shape optimizer helpers', () => {
     const heavier = nextHeavierW(name)!
     const back = nextLighterW(heavier.name)!
     expect(back.name).toBe(name)
+  })
+
+  describe('sectionBoundingBox — positive box for every family', () => {
+    it('returns a finite positive b×h for one shape of every family', () => {
+      for (const { id } of FAMILIES) {
+        const s = shapesOf(id)[0]
+        expect(s, `no shapes for family ${id}`).toBeTruthy()
+        const box = sectionBoundingBox(s)
+        expect(box.b).toBeGreaterThan(0)
+        expect(box.h).toBeGreaterThan(0)
+        expect(Number.isFinite(box.b) && Number.isFinite(box.h)).toBe(true)
+      }
+    })
+
+    it('uses bf×d for W, b×h for HSS, D×D for pipe, legs for angles', () => {
+      const w = shapeByName('W310x79')!
+      expect(sectionBoundingBox(w)).toEqual({ b: w.bf!, h: w.d! })
+      const hss = shapesOf('HSS')[0]
+      expect(sectionBoundingBox(hss)).toEqual({ b: hss.b!, h: hss.h! })
+      const pipe = shapesOf('PIPE')[0]
+      expect(sectionBoundingBox(pipe)).toEqual({ b: pipe.D!, h: pipe.D! })
+      const ang = shapesOf('L')[0]
+      const box = sectionBoundingBox(ang)
+      expect(box.h).toBeGreaterThanOrEqual(box.b)   // longer leg is the depth
+    })
   })
 })

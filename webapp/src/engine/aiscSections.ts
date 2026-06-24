@@ -495,6 +495,20 @@ export const FAMILIES: { id: SectionFamily; label: string }[] = [
 export const shapesOf   = (family: SectionFamily) => AISC_SHAPES.filter((s) => s.family === family)
 export const shapeByName = (name: string) => AISC_SHAPES.find((s) => s.name === name)
 
+/** Overall cross-section bounding box {b (width), h (depth)} in mm, per family.
+ *  Used as the RectSection b×h carried alongside a steel member (self-weight uses
+ *  the true area, but the box drives fallbacks, quantities and labelling). */
+export function sectionBoundingBox(s: AiscShape): { b: number; h: number } {
+  if (s.family === 'HSS') return { b: s.b ?? 100, h: s.h ?? 100 }
+  if (s.family === 'PIPE') return { b: s.D ?? 100, h: s.D ?? 100 }
+  if (s.family === 'L') {
+    const legV = Math.max(s.leg1 ?? 50, s.leg2 ?? 50), legH = Math.min(s.leg1 ?? 50, s.leg2 ?? 50)
+    return { b: legH, h: legV }
+  }
+  // W / WT / C
+  return { b: s.bf ?? 100, h: s.d ?? 100 }
+}
+
 /** Effective section used by a member: single shape or back-to-back DOUBLE ANGLE (2L) with a gusset gap. */
 export interface EffectiveSection {
   label: string
