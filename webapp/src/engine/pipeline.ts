@@ -791,11 +791,15 @@ export async function optimizeStructureAsync(
 
     if (converged) {
       let batchPass = 0
-      // Phase 1 — shrink h (or step to lighter W-shape for steel)
+      // Phase 1 — shrink h (or step to lighter W-shape for steel); only sections
+      // with utilisation clearly below capacity are included so one tight section
+      // does not poison the entire batch.
       let batchOk = true
       while (batchOk) {
+        const utilPerSec = sectionUtilMap(design, memSecId)
         const batchSizes = new Map<string, RectSection>()
         for (const s0 of work.sections) {
+          if ((utilPerSec.get(s0.id) ?? 0) >= 0.80) continue
           if (s0.material === 'steel' && s0.shape) {
             const lighter = nextLighterW(s0.shape)
             if (lighter) batchSizes.set(s0.id, applyShape(s0, lighter))
@@ -813,8 +817,10 @@ export async function optimizeStructureAsync(
       // Phase 2 — shrink b for RC sections (As = ρ·b·d; narrower b may still satisfy demand)
       let bBatchOk = true
       while (bBatchOk) {
+        const utilPerSec = sectionUtilMap(design, memSecId)
         const batchSizes = new Map<string, RectSection>()
         for (const s0 of work.sections) {
+          if ((utilPerSec.get(s0.id) ?? 0) >= 0.80) continue
           if (s0.material !== 'steel' && s0.b - 25 >= 200)
             batchSizes.set(s0.id, { ...s0, b: s0.b - 25, name: `${s0.b - 25}×${s0.h}` })
         }
@@ -988,6 +994,25 @@ function buildUtilMap(
   return out
 }
 
+/** Max demand/capacity ratio for every section across all member types (passing and failing). */
+function sectionUtilMap(design: StructureDesign, memSecId: Map<string, string>): Map<string, number> {
+  const out = new Map<string, number>()
+  const bump = (sid: string | undefined, u: number) => {
+    if (sid) out.set(sid, Math.max(out.get(sid) ?? 0, u))
+  }
+  for (const b of design.beams) {
+    const u = b.sections.reduce((mx, sec) => {
+      const mn = sec.design.phiMnMax
+      return Math.max(mx, mn > 1e-9 ? Math.abs(sec.Mu) / mn : 0)
+    }, 0)
+    bump(memSecId.get(b.id), u)
+  }
+  for (const c of design.columns)      bump(memSecId.get(c.id), c.util)
+  for (const b of design.steelBeams)   bump(memSecId.get(b.id), Math.max(b.utilM, b.utilV))
+  for (const c of design.steelColumns) bump(memSecId.get(c.id), c.ratio)
+  return out
+}
+
 /**
  * Grow a section by the estimated number of steps to satisfy a given demand/capacity
  * ratio (util = Mu/φMn ≥ 1).
@@ -1088,11 +1113,14 @@ export function optimizeStructure(
   // batch-trimmed (typically the critical ones controlling the design).
   if (converged) {
     let batchPass = 0
-    // Phase 1 — shrink h (or step to lighter W-shape for steel)
+    // Phase 1 — shrink h; only sections with utilisation clearly below capacity are
+    // included so one tight section does not reject the whole batch.
     let batchOk = true
     while (batchOk) {
+      const utilPerSec = sectionUtilMap(design, memSecId)
       const batchSizes = new Map<string, RectSection>()
       for (const s0 of work.sections) {
+        if ((utilPerSec.get(s0.id) ?? 0) >= 0.80) continue
         if (s0.material === 'steel' && s0.shape) {
           const lighter = nextLighterW(s0.shape)
           if (lighter) batchSizes.set(s0.id, applyShape(s0, lighter))
@@ -1110,8 +1138,10 @@ export function optimizeStructure(
     // Phase 2 — shrink b for RC sections (As = ρ·b·d; narrower b may still satisfy demand)
     let bBatchOk = true
     while (bBatchOk) {
+      const utilPerSec = sectionUtilMap(design, memSecId)
       const batchSizes = new Map<string, RectSection>()
       for (const s0 of work.sections) {
+        if ((utilPerSec.get(s0.id) ?? 0) >= 0.80) continue
         if (s0.material !== 'steel' && s0.b - 25 >= 200)
           batchSizes.set(s0.id, { ...s0, b: s0.b - 25, name: `${s0.b - 25}×${s0.h}` })
       }
