@@ -4,8 +4,8 @@ import type { ConcreteClass } from '../engine/quantities'
 import { ReportControls } from './ReportControls'
 
 /** Numeric input. */
-export function Num({ label, unit, value, onChange, step = 'any' }: {
-  label: ReactNode; unit?: string; value: number; onChange: (v: number) => void; step?: string
+export function Num({ label, unit, value, onChange, step = 'any', hint }: {
+  label: ReactNode; unit?: string; value: number; onChange: (v: number) => void; step?: string; hint?: string
 }) {
   return (
     <label className="flex flex-col text-sm">
@@ -15,6 +15,7 @@ export function Num({ label, unit, value, onChange, step = 'any' }: {
       <input type="number" inputMode="decimal" step={step} value={Number.isFinite(value) ? value : ''}
         onChange={(e) => onChange(parseFloat(e.target.value))}
         className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none focus:ring-1 focus:ring-[#0056b3]" />
+      {hint ? <span className="mt-0.5 text-[10px] text-slate-400">{hint}</span> : null}
     </label>
   )
 }

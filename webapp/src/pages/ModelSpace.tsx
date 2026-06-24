@@ -22,6 +22,8 @@ import { TABLE_205_1, TABLE_206 } from '../engine/liveLoads'
 import type { ConcreteClass } from '../engine/quantities'
 import { computeSeismic, type SeismicResult, type DriftRow } from '../engine/seismic'
 import { columnKFactors, type ColumnK } from '../engine/effectiveLength'
+import { freqFromDeflection, dg11Walking, DG11_OCCUPANCY } from '../engine/floorVibration'
+import { buildSeismicMass, GRAVITY } from '../engine/modal'
 import { computeWind, type WindResult } from '../engine/wind'
 import { ReportControls } from '../components/ReportControls'
 import { WorkedSolution } from '../components/WorkedSolution'
@@ -687,6 +689,10 @@ export default function ModelSpace() {
   const [modeAmp, setModeAmp] = useState(1.5)
   const [forceDiag, setForceDiag] = useState<DiagramComp | null>(null)   // inline 3D BMD/SFD overlay
   const [forceDiagScale, setForceDiagScale] = useState(1)                // user offset multiplier
+  // AISC DG11 floor-vibration check (0 = use the value auto-suggested from analysis)
+  const [dg11OccId, setDg11OccId] = useState('office')
+  const [dg11DeflMm, setDg11DeflMm] = useState(0)
+  const [dg11W, setDg11W] = useState(0)
   const [rsa, setRsa] = useState<ResponseSpectrumResult | null>(null)
   const [nModes, setNModes] = useState(12)
   const [design, setDesign] = useState<StructureDesign | null>(null)
@@ -1121,6 +1127,24 @@ export default function ModelSpace() {
     if (!model) return new Map<string, ColumnK>()
     return new Map(columnKFactors(model).map((k) => [k.memberId, k]))
   }, [model])
+
+  // DG11 auto-suggestions from the analysis: the worst floor vertical deflection
+  // (Δ for fn) and the dead weight supported by that floor's storey (W).
+  const dg11Suggest = useMemo(() => {
+    if (!model || !govRes) return null
+    const supports = new Set(model.supports.map((s) => s.node))
+    let worst = 0, worstY = 0
+    model.nodes.forEach((n, k) => {
+      if (supports.has(n.id) || n.y <= 1e-6) return       // skip bases & ground
+      const uy = Math.abs(govRes.d[6 * k + 1])            // vertical deflection, m
+      if (uy > worst) { worst = uy; worstY = n.y }
+    })
+    if (worst <= 0) return null
+    const mass = buildSeismicMass(model)                  // tonnes per node (dead)
+    let storeyT = 0
+    for (const n of model.nodes) if (Math.abs(n.y - worstY) < 1e-3) storeyT += mass.get(n.id) ?? 0
+    return { deflMm: worst * 1000, W: storeyT * GRAVITY } // mm, kN
+  }, [model, govRes])
 
   // immediate grid-neighbour base supports (share an x- or z-line and are the
   // nearest column either side, nothing between) — the only sensible partners
@@ -2333,6 +2357,40 @@ export default function ModelSpace() {
                 </ResultCard>
               )}
               {rsa && <ResponseSpectrumPanel result={rsa} seismicT={seis?.T} />}
+
+              {(() => {
+                const occ = DG11_OCCUPANCY.find((o) => o.id === dg11OccId) ?? DG11_OCCUPANCY[0]
+                const deflMm = dg11DeflMm > 0 ? dg11DeflMm : (dg11Suggest?.deflMm ?? 0)
+                const W = dg11W > 0 ? dg11W : (dg11Suggest?.W ?? 0)
+                const fn = freqFromDeflection(deflMm / 1000)
+                const res = dg11Walking({ fn, W, beta: occ.beta, Po: occ.Po, aoLimit: occ.aoLimit })
+                const has = deflMm > 0 && W > 0
+                return (
+                  <Card title="Floor vibration — AISC Design Guide 11 (walking)">
+                    <Pick label="Occupancy" value={dg11OccId} onChange={setDg11OccId}
+                      options={DG11_OCCUPANCY.map((o) => [o.id, o.label])} />
+                    <Num label="Floor deflection Δ" unit="mm" value={dg11DeflMm} onChange={setDg11DeflMm} step="0.1"
+                      hint={dg11Suggest ? `analysis suggests ${dg11Suggest.deflMm.toFixed(1)} (0 = use it)` : 'run Analyze to auto-suggest'} />
+                    <Num label="Supported weight W" unit="kN" value={dg11W} onChange={setDg11W} step="10"
+                      hint={dg11Suggest ? `storey dead ≈ ${dg11Suggest.W.toFixed(0)} (0 = use it)` : 'effective panel weight'} />
+                    <p className="col-span-full text-[11px] text-slate-500">
+                      fn = 0.18·√(g/Δ); aₚ/g = Po·e^(−0.35 fn)/(β·W) ≤ aₒ/g. Po = {occ.Po} kN, β = {occ.beta}, aₒ/g = {(occ.aoLimit * 100).toFixed(1)}% (DG11 Table 4.1).
+                    </p>
+                    {has ? (
+                      <div className="col-span-full mt-1 space-y-1">
+                        <Row label="Fundamental frequency fₙ" value={`${fn.toFixed(2)} Hz`}
+                          sub={fn > 9 ? 'high-frequency floor — Eq. 4.1 is conservative' : 'low-frequency floor'} />
+                        <Row label="Peak acceleration aₚ/g" value={`${(res.apOverG * 100).toFixed(2)}%`}
+                          sub={`limit aₒ/g = ${(res.aoLimit * 100).toFixed(1)}%`} />
+                        <Row alert={!res.ok} label={res.ok ? '✓ Satisfactory' : '✗ Exceeds tolerance'}
+                          value={`ratio ${res.ratio.toFixed(2)}`} sub={res.ok ? 'aₚ ≤ aₒ' : 'stiffen framing, add damping/mass, or relax occupancy'} />
+                      </div>
+                    ) : (
+                      <p className="col-span-full text-[11px] text-amber-600">Enter Δ and W (or run Analyze for auto-suggestions) to evaluate.</p>
+                    )}
+                  </Card>
+                )
+              })()}
             </div>
           )}
 
