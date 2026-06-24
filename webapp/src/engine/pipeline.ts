@@ -832,17 +832,19 @@ export async function optimizeStructureAsync(
         if (d && designOK(d)) { work = trial; design = d } else { bBatchOk = false }
       }
 
-      // Fine-tune: parallel per-section trial dispatch. Only sections with util < 0.80
-      // are candidates (same gate as the batch-shrink phases), capped at 30 per phase
-      // sorted by ascending utilisation (most room to shrink first) to bound the
-      // worst-case solve count for large models.
+      // Fine-tune: sequential per-section trials. Each call to designStructureWithPool
+      // internally calls pool.init() which resets all workers, so concurrent calls
+      // corrupt each other's state — trials must be sequential. The pool still
+      // parallelises the load-case sweep inside each trial.
+      // Only util<0.80 sections are candidates (same gate as batch-shrink), capped at
+      // 30 sorted by ascending utilisation to bound the worst-case solve count.
       const FINETUNE_CAP = 30
       let improved = true, guard = 0
       while (improved && guard++ < 4) {
         improved = false
         const utilPerSec = sectionUtilMap(design, memSecId)
 
-        // Phase A — h↓ / lighter-W
+        // Phase A — h↓ / lighter-W: test candidates one at a time, accept immediately
         const hCandidates = work.sections
           .filter((s0) => {
             if ((utilPerSec.get(s0.id) ?? 0) >= 0.80) return false
@@ -850,11 +852,10 @@ export async function optimizeStructureAsync(
           })
           .sort((a, b) => (utilPerSec.get(a.id) ?? 0) - (utilPerSec.get(b.id) ?? 0))
           .slice(0, FINETUNE_CAP)
-        const hCandidateIds = new Set(hCandidates.map((s) => s.id))
+        const hSucceededIds = new Set<string>()
         let hDone = 0
         onProgress?.({ phase: 'Optimizing — fine-tuning', current: 0, total: hCandidates.length, detail: `pass ${guard}: h↓ — ${hCandidates.length} section(s) to test` })
-        const hResults = await Promise.all(work.sections.map(async (s0) => {
-          if (!hCandidateIds.has(s0.id)) return null
+        for (const s0 of hCandidates) {
           let newSec: RectSection | null = null
           if (s0.material === 'steel' && s0.shape) {
             const lighter = nextLighterW(s0.shape)
@@ -862,28 +863,11 @@ export async function optimizeStructureAsync(
           } else if (s0.h - 25 >= 300) {
             newSec = { ...s0, h: s0.h - 25, name: `${s0.b}×${s0.h - 25}` }
           }
-          if (!newSec) return null
+          if (!newSec) { onProgress?.({ phase: 'Optimizing — fine-tuning', current: ++hDone, total: hCandidates.length, detail: `pass ${guard}: h↓ — tested ${s0.name}` }); continue }
           const trial = settle(withSizes(work, new Map([[s0.id, newSec]])))
           const d = await designStructureWithPool(trial, soil, plan, opts, pool)
           onProgress?.({ phase: 'Optimizing — fine-tuning', current: ++hDone, total: hCandidates.length, detail: `pass ${guard}: h↓ — tested ${s0.name}` })
-          return (d && designOK(d)) ? { id: s0.id, newSec } : null
-        }))
-        const hAccepted = hResults.filter((x): x is { id: string; newSec: RectSection } => x !== null)
-        const hSucceededIds = new Set(hAccepted.map((x) => x.id))
-
-        if (hAccepted.length > 0) {
-          const combined = new Map(hAccepted.map((x) => [x.id, x.newSec]))
-          const cTrial = settle(withSizes(work, combined))
-          const cd = await designStructureWithPool(cTrial, soil, plan, opts, pool)
-          if (cd && designOK(cd)) {
-            work = cTrial; design = cd; improved = true
-          } else {
-            for (const { id, newSec } of hAccepted) {
-              const t = settle(withSizes(work, new Map([[id, newSec]])))
-              const d = await designStructureWithPool(t, soil, plan, opts, pool)
-              if (d && designOK(d)) { work = t; design = d; improved = true }
-            }
-          }
+          if (d && designOK(d)) { work = trial; design = d; improved = true; hSucceededIds.add(s0.id) }
         }
 
         // Phase B — b↓: sections not helped by h↓, still under-utilised
@@ -895,32 +879,14 @@ export async function optimizeStructureAsync(
           })
           .sort((a, b) => (utilPerSec.get(a.id) ?? 0) - (utilPerSec.get(b.id) ?? 0))
           .slice(0, FINETUNE_CAP)
-        const bCandidateIds = new Set(bCandidates.map((s) => s.id))
         let bDone = 0
         onProgress?.({ phase: 'Optimizing — fine-tuning', current: 0, total: bCandidates.length, detail: `pass ${guard}: b↓ — ${bCandidates.length} section(s) to test` })
-        const bResults = await Promise.all(work.sections.map(async (s0) => {
-          if (!bCandidateIds.has(s0.id)) return null
+        for (const s0 of bCandidates) {
           const newSec = { ...s0, b: s0.b - 25, name: `${s0.b - 25}×${s0.h}` }
           const trial = settle(withSizes(work, new Map([[s0.id, newSec]])))
           const d = await designStructureWithPool(trial, soil, plan, opts, pool)
           onProgress?.({ phase: 'Optimizing — fine-tuning', current: ++bDone, total: bCandidates.length, detail: `pass ${guard}: b↓ — tested ${s0.name}` })
-          return (d && designOK(d)) ? { id: s0.id, newSec } : null
-        }))
-        const bAccepted = bResults.filter((x): x is { id: string; newSec: RectSection } => x !== null)
-
-        if (bAccepted.length > 0) {
-          const combined = new Map(bAccepted.map((x) => [x.id, x.newSec]))
-          const cTrial = settle(withSizes(work, combined))
-          const cd = await designStructureWithPool(cTrial, soil, plan, opts, pool)
-          if (cd && designOK(cd)) {
-            work = cTrial; design = cd; improved = true
-          } else {
-            for (const { id, newSec } of bAccepted) {
-              const t = settle(withSizes(work, new Map([[id, newSec]])))
-              const d = await designStructureWithPool(t, soil, plan, opts, pool)
-              if (d && designOK(d)) { work = t; design = d; improved = true }
-            }
-          }
+          if (d && designOK(d)) { work = trial; design = d; improved = true }
         }
       }
       if (tryBars) {
