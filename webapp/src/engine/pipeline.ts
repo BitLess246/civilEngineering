@@ -790,7 +790,7 @@ export async function optimizeStructureAsync(
     const converged = designOK(design)
 
     if (converged) {
-      onProgress?.({ phase: 'Optimizing — trimming sections', detail: 'batch-shrinking all sections' })
+      let batchPass = 0
       let batchOk = true
       while (batchOk) {
         const batchSizes = new Map<string, RectSection>()
@@ -803,6 +803,8 @@ export async function optimizeStructureAsync(
           }
         }
         if (batchSizes.size === 0) break
+        batchPass++
+        onProgress?.({ phase: 'Optimizing — trimming sections', detail: `batch pass ${batchPass}: ${batchSizes.size} section(s) ↓` })
         const trial = settle(withSizes(work, batchSizes))
         const d = await designStructureWithPool(trial, soil, plan, opts, pool)
         if (d && designOK(d)) { work = trial; design = d } else { batchOk = false }
@@ -821,6 +823,7 @@ export async function optimizeStructureAsync(
             trialSec = { ...s0, h: s0.h - 25, name: `${s0.b}×${s0.h - 25}` }
           }
           if (!trialSec) continue
+          onProgress?.({ phase: 'Optimizing — fine-tuning', detail: s0.name })
           const trial = settle(withSizes(work, new Map([[s0.id, trialSec]])))
           const d = await designStructureWithPool(trial, soil, plan, opts, pool)
           if (d && designOK(d)) { work = trial; design = d; improved = true }
@@ -1057,8 +1060,7 @@ export function optimizeStructure(
   // Then fall back to individual 25-mm fine-tune for sections that couldn't be
   // batch-trimmed (typically the critical ones controlling the design).
   if (converged) {
-    onProgress?.({ phase: 'Optimizing — trimming sections', detail: 'batch-shrinking all sections' })
-
+    let batchPass = 0
     let batchOk = true
     while (batchOk) {
       const batchSizes = new Map<string, RectSection>()
@@ -1071,6 +1073,8 @@ export function optimizeStructure(
         }
       }
       if (batchSizes.size === 0) break
+      batchPass++
+      onProgress?.({ phase: 'Optimizing — trimming sections', detail: `batch pass ${batchPass}: ${batchSizes.size} section(s) ↓` })
       const trial = settle(withSizes(work, batchSizes))
       const d = designStructure(trial, soil, plan, opts)
       if (d && designOK(d)) { work = trial; design = d } else { batchOk = false }
@@ -1090,6 +1094,7 @@ export function optimizeStructure(
           trialSec = { ...s0, h: s0.h - 25, name: `${s0.b}×${s0.h - 25}` }
         }
         if (!trialSec) continue
+        onProgress?.({ phase: 'Optimizing — fine-tuning', detail: s0.name })
         const trial = settle(withSizes(work, new Map([[s0.id, trialSec]])))
         const d = designStructure(trial, soil, plan, opts)
         if (d && designOK(d)) { work = trial; design = d; improved = true }
