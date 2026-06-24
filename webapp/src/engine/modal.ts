@@ -44,6 +44,10 @@ export interface Mode {
   effMass: [number, number, number]
   /** Effective modal mass as a fraction of the total mass, per direction. */
   effMassRatio: [number, number, number]
+  /** Node-displacement mode shape: node id → [ux, uy, uz].
+   *  Normalized so max|component| = 1. Only massive free translational DOFs
+   *  have non-zero entries. JSON-safe (plain object). */
+  shape: Record<string, [number, number, number]>
 }
 
 export interface ModalResult {
@@ -164,7 +168,7 @@ export function jacobiEigen(Ain: number[][], maxSweeps = 100): { values: number[
 
 // ── orchestration ───────────────────────────────────────────────────────────
 
-interface MassDof { fpos: number; dir: 0 | 1 | 2; mass: number }
+interface MassDof { fpos: number; dir: 0 | 1 | 2; mass: number; nodeId: string }
 
 /**
  * Modal analysis of a structural model. Returns the lowest `nModes` modes with
@@ -193,7 +197,7 @@ export function modalAnalysis(model: StructuralModel, nModes = 12): ModalResult 
       const fpos = precomp.freeIdx.get(gdof)
       if (fpos === undefined) continue  // restrained DOF → mass cannot vibrate
       totalMass[dir] += m              // participation is measured against free mass
-      massDofs.push({ fpos, dir, mass: m })
+      massDofs.push({ fpos, dir, mass: m, nodeId })
     }
   }
   const p = massDofs.length
@@ -237,7 +241,23 @@ export function modalAnalysis(model: StructuralModel, nModes = 12): ModalResult 
     const effMass: [number, number, number] = [L[0] * L[0] / Mstar, L[1] * L[1] / Mstar, L[2] * L[2] / Mstar]
     const effMassRatio: [number, number, number] = [0, 1, 2].map((r) =>
       totalMass[r] > 0 ? effMass[r] / totalMass[r] : 0) as [number, number, number]
-    return { period: 2 * Math.PI / omega, omega, freq: omega / (2 * Math.PI), effMass, effMassRatio }
+
+    // build per-node shape (node id → [ux, uy, uz]) from massive DOFs only
+    const rawShape: Record<string, [number, number, number]> = {}
+    for (let a = 0; a < p; a++) {
+      const { nodeId, dir } = massDofs[a]
+      if (!rawShape[nodeId]) rawShape[nodeId] = [0, 0, 0]
+      rawShape[nodeId][dir] = phi[a]
+    }
+    // normalize to max|component| = 1
+    let maxPhi = 0
+    for (const v of Object.values(rawShape)) maxPhi = Math.max(maxPhi, Math.abs(v[0]), Math.abs(v[1]), Math.abs(v[2]))
+    const shape: Record<string, [number, number, number]> = {}
+    for (const [id, v] of Object.entries(rawShape)) {
+      shape[id] = maxPhi > 0 ? [v[0] / maxPhi, v[1] / maxPhi, v[2] / maxPhi] : v
+    }
+
+    return { period: 2 * Math.PI / omega, omega, freq: omega / (2 * Math.PI), effMass, effMassRatio, shape }
   })
 
   const cum: [number, number, number] = [0, 1, 2].map((r) =>

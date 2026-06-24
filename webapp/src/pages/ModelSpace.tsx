@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Text } from '@react-three/drei'
 import * as THREE from 'three'
 import { generateGridModel, removeElements, removeNode, buildGravityLoads, splitSharedSections } from '../engine/modelBuilder'
@@ -260,6 +260,51 @@ function Wall3D({ tA, tB, bA, bB, shear }: { tA: THREE.Vector3; tB: THREE.Vector
       </>}
     </group>
   )
+}
+
+/** Animated mode-shape skeleton. Lines are updated imperatively in useFrame
+ *  (no re-render per frame) to show sinusoidal oscillation of the given mode. */
+function ModeShapePlayer({ shape, nodePos, members, amp }: {
+  shape: Record<string, [number, number, number]>
+  nodePos: Map<string, THREE.Vector3>
+  members: { id: string; i: string; j: string }[]
+  amp: number
+}) {
+  const ampRef = useRef(amp)
+  ampRef.current = amp
+  const shapeRef = useRef(shape)
+  shapeRef.current = shape
+
+  const { group, lineGeos } = useMemo(() => {
+    const g = new THREE.Group()
+    const geos: { i: string; j: string; geo: THREE.BufferGeometry }[] = []
+    for (const m of members) {
+      const aO = nodePos.get(m.i), bO = nodePos.get(m.j)
+      if (!aO || !bO) continue
+      const geo = new THREE.BufferGeometry()
+      geo.setAttribute('position', new THREE.BufferAttribute(
+        new Float32Array([aO.x, aO.y, aO.z, bO.x, bO.y, bO.z]), 3))
+      g.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: '#7c3aed' })))
+      geos.push({ i: m.i, j: m.j, geo })
+    }
+    return { group: g, lineGeos: geos }
+  }, [members, nodePos])
+
+  useFrame(({ clock }) => {
+    const scale = ampRef.current * Math.sin(clock.elapsedTime * Math.PI * 1.2)
+    const sh = shapeRef.current
+    for (const { i, j, geo } of lineGeos) {
+      const aO = nodePos.get(i), bO = nodePos.get(j)
+      if (!aO || !bO) continue
+      const da = sh[i], db = sh[j]
+      const pos = geo.attributes.position as THREE.BufferAttribute
+      pos.setXYZ(0, aO.x + (da?.[0] ?? 0) * scale, aO.y + (da?.[1] ?? 0) * scale, aO.z + (da?.[2] ?? 0) * scale)
+      pos.setXYZ(1, bO.x + (db?.[0] ?? 0) * scale, bO.y + (db?.[1] ?? 0) * scale, bO.z + (db?.[2] ?? 0) * scale)
+      pos.needsUpdate = true
+    }
+  })
+
+  return <primitive object={group} />
 }
 
 // ── Load glyphs ─────────────────────────────────────────────────────────────
@@ -603,6 +648,8 @@ export default function ModelSpace() {
   const [selected, setSelected] = useState<string | null>(null)
   const [analysis, setAnalysis] = useState<F3Analysis | null>(null)
   const [modal, setModal] = useState<ModalResult | null>(null)
+  const [modeShapeIdx, setModeShapeIdx] = useState<number | null>(null)
+  const [modeAmp, setModeAmp] = useState(1.5)
   const [rsa, setRsa] = useState<ResponseSpectrumResult | null>(null)
   const [nModes, setNModes] = useState(12)
   const [design, setDesign] = useState<StructureDesign | null>(null)
@@ -706,6 +753,7 @@ export default function ModelSpace() {
 
   const runModal = () => {
     if (!model || busy || meshErrors) return
+    setModeShapeIdx(null)    // stale shape from prior run
     run('modal', { model, nModes }).then((r) => {
       const m = (r as { modal: ModalResult | null }).modal
       setModal(m)
@@ -1184,6 +1232,14 @@ export default function ModelSpace() {
                   return <Wall3D key={w.id} tA={tA} tB={tB} bA={bA} bB={bB} shear={w.shearWall} />
                 })}
                 {showLoads && <Loads3D model={model} nodePos={nodePos} />}
+                {modal && modeShapeIdx !== null && modal.modes[modeShapeIdx] && (
+                  <ModeShapePlayer
+                    shape={modal.modes[modeShapeIdx].shape}
+                    nodePos={nodePos}
+                    members={model.members}
+                    amp={modeAmp}
+                  />
+                )}
                 <OrbitControls ref={controlsRef} makeDefault enablePan target={[6, 3, 2.5]} />
               </Canvas>
             ) : (
@@ -2130,7 +2186,30 @@ export default function ModelSpace() {
 
               {model && <ValidationPanel issues={meshIssues} />}
 
-              {modal && modal.modes.length > 0 && <ModalPanel result={modal} />}
+              {modal && modal.modes.length > 0 && (
+                <ModalPanel result={modal} selectedMode={modeShapeIdx} onSelectMode={setModeShapeIdx} />
+              )}
+              {modal && modeShapeIdx !== null && modal.modes[modeShapeIdx] && (
+                <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 shadow-sm">
+                  <div className="mb-2 flex items-center justify-between">
+                    <h3 className="text-[1.02rem] font-bold text-violet-700">
+                      Mode {modeShapeIdx + 1} shape — T = {modal.modes[modeShapeIdx].period.toFixed(3)} s
+                    </h3>
+                    <button type="button" onClick={() => setModeShapeIdx(null)}
+                      className="rounded px-2 py-0.5 text-xs font-semibold text-violet-500 hover:bg-violet-100">✕ Close</button>
+                  </div>
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium text-violet-700">Visual amplitude: {modeAmp.toFixed(1)} m</span>
+                    <input type="range" min={0.3} max={5} step={0.1} value={modeAmp}
+                      onChange={(e) => setModeAmp(parseFloat(e.target.value))}
+                      className="accent-violet-600" />
+                  </label>
+                  <p className="mt-1.5 text-[11px] text-violet-500">
+                    Purple skeleton oscillates in the 3D canvas (visual only — not structural displacement).
+                    Switch to any other tab; the animation continues while the panel is visible.
+                  </p>
+                </div>
+              )}
               {modal && modal.modes.length === 0 && (
                 <ResultCard title="Modal analysis">
                   <p className="text-sm text-slate-600">No modes found — the model has no lumped mass (add members/slabs with self-weight).</p>

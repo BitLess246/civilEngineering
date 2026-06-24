@@ -115,6 +115,21 @@ describe('modalAnalysis — SDOF cantilever column', () => {
     expect(res.cumRatio[0]).toBeCloseTo(1, 2)
     expect(res.cumRatio[2]).toBeCloseTo(1, 2)
   })
+
+  it('mode shape is a record with max |component| = 1 and only the free top node', () => {
+    const res = modalAnalysis(model, 6)!
+    for (const mode of res.modes) {
+      const vals = Object.values(mode.shape)
+      expect(vals.length).toBeGreaterThan(0)
+      // max absolute component must be exactly 1 (normalization)
+      const maxAbs = Math.max(...vals.flatMap((v) => v.map(Math.abs)))
+      expect(maxAbs).toBeCloseTo(1, 9)
+      // fixed base node carries no mass → not in shape
+      expect(mode.shape['base']).toBeUndefined()
+      // free top node is present
+      expect(mode.shape['top']).toBeDefined()
+    }
+  })
 })
 
 // ── full model sanity ───────────────────────────────────────────────────────
