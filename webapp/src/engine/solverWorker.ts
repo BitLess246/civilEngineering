@@ -39,7 +39,11 @@ ctx.onmessage = async (e: MessageEvent<SolverRequest>) => {
       ctx.postMessage({ id: msg.id, ok: true, result: { analysis, orphans: br.orphanEdges.length, drift } })
     } else if (msg.kind === 'design') {
       let m = msg.model
-      if (msg.tryBars) { onProgress({ phase: 'Selecting bar sizes' }); m = selectBarDiameters(msg.model, msg.soil, msg.plan, msg.opts) }
+      if (msg.tryBars) {
+        const hasConcrete = msg.model.sections.some((s) => s.material !== 'steel')
+        if (hasConcrete) onProgress({ phase: 'Selecting bar sizes' })
+        m = selectBarDiameters(msg.model, msg.soil, msg.plan, msg.opts)
+      }
       const design = await designStructureAsync(m, msg.soil, msg.plan, msg.opts, onProgress)
       ctx.postMessage({ id: msg.id, ok: true, result: { model: m, design } })
     } else {
