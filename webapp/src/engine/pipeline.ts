@@ -840,7 +840,9 @@ export async function optimizeStructureAsync(
         improved = false
 
         // Phase A — h↓ / lighter-W: dispatch all sections in parallel
-        onProgress?.({ phase: 'Optimizing — fine-tuning', detail: `pass ${guard}: h↓ / lighter-W (${work.sections.length} sections)` })
+        const hEligible = work.sections.filter((s0) => s0.material === 'steel' && s0.shape ? !!nextLighterW(s0.shape) : s0.h - 25 >= 300).length
+        let hDone = 0
+        onProgress?.({ phase: 'Optimizing — fine-tuning', current: 0, total: hEligible, detail: `pass ${guard}: h↓ — ${hEligible} section(s) to test` })
         const hResults = await Promise.all(work.sections.map(async (s0) => {
           let newSec: RectSection | null = null
           if (s0.material === 'steel' && s0.shape) {
@@ -852,6 +854,7 @@ export async function optimizeStructureAsync(
           if (!newSec) return null
           const trial = settle(withSizes(work, new Map([[s0.id, newSec]])))
           const d = await designStructureWithPool(trial, soil, plan, opts, pool)
+          onProgress?.({ phase: 'Optimizing — fine-tuning', current: ++hDone, total: hEligible, detail: `pass ${guard}: h↓ — tested ${s0.name}` })
           return (d && designOK(d)) ? { id: s0.id, newSec } : null
         }))
         const hAccepted = hResults.filter((x): x is { id: string; newSec: RectSection } => x !== null)
@@ -873,13 +876,16 @@ export async function optimizeStructureAsync(
         }
 
         // Phase B — b↓: sections where h↓ was not eligible or failed individually
-        onProgress?.({ phase: 'Optimizing — fine-tuning', detail: `pass ${guard}: b↓` })
+        const bEligible = work.sections.filter((s0) => s0.material !== 'steel' && !hSucceededIds.has(s0.id) && s0.b - 25 >= 200).length
+        let bDone = 0
+        onProgress?.({ phase: 'Optimizing — fine-tuning', current: 0, total: bEligible, detail: `pass ${guard}: b↓ — ${bEligible} section(s) to test` })
         const bResults = await Promise.all(work.sections.map(async (s0) => {
           if (s0.material === 'steel' || hSucceededIds.has(s0.id)) return null
           if (s0.b - 25 < 200) return null
           const newSec = { ...s0, b: s0.b - 25, name: `${s0.b - 25}×${s0.h}` }
           const trial = settle(withSizes(work, new Map([[s0.id, newSec]])))
           const d = await designStructureWithPool(trial, soil, plan, opts, pool)
+          onProgress?.({ phase: 'Optimizing — fine-tuning', current: ++bDone, total: bEligible, detail: `pass ${guard}: b↓ — tested ${s0.name}` })
           return (d && designOK(d)) ? { id: s0.id, newSec } : null
         }))
         const bAccepted = bResults.filter((x): x is { id: string; newSec: RectSection } => x !== null)
