@@ -102,8 +102,8 @@ export function BeamSchematic({
   const yCom = hogging
     ? y0 + hh - (cover + stirrupDia + dbC / 2) * s
     : y0 + (cover + stirrupDia + dbC / 2) * s
-  const tenY = (li: number) => yTen + sgn * li * pitch          // toward mid-depth
-  const comY = (li: number) => yCom - sgn * li * pitchC
+  const tenY = (li: number) => yTen - sgn * li * pitch          // toward mid-depth
+  const comY = (li: number) => yCom + sgn * li * pitchC
 
   // When the layout diverges, clip the drawing at the neutral axis (measured
   // from the compression face): tension layers stay on their side, compression

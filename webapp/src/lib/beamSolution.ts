@@ -23,7 +23,7 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
     lines: [
       txt('d_t is the depth to the extreme (bottom) tension layer; d is the depth to the centroid of the whole bar group — they coincide for a single layer, and d < d_t once the bars need more than one layer (see the bar-layout step).'),
       eq(String.raw`d_t = h - cover - d_s - \tfrac{d_b}{2} = ${sn0(i.h)} - ${sn0(i.cover)} - ${sn0(i.stirrupDia)} - ${sn1(i.barDia / 2)} = ${sn1(r.dt)}\ \text{mm}`),
-      eq(String.raw`d' = cover + d_s + \tfrac{d_b'}{2} = ${sn1(r.dPrime)}\ \text{mm},\qquad d = \mathbf{${sn1(d)}}\ \text{mm}${multiLayer ? String.raw`\ (\text{after } ${r.layerIters}\ \text{layout passes})` : ''}`),
+      eq(String.raw`d' = cover + d_s + \tfrac{d_b'}{2}${r.comprYBar > 0 ? String.raw` + \bar{y}'` : ''} = ${sn0(i.cover)} + ${sn0(i.stirrupDia)} + ${sn1(dbC / 2)}${r.comprYBar > 0 ? ` + ${sn1(r.comprYBar)}` : ''} = ${sn1(r.dPrime)}\ \text{mm},\qquad d = \mathbf{${sn1(d)}}\ \text{mm}${multiLayer ? String.raw`\ (\text{after } ${r.layerIters}\ \text{layout passes})` : ''}`),
     ],
   })
 
