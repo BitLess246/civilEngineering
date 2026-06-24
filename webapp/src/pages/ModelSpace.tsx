@@ -23,6 +23,7 @@ import { WorkedSolution } from '../components/WorkedSolution'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution } from '../lib/modelSpaceSolutions'
 import { Diagram } from '../components/Diagram'
 import { MemberForcesTable } from '../components/MemberForcesTable'
+import { ReactionsPanel } from '../components/ReactionsPanel'
 import { BeamSchematic } from '../components/BeamSchematic'
 import { ColumnSchematic } from '../components/ColumnSchematic'
 import { FootingSchematic } from '../components/FootingSchematic'
@@ -1029,6 +1030,16 @@ export default function ModelSpace() {
     ? nodePos.get(selMember.i)!.distanceTo(nodePos.get(selMember.j)!)
     : 0
 
+  // Member-length lookup (m) for the statics self-check in the reactions panel.
+  const memberLenById = useMemo(() => {
+    const map = new Map<string, number>()
+    model?.members.forEach((mm) => {
+      const a = nodePos.get(mm.i), b = nodePos.get(mm.j)
+      if (a && b) map.set(mm.id, a.distanceTo(b))
+    })
+    return (id: string) => map.get(id) ?? 0
+  }, [model, nodePos])
+
   const download = () => {
     if (!model) return
     const blob = new Blob([JSON.stringify(model, null, 2)], { type: 'application/json' })
@@ -1901,6 +1912,10 @@ export default function ModelSpace() {
 
               {analysis && model && (
                 <MemberForcesTable analysis={analysis} members={model.members} sectionFor={sectionFor} />
+              )}
+
+              {analysis && model && (
+                <ReactionsPanel analysis={analysis} memberLen={memberLenById} />
               )}
 
               {drift && seis && (

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { solveFrame3D, analyzeFrame3D, rectJ, precomputeFrame, solveWithGeometry, serializePrecomp, deserializePrecomp, type F3Node, type F3Member, type F3Support, type F3Load } from './frame3d'
+import { solveFrame3D, analyzeFrame3D, rectJ, precomputeFrame, solveWithGeometry, serializePrecomp, deserializePrecomp, appliedResultant, type F3Node, type F3Member, type F3Support, type F3Load } from './frame3d'
 import { solveFrame2D } from './frame2d'
 import { generateGridModel } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
@@ -221,5 +221,46 @@ describe('serializePrecomp / deserializePrecomp — postMessage roundtrip', () =
     expect(r2).not.toBeNull()
     for (let i = 0; i < r1.d.length; i++) expect(r2.d[i]).toBeCloseTo(r1.d[i], 9)
     expect(r2.Mmax).toBeCloseTo(r1.Mmax, 9)
+  })
+})
+
+describe('appliedResultant — statics self-check (§8)', () => {
+  const noLen = () => 0
+
+  it('sums node loads per global axis', () => {
+    const loads: F3Load[] = [
+      { kind: 'node', node: 'a', Fx: 10, Fy: -50, Fz: 5, cat: 'D' },
+      { kind: 'node', node: 'b', Fx: -4, Fy: -20, cat: 'L' },
+    ]
+    expect(appliedResultant(loads, noLen)).toEqual([6, -70, 5])
+  })
+
+  it('integrates member gravity loads (UDL w·L, VDL ½(w1+w2)·Δ, point P) into −Y', () => {
+    const loads: F3Load[] = [
+      { kind: 'member-udl', member: 'm1', w: 10, cat: 'D' },                              // 10·4 = 40
+      { kind: 'member-vdl', member: 'm2', x1: 0, x2: 6, w1: 0, w2: 8, cat: 'D' },         // ½·8·6 = 24
+      { kind: 'member-point', member: 'm3', a: 1.5, P: 12, cat: 'L' },                    // 12
+    ]
+    const len = (id: string) => ({ m1: 4, m2: 6, m3: 3 }[id] ?? 0)
+    expect(appliedResultant(loads, len)).toEqual([0, -(40 + 24 + 12), 0])
+  })
+
+  it('balances the reactions for a slab-loaded grid: ΣApplied + ΣReactions ≈ 0', () => {
+    const section: RectSection = { id: 'S1', name: '300×500', b, h, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+    const model = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section })
+    model.loads = model.plates.map((p) => ({ kind: 'area', plate: p.id, q: 5, cat: 'D' }))
+    const br = modelToFrame3D(model)
+    const res = analyzeFrame3D(br.nodes, br.members, br.supports, br.loads)!
+    const gov = res.perCombo[res.govIdx]
+    const pos = new Map(br.nodes.map((n) => [n.id, n]))
+    const len = (id: string) => {
+      const m = br.members.find((mm) => mm.id === id)!
+      const a = pos.get(m.i)!, c = pos.get(m.j)!
+      return Math.hypot(a.x - c.x, a.y - c.y, a.z - c.z)
+    }
+    const applied = appliedResultant(gov.factored, len)
+    const reac: [number, number, number] = [0, 1, 2].map((k) =>
+      gov.result!.reactions.reduce((s, q) => s + q.F[k], 0)) as [number, number, number]
+    for (let k = 0; k < 3; k++) expect(applied[k] + reac[k]).toBeCloseTo(0, 2)
   })
 })
