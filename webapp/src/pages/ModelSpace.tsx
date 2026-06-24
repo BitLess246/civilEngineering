@@ -22,6 +22,7 @@ import { ReportControls } from '../components/ReportControls'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution } from '../lib/modelSpaceSolutions'
 import { Diagram } from '../components/Diagram'
+import { MemberForcesTable } from '../components/MemberForcesTable'
 import { BeamSchematic } from '../components/BeamSchematic'
 import { ColumnSchematic } from '../components/ColumnSchematic'
 import { FootingSchematic } from '../components/FootingSchematic'
@@ -1896,6 +1897,10 @@ export default function ModelSpace() {
                   {orphans > 0 && <Row alert label="⚠ Orphan edges" value={`${orphans}`} sub="slab edges with no member" />}
                   <p className="mt-1 text-[11px] text-slate-400">Members tinted red by |M| relative to the model max. Click one for its diagrams.</p>
                 </ResultCard>
+              )}
+
+              {analysis && model && (
+                <MemberForcesTable analysis={analysis} members={model.members} sectionFor={sectionFor} />
               )}
 
               {drift && seis && (
