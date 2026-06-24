@@ -34,28 +34,49 @@ npx tsc -b       # typecheck
 npm run build    # typecheck + production build
 ```
 
-## Current state (all merged to `main`)
-Latest merged work — PRs **#178–#183** (main); **Steel Design** open PR:
-- **Truss Space** (`/truss`): planar pin-jointed truss — generate (Pratt / Howe /
-  Warren / pitched-roof), analyse axial forces, AISC-LRFD member design.
-- **AISC section library** (`webapp/src/engine/aiscSections.ts`) — W/C/L/HSS/Pipe/
-  WT, selectable per member; **double angles (2L)** back-to-back (long legs
-  connected, gap = separator-plate thickness, 0 = touching). Accurate
-  cross-sections drawn in 2D (`components/SectionShape.tsx`) **and extruded in 3D**
-  (`lib/sectionShapes3d.ts`).
-- **Zoom-to-extents on load** for both 3D pages (`components/FitView.tsx`).
-- **Truss Phase 2**: member self-weight from the section + NSCP gravity
-  combinations (1.4D, 1.2D+1.6L) enveloped per member (`engine/truss.ts`).
-- **Truss Phase 3** (`engine/trussTakeoff.ts` + `TrussSpace.tsx`): per-member
-  steel weight (A × L × 7850 kg/m³), subtotals by chord kind, gusset/connection
-  plate allowance (editable %), priced Bill of Materials (₱/kg, live totals).
-- **Truss Phase 4** (same PR): two more roof types — **Fink** (W-web) and
-  **scissor** (raised tie) in `engine/truss.ts` (determinate for n = 4/6/8,
-  tested); **free-form editor** (`components/TrussEditor.tsx`) to edit nodes /
-  members / supports / loaded joints live; **custom section** input (enter A, rₓ,
-  r_y directly); expanded **AISC HSS/Pipe** sizes (computed nominal geometry,
-  documented) in `engine/aiscSections.ts`. PDF export already works via the
-  browser-print path in `components/ReportControls.tsx`.
+## Current state (all merged to `main`, through PR #231)
+
+### 3D Model Space analysis core (`/model`) — the centrepiece
+The 3D space-frame solver and its NSCP design pipeline are the most developed part
+of the app. Everything runs **off the main thread** in a web worker
+(`engine/solverWorker.ts`) so the UI stays responsive.
+- **3D frame FEM** (`engine/frame3d.ts`): 12-DOF space-frame element (axial +
+  St-Venant torsion + biaxial Hermite bending), per-member local→global transform,
+  consistent fixed-end vectors for nodal / UDL / trapezoid (vdl) / point loads.
+  One LU factorization is shared across every NSCP combo.
+- **P-Δ second-order analysis**: geometric stiffness Kg(N) re-formed and the tangent
+  stiffness re-factored each iteration (`solveWithGeometry`, opt-in checkbox).
+- **Member end releases** (PR #229): `relI`/`relJ` flags release any of the 6 local
+  DOFs at either end; eliminated by static condensation (`condenseLocal`, Schur
+  complement). UI = per-member Fx/Fy/Fz/Mx/My/Mz checkboxes in the Geometry tab.
+- **Spring supports** (PR #229): `fixity:'spring'` with `kx/ky/kz` adds translational
+  stiffness to the free-DOF diagonal (pile-head / elastic-foundation modelling).
+  UI = fixed/pin/spring selector + stiffness fields in the Supports tab.
+- **Rigid floor diaphragm** (PR #231): per-storey master-slave constraint elimination
+  (T-matrix) tying in-plane `{ux, uz, θy}` with full rigid-body kinematics (arm
+  effect). `engine/diaphragm.ts` groups nodes by storey; opt-in checkbox in Analysis.
+- **Modal analysis** (`engine/modal.ts`): Jacobi eigensolver, lumped seismic mass,
+  effective modal-mass participation per direction with the NSCP 208.5.5 ≥90% check.
+  **Mode-shape visualization** (PR #230): click a mode row → animated deformed
+  skeleton in the 3D canvas (amplitude slider), via imperative R3F `useFrame`.
+- **Response-spectrum analysis** (`engine/responseSpectrum.ts`) + **storey-drift
+  check** (`engine/seismic.ts`, NSCP 208) + **wind loads** (`engine/wind.ts`).
+- **Design pipeline** (`engine/pipeline.ts`): governing combo → slab strips → beams /
+  girders (`detectCriticalSections` → `designBeam`) → columns (P–M) → footings
+  (isolated / combined / pile cap) → quantities. Steel path: §F2/§G2.1/§E3/§H1-1 +
+  base plates (`engine/baseplate.ts`). Optimizer grows concrete and shrinks steel.
+
+### Truss Space (`/truss`)
+- Planar pin-jointed truss — generate (Pratt / Howe / Warren / pitched / **Fink** /
+  **scissor**), analyse axial forces, AISC-LRFD design, free-form editor
+  (`components/TrussEditor.tsx`), priced BOM (`engine/trussTakeoff.ts`).
+
+### AISC section library (`engine/aiscSections.ts`)
+- Full 14th-edition metric dataset: ~195 W, 28 C, 42 L, 55 HSS rect/sq, 13 round
+  HSS/Pipe, 25 WT; **double angles (2L)** back-to-back. Accurate cross-sections in
+  2D (`components/SectionShape.tsx`) **and extruded in 3D** (`lib/sectionShapes3d.ts`).
+- ⚠️ Tier-2 note: the library has C/L/HSS, but verify the **3D model bridge**
+  (`modelBridge.steelSectionProps`) consumes non-W families before claiming item #6.
 
 ## Key paths
 - 3D RC frame page: `webapp/src/pages/ModelSpace.tsx` (route `/model`)
@@ -92,11 +113,34 @@ Latest merged work — PRs **#178–#183** (main); **Steel Design** open PR:
 ~195 W-shapes (W100–W920), 28 C, 42 L, 55 HSS rect/sq, 13 round HSS/Pipe, 25 WT.
 Shape names corrected to exact AISC designations (e.g. W310x38.7 not W310x39).
 
-## Next up — roadmap
-- Optional: save / load custom trusses (localStorage or file); drag nodes in 3D.
-- Optional: more roof forms (Fink fan/double-Fink, gambrel), wind/uplift cases.
-- Optional: custom section input on Steel Design page (enter Sx, Zx, ry directly).
-- Optional: point-load + moment diagram for beams; stiffened web shear (§G2.2).
-- Optional: steel section auto-optimization in 3D model space (shape-ladder search).
+## Next up — STAAD-parity roadmap (tiered)
 
-_Tests at last handoff: 330 passing; `tsc -b` clean; production build OK._
+Closing the gap with commercial structural software (STAAD.Pro). **Tier 1 is
+complete** (PRs #229–#231); Tier 2 is the current focus, one PR per item.
+
+### Tier 1 — Biggest structural modeling gaps ✅ DONE
+1. ✅ **Member end releases** — PR #229
+2. ✅ **Spring supports** — PR #229
+3. ✅ **Rigid floor diaphragm constraints** — PR #231
+
+### Tier 2 — High value, moderate effort (current)
+4. **Member force diagrams (BMD/SFD)** — inline bending-moment & shear diagrams drawn
+   on each member in the 3D view / Analysis tab. The per-member `xs[]`/`My[]`/`Mz[]`/
+   `Vy[]` arrays already exist on `F3MemberResult`; this is purely rendering.
+5. **Effective length factor K for columns** — compute K from the G-factor alignment
+   chart (AISC Commentary C-C2) using the ΣEI/L stiffness already assembled at joints.
+6. **HSS / channel / angle steel sections in the 3D model** — library exists; wire the
+   non-W families through `modelBridge.steelSectionProps` + design path (verify first).
+7. **Floor vibration check (AISC DG11)** — post-process modal results: fn = 0.18√(g/Δj),
+   compare ap/g against DG11 tolerances (0.5% g office, 0.05% g sensitive).
+8. **Temperature / thermal loads** — `kind:'member-thermal'` on ModelLoad with ΔT and α;
+   equivalent nodal forces P_thermal = EA·α·ΔT in the load assembly.
+
+### Tier 3 — Complex / specialized (later)
+9. Linearized buckling analysis ([K − λKg]{φ}=0; reuses the Jacobi eigensolver).
+10. Rigid links / member offsets (centroidal offset → rigid transform pre-element).
+11. Time-history analysis (Newmark-β on modal equations).
+12. Pushover / nonlinear static (plastic-hinge model, incremental-iterative).
+13. FEM plate/shell elements (true thin-shell walls & slabs vs. today's load sources).
+
+_Tests at last handoff: **601 passing**; `tsc -b` clean; production build OK._
