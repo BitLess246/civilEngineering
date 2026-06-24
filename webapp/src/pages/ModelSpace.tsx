@@ -6,7 +6,8 @@ import * as THREE from 'three'
 import { generateGridModel, removeElements, removeNode, buildGravityLoads, splitSharedSections } from '../engine/modelBuilder'
 import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole, MemberReleases, NodeSupport, SupportFixity } from '../engine/model'
 import { distributePanel } from '../engine/tributary'
-import { type F3Analysis } from '../engine/frame3d'
+import { type F3Analysis, type F3MemberResult, type V3 } from '../engine/frame3d'
+import { memberDiagramRibbon, diagramScale, type DiagramComp } from '../engine/memberDiagram3d'
 import { validateMesh, hasMeshErrors } from '../engine/meshValidation'
 import { type ModalResult } from '../engine/modal'
 import { computeResponseSpectrum, type ResponseSpectrumResult } from '../engine/responseSpectrum'
@@ -305,6 +306,37 @@ function ModeShapePlayer({ shape, nodePos, members, amp }: {
   })
 
   return <primitive object={group} />
+}
+
+// ── Member force diagrams (BMD / SFD / axial / torsion) ─────────────────────
+const DIAG_COLOR: Record<DiagramComp, string> = {
+  Mz: '#d62728', My: '#ea580c', Vy: '#1f77b4', Vz: '#0e7490', N: '#7c3aed', T: '#b45309',
+}
+const DIAG_LABEL: Record<DiagramComp, string> = {
+  Mz: 'Mz', My: 'My', Vy: 'Vy', Vz: 'Vz', N: 'N', T: 'T',
+}
+
+/** Inline 3D internal-force diagram drawn directly on one member. */
+function MemberForceDiagram3D({ a, b, xs, ys, comp, scale }: {
+  a: V3; b: V3; xs: number[]; ys: number[]; comp: DiagramComp; scale: number
+}) {
+  const { fillGeo, curveGeo } = useMemo(() => {
+    const r = memberDiagramRibbon(a, b, xs, ys, comp, scale)
+    const fillGeo = new THREE.BufferGeometry()
+    fillGeo.setAttribute('position', new THREE.Float32BufferAttribute(r.fill, 3))
+    const curveGeo = new THREE.BufferGeometry().setFromPoints(
+      r.curve.map((p) => new THREE.Vector3(p[0], p[1], p[2])))
+    return { fillGeo, curveGeo }
+  }, [a, b, xs, ys, comp, scale])
+  const color = DIAG_COLOR[comp]
+  return (
+    <group>
+      <mesh geometry={fillGeo}>
+        <meshBasicMaterial color={color} transparent opacity={0.25} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
+      <primitive object={new THREE.Line(curveGeo, new THREE.LineBasicMaterial({ color }))} />
+    </group>
+  )
 }
 
 // ── Load glyphs ─────────────────────────────────────────────────────────────
@@ -650,6 +682,8 @@ export default function ModelSpace() {
   const [modal, setModal] = useState<ModalResult | null>(null)
   const [modeShapeIdx, setModeShapeIdx] = useState<number | null>(null)
   const [modeAmp, setModeAmp] = useState(1.5)
+  const [forceDiag, setForceDiag] = useState<DiagramComp | null>(null)   // inline 3D BMD/SFD overlay
+  const [forceDiagScale, setForceDiagScale] = useState(1)                // user offset multiplier
   const [rsa, setRsa] = useState<ResponseSpectrumResult | null>(null)
   const [nModes, setNModes] = useState(12)
   const [design, setDesign] = useState<StructureDesign | null>(null)
@@ -1064,6 +1098,18 @@ export default function ModelSpace() {
     return { min: [Math.min(...xs), Math.min(...ys), Math.min(...zs)] as [number, number, number], max: [Math.max(...xs), Math.max(...ys), Math.max(...zs)] as [number, number, number] }
   }, [model])
 
+  // Auto-scale for the inline 3D force diagram: the model-wide peak |ordinate| of
+  // the chosen component maps to ~10% of the model's largest dimension (× user mult).
+  const forceDiagInfo = useMemo(() => {
+    if (!forceDiag || !govRes || !modelBox) return null
+    const byId = new Map<string, F3MemberResult>(govRes.members.map((m) => [m.id, m]))
+    let maxAbs = 0
+    for (const m of govRes.members) for (const v of m[forceDiag]) maxAbs = Math.max(maxAbs, Math.abs(v))
+    const span = Math.max(modelBox.max[0] - modelBox.min[0], modelBox.max[1] - modelBox.min[1], modelBox.max[2] - modelBox.min[2], 1)
+    const scale = diagramScale(maxAbs, span * 0.1 * forceDiagScale)
+    return { byId, scale, maxAbs }
+  }, [forceDiag, forceDiagScale, govRes, modelBox])
+
   const selMember: Member | undefined = model?.members.find((m) => m.id === selected)
   const selPlate: Plate | undefined = model?.plates.find((p) => p.id === selected)
 
@@ -1232,6 +1278,14 @@ export default function ModelSpace() {
                   return <Wall3D key={w.id} tA={tA} tB={tB} bA={bA} bB={bB} shear={w.shearWall} />
                 })}
                 {showLoads && <Loads3D model={model} nodePos={nodePos} />}
+                {forceDiag && forceDiagInfo && forceDiagInfo.scale > 0 && model.members.map((m) => {
+                  const mr = forceDiagInfo.byId.get(m.id)
+                  const a = nodePos.get(m.i), bb = nodePos.get(m.j)
+                  if (!mr || !a || !bb) return null
+                  return <MemberForceDiagram3D key={`fd-${m.id}`}
+                    a={[a.x, a.y, a.z]} b={[bb.x, bb.y, bb.z]}
+                    xs={mr.xs} ys={mr[forceDiag]} comp={forceDiag} scale={forceDiagInfo.scale} />
+                })}
                 {modal && modeShapeIdx !== null && modal.modes[modeShapeIdx] && (
                   <ModeShapePlayer
                     shape={modal.modes[modeShapeIdx].shape}
@@ -1281,6 +1335,30 @@ export default function ModelSpace() {
               </span>
             )}
           </label>
+          {govRes && (
+            <div className="no-print mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
+              <span className="font-medium">Force diagram:</span>
+              <button type="button" onClick={() => setForceDiag(null)}
+                className={`rounded px-1.5 py-0.5 font-semibold ${forceDiag === null ? 'bg-slate-200 text-slate-700' : 'text-slate-400 hover:text-slate-600'}`}>off</button>
+              {(['N', 'Vy', 'Vz', 'My', 'Mz', 'T'] as DiagramComp[]).map((c) => (
+                <button key={c} type="button" onClick={() => setForceDiag(c)}
+                  title={`Draw ${c} on every member (governing combo)`}
+                  className="rounded px-1.5 py-0.5 font-semibold transition"
+                  style={forceDiag === c
+                    ? { background: DIAG_COLOR[c], color: '#fff' }
+                    : { color: DIAG_COLOR[c] }}>
+                  {DIAG_LABEL[c]}
+                </button>
+              ))}
+              {forceDiag && (
+                <label className="ml-1 inline-flex items-center gap-1">
+                  <span className="text-slate-400">scale</span>
+                  <input type="range" min={0.3} max={3} step={0.1} value={forceDiagScale}
+                    onChange={(e) => setForceDiagScale(Number(e.target.value))} className="h-1 w-20" />
+                </label>
+              )}
+            </div>
+          )}
         </div>
 
         {/* RIGHT — tabbed controls */}
@@ -2136,10 +2214,13 @@ export default function ModelSpace() {
                     return (
                       <div className="mt-2 space-y-2">
                         <Row label="Forces (governing)" value={`M ${f1(mr.Mmax)} kN·m`}
-                          sub={`V ${f1(mr.Vmax)} · N ${f1(mr.Nmax)} kN`} />
-                        <Diagram xs={mr.xs} ys={mr.Mz} title="Mz" unit="kN·m" color="#d62728" decimals={1} />
-                        <Diagram xs={mr.xs} ys={mr.Vy} title="Vy" unit="kN" color="#1f77b4" decimals={1} />
-                        <Diagram xs={mr.xs} ys={mr.N} title="N (+tension)" unit="kN" color="#7c3aed" decimals={1} />
+                          sub={`V ${f1(mr.Vmax)} · N ${f1(mr.Nmax)} · T ${f1(mr.Tmax)} kN`} />
+                        <Diagram xs={mr.xs} ys={mr.Mz} title="Mz — strong-axis moment" unit="kN·m" color="#d62728" decimals={1} />
+                        <Diagram xs={mr.xs} ys={mr.My} title="My — weak-axis moment" unit="kN·m" color="#ea580c" decimals={1} />
+                        <Diagram xs={mr.xs} ys={mr.Vy} title="Vy — shear (x′-y′)" unit="kN" color="#1f77b4" decimals={1} />
+                        <Diagram xs={mr.xs} ys={mr.Vz} title="Vz — shear (x′-z′)" unit="kN" color="#0e7490" decimals={1} />
+                        <Diagram xs={mr.xs} ys={mr.N} title="N — axial (+tension)" unit="kN" color="#7c3aed" decimals={1} />
+                        <Diagram xs={mr.xs} ys={mr.T} title="T — torsion" unit="kN·m" color="#b45309" decimals={1} />
                       </div>
                     )
                   })()}

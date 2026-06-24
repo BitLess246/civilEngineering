@@ -162,7 +162,7 @@ const dot = (a: V3, b: V3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 const norm = (a: V3): V3 => { const l = Math.hypot(...a); return [a[0] / l, a[1] / l, a[2] / l] }
 
 /** Rotation matrix rows = local axes (x′, y′, z′) in global components. */
-function localAxes(dir: V3): [V3, V3, V3] {
+export function localAxes(dir: V3): [V3, V3, V3] {
   const xp = norm(dir)
   const up: V3 = Math.abs(dot(xp, [0, 1, 0])) > 0.999 ? [0, 0, 1] : [0, 1, 0]
   const proj = dot(up, xp)
