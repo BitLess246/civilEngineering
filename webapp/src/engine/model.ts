@@ -81,6 +81,10 @@ export type ModelLoad =
   | { kind: 'member-point'; member: string; t: number /* 0–1 along i→j */; P: number; cat: LoadCategory }
   | { kind: 'member-udl'; member: string; w: number; cat: LoadCategory }
   | { kind: 'area'; plate: string; q: number /* kPa */; cat: LoadCategory }
+  /** Uniform temperature change ΔT (°C, + = rise) with linear expansion α (/°C).
+   *  Equivalent axial force P_T = EA·α·ΔT is applied as self-equilibrating end forces
+   *  in the solver (AISC 360 Commentary §C2; ACI 318-14 §6.6.3.1). */
+  | { kind: 'member-thermal'; member: string; deltaT: number; alpha: number; cat: LoadCategory }
 
 export interface Storey { id: string; name: string; elevation: number /* m */ }
 
