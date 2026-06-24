@@ -272,7 +272,7 @@ describe('optimizeStructure', () => {
     // the column was never GROWN by the beam failures (width/height ≤ start);
     // shrink may trim it, but beam failures must not enlarge it.
     const col = r.model.sections.find((s) => s.id === m.members.find((x) => x.role === 'column')!.section)!
-    expect(col.b).toBe(300)
+    expect(col.b).toBeLessThanOrEqual(300)   // not grown by beam failures; shrink may reduce it
     expect(col.h).toBeLessThanOrEqual(500)
     expect(designOK(r.design)).toBe(true)
   })
