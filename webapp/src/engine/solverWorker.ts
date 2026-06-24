@@ -9,6 +9,7 @@
 import type { StructuralModel } from './model'
 import { modelToFrame3D } from './modelBridge'
 import { analyzeFrame3D, solveFrame3D, applyF3Combo, type F3AnalyzeOpts } from './frame3d'
+import { modalAnalysis } from './modal'
 import { driftCheck } from './seismic'
 import { designStructureAsync, optimizeStructureAsync, selectBarDiameters, type SoilOptions, type FootingPlan, type AnalyzeOptions } from './pipeline'
 import type { SolveProgress } from './progress'
@@ -18,6 +19,7 @@ export type SolverRequest =
   | { id: number; kind: 'analyze'; model: StructuralModel; opts: F3AnalyzeOpts; drift: DriftReq }
   | { id: number; kind: 'design'; model: StructuralModel; soil: SoilOptions; plan: FootingPlan; opts: AnalyzeOptions; tryBars: boolean }
   | { id: number; kind: 'optimize'; model: StructuralModel; soil: SoilOptions; plan: FootingPlan; opts: AnalyzeOptions; tryBars: boolean; maxIter: number }
+  | { id: number; kind: 'modal'; model: StructuralModel; nModes: number }
 
 const ctx = self as unknown as Worker
 
@@ -37,6 +39,10 @@ ctx.onmessage = async (e: MessageEvent<SolverRequest>) => {
         drift = sol ? driftCheck(msg.model, br.nodes, sol.d, msg.drift.R, msg.drift.T, msg.drift.axis) : null
       }
       ctx.postMessage({ id: msg.id, ok: true, result: { analysis, orphans: br.orphanEdges.length, drift } })
+    } else if (msg.kind === 'modal') {
+      onProgress({ phase: 'Modal analysis' })
+      const modal = modalAnalysis(msg.model, msg.nModes)
+      ctx.postMessage({ id: msg.id, ok: true, result: { modal } })
     } else if (msg.kind === 'design') {
       let m = msg.model
       if (msg.tryBars) {

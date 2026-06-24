@@ -136,8 +136,8 @@ export function removeNode(model: StructuralModel, nodeId: string): StructuralMo
   }
 }
 
-const GAMMA_C = 24    // kN/m³, default concrete unit weight
-const GAMMA_S = 78.5  // kN/m³, structural steel
+export const GAMMA_C = 24    // kN/m³, default concrete unit weight
+export const GAMMA_S = 78.5  // kN/m³, structural steel
 
 /**
  * Build the gravity load set: member SELF-WEIGHT (D, kN/m from the section),
