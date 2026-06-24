@@ -4,7 +4,7 @@
 // and land on the matching edge members as vdl/udl gravity loads (categories
 // preserved) — the load path, automated.
 // ─────────────────────────────────────────────────────────────────────────
-import type { StructuralModel, RectSection } from './model'
+import type { StructuralModel, RectSection, MemberReleases } from './model'
 import type { F3Node, F3Member, F3Support, F3Load } from './frame3d'
 import { rectJ } from './frame3d'
 import { distributePanel, type AreaLoad } from './tributary'
@@ -115,6 +115,16 @@ function edgeLoadToMember(ld: BeamLoad, memberId: string, sameDir: boolean, L: n
   return null
 }
 
+/** Map MemberReleases flags to F3Member relI / relJ arrays. */
+function releaseFlags(rel: MemberReleases | undefined): Pick<F3Member, 'relI' | 'relJ'> {
+  if (!rel) return {}
+  const toArr = (end?: MemberReleases['iEnd']): [boolean, boolean, boolean, boolean, boolean, boolean] | undefined =>
+    end ? [end.Fx ?? false, end.Fy ?? false, end.Fz ?? false, end.Mx ?? false, end.My ?? false, end.Mz ?? false] : undefined
+  const relI = toArr(rel.iEnd)
+  const relJ = toArr(rel.jEnd)
+  return { ...(relI ? { relI } : {}), ...(relJ ? { relJ } : {}) }
+}
+
 export function modelToFrame3D(model: StructuralModel): BridgeResult {
   const nodes: F3Node[] = model.nodes.map((n) => ({ id: n.id, x: n.x, y: n.y, z: n.z }))
   const nm = new Map(nodes.map((n) => [n.id, n]))
@@ -123,6 +133,7 @@ export function modelToFrame3D(model: StructuralModel): BridgeResult {
 
   const members: F3Member[] = model.members.map((m) => ({
     id: m.id, i: m.i, j: m.j, ...(secById.get(m.section) ?? fallback),
+    ...releaseFlags(m.releases),
   }))
   // shear walls → equivalent diagonal struts (lateral stiffness only)
   members.push(...wallStruts(model, nm))
@@ -132,10 +143,10 @@ export function modelToFrame3D(model: StructuralModel): BridgeResult {
     memberByPair.set(`${m.j}|${m.i}`, m)
   }
 
-  const supports: F3Support[] = model.supports.map((s) => ({
-    node: s.node,
-    fixity: s.fixity === 'fixed' ? 'fixed' : 'pin',   // roller/spring → pin in 3D for now
-  }))
+  const supports: F3Support[] = model.supports.map((s) => {
+    if (s.fixity === 'spring') return { node: s.node, fixity: 'spring', kx: s.kx, ky: s.ky, kz: s.kz }
+    return { node: s.node, fixity: s.fixity === 'fixed' ? 'fixed' : 'pin' }
+  })
 
   const loads: F3Load[] = []
   const orphanEdges: string[] = []

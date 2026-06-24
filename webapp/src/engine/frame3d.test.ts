@@ -224,6 +224,115 @@ describe('serializePrecomp / deserializePrecomp — postMessage roundtrip', () =
   })
 })
 
+// ── Member end releases ───────────────────────────────────────────────────
+// NOTE: Pin supports (fixity:'pin') + moment releases → singular K because the
+// node's rotational DOFs are unconstrained and the element contributes zero
+// rotational stiffness (released). Model a "pin" as fixity:'fixed' + Mz release
+// at the element end instead — the node rotation is clamped to zero by the fixed
+// support while the element end is free to rotate (internal DOF).
+describe('frame3d — member end releases', () => {
+  const L = 6, w = 10
+  const nodes: F3Node[] = [{ id: 'i', x: 0, y: 0, z: 0 }, { id: 'j', x: L, y: 0, z: 0 }]
+  const beamSec: F3Member = { id: 'b', i: 'i', j: 'j', E, G, A, Iy, Iz, J }
+  const udl: F3Load[] = [{ kind: 'member-udl', member: 'b', w, cat: 'D' }]
+  const bothFixed: F3Support[] = [{ node: 'i', fixity: 'fixed' }, { node: 'j', fixity: 'fixed' }]
+
+  it('no releases: end moments = wL²/12 (fixed-fixed)', () => {
+    const r = solveFrame3D(nodes, [beamSec], bothFixed, udl)!
+    expect(Math.abs(r.members[0].Mz[0])).toBeCloseTo((w * L * L) / 12, 2)
+    expect(Math.abs(r.members[0].Mz[r.members[0].Mz.length - 1])).toBeCloseTo((w * L * L) / 12, 2)
+  })
+
+  it('Mz released at both ends (→ simply supported): end moments ≈ 0, midspan = wL²/8', () => {
+    // fixity:'fixed' + Mz release ≡ pin: node is clamped but element end rotates freely
+    const m: F3Member = { ...beamSec, relI: [false, false, false, false, false, true], relJ: [false, false, false, false, false, true] }
+    const r = solveFrame3D(nodes, [m], bothFixed, udl)!
+    expect(r.members[0].Mz[0]).toBeCloseTo(0, 4)
+    expect(r.members[0].Mz[r.members[0].Mz.length - 1]).toBeCloseTo(0, 4)
+    const mid = Math.floor(r.members[0].xs.length / 2)
+    expect(r.members[0].Mz[mid]).toBeCloseTo((w * L * L) / 8, 1)
+    expect(r.reactions[0].F[1]).toBeCloseTo((w * L) / 2, 3)
+    expect(r.reactions[1].F[1]).toBeCloseTo((w * L) / 2, 3)
+  })
+
+  it('Mz released at i-end (→ propped cantilever): Mj = wL²/8, Ri = 3wL/8', () => {
+    const m: F3Member = { ...beamSec, relI: [false, false, false, false, false, true] }
+    const r = solveFrame3D(nodes, [m], bothFixed, udl)!
+    expect(r.members[0].Mz[0]).toBeCloseTo(0, 4)
+    expect(Math.abs(r.members[0].Mz[r.members[0].Mz.length - 1])).toBeCloseTo((w * L * L) / 8, 2)
+    expect(r.reactions[0].F[1]).toBeCloseTo((3 * w * L) / 8, 2)  // Ri = 3wL/8
+    expect(r.reactions[1].F[1]).toBeCloseTo((5 * w * L) / 8, 2)  // Rj = 5wL/8
+  })
+
+  it('beam in portal frame with Mz releases at beam-column joints', () => {
+    // 2-storey portal: columns fixed at base, beam Mz-released at both ends
+    const n: F3Node[] = [
+      { id: 'A', x: 0, y: 0, z: 0 }, { id: 'B', x: 0, y: 3, z: 0 },
+      { id: 'C', x: 6, y: 3, z: 0 }, { id: 'D', x: 6, y: 0, z: 0 },
+    ]
+    const beamL = 6
+    const col1: F3Member = { id: 'col1', i: 'A', j: 'B', E, G, A, Iy: Iz, Iz, J }
+    const col2: F3Member = { id: 'col2', i: 'D', j: 'C', E, G, A, Iy: Iz, Iz, J }
+    const beam: F3Member = { id: 'beam', i: 'B', j: 'C', E, G, A, Iy: Iz, Iz, J,
+      relI: [false, false, false, false, false, true],
+      relJ: [false, false, false, false, false, true],
+    }
+    const r = solveFrame3D(n, [col1, col2, beam],
+      [{ node: 'A', fixity: 'fixed' }, { node: 'D', fixity: 'fixed' }],
+      [{ kind: 'member-udl', member: 'beam', w, cat: 'D' }])!
+    const bm = r.members.find((m) => m.id === 'beam')!
+    // Released beam ends: Mz ≈ 0
+    expect(bm.Mz[0]).toBeCloseTo(0, 3)
+    expect(bm.Mz[bm.Mz.length - 1]).toBeCloseTo(0, 3)
+    // Mid-span: wL²/8 (simply-supported span)
+    const mid = Math.floor(bm.xs.length / 2)
+    expect(bm.Mz[mid]).toBeCloseTo((w * beamL * beamL) / 8, 1)
+  })
+})
+
+// ── Spring supports ────────────────────────────────────────────────────────
+describe('frame3d — spring supports', () => {
+  const L = 3
+  // Horizontal cantilever (fixed at a, spring at b), load Fy at tip b
+  it('cantilever tip spring: δy = Fy / (k_beam + k_spring)', () => {
+    const ky = 500
+    const r = solveFrame3D(
+      [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: L, y: 0, z: 0 }],
+      [{ id: 'm', i: 'a', j: 'b', E, G, A, Iy, Iz, J }],
+      [{ node: 'a', fixity: 'fixed' }, { node: 'b', fixity: 'spring', ky }],
+      [{ kind: 'node', node: 'b', Fy: -10, cat: 'D' }],
+    )!
+    // Cantilever effective tip stiffness (full 6×6 Kff solve resolves uy–θz coupling → 3EI/L³)
+    const kBeam = (3 * E * Iz * 1e-9) / L ** 3
+    expect(r.d[6 + 1]).toBeCloseTo(-10 / (kBeam + ky), 6)
+  })
+
+  it('spring reaction = k × displacement (identity check)', () => {
+    const ky = 200
+    const r = solveFrame3D(
+      [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: L, y: 0, z: 0 }],
+      [{ id: 'm', i: 'a', j: 'b', E, G, A, Iy, Iz, J }],
+      [{ node: 'a', fixity: 'fixed' }, { node: 'b', fixity: 'spring', ky }],
+      [{ kind: 'node', node: 'b', Fy: -40, cat: 'D' }],
+    )!
+    const springReac = r.reactions.find((rx) => rx.fixity === 'spring')!
+    expect(springReac.F[1]).toBeCloseTo(ky * r.d[6 + 1], 6)
+  })
+
+  it('spring carries only a share of the load (beam stiffness >> spring stiffness here)', () => {
+    const ky = 500
+    const r = solveFrame3D(
+      [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: L, y: 0, z: 0 }],
+      [{ id: 'm', i: 'a', j: 'b', E, G, A, Iy, Iz, J }],
+      [{ node: 'a', fixity: 'fixed' }, { node: 'b', fixity: 'spring', ky }],
+      [{ kind: 'node', node: 'b', Fy: -10, cat: 'D' }],
+    )!
+    const spring = r.reactions.find((rx) => rx.fixity === 'spring')!
+    expect(Math.abs(spring.F[1])).toBeGreaterThan(0)
+    expect(Math.abs(spring.F[1])).toBeLessThan(10)  // spring doesn't carry full load
+  })
+})
+
 describe('appliedResultant — statics self-check (§8)', () => {
   const noLen = () => 0
 

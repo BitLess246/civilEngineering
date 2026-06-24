@@ -28,11 +28,19 @@ export interface RectSection {
 }
 
 export type MemberRole = 'beam' | 'girder' | 'column' | 'brace'
+
+/** Per-end force/moment release flags (true = released, i.e. force/moment = 0 at that end). */
+export interface MemberReleases {
+  iEnd?: { Fx?: boolean; Fy?: boolean; Fz?: boolean; Mx?: boolean; My?: boolean; Mz?: boolean }
+  jEnd?: { Fx?: boolean; Fy?: boolean; Fz?: boolean; Mx?: boolean; My?: boolean; Mz?: boolean }
+}
+
 export interface Member {
   id: string
   i: string; j: string          // node ids
   role: MemberRole
   section: string               // RectSection id
+  releases?: MemberReleases
 }
 
 export type PlateRole = 'slab' | 'wall'
@@ -60,7 +68,13 @@ export interface Wall {
 }
 
 export type SupportFixity = 'pin' | 'fixed' | 'roller' | 'spring'
-export interface NodeSupport { node: string; fixity: SupportFixity; k?: number }
+export interface NodeSupport {
+  node: string
+  fixity: SupportFixity
+  k?: number          // (legacy)
+  /** Spring stiffness per global axis [kN/m], used when fixity = 'spring'. */
+  kx?: number; ky?: number; kz?: number
+}
 
 export type ModelLoad =
   | { kind: 'node'; node: string; Fx?: number; Fy?: number; Fz?: number; cat: LoadCategory }

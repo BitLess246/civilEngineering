@@ -4,7 +4,7 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Text } from '@react-three/drei'
 import * as THREE from 'three'
 import { generateGridModel, removeElements, removeNode, buildGravityLoads, splitSharedSections } from '../engine/modelBuilder'
-import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole } from '../engine/model'
+import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole, MemberReleases, NodeSupport, SupportFixity } from '../engine/model'
 import { distributePanel } from '../engine/tributary'
 import { type F3Analysis } from '../engine/frame3d'
 import { validateMesh, hasMeshErrors } from '../engine/meshValidation'
@@ -878,6 +878,10 @@ export default function ModelSpace() {
         : [...model.supports, { node: id, fixity: 'fixed' as const }],
     })
   }
+  const updSupport = (nodeId: string, patch: Partial<NodeSupport>) => {
+    if (!model) return
+    save({ ...model, supports: model.supports.map((s) => (s.node === nodeId ? { ...s, ...patch } : s)) })
+  }
   const updMember = (id: string, patch: Partial<Member>) => {
     if (!model) return
     save({ ...model, members: model.members.map((m) => (m.id === id ? { ...m, ...patch } : m)) })
@@ -1390,6 +1394,45 @@ export default function ModelSpace() {
                       )
                     })()}
                   </div>
+                  {/* End releases panel — shown when a member is selected */}
+                  {(() => {
+                    const sel = model.members.find((m) => m.id === selected)
+                    if (!sel) return null
+                    const rel: MemberReleases = sel.releases ?? {}
+                    const dofs = ['Fx', 'Fy', 'Fz', 'Mx', 'My', 'Mz'] as const
+                    const updRel = (end: 'iEnd' | 'jEnd', dof: typeof dofs[number], v: boolean) => {
+                      const cur = rel[end] ?? {}
+                      updMember(sel.id, { releases: { ...rel, [end]: { ...cur, [dof]: v } } })
+                    }
+                    return (
+                      <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs">
+                        <p className="mb-1.5 font-semibold text-amber-800">End releases — {sel.id}</p>
+                        <table className="w-full border-collapse">
+                          <thead>
+                            <tr className="text-left text-[10px] uppercase tracking-wide text-slate-500">
+                              <th className="pr-2">End</th>
+                              {dofs.map((d) => <th key={d} className="pr-1 text-center">{d}</th>)}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(['iEnd', 'jEnd'] as const).map((end) => (
+                              <tr key={end}>
+                                <td className="pr-2 font-medium text-slate-700">{end === 'iEnd' ? 'i' : 'j'}</td>
+                                {dofs.map((dof) => (
+                                  <td key={dof} className="pr-1 text-center">
+                                    <input type="checkbox"
+                                      checked={(rel[end] as Record<string, boolean> | undefined)?.[dof] ?? false}
+                                      onChange={(e) => updRel(end, dof, e.target.checked)} />
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <p className="mt-1 text-[10px] text-slate-400">Check to release (zero force/moment). Mz = in-plane bending; My = out-of-plane. Click a member row to select.</p>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
 
@@ -1578,6 +1621,54 @@ export default function ModelSpace() {
                   (q_net = qa − γsoil·Ds − γc·Dc). Applied on the next Design / Optimize.
                 </p>
               </Card>
+              {model && model.supports.length > 0 && (
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Support fixity</h3>
+                  <p className="mb-2 text-xs text-slate-500">
+                    Fixed = all 6 DOFs clamped. Pin = 3 translations free to rotate. Spring = translational springs (kN/m).
+                  </p>
+                  <div className="overflow-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="text-left uppercase tracking-wide text-slate-500">
+                          <th className="py-1 pr-2 font-semibold">Node</th>
+                          <th className="py-1 pr-2 font-semibold">Fixity</th>
+                          <th className="py-1 pr-1 font-semibold">kx (kN/m)</th>
+                          <th className="py-1 pr-1 font-semibold">ky (kN/m)</th>
+                          <th className="py-1 font-semibold">kz (kN/m)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {model.supports.map((s) => (
+                          <tr key={s.node} className="border-t border-slate-100">
+                            <td className="py-0.5 pr-2 font-medium">{s.node}</td>
+                            <td className="py-0.5 pr-2">
+                              <select value={s.fixity}
+                                onChange={(e) => updSupport(s.node, { fixity: e.target.value as SupportFixity })}
+                                className="rounded border border-slate-200 px-1 py-0.5">
+                                <option value="fixed">fixed</option>
+                                <option value="pin">pin</option>
+                                <option value="spring">spring</option>
+                              </select>
+                            </td>
+                            {(['kx', 'ky', 'kz'] as const).map((k) => (
+                              <td key={k} className="py-0.5 pr-1">
+                                {s.fixity === 'spring' ? (
+                                  <input type="number" step="100" value={s[k] ?? 0}
+                                    onChange={(e) => updSupport(s.node, { [k]: parseFloat(e.target.value) || 0 })}
+                                    className="w-20 rounded border border-slate-200 px-1 py-0.5" />
+                                ) : (
+                                  <span className="text-slate-300">—</span>
+                                )}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
               {model && model.supports.length > 0 && (
                 <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                   <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Footing plan</h3>
