@@ -8,6 +8,7 @@ import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole
 import { distributePanel } from '../engine/tributary'
 import { type F3Analysis } from '../engine/frame3d'
 import { validateMesh, hasMeshErrors } from '../engine/meshValidation'
+import { type ModalResult } from '../engine/modal'
 import { type StructureDesign, type FootingPlan, type OptimizeResult, type LateralCase } from '../engine/pipeline'
 import type { SteelJoint } from '../engine/steelConnections'
 import { estimateTakeoff, costBill, type PriceList } from '../engine/takeoff'
@@ -27,6 +28,7 @@ import { MemberForcesTable } from '../components/MemberForcesTable'
 import { ReactionsPanel } from '../components/ReactionsPanel'
 import { DisplacementTable } from '../components/DisplacementTable'
 import { ValidationPanel } from '../components/ValidationPanel'
+import { ModalPanel } from '../components/ModalPanel'
 import { BeamSchematic } from '../components/BeamSchematic'
 import { ColumnSchematic } from '../components/ColumnSchematic'
 import { FootingSchematic } from '../components/FootingSchematic'
@@ -404,13 +406,14 @@ function DirPicker({ value, onChange }: { value: string[]; onChange: (v: string[
 }
 
 // ── Right-panel tabs ────────────────────────────────────────────────────────
-type Tab = 'geometry' | 'properties' | 'supports' | 'loading' | 'analysis' | 'design'
+type Tab = 'geometry' | 'properties' | 'supports' | 'loading' | 'analysis' | 'modal' | 'design'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'geometry', label: 'Geometry' },
   { id: 'properties', label: 'Properties' },
   { id: 'supports', label: 'Supports' },
   { id: 'loading', label: 'Loading' },
   { id: 'analysis', label: 'Analysis' },
+  { id: 'modal', label: 'Modal' },
   { id: 'design', label: 'Design' },
 ]
 function TabBtn({ id, label, active, onClick }: { id: Tab; label: string; active: boolean; onClick: (t: Tab) => void }) {
@@ -597,6 +600,8 @@ export default function ModelSpace() {
   })
   const [selected, setSelected] = useState<string | null>(null)
   const [analysis, setAnalysis] = useState<F3Analysis | null>(null)
+  const [modal, setModal] = useState<ModalResult | null>(null)
+  const [nModes, setNModes] = useState(12)
   const [design, setDesign] = useState<StructureDesign | null>(null)
   const [opt, setOpt] = useState<OptimizeResult | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)   // open schedule-row solution
@@ -661,6 +666,7 @@ export default function ModelSpace() {
   const save = (m: StructuralModel | null) => {
     setModel(m)
     setAnalysis(null)             // geometry changed — results are stale
+    setModal(null)
     setDesign(null)
     setOpt(null)
     setExpanded(null)
@@ -692,6 +698,13 @@ export default function ModelSpace() {
       setAnalysis(res.analysis)
       setDrift(res.drift)
     }).catch((e) => console.error('analyze failed', e))
+  }
+
+  const runModal = () => {
+    if (!model || busy || meshErrors) return
+    run('modal', { model, nModes }).then((r) => {
+      setModal((r as { modal: ModalResult | null }).modal)
+    }).catch((e) => console.error('modal failed', e))
   }
 
   // Re-sign / re-axis a base node-load set into a directional case.
@@ -1983,6 +1996,40 @@ export default function ModelSpace() {
                   )}
                   <button type="button" onClick={() => { save(removeElements(model, new Set([selPlate.id]))); setSelected(null) }}
                     className="mt-2 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50">Delete slab</button>
+                </ResultCard>
+              )}
+            </div>
+          )}
+
+          {/* ── MODAL ── */}
+          {tab === 'modal' && (
+            <div className="space-y-4">
+              <Card title="Modal analysis options">
+                <label className="flex flex-col text-sm">
+                  <span className="mb-1 font-medium text-slate-600">Number of modes</span>
+                  <input type="number" min={1} max={50} step={1} value={nModes}
+                    onChange={(e) => setNModes(Math.max(1, Math.min(50, Math.round(parseFloat(e.target.value) || 1))))}
+                    className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none focus:ring-1 focus:ring-[#0056b3]" />
+                </label>
+                <p className="col-span-full text-[11px] text-slate-500">
+                  Lumped-mass free vibration ([K]−ω²[M]). Mass from member &amp; slab self-weight (dead). Request enough
+                  modes to accumulate ≥90% of the lateral mass (NSCP 208.5.5).
+                </p>
+                <div className="col-span-full">
+                  <button type="button" onClick={runModal} disabled={!model || !!busy || meshErrors} className={btn('from-[#7c3aed] to-[#5b21b6]')}>
+                    {busy === 'modal' ? '⏳ Solving modes…' : '〰 Run modal analysis'}
+                  </button>
+                  {meshErrors && <p className="mt-1 text-[11px] font-medium text-red-600">Resolve the mesh errors in the Analysis tab to enable modal analysis.</p>}
+                </div>
+                {busy === 'modal' && <SolverProgress p={progress} />}
+              </Card>
+
+              {model && <ValidationPanel issues={meshIssues} />}
+
+              {modal && modal.modes.length > 0 && <ModalPanel result={modal} />}
+              {modal && modal.modes.length === 0 && (
+                <ResultCard title="Modal analysis">
+                  <p className="text-sm text-slate-600">No modes found — the model has no lumped mass (add members/slabs with self-weight).</p>
                 </ResultCard>
               )}
             </div>
