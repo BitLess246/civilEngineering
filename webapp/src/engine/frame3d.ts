@@ -24,9 +24,18 @@ export interface F3Member {
   A: number                 // mm²
   Iy: number; Iz: number    // mm⁴ (Iz: bending under gravity for horizontal members)
   J: number                 // mm⁴
+  /** Released local DOFs at end i: [ux, uy, uz, θx, θy, θz] (true = force/moment = 0). */
+  relI?: [boolean, boolean, boolean, boolean, boolean, boolean]
+  /** Released local DOFs at end j: [ux, uy, uz, θx, θy, θz]. */
+  relJ?: [boolean, boolean, boolean, boolean, boolean, boolean]
 }
-export type F3Fixity = 'pin' | 'fixed'
-export interface F3Support { node: string; fixity: F3Fixity }
+export type F3Fixity = 'pin' | 'fixed' | 'spring'
+export interface F3Support {
+  node: string
+  fixity: F3Fixity
+  /** Spring stiffness per global axis [kN/m], used when fixity = 'spring'. */
+  kx?: number; ky?: number; kz?: number
+}
 
 export type F3Load =
   | { kind: 'node'; node: string; Fx?: number; Fy?: number; Fz?: number; Mx?: number; My?: number; Mz?: number; cat: LoadCategory }
@@ -167,14 +176,21 @@ const transpose = (A: number[][]): number[][] => A[0].map((_, j) => A.map((row) 
 // ── Geometry-only member data (load-independent) ──────────────────────────
 export interface MemberGeom {
   L: number; R: [V3, V3, V3]
-  kl: number[][]; T: number[][]; kg: number[][]
+  kl: number[][]        // original 12×12 local stiffness (for force recovery)
+  T: number[][]; kg: number[][]
   dofs: number[]
   gl: V3   // gravity unit vector in local coords: R · (0, −1, 0)
+  // Release data — populated only when member has releases
+  relIdx?: number[]     // which local DOFs (0-11) are released
+  retIdx?: number[]     // which are retained (complement of relIdx)
+  kff_inv?: number[][]  // inverse of k_ff sub-matrix (nf × nf)
+  kfr?: number[][]      // k_fr sub-matrix (nf × nr), used in force recovery
 }
 
 // ── Load-dependent member data ─────────────────────────────────────────────
 interface MemberLoads {
-  feq: number[]
+  feq: number[]         // original fixed-end forces (for postprocessMember)
+  feqEff: number[]      // condensed feq (for global load vector assembly)
   qy: (x: number) => number
   qz: (x: number) => number
   p: (x: number) => number
@@ -198,6 +214,55 @@ export interface FramePrecomp {
   Kff_raw: number[][]            // un-factored Kff; needed as P-Δ elastic baseline
 }
 
+/**
+ * Static condensation — eliminates released local DOFs from the element stiffness.
+ * Returns the condensed 12×12 stiffness (zeros at released rows/cols) and the
+ * recovery data needed to reconstruct released-DOF displacements after the global solve.
+ *
+ * Derivation (Schur complement): partition k into retained (r) and released (f):
+ *   k_cond = k_rr − k_rf · k_ff⁻¹ · k_fr
+ * Force recovery: d_f = k_ff⁻¹ · (feq_f − k_fr · d_r)
+ */
+function condenseLocal(kl: number[][], relIdx: number[]): {
+  klEff: number[][]
+  retIdx: number[]
+  kff_inv: number[][]
+  kfr: number[][]
+} {
+  const n = 12
+  const relSet = new Set(relIdx)
+  const retIdx = Array.from({ length: n }, (_, i) => i).filter((i) => !relSet.has(i))
+  const nf = relIdx.length
+
+  const k_rr = retIdx.map((r) => retIdx.map((c) => kl[r][c]))
+  const k_rf = retIdx.map((r) => relIdx.map((c) => kl[r][c]))
+  const k_fr = relIdx.map((r) => retIdx.map((c) => kl[r][c]))
+  const k_ff = relIdx.map((r) => relIdx.map((c) => kl[r][c]))
+
+  // Invert k_ff (at most 6×6)
+  const kff_fac = luFactor(k_ff)
+  const kff_inv: number[][] = Array.from({ length: nf }, (_, k) => {
+    const e = new Array(nf).fill(0); e[k] = 1
+    return kff_fac ? luSolve(kff_fac, e) : e
+  })
+
+  // k_rf · k_ff⁻¹ (nr × nf)
+  const k_rf_kffinv = k_rf.map((row) =>
+    Array.from({ length: nf }, (_, j) => row.reduce((s, v, k) => s + v * kff_inv[k][j], 0)),
+  )
+
+  // k_cond (nr × nr)
+  const k_cond_small = k_rr.map((row, i) =>
+    row.map((v, j) => v - k_rf_kffinv[i].reduce((s, u, k) => s + u * k_fr[k][j], 0)),
+  )
+
+  // Expand to 12×12
+  const klEff = Array.from({ length: n }, () => new Array(n).fill(0))
+  retIdx.forEach((ri, i) => retIdx.forEach((ci, j) => { klEff[ri][ci] = k_cond_small[i][j] }))
+
+  return { klEff, retIdx, kff_inv, kfr: k_fr }
+}
+
 function prepMemberGeom(m: F3Member, nm: Map<string, F3Node>, idx: Map<string, number>): MemberGeom {
   const ni = nm.get(m.i)!, nj = nm.get(m.j)!
   const dir: V3 = sub([nj.x, nj.y, nj.z], [ni.x, ni.y, ni.z])
@@ -208,12 +273,26 @@ function prepMemberGeom(m: F3Member, nm: Map<string, F3Node>, idx: Map<string, n
   const EIy = m.E * m.Iy * 1e-9
   const EIz = m.E * m.Iz * 1e-9
   const kl = kLocal(EA, GJ, EIy, EIz, L)
+
+  // Collect released local DOF indices (end i = 0..5, end j = 6..11)
+  const relIdx: number[] = []
+  m.relI?.forEach((r, k) => { if (r) relIdx.push(k) })
+  m.relJ?.forEach((r, k) => { if (r) relIdx.push(6 + k) })
+
+  let klEff = kl
+  let releaseData: Pick<MemberGeom, 'relIdx' | 'retIdx' | 'kff_inv' | 'kfr'> | undefined
+  if (relIdx.length > 0) {
+    const cond = condenseLocal(kl, relIdx)
+    klEff = cond.klEff
+    releaseData = { relIdx, retIdx: cond.retIdx, kff_inv: cond.kff_inv, kfr: cond.kfr }
+  }
+
   const T = tMatrix(R)
-  const kg = mul(mul(transpose(T), kl), T)
+  const kg = mul(mul(transpose(T), klEff), T)   // uses condensed stiffness when releases exist
   const ii = idx.get(m.i)!, jj = idx.get(m.j)!
   const dofs = [...Array.from({ length: 6 }, (_, k) => 6 * ii + k), ...Array.from({ length: 6 }, (_, k) => 6 * jj + k)]
   const gl: V3 = [R[0][1] * -1, R[1][1] * -1, R[2][1] * -1]
-  return { L, R, kl, T, kg, dofs, gl }
+  return { L, R, kl, T, kg, dofs, gl, ...releaseData }
 }
 
 function computeMemberLoads(geom: MemberGeom, m: F3Member, loads: F3Load[]): MemberLoads {
@@ -263,8 +342,25 @@ function computeMemberLoads(geom: MemberGeom, m: F3Member, loads: F3Load[]): Mem
     }
     return s
   }
+
+  // Condense feq when member has releases: feqEff[ret] = feq[ret] - k_rf · k_ff⁻¹ · feq[rel]
+  let feqEff = feq
+  if (geom.relIdx && geom.relIdx.length > 0 && geom.retIdx && geom.kff_inv && geom.kfr) {
+    const { relIdx, retIdx, kff_inv, kfr } = geom
+    const feq_f = relIdx.map((i) => feq[i])
+    // k_ff⁻¹ · feq_f
+    const kffinv_feqf = kff_inv.map((row) => row.reduce((s, v, k) => s + v * feq_f[k], 0))
+    feqEff = [...feq]
+    relIdx.forEach((i) => { feqEff[i] = 0 })
+    retIdx.forEach((ri, i) => {
+      // k_rf[i][j] = kfr[j][i] (k_fr transposed, by symmetry of k_l)
+      feqEff[ri] -= kfr.reduce((s, row, j) => s + row[i] * kffinv_feqf[j], 0)
+    })
+  }
+
   return {
     feq,
+    feqEff,
     p: (x) => intensity(x, 0),
     qy: (x) => intensity(x, 1),
     qz: (x) => intensity(x, 2),
@@ -287,6 +383,7 @@ export function precomputeFrame(
   for (const s of supports) {
     const i = idx.get(s.node)
     if (i === undefined) continue
+    if (s.fixity === 'spring') continue   // spring DOFs stay free; stiffness added below
     for (let k = 0; k < (s.fixity === 'fixed' ? 6 : 3); k++) constrained.add(6 * i + k)
   }
   const free: number[] = []
@@ -305,6 +402,19 @@ export function precomputeFrame(
         Kff_raw[ia][ib] += g.kg[a][b]
       }
     }
+  }
+
+  // Spring supports: add translational spring stiffness to Kff diagonal
+  for (const s of supports) {
+    if (s.fixity !== 'spring') continue
+    const i = idx.get(s.node)
+    if (i === undefined) continue
+    const ks = [s.kx ?? 0, s.ky ?? 0, s.kz ?? 0]
+    ks.forEach((k, dir) => {
+      if (k <= 0) return
+      const pos = freeIdx.get(6 * i + dir)
+      if (pos !== undefined) Kff_raw[pos][pos] += k
+    })
   }
 
   const Kff = luFactor(Kff_raw)   // null if singular; {n:0} if nf===0
@@ -346,7 +456,21 @@ export function deserializePrecomp(s: FramePrecompSerial): FramePrecomp {
 
 function postprocessMember(m: F3Member, g: MemberGeom, ml: MemberLoads, d: number[]): F3MemberResult {
   const de = g.dofs.map((dof) => d[dof])
-  const dl = matVec(g.T, de)
+  let dl = matVec(g.T, de)
+
+  // Recover released-DOF internal displacements so f at released ends = 0
+  // d_f = k_ff⁻¹ · (feq_f − k_fr · d_r)
+  if (g.relIdx && g.relIdx.length > 0 && g.retIdx && g.kff_inv && g.kfr) {
+    const { relIdx, retIdx, kff_inv, kfr } = g
+    const d_r = retIdx.map((i) => dl[i])
+    const feq_f = relIdx.map((i) => ml.feq[i])
+    const kfr_dr = kfr.map((row) => row.reduce((s, v, k) => s + v * d_r[k], 0))
+    const rhs = feq_f.map((v, k) => v - kfr_dr[k])
+    const d_f = kff_inv.map((row) => row.reduce((s, v, k) => s + v * rhs[k], 0))
+    dl = [...dl]
+    relIdx.forEach((ri, k) => { dl[ri] = d_f[k] })
+  }
+
   const f = matVec(g.kl, dl).map((v, k) => v - ml.feq[k])
 
   const NS = 24
@@ -410,10 +534,10 @@ export function solveWithGeometry(
 
   const mloads = members.map((m, i) => computeMemberLoads(geoms[i], m, loads))
 
-  // Assemble global load vector F
+  // Assemble global load vector F (use condensed feqEff so released DOFs get no moment)
   const F = new Array(ndof).fill(0)
   geoms.forEach((g, i) => {
-    const fg = matVec(transpose(g.T), mloads[i].feq)
+    const fg = matVec(transpose(g.T), mloads[i].feqEff)
     for (let a = 0; a < 12; a++) F[g.dofs[a]] += fg[a]
   })
   for (const ld of loads) {
@@ -480,6 +604,18 @@ export function solveWithGeometry(
     .filter((s) => idx.has(s.node))
     .map((s) => {
       const i = idx.get(s.node)!
+      if (s.fixity === 'spring') {
+        // Spring reaction = spring stiffness × displacement
+        return {
+          node: s.node, fixity: s.fixity,
+          F: [
+            (s.kx ?? 0) * d[6 * i + 0],
+            (s.ky ?? 0) * d[6 * i + 1],
+            (s.kz ?? 0) * d[6 * i + 2],
+          ] as [number, number, number],
+          M: [0, 0, 0] as [number, number, number],
+        }
+      }
       return {
         node: s.node, fixity: s.fixity,
         F: [Rv[6 * i], Rv[6 * i + 1], Rv[6 * i + 2]] as [number, number, number],
