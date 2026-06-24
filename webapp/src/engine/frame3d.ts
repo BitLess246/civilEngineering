@@ -73,6 +73,27 @@ export function applyF3Combo(loads: F3Load[], factors: Partial<Record<LoadCatego
     })
 }
 
+/**
+ * Resultant of an applied (already factored) load set in global axes, as
+ * [ΣFx, ΣFy, ΣFz] (kN). Member gravity loads act in global −Y; their resultant
+ * is the integral over the loaded length (UDL: w·L, VDL: ½(w1+w2)·Δ, point: P),
+ * matching the equivalent nodal loads the solver assembles. Used for the
+ * statics self-check ΣApplied + ΣReactions ≈ 0 (§8 — equilibrium sanity).
+ */
+export function appliedResultant(loads: F3Load[], memberLen: (id: string) => number): [number, number, number] {
+  let fx = 0, fy = 0, fz = 0
+  for (const ld of loads) {
+    if (ld.kind === 'node') { fx += ld.Fx ?? 0; fy += ld.Fy ?? 0; fz += ld.Fz ?? 0 }
+    else if (ld.kind === 'member-udl') { fy -= ld.w * memberLen(ld.member) }
+    else if (ld.kind === 'member-vdl') {
+      const L = memberLen(ld.member)
+      const x1 = Math.max(0, ld.x1), x2 = Math.min(L, ld.x2)
+      if (x2 > x1) fy -= 0.5 * (ld.w1 + ld.w2) * (x2 - x1)
+    } else { fy -= ld.P }
+  }
+  return [fx, fy, fz]
+}
+
 /** Local 12×12 stiffness. */
 function kLocal(EA: number, GJ: number, EIy: number, EIz: number, L: number): number[][] {
   const k = Array.from({ length: 12 }, () => new Array(12).fill(0))
