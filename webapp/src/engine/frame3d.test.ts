@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { solveFrame3D, analyzeFrame3D, rectJ, precomputeFrame, solveWithGeometry, serializePrecomp, deserializePrecomp, appliedResultant, type F3Node, type F3Member, type F3Support, type F3Load } from './frame3d'
+import { solveFrame3D, analyzeFrame3D, rectJ, precomputeFrame, solveWithGeometry, serializePrecomp, deserializePrecomp, appliedResultant, type F3Node, type F3Member, type F3Support, type F3Load, type F3DiaphragmGroup } from './frame3d'
 import { solveFrame2D } from './frame2d'
 import { generateGridModel } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
@@ -371,5 +371,70 @@ describe('appliedResultant — statics self-check (§8)', () => {
     const reac: [number, number, number] = [0, 1, 2].map((k) =>
       gov.result!.reactions.reduce((s, q) => s + q.F[k], 0)) as [number, number, number]
     for (let k = 0; k < 3; k++) expect(applied[k] + reac[k]).toBeCloseTo(0, 2)
+  })
+})
+
+// ── Rigid floor diaphragm ─────────────────────────────────────────────────
+describe('rigid floor diaphragm — precomputeFrame + solveWithGeometry', () => {
+  // Two columns at (0,0,0)→(0,3,0) and (6,0,0)→(6,3,0), both fixed at base.
+  // A lateral nodal load at the left column top (Fx = 1 kN).
+  // Without diaphragm: each column resists independently (equal stiffness → 0.5 kN each).
+  // With diaphragm: floor constraint forces equal Ux at both tops; same result here
+  //   since they are symmetric, but θy of both tops must also be equal.
+  const nodes: F3Node[] = [
+    { id: 'bL', x: 0, y: 0, z: 0 }, { id: 'tL', x: 0, y: 3, z: 0 },
+    { id: 'bR', x: 6, y: 0, z: 0 }, { id: 'tR', x: 6, y: 3, z: 0 },
+  ]
+  const Iy = (h * b ** 3) / 12  // weak axis
+  const colSec: F3Member = { id: 'cL', i: 'bL', j: 'tL', E, G, A, Iy, Iz, J }
+  const colR: F3Member = { ...colSec, id: 'cR', i: 'bR', j: 'tR' }
+  const supports: F3Support[] = [
+    { node: 'bL', fixity: 'fixed' }, { node: 'bR', fixity: 'fixed' },
+  ]
+  const loads: F3Load[] = [{ kind: 'node', node: 'tL', Fx: 1, cat: 'D' }]
+
+  it('without diaphragm: left column takes all sway (right column uninvited)', () => {
+    const r = solveFrame3D(nodes, [colSec, colR], supports, loads)!
+    // Without diaphragm the nodes are independent; right top should barely move
+    const tL = nodes.findIndex((n) => n.id === 'tL')
+    const tR = nodes.findIndex((n) => n.id === 'tR')
+    // tR has no direct load → zero horizontal displacement
+    expect(Math.abs(r.d[6 * tR + 0])).toBeCloseTo(0, 9)
+    expect(Math.abs(r.d[6 * tL + 0])).toBeGreaterThan(1e-6)
+  })
+
+  it('with diaphragm: both column tops have equal Ux', () => {
+    const dia: F3DiaphragmGroup[] = [{ masterNode: 'tL', slaveNodes: ['tR'] }]
+    const pc = precomputeFrame(nodes, [colSec, colR], supports, dia)
+    const r = solveWithGeometry(pc, loads)!
+    const tL = nodes.findIndex((n) => n.id === 'tL')
+    const tR = nodes.findIndex((n) => n.id === 'tR')
+    expect(r.d[6 * tL + 0]).toBeCloseTo(r.d[6 * tR + 0], 9)
+    // Both columns resist: total reaction = 1 kN
+    const sumRx = r.reactions.reduce((s, q) => s + q.F[0], 0)
+    expect(sumRx).toBeCloseTo(-1, 6)
+  })
+
+  it('with diaphragm: arm effect — slave at dz offset shares θy with master', () => {
+    // Master at (0,3,0), slave at (6,3,2) — has both dx and dz arm
+    const nodes2: F3Node[] = [
+      { id: 'bL', x: 0, y: 0, z: 0 }, { id: 'tL', x: 0, y: 3, z: 0 },
+      { id: 'bR', x: 6, y: 0, z: 2 }, { id: 'tR', x: 6, y: 3, z: 2 },
+    ]
+    const colSec2: F3Member = { ...colSec, id: 'cL2', i: 'bL', j: 'tL' }
+    const colR2: F3Member = { ...colSec, id: 'cR2', i: 'bR', j: 'tR' }
+    const dia: F3DiaphragmGroup[] = [{ masterNode: 'tL', slaveNodes: ['tR'] }]
+    const pc = precomputeFrame(nodes2, [colSec2, colR2], supports, dia)
+    const r = solveWithGeometry(pc, loads)!
+    expect(r).not.toBeNull()
+    // Rigid body kinematics: ux_tR = ux_tL − dz·θy_tL; dz = 2, dx = 6
+    const tL = nodes2.findIndex((n) => n.id === 'tL')
+    const tR = nodes2.findIndex((n) => n.id === 'tR')
+    const ux_m = r.d[6 * tL + 0], θy_m = r.d[6 * tL + 4]
+    const ux_s = r.d[6 * tR + 0]
+    const dz = nodes2[tR].z - nodes2[tL].z   // = 2
+    expect(ux_s).toBeCloseTo(ux_m - dz * θy_m, 6)
+    // Slave θy must equal master θy
+    expect(r.d[6 * tR + 4]).toBeCloseTo(θy_m, 9)
   })
 })

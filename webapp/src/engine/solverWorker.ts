@@ -30,7 +30,7 @@ ctx.onmessage = async (e: MessageEvent<SolverRequest>) => {
   try {
     if (msg.kind === 'analyze') {
       const br = modelToFrame3D(msg.model)
-      const analysis = analyzeFrame3D(br.nodes, br.members, br.supports, br.loads, msg.opts, onProgress)
+      const analysis = analyzeFrame3D(br.nodes, br.members, br.supports, br.loads, msg.opts, onProgress, br.diaphragmGroups)
       let drift = null
       if (msg.drift.hasSeis) {
         onProgress({ phase: 'Storey-drift check' })
