@@ -7,6 +7,7 @@ import { generateGridModel, removeElements, removeNode, buildGravityLoads, split
 import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole } from '../engine/model'
 import { distributePanel } from '../engine/tributary'
 import { type F3Analysis } from '../engine/frame3d'
+import { validateMesh, hasMeshErrors } from '../engine/meshValidation'
 import { type StructureDesign, type FootingPlan, type OptimizeResult, type LateralCase } from '../engine/pipeline'
 import type { SteelJoint } from '../engine/steelConnections'
 import { estimateTakeoff, costBill, type PriceList } from '../engine/takeoff'
@@ -25,6 +26,7 @@ import { Diagram } from '../components/Diagram'
 import { MemberForcesTable } from '../components/MemberForcesTable'
 import { ReactionsPanel } from '../components/ReactionsPanel'
 import { DisplacementTable } from '../components/DisplacementTable'
+import { ValidationPanel } from '../components/ValidationPanel'
 import { BeamSchematic } from '../components/BeamSchematic'
 import { ColumnSchematic } from '../components/ColumnSchematic'
 import { FootingSchematic } from '../components/FootingSchematic'
@@ -679,7 +681,7 @@ export default function ModelSpace() {
   const anaOpts = { f1: fLive, pDelta, lateral, seismicSystem }
 
   const analyze = () => {
-    if (!model || busy) return
+    if (!model || busy || meshErrors) return   // §1 fail-fast: don't solve a singular mesh
     const axis: 'x' | 'z' = (eDirs[0] ?? '+X').includes('X') ? 'x' : 'z'
     // 3D FEM + storey drift run in the worker so the UI stays responsive.
     run('analyze', {
@@ -795,7 +797,7 @@ export default function ModelSpace() {
   }
 
   const runPipeline = () => {
-    if (!model || busy) return
+    if (!model || busy || meshErrors) return
     setOpt(null)
     // material is applied on the main thread (cheap); the FEM + bar selection +
     // designStructure run in the worker so the page never freezes.
@@ -810,7 +812,7 @@ export default function ModelSpace() {
   }
 
   const optimize = () => {
-    if (!model || busy) return
+    if (!model || busy || meshErrors) return
     run('optimize', {
       model: applyMaterial(model), soil, plan: footingPlan(), opts: anaOpts, tryBars, maxIter: 30,
     }).then((raw) => {
@@ -1030,6 +1032,11 @@ export default function ModelSpace() {
   const memberLen = selMember
     ? nodePos.get(selMember.i)!.distanceTo(nodePos.get(selMember.j)!)
     : 0
+
+  // Pre-analysis mesh diagnostics (§1) — drives the validation panel and the
+  // fail-fast guard on the Analyze button.
+  const meshIssues = useMemo(() => (model ? validateMesh(model) : []), [model])
+  const meshErrors = hasMeshErrors(meshIssues)
 
   // Member-length lookup (m) for the statics self-check in the reactions panel.
   const memberLenById = useMemo(() => {
@@ -1894,12 +1901,15 @@ export default function ModelSpace() {
                   {pDelta ? ' Frame solved with the geometric-stiffness P-Δ iteration.' : ' First-order (linear) frame solve.'}
                 </p>
                 <div className="col-span-full">
-                  <button type="button" onClick={analyze} disabled={!model || !!busy} className={btn('from-[#0e7490] to-[#155e75]')}>
+                  <button type="button" onClick={analyze} disabled={!model || !!busy || meshErrors} className={btn('from-[#0e7490] to-[#155e75]')}>
                     {busy === 'analyze' ? '⏳ Analyzing…' : '▶ Analyze (3D FEM)'}
                   </button>
+                  {meshErrors && <p className="mt-1 text-[11px] font-medium text-red-600">Resolve the mesh errors below to enable analysis.</p>}
                 </div>
                 {busy === 'analyze' && <SolverProgress p={progress} />}
               </Card>
+
+              {model && <ValidationPanel issues={meshIssues} />}
 
               {gov && govRes && (
                 <ResultCard title={`Analysis — ${gov.combo.name} governs`}>
@@ -1983,14 +1993,19 @@ export default function ModelSpace() {
             <div className="space-y-4">
               <Card title="Design & optimise">
                 <div className="col-span-full flex flex-wrap gap-2">
-                  <button type="button" onClick={runPipeline} disabled={!model || !!busy} className={btn('from-[#15803d] to-[#166534]')}>
+                  <button type="button" onClick={runPipeline} disabled={!model || !!busy || meshErrors} className={btn('from-[#15803d] to-[#166534]')}>
                     {busy === 'design' ? '⏳ Designing…' : '🏗 Design structure'}
                   </button>
-                  <button type="button" onClick={optimize} disabled={!model || !!busy} className={btn('from-[#b45309] to-[#92400e]')}
+                  <button type="button" onClick={optimize} disabled={!model || !!busy || meshErrors} className={btn('from-[#b45309] to-[#92400e]')}
                     title="Grow each failing member's own section until nothing fails, then trim back">
                     {busy === 'optimize' ? '⏳ Optimizing…' : '🏁 Optimize design'}
                   </button>
                 </div>
+                {meshErrors && (
+                  <p className="col-span-full text-[11px] font-medium text-red-600">
+                    Mesh has errors — fix them in the Analysis tab before designing.
+                  </p>
+                )}
                 {busy && <SolverProgress p={progress} />}
                 {busy && (
                   <p className="col-span-full text-[11px] font-medium text-[#0056b3]">
