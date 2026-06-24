@@ -24,6 +24,7 @@ import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRow
 import { Diagram } from '../components/Diagram'
 import { MemberForcesTable } from '../components/MemberForcesTable'
 import { ReactionsPanel } from '../components/ReactionsPanel'
+import { DisplacementTable } from '../components/DisplacementTable'
 import { BeamSchematic } from '../components/BeamSchematic'
 import { ColumnSchematic } from '../components/ColumnSchematic'
 import { FootingSchematic } from '../components/FootingSchematic'
@@ -1916,6 +1917,10 @@ export default function ModelSpace() {
 
               {analysis && model && (
                 <ReactionsPanel analysis={analysis} memberLen={memberLenById} />
+              )}
+
+              {analysis && model && (
+                <DisplacementTable analysis={analysis} nodes={model.nodes} />
               )}
 
               {drift && seis && (
