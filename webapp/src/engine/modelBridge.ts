@@ -164,6 +164,14 @@ export function modelToFrame3D(model: StructuralModel): BridgeResult {
       const a = nm.get(m.i)!, b = nm.get(m.j)!
       const L = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)
       loads.push({ kind: 'member-point', member: ld.member, a: ld.t * L, P: ld.P, cat: ld.cat })
+    } else if (ld.kind === 'member-thermal') {
+      const m = model.members.find((q) => q.id === ld.member)
+      if (!m) continue
+      const sec = model.sections.find((s) => s.id === m.section)
+      if (!sec) continue
+      const { E, A } = sectionProps(sec)   // E in kN/mm², A in mm²
+      const PT = E * A * ld.alpha * ld.deltaT   // kN
+      loads.push({ kind: 'member-thermal', member: ld.member, PT, cat: ld.cat })
     }
   }
 

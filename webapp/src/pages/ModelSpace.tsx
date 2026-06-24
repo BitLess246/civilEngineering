@@ -689,6 +689,12 @@ export default function ModelSpace() {
   const [modeAmp, setModeAmp] = useState(1.5)
   const [forceDiag, setForceDiag] = useState<DiagramComp | null>(null)   // inline 3D BMD/SFD overlay
   const [forceDiagScale, setForceDiagScale] = useState(1)                // user offset multiplier
+  // Thermal load inputs
+  const [thMember, setThMember] = useState('')
+  const [thDeltaT, setThDeltaT] = useState(30)
+  const [thAlphaKey, setThAlphaKey] = useState<'steel' | 'concrete' | 'custom'>('steel')
+  const [thAlphaCustom, setThAlphaCustom] = useState(12e-6)
+  const thAlpha = thAlphaKey === 'steel' ? 11.7e-6 : thAlphaKey === 'concrete' ? 10e-6 : thAlphaCustom
   // AISC DG11 floor-vibration check (0 = use the value auto-suggested from analysis)
   const [dg11OccId, setDg11OccId] = useState('office')
   const [dg11DeflMm, setDg11DeflMm] = useState(0)
@@ -1036,6 +1042,7 @@ export default function ModelSpace() {
         if (l.kind === 'area') return { ...l, q: v }
         if (l.kind === 'member-udl') return { ...l, w: v }
         if (l.kind === 'member-point') return { ...l, P: v }
+        if (l.kind === 'member-thermal') return { ...l, deltaT: v }
         return l
       }),
     })
@@ -2050,18 +2057,19 @@ export default function ModelSpace() {
                       <tbody>
                         {model.loads.map((l: ModelLoad, idx) => {
                           const target = l.kind === 'node' ? l.node : l.kind === 'area' ? l.plate : l.member
-                          const val = l.kind === 'area' ? l.q : l.kind === 'member-udl' ? l.w : l.kind === 'member-point' ? l.P : null
-                          const unit = l.kind === 'area' ? 'kPa' : l.kind === 'member-udl' ? 'kN/m' : 'kN'
+                          const val = l.kind === 'area' ? l.q : l.kind === 'member-udl' ? l.w : l.kind === 'member-point' ? l.P : l.kind === 'member-thermal' ? l.deltaT : null
+                          const unit = l.kind === 'area' ? 'kPa' : l.kind === 'member-udl' ? 'kN/m' : l.kind === 'member-thermal' ? '°C' : 'kN'
                           return (
                             <tr key={idx} className="border-t border-slate-100">
                               <td className={`py-0.5 pr-2 font-semibold ${l.cat === 'D' ? 'text-slate-600' : l.cat === 'L' ? 'text-emerald-700' : 'text-purple-700'}`}>{l.cat}</td>
-                              <td className="py-0.5 pr-2">{l.kind === 'node' ? '·' : l.kind === 'area' ? '▦' : '—'} {target}</td>
+                              <td className="py-0.5 pr-2">{l.kind === 'node' ? '·' : l.kind === 'area' ? '▦' : l.kind === 'member-thermal' ? '🌡' : '—'} {target}</td>
                               <td className="py-0.5 pr-1 whitespace-nowrap">
                                 {val !== null ? (
                                   <>
                                     <input type="number" step="0.1" value={val}
                                       onChange={(e) => updLoad(idx, parseFloat(e.target.value))}
                                       className="w-16 rounded border border-slate-200 px-1 py-0.5" /> {unit}
+                                    {l.kind === 'member-thermal' && <span className="ml-1 text-slate-400">(α = {(l.alpha * 1e6).toFixed(1)}×10⁻⁶)</span>}
                                   </>
                                 ) : (
                                   <span className="text-slate-500">
@@ -2085,6 +2093,49 @@ export default function ModelSpace() {
                     input. “Rebuild” regenerates both after you edit the frame.
                   </p>
                 </div>
+              )}
+
+              {model && (
+                <Card title="Thermal / temperature loads">
+                  <label className="flex flex-col text-sm">
+                    <span className="mb-1 font-medium text-slate-600">Member</span>
+                    <select value={thMember} onChange={(e) => setThMember(e.target.value)}
+                      className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none">
+                      <option value="">— select member —</option>
+                      {model.members.map((m) => <option key={m.id} value={m.id}>{m.id}</option>)}
+                    </select>
+                  </label>
+                  <Num label="Temperature change ΔT" unit="°C" value={thDeltaT} onChange={setThDeltaT} step="5"
+                    hint="+ve = heating (expansion); −ve = cooling (contraction)" />
+                  <label className="flex flex-col text-sm">
+                    <span className="mb-1 font-medium text-slate-600">Expansion coeff. α</span>
+                    <select value={thAlphaKey} onChange={(e) => setThAlphaKey(e.target.value as 'steel' | 'concrete' | 'custom')}
+                      className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none">
+                      <option value="steel">Steel — 11.7×10⁻⁶ /°C (AISC)</option>
+                      <option value="concrete">Concrete — 10×10⁻⁶ /°C (ACI 318)</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                    {thAlphaKey === 'custom' && (
+                      <input type="number" step="1e-7" value={thAlphaCustom}
+                        onChange={(e) => setThAlphaCustom(parseFloat(e.target.value))}
+                        className="mt-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none focus:ring-1 focus:ring-[#0056b3]" />
+                    )}
+                  </label>
+                  <div className="col-span-full">
+                    <button type="button"
+                      disabled={!thMember || !Number.isFinite(thDeltaT) || !Number.isFinite(thAlpha) || thAlpha <= 0}
+                      onClick={() => {
+                        if (!model || !thMember) return
+                        save({ ...model, loads: [...model.loads, { kind: 'member-thermal', member: thMember, deltaT: thDeltaT, alpha: thAlpha, cat: 'D' }] })
+                      }}
+                      className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
+                      + Add thermal load
+                    </button>
+                  </div>
+                  <p className="col-span-full text-[10px] text-slate-400">
+                    Equivalent axial force P_T = EA·α·ΔT applied as self-equilibrating end forces (AISC 360-16 Commentary §C2). Treated as dead load (D) in NSCP 2015 combinations. Thermal effects appear in the member N diagram after Analyze.
+                  </p>
+                </Card>
               )}
 
               <Card title="Seismic — NSCP 208 static force">

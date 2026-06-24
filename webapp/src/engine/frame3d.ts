@@ -52,6 +52,9 @@ export type F3Load =
   | { kind: 'member-udl'; member: string; w: number; cat: LoadCategory }                       // kN/m, global −Y
   | { kind: 'member-vdl'; member: string; x1: number; x2: number; w1: number; w2: number; cat: LoadCategory } // global −Y
   | { kind: 'member-point'; member: string; a: number; P: number; cat: LoadCategory }          // kN, global −Y at a from i
+  /** Thermal axial prestress PT = EA·α·ΔT (kN). Positive ΔT = heating = member wants to elongate.
+   *  Fixed-end forces in local x′: −PT at i-node, +PT at j-node (self-equilibrating pair). */
+  | { kind: 'member-thermal'; member: string; PT: number; cat: LoadCategory }
 
 export interface F3MemberResult {
   id: string; L: number
@@ -78,6 +81,7 @@ function scaleF3(ld: F3Load, f: number): F3Load {
   if (ld.kind === 'node') return { ...ld, Fx: (ld.Fx ?? 0) * f, Fy: (ld.Fy ?? 0) * f, Fz: (ld.Fz ?? 0) * f, Mx: (ld.Mx ?? 0) * f, My: (ld.My ?? 0) * f, Mz: (ld.Mz ?? 0) * f }
   if (ld.kind === 'member-udl') return { ...ld, w: ld.w * f }
   if (ld.kind === 'member-vdl') return { ...ld, w1: ld.w1 * f, w2: ld.w2 * f }
+  if (ld.kind === 'member-thermal') return { ...ld, PT: ld.PT * f }
   return { ...ld, P: ld.P * f }
 }
 
@@ -88,6 +92,7 @@ export function applyF3Combo(loads: F3Load[], factors: Partial<Record<LoadCatego
       if (ld.kind === 'node') return [ld.Fx, ld.Fy, ld.Fz, ld.Mx, ld.My, ld.Mz].some((v) => Math.abs(v ?? 0) > 1e-9)
       if (ld.kind === 'member-udl') return Math.abs(ld.w) > 1e-9
       if (ld.kind === 'member-vdl') return Math.abs(ld.w1) + Math.abs(ld.w2) > 1e-9
+      if (ld.kind === 'member-thermal') return Math.abs(ld.PT) > 1e-9
       return Math.abs(ld.P) > 1e-9
     })
 }
@@ -108,6 +113,8 @@ export function appliedResultant(loads: F3Load[], memberLen: (id: string) => num
       const L = memberLen(ld.member)
       const x1 = Math.max(0, ld.x1), x2 = Math.min(L, ld.x2)
       if (x2 > x1) fy -= 0.5 * (ld.w1 + ld.w2) * (x2 - x1)
+    } else if (ld.kind === 'member-thermal') {
+      // self-equilibrating — zero net global force
     } else { fy -= ld.P }
   }
   return [fx, fy, fz]
@@ -329,6 +336,11 @@ function computeMemberLoads(geom: MemberGeom, m: F3Member, loads: F3Load[]): Mem
       feq[7] += ld.P * gl[1] * N[2]; feq[11] += ld.P * gl[1] * N[3]
       feq[2] += ld.P * gl[2] * N[0]; feq[4] -= ld.P * gl[2] * N[1]
       feq[8] += ld.P * gl[2] * N[2]; feq[10] -= ld.P * gl[2] * N[3]
+    } else if (ld.kind === 'member-thermal' && ld.member === m.id) {
+      // Equivalent axial end forces in local x′: {f_T}^e = EA·α·ΔT · {-1, +1}
+      // derived from ∫[B]^T · E·α·ΔT · A · dx (standard FEM thermal load vector).
+      feq[0] -= ld.PT   // i-end: compressive push (−x′)
+      feq[6] += ld.PT   // j-end: compressive push (+x′)
     }
   }
   for (const dd of dists) {
