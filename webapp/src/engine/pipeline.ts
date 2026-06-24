@@ -791,6 +791,7 @@ export async function optimizeStructureAsync(
 
     if (converged) {
       let batchPass = 0
+      // Phase 1 — shrink h (or step to lighter W-shape for steel)
       let batchOk = true
       while (batchOk) {
         const batchSizes = new Map<string, RectSection>()
@@ -804,29 +805,55 @@ export async function optimizeStructureAsync(
         }
         if (batchSizes.size === 0) break
         batchPass++
-        onProgress?.({ phase: 'Optimizing — trimming sections', detail: `batch pass ${batchPass}: ${batchSizes.size} section(s) ↓` })
+        onProgress?.({ phase: 'Optimizing — trimming sections', detail: `batch pass ${batchPass}: ${batchSizes.size} section(s) h↓` })
         const trial = settle(withSizes(work, batchSizes))
         const d = await designStructureWithPool(trial, soil, plan, opts, pool)
         if (d && designOK(d)) { work = trial; design = d } else { batchOk = false }
       }
+      // Phase 2 — shrink b for RC sections (As = ρ·b·d; narrower b may still satisfy demand)
+      let bBatchOk = true
+      while (bBatchOk) {
+        const batchSizes = new Map<string, RectSection>()
+        for (const s0 of work.sections) {
+          if (s0.material !== 'steel' && s0.b - 25 >= 200)
+            batchSizes.set(s0.id, { ...s0, b: s0.b - 25, name: `${s0.b - 25}×${s0.h}` })
+        }
+        if (batchSizes.size === 0) break
+        batchPass++
+        onProgress?.({ phase: 'Optimizing — trimming sections', detail: `batch pass ${batchPass}: ${batchSizes.size} section(s) b↓` })
+        const trial = settle(withSizes(work, batchSizes))
+        const d = await designStructureWithPool(trial, soil, plan, opts, pool)
+        if (d && designOK(d)) { work = trial; design = d } else { bBatchOk = false }
+      }
 
+      // Fine-tune: per-section — try h↓ first, then b↓ if h can't shrink or fails
       let improved = true, guard = 0
       while (improved && guard++ < 4) {
         improved = false
         for (const s0 of work.sections) {
-          let trialSec: RectSection | null = null
           if (s0.material === 'steel' && s0.shape) {
             const lighter = nextLighterW(s0.shape)
-            if (lighter) trialSec = applyShape(s0, lighter)
+            if (!lighter) continue
+            onProgress?.({ phase: 'Optimizing — fine-tuning', detail: s0.name })
+            const trial = settle(withSizes(work, new Map([[s0.id, applyShape(s0, lighter)]])))
+            const d = await designStructureWithPool(trial, soil, plan, opts, pool)
+            if (d && designOK(d)) { work = trial; design = d; improved = true }
           } else {
-            if (s0.h - 25 < 300) continue
-            trialSec = { ...s0, h: s0.h - 25, name: `${s0.b}×${s0.h - 25}` }
+            if (s0.h - 25 >= 300) {
+              onProgress?.({ phase: 'Optimizing — fine-tuning', detail: `${s0.name} h↓` })
+              const hSec = { ...s0, h: s0.h - 25, name: `${s0.b}×${s0.h - 25}` }
+              const trial = settle(withSizes(work, new Map([[s0.id, hSec]])))
+              const d = await designStructureWithPool(trial, soil, plan, opts, pool)
+              if (d && designOK(d)) { work = trial; design = d; improved = true; continue }
+            }
+            if (s0.b - 25 >= 200) {
+              onProgress?.({ phase: 'Optimizing — fine-tuning', detail: `${s0.name} b↓` })
+              const bSec = { ...s0, b: s0.b - 25, name: `${s0.b - 25}×${s0.h}` }
+              const trial = settle(withSizes(work, new Map([[s0.id, bSec]])))
+              const d = await designStructureWithPool(trial, soil, plan, opts, pool)
+              if (d && designOK(d)) { work = trial; design = d; improved = true }
+            }
           }
-          if (!trialSec) continue
-          onProgress?.({ phase: 'Optimizing — fine-tuning', detail: s0.name })
-          const trial = settle(withSizes(work, new Map([[s0.id, trialSec]])))
-          const d = await designStructureWithPool(trial, soil, plan, opts, pool)
-          if (d && designOK(d)) { work = trial; design = d; improved = true }
         }
       }
       if (tryBars) {
@@ -1061,6 +1088,7 @@ export function optimizeStructure(
   // batch-trimmed (typically the critical ones controlling the design).
   if (converged) {
     let batchPass = 0
+    // Phase 1 — shrink h (or step to lighter W-shape for steel)
     let batchOk = true
     while (batchOk) {
       const batchSizes = new Map<string, RectSection>()
@@ -1074,30 +1102,55 @@ export function optimizeStructure(
       }
       if (batchSizes.size === 0) break
       batchPass++
-      onProgress?.({ phase: 'Optimizing — trimming sections', detail: `batch pass ${batchPass}: ${batchSizes.size} section(s) ↓` })
+      onProgress?.({ phase: 'Optimizing — trimming sections', detail: `batch pass ${batchPass}: ${batchSizes.size} section(s) h↓` })
       const trial = settle(withSizes(work, batchSizes))
       const d = designStructure(trial, soil, plan, opts)
       if (d && designOK(d)) { work = trial; design = d } else { batchOk = false }
     }
+    // Phase 2 — shrink b for RC sections (As = ρ·b·d; narrower b may still satisfy demand)
+    let bBatchOk = true
+    while (bBatchOk) {
+      const batchSizes = new Map<string, RectSection>()
+      for (const s0 of work.sections) {
+        if (s0.material !== 'steel' && s0.b - 25 >= 200)
+          batchSizes.set(s0.id, { ...s0, b: s0.b - 25, name: `${s0.b - 25}×${s0.h}` })
+      }
+      if (batchSizes.size === 0) break
+      batchPass++
+      onProgress?.({ phase: 'Optimizing — trimming sections', detail: `batch pass ${batchPass}: ${batchSizes.size} section(s) b↓` })
+      const trial = settle(withSizes(work, batchSizes))
+      const d = designStructure(trial, soil, plan, opts)
+      if (d && designOK(d)) { work = trial; design = d } else { bBatchOk = false }
+    }
 
-    // Individual fine-tune: catch sections the batch couldn't trim
+    // Fine-tune: per-section — try h↓ first, then b↓ if h can't shrink or fails
     let improved = true, guard = 0
     while (improved && guard++ < 4) {
       improved = false
       for (const s0 of work.sections) {
-        let trialSec: RectSection | null = null
         if (s0.material === 'steel' && s0.shape) {
           const lighter = nextLighterW(s0.shape)
-          if (lighter) trialSec = applyShape(s0, lighter)
+          if (!lighter) continue
+          onProgress?.({ phase: 'Optimizing — fine-tuning', detail: s0.name })
+          const trial = settle(withSizes(work, new Map([[s0.id, applyShape(s0, lighter)]])))
+          const d = designStructure(trial, soil, plan, opts)
+          if (d && designOK(d)) { work = trial; design = d; improved = true }
         } else {
-          if (s0.h - 25 < 300) continue
-          trialSec = { ...s0, h: s0.h - 25, name: `${s0.b}×${s0.h - 25}` }
+          if (s0.h - 25 >= 300) {
+            onProgress?.({ phase: 'Optimizing — fine-tuning', detail: `${s0.name} h↓` })
+            const hSec = { ...s0, h: s0.h - 25, name: `${s0.b}×${s0.h - 25}` }
+            const trial = settle(withSizes(work, new Map([[s0.id, hSec]])))
+            const d = designStructure(trial, soil, plan, opts)
+            if (d && designOK(d)) { work = trial; design = d; improved = true; continue }
+          }
+          if (s0.b - 25 >= 200) {
+            onProgress?.({ phase: 'Optimizing — fine-tuning', detail: `${s0.name} b↓` })
+            const bSec = { ...s0, b: s0.b - 25, name: `${s0.b - 25}×${s0.h}` }
+            const trial = settle(withSizes(work, new Map([[s0.id, bSec]])))
+            const d = designStructure(trial, soil, plan, opts)
+            if (d && designOK(d)) { work = trial; design = d; improved = true }
+          }
         }
-        if (!trialSec) continue
-        onProgress?.({ phase: 'Optimizing — fine-tuning', detail: s0.name })
-        const trial = settle(withSizes(work, new Map([[s0.id, trialSec]])))
-        const d = designStructure(trial, soil, plan, opts)
-        if (d && designOK(d)) { work = trial; design = d; improved = true }
       }
     }
     // final bar re-detail at the trimmed sizes for the most economical layout
