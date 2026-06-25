@@ -207,8 +207,8 @@ function MemberSteel3D({ a, b, role, shapeName, selected, tint = 0, onPick }: {
   )
 }
 
-function Slab3D({ corners, selected, onPick }: {
-  corners: THREE.Vector3[]; selected: boolean; onPick: () => void
+function Slab3D({ corners, selected, shell, onPick }: {
+  corners: THREE.Vector3[]; selected: boolean; shell?: boolean; onPick: () => void
 }) {
   const { mid, sx, sz } = useMemo(() => {
     const mid = corners.reduce((s, c) => s.add(c.clone()), new THREE.Vector3()).multiplyScalar(0.25)
@@ -216,6 +216,36 @@ function Slab3D({ corners, selected, onPick }: {
     const sz = Math.abs(corners[3].z - corners[0].z) || Math.abs(corners[2].z - corners[0].z)
     return { mid, sx, sz }
   }, [corners])
+
+  // Shell mode: draw the real triangulated panel (two triangles on the c0–c2
+  // diagonal, the exact mesh the solver assembles) — works for any orientation,
+  // including vertical wall panels — tinted teal and overlaid with the diagonal.
+  const shellGeo = useMemo(() => {
+    if (!shell || corners.length < 4) return null
+    const [c0, c1, c2, c3] = corners
+    const fill = new THREE.BufferGeometry()
+    fill.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+      c0.x, c0.y, c0.z, c1.x, c1.y, c1.z, c2.x, c2.y, c2.z,
+      c0.x, c0.y, c0.z, c2.x, c2.y, c2.z, c3.x, c3.y, c3.z,
+    ]), 3))
+    fill.computeVertexNormals()
+    const diag = new THREE.BufferGeometry()
+    diag.setAttribute('position', new THREE.BufferAttribute(new Float32Array([c0.x, c0.y, c0.z, c2.x, c2.y, c2.z]), 3))
+    return { fill, diag }
+  }, [shell, corners])
+
+  if (shellGeo) {
+    return (
+      <group onClick={(e) => { e.stopPropagation(); onPick() }}>
+        <mesh geometry={shellGeo.fill}>
+          <meshStandardMaterial color={selected ? SEL : '#14b8a6'} transparent opacity={selected ? 0.75 : 0.4}
+            side={THREE.DoubleSide} depthWrite={false} />
+        </mesh>
+        <primitive object={new THREE.Line(shellGeo.diag, new THREE.LineBasicMaterial({ color: selected ? SEL : '#0f766e' }))} />
+      </group>
+    )
+  }
+
   return (
     <mesh position={[mid.x, mid.y + 0.05, mid.z]}
       onClick={(e) => { e.stopPropagation(); onPick() }}>
@@ -1384,7 +1414,7 @@ export default function ModelSpace() {
                 {model.plates.map((p) => {
                   const cs = p.corners.map((c) => nodePos.get(c))
                   if (cs.some((c) => !c)) return null
-                  return <Slab3D key={p.id} corners={cs as THREE.Vector3[]}
+                  return <Slab3D key={p.id} corners={cs as THREE.Vector3[]} shell={model.shellElements}
                     selected={p.id === selected} onPick={() => setSelected(p.id)} />
                 })}
                 {model.supports.map((s) => {
@@ -2418,6 +2448,17 @@ export default function ModelSpace() {
                       className="w-20 rounded border border-slate-300 px-2 py-1" />
                     <span className="text-[11px] text-slate-400">auto offsets = factor × ½·(connecting member depth) at each joint</span>
                   </label>
+                )}
+                <label className="col-span-full flex items-center gap-2 text-sm">
+                  <input type="checkbox" disabled={!model} checked={model?.shellElements ?? false}
+                    onChange={(e) => model && save({ ...model, shellElements: e.target.checked })} />
+                  <span>Shell elements (slab/wall panels as CST+DKT finite elements, not load sources)</span>
+                </label>
+                {model?.shellElements && (
+                  <p className="col-span-full pl-6 text-[11px] text-slate-400">
+                    Each panel meshes to two triangles on its corner nodes; area loads lump to those nodes.
+                    Analysis-path feature — the NSCP design pipeline keeps the tributary load model.
+                  </p>
                 )}
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={tryBars} onChange={(e) => setTryBars(e.target.checked)} />
