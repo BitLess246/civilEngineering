@@ -152,22 +152,23 @@ complete**; Tier 3 items #10–13 are the remaining backlog.
    iteration with Gram-Schmidt deflation; `bucklingFromFrame` (raw API) +
    `bucklingAnalysis` (StructuralModel API). Note: 3D pin-pin columns are torsionally
    singular under `fixity:'pin'`; fixed or fixed-pin BCs required.
-10. ✅ **Rigid links / member offsets** — PR #242. `offI`/`offJ` (node→member-end
-    vector, global m) on `F3Member`; rigid-link transform H folded into the element
-    transform (`Teff = T·H`) so stiffness, loads, force recovery, P-Δ and buckling
-    all carry the arm with no other code changes. **Next phase**: UI inputs +
-    3D rendering of the rigid arm in ModelSpace (engine ready).
-11. ✅ **Time-history analysis** — PR #244. `engine/timeHistory.ts`: `newmarkSDOF`
-    (Newmark-β average-acceleration SDOF integrator) + `modalTimeHistory` (modal
-    superposition under ground acceleration; base-shear history Σ effMass·ω²·D and
-    peak nodal displacements Σ φ·Γ·D). Reuses modalAnalysis untouched. **Next phase**:
-    ModelSpace UI — ground-motion input + base-shear/roof-disp plots.
-12. ✅ **Pushover / nonlinear static** — PR #246. `engine/pushover.ts`: concentrated
-    plastic-hinge model by the event-to-event method (a hinge = a member-end moment
-    release, reusing frame3d's DOF condensation). Returns the capacity curve (base
-    shear vs control-node disp), hinge sequence and mechanism flag; robust mechanism
-    detection. Biaxial My/Mz hinges. **Next phase**: ModelSpace UI (load pattern, Mp
-    per member, capacity-curve plot); engine — P–M interaction, axial/shear hinges.
+10. ✅ **Rigid links / member offsets** — engine PR #242, **UI PR #250**. `offI`/`offJ`
+    (node→member-end vector, global m) on `F3Member`; rigid-link transform H folded into
+    the element transform (`Teff = T·H`) so stiffness, loads, force recovery, P-Δ and
+    buckling all carry the arm. UI: `Member.offsets` + Geometry-tab editor + purple
+    3D rigid-arm rendering.
+11. ✅ **Time-history analysis** — engine PR #244, **UI PR #249**. `engine/timeHistory.ts`:
+    `newmarkSDOF` (Newmark-β SDOF integrator) + `modalTimeHistory` (modal superposition
+    under ground accel; base-shear Σ effMass·ω²·D and peak disp Σ φ·Γ·D). UI:
+    `engine/timeHistoryModel.ts` (synthetic ground motions) + V(t)/Δ(t) plots in the Modal tab.
+12. ✅ **Pushover / nonlinear static** — engine PR #246, **UI PR #248**. `engine/pushover.ts`:
+    event-to-event plastic hinges (a hinge = a member-end moment release). Capacity curve
+    + hinge sequence + mechanism flag. UI: `engine/pushoverModel.ts` (plastic-moment +
+    pattern bridge) + a Pushover tab with the capacity-curve plot.
 13. FEM plate/shell elements (true thin-shell walls & slabs vs. today's load sources).
 
-_Tests at last handoff: **676 passing**; `tsc -b` clean; production build OK._
+### UI follow-ups still open
+- Pushover: P–M interaction surface, axial/shear hinges, optional P-Δ in the push.
+- Time-history: upload a real accelerogram (CSV) in addition to synthetic samples.
+
+_Tests at last handoff: **691 passing**; `tsc -b` clean; production build OK._
