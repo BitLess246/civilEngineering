@@ -3965,6 +3965,7 @@ export default function ModelSpace() {
                 <thead>
                   <tr className="text-left uppercase tracking-wide text-slate-500">
                     <th className="py-1 pr-2 font-semibold">Shape</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Unit wt (kg/m)</th>
                     <th className="py-1 pr-2 text-right font-semibold">Length (m)</th>
                     <th className="py-1 text-right font-semibold">Mass (kg)</th>
                   </tr>
@@ -3973,12 +3974,14 @@ export default function ModelSpace() {
                   {takeoff.steelByShape.sort((a, b) => a.shape.localeCompare(b.shape)).map((s) => (
                     <tr key={s.shape} className="border-t border-slate-100">
                       <td className="py-0.5 pr-2 font-medium">{s.shape}</td>
+                      <td className="py-0.5 pr-2 text-right">{f1(s.kgPerM)}</td>
                       <td className="py-0.5 pr-2 text-right">{f1(s.L)}</td>
                       <td className="py-0.5 text-right">{Math.round(s.kg)}</td>
                     </tr>
                   ))}
                   <tr className="border-t border-slate-200 font-semibold">
                     <td className="py-1 pr-2">Total</td>
+                    <td className="py-1 pr-2" />
                     <td className="py-1 pr-2 text-right">{f1(takeoff.steelByShape.reduce((s, r) => s + r.L, 0))}</td>
                     <td className="py-1 text-right">{Math.round(takeoff.structuralSteelKg)} kg ({(takeoff.structuralSteelKg / 1000).toFixed(2)} t)</td>
                   </tr>
