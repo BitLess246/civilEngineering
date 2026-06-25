@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { autoRigidOffsets } from './rigidEndZones'
+import { shapeByName } from './aiscSections'
 import { emptyModel, type StructuralModel, type RectSection } from './model'
 
 const col: RectSection = { id: 'C', name: 'col', b: 400, h: 600, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
@@ -53,6 +54,40 @@ describe('autoRigidOffsets', () => {
     const full = autoRigidOffsets(portal(), 1).get('bm')!.offI![0]
     const half = autoRigidOffsets(portal(), 0.5).get('bm')!.offI![0]
     expect(half).toBeCloseTo(full / 2, 9)
+  })
+
+  it('per-member rigidZoneFactor overrides the model factor (0 excludes the member)', () => {
+    const model = portal()
+    model.members[1].rigidZoneFactor = 0   // exclude the beam
+    const m = autoRigidOffsets(model, 1)
+    expect(m.get('bm')).toBeUndefined()    // beam excluded
+    expect(m.get('cL')).toBeTruthy()       // column still gets its zone
+
+    const model2 = portal()
+    model2.members[1].rigidZoneFactor = 0.5
+    expect(autoRigidOffsets(model2, 1).get('bm')!.offI![0]).toBeCloseTo(0.1, 6)  // 0.5 × 0.2
+  })
+
+  it('resolves steel AISC shape dimensions, not the bounding-box b/h', () => {
+    const shp = shapeByName('W310x97')!
+    const colSteel: RectSection = {
+      id: 'CS', name: 'W310x97', b: 1, h: 1,           // bogus bounding box
+      fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40,
+      material: 'steel', shape: 'W310x97', steelFy: 345,
+    }
+    const model: StructuralModel = {
+      ...emptyModel('t'),
+      nodes: [{ id: 'bl', x: 0, y: 0, z: 0 }, { id: 'tl', x: 0, y: 4, z: 0 }, { id: 'tr', x: 6, y: 4, z: 0 }],
+      sections: [colSteel, beam],
+      members: [
+        { id: 'cL', i: 'bl', j: 'tl', role: 'column', section: 'CS' },
+        { id: 'bm', i: 'tl', j: 'tr', role: 'beam', section: 'B' },
+      ],
+      supports: [{ node: 'bl', fixity: 'fixed' }],
+    }
+    // beam i-end zone uses the steel column's width (bf) along X, not h/b = 1 mm.
+    const bm = autoRigidOffsets(model, 1).get('bm')!
+    expect(bm.offI![0]).toBeCloseTo((shp.bf! / 1000) / 2, 6)
   })
 
   it('caps the total offset so the clear span stays positive', () => {

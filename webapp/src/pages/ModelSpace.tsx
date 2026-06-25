@@ -1602,12 +1602,19 @@ export default function ModelSpace() {
                           <th className="py-1 pr-1 font-semibold">h</th>
                           <th className="py-1 pr-1 font-semibold">i</th>
                           <th className="py-1 pr-1 font-semibold">j</th>
+                          <th className="py-1 pr-1 font-semibold" title="clear span (centreline length minus rigid end zones)">Lc</th>
                           <th className="py-1" />
                         </tr>
                       </thead>
                       <tbody>
                         {model.members.map((m) => {
                           const ms = sectionFor(m.id)
+                          const pa = nodePos.get(m.i), pb = nodePos.get(m.j)
+                          const Lfull = pa && pb ? pa.distanceTo(pb) : 0
+                          const eI = m.offsets?.iEnd ?? autoOff?.get(m.id)?.offI
+                          const eJ = m.offsets?.jEnd ?? autoOff?.get(m.id)?.offJ
+                          const Lc = Math.max(Lfull - (eI ? Math.hypot(...eI) : 0) - (eJ ? Math.hypot(...eJ) : 0), 0)
+                          const trimmed = Lc < Lfull - 1e-6
                           return (
                             <tr key={m.id} className={`border-t border-slate-100 ${m.id === selected ? 'bg-amber-50' : ''}`}>
                               <td className="py-0.5 pr-2 font-medium cursor-pointer" onClick={() => setSelected(m.id)}>{m.id}</td>
@@ -1633,6 +1640,10 @@ export default function ModelSpace() {
                                   </select>
                                 </td>
                               ))}
+                              <td className={`py-0.5 pr-1 tabular-nums ${trimmed ? 'font-semibold text-violet-700' : 'text-slate-500'}`}
+                                title={trimmed ? `full ${Lfull.toFixed(2)} m` : 'no rigid end zone'}>
+                                {Lc.toFixed(2)}
+                              </td>
                               <td className="py-0.5 text-right">
                                 <button type="button" onClick={() => { save(removeElements(model, new Set([m.id]))); if (selected === m.id) setSelected(null) }}
                                   className="rounded px-1.5 text-red-500 hover:bg-red-50">✕</button>
@@ -1749,6 +1760,17 @@ export default function ModelSpace() {
                           </tbody>
                         </table>
                         <p className="mt-1 text-[10px] text-slate-400">Vector node→member-end (global m). The flexible member spans end→end; node↔end is a rigid arm (purple).</p>
+                        <label className="mt-2 flex items-center gap-2 border-t border-violet-200 pt-2 text-[11px] text-slate-700">
+                          <span>Auto rigid-zone factor override</span>
+                          <input type="number" min={0} max={1} step={0.1}
+                            value={sel.rigidZoneFactor ?? ''} placeholder="model"
+                            onChange={(e) => {
+                              const v = parseFloat(e.target.value)
+                              updMember(sel.id, { rigidZoneFactor: Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : undefined })
+                            }}
+                            className="w-16 rounded border border-violet-200 px-1 py-0.5 text-right" />
+                          <span className="text-[10px] text-slate-400">blank = model factor · 0 = no zone for this member (needs Auto rigid end zones on)</span>
+                        </label>
                       </div>
                     )
                   })()}

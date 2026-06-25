@@ -50,6 +50,9 @@ export interface Member {
   section: string               // RectSection id
   releases?: MemberReleases
   offsets?: MemberOffsets
+  /** Per-member rigid-zone factor override (0–1); falls back to the model factor.
+   *  0 excludes this member from automatic rigid end zones. */
+  rigidZoneFactor?: number
 }
 
 export type PlateRole = 'slab' | 'wall'
