@@ -167,8 +167,15 @@ complete**; Tier 3 items #10–13 are the remaining backlog.
     pattern bridge) + a Pushover tab with the capacity-curve plot.
 13. FEM plate/shell elements (true thin-shell walls & slabs vs. today's load sources).
 
+### Extras beyond the roadmap
+- ✅ **Automatic rigid end zones** (ETABS-style) — PR #252. `engine/rigidEndZones.ts`
+  `autoRigidOffsets(model, factor)` derives per-member end offsets from joint
+  connectivity (factor × ½·connecting-member depth, projected on the member axis);
+  applied in the bridge (manual offsets win per end), so every solve honours them.
+  Analysis-tab toggle + rigid-zone factor; 3D renders zones as muted member segments.
+
 ### UI follow-ups still open
 - Pushover: P–M interaction surface, axial/shear hinges, optional P-Δ in the push.
 - Time-history: upload a real accelerogram (CSV) in addition to synthetic samples.
 
-_Tests at last handoff: **691 passing**; `tsc -b` clean; production build OK._
+_Tests at last handoff: **698 passing**; `tsc -b` clean; production build OK._
