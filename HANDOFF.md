@@ -34,7 +34,7 @@ npx tsc -b       # typecheck
 npm run build    # typecheck + production build
 ```
 
-## Current state (all merged to `main`, through PR #231)
+## Current state (all merged to `main`, through PR #239)
 
 ### 3D Model Space analysis core (`/model`) — the centrepiece
 The 3D space-frame solver and its NSCP design pipeline are the most developed part
@@ -52,6 +52,9 @@ of the app. Everything runs **off the main thread** in a web worker
 - **Spring supports** (PR #229): `fixity:'spring'` with `kx/ky/kz` adds translational
   stiffness to the free-DOF diagonal (pile-head / elastic-foundation modelling).
   UI = fixed/pin/spring selector + stiffness fields in the Supports tab.
+  ⚠️ **Sign fix pending PR** (branch `claude/next-phase-jsoxhl`): reported spring
+  reaction was `+k·d` (wrong); correct restoring force is `−k·d`. Structural
+  solution is unaffected — display-only bug. Merge that PR to close it.
 - **Rigid floor diaphragm** (PR #231): per-storey master-slave constraint elimination
   (T-matrix) tying in-plane `{ux, uz, θy}` with full rigid-body kinematics (arm
   effect). `engine/diaphragm.ts` groups nodes by storey; opt-in checkbox in Analysis.
@@ -61,6 +64,21 @@ of the app. Everything runs **off the main thread** in a web worker
   skeleton in the 3D canvas (amplitude slider), via imperative R3F `useFrame`.
 - **Response-spectrum analysis** (`engine/responseSpectrum.ts`) + **storey-drift
   check** (`engine/seismic.ts`, NSCP 208) + **wind loads** (`engine/wind.ts`).
+- **Member force diagrams BMD/SFD** (PR #233): inline bending-moment and shear
+  diagrams rendered on each member in the 3D view and Analysis tab. Uses the
+  existing `xs[]`/`My[]`/`Mz[]`/`Vy[]` arrays on `F3MemberResult`.
+- **Effective length factor K** (PR #234): computed from the G-factor alignment chart
+  (AISC Commentary C-C2) using ΣEI/L stiffness assembled at joints. Applied per
+  column in the design pipeline.
+- **Non-W steel sections in the 3D model** (PR #235): HSS, channel (C), angle (L),
+  and WT shapes wired through `modelBridge.steelSectionProps` and the design path;
+  extruded accurately in 3D via `lib/sectionShapes3d.ts`.
+- **Floor vibration check AISC DG11** (PR #236): post-processes modal results;
+  fn = 0.18√(g/Δj); compares ap/g against 0.5% g (office) and 0.05% g (sensitive)
+  tolerances; results shown in the Analysis tab.
+- **Temperature / thermal loads** (PR #237): `kind:'member-thermal'` on `ModelLoad`
+  with ΔT and α; equivalent nodal forces P_thermal = EA·α·ΔT assembled in
+  `engine/frame3d.ts`. Sign convention: feq[0] = −PT, feq[6] = +PT (tension-positive).
 - **Design pipeline** (`engine/pipeline.ts`): governing combo → slab strips → beams /
   girders (`detectCriticalSections` → `designBeam`) → columns (P–M) → footings
   (isolated / combined / pile cap) → quantities. Steel path: §F2/§G2.1/§E3/§H1-1 +
@@ -75,8 +93,7 @@ of the app. Everything runs **off the main thread** in a web worker
 - Full 14th-edition metric dataset: ~195 W, 28 C, 42 L, 55 HSS rect/sq, 13 round
   HSS/Pipe, 25 WT; **double angles (2L)** back-to-back. Accurate cross-sections in
   2D (`components/SectionShape.tsx`) **and extruded in 3D** (`lib/sectionShapes3d.ts`).
-- ⚠️ Tier-2 note: the library has C/L/HSS, but verify the **3D model bridge**
-  (`modelBridge.steelSectionProps`) consumes non-W families before claiming item #6.
+  All families (C/L/HSS/WT) are now wired end-to-end through the 3D model — see PR #235.
 
 ## Key paths
 - 3D RC frame page: `webapp/src/pages/ModelSpace.tsx` (route `/model`)
@@ -87,8 +104,8 @@ of the app. Everything runs **off the main thread** in a web worker
 - Routes + home tiles: `webapp/src/App.tsx`
 
 - **3D model — steel option** (`/model`): the model space now builds either
-  **reinforced concrete** (NSCP/ACI, default) **or structural steel** (AISC W).
-  Pick the material + per-role W-shapes in Properties → Frame material. Steel:
+  **reinforced concrete** (NSCP/ACI, default) **or structural steel** (AISC W/C/L/HSS/WT).
+  Pick the material + per-role sections in Properties → Frame material. Steel:
   - FEM bridge uses AISC A/Ix/Iy/J and E = 200 GPa (`modelBridge.steelSectionProps`).
   - Design routes steel beams/girders → §F2 flexure + §G2.1 shear; steel columns
     → §E3 axial + §H1-1 combined (`pipeline.designSteelBeamRow/ColumnRow`).
@@ -115,36 +132,33 @@ Shape names corrected to exact AISC designations (e.g. W310x38.7 not W310x39).
 
 ## Next up — STAAD-parity roadmap (tiered)
 
-Closing the gap with commercial structural software (STAAD.Pro). **Tier 1 is
-complete** (PRs #229–#231); Tier 2 is the current focus, one PR per item.
+Closing the gap with commercial structural software (STAAD.Pro). **Tiers 1 and 2 are
+complete**; Tier 3 items #10–13 are the remaining backlog.
 
 ### Tier 1 — Biggest structural modeling gaps ✅ DONE
 1. ✅ **Member end releases** — PR #229
 2. ✅ **Spring supports** — PR #229
 3. ✅ **Rigid floor diaphragm constraints** — PR #231
 
-### Tier 2 — High value, moderate effort (current)
-4. **Member force diagrams (BMD/SFD)** — inline bending-moment & shear diagrams drawn
-   on each member in the 3D view / Analysis tab. The per-member `xs[]`/`My[]`/`Mz[]`/
-   `Vy[]` arrays already exist on `F3MemberResult`; this is purely rendering.
-5. **Effective length factor K for columns** — compute K from the G-factor alignment
-   chart (AISC Commentary C-C2) using the ΣEI/L stiffness already assembled at joints.
-6. **HSS / channel / angle steel sections in the 3D model** — library exists; wire the
-   non-W families through `modelBridge.steelSectionProps` + design path (verify first).
-7. **Floor vibration check (AISC DG11)** — post-process modal results: fn = 0.18√(g/Δj),
-   compare ap/g against DG11 tolerances (0.5% g office, 0.05% g sensitive).
-8. **Temperature / thermal loads** — `kind:'member-thermal'` on ModelLoad with ΔT and α;
-   equivalent nodal forces P_thermal = EA·α·ΔT in the load assembly.
+### Tier 2 — High value, moderate effort ✅ DONE
+4. ✅ **Member force diagrams (BMD/SFD)** — PR #233
+5. ✅ **Effective length factor K for columns** — PR #234
+6. ✅ **HSS / channel / angle / WT steel sections in the 3D model** — PR #235
+7. ✅ **Floor vibration check (AISC DG11)** — PR #236
+8. ✅ **Temperature / thermal loads** — PR #237
 
-### Tier 3 — Complex / specialized (later)
-9. ✅ **Linearized buckling analysis** — `engine/buckling.ts`; inverse power
+### Tier 3 — Complex / specialized
+9. ✅ **Linearized buckling analysis** — PR #238; `engine/buckling.ts`; inverse power
    iteration with Gram-Schmidt deflation; `bucklingFromFrame` (raw API) +
-   `bucklingAnalysis` (StructuralModel API).  PR #? (branch
-   `feature/linearized-buckling`).  Note: 3D pin-pin columns are torsionally
+   `bucklingAnalysis` (StructuralModel API). Note: 3D pin-pin columns are torsionally
    singular under `fixity:'pin'`; fixed or fixed-pin BCs required.
 10. Rigid links / member offsets (centroidal offset → rigid transform pre-element).
 11. Time-history analysis (Newmark-β on modal equations).
 12. Pushover / nonlinear static (plastic-hinge model, incremental-iterative).
 13. FEM plate/shell elements (true thin-shell walls & slabs vs. today's load sources).
+
+### Pending fix
+- **Spring reaction sign** (branch `claude/next-phase-jsoxhl`): display-only sign
+  error in reported spring reactions — fix is committed, needs a PR to main.
 
 _Tests at last handoff: **650 passing**; `tsc -b` clean; production build OK._
