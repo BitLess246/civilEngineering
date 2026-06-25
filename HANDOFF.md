@@ -165,7 +165,18 @@ complete**; Tier 3 items #10–13 are the remaining backlog.
     event-to-event plastic hinges (a hinge = a member-end moment release). Capacity curve
     + hinge sequence + mechanism flag. UI: `engine/pushoverModel.ts` (plastic-moment +
     pattern bridge) + a Pushover tab with the capacity-curve plot.
-13. FEM plate/shell elements (true thin-shell walls & slabs vs. today's load sources).
+13. ✅ **FEM plate/shell elements** — engine PR #256, solver/bridge PR #257, **UI PR #258**.
+    `engine/shell.ts`: a 3-node flat shell = CST membrane + DKT (Discrete Kirchhoff
+    Triangle) plate bending + θz drilling penalty; validated against Timoshenko
+    plate theory (SS 0.991×, clamped 1.034× at 8×8, converging). Integrated into
+    `frame3d` (`F3Shell`/`ShellGeom`, assembled into the global solve, reactions +
+    serialization). Bridge meshes each `Plate` into two triangles on its corner
+    nodes (`StructuralModel.shellElements`); area loads lump to those nodes and the
+    tributary path is skipped for shell panels. `BridgeOpts.useShells` keeps the
+    NSCP design pipeline on the tributary model (shells are analysis-path for now).
+    UI: Analysis-tab toggle + teal triangulated 3D panels (with the mesh diagonal).
+
+**Tier 3 complete — the full STAAD-parity roadmap (Tiers 1–3) is shipped.**
 
 ### Extras beyond the roadmap
 - ✅ **Automatic rigid end zones** (ETABS-style) — PR #252. `engine/rigidEndZones.ts`
@@ -181,5 +192,9 @@ complete**; Tier 3 items #10–13 are the remaining backlog.
 ### UI follow-ups still open
 - Pushover: P–M interaction surface, axial/shear hinges, optional P-Δ in the push.
 - Time-history: upload a real accelerogram (CSV) in addition to synthetic samples.
+- Shells: subdivision/auto-meshing (panels are 2 triangles per quad on corner
+  nodes — coarse for slab bending; composite tie to edge beams needs matching
+  mesh), element-stress recovery + contour overlay, and an opt-in to fold shells
+  into the design pipeline (today design stays on tributary loads).
 
-_Tests at last handoff: **700 passing**; `tsc -b` clean; production build OK._
+_Tests at last handoff: **718 passing**; `tsc -b` clean; production build OK._
