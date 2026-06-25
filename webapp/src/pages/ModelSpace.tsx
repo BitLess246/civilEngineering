@@ -39,7 +39,7 @@ import { ResponseSpectrumPanel } from '../components/ResponseSpectrumPanel'
 import { PushoverPanel } from '../components/PushoverPanel'
 import type { PushoverModelResult } from '../engine/pushoverModel'
 import { TimeHistoryPanel } from '../components/TimeHistoryPanel'
-import type { TimeHistoryModelResult, GroundMotionKind } from '../engine/timeHistoryModel'
+import type { TimeHistoryModelResult, GroundMotionKind, CsvAccelerogramOpts } from '../engine/timeHistoryModel'
 import { BeamSchematic } from '../components/BeamSchematic'
 import { ColumnSchematic } from '../components/ColumnSchematic'
 import { FootingSchematic } from '../components/FootingSchematic'
@@ -793,6 +793,9 @@ export default function ModelSpace() {
   const [thFreq, setThFreq] = useState(2)        // Hz
   const [thDur, setThDur] = useState(10)         // s
   const [thZeta, setThZeta] = useState(5)        // %
+  const [thCsv, setThCsv] = useState<{ text: string; name: string; npts: number } | null>(null)
+  const [thCsvUnits, setThCsvUnits] = useState<'g' | 'ms2'>('g')
+  const [thCsvDt, setThCsvDt] = useState(0.02)  // s, for one-column CSV
   const [th, setTh] = useState<TimeHistoryModelResult | null>(null)
   const [design, setDesign] = useState<StructureDesign | null>(null)
   const [opt, setOpt] = useState<OptimizeResult | null>(null)
@@ -921,12 +924,15 @@ export default function ModelSpace() {
 
   const runTimeHistory = () => {
     if (!model || busy || meshErrors) return
+    const dir: 0 | 2 = thDir === 'x' ? 0 : 2
+    const csvOpts: CsvAccelerogramOpts | undefined = thCsv
+      ? { text: thCsv.text, dt: thCsvDt, units: thCsvUnits, dir }
+      : undefined
     run('timeHistory', {
       model,
-      opts: {
-        spec: { kind: thKind, dt: 0.02, duration: thDur, pga: thPga * GRAVITY, freq: thFreq, dir: thDir === 'x' ? 0 : 2 },
-        zeta: thZeta / 100, nModes,
-      },
+      opts: csvOpts
+        ? { csv: csvOpts, zeta: thZeta / 100, nModes }
+        : { spec: { kind: thKind, dt: 0.02, duration: thDur, pga: thPga * GRAVITY, freq: thFreq, dir }, zeta: thZeta / 100, nModes },
     }).then((r) => setTh((r as { timeHistory: TimeHistoryModelResult | null }).timeHistory))
       .catch((e) => console.error('time-history failed', e))
   }
@@ -2633,16 +2639,64 @@ export default function ModelSpace() {
               {rsa && <ResponseSpectrumPanel result={rsa} seismicT={seis?.T} />}
 
               <Card title="Time-history — modal Newmark-β (linear)">
-                <Pick label="Ground motion" value={thKind} onChange={setThKind}
-                  options={[['rampedSine', 'Ramped sine (transient)'], ['pulse', 'Single pulse'], ['harmonic', 'Steady harmonic']]} />
+                {/* CSV accelerogram upload */}
+                <div className="col-span-full">
+                  <p className="mb-1 text-[11px] font-medium text-slate-600">Real accelerogram (CSV / PEER AT2)</p>
+                  {thCsv ? (
+                    <div className="flex items-center gap-2">
+                      <span className="rounded bg-teal-50 px-2 py-0.5 text-[11px] text-teal-700">
+                        {thCsv.name} — {thCsv.npts} pts
+                      </span>
+                      <button type="button" onClick={() => setThCsv(null)}
+                        className="text-[11px] text-slate-400 hover:text-red-500">✕ clear</button>
+                    </div>
+                  ) : (
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50">
+                      <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                        <path d="M8 2v8M5 7l3-3 3 3M2 12h12" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Upload CSV / AT2
+                      <input type="file" accept=".csv,.txt,.at2,.acc" className="sr-only"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0]
+                          if (!f) return
+                          f.text().then((text) => {
+                            // Quick sample count (non-comment, non-empty lines with at least one number)
+                            const npts = text.split('\n').filter((l) => {
+                              const t = l.trim()
+                              return t && !/^[#%!]/.test(t) && /[\d.\-]/.test(t) && !isNaN(parseFloat(t.split(/[\s,;]+/)[0]))
+                            }).length
+                            setThCsv({ text, name: f.name, npts })
+                          })
+                          e.target.value = ''
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+                {/* CSV units + dt override (only shown when a file is loaded) */}
+                {thCsv && (
+                  <>
+                    <Pick label="CSV units" value={thCsvUnits} onChange={setThCsvUnits}
+                      options={[['g', 'g (×9.81 m/s²)'], ['ms2', 'm/s²']]} />
+                    <Num label="Δt (one-column)" unit="s" value={thCsvDt} onChange={setThCsvDt} step="0.01" />
+                  </>
+                )}
+                {/* Synthetic motion params (shown when no CSV) */}
+                {!thCsv && (
+                  <>
+                    <Pick label="Ground motion" value={thKind} onChange={setThKind}
+                      options={[['rampedSine', 'Ramped sine (transient)'], ['pulse', 'Single pulse'], ['harmonic', 'Steady harmonic']]} />
+                    <Num label="Peak ground accel" unit="g" value={thPga} onChange={setThPga} step="0.05" />
+                    <Num label="Frequency" unit="Hz" value={thFreq} onChange={setThFreq} step="0.5" />
+                    <Num label="Duration" unit="s" value={thDur} onChange={setThDur} step="1" />
+                  </>
+                )}
                 <Pick label="Direction" value={thDir} onChange={setThDir} options={[['x', '+X'], ['z', '+Z']]} />
-                <Num label="Peak ground accel" unit="g" value={thPga} onChange={setThPga} step="0.05" />
-                <Num label="Frequency" unit="Hz" value={thFreq} onChange={setThFreq} step="0.5" />
-                <Num label="Duration" unit="s" value={thDur} onChange={setThDur} step="1" />
                 <Num label="Damping ζ" unit="%" value={thZeta} onChange={setThZeta} step="1" />
                 <p className="col-span-full text-[11px] text-slate-500">
-                  Modal superposition: each mode is an SDOF integrated by Newmark-β (β=¼, γ=½) under the
-                  ground record. Uses the modal count above (run modal first for periods). Δt = 0.02 s.
+                  Modal superposition: each mode is an SDOF integrated by Newmark-β (β=¼, γ=½). Upload a real
+                  record (two-column t/ag, one-column with Δt, or PEER AT2) or use the built-in synthetic motion.
                 </p>
                 <div className="col-span-full">
                   <button type="button" onClick={runTimeHistory} disabled={!model || !!busy || meshErrors} className={btn('from-[#0d9488] to-[#0f766e]')}>

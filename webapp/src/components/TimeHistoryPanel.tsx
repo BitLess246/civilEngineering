@@ -41,7 +41,7 @@ export function TimeHistoryPanel({ res, dirLabel }: { res: TimeHistoryModelResul
   const T1 = r.modal[0]?.period ?? 0
 
   return (
-    <ResultCard title={`Time-history — ground motion ${dirLabel}`}>
+    <ResultCard title={`Time-history — ground motion ${dirLabel}${res.source === 'csv' ? ' (CSV record)' : ''}`}>
       <div className="mb-1 text-[11px] font-semibold text-slate-500">Base shear V(t)</div>
       <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
         <TimeChart t={t} y={r.baseShear} color="#0056b3" yLabel="V (kN)" />
