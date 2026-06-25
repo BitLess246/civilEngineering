@@ -75,6 +75,8 @@ export interface TimeHistoryOpts extends NewmarkOpts {
   zeta?: number
   /** Number of modes to include (default 12, capped by available modes). */
   nModes?: number
+  /** When set, the full displacement history of this node is returned (nodeHistory). */
+  historyNode?: string
 }
 
 /** Per-mode time-history contribution. */
@@ -107,6 +109,8 @@ export interface TimeHistoryResult {
   peakNode: string | null
   /** Largest peak total displacement magnitude (over all nodes), m. */
   peakNodeDisp: number
+  /** Full displacement history [ux,uy,uz] (m) at opts.historyNode, when requested. */
+  nodeHistory?: { node: string; u: [number, number, number][] }
 }
 
 /**
@@ -168,22 +172,27 @@ export function modalTimeHistory(
   for (const mode of modal.modes) for (const id of Object.keys(mode.shape)) nodeIds.add(id)
   const peakDisp: Record<string, [number, number, number]> = {}
   let peakNode: string | null = null, peakNodeDisp = 0
+  let nodeHistory: TimeHistoryResult['nodeHistory']
   for (const id of nodeIds) {
     const peak: [number, number, number] = [0, 0, 0]
+    const keepHist = id === opts?.historyNode
+    const hist: [number, number, number][] | null = keepHist ? Array.from({ length: n }, () => [0, 0, 0]) : null
     for (let d = 0; d < 3; d++) {
       // coefficient per mode: φ_r·Γ_r  → response is Σ_r coeff·D_r(t)
       const coeff = modal.modes.map((mode, r) => (mode.shape[id]?.[d] ?? 0) * gammas[r])
       for (let i = 0; i < n; i++) {
         let s = 0
         for (let r = 0; r < coeff.length; r++) s += coeff[r] * Ds[r][i]
+        if (hist) hist[i][d] = s
         const abs = Math.abs(s)
         if (abs > peak[d]) peak[d] = abs
       }
     }
     peakDisp[id] = peak
+    if (hist) nodeHistory = { node: id, u: hist }
     const mag = Math.hypot(peak[0], peak[1], peak[2])
     if (mag > peakNodeDisp) { peakNodeDisp = mag; peakNode = id }
   }
 
-  return { t, dir: gm.dir, modal: modal_out, baseShear, peakBaseShear, peakDisp, peakNode, peakNodeDisp }
+  return { t, dir: gm.dir, modal: modal_out, baseShear, peakBaseShear, peakDisp, peakNode, peakNodeDisp, ...(nodeHistory ? { nodeHistory } : {}) }
 }

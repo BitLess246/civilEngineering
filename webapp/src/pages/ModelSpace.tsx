@@ -37,6 +37,8 @@ import { ModalPanel } from '../components/ModalPanel'
 import { ResponseSpectrumPanel } from '../components/ResponseSpectrumPanel'
 import { PushoverPanel } from '../components/PushoverPanel'
 import type { PushoverModelResult } from '../engine/pushoverModel'
+import { TimeHistoryPanel } from '../components/TimeHistoryPanel'
+import type { TimeHistoryModelResult, GroundMotionKind } from '../engine/timeHistoryModel'
 import { BeamSchematic } from '../components/BeamSchematic'
 import { ColumnSchematic } from '../components/ColumnSchematic'
 import { FootingSchematic } from '../components/FootingSchematic'
@@ -710,6 +712,14 @@ export default function ModelSpace() {
   const [poRho, setPoRho] = useState(1.5)        // concrete tension-steel ratio, %
   const [poMpScale, setPoMpScale] = useState(1)
   const [po, setPo] = useState<PushoverModelResult | null>(null)
+  // Time-history (modal Newmark-β) inputs + result
+  const [thKind, setThKind] = useState<GroundMotionKind>('rampedSine')
+  const [thDir, setThDir] = useState<'x' | 'z'>('x')
+  const [thPga, setThPga] = useState(0.3)        // g
+  const [thFreq, setThFreq] = useState(2)        // Hz
+  const [thDur, setThDur] = useState(10)         // s
+  const [thZeta, setThZeta] = useState(5)        // %
+  const [th, setTh] = useState<TimeHistoryModelResult | null>(null)
   const [design, setDesign] = useState<StructureDesign | null>(null)
   const [opt, setOpt] = useState<OptimizeResult | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)   // open schedule-row solution
@@ -833,6 +843,18 @@ export default function ModelSpace() {
       opts: { dir: poDir === 'x' ? 0 : 2, pattern: poPattern, rho: poRho / 100, mpScale: poMpScale },
     }).then((r) => setPo((r as { pushover: PushoverModelResult | null }).pushover))
       .catch((e) => console.error('pushover failed', e))
+  }
+
+  const runTimeHistory = () => {
+    if (!model || busy || meshErrors) return
+    run('timeHistory', {
+      model,
+      opts: {
+        spec: { kind: thKind, dt: 0.02, duration: thDur, pga: thPga * GRAVITY, freq: thFreq, dir: thDir === 'x' ? 0 : 2 },
+        zeta: thZeta / 100, nModes,
+      },
+    }).then((r) => setTh((r as { timeHistory: TimeHistoryModelResult | null }).timeHistory))
+      .catch((e) => console.error('time-history failed', e))
   }
 
   // Re-sign / re-axis a base node-load set into a directional case.
@@ -2426,6 +2448,27 @@ export default function ModelSpace() {
                 </ResultCard>
               )}
               {rsa && <ResponseSpectrumPanel result={rsa} seismicT={seis?.T} />}
+
+              <Card title="Time-history — modal Newmark-β (linear)">
+                <Pick label="Ground motion" value={thKind} onChange={setThKind}
+                  options={[['rampedSine', 'Ramped sine (transient)'], ['pulse', 'Single pulse'], ['harmonic', 'Steady harmonic']]} />
+                <Pick label="Direction" value={thDir} onChange={setThDir} options={[['x', '+X'], ['z', '+Z']]} />
+                <Num label="Peak ground accel" unit="g" value={thPga} onChange={setThPga} step="0.05" />
+                <Num label="Frequency" unit="Hz" value={thFreq} onChange={setThFreq} step="0.5" />
+                <Num label="Duration" unit="s" value={thDur} onChange={setThDur} step="1" />
+                <Num label="Damping ζ" unit="%" value={thZeta} onChange={setThZeta} step="1" />
+                <p className="col-span-full text-[11px] text-slate-500">
+                  Modal superposition: each mode is an SDOF integrated by Newmark-β (β=¼, γ=½) under the
+                  ground record. Uses the modal count above (run modal first for periods). Δt = 0.02 s.
+                </p>
+                <div className="col-span-full">
+                  <button type="button" onClick={runTimeHistory} disabled={!model || !!busy || meshErrors} className={btn('from-[#0d9488] to-[#0f766e]')}>
+                    {busy === 'timeHistory' ? '⏳ Integrating…' : '∿ Run time-history'}
+                  </button>
+                </div>
+                {busy === 'timeHistory' && <SolverProgress p={progress} />}
+              </Card>
+              {th && <TimeHistoryPanel res={th} dirLabel={thDir === 'x' ? '+X' : '+Z'} />}
 
               {(() => {
                 const occ = DG11_OCCUPANCY.find((o) => o.id === dg11OccId) ?? DG11_OCCUPANCY[0]
