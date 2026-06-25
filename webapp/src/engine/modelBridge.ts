@@ -8,6 +8,7 @@ import type { StructuralModel, RectSection, MemberReleases } from './model'
 import type { F3Node, F3Member, F3Support, F3Load, F3DiaphragmGroup } from './frame3d'
 import { rectJ } from './frame3d'
 import { buildDiaphragmGroups } from './diaphragm'
+import { autoRigidOffsets } from './rigidEndZones'
 import { distributePanel, type AreaLoad } from './tributary'
 import type { BeamLoad } from './beamAnalysis'
 import { shapeByName } from './aiscSections'
@@ -134,12 +135,20 @@ export function modelToFrame3D(model: StructuralModel): BridgeResult {
   const secById = new Map(model.sections.map((s) => [s.id, sectionProps(s)]))
   const fallback = sectionProps(model.sections[0] ?? { id: '', name: '', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 })
 
-  const members: F3Member[] = model.members.map((m) => ({
-    id: m.id, i: m.i, j: m.j, ...(secById.get(m.section) ?? fallback),
-    ...releaseFlags(m.releases),
-    ...(m.offsets?.iEnd ? { offI: m.offsets.iEnd } : {}),
-    ...(m.offsets?.jEnd ? { offJ: m.offsets.jEnd } : {}),
-  }))
+  // Automatic rigid end zones from connectivity (ETABS-style); manual member
+  // offsets always win over the auto value, per end.
+  const auto = model.rigidEndZones ? autoRigidOffsets(model, model.rigidZoneFactor ?? 0.5) : null
+  const members: F3Member[] = model.members.map((m) => {
+    const a = auto?.get(m.id)
+    const offI = m.offsets?.iEnd ?? a?.offI
+    const offJ = m.offsets?.jEnd ?? a?.offJ
+    return {
+      id: m.id, i: m.i, j: m.j, ...(secById.get(m.section) ?? fallback),
+      ...releaseFlags(m.releases),
+      ...(offI ? { offI } : {}),
+      ...(offJ ? { offJ } : {}),
+    }
+  })
   // shear walls → equivalent diagonal struts (lateral stiffness only)
   members.push(...wallStruts(model, nm))
   const memberByPair = new Map<string, { id: string; i: string; j: string }>()

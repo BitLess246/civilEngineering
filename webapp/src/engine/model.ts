@@ -110,6 +110,10 @@ export interface StructuralModel {
   storeys: Storey[]
   /** Treat each storey as a rigid floor diaphragm (ties in-plane lateral DOFs). */
   diaphragm?: boolean
+  /** Auto rigid end zones from connectivity (ETABS-style end length offsets). */
+  rigidEndZones?: boolean
+  /** Rigid-zone factor (0–1) scaling the auto end-offset length (default 0.5). */
+  rigidZoneFactor?: number
 }
 
 export function emptyModel(name = 'Untitled'): StructuralModel {
