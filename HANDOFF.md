@@ -152,13 +152,13 @@ complete**; Tier 3 items #10–13 are the remaining backlog.
    iteration with Gram-Schmidt deflation; `bucklingFromFrame` (raw API) +
    `bucklingAnalysis` (StructuralModel API). Note: 3D pin-pin columns are torsionally
    singular under `fixity:'pin'`; fixed or fixed-pin BCs required.
-10. Rigid links / member offsets (centroidal offset → rigid transform pre-element).
+10. ✅ **Rigid links / member offsets** — PR #242. `offI`/`offJ` (node→member-end
+    vector, global m) on `F3Member`; rigid-link transform H folded into the element
+    transform (`Teff = T·H`) so stiffness, loads, force recovery, P-Δ and buckling
+    all carry the arm with no other code changes. **Next phase**: UI inputs +
+    3D rendering of the rigid arm in ModelSpace (engine ready).
 11. Time-history analysis (Newmark-β on modal equations).
 12. Pushover / nonlinear static (plastic-hinge model, incremental-iterative).
 13. FEM plate/shell elements (true thin-shell walls & slabs vs. today's load sources).
 
-### Pending fix
-- **Spring reaction sign** (branch `claude/next-phase-jsoxhl`): display-only sign
-  error in reported spring reactions — fix is committed, needs a PR to main.
-
-_Tests at last handoff: **650 passing**; `tsc -b` clean; production build OK._
+_Tests at last handoff: **653 passing**; `tsc -b` clean; production build OK._
