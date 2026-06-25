@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  triFrame, cstMembrane, dktBending, triShell, solveShell, rectPlateMesh,
+  triFrame, cstMembrane, dktBending, dktBmat, triShell, solveShell, rectPlateMesh,
+  recoverShellStress, shellNodalContour,
   type ShellNode, type ShellElem, type ShellSupport,
 } from './shell'
 
@@ -149,5 +150,127 @@ describe('orientation independence', () => {
     const wXY = Math.abs(rXY.disp.get(mXY.id(c, c))![2])   // out-of-plane = z
     const wXZ = Math.abs(rXZ.disp.get(mXY.id(c, c))![1])   // out-of-plane = y
     expect(wXZ).toBeCloseTo(wXY, 6)
+  })
+})
+
+// ── dktBmat: consistency with dktBending ────────────────────────────────────
+describe('dktBmat', () => {
+  it('integrating Bᵀ D B over the 3 mid-edge Gauss points reproduces dktBending K', () => {
+    const f = triFrame([0, 0, 0], [3, 0, 0], [0, 4, 0])
+    const t = 150, nu = 0.3, Es = E * 1e3, tm = t / 1000
+    const cb = Es / (1 - nu * nu)
+    const Db = [[cb, cb * nu, 0], [cb * nu, cb, 0], [0, 0, cb * (1 - nu) / 2]].map((r) => r.map((v) => v * (tm ** 3 / 12)))
+    const gps: [number, number][] = [[0.5, 0], [0, 0.5], [0.5, 0.5]]
+    const mul = (A: number[][], B: number[][]): number[][] =>
+      A.map((row) => B[0].map((_, j) => row.reduce((s, v, k) => s + v * B[k][j], 0)))
+    const transpose = (A: number[][]): number[][] => A[0].map((_, j) => A.map((r) => r[j]))
+    const zeros9 = () => Array.from({ length: 9 }, () => new Array(9).fill(0))
+    let K = zeros9()
+    for (const [xi, eta] of gps) {
+      const B = dktBmat(f, xi, eta)
+      const k = mul(transpose(B), mul(Db, B))
+      K = K.map((row, i) => row.map((v, j) => v + (f.A / 3) * k[i][j]))
+    }
+    const Kref = dktBending(f, E, nu, t)
+    for (let i = 0; i < 9; i++) for (let j = 0; j < 9; j++) expect(K[i][j]).toBeCloseTo(Kref[i][j], 6)
+  })
+})
+
+// ── Stress recovery ──────────────────────────────────────────────────────────
+describe('recoverShellStress', () => {
+  // Reuse the 1×1 m uniaxial-tension setup from the CST membrane test.
+  const t = 100
+  const nodes: ShellNode[] = [
+    { id: 'bl', x: 0, y: 0, z: 0 }, { id: 'br', x: 1, y: 0, z: 0 },
+    { id: 'tr', x: 1, y: 1, z: 0 }, { id: 'tl', x: 0, y: 1, z: 0 },
+  ]
+  const elems: ShellElem[] = [
+    { id: 'e0', nodes: ['bl', 'br', 'tr'], E, nu, t },
+    { id: 'e1', nodes: ['bl', 'tr', 'tl'], E, nu, t },
+  ]
+  const sigma = 5   // MPa applied as traction
+  const P = (sigma * t * 1000) / 1e3
+  const supports: ShellSupport[] = [
+    { node: 'bl', ux: true, uy: true, uz: true, rx: true, ry: true, rz: true },
+    { node: 'tl', ux: true, uz: true, rx: true, ry: true, rz: true },
+    { node: 'br', uz: true, rx: true, ry: true, rz: true },
+    { node: 'tr', uz: true, rx: true, ry: true, rz: true },
+  ]
+
+  it('recovers σx ≈ σ_applied on the axis-aligned element (e0 local frame = global)', () => {
+    const r = solveShell(nodes, elems, supports, [{ node: 'br', Fx: P / 2 }, { node: 'tr', Fx: P / 2 }])!
+    const st = recoverShellStress(nodes, elems, r)
+    // e0 (bl→br→tr) has x̂ aligned with global X → local σx = global σx = 5 MPa = 5000 kN/m²
+    const s0 = st.find((s) => s.id === 'e0')!
+    expect(s0.sigmaX).toBeCloseTo(sigma * 1e3, 1)
+    // e1 (bl→tr→tl) is rotated 45°: local σx = σy_global·sin²45° + σx·cos²45° = 2500 kN/m²
+    const s1 = st.find((s) => s.id === 'e1')!
+    expect(s1.sigmaX).toBeCloseTo(sigma * 1e3 / 2, 1)
+  })
+
+  it('σ1 ≥ σ2 and vonMises ≥ 0 for all elements', () => {
+    const r = solveShell(nodes, elems, supports, [{ node: 'br', Fx: P / 2 }, { node: 'tr', Fx: P / 2 }])!
+    const st = recoverShellStress(nodes, elems, r)
+    for (const s of st) {
+      expect(s.sigma1).toBeGreaterThanOrEqual(s.sigma2 - 1e-9)
+      expect(s.vonMises).toBeGreaterThanOrEqual(0)
+    }
+  })
+
+  it('bending moments ≈ 0 for a pure in-plane load', () => {
+    const r = solveShell(nodes, elems, supports, [{ node: 'br', Fx: P / 2 }, { node: 'tr', Fx: P / 2 }])!
+    const st = recoverShellStress(nodes, elems, r)
+    for (const s of st) {
+      expect(Math.abs(s.Mx)).toBeLessThan(1e-6)
+      expect(Math.abs(s.My)).toBeLessThan(1e-6)
+      expect(Math.abs(s.Mxy)).toBeLessThan(1e-6)
+    }
+  })
+
+  it('bending moments non-zero under out-of-plane pressure (coarser mesh with interior node)', () => {
+    // 2×2 mesh gives a free interior node that deflects under pressure → non-zero M
+    const { nodes: mn, elems: me, id } = rectPlateMesh(1, 1, 2, 2, E, nu, t)
+    const n = 2
+    const onEdge = (i: number, j: number) => i === 0 || j === 0 || i === n || j === n
+    const sup: ShellSupport[] = []
+    for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) if (onEdge(i, j))
+      sup.push({ node: id(i, j), uz: true, ux: true, uy: true, rz: true })
+    const pr = me.map((e) => ({ elem: e.id, q: 10 }))
+    const r = solveShell(mn, me, sup, [], pr)!
+    const st = recoverShellStress(mn, me, r)
+    const maxMx = Math.max(...st.map((s) => Math.abs(s.Mx)))
+    expect(maxMx).toBeGreaterThan(0)
+  })
+})
+
+describe('shellNodalContour', () => {
+  const t = 100
+  const nodes: ShellNode[] = [
+    { id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: 1, y: 0, z: 0 },
+    { id: 'c', x: 0.5, y: 1, z: 0 },
+  ]
+  const elems: ShellElem[] = [{ id: 'e0', nodes: ['a', 'b', 'c'], E, nu, t }]
+  const supports: ShellSupport[] = [
+    { node: 'a', ux: true, uy: true, uz: true, rx: true, ry: true, rz: true },
+    { node: 'b', ux: true, uy: true, uz: true, rx: true, ry: true, rz: true },
+    { node: 'c', ux: true, uy: true, uz: true, rx: true, ry: true, rz: true },
+  ]
+
+  it('returns a value for every node', () => {
+    const r = solveShell(nodes, elems, supports)!
+    const st = recoverShellStress(nodes, elems, r)
+    const contour = shellNodalContour(nodes, elems, st, 'vonMises')
+    expect(contour.size).toBe(3)
+    for (const n of nodes) expect(contour.has(n.id)).toBe(true)
+  })
+
+  it('all values finite and non-negative for vonMises', () => {
+    const r = solveShell(nodes, elems, supports, [{ node: 'c', Fx: 1 }])!
+    const st = recoverShellStress(nodes, elems, r)
+    const contour = shellNodalContour(nodes, elems, st, 'vonMises')
+    for (const v of contour.values()) {
+      expect(isFinite(v)).toBe(true)
+      expect(v).toBeGreaterThanOrEqual(0)
+    }
   })
 })

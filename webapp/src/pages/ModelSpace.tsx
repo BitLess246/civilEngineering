@@ -15,6 +15,7 @@ import { type StructureDesign, type FootingPlan, type OptimizeResult, type Later
 import type { SteelJoint } from '../engine/steelConnections'
 import { estimateTakeoff, costBill, type PriceList } from '../engine/takeoff'
 import { footingLayout } from '../engine/footingLayout'
+import { solveShell, recoverShellStress, type ShellNode, type ShellElem, type ShellSupport, type ElementStress } from '../engine/shell'
 import { useSolver } from '../lib/useSolver'
 import type { SolveProgress } from '../engine/progress'
 import { TABLE_204_1, TABLE_204_2, sdlItemKPa, sdlTotal, type SdlItem } from '../engine/deadLoads'
@@ -39,6 +40,7 @@ import { ResponseSpectrumPanel } from '../components/ResponseSpectrumPanel'
 import { PushoverPanel } from '../components/PushoverPanel'
 import type { PushoverModelResult } from '../engine/pushoverModel'
 import { TimeHistoryPanel } from '../components/TimeHistoryPanel'
+import { ShellContourPanel } from '../components/ShellContourPanel'
 import type { TimeHistoryModelResult, GroundMotionKind, CsvAccelerogramOpts } from '../engine/timeHistoryModel'
 import { BeamSchematic } from '../components/BeamSchematic'
 import { ColumnSchematic } from '../components/ColumnSchematic'
@@ -793,6 +795,7 @@ export default function ModelSpace() {
   const [thFreq, setThFreq] = useState(2)        // Hz
   const [thDur, setThDur] = useState(10)         // s
   const [thZeta, setThZeta] = useState(5)        // %
+  const [shellStress, setShellStress] = useState<{ nodes: ShellNode[]; elems: ShellElem[]; stresses: ElementStress[] } | null>(null)
   const [thCsv, setThCsv] = useState<{ text: string; name: string; npts: number } | null>(null)
   const [thCsvUnits, setThCsvUnits] = useState<'g' | 'ms2'>('g')
   const [thCsvDt, setThCsvDt] = useState(0.02)  // s, for one-column CSV
@@ -935,6 +938,32 @@ export default function ModelSpace() {
         : { spec: { kind: thKind, dt: 0.02, duration: thDur, pga: thPga * GRAVITY, freq: thFreq, dir }, zeta: thZeta / 100, nModes },
     }).then((r) => setTh((r as { timeHistory: TimeHistoryModelResult | null }).timeHistory))
       .catch((e) => console.error('time-history failed', e))
+  }
+
+  const runShellStress = () => {
+    if (!model || !model.shellElements || model.plates.length === 0) return
+    const shNodes: ShellNode[] = model.nodes.map((n) => ({ id: n.id, x: n.x, y: n.y, z: n.z }))
+    const shElems: ShellElem[] = []
+    // Default concrete material: E = 25000 MPa, ν = 0.2
+    for (const p of model.plates) {
+      const [a, b, c, d] = p.corners
+      shElems.push({ id: `${p.id}_t0`, nodes: [a, b, c], E: 25000, nu: 0.2, t: p.thickness })
+      shElems.push({ id: `${p.id}_t1`, nodes: [a, c, d], E: 25000, nu: 0.2, t: p.thickness })
+    }
+    const shSupports: ShellSupport[] = model.supports.map((s) => ({
+      node: s.node, ux: true, uy: true, uz: true, rx: true, ry: true, rz: true,
+    }))
+    // Area loads → pressure on elements (kN/m²)
+    const pressures = model.loads
+      .filter((l) => l.kind === 'area')
+      .flatMap((l) => {
+        const al = l as { kind: 'area'; plate: string; q: number }
+        return [`${al.plate}_t0`, `${al.plate}_t1`].map((id) => ({ elem: id, q: al.q }))
+      })
+    const r = solveShell(shNodes, shElems, shSupports, [], pressures)
+    if (!r) return
+    const st = recoverShellStress(shNodes, shElems, r)
+    setShellStress({ nodes: shNodes, elems: shElems, stresses: st })
   }
 
   // Re-sign / re-axis a base node-load set into a directional case.
@@ -2507,6 +2536,25 @@ export default function ModelSpace() {
 
               {analysis && model && (
                 <DisplacementTable analysis={analysis} nodes={model.nodes} />
+              )}
+
+              {model?.shellElements && model.plates.length > 0 && (
+                <Card title="Shell plate stress (CST membrane + DKT bending)">
+                  <p className="col-span-full text-[11px] text-slate-500">
+                    Recovers per-element membrane stresses (σx, σy, τxy, von Mises) and bending
+                    moments (Mx, My, Mxy) from the shell FEM. Uses E = 25 000 MPa, ν = 0.2 for
+                    all plates. Area loads are applied as uniform pressure.
+                  </p>
+                  <div className="col-span-full">
+                    <button type="button" onClick={runShellStress} disabled={!model || !!busy}
+                      className={btn('from-[#0d9488] to-[#0f766e]')}>
+                      ⬡ Recover shell stresses
+                    </button>
+                  </div>
+                </Card>
+              )}
+              {shellStress && (
+                <ShellContourPanel nodes={shellStress.nodes} elems={shellStress.elems} stresses={shellStress.stresses} />
               )}
 
               {drift && seis && (
