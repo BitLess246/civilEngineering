@@ -1,5 +1,12 @@
 import { ResultCard, Row } from './qty'
 import type { PushoverModelResult } from '../engine/pushoverModel'
+import type { HingeId } from '../engine/pushover'
+
+/** Short hinge label, e.g. "C1 @i (Mz)", "B2 @i (Vy)", "BR3 @i (axial)". */
+function hingeLabel(h: HingeId): string {
+  const tag = h.type === 'moment' ? `M${h.axis}` : h.type === 'shear' ? `V${h.axis}` : 'axial'
+  return `${h.member} @${h.end} (${tag})`
+}
 
 /** Capacity (pushover) curve: base shear vs control-node displacement. */
 function CapacityCurve({ res }: { res: PushoverModelResult }) {
@@ -92,7 +99,7 @@ export function PushoverPanel({ res, dirLabel }: { res: PushoverModelResult; dir
                   <td className="py-1 pr-2 font-semibold">{Math.abs(p.baseShear).toFixed(1)}</td>
                   <td className="py-1 pr-2">{(Math.abs(p.roofDisp) * 1000).toFixed(1)}</td>
                   <td className="py-1 pr-2 text-slate-500">
-                    {p.newHinge ? `${p.newHinge.member} @${p.newHinge.end} (M${p.newHinge.axis})` : '—'}
+                    {p.newHinge ? hingeLabel(p.newHinge) : '—'}
                   </td>
                   {res.pmInteraction && <td className="py-1 pr-2 text-slate-500">{h?.axial !== undefined ? h.axial.toFixed(1) : '—'}</td>}
                   {res.pmInteraction && <td className="py-1 pr-2 text-slate-500">{h?.Mpc !== undefined ? h.Mpc.toFixed(1) : '—'}</td>}
