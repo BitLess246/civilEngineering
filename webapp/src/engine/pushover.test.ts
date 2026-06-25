@@ -155,6 +155,68 @@ describe('pushover — guards', () => {
   })
 })
 
+describe('pushover — axial hinge (brace yielding caps base shear at Pp)', () => {
+  // Bar along X, fixed at a, axial push at b. Axial force = applied load, so the
+  // bar yields axially at λ = Pp, then the Fx release frees node b ⇒ mechanism.
+  const L = 3, Pp = 50
+  const nodes: F3Node[] = [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: L, y: 0, z: 0 }]
+  const members: F3Member[] = [{ id: 'm', i: 'a', j: 'b', ...sec }]
+  const supports: F3Support[] = [{ node: 'a', fixity: 'fixed' }]
+  const input: PushoverInput = {
+    nodes, members, supports,
+    Mp: {}, Pp: { m: Pp },
+    pattern: { b: 1 },        // axial (+X) push at the tip
+    dir: 0, controlNode: 'b',
+  }
+
+  it('forms one axial hinge then a mechanism', () => {
+    const r = pushoverAnalysis(input)
+    expect(r.curve.length).toBe(2)
+    expect(r.mechanism).toBe(true)
+    expect(r.hinges).toHaveLength(1)
+    expect(r.hinges[0]).toMatchObject({ member: 'm', end: 'i', type: 'axial' })
+    expect(r.hinges[0].axis).toBeUndefined()
+  })
+
+  it('capacity base shear equals the axial capacity Pp', () => {
+    const r = pushoverAnalysis(input)
+    expect(Math.abs(r.curve[1].baseShear)).toBeCloseTo(Pp, 6)
+  })
+})
+
+describe('pushover — shear hinge competes with flexure', () => {
+  // Cantilever along X, transverse −Y tip load. Internal shear is constant (= P),
+  // the base moment grows to P·L. Whichever capacity the demand reaches first
+  // governs the hinge type.
+  const L = 3
+  const nodes: F3Node[] = [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: L, y: 0, z: 0 }]
+  const members: F3Member[] = [{ id: 'm', i: 'a', j: 'b', ...sec }]
+  const supports: F3Support[] = [{ node: 'a', fixity: 'fixed' }]
+  const base = { nodes, members, supports, pattern: { b: -1 }, dir: 1 as const, controlNode: 'b' }
+
+  it('shear-controlled: small Vp, large Mp ⇒ a shear hinge at base shear = Vp', () => {
+    const Vp = 10
+    const r = pushoverAnalysis({ ...base, Mp: { m: 1e6 }, Vp: { m: Vp } })
+    expect(r.mechanism).toBe(true)
+    expect(r.hinges[0]).toMatchObject({ member: 'm', type: 'shear' })
+    expect(r.hinges[0].axis === 'y' || r.hinges[0].axis === 'z').toBe(true)
+    expect(Math.abs(r.curve[1].baseShear)).toBeCloseTo(Vp, 6)
+  })
+
+  it('flexure-controlled: large Vp, small Mp ⇒ a moment hinge at base shear = Mp/L', () => {
+    const Mp = 60
+    const r = pushoverAnalysis({ ...base, Mp: { m: Mp }, Vp: { m: 1e6 } })
+    expect(r.hinges[0]).toMatchObject({ member: 'm', type: 'moment' })
+    expect(Math.abs(r.curve[1].baseShear)).toBeCloseTo(Mp / L, 6)
+  })
+
+  it('per-axis Vp { y, z } is accepted and the loaded axis governs', () => {
+    const r = pushoverAnalysis({ ...base, Mp: { m: 1e6 }, Vp: { m: { y: 8, z: 8 } } })
+    expect(r.hinges[0].type).toBe('shear')
+    expect(Math.abs(r.curve[1].baseShear)).toBeCloseTo(8, 6)
+  })
+})
+
 describe('pushover — P–M interaction reduces hinge capacity', () => {
   // Portal frame: a lateral push induces overturning ⇒ axial in the columns
   // (windward tension, leeward compression). With P–M active the columns hinge
