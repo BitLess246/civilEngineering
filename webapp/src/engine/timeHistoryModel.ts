@@ -12,6 +12,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel } from './model'
 import { modalTimeHistory, type GroundMotion, type TimeHistoryResult } from './timeHistory'
+import { parseAccelerogram } from './accelerogram'
 
 export type GroundMotionKind = 'harmonic' | 'pulse' | 'rampedSine'
 
@@ -45,8 +46,23 @@ export function makeGroundMotion(spec: GroundMotionSpec): GroundMotion {
   return { dt: spec.dt, ag, dir: spec.dir }
 }
 
+/** CSV/AT2 accelerogram wired directly into the time-history analysis. */
+export interface CsvAccelerogramOpts {
+  /** Raw text of the CSV or AT2 file. */
+  text: string
+  /** Time step (s). Required for one-column format when the file has no DT= header. */
+  dt?: number
+  /** Acceleration unit in the file. 'g' → ×9.81 → m/s². Default: 'ms2'. */
+  units?: 'g' | 'ms2'
+  /** Excitation direction: 0 = X, 1 = Y, 2 = Z. */
+  dir: 0 | 1 | 2
+}
+
 export interface TimeHistoryModelOpts {
-  spec: GroundMotionSpec
+  /** Synthetic ground-motion spec (used when csv is not provided). */
+  spec?: GroundMotionSpec
+  /** Real accelerogram parsed from a CSV / PEER AT2 file (takes priority over spec). */
+  csv?: CsvAccelerogramOpts
   zeta?: number
   nModes?: number
   controlNode?: string
@@ -55,14 +71,18 @@ export interface TimeHistoryModelOpts {
 export interface TimeHistoryModelResult {
   result: TimeHistoryResult
   controlNode: string
+  /** Peak ground acceleration of the applied record, m/s². */
   pga: number
   /** Peak displacement at the control node in the excitation direction, m. */
   peakRoof: number
+  /** 'csv' when a real accelerogram was used; 'synthetic' otherwise. */
+  source: 'csv' | 'synthetic'
 }
 
 /**
  * Build the record, pick the roof control node and run modal time-history.
- * Returns null when modal analysis fails (singular K / no mass).
+ * Pass opts.csv (a real accelerogram) or opts.spec (synthetic motion).
+ * Returns null when modal analysis fails (singular K / no mass) or the CSV cannot be parsed.
  */
 export function runTimeHistoryModel(
   model: StructuralModel, opts: TimeHistoryModelOpts,
@@ -71,12 +91,27 @@ export function runTimeHistoryModel(
   const yMax = Math.max(...model.nodes.map((nd) => nd.y))
   const controlNode = opts.controlNode ?? (model.nodes.find((nd) => nd.y === yMax)?.id ?? model.nodes[0].id)
 
-  const gm = makeGroundMotion(opts.spec)
+  let gm: GroundMotion
+  let source: 'csv' | 'synthetic'
+  if (opts.csv) {
+    const parsed = parseAccelerogram(opts.csv.text, { dt: opts.csv.dt, units: opts.csv.units })
+    if (!parsed) return null
+    gm = { dt: parsed.dt, ag: parsed.ag, dir: opts.csv.dir }
+    source = 'csv'
+  } else if (opts.spec) {
+    gm = makeGroundMotion(opts.spec)
+    source = 'synthetic'
+  } else {
+    return null
+  }
+
   const result = modalTimeHistory(model, gm, {
     zeta: opts.zeta, nModes: opts.nModes, historyNode: controlNode,
   })
   if (!result) return null
 
-  const peakRoof = result.peakDisp[controlNode]?.[opts.spec.dir] ?? 0
-  return { result, controlNode, pga: opts.spec.pga, peakRoof }
+  const dir = gm.dir
+  const peakRoof = result.peakDisp[controlNode]?.[dir] ?? 0
+  const pga = gm.ag.reduce((m, v) => Math.max(m, Math.abs(v)), 0)
+  return { result, controlNode, pga, peakRoof, source }
 }

@@ -42,6 +42,7 @@ describe('runTimeHistoryModel', () => {
       zeta: 0.05, nModes: 8,
     })!
     expect(r).toBeTruthy()
+    expect(r.source).toBe('synthetic')
     // control node is a roof node
     const yMax = Math.max(...model.nodes.map((nd) => nd.y))
     expect(model.nodes.find((nd) => nd.id === r.controlNode)!.y).toBeCloseTo(yMax, 6)
@@ -51,6 +52,33 @@ describe('runTimeHistoryModel', () => {
     expect(r.result.nodeHistory!.u.length).toBe(r.result.t.length)
     expect(r.result.peakBaseShear).toBeGreaterThan(0)
     expect(Math.abs(r.peakRoof)).toBeGreaterThan(0)
+  })
+
+  it('csv: accepts a two-column accelerogram and returns source=csv', () => {
+    // Build a simple triangular pulse as a CSV (time, ag in m/s²)
+    const dt = 0.02, n = 201
+    const w = 2 * Math.PI * 2, pga = 3
+    const lines = Array.from({ length: n }, (_, i) => {
+      const t = i * dt
+      const ramp = Math.min(1, t / 0.5)
+      const decay = Math.exp(-t / 1.5)
+      return `${t.toFixed(4)}, ${(pga * Math.sin(w * t) * ramp * decay).toFixed(8)}`
+    })
+    const text = ['# test accelerogram', 'time(s), ag(m/s2)', ...lines].join('\n')
+    const r = runTimeHistoryModel(model, { csv: { text, dir: 0 }, zeta: 0.05, nModes: 8 })!
+    expect(r).toBeTruthy()
+    expect(r.source).toBe('csv')
+    expect(r.pga).toBeGreaterThan(0)   // envelope attenuates peak below nominal pga; just verify positive
+    expect(r.result.peakBaseShear).toBeGreaterThan(0)
+  })
+
+  it('csv: returns null when CSV cannot be parsed (one-column without dt)', () => {
+    const text = '0.001\n0.002\n0.003'
+    expect(runTimeHistoryModel(model, { csv: { text, dir: 0 } })).toBeNull()
+  })
+
+  it('returns null without spec or csv', () => {
+    expect(runTimeHistoryModel(model, {})).toBeNull()
   })
 
   it('returns null for an empty model', () => {
