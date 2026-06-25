@@ -119,6 +119,9 @@ export interface SteelBeamScheduleRow {
   phiMn: number; phiVn: number     // kN·m, kN
   ltbZone: string
   utilM: number; utilV: number
+  /** Estimated midspan deflection (SS bound, 5Mu L²/48EI) and L/240 limit (mm).
+   *  Conservative: uses factored Mu and simply-supported boundary conditions. */
+  defl: number; deflLim: number; deflOK: boolean
   ok: boolean
   gov?: string
   // solution detail (section props + AISC check steps)
@@ -189,11 +192,20 @@ function designSteelBeamRow(mr: F3MemberResult, role: string, sec: RectSection):
   const Mu = mr.Mmax, Vu = mr.Vmax
   const utilM = flex.phiMn > 1e-9 ? Mu / flex.phiMn : Infinity
   const utilV = shear.phiVn > 1e-9 ? Vu / shear.phiVn : Infinity
+  // §L2 serviceability — conservative SS bound: δ = 5·Mu·L²/(48·E·Ix)
+  // Uses factored Mu (overestimates service deflection ~1.3–1.5×) against L/240
+  // (total-load limit), so net conservatism is acceptable for optimization.
+  const E_STEEL = 200000  // N/mm²
+  const L_mm = mr.L * 1000
+  const defl = p.Ix > 0 ? (5 * Mu * 1e6 * L_mm ** 2) / (48 * E_STEEL * p.Ix) : Infinity
+  const deflLim = L_mm / 240
+  const deflOK = defl <= deflLim + 1e-9
   const { d = 0, bf = 0, tf = 0, tw = 0, ry } = shape
   return {
     id: mr.id, role, L: mr.L, shape: shape.name, Mu, Vu,
     phiMn: flex.phiMn, phiVn: shear.phiVn, ltbZone: flex.ltbZone,
-    utilM, utilV, ok: utilM <= 1 + 1e-9 && utilV <= 1 + 1e-9,
+    utilM, utilV, defl, deflLim, deflOK,
+    ok: utilM <= 1 + 1e-9 && utilV <= 1 + 1e-9 && deflOK,
     d, bf: bf ?? 0, tf: tf ?? 0, tw: tw ?? 0,
     Ix: p.Ix, Sx: p.Sx, Zx: p.Zx, Iy: p.Iy, ry,
     Mp: flex.Mp, Lp: flex.Lp, Lr: flex.Lr, Lb, Mn: flex.Mn,
@@ -1016,7 +1028,7 @@ function buildUtilMap(
     }
   }
   for (const c of design.columns)      if (!c.ok) bump(memSecId.get(c.id), Math.max(2, c.util))
-  for (const b of design.steelBeams)   if (!b.ok) bump(memSecId.get(b.id), Math.max(2, b.utilM, b.utilV))
+  for (const b of design.steelBeams)   if (!b.ok) bump(memSecId.get(b.id), Math.max(2, b.utilM, b.utilV, b.deflLim > 0 ? b.defl / b.deflLim : 2))
   for (const c of design.steelColumns) if (!c.ok) bump(memSecId.get(c.id), Math.max(2, c.ratio))
   return out
 }
@@ -1035,7 +1047,7 @@ function sectionUtilMap(design: StructureDesign, memSecId: Map<string, string>):
     bump(memSecId.get(b.id), u)
   }
   for (const c of design.columns)      bump(memSecId.get(c.id), c.util)
-  for (const b of design.steelBeams)   bump(memSecId.get(b.id), Math.max(b.utilM, b.utilV))
+  for (const b of design.steelBeams)   bump(memSecId.get(b.id), Math.max(b.utilM, b.utilV, b.deflLim > 0 ? b.defl / b.deflLim : 0))
   for (const c of design.steelColumns) bump(memSecId.get(c.id), c.ratio)
   return out
 }

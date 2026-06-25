@@ -135,6 +135,23 @@ describe('steel design pipeline (AISC routing + base plates)', () => {
     }
   })
 
+  it('steel beam rows include §L2 serviceability deflection check', () => {
+    for (const b of r.steelBeams) {
+      expect(b.defl).toBeGreaterThanOrEqual(0)
+      expect(b.deflLim).toBeCloseTo(b.L * 1000 / 240, 4)
+      expect(typeof b.deflOK).toBe('boolean')
+    }
+  })
+
+  it('steel beam deflection matches 5·Mu·L²/(48·E·Ix) formula (SS bound)', () => {
+    const E = 200000  // N/mm²
+    for (const b of r.steelBeams) {
+      const L_mm = b.L * 1000
+      const expected = (5 * b.Mu * 1e6 * L_mm ** 2) / (48 * E * b.Ix)
+      expect(b.defl).toBeCloseTo(expected, 4)
+    }
+  })
+
   it('steel columns use §H1-1 combined interaction', () => {
     for (const c of r.steelColumns) {
       expect(c.phiPn).toBeGreaterThan(0)
