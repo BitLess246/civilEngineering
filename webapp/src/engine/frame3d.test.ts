@@ -307,7 +307,7 @@ describe('frame3d — spring supports', () => {
     expect(r.d[6 + 1]).toBeCloseTo(-10 / (kBeam + ky), 6)
   })
 
-  it('spring reaction = k × displacement (identity check)', () => {
+  it('spring reaction opposes displacement (restoring force sign)', () => {
     const ky = 200
     const r = solveFrame3D(
       [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: L, y: 0, z: 0 }],
@@ -316,7 +316,11 @@ describe('frame3d — spring supports', () => {
       [{ kind: 'node', node: 'b', Fy: -40, cat: 'D' }],
     )!
     const springReac = r.reactions.find((rx) => rx.fixity === 'spring')!
-    expect(springReac.F[1]).toBeCloseTo(ky * r.d[6 + 1], 6)
+    // Spring settles downward (d[6+1] < 0); reaction must be upward (positive) = −k·d
+    expect(springReac.F[1]).toBeCloseTo(-ky * r.d[6 + 1], 6)
+    // Fixed base + spring together balance the 40 kN downward load
+    const totalRy = r.reactions.reduce((s, rx) => s + rx.F[1], 0)
+    expect(totalRy).toBeCloseTo(40, 4)
   })
 
   it('spring carries only a share of the load (beam stiffness >> spring stiffness here)', () => {

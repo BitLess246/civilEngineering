@@ -803,13 +803,14 @@ export function solveWithGeometry(
     .map((s) => {
       const i = idx.get(s.node)!
       if (s.fixity === 'spring') {
-        // Spring reaction = spring stiffness × displacement
+        // Spring reaction = restoring force = −k·d (opposes displacement, consistent with
+        // pin/roller/fixed sign: positive = force the support exerts ON the structure in +axis).
         return {
           node: s.node, fixity: s.fixity,
           F: [
-            (s.kx ?? 0) * d[6 * i + 0],
-            (s.ky ?? 0) * d[6 * i + 1],
-            (s.kz ?? 0) * d[6 * i + 2],
+            -(s.kx ?? 0) * d[6 * i + 0],
+            -(s.ky ?? 0) * d[6 * i + 1],
+            -(s.kz ?? 0) * d[6 * i + 2],
           ] as [number, number, number],
           M: [0, 0, 0] as [number, number, number],
         }
