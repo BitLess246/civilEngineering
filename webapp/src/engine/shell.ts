@@ -88,22 +88,21 @@ export function cstMembrane(f: TriFrame, E: number, nu: number, t: number): numb
 // ── DKT plate bending (3×3 = 9 DOF: w,θx,θy per node) ──────────────────────
 // θx = ∂w/∂y, θy = −∂w/∂x (Kirchhoff). Batoz/Bathe/Ho (1980) shape-function
 // derivative arrays HX,HY (w.r.t. area coords ξ,η) → curvature matrix B (3×9).
-export function dktBending(f: TriFrame, E: number, nu: number, t: number): number[][] {
-  const Es = E * 1e3, tm = t / 1000
+
+/** DKT curvature-displacement matrix B (3×9) evaluated at area coords (ξ,η). */
+export function dktBmat(f: TriFrame, xi: number, eta: number): number[][] {
   const [x1, x2, x3] = f.x, [y1, y2, y3] = f.y
   const x21 = x2 - x1, x31 = x3 - x1, y21 = y2 - y1, y31 = y3 - y1
-  const det2A = x21 * y31 - x31 * y21   // = 2A (oriented +)
+  const det2A = x21 * y31 - x31 * y21
 
-  // side differences k = 4(23), 5(31), 6(12)
   const sd = (xi: number, xj: number, yi: number, yj: number) => {
     const dx = xi - xj, dy = yi - yj, l2 = dx * dx + dy * dy
     return { P: -6 * dx / l2, t: -6 * dy / l2, q: 3 * dx * dy / l2, r: 3 * dy * dy / l2 }
   }
   const s4 = sd(x2, x3, y2, y3), s5 = sd(x3, x1, y3, y1), s6 = sd(x1, x2, y1, y2)
-  const P4 = s4.P, P5 = s5.P, P6 = s6.P
-  const t4 = s4.t, t5 = s5.t, t6 = s6.t
-  const q4 = s4.q, q5 = s5.q, q6 = s6.q
-  const r4 = s4.r, r5 = s5.r, r6 = s6.r
+  const { P: P4, t: t4, q: q4, r: r4 } = s4
+  const { P: P5, t: t5, q: q5, r: r5 } = s5
+  const { P: P6, t: t6, q: q6, r: r6 } = s6
 
   const HXxi = (xi: number, eta: number): number[] => [
     P6 * (1 - 2 * xi) + (P5 - P6) * eta,
@@ -112,9 +111,7 @@ export function dktBending(f: TriFrame, E: number, nu: number, t: number): numbe
     -P6 * (1 - 2 * xi) + eta * (P4 + P6),
     q6 * (1 - 2 * xi) + eta * (q4 - q6),
     -2 + 6 * xi + r6 * (1 - 2 * xi) + eta * (r4 - r6),
-    -eta * (P4 + P5),
-    eta * (q4 - q5),
-    -eta * (r5 - r4),
+    -eta * (P4 + P5), eta * (q4 - q5), -eta * (r5 - r4),
   ]
   const HYxi = (xi: number, eta: number): number[] => [
     t6 * (1 - 2 * xi) + (t5 - t6) * eta,
@@ -123,17 +120,13 @@ export function dktBending(f: TriFrame, E: number, nu: number, t: number): numbe
     -t6 * (1 - 2 * xi) + eta * (t4 + t6),
     -1 + r6 * (1 - 2 * xi) + eta * (r4 - r6),
     -q6 * (1 - 2 * xi) - eta * (q4 - q6),
-    -eta * (t4 + t5),
-    eta * (r4 - r5),
-    -eta * (q4 - q5),
+    -eta * (t4 + t5), eta * (r4 - r5), -eta * (q4 - q5),
   ]
   const HXeta = (xi: number, eta: number): number[] => [
     -P5 * (1 - 2 * eta) - (P6 - P5) * xi,
     q5 * (1 - 2 * eta) - (q5 + q6) * xi,
     -4 + 6 * (xi + eta) + r5 * (1 - 2 * eta) - xi * (r5 + r6),
-    xi * (P4 + P6),
-    xi * (q4 - q6),
-    -xi * (r6 - r4),
+    xi * (P4 + P6), xi * (q4 - q6), -xi * (r6 - r4),
     P5 * (1 - 2 * eta) - xi * (P4 + P5),
     q5 * (1 - 2 * eta) + xi * (q4 - q5),
     -2 + 6 * eta + r5 * (1 - 2 * eta) + xi * (r4 - r5),
@@ -142,30 +135,29 @@ export function dktBending(f: TriFrame, E: number, nu: number, t: number): numbe
     -t5 * (1 - 2 * eta) - (t6 - t5) * xi,
     1 + r5 * (1 - 2 * eta) - (r5 + r6) * xi,
     -q5 * (1 - 2 * eta) + xi * (q5 + q6),
-    xi * (t4 + t6),
-    xi * (r4 - r6),
-    -xi * (q4 - q6),
+    xi * (t4 + t6), xi * (r4 - r6), -xi * (q4 - q6),
     t5 * (1 - 2 * eta) - xi * (t4 + t5),
     -1 + r5 * (1 - 2 * eta) + xi * (r4 - r5),
     -q5 * (1 - 2 * eta) - xi * (q4 - q5),
   ]
 
-  const D = planeStress(Es, nu).map((row) => row.map((v) => v * (tm * tm * tm / 12)))  // = Db (×t³/12 vs membrane ×t)
   const inv = 1 / det2A
-  const Bof = (xi: number, eta: number): number[][] => {
-    const hxx = HXxi(xi, eta), hxe = HXeta(xi, eta), hyx = HYxi(xi, eta), hye = HYeta(xi, eta)
-    const row1 = hxx.map((_, i) => inv * (y31 * hxx[i] - y21 * hxe[i]))
-    const row2 = hxx.map((_, i) => inv * (-x31 * hyx[i] + x21 * hye[i]))
-    const row3 = hxx.map((_, i) => inv * (-x31 * hxx[i] + x21 * hxe[i] + y31 * hyx[i] - y21 * hye[i]))
-    return [row1, row2, row3]
-  }
+  const hxx = HXxi(xi, eta), hxe = HXeta(xi, eta), hyx = HYxi(xi, eta), hye = HYeta(xi, eta)
+  return [
+    hxx.map((_, i) => inv * (y31 * hxx[i] - y21 * hxe[i])),
+    hxx.map((_, i) => inv * (-x31 * hyx[i] + x21 * hye[i])),
+    hxx.map((_, i) => inv * (-x31 * hxx[i] + x21 * hxe[i] + y31 * hyx[i] - y21 * hye[i])),
+  ]
+}
 
-  // 3-point mid-edge integration (exact for the linear DKT curvature), weight A/3
+export function dktBending(f: TriFrame, E: number, nu: number, t: number): number[][] {
+  const Es = E * 1e3, tm = t / 1000
+  const D = planeStress(Es, nu).map((row) => row.map((v) => v * (tm * tm * tm / 12)))  // = Db (×t³/12)
   const gps: [number, number][] = [[0.5, 0], [0, 0.5], [0.5, 0.5]]
-  const A = det2A / 2
+  const A = f.A
   let K = zeros(9, 9)
   for (const [xi, eta] of gps) {
-    const B = Bof(xi, eta)
+    const B = dktBmat(f, xi, eta)
     const DB = mul(D, B)
     const k = mul(transpose(B), DB)
     K = K.map((row, i) => row.map((v, j) => v + (A / 3) * k[i][j]))
@@ -288,6 +280,114 @@ export function solveShell(
     rot.set(n.id, [d[6 * i + 3], d[6 * i + 4], d[6 * i + 5]])
   })
   return { d, disp, rot }
+}
+
+// ── Shell stress recovery ─────────────────────────────────────────────────────
+/** Per-element stress state recovered from the global DOF vector. */
+export interface ElementStress {
+  id: string
+  /** Membrane stresses in element-local x–y, kN/m² (= kPa). */
+  sigmaX: number; sigmaY: number; tauXY: number
+  /** Principal membrane stresses, kN/m². */
+  sigma1: number; sigma2: number
+  /** Von Mises membrane stress, kN/m² (plane-stress formula). */
+  vonMises: number
+  /** Bending moments per unit width in element-local x–y, kN·m/m. */
+  Mx: number; My: number; Mxy: number
+}
+
+/**
+ * Recover element stresses from a `ShellResult`. Uses:
+ *   membrane: CST constant strain (σ = D_m · B_m · u_local, constant per element)
+ *   bending : DKT curvature at the centroid (ξ=η=1/3) → M = D_b · B_b · u_local
+ * All stresses are in element-local coordinates.
+ */
+export function recoverShellStress(
+  nodes: ShellNode[], elems: ShellElem[], result: ShellResult,
+): ElementStress[] {
+  const idx = new Map(nodes.map((n, i) => [n.id, i]))
+  return elems.map((e) => {
+    const ni = e.nodes.map((id) => idx.get(id)!)
+    const ns = e.nodes.map((id) => nodes[idx.get(id)!])
+    const p1: V3 = [ns[0].x, ns[0].y, ns[0].z]
+    const p2: V3 = [ns[1].x, ns[1].y, ns[1].z]
+    const p3: V3 = [ns[2].x, ns[2].y, ns[2].z]
+    const f = triFrame(p1, p2, p3)
+    const R = f.R   // rows: [x̂, ŷ, ẑ] (global→local rotation)
+
+    // Extract local translations & rotations per node
+    const uLoc: number[] = []   // [u1,v1, u2,v2, u3,v3] in-plane
+    const bLoc: number[] = []   // [w1,θx1,θy1, w2,θx2,θy2, w3,θx3,θy3] bending
+    for (const i of ni) {
+      const b = 6 * i
+      const ug: V3 = [result.d[b], result.d[b + 1], result.d[b + 2]]
+      const thg: V3 = [result.d[b + 3], result.d[b + 4], result.d[b + 5]]
+      uLoc.push(dot(R[0], ug), dot(R[1], ug))         // in-plane local u, v
+      bLoc.push(dot(R[2], ug), dot(R[0], thg), dot(R[1], thg)) // w, θx, θy
+    }
+
+    // ── Membrane stress (CST constant per element) ──────────────────────────
+    const [x1, x2, x3] = f.x, [y1, y2, y3] = f.y
+    const b_c = [y2 - y3, y3 - y1, y1 - y2]
+    const c_c = [x3 - x2, x1 - x3, x2 - x1]
+    const inv = 1 / (2 * f.A)
+    const epsX = b_c.reduce((s, b, i) => s + b * inv * uLoc[2 * i], 0)
+    const epsY = c_c.reduce((s, c, i) => s + c * inv * uLoc[2 * i + 1], 0)
+    const gamXY = c_c.reduce((s, c, i) => s + c * inv * uLoc[2 * i], 0)
+             + b_c.reduce((s, b, i) => s + b * inv * uLoc[2 * i + 1], 0)
+    const Es = e.E * 1e3, nu = e.nu   // MPa → kN/m²
+    const cm = Es / (1 - nu * nu)
+    const sigmaX = cm * (epsX + nu * epsY)
+    const sigmaY = cm * (nu * epsX + epsY)
+    const tauXY = cm * (1 - nu) / 2 * gamXY
+
+    // Principal stresses & von Mises
+    const avg = (sigmaX + sigmaY) / 2
+    const rad = Math.sqrt(((sigmaX - sigmaY) / 2) ** 2 + tauXY ** 2)
+    const sigma1 = avg + rad, sigma2 = avg - rad
+    const vonMises = Math.sqrt(sigmaX ** 2 + sigmaY ** 2 - sigmaX * sigmaY + 3 * tauXY ** 2)
+
+    // ── Bending moments at element centroid (ξ=η=1/3) ───────────────────────
+    const Bb = dktBmat(f, 1 / 3, 1 / 3)          // 3×9
+    const tm = e.t / 1000
+    const cb = (Es * tm * tm * tm) / (12 * (1 - nu * nu))  // plate rigidity kN·m
+    const kap = Bb.map((row) => row.reduce((s, v, i) => s + v * bLoc[i], 0))  // [κx,κy,2κxy]
+    const Mx = cb * (kap[0] + nu * kap[1])
+    const My = cb * (nu * kap[0] + kap[1])
+    const Mxy = cb * (1 - nu) / 2 * kap[2]
+
+    return { id: e.id, sigmaX, sigmaY, tauXY, sigma1, sigma2, vonMises, Mx, My, Mxy }
+  })
+}
+
+/**
+ * Build a per-node averaged contour from element stresses (for smooth colour maps).
+ * `key` selects which ElementStress field to average.
+ */
+export function shellNodalContour(
+  nodes: ShellNode[],
+  elems: ShellElem[],
+  stresses: ElementStress[],
+  key: keyof Omit<ElementStress, 'id'>,
+): Map<string, number> {
+  const sum = new Map<string, number>()
+  const cnt = new Map<string, number>()
+  const stressById = new Map(stresses.map((s) => [s.id, s]))
+  for (const e of elems) {
+    const s = stressById.get(e.id)
+    if (!s) continue
+    const v = s[key] as number
+    for (const id of e.nodes) {
+      sum.set(id, (sum.get(id) ?? 0) + v)
+      cnt.set(id, (cnt.get(id) ?? 0) + 1)
+    }
+  }
+  const out = new Map<string, number>()
+  for (const n of nodes) {
+    const c = cnt.get(n.id) ?? 0
+    out.set(n.id, c > 0 ? sum.get(n.id)! / c : 0)
+  }
+  return out
 }
 
 // ── Test/utility mesher: rectangular plate in the X-Y plane (normal +z) ─────
