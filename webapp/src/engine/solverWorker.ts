@@ -10,6 +10,7 @@ import type { StructuralModel } from './model'
 import { modelToFrame3D } from './modelBridge'
 import { analyzeFrame3D, solveFrame3D, applyF3Combo, type F3AnalyzeOpts } from './frame3d'
 import { modalAnalysis } from './modal'
+import { runPushoverModel, type PushoverModelOpts } from './pushoverModel'
 import { driftCheck } from './seismic'
 import { designStructureAsync, optimizeStructureAsync, selectBarDiameters, type SoilOptions, type FootingPlan, type AnalyzeOptions } from './pipeline'
 import type { SolveProgress } from './progress'
@@ -20,6 +21,7 @@ export type SolverRequest =
   | { id: number; kind: 'design'; model: StructuralModel; soil: SoilOptions; plan: FootingPlan; opts: AnalyzeOptions; tryBars: boolean }
   | { id: number; kind: 'optimize'; model: StructuralModel; soil: SoilOptions; plan: FootingPlan; opts: AnalyzeOptions; tryBars: boolean; maxIter: number }
   | { id: number; kind: 'modal'; model: StructuralModel; nModes: number }
+  | { id: number; kind: 'pushover'; model: StructuralModel; opts: PushoverModelOpts }
 
 const ctx = self as unknown as Worker
 
@@ -43,6 +45,10 @@ ctx.onmessage = async (e: MessageEvent<SolverRequest>) => {
       onProgress({ phase: 'Modal analysis' })
       const modal = modalAnalysis(msg.model, msg.nModes)
       ctx.postMessage({ id: msg.id, ok: true, result: { modal } })
+    } else if (msg.kind === 'pushover') {
+      onProgress({ phase: 'Pushover (event-to-event)' })
+      const pushover = runPushoverModel(msg.model, msg.opts)
+      ctx.postMessage({ id: msg.id, ok: true, result: { pushover } })
     } else if (msg.kind === 'design') {
       let m = msg.model
       if (msg.tryBars) {
