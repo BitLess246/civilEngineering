@@ -3,7 +3,9 @@ import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { designStructure } from './pipeline'
 import { estimateTakeoff, costBill, type PriceList } from './takeoff'
 import { sdlItemKPa, sdlTotal, type SdlItem } from './deadLoads'
-import type { RectSection } from './model'
+import type { RectSection, StructuralModel } from './model'
+import type { StructureDesign } from './pipeline'
+import { shapeByName } from './aiscSections'
 
 const section: RectSection = { id: 'S1', name: '300×500', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
 const soil = { qAllow: 200, gammaSoil: 18, gammaConc: 24, H: 1.5 }
@@ -106,5 +108,79 @@ describe('structure take-off / BOM-BOQ', () => {
       expect(e.concreteM3).toBeGreaterThanOrEqual(0)
       expect(Number.isFinite(e.steelKg)).toBe(true)
     }
+  })
+})
+
+describe('structural steel — per-shape unit weight + costed BOM line items (A2)', () => {
+  const STEEL_DENSITY = 7850
+  const emptyDesign: StructureDesign = {
+    govName: '', cases: [], beams: [], columns: [], steelBeams: [], steelColumns: [],
+    basePlates: [], joints: [], slabs: [], walls: [], footings: [], combined: [],
+    totals: { concreteMembers: 0, concreteSlabs: 0, concrete: 0, steelKg: 0 }, orphanEdges: 0,
+  }
+  // Two steel members: one 6 m W200x46.1 beam, two 4 m W250x49.1 columns.
+  const steelBeam: RectSection = {
+    id: 'SB', name: 'W200x46.1', b: 203, h: 203, fc: 0, fy: 0, barDia: 0, tieDia: 0, cover: 0,
+    material: 'steel', shape: 'W200x46.1',
+  }
+  const steelCol: RectSection = {
+    id: 'SC', name: 'W250x49.1', b: 203, h: 254, fc: 0, fy: 0, barDia: 0, tieDia: 0, cover: 0,
+    material: 'steel', shape: 'W250x49.1',
+  }
+  const model: StructuralModel = {
+    version: 1, name: 'steel-frame',
+    nodes: [
+      { id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: 0, y: 4, z: 0 },
+      { id: 'c', x: 6, y: 4, z: 0 }, { id: 'd', x: 6, y: 0, z: 0 },
+    ],
+    members: [
+      { id: 'col1', i: 'a', j: 'b', role: 'column', section: 'SC' },
+      { id: 'col2', i: 'd', j: 'c', role: 'column', section: 'SC' },
+      { id: 'gird', i: 'b', j: 'c', role: 'girder', section: 'SB' },
+    ],
+    sections: [steelBeam, steelCol], plates: [], supports: [], loads: [], storeys: [],
+  }
+  const t = estimateTakeoff(model, emptyDesign)
+
+  it('steelByShape carries unit weight kg/m = ρ·A and consolidated mass per shape', () => {
+    const beam = t.steelByShape.find((s) => s.shape === 'W200x46.1')!
+    const col = t.steelByShape.find((s) => s.shape === 'W250x49.1')!
+    expect(beam.kgPerM).toBeCloseTo((shapeByName('W200x46.1')!.A / 1e6) * STEEL_DENSITY, 6)
+    expect(col.kgPerM).toBeCloseTo((shapeByName('W250x49.1')!.A / 1e6) * STEEL_DENSITY, 6)
+    expect(beam.L).toBeCloseTo(6, 9)           // one 6 m girder
+    expect(col.L).toBeCloseTo(8, 9)            // two 4 m columns
+    expect(beam.kg).toBeCloseTo(beam.kgPerM * 6, 6)
+    expect(col.kg).toBeCloseTo(col.kgPerM * 8, 6)
+    expect(t.structuralSteelKg).toBeCloseTo(beam.kg + col.kg, 6)
+  })
+
+  it('costBill emits one priced line per shape (kg × ₱/kg), no aggregate W-shapes line', () => {
+    const prices: PriceList = {
+      cementBag: 260, sandM3: 1500, gravelM3: 1600, steelKg: 65, tieWireRoll: 2500,
+      plywoodSheet: 700, lumberM: 25, structuralSteelKg: 130,
+    }
+    const bill = costBill(t, prices)
+    expect(bill.rows.some((r) => r.item === 'Structural steel (W-shapes)')).toBe(false)
+    const beamRow = bill.rows.find((r) => r.item === 'Structural steel — W200x46.1')!
+    const colRow = bill.rows.find((r) => r.item === 'Structural steel — W250x49.1')!
+    expect(beamRow.unit).toBe('kg')
+    expect(beamRow.priceKey).toBe('structuralSteelKg')      // shares the editable rate
+    expect(beamRow.amount).toBeCloseTo(beamRow.qty * 130, 6)
+    expect(colRow.amount).toBeCloseTo(colRow.qty * 130, 6)
+    // per-shape steel sub-total equals the total tonnage × rate
+    const steelSubtotal = bill.rows.filter((r) => r.item.startsWith('Structural steel — '))
+      .reduce((s, r) => s + r.amount, 0)
+    expect(steelSubtotal).toBeCloseTo(t.structuralSteelKg * 130, 4)
+  })
+
+  it('default structural steel rate is ₱120/kg when none supplied', () => {
+    const prices: PriceList = {
+      cementBag: 260, sandM3: 1500, gravelM3: 1600, steelKg: 65, tieWireRoll: 2500,
+      plywoodSheet: 700, lumberM: 25,
+    }
+    const bill = costBill(t, prices)
+    const beamRow = bill.rows.find((r) => r.item === 'Structural steel — W200x46.1')!
+    expect(beamRow.unitPrice).toBe(120)
+    expect(beamRow.amount).toBeCloseTo(beamRow.qty * 120, 6)
   })
 })

@@ -67,7 +67,7 @@ export interface FormworkResult { areaM2: number; plywoodSheets: number; lumberM
 export interface TieWireResult { intersections: number; netM: number; rolls: number; weightKg: number }
 export interface BoqRow { item: string; unit: string; qty: number }
 
-export interface SteelShapeQty { shape: string; kg: number; L: number }
+export interface SteelShapeQty { shape: string; kg: number; L: number; kgPerM: number }
 
 export interface TakeoffResult {
   byElement: ElementQty[]
@@ -110,8 +110,12 @@ export function costBill(t: TakeoffResult, p: PriceList): CostedBill {
     row('Formwork — plywood', t.formwork.plywoodSheets, 'sheet', p.plywoodSheet, 'plywoodSheet'),
     row('Formwork — lumber', t.formwork.lumberM, 'lin·m', p.lumberM, 'lumberM'),
   ]
-  if (t.structuralSteelKg > 0)
-    rows.push(row('Structural steel (W-shapes)', t.structuralSteelKg, 'kg', p.structuralSteelKg ?? 120, 'structuralSteelKg'))
+  // Structural steel — one costed line per shape (kg × ₱/kg), so the BOM shows
+  // the priced steel sub-total alongside the concrete/rebar items. All shapes
+  // share the single editable structuralSteelKg rate (₱/kg).
+  const steelRate = p.structuralSteelKg ?? 120
+  for (const s of [...t.steelByShape].sort((a, b) => a.shape.localeCompare(b.shape)))
+    rows.push(row(`Structural steel — ${s.shape}`, s.kg, 'kg', steelRate, 'structuralSteelKg'))
   return { rows, total: rows.reduce((s, r) => s + r.amount, 0) }
 }
 
@@ -316,7 +320,7 @@ export function estimateTakeoff(
 
   // ── Structural steel members (W-shapes) ──
   const nodeXYZ = new Map(model.nodes.map((n) => [n.id, n]))
-  const shapeMap = new Map<string, { kg: number; L: number }>()
+  const shapeMap = new Map<string, { kg: number; L: number; kgPerM: number }>()
   let structuralSteelKg = 0
   for (const mem of model.members) {
     const sec = secById.get(memSecId.get(mem.id) ?? '')
@@ -324,10 +328,11 @@ export function estimateTakeoff(
     const shape = shapeByName(sec.shape); if (!shape) continue
     const ni = nodeXYZ.get(mem.i), nj = nodeXYZ.get(mem.j); if (!ni || !nj) continue
     const L = Math.hypot(nj.x - ni.x, nj.y - ni.y, nj.z - ni.z)
-    const kg = (shape.A / 1e6) * L * STEEL_DENSITY
+    const wKgM = (shape.A / 1e6) * STEEL_DENSITY        // unit weight, kg/m (ρ·A)
+    const kg = wKgM * L
     structuralSteelKg += kg
-    const prev = shapeMap.get(sec.shape) ?? { kg: 0, L: 0 }
-    shapeMap.set(sec.shape, { kg: prev.kg + kg, L: prev.L + L })
+    const prev = shapeMap.get(sec.shape) ?? { kg: 0, L: 0, kgPerM: wKgM }
+    shapeMap.set(sec.shape, { kg: prev.kg + kg, L: prev.L + L, kgPerM: wKgM })
     boq.push({ item: `Structural steel — ${sec.shape}`, unit: 'm', qty: L })
   }
   // consolidate duplicate BOQ shape entries

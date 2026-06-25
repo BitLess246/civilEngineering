@@ -12,7 +12,7 @@ status and how to continue from web/phone.)
    git checkout main && git fetch origin main && git merge --ff-only origin/main && git checkout -b <type>/<short-name>
    ```
 4. **One new PR per push** — never push more work onto an already-opened/merged branch.
-5. **Don't merge PRs yourself unless the user explicitly asks.** By default the user merges — open the PR and stop. Merge automatically only when the user authorizes it for that task.
+5. **Auto-merge enabled (standing authorization).** The user has authorized auto-merging for Tier 4 work: after CI passes on a PR, merge it yourself (`mcp__github__merge_pull_request`), then continue to the next phase. Still open one PR per phase. If the user revokes this, revert to "open the PR and stop."
 6. If you must create a branch but uncommitted changes are on the wrong branch, `git stash`, switch/branch off main, `git stash pop`.
 
 Branch names: `feature/*`, `fix/*`, `docs/*`.
