@@ -24,6 +24,7 @@ import { computeSeismic, type SeismicResult, type DriftRow } from '../engine/sei
 import { columnKFactors, type ColumnK } from '../engine/effectiveLength'
 import { freqFromDeflection, dg11Walking, DG11_OCCUPANCY } from '../engine/floorVibration'
 import { buildSeismicMass, GRAVITY } from '../engine/modal'
+import { autoRigidOffsets } from '../engine/rigidEndZones'
 import { computeWind, type WindResult } from '../engine/wind'
 import { ReportControls } from '../components/ReportControls'
 import { WorkedSolution } from '../components/WorkedSolution'
@@ -131,6 +132,30 @@ function RigidArm3D({ a, b }: { a: THREE.Vector3; b: THREE.Vector3 }) {
     <mesh position={mid} quaternion={quat}>
       <boxGeometry args={[len, 0.06, 0.06]} />
       <meshStandardMaterial color="#9333ea" />
+    </mesh>
+  )
+}
+
+/** Rigid end-zone segment: the member's own cross-section in a muted shade,
+ *  filling node→clear-span-end so members stay connected at joints (ETABS look). */
+function RigidZone3D({ a, b, role, sec }: {
+  a: THREE.Vector3; b: THREE.Vector3; role: string; sec?: { b: number; h: number }
+}) {
+  const { mid, quat, len } = useMemo(() => {
+    const dir = new THREE.Vector3().subVectors(b, a)
+    const len = dir.length()
+    const quat = new THREE.Quaternion().setFromUnitVectors(
+      new THREE.Vector3(1, 0, 0), len > 1e-9 ? dir.clone().normalize() : new THREE.Vector3(1, 0, 0))
+    return { mid: new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5), quat, len }
+  }, [a, b])
+  if (len < 1e-6) return null
+  const ty = sec ? sec.h / 1000 : role === 'column' ? 0.3 : 0.22
+  const tz = sec ? sec.b / 1000 : role === 'column' ? 0.3 : 0.22
+  const color = `#${new THREE.Color(ROLE_COLOR[role] ?? '#64748b').lerp(new THREE.Color('#1e293b'), 0.45).getHexString()}`
+  return (
+    <mesh position={mid} quaternion={quat}>
+      <boxGeometry args={[len, ty * 1.04, tz * 1.04]} />
+      <meshStandardMaterial color={color} />
     </mesh>
   )
 }
@@ -1165,6 +1190,10 @@ export default function ModelSpace() {
     model?.nodes.forEach((n) => map.set(n.id, new THREE.Vector3(n.x, n.y, n.z)))
     return map
   }, [model])
+  // auto rigid end-zone offsets (ETABS-style) for rendering the joint zones
+  const autoOff = useMemo(
+    () => (model?.rigidEndZones ? autoRigidOffsets(model, model.rigidZoneFactor ?? 0.5) : null),
+    [model])
   // model bounds → zoom-to-extents on load / after generate
   const modelBox = useMemo(() => {
     if (!model || model.nodes.length === 0) return null
@@ -1331,21 +1360,24 @@ export default function ModelSpace() {
                   const tint = govRes && govRes.Mmax > 1e-9
                     ? (memForce.get(m.id)?.Mmax ?? 0) / govRes.Mmax : 0
                   const sec = sectionFor(m.id)
-                  // rigid end offsets shift the flexible member endpoints; node↔end is a rigid arm
-                  const oI = m.offsets?.iEnd, oJ = m.offsets?.jEnd
-                  const aEff = oI ? a.clone().add(new THREE.Vector3(oI[0], oI[1], oI[2])) : a
-                  const bEff = oJ ? bb.clone().add(new THREE.Vector3(oJ[0], oJ[1], oJ[2])) : bb
+                  // rigid end offsets shift the flexible endpoints; manual offsets win over auto
+                  // rigid end zones. Manual → purple arm (eccentric); auto → muted member zone.
+                  const ao = autoOff?.get(m.id)
+                  const manI = m.offsets?.iEnd, manJ = m.offsets?.jEnd
+                  const effI = manI ?? ao?.offI, effJ = manJ ?? ao?.offJ
+                  const aEff = effI ? a.clone().add(new THREE.Vector3(effI[0], effI[1], effI[2])) : a
+                  const bEff = effJ ? bb.clone().add(new THREE.Vector3(effJ[0], effJ[1], effJ[2])) : bb
                   const memberEl = sec?.material === 'steel' && sec.shape
                     ? <MemberSteel3D a={aEff} b={bEff} role={m.role} shapeName={sec.shape}
                         tint={tint * 0.85} selected={m.id === selected} onPick={() => setSelected(m.id)} />
                     : <Member3D a={aEff} b={bEff} role={m.role} tint={tint * 0.85}
                         sec={sec} selected={m.id === selected} onPick={() => setSelected(m.id)} />
-                  if (!oI && !oJ) return <group key={m.id}>{memberEl}</group>
+                  if (!effI && !effJ) return <group key={m.id}>{memberEl}</group>
                   return (
                     <group key={m.id}>
                       {memberEl}
-                      {oI && <RigidArm3D a={a} b={aEff} />}
-                      {oJ && <RigidArm3D a={bb} b={bEff} />}
+                      {effI && (manI ? <RigidArm3D a={a} b={aEff} /> : <RigidZone3D a={a} b={aEff} role={m.role} sec={sec} />)}
+                      {effJ && (manJ ? <RigidArm3D a={bb} b={bEff} /> : <RigidZone3D a={bb} b={bEff} role={m.role} sec={sec} />)}
                     </group>
                   )
                 })}
@@ -2351,6 +2383,20 @@ export default function ModelSpace() {
                     onChange={(e) => model && save({ ...model, diaphragm: e.target.checked })} />
                   <span>Rigid floor diaphragm (ties in-plane lateral DOFs per storey)</span>
                 </label>
+                <label className="col-span-full flex items-center gap-2 text-sm">
+                  <input type="checkbox" disabled={!model} checked={model?.rigidEndZones ?? false}
+                    onChange={(e) => model && save({ ...model, rigidEndZones: e.target.checked })} />
+                  <span>Auto rigid end zones (ETABS-style end length offsets from connectivity)</span>
+                </label>
+                {model?.rigidEndZones && (
+                  <label className="col-span-full flex items-center gap-2 pl-6 text-sm">
+                    <span className="text-slate-600">Rigid-zone factor (0–1)</span>
+                    <input type="number" min={0} max={1} step={0.1} value={model.rigidZoneFactor ?? 0.5}
+                      onChange={(e) => model && save({ ...model, rigidZoneFactor: Math.max(0, Math.min(1, parseFloat(e.target.value) || 0)) })}
+                      className="w-20 rounded border border-slate-300 px-2 py-1" />
+                    <span className="text-[11px] text-slate-400">auto offsets = factor × ½·(connecting member depth) at each joint</span>
+                  </label>
+                )}
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={tryBars} onChange={(e) => setTryBars(e.target.checked)} />
                   <span>Try alternative bar sizes (Design / Optimize pick ⌀16–⌀32 beams, ⌀20–⌀32 columns)</span>
