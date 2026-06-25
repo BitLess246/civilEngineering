@@ -179,7 +179,7 @@ export function modalAnalysis(model: StructuralModel, nModes = 12): ModalResult 
   // A mesh with errors (e.g. no supports → rigid-body modes) makes K singular
   // in ways luFactor's pivot tolerance may not catch; gate on validation.
   if (hasMeshErrors(validateMesh(model))) return null
-  const br = modelToFrame3D(model)
+  const br = modelToFrame3D(model, { useShells: false })
   const precomp = precomputeFrame(br.nodes, br.members, br.supports)
   if (!precomp.Kff || precomp.Kff.n === 0) return null
 

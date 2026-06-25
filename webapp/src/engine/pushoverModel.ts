@@ -74,7 +74,7 @@ export interface PushoverModelResult {
  * reported base shear equals the load factor λ at each event.
  */
 export function runPushoverModel(model: StructuralModel, opts: PushoverModelOpts = {}): PushoverModelResult | null {
-  const br = modelToFrame3D(model)
+  const br = modelToFrame3D(model, { useShells: false })
   if (br.nodes.length === 0) return null
   const dir = opts.dir ?? 0
 

@@ -337,7 +337,7 @@ function buildRuns(model: StructuralModel, opts: AnalyzeOptions, onProgress?: Pr
   // slab tributary line loads and member self-weight; lateral cases are pure
   // node loads applied on top per direction.
   const gravityModel = { ...model, loads: model.loads.filter((l) => l.cat !== 'E' && l.cat !== 'W') }
-  const br = modelToFrame3D(gravityModel)
+  const br = modelToFrame3D(gravityModel, { useShells: false })
 
   let lateral = opts.lateral ?? []
   if (lateral.length === 0) {
@@ -666,7 +666,7 @@ async function buildRunsParallel(
   model: StructuralModel, opts: AnalyzeOptions, pool: FramePool, onProgress?: ProgressFn,
 ): Promise<{ br: BridgeResult; runs: FrameRun[] }> {
   const gravityModel = { ...model, loads: model.loads.filter((l) => l.cat !== 'E' && l.cat !== 'W') }
-  const br = modelToFrame3D(gravityModel)
+  const br = modelToFrame3D(gravityModel, { useShells: false })
 
   let lateral = opts.lateral ?? []
   if (lateral.length === 0) {

@@ -73,7 +73,7 @@ export interface ColumnK {
  * direction is treated as pinned (G = 10) for that direction.
  */
 export function columnKFactors(model: StructuralModel): ColumnK[] {
-  const br = modelToFrame3D(model)
+  const br = modelToFrame3D(model, { useShells: false })
   const pos = new Map(model.nodes.map((n) => [n.id, n]))
   const realIds = new Set(model.members.map((m) => m.id))
   const f3ById = new Map(br.members.map((m) => [m.id, m]))

@@ -13,6 +13,7 @@ import { luFactor, luSolve, matVec, hermite, gauss5Vec } from './fem'
 import type { LUFactor } from './fem'
 import { nscpCombos, type Combo, type LoadCategory } from './beamAnalysis'
 import type { ProgressFn } from './progress'
+import { triShell } from './shell'
 
 /** Second-order (P-Δ) options for the frame solve. */
 export interface PDeltaOpts { pDelta?: boolean; maxIter?: number; tol?: number }
@@ -35,6 +36,11 @@ export interface F3Member {
   /** Rigid end offset at end j: vector from node j to the member end in global coords [m]. */
   offJ?: [number, number, number]
 }
+/** Flat triangular shell element (CST membrane + DKT plate bending) framing into
+ *  three nodes of the model. Carries in-plane (wall) and out-of-plane (slab)
+ *  stiffness in the same global solve as the frame members. E in MPa, t in mm. */
+export interface F3Shell { id: string; nodes: [string, string, string]; E: number; nu: number; t: number }
+
 export type F3Fixity = 'pin' | 'fixed' | 'spring'
 export interface F3Support {
   node: string
@@ -232,6 +238,26 @@ export interface MemberGeom {
   kfr?: number[][]      // k_fr sub-matrix (nf × nr), used in force recovery
 }
 
+// ── Shell element geometry (load-independent) ──────────────────────────────
+export interface ShellGeom {
+  id: string
+  Ke: number[][]     // 18×18 global stiffness, DOF order [u,v,w,θx,θy,θz]×3 nodes
+  dofs: number[]     // 18 global DOF indices
+  A: number          // area (m²)
+  normal: V3         // element +normal (global), for pressure loads
+  nodeIds: [string, string, string]
+}
+
+function prepShellGeom(sh: F3Shell, nm: Map<string, F3Node>, idx: Map<string, number>): ShellGeom {
+  const [na, nb, nc] = sh.nodes.map((id) => nm.get(id)!)
+  const { Ke, A, f } = triShell(
+    [na.x, na.y, na.z], [nb.x, nb.y, nb.z], [nc.x, nc.y, nc.z], sh.E, sh.nu, sh.t,
+  )
+  const dofs: number[] = []
+  for (const id of sh.nodes) { const ni = idx.get(id)!; for (let k = 0; k < 6; k++) dofs.push(6 * ni + k) }
+  return { id: sh.id, Ke, dofs, A, normal: f.R[2], nodeIds: sh.nodes }
+}
+
 // ── Load-dependent member data ─────────────────────────────────────────────
 interface MemberLoads {
   feq: number[]         // original fixed-end forces (for postprocessMember)
@@ -252,6 +278,7 @@ export interface FramePrecomp {
   members: F3Member[]
   supports: F3Support[]
   geoms: MemberGeom[]
+  shellGeoms: ShellGeom[]        // flat-shell elements (empty when none)
   ndof: number
   free: number[]
   freeIdx: Map<number, number>   // global DOF → position in free[]
@@ -546,13 +573,16 @@ function applyTrecover(d_ind: number[], Trow: TEntry[][]): number[] {
  *  Call once per geometry/support change; reuse for every load case. */
 export function precomputeFrame(
   nodes: F3Node[], members: F3Member[], supports: F3Support[],
-  diaphragms?: F3DiaphragmGroup[],
+  diaphragms?: F3DiaphragmGroup[], shells?: F3Shell[],
 ): FramePrecomp {
   const nm = new Map(nodes.map((n) => [n.id, n]))
   const idx = new Map(nodes.map((n, i) => [n.id, i]))
   const ndof = 6 * nodes.length
 
   const geoms = members.map((m) => prepMemberGeom(m, nm, idx))
+  const shellGeoms = (shells ?? [])
+    .filter((sh) => sh.nodes.every((id) => nm.has(id)))
+    .map((sh) => prepShellGeom(sh, nm, idx))
 
   const constrained = new Set<number>()
   for (const s of supports) {
@@ -578,6 +608,18 @@ export function precomputeFrame(
       }
     }
   }
+  // Flat-shell elements: add their 18×18 global stiffness to the free block.
+  for (const sg of shellGeoms) {
+    for (let a = 0; a < 18; a++) {
+      const ia = freeIdx.get(sg.dofs[a])
+      if (ia === undefined) continue
+      for (let b = 0; b < 18; b++) {
+        const ib = freeIdx.get(sg.dofs[b])
+        if (ib === undefined) continue
+        Kff_raw[ia][ib] += sg.Ke[a][b]
+      }
+    }
+  }
 
   // Spring supports: add translational spring stiffness to Kff diagonal
   for (const s of supports) {
@@ -597,12 +639,12 @@ export function precomputeFrame(
     if (dia) {
       const K_ind = applyTtoK(Kff_raw, dia.Trow, dia.ni)
       const Kff_ind = luFactor(K_ind)
-      return { nm, idx, nodes, members, supports, geoms, ndof, free, freeIdx,
+      return { nm, idx, nodes, members, supports, geoms, shellGeoms, ndof, free, freeIdx,
                Kff: Kff_ind, Kff_raw, diaT: dia.Trow, diaNi: dia.ni }
     }
   }
   const Kff = luFactor(Kff_raw)   // null if singular; {n:0} if nf===0
-  return { nm, idx, nodes, members, supports, geoms, ndof, free, freeIdx, Kff, Kff_raw }
+  return { nm, idx, nodes, members, supports, geoms, shellGeoms, ndof, free, freeIdx, Kff, Kff_raw }
 }
 
 /** Plain-JSON-serializable form of FramePrecomp — Maps become entry arrays for postMessage. */
@@ -611,6 +653,7 @@ export interface FramePrecompSerial {
   members: F3Member[]
   supports: F3Support[]
   geoms: MemberGeom[]
+  shellGeoms: ShellGeom[]
   ndof: number
   free: number[]
   freeIdxEntries: [number, number][]
@@ -623,7 +666,7 @@ export interface FramePrecompSerial {
 export function serializePrecomp(p: FramePrecomp): FramePrecompSerial {
   return {
     nodes: p.nodes, members: p.members, supports: p.supports,
-    geoms: p.geoms, ndof: p.ndof, free: p.free,
+    geoms: p.geoms, shellGeoms: p.shellGeoms, ndof: p.ndof, free: p.free,
     freeIdxEntries: [...p.freeIdx],
     Kff: p.Kff, Kff_raw: p.Kff_raw,
     ...(p.diaT ? { diaT: p.diaT, diaNi: p.diaNi } : {}),
@@ -635,7 +678,7 @@ export function deserializePrecomp(s: FramePrecompSerial): FramePrecomp {
     nm: new Map(s.nodes.map((n) => [n.id, n])),
     idx: new Map(s.nodes.map((n, i) => [n.id, i])),
     nodes: s.nodes, members: s.members, supports: s.supports,
-    geoms: s.geoms, ndof: s.ndof, free: s.free,
+    geoms: s.geoms, shellGeoms: s.shellGeoms ?? [], ndof: s.ndof, free: s.free,
     freeIdx: new Map(s.freeIdxEntries),
     Kff: s.Kff, Kff_raw: s.Kff_raw,
     ...(s.diaT ? { diaT: s.diaT, diaNi: s.diaNi } : {}),
@@ -718,7 +761,7 @@ function postprocessMember(m: F3Member, g: MemberGeom, ml: MemberLoads, d: numbe
 export function solveWithGeometry(
   precomp: FramePrecomp, loads: F3Load[], opts?: PDeltaOpts,
 ): F3Result | null {
-  const { idx, members, geoms, ndof, free, freeIdx, Kff, Kff_raw, supports, diaT, diaNi } = precomp
+  const { idx, members, geoms, shellGeoms, ndof, free, freeIdx, Kff, Kff_raw, supports, diaT, diaNi } = precomp
 
   const mloads = members.map((m, i) => computeMemberLoads(geoms[i], m, loads))
 
@@ -831,6 +874,11 @@ export function solveWithGeometry(
     const gde = matVec(g.kg, de)
     for (let a = 0; a < 12; a++) Kd[g.dofs[a]] += gde[a]
   }
+  for (const sg of shellGeoms) {
+    const de = sg.dofs.map((dof) => d[dof])
+    const gde = matVec(sg.Ke, de)
+    for (let a = 0; a < 18; a++) Kd[sg.dofs[a]] += gde[a]
+  }
   const Rv = Kd.map((v, i) => v - F[i])
 
   const reactions: F3Reaction[] = supports
@@ -871,9 +919,9 @@ export function solveWithGeometry(
 /** Backward-compatible single-solve entry point. */
 export function solveFrame3D(
   nodes: F3Node[], members: F3Member[], supports: F3Support[], loads: F3Load[],
-  opts?: PDeltaOpts,
+  opts?: PDeltaOpts, shells?: F3Shell[],
 ): F3Result | null {
-  return solveWithGeometry(precomputeFrame(nodes, members, supports), loads, opts)
+  return solveWithGeometry(precomputeFrame(nodes, members, supports, undefined, shells), loads, opts)
 }
 
 // ── NSCP combination orchestration ────────────────────────────────────────
@@ -889,12 +937,12 @@ export interface F3AnalyzeOpts extends PDeltaOpts {
 export function analyzeFrame3D(
   nodes: F3Node[], members: F3Member[], supports: F3Support[], loads: F3Load[],
   opts?: F3AnalyzeOpts, onProgress?: ProgressFn,
-  diaphragms?: F3DiaphragmGroup[],
+  diaphragms?: F3DiaphragmGroup[], shells?: F3Shell[],
 ): F3Analysis | null {
   const perCombo: F3ComboRun[] = []
   let govIdx = -1, govM = -1
   const combos = nscpCombos(opts?.f1 ?? 1.0)
-  const precomp = precomputeFrame(nodes, members, supports, diaphragms)   // factor K once
+  const precomp = precomputeFrame(nodes, members, supports, diaphragms, shells)   // factor K once
   combos.forEach((combo, i) => {
     onProgress?.({ phase: 'Analyzing load cases', current: i + 1, total: combos.length, detail: combo.name })
     const factored = applyF3Combo(loads, combo.f)
