@@ -162,7 +162,12 @@ complete**; Tier 3 items #10–13 are the remaining backlog.
     superposition under ground acceleration; base-shear history Σ effMass·ω²·D and
     peak nodal displacements Σ φ·Γ·D). Reuses modalAnalysis untouched. **Next phase**:
     ModelSpace UI — ground-motion input + base-shear/roof-disp plots.
-12. Pushover / nonlinear static (plastic-hinge model, incremental-iterative).
+12. ✅ **Pushover / nonlinear static** — PR #246. `engine/pushover.ts`: concentrated
+    plastic-hinge model by the event-to-event method (a hinge = a member-end moment
+    release, reusing frame3d's DOF condensation). Returns the capacity curve (base
+    shear vs control-node disp), hinge sequence and mechanism flag; robust mechanism
+    detection. Biaxial My/Mz hinges. **Next phase**: ModelSpace UI (load pattern, Mp
+    per member, capacity-curve plot); engine — P–M interaction, axial/shear hinges.
 13. FEM plate/shell elements (true thin-shell walls & slabs vs. today's load sources).
 
-_Tests at last handoff: **666 passing**; `tsc -b` clean; production build OK._
+_Tests at last handoff: **676 passing**; `tsc -b` clean; production build OK._
