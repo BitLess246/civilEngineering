@@ -189,12 +189,77 @@ complete**; Tier 3 items #10–13 are the remaining backlog.
   trimmed, tooltip shows full L); `depthWidth()` resolves AISC shape d×bf for steel
   so zones are correct for W/C/HSS sections, not the bounding-box b×h.
 
-### UI follow-ups still open
-- Pushover: P–M interaction surface, axial/shear hinges, optional P-Δ in the push.
-- Time-history: upload a real accelerogram (CSV) in addition to synthetic samples.
-- Shells: subdivision/auto-meshing (panels are 2 triangles per quad on corner
-  nodes — coarse for slab bending; composite tie to edge beams needs matching
-  mesh), element-stress recovery + contour overlay, and an opt-in to fold shells
-  into the design pipeline (today design stays on tributary loads).
+## Tier 4 — Next phase (post STAAD-parity)
+
+The STAAD-parity roadmap is complete. This tier adds polish, completeness, and new
+capability across the four main engineering domains.
+
+### Group A — Steel (optimizer + BOM + connections)
+1. **Steel section auto-optimizer** *(highest priority)*
+   Shape-ladder search: for each steel beam/column in the design loop, walk the
+   AISC W-shape (or HSS) ordered list from the lightest adequate section down to
+   the minimum that satisfies all limit states (§F2 flexure, §G2.1 shear, §E3/§H1-1
+   combined, L/360 deflection). Currently the optimizer only shrinks concrete sections;
+   steel members always keep their original user-specified shape.
+   - Engine: extend `pipeline.ts` `optimizeModel()` with a `steelShapeSearch()` helper.
+   - Shapes sorted by weight ascending within each family (W100→W920); search is bounded
+     by Iy/Iz ≥ min-required from bending and area ≥ min from axial/shear.
+   - Output: report column "Optimized shape" beside "Design shape"; HANDOFF tracks PR.
+2. **Steel BOM line items in costed take-off**
+   Current `takeoff.ts` reports tonnage but no unit price per shape. Add a unit-weight
+   lookup (kg/m from `aiscSections`) and a \$/tonne multiplier (editable constant) so the
+   steel sub-total is costed alongside the concrete/rebar take-off.
+3. **Beam connections + Lb bracing inputs**
+   Add an optional `Lb` (unbraced length, m) per member so §F2 LTB (lateral-torsional
+   buckling) uses real brace spacing instead of the full member length. Matching input
+   fields in the Geometry tab Properties panel.
+
+### Group B — Pushover completeness
+4. **P-M interaction surface for pushover hinges** *(medium priority)*
+   Currently hinges form only at pure-moment capacity Mp. In practice axial force
+   reduces the plastic moment (P–M interaction: ACI 318-14 §22.4 for RC, AISC 360
+   Appendix 1 for steel). Add `pmSurface(P, Mp0, Ag, fc)` → `Mpc(P)` reduced moment
+   capacity; thread axial demand N through the pushover event loop.
+5. **Axial and shear hinges**
+   Add `type:'axial'` and `type:'shear'` hinge types to `pushover.ts`; useful for brace
+   and link-beam pushover models.
+6. **P-Δ inside the push loop**
+   Optional geometric-stiffness update at each load step (re-form Kg from current
+   deformation state, re-factor Ktan = Ke − λKg); gives a softening response for
+   slender frames under large lateral drift.
+
+### Group C — Time-history
+7. **CSV accelerogram upload** *(medium priority)*
+   Let users paste or upload a `.csv` file (columns: t [s], ag [g]) from PEER/NGA or
+   local seismic records. Parse → `Float64Array`; pass to `modalTimeHistory` via the
+   existing `GroundMotion` interface (already accepts arbitrary arrays). UI: file-input
+   button beside the existing synthetic-motion dropdown in the Modal tab.
+8. **Response-spectrum from CSV**
+   Compute the elastic response spectrum (PSA vs period) from a user-supplied
+   accelerogram; overlay on the NSCP 208 design spectrum for comparison.
+
+### Group D — Shell refinements
+9. **Element-stress recovery + contour overlay**
+   Post-process shell displacement vector → per-element `σx, σy, τxy` (membrane)
+   and `Mx, My, Mxy` (moments per unit width) via CST/DKT B-matrix back-computation.
+   Render as a vertex-colour contour on the 3D mesh (Three.js `vertexColors`).
+10. **Subdivision / auto-meshing**
+    Split each quad plate into n×n triangles before solve (e.g. n = 4 default).
+    Reduces the systematic stiffness overestimate of coarse 2-triangle meshes;
+    critical for floor slabs with high curvature gradients near columns.
+11. **Shell integration into NSCP design pipeline**
+    Use shell element moments (Mx, My per unit width) to size slab reinforcement
+    per ACI 318-14 §8.5 (strip-moment method), replacing the current tributary
+    edge-load model when `shellElements` is on.
+
+### Group E — Misc / polish
+12. **Wind load generation (NSCP 207E.6 terrain exposure)**
+    Automate storey-level wind forces from building geometry + terrain category,
+    replacing the current manual wind-load entries.
+13. **Seismic detailing flags (NSCP 408 SMRF/OMRF)**
+    Tag the building as SMRF or OMRF; adjust column-to-beam ratio check
+    (§406.3.2) and transverse-reinforcement spacing limits accordingly.
+
+**Order of implementation**: A1 → B4 → C7 → D9 → A2 → B5 → C8 → D10 → A3 → B6 → D11 → E12 → E13.
 
 _Tests at last handoff: **718 passing**; `tsc -b` clean; production build OK._
