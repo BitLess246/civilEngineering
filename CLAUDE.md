@@ -6,13 +6,13 @@ status and how to continue from web/phone.)
 
 ## Golden git/PR rules (do this every time)
 1. **Check the current branch before doing anything**: `git branch --show-current` + `git status`.
-2. **Verify the previous PR is merged before starting the next**: `gh pr view <n> --json state,mergedAt`. Assume the user has merged prior work unless you can see otherwise.
+2. **Verify the previous PR is merged before starting the next** (`gh pr view <n> --json state,mergedAt` locally, or the GitHub MCP tools in a cloud session). Assume the user has merged prior work unless you can see otherwise.
 3. **Always branch off fresh `main`. Never stack branches.** Start every task with:
    ```bash
    git checkout main && git fetch origin main && git merge --ff-only origin/main && git checkout -b <type>/<short-name>
    ```
 4. **One new PR per push** — never push more work onto an already-opened/merged branch.
-5. **Do not merge PRs yourself** — the user merges. After opening a PR, stop.
+5. **Don't merge PRs yourself unless the user explicitly asks.** By default the user merges — open the PR and stop. Merge automatically only when the user authorizes it for that task.
 6. If you must create a branch but uncommitted changes are on the wrong branch, `git stash`, switch/branch off main, `git stash pop`.
 
 Branch names: `feature/*`, `fix/*`, `docs/*`.
@@ -26,12 +26,19 @@ PR body footer (every PR):
 ```
 
 ## Environment / shell
-- Windows. Use the **Bash tool** with this PATH prefix on every command:
+This repo is worked on in two contexts — detect which you're in and adapt. The
+app lives in **`webapp/`** in both.
+
+- **Local (Windows terminal).** Repo root `C:\Users\raymv\Downloads\civilEngineering`.
+  Prefix every Bash command with:
   ```bash
   export PATH="/usr/bin:/c/Program Files/nodejs:/c/Program Files/GitHub CLI:$PATH"
   ```
-- Repo root: `C:\Users\raymv\Downloads\civilEngineering`. App lives in **`webapp/`**.
-- Use the **`gh` CLI** for all PR/issue operations.
+  Use the **`gh` CLI** for all PR/issue operations.
+- **Cloud (claude.ai/code, Linux container).** Repo root `/home/user/civilEngineering`;
+  use POSIX paths and no PATH prefix. There is **no `gh` CLI** — use the **GitHub MCP
+  tools** (`mcp__github__*`) for every PR / issue / CI operation. The repo is cloned
+  fresh and the container is ephemeral, so commit and push anything worth keeping.
 
 ## Always verify before committing
 - `cd webapp && npm test` (vitest) **and** `npx tsc -b` must both pass.
