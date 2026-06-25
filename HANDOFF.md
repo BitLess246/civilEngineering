@@ -137,10 +137,14 @@ complete** (PRs #229–#231); Tier 2 is the current focus, one PR per item.
    equivalent nodal forces P_thermal = EA·α·ΔT in the load assembly.
 
 ### Tier 3 — Complex / specialized (later)
-9. Linearized buckling analysis ([K − λKg]{φ}=0; reuses the Jacobi eigensolver).
+9. ✅ **Linearized buckling analysis** — `engine/buckling.ts`; inverse power
+   iteration with Gram-Schmidt deflation; `bucklingFromFrame` (raw API) +
+   `bucklingAnalysis` (StructuralModel API).  PR #? (branch
+   `feature/linearized-buckling`).  Note: 3D pin-pin columns are torsionally
+   singular under `fixity:'pin'`; fixed or fixed-pin BCs required.
 10. Rigid links / member offsets (centroidal offset → rigid transform pre-element).
 11. Time-history analysis (Newmark-β on modal equations).
 12. Pushover / nonlinear static (plastic-hinge model, incremental-iterative).
 13. FEM plate/shell elements (true thin-shell walls & slabs vs. today's load sources).
 
-_Tests at last handoff: **601 passing**; `tsc -b` clean; production build OK._
+_Tests at last handoff: **650 passing**; `tsc -b` clean; production build OK._
