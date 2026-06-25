@@ -15,7 +15,7 @@ import { type StructureDesign, type FootingPlan, type OptimizeResult, type Later
 import type { SteelJoint } from '../engine/steelConnections'
 import { estimateTakeoff, costBill, type PriceList } from '../engine/takeoff'
 import { footingLayout } from '../engine/footingLayout'
-import { solveShell, recoverShellStress, type ShellNode, type ShellElem, type ShellSupport, type ElementStress } from '../engine/shell'
+import { solveShell, recoverShellStress, subdivideQuadPlates, type ShellNode, type ShellElem, type ShellSupport, type ElementStress, type QuadPlateSpec } from '../engine/shell'
 import { useSolver } from '../lib/useSolver'
 import type { SolveProgress } from '../engine/progress'
 import { TABLE_204_1, TABLE_204_2, sdlItemKPa, sdlTotal, type SdlItem } from '../engine/deadLoads'
@@ -800,6 +800,7 @@ export default function ModelSpace() {
   const [thZeta, setThZeta] = useState(5)        // %
   const [shellStress, setShellStress] = useState<{ nodes: ShellNode[]; elems: ShellElem[]; stresses: ElementStress[] } | null>(null)
   const [recSpec, setRecSpec] = useState<{ spec: AccelSpectrum; design: DesignSpectrumPoint[]; name: string } | null>(null)
+  const [shellSubdiv, setShellSubdiv] = useState(4)   // n×n triangulation per plate
   const [thCsv, setThCsv] = useState<{ text: string; name: string; npts: number } | null>(null)
   const [thCsvUnits, setThCsvUnits] = useState<'g' | 'ms2'>('g')
   const [thCsvDt, setThCsvDt] = useState(0.02)  // s, for one-column CSV
@@ -958,23 +959,31 @@ export default function ModelSpace() {
 
   const runShellStress = () => {
     if (!model || !model.shellElements || model.plates.length === 0) return
-    const shNodes: ShellNode[] = model.nodes.map((n) => ({ id: n.id, x: n.x, y: n.y, z: n.z }))
-    const shElems: ShellElem[] = []
-    // Default concrete material: E = 25000 MPa, ν = 0.2
-    for (const p of model.plates) {
-      const [a, b, c, d] = p.corners
-      shElems.push({ id: `${p.id}_t0`, nodes: [a, b, c], E: 25000, nu: 0.2, t: p.thickness })
-      shElems.push({ id: `${p.id}_t1`, nodes: [a, c, d], E: 25000, nu: 0.2, t: p.thickness })
+    // Subdivide each quad plate into an n×n triangular mesh (D10). Subdivision
+    // nodes are shared across plate edges by coordinate; original model nodes are
+    // reused at coincident corners so supports/loads still attach.
+    const posById = new Map(model.nodes.map((n) => [n.id, [n.x, n.y, n.z] as V3]))
+    const cornerId = (p: V3): string | undefined => {
+      for (const n of model.nodes)
+        if (Math.hypot(p[0] - n.x, p[1] - n.y, p[2] - n.z) < 1e-4) return n.id
+      return undefined
     }
+    // Default concrete material: E = 25000 MPa, ν = 0.2
+    const specs: QuadPlateSpec[] = model.plates.flatMap((p) => {
+      const cs = p.corners.map((id) => posById.get(id))
+      if (cs.some((c) => !c)) return []
+      return [{ id: p.id, corners: cs as [V3, V3, V3, V3], E: 25000, nu: 0.2, t: p.thickness }]
+    })
+    const { nodes: shNodes, elems: shElems } = subdivideQuadPlates(specs, shellSubdiv, cornerId)
     const shSupports: ShellSupport[] = model.supports.map((s) => ({
       node: s.node, ux: true, uy: true, uz: true, rx: true, ry: true, rz: true,
     }))
-    // Area loads → pressure on elements (kN/m²)
+    // Area loads → pressure on every sub-element of the plate (kN/m²)
     const pressures = model.loads
       .filter((l) => l.kind === 'area')
       .flatMap((l) => {
         const al = l as { kind: 'area'; plate: string; q: number }
-        return [`${al.plate}_t0`, `${al.plate}_t1`].map((id) => ({ elem: id, q: al.q }))
+        return shElems.filter((e) => e.id.startsWith(`${al.plate}_`)).map((e) => ({ elem: e.id, q: al.q }))
       })
     const r = solveShell(shNodes, shElems, shSupports, [], pressures)
     if (!r) return
@@ -2560,6 +2569,13 @@ export default function ModelSpace() {
                     Recovers per-element membrane stresses (σx, σy, τxy, von Mises) and bending
                     moments (Mx, My, Mxy) from the shell FEM. Uses E = 25 000 MPa, ν = 0.2 for
                     all plates. Area loads are applied as uniform pressure.
+                  </p>
+                  <Num label="Mesh subdivision n×n" value={shellSubdiv} step="1"
+                    onChange={(v) => setShellSubdiv(Math.max(1, Math.min(12, Math.round(v) || 1)))}
+                    hint="1–12 cells per side" />
+                  <p className="col-span-full text-[11px] text-slate-500">
+                    Each quad is split into {shellSubdiv}×{shellSubdiv} cells (2·{shellSubdiv}² triangles); finer meshes
+                    reduce the stiffness overestimate of coarse 2-triangle plates. Edges shared by adjacent plates stay conforming.
                   </p>
                   <div className="col-span-full">
                     <button type="button" onClick={runShellStress} disabled={!model || !!busy}

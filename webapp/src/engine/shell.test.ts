@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   triFrame, cstMembrane, dktBending, dktBmat, triShell, solveShell, rectPlateMesh,
-  recoverShellStress, shellNodalContour,
-  type ShellNode, type ShellElem, type ShellSupport,
+  recoverShellStress, shellNodalContour, bilinearQuad, subdivideQuadPlates,
+  type ShellNode, type ShellElem, type ShellSupport, type V3, type QuadPlateSpec,
 } from './shell'
 
 const E = 25000, nu = 0.3   // MPa, concrete-ish; ν=0.3 matches Timoshenko tables
@@ -272,5 +272,89 @@ describe('shellNodalContour', () => {
       expect(isFinite(v)).toBe(true)
       expect(v).toBeGreaterThanOrEqual(0)
     }
+  })
+})
+
+// ── Quad subdivision / auto-meshing (D10) ────────────────────────────────────
+describe('bilinearQuad', () => {
+  const c: [V3, V3, V3, V3] = [[0, 0, 0], [2, 0, 0], [2, 3, 0], [0, 3, 0]]
+  it('reproduces the four corners at the parametric corners', () => {
+    expect(bilinearQuad(c, 0, 0)).toEqual([0, 0, 0])
+    expect(bilinearQuad(c, 1, 0)).toEqual([2, 0, 0])
+    expect(bilinearQuad(c, 1, 1)).toEqual([2, 3, 0])
+    expect(bilinearQuad(c, 0, 1)).toEqual([0, 3, 0])
+  })
+  it('gives the centroid at (½,½) and edge midpoints', () => {
+    expect(bilinearQuad(c, 0.5, 0.5)).toEqual([1, 1.5, 0])
+    expect(bilinearQuad(c, 0.5, 0)).toEqual([1, 0, 0])
+  })
+})
+
+describe('subdivideQuadPlates', () => {
+  const sq: QuadPlateSpec = {
+    id: 'P', corners: [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]], E: 25000, nu: 0.3, t: 200,
+  }
+
+  it('n = 1 reproduces the 2-triangle, 4-node quad', () => {
+    const m = subdivideQuadPlates([sq], 1)
+    expect(m.nodes.length).toBe(4)
+    expect(m.elems.length).toBe(2)
+  })
+
+  it('n = 4 yields (n+1)² nodes and 2n² triangles', () => {
+    const m = subdivideQuadPlates([sq], 4)
+    expect(m.nodes.length).toBe(25)
+    expect(m.elems.length).toBe(32)
+  })
+
+  it('adjacent plates share the common-edge nodes (conforming mesh)', () => {
+    const q2: QuadPlateSpec = {
+      id: 'Q', corners: [[1, 0, 0], [2, 0, 0], [2, 1, 0], [1, 1, 0]], E: 25000, nu: 0.3, t: 200,
+    }
+    const n = 2
+    const m = subdivideQuadPlates([sq, q2], n)
+    // 2·(n+1)² − (n+1) shared edge nodes
+    expect(m.nodes.length).toBe(2 * (n + 1) ** 2 - (n + 1))
+    expect(m.elems.length).toBe(2 * (2 * n ** 2))
+  })
+
+  it('cornerId reuses existing model node ids at coincident positions', () => {
+    const named: [V3, string][] = [
+      [[0, 0, 0], 'A'], [[1, 0, 0], 'B'], [[1, 1, 0], 'C'], [[0, 1, 0], 'D'],
+    ]
+    // exact-coordinate match only (edge/interior points return undefined → synthetic)
+    const cornerId = (p: V3) =>
+      named.find(([q]) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) < 1e-6)?.[1]
+    const m = subdivideQuadPlates([sq], 2, cornerId)
+    const byId = new Map(m.nodes.map((nd) => [nd.id, nd]))
+    expect(byId.has('A')).toBe(true)
+    expect(byId.has('C')).toBe(true)
+    expect(byId.get('C')).toMatchObject({ x: 1, y: 1, z: 0 })
+    // interior + edge midside nodes are synthetic
+    expect(m.nodes.some((nd) => nd.id.startsWith('sv'))).toBe(true)
+  })
+
+  it('refining the subdivision converges a simply-supported plate toward Timoshenko', () => {
+    const L = 5, t = 200, q = 10, Es = E * 1e3, tm = t / 1000
+    const D = (Es * tm ** 3) / (12 * (1 - nu * nu))
+    const exact = 0.00406 * q * L ** 4 / D
+    const plate: QuadPlateSpec = {
+      id: 'S', corners: [[0, 0, 0], [L, 0, 0], [L, L, 0], [0, L, 0]], E, nu, t,
+    }
+    const central = (nsub: number) => {
+      const { nodes, elems } = subdivideQuadPlates([plate], nsub)
+      const edge = (v: number) => Math.abs(v) < 1e-6 || Math.abs(v - L) < 1e-6
+      const supports: ShellSupport[] = nodes
+        .filter((nd) => edge(nd.x) || edge(nd.y))
+        .map((nd) => ({ node: nd.id, uz: true, ux: true, uy: true, rz: true }))
+      const r = solveShell(nodes, elems, supports, [], elems.map((e) => ({ elem: e.id, q })))!
+      const mid = nodes.find((nd) => Math.abs(nd.x - L / 2) < 1e-6 && Math.abs(nd.y - L / 2) < 1e-6)!
+      return Math.abs(r.disp.get(mid.id)![2])
+    }
+    const e2 = Math.abs(central(2) / exact - 1)
+    const e8 = Math.abs(central(8) / exact - 1)
+    expect(e8).toBeLessThan(e2)            // finer mesh is closer
+    expect(central(8) / exact).toBeGreaterThan(0.9)
+    expect(central(8) / exact).toBeLessThan(1.1)
   })
 })
