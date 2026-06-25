@@ -145,7 +145,7 @@ function kLocal(EA: number, GJ: number, EIy: number, EIz: number, L: number): nu
  *  (tension positive): adds stiffness in tension, removes it in compression —
  *  the basis of the P-Δ second-order iteration. Axial and torsion DOFs carry
  *  none; the two bending planes mirror kLocal's sign convention. */
-function kgLocal(N: number, L: number): number[][] {
+export function kgLocal(N: number, L: number): number[][] {
   const k = Array.from({ length: 12 }, () => new Array(12).fill(0))
   const set = (r: number, c: number, v: number) => { k[r][c] = v; k[c][r] = v }
   const a = (6 * N) / (5 * L), b = N / 10, c = (2 * N * L) / 15, e = -(N * L) / 30
