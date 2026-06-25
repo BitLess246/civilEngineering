@@ -3242,6 +3242,7 @@ export default function ModelSpace() {
                     <th className="py-1 pr-2 font-semibold">LTB</th>
                     <th className="py-1 pr-2 text-right font-semibold">Vu (kN)</th>
                     <th className="py-1 pr-2 text-right font-semibold">φVn</th>
+                    <th className="py-1 pr-2 text-right font-semibold">δ est.</th>
                     <th className="py-1 pr-2 text-right font-semibold">Util</th>
                     <th className="py-1 font-semibold">Case</th>
                   </tr>
@@ -3250,7 +3251,7 @@ export default function ModelSpace() {
                   {design.steelBeams.flatMap((b) => {
                     const key = `beam-${b.id}`
                     const open = expanded === key
-                    const util = Math.max(b.utilM, b.utilV)
+                    const util = Math.max(b.utilM, b.utilV, b.deflLim > 0 ? b.defl / b.deflLim : 0)
                     const rows = [
                       <tr key={b.id}
                         className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50 ${b.ok ? '' : 'bg-red-50 text-red-700'}`}
@@ -3262,13 +3263,14 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2">{b.ltbZone}</td>
                         <td className="py-1 pr-2 text-right">{f1(b.Vu)}</td>
                         <td className="py-1 pr-2 text-right">{f1(b.phiVn)}</td>
+                        <td className={`py-1 pr-2 text-right font-mono ${b.deflOK ? 'text-slate-700' : 'text-red-600 font-semibold'}`}>{b.defl.toFixed(1)}</td>
                         <td className={`py-1 pr-2 text-right font-semibold ${util > 1 ? 'text-red-600' : util > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(util * 100).toFixed(0)}%</td>
                         <td className="py-1 text-[11px] text-slate-500">{b.gov}</td>
                       </tr>,
                     ]
                     if (open) rows.push(
                       <tr key={`${b.id}-sol`}>
-                        <td colSpan={9} className="bg-slate-50 px-4 py-3">
+                        <td colSpan={10} className="bg-slate-50 px-4 py-3">
                           <div className="flex flex-wrap gap-6">
                             {/* W-shape cross-section drawing */}
                             <div className="shrink-0">
@@ -3330,8 +3332,24 @@ export default function ModelSpace() {
                                 </tbody>
                               </table>
                             </div>
+                            {/* §L2 Serviceability — deflection */}
+                            <div className="min-w-[180px]">
+                              <p className="mb-1 text-[11px] font-bold text-slate-600 uppercase tracking-wide">§L2 Serviceability</p>
+                              <table className="text-[11px] leading-5">
+                                <tbody>
+                                  {[
+                                    ['δ est. (SS bound)', `${b.defl.toFixed(1)} mm`],
+                                    ['L/240 limit', `${b.deflLim.toFixed(1)} mm`],
+                                    ['δ / limit', `${b.deflLim > 0 ? ((b.defl / b.deflLim) * 100).toFixed(1) : '—'}%`],
+                                    ['OK?', b.deflOK ? '✓ Pass' : '✗ Fail'],
+                                  ].map(([lbl, val]) => (
+                                    <tr key={lbl}><td className="pr-3 text-slate-500">{lbl}</td><td className={`font-mono ${lbl === 'OK?' && !b.deflOK ? 'text-red-600 font-bold' : ''}`}>{val}</td></tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
                           </div>
-                          <p className="mt-2 text-[10px] text-slate-400">Lb = full member length (conservative unbraced). Cb = 1.0. φ = 0.9 (flexure), 1.0 (shear, doubly-symmetric I).</p>
+                          <p className="mt-2 text-[10px] text-slate-400">Lb = full member length (conservative unbraced). Cb = 1.0. φ = 0.9 (flexure), 1.0 (shear, doubly-symmetric I). δ est. = 5Mu·L²/(48·E·Ix), SS bound vs L/240.</p>
                         </td>
                       </tr>
                     )
@@ -3340,7 +3358,7 @@ export default function ModelSpace() {
                 </tbody>
               </table>
               <p className="mt-1 text-[11px] text-slate-400">
-                §F2 flexure (Lb = full member length, conservative; Cb = 1.0), §G2.1 shear. Util = max(Mu/φMn, Vu/φVn). Click a row to expand the worked solution.
+                §F2 flexure (Lb = full member length, conservative; Cb = 1.0), §G2.1 shear, §L2 serviceability (δ est. = 5Mu·L²/48EI vs L/240). δ est. column shows estimated midspan deflection (mm) — red if &gt; L/240. Util = max(Mu/φMn, Vu/φVn, δ/lim). Click a row to expand.
               </p>
             </div>
           )}
