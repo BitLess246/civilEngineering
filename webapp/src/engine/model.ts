@@ -117,6 +117,10 @@ export interface StructuralModel {
   rigidEndZones?: boolean
   /** Rigid-zone factor (0–1) scaling the auto end-offset length (default 0.5). */
   rigidZoneFactor?: number
+  /** Model slab/wall panels as flat-shell finite elements (CST membrane + DKT
+   *  bending) assembled into the solve, instead of tributary edge load sources.
+   *  Each panel meshes to two triangles on its four corner nodes. */
+  shellElements?: boolean
 }
 
 export function emptyModel(name = 'Untitled'): StructuralModel {

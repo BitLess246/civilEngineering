@@ -34,12 +34,12 @@ ctx.onmessage = async (e: MessageEvent<SolverRequest>) => {
   try {
     if (msg.kind === 'analyze') {
       const br = modelToFrame3D(msg.model)
-      const analysis = analyzeFrame3D(br.nodes, br.members, br.supports, br.loads, msg.opts, onProgress, br.diaphragmGroups)
+      const analysis = analyzeFrame3D(br.nodes, br.members, br.supports, br.loads, msg.opts, onProgress, br.diaphragmGroups, br.shells)
       let drift = null
       if (msg.drift.hasSeis) {
         onProgress({ phase: 'Storey-drift check' })
         const eOnly = applyF3Combo(br.loads, { E: 1 })
-        const sol = eOnly.length ? solveFrame3D(br.nodes, br.members, br.supports, eOnly, { pDelta: msg.drift.pDelta }) : null
+        const sol = eOnly.length ? solveFrame3D(br.nodes, br.members, br.supports, eOnly, { pDelta: msg.drift.pDelta }, br.shells) : null
         drift = sol ? driftCheck(msg.model, br.nodes, sol.d, msg.drift.R, msg.drift.T, msg.drift.axis) : null
       }
       ctx.postMessage({ id: msg.id, ok: true, result: { analysis, orphans: br.orphanEdges.length, drift } })

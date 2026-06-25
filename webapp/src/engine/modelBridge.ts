@@ -4,8 +4,8 @@
 // and land on the matching edge members as vdl/udl gravity loads (categories
 // preserved) — the load path, automated.
 // ─────────────────────────────────────────────────────────────────────────
-import type { StructuralModel, RectSection, MemberReleases } from './model'
-import type { F3Node, F3Member, F3Support, F3Load, F3DiaphragmGroup } from './frame3d'
+import type { StructuralModel, RectSection, MemberReleases, Plate } from './model'
+import type { F3Node, F3Member, F3Support, F3Load, F3DiaphragmGroup, F3Shell } from './frame3d'
 import { rectJ } from './frame3d'
 import { buildDiaphragmGroups } from './diaphragm'
 import { autoRigidOffsets } from './rigidEndZones'
@@ -19,10 +19,37 @@ export interface BridgeResult {
   members: F3Member[]
   supports: F3Support[]
   loads: F3Load[]
+  /** Flat-shell elements meshed from slab/wall panels (empty unless shellElements on). */
+  shells: F3Shell[]
   /** Edges whose loads could not be attached (no matching member). */
   orphanEdges: string[]
   /** Rigid floor diaphragm groups (one per storey); empty when diaphragm disabled. */
   diaphragmGroups: F3DiaphragmGroup[]
+}
+
+/** Concrete shell material for slab/wall panels: E = 4700√fc (NSCP/ACI), ν = 0.2.
+ *  fc taken from the model's first concrete section (fallback 28 MPa). */
+function plateMaterial(model: StructuralModel): { E: number; nu: number } {
+  const fc = model.sections.find((s) => s.material !== 'steel')?.fc ?? 28
+  return { E: 4700 * Math.sqrt(Math.max(fc, 1)), nu: 0.2 }
+}
+
+/** Triangle area (m²) from three model node ids. */
+function triArea(p: [F3Node, F3Node, F3Node]): number {
+  const [a, b, c] = p
+  const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z
+  const vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z
+  const cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx
+  return 0.5 * Math.hypot(cx, cy, cz)
+}
+
+/** Mesh one quad panel into two triangular shells across the c0–c2 diagonal. */
+function plateShells(plate: Plate, mat: { E: number; nu: number }): F3Shell[] {
+  const [c0, c1, c2, c3] = plate.corners
+  return [
+    { id: `${plate.id}#0`, nodes: [c0, c1, c2], E: mat.E, nu: mat.nu, t: plate.thickness },
+    { id: `${plate.id}#1`, nodes: [c0, c2, c3], E: mat.E, nu: mat.nu, t: plate.thickness },
+  ]
 }
 
 function sectionProps(s: RectSection) {
@@ -129,7 +156,13 @@ function releaseFlags(rel: MemberReleases | undefined): Pick<F3Member, 'relI' | 
   return { ...(relI ? { relI } : {}), ...(relJ ? { relJ } : {}) }
 }
 
-export function modelToFrame3D(model: StructuralModel): BridgeResult {
+/** Bridge options. `useShells` defaults to the model's `shellElements` flag; the
+ *  design / modal / buckling paths pass `false` to keep the classic tributary
+ *  edge-load model (shells are an analysis-path feature in this phase). */
+export interface BridgeOpts { useShells?: boolean }
+
+export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): BridgeResult {
+  const useShells = opts?.useShells ?? !!model.shellElements
   const nodes: F3Node[] = model.nodes.map((n) => ({ id: n.id, x: n.x, y: n.y, z: n.z }))
   const nm = new Map(nodes.map((n) => [n.id, n]))
   const secById = new Map(model.sections.map((s) => [s.id, sectionProps(s)]))
@@ -161,6 +194,23 @@ export function modelToFrame3D(model: StructuralModel): BridgeResult {
     if (s.fixity === 'spring') return { node: s.node, fixity: 'spring', kx: s.kx, ky: s.ky, kz: s.kz }
     return { node: s.node, fixity: s.fixity === 'fixed' ? 'fixed' : 'pin' }
   })
+
+  // Optional: mesh slab/wall panels into flat-shell elements (two triangles per
+  // panel on its corner nodes). Panels handled as shells carry their area loads
+  // through the shell — the tributary edge-load path is skipped for them below.
+  const shells: F3Shell[] = []
+  const shellPlateIds = new Set<string>()
+  if (useShells) {
+    const mat = plateMaterial(model)
+    for (const plate of model.plates) {
+      const c = plate.corners.map((id) => nm.get(id))
+      if (c.some((q) => !q)) continue
+      const [c0, c1, c2, c3] = c as F3Node[]
+      if (triArea([c0, c1, c2]) + triArea([c0, c2, c3]) < 1e-9) continue   // degenerate
+      shells.push(...plateShells(plate, mat))
+      shellPlateIds.add(plate.id)
+    }
+  }
 
   const loads: F3Load[] = []
   const orphanEdges: string[] = []
@@ -196,6 +246,21 @@ export function modelToFrame3D(model: StructuralModel): BridgeResult {
     const c = plate.corners.map((id) => nm.get(id))
     if (c.some((q) => !q)) continue
     const [c0, c1, c2, c3] = c as F3Node[]
+
+    // Shell panel: lump each gravity area load to the corner nodes (−Y), split
+    // per triangle (q·A_tri/3 to each of its three nodes). Avoids double-count
+    // with the shell stiffness (no tributary edge loads for this panel).
+    if (shellPlateIds.has(plate.id)) {
+      const A0 = triArea([c0, c1, c2]), A1 = triArea([c0, c2, c3])
+      for (const al of areaLoads) {
+        const f0 = (al.q * A0) / 3, f1 = (al.q * A1) / 3
+        const add = (id: string, f: number) => loads.push({ kind: 'node', node: id, Fy: -f, cat: al.cat })
+        add(c0.id, f0); add(c1.id, f0); add(c2.id, f0)
+        add(c0.id, f1); add(c2.id, f1); add(c3.id, f1)
+      }
+      continue
+    }
+
     const lxSpan = Math.hypot(c1.x - c0.x, c1.y - c0.y, c1.z - c0.z)   // edge c0→c1 (and c3→c2)
     const lzSpan = Math.hypot(c3.x - c0.x, c3.y - c0.y, c3.z - c0.z)   // edge c0→c3 (and c1→c2)
     const trib = distributePanel(lxSpan, lzSpan, areaLoads)
@@ -228,5 +293,5 @@ export function modelToFrame3D(model: StructuralModel): BridgeResult {
   }
 
   const diaphragmGroups = model.diaphragm ? buildDiaphragmGroups(model) : []
-  return { nodes, members, supports, loads, orphanEdges, diaphragmGroups }
+  return { nodes, members, supports, loads, shells, orphanEdges, diaphragmGroups }
 }

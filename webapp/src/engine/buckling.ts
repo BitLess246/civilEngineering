@@ -247,7 +247,7 @@ export function bucklingAnalysis(
 ): BucklingResult | null {
   if (hasMeshErrors(validateMesh(model))) return null
 
-  const br = modelToFrame3D(model)
+  const br = modelToFrame3D(model, { useShells: false })
   const precomp = precomputeFrame(br.nodes, br.members, br.supports)
   if (!precomp.Kff || precomp.Kff.n === 0) return null
 
