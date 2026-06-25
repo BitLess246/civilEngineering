@@ -157,8 +157,12 @@ complete**; Tier 3 items #10–13 are the remaining backlog.
     transform (`Teff = T·H`) so stiffness, loads, force recovery, P-Δ and buckling
     all carry the arm with no other code changes. **Next phase**: UI inputs +
     3D rendering of the rigid arm in ModelSpace (engine ready).
-11. Time-history analysis (Newmark-β on modal equations).
+11. ✅ **Time-history analysis** — PR #244. `engine/timeHistory.ts`: `newmarkSDOF`
+    (Newmark-β average-acceleration SDOF integrator) + `modalTimeHistory` (modal
+    superposition under ground acceleration; base-shear history Σ effMass·ω²·D and
+    peak nodal displacements Σ φ·Γ·D). Reuses modalAnalysis untouched. **Next phase**:
+    ModelSpace UI — ground-motion input + base-shear/roof-disp plots.
 12. Pushover / nonlinear static (plastic-hinge model, incremental-iterative).
 13. FEM plate/shell elements (true thin-shell walls & slabs vs. today's load sources).
 
-_Tests at last handoff: **653 passing**; `tsc -b` clean; production build OK._
+_Tests at last handoff: **666 passing**; `tsc -b` clean; production build OK._
