@@ -52,6 +52,8 @@ export function PushoverPanel({ res, dirLabel }: { res: PushoverModelResult; dir
   const peakD = Math.max(...curve.map((p) => Math.abs(p.roofDisp)))
   const drift = res.totalHeight > 0 ? peakD / res.totalHeight : 0
   const nHinges = res.result.hinges.length
+  // event → hinge record, to surface P–M axial/reduced-capacity in the table
+  const hingeByEvent = new Map(res.result.hinges.map((h) => [h.event, h]))
 
   return (
     <ResultCard title={`Pushover capacity — push ${dirLabel}`}>
@@ -77,10 +79,14 @@ export function PushoverPanel({ res, dirLabel }: { res: PushoverModelResult; dir
                 <th className="py-1 pr-2">V (kN)</th>
                 <th className="py-1 pr-2">Δ (mm)</th>
                 <th className="py-1 pr-2">Hinge</th>
+                {res.pmInteraction && <th className="py-1 pr-2">N (kN)</th>}
+                {res.pmInteraction && <th className="py-1 pr-2">Mpc (kN·m)</th>}
               </tr>
             </thead>
             <tbody className="text-slate-700">
-              {curve.slice(1).map((p) => (
+              {curve.slice(1).map((p) => {
+                const h = hingeByEvent.get(p.event)
+                return (
                 <tr key={p.event} className="border-b border-slate-100 last:border-0">
                   <td className="py-1 pr-2">{p.event}</td>
                   <td className="py-1 pr-2 font-semibold">{Math.abs(p.baseShear).toFixed(1)}</td>
@@ -88,8 +94,11 @@ export function PushoverPanel({ res, dirLabel }: { res: PushoverModelResult; dir
                   <td className="py-1 pr-2 text-slate-500">
                     {p.newHinge ? `${p.newHinge.member} @${p.newHinge.end} (M${p.newHinge.axis})` : '—'}
                   </td>
+                  {res.pmInteraction && <td className="py-1 pr-2 text-slate-500">{h?.axial !== undefined ? h.axial.toFixed(1) : '—'}</td>}
+                  {res.pmInteraction && <td className="py-1 pr-2 text-slate-500">{h?.Mpc !== undefined ? h.Mpc.toFixed(1) : '—'}</td>}
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>

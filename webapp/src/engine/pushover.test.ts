@@ -154,3 +154,55 @@ describe('pushover — guards', () => {
     expect(r.mechanism).toBe(false)
   })
 })
+
+describe('pushover — P–M interaction reduces hinge capacity', () => {
+  // Portal frame: a lateral push induces overturning ⇒ axial in the columns
+  // (windward tension, leeward compression). With P–M active the columns hinge
+  // at the reduced Mpc(P) < Mp, so the collapse base shear drops.
+  const span = 6, height = 4, Mp = 120
+  const nodes: F3Node[] = [
+    { id: 'bl', x: 0, y: 0, z: 0 }, { id: 'br', x: span, y: 0, z: 0 },
+    { id: 'tl', x: 0, y: height, z: 0 }, { id: 'tr', x: span, y: height, z: 0 },
+  ]
+  const beamSec = { E: E * 100, G: G * 100, A, Iy, Iz, J }
+  const members: F3Member[] = [
+    { id: 'cL', i: 'bl', j: 'tl', ...sec }, { id: 'cR', i: 'br', j: 'tr', ...sec },
+    { id: 'bm', i: 'tl', j: 'tr', ...beamSec },
+  ]
+  const supports: F3Support[] = [{ node: 'bl', fixity: 'fixed' }, { node: 'br', fixity: 'fixed' }]
+  const base: PushoverInput = {
+    nodes, members, supports,
+    Mp: { cL: Mp, cR: Mp }, pattern: { tl: 1 }, dir: 0, controlNode: 'tr', maxEvents: 20,
+  }
+  // small axial capacity so the overturning axial is a meaningful fraction of Py
+  const pm = { cL: { Pcap: 400, kind: 'concrete' as const }, cR: { Pcap: 400, kind: 'concrete' as const } }
+
+  it('the peak base shear with P–M ≤ without P–M', () => {
+    const peak = (r: ReturnType<typeof pushoverAnalysis>) => Math.max(...r.curve.map((p) => Math.abs(p.baseShear)))
+    const noPM = pushoverAnalysis(base)
+    const withPM = pushoverAnalysis({ ...base, pm })
+    expect(peak(withPM)).toBeLessThanOrEqual(peak(noPM) + 1e-9)
+    expect(peak(withPM)).toBeLessThan(peak(noPM))   // axial here is non-trivial
+  })
+
+  it('hinge records carry the axial force and reduced Mpc (≤ Mp)', () => {
+    const r = pushoverAnalysis({ ...base, pm })
+    expect(r.hinges.length).toBeGreaterThan(0)
+    for (const h of r.hinges) {
+      expect(h.axial).toBeDefined()
+      expect(h.Mpc).toBeDefined()
+      expect(h.Mpc!).toBeLessThanOrEqual(Mp + 1e-9)
+      expect(h.Mpc!).toBeGreaterThanOrEqual(0)
+    }
+    // at least one column carried compression (negative axial)
+    expect(r.hinges.some((h) => (h.axial ?? 0) < 0)).toBe(true)
+  })
+
+  it('without pm the hinge records omit axial/Mpc (backward compatible)', () => {
+    const r = pushoverAnalysis(base)
+    for (const h of r.hinges) {
+      expect(h.axial).toBeUndefined()
+      expect(h.Mpc).toBeUndefined()
+    }
+  })
+})
