@@ -142,4 +142,17 @@ describe('modalTimeHistory', () => {
     expect(r2.peakBaseShear).toBeCloseTo(3 * r1.peakBaseShear, 6)
     expect(r2.peakNodeDisp).toBeCloseTo(3 * r1.peakNodeDisp, 6)
   })
+
+  it('historyNode returns the full node displacement history; its max = peakDisp', () => {
+    const r = modalTimeHistory(model, gm, { zeta: 0.05, nModes: 6, historyNode: 'n_0_0_0' })!
+    // pick whatever the engine reports as peak node instead (n_0_0_0 may be a base)
+    const target = r.peakNode!
+    const r2 = modalTimeHistory(model, gm, { zeta: 0.05, nModes: 6, historyNode: target })!
+    expect(r2.nodeHistory).toBeTruthy()
+    expect(r2.nodeHistory!.node).toBe(target)
+    expect(r2.nodeHistory!.u.length).toBe(N)
+    // max over the captured X-history equals the reported peakDisp[X]
+    const mx = Math.max(...r2.nodeHistory!.u.map((v) => Math.abs(v[0])))
+    expect(mx).toBeCloseTo(r2.peakDisp[target][0], 9)
+  })
 })
