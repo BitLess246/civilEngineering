@@ -442,3 +442,68 @@ describe('rigid floor diaphragm — precomputeFrame + solveWithGeometry', () => 
     expect(r.d[6 * tR + 4]).toBeCloseTo(θy_m, 9)
   })
 })
+
+describe('rigid links / member offsets — Teff = T·H', () => {
+  const L = 3
+
+  it('zero offset is identical to no offset (cantilever closed form)', () => {
+    const P = 20
+    const base = cant([{ kind: 'member-point', member: 'm', a: L, P, cat: 'D' }])
+    const off = solveFrame3D(
+      [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: 3, y: 0, z: 0 }],
+      [{ id: 'm', i: 'a', j: 'b', ...sec, offI: [0, 0, 0], offJ: [0, 0, 0] }],
+      [{ node: 'a', fixity: 'fixed' }],
+      [{ kind: 'member-point', member: 'm', a: L, P, cat: 'D' }],
+    )!
+    expect(off.d[6 + 1]).toBeCloseTo(base.d[6 + 1], 12)
+    expect(off.members[0].Mz[0]).toBeCloseTo(base.members[0].Mz[0], 9)
+  })
+
+  it('rigid offset arm matches an explicit near-rigid stub member', () => {
+    // Flexible beam A→(L,0,0); a rigid arm of (0,h,0) lifts the loaded node to (L,h,0).
+    // A horizontal load Fx at the lifted node bends the beam via the lever moment Fx·h.
+    const hArm = 1.2, Fx = 8
+
+    // Offset model: node B at (L,h,0); member end j pulled back to (L,0,0) by offJ=(0,-h,0).
+    const offModel = solveFrame3D(
+      [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: L, y: hArm, z: 0 }],
+      [{ id: 'm', i: 'a', j: 'b', ...sec, offJ: [0, -hArm, 0] }],
+      [{ node: 'a', fixity: 'fixed' }],
+      [{ kind: 'node', node: 'b', Fx, cat: 'D' }],
+    )!
+
+    // Explicit model: real flexible beam A→P2(L,0,0) + a stiff stub P2→B(L,h,0).
+    const stiff = { E: E * 1e6, G: G * 1e6, A, Iy, Iz, J }
+    const explicit = solveFrame3D(
+      [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'p2', x: L, y: 0, z: 0 }, { id: 'b', x: L, y: hArm, z: 0 }],
+      [
+        { id: 'm', i: 'a', j: 'p2', ...sec },
+        { id: 'stub', i: 'p2', j: 'b', ...stiff },
+      ],
+      [{ node: 'a', fixity: 'fixed' }],
+      [{ kind: 'node', node: 'b', Fx, cat: 'D' }],
+    )!
+
+    // Displacements at the loaded node must agree (offset arm = perfectly rigid stub).
+    // offModel: node b is index 1 (DOFs at 6); explicit: node b is index 2 (DOFs at 12).
+    expect(offModel.d[6 + 0]).toBeCloseTo(explicit.d[12 + 0], 4)  // ux
+    expect(offModel.d[6 + 1]).toBeCloseTo(explicit.d[12 + 1], 4)  // uy
+    expect(offModel.d[6 + 5]).toBeCloseTo(explicit.d[12 + 5], 4)  // θz
+    // The flexible member sees the lever moment at its base: |Mz,base| ≈ Fx·h.
+    expect(Math.abs(offModel.members[0].Mz[0])).toBeCloseTo(Fx * hArm, 2)
+  })
+
+  it('global equilibrium holds with an offset (ΣReactions + ΣApplied = 0)', () => {
+    const Fx = 8, hArm = 1.2
+    const r = solveFrame3D(
+      [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: L, y: hArm, z: 0 }],
+      [{ id: 'm', i: 'a', j: 'b', ...sec, offJ: [0, -hArm, 0] }],
+      [{ node: 'a', fixity: 'fixed' }],
+      [{ kind: 'node', node: 'b', Fx, cat: 'D' }],
+    )!
+    // Single fixed base reacts the whole applied horizontal load.
+    expect(r.reactions[0].F[0]).toBeCloseTo(-Fx, 4)
+    // Base moment about Z balances Fx acting at height hArm above the base node.
+    expect(r.reactions[0].M[2]).toBeCloseTo(Fx * hArm, 2)
+  })
+})

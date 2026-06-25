@@ -28,6 +28,12 @@ export interface F3Member {
   relI?: [boolean, boolean, boolean, boolean, boolean, boolean]
   /** Released local DOFs at end j: [ux, uy, uz, θx, θy, θz]. */
   relJ?: [boolean, boolean, boolean, boolean, boolean, boolean]
+  /** Rigid end offset (member offset / rigid link) at end i: vector from node i to the
+   *  member end in GLOBAL coords [m]. The span between the offset ends carries the flexible
+   *  element; node↔end is a rigid arm. Used to model centroidal/eccentric connections. */
+  offI?: [number, number, number]
+  /** Rigid end offset at end j: vector from node j to the member end in global coords [m]. */
+  offJ?: [number, number, number]
 }
 export type F3Fixity = 'pin' | 'fixed' | 'spring'
 export interface F3Support {
@@ -190,6 +196,28 @@ const mul = (A: number[][], B: number[][]): number[][] =>
   A.map((row) => B[0].map((_, j) => row.reduce((s, v, k) => s + v * B[k][j], 0)))
 const transpose = (A: number[][]): number[][] => A[0].map((_, j) => A.map((row) => row[j]))
 
+/**
+ * Rigid-link (member offset) transformation H mapping NODE DOFs → member-END DOFs, in
+ * global coordinates. For a rigid arm r (node→end vector), the end displacement follows
+ * rigid-body kinematics:  u_end = u_node + θ_node × r,  θ_end = θ_node. In matrix form the
+ * per-end 6×6 block is [[I, M(r)],[0, I]] with M(r)·θ = θ × r, i.e.
+ *   M(r) = [[0, rz, -ry], [-rz, 0, rx], [ry, -rx, 0]].
+ * Composing with the rotation T (Teff = T·H) carries the offset through every Galerkin form
+ * (Tᵀ k T, T·d, Tᵀ·f), so stiffness, loads, force recovery and Kg all stay consistent.
+ */
+function rigidLinkH(rI: V3, rJ: V3): number[][] {
+  const H = Array.from({ length: 12 }, (_, i) => { const row = new Array(12).fill(0); row[i] = 1; return row })
+  const block = (base: number, r: V3) => {
+    const [rx, ry, rz] = r
+    H[base + 0][base + 4] = rz;  H[base + 0][base + 5] = -ry
+    H[base + 1][base + 3] = -rz; H[base + 1][base + 5] = rx
+    H[base + 2][base + 3] = ry;  H[base + 2][base + 4] = -rx
+  }
+  block(0, rI)
+  block(6, rJ)
+  return H
+}
+
 // ── Geometry-only member data (load-independent) ──────────────────────────
 export interface MemberGeom {
   L: number; R: [V3, V3, V3]
@@ -287,7 +315,11 @@ function condenseLocal(kl: number[][], relIdx: number[]): {
 
 function prepMemberGeom(m: F3Member, nm: Map<string, F3Node>, idx: Map<string, number>): MemberGeom {
   const ni = nm.get(m.i)!, nj = nm.get(m.j)!
-  const dir: V3 = sub([nj.x, nj.y, nj.z], [ni.x, ni.y, ni.z])
+  // Member ends shift by the rigid offsets; the flexible element spans end→end.
+  const offI = m.offI ?? [0, 0, 0], offJ = m.offJ ?? [0, 0, 0]
+  const pi: V3 = [ni.x + offI[0], ni.y + offI[1], ni.z + offI[2]]
+  const pj: V3 = [nj.x + offJ[0], nj.y + offJ[1], nj.z + offJ[2]]
+  const dir: V3 = sub(pj, pi)
   const L = Math.hypot(...dir)
   const R = localAxes(dir)
   const EA = (m.E * m.A) / 1000
@@ -309,7 +341,10 @@ function prepMemberGeom(m: F3Member, nm: Map<string, F3Node>, idx: Map<string, n
     releaseData = { relIdx, retIdx: cond.retIdx, kff_inv: cond.kff_inv, kfr: cond.kfr }
   }
 
-  const T = tMatrix(R)
+  // Effective transform node→local: rotation T composed with the rigid-link H when offsets
+  // are present (Teff = T·H). With no offsets H = I, so this is exactly the rotation.
+  const hasOffset = (m.offI && m.offI.some((v) => v !== 0)) || (m.offJ && m.offJ.some((v) => v !== 0))
+  const T = hasOffset ? mul(tMatrix(R), rigidLinkH(offI, offJ)) : tMatrix(R)
   const kg = mul(mul(transpose(T), klEff), T)   // uses condensed stiffness when releases exist
   const ii = idx.get(m.i)!, jj = idx.get(m.j)!
   const dofs = [...Array.from({ length: 6 }, (_, k) => 6 * ii + k), ...Array.from({ length: 6 }, (_, k) => 6 * jj + k)]
