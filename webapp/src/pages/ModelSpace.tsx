@@ -41,6 +41,9 @@ import { PushoverPanel } from '../components/PushoverPanel'
 import type { PushoverModelResult } from '../engine/pushoverModel'
 import { TimeHistoryPanel } from '../components/TimeHistoryPanel'
 import { ShellContourPanel } from '../components/ShellContourPanel'
+import { RecordedSpectrumPanel } from '../components/RecordedSpectrumPanel'
+import { elasticResponseSpectrum, nscp208DesignCurve, type AccelSpectrum, type DesignSpectrumPoint } from '../engine/accelSpectrum'
+import { parseAccelerogram } from '../engine/accelerogram'
 import type { TimeHistoryModelResult, GroundMotionKind, CsvAccelerogramOpts } from '../engine/timeHistoryModel'
 import { BeamSchematic } from '../components/BeamSchematic'
 import { ColumnSchematic } from '../components/ColumnSchematic'
@@ -796,6 +799,7 @@ export default function ModelSpace() {
   const [thDur, setThDur] = useState(10)         // s
   const [thZeta, setThZeta] = useState(5)        // %
   const [shellStress, setShellStress] = useState<{ nodes: ShellNode[]; elems: ShellElem[]; stresses: ElementStress[] } | null>(null)
+  const [recSpec, setRecSpec] = useState<{ spec: AccelSpectrum; design: DesignSpectrumPoint[]; name: string } | null>(null)
   const [thCsv, setThCsv] = useState<{ text: string; name: string; npts: number } | null>(null)
   const [thCsvUnits, setThCsvUnits] = useState<'g' | 'ms2'>('g')
   const [thCsvDt, setThCsvDt] = useState(0.02)  // s, for one-column CSV
@@ -938,6 +942,18 @@ export default function ModelSpace() {
         : { spec: { kind: thKind, dt: 0.02, duration: thDur, pga: thPga * GRAVITY, freq: thFreq, dir }, zeta: thZeta / 100, nModes },
     }).then((r) => setTh((r as { timeHistory: TimeHistoryModelResult | null }).timeHistory))
       .catch((e) => console.error('time-history failed', e))
+  }
+
+  // Elastic response spectrum from the uploaded accelerogram, overlaid on the
+  // NSCP 208 design spectrum (C8). Parses the same CSV used by the time-history.
+  const runResponseSpectrum = () => {
+    if (!thCsv) return
+    const parsed = parseAccelerogram(thCsv.text, { dt: thCsvDt, units: thCsvUnits })
+    if (!parsed) { setRecSpec(null); return }
+    const spec = elasticResponseSpectrum(parsed.ag, parsed.dt, { zeta: thZeta / 100 })
+    if (!spec) { setRecSpec(null); return }
+    const design = nscp208DesignCurve(spec.points.map((p) => p.T), Ca, Cv, Ie, Rw)
+    setRecSpec({ spec, design, name: thCsv.name })
   }
 
   const runShellStress = () => {
@@ -2746,14 +2762,26 @@ export default function ModelSpace() {
                   Modal superposition: each mode is an SDOF integrated by Newmark-β (β=¼, γ=½). Upload a real
                   record (two-column t/ag, one-column with Δt, or PEER AT2) or use the built-in synthetic motion.
                 </p>
-                <div className="col-span-full">
+                <div className="col-span-full flex flex-wrap gap-2">
                   <button type="button" onClick={runTimeHistory} disabled={!model || !!busy || meshErrors} className={btn('from-[#0d9488] to-[#0f766e]')}>
                     {busy === 'timeHistory' ? '⏳ Integrating…' : '∿ Run time-history'}
                   </button>
+                  {thCsv && (
+                    <button type="button" onClick={runResponseSpectrum} className={btn('from-[#0056b3] to-[#003d82]')}>
+                      ⌁ Response spectrum
+                    </button>
+                  )}
                 </div>
+                {thCsv && (
+                  <p className="col-span-full text-[11px] text-slate-500">
+                    The response spectrum integrates an SDOF oscillator per period (Newmark-β, ζ = {thZeta}%) over the
+                    uploaded record, then overlays it on the NSCP 208 design spectrum (Ca {Ca}, Cv {Cv}, I {Ie}, R {Rw}).
+                  </p>
+                )}
                 {busy === 'timeHistory' && <SolverProgress p={progress} />}
               </Card>
               {th && <TimeHistoryPanel res={th} dirLabel={thDir === 'x' ? '+X' : '+Z'} />}
+              {recSpec && <RecordedSpectrumPanel spec={recSpec.spec} design={recSpec.design} recordName={recSpec.name} />}
 
               {(() => {
                 const occ = DG11_OCCUPANCY.find((o) => o.id === dg11OccId) ?? DG11_OCCUPANCY[0]
