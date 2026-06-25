@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { plasticMoment, runPushoverModel } from './pushoverModel'
+import { plasticMoment, axialCapacity, runPushoverModel } from './pushoverModel'
 import { shapeByName } from './aiscSections'
 import { deriveWSection } from './steelDesign'
 import { generateGridModel } from './modelBuilder'
@@ -72,5 +72,38 @@ describe('runPushoverModel', () => {
 
   it('returns null for an empty model', () => {
     expect(runPushoverModel({ ...model, nodes: [], members: [] })).toBeNull()
+  })
+
+  it('pmInteraction defaults off; flag is reported in the result', () => {
+    expect(runPushoverModel(model, { dir: 0 })!.pmInteraction).toBe(false)
+    expect(runPushoverModel(model, { dir: 0, pmInteraction: true })!.pmInteraction).toBe(true)
+  })
+
+  it('P–M interaction lowers (or matches) the peak base shear', () => {
+    const peak = (r: NonNullable<ReturnType<typeof runPushoverModel>>) =>
+      Math.max(...r.result.curve.map((p) => Math.abs(p.baseShear)))
+    const off = runPushoverModel(model, { dir: 0, pmInteraction: false })!
+    const on = runPushoverModel(model, { dir: 0, pmInteraction: true })!
+    expect(peak(on)).toBeLessThanOrEqual(peak(off) + 1e-6)
+  })
+})
+
+describe('axialCapacity', () => {
+  it('concrete: Pn0 = 0.85·f′c·Ag', () => {
+    const s: RectSection = {
+      id: 'S', name: '400×400', b: 400, h: 400, fc: 28, fy: 415,
+      barDia: 20, tieDia: 10, cover: 40, material: 'concrete',
+    }
+    expect(axialCapacity(s)).toBeCloseTo((0.85 * 28 * 400 * 400) / 1e3, 6)
+  })
+
+  it('steel: Py = Fy·A from the AISC shape', () => {
+    const name = 'W310x79'
+    const shape = shapeByName(name)!
+    const s: RectSection = {
+      id: 'S', name, b: 305, h: 310, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40,
+      material: 'steel', shape: name, steelFy: 345,
+    }
+    expect(axialCapacity(s)).toBeCloseTo((345 * shape.A) / 1e3, 6)
   })
 })

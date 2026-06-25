@@ -20,14 +20,16 @@
 // displacement Δ, piecewise-linear with a break at each hinge event. With
 // geometry linear this matches rigid-plastic limit analysis (collapse load).
 //
-// Model scope (first cut): biaxial moment hinges (independent My/Mz capacity Mp),
-// no axial/shear hinge and no P–M interaction — documented future work.
+// Model scope: biaxial moment hinges (independent My/Mz capacity Mp), optional
+// P–M interaction (reduced plastic moment Mpc(P), see `pm`); no axial/shear
+// hinge — documented future work.
 // Units: Mp in kN·m; pattern forces kN; base shear kN; displacement m.
 // ─────────────────────────────────────────────────────────────────────────
 import {
   precomputeFrame, solveWithGeometry,
   type F3Node, type F3Member, type F3Support, type F3Load,
 } from './frame3d'
+import { reducedPlasticMoment, type PmKind } from './pmInteraction'
 
 export interface PushoverInput {
   nodes: F3Node[]
@@ -36,6 +38,11 @@ export interface PushoverInput {
   /** Plastic moment capacity per member (same for My and Mz), kN·m. Members not
    *  listed stay elastic (never hinge). Use `MpByEnd` for per-end/per-axis control. */
   Mp: Record<string, number>
+  /** Optional P–M interaction data per member. When present, a hinge yields at
+   *  the reduced plastic moment Mpc(P) instead of the pure-bending Mp, where P is
+   *  the member's current axial force. `Pcap` = Py = Fy·A (steel) or Pn0 (concrete);
+   *  `kind` selects the interaction surface. Members absent here keep the pure Mp. */
+  pm?: Record<string, { Pcap: number; kind: 'steel' | 'concrete' }>
   /** Lateral load pattern: node id → reference force in the push direction, kN. */
   pattern: Record<string, number>
   /** Push / control direction: 0 = X (default), 1 = Y, 2 = Z. */
@@ -67,8 +74,9 @@ export interface PushoverResult {
   curve: PushoverStep[]
   /** True when the analysis stopped because a collapse mechanism formed. */
   mechanism: boolean
-  /** Every hinge formed, in order. */
-  hinges: { member: string; end: 'i' | 'j'; axis: 'y' | 'z'; event: number }[]
+  /** Every hinge formed, in order. `axial`/`Mpc` are populated when P–M
+   *  interaction is active (the axial force and reduced capacity at yield). */
+  hinges: { member: string; end: 'i' | 'j'; axis: 'y' | 'z'; event: number; axial?: number; Mpc?: number }[]
 }
 
 interface Slot {
@@ -80,6 +88,9 @@ interface Slot {
   relDof: 4 | 5         // local DOF: 4 = θy (My), 5 = θz (Mz)
   Mp: number
   Mcur: number          // current total moment, kN·m
+  Ncur: number          // current axial force, kN (for P–M interaction)
+  pmKind?: PmKind       // interaction surface (undefined → no interaction)
+  Pcap: number          // axial capacity Py/Pn0, kN (0 → no interaction)
   hinged: boolean
 }
 
@@ -103,14 +114,22 @@ export function pushoverAnalysis(input: PushoverInput): PushoverResult {
   input.members.forEach((m, mi) => {
     const Mp = input.Mp[m.id]
     if (Mp === undefined || Mp <= 0) return
+    const pmInfo = input.pm?.[m.id]
     for (const end of ['i', 'j'] as const)
-      for (const axis of ['y', 'z'] as const)
+      for (const axis of ['y', 'z'] as const) {
+        // axis 'z' = Mz (major/strong axis), axis 'y' = My (minor/weak axis)
+        const pmKind: PmKind | undefined = pmInfo
+          ? (pmInfo.kind === 'steel' ? (axis === 'z' ? 'steel-strong' : 'steel-weak') : 'concrete')
+          : undefined
         slots.push({
           mi, member: m.id, end, axis,
           relEnd: end === 'i' ? 'I' : 'J',
           relDof: axis === 'y' ? 4 : 5,
-          Mp, Mcur: 0, hinged: false,
+          Mp, Mcur: 0, Ncur: 0,
+          pmKind, Pcap: pmInfo?.Pcap ?? 0,
+          hinged: false,
         })
+      }
   })
   // No hinge capacity defined → the structure stays elastic (never yields).
   if (slots.length === 0) return { curve, mechanism: false, hinges: hingesOut }
@@ -160,17 +179,34 @@ export function pushoverAnalysis(input: PushoverInput): PushoverResult {
       const arr = s.axis === 'y' ? mr.My : mr.Mz
       return s.end === 'i' ? arr[0] : arr[arr.length - 1]
     }
+    // incremental axial per unit λ (compression negative, per frame3d sign).
+    // axial is ~constant along an unloaded member; read at the slot's end.
+    const axialAt = (s: Slot): number => {
+      const arr = res.members[s.mi].N
+      return s.end === 'i' ? arr[0] : arr[arr.length - 1]
+    }
+    // reduced plastic moment at a given axial force (pure Mp when no P–M data)
+    const capAt = (s: Slot, N: number): number =>
+      s.pmKind ? reducedPlasticMoment(s.Mp, N, s.Pcap, s.pmKind) : s.Mp
     const dRoof = ctrlIdx >= 0 ? res.d[6 * ctrlIdx + dir] : 0
 
-    // smallest positive Δλ that drives a free end to ±Mp
+    // smallest positive Δλ that drives a free end to ±Mpc(P). With P–M active the
+    // capacity moves as axial grows, so estimate Δλ at the current axial, then
+    // refine once at the projected axial (one fixed-point pass — exact for the
+    // linear steel/concrete chords, close for the quadratic weak-axis surface).
     let dLam = Infinity
     let crit: Slot | null = null
     for (const s of slots) {
       if (s.hinged) continue
       const dM = momAt(s)
       if (Math.abs(dM) < TOL) continue
-      const target = dM > 0 ? s.Mp : -s.Mp
-      const dl = (target - s.Mcur) / dM
+      const dN = axialAt(s)
+      let cap = capAt(s, s.Ncur)
+      let dl = ((dM > 0 ? cap : -cap) - s.Mcur) / dM
+      if (s.pmKind && dl > TOL && isFinite(dl)) {
+        cap = capAt(s, s.Ncur + dN * dl)
+        dl = ((dM > 0 ? cap : -cap) - s.Mcur) / dM
+      }
       if (dl > TOL && dl < dLam) { dLam = dl; crit = s }
     }
     if (!crit || !isFinite(dLam)) { mechanism = true; break }   // no further events → mechanism
@@ -178,12 +214,16 @@ export function pushoverAnalysis(input: PushoverInput): PushoverResult {
     // advance cumulative state by Δλ
     lambda += dLam
     roofDisp += dRoof * dLam
-    for (const s of slots) if (!s.hinged) s.Mcur += momAt(s) * dLam
+    for (const s of slots) if (!s.hinged) { s.Mcur += momAt(s) * dLam; s.Ncur += axialAt(s) * dLam }
     crit.hinged = true
-    crit.Mcur = crit.Mp * Math.sign(crit.Mcur || 1)   // clamp exactly to ±Mp
+    const critMpc = capAt(crit, crit.Ncur)
+    crit.Mcur = critMpc * Math.sign(crit.Mcur || 1)   // clamp exactly to ±Mpc
 
     const numHinges = slots.filter((s) => s.hinged).length
-    hingesOut.push({ member: crit.member, end: crit.end, axis: crit.axis, event })
+    hingesOut.push({
+      member: crit.member, end: crit.end, axis: crit.axis, event,
+      ...(crit.pmKind ? { axial: crit.Ncur, Mpc: critMpc } : {}),
+    })
     curve.push({
       event, lambda, baseShear: lambda * Vref, roofDisp,
       newHinge: { member: crit.member, end: crit.end, axis: crit.axis }, numHinges,

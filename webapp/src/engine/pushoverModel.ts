@@ -17,6 +17,19 @@ import { modelToFrame3D } from './modelBridge'
 import { buildSeismicMass } from './modal'
 import { pushoverAnalysis, type PushoverResult } from './pushover'
 
+/** Axial capacity for the P–M interaction surface, kN:
+ *  steel  Py = Fy·A      (squash load; A from the AISC shape, else b×h)
+ *  concr. Pn0 = 0.85·f′c·Ag   (ACI pure-axial, conservatively ignoring rebar) */
+export function axialCapacity(s: RectSection): number {
+  if (s.material === 'steel') {
+    const Fy = s.steelFy ?? 345
+    const shape = s.shape ? shapeByName(s.shape) : undefined
+    const A = shape?.A ?? s.b * s.h     // mm²
+    return (Fy * A) / 1e3               // kN
+  }
+  return (0.85 * Math.max(s.fc, 1) * s.b * s.h) / 1e3   // kN
+}
+
 /** Nominal plastic moment capacity of a section, kN·m (see file header). */
 export function plasticMoment(s: RectSection, rho = 0.015): number {
   if (s.material === 'steel') {
@@ -50,6 +63,9 @@ export interface PushoverModelOpts {
   rho?: number
   /** Multiplier applied to every member Mp (default 1). */
   mpScale?: number
+  /** Apply P–M interaction (reduced plastic moment Mpc(P)) at each hinge.
+   *  Default false → pure-bending Mp, matching the original behaviour. */
+  pmInteraction?: boolean
   /** Control node id; defaults to the highest node (roof). */
   controlNode?: string
   /** Stop at this fraction of the total height (default 0.04 = 4% drift). */
@@ -66,6 +82,8 @@ export interface PushoverModelResult {
   totalHeight: number
   /** Number of members assigned a plastic-moment capacity. */
   nHingeable: number
+  /** Whether P–M interaction was applied (reduced plastic moment at hinges). */
+  pmInteraction: boolean
 }
 
 /**
@@ -78,14 +96,19 @@ export function runPushoverModel(model: StructuralModel, opts: PushoverModelOpts
   if (br.nodes.length === 0) return null
   const dir = opts.dir ?? 0
 
-  // plastic moment per member
+  // plastic moment per member (+ P–M interaction data when enabled)
   const secById = new Map(model.sections.map((s) => [s.id, s]))
   const Mp: Record<string, number> = {}
+  const usePM = opts.pmInteraction ?? false
+  const pm: Record<string, { Pcap: number; kind: 'steel' | 'concrete' }> = {}
   for (const m of model.members) {
     const s = secById.get(m.section)
     if (!s) continue
     const mp = plasticMoment(s, opts.rho) * (opts.mpScale ?? 1)
-    if (mp > 0) Mp[m.id] = mp
+    if (mp > 0) {
+      Mp[m.id] = mp
+      if (usePM) pm[m.id] = { Pcap: axialCapacity(s), kind: s.material === 'steel' ? 'steel' : 'concrete' }
+    }
   }
 
   // control node = highest; total height from the y span
@@ -112,6 +135,7 @@ export function runPushoverModel(model: StructuralModel, opts: PushoverModelOpts
   const result = pushoverAnalysis({
     nodes: br.nodes, members: br.members, supports: br.supports,
     Mp, pattern, dir, controlNode, targetDisp, maxEvents: opts.maxEvents ?? 100,
+    ...(usePM ? { pm } : {}),
   })
-  return { result, controlNode, totalHeight, nHingeable: Object.keys(Mp).length }
+  return { result, controlNode, totalHeight, nHingeable: Object.keys(Mp).length, pmInteraction: usePM }
 }
