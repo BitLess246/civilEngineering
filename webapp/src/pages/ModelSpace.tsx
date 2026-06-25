@@ -35,6 +35,8 @@ import { DisplacementTable } from '../components/DisplacementTable'
 import { ValidationPanel } from '../components/ValidationPanel'
 import { ModalPanel } from '../components/ModalPanel'
 import { ResponseSpectrumPanel } from '../components/ResponseSpectrumPanel'
+import { PushoverPanel } from '../components/PushoverPanel'
+import type { PushoverModelResult } from '../engine/pushoverModel'
 import { BeamSchematic } from '../components/BeamSchematic'
 import { ColumnSchematic } from '../components/ColumnSchematic'
 import { FootingSchematic } from '../components/FootingSchematic'
@@ -487,7 +489,7 @@ function DirPicker({ value, onChange }: { value: string[]; onChange: (v: string[
 }
 
 // ── Right-panel tabs ────────────────────────────────────────────────────────
-type Tab = 'geometry' | 'properties' | 'supports' | 'loading' | 'analysis' | 'modal' | 'design'
+type Tab = 'geometry' | 'properties' | 'supports' | 'loading' | 'analysis' | 'modal' | 'pushover' | 'design'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'geometry', label: 'Geometry' },
   { id: 'properties', label: 'Properties' },
@@ -495,6 +497,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'loading', label: 'Loading' },
   { id: 'analysis', label: 'Analysis' },
   { id: 'modal', label: 'Modal' },
+  { id: 'pushover', label: 'Pushover' },
   { id: 'design', label: 'Design' },
 ]
 function TabBtn({ id, label, active, onClick }: { id: Tab; label: string; active: boolean; onClick: (t: Tab) => void }) {
@@ -701,6 +704,12 @@ export default function ModelSpace() {
   const [dg11W, setDg11W] = useState(0)
   const [rsa, setRsa] = useState<ResponseSpectrumResult | null>(null)
   const [nModes, setNModes] = useState(12)
+  // Pushover (nonlinear static) inputs + result
+  const [poDir, setPoDir] = useState<'x' | 'z'>('x')
+  const [poPattern, setPoPattern] = useState<'triangular' | 'uniform'>('triangular')
+  const [poRho, setPoRho] = useState(1.5)        // concrete tension-steel ratio, %
+  const [poMpScale, setPoMpScale] = useState(1)
+  const [po, setPo] = useState<PushoverModelResult | null>(null)
   const [design, setDesign] = useState<StructureDesign | null>(null)
   const [opt, setOpt] = useState<OptimizeResult | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)   // open schedule-row solution
@@ -815,6 +824,15 @@ export default function ModelSpace() {
         setRsa(null)
       }
     }).catch((e) => console.error('modal failed', e))
+  }
+
+  const runPushover = () => {
+    if (!model || busy || meshErrors) return
+    run('pushover', {
+      model,
+      opts: { dir: poDir === 'x' ? 0 : 2, pattern: poPattern, rho: poRho / 100, mpScale: poMpScale },
+    }).then((r) => setPo((r as { pushover: PushoverModelResult | null }).pushover))
+      .catch((e) => console.error('pushover failed', e))
   }
 
   // Re-sign / re-axis a base node-load set into a directional case.
@@ -2442,6 +2460,48 @@ export default function ModelSpace() {
                   </Card>
                 )
               })()}
+            </div>
+          )}
+
+          {/* ── PUSHOVER ── */}
+          {tab === 'pushover' && (
+            <div className="space-y-4">
+              <Card title="Pushover — nonlinear static (plastic hinges)">
+                <Pick label="Push direction" value={poDir} onChange={setPoDir}
+                  options={[['x', '+X'], ['z', '+Z']]} />
+                <Pick label="Lateral pattern" value={poPattern} onChange={setPoPattern}
+                  options={[['triangular', 'Inverted triangle (mass×h)'], ['uniform', 'Uniform (mass)']]} />
+                <Num label="Concrete ρ (tension)" unit="%" value={poRho} onChange={setPoRho} step="0.1"
+                  hint="assumed steel ratio for Mp (concrete only)" />
+                <Num label="Mp scale" value={poMpScale} onChange={setPoMpScale} step="0.1"
+                  hint="multiplier on every member capacity" />
+                <p className="col-span-full text-[11px] text-slate-500">
+                  Event-to-event concentrated plastic hinges (a hinge = a member-end moment release).
+                  Capacity curve = base shear vs roof displacement; pushes to a 4% drift target or a collapse
+                  mechanism. Mp: steel Fy·Zx; concrete ρ·b·d²·fy·(1−0.59ρfy/f′c). P–M interaction not yet modelled.
+                </p>
+                <div className="col-span-full">
+                  <button type="button" onClick={runPushover} disabled={!model || !!busy || meshErrors} className={btn('from-[#ea580c] to-[#c2410c]')}>
+                    {busy === 'pushover' ? '⏳ Pushing…' : '⤧ Run pushover'}
+                  </button>
+                  {meshErrors && <p className="mt-1 text-[11px] font-medium text-red-600">Resolve the mesh errors in the Analysis tab to enable pushover.</p>}
+                </div>
+                {busy === 'pushover' && <SolverProgress p={progress} />}
+              </Card>
+
+              {model && <ValidationPanel issues={meshIssues} />}
+
+              {po && po.result.curve.length > 1 && (
+                <PushoverPanel res={po} dirLabel={poDir === 'x' ? '+X' : '+Z'} />
+              )}
+              {po && po.result.curve.length <= 1 && (
+                <ResultCard title="Pushover">
+                  <p className="text-sm text-slate-600">
+                    No yield events — the model has no hingeable members or no lateral mass to push.
+                    Assign sections and ensure the frame carries self-weight.
+                  </p>
+                </ResultCard>
+              )}
             </div>
           )}
 
