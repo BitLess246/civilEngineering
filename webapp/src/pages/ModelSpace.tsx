@@ -117,6 +117,24 @@ function Member3D({ a, b, role, selected, tint = 0, sec, onPick }: {
   )
 }
 
+/** Rigid end-offset arm: a thin purple stub from a node to its (offset) member end. */
+function RigidArm3D({ a, b }: { a: THREE.Vector3; b: THREE.Vector3 }) {
+  const { mid, quat, len } = useMemo(() => {
+    const dir = new THREE.Vector3().subVectors(b, a)
+    const len = dir.length()
+    const quat = new THREE.Quaternion().setFromUnitVectors(
+      new THREE.Vector3(1, 0, 0), len > 1e-9 ? dir.clone().normalize() : new THREE.Vector3(1, 0, 0))
+    return { mid: new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5), quat, len }
+  }, [a, b])
+  if (len < 1e-6) return null
+  return (
+    <mesh position={mid} quaternion={quat}>
+      <boxGeometry args={[len, 0.06, 0.06]} />
+      <meshStandardMaterial color="#9333ea" />
+    </mesh>
+  )
+}
+
 /** Steel member drawn as its true AISC cross-section, extruded along the member
  *  axis (i→j). The profile is built in the local XY plane then oriented so its
  *  extrude (+Z) runs along the member and its strong axis (depth d) stays
@@ -1313,12 +1331,23 @@ export default function ModelSpace() {
                   const tint = govRes && govRes.Mmax > 1e-9
                     ? (memForce.get(m.id)?.Mmax ?? 0) / govRes.Mmax : 0
                   const sec = sectionFor(m.id)
-                  if (sec?.material === 'steel' && sec.shape) {
-                    return <MemberSteel3D key={m.id} a={a} b={bb} role={m.role} shapeName={sec.shape}
-                      tint={tint * 0.85} selected={m.id === selected} onPick={() => setSelected(m.id)} />
-                  }
-                  return <Member3D key={m.id} a={a} b={bb} role={m.role} tint={tint * 0.85}
-                    sec={sec} selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                  // rigid end offsets shift the flexible member endpoints; node↔end is a rigid arm
+                  const oI = m.offsets?.iEnd, oJ = m.offsets?.jEnd
+                  const aEff = oI ? a.clone().add(new THREE.Vector3(oI[0], oI[1], oI[2])) : a
+                  const bEff = oJ ? bb.clone().add(new THREE.Vector3(oJ[0], oJ[1], oJ[2])) : bb
+                  const memberEl = sec?.material === 'steel' && sec.shape
+                    ? <MemberSteel3D a={aEff} b={bEff} role={m.role} shapeName={sec.shape}
+                        tint={tint * 0.85} selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                    : <Member3D a={aEff} b={bEff} role={m.role} tint={tint * 0.85}
+                        sec={sec} selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                  if (!oI && !oJ) return <group key={m.id}>{memberEl}</group>
+                  return (
+                    <group key={m.id}>
+                      {memberEl}
+                      {oI && <RigidArm3D a={a} b={aEff} />}
+                      {oJ && <RigidArm3D a={bb} b={bEff} />}
+                    </group>
+                  )
                 })}
                 {model.plates.map((p) => {
                   const cs = p.corners.map((c) => nodePos.get(c))
@@ -1644,6 +1673,50 @@ export default function ModelSpace() {
                           </tbody>
                         </table>
                         <p className="mt-1 text-[10px] text-slate-400">Check to release (zero force/moment). Mz = in-plane bending; My = out-of-plane. Click a member row to select.</p>
+                      </div>
+                    )
+                  })()}
+                  {/* Rigid end offsets — shown when a member is selected */}
+                  {(() => {
+                    const sel = model.members.find((m) => m.id === selected)
+                    if (!sel) return null
+                    const off = sel.offsets ?? {}
+                    const axes = ['x', 'y', 'z'] as const
+                    const updOff = (end: 'iEnd' | 'jEnd', ax: 0 | 1 | 2, v: number) => {
+                      const cur: [number, number, number] = [...(off[end] ?? [0, 0, 0])] as [number, number, number]
+                      cur[ax] = Number.isFinite(v) ? v : 0
+                      const next = { ...off, [end]: cur }
+                      // drop a zero vector so it doesn't linger in the model
+                      if (next.iEnd && next.iEnd.every((c) => c === 0)) delete next.iEnd
+                      if (next.jEnd && next.jEnd.every((c) => c === 0)) delete next.jEnd
+                      updMember(sel.id, { offsets: Object.keys(next).length ? next : undefined })
+                    }
+                    return (
+                      <div className="mt-2 rounded-lg border border-violet-200 bg-violet-50 p-2 text-xs">
+                        <p className="mb-1.5 font-semibold text-violet-800">Rigid end offsets (m) — {sel.id}</p>
+                        <table className="w-full border-collapse">
+                          <thead>
+                            <tr className="text-left text-[10px] uppercase tracking-wide text-slate-500">
+                              <th className="pr-2">End</th>
+                              {axes.map((a) => <th key={a} className="pr-1 text-center">{a}</th>)}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(['iEnd', 'jEnd'] as const).map((end) => (
+                              <tr key={end}>
+                                <td className="pr-2 font-medium text-slate-700">{end === 'iEnd' ? 'i' : 'j'}</td>
+                                {axes.map((_, ax) => (
+                                  <td key={ax} className="pr-1">
+                                    <input type="number" step="0.05" value={(off[end] ?? [0, 0, 0])[ax]}
+                                      onChange={(e) => updOff(end, ax as 0 | 1 | 2, parseFloat(e.target.value))}
+                                      className="w-14 rounded border border-violet-200 px-1 py-0.5 text-right" />
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <p className="mt-1 text-[10px] text-slate-400">Vector node→member-end (global m). The flexible member spans end→end; node↔end is a rigid arm (purple).</p>
                       </div>
                     )
                   })()}

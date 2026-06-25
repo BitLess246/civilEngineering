@@ -137,6 +137,8 @@ export function modelToFrame3D(model: StructuralModel): BridgeResult {
   const members: F3Member[] = model.members.map((m) => ({
     id: m.id, i: m.i, j: m.j, ...(secById.get(m.section) ?? fallback),
     ...releaseFlags(m.releases),
+    ...(m.offsets?.iEnd ? { offI: m.offsets.iEnd } : {}),
+    ...(m.offsets?.jEnd ? { offJ: m.offsets.jEnd } : {}),
   }))
   // shear walls → equivalent diagonal struts (lateral stiffness only)
   members.push(...wallStruts(model, nm))

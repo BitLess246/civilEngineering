@@ -35,12 +35,21 @@ export interface MemberReleases {
   jEnd?: { Fx?: boolean; Fy?: boolean; Fz?: boolean; Mx?: boolean; My?: boolean; Mz?: boolean }
 }
 
+/** Rigid end offsets (member offset / rigid link): vector from the node to the
+ *  member end, in GLOBAL coordinates [m]. The flexible element spans end→end;
+ *  node↔end is a rigid arm. Models eccentric/centroidal connections. */
+export interface MemberOffsets {
+  iEnd?: [number, number, number]
+  jEnd?: [number, number, number]
+}
+
 export interface Member {
   id: string
   i: string; j: string          // node ids
   role: MemberRole
   section: string               // RectSection id
   releases?: MemberReleases
+  offsets?: MemberOffsets
 }
 
 export type PlateRole = 'slab' | 'wall'
