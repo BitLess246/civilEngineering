@@ -408,3 +408,59 @@ export function rectPlateMesh(
   }
   return { nodes, elems, id }
 }
+
+// ── Quad subdivision / auto-meshing (Tier 4 D10) ─────────────────────────────
+// Coarse 2-triangle plates systematically overestimate stiffness; splitting each
+// quad into n×n cells (2n² triangles) converges the slab response. Subdivision
+// nodes are keyed by snapped coordinate so coincident points on a shared edge of
+// adjacent plates collapse to ONE node — the assembled mesh stays conforming.
+
+/** Bilinear point in a quad p00→p10→p11→p01 at parametric (s, u) ∈ [0,1]². */
+export function bilinearQuad(c: [V3, V3, V3, V3], s: number, u: number): V3 {
+  const w = [(1 - s) * (1 - u), s * (1 - u), s * u, (1 - s) * u]
+  return [0, 1, 2].map((k) => w[0] * c[0][k] + w[1] * c[1][k] + w[2] * c[2][k] + w[3] * c[3][k]) as V3
+}
+
+export interface QuadPlateSpec { id: string; corners: [V3, V3, V3, V3]; E: number; nu: number; t: number }
+
+/**
+ * Subdivide a set of 3D quad plates into an n×n triangular mesh each, sharing
+ * nodes between plates that meet on a common edge (coordinate-hashed identity).
+ * `cornerId(pos)` may return an existing model node id for a coincident position
+ * (so supports/loads still attach); other vertices get synthetic `sv*` ids.
+ * n = 1 reproduces the original 2-triangle-per-quad mesh.
+ */
+export function subdivideQuadPlates(
+  plates: QuadPlateSpec[], n: number,
+  cornerId?: (pos: V3) => string | undefined, tol = 1e-4,
+): { nodes: ShellNode[]; elems: ShellElem[] } {
+  const m = Math.max(1, Math.floor(n))
+  const reg = new Map<string, string>()        // snapped-coord key → node id
+  const nodeMap = new Map<string, ShellNode>()
+  let ctr = 0
+  const key = (p: V3) => `${Math.round(p[0] / tol)}_${Math.round(p[1] / tol)}_${Math.round(p[2] / tol)}`
+  const vid = (p: V3): string => {
+    const k = key(p)
+    const ex = reg.get(k)
+    if (ex) return ex
+    const id = cornerId?.(p) ?? `sv${ctr++}`
+    reg.set(k, id)
+    if (!nodeMap.has(id)) nodeMap.set(id, { id, x: p[0], y: p[1], z: p[2] })
+    return id
+  }
+
+  const elems: ShellElem[] = []
+  for (const pl of plates) {
+    const gid: string[][] = []
+    for (let j = 0; j <= m; j++) {
+      gid[j] = []
+      for (let i = 0; i <= m; i++) gid[j][i] = vid(bilinearQuad(pl.corners, i / m, j / m))
+    }
+    for (let j = 0; j < m; j++) for (let i = 0; i < m; i++) {
+      const A = gid[j][i], B = gid[j][i + 1], C = gid[j + 1][i + 1], D = gid[j + 1][i]
+      elems.push({ id: `${pl.id}_${i}_${j}_0`, nodes: [A, B, C], E: pl.E, nu: pl.nu, t: pl.t })
+      elems.push({ id: `${pl.id}_${i}_${j}_1`, nodes: [A, C, D], E: pl.E, nu: pl.nu, t: pl.t })
+    }
+  }
+  return { nodes: [...nodeMap.values()], elems }
+}
