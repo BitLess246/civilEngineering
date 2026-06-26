@@ -178,15 +178,18 @@ export function designOK(d: StructureDesign): boolean {
 }
 
 // ── Steel member design (reuses steelDesign engine) ──────────────────────────
-/** Design a steel beam/girder from a member result. Lb = full length
- *  (conservative; the slab braces the top flange for sagging but support
- *  hogging puts the bottom flange in compression). */
-function designSteelBeamRow(mr: F3MemberResult, role: string, sec: RectSection): SteelBeamScheduleRow | null {
+/** Design a steel beam/girder from a member result. Lb defaults to the full
+ *  member length (conservative; the slab braces the top flange for sagging but
+ *  support hogging puts the bottom flange in compression). Pass `lbOverride`
+ *  (m) to use the real brace spacing for §F2 lateral-torsional buckling. */
+function designSteelBeamRow(
+  mr: F3MemberResult, role: string, sec: RectSection, lbOverride?: number,
+): SteelBeamScheduleRow | null {
   const shape = sec.shape ? shapeByName(sec.shape) : undefined
   if (!shape || (shape.family !== 'W' && shape.family !== 'WT')) return null
   const Fy = sec.steelFy ?? 248
   const p = deriveWSection(shape)
-  const Lb = mr.L * 1000
+  const Lb = (lbOverride && lbOverride > 0 ? lbOverride : mr.L) * 1000
   const flex = beamFlexure(shape, p, Fy, Lb, 1.0)
   const shear = beamShear(shape, p, Fy)
   const Mu = mr.Mmax, Vu = mr.Vmax
@@ -444,7 +447,7 @@ function designFromRuns(
         let best: SteelBeamScheduleRow | null = null, bestSev = -1, gov = ''
         for (const run of runs) {
           const mr = memberOf(run, m.id); if (!mr) continue
-          const row = designSteelBeamRow(mr, role, sec); if (!row) continue
+          const row = designSteelBeamRow(mr, role, sec, m.Lb); if (!row) continue
           const sev = (row.ok ? 0 : 1e9) + row.Mu
           if (sev > bestSev) { bestSev = sev; best = row; gov = run.name }
         }
