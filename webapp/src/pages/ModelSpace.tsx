@@ -1862,6 +1862,19 @@ export default function ModelSpace() {
                             className="w-16 rounded border border-violet-200 px-1 py-0.5 text-right" />
                           <span className="text-[10px] text-slate-400">blank = model factor · 0 = no zone for this member (needs Auto rigid end zones on)</span>
                         </label>
+                        {(sel.role === 'beam' || sel.role === 'girder') && (
+                          <label className="mt-2 flex items-center gap-2 border-t border-violet-200 pt-2 text-[11px] text-slate-700">
+                            <span>Lb unbraced length (m)</span>
+                            <input type="number" min={0} step={0.1}
+                              value={sel.Lb ?? ''} placeholder="full span"
+                              onChange={(e) => {
+                                const v = parseFloat(e.target.value)
+                                updMember(sel.id, { Lb: Number.isFinite(v) && v > 0 ? v : undefined })
+                              }}
+                              className="w-16 rounded border border-violet-200 px-1 py-0.5 text-right" />
+                            <span className="text-[10px] text-slate-400">§F2 LTB brace spacing — blank = full member length (conservative)</span>
+                          </label>
+                        )}
                       </div>
                     )
                   })()}
@@ -3503,7 +3516,7 @@ export default function ModelSpace() {
                               </table>
                             </div>
                           </div>
-                          <p className="mt-2 text-[10px] text-slate-400">Lb = full member length (conservative unbraced). Cb = 1.0. φ = 0.9 (flexure), 1.0 (shear, doubly-symmetric I). δ est. = 5Mu·L²/(48·E·Ix), SS bound vs L/240.</p>
+                          <p className="mt-2 text-[10px] text-slate-400">Lb = member brace spacing (set per-member in Geometry → Properties; blank = full length, conservative). Cb = 1.0. φ = 0.9 (flexure), 1.0 (shear, doubly-symmetric I). δ est. = 5Mu·L²/(48·E·Ix), SS bound vs L/240.</p>
                         </td>
                       </tr>
                     )

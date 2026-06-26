@@ -179,6 +179,47 @@ describe('steel design pipeline (AISC routing + base plates)', () => {
   })
 })
 
+describe('Lb bracing override per member (A3)', () => {
+  // W310x79, Fy=345: Lp ≈ 1.76·ry·√(E/Fy) = 1.76×49×√(200000/345) ≈ 2076 mm ≈ 2.08 m
+  // Full 6 m beam → Lb=6000 > Lp → inelastic/elastic zone.
+  // Setting Lb: 1.0 m on the member → Lb=1000 < Lp → plastic zone.
+  function steelModelLb(lbMetres?: number) {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section })
+    m.loads = m.plates.flatMap((p) => [
+      { kind: 'area' as const, plate: p.id, q: 4.8, cat: 'D' as const },
+      { kind: 'area' as const, plate: p.id, q: 2.4, cat: 'L' as const },
+    ])
+    m.sections = m.sections.map((s) => ({ ...s, material: 'steel' as const, shape: 'W310x79', steelFy: 345, steelFu: 448 }))
+    if (lbMetres !== undefined)
+      m.members = m.members.map((mb) => mb.role === 'beam' ? { ...mb, Lb: lbMetres } : mb)
+    return m
+  }
+
+  it('Lb field in schedule row reflects the override in mm', () => {
+    const r = designStructure(steelModelLb(1.0), soil)!
+    const beam = r.steelBeams.find((b) => b.role === 'beam')!
+    expect(beam).toBeDefined()
+    expect(beam.Lb).toBeCloseTo(1000, 1)          // 1.0 m → 1000 mm
+  })
+
+  it('short Lb (< Lp) forces plastic zone; long Lb gives inelastic/elastic', () => {
+    const rShort = designStructure(steelModelLb(1.0), soil)!
+    const rFull  = designStructure(steelModelLb(), soil)!
+    const beamShort = rShort.steelBeams.find((b) => b.role === 'beam')!
+    const beamFull  = rFull.steelBeams.find((b) => b.role === 'beam')!
+    expect(beamShort.ltbZone).toBe('plastic')
+    expect(['inelastic', 'elastic']).toContain(beamFull.ltbZone)
+  })
+
+  it('short Lb gives higher or equal φMn than full-length Lb', () => {
+    const rShort = designStructure(steelModelLb(1.0), soil)!
+    const rFull  = designStructure(steelModelLb(), soil)!
+    const beamShort = rShort.steelBeams.find((b) => b.role === 'beam')!
+    const beamFull  = rFull.steelBeams.find((b) => b.role === 'beam')!
+    expect(beamShort.phiMn).toBeGreaterThanOrEqual(beamFull.phiMn - 1e-6)
+  })
+})
+
 describe('beam critical sections — interior is the sagging peak', () => {
   it('a continuous multi-bay frame still sags at mid-span (not all hogging)', () => {
     const m = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3.5, 3], section })

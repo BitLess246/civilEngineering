@@ -53,6 +53,10 @@ export interface Member {
   /** Per-member rigid-zone factor override (0–1); falls back to the model factor.
    *  0 excludes this member from automatic rigid end zones. */
   rigidZoneFactor?: number
+  /** Unbraced length for §F2 lateral-torsional buckling, m (steel beams/girders).
+   *  Absent ⇒ the full member length is used (conservative). Set to the real
+   *  brace spacing (e.g. purlin/joist pitch) to relieve LTB. */
+  Lb?: number
 }
 
 export type PlateRole = 'slab' | 'wall'
