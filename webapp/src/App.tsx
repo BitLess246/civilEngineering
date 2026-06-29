@@ -11,6 +11,7 @@ import BeamAnalysis from './pages/BeamAnalysis'
 import ColumnDesign from './pages/ColumnDesign'
 import FrameAnalysis from './pages/FrameAnalysis'
 import LoadPath from './pages/LoadPath'
+import Documentation from './pages/Documentation'
 // three.js is heavy — the 3D pages load in their own lazy chunks.
 const ModelSpace = lazy(() => import('./pages/ModelSpace'))
 const TrussSpace = lazy(() => import('./pages/TrussSpace'))
@@ -35,6 +36,7 @@ export default function App() {
       <Navbar onAuth={setAuth} />
       <Routes>
         <Route path="/" element={<Home onAuth={setAuth} />} />
+        <Route path="/docs" element={<Documentation />} />
         <Route path="/foundation" element={<FoundationDesign />} />
         <Route path="/pile-cap" element={<PileCapDesign />} />
         <Route path="/combined" element={<CombinedFootingDesign />} />

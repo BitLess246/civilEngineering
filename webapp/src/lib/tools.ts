@@ -6,6 +6,12 @@ export interface ToolCategory { label: string; tools: ToolDef[] }
 
 export const TOOL_CATEGORIES: ToolCategory[] = [
   {
+    label: 'Reference',
+    tools: [
+      { to: '/docs', name: 'Documentation', sub: 'Toolkit guide' },
+    ],
+  },
+  {
     label: 'Structural',
     tools: [
       { to: '/foundation',    name: 'Foundation Design',  sub: 'Isolated pad footing'  },
