@@ -16,13 +16,15 @@ import { shapeByName } from './aiscSections'
 import { designAxialColumn } from './columnDesign'
 import { activeThrust, rankineKa, bearingFactors, infiniteSlopeFS } from './geotech'
 import { computeSeismic } from './seismic'
+import { jacobiEigen } from './modal'
+import { elasticResponseSpectrum } from './accelSpectrum'
 import { generateGridModel } from './modelBuilder'
 import { solveFrame3D, rectJ, type F3Node, type F3Member, type F3Support } from './frame3d'
 import type { RectSection } from './model'
 
 export interface ValidationCase {
   id: string
-  category: 'RC' | 'Steel' | 'Analysis' | 'Wind' | 'Geotech' | 'Seismic'
+  category: 'RC' | 'Steel' | 'Analysis' | 'Seismic' | 'Dynamics' | 'Wind' | 'Geotech'
   title: string
   reference: string
   formula: string
@@ -130,6 +132,20 @@ const slopeFS = (() => {
   return { manual: tan(phiDeg) / tan(betaDeg), software: infiniteSlopeFS({ c: 0, phiDeg, gamma: 18, z: 3, betaDeg }) }
 })()
 
+// ── Dynamics — eigen-solver & response spectrum ──────────────────────────────
+const dynamics = (() => {
+  const vals = jacobiEigen([[2, 1], [1, 2]]).values             // closed form: 1, 3
+  const ag = [0, 0.4, 1.0, -0.7, 0.5, -1.0, 0.2]                // m/s², PGA = 1.0
+  const spec = elasticResponseSpectrum(ag, 0.02, { Tmin: 0.1, Tmax: 2, nT: 20 })!
+  const p = spec.points[Math.floor(spec.points.length / 2)]
+  const omega = (2 * Math.PI) / p.T
+  return {
+    eig: { manual: 3, software: Math.max(...vals) },
+    anchor: { manual: spec.pga, software: spec.points[0].PSA },
+    pseudo: { manual: omega * omega * p.Sd, software: p.PSA },
+  }
+})()
+
 // ── 11. NSCP 208 seismic static — period & base shear ────────────────────────
 const seismic = (() => {
   const section: RectSection = { id: 'S', name: 's', b: 400, h: 400, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
@@ -216,5 +232,20 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'seismic-base-shear', category: 'Seismic', title: 'NSCP 208 static base shear',
     reference: 'NSCP 208.5.2.1', formula: 'V = Cv·I·W / (R·T)',
     manual: seismic.baseShear.manual, software: seismic.baseShear.software, unit: 'kN', tol: 1e-6,
+  },
+  {
+    id: 'eigen-jacobi', category: 'Dynamics', title: 'Jacobi eigenvalue of [[2,1],[1,2]]',
+    reference: 'Linear algebra', formula: 'λ = 2 ± 1  →  λmax = 3',
+    manual: dynamics.eig.manual, software: dynamics.eig.software, unit: '—', tol: 1e-6,
+  },
+  {
+    id: 'spectrum-anchor', category: 'Dynamics', title: 'Response spectrum T = 0 anchor',
+    reference: 'Chopra, Dynamics of Structures', formula: 'Sa(T→0) = PGA',
+    manual: dynamics.anchor.manual, software: dynamics.anchor.software, unit: 'm/s²', tol: 1e-9,
+  },
+  {
+    id: 'spectrum-pseudo', category: 'Dynamics', title: 'Pseudo-acceleration relation',
+    reference: 'Chopra, Dynamics of Structures', formula: 'PSA = ω²·Sd',
+    manual: dynamics.pseudo.manual, software: dynamics.pseudo.software, unit: 'm/s²', tol: 1e-9,
   },
 ]
