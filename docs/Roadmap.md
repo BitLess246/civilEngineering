@@ -60,7 +60,7 @@ Target: v2.0
 Structural:
 - [x] Retaining Wall Design (`/retaining-wall`, cantilever · Rankine)
 - [x] Wind Load Generator (NSCP §207B MWFRS + §207E.4 C&C, in 3D model space)
-- [ ] NSCP Seismic Wizard (engine exists in `engine/seismic.ts`; needs a guided UI)
+- [x] NSCP Seismic Wizard (`/seismic-wizard`; §208 Ca/Cv/I/R/Na/Nv tables + Cs)
 - [x] Stair Design (`/stair`, RC waist slab)
 - [ ] Water Tank Design
 
