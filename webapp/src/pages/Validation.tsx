@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { VALIDATION_CASES, pctDiff, type ValidationCase } from '../engine/validation'
 
-const CATS = ['RC', 'Steel', 'Analysis', 'Seismic', 'Wind', 'Geotech'] as const
+const CATS = ['RC', 'Steel', 'Analysis', 'Seismic', 'Dynamics', 'Wind', 'Geotech'] as const
 
 function fmt(v: number): string {
   if (!Number.isFinite(v)) return '—'
