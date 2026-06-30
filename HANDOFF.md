@@ -34,7 +34,11 @@ npx tsc -b       # typecheck
 npm run build    # typecheck + production build
 ```
 
-## Current state (all merged to `main`, through PR #239)
+## Current state (analysis-core baseline, PR #239)
+
+> Newer work is tracked in the **Tier 4** (A1–E13, PRs through #273) and
+> **Post-Tier-4** (PRs #275–#278) sections below; latest suite: **863 tests**.
+> The repo root is now just `webapp/`, `docs/` and the markdown docs.
 
 ### 3D Model Space analysis core (`/model`) — the centrepiece
 The 3D space-frame solver and its NSCP design pipeline are the most developed part
@@ -275,3 +279,59 @@ are now shipped and merged** (PRs through #273):
 **Order of implementation**: A1 → B4 → C7 → D9 → A2 → B5 → C8 → D10 → A3 → B6 → D11 → E12 → E13.
 
 _Tests after Tier 4 (E13): **845 passing**; `tsc -b` clean; production build OK._
+
+## Post-Tier-4 — repo hygiene, validation & geotech (PRs #275–#278)
+
+After Tier 4, four cleanup / capability items from an external code review shipped:
+
+- **#275 — untrack `node_modules`.** The legacy root app's `node_modules/` (458
+  files) was committed before it was gitignored; removed from version control.
+- **#276 — remove the legacy Firebase/Express root app.** The dormant root app
+  (`src/`, `public/`, `api/`, `firebase.json`, `.firebaserc`, root `package.json`,
+  `tailwind.config.js`) was deleted — it was fully replaced by `webapp/` (deployed
+  via `webapp/vercel.json`). **The repo root is now just `webapp/`, `docs/` and the
+  markdown docs.** `README.md` was rewritten to describe the live app.
+- **#277 — validation page (`/validation`).** `engine/validation.ts` benchmarks
+  engine output against independent closed-form results (RC beam Mn, cantilever
+  deflection/moment via the frame solver, compact W-beam φMp, wind qz, footing
+  area). Shown side-by-side with %Δ and enforced by `validation.test.ts`.
+- **#278 — geotechnical toolkit (`/geotech`).** `engine/geotech.ts`: Rankine earth
+  pressure, Terzaghi/Meyerhof bearing capacity (Vesić Nγ), infinite-slope FS — with
+  N-factors checked against published tables.
+
+_Tests after #278: **863 passing**; `tsc -b` clean; production build OK._
+
+## Validation roadmap — toward a formal validation manual
+
+The product direction is a **validated structural-analysis platform for NSCP
+workflows**, not "an ETABS replacement." The single most valuable next asset is a
+**formal, documented validation manual** proving the solvers are correct.
+
+**What already exists (in the unit suite).** A lot of solver-vs-analytical
+checking is already in `*.test.ts` and should be the seed of the manual, not
+redone:
+- `frame2d.test.ts` / `frame3d.test.ts` — cantilever `δ = PL³/3EI`, fixed-end
+  moments, planar portal vs `frame2d`, P-Δ amplifier vs `1/(1−P/Pe)`, statics
+  self-checks, diaphragm and rigid-link kinematics.
+- `modal.test.ts` — natural periods/mode shapes; `accelSpectrum.test.ts` /
+  `timeHistory.test.ts` — Newmark SDOF, PSA/PSV/Sd relations, resonance.
+- `pushover.test.ts` — collapse loads vs rigid-plastic limit analysis
+  (`8Mp/L`, mechanism base shears); `pipeline.test.ts` — NSCP load-path checks.
+- `validation.ts` (#277) — the first *user-visible* benchmark table.
+
+**The gap = a documented manual + external-tool cross-checks.** Proposed
+`docs/validation/` (or a generated `VALIDATION_MANUAL`) with one file per case,
+each as **Problem → Reference solution → Software output → Error % → PASS**:
+1. **Frame** — SS beam `5wL⁴/384EI`, cantilever `PL³/3EI`, textbook portal frame
+   (Hibbeler/McCormac), space frame vs **STAAD/SAP2000/ETABS**.
+2. **Modal** — 1-/2-/3-/5-storey shear buildings: periods, mode shapes,
+   participation factors vs textbook + ETABS.
+3. **Response spectrum** — SDOF and multi-storey base shear vs ETABS.
+4. **NSCP seismic** — worked 208 static base shear + vertical distribution +
+   drift for a 4-storey building (manual vs engine, target <0.5 %).
+5. **RC / steel / geotech** — extend the `/validation` table (the `/validation`
+   page already renders these and the test suite enforces them).
+
+Surface the pass counts on the `/validation` page and a public "Validation"
+section. This is the highest-leverage next body of work; treat each chapter as
+its own PR (engine benchmark test + a `docs/validation/*.md` write-up).
