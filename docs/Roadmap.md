@@ -62,7 +62,7 @@ Structural:
 - [x] Wind Load Generator (NSCP §207B MWFRS + §207E.4 C&C, in 3D model space)
 - [x] NSCP Seismic Wizard (`/seismic-wizard`; §208 Ca/Cv/I/R/Na/Nv tables + Cs)
 - [x] Stair Design (`/stair`, RC waist slab)
-- [ ] Water Tank Design
+- [x] Water Tank Design (`/water-tank`; circular wall — IS 3370 / ACI 350 working stress)
 
 Geotechnical:
 - [x] Geotechnical toolkit (`/geotech`: bearing capacity, earth pressure, slope)

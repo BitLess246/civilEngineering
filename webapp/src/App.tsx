@@ -28,6 +28,7 @@ import StairDesign from './pages/StairDesign'
 import Micropile from './pages/Micropile'
 import RockAnchor from './pages/RockAnchor'
 import SeismicWizard from './pages/SeismicWizard'
+import WaterTank from './pages/WaterTank'
 import SlabEstimate from './pages/SlabEstimate'
 import ChbEstimate from './pages/ChbEstimate'
 import ColumnEstimate from './pages/ColumnEstimate'
@@ -75,6 +76,7 @@ export default function App() {
         <Route path="/micropile" element={<Micropile />} />
         <Route path="/rock-anchor" element={<RockAnchor />} />
         <Route path="/seismic-wizard" element={<SeismicWizard />} />
+        <Route path="/water-tank" element={<WaterTank />} />
         <Route path="/estimate/slab" element={<SlabEstimate />} />
         <Route path="/estimate/beam" element={<BeamEstimate />} />
         <Route path="/estimate/column" element={<ColumnEstimate />} />
