@@ -27,7 +27,7 @@ import { columnKFactors, type ColumnK } from '../engine/effectiveLength'
 import { freqFromDeflection, dg11Walking, DG11_OCCUPANCY } from '../engine/floorVibration'
 import { buildSeismicMass, GRAVITY } from '../engine/modal'
 import { autoRigidOffsets } from '../engine/rigidEndZones'
-import { computeWind, type WindResult } from '../engine/wind'
+import { computeWind, computeCladding, type WindResult, type WindEnclosure, type CladdingResult } from '../engine/wind'
 import { ReportControls } from '../components/ReportControls'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution } from '../lib/modelSpaceSolutions'
@@ -750,6 +750,9 @@ export default function ModelSpace() {
   const [Kzt, setKzt] = useState(n('Kzt', 1.0))
   const [wDirs, setWDirs] = useState<string[]>((si.wDirs as string[]) ?? ['+X', '-X', '+Z', '-Z'])  // directional W cases
   const [wind, setWind] = useState<WindResult | null>(null)
+  const [ccArea, setCcArea] = useState(1.0)   // C&C effective wind area, m²
+  const [ccEncl, setCcEncl] = useState<WindEnclosure>('enclosed')
+  const [cladding, setCladding] = useState<CladdingResult | null>(null)
   const [eCases, setECases] = useState<LateralCase[]>([])
   const [wCases, setWCases] = useState<LateralCase[]>([])
   // Analysis options: f₁ live-load factor (§203.3.1) and P-Δ second order
@@ -1018,6 +1021,11 @@ export default function ModelSpace() {
     }))
     const primary = dirCase(primaryRes.loads, 'W', wDirs[0] ?? '+X')
     save({ ...model, loads: [...model.loads.filter((l) => !(l.cat === 'W' && l.kind === 'node')), ...primary.loads] })
+  }
+
+  const runCladding = () => {
+    if (!model) return
+    setCladding(computeCladding(model, { V: Vw, exposure: expo, Kzt, dir: 'x', area: ccArea, enclosure: ccEncl }))
   }
 
   const soil = { qAllow: qa, gammaSoil, gammaConc: gammaC, H: Hf }
@@ -2471,6 +2479,55 @@ export default function ModelSpace() {
                       qh = {f2(wind.qh)} kPa · B×L = {f1(wind.B)}×{f1(wind.L)} m (L/B {f2(wind.LB)}) ·
                       Cp,lee {f2(wind.CpLee)} · base shear V = {f1(wind.baseShear)} kN — {wCases.length} cat-W
                       case{wCases.length === 1 ? '' : 's'} ({wDirs.join(', ') || 'none'}). Windward Cp = 0.8, G = {wind.G}, Kd = {wind.Kd}.
+                    </p>
+                  )}
+                </div>
+              </Card>
+
+              <Card title="Wind — NSCP 207E.4 Components & Cladding (walls)">
+                <p className="col-span-full text-[11px] text-slate-500">
+                  Local wall cladding/curtain-wall pressures p = qh·[(GCp) − (GCpi)] at the mean roof
+                  height. GCp by zone &amp; effective wind area (Fig 207E.4-1); GCpi from the enclosure
+                  (±0.18 enclosed, ±0.55 partially enclosed). Uses the V, Kzt &amp; exposure above.
+                </p>
+                <Num label="Effective wind area" unit="m²" value={ccArea} step="0.5"
+                  onChange={(v) => setCcArea(Math.max(0.1, v))} hint="0.93–46.5 m² band" />
+                <label className="flex flex-col text-sm">
+                  <span className="mb-1 font-medium text-slate-600">Enclosure</span>
+                  <select value={ccEncl} onChange={(e) => setCcEncl(e.target.value as WindEnclosure)}
+                    className="rounded-md border border-slate-300 px-2.5 py-1.5">
+                    <option value="enclosed">Enclosed (±0.18)</option>
+                    <option value="partially">Partially enclosed (±0.55)</option>
+                    <option value="open">Open (0)</option>
+                  </select>
+                </label>
+                <div className="col-span-full">
+                  <button type="button" onClick={runCladding} disabled={!model}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">▦ Compute C&amp;C wall pressures</button>
+                  {cladding && (
+                    <table className="mt-2 w-full text-left text-xs">
+                      <thead className="text-slate-500">
+                        <tr className="border-b border-slate-200">
+                          <th className="py-1 pr-2">Zone</th><th className="py-1 pr-2">GCp (+ / −)</th>
+                          <th className="py-1 pr-2">p⁺ (inward)</th><th className="py-1 pr-2">p⁻ (suction)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {([['4 — interior', cladding.zone4], ['5 — corner', cladding.zone5]] as [string, CladdingResult['zone4']][]).map(([lbl, zone]) => (
+                          <tr key={zone.zone} className="border-b border-slate-100">
+                            <td className="py-1 pr-2 font-medium">Zone {lbl}</td>
+                            <td className="py-1 pr-2 font-mono">{f2(zone.GCpPos)} / {f2(zone.GCpNeg)}</td>
+                            <td className="py-1 pr-2 font-mono">{f2(zone.pPos)} kPa</td>
+                            <td className="py-1 pr-2 font-mono text-red-600">{f2(zone.pNeg)} kPa</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                  {cladding && (
+                    <p className="mt-1 text-[10px] text-slate-400">
+                      qh = {f2(cladding.qh)} kPa at h = {f1(cladding.h)} m · |GCpi| = {cladding.GCpi} · A = {f1(cladding.area)} m².
+                      Corner zone 5 governs cladding suction. Roof C&amp;C and h &gt; 18.3 m (§207E.5) out of scope.
                     </p>
                   )}
                 </div>
