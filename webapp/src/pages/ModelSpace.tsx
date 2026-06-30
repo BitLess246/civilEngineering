@@ -15,7 +15,8 @@ import { type StructureDesign, type FootingPlan, type OptimizeResult, type Later
 import type { SteelJoint } from '../engine/steelConnections'
 import { estimateTakeoff, costBill, type PriceList } from '../engine/takeoff'
 import { footingLayout } from '../engine/footingLayout'
-import { solveShell, recoverShellStress, subdivideQuadPlates, type ShellNode, type ShellElem, type ShellSupport, type ElementStress, type QuadPlateSpec } from '../engine/shell'
+import { type ShellNode, type ShellElem, type ElementStress } from '../engine/shell'
+import { solveModelShells, designModelSlabsFE, type SlabFEScheduleRow } from '../engine/shellModel'
 import { useSolver } from '../lib/useSolver'
 import type { SolveProgress } from '../engine/progress'
 import { TABLE_204_1, TABLE_204_2, sdlItemKPa, sdlTotal, type SdlItem } from '../engine/deadLoads'
@@ -800,6 +801,7 @@ export default function ModelSpace() {
   const [thDur, setThDur] = useState(10)         // s
   const [thZeta, setThZeta] = useState(5)        // %
   const [shellStress, setShellStress] = useState<{ nodes: ShellNode[]; elems: ShellElem[]; stresses: ElementStress[] } | null>(null)
+  const [slabFE, setSlabFE] = useState<SlabFEScheduleRow[] | null>(null)
   const [recSpec, setRecSpec] = useState<{ spec: AccelSpectrum; design: DesignSpectrumPoint[]; name: string } | null>(null)
   const [shellSubdiv, setShellSubdiv] = useState(4)   // n×n triangulation per plate
   const [thCsv, setThCsv] = useState<{ text: string; name: string; npts: number } | null>(null)
@@ -960,36 +962,19 @@ export default function ModelSpace() {
 
   const runShellStress = () => {
     if (!model || !model.shellElements || model.plates.length === 0) return
-    // Subdivide each quad plate into an n×n triangular mesh (D10). Subdivision
-    // nodes are shared across plate edges by coordinate; original model nodes are
-    // reused at coincident corners so supports/loads still attach.
-    const posById = new Map(model.nodes.map((n) => [n.id, [n.x, n.y, n.z] as V3]))
-    const cornerId = (p: V3): string | undefined => {
-      for (const n of model.nodes)
-        if (Math.hypot(p[0] - n.x, p[1] - n.y, p[2] - n.z) < 1e-4) return n.id
-      return undefined
-    }
-    // Default concrete material: E = 25000 MPa, ν = 0.2
-    const specs: QuadPlateSpec[] = model.plates.flatMap((p) => {
-      const cs = p.corners.map((id) => posById.get(id))
-      if (cs.some((c) => !c)) return []
-      return [{ id: p.id, corners: cs as [V3, V3, V3, V3], E: 25000, nu: 0.2, t: p.thickness }]
-    })
-    const { nodes: shNodes, elems: shElems } = subdivideQuadPlates(specs, shellSubdiv, cornerId)
-    const shSupports: ShellSupport[] = model.supports.map((s) => ({
-      node: s.node, ux: true, uy: true, uz: true, rx: true, ry: true, rz: true,
-    }))
-    // Area loads → pressure on every sub-element of the plate (kN/m²)
-    const pressures = model.loads
-      .filter((l) => l.kind === 'area')
-      .flatMap((l) => {
-        const al = l as { kind: 'area'; plate: string; q: number }
-        return shElems.filter((e) => e.id.startsWith(`${al.plate}_`)).map((e) => ({ elem: e.id, q: al.q }))
-      })
-    const r = solveShell(shNodes, shElems, shSupports, [], pressures)
-    if (!r) return
-    const st = recoverShellStress(shNodes, shElems, r)
-    setShellStress({ nodes: shNodes, elems: shElems, stresses: st })
+    // Mesh + solve the model's shell plates under the SERVICE area-load field for
+    // display (subdivision, conforming edges and corner-id reuse handled by the
+    // shared shellModel bridge). Pass nothing for D/L factors → unfactored stress.
+    const solved = solveModelShells(model, { subdiv: shellSubdiv })
+    if (!solved) { setShellStress(null); return }
+    setShellStress({ nodes: solved.nodes, elems: solved.elems, stresses: solved.stresses })
+  }
+
+  const runSlabFE = () => {
+    if (!model || !model.shellElements || model.plates.length === 0) return
+    // Factored (1.2D + 1.6L) shell moment field → Wood-Armer slab reinforcement.
+    const out = designModelSlabsFE(model, { subdiv: shellSubdiv })
+    setSlabFE(out ? out.rows : null)
   }
 
   // Re-sign / re-axis a base node-load set into a directional case.
@@ -2591,16 +2576,65 @@ export default function ModelSpace() {
                     Each quad is split into {shellSubdiv}×{shellSubdiv} cells (2·{shellSubdiv}² triangles); finer meshes
                     reduce the stiffness overestimate of coarse 2-triangle plates. Edges shared by adjacent plates stay conforming.
                   </p>
-                  <div className="col-span-full">
+                  <div className="col-span-full flex flex-wrap gap-2">
                     <button type="button" onClick={runShellStress} disabled={!model || !!busy}
                       className={btn('from-[#0d9488] to-[#0f766e]')}>
                       ⬡ Recover shell stresses
                     </button>
+                    <button type="button" onClick={runSlabFE} disabled={!model || !!busy}
+                      className={btn('from-[#0d9488] to-[#0f766e]')}>
+                      ▦ Design slab steel (Wood-Armer)
+                    </button>
                   </div>
+                  <p className="col-span-full text-[11px] text-slate-500">
+                    Wood-Armer (1968) converts the factored (1.2D + 1.6L) shell moment field (Mx, My, Mxy) into
+                    orthogonal design moments for the bottom (sagging) and top (hogging) faces, then sizes the x/y
+                    reinforcement per metre to NSCP 2015 / ACI 318-14 (φ = 0.90, ⌀12 @ 20 mm cover, fc 28, fy 415).
+                  </p>
                 </Card>
               )}
               {shellStress && (
                 <ShellContourPanel nodes={shellStress.nodes} elems={shellStress.elems} stresses={shellStress.stresses} />
+              )}
+              {slabFE && slabFE.length > 0 && (
+                <ResultCard title="Slab reinforcement — Wood-Armer (shell FE, factored)">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="text-slate-500">
+                        <tr className="border-b border-slate-200">
+                          <th className="py-1 pr-2">Slab</th><th className="py-1 pr-2">t (mm)</th>
+                          <th className="py-1 pr-2">Face / dir</th><th className="py-1 pr-2">M* (kN·m/m)</th>
+                          <th className="py-1 pr-2">As (mm²/m)</th><th className="py-1 pr-2">Bars ⌀12</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {slabFE.flatMap((r) => {
+                          const d = r.design
+                          const rows: [string, number, typeof d.bottomX][] = [
+                            ['Bottom · x', d.moments.mxBottom, d.bottomX],
+                            ['Bottom · y', d.moments.myBottom, d.bottomY],
+                            ['Top · x', d.moments.mxTop, d.topX],
+                            ['Top · y', d.moments.myTop, d.topY],
+                          ]
+                          return rows.map(([lbl, m, s], i) => (
+                            <tr key={`${r.plate}-${lbl}`} className="border-b border-slate-100">
+                              {i === 0 && <td className="py-1 pr-2 font-medium align-top" rowSpan={4}>{r.plate}</td>}
+                              {i === 0 && <td className="py-1 pr-2 align-top" rowSpan={4}>{r.thickness}</td>}
+                              <td className="py-1 pr-2">{lbl}</td>
+                              <td className="py-1 pr-2 font-mono">{m.toFixed(1)}</td>
+                              <td className="py-1 pr-2 font-mono">{s.As.toFixed(0)}{s.usedMin ? ' (min)' : ''}</td>
+                              <td className="py-1 pr-2 font-mono">⌀12 @ {s.spacing.toFixed(0)} mm</td>
+                            </tr>
+                          ))
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-2 text-[10px] text-slate-400">
+                    Envelope of the per-element Wood-Armer design moments over each panel. As includes the
+                    shrinkage/temperature minimum (ρ_min); spacing capped at min(3t, 450) mm. d = t − cover − 1.5⌀.
+                  </p>
+                </ResultCard>
               )}
 
               {drift && seis && (
