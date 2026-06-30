@@ -32,6 +32,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/punching-shear', name: 'Punching Shear',   sub: 'Two-way §22.6 · ACI 318' },
       { to: '/retaining-wall',   name: 'Retaining Wall',   sub: 'Cantilever · Rankine'     },
       { to: '/geotech',          name: 'Geotechnical',     sub: 'Bearing · earth · slope'  },
+      { to: '/soil-nail',        name: 'Soil-Nail Wall',   sub: 'FHWA · tensile · pullout' },
       { to: '/load-combinations', name: 'Load Combinations', sub: 'NSCP 2015 §203.3 LRFD'   },
     ],
   },
