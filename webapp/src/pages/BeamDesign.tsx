@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { designBeam, beamServiceDeflection, type BeamDesignInput, type BeamDesignResult } from '../engine/beamDesign'
+import type { BeamSupport } from '../engine/beamDeflection'
 import type { CriticalSection } from '../engine/beamSections'
 import { BeamSchematic } from '../components/BeamSchematic'
 import { ReportControls } from '../components/ReportControls'
@@ -67,6 +68,7 @@ export default function BeamDesign() {
 
   const [f, setF] = useState<FormState>({ ...DEFAULTS, ...(handoff.multi ? {} : handoff.single) })
   const [span, setSpan] = useState<number>(NaN)
+  const [support, setSupport] = useState<BeamSupport>('simple')
   const [svcWD, setSvcWD] = useState<number>(NaN)
   const [svcWL, setSvcWL] = useState<number>(NaN)
   const [multi, setMulti] = useState<boolean>(handoff.multi)
@@ -113,10 +115,10 @@ export default function BeamDesign() {
     if (!r || !Number.isFinite(span) || !Number.isFinite(svcWD) || !Number.isFinite(svcWL)) return null
     return beamServiceDeflection({
       b: f.b, h: f.h, d: r.d, As: r.As,
-      AsPrime: r.mode === 'DRRB' ? r.AsPrime : 0,
-      fc: f.fc, span, wD: svcWD, wL: svcWL,
+      AsPrime: r.mode === 'DRRB' ? r.AsPrime : 0, dPrime: r.dPrime,
+      fc: f.fc, fy: f.fy, span, support, wD: svcWD, wL: svcWL,
     })
-  }, [r, f.b, f.h, f.fc, span, svcWD, svcWL])
+  }, [r, f.b, f.h, f.fc, f.fy, span, support, svcWD, svcWL])
 
   const stirrupText = (rr: BeamDesignResult) =>
     rr.region === 'designed' || rr.region === 'minimum'
@@ -152,7 +154,9 @@ export default function BeamDesign() {
           </Card>
 
           <Card title="Serviceability (optional)">
-            <Num label="Simple span" unit="m" value={span} onChange={setSpan} />
+            <Num label="Span" unit="m" value={span} onChange={setSpan} />
+            <Pick label="Support" value={support} onChange={(v) => setSupport(v as BeamSupport)}
+              options={[['simple', 'Simply supported'], ['one-end', 'One end continuous'], ['both-ends', 'Both ends continuous'], ['cantilever', 'Cantilever']]} />
             <Num label={<>Dead load <KTex tex="w_D" /></>} unit="kN/m" value={svcWD} onChange={setSvcWD} />
             <Num label={<>Live load <KTex tex="w_L" /></>} unit="kN/m" value={svcWL} onChange={setSvcWL} />
           </Card>
@@ -300,6 +304,10 @@ export default function BeamDesign() {
           )}
           {deflection && (
             <ResultCard title="Serviceability — ACI 318-14 §24.2">
+              <Row label="Min. thickness h_min" value={`${deflection.hMin.toFixed(0)} mm`}
+                alert={!deflection.hMinOK}
+                sub={`Table 409.3.1.1 (${deflection.support})${deflection.hMinOK ? ' — h ≥ h_min ✓, deflection check waivable' : ' — h < h_min ✗, deflection governs'}`} />
+              <Row label="Section state" value={deflection.cracked ? 'Cracked (Ma > Mcr)' : 'Uncracked'} />
               <Row label={<><KTex tex="I_g" /> (gross)</>} value={`${(deflection.Ig / 1e6).toFixed(0)} ×10⁶ mm⁴`} />
               <Row label={<><KTex tex="I_{cr}" /> (cracked)</>} value={`${(deflection.Icr / 1e6).toFixed(0)} ×10⁶ mm⁴`} />
               <Row label={<><KTex tex="M_{cr}" /></>} value={`${deflection.Mcr.toFixed(1)} kN·m`} />
