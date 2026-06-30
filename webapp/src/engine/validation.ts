@@ -54,7 +54,24 @@ const cantilever = (() => {
   return {
     defl: { manual: (P * L ** 3) / (3 * EIz) * 1000, software: Math.abs(res.d[6 + 1]) * 1000 },  // mm
     moment: { manual: P * L, software: Math.abs(res.members[0].Mz[0]) },                          // kN·m
+    slope: { manual: (P * L ** 2) / (2 * EIz), software: Math.abs(res.d[6 + 5]) },                // rad (θz at tip)
   }
+})()
+
+// ── Fixed–fixed beam, central point load — deflection P·L³/192EI ──────────────
+const fixedFixed = (() => {
+  const E = 25000, G = E / 2.4, b = 300, h = 500, L = 4, P = 20
+  const Iz = (b * h ** 3) / 12, Iy = (h * b ** 3) / 12, A = b * h, J = rectJ(b, h)
+  const EIz = (E * Iz) / 1e9
+  const nodes: F3Node[] = [
+    { id: 'a', x: 0, y: 0, z: 0 }, { id: 'c', x: L / 2, y: 0, z: 0 }, { id: 'b', x: L, y: 0, z: 0 },
+  ]
+  const members: F3Member[] = [
+    { id: 'ac', i: 'a', j: 'c', E, G, A, Iy, Iz, J }, { id: 'cb', i: 'c', j: 'b', E, G, A, Iy, Iz, J },
+  ]
+  const supports: F3Support[] = [{ node: 'a', fixity: 'fixed' }, { node: 'b', fixity: 'fixed' }]
+  const res = solveFrame3D(nodes, members, supports, [{ kind: 'node', node: 'c', Fy: -P, cat: 'D' }])!
+  return { manual: (P * L ** 3) / (192 * EIz) * 1000, software: Math.abs(res.d[6 + 1]) * 1000 }  // mm at mid
 })()
 
 // ── 3. Compact steel beam — plastic moment φMp = 0.9·Fy·Zx ───────────────────
@@ -125,6 +142,16 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'cantilever-moment', category: 'Analysis', title: 'Cantilever fixed-end moment',
     reference: 'Statics', formula: 'M = P·L',
     manual: cantilever.moment.manual, software: cantilever.moment.software, unit: 'kN·m', tol: 1e-4,
+  },
+  {
+    id: 'cantilever-slope', category: 'Analysis', title: 'Cantilever tip rotation',
+    reference: 'Hibbeler, Structural Analysis', formula: 'θ = P·L² / (2·E·I)',
+    manual: cantilever.slope.manual, software: cantilever.slope.software, unit: 'rad', tol: 1e-4,
+  },
+  {
+    id: 'fixed-fixed-defl', category: 'Analysis', title: 'Fixed–fixed beam, central load',
+    reference: 'Roark / matrix analysis', formula: 'δ = P·L³ / (192·E·I)',
+    manual: fixedFixed.manual, software: fixedFixed.software, unit: 'mm', tol: 1e-3,
   },
   {
     id: 'steel-phimp', category: 'Steel', title: 'Compact W-beam plastic moment (short Lb)',
