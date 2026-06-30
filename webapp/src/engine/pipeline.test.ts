@@ -429,6 +429,19 @@ describe('strong column–weak beam hierarchy', () => {
     expect(anyCol.b).toBeGreaterThanOrEqual(350)
     expect(anyCol.h).toBeGreaterThanOrEqual(anyCol.b)
   })
+
+  it('SCWB joint check (§418.7.3.2) is populated only for a Special Moment Frame', () => {
+    const m = makeModel()
+    expect(designStructure(m, soil)!.scwb).toHaveLength(0)                       // default gravity
+    expect(designStructure(m, soil, {}, { seismicSystem: 'imf' })!.scwb).toHaveLength(0)
+    const smf = designStructure(m, soil, {}, { seismicSystem: 'smf' })!
+    expect(smf.scwb.length).toBeGreaterThan(0)
+    for (const j of smf.scwb) {
+      expect(j.nCols).toBeGreaterThan(0); expect(j.nBeams).toBeGreaterThan(0)
+      expect(j.ok).toBe(j.ratio >= 1.2 - 1e-9)
+      expect(j.ratio).toBeCloseTo(j.sumMnc / j.sumMnb, 9)
+    }
+  })
 })
 
 describe('model editing helpers', () => {
