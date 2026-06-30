@@ -34,6 +34,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/retaining-wall',   name: 'Retaining Wall',   sub: 'Cantilever · Rankine'     },
       { to: '/geotech',          name: 'Geotechnical',     sub: 'Bearing · earth · slope'  },
       { to: '/soil-nail',        name: 'Soil-Nail Wall',   sub: 'FHWA · tensile · pullout' },
+      { to: '/micropile',        name: 'Micropile',        sub: 'FHWA · structural · bond' },
       { to: '/load-combinations', name: 'Load Combinations', sub: 'NSCP 2015 §203.3 LRFD'   },
     ],
   },

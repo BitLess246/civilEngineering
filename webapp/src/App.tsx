@@ -25,6 +25,7 @@ import RetainingWall from './pages/RetainingWall'
 import Geotech from './pages/Geotech'
 import SoilNail from './pages/SoilNail'
 import StairDesign from './pages/StairDesign'
+import Micropile from './pages/Micropile'
 import SlabEstimate from './pages/SlabEstimate'
 import ChbEstimate from './pages/ChbEstimate'
 import ColumnEstimate from './pages/ColumnEstimate'
@@ -69,6 +70,7 @@ export default function App() {
         <Route path="/geotech" element={<Geotech />} />
         <Route path="/soil-nail" element={<SoilNail />} />
         <Route path="/stair" element={<StairDesign />} />
+        <Route path="/micropile" element={<Micropile />} />
         <Route path="/estimate/slab" element={<SlabEstimate />} />
         <Route path="/estimate/beam" element={<BeamEstimate />} />
         <Route path="/estimate/column" element={<ColumnEstimate />} />
