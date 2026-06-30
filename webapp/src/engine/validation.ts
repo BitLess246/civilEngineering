@@ -15,11 +15,14 @@ import { beamFlexure, beamShear, deriveWSection } from './steelDesign'
 import { shapeByName } from './aiscSections'
 import { designAxialColumn } from './columnDesign'
 import { activeThrust, rankineKa, bearingFactors, infiniteSlopeFS } from './geotech'
+import { computeSeismic } from './seismic'
+import { generateGridModel } from './modelBuilder'
 import { solveFrame3D, rectJ, type F3Node, type F3Member, type F3Support } from './frame3d'
+import type { RectSection } from './model'
 
 export interface ValidationCase {
   id: string
-  category: 'RC' | 'Steel' | 'Analysis' | 'Wind' | 'Geotech'
+  category: 'RC' | 'Steel' | 'Analysis' | 'Wind' | 'Geotech' | 'Seismic'
   title: string
   reference: string
   formula: string
@@ -127,6 +130,17 @@ const slopeFS = (() => {
   return { manual: tan(phiDeg) / tan(betaDeg), software: infiniteSlopeFS({ c: 0, phiDeg, gamma: 18, z: 3, betaDeg }) }
 })()
 
+// ── 11. NSCP 208 seismic static — period & base shear ────────────────────────
+const seismic = (() => {
+  const section: RectSection = { id: 'S', name: 's', b: 400, h: 400, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+  const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3, 3], section })
+  const r = computeSeismic(m, { Ca: 0.44, Cv: 0.64, I: 1, R: 8.5, dir: 'x' })!
+  return {
+    period: { manual: 0.0731 * r.hn ** 0.75, software: r.T },                 // T = Ct·hn^¾
+    baseShear: { manual: (0.64 * 1 * r.W) / (8.5 * r.T), software: r.Vraw },  // V = Cv·I·W/(R·T)
+  }
+})()
+
 export const VALIDATION_CASES: ValidationCase[] = [
   {
     id: 'rc-beam-mn', category: 'RC', title: 'Singly-reinforced beam — nominal moment',
@@ -192,5 +206,15 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'slope-fs', category: 'Geotech', title: 'Infinite-slope FS (cohesionless, dry)',
     reference: 'Soil mechanics', formula: 'FS = tanφ / tanβ',
     manual: slopeFS.manual, software: slopeFS.software, unit: '—', tol: 1e-9,
+  },
+  {
+    id: 'seismic-period', category: 'Seismic', title: 'NSCP 208 fundamental period (Method A)',
+    reference: 'NSCP 208.5.2.2', formula: 'T = Ct·hn^¾ (Ct = 0.0731)',
+    manual: seismic.period.manual, software: seismic.period.software, unit: 's', tol: 1e-6,
+  },
+  {
+    id: 'seismic-base-shear', category: 'Seismic', title: 'NSCP 208 static base shear',
+    reference: 'NSCP 208.5.2.1', formula: 'V = Cv·I·W / (R·T)',
+    manual: seismic.baseShear.manual, software: seismic.baseShear.software, unit: 'kN', tol: 1e-6,
   },
 ]
