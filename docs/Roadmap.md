@@ -34,21 +34,22 @@ Status: In Progress
 
 # Phase 2: Engineering Validation
 
-Target: v1.0
+Target: v1.0  ·  Status: In Progress
 
 Goals:
-- Complete validation manuals
-- Hand calculations
-- Excel verification sheets
-- ETABS comparisons
-- STAAD comparisons
-- NSCP example verification
+- [x] Hand calculations (engine-vs-closed-form benchmarks, `engine/validation.ts`)
+- [x] Automated validation tests (`validation.test.ts`; enforced in CI)
+- [x] Validation dashboard (`/validation` page with live per-module pass counts)
+- [ ] Validation Manual (docs/validation chapters; frame/modal/RS write-ups)
+- [ ] ETABS / STAAD comparisons (external-tool cross-checks)
+- [ ] Excel verification sheets
+- [ ] NSCP worked-example verification (208 base shear, etc.)
 
 Deliverables:
-- ValidationMap.md
-- Validation Manual PDF
-- Automated validation tests
-- Validation dashboard
+- [x] ValidationMap.md
+- [x] Automated validation tests
+- [x] Validation dashboard
+- [ ] Validation Manual PDF
 
 ---
 
@@ -57,16 +58,17 @@ Deliverables:
 Target: v2.0
 
 Structural:
-- [ ] Retaining Wall Design
-- [ ] Wind Load Generator
-- [ ] NSCP Seismic Wizard
-- [ ] Stair Design
+- [x] Retaining Wall Design (`/retaining-wall`, cantilever · Rankine)
+- [x] Wind Load Generator (NSCP §207B MWFRS + §207E.4 C&C, in 3D model space)
+- [ ] NSCP Seismic Wizard (engine exists in `engine/seismic.ts`; needs a guided UI)
+- [x] Stair Design (`/stair`, RC waist slab)
 - [ ] Water Tank Design
 
 Geotechnical:
-- [ ] Soil Nailing
-- [ ] Micropile Design
-- [ ] Shotcrete Design
+- [x] Geotechnical toolkit (`/geotech`: bearing capacity, earth pressure, slope)
+- [x] Soil Nailing (`/soil-nail`, FHWA GEC-7)
+- [x] Micropile Design (`/micropile`, FHWA-NHI-05-039)
+- [ ] Shotcrete Design (facing design — partly covered by soil-nail facing checks)
 - [ ] Rock Anchors
 - [ ] Pressure Grouting
 
@@ -74,7 +76,7 @@ Geotechnical:
 
 # Phase 4: Commercial Launch
 
-Target: v3.0
+Target: v3.0  ·  (business/infrastructure — owner-driven)
 
 - [ ] Authentication
 - [ ] Subscription System
