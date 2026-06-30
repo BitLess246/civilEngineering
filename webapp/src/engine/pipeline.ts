@@ -21,6 +21,7 @@ import { designSquareFooting, type SquareFootingResult } from './isolatedFooting
 import { designCombinedFooting, type CombinedFootingResult } from './combinedFooting'
 import { designSlabDDM, type SlabDesignResult } from './slabDDM'
 import { designShearWall, type ShearWallResult } from './shearWallDesign'
+import { checkModelSCWB, type SCWBJointRow } from './scwb'
 import { shapeByName, nextHeavierW, nextLighterW, type AiscShape } from './aiscSections'
 import { deriveWSection, beamFlexure, beamShear, columnAxial, combinedLoading } from './steelDesign'
 import { designBasePlate, adoptPlateThickness, type BasePlateResult } from './baseplate'
@@ -166,6 +167,9 @@ export interface StructureDesign {
   walls: WallScheduleRow[]
   footings: FootingScheduleRow[]
   combined: CombinedScheduleRow[]
+  /** Strong-column/weak-beam joint checks (NSCP §418.7.3.2); only populated for
+   *  a Special Moment Frame (`seismicSystem: 'smf'`), empty otherwise. */
+  scwb: SCWBJointRow[]
   totals: { concreteMembers: number; concreteSlabs: number; concrete: number; steelKg: number }
   orphanEdges: number
 }
@@ -653,10 +657,14 @@ function designFromRuns(
     beams, columns, steelBeams, steelColumns, basePlates,
     joints: [] as SteelJoint[],
     slabs, walls, footings, combined,
+    scwb: [] as SCWBJointRow[],
     totals: { concreteMembers, concreteSlabs, concrete: concreteMembers + concreteSlabs, steelKg },
     orphanEdges: br.orphanEdges.length,
   }
   partialDesign.joints = designSteelJoints(model, partialDesign)
+  // Strong-column/weak-beam is a Special-Moment-Frame requirement (§418.7.3.2).
+  if ((opts.seismicSystem ?? 'gravity') === 'smf')
+    partialDesign.scwb = checkModelSCWB(model, partialDesign)
   return partialDesign
 }
 

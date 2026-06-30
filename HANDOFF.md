@@ -189,10 +189,22 @@ complete**; Tier 3 items #10–13 are the remaining backlog.
   trimmed, tooltip shows full L); `depthWidth()` resolves AISC shape d×bf for steel
   so zones are correct for W/C/HSS sections, not the bounding-box b×h.
 
-## Tier 4 — Next phase (post STAAD-parity)
+## Tier 4 — ✅ COMPLETE (post STAAD-parity)
 
-The STAAD-parity roadmap is complete. This tier adds polish, completeness, and new
-capability across the four main engineering domains.
+The STAAD-parity roadmap is complete. This tier added polish, completeness, and new
+capability across the four main engineering domains. **All thirteen items (A1–E13)
+are now shipped and merged** (PRs through #273):
+
+- **A** — steel auto-optimizer, per-shape costed BOM, per-member `Lb` LTB bracing.
+- **B** — pushover P–M interaction surfaces, axial/shear hinges, second-order P-Δ
+  (gravity geometric stiffness; partial-step-to-target stop).
+- **C** — CSV accelerogram upload + Newmark response spectrum vs NSCP 208.
+- **D** — shell stress recovery + contour, n×n auto-meshing, and Wood-Armer slab
+  reinforcement from the shell FE moment field (`woodArmer.ts`, `shellModel.ts`).
+- **E** — NSCP §207E.4 Components & Cladding wall pressures; §418.7.3.2
+  strong-column/weak-beam joint check (`scwb.ts`) for Special Moment Frames.
+
+(The original per-item notes are retained below for reference / future extension.)
 
 ### Group A — Steel (optimizer + BOM + connections)
 1. **Steel section auto-optimizer** *(highest priority)*
@@ -262,4 +274,4 @@ capability across the four main engineering domains.
 
 **Order of implementation**: A1 → B4 → C7 → D9 → A2 → B5 → C8 → D10 → A3 → B6 → D11 → E12 → E13.
 
-_Tests at last handoff: **718 passing**; `tsc -b` clean; production build OK._
+_Tests after Tier 4 (E13): **845 passing**; `tsc -b` clean; production build OK._

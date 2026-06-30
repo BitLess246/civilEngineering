@@ -3320,6 +3320,42 @@ export default function ModelSpace() {
             </table>
           </div>}
 
+          {/* Strong-column/weak-beam joint check — NSCP §418.7.3.2 (SMF only) */}
+          {design.scwb.length > 0 && report !== 'draw-only' && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Strong-column / weak-beam — NSCP §418.7.3.2</h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Joint</th>
+                    <th className="py-1 pr-2 text-right font-semibold">ΣMnc (kN·m)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">ΣMnb (kN·m)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Ratio</th>
+                    <th className="py-1 pr-2 text-right font-semibold">≥ 6/5</th>
+                    <th className="py-1 font-semibold">Cols / Beams</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {design.scwb.map((j) => (
+                    <tr key={j.node} className="border-t border-slate-100">
+                      <td className="py-1 pr-2 font-medium">{j.node}</td>
+                      <td className="py-1 pr-2 text-right font-mono">{f1(j.sumMnc)}</td>
+                      <td className="py-1 pr-2 text-right font-mono">{f1(j.sumMnb)}</td>
+                      <td className="py-1 pr-2 text-right font-mono">{Number.isFinite(j.ratio) ? j.ratio.toFixed(2) : '∞'}</td>
+                      <td className={`py-1 pr-2 text-right font-semibold ${j.ok ? 'text-emerald-600' : 'text-red-600'}`}>{j.ok ? '✓' : '✗'}</td>
+                      <td className="py-1 text-slate-400">{j.nCols} / {j.nBeams}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-2 text-[10px] text-slate-400">
+                ΣMnc ≥ (6/5)·ΣMnb at each beam-column joint (§418.7.3.2). Column Mnc is taken at the design axial Pu;
+                beam Mnb from the heaviest designed tension steel. Failing joints need larger columns or lighter beams.
+                {design.scwb.every((j) => j.ok) ? ' All joints satisfy the requirement.' : ' ✗ One or more joints fail.'}
+              </p>
+            </div>
+          )}
+
           {/* Slab schedule (full width) — two-way DDM */}
           {design.slabs.length > 0 && report !== 'draw-only' && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
