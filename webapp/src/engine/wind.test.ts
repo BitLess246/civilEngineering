@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeWind, windKz, cpLeeward } from './wind'
+import { computeWind, windKz, cpLeeward, velocityPressure, gcpiMagnitude, wallGCp, computeCladding } from './wind'
 import { generateGridModel } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
 import { solveFrame3D, applyF3Combo } from './frame3d'
@@ -88,5 +88,64 @@ describe('NSCP 207B.4 — MWFRS directional wind on a frame', () => {
     expect(r.B).toBeCloseTo(12, 9)   // across-wind now the x extent
     expect(r.L).toBeCloseTo(5, 9)
     expect(r.loads.every((l) => (l as { Fz?: number }).Fz !== undefined)).toBe(true)
+  })
+})
+
+describe('NSCP 207E.4 — Components & Cladding wall pressures', () => {
+  it('GCpi magnitudes per Table 207A.11-1', () => {
+    expect(gcpiMagnitude('enclosed')).toBe(0.18)
+    expect(gcpiMagnitude('partially')).toBe(0.55)
+    expect(gcpiMagnitude('open')).toBe(0)
+  })
+
+  it('wall GCp endpoints at A₁ = 0.93 m² and A₂ = 46.5 m² (Fig 207E.4-1)', () => {
+    expect(wallGCp(4, 0.93)).toEqual({ pos: 1.0, neg: -1.1 })
+    expect(wallGCp(5, 0.93)).toEqual({ pos: 1.0, neg: -1.4 })
+    const big4 = wallGCp(4, 46.5), big5 = wallGCp(5, 46.5)
+    expect(big4.pos).toBeCloseTo(0.7, 9); expect(big4.neg).toBeCloseTo(-0.8, 9)
+    expect(big5.pos).toBeCloseTo(0.7, 9); expect(big5.neg).toBeCloseTo(-0.8, 9)
+  })
+
+  it('clamps outside the area band and interpolates log-linearly within', () => {
+    // below A₁ and above A₂ are constant
+    expect(wallGCp(5, 0.1)).toEqual(wallGCp(5, 0.93))
+    expect(wallGCp(5, 500)).toEqual(wallGCp(5, 46.5))
+    // log-midpoint A = √(0.93·46.5) ⇒ GCp = mean of the endpoints
+    const aMid = Math.sqrt(0.93 * 46.5)
+    expect(wallGCp(4, aMid).neg).toBeCloseTo((-1.1 + -0.8) / 2, 9)
+    expect(wallGCp(4, aMid).pos).toBeCloseTo((1.0 + 0.7) / 2, 9)
+  })
+
+  it('corner zone 5 always carries the larger suction', () => {
+    for (const a of [0.93, 5, 20, 46.5])
+      expect(wallGCp(5, a).neg).toBeLessThanOrEqual(wallGCp(4, a).neg + 1e-12)
+  })
+
+  it('computeCladding: p = qh·[(GCp) − (GCpi)] at the mean roof height', () => {
+    const m = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3.5, 3], section })
+    const r = computeCladding(m, { V: 50, exposure: 'C', dir: 'x', area: 1.0, enclosure: 'enclosed' })!
+    expect(r.h).toBeCloseTo(6.5, 9)
+    const qh = velocityPressure(6.5, 50, 'C')
+    expect(r.qh).toBeCloseTo(qh, 9)
+    expect(r.GCpi).toBe(0.18)
+    const g5 = wallGCp(5, 1.0)
+    expect(r.zone5.pPos).toBeCloseTo(qh * (g5.pos + 0.18), 9)
+    expect(r.zone5.pNeg).toBeCloseTo(qh * (g5.neg - 0.18), 9)
+    // suction (negative) is the controlling magnitude on a corner
+    expect(r.zone5.pNeg).toBeLessThan(r.zone4.pNeg)
+  })
+
+  it('partially enclosed raises the internal-pressure swing; open removes it', () => {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section })
+    const enc = computeCladding(m, { V: 45, exposure: 'B', dir: 'x', area: 2, enclosure: 'enclosed' })!
+    const par = computeCladding(m, { V: 45, exposure: 'B', dir: 'x', area: 2, enclosure: 'partially' })!
+    expect(par.zone4.pNeg).toBeLessThan(enc.zone4.pNeg)    // bigger suction
+    expect(par.zone4.pPos).toBeGreaterThan(enc.zone4.pPos) // bigger inward
+  })
+
+  it('returns null for a model with no height', () => {
+    const flat = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section })
+    flat.nodes = flat.nodes.map((n) => ({ ...n, y: 0 }))
+    expect(computeCladding(flat, { V: 50, exposure: 'C', dir: 'x', area: 1, enclosure: 'enclosed' })).toBeNull()
   })
 })

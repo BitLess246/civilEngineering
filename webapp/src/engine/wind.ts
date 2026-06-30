@@ -12,7 +12,10 @@
 // storey force uses only the external windward + leeward wall pressures. The
 // forces are emitted as NODE loads (category 'W') split across each level's
 // nodes — the existing NSCP combinations (1.2D+1.0W+…, 0.9D+1.0W) pick them up.
-// (Roof uplift, side-wall and components-&-cladding pressures are out of scope.)
+//
+// Components & Cladding (§207E.4, low-rise walls) is provided separately below
+// (`computeCladding`) for local cladding/curtain-wall pressures. Roof uplift and
+// MWFRS side-wall pressures remain out of scope.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, ModelLoad } from './model'
 
@@ -55,6 +58,13 @@ export function windKz(z: number, exposure: 'B' | 'C' | 'D'): number {
   return 2.01 * (zz / zg) ** (2 / a)
 }
 
+/** Velocity pressure qz = 0.613·Kz·Kzt·Kd·V² (207B.3-1), returned in kN/m². */
+export function velocityPressure(
+  z: number, V: number, exposure: 'B' | 'C' | 'D', Kzt = 1.0, Kd = 0.85,
+): number {
+  return (0.613 * windKz(z, exposure) * Kzt * Kd * V * V) / 1000
+}
+
 /** Leeward-wall external pressure coefficient Cp (Figure 207B.4-1), a function
  *  of the along-wind/across-wind ratio L/B: −0.5 (≤1), −0.3 (=2), −0.2 (≥4). */
 export function cpLeeward(LB: number): number {
@@ -81,7 +91,7 @@ export function computeWind(model: StructuralModel, p: WindParams): WindResult |
   const LB = L > 0 ? L / B : 1
 
   const Kd = p.Kd ?? 0.85, Kzt = p.Kzt ?? 1.0, G = p.G ?? 0.85
-  const q = (z: number) => (0.613 * windKz(z, p.exposure) * Kzt * Kd * p.V ** 2) / 1000 // kN/m²
+  const q = (z: number) => velocityPressure(z, p.V, p.exposure, Kzt, Kd) // kN/m²
   const qh = q(h)
   const CpLee = cpLeeward(LB)
   const pLee = qh * G * Math.abs(CpLee)              // leeward suction → adds to along-wind force
@@ -115,4 +125,84 @@ export function computeWind(model: StructuralModel, p: WindParams): WindResult |
     }
   }
   return { V: p.V, h, B, L, LB, Kd, G, qh, CpLee, levels, baseShear, loads }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// NSCP 2015 §207E — Components & Cladding (C&C), low-rise walls (h ≤ 18.3 m).
+//
+//   Design pressure  p = qh·[(GCp) − (GCpi)]   (kN/m²)        (207E.4-1)
+//   qh = velocity pressure at mean roof height h
+//   (GCp): external pressure coefficient by wall zone & effective wind area
+//          (Figure 207E.4-1); (GCpi): internal pressure coefficient
+//          (Table 207A.11-1: ±0.18 enclosed, ±0.55 partially enclosed, 0 open).
+//
+// Wall (GCp), all roof angles, h ≤ 18.3 m — log-linear in the effective wind
+// area A between A₁ = 0.93 m² and A₂ = 46.5 m² (constant outside that band):
+//   Zone 4 (interior):  + 1.0 → +0.7 ,  − 1.1 → −0.8
+//   Zone 5 (corner)  :  + 1.0 → +0.7 ,  − 1.4 → −0.8
+// The controlling pressures combine the worst internal pressure with each
+// external sign: p⁺ = qh·(GCp⁺ + |GCpi|),  p⁻ = qh·(GCp⁻ − |GCpi|).
+// (Roof C&C zones 1/2/3 and h > 18.3 m §207E.5 remain out of scope.)
+// ─────────────────────────────────────────────────────────────────────────
+export type WindEnclosure = 'enclosed' | 'partially' | 'open'
+
+/** Internal pressure coefficient magnitude |GCpi| (Table 207A.11-1). */
+export function gcpiMagnitude(e: WindEnclosure): number {
+  return e === 'enclosed' ? 0.18 : e === 'partially' ? 0.55 : 0
+}
+
+/** Effective-wind-area breakpoints for the wall C&C curves, m² (10 / 500 ft²). */
+const CC_A1 = 0.93
+const CC_A2 = 46.5
+
+/** Log-linear interpolation of a GCp value over the effective wind area A. */
+function ccInterp(v1: number, v2: number, area: number): number {
+  const a = Math.min(Math.max(area, CC_A1), CC_A2)
+  const t = (Math.log10(a) - Math.log10(CC_A1)) / (Math.log10(CC_A2) - Math.log10(CC_A1))
+  return v1 + (v2 - v1) * t
+}
+
+/** External wall (GCp) for C&C zone 4 (interior) or 5 (corner), by area (Fig 207E.4-1). */
+export function wallGCp(zone: 4 | 5, area: number): { pos: number; neg: number } {
+  const pos = ccInterp(1.0, 0.7, area)                       // both zones share +GCp
+  const neg = zone === 5 ? ccInterp(-1.4, -0.8, area) : ccInterp(-1.1, -0.8, area)
+  return { pos, neg }
+}
+
+/** C&C design pressures (kN/m²) for one wall zone at a given effective area. */
+export interface CladdingZonePressure {
+  zone: 4 | 5
+  GCpPos: number; GCpNeg: number
+  /** Positive (inward) and negative (suction, ≤ 0) design pressures, kN/m². */
+  pPos: number; pNeg: number
+}
+
+export interface CladdingParams extends WindParams {
+  /** Effective wind area of the component, m² (§207A.3); clamps to the curve band. */
+  area: number
+  enclosure: WindEnclosure
+}
+
+export interface CladdingResult {
+  h: number; qh: number; GCpi: number; area: number; enclosure: WindEnclosure
+  zone4: CladdingZonePressure; zone5: CladdingZonePressure
+}
+
+/**
+ * Components & Cladding wall pressures (NSCP §207E.4) for an enclosed/partially
+ * enclosed low-rise building. Returns null when the building height is non-positive.
+ * `dir` is irrelevant for C&C wall pressures (qh uses the mean roof height h).
+ */
+export function computeCladding(model: StructuralModel, p: CladdingParams): CladdingResult | null {
+  if (model.nodes.length === 0) return null
+  const h = Math.max(...model.nodes.map((n) => n.y))
+  if (!(h > 0)) return null
+  const Kd = p.Kd ?? 0.85, Kzt = p.Kzt ?? 1.0
+  const qh = velocityPressure(h, p.V, p.exposure, Kzt, Kd)
+  const gi = gcpiMagnitude(p.enclosure)
+  const zone = (z: 4 | 5): CladdingZonePressure => {
+    const g = wallGCp(z, p.area)
+    return { zone: z, GCpPos: g.pos, GCpNeg: g.neg, pPos: qh * (g.pos + gi), pNeg: qh * (g.neg - gi) }
+  }
+  return { h, qh, GCpi: gi, area: p.area, enclosure: p.enclosure, zone4: zone(4), zone5: zone(5) }
 }
