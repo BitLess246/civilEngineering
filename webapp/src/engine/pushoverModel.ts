@@ -14,7 +14,7 @@ import type { StructuralModel, RectSection } from './model'
 import { shapeByName } from './aiscSections'
 import { deriveWSection } from './steelDesign'
 import { modelToFrame3D } from './modelBridge'
-import { buildSeismicMass } from './modal'
+import { buildSeismicMass, GRAVITY } from './modal'
 import { pushoverAnalysis, type PushoverResult } from './pushover'
 
 /** Axial capacity for the P–M interaction surface, kN:
@@ -72,6 +72,10 @@ export interface PushoverModelOpts {
   targetDispRatio?: number
   /** Max hinge events (default 100). */
   maxEvents?: number
+  /** Include second-order P-Δ in the pushover tangent. The geometric stiffness is
+   *  built from the gravity weight (seismic mass × g, applied downward) and held
+   *  constant while the lateral pattern is scaled. Default false. */
+  pDelta?: boolean
 }
 
 export interface PushoverModelResult {
@@ -84,6 +88,8 @@ export interface PushoverModelResult {
   nHingeable: number
   /** Whether P–M interaction was applied (reduced plastic moment at hinges). */
   pmInteraction: boolean
+  /** Whether second-order P-Δ (gravity geometric stiffness) was included. */
+  pDelta: boolean
 }
 
 /**
@@ -132,10 +138,17 @@ export function runPushoverModel(model: StructuralModel, opts: PushoverModelOpts
 
   const targetDisp = totalHeight > 0 ? totalHeight * (opts.targetDispRatio ?? 0.04) : undefined
 
+  // P-Δ gravity preload: lumped seismic weight (mass[t]×g) applied downward (−Y).
+  const usePDelta = opts.pDelta ?? false
+  const gravity = usePDelta
+    ? [...mass].filter(([, mt]) => mt > 0).map(([node, mt]) => ({ node, Fy: -mt * GRAVITY }))
+    : undefined
+
   const result = pushoverAnalysis({
     nodes: br.nodes, members: br.members, supports: br.supports,
     Mp, pattern, dir, controlNode, targetDisp, maxEvents: opts.maxEvents ?? 100,
     ...(usePM ? { pm } : {}),
+    ...(usePDelta && gravity && gravity.length ? { pDelta: true, gravity } : {}),
   })
-  return { result, controlNode, totalHeight, nHingeable: Object.keys(Mp).length, pmInteraction: usePM }
+  return { result, controlNode, totalHeight, nHingeable: Object.keys(Mp).length, pmInteraction: usePM, pDelta: usePDelta }
 }

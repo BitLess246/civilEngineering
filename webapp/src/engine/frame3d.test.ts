@@ -176,6 +176,29 @@ describe('frame3d — P-Δ second order (vertical cantilever, L = 4)', () => {
     // second-order base moment = H·L + P·Δ > first-order H·L
     expect(Math.abs(r.members[0].My[0])).toBeGreaterThan(H * L)
   })
+
+  it('fixedAxial builds a CONSTANT geometric tangent (lateral-only solve, linear in load)', () => {
+    const P = 0.25 * Pe
+    // lateral-only load, geometric stiffness frozen at compression P (member axial
+    // tension +, so −P). Matches the self-consistent amplifier 1/(1−P/Pe).
+    const r = solveFrame3D(colNodes, colMem, sup, lat, { pDelta: true, fixedAxial: [-P] })!
+    const d2 = Math.abs(r.d[6 + 0])
+    expect(d2 / d1).toBeCloseTo(1 / (1 - 0.25), 1)
+    // constant tangent ⇒ drift scales linearly with lateral load (double H → double Δ)
+    const r2 = solveFrame3D(colNodes, colMem, sup,
+      [{ kind: 'node', node: 'top', Fx: 2 * H, cat: 'D' }], { pDelta: true, fixedAxial: [-P] })!
+    expect(Math.abs(r2.d[6 + 0]) / d2).toBeCloseTo(2, 6)
+  })
+
+  it('fixedAxial tension stiffens; amplification grows without bound toward Pcr', () => {
+    const rt = solveFrame3D(colNodes, colMem, sup, lat, { pDelta: true, fixedAxial: [+0.25 * Pe] })!
+    expect(Math.abs(rt.d[6 + 0])).toBeLessThan(d1)               // tension below first order
+    // compression marching toward the buckling load → drift amplifier blows up
+    const a25 = Math.abs(solveFrame3D(colNodes, colMem, sup, lat, { pDelta: true, fixedAxial: [-0.25 * Pe] })!.d[6 + 0]) / d1
+    const a90 = Math.abs(solveFrame3D(colNodes, colMem, sup, lat, { pDelta: true, fixedAxial: [-0.90 * Pe] })!.d[6 + 0]) / d1
+    expect(a90).toBeGreaterThan(a25)
+    expect(a90).toBeGreaterThan(5)                               // ~1/(1−0.9) order of magnitude
+  })
 })
 
 describe('serializePrecomp / deserializePrecomp — postMessage roundtrip', () => {

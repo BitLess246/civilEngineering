@@ -16,7 +16,16 @@ import type { ProgressFn } from './progress'
 import { triShell } from './shell'
 
 /** Second-order (P-Δ) options for the frame solve. */
-export interface PDeltaOpts { pDelta?: boolean; maxIter?: number; tol?: number }
+export interface PDeltaOpts {
+  pDelta?: boolean; maxIter?: number; tol?: number
+  /** Constant geometric-stiffness axial state, per member (tension +), kN. When
+   *  set together with `pDelta`, Kg is built ONCE from these forces (no
+   *  self-consistent iteration) so the tangent Kt = Ke + Kg is constant — the
+   *  ETABS-style "P-Δ from gravity loads" used by the pushover, where the axial
+   *  pattern is frozen at a gravity preload while the lateral load is scaled.
+   *  Length must equal the member count; a singular tangent returns null. */
+  fixedAxial?: number[]
+}
 
 export interface F3Node { id: string; x: number; y: number; z: number }
 export interface F3Member {
@@ -783,8 +792,54 @@ export function solveWithGeometry(
   if (free.length > 0) {
     if (!Kff) return null   // singular stiffness
     const Ff = free.map((dof) => F[dof])
+    const nf = free.length
 
-    if (diaT && diaNi !== undefined) {
+    // Free-block tangent Kt = Ke + Σ Kg(N): geometric stiffness assembled from a
+    // per-member axial force (tension +). Shared by the self-consistent P-Δ
+    // iteration and the fixed-axial (constant geometric tangent) pushover path.
+    const assembleKtff = (axialOf: (mi: number) => number): number[][] => {
+      const Ktff: number[][] = Array.from({ length: nf }, (_, i) => [...Kff_raw[i]])
+      for (let mi = 0; mi < geoms.length; mi++) {
+        const g = geoms[mi]
+        const kgg = mul(mul(transpose(g.T), kgLocal(axialOf(mi), g.L)), g.T)
+        for (let a = 0; a < 12; a++) {
+          const ia = freeIdx.get(g.dofs[a])
+          if (ia === undefined) continue
+          for (let b = 0; b < 12; b++) {
+            const ib = freeIdx.get(g.dofs[b])
+            if (ib === undefined) continue
+            Ktff[ia][ib] += kgg[a][b]
+          }
+        }
+      }
+      return Ktff
+    }
+    // Representative member axial (tension +) recovered from the current state d.
+    const axialFromState = (mi: number): number => {
+      const g = geoms[mi], ml = mloads[mi]
+      const dl = matVec(g.T, g.dofs.map((dof) => d[dof]))
+      const f = matVec(g.kl, dl).map((v, k) => v - ml.feq[k])
+      return (f[6] - f[0]) / 2
+    }
+
+    if (opts?.pDelta && opts.fixedAxial) {
+      // Constant geometric tangent from a prescribed axial state (ETABS-style
+      // "P-Δ from gravity"): one solve, no self-consistent iteration. A singular
+      // tangent (elastic instability under the preload) returns null.
+      const fixed = opts.fixedAxial
+      const Ktff = assembleKtff((mi) => fixed[mi] ?? 0)
+      if (diaT && diaNi !== undefined) {
+        const fac = luFactor(applyTtoK(Ktff, diaT, diaNi))
+        if (!fac) return null
+        const dn = applyTrecover(luSolve(fac, applyTtoLoad(Ff, diaT, diaNi)), diaT)
+        free.forEach((dof, k) => (d[dof] = dn[k]))
+      } else {
+        const fac = luFactor(Ktff)
+        if (!fac) return null
+        const dn = luSolve(fac, Ff)
+        free.forEach((dof, k) => (d[dof] = dn[k]))
+      }
+    } else if (diaT && diaNi !== undefined) {
       // Constrained solve: transform load to independent DOFs, solve, recover full d_f
       const Ff_ind = applyTtoLoad(Ff, diaT, diaNi)
       const d_ind = luSolve(Kff, Ff_ind)   // Kff is already K_ind = T^T K T
@@ -795,31 +850,11 @@ export function solveWithGeometry(
       if (opts?.pDelta) {
         const maxIter = opts.maxIter ?? 20
         const tol = opts.tol ?? 1e-5
-        const nf = free.length
         for (let it = 0; it < maxIter; it++) {
-          const Ktff: number[][] = Array.from({ length: nf }, (_, i) => [...Kff_raw[i]])
-          for (let mi = 0; mi < geoms.length; mi++) {
-            const g = geoms[mi], ml = mloads[mi]
-            const de = g.dofs.map((dof) => d[dof])
-            const dl = matVec(g.T, de)
-            const f = matVec(g.kl, dl).map((v, k) => v - ml.feq[k])
-            const N = (f[6] - f[0]) / 2
-            const kgg = mul(mul(transpose(g.T), kgLocal(N, g.L)), g.T)
-            for (let a = 0; a < 12; a++) {
-              const ia = freeIdx.get(g.dofs[a])
-              if (ia === undefined) continue
-              for (let b = 0; b < 12; b++) {
-                const ib = freeIdx.get(g.dofs[b])
-                if (ib === undefined) continue
-                Ktff[ia][ib] += kgg[a][b]
-              }
-            }
-          }
-          const Kt_ind = applyTtoK(Ktff, diaT, diaNi)
+          const Kt_ind = applyTtoK(assembleKtff(axialFromState), diaT, diaNi)
           const Ktff_fac = luFactor(Kt_ind)
           if (!Ktff_fac) break
-          const dn_ind = luSolve(Ktff_fac, Ff_ind)
-          const dn = applyTrecover(dn_ind, diaT)
+          const dn = applyTrecover(luSolve(Ktff_fac, Ff_ind), diaT)
           let num = 0, den = 0
           free.forEach((dof, k) => { num += (dn[k] - d[dof]) ** 2; den += dn[k] ** 2 })
           free.forEach((dof, k) => (d[dof] = dn[k]))
@@ -835,27 +870,8 @@ export function solveWithGeometry(
       if (opts?.pDelta) {
         const maxIter = opts.maxIter ?? 20
         const tol = opts.tol ?? 1e-5
-        const nf = free.length
         for (let it = 0; it < maxIter; it++) {
-          const Ktff: number[][] = Array.from({ length: nf }, (_, i) => [...Kff_raw[i]])
-          for (let mi = 0; mi < geoms.length; mi++) {
-            const g = geoms[mi], ml = mloads[mi]
-            const de = g.dofs.map((dof) => d[dof])
-            const dl = matVec(g.T, de)
-            const f = matVec(g.kl, dl).map((v, k) => v - ml.feq[k])
-            const N = (f[6] - f[0]) / 2                     // representative axial, tension +
-            const kgg = mul(mul(transpose(g.T), kgLocal(N, g.L)), g.T)
-            for (let a = 0; a < 12; a++) {
-              const ia = freeIdx.get(g.dofs[a])
-              if (ia === undefined) continue
-              for (let b = 0; b < 12; b++) {
-                const ib = freeIdx.get(g.dofs[b])
-                if (ib === undefined) continue
-                Ktff[ia][ib] += kgg[a][b]
-              }
-            }
-          }
-          const Ktff_fac = luFactor(Ktff)
+          const Ktff_fac = luFactor(assembleKtff(axialFromState))
           if (!Ktff_fac) break                               // elastic instability — retain last d
           const dn = luSolve(Ktff_fac, Ff)
           let num = 0, den = 0

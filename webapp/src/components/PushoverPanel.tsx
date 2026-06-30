@@ -68,7 +68,7 @@ export function PushoverPanel({ res, dirLabel }: { res: PushoverModelResult; dir
         <CapacityCurve res={res} />
       </div>
       <Row label="Peak base shear" value={`${peakV.toFixed(1)} kN`}
-        sub={res.result.mechanism ? 'collapse mechanism' : 'target reached'} />
+        sub={`${res.result.mechanism ? 'collapse mechanism' : 'target reached'}${res.pDelta ? ' · P-Δ on' : ''}`} />
       <Row label="Peak roof displacement" value={`${(peakD * 1000).toFixed(1)} mm`}
         sub={`drift ${(drift * 100).toFixed(2)}% of H`} />
       <Row label="Plastic hinges formed" value={`${nHinges}`}

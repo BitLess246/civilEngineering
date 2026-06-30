@@ -16,6 +16,13 @@
 //   4. Repeat until a mechanism forms (singular tangent / no positive event) or
 //      a target roof displacement is reached.
 //
+// Second-order P-Δ (optional, `pDelta`): the geometric stiffness Kg is built once
+// from a constant gravity-preload axial state and added to the elastic tangent at
+// every event (ETABS-style "P-Δ from gravity loads"). This keeps each event's
+// solve linear in λ — so the event-to-event scheme is unchanged — while softening
+// the lateral stiffness: drift is amplified, hinges form at lower λ, and the
+// collapse base shear drops (the post-yield branch can turn negative).
+//
 // The result is the capacity (pushover) curve: base shear V vs. control-node
 // displacement Δ, piecewise-linear with a break at each hinge event. With
 // geometry linear this matches rigid-plastic limit analysis (collapse load).
@@ -65,6 +72,17 @@ export interface PushoverInput {
   targetDisp?: number
   /** Maximum number of hinge events before stopping (default 100). */
   maxEvents?: number
+  /** Include second-order P-Δ effects in the pushover tangent. The geometric
+   *  stiffness is built once from the `gravity` preload axial state and held
+   *  constant while the lateral pattern is scaled (ETABS-style "P-Δ from gravity
+   *  loads"). Softens lateral stiffness, amplifies drift, and lowers the collapse
+   *  load — the post-yield branch can turn negative. Default false (first-order). */
+  pDelta?: boolean
+  /** Constant gravity loads (kN) that generate the P-Δ axial state. Used only when
+   *  `pDelta` is on; absent/empty ⇒ no geometric softening. Typically downward
+   *  vertical node loads (Fy < 0). Not added to the lateral load vector — they only
+   *  set the axial forces for the geometric stiffness. */
+  gravity?: { node: string; Fx?: number; Fy?: number; Fz?: number }[]
 }
 
 /** Hinge mode: plastic moment, axial yield, or shear yield. */
@@ -182,6 +200,19 @@ export function pushoverAnalysis(input: PushoverInput): PushoverResult {
 
   const ctrlIdx = input.nodes.findIndex((n) => n.id === input.controlNode)
 
+  // P-Δ: representative member axial (tension +) from a gravity preload, solved
+  // once on the un-hinged elastic frame and held constant. Feeds the geometric
+  // stiffness so the lateral tangent softens as gravity grows (ETABS linearization).
+  let fixedAxial: number[] | undefined
+  if (input.pDelta && input.gravity && input.gravity.length > 0) {
+    const gLoads: F3Load[] = input.gravity.map((g) => ({
+      kind: 'node', node: g.node, Fx: g.Fx ?? 0, Fy: g.Fy ?? 0, Fz: g.Fz ?? 0, cat: 'D',
+    }))
+    const resG = solveWithGeometry(precomputeFrame(input.nodes, input.members, input.supports), gLoads)
+    if (resG) fixedAxial = resG.members.map((mr) => mr.N.reduce((s, v) => s + v, 0) / mr.N.length)
+  }
+  const solveOpts = fixedAxial ? { pDelta: true, fixedAxial } : undefined
+
   let lambda = 0, roofDisp = 0
   let mechanism = false
   let dmax0 = 0   // elastic peak |displacement| baseline, for mechanism detection
@@ -200,7 +231,7 @@ export function pushoverAnalysis(input: PushoverInput): PushoverResult {
     }
 
     const precomp = precomputeFrame(input.nodes, members, input.supports)
-    const res = solveWithGeometry(precomp, refLoads)
+    const res = solveWithGeometry(precomp, refLoads, solveOpts)
     if (!res) { mechanism = true; break }   // singular tangent → mechanism
 
     // Mechanism guard: luFactor's pivot tolerance can let a near-singular
@@ -250,6 +281,24 @@ export function pushoverAnalysis(input: PushoverInput): PushoverResult {
       if (dl > TOL && dl < dLam) { dLam = dl; crit = s }
     }
     if (!crit || !isFinite(dLam)) { mechanism = true; break }   // no further events → mechanism
+
+    // If the next hinge would overshoot the target drift, take a PARTIAL step to
+    // the target (no new hinge) and stop. This is standard pushover practice and
+    // also discards a spurious large-Δλ increment when the tangent has nearly
+    // collapsed to a mechanism (e.g. under P-Δ softening) — the overshoot point
+    // would otherwise pollute the capacity curve with a meaningless base shear.
+    if (input.targetDisp !== undefined && Math.abs(dRoof) > TOL) {
+      const dLamToTarget = (Math.abs(input.targetDisp) - Math.abs(roofDisp)) / Math.abs(dRoof)
+      if (dLamToTarget >= 0 && dLamToTarget < dLam) {
+        lambda += dLamToTarget
+        roofDisp += dRoof * dLamToTarget
+        curve.push({
+          event, lambda, baseShear: lambda * Vref, roofDisp,
+          newHinge: null, numHinges: slots.filter((s) => s.hinged).length,
+        })
+        break
+      }
+    }
 
     // advance cumulative state by Δλ
     lambda += dLam

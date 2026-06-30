@@ -86,6 +86,24 @@ describe('runPushoverModel', () => {
     const on = runPushoverModel(model, { dir: 0, pmInteraction: true })!
     expect(peak(on)).toBeLessThanOrEqual(peak(off) + 1e-6)
   })
+
+  it('pDelta defaults off; flag is reported in the result', () => {
+    expect(runPushoverModel(model, { dir: 0 })!.pDelta).toBe(false)
+    expect(runPushoverModel(model, { dir: 0, pDelta: true })!.pDelta).toBe(true)
+  })
+
+  it('P-Δ lowers (or matches) the first-yield base shear from gravity softening', () => {
+    // compare at the first yield event, where both analyses share the same (elastic)
+    // hinge state — P-Δ amplifies the demand so yield arrives at a lower load factor.
+    // (Peak-over-curve isn't a clean invariant: the two runs can terminate on
+    // different events — a mechanism vs a drift-target partial step.)
+    const firstYield = (r: NonNullable<ReturnType<typeof runPushoverModel>>) =>
+      Math.abs(r.result.curve[1].baseShear)
+    const off = runPushoverModel(model, { dir: 0, pDelta: false })!
+    const on = runPushoverModel(model, { dir: 0, pDelta: true })!
+    expect(firstYield(on)).toBeLessThanOrEqual(firstYield(off) + 1e-6)
+    expect(firstYield(on)).toBeGreaterThan(firstYield(off) * 0.9)   // small gravity ⇒ close
+  })
 })
 
 describe('axialCapacity', () => {

@@ -790,6 +790,7 @@ export default function ModelSpace() {
   const [poRho, setPoRho] = useState(1.5)        // concrete tension-steel ratio, %
   const [poMpScale, setPoMpScale] = useState(1)
   const [poPM, setPoPM] = useState(false)        // apply P–M interaction at hinges
+  const [poPDelta, setPoPDelta] = useState(false) // include second-order P-Δ (gravity)
   const [po, setPo] = useState<PushoverModelResult | null>(null)
   // Time-history (modal Newmark-β) inputs + result
   const [thKind, setThKind] = useState<GroundMotionKind>('rampedSine')
@@ -925,7 +926,7 @@ export default function ModelSpace() {
     if (!model || busy || meshErrors) return
     run('pushover', {
       model,
-      opts: { dir: poDir === 'x' ? 0 : 2, pattern: poPattern, rho: poRho / 100, mpScale: poMpScale, pmInteraction: poPM },
+      opts: { dir: poDir === 'x' ? 0 : 2, pattern: poPattern, rho: poRho / 100, mpScale: poMpScale, pmInteraction: poPM, pDelta: poPDelta },
     }).then((r) => setPo((r as { pushover: PushoverModelResult | null }).pushover))
       .catch((e) => console.error('pushover failed', e))
   }
@@ -2865,12 +2866,19 @@ export default function ModelSpace() {
                     onChange={(e) => setPoPM(e.target.checked)} />
                   <span>P–M interaction (reduce plastic moment Mpc(P) at each hinge)</span>
                 </label>
+                <label className="col-span-full flex items-center gap-2 text-sm">
+                  <input type="checkbox" disabled={!model} checked={poPDelta}
+                    onChange={(e) => setPoPDelta(e.target.checked)} />
+                  <span>P-Δ second order (gravity geometric stiffness softens the capacity curve)</span>
+                </label>
                 <p className="col-span-full text-[11px] text-slate-500">
                   Event-to-event concentrated plastic hinges (a hinge = a member-end moment release).
                   Capacity curve = base shear vs roof displacement; pushes to a 4% drift target or a collapse
                   mechanism. Mp: steel Fy·Zx; concrete ρ·b·d²·fy·(1−0.59ρfy/f′c).
                   {' '}P–M interaction (opt-in): hinges yield at the reduced Mpc(P) — steel AISC App. 1
                   (1.18Mp(1−P/Py) major, 1.19Mp(1−(P/Py)²) minor); concrete ACI §22.4 linear chord Mp(1−P/Pn0).
+                  {' '}P-Δ (opt-in): a constant geometric stiffness from the gravity weight (mass×g) softens the
+                  lateral tangent — drift is amplified, hinges form earlier, and the collapse base shear drops.
                 </p>
                 <div className="col-span-full">
                   <button type="button" onClick={runPushover} disabled={!model || !!busy || meshErrors} className={btn('from-[#ea580c] to-[#c2410c]')}>
