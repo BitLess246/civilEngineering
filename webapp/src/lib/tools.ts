@@ -27,6 +27,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/truss',         name: 'Truss Space',        sub: 'Plane truss solver'    },
       { to: '/steel',         name: 'Steel Design',       sub: 'AISC 360-16 LRFD'      },
       { to: '/slab-design',   name: 'Slab Design',        sub: 'Two-way DDM · ACI 318'  },
+      { to: '/stair',         name: 'Stair Design',       sub: 'RC waist slab · NSCP'   },
       { to: '/torsion',       name: 'Torsion Design',     sub: 'RC torsion · ACI 318-14' },
       { to: '/dev-length',    name: 'Dev & Splice',       sub: 'ACI 318-14 §25.4–25.5'   },
       { to: '/punching-shear', name: 'Punching Shear',   sub: 'Two-way §22.6 · ACI 318' },
