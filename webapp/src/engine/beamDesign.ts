@@ -13,6 +13,8 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { rhoMin } from './flexure'
 import { beta1 } from './loads'
+import { Ec as concreteEc } from './slabDeflection'
+import { crackedInertia, deflCoeff, longTermMultiplier, minBeamThickness, type BeamSupport } from './beamDeflection'
 
 export interface BeamDesignInput {
   b: number            // web width, mm
@@ -282,72 +284,71 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
 export interface BeamDeflectionInput {
   b: number; h: number; d: number   // section, mm
   As: number                        // tension steel area, mm²
-  AsPrime?: number                  // compression steel area for λΔ, mm² (default 0)
+  AsPrime?: number                  // compression steel area, mm² (cracked Icr + λΔ; default 0)
+  dPrime?: number                   // compression-steel depth d′, mm (default 0)
   fc: number                        // MPa
+  fy?: number                       // for the min-thickness fy factor (default 420)
   lambda?: number                   // lightweight factor (default 1)
-  span: number                      // simple span, m
+  span: number                      // span, m
+  support?: BeamSupport             // support condition (default 'simple')
   wD: number; wL: number           // unfactored service loads, kN/m
 }
 
 export interface BeamDeflectionResult {
   Ig: number; Icr: number; Mcr: number; Ie: number   // mm⁴
+  cracked: boolean
   deltaD: number; deltaL: number                       // immediate, mm
   lambdaDelta: number; deltaLong: number               // long-term dead, mm
   deltaTotal: number                                   // long-term dead + immediate live, mm
   limitL360: number; limitL240: number                 // mm
   liveOK: boolean; totalOK: boolean
+  hMin: number; hMinOK: boolean; support: BeamSupport   // Table 409.3.1.1
 }
 
 export function beamServiceDeflection(i: BeamDeflectionInput): BeamDeflectionResult {
   const { b, h, d, As, fc, span } = i
   const lambda = i.lambda ?? 1
   const AsPrime = i.AsPrime ?? 0
+  const support = i.support ?? 'simple'
   const Lmm = span * 1000
 
-  // Ec = 4700√f'c (MPa), n = Es/Ec
-  const Ec = 4700 * Math.sqrt(Math.max(fc, 1))
-  const n = 200_000 / Ec
+  const Ec = concreteEc(fc)                // 4700√f′c, MPa
   const Ig = (b * h ** 3) / 12
 
-  // Cracked transformed Icr (singly-reinforced — conservative when A's > 0)
-  const rhoN = (n * As) / (b * d)
-  const kNA = Math.sqrt(2 * rhoN + rhoN ** 2) - rhoN
-  const kd = kNA * d
-  const Icr = (b * kd ** 3) / 3 + n * As * (d - kd) ** 2
+  // Cracked transformed Icr — now accounts for compression steel A′s at d′.
+  const Icr = crackedInertia({ b, d, As, fc, AsPrime, dPrime: i.dPrime })
 
   // Cracking moment: fr = 0.62λ√f'c (§419.2.3.1); Mcr = fr·Ig/yt
   const fr = 0.62 * lambda * Math.sqrt(Math.max(fc, 1))
   const Mcr = (fr * Ig) / (h / 2) / 1e6   // kN·m
 
-  // Service moment at full load (simple span): Ma = w·L²/8
+  // Service moment at full load (simple span): Ma = w·L²/8 (conservative for Ie)
   const Ma = ((i.wD + i.wL) * span ** 2) / 8   // kN·m
 
   // Branson effective Ie (§24.2.3.5)
-  const Ie = (() => {
-    if (Ma <= 0 || Ma <= Mcr) return Ig
-    const r = (Mcr / Ma) ** 3
-    return Math.min(Ig, r * Ig + (1 - r) * Icr)
-  })()
+  const cracked = Ma > Mcr && Ma > 0
+  const Ie = cracked ? Math.min(Ig, (Mcr / Ma) ** 3 * Ig + (1 - (Mcr / Ma) ** 3) * Icr) : Ig
 
-  // Immediate deflections: δ = 5wL⁴/(384EI)
-  // w [kN/m] = w [N/mm] numerically; E [MPa = N/mm²]; I [mm⁴]; L [mm] → δ [mm]
-  const coef = (5 * Lmm ** 4) / (384 * 200_000 * Ie)
+  // Immediate deflection δ = k·w·L⁴/(384·Ec·Ie), k by support condition.
+  // w [kN/m] = w [N/mm] numerically; Ec [MPa]; I [mm⁴]; L [mm] → δ [mm].
+  const coef = (deflCoeff(support) * Lmm ** 4) / (384 * Ec * Ie)
   const deltaD = i.wD * coef
   const deltaL = i.wL * coef
 
-  // Long-term multiplier: §24.2.4.1.1  λΔ = ξ/(1+50ρ')  ξ = 2.0 (≥5yr)
-  const rhoP = AsPrime > 0 ? AsPrime / (b * d) : 0
-  const lambdaDelta = 2.0 / (1 + 50 * rhoP)
+  // Long-term multiplier λΔ = ξ/(1+50ρ′), ξ = 2.0 (≥5 yr) — §24.2.4.1.1.
+  const lambdaDelta = longTermMultiplier(AsPrime / (b * d))
   const deltaLong = lambdaDelta * deltaD
   const deltaTotal = deltaLong + deltaL   // §24.2.2 Table R24.2.2
 
   const limitL360 = Lmm / 360
   const limitL240 = Lmm / 240
+  const hMin = minBeamThickness(span, support, i.fy ?? 420)
 
   return {
-    Ig, Icr, Mcr, Ie,
+    Ig, Icr, Mcr, Ie, cracked,
     deltaD, deltaL, lambdaDelta, deltaLong, deltaTotal,
     limitL360, limitL240,
     liveOK: deltaL <= limitL360, totalOK: deltaTotal <= limitL240,
+    hMin, hMinOK: h >= hMin - 1e-9, support,
   }
 }
