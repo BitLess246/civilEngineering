@@ -35,6 +35,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/geotech',          name: 'Geotechnical',     sub: 'Bearing · earth · slope'  },
       { to: '/soil-nail',        name: 'Soil-Nail Wall',   sub: 'FHWA · tensile · pullout' },
       { to: '/micropile',        name: 'Micropile',        sub: 'FHWA · structural · bond' },
+      { to: '/rock-anchor',      name: 'Rock Anchor',      sub: 'PTI · tendon · bond'      },
       { to: '/load-combinations', name: 'Load Combinations', sub: 'NSCP 2015 §203.3 LRFD'   },
     ],
   },
