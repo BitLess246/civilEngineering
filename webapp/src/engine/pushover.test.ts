@@ -136,6 +136,66 @@ describe('pushover — fixed-base portal frame', () => {
   })
 })
 
+describe('pushover — P-Δ second order (gravity softens the capacity curve)', () => {
+  // horizontal cantilever (member along X, fixed at i): lateral tip load in −Y
+  // bends about Mz with the base hinge at end i. A tip axial −X load is the
+  // gravity preload that compresses the member and softens that bending plane.
+  const L = 3, Mp = 60
+  const nodes: F3Node[] = [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: L, y: 0, z: 0 }]
+  const members: F3Member[] = [{ id: 'm', i: 'a', j: 'b', ...sec }]
+  const supports: F3Support[] = [{ node: 'a', fixity: 'fixed' }]
+  const base: PushoverInput = {
+    nodes, members, supports, Mp: { m: Mp }, pattern: { b: -1 }, dir: 1, controlNode: 'b',
+  }
+  // effective Euler load of the Mz plane from a first-order unit lateral solve
+  const lin = solveFrame3D(nodes, members, supports, [{ kind: 'node', node: 'b', Fy: -1, cat: 'E' }])!
+  const EIeff = L ** 3 / (3 * Math.abs(lin.d[6 + 1]))
+  const Pe = (Math.PI ** 2 * EIeff) / (4 * L ** 2)
+
+  const fy = pushoverAnalysis(base).curve[1]
+
+  it('first-order capacity = Mp / L with no gravity', () => {
+    expect(Math.abs(fy.baseShear)).toBeCloseTo(Mp / L, 4)
+  })
+
+  it('base moment = lateral V·L plus the P·Δ second-order term (≈ Mp at yield)', () => {
+    const P = 0.3 * Pe
+    const y = pushoverAnalysis({ ...base, pDelta: true, gravity: [{ node: 'b', Fx: -P }] }).curve[1]
+    // first-order would reach Mp on V·L alone; with P-Δ the lateral moment is well
+    // short of Mp and the axial-through-drift term P·Δ makes up the balance. The
+    // consistent (cubic) Kg distributes that term, so the tip-string sum V·L + P·Δ
+    // recovers Mp only approximately (within ~7%).
+    expect(Math.abs(y.baseShear) * L).toBeLessThan(Mp * 0.9)
+    const stringTotal = Math.abs(y.baseShear) * L + P * Math.abs(y.roofDisp)
+    expect(stringTotal).toBeGreaterThan(Mp * 0.9)
+    expect(stringTotal).toBeLessThanOrEqual(Mp + 1e-6)
+  })
+
+  it('P-Δ lowers the collapse base shear and amplifies roof drift', () => {
+    const P = 0.3 * Pe
+    const y = pushoverAnalysis({ ...base, pDelta: true, gravity: [{ node: 'b', Fx: -P }] }).curve[1]
+    expect(Math.abs(y.baseShear)).toBeLessThan(Math.abs(fy.baseShear) * 0.95)
+    expect(Math.abs(y.roofDisp)).toBeGreaterThan(Math.abs(fy.roofDisp))
+  })
+
+  it('heavier gravity ⇒ lower collapse base shear (monotone softening)', () => {
+    const light = pushoverAnalysis({ ...base, pDelta: true, gravity: [{ node: 'b', Fx: -0.2 * Pe }] })
+    const heavy = pushoverAnalysis({ ...base, pDelta: true, gravity: [{ node: 'b', Fx: -0.5 * Pe }] })
+    expect(Math.abs(heavy.curve[1].baseShear)).toBeLessThan(Math.abs(light.curve[1].baseShear))
+  })
+
+  it('pDelta on but no gravity ⇒ identical to first order', () => {
+    const r = pushoverAnalysis({ ...base, pDelta: true })
+    expect(Math.abs(r.curve[1].baseShear)).toBeCloseTo(Math.abs(fy.baseShear), 8)
+    expect(Math.abs(r.curve[1].roofDisp)).toBeCloseTo(Math.abs(fy.roofDisp), 8)
+  })
+
+  it('gravity given but pDelta off ⇒ gravity ignored (first order)', () => {
+    const r = pushoverAnalysis({ ...base, gravity: [{ node: 'b', Fx: -0.5 * Pe }] })
+    expect(Math.abs(r.curve[1].baseShear)).toBeCloseTo(Math.abs(fy.baseShear), 8)
+  })
+})
+
 describe('pushover — guards', () => {
   const nodes: F3Node[] = [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: 3, y: 0, z: 0 }]
   const members: F3Member[] = [{ id: 'm', i: 'a', j: 'b', ...sec }]
