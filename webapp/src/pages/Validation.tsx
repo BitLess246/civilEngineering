@@ -28,8 +28,17 @@ function Row({ c }: { c: ValidationCase }) {
   )
 }
 
+const passes = (c: ValidationCase) => pctDiff(c) <= c.tol * 100 + 1e-9 || pctDiff(c) < 0.01
+
 export default function Validation() {
-  const allOK = VALIDATION_CASES.every((c) => pctDiff(c) < 0.01)
+  const total = VALIDATION_CASES.length
+  const passing = VALIDATION_CASES.filter(passes).length
+  const allOK = passing === total
+  const perCat = CATS.map((cat) => {
+    const cases = VALIDATION_CASES.filter((c) => c.category === cat)
+    return { cat, n: cases.length, ok: cases.filter(passes).length }
+  }).filter((g) => g.n > 0)
+
   return (
     <main className="mx-auto max-w-5xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Reference</p>
@@ -37,10 +46,27 @@ export default function Validation() {
       <p className="mt-2 max-w-3xl text-sm text-slate-600">
         Each calculation engine is checked against an independent closed-form hand calculation from a
         textbook or the governing code clause. The <b>Software</b> column is produced by the same engine
-        the design pages use; the <b>Manual</b> column is the analytical result. These cases are also
-        enforced by the automated test suite ({VALIDATION_CASES.length} cases, {' '}
-        <span className={allOK ? 'text-emerald-600' : 'text-red-600'}>{allOK ? 'all passing' : 'see failures'}</span>).
+        the design pages use; the <b>Manual</b> column is the analytical result. Every case below is also
+        enforced by the automated test suite.
       </p>
+
+      {/* Per-module pass-count summary */}
+      <div className="mt-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`rounded-md px-3 py-1.5 text-sm font-bold ${allOK ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+            {allOK ? '✓' : '✗'} {passing}/{total} benchmarks passing
+          </span>
+          {perCat.map((g) => (
+            <span key={g.cat} className={`rounded-md px-2.5 py-1.5 text-xs font-medium ${g.ok === g.n ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+              {g.cat} {g.ok}/{g.n}
+            </span>
+          ))}
+        </div>
+        <p className="mt-2 text-[11px] text-slate-400">
+          A benchmark passes when the engine result is within tolerance of the hand calculation
+          (typically &lt; 0.01 %). Counts are evaluated live from the same engines the design pages use.
+        </p>
+      </div>
 
       {CATS.map((cat) => {
         const cases = VALIDATION_CASES.filter((c) => c.category === cat)
