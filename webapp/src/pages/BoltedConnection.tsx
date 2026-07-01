@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { solveBoltedConnection } from '../engine/boltedConnection'
 import { ConnectionDrawing } from '../components/ConnectionDrawing'
-import type { BoltPos } from '../engine/steelDesign'
+import { outOfPlaneBoltGroup, pryingAction } from '../engine/steelDesign'
+import type { BoltPos, BoltGrade } from '../engine/steelDesign'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -22,7 +23,21 @@ export default function BoltedConnection() {
   const [allow, setAllow] = useState(150)
   const [nShear, setNShear] = useState(1)
 
+  // Out-of-plane eccentricity (§J3.7) + prying (§J3.9)
+  const [showOOP, setShowOOP] = useState(false)
+  const [eOut, setEOut] = useState(75)     // mm, load offset ⟂ to the bolt plane
+  const [Vu, setVu] = useState(120)        // kN, factored shear
+  const [grade, setGrade] = useState<BoltGrade>('A325M')
+  const [threadIn, setThreadIn] = useState(true)
+  const [bDist, setBDist] = useState(45)   // bolt CL → face of stem
+  const [aDist, setADist] = useState(40)   // bolt CL → free edge
+  const [pitch, setPitch] = useState(70)   // tributary pitch
+  const [tf, setTf] = useState(12)         // fitting thickness
+  const [fy, setFy] = useState(248)        // fitting Fy
+
   const r = solveBoltedConnection({ bolts, dia, allowableStress: allow, nShear, load: { P, angleDeg: angle, px, py } })
+  const oop = outOfPlaneBoltGroup(r.geom, r.bolts, eOut, Vu, grade, dia, threadIn)
+  const pry = pryingAction(oop.Tmax, oop.phiTn_crit, bDist, aDist, pitch, tf, dia, fy)
 
   const setBolt = (i: number, k: 'x' | 'y', v: number) =>
     setBolts((bs) => bs.map((b, j) => (j === i ? { ...b, [k]: v } : b)))
@@ -110,6 +125,98 @@ export default function BoltedConnection() {
           </div>
         </section>
       </div>
+
+      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <label className="flex cursor-pointer items-center gap-2">
+          <input type="checkbox" checked={showOOP} onChange={(e) => setShowOOP(e.target.checked)} className="h-4 w-4" />
+          <span className="text-[1.05rem] font-bold text-[#0056b3]">Out-of-plane eccentricity &amp; prying (§J3.7 / §J3.9)</span>
+        </label>
+        {showOOP && (
+          <>
+            <p className="mt-2 max-w-3xl text-sm text-slate-600">
+              A shear Vu applied at a stand-off e_out (⟂ to the bolt plane) puts the group in bending
+              M_op = Vu·e_out. Tension develops in the upper bolts, T_i = M_op·yᵢ/Σyᵢ², combined with the
+              in-plane shear via the reduced tensile strength φF′_nt (§J3.7). Prying (§J3.9, AISC Part 9
+              T-stub) amplifies the critical bolt tension by Q.
+            </p>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {([['e_out (mm)', eOut, setEOut], ['Vu (kN)', Vu, setVu],
+                ['b: bolt→stem (mm)', bDist, setBDist], ['a: bolt→edge (mm)', aDist, setADist],
+                ['Pitch p (mm)', pitch, setPitch], ['Fitting t_f (mm)', tf, setTf],
+                ['Fitting F_y (MPa)', fy, setFy]] as const).map(([lbl, val, set]) => (
+                <label key={lbl} className="flex flex-col text-sm">
+                  <span className="mb-1 text-slate-600">{lbl}</span>
+                  <input type="number" value={val} onChange={(e) => set(num(e.target.value))} className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+                </label>
+              ))}
+              <label className="flex flex-col text-sm">
+                <span className="mb-1 text-slate-600">Bolt grade</span>
+                <select value={grade} onChange={(e) => setGrade(e.target.value as BoltGrade)} className="rounded-md border border-slate-300 px-2.5 py-1.5">
+                  <option value="A325M">A325M</option><option value="A490M">A490M</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm sm:col-span-1">
+                <input type="checkbox" checked={threadIn} onChange={(e) => setThreadIn(e.target.checked)} className="h-4 w-4" />
+                <span className="text-slate-600">Threads in shear plane (N)</span>
+              </label>
+            </div>
+
+            <div className="mt-5 grid gap-5 lg:grid-cols-[1.2fr_1fr]">
+              <div>
+                <h3 className="mb-2 text-sm font-bold text-[#0056b3]">Bolt tensions (M_op = {f2(oop.M_op / 1000)} kN·m)</h3>
+                <table className="w-full text-xs">
+                  <thead className="text-slate-500"><tr className="text-left"><th className="pr-2 py-1">Bolt</th><th className="pr-2">yᵢ</th><th className="pr-2 text-right">T (kN)</th><th className="pr-2 text-right">f_v</th><th className="pr-2 text-right">φF′_nt</th><th className="pr-2 text-right">φTn</th><th className="text-right">T/φTn</th></tr></thead>
+                  <tbody>
+                    {oop.bolts.map((b) => {
+                      const crit = b.id === oop.critical
+                      return (
+                        <tr key={b.id} className={`border-t border-slate-100 ${crit ? 'bg-red-50' : ''} ${!b.ok ? 'text-red-600' : ''}`}>
+                          <td className="pr-2 py-1 font-medium">{b.id}{crit ? ' ▲' : ''}</td>
+                          <td className="pr-2">{f2(b.yi)}</td>
+                          <td className="pr-2 text-right font-mono">{f2(b.T)}</td>
+                          <td className="pr-2 text-right font-mono">{f2(b.frv)}</td>
+                          <td className="pr-2 text-right font-mono">{f2(b.phiFnt_prime)}</td>
+                          <td className="pr-2 text-right font-mono">{f2(b.phiTn)}</td>
+                          <td className={`text-right font-mono font-semibold ${b.ok ? 'text-emerald-600' : 'text-red-600'}`}>{f2(b.util)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+                <div className="mt-2 text-xs text-slate-500">
+                  Σyᵢ² = {f2(oop.sumYi2 / 1e3)} ×10³ mm² · F_nt = {oop.Fnt} · F_nv = {oop.Fnv} MPa ·
+                  <span className={oop.ok ? ' text-emerald-600' : ' text-red-600'}> combined {oop.ok ? 'OK ✓' : 'OVERSTRESS ✗'}</span>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+                <h3 className="mb-1 text-sm font-bold text-[#0056b3]">Prying — critical bolt {oop.critical}</h3>
+                {[['Required tension T', `${f2(oop.Tmax)} kN`],
+                  ['Available φBn', `${f2(oop.phiTn_crit)} kN`],
+                  ['b′ = b − d_b/2', `${f2(pry.b_prime)} mm`],
+                  ['a′ = min(a, 1.25b)', `${f2(pry.a_prime)} mm`],
+                  ['ρ = b′/a′', f2(pry.rho)],
+                  ['δ = 1 − d_h/p', f2(pry.delta)],
+                  ['α (prying fraction)', f2(pry.alpha)],
+                  ['Prying force Q', `${f2(pry.Q)} kN`],
+                  ['Total T + Q', `${f2(pry.T_total)} kN`],
+                  ['t_req (with prying)', `${f2(pry.t_req)} mm`],
+                  ['t₀ (no prying)', `${f2(pry.t_no_prying)} mm`]].map(([k, v]) => (
+                  <div key={k} className="flex justify-between border-t border-slate-100 py-1"><span className="text-slate-500">{k}</span><span className="font-mono">{v}</span></div>
+                ))}
+                <div className="mt-2 flex items-baseline justify-between rounded-lg bg-blue-50 p-2">
+                  <span className="text-sm font-semibold text-[#0056b3]">T + Q ≤ φBn</span>
+                  <span className={`font-mono text-sm font-bold ${pry.ok ? 'text-emerald-600' : 'text-red-600'}`}>{pry.ok ? 'OK ✓' : 'NG ✗'}</span>
+                </div>
+                <p className="mt-2 text-[11px] text-slate-400">
+                  Provide fitting t_f ≥ t_req to carry T + Q; t_f ≥ t₀ eliminates prying (α → 0).
+                </p>
+              </div>
+            </div>
+          </>
+        )}
+      </section>
     </main>
   )
 }
