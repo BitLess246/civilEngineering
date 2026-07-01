@@ -11,12 +11,11 @@
  */
 import type { StructuralModel, Node as ModelNode } from './model'
 import type { StructureDesign, SteelBeamScheduleRow } from './pipeline'
+import { boltGeomFromPositions, eccentricBoltGroup, type BoltPos } from './steelDesign'
 
 // ── Material constants ──────────────────────────────────────────────────────
 const PHI_SHEAR_BOLT = 0.75           // AISC §J3.6
 const FNV_A325 = 495                  // MPa  (threads excluded from shear plane)
-const A_M20   = Math.PI / 4 * 20 * 20  // 314.16 mm² — M20 bolt
-const PHI_RN_BOLT_KN = PHI_SHEAR_BOLT * FNV_A325 * A_M20 / 1000  // ≈ 116.5 kN/bolt
 
 const PHI_PLATE_YIELD = 1.0           // AISC §J4.2 shear yielding
 const FY_PLATE = 248                  // MPa  A36
@@ -38,6 +37,9 @@ function adoptPlate(t: number): number {
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export type ConnFaceType = 'flange' | 'web'
+/** Which beam element(s) the connection engages: shear-tab bolts the beam WEB;
+ *  a moment connection welds the beam FLANGES and shear-tabs the web. */
+export type BeamAttachment = 'web' | 'web+flanges'
 export type ConnType     = 'shear-tab' | 'moment-flange-weld'
 export type SpanDir      = 'x' | 'z' | 'other'
 
@@ -46,7 +48,17 @@ export interface BoltGroup {
   dia: number       // bolt diameter mm (20 = M20)
   pitchMm: number   // bolt pitch mm
   edgeMm: number    // edge distance mm
-  phiRnKn: number   // design strength per bolt, kN
+  phiRnKn: number   // design shear strength per bolt, kN
+  /** In-plane eccentricity of the reaction from the bolt-group centroid, mm
+   *  (the weld/support line is x = 0). Drives the elastic bolt-force method. */
+  ecc: number
+  /** Per-bolt positions in the connection plane (absolute plate mm). These can be
+   *  laid out automatically OR supplied CUSTOM per bolt via `designBolts`. */
+  locations: BoltPos[]
+  /** Maximum bolt resultant from the elastic (vector) eccentric method, kN. */
+  Rmax: number
+  criticalId: string   // id of the most-loaded bolt
+  ok: boolean          // Rmax ≤ φRn
 }
 
 export interface ShearTab {
@@ -69,7 +81,8 @@ export interface BeamConnection {
   beamId: string
   role: string
   spanDir: SpanDir
-  faceType: ConnFaceType  // which column face the beam frames into
+  faceType: ConnFaceType       // which column element the beam frames into (flange/web)
+  beamElement: BeamAttachment  // which beam element(s) the connection engages
   connType: ConnType
   Vu: number              // design shear kN
   Mu: number              // design moment kN·m
@@ -92,14 +105,63 @@ export interface SteelJoint {
 
 // ── Core design functions ─────────────────────────────────────────────────────
 
-/** Design a single-plate shear tab for the given end shear Vu (kN). */
-function designShearTab(Vu: number): ShearTab {
-  const pitchMm = 75, edgeMm = 40
+// Conventional single-plate weld-to-bolt distance (bolt line offset from the
+// column face / weld line), mm — the in-plane eccentricity source.
+const A_WELD_TO_BOLT = 60
 
-  // bolt group (single shear)
-  const nBolts = Math.max(2, Math.ceil(Vu / PHI_RN_BOLT_KN))
+/** Per-bolt design shear strength (single shear plane), kN. */
+function phiBoltShear(dia: number): number {
+  const Ab = (Math.PI / 4) * dia * dia
+  return (PHI_SHEAR_BOLT * FNV_A325 * Ab) / 1000
+}
+
+/** Single-column bolt layout: n bolts at `pitch`, first `edge` from the top,
+ *  column at horizontal offset `a` from the weld line. Absolute plate mm. */
+function boltColumn(n: number, pitchMm: number, edgeMm: number, aMm: number): BoltPos[] {
+  return Array.from({ length: n }, (_, i) => ({ id: `B${i + 1}`, x: aMm, y: edgeMm + i * pitchMm }))
+}
+
+/**
+ * Design the connection bolt group for a vertical reaction Vu (kN) by the
+ * elastic (vector) eccentric method — each bolt carries direct shear V/n plus a
+ * torsional component from the reaction acting at eccentricity `ecc` from the
+ * group centroid. Auto-lays a single column and grows it until the most-loaded
+ * bolt is within φRn; alternatively pass CUSTOM `locations` to place each bolt
+ * anywhere in the plane (the weld/support line is x = 0).
+ */
+export function designBolts(Vu: number, opts: {
+  dia?: number; pitchMm?: number; edgeMm?: number; aMm?: number; locations?: BoltPos[];
+} = {}): BoltGroup {
+  const dia = opts.dia ?? 20
+  const pitchMm = opts.pitchMm ?? 75, edgeMm = opts.edgeMm ?? 40, aMm = opts.aMm ?? A_WELD_TO_BOLT
+  const phiRn = phiBoltShear(dia)
+
+  let locations: BoltPos[]
+  if (opts.locations && opts.locations.length > 0) {
+    locations = opts.locations
+  } else {
+    let n = Math.max(2, Math.ceil(Vu / phiRn))
+    for (let it = 0; it < 30; it++) {
+      const g = boltGeomFromPositions(boltColumn(n, pitchMm, edgeMm, aMm))
+      if (eccentricBoltGroup(g, Vu, 0, aMm, 0, phiRn, dia, 10).Rmax <= phiRn + 1e-6 || n >= 24) break
+      n++
+    }
+    locations = boltColumn(n, pitchMm, edgeMm, aMm)
+  }
+
+  const geom = boltGeomFromPositions(locations)
+  const ecc = Math.abs(geom.Cx)   // centroid-to-weld-line (x = 0) distance
+  const res = eccentricBoltGroup(geom, Vu, 0, ecc, 0, phiRn, dia, 10)
+  return {
+    n: locations.length, dia, pitchMm, edgeMm, phiRnKn: phiRn,
+    ecc, locations, Rmax: res.Rmax, criticalId: res.critical, ok: res.Rmax <= phiRn + 1e-6,
+  }
+}
+
+/** Design a single-plate shear tab sized to a bolt column of `nBolts`. */
+function designShearTab(Vu: number, nBolts: number, pitchMm = 75, edgeMm = 40): ShearTab {
   const hMm = (nBolts - 1) * pitchMm + 2 * edgeMm      // plate height
-  const wMm = 80                                          // plate width (horiz.)
+  const wMm = A_WELD_TO_BOLT + 2 * edgeMm               // plate width (weld line → bolt + edge)
 
   // plate thickness from shear yielding (governs over rupture for typical cases)
   const tReq = Vu * 1000 / (PHI_PLATE_YIELD * 0.6 * FY_PLATE * hMm)
@@ -213,18 +275,19 @@ export function designSteelJoints(
         // Connection type: use moment connection when moment demand is significant
         const useMoment = phiMn > 1e-9 && (Mu / phiMn) > MOMENT_CONN_THRESHOLD
 
-        const tab = designShearTab(Vu)
-        const bolts: BoltGroup = {
-          n: Math.max(2, Math.ceil(Vu / PHI_RN_BOLT_KN)),
-          dia: 20, pitchMm: 75, edgeMm: 40, phiRnKn: PHI_RN_BOLT_KN,
-        }
+        // Elastic eccentric bolt group (each bolt placed & checked individually).
+        const bolts = designBolts(Vu, { dia: 20 })
+        const tab = designShearTab(Vu, bolts.n)
 
         let flangeConn: FlangeMomentConn | undefined
         if (useMoment && row) {
           flangeConn = designFlangeConn(Mu, row.d, row.tf, row.bf)
         }
 
-        const boltOk = bolts.n * PHI_RN_BOLT_KN >= Vu - 1e-6
+        // Which beam element(s) the connection engages: web only for a shear tab;
+        // web (shear) + both flanges (CJP welds) for a moment connection.
+        const beamElement: BeamAttachment = useMoment ? 'web+flanges' : 'web'
+
         const tabOk  = tab.phiVn >= Vu - 1e-6 && tab.phiWeldVn >= Vu - 1e-6
         const flangeOk = !flangeConn || flangeConn.ok
 
@@ -233,12 +296,13 @@ export function designSteelJoints(
           role: mem.role,
           spanDir: sDir,
           faceType,
+          beamElement,
           connType: useMoment ? 'moment-flange-weld' : 'shear-tab',
           Vu, Mu,
           bolts,
           tab,
           flange: flangeConn,
-          ok: boltOk && tabOk && flangeOk,
+          ok: bolts.ok && tabOk && flangeOk,
         })
       }
 

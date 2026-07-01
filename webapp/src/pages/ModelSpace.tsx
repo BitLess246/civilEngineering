@@ -3834,7 +3834,7 @@ export default function ModelSpace() {
                     <th className="py-1 pr-2 font-semibold">Col. shape</th>
                     <th className="py-1 pr-2 font-semibold">Beam</th>
                     <th className="py-1 pr-2 font-semibold">Dir</th>
-                    <th className="py-1 pr-2 font-semibold">Face</th>
+                    <th className="py-1 pr-2 font-semibold">Connects (col → beam)</th>
                     <th className="py-1 pr-2 font-semibold">Type</th>
                     <th className="py-1 pr-2 text-right font-semibold">Vu (kN)</th>
                     <th className="py-1 pr-2 text-right font-semibold">Mu (kN·m)</th>
@@ -3860,15 +3860,19 @@ export default function ModelSpace() {
                         )}
                         <td className="py-1 pr-2 font-medium">{c.beamId}</td>
                         <td className="py-1 pr-2 uppercase">{c.spanDir}</td>
-                        <td className={`py-1 pr-2 font-semibold ${c.faceType === 'flange' ? 'text-blue-700' : 'text-slate-600'}`}>
-                          {c.faceType}
+                        <td className="py-1 pr-2 text-[11px]">
+                          <span className={c.faceType === 'flange' ? 'font-semibold text-blue-700' : 'text-slate-600'}>col {c.faceType}</span>
+                          <span className="text-slate-400"> → beam {c.beamElement}</span>
                         </td>
                         <td className="py-1 pr-2 text-[11px]">
                           {c.connType === 'moment-flange-weld' ? 'Moment (CJP flange)' : 'Shear tab'}
                         </td>
                         <td className="py-1 pr-2 text-right">{f1(c.Vu)}</td>
                         <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
-                        <td className="py-1 pr-2 text-[11px]">{c.bolts.n} × M{c.bolts.dia} A325</td>
+                        <td className="py-1 pr-2 text-[11px]">
+                          {c.bolts.n} × M{c.bolts.dia} A325
+                          <div className="text-[10px] text-slate-400">R={f1(c.bolts.Rmax)}/{f1(c.bolts.phiRnKn)} kN · e={Math.round(c.bolts.ecc)}mm</div>
+                        </td>
                         <td className="py-1 pr-2 text-[11px]">{c.tab.t}×{Math.round(c.tab.hMm)} mm</td>
                         <td className="py-1 pr-2 text-[11px]">
                           {c.tab.weldSizeMm}mm E70
