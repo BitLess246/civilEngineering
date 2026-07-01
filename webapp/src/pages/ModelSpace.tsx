@@ -1869,6 +1869,28 @@ export default function ModelSpace() {
                             <span className="text-[10px] text-slate-400">§F2 LTB brace spacing — blank = full member length (conservative)</span>
                           </label>
                         )}
+                        <div className="mt-2 border-t border-violet-200 pt-2">
+                          <p className="mb-1 text-[11px] font-semibold text-violet-800">End connections — {sel.id}</p>
+                          <div className="flex flex-wrap gap-3">
+                            {(['iEnd', 'jEnd'] as const).map((end) => (
+                              <label key={end} className="flex items-center gap-1.5 text-[11px] text-slate-700">
+                                <span>{end === 'iEnd' ? 'i' : 'j'}-end</span>
+                                <select value={sel.connections?.[end] ?? 'fixed'}
+                                  onChange={(e) => {
+                                    const k = e.target.value as 'simple' | 'moment' | 'fixed'
+                                    const next = { ...(sel.connections ?? {}), [end]: k }
+                                    updMember(sel.id, { connections: next })
+                                  }}
+                                  className="rounded border border-violet-200 px-1 py-0.5">
+                                  <option value="fixed">Continuous</option>
+                                  <option value="simple">Simple (pin)</option>
+                                  <option value="moment">Moment (rigid)</option>
+                                </select>
+                              </label>
+                            ))}
+                          </div>
+                          <span className="mt-1 block text-[10px] text-slate-400">Simple = shear-only pin (releases My, Mz — the connection hinge); Moment = rigid; drives both analysis and steel connection design.</span>
+                        </div>
                       </div>
                     )
                   })()}
@@ -3866,6 +3888,7 @@ export default function ModelSpace() {
                         </td>
                         <td className="py-1 pr-2 text-[11px]">
                           {c.connType === 'moment-flange-weld' ? 'Moment (CJP flange)' : 'Shear tab'}
+                          <div className="text-[10px] text-slate-400">{c.pinned ? 'pin — releases Mz' : 'rigid'}</div>
                         </td>
                         <td className="py-1 pr-2 text-right">{f1(c.Vu)}</td>
                         <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>

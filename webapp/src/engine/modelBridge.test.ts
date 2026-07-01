@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { modelToFrame3D } from './modelBridge'
+import { modelToFrame3D, effectiveReleases } from './modelBridge'
 import { emptyModel, type StructuralModel, type RectSection } from './model'
 
 const section: RectSection = {
@@ -120,5 +120,31 @@ describe('modelToFrame3D — shell elements', () => {
     const br = modelToFrame3D(model, { useShells: false })
     expect(br.shells).toEqual([])
     expect(br.loads.some((l) => l.kind === 'member-vdl')).toBe(true)
+  })
+})
+
+describe('connection type → member releases (force behaviour)', () => {
+  it("a 'simple' end releases the bending moments My, Mz (a pin)", () => {
+    const rel = effectiveReleases({ connections: { iEnd: 'simple' } })
+    expect(rel.iEnd).toMatchObject({ My: true, Mz: true })
+    expect(rel.iEnd?.Fx).toBeFalsy()      // shear/axial still transferred
+    expect(rel.jEnd).toBeUndefined()
+  })
+
+  it("'moment' and 'fixed' ends stay continuous (no release)", () => {
+    expect(effectiveReleases({ connections: { iEnd: 'moment', jEnd: 'fixed' } })).toEqual({})
+  })
+
+  it('explicit releases are unioned with connection-implied ones', () => {
+    const rel = effectiveReleases({ releases: { jEnd: { Fx: true } }, connections: { jEnd: 'simple' } })
+    expect(rel.jEnd).toMatchObject({ Fx: true, My: true, Mz: true })
+  })
+
+  it('the bridge pins a simple-ended beam in the assembled frame', () => {
+    const m = baseModel()
+    m.members[0].connections = { jEnd: 'simple' }
+    const br = modelToFrame3D(m)
+    expect(br.members[0].relJ?.[5]).toBe(true)   // Mz released at j
+    expect(br.members[0].relJ?.[4]).toBe(true)   // My released at j
   })
 })

@@ -4,7 +4,7 @@
 // and land on the matching edge members as vdl/udl gravity loads (categories
 // preserved) — the load path, automated.
 // ─────────────────────────────────────────────────────────────────────────
-import type { StructuralModel, RectSection, MemberReleases, Plate } from './model'
+import type { StructuralModel, RectSection, MemberReleases, MemberConnections, ConnectionKind, Plate } from './model'
 import type { F3Node, F3Member, F3Support, F3Load, F3DiaphragmGroup, F3Shell } from './frame3d'
 import { rectJ } from './frame3d'
 import { buildDiaphragmGroups } from './diaphragm'
@@ -146,6 +146,27 @@ function edgeLoadToMember(ld: BeamLoad, memberId: string, sameDir: boolean, L: n
   return null
 }
 
+/** A 'simple' (shear-only) connection pins the end: release the bending moments. */
+function connEnd(kind?: ConnectionKind): MemberReleases['iEnd'] {
+  return kind === 'simple' ? { My: true, Mz: true } : undefined
+}
+
+/** Combine explicit releases with the connection-type-implied releases (union:
+ *  either source releasing a DOF releases it). A 'simple' connection therefore
+ *  turns the member end into a pin, matching the connection's real behaviour. */
+export function effectiveReleases(m: { releases?: MemberReleases; connections?: MemberConnections }): MemberReleases {
+  const merge = (a?: MemberReleases['iEnd'], b?: MemberReleases['iEnd']): MemberReleases['iEnd'] | undefined => {
+    if (!a && !b) return undefined
+    return {
+      Fx: a?.Fx || b?.Fx, Fy: a?.Fy || b?.Fy, Fz: a?.Fz || b?.Fz,
+      Mx: a?.Mx || b?.Mx, My: a?.My || b?.My, Mz: a?.Mz || b?.Mz,
+    }
+  }
+  const iEnd = merge(m.releases?.iEnd, connEnd(m.connections?.iEnd))
+  const jEnd = merge(m.releases?.jEnd, connEnd(m.connections?.jEnd))
+  return { ...(iEnd ? { iEnd } : {}), ...(jEnd ? { jEnd } : {}) }
+}
+
 /** Map MemberReleases flags to F3Member relI / relJ arrays. */
 function releaseFlags(rel: MemberReleases | undefined): Pick<F3Member, 'relI' | 'relJ'> {
   if (!rel) return {}
@@ -177,7 +198,7 @@ export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): Bridg
     const offJ = m.offsets?.jEnd ?? a?.offJ
     return {
       id: m.id, i: m.i, j: m.j, ...(secById.get(m.section) ?? fallback),
-      ...releaseFlags(m.releases),
+      ...releaseFlags(effectiveReleases(m)),
       ...(offI ? { offI } : {}),
       ...(offJ ? { offJ } : {}),
     }
