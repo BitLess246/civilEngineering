@@ -68,7 +68,7 @@ Geotechnical:
 - [x] Geotechnical toolkit (`/geotech`: bearing capacity, earth pressure, slope)
 - [x] Soil Nailing (`/soil-nail`, FHWA GEC-7)
 - [x] Micropile Design (`/micropile`, FHWA-NHI-05-039)
-- [ ] Shotcrete Design (facing design — partly covered by soil-nail facing checks)
+- [x] Shotcrete Design (`/shotcrete-facing`; FHWA GEC-7 facing flexure + punching)
 - [ ] Rock Anchors
 - [ ] Pressure Grouting
 
