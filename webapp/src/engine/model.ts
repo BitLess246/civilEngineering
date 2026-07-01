@@ -43,12 +43,26 @@ export interface MemberOffsets {
   jEnd?: [number, number, number]
 }
 
+/** Physical connection idealisation at a member end, which drives BOTH the
+ *  analysis (releases) and the steel connection design:
+ *   'simple' — shear-only (shear tab / web plate / cleat): a PIN — releases the
+ *              bending moments My, Mz at that end (the "schematic hinge").
+ *   'moment' — rigid moment connection (end plate / flange weld): no release.
+ *   'fixed'  — fully continuous (default for a monolithic joint): no release. */
+export type ConnectionKind = 'simple' | 'moment' | 'fixed'
+
+/** Per-end connection type. Absent ⇒ continuous. */
+export interface MemberConnections { iEnd?: ConnectionKind; jEnd?: ConnectionKind }
+
 export interface Member {
   id: string
   i: string; j: string          // node ids
   role: MemberRole
   section: string               // RectSection id
   releases?: MemberReleases
+  /** Physical connection type per end — pins a 'simple' end (releases My, Mz) and
+   *  tags 'moment' ends for moment-connection design. Absent ⇒ continuous. */
+  connections?: MemberConnections
   offsets?: MemberOffsets
   /** Per-member rigid-zone factor override (0–1); falls back to the model factor.
    *  0 excludes this member from automatic rigid end zones. */

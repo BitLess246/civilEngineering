@@ -84,6 +84,9 @@ export interface BeamConnection {
   faceType: ConnFaceType       // which column element the beam frames into (flange/web)
   beamElement: BeamAttachment  // which beam element(s) the connection engages
   connType: ConnType
+  /** True when the connection releases beam-end bending (a shear/simple pin) —
+   *  the analysis idealisation the joint implies. False for a rigid moment conn. */
+  pinned: boolean
   Vu: number              // design shear kN
   Mu: number              // design moment kN·m
   bolts: BoltGroup
@@ -272,8 +275,13 @@ export function designSteelJoints(
         const Mu = row?.Mu ?? 0
         const phiMn = row?.phiMn ?? 1
 
-        // Connection type: use moment connection when moment demand is significant
-        const useMoment = phiMn > 1e-9 && (Mu / phiMn) > MOMENT_CONN_THRESHOLD
+        // The user's explicit connection type at the end framing into THIS node
+        // governs; otherwise infer from the moment demand. A 'simple' end is a
+        // pin (shear tab); 'moment' forces a moment connection.
+        const end = mem.i === nodeId ? 'iEnd' : 'jEnd'
+        const connKind = mem.connections?.[end]
+        const useMoment = connKind === 'moment'
+          || (connKind !== 'simple' && phiMn > 1e-9 && (Mu / phiMn) > MOMENT_CONN_THRESHOLD)
 
         // Elastic eccentric bolt group (each bolt placed & checked individually).
         const bolts = designBolts(Vu, { dia: 20 })
@@ -298,6 +306,7 @@ export function designSteelJoints(
           faceType,
           beamElement,
           connType: useMoment ? 'moment-flange-weld' : 'shear-tab',
+          pinned: !useMoment,
           Vu, Mu,
           bolts,
           tab,
