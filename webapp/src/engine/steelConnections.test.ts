@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { designStructure } from './pipeline'
-import { designSteelJoints } from './steelConnections'
+import { designSteelJoints, designBolts } from './steelConnections'
+import type { BoltPos } from './steelDesign'
 import type { RectSection } from './model'
 
 const steelSection: RectSection = {
@@ -42,11 +43,25 @@ describe('steel joint / connection design', () => {
     }
   })
 
-  it('bolt group: n × φRn ≥ Vu for each connection', () => {
+  it('bolt group: elastic eccentric method sizes each bolt within φRn', () => {
     for (const j of joints) {
       for (const c of j.connections) {
-        expect(c.bolts.n * c.bolts.phiRnKn).toBeGreaterThanOrEqual(c.Vu - 1e-6)
-        expect(c.bolts.dia).toBe(20)              // M20
+        expect(c.bolts.dia).toBe(20)                       // M20
+        expect(c.bolts.locations.length).toBe(c.bolts.n)   // one position per bolt
+        expect(c.bolts.Rmax).toBeLessThanOrEqual(c.bolts.phiRnKn + 1e-6)
+        expect(c.bolts.ok).toBe(true)
+        expect(c.bolts.ecc).toBeGreaterThan(0)             // real in-plane eccentricity
+        // the eccentric peak force is at least the direct share V/n
+        expect(c.bolts.Rmax).toBeGreaterThanOrEqual(c.Vu / c.bolts.n - 1e-6)
+      }
+    }
+  })
+
+  it('connected elements are reflected on both sides (column face → beam element)', () => {
+    for (const j of joints) {
+      for (const c of j.connections) {
+        expect(['flange', 'web']).toContain(c.faceType)
+        expect(c.beamElement).toBe(c.connType === 'moment-flange-weld' ? 'web+flanges' : 'web')
       }
     }
   })
@@ -83,5 +98,39 @@ describe('steel joint / connection design', () => {
     rcModel.loads = buildGravityLoads(rcModel, 4.8, 2.4)
     const rcDesign = designStructure(rcModel, soil)!
     expect(designSteelJoints(rcModel, rcDesign)).toHaveLength(0)
+  })
+})
+
+describe('designBolts — elastic eccentric bolt group', () => {
+  it('lays out one column, each bolt within φRn, ecc = centroid-to-weld distance', () => {
+    const g = designBolts(200)
+    expect(g.n).toBeGreaterThanOrEqual(2)
+    expect(g.locations).toHaveLength(g.n)
+    expect(g.ecc).toBeCloseTo(Math.abs(g.locations[0].x), 6)   // single column → Cx = bolt x
+    expect(g.Rmax).toBeLessThanOrEqual(g.phiRnKn + 1e-6)
+    expect(g.ok).toBe(true)
+  })
+
+  it('eccentricity raises the peak bolt force above the concentric share', () => {
+    const conc = designBolts(200, { aMm: 0 })    // no eccentricity ⇒ Rmax = V/n
+    const ecc = designBolts(200, { aMm: 120 })   // large eccentricity
+    expect(conc.Rmax).toBeCloseTo(200 / conc.n, 4)
+    expect(ecc.Rmax).toBeGreaterThan(200 / ecc.n)
+  })
+
+  it('accepts CUSTOM per-bolt locations and evaluates each', () => {
+    const locations: BoltPos[] = [
+      { id: 'B1', x: 50, y: 0 }, { id: 'B2', x: 50, y: 70 },
+      { id: 'B3', x: 50, y: 140 }, { id: 'B4', x: 110, y: 70 },   // an off-column bolt
+    ]
+    const g = designBolts(150, { locations })
+    expect(g.n).toBe(4)
+    expect(g.locations).toEqual(locations)
+    expect(g.Rmax).toBeGreaterThan(0)
+    expect(g.criticalId).toMatch(/^B[1-4]$/)
+  })
+
+  it('heavier shear needs more bolts', () => {
+    expect(designBolts(400).n).toBeGreaterThan(designBolts(150).n)
   })
 })

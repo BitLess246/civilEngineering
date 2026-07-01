@@ -291,6 +291,20 @@ export function boltGroupGeom(
   return { bolts, n, Cx, Cy, Ip, plateW: 2 * ex + (nCols - 1) * sx, plateH: 2 * ey + (nRows - 1) * sy }
 }
 
+/** Bolt-group geometry (centroid + polar inertia Ip) from ARBITRARY bolt
+ *  positions — lets a connection be designed with each bolt placed anywhere in
+ *  the plane, not just a regular grid. Positions are absolute (plate) mm. */
+export function boltGeomFromPositions(abs: BoltPos[]): BoltGroupGeom {
+  const n = abs.length
+  if (n === 0) return { bolts: [], n: 0, Cx: 0, Cy: 0, Ip: 0, plateW: 0, plateH: 0 }
+  const Cx = abs.reduce((s, b) => s + b.x, 0) / n
+  const Cy = abs.reduce((s, b) => s + b.y, 0) / n
+  const bolts = abs.map((b) => ({ id: b.id, x: b.x - Cx, y: b.y - Cy }))
+  const Ip = bolts.reduce((s, b) => s + b.x ** 2 + b.y ** 2, 0)
+  const xs = abs.map((b) => b.x), ys = abs.map((b) => b.y)
+  return { bolts, n, Cx, Cy, Ip, plateW: Math.max(...xs) - Math.min(...xs), plateH: Math.max(...ys) - Math.min(...ys) }
+}
+
 // ─── In-plane eccentric bolt group — elastic (vector) method ─────────────
 // Forces Pu (+Y = up) and Hu (+X = right) applied at offset (ex_load, ey_load)
 // from the bolt centroid. Positive ex_load → load is to the RIGHT of centroid.
