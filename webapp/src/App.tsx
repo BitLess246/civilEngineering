@@ -31,6 +31,7 @@ import SeismicWizard from './pages/SeismicWizard'
 import WaterTank from './pages/WaterTank'
 import ShotcreteFacing from './pages/ShotcreteFacing'
 import BoltedConnection from './pages/BoltedConnection'
+import WeldedConnection from './pages/WeldedConnection'
 import SlabEstimate from './pages/SlabEstimate'
 import ChbEstimate from './pages/ChbEstimate'
 import ColumnEstimate from './pages/ColumnEstimate'
@@ -81,6 +82,7 @@ export default function App() {
         <Route path="/water-tank" element={<WaterTank />} />
         <Route path="/shotcrete-facing" element={<ShotcreteFacing />} />
         <Route path="/bolted-connection" element={<BoltedConnection />} />
+        <Route path="/welded-connection" element={<WeldedConnection />} />
         <Route path="/estimate/slab" element={<SlabEstimate />} />
         <Route path="/estimate/beam" element={<BeamEstimate />} />
         <Route path="/estimate/column" element={<ColumnEstimate />} />
