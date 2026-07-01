@@ -26,6 +26,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/model',         name: '3D Model Space',     sub: 'BIM-lite viewer'       },
       { to: '/truss',         name: 'Truss Space',        sub: 'Plane truss solver'    },
       { to: '/steel',         name: 'Steel Design',       sub: 'AISC 360-16 LRFD'      },
+      { to: '/bolted-connection', name: 'Bolted Connection', sub: 'Eccentric bolt group' },
       { to: '/slab-design',   name: 'Slab Design',        sub: 'Two-way DDM · ACI 318'  },
       { to: '/stair',         name: 'Stair Design',       sub: 'RC waist slab · NSCP'   },
       { to: '/water-tank',    name: 'Water Tank',         sub: 'Circular · IS 3370/ACI 350' },
