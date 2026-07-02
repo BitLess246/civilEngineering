@@ -18,6 +18,7 @@ per-module pass counts, so the manual cannot silently drift from the code.
 | [Frame analysis](./frame.md) | Beam/frame solver vs closed-form elasticity | ✅ |
 | [NSCP seismic](./seismic.md) | 208 static period & base shear + governing logic | ✅ |
 | [Modal & response spectrum](./dynamics.md) | Eigen-solver, SDOF period, pseudo relations | ✅ |
+| [Steel connections](./connections.md) | Eccentric bolt/weld groups, §J3.7 out-of-plane, §J3.9 prying | ✅ |
 | RC design | Beam Mn, column φPn, footing area | in `/validation` (dashboard) |
 | Steel design | φMp, φVn | in `/validation` (dashboard) |
 | Geotechnical | Bearing factors, earth pressure, slope FS | in `/validation` (dashboard) |
