@@ -3157,6 +3157,16 @@ export default function ModelSpace() {
               {design.totals.steelKg > 0 && ` · steel ${(design.totals.steelKg / 1000).toFixed(2)} t`}
             </span>
           </h2>
+          {design.unchecked.length > 0 && (
+            <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+              <p className="font-bold">⚠ {design.unchecked.length} member(s) could NOT be design-checked — the result is not a passing design.</p>
+              <ul className="mt-1 list-inside list-disc">
+                {design.unchecked.map((u) => (
+                  <li key={u.id}><span className="font-mono">{u.id}</span> ({u.role}, {u.shape}) — {u.reason}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div className="no-print flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
             <span className="text-sm font-semibold text-[#0056b3]">Consolidated report</span>
             <select value={report} onChange={(e) => { setReport(e.target.value as typeof report); requestAnimationFrame(captureModel) }}

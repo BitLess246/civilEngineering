@@ -337,6 +337,40 @@ describe('optimizeStructure', () => {
   })
 })
 
+describe('unchecked members — unsupported steel beam families must not read as OK', () => {
+  function channelBeamModel() {
+    const m = makeModel()
+    const beamSecs = new Set(m.members.filter((x) => x.role === 'beam' || x.role === 'girder').map((x) => x.section))
+    m.sections = m.sections.map((s) =>
+      beamSecs.has(s.id)
+        ? { ...s, material: 'steel' as const, shape: 'C75x8.9', steelFy: 345, steelFu: 448 }
+        : { ...s, material: 'steel' as const, shape: 'W310x97', steelFy: 345, steelFu: 448 })
+    return m
+  }
+
+  it('C-shape beams land in design.unchecked and fail designOK', () => {
+    const d = designStructure(channelBeamModel(), soil)!
+    // previously: no steelBeams row at all and designOK could read true
+    expect(d.steelBeams).toHaveLength(0)
+    expect(d.unchecked).toHaveLength(4)                    // 2 beams + 2 girders
+    expect(d.unchecked.every((u) => u.shape === 'C75x8.9')).toBe(true)
+    expect(designOK(d)).toBe(false)
+  })
+
+  it('the optimizer reports converged=false instead of "fixing" what it never checked', () => {
+    const r = optimizeStructure(channelBeamModel(), soil)!
+    expect(r.converged).toBe(false)
+    expect(r.design.unchecked).toHaveLength(4)
+  })
+
+  it('a full W/WT steel model has no unchecked members (regression)', () => {
+    const m = makeModel()
+    m.sections = m.sections.map((s) => ({ ...s, material: 'steel' as const, shape: 'W310x97', steelFy: 345, steelFu: 448 }))
+    const d = designStructure(m, soil)!
+    expect(d.unchecked).toHaveLength(0)
+  })
+})
+
 describe('optimizeStructure — termination guards (hierarchy revert / catalog top)', () => {
   it('square columns > 300 wide do not hang the batch-shrink loop', () => {
     // enforceSectionHierarchy clamps a column square-or-taller, silently reverting

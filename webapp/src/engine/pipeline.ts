@@ -114,6 +114,11 @@ export interface WallScheduleRow {
 export type FootingPlan = Record<string, { type: 'isolated' } | { type: 'combined'; with: string }>
 
 // ── Steel schedule rows (AISC 360-16 LRFD) ──────────────────────────────────
+/** A member the pipeline could NOT design-check (e.g. a steel beam whose shape
+ *  family has no §F2 flexure path). Surfaced instead of silently skipped: any
+ *  unchecked member fails designOK — a green result must mean "all checked". */
+export interface UncheckedMember { id: string; role: string; shape: string; reason: string }
+
 export interface SteelBeamScheduleRow {
   id: string; role: string; L: number; shape: string
   Mu: number; Vu: number          // kN·m, kN
@@ -172,6 +177,8 @@ export interface StructureDesign {
   scwb: SCWBJointRow[]
   totals: { concreteMembers: number; concreteSlabs: number; concrete: number; steelKg: number }
   orphanEdges: number
+  /** Members no design path could check (unsupported shape family). Non-empty ⇒ designOK is false. */
+  unchecked: UncheckedMember[]
 }
 
 export function designOK(d: StructureDesign): boolean {
@@ -179,6 +186,7 @@ export function designOK(d: StructureDesign): boolean {
     && d.steelBeams.every((b) => b.ok) && d.steelColumns.every((c) => c.ok)
     && d.basePlates.every((p) => p.ok)
     && d.footings.every((f) => f.ok) && d.combined.every((c) => c.ok)
+    && d.unchecked.length === 0
 }
 
 // ── Steel member design (reuses steelDesign engine) ──────────────────────────
@@ -440,6 +448,7 @@ function designFromRuns(
   const columns: ColumnScheduleRow[] = []
   const steelBeams: SteelBeamScheduleRow[] = []
   const steelColumns: SteelColumnScheduleRow[] = []
+  const unchecked: UncheckedMember[] = []
   for (const m of model.members) {
     const role = roleOf.get(m.id)
     const sec = secOf(m.id)
@@ -456,6 +465,12 @@ function designFromRuns(
           if (sev > bestSev) { bestSev = sev; best = row; gov = run.name }
         }
         if (best) steelBeams.push({ ...best, gov })
+        // designSteelBeamRow covers W/WT only (§F2 doubly-symmetric / tee flexure).
+        // A C/L/HSS beam would otherwise vanish from the schedule and read as "OK".
+        else unchecked.push({
+          id: m.id, role, shape: sec.shape ?? '(no shape)',
+          reason: 'steel beam flexure covers W/WT shapes only — use a W/WT here or check this member separately',
+        })
       } else {
         let best: BeamScheduleRow | null = null, bestSev = -1, gov = ''
         for (const run of runs) {
@@ -476,6 +491,11 @@ function designFromRuns(
           if (row.ratio > bestRatio) { bestRatio = row.ratio; best = row; gov = run.name }
         }
         if (best) steelColumns.push({ ...best, gov })
+        // designSteelColumnRow bails only on an unresolvable shape name
+        else unchecked.push({
+          id: m.id, role, shape: sec.shape ?? '(no shape)',
+          reason: 'shape not found in the AISC library — column axial/§H1-1 check skipped',
+        })
       } else {
         let best: ColumnScheduleRow | null = null, bestUtil = -1, gov = ''
         const sysOpts = opts.seismicSystem ?? 'gravity'
@@ -660,6 +680,7 @@ function designFromRuns(
     scwb: [] as SCWBJointRow[],
     totals: { concreteMembers, concreteSlabs, concrete: concreteMembers + concreteSlabs, steelKg },
     orphanEdges: br.orphanEdges.length,
+    unchecked,
   }
   partialDesign.joints = designSteelJoints(model, partialDesign)
   // Strong-column/weak-beam is a Special-Moment-Frame requirement (§418.7.3.2).
@@ -1017,6 +1038,7 @@ const countFails = (d: StructureDesign): number =>
   + d.steelBeams.filter((x) => !x.ok).length + d.steelColumns.filter((x) => !x.ok).length
   + d.basePlates.filter((x) => !x.ok).length
   + d.footings.filter((x) => !x.ok).length + d.combined.filter((x) => !x.ok).length
+  + d.unchecked.length
 
 const withSizes = (model: StructuralModel, sizes: Map<string, RectSection>): StructuralModel =>
   ({ ...model, sections: model.sections.map((s) => sizes.get(s.id) ?? s) })
