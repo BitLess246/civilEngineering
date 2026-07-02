@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel, buildGravityLoads, removeNode, enforceSectionHierarchy, refreshSelfWeight, splitSharedSections } from './modelBuilder'
 import { designStructure, optimizeStructure, designOK, type LateralCase } from './pipeline'
+import { nextHeavierW } from './aiscSections'
 import { computeSeismic } from './seismic'
 import type { RectSection, ModelLoad } from './model'
 
@@ -334,6 +335,40 @@ describe('optimizeStructure', () => {
     expect(col.h).toBeLessThanOrEqual(500)
     expect(designOK(r.design)).toBe(true)
   })
+})
+
+describe('optimizeStructure — termination guards (hierarchy revert / catalog top)', () => {
+  it('square columns > 300 wide do not hang the batch-shrink loop', () => {
+    // enforceSectionHierarchy clamps a column square-or-taller, silently reverting
+    // the h−25 batch proposal; before the sectionsChanged guard this spun forever.
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section: { ...section, b: 450, h: 450, name: '450×450' } })
+    m.loads = m.plates.flatMap((p) => [
+      { kind: 'area' as const, plate: p.id, q: 3, cat: 'D' as const },
+      { kind: 'area' as const, plate: p.id, q: 1.5, cat: 'L' as const },
+    ])
+    const r = optimizeStructure(m, soil)!
+    expect(r.converged).toBe(true)
+    expect(designOK(r.design)).toBe(true)
+    // columns stay square-or-taller per the hierarchy
+    for (const mem of r.model.members.filter((x) => x.role === 'column')) {
+      const s = r.model.sections.find((x) => x.id === mem.section)!
+      expect(s.h).toBeGreaterThanOrEqual(s.b)
+    }
+  }, 120_000)
+
+  it('an un-growable failing design exits the grow loop early instead of burning maxIter', () => {
+    // heaviest W in the catalog under an absurd load: jumpSection cannot step up,
+    // so the grow loop must break on the first no-change iteration.
+    let top = 'W310x342'
+    for (let n = nextHeavierW(top); n; n = nextHeavierW(top)) top = n.name
+    const m = generateGridModel({ baysX: [12], baysZ: [10], storeyH: [3], section })
+    m.sections = m.sections.map((s) => ({ ...s, material: 'steel' as const, shape: top, steelFy: 345, steelFu: 448 }))
+    m.loads = m.plates.flatMap((p) => [{ kind: 'area' as const, plate: p.id, q: 400, cat: 'D' as const }])
+    const r = optimizeStructure(m, soil)!
+    expect(r.converged).toBe(false)
+    expect(r.steps.length).toBeLessThanOrEqual(2)   // initial + the single no-progress attempt
+    expect(r.model.sections.every((s) => s.shape === top)).toBe(true)
+  }, 120_000)
 })
 
 describe('optimizeStructure — steel sections', () => {

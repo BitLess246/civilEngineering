@@ -804,7 +804,9 @@ export async function optimizeStructureAsync(
         const u = utils.get(s.id)
         return [s.id, u !== undefined ? jumpSection(s, u, secRole.get(s.id) ?? '') : s]
       }))
-      work = settle(withSizes(work, sizes))
+      const grown = settle(withSizes(work, sizes))
+      if (!sectionsChanged(work, grown)) break   // nothing can grow (catalog top / unsupported shape)
+      work = grown
       const d = await designStructureWithPool(work, soil, plan, opts, pool, sub(`Optimize iter ${iter}`))
       if (!d) break
       ;({ m: work, d: design } = await detail(work, d, `Optimize iter ${iter}`))
@@ -834,6 +836,7 @@ export async function optimizeStructureAsync(
         batchPass++
         onProgress?.({ phase: 'Optimizing — trimming sections', detail: `batch pass ${batchPass}: ${batchSizes.size} section(s) h↓` })
         const trial = settle(withSizes(work, batchSizes))
+        if (!sectionsChanged(work, trial)) break   // hierarchy reverted every shrink — no progress
         const d = await designStructureWithPool(trial, soil, plan, opts, pool)
         if (d && designOK(d)) { work = trial; design = d } else { batchOk = false }
       }
@@ -851,6 +854,7 @@ export async function optimizeStructureAsync(
         batchPass++
         onProgress?.({ phase: 'Optimizing — trimming sections', detail: `batch pass ${batchPass}: ${batchSizes.size} section(s) b↓` })
         const trial = settle(withSizes(work, batchSizes))
+        if (!sectionsChanged(work, trial)) break   // hierarchy reverted every shrink — no progress
         const d = await designStructureWithPool(trial, soil, plan, opts, pool)
         if (d && designOK(d)) { work = trial; design = d } else { bBatchOk = false }
       }
@@ -888,6 +892,7 @@ export async function optimizeStructureAsync(
           }
           if (!newSec) { onProgress?.({ phase: 'Optimizing — fine-tuning', current: ++hDone, total: hCandidates.length, detail: `pass ${guard}: h↓ — tested ${s0.name}` }); continue }
           const trial = settle(withSizes(work, new Map([[s0.id, newSec]])))
+          if (!sectionsChanged(work, trial)) { onProgress?.({ phase: 'Optimizing — fine-tuning', current: ++hDone, total: hCandidates.length, detail: `pass ${guard}: h↓ — ${s0.name} reverted` }); continue }
           const d = await designStructureWithPool(trial, soil, plan, opts, pool)
           onProgress?.({ phase: 'Optimizing — fine-tuning', current: ++hDone, total: hCandidates.length, detail: `pass ${guard}: h↓ — tested ${s0.name}` })
           if (d && designOK(d)) { work = trial; design = d; improved = true; hSucceededIds.add(s0.id) }
@@ -907,6 +912,7 @@ export async function optimizeStructureAsync(
         for (const s0 of bCandidates) {
           const newSec = { ...s0, b: s0.b - 25, name: `${s0.b - 25}×${s0.h}` }
           const trial = settle(withSizes(work, new Map([[s0.id, newSec]])))
+          if (!sectionsChanged(work, trial)) { onProgress?.({ phase: 'Optimizing — fine-tuning', current: ++bDone, total: bCandidates.length, detail: `pass ${guard}: b↓ — ${s0.name} reverted` }); continue }
           const d = await designStructureWithPool(trial, soil, plan, opts, pool)
           onProgress?.({ phase: 'Optimizing — fine-tuning', current: ++bDone, total: bCandidates.length, detail: `pass ${guard}: b↓ — tested ${s0.name}` })
           if (d && designOK(d)) { work = trial; design = d; improved = true }
@@ -1014,6 +1020,18 @@ const countFails = (d: StructureDesign): number =>
 
 const withSizes = (model: StructuralModel, sizes: Map<string, RectSection>): StructuralModel =>
   ({ ...model, sections: model.sections.map((s) => sizes.get(s.id) ?? s) })
+
+/** True when any section geometry differs between two settled models.
+ *  enforceSectionHierarchy can silently revert a proposed change (e.g. a square
+ *  column's h-shrink is clamped back to h ≥ b), so a grow/shrink trial can come
+ *  out identical to the current model. Accepting such a trial makes no progress —
+ *  the unbounded batch loops would re-propose the same change forever. */
+const sectionsChanged = (a: StructuralModel, b: StructuralModel): boolean =>
+  a.sections.length !== b.sections.length
+  || a.sections.some((s, i) => {
+    const t = b.sections[i]
+    return s.b !== t.b || s.h !== t.h || s.shape !== t.shape
+  })
 
 /** Copy shape geometry into the section's bounding-box fields so metadata stays consistent. */
 const applyShape = (s: RectSection, sh: AiscShape): RectSection =>
@@ -1149,7 +1167,9 @@ export function optimizeStructure(
       const u = utils.get(s.id)
       return [s.id, u !== undefined ? jumpSection(s, u, secRole.get(s.id) ?? '') : s]
     }))
-    work = settle(withSizes(work, sizes))
+    const grown = settle(withSizes(work, sizes))
+    if (!sectionsChanged(work, grown)) break   // nothing can grow (catalog top / unsupported shape)
+    work = grown
     const d = designStructure(work, soil, plan, opts, sub(`Optimize iter ${iter}`))
     if (!d) break
     ;({ m: work, d: design } = detail(work, d, `Optimize iter ${iter}`))
@@ -1182,6 +1202,7 @@ export function optimizeStructure(
       batchPass++
       onProgress?.({ phase: 'Optimizing — trimming sections', detail: `batch pass ${batchPass}: ${batchSizes.size} section(s) h↓` })
       const trial = settle(withSizes(work, batchSizes))
+      if (!sectionsChanged(work, trial)) break   // hierarchy reverted every shrink — no progress
       const d = designStructure(trial, soil, plan, opts)
       if (d && designOK(d)) { work = trial; design = d } else { batchOk = false }
     }
@@ -1199,11 +1220,13 @@ export function optimizeStructure(
       batchPass++
       onProgress?.({ phase: 'Optimizing — trimming sections', detail: `batch pass ${batchPass}: ${batchSizes.size} section(s) b↓` })
       const trial = settle(withSizes(work, batchSizes))
+      if (!sectionsChanged(work, trial)) break   // hierarchy reverted every shrink — no progress
       const d = designStructure(trial, soil, plan, opts)
       if (d && designOK(d)) { work = trial; design = d } else { bBatchOk = false }
     }
 
-    // Fine-tune: per-section — try h↓ first, then b↓ if h can't shrink or fails
+    // Fine-tune: per-section — try h↓ first, then b↓ if h can't shrink or fails.
+    // A trial the hierarchy reverts is skipped (identical model ⇒ not an improvement).
     let improved = true, guard = 0
     while (improved && guard++ < 4) {
       improved = false
@@ -1213,6 +1236,7 @@ export function optimizeStructure(
           if (!lighter) continue
           onProgress?.({ phase: 'Optimizing — fine-tuning', detail: s0.name })
           const trial = settle(withSizes(work, new Map([[s0.id, applyShape(s0, lighter)]])))
+          if (!sectionsChanged(work, trial)) continue
           const d = designStructure(trial, soil, plan, opts)
           if (d && designOK(d)) { work = trial; design = d; improved = true }
         } else {
@@ -1220,13 +1244,16 @@ export function optimizeStructure(
             onProgress?.({ phase: 'Optimizing — fine-tuning', detail: `${s0.name} h↓` })
             const hSec = { ...s0, h: s0.h - 25, name: `${s0.b}×${s0.h - 25}` }
             const trial = settle(withSizes(work, new Map([[s0.id, hSec]])))
-            const d = designStructure(trial, soil, plan, opts)
-            if (d && designOK(d)) { work = trial; design = d; improved = true; continue }
+            if (sectionsChanged(work, trial)) {
+              const d = designStructure(trial, soil, plan, opts)
+              if (d && designOK(d)) { work = trial; design = d; improved = true; continue }
+            }
           }
           if (s0.b - 25 >= 200) {
             onProgress?.({ phase: 'Optimizing — fine-tuning', detail: `${s0.name} b↓` })
             const bSec = { ...s0, b: s0.b - 25, name: `${s0.b - 25}×${s0.h}` }
             const trial = settle(withSizes(work, new Map([[s0.id, bSec]])))
+            if (!sectionsChanged(work, trial)) continue
             const d = designStructure(trial, soil, plan, opts)
             if (d && designOK(d)) { work = trial; design = d; improved = true }
           }
