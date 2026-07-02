@@ -20,11 +20,14 @@ import { jacobiEigen } from './modal'
 import { elasticResponseSpectrum } from './accelSpectrum'
 import { generateGridModel } from './modelBuilder'
 import { solveFrame3D, rectJ, type F3Node, type F3Member, type F3Support } from './frame3d'
+import { solveBoltedConnection } from './boltedConnection'
+import { solveWeldedConnection } from './weldedConnection'
+import { boltGeomFromPositions, outOfPlaneBoltGroup, pryingAction } from './steelDesign'
 import type { RectSection } from './model'
 
 export interface ValidationCase {
   id: string
-  category: 'RC' | 'Steel' | 'Analysis' | 'Seismic' | 'Dynamics' | 'Wind' | 'Geotech'
+  category: 'RC' | 'Steel' | 'Connections' | 'Analysis' | 'Seismic' | 'Dynamics' | 'Wind' | 'Geotech'
   title: string
   reference: string
   formula: string
@@ -157,6 +160,51 @@ const seismic = (() => {
   }
 })()
 
+// ── 12. Steel connections — bolt/weld groups, out-of-plane, prying ───────────
+const boltEcc = (() => {
+  // 4 bolts on a 100×100 square (centroid 50,50); vertical P = 100 kN at
+  // ex = 100 mm. J = 4·(50²+50²) = 20000 mm²; direct P/4 plus torsional
+  // T·ρ/J on the corner bolts ⇒ R = P·√(0.25² + 0.5²) = 0.55902·P.
+  const bolts = [
+    { id: 'B1', x: 0, y: 0 }, { id: 'B2', x: 100, y: 0 },
+    { id: 'B3', x: 0, y: 100 }, { id: 'B4', x: 100, y: 100 },
+  ]
+  const r = solveBoltedConnection({ bolts, dia: 22, allowableStress: 150, load: { P: 100, angleDeg: -90, px: 150, py: 50 } })
+  return { manual: 100 * Math.sqrt(0.25 ** 2 + 0.5 ** 2), software: r.Rmax }
+})()
+
+const weldEcc = (() => {
+  // Single vertical weld line 300 mm; vertical P = 100 kN at 100 mm eccentricity.
+  // J/t = L³/12 = 2.25×10⁶ mm³. Direct P/Lw = 333.33; torsional T·c/(J/t) =
+  // (10⁷·150)/2.25×10⁶ = 666.67 ⇒ f = (P·1000/Lw)·√5.
+  const r = solveWeldedConnection({
+    segments: [{ id: 'w', x1: 0, y1: 0, x2: 0, y2: 300 }], size: 6,
+    load: { P: 100, angleDeg: 90, px: 100, py: 150 },
+  })
+  return { manual: (100_000 / 300) * Math.sqrt(5), software: r.fMax }
+})()
+
+const boltOop = (() => {
+  // 2×3 bolt group (rows y = 0/100/200); Vu = 100 kN at e_out = 100 mm ⇒
+  // M_op = 10 000 kN·mm. Σyi² = 2·(100² + 200²) = 100 000 mm² about the lowest
+  // row ⇒ top-row tension T = M_op·200/Σyi² = 20 kN.
+  const geom = boltGeomFromPositions([
+    { id: 'B1', x: 0, y: 0 }, { id: 'B2', x: 100, y: 0 },
+    { id: 'B3', x: 0, y: 100 }, { id: 'B4', x: 100, y: 100 },
+    { id: 'B5', x: 0, y: 200 }, { id: 'B6', x: 100, y: 200 },
+  ])
+  const r = outOfPlaneBoltGroup(geom, [], 100, 100, 'A325M', 20, true)
+  return { manual: (100 * 100 * 200) / 100_000, software: r.Tmax }
+})()
+
+const pryingT0 = (() => {
+  // Minimum fitting thickness that eliminates prying (AISC Part 9):
+  // t₀ = √(4·φBn·b′/(φf·Fy·p)) with φBn = 60 kN, b′ = 45 − 20/2 = 35 mm,
+  // Fy = 248, p = 70, φf = 0.90.
+  const r = pryingAction(50, 60, 45, 40, 70, 12, 20, 248)
+  return { manual: Math.sqrt((4 * 60 * 1000 * 35) / (0.9 * 248 * 70)), software: r.t_no_prying }
+})()
+
 export const VALIDATION_CASES: ValidationCase[] = [
   {
     id: 'rc-beam-mn', category: 'RC', title: 'Singly-reinforced beam — nominal moment',
@@ -247,5 +295,25 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'spectrum-pseudo', category: 'Dynamics', title: 'Pseudo-acceleration relation',
     reference: 'Chopra, Dynamics of Structures', formula: 'PSA = ω²·Sd',
     manual: dynamics.pseudo.manual, software: dynamics.pseudo.software, unit: 'm/s²', tol: 1e-9,
+  },
+  {
+    id: 'bolt-ecc-rmax', category: 'Connections', title: 'Eccentric bolt group — critical bolt force',
+    reference: 'AISC Manual Part 7 (elastic method)', formula: 'R = √((Pₓ/N + T·y/J)² + (Pᵧ/N + T·x/J)²)',
+    manual: boltEcc.manual, software: boltEcc.software, unit: 'kN', tol: 1e-9,
+  },
+  {
+    id: 'weld-ecc-fmax', category: 'Connections', title: 'Eccentric weld group — peak force per length',
+    reference: 'AISC Manual Part 8 (weld-as-a-line)', formula: 'f = √((P/L_w)² + (T·c/(J/t))²)',
+    manual: weldEcc.manual, software: weldEcc.software, unit: 'N/mm', tol: 1e-9,
+  },
+  {
+    id: 'bolt-oop-tension', category: 'Connections', title: 'Out-of-plane bolt group — top-row tension',
+    reference: 'AISC 360 §J3.7', formula: 'Tᵢ = M_op·yᵢ / Σyᵢ²',
+    manual: boltOop.manual, software: boltOop.software, unit: 'kN', tol: 1e-9,
+  },
+  {
+    id: 'prying-t0', category: 'Connections', title: 'Prying — thickness eliminating prying',
+    reference: 'AISC Manual Part 9 / §J3.9', formula: 't₀ = √(4·φBn·b′ / (φf·Fy·p))',
+    manual: pryingT0.manual, software: pryingT0.software, unit: 'mm', tol: 1e-9,
   },
 ]

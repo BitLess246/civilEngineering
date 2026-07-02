@@ -36,8 +36,9 @@ npm run build    # typecheck + production build
 
 ## Current state (analysis-core baseline, PR #239)
 
-> Newer work is tracked in the **Tier 4** (A1–E13, PRs through #273) and
-> **Post-Tier-4** (PRs #275–#278) sections below; latest suite: **863 tests**.
+> Newer work is tracked in the **Tier 4** (A1–E13, PRs through #273),
+> **Post-Tier-4** (PRs #275–#278) and **Phase 3 + connections** (PRs #279–#298)
+> sections below; latest suite: **965 tests**.
 > The repo root is now just `webapp/`, `docs/` and the markdown docs.
 
 ### 3D Model Space analysis core (`/model`) — the centrepiece
@@ -56,9 +57,7 @@ of the app. Everything runs **off the main thread** in a web worker
 - **Spring supports** (PR #229): `fixity:'spring'` with `kx/ky/kz` adds translational
   stiffness to the free-DOF diagonal (pile-head / elastic-foundation modelling).
   UI = fixed/pin/spring selector + stiffness fields in the Supports tab.
-  ⚠️ **Sign fix pending PR** (branch `claude/next-phase-jsoxhl`): reported spring
-  reaction was `+k·d` (wrong); correct restoring force is `−k·d`. Structural
-  solution is unaffected — display-only bug. Merge that PR to close it.
+  (Reaction sign fix — restoring force `−k·d` — shipped in PR #241; no longer pending.)
 - **Rigid floor diaphragm** (PR #231): per-storey master-slave constraint elimination
   (T-matrix) tying in-plane `{ux, uz, θy}` with full rigid-body kinematics (arm
   effect). `engine/diaphragm.ts` groups nodes by storey; opt-in checkbox in Analysis.
@@ -300,6 +299,50 @@ After Tier 4, four cleanup / capability items from an external code review shipp
   N-factors checked against published tables.
 
 _Tests after #278: **863 passing**; `tsc -b` clean; production build OK._
+
+## Phase 3 + steel connections (PRs #279–#298)
+
+Roadmap Phase 3 (specialty structural/geotech tools) plus a full steel-connection
+suite, one PR per phase, all auto-merged after Vercel CI:
+
+- **Validation manual + dashboard** — `docs/validation/` chapters: **frame**
+  (#287), **NSCP seismic** (#288), **modal & response spectrum** (#291),
+  **steel connections** (#298); per-module pass counts on `/validation` (#280).
+  All chapter benchmarks are live in `engine/validation.ts` + `validation.test.ts`.
+- **Beam serviceability** (#281) — NSCP min-thickness table, doubly-reinforced
+  cracked Ie, and an **Ec bug fix**: `beamServiceDeflection` had used steel Es
+  (200 GPa) in the deflection formula; now `Ec = 4700√f′c`.
+- **Phase 3 structural** — RC stair / waist slab (#283, `/stair`), NSCP 208
+  Seismic Wizard (#289, `/seismic-wizard`), circular RC water tank to
+  IS 3370 / ACI 350 hoop+flexure with crack-width service checks (#290,
+  `/water-tank`).
+- **Phase 3 geotech (FHWA/PTI)** — soil-nail wall GEC-7 (#282, `/soil-nail`),
+  micropile axial (#284, `/micropile`), rock/ground anchors PTI (#286,
+  `/rock-anchor`), soil-nail **shotcrete facing** flexure/punching GEC-7 (#292,
+  `/shotcrete-facing`).
+- **Steel connection suite** —
+  - #293: joint designer reflects the **actual connected elements** (column
+    flange vs web × beam web vs flanges) + custom per-bolt locations in
+    `designBolts`.
+  - #294: `/bolted-connection` — eccentric bolt group, elastic vector method,
+    fully custom bolt coordinates, critical/least bolt, max-P back-calc.
+  - #295: **connection kind drives analysis**: `Member.connections.iEnd/jEnd`
+    (`'simple' | 'moment' | 'fixed'`); a `'simple'` end auto-releases My+Mz via
+    `effectiveReleases` in `modelBridge` (the schematic hinge), so force
+    behaviour matches the detailing.
+  - #296: `/welded-connection` — eccentric fillet-weld group (weld-as-a-line,
+    `J/t = Σ[L³/12 + L·ρ²]`, throat 0.707·w per NSCP 510.2.2), required leg +
+    max P.
+  - #297: out-of-plane eccentricity (§J3.7 bolt tension + shear interaction
+    φF′nt) and prying action (§J3.9 T-stub: Q, T+Q, t_req, t₀) on
+    `/bolted-connection`.
+- **Gap-fill** (#298) — `Connections` category on `/validation` (4 hand-checked
+  benchmarks), `diaphragm.test.ts` (last untested logic engine), this HANDOFF
+  refresh.
+
+_Tests after #298: **965 passing**; `tsc -b` clean; production build OK._
+_Remaining roadmap: Pressure Grouting (empirical — skipped by design); Phase 4
+items are owner-driven (marketing/monetisation)._
 
 ## Validation roadmap — toward a formal validation manual
 
