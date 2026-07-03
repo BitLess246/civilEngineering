@@ -337,6 +337,46 @@ describe('optimizeStructure', () => {
   })
 })
 
+describe('RC serviceability — NSCP Table 409.3.1.1 minimum thickness gate', () => {
+  it('grid beams classify as both-ends continuous with hMin = (L/21)·(0.4 + fy/700)', () => {
+    const r = designStructure(makeModel(), soil)!
+    expect(r.beams.length).toBeGreaterThan(0)
+    for (const b of r.beams) {
+      expect(b.support).toBe('both-ends')
+      expect(b.hMin).toBeCloseTo(((b.L * 1000) / 21) * (0.4 + 415 / 700), 6)
+      expect(b.thickOK).toBe(true)          // 300×500 on ≤6 m spans satisfies the table
+    }
+  })
+
+  it('a long-span shallow beam fails the gate and the optimizer deepens it past hMin', () => {
+    const m = generateGridModel({ baysX: [11], baysZ: [5], storeyH: [3], section: { ...section, h: 400, name: '300×400' } })
+    m.loads = m.plates.flatMap((p) => [
+      { kind: 'area' as const, plate: p.id, q: 4.8, cat: 'D' as const },
+      { kind: 'area' as const, plate: p.id, q: 2.4, cat: 'L' as const },
+    ])
+    const first = designStructure(m, soil)!
+    const span11 = first.beams.filter((b) => b.L > 10)
+    expect(span11.some((b) => !b.thickOK)).toBe(true)      // 400 < hMin ≈ 520 mm
+    expect(designOK(first)).toBe(false)
+    const r = optimizeStructure(m, soil)!
+    expect(r.converged).toBe(true)
+    for (const b of r.design.beams) expect(b.thickOK).toBe(true)
+  }, 120_000)
+
+  it('an overhang beam classifies as a cantilever (L/8 table row)', () => {
+    const m = makeModel()
+    // overhang off node n1.0.0 (a corner column joint): 2 m to a free tip
+    const corner = m.nodes.find((n) => n.y > 0)!
+    m.nodes.push({ id: 'tip', x: corner.x + 2, y: corner.y, z: corner.z })
+    m.members.push({ id: 'ovh', i: corner.id, j: 'tip', role: 'beam', section: m.members.find((x) => x.role === 'beam')!.section })
+    m.loads.push({ kind: 'member-udl', member: 'ovh', w: 10, cat: 'D' })
+    const r = designStructure(m, soil)!
+    const row = r.beams.find((b) => b.id === 'ovh')!
+    expect(row.support).toBe('cantilever')
+    expect(row.hMin).toBeCloseTo(((row.L * 1000) / 8) * (0.4 + 415 / 700), 6)
+  })
+})
+
 describe('unchecked members — unsupported steel beam families must not read as OK', () => {
   function channelBeamModel() {
     const m = makeModel()
