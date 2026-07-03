@@ -16,6 +16,7 @@ import { FramePool } from './framePool'
 import { nscpCombos, type Combo } from './beamAnalysis'
 import type { ProgressFn } from './progress'
 import { designBeam, type BeamDesignResult } from './beamDesign'
+import { minBeamThickness, type BeamSupport } from './beamDeflection'
 import { designAxialColumn, capacityAtEccentricity, interaction } from './columnDesign'
 import { designSquareFooting, type SquareFootingResult } from './isolatedFooting'
 import { designCombinedFooting, type CombinedFootingResult } from './combinedFooting'
@@ -58,6 +59,12 @@ export interface BeamSectionDesign {
 export interface BeamScheduleRow {
   id: string; role: string; L: number
   sections: BeamSectionDesign[]
+  /** NSCP Table 409.3.1.1 deemed-to-comply serviceability: span type from the
+   *  joint connectivity, the corresponding minimum thickness ×(0.4 + fy/700),
+   *  and whether the section satisfies it (deflections need not be computed). */
+  support: BeamSupport
+  hMin: number
+  thickOK: boolean
   ok: boolean
   gov?: string   // governing load case (envelope)
   /** Governing-case force diagrams along the member (for the worked solution). */
@@ -281,7 +288,7 @@ function memberSections(mr: F3MemberResult): { label: string; x: number; Mu: num
 }
 
 /** Design one beam/girder member from a single run's member result. */
-function designBeamRow(mr: F3MemberResult, role: string, sec: RectSection): BeamScheduleRow {
+function designBeamRow(mr: F3MemberResult, role: string, sec: RectSection, support: BeamSupport = 'both-ends'): BeamScheduleRow {
   const sections: BeamSectionDesign[] = memberSections(mr)
     .filter((s) => Math.abs(s.Mu) > 1e-6 || s.Vu > 1e-6)
     .map((s) => ({
@@ -292,8 +299,14 @@ function designBeamRow(mr: F3MemberResult, role: string, sec: RectSection): Beam
         fc: sec.fc, fy: sec.fy, Mu: Math.abs(s.Mu), Vu: s.Vu,
       }),
     }))
+  // Table 409.3.1.1 minimum thickness (deemed-to-comply — deflections need not
+  // be computed when h ≥ hMin). Steel beams check L/240 explicitly; this is the
+  // RC counterpart so the optimizer cannot trim a long span into a springboard.
+  const hMin = minBeamThickness(mr.L, support, sec.fy)
+  const thickOK = sec.h >= hMin - 1e-9
   return {
-    id: mr.id, role, L: mr.L, sections, ok: sections.every((s) => beamOK(s.design)),
+    id: mr.id, role, L: mr.L, sections, support, hMin, thickOK,
+    ok: sections.every((s) => beamOK(s.design)) && thickOK,
     diag: { xs: mr.xs, Vy: mr.Vy, Mz: mr.Mz },
   }
 }
@@ -441,6 +454,25 @@ function designFromRuns(
   const roleOf = new Map(model.members.map((m) => [m.id, m.role]))
   const memberOf = (run: FrameRun, id: string) => run.result.members.find((m) => m.id === id)
 
+  // NSCP Table 409.3.1.1 span type from joint connectivity: an end with nothing
+  // beyond the beam itself (no other member, no support) is a cantilever tip;
+  // an end whose joint continues into a column or another flexural member is
+  // continuous; an end held only by a support (e.g. a pin) is discontinuous.
+  const memsAtNode = new Map<string, typeof model.members>()
+  for (const mm of model.members)
+    for (const n of [mm.i, mm.j]) {
+      const list = memsAtNode.get(n); if (list) list.push(mm); else memsAtNode.set(n, [mm])
+    }
+  const supportedNodes = new Set(model.supports.map((s) => s.node))
+  const spanTypeOf = (mm: (typeof model.members)[number]): BeamSupport => {
+    const others = (n: string) => (memsAtNode.get(n) ?? []).filter((o) => o.id !== mm.id)
+    const held = (n: string) => others(n).length > 0 || supportedNodes.has(n)
+    if (!held(mm.i) || !held(mm.j)) return 'cantilever'
+    const cont = (n: string) => others(n).some((o) => o.role === 'column' || o.role === 'beam' || o.role === 'girder')
+    const ci = cont(mm.i), cj = cont(mm.j)
+    return ci && cj ? 'both-ends' : ci || cj ? 'one-end' : 'simple'
+  }
+
   // ── Beams & girders — per-member worst case across all runs ──
   const totalMems = model.members.length
   let memDone = 0
@@ -473,9 +505,10 @@ function designFromRuns(
         })
       } else {
         let best: BeamScheduleRow | null = null, bestSev = -1, gov = ''
+        const support = spanTypeOf(m)
         for (const run of runs) {
           const mr = memberOf(run, m.id); if (!mr) continue
-          const row = designBeamRow(mr, role, sec)
+          const row = designBeamRow(mr, role, sec, support)
           if (row.sections.length === 0) continue
           const sev = beamSeverity(row)
           if (sev > bestSev) { bestSev = sev; best = row; gov = run.name }
