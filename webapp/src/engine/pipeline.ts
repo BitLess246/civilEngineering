@@ -850,16 +850,23 @@ export async function optimizeStructureAsync(
     steps.push({ iter: 0, grown: 0, fails: countFails(design), ok: designOK(design) })
 
     let iter = 0
+    let stopReason: string | undefined
     while (!designOK(design) && iter++ < maxIter) {
       const utils = buildUtilMap(design, memSecId)
-      if (utils.size === 0) break
+      if (utils.size === 0) {                        // not a member-section problem
+        stopReason = stopReasonFor(design, 'growing member sections cannot fix the remaining checks (adjust soil bearing, footing plan or section shapes)')
+        break
+      }
       onProgress?.({ phase: 'Optimizing — growing sections', current: iter, total: maxIter, detail: `iteration ${iter}: ${utils.size} member(s) grown, ${countFails(design)} failing` })
       const sizes = new Map(work.sections.map((s) => {
         const u = utils.get(s.id)
         return [s.id, u !== undefined ? jumpSection(s, u, secRole.get(s.id) ?? '') : s]
       }))
       const grown = settle(withSizes(work, sizes))
-      if (!sectionsChanged(work, grown)) break   // nothing can grow (catalog top / unsupported shape)
+      if (!sectionsChanged(work, grown)) {     // nothing can grow (catalog top / unsupported shape)
+        stopReason = stopReasonFor(design, 'no failing section can grow any further (top of the W catalog or an unsupported shape family)')
+        break
+      }
       work = grown
       const d = await designStructureWithPool(work, soil, plan, opts, pool, sub(`Optimize iter ${iter}`))
       if (!d) break
@@ -867,6 +874,8 @@ export async function optimizeStructureAsync(
       steps.push({ iter, grown: utils.size, fails: countFails(design), ok: designOK(design) })
     }
     const converged = designOK(design)
+    if (!converged && !stopReason)
+      stopReason = stopReasonFor(design, `iteration cap (${maxIter}) reached — check spans and loads`)
 
     if (converged) {
       let batchPass = 0
@@ -982,7 +991,7 @@ export async function optimizeStructureAsync(
       steps.push({ iter: iter + 1, grown: 0, fails: 0, ok: true })
     }
 
-    return { design, model: work, steps, converged }
+    return { design, model: work, steps, converged, stopReason }
   } finally {
     pool.terminate()
   }
@@ -1064,6 +1073,22 @@ export interface OptimizeResult {
   model: StructuralModel   // model carrying the optimised per-member sections
   steps: OptimizeStep[]
   converged: boolean
+  /** Why the optimizer stopped short, when converged is false. */
+  stopReason?: string
+}
+
+/** Human-readable reason for a non-converged stop. `why` explains the loop exit;
+ *  the failing-check breakdown tells the user what growing sections can't fix. */
+function stopReasonFor(d: StructureDesign, why: string): string {
+  const parts = [
+    [d.beams.filter((x) => !x.ok).length + d.columns.filter((x) => !x.ok).length
+      + d.steelBeams.filter((x) => !x.ok).length + d.steelColumns.filter((x) => !x.ok).length, 'member'],
+    [d.footings.filter((x) => !x.ok).length + d.combined.filter((x) => !x.ok).length, 'footing'],
+    [d.basePlates.filter((x) => !x.ok).length, 'base plate'],
+    [d.unchecked.length, 'unchecked member'],
+  ] as const
+  const failing = parts.filter(([n]) => n > 0).map(([n, l]) => `${n} ${l}${n === 1 ? '' : 's'}`).join(', ')
+  return `${why}${failing ? ` — still failing: ${failing}` : ''}`
 }
 
 const countFails = (d: StructureDesign): number =>
@@ -1214,16 +1239,23 @@ export function optimizeStructure(
   // demand/capacity, re-enforce the hierarchy and refresh self-weight so the
   // heavier sections feed back into the demands on the next iteration.
   let iter = 0
+  let stopReason: string | undefined
   while (!designOK(design) && iter++ < maxIter) {
     const utils = buildUtilMap(design, memSecId)
-    if (utils.size === 0) break                      // only footings fail — not a section problem
+    if (utils.size === 0) {                          // not a member-section problem
+      stopReason = stopReasonFor(design, 'growing member sections cannot fix the remaining checks (adjust soil bearing, footing plan or section shapes)')
+      break
+    }
     onProgress?.({ phase: 'Optimizing — growing sections', current: iter, total: maxIter, detail: `iteration ${iter}: ${utils.size} member(s) grown, ${countFails(design)} failing` })
     const sizes = new Map(work.sections.map((s) => {
       const u = utils.get(s.id)
       return [s.id, u !== undefined ? jumpSection(s, u, secRole.get(s.id) ?? '') : s]
     }))
     const grown = settle(withSizes(work, sizes))
-    if (!sectionsChanged(work, grown)) break   // nothing can grow (catalog top / unsupported shape)
+    if (!sectionsChanged(work, grown)) {       // nothing can grow (catalog top / unsupported shape)
+      stopReason = stopReasonFor(design, 'no failing section can grow any further (top of the W catalog or an unsupported shape family)')
+      break
+    }
     work = grown
     const d = designStructure(work, soil, plan, opts, sub(`Optimize iter ${iter}`))
     if (!d) break
@@ -1231,6 +1263,8 @@ export function optimizeStructure(
     steps.push({ iter, grown: utils.size, fails: countFails(design), ok: designOK(design) })
   }
   const converged = designOK(design)
+  if (!converged && !stopReason)
+    stopReason = stopReasonFor(design, `iteration cap (${maxIter}) reached — check spans and loads`)
 
   // SHRINK: first try trimming all sections simultaneously (batch pass) — much
   // faster for large models when most sections are over-sized by several steps.
@@ -1323,5 +1357,5 @@ export function optimizeStructure(
     steps.push({ iter: iter + 1, grown: 0, fails: 0, ok: true })
   }
 
-  return { design, model: work, steps, converged }
+  return { design, model: work, steps, converged, stopReason }
 }

@@ -3069,8 +3069,13 @@ export default function ModelSpace() {
             <h3 className="mb-1 text-[1.02rem] font-bold text-[#0056b3]">
               Optimization — {opt.converged
                 ? `converged in ${opt.steps.length} step${opt.steps.length === 1 ? '' : 's'}`
-                : 'did NOT converge (iteration cap hit — check spans/loads)'}
+                : 'did NOT converge'}
             </h3>
+            {!opt.converged && (
+              <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                {opt.stopReason ?? 'iteration cap hit — check spans/loads'}
+              </p>
+            )}
             <div className="mb-2 space-y-0.5 text-xs text-slate-500">
               <p>Concrete — <b>columns</b> {sizesFor('column')} · <b>girders</b> {sizesFor('girder')} · <b>beams</b> {sizesFor('beam')}</p>
               {(hasSteelBeams || hasSteelCols) && (
