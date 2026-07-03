@@ -401,6 +401,7 @@ describe('unchecked members — unsupported steel beam families must not read as
     const r = optimizeStructure(channelBeamModel(), soil)!
     expect(r.converged).toBe(false)
     expect(r.design.unchecked).toHaveLength(4)
+    expect(r.stopReason).toContain('4 unchecked members')
   })
 
   it('a full W/WT steel model has no unchecked members (regression)', () => {
@@ -442,7 +443,19 @@ describe('optimizeStructure — termination guards (hierarchy revert / catalog t
     expect(r.converged).toBe(false)
     expect(r.steps.length).toBeLessThanOrEqual(2)   // initial + the single no-progress attempt
     expect(r.model.sections.every((s) => s.shape === top)).toBe(true)
+    expect(r.stopReason).toContain('grow')
   }, 120_000)
+
+  it('failures the sections cannot fix (footings on bad soil) get an explanatory stopReason', () => {
+    // qAllow below the overburden ⇒ every isolated footing fails (qNet ≤ 0)
+    // while all members pass: the grow loop must bail with a reason, not iterate.
+    const r = optimizeStructure(makeModel(), { ...soil, qAllow: 5 })!
+    expect(r.converged).toBe(false)
+    expect(r.design.footings.every((f) => !f.ok)).toBe(true)
+    expect(r.design.beams.every((b) => b.ok)).toBe(true)
+    expect(r.stopReason).toContain('cannot fix')
+    expect(r.stopReason).toContain('footing')
+  })
 })
 
 describe('optimizeStructure — steel sections', () => {
