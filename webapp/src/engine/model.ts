@@ -109,7 +109,10 @@ export interface NodeSupport {
 export type ModelLoad =
   | { kind: 'node'; node: string; Fx?: number; Fy?: number; Fz?: number; cat: LoadCategory }
   | { kind: 'member-point'; member: string; t: number /* 0–1 along i→j */; P: number; cat: LoadCategory }
-  | { kind: 'member-udl'; member: string; w: number; cat: LoadCategory }
+  /** `sw` marks a GENERATED self-weight line load (member or wall gravity, from
+   *  buildGravityLoads) so refreshSelfWeight can rebuild exactly those and leave
+   *  user-applied dead line loads untouched. Absent on user loads. */
+  | { kind: 'member-udl'; member: string; w: number; cat: LoadCategory; sw?: boolean }
   | { kind: 'area'; plate: string; q: number /* kPa */; cat: LoadCategory }
   /** Uniform temperature change ΔT (°C, + = rise) with linear expansion α (/°C).
    *  Equivalent axial force P_T = EA·α·ΔT is applied as self-equilibrating end forces

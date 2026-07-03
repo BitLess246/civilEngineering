@@ -9,7 +9,9 @@ const section: RectSection = { id: 'S1', name: '300×500', b: 300, h: 500, fc: 2
 const soil = { qAllow: 200, gammaSoil: 18, gammaConc: 24, H: 1.5 }
 
 function makeModel() {
-  const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section })
+  // 200-mm slabs: the 6×5 m panel satisfies §424.2 deflection (150 mm does not,
+  // now that slab serviceability gates designOK).
+  const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section, slabThickness: 200 })
   m.loads = m.plates.flatMap((p) => [
     { kind: 'area' as const, plate: p.id, q: 4.8, cat: 'D' as const },
     { kind: 'area' as const, plate: p.id, q: 2.4, cat: 'L' as const },
@@ -99,7 +101,7 @@ describe('design pipeline — single-bay single-storey grid', () => {
   it('concrete totals: members + slab', () => {
     // 4 columns ×3 m + (2×6 + 2×5) m of beams = 12 + 22 = 34 m of 0.15 m² section
     expect(r.totals.concreteMembers).toBeCloseTo(34 * 0.3 * 0.5, 6)
-    expect(r.totals.concreteSlabs).toBeCloseTo(6 * 5 * 0.15, 6)
+    expect(r.totals.concreteSlabs).toBeCloseTo(6 * 5 * 0.20, 6)
   })
 
   it('no plan → no combined footings, designOK reflects the schedules', () => {
@@ -377,6 +379,86 @@ describe('RC serviceability — NSCP Table 409.3.1.1 minimum thickness gate', ()
   })
 })
 
+describe('optimizer covers every design check (slabs, walls, SCWB)', () => {
+  it('slab §424.2 deflection failure gates designOK and the optimizer thickens the panel', () => {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section, slabThickness: 150 })
+    m.loads = m.plates.flatMap((p) => [
+      { kind: 'area' as const, plate: p.id, q: 4.8, cat: 'D' as const },
+      { kind: 'area' as const, plate: p.id, q: 2.4, cat: 'L' as const },
+    ])
+    const first = designStructure(m, soil)!
+    expect(first.slabs[0].ok).toBe(false)          // 150 mm on 6×5 m violates ℓn/240
+    expect(designOK(first)).toBe(false)
+    const r = optimizeStructure(m, soil)!
+    expect(r.converged).toBe(true)
+    expect(r.model.plates[0].thickness).toBeGreaterThan(150)
+    expect(r.design.slabs.every((s) => s.ok)).toBe(true)
+    // the slab self-weight delta rode along into the panel's area-D load
+    const areaD = r.model.loads.find((l) => l.kind === 'area' && l.cat === 'D') as { q: number }
+    const dt = (r.model.plates[0].thickness - 150) / 1000
+    expect(areaD.q).toBeCloseTo(4.8 + dt * 24, 6)
+  }, 120_000)
+
+  it('failing SCWB joints (§418.7.3.2) gate designOK and the optimizer grows the columns', () => {
+    const m = generateGridModel({
+      baysX: [6], baysZ: [5], storeyH: [3], section, slabThickness: 200,
+      beam: { ...section, h: 600, name: '300×600' }, column: { ...section, b: 300, h: 300, name: '300×300' },
+    })
+    m.loads = m.plates.flatMap((p) => [
+      { kind: 'area' as const, plate: p.id, q: 4.8, cat: 'D' as const },
+      { kind: 'area' as const, plate: p.id, q: 2.4, cat: 'L' as const },
+    ])
+    const first = designStructure(m, soil, {}, { seismicSystem: 'smf' })!
+    expect(first.scwb.some((j) => !j.ok)).toBe(true)   // 300×300 cols vs 300×600 beams
+    expect(designOK(first)).toBe(false)
+    const r = optimizeStructure(m, soil, {}, 30, { seismicSystem: 'smf' })!
+    expect(r.converged).toBe(true)
+    expect(r.design.scwb.every((j) => j.ok)).toBe(true)
+  }, 120_000)
+
+  it('a failing shear wall gates designOK and the optimizer thickens the panel', () => {
+    const m = makeModel()
+    m.walls = [{ id: 'w0', member: 'bx0.0.1', height: 3, thickness: 100, shearWall: true }]
+    const base = computeSeismic(m, { Ca: 0.44, Cv: 0.64, I: 1, R: 8.5, dir: 'x' })!.loads
+    const eX: LateralCase = {
+      name: 'E+X', kind: 'E',
+      loads: base.map((l) => ({ kind: 'node', node: (l as { node: string }).node, Fx: Math.abs((l as { Fx?: number }).Fx ?? 0) * 400, cat: 'E' })),
+    }
+    const first = designStructure(m, soil, {}, { lateral: [eX] })!
+    expect(first.walls[0].ok).toBe(false)
+    expect(designOK(first)).toBe(false)
+    const r = optimizeStructure(m, soil, {}, 30, { lateral: [eX] })!
+    expect(r.converged).toBe(true)
+    expect(r.model.walls![0].thickness).toBeGreaterThan(100)
+    expect(r.design.walls.every((w) => w.ok)).toBe(true)
+  }, 120_000)
+})
+
+describe('refreshSelfWeight — sw marker semantics', () => {
+  it('preserves user-applied dead line loads when generated SW is marked', () => {
+    const m = makeModel()
+    m.loads = [
+      ...buildGravityLoads(m, 1.5, 2.4),                                          // marked sw
+      { kind: 'member-udl' as const, member: 'bx0.0.1', w: 12, cat: 'D' as const }, // user cladding load
+    ]
+    const out = refreshSelfWeight(m)
+    const user = out.loads.filter((l) => l.kind === 'member-udl' && l.cat === 'D' && !(l as { sw?: boolean }).sw)
+    expect(user).toHaveLength(1)
+    expect((user[0] as { w: number }).w).toBe(12)
+  })
+
+  it('re-derives wall self-weight from the current thickness instead of dropping it', () => {
+    const m = makeModel()
+    m.walls = [{ id: 'w0', member: 'bx0.0.1', height: 3, thickness: 200, shearWall: false }]
+    m.loads = buildGravityLoads(m, 1.5, 2.4)
+    m.walls = [{ ...m.walls[0], thickness: 300 }]           // wall thickened after load build
+    const out = refreshSelfWeight(m)
+    const onBeam = out.loads.find((l) => l.kind === 'member-udl' && (l as { member: string }).member === 'bx0.0.1') as { w: number }
+    // member SW (0.3·0.5·24 = 3.6) + wall SW at the CURRENT 300 mm (0.3·3·24 = 21.6)
+    expect(onBeam.w).toBeCloseTo(3.6 + 21.6, 9)
+  })
+})
+
 describe('unchecked members — unsupported steel beam families must not read as OK', () => {
   function channelBeamModel() {
     const m = makeModel()
@@ -438,7 +520,11 @@ describe('optimizeStructure — termination guards (hierarchy revert / catalog t
     for (let n = nextHeavierW(top); n; n = nextHeavierW(top)) top = n.name
     const m = generateGridModel({ baysX: [12], baysZ: [10], storeyH: [3], section })
     m.sections = m.sections.map((s) => ({ ...s, material: 'steel' as const, shape: top, steelFy: 345, steelFu: 448 }))
-    m.loads = m.plates.flatMap((p) => [{ kind: 'area' as const, plate: p.id, q: 400, cat: 'D' as const }])
+    // member POINT loads (not area/udl): keeps slabs out of the design and
+    // survives refreshSelfWeight, so the ONLY failing checks are the
+    // un-growable steel members — the early exit under test
+    m.loads = m.members.filter((x) => x.role !== 'column')
+      .map((x) => ({ kind: 'member-point' as const, member: x.id, t: 0.5, P: 4000, cat: 'D' as const }))
     const r = optimizeStructure(m, soil)!
     expect(r.converged).toBe(false)
     expect(r.steps.length).toBeLessThanOrEqual(2)   // initial + the single no-progress attempt
@@ -575,7 +661,7 @@ describe('model editing helpers', () => {
     expect(sw).toHaveLength(m.members.length)
     for (const l of sw) expect((l as { w: number }).w).toBeCloseTo(0.3 * 0.5 * 24, 9)
     const slabD = loads.find((l) => l.kind === 'area' && l.cat === 'D')!
-    expect((slabD as { q: number }).q).toBeCloseTo(0.15 * 24 + 1.5, 9)
+    expect((slabD as { q: number }).q).toBeCloseTo(0.20 * 24 + 1.5, 9)
     const slabL = loads.find((l) => l.kind === 'area' && l.cat === 'L')!
     expect((slabL as { q: number }).q).toBeCloseTo(2.4, 9)
     expect(loads.filter((l) => l.cat === 'E')).toHaveLength(1)

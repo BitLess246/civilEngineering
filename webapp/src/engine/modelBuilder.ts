@@ -154,12 +154,12 @@ export function buildGravityLoads(model: StructuralModel, sdl: number, ll: numbe
     .map((m) => {
       const sec = secMap.get(m.section) ?? model.sections[0]
       const w = sec ? (sec.b / 1000) * (sec.h / 1000) * gammaC : 0
-      return { kind: 'member-udl' as const, member: m.id, w, cat: 'D' as const }
+      return { kind: 'member-udl' as const, member: m.id, w, cat: 'D' as const, sw: true }
     })
     .filter((l) => l.w > 0)
   // wall self-weight as a line load on its supporting member
   const wallSW: StructuralModel['loads'] = (model.walls ?? [])
-    .map((wl) => ({ kind: 'member-udl' as const, member: wl.member, w: (wl.thickness / 1000) * wl.height * gammaC, cat: 'D' as const }))
+    .map((wl) => ({ kind: 'member-udl' as const, member: wl.member, w: (wl.thickness / 1000) * wl.height * gammaC, cat: 'D' as const, sw: true }))
     .filter((l) => l.w > 0)
   const plateLoads: StructuralModel['loads'] = model.plates
     .filter((p) => p.role !== 'wall')
@@ -178,15 +178,25 @@ export function buildGravityLoads(model: StructuralModel, sdl: number, ll: numbe
 }
 
 /**
- * Recompute member SELF-WEIGHT (member-udl, category D) from each member's
- * CURRENT section, leaving every other load untouched. No-op when the model
- * carries no member self-weight (so user models without it are not altered).
+ * Recompute the GENERATED self-weight line loads (member gravity from each
+ * member's CURRENT section, wall gravity from each wall's CURRENT thickness),
+ * leaving every other load untouched. Generated loads carry the `sw` marker
+ * (buildGravityLoads); user-applied dead line loads are preserved. Legacy
+ * models saved before the marker existed have unmarked self-weight — for
+ * those (no `sw` flag anywhere) every member-udl D load is treated as
+ * self-weight, matching the old behaviour. No-op when the model carries no
+ * self-weight line loads at all.
  */
 export function refreshSelfWeight(model: StructuralModel, gammaC = GAMMA_C): StructuralModel {
-  const hasSW = model.loads.some((l) => l.kind === 'member-udl' && l.cat === 'D')
-  if (!hasSW) return model
+  const marked = model.loads.some((l) => l.kind === 'member-udl' && l.cat === 'D' && l.sw)
+  const isSW = (l: StructuralModel['loads'][number]) =>
+    l.kind === 'member-udl' && l.cat === 'D' && (marked ? !!l.sw : true)
+  if (!model.loads.some(isSW)) return model
   const secMap = new Map(model.sections.map((s) => [s.id, s]))
-  const others = model.loads.filter((l) => !(l.kind === 'member-udl' && l.cat === 'D'))
+  const others = model.loads.filter((l) => !isSW(l))
+  const wallW = new Map<string, number>()
+  for (const wl of model.walls ?? [])
+    wallW.set(wl.member, (wallW.get(wl.member) ?? 0) + (wl.thickness / 1000) * wl.height * gammaC)
   const sw: StructuralModel['loads'] = model.members
     .map((m) => {
       const sec = secMap.get(m.section) ?? model.sections[0]
@@ -199,7 +209,7 @@ export function refreshSelfWeight(model: StructuralModel, gammaC = GAMMA_C): Str
           w = (sec.b / 1000) * (sec.h / 1000) * gammaC
         }
       }
-      return { kind: 'member-udl' as const, member: m.id, w, cat: 'D' as const }
+      return { kind: 'member-udl' as const, member: m.id, w: w + (wallW.get(m.id) ?? 0), cat: 'D' as const, sw: true }
     })
     .filter((l) => l.w > 0)
   return { ...model, loads: [...sw, ...others] }

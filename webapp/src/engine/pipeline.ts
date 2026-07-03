@@ -188,11 +188,16 @@ export interface StructureDesign {
   unchecked: UncheckedMember[]
 }
 
+/** Every check the pipeline runs must pass — members, foundations, slabs
+ *  (DDM + §408.3.1.2 + §424.2 deflection), shear walls, steel joints and the
+ *  §418.7.3.2 strong-column/weak-beam hierarchy. Nothing green is unchecked. */
 export function designOK(d: StructureDesign): boolean {
   return d.beams.every((b) => b.ok) && d.columns.every((c) => c.ok)
     && d.steelBeams.every((b) => b.ok) && d.steelColumns.every((c) => c.ok)
     && d.basePlates.every((p) => p.ok)
     && d.footings.every((f) => f.ok) && d.combined.every((c) => c.ok)
+    && d.slabs.every((s) => s.ok) && d.walls.every((w) => w.ok)
+    && d.joints.every((j) => j.ok) && d.scwb.every((j) => j.ok)
     && d.unchecked.length === 0
 }
 
@@ -670,7 +675,15 @@ function designFromRuns(
       fc: cs.fc, fy: cs.fy, h: p.thickness, cover: 20, barDia: 12,
       exterior: { x: extX, y: extZ }, withBeams: true,
     })
-    slabs.push({ plate: p.id, lx, ly: lz, design, ok: design.applicable })
+    // Pass = §408.3.1.2 minimum thickness AND §424.2 immediate-live + long-term
+    // deflection. DDM inapplicability (one-way panel, L > 2D) stays a schedule
+    // note — the strips are still detailed conservatively — so it does not
+    // dead-end the optimizer; serviceability violations DO fail the design.
+    slabs.push({
+      plate: p.id, lx, ly: lz, design,
+      ok: design.h >= design.hmin - 1e-9
+        && design.deflection.liveOK && design.deflection.totalOK,
+    })
   }
 
   // ── Shear walls — in-plane reinforcement ──
@@ -852,17 +865,17 @@ export async function optimizeStructureAsync(
     let iter = 0
     let stopReason: string | undefined
     while (!designOK(design) && iter++ < maxIter) {
-      const utils = buildUtilMap(design, memSecId)
-      if (utils.size === 0) {                        // not a member-section problem
-        stopReason = stopReasonFor(design, 'growing member sections cannot fix the remaining checks (adjust soil bearing, footing plan or section shapes)')
+      const act = buildGrowActions(design, work, memSecId)
+      if (act.n === 0) {                        // not fixable by growing anything
+        stopReason = stopReasonFor(design, 'growing sections or thicknesses cannot fix the remaining checks (adjust soil bearing, footing plan, section shapes or DDM layout)')
         break
       }
-      onProgress?.({ phase: 'Optimizing — growing sections', current: iter, total: maxIter, detail: `iteration ${iter}: ${utils.size} member(s) grown, ${countFails(design)} failing` })
+      onProgress?.({ phase: 'Optimizing — growing sections', current: iter, total: maxIter, detail: `iteration ${iter}: ${act.n} change(s), ${countFails(design)} failing` })
       const sizes = new Map(work.sections.map((s) => {
-        const u = utils.get(s.id)
+        const u = act.utils.get(s.id)
         return [s.id, u !== undefined ? jumpSection(s, u, secRole.get(s.id) ?? '') : s]
       }))
-      const grown = settle(withSizes(work, sizes))
+      const grown = settle(withWallThickness(withPlateThickness(withSizes(work, sizes), act.plates, soil.gammaConc), act.walls))
       if (!sectionsChanged(work, grown)) {     // nothing can grow (catalog top / unsupported shape)
         stopReason = stopReasonFor(design, 'no failing section can grow any further (top of the W catalog or an unsupported shape family)')
         break
@@ -871,7 +884,7 @@ export async function optimizeStructureAsync(
       const d = await designStructureWithPool(work, soil, plan, opts, pool, sub(`Optimize iter ${iter}`))
       if (!d) break
       ;({ m: work, d: design } = await detail(work, d, `Optimize iter ${iter}`))
-      steps.push({ iter, grown: utils.size, fails: countFails(design), ok: designOK(design) })
+      steps.push({ iter, grown: act.n, fails: countFails(design), ok: designOK(design) })
     }
     const converged = designOK(design)
     if (!converged && !stopReason)
@@ -920,6 +933,30 @@ export async function optimizeStructureAsync(
         if (!sectionsChanged(work, trial)) break   // hierarchy reverted every shrink — no progress
         const d = await designStructureWithPool(trial, soil, plan, opts, pool)
         if (d && designOK(d)) { work = trial; design = d } else { bBatchOk = false }
+      }
+      // Phase 3 — trim slab thickness (economy): only panels comfortably inside the
+      // §424.2 deflection limits shrink, and never below §408.3.1.2 hmin (or 100 mm).
+      let sBatchOk = true
+      while (sBatchOk) {
+        const trims = new Map<string, number>()
+        for (const s of design.slabs) {
+          if (!s.ok) continue
+          const d0 = s.design
+          const util = Math.max(
+            d0.deflection.total / Math.max(d0.deflection.limitTotal, 1e-9),
+            d0.deflection.immLive / Math.max(d0.deflection.limitLive, 1e-9),
+          )
+          if (util >= 0.80) continue
+          if (d0.h - 25 < Math.max(d0.hmin, 100)) continue
+          trims.set(s.plate, d0.h - 25)
+        }
+        if (trims.size === 0) break
+        batchPass++
+        onProgress?.({ phase: 'Optimizing — trimming sections', detail: `batch pass ${batchPass}: ${trims.size} slab(s) t↓` })
+        const trial = settle(withPlateThickness(work, trims, soil.gammaConc))
+        if (!sectionsChanged(work, trial)) break
+        const d = await designStructureWithPool(trial, soil, plan, opts, pool)
+        if (d && designOK(d)) { work = trial; design = d } else { sBatchOk = false }
       }
 
       // Fine-tune: sequential per-section trials. Each call to designStructureWithPool
@@ -1085,6 +1122,10 @@ function stopReasonFor(d: StructureDesign, why: string): string {
       + d.steelBeams.filter((x) => !x.ok).length + d.steelColumns.filter((x) => !x.ok).length, 'member'],
     [d.footings.filter((x) => !x.ok).length + d.combined.filter((x) => !x.ok).length, 'footing'],
     [d.basePlates.filter((x) => !x.ok).length, 'base plate'],
+    [d.slabs.filter((x) => !x.ok).length, 'slab'],
+    [d.walls.filter((x) => !x.ok).length, 'shear wall'],
+    [d.joints.filter((x) => !x.ok).length, 'steel joint'],
+    [d.scwb.filter((x) => !x.ok).length, 'SCWB joint'],
     [d.unchecked.length, 'unchecked member'],
   ] as const
   const failing = parts.filter(([n]) => n > 0).map(([n, l]) => `${n} ${l}${n === 1 ? '' : 's'}`).join(', ')
@@ -1096,12 +1137,15 @@ const countFails = (d: StructureDesign): number =>
   + d.steelBeams.filter((x) => !x.ok).length + d.steelColumns.filter((x) => !x.ok).length
   + d.basePlates.filter((x) => !x.ok).length
   + d.footings.filter((x) => !x.ok).length + d.combined.filter((x) => !x.ok).length
+  + d.slabs.filter((x) => !x.ok).length + d.walls.filter((x) => !x.ok).length
+  + d.joints.filter((x) => !x.ok).length + d.scwb.filter((x) => !x.ok).length
   + d.unchecked.length
 
 const withSizes = (model: StructuralModel, sizes: Map<string, RectSection>): StructuralModel =>
   ({ ...model, sections: model.sections.map((s) => sizes.get(s.id) ?? s) })
 
-/** True when any section geometry differs between two settled models.
+/** True when any design geometry differs between two settled models — sections,
+ *  slab thicknesses or wall thicknesses.
  *  enforceSectionHierarchy can silently revert a proposed change (e.g. a square
  *  column's h-shrink is clamped back to h ≥ b), so a grow/shrink trial can come
  *  out identical to the current model. Accepting such a trial makes no progress —
@@ -1112,6 +1156,69 @@ const sectionsChanged = (a: StructuralModel, b: StructuralModel): boolean =>
     const t = b.sections[i]
     return s.b !== t.b || s.h !== t.h || s.shape !== t.shape
   })
+  || a.plates.some((p, i) => p.thickness !== b.plates[i]?.thickness)
+  || (a.walls ?? []).some((w, i) => w.thickness !== (b.walls ?? [])[i]?.thickness)
+
+/** Re-thickness plates and shift each panel's area-D load by Δt·γc — the slab
+ *  self-weight is merged into that load at model build time (buildGravityLoads),
+ *  so a thickness change must carry its dead-load delta into the analysis. */
+function withPlateThickness(model: StructuralModel, t: Map<string, number>, gammaC: number): StructuralModel {
+  if (t.size === 0) return model
+  const t0 = new Map(model.plates.map((p) => [p.id, p.thickness]))
+  const plates = model.plates.map((p) => (t.has(p.id) ? { ...p, thickness: t.get(p.id)! } : p))
+  const adjusted = new Set<string>()   // shift only the FIRST area-D load per plate
+  const loads = model.loads.map((l) => {
+    if (l.kind !== 'area' || l.cat !== 'D' || !t.has(l.plate) || adjusted.has(l.plate)) return l
+    adjusted.add(l.plate)
+    const dq = ((t.get(l.plate)! - (t0.get(l.plate) ?? 0)) / 1000) * gammaC
+    return { ...l, q: l.q + dq }
+  })
+  return { ...model, plates, loads }
+}
+
+/** Re-thickness shear-wall panels; the wall dead load is re-derived from the
+ *  new thickness by refreshSelfWeight inside settle(). */
+const withWallThickness = (model: StructuralModel, t: Map<string, number>): StructuralModel =>
+  t.size === 0 ? model : { ...model, walls: (model.walls ?? []).map((w) => (t.has(w.id) ? { ...w, thickness: t.get(w.id)! } : w)) }
+
+/** Everything the grow phase can change in one iteration: member-section
+ *  demand/capacity ratios (incl. SCWB column bumps), slab thickness targets
+ *  and shear-wall thickness targets. n = number of distinct actions. */
+interface GrowActions { utils: Map<string, number>; plates: Map<string, number>; walls: Map<string, number>; n: number }
+
+function buildGrowActions(design: StructureDesign, model: StructuralModel, memSecId: Map<string, string>): GrowActions {
+  const utils = buildUtilMap(design, memSecId)
+  // SCWB (§418.7.3.2): ΣMnc ≥ (6/5)·ΣMnb. Column Mnc scales ≈ h², the same law
+  // the jump estimator assumes, so feed 1.2/ratio as the demand/capacity of
+  // every column framing the failing joint.
+  for (const j of design.scwb) {
+    if (j.ok) continue
+    const need = Math.max(1.05, 1.2 / Math.max(j.ratio, 1e-6))
+    for (const mm of model.members) {
+      if (mm.role !== 'column' || (mm.i !== j.node && mm.j !== j.node)) continue
+      utils.set(mm.section, Math.max(utils.get(mm.section) ?? 0, need))
+    }
+  }
+  // Slabs: §408.3.1.2 hmin directly; §424.2 deflection via Ie ≈ h³ ⇒ target
+  // h ≈ h·∛(δ/δlim). 25-mm steps, capped like the section jump.
+  const plates = new Map<string, number>()
+  for (const s of design.slabs) {
+    if (s.ok) continue
+    const d = s.design
+    const f = Math.max(
+      d.hmin / Math.max(d.h, 1),
+      Math.cbrt(d.deflection.total / Math.max(d.deflection.limitTotal, 1e-9)),
+      Math.cbrt(d.deflection.immLive / Math.max(d.deflection.limitLive, 1e-9)),
+    )
+    if (f <= 1 + 1e-9) continue
+    const steps = Math.max(1, Math.min(10, Math.ceil(((f - 1) * d.h) / 25)))
+    plates.set(s.plate, d.h + 25 * steps)
+  }
+  // Shear walls: in-plane shear failure → thicken the panel one step per iteration.
+  const walls = new Map<string, number>()
+  for (const w of design.walls) if (!w.ok) walls.set(w.id, w.thickness + 25)
+  return { utils, plates, walls, n: utils.size + plates.size + walls.size }
+}
 
 /** Copy shape geometry into the section's bounding-box fields so metadata stays consistent. */
 const applyShape = (s: RectSection, sh: AiscShape): RectSection =>
@@ -1241,17 +1348,17 @@ export function optimizeStructure(
   let iter = 0
   let stopReason: string | undefined
   while (!designOK(design) && iter++ < maxIter) {
-    const utils = buildUtilMap(design, memSecId)
-    if (utils.size === 0) {                          // not a member-section problem
-      stopReason = stopReasonFor(design, 'growing member sections cannot fix the remaining checks (adjust soil bearing, footing plan or section shapes)')
+    const act = buildGrowActions(design, work, memSecId)
+    if (act.n === 0) {                          // not fixable by growing anything
+      stopReason = stopReasonFor(design, 'growing sections or thicknesses cannot fix the remaining checks (adjust soil bearing, footing plan, section shapes or DDM layout)')
       break
     }
-    onProgress?.({ phase: 'Optimizing — growing sections', current: iter, total: maxIter, detail: `iteration ${iter}: ${utils.size} member(s) grown, ${countFails(design)} failing` })
+    onProgress?.({ phase: 'Optimizing — growing sections', current: iter, total: maxIter, detail: `iteration ${iter}: ${act.n} change(s), ${countFails(design)} failing` })
     const sizes = new Map(work.sections.map((s) => {
-      const u = utils.get(s.id)
+      const u = act.utils.get(s.id)
       return [s.id, u !== undefined ? jumpSection(s, u, secRole.get(s.id) ?? '') : s]
     }))
-    const grown = settle(withSizes(work, sizes))
+    const grown = settle(withWallThickness(withPlateThickness(withSizes(work, sizes), act.plates, soil.gammaConc), act.walls))
     if (!sectionsChanged(work, grown)) {       // nothing can grow (catalog top / unsupported shape)
       stopReason = stopReasonFor(design, 'no failing section can grow any further (top of the W catalog or an unsupported shape family)')
       break
@@ -1260,7 +1367,7 @@ export function optimizeStructure(
     const d = designStructure(work, soil, plan, opts, sub(`Optimize iter ${iter}`))
     if (!d) break
     ;({ m: work, d: design } = detail(work, d, `Optimize iter ${iter}`))
-    steps.push({ iter, grown: utils.size, fails: countFails(design), ok: designOK(design) })
+    steps.push({ iter, grown: act.n, fails: countFails(design), ok: designOK(design) })
   }
   const converged = designOK(design)
   if (!converged && !stopReason)
@@ -1312,6 +1419,30 @@ export function optimizeStructure(
       if (!sectionsChanged(work, trial)) break   // hierarchy reverted every shrink — no progress
       const d = designStructure(trial, soil, plan, opts)
       if (d && designOK(d)) { work = trial; design = d } else { bBatchOk = false }
+    }
+    // Phase 3 — trim slab thickness (economy): only panels comfortably inside the
+    // §424.2 deflection limits shrink, and never below §408.3.1.2 hmin (or 100 mm).
+    let sBatchOk = true
+    while (sBatchOk) {
+      const trims = new Map<string, number>()
+      for (const s of design.slabs) {
+        if (!s.ok) continue
+        const d0 = s.design
+        const util = Math.max(
+          d0.deflection.total / Math.max(d0.deflection.limitTotal, 1e-9),
+          d0.deflection.immLive / Math.max(d0.deflection.limitLive, 1e-9),
+        )
+        if (util >= 0.80) continue
+        if (d0.h - 25 < Math.max(d0.hmin, 100)) continue
+        trims.set(s.plate, d0.h - 25)
+      }
+      if (trims.size === 0) break
+      batchPass++
+      onProgress?.({ phase: 'Optimizing — trimming sections', detail: `batch pass ${batchPass}: ${trims.size} slab(s) t↓` })
+      const trial = settle(withPlateThickness(work, trims, soil.gammaConc))
+      if (!sectionsChanged(work, trial)) break
+      const d = designStructure(trial, soil, plan, opts)
+      if (d && designOK(d)) { work = trial; design = d } else { sBatchOk = false }
     }
 
     // Fine-tune: per-section — try h↓ first, then b↓ if h can't shrink or fails.
