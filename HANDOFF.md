@@ -37,8 +37,8 @@ npm run build    # typecheck + production build
 ## Current state (analysis-core baseline, PR #239)
 
 > Newer work is tracked in the **Tier 4** (A1–E13, PRs through #273),
-> **Post-Tier-4** (PRs #275–#278) and **Phase 3 + connections** (PRs #279–#298)
-> sections below; latest suite: **965 tests**.
+> **Post-Tier-4** (PRs #275–#278) and **Phase 3 + connections** (PRs #279–#308)
+> sections below; latest suite: **988 tests**.
 > The repo root is now just `webapp/`, `docs/` and the markdown docs.
 
 ### 3D Model Space analysis core (`/model`) — the centrepiece
@@ -300,7 +300,7 @@ After Tier 4, four cleanup / capability items from an external code review shipp
 
 _Tests after #278: **863 passing**; `tsc -b` clean; production build OK._
 
-## Phase 3 + steel connections (PRs #279–#298)
+## Phase 3 + steel connections (PRs #279–#308)
 
 Roadmap Phase 3 (specialty structural/geotech tools) plus a full steel-connection
 suite, one PR per phase, all auto-merged after Vercel CI:
@@ -341,6 +341,36 @@ suite, one PR per phase, all auto-merged after Vercel CI:
   refresh.
 
 _Tests after #298: **965 passing**; `tsc -b` clean; production build OK._
+
+## Optimizer hardening + steel joints (PRs #299–#308)
+
+- **#299–#302 — optimizer regime check fixes**: batch-shrink infinite loop on
+  square RC columns (hierarchy revert guard, sync+async); un-designable steel
+  members surface via `design.unchecked` instead of silently passing; NSCP
+  Table 409.3.1.1 min-thickness gate on pipeline RC beams; honest `stopReason`
+  on non-convergence (shown in the optimize panel).
+- **#303 — optimizer covers EVERY check**: slabs (§408.3.1.2 + §424.2
+  deflection), shear walls, steel joints and SCWB gate `designOK`; grow
+  actions for slab/wall thickness and SCWB columns; slab-trim economy pass;
+  `sw` marker so refreshSelfWeight stops wiping wall/user dead line loads.
+- **#304 — ETABS-consistent rigid end zones**: vertical members project with
+  the drawn orientation (depth d → X); steel zones render the true extruded
+  profile, not the bounding box.
+- **#305 — designed connections in 3D**: shear tabs + bolts at their designed
+  layout, moment flange welds + continuity plates, at the faces the rigid
+  zones cut ('Show designed steel connections' toggle).
+- **#306 — `Member.axisRotation`** (ETABS local axis 2 angle) through the
+  element transform; verticals default 90° so ANALYSIS strong-axis orientation
+  finally matches the drawn/joint-designed one. ⚠ results shift for non-square
+  columns (correction).
+- **#307 — beam-to-beam connections**: fin plates into a through-girder web
+  with the SCM coped-beam detail (`design.beamJoints`, gated + rendered).
+- **#308 — interactive connection schedule**: click a row → 2D detail drawing
+  (elevation + end section, SVG from the designed values) + KaTeX step-by-step
+  solution (§J3.6 bolt group, §J4.2 plate, §J2.4 weld, §J2.6 CJP, Part 9 cope).
+
+_Tests after #308: **988 passing**; `tsc -b` clean; production build OK._
+
 _Remaining roadmap: Pressure Grouting (empirical — skipped by design); Phase 4
 items are owner-driven (marketing/monetisation)._
 
