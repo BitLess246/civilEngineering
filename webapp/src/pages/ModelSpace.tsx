@@ -29,6 +29,7 @@ import { buildSeismicMass, GRAVITY } from '../engine/modal'
 import { autoRigidOffsets } from '../engine/rigidEndZones'
 import { computeWind, computeCladding, type WindResult, type WindEnclosure, type CladdingResult } from '../engine/wind'
 import { ReportControls } from '../components/ReportControls'
+import { JointConnections3D } from '../components/JointConnections3D'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution } from '../lib/modelSpaceSolutions'
 import { Diagram } from '../components/Diagram'
@@ -789,6 +790,7 @@ export default function ModelSpace() {
   const [tryBars, setTryBars] = useState(b('tryBars', true))        // let design/optimize pick bar Ø from a ladder
   const [showLoads, setShowLoads] = useState(true)   // load-diagram overlay
   const [showFootings, setShowFootings] = useState(true)   // designed footing footprints
+  const [showConns, setShowConns] = useState(true)         // designed steel joint hardware
 
   const [model, setModel] = useState<StructuralModel | null>(() => {
     try {
@@ -1504,6 +1506,9 @@ export default function ModelSpace() {
                   const p = nodePos.get(s.node)
                   return p ? <Support3D key={s.node} p={p} /> : null
                 })}
+                {showConns && design && design.joints.length > 0 && (
+                  <JointConnections3D joints={design.joints} model={model} nodePos={nodePos} />
+                )}
                 {showFootings && design && (() => {
                   const xz = new Map([...nodePos].map(([id, p]) => [id, { x: p.x, z: p.z }]))
                   const { items, overlaps } = footingLayout(
@@ -1568,6 +1573,14 @@ export default function ModelSpace() {
               </div>
             )}
           </div>
+          {design && design.joints.length > 0 && (
+            <label className="no-print mt-2 flex items-center gap-2 text-xs text-slate-600">
+              <input type="checkbox" checked={showConns} onChange={(e) => setShowConns(e.target.checked)} />
+              Show designed steel connections
+              <span className="ml-1 inline-flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm" style={{ background: '#334155' }} />plates</span>
+              <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm" style={{ background: '#d4a017' }} />bolts / welds</span>
+            </label>
+          )}
           {design && (
             <label className="no-print mt-2 flex items-center gap-2 text-xs text-slate-600">
               <input type="checkbox" checked={showFootings} onChange={(e) => setShowFootings(e.target.checked)} />
