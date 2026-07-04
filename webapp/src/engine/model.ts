@@ -71,6 +71,11 @@ export interface Member {
    *  Absent ⇒ the full member length is used (conservative). Set to the real
    *  brace spacing (e.g. purlin/joist pitch) to relieve LTB. */
   Lb?: number
+  /** Local-axis rotation about the member axis, degrees (ETABS "local axis 2
+   *  angle"): +θ turns the section depth (local y′) toward local z′, i→j
+   *  right-hand rule. Absent ⇒ 0 for beams; VERTICAL members default to 90° so
+   *  the depth lands on global X — the drawn orientation. */
+  axisRotation?: number
 }
 
 export type PlateRole = 'slab' | 'wall'
