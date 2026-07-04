@@ -143,21 +143,49 @@ function RigidArm3D({ a, b }: { a: THREE.Vector3; b: THREE.Vector3 }) {
 }
 
 /** Rigid end-zone segment: the member's own cross-section in a muted shade,
- *  filling node→clear-span-end so members stay connected at joints (ETABS look). */
-function RigidZone3D({ a, b, role, sec }: {
+ *  filling node→clear-span-end so members stay connected at joints (ETABS look).
+ *  Steel members draw their TRUE extruded profile (same orientation rules as
+ *  MemberSteel3D — a bounding-box cuboid on the end of an I-beam is not ETABS). */
+function RigidZone3D({ a, b, role, sec, shapeName }: {
   a: THREE.Vector3; b: THREE.Vector3; role: string; sec?: { b: number; h: number }
+  /** AISC shape name for steel members — switches to the true-profile render. */
+  shapeName?: string
 }) {
-  const { mid, quat, len } = useMemo(() => {
+  const { mid, quat, len, steel } = useMemo(() => {
     const dir = new THREE.Vector3().subVectors(b, a)
     const len = dir.length()
     const quat = new THREE.Quaternion().setFromUnitVectors(
       new THREE.Vector3(1, 0, 0), len > 1e-9 ? dir.clone().normalize() : new THREE.Vector3(1, 0, 0))
-    return { mid: new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5), quat, len }
-  }, [a, b])
+    // steel: extrude the true profile along the member (MemberSteel3D rules)
+    const shape = shapeName ? shapeByName(shapeName) : undefined
+    let steel: { shapes: THREE.Shape[]; quat: THREE.Quaternion } | null = null
+    if (shape && len > 1e-9) {
+      const shapes = buildSectionShapes(effectiveSection(shape, false))
+      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.clone().normalize())
+      if (role === 'column') {
+        const rPre = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2)
+        q.multiply(rPre)
+      }
+      steel = { shapes, quat: q }
+    }
+    return { mid: new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5), quat, len, steel }
+  }, [a, b, role, shapeName])
   if (len < 1e-6) return null
+  const color = `#${new THREE.Color(ROLE_COLOR[role] ?? '#64748b').lerp(new THREE.Color('#1e293b'), 0.45).getHexString()}`
+  if (steel && steel.shapes.length > 0) {
+    return (
+      <group position={a} quaternion={steel.quat}>
+        {steel.shapes.map((sh, i) => (
+          <mesh key={i}>
+            <extrudeGeometry args={[sh, { depth: len, bevelEnabled: false, steps: 1 }]} />
+            <meshStandardMaterial color="#334155" metalness={0.35} roughness={0.5} />
+          </mesh>
+        ))}
+      </group>
+    )
+  }
   const ty = sec ? sec.h / 1000 : role === 'column' ? 0.3 : 0.22
   const tz = sec ? sec.b / 1000 : role === 'column' ? 0.3 : 0.22
-  const color = `#${new THREE.Color(ROLE_COLOR[role] ?? '#64748b').lerp(new THREE.Color('#1e293b'), 0.45).getHexString()}`
   return (
     <mesh position={mid} quaternion={quat}>
       <boxGeometry args={[len, ty * 1.04, tz * 1.04]} />
@@ -1461,8 +1489,8 @@ export default function ModelSpace() {
                   return (
                     <group key={m.id}>
                       {memberEl}
-                      {effI && (manI ? <RigidArm3D a={a} b={aEff} /> : <RigidZone3D a={a} b={aEff} role={m.role} sec={sec} />)}
-                      {effJ && (manJ ? <RigidArm3D a={bb} b={bEff} /> : <RigidZone3D a={bb} b={bEff} role={m.role} sec={sec} />)}
+                      {effI && (manI ? <RigidArm3D a={a} b={aEff} /> : <RigidZone3D a={a} b={aEff} role={m.role} sec={sec} shapeName={sec?.material === 'steel' ? sec.shape : undefined} />)}
+                      {effJ && (manJ ? <RigidArm3D a={bb} b={bEff} /> : <RigidZone3D a={bb} b={bEff} role={m.role} sec={sec} shapeName={sec?.material === 'steel' ? sec.shape : undefined} />)}
                     </group>
                   )
                 })}
