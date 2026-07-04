@@ -31,6 +31,9 @@ describe('connectionRowSolution — schedule row worked solution', () => {
     expect(flat).toContain(`M${conn.bolts.dia}`)
     expect(conn.ok).toBe(true)
     expect(flat).toContain('All checks pass')
+    // the shear-plane basis is stated explicitly (single plate ⇒ m = 1)
+    expect(flat).toContain('SINGLE shear')
+    expect(flat).toContain('m = 1 shear plane')
   })
 
   it('a moment connection adds the CJP flange-force step', () => {
