@@ -26,7 +26,7 @@ import { checkModelSCWB, type SCWBJointRow } from './scwb'
 import { shapeByName, nextHeavierW, nextLighterW, type AiscShape } from './aiscSections'
 import { deriveWSection, beamFlexure, beamShear, columnAxial, combinedLoading } from './steelDesign'
 import { designBasePlate, adoptPlateThickness, type BasePlateResult } from './baseplate'
-import { designSteelJoints, type SteelJoint } from './steelConnections'
+import { designSteelJoints, designBeamBeamJoints, type SteelJoint, type BeamBeamJoint } from './steelConnections'
 
 export interface SoilOptions {
   qAllow: number; gammaSoil: number; gammaConc: number; H: number
@@ -175,6 +175,8 @@ export interface StructureDesign {
   steelColumns: SteelColumnScheduleRow[]
   basePlates: BasePlateScheduleRow[]
   joints: SteelJoint[]               // beam-to-column connections (steel frames only)
+  /** Beam-to-beam fin plates: beams framing into a girder web (steel only). */
+  beamJoints: BeamBeamJoint[]
   slabs: SlabScheduleRow[]
   walls: WallScheduleRow[]
   footings: FootingScheduleRow[]
@@ -197,7 +199,7 @@ export function designOK(d: StructureDesign): boolean {
     && d.basePlates.every((p) => p.ok)
     && d.footings.every((f) => f.ok) && d.combined.every((c) => c.ok)
     && d.slabs.every((s) => s.ok) && d.walls.every((w) => w.ok)
-    && d.joints.every((j) => j.ok) && d.scwb.every((j) => j.ok)
+    && d.joints.every((j) => j.ok) && d.beamJoints.every((j) => j.ok) && d.scwb.every((j) => j.ok)
     && d.unchecked.length === 0
 }
 
@@ -722,6 +724,7 @@ function designFromRuns(
     cases: runs.map((r) => r.name),
     beams, columns, steelBeams, steelColumns, basePlates,
     joints: [] as SteelJoint[],
+    beamJoints: [] as BeamBeamJoint[],
     slabs, walls, footings, combined,
     scwb: [] as SCWBJointRow[],
     totals: { concreteMembers, concreteSlabs, concrete: concreteMembers + concreteSlabs, steelKg },
@@ -729,6 +732,7 @@ function designFromRuns(
     unchecked,
   }
   partialDesign.joints = designSteelJoints(model, partialDesign)
+  partialDesign.beamJoints = designBeamBeamJoints(model, partialDesign)
   // Strong-column/weak-beam is a Special-Moment-Frame requirement (§418.7.3.2).
   if ((opts.seismicSystem ?? 'gravity') === 'smf')
     partialDesign.scwb = checkModelSCWB(model, partialDesign)
@@ -1124,7 +1128,7 @@ function stopReasonFor(d: StructureDesign, why: string): string {
     [d.basePlates.filter((x) => !x.ok).length, 'base plate'],
     [d.slabs.filter((x) => !x.ok).length, 'slab'],
     [d.walls.filter((x) => !x.ok).length, 'shear wall'],
-    [d.joints.filter((x) => !x.ok).length, 'steel joint'],
+    [d.joints.filter((x) => !x.ok).length + d.beamJoints.filter((x) => !x.ok).length, 'steel joint'],
     [d.scwb.filter((x) => !x.ok).length, 'SCWB joint'],
     [d.unchecked.length, 'unchecked member'],
   ] as const
@@ -1138,7 +1142,8 @@ const countFails = (d: StructureDesign): number =>
   + d.basePlates.filter((x) => !x.ok).length
   + d.footings.filter((x) => !x.ok).length + d.combined.filter((x) => !x.ok).length
   + d.slabs.filter((x) => !x.ok).length + d.walls.filter((x) => !x.ok).length
-  + d.joints.filter((x) => !x.ok).length + d.scwb.filter((x) => !x.ok).length
+  + d.joints.filter((x) => !x.ok).length + d.beamJoints.filter((x) => !x.ok).length
+  + d.scwb.filter((x) => !x.ok).length
   + d.unchecked.length
 
 const withSizes = (model: StructuralModel, sizes: Map<string, RectSection>): StructuralModel =>

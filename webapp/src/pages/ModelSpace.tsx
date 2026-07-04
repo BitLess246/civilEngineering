@@ -1514,8 +1514,8 @@ export default function ModelSpace() {
                   const p = nodePos.get(s.node)
                   return p ? <Support3D key={s.node} p={p} /> : null
                 })}
-                {showConns && design && design.joints.length > 0 && (
-                  <JointConnections3D joints={design.joints} model={model} nodePos={nodePos} />
+                {showConns && design && (design.joints.length > 0 || design.beamJoints.length > 0) && (
+                  <JointConnections3D joints={design.joints} beamJoints={design.beamJoints} model={model} nodePos={nodePos} />
                 )}
                 {showFootings && design && (() => {
                   const xz = new Map([...nodePos].map(([id, p]) => [id, { x: p.x, z: p.z }]))
@@ -1581,7 +1581,7 @@ export default function ModelSpace() {
               </div>
             )}
           </div>
-          {design && design.joints.length > 0 && (
+          {design && (design.joints.length > 0 || design.beamJoints.length > 0) && (
             <label className="no-print mt-2 flex items-center gap-2 text-xs text-slate-600">
               <input type="checkbox" checked={showConns} onChange={(e) => setShowConns(e.target.checked)} />
               Show designed steel connections
@@ -3918,7 +3918,7 @@ export default function ModelSpace() {
           )}
 
           {/* Steel connection schedule — only for steel frames */}
-          {design.joints.length > 0 && (
+          {(design.joints.length > 0 || design.beamJoints.length > 0) && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Steel connection schedule — AISC SCM</h3>
               <p className="mb-2 text-[11px] text-slate-500">
@@ -3985,11 +3985,52 @@ export default function ModelSpace() {
                       </tr>
                     ))
                   )}
+                  {design.beamJoints.flatMap((bj) =>
+                    bj.connections.map((c, ci) => (
+                      <tr key={`bb-${bj.nodeId}-${c.beamId}`}
+                        className={`border-t border-slate-100 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                        {ci === 0 && (
+                          <td className="py-1 pr-2 font-medium align-top" rowSpan={bj.connections.length}>
+                            {bj.nodeId}
+                            <div className="text-[10px] text-slate-400">beam-to-beam</div>
+                          </td>
+                        )}
+                        {ci === 0 && (
+                          <td className="py-1 pr-2 font-mono align-top" rowSpan={bj.connections.length}>
+                            {bj.girderShape}
+                            <div className="text-[10px] text-slate-400">girder {bj.girderId}</div>
+                          </td>
+                        )}
+                        <td className="py-1 pr-2 font-medium">{c.beamId}</td>
+                        <td className="py-1 pr-2 uppercase">{c.spanDir}</td>
+                        <td className="py-1 pr-2 text-[11px]">
+                          <span className="text-slate-600">girder web</span>
+                          <span className="text-slate-400"> → beam web{c.cope ? ` (coped ${c.cope.lengthMm}×${c.cope.depthMm})` : ''}</span>
+                        </td>
+                        <td className="py-1 pr-2 text-[11px]">
+                          Fin plate
+                          <div className="text-[10px] text-slate-400">pin — releases Mz</div>
+                        </td>
+                        <td className="py-1 pr-2 text-right">{f1(c.Vu)}</td>
+                        <td className="py-1 pr-2 text-right">—</td>
+                        <td className="py-1 pr-2 text-[11px]">
+                          {c.bolts.n} × M{c.bolts.dia} A325
+                          <div className="text-[10px] text-slate-400">R={f1(c.bolts.Rmax)}/{f1(c.bolts.phiRnKn)} kN · e={Math.round(c.bolts.ecc)}mm</div>
+                        </td>
+                        <td className="py-1 pr-2 text-[11px]">{c.tab.t}×{Math.round(c.tab.hMm)} mm</td>
+                        <td className="py-1 pr-2 text-[11px]">{c.tab.weldSizeMm}mm E70</td>
+                        <td className="py-1 text-[11px]">
+                          <span className={c.ok ? 'text-green-700' : 'text-red-600'}>{c.ok ? '✓ OK' : '✗ NG'}</span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
               <p className="mt-1 text-[11px] text-slate-400">
                 Shear tab: A36 plate (Fy=248, Fu=400 MPa), M20 A325 bolts @ 75 mm pitch, 40 mm edge. Plate shear yielding φ=1.0 (§J4.2).
                 Moment connection: CJP groove weld at beam flanges, φFu·A_flange (§J2.6). Weld = E70XX fillet both sides of shear tab.
+                Beam-to-beam: fin plate welded to the girder web, supported-beam top flange coped to clear the girder flange (SCM Pt 9/10).
               </p>
             </div>
           )}

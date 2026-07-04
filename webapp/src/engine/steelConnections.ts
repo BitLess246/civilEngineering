@@ -12,6 +12,7 @@
 import type { StructuralModel, Node as ModelNode } from './model'
 import type { StructureDesign, SteelBeamScheduleRow } from './pipeline'
 import { boltGeomFromPositions, eccentricBoltGroup, type BoltPos } from './steelDesign'
+import { shapeByName } from './aiscSections'
 
 // ── Material constants ──────────────────────────────────────────────────────
 const PHI_SHEAR_BOLT = 0.75           // AISC §J3.6
@@ -92,6 +93,9 @@ export interface BeamConnection {
   bolts: BoltGroup
   tab: ShearTab
   flange?: FlangeMomentConn
+  /** Top-flange cope on the SUPPORTED beam (beam-to-beam fin plates only):
+   *  clears the carrying girder's flange (AISC SCM Part 9 coped-beam detail). */
+  cope?: { lengthMm: number; depthMm: number }
   ok: boolean
 }
 
@@ -332,5 +336,121 @@ export function designSteelJoints(
     }
   }
 
+  return joints
+}
+
+// ── Beam-to-beam (girder web) connections — AISC SCM Part 10 fin plates ─────
+
+export interface BeamBeamJoint {
+  nodeId: string
+  /** The CARRYING member (continuous through the joint) — usually a girder. */
+  girderId: string
+  girderShape: string
+  connections: BeamConnection[]   // the supported beams, fin-plated to the girder web
+  ok: boolean
+}
+
+/**
+ * Design fin-plate connections at every joint where a beam frames into the WEB
+ * of a girder that runs CONTINUOUSLY through the node (two collinear segments)
+ * and no steel column exists there — the beam-to-beam case (reference fig. 20):
+ * single plate welded to the girder web, bolted to the supported beam web, the
+ * supported beam's top flange coped to clear the girder flange.
+ */
+export function designBeamBeamJoints(
+  model: StructuralModel,
+  design: StructureDesign,
+): BeamBeamJoint[] {
+  if (design.steelBeams.length === 0) return []
+  const nodeMap = new Map<string, ModelNode>(model.nodes.map((n) => [n.id, n]))
+  const beamRow = new Map<string, SteelBeamScheduleRow>(design.steelBeams.map((b) => [b.id, b]))
+  const secOf = new Map(model.sections.map((sec) => [sec.id, sec]))
+  const memMap = new Map(model.members.map((m) => [m.id, m]))
+
+  // nodes that already host a steel column joint (handled by designSteelJoints)
+  const colNodes = new Set<string>()
+  for (const c of design.steelColumns) {
+    const cm = memMap.get(c.id)
+    if (cm) { colNodes.add(cm.i); colNodes.add(cm.j) }
+  }
+
+  const adj = new Map<string, string[]>()
+  for (const m of model.members)
+    for (const n of [m.i, m.j]) {
+      const list = adj.get(n); if (list) list.push(m.id); else adj.set(n, [m.id])
+    }
+
+  const flexAt = (nodeId: string) =>
+    (adj.get(nodeId) ?? []).map((id) => memMap.get(id)!).filter((m) =>
+      (m.role === 'beam' || m.role === 'girder') && secOf.get(m.section)?.material === 'steel')
+
+  // unit horizontal direction of member m pointing AWAY from `nodeId`
+  const outDir = (m: { i: string; j: string }, nodeId: string): [number, number] | null => {
+    const a = nodeMap.get(nodeId), bId = m.i === nodeId ? m.j : m.i
+    const b = nodeMap.get(bId)
+    if (!a || !b) return null
+    const dx = b.x - a.x, dz = b.z - a.z
+    const L = Math.hypot(dx, dz)
+    return L > 1e-9 ? [dx / L, dz / L] : null
+  }
+
+  const joints: BeamBeamJoint[] = []
+  for (const node of model.nodes) {
+    if (colNodes.has(node.id)) continue
+    const mems = flexAt(node.id)
+    if (mems.length < 3) continue   // need a through pair + ≥1 supported beam
+
+    // carrier = collinear pair through the node (outward dirs opposed);
+    // among candidates prefer girders, then the deeper shape.
+    let carrier: [typeof mems[number], typeof mems[number]] | null = null
+    let carrierDepth = -1
+    for (let a = 0; a < mems.length; a++)
+      for (let b = a + 1; b < mems.length; b++) {
+        const da = outDir(mems[a], node.id), db = outDir(mems[b], node.id)
+        if (!da || !db) continue
+        if (da[0] * db[0] + da[1] * db[1] > -0.999) continue   // not collinear-through
+        const shp = shapeByName(secOf.get(mems[a].section)?.shape ?? '')
+        const depth = (shp?.d ?? 0) + (mems[a].role === 'girder' ? 1e6 : 0)
+        if (depth > carrierDepth) { carrierDepth = depth; carrier = [mems[a], mems[b]] }
+      }
+    if (!carrier) continue
+
+    const girderSec = secOf.get(carrier[0].section)
+    const girderShp = girderSec?.shape ? shapeByName(girderSec.shape) : undefined
+    if (!girderShp) continue
+
+    const supported = mems.filter((m) => m.id !== carrier![0].id && m.id !== carrier![1].id)
+    if (supported.length === 0) continue
+
+    const connections: BeamConnection[] = []
+    for (const mem of supported) {
+      const ni = nodeMap.get(mem.i)!, nj = nodeMap.get(mem.j)!
+      const row = beamRow.get(mem.id)
+      const Vu = row?.Vu ?? 5
+      const bolts = designBolts(Vu, { dia: 20 })
+      const tab = designShearTab(Vu, bolts.n)
+      const tabOk = tab.phiVn >= Vu - 1e-6 && tab.phiWeldVn >= Vu - 1e-6
+      // top-flange cope clears the girder flange: half its width + clearance
+      // long, flange thickness + fillet allowance deep (SCM Part 9 detailing).
+      const cope = {
+        lengthMm: Math.round((girderShp.bf ?? 150) / 2 + 12),
+        depthMm: Math.round((girderShp.tf ?? 12) + 12),
+      }
+      connections.push({
+        beamId: mem.id, role: mem.role, spanDir: spanDirOf(ni, nj),
+        faceType: 'web', beamElement: 'web', connType: 'shear-tab',
+        pinned: true, Vu, Mu: 0, bolts, tab, cope,
+        ok: bolts.ok && tabOk,
+      })
+    }
+
+    joints.push({
+      nodeId: node.id,
+      girderId: carrier[0].id,
+      girderShape: girderShp.name,
+      connections,
+      ok: connections.every((c) => c.ok),
+    })
+  }
   return joints
 }

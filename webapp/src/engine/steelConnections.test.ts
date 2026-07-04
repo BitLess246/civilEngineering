@@ -134,3 +134,56 @@ describe('designBolts — elastic eccentric bolt group', () => {
     expect(designBolts(400).n).toBeGreaterThan(designBolts(150).n)
   })
 })
+
+describe('designBeamBeamJoints — beams framing into a girder web (fin plates)', () => {
+  // girder a→m→b runs through m; secondary beam m→c frames into its web.
+  function beamBeamModel() {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section: steelSection })
+    // split the first X-girder line? simpler: append a through-girder + secondary beam at a new node set
+    m.nodes.push(
+      { id: 'ga', x: 0, y: 3, z: 2.5 }, { id: 'gm', x: 3, y: 3, z: 2.5 }, { id: 'gb', x: 6, y: 3, z: 2.5 },
+      { id: 'sc', x: 3, y: 3, z: 0 },
+    )
+    const gSec = { ...steelSection, shape: 'W360x51' }
+    m.sections.push({ ...gSec, id: 'g1s' }, { ...gSec, id: 'g2s' }, { ...steelSection, id: 'sbs', shape: 'W310x38.7' })
+    m.members.push(
+      { id: 'g1', i: 'ga', j: 'gm', role: 'girder', section: 'g1s' },
+      { id: 'g2', i: 'gm', j: 'gb', role: 'girder', section: 'g2s' },
+      { id: 'sb', i: 'gm', j: 'sc', role: 'beam', section: 'sbs' },
+    )
+    m.supports.push({ node: 'ga', fixity: 'pin' }, { node: 'gb', fixity: 'pin' }, { node: 'sc', fixity: 'pin' })
+    m.loads = [
+      ...buildGravityLoads(m, 4.8, 2.4),
+      { kind: 'member-point', member: 'sb', t: 0.4, P: 60, cat: 'D' },
+    ]
+    return m
+  }
+
+  it('finds the through-girder joint, designs the fin plate + cope, and gates designOK', () => {
+    const m = beamBeamModel()
+    const d = designStructure(m, soil)!
+    expect(d.beamJoints.length).toBeGreaterThanOrEqual(1)
+    const bj = d.beamJoints.find((j) => j.nodeId === 'gm')!
+    expect(bj).toBeTruthy()
+    expect(['g1', 'g2']).toContain(bj.girderId)
+    expect(bj.girderShape).toBe('W360x51')
+    const c = bj.connections.find((x) => x.beamId === 'sb')!
+    expect(c.faceType).toBe('web')
+    expect(c.connType).toBe('shear-tab')
+    expect(c.pinned).toBe(true)
+    expect(c.bolts.n).toBeGreaterThanOrEqual(2)
+    expect(c.tab.hMm).toBeGreaterThan(0)
+    // cope clears the W360x51 flange: bf/2 + 12 long, tf + 12 deep
+    expect(c.cope).toBeTruthy()
+    expect(c.cope!.lengthMm).toBeGreaterThan(60)
+    expect(c.cope!.depthMm).toBeGreaterThan(12)
+    expect(c.ok).toBe(true)
+  })
+
+  it('does NOT create beam-to-beam joints at column-hosted nodes', () => {
+    const m = makeModel()                       // grid: every beam meets a column
+    const d = designStructure(m, soil)!
+    expect(d.beamJoints).toHaveLength(0)
+    expect(d.joints.length).toBeGreaterThan(0)  // those are beam-to-COLUMN joints
+  })
+})
