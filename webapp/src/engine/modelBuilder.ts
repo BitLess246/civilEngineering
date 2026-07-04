@@ -272,5 +272,43 @@ export function enforceSectionHierarchy(model: StructuralModel): StructuralModel
     }
     if (!changed) break
   }
-  return { ...model, sections: model.sections.map((s) => { const u = sec.get(s.id)!; return { ...u, name: `${u.b}×${u.h}` } }) }
+
+  // ── Column-stack continuity: a physical column is CONTINUOUS through the
+  // storeys, so every column member on the same plan position carries one
+  // section — the stack's largest (concrete: max b × max h; steel: heaviest
+  // shape by area). Grow-only, like the joint hierarchy above; idempotent. ──
+  const nodeXZ = new Map(model.nodes.map((n) => [n.id, n]))
+  const stacks = new Map<string, Member[]>()
+  for (const m of model.members) {
+    if (m.role !== 'column') continue
+    const a = nodeXZ.get(m.i), b = nodeXZ.get(m.j)
+    if (!a || !b) continue
+    if (Math.abs(a.x - b.x) > 1e-4 || Math.abs(a.z - b.z) > 1e-4) continue   // skewed — not a stack
+    const key = `${Math.round(a.x * 1e3)},${Math.round(a.z * 1e3)}`
+    ;(stacks.get(key) ?? stacks.set(key, []).get(key)!).push(m)
+  }
+  for (const stack of stacks.values()) {
+    if (stack.length < 2) continue
+    const secs = stack.map((m) => secOf(m)!).filter(Boolean)
+    if (secs.some((s) => s.material === 'steel')) {
+      // heaviest shape in the stack governs
+      let best: { name: string; A: number } | null = null
+      for (const s of secs) {
+        const shp = s.shape ? shapeByName(s.shape) : undefined
+        if (shp && (!best || shp.A > best.A)) best = { name: shp.name, A: shp.A }
+      }
+      if (best) for (const s of secs) {
+        if (s.shape !== best.name) {
+          const shp = shapeByName(best.name)!
+          s.shape = shp.name; s.b = shp.bf ?? s.b; s.h = shp.d ?? s.h
+        }
+      }
+    } else {
+      const bMax = Math.max(...secs.map((s) => s.b))
+      const hMax = Math.max(...secs.map((s) => s.h))
+      for (const s of secs) { s.b = bMax; s.h = hMax }
+    }
+  }
+
+  return { ...model, sections: model.sections.map((s) => { const u = sec.get(s.id)!; return { ...u, name: u.material === 'steel' && u.shape ? u.shape : `${u.b}×${u.h}` } }) }
 }

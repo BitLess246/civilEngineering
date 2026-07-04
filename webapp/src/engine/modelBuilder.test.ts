@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { generateGridModel, removeElements, nodeId, buildGravityLoads } from './modelBuilder'
+import { generateGridModel, removeElements, nodeId, buildGravityLoads, enforceSectionHierarchy } from './modelBuilder'
 import type { RectSection } from './model'
 
 const sec: RectSection = { id: 'S1', name: '300×500', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
@@ -77,5 +77,40 @@ describe('removeElements', () => {
     // untouched collections preserved
     expect(out.nodes).toEqual(m.nodes)
     expect(out.supports).toEqual(m.supports)
+  })
+})
+
+describe('enforceSectionHierarchy — column-stack continuity', () => {
+  const rc = (id: string, b: number, h: number): RectSection =>
+    ({ id, name: `${b}×${h}`, b, h, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 })
+
+  it('concrete columns on one plan position all take the stack maximum b × h', () => {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3, 3], section: rc('S', 300, 300) })
+    // storey-2 column above c0.0.0 is c0.0.1 — make the lower one bigger
+    const lower = m.sections.find((s) => s.id === 'c0.0.0')!
+    lower.b = 400; lower.h = 450
+    const out = enforceSectionHierarchy(m)
+    const up = out.sections.find((s) => s.id === 'c0.0.1')!
+    expect(up.b).toBe(400)
+    expect(up.h).toBe(450)
+    // a different stack is untouched
+    expect(out.sections.find((s) => s.id === 'c1.0.1')!.b).toBe(300)
+  })
+
+  it('steel stacks unify to the heaviest shape', () => {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3, 3], section: rc('S', 300, 300) })
+    for (const s of m.sections) Object.assign(s, { material: 'steel', shape: 'W310x38.7', steelFy: 345, steelFu: 448 })
+    m.sections.find((s) => s.id === 'c0.0.0')!.shape = 'W310x97'
+    const out = enforceSectionHierarchy(m)
+    expect(out.sections.find((s) => s.id === 'c0.0.1')!.shape).toBe('W310x97')
+    expect(out.sections.find((s) => s.id === 'c1.0.0')!.shape).toBe('W310x38.7')
+  })
+
+  it('is idempotent', () => {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3, 3], section: rc('S', 300, 300) })
+    m.sections.find((s) => s.id === 'c0.0.0')!.h = 500
+    const once = enforceSectionHierarchy(m)
+    const twice = enforceSectionHierarchy(once)
+    expect(JSON.stringify(twice.sections)).toBe(JSON.stringify(once.sections))
   })
 })
