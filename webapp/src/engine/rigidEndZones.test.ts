@@ -28,17 +28,26 @@ describe('autoRigidOffsets', () => {
     expect(autoRigidOffsets(portal(), 0).size).toBe(0)
   })
 
-  it('beam gets an inward i-end offset = factor·(column width/2) along +X', () => {
+  it('beam gets an inward i-end offset = factor·(column DEPTH/2) along +X (ETABS face offset)', () => {
     const m = autoRigidOffsets(portal(), 1)
     const bm = m.get('bm')!
     expect(bm).toBeTruthy()
-    // column at tl: vertical, cross-section b=400 (along X), h=600 (along Z).
-    // half-extent on the beam axis (X) = b/2 = 0.2 m. factor 1 → offI ≈ [0.2,0,0].
-    expect(bm.offI![0]).toBeCloseTo(0.2, 6)
+    // Columns are oriented depth-along-X in this app (Member3D/MemberSteel3D,
+    // joint designer): h=600 lies along X, b=400 along Z. The X-beam's offset is
+    // the support half-DEPTH h/2 = 0.3 m — matching ETABS auto end offsets.
+    expect(bm.offI![0]).toBeCloseTo(0.3, 6)
     expect(bm.offI![1]).toBeCloseTo(0, 9)
     expect(bm.offI![2]).toBeCloseTo(0, 9)
     // beam free end (tr) has no other member → no jEnd offset
     expect(bm.offJ).toBeUndefined()
+  })
+
+  it('a Z-girder at the same joint gets the column WIDTH/2 (weak-direction face)', () => {
+    const model = portal()
+    model.nodes.push({ id: 'tz', x: 0, y: 4, z: 5 })
+    model.members.push({ id: 'gz', i: 'tl', j: 'tz', role: 'girder', section: 'B' })
+    const gz = autoRigidOffsets(model, 1).get('gz')!
+    expect(gz.offI![2]).toBeCloseTo(0.2, 6)   // b/2 = 400/2 mm along +Z
   })
 
   it('column gets an inward j-end offset = factor·(beam depth/2) along +Y', () => {
@@ -65,7 +74,7 @@ describe('autoRigidOffsets', () => {
 
     const model2 = portal()
     model2.members[1].rigidZoneFactor = 0.5
-    expect(autoRigidOffsets(model2, 1).get('bm')!.offI![0]).toBeCloseTo(0.1, 6)  // 0.5 × 0.2
+    expect(autoRigidOffsets(model2, 1).get('bm')!.offI![0]).toBeCloseTo(0.15, 6)  // 0.5 × h/2 = 0.5 × 0.3
   })
 
   it('resolves steel AISC shape dimensions, not the bounding-box b/h', () => {
@@ -85,9 +94,10 @@ describe('autoRigidOffsets', () => {
       ],
       supports: [{ node: 'bl', fixity: 'fixed' }],
     }
-    // beam i-end zone uses the steel column's width (bf) along X, not h/b = 1 mm.
+    // beam i-end zone uses the steel column's DEPTH d along X (flanges face ±X
+    // per the app orientation — the X-beam frames into the flange), not b/h = 1 mm.
     const bm = autoRigidOffsets(model, 1).get('bm')!
-    expect(bm.offI![0]).toBeCloseTo((shp.bf! / 1000) / 2, 6)
+    expect(bm.offI![0]).toBeCloseTo((shp.d! / 1000) / 2, 6)
   })
 
   it('caps the total offset so the clear span stays positive', () => {
