@@ -44,7 +44,8 @@ export function connectionRowSolution(c: BeamConnection, host: ConnHost): Soluti
   steps.push({
     title: 'Bolt group — elastic eccentric method (§J3.6)',
     lines: [
-      { tex: `\\phi R_n = 0.75 \\cdot F_{nv} A_b = 0.75 \\cdot ${FNV} \\cdot ${sn1(Ab)} / 10^3 = ${sn1(phiRn)}\\ \\text{kN/bolt (M${b.dia} A325-X)}` },
+      { text: 'Single-plate connection ⇒ each bolt works in SINGLE shear: m = 1 shear plane, at the plate ↔ beam-web interface. (A double-angle cleat would give m = 2 and twice the per-bolt capacity.)' },
+      { tex: `\\phi R_n = 0.75 \\cdot F_{nv} A_b \\cdot m = 0.75 \\cdot ${FNV} \\cdot ${sn1(Ab)} \\cdot 1 / 10^3 = ${sn1(phiRn)}\\ \\text{kN/bolt (M${b.dia} A325-X)}` },
       { text: `${b.n} bolt(s), single column @ ${b.pitchMm} mm pitch, ${b.edgeMm} mm edge; bolt line ${Math.round(b.ecc)} mm from the weld line (the eccentricity e).` },
       { tex: `J = \\sum (x_c^2 + y_c^2) = ${sn1(J / 1e3)}\\times 10^3\\ \\text{mm}^2` },
       { tex: `R_d = V_u / n = ${sn1(c.Vu)} / ${b.n} = ${sn2(Rd)}\\ \\text{kN};\\quad R_T = V_u\\, e\\, \\rho / J` },

@@ -3970,8 +3970,8 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2 text-right">{f1(c.Vu)}</td>
                         <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
                         <td className="py-1 pr-2 text-[11px]">
-                          {c.bolts.n} × M{c.bolts.dia} A325
-                          <div className="text-[10px] text-slate-400">R={f1(c.bolts.Rmax)}/{f1(c.bolts.phiRnKn)} kN · e={Math.round(c.bolts.ecc)}mm</div>
+                          {c.bolts.n} × M{c.bolts.dia} A325 <span className="text-[10px] text-slate-400">(single shear)</span>
+                          <div className="text-[10px] text-slate-400">R={f1(c.bolts.Rmax)}/{f1(c.bolts.phiRnKn)} kN/bolt · e={Math.round(c.bolts.ecc)}mm</div>
                         </td>
                         <td className="py-1 pr-2 text-[11px]">{c.tab.t}×{Math.round(c.tab.hMm)} mm</td>
                         <td className="py-1 pr-2 text-[11px]">
@@ -4028,8 +4028,8 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2 text-right">{f1(c.Vu)}</td>
                         <td className="py-1 pr-2 text-right">—</td>
                         <td className="py-1 pr-2 text-[11px]">
-                          {c.bolts.n} × M{c.bolts.dia} A325
-                          <div className="text-[10px] text-slate-400">R={f1(c.bolts.Rmax)}/{f1(c.bolts.phiRnKn)} kN · e={Math.round(c.bolts.ecc)}mm</div>
+                          {c.bolts.n} × M{c.bolts.dia} A325 <span className="text-[10px] text-slate-400">(single shear)</span>
+                          <div className="text-[10px] text-slate-400">R={f1(c.bolts.Rmax)}/{f1(c.bolts.phiRnKn)} kN/bolt · e={Math.round(c.bolts.ecc)}mm</div>
                         </td>
                         <td className="py-1 pr-2 text-[11px]">{c.tab.t}×{Math.round(c.tab.hMm)} mm</td>
                         <td className="py-1 pr-2 text-[11px]">{c.tab.weldSizeMm}mm E70</td>
