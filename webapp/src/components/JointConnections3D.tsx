@@ -13,7 +13,7 @@
 import { useMemo } from 'react'
 import * as THREE from 'three'
 import { shapeByName } from '../engine/aiscSections'
-import type { SteelJoint, BeamConnection } from '../engine/steelConnections'
+import type { SteelJoint, BeamBeamJoint, BeamConnection } from '../engine/steelConnections'
 import type { StructuralModel } from '../engine/model'
 
 const PLATE = '#334155'   // dark slate plates (tabs, continuity)
@@ -42,20 +42,18 @@ function Bolt({ p, axis, dia, len }: { p: THREE.Vector3; axis: THREE.Vector3; di
   )
 }
 
-/** One beam's connection hardware at a joint. */
-function Connection({ conn, node, beamDir, col }: {
+/** One beam's connection hardware at a joint. `faceOff` = distance from the
+ *  joint node to the supporting face along the beam axis (m). */
+function Connection({ conn, node, beamDir, faceOff }: {
   conn: BeamConnection
   node: THREE.Vector3
   beamDir: THREE.Vector3          // unit, node → beam span
-  col: { d: number; bf: number; tf: number }   // column dims, m
+  faceOff: number
 }) {
   const parts = useMemo(() => {
     const ex = beamDir.clone()                                   // along the beam
     const ez = new THREE.Vector3().crossVectors(ex, new THREE.Vector3(0, 1, 0)).normalize() // lateral
-    const alongX = Math.abs(ex.x) >= Math.abs(ex.z)
-    // face the beam lands on, per the drawn orientation (d → global X)
-    const faceOff = alongX ? col.d / 2 : col.bf / 2
-    const F = node.clone().add(ex.clone().multiplyScalar(faceOff))   // column face @ beam CL
+    const F = node.clone().add(ex.clone().multiplyScalar(faceOff))   // supporting face @ beam CL
 
     const tab = conn.tab
     const t = tab.t * MM, w = tab.wMm * MM, h = tab.hMm * MM
@@ -73,7 +71,7 @@ function Connection({ conn, node, beamDir, col }: {
     }))
 
     return { ex, ez, F, plate: { ctr: plateCtr, t, w, h }, bolts }
-  }, [conn, node, beamDir, col])
+  }, [conn, node, beamDir, faceOff])
 
   const { ex, ez, F, plate, bolts } = parts
   // orient a unit box so local X→ex, Y→up, Z→ez (right-handed by construction)
@@ -106,16 +104,40 @@ function Connection({ conn, node, beamDir, col }: {
   )
 }
 
-export function JointConnections3D({ joints, model, nodePos }: {
+export function JointConnections3D({ joints, beamJoints = [], model, nodePos }: {
   joints: SteelJoint[]
+  /** Beam-to-beam fin plates (beams framing into a girder web). */
+  beamJoints?: BeamBeamJoint[]
   model: StructuralModel
   nodePos: Map<string, THREE.Vector3>
 }) {
   const memMap = useMemo(() => new Map(model.members.map((m) => [m.id, m])), [model])
   const secMap = useMemo(() => new Map(model.sections.map((s) => [s.id, s])), [model])
 
+  const renderConn = (nodeId: string, c: BeamConnection, faceOff: number) => {
+    const P = nodePos.get(nodeId)
+    const mem = memMap.get(c.beamId)
+    if (!P || !mem) return null
+    const otherId = mem.i === nodeId ? mem.j : mem.i
+    const Q = nodePos.get(otherId)
+    if (!Q) return null
+    const dir = Q.clone().sub(P)
+    if (dir.lengthSq() < 1e-9) return null
+    const sec = secMap.get(mem.section)
+    if (sec?.material !== 'steel') return null
+    return <Connection key={c.beamId} conn={c} node={P} beamDir={dir.normalize()} faceOff={faceOff} />
+  }
+
   return (
     <group>
+      {/* beam-to-beam fin plates: face = the girder WEB plane (tw/2) */}
+      {beamJoints.map((bj) => {
+        const gMem = memMap.get(bj.girderId)
+        const gShape = shapeByName(bj.girderShape)
+        const tw = ((gShape?.tw ?? 8) / 2 + 1) * MM
+        if (!gMem) return null
+        return <group key={`bb-${bj.nodeId}`}>{bj.connections.map((c) => renderConn(bj.nodeId, c, tw))}</group>
+      })}
       {joints.map((j) => {
         const P = nodePos.get(j.nodeId)
         const colShape = shapeByName(j.columnShape)
@@ -139,16 +161,13 @@ export function JointConnections3D({ joints, model, nodePos }: {
           <group key={j.nodeId}>
             {contPlates}
             {j.connections.map((c) => {
+              // face per the drawn orientation (column depth d along global X)
               const mem = memMap.get(c.beamId)
               if (!mem) return null
               const otherId = mem.i === j.nodeId ? mem.j : mem.i
               const Q = nodePos.get(otherId)
-              if (!Q) return null
-              const dir = Q.clone().sub(P)
-              if (dir.lengthSq() < 1e-9) return null
-              const sec = secMap.get(mem.section)
-              if (sec?.material !== 'steel') return null
-              return <Connection key={c.beamId} conn={c} node={P} beamDir={dir.normalize()} col={col} />
+              const dirX = Q ? Math.abs(Q.x - P.x) >= Math.abs(Q.z - P.z) : true
+              return renderConn(j.nodeId, c, dirX ? col.d / 2 : col.bf / 2)
             })}
           </group>
         )

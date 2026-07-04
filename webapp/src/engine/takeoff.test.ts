@@ -115,7 +115,7 @@ describe('structural steel — per-shape unit weight + costed BOM line items (A2
   const STEEL_DENSITY = 7850
   const emptyDesign: StructureDesign = {
     govName: '', cases: [], beams: [], columns: [], steelBeams: [], steelColumns: [],
-    basePlates: [], joints: [], slabs: [], walls: [], footings: [], combined: [], scwb: [],
+    basePlates: [], joints: [], beamJoints: [], slabs: [], walls: [], footings: [], combined: [], scwb: [],
     totals: { concreteMembers: 0, concreteSlabs: 0, concrete: 0, steelKg: 0 }, orphanEdges: 0,
     unchecked: [],
   }
