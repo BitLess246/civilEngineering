@@ -59,6 +59,10 @@ export function validateMesh(model: StructuralModel): MeshIssue[] {
       issues.push({ severity: 'error', code: 'zero-length-member', refs: [m.id],
         message: `Member ${m.id} has zero length (nodes ${m.i} and ${m.j} coincide) — its stiffness is singular.` })
 
+    if (m.axisRotation !== undefined && !Number.isFinite(m.axisRotation))
+      issues.push({ severity: 'error', code: 'bad-axis-rotation', refs: [m.id],
+        message: `Member ${m.id} has a non-numeric local-axis rotation.` })
+
     const key = [m.i, m.j].sort().join('|')
     const prev = pairSeen.get(key)
     if (prev) issues.push({ severity: 'warning', code: 'duplicate-member', refs: [prev, m.id],

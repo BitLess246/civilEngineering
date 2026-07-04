@@ -12,7 +12,7 @@
 // Units: section b/h in mm → m; offsets in m (global).
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, RectSection } from './model'
-import { localAxes, type V3 } from './frame3d'
+import { localAxes, defaultAxisRotation, type V3 } from './frame3d'
 import { shapeByName } from './aiscSections'
 
 const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
@@ -55,15 +55,11 @@ export function autoRigidOffsets(
     const dir = sub(pj, pi)
     const L = Math.hypot(...dir)
     if (L <= 1e-9) continue
-    const [xp, ypA, zpA] = localAxes(dir)
-    // Columns are DRAWN (and joint-designed) with the section depth along global
-    // X — flanges facing ±X (Member3D / MemberSteel3D). localAxes puts y′ on
-    // global Z for verticals, which would project the WRONG dimension onto the
-    // framing beams (bf/2 where ETABS uses d/2, and vice versa for Z-girders).
-    // Use the app's physical orientation for the panel-zone geometry.
-    const vertical = Math.abs(xp[1]) > 0.999
-    const yp: V3 = vertical ? [1, 0, 0] : ypA
-    const zp: V3 = vertical ? [0, 0, 1] : zpA
+    // Section orientation = the member's resolved local axes (explicit
+    // axisRotation, or the vertical 90° default that puts depth on global X —
+    // the drawn orientation), so the panel-zone projection always matches the
+    // analysis AND the rendered section.
+    const [xp, yp, zp] = localAxes(dir, defaultAxisRotation(dir, m.axisRotation))
     const { depth, width } = depthWidth(secById.get(m.section))
     mgs.push({ id: m.id, i: m.i, j: m.j, e: xp, L, yp, zp, depth, width, factor: m.rigidZoneFactor ?? factor })
   }

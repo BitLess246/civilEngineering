@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { solveFrame3D, analyzeFrame3D, rectJ, precomputeFrame, solveWithGeometry, serializePrecomp, deserializePrecomp, appliedResultant, type F3Node, type F3Member, type F3Support, type F3Load, type F3DiaphragmGroup } from './frame3d'
+import { solveFrame3D, analyzeFrame3D, rectJ, localAxes, precomputeFrame, solveWithGeometry, serializePrecomp, deserializePrecomp, appliedResultant, type F3Node, type F3Member, type F3Support, type F3Load, type F3DiaphragmGroup } from './frame3d'
 import { solveFrame2D } from './frame2d'
 import { generateGridModel } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
@@ -528,5 +528,43 @@ describe('rigid links / member offsets — Teff = T·H', () => {
     expect(r.reactions[0].F[0]).toBeCloseTo(-Fx, 4)
     // Base moment about Z balances Fx acting at height hArm above the base node.
     expect(r.reactions[0].M[2]).toBeCloseTo(Fx * hArm, 2)
+  })
+})
+
+describe('frame3d — local-axis rotation (ETABS local axis 2 angle)', () => {
+  it('localAxes(dir, 90) turns a vertical member’s depth axis onto global X', () => {
+    const [xp, yp, zp] = localAxes([0, 4, 0], 90)
+    expect(xp[1]).toBeCloseTo(1, 9)
+    expect(yp[0]).toBeCloseTo(1, 6)          // y′ (depth) → +X
+    expect(Math.abs(zp[2])).toBeCloseTo(1, 6) // z′ → ±Z
+  })
+
+  it('rotating a non-square vertical cantilever 90° swaps its strong/weak response', () => {
+    // strongly non-square: Iz (about z′, resisting displacement along y′) ≫ Iy
+    const E = 200000, G = 77000, A = 6650, Iz = 165e6, Iy = 9.2e6, J = 0.23e6, L = 3
+    const nodes: F3Node[] = [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: 0, y: L, z: 0 }]
+    const sup: F3Support[] = [{ node: 'a', fixity: 'fixed' }]
+    const tipX: F3Load[] = [{ kind: 'node', node: 'b', Fx: 10, cat: 'D' }]
+    const mk = (rot?: number): F3Member[] => [{ id: 'c', i: 'a', j: 'b', E, G, A, Iy, Iz, J, ...(rot ? { rot } : {}) }]
+    const dx0 = solveFrame3D(nodes, mk(), sup, tipX)!.d[6 + 0]      // rot 0: depth on Z → X is WEAK
+    const dx90 = solveFrame3D(nodes, mk(90), sup, tipX)!.d[6 + 0]   // rot 90: depth on X → X is STRONG
+    expect(Math.abs(dx90)).toBeLessThan(Math.abs(dx0) / 5)
+    // exact: both match PL³/3EI with the respective inertia
+    const del = (I: number) => (10 * L ** 3) / (3 * ((E * I) * 1e-9))
+    expect(Math.abs(dx0)).toBeCloseTo(del(Iy), 6)
+    expect(Math.abs(dx90)).toBeCloseTo(del(Iz), 6)
+  })
+
+  it('the bridge defaults vertical members to rot 90 and honors an explicit value', () => {
+    const section: RectSection = { id: 'S', name: 's', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section })
+    m.members.find((x) => x.role === 'beam')!.axisRotation = 30
+    const br = modelToFrame3D(m)
+    const col = br.members.find((x) => x.id.startsWith('c'))!
+    const beam30 = br.members.find((x) => m.members.find((y) => y.id === x.id)?.axisRotation === 30)!
+    const beam0 = br.members.find((x) => x.id.startsWith('bx') && x.id !== beam30.id)!
+    expect(col.rot).toBe(90)
+    expect(beam30.rot).toBe(30)
+    expect(beam0.rot).toBeUndefined()   // 0 → omitted
   })
 })

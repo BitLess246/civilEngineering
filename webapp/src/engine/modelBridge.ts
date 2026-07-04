@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, RectSection, MemberReleases, MemberConnections, ConnectionKind, Plate } from './model'
 import type { F3Node, F3Member, F3Support, F3Load, F3DiaphragmGroup, F3Shell } from './frame3d'
-import { rectJ } from './frame3d'
+import { rectJ, defaultAxisRotation } from './frame3d'
 import { buildDiaphragmGroups } from './diaphragm'
 import { autoRigidOffsets } from './rigidEndZones'
 import { distributePanel, type AreaLoad } from './tributary'
@@ -196,11 +196,16 @@ export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): Bridg
     const a = auto?.get(m.id)
     const offI = m.offsets?.iEnd ?? a?.offI
     const offJ = m.offsets?.jEnd ?? a?.offJ
+    // local-axis rotation: explicit wins; verticals default to 90° so the
+    // analysis strong-axis orientation matches the drawn one (depth d → X)
+    const ni = nm.get(m.i), nj = nm.get(m.j)
+    const rot = ni && nj ? defaultAxisRotation([nj.x - ni.x, nj.y - ni.y, nj.z - ni.z], m.axisRotation) : (m.axisRotation ?? 0)
     return {
       id: m.id, i: m.i, j: m.j, ...(secById.get(m.section) ?? fallback),
       ...releaseFlags(effectiveReleases(m)),
       ...(offI ? { offI } : {}),
       ...(offJ ? { offJ } : {}),
+      ...(rot ? { rot } : {}),
     }
   })
   // shear walls → equivalent diagonal struts (lateral stiffness only)

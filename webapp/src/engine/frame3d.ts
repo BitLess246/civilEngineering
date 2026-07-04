@@ -44,6 +44,9 @@ export interface F3Member {
   offI?: [number, number, number]
   /** Rigid end offset at end j: vector from node j to the member end in global coords [m]. */
   offJ?: [number, number, number]
+  /** Local-axis rotation about x′, degrees (ETABS local axis 2 angle). Orients
+   *  the section: depth lies along y′. The bridge defaults verticals to 90°. */
+  rot?: number
 }
 /** Flat triangular shell element (CST membrane + DKT plate bending) framing into
  *  three nodes of the model. Carries in-plane (wall) and out-of-plane (slab)
@@ -190,13 +193,30 @@ const dot = (a: V3, b: V3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 const norm = (a: V3): V3 => { const l = Math.hypot(...a); return [a[0] / l, a[1] / l, a[2] / l] }
 
 /** Rotation matrix rows = local axes (x′, y′, z′) in global components. */
-export function localAxes(dir: V3): [V3, V3, V3] {
+/** Member local axes [x′, y′, z′]. `rotDeg` is an ETABS-style local-axis
+ *  rotation about x′ (right-hand rule, i→j): +θ turns y′ toward z′. The section
+ *  depth lies along y′, so rotDeg orients the strong axis. */
+export function localAxes(dir: V3, rotDeg = 0): [V3, V3, V3] {
   const xp = norm(dir)
   const up: V3 = Math.abs(dot(xp, [0, 1, 0])) > 0.999 ? [0, 0, 1] : [0, 1, 0]
   const proj = dot(up, xp)
   const yp = norm([up[0] - proj * xp[0], up[1] - proj * xp[1], up[2] - proj * xp[2]])
   const zp = cross(xp, yp)
-  return [xp, yp, zp]
+  if (!rotDeg) return [xp, yp, zp]
+  const c = Math.cos((rotDeg * Math.PI) / 180), s = Math.sin((rotDeg * Math.PI) / 180)
+  const ypr: V3 = [yp[0] * c + zp[0] * s, yp[1] * c + zp[1] * s, yp[2] * c + zp[2] * s]
+  const zpr: V3 = [zp[0] * c - yp[0] * s, zp[1] * c - yp[1] * s, zp[2] * c - yp[2] * s]
+  return [xp, ypr, zpr]
+}
+
+/** Resolve a member's local-axis rotation: an explicit value wins; otherwise
+ *  vertical members default to 90° so the section depth lands on global X —
+ *  the orientation the app draws (Member3D/MemberSteel3D), the joint designer
+ *  assumes, and ETABS uses for columns (local 2 toward +X). */
+export function defaultAxisRotation(dir: V3, explicit?: number): number {
+  if (explicit !== undefined && Number.isFinite(explicit)) return explicit
+  const L = Math.hypot(...dir)
+  return L > 1e-9 && Math.abs(dir[1] / L) > 0.999 ? 90 : 0
 }
 
 function tMatrix(R: [V3, V3, V3]): number[][] {
@@ -357,7 +377,7 @@ function prepMemberGeom(m: F3Member, nm: Map<string, F3Node>, idx: Map<string, n
   const pj: V3 = [nj.x + offJ[0], nj.y + offJ[1], nj.z + offJ[2]]
   const dir: V3 = sub(pj, pi)
   const L = Math.hypot(...dir)
-  const R = localAxes(dir)
+  const R = localAxes(dir, m.rot ?? 0)
   const EA = (m.E * m.A) / 1000
   const GJ = m.G * m.J * 1e-9
   const EIy = m.E * m.Iy * 1e-9

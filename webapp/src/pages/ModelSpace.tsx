@@ -200,9 +200,12 @@ function RigidZone3D({ a, b, role, sec, shapeName }: {
  *  extrude (+Z) runs along the member and its strong axis (depth d) stays
  *  vertical for beams/girders. Falls back to the box Member3D if the shape is
  *  unknown. */
-function MemberSteel3D({ a, b, role, shapeName, selected, tint = 0, onPick }: {
+function MemberSteel3D({ a, b, role, shapeName, selected, tint = 0, axisRotation, onPick }: {
   a: THREE.Vector3; b: THREE.Vector3; role: string; shapeName: string
-  selected: boolean; tint?: number; onPick: () => void
+  selected: boolean; tint?: number
+  /** Explicit local-axis rotation (°). Absent ⇒ the role default (columns 90). */
+  axisRotation?: number
+  onPick: () => void
 }) {
   const { shapes, quat, pos, len } = useMemo(() => {
     const shape = shapeByName(shapeName)
@@ -212,14 +215,19 @@ function MemberSteel3D({ a, b, role, shapeName, selected, tint = 0, onPick }: {
     // orient local +Z (extrude dir) onto the member axis; group placed at node i
     const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.clone().normalize())
     // For columns (primarily vertical), pre-rotate the section 90° around local Z
-    // so the depth d aligns with global X and the flanges face ±X.
-    // X-direction girders then frame into the column FLANGE FACE (strong-axis connection).
+    // so the depth d aligns with global X and the flanges face ±X — the 90°
+    // axisRotation default the analysis now shares.
     if (role === 'column') {
       const rPre = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2)
       quat.multiply(rPre)
     }
+    // explicit axisRotation: rotate by the difference from the role default
+    // (engine +θ turns depth y′ toward z′ = −rotation about the extrude axis here)
+    const d0 = role === 'column' ? 90 : 0
+    const extra = (axisRotation ?? d0) - d0
+    if (extra) quat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), (-extra * Math.PI) / 180))
     return { shapes, quat, pos: a.clone(), len }
-  }, [a, b, shapeName, role])
+  }, [a, b, shapeName, role, axisRotation])
 
   const color = useMemo(() => {
     if (selected) return SEL
@@ -1483,7 +1491,7 @@ export default function ModelSpace() {
                   const aEff = effI ? a.clone().add(new THREE.Vector3(effI[0], effI[1], effI[2])) : a
                   const bEff = effJ ? bb.clone().add(new THREE.Vector3(effJ[0], effJ[1], effJ[2])) : bb
                   const memberEl = sec?.material === 'steel' && sec.shape
-                    ? <MemberSteel3D a={aEff} b={bEff} role={m.role} shapeName={sec.shape}
+                    ? <MemberSteel3D a={aEff} b={bEff} role={m.role} shapeName={sec.shape} axisRotation={m.axisRotation}
                         tint={tint * 0.85} selected={m.id === selected} onPick={() => setSelected(m.id)} />
                     : <Member3D a={aEff} b={bEff} role={m.role} tint={tint * 0.85}
                         sec={sec} selected={m.id === selected} onPick={() => setSelected(m.id)} />
@@ -1896,6 +1904,17 @@ export default function ModelSpace() {
                             }}
                             className="w-16 rounded border border-violet-200 px-1 py-0.5 text-right" />
                           <span className="text-[10px] text-slate-400">blank = model factor · 0 = no zone for this member (needs Auto rigid end zones on)</span>
+                        </label>
+                        <label className="mt-2 flex items-center gap-2 border-t border-violet-200 pt-2 text-[11px] text-slate-700">
+                          <span>Local axis rotation θ (°)</span>
+                          <input type="number" step={15}
+                            value={sel.axisRotation ?? ''} placeholder="auto"
+                            onChange={(e) => {
+                              const v = parseFloat(e.target.value)
+                              updMember(sel.id, { axisRotation: Number.isFinite(v) ? v : undefined })
+                            }}
+                            className="w-16 rounded border border-violet-200 px-1 py-0.5 text-right" />
+                          <span className="text-[10px] text-slate-400">ETABS local-axis angle about the member axis. Blank = default (vertical members 90° — depth d on global X); orients section stiffness, rigid zones and the drawn shape.</span>
                         </label>
                         {(sel.role === 'beam' || sel.role === 'girder') && (
                           <label className="mt-2 flex items-center gap-2 border-t border-violet-200 pt-2 text-[11px] text-slate-700">
