@@ -30,6 +30,8 @@ import { autoRigidOffsets } from '../engine/rigidEndZones'
 import { computeWind, computeCladding, type WindResult, type WindEnclosure, type CladdingResult } from '../engine/wind'
 import { ReportControls } from '../components/ReportControls'
 import { JointConnections3D } from '../components/JointConnections3D'
+import { ConnectionDetail2D } from '../components/ConnectionDetail2D'
+import { connectionRowSolution } from '../lib/connectionSolution'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution } from '../lib/modelSpaceSolutions'
 import { Diagram } from '../components/Diagram'
@@ -3943,18 +3945,18 @@ export default function ModelSpace() {
                 </thead>
                 <tbody>
                   {(design.joints as SteelJoint[]).flatMap((j) =>
-                    j.connections.map((c, ci) => (
-                      <tr key={`${j.nodeId}-${c.beamId}`}
-                        className={`border-t border-slate-100 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
-                        {ci === 0 && (
-                          <td className="py-1 pr-2 font-medium align-top" rowSpan={j.connections.length}>
-                            {j.nodeId}
-                            <div className="text-[10px] text-slate-400">{j.strongAxisDir.toUpperCase()}-axis</div>
-                          </td>
-                        )}
-                        {ci === 0 && (
-                          <td className="py-1 pr-2 font-mono align-top" rowSpan={j.connections.length}>{j.columnShape}</td>
-                        )}
+                    j.connections.flatMap((c, ci) => {
+                      const key = `conn:${j.nodeId}:${c.beamId}`
+                      const open = expanded === key || reportOpen
+                      const beamShapeName = model?.sections.find((sx) => sx.id === model.members.find((mm) => mm.id === c.beamId)?.section)?.shape
+                      return [(
+                      <tr key={`${j.nodeId}-${c.beamId}`} onClick={() => setExpanded(expanded === key ? null : key)}
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                        <td className={`py-1 pr-2 align-top ${ci === 0 ? 'font-medium' : 'text-slate-300'}`}>
+                          {open ? '▾' : '▸'} {j.nodeId}
+                          {ci === 0 && <div className="text-[10px] text-slate-400">{j.strongAxisDir.toUpperCase()}-axis</div>}
+                        </td>
+                        <td className={`py-1 pr-2 font-mono align-top ${ci === 0 ? '' : 'text-slate-300'}`}>{j.columnShape}</td>
                         <td className="py-1 pr-2 font-medium">{c.beamId}</td>
                         <td className="py-1 pr-2 uppercase">{c.spanDir}</td>
                         <td className="py-1 pr-2 text-[11px]">
@@ -3983,24 +3985,36 @@ export default function ModelSpace() {
                           )}
                         </td>
                       </tr>
-                    ))
+                      ),
+                      open && (
+                        <tr key={`${key}:detail`}>
+                          <td colSpan={12} className="bg-slate-50/60 px-2 pb-2">
+                            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[auto_1fr]">
+                              <ConnectionDetail2D conn={c} hostShape={j.columnShape} hostKind="column" faceType={c.faceType} beamShape={beamShapeName} />
+                              {wantSol && <WorkedSolution steps={connectionRowSolution(c, { kind: 'column', shape: j.columnShape, faceType: c.faceType })} title={`Connection ${j.nodeId} · ${c.beamId} — worked solution`} />}
+                            </div>
+                          </td>
+                        </tr>
+                      ),
+                      ]
+                    })
                   )}
                   {design.beamJoints.flatMap((bj) =>
-                    bj.connections.map((c, ci) => (
-                      <tr key={`bb-${bj.nodeId}-${c.beamId}`}
-                        className={`border-t border-slate-100 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
-                        {ci === 0 && (
-                          <td className="py-1 pr-2 font-medium align-top" rowSpan={bj.connections.length}>
-                            {bj.nodeId}
-                            <div className="text-[10px] text-slate-400">beam-to-beam</div>
-                          </td>
-                        )}
-                        {ci === 0 && (
-                          <td className="py-1 pr-2 font-mono align-top" rowSpan={bj.connections.length}>
-                            {bj.girderShape}
-                            <div className="text-[10px] text-slate-400">girder {bj.girderId}</div>
-                          </td>
-                        )}
+                    bj.connections.flatMap((c, ci) => {
+                      const key = `conn:${bj.nodeId}:${c.beamId}`
+                      const open = expanded === key || reportOpen
+                      const beamShapeName = model?.sections.find((sx) => sx.id === model.members.find((mm) => mm.id === c.beamId)?.section)?.shape
+                      return [(
+                      <tr key={`bb-${bj.nodeId}-${c.beamId}`} onClick={() => setExpanded(expanded === key ? null : key)}
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                        <td className={`py-1 pr-2 align-top ${ci === 0 ? 'font-medium' : 'text-slate-300'}`}>
+                          {open ? '▾' : '▸'} {bj.nodeId}
+                          {ci === 0 && <div className="text-[10px] text-slate-400">beam-to-beam</div>}
+                        </td>
+                        <td className={`py-1 pr-2 font-mono align-top ${ci === 0 ? '' : 'text-slate-300'}`}>
+                          {bj.girderShape}
+                          {ci === 0 && <div className="text-[10px] text-slate-400">girder {bj.girderId}</div>}
+                        </td>
                         <td className="py-1 pr-2 font-medium">{c.beamId}</td>
                         <td className="py-1 pr-2 uppercase">{c.spanDir}</td>
                         <td className="py-1 pr-2 text-[11px]">
@@ -4023,7 +4037,19 @@ export default function ModelSpace() {
                           <span className={c.ok ? 'text-green-700' : 'text-red-600'}>{c.ok ? '✓ OK' : '✗ NG'}</span>
                         </td>
                       </tr>
-                    ))
+                      ),
+                      open && (
+                        <tr key={`${key}:detail`}>
+                          <td colSpan={12} className="bg-slate-50/60 px-2 pb-2">
+                            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[auto_1fr]">
+                              <ConnectionDetail2D conn={c} hostShape={bj.girderShape} hostKind="girder" faceType="web" beamShape={beamShapeName} />
+                              {wantSol && <WorkedSolution steps={connectionRowSolution(c, { kind: 'girder', shape: bj.girderShape })} title={`Connection ${bj.nodeId} · ${c.beamId} — worked solution`} />}
+                            </div>
+                          </td>
+                        </tr>
+                      ),
+                      ]
+                    })
                   )}
                 </tbody>
               </table>
