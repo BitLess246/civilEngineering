@@ -1319,6 +1319,14 @@ export default function ModelSpace() {
   const autoOff = useMemo(
     () => (model?.rigidEndZones ? autoRigidOffsets(model, model.rigidZoneFactor ?? 0.5) : null),
     [model])
+  // VISUAL face offsets (factor 1 = the full support face, independent of the
+  // analysis rigid-zone setting): physical steel stops at the member it lands
+  // on — a beam ends at the column face (the tab bridges the gap), and a roof
+  // column extends UP to the top of the deepest beam so the joint hardware has
+  // something to land on.
+  const faceOff = useMemo(
+    () => (model && model.sections.some((s) => s.material === 'steel') ? autoRigidOffsets(model, 1) : null),
+    [model])
   // model bounds → zoom-to-extents on load / after generate
   const modelBox = useMemo(() => {
     if (!model || model.nodes.length === 0) return null
@@ -1485,24 +1493,49 @@ export default function ModelSpace() {
                   const tint = govRes && govRes.Mmax > 1e-9
                     ? (memForce.get(m.id)?.Mmax ?? 0) / govRes.Mmax : 0
                   const sec = sectionFor(m.id)
-                  // rigid end offsets shift the flexible endpoints; manual offsets win over auto
-                  // rigid end zones. Manual → purple arm (eccentric); auto → muted member zone.
-                  const ao = autoOff?.get(m.id)
                   const manI = m.offsets?.iEnd, manJ = m.offsets?.jEnd
+                  const v3 = (v: [number, number, number]) => new THREE.Vector3(v[0], v[1], v[2])
+                  const isSteel = sec?.material === 'steel' && !!sec.shape
+                  if (isSteel && sec?.shape) {
+                    // PHYSICAL steel: a beam ends AT the support face (the tab/weld
+                    // bridges the gap — it never runs inside the column), and a
+                    // column whose stack ends extends UP past the joint to the top
+                    // of the deepest framing beam so the hardware lands on steel.
+                    const fo = faceOff?.get(m.id)
+                    let aV = a, bV = bb
+                    if (m.role === 'column') {
+                      const contAt = (nid: string) => model.members.some((o) => o.id !== m.id && o.role === 'column' && (o.i === nid || o.j === nid))
+                      aV = manI ? a.clone().add(v3(manI)) : (fo?.offI && !contAt(m.i) ? a.clone().sub(v3(fo.offI)) : a)
+                      bV = manJ ? bb.clone().add(v3(manJ)) : (fo?.offJ && !contAt(m.j) ? bb.clone().sub(v3(fo.offJ)) : bb)
+                    } else {
+                      aV = manI ? a.clone().add(v3(manI)) : (fo?.offI ? a.clone().add(v3(fo.offI)) : a)
+                      bV = manJ ? bb.clone().add(v3(manJ)) : (fo?.offJ ? bb.clone().add(v3(fo.offJ)) : bb)
+                    }
+                    return (
+                      <group key={m.id}>
+                        <MemberSteel3D a={aV} b={bV} role={m.role} shapeName={sec.shape} axisRotation={m.axisRotation}
+                          tint={tint * 0.85} selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                        {manI && <RigidArm3D a={a} b={aV} />}
+                        {manJ && <RigidArm3D a={bb} b={bV} />}
+                      </group>
+                    )
+                  }
+                  // Concrete (monolithic): rigid end offsets shift the flexible endpoints;
+                  // manual → purple arm (eccentric); auto → muted member zone.
+                  const ao = autoOff?.get(m.id)
                   const effI = manI ?? ao?.offI, effJ = manJ ?? ao?.offJ
-                  const aEff = effI ? a.clone().add(new THREE.Vector3(effI[0], effI[1], effI[2])) : a
-                  const bEff = effJ ? bb.clone().add(new THREE.Vector3(effJ[0], effJ[1], effJ[2])) : bb
-                  const memberEl = sec?.material === 'steel' && sec.shape
-                    ? <MemberSteel3D a={aEff} b={bEff} role={m.role} shapeName={sec.shape} axisRotation={m.axisRotation}
-                        tint={tint * 0.85} selected={m.id === selected} onPick={() => setSelected(m.id)} />
-                    : <Member3D a={aEff} b={bEff} role={m.role} tint={tint * 0.85}
-                        sec={sec} selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                  const aEff = effI ? a.clone().add(v3(effI)) : a
+                  const bEff = effJ ? bb.clone().add(v3(effJ)) : bb
+                  const memberEl = (
+                    <Member3D a={aEff} b={bEff} role={m.role} tint={tint * 0.85}
+                      sec={sec} selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                  )
                   if (!effI && !effJ) return <group key={m.id}>{memberEl}</group>
                   return (
                     <group key={m.id}>
                       {memberEl}
-                      {effI && (manI ? <RigidArm3D a={a} b={aEff} /> : <RigidZone3D a={a} b={aEff} role={m.role} sec={sec} shapeName={sec?.material === 'steel' ? sec.shape : undefined} />)}
-                      {effJ && (manJ ? <RigidArm3D a={bb} b={bEff} /> : <RigidZone3D a={bb} b={bEff} role={m.role} sec={sec} shapeName={sec?.material === 'steel' ? sec.shape : undefined} />)}
+                      {effI && (manI ? <RigidArm3D a={a} b={aEff} /> : <RigidZone3D a={a} b={aEff} role={m.role} sec={sec} />)}
+                      {effJ && (manJ ? <RigidArm3D a={bb} b={bEff} /> : <RigidZone3D a={bb} b={bEff} role={m.role} sec={sec} />)}
                     </group>
                   )
                 })}

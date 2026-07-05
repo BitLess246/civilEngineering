@@ -9,49 +9,13 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { useMemo } from 'react'
 import { shapeByName } from '../engine/aiscSections'
+import { DimBelow, DimSide } from './dims'
 import type { BeamConnection } from '../engine/steelConnections'
 
 const STEEL = '#94a3b8'      // member outline fill
 const PLATE = '#334155'
 const BOLT = '#b45309'
-const DIM = '#2563eb'
 const WELD = '#d97706'
-
-/** Drafting dimension: extension lines + dimension line with filled arrowheads
- *  + centered label. Vertical (measuring y) or horizontal (measuring x). */
-function Dim({ x1, y1, x2, y2, off, label, vertical }: {
-  x1: number; y1: number; x2: number; y2: number
-  /** offset of the dimension line from the measured points (px, signed) */
-  off: number
-  label: string
-  vertical?: boolean
-}) {
-  const A = 5   // arrowhead size
-  if (vertical) {
-    const dx = x1 + off
-    return (
-      <g stroke={DIM} fill={DIM} strokeWidth={0.8}>
-        <line x1={x1} y1={y1} x2={dx + Math.sign(off) * 3} y2={y1} />
-        <line x1={x2} y1={y2} x2={dx + Math.sign(off) * 3} y2={y2} />
-        <line x1={dx} y1={y1} x2={dx} y2={y2} />
-        <path d={`M ${dx} ${y1} l ${-A / 2} ${A} l ${A} 0 z`} />
-        <path d={`M ${dx} ${y2} l ${-A / 2} ${-A} l ${A} 0 z`} />
-        <text x={dx + 5} y={(y1 + y2) / 2 + 3} fontSize={10} stroke="none">{label}</text>
-      </g>
-    )
-  }
-  const dy = y1 + off
-  return (
-    <g stroke={DIM} fill={DIM} strokeWidth={0.8}>
-      <line x1={x1} y1={y1} x2={x1} y2={dy + Math.sign(off) * 3} />
-      <line x1={x2} y1={y2} x2={x2} y2={dy + Math.sign(off) * 3} />
-      <line x1={x1} y1={dy} x2={x2} y2={dy} />
-      <path d={`M ${x1} ${dy} l ${A} ${-A / 2} l 0 ${A} z`} />
-      <path d={`M ${x2} ${dy} l ${-A} ${-A / 2} l 0 ${A} z`} />
-      <text x={(x1 + x2) / 2} y={dy + (off > 0 ? 12 : -5)} textAnchor="middle" fontSize={10} stroke="none">{label}</text>
-    </g>
-  )
-}
 
 export function ConnectionDetail2D({ conn, hostShape, hostKind, faceType, beamShape }: {
   conn: BeamConnection
@@ -121,7 +85,7 @@ export function ConnectionDetail2D({ conn, hostShape, hostKind, faceType, beamSh
         <line x1={cope ? faceX + cope.lengthMm : faceX} y1={beamTop + tfB} x2={faceX + beamLen} y2={beamTop + tfB} stroke="#475569" />
         <line x1={faceX} y1={beamBot - tfB} x2={faceX + beamLen} y2={beamBot - tfB} stroke="#475569" />
         {cope && (
-          <Dim x1={faceX} y1={beamTop + cope.depthMm} x2={faceX + cope.lengthMm} y2={beamTop + cope.depthMm} off={-(cope.depthMm + 14)} label={`cope ${cope.lengthMm}×${cope.depthMm}`} />
+          <DimBelow xA={faceX} xB={faceX + cope.lengthMm} featY={beamTop + cope.depthMm} dY={beamTop + cope.depthMm + 16} label={`cope ${cope.lengthMm}×${cope.depthMm}`} />
         )}
         {/* plate + weld triangle at the support face */}
         <rect x={faceX} y={plateTop} width={tab.wMm} height={tab.hMm} fill="none" stroke={PLATE} strokeWidth={2.2} />
@@ -135,11 +99,11 @@ export function ConnectionDetail2D({ conn, hostShape, hostKind, faceType, beamSh
             <line x1={faceX + bp.x} y1={boltY(bp.y) - 7} x2={faceX + bp.x} y2={boltY(bp.y) + 7} stroke={BOLT} />
           </g>
         ))}
-        {/* dimensions: plate h (right), a (face→bolt line, below), pitch (right of bolts) */}
-        <Dim x1={faceX + tab.wMm} y1={plateTop} x2={faceX + tab.wMm} y2={plateTop + tab.hMm} off={22} label={`h = ${Math.round(tab.hMm)}`} vertical />
-        <Dim x1={faceX} y1={plateTop + tab.hMm} x2={faceX + a0} y2={plateTop + tab.hMm} off={26} label={`a = ${Math.round(a0)}`} />
+        {/* dimensions (shared architectural-tick primitives, as in the RC schematics) */}
+        <DimSide yA={plateTop} yB={plateTop + tab.hMm} featX={faceX + tab.wMm} dX={faceX + tab.wMm + 24} label={`h = ${Math.round(tab.hMm)}`} side="right" />
+        <DimBelow xA={faceX} xB={faceX + a0} featY={plateTop + tab.hMm} dY={plateTop + tab.hMm + 30} label={`a = ${Math.round(a0)}`} />
         {rows.length > 1 && (
-          <Dim x1={faceX + a0} y1={boltY(rows[1].y)} x2={faceX + a0} y2={boltY(rows[0].y)} off={-24} label={`p = ${conn.bolts.pitchMm}`} vertical />
+          <DimSide yA={boltY(rows[rows.length - 1].y)} yB={boltY(rows[0].y)} featX={faceX + a0 - 10} dX={faceX + a0 - 26} label={`p = ${conn.bolts.pitchMm}`} side="left" />
         )}
         <text x={faceX + tab.wMm / 2} y={plateTop + tab.hMm + 52} textAnchor="middle" fontSize={10} fill={PLATE} fontWeight={600}>
           PL {tab.t}×{tab.wMm}×{Math.round(tab.hMm)}
@@ -165,11 +129,26 @@ export function ConnectionDetail2D({ conn, hostShape, hostKind, faceType, beamSh
           <rect x={cx2 - bfB / 2} y={cy2 + dB / 2 - tfB} width={bfB} height={tfB} />
           <rect x={cx2 - twB / 2} y={cy2 - dB / 2 + tfB} width={twB} height={dB - 2 * tfB} />
         </g>
-        {/* plate against the web + fillet weld triangles top/bottom (to the support) */}
+        {/* plate against the web */}
         <rect x={plateX2} y={cy2 - tab.hMm / 2} width={tab.t + 2} height={tab.hMm} fill={PLATE} />
-        <path d={`M ${plateX2} ${cy2 - tab.hMm / 2} l ${tab.t + 2} 0 l ${-(tab.t + 2) / 2} ${-9} z`} fill={WELD} />
-        <path d={`M ${plateX2} ${cy2 + tab.hMm / 2} l ${tab.t + 2} 0 l ${-(tab.t + 2) / 2} ${9} z`} fill={WELD} />
-        <text x={plateX2 + tab.t + 8} y={cy2 - tab.hMm / 2 - 4} fontSize={9} fill={WELD}>weld to support</text>
+        {conn.connType === 'moment-flange-weld' ? (
+          <>
+            {/* CJP flange welds: beads on TOP of the top flange and UNDER the
+                bottom flange, against the support behind — as built in 3D */}
+            <rect x={cx2 - bfB / 2} y={cy2 - dB / 2 - 6} width={bfB} height={6} fill={WELD} />
+            <rect x={cx2 - bfB / 2} y={cy2 + dB / 2} width={bfB} height={6} fill={WELD} />
+            <text x={cx2 + bfB / 2 + 6} y={cy2 - dB / 2 - 6} fontSize={9} fill={WELD}>CJP flange weld</text>
+            <text x={cx2 + bfB / 2 + 6} y={cy2 + dB / 2 + 12} fontSize={9} fill={WELD}>CJP flange weld</text>
+          </>
+        ) : (
+          <>
+            {/* fin/tab plate: vertical fillet to the support face behind — marked
+                at the plate's support edge */}
+            <path d={`M ${plateX2} ${cy2 - tab.hMm / 2} l ${tab.t + 2} 0 l ${-(tab.t + 2) / 2} ${-9} z`} fill={WELD} />
+            <path d={`M ${plateX2} ${cy2 + tab.hMm / 2} l ${tab.t + 2} 0 l ${-(tab.t + 2) / 2} ${9} z`} fill={WELD} />
+            <text x={plateX2 + tab.t + 8} y={cy2 + tab.hMm / 2 + 14} fontSize={9} fill={WELD}>fillet to support (behind)</text>
+          </>
+        )}
         {/* bolts: shank through web + plate, hex head (plate side) + nut (web side), per row */}
         {rows.map((bp) => {
           const y = cy2 + tab.hMm / 2 - bp.y
@@ -182,18 +161,18 @@ export function ConnectionDetail2D({ conn, hostShape, hostKind, faceType, beamSh
             </g>
           )
         })}
-        {/* single-shear plane callout at the plate ↔ web interface */}
+        {/* single-shear plane callout at the plate ↔ web interface (leader to the left) */}
         {rows.length > 0 && (() => {
-          const y = cy2 + tab.hMm / 2 - rows[rows.length - 1].y
+          const y = cy2 + tab.hMm / 2 - rows[0].y
           return (
             <g>
-              <line x1={plateX2 - 1} y1={y - 26} x2={plateX2 - 1} y2={y + 26} stroke="#dc2626" strokeDasharray="4 3" strokeWidth={1.4} />
-              <line x1={plateX2 - 1} y1={y - 26} x2={plateX2 + 34} y2={y - 40} stroke="#dc2626" strokeWidth={0.9} />
-              <text x={plateX2 + 36} y={y - 42} fontSize={9.5} fill="#dc2626" fontWeight={600}>single shear plane (m = 1)</text>
+              <line x1={plateX2 - 1} y1={y - 20} x2={plateX2 - 1} y2={y + 20} stroke="#dc2626" strokeDasharray="4 3" strokeWidth={1.4} />
+              <line x1={plateX2 - 1} y1={y + 20} x2={cx2 - bfB / 2 - 8} y2={y + 34} stroke="#dc2626" strokeWidth={0.9} />
+              <text x={cx2 - bfB / 2 - 10} y={y + 38} fontSize={9.5} fill="#dc2626" fontWeight={600} textAnchor="end">single shear plane (m = 1)</text>
             </g>
           )
         })()}
-        <Dim x1={plateX2} y1={cy2 + tab.hMm / 2 + 14} x2={plateX2 + tab.t + 2} y2={cy2 + tab.hMm / 2 + 14} off={10} label={`t = ${tab.t}`} />
+        <DimBelow xA={plateX2} xB={plateX2 + tab.t + 2} featY={cy2 + tab.hMm / 2} dY={cy2 + tab.hMm / 2 + 26} label={`t = ${tab.t}`} />
         <text x={cx2} y={H2 - 14} textAnchor="middle" fontSize={10} fill="#334155">
           {beamShape ?? 'beam'} — {conn.bolts.n} × M{conn.bolts.dia} A325, single shear
         </text>
