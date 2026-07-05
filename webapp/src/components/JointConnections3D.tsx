@@ -44,11 +44,13 @@ function Bolt({ p, axis, dia, len }: { p: THREE.Vector3; axis: THREE.Vector3; di
 
 /** One beam's connection hardware at a joint. `faceOff` = distance from the
  *  joint node to the supporting face along the beam axis (m). */
-function Connection({ conn, node, beamDir, faceOff }: {
+function Connection({ conn, node, beamDir, faceOff, beamTw }: {
   conn: BeamConnection
   node: THREE.Vector3
   beamDir: THREE.Vector3          // unit, node → beam span
   faceOff: number
+  /** supported beam's web thickness, m (actual shape value). */
+  beamTw?: number
 }) {
   const parts = useMemo(() => {
     const ex = beamDir.clone()                                   // along the beam
@@ -57,7 +59,7 @@ function Connection({ conn, node, beamDir, faceOff }: {
 
     const tab = conn.tab
     const t = tab.t * MM, w = tab.wMm * MM, h = tab.hMm * MM
-    const twb = 0.008              // nominal beam web thickness for bolt lengths, m
+    const twb = beamTw ?? 0.008    // beam web thickness for plate offset / bolt lengths, m
     const plateCtr = F.clone()
       .add(ex.clone().multiplyScalar(w / 2))
       .add(ez.clone().multiplyScalar(twb / 2 + t / 2))
@@ -71,7 +73,7 @@ function Connection({ conn, node, beamDir, faceOff }: {
     }))
 
     return { ex, ez, F, plate: { ctr: plateCtr, t, w, h }, bolts }
-  }, [conn, node, beamDir, faceOff])
+  }, [conn, node, beamDir, faceOff, beamTw])
 
   const { ex, ez, F, plate, bolts } = parts
   // orient a unit box so local X→ex, Y→up, Z→ez (right-handed by construction)
@@ -85,7 +87,12 @@ function Connection({ conn, node, beamDir, faceOff }: {
       {/* shear tab plate (every connection has one — moment conns tab the web too) */}
       <mesh position={plate.ctr} quaternion={boxQuat}>
         <boxGeometry args={[plate.w, plate.h, plate.t]} />
-        <meshStandardMaterial color={PLATE} metalness={0.3} roughness={0.55} />
+        <meshStandardMaterial color="#475569" metalness={0.35} roughness={0.5} />
+      </mesh>
+      {/* full-height fillet weld bead: plate → support face (both sides drawn as one gold strip) */}
+      <mesh position={F.clone().add(ex.clone().multiplyScalar(0.006)).add(ez.clone().multiplyScalar(plate.t))} quaternion={boxQuat}>
+        <boxGeometry args={[0.012, plate.h, plate.t + 0.012]} />
+        <meshStandardMaterial color={BOLT} metalness={0.5} roughness={0.4} />
       </mesh>
       {bolts.map((b) => (
         <Bolt key={b.id} p={b.p.clone().add(ez.clone().multiplyScalar(plate.t / 2))} axis={ez} dia={conn.bolts.dia} len={b.len} />
@@ -125,7 +132,8 @@ export function JointConnections3D({ joints, beamJoints = [], model, nodePos }: 
     if (dir.lengthSq() < 1e-9) return null
     const sec = secMap.get(mem.section)
     if (sec?.material !== 'steel') return null
-    return <Connection key={c.beamId} conn={c} node={P} beamDir={dir.normalize()} faceOff={faceOff} />
+    const beamTw = sec.shape ? (shapeByName(sec.shape)?.tw ?? 8) * MM : undefined
+    return <Connection key={c.beamId} conn={c} node={P} beamDir={dir.normalize()} faceOff={faceOff} beamTw={beamTw} />
   }
 
   return (

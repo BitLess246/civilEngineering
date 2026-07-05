@@ -4022,7 +4022,7 @@ export default function ModelSpace() {
                       open && (
                         <tr key={`${key}:detail`}>
                           <td colSpan={12} className="bg-slate-50/60 px-2 pb-2">
-                            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[auto_1fr]">
+                            <div className="grid w-full grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
                               <ConnectionDetail2D conn={c} hostShape={j.columnShape} hostKind="column" faceType={c.faceType} beamShape={beamShapeName} />
                               {wantSol && <WorkedSolution steps={connectionRowSolution(c, { kind: 'column', shape: j.columnShape, faceType: c.faceType })} title={`Connection ${j.nodeId} · ${c.beamId} — worked solution`} />}
                             </div>
@@ -4074,7 +4074,7 @@ export default function ModelSpace() {
                       open && (
                         <tr key={`${key}:detail`}>
                           <td colSpan={12} className="bg-slate-50/60 px-2 pb-2">
-                            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[auto_1fr]">
+                            <div className="grid w-full grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
                               <ConnectionDetail2D conn={c} hostShape={bj.girderShape} hostKind="girder" faceType="web" beamShape={beamShapeName} />
                               {wantSol && <WorkedSolution steps={connectionRowSolution(c, { kind: 'girder', shape: bj.girderShape })} title={`Connection ${bj.nodeId} · ${c.beamId} — worked solution`} />}
                             </div>
