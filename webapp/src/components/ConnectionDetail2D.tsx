@@ -62,10 +62,13 @@ export function ConnectionDetail2D({ conn, hostShape, hostKind, faceType, beamSh
   const sc = 0.55                     // mm → px
 
   return (
-    <div className="flex flex-wrap gap-4">
+    <div className="flex w-full flex-wrap items-start gap-4 [&>svg]:min-w-[260px] [&>svg]:flex-1">
       {/* ELEVATION */}
-      <svg viewBox={`0 0 ${W} ${H}`} width={W * sc} height={H * sc} className="rounded-lg border border-slate-200 bg-white">
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full rounded-lg border border-slate-200 bg-white" style={{ maxWidth: W * sc }}>
         <text x={W / 2} y={16} textAnchor="middle" fontSize={13} fontWeight={700} fill="#0f172a">ELEVATION</text>
+        <text x={W / 2} y={30} textAnchor="middle" fontSize={9} fill="#64748b">
+          single plate — welded to the {hostKind === 'girder' ? 'girder web' : `column ${faceType}`}, bolted to the beam web (mm)
+        </text>
         {/* support (column band / girder web) */}
         <rect x={cx} y={20} width={hostW} height={H - 40} fill={STEEL} opacity={0.5} stroke="#475569" />
         {hostKind === 'column' && faceType === 'flange' && (
@@ -85,12 +88,25 @@ export function ConnectionDetail2D({ conn, hostShape, hostKind, faceType, beamSh
         <line x1={cope ? faceX + cope.lengthMm : faceX} y1={beamTop + tfB} x2={faceX + beamLen} y2={beamTop + tfB} stroke="#475569" />
         <line x1={faceX} y1={beamBot - tfB} x2={faceX + beamLen} y2={beamBot - tfB} stroke="#475569" />
         {cope && (
-          <DimBelow xA={faceX} xB={faceX + cope.lengthMm} featY={beamTop + cope.depthMm} dY={beamTop + cope.depthMm + 16} label={`cope ${cope.lengthMm}×${cope.depthMm}`} />
+          <DimBelow xA={faceX} xB={faceX + cope.lengthMm} featY={beamTop + cope.depthMm} dY={beamTop + cope.depthMm + 16} label={`cope ${cope.lengthMm}×${cope.depthMm} mm`} />
         )}
-        {/* plate + weld triangle at the support face */}
+        {/* plate: WELDED to the support along its FULL height (fillet both sides),
+            BOLTED to the beam web — the gold bead runs the whole plate edge */}
         <rect x={faceX} y={plateTop} width={tab.wMm} height={tab.hMm} fill="none" stroke={PLATE} strokeWidth={2.2} />
+        <rect x={faceX - 2.5} y={plateTop} width={5} height={tab.hMm} fill={WELD} />
         <path d={`M ${faceX} ${plateTop - 9} l 11 9 l -11 0 z`} fill={WELD} />
-        <text x={faceX + 14} y={plateTop - 11} fontSize={9} fill={WELD}>{tab.weldSizeMm} mm E70 fillet, 2 sides</text>
+        <text x={faceX + 14} y={plateTop - 11} fontSize={9} fill={WELD}>
+          {tab.weldSizeMm} mm E70 fillet × {Math.round(tab.hMm)} mm, both sides (full plate height)
+        </text>
+        {conn.connType === 'moment-flange-weld' && (
+          <>
+            {/* CJP flange welds at the column face — matching the SECTION and the 3D view */}
+            <path d={`M ${faceX} ${beamTop} l 14 0 l -14 -11 z`} fill={WELD} />
+            <path d={`M ${faceX} ${beamBot} l 14 0 l -14 11 z`} fill={WELD} />
+            <text x={faceX + 17} y={beamTop - 4} fontSize={9} fill={WELD}>CJP flange weld</text>
+            <text x={faceX + 17} y={beamBot + 12} fontSize={9} fill={WELD}>CJP flange weld</text>
+          </>
+        )}
         {/* bolts at the designed layout */}
         {rows.map((bp) => (
           <g key={bp.id}>
@@ -100,13 +116,13 @@ export function ConnectionDetail2D({ conn, hostShape, hostKind, faceType, beamSh
           </g>
         ))}
         {/* dimensions (shared architectural-tick primitives, as in the RC schematics) */}
-        <DimSide yA={plateTop} yB={plateTop + tab.hMm} featX={faceX + tab.wMm} dX={faceX + tab.wMm + 24} label={`h = ${Math.round(tab.hMm)}`} side="right" />
-        <DimBelow xA={faceX} xB={faceX + a0} featY={plateTop + tab.hMm} dY={plateTop + tab.hMm + 30} label={`a = ${Math.round(a0)}`} />
+        <DimSide yA={plateTop} yB={plateTop + tab.hMm} featX={faceX + tab.wMm} dX={faceX + tab.wMm + 24} label={`h = ${Math.round(tab.hMm)} mm`} side="right" />
+        <DimBelow xA={faceX} xB={faceX + a0} featY={plateTop + tab.hMm} dY={plateTop + tab.hMm + 30} label={`a = ${Math.round(a0)} mm`} />
         {rows.length > 1 && (
-          <DimSide yA={boltY(rows[rows.length - 1].y)} yB={boltY(rows[0].y)} featX={faceX + a0 - 10} dX={faceX + a0 - 26} label={`p = ${conn.bolts.pitchMm}`} side="left" />
+          <DimSide yA={boltY(rows[rows.length - 1].y)} yB={boltY(rows[0].y)} featX={faceX + a0 - 10} dX={faceX + a0 - 26} label={`p = ${conn.bolts.pitchMm} mm`} side="left" />
         )}
         <text x={faceX + tab.wMm / 2} y={plateTop + tab.hMm + 52} textAnchor="middle" fontSize={10} fill={PLATE} fontWeight={600}>
-          PL {tab.t}×{tab.wMm}×{Math.round(tab.hMm)}
+          PL {tab.t}×{tab.wMm}×{Math.round(tab.hMm)} mm
         </text>
         {/* Vu arrow */}
         <line x1={faceX + beamLen - 32} y1={beamTop - 28} x2={faceX + beamLen - 32} y2={beamTop - 6} stroke="#dc2626" strokeWidth={2} />
@@ -115,7 +131,7 @@ export function ConnectionDetail2D({ conn, hostShape, hostKind, faceType, beamSh
       </svg>
 
       {/* END SECTION */}
-      <svg viewBox={`0 0 ${W2} ${H2}`} width={W2 * sc} height={H2 * sc} className="rounded-lg border border-slate-200 bg-white">
+      <svg viewBox={`0 0 ${W2} ${H2}`} className="h-auto w-full rounded-lg border border-slate-200 bg-white" style={{ maxWidth: W2 * sc }}>
         <text x={W2 / 2} y={16} textAnchor="middle" fontSize={13} fontWeight={700} fill="#0f172a">SECTION</text>
         {/* support face behind: column flange (or girder web edge-band) */}
         <rect x={cx2 - supW / 2} y={cy2 - dB / 2 - 34} width={supW} height={dB + 68}
@@ -164,15 +180,16 @@ export function ConnectionDetail2D({ conn, hostShape, hostKind, faceType, beamSh
         {/* single-shear plane callout at the plate ↔ web interface (leader to the left) */}
         {rows.length > 0 && (() => {
           const y = cy2 + tab.hMm / 2 - rows[0].y
+          const lx = 8, ly = H2 - 34   // label INSIDE the frame, bottom-left
           return (
             <g>
               <line x1={plateX2 - 1} y1={y - 20} x2={plateX2 - 1} y2={y + 20} stroke="#dc2626" strokeDasharray="4 3" strokeWidth={1.4} />
-              <line x1={plateX2 - 1} y1={y + 20} x2={cx2 - bfB / 2 - 8} y2={y + 34} stroke="#dc2626" strokeWidth={0.9} />
-              <text x={cx2 - bfB / 2 - 10} y={y + 38} fontSize={9.5} fill="#dc2626" fontWeight={600} textAnchor="end">single shear plane (m = 1)</text>
+              <line x1={plateX2 - 1} y1={y + 20} x2={lx + 66} y2={ly - 10} stroke="#dc2626" strokeWidth={0.9} />
+              <text x={lx} y={ly} fontSize={9.5} fill="#dc2626" fontWeight={600}>single shear plane (m = 1)</text>
             </g>
           )
         })()}
-        <DimBelow xA={plateX2} xB={plateX2 + tab.t + 2} featY={cy2 + tab.hMm / 2} dY={cy2 + tab.hMm / 2 + 26} label={`t = ${tab.t}`} />
+        <DimBelow xA={plateX2} xB={plateX2 + tab.t + 2} featY={cy2 + tab.hMm / 2} dY={cy2 + tab.hMm / 2 + 26} label={`t = ${tab.t} mm`} />
         <text x={cx2} y={H2 - 14} textAnchor="middle" fontSize={10} fill="#334155">
           {beamShape ?? 'beam'} — {conn.bolts.n} × M{conn.bolts.dia} A325, single shear
         </text>
