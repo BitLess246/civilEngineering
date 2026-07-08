@@ -273,10 +273,12 @@ export function enforceSectionHierarchy(model: StructuralModel): StructuralModel
     if (!changed) break
   }
 
-  // ── Column-stack continuity: a physical column is CONTINUOUS through the
-  // storeys, so every column member on the same plan position carries one
-  // section — the stack's largest (concrete: max b × max h; steel: heaviest
-  // shape by area). Grow-only, like the joint hierarchy above; idempotent. ──
+  // ── Column-stack rule: a column may only be EQUAL OR SMALLER than the one
+  // below it (standard practice — sections step down going up, never up).
+  // Enforced grow-only: walking each plan-position stack from the TOP down,
+  // every segment is raised to at least the largest section above it
+  // (concrete: b and h independently; steel: the heavier shape by area).
+  // Upper storeys stay smaller for economy; idempotent. ──
   const nodeXZ = new Map(model.nodes.map((n) => [n.id, n]))
   const stacks = new Map<string, Member[]>()
   for (const m of model.members) {
@@ -289,24 +291,29 @@ export function enforceSectionHierarchy(model: StructuralModel): StructuralModel
   }
   for (const stack of stacks.values()) {
     if (stack.length < 2) continue
-    const secs = stack.map((m) => secOf(m)!).filter(Boolean)
+    // top segment first (highest lower-node elevation)
+    const ordered = [...stack].sort((m1, m2) =>
+      Math.min(nodeXZ.get(m2.i)!.y, nodeXZ.get(m2.j)!.y) - Math.min(nodeXZ.get(m1.i)!.y, nodeXZ.get(m1.j)!.y))
+    const secs = ordered.map((m) => secOf(m)!).filter(Boolean)
     if (secs.some((s) => s.material === 'steel')) {
-      // heaviest shape in the stack governs
-      let best: { name: string; A: number } | null = null
+      let req: { name: string; A: number } | null = null
       for (const s of secs) {
         const shp = s.shape ? shapeByName(s.shape) : undefined
-        if (shp && (!best || shp.A > best.A)) best = { name: shp.name, A: shp.A }
-      }
-      if (best) for (const s of secs) {
-        if (s.shape !== best.name) {
-          const shp = shapeByName(best.name)!
-          s.shape = shp.name; s.b = shp.bf ?? s.b; s.h = shp.d ?? s.h
+        if (!shp) continue
+        if (req && shp.A < req.A) {
+          const up = shapeByName(req.name)!
+          s.shape = up.name; s.b = up.bf ?? s.b; s.h = up.d ?? s.h
+          continue   // req unchanged (this segment now equals it)
         }
+        req = { name: shp.name, A: shp.A }
       }
     } else {
-      const bMax = Math.max(...secs.map((s) => s.b))
-      const hMax = Math.max(...secs.map((s) => s.h))
-      for (const s of secs) { s.b = bMax; s.h = hMax }
+      let reqB = 0, reqH = 0
+      for (const s of secs) {
+        if (s.b < reqB) s.b = reqB
+        if (s.h < reqH) s.h = reqH
+        reqB = s.b; reqH = s.h
+      }
     }
   }
 

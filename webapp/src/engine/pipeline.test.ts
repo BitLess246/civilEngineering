@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel, buildGravityLoads, removeNode, enforceSectionHierarchy, refreshSelfWeight, splitSharedSections } from './modelBuilder'
-import { designStructure, optimizeStructure, designOK, type LateralCase } from './pipeline'
+import { designStructure, optimizeStructure, designOK, RC_LIMITS, type LateralCase } from './pipeline'
 import { nextHeavierW } from './aiscSections'
 import { computeSeismic } from './seismic'
 import type { RectSection, ModelLoad } from './model'
@@ -417,19 +417,20 @@ describe('optimizer covers every design check (slabs, walls, SCWB)', () => {
   }, 120_000)
 
   it('a failing shear wall gates designOK and the optimizer thickens the panel', () => {
+    // With the RC size caps, the old ×400 seismic case can no longer converge
+    // (that unbounded convergence was the bug the caps fix). This milder case
+    // exercises the same mechanism: the thin wall fails DURING the loop as the
+    // stiffening frame sheds shear into it, and the optimizer thickens it.
     const m = makeModel()
-    m.walls = [{ id: 'w0', member: 'bx0.0.1', height: 3, thickness: 100, shearWall: true }]
+    m.walls = [{ id: 'w0', member: 'bx0.0.1', height: 3, thickness: 50, shearWall: true }]
     const base = computeSeismic(m, { Ca: 0.44, Cv: 0.64, I: 1, R: 8.5, dir: 'x' })!.loads
     const eX: LateralCase = {
       name: 'E+X', kind: 'E',
-      loads: base.map((l) => ({ kind: 'node', node: (l as { node: string }).node, Fx: Math.abs((l as { Fx?: number }).Fx ?? 0) * 400, cat: 'E' })),
+      loads: base.map((l) => ({ kind: 'node', node: (l as { node: string }).node, Fx: Math.abs((l as { Fx?: number }).Fx ?? 0) * 45, cat: 'E' })),
     }
-    const first = designStructure(m, soil, {}, { lateral: [eX] })!
-    expect(first.walls[0].ok).toBe(false)
-    expect(designOK(first)).toBe(false)
     const r = optimizeStructure(m, soil, {}, 30, { lateral: [eX] })!
     expect(r.converged).toBe(true)
-    expect(r.model.walls![0].thickness).toBeGreaterThan(100)
+    expect(r.model.walls![0].thickness).toBeGreaterThan(50)   // grew to pass
     expect(r.design.walls.every((w) => w.ok)).toBe(true)
   }, 120_000)
 })
@@ -542,6 +543,34 @@ describe('optimizeStructure — termination guards (hierarchy revert / catalog t
     expect(r.stopReason).toContain('cannot fix')
     expect(r.stopReason).toContain('footing')
   })
+})
+
+describe('optimizeStructure — RC cast-in-place size limits (like the W-catalog top)', () => {
+  it('an un-growable failing RC design stops AT the cap with an honest reason', () => {
+    // 12 m span under an absurd point load: no cast-in-place beam can work.
+    const m = generateGridModel({ baysX: [12], baysZ: [10], storeyH: [3], section })
+    m.loads = m.members.filter((x) => x.role !== 'column')
+      .map((x) => ({ kind: 'member-point' as const, member: x.id, t: 0.5, P: 12000, cat: 'D' as const }))
+    const r = optimizeStructure(m, soil)!
+    expect(r.converged).toBe(false)
+    expect(r.stopReason).toContain('cast-in-place size limit')
+    for (const s of r.model.sections) {
+      const lim = m.members.find((x) => x.id === s.id)?.role === 'column' ? RC_LIMITS.column : RC_LIMITS.flexural
+      expect(s.b).toBeLessThanOrEqual(lim.b)
+      expect(s.h).toBeLessThanOrEqual(lim.h)
+    }
+  }, 120_000)
+
+  it('normal growth never exceeds the caps', () => {
+    const m = makeModel()
+    m.sections = m.sections.map((s) => ({ ...s, b: 200, h: 250, name: '200×250' }))
+    const r = optimizeStructure(m, soil)!
+    expect(r.converged).toBe(true)
+    for (const s of r.model.sections) {
+      expect(s.b).toBeLessThanOrEqual(RC_LIMITS.column.b)
+      expect(s.h).toBeLessThanOrEqual(RC_LIMITS.flexural.h)
+    }
+  }, 120_000)
 })
 
 describe('optimizeStructure — steel sections', () => {

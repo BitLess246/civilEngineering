@@ -84,26 +84,36 @@ describe('enforceSectionHierarchy — column-stack continuity', () => {
   const rc = (id: string, b: number, h: number): RectSection =>
     ({ id, name: `${b}×${h}`, b, h, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 })
 
-  it('concrete columns on one plan position all take the stack maximum b × h', () => {
+  it('a bigger LOWER column leaves the smaller upper one alone (upper ≤ lower is fine)', () => {
     const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3, 3], section: rc('S', 300, 300) })
-    // storey-2 column above c0.0.0 is c0.0.1 — make the lower one bigger
     const lower = m.sections.find((s) => s.id === 'c0.0.0')!
     lower.b = 400; lower.h = 450
     const out = enforceSectionHierarchy(m)
     const up = out.sections.find((s) => s.id === 'c0.0.1')!
-    expect(up.b).toBe(400)
-    expect(up.h).toBe(450)
-    // a different stack is untouched
-    expect(out.sections.find((s) => s.id === 'c1.0.1')!.b).toBe(300)
+    expect(up.b).toBe(300)     // stays smaller — economical and code-of-practice
+    expect(up.h).toBe(300)
   })
 
-  it('steel stacks unify to the heaviest shape', () => {
+  it('a bigger UPPER column raises the one below (a column is never larger than the one under it)', () => {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3, 3], section: rc('S', 300, 300) })
+    const upper = m.sections.find((s) => s.id === 'c0.0.1')!
+    upper.b = 400; upper.h = 450
+    const out = enforceSectionHierarchy(m)
+    const low = out.sections.find((s) => s.id === 'c0.0.0')!
+    expect(low.b).toBeGreaterThanOrEqual(400)
+    expect(low.h).toBeGreaterThanOrEqual(450)
+    // a different stack is untouched
+    expect(out.sections.find((s) => s.id === 'c1.0.0')!.b).toBe(300)
+  })
+
+  it('steel: a heavier shape ABOVE pulls the lower segment up; heavier BELOW leaves the top light', () => {
     const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3, 3], section: rc('S', 300, 300) })
     for (const s of m.sections) Object.assign(s, { material: 'steel', shape: 'W310x38.7', steelFy: 345, steelFu: 448 })
-    m.sections.find((s) => s.id === 'c0.0.0')!.shape = 'W310x97'
+    m.sections.find((s) => s.id === 'c0.0.1')!.shape = 'W310x97'   // heavy on top
+    m.sections.find((s) => s.id === 'c1.0.0')!.shape = 'W310x97'   // heavy at bottom
     const out = enforceSectionHierarchy(m)
-    expect(out.sections.find((s) => s.id === 'c0.0.1')!.shape).toBe('W310x97')
-    expect(out.sections.find((s) => s.id === 'c1.0.0')!.shape).toBe('W310x38.7')
+    expect(out.sections.find((s) => s.id === 'c0.0.0')!.shape).toBe('W310x97')   // raised
+    expect(out.sections.find((s) => s.id === 'c1.0.1')!.shape).toBe('W310x38.7') // stays light
   })
 
   it('is idempotent', () => {
