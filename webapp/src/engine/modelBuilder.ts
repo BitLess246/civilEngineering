@@ -319,3 +319,70 @@ export function enforceSectionHierarchy(model: StructuralModel): StructuralModel
 
   return { ...model, sections: model.sections.map((s) => { const u = sec.get(s.id)!; return { ...u, name: u.material === 'steel' && u.shape ? u.shape : `${u.b}×${u.h}` } }) }
 }
+
+/**
+ * Bar-diameter CONTINUITY groups (concrete members only): the member sets that
+ * must share one main-bar diameter for buildable joint detailing —
+ *  · a continuous BEAM/GIRDER line: collinear spans running through shared
+ *    joints (top/bottom bars pass through or anchor into the same column), and
+ *  · a COLUMN STACK: segments on one plan position (verticals are spliced
+ *    storey to storey — mixed diameters complicate the splice).
+ * Bar COUNT stays free per span/section (cuts and splices). Returns groups of
+ * member ids with ≥ 2 members.
+ */
+export function barContinuityGroups(model: StructuralModel): string[][] {
+  const nodeById = new Map(model.nodes.map((n) => [n.id, n]))
+  const steelSec = new Set(model.sections.filter((s) => s.material === 'steel').map((s) => s.id))
+  const mems = model.members.filter((m) => !steelSec.has(m.section))
+
+  const parent = new Map<string, string>()
+  const find = (x: string): string => {
+    let r = x
+    while (parent.get(r) !== r) r = parent.get(r)!
+    while (parent.get(x) !== r) { const nx = parent.get(x)!; parent.set(x, r); x = nx }
+    return r
+  }
+  const union = (a: string, b: string) => { parent.set(find(a), find(b)) }
+  for (const m of mems) parent.set(m.id, m.id)
+
+  // column stacks (same plan position, vertical)
+  const stacks = new Map<string, string[]>()
+  for (const m of mems) {
+    if (m.role !== 'column') continue
+    const a = nodeById.get(m.i), b = nodeById.get(m.j)
+    if (!a || !b) continue
+    if (Math.abs(a.x - b.x) > 1e-4 || Math.abs(a.z - b.z) > 1e-4) continue
+    const key = `${Math.round(a.x * 1e3)},${Math.round(a.z * 1e3)}`
+    ;(stacks.get(key) ?? stacks.set(key, []).get(key)!).push(m.id)
+  }
+  for (const ids of stacks.values()) for (let i = 1; i < ids.length; i++) union(ids[0], ids[i])
+
+  // beam/girder runs: collinear continuation through a shared node
+  const flexAt = new Map<string, Member[]>()
+  for (const m of mems) {
+    if (m.role !== 'beam' && m.role !== 'girder') continue
+    for (const n of [m.i, m.j]) (flexAt.get(n) ?? flexAt.set(n, []).get(n)!).push(m)
+  }
+  const outDir = (m: Member, nid: string): [number, number] | null => {
+    const a = nodeById.get(nid), b = nodeById.get(m.i === nid ? m.j : m.i)
+    if (!a || !b) return null
+    const dx = b.x - a.x, dz = b.z - a.z
+    const L = Math.hypot(dx, dz)
+    return L > 1e-9 ? [dx / L, dz / L] : null
+  }
+  for (const [nid, list] of flexAt) {
+    for (let i = 0; i < list.length; i++)
+      for (let j = i + 1; j < list.length; j++) {
+        const da = outDir(list[i], nid), db = outDir(list[j], nid)
+        if (da && db && da[0] * db[0] + da[1] * db[1] < -0.999) union(list[i].id, list[j].id)
+      }
+  }
+
+  const groups = new Map<string, string[]>()
+  for (const m of mems) {
+    if (m.role !== 'column' && m.role !== 'beam' && m.role !== 'girder') continue
+    const r = find(m.id)
+    ;(groups.get(r) ?? groups.set(r, []).get(r)!).push(m.id)
+  }
+  return [...groups.values()].filter((g) => g.length >= 2)
+}

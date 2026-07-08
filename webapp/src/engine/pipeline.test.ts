@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { generateGridModel, buildGravityLoads, removeNode, enforceSectionHierarchy, refreshSelfWeight, splitSharedSections } from './modelBuilder'
-import { designStructure, optimizeStructure, designOK, RC_LIMITS, type LateralCase } from './pipeline'
+import { generateGridModel, buildGravityLoads, removeNode, enforceSectionHierarchy, refreshSelfWeight, splitSharedSections, barContinuityGroups } from './modelBuilder'
+import { designStructure, optimizeStructure, selectBarDiameters, designOK, RC_LIMITS, type LateralCase } from './pipeline'
 import { nextHeavierW } from './aiscSections'
 import { computeSeismic } from './seismic'
+import { validateMesh } from './meshValidation'
 import type { RectSection, ModelLoad } from './model'
 
 const section: RectSection = { id: 'S1', name: '300×500', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
@@ -542,6 +543,39 @@ describe('optimizeStructure — termination guards (hierarchy revert / catalog t
     expect(r.design.beams.every((b) => b.ok)).toBe(true)
     expect(r.stopReason).toContain('cannot fix')
     expect(r.stopReason).toContain('footing')
+  })
+})
+
+describe('bar-diameter continuity guard (selectBarDiameters)', () => {
+  it('a continuous beam line and each column stack end with ONE bar Ø (count may differ)', () => {
+    // 2×1 bays, 2 storeys: multi-span beam lines + column stacks; mixed start Øs
+    const m = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3, 3], section, slabThickness: 200 })
+    m.loads = m.plates.flatMap((p) => [
+      { kind: 'area' as const, plate: p.id, q: 4.8, cat: 'D' as const },
+      { kind: 'area' as const, plate: p.id, q: 2.4, cat: 'L' as const },
+    ])
+    m.sections.find((s) => s.id === 'bx0.0.1')!.barDia = 25   // one span Ø25, its continuation Ø20
+    m.sections.find((s) => s.id === 'c0.0.0')!.barDia = 28    // stack base Ø28, upper Ø20
+    const out = selectBarDiameters(m, soil)
+    const secOf = (id: string) => out.sections.find((s) => s.id === id)!
+    for (const g of barContinuityGroups(out)) {
+      const dias = new Set(g.map((mid) => secOf(out.members.find((x) => x.id === mid)!.section).barDia))
+      expect(dias.size).toBe(1)
+    }
+  }, 120_000)
+})
+
+describe('meshValidation — bar-diameter discontinuity warning', () => {
+  it('flags a continuous run mixing Ø25 and Ø20; silent when uniform', () => {
+    const m = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3], section })
+    expect(validateMesh(m).filter((i) => i.code === 'bar-dia-discontinuity')).toHaveLength(0)
+    m.sections.find((s) => s.id === 'bx0.0.1')!.barDia = 25
+    const issues = validateMesh(m).filter((i) => i.code === 'bar-dia-discontinuity')
+    expect(issues.length).toBeGreaterThanOrEqual(1)
+    expect(issues[0].severity).toBe('warning')
+    expect(issues[0].refs).toContain('bx0.0.1')
+    expect(issues[0].message).toContain('⌀20')
+    expect(issues[0].message).toContain('⌀25')
   })
 })
 

@@ -20,6 +20,7 @@
 // valid model with a false error.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel } from './model'
+import { barContinuityGroups } from './modelBuilder'
 
 export type MeshSeverity = 'error' | 'warning'
 export interface MeshIssue {
@@ -68,6 +69,18 @@ export function validateMesh(model: StructuralModel): MeshIssue[] {
     if (prev) issues.push({ severity: 'warning', code: 'duplicate-member', refs: [prev, m.id],
       message: `Members ${prev} and ${m.id} span the same nodes — stiffness is doubled.` })
     else pairSeen.set(key, m.id)
+  }
+
+  // ── bar-diameter continuity (advisory): a continuous beam line or column
+  // stack should carry ONE main-bar Ø — bars pass through the joint / splice
+  // storey to storey. Bar count may differ per span (cuts and splices). ──────
+  const secDia = new Map(model.sections.map((s) => [s.id, s.barDia]))
+  const memSec = new Map(model.members.map((m) => [m.id, m.section]))
+  for (const group of barContinuityGroups(model)) {
+    const dias = [...new Set(group.map((id) => secDia.get(memSec.get(id) ?? '') ?? 0))].filter((d) => d > 0)
+    if (dias.length > 1)
+      issues.push({ severity: 'warning', code: 'bar-dia-discontinuity', refs: group,
+        message: `Members ${group.join(', ')} form a continuous run/stack but mix main-bar diameters (⌀${dias.sort((a, b) => a - b).join(', ⌀')}) — use one Ø through the joint; vary the bar COUNT per span instead.` })
   }
 
   // ── coincident distinct nodes (advisory: usually an unmerged mesh) ───────
