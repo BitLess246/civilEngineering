@@ -881,7 +881,7 @@ export async function optimizeStructureAsync(
       }))
       const grown = settle(withWallThickness(withPlateThickness(withSizes(work, sizes), act.plates, soil.gammaConc), act.walls))
       if (!sectionsChanged(work, grown)) {     // nothing can grow (catalog top / unsupported shape)
-        stopReason = stopReasonFor(design, 'no failing section can grow any further (top of the W catalog or an unsupported shape family)')
+        stopReason = stopReasonFor(design, 'no failing section can grow any further (top of the W catalog, an unsupported shape family, or the cast-in-place size limit)')
         break
       }
       work = grown
@@ -1281,6 +1281,15 @@ function sectionUtilMap(design: StructureDesign, memSecId: Map<string, string>):
  *   Square RC columns (b/h ∈ [0.75, 1.33]) grow both b and h together to preserve
  *   aspect ratio; all others switch to width growth at h ≥ 2.5b.
  */
+/** Cast-in-place size limits — the RC counterpart of the top of the W catalog.
+ *  Growth clamps here; a member still failing at the cap exits the grow loop
+ *  with an honest stopReason instead of ballooning without bound.
+ *  Practical formwork/constructability bounds for building work. */
+export const RC_LIMITS = {
+  column: { b: 1000, h: 1000 },
+  flexural: { b: 600, h: 1200 },   // beams & girders
+} as const
+
 function jumpSection(s: RectSection, util: number, role: string): RectSection {
   if (util <= 1 + 1e-9) return s
   if (s.material === 'steel' && s.shape) {
@@ -1293,18 +1302,25 @@ function jumpSection(s: RectSection, util: number, role: string): RectSection {
     }
     return cur
   }
+  const lim = role === 'column' ? RC_LIMITS.column : RC_LIMITS.flexural
   const nSteps = Math.max(1, Math.min(10, Math.ceil((Math.sqrt(util) - 1) * s.h / 50)))
   const ratio = s.b / s.h
   const isSquareCol = role === 'column' && ratio > 0.75 && ratio < 1.33
   let sec = s
   for (let i = 0; i < nSteps; i++) {
-    if (isSquareCol) {
-      sec = { ...sec, b: sec.b + 50, h: sec.h + 50, name: `${sec.b + 50}×${sec.h + 50}` }
-    } else if (sec.h >= 2.5 * sec.b) {
-      sec = { ...sec, b: sec.b + 50, name: `${sec.b + 50}×${sec.h}` }
+    const canB = sec.b + 50 <= lim.b, canH = sec.h + 50 <= lim.h
+    if (isSquareCol && canB && canH) {
+      sec = { ...sec, b: sec.b + 50, h: sec.h + 50 }
+    } else if ((sec.h >= 2.5 * sec.b || !canH) && canB) {
+      sec = { ...sec, b: sec.b + 50 }
+    } else if (canH) {
+      sec = { ...sec, h: sec.h + 50 }
+    } else if (canB) {
+      sec = { ...sec, b: sec.b + 50 }
     } else {
-      sec = { ...sec, h: sec.h + 50, name: `${sec.b}×${sec.h + 50}` }
+      break   // at the cast-in-place cap — cannot grow (like the W-catalog top)
     }
+    sec = { ...sec, name: `${sec.b}×${sec.h}` }
   }
   return sec
 }
@@ -1365,7 +1381,7 @@ export function optimizeStructure(
     }))
     const grown = settle(withWallThickness(withPlateThickness(withSizes(work, sizes), act.plates, soil.gammaConc), act.walls))
     if (!sectionsChanged(work, grown)) {       // nothing can grow (catalog top / unsupported shape)
-      stopReason = stopReasonFor(design, 'no failing section can grow any further (top of the W catalog or an unsupported shape family)')
+      stopReason = stopReasonFor(design, 'no failing section can grow any further (top of the W catalog, an unsupported shape family, or the cast-in-place size limit)')
       break
     }
     work = grown
