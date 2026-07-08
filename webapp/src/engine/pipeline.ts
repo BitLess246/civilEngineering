@@ -8,7 +8,7 @@
 // Every stage reuses the existing engines unchanged.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, RectSection, ModelLoad } from './model'
-import { enforceSectionHierarchy, refreshSelfWeight } from './modelBuilder'
+import { enforceSectionHierarchy, refreshSelfWeight, barContinuityGroups } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
 import { precomputeFrame, solveWithGeometry, applyF3Combo, serializePrecomp, type F3Result, type F3MemberResult, type F3Load } from './frame3d'
 import type { BridgeResult } from './modelBridge'
@@ -1097,6 +1097,24 @@ export function selectBarDiameters(
     for (const db of ladder(BAR_LADDER_COLUMN, sec.barDia)) {
       const r = designColumnFromPM({ ...sec, barDia: db }, row.Pu, row.Mu)
       if (r.ok && columnBarsFit(sec, db, r.bars)) { if (db !== sec.barDia) chosen.set(sec.id, db); break }
+    }
+  }
+
+  // ── Bar-diameter continuity guard: one Ø through each continuous beam line
+  // and each column stack — bars run through the joint / splice storey to
+  // storey, so a Ø25 span meeting a Ø20 span at the same column is a detailing
+  // error. The group adopts its LARGEST required diameter; bar COUNT stays
+  // free per section (cuts and splices handle the difference). This also
+  // repairs user-set mismatches whenever bar selection runs.
+  for (const group of barContinuityGroups(model)) {
+    const diaOf = (mid: string) => {
+      const sec = secById.get(memSecId.get(mid) ?? '')
+      return sec ? (chosen.get(sec.id) ?? sec.barDia) : 0
+    }
+    const dmax = Math.max(...group.map(diaOf))
+    for (const mid of group) {
+      const sec = secById.get(memSecId.get(mid) ?? '')
+      if (sec && diaOf(mid) !== dmax) chosen.set(sec.id, dmax)
     }
   }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { generateGridModel, removeElements, nodeId, buildGravityLoads, enforceSectionHierarchy } from './modelBuilder'
+import { generateGridModel, removeElements, nodeId, buildGravityLoads, enforceSectionHierarchy, barContinuityGroups } from './modelBuilder'
 import type { RectSection } from './model'
 
 const sec: RectSection = { id: 'S1', name: '300×500', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
@@ -122,5 +122,35 @@ describe('enforceSectionHierarchy — column-stack continuity', () => {
     const once = enforceSectionHierarchy(m)
     const twice = enforceSectionHierarchy(once)
     expect(JSON.stringify(twice.sections)).toBe(JSON.stringify(once.sections))
+  })
+})
+
+
+describe('barContinuityGroups — one bar Ø per beam run / column stack', () => {
+  const rc = (id: string, b: number, h: number): RectSection =>
+    ({ id, name: `${b}×${h}`, b, h, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 })
+
+  it('collinear beam spans through a joint form one run; girders form their own', () => {
+    const m = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3], section: rc('S', 300, 500) })
+    const groups = barContinuityGroups(m)
+    // the two X-spans on each Z-line are collinear through the middle column
+    const bxRun = groups.find((g) => g.includes('bx0.0.1') && g.includes('bx1.0.1'))
+    expect(bxRun).toBeTruthy()
+    // a girder never joins a perpendicular beam run
+    expect(bxRun!.some((id) => id.startsWith('bz'))).toBe(false)
+  })
+
+  it('column segments on one plan position form a stack group', () => {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3, 3], section: rc('S', 300, 500) })
+    const groups = barContinuityGroups(m)
+    const stack = groups.find((g) => g.includes('c0.0.0') && g.includes('c0.0.1'))
+    expect(stack).toBeTruthy()
+    expect(stack!.every((id) => id.startsWith('c0.0.'))).toBe(true)
+  })
+
+  it('steel members are excluded (bar diameters are an RC concern)', () => {
+    const m = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3], section: rc('S', 300, 500) })
+    m.sections = m.sections.map((s) => ({ ...s, material: 'steel' as const, shape: 'W310x79' }))
+    expect(barContinuityGroups(m)).toHaveLength(0)
   })
 })
