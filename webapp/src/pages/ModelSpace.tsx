@@ -3928,7 +3928,8 @@ export default function ModelSpace() {
                           <span className="text-slate-400"> → beam {c.beamElement}</span>
                         </td>
                         <td className="py-1 pr-2 text-[11px]">
-                          {c.connType === 'moment-flange-weld' ? 'Moment (CJP flange)' : 'Shear tab'}
+                          {c.connType === 'moment-flange-weld' ? 'Moment (CJP flange)'
+                            : c.connType === 'moment-web-plate' ? 'Moment (web ext. plates)' : 'Shear tab'}
                           <div className="text-[10px] text-slate-400">{c.pinned ? 'pin — releases Mz' : 'rigid'}</div>
                         </td>
                         <td className="py-1 pr-2 text-right">{f1(c.Vu)}</td>
@@ -3940,7 +3941,7 @@ export default function ModelSpace() {
                         <td className="py-1 pr-2 text-[11px]">{c.tab.t}×{Math.round(c.tab.hMm)} mm</td>
                         <td className="py-1 pr-2 text-[11px]">
                           {c.tab.weldSizeMm}mm E70
-                          {c.flange && <span className="ml-1 text-blue-600">+ CJP flg</span>}
+                          {c.flange && <span className="ml-1 text-blue-600">{c.flange.webPlate ? '+ ext. plates' : '+ CJP flg'}</span>}
                         </td>
                         <td className="py-1 text-[11px]">
                           <span className={c.ok ? 'text-green-700' : 'text-red-600'}>{c.ok ? '✓ OK' : '✗ NG'}</span>

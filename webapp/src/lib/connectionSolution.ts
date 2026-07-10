@@ -26,14 +26,18 @@ export function connectionRowSolution(c: BeamConnection, host: ConnHost): Soluti
   const Ab = (Math.PI / 4) * b.dia * b.dia
   const phiRn = (PHI_BOLT * FNV * Ab) / 1000
 
+  const beamSide = c.beamElement === 'web+flanges' ? 'web + flanges' : 'web'
+  const hostSide = host.kind === 'column' ? `column ${host.shape} ${host.faceType ?? 'flange'} face` : `girder ${host.shape} web`
   steps.push({
     title: 'Design forces and connection type',
     lines: [
-      { text: `Beam ${c.beamId} lands on the ${host.kind === 'column' ? `column ${host.shape} ${host.faceType ?? ''} face` : `web of girder ${host.shape}`}.` },
+      { text: `Element pairing: beam ${c.beamId} ${beamSide} → ${hostSide}. The web/flange pair on each side selects the detail below.` },
       { tex: `V_u = ${sn1(c.Vu)}\\ \\text{kN}${c.Mu > 0 ? `,\\quad M_u = ${sn1(c.Mu)}\\ \\text{kN·m}` : ''}` },
       { text: c.connType === 'moment-flange-weld'
-        ? 'Moment connection: CJP flange welds carry Mu; the single-plate web tab carries Vu (§J1.2 force split).'
-        : `Simple (shear-only) ${host.kind === 'girder' ? 'fin plate' : 'shear tab'} — the end is a pin; only Vu transfers.` },
+        ? 'Strong-axis moment connection (beam flanges meet the column FLANGE): direct CJP flange welds carry Mu; the single-plate web tab carries Vu (§J1.2 force split).'
+        : c.connType === 'moment-web-plate'
+        ? 'Weak-axis moment connection (beam flanges meet the column WEB): CJP into the thin web has no load path, so horizontal extension plates welded into the web carry the flange forces (AISC DG13 detail); the web tab carries Vu.'
+        : `Simple (shear-only) ${host.kind === 'girder' ? 'fin plate' : 'shear tab'} — the end is a pin; only Vu transfers.${host.kind === 'column' && host.faceType === 'web' ? ' The plate is welded to the column web and EXTENDED past the flange tips so the bolts are erectable — the larger eccentricity is carried below.' : ''}` },
     ],
   })
 
@@ -80,6 +84,19 @@ export function connectionRowSolution(c: BeamConnection, host: ConnHost): Soluti
         { tex: `T_f = \\dfrac{M_u}{d - t_f} = ${sn1(c.flange.Tf)}\\ \\text{kN}` },
         { tex: `\\phi R_{CJP} = \\phi F_u A_{fl} = ${sn1(c.flange.phiCapKn)}\\ \\text{kN} \\quad ${c.flange.ok ? '\\checkmark' : '\\text{NG}'} \\qquad (A_{fl} = ${Math.round(c.flange.flangeArea)}\\ \\text{mm}^2)` },
         { text: 'Provide column continuity plates at both beam-flange levels (web crippling/local bending, §J10).' },
+      ],
+    })
+  }
+
+  if (c.connType === 'moment-web-plate' && c.flange?.webPlate) {
+    const wp = c.flange.webPlate
+    steps.push({
+      title: 'Flange force — weak-axis extension plates (§J4.1, §J2.4)',
+      lines: [
+        { tex: `T_f = \\dfrac{M_u}{d - t_f} = ${sn1(c.flange.Tf)}\\ \\text{kN}` },
+        { text: `Horizontal plates PL ${wp.tMm}×${wp.wMm} mm at both beam-flange levels, welded into the column web between the flanges; the beam flanges CJP to the plate edges.` },
+        { tex: `\\phi R_{pl} = 0.9\\, F_y\\, t\\, w = 0.9 \\cdot 248 \\cdot ${wp.tMm} \\cdot ${wp.wMm} / 10^3 = ${sn1(wp.phiPlateKn)}\\ \\text{kN} \\; ${wp.phiPlateKn >= c.flange.Tf ? '\\ge' : '<'} \\; T_f \\quad ${wp.phiPlateKn >= c.flange.Tf ? '\\checkmark' : '\\text{NG}'}` },
+        { tex: `\\phi R_w = ${sn1(wp.phiWeldKn)}\\ \\text{kN} \\; ${wp.phiWeldKn >= c.flange.Tf ? '\\ge' : '<'} \\; T_f \\quad ${wp.phiWeldKn >= c.flange.Tf ? '\\checkmark' : '\\text{NG}'} \\qquad (w = ${wp.weldMm}\\ \\text{mm fillet, both sides along the web})` },
       ],
     })
   }

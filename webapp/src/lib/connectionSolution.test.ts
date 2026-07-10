@@ -43,6 +43,29 @@ describe('connectionRowSolution — schedule row worked solution', () => {
     expect(steps.some((s) => s.title.includes('Flange force'))).toBe(true)
   })
 
+  it('a weak-axis (column-web) moment connection adds the extension-plate step', () => {
+    const m2 = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section: steel })
+    m2.loads = buildGravityLoads(m2, 4.8, 2.4)
+    const nm = new Map(m2.nodes.map((n) => [n.id, n]))
+    const zBeam = m2.members.find((mem) => {
+      if (mem.role !== 'beam' && mem.role !== 'girder') return false
+      const ni = nm.get(mem.i)!, nj = nm.get(mem.j)!
+      return Math.abs(nj.z - ni.z) > Math.abs(nj.x - ni.x)
+    })!
+    zBeam.connections = { iEnd: 'moment', jEnd: 'moment' }
+    const d2 = designStructure(m2, soil)!
+    const wc = d2.joints.flatMap((j) => j.connections).find((c) => c.connType === 'moment-web-plate')!
+    expect(wc).toBeTruthy()
+    const j2 = d2.joints.find((j) => j.connections.includes(wc))!
+    const steps = connectionRowSolution(wc, { kind: 'column', shape: j2.columnShape, faceType: wc.faceType })
+    const flat = JSON.stringify(steps)
+    expect(flat).toContain('Weak-axis moment connection')
+    expect(steps.some((s) => s.title.includes('extension plates'))).toBe(true)
+    expect(flat).toContain(`PL ${wc.flange!.webPlate!.tMm}×${wc.flange!.webPlate!.wMm}`)
+    // the element pairing is stated up front
+    expect(flat).toContain('web + flanges')
+  })
+
   it('a coped beam-to-beam fin plate adds the SCM Part 9 cope step', () => {
     const coped = { ...conn, cope: { lengthMm: 98, depthMm: 26 } }
     const steps = connectionRowSolution(coped, { kind: 'girder', shape: 'W360x51' })

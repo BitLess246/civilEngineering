@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { designStructure } from './pipeline'
 import { designSteelJoints, designBolts } from './steelConnections'
+import { shapeByName } from './aiscSections'
 import type { BoltPos } from './steelDesign'
 import type { RectSection } from './model'
 
@@ -61,8 +62,73 @@ describe('steel joint / connection design', () => {
     for (const j of joints) {
       for (const c of j.connections) {
         expect(['flange', 'web']).toContain(c.faceType)
-        expect(c.beamElement).toBe(c.connType === 'moment-flange-weld' ? 'web+flanges' : 'web')
+        expect(c.beamElement).toBe(c.connType === 'shear-tab' ? 'web' : 'web+flanges')
       }
+    }
+  })
+
+  it('WEB-face tab is extended past the flange tips: larger designed eccentricity', () => {
+    // default vertical orientation (rot 90°): depth d on X ⇒ X-beams hit the
+    // flange (a = 60), Z-beams hit the web (a = 60 + (bf − tw)/2)
+    const all = joints.flatMap((j) => j.connections.map((c) => ({ c, shape: j.columnShape })))
+    const webs = all.filter(({ c }) => c.faceType === 'web')
+    const flanges = all.filter(({ c }) => c.faceType === 'flange')
+    expect(webs.length).toBeGreaterThan(0)
+    expect(flanges.length).toBeGreaterThan(0)
+    for (const { c } of flanges) expect(c.bolts.ecc).toBeCloseTo(60, 3)
+    for (const { c, shape } of webs) {
+      const s = shapeByName(shape)!
+      expect(c.bolts.ecc).toBeCloseTo(60 + ((s.bf ?? 0) - (s.tw ?? 0)) / 2, 3)
+      expect(c.bolts.ecc).toBeGreaterThan(60)
+      // the plate itself grows with the bolt line
+      expect(c.tab.wMm).toBeCloseTo(c.bolts.ecc + 80, 3)
+      // and each bolt still works within φRn at the larger eccentricity
+      expect(c.bolts.Rmax).toBeLessThanOrEqual(c.bolts.phiRnKn + 1e-6)
+    }
+  })
+
+  it('face determination follows the COLUMN orientation (axisRotation), not the beam count', () => {
+    // rotate every column to 0° ⇒ depth d lands on global Z ⇒ the faces swap:
+    // X-beams now hit the WEB, Z-beams the FLANGE
+    const m2 = makeModel()
+    for (const mem of m2.members) if (mem.role === 'column') mem.axisRotation = 0
+    const d2 = designStructure(m2, soil)!
+    const joints2 = designSteelJoints(m2, d2)
+    expect(joints2.length).toBeGreaterThan(0)
+    for (const j of joints2) {
+      expect(j.strongAxisDir).toBe('z')
+      for (const c of j.connections) {
+        if (c.spanDir === 'x') expect(c.faceType).toBe('web')
+        if (c.spanDir === 'z') expect(c.faceType).toBe('flange')
+      }
+    }
+  })
+
+  it('a moment demand on the column WEB face becomes a weak-axis extension-plate connection', () => {
+    const m2 = makeModel()
+    // force a moment end on a Z-spanning beam (hits the web with default rot 90°)
+    const nm = new Map(m2.nodes.map((n) => [n.id, n]))
+    const zBeam = m2.members.find((mem) => {
+      if (mem.role !== 'beam' && mem.role !== 'girder') return false
+      const ni = nm.get(mem.i)!, nj = nm.get(mem.j)!
+      return Math.abs(nj.z - ni.z) > Math.abs(nj.x - ni.x)
+    })!
+    zBeam.connections = { iEnd: 'moment', jEnd: 'moment' }
+    const d2 = designStructure(m2, soil)!
+    const joints2 = designSteelJoints(m2, d2)
+    const conns = joints2.flatMap((j) => j.connections).filter((c) => c.beamId === zBeam.id)
+    expect(conns.length).toBeGreaterThan(0)
+    for (const c of conns) {
+      expect(c.faceType).toBe('web')
+      expect(c.connType).toBe('moment-web-plate')
+      expect(c.pinned).toBe(false)
+      expect(c.beamElement).toBe('web+flanges')
+      const wp = c.flange!.webPlate!
+      expect(wp).toBeTruthy()
+      // both the plate (§J4.1 tension yielding) and its web welds carry Tf
+      expect(wp.phiPlateKn).toBeGreaterThanOrEqual(c.flange!.Tf - 1e-6)
+      expect(wp.phiWeldKn).toBeGreaterThanOrEqual(c.flange!.Tf - 1e-6)
+      expect(c.flange!.phiCapKn).toBeCloseTo(Math.min(wp.phiPlateKn, wp.phiWeldKn), 6)
     }
   })
 

@@ -46,7 +46,10 @@ export function ConnectionDetail2D({ conn, hostShape, hostKind, faceType, beamSh
   // ── elevation view geometry (mm coordinate space, y down = SVG) ──
   const W = hostW + beamLen + 120, H = Math.max(dB, tab.hMm) + 190
   const cx = 40                       // host left edge
-  const faceX = cx + hostW            // support face
+  const faceX = cx + hostW            // support face (flange tips for a web conn)
+  // where the plate WELDS: a column-web connection welds at the web centreline
+  // and the plate extends past the flange tips to the bolts (engine aMm)
+  const weldX = hostKind === 'column' && faceType === 'web' ? cx + hostW / 2 : faceX
   const cy = H / 2                    // beam centreline
   const beamTop = cy - dB / 2, beamBot = cy + dB / 2
   const plateTop = cy - tab.hMm / 2
@@ -54,7 +57,11 @@ export function ConnectionDetail2D({ conn, hostShape, hostKind, faceType, beamSh
   const a0 = rows[0]?.x ?? 60
 
   // ── end-section view ──
-  const supW = hostKind === 'girder' ? 30 : Math.max(bfB + 60, (g.host?.bf ?? 254))
+  // looking along the beam: a FLANGE conn shows the column flange (bf wide);
+  // a WEB conn shows the column depth d with both flanges edge-on at the sides
+  const supW = hostKind === 'girder' ? 30
+    : faceType === 'web' ? Math.max((g.host?.d ?? 300), bfB + 60)
+    : Math.max(bfB + 60, (g.host?.bf ?? 254))
   const W2 = Math.max(bfB, supW) + 190, H2 = dB + 150
   const cx2 = (W2 - 60) / 2, cy2 = H2 / 2
   const plateX2 = cx2 + twB / 2                                 // plate against the web, near side
@@ -77,6 +84,13 @@ export function ConnectionDetail2D({ conn, hostShape, hostKind, faceType, beamSh
             <rect x={cx + hostW - (g.host?.tf ?? 15)} y={20} width={(g.host?.tf ?? 15)} height={H - 40} fill="#64748b" />
           </>
         )}
+        {hostKind === 'column' && faceType === 'web' && (
+          <>
+            {/* looking at the flange face: the web is the centre plane — the tab welds there */}
+            <line x1={weldX} y1={22} x2={weldX} y2={H - 22} stroke="#475569" strokeDasharray="6 4" />
+            <text x={weldX + 5} y={50} fontSize={9} fill="#64748b">column web (weld line)</text>
+          </>
+        )}
         <text x={cx + hostW / 2} y={34} textAnchor="middle" fontSize={10} fill="#334155">{hostShape}</text>
         {/* beam with flanges (+ cope notch on the top flange) */}
         {cope ? (
@@ -92,10 +106,10 @@ export function ConnectionDetail2D({ conn, hostShape, hostKind, faceType, beamSh
         )}
         {/* plate: WELDED to the support along its FULL height (fillet both sides),
             BOLTED to the beam web — the gold bead runs the whole plate edge */}
-        <rect x={faceX} y={plateTop} width={tab.wMm} height={tab.hMm} fill="none" stroke={PLATE} strokeWidth={2.2} />
-        <rect x={faceX - 2.5} y={plateTop} width={5} height={tab.hMm} fill={WELD} />
-        <path d={`M ${faceX} ${plateTop - 9} l 11 9 l -11 0 z`} fill={WELD} />
-        <text x={faceX + 14} y={plateTop - 11} fontSize={9} fill={WELD}>
+        <rect x={weldX} y={plateTop} width={tab.wMm} height={tab.hMm} fill="none" stroke={PLATE} strokeWidth={2.2} />
+        <rect x={weldX - 2.5} y={plateTop} width={5} height={tab.hMm} fill={WELD} />
+        <path d={`M ${weldX} ${plateTop - 9} l 11 9 l -11 0 z`} fill={WELD} />
+        <text x={weldX + 14} y={plateTop - 11} fontSize={9} fill={WELD}>
           {tab.weldSizeMm} mm E70 fillet × {Math.round(tab.hMm)} mm, both sides (full plate height)
         </text>
         {conn.connType === 'moment-flange-weld' && (
@@ -107,21 +121,36 @@ export function ConnectionDetail2D({ conn, hostShape, hostKind, faceType, beamSh
             <text x={faceX + 17} y={beamBot + 12} fontSize={9} fill={WELD}>CJP flange weld</text>
           </>
         )}
-        {/* bolts at the designed layout */}
+        {conn.connType === 'moment-web-plate' && conn.flange?.webPlate && (
+          <>
+            {/* weak-axis extension plates: welded to the web, butting the beam flanges */}
+            <rect x={weldX} y={beamTop} width={faceX - weldX + 4} height={tfB} fill={PLATE} />
+            <rect x={weldX} y={beamBot - tfB} width={faceX - weldX + 4} height={tfB} fill={PLATE} />
+            <path d={`M ${faceX + 4} ${beamTop} l 14 0 l -14 -11 z`} fill={WELD} />
+            <path d={`M ${faceX + 4} ${beamBot} l 14 0 l -14 11 z`} fill={WELD} />
+            <text x={faceX + 20} y={beamTop - 4} fontSize={9} fill={PLATE} fontWeight={600}>
+              ext. plate PL {conn.flange.webPlate.tMm}×{conn.flange.webPlate.wMm} — CJP to beam flange
+            </text>
+            <text x={faceX + 44} y={beamBot + 26} fontSize={9} fill={PLATE} fontWeight={600}>
+              ext. plate (welded into column web)
+            </text>
+          </>
+        )}
+        {/* bolts at the designed layout (x measured from the WELD line) */}
         {rows.map((bp) => (
           <g key={bp.id}>
-            <circle cx={faceX + bp.x} cy={boltY(bp.y)} r={conn.bolts.dia / 2} fill="none" stroke={BOLT} strokeWidth={2} />
-            <line x1={faceX + bp.x - 7} y1={boltY(bp.y)} x2={faceX + bp.x + 7} y2={boltY(bp.y)} stroke={BOLT} />
-            <line x1={faceX + bp.x} y1={boltY(bp.y) - 7} x2={faceX + bp.x} y2={boltY(bp.y) + 7} stroke={BOLT} />
+            <circle cx={weldX + bp.x} cy={boltY(bp.y)} r={conn.bolts.dia / 2} fill="none" stroke={BOLT} strokeWidth={2} />
+            <line x1={weldX + bp.x - 7} y1={boltY(bp.y)} x2={weldX + bp.x + 7} y2={boltY(bp.y)} stroke={BOLT} />
+            <line x1={weldX + bp.x} y1={boltY(bp.y) - 7} x2={weldX + bp.x} y2={boltY(bp.y) + 7} stroke={BOLT} />
           </g>
         ))}
         {/* dimensions (shared architectural-tick primitives, as in the RC schematics) */}
-        <DimSide yA={plateTop} yB={plateTop + tab.hMm} featX={faceX + tab.wMm} dX={faceX + tab.wMm + 24} label={`h = ${Math.round(tab.hMm)} mm`} side="right" />
-        <DimBelow xA={faceX} xB={faceX + a0} featY={plateTop + tab.hMm} dY={plateTop + tab.hMm + 30} label={`a = ${Math.round(a0)} mm`} />
+        <DimSide yA={plateTop} yB={plateTop + tab.hMm} featX={weldX + tab.wMm} dX={weldX + tab.wMm + 24} label={`h = ${Math.round(tab.hMm)} mm`} side="right" />
+        <DimBelow xA={weldX} xB={weldX + a0} featY={plateTop + tab.hMm} dY={plateTop + tab.hMm + 30} label={`a = ${Math.round(a0)} mm`} />
         {rows.length > 1 && (
-          <DimSide yA={boltY(rows[rows.length - 1].y)} yB={boltY(rows[0].y)} featX={faceX + a0 - 10} dX={faceX + a0 - 26} label={`p = ${conn.bolts.pitchMm} mm`} side="left" />
+          <DimSide yA={boltY(rows[rows.length - 1].y)} yB={boltY(rows[0].y)} featX={weldX + a0 - 10} dX={weldX + a0 - 26} label={`p = ${conn.bolts.pitchMm} mm`} side="left" />
         )}
-        <text x={faceX + tab.wMm / 2} y={plateTop + tab.hMm + 52} textAnchor="middle" fontSize={10} fill={PLATE} fontWeight={600}>
+        <text x={weldX + tab.wMm / 2} y={plateTop + tab.hMm + 52} textAnchor="middle" fontSize={10} fill={PLATE} fontWeight={600}>
           PL {tab.t}×{tab.wMm}×{Math.round(tab.hMm)} mm
         </text>
         {/* Vu arrow */}
@@ -136,6 +165,13 @@ export function ConnectionDetail2D({ conn, hostShape, hostKind, faceType, beamSh
         {/* support face behind: column flange (or girder web edge-band) */}
         <rect x={cx2 - supW / 2} y={cy2 - dB / 2 - 34} width={supW} height={dB + 68}
           fill={STEEL} opacity={0.22} stroke="#94a3b8" strokeDasharray="5 3" />
+        {hostKind === 'column' && faceType === 'web' && (
+          <>
+            {/* column flanges seen edge-on at both ends of the depth d */}
+            <rect x={cx2 - supW / 2} y={cy2 - dB / 2 - 34} width={g.host?.tf ?? 15} height={dB + 68} fill={STEEL} opacity={0.45} />
+            <rect x={cx2 + supW / 2 - (g.host?.tf ?? 15)} y={cy2 - dB / 2 - 34} width={g.host?.tf ?? 15} height={dB + 68} fill={STEEL} opacity={0.45} />
+          </>
+        )}
         <text x={cx2 - supW / 2 + 4} y={cy2 - dB / 2 - 22} fontSize={9} fill="#64748b">
           {hostKind === 'girder' ? `girder web (${hostShape})` : `column ${faceType} (${hostShape})`} behind
         </text>
@@ -155,6 +191,19 @@ export function ConnectionDetail2D({ conn, hostShape, hostKind, faceType, beamSh
             <rect x={cx2 - bfB / 2} y={cy2 + dB / 2} width={bfB} height={6} fill={WELD} />
             <text x={cx2 + bfB / 2 + 6} y={cy2 - dB / 2 - 6} fontSize={9} fill={WELD}>CJP flange weld</text>
             <text x={cx2 + bfB / 2 + 6} y={cy2 + dB / 2 + 12} fontSize={9} fill={WELD}>CJP flange weld</text>
+          </>
+        ) : conn.connType === 'moment-web-plate' && conn.flange?.webPlate ? (
+          <>
+            {/* weak-axis extension plates spanning the column clear depth, at
+                both beam-flange levels — the beam flanges CJP to their edges */}
+            <rect x={cx2 - conn.flange.webPlate.wMm / 2} y={cy2 - dB / 2 - 7} width={conn.flange.webPlate.wMm} height={7} fill={PLATE} />
+            <rect x={cx2 - conn.flange.webPlate.wMm / 2} y={cy2 + dB / 2} width={conn.flange.webPlate.wMm} height={7} fill={PLATE} />
+            <text x={cx2 + conn.flange.webPlate.wMm / 2 + 6} y={cy2 - dB / 2 - 6} fontSize={9} fill={PLATE} fontWeight={600}>
+              ext. plate PL {conn.flange.webPlate.tMm}×{conn.flange.webPlate.wMm}
+            </text>
+            <text x={cx2 + conn.flange.webPlate.wMm / 2 + 6} y={cy2 + dB / 2 + 12} fontSize={9} fill={PLATE} fontWeight={600}>
+              ext. plate (into column web)
+            </text>
           </>
         ) : (
           <>

@@ -13,6 +13,7 @@ import type { StructuralModel, Node as ModelNode } from './model'
 import type { StructureDesign, SteelBeamScheduleRow } from './pipeline'
 import { boltGeomFromPositions, eccentricBoltGroup, type BoltPos } from './steelDesign'
 import { shapeByName } from './aiscSections'
+import { localAxes, defaultAxisRotation, type V3 } from './frame3d'
 
 // ── Material constants ──────────────────────────────────────────────────────
 const PHI_SHEAR_BOLT = 0.75           // AISC §J3.6
@@ -41,7 +42,14 @@ export type ConnFaceType = 'flange' | 'web'
 /** Which beam element(s) the connection engages: shear-tab bolts the beam WEB;
  *  a moment connection welds the beam FLANGES and shear-tabs the web. */
 export type BeamAttachment = 'web' | 'web+flanges'
-export type ConnType     = 'shear-tab' | 'moment-flange-weld'
+/** Connection type per web/flange PAIRING of the two members:
+ *  · shear-tab           — beam web → support face, single plate (any face)
+ *  · moment-flange-weld  — beam flanges → column FLANGE, direct CJP welds
+ *  · moment-web-plate    — beam flanges → column WEB (weak axis): the flange
+ *    force cannot CJP into the thin web, so it goes through horizontal
+ *    extension plates welded into the column web between the flanges
+ *    (AISC Design Guide 13 weak-axis moment detail). */
+export type ConnType     = 'shear-tab' | 'moment-flange-weld' | 'moment-web-plate'
 export type SpanDir      = 'x' | 'z' | 'other'
 
 export interface BoltGroup {
@@ -71,11 +79,26 @@ export interface ShearTab {
   phiWeldVn: number // weld capacity kN
 }
 
+/** Weak-axis (column-web) moment detail: horizontal extension plates carry the
+ *  beam-flange force into the column web + flanges (moment-web-plate). */
+export interface WebMomentPlate {
+  tMm: number        // plate thickness mm (stock)
+  wMm: number        // plate width mm (≥ beam bf, spans between column flanges)
+  weldMm: number     // fillet leg to the column web, both sides, mm
+  phiPlateKn: number // φ·Fy·t·w tension yielding (§J4.1) kN
+  phiWeldKn: number  // weld group capacity kN
+  ok: boolean
+}
+
 export interface FlangeMomentConn {
   Tf: number        // design flange force kN  (= Mu / (d - tf))
   flangeArea: number // beam flange area mm²
-  phiCapKn: number  // φ·Fu·A_flange (CJP) kN
+  /** Governing capacity of the flange-force path: CJP (flange face) or
+   *  min(plate, weld) of the extension plates (web face). kN */
+  phiCapKn: number
   ok: boolean
+  /** Present only for moment-web-plate — the extension-plate detail. */
+  webPlate?: WebMomentPlate
 }
 
 export interface BeamConnection {
@@ -165,10 +188,12 @@ export function designBolts(Vu: number, opts: {
   }
 }
 
-/** Design a single-plate shear tab sized to a bolt column of `nBolts`. */
-function designShearTab(Vu: number, nBolts: number, pitchMm = 75, edgeMm = 40): ShearTab {
+/** Design a single-plate shear tab sized to a bolt column of `nBolts`.
+ *  `aMm` = weld-line → bolt-line distance; a WEB-face tab is extended so the
+ *  bolts clear the column flange tips, which grows both `aMm` and the plate. */
+function designShearTab(Vu: number, nBolts: number, pitchMm = 75, edgeMm = 40, aMm = A_WELD_TO_BOLT): ShearTab {
   const hMm = (nBolts - 1) * pitchMm + 2 * edgeMm      // plate height
-  const wMm = A_WELD_TO_BOLT + 2 * edgeMm               // plate width (weld line → bolt + edge)
+  const wMm = aMm + 2 * edgeMm                          // plate width (weld line → bolt + edge)
 
   // plate thickness from shear yielding (governs over rupture for typical cases)
   const tReq = Vu * 1000 / (PHI_PLATE_YIELD * 0.6 * FY_PLATE * hMm)
@@ -192,6 +217,22 @@ function designFlangeConn(Mu: number, d: number, tf: number, bf: number): Flange
   const flangeArea = bf * tf               // mm²
   const phiCapKn = PHI_CJP * FU_PLATE * flangeArea / 1000  // kN
   return { Tf, flangeArea, phiCapKn, ok: phiCapKn >= Tf - 1e-6 }
+}
+
+const PHI_TENSION = 0.9   // AISC §J4.1 tensile yielding of connecting elements
+
+/** Weak-axis moment detail: size the horizontal extension plates that carry the
+ *  beam-flange force Tf into the column web (fillet welds both sides along the
+ *  clear web depth). Plate width ≥ beam bf; tension yielding per §J4.1. */
+function designWebMomentPlate(Tf: number, beamBf: number, colD: number, colTf: number): WebMomentPlate {
+  const wMm = Math.ceil((beamBf + 20) / 10) * 10          // plate a little wider than the beam flange
+  const tReq = (Tf * 1000) / (PHI_TENSION * FY_PLATE * wMm)
+  const tMm = adoptPlate(Math.max(8, tReq))
+  const phiPlateKn = (PHI_TENSION * FY_PLATE * tMm * wMm) / 1000
+  const Lw = 2 * Math.max(colD - 2 * colTf, 100)          // both sides of the plate along the web
+  const weldMm = Math.max(6, Math.ceil(Tf / (phiWeldPerMm(1) * Lw)))
+  const phiWeldKn = phiWeldPerMm(weldMm) * Lw
+  return { tMm, wMm, weldMm, phiPlateKn, phiWeldKn, ok: phiPlateKn >= Tf - 1e-6 && phiWeldKn >= Tf - 1e-6 }
 }
 
 /**
@@ -251,17 +292,29 @@ export function designSteelJoints(
       })
       if (beamMems.length === 0) continue
 
-      // Determine column strong-axis direction from the count of X vs Z beams
-      let xCount = 0, zCount = 0
-      for (const mid of beamMems) {
-        const mem = memMap.get(mid)!
-        const ni = nodeMap.get(mem.i)!, nj = nodeMap.get(mem.j)!
-        if (spanDirOf(ni, nj) === 'x') xCount++
-        else zCount++
-      }
-      // Strong axis faces the direction with more beams (girder direction)
-      // If equal, default to X (primary frame direction)
-      const strongAxisDir: 'x' | 'z' = xCount >= zCount ? 'x' : 'z'
+      // The column member actually present at this node (may be the storey
+      // above/below the loop column) — its section + orientation set the faces.
+      const colAtNode = neighbours.find((mid) => colIds.has(mid)) ?? col.id
+      const colDesign = design.steelColumns.find((c) => c.id === colAtNode)
+        ?? design.steelColumns.find((c) => c.id === col.id)!
+      const colMemAtNode = memMap.get(colAtNode) ?? colMem
+      const colShp = shapeByName(colDesign.shape)
+
+      // Column strong-axis direction from the member's RESOLVED orientation
+      // (explicit axisRotation, or the vertical 90° default that puts depth d
+      // on global X) — the same axes the solver, rigid zones and the drawn
+      // section use. The depth axis is local y′ projected to the horizontal:
+      // a beam spanning along it lands on the FLANGE face; across it, the WEB.
+      const cpi = nodeMap.get(colMemAtNode.i), cpj = nodeMap.get(colMemAtNode.j)
+      const colDir: V3 = cpi && cpj ? [cpj.x - cpi.x, cpj.y - cpi.y, cpj.z - cpi.z] : [0, 1, 0]
+      const [, ypCol] = localAxes(colDir, defaultAxisRotation(colDir, colMemAtNode.axisRotation))
+      const dh = Math.hypot(ypCol[0], ypCol[2])
+      const depthDir: [number, number] = dh > 1e-9 ? [ypCol[0] / dh, ypCol[2] / dh] : [1, 0]
+      const strongAxisDir: 'x' | 'z' = Math.abs(depthDir[0]) >= Math.abs(depthDir[1]) ? 'x' : 'z'
+
+      // A WEB-face tab is welded to the column web and extended past the flange
+      // tips so the bolts are erectable — the bolt line moves out by (bf−tw)/2.
+      const aWebMm = A_WELD_TO_BOLT + Math.max(0, ((colShp?.bf ?? 0) - (colShp?.tw ?? 0)) / 2)
 
       const connections: BeamConnection[] = []
 
@@ -270,8 +323,12 @@ export function designSteelJoints(
         const ni = nodeMap.get(mem.i)!, nj = nodeMap.get(mem.j)!
         const sDir = spanDirOf(ni, nj)
 
-        // The column face the beam frames into
-        const faceType: ConnFaceType = sDir === strongAxisDir ? 'flange' : 'web'
+        // The column face the beam frames into: compare the beam's horizontal
+        // direction with the column DEPTH axis (|cos| ≥ √2/2 ⇒ flange face).
+        const bdx = nj.x - ni.x, bdz = nj.z - ni.z
+        const bl = Math.hypot(bdx, bdz)
+        const cosA = bl > 1e-9 ? Math.abs((bdx * depthDir[0] + bdz * depthDir[1]) / bl) : 1
+        const faceType: ConnFaceType = cosA >= Math.SQRT1_2 ? 'flange' : 'web'
 
         const row = beamRow.get(mid)
         // If no design row (can happen for non-designed members): use a minimal shear
@@ -288,16 +345,25 @@ export function designSteelJoints(
           || (connKind !== 'simple' && phiMn > 1e-9 && (Mu / phiMn) > MOMENT_CONN_THRESHOLD)
 
         // Elastic eccentric bolt group (each bolt placed & checked individually).
-        const bolts = designBolts(Vu, { dia: 20 })
-        const tab = designShearTab(Vu, bolts.n)
+        // Web-face tabs carry the larger extended-plate eccentricity.
+        const aMm = faceType === 'web' ? aWebMm : A_WELD_TO_BOLT
+        const bolts = designBolts(Vu, { dia: 20, aMm })
+        const tab = designShearTab(Vu, bolts.n, undefined, undefined, aMm)
 
+        // Moment path per the FACE the flanges meet: direct CJP into a column
+        // flange; extension plates into a column web (CJP into the thin web
+        // has no stiffness path — AISC DG13 weak-axis detail).
         let flangeConn: FlangeMomentConn | undefined
         if (useMoment && row) {
           flangeConn = designFlangeConn(Mu, row.d, row.tf, row.bf)
+          if (faceType === 'web') {
+            const wp = designWebMomentPlate(flangeConn.Tf, row.bf, colShp?.d ?? 300, colShp?.tf ?? 15)
+            flangeConn = { ...flangeConn, phiCapKn: Math.min(wp.phiPlateKn, wp.phiWeldKn), ok: wp.ok, webPlate: wp }
+          }
         }
 
         // Which beam element(s) the connection engages: web only for a shear tab;
-        // web (shear) + both flanges (CJP welds) for a moment connection.
+        // web (shear) + both flanges (moment path) for a moment connection.
         const beamElement: BeamAttachment = useMoment ? 'web+flanges' : 'web'
 
         const tabOk  = tab.phiVn >= Vu - 1e-6 && tab.phiWeldVn >= Vu - 1e-6
@@ -309,7 +375,7 @@ export function designSteelJoints(
           spanDir: sDir,
           faceType,
           beamElement,
-          connType: useMoment ? 'moment-flange-weld' : 'shear-tab',
+          connType: useMoment ? (faceType === 'web' ? 'moment-web-plate' : 'moment-flange-weld') : 'shear-tab',
           pinned: !useMoment,
           Vu, Mu,
           bolts,
@@ -320,10 +386,6 @@ export function designSteelJoints(
       }
 
       if (connections.length === 0) continue
-
-      // Find the column member id connected to this node (may be i or j)
-      const colAtNode = neighbours.find((mid) => colIds.has(mid)) ?? col.id
-      const colDesign = design.steelColumns.find((c) => c.id === colAtNode) ?? design.steelColumns.find((c) => c.id === col.id)!
 
       joints.push({
         nodeId,

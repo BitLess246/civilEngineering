@@ -5,9 +5,12 @@
 //     with every designed bolt drawn at its actual layout position
 //   · moment connection: the same web tab PLUS flange CJP weld beads and
 //     column continuity plates at the beam-flange levels
-// Geometry follows the app's drawn orientation (column depth d along global X,
-// flanges facing ±X): X-beams land on the flange face at d/2, Z-beams on the
-// flange-tip plane at bf/2 — the same faces the rigid end zones use.
+//   · weak-axis moment (moment-web-plate): horizontal extension plates welded
+//     into the column web at both beam-flange levels
+// The weld line follows the ENGINE's web/flange face determination: flange
+// connections weld at the flange face (d/2), web connections at the web plane
+// (tw/2) with the plate extended past the flange tips (bf/2) — matching the
+// designed bolt eccentricity and the rigid-end-zone faces.
 // Units: engine mm → scene metres.
 // ─────────────────────────────────────────────────────────────────────────
 import { useMemo } from 'react'
@@ -43,14 +46,17 @@ function Bolt({ p, axis, dia, len }: { p: THREE.Vector3; axis: THREE.Vector3; di
 }
 
 /** One beam's connection hardware at a joint. `faceOff` = distance from the
- *  joint node to the supporting face along the beam axis (m). */
-function Connection({ conn, node, beamDir, faceOff, beamTw }: {
+ *  joint node to the plate WELD line along the beam axis (m) — the support
+ *  flange face (d/2), or the support web plane (tw/2) for web connections. */
+function Connection({ conn, node, beamDir, faceOff, beamTw, extPlateLen }: {
   conn: BeamConnection
   node: THREE.Vector3
   beamDir: THREE.Vector3          // unit, node → beam span
   faceOff: number
   /** supported beam's web thickness, m (actual shape value). */
   beamTw?: number
+  /** moment-web-plate only: extension-plate run web → past the flange tips, m. */
+  extPlateLen?: number
 }) {
   const parts = useMemo(() => {
     const ex = beamDir.clone()                                   // along the beam
@@ -97,13 +103,28 @@ function Connection({ conn, node, beamDir, faceOff, beamTw }: {
       {bolts.map((b) => (
         <Bolt key={b.id} p={b.p.clone().add(ez.clone().multiplyScalar(plate.t / 2))} axis={ez} dia={conn.bolts.dia} len={b.len} />
       ))}
-      {/* moment connection: flange CJP weld beads at the column face */}
+      {/* strong-axis moment connection: flange CJP weld beads at the column face */}
       {conn.connType === 'moment-flange-weld' && conn.flange && (() => {
         const dB = plate.h + 0.16   // ≈ beam depth proxy from tab height (tab ≈ web depth)
         return [1, -1].map((s) => (
           <mesh key={s} position={F.clone().add(new THREE.Vector3(0, (s * dB) / 2, 0)).add(ex.clone().multiplyScalar(0.012))} quaternion={boxQuat}>
             <boxGeometry args={[0.025, 0.02, Math.max(0.12, plate.w * 0.9)]} />
             <meshStandardMaterial color={BOLT} metalness={0.5} roughness={0.4} />
+          </mesh>
+        ))
+      })()}
+      {/* weak-axis moment connection: horizontal extension plates welded into the
+          column web at both beam-flange levels, running out past the flange tips */}
+      {conn.connType === 'moment-web-plate' && conn.flange?.webPlate && extPlateLen && (() => {
+        const wp = conn.flange.webPlate
+        const dB = plate.h + 0.16
+        const tP = wp.tMm * MM, wP = wp.wMm * MM
+        return [1, -1].map((s) => (
+          <mesh key={`wp${s}`}
+            position={F.clone().add(new THREE.Vector3(0, (s * dB) / 2, 0)).add(ex.clone().multiplyScalar(extPlateLen / 2))}
+            quaternion={boxQuat}>
+            <boxGeometry args={[extPlateLen, tP, wP]} />
+            <meshStandardMaterial color={PLATE} metalness={0.3} roughness={0.55} />
           </mesh>
         ))
       })()}
@@ -121,7 +142,7 @@ export function JointConnections3D({ joints, beamJoints = [], model, nodePos }: 
   const memMap = useMemo(() => new Map(model.members.map((m) => [m.id, m])), [model])
   const secMap = useMemo(() => new Map(model.sections.map((s) => [s.id, s])), [model])
 
-  const renderConn = (nodeId: string, c: BeamConnection, faceOff: number) => {
+  const renderConn = (nodeId: string, c: BeamConnection, faceOff: number, extPlateLen?: number) => {
     const P = nodePos.get(nodeId)
     const mem = memMap.get(c.beamId)
     if (!P || !mem) return null
@@ -133,7 +154,7 @@ export function JointConnections3D({ joints, beamJoints = [], model, nodePos }: 
     const sec = secMap.get(mem.section)
     if (sec?.material !== 'steel') return null
     const beamTw = sec.shape ? (shapeByName(sec.shape)?.tw ?? 8) * MM : undefined
-    return <Connection key={c.beamId} conn={c} node={P} beamDir={dir.normalize()} faceOff={faceOff} beamTw={beamTw} />
+    return <Connection key={c.beamId} conn={c} node={P} beamDir={dir.normalize()} faceOff={faceOff} beamTw={beamTw} extPlateLen={extPlateLen} />
   }
 
   return (
@@ -150,9 +171,10 @@ export function JointConnections3D({ joints, beamJoints = [], model, nodePos }: 
         const P = nodePos.get(j.nodeId)
         const colShape = shapeByName(j.columnShape)
         if (!P || !colShape) return null
-        const col = { d: (colShape.d ?? 300) * MM, bf: (colShape.bf ?? 300) * MM, tf: (colShape.tf ?? 15) * MM }
+        const col = { d: (colShape.d ?? 300) * MM, bf: (colShape.bf ?? 300) * MM, tf: (colShape.tf ?? 15) * MM, tw: (colShape.tw ?? 10) * MM }
 
-        // continuity plates once per joint when ANY moment connection lands here
+        // continuity plates once per joint when a STRONG-axis moment connection
+        // lands here (weak-axis conns bring their own extension plates)
         const momentConns = j.connections.filter((c) => c.connType === 'moment-flange-weld')
         const contPlates = momentConns.length > 0 ? (() => {
           const c0 = momentConns[0]
@@ -169,13 +191,13 @@ export function JointConnections3D({ joints, beamJoints = [], model, nodePos }: 
           <group key={j.nodeId}>
             {contPlates}
             {j.connections.map((c) => {
-              // face per the drawn orientation (column depth d along global X)
-              const mem = memMap.get(c.beamId)
-              if (!mem) return null
-              const otherId = mem.i === j.nodeId ? mem.j : mem.i
-              const Q = nodePos.get(otherId)
-              const dirX = Q ? Math.abs(Q.x - P.x) >= Math.abs(Q.z - P.z) : true
-              return renderConn(j.nodeId, c, dirX ? col.d / 2 : col.bf / 2)
+              // weld line per the ENGINE's face determination: a FLANGE conn
+              // welds at the flange face (d/2); a WEB conn welds at the web
+              // plane (tw/2) — the plate itself runs past the flange tips
+              // (bf/2), matching the designed eccentricity.
+              const faceOff = c.faceType === 'flange' ? col.d / 2 : col.tw / 2
+              const extLen = c.connType === 'moment-web-plate' ? col.bf / 2 - col.tw / 2 + 0.04 : undefined
+              return renderConn(j.nodeId, c, faceOff, extLen)
             })}
           </group>
         )
