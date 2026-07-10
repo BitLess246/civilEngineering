@@ -37,8 +37,9 @@ npm run build    # typecheck + production build
 ## Current state (analysis-core baseline, PR #239)
 
 > Newer work is tracked in the **Tier 4** (A1–E13, PRs through #273),
-> **Post-Tier-4** (PRs #275–#278) and **Phase 3 + connections** (PRs #279–#308)
-> sections below; latest suite: **988 tests**.
+> **Post-Tier-4** (PRs #275–#278), **Phase 3 + connections** (PRs #279–#308)
+> and **Connection detailing polish** (PRs #310–#317) sections below; latest
+> suite: **1003 tests**.
 > The repo root is now just `webapp/`, `docs/` and the markdown docs.
 
 ### 3D Model Space analysis core (`/model`) — the centrepiece
@@ -370,6 +371,41 @@ _Tests after #298: **965 passing**; `tsc -b` clean; production build OK._
   solution (§J3.6 bolt group, §J4.2 plate, §J2.4 weld, §J2.6 CJP, Part 9 cope).
 
 _Tests after #308: **988 passing**; `tsc -b` clean; production build OK._
+
+## Connection detailing + continuity polish (PRs #310–#317)
+
+User-feedback rounds on the connection schedule, joint rendering and RC/steel
+modelling consistency, one PR per round:
+
+- **#310–#313 — detail-drawing polish**: shared RC dimension primitives
+  (`components/dims.tsx`) reused in the connection views; single-shear basis
+  (m = 1) called out in the section, worked solution and schedule; full-height
+  tab weld (elevation + 3D plate + bead); units on the elevation; flexible
+  drawing panels.
+- **#311/#312 — column-stack visual/section continuity**: beams end at the
+  support face, roof columns extend to beam top, column sections continuous
+  up the stack.
+- **#314 — RC size limits + monotonic stacks**: `RC_LIMITS` caps in the
+  optimizer (like steel's shape table bounds); a column may only be equal or
+  smaller than the column below (`enforceSectionHierarchy`).
+- **#315 — bar-diameter continuity guards**: one Ø per beam run / column stack
+  (`barContinuityGroups`, union-find); bar COUNT still varies per section.
+- **#316 — concrete renders physically like steel**: face-trimmed beams,
+  extended roof columns.
+- **#317 — bolt-layout renderer + web/flange pairing drives the connection**:
+  `/bolted-connection` drawing rebuilt (self-sufficient plate, collision-free
+  labels, centroid + eccentricity trace); the joint designer determines the
+  column face from the member's **resolved orientation** (`axisRotation`),
+  WEB-face tabs extend past the flange tips with the larger designed
+  eccentricity, and a weak-axis moment demand becomes **`moment-web-plate`**
+  (extension plates into the column web, §J4.1 + §J2.4 checks) — in the
+  solution, the 2D detail and the 3D render.
+
+Known gap (CLAUDE.md backlog P4-13): `designBeamBeamJoints` assumes every
+supported beam meets the girder **web** (nodes are coplanar); beam-on-girder-
+flange bearing needs vertically offset framing first.
+
+_Tests after #317: **1003 passing**; `tsc -b` clean; production build OK._
 
 _Remaining roadmap: Pressure Grouting (empirical — skipped by design); Phase 4
 items are owner-driven (marketing/monetisation)._

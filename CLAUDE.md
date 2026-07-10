@@ -180,3 +180,8 @@ Ordered: correctness first, then code completeness, then new capability.
     infinite slope alone can't cover global stability of protected slopes.
 12. Settlement (immediate + consolidation), laterally loaded piles
     (Broms / p-y), pressure grouting (Roadmap Phase 3 leftovers).
+13. **Offset framing / beam-on-girder-flange bearing** — `designBeamBeamJoints`
+    assumes every supported beam meets the girder WEB (coplanar nodes). A beam
+    bearing on a girder TOP FLANGE (seat/bearing detail, stiffener check per
+    AISC §J10) can't arise until the model supports vertically offset framing;
+    add the pairing + detail when it does.
