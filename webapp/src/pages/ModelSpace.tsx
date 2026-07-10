@@ -145,58 +145,6 @@ function RigidArm3D({ a, b }: { a: THREE.Vector3; b: THREE.Vector3 }) {
   )
 }
 
-/** Rigid end-zone segment: the member's own cross-section in a muted shade,
- *  filling node→clear-span-end so members stay connected at joints (ETABS look).
- *  Steel members draw their TRUE extruded profile (same orientation rules as
- *  MemberSteel3D — a bounding-box cuboid on the end of an I-beam is not ETABS). */
-function RigidZone3D({ a, b, role, sec, shapeName }: {
-  a: THREE.Vector3; b: THREE.Vector3; role: string; sec?: { b: number; h: number }
-  /** AISC shape name for steel members — switches to the true-profile render. */
-  shapeName?: string
-}) {
-  const { mid, quat, len, steel } = useMemo(() => {
-    const dir = new THREE.Vector3().subVectors(b, a)
-    const len = dir.length()
-    const quat = new THREE.Quaternion().setFromUnitVectors(
-      new THREE.Vector3(1, 0, 0), len > 1e-9 ? dir.clone().normalize() : new THREE.Vector3(1, 0, 0))
-    // steel: extrude the true profile along the member (MemberSteel3D rules)
-    const shape = shapeName ? shapeByName(shapeName) : undefined
-    let steel: { shapes: THREE.Shape[]; quat: THREE.Quaternion } | null = null
-    if (shape && len > 1e-9) {
-      const shapes = buildSectionShapes(effectiveSection(shape, false))
-      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.clone().normalize())
-      if (role === 'column') {
-        const rPre = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2)
-        q.multiply(rPre)
-      }
-      steel = { shapes, quat: q }
-    }
-    return { mid: new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5), quat, len, steel }
-  }, [a, b, role, shapeName])
-  if (len < 1e-6) return null
-  const color = `#${new THREE.Color(ROLE_COLOR[role] ?? '#64748b').lerp(new THREE.Color('#1e293b'), 0.45).getHexString()}`
-  if (steel && steel.shapes.length > 0) {
-    return (
-      <group position={a} quaternion={steel.quat}>
-        {steel.shapes.map((sh, i) => (
-          <mesh key={i}>
-            <extrudeGeometry args={[sh, { depth: len, bevelEnabled: false, steps: 1 }]} />
-            <meshStandardMaterial color="#334155" metalness={0.35} roughness={0.5} />
-          </mesh>
-        ))}
-      </group>
-    )
-  }
-  const ty = sec ? sec.h / 1000 : role === 'column' ? 0.3 : 0.22
-  const tz = sec ? sec.b / 1000 : role === 'column' ? 0.3 : 0.22
-  return (
-    <mesh position={mid} quaternion={quat}>
-      <boxGeometry args={[len, ty * 1.04, tz * 1.04]} />
-      <meshStandardMaterial color={color} />
-    </mesh>
-  )
-}
-
 /** Steel member drawn as its true AISC cross-section, extruded along the member
  *  axis (i→j). The profile is built in the local XY plane then oriented so its
  *  extrude (+Z) runs along the member and its strong axis (depth d) stays
@@ -1320,13 +1268,11 @@ export default function ModelSpace() {
     () => (model?.rigidEndZones ? autoRigidOffsets(model, model.rigidZoneFactor ?? 0.5) : null),
     [model])
   // VISUAL face offsets (factor 1 = the full support face, independent of the
-  // analysis rigid-zone setting): physical steel stops at the member it lands
-  // on — a beam ends at the column face (the tab bridges the gap), and a roof
-  // column extends UP to the top of the deepest beam so the joint hardware has
-  // something to land on.
-  const faceOff = useMemo(
-    () => (model && model.sections.some((s) => s.material === 'steel') ? autoRigidOffsets(model, 1) : null),
-    [model])
+  // analysis rigid-zone setting), for BOTH materials: a beam is drawn to the
+  // face of the member it lands on (steel: the tab/weld bridges the gap;
+  // concrete: the joint block belongs to the column pour), and a column whose
+  // stack ends extends UP to the top of the deepest framing beam.
+  const faceOff = useMemo(() => (model ? autoRigidOffsets(model, 1) : null), [model])
   // model bounds → zoom-to-extents on load / after generate
   const modelBox = useMemo(() => {
     if (!model || model.nodes.length === 0) return null
@@ -1495,47 +1441,32 @@ export default function ModelSpace() {
                   const sec = sectionFor(m.id)
                   const manI = m.offsets?.iEnd, manJ = m.offsets?.jEnd
                   const v3 = (v: [number, number, number]) => new THREE.Vector3(v[0], v[1], v[2])
-                  const isSteel = sec?.material === 'steel' && !!sec.shape
-                  if (isSteel && sec?.shape) {
-                    // PHYSICAL steel: a beam ends AT the support face (the tab/weld
-                    // bridges the gap — it never runs inside the column), and a
-                    // column whose stack ends extends UP past the joint to the top
-                    // of the deepest framing beam so the hardware lands on steel.
-                    const fo = faceOff?.get(m.id)
-                    let aV = a, bV = bb
-                    if (m.role === 'column') {
-                      const contAt = (nid: string) => model.members.some((o) => o.id !== m.id && o.role === 'column' && (o.i === nid || o.j === nid))
-                      aV = manI ? a.clone().add(v3(manI)) : (fo?.offI && !contAt(m.i) ? a.clone().sub(v3(fo.offI)) : a)
-                      bV = manJ ? bb.clone().add(v3(manJ)) : (fo?.offJ && !contAt(m.j) ? bb.clone().sub(v3(fo.offJ)) : bb)
-                    } else {
-                      aV = manI ? a.clone().add(v3(manI)) : (fo?.offI ? a.clone().add(v3(fo.offI)) : a)
-                      bV = manJ ? bb.clone().add(v3(manJ)) : (fo?.offJ ? bb.clone().add(v3(fo.offJ)) : bb)
-                    }
-                    return (
-                      <group key={m.id}>
-                        <MemberSteel3D a={aV} b={bV} role={m.role} shapeName={sec.shape} axisRotation={m.axisRotation}
-                          tint={tint * 0.85} selected={m.id === selected} onPick={() => setSelected(m.id)} />
-                        {manI && <RigidArm3D a={a} b={aV} />}
-                        {manJ && <RigidArm3D a={bb} b={bV} />}
-                      </group>
-                    )
+                  // PHYSICAL members, both materials: a beam ends AT the support
+                  // face (steel: the tab/weld bridges the gap; concrete: the joint
+                  // block belongs to the column pour), and a column whose stack
+                  // ends extends UP past the joint to the top of the deepest
+                  // framing beam. Intermediate columns keep meeting at the node,
+                  // so the storey above fills the joint block.
+                  const fo = faceOff?.get(m.id)
+                  let aV = a, bV = bb
+                  if (m.role === 'column') {
+                    const contAt = (nid: string) => model.members.some((o) => o.id !== m.id && o.role === 'column' && (o.i === nid || o.j === nid))
+                    aV = manI ? a.clone().add(v3(manI)) : (fo?.offI && !contAt(m.i) ? a.clone().sub(v3(fo.offI)) : a)
+                    bV = manJ ? bb.clone().add(v3(manJ)) : (fo?.offJ && !contAt(m.j) ? bb.clone().sub(v3(fo.offJ)) : bb)
+                  } else {
+                    aV = manI ? a.clone().add(v3(manI)) : (fo?.offI ? a.clone().add(v3(fo.offI)) : a)
+                    bV = manJ ? bb.clone().add(v3(manJ)) : (fo?.offJ ? bb.clone().add(v3(fo.offJ)) : bb)
                   }
-                  // Concrete (monolithic): rigid end offsets shift the flexible endpoints;
-                  // manual → purple arm (eccentric); auto → muted member zone.
-                  const ao = autoOff?.get(m.id)
-                  const effI = manI ?? ao?.offI, effJ = manJ ?? ao?.offJ
-                  const aEff = effI ? a.clone().add(v3(effI)) : a
-                  const bEff = effJ ? bb.clone().add(v3(effJ)) : bb
-                  const memberEl = (
-                    <Member3D a={aEff} b={bEff} role={m.role} tint={tint * 0.85}
-                      sec={sec} selected={m.id === selected} onPick={() => setSelected(m.id)} />
-                  )
-                  if (!effI && !effJ) return <group key={m.id}>{memberEl}</group>
+                  const memberEl = sec?.material === 'steel' && sec.shape
+                    ? <MemberSteel3D a={aV} b={bV} role={m.role} shapeName={sec.shape} axisRotation={m.axisRotation}
+                        tint={tint * 0.85} selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                    : <Member3D a={aV} b={bV} role={m.role} tint={tint * 0.85}
+                        sec={sec} selected={m.id === selected} onPick={() => setSelected(m.id)} />
                   return (
                     <group key={m.id}>
                       {memberEl}
-                      {effI && (manI ? <RigidArm3D a={a} b={aEff} /> : <RigidZone3D a={a} b={aEff} role={m.role} sec={sec} />)}
-                      {effJ && (manJ ? <RigidArm3D a={bb} b={bEff} /> : <RigidZone3D a={bb} b={bEff} role={m.role} sec={sec} />)}
+                      {manI && <RigidArm3D a={a} b={aV} />}
+                      {manJ && <RigidArm3D a={bb} b={bV} />}
                     </group>
                   )
                 })}
