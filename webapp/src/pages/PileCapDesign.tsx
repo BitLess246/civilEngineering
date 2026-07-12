@@ -55,7 +55,7 @@ function NumField({ label, unit, value, onChange, step = 'any' }: {
   return (
     <label className="flex flex-col text-sm">
       <span className="mb-1 font-medium text-slate-600">
-        {label}{unit ? <span className="text-slate-400"> ({unit})</span> : null}
+        {label}{unit ? <span className="text-slate-500"> ({unit})</span> : null}
       </span>
       <input
         type="number" inputMode="decimal" step={step} value={Number.isFinite(value) ? value : ''}
@@ -228,7 +228,7 @@ export default function PileCapDesign() {
                 reactions={result.reactions}
               />
             ) : (
-              <p className="py-8 text-center text-sm text-slate-400">Enter valid inputs to preview.</p>
+              <p className="py-8 text-center text-sm text-slate-500">Enter valid inputs to preview.</p>
             )}
           </div>
 
@@ -306,7 +306,7 @@ export default function PileCapDesign() {
               <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
                 <h2 className="mb-1 text-[1.02rem] font-bold text-[#0056b3]">Basis</h2>
                 <KTex block tex={String.raw`R_i = \frac{P}{N} + \frac{M_x \cdot y_i}{\sum y_i^2} + \frac{M_y \cdot x_i}{\sum x_i^2}`} />
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1 text-xs text-slate-500">
                   NSCP 2015 / ACI 318-14. φ_v = 0.75, φ_f = 0.90.
                   Column punching at d/2 from column face; pile punching at d/2 from pile perimeter (§13.4.6).
                   One-way shear critical section at d from column face.

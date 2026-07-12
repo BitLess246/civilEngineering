@@ -16,7 +16,7 @@ function Choice<T extends string | number>({ value, set, options }: {
           className={`rounded-lg border px-3 py-2 text-left text-sm transition ${value === o.v
             ? 'border-[#0056b3] bg-blue-50 font-semibold text-[#0056b3]'
             : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'}`}>
-          {o.label}{o.sub ? <span className="block text-[11px] font-normal text-slate-400">{o.sub}</span> : null}
+          {o.label}{o.sub ? <span className="block text-[11px] font-normal text-slate-500">{o.sub}</span> : null}
         </button>
       ))}
     </div>
@@ -56,7 +56,7 @@ export default function SeismicWizard() {
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Structural</p>
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Structural</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">NSCP 208 Seismic Wizard</h1>
       <p className="mt-2 text-sm text-slate-600">
         Walk through the NSCP 2015 §208 static lateral-force tables — zone, soil, near-source, occupancy and
@@ -110,7 +110,7 @@ export default function SeismicWizard() {
                 onChange={(e) => setDistance(parseFloat(e.target.value) || 0)}
                 className="w-40 rounded-md border border-slate-300 px-2.5 py-1.5" />
             </label>
-            <p className="mt-2 text-[11px] text-slate-400">Na = {f3(params.Na)}, Nv = {f3(params.Nv)}</p>
+            <p className="mt-2 text-[11px] text-slate-500">Na = {f3(params.Na)}, Nv = {f3(params.Nv)}</p>
           </>
         )}
         {cur.key === 'occupancy' && (
@@ -174,7 +174,7 @@ export default function SeismicWizard() {
             floor 0.11Ca·I {f3(cs.Csmin)}{params.Z >= 0.4 ? ` · Zone-4 0.8Z·Nv·I/R ${f3(cs.Cszone4)}` : ''}
           </p>
         </div>
-        <p className="mt-2 text-[10px] text-slate-400">
+        <p className="mt-2 text-[10px] text-slate-500">
           V = Cs·W (§208.5.2.1). Feed Ca, Cv, I, R into the 3D model space seismic generator for the
           full storey-force distribution. Verify the soil profile with a geotechnical investigation.
         </p>

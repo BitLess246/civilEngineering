@@ -104,7 +104,7 @@ export default function FrameAnalysis() {
             <Num label="b" unit="mm" value={b} onChange={setB} />
             <Num label="h" unit="mm" value={h} onChange={setH} />
             <Num label="f′c" unit="MPa" value={fc} onChange={setFc} />
-            <p className="col-span-full text-xs text-slate-400">
+            <p className="col-span-full text-xs text-slate-500">
               E = 4700√f′c = {f1(E)} MPa · A = {b * h} mm² · I = {(b * h ** 3 / 12 / 1e9).toFixed(3)}×10⁹ mm⁴
             </p>
           </Card>
@@ -253,7 +253,7 @@ export default function FrameAnalysis() {
               className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm">
               {r.members.map((m) => <option key={m.id} value={m.id}>{m.id}</option>)}
             </select>
-            <span className="text-xs text-slate-400">local x from node i · N &gt; 0 tension</span>
+            <span className="text-xs text-slate-500">local x from node i · N &gt; 0 tension</span>
           </div>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">

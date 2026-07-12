@@ -63,7 +63,7 @@ export default function LoadPath() {
           <Card title="Panel">
             <Num label="Side a" unit="m" value={a} onChange={setA} />
             <Num label="Side b" unit="m" value={b} onChange={setB} />
-            <p className="col-span-full text-xs text-slate-400">
+            <p className="col-span-full text-xs text-slate-500">
               ℓx = short span, ℓy = long span — assigned automatically.
             </p>
           </Card>
@@ -98,7 +98,7 @@ export default function LoadPath() {
             {wallOn && <>
               <Num label="Thickness" unit="mm" value={wallT} onChange={setWallT} />
               <Num label="Height" unit="m" value={wallH} onChange={setWallH} />
-              <p className="col-span-full text-xs text-slate-400">
+              <p className="col-span-full text-xs text-slate-500">
                 w = t·h·24 = {f2(wWall)} kN/m (dead) — added to whichever edge you send to Beam Analysis.
               </p>
             </>}

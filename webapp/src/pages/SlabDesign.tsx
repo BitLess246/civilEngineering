@@ -69,7 +69,7 @@ function DirCard({ title, dir, barDia }: { title: string; dir: SlabDirResult; ba
                       <div className="font-semibold text-slate-800">{steelText(loc.middle, barDia)}</div>
                       <div className="text-slate-500">{steelSub(loc.middle)}</div>
                     </>
-                  ) : <span className="text-slate-400">—</span>}
+                  ) : <span className="text-slate-500">—</span>}
                 </td>
               </tr>
             ))}
@@ -205,7 +205,7 @@ export default function SlabDesign() {
               )}
             </>
           ) : (
-            <p className="py-8 text-center text-sm text-slate-400">Enter valid panel inputs to see results.</p>
+            <p className="py-8 text-center text-sm text-slate-500">Enter valid panel inputs to see results.</p>
           )}
         </div>
       </div>

@@ -46,7 +46,7 @@ export default function BoltedConnection() {
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Structural · Steel</p>
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Structural · Steel</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Eccentric bolted connection</h1>
       <p className="mt-2 max-w-3xl text-sm text-slate-600">
         Elastic (vector) method for an eccentrically-loaded bolt group. Each bolt carries the direct
@@ -73,7 +73,7 @@ export default function BoltedConnection() {
                       <td className="pr-2"><input type="number" value={b.x} onChange={(e) => setBolt(i, 'x', num(e.target.value))} className="w-16 rounded border border-slate-200 px-1 py-0.5" /></td>
                       <td className="pr-2"><input type="number" value={b.y} onChange={(e) => setBolt(i, 'y', num(e.target.value))} className="w-16 rounded border border-slate-200 px-1 py-0.5" /></td>
                       <td className="pr-2 text-right font-mono">{force ? f2(force.R) : '—'}</td>
-                      <td className="text-right"><button type="button" onClick={() => delBolt(i)} className="text-slate-400 hover:text-red-600">✕</button></td>
+                      <td className="text-right"><button type="button" onClick={() => delBolt(i)} className="text-slate-500 hover:text-red-600">✕</button></td>
                     </tr>
                   )
                 })}
@@ -209,7 +209,7 @@ export default function BoltedConnection() {
                   <span className="text-sm font-semibold text-[#0056b3]">T + Q ≤ φBn</span>
                   <span className={`font-mono text-sm font-bold ${pry.ok ? 'text-emerald-600' : 'text-red-600'}`}>{pry.ok ? 'OK ✓' : 'NG ✗'}</span>
                 </div>
-                <p className="mt-2 text-[11px] text-slate-400">
+                <p className="mt-2 text-[11px] text-slate-500">
                   Provide fitting t_f ≥ t_req to carry T + Q; t_f ≥ t₀ eliminates prying (α → 0).
                 </p>
               </div>

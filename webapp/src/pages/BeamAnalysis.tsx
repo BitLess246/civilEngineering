@@ -134,7 +134,7 @@ export default function BeamAnalysis() {
               ))}
             </div>
             <div className="space-y-3">
-              {supports.length === 0 && <p className="text-sm text-slate-400">No supports — add at least 2 (or a single Fixed).</p>}
+              {supports.length === 0 && <p className="text-sm text-slate-500">No supports — add at least 2 (or a single Fixed).</p>}
               {supports.map((s) => (
                 <ItemShell key={s.id} title={s.type} onRemove={() => setSupports((ss) => ss.filter((q) => q.id !== s.id))}>
                   <Num label="x" unit="m" value={s.x} onChange={(v) => setSup(s.id, { x: v })} />
@@ -157,7 +157,7 @@ export default function BeamAnalysis() {
               ))}
             </div>
             <div className="space-y-3">
-              {loads.length === 0 && <p className="text-sm text-slate-400">No loads yet.</p>}
+              {loads.length === 0 && <p className="text-sm text-slate-500">No loads yet.</p>}
               {loads.map((ld) => (
                 <ItemShell key={ld.id} title={ld.type.toUpperCase()} onRemove={() => setLoads((ls) => ls.filter((q) => q.id !== ld.id))}>
                   {ld.type === 'point' && <>
@@ -219,7 +219,7 @@ export default function BeamAnalysis() {
                   </tbody>
                 </table>
               </div>
-              <p className="mt-1 text-[11px] text-slate-400">★ governing (largest |M|). Click a row to view its reactions & diagrams.</p>
+              <p className="mt-1 text-[11px] text-slate-500">★ governing (largest |M|). Click a row to view its reactions & diagrams.</p>
             </ResultCard>
           )}
 
@@ -272,14 +272,14 @@ export default function BeamAnalysis() {
       {res?.tmt && (
         <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm print-avoid-break">
           <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">
-            Three-moment theorem check <span className="text-xs font-normal text-slate-400">Clapeyron — governing combo, interior support moments</span>
+            Three-moment theorem check <span className="text-xs font-normal text-slate-500">Clapeyron — governing combo, interior support moments</span>
           </h2>
           {res.tmt.positions.map((x, i) => (
             <Row key={i} label={`Support @ x = ${f2(x)} m`}
               value={`M = ${f2(res.tmt!.supportMoments[i])} kN·m`}
               sub={`R = ${f2(res.tmt!.reactions[i])} kN`} />
           ))}
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-slate-500">
             M₍ᵢ₋₁₎Lᵢ + 2Mᵢ(Lᵢ+Lᵢ₊₁) + Mᵢ₊₁Lᵢ₊₁ = −6(Q/L)ᵢ − 6(Q/L)ᵢ₊₁ — end moments 0, interior solved from the
             tri-diagonal system. Compare with the FEM reactions above as an independent hand-method check.
           </p>

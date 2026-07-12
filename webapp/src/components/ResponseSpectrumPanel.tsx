@@ -137,7 +137,7 @@ export function ResponseSpectrumPanel({
       <h2 className="mb-1 text-[1.02rem] font-bold text-[#0056b3]">
         Response Spectrum Analysis — NSCP §208.6
       </h2>
-      <p className="mb-2 text-[11px] text-slate-400">
+      <p className="mb-2 text-[11px] text-slate-500">
         Design spectrum: Sa/g = min(2.5·Ca·I/R, Cv·I/(R·T)) ≥ 0.11·Ca·I/R.
         {' '}Ts = {f3(Ts)} s. CQC combination (ζ = {pct(zeta)}).
         {T1 !== null && seismicT !== undefined && (
@@ -231,12 +231,12 @@ export function ResponseSpectrumPanel({
               <td className="py-0.5 pr-4 text-right tabular-nums font-semibold text-slate-900">{f0(cqc[0])}</td>
               <td className="py-0.5 pr-4 text-right tabular-nums font-semibold text-slate-900">{f0(cqc[2])}</td>
               {staticV && (
-                <td className={`py-0.5 pr-4 text-right tabular-nums text-xs ${cqcRatio[0] !== null ? (cqcRatio[0]! < 0.9 ? 'text-red-600 font-semibold' : 'text-emerald-600') : 'text-slate-400'}`}>
+                <td className={`py-0.5 pr-4 text-right tabular-nums text-xs ${cqcRatio[0] !== null ? (cqcRatio[0]! < 0.9 ? 'text-red-600 font-semibold' : 'text-emerald-600') : 'text-slate-500'}`}>
                   {cqcRatio[0] !== null ? pct(cqcRatio[0]!) : '—'}
                 </td>
               )}
               {staticV && (
-                <td className={`py-0.5 text-right tabular-nums text-xs ${cqcRatio[2] !== null ? (cqcRatio[2]! < 0.9 ? 'text-red-600 font-semibold' : 'text-emerald-600') : 'text-slate-400'}`}>
+                <td className={`py-0.5 text-right tabular-nums text-xs ${cqcRatio[2] !== null ? (cqcRatio[2]! < 0.9 ? 'text-red-600 font-semibold' : 'text-emerald-600') : 'text-slate-500'}`}>
                   {cqcRatio[2] !== null ? pct(cqcRatio[2]!) : '—'}
                 </td>
               )}
@@ -264,7 +264,7 @@ export function ResponseSpectrumPanel({
         </p>
       )}
 
-      <p className="mt-2 text-[11px] text-slate-400">
+      <p className="mt-2 text-[11px] text-slate-500">
         Use CQC base shear (more accurate for closely-spaced modes). SRSS is shown for reference.
         {T1 !== null && seismicT !== undefined && T1 > seismicT && (
           <> T₁ &gt; T_approx — the static ELF base shear is conservative (short-period cap may govern).</>

@@ -471,7 +471,7 @@ function ConnectionTab() {
             <Num label="In-plane e_x" unit="mm" value={ex_load} onChange={setExLoad} />
             <Num label="In-plane e_y" unit="mm" value={ey_load} onChange={setEyLoad} />
             <Num label="Out-of-plane e_out" unit="mm" value={e_out} onChange={setEOut} />
-            <p className="col-span-full text-[10px] text-slate-400">
+            <p className="col-span-full text-[10px] text-slate-500">
               e_x/e_y: in-plane offset (§J3.6 elastic method).
               e_out: perpendicular to plate → bolt tension + §J3.7 interaction.
             </p>
@@ -479,7 +479,7 @@ function ConnectionTab() {
           {e_out > 0 && (
             <Card title="Prying action §J3.9">
               <Num label="Gage b (bolt CL → web face)" unit="mm" value={b_gage} onChange={setBGage} />
-              <p className="col-span-full text-[10px] text-slate-400">
+              <p className="col-span-full text-[10px] text-slate-500">
                 b = distance from bolt centreline to face of the connecting web or stem.
                 Set 0 to skip prying check. Edge dist a = ex, pitch p = sv, plate tf/Fy reused from above.
               </p>
@@ -541,7 +541,7 @@ function ConnectionTab() {
           <ResultCard title="Per-bolt forces">
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
-                <thead><tr className="text-left text-slate-400">
+                <thead><tr className="text-left text-slate-500">
                   <th className="pr-2 pb-1">id</th><th className="pr-2 pb-1">Vx kN</th><th className="pr-2 pb-1">Vy kN</th>
                   <th className="pr-2 pb-1">R kN</th><th className="pb-1">fbr MPa</th>
                 </tr></thead>
@@ -585,7 +585,7 @@ function ConnectionTab() {
                 value={ok(res.outOfPlane.ok, res.outOfPlane.ok ? 'PASS' : 'FAIL')} />
               <div className="col-span-full overflow-x-auto">
                 <table className="mt-1 w-full text-xs">
-                  <thead><tr className="text-left text-slate-400">
+                  <thead><tr className="text-left text-slate-500">
                     <th className="pr-2 pb-1">id</th><th className="pr-2 pb-1">yi mm</th>
                     <th className="pr-2 pb-1">T kN</th><th className="pr-2 pb-1">frv MPa</th><th className="pb-1">util</th>
                   </tr></thead>

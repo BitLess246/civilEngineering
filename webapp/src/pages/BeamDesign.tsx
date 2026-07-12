@@ -170,7 +170,7 @@ export default function BeamDesign() {
               <Num label={<KTex tex="V_u" />} unit="kN" value={f.Vu} onChange={set('Vu')} />
             </>}
             {hogging && !multi && (
-              <p className="col-span-full text-xs text-slate-400">Negative Mu — hogging: designed with |Mu|; the tension steel goes at the TOP.</p>
+              <p className="col-span-full text-xs text-slate-500">Negative Mu — hogging: designed with |Mu|; the tension steel goes at the TOP.</p>
             )}
           </Card>
 
@@ -183,7 +183,7 @@ export default function BeamDesign() {
                   className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">
                   + Add section
                 </button>
-                <span className="text-xs text-slate-400">or auto-detect from <Link to="/beam-analysis" className="text-[#0056b3] hover:underline">Beam Analysis</Link>. Negative Mu = hogging (top steel).</span>
+                <span className="text-xs text-slate-500">or auto-detect from <Link to="/beam-analysis" className="text-[#0056b3] hover:underline">Beam Analysis</Link>. Negative Mu = hogging (top steel).</span>
               </div>
               <div className="space-y-3">
                 {sections.map((s) => (
@@ -241,7 +241,7 @@ export default function BeamDesign() {
                   </tbody>
                 </table>
               </div>
-              <p className="mt-1 text-[11px] text-slate-400">Click a row to view its drawing, results and worked solution. Red rows have errors.</p>
+              <p className="mt-1 text-[11px] text-slate-500">Click a row to view its drawing, results and worked solution. Red rows have errors.</p>
             </ResultCard>
           )}
 
@@ -256,7 +256,7 @@ export default function BeamDesign() {
                 comprBars={r.comprBars} comprBarDia={f.comprBarDia}
                 naDepth={r.cNA} flexOK={r.flexOK} hogging={hogging} />
             ) : (
-              <p className="py-8 text-center text-sm text-slate-400">Enter a valid section (d must be positive).</p>
+              <p className="py-8 text-center text-sm text-slate-500">Enter a valid section (d must be positive).</p>
             )}
           </div>
 

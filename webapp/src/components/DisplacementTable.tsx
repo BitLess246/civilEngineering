@@ -75,7 +75,7 @@ export function DisplacementTable({
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="mb-1 text-[1.02rem] font-bold text-[#0056b3]">Nodal Displacements</h2>
-      <p className="mb-3 text-[11px] text-slate-400">Translations in mm, rotations in mrad. Envelope shows the signed extreme across combinations.</p>
+      <p className="mb-3 text-[11px] text-slate-500">Translations in mm, rotations in mrad. Envelope shows the signed extreme across combinations.</p>
 
       <div className="mb-3 flex flex-wrap gap-1">
         <button type="button" onClick={() => setActive('envelope')} className={tabCls(active === 'envelope')}>

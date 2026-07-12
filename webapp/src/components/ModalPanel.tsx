@@ -19,7 +19,7 @@ export function ModalPanel({ result, selectedMode, onSelectMode }: {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="mb-1 text-[1.02rem] font-bold text-[#0056b3]">Modal Analysis — natural periods &amp; mass participation</h2>
-      <p className="mb-3 text-[11px] text-slate-400">
+      <p className="mb-3 text-[11px] text-slate-500">
         Lumped-mass free vibration. Effective modal mass per global direction; the cumulative column turns green at the
         NSCP 208.5.5 ≥90% threshold. Total mass {f2(totalMass[0])} t (X), {f2(totalMass[1])} t (Y), {f2(totalMass[2])} t (Z).
         {onSelectMode && <span className="ml-1">Click <span className="font-semibold text-violet-600">3D</span> to animate the mode shape in the canvas.</span>}
@@ -50,7 +50,7 @@ export function ModalPanel({ result, selectedMode, onSelectMode }: {
               const active = selectedMode === i
               return (
                 <tr key={i} className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 ${active ? 'bg-violet-50' : ''}`}>
-                  <td className="py-1 pr-3 font-mono text-slate-700">{i + 1}{domLabel && <span className="ml-1 text-[10px] text-slate-400">{domLabel}</span>}</td>
+                  <td className="py-1 pr-3 font-mono text-slate-700">{i + 1}{domLabel && <span className="ml-1 text-[10px] text-slate-500">{domLabel}</span>}</td>
                   <td className="py-1 pr-3 text-right tabular-nums font-semibold text-slate-800">{f3(m.period)}</td>
                   <td className="py-1 pr-3 text-right tabular-nums text-slate-600">{f2(m.freq)}</td>
                   <td className="py-1 pr-3 text-right tabular-nums text-slate-600">{f2(m.omega)}</td>
@@ -66,7 +66,7 @@ export function ModalPanel({ result, selectedMode, onSelectMode }: {
                         onClick={() => onSelectMode(active ? null : i)}
                         title={active ? 'Hide mode shape' : 'Animate mode shape in 3D view'}
                         className={`rounded px-1.5 py-0.5 text-[10px] font-semibold transition ${
-                          active ? 'bg-violet-100 text-violet-700' : 'text-slate-400 hover:text-violet-600'
+                          active ? 'bg-violet-100 text-violet-700' : 'text-slate-500 hover:text-violet-600'
                         }`}>
                         {active ? '◉' : '◎'} 3D
                       </button>

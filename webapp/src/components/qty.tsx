@@ -10,12 +10,12 @@ export function Num({ label, unit, value, onChange, step = 'any', hint }: {
   return (
     <label className="flex flex-col text-sm">
       <span className="mb-1 font-medium text-slate-600">
-        {label}{unit ? <span className="text-slate-400"> ({unit})</span> : null}
+        {label}{unit ? <span className="text-slate-500"> ({unit})</span> : null}
       </span>
       <input type="number" inputMode="decimal" step={step} value={Number.isFinite(value) ? value : ''}
         onChange={(e) => onChange(parseFloat(e.target.value))}
         className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none focus:ring-1 focus:ring-[#0056b3]" />
-      {hint ? <span className="mt-0.5 text-[10px] text-slate-400">{hint}</span> : null}
+      {hint ? <span className="mt-0.5 text-[10px] text-slate-500">{hint}</span> : null}
     </label>
   )
 }

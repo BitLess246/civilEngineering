@@ -38,7 +38,7 @@ export default function RockAnchor() {
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Geotechnical</p>
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Rock / ground anchor</h1>
       <p className="mt-2 text-sm text-slate-600">
         PTI DC35.1 / FHWA-IF-99-015 check: prestressing-tendon design load (0.60·GUTS) and grout-ground
@@ -66,7 +66,7 @@ export default function RockAnchor() {
         <Out label="FS (allowable / demand)" value={f2(r.fs)} ok={r.ok} />
         <Out label="Proof/test load" value={`${f0(r.testLoad)} kN`} />
         <Out label="Bond length for FS = 2" value={`${f2(r.bondLengthReq)} m`} ok={bondLength >= r.bondLengthReq} />
-        <p className="mt-2 text-[10px] text-slate-400">
+        <p className="mt-2 text-[10px] text-slate-500">
           Td = 0.60·GUTS (PTI permanent max). Bond Qult = π·Dhole·Lbond·τult / FS. Proof load
           min(1.33·T, 0.80·GUTS). Provide the unbonded (free) length and corrosion protection separately.
         </p>

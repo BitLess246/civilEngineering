@@ -96,7 +96,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
                 Browse all {toolCount} tools ↓
               </a>
             </div>
-            <div className="mt-10 flex items-center gap-7 text-xs text-slate-400">
+            <div className="mt-10 flex items-center gap-7 text-xs text-slate-500">
               <span><strong className="text-slate-800">{toolCount}</strong> tools</span>
               <div className="h-3 w-px bg-slate-200" />
               <span><strong className="text-slate-800">Server-side</strong> solvers</span>
@@ -124,14 +124,14 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
       {/* Sample / test cases */}
       <section className="mx-auto max-w-6xl px-6 py-16">
         <div className="mb-6 flex items-center gap-4">
-          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Try a sample</span>
+          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Try a sample</span>
           <div className="h-px flex-1 bg-slate-200" />
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           {SAMPLES.map(s => (
             <Link key={s.to} to={s.to}
               className="group flex flex-col border border-slate-200 bg-white p-6 transition-colors hover:border-[#0056b3] hover:bg-[#f4f8ff]">
-              <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400 group-hover:text-[#0056b3]">{s.tag}</span>
+              <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500 group-hover:text-[#0056b3]">{s.tag}</span>
               <span className="mt-2 text-base font-semibold text-slate-900">{s.title}</span>
               <span className="mt-2 text-xs leading-relaxed text-slate-500">{s.desc}</span>
               <span className="mt-5 text-xs font-semibold text-[#0056b3] opacity-0 transition-opacity group-hover:opacity-100">
