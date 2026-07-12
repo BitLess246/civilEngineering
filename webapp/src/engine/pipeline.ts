@@ -44,7 +44,9 @@ export interface AnalyzeOptions {
   pDelta?: boolean
   /** Directional lateral cases (E/W in ±X/±Z). When given, every combination
    *  with an E (or W) factor is run once per E (or W) case and the design is
-   *  enveloped per member — STAAD-style. */
+   *  enveloped per member — STAAD-style. The list is used VERBATIM — include
+   *  both senses (±) yourself; only the default cases auto-derived from the
+   *  model's E/W node loads get a reversed-sign companion added. */
   lateral?: LateralCase[]
   /** Seismic lateral resisting system — drives column tie detailing per NSCP 2015 §418.
    *  'smf' = Special Moment Frame (§418.7.5), 'imf' = Intermediate (§418.4.3).
@@ -377,6 +379,25 @@ const beamSeverity = (r: BeamScheduleRow) =>
 
 interface FrameRun { name: string; result: F3Result }
 
+/** Default directional lateral cases derived from the model's category-E/W node
+ *  loads. Seismic and wind forces act in BOTH senses along each axis (NSCP 2015
+ *  §208.5.1.1 E is reversible; §207A.8 wind on each principal axis), so each
+ *  auto-derived case gets a reversed-sign companion — without it 0.9D + 1.0E/W
+ *  never sees uplift/moment reversal and the envelope is one-sided. A
+ *  caller-supplied opts.lateral list is used verbatim: the caller owns its own
+ *  ± directions (the UI already generates +X/−X/+Z/−Z). */
+function defaultLateralCases(model: StructuralModel): LateralCase[] {
+  const neg = (l: ModelLoad): ModelLoad => l.kind === 'node'
+    ? { ...l, Fx: -(l.Fx ?? 0), Fy: -(l.Fy ?? 0), Fz: -(l.Fz ?? 0) }
+    : l
+  const out: LateralCase[] = []
+  const eL = model.loads.filter((l) => l.kind === 'node' && l.cat === 'E')
+  const wL = model.loads.filter((l) => l.kind === 'node' && l.cat === 'W')
+  if (eL.length) out.push({ name: 'E+', kind: 'E', loads: eL }, { name: 'E-', kind: 'E', loads: eL.map(neg) })
+  if (wL.length) out.push({ name: 'W+', kind: 'W', loads: wL }, { name: 'W-', kind: 'W', loads: wL.map(neg) })
+  return out
+}
+
 /** Build the load cases to envelope: every NSCP combination, expanded once per
  *  directional lateral case (E/W) when the combination carries that factor. */
 function buildRuns(model: StructuralModel, opts: AnalyzeOptions, onProgress?: ProgressFn) {
@@ -386,13 +407,7 @@ function buildRuns(model: StructuralModel, opts: AnalyzeOptions, onProgress?: Pr
   const gravityModel = { ...model, loads: model.loads.filter((l) => l.cat !== 'E' && l.cat !== 'W') }
   const br = modelToFrame3D(gravityModel, { useShells: false })
 
-  let lateral = opts.lateral ?? []
-  if (lateral.length === 0) {
-    const eL = model.loads.filter((l) => l.kind === 'node' && l.cat === 'E')
-    const wL = model.loads.filter((l) => l.kind === 'node' && l.cat === 'W')
-    if (eL.length) lateral = [...lateral, { name: 'E', kind: 'E', loads: eL }]
-    if (wL.length) lateral = [...lateral, { name: 'W', kind: 'W', loads: wL }]
-  }
+  const lateral = opts.lateral?.length ? opts.lateral : defaultLateralCases(model)
   const toF3 = (l: ModelLoad): F3Load =>
     ({ kind: 'node', node: (l as { node: string }).node, Fx: (l as { Fx?: number }).Fx, Fy: (l as { Fy?: number }).Fy, Fz: (l as { Fz?: number }).Fz, cat: l.cat })
   const eCases = lateral.filter((c) => c.kind === 'E')
@@ -762,13 +777,7 @@ async function buildRunsParallel(
   const gravityModel = { ...model, loads: model.loads.filter((l) => l.cat !== 'E' && l.cat !== 'W') }
   const br = modelToFrame3D(gravityModel, { useShells: false })
 
-  let lateral = opts.lateral ?? []
-  if (lateral.length === 0) {
-    const eL = model.loads.filter((l) => l.kind === 'node' && l.cat === 'E')
-    const wL = model.loads.filter((l) => l.kind === 'node' && l.cat === 'W')
-    if (eL.length) lateral = [...lateral, { name: 'E', kind: 'E' as const, loads: eL }]
-    if (wL.length) lateral = [...lateral, { name: 'W', kind: 'W' as const, loads: wL }]
-  }
+  const lateral = opts.lateral?.length ? opts.lateral : defaultLateralCases(model)
   const toF3 = (l: ModelLoad): F3Load =>
     ({ kind: 'node', node: (l as { node: string }).node, Fx: (l as { Fx?: number }).Fx, Fy: (l as { Fy?: number }).Fy, Fz: (l as { Fz?: number }).Fz, cat: l.cat })
   const eCases = lateral.filter((c) => c.kind === 'E')
