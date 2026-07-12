@@ -15,6 +15,7 @@
 // or 0.020·hs otherwise.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, ModelLoad } from './model'
+import { buildSeismicMass } from './modal'
 
 export interface SeismicParams {
   Ca: number; Cv: number
@@ -140,6 +141,74 @@ export function computeSeismic(model: StructuralModel, p: SeismicParams): Seismi
   }
 
   return { hn, Ta, T, Tmethod, W, Vraw, Vmax, Vmin, Vsrc, V, Ft, storeys, loads }
+}
+
+// ── Accidental torsion (NSCP 208.7.2.7) ──────────────────────────────────
+// The centre of mass of each level is assumed displaced ±5% of the plan
+// dimension perpendicular to the load direction — statically equivalent to the
+// storey force F applied at the mass centroid PLUS a torque T = ±0.05·L⊥·F
+// about the vertical axis. The torque is realised as a self-equilibrating set
+// of node forces in the load direction, distributed about the storey mass
+// centroid:  ΔF_i = T · m_i·d_i / Σ m_j·d_j²   (d = perpendicular offset)
+// so ΣΔF = 0 (statics unchanged) and ΣΔF·d = T (torque exact). This works with
+// or without a rigid diaphragm: the couple simply loads the frames in
+// proportion to a rigid-rotation displacement pattern weighted by mass.
+
+/**
+ * Antisymmetric node-force set adding the §208.7.2.7 accidental torsion to a
+ * directional E-case. `base` is the case's SIGNED node-load set (Fx for
+ * dir 'x', Fz for dir 'z'); the returned loads are ADDED to it. `sign` picks
+ * the eccentricity sense (envelope both). Levels with no torsional lever
+ * (single frame line, denom ≈ 0) contribute nothing.
+ */
+export function accidentalTorsionLoads(
+  model: StructuralModel, base: ModelLoad[], dir: 'x' | 'z', sign: 1 | -1, ecc = 0.05,
+): ModelLoad[] {
+  const nm = new Map(model.nodes.map((n) => [n.id, n]))
+  const mass = buildSeismicMass(model)
+  // perpendicular plan coordinate: force in x ↔ lever arm in z, and vice versa
+  const perp = (n: { x: number; z: number }) => (dir === 'x' ? n.z : n.x)
+
+  // group the case's forces by level (node elevation)
+  const byLevel = new Map<number, { node: string; F: number }[]>()
+  for (const l of base) {
+    if (l.kind !== 'node') continue
+    const n = nm.get(l.node)
+    if (!n) continue
+    const F = (dir === 'x' ? l.Fx : l.Fz) ?? 0
+    if (F === 0) continue
+    const key = [...byLevel.keys()].find((e) => Math.abs(e - n.y) < 1e-6) ?? n.y
+    const arr = byLevel.get(key) ?? []
+    arr.push({ node: l.node, F })
+    byLevel.set(key, arr)
+  }
+
+  const out: ModelLoad[] = []
+  for (const [y, entries] of byLevel) {
+    const Flevel = entries.reduce((s, e) => s + e.F, 0)
+    const nodes = model.nodes.filter((n) => Math.abs(n.y - y) < 1e-6)
+    if (nodes.length < 2 || Math.abs(Flevel) < 1e-12) continue
+    const cs = nodes.map(perp)
+    const Lperp = Math.max(...cs) - Math.min(...cs)          // plan dimension ⊥ force
+    if (!(Lperp > 0)) continue
+    // mass centroid and torsional lever Σm·d² of the level
+    let mTot = 0, mC = 0
+    for (const n of nodes) { const m = mass.get(n.id) ?? 0; mTot += m; mC += m * perp(n) }
+    if (!(mTot > 0)) continue
+    const cbar = mC / mTot
+    let denom = 0
+    for (const n of nodes) denom += (mass.get(n.id) ?? 0) * (perp(n) - cbar) ** 2
+    if (!(denom > 1e-9)) continue                            // no lever — single frame line
+    const T = sign * ecc * Lperp * Flevel                    // kN·m about the vertical axis
+    for (const n of nodes) {
+      const dF = (T * (mass.get(n.id) ?? 0) * (perp(n) - cbar)) / denom
+      if (Math.abs(dF) < 1e-12) continue
+      out.push(dir === 'x'
+        ? { kind: 'node', node: n.id, Fx: dF, cat: 'E' }
+        : { kind: 'node', node: n.id, Fz: dF, cat: 'E' })
+    }
+  }
+  return out
 }
 
 // ── Storey drift (NSCP 208.5.10) ─────────────────────────────────────────

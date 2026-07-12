@@ -22,7 +22,7 @@ import type { SolveProgress } from '../engine/progress'
 import { TABLE_204_1, TABLE_204_2, sdlItemKPa, sdlTotal, type SdlItem } from '../engine/deadLoads'
 import { TABLE_205_1, TABLE_206 } from '../engine/liveLoads'
 import type { ConcreteClass } from '../engine/quantities'
-import { computeSeismic, type SeismicResult, type DriftRow } from '../engine/seismic'
+import { computeSeismic, accidentalTorsionLoads, type SeismicResult, type DriftRow } from '../engine/seismic'
 import { columnKFactors, type ColumnK } from '../engine/effectiveLength'
 import { freqFromDeflection, dg11Walking, DG11_OCCUPANCY } from '../engine/floorVibration'
 import { buildSeismicMass, GRAVITY } from '../engine/modal'
@@ -733,6 +733,7 @@ export default function ModelSpace() {
   // §208 static results per axis (they differ when Method-B periods differ per axis)
   const [seisXZ, setSeisXZ] = useState<{ x: SeismicResult; z: SeismicResult } | null>(null)
   const [methodB, setMethodB] = useState(b('methodB', true))          // §208.5.2.2 analytical period (needs a modal run)
+  const [accTor, setAccTor] = useState(b('accTor', true))             // §208.7.2.7 accidental torsion ±5% E-case variants
   const [rsaRegular, setRsaRegular] = useState(b('rsaRegular', true)) // §208.6.4.2 floors: 0.9·V_B & 0.8·V_A vs 1.0·V_B
   const [rsaGen, setRsaGen] = useState<{ x: RsaLateralResult; z: RsaLateralResult } | null>(null)   // RSA-derived E cases
   const [drift, setDrift] = useState<DriftRow[] | null>(null)
@@ -852,7 +853,7 @@ export default function ModelSpace() {
       sessionStorage.setItem(INPUTS_KEY, JSON.stringify({
         baysX, baysZ, storeyH, colB, colH, girB, girH, beaB, beaH,
         fc, fy, barDia, tieDia, cover, slabThk, gammaC, qD, qL,
-        qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs, methodB, rsaRegular,
+        qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs, methodB, accTor, rsaRegular,
         Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, tryBars,
         concreteClass, prices, planSel,
         material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu,
@@ -860,7 +861,7 @@ export default function ModelSpace() {
     } catch { /* quota — ignore */ }
   }, [baysX, baysZ, storeyH, colB, colH, girB, girH, beaB, beaH,
     fc, fy, barDia, tieDia, cover, slabThk, gammaC, qD, qL,
-    qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs, methodB, rsaRegular,
+    qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs, methodB, accTor, rsaRegular,
     Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, tryBars,
     concreteClass, prices, planSel,
     material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu])
@@ -1014,12 +1015,25 @@ export default function ModelSpace() {
   }
 
   /** Swap the model's cat-E node loads for the primary direction's case and
-   *  refresh the derived state shared by both E-generation paths. */
+   *  refresh the derived state shared by both E-generation paths. With
+   *  accidental torsion on, each directional case splits into ⟳/⟲ variants
+   *  carrying the ±0.05·L⊥ storey-torque couple (§208.7.2.7). */
   const commitECases = (rx: SeismicResult, rz: SeismicResult, baseOf: (axis: 'x' | 'z') => ModelLoad[]) => {
     if (!model) return
     setSeisXZ({ x: rx, z: rz })
-    setECases(eDirs.map((d) => dirCase(baseOf(d.includes('X') ? 'x' : 'z'), 'E', d)))
-    // commit the primary direction for the load-diagram overlay + drift check
+    const cases: LateralCase[] = []
+    for (const d of eDirs) {
+      const axis: 'x' | 'z' = d.includes('X') ? 'x' : 'z'
+      const c = dirCase(baseOf(axis), 'E', d)
+      if (!accTor) { cases.push(c); continue }
+      for (const s of [1, -1] as const) {
+        const tor = accidentalTorsionLoads(model, c.loads, axis, s)
+        cases.push({ name: `${c.name}${s > 0 ? '⟳' : '⟲'}`, kind: 'E', loads: [...c.loads, ...tor] })
+      }
+    }
+    setECases(cases)
+    // commit the primary direction (untorsioned pattern) for the load-diagram
+    // overlay + drift check
     const primary = dirCase(baseOf(primAxis), 'E', eDirs[0] ?? '+X')
     saveKeepModal({ ...model, loads: [...model.loads.filter((l) => !(l.cat === 'E' && l.kind === 'node')), ...primary.loads] })
   }
@@ -2530,6 +2544,13 @@ export default function ModelSpace() {
                   <span>
                     Method-B period (§208.5.2.2) — use the modal fundamental period per axis, capped at {Zf >= 0.4 ? '1.3' : '1.4'}·Ta.
                     {!modal && <span className="text-slate-500"> No modal result yet — run Modal (Dynamics) first, else Method A is used.</span>}
+                  </span>
+                </label>
+                <label className="col-span-full flex items-start gap-2 text-xs text-slate-600">
+                  <input type="checkbox" checked={accTor} onChange={(e) => setAccTor(e.target.checked)} className="mt-0.5" />
+                  <span>
+                    Accidental torsion ±5% (§208.7.2.7) — each E case splits into ⟳/⟲ variants carrying a ±0.05·L⊥ storey torque
+                    (a mass-weighted force couple about the level&apos;s mass centroid), enveloped by Design/Optimize.
                   </span>
                 </label>
                 <div className="col-span-full">

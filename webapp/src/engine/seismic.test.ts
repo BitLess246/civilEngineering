@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { computeSeismic, storeyWeights, driftCheck } from './seismic'
+import { computeSeismic, storeyWeights, driftCheck, accidentalTorsionLoads } from './seismic'
+import { buildSeismicMass } from './modal'
 import { generateGridModel } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
 import { solveFrame3D, applyF3Combo } from './frame3d'
@@ -135,6 +136,78 @@ describe('§208.5.2.2 Method-B period', () => {
     expect(b.Vraw).toBeLessThan(a.Vraw)
     expect(b.Vraw).toBeCloseTo(a.Vraw / 1.3, 6)
     expect(b.storeys.reduce((s, q) => s + q.Fx, 0)).toBeCloseTo(b.V, 4)
+  })
+})
+
+describe('§208.7.2.7 accidental torsion', () => {
+  const m = makeModel()   // 6 m (X) × 5 m (Z) plan, 2 storeys
+  const seis = computeSeismic(m, params)!
+  const mass = buildSeismicMass(m)
+  const fxOf = (loads: ReturnType<typeof accidentalTorsionLoads>, node: string) =>
+    loads.filter((l) => l.kind === 'node' && l.node === node)
+      .reduce((s, l) => s + ((l as { Fx?: number }).Fx ?? 0), 0)
+
+  it('per level: ΣΔF = 0 and ΣΔF·d = 0.05·L⊥·F_level (hand statics)', () => {
+    const tor = accidentalTorsionLoads(m, seis.loads, 'x', 1)
+    expect(tor.length).toBeGreaterThan(0)
+    for (const s of seis.storeys) {
+      const lvlNodes = m.nodes.filter((n) => Math.abs(n.y - s.elevation) < 1e-6)
+      const cs = lvlNodes.map((n) => n.z)
+      const Lperp = Math.max(...cs) - Math.min(...cs)   // = 5 m
+      expect(Lperp).toBeCloseTo(5, 9)
+      let mTot = 0, mC = 0
+      for (const n of lvlNodes) { const mm = mass.get(n.id) ?? 0; mTot += mm; mC += mm * n.z }
+      const cbar = mC / mTot
+      const sumF = lvlNodes.reduce((t, n) => t + fxOf(tor, n.id), 0)
+      const torque = lvlNodes.reduce((t, n) => t + fxOf(tor, n.id) * (n.z - cbar), 0)
+      expect(sumF).toBeCloseTo(0, 9)                              // self-equilibrating
+      expect(torque).toBeCloseTo(0.05 * Lperp * s.Fx, 6)          // exact 5% torque
+    }
+  })
+
+  it('sign = −1 mirrors the couple exactly', () => {
+    const pos = accidentalTorsionLoads(m, seis.loads, 'x', 1)
+    const neg = accidentalTorsionLoads(m, seis.loads, 'x', -1)
+    expect(neg).toHaveLength(pos.length)
+    for (const n of m.nodes) expect(fxOf(neg, n.id)).toBeCloseTo(-fxOf(pos, n.id), 9)
+  })
+
+  it("dir 'z' uses the X plan dimension and Fz components", () => {
+    // rebuild the base case in z: same magnitudes on Fz
+    const baseZ = seis.loads.map((l) => ({ kind: 'node' as const, node: (l as { node: string }).node, Fz: (l as { Fx?: number }).Fx, cat: 'E' as const }))
+    const tor = accidentalTorsionLoads(m, baseZ, 'z', 1)
+    expect(tor.length).toBeGreaterThan(0)
+    expect(tor.every((l) => (l as { Fx?: number }).Fx === undefined)).toBe(true)
+    const s0 = seis.storeys[0]
+    const lvlNodes = m.nodes.filter((n) => Math.abs(n.y - s0.elevation) < 1e-6)
+    let mTot = 0, mC = 0
+    for (const n of lvlNodes) { const mm = mass.get(n.id) ?? 0; mTot += mm; mC += mm * n.x }
+    const cbar = mC / mTot
+    const fz = (id: string) => tor.filter((l) => l.kind === 'node' && l.node === id)
+      .reduce((s, l) => s + ((l as { Fz?: number }).Fz ?? 0), 0)
+    const torque = lvlNodes.reduce((t, n) => t + fz(n.id) * (n.x - cbar), 0)
+    expect(torque).toBeCloseTo(0.05 * 6 * s0.Fx, 6)               // L⊥ = 6 m in X
+  })
+
+  it('torque flips with the storey-force sign (−X case)', () => {
+    const negBase = seis.loads.map((l) => ({ ...l, Fx: -((l as { Fx?: number }).Fx ?? 0) }))
+    const tor = accidentalTorsionLoads(m, negBase as typeof seis.loads, 'x', 1)
+    const s0 = seis.storeys[0]
+    const lvlNodes = m.nodes.filter((n) => Math.abs(n.y - s0.elevation) < 1e-6)
+    let mTot = 0, mC = 0
+    const massM = buildSeismicMass(m)
+    for (const n of lvlNodes) { const mm = massM.get(n.id) ?? 0; mTot += mm; mC += mm * n.z }
+    const cbar = mC / mTot
+    const torque = lvlNodes.reduce((t, n) => t + fxOf(tor, n.id) * (n.z - cbar), 0)
+    expect(torque).toBeCloseTo(-0.05 * 5 * s0.Fx, 6)
+  })
+
+  it('single frame line (no lever) → no loads, no NaN', () => {
+    const plane = generateGridModel({ baysX: [6], baysZ: [], storeyH: [3], section })
+    // all nodes share z = 0 → denom = 0 for dir 'x'
+    const base = plane.nodes.filter((n) => n.y > 0).map((n) => ({ kind: 'node' as const, node: n.id, Fx: 10, cat: 'E' as const }))
+    const tor = accidentalTorsionLoads(plane, base, 'x', 1)
+    expect(tor).toEqual([])
   })
 })
 
