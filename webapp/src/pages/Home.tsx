@@ -1,5 +1,6 @@
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { TOOL_CATEGORIES } from '../lib/tools'
+import { TOOL_CATEGORIES, toolGroups } from '../lib/tools'
 
 // Flat structural-frame line illustration — distributed load on a portal frame
 // with a hint of the bending diagram. Pure SVG, no assets, scales cleanly.
@@ -49,6 +50,21 @@ const SAMPLES: Sample[] = [
 
 export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') => void }) {
   const toolCount = TOOL_CATEGORIES.reduce((n, c) => n + c.tools.length, 0)
+  const [query, setQuery] = useState('')
+
+  // Full catalog as {heading, tools} sections: grouped categories (Structural)
+  // contribute one section per discipline group, flat ones a single section.
+  const sections = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    const all = TOOL_CATEGORIES.flatMap((c) =>
+      toolGroups(c).map((g) => ({
+        heading: g.group ? g.group : c.label,
+        tools: g.tools.filter((t) =>
+          !q || t.name.toLowerCase().includes(q) || t.sub.toLowerCase().includes(q)
+          || (t.group ?? '').toLowerCase().includes(q)),
+      })))
+    return all.filter((s) => s.tools.length > 0)
+  }, [query])
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -76,6 +92,9 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
                 className="border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 hover:border-slate-800">
                 Create account
               </button>
+              <a href="#tools" className="px-2 py-3 text-sm font-semibold text-[#0056b3] hover:underline">
+                Browse all {toolCount} tools ↓
+              </a>
             </div>
             <div className="mt-10 flex items-center gap-7 text-xs text-slate-400">
               <span><strong className="text-slate-800">{toolCount}</strong> tools</span>
@@ -123,12 +142,42 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
         </div>
       </section>
 
+      {/* All tools — searchable index */}
+      <section id="tools" className="border-t border-slate-200 bg-white">
+        <div className="mx-auto max-w-6xl px-6 py-16">
+          <div className="mb-6 flex flex-wrap items-center gap-4">
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">All {toolCount} tools</span>
+            <div className="h-px flex-1 bg-slate-200" />
+            <input type="search" value={query} onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search tools… (beam, footing, seismic)" aria-label="Search tools"
+              className="w-full border border-slate-300 px-3.5 py-2 text-sm outline-none focus:border-[#0056b3] sm:w-72" />
+          </div>
+          {sections.length === 0 && (
+            <p className="py-8 text-sm text-slate-500">No tool matches “{query}”.</p>
+          )}
+          {sections.map(sec => (
+            <div key={sec.heading} className="mb-8 last:mb-0">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-[#0056b3]">{sec.heading}</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {sec.tools.map(t => (
+                  <Link key={t.to} to={t.to}
+                    className="group flex flex-col border border-slate-200 bg-white p-4 transition-colors hover:border-[#0056b3] hover:bg-[#f4f8ff]">
+                    <span className="text-sm font-semibold text-slate-900 group-hover:text-[#0056b3]">{t.name}</span>
+                    <span className="mt-1 text-[11px] text-slate-500">{t.sub}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* Closing CTA */}
       <section className="border-t border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 px-6 py-12 sm:flex-row sm:items-center">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">Browse every tool from the menu.</h2>
-            <p className="mt-1 text-sm text-slate-500">Pick a category in the top navigation — Structural or Quantity Take-Off.</p>
+            <h2 className="text-xl font-bold text-slate-900">Every calculation, code-referenced.</h2>
+            <p className="mt-1 text-sm text-slate-500">NSCP 2015, ACI 318-14 and AISC 360-16 clause citations on every worked solution.</p>
           </div>
           <button onClick={() => onAuth('signup')}
             className="bg-[#0056b3] px-6 py-3 text-sm font-semibold text-white hover:bg-[#0066d6]">
