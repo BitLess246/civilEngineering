@@ -14,15 +14,40 @@ import type {
 // same host, or set VITE_API_URL in .env.local for local dev with split servers).
 const BASE = import.meta.env.VITE_API_URL ?? ''
 
+let warnedLocal = false
+
+/** In-browser fallback when the API is unreachable (dev without the service,
+ *  static deploys) or the route is absent (404). Dynamic import keeps the
+ *  engine in a lazy chunk — the eager path still ships zero engine code. */
+async function localFallback<T>(path: string, body: unknown): Promise<T> {
+  const local = await import('./calcLocal')
+  if (!warnedLocal) {
+    warnedLocal = true
+    console.warn(`calc API unreachable at ${BASE || 'same-origin'} — steel results are computed locally in-browser (same engine).`)
+  }
+  if (path === '/api/steel/beam') return local.localBeam(body as never) as T
+  if (path === '/api/steel/column') return local.localColumn(body as never) as T
+  if (path === '/api/steel/connection') return local.localConnection(body as never) as T
+  throw new Error(`No local fallback for ${path}`)
+}
+
 async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  let res: Response
+  try {
+    res = await fetch(`${BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    return localFallback<T>(path, body)          // network error — API not running
+  }
+  if (res.status === 404) return localFallback<T>(path, body)  // route absent (static host)
   if (!res.ok) {
     const detail = (await res.json().catch(() => null)) as { error?: string } | null
-    throw new Error(detail?.error ?? `Calculation API error (${res.status})`)
+    const err = new Error(detail?.error ?? `Calculation API error (${res.status})`)
+    console.error(err)   // the UI badge says "check console" — make that true
+    throw err
   }
   return (await res.json()) as T
 }
