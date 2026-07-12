@@ -215,3 +215,71 @@ describe('connection type → member releases (force behaviour)', () => {
     expect(br.members[0].relJ?.[4]).toBe(true)   // My released at j
   })
 })
+
+// ── Bridge → solver UNIT CONTRACT ────────────────────────────────────────────
+// The unit convention (geometry m, sections mm/mm², forces kN, stress MPa) is
+// enforced only by comments; the 1000× thermal bug (PR #319) slipped through
+// exactly here. These tests pin the contract END-TO-END with absolute closed
+// forms, so any future unit slip in the bridge (N vs kN, m vs mm) fails loud.
+describe('bridge → solver unit contract (absolute closed forms)', () => {
+  // 300×500 fc28 cantilever, L = 4 m: E = 4700√28 = 24 870 MPa,
+  // I = 300·500³/12 = 3.125e9 mm⁴ → EI = E·I·1e-9 = 77 719 kN·m².
+  const EI = 4700 * Math.sqrt(28) * ((300 * 500 ** 3) / 12) * 1e-9
+
+  it('nodal kN load → δ = PL³/3EI in metres (E MPa · I mm⁴ · L m all consistent)', () => {
+    const m = { ...baseModel(), loads: [{ kind: 'node' as const, node: 'b', Fy: -10, cat: 'D' as const }] }
+    const br = modelToFrame3D(m)
+    const r = solveFrame3D(br.nodes, br.members, br.supports, br.loads)!
+    // δ = 10·4³/(3·77 719) = 2.7449e-3 m — absolute value, not a ratio
+    expect(-r.d[6 + 1]).toBeCloseTo((10 * 4 ** 3) / (3 * EI), 6)
+  })
+
+  it('member UDL in kN/m → ΣR = w·L kN and fixed-end moment wL²/2 at the root', () => {
+    const m = { ...baseModel(), loads: [{ kind: 'member-udl' as const, member: 'm', w: -5, cat: 'D' as const }] }
+    const br = modelToFrame3D(m)
+    const r = solveFrame3D(br.nodes, br.members, br.supports, br.loads)!
+    // |ΣR| pins the kN/m × m scaling; the sign convention is the solver's own
+    const sumRy = r.reactions.reduce((s, q) => s + q.F[1], 0)
+    expect(Math.abs(sumRy)).toBeCloseTo(5 * 4, 6)          // 20 kN total
+    const root = r.reactions.find((q) => q.node === 'a')!
+    expect(Math.abs(root.M[2])).toBeCloseTo((5 * 4 ** 2) / 2, 4)  // 40 kN·m
+  })
+
+  it('member point load kN at t → ΣR equals P (no unit slip in the a=t·L mapping)', () => {
+    const m = { ...baseModel(), loads: [{ kind: 'member-point' as const, member: 'm', t: 0.5, P: -25, cat: 'L' as const }] }
+    const br = modelToFrame3D(m)
+    const r = solveFrame3D(br.nodes, br.members, br.supports, br.loads)!
+    expect(Math.abs(r.reactions.reduce((s, q) => s + q.F[1], 0))).toBeCloseTo(25, 6)
+    const root = r.reactions.find((q) => q.node === 'a')!
+    expect(Math.abs(root.M[2])).toBeCloseTo(25 * 2, 4)     // P·a = 25·2 kN·m
+  })
+
+  it('restrained thermal force is E·A·α·ΔT/1000 kN — the PR #319 contract', () => {
+    // both ends held: PT is fully restrained, reactions = ±PT
+    const m: StructuralModel = {
+      ...baseModel(),
+      supports: [{ node: 'a', fixity: 'fixed' }, { node: 'b', fixity: 'fixed' }],
+      loads: [{ kind: 'member-thermal', member: 'm', alpha: 1e-5, deltaT: 20, cat: 'D' }],
+    }
+    const br = modelToFrame3D(m)
+    const r = solveFrame3D(br.nodes, br.members, br.supports, br.loads)!
+    const PT = (4700 * Math.sqrt(28) * 300 * 500 * 1e-5 * 20) / 1000   // ≈ 746 kN
+    const Rx = r.reactions.find((q) => q.node === 'a')!.F[0]
+    expect(Math.abs(Rx)).toBeCloseTo(PT, 3)
+    expect(PT).toBeGreaterThan(500)
+    expect(PT).toBeLessThan(1000)   // a 1000× slip lands at ~7.5e5 and fails here
+  })
+
+  it('spring support: reaction = −k·d with k in kN/m, d in m', () => {
+    const m: StructuralModel = {
+      ...baseModel(),
+      supports: [{ node: 'a', fixity: 'fixed' }, { node: 'b', fixity: 'spring', ky: 1000 }],
+      loads: [{ kind: 'node', node: 'b', Fy: -10, cat: 'D' }],
+    }
+    const br = modelToFrame3D(m)
+    const r = solveFrame3D(br.nodes, br.members, br.supports, br.loads)!
+    const spring = r.reactions.find((q) => q.node === 'b')!
+    expect(spring.F[1]).toBeCloseTo(-1000 * r.d[6 + 1], 6)  // restoring force
+    expect(spring.F[1]).toBeGreaterThan(0)                  // pushes back up
+  })
+})
