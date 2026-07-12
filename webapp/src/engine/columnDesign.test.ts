@@ -162,8 +162,24 @@ describe('slenderness — nonsway moment magnification (RC-06 conventions)', () 
       Pu: 1000, M1: -80, M2: 100, k: 0.8, Lu: 4, h: 400, EI: 50000,
     })
     expect(r.Pc).toBeCloseTo((Math.PI ** 2 * 50000) / (0.8 * 4) ** 2, 3)
+    expect(r.stable).toBe(true)
     expect(r.delta).toBeGreaterThanOrEqual(1)
     expect(r.M2min).toBeCloseTo((1000 * (15 + 12)) / 1000, 6)   // 27 kN·m
     expect(r.Mc).toBeCloseTo(r.delta * 100, 6)
+  })
+
+  it('Pu ≥ 0.75Pc → stable=false with δ, Mc = ∞ (no silent clamp to 1.0)', () => {
+    // EI = 10 000 kN·m², kLu = 5 m → Pc = π²·10000/25 ≈ 3947.8 kN; 0.75Pc ≈ 2960.9 kN
+    const base = { M1: -80, M2: 100, k: 1, Lu: 5, h: 400, EI: 10000 }
+    const Pc = (Math.PI ** 2 * 10000) / 25
+    const unstable = momentMagnificationNonsway({ ...base, Pu: 0.80 * Pc })
+    expect(unstable.stable).toBe(false)          // Pu = 0.80Pc > 0.75Pc
+    expect(unstable.delta).toBe(Infinity)
+    expect(unstable.Mc).toBe(Infinity)
+    // just below the threshold the magnifier is finite and large, not clamped
+    const nearLimit = momentMagnificationNonsway({ ...base, Pu: 0.70 * Pc })
+    expect(nearLimit.stable).toBe(true)
+    expect(Number.isFinite(nearLimit.delta)).toBe(true)
+    expect(nearLimit.delta).toBeGreaterThan(1)
   })
 })

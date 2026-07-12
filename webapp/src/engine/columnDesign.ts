@@ -281,9 +281,12 @@ export interface SlendernessResult {
   Cm: number
   EI: number                   // kN·m²
   Pc: number                   // kN
-  delta: number
+  delta: number                // Infinity when !stable
+  /** false when Pu ≥ 0.75·Pc — the §6.6.4.5.2 magnifier is undefined (elastic
+   *  instability); the section must be enlarged, not reported unmagnified. */
+  stable: boolean
   M2min: number                // kN·m
-  Mc: number                   // kN·m
+  Mc: number                   // kN·m (Infinity when !stable)
 }
 
 export function momentMagnificationNonsway(i: SlendernessInput): SlendernessResult {
@@ -303,8 +306,12 @@ export function momentMagnificationNonsway(i: SlendernessInput): SlendernessResu
     EI = (0.4 * Ec * Ig) / (1 + (i.betaD ?? 0.6))
   }
   const Pc = (Math.PI ** 2 * EI) / Math.pow(i.k * i.Lu, 2)
-  const delta = Math.max(1, Cm / (1 - i.Pu / (0.75 * Pc)))
+  // ACI 318-14 §6.6.4.5.2: δ = Cm/(1 − Pu/0.75Pc) ≥ 1.0 is only defined for
+  // Pu < 0.75Pc. At or beyond that load the column is elastically unstable —
+  // surface stable=false (δ, Mc = ∞) instead of silently clamping δ to 1.
+  const stable = i.Pu < 0.75 * Pc
+  const delta = stable ? Math.max(1, Cm / (1 - i.Pu / (0.75 * Pc))) : Infinity
   const M2min = (i.Pu * (15 + 0.03 * i.h)) / 1000
-  const Mc = delta * Math.max(Math.abs(i.M2), M2min)
-  return { r, kLuOverR, limit: lim, slender, Cm, EI, Pc, delta, M2min, Mc }
+  const Mc = stable ? delta * Math.max(Math.abs(i.M2), M2min) : Infinity
+  return { r, kLuOverR, limit: lim, slender, Cm, EI, Pc, delta, stable, M2min, Mc }
 }

@@ -190,6 +190,32 @@ describe('frame3d — P-Δ second order (vertical cantilever, L = 4)', () => {
     expect(Math.abs(r2.d[6 + 0]) / d2).toBeCloseTo(2, 6)
   })
 
+  it('iterative P-Δ surfaces {converged, iterations, residual} on the result', () => {
+    const P = 0.25 * Pe
+    const r = solveFrame3D(colNodes, colMem, sup,
+      [...lat, { kind: 'node', node: 'top', Fy: -P, cat: 'D' }], { pDelta: true })!
+    expect(r.pDelta).toBeDefined()
+    expect(r.pDelta!.converged).toBe(true)
+    expect(r.pDelta!.singular).toBe(false)
+    expect(r.pDelta!.iterations).toBeGreaterThanOrEqual(1)
+    expect(r.pDelta!.residual).toBeLessThan(1e-5)
+    // first-order solve carries no status
+    expect(solveFrame3D(colNodes, colMem, sup, lat)!.pDelta).toBeUndefined()
+  })
+
+  it('P-Δ that runs out of iterations reports converged:false, not a silent pass', () => {
+    // At 0.9Pe the first tangent solve amplifies drift ~10× (relative increment
+    // ≈ 0.9 ≫ tol); with maxIter 1 that correction is never confirmed, so the
+    // status must say non-converged instead of silently passing.
+    const r = solveFrame3D(colNodes, colMem, sup,
+      [...lat, { kind: 'node', node: 'top', Fy: -0.9 * Pe, cat: 'D' }], { pDelta: true, maxIter: 1 })!
+    expect(r.pDelta).toBeDefined()
+    expect(r.pDelta!.converged).toBe(false)
+    expect(r.pDelta!.singular).toBe(false)
+    expect(r.pDelta!.iterations).toBe(1)
+    expect(r.pDelta!.residual).toBeGreaterThanOrEqual(1e-5)
+  })
+
   it('fixedAxial tension stiffens; amplification grows without bound toward Pcr', () => {
     const rt = solveFrame3D(colNodes, colMem, sup, lat, { pDelta: true, fixedAxial: [+0.25 * Pe] })!
     expect(Math.abs(rt.d[6 + 0])).toBeLessThan(d1)               // tension below first order

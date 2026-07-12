@@ -66,13 +66,14 @@ export default function ColumnDesign() {
     })
   }, [eccentric, slenderOn, Pu, M1, M2, kEff, Lu, h, EIin, fc, b])
 
+  const unstable = slender !== null && !slender.stable
   const MuEff = slender ? slender.Mc : Mu
   const inter = useMemo(() => {
     if (!eccentric || !(b > 0 && h > 0)) return null
     try { return interaction({ b, h, cover, barDia, tieDia, fc, fy, numBars }) } catch { return null }
   }, [eccentric, b, h, cover, barDia, tieDia, fc, fy, numBars])
   const cap = useMemo(() => {
-    if (!inter || !(Pu > 0) || !(MuEff > 0)) return null
+    if (!inter || !(Pu > 0) || !(MuEff > 0) || !Number.isFinite(MuEff)) return null
     return capacityAtEccentricity({ b, h, cover, barDia, tieDia, fc, fy, numBars }, MuEff / Pu)
   }, [inter, Pu, MuEff, b, h, cover, barDia, tieDia, fc, fy, numBars])
 
@@ -213,10 +214,13 @@ export default function ColumnDesign() {
 
           {axial && (
             <ResultCard title="Results">
-              {eccentric && slender && (
+              {eccentric && slender && (unstable ? (
+                <Row alert label="Slender column UNSTABLE" value={`Pu ≥ 0.75·Pc (${f1(0.75 * slender.Pc)} kN)`}
+                  sub="δ undefined (§406.6.4) — enlarge the section or reduce kLu" />
+              ) : (
                 <Row label="Magnified Mc" value={`${f2(slender.Mc)} kN·m`}
                   sub={`δ=${slender.delta.toFixed(3)} · ${slender.slender ? 'slender' : 'short'}`} />
-              )}
+              ))}
               {eccentric && util !== null && cap && (
                 <Row alert={util > 1} label="Utilisation" value={`${(util * 100).toFixed(0)} %`}
                   sub={`φPn=${f1(cap.phi * cap.Pn)} kN @ e=${f0((MuEff / Pu) * 1000)} mm`} />
