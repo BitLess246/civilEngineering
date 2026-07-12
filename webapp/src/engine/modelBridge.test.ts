@@ -123,6 +123,21 @@ describe('modelToFrame3D — shell elements', () => {
   })
 })
 
+describe('modelToFrame3D — member-thermal loads', () => {
+  it('converts EA·α·ΔT to kN (hand calc: 300×500 f\'c=28, α=1e-5, ΔT=20 → ≈746 kN)', () => {
+    const model = baseModel()
+    model.loads = [{ kind: 'member-thermal', member: 'm', deltaT: 20, alpha: 1e-5, cat: 'D' }]
+    const br = modelToFrame3D(model)
+    const th = br.loads.find((l) => l.kind === 'member-thermal') as Extract<typeof br.loads[number], { kind: 'member-thermal' }>
+    // E = 4700·√28 = 24 870 MPa, A = 300·500 = 150 000 mm²
+    // PT = E·A·α·ΔT = 24 870 × 150 000 × 1e-5 × 20 = 746 102 N = 746.1 kN
+    const expected = (4700 * Math.sqrt(28) * 150_000 * 1e-5 * 20) / 1000
+    expect(expected).toBeCloseTo(746.1, 1)      // hand-calc sanity anchor
+    expect(th.PT).toBeCloseTo(expected, 6)
+    expect(th.cat).toBe('D')
+  })
+})
+
 describe('connection type → member releases (force behaviour)', () => {
   it("a 'simple' end releases the bending moments My, Mz (a pin)", () => {
     const rel = effectiveReleases({ connections: { iEnd: 'simple' } })

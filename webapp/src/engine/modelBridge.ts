@@ -256,8 +256,8 @@ export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): Bridg
       if (!m) continue
       const sec = model.sections.find((s) => s.id === m.section)
       if (!sec) continue
-      const { E, A } = sectionProps(sec)   // E in kN/mm², A in mm²
-      const PT = E * A * ld.alpha * ld.deltaT   // kN
+      const { E, A } = sectionProps(sec)   // E in MPa (N/mm²), A in mm²
+      const PT = (E * A * ld.alpha * ld.deltaT) / 1000   // N → kN (frame3d expects PT in kN)
       loads.push({ kind: 'member-thermal', member: ld.member, PT, cat: ld.cat })
     }
   }
