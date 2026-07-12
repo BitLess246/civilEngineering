@@ -56,6 +56,10 @@ export interface AnalyzeOptions {
    *  0.70Ig columns/braces) on concrete members. Default off at the API level;
    *  the Model Space UI enables it by default. */
   crackedSections?: boolean
+  /** Vertical seismic component addend Ev = 0.5·Ca·I (NSCP §208.4.1): the
+   *  E-carrying combos get D → D+Ev when additive (1.2D+1.0E) and D → D−Ev on
+   *  the counteracting uplift combo (0.9D+1.0E). Omit → gross combos. */
+  Ev?: number
 }
 
 export interface BeamSectionDesign {
@@ -407,6 +411,41 @@ function defaultLateralCases(model: StructuralModel): LateralCase[] {
   return out
 }
 
+/** §208.4.1 vertical seismic component: E = ρ·Eh + Ev with Ev = 0.5·Ca·I·D for
+ *  strength design. Folded into the E-carrying combos as a dead-load factor
+ *  shift — +Ev on the additive combo (D ≥ 1.0), −Ev on the counteracting 0.9D
+ *  uplift combo — with the effective factor spelled out in the combo name. */
+export function withEv(combos: Combo[], Ev?: number): Combo[] {
+  if (!Ev) return combos
+  return combos.map((c) => {
+    const D = c.f.D ?? 0
+    if (!(c.f.E ?? 0) || D === 0) return c
+    const newD = D >= 1.0 ? D + Ev : D - Ev
+    return { name: c.name.replace(`${D}D`, `${newD.toFixed(2)}D`), f: { ...c.f, D: newD } }
+  })
+}
+
+/** Expand every NSCP combination into its directional variants (once per
+ *  lateral E/W case when the combination carries that factor). Shared by the
+ *  serial and FramePool run builders. */
+function buildComboTasks(lateral: LateralCase[], opts: AnalyzeOptions): { name: string; combo: Combo; lat: F3Load[] }[] {
+  const toF3 = (l: ModelLoad): F3Load =>
+    ({ kind: 'node', node: (l as { node: string }).node, Fx: (l as { Fx?: number }).Fx, Fy: (l as { Fy?: number }).Fy, Fz: (l as { Fz?: number }).Fz, cat: l.cat })
+  const eCases = lateral.filter((c) => c.kind === 'E')
+  const wCases = lateral.filter((c) => c.kind === 'W')
+  const tasks: { name: string; combo: Combo; lat: F3Load[] }[] = []
+  for (const combo of withEv(nscpCombos(opts.f1 ?? 1.0), opts.Ev)) {
+    const hasE = (combo.f.E ?? 0) !== 0
+    const hasW = (combo.f.W ?? 0) !== 0
+    const variants: { tag: string; lat: F3Load[] }[] =
+      hasE && eCases.length ? eCases.map((c) => ({ tag: c.name, lat: c.loads.map(toF3) }))
+        : hasW && wCases.length ? wCases.map((c) => ({ tag: c.name, lat: c.loads.map(toF3) }))
+          : [{ tag: '', lat: [] }]
+    for (const v of variants) tasks.push({ name: combo.name + (v.tag ? ` · ${v.tag}` : ''), combo, lat: v.lat })
+  }
+  return tasks
+}
+
 /** Build the load cases to envelope: every NSCP combination, expanded once per
  *  directional lateral case (E/W) when the combination carries that factor. */
 function buildRuns(model: StructuralModel, opts: AnalyzeOptions, onProgress?: ProgressFn) {
@@ -417,22 +456,8 @@ function buildRuns(model: StructuralModel, opts: AnalyzeOptions, onProgress?: Pr
   const br = modelToFrame3D(gravityModel, { useShells: false, crackedSections: opts.crackedSections })
 
   const lateral = opts.lateral?.length ? opts.lateral : defaultLateralCases(model)
-  const toF3 = (l: ModelLoad): F3Load =>
-    ({ kind: 'node', node: (l as { node: string }).node, Fx: (l as { Fx?: number }).Fx, Fy: (l as { Fy?: number }).Fy, Fz: (l as { Fz?: number }).Fz, cat: l.cat })
-  const eCases = lateral.filter((c) => c.kind === 'E')
-  const wCases = lateral.filter((c) => c.kind === 'W')
-
   // expand every combo into its directional variants up front so progress has a total
-  const tasks: { name: string; combo: Combo; lat: F3Load[] }[] = []
-  for (const combo of nscpCombos(opts.f1 ?? 1.0)) {
-    const hasE = (combo.f.E ?? 0) !== 0
-    const hasW = (combo.f.W ?? 0) !== 0
-    const variants: { tag: string; lat: F3Load[] }[] =
-      hasE && eCases.length ? eCases.map((c) => ({ tag: c.name, lat: c.loads.map(toF3) }))
-        : hasW && wCases.length ? wCases.map((c) => ({ tag: c.name, lat: c.loads.map(toF3) }))
-          : [{ tag: '', lat: [] }]
-    for (const v of variants) tasks.push({ name: combo.name + (v.tag ? ` · ${v.tag}` : ''), combo, lat: v.lat })
-  }
+  const tasks = buildComboTasks(lateral, opts)
 
   const precomp = precomputeFrame(br.nodes, br.members, br.supports)
   const runs: FrameRun[] = []
@@ -789,21 +814,7 @@ async function buildRunsParallel(
   const br = modelToFrame3D(gravityModel, { useShells: false, crackedSections: opts.crackedSections })
 
   const lateral = opts.lateral?.length ? opts.lateral : defaultLateralCases(model)
-  const toF3 = (l: ModelLoad): F3Load =>
-    ({ kind: 'node', node: (l as { node: string }).node, Fx: (l as { Fx?: number }).Fx, Fy: (l as { Fy?: number }).Fy, Fz: (l as { Fz?: number }).Fz, cat: l.cat })
-  const eCases = lateral.filter((c) => c.kind === 'E')
-  const wCases = lateral.filter((c) => c.kind === 'W')
-
-  const tasks: { name: string; combo: Combo; lat: F3Load[] }[] = []
-  for (const combo of nscpCombos(opts.f1 ?? 1.0)) {
-    const hasE = (combo.f.E ?? 0) !== 0
-    const hasW = (combo.f.W ?? 0) !== 0
-    const variants: { tag: string; lat: F3Load[] }[] =
-      hasE && eCases.length ? eCases.map((c) => ({ tag: c.name, lat: c.loads.map(toF3) }))
-        : hasW && wCases.length ? wCases.map((c) => ({ tag: c.name, lat: c.loads.map(toF3) }))
-          : [{ tag: '', lat: [] }]
-    for (const v of variants) tasks.push({ name: combo.name + (v.tag ? ` · ${v.tag}` : ''), combo, lat: v.lat })
-  }
+  const tasks = buildComboTasks(lateral, opts)
 
   const precomp = precomputeFrame(br.nodes, br.members, br.supports)
   await pool.init(serializePrecomp(precomp))

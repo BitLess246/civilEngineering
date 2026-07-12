@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel, buildGravityLoads, removeNode, enforceSectionHierarchy, refreshSelfWeight, splitSharedSections, barContinuityGroups } from './modelBuilder'
-import { designStructure, optimizeStructure, selectBarDiameters, designOK, RC_LIMITS, type LateralCase } from './pipeline'
+import { designStructure, optimizeStructure, selectBarDiameters, designOK, withEv, RC_LIMITS, type LateralCase } from './pipeline'
 import { nextHeavierW } from './aiscSections'
 import { computeSeismic } from './seismic'
+import { nscpCombos } from './beamAnalysis'
 import { validateMesh } from './meshValidation'
 import type { RectSection, ModelLoad } from './model'
 
@@ -773,5 +774,35 @@ describe('model editing helpers', () => {
     expect(out.loads.every((l) => l.kind !== 'node' || l.node !== 'n0.0.1')).toBe(true)
     // area loads on the removed slab are gone too
     expect(out.loads.filter((l) => l.kind === 'area')).toHaveLength(0)
+  })
+})
+
+describe('§208.4.1 vertical seismic component Ev in the combo factors', () => {
+  const Ev = 0.5 * 0.44 * 1.0   // Zone 4, I = 1 → 0.22
+
+  it('shifts D on the E combos only: 1.2+Ev additive, 0.9−Ev uplift', () => {
+    const combos = withEv(nscpCombos(1.0), Ev)
+    const add = combos.find((c) => (c.f.E ?? 0) !== 0 && c.f.D! > 1)!
+    const uplift = combos.find((c) => (c.f.E ?? 0) !== 0 && c.f.D! < 1)!
+    expect(add.f.D).toBeCloseTo(1.2 + Ev, 9)
+    expect(uplift.f.D).toBeCloseTo(0.9 - Ev, 9)
+    expect(add.name).toContain('1.42D')
+    expect(uplift.name).toContain('0.68D')
+    // gravity/wind combos untouched
+    for (const c of combos.filter((c) => !(c.f.E ?? 0))) {
+      const orig = nscpCombos(1.0).find((o) => o.name === c.name)!
+      expect(c.f).toEqual(orig.f)
+    }
+  })
+
+  it('identity when Ev is undefined or zero', () => {
+    expect(withEv(nscpCombos(1.0), undefined)).toEqual(nscpCombos(1.0))
+    expect(withEv(nscpCombos(1.0), 0)).toEqual(nscpCombos(1.0))
+  })
+
+  it('uplift combo net dead-load factor drops — reactions shrink under 0.9D−Ev', () => {
+    const Evd = withEv(nscpCombos(1.0), Ev)
+    const up = Evd.find((c) => (c.f.E ?? 0) !== 0 && c.f.D! < 0.9)!
+    expect(up.f.D).toBeLessThan(0.9)   // more severe for uplift/overturning checks
   })
 })

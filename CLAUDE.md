@@ -150,11 +150,12 @@ Ordered: correctness first, then code completeness, then new capability.
    beams, 0.70Ig columns, 0.25Ig walls/flat plates). The frame runs on gross
    EI → drifts and P-Δ are unconservative. Implement as per-role factors in
    `modelBridge` section props (opt-out toggle), not inside `frame3d`.
-2. **Accidental torsion, 5% eccentricity** (NSCP §208.7.2.7) — required with
-   the rigid diaphragm + RS path. Apply as ±0.05·L storey torques through the
-   diaphragm master DOF.
-3. **Orthogonal effects 100%+30%** (§208.8.1) and **vertical component
-   Ev = 0.5·Ca·I·D** in the strength combos (`loadCombinations.ts`).
+2. ~~**Accidental torsion, 5% eccentricity** (NSCP §208.7.2.7)~~ — ✔ shipped:
+   `accidentalTorsionLoads` applies ±0.05·L⊥ storey torques as mass-weighted
+   node-force couples (works with and without the diaphragm).
+3. ~~**Orthogonal effects 100%+30%** (§208.8.1) and **vertical component
+   Ev = 0.5·Ca·I·D**~~ — ✔ shipped: `buildECases` (case composition) +
+   `withEv` (E-combo D-factor shift) in `pipeline.ts`/`seismic.ts`.
 
 ## P2 — the v1.0 gate
 4. **Fill `docs/ValidationMap.md`** — every row is ⬜ while 863 tests already

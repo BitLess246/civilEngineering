@@ -15,6 +15,7 @@
 // or 0.020·hs otherwise.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, ModelLoad } from './model'
+import type { LateralCase } from './pipeline'
 import { buildSeismicMass } from './modal'
 
 export interface SeismicParams {
@@ -206,6 +207,70 @@ export function accidentalTorsionLoads(
       out.push(dir === 'x'
         ? { kind: 'node', node: n.id, Fx: dF, cat: 'E' }
         : { kind: 'node', node: n.id, Fz: dF, cat: 'E' })
+    }
+  }
+  return out
+}
+
+// ── Directional E-case builder (§208.7.2.7 + §208.8.1) ───────────────────
+
+export interface ECaseOpts {
+  /** Directions to envelope: '+X' | '-X' | '+Z' | '-Z'. */
+  dirs: string[]
+  /** §208.7.2.7 accidental torsion: split every case into ⟳/⟲ variants. */
+  torsion?: boolean
+  /** Accidental eccentricity ratio (default 0.05). */
+  ecc?: number
+  /** §208.8.1 orthogonal effects: add ±30% of the perpendicular direction to
+   *  every case (100%+30% rule — corner columns / intersecting systems). */
+  orth30?: boolean
+}
+
+const scaleNodeLoads = (loads: ModelLoad[], f: number): ModelLoad[] =>
+  loads.map((l) => l.kind === 'node'
+    ? {
+      ...l,
+      ...(l.Fx !== undefined ? { Fx: l.Fx * f } : {}),
+      ...(l.Fy !== undefined ? { Fy: l.Fy * f } : {}),
+      ...(l.Fz !== undefined ? { Fz: l.Fz * f } : {}),
+    }
+    : l)
+
+/**
+ * Expands per-axis base E-load sets (from the static §208.5 or RSA §208.6.4
+ * procedure — `baseX` carries Fx, `baseZ` carries Fz, both in the + sense)
+ * into the directional cat-E cases the design pipeline envelopes:
+ *   dirs × (orth30 ? ±0.3·perpendicular : 1) × (torsion ? ⟳/⟲ : 1).
+ * The accidental-torsion couple is built per component (100% primary and 30%
+ * perpendicular each carry their own ±5%·L⊥ torque, same eccentricity sense).
+ */
+export function buildECases(
+  model: StructuralModel, baseX: ModelLoad[], baseZ: ModelLoad[], o: ECaseOpts,
+): LateralCase[] {
+  const out: LateralCase[] = []
+  for (const d of o.dirs) {
+    const axis: 'x' | 'z' = d.includes('X') ? 'x' : 'z'
+    const sign = d.startsWith('-') ? -1 : 1
+    const prim = scaleNodeLoads(axis === 'x' ? baseX : baseZ, sign)
+    const perpAxis: 'x' | 'z' = axis === 'x' ? 'z' : 'x'
+    const perpBase = perpAxis === 'x' ? baseX : baseZ
+    const perpVariants = o.orth30
+      ? ([1, -1] as const).map((ps) => ({
+        tag: `${ps > 0 ? '+' : '−'}0.3${perpAxis.toUpperCase()}`,
+        loads: scaleNodeLoads(perpBase, 0.3 * ps),
+      }))
+      : [{ tag: '', loads: [] as ModelLoad[] }]
+    for (const pv of perpVariants) {
+      const name = `E${d}${pv.tag}`
+      const loads = [...prim, ...pv.loads]
+      if (!o.torsion) { out.push({ name, kind: 'E', loads }); continue }
+      for (const s of [1, -1] as const) {
+        const tor = [
+          ...accidentalTorsionLoads(model, prim, axis, s, o.ecc),
+          ...(pv.loads.length ? accidentalTorsionLoads(model, pv.loads, perpAxis, s, o.ecc) : []),
+        ]
+        out.push({ name: `${name}${s > 0 ? '⟳' : '⟲'}`, kind: 'E', loads: [...loads, ...tor] })
+      }
     }
   }
   return out

@@ -80,6 +80,12 @@ of the app. Everything runs **off the main thread** in a web worker
   self-equilibrating node-force couple (ΣΔF = 0, ΣΔF·d = ±0.05·L⊥·F_storey,
   mass-weighted about the storey mass centroid) — works with or without the
   rigid diaphragm; toggle in the Loading tab, on by default.
+- **Orthogonal 100%+30% + vertical Ev** (§208.8.1 / §208.4.1): `buildECases`
+  composes dirs × ±0.3·perpendicular × ⟳/⟲ torsion into the cat-E envelope
+  (up to 16 cases); `withEv` shifts the E-combo dead-load factors to
+  (1.2+0.5CaI)D and (0.9−0.5CaI)D with the effective factor in the combo name.
+  Toggles in the Loading tab: orthogonal off by default (conditional per code),
+  Ev on by default (strength design).
 - **Member force diagrams BMD/SFD** (PR #233): inline bending-moment and shear
   diagrams rendered on each member in the 3D view and Analysis tab. Uses the
   existing `xs[]`/`My[]`/`Mz[]`/`Vy[]` arrays on `F3MemberResult`.
