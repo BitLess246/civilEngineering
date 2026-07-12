@@ -804,6 +804,9 @@ export function solveWithGeometry(
 ): F3Result | null {
   const { idx, members, geoms, shellGeoms, ndof, free, freeIdx, Kff, Kff_raw, supports, diaT, diaNi } = precomp
   let pdStatus: F3PDeltaStatus | undefined
+  // Axial state of the FINAL tangent when P-Δ ran — reactions must then be
+  // (K + Kg)·d − F, or the secondary P-Δ shear/moment never reaches supports.
+  let geoAxial: ((mi: number) => number) | null = null
 
   const mloads = members.map((m, i) => computeMemberLoads(geoms[i], m, loads))
 
@@ -872,6 +875,7 @@ export function solveWithGeometry(
         const dn = luSolve(fac, Ff)
         free.forEach((dof, k) => (d[dof] = dn[k]))
       }
+      geoAxial = (mi) => fixed[mi] ?? 0
     } else if (diaT && diaNi !== undefined) {
       // Constrained solve: transform load to independent DOFs, solve, recover full d_f
       const Ff_ind = applyTtoLoad(Ff, diaT, diaNi)
@@ -897,6 +901,7 @@ export function solveWithGeometry(
           if (res < tol) break
         }
         pdStatus = { converged: !singular && res < tol, singular, iterations: iters, residual: res }
+        geoAxial = axialFromState
       }
     } else {
       const d0 = luSolve(Kff, Ff)
@@ -920,16 +925,26 @@ export function solveWithGeometry(
           if (res < tol) break
         }
         pdStatus = { converged: !singular && res < tol, singular, iterations: iters, residual: res }
+        geoAxial = axialFromState
       }
     }
   }
 
-  // Reactions: compute K·d via member contributions (avoids storing full K)
+  // Reactions: compute K·d via member contributions (avoids storing full K).
+  // When P-Δ ran, add each member's Kg(N)·d so reactions carry the secondary
+  // shear/moment: R = (K + Kg)·d − F, consistent with the tangent that solved d.
+  // Kg is self-equilibrating per member, so ΣR = ΣF is unchanged.
   const Kd = new Array(ndof).fill(0)
-  for (const g of geoms) {
+  for (let mi = 0; mi < geoms.length; mi++) {
+    const g = geoms[mi]
     const de = g.dofs.map((dof) => d[dof])
     const gde = matVec(g.kg, de)
     for (let a = 0; a < 12; a++) Kd[g.dofs[a]] += gde[a]
+    if (geoAxial) {
+      const kgg = mul(mul(transpose(g.T), kgLocal(geoAxial(mi), g.L)), g.T)
+      const gge = matVec(kgg, de)
+      for (let a = 0; a < 12; a++) Kd[g.dofs[a]] += gge[a]
+    }
   }
   for (const sg of shellGeoms) {
     const de = sg.dofs.map((dof) => d[dof])

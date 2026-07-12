@@ -203,6 +203,21 @@ describe('frame3d — P-Δ second order (vertical cantilever, L = 4)', () => {
     expect(solveFrame3D(colNodes, colMem, sup, lat)!.pDelta).toBeUndefined()
   })
 
+  it('P-Δ base reaction carries the secondary moment: M_base ≈ H·L + P·Δ', () => {
+    const P = 0.25 * Pe
+    // first-order: base moment reaction is exactly H·L, no P·Δ term
+    expect(Math.abs(lin.reactions[0].M[2])).toBeCloseTo(H * L, 6)
+    const r = solveFrame3D(colNodes, colMem, sup,
+      [...lat, { kind: 'node', node: 'top', Fy: -P, cat: 'D' }], { pDelta: true })!
+    const drift = Math.abs(r.d[6 + 0])
+    const Mbase = Math.abs(r.reactions[0].M[2])
+    // reactions now assemble (K + Kg)·d − F, so the P·Δ couple shows up
+    expect(Mbase).toBeGreaterThan(H * L * 1.05)
+    expect(Mbase / (H * L + P * drift)).toBeCloseTo(1, 2)
+    // and global vertical equilibrium is untouched (Kg self-equilibrates)
+    expect(r.reactions.reduce((s, q) => s + q.F[1], 0)).toBeCloseTo(P, 6)
+  })
+
   it('P-Δ that runs out of iterations reports converged:false, not a silent pass', () => {
     // At 0.9Pe the first tangent solve amplifies drift ~10× (relative increment
     // ≈ 0.9 ≫ tol); with maxIter 1 that correction is never confirmed, so the
