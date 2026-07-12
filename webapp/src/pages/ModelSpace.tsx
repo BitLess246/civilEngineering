@@ -22,7 +22,7 @@ import type { SolveProgress } from '../engine/progress'
 import { TABLE_204_1, TABLE_204_2, sdlItemKPa, sdlTotal, type SdlItem } from '../engine/deadLoads'
 import { TABLE_205_1, TABLE_206 } from '../engine/liveLoads'
 import type { ConcreteClass } from '../engine/quantities'
-import { computeSeismic, accidentalTorsionLoads, type SeismicResult, type DriftRow } from '../engine/seismic'
+import { computeSeismic, buildECases, type SeismicResult, type DriftRow } from '../engine/seismic'
 import { columnKFactors, type ColumnK } from '../engine/effectiveLength'
 import { freqFromDeflection, dg11Walking, DG11_OCCUPANCY } from '../engine/floorVibration'
 import { buildSeismicMass, GRAVITY } from '../engine/modal'
@@ -734,6 +734,8 @@ export default function ModelSpace() {
   const [seisXZ, setSeisXZ] = useState<{ x: SeismicResult; z: SeismicResult } | null>(null)
   const [methodB, setMethodB] = useState(b('methodB', true))          // §208.5.2.2 analytical period (needs a modal run)
   const [accTor, setAccTor] = useState(b('accTor', true))             // §208.7.2.7 accidental torsion ±5% E-case variants
+  const [orth30, setOrth30] = useState(b('orth30', false))           // §208.8.1 orthogonal 100%+30% E cases
+  const [evOn, setEvOn] = useState(b('evOn', true))                   // §208.4.1 vertical component Ev = 0.5·Ca·I·D
   const [rsaRegular, setRsaRegular] = useState(b('rsaRegular', true)) // §208.6.4.2 floors: 0.9·V_B & 0.8·V_A vs 1.0·V_B
   const [rsaGen, setRsaGen] = useState<{ x: RsaLateralResult; z: RsaLateralResult } | null>(null)   // RSA-derived E cases
   const [drift, setDrift] = useState<DriftRow[] | null>(null)
@@ -853,7 +855,7 @@ export default function ModelSpace() {
       sessionStorage.setItem(INPUTS_KEY, JSON.stringify({
         baysX, baysZ, storeyH, colB, colH, girB, girH, beaB, beaH,
         fc, fy, barDia, tieDia, cover, slabThk, gammaC, qD, qL,
-        qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs, methodB, accTor, rsaRegular,
+        qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs, methodB, accTor, orth30, evOn, rsaRegular,
         Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, tryBars,
         concreteClass, prices, planSel,
         material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu,
@@ -861,7 +863,7 @@ export default function ModelSpace() {
     } catch { /* quota — ignore */ }
   }, [baysX, baysZ, storeyH, colB, colH, girB, girH, beaB, beaH,
     fc, fy, barDia, tieDia, cover, slabThk, gammaC, qD, qL,
-    qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs, methodB, accTor, rsaRegular,
+    qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs, methodB, accTor, orth30, evOn, rsaRegular,
     Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, tryBars,
     concreteClass, prices, planSel,
     material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu])
@@ -904,7 +906,8 @@ export default function ModelSpace() {
   // Only applies when E loads are present (user clicked "Generate E cases").
   const hasELoads = model?.loads.some((l) => l.cat === 'E') ?? false
   const seismicSystem: 'gravity' | 'imf' | 'smf' = hasELoads ? (Rw >= 8 ? 'smf' : Rw >= 5 ? 'imf' : 'gravity') : 'gravity'
-  const anaOpts = { f1: fLive, pDelta, lateral, seismicSystem, crackedSections: cracked }
+  // §208.4.1 vertical seismic component folded into the E-combo D factors.
+  const anaOpts = { f1: fLive, pDelta, lateral, seismicSystem, crackedSections: cracked, Ev: evOn ? 0.5 * Ca * Ie : undefined }
 
   const analyze = () => {
     if (!model || busy || meshErrors) return   // §1 fail-fast: don't solve a singular mesh
@@ -1015,23 +1018,13 @@ export default function ModelSpace() {
   }
 
   /** Swap the model's cat-E node loads for the primary direction's case and
-   *  refresh the derived state shared by both E-generation paths. With
-   *  accidental torsion on, each directional case splits into ⟳/⟲ variants
-   *  carrying the ±0.05·L⊥ storey-torque couple (§208.7.2.7). */
+   *  refresh the derived state shared by both E-generation paths. The engine
+   *  builder expands dirs × ±0.3·perpendicular (§208.8.1) × ⟳/⟲ accidental
+   *  torsion (§208.7.2.7) per the toggles. */
   const commitECases = (rx: SeismicResult, rz: SeismicResult, baseOf: (axis: 'x' | 'z') => ModelLoad[]) => {
     if (!model) return
     setSeisXZ({ x: rx, z: rz })
-    const cases: LateralCase[] = []
-    for (const d of eDirs) {
-      const axis: 'x' | 'z' = d.includes('X') ? 'x' : 'z'
-      const c = dirCase(baseOf(axis), 'E', d)
-      if (!accTor) { cases.push(c); continue }
-      for (const s of [1, -1] as const) {
-        const tor = accidentalTorsionLoads(model, c.loads, axis, s)
-        cases.push({ name: `${c.name}${s > 0 ? '⟳' : '⟲'}`, kind: 'E', loads: [...c.loads, ...tor] })
-      }
-    }
-    setECases(cases)
+    setECases(buildECases(model, baseOf('x'), baseOf('z'), { dirs: eDirs, torsion: accTor, orth30 }))
     // commit the primary direction (untorsioned pattern) for the load-diagram
     // overlay + drift check
     const primary = dirCase(baseOf(primAxis), 'E', eDirs[0] ?? '+X')
@@ -2551,6 +2544,20 @@ export default function ModelSpace() {
                   <span>
                     Accidental torsion ±5% (§208.7.2.7) — each E case splits into ⟳/⟲ variants carrying a ±0.05·L⊥ storey torque
                     (a mass-weighted force couple about the level&apos;s mass centroid), enveloped by Design/Optimize.
+                  </span>
+                </label>
+                <label className="col-span-full flex items-start gap-2 text-xs text-slate-600">
+                  <input type="checkbox" checked={orth30} onChange={(e) => setOrth30(e.target.checked)} className="mt-0.5" />
+                  <span>
+                    Orthogonal effects 100%+30% (§208.8.1) — every E case also carries ±30% of the perpendicular direction.
+                    Required for corner columns / elements common to two intersecting lateral systems; doubles the case count.
+                  </span>
+                </label>
+                <label className="col-span-full flex items-start gap-2 text-xs text-slate-600">
+                  <input type="checkbox" checked={evOn} onChange={(e) => setEvOn(e.target.checked)} className="mt-0.5" />
+                  <span>
+                    Vertical component Ev = 0.5·Ca·I·D (§208.4.1) — E combos become {(1.2 + 0.5 * Ca * Ie).toFixed(2)}D + 1.0E + f₁L + 0.2S
+                    and {(0.9 - 0.5 * Ca * Ie).toFixed(2)}D + 1.0E (uplift).
                   </span>
                 </label>
                 <div className="col-span-full">

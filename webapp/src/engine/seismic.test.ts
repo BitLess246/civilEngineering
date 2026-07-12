@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeSeismic, storeyWeights, driftCheck, accidentalTorsionLoads } from './seismic'
+import { computeSeismic, storeyWeights, driftCheck, accidentalTorsionLoads, buildECases } from './seismic'
 import { buildSeismicMass } from './modal'
 import { generateGridModel } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
@@ -227,5 +227,60 @@ describe('drift check', () => {
       expect(row.limit).toBeCloseTo(0.025 * row.hs, 9)   // T < 0.7 s
       expect(row.ok).toBe(row.dM <= row.limit + 1e-9)
     }
+  })
+})
+
+describe('buildECases — §208.8.1 orthogonal 100%+30% composition', () => {
+  const m = makeModel()
+  const seis = computeSeismic(m, params)!
+  const baseX = seis.loads
+  const baseZ = seis.loads.map((l) => ({ kind: 'node' as const, node: (l as { node: string }).node, Fz: (l as { Fx?: number }).Fx, cat: 'E' as const }))
+  const dirs = ['+X', '-X', '+Z', '-Z']
+  const sumOf = (loads: ReturnType<typeof buildECases>[number]['loads'], k: 'Fx' | 'Fz') =>
+    loads.reduce((s, l) => s + ((l as unknown as Record<string, number | undefined>)[k] ?? 0), 0)
+  const V = baseX.reduce((s, l) => s + ((l as { Fx?: number }).Fx ?? 0), 0)   // total base shear
+
+  it('case counts: dirs × orth30 × torsion', () => {
+    expect(buildECases(m, baseX, baseZ, { dirs })).toHaveLength(4)
+    expect(buildECases(m, baseX, baseZ, { dirs, torsion: true })).toHaveLength(8)
+    expect(buildECases(m, baseX, baseZ, { dirs, orth30: true })).toHaveLength(8)
+    expect(buildECases(m, baseX, baseZ, { dirs, orth30: true, torsion: true })).toHaveLength(16)
+  })
+
+  it('100%+30%: ΣFx = ±V and ΣFz = ±0.3·V on an X-primary case', () => {
+    const cases = buildECases(m, baseX, baseZ, { dirs: ['+X'], orth30: true })
+    expect(cases.map((c) => c.name)).toEqual(['E+X+0.3Z', 'E+X−0.3Z'])
+    for (const c of cases) {
+      expect(sumOf(c.loads, 'Fx')).toBeCloseTo(V, 6)
+      expect(Math.abs(sumOf(c.loads, 'Fz'))).toBeCloseTo(0.3 * V, 6)
+    }
+    expect(sumOf(cases[0].loads, 'Fz')).toBeCloseTo(0.3 * V, 6)
+    expect(sumOf(cases[1].loads, 'Fz')).toBeCloseTo(-0.3 * V, 6)
+  })
+
+  it('−Z primary: ΣFz = −V, ΣFx = ±0.3·V', () => {
+    const cases = buildECases(m, baseX, baseZ, { dirs: ['-Z'], orth30: true })
+    for (const c of cases) {
+      expect(sumOf(c.loads, 'Fz')).toBeCloseTo(-V, 6)
+      expect(Math.abs(sumOf(c.loads, 'Fx'))).toBeCloseTo(0.3 * V, 6)
+    }
+  })
+
+  it('torsion on a combined case adds nothing to the direction sums (couples are self-equilibrating)', () => {
+    const cases = buildECases(m, baseX, baseZ, { dirs: ['+X'], orth30: true, torsion: true })
+    expect(cases).toHaveLength(4)
+    for (const c of cases) {
+      expect(sumOf(c.loads, 'Fx')).toBeCloseTo(V, 6)
+      expect(Math.abs(sumOf(c.loads, 'Fz'))).toBeCloseTo(0.3 * V, 6)
+      expect(c.name).toMatch(/E\+X[+−]0\.3Z[⟳⟲]/u)
+    }
+  })
+
+  it('plain single-direction case matches the base loads exactly', () => {
+    const [c] = buildECases(m, baseX, baseZ, { dirs: ['+X'] })
+    expect(c.name).toBe('E+X')
+    expect(c.loads).toHaveLength(baseX.length)
+    expect(sumOf(c.loads, 'Fx')).toBeCloseTo(V, 9)
+    expect(sumOf(c.loads, 'Fz')).toBe(0)
   })
 })
