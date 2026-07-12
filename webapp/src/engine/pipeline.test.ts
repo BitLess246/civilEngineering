@@ -298,6 +298,31 @@ describe('directional lateral load cases (STAAD-style envelope)', () => {
     expect(r.cases).toHaveLength(7)
     expect(r.beams.every((b) => (b.gov ?? '').length > 0)).toBe(true)
   })
+
+  it('model-derived E loads get a reversed-sign companion and a symmetric envelope (§208.5.1.1)', () => {
+    const m = makeModel()
+    m.loads = [...m.loads, ...seismicXcase(m).loads]   // +X node loads ONLY in the model
+    const r = designStructure(m, soil)!                // no opts.lateral → default path
+    // 7 combos: 2 with E → ×2 (E+/E-) = 4; 3 with W (no W loads) → 3; 2 gravity → 2 = 9
+    expect(r.cases).toHaveLength(9)
+    expect(r.cases.filter((c) => c.includes('· E+'))).toHaveLength(2)
+    expect(r.cases.filter((c) => c.includes('· E-'))).toHaveLength(2)
+    // the reversal is actually enveloped: both senses govern somewhere (windward
+    // columns are governed by E-, leeward by E+ — one direction alone can't do both)
+    expect(r.columns.some((c) => (c.gov ?? '').includes('E+'))).toBe(true)
+    expect(r.columns.some((c) => (c.gov ?? '').includes('E-'))).toBe(true)
+    // symmetric structure + ±X seismic → mirrored columns see identical extremes
+    const col = (id: string) => r.columns.find((c) => c.id === id)!
+    for (const [a, b] of [['c0.0.0', 'c1.0.0'], ['c0.1.0', 'c1.1.0']] as const) {
+      expect(col(a).Pu).toBeCloseTo(col(b).Pu, 5)
+      expect(col(a).Mu).toBeCloseTo(col(b).Mu, 5)
+      expect(col(a).util).toBeCloseTo(col(b).util, 6)
+    }
+    // footing axials envelope both sway senses too (0.9D+E uplift side included)
+    const foot = (n: string) => r.footings.find((f) => f.node === n)!
+    expect(foot('n0.0.0').Pu).toBeCloseTo(foot('n1.0.0').Pu, 5)
+    expect(foot('n0.1.0').Pu).toBeCloseTo(foot('n1.1.0').Pu, 5)
+  })
 })
 
 describe('optimizeStructure', () => {
