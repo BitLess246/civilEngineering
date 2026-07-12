@@ -11,7 +11,7 @@ import { buildDiaphragmGroups } from './diaphragm'
 import { autoRigidOffsets } from './rigidEndZones'
 import { distributePanel, type AreaLoad } from './tributary'
 import type { BeamLoad } from './beamAnalysis'
-import { shapeByName, torsionJ } from './aiscSections'
+import { shapeByName, torsionJ, type AiscShape } from './aiscSections'
 import { deriveWSection, E_STEEL } from './steelDesign'
 
 export interface BridgeResult {
@@ -62,7 +62,33 @@ function sectionProps(s: RectSection) {
     Iz: (s.b * s.h ** 3) / 12,  // gravity bending (depth h vertical)
     Iy: (s.h * s.b ** 3) / 12,
     J: rectJ(s.b, s.h),
+    // Timoshenko shear areas: rectangle κ = 5/6 in both directions
+    Asy: (5 / 6) * s.b * s.h,
+    Asz: (5 / 6) * s.b * s.h,
   }
+}
+
+/** Timoshenko shear areas for a steel shape, mm². Asy carries shear along the
+ *  section depth (pairs with strong-axis bending): the web(s) for open shapes
+ *  (d·tw — the same area AISC §G2.1 uses for Vn) and the side walls 2·h·t for
+ *  rect HSS. Asz (shear across the flanges / weak axis) takes κ = 5/6 on the
+ *  flange area. Round sections use the thin-tube κ·A ≈ 0.5·A. Unknown families
+ *  fall back to 5/6·A (rectangle-like). */
+function steelShearAreas(shape: AiscShape): { Asy: number; Asz: number } {
+  const flanges = (bf?: number, tf?: number) => (bf && tf ? (5 / 6) * 2 * bf * tf : (5 / 6) * shape.A)
+  if ((shape.family === 'W' || shape.family === 'C') && shape.d && shape.tw) {
+    return { Asy: shape.d * shape.tw, Asz: flanges(shape.bf, shape.tf) }
+  }
+  if (shape.family === 'WT' && shape.d && shape.tw) {
+    return { Asy: shape.d * shape.tw, Asz: shape.bf && shape.tf ? (5 / 6) * shape.bf * shape.tf : (5 / 6) * shape.A }
+  }
+  if (shape.family === 'HSS' && shape.b && shape.h && shape.t) {
+    return { Asy: 2 * shape.h * shape.t, Asz: 2 * shape.b * shape.t }
+  }
+  if ((shape.family === 'HSS' || shape.family === 'PIPE') && shape.D) {
+    return { Asy: 0.5 * shape.A, Asz: 0.5 * shape.A }   // thin round tube κ·A ≈ 0.5·A
+  }
+  return { Asy: (5 / 6) * shape.A, Asz: (5 / 6) * shape.A }
 }
 
 /** Steel member stiffness from its AISC shape (E = 200 GPa, G = E/2.6, ν = 0.3).
@@ -71,7 +97,12 @@ function sectionProps(s: RectSection) {
 function steelSectionProps(s: RectSection) {
   const E = E_STEEL, G = E / 2.6
   const shape = s.shape ? shapeByName(s.shape) : undefined
-  if (!shape) return { E, G, A: s.b * s.h, Iz: (s.b * s.h ** 3) / 12, Iy: (s.h * s.b ** 3) / 12, J: rectJ(s.b, s.h) }
+  if (!shape) {
+    return {
+      E, G, A: s.b * s.h, Iz: (s.b * s.h ** 3) / 12, Iy: (s.h * s.b ** 3) / 12, J: rectJ(s.b, s.h),
+      Asy: (5 / 6) * s.b * s.h, Asz: (5 / 6) * s.b * s.h,
+    }
+  }
   let Iz: number, Iy: number, J: number
   if (shape.family === 'W' || shape.family === 'WT') {
     const d = deriveWSection(shape)
@@ -84,7 +115,7 @@ function steelSectionProps(s: RectSection) {
     Iy = shape.A * shape.ry ** 2
     J = torsionJ(shape) ?? Iz + Iy
   }
-  return { E, G, A: shape.A, Iz, Iy, J }
+  return { E, G, A: shape.A, Iz, Iy, J, ...steelShearAreas(shape) }
 }
 
 /**
@@ -194,6 +225,11 @@ export interface BridgeOpts {
    *  Off by default at the API level so closed-form benchmarks stay anchored
    *  to gross-section theory; the Model Space UI enables it by default. */
   crackedSections?: boolean
+  /** Thread Timoshenko shear areas (Asy/Asz) into the frame elements so deep
+   *  girders and squat columns carry shear flexibility Φ = 12EI/(G·As·L²).
+   *  Off by default at the API level so closed-form Euler benchmarks stay
+   *  anchored; the Model Space UI enables it by default. */
+  shearDeformation?: boolean
 }
 
 export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): BridgeResult {
@@ -217,8 +253,10 @@ export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): Bridg
     const props = secById.get(m.section) ?? fallback
     const ck = opts?.crackedSections && model.sections.find((s) => s.id === m.section)?.material !== 'steel'
       ? CRACKED_I[m.role] : 1
+    const { Asy, Asz, ...stiff } = props
     return {
-      id: m.id, i: m.i, j: m.j, ...props, Iz: props.Iz * ck, Iy: props.Iy * ck,
+      id: m.id, i: m.i, j: m.j, ...stiff, Iz: props.Iz * ck, Iy: props.Iy * ck,
+      ...(opts?.shearDeformation ? { Asy, Asz } : {}),
       ...releaseFlags(effectiveReleases(m)),
       ...(offI ? { offI } : {}),
       ...(offJ ? { offJ } : {}),

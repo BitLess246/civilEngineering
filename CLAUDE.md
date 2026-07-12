@@ -164,8 +164,10 @@ Ordered: correctness first, then code completeness, then new capability.
    Fix stale checkboxes in `docs/Roadmap.md` (rock anchors are shipped).
 
 ## P3 — analysis completeness
-5. **Timoshenko shear deformation** in frame elements (deep girders, squat
-   columns read too stiff; shells already handle it).
+5. ~~**Timoshenko shear deformation** in frame elements~~ — ✔ shipped:
+   Φ-modified `kLocal` + per-family shear areas in the bridge (opt-in
+   `shearDeformation`, UI default on). FEMs stay Euler; modal/pushover/
+   buckling still run the Euler element (follow-up if needed).
 6. **Direct-integration time-history** on the full MDOF system with Rayleigh
    damping (currently modal superposition only) — prerequisite for nonlinear TH.
 7. Tension-only / compression-only members (braces, uplift springs);

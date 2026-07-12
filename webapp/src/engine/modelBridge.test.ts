@@ -283,3 +283,37 @@ describe('bridge → solver unit contract (absolute closed forms)', () => {
     expect(spring.F[1]).toBeGreaterThan(0)                  // pushes back up
   })
 })
+
+describe('modelToFrame3D — Timoshenko shear areas (opt-in)', () => {
+  it('off by default: members carry no Asy/Asz (Euler benchmarks anchored)', () => {
+    const m = modelToFrame3D(baseModel()).members.find((x) => x.id === 'm')!
+    expect(m.Asy).toBeUndefined()
+    expect(m.Asz).toBeUndefined()
+  })
+
+  it('concrete rectangle: Asy = Asz = 5/6·b·h', () => {
+    const m = modelToFrame3D(baseModel(), { shearDeformation: true }).members.find((x) => x.id === 'm')!
+    expect(m.Asy).toBeCloseTo((5 / 6) * 300 * 500, 6)
+    expect(m.Asz).toBeCloseTo((5 / 6) * 300 * 500, 6)
+  })
+
+  it('steel W-shape: Asy = d·tw (AISC §G2.1 web), Asz = 5/6·2·bf·tf (flanges)', () => {
+    const model = baseModel()
+    model.sections = [{ ...section, material: 'steel' as const, shape: 'W150x13' }]
+    const m = modelToFrame3D(model, { shearDeformation: true }).members.find((x) => x.id === 'm')!
+    // W150x13: d = 150, tw = 5.0, bf = 100, tf = 7.1 (mm)
+    expect(m.Asy).toBeCloseTo(150 * 5.0, 6)
+    expect(m.Asz).toBeCloseTo((5 / 6) * 2 * 100 * 7.1, 6)
+  })
+
+  it('shear-deformable solve is softer than Euler and keeps ΣR = ΣP', () => {
+    const model = baseModel()
+    model.loads = [{ kind: 'node', node: 'b', Fy: -20, cat: 'D' }]
+    const euler = modelToFrame3D(model)
+    const timo = modelToFrame3D(model, { shearDeformation: true })
+    const rE = solveFrame3D(euler.nodes, euler.members, euler.supports, euler.loads)!
+    const rT = solveFrame3D(timo.nodes, timo.members, timo.supports, timo.loads)!
+    expect(Math.abs(rT.d[6 + 1])).toBeGreaterThan(Math.abs(rE.d[6 + 1]))
+    expect(rT.reactions.reduce((t, q) => t + q.F[1], 0)).toBeCloseTo(20, 6)
+  })
+})

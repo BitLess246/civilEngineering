@@ -60,6 +60,9 @@ export interface AnalyzeOptions {
    *  E-carrying combos get D → D+Ev when additive (1.2D+1.0E) and D → D−Ev on
    *  the counteracting uplift combo (0.9D+1.0E). Omit → gross combos. */
   Ev?: number
+  /** Timoshenko shear deformation: bridge shear areas into the frame elements
+   *  (Φ = 12EI/(G·As·L²)). Default off at the API level; UI enables it. */
+  shearDeformation?: boolean
 }
 
 export interface BeamSectionDesign {
@@ -453,7 +456,7 @@ function buildRuns(model: StructuralModel, opts: AnalyzeOptions, onProgress?: Pr
   // slab tributary line loads and member self-weight; lateral cases are pure
   // node loads applied on top per direction.
   const gravityModel = { ...model, loads: model.loads.filter((l) => l.cat !== 'E' && l.cat !== 'W') }
-  const br = modelToFrame3D(gravityModel, { useShells: false, crackedSections: opts.crackedSections })
+  const br = modelToFrame3D(gravityModel, { useShells: false, crackedSections: opts.crackedSections, shearDeformation: opts.shearDeformation })
 
   const lateral = opts.lateral?.length ? opts.lateral : defaultLateralCases(model)
   // expand every combo into its directional variants up front so progress has a total
@@ -811,7 +814,7 @@ async function buildRunsParallel(
   model: StructuralModel, opts: AnalyzeOptions, pool: FramePool, onProgress?: ProgressFn,
 ): Promise<{ br: BridgeResult; runs: FrameRun[] }> {
   const gravityModel = { ...model, loads: model.loads.filter((l) => l.cat !== 'E' && l.cat !== 'W') }
-  const br = modelToFrame3D(gravityModel, { useShells: false, crackedSections: opts.crackedSections })
+  const br = modelToFrame3D(gravityModel, { useShells: false, crackedSections: opts.crackedSections, shearDeformation: opts.shearDeformation })
 
   const lateral = opts.lateral?.length ? opts.lateral : defaultLateralCases(model)
   const tasks = buildComboTasks(lateral, opts)

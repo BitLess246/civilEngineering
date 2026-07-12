@@ -609,3 +609,62 @@ describe('frame3d — local-axis rotation (ETABS local axis 2 angle)', () => {
     expect(beam0.rot).toBeUndefined()   // 0 → omitted
   })
 })
+
+describe('frame3d — Timoshenko shear deformation (Φ = 12EI/(G·As·L²))', () => {
+  const L = 3
+  const Asy = (5 / 6) * A, Asz = (5 / 6) * A
+  const GAsy = (G * Asy) / 1000, GAsz = (G * Asz) / 1000   // kN
+  const secT = { ...sec, Asy, Asz }
+  const cantT = (loads: F3Load[], over: Partial<F3Member> = {}) => solveFrame3D(
+    [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: L, y: 0, z: 0 }] as F3Node[],
+    [{ id: 'm', i: 'a', j: 'b', ...secT, ...over } as F3Member],
+    [{ node: 'a', fixity: 'fixed' }] as F3Support[],
+    loads)!
+
+  it('tip load (−Y): δ = PL³/3EIz + PL/GAsy — the 2-node element is nodally exact', () => {
+    const P = 20
+    const r = cantT([{ kind: 'node', node: 'b', Fy: -P, cat: 'D' }])
+    expect(r.d[6 + 1]).toBeCloseTo(-(P * L ** 3 / (3 * EIz) + P * L / GAsy), 9)
+    // statics are Φ-independent: base moment and reaction unchanged
+    expect(Math.abs(r.members[0].Mz[0])).toBeCloseTo(P * L, 3)
+    expect(r.reactions[0].F[1]).toBeCloseTo(P, 6)
+  })
+
+  it('second plane (−Z): δ = PL³/3EIy + PL/GAsz', () => {
+    const P = 15
+    const r = cantT([{ kind: 'node', node: 'b', Fz: -P, cat: 'D' }])
+    expect(r.d[6 + 2]).toBeCloseTo(-(P * L ** 3 / (3 * EIy) + P * L / GAsz), 9)
+  })
+
+  it('shear share is significant for a squat member and vanishes for a slender one', () => {
+    const P = 20
+    const euler = (P * L ** 3) / (3 * EIz)
+    const r = cantT([{ kind: 'node', node: 'b', Fy: -P, cat: 'D' }])
+    expect(Math.abs(r.d[6 + 1])).toBeGreaterThan(euler * 1.005)   // 300×500 over 3 m: Φ ≈ 2–3%
+    // As → ∞ recovers Euler–Bernoulli exactly
+    const stiff = cantT([{ kind: 'node', node: 'b', Fy: -P, cat: 'D' }], { Asy: 1e15, Asz: 1e15 })
+    expect(stiff.d[6 + 1]).toBeCloseTo(-euler, 9)
+  })
+
+  it('omitted shear areas keep the classic Euler element (regression anchor)', () => {
+    const P = 20
+    const r = cantT([{ kind: 'node', node: 'b', Fy: -P, cat: 'D' }], { Asy: undefined, Asz: undefined })
+    expect(r.d[6 + 1]).toBeCloseTo(-(P * L ** 3) / (3 * EIz), 9)
+  })
+
+  it('fixed-fixed centre load across two elements: δ = PL³/192EI + PL/4GAs', () => {
+    const P = 40
+    const r = solveFrame3D(
+      [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'c', x: L / 2, y: 0, z: 0 }, { id: 'b', x: L, y: 0, z: 0 }] as F3Node[],
+      [
+        { id: 'm1', i: 'a', j: 'c', ...secT } as F3Member,
+        { id: 'm2', i: 'c', j: 'b', ...secT } as F3Member,
+      ],
+      [{ node: 'a', fixity: 'fixed' }, { node: 'b', fixity: 'fixed' }] as F3Support[],
+      [{ kind: 'node', node: 'c', Fy: -P, cat: 'D' }])!
+    expect(r.d[6 + 1]).toBeCloseTo(-(P * L ** 3 / (192 * EIz) + P * L / (4 * GAsy)), 9)
+    // equilibrium: ΣRy = P, symmetric halves
+    expect(r.reactions.reduce((t, q) => t + q.F[1], 0)).toBeCloseTo(P, 6)
+    expect(r.reactions[0].F[1]).toBeCloseTo(P / 2, 6)
+  })
+})
