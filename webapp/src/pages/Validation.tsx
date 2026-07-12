@@ -16,7 +16,7 @@ function Row({ c }: { c: ValidationCase }) {
     <tr className="border-t border-slate-100 align-top">
       <td className="py-2 pr-3">
         <p className="font-medium text-slate-800">{c.title}</p>
-        <p className="text-[11px] text-slate-400">{c.reference}</p>
+        <p className="text-[11px] text-slate-500">{c.reference}</p>
       </td>
       <td className="py-2 pr-3 font-mono text-[11px] text-slate-600">{c.formula}</td>
       <td className="py-2 pr-3 text-right font-mono">{fmt(c.manual)}</td>
@@ -41,7 +41,7 @@ export default function Validation() {
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Reference</p>
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Reference</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Validation</h1>
       <p className="mt-2 max-w-3xl text-sm text-slate-600">
         Each calculation engine is checked against an independent closed-form hand calculation from a
@@ -62,7 +62,7 @@ export default function Validation() {
             </span>
           ))}
         </div>
-        <p className="mt-2 text-[11px] text-slate-400">
+        <p className="mt-2 text-[11px] text-slate-500">
           A benchmark passes when the engine result is within tolerance of the hand calculation
           (typically &lt; 0.01 %). Counts are evaluated live from the same engines the design pages use.
         </p>
@@ -77,7 +77,7 @@ export default function Validation() {
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <table className="w-full border-collapse text-xs">
                 <thead>
-                  <tr className="text-left uppercase tracking-wide text-slate-400">
+                  <tr className="text-left uppercase tracking-wide text-slate-500">
                     <th className="py-1 pr-3 font-semibold">Benchmark</th>
                     <th className="py-1 pr-3 font-semibold">Formula</th>
                     <th className="py-1 pr-3 text-right font-semibold">Manual</th>
@@ -94,7 +94,7 @@ export default function Validation() {
         )
       })}
 
-      <p className="mt-8 text-[11px] text-slate-400">
+      <p className="mt-8 text-[11px] text-slate-500">
         Codes: NSCP 2015 · ACI 318-14 · AISC 360. See the{' '}
         <Link to="/docs" className="text-[#0056b3] underline">documentation</Link> for the full toolkit guide.
       </p>

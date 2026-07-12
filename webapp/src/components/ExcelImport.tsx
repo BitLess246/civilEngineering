@@ -72,7 +72,7 @@ export function ExcelImport({ onResult }: { onResult: (r: BatchResult | null) =>
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
               <h3 className="text-base font-bold text-[#0056b3]">Excel upload format</h3>
               <button type="button" onClick={() => setShowHelp(false)} aria-label="Close"
-                className="text-2xl leading-none text-slate-400 hover:text-slate-700">×</button>
+                className="text-2xl leading-none text-slate-500 hover:text-slate-700">×</button>
             </div>
             <div className="px-5 py-4 text-sm text-slate-600">
               <p>

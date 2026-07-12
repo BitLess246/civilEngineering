@@ -61,7 +61,7 @@ export function TrussEditor({ model, onChange, onReset }: {
           <h4 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Nodes (m)</h4>
           <div className="max-h-48 overflow-y-auto pr-1">
             <table className="w-full text-xs">
-              <thead><tr className="text-left text-slate-400"><th className="pr-2">id</th><th className="pr-2">x</th><th className="pr-2">y</th><th /></tr></thead>
+              <thead><tr className="text-left text-slate-500"><th className="pr-2">id</th><th className="pr-2">x</th><th className="pr-2">y</th><th /></tr></thead>
               <tbody>
                 {model.nodes.map((n, i) => (
                   <tr key={n.id}>
@@ -82,7 +82,7 @@ export function TrussEditor({ model, onChange, onReset }: {
           <h4 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Members</h4>
           <div className="max-h-48 overflow-y-auto pr-1">
             <table className="w-full text-xs">
-              <thead><tr className="text-left text-slate-400"><th className="pr-2">id</th><th className="pr-2">i</th><th className="pr-2">j</th><th className="pr-2">kind</th><th /></tr></thead>
+              <thead><tr className="text-left text-slate-500"><th className="pr-2">id</th><th className="pr-2">i</th><th className="pr-2">j</th><th className="pr-2">kind</th><th /></tr></thead>
               <tbody>
                 {model.members.map((m, i) => (
                   <tr key={m.id}>
@@ -107,7 +107,7 @@ export function TrussEditor({ model, onChange, onReset }: {
         <div>
           <h4 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Supports</h4>
           <table className="w-full text-xs">
-            <thead><tr className="text-left text-slate-400"><th className="pr-2">node</th><th className="pr-2">ux</th><th className="pr-2">uy</th><th /></tr></thead>
+            <thead><tr className="text-left text-slate-500"><th className="pr-2">node</th><th className="pr-2">ux</th><th className="pr-2">uy</th><th /></tr></thead>
             <tbody>
               {model.supports.map((s, i) => (
                 <tr key={i}>
@@ -126,7 +126,7 @@ export function TrussEditor({ model, onChange, onReset }: {
         <div>
           <h4 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-500">Loaded joints</h4>
           <table className="w-full text-xs">
-            <thead><tr className="text-left text-slate-400"><th className="pr-2">node</th><th /></tr></thead>
+            <thead><tr className="text-left text-slate-500"><th className="pr-2">node</th><th /></tr></thead>
             <tbody>
               {model.loads.map((l, i) => (
                 <tr key={i}>
@@ -137,7 +137,7 @@ export function TrussEditor({ model, onChange, onReset }: {
             </tbody>
           </table>
           <button type="button" className={addBtn} onClick={addLoad}>+ loaded joint</button>
-          <p className="mt-1 text-[10px] text-slate-400">Magnitudes come from the Dead / Live joint-load fields above.</p>
+          <p className="mt-1 text-[10px] text-slate-500">Magnitudes come from the Dead / Live joint-load fields above.</p>
         </div>
       </div>
       <p className="mt-2 text-[11px] text-slate-500">

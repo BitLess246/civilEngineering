@@ -48,7 +48,7 @@ export default function Micropile() {
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Geotechnical</p>
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Micropile — axial capacity</h1>
       <p className="mt-2 text-sm text-slate-600">
         FHWA-NHI-05-039 allowable-stress check: structural capacity of the bar/casing/grout vs the
@@ -98,7 +98,7 @@ export default function Micropile() {
         <Out label={`Governing allowable (${r.governs})`} value={`${f0(r.allowable)} kN`} />
         <Out label="FS (allowable / demand)" value={f2(r.fs)} ok={r.ok} />
         <Out label="Bond length for FS = 2" value={`${f2(r.bondLengthReq)} m`} ok={bondLength >= r.bondLengthReq} />
-        <p className="mt-2 text-[10px] text-slate-400">
+        <p className="mt-2 text-[10px] text-slate-500">
           Structural: 0.40·f′c·Agrout + 0.47·Fy·As (compression), 0.55·Fy·As (tension). Bond:
           π·Dbond·Lbond·αbond / FS. Verify buckling in very soft soils and group/settlement effects separately.
         </p>

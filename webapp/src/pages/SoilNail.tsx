@@ -45,7 +45,7 @@ export default function SoilNail() {
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Geotechnical</p>
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Soil-nail wall — per-nail check</h1>
       <p className="mt-2 text-sm text-slate-600">
         Preliminary FHWA GEC-7 checks for a single nail: tributary active demand vs bar-tensile and
@@ -82,7 +82,7 @@ export default function SoilNail() {
         <Out label="Pullout Qult = π·DDH·Le·qu" value={`${f2(r.Qult)} kN`} />
         <Out label="FS pullout (Qult / Tmax ≥ 2.0)" value={f2(r.fsPullout)} ok={r.pulloutOK} />
         <Out label="Bond length for FS = 2.0" value={`${f2(r.bondLengthReq)} m`} ok={bondLength >= r.bondLengthReq} />
-        <p className="mt-2 text-[10px] text-slate-400">
+        <p className="mt-2 text-[10px] text-slate-500">
           FHWA GEC-7. Tmax is the tributary active load on one nail at depth z. Allowable bar load Tn/1.8,
           allowable pullout Qult/2.0. Provide Le ≥ the required bond length beyond the slip surface.
           This is a preliminary component check — verify global stability separately.

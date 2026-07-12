@@ -165,7 +165,7 @@ export default function ColumnDesign() {
             {system === 'smf' && (
               <>
                 <Num label="Max lateral bar spacing hx" unit="mm" value={hx} onChange={setHx} />
-                <p className="col-span-full text-[10px] text-slate-400">
+                <p className="col-span-full text-[10px] text-slate-500">
                   hx = centre-to-centre of outermost laterally restrained bars (≤ 350 mm).
                   Set 0 to use the column least dimension as the default.
                 </p>
@@ -179,7 +179,7 @@ export default function ColumnDesign() {
             {loadInput === 'individual' ? <>
               <Num label={<>Dead <KTex tex="D" /></>} unit="kN" value={dead} onChange={setDead} />
               <Num label={<>Live <KTex tex="L" /></>} unit="kN" value={live} onChange={setLive} />
-              <p className="col-span-full text-xs text-slate-400">Pu = max(1.4D, 1.2D+1.6L) = {f0(Pu)} kN</p>
+              <p className="col-span-full text-xs text-slate-500">Pu = max(1.4D, 1.2D+1.6L) = {f0(Pu)} kN</p>
             </> : (
               <Num label={<KTex tex="P_u" />} unit="kN" value={PuDirect} onChange={setPuDirect} />
             )}
@@ -196,7 +196,7 @@ export default function ColumnDesign() {
                 <Num label={<KTex tex="M_1" />} unit="kN·m" value={M1} onChange={setM1} />
                 <Num label={<KTex tex="M_2" />} unit="kN·m" value={M2} onChange={setM2} />
                 <Num label="EI (0 = 0.4EcIg/1.6)" unit="kN·m²" value={EIin} onChange={setEIin} />
-                <p className="col-span-full text-xs text-slate-400">
+                <p className="col-span-full text-xs text-slate-500">
                   Sheet convention: M1/M2 negative for single curvature.
                 </p>
               </>}

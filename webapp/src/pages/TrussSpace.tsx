@@ -208,10 +208,10 @@ export default function TrussSpace() {
                   {f1(Math.abs(selForce.N))} kN {selForce.N >= 0 ? 'tension' : 'compression'}
                 </span>
                 {selDes && <span className="text-slate-500">util {(selDes.util * 100).toFixed(0)}%</span>}
-                <button type="button" onClick={() => setSelected(null)} className="ml-0.5 text-slate-400 hover:text-red-500">✕</button>
+                <button type="button" onClick={() => setSelected(null)} className="ml-0.5 text-slate-500 hover:text-red-500">✕</button>
               </div>
             )}
-            <div className="no-print pointer-events-none absolute bottom-2 left-3 text-[10px] text-slate-400">
+            <div className="no-print pointer-events-none absolute bottom-2 left-3 text-[10px] text-slate-500">
               drag to orbit · scroll to zoom · hold <b>Shift</b> (or right-drag) to pan · <span className="text-blue-700">tension</span> / <span className="text-red-600">compression</span>
             </div>
           </div>
@@ -242,7 +242,7 @@ export default function TrussSpace() {
               <input type="checkbox" checked={includeSW} onChange={(e) => setIncludeSW(e.target.checked)} />
               <span>Add member self-weight (from the section) to Dead</span>
             </label>
-            <p className="col-span-full text-[11px] text-slate-400">
+            <p className="col-span-full text-[11px] text-slate-500">
               Members are enveloped over <b>1.4D</b> and <b>1.2D + 1.6L</b>; each is designed for its governing combination.
             </p>
           </Card>
@@ -334,7 +334,7 @@ export default function TrussSpace() {
                   return (
                     <tr key={f.id} onClick={() => setSelected(f.id)}
                       className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${bad ? 'bg-red-50 text-red-700' : ''} ${selected === f.id ? 'bg-amber-50' : ''}`}>
-                      <td className="py-1 pr-2 font-medium">{f.id} <span className="text-slate-400">({f.i}–{f.j})</span></td>
+                      <td className="py-1 pr-2 font-medium">{f.id} <span className="text-slate-500">({f.i}–{f.j})</span></td>
                       <td className="py-1 pr-2">{f.kind}</td>
                       <td className="py-1 pr-2 text-right">{f2(f.L)}</td>
                       <td className="py-1 pr-2 text-right">{f1(Math.abs(f.N))}</td>
@@ -348,7 +348,7 @@ export default function TrussSpace() {
                 })}
               </tbody>
             </table>
-            <p className="mt-1 text-[11px] text-slate-400">
+            <p className="mt-1 text-[11px] text-slate-500">
               Pin-jointed planar truss (axial only). Tension yielding φPn = 0.9·Fy·Ag; compression flexural buckling per AISC §E3
               (Fcr from KL/r, φ = 0.90). KL/r &gt; 200 flagged (⚠). Reactions: pin at the left support, roller at the right.
             </p>
@@ -495,7 +495,7 @@ export default function TrussSpace() {
                     </tr>
                   </tbody>
                 </table>
-                <p className="mt-1 text-[11px] text-slate-400">
+                <p className="mt-1 text-[11px] text-slate-500">
                   Section steel weight = A × L × 7850 kg/m³ per member.
                   Gusset / connection plate allowance added as a fraction of the section steel.
                   Prices in Philippine Peso (₱); edit to match current market rates.

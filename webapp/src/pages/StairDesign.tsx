@@ -43,7 +43,7 @@ export default function StairDesign() {
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Structural</p>
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Structural</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">RC stair flight — waist slab</h1>
       <p className="mt-2 text-sm text-slate-600">
         One-way waist-slab stair to NSCP 2015 / ACI 318-14. Self-weight of the inclined waist plus
@@ -89,7 +89,7 @@ export default function StairDesign() {
         <Out label="Main bars" value={`⌀${barDia} @ ${f0(r.mainSpacing)} mm`} />
         <Out label="Distribution steel" value={`${f0(r.AsDist)} mm²/m — ⌀10 @ ${f0(r.distSpacing)} mm`} />
         <Out label="Min. waist (ℓ/20…ℓ/28)" value={`${f0(r.tMin)} mm`} ok={r.tMinOK} />
-        <p className="mt-2 text-[10px] text-slate-400">
+        <p className="mt-2 text-[10px] text-slate-500">
           Mu = wu·ℓ²/k (k = 8/9/11 by support). Distribution steel 0.0018·b·t (§424.4.3.2); spacing capped
           at min(3t, 450). Verify the landing and support detailing separately.
         </p>

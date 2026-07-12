@@ -40,7 +40,7 @@ export default function LoadCombinations() {
           <Num label="Lr — Roof live"      value={d.Lr} onChange={set('Lr')} />
           <Num label="W — Wind"            value={d.W}  onChange={set('W')} />
           <Num label="E — Earthquake"      value={d.E}  onChange={set('E')} />
-          <p className="mt-2 text-xs text-slate-400">
+          <p className="mt-2 text-xs text-slate-500">
             Any consistent unit (kN, kN/m, kPa, …). W and E enter as positive magnitudes;
             the ±W/±E sign is handled by each combination.
           </p>
@@ -51,7 +51,7 @@ export default function LoadCombinations() {
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5">
               <span className="text-sm font-semibold text-slate-700">Factored Load Combinations</span>
-              <span className="ml-3 text-xs text-slate-400">NSCP 2015 §203.3</span>
+              <span className="ml-3 text-xs text-slate-500">NSCP 2015 §203.3</span>
             </div>
             <table className="w-full text-sm">
               <thead>
@@ -72,7 +72,7 @@ export default function LoadCombinations() {
                     : ''
                   return (
                     <tr key={c.id} className={`border-b border-slate-50 ${highlight}`}>
-                      <td className="px-3 py-2 font-mono text-slate-400">{c.id}</td>
+                      <td className="px-3 py-2 font-mono text-slate-500">{c.id}</td>
                       <td className="px-3 py-2 text-slate-700">{c.label}</td>
                       <td className="px-3 py-2 text-right font-semibold tabular-nums">
                         {f2(c.value)}
@@ -92,12 +92,12 @@ export default function LoadCombinations() {
               <div>
                 <span className="text-slate-500">Max (governing):</span>
                 <span className="ml-1.5 font-bold text-green-700">{f2(r.maxCombo.value)}</span>
-                <span className="ml-1 text-slate-400 text-xs">combo {r.maxCombo.id}</span>
+                <span className="ml-1 text-slate-500 text-xs">combo {r.maxCombo.id}</span>
               </div>
               <div>
                 <span className="text-slate-500">Min:</span>
                 <span className="ml-1.5 font-bold text-slate-700">{f2(r.minCombo.value)}</span>
-                <span className="ml-1 text-slate-400 text-xs">combo {r.minCombo.id}</span>
+                <span className="ml-1 text-slate-500 text-xs">combo {r.minCombo.id}</span>
               </div>
             </div>
           </div>

@@ -41,7 +41,7 @@ export default function WaterTank() {
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Structural</p>
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Structural</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Circular RC water tank — wall</h1>
       <p className="mt-2 text-sm text-slate-600">
         Permissible-stress (working-stress) wall design for a circular liquid-retaining tank, following the
@@ -75,7 +75,7 @@ export default function WaterTank() {
         <Out label="Vertical steel As" value={`${f0(r.vertAs)} mm²/m — ⌀${barDia} @ ${f0(r.vertSpacing)} mm`} />
         <Out label={`Concrete tension fct (≤ ${f2(sigmaCt)})`} value={`${f2(r.fct)} MPa`} ok={r.thicknessOK} />
         <Out label="Freeboard ≥ 300 mm" value={`${f2(freeboard)} m`} ok={r.freeboardOK} />
-        <p className="mt-2 text-[10px] text-slate-400">
+        <p className="mt-2 text-[10px] text-slate-500">
           Provide ring steel on both faces near the base where hoop tension peaks; reduce up the wall as
           T = γw·z·D/2 falls. σst ≈ 115–150 MPa controls crack width (IS 3370 / ACI 350). Base slab, roof,
           and the wall-base joint (fixed vs hinged) are designed separately.

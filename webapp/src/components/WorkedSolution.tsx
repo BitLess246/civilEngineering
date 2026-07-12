@@ -12,7 +12,7 @@ export function WorkedSolution({ steps, title = 'Solution — step by step' }: {
       <button type="button" onClick={() => setOpen((o) => !o)}
         className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left">
         <h2 className="text-[1.02rem] font-bold text-[#0056b3]">{title}</h2>
-        <span className="no-print text-sm text-slate-400">{open ? 'Hide ▲' : 'Show ▼'}</span>
+        <span className="no-print text-sm text-slate-500">{open ? 'Hide ▲' : 'Show ▼'}</span>
       </button>
 
       {open && (
@@ -20,7 +20,7 @@ export function WorkedSolution({ steps, title = 'Solution — step by step' }: {
           {steps.map((s, i) => (
             <li key={i} className="print-avoid-break">
               <h3 className="mb-1.5 text-sm font-semibold text-slate-800">
-                <span className="text-slate-400">{i + 1}.</span> {s.title}
+                <span className="text-slate-500">{i + 1}.</span> {s.title}
               </h3>
               <div className="space-y-1.5 pl-4">
                 {s.lines.map((ln, j) => (

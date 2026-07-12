@@ -43,7 +43,7 @@ export default function ShotcreteFacing() {
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Geotechnical</p>
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Soil-nail shotcrete facing</h1>
       <p className="mt-2 text-sm text-slate-600">
         FHWA GEC-7 facing check. The thin shotcrete panel spans <b>between</b> the nail heads, so earth
@@ -79,7 +79,7 @@ export default function ShotcreteFacing() {
         <Out label="Punching R_FP" value={`${f0(r.Rfp)} kN`} />
         <Out label={`Governing facing strength (${r.governs})`} value={`${f0(r.strength)} kN`} ok={r.ok} />
         <Out label="FS (strength / nail-head force)" value={f2(r.fs)} ok={r.ok} />
-        <p className="mt-2 text-[10px] text-slate-400">
+        <p className="mt-2 text-[10px] text-slate-500">
           R_FF = C_F·(m_neg + m_pos)·8·S_perp/S_span (fixed-strip mechanism). R_FP = φ·0.33·√f′c·bo·d
           around the bearing plate. C_F ≈ 2.0 thin → 1.0 thick facing (FHWA GEC-7 Table). Headed-stud
           tension (permanent facing) and temporary-vs-final facing stages are checked separately.

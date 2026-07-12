@@ -58,12 +58,12 @@ export default function App() {
         <Route path="/frame" element={<FrameAnalysis />} />
         <Route path="/load-path" element={<LoadPath />} />
         <Route path="/model" element={
-          <Suspense fallback={<p className="p-8 text-center text-sm text-slate-400">Loading 3D model space…</p>}>
+          <Suspense fallback={<p className="p-8 text-center text-sm text-slate-500">Loading 3D model space…</p>}>
             <ModelSpace />
           </Suspense>
         } />
         <Route path="/truss" element={
-          <Suspense fallback={<p className="p-8 text-center text-sm text-slate-400">Loading truss space…</p>}>
+          <Suspense fallback={<p className="p-8 text-center text-sm text-slate-500">Loading truss space…</p>}>
             <TrussSpace />
           </Suspense>
         } />

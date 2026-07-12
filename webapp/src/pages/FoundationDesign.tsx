@@ -110,7 +110,7 @@ function NumField({ label, unit, value, onChange, step = 'any' }: {
   return (
     <label className="flex flex-col text-sm">
       <span className="mb-1 font-medium text-slate-600">
-        {label}{unit ? <span className="text-slate-400"> ({unit})</span> : null}
+        {label}{unit ? <span className="text-slate-500"> ({unit})</span> : null}
       </span>
       <input
         type="number" inputMode="decimal" step={step} value={Number.isFinite(value) ? value : ''}
@@ -302,7 +302,7 @@ export default function FoundationDesign() {
             </table>
           </div>
           {batch.unknownHeaders.length > 0 && (
-            <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-400">
+            <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
               Ignored headers: {batch.unknownHeaders.join(', ')}
             </p>
           )}
@@ -343,7 +343,7 @@ export default function FoundationDesign() {
               <NumField label="Width By" unit="m" value={form.fixedBy} onChange={set('fixedBy')} />
             )}
             {ecc && (
-              <p className="col-span-full text-xs text-slate-400">Eccentric is square-only in this pilot; the footing is sized to keep the load in the kern (no uplift).</p>
+              <p className="col-span-full text-xs text-slate-500">Eccentric is square-only in this pilot; the footing is sized to keep the load in the kern (no uplift).</p>
             )}
           </Card>
 
@@ -354,7 +354,7 @@ export default function FoundationDesign() {
               <>
                 <NumField label={<>Dead <Math tex="D" /></>} unit="kN" value={form.deadLoad} onChange={set('deadLoad')} />
                 <NumField label={<>Live <Math tex="L" /></>} unit="kN" value={form.liveLoad} onChange={set('liveLoad')} />
-                <p className="col-span-full text-xs text-slate-400">
+                <p className="col-span-full text-xs text-slate-500">
                   P = D + L = {f0(serviceLoad)} kN · Pu = max(1.4D, 1.2D+1.6L) = {f0(ultimateLoad)} kN
                 </p>
               </>
@@ -377,12 +377,12 @@ export default function FoundationDesign() {
             <Select label="Column position" value={form.position} onChange={set('position')}
               options={[['interior', 'Interior'], ['edge', 'Edge'], ['corner', 'Corner']]} />
             {circular && (
-              <p className="col-span-full text-xs text-slate-400">
+              <p className="col-span-full text-xs text-slate-500">
                 Circular column → equivalent square c = D·√(π/4) = {f0(colWidth)} mm (equal area, legacy convention).
               </p>
             )}
             {rectCol && !rect && (
-              <p className="col-span-full text-xs text-slate-400">
+              <p className="col-span-full text-xs text-slate-500">
                 Punching uses the full cx × cy perimeter (β = max/min); one-way shear & flexure use the smaller
                 dimension (longer cantilever governs both ways on a square footing).
               </p>
@@ -412,7 +412,7 @@ export default function FoundationDesign() {
             {view ? (
               <FootingSchematic Bx={view.Bx} By={view.By} Dc={view.Dc} columnWidth={colWidth} H={form.H} />
             ) : (
-              <p className="py-8 text-center text-sm text-slate-400">Enter valid inputs — net bearing must be positive.</p>
+              <p className="py-8 text-center text-sm text-slate-500">Enter valid inputs — net bearing must be positive.</p>
             )}
           </div>
 
@@ -460,7 +460,7 @@ export default function FoundationDesign() {
           <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
             <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Basis</h2>
             <Math block tex={String.raw`q_{net} = q_a - \gamma_s D_s - \gamma_c D_c - q,\quad P_u = \max(1.4D,\ 1.2D + 1.6L)`} />
-            <p className="mt-1 text-xs text-slate-400">NSCP 2015 / ACI 318-14. φ: shear 0.75, flexure 0.90. Short-direction band per §413.3.3.3.</p>
+            <p className="mt-1 text-xs text-slate-500">NSCP 2015 / ACI 318-14. φ: shear 0.75, flexure 0.90. Short-direction band per §413.3.3.3.</p>
           </div>
         </div>
       </div>

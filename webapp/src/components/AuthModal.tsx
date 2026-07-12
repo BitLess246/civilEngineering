@@ -17,18 +17,18 @@ export function AuthModal({ mode, onClose }: { mode: 'login' | 'signup'; onClose
           <span className="text-sm font-bold uppercase tracking-wider text-slate-800">
             {isSignup ? 'Create account' : 'Log in'}
           </span>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700">✕</button>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-700">✕</button>
         </div>
         <div className="space-y-3 p-5">
           <label className="flex flex-col text-xs font-medium text-slate-600">
             Email
             <input type="email" disabled placeholder="you@example.com"
-              className="mt-1 cursor-not-allowed bg-slate-50 text-slate-400" />
+              className="mt-1 cursor-not-allowed bg-slate-50 text-slate-500" />
           </label>
           <label className="flex flex-col text-xs font-medium text-slate-600">
             Password
             <input type="password" disabled placeholder="••••••••"
-              className="mt-1 cursor-not-allowed bg-slate-50 text-slate-400" />
+              className="mt-1 cursor-not-allowed bg-slate-50 text-slate-500" />
           </label>
           <div className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
             Accounts &amp; saved projects are coming soon. All tools work without an account today.

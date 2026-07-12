@@ -59,7 +59,7 @@ export default function WeldedConnection() {
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">Structural · Steel</p>
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Structural · Steel</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Eccentric weld group</h1>
       <p className="mt-2 max-w-3xl text-sm text-slate-600">
         Elastic (weld-as-a-line) method for an eccentrically-loaded fillet weld group. Each unit length
@@ -85,7 +85,7 @@ export default function WeldedConnection() {
                       <td key={k} className="pr-2"><input type="number" value={s[k]} onChange={(e) => setSeg(i, k, num(e.target.value))} className="w-14 rounded border border-slate-200 px-1 py-0.5" /></td>
                     ))}
                     <td className="pr-2 text-right font-mono">{f2(Math.hypot(s.x2 - s.x1, s.y2 - s.y1))}</td>
-                    <td className="text-right"><button type="button" onClick={() => delSeg(i)} className="text-slate-400 hover:text-red-600">✕</button></td>
+                    <td className="text-right"><button type="button" onClick={() => delSeg(i)} className="text-slate-500 hover:text-red-600">✕</button></td>
                   </tr>
                 ))}
               </tbody>
