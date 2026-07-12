@@ -10,7 +10,7 @@ import { type F3Analysis, type F3MemberResult, type V3 } from '../engine/frame3d
 import { memberDiagramRibbon, diagramScale, type DiagramComp } from '../engine/memberDiagram3d'
 import { validateMesh, hasMeshErrors } from '../engine/meshValidation'
 import { type ModalResult } from '../engine/modal'
-import { computeResponseSpectrum, type ResponseSpectrumResult } from '../engine/responseSpectrum'
+import { computeResponseSpectrum, rsaEquivalentLoads, type ResponseSpectrumResult, type RsaLateralResult } from '../engine/responseSpectrum'
 import { type StructureDesign, type FootingPlan, type OptimizeResult, type LateralCase } from '../engine/pipeline'
 import type { SteelJoint } from '../engine/steelConnections'
 import { estimateTakeoff, costBill, type PriceList } from '../engine/takeoff'
@@ -730,7 +730,11 @@ export default function ModelSpace() {
   const [Rw, setRw] = useState(n('Rw', 8.5)); const [Ie, setIe] = useState(n('Ie', 1.0))
   const [Zf, setZf] = useState(n('Zf', 0.4)); const [Nv, setNv] = useState(n('Nv', 1.0))   // Zone factor + near-source (208-11)
   const [eDirs, setEDirs] = useState<string[]>((si.eDirs as string[]) ?? ['+X', '-X', '+Z', '-Z'])  // directional E cases to envelope
-  const [seis, setSeis] = useState<SeismicResult | null>(null)
+  // §208 static results per axis (they differ when Method-B periods differ per axis)
+  const [seisXZ, setSeisXZ] = useState<{ x: SeismicResult; z: SeismicResult } | null>(null)
+  const [methodB, setMethodB] = useState(b('methodB', true))          // §208.5.2.2 analytical period (needs a modal run)
+  const [rsaRegular, setRsaRegular] = useState(b('rsaRegular', true)) // §208.6.4.2 floors: 0.9·V_B & 0.8·V_A vs 1.0·V_B
+  const [rsaGen, setRsaGen] = useState<{ x: RsaLateralResult; z: RsaLateralResult } | null>(null)   // RSA-derived E cases
   const [drift, setDrift] = useState<DriftRow[] | null>(null)
   // Wind (NSCP 207B directional procedure, MWFRS)
   const [Vw, setVw] = useState(n('Vw', 50)); const [expo, setExpo] = useState<'B' | 'C' | 'D'>((si.expo as 'B' | 'C' | 'D') ?? 'C')
@@ -848,7 +852,7 @@ export default function ModelSpace() {
       sessionStorage.setItem(INPUTS_KEY, JSON.stringify({
         baysX, baysZ, storeyH, colB, colH, girB, girH, beaB, beaH,
         fc, fy, barDia, tieDia, cover, slabThk, gammaC, qD, qL,
-        qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs,
+        qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs, methodB, rsaRegular,
         Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, tryBars,
         concreteClass, prices, planSel,
         material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu,
@@ -856,7 +860,7 @@ export default function ModelSpace() {
     } catch { /* quota — ignore */ }
   }, [baysX, baysZ, storeyH, colB, colH, girB, girH, beaB, beaH,
     fc, fy, barDia, tieDia, cover, slabThk, gammaC, qD, qL,
-    qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs,
+    qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs, methodB, rsaRegular,
     Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, tryBars,
     concreteClass, prices, planSel,
     material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu])
@@ -876,8 +880,24 @@ export default function ModelSpace() {
     } catch { /* quota — ignore */ }
   }
 
+  /** save() for node-load-only edits (E/W case generation): mass and stiffness
+   *  are untouched, so the modal result — which Method B and the RSA E-cases
+   *  need on the NEXT generate click — stays valid and is kept. */
+  const saveKeepModal = (m: StructuralModel) => {
+    setModel(m)
+    setAnalysis(null)
+    setDesign(null)
+    setOpt(null)
+    setExpanded(null)
+    setDrift(null)
+    try { sessionStorage.setItem(AUTOSAVE_KEY, JSON.stringify(m)) } catch { /* quota — ignore */ }
+  }
+
   // §203.3.1: f₁ = 1.0 for assembly/garage or live load > 4.8 kPa, else 0.5.
   const fLive = assembly || qL > 4.8 ? 1.0 : 0.5
+  // Primary lateral axis (headline §208 summary + drift check direction).
+  const primAxis: 'x' | 'z' = (eDirs[0] ?? '+X').includes('X') ? 'x' : 'z'
+  const seis = seisXZ?.[primAxis] ?? null
   const lateral = [...eCases, ...wCases]
   // Infer seismic lateral system from R for column tie-detailing.
   // Only applies when E loads are present (user clicked "Generate E cases").
@@ -887,10 +907,9 @@ export default function ModelSpace() {
 
   const analyze = () => {
     if (!model || busy || meshErrors) return   // §1 fail-fast: don't solve a singular mesh
-    const axis: 'x' | 'z' = (eDirs[0] ?? '+X').includes('X') ? 'x' : 'z'
     // 3D FEM + storey drift run in the worker so the UI stays responsive.
     run('analyze', {
-      model, opts: anaOpts, drift: { hasSeis: !!seis, T: seis?.T ?? 0, R: Rw, axis, pDelta }, crackedSections: cracked,
+      model, opts: anaOpts, drift: { hasSeis: !!seis, T: seis?.T ?? 0, R: Rw, axis: primAxis, pDelta }, crackedSections: cracked,
     }).then((r) => {
       const res = r as { analysis: F3Analysis | null; orphans: number; drift: DriftRow[] | null }
       setOrphans(res.orphans)
@@ -908,7 +927,7 @@ export default function ModelSpace() {
       if (m && m.modes.length > 0) {
         setRsa(computeResponseSpectrum(m, {
           Ca, Cv, I: Ie, R: Rw,
-          staticV: seis ? [seis.V, 0, seis.V] : undefined,
+          staticV: seisXZ ? [seisXZ.x.V, 0, seisXZ.z.V] : undefined,
         }))
       } else {
         setRsa(null)
@@ -969,30 +988,72 @@ export default function ModelSpace() {
     setSlabFE(out ? out.rows : null)
   }
 
-  // Re-sign / re-axis a base node-load set into a directional case.
+  // Re-sign / re-axis a base node-load set into a directional case. The base
+  // value's sign is preserved (RSA storey-force patterns can locally reverse),
+  // so '−' cases are the exact mirror of '+' cases.
   const dirCase = (base: ModelLoad[], kind: 'E' | 'W', d: string): LateralCase => {
     const axis = d.includes('X') ? 'Fx' : 'Fz'
     const sign = d.startsWith('-') ? -1 : 1
     return {
       name: `${kind}${d}`, kind,
       loads: base.map((l) => {
-        const mag = Math.abs((l as { Fx?: number }).Fx ?? 0) || Math.abs((l as { Fz?: number }).Fz ?? 0)
-        return { kind: 'node', node: (l as { node: string }).node, [axis]: sign * mag, cat: kind }
+        const v = (l as { Fx?: number }).Fx ?? (l as { Fz?: number }).Fz ?? 0
+        return { kind: 'node', node: (l as { node: string }).node, [axis]: sign * v, cat: kind }
       }),
     }
   }
 
+  /** §208.5.2.2 Method-B period per axis: the modal period of the mode with the
+   *  largest effective-mass share in that direction (the fundamental
+   *  translational mode). undefined when no modal result is available. */
+  const fundamentalT = (axis: 'x' | 'z'): number | undefined => {
+    if (!modal || modal.modes.length === 0) return undefined
+    const d = axis === 'x' ? 0 : 2
+    const best = modal.modes.reduce((a, m) => (m.effMassRatio[d] > a.effMassRatio[d] ? m : a))
+    return best.effMassRatio[d] > 0 ? best.period : undefined
+  }
+
+  /** Swap the model's cat-E node loads for the primary direction's case and
+   *  refresh the derived state shared by both E-generation paths. */
+  const commitECases = (rx: SeismicResult, rz: SeismicResult, baseOf: (axis: 'x' | 'z') => ModelLoad[]) => {
+    if (!model) return
+    setSeisXZ({ x: rx, z: rz })
+    setECases(eDirs.map((d) => dirCase(baseOf(d.includes('X') ? 'x' : 'z'), 'E', d)))
+    // commit the primary direction for the load-diagram overlay + drift check
+    const primary = dirCase(baseOf(primAxis), 'E', eDirs[0] ?? '+X')
+    saveKeepModal({ ...model, loads: [...model.loads.filter((l) => !(l.cat === 'E' && l.kind === 'node')), ...primary.loads] })
+  }
+
   const generateE = () => {
     if (!model) return
-    // base magnitude is direction-independent (storey force per node), so one
-    // solve gives every ±X/±Z case.
-    const r = computeSeismic(model, { Ca, Cv, I: Ie, R: Rw, Z: Zf, Nv, gammaC, dir: 'x' })
-    if (!r) return
-    setSeis(r)
-    setECases(eDirs.map((d) => dirCase(r.loads, 'E', d)))
-    // commit the primary direction for the load-diagram overlay + drift check
-    const primary = dirCase(r.loads, 'E', eDirs[0] ?? '+X')
-    save({ ...model, loads: [...model.loads.filter((l) => !(l.cat === 'E' && l.kind === 'node')), ...primary.loads] })
+    // one solve per axis: distribution is direction-independent, but with a
+    // Method-B period V (and so every Fx) can differ between X and Z.
+    const base = { Ca, Cv, I: Ie, R: Rw, Z: Zf, Nv, gammaC }
+    const rx = computeSeismic(model, { ...base, dir: 'x' as const, Tb: methodB ? fundamentalT('x') : undefined })
+    const rz = computeSeismic(model, { ...base, dir: 'z' as const, Tb: methodB ? fundamentalT('z') : undefined })
+    if (!rx || !rz) return
+    setRsaGen(null)   // static pattern replaces any RSA-derived cases
+    commitECases(rx, rz, (axis) => (axis === 'x' ? rx : rz).loads)
+  }
+
+  /** §208.6.4 dynamic path: RSA storey forces (CQC), scaled to the §208.6.4.2
+   *  static-base-shear floor, become the cat-E cases the design envelopes. */
+  const generateRsaE = () => {
+    if (!model || !modal || modal.modes.length === 0) return
+    const base = { Ca, Cv, I: Ie, R: Rw, Z: Zf, Nv, gammaC }
+    const gen = (axis: 'x' | 'z') => {
+      const vA = computeSeismic(model, { ...base, dir: axis })                            // Method-A static V
+      const vB = computeSeismic(model, { ...base, dir: axis, Tb: fundamentalT(axis) })    // Method-B static V (§208.6.4.2)
+      if (!vA || !vB) return null
+      // regular: ≥ 90% of V(T_B), and never below 80% of V(T_A); irregular: 100% of V(T_B)
+      const Vfloor = rsaRegular ? Math.max(0.9 * vB.V, 0.8 * vA.V) : vB.V
+      const rsa = rsaEquivalentLoads(model, modal, { Ca, Cv, I: Ie, R: Rw, dir: axis, combine: 'cqc', Vfloor })
+      return rsa ? { stat: vB, rsa } : null
+    }
+    const gx = gen('x'), gz = gen('z')
+    if (!gx || !gz) return
+    setRsaGen({ x: gx.rsa, z: gz.rsa })
+    commitECases(gx.stat, gz.stat, (axis) => (axis === 'x' ? gx : gz).rsa.loads)
   }
 
   const generateW = () => {
@@ -1009,7 +1070,7 @@ export default function ModelSpace() {
       return dirCase(base, 'W', d)
     }))
     const primary = dirCase(primaryRes.loads, 'W', wDirs[0] ?? '+X')
-    save({ ...model, loads: [...model.loads.filter((l) => !(l.cat === 'W' && l.kind === 'node')), ...primary.loads] })
+    saveKeepModal({ ...model, loads: [...model.loads.filter((l) => !(l.cat === 'W' && l.kind === 'node')), ...primary.loads] })
   }
 
   const runCladding = () => {
@@ -1251,7 +1312,8 @@ export default function ModelSpace() {
     // gravity loads: member self-weight (D), slab self-weight + SDL (D), LL (L)
     m.loads = buildGravityLoads(m, qD, qL, gammaC)
     setSelected(null)
-    setSeis(null)
+    setSeisXZ(null)
+    setRsaGen(null)
     setWind(null)
     setECases([])
     setWCases([])
@@ -2463,34 +2525,60 @@ export default function ModelSpace() {
                 <Num label="Z (zone)" value={Zf} onChange={setZf} />
                 <Num label="Nv (near-source)" value={Nv} onChange={setNv} />
                 <DirPicker value={eDirs} onChange={setEDirs} />
+                <label className="col-span-full flex items-start gap-2 text-xs text-slate-600">
+                  <input type="checkbox" checked={methodB} onChange={(e) => setMethodB(e.target.checked)} className="mt-0.5" />
+                  <span>
+                    Method-B period (§208.5.2.2) — use the modal fundamental period per axis, capped at {Zf >= 0.4 ? '1.3' : '1.4'}·Ta.
+                    {!modal && <span className="text-slate-500"> No modal result yet — run Modal (Dynamics) first, else Method A is used.</span>}
+                  </span>
+                </label>
                 <div className="col-span-full">
                   <button type="button" onClick={generateE} disabled={!model || eDirs.length === 0}
                     className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">⚡ Generate E cases</button>
-                  {seis && (
+                  {seis && (() => {
+                    const other = seisXZ ? seisXZ[primAxis === 'x' ? 'z' : 'x'] : null
+                    const twoAxis = !!other && (Math.abs(other.V - seis.V) > 1e-6 || Math.abs(other.T - seis.T) > 1e-9)
+                    const sx = seisXZ?.x, sz = seisXZ?.z
+                    return (
                     <div className="mt-1 space-y-1">
                       <p className="text-xs text-slate-500">
-                        T = {seis.T.toFixed(3)} s · W = {f1(seis.W)} kN · V = {f1(seis.V)} kN
+                        {twoAxis ? `${primAxis.toUpperCase()}: ` : ''}T = {seis.T.toFixed(3)} s{seis.Tmethod === 'B' ? ` (Method B, Ta = ${seis.Ta.toFixed(3)} s)` : ''} · W = {f1(seis.W)} kN · V = {f1(seis.V)} kN
                         {seis.V === seis.Vmax ? ' (2.5CaIW/R cap governs)'
                           : seis.Vsrc > 0 && seis.V === seis.Vsrc ? ' (Zone-4 0.8ZNvIW/R floor governs)'
                             : seis.V === seis.Vmin ? ' (0.11CaIW floor governs)' : ''}
                         {seis.Ft > 0 ? ` · Ft = ${f1(seis.Ft)} kN` : ''} — {eCases.length} cat-E case{eCases.length === 1 ? '' : 's'} ({eDirs.join(', ') || 'none'}).
                         {Zf >= 0.4 ? ` Zone-4 floor = ${f1(seis.Vsrc)} kN.` : ' (Zone-4 floor off: Z < 0.4)'}
                       </p>
+                      {twoAxis && other && (
+                        <p className="text-xs text-slate-500">
+                          {primAxis === 'x' ? 'Z' : 'X'}: T = {other.T.toFixed(3)} s{other.Tmethod === 'B' ? ` (Method B, Ta = ${other.Ta.toFixed(3)} s)` : ''} · V = {f1(other.V)} kN{other.Ft > 0 ? ` · Ft = ${f1(other.Ft)} kN` : ''}
+                        </p>
+                      )}
                       <table className="w-full border-collapse text-xs">
                         <thead>
                           <tr className="text-left uppercase tracking-wide text-slate-500">
                             <th className="py-0.5 pr-2 font-semibold">Level (m)</th>
                             <th className="py-0.5 pr-2 text-right font-semibold">wx (kN)</th>
-                            <th className="py-0.5 pr-2 text-right font-semibold">Fx (kN)</th>
+                            {twoAxis ? (
+                              <>
+                                <th className="py-0.5 pr-2 text-right font-semibold">F·X (kN)</th>
+                                <th className="py-0.5 pr-2 text-right font-semibold">F·Z (kN)</th>
+                              </>
+                            ) : <th className="py-0.5 pr-2 text-right font-semibold">Fx (kN)</th>}
                             <th className="py-0.5 text-right font-semibold">Nodes</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {seis.storeys.map((s) => (
+                          {seis.storeys.map((s, i) => (
                             <tr key={s.elevation} className="border-t border-slate-100">
                               <td className="py-0.5 pr-2">{f1(s.elevation)}</td>
                               <td className="py-0.5 pr-2 text-right">{f1(s.wx)}</td>
-                              <td className="py-0.5 pr-2 text-right font-medium text-[#7c3aed]">{f1(s.Fx)}</td>
+                              {twoAxis && sx && sz ? (
+                                <>
+                                  <td className="py-0.5 pr-2 text-right font-medium text-[#7c3aed]">{f1(sx.storeys[i]?.Fx ?? 0)}</td>
+                                  <td className="py-0.5 pr-2 text-right font-medium text-[#7c3aed]">{f1(sz.storeys[i]?.Fx ?? 0)}</td>
+                                </>
+                              ) : <td className="py-0.5 pr-2 text-right font-medium text-[#7c3aed]">{f1(s.Fx)}</td>}
                               <td className="py-0.5 text-right text-slate-500">{s.nodes}</td>
                             </tr>
                           ))}
@@ -2498,6 +2586,59 @@ export default function ModelSpace() {
                       </table>
                       <p className="text-[10px] text-slate-500">
                         System: <b>{seismicSystem.toUpperCase()}</b> (R = {Rw}) — column tie detailing uses {seismicSystem === 'smf' ? 'NSCP §418.7.5 SMF confinement' : seismicSystem === 'imf' ? 'NSCP §418.4.3 IMF hinge zone' : '§425.7.2 gravity ties only'}.
+                      </p>
+                    </div>
+                    )
+                  })()}
+                </div>
+                <div className="col-span-full border-t border-slate-100 pt-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button type="button" onClick={generateRsaE}
+                      disabled={!model || eDirs.length === 0 || !modal || modal.modes.length === 0}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#7c3aed] hover:border-[#7c3aed] hover:bg-purple-50 disabled:opacity-40">〜 Generate E cases — RSA (§208.6.4)</button>
+                    <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                      <input type="checkbox" checked={rsaRegular} onChange={(e) => setRsaRegular(e.target.checked)} />
+                      <span>regular structure — 0.9·V(T_B) &amp; 0.8·V(T_A) floors (unticked: irregular, 100%·V)</span>
+                    </label>
+                  </div>
+                  {(!modal || modal.modes.length === 0) && (
+                    <p className="mt-1 text-[10px] text-slate-500">Needs a Modal run (Dynamics) — the CQC storey shears are combined from the mode shapes, then scaled to the §208.6.4.2 static floor and enveloped by Design/Optimize like any E case.</p>
+                  )}
+                  {rsaGen && (
+                    <div className="mt-1 space-y-1">
+                      {(['x', 'z'] as const).map((ax) => {
+                        const g = rsaGen[ax]
+                        return (
+                          <p key={ax} className="text-xs text-slate-500">
+                            {ax.toUpperCase()}: V<sub>CQC</sub> = {f1(g.Vdyn)} kN · §208.6.4.2 floor = {f1(g.Vfloor)} kN → scale ×{g.scale.toFixed(3)} · mass participation {Math.round(g.massRatio * 100)}%
+                            {g.massRatio < 0.9 && <span className="font-semibold text-amber-600"> — below 90% (§208.6.4.1): raise the mode count in Dynamics</span>}
+                          </p>
+                        )
+                      })}
+                      <table className="w-full border-collapse text-xs">
+                        <thead>
+                          <tr className="text-left uppercase tracking-wide text-slate-500">
+                            <th className="py-0.5 pr-2 font-semibold">Level (m)</th>
+                            <th className="py-0.5 pr-2 text-right font-semibold">F·X (kN)</th>
+                            <th className="py-0.5 pr-2 text-right font-semibold">V·X (kN)</th>
+                            <th className="py-0.5 pr-2 text-right font-semibold">F·Z (kN)</th>
+                            <th className="py-0.5 text-right font-semibold">V·Z (kN)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rsaGen.x.storeys.map((s, i) => (
+                            <tr key={s.elevation} className="border-t border-slate-100">
+                              <td className="py-0.5 pr-2">{f1(s.elevation)}</td>
+                              <td className="py-0.5 pr-2 text-right font-medium text-[#7c3aed]">{f1(s.F)}</td>
+                              <td className="py-0.5 pr-2 text-right">{f1(s.V)}</td>
+                              <td className="py-0.5 pr-2 text-right font-medium text-[#7c3aed]">{f1(rsaGen.z.storeys[i]?.F ?? 0)}</td>
+                              <td className="py-0.5 text-right">{f1(rsaGen.z.storeys[i]?.V ?? 0)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <p className="text-[10px] text-slate-500">
+                        Storey forces back-difference the CQC storey-shear diagram, scaled so the base shear meets the §208.6.4.2 floor, split to the level&apos;s nodes ∝ seismic mass. They replace the static pattern in the cat-E cases enveloped by Analyze/Design/Optimize.
                       </p>
                     </div>
                   )}

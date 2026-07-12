@@ -68,6 +68,13 @@ of the app. Everything runs **off the main thread** in a web worker
   skeleton in the 3D canvas (amplitude slider), via imperative R3F `useFrame`.
 - **Response-spectrum analysis** (`engine/responseSpectrum.ts`) + **storey-drift
   check** (`engine/seismic.ts`, NSCP 208) + **wind loads** (`engine/wind.ts`).
+- **Method-B period + RSA-driven design**: `computeSeismic` accepts a modal
+  fundamental period `Tb` (capped at 1.3·Ta Zone 4 / 1.4·Ta, §208.5.2.2) and
+  `rsaEquivalentLoads` back-differences the CQC storey-shear diagram into
+  equivalent static cat-E node loads scaled to the §208.6.4.2 floor
+  (0.9·V_B & 0.8·V_A regular / 1.0·V_B irregular) — both feed the same
+  `LateralCase` envelope that Design/Optimize consume ("Generate E cases — RSA"
+  in the Loading tab; needs a Modal run first).
 - **Member force diagrams BMD/SFD** (PR #233): inline bending-moment and shear
   diagrams rendered on each member in the 3D view and Analysis tab. Uses the
   existing `xs[]`/`My[]`/`Mz[]`/`Vy[]` arrays on `F3MemberResult`.

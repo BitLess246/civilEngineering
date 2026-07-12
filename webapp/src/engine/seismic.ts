@@ -1,7 +1,9 @@
 // ─────────────────────────────────────────────────────────────────────────
 // NSCP 2015 §208 (UBC-97) static lateral force procedure + storey drift —
 // Phase 7 of the 3D roadmap.
-//   T = Ct·hn^(3/4)                  (Ct = 0.0731 for RC moment frames, m)
+//   Ta = Ct·hn^(3/4)                 (Method A; Ct = 0.0731 for RC frames, m)
+//   T  = min(Tb, 1.3·Ta) Zone 4 / min(Tb, 1.4·Ta) else, when a Method-B
+//        analytical period Tb is supplied (§208.5.2.2); otherwise T = Ta.
 //   V = Cv·I·W / (R·T)               2.5·Ca·I·W/R ≥ V ≥ 0.11·Ca·I·W
 //   Ft = 0.07·T·V ≤ 0.25·V  (T > 0.7 s, else 0)
 //   Fx = (V − Ft)·wx·hx / Σ(w·h)     (+Ft at the roof)
@@ -22,6 +24,10 @@ export interface SeismicParams {
   Ct?: number               // default 0.0731 (RC moment frame, metres)
   gammaC?: number           // concrete unit weight for member self-weight (default 24)
   dir: 'x' | 'z'
+  /** §208.5.2.2 Method B: analytical fundamental period (s) in the load
+   *  direction (e.g. from modal analysis). Used for V and Ft, but capped at
+   *  1.3·Ta in Seismic Zone 4 (Z ≥ 0.4) and 1.4·Ta elsewhere. Omit → Method A. */
+  Tb?: number
 }
 
 export interface StoreyForce {
@@ -29,7 +35,14 @@ export interface StoreyForce {
 }
 
 export interface SeismicResult {
-  hn: number; T: number; W: number
+  hn: number
+  /** Method-A empirical period Ct·hn^¾, s (§208.5.2.1). */
+  Ta: number
+  /** Period used for V and Ft, s: Ta, or the capped Method-B period. */
+  T: number
+  /** Which §208.5.2 method produced T ('B' only when Tb was supplied). */
+  Tmethod: 'A' | 'B'
+  W: number
   Vraw: number; Vmax: number; Vmin: number; Vsrc: number; V: number
   Ft: number
   storeys: StoreyForce[]
@@ -91,7 +104,12 @@ export function computeSeismic(model: StructuralModel, p: SeismicParams): Seismi
   if (!(hn > 0) || !(W > 0)) return null
 
   const Ct = p.Ct ?? 0.0731
-  const T = Ct * Math.pow(hn, 0.75)
+  const Ta = Ct * Math.pow(hn, 0.75)
+  // §208.5.2.2 Method B: the analytical period may replace Ta, but shall not
+  // exceed it by more than 30% in Seismic Zone 4 (Z ≥ 0.4) or 40% elsewhere.
+  const useB = p.Tb !== undefined && p.Tb > 0
+  const T = useB ? Math.min(p.Tb!, ((p.Z ?? 0) >= 0.4 ? 1.3 : 1.4) * Ta) : Ta
+  const Tmethod: 'A' | 'B' = useB ? 'B' : 'A'
   const Vraw = (p.Cv * p.I * W) / (p.R * T)
   const Vmax = (2.5 * p.Ca * p.I * W) / p.R          // 208-9 upper bound
   const Vmin = 0.11 * p.Ca * p.I * W                  // 208-10 lower bound
@@ -121,7 +139,7 @@ export function computeSeismic(model: StructuralModel, p: SeismicParams): Seismi
     }
   }
 
-  return { hn, T, W, Vraw, Vmax, Vmin, Vsrc, V, Ft, storeys, loads }
+  return { hn, Ta, T, Tmethod, W, Vraw, Vmax, Vmin, Vsrc, V, Ft, storeys, loads }
 }
 
 // ── Storey drift (NSCP 208.5.10) ─────────────────────────────────────────

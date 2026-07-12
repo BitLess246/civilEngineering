@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { nscp208Spectrum, cqcCorrel, computeResponseSpectrum } from './responseSpectrum'
+import { nscp208Spectrum, cqcCorrel, computeResponseSpectrum, rsaEquivalentLoads } from './responseSpectrum'
 import { modalAnalysis, GRAVITY } from './modal'
 import { generateGridModel } from './modelBuilder'
 import type { RectSection } from './model'
@@ -116,5 +116,76 @@ describe('computeResponseSpectrum', () => {
     const rsa = computeResponseSpectrum(emptyModal, p)
     expect(rsa.srss).toEqual([0, 0, 0])
     expect(rsa.cqc).toEqual([0, 0, 0])
+  })
+})
+
+// ── RSA → equivalent lateral loads (§208.6.4) ────────────────────────────────
+describe('rsaEquivalentLoads', () => {
+  const model = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3.5, 3], section })
+  const modal = modalAnalysis(model, 12)!
+  const p = { Ca, Cv, I, R }
+  const rel = (a: number, b: number) => Math.abs(a - b) / Math.max(Math.abs(b), 1e-12)
+
+  it('combined base shear reproduces computeResponseSpectrum (CQC and SRSS, X and Z)', () => {
+    const rsa = computeResponseSpectrum(modal, p)
+    const cqcX = rsaEquivalentLoads(model, modal, { ...p, dir: 'x' })!
+    const cqcZ = rsaEquivalentLoads(model, modal, { ...p, dir: 'z' })!
+    const srsX = rsaEquivalentLoads(model, modal, { ...p, dir: 'x', combine: 'srss' })!
+    expect(rel(cqcX.Vdyn, rsa.cqc[0])).toBeLessThan(1e-9)
+    expect(rel(cqcZ.Vdyn, rsa.cqc[2])).toBeLessThan(1e-9)
+    expect(rel(srsX.Vdyn, rsa.srss[0])).toBeLessThan(1e-9)
+  })
+
+  it('single mode: base shear = Sa·effMass (hand calc)', () => {
+    const modal1 = { modes: [modal.modes[0]], totalMass: modal.totalMass, cumRatio: modal.cumRatio }
+    const eq = rsaEquivalentLoads(model, modal1, { ...p, dir: 'x' })!
+    const expected = modal.modes[0].effMass[0] * nscp208Spectrum(modal.modes[0].period, Ca, Cv, I, R)
+    expect(rel(eq.Vdyn, expected)).toBeLessThan(1e-9)
+  })
+
+  it('storey forces back-difference the combined shear diagram (ΣF = V_base)', () => {
+    const eq = rsaEquivalentLoads(model, modal, { ...p, dir: 'x' })!
+    expect(eq.storeys.map((s) => s.elevation)).toEqual([3.5, 6.5])
+    const sumF = eq.storeys.reduce((s, r) => s + r.F, 0)
+    expect(rel(sumF, eq.storeys[0].V)).toBeLessThan(1e-9)
+    expect(rel(eq.storeys[0].V, eq.Vdyn * eq.scale)).toBeLessThan(1e-9)
+    // shear at the roof = roof force alone
+    expect(rel(eq.storeys[1].V, eq.storeys[1].F)).toBeLessThan(1e-9)
+    for (const s of eq.storeys) expect(s.V).toBeGreaterThan(0)
+  })
+
+  it('§208.6.4.2 scaling: forces scale up to the floor, never down', () => {
+    const base = rsaEquivalentLoads(model, modal, { ...p, dir: 'x' })!
+    const up = rsaEquivalentLoads(model, modal, { ...p, dir: 'x', Vfloor: 2 * base.Vdyn })!
+    expect(up.scale).toBeCloseTo(2, 9)
+    expect(rel(up.storeys[0].V, 2 * base.storeys[0].V)).toBeLessThan(1e-9)
+    const down = rsaEquivalentLoads(model, modal, { ...p, dir: 'x', Vfloor: 0.5 * base.Vdyn })!
+    expect(down.scale).toBe(1)
+    expect(rel(down.storeys[0].V, base.storeys[0].V)).toBeLessThan(1e-9)
+  })
+
+  it('node loads: cat E, correct component, per-level sums match storey forces', () => {
+    const eq = rsaEquivalentLoads(model, modal, { ...p, dir: 'x', Vfloor: 800 })!
+    expect(eq.loads.every((l) => l.kind === 'node' && l.cat === 'E')).toBe(true)
+    for (const s of eq.storeys) {
+      const lvlLoads = eq.loads.filter((l) =>
+        l.kind === 'node' && Math.abs(model.nodes.find((n) => n.id === l.node)!.y - s.elevation) < 1e-6)
+      const sum = lvlLoads.reduce((t, l) => t + ((l as { Fx?: number }).Fx ?? 0), 0)
+      expect(rel(sum, s.F)).toBeLessThan(1e-9)
+      for (const l of lvlLoads) expect((l as { Fz?: number }).Fz).toBeUndefined()
+    }
+    const eqZ = rsaEquivalentLoads(model, modal, { ...p, dir: 'z' })!
+    expect(eqZ.loads.every((l) => (l as { Fx?: number }).Fx === undefined)).toBe(true)
+  })
+
+  it('reports directional mass participation (§208.6.4.1 ≥ 90% check)', () => {
+    const eq = rsaEquivalentLoads(model, modal, { ...p, dir: 'x' })!
+    expect(eq.massRatio).toBeGreaterThan(0.9)     // 12 modes on a small grid
+    expect(eq.massRatio).toBeLessThanOrEqual(1 + 1e-6)
+  })
+
+  it('null for empty modes', () => {
+    const emptyModal = { modes: [], totalMass: [0, 0, 0] as [number,number,number], cumRatio: [0,0,0] as [number,number,number] }
+    expect(rsaEquivalentLoads(model, emptyModal, { ...p, dir: 'x' })).toBeNull()
   })
 })
