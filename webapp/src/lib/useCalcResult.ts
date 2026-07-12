@@ -24,7 +24,10 @@ export function useCalcResult<T>(
     const t = setTimeout(() => {
       latestFn.current()
         .then((d) => { if (!cancelled) { setData(d); setError(null); setLoading(false) } })
-        .catch((e: unknown) => { if (!cancelled) { setError(String(e)); setLoading(false) } })
+        .catch((e: unknown) => {
+          console.error('calc failed:', e)   // UI badge says "check console" — keep that true
+          if (!cancelled) { setError(String(e)); setLoading(false) }
+        })
     }, debounceMs)
     return () => { cancelled = true; clearTimeout(t) }
     // deps is intentionally spread here; exhaustive-deps lint does not apply.
