@@ -86,6 +86,13 @@ of the app. Everything runs **off the main thread** in a web worker
   (1.2+0.5CaI)D and (0.9−0.5CaI)D with the effective factor in the combo name.
   Toggles in the Loading tab: orthogonal off by default (conditional per code),
   Ev on by default (strength design).
+- **Timoshenko shear deformation** (P3-5): `kLocal` takes Przemieniecki
+  Φ = 12EI/(G·As·L²) modifiers per bending plane; the bridge supplies shear
+  areas per section type (rect 5/6·A, W web d·tw / flanges 5/6·2·bf·tf,
+  HSS walls, tube 0.5·A) behind a `shearDeformation` BridgeOpt — API off /
+  UI on, like crackedSections. Fixed-end forces stay Euler (exact for UDL;
+  O(Φ) approximation on asymmetric point/VDL loads). Modal/pushover/buckling
+  paths still run the Euler element.
 - **Member force diagrams BMD/SFD** (PR #233): inline bending-moment and shear
   diagrams rendered on each member in the 3D view and Analysis tab. Uses the
   existing `xs[]`/`My[]`/`Mz[]`/`Vy[]` arrays on `F3MemberResult`.

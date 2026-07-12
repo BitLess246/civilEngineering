@@ -34,6 +34,12 @@ export interface F3Member {
   A: number                 // mm²
   Iy: number; Iz: number    // mm⁴ (Iz: bending under gravity for horizontal members)
   J: number                 // mm⁴
+  /** Shear areas for Timoshenko shear deformation, mm² (Asy: shear along y′,
+   *  pairs with bending about z′; Asz: along z′, pairs with bending about y′).
+   *  Omitted or 0 → rigid in shear (classic Euler–Bernoulli element). Note:
+   *  fixed-end forces stay Euler — exact for symmetric member loads (UDL);
+   *  asymmetric point/VDL FEMs carry a small O(Φ) approximation. */
+  Asy?: number; Asz?: number
   /** Released local DOFs at end i: [ux, uy, uz, θx, θy, θz] (true = force/moment = 0). */
   relI?: [boolean, boolean, boolean, boolean, boolean, boolean]
   /** Released local DOFs at end j: [ux, uy, uz, θx, θy, θz]. */
@@ -156,20 +162,28 @@ export function appliedResultant(loads: F3Load[], memberLen: (id: string) => num
   return [fx, fy, fz]
 }
 
-/** Local 12×12 stiffness. */
-function kLocal(EA: number, GJ: number, EIy: number, EIz: number, L: number): number[][] {
+/** Local 12×12 stiffness. `phiY`/`phiZ` are the Timoshenko shear-flexibility
+ *  parameters Φ = 12EI/(G·As·L²) per bending plane (Przemieniecki, Theory of
+ *  Matrix Structural Analysis §5.6): the bending blocks become
+ *    12EI/L³(1+Φ), 6EI/L²(1+Φ), (4+Φ)EI/L(1+Φ), (2−Φ)EI/L(1+Φ)
+ *  Φ = 0 (the default) recovers the Euler–Bernoulli element exactly. */
+function kLocal(EA: number, GJ: number, EIy: number, EIz: number, L: number, phiY = 0, phiZ = 0): number[][] {
   const k = Array.from({ length: 12 }, () => new Array(12).fill(0))
   const set = (r: number, c: number, v: number) => { k[r][c] = v; k[c][r] = v }
   set(0, 0, EA / L); set(0, 6, -EA / L); set(6, 6, EA / L)
   set(3, 3, GJ / L); set(3, 9, -GJ / L); set(9, 9, GJ / L)
-  // bending about z′ (uy, θz)
-  const az = (12 * EIz) / L ** 3, bz = (6 * EIz) / L ** 2, cz = (4 * EIz) / L, dz = (2 * EIz) / L
+  // bending about z′ (uy, θz) — shear flexibility from Vy → phiZ
+  const fz = 1 + phiZ
+  const az = (12 * EIz) / (L ** 3 * fz), bz = (6 * EIz) / (L ** 2 * fz)
+  const cz = ((4 + phiZ) * EIz) / (L * fz), dz = ((2 - phiZ) * EIz) / (L * fz)
   set(1, 1, az); set(1, 5, bz); set(1, 7, -az); set(1, 11, bz)
   set(5, 5, cz); set(5, 7, -bz); set(5, 11, dz)
   set(7, 7, az); set(7, 11, -bz)
   set(11, 11, cz)
-  // bending about y′ (uz, θy) — mirrored signs
-  const ay = (12 * EIy) / L ** 3, by = (6 * EIy) / L ** 2, cy = (4 * EIy) / L, dy = (2 * EIy) / L
+  // bending about y′ (uz, θy) — mirrored signs; shear flexibility from Vz → phiY
+  const fy = 1 + phiY
+  const ay = (12 * EIy) / (L ** 3 * fy), by = (6 * EIy) / (L ** 2 * fy)
+  const cy = ((4 + phiY) * EIy) / (L * fy), dy = ((2 - phiY) * EIy) / (L * fy)
   set(2, 2, ay); set(2, 4, -by); set(2, 8, -ay); set(2, 10, -by)
   set(4, 4, cy); set(4, 8, by); set(4, 10, dy)
   set(8, 8, ay); set(8, 10, by)
@@ -394,7 +408,12 @@ function prepMemberGeom(m: F3Member, nm: Map<string, F3Node>, idx: Map<string, n
   const GJ = m.G * m.J * 1e-9
   const EIy = m.E * m.Iy * 1e-9
   const EIz = m.E * m.Iz * 1e-9
-  const kl = kLocal(EA, GJ, EIy, EIz, L)
+  // Timoshenko shear flexibility Φ = 12EI/(G·As·L²); 0 without a shear area.
+  const GAsy = m.Asy ? (m.G * m.Asy) / 1000 : 0   // kN
+  const GAsz = m.Asz ? (m.G * m.Asz) / 1000 : 0
+  const phiZ = GAsy > 0 ? (12 * EIz) / (GAsy * L * L) : 0
+  const phiY = GAsz > 0 ? (12 * EIy) / (GAsz * L * L) : 0
+  const kl = kLocal(EA, GJ, EIy, EIz, L, phiY, phiZ)
 
   // Collect released local DOF indices (end i = 0..5, end j = 6..11)
   const relIdx: number[] = []

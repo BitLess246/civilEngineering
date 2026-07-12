@@ -753,6 +753,7 @@ export default function ModelSpace() {
   const [assembly, setAssembly] = useState(b('assembly', false))
   const [pDelta, setPDelta] = useState(b('pDelta', false))
   const [cracked, setCracked] = useState(b('cracked', true))       // ACI §6.6.3.1.1 cracked EI (0.35/0.70 Ig)
+  const [shearDef, setShearDef] = useState(b('shearDef', true))    // Timoshenko shear deformation (deep girders / squat columns)
   const [tryBars, setTryBars] = useState(b('tryBars', true))        // let design/optimize pick bar Ø from a ladder
   const [showLoads, setShowLoads] = useState(true)   // load-diagram overlay
   const [showFootings, setShowFootings] = useState(true)   // designed footing footprints
@@ -856,7 +857,7 @@ export default function ModelSpace() {
         baysX, baysZ, storeyH, colB, colH, girB, girH, beaB, beaH,
         fc, fy, barDia, tieDia, cover, slabThk, gammaC, qD, qL,
         qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs, methodB, accTor, orth30, evOn, rsaRegular,
-        Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, tryBars,
+        Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, shearDef, tryBars,
         concreteClass, prices, planSel,
         material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu,
       }))
@@ -864,7 +865,7 @@ export default function ModelSpace() {
   }, [baysX, baysZ, storeyH, colB, colH, girB, girH, beaB, beaH,
     fc, fy, barDia, tieDia, cover, slabThk, gammaC, qD, qL,
     qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs, methodB, accTor, orth30, evOn, rsaRegular,
-    Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, tryBars,
+    Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, shearDef, tryBars,
     concreteClass, prices, planSel,
     material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu])
 
@@ -907,13 +908,13 @@ export default function ModelSpace() {
   const hasELoads = model?.loads.some((l) => l.cat === 'E') ?? false
   const seismicSystem: 'gravity' | 'imf' | 'smf' = hasELoads ? (Rw >= 8 ? 'smf' : Rw >= 5 ? 'imf' : 'gravity') : 'gravity'
   // §208.4.1 vertical seismic component folded into the E-combo D factors.
-  const anaOpts = { f1: fLive, pDelta, lateral, seismicSystem, crackedSections: cracked, Ev: evOn ? 0.5 * Ca * Ie : undefined }
+  const anaOpts = { f1: fLive, pDelta, lateral, seismicSystem, crackedSections: cracked, shearDeformation: shearDef, Ev: evOn ? 0.5 * Ca * Ie : undefined }
 
   const analyze = () => {
     if (!model || busy || meshErrors) return   // §1 fail-fast: don't solve a singular mesh
     // 3D FEM + storey drift run in the worker so the UI stays responsive.
     run('analyze', {
-      model, opts: anaOpts, drift: { hasSeis: !!seis, T: seis?.T ?? 0, R: Rw, axis: primAxis, pDelta }, crackedSections: cracked,
+      model, opts: anaOpts, drift: { hasSeis: !!seis, T: seis?.T ?? 0, R: Rw, axis: primAxis, pDelta }, crackedSections: cracked, shearDeformation: shearDef,
     }).then((r) => {
       const res = r as { analysis: F3Analysis | null; orphans: number; drift: DriftRow[] | null }
       setOrphans(res.orphans)
@@ -2768,6 +2769,10 @@ export default function ModelSpace() {
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={cracked} onChange={(e) => setCracked(e.target.checked)} />
                   <span>Cracked sections — ACI §6.6.3.1.1 (0.35Ig beams, 0.70Ig columns; concrete only)</span>
+                </label>
+                <label className="col-span-full flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={shearDef} onChange={(e) => setShearDef(e.target.checked)} />
+                  <span>Shear deformation (Timoshenko) — Φ = 12EI/(G·As·L²); softens deep girders &amp; squat columns</span>
                 </label>
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" disabled={!model} checked={model?.diaphragm ?? false}
