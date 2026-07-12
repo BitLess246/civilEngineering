@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { modelToFrame3D, effectiveReleases } from './modelBridge'
+import { solveFrame3D } from './frame3d'
 import { emptyModel, type StructuralModel, type RectSection } from './model'
 
 const section: RectSection = {
@@ -62,6 +63,57 @@ describe('modelToFrame3D — rigid offsets', () => {
     }
     const m = modelToFrame3D(model).members.find((x) => x.id === 'm')!
     expect(m.offI).toEqual([0, 0.9, 0])    // manual wins
+  })
+})
+
+describe('modelToFrame3D — cracked-section modifiers (ACI 318-14 §6.6.3.1.1)', () => {
+  // gross I of the 300×500: Iz = 300·500³/12 = 3.125e9 mm⁴, Iy = 500·300³/12 = 1.125e9 mm⁴
+  const IgZ = (300 * 500 ** 3) / 12, IgY = (500 * 300 ** 3) / 12
+  const twoRoles = (): StructuralModel => ({
+    ...baseModel(),
+    nodes: [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: 4, y: 0, z: 0 }, { id: 'c', x: 0, y: 3, z: 0 }],
+    members: [
+      { id: 'bm', i: 'a', j: 'b', role: 'beam', section: 'S' },
+      { id: 'col', i: 'a', j: 'c', role: 'column', section: 'S' },
+    ],
+  })
+
+  it('default (opt-out) keeps gross section properties', () => {
+    const br = modelToFrame3D(twoRoles())
+    expect(br.members.find((m) => m.id === 'bm')!.Iz).toBeCloseTo(IgZ, 0)
+    expect(br.members.find((m) => m.id === 'col')!.Iz).toBeCloseTo(IgZ, 0)
+  })
+
+  it('crackedSections: beams 0.35Ig, columns 0.70Ig, both axes; A and J gross', () => {
+    const br = modelToFrame3D(twoRoles(), { crackedSections: true })
+    const bm = br.members.find((m) => m.id === 'bm')!
+    const col = br.members.find((m) => m.id === 'col')!
+    expect(bm.Iz).toBeCloseTo(0.35 * IgZ, 0)
+    expect(bm.Iy).toBeCloseTo(0.35 * IgY, 0)
+    expect(col.Iz).toBeCloseTo(0.70 * IgZ, 0)
+    expect(col.Iy).toBeCloseTo(0.70 * IgY, 0)
+    expect(bm.A).toBeCloseTo(300 * 500, 6)          // 1.0Ag per Table 6.6.3.1.1(a)
+    expect(bm.J).toBeCloseTo(modelToFrame3D(twoRoles()).members[0].J, 6)  // J untouched
+  })
+
+  it('steel members are exempt from cracking factors', () => {
+    const model = twoRoles()
+    model.sections = [{ ...section, material: 'steel' as const }]
+    const gross = modelToFrame3D(model).members.find((m) => m.id === 'bm')!.Iz
+    const cracked = modelToFrame3D(model, { crackedSections: true }).members.find((m) => m.id === 'bm')!.Iz
+    expect(cracked).toBeCloseTo(gross, 6)
+  })
+
+  it('cracked beam deflects 1/0.35× more under the same load (bridge → solver)', () => {
+    // cantilever tip load through the full bridge+solver path: δ ∝ 1/I
+    const load = { kind: 'node' as const, node: 'b', Fy: -10, cat: 'D' as const }
+    const m = { ...baseModel(), loads: [load] }
+    const solve = (cracked: boolean) => {
+      const br = modelToFrame3D(m, { crackedSections: cracked })
+      return solveFrame3D(br.nodes, br.members, br.supports, br.loads)!
+    }
+    const dG = solve(false).d[6 + 1], dC = solve(true).d[6 + 1]
+    expect(dC / dG).toBeCloseTo(1 / 0.35, 3)
   })
 })
 
