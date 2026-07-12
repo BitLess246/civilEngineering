@@ -93,6 +93,51 @@ describe('NSCP 208-11 — Seismic Zone 4 base shear floor', () => {
   })
 })
 
+describe('§208.5.2.2 Method-B period', () => {
+  const m = makeModel()
+  const Ta = 0.0731 * Math.pow(6, 0.75)
+
+  it('defaults to Method A when Tb is not supplied', () => {
+    const r = computeSeismic(m, params)!
+    expect(r.Tmethod).toBe('A')
+    expect(r.Ta).toBeCloseTo(Ta, 9)
+    expect(r.T).toBeCloseTo(Ta, 9)
+  })
+
+  it('uses the analytical period when below the cap', () => {
+    const Tb = 1.2 * Ta
+    const r = computeSeismic(m, { ...params, Z: 0.4, Tb })!
+    expect(r.Tmethod).toBe('B')
+    expect(r.T).toBeCloseTo(Tb, 9)
+    expect(r.Ta).toBeCloseTo(Ta, 9)                       // Ta still reported
+    expect(r.Vraw).toBeCloseTo((params.Cv * params.I * r.W) / (params.R * Tb), 6)
+  })
+
+  it('caps at 1.3·Ta in Seismic Zone 4', () => {
+    const r = computeSeismic(m, { ...params, Z: 0.4, Tb: 5 * Ta })!
+    expect(r.T).toBeCloseTo(1.3 * Ta, 9)
+  })
+
+  it('caps at 1.4·Ta outside Zone 4', () => {
+    const r = computeSeismic(m, { ...params, Z: 0.2, Tb: 5 * Ta })!
+    expect(r.T).toBeCloseTo(1.4 * Ta, 9)
+    // no Z supplied at all → also 1.4 (zone unknown ⇒ not Zone 4)
+    const r2 = computeSeismic(m, { ...params, Tb: 5 * Ta })!
+    expect(r2.T).toBeCloseTo(1.4 * Ta, 9)
+  })
+
+  it('longer Method-B period lowers the raw base shear (velocity branch)', () => {
+    const tall = generateGridModel({ baysX: [6], baysZ: [5], storeyH: Array(12).fill(3), section })
+    tall.loads = tall.plates.map((p) => ({ kind: 'area' as const, plate: p.id, q: 5, cat: 'D' as const }))
+    const a = computeSeismic(tall, params)!
+    const b = computeSeismic(tall, { ...params, Tb: 1.3 * a.Ta })!
+    expect(a.T).toBeGreaterThan(0.7)                      // velocity branch governs
+    expect(b.Vraw).toBeLessThan(a.Vraw)
+    expect(b.Vraw).toBeCloseTo(a.Vraw / 1.3, 6)
+    expect(b.storeys.reduce((s, q) => s + q.Fx, 0)).toBeCloseTo(b.V, 4)
+  })
+})
+
 describe('drift check', () => {
   it('ΔM = 0.7RΔs against the elastic frame solution', () => {
     const m = makeModel()
