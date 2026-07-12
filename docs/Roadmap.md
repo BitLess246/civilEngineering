@@ -38,7 +38,7 @@ Target: v1.0  ·  Status: In Progress
 
 Goals:
 - [x] Hand calculations (engine-vs-closed-form benchmarks, `engine/validation.ts`)
-- [x] Automated validation tests (`validation.test.ts`; enforced in CI)
+- [x] Automated validation tests (`validation.test.ts`; run in the GitHub Actions `ci` job — `.github/workflows/static.yml` — gating the Pages deploy)
 - [x] Validation dashboard (`/validation` page with live per-module pass counts)
 - [ ] Validation Manual (docs/validation chapters; frame/modal/RS write-ups)
 - [ ] ETABS / STAAD comparisons (external-tool cross-checks)
@@ -69,7 +69,7 @@ Geotechnical:
 - [x] Soil Nailing (`/soil-nail`, FHWA GEC-7)
 - [x] Micropile Design (`/micropile`, FHWA-NHI-05-039)
 - [x] Shotcrete Design (`/shotcrete-facing`; FHWA GEC-7 facing flexure + punching)
-- [ ] Rock Anchors
+- [x] Rock Anchors (`/rock-anchor`, PTI DC35.1 / FHWA-IF-99-015)
 - [ ] Pressure Grouting
 
 ---

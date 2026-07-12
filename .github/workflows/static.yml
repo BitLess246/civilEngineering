@@ -1,9 +1,11 @@
-# Simple workflow for deploying static content to GitHub Pages
-name: Deploy static content to Pages
+# CI (typecheck + lint + tests) on every push/PR to main; Pages deploy only
+# runs on push to main and only after CI passes.
+name: CI and deploy to Pages
 
 on:
-  # Runs on pushes targeting the default branch
   push:
+    branches: ["main"]
+  pull_request:
     branches: ["main"]
 
   # Allows you to run this workflow manually from the Actions tab
@@ -15,19 +17,48 @@ permissions:
   pages: write
   id-token: write
 
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
-
 jobs:
-  # Single deploy job since we're just deploying
+  ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webapp
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Typecheck
+        run: npx tsc -b
+      # Non-blocking for now: main has 28 pre-existing eslint errors (react-hooks
+      # render-safety in ModelSpace/Diagram/useCalcResult + assorted no-useless-*).
+      # Remove continue-on-error once they're fixed so lint gates like the rest.
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true
+      - name: Test
+        run: npm test
+
   deploy:
+    # Deploy only from pushes to main (and manual dispatch), never from PRs,
+    # and only once CI is green.
+    needs: ci
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    # Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+    # However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+    concurrency:
+      group: "pages"
+      cancel-in-progress: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4

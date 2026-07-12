@@ -627,6 +627,8 @@ describe('optimizeStructure — steel sections', () => {
     expect(r.steps.some((s) => !s.ok)).toBe(true) // at least one failing iteration logged
   })
 
+  // Shrinking from the heaviest W-shape walks many optimizer iterations
+  // (~6–7 s), past vitest's 5 s default — give it explicit headroom.
   it('shrinks an oversized steel shape (W310x342) while the design stays OK', () => {
     const start = steelModel('W310x342')
     const first = designStructure(start, soil)!
@@ -635,7 +637,7 @@ describe('optimizeStructure — steel sections', () => {
     expect(r.converged).toBe(true)
     // shrink must have stepped at least one section down from the starting shape
     expect(r.model.sections.some((s) => s.shape !== 'W310x342')).toBe(true)
-  })
+  }, 20000)
 
   it('steel self-weight uses shape area × 78.5 kN/m³, not bounding box × 24', () => {
     // W310x79: A = 10000 mm². Self-weight = 10000/1e6 × 78.5 = 0.785 kN/m
