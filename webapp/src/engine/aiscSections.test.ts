@@ -1,5 +1,36 @@
 import { describe, it, expect } from 'vitest'
-import { AISC_SHAPES, shapesOf, shapeByName, effectiveSection, doubleAngle, W_SORTED, nextHeavierW, nextLighterW, sectionBoundingBox, FAMILIES } from './aiscSections'
+import { AISC_SHAPES, shapesOf, shapeByName, effectiveSection, doubleAngle, W_SORTED, nextHeavierW, nextLighterW, sectionBoundingBox, FAMILIES, torsionJ } from './aiscSections'
+
+describe('torsionJ — St-Venant constant per family', () => {
+  it('channel: thin-wall Σbt³/3, orders below the polar moment', () => {
+    // C200x17.1 (d 203, bf 57.4, tf 9.9, tw 5.6):
+    // J = (2·57.4·9.9³ + (203 − 19.8)·5.6³)/3 = 47 854 mm⁴ (hand calc)
+    const c = shapeByName('C200x17.1')!
+    expect(torsionJ(c)).toBeCloseTo(47854.4, 0)
+    // the old polar approximation A(rx²+ry²) ≈ 15.3e6 mm⁴ — ~320× too stiff
+    expect(c.A * (c.rx ** 2 + c.ry ** 2) / torsionJ(c)!).toBeGreaterThan(100)
+  })
+
+  it('angle: Σbt³/3 over the two legs', () => {
+    // L51x51x6.4: J = (51·6.4³ + (51 − 6.4)·6.4³)/3 = 8 353.7 mm⁴ (hand calc)
+    expect(torsionJ(shapeByName('L51x51x6.4')!)).toBeCloseTo(8353.66, 1)
+  })
+
+  it('rect HSS: Bredt J = 4A₀²t/p on the midline', () => {
+    // HSS64x64x4.8: bm = hm = 59.2 → J = 4·(59.2²)²·4.8/(4·59.2) = 995 878 mm⁴
+    expect(torsionJ(shapeByName('HSS64x64x4.8')!)).toBeCloseTo(995878.5, 0)
+  })
+
+  it('round pipe: exact polar (π/32)(D⁴ − Di⁴)', () => {
+    const p = shapesOf('PIPE')[0]
+    const Di = p.D! - 2 * p.t!
+    expect(torsionJ(p)).toBeCloseTo((Math.PI / 32) * (p.D! ** 4 - Di ** 4), 3)
+  })
+
+  it('W/WT return undefined (deriveWSection owns their J)', () => {
+    expect(torsionJ(shapeByName('W310x79')!)).toBeUndefined()
+  })
+})
 
 describe('AISC section library', () => {
   it('every shape has area + radii and a unique name', () => {

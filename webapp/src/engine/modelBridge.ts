@@ -11,7 +11,7 @@ import { buildDiaphragmGroups } from './diaphragm'
 import { autoRigidOffsets } from './rigidEndZones'
 import { distributePanel, type AreaLoad } from './tributary'
 import type { BeamLoad } from './beamAnalysis'
-import { shapeByName } from './aiscSections'
+import { shapeByName, torsionJ } from './aiscSections'
 import { deriveWSection, E_STEEL } from './steelDesign'
 
 export interface BridgeResult {
@@ -77,10 +77,12 @@ function steelSectionProps(s: RectSection) {
     const d = deriveWSection(shape)
     Iz = d.Ix; Iy = d.Iy; J = d.J
   } else {
-    // generic: I = A·r² about each axis; torsion ≈ box approximation
+    // generic: I = A·r² about each axis; J from the family-correct formula
+    // (thin-wall Σbt³/3 open / Bredt closed) — the polar moment Iz+Iy reads
+    // 1–2 orders too STIFF for open shapes (C, L), which is unconservative.
     Iz = shape.A * shape.rx ** 2
     Iy = shape.A * shape.ry ** 2
-    J = Iz + Iy   // polar (conservative for open shapes; exact for closed tubes)
+    J = torsionJ(shape) ?? Iz + Iy
   }
   return { E, G, A: shape.A, Iz, Iy, J }
 }

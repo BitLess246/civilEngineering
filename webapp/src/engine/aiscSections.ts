@@ -495,6 +495,28 @@ export const FAMILIES: { id: SectionFamily; label: string }[] = [
 export const shapesOf   = (family: SectionFamily) => AISC_SHAPES.filter((s) => s.family === family)
 export const shapeByName = (name: string) => AISC_SHAPES.find((s) => s.name === name)
 
+/** St-Venant torsional constant J (mm⁴) from the tabulated geometry.
+ *  Open shapes (C, L): thin-wall J = Σ(b·t³)/3 (Roark, Table 10.7) — the polar
+ *  moment Ix+Iy overestimates open-section J by 1–2 orders of magnitude, i.e.
+ *  reads UNconservatively stiff in torsion.
+ *  Closed shapes: rect/square HSS by Bredt's second formula J = 4A₀²t/p on the
+ *  midline; round HSS / pipe exactly J = (π/32)(D⁴ − Di⁴) (= Ix+Iy, circular).
+ *  Returns undefined when the needed geometry fields are absent (caller keeps
+ *  its fallback). W/WT use deriveWSection's thin-wall J instead. */
+export function torsionJ(s: AiscShape): number | undefined {
+  if (s.family === 'C' && s.d && s.bf && s.tf && s.tw)
+    return (2 * s.bf * s.tf ** 3 + (s.d - 2 * s.tf) * s.tw ** 3) / 3
+  if (s.family === 'L' && s.leg1 && s.leg2 && s.t)
+    return (s.leg1 * s.t ** 3 + (s.leg2 - s.t) * s.t ** 3) / 3
+  if ((s.family === 'HSS' || s.family === 'PIPE') && s.D && s.t)
+    return (Math.PI / 32) * (s.D ** 4 - (s.D - 2 * s.t) ** 4)
+  if (s.family === 'HSS' && s.b && s.h && s.t) {
+    const bm = s.b - s.t, hm = s.h - s.t              // midline rectangle
+    return (4 * (bm * hm) ** 2 * s.t) / (2 * (bm + hm))
+  }
+  return undefined
+}
+
 /** Overall cross-section bounding box {b (width), h (depth)} in mm, per family.
  *  Used as the RectSection b×h carried alongside a steel member (self-weight uses
  *  the true area, but the box drives fallbacks, quantities and labelling). */
