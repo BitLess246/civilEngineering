@@ -37,9 +37,9 @@ npm run build    # typecheck + production build
 ## Current state (analysis-core baseline, PR #239)
 
 > Newer work is tracked in the **Tier 4** (A1–E13, PRs through #273),
-> **Post-Tier-4** (PRs #275–#278), **Phase 3 + connections** (PRs #279–#308)
-> and **Connection detailing polish** (PRs #310–#317) sections below; latest
-> suite: **1003 tests**.
+> **Post-Tier-4** (PRs #275–#278), **Phase 3 + connections** (PRs #279–#308),
+> **Connection detailing polish** (PRs #310–#317) and **Audit round**
+> (PRs #319–#334) sections below; latest suite: **1028 tests**.
 > The repo root is now just `webapp/`, `docs/` and the markdown docs.
 
 ### 3D Model Space analysis core (`/model`) — the centrepiece
@@ -407,8 +407,58 @@ flange bearing needs vertically offset framing first.
 
 _Tests after #317: **1003 passing**; `tsc -b` clean; production build OK._
 
+## Audit round (PRs #319–#334)
+
+A three-agent full-project audit (engine correctness / live UI-UX / build-test
+health, 2026-07-12) produced **issue #325** — the prioritised follow-up
+backlog — and this fix round. Remaining work lives in #325's unticked boxes.
+
+**Correctness (found by the audit, fixed immediately):**
+- **#319 — thermal loads were 1000× too large**: `modelBridge` fed `E·A·α·ΔT`
+  in newtons to a solver contract in kN; `/1000` + bridge-level regression test.
+- **#321 — ±E/±W load reversal**: model-derived lateral cases get reversed-sign
+  companion runs, so uplift (0.9D±E/W) and moment reversal are enveloped.
+- **#326 — instability surfaced, never clamped**: `momentMagnificationNonsway`
+  returns `stable:false` (δ, Mc = ∞) when Pu ≥ 0.75Pc (§6.6.4.5.2) instead of
+  silently clamping δ to 1.0; the P-Δ loops return
+  `F3PDeltaStatus {converged, singular, iterations, residual}` on `F3Result`,
+  and `StructureDesign.pDeltaIssues` gates `designOK` (fail-loud in UI too).
+- **#328 — open-section torsion**: non-W shapes used the polar moment
+  (1–2 orders too stiff for C/L); `torsionJ()` now does thin-wall Σbt³/3 open /
+  Bredt closed.
+- **#330 — P-Δ reactions carry the Kg term**: reactions are `(K+Kg)·d − F`
+  when P-Δ ran, so the secondary base shear/moment reaches supports; ΣR = ΣF
+  unchanged (Kg self-equilibrates).
+
+**Engine features / hardening:**
+- **#327 — ACI §6.6.3.1.1 cracked-section modifiers**: 0.35Ig beams / 0.70Ig
+  columns via `BridgeOpts.crackedSections`; ON by default in the Model Space UI,
+  OFF at the API level so closed-form benchmarks stay gross-section.
+- **#329 — bridge→solver unit-contract tests**: five absolute closed-form
+  anchors (δ = PL³/3EI in metres, ΣR = wL, thermal ≈746 kN hard-bracketed…) so
+  the next N-vs-kN slip fails loud.
+
+**Process / UI:**
+- **#320 — real CI gate**: `tsc -b` + lint (non-blocking: 28 pre-existing
+  eslint errors) + `npm test` gate the Pages deploy; optimizer-test timeout
+  headroom; Roadmap truth-up.
+- **#331 — discoverability**: searchable “All tools” grid on Home; Structural
+  dropdown sub-grouped into 6 disciplines (two-column panel); ARIA menu
+  semantics.
+- **#332 — Steel Design works without the API**: `calcApi` falls back to an
+  in-browser `calcLocal` (lazy chunk, same engine) on network error/404; real
+  API errors now actually log.
+- **#333 — KaTeX ⌀/§ sanitizer** in `lib/math.tsx` (single chokepoint) kills
+  the per-page console warnings; **#334 — WCAG AA helper text** (slate-400 →
+  slate-500 on light surfaces, 3 dark-bg exceptions).
+
+_Tests after #334: **1028 passing**; `tsc -b` clean._
+
 _Remaining roadmap: Pressure Grouting (empirical — skipped by design); Phase 4
-items are owner-driven (marketing/monetisation)._
+items are owner-driven (marketing/monetisation). Prioritised follow-ups: the
+unticked boxes in **issue #325** (page-shell unification, mobile tables, FEM
+run feedback, eslint zero-out, xlsx vuln, bundle splitting, ModelSpace split,
+ValidationMap transcription, project save/load…)._
 
 ## Validation roadmap — toward a formal validation manual
 
