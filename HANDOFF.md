@@ -75,6 +75,11 @@ of the app. Everything runs **off the main thread** in a web worker
   (0.9·V_B & 0.8·V_A regular / 1.0·V_B irregular) — both feed the same
   `LateralCase` envelope that Design/Optimize consume ("Generate E cases — RSA"
   in the Loading tab; needs a Modal run first).
+- **Accidental torsion ±5%** (`accidentalTorsionLoads`, §208.7.2.7): each
+  directional E case (static or RSA) splits into ⟳/⟲ variants adding a
+  self-equilibrating node-force couple (ΣΔF = 0, ΣΔF·d = ±0.05·L⊥·F_storey,
+  mass-weighted about the storey mass centroid) — works with or without the
+  rigid diaphragm; toggle in the Loading tab, on by default.
 - **Member force diagrams BMD/SFD** (PR #233): inline bending-moment and shear
   diagrams rendered on each member in the 3D view and Analysis tab. Uses the
   existing `xs[]`/`My[]`/`Mz[]`/`Vy[]` arrays on `F3MemberResult`.
