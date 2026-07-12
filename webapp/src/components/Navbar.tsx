@@ -1,9 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { TOOL_CATEGORIES, type ToolCategory } from '../lib/tools'
+import { TOOL_CATEGORIES, toolGroups, type ToolCategory, type ToolDef } from '../lib/tools'
 
 // Flat, sharp-cornered top navigation. Tool calculators live in category
 // dropdowns; auth actions sit on the right. Hidden in print via `no-print`.
+
+function ToolLink({ t, onClose }: { t: ToolDef; onClose: () => void }) {
+  return (
+    <Link to={t.to} role="menuitem" onClick={onClose}
+      className="group flex flex-col px-4 py-2 hover:bg-[#f4f8ff]">
+      <span className="text-sm font-medium text-slate-800 group-hover:text-[#0056b3]">{t.name}</span>
+      <span className="text-[10px] uppercase tracking-wider text-slate-500">{t.sub}</span>
+    </Link>
+  )
+}
 
 function Dropdown({ category, open, onToggle, onClose }: {
   category: ToolCategory
@@ -11,23 +21,32 @@ function Dropdown({ category, open, onToggle, onClose }: {
   onToggle: () => void
   onClose: () => void
 }) {
+  const groups = toolGroups(category)
+  const grouped = groups.some(g => g.group !== '')
   return (
     <div className="relative">
-      <button onClick={onToggle}
+      <button onClick={onToggle} aria-haspopup="menu" aria-expanded={open}
         className={`flex h-11 items-center gap-1.5 px-3 text-xs font-semibold tracking-wide transition-colors ${
           open ? 'bg-white/10 text-white' : 'text-slate-300 hover:text-white'}`}>
         {category.label}
-        <span className={`text-[8px] transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
+        <span aria-hidden className={`text-[8px] transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
       </button>
       {open && (
-        <div className="absolute left-0 top-11 z-50 w-64 border border-slate-200 bg-white shadow-xl">
-          {category.tools.map(t => (
-            <Link key={t.to} to={t.to} onClick={onClose}
-              className="group flex flex-col border-b border-slate-100 px-4 py-2.5 last:border-0 hover:bg-[#f4f8ff]">
-              <span className="text-sm font-medium text-slate-800 group-hover:text-[#0056b3]">{t.name}</span>
-              <span className="text-[10px] uppercase tracking-wider text-slate-400">{t.sub}</span>
-            </Link>
-          ))}
+        <div role="menu" aria-label={category.label}
+          className={`absolute left-0 top-11 z-50 max-h-[calc(100vh-3.5rem)] overflow-y-auto border border-slate-200 bg-white shadow-xl ${
+            grouped ? 'grid w-[36rem] grid-cols-2 gap-x-2 p-2' : 'w-64'}`}>
+          {grouped
+            ? groups.map(g => (
+                <div key={g.group} className="mb-2 break-inside-avoid">
+                  <p className="px-4 pb-1 pt-2 text-[9px] font-bold uppercase tracking-[0.18em] text-[#0056b3]">{g.group}</p>
+                  {g.tools.map(t => <ToolLink key={t.to} t={t} onClose={onClose} />)}
+                </div>
+              ))
+            : category.tools.map(t => (
+                <div key={t.to} className="border-b border-slate-100 last:border-0">
+                  <ToolLink t={t} onClose={onClose} />
+                </div>
+              ))}
         </div>
       )}
     </div>
