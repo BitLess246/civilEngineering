@@ -52,6 +52,10 @@ export interface AnalyzeOptions {
    *  'smf' = Special Moment Frame (§418.7.5), 'imf' = Intermediate (§418.4.3).
    *  Default 'gravity' (ordinary ties only, §425.7.2). */
   seismicSystem?: 'gravity' | 'imf' | 'smf'
+  /** ACI 318-14 §6.6.3.1.1 cracked-section I-modifiers (0.35Ig beams/girders,
+   *  0.70Ig columns/braces) on concrete members. Default off at the API level;
+   *  the Model Space UI enables it by default. */
+  crackedSections?: boolean
 }
 
 export interface BeamSectionDesign {
@@ -410,7 +414,7 @@ function buildRuns(model: StructuralModel, opts: AnalyzeOptions, onProgress?: Pr
   // slab tributary line loads and member self-weight; lateral cases are pure
   // node loads applied on top per direction.
   const gravityModel = { ...model, loads: model.loads.filter((l) => l.cat !== 'E' && l.cat !== 'W') }
-  const br = modelToFrame3D(gravityModel, { useShells: false })
+  const br = modelToFrame3D(gravityModel, { useShells: false, crackedSections: opts.crackedSections })
 
   const lateral = opts.lateral?.length ? opts.lateral : defaultLateralCases(model)
   const toF3 = (l: ModelLoad): F3Load =>
@@ -782,7 +786,7 @@ async function buildRunsParallel(
   model: StructuralModel, opts: AnalyzeOptions, pool: FramePool, onProgress?: ProgressFn,
 ): Promise<{ br: BridgeResult; runs: FrameRun[] }> {
   const gravityModel = { ...model, loads: model.loads.filter((l) => l.cat !== 'E' && l.cat !== 'W') }
-  const br = modelToFrame3D(gravityModel, { useShells: false })
+  const br = modelToFrame3D(gravityModel, { useShells: false, crackedSections: opts.crackedSections })
 
   const lateral = opts.lateral?.length ? opts.lateral : defaultLateralCases(model)
   const toF3 = (l: ModelLoad): F3Load =>

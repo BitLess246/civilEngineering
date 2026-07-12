@@ -18,7 +18,7 @@ import type { SolveProgress } from './progress'
 
 type DriftReq = { hasSeis: boolean; T: number; R: number; axis: 'x' | 'z'; pDelta: boolean }
 export type SolverRequest =
-  | { id: number; kind: 'analyze'; model: StructuralModel; opts: F3AnalyzeOpts; drift: DriftReq }
+  | { id: number; kind: 'analyze'; model: StructuralModel; opts: F3AnalyzeOpts; drift: DriftReq; crackedSections?: boolean }
   | { id: number; kind: 'design'; model: StructuralModel; soil: SoilOptions; plan: FootingPlan; opts: AnalyzeOptions; tryBars: boolean }
   | { id: number; kind: 'optimize'; model: StructuralModel; soil: SoilOptions; plan: FootingPlan; opts: AnalyzeOptions; tryBars: boolean; maxIter: number }
   | { id: number; kind: 'modal'; model: StructuralModel; nModes: number }
@@ -33,7 +33,7 @@ ctx.onmessage = async (e: MessageEvent<SolverRequest>) => {
   const onProgress = (p: SolveProgress) => ctx.postMessage({ id: msg.id, progress: p })
   try {
     if (msg.kind === 'analyze') {
-      const br = modelToFrame3D(msg.model)
+      const br = modelToFrame3D(msg.model, { crackedSections: msg.crackedSections })
       const analysis = analyzeFrame3D(br.nodes, br.members, br.supports, br.loads, msg.opts, onProgress, br.diaphragmGroups, br.shells)
       let drift = null
       if (msg.drift.hasSeis) {

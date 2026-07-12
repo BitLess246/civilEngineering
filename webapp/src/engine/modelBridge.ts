@@ -4,7 +4,7 @@
 // and land on the matching edge members as vdl/udl gravity loads (categories
 // preserved) — the load path, automated.
 // ─────────────────────────────────────────────────────────────────────────
-import type { StructuralModel, RectSection, MemberReleases, MemberConnections, ConnectionKind, Plate } from './model'
+import type { StructuralModel, RectSection, MemberReleases, MemberConnections, ConnectionKind, Plate, MemberRole } from './model'
 import type { F3Node, F3Member, F3Support, F3Load, F3DiaphragmGroup, F3Shell } from './frame3d'
 import { rectJ, defaultAxisRotation } from './frame3d'
 import { buildDiaphragmGroups } from './diaphragm'
@@ -180,7 +180,19 @@ function releaseFlags(rel: MemberReleases | undefined): Pick<F3Member, 'relI' | 
 /** Bridge options. `useShells` defaults to the model's `shellElements` flag; the
  *  design / modal / buckling paths pass `false` to keep the classic tributary
  *  edge-load model (shells are an analysis-path feature in this phase). */
-export interface BridgeOpts { useShells?: boolean }
+/** ACI 318-14 Table 6.6.3.1.1(a) — cracked flexural stiffness for factored-load
+ *  analysis: beams 0.35Ig, columns 0.70Ig (braces treated as compression
+ *  members → 0.70). Axial area stays 1.0Ag; J is left gross (torsional cracking
+ *  is a separate §22.7 concern). Concrete members only — steel is uncracked. */
+const CRACKED_I: Record<MemberRole, number> = { beam: 0.35, girder: 0.35, column: 0.70, brace: 0.70 }
+
+export interface BridgeOpts {
+  useShells?: boolean
+  /** Apply ACI §6.6.3.1.1 cracked-section I-modifiers to concrete members.
+   *  Off by default at the API level so closed-form benchmarks stay anchored
+   *  to gross-section theory; the Model Space UI enables it by default. */
+  crackedSections?: boolean
+}
 
 export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): BridgeResult {
   const useShells = opts?.useShells ?? !!model.shellElements
@@ -200,8 +212,11 @@ export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): Bridg
     // analysis strong-axis orientation matches the drawn one (depth d → X)
     const ni = nm.get(m.i), nj = nm.get(m.j)
     const rot = ni && nj ? defaultAxisRotation([nj.x - ni.x, nj.y - ni.y, nj.z - ni.z], m.axisRotation) : (m.axisRotation ?? 0)
+    const props = secById.get(m.section) ?? fallback
+    const ck = opts?.crackedSections && model.sections.find((s) => s.id === m.section)?.material !== 'steel'
+      ? CRACKED_I[m.role] : 1
     return {
-      id: m.id, i: m.i, j: m.j, ...(secById.get(m.section) ?? fallback),
+      id: m.id, i: m.i, j: m.j, ...props, Iz: props.Iz * ck, Iy: props.Iy * ck,
       ...releaseFlags(effectiveReleases(m)),
       ...(offI ? { offI } : {}),
       ...(offJ ? { offJ } : {}),
