@@ -111,6 +111,11 @@ describe('design pipeline — single-bay single-storey grid', () => {
       r.beams.every((b) => b.ok) && r.columns.every((c) => c.ok) && r.footings.every((f) => f.ok),
     )
   })
+
+  it('P-Δ non-convergence gates designOK (fail-loud, never silently designed)', () => {
+    expect(r.pDeltaIssues).toEqual([])   // first-order runs carry no P-Δ status
+    expect(designOK({ ...r, pDeltaIssues: ['1.2D+1.6L+E(+X)'] })).toBe(false)
+  })
 })
 
 describe('steel design pipeline (AISC routing + base plates)', () => {

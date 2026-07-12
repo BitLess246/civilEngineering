@@ -88,11 +88,23 @@ export interface F3MemberResult {
   Nmax: number; Vmax: number; Mmax: number; Tmax: number
 }
 export interface F3Reaction { node: string; fixity: F3Fixity; F: [number, number, number]; M: [number, number, number] }
+/** Status of the iterative P-Δ solve (self-consistent Kg(N) path only; the
+ *  `fixedAxial` path is a single solve and returns null outright when singular). */
+export interface F3PDeltaStatus {
+  converged: boolean   // residual < tol reached with a non-singular tangent
+  singular: boolean    // tangent LU failed (elastic instability) — d is the last iterate
+  iterations: number   // iterations performed
+  residual: number     // last relative increment ‖Δd‖/‖d‖ (0 when d = 0 exactly)
+}
+
 export interface F3Result {
   d: number[]
   reactions: F3Reaction[]
   members: F3MemberResult[]
   Mmax: number; Vmax: number; Nmax: number
+  /** Present only when an iterative P-Δ solve ran. Callers must check
+   *  converged/singular rather than trusting d blindly near instability. */
+  pDelta?: F3PDeltaStatus
 }
 
 /** St-Venant torsional constant for a solid rectangle b×h (mm). */
@@ -791,6 +803,7 @@ export function solveWithGeometry(
   precomp: FramePrecomp, loads: F3Load[], opts?: PDeltaOpts,
 ): F3Result | null {
   const { idx, members, geoms, shellGeoms, ndof, free, freeIdx, Kff, Kff_raw, supports, diaT, diaNi } = precomp
+  let pdStatus: F3PDeltaStatus | undefined
 
   const mloads = members.map((m, i) => computeMemberLoads(geoms[i], m, loads))
 
@@ -870,16 +883,20 @@ export function solveWithGeometry(
       if (opts?.pDelta) {
         const maxIter = opts.maxIter ?? 20
         const tol = opts.tol ?? 1e-5
+        let res = Infinity, singular = false, iters = 0
         for (let it = 0; it < maxIter; it++) {
           const Kt_ind = applyTtoK(assembleKtff(axialFromState), diaT, diaNi)
           const Ktff_fac = luFactor(Kt_ind)
-          if (!Ktff_fac) break
+          if (!Ktff_fac) { singular = true; break }   // elastic instability — retain last d, flagged in status
           const dn = applyTrecover(luSolve(Ktff_fac, Ff_ind), diaT)
           let num = 0, den = 0
           free.forEach((dof, k) => { num += (dn[k] - d[dof]) ** 2; den += dn[k] ** 2 })
           free.forEach((dof, k) => (d[dof] = dn[k]))
-          if (den === 0 || Math.sqrt(num / den) < tol) break
+          iters = it + 1
+          res = den === 0 ? 0 : Math.sqrt(num / den)
+          if (res < tol) break
         }
+        pdStatus = { converged: !singular && res < tol, singular, iterations: iters, residual: res }
       }
     } else {
       const d0 = luSolve(Kff, Ff)
@@ -890,15 +907,19 @@ export function solveWithGeometry(
       if (opts?.pDelta) {
         const maxIter = opts.maxIter ?? 20
         const tol = opts.tol ?? 1e-5
+        let res = Infinity, singular = false, iters = 0
         for (let it = 0; it < maxIter; it++) {
           const Ktff_fac = luFactor(assembleKtff(axialFromState))
-          if (!Ktff_fac) break                               // elastic instability — retain last d
+          if (!Ktff_fac) { singular = true; break }          // elastic instability — retain last d, flagged in status
           const dn = luSolve(Ktff_fac, Ff)
           let num = 0, den = 0
           free.forEach((dof, k) => { num += (dn[k] - d[dof]) ** 2; den += dn[k] ** 2 })
           free.forEach((dof, k) => (d[dof] = dn[k]))
-          if (den === 0 || Math.sqrt(num / den) < tol) break
+          iters = it + 1
+          res = den === 0 ? 0 : Math.sqrt(num / den)
+          if (res < tol) break
         }
+        pdStatus = { converged: !singular && res < tol, singular, iterations: iters, residual: res }
       }
     }
   }
@@ -949,6 +970,7 @@ export function solveWithGeometry(
     Mmax: Math.max(...results.map((r) => r.Mmax), 0),
     Vmax: Math.max(...results.map((r) => r.Vmax), 0),
     Nmax: Math.max(...results.map((r) => r.Nmax), 0),
+    ...(pdStatus ? { pDelta: pdStatus } : {}),
   }
 }
 

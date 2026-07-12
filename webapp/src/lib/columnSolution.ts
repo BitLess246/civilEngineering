@@ -157,10 +157,15 @@ export function slendernessSolution(i: SlendernessInput, r: SlendernessResult): 
       lines: [
         eq(String.raw`C_m = 0.6 - 0.4\,\tfrac{M_1}{M_2} = ${sn3(r.Cm)}`),
         eq(String.raw`P_c = \dfrac{\pi^2 EI}{(k L_u)^2} = \dfrac{\pi^2 (${sn0(r.EI)})}{(${sn2(i.k * i.Lu)})^2} = ${sn1(r.Pc)}\ \text{kN}`),
-        eq(String.raw`\delta = \dfrac{C_m}{1 - \tfrac{P_u}{0.75 P_c}} = ${sn3(r.delta)} \ge 1.0`),
-        eq(String.raw`M_{2,min} = P_u(15 + 0.03h) = ${sn2(r.M2min)}\ \text{kN·m},\qquad M_c = \delta\,M_2 = \mathbf{${sn2(r.Mc)}}\ \text{kN·m}`),
+        ...(r.stable ? [
+          eq(String.raw`\delta = \dfrac{C_m}{1 - \tfrac{P_u}{0.75 P_c}} = ${sn3(r.delta)} \ge 1.0`),
+          eq(String.raw`M_{2,min} = P_u(15 + 0.03h) = ${sn2(r.M2min)}\ \text{kN·m},\qquad M_c = \delta\,M_2 = \mathbf{${sn2(r.Mc)}}\ \text{kN·m}`),
+        ] : [
+          eq(String.raw`P_u = ${sn1(i.Pu)}\ \text{kN} \;\ge\; 0.75P_c = ${sn1(0.75 * r.Pc)}\ \text{kN}`),
+          txt('δ = Cm/(1 − Pu/0.75Pc) is undefined — the column is elastically unstable at this load (§406.6.4). Enlarge the section, raise f\'c, or reduce the effective length; magnified design cannot proceed.'),
+        ]),
       ],
-      note: 'Mc replaces Mu in the eccentric design above.',
+      note: r.stable ? 'Mc replaces Mu in the eccentric design above.' : 'UNSTABLE — no Mc; revise the column before design.',
     },
   ]
 }

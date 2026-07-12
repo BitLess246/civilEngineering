@@ -3188,6 +3188,14 @@ export default function ModelSpace() {
               {design.totals.steelKg > 0 && ` · steel ${(design.totals.steelKg / 1000).toFixed(2)} t`}
             </span>
           </h2>
+          {design.pDeltaIssues.length > 0 && (
+            <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+              <p className="font-bold">⚠ P-Δ did not converge for {design.pDeltaIssues.length} load case(s) — forces from these runs are unreliable (possible elastic instability).</p>
+              <ul className="mt-1 list-inside list-disc">
+                {design.pDeltaIssues.map((n) => <li key={n}><span className="font-mono">{n}</span></li>)}
+              </ul>
+            </div>
+          )}
           {design.unchecked.length > 0 && (
             <div className="rounded-xl border border-red-300 bg-red-50 p-3 text-sm text-red-800">
               <p className="font-bold">⚠ {design.unchecked.length} member(s) could NOT be design-checked — the result is not a passing design.</p>

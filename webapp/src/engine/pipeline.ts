@@ -190,6 +190,10 @@ export interface StructureDesign {
   orphanEdges: number
   /** Members no design path could check (unsupported shape family). Non-empty ⇒ designOK is false. */
   unchecked: UncheckedMember[]
+  /** Load-case runs whose P-Δ iteration failed to converge (singular tangent or
+   *  residual above tol) — the forces from those runs are not trustworthy.
+   *  Non-empty ⇒ designOK is false. Empty for first-order analyses. */
+  pDeltaIssues: string[]
 }
 
 /** Every check the pipeline runs must pass — members, foundations, slabs
@@ -203,6 +207,7 @@ export function designOK(d: StructureDesign): boolean {
     && d.slabs.every((s) => s.ok) && d.walls.every((w) => w.ok)
     && d.joints.every((j) => j.ok) && d.beamJoints.every((j) => j.ok) && d.scwb.every((j) => j.ok)
     && d.unchecked.length === 0
+    && d.pDeltaIssues.length === 0
 }
 
 // ── Steel member design (reuses steelDesign engine) ──────────────────────────
@@ -745,6 +750,8 @@ function designFromRuns(
     totals: { concreteMembers, concreteSlabs, concrete: concreteMembers + concreteSlabs, steelKg },
     orphanEdges: br.orphanEdges.length,
     unchecked,
+    // fail-loud: forces from a non-converged P-Δ run must not silently drive design
+    pDeltaIssues: runs.filter((r) => r.result.pDelta && !r.result.pDelta.converged).map((r) => r.name),
   }
   partialDesign.joints = designSteelJoints(model, partialDesign)
   partialDesign.beamJoints = designBeamBeamJoints(model, partialDesign)
