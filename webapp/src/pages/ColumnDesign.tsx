@@ -6,8 +6,8 @@ import {
 } from '../engine/columnDesign'
 import { factoredLoad } from '../engine/loads'
 import { ColumnSchematic } from '../components/ColumnSchematic'
+import { ReportBar, PrintReport, type LetterheadState } from '../components/calc'
 import { InteractionDiagram } from '../components/InteractionDiagram'
-import { ReportControls } from '../components/ReportControls'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { axialColumnSolution, eccentricColumnSolution, slendernessSolution } from '../lib/columnSolution'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
@@ -22,6 +22,7 @@ type BarMode = 'design' | 'analyze'
 
 export default function ColumnDesign() {
   const [mode, setMode] = useState<Mode>('axial')
+  const [lh, setLh] = useState<LetterheadState>({ project: '', sheet: 'C-01 · Rev A', preparedBy: '' })
   const [shape, setShape] = useState<ColumnShape>('tied')
   const [b, setB] = useState(400); const [h, setH] = useState(400); const [D, setD] = useState(400)
   const [cover, setCover] = useState(40)
@@ -121,7 +122,7 @@ export default function ColumnDesign() {
         P–M interaction (balanced condition, φ transition), and nonsway moment magnification for slender
         columns. NSCP 2015 / ACI 318-14.
       </p>
-      <ReportControls title="Column Design Report" />
+      <ReportBar title="Column Design Report" lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} />
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-5">
@@ -323,7 +324,34 @@ export default function ColumnDesign() {
         </div>
       )}
 
-      {solution.length > 0 && <WorkedSolution steps={solution} />}
+      <div className="no-print">{solution.length > 0 && <WorkedSolution steps={solution} title="Calculation report — worked solution" />}</div>
+      {axial && solution.length > 0 && (
+        <PrintReport
+          docTitle={tied ? 'Tied RC Column' : 'Spiral RC Column'} docCode="C-01" badges={['ACI 318-14', 'NSCP 2015']}
+          ok={(eccentric ? util !== null && util <= 1 && !unstable : axial.axialOK) && axial.rhoOK}
+          governing={eccentric
+            ? (unstable ? 'Slender column unstable — Pu ≥ 0.75·Pc' : `P–M interaction · utilization ${util !== null ? util.toFixed(2) : '—'}`)
+            : `Axial φPn,max = ${f1(axial.phiPnMax)} kN`}
+          lh={lh}
+          stats={[
+            { label: 'Bars', value: `${axial.bars}-⌀${barDia}` },
+            { label: tied ? 'Ties' : 'Spiral pitch', value: tied ? `⌀${Math.max(tieDia, axial.tieDiaMin)} @${f0(axial.tieSpacingFinal)}` : `@${f0(axial.spiralPitch)}`, unit: 'mm' },
+            { label: 'φPn,max', value: f1(axial.phiPnMax), unit: 'kN' },
+          ]}
+          checks={eccentric && util !== null ? [{ name: 'P–M interaction Pu/φPn', ratio: util, ok: util <= 1.0001 }] : []}
+          data={[
+            ['Section', tied ? `${b} × ${h} mm (tied)` : `⌀${D} mm (spiral)`], ['Clear cover', `${cover} mm`],
+            ["Concrete f'c", `${fc} MPa`], ['Steel fy / fyt', `${fy} / ${fyt} MPa`],
+            ['Bar ⌀ / tie ⌀', `${barDia} / ${tieDia} mm`], ['ρ provided', `${(axial.rho * 100).toFixed(2)} %`],
+            ['Pu', `${f1(Pu)} kN`], ...(eccentric ? [['Mu', `${f1(Mu)} kN·m`] as [string, string]] : []),
+          ]}
+          steps={solution}
+          drawingTitle="Column Section"
+          drawing={<ColumnSchematic shape={tied ? 'tied' : 'spiral'} b={b} h={h} D={D} cover={cover}
+            barDia={barDia} tieDia={tieDia} bars={axial.bars}
+            tieSpacing={tied ? axial.tieSpacingFinal : axial.spiralPitch} />}
+        />
+      )}
     </div>
   )
 }

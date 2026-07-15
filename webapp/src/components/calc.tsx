@@ -144,14 +144,14 @@ export interface ReportCheckRow { name: string; ratio: number; ok: boolean }
 const SectionRule = ({ n, title }: { n: number; title: string }) => (
   <h2 className="mt-6 border-b-2 border-[#0f1b2a] pb-1.5 text-[12px] font-extrabold uppercase tracking-[.12em] text-[#0f1b2a]">{n} · {title}</h2>
 )
-export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, stats, checks, data, steps, drawing, drawingTitle }: {
+export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, stats = [], checks = [], data = [], steps, drawing, drawingTitle }: {
   docTitle: string; docCode: string; badges: string[]
   ok: boolean; governing: string
   lh: LetterheadState
-  stats: VerdictStat[]; checks: ReportCheckRow[]
-  data: [string, string][]
+  stats?: VerdictStat[]; checks?: ReportCheckRow[]
+  data?: [string, string][]
   steps: SolutionStep[]
-  drawing: ReactNode; drawingTitle: string
+  drawing?: ReactNode; drawingTitle?: string
 }) {
   const today = new Date().toISOString().slice(0, 10)
   const lhCells: [string, string, boolean][] = [
@@ -192,16 +192,16 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, stat
         ))}
       </div>
 
-      <SectionRule n={1} title="Design Summary" />
-      <div className="print-avoid-break mt-3 grid grid-cols-3 gap-2.5">
+      {(stats.length > 0 || checks.length > 0) && <SectionRule n={1} title="Design Summary" />}
+      {stats.length > 0 && <div className="print-avoid-break mt-3 grid grid-cols-3 gap-2.5">
         {stats.map((st) => (
           <div key={st.label} className="rounded-lg border border-[#e3e1da] px-3.5 py-2.5">
             <p className="text-[8.5px] font-semibold uppercase tracking-widest text-[#a39d8d]">{st.label}</p>
             <p className="mt-0.5 font-mono text-[15px] font-semibold">{st.value}{st.unit && <span className="text-[10px] text-[#a39d8d]"> {st.unit}</span>}</p>
           </div>
         ))}
-      </div>
-      <table className="mt-3 w-full border-collapse text-[10.5px]">
+      </div>}
+      {checks.length > 0 && <table className="mt-3 w-full border-collapse text-[10.5px]">
         <thead><tr>
           <th className="border-b-[1.5px] border-[#0f1b2a] px-2.5 py-1.5 text-left text-[8.5px] font-bold uppercase tracking-widest text-[#5c6675]">Check</th>
           <th className="border-b-[1.5px] border-[#0f1b2a] px-2.5 py-1.5 text-right text-[8.5px] font-bold uppercase tracking-widest text-[#5c6675]">Ratio</th>
@@ -218,16 +218,16 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, stat
             </tr>
           ))}
         </tbody>
-      </table>
+      </table>}
 
-      <SectionRule n={2} title="Design Data" />
-      <div className="print-avoid-break mt-2 grid grid-cols-2 gap-x-7">
+      {data.length > 0 && <SectionRule n={2} title="Design Data" />}
+      {data.length > 0 && <div className="print-avoid-break mt-2 grid grid-cols-2 gap-x-7">
         {data.map(([k, v]) => (
           <div key={k} className="flex items-baseline justify-between border-b border-[#f3f1ea] py-1 text-[10.5px]">
             <span className="text-[#5c6675]">{k}</span><span className="font-mono font-medium">{v}</span>
           </div>
         ))}
-      </div>
+      </div>}
 
       <SectionRule n={3} title="Worked Solution" />
       {steps.map((st, i) => (
@@ -244,20 +244,52 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, stat
         </div>
       ))}
 
-      <SectionRule n={4} title="Drawing" />
-      <div className="print-avoid-break mt-3 rounded-lg border border-[#e3e1da] p-3.5 [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
+      {drawing && <SectionRule n={4} title="Drawing" />}
+      {drawing && <div className="print-avoid-break mt-3 rounded-lg border border-[#e3e1da] p-3.5 [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
         <div className="flex items-baseline justify-between">
-          <span className="text-[10px] font-bold tracking-[.14em] text-[#5c6675]">{(lh.sheet || docCode).split('·')[0].trim()} · {drawingTitle.toUpperCase()}</span>
+          <span className="text-[10px] font-bold tracking-[.14em] text-[#5c6675]">{(lh.sheet || docCode).split('·')[0].trim()} · {(drawingTitle ?? docTitle).toUpperCase()}</span>
           <span className="font-mono text-[9px] text-[#a39d8d]">to scale</span>
         </div>
         <div className="mx-auto w-3/4">{drawing}</div>
-      </div>
+      </div>}
 
       <div className="print-avoid-break mt-6 grid grid-cols-2 gap-7">
         <div><div className="h-11 border-b border-[#0f1b2a]" /><p className="mt-1.5 text-[10px] font-bold">{lh.preparedBy || '\u00a0'}</p><p className="text-[9px] text-[#7a7568]">Prepared by</p></div>
         <div><div className="h-11 border-b border-[#0f1b2a]" /><p className="mt-1.5 text-[10px] font-bold">{'\u00a0'}</p><p className="text-[9px] text-[#7a7568]">Reviewed by · Date</p></div>
       </div>
       <p className="mt-4 text-[8.5px] leading-relaxed text-[#a39d8d]">Computed client-side by the CivEng Toolkit engine · verify before construction use. Load factors per NSCP 2015 §203.3; strength reduction factors per ACI 318-14 Table 21.2.1. Project: {lh.project || '—'}.</p>
+    </div>
+  )
+}
+
+/** Screen report bar for calculator pages that keep a single-column layout:
+ *  inline letterhead fields + the Export (print) action. Pairs with
+ *  PrintReport, which renders the printed letterhead itself. */
+export function ReportBar({ title, lh, onChange }: {
+  title: string; lh: LetterheadState; onChange: (p: Partial<LetterheadState>) => void
+}) {
+  const print = () => {
+    const prev = document.title
+    document.title = title + (lh.project ? ` — ${lh.project}` : '')
+    window.print()
+    window.setTimeout(() => { document.title = prev }, 500)
+  }
+  const field = (label: string, key: keyof LetterheadState, ph: string, mono = false) => (
+    <label className="flex min-w-36 flex-1 flex-col text-sm">
+      <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">{label}</span>
+      <input value={lh[key]} onChange={(e) => onChange({ [key]: e.target.value })} placeholder={ph}
+        className={`text-[13px] ${mono ? 'font-mono' : ''}`} />
+    </label>
+  )
+  return (
+    <div className="no-print mt-4 flex flex-wrap items-end gap-3 rounded-lg border border-[#e3e1da] bg-white p-3">
+      {field('Project / job', 'project', 'Lot 12 Residence')}
+      {field('Sheet', 'sheet', 'S-01 · Rev A', true)}
+      {field('Prepared by', 'preparedBy', 'Engineer, CE')}
+      <button type="button" onClick={print}
+        className="ml-auto inline-flex items-center gap-2 rounded-md bg-[#0f4c92] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0d3f78]">
+        ⎙ Export report
+      </button>
     </div>
   )
 }

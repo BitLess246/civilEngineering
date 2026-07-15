@@ -1,11 +1,10 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { PageHeader, VerdictPanel, DrawingCard } from '../components/calc'
+import { PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
 import { designBeam, beamServiceDeflection, type BeamDesignInput, type BeamDesignResult } from '../engine/beamDesign'
 import type { BeamSupport } from '../engine/beamDeflection'
 import type { CriticalSection } from '../engine/beamSections'
 import { BeamSchematic } from '../components/BeamSchematic'
-import { ReportControls } from '../components/ReportControls'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { buildBeamSolution } from '../lib/beamSolution'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
@@ -68,6 +67,7 @@ export default function BeamDesign() {
   }, [params])
 
   const [f, setF] = useState<FormState>({ ...DEFAULTS, ...(handoff.multi ? {} : handoff.single) })
+  const [lh, setLh] = useState<LetterheadState>({ project: '', sheet: 'S-01 · Rev A', preparedBy: '' })
   const [span, setSpan] = useState<number>(NaN)
   const [support, setSupport] = useState<BeamSupport>('simple')
   const [svcWD, setSvcWD] = useState<number>(NaN)
@@ -149,10 +149,11 @@ export default function BeamDesign() {
                 {t}
               </button>
             ))}
+            <button type="button" onClick={() => { const prev = document.title; document.title = `Beam Design Report${lh.project ? ` — ${lh.project}` : ''}`; window.print(); window.setTimeout(() => { document.title = prev }, 500) }}
+              className="ml-1.5 inline-flex items-center gap-2 rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-[#0d3f78]">⎙ Export report</button>
           </div>
         } />
       <div className="mx-auto max-w-6xl px-5 pb-8 sm:px-7">
-      <ReportControls title="Beam Design Report" />
 
       <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
         <div className="space-y-3.5">
@@ -357,12 +358,41 @@ export default function BeamDesign() {
                 sub={`L/240 = ${deflection.limitL240.toFixed(1)} mm${deflection.totalOK ? ' ✓' : ' ✗'}`} />
             </ResultCard>
           )}
+          <LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} />
         </div>
       </div>
 
-      {solution && (
-        <WorkedSolution steps={solution}
-          title={multi && active ? `Calculation report — ${active.label}` : 'Calculation report — worked solution'} />
+      <div className="no-print">
+        {solution && (
+          <WorkedSolution steps={solution}
+            title={multi && active ? `Calculation report — ${active.label}` : 'Calculation report — worked solution'} />
+        )}
+      </div>
+      {r && solution && (
+        <PrintReport
+          docTitle={multi && active ? `RC Beam — ${active.label}` : 'Rectangular RC Beam'} docCode="S-01" badges={['ACI 318-14', 'NSCP 2015']}
+          ok={allOK} governing={r.mode === 'SRRB' ? `Governing: flexure · ${(demand.Mu / r.phiMnMax).toFixed(2)}` : 'DRRB — compression steel engaged'}
+          lh={lh}
+          stats={[
+            { label: hogging ? 'Tension (top)' : 'Tension steel', value: `${r.bars}-⌀${f.barDia}` },
+            { label: 'Stirrups', value: r.sAdopt > 0 ? `⌀${f.stirrupDia} @${f0(r.sAdopt)}` : REGION[r.region] },
+            { label: 'Eff. depth d', value: f0(r.d), unit: 'mm' },
+          ]}
+          checks={checks.map((c) => ({ ...c, ok: c.ratio <= 1.0001 }))}
+          data={[
+            ['Section b × h', `${f.b} × ${f.h} mm`], ['Clear cover', `${f.cover} mm`],
+            ["Concrete f'c", `${f.fc} MPa`], ['Steel fy / fyt', `${f.fy} / ${f.fyt} MPa`],
+            ['Bar ⌀ / stirrup ⌀', `${f.barDia} / ${f.stirrupDia} mm (${f.legs}-leg)`],
+            ['Moment Mu', `${f1(demand.Mu)} kN·m${hogging ? ' (hogging)' : ''}`],
+            ['Shear Vu', `${f1(demand.Vu)} kN`], ['ρ / ρmin / ρmax', `${r.rho.toFixed(4)} / ${r.rhoMin.toFixed(4)} / ${r.rhoMax.toFixed(4)}`],
+          ]}
+          steps={solution}
+          drawingTitle="Beam Section"
+          drawing={<BeamSchematic b={f.b} h={f.h} cover={f.cover} barDia={f.barDia} stirrupDia={f.stirrupDia}
+            bars={r.bars} d={r.d} dPrime={r.comprLayers.length > 0 ? r.dPrime : undefined}
+            layers={r.layers} comprLayers={r.comprLayers} comprBars={r.comprBars} comprBarDia={f.comprBarDia}
+            naDepth={r.cNA} flexOK={r.flexOK} hogging={hogging} />}
+        />
       )}
       </div>
     </div>
