@@ -25,27 +25,26 @@ export function ReportControls({ title }: ReportControlsProps): JSX.Element {
 
   const field = (label: string, value: string, set: (v: string) => void, ph: string) => (
     <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-slate-600">{label}</span>
-      <input value={value} onChange={(e) => set(e.target.value)} placeholder={ph}
-        className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none focus:ring-1 focus:ring-[#0056b3]" />
+      <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">{label}</span>
+      <input value={value} onChange={(e) => set(e.target.value)} placeholder={ph} className="text-sm" />
     </label>
   )
 
   return (
     <>
       {/* On-screen controls */}
-      <div className="no-print mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="no-print mt-4 flex flex-wrap items-end gap-3 rounded-lg border border-[#e3e1da] bg-white p-3">
         {field('Project / job', project, setProject, 'e.g. Lot 12 Residence')}
         {field('Prepared by', preparedBy, setPreparedBy, 'Engineer name')}
         <button type="button" onClick={print}
-          className="ml-auto inline-flex items-center gap-2 rounded-lg bg-gradient-to-br from-[#0056b3] to-[#003f86] px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:shadow-lg">
+          className="ml-auto inline-flex items-center gap-2 rounded-md bg-[#0f4c92] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#0d3f78]">
           🖨 Print / Save PDF
         </button>
       </div>
 
       {/* Print-only letterhead */}
-      <div className="print-only mb-4 border-b-2 border-[#0056b3] pb-2">
-        <h1 className="text-xl font-extrabold text-[#0056b3]">{title}</h1>
+      <div className="print-only mb-4 border-b-2 border-[#0f1b2a] pb-2">
+        <h1 className="text-xl font-extrabold text-[#0f1b2a]">{title}</h1>
         <p className="mt-0.5 text-xs text-slate-600">
           Project: <b>{project || '—'}</b> &nbsp;·&nbsp; Prepared by: <b>{preparedBy || '—'}</b> &nbsp;·&nbsp; Date: <b>{today}</b>
         </p>
