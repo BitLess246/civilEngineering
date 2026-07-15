@@ -41,12 +41,12 @@ Goals:
 - [x] Automated validation tests (`validation.test.ts`; run in the GitHub Actions `ci` job — `.github/workflows/static.yml` — gating the Pages deploy)
 - [x] Validation dashboard (`/validation` page with live per-module pass counts)
 - [ ] Validation Manual (docs/validation chapters; frame/modal/RS write-ups)
-- [ ] ETABS / STAAD comparisons (external-tool cross-checks)
-- [ ] Excel verification sheets
-- [ ] NSCP worked-example verification (208 base shear, etc.)
+- [ ] ETABS / STAAD comparisons (external-tool cross-checks — tracked as X001/X002 in ValidationMap.md)
+- [ ] Excel verification sheets (X004; the /validation manual-vs-software tables can seed them)
+- [x] NSCP worked-example verification (208 base shear + period vs hand calc in `validation.ts`/`seismic.test.ts`; review-problem answer keys in column/effective-length/geotech tests — see ValidationMap.md)
 
 Deliverables:
-- [x] ValidationMap.md
+- [x] ValidationMap.md (filled with per-row test evidence, July 2026)
 - [x] Automated validation tests
 - [x] Validation dashboard
 - [ ] Validation Manual PDF

@@ -158,10 +158,11 @@ Ordered: correctness first, then code completeness, then new capability.
    `withEv` (E-combo D-factor shift) in `pipeline.ts`/`seismic.ts`.
 
 ## P2 — the v1.0 gate
-4. **Fill `docs/ValidationMap.md`** — every row is ⬜ while 863 tests already
-   cover most cases. Transcribe existing test evidence into the map, then add
-   the genuinely missing ETABS/STAAD cross-checks and NSCP worked examples.
-   Fix stale checkboxes in `docs/Roadmap.md` (rock anchors are shipped).
+4. ~~**Fill `docs/ValidationMap.md`**~~ — ✔ shipped: every row now carries
+   its vitest evidence (✅), or an equivalent-method verification with the
+   external cross-check flagged (🔶); ETABS/STAAD/PCA/Excel remain as the
+   map's X001–X004 open items (need external licenses). Roadmap Phase-2
+   checkboxes synced.
 
 ## P3 — analysis completeness
 5. ~~**Timoshenko shear deformation** in frame elements~~ — ✔ shipped:
