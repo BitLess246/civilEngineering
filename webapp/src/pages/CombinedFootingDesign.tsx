@@ -1,9 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
 import { designCombinedFooting, type CombinedFootingInput } from '../engine/combinedFooting'
 import { designFlexibleCombinedFooting } from '../engine/flexibleCombinedFooting'
 import { CombinedFootingSchematic } from '../components/CombinedFootingSchematic'
-import { ReportBar, PrintReport, type LetterheadState } from '../components/calc'
+import { PageHeader, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
 import { Diagram } from '../components/Diagram'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { buildCombinedFootingSolution } from '../lib/combinedFootingSolution'
@@ -168,17 +167,15 @@ export default function CombinedFootingDesign() {
     : []
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
-      <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">Combined Footing Design</h1>
-      <p className="no-print mt-1 text-slate-600">
-        Two-column combined footing. Rectangular when one edge is free, trapezoidal when both are property-restricted.
-        Choose the <b>rigid</b> (linear-pressure) or <b>flexible</b> (Winkler beam-on-elastic-foundation) method —
-        geometry is shared; the flexible method recomputes V/M from the settlement field. Results update live.
-      </p>
-      <ReportBar title="Combined Footing Design Report" lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} />
+    <div>
+      <PageHeader title="Combined Footing" badges={['ACI 318-14', 'NSCP 2015']}
+        actions={
+          <button type="button" onClick={() => { const prev = document.title; document.title = `Combined Footing Design Report${lh.project ? ` — ${lh.project}` : ''}`; window.print(); window.setTimeout(() => { document.title = prev }, 500) }}
+            className="inline-flex items-center gap-2 rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-[#0d3f78]">⎙ Export report</button>
+        } />
+      <div className="mx-auto max-w-6xl px-5 pb-8 sm:px-7">
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
+      <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
         {/* ── Inputs ── */}
         <div className="space-y-5">
           <Card title="Analysis method">
@@ -350,6 +347,7 @@ export default function CombinedFootingDesign() {
         )}
       </div>
 
+      <div className="no-print mt-5"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>
       <div className="no-print">
         {solutionSteps && (
           <WorkedSolution steps={solutionSteps} title="Combined footing — worked solution (rigid method)" />
@@ -379,6 +377,7 @@ export default function CombinedFootingDesign() {
             x1={result.x1} x2={result.x2} col1Width={form.col1Width} col2Width={form.col2Width} />}
         />
       )}
+      </div>
     </div>
   )
 }

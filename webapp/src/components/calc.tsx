@@ -9,7 +9,7 @@ import { Math as KTex } from '../lib/math'
 
 export function PageHeader({ title, badges, actions }: { title: string; badges: string[]; actions?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center gap-3 border-b border-[#e3e1da] bg-white px-5 py-3.5 sm:px-7">
+    <div className="no-print flex flex-wrap items-center gap-3 border-b border-[#e3e1da] bg-white px-5 py-3.5 sm:px-7">
       <div className="flex min-w-0 flex-wrap items-center gap-3">
         <h1 className="text-[21px] font-extrabold tracking-tight text-[#0f1b2a]">{title}</h1>
         {badges.map((b) => (

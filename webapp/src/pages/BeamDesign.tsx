@@ -155,7 +155,7 @@ export default function BeamDesign() {
         } />
       <div className="mx-auto max-w-6xl px-5 pb-8 sm:px-7">
 
-      <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
+      <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
         <div className="space-y-3.5">
           <Card title="Section">
             <Num label="Width b" unit="mm" value={f.b} onChange={set('b')} />
