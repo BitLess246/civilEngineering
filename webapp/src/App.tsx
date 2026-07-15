@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react'
 import { Routes, Route } from 'react-router-dom'
-import { Navbar } from './components/Navbar'
+import { AppShell } from './components/AppShell'
 import { AuthModal } from './components/AuthModal'
 import Home from './pages/Home'
 import FoundationDesign from './pages/FoundationDesign'
@@ -42,11 +42,15 @@ import LoadCombinations from './pages/LoadCombinations'
 export default function App() {
   const [auth, setAuth] = useState<'login' | 'signup' | null>(null)
 
+  // Home carries its own hero navigation; every tool route lives inside the
+  // workbench shell (sidebar + breadcrumb header + command palette).
   return (
     <>
-      <Navbar onAuth={setAuth} />
       <Routes>
         <Route path="/" element={<Home onAuth={setAuth} />} />
+        <Route path="*" element={
+          <AppShell>
+            <Routes>
         <Route path="/docs" element={<Documentation />} />
         <Route path="/validation" element={<Validation />} />
         <Route path="/foundation" element={<FoundationDesign />} />
@@ -88,7 +92,10 @@ export default function App() {
         <Route path="/estimate/column" element={<ColumnEstimate />} />
         <Route path="/estimate/chb" element={<ChbEstimate />} />
         <Route path="/estimate/box-culvert" element={<BoxCulvertEstimate />} />
-        <Route path="/load-combinations" element={<LoadCombinations />} />
+              <Route path="/load-combinations" element={<LoadCombinations />} />
+            </Routes>
+          </AppShell>
+        } />
       </Routes>
       {auth && <AuthModal mode={auth} onClose={() => setAuth(null)} />}
     </>
