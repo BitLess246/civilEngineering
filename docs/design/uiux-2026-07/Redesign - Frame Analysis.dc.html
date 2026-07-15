@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'Archivo',system-ui,sans-serif;color:#0f1b2a;background:#f4f3ef}a{color:#0f4c92;text-decoration:none}a:hover{color:#0d3f78}
+#fa-cols{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(340px,1fr);gap:22px;padding:22px 28px 0;align-items:start}
+@media (max-width:1240px){#fa-cols{grid-template-columns:minmax(0,1fr)}#fa-cols>div:last-child{position:static !important}}
+#fa-diags{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;padding:14px 28px 28px}
+@media (max-width:1100px){#fa-diags{grid-template-columns:1fr}}
+.fa-th{text-align:left;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#a39d8d;padding:8px 10px;border-bottom:1px solid #eeece5}
+.fa-td{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#0f1b2a;padding:7px 10px;border-bottom:1px solid #f3f1ea}
+</style>
+</helmet>
+<div style="display:flex;min-height:100vh;background:#f4f3ef">
+  <dc-import name="Sidebar" active="Frame Analysis" hint-size="250px,100vh" style="flex:none"></dc-import>
+  <main style="flex:1;min-width:0">
+    <header style="background:#fff;border-bottom:1px solid #e3e1da">
+      <div style="display:flex;align-items:center;gap:14px;padding:14px 28px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#7a7568">
+            <a href="Redesign — Home.dc.html" style="color:#7a7568" style-hover="color:#0f4c92">Analysis &amp; Modelling</a><span>/</span><span style="color:#0f1b2a;font-weight:600">Frame Analysis</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:3px">
+            <h1 style="margin:0;font-size:21px;font-weight:800;letter-spacing:-.01em">2D Frame — Direct Stiffness</h1>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;color:#0f4c92;background:#eaf1f9;border:1px solid #cddcf0;border-radius:4px;padding:2px 7px;white-space:nowrap">NSCP 2015 §203.3</span>
+          </div>
+        </div>
+        <button style="display:inline-flex;align-items:center;gap:7px;border:none;border-radius:6px;background:#0f4c92;padding:9px 16px;font-size:12.5px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit" style-hover="background:#0d3f78"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"></path><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>Export report</button>
+      </div>
+    </header>
+
+    <div id="fa-cols">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px">
+          <div style="display:flex;align-items:baseline;gap:10px;padding:12px 18px;border-bottom:1px solid #eeece5">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;color:#a39d8d">01</span>
+            <h2 style="margin:0;font-size:13.5px;font-weight:700">Member section — all members</h2>
+            <span style="margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#a39d8d">E = 4700√f′c = 24 870 MPa</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 16px;padding:16px 18px">
+            <label style="display:flex;flex-direction:column;gap:5px"><span style="font-size:11.5px;font-weight:600;color:#5c6675">Width b</span><div style="display:flex;border:1px solid #d6d3c9;border-radius:6px;background:#fcfbf8;overflow:hidden"><span style="flex:1;padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:13px">300</span><span style="display:flex;align-items:center;padding:0 9px;border-left:1px solid #eeece5;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#a39d8d;background:#f7f6f1">mm</span></div></label>
+            <label style="display:flex;flex-direction:column;gap:5px"><span style="font-size:11.5px;font-weight:600;color:#5c6675">Depth h</span><div style="display:flex;border:1px solid #d6d3c9;border-radius:6px;background:#fcfbf8;overflow:hidden"><span style="flex:1;padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:13px">500</span><span style="display:flex;align-items:center;padding:0 9px;border-left:1px solid #eeece5;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#a39d8d;background:#f7f6f1">mm</span></div></label>
+            <label style="display:flex;flex-direction:column;gap:5px"><span style="font-size:11.5px;font-weight:600;color:#5c6675">Concrete f′c</span><div style="display:flex;border:1px solid #d6d3c9;border-radius:6px;background:#fcfbf8;overflow:hidden"><span style="flex:1;padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:13px">28</span><span style="display:flex;align-items:center;padding:0 9px;border-left:1px solid #eeece5;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#a39d8d;background:#f7f6f1">MPa</span></div></label>
+          </div>
+        </section>
+
+        <sc-for list="{{ tables }}" as="t" hint-placeholder-count="4">
+          <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px">
+            <div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid #eeece5">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;color:#a39d8d">{{ t.num }}</span>
+              <h2 style="margin:0;font-size:13.5px;font-weight:700">{{ t.title }}</h2>
+              <span style="margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;color:#0f4c92;border:1px solid #cddcf0;border-radius:6px;background:#eaf1f9;padding:4px 10px;cursor:pointer" style-hover="background:#dce9f7">＋ {{ t.add }}</span>
+            </div>
+            <table style="width:100%;border-collapse:collapse">
+              <thead><tr>
+                <sc-for list="{{ t.cols }}" as="c" hint-placeholder-count="4"><th class="fa-th">{{ c }}</th></sc-for>
+                <th class="fa-th" style="width:30px"></th>
+              </tr></thead>
+              <tbody>
+                <sc-for list="{{ t.rows }}" as="row" hint-placeholder-count="3">
+                  <tr>
+                    <sc-for list="{{ row.cells }}" as="cell" hint-placeholder-count="4"><td class="fa-td">{{ cell }}</td></sc-for>
+                    <td class="fa-td" style="text-align:center;color:#c2402a;cursor:pointer">✕</td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </section>
+        </sc-for>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px;position:sticky;top:22px">
+        <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid #eeece5">
+            <h2 style="margin:0;font-size:13.5px;font-weight:700">Model</h2>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#a39d8d">pinned portal · 4 nodes · 3 members</span>
+          </div>
+          <div style="padding:12px 16px;background-image:linear-gradient(#f0eee7 1px,transparent 1px),linear-gradient(90deg,#f0eee7 1px,transparent 1px);background-size:22px 22px">
+            <svg viewBox="0 0 340 210" style="width:100%;height:auto;font-family:'IBM Plex Mono',monospace">
+              <g stroke="#0f4c92" stroke-width="1.2"><line x1="70" y1="18" x2="70" y2="40"></line><line x1="110" y1="18" x2="110" y2="40"></line><line x1="150" y1="18" x2="150" y2="40"></line><line x1="190" y1="18" x2="190" y2="40"></line><line x1="230" y1="18" x2="230" y2="40"></line><line x1="270" y1="18" x2="270" y2="40"></line><line x1="66" y1="18" x2="274" y2="18" stroke-width="1.6"></line></g>
+              <g stroke="#0f1b2a" stroke-width="3.5" stroke-linecap="square"><line x1="70" y1="42" x2="270" y2="42"></line><line x1="70" y1="42" x2="70" y2="170"></line><line x1="270" y1="42" x2="270" y2="170"></line></g>
+              <line x1="20" y1="70" x2="60" y2="70" stroke="#b97d10" stroke-width="1.6" marker-end="url(#ah)"></line>
+              <text x="18" y="62" font-size="9" fill="#b97d10">20 kN (W)</text>
+              <polygon points="70,170 58,186 82,186" fill="none" stroke="#0f1b2a" stroke-width="1.6"></polygon>
+              <polygon points="270,170 258,186 282,186" fill="none" stroke="#0f1b2a" stroke-width="1.6"></polygon>
+              <line x1="50" y1="186" x2="90" y2="186" stroke="#0f1b2a" stroke-width="1.2"></line>
+              <line x1="250" y1="186" x2="290" y2="186" stroke="#0f1b2a" stroke-width="1.2"></line>
+              <text x="62" y="200" font-size="9.5" fill="#5c6675">A (pin)</text><text x="262" y="200" font-size="9.5" fill="#5c6675">D (pin)</text>
+              <text x="60" y="36" font-size="9.5" fill="#5c6675">B</text><text x="274" y="36" font-size="9.5" fill="#5c6675">C</text>
+              <text x="155" y="60" font-size="9" fill="#0f4c92">w = 12 D + 8 L kN/m</text>
+              <defs><marker id="ah" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7" fill="#b97d10"></path></marker></defs>
+            </svg>
+          </div>
+        </section>
+
+        <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid #eeece5">
+            <h2 style="margin:0;font-size:13.5px;font-weight:700">Load combinations</h2>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#a39d8d">NSCP 2015 §203.3 · 7 combos</span>
+          </div>
+          <table style="width:100%;border-collapse:collapse">
+            <thead><tr><th class="fa-th">Combination</th><th class="fa-th" style="text-align:right">Nmax</th><th class="fa-th" style="text-align:right">Vmax</th><th class="fa-th" style="text-align:right">Mmax</th></tr></thead>
+            <tbody>
+              <sc-for list="{{ combos }}" as="c" hint-placeholder-count="7">
+                <tr style="background:{{ c.bg }}">
+                  <td class="fa-td" style="font-family:'Archivo',sans-serif;font-weight:{{ c.weight }}">{{ c.name }}</td>
+                  <td class="fa-td" style="text-align:right">{{ c.n }}</td>
+                  <td class="fa-td" style="text-align:right">{{ c.v }}</td>
+                  <td class="fa-td" style="text-align:right">{{ c.m }}</td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+          <p style="margin:0;padding:8px 18px 12px;font-size:10.5px;color:#a39d8d">★ governing envelope — shown in the diagrams below</p>
+        </section>
+
+        <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid #eeece5">
+            <h2 style="margin:0;font-size:13.5px;font-weight:700">Reactions — 1.2D + 1.6L</h2>
+          </div>
+          <div style="padding:8px 18px 12px">
+            <sc-for list="{{ reactions }}" as="r" hint-placeholder-count="2">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid #f3f1ea;padding:6px 0">
+                <span style="font-size:11.5px;color:#5c6675">{{ r.label }}</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:500;color:#0f1b2a">{{ r.value }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div id="fa-diags">
+      <sc-for list="{{ diagrams }}" as="d" hint-placeholder-count="3">
+        <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid #eeece5">
+            <h3 style="margin:0;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#3d4a5c">{{ d.title }}</h3>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:{{ d.color }}">{{ d.peak }}</span>
+          </div>
+          <div style="padding:10px 14px">
+            <svg viewBox="0 0 300 120" style="width:100%;height:auto">
+              <line x1="16" y1="60" x2="284" y2="60" stroke="#d6d3c9" stroke-width="1"></line>
+              <path d="{{ d.path }}" fill="{{ d.fill }}" stroke="{{ d.color }}" stroke-width="1.6"></path>
+              <text x="18" y="14" font-size="9" font-family="IBM Plex Mono,monospace" fill="#a39d8d">member: beam · local x from B</text>
+            </svg>
+          </div>
+        </section>
+      </sc-for>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const tables = [
+      { num: '02', title: 'Nodes', add: 'Node', cols: ['id', 'x (m)', 'y (m)'], rows: [['A', '0.00', '0.00'], ['B', '0.00', '3.00'], ['C', '6.00', '3.00'], ['D', '6.00', '0.00']].map(c => ({ cells: c })) },
+      { num: '03', title: 'Members', add: 'Member', cols: ['id', 'node i', 'node j'], rows: [['col1', 'A', 'B'], ['beam', 'B', 'C'], ['col2', 'D', 'C']].map(c => ({ cells: c })) },
+      { num: '04', title: 'Supports', add: 'Support', cols: ['node', 'type'], rows: [['A', 'Pin'], ['D', 'Pin']].map(c => ({ cells: c })) },
+      { num: '05', title: 'Loads', add: 'Load', cols: ['kind', 'target', 'magnitude', 'category'], rows: [['UDL', 'beam', 'w = 12 kN/m ↓', 'D — dead'], ['UDL', 'beam', 'w = 8 kN/m ↓', 'L — live'], ['Node', 'B', 'Fx = 20 kN', 'W — wind']].map(c => ({ cells: c })) },
+    ];
+    const gov = { bg: '#fdf6e7', weight: '700' }, reg = { bg: 'transparent', weight: '500' };
+    const combos = [
+      { name: '1.4D', n: '52.1', v: '36.1', m: '54.6', ...reg },
+      { name: '1.2D + 1.6L ★', n: '83.7', v: '58.1', m: '87.9', ...gov },
+      { name: '1.2D + 1.0W + L', n: '68.4', v: '49.9', m: '78.3', ...reg },
+      { name: '1.2D + 1.0E + L', n: '61.2', v: '44.8', m: '70.1', ...reg },
+      { name: '0.9D + 1.0W', n: '35.0', v: '27.6', m: '48.7', ...reg },
+      { name: '0.9D + 1.0E', n: '30.9', v: '24.1', m: '41.5', ...reg },
+      { name: '1.2D + 1.6Lr + L', n: '55.8', v: '40.2', m: '60.8', ...reg },
+    ];
+    const reactions = [
+      { label: 'A (pin)', value: 'Rx −6.2 · Ry 58.1 kN' },
+      { label: 'D (pin)', value: 'Rx 6.2 · Ry 58.1 kN' },
+    ];
+    const diagrams = [
+      { title: 'Axial', color: '#7c3aed', fill: 'rgba(124,58,237,.12)', peak: 'N = −6.2 kN', path: 'M16 60 L16 52 L284 52 L284 60 Z' },
+      { title: 'Shear', color: '#0f4c92', fill: 'rgba(15,76,146,.12)', peak: 'V = ±58.1 kN', path: 'M16 60 L16 22 L284 98 L284 60 Z' },
+      { title: 'Moment', color: '#c2402a', fill: 'rgba(194,64,42,.12)', peak: 'M = 87.9 kN·m', path: 'M16 60 L16 44 Q150 128 284 44 L284 60 Z' },
+    ];
+    return { tables, combos, reactions, diagrams };
+  }
+}
+</script>
+</body>
+</html>

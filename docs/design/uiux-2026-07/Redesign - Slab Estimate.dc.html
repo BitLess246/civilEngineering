@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'Archivo',system-ui,sans-serif;color:#0f1b2a;background:#f4f3ef}a{color:#0f4c92;text-decoration:none}a:hover{color:#0d3f78}
+#se-cols{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(340px,1fr);gap:22px;padding:22px 28px;align-items:start}
+@media (max-width:1240px){#se-cols{grid-template-columns:minmax(0,1fr)}#se-cols>div:last-child{position:static !important}}
+</style>
+</helmet>
+<div style="display:flex;min-height:100vh;background:#f4f3ef">
+  <dc-import name="Sidebar" active="Slab" hint-size="250px,100vh" style="flex:none"></dc-import>
+  <main style="flex:1;min-width:0">
+    <header style="background:#fff;border-bottom:1px solid #e3e1da">
+      <div style="display:flex;align-items:center;gap:14px;padding:14px 28px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#7a7568">
+            <a href="Redesign — Home.dc.html" style="color:#7a7568" style-hover="color:#0f4c92">Quantity Take-Off</a><span>/</span><span style="color:#0f1b2a;font-weight:600">Slab Estimate</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:3px">
+            <h1 style="margin:0;font-size:21px;font-weight:800;letter-spacing:-.01em">Slab — Material Estimate</h1>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;color:#0f4c92;background:#eaf1f9;border:1px solid #cddcf0;border-radius:4px;padding:2px 7px;white-space:nowrap">Take-off</span>
+          </div>
+        </div>
+        <button style="display:inline-flex;align-items:center;gap:7px;border:none;border-radius:6px;background:#0f4c92;padding:9px 16px;font-size:12.5px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit" style-hover="background:#0d3f78">Export report</button>
+      </div>
+    </header>
+
+    <div id="se-cols">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <sc-for list="{{ inputSections }}" as="sec" hint-placeholder-count="4">
+          <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px">
+            <div style="display:flex;align-items:baseline;gap:10px;padding:12px 18px;border-bottom:1px solid #eeece5">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;color:#a39d8d">{{ sec.num }}</span>
+              <h2 style="margin:0;font-size:13.5px;font-weight:700">{{ sec.title }}</h2>
+              <span style="margin-left:auto;font-size:11px;color:#a39d8d">{{ sec.hint }}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 16px;padding:16px 18px">
+              <sc-for list="{{ sec.fields }}" as="f" hint-placeholder-count="3">
+                <label style="display:flex;flex-direction:column;gap:5px">
+                  <span style="font-size:11.5px;font-weight:600;color:#5c6675">{{ f.label }}</span>
+                  <sc-if value="{{ f.isSelect }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;align-items:center;justify-content:space-between;border:1px solid #d6d3c9;border-radius:6px;background:#fcfbf8;padding:8px 10px;font-size:13px;color:#0f1b2a;cursor:pointer">{{ f.value }}<span style="font-size:9px;color:#a39d8d">▼</span></div>
+                  </sc-if>
+                  <sc-if value="{{ f.isInput }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;border:1px solid #d6d3c9;border-radius:6px;background:#fcfbf8;overflow:hidden">
+                      <span style="flex:1;padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#0f1b2a">{{ f.value }}</span>
+                      <span style="display:flex;align-items:center;padding:0 9px;border-left:1px solid #eeece5;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#a39d8d;background:#f7f6f1">{{ f.unit }}</span>
+                    </div>
+                  </sc-if>
+                </label>
+              </sc-for>
+            </div>
+          </section>
+        </sc-for>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px;position:sticky;top:22px">
+        <section style="background:#0f1b2a;border-radius:8px;padding:16px 20px;color:#fff;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+          <div><p style="margin:0;font-size:9.5px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#7d8ea3">Concrete</p><p style="margin:4px 0 0;font-family:'IBM Plex Mono',monospace;font-size:19px;font-weight:600">2.50 <span style="font-size:11px;color:#7d8ea3">m³</span></p></div>
+          <div><p style="margin:0;font-size:9.5px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#7d8ea3">Steel</p><p style="margin:4px 0 0;font-family:'IBM Plex Mono',monospace;font-size:19px;font-weight:600">110.0 <span style="font-size:11px;color:#7d8ea3">kg</span></p></div>
+          <div><p style="margin:0;font-size:9.5px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:#7d8ea3">Tie wire</p><p style="margin:4px 0 0;font-family:'IBM Plex Mono',monospace;font-size:19px;font-weight:600">1 <span style="font-size:11px;color:#7d8ea3">roll</span></p></div>
+        </section>
+
+        <sc-for list="{{ resultCards }}" as="rc" hint-placeholder-count="3">
+          <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid #eeece5">
+              <h2 style="margin:0;font-size:13.5px;font-weight:700">{{ rc.title }}</h2>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#a39d8d">{{ rc.note }}</span>
+            </div>
+            <div style="padding:8px 18px 12px">
+              <sc-for list="{{ rc.rows }}" as="r" hint-placeholder-count="4">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;border-bottom:1px solid #f3f1ea;padding:6px 0">
+                  <span style="font-size:11.5px;color:#5c6675">{{ r.label }}</span>
+                  <span style="font-size:10.5px;color:#a39d8d;flex:1;text-align:right">{{ r.sub }}</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;color:#0f1b2a;min-width:80px;text-align:right">{{ r.value }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+        </sc-for>
+        <p style="margin:0;font-size:10.5px;color:#a39d8d;padding:0 4px">Quantities are net; add site wastage per your practice (typ. 5–10%). Class A mix = 9 bags/m³ · 0.5 m³ sand · 1.0 m³ gravel.</p>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const S = (label, value) => ({ label, value, isSelect: true, isInput: false, unit: '' });
+    const N = (label, value, unit) => ({ label, value, unit, isSelect: false, isInput: true });
+    const inputSections = [
+      { num: '01', title: 'Geometry & mix', hint: 'slab & concrete class', fields: [N('Slab area', '20', 'm²'), N('Thickness', '0.125', 'm'), N('No. of structures', '1', 'ea'), S('Concrete class', 'Class A — 9 bags/m³'), N('Splice length', '0.3', 'm')] },
+      { num: '02', title: 'Long-span bars', hint: 'main steel', fields: [N('Length / piece', '5.0', 'm'), N('No. of pieces', '12', 'pcs'), N('Bar Ø', '12', 'mm')] },
+      { num: '03', title: 'Short-span bars', hint: 'distribution steel', fields: [N('Length / piece', '4.0', 'm'), N('No. of pieces', '14', 'pcs'), N('Bar Ø', '12', 'mm')] },
+      { num: '04', title: 'Tie wire', hint: '#16 GI wire', fields: [N('Length / cut', '0.3', 'm')] },
+    ];
+    const resultCards = [
+      { title: 'Concrete', note: 'class A · factor 9', rows: [
+        { label: 'Volume', sub: '20 m² × 0.125 m', value: '2.50 m³' },
+        { label: 'Cement', sub: '2.5 × 9 bags/m³', value: '23 bags' },
+        { label: 'Sand', sub: '0.5 m³ per m³', value: '1.25 m³' },
+        { label: 'Gravel', sub: '1.0 m³ per m³', value: '2.50 m³' },
+      ] },
+      { title: 'Reinforcing steel', note: 'Ø12 = 0.888 kg/m', rows: [
+        { label: 'Long span (Ø12)', sub: '12 bars · 63.6 m net', value: '56.5 kg' },
+        { label: 'Short span (Ø12)', sub: '14 bars · 60.2 m net', value: '53.5 kg' },
+        { label: 'Total steel weight', sub: '', value: '110.0 kg' },
+      ] },
+      { title: 'Tie wire', note: '#16 · 53 m/kg', rows: [
+        { label: 'Intersections', sub: '12 × 14 grid', value: '168' },
+        { label: 'Net length', sub: '168 × 0.3 m', value: '50.4 m' },
+        { label: 'Rolls', sub: '', value: '1 roll' },
+      ] },
+    ];
+    return { inputSections, resultCards };
+  }
+}
+</script>
+</body>
+</html>

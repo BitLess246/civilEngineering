@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'Archivo',system-ui,sans-serif;color:#0f1b2a;background:#f4f3ef}a{color:#0f4c92;text-decoration:none}a:hover{color:#0d3f78}
+#sw-cols{display:grid;grid-template-columns:200px minmax(0,1fr) 320px;gap:22px;padding:22px 28px;align-items:start;max-width:1240px}
+@media (max-width:1240px){#sw-cols{grid-template-columns:minmax(0,1fr)}}
+</style>
+</helmet>
+<div style="display:flex;min-height:100vh;background:#f4f3ef">
+  <dc-import name="Sidebar" active="Seismic Wizard" hint-size="250px,100vh" style="flex:none"></dc-import>
+  <main style="flex:1;min-width:0">
+    <header style="background:#fff;border-bottom:1px solid #e3e1da">
+      <div style="display:flex;align-items:center;gap:14px;padding:14px 28px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#7a7568">
+            <a href="Redesign — Home.dc.html" style="color:#7a7568" style-hover="color:#0f4c92">Seismic &amp; Loads</a><span>/</span><span style="color:#0f1b2a;font-weight:600">Seismic Wizard</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:3px">
+            <h1 style="margin:0;font-size:21px;font-weight:800;letter-spacing:-.01em">NSCP 208 Static Lateral Force</h1>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;color:#0f4c92;background:#eaf1f9;border:1px solid #cddcf0;border-radius:4px;padding:2px 7px;white-space:nowrap">NSCP 2015 §208</span>
+          </div>
+        </div>
+        <button style="display:inline-flex;align-items:center;gap:7px;border:none;border-radius:6px;background:#0f4c92;padding:9px 16px;font-size:12.5px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit" style-hover="background:#0d3f78">Send to 3D Model Space →</button>
+      </div>
+    </header>
+
+    <div id="sw-cols">
+      <div style="display:flex;flex-direction:column;gap:2px;position:sticky;top:22px">
+        <sc-for list="{{ railSteps }}" as="r" hint-placeholder-count="6">
+          <div style="display:flex;align-items:center;gap:10px;border-radius:6px;padding:8px 10px;background:{{ r.bg }};cursor:pointer">
+            <span style="display:flex;width:20px;height:20px;flex:none;align-items:center;justify-content:center;border-radius:50%;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;color:{{ r.numColor }};background:{{ r.numBg }};border:1px solid {{ r.numEdge }}">{{ r.n }}</span>
+            <div style="min-width:0">
+              <p style="margin:0;font-size:12px;font-weight:600;color:{{ r.color }}">{{ r.label }}</p>
+              <p style="margin:0;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#8b8574">{{ r.value }}</p>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px">
+        <div style="display:flex;align-items:baseline;gap:10px;padding:14px 20px;border-bottom:1px solid #eeece5">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;color:#a39d8d">STEP 5 / 6</span>
+          <h2 style="margin:0;font-size:15px;font-weight:700">Structural system</h2>
+          <span style="margin-left:auto;font-size:11px;color:#a39d8d">Table 208-11</span>
+        </div>
+        <div style="padding:18px 20px;display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ systems }}" as="s" hint-placeholder-count="4">
+            <div style="display:flex;align-items:center;gap:14px;border:1px solid {{ s.edge }};border-radius:8px;background:{{ s.bg }};padding:12px 16px;cursor:pointer" style-hover="border-color:#0f4c92">
+              <span style="display:flex;width:16px;height:16px;flex:none;align-items:center;justify-content:center;border-radius:50%;border:2px solid {{ s.dotEdge }};background:#fff"><span style="width:8px;height:8px;border-radius:50%;background:{{ s.dot }}"></span></span>
+              <div style="flex:1">
+                <p style="margin:0;font-size:13px;font-weight:600;color:#0f1b2a">{{ s.name }}</p>
+                <p style="margin:1px 0 0;font-size:11px;color:#8b8574">{{ s.sub }}</p>
+              </div>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;color:#0f4c92">R = {{ s.r }}</span>
+            </div>
+          </sc-for>
+          <div style="margin-top:8px;display:flex;justify-content:space-between">
+            <button style="border:1px solid #d6d3c9;border-radius:6px;background:#fff;padding:8px 18px;font-size:12.5px;font-weight:600;color:#5c6675;cursor:pointer;font-family:inherit" style-hover="border-color:#0f4c92;color:#0f4c92">← Occupancy</button>
+            <button style="border:none;border-radius:6px;background:#0f4c92;padding:9px 18px;font-size:12.5px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit" style-hover="background:#0d3f78">Period &amp; result →</button>
+          </div>
+        </div>
+      </section>
+
+      <div style="display:flex;flex-direction:column;gap:14px;position:sticky;top:22px">
+        <section style="background:#0f1b2a;border-radius:8px;padding:18px 20px;color:#fff">
+          <p style="margin:0;font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#7d8ea3">Design base-shear coefficient</p>
+          <p style="margin:8px 0 0;font-family:'IBM Plex Mono',monospace;font-size:34px;font-weight:600;line-height:1">Cs = 0.129</p>
+          <p style="margin:8px 0 0;font-size:11.5px;color:#9db0c5">V = Cs·W — governed by the <strong style="color:#fff">2.5·Ca·I/R cap</strong> (§208.5.2.1)</p>
+          <div style="margin-top:14px;display:flex;flex-direction:column;gap:6px">
+            <sc-for list="{{ csRows }}" as="c" hint-placeholder-count="4">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid rgba(255,255,255,.1);padding-top:6px">
+                <span style="font-size:10.5px;color:{{ c.color }}">{{ c.label }}</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ c.color }}">{{ c.value }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+        <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px">
+          <div style="padding:12px 18px;border-bottom:1px solid #eeece5"><h2 style="margin:0;font-size:13.5px;font-weight:700">Seismic parameters</h2></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;padding:6px 18px 12px">
+            <sc-for list="{{ params }}" as="p" hint-placeholder-count="8">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid #f3f1ea;padding:6px 10px 6px 0">
+                <span style="font-size:11px;color:#8b8574">{{ p.k }}</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:500;color:#0f1b2a">{{ p.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <p style="margin:0;padding:0 18px 12px;font-size:10.5px;color:#a39d8d">Feed Ca, Cv, I, R into the 3D Model Space seismic generator for the storey-force distribution. Verify the soil profile with a geotechnical investigation.</p>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const done = { bg: 'transparent', color: '#3d4a5c', numColor: '#14603a', numBg: '#ddefe3', numEdge: '#bcdcc8' };
+    const cur = { bg: '#e9e7df', color: '#0f1b2a', numColor: '#fff', numBg: '#0f4c92', numEdge: '#0f4c92' };
+    const todo = { bg: 'transparent', color: '#8b8574', numColor: '#a39d8d', numBg: '#f1efe8', numEdge: '#e3e1da' };
+    const railSteps = [
+      { n: '1', label: 'Seismic zone', value: 'Zone 4 · Z = 0.40', ...done },
+      { n: '2', label: 'Soil profile', value: 'SD — stiff soil', ...done },
+      { n: '3', label: 'Near-source', value: 'Type B · 10 km', ...done },
+      { n: '4', label: 'Occupancy', value: 'Standard · I = 1.00', ...done },
+      { n: '5', label: 'Structural system', value: 'SMRF concrete · R = 8.5', ...cur },
+      { n: '6', label: 'Period & result', value: 'T = 0.50 s', ...todo },
+    ];
+    const sel = { edge: '#0f4c92', bg: '#eaf1f9', dot: '#0f4c92', dotEdge: '#0f4c92' };
+    const un = { edge: '#e3e1da', bg: '#fff', dot: 'transparent', dotEdge: '#d6d3c9' };
+    const systems = [
+      { name: 'Special moment-resisting frame — concrete', sub: 'SMRF · ductile detailing per §418', r: '8.5', ...sel },
+      { name: 'Special moment-resisting frame — steel', sub: 'SMRF · AISC 341 seismic provisions', r: '8.0', ...un },
+      { name: 'Dual system — shear wall + SMRF', sub: 'Concrete walls with ductile frames', r: '8.5', ...un },
+      { name: 'Ordinary moment-resisting frame', sub: 'OMRF · limited to low seismic demand', r: '3.5', ...un },
+    ];
+    const csRows = [
+      { label: 'Basic Cv·I/(R·T)', value: '0.181', color: '#7d8ea3' },
+      { label: 'Cap 2.5·Ca·I/R — governs', value: '0.129', color: '#fff' },
+      { label: 'Floor 0.11·Ca·I', value: '0.048', color: '#7d8ea3' },
+      { label: 'Zone-4 floor 0.8·Z·Nv·I/R', value: '0.045', color: '#7d8ea3' },
+    ];
+    const params = [
+      { k: 'Z', v: '0.400' }, { k: 'Na', v: '1.000' }, { k: 'Nv', v: '1.200' }, { k: 'Ca', v: '0.440' },
+      { k: 'Cv', v: '0.768' }, { k: 'I', v: '1.000' }, { k: 'R', v: '8.500' }, { k: 'T (s)', v: '0.500' },
+    ];
+    return { railSteps, systems, csRows, params };
+  }
+}
+</script>
+</body>
+</html>

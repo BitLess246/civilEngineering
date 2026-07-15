@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'Archivo',system-ui,sans-serif;color:#0f1b2a;background:#f4f3ef}a{color:#0f4c92;text-decoration:none}
+#ms-body{display:grid;grid-template-columns:minmax(0,1fr) 360px;height:calc(100vh - 61px)}
+@media (max-width:1150px){#ms-body{grid-template-columns:minmax(0,1fr)}#ms-panel{display:none}}
+</style>
+</helmet>
+<div style="display:flex;height:100vh;overflow:hidden;background:#f4f3ef">
+  <dc-import name="Sidebar" active="3D Model Space" hint-size="250px,100vh" style="flex:none"></dc-import>
+  <main style="flex:1;min-width:0;display:flex;flex-direction:column">
+    <header style="background:#fff;border-bottom:1px solid #e3e1da;flex:none">
+      <div style="display:flex;align-items:center;gap:14px;padding:12px 20px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#7a7568">
+            <a href="Redesign — Home.dc.html" style="color:#7a7568">Analysis &amp; Modelling</a><span>/</span><span style="color:#0f1b2a;font-weight:600">3D Model Space</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:2px">
+            <h1 style="margin:0;font-size:18px;font-weight:800;letter-spacing:-.01em">2×1 Bay · 2 Storeys</h1>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;color:#0f4c92;background:#eaf1f9;border:1px solid #cddcf0;border-radius:4px;padding:2px 7px;white-space:nowrap">autosaved</span>
+          </div>
+        </div>
+        <button style="display:inline-flex;align-items:center;gap:7px;border:1px solid #d6d3c9;border-radius:6px;background:#fff;padding:8px 14px;font-size:12.5px;font-weight:600;color:#3d4a5c;cursor:pointer;font-family:inherit" style-hover="border-color:#0f4c92;color:#0f4c92">Import / Export</button>
+        <button style="display:inline-flex;align-items:center;gap:7px;border:none;border-radius:6px;background:#1a7f4b;padding:9px 18px;font-size:12.5px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit" style-hover="background:#14603a">▶ Analyze</button>
+        <button style="display:inline-flex;align-items:center;gap:7px;border:none;border-radius:6px;background:#0f4c92;padding:9px 16px;font-size:12.5px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit" style-hover="background:#0d3f78">Design all</button>
+      </div>
+    </header>
+
+    <div id="ms-body">
+      <div style="position:relative;display:flex;align-items:center;justify-content:center;background:#101821;min-height:0">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#5b6b7d">3D viewport</span>
+      </div>
+
+      <div id="ms-panel" style="background:#fff;border-left:1px solid #e3e1da;display:flex;flex-direction:column;min-height:0">
+        <div style="display:flex;flex-wrap:wrap;gap:2px;padding:10px 12px;border-bottom:1px solid #eeece5;flex:none">
+          <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="8">
+            <span style="border-radius:5px;padding:5px 10px;font-size:11.5px;font-weight:600;color:{{ t.color }};background:{{ t.bg }};cursor:pointer" style-hover="background:#eaf1f9">{{ t.label }}</span>
+          </sc-for>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+          <div>
+            <p style="margin:0 0 8px;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#a39d8d">Grid generator</p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <sc-for list="{{ geomFields }}" as="f" hint-placeholder-count="4">
+                <label style="display:flex;flex-direction:column;gap:4px">
+                  <span style="font-size:11px;font-weight:600;color:#5c6675">{{ f.label }}</span>
+                  <div style="display:flex;border:1px solid #d6d3c9;border-radius:6px;background:#fcfbf8;overflow:hidden">
+                    <span style="flex:1;padding:7px 9px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#0f1b2a">{{ f.value }}</span>
+                    <span style="display:flex;align-items:center;padding:0 8px;border-left:1px solid #eeece5;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#a39d8d;background:#f7f6f1">{{ f.unit }}</span>
+                  </div>
+                </label>
+              </sc-for>
+            </div>
+            <button style="margin-top:10px;width:100%;border:1px solid #cddcf0;border-radius:6px;background:#eaf1f9;padding:8px;font-size:12px;font-weight:600;color:#0f4c92;cursor:pointer;font-family:inherit" style-hover="background:#dce9f7">Regenerate grid model</button>
+          </div>
+          <div style="border-top:1px solid #eeece5;padding-top:12px">
+            <p style="margin:0 0 8px;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#a39d8d">Selected — g2-1 · girder</p>
+            <sc-for list="{{ selRows }}" as="r" hint-placeholder-count="4">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid #f3f1ea;padding:6px 0">
+                <span style="font-size:11.5px;color:#5c6675">{{ r.k }}</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:500;color:#0f1b2a">{{ r.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="border-top:1px solid #eeece5;padding-top:12px">
+            <p style="margin:0 0 8px;font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#a39d8d">Display</p>
+            <sc-for list="{{ toggles }}" as="t" hint-placeholder-count="3">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0">
+                <span style="font-size:11.5px;color:#3d4a5c">{{ t.label }}</span>
+                <span style="width:30px;height:17px;border-radius:9px;background:{{ t.bg }};position:relative;cursor:pointer"><span style="position:absolute;top:2px;left:{{ t.knob }};width:13px;height:13px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25)"></span></span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const tabs = ['Geometry', 'Properties', 'Supports', 'Loading', 'Analysis', 'Modal', 'Pushover', 'Design'].map((label, i) => ({
+      label, color: i === 0 ? '#fff' : '#5c6675', bg: i === 0 ? '#0f4c92' : 'transparent',
+    }));
+    const geomFields = [
+      { label: 'Bays X', value: '6, 6', unit: 'm' },
+      { label: 'Bays Z', value: '5', unit: 'm' },
+      { label: 'Storey heights', value: '3.5, 3', unit: 'm' },
+      { label: 'Slab thickness', value: '150', unit: 'mm' },
+    ];
+    const selRows = [
+      { k: 'Section', v: '300 × 500 RC' },
+      { k: 'Span', v: '6.00 m · B2→C2' },
+      { k: 'Role', v: 'girder' },
+      { k: 'Loads', v: 'SDL 4.8 + LL 2.4 kPa trib' },
+    ];
+    const on = { bg: '#0f4c92', knob: '15px' }, off = { bg: '#d6d3c9', knob: '2px' };
+    const toggles = [
+      { label: 'Load diagrams', ...on },
+      { label: 'Designed footings', ...on },
+      { label: 'Steel joint hardware', ...off },
+    ];
+    return { tabs, geomFields, selRows, toggles };
+  }
+}
+</script>
+</body>
+</html>

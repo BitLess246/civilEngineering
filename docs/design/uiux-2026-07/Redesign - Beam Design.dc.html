@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'Archivo',system-ui,sans-serif;color:#0f1b2a;background:#f4f3ef}a{color:#0f4c92;text-decoration:none}a:hover{color:#0d3f78}
+#bd-cols{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(340px,1fr);gap:22px;padding:22px 28px;align-items:start}
+@media (max-width:1240px){#bd-cols{grid-template-columns:minmax(0,1fr)}#bd-cols>div:last-child{position:static !important}}
+</style>
+</helmet>
+<div style="display:flex;min-height:100vh;background:#f4f3ef">
+  <dc-import name="Sidebar" active="Beam Design" hint-size="250px,100vh" style="flex:none"></dc-import>
+  <main style="flex:1;min-width:0">
+    <header style="background:#fff;border-bottom:1px solid #e3e1da">
+      <div style="display:flex;align-items:center;gap:14px;padding:14px 28px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#7a7568">
+            <a href="Redesign — Home.dc.html" style="color:#7a7568" style-hover="color:#0f4c92">Concrete</a><span>/</span><span style="color:#0f1b2a;font-weight:600">Beam Design</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:3px">
+            <h1 style="margin:0;font-size:21px;font-weight:800;letter-spacing:-.01em">Rectangular RC Beam</h1>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;color:#0f4c92;background:#eaf1f9;border:1px solid #cddcf0;border-radius:4px;padding:2px 7px;white-space:nowrap">ACI 318-14</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;color:#0f4c92;background:#eaf1f9;border:1px solid #cddcf0;border-radius:4px;padding:2px 7px;white-space:nowrap">NSCP 2015</span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:2px;border:1px solid #d6d3c9;border-radius:6px;background:#fcfbf8;padding:2px">
+          <span style="border-radius:4px;background:#0f4c92;color:#fff;padding:5px 12px;font-size:11.5px;font-weight:600">Single section</span>
+          <span style="border-radius:4px;color:#5c6675;padding:5px 12px;font-size:11.5px;font-weight:600;cursor:pointer" style-hover="color:#0f1b2a">Multiple sections</span>
+        </div>
+        <button style="display:inline-flex;align-items:center;gap:7px;border:none;border-radius:6px;background:#0f4c92;padding:9px 16px;font-size:12.5px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit" style-hover="background:#0d3f78"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"></path><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>Export report</button>
+      </div>
+    </header>
+
+    <div id="bd-cols">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <sc-for list="{{ inputSections }}" as="sec" hint-placeholder-count="4">
+          <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px">
+            <div style="display:flex;align-items:baseline;gap:10px;padding:12px 18px;border-bottom:1px solid #eeece5">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;color:#a39d8d">{{ sec.num }}</span>
+              <h2 style="margin:0;font-size:13.5px;font-weight:700;letter-spacing:.02em">{{ sec.title }}</h2>
+              <span style="margin-left:auto;font-size:11px;color:#a39d8d">{{ sec.hint }}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px 16px;padding:16px 18px">
+              <sc-for list="{{ sec.fields }}" as="f" hint-placeholder-count="4">
+                <label style="display:flex;flex-direction:column;gap:5px">
+                  <span style="font-size:11.5px;font-weight:600;color:#5c6675">{{ f.label }}</span>
+                  <sc-if value="{{ f.isSelect }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;align-items:center;justify-content:space-between;border:1px solid #d6d3c9;border-radius:6px;background:#fcfbf8;padding:8px 10px;font-size:13px;color:#0f1b2a;cursor:pointer">{{ f.value }}<span style="font-size:9px;color:#a39d8d">▼</span></div>
+                  </sc-if>
+                  <sc-if value="{{ f.isInput }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;border:1px solid #d6d3c9;border-radius:6px;background:#fcfbf8;overflow:hidden">
+                      <span style="flex:1;padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#0f1b2a">{{ f.value }}</span>
+                      <span style="display:flex;align-items:center;padding:0 9px;border-left:1px solid #eeece5;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#a39d8d;background:#f7f6f1">{{ f.unit }}</span>
+                    </div>
+                  </sc-if>
+                </label>
+              </sc-for>
+            </div>
+          </section>
+        </sc-for>
+
+        <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px">
+          <div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid #eeece5">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;color:#a39d8d">05</span>
+            <h2 style="margin:0;font-size:13.5px;font-weight:700;letter-spacing:.02em">Calculation report</h2>
+            <span style="margin-left:auto;display:inline-flex;gap:14px;font-size:11.5px;font-weight:600">
+              <span style="color:#0f4c92;border-bottom:2px solid #0f4c92;padding-bottom:2px">Worked solution</span>
+              <span style="color:#a39d8d;cursor:pointer" style-hover="color:#5c6675">Summary only</span>
+            </span>
+          </div>
+          <div style="padding:6px 0">
+            <sc-for list="{{ steps }}" as="s" hint-placeholder-count="5">
+              <div style="display:grid;grid-template-columns:1fr 130px;gap:16px;padding:13px 18px;border-bottom:1px solid #f3f1ea">
+                <div>
+                  <h3 style="margin:0;font-size:12.5px;font-weight:700;color:#0f1b2a"><span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:#a39d8d;margin-right:6px">{{ s.n }}</span>{{ s.title }}</h3>
+                  <sc-if value="{{ s.text }}" hint-placeholder-val="{{ true }}"><p style="margin:5px 0 0;font-size:12px;line-height:1.55;color:#5c6675">{{ s.text }}</p></sc-if>
+                  <p style="margin:7px 0 0;font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.7;color:#1e2c3d;background:#f9f8f4;border:1px solid #eeece5;border-radius:6px;padding:8px 12px;overflow-x:auto;white-space:pre">{{ s.tex }}</p>
+                </div>
+                <div style="padding-top:2px">
+                  <sc-if value="{{ s.status }}" hint-placeholder-val="{{ true }}"><span style="display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;color:{{ s.statusColor }};background:{{ s.statusBg }};border-radius:4px;padding:2px 7px">{{ s.status }}</span></sc-if>
+                  <p style="margin:6px 0 0;font-size:10.5px;line-height:1.5;color:#a39d8d">{{ s.clause }}</p>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px;position:sticky;top:22px">
+        <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:10px;background:#ecf6ef;border-bottom:1px solid #d3e8da;padding:13px 18px">
+            <span style="display:flex;width:22px;height:22px;align-items:center;justify-content:center;border-radius:50%;background:#1a7f4b;color:#fff"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
+            <div>
+              <p style="margin:0;font-size:13px;font-weight:800;color:#14603a;letter-spacing:.02em">DESIGN OK — SRRB, single layer</p>
+              <p style="margin:1px 0 0;font-size:11px;color:#4d7a5f">Governing: flexure · utilization 0.78</p>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #eeece5">
+            <div style="padding:12px 16px;border-right:1px solid #eeece5">
+              <p style="margin:0;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#a39d8d">Tension steel</p>
+              <p style="margin:3px 0 0;font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:600;color:#0f1b2a">5-⌀20 <span style="font-size:11px;color:#a39d8d">bottom</span></p>
+            </div>
+            <div style="padding:12px 16px;border-right:1px solid #eeece5">
+              <p style="margin:0;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#a39d8d">Stirrups</p>
+              <p style="margin:3px 0 0;font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:600;color:#0f1b2a">⌀10 <span style="font-size:11px;color:#a39d8d">2-leg @180</span></p>
+            </div>
+            <div style="padding:12px 16px">
+              <p style="margin:0;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#a39d8d">Eff. depth d</p>
+              <p style="margin:3px 0 0;font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:600;color:#0f1b2a">440 <span style="font-size:11px;color:#a39d8d">mm</span></p>
+            </div>
+          </div>
+          <div style="padding:14px 18px;display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{ checks }}" as="c" hint-placeholder-count="3">
+              <div>
+                <div style="display:flex;justify-content:space-between;align-items:baseline">
+                  <span style="font-size:11.5px;font-weight:600;color:#3d4a5c">{{ c.name }}</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ c.color }}">{{ c.ratio }}</span>
+                </div>
+                <div style="margin-top:4px;height:5px;border-radius:3px;background:#eeece5;overflow:hidden">
+                  <div style="height:100%;border-radius:3px;background:{{ c.color }};width:{{ c.pct }}"></div>
+                </div>
+              </div>
+            </sc-for>
+            <p style="margin:2px 0 0;font-size:10.5px;color:#a39d8d">ρ = 0.0119 within ρmin 0.0034 … ρmax 0.0206 — §9.6.1.2 / §21.2.2</p>
+          </div>
+        </section>
+
+        <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid #eeece5">
+            <h2 style="margin:0;font-size:13.5px;font-weight:700">Section</h2>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#a39d8d">300 × 500 · to scale</span>
+          </div>
+          <div style="padding:12px 16px 16px;background-image:linear-gradient(#f0eee7 1px,transparent 1px),linear-gradient(90deg,#f0eee7 1px,transparent 1px);background-size:22px 22px;display:flex;justify-content:center">
+            <svg viewBox="-46 0 292 280" style="width:230px;height:auto;font-family:'IBM Plex Mono',monospace">
+              <rect x="30" y="20" width="140" height="233" fill="#fff" stroke="#0f1b2a" stroke-width="1.6"></rect>
+              <rect x="49" y="39" width="102" height="195" rx="5" fill="none" stroke="#c2402a" stroke-width="2"></rect>
+              <circle cx="59" cy="222" r="7" fill="#0f1b2a"></circle><circle cx="80" cy="222" r="7" fill="#0f1b2a"></circle><circle cx="100" cy="222" r="7" fill="#0f1b2a"></circle><circle cx="120" cy="222" r="7" fill="#0f1b2a"></circle><circle cx="141" cy="222" r="7" fill="#0f1b2a"></circle>
+              <line x1="30" y1="86" x2="170" y2="86" stroke="#0f4c92" stroke-width="1" stroke-dasharray="5 4"></line>
+              <text x="176" y="90" font-size="9.5" fill="#0f4c92">c = 71 mm</text>
+              <line x1="30" y1="266" x2="170" y2="266" stroke="#0f4c92" stroke-width=".9"></line>
+              <text x="100" y="278" font-size="9.5" fill="#0f4c92" text-anchor="middle">b = 300 mm</text>
+              <line x1="18" y1="20" x2="18" y2="253" stroke="#0f4c92" stroke-width=".9"></line>
+              <text x="13" y="140" font-size="9.5" fill="#0f4c92" text-anchor="end">h = 500</text>
+              <text x="176" y="226" font-size="9.5" fill="#c2402a">5-⌀20</text>
+              <text x="176" y="48" font-size="9.5" fill="#c2402a">⌀10 stirrup</text>
+            </svg>
+          </div>
+        </section>
+
+        <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid #eeece5">
+            <h2 style="margin:0;font-size:13.5px;font-weight:700">Serviceability</h2>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;color:#14603a;background:#ddefe3;border-radius:4px;padding:2px 7px">PASS</span>
+          </div>
+          <div style="padding:8px 18px 12px">
+            <sc-for list="{{ svc }}" as="v" hint-placeholder-count="4">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid #f3f1ea;padding:6px 0">
+                <span style="font-size:11.5px;color:#5c6675">{{ v.label }}</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:500;color:#0f1b2a">{{ v.value }}</span>
+              </div>
+            </sc-for>
+            <p style="margin:8px 0 0;font-size:10.5px;color:#a39d8d">Branson Ie · λΔ with ξ = 2.0 (≥ 5 yr) — ACI 318-14 §24.2</p>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const S = (label, value) => ({ label, value, isSelect: true, isInput: false, unit: '' });
+    const N = (label, value, unit) => ({ label, value, unit, isSelect: false, isInput: true });
+    const inputSections = [
+      { num: '01', title: 'Section', hint: 'geometry & bars', fields: [N('Width b', '300', 'mm'), N('Total depth h', '500', 'mm'), N('Clear cover', '40', 'mm'), N('Bar db', '20', 'mm'), N("Compr. bar db'", '16', 'mm'), N('Stirrup ds', '10', 'mm'), N('Stirrup legs', '2', 'legs')] },
+      { num: '02', title: 'Materials', hint: 'concrete & steel', fields: [N("Concrete f'c", '28', 'MPa'), N('Steel fy', '415', 'MPa'), N('Stirrup fyt', '415', 'MPa')] },
+      { num: '03', title: 'Factored demands', hint: 'negative Mu = hogging (top steel)', fields: [N('Moment Mu', '180', 'kN·m'), N('Shear Vu', '150', 'kN')] },
+      { num: '04', title: 'Serviceability', hint: 'optional — deflection check', fields: [N('Span', '6.0', 'm'), S('Support', 'Simply supported'), N('Dead load wD', '12', 'kN/m'), N('Live load wL', '8', 'kN/m')] },
+    ];
+    const pass = { status: 'PASS', statusColor: '#14603a', statusBg: '#ddefe3' };
+    const info = { status: '', statusColor: '', statusBg: '' };
+    const steps = [
+      { n: '1', title: 'Effective depth', text: 'Single layer of ⌀20 bars inside ⌀10 stirrups.', tex: 'd = h − cover − ds − db/2 = 500 − 40 − 10 − 10 = 440 mm', clause: '§20.6.1 cover', ...info },
+      { n: '2', title: 'Required steel — flexure', text: 'Solve the quadratic for As at Mu = 180 kN·m; singly reinforced governs.', tex: 'Rn = Mu/(φ·b·d²) = 180e6/(0.9·300·440²) = 3.44 MPa\nAs,req = 1258 mm² → 5-⌀20 = 1571 mm² (1 layer fits)', clause: 'ACI 318-14 §22.2', ...pass },
+      { n: '3', title: 'Ductility limits', text: 'Tension-controlled: εt at the extreme layer exceeds 0.005.', tex: 'ρ = 0.0119 · ρmin = 0.0034 · ρmax = 0.0206\nc = 71 mm → εt = 0.0156 > 0.005 → φ = 0.90', clause: '§9.6.1.2 · §21.2.2', ...pass },
+      { n: '4', title: 'Design strength', text: '', tex: 'a = As·fy/(0.85·f\'c·b) = 91 mm\nφMn = 0.9·1571·415·(440 − 45.6) = 231 kN·m ≥ 180', clause: '§22.2.2', ...pass },
+      { n: '5', title: 'One-way shear & stirrups', text: 'Vs required; spacing capped by d/2 and the §9.7.6.2.2 ceiling.', tex: 'φVc = 0.75·0.17·√28·300·440 = 89 kN < Vu = 150 kN\nVs,req = 81 kN → s,req = 196 mm → adopt ⌀10 2-leg @ 180', clause: '§22.5 · §9.7.6.2.2', ...pass },
+      { n: '6', title: 'Stirrup anchorage', text: '135° seismic hooks.', tex: 'hook extension = 6·ds = 60 mm · bend Ø = 4·ds = 40 mm', clause: '§25.3.2', ...info },
+    ];
+    const checks = [
+      { name: 'Flexure Mu/φMn', ratio: '0.78', pct: '78%', color: '#1a7f4b' },
+      { name: 'Shear Vu/φVn', ratio: '0.71', pct: '71%', color: '#1a7f4b' },
+      { name: 'Bar spacing (1 layer)', ratio: '0.62', pct: '62%', color: '#1a7f4b' },
+    ];
+    const svc = [
+      { label: 'Min. thickness hmin', value: '375 mm ≤ h ✓' },
+      { label: 'Section state', value: 'Cracked (Ma > Mcr)' },
+      { label: 'Immediate live δL', value: '4.1 ≤ L/360 = 16.7 mm' },
+      { label: 'Long-term δtotal', value: '14.8 ≤ L/240 = 25.0 mm' },
+    ];
+    return { inputSections, steps, checks, svc };
+  }
+}
+</script>
+</body>
+</html>

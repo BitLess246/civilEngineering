@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'Inter',system-ui,sans-serif;color:#1f2933;background:#f5f7fa}a{color:#0056b3;text-decoration:none}a:hover{color:#003f86}
+input,select{border-radius:8px;border:1px solid #cbd5e1;padding:.5rem .75rem;font-family:inherit;font-size:14px;color:#1e293b;background:#fff}
+input:focus,select:focus{outline:none;border-color:#0056b3;box-shadow:0 0 0 3px rgba(0,86,179,.16)}
+.mth{font-family:'Times New Roman',serif;font-style:italic}
+</style>
+</helmet>
+<div style="min-height:100vh;background:#f5f7fa">
+  <nav style="position:sticky;top:0;z-index:50;border-bottom:1px solid rgba(255,255,255,.1);background:#000">
+    <div style="display:flex;height:44px;align-items:center;padding:0 20px">
+      <a href="#" style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.2em;color:#fff">CivEng</span>
+        <span style="height:14px;width:1px;background:rgba(255,255,255,.2)"></span>
+        <span style="font-size:10px;letter-spacing:.025em;color:#64748b">Structural Toolkit</span>
+      </a>
+      <div style="margin-left:24px;display:flex;align-items:center">
+        <span style="display:flex;height:44px;align-items:center;gap:6px;padding:0 12px;font-size:12px;font-weight:600;letter-spacing:.025em;color:#cbd5e1">Reference <span style="font-size:8px">▼</span></span>
+        <span style="display:flex;height:44px;align-items:center;gap:6px;padding:0 12px;font-size:12px;font-weight:600;letter-spacing:.025em;color:#cbd5e1">Structural <span style="font-size:8px">▼</span></span>
+        <span style="display:flex;height:44px;align-items:center;gap:6px;padding:0 12px;font-size:12px;font-weight:600;letter-spacing:.025em;color:#cbd5e1">Quantity Take-Off <span style="font-size:8px">▼</span></span>
+        <span style="display:flex;height:44px;cursor:default;align-items:center;padding:0 12px;font-size:12px;font-weight:600;letter-spacing:.025em;color:#475569">More <span style="margin-left:6px;background:rgba(255,255,255,.1);padding:2px 4px;font-size:8px;text-transform:uppercase;color:#94a3b8">soon</span></span>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+        <span style="padding:6px 12px;font-size:12px;font-weight:600;color:#cbd5e1">Log in</span>
+        <span style="background:#0056b3;padding:6px 14px;font-size:12px;font-weight:600;color:#fff">Sign up</span>
+      </div>
+    </div>
+  </nav>
+
+  <div style="margin:0 auto;max-width:1152px;padding:24px">
+    <a href="#" style="font-size:14px;color:#0056b3" style-hover="text-decoration:underline">← Home</a>
+    <h1 style="margin:4px 0 0;font-size:30px;font-weight:800;letter-spacing:-.025em;color:#0056b3">Foundation Design</h1>
+    <p style="margin:4px 0 0;color:#475569;font-size:16px">Isolated footing (square / rectangular, concentric / eccentric) — React + typed engine. Results update live.</p>
+
+    <div style="margin-top:16px;display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;border-radius:12px;border:1px solid #e2e8f0;background:#fff;padding:12px;box-shadow:0 1px 2px rgba(0,0,0,.05)">
+      <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569">Project / job</span><input placeholder="e.g. Lot 12 Residence" style="width:200px"></label>
+      <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569">Prepared by</span><input placeholder="Engineer name" style="width:200px"></label>
+      <button style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;border-radius:8px;background:linear-gradient(135deg,#0056b3,#003f86);padding:8px 16px;font-size:14px;font-weight:600;color:#fff;border:none;cursor:pointer;font-family:inherit;box-shadow:0 4px 6px -1px rgba(0,0,0,.1)">🖨 Print / Save PDF</button>
+    </div>
+
+    <div style="margin-top:16px;border-radius:12px;border:1px solid #e2e8f0;background:#f8fafc;padding:12px">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 12px">
+        <span style="font-size:14.7px;font-weight:700;color:#1e293b">Import from Excel</span>
+        <button style="display:inline-flex;align-items:center;gap:8px;border-radius:8px;background:linear-gradient(135deg,#0056b3,#003f86);padding:8px 14px;font-size:14px;font-weight:600;color:#fff;border:none;cursor:pointer;font-family:inherit;box-shadow:0 1px 2px rgba(0,0,0,.05)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>Choose file</button>
+        <span style="font-size:13.3px;color:#64748b">No file chosen</span>
+        <button style="display:inline-flex;align-items:center;gap:8px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;padding:8px 14px;font-size:14px;font-weight:600;color:#0056b3;cursor:pointer;font-family:inherit" style-hover="border-color:#0056b3;background:#eff6ff"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Blank template</button>
+        <span style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:13.3px;color:#64748b">One row = one foundation. <span style="display:inline-flex;align-items:center;gap:4px;font-weight:600;color:#0056b3;cursor:pointer">ⓘ What format?</span></span>
+      </div>
+    </div>
+
+    <div style="margin-top:24px;display:grid;grid-template-columns:1.4fr 1fr;gap:24px;align-items:start">
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <fieldset style="border-radius:12px;border:1px solid #e2e8f0;background:#fff;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.05);margin:0">
+          <legend style="padding:0 8px;font-size:16.3px;font-weight:700;color:#0056b3">Footing</legend>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+            <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569">Type</span><select><option>Isolated Square</option><option>Isolated Rectangular</option></select></label>
+            <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569">Loading</span><select><option>Concentric</option><option>Eccentric (uniaxial)</option></select></label>
+            <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569">Analysis method</span><select><option>Detailed design</option><option>Analyze given dimensions</option></select></label>
+            <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569">Solution method</span><select><option>Iteration</option><option>Approximate (initial Dc)</option></select></label>
+          </div>
+        </fieldset>
+
+        <fieldset style="border-radius:12px;border:1px solid #e2e8f0;background:#fff;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.05);margin:0">
+          <legend style="padding:0 8px;font-size:16.3px;font-weight:700;color:#0056b3">Loads &amp; Column</legend>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+            <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569">Load entry</span><select><option>Service &amp; ultimate (P, Pu)</option><option>Individual loads (DL &amp; LL)</option></select></label>
+            <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569"><span class="mth">P</span> <span style="color:#64748b">(kN)</span></span><input type="number" defaultValue="1000"></label>
+            <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569"><span class="mth">P<sub>u</sub></span> <span style="color:#64748b">(kN)</span></span><input type="number" defaultValue="1400"></label>
+            <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569">Column shape</span><select><option>Square</option><option>Rectangular</option><option>Circular (spiral)</option></select></label>
+            <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569">Column <span class="mth">c</span> (square) <span style="color:#64748b">(mm)</span></span><input type="number" defaultValue="400"></label>
+            <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569">Column position</span><select><option>Interior</option><option>Edge</option><option>Corner</option></select></label>
+          </div>
+        </fieldset>
+
+        <fieldset style="border-radius:12px;border:1px solid #e2e8f0;background:#fff;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.05);margin:0">
+          <legend style="padding:0 8px;font-size:16.3px;font-weight:700;color:#0056b3">Materials</legend>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+            <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569"><span class="mth">f'<sub>c</sub></span> <span style="color:#64748b">(MPa)</span></span><input type="number" defaultValue="28"></label>
+            <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569"><span class="mth">f<sub>y</sub></span> <span style="color:#64748b">(MPa)</span></span><input type="number" defaultValue="415"></label>
+            <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569">Bar <span class="mth">d<sub>b</sub></span> <span style="color:#64748b">(mm)</span></span><input type="number" defaultValue="20"></label>
+            <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569">Clear cover <span style="color:#64748b">(mm)</span></span><input type="number" defaultValue="75"></label>
+          </div>
+        </fieldset>
+
+        <fieldset style="border-radius:12px;border:1px solid #e2e8f0;background:#fff;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.05);margin:0">
+          <legend style="padding:0 8px;font-size:16.3px;font-weight:700;color:#0056b3">Soil &amp; Geometry</legend>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+            <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569"><span class="mth">q<sub>a</sub></span> <span style="color:#64748b">(kPa)</span></span><input type="number" defaultValue="200"></label>
+            <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569"><span class="mth">γ<sub>soil</sub></span> <span style="color:#64748b">(kN/m³)</span></span><input type="number" defaultValue="18"></label>
+            <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569"><span class="mth">γ<sub>conc</sub></span> <span style="color:#64748b">(kN/m³)</span></span><input type="number" defaultValue="24"></label>
+            <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569">Total depth <span class="mth">H</span> <span style="color:#64748b">(m)</span></span><input type="number" defaultValue="1.5"></label>
+            <label style="display:flex;flex-direction:column;font-size:14px"><span style="margin-bottom:4px;font-weight:500;color:#475569">Surcharge <span style="color:#64748b">(kPa)</span></span><input type="number" defaultValue="0"></label>
+          </div>
+        </fieldset>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:20px;position:sticky;top:24px">
+        <div style="border-radius:12px;border:1px solid #e2e8f0;background:#fff;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.05)">
+          <h2 style="margin:0 0 8px;font-size:16.3px;font-weight:700;color:#0056b3">Design preview</h2>
+          <svg viewBox="0 0 360 330" style="width:100%;height:auto;font-family:Arial,sans-serif">
+            <text x="14" y="20" font-size="11" font-weight="700" fill="#0056b3">PLAN</text>
+            <rect x="72" y="36" width="150" height="116" rx="2" fill="#eef3f8" stroke="#37526e" stroke-width="1.4"></rect>
+            <rect x="138" y="85" width="18" height="18" fill="#37526e"></rect>
+            <line x1="72" y1="168" x2="222" y2="168" stroke="#37526e" stroke-width=".9"></line>
+            <text x="147" y="182" font-size="10" fill="#334155" text-anchor="middle">Bx = 2.45 m</text>
+            <line x1="234" y1="36" x2="234" y2="152" stroke="#37526e" stroke-width=".9"></line>
+            <text x="240" y="97" font-size="10" fill="#334155">By = 2.45 m</text>
+            <text x="14" y="216" font-size="11" font-weight="700" fill="#0056b3">SECTION</text>
+            <line x1="46" y1="232" x2="316" y2="232" stroke="#8a6d3b" stroke-width="1.2"></line>
+            <line x1="46" y1="232" x2="40" y2="238" stroke="#caa472" stroke-width=".8"></line><line x1="70" y1="232" x2="64" y2="238" stroke="#caa472" stroke-width=".8"></line><line x1="94" y1="232" x2="88" y2="238" stroke="#caa472" stroke-width=".8"></line><line x1="118" y1="232" x2="112" y2="238" stroke="#caa472" stroke-width=".8"></line><line x1="142" y1="232" x2="136" y2="238" stroke="#caa472" stroke-width=".8"></line><line x1="166" y1="232" x2="160" y2="238" stroke="#caa472" stroke-width=".8"></line><line x1="190" y1="232" x2="184" y2="238" stroke="#caa472" stroke-width=".8"></line><line x1="214" y1="232" x2="208" y2="238" stroke="#caa472" stroke-width=".8"></line><line x1="238" y1="232" x2="232" y2="238" stroke="#caa472" stroke-width=".8"></line><line x1="262" y1="232" x2="256" y2="238" stroke="#caa472" stroke-width=".8"></line><line x1="286" y1="232" x2="280" y2="238" stroke="#caa472" stroke-width=".8"></line><line x1="310" y1="232" x2="304" y2="238" stroke="#caa472" stroke-width=".8"></line>
+            <rect x="46" y="299" width="270" height="29" fill="#cfe0f1" stroke="#37526e" stroke-width="1.4"></rect>
+            <rect x="167" y="232" width="28" height="67" fill="#37526e"></rect>
+            <line x1="34" y1="232" x2="34" y2="328" stroke="#37526e" stroke-width=".9"></line>
+            <text x="30" y="284" font-size="10" fill="#334155" text-anchor="end">H = 1.50 m</text>
+            <line x1="324" y1="299" x2="324" y2="328" stroke="#37526e" stroke-width=".9"></line>
+            <text x="330" y="317" font-size="10" fill="#334155">Dc = 460 mm</text>
+          </svg>
+        </div>
+
+        <div style="border-radius:12px;border:1px solid #e2e8f0;background:#fff;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.05)">
+          <h2 style="margin:0 0 8px;font-size:16.3px;font-weight:700;color:#0056b3">Results</h2>
+          <sc-for list="{{ rows }}" as="r" hint-placeholder-count="7">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;border-bottom:1px solid #f1f5f9;padding:6px 0">
+              <span style="font-size:14px;color:#475569">{{ r.label }}</span>
+              <span style="text-align:right;font-size:14px;font-weight:600;color:#1e293b;flex:1">{{ r.value }}</span>
+              <sc-if value="{{ r.check }}" hint-placeholder-val="{{ true }}"><span style="width:128px;text-align:right;font-size:12px;color:#64748b">{{ r.check }}</span></sc-if>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="border-radius:12px;border:1px solid #e2e8f0;background:#fff;padding:16px;box-shadow:0 1px 2px rgba(0,0,0,.05);font-size:14px;color:#475569">
+          <h2 style="margin:0 0 8px;font-size:16.3px;font-weight:700;color:#0056b3">Basis</h2>
+          <p class="mth" style="margin:8px 0;text-align:center;font-size:15px;color:#334155">q<sub>net</sub> = q<sub>a</sub> − γ<sub>s</sub>D<sub>s</sub> − γ<sub>c</sub>D<sub>c</sub> − q,&nbsp;&nbsp; P<sub>u</sub> = max(1.4D, 1.2D + 1.6L)</p>
+          <p style="margin:4px 0 0;font-size:12px;color:#64748b">NSCP 2015 / ACI 318-14. φ: shear 0.75, flexure 0.90. Short-direction band per §413.3.3.3.</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:24px;border-radius:12px;border:1px solid #e2e8f0;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.05)">
+      <div style="display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px">
+        <h2 style="margin:0;font-size:16.3px;font-weight:700;color:#0056b3">Solution — step by step</h2>
+        <span style="font-size:14px;color:#64748b">Hide ▲</span>
+      </div>
+      <ol style="margin:0;display:flex;flex-direction:column;gap:16px;border-top:1px solid #f1f5f9;padding:16px;list-style:none">
+        <sc-for list="{{ steps }}" as="s" hint-placeholder-count="5">
+          <li>
+            <h3 style="margin:0 0 6px;font-size:14px;font-weight:600;color:#1e293b"><span style="color:#64748b">{{ s.n }}.</span> {{ s.title }}</h3>
+            <div style="display:flex;flex-direction:column;gap:6px;padding-left:16px">
+              <sc-if value="{{ s.text }}" hint-placeholder-val="{{ true }}"><p style="margin:0;font-size:14px;line-height:1.625;color:#475569">{{ s.text }}</p></sc-if>
+              <p class="mth" style="margin:4px 0;text-align:center;font-size:15.2px;color:#334155">{{ s.tex }}</p>
+            </div>
+            <sc-if value="{{ s.note }}" hint-placeholder-val="{{ true }}"><p style="margin:4px 0 0;padding-left:16px;font-size:12px;color:#64748b">{{ s.note }}</p></sc-if>
+          </li>
+        </sc-for>
+      </ol>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const rows = [
+      { label: 'Method', value: 'Iteration', check: '' },
+      { label: 'qnet', value: '164.960 kPa', check: '' },
+      { label: 'Footing size', value: 'B = 2.45 m', check: '' },
+      { label: 'qu', value: '233.236 kPa', check: '' },
+      { label: 'Slab thickness Dc', value: '460 mm', check: '' },
+      { label: 'd — punching', value: '375 mm', check: 'beam 292 mm' },
+      { label: 'Steel (each way)', value: '10 ⌀20 mm @ 250 mm', check: 'As=3053 mm² · ρ_min' },
+    ];
+    const steps = [
+      { n: 1, title: 'Net allowable bearing pressure', text: 'Deduct soil and concrete overburden from the gross allowable pressure.', tex: 'qnet = qa − γs·Ds − γc·Dc = 200 − 18(1.04) − 24(0.46) = 164.96 kPa', note: '' },
+      { n: 2, title: 'Required footing area and size', text: 'Size the footing so the service pressure does not exceed qnet.', tex: 'Areq = P / qnet = 1000 / 164.96 = 6.06 m² → B = √6.06 = 2.46 → use B = 2.45 m', note: 'Iterated with Dc until the assumed and computed thickness converge.' },
+      { n: 3, title: 'Ultimate soil pressure', text: '', tex: 'qu = Pu / B² = 1400 / 2.45² = 233.24 kPa', note: '' },
+      { n: 4, title: 'Two-way (punching) shear', text: 'Critical section at d/2 from the column face; interior column, β = 1.', tex: 'Vu = qu(B² − (c+d)²) = 233.24(6.00 − 0.60) = 1259 kN ≤ φVc = 0.75·0.33√f′c·bo·d = 1287 kN ✓', note: 'ACI 318-14 §22.6.5.2 — governs the effective depth, d = 375 mm.' },
+      { n: 5, title: 'One-way (beam) shear', text: 'Critical section at d from the column face.', tex: 'Vu = qu·B·(ℓ − d) = 233.24 · 2.45 · 0.650 = 371 kN ≤ φVc = 0.75·0.17√f′c·B·d = 620 kN ✓', note: 'ACI 318-14 §22.5.5.1.' },
+      { n: 6, title: 'Flexural reinforcement', text: 'Cantilever moment at the column face, each way.', tex: 'Mu = qu·B·ℓ²/2 = 233.24 · 2.45 · 1.025²/2 = 300 kN·m → As = 2210 mm² < As,min = 0.0018·B·Dc = 3053 mm²', note: 'Minimum temperature-shrinkage steel governs → 10 ⌀20 mm @ 250 mm each way.' },
+    ];
+    return { rows, steps };
+  }
+}
+</script>
+</body>
+</html>
