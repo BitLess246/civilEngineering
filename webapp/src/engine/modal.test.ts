@@ -37,6 +37,20 @@ describe('jacobiEigen — symmetric eigen-decomposition', () => {
 })
 
 // ── mass assembly ─────────────────────────────────────────────────────────
+describe('jacobiEigen — 2-storey shear building (textbook closed form)', () => {
+  // Chopra, Dynamics of Structures: equal storey masses m and stiffnesses k →
+  // K = [[2k, −k], [−k, k]], M = m·I. Eigenvalues ω² = (k/m)·(3 ∓ √5)/2.
+  it('eigenvalues are k·(3 ∓ √5)/2 for m = 1', () => {
+    const k = 250
+    const { values } = jacobiEigen([[2 * k, -k], [-k, k]])
+    const sorted = [...values].sort((a, b) => a - b)
+    expect(sorted[0]).toBeCloseTo((k * (3 - Math.sqrt(5))) / 2, 8)
+    expect(sorted[1]).toBeCloseTo((k * (3 + Math.sqrt(5))) / 2, 8)
+    // frequency ratio ω2/ω1 = √(λ2/λ1) ≈ 2.618 (golden-ratio² classic)
+    expect(Math.sqrt(sorted[1] / sorted[0])).toBeCloseTo((1 + Math.sqrt(5)) ** 2 / 4, 6)
+  })
+})
+
 describe('buildSeismicMass', () => {
   it('conserves total member self-mass (Σ nodal = Σ member)', () => {
     const model = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section })

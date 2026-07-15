@@ -86,6 +86,10 @@ of the app. Everything runs **off the main thread** in a web worker
   (1.2+0.5CaI)D and (0.9−0.5CaI)D with the effective factor in the combo name.
   Toggles in the Loading tab: orthogonal off by default (conditional per code),
   Ev on by default (strength design).
+- **ValidationMap filled** (P2-4): every row in `docs/ValidationMap.md` now
+  cites its vitest evidence (✅/🔶) or is an explicit external-tool gap
+  (X001–X004); Chopra 2-DOF eigen anchor added to `modal.test.ts`; Roadmap
+  Phase-2 checkboxes synced.
 - **Timoshenko shear deformation** (P3-5): `kLocal` takes Przemieniecki
   Φ = 12EI/(G·As·L²) modifiers per bending plane; the bridge supplies shear
   areas per section type (rect 5/6·A, W web d·tw / flanges 5/6·2·bf·tf,
