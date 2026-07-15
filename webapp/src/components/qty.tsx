@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import type { ConcreteClass } from '../engine/quantities'
 import { ReportControls } from './ReportControls'
@@ -9,13 +8,13 @@ export function Num({ label, unit, value, onChange, step = 'any', hint }: {
 }) {
   return (
     <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-slate-600">
-        {label}{unit ? <span className="text-slate-500"> ({unit})</span> : null}
+      <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">
+        {label}{unit ? <span className="font-mono text-[10.5px] font-normal text-[#a39d8d]"> ({unit})</span> : null}
       </span>
       <input type="number" inputMode="decimal" step={step} value={Number.isFinite(value) ? value : ''}
         onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none focus:ring-1 focus:ring-[#0056b3]" />
-      {hint ? <span className="mt-0.5 text-[10px] text-slate-500">{hint}</span> : null}
+        className="text-[13px]" />
+      {hint ? <span className="mt-0.5 text-[10px] text-[#a39d8d]">{hint}</span> : null}
     </label>
   )
 }
@@ -25,9 +24,8 @@ export function Pick<T extends string>({ label, value, onChange, options }: {
 }) {
   return (
     <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-slate-600">{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value as T)}
-        className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none">
+      <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value as T)} className="text-[13px]">
         {options.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
       </select>
     </label>
@@ -43,17 +41,17 @@ export function ClassPick({ value, onChange }: { value: ConcreteClass; onChange:
 
 export function Card({ title, children }: { title: ReactNode; children: ReactNode }) {
   return (
-    <fieldset className="print-avoid-break rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <legend className="px-2 text-[1.02rem] font-bold text-[#0056b3]">{title}</legend>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
+    <fieldset className="print-avoid-break rounded-lg border border-[#e3e1da] bg-white p-4">
+      <legend className="px-2 text-[13.5px] font-bold text-[#0f1b2a]">{title}</legend>
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
     </fieldset>
   )
 }
 
 export function ResultCard({ title, children }: { title: ReactNode; children: ReactNode }) {
   return (
-    <div className="print-avoid-break rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">{title}</h2>
+    <div className="print-avoid-break rounded-lg border border-[#e3e1da] bg-white p-4">
+      <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">{title}</h2>
       {children}
     </div>
   )
@@ -64,10 +62,10 @@ export function Row({ label, value, sub, alert }: {
 }) {
   return (
     <div className={`flex items-baseline justify-between gap-3 border-b py-1.5 last:border-0 ${
-      alert ? 'border-red-100 bg-red-50 px-2 -mx-2 rounded' : 'border-slate-100'}`}>
-      <span className={`text-sm ${alert ? 'text-red-700' : 'text-slate-600'}`}>{label}</span>
-      <span className={`text-right text-sm font-semibold ${alert ? 'text-red-700' : 'text-slate-800'}`}>{value}</span>
-      {sub ? <span className={`w-32 text-right text-xs ${alert ? 'text-red-500' : 'text-slate-500'}`}>{sub}</span> : null}
+      alert ? 'border-[#efd4cc] bg-[#fbeeea] px-2 -mx-2 rounded' : 'border-[#f3f1ea]'}`}>
+      <span className={`text-[12px] ${alert ? 'text-[#8f2f1e]' : 'text-[#5c6675]'}`}>{label}</span>
+      <span className={`text-right font-mono text-[12.5px] font-semibold ${alert ? 'text-[#c2402a]' : 'text-[#0f1b2a]'}`}>{value}</span>
+      {sub ? <span className={`w-32 text-right text-[10.5px] ${alert ? 'text-[#c2402a]' : 'text-[#a39d8d]'}`}>{sub}</span> : null}
     </div>
   )
 }
@@ -77,12 +75,11 @@ export function QtyPage({ title, reportTitle, intro, children }: {
   title: string; reportTitle: string; intro: ReactNode; children: ReactNode
 }) {
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
-      <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">{title}</h1>
-      <p className="no-print mt-1 text-slate-600">{intro}</p>
+    <div className="mx-auto max-w-6xl px-5 py-5 sm:px-7">
+      <h1 className="text-[21px] font-extrabold tracking-tight text-[#0f1b2a]">{title}</h1>
+      <p className="no-print mt-1 text-[13px] text-[#5c6675]">{intro}</p>
       <ReportControls title={reportTitle} />
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">{children}</div>
+      <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">{children}</div>
     </div>
   )
 }
