@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { PageHeader, VerdictPanel, DrawingCard } from '../components/calc'
 import { designBeam, beamServiceDeflection, type BeamDesignInput, type BeamDesignResult } from '../engine/beamDesign'
 import type { BeamSupport } from '../engine/beamDeflection'
 import type { CriticalSection } from '../engine/beamSections'
@@ -125,19 +126,36 @@ export default function BeamDesign() {
       ? `⌀${f.stirrupDia} ${f.legs}-leg @ ${f0(rr.sAdopt)} mm`
       : rr.region === 'none' ? '— none' : '⚠ enlarge'
 
+  // Verdict presentation from the engine result: flexure utilization is
+  // Mu/φMn,max (true section utilization while singly reinforced), bar-fit is
+  // required-over-provided clear spacing, shear Vu/φVc while no stirrups are
+  // demanded — all existing outputs, no new calculation.
+  const allOK = !!r && sectionOK(r) && (!deflection || (deflection.liveOK && deflection.totalOK))
+  const checks = r ? [
+    ...(r.mode === 'SRRB' ? [{ name: 'Flexure Mu / φMn,max', ratio: demand.Mu / r.phiMnMax }] : []),
+    ...(r.region === 'none' || r.region === 'minimum' ? [{ name: 'Shear Vu / φVc', ratio: demand.Vu / r.phiVc }] : []),
+    ...(r.region === 'designed' ? [{ name: 'Stirrup spacing s / s,max', ratio: r.sAdopt / r.sMax }] : []),
+    { name: `Bar spacing (${r.layers.length} layer${r.layers.length > 1 ? 's' : ''})`, ratio: r.sMinClear / Math.max(r.sClear, 1e-9) },
+  ] : []
+
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
-      <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">Beam Design</h1>
-      <p className="no-print mt-1 text-slate-600">
-        Rectangular RC beam — SRRB/DRRB flexure, §407.7 bar layout with automatic layering (Varignon d), one-way
-        shear & 135° hooks. Design one section, or a whole list of critical sections (negative Mu = hogging) on the
-        same cross-section — auto-detected from Beam Analysis or entered by hand. NSCP 2015 / ACI 318-14.
-      </p>
+    <div>
+      <PageHeader title="Rectangular RC Beam" badges={['ACI 318-14', 'NSCP 2015']}
+        actions={
+          <div className="flex items-center gap-0.5 rounded-md border border-[#d6d3c9] bg-[#fcfbf8] p-0.5">
+            {([['single', 'Single section'], ['multi', 'Multiple sections']] as const).map(([v, t]) => (
+              <button key={v} type="button" onClick={() => setMulti(v === 'multi')}
+                className={`rounded px-3 py-1.5 text-[11.5px] font-semibold ${(v === 'multi') === multi ? 'bg-[#0f4c92] text-white' : 'text-[#5c6675] hover:text-[#0f1b2a]'}`}>
+                {t}
+              </button>
+            ))}
+          </div>
+        } />
+      <div className="mx-auto max-w-6xl px-5 pb-8 sm:px-7">
       <ReportControls title="Beam Design Report" />
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
-        <div className="space-y-5">
+      <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
+        <div className="space-y-3.5">
           <Card title="Section">
             <Num label="Width b" unit="mm" value={f.b} onChange={set('b')} />
             <Num label="Total depth h" unit="mm" value={f.h} onChange={set('h')} />
@@ -162,9 +180,6 @@ export default function BeamDesign() {
           </Card>
 
           <Card title="Factored demands">
-            <Pick label="Mode" value={multi ? 'multi' : 'single'}
-              onChange={(v) => setMulti(v === 'multi')}
-              options={[['single', 'Single section'], ['multi', 'Multiple critical sections']]} />
             {!multi && <>
               <Num label={<KTex tex="M_u" />} unit="kN·m" value={f.Mu} onChange={set('Mu')} />
               <Num label={<KTex tex="V_u" />} unit="kN" value={f.Vu} onChange={set('Vu')} />
@@ -175,8 +190,8 @@ export default function BeamDesign() {
           </Card>
 
           {multi && (
-            <fieldset className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <legend className="px-2 text-[1.02rem] font-bold text-[#0056b3]">Critical sections</legend>
+            <fieldset className="rounded-lg border border-[#e3e1da] bg-white p-4">
+              <legend className="px-2 text-[13.5px] font-bold text-[#0f1b2a]">Critical sections</legend>
               <div className="no-print mb-3 flex flex-wrap items-center gap-2">
                 <button type="button"
                   onClick={() => setSections((ss) => [...ss, { id: uid++, label: `Section ${ss.length + 1}`, x: 0, Mu: 50, Vu: 30 }])}
@@ -208,7 +223,25 @@ export default function BeamDesign() {
           )}
         </div>
 
-        <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
+        <div className="space-y-3.5 lg:sticky lg:top-14 lg:self-start">
+          {r && (
+            <VerdictPanel
+              ok={allOK}
+              headline={allOK
+                ? `DESIGN OK — ${r.mode}, ${r.layers.length > 1 ? `${r.layers.length} layers` : 'single layer'}`
+                : 'CHECK FAILED — revise the section'}
+              governing={r.mode === 'SRRB'
+                ? `Governing: flexure · utilization ${(demand.Mu / r.phiMnMax).toFixed(2)}`
+                : `DRRB — compression steel engaged (Mu > φMn,max = ${f1(r.phiMnMax)} kN·m)`}
+              stats={[
+                { label: hogging ? 'Tension (top)' : 'Tension steel', value: `${r.bars}-⌀${f.barDia}`, unit: hogging ? 'top' : 'bottom' },
+                { label: 'Stirrups', value: r.sAdopt > 0 ? `⌀${f.stirrupDia}` : '—', unit: r.sAdopt > 0 ? `${f.legs}-leg @${f0(r.sAdopt)}` : REGION[r.region] },
+                { label: 'Eff. depth d', value: f0(r.d), unit: 'mm' },
+              ]}
+              checks={checks}
+              footnote={`ρ = ${r.rho.toFixed(4)} within ρmin ${r.rhoMin.toFixed(4)} … ρmax ${r.rhoMax.toFixed(4)} — §9.6.1.2 / §21.2.2`}
+            />
+          )}
           {multi && (
             <ResultCard title="Section schedule">
               <div className="overflow-x-auto">
@@ -245,10 +278,7 @@ export default function BeamDesign() {
             </ResultCard>
           )}
 
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">
-              Section preview{multi && active ? ` — ${active.label}` : ''}
-            </h2>
+          <DrawingCard title={`Section${multi && active ? ` — ${active.label}` : ''}`} meta={`${f0(f.b)} × ${f0(f.h)} · to scale`}>
             {r ? (
               <BeamSchematic b={f.b} h={f.h} cover={f.cover} barDia={f.barDia} stirrupDia={f.stirrupDia}
                 bars={r.bars} d={r.d} dPrime={r.comprLayers.length > 0 ? r.dPrime : undefined}
@@ -256,9 +286,9 @@ export default function BeamDesign() {
                 comprBars={r.comprBars} comprBarDia={f.comprBarDia}
                 naDepth={r.cNA} flexOK={r.flexOK} hogging={hogging} />
             ) : (
-              <p className="py-8 text-center text-sm text-slate-500">Enter a valid section (d must be positive).</p>
+              <p className="py-8 text-center text-sm text-[#a39d8d]">Enter a valid section (d must be positive).</p>
             )}
-          </div>
+          </DrawingCard>
 
           {r && (
             <ResultCard title={`Results${multi && active ? ` — ${active.label}` : ''}`}>
@@ -303,7 +333,9 @@ export default function BeamDesign() {
             </ResultCard>
           )}
           {deflection && (
-            <ResultCard title="Serviceability — ACI 318-14 §24.2">
+            <ResultCard title={<span className="flex items-center justify-between">Serviceability — ACI 318-14 §24.2
+              <span className={`rounded px-1.5 py-px font-mono text-[10px] font-semibold ${deflection.liveOK && deflection.totalOK && deflection.hMinOK ? 'bg-[#ddefe3] text-[#14603a]' : 'bg-[#fbeeea] text-[#c2402a]'}`}>
+                {deflection.liveOK && deflection.totalOK && deflection.hMinOK ? 'PASS' : 'CHECK'}</span></span>}>
               <Row label="Min. thickness h_min" value={`${deflection.hMin.toFixed(0)} mm`}
                 alert={!deflection.hMinOK}
                 sub={`Table 409.3.1.1 (${deflection.support})${deflection.hMinOK ? ' — h ≥ h_min ✓, deflection check waivable' : ' — h < h_min ✗, deflection governs'}`} />
@@ -330,8 +362,9 @@ export default function BeamDesign() {
 
       {solution && (
         <WorkedSolution steps={solution}
-          title={multi && active ? `Solution — ${active.label}` : 'Solution — step by step'} />
+          title={multi && active ? `Calculation report — ${active.label}` : 'Calculation report — worked solution'} />
       )}
+      </div>
     </div>
   )
 }
