@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'Archivo',system-ui,sans-serif;color:#0f1b2a;background:#f4f3ef}a{color:#0f4c92;text-decoration:none}a:hover{color:#0d3f78}
+input:focus{outline:none;border-color:#0f4c92 !important;box-shadow:0 0 0 3px rgba(15,76,146,.14)}
+</style>
+</helmet>
+<div style="min-height:100vh;background:#f4f3ef">
+
+  <nav style="position:sticky;top:0;z-index:50;background:#0f1b2a;border-bottom:1px solid rgba(255,255,255,.08)">
+    <div style="margin:0 auto;max-width:1200px;display:flex;height:52px;align-items:center;gap:20px;padding:0 24px">
+      <a href="#" style="display:flex;align-items:baseline;gap:8px">
+        <span style="font-size:15px;font-weight:800;letter-spacing:.14em;color:#fff">CIVENG</span>
+        <span style="font-size:9px;font-weight:600;letter-spacing:.22em;color:#7d8ea3;text-transform:uppercase">Toolkit</span>
+      </a>
+      <div style="display:flex;align-items:center;gap:2px">
+        <a href="#" style="padding:7px 11px;font-size:12.5px;font-weight:600;color:#b6c2d0;border-radius:6px" style-hover="color:#fff;background:rgba(255,255,255,.07)">Tools</a>
+        <a href="#" style="padding:7px 11px;font-size:12.5px;font-weight:600;color:#b6c2d0;border-radius:6px" style-hover="color:#fff;background:rgba(255,255,255,.07)">Docs</a>
+        <a href="#" style="padding:7px 11px;font-size:12.5px;font-weight:600;color:#b6c2d0;border-radius:6px" style-hover="color:#fff;background:rgba(255,255,255,.07)">Validation</a>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+        <div style="display:flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.14);border-radius:6px;background:rgba(255,255,255,.05);padding:6px 10px;width:220px;cursor:text">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#7d8ea3" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
+          <span style="font-size:12px;color:#7d8ea3;flex:1">Find a tool…</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#7d8ea3;border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:1px 5px">⌘K</span>
+        </div>
+        <button style="background:none;border:none;padding:7px 10px;font-size:12.5px;font-weight:600;color:#b6c2d0;cursor:pointer;font-family:inherit" style-hover="color:#fff">Log in</button>
+        <button style="background:#0f4c92;border:none;border-radius:6px;padding:8px 14px;font-size:12.5px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit" style-hover="background:#135caf">Sign up</button>
+      </div>
+    </div>
+  </nav>
+
+  <section style="background:#0f1b2a;background-image:linear-gradient(rgba(255,255,255,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.045) 1px,transparent 1px);background-size:32px 32px;border-bottom:1px solid #e3e1da">
+    <div style="margin:0 auto;max-width:1200px;padding:64px 24px 56px">
+      <p style="margin:0;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:500;letter-spacing:.2em;color:#5b9bd5">NSCP 2015 · ACI 318-14 · AISC 360-16</p>
+      <h1 style="margin:14px 0 0;font-size:52px;font-weight:800;line-height:1.04;letter-spacing:-.02em;color:#fff;max-width:720px">The structural workbench for Philippine practice.</h1>
+      <p style="margin:18px 0 0;max-width:600px;font-size:16px;line-height:1.6;color:#9db0c5">34 code-checked calculators, 3D analysis and quantity take-off on a typed engine — every result traced to its clause, every report ready to sign.</p>
+      <div style="margin-top:30px;display:flex;align-items:center;gap:10px;max-width:640px">
+        <div style="flex:1;display:flex;align-items:center;gap:10px;border:1px solid rgba(255,255,255,.2);border-radius:8px;background:rgba(255,255,255,.07);padding:13px 16px;cursor:text">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#7d8ea3" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
+          <span style="font-size:14.5px;color:#7d8ea3">Search 34 tools — try "footing", "W-shape", "seismic"…</span>
+        </div>
+        <button style="background:#0f4c92;border:none;border-radius:8px;padding:14px 22px;font-size:14px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit;white-space:nowrap" style-hover="background:#135caf">Open workbench</button>
+      </div>
+      <div style="margin-top:26px;display:flex;flex-wrap:wrap;gap:8px">
+        <sc-for list="{{ chips }}" as="c" hint-placeholder-count="8">
+          <a href="#" style="font-size:12px;font-weight:600;color:#b6c2d0;border:1px solid rgba(255,255,255,.16);border-radius:99px;padding:6px 13px" style-hover="color:#fff;border-color:#5b9bd5;background:rgba(15,76,146,.35)">{{ c }}</a>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+
+  <section style="margin:0 auto;max-width:1200px;padding:36px 24px 8px">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+      <sc-for list="{{ samples }}" as="s" hint-placeholder-count="3">
+        <a href="#" style="display:flex;flex-direction:column;background:#fff;border:1px solid #e3e1da;border-radius:8px;padding:20px;transition:border-color .15s,box-shadow .15s" style-hover="border-color:#0f4c92;box-shadow:0 2px 10px rgba(15,27,42,.07)">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.08em;color:#0f4c92;background:#eaf1f9;border:1px solid #cddcf0;border-radius:4px;padding:2px 7px;white-space:nowrap">{{ s.tag }}</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#a39d8d">{{ s.time }}</span>
+          </div>
+          <span style="margin-top:12px;font-size:15.5px;font-weight:700;color:#0f1b2a">{{ s.title }}</span>
+          <span style="margin-top:6px;font-size:12.5px;line-height:1.55;color:#5c6675">{{ s.desc }}</span>
+          <span style="margin-top:14px;font-size:12px;font-weight:700;color:#0f4c92">Run this example →</span>
+        </a>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="margin:0 auto;max-width:1200px;padding:36px 24px 72px">
+    <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:18px">
+      <h2 style="margin:0;font-size:19px;font-weight:800;letter-spacing:-.01em">Tool directory</h2>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#a39d8d">34 tools · 8 disciplines</span>
+    </div>
+    <div style="display:grid;grid-template-columns:200px 1fr;gap:26px;align-items:start">
+      <div style="position:sticky;top:72px;display:flex;flex-direction:column;gap:2px">
+        <sc-for list="{{ rail }}" as="r" hint-placeholder-count="8">
+          <a href="#" style="display:flex;align-items:center;justify-content:space-between;border-radius:6px;padding:7px 10px;font-size:12.5px;font-weight:600;color:{{ r.color }};background:{{ r.bg }}" style-hover="background:#e9e7df;color:#0f1b2a">{{ r.label }}<span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#a39d8d">{{ r.count }}</span></a>
+        </sc-for>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:26px">
+        <sc-for list="{{ groups }}" as="g" hint-placeholder-count="4">
+          <div>
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;color:#a39d8d">{{ g.num }}</span>
+              <h3 style="margin:0;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#3d4a5c">{{ g.heading }}</h3>
+              <div style="height:1px;flex:1;background:#e3e1da"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+              <sc-for list="{{ g.tools }}" as="t" hint-placeholder-count="3">
+                <a href="#" style="display:flex;flex-direction:column;background:#fff;border:1px solid #e3e1da;border-radius:8px;padding:14px 16px;transition:border-color .15s" style-hover="border-color:#0f4c92">
+                  <span style="font-size:13.5px;font-weight:700;color:#0f1b2a">{{ t.name }}</span>
+                  <span style="margin-top:3px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#8b8574">{{ t.sub }}</span>
+                </a>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+
+  <section style="background:#0f1b2a">
+    <div style="margin:0 auto;max-width:1200px;display:flex;align-items:center;justify-content:space-between;gap:24px;padding:40px 24px">
+      <div>
+        <h2 style="margin:0;font-size:20px;font-weight:800;color:#fff">Every calculation, code-referenced.</h2>
+        <p style="margin:5px 0 0;font-size:13px;color:#9db0c5">Clause citations on every worked step. Validated against hand calcs — see the validation suite.</p>
+      </div>
+      <button style="background:#0f4c92;border:none;border-radius:6px;padding:12px 22px;font-size:13px;font-weight:700;color:#fff;cursor:pointer;font-family:inherit;white-space:nowrap" style-hover="background:#135caf">Create free account</button>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const chips = ['RC Beam', 'Isolated Footing', 'Steel W-shape', '3D Model Space', 'Seismic Wizard', 'Retaining Wall', 'Truss', 'Load Combos'];
+    const samples = [
+      { tag: 'ACI 318-14', time: '~2 min', title: 'RC Beam — flexure & shear', desc: 'Size a 300×500 beam for Mu = 180 kN·m; rebar and stirrup spacing with a worked solution.' },
+      { tag: 'AISC 360-16', time: '~2 min', title: 'Steel Beam — LRFD', desc: 'Check a W-shape for §F2 flexure and §G2 shear with live utilization and a 3D section.' },
+      { tag: '2D FEM', time: '~3 min', title: 'Portal Frame — analysis', desc: 'Member forces and reactions on a 2D frame by the direct stiffness method.' },
+    ];
+    const mk = (arr) => arr.map(([name, sub]) => ({ name, sub }));
+    const groups = [
+      { num: '01', heading: 'Concrete', tools: mk([['Beam Design','RC beam · ACI 318-14'],['Column Design','RC column · biaxial'],['Slab Design','Two-way DDM · ACI 318'],['Stair Design','RC waist slab · NSCP'],['Water Tank','Circular · IS 3370/ACI 350'],['Torsion Design','RC torsion · ACI 318-14'],['Dev & Splice','ACI 318-14 §25.4–25.5'],['Punching Shear','Two-way §22.6 · ACI 318']]) },
+      { num: '02', heading: 'Analysis & Modelling', tools: mk([['3D Model Space','BIM-lite viewer'],['Frame Analysis','2D stiffness method'],['Beam Analysis','FEM multi-span'],['Truss Space','Plane truss solver'],['Slab Load Path','Two-way tributary']]) },
+      { num: '03', heading: 'Steel & Connections', tools: mk([['Steel Design','AISC 360-16 LRFD'],['Bolted Connection','Eccentric bolt group'],['Welded Connection','Eccentric weld group']]) },
+      { num: '04', heading: 'Foundations', tools: mk([['Foundation Design','Isolated pad footing'],['Pile Cap Design','Group pile cap'],['Combined Footing','Two-column footing']]) },
+      { num: '05', heading: 'Geotechnical', tools: mk([['Retaining Wall','Cantilever · Rankine'],['Geotechnical','Bearing · earth · slope'],['Soil-Nail Wall','FHWA · tensile · pullout'],['Micropile','FHWA · structural · bond'],['Rock Anchor','PTI · tendon · bond'],['Shotcrete Facing','FHWA · flexure · punching']]) },
+      { num: '06', heading: 'Seismic & Loads', tools: mk([['Seismic Wizard','NSCP 208 Ca/Cv/I/R'],['Load Combinations','NSCP 2015 §203.3 LRFD']]) },
+      { num: '07', heading: 'Quantity Take-Off', tools: mk([['Slab Estimate','Concrete + rebar'],['Beam Estimate','Volume & weight'],['Column Estimate','Concrete + rebar'],['CHB Wall','Block count'],['Box Culvert','Culvert estimate']]) },
+      { num: '08', heading: 'Reference', tools: mk([['Documentation','Toolkit guide'],['Validation','Engine vs hand calc']]) },
+    ];
+    const rail = groups.map((g, i) => ({ label: g.heading, count: String(g.tools.length).padStart(2, '0'), color: i === 0 ? '#0f1b2a' : '#5c6675', bg: i === 0 ? '#e9e7df' : 'transparent' }));
+    return { chips, samples, groups, rail };
+  }
+}
+</script>
+</body>
+</html>

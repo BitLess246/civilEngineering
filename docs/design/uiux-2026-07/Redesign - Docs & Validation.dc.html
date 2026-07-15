@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'Archivo',system-ui,sans-serif;color:#0f1b2a;background:#f4f3ef}a{color:#0f4c92;text-decoration:none}a:hover{color:#0d3f78}
+.dv-th{text-align:left;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#a39d8d;padding:8px 10px;border-bottom:1px solid #eeece5}
+.dv-td{font-size:11.5px;color:#0f1b2a;padding:8px 10px;border-bottom:1px solid #f3f1ea;vertical-align:top}
+#dvgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+@media (max-width:1100px){#dvgrid{grid-template-columns:minmax(0,1fr)}}
+</style>
+</helmet>
+<div style="display:flex;min-height:100vh;background:#f4f3ef">
+  <dc-import name="Sidebar" active="Validation" hint-size="250px,100vh" style="flex:none"></dc-import>
+  <main style="flex:1;min-width:0">
+    <header style="background:#fff;border-bottom:1px solid #e3e1da">
+      <div style="display:flex;align-items:center;gap:14px;padding:14px 28px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#7a7568">
+            <a href="Redesign — Home.dc.html" style="color:#7a7568" style-hover="color:#0f4c92">Reference</a><span>/</span><span style="color:#0f1b2a;font-weight:600">Documentation &amp; Validation</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:3px">
+            <h1 style="margin:0;font-size:21px;font-weight:800;letter-spacing:-.01em">Trust the numbers</h1>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;color:#14603a;background:#ddefe3;border:1px solid #bcdcc8;border-radius:4px;padding:2px 7px;white-space:nowrap">✓ 132/132 benchmarks passing</span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:2px;border:1px solid #d6d3c9;border-radius:6px;background:#fcfbf8;padding:2px">
+          <span style="border-radius:4px;background:#0f4c92;color:#fff;padding:5px 12px;font-size:11.5px;font-weight:600">Validation</span>
+          <span style="border-radius:4px;color:#5c6675;padding:5px 12px;font-size:11.5px;font-weight:600;cursor:pointer" style-hover="color:#0f1b2a">Guide</span>
+        </div>
+      </div>
+    </header>
+
+    <div style="padding:22px 28px;display:flex;flex-direction:column;gap:14px;max-width:1240px">
+      <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px;padding:14px 18px">
+        <p style="margin:0;font-size:12.5px;line-height:1.6;color:#5c6675;max-width:760px">Each calculation engine is checked against an independent closed-form hand calculation from a textbook or the governing clause. <strong style="color:#0f1b2a">Software</strong> is produced by the same engine the design pages use; <strong style="color:#0f1b2a">Manual</strong> is the analytical result. Every case is also enforced by the automated test suite (800+ tests).</p>
+        <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:6px">
+          <sc-for list="{{ cats }}" as="c" hint-placeholder-count="8">
+            <span style="display:inline-flex;align-items:center;gap:6px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;color:#14603a;background:#ecf6ef;border:1px solid #d3e8da;border-radius:99px;padding:4px 11px">✓ {{ c }}</span>
+          </sc-for>
+        </div>
+      </section>
+
+      <div id="dvgrid">
+        <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+          <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px;align-self:start">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid #eeece5">
+              <h2 style="margin:0;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#3d4a5c">{{ g.cat }}</h2>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#a39d8d">{{ g.count }}</span>
+            </div>
+            <table style="width:100%;border-collapse:collapse">
+              <thead><tr><th class="dv-th">Benchmark</th><th class="dv-th" style="text-align:right">Manual</th><th class="dv-th" style="text-align:right">Engine</th><th class="dv-th" style="text-align:right">Δ</th></tr></thead>
+              <tbody>
+                <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="3">
+                  <tr>
+                    <td class="dv-td"><p style="margin:0;font-weight:600">{{ r.title }}</p><p style="margin:1px 0 0;font-size:10px;color:#a39d8d">{{ r.ref }}</p></td>
+                    <td class="dv-td" style="text-align:right;font-family:'IBM Plex Mono',monospace">{{ r.manual }}</td>
+                    <td class="dv-td" style="text-align:right;font-family:'IBM Plex Mono',monospace">{{ r.engine }}</td>
+                    <td class="dv-td" style="text-align:right;font-family:'IBM Plex Mono',monospace;color:#14603a">{{ r.d }}</td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </section>
+        </sc-for>
+      </div>
+
+      <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px">
+        <div style="padding:12px 18px;border-bottom:1px solid #eeece5"><h2 style="margin:0;font-size:13.5px;font-weight:700">Typical workflow</h2></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0;padding:6px 0">
+          <sc-for list="{{ workflow }}" as="w" hint-placeholder-count="4">
+            <div style="padding:14px 18px;border-right:1px solid #f3f1ea">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;color:#0f4c92">STEP {{ w.n }}</span>
+              <p style="margin:5px 0 0;font-size:13px;font-weight:700">{{ w.title }}</p>
+              <p style="margin:4px 0 0;font-size:11.5px;line-height:1.55;color:#5c6675">{{ w.body }}</p>
+            </div>
+          </sc-for>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const cats = ['RC 24/24', 'Steel 21/21', 'Connections 12/12', 'Analysis 26/26', 'Seismic 14/14', 'Dynamics 11/11', 'Wind 9/9', 'Geotech 15/15'];
+    const groups = [
+      { cat: 'RC — reinforced concrete', count: '24 cases', rows: [
+        { title: 'SRRB flexure φMn', ref: 'ACI 318-14 §22.2 · McCormac Ex 4-3', manual: '231.4', engine: '231.4', d: '0.000%' },
+        { title: 'Beam one-way shear φVc', ref: 'ACI 318-14 §22.5.5.1', manual: '89.15', engine: '89.15', d: '0.000%' },
+        { title: 'Footing punching bo·d', ref: 'ACI 318-14 §22.6.5.2', manual: '1287', engine: '1287', d: '0.000%' },
+        { title: 'Column P–M balanced point', ref: 'ACI 318-14 §22.4 · Wight Ex 11-2', manual: '1842', engine: '1842', d: '0.001%' },
+      ] },
+      { cat: 'Analysis — FEM', count: '26 cases', rows: [
+        { title: 'Portal frame sway Δ', ref: 'Hibbeler Ex 16-8 · stiffness method', manual: '12.43', engine: '12.43', d: '0.000%' },
+        { title: 'Fixed-end beam Mmax', ref: 'wL²/12 closed form', manual: '54.00', engine: '54.00', d: '0.000%' },
+        { title: 'Truss member force', ref: 'Method of joints', manual: '−67.1', engine: '−67.1', d: '0.000%' },
+        { title: 'Modal T1 — 3-storey frame', ref: 'Chopra Ex 12.4 · eigen', manual: '0.585', engine: '0.585', d: '0.002%' },
+      ] },
+    ];
+    const workflow = [
+      { n: '1', title: 'Choose the tool', body: 'Open the calculator that matches the task from the sidebar or ⌘K search.' },
+      { n: '2', title: 'Enter geometry & loads', body: 'Numbered input sections; every field carries its unit and symbol.' },
+      { n: '3', title: 'Review the verdict', body: 'Pass/fail banner, governing check, utilization bars and the worked solution.' },
+      { n: '4', title: 'Export the report', body: 'Clause-referenced calc sheet with letterhead, ready to print and sign.' },
+    ];
+    return { cats, groups, workflow };
+  }
+}
+</script>
+</body>
+</html>

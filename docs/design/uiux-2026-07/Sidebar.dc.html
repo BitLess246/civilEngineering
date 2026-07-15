@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>body{margin:0}</style>
+</helmet>
+<aside style="width:250px;flex:none;display:flex;flex-direction:column;background:#0f1b2a;color:#e8eaed;position:sticky;top:0;height:100vh;overflow-y:auto;font-family:'Archivo',system-ui,sans-serif">
+  <div style="padding:18px 18px 14px;border-bottom:1px solid rgba(255,255,255,.08)">
+    <div style="display:flex;align-items:baseline;gap:8px">
+      <span style="font-size:15px;font-weight:800;letter-spacing:.14em;color:#fff">CIVENG</span>
+      <span style="font-size:9px;font-weight:600;letter-spacing:.22em;color:#7d8ea3;text-transform:uppercase">Toolkit</span>
+    </div>
+    <div style="margin-top:12px;display:flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.14);border-radius:6px;background:rgba(255,255,255,.05);padding:7px 10px;cursor:text">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#7d8ea3" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
+      <span style="font-size:12px;color:#7d8ea3;flex:1">Find a tool…</span>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#7d8ea3;border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:1px 5px">⌘K</span>
+    </div>
+  </div>
+  <nav style="flex:1;padding:10px 10px 18px">
+    <sc-for list="{{ navSections }}" as="sec" hint-placeholder-count="8">
+      <div style="margin-top:12px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;padding:0 8px 5px">
+          <span style="font-size:9.5px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#7d8ea3">{{ sec.label }}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#55677c">{{ sec.count }}</span>
+        </div>
+        <sc-for list="{{ sec.items }}" as="it" hint-placeholder-count="2">
+          <a href="{{ it.href }}" style="display:flex;align-items:center;gap:8px;border-radius:6px;padding:6px 8px;font-size:12.5px;font-weight:500;color:{{ it.color }};background:{{ it.bg }};border-left:2px solid {{ it.edge }};text-decoration:none" style-hover="background:rgba(255,255,255,.07);color:#fff">{{ it.name }}</a>
+        </sc-for>
+        <sc-if value="{{ sec.more }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:4px 8px 0;font-size:11px;color:#55677c;cursor:pointer" style-hover="color:#9db0c5">▸ {{ sec.more }}</div>
+        </sc-if>
+      </div>
+    </sc-for>
+  </nav>
+  <div style="padding:14px 18px;border-top:1px solid rgba(255,255,255,.08);font-size:10.5px;line-height:1.6;color:#55677c">NSCP 2015 · ACI 318-14<br>AISC 360-16 · client-side engine</div>
+</aside>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:250,&quot;height&quot;:800},&quot;active&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;Beam Design&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const active = this.props.active ?? '';
+    const GROUPS = [
+      ['Concrete', [['Beam Design', 'Redesign — Beam Design.dc.html'], ['Column Design', '#'], ['Slab Design', '#'], ['Stair Design', '#'], ['Water Tank', '#'], ['Torsion Design', '#'], ['Dev & Splice', '#'], ['Punching Shear', '#']]],
+      ['Analysis', [['3D Model Space', 'Redesign — 3D Model Space.dc.html'], ['Frame Analysis', 'Redesign — Frame Analysis.dc.html'], ['Beam Analysis', '#'], ['Truss Space', '#'], ['Slab Load Path', '#']]],
+      ['Steel', [['Steel Design', '#'], ['Bolted Connection', '#'], ['Welded Connection', '#']]],
+      ['Foundations', [['Foundation Design', 'Redesign — Foundation Design.dc.html'], ['Pile Cap Design', '#'], ['Combined Footing', '#']]],
+      ['Geotechnical', [['Retaining Wall', '#'], ['Geotechnical', '#'], ['Soil-Nail Wall', '#'], ['Micropile', '#'], ['Rock Anchor', '#'], ['Shotcrete Facing', '#']]],
+      ['Seismic & Loads', [['Seismic Wizard', 'Redesign — Seismic Wizard.dc.html'], ['Load Combinations', '#']]],
+      ['Estimates', [['Slab', 'Redesign — Slab Estimate.dc.html'], ['Beam', '#'], ['Column', '#'], ['CHB Wall', '#'], ['Box Culvert', '#']]],
+      ['Reference', [['Documentation', 'Redesign — Docs & Validation.dc.html'], ['Validation', 'Redesign — Docs & Validation.dc.html']]],
+    ];
+    const on = { color: '#fff', bg: 'rgba(15,76,146,.55)', edge: '#5b9bd5' };
+    const off = { color: '#b6c2d0', bg: 'transparent', edge: 'transparent' };
+    const navSections = GROUPS.map(([label, tools]) => {
+      const isActiveGroup = tools.some(([n]) => n === active);
+      // collapsed groups show first 2 items unless the group holds the active tool
+      const shown = isActiveGroup || tools.length <= 3 ? tools : tools.slice(0, 2);
+      return {
+        label,
+        count: String(tools.length).padStart(2, '0'),
+        items: shown.map(([name, href]) => ({ name, href, ...(name === active ? on : off) })),
+        more: shown.length < tools.length ? `${tools.length - shown.length} more` : '',
+      };
+    });
+    return { navSections };
+  }
+}
+</script>
+</body>
+</html>

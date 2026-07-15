@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'Archivo',system-ui,sans-serif;color:#0f1b2a;background:#f4f3ef}a{color:#0f4c92;text-decoration:none}a:hover{text-decoration:underline}</style>
+</helmet>
+<div style="margin:0 auto;max-width:880px;padding:48px 32px 80px">
+  <p style="margin:0;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:.2em;color:#0f4c92">CIVENG TOOLKIT · UI/UX PASS · JUL 2026</p>
+  <h1 style="margin:12px 0 0;font-size:34px;font-weight:800;letter-spacing:-.02em">UX audit &amp; design direction</h1>
+
+  <div style="margin-top:28px;display:grid;grid-template-columns:1fr 1fr;gap:14px">
+    <div style="background:#fff;border:1px solid #e3e1da;border-radius:8px;padding:18px 20px">
+      <h2 style="margin:0;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#3d4a5c">Deliverables</h2>
+      <ul style="margin:10px 0 0;padding-left:18px;font-size:13.5px;line-height:2">
+        <li><a href="Redesign — Home.dc.html">Home</a> (search-first tool directory)</li>
+        <li><a href="Redesign — Foundation Design.dc.html">Foundation Design</a> · <a href="Redesign — Beam Design.dc.html">Beam Design</a> (calculator template)</li>
+        <li><a href="Redesign — Frame Analysis.dc.html">Frame Analysis</a> (model-editor template)</li>
+        <li><a href="Redesign — Seismic Wizard.dc.html">Seismic Wizard</a> (wizard template)</li>
+        <li><a href="Redesign — Slab Estimate.dc.html">Slab Estimate</a> (take-off template)</li>
+        <li><a href="Redesign — Docs & Validation.dc.html">Docs &amp; Validation</a> (reference template)</li>
+        <li><a href="Redesign — 3D Model Space.dc.html">3D Model Space</a> (workspace shell)</li>
+        <li><a href="Current — Home.dc.html">Current — Home</a> · <a href="Current — Foundation Design.dc.html">Current — Foundation Design</a> (baselines)</li>
+      </ul>
+      <p style="margin:10px 0 0;font-size:11.5px;color:#8b8574">Each remaining page maps onto one of these seven templates — e.g. Steel/Column/Slab Design → Beam template; Truss Space → Model Space shell; other estimates → Slab Estimate.</p>
+    </div>
+    <div style="background:#fff;border:1px solid #e3e1da;border-radius:8px;padding:18px 20px">
+      <h2 style="margin:0;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#3d4a5c">Direction</h2>
+      <p style="margin:10px 0 0;font-size:13.5px;line-height:1.65;color:#3d4a5c">A <strong>drawing-sheet workbench</strong>: warm paper, ink navy, drafting blue, hairline rules. Archivo for UI, IBM Plex Mono for every number — data reads like a title block, not a marketing site.</p>
+      <div style="margin-top:12px;display:flex;gap:6px">
+        <span style="width:34px;height:22px;border-radius:4px;background:#0f1b2a"></span>
+        <span style="width:34px;height:22px;border-radius:4px;background:#0f4c92"></span>
+        <span style="width:34px;height:22px;border-radius:4px;background:#f4f3ef;border:1px solid #e3e1da"></span>
+        <span style="width:34px;height:22px;border-radius:4px;background:#1a7f4b"></span>
+        <span style="width:34px;height:22px;border-radius:4px;background:#b97d10"></span>
+        <span style="width:34px;height:22px;border-radius:4px;background:#c2402a"></span>
+      </div>
+    </div>
+  </div>
+
+  <h2 style="margin:36px 0 0;font-size:19px;font-weight:800">Audit — what holds the current app back</h2>
+  <div style="margin-top:14px;display:flex;flex-direction:column;gap:10px">
+    <sc-for list="{{ findings }}" as="f" hint-placeholder-count="5">
+      <div style="display:grid;grid-template-columns:30px 1fr 1.1fr;gap:14px;background:#fff;border:1px solid #e3e1da;border-radius:8px;padding:14px 18px;align-items:start">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;color:#a39d8d;padding-top:2px">{{ f.n }}</span>
+        <div>
+          <p style="margin:0;font-size:13.5px;font-weight:700">{{ f.problem }}</p>
+          <p style="margin:4px 0 0;font-size:12.5px;line-height:1.55;color:#5c6675">{{ f.detail }}</p>
+        </div>
+        <div style="border-left:2px solid #0f4c92;padding-left:14px">
+          <p style="margin:0;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#0f4c92">Fix</p>
+          <p style="margin:4px 0 0;font-size:12.5px;line-height:1.55;color:#3d4a5c">{{ f.fix }}</p>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <h2 style="margin:36px 0 0;font-size:19px;font-weight:800">System rules (apply to all 34 pages)</h2>
+  <ul style="margin:12px 0 0;padding-left:20px;font-size:13.5px;line-height:1.9;color:#3d4a5c">
+    <li><strong>Shell:</strong> persistent dark sidebar with grouped tools + ⌘K search on every tool page; breadcrumb + code badges + actions in a shared header.</li>
+    <li><strong>Calculator template:</strong> numbered input sections (01–04) left · sticky verdict panel right (pass/fail banner, governing check, utilization bars, key outputs in mono, scaled drawing) · report below.</li>
+    <li><strong>Reports:</strong> worked steps with clause references in a margin column, PASS chips per check, letterhead block (project / sheet / rev / engineer / date) baked in.</li>
+    <li><strong>Estimates &amp; analysis pages</strong> reuse the same shell and verdict-panel grammar; 3D spaces keep their canvas but adopt the sidebar and header.</li>
+  </ul>
+
+  <p style="margin:30px 0 0;font-size:12.5px;color:#8b8574">Next steps: apply the template to Beam/Steel/Column pages · design the ⌘K palette · mobile pass · print stylesheet for the new report.</p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const findings = [
+      { n: '01', problem: 'Tool discovery is buried', detail: '34 tools live in three nav dropdowns with a 2-col mega-menu; the home page duplicates the catalog below the fold.', fix: 'Search-first: ⌘K palette + persistent sidebar on tool pages; home becomes a scannable directory with a sticky discipline rail.' },
+      { n: '02', problem: 'Calculator pages read as walls of fields', detail: 'Four flat fieldsets with 3-col grids and no hierarchy; the answer (footing size, steel) has the same visual weight as inputs.', fix: 'Numbered input sections with hints; verdict-first results panel — pass/fail banner, governing check, utilization bars, key outputs oversized in mono.' },
+      { n: '03', problem: 'No cohesion between pages', detail: 'Home is flat/sharp-cornered marketing; calculators are rounded cards; gradients appear only on two buttons; blue is heading color, link color and brand at once.', fix: 'One shell (sidebar + header), one radius (8px), one accent used only for actions/links, semantic green/amber/red reserved for check status.' },
+      { n: '04', problem: 'Results are hard to trust at a glance', detail: '✓/✗ glyphs hide inside table rows; the governing check is not called out; utilization is invisible.', fix: 'PASS/FAIL chips per step, governing check named in the banner, utilization bars with amber ≥ 0.95.' },
+      { n: '05', problem: 'Reports look like screen dumps', detail: 'Print path hides chrome but keeps screen layout; letterhead is two plain fields.', fix: 'Calc-sheet report: clause margin column, step numbering, letterhead block (project / sheet / rev / engineer / date) — sign-off ready.' },
+    ];
+    return { findings };
+  }
+}
+</script>
+</body>
+</html>

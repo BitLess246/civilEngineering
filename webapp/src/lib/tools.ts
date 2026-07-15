@@ -68,3 +68,24 @@ export function toolGroups(category: ToolCategory): { group: string; tools: Tool
   }
   return order.map((group) => ({ group, tools: byGroup.get(group)! }))
 }
+
+/** Sidebar groups for the workbench shell (docs/design/uiux-2026-07): the
+ *  Structural category's sub-groups become top-level sections, take-off and
+ *  reference get their own. Pure re-bucketing of TOOL_CATEGORIES. */
+export interface SidebarGroup { label: string; tools: ToolDef[] }
+export const SIDEBAR_GROUPS: SidebarGroup[] = (() => {
+  const structural = TOOL_CATEGORIES.find((c) => c.label === 'Structural')!
+  const takeoff = TOOL_CATEGORIES.find((c) => c.label === 'Quantity Take-Off')!
+  const reference = TOOL_CATEGORIES.find((c) => c.label === 'Reference')!
+  const short: Record<string, string> = {
+    'Analysis & Modelling': 'Analysis',
+    'Steel & Connections': 'Steel',
+  }
+  const groups = toolGroups(structural).map(({ group, tools }) => ({ label: short[group] ?? group, tools }))
+  return [...groups, { label: 'Estimates', tools: takeoff.tools }, { label: 'Reference', tools: reference.tools }]
+})()
+
+/** Every tool with its sidebar group label — drives the ⌘K palette and the
+ *  shell breadcrumb. */
+export const ALL_TOOLS: (ToolDef & { groupLabel: string })[] =
+  SIDEBAR_GROUPS.flatMap((g) => g.tools.map((t) => ({ ...t, groupLabel: g.label })))

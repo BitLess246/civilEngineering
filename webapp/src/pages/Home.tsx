@@ -1,190 +1,160 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { TOOL_CATEGORIES, toolGroups } from '../lib/tools'
+import { SIDEBAR_GROUPS, ALL_TOOLS } from '../lib/tools'
+import { CommandPalette, usePaletteHotkey } from '../components/CommandPalette'
 
-// Flat structural-frame line illustration — distributed load on a portal frame
-// with a hint of the bending diagram. Pure SVG, no assets, scales cleanly.
-function FrameIllustration() {
-  return (
-    <svg viewBox="0 0 320 240" className="h-full w-full" fill="none" stroke="currentColor">
-      {/* distributed load arrows */}
-      <g className="text-[#0056b3]" strokeWidth={1.5}>
-        {[40, 80, 120, 160, 200, 240, 280].map(x => (
-          <line key={x} x1={x} y1={22} x2={x} y2={48} markerEnd="url(#arrow)" />
-        ))}
-        <line x1={36} y1={22} x2={284} y2={22} strokeWidth={2} />
-      </g>
-      {/* portal frame */}
-      <g className="text-slate-800" strokeWidth={3} strokeLinecap="square">
-        <line x1={40} y1={50} x2={280} y2={50} />
-        <line x1={40} y1={50} x2={40} y2={200} />
-        <line x1={280} y1={50} x2={280} y2={200} />
-      </g>
-      {/* supports */}
-      <g className="text-slate-800" strokeWidth={2}>
-        <polygon points="40,200 28,216 52,216" className="fill-slate-800" />
-        <polygon points="280,200 268,216 292,216" className="fill-slate-800" />
-        <line x1={20} y1={216} x2={60} y2={216} />
-        <line x1={260} y1={216} x2={300} y2={216} />
-      </g>
-      {/* bending hint */}
-      <path d="M40 90 Q160 150 280 90" className="text-[#0056b3]" strokeWidth={1.5} strokeDasharray="4 4" />
-      <defs>
-        <marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="5" orient="auto">
-          <path d="M0,0 L3,6 L6,0" className="fill-[#0056b3]" stroke="none" />
-        </marker>
-      </defs>
-    </svg>
-  )
-}
+// Home — search-first tool directory on the drawing-sheet workbench theme
+// (docs/design/uiux-2026-07/Redesign - Home): dark hero with drafting grid,
+// ⌘K search, sample cards, and the full catalog with a sticky discipline rail.
 
-interface Sample { to: string; tag: string; title: string; desc: string }
+interface Sample { to: string; tag: string; time: string; title: string; desc: string }
 const SAMPLES: Sample[] = [
-  { to: '/beam-design',   tag: 'ACI 318-14', title: 'RC Beam — flexure & shear',
-    desc: 'Size a 300×500 beam for Mu = 180 kN·m, get rebar and stirrup spacing with a worked solution.' },
-  { to: '/steel',         tag: 'AISC 360-16', title: 'Steel Beam — LRFD',
+  { to: '/beam-design', tag: 'ACI 318-14', time: '~2 min', title: 'RC Beam — flexure & shear',
+    desc: 'Size a 300×500 beam for Mu = 180 kN·m; rebar and stirrup spacing with a worked solution.' },
+  { to: '/steel', tag: 'AISC 360-16', time: '~2 min', title: 'Steel Beam — LRFD',
     desc: 'Check a W-shape for §F2 flexure and §G2 shear with live utilization and a 3D section.' },
-  { to: '/frame',         tag: '2D FEM',      title: 'Portal Frame — analysis',
-    desc: 'Solve member forces and reactions on a 2D frame using the direct stiffness method.' },
+  { to: '/frame', tag: '2D FEM', time: '~3 min', title: 'Portal Frame — analysis',
+    desc: 'Member forces and reactions on a 2D frame by the direct stiffness method.' },
 ]
 
-export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') => void }) {
-  const toolCount = TOOL_CATEGORIES.reduce((n, c) => n + c.tools.length, 0)
-  const [query, setQuery] = useState('')
+const CHIPS = ['RC Beam', 'Isolated Footing', 'Steel W-shape', '3D Model Space', 'Seismic Wizard', 'Retaining Wall', 'Truss', 'Load Combos']
+const chipTo: Record<string, string> = {
+  'RC Beam': '/beam-design', 'Isolated Footing': '/foundation', 'Steel W-shape': '/steel',
+  '3D Model Space': '/model', 'Seismic Wizard': '/seismic-wizard', 'Retaining Wall': '/retaining-wall',
+  'Truss': '/truss', 'Load Combos': '/load-combinations',
+}
 
-  // Full catalog as {heading, tools} sections: grouped categories (Structural)
-  // contribute one section per discipline group, flat ones a single section.
-  const sections = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    const all = TOOL_CATEGORIES.flatMap((c) =>
-      toolGroups(c).map((g) => ({
-        heading: g.group ? g.group : c.label,
-        tools: g.tools.filter((t) =>
-          !q || t.name.toLowerCase().includes(q) || t.sub.toLowerCase().includes(q)
-          || (t.group ?? '').toLowerCase().includes(q)),
-      })))
-    return all.filter((s) => s.tools.length > 0)
-  }, [query])
+export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') => void }) {
+  const [palette, setPalette] = useState(false)
+  usePaletteHotkey(setPalette)
+  const toolCount = ALL_TOOLS.length
+  const groups = useMemo(() => SIDEBAR_GROUPS.map((g, i) => ({
+    num: String(i + 1).padStart(2, '0'),
+    heading: g.label === 'Analysis' ? 'Analysis & Modelling' : g.label === 'Steel' ? 'Steel & Connections' : g.label === 'Estimates' ? 'Quantity Take-Off' : g.label,
+    anchor: `dir-${i}`,
+    tools: g.tools,
+  })), [])
+
+  const searchBox = (big: boolean) => (
+    <button type="button" onClick={() => setPalette(true)}
+      className={`flex items-center gap-2.5 rounded-lg border border-white/20 bg-white/[.07] text-left hover:border-[#5b9bd5] ${big ? 'flex-1 px-4 py-3' : 'w-[220px] rounded-md border-white/15 bg-white/5 px-2.5 py-1.5'}`}>
+      <svg viewBox="0 0 24 24" width={big ? 16 : 13} height={big ? 16 : 13} fill="none" stroke="#7d8ea3" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" /></svg>
+      <span className={`flex-1 text-[#7d8ea3] ${big ? 'text-sm' : 'text-xs'}`}>{big ? `Search ${toolCount} tools — try "footing", "W-shape", "seismic"…` : 'Find a tool…'}</span>
+      <span className="rounded border border-white/15 px-1 py-px font-mono text-[10px] text-[#7d8ea3]">⌘K</span>
+    </button>
+  )
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* Hero */}
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto grid max-w-6xl items-center gap-10 px-6 py-16 lg:grid-cols-[1.1fr_0.9fr] lg:py-24">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#0056b3]">
-              NSCP 2015 · ACI 318-14 · AISC 360-16
-            </p>
-            <h1 className="mt-4 text-4xl font-black leading-[1.05] tracking-tight text-slate-900 sm:text-6xl">
-              Structural design,<br />computed live.
-            </h1>
-            <p className="mt-5 max-w-xl text-base leading-relaxed text-slate-500">
-              A suite of design solvers and material take-off estimators built on a typed
-              calculation engine. Every input recomputes instantly and exports a clean,
-              code-referenced report — no spreadsheets, no black boxes.
-            </p>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <Link to="/beam-design"
-                className="bg-[#0056b3] px-6 py-3 text-sm font-semibold text-white hover:bg-[#0066d6]">
-                Open a calculator →
-              </Link>
-              <button onClick={() => onAuth('signup')}
-                className="border border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 hover:border-slate-800">
-                Create account
-              </button>
-              <a href="#tools" className="px-2 py-3 text-sm font-semibold text-[#0056b3] hover:underline">
-                Browse all {toolCount} tools ↓
-              </a>
-            </div>
-            <div className="mt-10 flex items-center gap-7 text-xs text-slate-500">
-              <span><strong className="text-slate-800">{toolCount}</strong> tools</span>
-              <div className="h-3 w-px bg-slate-200" />
-              <span><strong className="text-slate-800">Server-side</strong> solvers</span>
-              <div className="h-3 w-px bg-slate-200" />
-              <span><strong className="text-slate-800">PDF</strong> reports</span>
-            </div>
+    <div className="min-h-screen bg-[#f4f3ef]">
+      {/* Top bar */}
+      <nav className="no-print sticky top-0 z-50 border-b border-white/10 bg-[#0f1b2a]">
+        <div className="mx-auto flex h-[52px] max-w-[1200px] items-center gap-5 px-6">
+          <Link to="/" className="flex items-baseline gap-2">
+            <span className="text-[15px] font-extrabold tracking-[.14em] text-white">CIVENG</span>
+            <span className="text-[9px] font-semibold uppercase tracking-[.22em] text-[#7d8ea3]">Toolkit</span>
+          </Link>
+          <div className="hidden items-center gap-0.5 md:flex">
+            <a href="#tools" className="rounded-md px-2.5 py-1.5 text-[12.5px] font-semibold text-[#b6c2d0] hover:bg-white/5 hover:text-white">Tools</a>
+            <Link to="/docs" className="rounded-md px-2.5 py-1.5 text-[12.5px] font-semibold text-[#b6c2d0] hover:bg-white/5 hover:text-white">Docs</Link>
+            <Link to="/validation" className="rounded-md px-2.5 py-1.5 text-[12.5px] font-semibold text-[#b6c2d0] hover:bg-white/5 hover:text-white">Validation</Link>
           </div>
-          <div className="flex items-center justify-center border border-slate-200 bg-slate-50 p-8">
-            <div className="h-64 w-full max-w-sm">
-              <FrameIllustration />
-            </div>
+          <div className="ml-auto flex items-center gap-2.5">
+            <div className="hidden sm:block">{searchBox(false)}</div>
+            <button onClick={() => onAuth('login')} className="px-2 py-1.5 text-[12.5px] font-semibold text-[#b6c2d0] hover:text-white">Log in</button>
+            <button onClick={() => onAuth('signup')} className="rounded-md bg-[#0f4c92] px-3.5 py-2 text-[12.5px] font-semibold text-white hover:bg-[#135caf]">Sign up</button>
+          </div>
+        </div>
+      </nav>
+
+      {/* Hero on a drafting grid */}
+      <section className="border-b border-[#e3e1da] bg-[#0f1b2a] [background-image:linear-gradient(rgba(255,255,255,.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.045)_1px,transparent_1px)] [background-size:32px_32px]">
+        <div className="mx-auto max-w-[1200px] px-6 pb-14 pt-16">
+          <p className="font-mono text-[11px] font-medium tracking-[.2em] text-[#5b9bd5]">NSCP 2015 · ACI 318-14 · AISC 360-16</p>
+          <h1 className="mt-3.5 max-w-[720px] text-4xl font-extrabold leading-[1.04] tracking-tight text-white sm:text-[52px]">The structural workbench for Philippine practice.</h1>
+          <p className="mt-4 max-w-[600px] text-base leading-relaxed text-[#9db0c5]">{toolCount} code-checked calculators, 3D analysis and quantity take-off on a typed engine — every result traced to its clause, every report ready to sign.</p>
+          <div className="mt-7 flex max-w-[640px] items-center gap-2.5">
+            {searchBox(true)}
+            <Link to="/model" className="whitespace-nowrap rounded-lg bg-[#0f4c92] px-5 py-3.5 text-sm font-bold text-white hover:bg-[#135caf]">Open workbench</Link>
+          </div>
+          <div className="mt-6 flex flex-wrap gap-2">
+            {CHIPS.map((c) => (
+              <Link key={c} to={chipTo[c] ?? '#'}
+                className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-semibold text-[#b6c2d0] hover:border-[#5b9bd5] hover:bg-[#0f4c92]/35 hover:text-white">{c}</Link>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* Standards strip */}
-      <section className="border-b border-slate-200 bg-black">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-4">
-          {['Reinforced Concrete', 'Structural Steel', 'Foundations', 'Frame & Truss Analysis', 'Quantity Take-Off'].map(s => (
-            <span key={s} className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">{s}</span>
-          ))}
-        </div>
-      </section>
-
-      {/* Sample / test cases */}
-      <section className="mx-auto max-w-6xl px-6 py-16">
-        <div className="mb-6 flex items-center gap-4">
-          <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Try a sample</span>
-          <div className="h-px flex-1 bg-slate-200" />
-        </div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          {SAMPLES.map(s => (
+      {/* Sample cards */}
+      <section className="mx-auto max-w-[1200px] px-6 pb-2 pt-9">
+        <div className="grid gap-3.5 md:grid-cols-3">
+          {SAMPLES.map((s) => (
             <Link key={s.to} to={s.to}
-              className="group flex flex-col border border-slate-200 bg-white p-6 transition-colors hover:border-[#0056b3] hover:bg-[#f4f8ff]">
-              <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500 group-hover:text-[#0056b3]">{s.tag}</span>
-              <span className="mt-2 text-base font-semibold text-slate-900">{s.title}</span>
-              <span className="mt-2 text-xs leading-relaxed text-slate-500">{s.desc}</span>
-              <span className="mt-5 text-xs font-semibold text-[#0056b3] opacity-0 transition-opacity group-hover:opacity-100">
-                Open tool →
-              </span>
+              className="flex flex-col rounded-lg border border-[#e3e1da] bg-white p-5 transition-[border-color,box-shadow] hover:border-[#0f4c92] hover:shadow-[0_2px_10px_rgba(15,27,42,.07)]">
+              <div className="flex items-center justify-between">
+                <span className="rounded border border-[#cddcf0] bg-[#eaf1f9] px-1.5 py-px font-mono text-[10px] font-semibold tracking-wide text-[#0f4c92]">{s.tag}</span>
+                <span className="font-mono text-[10px] text-[#a39d8d]">{s.time}</span>
+              </div>
+              <span className="mt-3 text-[15.5px] font-bold text-[#0f1b2a]">{s.title}</span>
+              <span className="mt-1.5 text-[12.5px] leading-relaxed text-[#5c6675]">{s.desc}</span>
+              <span className="mt-3.5 text-xs font-bold text-[#0f4c92]">Run this example →</span>
             </Link>
           ))}
         </div>
       </section>
 
-      {/* All tools — searchable index */}
-      <section id="tools" className="border-t border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-6 py-16">
-          <div className="mb-6 flex flex-wrap items-center gap-4">
-            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">All {toolCount} tools</span>
-            <div className="h-px flex-1 bg-slate-200" />
-            <input type="search" value={query} onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search tools… (beam, footing, seismic)" aria-label="Search tools"
-              className="w-full border border-slate-300 px-3.5 py-2 text-sm outline-none focus:border-[#0056b3] sm:w-72" />
+      {/* Tool directory with sticky rail */}
+      <section id="tools" className="mx-auto max-w-[1200px] px-6 pb-16 pt-9">
+        <div className="mb-4 flex items-baseline gap-3.5">
+          <h2 className="text-[19px] font-extrabold tracking-tight">Tool directory</h2>
+          <span className="font-mono text-[11px] text-[#a39d8d]">{toolCount} tools · {groups.length} disciplines</span>
+        </div>
+        <div className="grid items-start gap-6 lg:grid-cols-[200px_1fr]">
+          <div className="sticky top-[72px] hidden flex-col gap-0.5 lg:flex">
+            {groups.map((g) => (
+              <a key={g.anchor} href={`#${g.anchor}`}
+                className="flex items-center justify-between rounded-md px-2.5 py-[7px] text-[12.5px] font-semibold text-[#5c6675] hover:bg-[#e9e7df] hover:text-[#0f1b2a]">
+                {g.heading}
+                <span className="font-mono text-[10px] text-[#a39d8d]">{String(g.tools.length).padStart(2, '0')}</span>
+              </a>
+            ))}
           </div>
-          {sections.length === 0 && (
-            <p className="py-8 text-sm text-slate-500">No tool matches “{query}”.</p>
-          )}
-          {sections.map(sec => (
-            <div key={sec.heading} className="mb-8 last:mb-0">
-              <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-[#0056b3]">{sec.heading}</p>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {sec.tools.map(t => (
-                  <Link key={t.to} to={t.to}
-                    className="group flex flex-col border border-slate-200 bg-white p-4 transition-colors hover:border-[#0056b3] hover:bg-[#f4f8ff]">
-                    <span className="text-sm font-semibold text-slate-900 group-hover:text-[#0056b3]">{t.name}</span>
-                    <span className="mt-1 text-[11px] text-slate-500">{t.sub}</span>
-                  </Link>
-                ))}
+          <div className="flex flex-col gap-6">
+            {groups.map((g) => (
+              <div key={g.anchor} id={g.anchor} className="scroll-mt-16">
+                <div className="mb-2.5 flex items-baseline gap-2.5">
+                  <span className="font-mono text-[10px] font-semibold text-[#a39d8d]">{g.num}</span>
+                  <h3 className="text-[13px] font-bold uppercase tracking-wider text-[#3d4a5c]">{g.heading}</h3>
+                  <div className="h-px flex-1 bg-[#e3e1da]" />
+                </div>
+                <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                  {g.tools.map((t) => (
+                    <Link key={t.to + t.name} to={t.to}
+                      className="flex flex-col rounded-lg border border-[#e3e1da] bg-white px-4 py-3.5 transition-colors hover:border-[#0f4c92]">
+                      <span className="text-[13.5px] font-bold text-[#0f1b2a]">{t.name}</span>
+                      <span className="mt-0.5 font-mono text-[10.5px] text-[#8b8574]">{t.sub}</span>
+                    </Link>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* Closing CTA */}
-      <section className="border-t border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 px-6 py-12 sm:flex-row sm:items-center">
+      {/* CTA band */}
+      <section className="bg-[#0f1b2a]">
+        <div className="mx-auto flex max-w-[1200px] flex-col items-start justify-between gap-5 px-6 py-10 sm:flex-row sm:items-center">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">Every calculation, code-referenced.</h2>
-            <p className="mt-1 text-sm text-slate-500">NSCP 2015, ACI 318-14 and AISC 360-16 clause citations on every worked solution.</p>
+            <h2 className="text-xl font-extrabold text-white">Every calculation, code-referenced.</h2>
+            <p className="mt-1 text-[13px] text-[#9db0c5]">Clause citations on every worked step. Validated against hand calcs — <Link to="/validation" className="text-[#5b9bd5] hover:underline">see the validation suite</Link>.</p>
           </div>
           <button onClick={() => onAuth('signup')}
-            className="bg-[#0056b3] px-6 py-3 text-sm font-semibold text-white hover:bg-[#0066d6]">
-            Create free account
-          </button>
+            className="whitespace-nowrap rounded-md bg-[#0f4c92] px-5 py-3 text-[13px] font-bold text-white hover:bg-[#135caf]">Create free account</button>
         </div>
       </section>
+
+      <CommandPalette open={palette} onClose={() => setPalette(false)} />
     </div>
   )
 }

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>body{margin:0;font-family:'Archivo',system-ui,sans-serif;color:#0f1b2a;background:#f4f3ef}a{color:#0f4c92;text-decoration:none}a:hover{color:#0d3f78}
+#fd-cols{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(340px,1fr);gap:22px;padding:22px 28px;align-items:start}
+@media (max-width:1240px){#fd-cols{grid-template-columns:minmax(0,1fr)}#fd-cols>div:last-child{position:static !important}}
+input,select{font-family:inherit}
+input:focus,select:focus{outline:none;border-color:#0f4c92 !important;box-shadow:0 0 0 3px rgba(15,76,146,.14)}
+</style>
+</helmet>
+<div style="display:flex;min-height:100vh;background:#f4f3ef">
+
+  <aside style="width:250px;flex:none;display:flex;flex-direction:column;background:#0f1b2a;color:#e8eaed;position:sticky;top:0;height:100vh;overflow-y:auto">
+    <div style="padding:18px 18px 14px;border-bottom:1px solid rgba(255,255,255,.08)">
+      <div style="display:flex;align-items:baseline;gap:8px">
+        <span style="font-size:15px;font-weight:800;letter-spacing:.14em;color:#fff">CIVENG</span>
+        <span style="font-size:9px;font-weight:600;letter-spacing:.22em;color:#7d8ea3;text-transform:uppercase">Toolkit</span>
+      </div>
+      <div style="margin-top:12px;display:flex;align-items:center;gap:8px;border:1px solid rgba(255,255,255,.14);border-radius:6px;background:rgba(255,255,255,.05);padding:7px 10px;cursor:text">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#7d8ea3" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
+        <span style="font-size:12px;color:#7d8ea3;flex:1">Find a tool…</span>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#7d8ea3;border:1px solid rgba(255,255,255,.16);border-radius:4px;padding:1px 5px">⌘K</span>
+      </div>
+    </div>
+    <nav style="flex:1;padding:10px 10px 18px">
+      <sc-for list="{{ navSections }}" as="sec" hint-placeholder-count="6">
+        <div style="margin-top:12px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;padding:0 8px 5px">
+            <span style="font-size:9.5px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#7d8ea3">{{ sec.label }}</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#55677c">{{ sec.count }}</span>
+          </div>
+          <sc-for list="{{ sec.items }}" as="it" hint-placeholder-count="3">
+            <a href="#" style="display:flex;align-items:center;gap:8px;border-radius:6px;padding:6px 8px;font-size:12.5px;font-weight:500;color:{{ it.color }};background:{{ it.bg }};border-left:2px solid {{ it.edge }}" style-hover="background:rgba(255,255,255,.07);color:#fff">{{ it.name }}</a>
+          </sc-for>
+          <sc-if value="{{ sec.collapsed }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:4px 8px 0;font-size:11px;color:#55677c;cursor:pointer" style-hover="color:#9db0c5">▸ {{ sec.more }}</div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </nav>
+    <div style="padding:14px 18px;border-top:1px solid rgba(255,255,255,.08);font-size:10.5px;line-height:1.6;color:#55677c">NSCP 2015 · ACI 318-14<br>AISC 360-16 · client-side engine</div>
+  </aside>
+
+  <main style="flex:1;min-width:0">
+    <header style="background:#fff;border-bottom:1px solid #e3e1da">
+      <div style="display:flex;align-items:center;gap:14px;padding:14px 28px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;font-size:11px;color:#7a7568">
+            <a href="#" style="color:#7a7568" style-hover="color:#0f4c92">Foundations</a><span>/</span><span style="color:#0f1b2a;font-weight:600">Foundation Design</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:3px">
+            <h1 style="margin:0;font-size:21px;font-weight:800;letter-spacing:-.01em">Isolated Footing</h1>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;color:#0f4c92;background:#eaf1f9;border:1px solid #cddcf0;border-radius:4px;padding:2px 7px;white-space:nowrap">ACI 318-14</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;color:#0f4c92;background:#eaf1f9;border:1px solid #cddcf0;border-radius:4px;padding:2px 7px;white-space:nowrap">NSCP 2015</span>
+          </div>
+        </div>
+        <button style="display:inline-flex;align-items:center;gap:7px;border:1px solid #d6d3c9;border-radius:6px;background:#fff;padding:8px 14px;font-size:12.5px;font-weight:600;color:#3d4a5c;cursor:pointer;font-family:inherit" style-hover="border-color:#0f4c92;color:#0f4c92"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>Import Excel</button>
+        <button style="display:inline-flex;align-items:center;gap:7px;border:none;border-radius:6px;background:#0f4c92;padding:9px 16px;font-size:12.5px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit" style-hover="background:#0d3f78"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"></path><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>Export report</button>
+      </div>
+    </header>
+
+    <div id="fd-cols">
+
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <sc-for list="{{ inputSections }}" as="sec" hint-placeholder-count="4">
+          <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px">
+            <div style="display:flex;align-items:baseline;gap:10px;padding:12px 18px;border-bottom:1px solid #eeece5">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;color:#a39d8d">{{ sec.num }}</span>
+              <h2 style="margin:0;font-size:13.5px;font-weight:700;letter-spacing:.02em">{{ sec.title }}</h2>
+              <span style="margin-left:auto;font-size:11px;color:#a39d8d">{{ sec.hint }}</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px 16px;padding:16px 18px">
+              <sc-for list="{{ sec.fields }}" as="f" hint-placeholder-count="4">
+                <label style="display:flex;flex-direction:column;gap:5px;grid-column:span {{ f.span }}">
+                  <span style="font-size:11.5px;font-weight:600;color:#5c6675">{{ f.label }}</span>
+                  <sc-if value="{{ f.isSelect }}" hint-placeholder-val="{{ false }}">
+                    <div style="position:relative">
+                      <div style="display:flex;align-items:center;justify-content:space-between;border:1px solid #d6d3c9;border-radius:6px;background:#fcfbf8;padding:8px 10px;font-size:13px;color:#0f1b2a;cursor:pointer">{{ f.value }}<span style="font-size:9px;color:#a39d8d">▼</span></div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ f.isInput }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;border:1px solid #d6d3c9;border-radius:6px;background:#fcfbf8;overflow:hidden">
+                      <span style="flex:1;padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:13px;color:#0f1b2a">{{ f.value }}</span>
+                      <span style="display:flex;align-items:center;padding:0 9px;border-left:1px solid #eeece5;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#a39d8d;background:#f7f6f1">{{ f.unit }}</span>
+                    </div>
+                  </sc-if>
+                </label>
+              </sc-for>
+            </div>
+          </section>
+        </sc-for>
+
+        <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px">
+          <div style="display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:1px solid #eeece5">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;font-weight:600;color:#a39d8d">05</span>
+            <h2 style="margin:0;font-size:13.5px;font-weight:700;letter-spacing:.02em">Calculation report</h2>
+            <span style="margin-left:auto;display:inline-flex;gap:14px;font-size:11.5px;font-weight:600">
+              <span style="color:#0f4c92;border-bottom:2px solid #0f4c92;padding-bottom:2px">Worked solution</span>
+              <span style="color:#a39d8d;cursor:pointer" style-hover="color:#5c6675">Summary only</span>
+              <span style="color:#a39d8d;cursor:pointer" style-hover="color:#5c6675">Drawing</span>
+            </span>
+          </div>
+          <div style="padding:6px 0">
+            <sc-for list="{{ steps }}" as="s" hint-placeholder-count="6">
+              <div style="display:grid;grid-template-columns:1fr 130px;gap:16px;padding:13px 18px;border-bottom:1px solid #f3f1ea">
+                <div>
+                  <h3 style="margin:0;font-size:12.5px;font-weight:700;color:#0f1b2a"><span style="font-family:'IBM Plex Mono',monospace;font-weight:600;color:#a39d8d;margin-right:6px">{{ s.n }}</span>{{ s.title }}</h3>
+                  <sc-if value="{{ s.text }}" hint-placeholder-val="{{ true }}"><p style="margin:5px 0 0;font-size:12px;line-height:1.55;color:#5c6675">{{ s.text }}</p></sc-if>
+                  <p style="margin:7px 0 0;font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:1.7;color:#1e2c3d;background:#f9f8f4;border:1px solid #eeece5;border-radius:6px;padding:8px 12px;overflow-x:auto;white-space:pre">{{ s.tex }}</p>
+                </div>
+                <div style="padding-top:2px">
+                  <sc-if value="{{ s.status }}" hint-placeholder-val="{{ true }}"><span style="display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;color:{{ s.statusColor }};background:{{ s.statusBg }};border-radius:4px;padding:2px 7px">{{ s.status }}</span></sc-if>
+                  <p style="margin:6px 0 0;font-size:10.5px;line-height:1.5;color:#a39d8d">{{ s.clause }}</p>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px;position:sticky;top:22px">
+        <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px;overflow:hidden">
+          <div style="display:flex;align-items:center;gap:10px;background:#ecf6ef;border-bottom:1px solid #d3e8da;padding:13px 18px">
+            <span style="display:flex;width:22px;height:22px;align-items:center;justify-content:center;border-radius:50%;background:#1a7f4b;color:#fff"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
+            <div>
+              <p style="margin:0;font-size:13px;font-weight:800;color:#14603a;letter-spacing:.02em">DESIGN OK — all checks pass</p>
+              <p style="margin:1px 0 0;font-size:11px;color:#4d7a5f">Governing: two-way punching shear · utilization 0.98</p>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #eeece5">
+            <div style="padding:12px 16px;border-right:1px solid #eeece5">
+              <p style="margin:0;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#a39d8d">Plan size</p>
+              <p style="margin:3px 0 0;font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:600;color:#0f1b2a">2.45 × 2.45 <span style="font-size:11px;color:#a39d8d">m</span></p>
+            </div>
+            <div style="padding:12px 16px;border-right:1px solid #eeece5">
+              <p style="margin:0;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#a39d8d">Thickness Dc</p>
+              <p style="margin:3px 0 0;font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:600;color:#0f1b2a">460 <span style="font-size:11px;color:#a39d8d">mm</span></p>
+            </div>
+            <div style="padding:12px 16px">
+              <p style="margin:0;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#a39d8d">Steel each way</p>
+              <p style="margin:3px 0 0;font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:600;color:#0f1b2a">10-⌀20 <span style="font-size:11px;color:#a39d8d">@250</span></p>
+            </div>
+          </div>
+          <div style="padding:14px 18px;display:flex;flex-direction:column;gap:10px">
+            <sc-for list="{{ checks }}" as="c" hint-placeholder-count="3">
+              <div>
+                <div style="display:flex;justify-content:space-between;align-items:baseline">
+                  <span style="font-size:11.5px;font-weight:600;color:#3d4a5c">{{ c.name }}</span>
+                  <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:{{ c.color }}">{{ c.ratio }}</span>
+                </div>
+                <div style="margin-top:4px;height:5px;border-radius:3px;background:#eeece5;overflow:hidden">
+                  <div style="height:100%;border-radius:3px;background:{{ c.color }};width:{{ c.pct }}"></div>
+                </div>
+              </div>
+            </sc-for>
+            <p style="margin:2px 0 0;font-size:10.5px;color:#a39d8d">Flexure: As,min = 0.0018·b·h governs (ρmin) — §24.4.3.2</p>
+          </div>
+        </section>
+
+        <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid #eeece5">
+            <h2 style="margin:0;font-size:13.5px;font-weight:700">Drawing</h2>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#a39d8d">to scale · 1:40</span>
+          </div>
+          <div style="padding:10px 16px 16px;background-image:linear-gradient(#f0eee7 1px,transparent 1px),linear-gradient(90deg,#f0eee7 1px,transparent 1px);background-size:22px 22px">
+            <svg viewBox="-40 0 440 330" style="width:100%;height:auto;font-family:'IBM Plex Mono',monospace">
+              <text x="14" y="20" font-size="10" font-weight="600" fill="#a39d8d" letter-spacing="2">PLAN</text>
+              <rect x="72" y="36" width="150" height="116" fill="#fff" stroke="#0f1b2a" stroke-width="1.4"></rect>
+              <rect x="138" y="85" width="18" height="18" fill="#0f1b2a"></rect>
+              <line x1="72" y1="168" x2="222" y2="168" stroke="#0f4c92" stroke-width=".9"></line>
+              <text x="147" y="182" font-size="9.5" fill="#0f4c92" text-anchor="middle">Bx = 2.45 m</text>
+              <line x1="234" y1="36" x2="234" y2="152" stroke="#0f4c92" stroke-width=".9"></line>
+              <text x="240" y="97" font-size="9.5" fill="#0f4c92">By = 2.45 m</text>
+              <text x="14" y="216" font-size="10" font-weight="600" fill="#a39d8d" letter-spacing="2">SECTION</text>
+              <line x1="46" y1="232" x2="316" y2="232" stroke="#8a6d3b" stroke-width="1.2"></line>
+              <line x1="46" y1="232" x2="40" y2="238" stroke="#caa472" stroke-width=".8"></line><line x1="82" y1="232" x2="76" y2="238" stroke="#caa472" stroke-width=".8"></line><line x1="118" y1="232" x2="112" y2="238" stroke="#caa472" stroke-width=".8"></line><line x1="154" y1="232" x2="148" y2="238" stroke="#caa472" stroke-width=".8"></line><line x1="190" y1="232" x2="184" y2="238" stroke="#caa472" stroke-width=".8"></line><line x1="226" y1="232" x2="220" y2="238" stroke="#caa472" stroke-width=".8"></line><line x1="262" y1="232" x2="256" y2="238" stroke="#caa472" stroke-width=".8"></line><line x1="298" y1="232" x2="292" y2="238" stroke="#caa472" stroke-width=".8"></line>
+              <rect x="46" y="299" width="270" height="29" fill="#fff" stroke="#0f1b2a" stroke-width="1.4"></rect>
+              <rect x="167" y="232" width="28" height="67" fill="#0f1b2a"></rect>
+              <line x1="34" y1="232" x2="34" y2="328" stroke="#0f4c92" stroke-width=".9"></line>
+              <text x="30" y="284" font-size="9.5" fill="#0f4c92" text-anchor="end">H = 1.50 m</text>
+              <line x1="324" y1="299" x2="324" y2="328" stroke="#0f4c92" stroke-width=".9"></line>
+              <text x="330" y="317" font-size="9.5" fill="#0f4c92">Dc = 460</text>
+            </svg>
+          </div>
+        </section>
+
+        <section style="background:#fff;border:1px solid #e3e1da;border-radius:8px;padding:14px 18px">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <h2 style="margin:0;font-size:13.5px;font-weight:700">Report letterhead</h2>
+            <span style="font-size:11px;color:#0f4c92;font-weight:600;cursor:pointer" style-hover="text-decoration:underline">Edit</span>
+          </div>
+          <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;font-size:11.5px">
+            <div><span style="color:#a39d8d">Project</span><p style="margin:1px 0 0;font-weight:600;color:#0f1b2a">Lot 12 Residence</p></div>
+            <div><span style="color:#a39d8d">Sheet</span><p style="margin:1px 0 0;font-family:'IBM Plex Mono',monospace;font-weight:500;color:#0f1b2a">F-01 · Rev A</p></div>
+            <div><span style="color:#a39d8d">Prepared by</span><p style="margin:1px 0 0;font-weight:600;color:#0f1b2a">J. de la Cruz, CE</p></div>
+            <div><span style="color:#a39d8d">Date</span><p style="margin:1px 0 0;font-family:'IBM Plex Mono',monospace;font-weight:500;color:#0f1b2a">2026-07-15</p></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const on = { color: '#fff', bg: 'rgba(15,76,146,.55)', edge: '#5b9bd5' };
+    const off = { color: '#b6c2d0', bg: 'transparent', edge: 'transparent' };
+    const item = (name, active) => ({ name, ...(active ? on : off) });
+    const navSections = [
+      { label: 'Foundations', count: '03', items: [item('Foundation Design', true), item('Pile Cap Design'), item('Combined Footing')], collapsed: false, more: '' },
+      { label: 'Concrete', count: '08', items: [item('Beam Design'), item('Column Design'), item('Slab Design')], collapsed: true, more: '5 more' },
+      { label: 'Analysis', count: '05', items: [item('3D Model Space'), item('Frame Analysis')], collapsed: true, more: '3 more' },
+      { label: 'Steel', count: '03', items: [item('Steel Design')], collapsed: true, more: '2 more' },
+      { label: 'Geotechnical', count: '06', items: [item('Retaining Wall')], collapsed: true, more: '5 more' },
+      { label: 'Seismic & Loads', count: '02', items: [item('Seismic Wizard'), item('Load Combinations')], collapsed: false, more: '' },
+      { label: 'Estimates', count: '05', items: [item('Slab'), item('Beam')], collapsed: true, more: '3 more' },
+      { label: 'Reference', count: '02', items: [item('Documentation'), item('Validation')], collapsed: false, more: '' },
+    ];
+    const S = (label, value, span = 1) => ({ label, value, span: String(span), isSelect: true, isInput: false, unit: '' });
+    const N = (label, value, unit, span = 1) => ({ label, value, unit, span: String(span), isSelect: false, isInput: true });
+    const inputSections = [
+      { num: '01', title: 'Footing', hint: 'geometry & method', fields: [S('Type', 'Isolated Square'), S('Loading', 'Concentric'), S('Analysis method', 'Detailed design'), S('Solution method', 'Iteration')] },
+      { num: '02', title: 'Loads & Column', hint: 'P = service, Pu = factored', fields: [S('Load entry', 'Service & ultimate (P, Pu)'), N('Service load P', '1000', 'kN'), N('Ultimate load Pu', '1400', 'kN'), S('Column shape', 'Square'), N('Column width c', '400', 'mm'), S('Column position', 'Interior')] },
+      { num: '03', title: 'Materials', hint: 'concrete & rebar', fields: [N("Concrete f'c", '28', 'MPa'), N('Steel fy', '415', 'MPa'), N('Bar diameter db', '20', 'mm'), N('Clear cover', '75', 'mm')] },
+      { num: '04', title: 'Soil & Geometry', hint: 'allowable bearing', fields: [N('Allowable qa', '200', 'kPa'), N('γ soil', '18', 'kN/m³'), N('γ concrete', '24', 'kN/m³'), N('Total depth H', '1.5', 'm'), N('Surcharge', '0', 'kPa')] },
+    ];
+    const pass = { status: 'PASS', statusColor: '#14603a', statusBg: '#ddefe3' };
+    const info = { status: '', statusColor: '', statusBg: '' };
+    const steps = [
+      { n: '1', title: 'Net allowable bearing pressure', text: 'Deduct soil and concrete overburden from the gross allowable pressure.', tex: 'qnet = qa − γs·Ds − γc·Dc\n     = 200 − 18(1.04) − 24(0.46) = 164.96 kPa', clause: 'Service condition', ...info },
+      { n: '2', title: 'Required footing size', text: 'Size the footing so service pressure ≤ qnet; iterate with Dc until converged.', tex: 'Areq = P / qnet = 1000 / 164.96 = 6.06 m²\nB = √6.06 = 2.46 → use B = 2.45 m', clause: 'Iterative sizing', ...info },
+      { n: '3', title: 'Ultimate soil pressure', text: '', tex: 'qu = Pu / B² = 1400 / 2.45² = 233.24 kPa', clause: 'NSCP §203.3 load factors', ...info },
+      { n: '4', title: 'Two-way (punching) shear', text: 'Critical section at d/2 from column face; interior column, β = 1.', tex: 'Vu = qu·(B² − (c+d)²) = 1259 kN\nφVc = 0.75·0.33·√f\'c·bo·d = 1287 kN', clause: 'ACI 318-14 §22.6.5.2', ...pass },
+      { n: '5', title: 'One-way (beam) shear', text: 'Critical section at d from column face.', tex: 'Vu = qu·B·(ℓ − d) = 371 kN\nφVc = 0.75·0.17·√f\'c·B·d = 620 kN', clause: 'ACI 318-14 §22.5.5.1', ...pass },
+      { n: '6', title: 'Flexural reinforcement', text: 'Cantilever moment at column face, each way; minimum steel governs.', tex: 'Mu = qu·B·ℓ²/2 = 300 kN·m → As = 2210 mm²\nAs,min = 0.0018·B·Dc = 3053 mm² → 10-⌀20 @ 250', clause: 'ACI 318-14 §24.4.3.2', ...pass },
+    ];
+    const checks = [
+      { name: 'Punching shear', ratio: '0.98', pct: '98%', color: '#b97d10' },
+      { name: 'Beam shear', ratio: '0.60', pct: '60%', color: '#1a7f4b' },
+      { name: 'Flexure (ρmin governs)', ratio: '0.72', pct: '72%', color: '#1a7f4b' },
+    ];
+    return { navSections, inputSections, steps, checks };
+  }
+}
+</script>
+</body>
+</html>
