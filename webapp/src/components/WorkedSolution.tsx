@@ -8,19 +8,20 @@ export function WorkedSolution({ steps, title = 'Solution — step by step' }: {
 }): JSX.Element {
   const [open, setOpen] = useState(true)
   return (
-    <div className="mt-6 rounded-xl border border-slate-200 bg-white shadow-sm print-avoid-break">
+    <div className="mt-6 rounded-lg border border-[#e3e1da] bg-white print-avoid-break">
       <button type="button" onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left">
-        <h2 className="text-[1.02rem] font-bold text-[#0056b3]">{title}</h2>
-        <span className="no-print text-sm text-slate-500">{open ? 'Hide ▲' : 'Show ▼'}</span>
+        className="flex w-full items-center gap-2.5 px-4 py-3 text-left">
+        <span className="font-mono text-[10.5px] font-semibold text-[#a39d8d]">05</span>
+        <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">{title}</h2>
+        <span className="no-print ml-auto text-xs text-[#a39d8d]">{open ? 'Hide ▲' : 'Show ▼'}</span>
       </button>
 
       {open && (
-        <ol className="space-y-4 border-t border-slate-100 px-4 py-4">
+        <ol className="space-y-4 border-t border-[#eeece5] px-4 py-4">
           {steps.map((s, i) => (
             <li key={i} className="print-avoid-break">
-              <h3 className="mb-1.5 text-sm font-semibold text-slate-800">
-                <span className="text-slate-500">{i + 1}.</span> {s.title}
+              <h3 className="mb-1.5 text-[12.5px] font-bold text-[#0f1b2a]">
+                <span className="mr-1.5 font-mono font-semibold text-[#a39d8d]">{i + 1}</span>{s.title}
               </h3>
               <div className="space-y-1.5 pl-4">
                 {s.lines.map((ln, j) => (
