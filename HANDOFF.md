@@ -86,6 +86,21 @@ of the app. Everything runs **off the main thread** in a web worker
   (1.2+0.5CaI)D and (0.9−0.5CaI)D with the effective factor in the combo name.
   Toggles in the Loading tab: orthogonal off by default (conditional per code),
   Ev on by default (strength design).
+- **UI redesign (PRs #341–#347, July 2026)** — the user-supplied
+  "drawing-sheet workbench" design (mockups checked into
+  `docs/design/uiux-2026-07/`, also live in their claude.ai/design project):
+  Archivo/IBM Plex Mono theme + palette vars (`index.css`), dark sidebar
+  AppShell + breadcrumb header on all tool routes, ⌘K CommandPalette,
+  redesigned Home, Model Space workspace chrome (viewport untouched).
+  Calculator template in `components/calc.tsx`: PageHeader, CalcSection,
+  VerdictPanel (utilization bars, amber ≥ 0.95), DrawingCard, LetterheadCard,
+  and the print-only **PrintReport calc sheet** (letterhead grid, summary
+  PASS table, design data, worked solution, drawing, signatures) — the only
+  thing that prints on converted pages. Converted so far: **Foundation,
+  Beam, Column, Combined Footing**. NEXT: same recipe on Steel (3 sub-tabs
+  need a per-tab report decision), Pile Cap, Retaining Wall, Stair, Water
+  Tank, geotech pages, estimates; then the mobile pass. Hard rule kept on
+  every UI PR: zero files under `src/engine`, suite pinned at 1063.
 - **ValidationMap filled** (P2-4): every row in `docs/ValidationMap.md` now
   cites its vitest evidence (✅/🔶) or is an explicit external-tool gap
   (X001–X004); Chopra 2-DOF eigen anchor added to `modal.test.ts`; Roadmap
