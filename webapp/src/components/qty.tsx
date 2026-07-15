@@ -8,12 +8,13 @@ export function Num({ label, unit, value, onChange, step = 'any', hint }: {
 }) {
   return (
     <label className="flex flex-col text-sm">
-      <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">
-        {label}{unit ? <span className="font-mono text-[10.5px] font-normal text-[#a39d8d]"> ({unit})</span> : null}
+      <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">{label}</span>
+      <span className="flex overflow-hidden rounded-md border border-[#d6d3c9] bg-[#fcfbf8] focus-within:border-[#0f4c92] focus-within:shadow-[0_0_0_3px_rgba(15,76,146,.14)]">
+        <input type="number" inputMode="decimal" step={step} value={Number.isFinite(value) ? value : ''}
+          onChange={(e) => onChange(parseFloat(e.target.value))}
+          className="min-w-0 flex-1 !rounded-none !border-0 !bg-transparent text-[13px] !shadow-none" />
+        {unit && <span className="flex items-center border-l border-[#eeece5] bg-[#f7f6f1] px-2.5 font-mono text-[10.5px] text-[#a39d8d]">{unit}</span>}
       </span>
-      <input type="number" inputMode="decimal" step={step} value={Number.isFinite(value) ? value : ''}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="text-[13px]" />
       {hint ? <span className="mt-0.5 text-[10px] text-[#a39d8d]">{hint}</span> : null}
     </label>
   )

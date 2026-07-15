@@ -6,13 +6,12 @@ import { netBearing } from '../engine/bearing'
 import { factoredLoad } from '../engine/loads'
 import type { ColumnPosition } from '../engine/shear'
 import { FootingSchematic } from '../components/FootingSchematic'
-import { ReportControls } from '../components/ReportControls'
 import { ExcelImport } from '../components/ExcelImport'
 import type { BatchResult } from '../lib/foundationExcel'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { buildFoundationSolution, type SolutionCtx } from '../lib/foundationSolution'
 import { Math } from '../lib/math'
-import { PageHeader, CalcSection, VerdictPanel, DrawingCard } from '../components/calc'
+import { PageHeader, CalcSection, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
 import { f0, f2, f3 } from '../lib/format'
 import 'katex/dist/katex.min.css'
 
@@ -109,14 +108,15 @@ function NumField({ label, unit, value, onChange, step = 'any' }: {
 }) {
   return (
     <label className="flex flex-col text-sm">
-      <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">
-        {label}{unit ? <span className="font-mono text-[10.5px] font-normal text-[#a39d8d]"> ({unit})</span> : null}
+      <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">{label}</span>
+      <span className="flex overflow-hidden rounded-md border border-[#d6d3c9] bg-[#fcfbf8] focus-within:border-[#0f4c92] focus-within:shadow-[0_0_0_3px_rgba(15,76,146,.14)]">
+        <input
+          type="number" inputMode="decimal" step={step} value={Number.isFinite(value) ? value : ''}
+          onChange={(e) => onChange(parseFloat(e.target.value))}
+          className="min-w-0 flex-1 !rounded-none !border-0 !bg-transparent text-[13px] !shadow-none"
+        />
+        {unit && <span className="flex items-center border-l border-[#eeece5] bg-[#f7f6f1] px-2.5 font-mono text-[10.5px] text-[#a39d8d]">{unit}</span>}
       </span>
-      <input
-        type="number" inputMode="decimal" step={step} value={Number.isFinite(value) ? value : ''}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="text-[13px]"
-      />
     </label>
   )
 }
@@ -164,6 +164,7 @@ function steelRow(label: ReactNode, s: DirSteel, db: number) {
 
 export default function FoundationDesign() {
   const [form, setForm] = useState<FormState>(DEFAULTS)
+  const [lh, setLh] = useState<LetterheadState>({ project: '', sheet: 'F-01 · Rev A', preparedBy: '' })
   const [batch, setBatch] = useState<BatchResult | null>(null)
   const set = <K extends keyof FormState>(k: K) => (v: FormState[K]) => setForm((s) => ({ ...s, [k]: v }))
   const ecc = form.loadingType === 'eccentric'
@@ -270,10 +271,15 @@ export default function FoundationDesign() {
 
   return (
     <div>
-      <PageHeader title="Isolated Footing" badges={['ACI 318-14', 'NSCP 2015']} />
+      <PageHeader title="Isolated Footing" badges={['ACI 318-14', 'NSCP 2015']}
+        actions={
+          <button type="button" onClick={() => { const prev = document.title; document.title = `Foundation Design Report${lh.project ? ` — ${lh.project}` : ''}`; window.print(); window.setTimeout(() => { document.title = prev }, 500) }}
+            className="inline-flex items-center gap-2 rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-[#0d3f78]">
+            ⎙ Export report
+          </button>
+        } />
       <div className="mx-auto max-w-6xl px-5 pb-8 sm:px-7">
-      <ReportControls title="Foundation Design Report" />
-      <ExcelImport onResult={setBatch} />
+      <div className="no-print"><ExcelImport onResult={setBatch} /></div>
 
       {batch && (
         <div className="mt-4 overflow-hidden rounded-lg border border-[#e3e1da] bg-white print-avoid-break">
@@ -486,15 +492,38 @@ export default function FoundationDesign() {
             </div>
           )}
 
-          <div className="rounded-lg border border-[#e3e1da] bg-white p-4 text-sm text-[#5c6675]">
-            <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Basis</h2>
-            <Math block tex={String.raw`q_{net} = q_a - \gamma_s D_s - \gamma_c D_c - q,\quad P_u = \max(1.4D,\ 1.2D + 1.6L)`} />
-            <p className="mt-1 text-xs text-slate-500">NSCP 2015 / ACI 318-14. φ: shear 0.75, flexure 0.90. Short-direction band per §413.3.3.3.</p>
-          </div>
+          <LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} />
         </div>
       </div>
 
-      {solutionSteps && <WorkedSolution steps={solutionSteps} title="Calculation report — worked solution" />}
+      <div className="no-print">{solutionSteps && <WorkedSolution steps={solutionSteps} title="Calculation report — worked solution" />}</div>
+      {view && solutionSteps && (
+        <PrintReport
+          docTitle="Isolated Footing" docCode="F-01" badges={['ACI 318-14', 'NSCP 2015']}
+          ok={allOK} governing={`Governing: ${governing} · ${globalThis.Math.max(punchRatio, beamRatio).toFixed(2)}`}
+          lh={lh}
+          stats={[
+            { label: 'Plan size', value: `${f2(view.Bx)} × ${f2(view.By)}`, unit: 'm' },
+            { label: 'Thickness Dc', value: f0(view.Dc), unit: 'mm' },
+            { label: view.type === 'square' ? 'Steel each way' : 'Steel — long', value: `${view.long.bars}-⌀${form.barDia}`, unit: `@${f0(view.long.spacing)}` },
+          ]}
+          checks={[
+            { name: 'Two-way (punching) shear — d req/prov', ratio: punchRatio, ok: view.punchOK },
+            { name: 'One-way (beam) shear — d req/prov', ratio: beamRatio, ok: view.beamOK },
+          ]}
+          data={[
+            ['Service load P', `${f0(serviceLoad)} kN`], ['Ultimate load Pu', `${f0(ultimateLoad)} kN`],
+            ["Concrete f'c", `${form.fc} MPa`], ['Steel fy', `${form.fy} MPa`],
+            ['Column width c', `${f0(colWidth)} mm (${form.position})`], ['Bar diameter db', `⌀${form.barDia} mm`],
+            ['Allowable bearing qa', `${form.qAllow} kPa`], ['Clear cover', `${form.cover} mm`],
+            ['Unit weight, soil γs', `${form.gammaSoil} kN/m³`], ['Unit weight, concrete γc', `${form.gammaConc} kN/m³`],
+            ['Total depth H', `${f2(form.H)} m`], ['Surcharge', `${form.surcharge} kPa`],
+          ]}
+          steps={solutionSteps}
+          drawingTitle="Isolated Footing"
+          drawing={<FootingSchematic Bx={view.Bx} By={view.By} Dc={view.Dc} columnWidth={colWidth} H={form.H} />}
+        />
+      )}
       </div>
     </div>
   )
