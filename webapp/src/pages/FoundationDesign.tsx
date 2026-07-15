@@ -282,7 +282,7 @@ export default function FoundationDesign() {
       <div className="no-print"><ExcelImport onResult={setBatch} /></div>
 
       {batch && (
-        <div className="mt-4 overflow-hidden rounded-lg border border-[#e3e1da] bg-white print-avoid-break">
+        <div className="no-print mt-4 overflow-hidden rounded-lg border border-[#e3e1da] bg-white">
           <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-200 px-4 py-2.5">
             <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">
               Batch schedule <span className="text-sm font-normal text-slate-500">({batch.designed}/{batch.rows.length} designed)</span>
@@ -323,7 +323,7 @@ export default function FoundationDesign() {
         </div>
       )}
 
-      <div className="mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
+      <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
         {/* ── Inputs ── */}
         <div className="space-y-3.5">
           <Card title="Footing">
