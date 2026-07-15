@@ -1,9 +1,9 @@
 import type { JSX } from 'react'
 import { DimBelow, DimSide } from './dims'
 
-const STROKE = '#37526e'
-const FILL = '#eef3f8'
-const COL = '#37526e'
+const STROKE = '#0f1b2a'
+const FILL = '#fff'
+const COL = '#0f1b2a'
 
 export interface SchematicProps {
   /** Footing length along x, m. */
@@ -61,19 +61,19 @@ export function FootingSchematic({ Bx, By, Dc, columnWidth, H }: SchematicProps)
   return (
     <svg viewBox={`0 0 ${W} ${totalH}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
       style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
-      <text x={14} y={20} fontSize={11} fontWeight={700} fill="#0056b3">PLAN</text>
+      <text x={14} y={20} fontSize={11} fontWeight={700} fill="#a39d8d" fontFamily="IBM Plex Mono, monospace" letterSpacing="2">PLAN</text>
       {/* footing + column */}
-      <rect x={fx} y={fyTop} width={fW} height={fH} rx={2} fill={FILL} stroke={STROKE} strokeWidth={1.4} />
+      <rect x={fx} y={fyTop} width={fW} height={fH} fill={FILL} stroke={STROKE} strokeWidth={1.4} />
       <rect x={cxc - cpx / 2} y={cyc - cpx / 2} width={cpx} height={cpx} fill={COL} />
       <DimBelow xA={fx} xB={fx + fW} featY={fyBot} dY={fyBot + 20} label={`Bx = ${Bx.toFixed(2)} m`} />
       <DimSide yA={fyTop} yB={fyBot} featX={fx + fW} dX={fx + fW + 10} label={`By = ${By.toFixed(2)} m`} side="right" />
 
-      <text x={14} y={secTitleY} fontSize={11} fontWeight={700} fill="#0056b3">SECTION</text>
+      <text x={14} y={secTitleY} fontSize={11} fontWeight={700} fill="#a39d8d" fontFamily="IBM Plex Mono, monospace" letterSpacing="2">SECTION</text>
       {/* ground + soil */}
       <line x1={slabX} y1={gl} x2={slabX + sW} y2={gl} stroke="#8a6d3b" strokeWidth={1.2} />
       {soilTicks}
       {/* slab + column stub */}
-      <rect x={slabX} y={slabY} width={sW} height={slabH} fill="#cfe0f1" stroke={STROKE} strokeWidth={1.4} />
+      <rect x={slabX} y={slabY} width={sW} height={slabH} fill="#fff" stroke={STROKE} strokeWidth={1.4} />
       <rect x={slabX + sW / 2 - stubW / 2} y={gl} width={stubW} height={slabY - gl} fill={COL} />
       <DimSide yA={gl} yB={baseY} featX={slabX} dX={slabX - 12} label={`H = ${H.toFixed(2)} m`} side="left" />
       <DimSide yA={slabY} yB={baseY} featX={slabX + sW} dX={slabX + sW + 8} label={`Dc = ${Math.round(Dc)} mm`} side="right" />
