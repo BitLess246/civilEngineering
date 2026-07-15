@@ -3,8 +3,8 @@ import { Link } from 'react-router-dom'
 import { designCombinedFooting, type CombinedFootingInput } from '../engine/combinedFooting'
 import { designFlexibleCombinedFooting } from '../engine/flexibleCombinedFooting'
 import { CombinedFootingSchematic } from '../components/CombinedFootingSchematic'
+import { ReportBar, PrintReport, type LetterheadState } from '../components/calc'
 import { Diagram } from '../components/Diagram'
-import { ReportControls } from '../components/ReportControls'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { buildCombinedFootingSolution } from '../lib/combinedFootingSolution'
 import { Math } from '../lib/math'
@@ -121,6 +121,7 @@ function Row({ label, value, check }: { label: ReactNode; value: ReactNode; chec
 
 export default function CombinedFootingDesign() {
   const [form, setForm] = useState<FormState>(DEFAULTS)
+  const [lh, setLh] = useState<LetterheadState>({ project: '', sheet: 'F-02 · Rev A', preparedBy: '' })
   const set = <K extends keyof FormState>(k: K) => (v: FormState[K]) => setForm((s) => ({ ...s, [k]: v }))
 
   const valid = useMemo(() => {
@@ -175,7 +176,7 @@ export default function CombinedFootingDesign() {
         Choose the <b>rigid</b> (linear-pressure) or <b>flexible</b> (Winkler beam-on-elastic-foundation) method —
         geometry is shared; the flexible method recomputes V/M from the settlement field. Results update live.
       </p>
-      <ReportControls title="Combined Footing Design Report" />
+      <ReportBar title="Combined Footing Design Report" lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} />
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
         {/* ── Inputs ── */}
@@ -349,8 +350,34 @@ export default function CombinedFootingDesign() {
         )}
       </div>
 
-      {solutionSteps && (
-        <WorkedSolution steps={solutionSteps} title="Combined footing — worked solution (rigid method)" />
+      <div className="no-print">
+        {solutionSteps && (
+          <WorkedSolution steps={solutionSteps} title="Combined footing — worked solution (rigid method)" />
+        )}
+      </div>
+      {result && solutionSteps && (
+        <PrintReport
+          docTitle={result.shape === 'Trapezoidal (CTF)' ? 'Combined Footing (Trapezoidal)' : 'Combined Footing (Rectangular)'}
+          docCode="F-02" badges={['ACI 318-14', 'NSCP 2015']}
+          ok={result.qNet > 0} governing="Rigid (conventional) method — resultant matched to factored column loads"
+          lh={lh}
+          stats={[
+            { label: 'Plan', value: result.shape === 'Trapezoidal (CTF)' ? `${f2(result.Bx)} × ${f2(result.By1)}→${f2(result.By2)}` : `${f2(result.Bx)} × ${f2(result.By)}`, unit: 'm' },
+            { label: 'Thickness Dc', value: f0(result.Dc), unit: 'mm' },
+            { label: 'q net', value: f2(result.qNet), unit: 'kPa' },
+          ]}
+          data={[
+            ['Column 1 DL / LL', `${f0(form.dl1)} / ${f0(form.ll1)} kN`], ['Column 2 DL / LL', `${f0(form.dl2)} / ${f0(form.ll2)} kN`],
+            ['Column spacing', `${f2(form.spacing)} m`], ["Concrete f'c", `${form.fc} MPa`],
+            ['Steel fy', `${form.fy} MPa`], ['Allowable qa', `${form.qAllow} kPa`],
+            ['Total depth H', `${f2(form.H)} m`], ['Bar ⌀', `${form.barDia} mm`],
+          ]}
+          steps={solutionSteps}
+          drawingTitle="Combined Footing Plan"
+          drawing={<CombinedFootingSchematic
+            shape={result.shape} Bx={result.Bx} By={result.By} By1={result.By1} By2={result.By2}
+            x1={result.x1} x2={result.x2} col1Width={form.col1Width} col2Width={form.col2Width} />}
+        />
       )}
     </div>
   )
