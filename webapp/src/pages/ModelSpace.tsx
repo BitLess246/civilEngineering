@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Text } from '@react-three/drei'
 import * as THREE from 'three'
@@ -75,7 +74,7 @@ function loadInputs(): Record<string, unknown> {
 }
 
 const ROLE_COLOR: Record<string, string> = {
-  column: '#475569', beam: '#0056b3', girder: '#0e7490',
+  column: '#475569', beam: '#0f4c92', girder: '#0e7490',
 }
 const SEL = '#f59e0b'
 
@@ -254,8 +253,8 @@ function SolverProgress({ p }: { p: SolveProgress | null }) {
   if (!p) return null
   const pct = p.total && p.current ? Math.min(100, Math.round((p.current / p.total) * 100)) : null
   return (
-    <div className="col-span-full rounded-lg border border-[#0056b3]/30 bg-blue-50/60 p-2.5">
-      <div className="flex items-center justify-between text-[11px] font-semibold text-[#0056b3]">
+    <div className="col-span-full rounded-lg border border-[#0f4c92]/30 bg-blue-50/60 p-2.5">
+      <div className="flex items-center justify-between text-[11px] font-semibold text-[#0f4c92]">
         <span>⏳ {p.phase}</span>
         <span className="tabular-nums text-slate-500">
           {p.total && p.current ? `${p.current} / ${p.total}` : ''}{pct !== null ? ` · ${pct}%` : ''}
@@ -263,14 +262,14 @@ function SolverProgress({ p }: { p: SolveProgress | null }) {
       </div>
       {p.detail && (
         <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-600">
-          <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[#0056b3] opacity-70" />
+          <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[#0f4c92] opacity-70" />
           <span className="truncate font-mono">{p.detail}</span>
         </div>
       )}
       <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-blue-100">
         {pct !== null
-          ? <div className="h-full rounded-full bg-[#0056b3] transition-all duration-150" style={{ width: `${pct}%` }} />
-          : <div className="h-full w-1/3 animate-pulse rounded-full bg-[#0056b3]" />}
+          ? <div className="h-full rounded-full bg-[#0f4c92] transition-all duration-150" style={{ width: `${pct}%` }} />
+          : <div className="h-full w-1/3 animate-pulse rounded-full bg-[#0f4c92]" />}
       </div>
     </div>
   )
@@ -280,7 +279,7 @@ function Support3D({ p }: { p: THREE.Vector3 }) {
   return (
     <mesh position={[p.x, p.y - 0.22, p.z]}>
       <coneGeometry args={[0.28, 0.45, 4]} />
-      <meshStandardMaterial color="#0056b3" />
+      <meshStandardMaterial color="#0f4c92" />
     </mesh>
   )
 }
@@ -425,7 +424,7 @@ function Arrow({ tip, dir, len, color }: { tip: THREE.Vector3; dir: THREE.Vector
 }
 
 // Colours for the tributary footprint by shape (= which beam carries it).
-const TRIB_COLOR = { triangle: '#0e7490', trapezoid: '#0056b3', rect: '#15803d' } as const
+const TRIB_COLOR = { triangle: '#0e7490', trapezoid: '#0f4c92', rect: '#15803d' } as const
 type TribKind = keyof typeof TRIB_COLOR
 
 /** Tributary footprint of a slab on its edge beams: 45° triangles (short
@@ -547,7 +546,7 @@ function DirPicker({ value, onChange }: { value: string[]; onChange: (v: string[
       <span className="mb-1 font-medium text-slate-600">Directions to envelope</span>
       <div className="flex gap-1.5">
         {LAT_DIRS.map((d) => (
-          <label key={d} className={`inline-flex cursor-pointer items-center gap-1 rounded border px-2 py-0.5 text-xs ${value.includes(d) ? 'border-[#0056b3] bg-blue-50 text-[#0056b3]' : 'border-slate-200 text-slate-500'}`}>
+          <label key={d} className={`inline-flex cursor-pointer items-center gap-1 rounded border px-2 py-0.5 text-xs ${value.includes(d) ? 'border-[#0f4c92] bg-blue-50 text-[#0f4c92]' : 'border-slate-200 text-slate-500'}`}>
             <input type="checkbox" className="sr-only" checked={value.includes(d)} onChange={() => toggle(d)} />{d}
           </label>
         ))}
@@ -571,7 +570,7 @@ const TABS: { id: Tab; label: string }[] = [
 function TabBtn({ id, label, active, onClick }: { id: Tab; label: string; active: boolean; onClick: (t: Tab) => void }) {
   return (
     <button type="button" onClick={() => onClick(id)}
-      className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${active ? 'bg-[#0056b3] text-white shadow-sm' : 'text-slate-600 hover:bg-blue-50'}`}>
+      className={`rounded-md px-3 py-1.5 text-[13px] font-semibold transition ${active ? 'bg-[#0f4c92] text-white' : 'text-[#5c6675] hover:bg-[#eaf1f9] hover:text-[#0f1b2a]'}`}>
       {label}
     </button>
   )
@@ -594,7 +593,7 @@ function BeamRebarElevation({ L, h, sections }: {
   return (
     <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
       style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
-      <text x={x0} y={13} fontSize={11} fontWeight={700} fill="#0056b3">ELEVATION — rebar{sm > 0 ? ` (stirrups @${Math.round(sm * 1000)})` : ''}</text>
+      <text x={x0} y={13} fontSize={11} fontWeight={700} fill="#0f4c92">ELEVATION — rebar{sm > 0 ? ` (stirrups @${Math.round(sm * 1000)})` : ''}</text>
       <rect x={x0} y={yTop} width={x1 - x0} height={bh} fill="#fff" stroke="#37526e" strokeWidth={1.4} />
       {Array.from({ length: nStir + 1 }, (_, k) => {
         const x = sx((L * k) / Math.max(nStir, 1))
@@ -633,7 +632,7 @@ function ColumnElevation({ Lh, b, barDia, tieDia, bars, tieSpacing }: { Lh: numb
   return (
     <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
       style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
-      <text x={12} y={14} fontSize={11} fontWeight={700} fill="#0056b3">ELEVATION — {bars}⌀{barDia} · ties ⌀{tieDia} @{Math.round(tieSpacing)} mm</text>
+      <text x={12} y={14} fontSize={11} fontWeight={700} fill="#0f4c92">ELEVATION — {bars}⌀{barDia} · ties ⌀{tieDia} @{Math.round(tieSpacing)} mm</text>
       <rect x={x0} y={y0} width={colW} height={availH} fill="#fff" stroke="#37526e" strokeWidth={1.4} />
       <line x1={x0 + 6} y1={y0} x2={x0 + 6} y2={y1} stroke="#dc2626" strokeWidth={1.6} />
       <line x1={x1 - 6} y1={y0} x2={x1 - 6} y2={y1} stroke="#dc2626" strokeWidth={1.6} />
@@ -664,13 +663,13 @@ function WShapeSection({ shape, d, bf, tf, tw }: { shape: string; d: number; bf:
     <svg viewBox={`0 0 ${VW} ${VH}`} xmlns="http://www.w3.org/2000/svg"
       style={{ width: 200, height: 200 }}>
       {/* label */}
-      <text x={VW / 2} y={10} textAnchor="middle" fontSize={10} fontWeight={700} fill="#0056b3" fontFamily="Arial, sans-serif">{shape}</text>
+      <text x={VW / 2} y={10} textAnchor="middle" fontSize={10} fontWeight={700} fill="#0f4c92" fontFamily="Arial, sans-serif">{shape}</text>
       {/* top flange */}
-      <rect x={x0} y={y0} width={sw} height={stf} fill="#bfdbfe" stroke="#0056b3" strokeWidth={0.8} />
+      <rect x={x0} y={y0} width={sw} height={stf} fill="#bfdbfe" stroke="#0f4c92" strokeWidth={0.8} />
       {/* web */}
-      <rect x={webX} y={y0 + stf} width={stw} height={sh - 2 * stf} fill="#dbeafe" stroke="#0056b3" strokeWidth={0.8} />
+      <rect x={webX} y={y0 + stf} width={stw} height={sh - 2 * stf} fill="#dbeafe" stroke="#0f4c92" strokeWidth={0.8} />
       {/* bottom flange */}
-      <rect x={x0} y={y0 + sh - stf} width={sw} height={stf} fill="#bfdbfe" stroke="#0056b3" strokeWidth={0.8} />
+      <rect x={x0} y={y0 + sh - stf} width={sw} height={stf} fill="#bfdbfe" stroke="#0f4c92" strokeWidth={0.8} />
       {/* bf dim arrow */}
       <line x1={x0} y1={VH - 10} x2={x0 + sw} y2={VH - 10} stroke="#64748b" strokeWidth={0.8} markerStart="url(#arr)" markerEnd="url(#arr)" />
       <text x={VW / 2} y={VH - 2} textAnchor="middle" {...textStyle}>bf={Math.round(bf)} mm</text>
@@ -1469,25 +1468,38 @@ export default function ModelSpace() {
   const btn = (color: string) =>
     `rounded-lg bg-gradient-to-br ${color} px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:shadow-lg disabled:opacity-40`
 
+  // Model name for the workspace header: bays × storeys from the live model.
+  const modelName = model
+    ? `${globalThis.Math.max(1, [...new Set(model.nodes.map((n) => n.x))].length - 1)}×${globalThis.Math.max(1, [...new Set(model.nodes.map((n) => n.z))].length - 1)} Bay · ${[...new Set(model.storeys.map((q) => q.elevation))].length} Storey${[...new Set(model.storeys.map((q) => q.elevation))].length === 1 ? '' : 's'}`
+    : '3D Model Space'
+
   return (
     <div className="mx-auto max-w-[1700px] p-4">
-      {/* ── Header + toolbar ── */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
-          <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-[#0056b3]">3D Model Space</h1>
+      {/* ── Workspace header (docs/design/uiux-2026-07) ── */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2.5">
+          <h1 className="text-[21px] font-extrabold tracking-tight text-[#0f1b2a]">{modelName}</h1>
+          {model && <span className="rounded border border-[#cddcf0] bg-[#eaf1f9] px-1.5 py-px font-mono text-[10px] font-medium text-[#0f4c92]">autosaved</span>}
         </div>
-        <div className="no-print flex flex-wrap items-center gap-2">
+        <div className="no-print ml-auto flex flex-wrap items-center gap-2">
           <button type="button" onClick={download} disabled={!model}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
-            ⤓ Save JSON
+            className="rounded-md border border-[#d6d3c9] bg-white px-3 py-2 text-[12.5px] font-semibold text-[#3d4a5c] hover:border-[#0f4c92] hover:text-[#0f4c92] disabled:opacity-40">
+            Export JSON
           </button>
           <button type="button" onClick={() => fileRef.current?.click()}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">
-            ⤒ Load JSON
+            className="rounded-md border border-[#d6d3c9] bg-white px-3 py-2 text-[12.5px] font-semibold text-[#3d4a5c] hover:border-[#0f4c92] hover:text-[#0f4c92]">
+            Import
           </button>
           <input ref={fileRef} type="file" accept=".json" className="sr-only"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f) }} />
+          <button type="button" onClick={analyze} disabled={!model || !!busy || meshErrors}
+            className="rounded-md bg-[#1a7f4b] px-4 py-2 text-[12.5px] font-bold text-white hover:bg-[#14603a] disabled:opacity-40">
+            ▶ Analyze
+          </button>
+          <button type="button" onClick={runPipeline} disabled={!model || !!busy || meshErrors}
+            className="rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-bold text-white hover:bg-[#0d3f78] disabled:opacity-40">
+            Design all
+          </button>
           <ReportControls title="Structure Design Report" />
         </div>
       </div>
@@ -1496,7 +1508,7 @@ export default function ModelSpace() {
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr] lg:items-start">
         {/* LEFT — sticky 3D viewport */}
         <div className="no-print lg:sticky lg:top-4">
-          <div className="relative h-[80vh] min-h-[460px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="relative h-[80vh] min-h-[460px] overflow-hidden rounded-lg border border-[#e3e1da] bg-[#0f1b2a]">
             {model ? (
               <Canvas camera={{ position: [14, 11, 14], fov: 45 }} gl={{ preserveDrawingBuffer: true }} onPointerMissed={() => setSelected(null)}>
                 <color attach="background" args={['#f8fafc']} />
@@ -1601,20 +1613,20 @@ export default function ModelSpace() {
                 <OrbitControls ref={controlsRef} makeDefault enablePan target={[6, 3, 2.5]} />
               </Canvas>
             ) : (
-              <div className="flex h-full items-center justify-center text-sm text-slate-500">
+              <div className="flex h-full items-center justify-center font-mono text-sm text-[#7d8ea3]">
                 Set the grid and hit “Generate model”.
               </div>
             )}
             {model && selInfo && (
-              <div className="no-print absolute left-3 top-3 flex items-center gap-2 rounded-lg border border-[#0056b3]/30 bg-white/90 px-2.5 py-1 text-xs shadow-sm backdrop-blur">
-                <span className="font-semibold text-[#0056b3]">▣ {selInfo.kind} {selInfo.id}</span>
+              <div className="no-print absolute left-3 top-11 flex items-center gap-2 rounded-md border border-[#0f4c92]/30 bg-white/95 px-2.5 py-1 text-xs shadow-sm backdrop-blur">
+                <span className="font-semibold text-[#0f4c92]">▣ {selInfo.kind} {selInfo.id}</span>
                 {selInfo.extra && <span className="text-slate-500">{selInfo.extra}</span>}
                 <button type="button" onClick={() => setSelected(null)} className="ml-0.5 text-slate-500 hover:text-red-500" title="Deselect">✕</button>
               </div>
             )}
             {model && (
-              <div className="no-print pointer-events-none absolute bottom-2 left-3 text-[10px] text-slate-500">
-                drag to orbit · scroll to zoom · hold <b>Shift</b> (or right-drag) to pan
+              <div className="no-print pointer-events-none absolute left-3 top-3 rounded border border-white/15 bg-[#0f1b2a]/80 px-2 py-1 font-mono text-[10px] text-[#9db0c5]">
+                orbit: drag · pan: ⇧drag · zoom: scroll
               </div>
             )}
           </div>
@@ -1699,7 +1711,7 @@ export default function ModelSpace() {
                     className="rounded-md border border-slate-300 px-2.5 py-1.5" />
                 </label>
                 <div className="col-span-full">
-                  <button type="button" onClick={() => generate()} className={btn('from-[#0056b3] to-[#003f86]')}>⚙ Generate model</button>
+                  <button type="button" onClick={() => generate()} className={btn('from-[#0f4c92] to-[#0d3f78]')}>⚙ Generate model</button>
                 </div>
               </Card>
 
@@ -1716,9 +1728,9 @@ export default function ModelSpace() {
               {model && (
                 <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="mb-2 flex items-center justify-between">
-                    <h3 className="text-[1.02rem] font-bold text-[#0056b3]">Nodes</h3>
+                    <h3 className="text-[1.02rem] font-bold text-[#0f4c92]">Nodes</h3>
                     <button type="button" onClick={addNode}
-                      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">+ Add node</button>
+                      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50">+ Add node</button>
                   </div>
                   <div className="max-h-72 overflow-auto">
                     <table className="w-full border-collapse text-xs">
@@ -1762,7 +1774,7 @@ export default function ModelSpace() {
 
               {model && (
                 <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Beams &amp; columns</h3>
+                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Beams &amp; columns</h3>
                   <div className="max-h-72 overflow-auto">
                     <table className="w-full border-collapse text-xs">
                       <thead>
@@ -1845,7 +1857,7 @@ export default function ModelSpace() {
                       return (
                         <button type="button" onClick={addMember} disabled={!newI || !newJ || newI === newJ || dup}
                           title={dup ? 'A member already connects these two nodes' : undefined}
-                          className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
+                          className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50 disabled:opacity-40">
                           {dup ? 'Member exists' : '+ Add member'}
                         </button>
                       )
@@ -1997,7 +2009,7 @@ export default function ModelSpace() {
               {/* ── Plates (slabs) ── */}
               {model && (
                 <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Slabs / plates</h3>
+                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Slabs / plates</h3>
                   {model.plates.filter((p) => p.role !== 'wall').length === 0 ? (
                     <p className="text-xs text-slate-500">No slabs — generate a grid or add members forming closed panels.</p>
                   ) : (
@@ -2038,7 +2050,7 @@ export default function ModelSpace() {
               {/* ── Walls ── */}
               {model && (
                 <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Walls (on beams)</h3>
+                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Walls (on beams)</h3>
                   {(model.walls ?? []).length > 0 && (
                     <div className="mb-2 max-h-48 overflow-auto">
                       <table className="w-full border-collapse text-xs">
@@ -2082,7 +2094,7 @@ export default function ModelSpace() {
                       return (
                         <button type="button" onClick={addWall} disabled={!wallMember || dup}
                           title={dup ? 'This beam already carries a wall' : undefined}
-                          className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
+                          className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50 disabled:opacity-40">
                           {dup ? 'Wall exists' : '+ Add wall'}
                         </button>
                       )
@@ -2188,7 +2200,7 @@ export default function ModelSpace() {
               </Card>
               {model && model.supports.length > 0 && (
                 <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Support fixity</h3>
+                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Support fixity</h3>
                   <p className="mb-2 text-xs text-slate-500">
                     Fixed = all 6 DOFs clamped. Pin = 3 translations free to rotate. Spring = translational springs (kN/m).
                   </p>
@@ -2236,7 +2248,7 @@ export default function ModelSpace() {
               )}
               {model && model.supports.length > 0 && (
                 <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Footing plan</h3>
+                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Footing plan</h3>
                   <p className="mb-2 text-xs text-slate-500">
                     Each base support gets an isolated square footing by default — pick a partner node to design the
                     pair as one combined footing instead (close columns / property-line situations).
@@ -2282,7 +2294,7 @@ export default function ModelSpace() {
 
               {/* NSCP 204 superimposed-dead-load composer (per slab) */}
               <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h3 className="mb-1 text-[1.02rem] font-bold text-[#0056b3]">Superimposed dead load — NSCP 204</h3>
+                <h3 className="mb-1 text-[1.02rem] font-bold text-[#0f4c92]">Superimposed dead load — NSCP 204</h3>
                 <p className="mb-2 text-[11px] text-slate-500">
                   Build the SDL from finishes/ceilings/partitions (Table 204-1, kPa) and material layers
                   (Table 204-2, γ × thickness). Then apply it to every slab, or to the slab selected in the 3D view.
@@ -2312,7 +2324,7 @@ export default function ModelSpace() {
                       <input type="number" value={sdlMatT} onChange={(e) => setSdlMatT(parseFloat(e.target.value))}
                         className="w-20 rounded-md border border-slate-300 px-2 py-1 text-xs" /> <span className="text-[11px] text-slate-500">mm</span>
                       <button type="button" onClick={addSdl204_2}
-                        className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">+ Add</button>
+                        className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50">+ Add</button>
                     </div>
                     <div className="mt-2 space-y-0.5">
                       {sdlDraft.length === 0 && <p className="text-[11px] text-slate-500">No components selected.</p>}
@@ -2324,16 +2336,16 @@ export default function ModelSpace() {
                         </div>
                       ))}
                       <div className="mt-1 border-t border-slate-100 pt-1 text-[11px] font-semibold">
-                        Composed SDL = <span className="text-[#0056b3]">{sdlTotal(sdlDraft).toFixed(2)} kPa</span>
+                        Composed SDL = <span className="text-[#0f4c92]">{sdlTotal(sdlDraft).toFixed(2)} kPa</span>
                       </div>
                     </div>
                   </div>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button type="button" onClick={() => applySdl(true)} disabled={!model}
-                    className="rounded-md bg-[#0056b3] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">Apply to all slabs</button>
+                    className="rounded-md bg-[#0f4c92] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">Apply to all slabs</button>
                   <button type="button" onClick={() => applySdl(false)} disabled={!selPlate || selPlate.role === 'wall'}
-                    className="rounded-md border border-[#0056b3] px-3 py-1.5 text-xs font-semibold text-[#0056b3] disabled:opacity-40"
+                    className="rounded-md border border-[#0f4c92] px-3 py-1.5 text-xs font-semibold text-[#0f4c92] disabled:opacity-40"
                     title="Select a slab panel in the 3D view first">
                     Apply to selected slab{selPlate && selPlate.role !== 'wall' ? ` (${selPlate.id})` : ''}
                   </button>
@@ -2343,7 +2355,7 @@ export default function ModelSpace() {
 
               {/* NSCP 205-1 / 206 live-load occupancy (per slab) */}
               <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h3 className="mb-1 text-[1.02rem] font-bold text-[#0056b3]">Live load — NSCP 205 / 206</h3>
+                <h3 className="mb-1 text-[1.02rem] font-bold text-[#0f4c92]">Live load — NSCP 205 / 206</h3>
                 <p className="mb-2 text-[11px] text-slate-500">
                   Pick the occupancy (Table 205-1) or other minimum load (§206); its uniform live load overrides the
                   default LL for the chosen slabs.
@@ -2362,9 +2374,9 @@ export default function ModelSpace() {
                     </optgroup>
                   </select>
                   <button type="button" onClick={() => applyLive(true)} disabled={!model}
-                    className="rounded-md bg-[#0056b3] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">Apply to all slabs</button>
+                    className="rounded-md bg-[#0f4c92] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">Apply to all slabs</button>
                   <button type="button" onClick={() => applyLive(false)} disabled={!selPlate || selPlate.role === 'wall'}
-                    className="rounded-md border border-[#0056b3] px-3 py-1.5 text-xs font-semibold text-[#0056b3] disabled:opacity-40">
+                    className="rounded-md border border-[#0f4c92] px-3 py-1.5 text-xs font-semibold text-[#0f4c92] disabled:opacity-40">
                     Apply to selected{selPlate && selPlate.role !== 'wall' ? ` (${selPlate.id})` : ''}
                   </button>
                 </div>
@@ -2373,7 +2385,7 @@ export default function ModelSpace() {
               {/* Persistent per-panel editor — every slab's SDL & live load */}
               {model && model.plates.filter((p) => p.role !== 'wall').length > 0 && (
                 <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Per-panel loads</h3>
+                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Per-panel loads</h3>
                   <div className="max-h-64 overflow-auto">
                     <table className="w-full border-collapse text-[11px]">
                       <thead>
@@ -2391,7 +2403,7 @@ export default function ModelSpace() {
                           const composed = !!(p.sdlItems && p.sdlItems.length > 0)
                           return (
                             <tr key={p.id} className={`border-t border-slate-100 ${selected === p.id ? 'bg-blue-50/60' : ''}`}>
-                              <td className="py-0.5 pr-2 font-medium cursor-pointer hover:text-[#0056b3]" onClick={() => setSelected(p.id)}>{p.id}</td>
+                              <td className="py-0.5 pr-2 font-medium cursor-pointer hover:text-[#0f4c92]" onClick={() => setSelected(p.id)}>{p.id}</td>
                               <td className="py-0.5 pr-2 text-right">{(composed ? sdlTotal(p.sdlItems) : qD).toFixed(2)}</td>
                               <td className="py-0.5 pr-2 text-slate-500">{composed ? `204 (${p.sdlItems!.length})` : 'default'}</td>
                               <td className="py-0.5 pr-2 text-right">{(p.live ? p.live.kPa : qL).toFixed(2)}</td>
@@ -2404,7 +2416,7 @@ export default function ModelSpace() {
                               </td>
                               <td className="py-0.5 whitespace-nowrap text-right">
                                 <button type="button" onClick={() => setSlabSdl(p.id, false)} title="Apply the composed SDL above to this slab"
-                                  className="rounded px-1.5 text-[#0056b3] hover:bg-blue-50">set SDL</button>
+                                  className="rounded px-1.5 text-[#0f4c92] hover:bg-blue-50">set SDL</button>
                                 <button type="button" onClick={() => setSlabSdl(p.id, true)} title="Clear to default SDL"
                                   className="rounded px-1.5 text-red-500 hover:bg-red-50">clear</button>
                               </td>
@@ -2423,10 +2435,10 @@ export default function ModelSpace() {
               {model && (
                 <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="mb-2 flex items-center justify-between">
-                    <h3 className="text-[1.02rem] font-bold text-[#0056b3]">Loads</h3>
+                    <h3 className="text-[1.02rem] font-bold text-[#0f4c92]">Loads</h3>
                     <button type="button" onClick={rebuildGravity}
                       title="Regenerate dead (member self-weight + slab self-weight + SDL) and live loads from the inputs; keeps E loads"
-                      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">↻ Rebuild D + L</button>
+                      className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50">↻ Rebuild D + L</button>
                   </div>
                   <div className="max-h-72 overflow-auto">
                     <table className="w-full border-collapse text-xs">
@@ -2484,7 +2496,7 @@ export default function ModelSpace() {
                   <label className="flex flex-col text-sm">
                     <span className="mb-1 font-medium text-slate-600">Member</span>
                     <select value={thMember} onChange={(e) => setThMember(e.target.value)}
-                      className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none">
+                      className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0f4c92] focus:outline-none">
                       <option value="">— select member —</option>
                       {model.members.map((m) => <option key={m.id} value={m.id}>{m.id}</option>)}
                     </select>
@@ -2494,7 +2506,7 @@ export default function ModelSpace() {
                   <label className="flex flex-col text-sm">
                     <span className="mb-1 font-medium text-slate-600">Expansion coeff. α</span>
                     <select value={thAlphaKey} onChange={(e) => setThAlphaKey(e.target.value as 'steel' | 'concrete' | 'custom')}
-                      className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none">
+                      className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0f4c92] focus:outline-none">
                       <option value="steel">Steel — 11.7×10⁻⁶ /°C (AISC)</option>
                       <option value="concrete">Concrete — 10×10⁻⁶ /°C (ACI 318)</option>
                       <option value="custom">Custom</option>
@@ -2502,7 +2514,7 @@ export default function ModelSpace() {
                     {thAlphaKey === 'custom' && (
                       <input type="number" step="1e-7" value={thAlphaCustom}
                         onChange={(e) => setThAlphaCustom(parseFloat(e.target.value))}
-                        className="mt-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none focus:ring-1 focus:ring-[#0056b3]" />
+                        className="mt-1 rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0f4c92] focus:outline-none focus:ring-1 focus:ring-[#0f4c92]" />
                     )}
                   </label>
                   <div className="col-span-full">
@@ -2512,7 +2524,7 @@ export default function ModelSpace() {
                         if (!model || !thMember) return
                         save({ ...model, loads: [...model.loads, { kind: 'member-thermal', member: thMember, deltaT: thDeltaT, alpha: thAlpha, cat: 'D' }] })
                       }}
-                      className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">
+                      className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50 disabled:opacity-40">
                       + Add thermal load
                     </button>
                   </div>
@@ -2563,7 +2575,7 @@ export default function ModelSpace() {
                 </label>
                 <div className="col-span-full">
                   <button type="button" onClick={generateE} disabled={!model || eDirs.length === 0}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">⚡ Generate E cases</button>
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50 disabled:opacity-40">⚡ Generate E cases</button>
                   {seis && (() => {
                     const other = seisXZ ? seisXZ[primAxis === 'x' ? 'z' : 'x'] : null
                     const twoAxis = !!other && (Math.abs(other.V - seis.V) > 1e-6 || Math.abs(other.T - seis.T) > 1e-9)
@@ -2692,7 +2704,7 @@ export default function ModelSpace() {
                 <DirPicker value={wDirs} onChange={setWDirs} />
                 <div className="col-span-full">
                   <button type="button" onClick={generateW} disabled={!model || wDirs.length === 0}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">🌬 Generate W cases</button>
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50 disabled:opacity-40">🌬 Generate W cases</button>
                   {wind && (
                     <p className="mt-1 text-xs text-slate-500">
                       qh = {f2(wind.qh)} kPa · B×L = {f1(wind.B)}×{f1(wind.L)} m (L/B {f2(wind.LB)}) ·
@@ -2722,7 +2734,7 @@ export default function ModelSpace() {
                 </label>
                 <div className="col-span-full">
                   <button type="button" onClick={runCladding} disabled={!model}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50 disabled:opacity-40">▦ Compute C&amp;C wall pressures</button>
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50 disabled:opacity-40">▦ Compute C&amp;C wall pressures</button>
                   {cladding && (
                     <table className="mt-2 w-full text-left text-xs">
                       <thead className="text-slate-500">
@@ -2960,7 +2972,7 @@ export default function ModelSpace() {
                     const k = columnKs.get(selMember.id)!
                     return (
                       <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
-                        <p className="mb-1 text-[11px] font-semibold text-[#0056b3]">Effective length K — AISC alignment chart (C-C2)</p>
+                        <p className="mb-1 text-[11px] font-semibold text-[#0f4c92]">Effective length K — AISC alignment chart (C-C2)</p>
                         <Row label="K — X-sway" value={`sway ${f2(k.Kx.sway)} · braced ${f2(k.Kx.braced)}`}
                           sub={`G: ${f2(k.Gi.x)} (i) · ${f2(k.Gj.x)} (j)`} />
                         <Row label="K — Z-sway" value={`sway ${f2(k.Kz.sway)} · braced ${f2(k.Kz.braced)}`}
@@ -3002,7 +3014,7 @@ export default function ModelSpace() {
                   <span className="mb-1 font-medium text-slate-600">Number of modes</span>
                   <input type="number" min={1} max={50} step={1} value={nModes}
                     onChange={(e) => setNModes(Math.max(1, Math.min(50, Math.round(parseFloat(e.target.value) || 1))))}
-                    className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0056b3] focus:outline-none focus:ring-1 focus:ring-[#0056b3]" />
+                    className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0f4c92] focus:outline-none focus:ring-1 focus:ring-[#0f4c92]" />
                 </label>
                 <p className="col-span-full text-[11px] text-slate-500">
                   Lumped-mass free vibration ([K]−ω²[M]). Mass from member &amp; slab self-weight (dead). Request enough
@@ -3115,7 +3127,7 @@ export default function ModelSpace() {
                     {busy === 'timeHistory' ? '⏳ Integrating…' : '∿ Run time-history'}
                   </button>
                   {thCsv && (
-                    <button type="button" onClick={runResponseSpectrum} className={btn('from-[#0056b3] to-[#003d82]')}>
+                    <button type="button" onClick={runResponseSpectrum} className={btn('from-[#0f4c92] to-[#003d82]')}>
                       ⌁ Response spectrum
                     </button>
                   )}
@@ -3243,7 +3255,7 @@ export default function ModelSpace() {
                 )}
                 {busy && <SolverProgress p={progress} />}
                 {busy && (
-                  <p className="col-span-full text-[11px] font-medium text-[#0056b3]">
+                  <p className="col-span-full text-[11px] font-medium text-[#0f4c92]">
                     Running in the background — the page stays responsive; results appear when ready.
                   </p>
                 )}
@@ -3271,7 +3283,7 @@ export default function ModelSpace() {
         const steelKg         = opt.design.totals.steelKg
         return (
           <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-1 text-[1.02rem] font-bold text-[#0056b3]">
+            <h3 className="mb-1 text-[1.02rem] font-bold text-[#0f4c92]">
               Optimization — {opt.converged
                 ? `converged in ${opt.steps.length} step${opt.steps.length === 1 ? '' : 's'}`
                 : 'did NOT converge'}
@@ -3360,7 +3372,7 @@ export default function ModelSpace() {
         return (
         <div className={`mt-6 space-y-6 ${tablesHidden ? 'report-no-tables' : ''}`}>
           {/* PAGE 1 — header + 3D model snapshot */}
-          <h2 className="text-xl font-extrabold tracking-tight text-[#0056b3]">
+          <h2 className="text-xl font-extrabold tracking-tight text-[#0f4c92]">
             Structure design — {design.govName} governs
             <span className="ml-3 text-sm font-normal text-slate-500">
               concrete ≈ {f1(design.totals.concrete)} m³ ({f1(design.totals.concreteMembers)} members + {f1(design.totals.concreteSlabs)} slabs)
@@ -3386,7 +3398,7 @@ export default function ModelSpace() {
             </div>
           )}
           <div className="no-print flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-            <span className="text-sm font-semibold text-[#0056b3]">Consolidated report</span>
+            <span className="text-sm font-semibold text-[#0f4c92]">Consolidated report</span>
             <select value={report} onChange={(e) => { setReport(e.target.value as typeof report); requestAnimationFrame(captureModel) }}
               className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm">
               <option value="">Interactive (click a row)</option>
@@ -3398,7 +3410,7 @@ export default function ModelSpace() {
               <option value="draw-only">Drawing sections only (no tables)</option>
             </select>
             <button type="button" onClick={captureModel}
-              className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">
+              className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50">
               ⟳ Update 3D snapshot
             </button>
             <span className="text-xs text-slate-500">
@@ -3419,7 +3431,7 @@ export default function ModelSpace() {
 
           {/* PAGE 2+ — project & design inputs (every template) */}
           <div className="break-before-page rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Project &amp; design inputs</h3>
+            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Project &amp; design inputs</h3>
             <table className="w-full border-collapse text-xs">
               <tbody>
                 {props.map(([k, v]) => (
@@ -3434,7 +3446,7 @@ export default function ModelSpace() {
 
           {/* Beam & girder schedule — RC only */}
           {design.beams.length > 0 && <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">RC beam & girder schedule</h3>
+            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">RC beam & girder schedule</h3>
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -3486,7 +3498,7 @@ export default function ModelSpace() {
                             <div className="space-y-3 self-start rounded-lg border border-slate-200 bg-white p-3">
                               <BeamRebarElevation L={bm.L} h={sec.h} sections={bm.sections} />
                               <div className="border-t border-slate-100 pt-2">
-                                <p className="mb-1 text-[11px] font-semibold text-[#0056b3]">SECTION — {s.label}</p>
+                                <p className="mb-1 text-[11px] font-semibold text-[#0f4c92]">SECTION — {s.label}</p>
                                 <BeamSchematic b={sec.b} h={sec.h} cover={sec.cover} barDia={sec.barDia} stirrupDia={sec.tieDia}
                                   bars={d.bars} d={d.d} dPrime={d.comprLayers.length > 0 ? d.dPrime : undefined}
                                   layers={d.layers} comprLayers={d.comprLayers} comprBars={d.comprBars} comprBarDia={16}
@@ -3506,7 +3518,7 @@ export default function ModelSpace() {
 
           {/* Column schedule (full width) — RC only */}
           {design.columns.length > 0 && <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">RC column schedule</h3>
+            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">RC column schedule</h3>
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -3543,13 +3555,13 @@ export default function ModelSpace() {
                             <div className="space-y-3 self-start rounded-lg border border-slate-200 bg-white p-3">
                               <ColumnElevation Lh={c.L} b={cs.b} barDia={cs.barDia} tieDia={cs.tieDia} bars={c.bars} tieSpacing={c.tieSpacingFinal} />
                               <div className="border-t border-slate-100 pt-2">
-                                <p className="mb-1 text-[11px] font-semibold text-[#0056b3]">SECTION</p>
+                                <p className="mb-1 text-[11px] font-semibold text-[#0f4c92]">SECTION</p>
                                 <ColumnSchematic shape="tied" b={cs.b} h={cs.h} cover={cs.cover}
                                   barDia={cs.barDia} tieDia={cs.tieDia} bars={c.bars} tieSpacing={c.tieSpacingFinal} />
                               </div>
                               {c.seismicSConf !== undefined && (
                                 <div className="border-t border-slate-100 pt-2 text-[11px] text-slate-600">
-                                  <p className="mb-0.5 font-semibold text-[#0056b3]">Seismic confinement ({seismicSystem.toUpperCase()})</p>
+                                  <p className="mb-0.5 font-semibold text-[#0f4c92]">Seismic confinement ({seismicSystem.toUpperCase()})</p>
                                   <p>Confinement zone ℓo = {Math.round(c.seismicLoZone!)} mm</p>
                                   <p>Ties within ℓo @ {Math.round(c.seismicSConf)} mm <span className="text-slate-500">({c.tieSpacingLabel})</span></p>
                                   {c.seismicSOut !== undefined && c.seismicSOut !== c.tieSpacing && (
@@ -3573,7 +3585,7 @@ export default function ModelSpace() {
           {/* Strong-column/weak-beam joint check — NSCP §418.7.3.2 (SMF only) */}
           {design.scwb.length > 0 && report !== 'draw-only' && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Strong-column / weak-beam — NSCP §418.7.3.2</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Strong-column / weak-beam — NSCP §418.7.3.2</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -3609,7 +3621,7 @@ export default function ModelSpace() {
           {/* Slab schedule (full width) — two-way DDM */}
           {design.slabs.length > 0 && report !== 'draw-only' && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Slab schedule (two-way DDM)</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Slab schedule (two-way DDM)</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -3641,7 +3653,7 @@ export default function ModelSpace() {
                             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                               {[dd.x, dd.y].map((dr) => (
                                 <div key={dr.dir}>
-                                  <p className="mb-1 mt-2 text-[12px] font-bold text-[#0056b3]">
+                                  <p className="mb-1 mt-2 text-[12px] font-bold text-[#0f4c92]">
                                     {dr.dir.toUpperCase()}-direction — ℓ1 = {f1(dr.l1)} m, ℓn = {f1(dr.ln)} m, Mo = {f1(dr.Mo)} kN·m
                                   </p>
                                   <table className="w-full border-collapse text-[11px]">
@@ -3669,7 +3681,7 @@ export default function ModelSpace() {
                             </div>
                             {/* Deflection (Branson Ie + crossing-strip) */}
                             <div className="mt-3 rounded-lg border border-slate-200 bg-white p-2">
-                              <p className="mb-1 text-[12px] font-bold text-[#0056b3]">Deflection (NSCP §424.2)</p>
+                              <p className="mb-1 text-[12px] font-bold text-[#0f4c92]">Deflection (NSCP §424.2)</p>
                               <table className="w-full border-collapse text-[11px]">
                                 <tbody>
                                   <tr className="border-t border-slate-100">
@@ -3717,7 +3729,7 @@ export default function ModelSpace() {
           {/* Shear-wall schedule (full width) — in-plane reinforcement */}
           {design.walls.length > 0 && report !== 'draw-only' && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Shear-wall schedule (in-plane)</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Shear-wall schedule (in-plane)</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -3783,7 +3795,7 @@ export default function ModelSpace() {
           {/* Steel beam schedule (full width) — only when steel members exist */}
           {design.steelBeams.length > 0 && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Steel beam / girder schedule — AISC 360-16 LRFD</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Steel beam / girder schedule — AISC 360-16 LRFD</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -3918,7 +3930,7 @@ export default function ModelSpace() {
           {/* Steel column schedule (full width) */}
           {design.steelColumns.length > 0 && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Steel column schedule — AISC §E3 + §H1-1</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Steel column schedule — AISC §E3 + §H1-1</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -4035,7 +4047,7 @@ export default function ModelSpace() {
           {/* Base-plate schedule (full width) */}
           {design.basePlates.length > 0 && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Base-plate schedule — AISC §J8 / Design Guide 1</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Base-plate schedule — AISC §J8 / Design Guide 1</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -4073,7 +4085,7 @@ export default function ModelSpace() {
           {/* Steel connection schedule — only for steel frames */}
           {(design.joints.length > 0 || design.beamJoints.length > 0) && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Steel connection schedule — AISC SCM</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Steel connection schedule — AISC SCM</h3>
               <p className="mb-2 text-[11px] text-slate-500">
                 Columns oriented with depth <em>d</em> in X (flanges face ±X); X-direction girders land on the column <strong>flange</strong> face (strong-axis moment connection), Z-direction beams land on the column <strong>web</strong> face (shear tab). Bolts: M20 A325 single-shear (φRₙ = 116.5 kN/bolt). Welds: E70XX fillet, both sides of plate.
               </p>
@@ -4215,7 +4227,7 @@ export default function ModelSpace() {
 
           {/* Footing schedule (full width) */}
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Footing schedule</h3>
+            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Footing schedule</h3>
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -4265,7 +4277,7 @@ export default function ModelSpace() {
           {/* Combined footing schedule (full width) */}
           {design.combined.length > 0 && report !== 'draw-only' && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Combined footing schedule</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Combined footing schedule</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -4320,7 +4332,7 @@ export default function ModelSpace() {
       {design && takeoff && (
         <div className="mt-6 space-y-4 break-before-page">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-xl font-extrabold tracking-tight text-[#0056b3]">
+            <h2 className="text-xl font-extrabold tracking-tight text-[#0f4c92]">
               Material take-off — Bill of Quantities &amp; Materials
             </h2>
             <label className="no-print flex items-center gap-2 text-sm">
@@ -4348,7 +4360,7 @@ export default function ModelSpace() {
             ].filter(Boolean as unknown as (v: unknown) => v is [string, string]).map(([k, v]) => (
               <div key={k} className="rounded-lg border border-slate-200 bg-white p-2 text-center shadow-sm">
                 <div className="text-[11px] uppercase tracking-wide text-slate-500">{k}</div>
-                <div className="text-sm font-bold text-[#0056b3]">{v}</div>
+                <div className="text-sm font-bold text-[#0f4c92]">{v}</div>
               </div>
             ))}
           </div>
@@ -4357,8 +4369,8 @@ export default function ModelSpace() {
           {bill && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-[1.02rem] font-bold text-[#0056b3]">Bill of Materials (priced)</h3>
-                <span className="text-sm font-bold text-[#0056b3]">Grand total: {peso(bill.total)}</span>
+                <h3 className="text-[1.02rem] font-bold text-[#0f4c92]">Bill of Materials (priced)</h3>
+                <span className="text-sm font-bold text-[#0f4c92]">Grand total: {peso(bill.total)}</span>
               </div>
               <table className="w-full border-collapse text-xs">
                 <thead>
@@ -4393,7 +4405,7 @@ export default function ModelSpace() {
                       </tr>
                     )
                   })}
-                  <tr className="border-t border-slate-200 font-bold text-[#0056b3]">
+                  <tr className="border-t border-slate-200 font-bold text-[#0f4c92]">
                     <td className="py-1 pr-2" colSpan={4}>Grand total</td>
                     <td className="py-1 text-right">{peso(bill.total)}</td>
                   </tr>
@@ -4409,7 +4421,7 @@ export default function ModelSpace() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {/* BOQ */}
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Bill of Quantities (by element)</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Bill of Quantities (by element)</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="text-left uppercase tracking-wide text-slate-500">
@@ -4432,7 +4444,7 @@ export default function ModelSpace() {
 
             {/* Steel by diameter (BOM) — 6 m commercial bars with lap + waste */}
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Reinforcement by bar Ø (6 m bars)</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Reinforcement by bar Ø (6 m bars)</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="text-left uppercase tracking-wide text-slate-500">
@@ -4473,7 +4485,7 @@ export default function ModelSpace() {
           {/* Structural steel by shape — only when W-shapes are present */}
           {takeoff.structuralSteelKg > 0 && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Structural steel by shape</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Structural steel by shape</h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="text-left uppercase tracking-wide text-slate-500">
@@ -4507,7 +4519,7 @@ export default function ModelSpace() {
           {/* Formwork + tie wire */}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Formwork</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Formwork</h3>
               <table className="w-full border-collapse text-xs">
                 <tbody>
                   {[
@@ -4524,7 +4536,7 @@ export default function ModelSpace() {
               </table>
             </div>
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Tie wire (#16 G.I.)</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Tie wire (#16 G.I.)</h3>
               <table className="w-full border-collapse text-xs">
                 <tbody>
                   {[
@@ -4545,7 +4557,7 @@ export default function ModelSpace() {
 
           {/* Detailed cut list */}
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Reinforcement cut list</h3>
+            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Reinforcement cut list</h3>
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="text-left uppercase tracking-wide text-slate-500">
