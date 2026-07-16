@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Text } from '@react-three/drei'
 import * as THREE from 'three'
@@ -27,7 +27,7 @@ import { freqFromDeflection, dg11Walking, DG11_OCCUPANCY } from '../engine/floor
 import { buildSeismicMass, GRAVITY } from '../engine/modal'
 import { autoRigidOffsets } from '../engine/rigidEndZones'
 import { computeWind, computeCladding, type WindResult, type WindEnclosure, type CladdingResult } from '../engine/wind'
-import { ReportControls } from '../components/ReportControls'
+import { LetterheadCard, type LetterheadState } from '../components/calc'
 import { JointConnections3D } from '../components/JointConnections3D'
 import { ConnectionDetail2D } from '../components/ConnectionDetail2D'
 import { connectionRowSolution } from '../lib/connectionSolution'
@@ -811,7 +811,9 @@ export default function ModelSpace() {
   const [opt, setOpt] = useState<OptimizeResult | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)   // open schedule-row solution
   const [report, setReport] = useState<'' | 'schedules' | 'drawings' | 'solutions' | 'full' | 'sol-only' | 'draw-only'>('')  // consolidated report template
-  const [modelImg, setModelImg] = useState<string | null>(null)   // 3D snapshot for the printed report
+  const [modelImg, setModelImg] = useState<string | null>(null)   // 3D snapshot for the PDF report
+  const [lh, setLh] = useState<LetterheadState>({ project: '', sheet: '', preparedBy: '' })
+  const [exporting, setExporting] = useState(false)               // PDF build in flight
   const [concreteClass, setConcreteClass] = useState<ConcreteClass>((si.concreteClass as ConcreteClass) ?? 'A')   // mix class for the take-off
   const [prices, setPrices] = useState<PriceList>((si.prices as PriceList) ?? {   // unit prices for the costed bill (PHP)
     cementBag: 260, sandM3: 1500, gravelM3: 1600, steelKg: 65, tieWireRoll: 2500, plywoodSheet: 700, lumberM: 25, structuralSteelKg: 120,
@@ -1173,11 +1175,70 @@ export default function ModelSpace() {
     }).catch((e) => console.error('optimize failed', e))
   }
 
-  /** Snapshot the live 3D canvas as a PNG for the printed report's first page. */
+  /** Snapshot the live 3D canvas as a PNG for the PDF report's first page. */
   const captureModel = () => {
     const c = document.querySelector('canvas') as HTMLCanvasElement | null
     if (!c) return
     try { setModelImg(c.toDataURL('image/png')) } catch { /* tainted / no context — skip */ }
+  }
+
+  /** Project & design inputs — shown in the schedules block and printed as
+   *  §2 of the PDF calculation report. */
+  const reportProps = (d: StructureDesign): [string, string][] => {
+    const distinct = (role: MemberRole) => {
+      const ids = new Set((model?.members ?? []).filter((m) => m.role === role).map((m) => m.section))
+      return [...new Set((model?.sections ?? []).filter((s) => ids.has(s.id)).map((s) => s.name))].join(', ') || '—'
+    }
+    const slabT = [...new Set((model?.plates ?? []).filter((p) => p.role !== 'wall').map((p) => p.thickness))].join(', ')
+    const barsUsed = [...new Set((model?.sections ?? []).filter((s) => s.material !== 'steel').map((s) => s.barDia))].sort((a, b) => a - b)
+    const hasConcreteMems = d.beams.length > 0 || d.columns.length > 0
+    const hasSteelMems    = d.steelBeams.length > 0 || d.steelColumns.length > 0
+    const slabSdls = [...new Set((model?.plates ?? []).filter((p) => p.role !== 'wall')
+      .map((p) => (p.sdlItems && p.sdlItems.length ? sdlTotal(p.sdlItems) : qD)))].sort((a, b) => a - b)
+    return [
+      ['Column grid', `bays X ${baysX} m · bays Z ${baysZ} m · storeys ${storeyH} m`],
+      ...(hasConcreteMems ? [['RC material', `f′c ${fc} MPa · fy ${fy} MPa · main ⌀${barsUsed.join('/⌀') || barDia} · ties ⌀${tieDia} · cover ${cover} mm`]] as [string, string][] : []),
+      ...(hasSteelMems    ? [['Steel grade',  `Fy ${steelFy} MPa · Fu ${steelFu} MPa (AISC W-shapes)`]] as [string, string][] : []),
+      ['Columns', distinct('column')],
+      ['Girders', distinct('girder')],
+      ['Beams', distinct('beam')],
+      ['Slabs', `t = ${slabT || '—'} mm · SDL ${slabSdls.map((v) => v.toFixed(2)).join(' / ')} kPa`],
+      ['Loads', `default SDL ${qD} kPa · LL ${qL} kPa · γc ${gammaC} kN/m³`],
+      ['Soil / footing', `qa ${qa} kPa · γsoil ${gammaSoil} kN/m³ · depth H ${Hf} m`],
+      ['Seismic (NSCP 208)', `Ca ${Ca} · Cv ${Cv} · R ${Rw} · I ${Ie} · Z ${Zf} · Nv ${Nv}`],
+      ['Wind (NSCP 207B)', `V ${Vw} m/s · exposure ${expo} · Kzt ${Kzt}`],
+      ['Model', `${model?.nodes.length ?? 0} nodes · ${model?.members.length ?? 0} members · ${model?.plates.length ?? 0} slabs · ${(model?.walls ?? []).length} walls · ${model?.supports.length ?? 0} supports`],
+      ['Governing case', d.govName],
+      ['Concrete', `${f1(d.totals.concrete)} m³ (${f1(d.totals.concreteMembers)} members + ${f1(d.totals.concreteSlabs)} slabs)`],
+      ...(d.totals.steelKg > 0
+        ? [['Structural steel', `${f1(d.totals.steelKg)} kg (${f2(d.totals.steelKg / 1000)} t)`] as [string, string]]
+        : []),
+    ]
+  }
+
+  /** Direct PDF export — grabs a fresh 3D snapshot, assembles the report
+   *  payload and lazy-loads the jsPDF renderer (fonts stay out of the main
+   *  bundle). Replaces the old print-the-page path. */
+  const exportPdf = async () => {
+    if (!model || !design || exporting) return
+    setExporting(true)
+    try {
+      let img = modelImg
+      const c = document.querySelector('canvas') as HTMLCanvasElement | null
+      if (c) { try { img = c.toDataURL('image/png') } catch { /* tainted — keep the last snapshot */ } }
+      const [{ buildModelReport }, { generateModelPdf }] = await Promise.all([
+        import('../lib/modelReport'), import('../lib/modelPdf'),
+      ])
+      const badges = ['NSCP 2015', 'ACI 318-14',
+        ...(design.steelBeams.length || design.steelColumns.length ? ['AISC 360-16'] : [])]
+      await generateModelPdf({
+        lh, modelImg: img, badges,
+        report: buildModelReport(model, design, reportProps(design), soil),
+        fileName: `structure-report${lh.sheet ? '-' + lh.sheet.split('·')[0].trim() : ''}.pdf`,
+      })
+    } catch (e) {
+      console.error('PDF export failed', e)
+    } finally { setExporting(false) }
   }
 
   // ── Frame-editor helpers (all immutable via save) ──
@@ -1500,7 +1561,11 @@ export default function ModelSpace() {
             className="rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-bold text-white hover:bg-[#0d3f78] disabled:opacity-40">
             Design all
           </button>
-          <ReportControls title="Structure Design Report" />
+          <button type="button" onClick={() => void exportPdf()} disabled={!design || exporting}
+            title={design ? 'Download the calculation report as a PDF' : 'Run “Design all” first'}
+            className="rounded-md border border-[#0f4c92] bg-white px-3.5 py-2 text-[12.5px] font-bold text-[#0f4c92] hover:bg-[#eaf1f9] disabled:opacity-40">
+            {exporting ? '⏳ Building PDF…' : '⎙ Export PDF'}
+          </button>
         </div>
       </div>
 
@@ -1511,6 +1576,11 @@ export default function ModelSpace() {
           <div className="relative h-[80vh] min-h-[460px] overflow-hidden rounded-lg border border-[#e3e1da] bg-[#0f1b2a]">
             {model ? (
               <Canvas camera={{ position: [14, 11, 14], fov: 45 }} gl={{ preserveDrawingBuffer: true }} onPointerMissed={() => setSelected(null)}>
+                {/* Local boundary: drei <Text> suspends while troika fetches its
+                    font-resolver data — without this, the suspension bubbles to the
+                    route-level <Suspense> and React hides the WHOLE page (blank page
+                    after "Design all" on networks that block cdn.jsdelivr.net). */}
+                <Suspense fallback={null}>
                 <color attach="background" args={['#f8fafc']} />
                 <ambientLight intensity={0.85} />
                 <directionalLight position={[12, 18, 8]} intensity={0.9} />
@@ -1611,6 +1681,7 @@ export default function ModelSpace() {
                   />
                 )}
                 <OrbitControls ref={controlsRef} makeDefault enablePan target={[6, 3, 2.5]} />
+                </Suspense>
               </Canvas>
             ) : (
               <div className="flex h-full items-center justify-center font-mono text-sm text-[#7d8ea3]">
@@ -3340,35 +3411,7 @@ export default function ModelSpace() {
         const wantSol = report === '' || report === 'full' || report === 'solutions' || report === 'sol-only'
         const wantDraw = report === '' || report === 'full' || report === 'drawings' || report === 'draw-only'
         const tablesHidden = report === 'sol-only' || report === 'draw-only'   // *-only: no schedule tables
-        const distinct = (role: MemberRole) => {
-          const ids = new Set((model?.members ?? []).filter((m) => m.role === role).map((m) => m.section))
-          return [...new Set((model?.sections ?? []).filter((s) => ids.has(s.id)).map((s) => s.name))].join(', ') || '—'
-        }
-        const slabT = [...new Set((model?.plates ?? []).filter((p) => p.role !== 'wall').map((p) => p.thickness))].join(', ')
-        const barsUsed = [...new Set((model?.sections ?? []).filter((s) => s.material !== 'steel').map((s) => s.barDia))].sort((a, b) => a - b)
-        const hasConcreteMems = design.beams.length > 0 || design.columns.length > 0
-        const hasSteelMems    = design.steelBeams.length > 0 || design.steelColumns.length > 0
-        const slabSdls = [...new Set((model?.plates ?? []).filter((p) => p.role !== 'wall')
-          .map((p) => (p.sdlItems && p.sdlItems.length ? sdlTotal(p.sdlItems) : qD)))].sort((a, b) => a - b)
-        const props: [string, string][] = [
-          ['Column grid', `bays X ${baysX} m · bays Z ${baysZ} m · storeys ${storeyH} m`],
-          ...(hasConcreteMems ? [['RC material', `f′c ${fc} MPa · fy ${fy} MPa · main ⌀${barsUsed.join('/⌀') || barDia} · ties ⌀${tieDia} · cover ${cover} mm`]] as [string, string][] : []),
-          ...(hasSteelMems    ? [['Steel grade',  `Fy ${steelFy} MPa · Fu ${steelFu} MPa (AISC W-shapes)`]] as [string, string][] : []),
-          ['Columns', distinct('column')],
-          ['Girders', distinct('girder')],
-          ['Beams', distinct('beam')],
-          ['Slabs', `t = ${slabT || '—'} mm · SDL ${slabSdls.map((v) => v.toFixed(2)).join(' / ')} kPa`],
-          ['Loads', `default SDL ${qD} kPa · LL ${qL} kPa · γc ${gammaC} kN/m³`],
-          ['Soil / footing', `qa ${qa} kPa · γsoil ${gammaSoil} kN/m³ · depth H ${Hf} m`],
-          ['Seismic (NSCP 208)', `Ca ${Ca} · Cv ${Cv} · R ${Rw} · I ${Ie} · Z ${Zf} · Nv ${Nv}`],
-          ['Wind (NSCP 207B)', `V ${Vw} m/s · exposure ${expo} · Kzt ${Kzt}`],
-          ['Model', `${model?.nodes.length ?? 0} nodes · ${model?.members.length ?? 0} members · ${model?.plates.length ?? 0} slabs · ${(model?.walls ?? []).length} walls · ${model?.supports.length ?? 0} supports`],
-          ['Governing case', design.govName],
-          ['Concrete', `${f1(design.totals.concrete)} m³ (${f1(design.totals.concreteMembers)} members + ${f1(design.totals.concreteSlabs)} slabs)`],
-          ...(design.totals.steelKg > 0
-            ? [['Structural steel', `${f1(design.totals.steelKg)} kg (${f2(design.totals.steelKg / 1000)} t)`] as [string, string]]
-            : []),
-        ]
+        const props = reportProps(design)
         return (
         <div className={`mt-6 space-y-6 ${tablesHidden ? 'report-no-tables' : ''}`}>
           {/* PAGE 1 — header + 3D model snapshot */}
@@ -3397,9 +3440,10 @@ export default function ModelSpace() {
               </ul>
             </div>
           )}
+          <LetterheadCard lh={lh} onChange={(p) => setLh((s) => ({ ...s, ...p }))} />
           <div className="no-print flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-            <span className="text-sm font-semibold text-[#0f4c92]">Consolidated report</span>
-            <select value={report} onChange={(e) => { setReport(e.target.value as typeof report); requestAnimationFrame(captureModel) }}
+            <span className="text-sm font-semibold text-[#0f4c92]">Schedule view</span>
+            <select value={report} onChange={(e) => setReport(e.target.value as typeof report)}
               className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm">
               <option value="">Interactive (click a row)</option>
               <option value="schedules">Schedules only</option>
@@ -3409,24 +3453,18 @@ export default function ModelSpace() {
               <option value="sol-only">Solutions only (no tables)</option>
               <option value="draw-only">Drawing sections only (no tables)</option>
             </select>
-            <button type="button" onClick={captureModel}
-              className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50">
-              ⟳ Update 3D snapshot
-            </button>
             <span className="text-xs text-slate-500">
-              {report === '' ? 'rows expand one at a time' : 'every row expanded — 3D + inputs lead the print'}
+              {report === '' ? 'rows expand one at a time' : 'every row expanded'}
             </span>
+            <button type="button" onClick={() => void exportPdf()} disabled={exporting}
+              className="ml-auto rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-bold text-white hover:bg-[#0d3f78] disabled:opacity-40">
+              {exporting ? '⏳ Building PDF…' : '⎙ Export PDF report'}
+            </button>
           </div>
-          {modelImg && (
-            <div className="print-only">
-              <img src={modelImg} alt="3D structural model" className="mx-auto w-full max-w-3xl rounded-lg border border-slate-200" style={{ maxHeight: '150mm', objectFit: 'contain' }} />
-              <p className="mt-1 text-center text-xs text-slate-500">3D structural model — orbit/print snapshot.</p>
-            </div>
-          )}
           <p className="-mt-3 text-xs text-slate-500">
             Envelope of <b>{design.cases.length}</b> load case{design.cases.length === 1 ? '' : 's'} (NSCP combinations × lateral directions).
             Each element is designed for its own governing case, shown in the “Case” column.
-            <span className="no-print"> Pick a report template above, or click any row to expand its solution + drawings.</span>
+            <span className="no-print"> The PDF report carries the letterhead, design summary, schedules and every worked solution.</span>
           </p>
 
           {/* PAGE 2+ — project & design inputs (every template) */}
