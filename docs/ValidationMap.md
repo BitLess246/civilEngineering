@@ -132,3 +132,4 @@ asserted by that file; all run in CI.
 | X002 | STAAD continuous-beam / multi-bay cross-check (FR004, F3D003) | needs STAAD reference output |
 | X003 | PCA Column biaxial + slender cross-check (C003, C004) | needs spColumn reference curves |
 | X004 | Excel verification sheets (Roadmap Phase-2 goal) | authoring task — the `/validation` page already renders manual-vs-software tables that can seed them |
+| T-beam flexure (`tbeam.ts`) | §6.3.2 bf table + two-couple T flexure vs hand calc (Asf 1290 mm², rect/true-T switch, εt/φ) | ✅ `tbeam.test.ts` (14) |
