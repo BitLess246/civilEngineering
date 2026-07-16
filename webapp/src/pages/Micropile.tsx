@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { designMicropile } from '../engine/micropile'
+import { ReportControls } from '../components/ReportControls'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -50,6 +51,7 @@ export default function Micropile() {
     <main className="mx-auto max-w-3xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Micropile — axial capacity</h1>
+      <ReportControls title="Micropile Design Report" badges={['FHWA-NHI-05-039']} />
       <p className="mt-2 text-sm text-slate-600">
         FHWA-NHI-05-039 allowable-stress check: structural capacity of the bar/casing/grout vs the
         grout-ground bond capacity of the bonded zone. Governing allowable = the smaller of the two.

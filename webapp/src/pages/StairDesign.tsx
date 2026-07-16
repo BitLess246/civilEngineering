@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { designStair, type StairSupport } from '../engine/stair'
+import { ReportControls } from '../components/ReportControls'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -45,6 +46,7 @@ export default function StairDesign() {
     <main className="mx-auto max-w-3xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Structural</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">RC stair flight — waist slab</h1>
+      <ReportControls title="Stair Design Report" badges={['NSCP 2015', 'ACI 318-14']} />
       <p className="mt-2 text-sm text-slate-600">
         One-way waist-slab stair to NSCP 2015 / ACI 318-14. Self-weight of the inclined waist plus
         triangular treads, finishes, and the NSCP 205 stair live load (4.8 kPa), designed per metre width.
