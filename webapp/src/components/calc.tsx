@@ -150,7 +150,7 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, stat
   lh: LetterheadState
   stats?: VerdictStat[]; checks?: ReportCheckRow[]
   data?: [string, string][]
-  steps: SolutionStep[]
+  steps?: SolutionStep[]
   drawing?: ReactNode; drawingTitle?: string
 }) {
   const today = new Date().toISOString().slice(0, 10)
@@ -229,8 +229,8 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, stat
         ))}
       </div>}
 
-      <SectionRule n={3} title="Worked Solution" />
-      {steps.map((st, i) => (
+      {steps && steps.length > 0 && <SectionRule n={3} title="Worked Solution" />}
+      {(steps ?? []).map((st, i) => (
         <div key={i} className="print-avoid-break grid grid-cols-[1fr_110px] gap-4 border-b border-[#f3f1ea] py-3">
           <div>
             <h3 className="text-[11.5px] font-bold"><span className="mr-1.5 font-mono font-semibold text-[#a39d8d]">3.{i + 1}</span>{st.title}</h3>
