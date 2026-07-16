@@ -296,5 +296,22 @@ export function buildFoundationSolution(c: SolutionCtx): SolutionStep[] {
       })
     }
   }
-  return steps
+  const notes: [string, string, boolean | undefined][] = [
+    ['Net allowable', 'Service condition', undefined],
+    ['Required footing', 'Iterative sizing', undefined],
+    ['Footing size', 'Iterative sizing', undefined],
+    ['Eccentricity', 'Kern check e ≤ B/6', c.ecc ? c.ecc.kernOK : undefined],
+    ['Service pressure', 'Kern check e ≤ B/6', c.ecc ? c.ecc.kernOK : undefined],
+    ['Ultimate soil pressure', 'NSCP §203.3 load factors', undefined],
+    ['Two-way', 'ACI 318-14 §22.6.5.2', c.punchOK],
+    ['Punching', 'ACI 318-14 §22.6.5.2', c.punchOK],
+    ['One-way', 'ACI 318-14 §22.5.5.1', c.beamOK],
+    ['Beam shear', 'ACI 318-14 §22.5.5.1', c.beamOK],
+    ['Flexural', 'ACI 318-14 §24.4.3.2', true],
+    ['Bearing', '§22.8 bearing', undefined],
+  ]
+  return steps.map((st) => {
+    const hit = notes.find(([k]) => st.title.startsWith(k))
+    return hit ? { ...st, clause: hit[1], ...(hit[2] === undefined ? {} : { pass: hit[2] }) } : st
+  })
 }

@@ -240,7 +240,12 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, stat
                 : <div key={j} className="overflow-x-auto rounded-md border border-[#eeece5] bg-[#f9f8f4] px-2.5 py-1 text-[10.5px]"><KTex block tex={ln.tex} /></div>)}
             </div>
           </div>
-          <p className="pt-0.5 text-[9px] leading-snug text-[#a39d8d]">{st.note ?? ''}</p>
+          <div className="pt-0.5">
+            {st.pass !== undefined && (
+              <span className={`inline-block rounded px-1.5 py-px font-mono text-[9px] font-semibold ${st.pass ? 'bg-[#ddefe3] text-[#14603a]' : 'bg-[#fbeeea] text-[#c2402a]'}`}>{st.pass ? 'PASS' : 'FAIL'}</span>
+            )}
+            <p className="mt-1 text-[9px] leading-snug text-[#a39d8d]">{st.clause ?? st.note ?? ''}</p>
+          </div>
         </div>
       ))}
 

@@ -6,7 +6,7 @@ import type { BeamSupport } from '../engine/beamDeflection'
 import type { CriticalSection } from '../engine/beamSections'
 import { BeamSchematic } from '../components/BeamSchematic'
 import { WorkedSolution } from '../components/WorkedSolution'
-import { buildBeamSolution } from '../lib/beamSolution'
+import { buildBeamSolution, beamProvidedCapacities } from '../lib/beamSolution'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { Math as KTex } from '../lib/math'
 import { f0, f1 } from '../lib/format'
@@ -131,10 +131,10 @@ export default function BeamDesign() {
   // required-over-provided clear spacing, shear Vu/φVc while no stirrups are
   // demanded — all existing outputs, no new calculation.
   const allOK = !!r && sectionOK(r) && (!deflection || (deflection.liveOK && deflection.totalOK))
-  const checks = r ? [
-    ...(r.mode === 'SRRB' ? [{ name: 'Flexure Mu / φMn,max', ratio: demand.Mu / r.phiMnMax }] : []),
-    ...(r.region === 'none' || r.region === 'minimum' ? [{ name: 'Shear Vu / φVc', ratio: demand.Vu / r.phiVc }] : []),
-    ...(r.region === 'designed' ? [{ name: 'Stirrup spacing s / s,max', ratio: r.sAdopt / r.sMax }] : []),
+  const cap = r ? beamProvidedCapacities(f, r) : null
+  const checks = r && cap ? [
+    { name: 'Flexure Mu/φMn', ratio: demand.Mu / cap.phiMn },
+    { name: 'Shear Vu/φVn', ratio: demand.Vu / cap.phiVn },
     { name: `Bar spacing (${r.layers.length} layer${r.layers.length > 1 ? 's' : ''})`, ratio: r.sMinClear / Math.max(r.sClear, 1e-9) },
   ] : []
 
@@ -231,9 +231,7 @@ export default function BeamDesign() {
               headline={allOK
                 ? `DESIGN OK — ${r.mode}, ${r.layers.length > 1 ? `${r.layers.length} layers` : 'single layer'}`
                 : 'CHECK FAILED — revise the section'}
-              governing={r.mode === 'SRRB'
-                ? `Governing: flexure · utilization ${(demand.Mu / r.phiMnMax).toFixed(2)}`
-                : `DRRB — compression steel engaged (Mu > φMn,max = ${f1(r.phiMnMax)} kN·m)`}
+              governing={`Governing: flexure · utilization ${cap ? (demand.Mu / cap.phiMn).toFixed(2) : '—'}${r.mode === 'DRRB' ? ' · DRRB (compression steel engaged)' : ''}`}
               stats={[
                 { label: hogging ? 'Tension (top)' : 'Tension steel', value: `${r.bars}-⌀${f.barDia}`, unit: hogging ? 'top' : 'bottom' },
                 { label: 'Stirrups', value: r.sAdopt > 0 ? `⌀${f.stirrupDia}` : '—', unit: r.sAdopt > 0 ? `${f.legs}-leg @${f0(r.sAdopt)}` : REGION[r.region] },
@@ -371,7 +369,7 @@ export default function BeamDesign() {
       {r && solution && (
         <PrintReport
           docTitle={multi && active ? `RC Beam — ${active.label}` : 'Rectangular RC Beam'} docCode="S-01" badges={['ACI 318-14', 'NSCP 2015']}
-          ok={allOK} governing={r.mode === 'SRRB' ? `Governing: flexure · ${(demand.Mu / r.phiMnMax).toFixed(2)}` : 'DRRB — compression steel engaged'}
+          ok={allOK} governing={`Governing: flexure · utilization ${cap ? (demand.Mu / cap.phiMn).toFixed(2) : '—'}${r.mode === 'DRRB' ? ' · DRRB' : ''}`}
           lh={lh}
           stats={[
             { label: hogging ? 'Tension (top)' : 'Tension steel', value: `${r.bars}-⌀${f.barDia}` },
