@@ -57,6 +57,13 @@ select:focus {
 /* numeric entry reads like a title block */
 input[type="number"] { font-family: var(--font-mono); }
 
+/* ── Numbered input cards ────────────────────────────────────────────────
+   Every qty.tsx <Card> gets a drawing-sheet section number (01, 02, …) in
+   DOM order; display:none'd cards (inactive tabs) don't consume a number. */
+body { counter-reset: calccard; }
+.calc-card { counter-increment: calccard; }
+.calc-card-num::before { content: counter(calccard, decimal-leading-zero); }
+
 /* ── Print / PDF export ──────────────────────────────────────────────
    Screen keeps the interactive chrome; print shows a clean report:
    nav + buttons hidden, white background, cards kept whole across pages. */

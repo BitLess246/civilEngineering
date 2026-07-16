@@ -40,12 +40,19 @@ export function ClassPick({ value, onChange }: { value: ConcreteClass; onChange:
   )
 }
 
-export function Card({ title, children }: { title: ReactNode; children: ReactNode }) {
+/** Numbered input card (Foundation mockup): mono counter + title header row,
+ *  hairline divider, field grid. Numbers auto-increment in DOM order via the
+ *  `calc-card` CSS counter in index.css — no per-page wiring. */
+export function Card({ title, hint, children }: { title: ReactNode; hint?: ReactNode; children: ReactNode }) {
   return (
-    <fieldset className="print-avoid-break rounded-lg border border-[#e3e1da] bg-white p-4">
-      <legend className="px-2 text-[13.5px] font-bold text-[#0f1b2a]">{title}</legend>
-      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
-    </fieldset>
+    <section className="calc-card print-avoid-break rounded-lg border border-[#e3e1da] bg-white">
+      <div className="flex items-baseline gap-2.5 border-b border-[#eeece5] px-4 py-3">
+        <span aria-hidden className="calc-card-num font-mono text-[10.5px] font-semibold text-[#a39d8d]" />
+        <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">{title}</h2>
+        {hint && <span className="ml-auto text-[11px] text-[#a39d8d]">{hint}</span>}
+      </div>
+      <div className="grid grid-cols-1 gap-3.5 p-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
+    </section>
   )
 }
 
