@@ -110,7 +110,17 @@ export function eccentricColumnSolution(
   const b1 = beta1(i.fc)
   const aB = Math.min(b1 * r.balanced.c, i.h)
 
+  const layoutStep: SolutionStep[] = r.layout === 'all-around' ? [{
+    title: 'Bar layout — all four faces',
+    clause: 'strain compatibility',
+    lines: [
+      txt(`${i.numBars} bars are detailed around the cage: ${r.nx} per ${i.b}-mm face and ${r.ny} per ${i.h}-mm face (corners shared). Each row enters the P–M sum as its own layer — side bars near the neutral axis contribute little moment, so this layout gives a lower Mb than the two-face idealisation.`),
+      eq(String.raw`\text{layers } d_i = [${r.layers.map((L) => sn1(L.d)).join(',\ ')}]\ \text{mm},\quad n_i = [${r.layers.map((L) => L.n).join(',\ ')}]`),
+    ],
+  }] : []
+
   return [
+    ...layoutStep,
     {
       title: 'Eccentricity of the load',
       lines: [
@@ -145,7 +155,8 @@ export function eccentricColumnSolution(
 export function slendernessSolution(i: SlendernessInput, r: SlendernessResult): SolutionStep[] {
   return [
     {
-      title: 'Slenderness classification (nonsway)',
+      title: `Slenderness classification (nonsway) — ${r.slender ? 'LONG column' : 'SHORT column'}`,
+      clause: 'ACI 318-14 §6.2.5',
       lines: [
         txt('For compression members braced against sidesway, slenderness may be neglected when kLu/r ≤ 34 + 12(M1/M2) ≤ 40, with M1/M2 negative in single curvature (RC-06 / §406.2.5). r = 0.3h for rectangular sections.'),
         eq(String.raw`\dfrac{k L_u}{r} = \dfrac{${sn2(i.k)}\times ${sn2(i.Lu)}\times 1000}{${sn1(r.r)}} = ${sn1(r.kLuOverR)} \;${r.slender ? '>' : '\\le'}\; ${sn1(r.limit)}`),

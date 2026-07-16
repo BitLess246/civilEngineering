@@ -171,35 +171,79 @@ export function designAxialColumn(i: AxialColumnInput): AxialColumnResult {
 }
 
 // ── Strain-compatibility interaction (tied rectangular, two-face bars) ──
+export type BarLayout = 'two-face' | 'all-around'
 export interface InteractionInput {
   b: number; h: number          // mm; bending about the axis ⟂ h
   cover: number; barDia: number; tieDia: number
   fc: number; fy: number
-  numBars: number               // split evenly between the two faces ⟂ to h
+  numBars: number               // total bars in the section
+  /** 'two-face' (default): bars split between the two faces ⟂ to h.
+   *  'all-around': bars distributed on all four faces (corners shared) —
+   *  intermediate side-bar rows enter the strain-compatibility sum as their
+   *  own layers, so Mn near the balanced point drops vs the 2-face idealised
+   *  layout (side bars sit near the neutral axis). */
+  layout?: BarLayout
 }
+
+/** One reinforcement row in the bending plane: depth d from the compression
+ *  face, n bars, As total (mm²). */
+export interface BarLayer { d: number; n: number; As: number }
 
 export interface PMPoint { c: number; Pn: number; Mn: number; phi: number; et: number }
 export interface InteractionResult {
   dPrime: number; dt: number
-  AsFace: number                // mm² per face
+  AsFace: number                // mm² per extreme face
+  layout: BarLayout
+  layers: BarLayer[]            // compression face → tension face
+  nx: number                    // bars per b-face (incl. corners)
+  ny: number                    // bars per h-face (incl. corners)
   Po: number; PnMax: number; phiC: number
   balanced: { c: number; Pb: number; Mb: number; eb: number }
   curve: PMPoint[]              // c sweep, Pn descending
 }
 
-function pmAt(i: InteractionInput, dPrime: number, dt: number, AsFace: number, c: number): PMPoint {
+/** Distribute numBars into strain-compatibility layers.
+ *  two-face: numBars/2 at d′ and dt (the classic sheet idealisation).
+ *  all-around: 4 corner bars + the rest split between the b- and h-faces in
+ *  proportion to the face lengths (as a real cage is detailed): nx per b-face,
+ *  ny per h-face with 2nx + 2ny − 4 = numBars; the (ny−2) intermediate rows
+ *  carry 2 bars each at equal spacing between d′ and dt. */
+export function barLayers(i: InteractionInput): { layers: BarLayer[]; nx: number; ny: number } {
+  const dPrime = i.cover + i.tieDia + i.barDia / 2
+  const dt = i.h - dPrime
+  const Ab = (Math.PI / 4) * i.barDia ** 2
+  const N = i.numBars
+  if ((i.layout ?? 'two-face') === 'two-face' || N < 4) {
+    return { layers: [{ d: dPrime, n: N / 2, As: (N / 2) * Ab }, { d: dt, n: N / 2, As: (N / 2) * Ab }], nx: N / 2, ny: 2 }
+  }
+  const Ne = 2 * Math.round(N / 2)                       // even bars all-around
+  const bw = i.b - 2 * dPrime, hw = dt - dPrime          // cage centre-line sides
+  let nx = 2 + Math.round(((Ne - 4) / 2) * (bw / (bw + hw)))
+  nx = Math.max(2, Math.min(nx, Ne / 2))                 // ny = Ne/2 + 2 − nx ≥ 2
+  const ny = Ne / 2 + 2 - nx
+  const layers: BarLayer[] = [{ d: dPrime, n: nx, As: nx * Ab }]
+  for (let k = 1; k <= ny - 2; k++) {
+    const d = dPrime + (k * (dt - dPrime)) / (ny - 1)
+    layers.push({ d, n: 2, As: 2 * Ab })
+  }
+  layers.push({ d: dt, n: nx, As: nx * Ab })
+  return { layers, nx, ny }
+}
+
+function pmAt(i: InteractionInput, layers: BarLayer[], dt: number, c: number): PMPoint {
   const b1 = beta1(i.fc)
   const a = Math.min(b1 * c, i.h)
   const Cc = (0.85 * i.fc * a * i.b) / 1000
-  const layerF = (d: number): number => {
-    const fs = Math.max(-i.fy, Math.min(i.fy, (ES * (c - d)) / c))
-    const displaced = d <= a ? 0.85 * i.fc : 0
-    return (AsFace * (fs - displaced)) / 1000
+  let Pn = Cc
+  let Mn = Cc * (i.h / 2 - a / 2)
+  for (const L of layers) {
+    const fs = Math.max(-i.fy, Math.min(i.fy, (ES * (c - L.d)) / c))
+    const displaced = L.d <= a ? 0.85 * i.fc : 0
+    const F = (L.As * (fs - displaced)) / 1000
+    Pn += F
+    Mn += F * (i.h / 2 - L.d)
   }
-  const F1 = layerF(dPrime)
-  const F2 = layerF(dt)
-  const Pn = Cc + F1 + F2
-  const Mn = (Cc * (i.h / 2 - a / 2) + F1 * (i.h / 2 - dPrime) + F2 * (i.h / 2 - dt)) / 1000
+  Mn /= 1000
   const et = (0.003 * (dt - c)) / c
   const ety = i.fy / 200000
   const phi = et >= 0.005 ? 0.90 : et <= ety ? 0.65 : 0.65 + (0.25 * (et - ety)) / (0.005 - ety)
@@ -211,13 +255,14 @@ export function interaction(i: InteractionInput): InteractionResult {
   const dt = i.h - dPrime
   const Ab = (Math.PI / 4) * i.barDia ** 2
   const AsFace = (i.numBars / 2) * Ab
-  const Ast = i.numBars * Ab
+  const { layers, nx, ny } = barLayers(i)
+  const Ast = layers.reduce((s, L) => s + L.As, 0)
   const Ag = i.b * i.h
   const Po = (0.85 * i.fc * (Ag - Ast) + i.fy * Ast) / 1000
   const PnMax = 0.80 * Po
 
   const cb = (600 / (600 + i.fy)) * dt
-  const bal = pmAt(i, dPrime, dt, AsFace, cb)
+  const bal = pmAt(i, layers, dt, cb)
 
   const curve: PMPoint[] = []
   // Sweep from near-pure-bending (small c) to pure compression. The top end
@@ -228,11 +273,12 @@ export function interaction(i: InteractionInput): InteractionResult {
   const N = 80
   for (let k = 0; k <= N; k++) {
     const c = cMin * Math.pow(cMaxV / cMin, k / N)   // log sweep
-    curve.push(pmAt(i, dPrime, dt, AsFace, c))
+    curve.push(pmAt(i, layers, dt, c))
   }
 
   return {
-    dPrime, dt, AsFace, Po, PnMax, phiC: 0.65,
+    dPrime, dt, AsFace, layout: i.layout ?? 'two-face', layers, nx, ny,
+    Po, PnMax, phiC: 0.65,
     balanced: { c: cb, Pb: bal.Pn, Mb: bal.Mn, eb: bal.Pn > 1e-9 ? bal.Mn / bal.Pn : 0 },
     curve,
   }
@@ -242,16 +288,16 @@ export function interaction(i: InteractionInput): InteractionResult {
 export function capacityAtEccentricity(i: InteractionInput, e: number): PMPoint {
   const dPrime = i.cover + i.tieDia + i.barDia / 2
   const dt = i.h - dPrime
-  const AsFace = ((i.numBars / 2) * Math.PI * i.barDia ** 2) / 4
+  const { layers } = barLayers(i)
   let lo = dPrime * 0.1, hi = i.h * 20
   for (let k = 0; k < 80; k++) {
     const mid = (lo + hi) / 2
-    const p = pmAt(i, dPrime, dt, AsFace, mid)
+    const p = pmAt(i, layers, dt, mid)
     const eAt = p.Pn > 1e-9 ? p.Mn / p.Pn : Infinity
     if (eAt > e) lo = mid
     else hi = mid
   }
-  return pmAt(i, dPrime, dt, AsFace, (lo + hi) / 2)
+  return pmAt(i, layers, dt, (lo + hi) / 2)
 }
 
 /** Bresler reciprocal load for biaxial bending: 1/Pn = 1/Pnx + 1/Pny − 1/Po. */

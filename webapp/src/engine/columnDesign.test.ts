@@ -183,3 +183,68 @@ describe('slenderness — nonsway moment magnification (RC-06 conventions)', () 
     expect(nearLimit.delta).toBeGreaterThan(1)
   })
 })
+
+// ── All-around bar distribution (multi-layer strain compatibility) ──────────
+describe('interaction — all-around bar layout', () => {
+  const base = { b: 450, h: 450, cover: 40, barDia: 25, tieDia: 10, fc: 28, fy: 415 }
+  const Ab = (Math.PI / 4) * 25 ** 2
+
+  it('8 bars on a square: 3 per face, one 2-bar intermediate row (d′/mid/dt)', () => {
+    const r = interaction({ ...base, numBars: 8, layout: 'all-around' })
+    expect(r.nx).toBe(3)
+    expect(r.ny).toBe(3)
+    expect(r.layers.map((L) => L.n)).toEqual([3, 2, 3])
+    expect(r.layers[0].d).toBeCloseTo(62.5, 9)          // 40 + 10 + 25/2
+    expect(r.layers[1].d).toBeCloseTo(225, 9)           // mid-depth
+    expect(r.layers[2].d).toBeCloseTo(387.5, 9)
+    expect(r.layers.reduce((s, L) => s + L.As, 0)).toBeCloseTo(8 * Ab, 6)
+  })
+
+  it('12 bars on 600×400 (bending about h): more bars on the wide faces', () => {
+    const r = interaction({ ...base, b: 600, h: 400, numBars: 12, layout: 'all-around' })
+    // centre-line sides: bw = 600−125 = 475, hw = 400−2·62.5−? → dt−d′ = 275
+    // interior 8 → per b-face round(4·475/750) = 3 → nx = 5, ny = 3
+    expect(r.nx).toBe(5)
+    expect(r.ny).toBe(3)
+    expect(2 * r.nx + 2 * r.ny - 4).toBe(12)
+  })
+
+  it('4 bars: all-around degenerates to the two-face layout exactly', () => {
+    const a = interaction({ ...base, numBars: 4, layout: 'all-around' })
+    const b2 = interaction({ ...base, numBars: 4 })
+    expect(a.balanced.Pb).toBeCloseTo(b2.balanced.Pb, 9)
+    expect(a.balanced.Mb).toBeCloseTo(b2.balanced.Mb, 9)
+    for (let k = 0; k < a.curve.length; k += 10) {
+      expect(a.curve[k].Pn).toBeCloseTo(b2.curve[k].Pn, 9)
+      expect(a.curve[k].Mn).toBeCloseTo(b2.curve[k].Mn, 9)
+    }
+  })
+
+  it('balanced point matches the hand calc (8⌀25, 450², fc 28, fy 415)', () => {
+    // cb = 600/(1015)·387.5 = 229.064 mm; a = 194.704 mm
+    // Cc = 0.85·28·194.704·450 = 2085.3 kN
+    // top (3 bars, 1472.6 mm²): fs = 600(cb−62.5)/cb = 436 → fy, −0.85f′c displaced → +576.1 kN
+    // mid (2 bars, 981.7 mm²): fs = 600(cb−225)/cb = 10.6 MPa → +10.4 kN
+    // bottom (3 bars): fs → −fy → −611.1 kN
+    // Pb ≈ 2060.7 kN; Mb ≈ 2085.3·0.12765 + 576.1·0.1625 + 611.1·0.1625 ≈ 459.1 kN·m
+    const r = interaction({ ...base, numBars: 8, layout: 'all-around' })
+    expect(r.balanced.c).toBeCloseTo(229.064, 2)
+    expect(r.balanced.Pb).toBeCloseTo(2060.7, 0)
+    expect(r.balanced.Mb).toBeCloseTo(459.1, 0)
+  })
+
+  it('same bars all-around give LOWER Mb than the 2-face idealisation, same Po', () => {
+    const all = interaction({ ...base, numBars: 8, layout: 'all-around' })
+    const two = interaction({ ...base, numBars: 8 })
+    expect(all.balanced.Mb).toBeLessThan(two.balanced.Mb)
+    expect(all.Po).toBeCloseTo(two.Po, 6)
+    expect(all.curve[all.curve.length - 1].Pn).toBeCloseTo(all.Po, 0)   // closes at Po
+  })
+
+  it('capacityAtEccentricity on the all-around curve recovers the balanced point at e = eb', () => {
+    const r = interaction({ ...base, numBars: 8, layout: 'all-around' })
+    const p = capacityAtEccentricity({ ...base, numBars: 8, layout: 'all-around' }, r.balanced.eb)
+    expect(p.Pn).toBeCloseTo(r.balanced.Pb, 0)
+    expect(p.Mn).toBeCloseTo(r.balanced.Mb, 0)
+  })
+})
