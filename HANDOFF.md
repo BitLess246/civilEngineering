@@ -101,6 +101,17 @@ of the app. Everything runs **off the main thread** in a web worker
   need a per-tab report decision), Pile Cap, Retaining Wall, Stair, Water
   Tank, geotech pages, estimates; then the mobile pass. Hard rule kept on
   every UI PR: zero files under `src/engine`, suite pinned at 1063.
+- **UI follow-ups (PRs #348–#352, July 2026)**: report letterhead + PrintReport
+  on all calculator pages, mockup-exact calc report (clause margin, PASS chips,
+  Worked/Summary tabs, Beam φMn/φVn bars), numbered input cards everywhere
+  (qty.tsx `Card` + CSS counter), and the **Model Space direct-PDF report**
+  (#352): `lib/texText.ts` (LaTeX → plain unicode), `lib/modelReport.ts`
+  (payload: verdict, checks, 11 schedules, every-member worked solutions),
+  `lib/modelPdf.ts` (jsPDF A4 calc sheet, lazy-loaded with embedded DejaVu
+  subsets in `lib/pdfFonts.ts`) — replaced the print-the-page path; letterhead
+  card + ⎙ Export PDF on `/model`. Suite now 1076. Note: drei `<Text>` suspends
+  on a cdn.jsdelivr.net font-resolver fetch; a local `<Suspense>` inside the
+  Canvas keeps that from blanking the page on blocked networks.
 - **ValidationMap filled** (P2-4): every row in `docs/ValidationMap.md` now
   cites its vitest evidence (✅/🔶) or is an explicit external-tool gap
   (X001–X004); Chopra 2-DOF eigen anchor added to `modal.test.ts`; Roadmap

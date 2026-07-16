@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Text } from '@react-three/drei'
 import * as THREE from 'three'
@@ -1576,6 +1576,11 @@ export default function ModelSpace() {
           <div className="relative h-[80vh] min-h-[460px] overflow-hidden rounded-lg border border-[#e3e1da] bg-[#0f1b2a]">
             {model ? (
               <Canvas camera={{ position: [14, 11, 14], fov: 45 }} gl={{ preserveDrawingBuffer: true }} onPointerMissed={() => setSelected(null)}>
+                {/* Local boundary: drei <Text> suspends while troika fetches its
+                    font-resolver data — without this, the suspension bubbles to the
+                    route-level <Suspense> and React hides the WHOLE page (blank page
+                    after "Design all" on networks that block cdn.jsdelivr.net). */}
+                <Suspense fallback={null}>
                 <color attach="background" args={['#f8fafc']} />
                 <ambientLight intensity={0.85} />
                 <directionalLight position={[12, 18, 8]} intensity={0.9} />
@@ -1676,6 +1681,7 @@ export default function ModelSpace() {
                   />
                 )}
                 <OrbitControls ref={controlsRef} makeDefault enablePan target={[6, 3, 2.5]} />
+                </Suspense>
               </Canvas>
             ) : (
               <div className="flex h-full items-center justify-center font-mono text-sm text-[#7d8ea3]">
