@@ -841,3 +841,35 @@ describe('engine integrations — all-around columns & T-beam action', () => {
     expect(flanged).toBeGreaterThan(0)                       // slabs adjoin the grid beams
   })
 })
+
+describe('engine integrations — prestressed member check', () => {
+  const m = makeModel()
+  // tag every beam section with pretensioned strands (mutate shared sections)
+  m.sections = m.sections.map((s) => ({ ...s, ps: { Aps: 600, fpu: 1860, e: 150, fci: 24 } }))
+  const r = designStructure(m, soil)!
+
+  it('every prestressed-tagged beam gets a row with the full engine result', () => {
+    const beamIds = new Set(r.beams.map((b) => b.id))
+    expect(r.prestressed.length).toBe(beamIds.size)
+    for (const p of r.prestressed) {
+      expect(beamIds.has(p.id)).toBe(true)
+      expect(p.design.lossPct).toBeGreaterThan(5)
+      expect(p.design.lossPct).toBeLessThan(30)
+      expect(p.design.phiMn).toBeGreaterThan(0)
+      expect(p.ok).toBe(p.design.ok)
+    }
+  })
+
+  it('undersized strands fail designOK through the prestressed rows', () => {
+    const bad = makeModel()
+    bad.sections = bad.sections.map((s) => ({ ...s, ps: { Aps: 40, fpu: 1860, e: 150, fci: 24 } }))
+    const rBad = designStructure(bad, soil)!
+    expect(rBad.prestressed.some((p) => !p.ok)).toBe(true)
+    expect(designOK(rBad)).toBe(false)
+  })
+
+  it('untagged models produce no prestressed rows (back-compat)', () => {
+    const plain = designStructure(makeModel(), soil)!
+    expect(plain.prestressed).toEqual([])
+  })
+})

@@ -17,6 +17,7 @@ import { nscpCombos, type Combo } from './beamAnalysis'
 import type { ProgressFn } from './progress'
 import { designBeam, type BeamDesignResult } from './beamDesign'
 import { effectiveFlange } from './tbeam'
+import { designPrestressed, type PrestressedResult } from './prestressedBeam'
 import { minBeamThickness, type BeamSupport } from './beamDeflection'
 import { designAxialColumn, capacityAtEccentricity, interaction, type BarLayout } from './columnDesign'
 import { designSquareFooting, type SquareFootingResult } from './isolatedFooting'
@@ -193,10 +194,22 @@ export interface BasePlateScheduleRow {
   ok: boolean
 }
 
+/** Prestressed member check (sections with RectSection.ps): the pipeline
+ *  back-derives equivalent UDLs from the D-only / L-only midspan sagging
+ *  moments (w = 8M/L², self-weight excluded from SDL) and runs the full
+ *  prestressedBeam engine — a simple-span GRAVITY idealisation of the member. */
+export interface PrestressedScheduleRow {
+  id: string; L: number
+  design: PrestressedResult
+  ok: boolean
+}
+
 export interface StructureDesign {
   govName: string
   cases: string[]   // every load case (combo × direction) run for the envelope
   beams: BeamScheduleRow[]
+  /** Members whose section carries prestressing (RectSection.ps). */
+  prestressed: PrestressedScheduleRow[]
   columns: ColumnScheduleRow[]
   steelBeams: SteelBeamScheduleRow[]
   steelColumns: SteelColumnScheduleRow[]
@@ -225,7 +238,7 @@ export interface StructureDesign {
  *  (DDM + §408.3.1.2 + §424.2 deflection), shear walls, steel joints and the
  *  §418.7.3.2 strong-column/weak-beam hierarchy. Nothing green is unchecked. */
 export function designOK(d: StructureDesign): boolean {
-  return d.beams.every((b) => b.ok) && d.columns.every((c) => c.ok)
+  return d.beams.every((b) => b.ok) && d.prestressed.every((p) => p.ok) && d.columns.every((c) => c.ok)
     && d.steelBeams.every((b) => b.ok) && d.steelColumns.every((c) => c.ok)
     && d.basePlates.every((p) => p.ok)
     && d.footings.every((f) => f.ok) && d.combined.every((c) => c.ok)
@@ -599,6 +612,7 @@ function designFromRuns(
   const totalMems = model.members.length
   let memDone = 0
   const beams: BeamScheduleRow[] = []
+  const prestressed: PrestressedScheduleRow[] = []
   const columns: ColumnScheduleRow[] = []
   const steelBeams: SteelBeamScheduleRow[] = []
   const steelColumns: SteelColumnScheduleRow[] = []
@@ -640,6 +654,24 @@ function designFromRuns(
           if (sev > bestSev) { bestSev = sev; best = row; gov = run.name }
         }
         if (best) beams.push({ ...best, gov })
+        // prestressed check (section tagged with ps): equivalent UDLs from the
+        // D-only / L-only sagging peaks — simple-span gravity idealisation
+        if (sec.ps && best) {
+          const L = best.L
+          const sag = (res: F3Result | null) => {
+            if (!res) return 0
+            const mr = res.members.find((x) => x.id === m.id)
+            return mr ? Math.max(0, ...mr.Mz) : 0
+          }
+          const wSW = ((sec.b * sec.h) / 1e6) * 24
+          const wD = Math.max(0, (8 * sag(dRes)) / (L * L) - wSW)
+          const wL = (8 * sag(lRes)) / (L * L)
+          const design = designPrestressed({
+            b: sec.b, h: sec.h, span: L, fc: sec.fc, fci: sec.ps.fci,
+            Aps: sec.ps.Aps, fpu: sec.ps.fpu, e: sec.ps.e, wSDL: wD, wLL: wL,
+          })
+          prestressed.push({ id: m.id, L, design, ok: design.ok })
+        }
       }
     } else if (role === 'column') {
       if (isSteel) {
@@ -841,7 +873,7 @@ function designFromRuns(
   const partialDesign = {
     govName: runs[govIdx].name,
     cases: runs.map((r) => r.name),
-    beams, columns, steelBeams, steelColumns, basePlates,
+    beams, prestressed, columns, steelBeams, steelColumns, basePlates,
     joints: [] as SteelJoint[],
     beamJoints: [] as BeamBeamJoint[],
     slabs, walls, footings, combined,

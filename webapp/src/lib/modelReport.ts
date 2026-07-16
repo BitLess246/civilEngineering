@@ -11,6 +11,7 @@ import type {
 import { designOK } from '../engine/pipeline'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution } from './modelSpaceSolutions'
 import { connectionRowSolution } from './connectionSolution'
+import { buildPrestressedSolution } from './prestressedSolution'
 import type { SolutionStep, SolutionLine } from './solution'
 
 export interface ReportStat { label: string; value: string; unit?: string }
@@ -127,6 +128,10 @@ export function buildModelReport(
     + design.beamJoints.reduce((s, j) => s + j.connections.length, 0)
   if (nConn)
     checks.push({ name: 'Steel connections', detail: `${nConn} connections at ${design.joints.length + design.beamJoints.length} joints`, ratio: null, ok: design.joints.every((j) => j.ok) && design.beamJoints.every((j) => j.ok) })
+  if (design.prestressed.length) {
+    const w = worst(design.prestressed, (p) => p.design.Mu / Math.max(p.design.phiMn, 1e-9))!
+    checks.push({ name: 'Prestressed members', detail: `${design.prestressed.length} members · governing ${w.row.id}`, ratio: w.r, ok: design.prestressed.every((p) => p.ok) })
+  }
   if (design.footings.length)
     checks.push({ name: 'Isolated footings', detail: `${design.footings.length} footings`, ratio: null, ok: design.footings.every((f) => f.ok) })
   if (design.combined.length)
@@ -164,7 +169,7 @@ export function buildModelReport(
         const d = s.design
         return [
           k === 0 ? `${bm.id} (${bm.role} ${sec?.name ?? ''}, ${f1(bm.L)} m)` : '',
-          `${s.label}${s.hogging ? ' (hog)' : ''}`,
+          `${s.label}${s.hogging ? ' (hog)' : s.bf ? ` · T bf=${Math.round(s.bf)}` : ''}`,
           f1(Math.abs(s.Mu)), f1(s.Vu), d.mode,
           `${d.bars}⌀${sec?.barDia}${d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}${s.hogging ? ' top' : ''}`,
           d.sAdopt > 0 ? `⌀${sec?.tieDia}@${Math.round(d.sAdopt)}` : d.region === 'none' ? 'none' : '⚠',
@@ -183,6 +188,14 @@ export function buildModelReport(
         `${c.bars}⌀${cs?.barDia} · ties @${Math.round(c.tieSpacingFinal)}${c.seismicSConf !== undefined ? ' (seismic)' : ''}`,
         `${(c.util * 100).toFixed(0)}%`, c.gov ?? '']
     }),
+  })
+  if (design.prestressed.length) tables.push({
+    title: 'Prestressed member checks (§24.5 · PCI losses)',
+    head: ['Member', 'L (m)', 'Loss %', 'fse (MPa)', 'Transfer', 'Service', 'φMn (kN·m)', 'Mu', '1.2Mcr', 'Status'],
+    right: [1, 2, 3, 6, 7],
+    rows: design.prestressed.map((p) => [p.id, f2(p.L), p.design.lossPct.toFixed(1), f1(p.design.fse),
+      p.design.transferOK ? 'PASS' : 'FAIL', p.design.serviceOK ? 'PASS' : 'FAIL',
+      f1(p.design.phiMn), f1(p.design.Mu), p.design.crackingOK ? 'PASS' : 'FAIL', p.ok ? 'PASS' : 'FAIL']),
   })
   if (design.scwb.length) tables.push({
     title: 'Strong-column / weak-beam joints (NSCP §418.7.3.2)',
@@ -269,6 +282,21 @@ export function buildModelReport(
         sub: `${bm.role} ${sec.name} · L = ${f1(bm.L)} m · ${bm.gov ?? ''}`,
         steps: beamSectionSolution(sec, s),
       }))
+    }),
+  })
+  if (design.prestressed.length) groups.push({
+    title: 'Prestressed members',
+    items: design.prestressed.flatMap((p) => {
+      const sec = sectionFor(p.id)
+      if (!sec?.ps) return []
+      return [{
+        title: p.id,
+        sub: `${sec.name} · L = ${f2(p.L)} m · Aps ${sec.ps.Aps} mm²`,
+        steps: buildPrestressedSolution({
+          b: sec.b, h: sec.h, span: p.L, fc: sec.fc, fci: sec.ps.fci,
+          Aps: sec.ps.Aps, fpu: sec.ps.fpu, e: sec.ps.e, wSDL: 0, wLL: 0,
+        }, p.design),
+      }]
     }),
   })
   if (design.columns.length) groups.push({

@@ -25,6 +25,10 @@ export interface RectSection {
   /** Steel grade yield/ultimate (steel only). Defaults: Fy 248, Fu 400 (A36). */
   steelFy?: number
   steelFu?: number
+  /** Pretensioned bonded prestressing on this (concrete beam) section — when
+   *  present the pipeline runs the full prestressed check (losses, §24.5
+   *  stresses, fps/φMn, 1.2Mcr) beside the RC design. */
+  ps?: { Aps: number; fpu: number; e: number; fci: number }
 }
 
 export type MemberRole = 'beam' | 'girder' | 'column' | 'brace'

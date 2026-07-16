@@ -30,7 +30,7 @@ export function columnRowSolution(sec: RectSection, row: ColumnScheduleRow): Sol
   const ax = designAxialColumn(base)
   const steps: SolutionStep[] = []
   if (row.e > 1e-4 && row.Pu > 0) {
-    const ic = { b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, numBars: ax.bars }
+    const ic = { b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, numBars: ax.bars, layout: row.layout }
     steps.push(...eccentricColumnSolution(ic, interaction(ic), row.Pu, row.Mu, capacityAtEccentricity(ic, row.e)))
   }
   const seismic: SeismicTieOverride | undefined =
