@@ -3,6 +3,7 @@ import { solveBoltedConnection } from '../engine/boltedConnection'
 import { ConnectionDrawing } from '../components/ConnectionDrawing'
 import { outOfPlaneBoltGroup, pryingAction } from '../engine/steelDesign'
 import type { BoltPos, BoltGrade } from '../engine/steelDesign'
+import { ReportControls } from '../components/ReportControls'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -48,6 +49,7 @@ export default function BoltedConnection() {
     <main className="mx-auto max-w-5xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Structural · Steel</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Eccentric bolted connection</h1>
+      <ReportControls title="Bolted Connection Report" badges={['AISC 360-16']} />
       <p className="mt-2 max-w-3xl text-sm text-slate-600">
         Elastic (vector) method for an eccentrically-loaded bolt group. Each bolt carries the direct
         share P/N plus a torsional share T·ρ/J (T = Pᵧ·eₓ − Pₓ·e_y, J = Σ(x²+y²)). Place bolts anywhere —

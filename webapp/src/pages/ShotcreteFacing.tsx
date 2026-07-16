@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { designFacing } from '../engine/shotcreteFacing'
+import { ReportControls } from '../components/ReportControls'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -45,6 +46,7 @@ export default function ShotcreteFacing() {
     <main className="mx-auto max-w-3xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Soil-nail shotcrete facing</h1>
+      <ReportControls title="Shotcrete Facing Report" badges={['FHWA GEC-7']} />
       <p className="mt-2 text-sm text-slate-600">
         FHWA GEC-7 facing check. The thin shotcrete panel spans <b>between</b> the nail heads, so earth
         pressure bends it like a two-way slab on point supports — hogging over each nail, sagging at

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { solveWeldedConnection, type WeldSegment } from '../engine/weldedConnection'
+import { ReportControls } from '../components/ReportControls'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -61,6 +62,7 @@ export default function WeldedConnection() {
     <main className="mx-auto max-w-5xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Structural · Steel</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Eccentric weld group</h1>
+      <ReportControls title="Welded Connection Report" badges={['AISC 360-16']} />
       <p className="mt-2 max-w-3xl text-sm text-slate-600">
         Elastic (weld-as-a-line) method for an eccentrically-loaded fillet weld group. Each unit length
         carries the direct share P/L_w plus a torsional share T·ρ/(J/t), T = Pᵧ·eₓ − Pₓ·e_y and

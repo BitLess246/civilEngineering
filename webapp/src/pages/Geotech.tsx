@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { activeThrust, passiveThrust, bearingCapacity, infiniteSlopeFS, type FootingShape } from '../engine/geotech'
+import { ReportControls } from '../components/ReportControls'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 
@@ -136,6 +137,7 @@ export default function Geotech() {
     <main className="mx-auto max-w-5xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Geotechnical toolkit</h1>
+      <ReportControls title="Geotechnical Report" badges={['NSCP 2015']} />
       <p className="mt-2 max-w-3xl text-sm text-slate-600">
         Classic soil-mechanics checks — Rankine lateral earth pressure, shallow-foundation bearing
         capacity, and infinite-slope stability. All formulas are closed-form and cross-checked against

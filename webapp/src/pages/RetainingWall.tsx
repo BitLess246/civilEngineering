@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { designRetainingWall, type RetainingWallInput } from '../engine/retainingWall'
 import { Num, Card, ResultCard, Row } from '../components/qty'
-import { ReportControls } from '../components/ReportControls'
+import { PageHeader, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
 import { f1, f2, f3 } from '../lib/format'
 
 type FormState = RetainingWallInput & { gamma_c: number }
@@ -29,6 +28,7 @@ function Status({ ok, label }: { ok: boolean; label: string }) {
 
 export default function RetainingWall() {
   const [f, setF] = useState<FormState>(DEFAULTS)
+  const [lh, setLh] = useState<LetterheadState>({ project: '', sheet: 'RW-01 · Rev A', preparedBy: '' })
   const set = <K extends keyof FormState>(k: K) => (v: FormState[K]) =>
     setF((s) => ({ ...s, [k]: v }))
 
@@ -42,16 +42,13 @@ export default function RetainingWall() {
   )
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
-      <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">
-        Retaining Wall Design
-      </h1>
-      <p className="no-print mt-1 text-slate-600">
-        Cantilever RC retaining wall — Rankine active pressure, NSCP 2015 stability checks,
-        ACI 318-14 stem design. All forces per metre of wall length.
-      </p>
-      <ReportControls title="Retaining Wall Design" />
+    <div>
+      <PageHeader title="Cantilever Retaining Wall" badges={['NSCP 2015', 'ACI 318-14']}
+        actions={
+          <button type="button" onClick={() => { const prev = document.title; document.title = `Retaining Wall Design Report${lh.project ? ` — ${lh.project}` : ''}`; window.print(); window.setTimeout(() => { document.title = prev }, 500) }}
+            className="inline-flex items-center gap-2 rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-[#0d3f78]">⎙ Export report</button>
+        } />
+      <div className="mx-auto max-w-6xl px-5 pb-8 sm:px-7">
 
       {/* Schematic legend */}
       <pre className="no-print mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-[0.65rem] leading-tight text-slate-500">
@@ -63,7 +60,7 @@ export default function RetainingWall() {
 |           base  (tb)      |`}
       </pre>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
+      <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
         {/* ── INPUTS ── */}
         <div className="flex flex-col gap-6">
           <Card title="Geometry (mm)">
@@ -155,6 +152,34 @@ export default function RetainingWall() {
             Fill in all inputs to see results.
           </p>
         )}
+      </div>
+      <div className="no-print mt-5"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>
+      {r && (
+        <PrintReport
+          docTitle="Cantilever Retaining Wall" docCode="RW-01" badges={['NSCP 2015', 'ACI 318-14']}
+          ok={r.stableSL && r.stableOT && r.bearingOK && r.tensionOK && r.shearOK}
+          governing={`FS sliding ${f2(r.FS_SL)} · FS overturning ${f2(r.FS_OT)} · q,max ${f1(r.q_max)} kPa`}
+          lh={lh}
+          stats={[
+            { label: 'Base width B', value: f2(r.B / 1000), unit: 'm' },
+            { label: 'Total height H', value: f2(r.H / 1000), unit: 'm' },
+            { label: 'q,max', value: f1(r.q_max), unit: 'kPa' },
+          ]}
+          checks={[
+            { name: 'Sliding (FS req 1.5 / FS)', ratio: 1.5 / r.FS_SL, ok: r.stableSL },
+            { name: 'Overturning (FS req 2.0 / FS)', ratio: 2.0 / r.FS_OT, ok: r.stableOT },
+            { name: 'Bearing q,max / qa', ratio: r.q_max / f.qa, ok: r.bearingOK },
+          ]}
+          data={[
+            ['Stem height Hs', `${f.Hs} mm`], ['Base thickness tb', `${f.tb} mm`],
+            ['Stem thickness ts', `${f.ts} mm`], ['Toe / heel', `${f.bt} / ${f.bh} mm`],
+            ['Soil γs / φ', `${f.gamma_s} kN/m³ / ${f.phi_deg}°`], ['Surcharge', `${f.q_sur} kPa`],
+            ['Friction μ', `${f.mu}`], ['Allowable qa', `${f.qa} kPa`],
+            ["Concrete f'c / fy", `${f.fc} / ${f.fy} MPa`], ['Ka (Rankine)', `${f3(r.Ka)}`],
+            ['Active thrust Pa + Pq', `${f1(r.Pa)} + ${f1(r.Pq)} kN/m`], ['Stem Mu', `${f1(r.Mu_stem)} kN·m/m`],
+          ]}
+        />
+      )}
       </div>
     </div>
   )

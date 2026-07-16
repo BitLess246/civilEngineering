@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { ReportControls } from '../components/ReportControls'
 import {
   nscpSeismicParams, baseShearCoeff, STRUCTURAL_SYSTEMS,
   type SoilProfile, type SeismicSource, type SeismicZone, type Occupancy,
@@ -58,6 +59,7 @@ export default function SeismicWizard() {
     <main className="mx-auto max-w-3xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Structural</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">NSCP 208 Seismic Wizard</h1>
+      <ReportControls title="Seismic Parameters Report" badges={['NSCP 2015 §208']} />
       <p className="mt-2 text-sm text-slate-600">
         Walk through the NSCP 2015 §208 static lateral-force tables — zone, soil, near-source, occupancy and
         structural system — to get Ca, Cv, I, R and the design base-shear coefficient Cs = V/W.

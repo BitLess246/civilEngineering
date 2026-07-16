@@ -1,8 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
 import { designPileCap, type PileArrangement } from '../engine/pileCap'
 import { PileCapSchematic } from '../components/PileCapSchematic'
-import { ReportControls } from '../components/ReportControls'
+import { PageHeader, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
 import { Math as KTex } from '../lib/math'
 import { f0, f2, f3 } from '../lib/format'
 import 'katex/dist/katex.min.css'
@@ -125,6 +124,7 @@ function steelRow(label: ReactNode, s: { bars: number; spacing: number; As: numb
 
 export default function PileCapDesign() {
   const [form, setForm] = useState<FormState>(DEFAULTS)
+  const [lh, setLh] = useState<LetterheadState>({ project: '', sheet: 'PC-01 · Rev A', preparedBy: '' })
   const set = <K extends keyof FormState>(k: K) => (v: FormState[K]) => setForm(s => ({ ...s, [k]: v }))
 
   const valid = Object.values(form).every(v => typeof v === 'string' || Number.isFinite(v as number))
@@ -159,15 +159,15 @@ export default function PileCapDesign() {
     && result.beamXOK && result.beamYOK && result.ldOK
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
-      <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
-      <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">Pile Cap Design</h1>
-      <p className="no-print mt-1 text-slate-600">
-        ACI 318-14 / NSCP 2015 — pile reactions, column & pile punching, one-way shear, flexure, development length.
-      </p>
-      <ReportControls title="Pile Cap Design Report" />
+    <div>
+      <PageHeader title="Pile Cap" badges={['ACI 318-14', 'NSCP 2015']}
+        actions={
+          <button type="button" onClick={() => { const prev = document.title; document.title = `Pile Cap Design Report${lh.project ? ` — ${lh.project}` : ''}`; window.print(); window.setTimeout(() => { document.title = prev }, 500) }}
+            className="inline-flex items-center gap-2 rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-[#0d3f78]">⎙ Export report</button>
+        } />
+      <div className="mx-auto max-w-6xl px-5 pb-8 sm:px-7">
 
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
+      <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
         {/* ── Inputs ── */}
         <div className="space-y-5">
           <Card title="Column Loads">
@@ -316,6 +316,40 @@ export default function PileCapDesign() {
             </>
           )}
         </div>
+      </div>
+      <div className="no-print mt-5"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>
+      {result && (
+        <PrintReport
+          docTitle="Pile Cap" docCode="PC-01" badges={['ACI 318-14', 'NSCP 2015']}
+          ok={!!allOK}
+          governing={`Governing ratio ${globalThis.Math.max(
+            result.VuPunchCol / result.phiVcPunchCol, result.VuPunchPile / result.phiVcPunchPile,
+            result.VuBeamX / result.phiVcBeamX, result.VuBeamY / result.phiVcBeamY).toFixed(2)} across punching / beam shear`}
+          lh={lh}
+          stats={[
+            { label: 'Cap plan', value: `${f2(result.capBx)} × ${f2(result.capBy)}`, unit: 'm' },
+            { label: 'Thickness Dc', value: f0(result.Dc), unit: 'mm' },
+            { label: 'Piles', value: `${form.nPiles}-⌀${form.pileDia}`, unit: 'mm' },
+          ]}
+          checks={[
+            { name: 'Column punching Vu/φVc', ratio: result.VuPunchCol / result.phiVcPunchCol, ok: result.punchColOK },
+            { name: 'Pile punching Vu/φVc', ratio: result.VuPunchPile / result.phiVcPunchPile, ok: result.punchPileOK },
+            { name: 'One-way shear X Vu/φVc', ratio: result.VuBeamX / result.phiVcBeamX, ok: result.beamXOK },
+            { name: 'One-way shear Y Vu/φVc', ratio: result.VuBeamY / result.phiVcBeamY, ok: result.beamYOK },
+            { name: 'Development ld,req/avail', ratio: result.ldRequired / globalThis.Math.max(result.ldAvailable, 1e-9), ok: result.ldOK },
+          ]}
+          data={[
+            ['Service / ultimate load', `${form.serviceLoad} / ${form.ultimateLoad} kN`],
+            ['Moments MuX / MuY', `${result.MuX.toFixed(1)} / ${result.MuY.toFixed(1)} kN·m`],
+            ['Pile capacity', `${form.pileCapacity} kN`], ['Pile spacing / edge', `${form.spacing} / ${form.edgeDist} mm`],
+            ['Column', `${form.colX} × ${form.colY} mm`], ["Concrete f'c / fy", `${form.fc} / ${form.fy} MPa`],
+            ['Effective depth d', `${result.d.toFixed(0)} mm`],
+          ]}
+          drawingTitle="Pile Cap Plan"
+          drawing={<PileCapSchematic capBx={result.capBx} capBy={result.capBy} coords={result.coords}
+            pileDia={form.pileDia} colX={form.colX} colY={form.colY} reactions={result.reactions} />}
+        />
+      )}
       </div>
     </div>
   )
