@@ -17,6 +17,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
     tools: [
       { to: '/beam-design',   name: 'Beam Design',        sub: 'RC beam · ACI 318-14',      group: 'Concrete' },
       { to: '/tbeam-design',  name: 'T-Beam Design',      sub: 'flanged beam · §6.3.2',     group: 'Concrete' },
+      { to: '/prestressed-beam', name: 'Prestressed Beam', sub: 'PCI losses · §24.5 · fps',  group: 'Concrete' },
       { to: '/column-design', name: 'Column Design',      sub: 'RC column · biaxial',       group: 'Concrete' },
       { to: '/slab-design',   name: 'Slab Design',        sub: 'Two-way DDM · ACI 318',     group: 'Concrete' },
       { to: '/stair',         name: 'Stair Design',       sub: 'RC waist slab · NSCP',      group: 'Concrete' },
