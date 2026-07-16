@@ -27,6 +27,10 @@ export interface BeamDesignInput {
   fyt?: number         // stirrup yield (default fy)
   Mu: number           // factored moment, kN·m
   Vu: number           // factored shear, kN
+  /** Width used for the §9.6.1.2 minimum-steel floor (defaults to b). A
+   *  flanged sagging section passes bf as b but keeps the WEB width here —
+   *  min steel is a web property, it must not scale with the flange. */
+  bMin?: number
   legs?: number        // stirrup legs (default 2)
   lambda?: number      // lightweight factor (default 1)
 }
@@ -162,9 +166,11 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
       mode = 'SRRB'
       const Rn = (i.Mu * 1e6) / (PHI_FLEX * i.b * d * d)
       const rhoCalc = (0.85 * i.fc / i.fy) * (1 - Math.sqrt(Math.max(0, 1 - (2 * Rn) / (0.85 * i.fc))))
-      usedMin = rhoCalc < rMin
-      rho = usedMin ? rMin : rhoCalc
-      As = rho * i.b * d
+      const AsMinArea = rMin * (i.bMin ?? i.b) * d
+      const AsCalc = rhoCalc * i.b * d
+      usedMin = AsCalc < AsMinArea
+      As = usedMin ? AsMinArea : AsCalc
+      rho = As / (i.b * d)
       As1 = 0; As2 = 0; MnResid = 0; cNA = 0; fsPrime = i.fy; fsYields = true; AsPrime = 0
       comprEffective = true
     } else {
