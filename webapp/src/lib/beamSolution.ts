@@ -178,5 +178,39 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
     note: `Provide 135° seismic hooks, ${sn0(r.stirrupHookExt)} mm extension, bent around a corner bar.`,
   })
 
-  return steps
+  // Margin clauses + PASS chips for the calc-report layout: title-keyed so the
+  // step-building branches above stay untouched.
+  const notes: [string, string, boolean | undefined][] = [
+    ['Effective depth', '§20.6.1 cover', undefined],
+    ['Reinforcement-ratio limits', '§9.6.1.2 · §21.2.2', r.rho >= r.rhoMin - 1e-9 && r.rho <= r.rhoMax + 1e-9],
+    ['SRRB / DRRB classification', 'ACI 318-14 §22.2', undefined],
+    ['Tension steel', 'ACI 318-14 §22.2', r.flexOK],
+    ['Compression steel', '§22.2.2', r.comprEffective && r.comprNAOK],
+    ['Bar layout', '§407.7', r.sClear >= r.sMinClear - 1e-9],
+    ['Shear strength of concrete', '§22.5.5.1', undefined],
+    ['Stirrup requirement', '§22.5', undefined],
+    ['Minimum stirrups', '§9.6.3', r.region !== 'inadequate'],
+    ['Stirrup design', '§22.5 · §9.7.6.2.2', r.region !== 'inadequate'],
+    ['Section check (shear)', '§22.5.1.2', r.region !== 'inadequate'],
+    ['Stirrup detailing', '§407.3.2 · §425.3.2', undefined],
+  ]
+  return steps.map((st) => {
+    const hit = notes.find(([k]) => st.title.startsWith(k))
+    return hit ? { ...st, clause: hit[1], ...(hit[2] === undefined ? {} : { pass: hit[2] }) } : st
+  })
+}
+
+/** Provided design capacities for the verdict/utilization display — the same
+ *  arithmetic the worked-solution steps above already spell out (φ = 0.90
+ *  flexure / 0.75 shear; Vs from the adopted stirrup spacing). Presentation
+ *  math in the lib layer; the engine result stays the source of As, d, sAdopt. */
+export function beamProvidedCapacities(
+  i: BeamDesignInput & { fyt: number; legs: number }, r: BeamDesignResult,
+): { phiMn: number; phiVn: number } {
+  const AsProv = r.bars * (Math.PI / 4) * i.barDia ** 2               // provided bars, mm²
+  const a = (AsProv * i.fy) / (0.85 * i.fc * i.b)                     // mm
+  const phiMn = (0.9 * AsProv * i.fy * (r.d - a / 2)) / 1e6           // kN·m (tension steel only — conservative for DRRB)
+  const Av = i.legs * (Math.PI / 4) * i.stirrupDia ** 2               // mm²
+  const phiVs = r.sAdopt > 0 ? (0.75 * Av * i.fyt * r.d) / r.sAdopt / 1e3 : 0   // kN
+  return { phiMn, phiVn: r.phiVc + phiVs }
 }
