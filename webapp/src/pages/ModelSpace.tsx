@@ -53,7 +53,7 @@ import { ColumnSchematic } from '../components/ColumnSchematic'
 import { FootingSchematic } from '../components/FootingSchematic'
 import { DimBelow, DimSide } from '../components/dims'
 import { HintButton, SeismicHint, WindHint } from '../components/LoadHints'
-import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
+import { Num, Pick, Row } from '../components/qty'
 import { FitView } from '../components/FitView'
 import { shapeByName, shapesOf, effectiveSection, sectionBoundingBox, FAMILIES, type SectionFamily } from '../engine/aiscSections'
 import { buildSectionShapes } from '../lib/sectionShapes3d'
@@ -567,10 +567,25 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'pushover', label: 'Pushover' },
   { id: 'design', label: 'Design' },
 ]
+/** Flat panel section (3D Model Space mockup): uppercase mini-title, no card
+ *  chrome — hairline separation comes from the parent's divide-y. */
+function Sec({ title, hint, grid = true, children }: {
+  title: ReactNode; hint?: ReactNode; grid?: boolean; children: ReactNode
+}) {
+  return (
+    <section className="py-3.5">
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">{title}</p>
+        {hint && <span className="text-[10.5px] text-[#a39d8d]">{hint}</span>}
+      </div>
+      {grid ? <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">{children}</div> : children}
+    </section>
+  )
+}
 function TabBtn({ id, label, active, onClick }: { id: Tab; label: string; active: boolean; onClick: (t: Tab) => void }) {
   return (
     <button type="button" onClick={() => onClick(id)}
-      className={`rounded-md px-3 py-1.5 text-[13px] font-semibold transition ${active ? 'bg-[#0f4c92] text-white' : 'text-[#5c6675] hover:bg-[#eaf1f9] hover:text-[#0f1b2a]'}`}>
+      className={`rounded-[5px] px-2.5 py-[5px] text-[11.5px] font-semibold transition ${active ? 'bg-[#0f4c92] text-white' : 'text-[#5c6675] hover:bg-[#eaf1f9] hover:text-[#0f1b2a]'}`}>
       {label}
     </button>
   )
@@ -1526,8 +1541,9 @@ export default function ModelSpace() {
     } catch { alert('Could not read that file as a structural model (.model.json).') }
   }
 
-  const btn = (color: string) =>
-    `rounded-lg bg-gradient-to-br ${color} px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:shadow-lg disabled:opacity-40`
+  // Panel action button (mockup "Regenerate grid model" style — flat light blue).
+  const btn =
+    'rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-4 py-2 text-[12px] font-semibold text-[#0f4c92] transition hover:bg-[#dce9f7] disabled:opacity-40'
 
   // Model name for the workspace header: bays × storeys from the live model.
   const modelName = model
@@ -1756,16 +1772,16 @@ export default function ModelSpace() {
           )}
         </div>
 
-        {/* RIGHT — tabbed controls */}
-        <div className="no-print space-y-4">
-          <div className="flex flex-wrap gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-sm">
+        {/* RIGHT — tabbed controls: one flat panel, hairline-separated sections (mockup) */}
+        <div className="no-print overflow-hidden rounded-lg border border-[#e3e1da] bg-white">
+          <div className="flex flex-wrap gap-0.5 border-b border-[#eeece5] px-3 py-2.5">
             {TABS.map((t) => <TabBtn key={t.id} id={t.id} label={t.label} active={tab === t.id} onClick={setTab} />)}
           </div>
 
           {/* ── GEOMETRY ── */}
           {tab === 'geometry' && (
-            <div className="space-y-4">
-              <Card title="Column grid">
+            <div className="divide-y divide-[#eeece5] px-4 py-1">
+              <Sec title="Column grid">
                 <label className="flex flex-col text-sm">
                   <span className="mb-1 font-medium text-slate-600">Bays X (m, comma-sep)</span>
                   <input value={baysX} onChange={(e) => setBaysX(e.target.value)}
@@ -1782,24 +1798,24 @@ export default function ModelSpace() {
                     className="rounded-md border border-slate-300 px-2.5 py-1.5" />
                 </label>
                 <div className="col-span-full">
-                  <button type="button" onClick={() => generate()} className={btn('from-[#0f4c92] to-[#0d3f78]')}>⚙ Generate model</button>
+                  <button type="button" onClick={() => generate()} className={`w-full ${btn}`}>Regenerate grid model</button>
                 </div>
-              </Card>
+              </Sec>
 
               {model && (
-                <ResultCard title="Model">
+                <Sec grid={false} title="Model">
                   <Row label="Nodes / members" value={`${model.nodes.length} / ${model.members.length}`}
                     sub={`${model.members.filter((m) => m.role === 'column').length} col · ${model.members.filter((m) => m.role !== 'column').length} bm`} />
                   <Row label="Slabs / loads" value={`${model.plates.length} / ${model.loads.length}`} />
                   <Row label="Storeys" value={`${model.storeys.length}`}
                     sub={model.storeys.map((s) => `${s.elevation} m`).join(' · ')} />
-                </ResultCard>
+                </Sec>
               )}
 
               {model && (
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="py-3.5">
                   <div className="mb-2 flex items-center justify-between">
-                    <h3 className="text-[1.02rem] font-bold text-[#0f4c92]">Nodes</h3>
+                    <h3 className="text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Nodes</h3>
                     <button type="button" onClick={addNode}
                       className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50">+ Add node</button>
                   </div>
@@ -1844,8 +1860,8 @@ export default function ModelSpace() {
               )}
 
               {model && (
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Beams &amp; columns</h3>
+                <div className="py-3.5">
+                  <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Beams &amp; columns</h3>
                   <div className="max-h-72 overflow-auto">
                     <table className="w-full border-collapse text-xs">
                       <thead>
@@ -2079,8 +2095,8 @@ export default function ModelSpace() {
 
               {/* ── Plates (slabs) ── */}
               {model && (
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Slabs / plates</h3>
+                <div className="py-3.5">
+                  <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Slabs / plates</h3>
                   {model.plates.filter((p) => p.role !== 'wall').length === 0 ? (
                     <p className="text-xs text-slate-500">No slabs — generate a grid or add members forming closed panels.</p>
                   ) : (
@@ -2120,8 +2136,8 @@ export default function ModelSpace() {
 
               {/* ── Walls ── */}
               {model && (
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Walls (on beams)</h3>
+                <div className="py-3.5">
+                  <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Walls (on beams)</h3>
                   {(model.walls ?? []).length > 0 && (
                     <div className="mb-2 max-h-48 overflow-auto">
                       <table className="w-full border-collapse text-xs">
@@ -2179,8 +2195,8 @@ export default function ModelSpace() {
 
           {/* ── PROPERTIES ── */}
           {tab === 'properties' && (
-            <div className="space-y-4">
-              <Card title="Frame material">
+            <div className="divide-y divide-[#eeece5] px-4 py-1">
+              <Sec title="Frame material">
                 <Pick label="Members" value={material} onChange={(v) => {
                   const next = v as 'concrete' | 'steel'
                   setMaterial(next)
@@ -2192,9 +2208,9 @@ export default function ModelSpace() {
                     ? 'Members become AISC W-shapes designed to AISC 360-16 LRFD (§F flexure, §G shear, §E/§H1 columns); base plates per §J8. Slabs/footings stay reinforced concrete.'
                     : 'Members are reinforced concrete designed to NSCP 2015 / ACI 318-14.'}
                 </p>
-              </Card>
+              </Sec>
               {material === 'steel' ? (
-                <Card title="Steel sections (AISC)">
+                <Sec title="Steel sections (AISC)">
                   <Pick label="Column family" value={colFam} onChange={(v) => { const f = v as SectionFamily; setColFam(f); setColShape(shapesOf(f)[0].name) }}
                     options={FAMILIES.map((f) => [f.id, f.label])} />
                   <Pick label="Column shape" value={colShape} onChange={setColShape}
@@ -2215,9 +2231,9 @@ export default function ModelSpace() {
                     HSS/angles suit braces. Auto-design covers W/WT flexure + axial for any family; detailed
                     HSS/angle/channel flexure checks are not yet automated. Concrete f′c is still used for base-plate bearing.
                   </p>
-                </Card>
+                </Sec>
               ) : (
-                <Card title="Initial member sizes (mm)">
+                <Sec title="Initial member sizes (mm)">
                   <p className="col-span-full -mb-1 text-[11px] text-slate-500">
                     Each member starts from its role size and grows independently when optimised;
                     columns are kept ≥ girders ≥ beams in width (strong-column / weak-beam).
@@ -2229,9 +2245,9 @@ export default function ModelSpace() {
                   <Num label="Beam b" unit="mm" value={beaB} onChange={setBeaB} />
                   <Num label="Beam h" unit="mm" value={beaH} onChange={setBeaH} />
                   <Num label="Slab thickness" unit="mm" value={slabThk} onChange={setSlabThk} />
-                </Card>
+                </Sec>
               )}
-              <Card title="Concrete & reinforcement">
+              <Sec title="Concrete & reinforcement">
                 <p className="col-span-full -mb-1 text-[11px] text-slate-500">
                   Shared material applied to every section when you generate the grid. f′c drives Ec and the
                   flexural/shear capacities; fy the steel; ⌀ and cover the bar layout and effective depth.
@@ -2245,7 +2261,7 @@ export default function ModelSpace() {
                   options={[['10', '⌀10'], ['12', '⌀12'], ['16', '⌀16']]} />
                 <Num label="Clear cover" unit="mm" value={cover} onChange={setCover} step="5" />
                 <Num label="Concrete unit wt γc" unit="kN/m³" value={gammaC} onChange={setGammaC} step="0.5" />
-              </Card>
+              </Sec>
               <p className="text-[11px] text-slate-500">
                 Per-member b×h are editable in the Geometry → Beams &amp; columns table; slab thickness per panel
                 in Geometry → Slabs. f′c, fy, ⌀, cover and slab thickness are applied when you generate a new grid;
@@ -2258,8 +2274,8 @@ export default function ModelSpace() {
 
           {/* ── SUPPORTS ── */}
           {tab === 'supports' && (
-            <div className="space-y-4">
-              <Card title="Soil (footing design)">
+            <div className="divide-y divide-[#eeece5] px-4 py-1">
+              <Sec title="Soil (footing design)">
                 <Num label="Soil qa" unit="kPa" value={qa} onChange={setQa} />
                 <Num label="Footing depth H" unit="m" value={Hf} onChange={setHf} />
                 <Num label="Soil unit wt γsoil" unit="kN/m³" value={gammaSoil} onChange={setGammaSoil} step="0.5" />
@@ -2268,10 +2284,10 @@ export default function ModelSpace() {
                   qa is the allowable bearing; γsoil is the overburden weight deducted for the net bearing
                   (q_net = qa − γsoil·Ds − γc·Dc). Applied on the next Design / Optimize.
                 </p>
-              </Card>
+              </Sec>
               {model && model.supports.length > 0 && (
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Support fixity</h3>
+                <div className="py-3.5">
+                  <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Support fixity</h3>
                   <p className="mb-2 text-xs text-slate-500">
                     Fixed = all 6 DOFs clamped. Pin = 3 translations free to rotate. Spring = translational springs (kN/m).
                   </p>
@@ -2318,8 +2334,8 @@ export default function ModelSpace() {
                 </div>
               )}
               {model && model.supports.length > 0 && (
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Footing plan</h3>
+                <div className="py-3.5">
+                  <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Footing plan</h3>
                   <p className="mb-2 text-xs text-slate-500">
                     Each base support gets an isolated square footing by default — pick a partner node to design the
                     pair as one combined footing instead (close columns / property-line situations).
@@ -2354,18 +2370,18 @@ export default function ModelSpace() {
 
           {/* ── LOADING ── */}
           {tab === 'loading' && (
-            <div className="space-y-4">
-              <Card title="Slab loads">
+            <div className="divide-y divide-[#eeece5] px-4 py-1">
+              <Sec title="Slab loads">
                 <Num label="Default SDL" unit="kPa" value={qD} onChange={setQD} />
                 <Num label="Live load" unit="kPa" value={qL} onChange={setQL} />
                 <p className="col-span-full text-[11px] text-slate-500">
                   “Default SDL” applies to any slab without a composed NSCP-204 SDL below. Live load is shared.
                 </p>
-              </Card>
+              </Sec>
 
               {/* NSCP 204 superimposed-dead-load composer (per slab) */}
-              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h3 className="mb-1 text-[1.02rem] font-bold text-[#0f4c92]">Superimposed dead load — NSCP 204</h3>
+              <div className="py-3.5">
+                <h3 className="mb-1 text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Superimposed dead load — NSCP 204</h3>
                 <p className="mb-2 text-[11px] text-slate-500">
                   Build the SDL from finishes/ceilings/partitions (Table 204-1, kPa) and material layers
                   (Table 204-2, γ × thickness). Then apply it to every slab, or to the slab selected in the 3D view.
@@ -2425,8 +2441,8 @@ export default function ModelSpace() {
               </div>
 
               {/* NSCP 205-1 / 206 live-load occupancy (per slab) */}
-              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h3 className="mb-1 text-[1.02rem] font-bold text-[#0f4c92]">Live load — NSCP 205 / 206</h3>
+              <div className="py-3.5">
+                <h3 className="mb-1 text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Live load — NSCP 205 / 206</h3>
                 <p className="mb-2 text-[11px] text-slate-500">
                   Pick the occupancy (Table 205-1) or other minimum load (§206); its uniform live load overrides the
                   default LL for the chosen slabs.
@@ -2455,8 +2471,8 @@ export default function ModelSpace() {
 
               {/* Persistent per-panel editor — every slab's SDL & live load */}
               {model && model.plates.filter((p) => p.role !== 'wall').length > 0 && (
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Per-panel loads</h3>
+                <div className="py-3.5">
+                  <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Per-panel loads</h3>
                   <div className="max-h-64 overflow-auto">
                     <table className="w-full border-collapse text-[11px]">
                       <thead>
@@ -2504,9 +2520,9 @@ export default function ModelSpace() {
               )}
 
               {model && (
-                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="py-3.5">
                   <div className="mb-2 flex items-center justify-between">
-                    <h3 className="text-[1.02rem] font-bold text-[#0f4c92]">Loads</h3>
+                    <h3 className="text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Loads</h3>
                     <button type="button" onClick={rebuildGravity}
                       title="Regenerate dead (member self-weight + slab self-weight + SDL) and live loads from the inputs; keeps E loads"
                       className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50">↻ Rebuild D + L</button>
@@ -2563,7 +2579,7 @@ export default function ModelSpace() {
               )}
 
               {model && (
-                <Card title="Thermal / temperature loads">
+                <Sec title="Thermal / temperature loads">
                   <label className="flex flex-col text-sm">
                     <span className="mb-1 font-medium text-slate-600">Member</span>
                     <select value={thMember} onChange={(e) => setThMember(e.target.value)}
@@ -2602,10 +2618,10 @@ export default function ModelSpace() {
                   <p className="col-span-full text-[10px] text-slate-500">
                     Equivalent axial force P_T = EA·α·ΔT applied as self-equilibrating end forces (AISC 360-16 Commentary §C2). Treated as dead load (D) in NSCP 2015 combinations. Thermal effects appear in the member N diagram after Analyze.
                   </p>
-                </Card>
+                </Sec>
               )}
 
-              <Card title="Seismic — NSCP 208 static force">
+              <Sec title="Seismic — NSCP 208 static force">
                 <div className="col-span-full -mt-1 flex justify-end">
                   <HintButton title="Seismic input guide — NSCP 208"><SeismicHint /></HintButton>
                 </div>
@@ -2755,9 +2771,9 @@ export default function ModelSpace() {
                     </div>
                   )}
                 </div>
-              </Card>
+              </Sec>
 
-              <Card title="Wind — NSCP 207B MWFRS (directional)">
+              <Sec title="Wind — NSCP 207B MWFRS (directional)">
                 <div className="col-span-full -mt-1 flex justify-end">
                   <HintButton title="Wind input guide — NSCP 207"><WindHint /></HintButton>
                 </div>
@@ -2784,9 +2800,9 @@ export default function ModelSpace() {
                     </p>
                   )}
                 </div>
-              </Card>
+              </Sec>
 
-              <Card title="Wind — NSCP 207E.4 Components & Cladding (walls)">
+              <Sec title="Wind — NSCP 207E.4 Components & Cladding (walls)">
                 <p className="col-span-full text-[11px] text-slate-500">
                   Local wall cladding/curtain-wall pressures p = qh·[(GCp) − (GCpi)] at the mean roof
                   height. GCp by zone &amp; effective wind area (Fig 207E.4-1); GCpi from the enclosure
@@ -2833,14 +2849,14 @@ export default function ModelSpace() {
                     </p>
                   )}
                 </div>
-              </Card>
+              </Sec>
             </div>
           )}
 
           {/* ── ANALYSIS ── */}
           {tab === 'analysis' && (
-            <div className="space-y-4">
-              <Card title="Analysis options">
+            <div className="divide-y divide-[#eeece5] px-4 py-1">
+              <Sec title="Analysis options">
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={assembly} onChange={(e) => setAssembly(e.target.checked)} />
                   <span>Public assembly / garage (f₁ = 1.0)</span>
@@ -2897,24 +2913,24 @@ export default function ModelSpace() {
                   {pDelta ? ' Frame solved with the geometric-stiffness P-Δ iteration.' : ' First-order (linear) frame solve.'}
                 </p>
                 <div className="col-span-full">
-                  <button type="button" onClick={analyze} disabled={!model || !!busy || meshErrors} className={btn('from-[#0e7490] to-[#155e75]')}>
+                  <button type="button" onClick={analyze} disabled={!model || !!busy || meshErrors} className={btn}>
                     {busy === 'analyze' ? '⏳ Analyzing…' : '▶ Analyze (3D FEM)'}
                   </button>
                   {meshErrors && <p className="mt-1 text-[11px] font-medium text-red-600">Resolve the mesh errors below to enable analysis.</p>}
                 </div>
                 {busy === 'analyze' && <SolverProgress p={progress} />}
-              </Card>
+              </Sec>
 
               {model && <ValidationPanel issues={meshIssues} />}
 
               {gov && govRes && (
-                <ResultCard title={`Analysis — ${gov.combo.name} governs`}>
+                <Sec grid={false} title={`Analysis — ${gov.combo.name} governs`}>
                   <Row label="ΣRy (gravity)" value={`${f1(govRes.reactions.reduce((s, q) => s + q.F[1], 0))} kN`} />
                   <Row label="Extremes" value={`M ${f1(govRes.Mmax)} kN·m`}
                     sub={`V ${f1(govRes.Vmax)} · N ${f1(govRes.Nmax)} kN`} />
                   {orphans > 0 && <Row alert label="⚠ Orphan edges" value={`${orphans}`} sub="slab edges with no member" />}
                   <p className="mt-1 text-[11px] text-slate-500">Members tinted red by |M| relative to the model max. Click one for its diagrams.</p>
-                </ResultCard>
+                </Sec>
               )}
 
               {analysis && model && (
@@ -2930,7 +2946,7 @@ export default function ModelSpace() {
               )}
 
               {model?.shellElements && model.plates.length > 0 && (
-                <Card title="Shell plate stress (CST membrane + DKT bending)">
+                <Sec title="Shell plate stress (CST membrane + DKT bending)">
                   <p className="col-span-full text-[11px] text-slate-500">
                     Recovers per-element membrane stresses (σx, σy, τxy, von Mises) and bending
                     moments (Mx, My, Mxy) from the shell FEM. Uses E = 25 000 MPa, ν = 0.2 for
@@ -2945,11 +2961,11 @@ export default function ModelSpace() {
                   </p>
                   <div className="col-span-full flex flex-wrap gap-2">
                     <button type="button" onClick={runShellStress} disabled={!model || !!busy}
-                      className={btn('from-[#0d9488] to-[#0f766e]')}>
+                      className={btn}>
                       ⬡ Recover shell stresses
                     </button>
                     <button type="button" onClick={runSlabFE} disabled={!model || !!busy}
-                      className={btn('from-[#0d9488] to-[#0f766e]')}>
+                      className={btn}>
                       ▦ Design slab steel (Wood-Armer)
                     </button>
                   </div>
@@ -2958,13 +2974,13 @@ export default function ModelSpace() {
                     orthogonal design moments for the bottom (sagging) and top (hogging) faces, then sizes the x/y
                     reinforcement per metre to NSCP 2015 / ACI 318-14 (φ = 0.90, ⌀12 @ 20 mm cover, fc 28, fy 415).
                   </p>
-                </Card>
+                </Sec>
               )}
               {shellStress && (
                 <ShellContourPanel nodes={shellStress.nodes} elems={shellStress.elems} stresses={shellStress.stresses} />
               )}
               {slabFE && slabFE.length > 0 && (
-                <ResultCard title="Slab reinforcement — Wood-Armer (shell FE, factored)">
+                <Sec grid={false} title="Slab reinforcement — Wood-Armer (shell FE, factored)">
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs">
                       <thead className="text-slate-500">
@@ -3001,11 +3017,11 @@ export default function ModelSpace() {
                     Envelope of the per-element Wood-Armer design moments over each panel. As includes the
                     shrinkage/temperature minimum (ρ_min); spacing capped at min(3t, 450) mm. d = t − cover − 1.5⌀.
                   </p>
-                </ResultCard>
+                </Sec>
               )}
 
               {drift && seis && (
-                <ResultCard title={`Storey drift — ${(eDirs[0] ?? '+X').replace(/[+-]/, '')} (ΔM = 0.7·R·Δs)`}>
+                <Sec grid={false} title={`Storey drift — ${(eDirs[0] ?? '+X').replace(/[+-]/, '')} (ΔM = 0.7·R·Δs)`}>
                   {drift.map((row) => (
                     <Row key={row.elevation} alert={!row.ok}
                       label={`Level ${f1(row.elevation)} m`}
@@ -3015,11 +3031,11 @@ export default function ModelSpace() {
                   <p className="mt-1 text-[11px] text-slate-500">
                     Limit {seis.T < 0.7 ? '0.025' : '0.020'}·hs (T {seis.T < 0.7 ? '<' : '≥'} 0.7 s) — NSCP 208.5.10.
                   </p>
-                </ResultCard>
+                </Sec>
               )}
 
               {selMember && model && (
-                <ResultCard title={`Member — ${selMember.id}`}>
+                <Sec grid={false} title={`Member — ${selMember.id}`}>
                   <Row label="Role" value={selMember.role} />
                   <Row label="Length" value={`${f2(memberLen)} m`} />
                   <Row label="Section" value={sectionFor(selMember.id)?.name ?? selMember.section} />
@@ -3056,11 +3072,11 @@ export default function ModelSpace() {
                   })()}
                   <button type="button" onClick={() => { save(removeElements(model, new Set([selMember.id]))); setSelected(null) }}
                     className="mt-2 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50">Delete member</button>
-                </ResultCard>
+                </Sec>
               )}
 
               {selPlate && plateInfo && model && (
-                <ResultCard title={`Slab — ${selPlate.id}`}>
+                <Sec grid={false} title={`Slab — ${selPlate.id}`}>
                   <Row label="Panel" value={`${f2(plateInfo.lx)} × ${f2(plateInfo.lz)} m`}
                     sub={`t = ${selPlate.thickness} mm`} />
                   {plateInfo.areaLoads.map((l, i) => (
@@ -3072,15 +3088,15 @@ export default function ModelSpace() {
                   )}
                   <button type="button" onClick={() => { save(removeElements(model, new Set([selPlate.id]))); setSelected(null) }}
                     className="mt-2 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50">Delete slab</button>
-                </ResultCard>
+                </Sec>
               )}
             </div>
           )}
 
           {/* ── MODAL ── */}
           {tab === 'modal' && (
-            <div className="space-y-4">
-              <Card title="Modal analysis options">
+            <div className="divide-y divide-[#eeece5] px-4 py-1">
+              <Sec title="Modal analysis options">
                 <label className="flex flex-col text-sm">
                   <span className="mb-1 font-medium text-slate-600">Number of modes</span>
                   <input type="number" min={1} max={50} step={1} value={nModes}
@@ -3092,13 +3108,13 @@ export default function ModelSpace() {
                   modes to accumulate ≥90% of the lateral mass (NSCP 208.5.5).
                 </p>
                 <div className="col-span-full">
-                  <button type="button" onClick={runModal} disabled={!model || !!busy || meshErrors} className={btn('from-[#7c3aed] to-[#5b21b6]')}>
+                  <button type="button" onClick={runModal} disabled={!model || !!busy || meshErrors} className={btn}>
                     {busy === 'modal' ? '⏳ Solving modes…' : '〰 Run modal analysis'}
                   </button>
                   {meshErrors && <p className="mt-1 text-[11px] font-medium text-red-600">Resolve the mesh errors in the Analysis tab to enable modal analysis.</p>}
                 </div>
                 {busy === 'modal' && <SolverProgress p={progress} />}
-              </Card>
+              </Sec>
 
               {model && <ValidationPanel issues={meshIssues} />}
 
@@ -3108,7 +3124,7 @@ export default function ModelSpace() {
               {modal && modeShapeIdx !== null && modal.modes[modeShapeIdx] && (
                 <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 shadow-sm">
                   <div className="mb-2 flex items-center justify-between">
-                    <h3 className="text-[1.02rem] font-bold text-violet-700">
+                    <h3 className="text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">
                       Mode {modeShapeIdx + 1} shape — T = {modal.modes[modeShapeIdx].period.toFixed(3)} s
                     </h3>
                     <button type="button" onClick={() => setModeShapeIdx(null)}
@@ -3127,13 +3143,13 @@ export default function ModelSpace() {
                 </div>
               )}
               {modal && modal.modes.length === 0 && (
-                <ResultCard title="Modal analysis">
+                <Sec grid={false} title="Modal analysis">
                   <p className="text-sm text-slate-600">No modes found — the model has no lumped mass (add members/slabs with self-weight).</p>
-                </ResultCard>
+                </Sec>
               )}
               {rsa && <ResponseSpectrumPanel result={rsa} seismicT={seis?.T} />}
 
-              <Card title="Time-history — modal Newmark-β (linear)">
+              <Sec title="Time-history — modal Newmark-β (linear)">
                 {/* CSV accelerogram upload */}
                 <div className="col-span-full">
                   <p className="mb-1 text-[11px] font-medium text-slate-600">Real accelerogram (CSV / PEER AT2)</p>
@@ -3194,11 +3210,11 @@ export default function ModelSpace() {
                   record (two-column t/ag, one-column with Δt, or PEER AT2) or use the built-in synthetic motion.
                 </p>
                 <div className="col-span-full flex flex-wrap gap-2">
-                  <button type="button" onClick={runTimeHistory} disabled={!model || !!busy || meshErrors} className={btn('from-[#0d9488] to-[#0f766e]')}>
+                  <button type="button" onClick={runTimeHistory} disabled={!model || !!busy || meshErrors} className={btn}>
                     {busy === 'timeHistory' ? '⏳ Integrating…' : '∿ Run time-history'}
                   </button>
                   {thCsv && (
-                    <button type="button" onClick={runResponseSpectrum} className={btn('from-[#0f4c92] to-[#003d82]')}>
+                    <button type="button" onClick={runResponseSpectrum} className={btn}>
                       ⌁ Response spectrum
                     </button>
                   )}
@@ -3210,7 +3226,7 @@ export default function ModelSpace() {
                   </p>
                 )}
                 {busy === 'timeHistory' && <SolverProgress p={progress} />}
-              </Card>
+              </Sec>
               {th && <TimeHistoryPanel res={th} dirLabel={thDir === 'x' ? '+X' : '+Z'} />}
               {recSpec && <RecordedSpectrumPanel spec={recSpec.spec} design={recSpec.design} recordName={recSpec.name} />}
 
@@ -3222,7 +3238,7 @@ export default function ModelSpace() {
                 const res = dg11Walking({ fn, W, beta: occ.beta, Po: occ.Po, aoLimit: occ.aoLimit })
                 const has = deflMm > 0 && W > 0
                 return (
-                  <Card title="Floor vibration — AISC Design Guide 11 (walking)">
+                  <Sec title="Floor vibration — AISC Design Guide 11 (walking)">
                     <Pick label="Occupancy" value={dg11OccId} onChange={setDg11OccId}
                       options={DG11_OCCUPANCY.map((o) => [o.id, o.label])} />
                     <Num label="Floor deflection Δ" unit="mm" value={dg11DeflMm} onChange={setDg11DeflMm} step="0.1"
@@ -3244,7 +3260,7 @@ export default function ModelSpace() {
                     ) : (
                       <p className="col-span-full text-[11px] text-amber-600">Enter Δ and W (or run Analyze for auto-suggestions) to evaluate.</p>
                     )}
-                  </Card>
+                  </Sec>
                 )
               })()}
             </div>
@@ -3252,8 +3268,8 @@ export default function ModelSpace() {
 
           {/* ── PUSHOVER ── */}
           {tab === 'pushover' && (
-            <div className="space-y-4">
-              <Card title="Pushover — nonlinear static (plastic hinges)">
+            <div className="divide-y divide-[#eeece5] px-4 py-1">
+              <Sec title="Pushover — nonlinear static (plastic hinges)">
                 <Pick label="Push direction" value={poDir} onChange={setPoDir}
                   options={[['x', '+X'], ['z', '+Z']]} />
                 <Pick label="Lateral pattern" value={poPattern} onChange={setPoPattern}
@@ -3282,13 +3298,13 @@ export default function ModelSpace() {
                   lateral tangent — drift is amplified, hinges form earlier, and the collapse base shear drops.
                 </p>
                 <div className="col-span-full">
-                  <button type="button" onClick={runPushover} disabled={!model || !!busy || meshErrors} className={btn('from-[#ea580c] to-[#c2410c]')}>
+                  <button type="button" onClick={runPushover} disabled={!model || !!busy || meshErrors} className={btn}>
                     {busy === 'pushover' ? '⏳ Pushing…' : '⤧ Run pushover'}
                   </button>
                   {meshErrors && <p className="mt-1 text-[11px] font-medium text-red-600">Resolve the mesh errors in the Analysis tab to enable pushover.</p>}
                 </div>
                 {busy === 'pushover' && <SolverProgress p={progress} />}
-              </Card>
+              </Sec>
 
               {model && <ValidationPanel issues={meshIssues} />}
 
@@ -3296,25 +3312,25 @@ export default function ModelSpace() {
                 <PushoverPanel res={po} dirLabel={poDir === 'x' ? '+X' : '+Z'} />
               )}
               {po && po.result.curve.length <= 1 && (
-                <ResultCard title="Pushover">
+                <Sec grid={false} title="Pushover">
                   <p className="text-sm text-slate-600">
                     No yield events — the model has no hingeable members or no lateral mass to push.
                     Assign sections and ensure the frame carries self-weight.
                   </p>
-                </ResultCard>
+                </Sec>
               )}
             </div>
           )}
 
           {/* ── DESIGN ── */}
           {tab === 'design' && (
-            <div className="space-y-4">
-              <Card title="Design & optimise">
+            <div className="divide-y divide-[#eeece5] px-4 py-1">
+              <Sec title="Design & optimise">
                 <div className="col-span-full flex flex-wrap gap-2">
-                  <button type="button" onClick={runPipeline} disabled={!model || !!busy || meshErrors} className={btn('from-[#15803d] to-[#166534]')}>
+                  <button type="button" onClick={runPipeline} disabled={!model || !!busy || meshErrors} className={btn}>
                     {busy === 'design' ? '⏳ Designing…' : '🏗 Design structure'}
                   </button>
-                  <button type="button" onClick={optimize} disabled={!model || !!busy || meshErrors} className={btn('from-[#b45309] to-[#92400e]')}
+                  <button type="button" onClick={optimize} disabled={!model || !!busy || meshErrors} className={btn}
                     title="Grow each failing member's own section until nothing fails, then trim back">
                     {busy === 'optimize' ? '⏳ Optimizing…' : '🏁 Optimize design'}
                   </button>
@@ -3334,7 +3350,7 @@ export default function ModelSpace() {
                   The full schedules (beam/girder, column, footing) render below, each the full width of the page.
                   Click any schedule row for its step-by-step solution and plan/elevation drawings.
                 </p>
-              </Card>
+              </Sec>
             </div>
           )}
         </div>
