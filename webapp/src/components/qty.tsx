@@ -45,7 +45,7 @@ export function ClassPick({ value, onChange }: { value: ConcreteClass; onChange:
  *  `calc-card` CSS counter in index.css — no per-page wiring. */
 export function Card({ title, hint, children }: { title: ReactNode; hint?: ReactNode; children: ReactNode }) {
   return (
-    <section className="calc-card print-avoid-break rounded-lg border border-[#e3e1da] bg-white">
+    <section className="calc-card rail-card print-avoid-break rounded-lg border border-[#e3e1da] bg-white">
       <div className="flex items-baseline gap-2.5 border-b border-[#eeece5] px-4 py-3">
         <span aria-hidden className="calc-card-num font-mono text-[10.5px] font-semibold text-[#a39d8d]" />
         <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">{title}</h2>
@@ -58,7 +58,7 @@ export function Card({ title, hint, children }: { title: ReactNode; hint?: React
 
 export function ResultCard({ title, children }: { title: ReactNode; children: ReactNode }) {
   return (
-    <div className="print-avoid-break rounded-lg border border-[#e3e1da] bg-white p-4">
+    <div className="rail-card print-avoid-break rounded-lg border border-[#e3e1da] bg-white p-4">
       <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">{title}</h2>
       {children}
     </div>
