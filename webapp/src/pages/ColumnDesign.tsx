@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
   designAxialColumn, interaction, capacityAtEccentricity, momentMagnificationNonsway,
-  type ColumnShape, type LateralSystem,
+  type ColumnShape, type LateralSystem, type BarLayout,
 } from '../engine/columnDesign'
 import { factoredLoad } from '../engine/loads'
 import { ColumnSchematic } from '../components/ColumnSchematic'
@@ -33,12 +33,13 @@ export default function ColumnDesign() {
   const [Mu, setMu] = useState(200)
   const [barMode, setBarMode] = useState<BarMode>('design')
   const [numBars, setNumBars] = useState(8)
+  const [layout, setLayout] = useState<BarLayout>('all-around')   // P–M bar distribution
   // Seismic / lateral system
   const [system, setSystem] = useState<LateralSystem>('gravity')
   const [colLen, setColLen] = useState(3000)  // mm clear height
   const [hx, setHx]         = useState(0)     // mm, max lateral tie spacing (0 = use bMin)
   // Slenderness (nonsway)
-  const [slenderOn, setSlenderOn] = useState(false)
+  const [slenderOn, setSlenderOn] = useState(true)
   const [kEff, setKEff] = useState(1.0); const [Lu, setLu] = useState(3.0)
   const [M1, setM1] = useState(-150); const [M2, setM2] = useState(200)
   const [EIin, setEIin] = useState(0)   // kN·m², 0 → derive 0.4EcIg/(1+βd)
@@ -70,17 +71,17 @@ export default function ColumnDesign() {
   const MuEff = slender ? slender.Mc : Mu
   const inter = useMemo(() => {
     if (!eccentric || !(b > 0 && h > 0)) return null
-    try { return interaction({ b, h, cover, barDia, tieDia, fc, fy, numBars }) } catch { return null }
-  }, [eccentric, b, h, cover, barDia, tieDia, fc, fy, numBars])
+    try { return interaction({ b, h, cover, barDia, tieDia, fc, fy, numBars, layout }) } catch { return null }
+  }, [eccentric, b, h, cover, barDia, tieDia, fc, fy, numBars, layout])
   const cap = useMemo(() => {
     if (!inter || !(Pu > 0) || !(MuEff > 0) || !Number.isFinite(MuEff)) return null
-    return capacityAtEccentricity({ b, h, cover, barDia, tieDia, fc, fy, numBars }, MuEff / Pu)
-  }, [inter, Pu, MuEff, b, h, cover, barDia, tieDia, fc, fy, numBars])
+    return capacityAtEccentricity({ b, h, cover, barDia, tieDia, fc, fy, numBars, layout }, MuEff / Pu)
+  }, [inter, Pu, MuEff, b, h, cover, barDia, tieDia, fc, fy, numBars, layout])
 
   const solution = useMemo(() => {
     const steps: SolutionStep[] = []
     if (slender) steps.push(...slendernessSolution({ Pu, M1, M2, k: kEff, Lu, h, EI: EIin > 0 ? EIin : undefined, fc, b }, slender))
-    if (eccentric && inter && cap) steps.push(...eccentricColumnSolution({ b, h, cover, barDia, tieDia, fc, fy, numBars }, inter, Pu, MuEff, cap))
+    if (eccentric && inter && cap) steps.push(...eccentricColumnSolution({ b, h, cover, barDia, tieDia, fc, fy, numBars, layout }, inter, Pu, MuEff, cap))
     if (axial) steps.push(...axialColumnSolution({
       shape: tied ? 'tied' : 'spiral', b, h, D, cover, barDia, tieDia, fc, fy, fyt, Pu,
       numBars: barMode === 'analyze' || eccentric ? numBars : undefined,
@@ -141,6 +142,10 @@ export default function ColumnDesign() {
               options={eccentric ? [['analyze', 'Given count']] : [['design', 'Design automatically'], ['analyze', 'Given count']]} />
             {(barMode === 'analyze' || eccentric) && (
               <Num label="No. of bars" value={numBars} onChange={setNumBars} />
+            )}
+            {eccentric && (
+              <Pick label="Bar distribution" value={layout} onChange={(v) => setLayout(v as BarLayout)}
+                options={[['all-around', 'All four faces'], ['two-face', 'Two faces (⟂ to h)']]} />
             )}
           </Card>
 
@@ -335,6 +340,10 @@ export default function ColumnDesign() {
             { label: 'Bars', value: `${axial.bars}-⌀${barDia}` },
             { label: tied ? 'Ties' : 'Spiral pitch', value: tied ? `⌀${Math.max(tieDia, axial.tieDiaMin)} @${f0(axial.tieSpacingFinal)}` : `@${f0(axial.spiralPitch)}`, unit: 'mm' },
             { label: 'φPn,max', value: f1(axial.phiPnMax), unit: 'kN' },
+            ...(eccentric && slender ? [{
+              label: 'Column class',
+              value: slender.slender ? 'LONG (slender)' : 'SHORT',
+            }] : []),
           ]}
           checks={eccentric && util !== null ? [{ name: 'P–M interaction Pu/φPn', ratio: util, ok: util <= 1.0001 }] : []}
           data={[
