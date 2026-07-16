@@ -7,6 +7,7 @@ import FoundationDesign from './pages/FoundationDesign'
 import PileCapDesign from './pages/PileCapDesign'
 import CombinedFootingDesign from './pages/CombinedFootingDesign'
 import BeamDesign from './pages/BeamDesign'
+import TBeamDesign from './pages/TBeamDesign'
 import BeamAnalysis from './pages/BeamAnalysis'
 import ColumnDesign from './pages/ColumnDesign'
 import FrameAnalysis from './pages/FrameAnalysis'
@@ -57,6 +58,7 @@ export default function App() {
         <Route path="/pile-cap" element={<PileCapDesign />} />
         <Route path="/combined" element={<CombinedFootingDesign />} />
         <Route path="/beam-design" element={<BeamDesign />} />
+        <Route path="/tbeam-design" element={<TBeamDesign />} />
         <Route path="/beam-analysis" element={<BeamAnalysis />} />
         <Route path="/column-design" element={<ColumnDesign />} />
         <Route path="/frame" element={<FrameAnalysis />} />
