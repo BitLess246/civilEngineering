@@ -64,6 +64,25 @@ body { counter-reset: calccard; }
 .calc-card { counter-increment: calccard; }
 .calc-card-num::before { content: counter(calccard, decimal-leading-zero); }
 
+/* ── Flat control rails ─────────────────────────────────────────────────
+   3D Model Space mockup: a vertically stacked run of cards reads as ONE
+   panel — consecutive .rail-card siblings inside any space-y container
+   merge (gap and shared borders collapse; only a soft hairline remains). */
+[class*="space-y"] > .rail-card + .rail-card {
+  margin-top: 0 !important;
+  margin-block-start: 0 !important;
+  border-top: 1px solid var(--hairline-soft);
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+[class*="space-y"] > .rail-card:has(+ .rail-card) {
+  margin-bottom: 0 !important;
+  margin-block-end: 0 !important;   /* Tailwind v4 space-y margins the leading sibling */
+  border-bottom: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
 /* ── Print / PDF export ──────────────────────────────────────────────
    Screen keeps the interactive chrome; print shows a clean report:
    nav + buttons hidden, white background, cards kept whole across pages. */

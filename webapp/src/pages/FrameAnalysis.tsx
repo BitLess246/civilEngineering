@@ -112,7 +112,7 @@ export default function FrameAnalysis() {
           <fieldset className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <legend className="px-2 text-[1.02rem] font-bold text-[#0056b3]">Nodes</legend>
             <button type="button" onClick={() => setNodes((ns) => [...ns, { uid: uid++, id: `N${ns.length + 1}`, x: 0, y: 0 }])}
-              className="no-print mb-3 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">+ Node</button>
+              className="no-print mb-3 rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">+ Node</button>
             <div className="space-y-3">
               {nodes.map((n) => (
                 <Shell key={n.uid} title={n.id} onRemove={() => setNodes((ns) => ns.filter((q) => q.uid !== n.uid))}>
@@ -131,7 +131,7 @@ export default function FrameAnalysis() {
           <fieldset className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <legend className="px-2 text-[1.02rem] font-bold text-[#0056b3]">Members</legend>
             <button type="button" onClick={() => setMembers((ms) => [...ms, { uid: uid++, id: `m${ms.length + 1}`, i: nodeIds[0] ?? '', j: nodeIds[1] ?? '' }])}
-              className="no-print mb-3 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">+ Member</button>
+              className="no-print mb-3 rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">+ Member</button>
             <div className="space-y-3">
               {members.map((m) => (
                 <Shell key={m.uid} title={m.id} onRemove={() => setMembers((ms) => ms.filter((q) => q.uid !== m.uid))}>
@@ -150,7 +150,7 @@ export default function FrameAnalysis() {
           <fieldset className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <legend className="px-2 text-[1.02rem] font-bold text-[#0056b3]">Supports</legend>
             <button type="button" onClick={() => setSupports((ss) => [...ss, { uid: uid++, node: nodeIds[0] ?? '', type: 'pin' }])}
-              className="no-print mb-3 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">+ Support</button>
+              className="no-print mb-3 rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">+ Support</button>
             <div className="space-y-3">
               {supports.map((s) => (
                 <Shell key={s.uid} title={s.type} onRemove={() => setSupports((ss) => ss.filter((q) => q.uid !== s.uid))}>
@@ -166,11 +166,11 @@ export default function FrameAnalysis() {
             <legend className="px-2 text-[1.02rem] font-bold text-[#0056b3]">Loads</legend>
             <div className="no-print mb-3 flex flex-wrap gap-2">
               <button type="button" onClick={() => setLoads((ls) => [...ls, { uid: uid++, kind: 'node', node: nodeIds[0] ?? '', Fx: 0, Fy: -50, Mz: 0, cat: 'D' }])}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">+ Node load</button>
+                className="rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">+ Node load</button>
               <button type="button" onClick={() => setLoads((ls) => [...ls, { uid: uid++, kind: 'member-udl', member: memberIds[0] ?? '', w: 10, cat: 'D' }])}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">+ Member UDL</button>
+                className="rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">+ Member UDL</button>
               <button type="button" onClick={() => setLoads((ls) => [...ls, { uid: uid++, kind: 'member-point', member: memberIds[0] ?? '', a: 1, P: 50, cat: 'D' }])}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">+ Member point</button>
+                className="rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">+ Member point</button>
             </div>
             <div className="space-y-3">
               {loads.map((ld) => (

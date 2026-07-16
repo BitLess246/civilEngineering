@@ -128,7 +128,7 @@ export default function BeamAnalysis() {
             <div className="no-print mb-3 flex flex-wrap gap-2">
               {(['pin', 'roller', 'fixed', 'spring'] as SupportType[]).map((t) => (
                 <button key={t} type="button" onClick={() => addSupport(t)}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">
+                  className="rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">
                   + {t[0].toUpperCase() + t.slice(1)}
                 </button>
               ))}
@@ -151,7 +151,7 @@ export default function BeamAnalysis() {
             <div className="no-print mb-3 flex flex-wrap gap-2">
               {([['point', '+ Point'], ['udl', '+ UDL'], ['vdl', '+ VDL'], ['moment', '+ Moment']] as const).map(([t, lbl]) => (
                 <button key={t} type="button" onClick={() => addLoad(t)}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">
+                  className="rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">
                   {lbl}
                 </button>
               ))}
@@ -246,7 +246,7 @@ export default function BeamAnalysis() {
                     sessionStorage.setItem(SECTIONS_HANDOFF_KEY, JSON.stringify(secs))
                     navigate('/beam-design?sections=auto')
                   }}
-                  className="inline-block rounded-lg bg-gradient-to-br from-[#0056b3] to-[#003f86] px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:shadow-lg">
+                  className="inline-block rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-4 py-2 text-sm font-semibold text-[#0f4c92] transition hover:bg-[#dce9f7]">
                   ⚡ Auto-detect critical sections → design
                 </button>
               </div>

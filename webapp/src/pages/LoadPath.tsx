@@ -71,7 +71,7 @@ export default function LoadPath() {
           <fieldset className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <legend className="px-2 text-[1.02rem] font-bold text-[#0056b3]">Area loads</legend>
             <button type="button" onClick={() => setAreaLoads((ls) => [...ls, { id: uid++, q: 2, cat: 'L' }])}
-              className="no-print mb-3 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">+ Area load</button>
+              className="no-print mb-3 rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">+ Area load</button>
             <div className="space-y-3">
               {areaLoads.map((l) => (
                 <div key={l.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">

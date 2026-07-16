@@ -229,7 +229,7 @@ export default function TrussSpace() {
               <Num label="Height" unit="m" value={height} onChange={setHeight} step="0.25" />
               <Num label="Panels" value={panels} onChange={(v) => setPanels(Math.max(2, Math.round(v)))} step="1" />
               <button type="button" onClick={() => { setCustom(structuredClone(generated)); setSelected(null) }}
-                className="col-span-full mt-1 rounded-md border border-[#0056b3]/40 bg-[#0056b3]/5 px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:bg-[#0056b3]/10">
+                className="col-span-full mt-1 w-full rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-2 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">
                 ✎ Customize this truss (free-form editor)
               </button>
             </Card>

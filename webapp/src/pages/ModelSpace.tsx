@@ -829,6 +829,7 @@ export default function ModelSpace() {
   const [modelImg, setModelImg] = useState<string | null>(null)   // 3D snapshot for the PDF report
   const [lh, setLh] = useState<LetterheadState>({ project: '', sheet: '', preparedBy: '' })
   const [exporting, setExporting] = useState(false)               // PDF build in flight
+  const [ioMenu, setIoMenu] = useState(false)                     // Import/Export dropdown
   const [concreteClass, setConcreteClass] = useState<ConcreteClass>((si.concreteClass as ConcreteClass) ?? 'A')   // mix class for the take-off
   const [prices, setPrices] = useState<PriceList>((si.prices as PriceList) ?? {   // unit prices for the costed bill (PHP)
     cementBag: 260, sandM3: 1500, gravelM3: 1600, steelKg: 65, tieWireRoll: 2500, plywoodSheet: 700, lumberM: 25, structuralSteelKg: 120,
@@ -1559,14 +1560,25 @@ export default function ModelSpace() {
           {model && <span className="rounded border border-[#cddcf0] bg-[#eaf1f9] px-1.5 py-px font-mono text-[10px] font-medium text-[#0f4c92]">autosaved</span>}
         </div>
         <div className="no-print ml-auto flex flex-wrap items-center gap-2">
-          <button type="button" onClick={download} disabled={!model}
-            className="rounded-md border border-[#d6d3c9] bg-white px-3 py-2 text-[12.5px] font-semibold text-[#3d4a5c] hover:border-[#0f4c92] hover:text-[#0f4c92] disabled:opacity-40">
-            Export JSON
-          </button>
-          <button type="button" onClick={() => fileRef.current?.click()}
-            className="rounded-md border border-[#d6d3c9] bg-white px-3 py-2 text-[12.5px] font-semibold text-[#3d4a5c] hover:border-[#0f4c92] hover:text-[#0f4c92]">
-            Import
-          </button>
+          {/* Import / Export dropdown (mockup header: one combined button) */}
+          <div className="relative" onMouseLeave={() => setIoMenu(false)}>
+            <button type="button" onClick={() => setIoMenu((v) => !v)}
+              className="rounded-md border border-[#d6d3c9] bg-white px-3 py-2 text-[12.5px] font-semibold text-[#3d4a5c] hover:border-[#0f4c92] hover:text-[#0f4c92]">
+              Import / Export ▾
+            </button>
+            {ioMenu && (
+              <div className="absolute right-0 top-full z-30 w-44 overflow-hidden rounded-md border border-[#e3e1da] bg-white py-1 shadow-lg">
+                <button type="button" disabled={!model} onClick={() => { setIoMenu(false); download() }}
+                  className="block w-full px-3.5 py-2 text-left text-[12.5px] font-semibold text-[#3d4a5c] hover:bg-[#eaf1f9] hover:text-[#0f4c92] disabled:opacity-40">
+                  ⬇ Export model JSON
+                </button>
+                <button type="button" onClick={() => { setIoMenu(false); fileRef.current?.click() }}
+                  className="block w-full px-3.5 py-2 text-left text-[12.5px] font-semibold text-[#3d4a5c] hover:bg-[#eaf1f9] hover:text-[#0f4c92]">
+                  ⬆ Import model JSON…
+                </button>
+              </div>
+            )}
+          </div>
           <input ref={fileRef} type="file" accept=".json" className="sr-only"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f) }} />
           <button type="button" onClick={analyze} disabled={!model || !!busy || meshErrors}

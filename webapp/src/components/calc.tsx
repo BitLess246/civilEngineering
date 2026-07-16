@@ -25,7 +25,7 @@ export function CalcSection({ num, title, hint, children, grid = true }: {
   num: string; title: string; hint?: string; children: ReactNode; grid?: boolean
 }) {
   return (
-    <section className="rounded-lg border border-[#e3e1da] bg-white print-avoid-break">
+    <section className="rail-card rounded-lg border border-[#e3e1da] bg-white print-avoid-break">
       <div className="flex items-baseline gap-2.5 border-b border-[#eeece5] px-4 py-3">
         <span className="font-mono text-[10.5px] font-semibold text-[#a39d8d]">{num}</span>
         <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">{title}</h2>
@@ -61,7 +61,7 @@ export function VerdictPanel({ ok, headline, governing, stats, checks, footnote 
   stats: VerdictStat[]; checks: VerdictCheck[]; footnote?: ReactNode
 }) {
   return (
-    <section className="overflow-hidden rounded-lg border border-[#e3e1da] bg-white print-avoid-break">
+    <section className="rail-card overflow-hidden rounded-lg border border-[#e3e1da] bg-white print-avoid-break">
       <div className={`flex items-center gap-2.5 border-b px-4 py-3 ${ok ? 'border-[#d3e8da] bg-[#ecf6ef]' : 'border-[#efd4cc] bg-[#fbeeea]'}`}>
         <span className={`flex h-[22px] w-[22px] flex-none items-center justify-center rounded-full text-white ${ok ? 'bg-[#1a7f4b]' : 'bg-[#c2402a]'}`}>
           {ok
@@ -96,7 +96,7 @@ export function VerdictPanel({ ok, headline, governing, stats, checks, footnote 
 /** Right-rail card with the drawing-sheet grid backdrop. */
 export function DrawingCard({ title, meta, children }: { title: string; meta?: string; children: ReactNode }) {
   return (
-    <section className="rounded-lg border border-[#e3e1da] bg-white print-avoid-break">
+    <section className="rail-card rounded-lg border border-[#e3e1da] bg-white print-avoid-break">
       <div className="flex items-center justify-between border-b border-[#eeece5] px-4 py-3">
         <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">{title}</h2>
         {meta && <span className="font-mono text-[10px] text-[#a39d8d]">{meta}</span>}
@@ -120,7 +120,7 @@ export function LetterheadCard({ lh, onChange }: { lh: LetterheadState; onChange
     </div>
   )
   return (
-    <section className="no-print rounded-lg border border-[#e3e1da] bg-white p-4">
+    <section className="rail-card no-print rounded-lg border border-[#e3e1da] bg-white p-4">
       <div className="flex items-center justify-between">
         <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">Report letterhead</h2>
         <span className="font-mono text-[10px] text-[#a39d8d]">prints on the calc sheet</span>

@@ -196,7 +196,7 @@ export default function BeamDesign() {
               <div className="no-print mb-3 flex flex-wrap items-center gap-2">
                 <button type="button"
                   onClick={() => setSections((ss) => [...ss, { id: uid++, label: `Section ${ss.length + 1}`, x: 0, Mu: 50, Vu: 30 }])}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50">
+                  className="rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">
                   + Add section
                 </button>
                 <span className="text-xs text-slate-500">or auto-detect from <Link to="/beam-analysis" className="text-[#0056b3] hover:underline">Beam Analysis</Link>. Negative Mu = hogging (top steel).</span>
