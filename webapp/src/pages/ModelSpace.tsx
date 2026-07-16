@@ -725,6 +725,10 @@ export default function ModelSpace() {
   const [fc, setFc] = useState(n('fc', 28)); const [fy, setFy] = useState(n('fy', 415))
   const [barDia, setBarDia] = useState(n('barDia', 20)); const [tieDia, setTieDia] = useState(n('tieDia', 10))
   const [cover, setCover] = useState(n('cover', 40)); const [slabThk, setSlabThk] = useState(n('slabThk', 150))
+  // Prestressing (applied to beam/girder sections as RectSection.ps)
+  const [psOn, setPsOn] = useState(false)
+  const [psAps, setPsAps] = useState(600); const [psFpu, setPsFpu] = useState(1860)
+  const [psE, setPsE] = useState(150); const [psFci, setPsFci] = useState(24)
   const [gammaC, setGammaC] = useState(n('gammaC', 24))            // concrete unit weight, kN/m³
   // Material: 'concrete' (RC) or 'steel' (AISC W-shapes) for the frame members.
   const [material, setMaterial] = useState<'concrete' | 'steel'>((si.material as 'concrete' | 'steel') ?? 'concrete')
@@ -768,6 +772,8 @@ export default function ModelSpace() {
   const [pDelta, setPDelta] = useState(b('pDelta', false))
   const [cracked, setCracked] = useState(b('cracked', true))       // ACI §6.6.3.1.1 cracked EI (0.35/0.70 Ig)
   const [shearDef, setShearDef] = useState(b('shearDef', true))    // Timoshenko shear deformation (deep girders / squat columns)
+  const [allAround, setAllAround] = useState(b('allAround', true)) // column P–M bars on all four faces
+  const [tBeamOn, setTBeamOn] = useState(b('tBeamOn', true))       // §6.3.2 flanged sagging design
   const [tryBars, setTryBars] = useState(b('tryBars', true))        // let design/optimize pick bar Ø from a ladder
   const [showLoads, setShowLoads] = useState(true)   // load-diagram overlay
   const [showFootings, setShowFootings] = useState(true)   // designed footing footprints
@@ -925,7 +931,7 @@ export default function ModelSpace() {
   const hasELoads = model?.loads.some((l) => l.cat === 'E') ?? false
   const seismicSystem: 'gravity' | 'imf' | 'smf' = hasELoads ? (Rw >= 8 ? 'smf' : Rw >= 5 ? 'imf' : 'gravity') : 'gravity'
   // §208.4.1 vertical seismic component folded into the E-combo D factors.
-  const anaOpts = { f1: fLive, pDelta, lateral, seismicSystem, crackedSections: cracked, shearDeformation: shearDef, Ev: evOn ? 0.5 * Ca * Ie : undefined }
+  const anaOpts = { f1: fLive, pDelta, lateral, seismicSystem, crackedSections: cracked, shearDeformation: shearDef, Ev: evOn ? 0.5 * Ca * Ie : undefined, colLayout: (allAround ? 'all-around' as const : 'two-face' as const), tBeamAction: tBeamOn }
 
   const analyze = () => {
     if (!model || busy || meshErrors) return   // §1 fail-fast: don't solve a singular mesh
@@ -2274,6 +2280,37 @@ export default function ModelSpace() {
                 <Num label="Clear cover" unit="mm" value={cover} onChange={setCover} step="5" />
                 <Num label="Concrete unit wt γc" unit="kN/m³" value={gammaC} onChange={setGammaC} step="0.5" />
               </Sec>
+              <Sec title="Prestressing — beams & girders" hint="§24.5 · PCI losses">
+                <label className="col-span-full flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={psOn} onChange={(e) => setPsOn(e.target.checked)} />
+                  <span>Check beam/girder members as pretensioned bonded (beside the RC design)</span>
+                </label>
+                {psOn && (<>
+                  <Num label="Aps" unit="mm²" value={psAps} onChange={setPsAps} />
+                  <Num label="fpu" unit="MPa" value={psFpu} onChange={setPsFpu} />
+                  <Num label="Eccentricity e" unit="mm" value={psE} onChange={setPsE} />
+                  <Num label="f'ci (transfer)" unit="MPa" value={psFci} onChange={setPsFci} />
+                </>)}
+                <div className="col-span-full">
+                  <button type="button" disabled={!model}
+                    onClick={() => model && save({
+                      ...model,
+                      sections: model.sections.map((sc) => {
+                        const isBeamSec = model.members.some((mm) => mm.section === sc.id && mm.role !== 'column')
+                        if (!isBeamSec || sc.material === 'steel') return sc
+                        if (!psOn) { const { ps: _drop, ...rest } = sc; return rest }
+                        return { ...sc, ps: { Aps: psAps, fpu: psFpu, e: psE, fci: psFci } }
+                      }),
+                    })}
+                    className={`w-full ${btn}`}>
+                    {psOn ? 'Apply prestressing to beam sections' : 'Clear prestressing from beam sections'}
+                  </button>
+                </div>
+                <p className="col-span-full text-[11px] text-slate-500">
+                  The pipeline back-derives equivalent gravity UDLs from the D/L solves (w = 8M/L²) and runs the
+                  full prestressed engine per member — losses, transfer/service stresses, fps/φMn, 1.2Mcr.
+                </p>
+              </Sec>
               <p className="text-[11px] text-slate-500">
                 Per-member b×h are editable in the Geometry → Beams &amp; columns table; slab thickness per panel
                 in Geometry → Slabs. f′c, fy, ⌀, cover and slab thickness are applied when you generate a new grid;
@@ -2884,6 +2921,14 @@ export default function ModelSpace() {
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={shearDef} onChange={(e) => setShearDef(e.target.checked)} />
                   <span>Shear deformation (Timoshenko) — Φ = 12EI/(G·As·L²); softens deep girders &amp; squat columns</span>
+                </label>
+                <label className="col-span-full flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={allAround} onChange={(e) => setAllAround(e.target.checked)} />
+                  <span>Column bars on all four faces — P–M strain-compatibility layers (real cage; lower Mb)</span>
+                </label>
+                <label className="col-span-full flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={tBeamOn} onChange={(e) => setTBeamOn(e.target.checked)} />
+                  <span>T-beam action — §6.3.2 flange from adjoining slabs for sagging sections (a ≤ hf)</span>
                 </label>
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" disabled={!model} checked={model?.diaphragm ?? false}
@@ -3537,7 +3582,7 @@ export default function ModelSpace() {
                     <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
                       className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${bad ? 'bg-red-50 text-red-700' : ''}`}>
                       <td className="py-1 pr-2 font-medium">{k === 0 ? `${open ? '▾' : '▸'} ${bm.id} (${bm.role} ${sec?.name ?? ''}, ${f1(bm.L)} m)` : ''}</td>
-                      <td className="py-1 pr-2">{s.label}{s.hogging ? ' (hog)' : ''}</td>
+                      <td className="py-1 pr-2">{s.label}{s.hogging ? ' (hog)' : s.bf ? ` · T bf=${Math.round(s.bf)}` : ''}</td>
                       <td className="py-1 pr-2 text-right">{f1(Math.abs(s.Mu))}</td>
                       <td className="py-1 pr-2 text-right">{f1(s.Vu)}</td>
                       <td className="py-1 pr-2">{d.mode}</td>
@@ -3578,6 +3623,39 @@ export default function ModelSpace() {
                     ),
                   ]
                 }))}
+              </tbody>
+            </table>
+          </div>}
+
+          {/* Prestressed member checks */}
+          {design.prestressed.length > 0 && <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Prestressed member checks (§24.5 · PCI)</h3>
+            <table className="w-full border-collapse text-xs">
+              <thead>
+                <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                  <th className="py-1 pr-2 font-semibold">Member</th>
+                  <th className="py-1 pr-2 text-right font-semibold">Loss %</th>
+                  <th className="py-1 pr-2 text-right font-semibold">fse (MPa)</th>
+                  <th className="py-1 pr-2 font-semibold">Transfer</th>
+                  <th className="py-1 pr-2 font-semibold">Service</th>
+                  <th className="py-1 pr-2 text-right font-semibold">φMn / Mu</th>
+                  <th className="py-1 pr-2 font-semibold">1.2Mcr</th>
+                  <th className="py-1 font-semibold">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {design.prestressed.map((pr) => (
+                  <tr key={pr.id} className={`border-t border-slate-100 ${pr.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                    <td className="py-1 pr-2 font-medium">{pr.id} ({f1(pr.L)} m)</td>
+                    <td className="py-1 pr-2 text-right">{pr.design.lossPct.toFixed(1)}</td>
+                    <td className="py-1 pr-2 text-right">{f1(pr.design.fse)}</td>
+                    <td className="py-1 pr-2">{pr.design.transferOK ? '✓' : '✗'}</td>
+                    <td className="py-1 pr-2">{pr.design.serviceOK ? '✓' : '✗'}</td>
+                    <td className="py-1 pr-2 text-right">{f1(pr.design.phiMn)} / {f1(pr.design.Mu)}</td>
+                    <td className="py-1 pr-2">{pr.design.crackingOK ? '✓' : '✗'}</td>
+                    <td className="py-1">{pr.ok ? '✓ OK' : '✗ FAILS'}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>}

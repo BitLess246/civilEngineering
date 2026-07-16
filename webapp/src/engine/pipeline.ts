@@ -7,7 +7,7 @@
 //   factored reactions → isolated footing) → concrete totals.
 // Every stage reuses the existing engines unchanged.
 // ─────────────────────────────────────────────────────────────────────────
-import type { StructuralModel, RectSection, ModelLoad } from './model'
+import type { StructuralModel, RectSection, ModelLoad, Member } from './model'
 import { enforceSectionHierarchy, refreshSelfWeight, barContinuityGroups } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
 import { precomputeFrame, solveWithGeometry, applyF3Combo, serializePrecomp, type F3Result, type F3MemberResult, type F3Load } from './frame3d'
@@ -16,8 +16,10 @@ import { FramePool } from './framePool'
 import { nscpCombos, type Combo } from './beamAnalysis'
 import type { ProgressFn } from './progress'
 import { designBeam, type BeamDesignResult } from './beamDesign'
+import { effectiveFlange } from './tbeam'
+import { designPrestressed, type PrestressedResult } from './prestressedBeam'
 import { minBeamThickness, type BeamSupport } from './beamDeflection'
-import { designAxialColumn, capacityAtEccentricity, interaction } from './columnDesign'
+import { designAxialColumn, capacityAtEccentricity, interaction, type BarLayout } from './columnDesign'
 import { designSquareFooting, type SquareFootingResult } from './isolatedFooting'
 import { designCombinedFooting, type CombinedFootingResult } from './combinedFooting'
 import { designSlabDDM, type SlabDesignResult } from './slabDDM'
@@ -63,11 +65,22 @@ export interface AnalyzeOptions {
   /** Timoshenko shear deformation: bridge shear areas into the frame elements
    *  (Φ = 12EI/(G·As·L²)). Default off at the API level; UI enables it. */
   shearDeformation?: boolean
+  /** Column P–M bar layout: 'all-around' models the real cage (side bars as
+   *  their own strain layers). Default 'two-face' at the API level; the Model
+   *  Space UI enables all-around. */
+  colLayout?: BarLayout
+  /** Flanged (T-beam) action for sagging sections of beams that carry a slab:
+   *  bf per ACI §6.3.2 from the adjoining panels, used when a ≤ hf AND the
+   *  flanged design actually saves steel. */
+  tBeamAction?: boolean
 }
 
 export interface BeamSectionDesign {
   label: string; x: number; Mu: number; Vu: number; hogging: boolean
   design: BeamDesignResult
+  /** T-beam action: effective flange width used for this sagging section
+   *  (ACI §6.3.2) — present only when the block stayed inside the slab. */
+  bf?: number; hf?: number
 }
 export interface BeamScheduleRow {
   id: string; role: string; L: number
@@ -86,6 +99,8 @@ export interface BeamScheduleRow {
 export interface ColumnScheduleRow {
   id: string; L: number
   Pu: number; Mu: number; e: number
+  /** P–M bar layout used for the check (mirrors AnalyzeOptions.colLayout). */
+  layout?: BarLayout
   bars: number; phiPn: number; util: number
   /** Gravity-only tie spacing (§425.7.2), mm. */
   tieSpacing: number
@@ -179,10 +194,22 @@ export interface BasePlateScheduleRow {
   ok: boolean
 }
 
+/** Prestressed member check (sections with RectSection.ps): the pipeline
+ *  back-derives equivalent UDLs from the D-only / L-only midspan sagging
+ *  moments (w = 8M/L², self-weight excluded from SDL) and runs the full
+ *  prestressedBeam engine — a simple-span GRAVITY idealisation of the member. */
+export interface PrestressedScheduleRow {
+  id: string; L: number
+  design: PrestressedResult
+  ok: boolean
+}
+
 export interface StructureDesign {
   govName: string
   cases: string[]   // every load case (combo × direction) run for the envelope
   beams: BeamScheduleRow[]
+  /** Members whose section carries prestressing (RectSection.ps). */
+  prestressed: PrestressedScheduleRow[]
   columns: ColumnScheduleRow[]
   steelBeams: SteelBeamScheduleRow[]
   steelColumns: SteelColumnScheduleRow[]
@@ -211,7 +238,7 @@ export interface StructureDesign {
  *  (DDM + §408.3.1.2 + §424.2 deflection), shear walls, steel joints and the
  *  §418.7.3.2 strong-column/weak-beam hierarchy. Nothing green is unchecked. */
 export function designOK(d: StructureDesign): boolean {
-  return d.beams.every((b) => b.ok) && d.columns.every((c) => c.ok)
+  return d.beams.every((b) => b.ok) && d.prestressed.every((p) => p.ok) && d.columns.every((c) => c.ok)
     && d.steelBeams.every((b) => b.ok) && d.steelColumns.every((c) => c.ok)
     && d.basePlates.every((p) => p.ok)
     && d.footings.every((f) => f.ok) && d.combined.every((c) => c.ok)
@@ -312,18 +339,65 @@ function memberSections(mr: F3MemberResult): { label: string; x: number; Mu: num
   return out
 }
 
+/** Effective flange for a beam that carries slab panels (T-beam action):
+ *  panels adjoin when both member end nodes are among the plate corners.
+ *  hf = thinnest adjoining slab; sw = clear web-to-web distance approximated
+ *  by the panel width across the beam; interior with 2 panels, edge with 1. */
+function memberFlange(model: StructuralModel, m: Member, L: number): { bf: number; hf: number } | null {
+  const sec = model.sections.find((x) => x.id === m.section)
+  if (!sec || sec.material === 'steel') return null
+  const pos = new Map(model.nodes.map((n) => [n.id, n]))
+  const panels = model.plates.filter((p) => p.role !== 'wall' && p.corners.includes(m.i) && p.corners.includes(m.j))
+  if (!panels.length) return null
+  const hf = Math.min(...panels.map((p) => p.thickness))
+  const a = pos.get(m.i), b = pos.get(m.j)
+  if (!a || !b) return null
+  const across = (p: (typeof model.plates)[number]) => Math.max(...p.corners
+    .filter((cid) => cid !== m.i && cid !== m.j)
+    .map((cid) => {
+      const n = pos.get(cid)!
+      const dx = b.x - a.x, dz = b.z - a.z
+      const len = Math.hypot(dx, dz) || 1
+      return Math.abs(((n.x - a.x) * dz - (n.z - a.z) * dx) / len)
+    }))
+  const swM = Math.max(0.1, Math.min(...panels.map(across)) - sec.b / 1000)
+  const { bf } = effectiveFlange({
+    kind: panels.length >= 2 ? 'interior' : 'edge',
+    bw: sec.b, h: sec.h, hf, ln: L, sw: swM,
+    cover: sec.cover, stirrupDia: sec.tieDia, barDia: sec.barDia,
+    fc: sec.fc, fy: sec.fy, Mu: 0,
+  })
+  return { bf, hf }
+}
+
 /** Design one beam/girder member from a single run's member result. */
-function designBeamRow(mr: F3MemberResult, role: string, sec: RectSection, support: BeamSupport = 'both-ends'): BeamScheduleRow {
+function designBeamRow(
+  mr: F3MemberResult, role: string, sec: RectSection, support: BeamSupport = 'both-ends',
+  flange?: { bf: number; hf: number },
+): BeamScheduleRow {
   const sections: BeamSectionDesign[] = memberSections(mr)
     .filter((s) => Math.abs(s.Mu) > 1e-6 || s.Vu > 1e-6)
-    .map((s) => ({
-      label: s.label, x: s.x, Mu: s.Mu, Vu: s.Vu, hogging: s.Mu < 0,
-      design: designBeam({
+    .map((s) => {
+      const base = {
         b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia,
         comprBarDia: 16, stirrupDia: sec.tieDia,
         fc: sec.fc, fy: sec.fy, Mu: Math.abs(s.Mu), Vu: s.Vu,
-      }),
-    }))
+      }
+      const rect = designBeam(base)
+      // T-beam action (§6.3.2): sagging compression lives in the slab, so the
+      // section may design as a rectangle b = bf — adopted only when the block
+      // stays inside the flange (a ≤ hf) AND it actually saves steel
+      // (designBeam's ρmin scales with b, so a min-governed wide-flange result
+      // would be spurious, not a benefit).
+      if (flange && s.Mu > 0) {
+        const rT = designBeam({ ...base, b: flange.bf, bMin: sec.b })
+        const aT = (rT.As * sec.fy) / (0.85 * sec.fc * flange.bf)
+        if (aT <= flange.hf + 1e-9 && rT.As <= rect.As + 1e-6) {
+          return { label: s.label, x: s.x, Mu: s.Mu, Vu: s.Vu, hogging: false, design: rT, bf: flange.bf, hf: flange.hf }
+        }
+      }
+      return { label: s.label, x: s.x, Mu: s.Mu, Vu: s.Vu, hogging: s.Mu < 0, design: rect }
+    })
   // Table 409.3.1.1 minimum thickness (deemed-to-comply — deflections need not
   // be computed when h ≥ hMin). Steel beams check L/240 explicitly; this is the
   // RC counterpart so the optimizer cannot trim a long span into a springboard.
@@ -341,6 +415,7 @@ function designBeamRow(mr: F3MemberResult, role: string, sec: RectSection, suppo
 function designColumnFromPM(
   sec: RectSection, Pu: number, Mu: number,
   system: 'gravity' | 'imf' | 'smf' = 'gravity', columnLength?: number,
+  layout: BarLayout = 'two-face',
 ) {
   const ax = designAxialColumn({
     shape: 'tied', b: sec.b, h: sec.h, cover: sec.cover,
@@ -351,10 +426,10 @@ function designColumnFromPM(
   const e = Pu > 1e-9 ? Mu / Pu : 0
   if (e > 1e-4) {
     const cap = capacityAtEccentricity(
-      { b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, numBars: ax.bars },
+      { b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, numBars: ax.bars, layout },
       e,
     )
-    const inter = interaction({ b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, numBars: ax.bars })
+    const inter = interaction({ b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, numBars: ax.bars, layout })
     phiPn = Math.min(cap.phi * cap.Pn, 0.65 * inter.PnMax)
   }
   const util = phiPn > 1e-9 ? Pu / phiPn : Infinity
@@ -374,12 +449,13 @@ function designColumnFromPM(
 function designColumnRow(
   mr: F3MemberResult, sec: RectSection,
   system: 'gravity' | 'imf' | 'smf' = 'gravity',
+  layout: BarLayout = 'two-face',
 ): ColumnScheduleRow {
   const Pu = Math.max(0, -Math.min(...mr.N))           // compression (N < 0)
   const Mu = mr.Mmax
-  const r = designColumnFromPM(sec, Pu, Mu, system, mr.L * 1000)   // L m → mm
+  const r = designColumnFromPM(sec, Pu, Mu, system, mr.L * 1000, layout)   // L m → mm
   return {
-    id: mr.id, L: mr.L, Pu, Mu, e: r.e, bars: r.bars, phiPn: r.phiPn, util: r.util,
+    id: mr.id, L: mr.L, Pu, Mu, e: r.e, bars: r.bars, phiPn: r.phiPn, util: r.util, layout,
     tieSpacing: r.tieSpacing,
     tieSpacingFinal: r.tieSpacingFinal,
     tieSpacingLabel: r.tieSpacingLabel,
@@ -536,6 +612,7 @@ function designFromRuns(
   const totalMems = model.members.length
   let memDone = 0
   const beams: BeamScheduleRow[] = []
+  const prestressed: PrestressedScheduleRow[] = []
   const columns: ColumnScheduleRow[] = []
   const steelBeams: SteelBeamScheduleRow[] = []
   const steelColumns: SteelColumnScheduleRow[] = []
@@ -565,14 +642,36 @@ function designFromRuns(
       } else {
         let best: BeamScheduleRow | null = null, bestSev = -1, gov = ''
         const support = spanTypeOf(m)
+        const flange = opts.tBeamAction ? (() => {
+          const ni = model.nodes.find((n) => n.id === m.i), nj = model.nodes.find((n) => n.id === m.j)
+          return ni && nj ? memberFlange(model, m, Math.hypot(nj.x - ni.x, nj.y - ni.y, nj.z - ni.z)) : null
+        })() : null
         for (const run of runs) {
           const mr = memberOf(run, m.id); if (!mr) continue
-          const row = designBeamRow(mr, role, sec, support)
+          const row = designBeamRow(mr, role, sec, support, flange ?? undefined)
           if (row.sections.length === 0) continue
           const sev = beamSeverity(row)
           if (sev > bestSev) { bestSev = sev; best = row; gov = run.name }
         }
         if (best) beams.push({ ...best, gov })
+        // prestressed check (section tagged with ps): equivalent UDLs from the
+        // D-only / L-only sagging peaks — simple-span gravity idealisation
+        if (sec.ps && best) {
+          const L = best.L
+          const sag = (res: F3Result | null) => {
+            if (!res) return 0
+            const mr = res.members.find((x) => x.id === m.id)
+            return mr ? Math.max(0, ...mr.Mz) : 0
+          }
+          const wSW = ((sec.b * sec.h) / 1e6) * 24
+          const wD = Math.max(0, (8 * sag(dRes)) / (L * L) - wSW)
+          const wL = (8 * sag(lRes)) / (L * L)
+          const design = designPrestressed({
+            b: sec.b, h: sec.h, span: L, fc: sec.fc, fci: sec.ps.fci,
+            Aps: sec.ps.Aps, fpu: sec.ps.fpu, e: sec.ps.e, wSDL: wD, wLL: wL,
+          })
+          prestressed.push({ id: m.id, L, design, ok: design.ok })
+        }
       }
     } else if (role === 'column') {
       if (isSteel) {
@@ -593,7 +692,7 @@ function designFromRuns(
         const sysOpts = opts.seismicSystem ?? 'gravity'
         for (const run of runs) {
           const mr = memberOf(run, m.id); if (!mr) continue
-          const row = designColumnRow(mr, sec, sysOpts)
+          const row = designColumnRow(mr, sec, sysOpts, opts.colLayout ?? 'two-face')
           if (row.util > bestUtil) { bestUtil = row.util; best = row; gov = run.name }
         }
         if (best) columns.push({ ...best, gov })
@@ -774,7 +873,7 @@ function designFromRuns(
   const partialDesign = {
     govName: runs[govIdx].name,
     cases: runs.map((r) => r.name),
-    beams, columns, steelBeams, steelColumns, basePlates,
+    beams, prestressed, columns, steelBeams, steelColumns, basePlates,
     joints: [] as SteelJoint[],
     beamJoints: [] as BeamBeamJoint[],
     slabs, walls, footings, combined,

@@ -806,3 +806,70 @@ describe('§208.4.1 vertical seismic component Ev in the combo factors', () => {
     expect(up.f.D).toBeLessThan(0.9)   // more severe for uplift/overturning checks
   })
 })
+
+describe('engine integrations — all-around columns & T-beam action', () => {
+  const rTwo = designStructure(makeModel(), soil)!
+  const rInt = designStructure(makeModel(), soil, {}, { colLayout: 'all-around', tBeamAction: true })!
+
+  it('all-around layout is recorded on every column row and stays plausible', () => {
+    expect(rInt.columns.every((c) => c.layout === 'all-around')).toBe(true)
+    expect(rTwo.columns.every((c) => (c.layout ?? 'two-face') === 'two-face')).toBe(true)
+    for (const c of rInt.columns) {
+      const t = rTwo.columns.find((x) => x.id === c.id)!
+      // side bars shift capacity along the demand ray but never wildly
+      expect(c.util).toBeGreaterThan(0)
+      expect(c.util / t.util).toBeGreaterThan(0.5)
+      expect(c.util / t.util).toBeLessThan(2)
+    }
+  })
+
+  it('T-beam action tags only sagging sections, with bf > b, never more steel', () => {
+    let flanged = 0
+    for (const bm of rInt.beams) {
+      const two = rTwo.beams.find((x) => x.id === bm.id)!
+      for (const s of bm.sections) {
+        if (s.bf !== undefined) {
+          flanged++
+          expect(s.Mu).toBeGreaterThan(0)
+          expect(s.bf).toBeGreaterThan(300)
+          const sTwo = two.sections.find((x) => x.label === s.label)
+          if (sTwo) expect(s.design.As).toBeLessThanOrEqual(sTwo.design.As + 1e-6)
+        }
+        if (s.hogging) expect(s.bf).toBeUndefined()
+      }
+    }
+    expect(flanged).toBeGreaterThan(0)                       // slabs adjoin the grid beams
+  })
+})
+
+describe('engine integrations — prestressed member check', () => {
+  const m = makeModel()
+  // tag every beam section with pretensioned strands (mutate shared sections)
+  m.sections = m.sections.map((s) => ({ ...s, ps: { Aps: 600, fpu: 1860, e: 150, fci: 24 } }))
+  const r = designStructure(m, soil)!
+
+  it('every prestressed-tagged beam gets a row with the full engine result', () => {
+    const beamIds = new Set(r.beams.map((b) => b.id))
+    expect(r.prestressed.length).toBe(beamIds.size)
+    for (const p of r.prestressed) {
+      expect(beamIds.has(p.id)).toBe(true)
+      expect(p.design.lossPct).toBeGreaterThan(5)
+      expect(p.design.lossPct).toBeLessThan(30)
+      expect(p.design.phiMn).toBeGreaterThan(0)
+      expect(p.ok).toBe(p.design.ok)
+    }
+  })
+
+  it('undersized strands fail designOK through the prestressed rows', () => {
+    const bad = makeModel()
+    bad.sections = bad.sections.map((s) => ({ ...s, ps: { Aps: 40, fpu: 1860, e: 150, fci: 24 } }))
+    const rBad = designStructure(bad, soil)!
+    expect(rBad.prestressed.some((p) => !p.ok)).toBe(true)
+    expect(designOK(rBad)).toBe(false)
+  })
+
+  it('untagged models produce no prestressed rows (back-compat)', () => {
+    const plain = designStructure(makeModel(), soil)!
+    expect(plain.prestressed).toEqual([])
+  })
+})

@@ -152,6 +152,17 @@ export function validateMesh(model: StructuralModel): MeshIssue[] {
         message: `Node ${n.id} is attached to no member; its free DOFs have no stiffness (singular K).` })
   }
 
+
+  // ── prestressing sanity (L1 rule for RectSection.ps) ────────────────────
+  for (const sec of model.sections) {
+    if (!sec.ps) continue
+    if (sec.material === 'steel')
+      issues.push({ severity: 'error', code: 'PS_STEEL', message: `section ${sec.id}: prestressing is only supported on concrete sections`, refs: [sec.id] })
+    if (!(sec.ps.Aps > 0) || !(sec.ps.fpu > 0) || !(sec.ps.fci > 0))
+      issues.push({ severity: 'error', code: 'PS_PARAMS', message: `section ${sec.id}: Aps, fpu and f'ci must be positive`, refs: [sec.id] })
+    if (!(sec.ps.e > 0) || sec.ps.e > sec.h / 2 - 40)
+      issues.push({ severity: 'error', code: 'PS_ECC', message: `section ${sec.id}: tendon eccentricity must satisfy 0 < e ≤ h/2 − 40 mm`, refs: [sec.id] })
+  }
   return issues
 }
 
