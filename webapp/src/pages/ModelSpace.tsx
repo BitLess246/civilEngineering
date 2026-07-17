@@ -2616,7 +2616,7 @@ export default function ModelSpace() {
                           const unit = l.kind === 'area' ? 'kPa' : l.kind === 'member-udl' ? 'kN/m' : l.kind === 'member-thermal' ? '°C' : 'kN'
                           return (
                             <tr key={idx} className="border-t border-slate-100">
-                              <td className={`py-0.5 pr-2 font-semibold ${l.cat === 'D' ? 'text-slate-600' : l.cat === 'L' ? 'text-emerald-700' : 'text-purple-700'}`}>{l.cat}</td>
+                              <td className={`py-0.5 pr-2 font-semibold ${l.cat === 'D' ? 'text-slate-600' : l.cat === 'L' ? 'text-emerald-700' : l.cat === 'T' ? 'text-amber-600' : 'text-purple-700'}`}>{l.cat}</td>
                               <td className="py-0.5 pr-2">{l.kind === 'node' ? '·' : l.kind === 'area' ? '▦' : l.kind === 'member-thermal' ? '🌡' : '—'} {target}</td>
                               <td className="py-0.5 pr-1 whitespace-nowrap">
                                 {val !== null ? (
@@ -2681,7 +2681,7 @@ export default function ModelSpace() {
                       disabled={!thMember || !Number.isFinite(thDeltaT) || !Number.isFinite(thAlpha) || thAlpha <= 0}
                       onClick={() => {
                         if (!model || !thMember) return
-                        save({ ...model, loads: [...model.loads, { kind: 'member-thermal', member: thMember, deltaT: thDeltaT, alpha: thAlpha, cat: 'D' }] })
+                        save({ ...model, loads: [...model.loads, { kind: 'member-thermal', member: thMember, deltaT: thDeltaT, alpha: thAlpha, cat: 'T' }] })
                       }}
                       className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50 disabled:opacity-40">
                       + Add thermal load
