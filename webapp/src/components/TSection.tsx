@@ -35,24 +35,24 @@ export function TSection({ bf, bw, h, hf, a = 0, bars = 0, barDia = 0, layers = 
       {/* stirrup in the web */}
       <rect x={xw + inset} y={y0 + hff * 0.35} width={wf - 2 * inset} height={ht - hff * 0.35 - inset}
         rx={Math.max(2, 2 * stirrupDia * S)} fill="none" stroke="#37526e" strokeWidth={Math.max(1, stirrupDia * S)} opacity="0.8" />
-      {/* 135° stirrup hook — the tie's free end wraps 135° around the bottom-left
-          corner bar (tension side) and the tail runs 45° into the core. Drawn from
-          the tie corner THROUGH the corner bar (painted on top after, so the tie
-          reads as wrapping it) out into the core, ext = max(6ds, 75) mm (ACI §425.3.2) */}
+      {/* 135° stirrup hooks — the tie is a bent bar with a hook at BOTH ends,
+          meeting at the bottom-left (tension) corner. Each free end is a single
+          hairline stroke, same weight as the tie: one bends off the bottom leg,
+          the other off the left leg, straddling the corner bar into the core.
+          Tail ext = max(6ds, 75) mm (ACI 318-14 §425.3.2) */}
       {barRows.length > 0 && (() => {
         const len = Math.max(6 * stirrupDia, 75) * S
-        const wid = Math.max(2, stirrupDia * S)
         const dx = 1 / Math.SQRT2, dy = -1 / Math.SQRT2      // up-inward into core
-        const px = -dy, py = dx                              // perpendicular
-        const back = (stirrupDia / 2 + barDia / 2) * S * Math.SQRT2   // tie corner → corner bar
-        const total = back + len
-        const tcx = xw + inset, tcy = y0 + ht - inset        // tie bottom-left corner
-        const ax = tcx + (px * wid) / 2, ay = tcy + (py * wid) / 2
-        const pts = [
-          [ax, ay], [ax + dx * total, ay + dy * total],
-          [ax + dx * total - px * wid, ay + dy * total - py * wid], [ax - px * wid, ay - py * wid],
-        ].map((p) => p.join(',')).join(' ')
-        return <polygon points={pts} fill="none" stroke="#37526e" strokeWidth={Math.max(1, stirrupDia * S * 0.5)} opacity="0.85" />
+        const cy = barRows[0].y                              // corner bar row
+        const edgeY = y0 + ht - inset                        // tie bottom leg
+        const leftX = xw + inset                             // tie left leg
+        const sw = Math.max(1, stirrupDia * S)
+        return (
+          <g stroke="#37526e" strokeWidth={sw} opacity="0.8" strokeLinecap="round">
+            <line x1={bx1} y1={edgeY} x2={bx1 + dx * len} y2={edgeY + dy * len} />
+            <line x1={leftX} y1={cy} x2={leftX + dx * len} y2={cy + dy * len} />
+          </g>
+        )
       })()}
       {/* tension bars */}
       {barRows.map((row, li) => Array.from({ length: row.n }, (_, i) => (
