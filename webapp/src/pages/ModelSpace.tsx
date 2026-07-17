@@ -49,6 +49,7 @@ import { elasticResponseSpectrum, nscp208DesignCurve, type AccelSpectrum, type D
 import { parseAccelerogram } from '../engine/accelerogram'
 import type { TimeHistoryModelResult, GroundMotionKind, CsvAccelerogramOpts } from '../engine/timeHistoryModel'
 import { BeamSchematic } from '../components/BeamSchematic'
+import { TSection } from '../components/TSection'
 import { ColumnSchematic } from '../components/ColumnSchematic'
 import { FootingSchematic } from '../components/FootingSchematic'
 import { DimBelow, DimSide } from '../components/dims'
@@ -588,6 +589,19 @@ function TabBtn({ id, label, active, onClick }: { id: Tab; label: string; active
       className={`rounded-[5px] px-2.5 py-[5px] text-[11.5px] font-semibold transition ${active ? 'bg-[#0f4c92] text-white' : 'text-[#5c6675] hover:bg-[#eaf1f9] hover:text-[#0f1b2a]'}`}>
       {label}
     </button>
+  )
+}
+
+/** Pass/fail pill for a schedule title — "all passed" (green) or "n failed"
+ *  (red). `items` are the rows, `ok` maps a row to its verdict. */
+function SchedChip<T>({ items, ok }: { items: T[]; ok: (r: T) => boolean }) {
+  const failed = items.reduce((n, r) => n + (ok(r) ? 0 : 1), 0)
+  const good = failed === 0
+  return (
+    <span className={`ml-2 inline-block rounded px-1.5 py-px align-middle font-mono text-[10px] font-semibold ${
+      good ? 'bg-[#ddefe3] text-[#14603a]' : 'bg-[#fbeeea] text-[#c2402a]'}`}>
+      {good ? 'all passed' : `${failed} failed`}
+    </span>
   )
 }
 
@@ -2280,6 +2294,15 @@ export default function ModelSpace() {
                 <Num label="Clear cover" unit="mm" value={cover} onChange={setCover} step="5" />
                 <Num label="Concrete unit wt γc" unit="kN/m³" value={gammaC} onChange={setGammaC} step="0.5" />
               </Sec>
+              <Sec title="Beam design method" hint="flanged / rectangular">
+                <label className="col-span-full flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={tBeamOn} onChange={(e) => setTBeamOn(e.target.checked)} />
+                  <span>Design beams as T-beams — §6.3.2 flange from the adjoining slabs for sagging sections (when a ≤ hf). Off = plain rectangular web.</span>
+                </label>
+                <p className="col-span-full text-[11px] text-slate-500">
+                  Sagging sections that get flange action are tagged “T bf=…” in the schedule and drawn as a T-section.
+                </p>
+              </Sec>
               <Sec title="Prestressing — beams & girders" hint="§24.5 · PCI losses">
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={psOn} onChange={(e) => setPsOn(e.target.checked)} />
@@ -2927,10 +2950,6 @@ export default function ModelSpace() {
                   <span>Column bars on all four faces — P–M strain-compatibility layers (real cage; lower Mb)</span>
                 </label>
                 <label className="col-span-full flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={tBeamOn} onChange={(e) => setTBeamOn(e.target.checked)} />
-                  <span>T-beam action — §6.3.2 flange from adjoining slabs for sagging sections (a ≤ hf)</span>
-                </label>
-                <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" disabled={!model} checked={model?.diaphragm ?? false}
                     onChange={(e) => model && save({ ...model, diaphragm: e.target.checked })} />
                   <span>Rigid floor diaphragm (ties in-plane lateral DOFs per storey)</span>
@@ -3557,7 +3576,7 @@ export default function ModelSpace() {
 
           {/* Beam & girder schedule — RC only */}
           {design.beams.length > 0 && <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">RC beam & girder schedule</h3>
+            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">RC beam & girder schedule<SchedChip items={design.beams} ok={(b) => b.ok} /></h3>
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -3609,11 +3628,17 @@ export default function ModelSpace() {
                             <div className="space-y-3 self-start rounded-lg border border-slate-200 bg-white p-3">
                               <BeamRebarElevation L={bm.L} h={sec.h} sections={bm.sections} />
                               <div className="border-t border-slate-100 pt-2">
-                                <p className="mb-1 text-[11px] font-semibold text-[#0f4c92]">SECTION — {s.label}</p>
-                                <BeamSchematic b={sec.b} h={sec.h} cover={sec.cover} barDia={sec.barDia} stirrupDia={sec.tieDia}
-                                  bars={d.bars} d={d.d} dPrime={d.comprLayers.length > 0 ? d.dPrime : undefined}
-                                  layers={d.layers} comprLayers={d.comprLayers} comprBars={d.comprBars} comprBarDia={16}
-                                  naDepth={d.cNA} flexOK={d.flexOK} hogging={s.hogging} />
+                                <p className="mb-1 text-[11px] font-semibold text-[#0f4c92]">SECTION — {s.label}{s.bf ? ' (T-beam)' : ''}</p>
+                                {s.bf && s.hf ? (
+                                  <TSection bf={s.bf} bw={sec.b} h={sec.h} hf={s.hf}
+                                    a={(d.bars * (Math.PI / 4) * sec.barDia ** 2 * sec.fy) / (0.85 * sec.fc * s.bf)}
+                                    bars={d.bars} barDia={sec.barDia} layers={d.layers} cover={sec.cover} stirrupDia={sec.tieDia} />
+                                ) : (
+                                  <BeamSchematic b={sec.b} h={sec.h} cover={sec.cover} barDia={sec.barDia} stirrupDia={sec.tieDia}
+                                    bars={d.bars} d={d.d} dPrime={d.comprLayers.length > 0 ? d.dPrime : undefined}
+                                    layers={d.layers} comprLayers={d.comprLayers} comprBars={d.comprBars} comprBarDia={16}
+                                    naDepth={d.cNA} flexOK={d.flexOK} hogging={s.hogging} />
+                                )}
                               </div>
                             </div>
                             )}
@@ -3629,7 +3654,7 @@ export default function ModelSpace() {
 
           {/* Prestressed member checks */}
           {design.prestressed.length > 0 && <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Prestressed member checks (§24.5 · PCI)</h3>
+            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Prestressed member checks (§24.5 · PCI)<SchedChip items={design.prestressed} ok={(pr) => pr.ok} /></h3>
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -3662,7 +3687,7 @@ export default function ModelSpace() {
 
           {/* Column schedule (full width) — RC only */}
           {design.columns.length > 0 && <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">RC column schedule</h3>
+            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">RC column schedule<SchedChip items={design.columns} ok={(c) => c.ok} /></h3>
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -3729,7 +3754,7 @@ export default function ModelSpace() {
           {/* Strong-column/weak-beam joint check — NSCP §418.7.3.2 (SMF only) */}
           {design.scwb.length > 0 && report !== 'draw-only' && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Strong-column / weak-beam — NSCP §418.7.3.2</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Strong-column / weak-beam — NSCP §418.7.3.2<SchedChip items={design.scwb} ok={(j) => j.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -3765,7 +3790,7 @@ export default function ModelSpace() {
           {/* Slab schedule (full width) — two-way DDM */}
           {design.slabs.length > 0 && report !== 'draw-only' && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Slab schedule (two-way DDM)</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Slab schedule (two-way DDM)<SchedChip items={design.slabs} ok={(x) => x.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -3873,7 +3898,7 @@ export default function ModelSpace() {
           {/* Shear-wall schedule (full width) — in-plane reinforcement */}
           {design.walls.length > 0 && report !== 'draw-only' && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Shear-wall schedule (in-plane)</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Shear-wall schedule (in-plane)<SchedChip items={design.walls} ok={(w) => w.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -3939,7 +3964,7 @@ export default function ModelSpace() {
           {/* Steel beam schedule (full width) — only when steel members exist */}
           {design.steelBeams.length > 0 && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Steel beam / girder schedule — AISC 360-16 LRFD</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Steel beam / girder schedule — AISC 360-16 LRFD<SchedChip items={design.steelBeams} ok={(b) => b.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -4074,7 +4099,7 @@ export default function ModelSpace() {
           {/* Steel column schedule (full width) */}
           {design.steelColumns.length > 0 && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Steel column schedule — AISC §E3 + §H1-1</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Steel column schedule — AISC §E3 + §H1-1<SchedChip items={design.steelColumns} ok={(c) => c.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -4191,7 +4216,7 @@ export default function ModelSpace() {
           {/* Base-plate schedule (full width) */}
           {design.basePlates.length > 0 && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Base-plate schedule — AISC §J8 / Design Guide 1</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Base-plate schedule — AISC §J8 / Design Guide 1<SchedChip items={design.basePlates} ok={(pl) => pl.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -4229,7 +4254,7 @@ export default function ModelSpace() {
           {/* Steel connection schedule — only for steel frames */}
           {(design.joints.length > 0 || design.beamJoints.length > 0) && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Steel connection schedule — AISC SCM</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Steel connection schedule — AISC SCM<SchedChip items={[...design.joints.flatMap((j) => j.connections), ...design.beamJoints.flatMap((j) => j.connections)]} ok={(cn) => cn.ok} /></h3>
               <p className="mb-2 text-[11px] text-slate-500">
                 Columns oriented with depth <em>d</em> in X (flanges face ±X); X-direction girders land on the column <strong>flange</strong> face (strong-axis moment connection), Z-direction beams land on the column <strong>web</strong> face (shear tab). Bolts: M20 A325 single-shear (φRₙ = 116.5 kN/bolt). Welds: E70XX fillet, both sides of plate.
               </p>
@@ -4371,7 +4396,7 @@ export default function ModelSpace() {
 
           {/* Footing schedule (full width) */}
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Footing schedule</h3>
+            <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Footing schedule<SchedChip items={design.footings} ok={(f) => f.ok} /></h3>
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
@@ -4421,7 +4446,7 @@ export default function ModelSpace() {
           {/* Combined footing schedule (full width) */}
           {design.combined.length > 0 && report !== 'draw-only' && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Combined footing schedule</h3>
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Combined footing schedule<SchedChip items={design.combined} ok={(c) => c.ok} /></h3>
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="sched-head text-left uppercase tracking-wide text-slate-500">

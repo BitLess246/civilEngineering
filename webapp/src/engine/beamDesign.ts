@@ -92,16 +92,26 @@ const PHI_SHEAR = 0.75
 const LAYER_CLEAR = 25       // §407.7.2 clear distance between layers, mm
 const roundDown = (v: number, step: number) => Math.floor(v / step) * step
 
-/** Split n bars into layers of at most maxPerLayer, fullest at the bottom. */
-function splitLayers(n: number, maxPerLayer: number): number[] {
-  const layers: number[] = []
-  let left = n
-  while (left > 0) {
-    const take = Math.min(left, maxPerLayer)
-    layers.push(take)
-    left -= take
+/** Split n bars into layers of at most maxPerLayer, fullest at the bottom.
+ *  Detailing rule: no layer carries a single bar — a lone bar in the top
+ *  (least-full) layer is paired with a second so the two sit beside the
+ *  stirrup legs on each side. Pairing adds one bar (conservative on As).
+ *  Returns the (possibly bumped) total count alongside the layer vector. */
+function splitLayers(n: number, maxPerLayer: number): { bars: number; layers: number[] } {
+  let total = n
+  const build = (m: number): number[] => {
+    const out: number[] = []
+    let left = m
+    while (left > 0) { const take = Math.min(left, maxPerLayer); out.push(take); left -= take }
+    return out
   }
-  return layers
+  let layers = build(total)
+  // pair a lone top-layer bar (only meaningful once the section holds ≥ 2/layer)
+  if (maxPerLayer >= 2 && layers.length > 1 && layers[layers.length - 1] === 1) {
+    total += 1
+    layers = build(total)
+  }
+  return { bars: total, layers }
 }
 
 /** Centroid rise of the bar group above the extreme (bottom) layer — Varignon. */
@@ -191,16 +201,19 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
       AsPrime = comprEffective ? (As2 * i.fy) / (fsPrime - 0.85 * i.fc) : 0
     }
 
-    // Tension side: bars → layers → Varignon → new d.
-    bars = Math.max(2, Math.ceil(As / Ab))
-    const newLayers = splitLayers(bars, maxPerLayer)
+    // Tension side: bars → layers (lone-bar pairing) → Varignon → new d.
+    const tenSplit = splitLayers(Math.max(2, Math.ceil(As / Ab)), maxPerLayer)
+    bars = tenSplit.bars
+    const newLayers = tenSplit.layers
     yBar = centroidRise(newLayers, pitch)
     const dNew = dt - yBar
 
     // Compression side: same technique, layered downward from the top face —
     // stacking layers DEEPENS d' (centroid drops), which feeds back into As2.
-    comprBars = mode === 'DRRB' && comprEffective ? Math.max(2, Math.ceil(AsPrime / AbC)) : 0
-    const newComprLayers = comprBars > 0 ? splitLayers(comprBars, comprMaxPerLayer) : []
+    const comprSplit = mode === 'DRRB' && comprEffective
+      ? splitLayers(Math.max(2, Math.ceil(AsPrime / AbC)), comprMaxPerLayer) : { bars: 0, layers: [] as number[] }
+    comprBars = comprSplit.bars
+    const newComprLayers = comprSplit.layers
     comprYBar = centroidRise(newComprLayers, pitchC)
     const dPrimeNew = dPrimeBase + comprYBar
 

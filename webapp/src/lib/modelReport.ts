@@ -17,7 +17,19 @@ import type { SolutionStep, SolutionLine } from './solution'
 export interface ReportStat { label: string; value: string; unit?: string }
 export interface ReportCheck { name: string; detail: string; ratio: number | null; ok: boolean }
 export interface ReportTable { title: string; head: string[]; rows: string[][]; right?: number[] }
-export interface ReportSolution { title: string; sub?: string; steps: SolutionStep[] }
+/** Cross-section geometry for a member, drawn (vector) in the PDF report so the
+ *  reader can see the bar layout in the section. */
+export interface ReportSection {
+  kind: 'beam' | 'column'
+  b: number; h: number; cover: number; barDia: number; stirrupDia: number
+  bars: number
+  layers?: number[]         // beam: tension bars per layer (bottom-first)
+  comprLayers?: number[]    // beam: compression bars per layer (top-first)
+  hogging?: boolean         // beam: tension steel at the top
+  bf?: number; hf?: number  // beam: T-flange (sagging flanged section)
+  fourFace?: boolean        // column: bars distributed on all four faces
+}
+export interface ReportSolution { title: string; sub?: string; steps: SolutionStep[]; section?: ReportSection }
 export interface ReportGroup { title: string; items: ReportSolution[] }
 export interface ModelReport {
   ok: boolean
@@ -281,6 +293,11 @@ export function buildModelReport(
         title: `${bm.id} · ${s.label}`,
         sub: `${bm.role} ${sec.name} · L = ${f1(bm.L)} m · ${bm.gov ?? ''}`,
         steps: beamSectionSolution(sec, s),
+        section: {
+          kind: 'beam' as const, b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, stirrupDia: sec.tieDia,
+          bars: s.design.bars, layers: s.design.layers, comprLayers: s.design.comprLayers,
+          hogging: s.hogging, bf: s.bf, hf: s.hf,
+        },
       }))
     }),
   })
@@ -303,7 +320,13 @@ export function buildModelReport(
     title: 'RC columns',
     items: design.columns.flatMap((c) => {
       const cs = sectionFor(c.id)
-      return cs ? [{ title: c.id, sub: `${cs.name} · L = ${f1(c.L)} m · ${c.gov ?? ''}`, steps: columnRowSolution(cs, c) }] : []
+      return cs ? [{
+        title: c.id, sub: `${cs.name} · L = ${f1(c.L)} m · ${c.gov ?? ''}`, steps: columnRowSolution(cs, c),
+        section: {
+          kind: 'column' as const, b: cs.b, h: cs.h, cover: cs.cover, barDia: cs.barDia, stirrupDia: cs.tieDia,
+          bars: c.bars, fourFace: c.layout === 'all-around',
+        },
+      }] : []
     }),
   })
   if (design.steelBeams.length) groups.push({

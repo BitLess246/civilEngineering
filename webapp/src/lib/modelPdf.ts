@@ -8,7 +8,7 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { LetterheadState } from '../components/calc'
-import type { ModelReport } from './modelReport'
+import type { ModelReport, ReportSection } from './modelReport'
 import { texToPlain } from './texText'
 import { SANS, SANS_BOLD, MONO, MONO_BOLD } from './pdfFonts'
 
@@ -84,6 +84,64 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
     doc.text(label, x + 1.5, cy)
     return w
   }
+  const CONC: [number, number, number] = [238, 243, 248]
+  /** Vector cross-section (bar layout) drawn into a boxW×boxH mm cell at (x, topY). */
+  const drawSection = (sec: ReportSection, x: number, topY: number, boxW: number, boxH: number) => {
+    const flanged = sec.kind === 'beam' && !!sec.bf && sec.bf > sec.b && !sec.hogging && !!sec.hf
+    const drawW = flanged ? sec.bf! : sec.b
+    const s = Math.min((boxW - 3) / drawW, (boxH - 3) / sec.h)
+    const wv = drawW * s, hv = sec.h * s, bwv = sec.b * s
+    const bx = x + (boxW - wv) / 2, by = topY + (boxH - hv) / 2
+    const webX = bx + (wv - bwv) / 2
+    doc.setLineWidth(0.25); doc.setDrawColor(...INK); doc.setFillColor(...CONC)
+    if (flanged) {
+      const hfv = sec.hf! * s
+      doc.rect(webX, by, bwv, hv, 'FD')       // web (full height)
+      doc.rect(bx, by, wv, hfv, 'FD')         // flange cap
+    } else {
+      doc.rect(webX, by, bwv, hv, 'FD')
+    }
+    // tie / stirrup
+    const ins = (sec.cover + sec.stirrupDia / 2) * s
+    doc.setDrawColor(...MUTED); doc.setLineWidth(0.35)
+    doc.roundedRect(webX + ins, by + ins, bwv - 2 * ins, hv - 2 * ins, 0.6, 0.6, 'S')
+    // bars
+    const br = Math.max(0.5, (sec.barDia / 2) * s)
+    const barIns = (sec.cover + sec.stirrupDia + sec.barDia / 2) * s
+    const bx1 = webX + barIns, bx2 = webX + bwv - barIns
+    const spanX = (n: number, i: number) => (n <= 1 ? (bx1 + bx2) / 2 : bx1 + ((bx2 - bx1) * i) / (n - 1))
+    doc.setFillColor(...INK); doc.setDrawColor(...INK); doc.setLineWidth(0.25)
+    if (sec.kind === 'beam') {
+      const pitch = (sec.barDia + 25) * s
+      const tenBottom = !sec.hogging
+      ;(sec.layers ?? [sec.bars]).forEach((n, li) => {
+        const yb = tenBottom ? by + hv - barIns - li * pitch : by + barIns + li * pitch
+        for (let i = 0; i < n; i++) doc.circle(spanX(n, i), yb, br, 'F')
+      })
+      ;(sec.comprLayers ?? []).forEach((n, li) => {
+        const yb = tenBottom ? by + barIns + li * pitch : by + hv - barIns - li * pitch
+        for (let i = 0; i < n; i++) doc.circle(spanX(n, i), yb, br, 'S')   // hollow
+      })
+    } else {
+      // column — bars around the perimeter (all-around) or two faces
+      const N = Math.max(4, 2 * Math.round(sec.bars / 2))
+      const bwIn = sec.b - 2 * barIns / s, hIn = sec.h - 2 * barIns / s
+      const nx = sec.fourFace ? Math.max(2, Math.min(N / 2, 2 + Math.round(((N - 4) / 2) * (bwIn / (bwIn + hIn))))) : N / 2
+      const ny = sec.fourFace ? N / 2 + 2 - nx : 2
+      const yTop = by + barIns, yBot = by + hv - barIns
+      for (let i = 0; i < nx; i++) { doc.circle(spanX(nx, i), yTop, br, 'F'); doc.circle(spanX(nx, i), yBot, br, 'F') }
+      for (let k = 1; k <= ny - 2; k++) {
+        const yy = yTop + ((yBot - yTop) * k) / (ny - 1)
+        doc.circle(bx1, yy, br, 'F'); doc.circle(bx2, yy, br, 'F')
+      }
+    }
+    setF('mono', 'normal', 5, FAINT)
+    const cap = sec.kind === 'beam'
+      ? `${sec.bars}⌀${sec.barDia}${flanged ? ` · T bf=${Math.round(sec.bf!)}` : ''}`
+      : `${sec.bars}⌀${sec.barDia} · ${sec.b}×${sec.h}`
+    doc.text(cap, x + boxW / 2, topY + boxH - 0.5, { align: 'center' })
+  }
+
   const tableTheme = (right: number[] = []) => ({
     margin: { left: M, right: M, bottom: PAGE_H - FOOT_Y + 2 },
     styles: {
@@ -316,6 +374,17 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
         doc.line(M, y, M + CONTENT_W, y)
         y += 3
       })
+      // cross-section figure — the bar layout in the section
+      if (item.section) {
+        const boxW = 46, boxH = 34
+        ensure(boxH + 4)
+        setF('sans', 'bold', 5.5, FAINT)
+        doc.text('SECTION', M + 1, y + 2)
+        doc.setDrawColor(...HAIR); doc.setLineWidth(0.2)
+        doc.roundedRect(M, y + 3, boxW, boxH, 1, 1, 'S')
+        drawSection(item.section, M, y + 3, boxW, boxH)
+        y += boxH + 5
+      }
       y += 2
     })
   })
