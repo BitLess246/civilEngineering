@@ -35,18 +35,21 @@ export function TSection({ bf, bw, h, hf, a = 0, bars = 0, barDia = 0, layers = 
       {/* stirrup in the web */}
       <rect x={xw + inset} y={y0 + hff * 0.35} width={wf - 2 * inset} height={ht - hff * 0.35 - inset}
         rx={Math.max(2, 2 * stirrupDia * S)} fill="none" stroke="#37526e" strokeWidth={Math.max(1, stirrupDia * S)} opacity="0.8" />
-      {/* 135° stirrup hooks — start at the bottom corner bars (tension side) and
-          turn 45° into the core, ext = max(6ds, 75) mm (ACI 318-14 §425.3.2) */}
+      {/* 135° stirrup hook — a single closed tie hook at the bottom-left corner
+          bar (tension side): the bar bends 135° and the tail runs 45° into the
+          core, drawn to the stirrup-bar width, ext = max(6ds, 75) mm (ACI §425.3.2) */}
       {barRows.length > 0 && (() => {
-        const hk = (Math.max(6 * stirrupDia, 75) * S) / Math.SQRT2
-        const sw = Math.max(1, stirrupDia * S)
         const hy = barRows[0].y
-        return (
-          <g stroke="#37526e" strokeWidth={sw} opacity="0.8" strokeLinecap="round">
-            <line x1={bx1} y1={hy} x2={bx1 + hk} y2={hy - hk} />
-            <line x1={bx2} y1={hy} x2={bx2 - hk} y2={hy - hk} />
-          </g>
-        )
+        const len = Math.max(6 * stirrupDia, 75) * S
+        const wid = Math.max(2, stirrupDia * S)
+        const dx = 1 / Math.SQRT2, dy = -1 / Math.SQRT2      // up-inward
+        const px = -dy, py = dx                              // perpendicular
+        const ax = bx1 + (px * wid) / 2, ay = hy + (py * wid) / 2
+        const pts = [
+          [ax, ay], [ax + dx * len, ay + dy * len],
+          [ax + dx * len - px * wid, ay + dy * len - py * wid], [ax - px * wid, ay - py * wid],
+        ].map((p) => p.join(',')).join(' ')
+        return <polygon points={pts} fill="none" stroke="#37526e" strokeWidth={Math.max(1, stirrupDia * S * 0.5)} opacity="0.85" />
       })()}
       {/* tension bars */}
       {barRows.map((row, li) => Array.from({ length: row.n }, (_, i) => (

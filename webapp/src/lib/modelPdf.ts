@@ -116,16 +116,21 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
     const barIns = (sec.cover + sec.stirrupDia + sec.barDia / 2) * s
     const bx1 = webX + barIns, bx2 = webX + bwv - barIns
     const spanX = (n: number, i: number) => (n <= 1 ? (bx1 + bx2) / 2 : bx1 + ((bx2 - bx1) * i) / (n - 1))
-    // 135° stirrup hooks — start at the two corner bars on the tension side
-    // (bottom for sagging, top for hogging; top for columns) and turn 45° into
-    // the core, true tail ext = max(6ds, 75) mm (ACI 318-14 §425.3.2)
-    const hk = (Math.max(6 * sec.stirrupDia, 75) * s) / Math.SQRT2
+    // 135° stirrup hook — a single closed tie hook at the tension-side corner
+    // bar (bottom for sagging, top for hogging; top for columns): the bar bends
+    // 135° and the free tail runs 45° into the core, drawn to the stirrup-bar
+    // width as a closed blade. Tail ext = max(6ds, 75) mm (ACI 318-14 §425.3.2).
     const hookBottom = sec.kind === 'beam' ? !sec.hogging : false
     const hookY = hookBottom ? by + hv - barIns : by + barIns
-    const hookDy = hookBottom ? -hk : hk
-    doc.setDrawColor(...MUTED); doc.setLineWidth(0.35)
-    doc.line(bx1, hookY, bx1 + hk, hookY + hookDy)      // left corner-bar hook
-    doc.line(bx2, hookY, bx2 - hk, hookY + hookDy)      // right corner-bar hook
+    const dirX = 1 / Math.SQRT2, dirY = (hookBottom ? -1 : 1) / Math.SQRT2
+    const hLen = Math.max(6 * sec.stirrupDia, 75) * s
+    const hWid = Math.max(0.45, sec.stirrupDia * s)
+    const pxu = -dirY, pyu = dirX                         // unit perpendicular
+    doc.setDrawColor(...MUTED); doc.setLineWidth(0.3)
+    doc.lines(
+      [[dirX * hLen, dirY * hLen], [-pxu * hWid, -pyu * hWid], [-dirX * hLen, -dirY * hLen]],
+      bx1 + (pxu * hWid) / 2, hookY + (pyu * hWid) / 2, [1, 1], 'S', true,
+    )
     doc.setFillColor(...INK); doc.setDrawColor(...INK); doc.setLineWidth(0.25)
     if (sec.kind === 'beam') {
       const pitch = (sec.barDia + 25) * s
