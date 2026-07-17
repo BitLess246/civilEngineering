@@ -111,16 +111,21 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
     const cr = Math.max(0.4, Math.min(1.4, 2 * sec.stirrupDia * s))
     doc.setDrawColor(...MUTED); doc.setLineWidth(0.35)
     doc.roundedRect(stX, stY, stW, stH, cr, cr, 'S')
-    // 135° hooks at the top corners — free end angles into the core (down-inward
-    // at 45°), true length ext = max(6ds, 75) mm (ACI 318-14 §425.3.2)
-    const hk = (Math.max(6 * sec.stirrupDia, 75) * s) / Math.SQRT2
-    doc.line(stX + cr, stY + cr, stX + cr + hk, stY + cr + hk)          // left hook
-    doc.line(stX + stW - cr, stY + cr, stX + stW - cr - hk, stY + cr + hk) // right hook
     // bars
     const br = Math.max(0.5, (sec.barDia / 2) * s)
     const barIns = (sec.cover + sec.stirrupDia + sec.barDia / 2) * s
     const bx1 = webX + barIns, bx2 = webX + bwv - barIns
     const spanX = (n: number, i: number) => (n <= 1 ? (bx1 + bx2) / 2 : bx1 + ((bx2 - bx1) * i) / (n - 1))
+    // 135° stirrup hooks — start at the two corner bars on the tension side
+    // (bottom for sagging, top for hogging; top for columns) and turn 45° into
+    // the core, true tail ext = max(6ds, 75) mm (ACI 318-14 §425.3.2)
+    const hk = (Math.max(6 * sec.stirrupDia, 75) * s) / Math.SQRT2
+    const hookBottom = sec.kind === 'beam' ? !sec.hogging : false
+    const hookY = hookBottom ? by + hv - barIns : by + barIns
+    const hookDy = hookBottom ? -hk : hk
+    doc.setDrawColor(...MUTED); doc.setLineWidth(0.35)
+    doc.line(bx1, hookY, bx1 + hk, hookY + hookDy)      // left corner-bar hook
+    doc.line(bx2, hookY, bx2 - hk, hookY + hookDy)      // right corner-bar hook
     doc.setFillColor(...INK); doc.setDrawColor(...INK); doc.setLineWidth(0.25)
     if (sec.kind === 'beam') {
       const pitch = (sec.barDia + 25) * s
@@ -152,7 +157,7 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
     setF('mono', 'normal', 4.3, MUTED)
     const hDim = (x0: number, x1: number, yd: number, val: number) => {
       doc.line(x0, yd, x1, yd); doc.line(x0, yd - 0.9, x0, yd + 0.9); doc.line(x1, yd - 0.9, x1, yd + 0.9)
-      doc.text(String(Math.round(val)), (x0 + x1) / 2, yd + 2.4, { align: 'center' })
+      doc.text(`${Math.round(val)} mm`, (x0 + x1) / 2, yd + 2.4, { align: 'center' })
     }
     const wDimY = by + hv + 3.4
     hDim(webX, webX + bwv, wDimY, sec.b)                       // web width b
@@ -160,7 +165,7 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
     // height h on the right
     const vx = webX + bwv + 3.6
     doc.line(vx, by, vx, by + hv); doc.line(vx - 0.9, by, vx + 0.9, by); doc.line(vx - 0.9, by + hv, vx + 0.9, by + hv)
-    doc.text(String(Math.round(sec.h)), vx + 1.4, by + hv / 2, { align: 'center', angle: 90 })
+    doc.text(`${Math.round(sec.h)} mm`, vx + 1.4, by + hv / 2, { align: 'center', angle: 90 })
   }
 
   const tableTheme = (right: number[] = []) => ({
@@ -346,10 +351,10 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
     y += 4.5
     g.items.forEach((item) => {
       const fig = item.section
-      const boxW = 52, boxH = 40
+      const boxW = 46, boxH = 34
       ensure(fig ? boxH + 5 : 20)
       const headTop = y
-      const leftW = fig ? CONTENT_W - boxW - 5 : CONTENT_W
+      const leftW = fig ? CONTENT_W - boxW - 6 : CONTENT_W
       // cross-section figure — drawn BESIDE the name (top-right of the block)
       if (fig) {
         const fx = M + CONTENT_W - boxW
@@ -359,7 +364,14 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
         doc.roundedRect(fx, headTop + 2.5, boxW, boxH, 1, 1, 'S')
         drawSection(fig, fx, headTop + 2.5, boxW, boxH)
       }
-      // left stack — name, sub, bar callout, demand summary, plan location
+      // left stack — name, sub, bar callout, demand summary, plan location.
+      // Vertically centre it against the figure so the block reads as one card
+      // rather than leaving a tall blank band beside a short caption.
+      const flanged = !!fig && fig.kind === 'beam' && !!fig.bf && fig.bf > fig.b && !fig.hogging && !!fig.hf
+      const subN = item.sub ? doc.splitTextToSize(item.sub, leftW).length : 0
+      const locN = item.loc ? doc.splitTextToSize(item.loc, leftW).length : 0
+      const stackH = 4.4 + subN * 3 + (fig ? 3.6 : 0) + (item.details ? 3.3 : 0) + locN * 3.3
+      if (fig) y = headTop + 2.5 + Math.max(0, (boxH - stackH) / 2)
       setF('sans', 'bold', 7.8, INK)
       doc.text(item.title, M, y + 1)
       y += 4.4
@@ -368,7 +380,6 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
         for (const w of doc.splitTextToSize(item.sub, leftW)) { doc.text(w, M, y); y += 3 }
       }
       if (fig) {
-        const flanged = fig.kind === 'beam' && !!fig.bf && fig.bf > fig.b && !fig.hogging && !!fig.hf
         const cap = `${fig.bars}⌀${fig.barDia}${flanged ? ` · T bf=${Math.round(fig.bf!)}` : ''} · ${fig.b}×${fig.h}`
         setF('mono', 'bold', 6.6, INK)
         doc.text(cap, M, y + 0.6); y += 3.6
@@ -383,7 +394,7 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
       }
       // clear the figure box before the steps begin
       if (fig) y = Math.max(y, headTop + 2.5 + boxH)
-      y += 3.4
+      y += 2.5
       item.steps.forEach((st, si) => {
         ensure(12)
         const stepTop = y

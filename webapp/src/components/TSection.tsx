@@ -35,16 +35,16 @@ export function TSection({ bf, bw, h, hf, a = 0, bars = 0, barDia = 0, layers = 
       {/* stirrup in the web */}
       <rect x={xw + inset} y={y0 + hff * 0.35} width={wf - 2 * inset} height={ht - hff * 0.35 - inset}
         rx={Math.max(2, 2 * stirrupDia * S)} fill="none" stroke="#37526e" strokeWidth={Math.max(1, stirrupDia * S)} opacity="0.8" />
-      {/* 135° stirrup hooks — free ends into the core, ext = max(6ds, 75) mm (ACI 318-14 §425.3.2) */}
-      {(() => {
-        const stX = xw + inset, stY = y0 + hff * 0.35, stW = wf - 2 * inset
-        const rr = Math.max(2, 2 * stirrupDia * S)
+      {/* 135° stirrup hooks — start at the bottom corner bars (tension side) and
+          turn 45° into the core, ext = max(6ds, 75) mm (ACI 318-14 §425.3.2) */}
+      {barRows.length > 0 && (() => {
         const hk = (Math.max(6 * stirrupDia, 75) * S) / Math.SQRT2
         const sw = Math.max(1, stirrupDia * S)
+        const hy = barRows[0].y
         return (
           <g stroke="#37526e" strokeWidth={sw} opacity="0.8" strokeLinecap="round">
-            <line x1={stX + rr} y1={stY + rr} x2={stX + rr + hk} y2={stY + rr + hk} />
-            <line x1={stX + stW - rr} y1={stY + rr} x2={stX + stW - rr - hk} y2={stY + rr + hk} />
+            <line x1={bx1} y1={hy} x2={bx1 + hk} y2={hy - hk} />
+            <line x1={bx2} y1={hy} x2={bx2 - hk} y2={hy - hk} />
           </g>
         )
       })()}
