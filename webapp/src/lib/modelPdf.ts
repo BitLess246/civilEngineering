@@ -116,6 +116,33 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
     const barIns = (sec.cover + sec.stirrupDia + sec.barDia / 2) * s
     const bx1 = webX + barIns, bx2 = webX + bwv - barIns
     const spanX = (n: number, i: number) => (n <= 1 ? (bx1 + bx2) / 2 : bx1 + ((bx2 - bx1) * i) / (n - 1))
+    // C-tie: an interior crosstie that arcs around bar A and bar B (the two bars
+    // it grips) at the tie radius, joined by a leg on the far side with a short
+    // hook tail, the opening facing `openDir` (toward the section centre). u is
+    // the unit A→B axis; used vertically (beams/columns) and horizontally (cols).
+    const cTie = (
+      A: [number, number], B: [number, number], u: [number, number], openDir: [number, number], rw: number, stub: number,
+    ) => {
+      const NS = 8, pts: [number, number][] = []
+      const P = (Q: [number, number], vx: number, vy: number): [number, number] => [Q[0] + vx, Q[1] + vy]
+      pts.push(P(A, openDir[0] * rw + u[0] * stub, openDir[1] * rw + u[1] * stub))
+      for (let j = 0; j <= NS; j++) { const t = (Math.PI * j) / NS, c = Math.cos(t), sn = Math.sin(t)
+        pts.push(P(A, (openDir[0] * c - u[0] * sn) * rw, (openDir[1] * c - u[1] * sn) * rw)) }
+      pts.push(P(B, -openDir[0] * rw, -openDir[1] * rw))
+      for (let j = 0; j <= NS; j++) { const t = (Math.PI * j) / NS, c = Math.cos(t), sn = Math.sin(t)
+        pts.push(P(B, (-openDir[0] * c + u[0] * sn) * rw, (-openDir[1] * c + u[1] * sn) * rw)) }
+      pts.push(P(B, openDir[0] * rw - u[0] * stub, openDir[1] * rw - u[1] * stub))
+      doc.setDrawColor(...MUTED); doc.setLineWidth(0.35)
+      for (let j = 0; j < pts.length - 1; j++) doc.line(pts[j][0], pts[j][1], pts[j + 1][0], pts[j + 1][1])
+    }
+    // column bar grid (shared by the crossties and the bar circles below)
+    let colNx = 0, colNy = 0
+    if (sec.kind === 'column') {
+      const N = Math.max(4, 2 * Math.round(sec.bars / 2))
+      const bwIn = sec.b - 2 * barIns / s, hIn = sec.h - 2 * barIns / s
+      colNx = sec.fourFace ? Math.max(2, Math.min(N / 2, 2 + Math.round(((N - 4) / 2) * (bwIn / (bwIn + hIn))))) : N / 2
+      colNy = sec.fourFace ? N / 2 + 2 - colNx : 2
+    }
     // 135° stirrup hooks — the tie is a bent bar with a 135° hook at BOTH ends,
     // meeting at the tension-side corner (bottom for sagging, top for hogging;
     // top for columns). Each free end is a single hairline stroke — same weight
@@ -131,30 +158,29 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
     // the vertical leg (beside it); they straddle the corner bar into the core
     doc.line(bx1, edgeY, bx1 + dirX * hLen, edgeY + dirY * hLen)
     doc.line(stX, cornerBarY, stX + dirX * hLen, cornerBarY + dirY * hLen)
-    // interior crossties — each added leg (legs − 2) is a vertical hairline tie
-    // gripping an interior bar top & bottom with a 135° hook at each end,
-    // alternating sides (§25.7.2.3). Drawn before the bars so they sit on top.
+    // interior crossties — each added leg is a C-tie gripping an interior bar
+    // pair (§25.7.2.3). Drawn before the bars so the bars sit on top.
+    const yTopB = by + barIns, yBotB = by + hv - barIns
+    const rwC = br + (sec.stirrupDia / 2) * s, stubC = (br + (sec.stirrupDia / 2) * s) * 1.6
+    const midX = (bx1 + bx2) / 2, midY = (yTopB + yBotB) / 2
     if (sec.kind === 'beam' && (sec.legs ?? 2) > 2) {
       const nCross = (sec.legs ?? 2) - 2
       const n0 = (sec.layers && sec.layers[0]) || sec.bars
-      const yTop = by + barIns, yBot = by + hv - barIns
-      const rw = br + (sec.stirrupDia / 2) * s         // tie centreline wraps just outside the bar
-      const stub = rw * 1.6                            // short hook tail
-      const midX = (bx1 + bx2) / 2, NS = 8
-      doc.setDrawColor(...MUTED); doc.setLineWidth(0.35)
       for (let k = 0; k < nCross; k++) {
         const idx = Math.min(n0 - 2, Math.max(1, Math.round(((n0 - 1) * (k + 1)) / (nCross + 1))))
         const xc = spanX(n0, idx)
-        const hd = xc <= midX ? 1 : -1                 // C opening faces the section centre
-        const xo = (o: number) => xc + hd * o
-        // C-tie: tail → arc OVER the top bar → far-side leg → arc UNDER the
-        // bottom bar → tail, so the tie grips the interior bars top & bottom.
-        const pts: [number, number][] = [[xo(rw), yTop + stub]]
-        for (let j = 0; j <= NS; j++) { const t = (Math.PI * j) / NS; pts.push([xo(rw * Math.cos(t)), yTop - rw * Math.sin(t)]) }
-        pts.push([xo(-rw), yBot])
-        for (let j = 0; j <= NS; j++) { const t = Math.PI - (Math.PI * j) / NS; pts.push([xo(rw * Math.cos(t)), yBot + rw * Math.sin(t)]) }
-        pts.push([xo(rw), yBot - stub])
-        for (let j = 0; j < pts.length - 1; j++) doc.line(pts[j][0], pts[j][1], pts[j + 1][0], pts[j + 1][1])
+        cTie([xc, yTopB], [xc, yBotB], [0, 1], [xc <= midX ? 1 : -1, 0], rwC, stubC)  // vertical
+      }
+    } else if (sec.kind === 'column') {
+      // vertical C-ties grip interior top/bottom-face bars; horizontal C-ties
+      // grip interior side-face bars — the added legs of a tied column cage.
+      for (let i = 1; i <= colNx - 2; i++) {
+        const xc = spanX(colNx, i)
+        cTie([xc, yTopB], [xc, yBotB], [0, 1], [xc <= midX ? 1 : -1, 0], rwC, stubC)
+      }
+      for (let k = 1; k <= colNy - 2; k++) {
+        const yy = yTopB + ((yBotB - yTopB) * k) / (colNy - 1)
+        cTie([bx1, yy], [bx2, yy], [1, 0], [0, yy <= midY ? 1 : -1], rwC, stubC)  // horizontal
       }
     }
     doc.setFillColor(...INK); doc.setDrawColor(...INK); doc.setLineWidth(0.25)
@@ -171,14 +197,10 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
       })
     } else {
       // column — bars around the perimeter (all-around) or two faces
-      const N = Math.max(4, 2 * Math.round(sec.bars / 2))
-      const bwIn = sec.b - 2 * barIns / s, hIn = sec.h - 2 * barIns / s
-      const nx = sec.fourFace ? Math.max(2, Math.min(N / 2, 2 + Math.round(((N - 4) / 2) * (bwIn / (bwIn + hIn))))) : N / 2
-      const ny = sec.fourFace ? N / 2 + 2 - nx : 2
       const yTop = by + barIns, yBot = by + hv - barIns
-      for (let i = 0; i < nx; i++) { doc.circle(spanX(nx, i), yTop, br, 'F'); doc.circle(spanX(nx, i), yBot, br, 'F') }
-      for (let k = 1; k <= ny - 2; k++) {
-        const yy = yTop + ((yBot - yTop) * k) / (ny - 1)
+      for (let i = 0; i < colNx; i++) { doc.circle(spanX(colNx, i), yTop, br, 'F'); doc.circle(spanX(colNx, i), yBot, br, 'F') }
+      for (let k = 1; k <= colNy - 2; k++) {
+        const yy = yTop + ((yBot - yTop) * k) / (colNy - 1)
         doc.circle(bx1, yy, br, 'F'); doc.circle(bx2, yy, br, 'F')
       }
     }

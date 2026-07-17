@@ -45,11 +45,30 @@ export function ColumnSchematic({ shape, b = 0, h = 0, D = 0, cover, barDia, tie
     const ny = N / 2 + 2 - nx
     const rowX = Array.from({ length: nx }, (_, i) => (nx === 1 ? (x1 + x2) / 2 : x1 + ((x2 - x1) * i) / (nx - 1)))
     const sideY = Array.from({ length: Math.max(0, ny - 2) }, (_, i) => yT + ((yB - yT) * (i + 1)) / (ny - 1))
+    // interior crossties (C-ties) that grip the interior face bars — vertical for
+    // the top/bottom-face bars, horizontal for the side-face bars (§25.7.2.3)
+    const midX = (x1 + x2) / 2, midY = (yT + yB) / 2
+    const rw = br + (tieDia / 2) * s, stub = (br + (tieDia / 2) * s) * 1.6, NS = 10
+    const cTie = (A: [number, number], B: [number, number], u: [number, number], od: [number, number]): string => {
+      const pts: [number, number][] = [[A[0] + od[0] * rw + u[0] * stub, A[1] + od[1] * rw + u[1] * stub]]
+      for (let j = 0; j <= NS; j++) { const t = (Math.PI * j) / NS, c = Math.cos(t), sn = Math.sin(t)
+        pts.push([A[0] + (od[0] * c - u[0] * sn) * rw, A[1] + (od[1] * c - u[1] * sn) * rw]) }
+      pts.push([B[0] - od[0] * rw, B[1] - od[1] * rw])
+      for (let j = 0; j <= NS; j++) { const t = (Math.PI * j) / NS, c = Math.cos(t), sn = Math.sin(t)
+        pts.push([B[0] + (-od[0] * c + u[0] * sn) * rw, B[1] + (-od[1] * c + u[1] * sn) * rw]) }
+      pts.push([B[0] + od[0] * rw - u[0] * stub, B[1] + od[1] * rw - u[1] * stub])
+      return pts.map((p) => p.join(',')).join(' ')
+    }
+    const crossties: string[] = [
+      ...rowX.slice(1, -1).map((bx) => cTie([bx, yT], [bx, yB], [0, 1], [bx <= midX ? 1 : -1, 0])),
+      ...sideY.map((sy) => cTie([x1, sy], [x2, sy], [1, 0], [0, sy <= midY ? 1 : -1])),
+    ]
     body = (
       <g>
         <rect x={x0} y={y0} width={bw} height={hgt} rx={2} fill={FILL} stroke={STROKE} strokeWidth={1.6} />
         <rect x={x0 + inset} y={y0 + inset} width={bw - 2 * inset} height={hgt - 2 * inset}
           rx={Math.max(2, 2.5 * tieDia * s)} fill="none" stroke={BAR} strokeWidth={stW} opacity={0.8} />
+        {crossties.map((pts, i) => <polyline key={`c${i}`} points={pts} fill="none" stroke={BAR} strokeWidth={stW} opacity={0.8} strokeLinecap="round" strokeLinejoin="round" />)}
         {rowX.map((bx, i) => <circle key={`t${i}`} cx={bx} cy={yT} r={br} fill={BAR} />)}
         {rowX.map((bx, i) => <circle key={`b${i}`} cx={bx} cy={yB} r={br} fill={BAR} />)}
         {sideY.map((sy, i) => <g key={`s${i}`}>
