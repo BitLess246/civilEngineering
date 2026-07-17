@@ -11,7 +11,7 @@
 export type SupportType = 'pin' | 'roller' | 'fixed' | 'spring'
 export interface Support { type: SupportType; x: number; k?: number /* kN/m, spring */ }
 
-export type LoadCategory = 'D' | 'L' | 'Lr' | 'S' | 'R' | 'W' | 'E'
+export type LoadCategory = 'D' | 'L' | 'Lr' | 'S' | 'R' | 'W' | 'E' | 'T'
 export type BeamLoad =
   | { type: 'point'; x: number; P: number; cat: LoadCategory }
   | { type: 'udl'; x1: number; x2: number; w: number; cat: LoadCategory }
@@ -32,16 +32,21 @@ export interface Combo { name: string; f: Partial<Record<LoadCategory, number>> 
  * The live-load factor f₁ (eqs 203-3, 203-4, 203-5) is **1.0** for floors of
  * public assembly, live loads > 4.8 kPa, and garages; **0.5** otherwise.
  * (S is carried for ASCE-7 parity but is zero in the Philippines — no snow.)
+ *
+ * Self-straining force **T** (thermal, shrinkage, settlement — NSCP §203.3.3 /
+ * ASCE 7-16 §2.3.4) is locked-in like dead load, so it rides at 1.2 in every
+ * combination that carries the factored dead load; it is omitted from the 0.9D
+ * uplift combinations so it can never be credited to relieve net uplift.
  */
 export function nscpCombos(f1 = 1.0): Combo[] {
   const lf = f1 === 1 ? '1.0L' : `${f1}L`
   return [
-    { name: '1.4D', f: { D: 1.4 } },                                                          // 203-1
-    { name: '1.2D + 1.6L + 0.5(Lr|S|R)', f: { D: 1.2, L: 1.6, Lr: 0.5, S: 0.5, R: 0.5 } },     // 203-2
-    { name: `1.2D + 1.6(Lr|S|R) + (${lf}|0.5W)`, f: { D: 1.2, Lr: 1.6, S: 1.6, R: 1.6, L: f1, W: 0.5 } }, // 203-3
-    { name: `1.2D + 1.0W + ${lf} + 0.5(Lr|S|R)`, f: { D: 1.2, W: 1.0, L: f1, Lr: 0.5, S: 0.5, R: 0.5 } }, // 203-4
+    { name: '1.4D', f: { D: 1.4, T: 1.2 } },                                                   // 203-1
+    { name: '1.2D + 1.6L + 0.5(Lr|S|R)', f: { D: 1.2, L: 1.6, Lr: 0.5, S: 0.5, R: 0.5, T: 1.2 } },     // 203-2
+    { name: `1.2D + 1.6(Lr|S|R) + (${lf}|0.5W)`, f: { D: 1.2, Lr: 1.6, S: 1.6, R: 1.6, L: f1, W: 0.5, T: 1.2 } }, // 203-3
+    { name: `1.2D + 1.0W + ${lf} + 0.5(Lr|S|R)`, f: { D: 1.2, W: 1.0, L: f1, Lr: 0.5, S: 0.5, R: 0.5, T: 1.2 } }, // 203-4
     { name: '0.9D + 1.0W', f: { D: 0.9, W: 1.0 } },                                            // 203-6
-    { name: `1.2D + 1.0E + ${lf} + 0.2S`, f: { D: 1.2, E: 1.0, L: f1, S: 0.2 } },              // 203-5
+    { name: `1.2D + 1.0E + ${lf} + 0.2S`, f: { D: 1.2, E: 1.0, L: f1, S: 0.2, T: 1.2 } },      // 203-5
     { name: '0.9D + 1.0E', f: { D: 0.9, E: 1.0 } },                                            // 203-7
   ]
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { solveFEM, analyzeBeam, threeMoment, nscpCombos, NSCP_COMBOS, type Support, type BeamLoad } from './beamAnalysis'
+import { solveFEM, analyzeBeam, threeMoment, nscpCombos, NSCP_COMBOS, applyCombo, type Support, type BeamLoad } from './beamAnalysis'
 
 describe('NSCP §203.3.1 — f₁ live-load factor', () => {
   it('f₁ scales L in eqs 203-3/4/5 only; default export is the 1.0 set', () => {
@@ -11,6 +11,20 @@ describe('NSCP §203.3.1 — f₁ live-load factor', () => {
     expect(c1[5].f.L).toBe(1.0); expect(c05[5].f.L).toBe(0.5)   // 203-5 (seismic)
     expect(c05[4].f.L).toBeUndefined()                  // 203-6 (0.9D+1.0W) has no L
     expect(NSCP_COMBOS[2].f.L).toBe(1.0)                // conservative default
+  })
+
+  it('self-straining T (§203.3.3 / ASCE 7-16 §2.3.4) rides at 1.2 with factored D, omitted from 0.9D uplift', () => {
+    const c = nscpCombos(1.0)
+    // present in every combo that carries the factored dead load (203-1…203-5)
+    for (const i of [0, 1, 2, 3, 5]) expect(c[i].f.T).toBe(1.2)
+    // excluded from the 0.9D uplift combos (203-6, 203-7) so it can't relieve
+    expect(c[4].f.T).toBeUndefined()                    // 0.9D + 1.0W
+    expect(c[6].f.T).toBeUndefined()                    // 0.9D + 1.0E
+    // a T load is scaled, not dropped, under a gravity combo…
+    const t: BeamLoad = { type: 'udl', x1: 0, x2: 6, w: 10, cat: 'T' }
+    expect(applyCombo([t], c[1].f)[0]).toMatchObject({ w: 12 })   // 1.2 × 10
+    // …and dropped under 0.9D + 1.0W (no T factor → ×0 → filtered out)
+    expect(applyCombo([t], c[4].f)).toHaveLength(0)
   })
 })
 
