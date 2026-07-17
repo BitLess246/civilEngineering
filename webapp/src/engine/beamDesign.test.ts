@@ -60,6 +60,16 @@ describe('beam design — bar layout & layers (§407.7, Varignon)', () => {
     expect(fits).toBeLessThanOrEqual(bw + 1e-9)
     expect(oneMore).toBeGreaterThan(bw)
   })
+
+  it('never leaves a lone bar in an upper layer — pairs it (2 bars beside the stirrups)', () => {
+    // Sweep demands that land on odd totals; a multi-layer result must never
+    // end in a single-bar top layer, and bars must stay consistent with layers.
+    for (let Mu = 200; Mu <= 900; Mu += 20) {
+      const r = designBeam({ ...base, b: 250, h: 650, Mu, barDia: 20 })
+      if (r.layers.length > 1) expect(r.layers[r.layers.length - 1]).toBeGreaterThanOrEqual(2)
+      expect(r.bars).toBe(r.layers.reduce((s, k) => s + k, 0))
+    }
+  })
 })
 
 describe('beam design — DRRB (compression steel)', () => {
