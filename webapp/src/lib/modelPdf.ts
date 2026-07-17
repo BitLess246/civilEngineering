@@ -138,16 +138,23 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
       const nCross = (sec.legs ?? 2) - 2
       const n0 = (sec.layers && sec.layers[0]) || sec.bars
       const yTop = by + barIns, yBot = by + hv - barIns
-      const chd = (Math.max(6 * sec.stirrupDia, 75) * s) / Math.SQRT2
-      const midX = (bx1 + bx2) / 2
+      const rw = br + (sec.stirrupDia / 2) * s         // tie centreline wraps just outside the bar
+      const stub = rw * 1.6                            // short hook tail
+      const midX = (bx1 + bx2) / 2, NS = 8
       doc.setDrawColor(...MUTED); doc.setLineWidth(0.35)
       for (let k = 0; k < nCross; k++) {
         const idx = Math.min(n0 - 2, Math.max(1, Math.round(((n0 - 1) * (k + 1)) / (nCross + 1))))
         const xc = spanX(n0, idx)
-        const hd = xc <= midX ? 1 : -1               // hooks point toward centre, clear of the corners
-        doc.line(xc, yTop, xc, yBot)                 // crosstie leg
-        doc.line(xc, yTop, xc + hd * chd, yTop + chd)  // top 135° hook
-        doc.line(xc, yBot, xc + hd * chd, yBot - chd)  // bottom 135° hook
+        const hd = xc <= midX ? 1 : -1                 // C opening faces the section centre
+        const xo = (o: number) => xc + hd * o
+        // C-tie: tail → arc OVER the top bar → far-side leg → arc UNDER the
+        // bottom bar → tail, so the tie grips the interior bars top & bottom.
+        const pts: [number, number][] = [[xo(rw), yTop + stub]]
+        for (let j = 0; j <= NS; j++) { const t = (Math.PI * j) / NS; pts.push([xo(rw * Math.cos(t)), yTop - rw * Math.sin(t)]) }
+        pts.push([xo(-rw), yBot])
+        for (let j = 0; j <= NS; j++) { const t = Math.PI - (Math.PI * j) / NS; pts.push([xo(rw * Math.cos(t)), yBot + rw * Math.sin(t)]) }
+        pts.push([xo(rw), yBot - stub])
+        for (let j = 0; j < pts.length - 1; j++) doc.line(pts[j][0], pts[j][1], pts[j + 1][0], pts[j + 1][1])
       }
     }
     doc.setFillColor(...INK); doc.setDrawColor(...INK); doc.setLineWidth(0.25)
