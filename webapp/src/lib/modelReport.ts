@@ -3,7 +3,7 @@
 // summary checks, schedule tables and EVERY member's worked solution, reusing
 // the same step builders the on-screen schedules use. Presentation only — all
 // numbers come from the pipeline's StructureDesign rows.
-import type { StructuralModel, RectSection } from '../engine/model'
+import type { StructuralModel, RectSection, Node } from '../engine/model'
 import type {
   StructureDesign, SoilOptions,
   SteelBeamScheduleRow, SteelColumnScheduleRow,
@@ -29,7 +29,11 @@ export interface ReportSection {
   bf?: number; hf?: number  // beam: T-flange (sagging flanged section)
   fourFace?: boolean        // column: bars distributed on all four faces
 }
-export interface ReportSolution { title: string; sub?: string; steps: SolutionStep[]; section?: ReportSection }
+export interface ReportSolution {
+  title: string; sub?: string; steps: SolutionStep[]; section?: ReportSection
+  details?: string          // demand summary (Mu/Vu for beams, Pu/Mu for columns)
+  loc?: string              // plan grid line + floor the member sits on
+}
 export interface ReportGroup { title: string; items: ReportSolution[] }
 export interface ModelReport {
   ok: boolean
@@ -101,6 +105,39 @@ export function buildModelReport(
     return c ? sectionFor(c.id) : undefined
   }
   const fallbackSec = model.sections[0]
+
+  // ── Plan grid + floor locator ──
+  // A/B/C column lines from unique X coords, 1/2/3 rows from unique Z coords,
+  // floor from the nearest storey elevation (n.y is the vertical axis, m).
+  const uniqAxis = (vals: number[]): number[] => {
+    const out: number[] = []
+    for (const v of vals.slice().sort((a, b) => a - b))
+      if (!out.length || Math.abs(v - out[out.length - 1]) > 0.05) out.push(v)
+    return out
+  }
+  const xs = uniqAxis(model.nodes.map((n) => n.x))
+  const zs = uniqAxis(model.nodes.map((n) => n.z))
+  const nearestIdx = (arr: number[], v: number) =>
+    arr.reduce((best, c, i) => (Math.abs(c - v) < Math.abs(arr[best] - v) ? i : best), 0)
+  const grid = (n: Node) => `${String.fromCharCode(65 + nearestIdx(xs, n.x))}${nearestIdx(zs, n.z) + 1}`
+  const floorAt = (yy: number) =>
+    model.storeys.length
+      ? model.storeys.reduce((b, s) => (Math.abs(s.elevation - yy) < Math.abs(b.elevation - yy) ? s : b)).name
+      : `El. ${f2(yy)} m`
+  const memberLoc = (memberId: string): string | undefined => {
+    const m = model.members.find((x) => x.id === memberId)
+    if (!m) return undefined
+    const ni = model.nodes.find((n) => n.id === m.i)
+    const nj = model.nodes.find((n) => n.id === m.j)
+    if (!ni || !nj) return undefined
+    if (m.role === 'column') {
+      const lo = ni.y <= nj.y ? ni : nj, hi = ni.y <= nj.y ? nj : ni
+      const a = floorAt(lo.y), b = floorAt(hi.y)
+      return `${grid(lo)} · ${a === b ? a : `${a}→${b}`}`
+    }
+    const g = grid(ni) === grid(nj) ? grid(ni) : `${grid(ni)}–${grid(nj)}`
+    return `${floorAt(Math.max(ni.y, nj.y))} · ${g}`
+  }
 
   // ── Design-summary checks (group verdicts + governing ratios) ──
   const checks: ReportCheck[] = []
@@ -292,6 +329,8 @@ export function buildModelReport(
       return bm.sections.map((s) => ({
         title: `${bm.id} · ${s.label}`,
         sub: `${bm.role} ${sec.name} · L = ${f1(bm.L)} m · ${bm.gov ?? ''}`,
+        details: `Mu ${f1(Math.abs(s.Mu))} kN·m · Vu ${f1(s.Vu)} kN`,
+        loc: memberLoc(bm.id),
         steps: beamSectionSolution(sec, s),
         section: {
           kind: 'beam' as const, b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, stirrupDia: sec.tieDia,
@@ -321,7 +360,10 @@ export function buildModelReport(
     items: design.columns.flatMap((c) => {
       const cs = sectionFor(c.id)
       return cs ? [{
-        title: c.id, sub: `${cs.name} · L = ${f1(c.L)} m · ${c.gov ?? ''}`, steps: columnRowSolution(cs, c),
+        title: c.id, sub: `${cs.name} · L = ${f1(c.L)} m · ${c.gov ?? ''}`,
+        details: `Pu ${f1(c.Pu)} kN · Mu ${f1(c.Mu)} kN·m`,
+        loc: memberLoc(c.id),
+        steps: columnRowSolution(cs, c),
         section: {
           kind: 'column' as const, b: cs.b, h: cs.h, cover: cs.cover, barDia: cs.barDia, stirrupDia: cs.tieDia,
           bars: c.bars, fourFace: c.layout === 'all-around',

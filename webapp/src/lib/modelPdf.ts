@@ -85,13 +85,17 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
     return w
   }
   const CONC: [number, number, number] = [238, 243, 248]
-  /** Vector cross-section (bar layout) drawn into a boxW×boxH mm cell at (x, topY). */
+  /** Vector cross-section (bar layout + stirrup hooks + dimension lines) drawn
+   *  into a boxW×boxH mm cell at (x, topY). Gutters are reserved on the bottom
+   *  (width dimension) and right (height dimension) so the callouts stay clear. */
   const drawSection = (sec: ReportSection, x: number, topY: number, boxW: number, boxH: number) => {
+    const padL = 2.5, padR = 8, padT = 3, padB = 6.5     // gutters for dim callouts
+    const availW = boxW - padL - padR, availH = boxH - padT - padB
     const flanged = sec.kind === 'beam' && !!sec.bf && sec.bf > sec.b && !sec.hogging && !!sec.hf
     const drawW = flanged ? sec.bf! : sec.b
-    const s = Math.min((boxW - 3) / drawW, (boxH - 3) / sec.h)
+    const s = Math.min(availW / drawW, availH / sec.h)
     const wv = drawW * s, hv = sec.h * s, bwv = sec.b * s
-    const bx = x + (boxW - wv) / 2, by = topY + (boxH - hv) / 2
+    const bx = x + padL + (availW - wv) / 2, by = topY + padT + (availH - hv) / 2
     const webX = bx + (wv - bwv) / 2
     doc.setLineWidth(0.25); doc.setDrawColor(...INK); doc.setFillColor(...CONC)
     if (flanged) {
@@ -101,10 +105,17 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
     } else {
       doc.rect(webX, by, bwv, hv, 'FD')
     }
-    // tie / stirrup
+    // tie / stirrup — bend radius r = 4ds/2 = 2ds (ACI 318-14 §407.3.2)
     const ins = (sec.cover + sec.stirrupDia / 2) * s
+    const stX = webX + ins, stY = by + ins, stW = bwv - 2 * ins, stH = hv - 2 * ins
+    const cr = Math.max(0.4, Math.min(1.4, 2 * sec.stirrupDia * s))
     doc.setDrawColor(...MUTED); doc.setLineWidth(0.35)
-    doc.roundedRect(webX + ins, by + ins, bwv - 2 * ins, hv - 2 * ins, 0.6, 0.6, 'S')
+    doc.roundedRect(stX, stY, stW, stH, cr, cr, 'S')
+    // 135° hooks at the top corners — free end angles into the core (down-inward
+    // at 45°), true length ext = max(6ds, 75) mm (ACI 318-14 §425.3.2)
+    const hk = (Math.max(6 * sec.stirrupDia, 75) * s) / Math.SQRT2
+    doc.line(stX + cr, stY + cr, stX + cr + hk, stY + cr + hk)          // left hook
+    doc.line(stX + stW - cr, stY + cr, stX + stW - cr - hk, stY + cr + hk) // right hook
     // bars
     const br = Math.max(0.5, (sec.barDia / 2) * s)
     const barIns = (sec.cover + sec.stirrupDia + sec.barDia / 2) * s
@@ -135,11 +146,21 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
         doc.circle(bx1, yy, br, 'F'); doc.circle(bx2, yy, br, 'F')
       }
     }
-    setF('mono', 'normal', 5, FAINT)
-    const cap = sec.kind === 'beam'
-      ? `${sec.bars}⌀${sec.barDia}${flanged ? ` · T bf=${Math.round(sec.bf!)}` : ''}`
-      : `${sec.bars}⌀${sec.barDia} · ${sec.b}×${sec.h}`
-    doc.text(cap, x + boxW / 2, topY + boxH - 0.5, { align: 'center' })
+    // dimension lines — width below, height on the right (bf across the top for
+    // flanged sections). Ticks + centred value, true mm from the design.
+    doc.setDrawColor(...FAINT); doc.setLineWidth(0.12)
+    setF('mono', 'normal', 4.3, MUTED)
+    const hDim = (x0: number, x1: number, yd: number, val: number) => {
+      doc.line(x0, yd, x1, yd); doc.line(x0, yd - 0.9, x0, yd + 0.9); doc.line(x1, yd - 0.9, x1, yd + 0.9)
+      doc.text(String(Math.round(val)), (x0 + x1) / 2, yd + 2.4, { align: 'center' })
+    }
+    const wDimY = by + hv + 3.4
+    hDim(webX, webX + bwv, wDimY, sec.b)                       // web width b
+    if (flanged) hDim(bx, bx + wv, by - 2, sec.bf!)            // flange width bf (above)
+    // height h on the right
+    const vx = webX + bwv + 3.6
+    doc.line(vx, by, vx, by + hv); doc.line(vx - 0.9, by, vx + 0.9, by); doc.line(vx - 0.9, by + hv, vx + 0.9, by + hv)
+    doc.text(String(Math.round(sec.h)), vx + 1.4, by + hv / 2, { align: 'center', angle: 90 })
   }
 
   const tableTheme = (right: number[] = []) => ({
@@ -324,13 +345,44 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
     doc.line(M, y, M + CONTENT_W, y)
     y += 4.5
     g.items.forEach((item) => {
-      ensure(22)
+      const fig = item.section
+      const boxW = 52, boxH = 40
+      ensure(fig ? boxH + 5 : 20)
+      const headTop = y
+      const leftW = fig ? CONTENT_W - boxW - 5 : CONTENT_W
+      // cross-section figure — drawn BESIDE the name (top-right of the block)
+      if (fig) {
+        const fx = M + CONTENT_W - boxW
+        setF('sans', 'bold', 5, FAINT)
+        doc.text('SECTION', fx + 1, headTop + 1.5)
+        doc.setDrawColor(...HAIR); doc.setLineWidth(0.2)
+        doc.roundedRect(fx, headTop + 2.5, boxW, boxH, 1, 1, 'S')
+        drawSection(fig, fx, headTop + 2.5, boxW, boxH)
+      }
+      // left stack — name, sub, bar callout, demand summary, plan location
       setF('sans', 'bold', 7.8, INK)
-      doc.text(item.title, M, y)
+      doc.text(item.title, M, y + 1)
+      y += 4.4
       if (item.sub) {
         setF('mono', 'normal', 5.8, FAINT)
-        doc.text(item.sub, M + CONTENT_W, y, { align: 'right' })
+        for (const w of doc.splitTextToSize(item.sub, leftW)) { doc.text(w, M, y); y += 3 }
       }
+      if (fig) {
+        const flanged = fig.kind === 'beam' && !!fig.bf && fig.bf > fig.b && !fig.hogging && !!fig.hf
+        const cap = `${fig.bars}⌀${fig.barDia}${flanged ? ` · T bf=${Math.round(fig.bf!)}` : ''} · ${fig.b}×${fig.h}`
+        setF('mono', 'bold', 6.6, INK)
+        doc.text(cap, M, y + 0.6); y += 3.6
+      }
+      if (item.details) {
+        setF('sans', 'normal', 6.4, MUTED)
+        doc.text(item.details, M, y + 0.4); y += 3.3
+      }
+      if (item.loc) {
+        setF('sans', 'normal', 6.4, BRAND)
+        for (const w of doc.splitTextToSize(item.loc, leftW)) { doc.text(w, M, y + 0.4); y += 3.3 }
+      }
+      // clear the figure box before the steps begin
+      if (fig) y = Math.max(y, headTop + 2.5 + boxH)
       y += 3.4
       item.steps.forEach((st, si) => {
         ensure(12)
@@ -374,17 +426,6 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
         doc.line(M, y, M + CONTENT_W, y)
         y += 3
       })
-      // cross-section figure — the bar layout in the section
-      if (item.section) {
-        const boxW = 46, boxH = 34
-        ensure(boxH + 4)
-        setF('sans', 'bold', 5.5, FAINT)
-        doc.text('SECTION', M + 1, y + 2)
-        doc.setDrawColor(...HAIR); doc.setLineWidth(0.2)
-        doc.roundedRect(M, y + 3, boxW, boxH, 1, 1, 'S')
-        drawSection(item.section, M, y + 3, boxW, boxH)
-        y += boxH + 5
-      }
       y += 2
     })
   })

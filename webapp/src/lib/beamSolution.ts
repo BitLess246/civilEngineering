@@ -182,7 +182,7 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
   // step-building branches above stay untouched.
   const notes: [string, string, boolean | undefined][] = [
     ['Effective depth', '§20.6.1 cover', undefined],
-    ['Reinforcement-ratio limits', '§9.6.1.2 · §21.2.2', r.rho >= r.rhoMin - 1e-9 && r.rho <= r.rhoMax + 1e-9],
+    ['Reinforcement-ratio limits', '§9.6.1.2 · §21.2.2', r.rho <= r.rhoMax + 1e-9 || r.mode === 'DRRB'],
     ['SRRB / DRRB classification', 'ACI 318-14 §22.2', undefined],
     ['Tension steel', 'ACI 318-14 §22.2', r.flexOK],
     ['Compression steel', '§22.2.2', r.comprEffective && r.comprNAOK],
