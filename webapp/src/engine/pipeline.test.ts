@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { generateGridModel, buildGravityLoads, removeNode, enforceSectionHierarchy, refreshSelfWeight, splitSharedSections, barContinuityGroups } from './modelBuilder'
 import { designStructure, optimizeStructure, selectBarDiameters, designOK, withEv, RC_LIMITS, type LateralCase } from './pipeline'
 import { nextHeavierW } from './aiscSections'
@@ -6,6 +6,12 @@ import { computeSeismic } from './seismic'
 import { nscpCombos } from './beamAnalysis'
 import { validateMesh } from './meshValidation'
 import type { RectSection, ModelLoad } from './model'
+
+// The optimizer cases in this file walk many design iterations (the steel
+// catalog search is ~6–7 s alone) and spike well past vitest's 5 s default
+// under full-suite CPU contention — see issue #324. Give the whole file
+// generous headroom so a busy CI run can't flake them out.
+vi.setConfig({ testTimeout: 30_000 })
 
 const section: RectSection = { id: 'S1', name: '300×500', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
 const soil = { qAllow: 200, gammaSoil: 18, gammaConc: 24, H: 1.5 }
@@ -659,7 +665,7 @@ describe('optimizeStructure — steel sections', () => {
   })
 
   // Shrinking from the heaviest W-shape walks many optimizer iterations
-  // (~6–7 s), past vitest's 5 s default — give it explicit headroom.
+  // (~6–7 s); the file-level testTimeout above gives it headroom.
   it('shrinks an oversized steel shape (W310x342) while the design stays OK', () => {
     const start = steelModel('W310x342')
     const first = designStructure(start, soil)!
@@ -668,7 +674,7 @@ describe('optimizeStructure — steel sections', () => {
     expect(r.converged).toBe(true)
     // shrink must have stepped at least one section down from the starting shape
     expect(r.model.sections.some((s) => s.shape !== 'W310x342')).toBe(true)
-  }, 20000)
+  })
 
   it('steel self-weight uses shape area × 78.5 kN/m³, not bounding box × 24', () => {
     // W310x79: A = 10000 mm². Self-weight = 10000/1e6 × 78.5 = 0.785 kN/m
