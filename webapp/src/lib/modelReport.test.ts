@@ -63,6 +63,20 @@ describe('buildModelReport', () => {
     for (const g of rpt.groups) for (const it of g.items) expect(it.steps.length).toBeGreaterThan(0)
   })
 
+  it('beam & column items carry a demand summary and a plan location', () => {
+    const beams = rpt.groups.find((g) => g.title === 'RC beams & girders')!.items
+    for (const it of beams) {
+      expect(it.details).toMatch(/^Mu .* kN·m · Vu .* kN$/)
+      expect(it.loc).toMatch(/·/)                       // "<floor> · <grid>"
+      expect(it.section?.kind).toBe('beam')
+    }
+    const cols = rpt.groups.find((g) => g.title === 'RC columns')!.items
+    for (const it of cols) {
+      expect(it.details).toMatch(/^Pu .* kN · Mu .* kN·m$/)
+      expect(it.loc).toMatch(/^[A-Z]\d · /)             // "<grid> · <floor(s)>"
+    }
+  })
+
   it('every formula line converts to plain text without residual LaTeX', () => {
     for (const g of rpt.groups)
       for (const item of g.items)
