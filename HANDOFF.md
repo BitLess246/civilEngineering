@@ -38,8 +38,10 @@ npm run build    # typecheck + production build
 
 > Newer work is tracked in the **Tier 4** (A1–E13, PRs through #273),
 > **Post-Tier-4** (PRs #275–#278), **Phase 3 + connections** (PRs #279–#308),
-> **Connection detailing polish** (PRs #310–#317) and **Audit round**
-> (PRs #319–#334) sections below; latest suite: **1028 tests**.
+> **Connection detailing polish** (PRs #310–#317), **Audit round**
+> (PRs #319–#334) and **Section detailing + multi-leg ties + Dependabot cleanup**
+> (PRs #362–#371) sections below; latest suite: **1118 tests**;
+> `npm audit` **0 vulnerabilities**.
 > The repo root is now just `webapp/`, `docs/` and the markdown docs.
 
 ### 3D Model Space analysis core (`/model`) — the centrepiece
@@ -512,8 +514,64 @@ _Tests after #334: **1028 passing**; `tsc -b` clean._
 _Remaining roadmap: Pressure Grouting (empirical — skipped by design); Phase 4
 items are owner-driven (marketing/monetisation). Prioritised follow-ups: the
 unticked boxes in **issue #325** (page-shell unification, mobile tables, FEM
-run feedback, eslint zero-out, xlsx vuln, bundle splitting, ModelSpace split,
-ValidationMap transcription, project save/load…)._
+run feedback, eslint zero-out, bundle splitting, ModelSpace split,
+ValidationMap transcription, project save/load…). The xlsx vuln + optimizer-test
+timeout from that list are now resolved — see the PRs #362–#371 section below._
+
+## Section detailing, multi-leg ties & Dependabot cleanup (PRs #362–#371, July 2026)
+
+Model Space (`/model`) report polish, reinforcement-detailing drawings, and the
+three open GitHub issues. Latest suite: **1118 passing**; `tsc -b` clean;
+`npm audit` **0 vulnerabilities**.
+
+**Report / section-figure (PRs #362–#368) — the direct PDF export (`lib/modelPdf.ts`)
+and the on-screen schematics (`components/TSection.tsx`, `ColumnSchematic.tsx`):**
+- **#362 — schedule↔solution verdict parity**: the worked-solution
+  "Reinforcement-ratio limits" step false-FAILed DRRB and flanged (T-beam)
+  sections while the schedule chip (`beamOK`) passed. Min steel is satisfied by
+  construction and exceeding ρmax is valid for DRRB, so the step now passes when
+  `ρ ≤ ρmax || mode === 'DRRB'` (`lib/beamSolution.ts`). Also moved the section
+  figure **beside** the member name with a demand line (`Mu/Vu` beams, `Pu/Mu`
+  columns) and a plan location (grid line + floor) via a `memberLoc` helper in
+  `lib/modelReport.ts` (`ReportSolution.details`/`loc`, `ReportSection.legs`).
+- **#363–#366 — stirrup hook, iterated to a real detail**: the tie is a single
+  hairline stroke, so the 135° hook is drawn as one hairline that **wraps around
+  the tension-side corner bar** (the bar is painted on top so the tie reads as
+  wrapping it) with the tail into the core, on the correct side (bottom sagging /
+  top hogging). Dimension callouts carry units (`300 mm`), and the block header is
+  centred against a compact figure box.
+- **#367 — multi-leg stirrups (beams)**: `stirrupLegs(barsWidestLayer)` in
+  `engine/beamDesign.ts` (ACI 318-14 §25.7.2.3: 2 perimeter + a crosstie every
+  other interior bar) is echoed on `BeamDesignResult.legs` and **feeds `Av`**
+  (the extra legs raise shear capacity). Each added leg draws as an interior
+  **C-tie** that arcs OVER the top bar and UNDER the bottom bar it grips.
+- **#368 — multi-leg stirrups (columns)**: the C-tie is factored into a reusable
+  helper (bar A, bar B, axis, opening) and used for a tied column cage —
+  **vertical** C-ties on interior top/bottom-face bars, **horizontal** C-ties on
+  interior side-face bars.
+
+**Open issues closed (PRs #369–#371):**
+- **#324 — flaky optimizer test**: file-level `vi.setConfig({ testTimeout: 30_000 })`
+  in `pipeline.test.ts` so the catalog-search cases get headroom under full-suite
+  CPU contention (was only one `it` with a 20 s override).
+- **#322 — Dependabot (2 high + 1 low)**: dropped the abandoned `xlsx` (ReDoS +
+  prototype-pollution in the user-upload parser; patched builds ship only from the
+  CDN, unreachable in CI) for **ExcelJS** (dynamically imported, browser build via
+  the `browser` field) in `lib/foundationExcel.ts`; `accept=".xlsx"` (OOXML only).
+  `package.json` `overrides`: esbuild `^0.28.1`, uuid `^11.1.1` → **`npm audit` = 0**.
+- **#323 — thermal load category `T`**: `member-thermal` was tagged `cat:'D'` (so
+  self-straining effects were factored as dead load and counted as seismic mass).
+  Added `'T'` to `LoadCategory` and threaded it through `nscpCombos`
+  (`engine/beamAnalysis.ts`): self-straining `T` rides at 1.2 in every combo
+  carrying the factored dead load (203-1…203-5), omitted from the 0.9D uplift
+  combos (ASCE 7-16 §2.3.4); the Model Space thermal form now tags `'T'`.
+
+> **Container note (cloud sessions):** this session's container twice reverted
+> uncommitted work to a stale commit mid-task. If the working tree ever looks
+> wrong (e.g. `foundationExcel.ts` back on `xlsx`, or stray edits to files you
+> didn't touch), `git fetch origin main && git checkout -B <branch> origin/main`,
+> re-apply, and **`npm install`** to resync `node_modules` with the merged
+> `package.json`. Commit and push early.
 
 ## Validation roadmap — toward a formal validation manual
 
