@@ -40,7 +40,7 @@ export default function Validation() {
   }).filter((g) => g.n > 0)
 
   return (
-    <main className="mx-auto max-w-5xl px-5 py-10">
+    <main className="mx-auto max-w-[1400px] px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Reference</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Validation</h1>
       <p className="mt-2 max-w-3xl text-sm text-slate-600">

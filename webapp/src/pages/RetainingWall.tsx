@@ -48,7 +48,7 @@ export default function RetainingWall() {
           <button type="button" onClick={() => { const prev = document.title; document.title = `Retaining Wall Design Report${lh.project ? ` — ${lh.project}` : ''}`; window.print(); window.setTimeout(() => { document.title = prev }, 500) }}
             className="inline-flex items-center gap-2 rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-[#0d3f78]">⎙ Export report</button>
         } />
-      <div className="mx-auto max-w-6xl px-5 pb-8 sm:px-7">
+      <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
 
       {/* Schematic legend */}
       <pre className="no-print mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-[0.65rem] leading-tight text-slate-500">

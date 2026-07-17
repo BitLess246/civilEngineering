@@ -83,7 +83,7 @@ export function QtyPage({ title, reportTitle, intro, children }: {
   title: string; reportTitle: string; intro: ReactNode; children: ReactNode
 }) {
   return (
-    <div className="mx-auto max-w-6xl px-5 py-5 sm:px-7">
+    <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
       <h1 className="text-[21px] font-extrabold tracking-tight text-[#0f1b2a]">{title}</h1>
       <p className="no-print mt-1 text-[13px] text-[#5c6675]">{intro}</p>
       <ReportControls title={reportTitle} />

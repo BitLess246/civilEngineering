@@ -83,7 +83,7 @@ export default function TBeamDesign() {
   return (
     <div className="min-h-screen">
       <PageHeader title="T-Beam Design" badges={[...badges, kind]} />
-      <div className="mx-auto max-w-6xl px-5 py-5 sm:px-7">
+      <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
         <p className="no-print text-[13px] text-[#5c6675]">
           <Link to="/" className="font-semibold text-[#0f4c92]">← Home</Link> · Flanged-beam flexure: §6.3.2 effective width,
           rectangular vs true-T stress block, §9.6.1.2 minimum steel, εt/φ per §21.2.2. Positive Mu = flange in compression.
@@ -110,7 +110,6 @@ export default function TBeamDesign() {
             <Card title="Demand" hint="+ sagging / − hogging">
               <Num label="Mu" unit="kN·m" value={Mu} onChange={setMu} />
             </Card>
-            {r && <WorkedSolution steps={steps} title="T-beam — worked solution" />}
           </div>
           <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
             {r && (
@@ -135,6 +134,11 @@ export default function TBeamDesign() {
             <LetterheadCard lh={lh} onChange={(p) => setLh((s) => ({ ...s, ...p }))} />
           </div>
         </div>
+        {r && (
+          <div className="no-print mt-5">
+            <WorkedSolution steps={steps} title="T-beam — worked solution" />
+          </div>
+        )}
       </div>
       {r && (
         <PrintReport docTitle="T-Beam" docCode="TB-01" badges={badges} ok={r.ok}

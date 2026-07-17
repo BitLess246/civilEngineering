@@ -173,7 +173,7 @@ export default function CombinedFootingDesign() {
           <button type="button" onClick={() => { const prev = document.title; document.title = `Combined Footing Design Report${lh.project ? ` — ${lh.project}` : ''}`; window.print(); window.setTimeout(() => { document.title = prev }, 500) }}
             className="inline-flex items-center gap-2 rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-[#0d3f78]">⎙ Export report</button>
         } />
-      <div className="mx-auto max-w-6xl px-5 pb-8 sm:px-7">
+      <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
 
       <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
         {/* ── Inputs ── */}
