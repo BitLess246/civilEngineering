@@ -5,24 +5,47 @@ import { buildPrestressedSolution } from '../lib/prestressedSolution'
 import { PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
 import { Num, Pick, Card } from '../components/qty'
 import { WorkedSolution } from '../components/WorkedSolution'
+import { DimBelow, DimSide } from '../components/dims'
 
 const f1 = (v: number) => v.toFixed(1)
 
-/** Elevation: beam, tendon profile (straight, eccentric) and load arrows. */
-function PSElevation({ h, e }: { h: number; e: number }) {
-  const y0 = 60, H = 60, yc = y0 + H / 2, yTendon = yc + (e / h) * H
+/** Elevation to scale-ish: beam on pin + roller supports, UDL arrows landing
+ *  on the top edge, straight eccentric tendon, template dimension lines. */
+function PSElevation({ h, e, span }: { h: number; e: number; span: number }) {
+  const W = 340, HT = 220
+  const x0 = 46, bw = 248
+  const y0 = 74, H = 56
+  const yc = y0 + H / 2, yTendon = Math.min(y0 + H - 5, yc + (e / h) * H)
+  const arrows = [0.08, 0.26, 0.44, 0.62, 0.8, 0.96].map((f) => x0 + f * bw)
   return (
-    <svg viewBox="0 0 300 160" className="mx-auto block w-full max-w-[360px]">
-      <rect x="20" y={y0} width="260" height={H} fill="#fff" stroke="#0f1b2a" strokeWidth="2" />
-      <line x1="20" y1={yTendon} x2="280" y2={yTendon} stroke="#0f4c92" strokeWidth="2.5" strokeDasharray="7 4" />
-      <line x1="20" y1={yc} x2="280" y2={yc} stroke="#a39d8d" strokeWidth="1" strokeDasharray="3 4" />
-      <text x="150" y={yTendon + 12} fontSize="9" textAnchor="middle" fontFamily="IBM Plex Mono, monospace" fill="#0f4c92">Aps · e = {e} mm</text>
-      {[60, 110, 160, 210, 260].map((x) => (
-        <line key={x} x1={x} y1={y0 - 18} x2={x} y2={y0 - 4} stroke="#5c6675" strokeWidth="1.5" markerEnd="url(#arr)" />
+    <svg viewBox={`0 0 ${W} ${HT}`} className="mx-auto block w-full max-w-[380px]" style={{ fontFamily: 'Arial, sans-serif' }}>
+      {/* UDL: top line + arrows touching the beam's top edge */}
+      <line x1={x0} y1={y0 - 26} x2={x0 + bw} y2={y0 - 26} stroke="#5c6675" strokeWidth="1.4" />
+      {arrows.map((x) => (
+        <g key={x} stroke="#5c6675" strokeWidth="1.4">
+          <line x1={x} y1={y0 - 26} x2={x} y2={y0 - 5} />
+          <path d={`M${x - 3.2} ${y0 - 6.5} L${x} ${y0 - 0.5} L${x + 3.2} ${y0 - 6.5} z`} fill="#5c6675" stroke="none" />
+        </g>
       ))}
-      <defs><marker id="arr" markerWidth="6" markerHeight="6" refX="3" refY="5" orient="auto"><path d="M0 0 L6 0 L3 6 z" fill="#5c6675" /></marker></defs>
-      <polygon points="20,126 12,140 28,140" fill="#0f4c92" />
-      <circle cx="280" cy="133" r="6" fill="none" stroke="#0f4c92" strokeWidth="2" />
+      <text x={x0 + bw / 2} y={y0 - 32} fontSize="8.5" fill="#5c6675" textAnchor="middle">w (D + L)</text>
+      {/* beam */}
+      <rect x={x0} y={y0} width={bw} height={H} fill="#eef3f8" stroke="#37526e" strokeWidth="1.6" />
+      <line x1={x0} y1={yc} x2={x0 + bw} y2={yc} stroke="#a39d8d" strokeWidth="0.8" strokeDasharray="3 4" />
+      <line x1={x0} y1={yTendon} x2={x0 + bw} y2={yTendon} stroke="#0f4c92" strokeWidth="2.2" strokeDasharray="8 4" />
+      <text x={x0 + bw / 2} y={y0 + H + 12} fontSize="8.5" fontFamily="IBM Plex Mono, monospace" fill="#0f4c92" textAnchor="middle">
+        Aps · e = {e} mm below cg
+      </text>
+      {/* supports ON the soffit: pin (triangle apex at the beam) + roller */}
+      <g stroke="#37526e" strokeWidth="1.4" fill="#fff">
+        <path d={`M${x0 + 10} ${y0 + H} L${x0 + 1} ${y0 + H + 15} L${x0 + 19} ${y0 + H + 15} z`} />
+        <line x1={x0 - 5} y1={y0 + H + 15} x2={x0 + 25} y2={y0 + H + 15} />
+        <circle cx={x0 + bw - 10} cy={y0 + H + 7.5} r={7} />
+        <line x1={x0 + bw - 25} y1={y0 + H + 15} x2={x0 + bw + 5} y2={y0 + H + 15} />
+      </g>
+      {/* dimensions (shared template) */}
+      <DimBelow xA={x0} xB={x0 + bw} featY={y0 + H + 18} dY={y0 + H + 40} label={`L = ${span} m`} />
+      <DimSide yA={y0} yB={y0 + H} featX={x0 + bw} dX={x0 + bw + 20} label={`h = ${h} mm`} side="right" />
+      <DimSide yA={yc} yB={yTendon} featX={x0} dX={x0 - 18} label={`e`} side="left" />
     </svg>
   )
 }
@@ -95,7 +118,7 @@ export default function PrestressedBeam() {
             )}
             {r && (
               <DrawingCard title="Elevation & tendon profile" meta={`${b}×${h} · L = ${span} m`}>
-                <PSElevation h={h} e={e} />
+                <PSElevation h={h} e={e} span={span} />
               </DrawingCard>
             )}
             <LetterheadCard lh={lh} onChange={(p) => setLh((s) => ({ ...s, ...p }))} />
@@ -123,7 +146,7 @@ export default function PrestressedBeam() {
             ['Losses', `${r.lossPct.toFixed(1)} % → fse ${f1(r.fse)} MPa`],
           ]}
           steps={steps}
-          drawing={<PSElevation h={h} e={e} />}
+          drawing={<PSElevation h={h} e={e} span={span} />}
           drawingTitle="Prestressed beam" />
       )}
     </div>

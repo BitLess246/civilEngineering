@@ -96,6 +96,9 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
     theme: 'plain' as const,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     didParseCell: (d: any) => {
+      // right-aligned numeric columns must right-align their HEADERS too —
+      // headStyles outrank columnStyles in autotable, so set it per cell
+      if (d.section === 'head' && right.includes(d.column.index)) d.cell.styles.halign = 'right'
       if (d.section === 'body' && (d.cell.raw === 'PASS' || d.cell.raw === 'FAIL')) {
         d.cell.styles.font = 'mono'; d.cell.styles.fontStyle = 'bold'; d.cell.styles.fontSize = 6.2
         d.cell.styles.textColor = d.cell.raw === 'PASS' ? OK_FG : FAIL_FG
