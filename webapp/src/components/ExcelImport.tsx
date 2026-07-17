@@ -42,7 +42,7 @@ export function ExcelImport({ onResult }: { onResult: (r: BatchResult | null) =>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span className="text-[0.92rem] font-bold text-slate-800">Import from Excel</span>
 
-        <input ref={fileRef} type="file" accept=".xlsx,.xls" className="sr-only" onChange={onPick} />
+        <input ref={fileRef} type="file" accept=".xlsx" className="sr-only" onChange={onPick} />
         <button type="button" onClick={() => fileRef.current?.click()} disabled={busy}
           className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-br from-[#0056b3] to-[#003f86] px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:shadow disabled:opacity-60">
           <UploadIcon />{busy ? 'Reading…' : 'Choose file'}

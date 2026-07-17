@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import { importFoundationWorkbook } from './foundationExcel'
 
 const HEADERS = [
@@ -8,20 +8,19 @@ const HEADERS = [
   'H (m)', 'Bar Dia (mm)', 'Cover (mm)', 'Surcharge (kPa)', 'Aspect Bx/By',
 ]
 
-function toFile(ws: XLSX.WorkSheet): File {
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'DESIGN PARAMETERS')
-  const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }) as ArrayBuffer
+async function toFile(aoa: (string | number)[][]): Promise<File> {
+  const wb = new ExcelJS.Workbook()
+  const ws = wb.addWorksheet('DESIGN PARAMETERS')
+  aoa.forEach((r) => ws.addRow(r))
+  const out = await wb.xlsx.writeBuffer()
   return { arrayBuffer: async () => out } as unknown as File
 }
 
-function makeFile(rows: (string | number)[][]): File {
-  return toFile(XLSX.utils.aoa_to_sheet([HEADERS, ...rows]))
-}
+const makeFile = (rows: (string | number)[][]): Promise<File> => toFile([HEADERS, ...rows])
 
 describe('foundation Excel import', () => {
   it('designs square + rectangular rows', async () => {
-    const f = makeFile([
+    const f = await makeFile([
       ['F-1', 'Isolated Square', 1000, 1400, 400, 'interior', 28, 415, 200, 18, 24, 1.5, 20, 75, 0, ''],
       ['F-2', 'Isolated Rectangular', 1200, 1680, 450, 'edge', 28, 415, 180, 18, 24, 1.5, 20, 75, 0, 1.5],
     ])
@@ -34,7 +33,7 @@ describe('foundation Excel import', () => {
   })
 
   it('flags unknown types and missing required fields', async () => {
-    const f = makeFile([
+    const f = await makeFile([
       ['Bad', 'Mystery', 1000, 1400, 400, 'interior', 28, 415, 200, 18, 24, 1.5, 20, 75, 0, ''],
       ['Gap', 'Isolated Square', '', '', 400, 'interior', 28, 415, 200, 18, 24, 1.5, 20, 75, 0, ''],
     ])
@@ -46,10 +45,10 @@ describe('foundation Excel import', () => {
   })
 
   it('reports unknown headers', async () => {
-    const file = toFile(XLSX.utils.aoa_to_sheet([
+    const file = await toFile([
       [...HEADERS, 'Some Extra Column'],
       ['F-1', 'Isolated Square', 1000, 1400, 400, 'interior', 28, 415, 200, 18, 24, 1.5, 20, 75, 0, '', 'junk'],
-    ]))
+    ])
     const res = await importFoundationWorkbook(file)
     expect(res.unknownHeaders).toContain('Some Extra Column')
   })
