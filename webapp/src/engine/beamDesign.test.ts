@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { designBeam, beamServiceDeflection, type BeamDesignInput, type BeamDeflectionInput } from './beamDesign'
+import { designBeam, beamServiceDeflection, stirrupLegs, type BeamDesignInput, type BeamDeflectionInput } from './beamDesign'
 import { beta1 } from './loads'
 
 const base: BeamDesignInput = {
@@ -100,6 +100,27 @@ describe('beam design — DRRB (compression steel)', () => {
   it('flags flexOK = false when the layout diverges (over-demanded section)', () => {
     const r = designBeam({ ...base, b: 250, h: 400, Mu: 450 })
     expect(r.flexOK).toBe(false)
+  })
+})
+
+describe('stirrup legs — lateral support (§25.7.2.3)', () => {
+  it('2 legs to 2 bars, a crosstie every other interior bar beyond', () => {
+    expect(stirrupLegs(2)).toBe(2)   // corners only
+    expect(stirrupLegs(3)).toBe(3)   // + 1 crosstie on the middle bar
+    expect(stirrupLegs(4)).toBe(3)
+    expect(stirrupLegs(5)).toBe(4)   // + 2 crossties
+    expect(stirrupLegs(6)).toBe(4)
+    expect(stirrupLegs(7)).toBe(5)
+  })
+
+  it('Av scales with the auto leg count; explicit legs override', () => {
+    // Wide web, big moment → many bottom bars → ≥ 3 legs → Av > 2-leg Av.
+    const wide = designBeam({ ...base, b: 500, h: 550, Mu: 420, Vu: 260 })
+    expect(wide.legs).toBeGreaterThanOrEqual(3)
+    expect(wide.Av).toBeCloseTo(wide.legs * (Math.PI / 4) * 10 * 10, 6)
+    const forced = designBeam({ ...base, b: 500, h: 550, Mu: 420, Vu: 260, legs: 2 })
+    expect(forced.legs).toBe(2)
+    expect(forced.Av).toBeLessThan(wide.Av)
   })
 })
 

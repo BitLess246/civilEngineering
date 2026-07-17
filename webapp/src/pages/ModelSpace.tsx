@@ -3632,7 +3632,7 @@ export default function ModelSpace() {
                                 {s.bf && s.hf ? (
                                   <TSection bf={s.bf} bw={sec.b} h={sec.h} hf={s.hf}
                                     a={(d.bars * (Math.PI / 4) * sec.barDia ** 2 * sec.fy) / (0.85 * sec.fc * s.bf)}
-                                    bars={d.bars} barDia={sec.barDia} layers={d.layers} cover={sec.cover} stirrupDia={sec.tieDia} />
+                                    bars={d.bars} barDia={sec.barDia} layers={d.layers} cover={sec.cover} stirrupDia={sec.tieDia} legs={d.legs} />
                                 ) : (
                                   <BeamSchematic b={sec.b} h={sec.h} cover={sec.cover} barDia={sec.barDia} stirrupDia={sec.tieDia}
                                     bars={d.bars} d={d.d} dPrime={d.comprLayers.length > 0 ? d.dPrime : undefined}

@@ -4,9 +4,9 @@ import { DimBelow, DimSide } from './dims'
  *  stress block, stirrup + tension-bar layers in the web, and the shared
  *  dimension-line template (bf above, h left, hf right, bw below). Reused by
  *  the standalone T-beam page and the 3D Model Space beam schedule. */
-export function TSection({ bf, bw, h, hf, a = 0, bars = 0, barDia = 0, layers = [], cover = 40, stirrupDia = 10 }: {
+export function TSection({ bf, bw, h, hf, a = 0, bars = 0, barDia = 0, layers = [], cover = 40, stirrupDia = 10, legs = 2 }: {
   bf: number; bw: number; h: number; hf: number; a?: number
-  bars?: number; barDia?: number; layers?: number[]; cover?: number; stirrupDia?: number
+  bars?: number; barDia?: number; layers?: number[]; cover?: number; stirrupDia?: number; legs?: number
 }) {
   const W = 340, HT = 285
   const availW = 210, availH = 200
@@ -51,6 +51,30 @@ export function TSection({ bf, bw, h, hf, a = 0, bars = 0, barDia = 0, layers = 
           <g stroke="#37526e" strokeWidth={sw} opacity="0.8" strokeLinecap="round">
             <line x1={bx1} y1={edgeY} x2={bx1 + dx * len} y2={edgeY + dy * len} />
             <line x1={leftX} y1={cy} x2={leftX + dx * len} y2={cy + dy * len} />
+          </g>
+        )
+      })()}
+      {/* interior crossties — each added leg (legs − 2) grips an interior bottom
+          bar with a 135° hook at each end (§25.7.2.3). Drawn before the bars. */}
+      {legs > 2 && barRows.length > 0 && (() => {
+        const nCross = legs - 2, n0 = barRows[0].n
+        const yTop = y0 + hff * 0.35 + inset, yBot = barRows[0].y
+        const d = (Math.max(6 * stirrupDia, 75) * S) / Math.SQRT2
+        const sw = Math.max(1, stirrupDia * S)
+        return (
+          <g stroke="#37526e" strokeWidth={sw} opacity="0.8" strokeLinecap="round">
+            {Array.from({ length: nCross }, (_, k) => {
+              const idx = Math.min(n0 - 2, Math.max(1, Math.round(((n0 - 1) * (k + 1)) / (nCross + 1))))
+              const xc = n0 <= 1 ? (bx1 + bx2) / 2 : bx1 + ((bx2 - bx1) * idx) / (n0 - 1)
+              const hd = xc <= (bx1 + bx2) / 2 ? 1 : -1     // hooks point toward centre
+              return (
+                <g key={k}>
+                  <line x1={xc} y1={yTop} x2={xc} y2={yBot} />
+                  <line x1={xc} y1={yTop} x2={xc + hd * d} y2={yTop + d} />
+                  <line x1={xc} y1={yBot} x2={xc + hd * d} y2={yBot - d} />
+                </g>
+              )
+            })}
           </g>
         )
       })()}

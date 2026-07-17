@@ -131,6 +131,25 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
     // the vertical leg (beside it); they straddle the corner bar into the core
     doc.line(bx1, edgeY, bx1 + dirX * hLen, edgeY + dirY * hLen)
     doc.line(stX, cornerBarY, stX + dirX * hLen, cornerBarY + dirY * hLen)
+    // interior crossties — each added leg (legs − 2) is a vertical hairline tie
+    // gripping an interior bar top & bottom with a 135° hook at each end,
+    // alternating sides (§25.7.2.3). Drawn before the bars so they sit on top.
+    if (sec.kind === 'beam' && (sec.legs ?? 2) > 2) {
+      const nCross = (sec.legs ?? 2) - 2
+      const n0 = (sec.layers && sec.layers[0]) || sec.bars
+      const yTop = by + barIns, yBot = by + hv - barIns
+      const chd = (Math.max(6 * sec.stirrupDia, 75) * s) / Math.SQRT2
+      const midX = (bx1 + bx2) / 2
+      doc.setDrawColor(...MUTED); doc.setLineWidth(0.35)
+      for (let k = 0; k < nCross; k++) {
+        const idx = Math.min(n0 - 2, Math.max(1, Math.round(((n0 - 1) * (k + 1)) / (nCross + 1))))
+        const xc = spanX(n0, idx)
+        const hd = xc <= midX ? 1 : -1               // hooks point toward centre, clear of the corners
+        doc.line(xc, yTop, xc, yBot)                 // crosstie leg
+        doc.line(xc, yTop, xc + hd * chd, yTop + chd)  // top 135° hook
+        doc.line(xc, yBot, xc + hd * chd, yBot - chd)  // bottom 135° hook
+      }
+    }
     doc.setFillColor(...INK); doc.setDrawColor(...INK); doc.setLineWidth(0.25)
     if (sec.kind === 'beam') {
       const pitch = (sec.barDia + 25) * s

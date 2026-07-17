@@ -28,6 +28,7 @@ export interface ReportSection {
   hogging?: boolean         // beam: tension steel at the top
   bf?: number; hf?: number  // beam: T-flange (sagging flanged section)
   fourFace?: boolean        // column: bars distributed on all four faces
+  legs?: number             // stirrup legs: 2 perimeter + interior crossties
 }
 export interface ReportSolution {
   title: string; sub?: string; steps: SolutionStep[]; section?: ReportSection
@@ -335,7 +336,7 @@ export function buildModelReport(
         section: {
           kind: 'beam' as const, b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, stirrupDia: sec.tieDia,
           bars: s.design.bars, layers: s.design.layers, comprLayers: s.design.comprLayers,
-          hogging: s.hogging, bf: s.bf, hf: s.hf,
+          hogging: s.hogging, bf: s.bf, hf: s.hf, legs: s.design.legs,
         },
       }))
     }),
