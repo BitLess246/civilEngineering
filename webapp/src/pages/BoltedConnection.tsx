@@ -46,7 +46,7 @@ export default function BoltedConnection() {
   const delBolt = (i: number) => setBolts((bs) => bs.filter((_, j) => j !== i).map((b, k) => ({ ...b, id: `B${k + 1}` })))
 
   return (
-    <main className="mx-auto max-w-5xl px-5 py-10">
+    <main className="mx-auto max-w-[1400px] px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Structural · Steel</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Eccentric bolted connection</h1>
       <ReportControls title="Bolted Connection Report" badges={['AISC 360-16']} />

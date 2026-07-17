@@ -105,7 +105,7 @@ export default function BeamAnalysis() {
   const vlines = supports.map((s) => ({ x: s.x, label: s.type === 'spring' ? 'k' : s.type[0].toUpperCase() }))
 
   return (
-    <div className="mx-auto max-w-6xl p-6">
+    <div className="mx-auto max-w-[1500px] p-6">
       <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
       <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">Beam Analysis</h1>
       <p className="no-print mt-1 text-slate-600">

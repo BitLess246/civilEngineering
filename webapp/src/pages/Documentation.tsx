@@ -69,7 +69,7 @@ function SectionCard({ section }: { section: DocSection }) {
 
 export default function Documentation() {
   return (
-    <main className="mx-auto max-w-6xl px-5 py-6 sm:px-8">
+    <main className="mx-auto max-w-[1500px] px-5 py-6 sm:px-8">
       <Link to="/" className="no-print text-sm font-medium text-[#0056b3] hover:underline">Back to home</Link>
 
       <header className="mt-4 border-b border-slate-200 pb-8">

@@ -278,7 +278,7 @@ export default function FoundationDesign() {
             ⎙ Export report
           </button>
         } />
-      <div className="mx-auto max-w-6xl px-5 pb-8 sm:px-7">
+      <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
       <div className="no-print"><ExcelImport onResult={setBatch} /></div>
 
       {batch && (

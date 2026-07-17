@@ -71,7 +71,7 @@ export default function PrestressedBeam() {
   return (
     <div className="min-h-screen">
       <PageHeader title="Prestressed Beam" badges={[...badges, `class ${klass}`]} />
-      <div className="mx-auto max-w-6xl px-5 py-5 sm:px-7">
+      <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
         <p className="no-print text-[13px] text-[#5c6675]">
           <Link to="/" className="font-semibold text-[#0f4c92]">← Home</Link> · Pretensioned bonded beam: PCI losses
           (ES/CR/SH/RE), §24.5 transfer & service stress limits, fps per §20.3.2.3.1, φMn ≥ 1.2Mcr, Vci/Vcw, camber.
@@ -98,7 +98,6 @@ export default function PrestressedBeam() {
               <Num label="Superimposed DL" unit="kN/m" value={wSDL} onChange={setWSDL} />
               <Num label="Live load" unit="kN/m" value={wLL} onChange={setWLL} />
             </Card>
-            {r && <WorkedSolution steps={steps} title="Prestressed beam — worked solution" />}
           </div>
           <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
             {r && (
@@ -124,6 +123,11 @@ export default function PrestressedBeam() {
             <LetterheadCard lh={lh} onChange={(p) => setLh((s) => ({ ...s, ...p }))} />
           </div>
         </div>
+        {r && (
+          <div className="no-print mt-5">
+            <WorkedSolution steps={steps} title="Prestressed beam — worked solution" />
+          </div>
+        )}
       </div>
       {r && (
         <PrintReport docTitle="Prestressed Beam" docCode="PS-01" badges={badges} ok={r.ok}

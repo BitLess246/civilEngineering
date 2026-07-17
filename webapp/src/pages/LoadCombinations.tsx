@@ -20,7 +20,7 @@ export default function LoadCombinations() {
   )
 
   return (
-    <div className="mx-auto max-w-4xl p-6">
+    <div className="mx-auto max-w-[1200px] p-6">
       <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
       <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">
         Load Combinations
