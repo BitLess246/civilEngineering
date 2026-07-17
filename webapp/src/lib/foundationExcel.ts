@@ -1,15 +1,34 @@
 // ─────────────────────────────────────────────────────────────────────────
 // Excel batch import for the Foundation page — parse a "DESIGN PARAMETERS"
 // sheet (one row per footing), run each row through the typed engine, and
-// produce a schedule. Also generates a ready-to-fill template. The xlsx
-// library is dynamically imported so it stays out of the main bundle.
+// produce a schedule. Also generates a ready-to-fill template. ExcelJS is
+// dynamically imported so it stays out of the main bundle. (Replaced the
+// abandoned `xlsx` package, which carried unpatched high-severity CVEs — #322.)
 // ─────────────────────────────────────────────────────────────────────────
+import type { CellValue } from 'exceljs'
 import { designSquareFooting } from '../engine/isolatedFooting'
 import { designRectangularFooting } from '../engine/rectangularFooting'
 import type { ColumnPosition } from '../engine/shear'
 import { f0, f2, f3 } from './format'
 
 const SHEET = 'DESIGN PARAMETERS'
+
+/** Flatten an ExcelJS cell value to the primitive the row parser expects
+ *  (number | string | ''), unwrapping formula/hyperlink/rich-text objects. */
+function cellValue(v: CellValue): number | string {
+  if (v == null) return ''
+  if (typeof v === 'number' || typeof v === 'string') return v
+  if (typeof v === 'boolean') return String(v)
+  if (v instanceof Date) return v.toISOString()
+  if (typeof v === 'object') {
+    const o = v as unknown as Record<string, unknown>
+    if ('result' in o) return cellValue(o.result as CellValue)
+    if ('text' in o) return String(o.text ?? '')
+    if ('richText' in o) return (o.richText as { text: string }[]).map((t) => t.text).join('')
+    if ('hyperlink' in o) return String(o.hyperlink ?? '')
+  }
+  return ''
+}
 
 interface ColumnSpec {
   header: string
@@ -129,16 +148,27 @@ function designRow(r: ParsedRow, index: number): ScheduleRow {
 
 export interface BatchResult { rows: ScheduleRow[]; unknownHeaders: string[]; designed: number }
 
-/** Parse an uploaded .xlsx/.xls and design every row. */
+/** Parse an uploaded .xlsx and design every row. Rows are keyed by the header
+ *  cells of row 1, so unknown/extra columns are still surfaced. */
 export async function importFoundationWorkbook(file: File): Promise<BatchResult> {
-  const XLSX = await import('xlsx')
-  const buf = await file.arrayBuffer()
-  const wb = XLSX.read(new Uint8Array(buf), { type: 'array' })
-  const sheetName = wb.SheetNames.includes(SHEET) ? SHEET : wb.SheetNames[0]
-  if (!sheetName) throw new Error('The workbook has no sheets.')
-  const sheet = wb.Sheets[sheetName]
-  const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' })
-  if (!raw.length) throw new Error(`Sheet "${sheetName}" has no data rows.`)
+  const { Workbook } = (await import('exceljs')).default
+  const wb = new Workbook()
+  await wb.xlsx.load(await file.arrayBuffer())
+  const ws = wb.getWorksheet(SHEET) ?? wb.worksheets[0]
+  if (!ws) throw new Error('The workbook has no sheets.')
+
+  const headers: string[] = []
+  ws.getRow(1).eachCell({ includeEmpty: true }, (cell, col) => { headers[col - 1] = String(cellValue(cell.value)).trim() })
+  if (!headers.some((h) => h)) throw new Error(`Sheet "${ws.name}" has no header row.`)
+
+  const raw: Record<string, unknown>[] = []
+  ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    if (rowNumber === 1) return
+    const obj: Record<string, unknown> = {}
+    headers.forEach((h, i) => { if (h) obj[h] = cellValue(row.getCell(i + 1).value) })
+    raw.push(obj)
+  })
+  if (!raw.length) throw new Error(`Sheet "${ws.name}" has no data rows.`)
 
   const unknown = new Set<string>()
   const rows = raw.map((r, i) => {
@@ -151,19 +181,17 @@ export async function importFoundationWorkbook(file: File): Promise<BatchResult>
 
 /** Build and download a ready-to-fill template (.xlsx) with sample rows + a guide. */
 export async function downloadFoundationTemplate(): Promise<void> {
-  const XLSX = await import('xlsx')
+  const { Workbook } = (await import('exceljs')).default
   const headers = COLUMNS.map((c) => c.header)
   const sampleSquare = ['F-1', 'Isolated Square', 1000, 1400, 400, 'interior', 28, 415, 200, 18, 24, 1.5, 20, 75, 0, '']
   const sampleRect = ['F-2', 'Isolated Rectangular', 1200, 1680, 450, 'edge', 28, 415, 180, 18, 24, 1.5, 20, 75, 0, 1.5]
-  const ws = XLSX.utils.aoa_to_sheet([headers, sampleSquare, sampleRect])
-  const guide = XLSX.utils.aoa_to_sheet([
-    ['Header', 'Required', 'Notes'],
-    ...TEMPLATE_GUIDE.map((g) => [g.header, g.required, g.note]),
-  ])
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, SHEET)
-  XLSX.utils.book_append_sheet(wb, guide, 'PARAMETER GUIDE')
-  const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+  const wb = new Workbook()
+  const ws = wb.addWorksheet(SHEET)
+  ws.addRow(headers); ws.addRow(sampleSquare); ws.addRow(sampleRect)
+  const guide = wb.addWorksheet('PARAMETER GUIDE')
+  guide.addRow(['Header', 'Required', 'Notes'])
+  TEMPLATE_GUIDE.forEach((g) => guide.addRow([g.header, g.required, g.note]))
+  const out = await wb.xlsx.writeBuffer()
   const blob = new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
