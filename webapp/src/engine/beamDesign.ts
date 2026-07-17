@@ -82,6 +82,7 @@ export interface BeamDesignResult {
   // Shear
   Vc: number; phiVc: number
   region: ShearRegion
+  legs: number           // stirrup legs: 2 (perimeter) + crossties (§25.7.2.3)
   Av: number
   VsReq: number; VsMax: number
   sReq: number; sMax: number; sAdopt: number
@@ -121,9 +122,17 @@ function centroidRise(layers: number[], pitch: number): number {
   return n > 0 ? sum / n : 0
 }
 
+/** Transverse legs for lateral support of the longitudinal bars
+ *  (ACI 318-14 §25.7.2.3): the closed perimeter tie restrains the two corner
+ *  bars; every other interior bar of the widest layer then needs a crosstie so
+ *  no bar sits more than 150 mm clear from a laterally supported one. Each
+ *  crosstie is one added leg. Returns ≥ 2. */
+export function stirrupLegs(barsWidestLayer: number): number {
+  return 2 + Math.max(0, Math.floor((barsWidestLayer - 1) / 2))
+}
+
 export function designBeam(i: BeamDesignInput): BeamDesignResult {
   const fyt = i.fyt ?? i.fy
-  const legs = i.legs ?? 2
   const lambda = i.lambda ?? 1
   const dbC = i.comprBarDia ?? i.barDia
   const b1 = beta1(i.fc)
@@ -255,6 +264,9 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
   const stirrupHookExt = Math.max(6 * i.stirrupDia, 75)
 
   // ── Shear (NSCP 2015 §422.5 / §409.4) ──
+  // Legs: explicit override, else lateral-support detailing of the widest
+  // tension layer (§25.7.2.3). The extra crosstie legs also raise Av.
+  const legs = i.legs ?? stirrupLegs(Math.max(...layers, 1))
   const Vc = (lambda * Math.sqrt(i.fc) * i.b * d) / 6 / 1000
   const phiVc = PHI_SHEAR * Vc
   const Av = legs * (Math.PI / 4) * i.stirrupDia * i.stirrupDia
@@ -292,7 +304,7 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
     comprSMinClear, comprMaxPerLayer, comprLayers, comprSClear, comprYBar,
     dPrimeExtreme, comprNAOK,
     stirrupBendDia, stirrupHookExt,
-    Vc, phiVc, region, Av, VsReq, VsMax, sReq, sMax, sAdopt,
+    Vc, phiVc, region, legs, Av, VsReq, VsMax, sReq, sMax, sAdopt,
   }
 }
 

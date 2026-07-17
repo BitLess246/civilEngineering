@@ -131,6 +131,32 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
     // the vertical leg (beside it); they straddle the corner bar into the core
     doc.line(bx1, edgeY, bx1 + dirX * hLen, edgeY + dirY * hLen)
     doc.line(stX, cornerBarY, stX + dirX * hLen, cornerBarY + dirY * hLen)
+    // interior crossties — each added leg (legs − 2) is a vertical hairline tie
+    // gripping an interior bar top & bottom with a 135° hook at each end,
+    // alternating sides (§25.7.2.3). Drawn before the bars so they sit on top.
+    if (sec.kind === 'beam' && (sec.legs ?? 2) > 2) {
+      const nCross = (sec.legs ?? 2) - 2
+      const n0 = (sec.layers && sec.layers[0]) || sec.bars
+      const yTop = by + barIns, yBot = by + hv - barIns
+      const rw = br + (sec.stirrupDia / 2) * s         // tie centreline wraps just outside the bar
+      const stub = rw * 1.6                            // short hook tail
+      const midX = (bx1 + bx2) / 2, NS = 8
+      doc.setDrawColor(...MUTED); doc.setLineWidth(0.35)
+      for (let k = 0; k < nCross; k++) {
+        const idx = Math.min(n0 - 2, Math.max(1, Math.round(((n0 - 1) * (k + 1)) / (nCross + 1))))
+        const xc = spanX(n0, idx)
+        const hd = xc <= midX ? 1 : -1                 // C opening faces the section centre
+        const xo = (o: number) => xc + hd * o
+        // C-tie: tail → arc OVER the top bar → far-side leg → arc UNDER the
+        // bottom bar → tail, so the tie grips the interior bars top & bottom.
+        const pts: [number, number][] = [[xo(rw), yTop + stub]]
+        for (let j = 0; j <= NS; j++) { const t = (Math.PI * j) / NS; pts.push([xo(rw * Math.cos(t)), yTop - rw * Math.sin(t)]) }
+        pts.push([xo(-rw), yBot])
+        for (let j = 0; j <= NS; j++) { const t = Math.PI - (Math.PI * j) / NS; pts.push([xo(rw * Math.cos(t)), yBot + rw * Math.sin(t)]) }
+        pts.push([xo(rw), yBot - stub])
+        for (let j = 0; j < pts.length - 1; j++) doc.line(pts[j][0], pts[j][1], pts[j + 1][0], pts[j + 1][1])
+      }
+    }
     doc.setFillColor(...INK); doc.setDrawColor(...INK); doc.setLineWidth(0.25)
     if (sec.kind === 'beam') {
       const pitch = (sec.barDia + 25) * s

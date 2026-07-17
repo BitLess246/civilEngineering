@@ -4,9 +4,9 @@ import { DimBelow, DimSide } from './dims'
  *  stress block, stirrup + tension-bar layers in the web, and the shared
  *  dimension-line template (bf above, h left, hf right, bw below). Reused by
  *  the standalone T-beam page and the 3D Model Space beam schedule. */
-export function TSection({ bf, bw, h, hf, a = 0, bars = 0, barDia = 0, layers = [], cover = 40, stirrupDia = 10 }: {
+export function TSection({ bf, bw, h, hf, a = 0, bars = 0, barDia = 0, layers = [], cover = 40, stirrupDia = 10, legs = 2 }: {
   bf: number; bw: number; h: number; hf: number; a?: number
-  bars?: number; barDia?: number; layers?: number[]; cover?: number; stirrupDia?: number
+  bars?: number; barDia?: number; layers?: number[]; cover?: number; stirrupDia?: number; legs?: number
 }) {
   const W = 340, HT = 285
   const availW = 210, availH = 200
@@ -51,6 +51,30 @@ export function TSection({ bf, bw, h, hf, a = 0, bars = 0, barDia = 0, layers = 
           <g stroke="#37526e" strokeWidth={sw} opacity="0.8" strokeLinecap="round">
             <line x1={bx1} y1={edgeY} x2={bx1 + dx * len} y2={edgeY + dy * len} />
             <line x1={leftX} y1={cy} x2={leftX + dx * len} y2={cy + dy * len} />
+          </g>
+        )
+      })()}
+      {/* interior crossties — each added leg (legs − 2) is a C-tie that arcs OVER
+          the top bar and UNDER the bottom bar it grips (§25.7.2.3). Before bars. */}
+      {legs > 2 && barRows.length > 0 && (() => {
+        const nCross = legs - 2, n0 = barRows[0].n
+        const yTop = y0 + hff * 0.35 + inset, yBot = barRows[0].y
+        const rw = br + (stirrupDia / 2) * S, stub = rw * 1.6, NS = 10
+        const sw = Math.max(1, stirrupDia * S)
+        return (
+          <g stroke="#37526e" strokeWidth={sw} opacity="0.8" fill="none" strokeLinecap="round" strokeLinejoin="round">
+            {Array.from({ length: nCross }, (_, k) => {
+              const idx = Math.min(n0 - 2, Math.max(1, Math.round(((n0 - 1) * (k + 1)) / (nCross + 1))))
+              const xc = n0 <= 1 ? (bx1 + bx2) / 2 : bx1 + ((bx2 - bx1) * idx) / (n0 - 1)
+              const hd = xc <= (bx1 + bx2) / 2 ? 1 : -1
+              const xo = (o: number) => xc + hd * o
+              const pts: [number, number][] = [[xo(rw), yTop + stub]]
+              for (let j = 0; j <= NS; j++) { const t = (Math.PI * j) / NS; pts.push([xo(rw * Math.cos(t)), yTop - rw * Math.sin(t)]) }
+              pts.push([xo(-rw), yBot])
+              for (let j = 0; j <= NS; j++) { const t = Math.PI - (Math.PI * j) / NS; pts.push([xo(rw * Math.cos(t)), yBot + rw * Math.sin(t)]) }
+              pts.push([xo(rw), yBot - stub])
+              return <polyline key={k} points={pts.map((p) => p.join(',')).join(' ')} />
+            })}
           </g>
         )
       })()}
