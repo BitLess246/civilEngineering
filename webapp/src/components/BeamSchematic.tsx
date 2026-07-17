@@ -48,7 +48,7 @@ export function BeamSchematic({
   comprBars = 0, comprBarDia, naDepth = 0, flexOK = true, hogging = false,
 }: BeamSchematicProps): JSX.Element {
   const W = 330, H = 322
-  const padL = 56, padT = 30, availW = 150, availH = 210
+  const padL = 90, padT = 18, availW = 150, availH = 220
   const s = Math.min(availW / b, availH / h)
   const bw = b * s, hh = h * s
   const x0 = padL + (availW - bw) / 2, y0 = padT
@@ -130,8 +130,6 @@ export function BeamSchematic({
   return (
     <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
       style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
-      <text x={padL} y={14} fontSize={11} fontWeight={700} fill="#0056b3">SECTION</text>
-
       {/* concrete */}
       <rect x={x0} y={y0} width={bw} height={hh} rx={2} fill={FILL} stroke={STROKE} strokeWidth={1.6} />
 

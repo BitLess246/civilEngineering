@@ -35,15 +35,27 @@ export function ColumnSchematic({ shape, b = 0, h = 0, D = 0, cover, barDia, tie
     const x2 = x0 + bw - (cover + tieDia + barDia / 2) * s
     const yT = y0 + (cover + tieDia + barDia / 2) * s
     const yB = y0 + hgt - (cover + tieDia + barDia / 2) * s
-    const nFace = Math.max(2, Math.ceil(bars / 2))
-    const rowX = Array.from({ length: nFace }, (_, i) => (nFace === 1 ? (x1 + x2) / 2 : x1 + ((x2 - x1) * i) / (nFace - 1)))
+    // real cage: 4 corner bars + the rest split between the b- and h-faces in
+    // proportion to the face lengths (mirrors engine barLayers 'all-around')
+    const N = Math.max(4, 2 * Math.round(bars / 2))
+    const bwIn = b - 2 * (cover + tieDia + barDia / 2)
+    const hIn = h - 2 * (cover + tieDia + barDia / 2)
+    let nx = 2 + Math.round(((N - 4) / 2) * (bwIn / (bwIn + hIn)))
+    nx = Math.max(2, Math.min(nx, N / 2))
+    const ny = N / 2 + 2 - nx
+    const rowX = Array.from({ length: nx }, (_, i) => (nx === 1 ? (x1 + x2) / 2 : x1 + ((x2 - x1) * i) / (nx - 1)))
+    const sideY = Array.from({ length: Math.max(0, ny - 2) }, (_, i) => yT + ((yB - yT) * (i + 1)) / (ny - 1))
     body = (
       <g>
         <rect x={x0} y={y0} width={bw} height={hgt} rx={2} fill={FILL} stroke={STROKE} strokeWidth={1.6} />
         <rect x={x0 + inset} y={y0 + inset} width={bw - 2 * inset} height={hgt - 2 * inset}
           rx={Math.max(2, 2.5 * tieDia * s)} fill="none" stroke={BAR} strokeWidth={stW} opacity={0.8} />
         {rowX.map((bx, i) => <circle key={`t${i}`} cx={bx} cy={yT} r={br} fill={BAR} />)}
-        {rowX.slice(0, Math.max(2, Math.floor(bars / 2))).map((bx, i) => <circle key={`b${i}`} cx={bx} cy={yB} r={br} fill={BAR} />)}
+        {rowX.map((bx, i) => <circle key={`b${i}`} cx={bx} cy={yB} r={br} fill={BAR} />)}
+        {sideY.map((sy, i) => <g key={`s${i}`}>
+          <circle cx={x1} cy={sy} r={br} fill={BAR} />
+          <circle cx={x2} cy={sy} r={br} fill={BAR} />
+        </g>)}
       </g>
     )
   } else {

@@ -255,7 +255,7 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, stat
           <span className="text-[10px] font-bold tracking-[.14em] text-[#5c6675]">{(lh.sheet || docCode).split('·')[0].trim()} · {(drawingTitle ?? docTitle).toUpperCase()}</span>
           <span className="font-mono text-[9px] text-[#a39d8d]">to scale</span>
         </div>
-        <div className="mx-auto w-3/4">{drawing}</div>
+        <div className="mx-auto w-[46%]">{drawing}</div>
       </div>}
 
       <div className="print-avoid-break mt-6 grid grid-cols-2 gap-7">
