@@ -31,7 +31,8 @@ export interface BeamDesignInput {
    *  flanged sagging section passes bf as b but keeps the WEB width here —
    *  min steel is a web property, it must not scale with the flange. */
   bMin?: number
-  legs?: number        // stirrup legs (default 2)
+  legs?: number        // stirrup legs — explicit override (else auto: width + shear)
+  legSpacingLimit?: number  // max transverse leg spacing hx, mm (350 seismic, 600 gravity)
   lambda?: number      // lightweight factor (default 1)
 }
 
@@ -82,7 +83,8 @@ export interface BeamDesignResult {
   // Shear
   Vc: number; phiVc: number
   region: ShearRegion
-  legs: number           // stirrup legs: 2 (perimeter) + crossties (§25.7.2.3)
+  legs: number           // stirrup legs — width-driven (hx ≤ limit), bumped by shear
+  legSpacingLimit: number // the transverse leg-spacing limit hx used, mm
   Av: number
   VsReq: number; VsMax: number
   sReq: number; sMax: number; sAdopt: number
@@ -123,9 +125,9 @@ function centroidRise(layers: number[], pitch: number): number {
 }
 
 /** Minimum practical stirrup spacing, mm — the tightest a designer will place
- *  transverse steel before adding legs instead (placement / congestion). Beam
- *  legs are driven by shear: extra legs are added only when a 2-leg tie at this
- *  spacing cannot supply the required Aᵥ/s (§422.5.10.5.3). */
+ *  transverse steel before adding legs instead (placement / congestion). Used as
+ *  the SECONDARY (shear-congestion) leg driver; beam legs are primarily set by the
+ *  transverse leg-spacing limit hx (beam width). */
 export const S_MIN_STIRRUP = 75
 
 export function designBeam(i: BeamDesignInput): BeamDesignResult {
@@ -273,15 +275,20 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
   else if (i.Vu <= phiVc) region = 'minimum'
   else { VsReq = i.Vu / PHI_SHEAR - Vc; region = VsReq > VsMax ? 'inadequate' : 'designed' }
 
-  // Legs: a closed 2-leg tie is the default. Extra legs are added ONLY when a
-  // 2-leg tie — even at the minimum practical spacing — cannot supply the Aᵥ/s
-  // the shear demands (§422.5.10.5.3): shear congestion, not bar spacing, drives
-  // multi-leg beam stirrups. (n_legs = ⌈(Aᵥ/s)_req · s_min / A_v,leg⌉.)
-  let legs = i.legs ?? 2
-  if (i.legs === undefined && region === 'designed') {
-    const avsReq = (VsReq * 1000) / (fyt * d)                 // required Aᵥ/s, mm²/mm
-    legs = Math.max(2, Math.ceil((avsReq * S_MIN_STIRRUP) / avPerLeg))
-  }
+  // Legs — PRIMARY driver is beam WIDTH: the transverse (horizontal) spacing
+  // between legs must stay within hx so the stirrup engages the full width and
+  // laterally supports the bars (hx ≤ 350 mm seismic §418.6.4.3; ~600 mm gravity).
+  // legSpan = c/c of the two outer perimeter legs → n_legs = ⌈legSpan/hx⌉ + 1.
+  const legSpacingLimit = i.legSpacingLimit ?? 600
+  const legWidth = i.bMin ?? i.b                    // stirrups sit in the web (T-beams)
+  const legSpan = legWidth - 2 * (i.cover + i.stirrupDia / 2)
+  const widthLegs = Math.max(1, Math.ceil(legSpan / legSpacingLimit)) + 1
+  // SECONDARY: a shear-congestion bump — a 2-leg tie at the minimum practical
+  // spacing may not supply the Aᵥ/s the shear demands (§422.5.10.5.3).
+  const shearLegs = region === 'designed'
+    ? Math.max(2, Math.ceil((((VsReq * 1000) / (fyt * d)) * S_MIN_STIRRUP) / avPerLeg))
+    : 2
+  const legs = i.legs ?? Math.max(widthLegs, shearLegs)
   const Av = legs * avPerLeg
   const sMinArea = (Av * fyt) / Math.max(0.062 * Math.sqrt(i.fc) * i.b, 0.35 * i.b)
 
@@ -306,7 +313,7 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
     comprSMinClear, comprMaxPerLayer, comprLayers, comprSClear, comprYBar,
     dPrimeExtreme, comprNAOK,
     stirrupBendDia, stirrupHookExt,
-    Vc, phiVc, region, legs, Av, VsReq, VsMax, sReq, sMax, sAdopt,
+    Vc, phiVc, region, legs, legSpacingLimit, Av, VsReq, VsMax, sReq, sMax, sAdopt,
   }
 }
 

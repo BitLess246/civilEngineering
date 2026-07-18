@@ -373,15 +373,18 @@ function memberFlange(model: StructuralModel, m: Member, L: number): { bf: numbe
 /** Design one beam/girder member from a single run's member result. */
 function designBeamRow(
   mr: F3MemberResult, role: string, sec: RectSection, support: BeamSupport = 'both-ends',
-  flange?: { bf: number; hf: number },
+  flange?: { bf: number; hf: number }, system: 'gravity' | 'imf' | 'smf' = 'gravity',
 ): BeamScheduleRow {
+  // Transverse stirrup-leg spacing limit hx (§418.6.4.3): 350 mm for seismic
+  // frame beams, ~600 mm good-practice for gravity.
+  const legSpacingLimit = system === 'smf' || system === 'imf' ? 350 : 600
   const sections: BeamSectionDesign[] = memberSections(mr)
     .filter((s) => Math.abs(s.Mu) > 1e-6 || s.Vu > 1e-6)
     .map((s) => {
       const base = {
         b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia,
         comprBarDia: 16, stirrupDia: sec.tieDia,
-        fc: sec.fc, fy: sec.fy, Mu: Math.abs(s.Mu), Vu: s.Vu,
+        fc: sec.fc, fy: sec.fy, Mu: Math.abs(s.Mu), Vu: s.Vu, legSpacingLimit,
       }
       const rect = designBeam(base)
       // T-beam action (§6.3.2): sagging compression lives in the slab, so the
@@ -648,7 +651,7 @@ function designFromRuns(
         })() : null
         for (const run of runs) {
           const mr = memberOf(run, m.id); if (!mr) continue
-          const row = designBeamRow(mr, role, sec, support, flange ?? undefined)
+          const row = designBeamRow(mr, role, sec, support, flange ?? undefined, opts.seismicSystem ?? 'gravity')
           if (row.sections.length === 0) continue
           const sev = beamSeverity(row)
           if (sev > bestSev) { bestSev = sev; best = row; gov = run.name }
