@@ -10,7 +10,7 @@ const eq = (tex: string): SolutionLine => ({ tex })
 
 export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): SolutionStep[] {
   const fyt = i.fyt ?? i.fy
-  const legs = i.legs ?? 2
+  const legs = r.legs ?? i.legs ?? 2      // the design's actual leg count (§25.7.2.3)
   const dbC = i.comprBarDia ?? i.barDia
   const d = r.d
   const Ab = (Math.PI / 4) * i.barDia * i.barDia
@@ -129,6 +129,21 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
     ],
   })
 
+  // Why 2 legs (or more): lateral support of the longitudinal bars sets the
+  // stirrup leg count, which in turn fixes the shear area Aᵥ.
+  {
+    const nWide = Math.max(...r.layers, 1)
+    const crossties = legs - 2
+    steps.push({
+      title: 'Transverse legs & shear-reinforcement area Aᵥ (§25.7.2.3)',
+      lines: [
+        txt('The stirrup leg count comes from lateral support of the longitudinal bars, not the shear demand: every corner and alternate bar must be held by the corner of a closed tie or by a crosstie, with no bar more than 150 mm clear from a supported one (§25.7.2.3). The closed perimeter tie restrains the two corner bars (2 legs); one crosstie leg is added for every other interior bar of the widest layer. Aᵥ is the total area of all legs crossing the shear crack.'),
+        eq(String.raw`n_{legs} = 2 + \left\lfloor\tfrac{n_{bar}-1}{2}\right\rfloor = 2 + \left\lfloor\tfrac{${nWide}-1}{2}\right\rfloor = \mathbf{${legs}}\quad(${crossties <= 0 ? String.raw`\text{perimeter tie only}` : String.raw`${crossties}\ \text{crosstie${crossties === 1 ? '' : 's'}}`})`),
+        eq(String.raw`A_v = n_{legs}\cdot\tfrac{\pi}{4}d_s^2 = ${legs}\cdot\tfrac{\pi}{4}(${sn0(i.stirrupDia)})^2 = ${sn0(r.Av)}\ \text{mm}^2`),
+      ],
+    })
+  }
+
   if (r.region === 'none') {
     steps.push({
       title: 'Stirrup requirement',
@@ -142,8 +157,8 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
     steps.push({
       title: 'Minimum stirrups',
       lines: [
-        txt('Vu exceeds ½φVc but not φVc — minimum shear reinforcement applies (§409.6.3.3), with spacing capped at d/2 ≤ 600 mm (§409.7.6.2.2).'),
-        eq(String.raw`A_v = ${legs}\cdot\tfrac{\pi}{4}d_s^2 = ${sn0(r.Av)}\ \text{mm}^2,\quad s_{max} = \min(d/2,\,600) = ${sn0(r.sMax)}\ \text{mm}`),
+        txt('Vu exceeds ½φVc but not φVc — minimum shear reinforcement applies (§409.6.3.3), with spacing capped at d/2 ≤ 600 mm (§409.7.6.2.2). Aᵥ is the leg area from the step above.'),
+        eq(String.raw`A_{v,min} = \max\!\left(0.062\sqrt{f'_c}\,\tfrac{b\,s}{f_{yt}},\ 0.35\tfrac{b\,s}{f_{yt}}\right),\quad s_{max} = \min(d/2,\,600) = ${sn0(r.sMax)}\ \text{mm}`),
       ],
       note: `Provide ⌀${i.stirrupDia} mm, ${legs}-leg stirrups @ ${sn0(r.sAdopt)} mm.`,
     })

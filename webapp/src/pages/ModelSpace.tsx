@@ -3606,7 +3606,7 @@ export default function ModelSpace() {
                       <td className="py-1 pr-2 text-right">{f1(s.Vu)}</td>
                       <td className="py-1 pr-2">{d.mode}</td>
                       <td className="py-1 pr-2">{d.bars}⌀{sec?.barDia}{d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}{s.hogging ? ' top' : ''}</td>
-                      <td className="py-1 pr-2">{d.sAdopt > 0 ? `@${Math.round(d.sAdopt)}` : d.region === 'none' ? 'none' : '⚠'}</td>
+                      <td className="py-1 pr-2">{d.sAdopt > 0 ? `${d.legs}L@${Math.round(d.sAdopt)}` : d.region === 'none' ? 'none' : '⚠'}</td>
                       <td className="py-1 text-slate-500">{k === 0 ? bm.gov : ''}</td>
                     </tr>,
                     open && model && sec && (
