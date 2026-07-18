@@ -133,13 +133,15 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
   // stirrup leg count, which in turn fixes the shear area Aᵥ.
   {
     const nWide = Math.max(...r.layers, 1)
+    const bw = i.b - 2 * (i.cover + i.stirrupDia)
+    const sClearW = nWide > 1 ? (bw - nWide * i.barDia) / (nWide - 1) : bw
     const crossties = legs - 2
     steps.push({
       title: 'Transverse legs & shear-reinforcement area Aᵥ (§25.7.2.3)',
       lines: [
-        txt('The stirrup leg count comes from lateral support of the longitudinal bars, not the shear demand: every corner and alternate bar must be held by the corner of a closed tie or by a crosstie, with no bar more than 150 mm clear from a supported one (§25.7.2.3). The closed perimeter tie restrains the two corner bars (2 legs); one crosstie leg is added for every other interior bar of the widest layer. Aᵥ is the total area of all legs crossing the shear crack.'),
-        eq(String.raw`n_{legs} = 2 + \left\lfloor\tfrac{n_{bar}-1}{2}\right\rfloor = 2 + \left\lfloor\tfrac{${nWide}-1}{2}\right\rfloor = \mathbf{${legs}}\quad(${crossties <= 0 ? String.raw`\text{perimeter tie only}` : String.raw`${crossties}\ \text{crosstie${crossties === 1 ? '' : 's'}}`})`),
-        eq(String.raw`A_v = n_{legs}\cdot\tfrac{\pi}{4}d_s^2 = ${legs}\cdot\tfrac{\pi}{4}(${sn0(i.stirrupDia)})^2 = ${sn0(r.Av)}\ \text{mm}^2`),
+        txt('The stirrup leg count comes from lateral support of the longitudinal bars, not the shear demand. The closed perimeter tie restrains the two corner bars; a crosstie (one extra leg) is added ONLY where a bar would otherwise be more than 150 mm clear from a laterally supported bar (§25.7.2.3). Closely-spaced bars — the usual case — need only the two corner legs. Aᵥ is the total area of all legs crossing the shear crack.'),
+        eq(String.raw`s_{clear} = \dfrac{b_w - n\,d_b}{n-1} = \dfrac{${sn0(bw)} - ${nWide}(${sn0(i.barDia)})}{${nWide}-1} = ${sn0(sClearW)}\ \text{mm}\ ${sClearW <= 150 ? String.raw`\le 150 \Rightarrow \text{corner ties suffice}` : String.raw`> 150 \Rightarrow \text{crosstie(s) required}`}`),
+        eq(String.raw`n_{legs} = \mathbf{${legs}}\quad(${crossties <= 0 ? String.raw`\text{perimeter tie only}` : String.raw`${crossties}\ \text{crosstie${crossties === 1 ? '' : 's'}}`}),\qquad A_v = n_{legs}\cdot\tfrac{\pi}{4}d_s^2 = ${legs}\cdot\tfrac{\pi}{4}(${sn0(i.stirrupDia)})^2 = ${sn0(r.Av)}\ \text{mm}^2`),
       ],
     })
   }

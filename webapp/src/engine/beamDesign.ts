@@ -124,11 +124,20 @@ function centroidRise(layers: number[], pitch: number): number {
 
 /** Transverse legs for lateral support of the longitudinal bars
  *  (ACI 318-14 §25.7.2.3): the closed perimeter tie restrains the two corner
- *  bars; every other interior bar of the widest layer then needs a crosstie so
- *  no bar sits more than 150 mm clear from a laterally supported one. Each
- *  crosstie is one added leg. Returns ≥ 2. */
-export function stirrupLegs(barsWidestLayer: number): number {
-  return 2 + Math.max(0, Math.floor((barsWidestLayer - 1) / 2))
+ *  bars; a crosstie (one extra leg) is added ONLY where a bar would otherwise be
+ *  more than 150 mm clear from a laterally supported bar. Closely-spaced bars
+ *  (the usual case) therefore need no crosstie — 2 legs.
+ *
+ *  With bars evenly spaced at centre-to-centre pitch `p = sClear + db`, a
+ *  supported bar keeps `reach = ⌊(150 + db)/p⌋` bars on each side within the
+ *  150 mm limit, so consecutive supported legs may span up to `2·reach + 1`
+ *  bar spaces. Returns ≥ 2. */
+export function stirrupLegs(barsWidestLayer: number, sClear: number, db: number): number {
+  if (barsWidestLayer <= 2) return 2
+  const pitch = Math.max(sClear, 0) + db
+  const reach = Math.floor((150 + db) / pitch)
+  const gap = 2 * reach + 1                                   // bar spaces between supported legs
+  return 2 + Math.max(0, Math.ceil((barsWidestLayer - 1) / gap) - 1)
 }
 
 export function designBeam(i: BeamDesignInput): BeamDesignResult {
@@ -264,9 +273,12 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
   const stirrupHookExt = Math.max(6 * i.stirrupDia, 75)
 
   // ── Shear (NSCP 2015 §422.5 / §409.4) ──
-  // Legs: explicit override, else lateral-support detailing of the widest
-  // tension layer (§25.7.2.3). The extra crosstie legs also raise Av.
-  const legs = i.legs ?? stirrupLegs(Math.max(...layers, 1))
+  // Legs: explicit override, else lateral-support detailing of the widest tension
+  // layer (§25.7.2.3) — a crosstie only where a bar would be > 150 mm clear from a
+  // supported bar. The extra crosstie legs also raise Av.
+  const nWide = Math.max(...layers, 1)
+  const sClearWide = nWide > 1 ? (bw - nWide * i.barDia) / (nWide - 1) : bw
+  const legs = i.legs ?? stirrupLegs(nWide, sClearWide, i.barDia)
   const Vc = (lambda * Math.sqrt(i.fc) * i.b * d) / 6 / 1000
   const phiVc = PHI_SHEAR * Vc
   const Av = legs * (Math.PI / 4) * i.stirrupDia * i.stirrupDia

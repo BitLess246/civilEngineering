@@ -8,8 +8,8 @@ const texOf = (steps: ReturnType<typeof buildBeamSolution>, title: string) =>
 
 describe('beam worked solution — transverse legs & Aᵥ (§25.7.2.3)', () => {
   it('adds a leg step whose count matches the design and is used in Aᵥ (not hard-coded 2)', () => {
-    // Narrow web + heavy demand → ≥ 3 bottom bars → the tie needs crossties.
-    const i: BeamDesignInput = { b: 300, h: 650, cover: 40, barDia: 20, stirrupDia: 10, fc: 28, fy: 415, Mu: 480, Vu: 320 }
+    // Wide beam, few widely-spaced bars (> 150 mm clear) → the tie needs a crosstie.
+    const i: BeamDesignInput = { b: 800, h: 600, cover: 40, barDia: 25, stirrupDia: 10, fc: 28, fy: 415, Mu: 150, Vu: 320 }
     const r = designBeam(i)
     expect(r.legs).toBeGreaterThanOrEqual(3)             // the design chose > 2 legs
     const steps = buildBeamSolution(i, r)
