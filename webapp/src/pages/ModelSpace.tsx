@@ -325,7 +325,7 @@ function GridBubbles3D({ model }: { model: StructuralModel }) {
     const geo = new THREE.BufferGeometry()
     geo.setAttribute('position', new THREE.Float32BufferAttribute(gpts, 3))
     // dimension lines + 45° architectural ticks, 2 m off the top and left edges
-    const zDim = z0 - DIM, xDim = x0 - DIM, s = r * 0.6
+    const zDim = z0 - DIM, xDim = x0 - DIM, s = r * 0.3
     const dpts: number[] = []
     if (xs.length > 1) {
       dpts.push(x0, y0, zDim, x1, y0, zDim)
@@ -342,7 +342,7 @@ function GridBubbles3D({ model }: { model: StructuralModel }) {
     return { xs, zs, y0, x0, z0, r, BUB, zDim, xDim, geo, dimGeo, xDims, zDims }
   }, [model])
   if (!g) return null
-  const dimFont = g.r * 0.72, tOff = g.r * 1.4                          // text offset above the line
+  const dimFont = g.r * 0.72, tOff = 0.3                                // text 0.3 m above the line (→ 2.3 m out)
   return (
     <group>
       <lineSegments geometry={g.geo}>
