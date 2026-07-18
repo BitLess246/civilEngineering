@@ -290,16 +290,18 @@ function Support3D({ p }: { p: THREE.Vector3 }) {
 function AxisBubble({ x, y, z, r, label }: { x: number; y: number; z: number; r: number; label: string }) {
   return (
     <group position={[x, y + 0.02, z]} rotation={[-Math.PI / 2, 0, 0]}>
-      <mesh><circleGeometry args={[r, 28]} /><meshBasicMaterial color="#ffffff" /></mesh>
-      <mesh position={[0, 0, 0.001]}><ringGeometry args={[r * 0.85, r, 28]} /><meshBasicMaterial color="#475569" /></mesh>
-      <Text position={[0, 0, 0.004]} fontSize={r * 1.05} color="#1e293b" anchorX="center" anchorY="middle">{label}</Text>
+      <mesh><circleGeometry args={[r, 40]} /><meshBasicMaterial color="#ffffff" /></mesh>
+      <mesh position={[0, 0, 0.001]}><ringGeometry args={[r * 0.94, r, 40]} /><meshBasicMaterial color="#475569" /></mesh>
+      <Text position={[0, 0, 0.004]} fontSize={r * 0.95} color="#1e293b" anchorX="center" anchorY="middle">{label}</Text>
     </group>
   )
 }
 
 /** ETABS-style plan grid on the floor: column lines (A, B, …) parallel to Z and
- *  rows (1, 2, …) parallel to X, derived from the unique node coordinates, with
- *  labelled bubbles at both ends of every line. Drawn flat on the base plane. */
+ *  rows (1, 2, …) parallel to X, derived from the unique node coordinates. Bubbles
+ *  sit ~2 bays off the top (letters) and left (numbers) edges only, and a dimension
+ *  line between the grid and the bubbles reports the bay spacings (m). Flat on the
+ *  base plane. */
 function GridBubbles3D({ model }: { model: StructuralModel }) {
   const g = useMemo(() => {
     if (!model.nodes.length) return null
@@ -314,39 +316,63 @@ function GridBubbles3D({ model }: { model: StructuralModel }) {
     if (xs.length < 2 && zs.length < 2) return null
     const y0 = Math.min(...model.nodes.map((n) => n.y))
     const x0 = xs[0], x1 = xs[xs.length - 1], z0 = zs[0], z1 = zs[zs.length - 1]
-    const r = Math.max(0.3, Math.max(x1 - x0, z1 - z0, 1) * 0.02)
-    const ext = r * 2.4
-    const pts: number[] = []
-    for (const x of xs) pts.push(x, y0, z0 - ext, x, y0, z1 + ext)   // column lines ‖ Z
-    for (const z of zs) pts.push(x0 - ext, y0, z, x1 + ext, y0, z)   // rows ‖ X
+    const r = Math.max(0.5, Math.max(x1 - x0, z1 - z0, 1) * 0.035)      // bigger bubbles
+    const bayX = xs.length > 1 ? (x1 - x0) / (xs.length - 1) : Math.max(x1 - x0, 1)
+    const bayZ = zs.length > 1 ? (z1 - z0) / (zs.length - 1) : Math.max(z1 - z0, 1)
+    const extZ = 2 * bayZ                                               // letters ~2 boxes off the top (−Z)
+    const extX = 2 * bayX                                               // numbers ~2 boxes off the left (−X)
+    const pad = r
+    // main grid lines — reach the bubble on the labelled side, a touch past on the far side
+    const gpts: number[] = []
+    for (const x of xs) gpts.push(x, y0, z0 - extZ, x, y0, z1 + pad)    // column lines ‖ Z
+    for (const z of zs) gpts.push(x0 - extX, y0, z, x1 + pad, y0, z)    // rows ‖ X
     const geo = new THREE.BufferGeometry()
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3))
-    return { xs, zs, y0, x0, x1, z0, z1, r, ext, geo }
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(gpts, 3))
+    // dimension lines + end ticks, sitting between the grid edge and the bubbles
+    const zDim = z0 - extZ * 0.45, xDim = x0 - extX * 0.45, tick = r * 0.8
+    const dpts: number[] = []
+    if (xs.length > 1) {
+      dpts.push(x0, y0, zDim, x1, y0, zDim)
+      for (const x of xs) dpts.push(x, y0, zDim - tick, x, y0, zDim + tick)
+    }
+    if (zs.length > 1) {
+      dpts.push(xDim, y0, z0, xDim, y0, z1)
+      for (const z of zs) dpts.push(xDim - tick, y0, z, xDim + tick, y0, z)
+    }
+    const dimGeo = new THREE.BufferGeometry()
+    dimGeo.setAttribute('position', new THREE.Float32BufferAttribute(dpts, 3))
+    const xDims = xs.slice(1).map((x, i) => ({ mid: (xs[i] + x) / 2, val: x - xs[i] }))
+    const zDims = zs.slice(1).map((z, i) => ({ mid: (zs[i] + z) / 2, val: z - zs[i] }))
+    return { xs, zs, y0, x0, z0, r, extZ, extX, zDim, xDim, geo, dimGeo, xDims, zDims }
   }, [model])
   if (!g) return null
+  const dimFont = g.r * 0.72
   return (
     <group>
       <lineSegments geometry={g.geo}>
-        <lineBasicMaterial color="#64748b" transparent opacity={0.55} />
+        <lineBasicMaterial color="#64748b" transparent opacity={0.5} />
       </lineSegments>
-      {g.xs.map((x, i) => {
-        const label = String.fromCharCode(65 + i)
-        return (
-          <group key={`col${i}`}>
-            <AxisBubble x={x} y={g.y0} z={g.z0 - g.ext - g.r} r={g.r} label={label} />
-            <AxisBubble x={x} y={g.y0} z={g.z1 + g.ext + g.r} r={g.r} label={label} />
-          </group>
-        )
-      })}
-      {g.zs.map((z, i) => {
-        const label = String(i + 1)
-        return (
-          <group key={`row${i}`}>
-            <AxisBubble x={g.x0 - g.ext - g.r} y={g.y0} z={z} r={g.r} label={label} />
-            <AxisBubble x={g.x1 + g.ext + g.r} y={g.y0} z={z} r={g.r} label={label} />
-          </group>
-        )
-      })}
+      <lineSegments geometry={g.dimGeo}>
+        <lineBasicMaterial color="#94a3b8" transparent opacity={0.7} />
+      </lineSegments>
+      {/* column-line bubbles (A, B, …) — top edge only */}
+      {g.xs.map((x, i) => (
+        <AxisBubble key={`col${i}`} x={x} y={g.y0} z={g.z0 - g.extZ - g.r} r={g.r} label={String.fromCharCode(65 + i)} />
+      ))}
+      {/* row bubbles (1, 2, …) — left edge only */}
+      {g.zs.map((z, i) => (
+        <AxisBubble key={`row${i}`} x={g.x0 - g.extX - g.r} y={g.y0} z={z} r={g.r} label={String(i + 1)} />
+      ))}
+      {/* bay dimensions across the top (X spacings) */}
+      {g.xDims.map((d, i) => (
+        <Text key={`dx${i}`} position={[d.mid, g.y0 + 0.03, g.zDim]} rotation={[-Math.PI / 2, 0, 0]}
+          fontSize={dimFont} color="#475569" anchorX="center" anchorY="middle">{`${d.val.toFixed(2)} m`}</Text>
+      ))}
+      {/* bay dimensions down the left (Z spacings) */}
+      {g.zDims.map((d, i) => (
+        <Text key={`dz${i}`} position={[g.xDim, g.y0 + 0.03, d.mid]} rotation={[-Math.PI / 2, 0, Math.PI / 2]}
+          fontSize={dimFont} color="#475569" anchorX="center" anchorY="middle">{`${d.val.toFixed(2)} m`}</Text>
+      ))}
     </group>
   )
 }
