@@ -285,6 +285,72 @@ function Support3D({ p }: { p: THREE.Vector3 }) {
   )
 }
 
+/** A labelled bubble (white disc + ring + letter/number) lying flat on the floor
+ *  at the end of a grid line, ETABS-style. */
+function AxisBubble({ x, y, z, r, label }: { x: number; y: number; z: number; r: number; label: string }) {
+  return (
+    <group position={[x, y + 0.02, z]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh><circleGeometry args={[r, 28]} /><meshBasicMaterial color="#ffffff" /></mesh>
+      <mesh position={[0, 0, 0.001]}><ringGeometry args={[r * 0.85, r, 28]} /><meshBasicMaterial color="#475569" /></mesh>
+      <Text position={[0, 0, 0.004]} fontSize={r * 1.05} color="#1e293b" anchorX="center" anchorY="middle">{label}</Text>
+    </group>
+  )
+}
+
+/** ETABS-style plan grid on the floor: column lines (A, B, …) parallel to Z and
+ *  rows (1, 2, …) parallel to X, derived from the unique node coordinates, with
+ *  labelled bubbles at both ends of every line. Drawn flat on the base plane. */
+function GridBubbles3D({ model }: { model: StructuralModel }) {
+  const g = useMemo(() => {
+    if (!model.nodes.length) return null
+    const uniq = (vals: number[]) => {
+      const out: number[] = []
+      for (const v of [...vals].sort((a, b) => a - b))
+        if (!out.length || Math.abs(v - out[out.length - 1]) > 0.05) out.push(v)
+      return out
+    }
+    const xs = uniq(model.nodes.map((n) => n.x))
+    const zs = uniq(model.nodes.map((n) => n.z))
+    if (xs.length < 2 && zs.length < 2) return null
+    const y0 = Math.min(...model.nodes.map((n) => n.y))
+    const x0 = xs[0], x1 = xs[xs.length - 1], z0 = zs[0], z1 = zs[zs.length - 1]
+    const r = Math.max(0.3, Math.max(x1 - x0, z1 - z0, 1) * 0.02)
+    const ext = r * 2.4
+    const pts: number[] = []
+    for (const x of xs) pts.push(x, y0, z0 - ext, x, y0, z1 + ext)   // column lines ‖ Z
+    for (const z of zs) pts.push(x0 - ext, y0, z, x1 + ext, y0, z)   // rows ‖ X
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3))
+    return { xs, zs, y0, x0, x1, z0, z1, r, ext, geo }
+  }, [model])
+  if (!g) return null
+  return (
+    <group>
+      <lineSegments geometry={g.geo}>
+        <lineBasicMaterial color="#64748b" transparent opacity={0.55} />
+      </lineSegments>
+      {g.xs.map((x, i) => {
+        const label = String.fromCharCode(65 + i)
+        return (
+          <group key={`col${i}`}>
+            <AxisBubble x={x} y={g.y0} z={g.z0 - g.ext - g.r} r={g.r} label={label} />
+            <AxisBubble x={x} y={g.y0} z={g.z1 + g.ext + g.r} r={g.r} label={label} />
+          </group>
+        )
+      })}
+      {g.zs.map((z, i) => {
+        const label = String(i + 1)
+        return (
+          <group key={`row${i}`}>
+            <AxisBubble x={g.x0 - g.ext - g.r} y={g.y0} z={z} r={g.r} label={label} />
+            <AxisBubble x={g.x1 + g.ext + g.r} y={g.y0} z={z} r={g.r} label={label} />
+          </group>
+        )
+      })}
+    </group>
+  )
+}
+
 /** A designed footing drawn to ACTUAL plan size below grade, so overlapping
  *  footprints are visible. bx/bz = plan dimensions (m), dc = depth (m), angle =
  *  plan rotation about Y (combined footings follow the column axis). Overlapping
@@ -1633,7 +1699,8 @@ export default function ModelSpace() {
                 <ambientLight intensity={0.85} />
                 <directionalLight position={[12, 18, 8]} intensity={0.9} />
                 <FitView box={modelBox} dir={[1, 0.8, 1]} />
-                <gridHelper args={[40, 40, '#cbd5e1', '#e2e8f0']} />
+                <gridHelper args={[40, 40, '#e2e8f0', '#eef2f7']} />
+                <GridBubbles3D model={model} />
                 {model.members.map((m) => {
                   const a = nodePos.get(m.i), bb = nodePos.get(m.j)
                   if (!a || !bb) return null
