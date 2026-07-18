@@ -103,22 +103,23 @@ describe('beam design — DRRB (compression steel)', () => {
   })
 })
 
-describe('stirrup legs — shear-driven (§422.5.10.5.3)', () => {
-  it('stays at 2 legs until a 2-leg tie at s_min cannot carry Vs', () => {
-    // ordinary shear → the 2-leg tie spaces out fine → 2 legs
-    expect(designBeam({ ...base, b: 300, h: 550, Mu: 200, Vu: 260 }).legs).toBe(2)
-    // very high Vs (near the crushing limit) → a 2-leg tie would need s < 75 mm → add a leg
-    const hi = designBeam({ ...base, b: 300, h: 550, Mu: 100, Vu: 450 })
-    expect(hi.region).toBe('designed')
-    expect(hi.legs).toBeGreaterThanOrEqual(3)
-    // the adopted leg count keeps the required spacing at/above the practical minimum
-    expect((hi.Av * (base.fyt ?? base.fy) * hi.d) / (hi.VsReq * 1000)).toBeGreaterThanOrEqual(75 - 1e-6)
-    expect(hi.Av).toBeCloseTo(hi.legs * (Math.PI / 4) * 10 * 10, 6)
+describe('stirrup legs — width-driven (hx limit) + shear bump', () => {
+  it('normal beams stay at 2 legs; wide beams add legs; seismic hx tightens it', () => {
+    expect(designBeam({ ...base, b: 300 }).legs).toBe(2)                    // normal gravity → 2
+    expect(designBeam({ ...base, b: 900 }).legs).toBe(3)                    // wide gravity (hx 600) → 3
+    expect(designBeam({ ...base, b: 900, legSpacingLimit: 350 }).legs).toBe(4)  // seismic hx 350 → 4
+    expect(designBeam({ ...base, b: 400, legSpacingLimit: 350 }).legs).toBe(2)  // normal seismic → still 2
+    expect(designBeam({ ...base, b: 900, legs: 2 }).legs).toBe(2)           // explicit override wins
+    expect(designBeam({ ...base, b: 900 }).legSpacingLimit).toBe(600)       // limit echoed on the result
   })
 
-  it('honours an explicit legs override', () => {
-    const forced = designBeam({ ...base, b: 300, h: 550, Mu: 100, Vu: 450, legs: 2 })
-    expect(forced.legs).toBe(2)
+  it('a very high Vs bumps the leg count even on a normal-width beam', () => {
+    const hi = designBeam({ ...base, b: 300, h: 550, Mu: 100, Vu: 450 })
+    expect(hi.region).toBe('designed')
+    expect(hi.legs).toBeGreaterThanOrEqual(3)                              // shear bump beyond width's 2
+    // the adopted legs keep the required spacing at/above the practical minimum
+    expect((hi.Av * (base.fyt ?? base.fy) * hi.d) / (hi.VsReq * 1000)).toBeGreaterThanOrEqual(75 - 1e-6)
+    expect(hi.Av).toBeCloseTo(hi.legs * (Math.PI / 4) * 10 * 10, 6)
   })
 })
 

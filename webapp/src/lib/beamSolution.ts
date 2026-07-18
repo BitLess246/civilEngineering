@@ -129,23 +129,26 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
     ],
   })
 
-  // Why 2 legs (or more): a closed 2-leg tie is the default; extra legs are a
-  // SHEAR response — added only when a 2-leg tie at the minimum practical spacing
-  // cannot supply the Aᵥ/s that Vs demands.
+  // Why 2 legs (or more): the leg count is set PRIMARILY by the beam width — the
+  // transverse spacing between legs must stay within hx — and BUMPED by shear if a
+  // 2-leg tie at the minimum spacing can't carry Vs.
   {
+    const hx = r.legSpacingLimit
+    const legWidth = (i.bMin ?? i.b)
+    const legSpan = legWidth - 2 * (i.cover + i.stirrupDia / 2)
+    const hxUsed = legSpan / (legs - 1)
     const crossties = legs - 2
     const lines: SolutionLine[] = [
-      txt(`Stirrups are 2-leg closed ties by default. Extra legs are added only if a 2-leg tie — even at the minimum practical spacing s_min = ${S_MIN_STIRRUP} mm — cannot supply the Aᵥ/s that Vs demands (§422.5.10.5.3); i.e. shear congestion, not bar spacing, drives multi-leg beam stirrups. Aᵥ is the total area of all legs crossing the shear crack.`),
+      txt(`The number of legs is set primarily by the beam WIDTH: the transverse (horizontal) spacing between legs must stay within hx = ${sn0(hx)} mm (§418.6.4.3 — 350 mm for seismic frame beams, ~600 mm gravity) so the stirrup engages the full width and laterally supports the bars. A 2-leg tie is the default; a wide beam needs interior legs. Aᵥ is the total leg area crossing the shear crack.`),
+      eq(String.raw`n_{legs} = \left\lceil \dfrac{b_{web} - 2(c + d_s/2)}{h_x} \right\rceil + 1 = \left\lceil \dfrac{${sn0(legSpan)}}{${sn0(hx)}} \right\rceil + 1 = ${Math.max(1, Math.ceil(legSpan / hx)) + 1}\quad(h_x^{used} = ${sn0(hxUsed)}\ \text{mm})`),
     ]
     if (r.region === 'designed' && r.VsReq > 0) {
       const avsReq = (r.VsReq * 1000) / (fyt * d)
-      lines.push(eq(String.raw`(A_v/s)_{req} = \dfrac{V_s\cdot 10^3}{f_{yt}\,d} = \dfrac{${sn1(r.VsReq)}\times 10^3}{${sn0(fyt)}(${sn1(d)})} = ${sn3(avsReq)}\ \text{mm}^2\!/\text{mm}`))
-      lines.push(eq(String.raw`n_{legs} = \max\!\left(2,\ \left\lceil \dfrac{(A_v/s)_{req}\, s_{min}}{\tfrac{\pi}{4}d_s^2} \right\rceil\right) = \max\!\left(2,\ \left\lceil \dfrac{${sn3(avsReq)}(${S_MIN_STIRRUP})}{${sn1((Math.PI / 4) * i.stirrupDia * i.stirrupDia)}} \right\rceil\right) = \mathbf{${legs}}`))
-    } else {
-      lines.push(eq(String.raw`n_{legs} = \mathbf{2}\quad(\text{closed perimeter tie — Vs does not require more})`))
+      const shearLegs = Math.max(2, Math.ceil((avsReq * S_MIN_STIRRUP) / ((Math.PI / 4) * i.stirrupDia * i.stirrupDia)))
+      lines.push(eq(String.raw`\text{shear bump: } n_{legs} \ge \left\lceil \dfrac{(A_v/s)_{req}\, s_{min}}{\tfrac{\pi}{4}d_s^2} \right\rceil = \left\lceil \dfrac{${sn3(avsReq)}(${S_MIN_STIRRUP})}{${sn1((Math.PI / 4) * i.stirrupDia * i.stirrupDia)}} \right\rceil = ${shearLegs}`))
     }
-    lines.push(eq(String.raw`A_v = n_{legs}\cdot\tfrac{\pi}{4}d_s^2 = ${legs}\cdot\tfrac{\pi}{4}(${sn0(i.stirrupDia)})^2 = ${sn0(r.Av)}\ \text{mm}^2${crossties > 0 ? String.raw`\quad(${crossties}\ \text{extra leg${crossties === 1 ? '' : 's'}})` : ''}`))
-    steps.push({ title: 'Transverse legs & shear-reinforcement area Aᵥ (§422.5.10.5.3)', lines })
+    lines.push(eq(String.raw`n_{legs} = \mathbf{${legs}},\qquad A_v = n_{legs}\cdot\tfrac{\pi}{4}d_s^2 = ${legs}\cdot\tfrac{\pi}{4}(${sn0(i.stirrupDia)})^2 = ${sn0(r.Av)}\ \text{mm}^2${crossties > 0 ? String.raw`\quad(${crossties}\ \text{extra leg${crossties === 1 ? '' : 's'}})` : ''}`))
+    steps.push({ title: 'Transverse legs & shear-reinforcement area Aᵥ (§418.6.4.3 · §422.5)', lines })
   }
 
   if (r.region === 'none') {
