@@ -222,7 +222,7 @@ export function buildModelReport(
           `${s.label}${s.hogging ? ' (hog)' : s.bf ? ` · T bf=${Math.round(s.bf)}` : ''}`,
           f1(Math.abs(s.Mu)), f1(s.Vu), d.mode,
           `${d.bars}⌀${sec?.barDia}${d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}${s.hogging ? ' top' : ''}`,
-          d.sAdopt > 0 ? `⌀${sec?.tieDia}@${Math.round(d.sAdopt)}` : d.region === 'none' ? 'none' : '⚠',
+          d.sAdopt > 0 ? `${d.legs}L-⌀${sec?.tieDia}@${Math.round(d.sAdopt)}` : d.region === 'none' ? 'none' : '⚠',
           k === 0 ? (bm.gov ?? '') : '',
         ]
       })

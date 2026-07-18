@@ -2,7 +2,7 @@
 // an explanation citing the governing provision, then the substituted
 // equations. Mirrors engine/beamDesign.ts (ρ_max,TC with dt/d, DRRB with
 // displaced concrete, §407.7 bar layout with Varignon d-iteration).
-import type { BeamDesignInput, BeamDesignResult } from '../engine/beamDesign'
+import { S_MIN_STIRRUP, type BeamDesignInput, type BeamDesignResult } from '../engine/beamDesign'
 import { type SolutionStep, type SolutionLine, sn0, sn1, sn2, sn3, sn4 } from './solution'
 
 const txt = (text: string): SolutionLine => ({ text })
@@ -10,7 +10,7 @@ const eq = (tex: string): SolutionLine => ({ tex })
 
 export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): SolutionStep[] {
   const fyt = i.fyt ?? i.fy
-  const legs = i.legs ?? 2
+  const legs = r.legs ?? i.legs ?? 2      // the design's actual leg count (§25.7.2.3)
   const dbC = i.comprBarDia ?? i.barDia
   const d = r.d
   const Ab = (Math.PI / 4) * i.barDia * i.barDia
@@ -129,6 +129,25 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
     ],
   })
 
+  // Why 2 legs (or more): a closed 2-leg tie is the default; extra legs are a
+  // SHEAR response — added only when a 2-leg tie at the minimum practical spacing
+  // cannot supply the Aᵥ/s that Vs demands.
+  {
+    const crossties = legs - 2
+    const lines: SolutionLine[] = [
+      txt(`Stirrups are 2-leg closed ties by default. Extra legs are added only if a 2-leg tie — even at the minimum practical spacing s_min = ${S_MIN_STIRRUP} mm — cannot supply the Aᵥ/s that Vs demands (§422.5.10.5.3); i.e. shear congestion, not bar spacing, drives multi-leg beam stirrups. Aᵥ is the total area of all legs crossing the shear crack.`),
+    ]
+    if (r.region === 'designed' && r.VsReq > 0) {
+      const avsReq = (r.VsReq * 1000) / (fyt * d)
+      lines.push(eq(String.raw`(A_v/s)_{req} = \dfrac{V_s\cdot 10^3}{f_{yt}\,d} = \dfrac{${sn1(r.VsReq)}\times 10^3}{${sn0(fyt)}(${sn1(d)})} = ${sn3(avsReq)}\ \text{mm}^2\!/\text{mm}`))
+      lines.push(eq(String.raw`n_{legs} = \max\!\left(2,\ \left\lceil \dfrac{(A_v/s)_{req}\, s_{min}}{\tfrac{\pi}{4}d_s^2} \right\rceil\right) = \max\!\left(2,\ \left\lceil \dfrac{${sn3(avsReq)}(${S_MIN_STIRRUP})}{${sn1((Math.PI / 4) * i.stirrupDia * i.stirrupDia)}} \right\rceil\right) = \mathbf{${legs}}`))
+    } else {
+      lines.push(eq(String.raw`n_{legs} = \mathbf{2}\quad(\text{closed perimeter tie — Vs does not require more})`))
+    }
+    lines.push(eq(String.raw`A_v = n_{legs}\cdot\tfrac{\pi}{4}d_s^2 = ${legs}\cdot\tfrac{\pi}{4}(${sn0(i.stirrupDia)})^2 = ${sn0(r.Av)}\ \text{mm}^2${crossties > 0 ? String.raw`\quad(${crossties}\ \text{extra leg${crossties === 1 ? '' : 's'}})` : ''}`))
+    steps.push({ title: 'Transverse legs & shear-reinforcement area Aᵥ (§422.5.10.5.3)', lines })
+  }
+
   if (r.region === 'none') {
     steps.push({
       title: 'Stirrup requirement',
@@ -142,8 +161,8 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
     steps.push({
       title: 'Minimum stirrups',
       lines: [
-        txt('Vu exceeds ½φVc but not φVc — minimum shear reinforcement applies (§409.6.3.3), with spacing capped at d/2 ≤ 600 mm (§409.7.6.2.2).'),
-        eq(String.raw`A_v = ${legs}\cdot\tfrac{\pi}{4}d_s^2 = ${sn0(r.Av)}\ \text{mm}^2,\quad s_{max} = \min(d/2,\,600) = ${sn0(r.sMax)}\ \text{mm}`),
+        txt('Vu exceeds ½φVc but not φVc — minimum shear reinforcement applies (§409.6.3.3), with spacing capped at d/2 ≤ 600 mm (§409.7.6.2.2). Aᵥ is the leg area from the step above.'),
+        eq(String.raw`A_{v,min} = \max\!\left(0.062\sqrt{f'_c}\,\tfrac{b\,s}{f_{yt}},\ 0.35\tfrac{b\,s}{f_{yt}}\right),\quad s_{max} = \min(d/2,\,600) = ${sn0(r.sMax)}\ \text{mm}`),
       ],
       note: `Provide ⌀${i.stirrupDia} mm, ${legs}-leg stirrups @ ${sn0(r.sAdopt)} mm.`,
     })
