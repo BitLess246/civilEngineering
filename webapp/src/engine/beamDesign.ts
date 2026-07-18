@@ -122,23 +122,11 @@ function centroidRise(layers: number[], pitch: number): number {
   return n > 0 ? sum / n : 0
 }
 
-/** Transverse legs for lateral support of the longitudinal bars
- *  (ACI 318-14 §25.7.2.3): the closed perimeter tie restrains the two corner
- *  bars; a crosstie (one extra leg) is added ONLY where a bar would otherwise be
- *  more than 150 mm clear from a laterally supported bar. Closely-spaced bars
- *  (the usual case) therefore need no crosstie — 2 legs.
- *
- *  With bars evenly spaced at centre-to-centre pitch `p = sClear + db`, a
- *  supported bar keeps `reach = ⌊(150 + db)/p⌋` bars on each side within the
- *  150 mm limit, so consecutive supported legs may span up to `2·reach + 1`
- *  bar spaces. Returns ≥ 2. */
-export function stirrupLegs(barsWidestLayer: number, sClear: number, db: number): number {
-  if (barsWidestLayer <= 2) return 2
-  const pitch = Math.max(sClear, 0) + db
-  const reach = Math.floor((150 + db) / pitch)
-  const gap = 2 * reach + 1                                   // bar spaces between supported legs
-  return 2 + Math.max(0, Math.ceil((barsWidestLayer - 1) / gap) - 1)
-}
+/** Minimum practical stirrup spacing, mm — the tightest a designer will place
+ *  transverse steel before adding legs instead (placement / congestion). Beam
+ *  legs are driven by shear: extra legs are added only when a 2-leg tie at this
+ *  spacing cannot supply the required Aᵥ/s (§422.5.10.5.3). */
+export const S_MIN_STIRRUP = 75
 
 export function designBeam(i: BeamDesignInput): BeamDesignResult {
   const fyt = i.fyt ?? i.fy
@@ -273,37 +261,39 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
   const stirrupHookExt = Math.max(6 * i.stirrupDia, 75)
 
   // ── Shear (NSCP 2015 §422.5 / §409.4) ──
-  // Legs: explicit override, else lateral-support detailing of the widest tension
-  // layer (§25.7.2.3) — a crosstie only where a bar would be > 150 mm clear from a
-  // supported bar. The extra crosstie legs also raise Av.
-  const nWide = Math.max(...layers, 1)
-  const sClearWide = nWide > 1 ? (bw - nWide * i.barDia) / (nWide - 1) : bw
-  const legs = i.legs ?? stirrupLegs(nWide, sClearWide, i.barDia)
   const Vc = (lambda * Math.sqrt(i.fc) * i.b * d) / 6 / 1000
   const phiVc = PHI_SHEAR * Vc
-  const Av = legs * (Math.PI / 4) * i.stirrupDia * i.stirrupDia
   const VsMax = (2 / 3) * Math.sqrt(i.fc) * i.b * d / 1000
+  const avPerLeg = (Math.PI / 4) * i.stirrupDia * i.stirrupDia
+
+  // Region + Vs demand (independent of the leg count).
+  let region: ShearRegion
+  let VsReq = 0
+  if (i.Vu <= 0.5 * phiVc) region = 'none'
+  else if (i.Vu <= phiVc) region = 'minimum'
+  else { VsReq = i.Vu / PHI_SHEAR - Vc; region = VsReq > VsMax ? 'inadequate' : 'designed' }
+
+  // Legs: a closed 2-leg tie is the default. Extra legs are added ONLY when a
+  // 2-leg tie — even at the minimum practical spacing — cannot supply the Aᵥ/s
+  // the shear demands (§422.5.10.5.3): shear congestion, not bar spacing, drives
+  // multi-leg beam stirrups. (n_legs = ⌈(Aᵥ/s)_req · s_min / A_v,leg⌉.)
+  let legs = i.legs ?? 2
+  if (i.legs === undefined && region === 'designed') {
+    const avsReq = (VsReq * 1000) / (fyt * d)                 // required Aᵥ/s, mm²/mm
+    legs = Math.max(2, Math.ceil((avsReq * S_MIN_STIRRUP) / avPerLeg))
+  }
+  const Av = legs * avPerLeg
   const sMinArea = (Av * fyt) / Math.max(0.062 * Math.sqrt(i.fc) * i.b, 0.35 * i.b)
 
-  let region: ShearRegion
-  let VsReq = 0, sReq = 0, sMax = 0, sAdopt = 0
-  if (i.Vu <= 0.5 * phiVc) {
-    region = 'none'
-  } else if (i.Vu <= phiVc) {
-    region = 'minimum'
+  let sReq = 0, sMax = 0, sAdopt = 0
+  if (region === 'minimum') {
     sMax = Math.min(d / 2, 600)
     sAdopt = roundDown(Math.min(sMinArea, sMax), 10)
-  } else {
-    VsReq = i.Vu / PHI_SHEAR - Vc
-    if (VsReq > VsMax) {
-      region = 'inadequate'
-    } else {
-      region = 'designed'
-      sReq = (Av * fyt * d) / (VsReq * 1000)
-      const sCap = VsReq <= Math.sqrt(i.fc) * i.b * d / 3 / 1000 ? Math.min(d / 2, 600) : Math.min(d / 4, 300)
-      sMax = sCap
-      sAdopt = roundDown(Math.min(sReq, sCap, sMinArea), 10)
-    }
+  } else if (region === 'designed') {
+    sReq = (Av * fyt * d) / (VsReq * 1000)
+    const sCap = VsReq <= Math.sqrt(i.fc) * i.b * d / 3 / 1000 ? Math.min(d / 2, 600) : Math.min(d / 4, 300)
+    sMax = sCap
+    sAdopt = roundDown(Math.min(sReq, sCap, sMinArea), 10)
   }
 
   return {

@@ -2,7 +2,7 @@
 // an explanation citing the governing provision, then the substituted
 // equations. Mirrors engine/beamDesign.ts (ρ_max,TC with dt/d, DRRB with
 // displaced concrete, §407.7 bar layout with Varignon d-iteration).
-import type { BeamDesignInput, BeamDesignResult } from '../engine/beamDesign'
+import { S_MIN_STIRRUP, type BeamDesignInput, type BeamDesignResult } from '../engine/beamDesign'
 import { type SolutionStep, type SolutionLine, sn0, sn1, sn2, sn3, sn4 } from './solution'
 
 const txt = (text: string): SolutionLine => ({ text })
@@ -129,21 +129,23 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
     ],
   })
 
-  // Why 2 legs (or more): lateral support of the longitudinal bars sets the
-  // stirrup leg count, which in turn fixes the shear area Aᵥ.
+  // Why 2 legs (or more): a closed 2-leg tie is the default; extra legs are a
+  // SHEAR response — added only when a 2-leg tie at the minimum practical spacing
+  // cannot supply the Aᵥ/s that Vs demands.
   {
-    const nWide = Math.max(...r.layers, 1)
-    const bw = i.b - 2 * (i.cover + i.stirrupDia)
-    const sClearW = nWide > 1 ? (bw - nWide * i.barDia) / (nWide - 1) : bw
     const crossties = legs - 2
-    steps.push({
-      title: 'Transverse legs & shear-reinforcement area Aᵥ (§25.7.2.3)',
-      lines: [
-        txt('The stirrup leg count comes from lateral support of the longitudinal bars, not the shear demand. The closed perimeter tie restrains the two corner bars; a crosstie (one extra leg) is added ONLY where a bar would otherwise be more than 150 mm clear from a laterally supported bar (§25.7.2.3). Closely-spaced bars — the usual case — need only the two corner legs. Aᵥ is the total area of all legs crossing the shear crack.'),
-        eq(String.raw`s_{clear} = \dfrac{b_w - n\,d_b}{n-1} = \dfrac{${sn0(bw)} - ${nWide}(${sn0(i.barDia)})}{${nWide}-1} = ${sn0(sClearW)}\ \text{mm}\ ${sClearW <= 150 ? String.raw`\le 150 \Rightarrow \text{corner ties suffice}` : String.raw`> 150 \Rightarrow \text{crosstie(s) required}`}`),
-        eq(String.raw`n_{legs} = \mathbf{${legs}}\quad(${crossties <= 0 ? String.raw`\text{perimeter tie only}` : String.raw`${crossties}\ \text{crosstie${crossties === 1 ? '' : 's'}}`}),\qquad A_v = n_{legs}\cdot\tfrac{\pi}{4}d_s^2 = ${legs}\cdot\tfrac{\pi}{4}(${sn0(i.stirrupDia)})^2 = ${sn0(r.Av)}\ \text{mm}^2`),
-      ],
-    })
+    const lines: SolutionLine[] = [
+      txt(`Stirrups are 2-leg closed ties by default. Extra legs are added only if a 2-leg tie — even at the minimum practical spacing s_min = ${S_MIN_STIRRUP} mm — cannot supply the Aᵥ/s that Vs demands (§422.5.10.5.3); i.e. shear congestion, not bar spacing, drives multi-leg beam stirrups. Aᵥ is the total area of all legs crossing the shear crack.`),
+    ]
+    if (r.region === 'designed' && r.VsReq > 0) {
+      const avsReq = (r.VsReq * 1000) / (fyt * d)
+      lines.push(eq(String.raw`(A_v/s)_{req} = \dfrac{V_s\cdot 10^3}{f_{yt}\,d} = \dfrac{${sn1(r.VsReq)}\times 10^3}{${sn0(fyt)}(${sn1(d)})} = ${sn3(avsReq)}\ \text{mm}^2\!/\text{mm}`))
+      lines.push(eq(String.raw`n_{legs} = \max\!\left(2,\ \left\lceil \dfrac{(A_v/s)_{req}\, s_{min}}{\tfrac{\pi}{4}d_s^2} \right\rceil\right) = \max\!\left(2,\ \left\lceil \dfrac{${sn3(avsReq)}(${S_MIN_STIRRUP})}{${sn1((Math.PI / 4) * i.stirrupDia * i.stirrupDia)}} \right\rceil\right) = \mathbf{${legs}}`))
+    } else {
+      lines.push(eq(String.raw`n_{legs} = \mathbf{2}\quad(\text{closed perimeter tie — Vs does not require more})`))
+    }
+    lines.push(eq(String.raw`A_v = n_{legs}\cdot\tfrac{\pi}{4}d_s^2 = ${legs}\cdot\tfrac{\pi}{4}(${sn0(i.stirrupDia)})^2 = ${sn0(r.Av)}\ \text{mm}^2${crossties > 0 ? String.raw`\quad(${crossties}\ \text{extra leg${crossties === 1 ? '' : 's'}})` : ''}`))
+    steps.push({ title: 'Transverse legs & shear-reinforcement area Aᵥ (§422.5.10.5.3)', lines })
   }
 
   if (r.region === 'none') {

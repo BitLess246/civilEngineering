@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { designBeam, beamServiceDeflection, stirrupLegs, type BeamDesignInput, type BeamDeflectionInput } from './beamDesign'
+import { designBeam, beamServiceDeflection, type BeamDesignInput, type BeamDeflectionInput } from './beamDesign'
 import { beta1 } from './loads'
 
 const base: BeamDesignInput = {
@@ -103,28 +103,22 @@ describe('beam design — DRRB (compression steel)', () => {
   })
 })
 
-describe('stirrup legs — lateral support (§25.7.2.3)', () => {
-  it('closely-spaced bars need only the 2 corner legs; crossties appear past 150 mm', () => {
-    // tight spacing (40 mm clear, 20 mm bar): the corner ties reach many bars
-    expect(stirrupLegs(2, 40, 20)).toBe(2)
-    expect(stirrupLegs(3, 40, 20)).toBe(2)
-    expect(stirrupLegs(6, 40, 20)).toBe(2)
-    expect(stirrupLegs(7, 40, 20)).toBe(3)
-    // wide spacing (200 mm clear): interior bars are > 150 mm from a corner
-    expect(stirrupLegs(3, 200, 20)).toBe(3)   // middle bar needs a crosstie
-    expect(stirrupLegs(4, 200, 20)).toBe(4)   // both interior bars need one
+describe('stirrup legs — shear-driven (§422.5.10.5.3)', () => {
+  it('stays at 2 legs until a 2-leg tie at s_min cannot carry Vs', () => {
+    // ordinary shear → the 2-leg tie spaces out fine → 2 legs
+    expect(designBeam({ ...base, b: 300, h: 550, Mu: 200, Vu: 260 }).legs).toBe(2)
+    // very high Vs (near the crushing limit) → a 2-leg tie would need s < 75 mm → add a leg
+    const hi = designBeam({ ...base, b: 300, h: 550, Mu: 100, Vu: 450 })
+    expect(hi.region).toBe('designed')
+    expect(hi.legs).toBeGreaterThanOrEqual(3)
+    // the adopted leg count keeps the required spacing at/above the practical minimum
+    expect((hi.Av * (base.fyt ?? base.fy) * hi.d) / (hi.VsReq * 1000)).toBeGreaterThanOrEqual(75 - 1e-6)
+    expect(hi.Av).toBeCloseTo(hi.legs * (Math.PI / 4) * 10 * 10, 6)
   })
 
-  it('Av uses the spacing-based leg count; explicit legs override', () => {
-    // wide beam, few widely-spaced bars → a crosstie (> 2 legs)
-    const wide = designBeam({ ...base, b: 800, h: 600, barDia: 25, Mu: 150, Vu: 320 })
-    expect(wide.legs).toBeGreaterThanOrEqual(3)
-    expect(wide.Av).toBeCloseTo(wide.legs * (Math.PI / 4) * 10 * 10, 6)
-    const forced = designBeam({ ...base, b: 800, h: 600, barDia: 25, Mu: 150, Vu: 320, legs: 2 })
+  it('honours an explicit legs override', () => {
+    const forced = designBeam({ ...base, b: 300, h: 550, Mu: 100, Vu: 450, legs: 2 })
     expect(forced.legs).toBe(2)
-    expect(forced.Av).toBeLessThan(wide.Av)
-    // a normal narrow beam stays at 2 legs even when it carries many bars
-    expect(designBeam({ ...base, b: 300, h: 550, Mu: 320, Vu: 260 }).legs).toBe(2)
   })
 })
 
