@@ -69,6 +69,17 @@ export interface BoqRow { item: string; unit: string; qty: number }
 
 export interface SteelShapeQty { shape: string; kg: number; L: number; kgPerM: number }
 
+/** Timber members aggregated by section size × species (solid-rectangle b×h). */
+export interface TimberSizeQty {
+  name: string             // section name, e.g. '400×400'
+  species: string          // woodSpecies id/label
+  kind: string             // 'sawn' | 'glulam'
+  count: number            // number of members of this size
+  L: number                // total length, m
+  m3: number               // volume, m³
+  boardFeet: number        // 1 m³ = 423.776 bd·ft
+}
+
 export interface TakeoffResult {
   byElement: ElementQty[]
   cutList: CutItem[]
@@ -83,13 +94,20 @@ export interface TakeoffResult {
   slabSteelDDM: boolean                   // slab steel from the DDM strip layout
   structuralSteelKg: number               // W-shape structural steel, net kg
   steelByShape: SteelShapeQty[]           // per W-shape breakdown
+  timberM3: number                        // timber (wood-frame) volume, m³
+  timberBoardFeet: number                 // = timberM3 × 423.776
+  timberBySize: TimberSizeQty[]           // per section-size × species breakdown
 }
+
+/** Board feet per cubic metre (1 bd·ft = 1/12 ft³). */
+export const BDFT_PER_M3 = 423.776
 
 // ── Pricing — turn the take-off into a costed Bill of Materials ──
 export interface PriceList {
   cementBag: number; sandM3: number; gravelM3: number; steelKg: number
   tieWireRoll: number; plywoodSheet: number; lumberM: number
   structuralSteelKg?: number              // W-shape sections, default ₱120/kg
+  timberBdFt?: number                     // structural timber, default ₱55 / board foot
 }
 export interface BillRow {
   item: string; qty: number; unit: string; unitPrice: number; amount: number
@@ -116,6 +134,10 @@ export function costBill(t: TakeoffResult, p: PriceList): CostedBill {
   const steelRate = p.structuralSteelKg ?? 120
   for (const s of [...t.steelByShape].sort((a, b) => a.shape.localeCompare(b.shape)))
     rows.push(row(`Structural steel — ${s.shape}`, s.kg, 'kg', steelRate, 'structuralSteelKg'))
+  // Timber — one costed line per section size, priced per board foot (PH commercial unit).
+  const timberRate = p.timberBdFt ?? 55
+  for (const t2 of [...t.timberBySize].sort((a, b) => a.name.localeCompare(b.name)))
+    rows.push(row(`Timber — ${t2.name} (${t2.species})`, t2.boardFeet, 'bd·ft', timberRate, 'timberBdFt'))
   return { rows, total: rows.reduce((s, r) => s + r.amount, 0) }
 }
 
@@ -335,6 +357,25 @@ export function estimateTakeoff(
     shapeMap.set(sec.shape, { kg: prev.kg + kg, L: prev.L + L, kgPerM: wKgM })
     boq.push({ item: `Structural steel — ${sec.shape}`, unit: 'm', qty: L })
   }
+
+  // ── Timber members (wood frame): volume + board feet by section size × species ──
+  const timberMap = new Map<string, TimberSizeQty>()
+  let timberM3 = 0
+  for (const mem of model.members) {
+    const sec = secById.get(memSecId.get(mem.id) ?? '')
+    if (sec?.material !== 'wood') continue
+    const ni = nodeXYZ.get(mem.i), nj = nodeXYZ.get(mem.j); if (!ni || !nj) continue
+    const L = Math.hypot(nj.x - ni.x, nj.y - ni.y, nj.z - ni.z)
+    const vol = (sec.b / 1000) * (sec.h / 1000) * L
+    timberM3 += vol
+    const species = sec.woodSpecies ?? '—', kind = sec.woodKind ?? 'sawn'
+    const key = `${sec.name}|${species}|${kind}`
+    const prev = timberMap.get(key) ?? { name: sec.name, species, kind, count: 0, L: 0, m3: 0, boardFeet: 0 }
+    timberMap.set(key, { ...prev, count: prev.count + 1, L: prev.L + L, m3: prev.m3 + vol, boardFeet: prev.boardFeet + vol * BDFT_PER_M3 })
+  }
+  const timberBySize = [...timberMap.values()]
+  const timberBoardFeet = timberM3 * BDFT_PER_M3
+  for (const t of timberBySize) boq.push({ item: `Timber — ${t.name} (${t.species})`, unit: 'm³', qty: t.m3 })
   // consolidate duplicate BOQ shape entries
   const shapeBoq = new Map<string, number>()
   for (const r of boq.filter((r) => r.item.startsWith('Structural steel — '))) {
@@ -350,5 +391,6 @@ export function estimateTakeoff(
     totalSteelNetKg, totalSteelPurchasedKg, totalConcreteM3, boq: boqFinal, slabSteelDDM,
     structuralSteelKg,
     steelByShape: [...shapeMap.entries()].map(([shape, v]) => ({ shape, ...v })),
+    timberM3, timberBoardFeet, timberBySize,
   }
 }

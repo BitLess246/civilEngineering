@@ -186,3 +186,47 @@ describe('structural steel — per-shape unit weight + costed BOM line items (A2
     expect(beamRow.amount).toBeCloseTo(beamRow.qty * 120, 6)
   })
 })
+
+describe('timber (wood-frame) take-off', () => {
+  const woodSec = (id: string, name: string, b: number, h: number): RectSection =>
+    ({ id, name, b, h, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40, material: 'wood', woodSpecies: 'DFL-2', woodKind: 'sawn' })
+  const woodModel = (): StructuralModel => {
+    const m = generateGridModel({
+      baysX: [6], baysZ: [5], storeyH: [3],
+      column: woodSec('C', '400×400', 400, 400), girder: woodSec('G', '300×500', 300, 500),
+      beam: woodSec('B', '250×450', 250, 450), slabThickness: 200,
+    })
+    m.loads = buildGravityLoads(m, 4.8, 2.4)
+    return m
+  }
+  const design = designStructure(woodModel(), soil)!
+  const t = estimateTakeoff(woodModel(), design)
+
+  it('reports timber volume + board feet by section size, excluded from concrete', () => {
+    expect(t.timberM3).toBeGreaterThan(0)
+    expect(t.timberBoardFeet).toBeCloseTo(t.timberM3 * 423.776, 4)
+    expect(t.timberBySize.reduce((s, x) => s + x.m3, 0)).toBeCloseTo(t.timberM3, 6)
+    expect(t.timberBySize.every((x) => x.species === 'DFL-2' && x.kind === 'sawn' && x.count > 0)).toBe(true)
+    // the three role sizes appear
+    expect(t.timberBySize.map((x) => x.name).sort()).toEqual(['250×450', '300×500', '400×400'])
+    // wood not double-counted as concrete members (only the concrete slabs remain)
+    expect(t.byElement.filter((e) => e.kind === 'Beam' || e.kind === 'Column')).toHaveLength(0)
+  })
+
+  it('adds timber lines to the BOQ and prices them per board foot', () => {
+    expect(t.boq.some((r) => r.item.startsWith('Timber — ') && r.unit === 'm³')).toBe(true)
+    const bill = costBill(t, {
+      cementBag: 260, sandM3: 1500, gravelM3: 1600, steelKg: 65, tieWireRoll: 2500, plywoodSheet: 700, lumberM: 25, timberBdFt: 60,
+    })
+    const timberRows = bill.rows.filter((r) => r.item.startsWith('Timber — '))
+    expect(timberRows.length).toBe(t.timberBySize.length)
+    expect(timberRows.every((r) => r.unit === 'bd·ft' && r.unitPrice === 60 && r.priceKey === 'timberBdFt')).toBe(true)
+    const timberSubtotal = timberRows.reduce((s, r) => s + r.amount, 0)
+    expect(timberSubtotal).toBeCloseTo(t.timberBoardFeet * 60, 2)
+  })
+
+  it('defaults the timber rate to ₱55 / board foot', () => {
+    const bill = costBill(t, { cementBag: 260, sandM3: 1500, gravelM3: 1600, steelKg: 65, tieWireRoll: 2500, plywoodSheet: 700, lumberM: 25 })
+    expect(bill.rows.find((r) => r.item.startsWith('Timber — '))!.unitPrice).toBe(55)
+  })
+})
