@@ -23,11 +23,12 @@ import { solveFrame3D, rectJ, type F3Node, type F3Member, type F3Support } from 
 import { solveBoltedConnection } from './boltedConnection'
 import { solveWeldedConnection } from './weldedConnection'
 import { boltGeomFromPositions, outOfPlaneBoltGroup, pryingAction } from './steelDesign'
+import { columnStabilityFactor, beamStabilityFactor, getWoodRef } from './woodDesign'
 import type { RectSection } from './model'
 
 export interface ValidationCase {
   id: string
-  category: 'RC' | 'Steel' | 'Connections' | 'Analysis' | 'Seismic' | 'Dynamics' | 'Wind' | 'Geotech'
+  category: 'RC' | 'Steel' | 'Timber' | 'Connections' | 'Analysis' | 'Seismic' | 'Dynamics' | 'Wind' | 'Geotech'
   title: string
   reference: string
   formula: string
@@ -205,6 +206,23 @@ const pryingT0 = (() => {
   return { manual: Math.sqrt((4 * 60 * 1000 * 35) / (0.9 * 248 * 70)), software: r.t_no_prying }
 })()
 
+// ── Timber (wood) — NDS §3 / NSCP §6 ASD stability factors ──────────────────
+const woodCP = (() => {
+  // 140 mm square DFL-SS post, le = 3.0 m, c = 0.8.  CF = 1 (d ≤ 300), CD = 1.
+  const Emin = getWoodRef('DFL-SS')!.ref.Emin, FcStar = getWoodRef('DFL-SS')!.ref.Fc
+  const FcE = (0.822 * Emin) / (3000 / 140) ** 2
+  const r = FcE / FcStar, a = (1 + r) / (2 * 0.8)
+  return { manual: a - Math.sqrt(a * a - r / 0.8), software: columnStabilityFactor(3000, 140, Emin, FcStar, 0.8).CP }
+})()
+
+const woodCL = (() => {
+  // 100 × 300 mm DFL-SS beam, le = 4.0 m.  CF = 1 (d ≤ 300), CD = 1.
+  const Emin = getWoodRef('DFL-SS')!.ref.Emin, FbStar = getWoodRef('DFL-SS')!.ref.Fb
+  const RB = Math.sqrt((4000 * 300) / 100 ** 2), FbE = (1.2 * Emin) / (RB * RB)
+  const r = FbE / FbStar, a = (1 + r) / 1.9
+  return { manual: a - Math.sqrt(a * a - r / 0.95), software: beamStabilityFactor(100, 300, 4000, Emin, FbStar).CL }
+})()
+
 export const VALIDATION_CASES: ValidationCase[] = [
   {
     id: 'rc-beam-mn', category: 'RC', title: 'Singly-reinforced beam — nominal moment',
@@ -315,5 +333,15 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'prying-t0', category: 'Connections', title: 'Prying — thickness eliminating prying',
     reference: 'AISC Manual Part 9 / §J3.9', formula: 't₀ = √(4·φBn·b′ / (φf·Fy·p))',
     manual: pryingT0.manual, software: pryingT0.software, unit: 'mm', tol: 1e-9,
+  },
+  {
+    id: 'wood-cp', category: 'Timber', title: 'Timber column stability factor CP',
+    reference: 'NDS 2018 §3.7.1 / NSCP §6', formula: 'CP = a − √(a² − (FcE/Fc*)/c),  a = (1+FcE/Fc*)/2c',
+    manual: woodCP.manual, software: woodCP.software, unit: '—', tol: 1e-9,
+  },
+  {
+    id: 'wood-cl', category: 'Timber', title: 'Timber beam stability factor CL',
+    reference: 'NDS 2018 §3.3.3 / NSCP §6', formula: 'CL = a − √(a² − (FbE/Fb*)/0.95),  a = (1+FbE/Fb*)/1.9',
+    manual: woodCL.manual, software: woodCL.software, unit: '—', tol: 1e-9,
   },
 ]
