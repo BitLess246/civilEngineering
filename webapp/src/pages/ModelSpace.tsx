@@ -58,6 +58,8 @@ import { Num, Pick, Row } from '../components/qty'
 import { FitView } from '../components/FitView'
 import { shapeByName, shapesOf, effectiveSection, sectionBoundingBox, FAMILIES, type SectionFamily } from '../engine/aiscSections'
 import { WOOD_SPECIES, speciesList, gradesOf, resolveWoodSpecies, type WoodSpecies } from '../engine/woodDesign'
+import { MaterialLibrary } from '../components/MaterialLibrary'
+import { loadCustomMaterials, saveCustomMaterials, type CustomMaterial } from '../lib/materialLibrary'
 import { buildSectionShapes } from '../lib/sectionShapes3d'
 import { SectionShape } from '../components/SectionShape'
 import { f1, f2 } from '../lib/format'
@@ -843,7 +845,15 @@ export default function ModelSpace() {
   const [woodGrade, setWoodGrade] = useState(s('woodGrade', legacyWood?.grade ?? '2'))
   const [woodWet, setWoodWet] = useState(b('woodWet', false))
   const woodSel: WoodSpecies = resolveWoodSpecies(woodSpeciesId, woodGrade) ?? gradesOf(woodSpeciesId)[0] ?? WOOD_SPECIES['DFL-2']
-  const woodKind = woodSel.kind
+  // Timber material source: built-in library vs a user-defined custom material.
+  const [matSource, setMatSource] = useState<'library' | 'custom'>((s('matSource', 'library')) as 'library' | 'custom')
+  const [customId, setCustomId] = useState(s('customId', ''))
+  const [customMaterials, setCustomMaterials] = useState<CustomMaterial[]>(() => loadCustomMaterials())
+  const customAsSpecies = (cm: CustomMaterial): WoodSpecies =>
+    ({ id: cm.id, label: cm.name, kind: cm.kind, ref: cm.ref, species: cm.id, speciesLabel: cm.name, grade: 'custom', gradeLabel: 'Custom', origin: 'custom' })
+  const selectedCustom = customMaterials.find((m) => m.id === customId)
+  const activeWood: WoodSpecies = matSource === 'custom' && selectedCustom ? customAsSpecies(selectedCustom) : woodSel
+  const woodKind = activeWood.kind
   const [colFam, setColFam] = useState<SectionFamily>((s('colFam', 'W')) as SectionFamily)
   const [girFam, setGirFam] = useState<SectionFamily>((s('girFam', 'W')) as SectionFamily)
   const [beaFam, setBeaFam] = useState<SectionFamily>((s('beaFam', 'W')) as SectionFamily)
@@ -995,7 +1005,7 @@ export default function ModelSpace() {
         Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, shearDef, tryBars,
         concreteClass, prices, planSel,
         material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu,
-        woodSpeciesId, woodGrade, woodWet,
+        woodSpeciesId, woodGrade, woodWet, matSource, customId,
       }))
     } catch { /* quota — ignore */ }
   }, [baysX, baysZ, storeyH, colB, colH, girB, girH, beaB, beaH,
@@ -1004,7 +1014,7 @@ export default function ModelSpace() {
     Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, shearDef, tryBars,
     concreteClass, prices, planSel,
     material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu,
-    woodSpeciesId, woodGrade, woodWet])
+    woodSpeciesId, woodGrade, woodWet, matSource, customId])
 
   const save = (m: StructuralModel | null) => {
     setModel(m)
@@ -1517,7 +1527,7 @@ export default function ModelSpace() {
     // both the library id and the reference values travel with the section so
     // the bridge (E), pipeline (NDS §3 design) and take-off pick it up. Fresh
     // selection passed via woodOverride to avoid a same-tick stale-state read.
-    const wsel = woodOverride?.sel ?? woodSel
+    const wsel = woodOverride?.sel ?? activeWood
     const wet = woodOverride?.wet ?? woodWet
     const woodRole = (b: number, h: number, id: string): RectSection =>
       ({ id, name: `${b}×${h}`, b, h, ...mat, material: 'wood',
@@ -2387,15 +2397,30 @@ export default function ModelSpace() {
                 </Sec>
               ) : material === 'wood' ? (
                 <Sec title="Timber (wood frame)">
-                  <Pick label="Species" value={woodSpeciesId} onChange={(v) => {
-                    const g = gradesOf(v)[0]?.grade ?? '2'
-                    setWoodSpeciesId(v); setWoodGrade(g)
-                    if (model) generate('wood', { sel: resolveWoodSpecies(v, g) })
-                  }} options={speciesList().map((sp) => [sp.species, sp.label])} />
-                  <Pick label="Grade" value={woodGrade} onChange={(v) => {
-                    setWoodGrade(v)
-                    if (model) generate('wood', { sel: resolveWoodSpecies(woodSpeciesId, v) })
-                  }} options={gradesOf(woodSpeciesId).map((g) => [g.grade, g.gradeLabel])} />
+                  <Pick label="Material source" value={matSource} onChange={(v) => {
+                    const src = v as 'library' | 'custom'; setMatSource(src)
+                    if (model) generate('wood', { sel: src === 'custom' && selectedCustom ? customAsSpecies(selectedCustom) : woodSel })
+                  }} options={[['library', 'Built-in library'], ['custom', 'Custom material']]} />
+                  {matSource === 'library' ? (
+                    <>
+                      <Pick label="Species" value={woodSpeciesId} onChange={(v) => {
+                        const g = gradesOf(v)[0]?.grade ?? '2'
+                        setWoodSpeciesId(v); setWoodGrade(g)
+                        if (model) generate('wood', { sel: resolveWoodSpecies(v, g) })
+                      }} options={speciesList().map((sp) => [sp.species, sp.label])} />
+                      <Pick label="Grade" value={woodGrade} onChange={(v) => {
+                        setWoodGrade(v)
+                        if (model) generate('wood', { sel: resolveWoodSpecies(woodSpeciesId, v) })
+                      }} options={gradesOf(woodSpeciesId).map((g) => [g.grade, g.gradeLabel])} />
+                    </>
+                  ) : (
+                    <MaterialLibrary materials={customMaterials} selectedId={customId}
+                      onSelect={(id, cm) => {
+                        setCustomId(id)
+                        if (model) generate('wood', { sel: cm ? customAsSpecies(cm) : woodSel })
+                      }}
+                      onChange={(list) => { setCustomMaterials(list); saveCustomMaterials(list) }} />
+                  )}
                   <label className="col-span-full flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={woodWet}
                       onChange={(e) => { setWoodWet(e.target.checked); if (model) generate('wood', { wet: e.target.checked }) }} />
@@ -2413,7 +2438,7 @@ export default function ModelSpace() {
                   <Num label="Beam d" unit="mm" value={beaH} onChange={setBeaH} />
                   <Num label="Slab thickness" unit="mm" value={slabThk} onChange={setSlabThk} />
                   <p className="col-span-full text-[11px] text-slate-500">
-                    Designed to NDS §3 / NSCP §6: reference values ({woodKind === 'glulam' ? 'glulam' : 'sawn'}, {woodSel.origin})
+                    Designed to NDS §3 / NSCP §6: reference values ({woodKind === 'glulam' ? 'glulam' : 'sawn'}, {activeWood.origin})
                     adjusted by C<sub>D</sub>/C<sub>M</sub>/C<sub>F</sub>/C<sub>V</sub>, beam stability C<sub>L</sub> and column
                     stability C<sub>P</sub>; factored demands checked LRFD (Appendix N, K<sub>F</sub>·φ·λ). Slabs/footings stay reinforced concrete.
                   </p>
