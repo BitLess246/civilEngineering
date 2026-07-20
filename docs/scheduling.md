@@ -34,6 +34,9 @@ webapp/src/engine/schedule/
   calendar.ts     # working-day date arithmetic (workweek + holidays)
   cpm.ts          # Critical Path Method: topo-order, forward/backward, floats
   pert.ts         # PERT: TE/variance + normal-approx completion probability
+  earnedValue.ts  # EVM: PV/EV/AC → SPI/CPI/…/TCPI + earned-schedule time SV
+  progress.ts     # %-complete roll-up, status derivation, dashboard summary,
+                  #        baseline variance
   *.test.ts       # hand-calc-verified vitest coverage for each engine
 ```
 
@@ -86,11 +89,31 @@ activities on the critical path; `σ = √Σσ²`. Completion probability for a 
 high-accuracy `erf` (A&S 7.1.26) and inverse `Φ⁻¹` (Acklam) so we can also
 answer "what date carries 90 % confidence?" (`durationForProbability`).
 
+## Progress & earned value (`progress.ts`, `earnedValue.ts`)
+
+**EVM** at a data date, per PMBOK:
+
+```
+PV = Σ BACᵢ·plannedᵢ   EV = Σ BACᵢ·%compᵢ   AC = Σ ACᵢ
+SV = EV − PV   CV = EV − AC   SPI = EV/PV   CPI = EV/AC
+EAC = BAC/CPI   VAC = BAC − EAC   ETC = EAC − AC   TCPI = (BAC−EV)/(BAC−AC)
+```
+
+BAC/AC are unit-agnostic (currency, or duration/man-days for a cost-free
+schedule view). Ratios with a zero denominator are returned as `null`
+(undefined, not 0). Time-based schedule variance uses the **Earned Schedule**
+method: the project-time offset where the PV curve equals the current EV, minus
+the data date (>0 ⇒ ahead). `progress.ts` derives each activity's status
+(completed / in-progress / delayed / not-started, honouring an explicit
+`blocked`), rolls duration-weighted planned-vs-actual %, and reports SPI,
+forecast duration, remaining work, and baseline start/finish/duration variance.
+
 ## Roadmap (one PR per phase)
 
-- **Phase 1 — engine core** *(this PR)*: model, calendar, CPM, PERT + 50 tests.
-- **Phase 2 — progress & earned value**: %-complete roll-up, status derivation,
-  PV/EV/AC → SPI/CPI/SV/CV/BAC/EAC/VAC, baseline capture + variance.
+- **Phase 1 — engine core** ✅: model, calendar, CPM, PERT + 50 tests.
+- **Phase 2 — progress & earned value** *(this PR)*: %-complete roll-up, status
+  derivation, PV/EV/AC → SPI/CPI/SV/CV/BAC/EAC/VAC/ETC/TCPI, earned-schedule
+  time variance, baseline variance + 24 tests.
 - **Phase 3 — persistence**: `ScheduleProject` store (localStorage, schema
   version), JSON import/export, sample projects.
 - **Phase 4 — WBS + activity grid UI**: add/edit/delete/reorder/collapse, live
