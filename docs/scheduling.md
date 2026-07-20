@@ -37,6 +37,10 @@ webapp/src/engine/schedule/
   earnedValue.ts  # EVM: PV/EV/AC → SPI/CPI/…/TCPI + earned-schedule time SV
   progress.ts     # %-complete roll-up, status derivation, dashboard summary,
                   #        baseline variance
+  validate.ts     # project integrity checks (refs, cycles, durations, percents)
+  baseline.ts     # capture the CPM schedule as dated snapshots + date variance
+  store.ts        # persistence: swappable backend, save/load/list + JSON I/O
+  sample.ts       # worked RC-building fixture (UI seed + end-to-end test)
   *.test.ts       # hand-calc-verified vitest coverage for each engine
 ```
 
@@ -108,14 +112,30 @@ the data date (>0 ⇒ ahead). `progress.ts` derives each activity's status
 `blocked`), rolls duration-weighted planned-vs-actual %, and reports SPI,
 forecast duration, remaining work, and baseline start/finish/duration variance.
 
+## Persistence (`validate.ts`, `store.ts`, `baseline.ts`, `sample.ts`)
+
+`validateProject` returns a flat list of integrity issues (errors block, warnings
+advise): duplicate ids, unresolved predecessor / calendar / WBS / resource
+references, dependency cycles, WBS-parent cycles, negative durations, milestone-
+with-duration, out-of-range percents. `store.ts` persists projects one key each
+(`schedule:project:<id>`) over a **swappable `StorageBackend`** — browser
+localStorage in the app, an in-memory backend in tests — wrapped with
+`SCHEDULE_SCHEMA_VERSION` so old saves migrate on read. `exportProjectJSON` /
+`importProjectJSON` round-trip a project (import validates and rejects corrupt or
+inconsistent data). `baseline.ts` captures the live CPM schedule as dated
+snapshots and reports per-activity start/finish/duration variance. `sample.ts` is
+a worked RC-building schedule used as the UI seed and an end-to-end fixture.
+
 ## Roadmap (one PR per phase)
 
 - **Phase 1 — engine core** ✅: model, calendar, CPM, PERT + 50 tests.
-- **Phase 2 — progress & earned value** *(this PR)*: %-complete roll-up, status
+- **Phase 2 — progress & earned value** ✅: %-complete roll-up, status
   derivation, PV/EV/AC → SPI/CPI/SV/CV/BAC/EAC/VAC/ETC/TCPI, earned-schedule
   time variance, baseline variance + 24 tests.
-- **Phase 3 — persistence**: `ScheduleProject` store (localStorage, schema
-  version), JSON import/export, sample projects.
+- **Phase 3 — persistence** *(this PR)*: project integrity validation, a
+  schema-versioned `ScheduleProject` store over a swappable backend
+  (localStorage / in-memory), JSON import/export, baseline capture + date
+  variance, and a worked RC-building sample fixture + 25 tests.
 - **Phase 4 — WBS + activity grid UI**: add/edit/delete/reorder/collapse, live
   CPM recompute, dependency editor with cycle prevention.
 - **Phase 5 — Gantt chart**: baseline/actual/forecast bars, critical highlight,
