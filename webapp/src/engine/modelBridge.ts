@@ -13,6 +13,7 @@ import { distributePanel, type AreaLoad } from './tributary'
 import type { BeamLoad } from './beamAnalysis'
 import { shapeByName, torsionJ, type AiscShape } from './aiscSections'
 import { deriveWSection, E_STEEL } from './steelDesign'
+import { getWoodRef } from './woodDesign'
 
 export interface BridgeResult {
   nodes: F3Node[]
@@ -28,9 +29,10 @@ export interface BridgeResult {
 }
 
 /** Concrete shell material for slab/wall panels: E = 4700√fc (NSCP/ACI), ν = 0.2.
- *  fc taken from the model's first concrete section (fallback 28 MPa). */
+ *  fc taken from the model's first CONCRETE section (fallback 28 MPa) — steel and
+ *  wood frames keep concrete slabs/panels. */
 function plateMaterial(model: StructuralModel): { E: number; nu: number } {
-  const fc = model.sections.find((s) => s.material !== 'steel')?.fc ?? 28
+  const fc = model.sections.find((s) => (s.material ?? 'concrete') === 'concrete')?.fc ?? 28
   return { E: 4700 * Math.sqrt(Math.max(fc, 1)), nu: 0.2 }
 }
 
@@ -52,8 +54,27 @@ function plateShells(plate: Plate, mat: { E: number; nu: number }): F3Shell[] {
   ]
 }
 
+/** Timber member stiffness: mean modulus E from the species (wet-adjusted by CM),
+ *  shear modulus G ≈ E/16 (NDS solid-sawn), solid-rectangle I/J and κ = 5/6 shear
+ *  areas. Falls back to a mid-range softwood E if the species is unset/unknown. */
+function woodSectionProps(s: RectSection) {
+  const ref = (s.woodSpecies ? getWoodRef(s.woodSpecies) : undefined)?.ref
+  const cmE = s.woodWet ? (s.woodKind === 'glulam' ? 0.833 : 0.9) : 1
+  const E = (ref?.E ?? 9500) * cmE
+  const G = E / 16
+  return {
+    E, G, A: s.b * s.h,
+    Iz: (s.b * s.h ** 3) / 12,   // gravity bending (depth h vertical)
+    Iy: (s.h * s.b ** 3) / 12,
+    J: rectJ(s.b, s.h),
+    Asy: (5 / 6) * s.b * s.h,
+    Asz: (5 / 6) * s.b * s.h,
+  }
+}
+
 function sectionProps(s: RectSection) {
   if (s.material === 'steel') return steelSectionProps(s)
+  if (s.material === 'wood') return woodSectionProps(s)
   const E = 4700 * Math.sqrt(Math.max(s.fc, 1))
   return {
     E,

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   WOOD_SPECIES, getWoodRef, loadDurationFactor, sizeFactorTimber, volumeFactorGlulam,
   effectiveBendingLength, beamStabilityFactor, columnStabilityFactor, woodSectionProps,
-  woodAdjusted, checkWoodBeam, checkWoodColumn,
+  woodAdjusted, checkWoodBeam, checkWoodColumn, woodUnitWeight,
 } from './woodDesign'
 
 describe('reference value library', () => {
@@ -148,6 +148,36 @@ describe('checkWoodColumn — axial + beam-column interaction', () => {
   it('a very slender column is governed by buckling (CP ≪ 1)', () => {
     const r = checkWoodColumn({ ref, kind: 'sawn', b: 100, d: 100, length: 4000, P: 10 })
     expect(r.CP).toBeLessThan(0.5)
+  })
+})
+
+describe('unit weight (self-weight only)', () => {
+  it('γ ≈ G·9.81 kN/m³', () => {
+    expect(woodUnitWeight(0.5)).toBeCloseTo(4.905, 3)
+    expect(woodUnitWeight(0.42)).toBeLessThan(woodUnitWeight(0.55))   // SPF lighter than Southern Pine
+  })
+})
+
+describe('NDS Appendix N — LRFD format conversion', () => {
+  const ref = getWoodRef('DFL-SS')!.ref
+  it('strength values scale by KF·φ·λ = 2.16·λ vs the CD = 1 ASD baseline', () => {
+    const asd = woodAdjusted(ref, 'sawn', 200, { duration: 'ten-year' })       // CD = 1
+    const lrfd = woodAdjusted(ref, 'sawn', 200, { method: 'LRFD', lambda: 0.8 })
+    expect(lrfd.FbStar / asd.FbStar).toBeCloseTo(2.16 * 0.8, 6)
+    expect(lrfd.FcStar / asd.FcStar).toBeCloseTo(2.16 * 0.8, 6)
+    expect(lrfd.FvAllow / asd.FvAllow).toBeCloseTo(2.16 * 0.8, 6)
+  })
+  it('Emin (stability) scales by ≈1.50 and carries no λ; service E is unchanged', () => {
+    const asd = woodAdjusted(ref, 'sawn', 200)
+    const lrfd = woodAdjusted(ref, 'sawn', 200, { method: 'LRFD', lambda: 1.0 })
+    expect(lrfd.Emin / asd.Emin).toBeCloseTo(1.496, 3)
+    expect(lrfd.E).toBeCloseTo(asd.E, 6)                                        // deflection modulus not converted
+  })
+  it('a wind combo (λ=1.0) allows more than a gravity combo (λ=0.8)', () => {
+    const wind = checkWoodColumn({ ref, kind: 'sawn', b: 150, d: 150, length: 3000, P: 200, opts: { method: 'LRFD', lambda: 1.0 } })
+    const grav = checkWoodColumn({ ref, kind: 'sawn', b: 150, d: 150, length: 3000, P: 200, opts: { method: 'LRFD', lambda: 0.8 } })
+    expect(wind.FcPrime).toBeGreaterThan(grav.FcPrime)
+    expect(wind.ratio).toBeLessThan(grav.ratio)
   })
 })
 

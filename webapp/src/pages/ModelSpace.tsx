@@ -57,6 +57,7 @@ import { HintButton, SeismicHint, WindHint } from '../components/LoadHints'
 import { Num, Pick, Row } from '../components/qty'
 import { FitView } from '../components/FitView'
 import { shapeByName, shapesOf, effectiveSection, sectionBoundingBox, FAMILIES, type SectionFamily } from '../engine/aiscSections'
+import { WOOD_SPECIES } from '../engine/woodDesign'
 import { buildSectionShapes } from '../lib/sectionShapes3d'
 import { SectionShape } from '../components/SectionShape'
 import { f1, f2 } from '../lib/format'
@@ -102,7 +103,7 @@ function Member3D({ a, b, role, selected, tint = 0, sec, onPick }: {
   /** 0–1 utilisation tint (|M| relative to the model max) after analysis. */
   tint?: number
   /** the member's own section, drawn to scale (mm → m). */
-  sec?: { b: number; h: number }
+  sec?: { b: number; h: number; material?: string }
   onPick: () => void
 }) {
   const { mid, quat, len } = useMemo(() => {
@@ -116,8 +117,9 @@ function Member3D({ a, b, role, selected, tint = 0, sec, onPick }: {
   const color = useMemo(() => {
     if (selected) return SEL
     const base = new THREE.Color(ROLE_COLOR[role] ?? '#64748b')
+    if (sec?.material === 'wood') base.lerp(new THREE.Color('#a86b34'), 0.6)   // timber brown tint
     return tint > 0 ? `#${base.lerp(new THREE.Color('#dc2626'), tint).getHexString()}` : `#${base.getHexString()}`
-  }, [selected, role, tint])
+  }, [selected, role, tint, sec?.material])
   return (
     <mesh position={mid} quaternion={quat}
       onClick={(e) => { e.stopPropagation(); onPick() }}>
@@ -832,8 +834,12 @@ export default function ModelSpace() {
   const [psAps, setPsAps] = useState(600); const [psFpu, setPsFpu] = useState(1860)
   const [psE, setPsE] = useState(150); const [psFci, setPsFci] = useState(24)
   const [gammaC, setGammaC] = useState(n('gammaC', 24))            // concrete unit weight, kN/m³
-  // Material: 'concrete' (RC) or 'steel' (AISC W-shapes) for the frame members.
-  const [material, setMaterial] = useState<'concrete' | 'steel'>((si.material as 'concrete' | 'steel') ?? 'concrete')
+  // Material: 'concrete' (RC), 'steel' (AISC W-shapes) or 'wood' (timber) for the frame members.
+  const [material, setMaterial] = useState<'concrete' | 'steel' | 'wood'>((si.material as 'concrete' | 'steel' | 'wood') ?? 'concrete')
+  // Timber (wood frame): species/grade, sawn vs glulam, wet service.
+  const [woodSpecies, setWoodSpecies] = useState(s('woodSpecies', 'DFL-2'))
+  const [woodKind, setWoodKind] = useState<'sawn' | 'glulam'>((s('woodKind', 'sawn')) as 'sawn' | 'glulam')
+  const [woodWet, setWoodWet] = useState(b('woodWet', false))
   const [colFam, setColFam] = useState<SectionFamily>((s('colFam', 'W')) as SectionFamily)
   const [girFam, setGirFam] = useState<SectionFamily>((s('girFam', 'W')) as SectionFamily)
   const [beaFam, setBeaFam] = useState<SectionFamily>((s('beaFam', 'W')) as SectionFamily)
@@ -985,6 +991,7 @@ export default function ModelSpace() {
         Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, shearDef, tryBars,
         concreteClass, prices, planSel,
         material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu,
+        woodSpecies, woodKind, woodWet,
       }))
     } catch { /* quota — ignore */ }
   }, [baysX, baysZ, storeyH, colB, colH, girB, girH, beaB, beaH,
@@ -992,7 +999,8 @@ export default function ModelSpace() {
     qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs, methodB, accTor, orth30, evOn, rsaRegular,
     Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, shearDef, tryBars,
     concreteClass, prices, planSel,
-    material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu])
+    material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu,
+    woodSpecies, woodKind, woodWet])
 
   const save = (m: StructuralModel | null) => {
     setModel(m)
@@ -1317,12 +1325,16 @@ export default function ModelSpace() {
     const barsUsed = [...new Set((model?.sections ?? []).filter((s) => s.material !== 'steel').map((s) => s.barDia))].sort((a, b) => a - b)
     const hasConcreteMems = d.beams.length > 0 || d.columns.length > 0
     const hasSteelMems    = d.steelBeams.length > 0 || d.steelColumns.length > 0
+    const hasWoodMems     = d.woodBeams.length > 0 || d.woodColumns.length > 0
+    const woodGrades      = [...new Set([...d.woodBeams, ...d.woodColumns].map((r) => r.species))]
+      .map((id) => WOOD_SPECIES[id]?.label ?? id).join(', ')
     const slabSdls = [...new Set((model?.plates ?? []).filter((p) => p.role !== 'wall')
       .map((p) => (p.sdlItems && p.sdlItems.length ? sdlTotal(p.sdlItems) : qD)))].sort((a, b) => a - b)
     return [
       ['Column grid', `bays X ${baysX} m · bays Z ${baysZ} m · storeys ${storeyH} m`],
       ...(hasConcreteMems ? [['RC material', `f′c ${fc} MPa · fy ${fy} MPa · main ⌀${barsUsed.join('/⌀') || barDia} · ties ⌀${tieDia} · cover ${cover} mm`]] as [string, string][] : []),
       ...(hasSteelMems    ? [['Steel grade',  `Fy ${steelFy} MPa · Fu ${steelFu} MPa (AISC W-shapes)`]] as [string, string][] : []),
+      ...(hasWoodMems     ? [['Timber grade', `${woodGrades}${woodWet ? ' · wet service' : ''} (NDS §3 / NSCP §6)`]] as [string, string][] : []),
       ['Columns', distinct('column')],
       ['Girders', distinct('girder')],
       ['Beams', distinct('beam')],
@@ -1336,6 +1348,9 @@ export default function ModelSpace() {
       ['Concrete', `${f1(d.totals.concrete)} m³ (${f1(d.totals.concreteMembers)} members + ${f1(d.totals.concreteSlabs)} slabs)`],
       ...(d.totals.steelKg > 0
         ? [['Structural steel', `${f1(d.totals.steelKg)} kg (${f2(d.totals.steelKg / 1000)} t)`] as [string, string]]
+        : []),
+      ...(d.totals.woodVolume > 0
+        ? [['Timber', `${f2(d.totals.woodVolume)} m³`] as [string, string]]
         : []),
     ]
   }
@@ -1354,7 +1369,8 @@ export default function ModelSpace() {
         import('../lib/modelReport'), import('../lib/modelPdf'),
       ])
       const badges = ['NSCP 2015', 'ACI 318-14',
-        ...(design.steelBeams.length || design.steelColumns.length ? ['AISC 360-16'] : [])]
+        ...(design.steelBeams.length || design.steelColumns.length ? ['AISC 360-16'] : []),
+        ...(design.woodBeams.length || design.woodColumns.length ? ['NDS §3 / NSCP §6'] : [])]
       await generateModelPdf({
         lh, modelImg: img, badges,
         report: buildModelReport(model, design, reportProps(design), soil),
@@ -1483,7 +1499,7 @@ export default function ModelSpace() {
     return map
   }, [govRes])
 
-  const generate = (matOverride?: 'concrete' | 'steel') => {
+  const generate = (matOverride?: 'concrete' | 'steel' | 'wood') => {
     const mat = { fc, fy, barDia, tieDia, cover }
     const role = (b: number, h: number, id: string): RectSection => ({ id, name: `${b}×${h}`, b, h, ...mat })
     // steel role: bounding box b = bf, h = d from the chosen AISC shape, tagged
@@ -1493,12 +1509,17 @@ export default function ModelSpace() {
       const { b, h } = sh ? sectionBoundingBox(sh) : { b: 200, h: 300 }
       return { id, name: shapeName, b, h, ...mat, material: 'steel', shape: shapeName, steelFy, steelFu }
     }
-    const steel = (matOverride ?? material) === 'steel'
+    // wood role: solid-rectangle b × d tagged with the timber species/grade so
+    // the bridge (E), pipeline (NDS §3 design) and take-off pick it up.
+    const woodRole = (b: number, h: number, id: string): RectSection =>
+      ({ id, name: `${b}×${h}`, b, h, ...mat, material: 'wood', woodSpecies, woodKind, woodWet })
+    const chosen = matOverride ?? material
+    const steel = chosen === 'steel', wood = chosen === 'wood'
     const m = generateGridModel({
       baysX: parseList(baysX), baysZ: parseList(baysZ), storeyH: parseList(storeyH),
-      column: steel ? steelRole(colShape, 'COL') : role(colB, colH, 'COL'),
-      girder: steel ? steelRole(girShape, 'GIR') : role(girB, girH, 'GIR'),
-      beam: steel ? steelRole(beaShape, 'BEA') : role(beaB, beaH, 'BEA'),
+      column: steel ? steelRole(colShape, 'COL') : wood ? woodRole(colB, colH, 'COL') : role(colB, colH, 'COL'),
+      girder: steel ? steelRole(girShape, 'GIR') : wood ? woodRole(girB, girH, 'GIR') : role(girB, girH, 'GIR'),
+      beam: steel ? steelRole(beaShape, 'BEA') : wood ? woodRole(beaB, beaH, 'BEA') : role(beaB, beaH, 'BEA'),
       slabThickness: slabThk,
     })
     // gravity loads: member self-weight (D), slab self-weight + SDL (D), LL (L)
@@ -2319,15 +2340,17 @@ export default function ModelSpace() {
             <div className="divide-y divide-[#eeece5] px-4 py-1">
               <Sec title="Frame material">
                 <Pick label="Members" value={material} onChange={(v) => {
-                  const next = v as 'concrete' | 'steel'
+                  const next = v as 'concrete' | 'steel' | 'wood'
                   setMaterial(next)
                   if (model) generate(next)          // auto-regenerate grid with new frame material
                 }}
-                  options={[['concrete', 'Reinforced concrete'], ['steel', 'Structural steel (AISC W)']]} />
+                  options={[['concrete', 'Reinforced concrete'], ['steel', 'Structural steel (AISC W)'], ['wood', 'Timber (wood frame)']]} />
                 <p className="col-span-full -mt-1 text-[11px] text-slate-500">
                   {material === 'steel'
                     ? 'Members become AISC W-shapes designed to AISC 360-16 LRFD (§F flexure, §G shear, §E/§H1 columns); base plates per §J8. Slabs/footings stay reinforced concrete.'
-                    : 'Members are reinforced concrete designed to NSCP 2015 / ACI 318-14.'}
+                    : material === 'wood'
+                      ? 'Members become solid-rectangular timber designed to NDS §3 / NSCP §6 (LRFD via Appendix N). Slabs/footings stay reinforced concrete.'
+                      : 'Members are reinforced concrete designed to NSCP 2015 / ACI 318-14.'}
                 </p>
               </Sec>
               {material === 'steel' ? (
@@ -2353,6 +2376,34 @@ export default function ModelSpace() {
                     HSS/angle/channel flexure checks are not yet automated. Concrete f′c is still used for base-plate bearing.
                   </p>
                 </Sec>
+              ) : material === 'wood' ? (
+                <Sec title="Timber (wood frame)">
+                  <Pick label="Species / grade" value={woodSpecies} onChange={(v) => {
+                    setWoodSpecies(v); setWoodKind(WOOD_SPECIES[v]?.kind ?? 'sawn')
+                    if (model) generate('wood')
+                  }} options={Object.values(WOOD_SPECIES).map((sp) => [sp.id, sp.label])} />
+                  <label className="col-span-full flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={woodWet}
+                      onChange={(e) => { setWoodWet(e.target.checked); if (model) generate('wood') }} />
+                    Wet service — MC &gt; 19% sawn / 16% glulam (applies C<sub>M</sub>)
+                  </label>
+                  <p className="col-span-full -mb-1 text-[11px] text-slate-500">
+                    Solid rectangular b × d members. Each starts from its role size and grows independently
+                    when optimised; columns are kept ≥ girders ≥ beams in width.
+                  </p>
+                  <Num label="Column b" unit="mm" value={colB} onChange={setColB} />
+                  <Num label="Column d" unit="mm" value={colH} onChange={setColH} />
+                  <Num label="Girder b" unit="mm" value={girB} onChange={setGirB} />
+                  <Num label="Girder d" unit="mm" value={girH} onChange={setGirH} />
+                  <Num label="Beam b" unit="mm" value={beaB} onChange={setBeaB} />
+                  <Num label="Beam d" unit="mm" value={beaH} onChange={setBeaH} />
+                  <Num label="Slab thickness" unit="mm" value={slabThk} onChange={setSlabThk} />
+                  <p className="col-span-full text-[11px] text-slate-500">
+                    Designed to NDS §3 / NSCP §6: reference values ({WOOD_SPECIES[woodSpecies]?.kind === 'glulam' ? 'glulam' : 'sawn'})
+                    adjusted by C<sub>D</sub>/C<sub>M</sub>/C<sub>F</sub>/C<sub>V</sub>, beam stability C<sub>L</sub> and column
+                    stability C<sub>P</sub>; factored demands checked LRFD (Appendix N, K<sub>F</sub>·φ·λ). Slabs/footings stay reinforced concrete.
+                  </p>
+                </Sec>
               ) : (
                 <Sec title="Initial member sizes (mm)">
                   <p className="col-span-full -mb-1 text-[11px] text-slate-500">
@@ -2373,6 +2424,7 @@ export default function ModelSpace() {
                   Shared material applied to every section when you generate the grid. f′c drives Ec and the
                   flexural/shear capacities; fy the steel; ⌀ and cover the bar layout and effective depth.
                   {material === 'steel' && ' (Used for slabs, footings and base-plate bearing.)'}
+                  {material === 'wood' && ' (Used for the concrete slabs and footings of the timber frame.)'}
                 </p>
                 <Num label="Concrete f′c" unit="MPa" value={fc} onChange={setFc} step="0.5" />
                 <Num label="Steel fy" unit="MPa" value={fy} onChange={setFy} step="5" />
@@ -4051,6 +4103,88 @@ export default function ModelSpace() {
           )}
 
           {/* Steel beam schedule (full width) — only when steel members exist */}
+          {/* Timber beam / girder schedule */}
+          {design.woodBeams.length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Timber beam / girder schedule — NDS §3.3/§3.4 (NSCP §6, LRFD)<SchedChip items={design.woodBeams} ok={(b) => b.ok} /></h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Beam</th>
+                    <th className="py-1 pr-2 font-semibold">b×d (mm)</th>
+                    <th className="py-1 pr-2 font-semibold">Grade</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Mu (kN·m)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">F′b (MPa)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">CL</th>
+                    <th className="py-1 pr-2 text-right font-semibold">util M</th>
+                    <th className="py-1 pr-2 text-right font-semibold">util V</th>
+                    <th className="py-1 font-semibold">Case</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {design.woodBeams.map((b) => (
+                    <tr key={b.id} className={`sched-row border-t border-slate-100 ${b.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                      <td className="py-1 pr-2 font-medium">{b.id}</td>
+                      <td className="py-1 pr-2 font-mono">{b.b}×{b.d}</td>
+                      <td className="py-1 pr-2" title={WOOD_SPECIES[b.species]?.label ?? b.species}>{b.species}{b.kind === 'glulam' ? ' (GL)' : ''}</td>
+                      <td className="py-1 pr-2 text-right">{f1(b.Mu)}</td>
+                      <td className="py-1 pr-2 text-right">{b.FbPrime.toFixed(2)}</td>
+                      <td className="py-1 pr-2 text-right">{b.CL.toFixed(2)}</td>
+                      <td className={`py-1 pr-2 text-right font-semibold ${b.utilM > 1 ? 'text-red-600' : b.utilM > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(b.utilM * 100).toFixed(0)}%</td>
+                      <td className={`py-1 pr-2 text-right font-semibold ${b.utilV > 1 ? 'text-red-600' : b.utilV > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(b.utilV * 100).toFixed(0)}%</td>
+                      <td className="py-1 text-[11px] text-slate-500">{b.gov}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-1 text-[11px] text-slate-500">
+                fb = M/S ≤ F′b (§3.3, beam stability CL §3.3.3); fv = 1.5V/A ≤ F′v (§3.4). Reference values adjusted by
+                CD→λ, CM, CF/CV and converted to LRFD via Appendix N (KF·φ·λ). le auto per §3.3.3.
+              </p>
+            </div>
+          )}
+          {/* Timber column schedule */}
+          {design.woodColumns.length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Timber column schedule — NDS §3.7 + §3.9 (NSCP §6, LRFD)<SchedChip items={design.woodColumns} ok={(c) => c.ok} /></h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Column</th>
+                    <th className="py-1 pr-2 font-semibold">b×d (mm)</th>
+                    <th className="py-1 pr-2 font-semibold">Grade</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Pu (kN)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Mu (kN·m)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">F′c (MPa)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">CP</th>
+                    <th className="py-1 pr-2 text-right font-semibold">le/d</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Ratio</th>
+                    <th className="py-1 font-semibold">Case</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {design.woodColumns.map((c) => (
+                    <tr key={c.id} className={`sched-row border-t border-slate-100 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                      <td className="py-1 pr-2 font-medium">{c.id}</td>
+                      <td className="py-1 pr-2 font-mono">{c.b}×{c.d}</td>
+                      <td className="py-1 pr-2" title={WOOD_SPECIES[c.species]?.label ?? c.species}>{c.species}{c.kind === 'glulam' ? ' (GL)' : ''}</td>
+                      <td className="py-1 pr-2 text-right">{f1(c.Pu)}</td>
+                      <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
+                      <td className="py-1 pr-2 text-right">{c.FcPrime.toFixed(2)}</td>
+                      <td className="py-1 pr-2 text-right">{c.CP.toFixed(2)}</td>
+                      <td className="py-1 pr-2 text-right">{c.slenderness.toFixed(0)}</td>
+                      <td className={`py-1 pr-2 text-right font-semibold ${c.ratio > 1 ? 'text-red-600' : c.ratio > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(c.ratio * 100).toFixed(0)}%</td>
+                      <td className="py-1 text-[11px] text-slate-500">{c.gov}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-1 text-[11px] text-slate-500">
+                fc = P/A ≤ F′c with column stability CP (§3.7.1, governing plane le/d); beam-column members add the §3.9.2
+                interaction (fc/F′c)² + fb/[F′b(1 − fc/FcE)]. Ratio = governing of the two.
+              </p>
+            </div>
+          )}
           {design.steelBeams.length > 0 && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Steel beam / girder schedule — AISC 360-16 LRFD<SchedChip items={design.steelBeams} ok={(b) => b.ok} /></h3>
