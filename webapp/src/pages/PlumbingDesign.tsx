@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { FIXTURE_LIST, type FixtureCount, type Occupancy, totalWSFU, totalDFU } from '../engine/plumbingFixtures'
 import { designWaterSupply, waterSupplySolution, HAZEN_C, type HunterSystem, type WaterSupplyInput } from '../engine/waterSupply'
+import { designDrainage, drainageSolution } from '../engine/drainage'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { ReportControls } from '../components/ReportControls'
 
@@ -65,6 +66,11 @@ export default function PlumbingDesign() {
   }
   const supply = useMemo(() => designWaterSupply(supplyInput), [supplyInput])
   const supplySteps = useMemo(() => waterSupplySolution(supplyInput, supply), [supplyInput, supply])
+
+  // Drainage (DWV) tab inputs.
+  const [slopePct, setSlopePct] = useState(2)
+  const drainage = useMemo(() => designDrainage({ items, occupancy: occ, slopePct }), [items, occ, slopePct])
+  const drainageSteps = useMemo(() => drainageSolution({ items, occupancy: occ }, drainage), [items, occ, drainage])
 
   const tabBtn = (id: Tab, label: string) => (
     <button type="button" onClick={() => setTab(id)}
@@ -171,12 +177,36 @@ export default function PlumbingDesign() {
       )}
 
       {tab === 'drainage' && (
-        <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">
-            Sanitary drainage (DWV) sizing — drain, waste and vent lines from the drainage fixture units above
-            (currently {f0(dfu)} DFU). This module ships in an upcoming update.
-          </p>
-        </section>
+        <>
+          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Drainage run</h2>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <label className="flex flex-col text-sm">
+                <span className="mb-1 font-medium text-slate-600">Sewer slope</span>
+                <select value={slopePct} onChange={(e) => setSlopePct(num(e.target.value))}
+                  className="rounded-md border border-slate-300 px-2.5 py-1.5">
+                  <option value={2}>2% (21 mm/m)</option>
+                  <option value={1}>1% (10.5 mm/m)</option>
+                  <option value={0.5}>0.5% (5.3 mm/m)</option>
+                </select>
+              </label>
+            </div>
+          </section>
+          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Results</h2>
+            <Out label="Drainage fixture units" value={`${f0(drainage.dfu)} DFU${slopePct <= 1 ? ` · design ${f1(drainage.effectiveDfu)} (1% ×1.25)` : ''}`} />
+            <Out label="Drain (horizontal & vertical)" value={`${f0(drainage.drainMm)} mm`} ok={drainage.wcCount === 0 || drainage.drainMm >= 75} />
+            <Out label="Vent" value={`${f0(drainage.ventMm)} mm`} ok={drainage.ventOK} />
+            <Out label="Max developed length" value={`drain ${f0(drainage.maxDrainM)} m · vent ${f0(drainage.maxVentM)} m`} />
+            <Out label="Building-sewer min slope" value={`${f1(drainage.sewer.minPct)}% (${f1(drainage.sewer.mmPerM)} mm/m)`} />
+            {drainage.wcStackWarn && <p className="mt-1 text-[11px] text-amber-600">⚠ {drainage.wcCount} water closets on one stack — the code allows max 4 per stack; split the stack.</p>}
+            <p className="mt-2 text-[10px] text-slate-500">
+              Drain/vent size &amp; max length from Table 7-5; a vent is ≥ 32 mm and ≥ ½ the drain. No water closet
+              into a drain &lt; 75 mm. Slope per §1206. Set the fixture schedule above.
+            </p>
+          </section>
+          <div className="no-print">{drainageSteps.length > 0 && <WorkedSolution steps={drainageSteps} />}</div>
+        </>
       )}
       {tab === 'septic' && (
         <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">

@@ -25,6 +25,7 @@ import { solveWeldedConnection } from './weldedConnection'
 import { boltGeomFromPositions, outOfPlaneBoltGroup, pryingAction } from './steelDesign'
 import { columnStabilityFactor, beamStabilityFactor, getWoodRef } from './woodDesign'
 import { velocity, hazenWilliamsHead, gpmToLps } from './waterSupply'
+import { designDrainage } from './drainage'
 import type { RectSection } from './model'
 
 export interface ValidationCase {
@@ -237,6 +238,12 @@ const plumbFriction = (() => {
   return { manual: (10.67 * L * (Q / 1000) ** 1.852) / (C ** 1.852 * (D / 1000) ** 4.87), software: hazenWilliamsHead(Q, D, C, L) }
 })()
 
+const plumbDrain = (() => {
+  // Module 3 ex.1: 2 WC(priv) + 2 lav + 2 floor drains = 14 DFU → 76 mm drain.
+  const r = designDrainage({ items: [{ id: 'water-closet', count: 2 }, { id: 'lavatory', count: 2 }, { id: 'floor-drain', count: 2 }], occupancy: 'private' })
+  return { manual: 76, software: r.drainMm }
+})()
+
 export const VALIDATION_CASES: ValidationCase[] = [
   {
     id: 'rc-beam-mn', category: 'RC', title: 'Singly-reinforced beam — nominal moment',
@@ -367,5 +374,10 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'plumb-friction', category: 'Plumbing', title: 'Water friction head — Hazen-Williams',
     reference: 'Hazen-Williams (RNPCP Chart A-4…A-7)', formula: 'hf = 10.67·L·Q^1.852 / (C^1.852·D^4.87)',
     manual: plumbFriction.manual, software: plumbFriction.software, unit: 'm', tol: 1e-9,
+  },
+  {
+    id: 'plumb-drain', category: 'Plumbing', title: 'Sanitary drain size (14 DFU)',
+    reference: 'RNPCP Table 7-5 / Module 3', formula: '14 DFU (incl. WC) → 76 mm soil drain',
+    manual: plumbDrain.manual, software: plumbDrain.software, unit: 'mm', tol: 1e-9,
   },
 ]
