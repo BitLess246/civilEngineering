@@ -24,11 +24,12 @@ import { solveBoltedConnection } from './boltedConnection'
 import { solveWeldedConnection } from './weldedConnection'
 import { boltGeomFromPositions, outOfPlaneBoltGroup, pryingAction } from './steelDesign'
 import { columnStabilityFactor, beamStabilityFactor, getWoodRef } from './woodDesign'
+import { velocity, hazenWilliamsHead, gpmToLps } from './waterSupply'
 import type { RectSection } from './model'
 
 export interface ValidationCase {
   id: string
-  category: 'RC' | 'Steel' | 'Timber' | 'Connections' | 'Analysis' | 'Seismic' | 'Dynamics' | 'Wind' | 'Geotech'
+  category: 'RC' | 'Steel' | 'Timber' | 'Connections' | 'Analysis' | 'Seismic' | 'Dynamics' | 'Wind' | 'Geotech' | 'Plumbing'
   title: string
   reference: string
   formula: string
@@ -223,6 +224,19 @@ const woodCL = (() => {
   return { manual: a - Math.sqrt(a * a - r / 0.95), software: beamStabilityFactor(100, 300, 4000, Emin, FbStar).CL }
 })()
 
+// ── Plumbing (RNPCP 2000) — water-supply hydraulics ─────────────────────────
+const plumbVelocity = (() => {
+  // ¾" Type L copper (19.94 mm ID) at 10 gpm — continuity v = Q/A.
+  const lps = gpmToLps(10), D = 19.94
+  return { manual: (lps / 1000) / ((Math.PI * (D / 1000) ** 2) / 4), software: velocity(lps, D) }
+})()
+
+const plumbFriction = (() => {
+  // Hazen-Williams head loss, 20 gpm in 1" copper (C = 140) over 100 m.
+  const Q = gpmToLps(20), D = 26.04, C = 140, L = 100
+  return { manual: (10.67 * L * (Q / 1000) ** 1.852) / (C ** 1.852 * (D / 1000) ** 4.87), software: hazenWilliamsHead(Q, D, C, L) }
+})()
+
 export const VALIDATION_CASES: ValidationCase[] = [
   {
     id: 'rc-beam-mn', category: 'RC', title: 'Singly-reinforced beam — nominal moment',
@@ -343,5 +357,15 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'wood-cl', category: 'Timber', title: 'Timber beam stability factor CL',
     reference: 'NDS 2018 §3.3.3 / NSCP §6', formula: 'CL = a − √(a² − (FbE/Fb*)/0.95),  a = (1+FbE/Fb*)/1.9',
     manual: woodCL.manual, software: woodCL.software, unit: '—', tol: 1e-9,
+  },
+  {
+    id: 'plumb-velocity', category: 'Plumbing', title: 'Supply pipe velocity (continuity)',
+    reference: 'RNPCP 2000 / Module 2', formula: 'v = Q / A = 4Q / (π·D²)',
+    manual: plumbVelocity.manual, software: plumbVelocity.software, unit: 'm/s', tol: 1e-9,
+  },
+  {
+    id: 'plumb-friction', category: 'Plumbing', title: 'Water friction head — Hazen-Williams',
+    reference: 'Hazen-Williams (RNPCP Chart A-4…A-7)', formula: 'hf = 10.67·L·Q^1.852 / (C^1.852·D^4.87)',
+    manual: plumbFriction.manual, software: plumbFriction.software, unit: 'm', tol: 1e-9,
   },
 ]

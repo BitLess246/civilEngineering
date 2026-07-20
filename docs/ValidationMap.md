@@ -110,6 +110,7 @@ asserted by that file; all run in CI.
 | Steel connections | `steelConnections.test.ts`, `boltedConnection.test.ts`, `weldedConnection.test.ts`, `connectionSolution.test.ts`, `baseplate.test.ts` | IC-method bolt/weld groups vs `validation.ts` `bolt-ecc-rmax`/`weld-ecc-fmax`/`bolt-oop-tension`/`prying-t0`; AISC DG1 base plates |
 | Effective length K | `effectiveLength.test.ts` | alignment-chart G-factors vs published values (review anchors) |
 | Timber (wood) member design | `woodDesign.test.ts` | NDS §3 / NSCP §6 ASD adjustment factors (CD/CM/CF/CV), beam CL (§3.3.3) + column CP (§3.7.1) closed-form anchors, beam-column §3.9.2 interaction; `validation.ts` `wood-cp`/`wood-cl` |
+| Plumbing — water supply (RNPCP 2000) | `plumbingFixtures.test.ts`, `waterSupply.test.ts` | Table 6-5/7-2 fixture-unit totals vs Module 2/3/4 worked examples; demand (ΣFU×8), static head, continuity velocity, Hazen-Williams friction; `validation.ts` `plumb-velocity`/`plumb-friction` |
 | SCWB | `scwb.test.ts` | ΣMnc/ΣMnb ≥ 6/5 (§418.7.3.2) with hand Mn |
 | Slabs | `slabDDM.test.ts`, `woodArmer.test.ts`, `slabDeflection.test.ts` | DDM coefficient tables; Wood–Armer moment transformation identities |
 | RC misc | `devLength.test.ts`, `torsionDesign.test.ts`, `beamDeflection.test.ts`, `shearWallDesign.test.ts` | §425.4 ld, §422.7 threshold/cracking torsion, Branson Ie, wall shear |
