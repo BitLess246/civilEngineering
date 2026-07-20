@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { FIXTURE_LIST, type FixtureCount, type Occupancy, totalWSFU, totalDFU } from '../engine/plumbingFixtures'
 import { designWaterSupply, waterSupplySolution, HAZEN_C, type HunterSystem, type WaterSupplyInput } from '../engine/waterSupply'
 import { designDrainage, drainageSolution } from '../engine/drainage'
+import { designSepticTank, septicSolution } from '../engine/septicTank'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { ReportControls } from '../components/ReportControls'
 
@@ -71,6 +72,12 @@ export default function PlumbingDesign() {
   const [slopePct, setSlopePct] = useState(2)
   const drainage = useMemo(() => designDrainage({ items, occupancy: occ, slopePct }), [items, occ, slopePct])
   const drainageSteps = useMemo(() => drainageSolution({ items, occupancy: occ }, drainage), [items, occ, drainage])
+
+  // Septic tank (OSST) tab inputs.
+  const [tankWidth, setTankWidth] = useState(2.0)
+  const [liquidDepth, setLiquidDepth] = useState(1.2)
+  const septic = useMemo(() => designSepticTank({ dfu, width: tankWidth, liquidDepth }), [dfu, tankWidth, liquidDepth])
+  const septicSteps = useMemo(() => septicSolution(septic), [septic])
 
   const tabBtn = (id: Tab, label: string) => (
     <button type="button" onClick={() => setTab(id)}
@@ -209,12 +216,30 @@ export default function PlumbingDesign() {
         </>
       )}
       {tab === 'septic' && (
-        <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-slate-500">
-            Septic-tank / on-site sewage treatment sizing (RNPCP Appendix B) from the drainage fixture units
-            above ({f0(dfu)} DFU). This module ships in an upcoming update.
-          </p>
-        </section>
+        <>
+          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Tank geometry</h2>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Field label="Plan width" unit="m" value={tankWidth} onChange={setTankWidth} step="0.1" hint="≥ 0.9 m" />
+              <Field label="Liquid depth" unit="m" value={liquidDepth} onChange={setLiquidDepth} step="0.1" hint="0.6–1.8 m" />
+            </div>
+          </section>
+          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Results</h2>
+            <Out label="Drainage fixture units" value={`${f0(septic.dfu)} DFU`} />
+            <Out label="Min capacity (Table B-2)" value={`${f0(septic.capacityL)} L · ${f2(septic.capacityL / 1000)} m³`} />
+            <Out label="Plan length" value={`${f2(septic.length)} m`} ok={septic.capacityOK} />
+            <Out label="Overall height" value={`${f2(septic.totalHeight)} m (liquid ${f1(septic.liquidDepth)} + 0.23 freeboard)`} ok={septic.depthOK} />
+            <Out label="Digestive chamber (2/3)" value={`${f2(tankWidth)} × ${f2(septic.inletLength)} × ${f2(septic.totalHeight)} m · ${f2(septic.inletVol)} m³`} ok={septic.inletVolOK && septic.inletDimOK} />
+            <Out label="Leaching chamber (1/3)" value={`${f2(tankWidth)} × ${f2(septic.outletLength)} × ${f2(septic.totalHeight)} m · ${f2(septic.outletVol)} m³`} ok={septic.outletVolOK} />
+            <Out label="Provided liquid volume" value={`${f2(septic.providedVol)} m³`} ok={septic.capacityOK} />
+            <p className="mt-2 text-[10px] text-slate-500">
+              Capacity from Table B-2 (by DFU). L = V/(w·d); inlet 2/3 (≥ 2 m³ &amp; ≥ 2/3 total), secondary 1/3
+              (≥ 1 m³). Liquid depth 0.6–1.8 m; side walls 228.6 mm above liquid. Two 508 mm manholes required.
+            </p>
+          </section>
+          <div className="no-print">{septicSteps.length > 0 && <WorkedSolution steps={septicSteps} />}</div>
+        </>
       )}
     </main>
   )
