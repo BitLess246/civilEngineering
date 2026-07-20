@@ -10,12 +10,12 @@ import type { LiveItem } from './liveLoads'
 
 export interface Node { id: string; x: number; y: number; z: number }
 
-export type SectionMaterial = 'concrete' | 'steel'
+export type SectionMaterial = 'concrete' | 'steel' | 'wood'
 
 export interface RectSection {
   id: string
   name: string
-  b: number; h: number          // mm  (concrete; for steel a bounding box ≈ bf × d)
+  b: number; h: number          // mm  (concrete/wood b × d; for steel a bounding box ≈ bf × d)
   fc: number; fy: number
   barDia: number; tieDia: number; cover: number
   /** Material of the member. Absent ⇒ 'concrete' (back-compatible). */
@@ -25,6 +25,14 @@ export interface RectSection {
   /** Steel grade yield/ultimate (steel only). Defaults: Fy 248, Fu 400 (A36). */
   steelFy?: number
   steelFu?: number
+  /** Timber species/grade id (wood only), key into WOOD_SPECIES (woodDesign.ts),
+   *  e.g. 'DFL-2'. Resolves the ASD/LRFD reference design values. */
+  woodSpecies?: string
+  /** Solid-sawn ('sawn') or glued-laminated ('glulam') timber (wood only).
+   *  Absent ⇒ 'sawn'. */
+  woodKind?: 'sawn' | 'glulam'
+  /** Wet-service condition (wood only): in-service MC > 19% sawn / 16% glulam. */
+  woodWet?: boolean
   /** Pretensioned bonded prestressing on this (concrete beam) section — when
    *  present the pipeline runs the full prestressed check (losses, §24.5
    *  stresses, fps/φMn, 1.2Mcr) beside the RC design. */

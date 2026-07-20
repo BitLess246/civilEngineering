@@ -27,6 +27,7 @@ import { designShearWall, type ShearWallResult } from './shearWallDesign'
 import { checkModelSCWB, type SCWBJointRow } from './scwb'
 import { shapeByName, nextHeavierW, nextLighterW, type AiscShape } from './aiscSections'
 import { deriveWSection, beamFlexure, beamShear, columnAxial, combinedLoading } from './steelDesign'
+import { getWoodRef, checkWoodBeam, checkWoodColumn } from './woodDesign'
 import { designBasePlate, adoptPlateThickness, type BasePlateResult } from './baseplate'
 import { designSteelJoints, designBeamBeamJoints, type SteelJoint, type BeamBeamJoint } from './steelConnections'
 
@@ -194,6 +195,27 @@ export interface BasePlateScheduleRow {
   ok: boolean
 }
 
+// ── Timber schedule rows (NDS §3 / NSCP §6, LRFD via Appendix N) ─────────────
+export interface WoodBeamScheduleRow {
+  id: string; role: string; L: number
+  species: string; kind: string; b: number; d: number
+  Mu: number; Vu: number           // kN·m, kN (factored demand)
+  fb: number; FbPrime: number; CL: number   // MPa
+  fv: number; FvPrime: number      // MPa
+  utilM: number; utilV: number
+  ok: boolean
+  gov?: string
+}
+export interface WoodColumnScheduleRow {
+  id: string; L: number
+  species: string; kind: string; b: number; d: number
+  Pu: number; Mu: number           // kN, kN·m
+  fc: number; FcPrime: number; CP: number; slenderness: number   // MPa
+  ratio: number                    // governing (axial or §3.9.2 interaction)
+  ok: boolean
+  gov?: string
+}
+
 /** Prestressed member check (sections with RectSection.ps): the pipeline
  *  back-derives equivalent UDLs from the D-only / L-only midspan sagging
  *  moments (w = 8M/L², self-weight excluded from SDL) and runs the full
@@ -213,6 +235,9 @@ export interface StructureDesign {
   columns: ColumnScheduleRow[]
   steelBeams: SteelBeamScheduleRow[]
   steelColumns: SteelColumnScheduleRow[]
+  /** Timber beams/girders and columns (NDS §3 / NSCP §6, LRFD Appendix N). */
+  woodBeams: WoodBeamScheduleRow[]
+  woodColumns: WoodColumnScheduleRow[]
   basePlates: BasePlateScheduleRow[]
   joints: SteelJoint[]               // beam-to-column connections (steel frames only)
   /** Beam-to-beam fin plates: beams framing into a girder web (steel only). */
@@ -224,7 +249,7 @@ export interface StructureDesign {
   /** Strong-column/weak-beam joint checks (NSCP §418.7.3.2); only populated for
    *  a Special Moment Frame (`seismicSystem: 'smf'`), empty otherwise. */
   scwb: SCWBJointRow[]
-  totals: { concreteMembers: number; concreteSlabs: number; concrete: number; steelKg: number }
+  totals: { concreteMembers: number; concreteSlabs: number; concrete: number; steelKg: number; woodVolume: number }
   orphanEdges: number
   /** Members no design path could check (unsupported shape family). Non-empty ⇒ designOK is false. */
   unchecked: UncheckedMember[]
@@ -240,6 +265,7 @@ export interface StructureDesign {
 export function designOK(d: StructureDesign): boolean {
   return d.beams.every((b) => b.ok) && d.prestressed.every((p) => p.ok) && d.columns.every((c) => c.ok)
     && d.steelBeams.every((b) => b.ok) && d.steelColumns.every((c) => c.ok)
+    && d.woodBeams.every((b) => b.ok) && d.woodColumns.every((c) => c.ok)
     && d.basePlates.every((p) => p.ok)
     && d.footings.every((f) => f.ok) && d.combined.every((c) => c.ok)
     && d.slabs.every((s) => s.ok) && d.walls.every((w) => w.ok)
@@ -318,6 +344,54 @@ function designSteelColumnRow(mr: F3MemberResult, sec: RectSection): SteelColumn
 
 const beamOK = (d: BeamDesignResult) =>
   d.flexOK && d.comprEffective && d.comprNAOK && d.region !== 'inadequate'
+
+// ── Timber member design (NDS §3 / NSCP §6, LRFD via Appendix N) ─────────────
+/** NDS Appendix N time-effect factor λ from the governing LRFD combo name:
+ *  wind/seismic combos (1.0W/1.0E) → 1.0; the 1.4D dead-only combo → 0.6;
+ *  everything else (gravity D + L) → 0.8. A conservative name-based mapping. */
+function timeEffectFactor(comboName: string): number {
+  if (/1\.0E|1\.0W/.test(comboName)) return 1.0
+  if (/^1\.4D/.test(comboName)) return 0.6
+  return 0.8
+}
+
+/** Design a timber beam/girder from a member result. lu (m) is the unbraced
+ *  compression-edge length for §3.3.3 CL — falls back to the member length. */
+function designWoodBeamRow(
+  mr: F3MemberResult, role: string, sec: RectSection, lambda: number, lu?: number,
+): WoodBeamScheduleRow | null {
+  const ref = (sec.woodSpecies ? getWoodRef(sec.woodSpecies) : undefined)?.ref
+  if (!ref) return null
+  const kind = sec.woodKind === 'glulam' ? 'glulam' : 'sawn'
+  const r = checkWoodBeam({
+    ref, kind, b: sec.b, d: sec.h, length: mr.L * 1000,
+    M: mr.Mmax, V: mr.Vmax, lu: lu && lu > 0 ? lu * 1000 : undefined,
+    opts: { method: 'LRFD', lambda, wet: sec.woodWet },
+  })
+  return {
+    id: mr.id, role, L: mr.L, species: sec.woodSpecies ?? '', kind, b: sec.b, d: sec.h,
+    Mu: mr.Mmax, Vu: mr.Vmax, fb: r.fb, FbPrime: r.FbPrime, CL: r.CL,
+    fv: r.fv, FvPrime: r.FvPrime, utilM: r.bendingRatio, utilV: r.shearRatio, ok: r.ok,
+  }
+}
+
+/** Design a timber column from a member result: axial (governing-plane CP) +
+ *  §3.9.2 beam-column interaction with the peak bending. */
+function designWoodColumnRow(mr: F3MemberResult, sec: RectSection, lambda: number): WoodColumnScheduleRow | null {
+  const ref = (sec.woodSpecies ? getWoodRef(sec.woodSpecies) : undefined)?.ref
+  if (!ref) return null
+  const kind = sec.woodKind === 'glulam' ? 'glulam' : 'sawn'
+  const Pu = Math.max(0, -Math.min(...mr.N))   // compression (N < 0)
+  const r = checkWoodColumn({
+    ref, kind, b: sec.b, d: sec.h, length: mr.L * 1000,
+    P: Pu, Mx: mr.Mmax, opts: { method: 'LRFD', lambda, wet: sec.woodWet },
+  })
+  return {
+    id: mr.id, L: mr.L, species: sec.woodSpecies ?? '', kind, b: sec.b, d: sec.h,
+    Pu, Mu: mr.Mmax, fc: r.fc, FcPrime: r.FcPrime, CP: r.CP, slenderness: r.slenderness,
+    ratio: r.ratio, ok: r.ok,
+  }
+}
 
 /** Critical sections of a frame member: the two ends (which carry the hogging
  *  moments, top steel) plus the interior SAGGING peak — the most positive Mz
@@ -619,11 +693,14 @@ function designFromRuns(
   const columns: ColumnScheduleRow[] = []
   const steelBeams: SteelBeamScheduleRow[] = []
   const steelColumns: SteelColumnScheduleRow[] = []
+  const woodBeams: WoodBeamScheduleRow[] = []
+  const woodColumns: WoodColumnScheduleRow[] = []
   const unchecked: UncheckedMember[] = []
   for (const m of model.members) {
     const role = roleOf.get(m.id)
     const sec = secOf(m.id)
     const isSteel = sec.material === 'steel'
+    const isWood = sec.material === 'wood'
     const roleLabel = role === 'beam' ? 'beam' : role === 'girder' ? 'girder' : role === 'column' ? 'column' : role ?? ''
     onProgress?.({ phase: 'Designing members', current: ++memDone, total: totalMems, detail: `${m.id} (${roleLabel} ${sec.b}×${sec.h})` })
     if (role === 'beam' || role === 'girder') {
@@ -641,6 +718,19 @@ function designFromRuns(
         else unchecked.push({
           id: m.id, role, shape: sec.shape ?? '(no shape)',
           reason: 'steel beam flexure covers W/WT shapes only — use a W/WT here or check this member separately',
+        })
+      } else if (isWood) {
+        let best: WoodBeamScheduleRow | null = null, bestSev = -1, gov = ''
+        for (const run of runs) {
+          const mr = memberOf(run, m.id); if (!mr) continue
+          const row = designWoodBeamRow(mr, role, sec, timeEffectFactor(run.name), m.Lb); if (!row) continue
+          const sev = (row.ok ? 0 : 1e9) + row.Mu
+          if (sev > bestSev) { bestSev = sev; best = row; gov = run.name }
+        }
+        if (best) woodBeams.push({ ...best, gov })
+        else unchecked.push({
+          id: m.id, role, shape: sec.woodSpecies ?? '(no species)',
+          reason: 'timber section has no resolved species — set a WOOD_SPECIES grade for this member',
         })
       } else {
         let best: BeamScheduleRow | null = null, bestSev = -1, gov = ''
@@ -689,6 +779,18 @@ function designFromRuns(
         else unchecked.push({
           id: m.id, role, shape: sec.shape ?? '(no shape)',
           reason: 'shape not found in the AISC library — column axial/§H1-1 check skipped',
+        })
+      } else if (isWood) {
+        let best: WoodColumnScheduleRow | null = null, bestRatio = -1, gov = ''
+        for (const run of runs) {
+          const mr = memberOf(run, m.id); if (!mr) continue
+          const row = designWoodColumnRow(mr, sec, timeEffectFactor(run.name)); if (!row) continue
+          if (row.ratio > bestRatio) { bestRatio = row.ratio; best = row; gov = run.name }
+        }
+        if (best) woodColumns.push({ ...best, gov })
+        else unchecked.push({
+          id: m.id, role: role ?? 'column', shape: sec.woodSpecies ?? '(no species)',
+          reason: 'timber section has no resolved species — set a WOOD_SPECIES grade for this member',
         })
       } else {
         let best: ColumnScheduleRow | null = null, bestUtil = -1, gov = ''
@@ -786,7 +888,7 @@ function designFromRuns(
 
   // ── Concrete & steel totals ──
   const nm = new Map(model.nodes.map((n) => [n.id, n]))
-  let concreteMembers = 0, steelKg = 0
+  let concreteMembers = 0, steelKg = 0, woodVolume = 0
   for (const m of model.members) {
     const a = nm.get(m.i), b2 = nm.get(m.j)
     if (!a || !b2) continue
@@ -795,6 +897,8 @@ function designFromRuns(
     if (s.material === 'steel') {
       const shape = s.shape ? shapeByName(s.shape) : undefined
       if (shape) steelKg += (shape.A / 1e6) * L * 7850   // A m² × L × ρ
+    } else if (s.material === 'wood') {
+      woodVolume += (s.b / 1000) * (s.h / 1000) * L       // m³ of timber
     } else {
       concreteMembers += (s.b / 1000) * (s.h / 1000) * L
     }
@@ -876,12 +980,12 @@ function designFromRuns(
   const partialDesign = {
     govName: runs[govIdx].name,
     cases: runs.map((r) => r.name),
-    beams, prestressed, columns, steelBeams, steelColumns, basePlates,
+    beams, prestressed, columns, steelBeams, steelColumns, woodBeams, woodColumns, basePlates,
     joints: [] as SteelJoint[],
     beamJoints: [] as BeamBeamJoint[],
     slabs, walls, footings, combined,
     scwb: [] as SCWBJointRow[],
-    totals: { concreteMembers, concreteSlabs, concrete: concreteMembers + concreteSlabs, steelKg },
+    totals: { concreteMembers, concreteSlabs, concrete: concreteMembers + concreteSlabs, steelKg, woodVolume },
     orphanEdges: br.orphanEdges.length,
     unchecked,
     // fail-loud: forces from a non-converged P-Δ run must not silently drive design

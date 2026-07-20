@@ -21,6 +21,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel } from './model'
 import { barContinuityGroups } from './modelBuilder'
+import { WOOD_SPECIES } from './woodDesign'
 
 export type MeshSeverity = 'error' | 'warning'
 export interface MeshIssue {
@@ -153,10 +154,19 @@ export function validateMesh(model: StructuralModel): MeshIssue[] {
   }
 
 
+  // ── timber sanity (L1 rule for wood sections) ───────────────────────────
+  for (const sec of model.sections) {
+    if (sec.material !== 'wood') continue
+    if (sec.woodSpecies && !WOOD_SPECIES[sec.woodSpecies])
+      issues.push({ severity: 'error', code: 'WOOD_SPECIES', message: `section ${sec.id}: unknown timber species "${sec.woodSpecies}" — not in the WOOD_SPECIES library`, refs: [sec.id] })
+    if (!(sec.b > 0) || !(sec.h > 0))
+      issues.push({ severity: 'error', code: 'WOOD_DIMS', message: `section ${sec.id}: timber b and d must be positive`, refs: [sec.id] })
+  }
+
   // ── prestressing sanity (L1 rule for RectSection.ps) ────────────────────
   for (const sec of model.sections) {
     if (!sec.ps) continue
-    if (sec.material === 'steel')
+    if (sec.material === 'steel' || sec.material === 'wood')
       issues.push({ severity: 'error', code: 'PS_STEEL', message: `section ${sec.id}: prestressing is only supported on concrete sections`, refs: [sec.id] })
     if (!(sec.ps.Aps > 0) || !(sec.ps.fpu > 0) || !(sec.ps.fci > 0))
       issues.push({ severity: 'error', code: 'PS_PARAMS', message: `section ${sec.id}: Aps, fpu and f'ci must be positive`, refs: [sec.id] })

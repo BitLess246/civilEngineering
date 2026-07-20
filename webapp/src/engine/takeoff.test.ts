@@ -115,8 +115,9 @@ describe('structural steel — per-shape unit weight + costed BOM line items (A2
   const STEEL_DENSITY = 7850
   const emptyDesign: StructureDesign = {
     govName: '', cases: [], beams: [], prestressed: [], columns: [], steelBeams: [], steelColumns: [],
+    woodBeams: [], woodColumns: [],
     basePlates: [], joints: [], beamJoints: [], slabs: [], walls: [], footings: [], combined: [], scwb: [],
-    totals: { concreteMembers: 0, concreteSlabs: 0, concrete: 0, steelKg: 0 }, orphanEdges: 0,
+    totals: { concreteMembers: 0, concreteSlabs: 0, concrete: 0, steelKg: 0, woodVolume: 0 }, orphanEdges: 0,
     unchecked: [], pDeltaIssues: [],
   }
   // Two steel members: one 6 m W200x46.1 beam, two 4 m W250x49.1 columns.

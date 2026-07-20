@@ -134,14 +134,31 @@ export function woodSectionProps(b: number, d: number): { A: number; S: number; 
   return { A: b * d, S: (b * d * d) / 6, I: (b * d * d * d) / 12 }
 }
 
+/** Approximate timber unit weight for self-weight, kN/m³, from specific gravity:
+ *  γ ≈ G·9.81 (softwood G ≈ 0.4–0.5 → ~4–5; dense hardwood G ≈ 0.6 → ~6). For
+ *  self-weight/mass only — NOT a design value. */
+export function woodUnitWeight(G: number): number { return G * 9.81 }
+
+// ── NDS Appendix N — LRFD format-conversion (KF·φ) and time-effect factor λ ──
+// A strength-design timber check compares a FACTORED demand to an LRFD-adjusted
+// design value F′ = F·(C factors)·KF·φ·λ, with CD replaced by λ (Table N3).
+// KF·φ products: strength (Fb/Ft/Fv/Fc) 2.16, bearing (Fc⊥) 1.50, stability
+// (Emin) 1.76·0.85 = 1.50.  λ ≈ 0.6 (1.4D), 0.8 (gravity D+L), 1.0 (W/E).
+const KFP_STRENGTH = 2.16, KFP_BEARING = 1.503, KFP_STABILITY = 1.496
+
 // ── Common adjustment-factor inputs ────────────────────────────────────────
 export interface WoodAdjustOpts {
-  duration?: LoadDuration   // → CD (default 'ten-year')
+  duration?: LoadDuration   // → CD, ASD only (default 'ten-year')
   wet?: boolean             // → CM (default dry, all = 1)
   Ct?: number               // temperature factor (default 1.0, T ≤ 37.8 °C)
   Ci?: number               // incising factor (default 1.0, not incised)
   Cr?: number               // repetitive-member factor for Fb (default 1.0)
   CF?: number               // explicit size factor override (dimension lumber)
+  /** 'ASD' (service demand ≤ allowable, uses CD) or 'LRFD' (factored demand ≤
+   *  KF·φ·λ-adjusted, uses λ instead of CD).  Default 'ASD'. */
+  method?: 'ASD' | 'LRFD'
+  /** LRFD time-effect factor λ (Table N3); default 0.8 (gravity occupancy). */
+  lambda?: number
 }
 
 /** All adjustment factors + adjusted stresses that do NOT depend on member
@@ -158,22 +175,27 @@ export interface WoodAdjusted {
 }
 
 export function woodAdjusted(ref: WoodRefValues, kind: WoodKind, d: number, opts: WoodAdjustOpts = {}): WoodAdjusted {
-  const CD = CD_TABLE[opts.duration ?? 'ten-year']
+  const lrfd = (opts.method ?? 'ASD') === 'LRFD'
+  const lambda = lrfd ? (opts.lambda ?? 0.8) : 1
+  const CD = lrfd ? 1 : CD_TABLE[opts.duration ?? 'ten-year']   // LRFD uses λ, not CD
+  const kF = lrfd ? KFP_STRENGTH : 1                            // KF·φ, strength values
+  const kPerp = lrfd ? KFP_BEARING : 1                          // KF·φ, bearing
+  const kE = lrfd ? KFP_STABILITY : 1                           // KF·φ, stability (Emin)
   const Ct = opts.Ct ?? 1
   const Ci = opts.Ci ?? 1
   const Cr = opts.Cr ?? 1
   const CF = opts.CF ?? (kind === 'sawn' ? sizeFactorTimber(d) : 1)
   const cm = opts.wet ? (kind === 'sawn' ? CM_SAWN : CM_GLULAM) : { Fb: 1, Ft: 1, Fv: 1, FcPerp: 1, Fc: 1, E: 1 }
-  const Emin = ref.Emin * cm.E * Ct * Ci
-  const E = ref.E * cm.E * Ct * Ci
+  const Emin = ref.Emin * cm.E * Ct * Ci * kE
+  const E = ref.E * cm.E * Ct * Ci                              // service modulus (deflection) — never converted
   // Fb* — all bending factors except CL (and CV / Cfu, folded in by the caller).
-  const FbStar = ref.Fb * CD * cm.Fb * Ct * Ci * CF * Cr
-  const FcStar = ref.Fc * CD * cm.Fc * Ct * Ci * CF
+  const FbStar = ref.Fb * CD * cm.Fb * Ct * Ci * CF * Cr * kF * lambda
+  const FcStar = ref.Fc * CD * cm.Fc * Ct * Ci * CF * kF * lambda
   return {
     CD, CM: cm, Ct, Ci, Cr, CF, Emin, E, FbStar, FcStar,
-    FvAllow: ref.Fv * CD * cm.Fv * Ct * Ci,
-    FtAllow: ref.Ft * CD * cm.Ft * Ct * Ci * CF,
-    FcPerpAllow: ref.FcPerp * cm.FcPerp * Ct * Ci,   // CD does not apply to Fc⊥
+    FvAllow: ref.Fv * CD * cm.Fv * Ct * Ci * kF * lambda,
+    FtAllow: ref.Ft * CD * cm.Ft * Ct * Ci * CF * kF * lambda,
+    FcPerpAllow: ref.FcPerp * cm.FcPerp * Ct * Ci * kPerp,   // no CD/λ on bearing
   }
 }
 

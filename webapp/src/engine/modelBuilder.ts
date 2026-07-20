@@ -9,6 +9,12 @@
 import type { StructuralModel, RectSection, Node, Member, Plate, NodeSupport, MemberRole } from './model'
 import { sdlTotal } from './deadLoads'
 import { shapeByName } from './aiscSections'
+import { getWoodRef, woodUnitWeight } from './woodDesign'
+
+/** Timber self-weight line load basis (kN/m³) from the section's species (γ ≈
+ *  G·9.81); fallback G = 0.5 (~4.9 kN/m³) when the species is unset/unknown. */
+const woodGamma = (sec: RectSection): number =>
+  woodUnitWeight((sec.woodSpecies ? getWoodRef(sec.woodSpecies) : undefined)?.ref.G ?? 0.5)
 
 export interface GridSpec {
   baysX: number[]      // bay widths along x, m
@@ -153,7 +159,8 @@ export function buildGravityLoads(model: StructuralModel, sdl: number, ll: numbe
   const memberSW: StructuralModel['loads'] = model.members
     .map((m) => {
       const sec = secMap.get(m.section) ?? model.sections[0]
-      const w = sec ? (sec.b / 1000) * (sec.h / 1000) * gammaC : 0
+      const gamma = sec?.material === 'wood' ? woodGamma(sec) : gammaC
+      const w = sec ? (sec.b / 1000) * (sec.h / 1000) * gamma : 0
       return { kind: 'member-udl' as const, member: m.id, w, cat: 'D' as const, sw: true }
     })
     .filter((l) => l.w > 0)
@@ -205,6 +212,8 @@ export function refreshSelfWeight(model: StructuralModel, gammaC = GAMMA_C): Str
         if (sec.material === 'steel') {
           const shape = sec.shape ? shapeByName(sec.shape) : undefined
           w = shape ? (shape.A / 1e6) * GAMMA_S : (sec.b / 1000) * (sec.h / 1000) * GAMMA_S
+        } else if (sec.material === 'wood') {
+          w = (sec.b / 1000) * (sec.h / 1000) * woodGamma(sec)
         } else {
           w = (sec.b / 1000) * (sec.h / 1000) * gammaC
         }
