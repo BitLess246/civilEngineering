@@ -44,6 +44,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/shotcrete-facing', name: 'Shotcrete Facing', sub: 'FHWA · flexure · punching', group: 'Geotechnical' },
       { to: '/seismic-wizard',   name: 'Seismic Wizard',   sub: 'NSCP 208 Ca/Cv/I/R',       group: 'Seismic & Loads' },
       { to: '/load-combinations', name: 'Load Combinations', sub: 'NSCP 2015 §203.3 LRFD',  group: 'Seismic & Loads' },
+      { to: '/plumbing',         name: 'Plumbing Design',  sub: 'Water · DWV · septic · RNPCP', group: 'Plumbing & Sanitary' },
     ],
   },
   {
