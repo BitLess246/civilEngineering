@@ -3,6 +3,7 @@ import {
   WOOD_SPECIES, getWoodRef, loadDurationFactor, sizeFactorTimber, volumeFactorGlulam,
   effectiveBendingLength, beamStabilityFactor, columnStabilityFactor, woodSectionProps,
   woodAdjusted, checkWoodBeam, checkWoodColumn, woodUnitWeight,
+  speciesList, gradesOf, resolveWoodSpecies, woodRefOf, validateWoodRef,
 } from './woodDesign'
 
 describe('reference value library', () => {
@@ -19,6 +20,53 @@ describe('reference value library', () => {
       for (const v of Object.values(s.ref)) expect(v).toBeGreaterThan(0)
       expect(s.ref.Emin).toBeLessThan(s.ref.E)   // stability modulus < mean E
     }
+  })
+})
+
+describe('structured library — species / grade separation', () => {
+  it('keeps the stable flat ids for back-compatibility', () => {
+    for (const id of ['DFL-SS', 'DFL-1', 'DFL-2', 'HF-2', 'SPF-2', 'SP-2', 'GLULAM-24F'])
+      expect(getWoodRef(id), id).toBeTruthy()
+  })
+  it('speciesList returns the distinct species (DFL first, 5 total)', () => {
+    const sp = speciesList()
+    expect(sp.map((s) => s.species)).toEqual(['DFL', 'HF', 'SPF', 'SP', 'GLULAM'])
+    expect(sp[0].label).toBe('Douglas Fir-Larch')
+  })
+  it('gradesOf lists the grades within a species', () => {
+    expect(gradesOf('DFL').map((g) => g.grade)).toEqual(['SS', '1', '2'])
+    expect(gradesOf('HF')).toHaveLength(1)
+  })
+  it('resolveWoodSpecies composes the id from species + grade', () => {
+    expect(resolveWoodSpecies('DFL', '2')!.id).toBe('DFL-2')
+    expect(resolveWoodSpecies('DFL', 'nope')).toBeUndefined()
+  })
+})
+
+describe('woodRefOf — the section → reference-values contract', () => {
+  const custom = { Fb: 30, Ft: 20, Fv: 4, FcPerp: 8, Fc: 18, E: 15000, Emin: 5200, G: 0.75 }
+  it('an explicit woodRef (custom material) wins over the library id', () => {
+    expect(woodRefOf({ woodSpecies: 'DFL-2', woodRef: custom })).toBe(custom)
+  })
+  it('falls back to the library id when no woodRef is stored', () => {
+    expect(woodRefOf({ woodSpecies: 'DFL-2' })).toBe(getWoodRef('DFL-2')!.ref)
+  })
+  it('returns undefined when neither is available', () => {
+    expect(woodRefOf({})).toBeUndefined()
+    expect(woodRefOf({ woodSpecies: 'not-a-species' })).toBeUndefined()
+  })
+})
+
+describe('validateWoodRef — guards the custom-material path', () => {
+  it('accepts a sound reference set', () => {
+    expect(validateWoodRef({ Fb: 24, Ft: 16, Fv: 2.5, FcPerp: 6, Fc: 16, E: 16000, Emin: 5500, G: 0.8 })).toEqual([])
+  })
+  it('rejects non-positive stresses', () => {
+    expect(validateWoodRef({ Fb: 0, Ft: 16, Fv: 2.5, FcPerp: 6, Fc: 16, E: 16000, Emin: 5500, G: 0.8 })).not.toHaveLength(0)
+  })
+  it('requires Emin < E and G ≤ 1.4', () => {
+    expect(validateWoodRef({ Fb: 24, Ft: 16, Fv: 2.5, FcPerp: 6, Fc: 16, E: 16000, Emin: 16000, G: 0.8 }).some((e) => /Emin/.test(e))).toBe(true)
+    expect(validateWoodRef({ Fb: 24, Ft: 16, Fv: 2.5, FcPerp: 6, Fc: 16, E: 16000, Emin: 5500, G: 1.6 }).some((e) => /gravity/.test(e))).toBe(true)
   })
 })
 

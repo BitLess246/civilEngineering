@@ -27,7 +27,7 @@ import { designShearWall, type ShearWallResult } from './shearWallDesign'
 import { checkModelSCWB, type SCWBJointRow } from './scwb'
 import { shapeByName, nextHeavierW, nextLighterW, type AiscShape } from './aiscSections'
 import { deriveWSection, beamFlexure, beamShear, columnAxial, combinedLoading } from './steelDesign'
-import { getWoodRef, checkWoodBeam, checkWoodColumn } from './woodDesign'
+import { woodRefOf, checkWoodBeam, checkWoodColumn } from './woodDesign'
 import { designBasePlate, adoptPlateThickness, type BasePlateResult } from './baseplate'
 import { designSteelJoints, designBeamBeamJoints, type SteelJoint, type BeamBeamJoint } from './steelConnections'
 
@@ -360,7 +360,7 @@ function timeEffectFactor(comboName: string): number {
 function designWoodBeamRow(
   mr: F3MemberResult, role: string, sec: RectSection, lambda: number, lu?: number,
 ): WoodBeamScheduleRow | null {
-  const ref = (sec.woodSpecies ? getWoodRef(sec.woodSpecies) : undefined)?.ref
+  const ref = woodRefOf(sec)
   if (!ref) return null
   const kind = sec.woodKind === 'glulam' ? 'glulam' : 'sawn'
   const r = checkWoodBeam({
@@ -378,7 +378,7 @@ function designWoodBeamRow(
 /** Design a timber column from a member result: axial (governing-plane CP) +
  *  §3.9.2 beam-column interaction with the peak bending. */
 function designWoodColumnRow(mr: F3MemberResult, sec: RectSection, lambda: number): WoodColumnScheduleRow | null {
-  const ref = (sec.woodSpecies ? getWoodRef(sec.woodSpecies) : undefined)?.ref
+  const ref = woodRefOf(sec)
   if (!ref) return null
   const kind = sec.woodKind === 'glulam' ? 'glulam' : 'sawn'
   const Pu = Math.max(0, -Math.min(...mr.N))   // compression (N < 0)

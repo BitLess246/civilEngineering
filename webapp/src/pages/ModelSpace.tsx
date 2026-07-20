@@ -57,7 +57,7 @@ import { HintButton, SeismicHint, WindHint } from '../components/LoadHints'
 import { Num, Pick, Row } from '../components/qty'
 import { FitView } from '../components/FitView'
 import { shapeByName, shapesOf, effectiveSection, sectionBoundingBox, FAMILIES, type SectionFamily } from '../engine/aiscSections'
-import { WOOD_SPECIES } from '../engine/woodDesign'
+import { WOOD_SPECIES, speciesList, gradesOf, resolveWoodSpecies, type WoodSpecies } from '../engine/woodDesign'
 import { buildSectionShapes } from '../lib/sectionShapes3d'
 import { SectionShape } from '../components/SectionShape'
 import { f1, f2 } from '../lib/format'
@@ -837,9 +837,13 @@ export default function ModelSpace() {
   // Material: 'concrete' (RC), 'steel' (AISC W-shapes) or 'wood' (timber) for the frame members.
   const [material, setMaterial] = useState<'concrete' | 'steel' | 'wood'>((si.material as 'concrete' | 'steel' | 'wood') ?? 'concrete')
   // Timber (wood frame): species/grade, sawn vs glulam, wet service.
-  const [woodSpecies, setWoodSpecies] = useState(s('woodSpecies', 'DFL-2'))
-  const [woodKind, setWoodKind] = useState<'sawn' | 'glulam'>((s('woodKind', 'sawn')) as 'sawn' | 'glulam')
+  // Timber material as separate species + grade (migrating any legacy composite id).
+  const legacyWood = WOOD_SPECIES[s('woodSpecies', 'DFL-2')]
+  const [woodSpeciesId, setWoodSpeciesId] = useState(s('woodSpeciesId', legacyWood?.species ?? 'DFL'))
+  const [woodGrade, setWoodGrade] = useState(s('woodGrade', legacyWood?.grade ?? '2'))
   const [woodWet, setWoodWet] = useState(b('woodWet', false))
+  const woodSel: WoodSpecies = resolveWoodSpecies(woodSpeciesId, woodGrade) ?? gradesOf(woodSpeciesId)[0] ?? WOOD_SPECIES['DFL-2']
+  const woodKind = woodSel.kind
   const [colFam, setColFam] = useState<SectionFamily>((s('colFam', 'W')) as SectionFamily)
   const [girFam, setGirFam] = useState<SectionFamily>((s('girFam', 'W')) as SectionFamily)
   const [beaFam, setBeaFam] = useState<SectionFamily>((s('beaFam', 'W')) as SectionFamily)
@@ -991,7 +995,7 @@ export default function ModelSpace() {
         Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, shearDef, tryBars,
         concreteClass, prices, planSel,
         material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu,
-        woodSpecies, woodKind, woodWet,
+        woodSpeciesId, woodGrade, woodWet,
       }))
     } catch { /* quota — ignore */ }
   }, [baysX, baysZ, storeyH, colB, colH, girB, girH, beaB, beaH,
@@ -1000,7 +1004,7 @@ export default function ModelSpace() {
     Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, shearDef, tryBars,
     concreteClass, prices, planSel,
     material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu,
-    woodSpecies, woodKind, woodWet])
+    woodSpeciesId, woodGrade, woodWet])
 
   const save = (m: StructuralModel | null) => {
     setModel(m)
@@ -1499,7 +1503,7 @@ export default function ModelSpace() {
     return map
   }, [govRes])
 
-  const generate = (matOverride?: 'concrete' | 'steel' | 'wood') => {
+  const generate = (matOverride?: 'concrete' | 'steel' | 'wood', woodOverride?: { sel?: WoodSpecies; wet?: boolean }) => {
     const mat = { fc, fy, barDia, tieDia, cover }
     const role = (b: number, h: number, id: string): RectSection => ({ id, name: `${b}×${h}`, b, h, ...mat })
     // steel role: bounding box b = bf, h = d from the chosen AISC shape, tagged
@@ -1509,10 +1513,15 @@ export default function ModelSpace() {
       const { b, h } = sh ? sectionBoundingBox(sh) : { b: 200, h: 300 }
       return { id, name: shapeName, b, h, ...mat, material: 'steel', shape: shapeName, steelFy, steelFu }
     }
-    // wood role: solid-rectangle b × d tagged with the timber species/grade so
-    // the bridge (E), pipeline (NDS §3 design) and take-off pick it up.
+    // wood role: solid-rectangle b × d tagged with the resolved timber material —
+    // both the library id and the reference values travel with the section so
+    // the bridge (E), pipeline (NDS §3 design) and take-off pick it up. Fresh
+    // selection passed via woodOverride to avoid a same-tick stale-state read.
+    const wsel = woodOverride?.sel ?? woodSel
+    const wet = woodOverride?.wet ?? woodWet
     const woodRole = (b: number, h: number, id: string): RectSection =>
-      ({ id, name: `${b}×${h}`, b, h, ...mat, material: 'wood', woodSpecies, woodKind, woodWet })
+      ({ id, name: `${b}×${h}`, b, h, ...mat, material: 'wood',
+         woodSpecies: wsel.id, woodGrade: wsel.grade, woodRef: wsel.ref, woodKind: wsel.kind, woodWet: wet })
     const chosen = matOverride ?? material
     const steel = chosen === 'steel', wood = chosen === 'wood'
     const m = generateGridModel({
@@ -2378,13 +2387,18 @@ export default function ModelSpace() {
                 </Sec>
               ) : material === 'wood' ? (
                 <Sec title="Timber (wood frame)">
-                  <Pick label="Species / grade" value={woodSpecies} onChange={(v) => {
-                    setWoodSpecies(v); setWoodKind(WOOD_SPECIES[v]?.kind ?? 'sawn')
-                    if (model) generate('wood')
-                  }} options={Object.values(WOOD_SPECIES).map((sp) => [sp.id, sp.label])} />
+                  <Pick label="Species" value={woodSpeciesId} onChange={(v) => {
+                    const g = gradesOf(v)[0]?.grade ?? '2'
+                    setWoodSpeciesId(v); setWoodGrade(g)
+                    if (model) generate('wood', { sel: resolveWoodSpecies(v, g) })
+                  }} options={speciesList().map((sp) => [sp.species, sp.label])} />
+                  <Pick label="Grade" value={woodGrade} onChange={(v) => {
+                    setWoodGrade(v)
+                    if (model) generate('wood', { sel: resolveWoodSpecies(woodSpeciesId, v) })
+                  }} options={gradesOf(woodSpeciesId).map((g) => [g.grade, g.gradeLabel])} />
                   <label className="col-span-full flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={woodWet}
-                      onChange={(e) => { setWoodWet(e.target.checked); if (model) generate('wood') }} />
+                      onChange={(e) => { setWoodWet(e.target.checked); if (model) generate('wood', { wet: e.target.checked }) }} />
                     Wet service — MC &gt; 19% sawn / 16% glulam (applies C<sub>M</sub>)
                   </label>
                   <p className="col-span-full -mb-1 text-[11px] text-slate-500">
@@ -2399,7 +2413,7 @@ export default function ModelSpace() {
                   <Num label="Beam d" unit="mm" value={beaH} onChange={setBeaH} />
                   <Num label="Slab thickness" unit="mm" value={slabThk} onChange={setSlabThk} />
                   <p className="col-span-full text-[11px] text-slate-500">
-                    Designed to NDS §3 / NSCP §6: reference values ({WOOD_SPECIES[woodSpecies]?.kind === 'glulam' ? 'glulam' : 'sawn'})
+                    Designed to NDS §3 / NSCP §6: reference values ({woodKind === 'glulam' ? 'glulam' : 'sawn'}, {woodSel.origin})
                     adjusted by C<sub>D</sub>/C<sub>M</sub>/C<sub>F</sub>/C<sub>V</sub>, beam stability C<sub>L</sub> and column
                     stability C<sub>P</sub>; factored demands checked LRFD (Appendix N, K<sub>F</sub>·φ·λ). Slabs/footings stay reinforced concrete.
                   </p>

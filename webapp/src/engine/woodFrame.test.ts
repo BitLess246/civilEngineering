@@ -39,6 +39,22 @@ describe('bridge — timber member stiffness', () => {
   })
 })
 
+describe('bridge — custom material (woodRef on the section)', () => {
+  it('uses an explicit woodRef even with no library species (custom material travels with the model)', () => {
+    const customRef = { Fb: 30, Ft: 20, Fv: 4, FcPerp: 8, Fc: 18, E: 16500, Emin: 5800, G: 0.85 }
+    const sec: RectSection = { id: 'S', name: '200×400', b: 200, h: 400, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40, material: 'wood', woodRef: customRef }
+    const model: StructuralModel = {
+      ...emptyModel('t'),
+      nodes: [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: 4, y: 0, z: 0 }],
+      sections: [sec], members: [{ id: 'm', i: 'a', j: 'b', role: 'beam', section: 'S' }],
+      supports: [{ node: 'a', fixity: 'fixed' }],
+    }
+    const m = modelToFrame3D(model).members.find((x) => x.id === 'm')!
+    expect(m.E).toBeCloseTo(customRef.E, 3)      // the custom E, not a library value
+    expect(m.G).toBeCloseTo(customRef.E / 16, 3)
+  })
+})
+
 describe('self-weight — timber density', () => {
   it('a wood member self-weight uses γ ≈ G·9.81, much lighter than concrete', () => {
     const model = woodModel()
