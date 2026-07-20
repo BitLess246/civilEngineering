@@ -7,6 +7,7 @@
 import type { LoadCategory } from './beamAnalysis'
 import type { SdlItem } from './deadLoads'
 import type { LiveItem } from './liveLoads'
+import type { WoodRefValues } from './woodDesign'
 
 export interface Node { id: string; x: number; y: number; z: number }
 
@@ -25,9 +26,16 @@ export interface RectSection {
   /** Steel grade yield/ultimate (steel only). Defaults: Fy 248, Fu 400 (A36). */
   steelFy?: number
   steelFu?: number
-  /** Timber species/grade id (wood only), key into WOOD_SPECIES (woodDesign.ts),
-   *  e.g. 'DFL-2'. Resolves the ASD/LRFD reference design values. */
+  /** Timber material id (wood only): a built-in library id (`${species}-${grade}`,
+   *  e.g. 'DFL-2') or a custom-material id. Resolves the reference design values
+   *  via WOOD_SPECIES when `woodRef` is absent. */
   woodSpecies?: string
+  /** Grade key within the species (wood only), e.g. '2' for No.2 — UI metadata. */
+  woodGrade?: string
+  /** Resolved ASD/LRFD reference design values (wood only). When present these
+   *  are authoritative (a custom material's values travel with the model); the
+   *  engine falls back to the library id otherwise. JSON-serialisable. */
+  woodRef?: WoodRefValues
   /** Solid-sawn ('sawn') or glued-laminated ('glulam') timber (wood only).
    *  Absent ⇒ 'sawn'. */
   woodKind?: 'sawn' | 'glulam'

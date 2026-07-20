@@ -13,7 +13,7 @@ import { distributePanel, type AreaLoad } from './tributary'
 import type { BeamLoad } from './beamAnalysis'
 import { shapeByName, torsionJ, type AiscShape } from './aiscSections'
 import { deriveWSection, E_STEEL } from './steelDesign'
-import { getWoodRef } from './woodDesign'
+import { woodRefOf } from './woodDesign'
 
 export interface BridgeResult {
   nodes: F3Node[]
@@ -58,7 +58,7 @@ function plateShells(plate: Plate, mat: { E: number; nu: number }): F3Shell[] {
  *  shear modulus G ≈ E/16 (NDS solid-sawn), solid-rectangle I/J and κ = 5/6 shear
  *  areas. Falls back to a mid-range softwood E if the species is unset/unknown. */
 function woodSectionProps(s: RectSection) {
-  const ref = (s.woodSpecies ? getWoodRef(s.woodSpecies) : undefined)?.ref
+  const ref = woodRefOf(s)
   const cmE = s.woodWet ? (s.woodKind === 'glulam' ? 0.833 : 0.9) : 1
   const E = (ref?.E ?? 9500) * cmE
   const G = E / 16

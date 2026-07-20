@@ -9,12 +9,12 @@
 import type { StructuralModel, RectSection, Node, Member, Plate, NodeSupport, MemberRole } from './model'
 import { sdlTotal } from './deadLoads'
 import { shapeByName } from './aiscSections'
-import { getWoodRef, woodUnitWeight } from './woodDesign'
+import { woodRefOf, woodUnitWeight } from './woodDesign'
 
-/** Timber self-weight line load basis (kN/m³) from the section's species (γ ≈
- *  G·9.81); fallback G = 0.5 (~4.9 kN/m³) when the species is unset/unknown. */
+/** Timber self-weight line load basis (kN/m³) from the section's material (γ ≈
+ *  G·9.81); fallback G = 0.5 (~4.9 kN/m³) when the material is unset/unknown. */
 const woodGamma = (sec: RectSection): number =>
-  woodUnitWeight((sec.woodSpecies ? getWoodRef(sec.woodSpecies) : undefined)?.ref.G ?? 0.5)
+  woodUnitWeight(woodRefOf(sec)?.G ?? 0.5)
 
 export interface GridSpec {
   baysX: number[]      // bay widths along x, m

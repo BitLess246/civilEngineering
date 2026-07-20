@@ -27,39 +27,105 @@ export interface WoodRefValues {
 
 export type WoodKind = 'sawn' | 'glulam'
 
+/** One material entry (species × grade) resolved to a flat lookup.  The
+ *  analysis/design engine only ever consumes `ref` (WoodRefValues) — species,
+ *  grade and origin are UI/provenance metadata so the library is code- and
+ *  country-agnostic (add any species by supplying its ref). */
 export interface WoodSpecies {
-  id: string
-  label: string
+  id: string                 // composite `${species}-${grade}`
+  label: string              // "<species> — <grade>"
   kind: WoodKind
   ref: WoodRefValues
+  species: string            // grouping key for the species dropdown
+  speciesLabel: string
+  grade: string              // key within a species (grade dropdown)
+  gradeLabel: string
+  origin: string             // provenance badge: 'NDS' | 'NSCP' | 'custom' | …
 }
 
 // psi → MPa
 const K = 0.00689476
 const mpa = (psi: number) => psi * K
 
-// ── Reference design value library ────────────────────────────────────────
+// ── Built-in reference-value library, structured species → grades ──────────
 // Sawn: NDS Supplement Table 4A (visually-graded dimension lumber / timbers).
 // Glulam: NDS Supplement Table 5A (bending combinations, Δ = tension zone).
-export const WOOD_SPECIES: Record<string, WoodSpecies> = {
-  'DFL-SS': { id: 'DFL-SS', label: 'Douglas Fir-Larch — Select Structural', kind: 'sawn',
-    ref: { Fb: mpa(1500), Ft: mpa(1000), Fv: mpa(180), FcPerp: mpa(625), Fc: mpa(1700), E: mpa(1_900_000), Emin: mpa(690_000), G: 0.50 } },
-  'DFL-1': { id: 'DFL-1', label: 'Douglas Fir-Larch — No.1', kind: 'sawn',
-    ref: { Fb: mpa(1000), Ft: mpa(675), Fv: mpa(180), FcPerp: mpa(625), Fc: mpa(1500), E: mpa(1_700_000), Emin: mpa(620_000), G: 0.50 } },
-  'DFL-2': { id: 'DFL-2', label: 'Douglas Fir-Larch — No.2', kind: 'sawn',
-    ref: { Fb: mpa(900), Ft: mpa(575), Fv: mpa(180), FcPerp: mpa(625), Fc: mpa(1350), E: mpa(1_600_000), Emin: mpa(580_000), G: 0.50 } },
-  'HF-2': { id: 'HF-2', label: 'Hem-Fir — No.2', kind: 'sawn',
-    ref: { Fb: mpa(850), Ft: mpa(525), Fv: mpa(150), FcPerp: mpa(405), Fc: mpa(1300), E: mpa(1_300_000), Emin: mpa(470_000), G: 0.43 } },
-  'SPF-2': { id: 'SPF-2', label: 'Spruce-Pine-Fir — No.2', kind: 'sawn',
-    ref: { Fb: mpa(875), Ft: mpa(450), Fv: mpa(135), FcPerp: mpa(425), Fc: mpa(1150), E: mpa(1_400_000), Emin: mpa(510_000), G: 0.42 } },
-  'SP-2': { id: 'SP-2', label: 'Southern Pine — No.2', kind: 'sawn',
-    ref: { Fb: mpa(1050), Ft: mpa(650), Fv: mpa(175), FcPerp: mpa(565), Fc: mpa(1700), E: mpa(1_600_000), Emin: mpa(580_000), G: 0.55 } },
-  'GLULAM-24F': { id: 'GLULAM-24F', label: 'Glulam 24F-1.8E (24F-V4 DF)', kind: 'glulam',
-    ref: { Fb: mpa(2400), Ft: mpa(1100), Fv: mpa(265), FcPerp: mpa(650), Fc: mpa(1650), E: mpa(1_800_000), Emin: mpa(950_000), G: 0.50 } },
-}
+// Philippine species (Yakal, Ipil, Molave, Tanguile …) share this shape and can
+// be added here — or supplied as custom materials — once their NSCP §6 / PWCM /
+// FPRDI allowable stresses are available.
+interface GradeSpec { grade: string; gradeLabel: string; ref: WoodRefValues }
+interface SpeciesSpec { species: string; speciesLabel: string; kind: WoodKind; origin: string; grades: GradeSpec[] }
+
+const LIBRARY_SPEC: SpeciesSpec[] = [
+  { species: 'DFL', speciesLabel: 'Douglas Fir-Larch', kind: 'sawn', origin: 'NDS', grades: [
+    { grade: 'SS', gradeLabel: 'Select Structural', ref: { Fb: mpa(1500), Ft: mpa(1000), Fv: mpa(180), FcPerp: mpa(625), Fc: mpa(1700), E: mpa(1_900_000), Emin: mpa(690_000), G: 0.50 } },
+    { grade: '1', gradeLabel: 'No.1', ref: { Fb: mpa(1000), Ft: mpa(675), Fv: mpa(180), FcPerp: mpa(625), Fc: mpa(1500), E: mpa(1_700_000), Emin: mpa(620_000), G: 0.50 } },
+    { grade: '2', gradeLabel: 'No.2', ref: { Fb: mpa(900), Ft: mpa(575), Fv: mpa(180), FcPerp: mpa(625), Fc: mpa(1350), E: mpa(1_600_000), Emin: mpa(580_000), G: 0.50 } },
+  ] },
+  { species: 'HF', speciesLabel: 'Hem-Fir', kind: 'sawn', origin: 'NDS', grades: [
+    { grade: '2', gradeLabel: 'No.2', ref: { Fb: mpa(850), Ft: mpa(525), Fv: mpa(150), FcPerp: mpa(405), Fc: mpa(1300), E: mpa(1_300_000), Emin: mpa(470_000), G: 0.43 } },
+  ] },
+  { species: 'SPF', speciesLabel: 'Spruce-Pine-Fir', kind: 'sawn', origin: 'NDS', grades: [
+    { grade: '2', gradeLabel: 'No.2', ref: { Fb: mpa(875), Ft: mpa(450), Fv: mpa(135), FcPerp: mpa(425), Fc: mpa(1150), E: mpa(1_400_000), Emin: mpa(510_000), G: 0.42 } },
+  ] },
+  { species: 'SP', speciesLabel: 'Southern Pine', kind: 'sawn', origin: 'NDS', grades: [
+    { grade: '2', gradeLabel: 'No.2', ref: { Fb: mpa(1050), Ft: mpa(650), Fv: mpa(175), FcPerp: mpa(565), Fc: mpa(1700), E: mpa(1_600_000), Emin: mpa(580_000), G: 0.55 } },
+  ] },
+  { species: 'GLULAM', speciesLabel: 'Glulam — Douglas Fir', kind: 'glulam', origin: 'NDS', grades: [
+    { grade: '24F', gradeLabel: '24F-1.8E (24F-V4)', ref: { Fb: mpa(2400), Ft: mpa(1100), Fv: mpa(265), FcPerp: mpa(650), Fc: mpa(1650), E: mpa(1_800_000), Emin: mpa(950_000), G: 0.50 } },
+  ] },
+]
+
+/** Flat id → material lookup (id = `${species}-${grade}`), derived from the
+ *  structured spec.  Ids are stable ('DFL-SS', 'HF-2', 'GLULAM-24F', …). */
+export const WOOD_SPECIES: Record<string, WoodSpecies> = Object.fromEntries(
+  LIBRARY_SPEC.flatMap((s) => s.grades.map((g): [string, WoodSpecies] => {
+    const id = `${s.species}-${g.grade}`
+    return [id, {
+      id, label: `${s.speciesLabel} — ${g.gradeLabel}`, kind: s.kind, ref: g.ref,
+      species: s.species, speciesLabel: s.speciesLabel, grade: g.grade, gradeLabel: g.gradeLabel, origin: s.origin,
+    }]
+  })),
+)
 
 export function getWoodRef(id: string): WoodSpecies | undefined {
   return WOOD_SPECIES[id]
+}
+
+/** Distinct species for the species dropdown (first-seen order). */
+export function speciesList(): { species: string; label: string; kind: WoodKind; origin: string }[] {
+  const seen = new Map<string, { species: string; label: string; kind: WoodKind; origin: string }>()
+  for (const e of Object.values(WOOD_SPECIES))
+    if (!seen.has(e.species)) seen.set(e.species, { species: e.species, label: e.speciesLabel, kind: e.kind, origin: e.origin })
+  return [...seen.values()]
+}
+
+/** Grades available for a species (the dependent grade dropdown). */
+export function gradesOf(species: string): WoodSpecies[] {
+  return Object.values(WOOD_SPECIES).filter((e) => e.species === species)
+}
+
+/** Resolve a (species, grade) pair to its material entry. */
+export function resolveWoodSpecies(species: string, grade: string): WoodSpecies | undefined {
+  return WOOD_SPECIES[`${species}-${grade}`]
+}
+
+/** The reference design values a wood section actually uses: an explicit
+ *  `woodRef` (custom material — travels with the model) wins over the built-in
+ *  library id.  Keeps the pure engine independent of any material registry. */
+export function woodRefOf(sec: { woodSpecies?: string; woodRef?: WoodRefValues }): WoodRefValues | undefined {
+  return sec.woodRef ?? (sec.woodSpecies ? getWoodRef(sec.woodSpecies)?.ref : undefined)
+}
+
+/** Validate a (possibly user-entered) reference-value set; returns human-
+ *  readable errors, empty when usable.  Guards the custom-material path. */
+export function validateWoodRef(r: Partial<WoodRefValues>): string[] {
+  const errs: string[] = []
+  const pos = (k: keyof WoodRefValues) => { const v = r[k]; if (!(typeof v === 'number' && Number.isFinite(v) && v > 0)) errs.push(`${k} must be a positive number`) }
+  ;(['Fb', 'Ft', 'Fv', 'FcPerp', 'Fc', 'E', 'Emin', 'G'] as (keyof WoodRefValues)[]).forEach(pos)
+  if (typeof r.E === 'number' && typeof r.Emin === 'number' && r.Emin >= r.E) errs.push('Emin (5th-percentile stability modulus) must be less than E')
+  if (typeof r.G === 'number' && (r.G <= 0 || r.G > 1.4)) errs.push('specific gravity G must be within (0, 1.4]')
+  return errs
 }
 
 // ── Load-duration factor CD (NDS Table 2.3.2) ──────────────────────────────
