@@ -62,7 +62,7 @@ import { MaterialLibrary } from '../components/MaterialLibrary'
 import { loadCustomMaterials, saveCustomMaterials, type CustomMaterial } from '../lib/materialLibrary'
 import { buildSectionShapes } from '../lib/sectionShapes3d'
 import { SectionShape } from '../components/SectionShape'
-import { f1, f2 } from '../lib/format'
+import { f0, f1, f2 } from '../lib/format'
 
 const AUTOSAVE_KEY = 'model-space-autosave'
 const INPUTS_KEY = 'model-space-inputs'
@@ -960,7 +960,7 @@ export default function ModelSpace() {
   const [ioMenu, setIoMenu] = useState(false)                     // Import/Export dropdown
   const [concreteClass, setConcreteClass] = useState<ConcreteClass>((si.concreteClass as ConcreteClass) ?? 'A')   // mix class for the take-off
   const [prices, setPrices] = useState<PriceList>((si.prices as PriceList) ?? {   // unit prices for the costed bill (PHP)
-    cementBag: 260, sandM3: 1500, gravelM3: 1600, steelKg: 65, tieWireRoll: 2500, plywoodSheet: 700, lumberM: 25, structuralSteelKg: 120,
+    cementBag: 260, sandM3: 1500, gravelM3: 1600, steelKg: 65, tieWireRoll: 2500, plywoodSheet: 700, lumberM: 25, structuralSteelKg: 120, timberBdFt: 55,
   })
   const [sdlDraft, setSdlDraft] = useState<SdlItem[]>([])          // NSCP-204 SDL composition being built
   const [sdlMatId, setSdlMatId] = useState(TABLE_204_2[0].id)      // 204-2 material add-row
@@ -4788,6 +4788,8 @@ export default function ModelSpace() {
               takeoff.totalSteelPurchasedKg > 0 && ['Rebar (bought)', `${f1(takeoff.totalSteelPurchasedKg)} kg`],
               takeoff.tieWire.rolls > 0 && ['Tie wire', `${takeoff.tieWire.rolls} roll${takeoff.tieWire.rolls === 1 ? '' : 's'}`],
               takeoff.structuralSteelKg > 0 && ['Structural steel', `${(takeoff.structuralSteelKg / 1000).toFixed(2)} t`],
+              takeoff.timberM3 > 0 && ['Timber', `${f2(takeoff.timberM3)} m³`],
+              takeoff.timberM3 > 0 && ['Timber (bd·ft)', `${f0(takeoff.timberBoardFeet)}`],
             ].filter(Boolean as unknown as (v: unknown) => v is [string, string]).map(([k, v]) => (
               <div key={k} className="rounded-lg border border-slate-200 bg-white p-2 text-center shadow-sm">
                 <div className="text-[11px] uppercase tracking-wide text-slate-500">{k}</div>
@@ -4844,7 +4846,7 @@ export default function ModelSpace() {
               </table>
               <p className="mt-1 text-[11px] text-slate-500">
                 Edit the unit prices to your local rates (PHP). Steel priced on the purchased (6 m-bar) weight incl. lap/waste;
-                concrete via cement/sand/gravel. Labour, hauling and contingencies not included.
+                concrete via cement/sand/gravel; timber per board foot. Labour, hauling and contingencies not included.
               </p>
             </div>
           )}
@@ -4944,6 +4946,47 @@ export default function ModelSpace() {
                 </tbody>
               </table>
               <p className="mt-1 text-[11px] text-slate-500">Net mass: ρ = 7 850 kg/m³ · A (mm²) × L (m). Connections, base plates and field splices not included.</p>
+            </div>
+          )}
+
+          {/* Timber by section size — only when a wood frame is present */}
+          {takeoff.timberM3 > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Timber by size</h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Size (mm)</th>
+                    <th className="py-1 pr-2 font-semibold">Species</th>
+                    <th className="py-1 pr-2 font-semibold">Kind</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Pcs</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Length (m)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Volume (m³)</th>
+                    <th className="py-1 text-right font-semibold">Board feet</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...takeoff.timberBySize].sort((a, b) => a.name.localeCompare(b.name)).map((s) => (
+                    <tr key={`${s.name}-${s.species}-${s.kind}`} className="border-t border-slate-100">
+                      <td className="py-0.5 pr-2 font-medium">{s.name}</td>
+                      <td className="py-0.5 pr-2" title={WOOD_SPECIES[s.species]?.label ?? s.species}>{s.species}</td>
+                      <td className="py-0.5 pr-2">{s.kind}</td>
+                      <td className="py-0.5 pr-2 text-right">{s.count}</td>
+                      <td className="py-0.5 pr-2 text-right">{f1(s.L)}</td>
+                      <td className="py-0.5 pr-2 text-right">{f2(s.m3)}</td>
+                      <td className="py-0.5 text-right">{f0(s.boardFeet)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t border-slate-200 font-semibold">
+                    <td className="py-1 pr-2">Total</td>
+                    <td className="py-1 pr-2" colSpan={3} />
+                    <td className="py-1 pr-2 text-right">{f1(takeoff.timberBySize.reduce((s, r) => s + r.L, 0))}</td>
+                    <td className="py-1 pr-2 text-right">{f2(takeoff.timberM3)}</td>
+                    <td className="py-1 text-right">{f0(takeoff.timberBoardFeet)}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="mt-1 text-[11px] text-slate-500">Solid-rectangle volume b×h×L; board feet = m³ × 423.776 (1 bd·ft = 1/12 ft³). Priced per board foot in the Bill of Materials. Connections and wastage/off-cuts not included.</p>
             </div>
           )}
 
