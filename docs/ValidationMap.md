@@ -112,6 +112,7 @@ asserted by that file; all run in CI.
 | Timber (wood) member design | `woodDesign.test.ts` | NDS §3 / NSCP §6 ASD adjustment factors (CD/CM/CF/CV), beam CL (§3.3.3) + column CP (§3.7.1) closed-form anchors, beam-column §3.9.2 interaction; `validation.ts` `wood-cp`/`wood-cl` |
 | Plumbing — water supply (RNPCP 2000) | `plumbingFixtures.test.ts`, `waterSupply.test.ts` | Table 6-5/7-2 fixture-unit totals vs Module 2/3/4 worked examples; demand (ΣFU×8), static head, continuity velocity, Hazen-Williams friction; `validation.ts` `plumb-velocity`/`plumb-friction` |
 | Plumbing — drainage/DWV (RNPCP 2000) | `drainage.test.ts` | Table 7-5 drain/vent sizing + max lengths vs Module 3 examples (14 DFU→76/51 mm, 39 DFU→102/65 mm); vent ≥ max(32, drain/2); §1206 slope; `validation.ts` `plumb-drain` |
+| Plumbing — septic tank/OSST (RNPCP 2000) | `septicTank.test.ts` | Table B-2 capacity by DFU (+94.6 L/FU over 100); Appendix B two-chamber layout (2/3·1/3, freeboard, depth 0.6–1.8 m) vs Module 4 example (78 DFU→11,355 L→2.0×4.8×1.5 m); `validation.ts` `plumb-septic` |
 | SCWB | `scwb.test.ts` | ΣMnc/ΣMnb ≥ 6/5 (§418.7.3.2) with hand Mn |
 | Slabs | `slabDDM.test.ts`, `woodArmer.test.ts`, `slabDeflection.test.ts` | DDM coefficient tables; Wood–Armer moment transformation identities |
 | RC misc | `devLength.test.ts`, `torsionDesign.test.ts`, `beamDeflection.test.ts`, `shearWallDesign.test.ts` | §425.4 ld, §422.7 threshold/cracking torsion, Branson Ie, wall shear |

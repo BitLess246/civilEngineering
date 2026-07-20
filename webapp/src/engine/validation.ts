@@ -26,6 +26,7 @@ import { boltGeomFromPositions, outOfPlaneBoltGroup, pryingAction } from './stee
 import { columnStabilityFactor, beamStabilityFactor, getWoodRef } from './woodDesign'
 import { velocity, hazenWilliamsHead, gpmToLps } from './waterSupply'
 import { designDrainage } from './drainage'
+import { designSepticTank } from './septicTank'
 import type { RectSection } from './model'
 
 export interface ValidationCase {
@@ -244,6 +245,11 @@ const plumbDrain = (() => {
   return { manual: 76, software: r.drainMm }
 })()
 
+const plumbSeptic = (() => {
+  // Module 4: 78 DFU, 2.0 m wide, 1.2 m liquid depth → 4.8 m plan length.
+  return { manual: 4.8, software: designSepticTank({ dfu: 78, width: 2.0, liquidDepth: 1.2 }).length }
+})()
+
 export const VALIDATION_CASES: ValidationCase[] = [
   {
     id: 'rc-beam-mn', category: 'RC', title: 'Singly-reinforced beam — nominal moment',
@@ -379,5 +385,10 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'plumb-drain', category: 'Plumbing', title: 'Sanitary drain size (14 DFU)',
     reference: 'RNPCP Table 7-5 / Module 3', formula: '14 DFU (incl. WC) → 76 mm soil drain',
     manual: plumbDrain.manual, software: plumbDrain.software, unit: 'mm', tol: 1e-9,
+  },
+  {
+    id: 'plumb-septic', category: 'Plumbing', title: 'Septic tank plan length (78 DFU)',
+    reference: 'RNPCP Table B-2 / Module 4', formula: 'L = V/(w·d) = 11.355/(2.0·1.2) → 4.8 m',
+    manual: plumbSeptic.manual, software: plumbSeptic.software, unit: 'm', tol: 1e-9,
   },
 ]
