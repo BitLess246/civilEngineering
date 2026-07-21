@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { designWoodSlab, type DeckMaterial, type SlabSupport } from '../engine/woodSlab'
+import { designWoodSlab, woodSlabTimberSizes, type DeckMaterial, type SlabSupport } from '../engine/woodSlab'
 import { speciesList, gradesOf, resolveWoodSpecies } from '../engine/woodDesign'
 import type { LoadDuration } from '../engine/woodDesign'
+import { costTimberRows } from '../engine/takeoff'
 import { ReportControls } from '../components/ReportControls'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
@@ -77,6 +78,7 @@ export default function WoodSlab() {
   // options
   const [duration, setDuration] = useState<LoadDuration>('ten-year')
   const [wet, setWet] = useState(false)
+  const [timberRate, setTimberRate] = useState(55)   // ₱ / board-foot (shared wood-frame rate)
 
   const sp = resolveWoodSpecies(species, grade)
   const joistRef = sp?.ref
@@ -204,37 +206,61 @@ export default function WoodSlab() {
             <CheckCard title="Joist" sub={`${f0(joistB)}×${f0(joistD)} over ${f2(Lx)} m`} c={r.joist} />
           </div>
 
-          <h3 className="mb-1 mt-5 text-sm font-bold text-slate-700">Bill of materials</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-slate-500">
-                  <th className="py-1 pr-3 font-medium">Item</th>
-                  <th className="py-1 pr-3 font-medium">Qty</th>
-                  <th className="py-1 font-medium">Board feet</th>
-                </tr>
-              </thead>
-              <tbody className="font-mono">
-                <tr className="border-b border-slate-100">
-                  <td className="py-1 pr-3">Joists {f0(joistB)}×{f0(joistD)} ({sp?.label})</td>
-                  <td className="py-1 pr-3">{f0(r.takeoff.joistCount)} pc · {f2(r.takeoff.joistLengthM)} m · {f3(r.takeoff.joistM3)} m³</td>
-                  <td className="py-1">{f0(r.takeoff.joistBoardFeet)}</td>
-                </tr>
-                <tr className="border-b border-slate-100">
-                  <td className="py-1 pr-3">Decking — {deckMaterial === 'bamboo-slat' ? 'bamboo slats' : 'planks'} ({f0(deckThickness)} mm)</td>
-                  <td className="py-1 pr-3">
-                    {f2(r.takeoff.deckAreaM2)} m² · {f3(r.takeoff.deckM3)} m³
-                    {r.takeoff.bambooSlatCount != null ? ` · ${f0(r.takeoff.bambooSlatCount)} slats` : ''}
-                  </td>
-                  <td className="py-1">{f0(r.takeoff.deckBoardFeet)}</td>
-                </tr>
-              </tbody>
-            </table>
+          <div className="mb-1 mt-5 flex items-baseline justify-between">
+            <h3 className="text-sm font-bold text-slate-700">Bill of materials <span className="font-normal text-slate-400">— wood-frame timber costing</span></h3>
+            <label className="no-print flex items-center gap-1 text-xs text-slate-500">
+              ₱/bd·ft
+              <input type="number" step="any" value={timberRate} onChange={(e) => setTimberRate(num(e.target.value, 55))}
+                className="w-16 rounded border border-slate-300 px-1.5 py-0.5 text-right font-mono" />
+            </label>
           </div>
+          {(() => {
+            const sizes = woodSlabTimberSizes(
+              { Lx, Ly, joistRef: joistRef!, joistKind: sp!.kind, joistB, joistD, joistSpacing, joistSupport, deckMaterial, deckThickness, deckWidth, deckSupport, deadKpa, liveKpa },
+              r, { joist: sp?.label, deck: deckMaterial === 'bamboo-slat' ? 'bamboo' : sp?.label },
+            )
+            const rows = costTimberRows(sizes, timberRate)
+            const total = rows.reduce((s, x) => s + x.amount, 0)
+            return (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-left text-slate-500">
+                      <th className="py-1 pr-3 font-medium">Item</th>
+                      <th className="py-1 pr-3 text-right font-medium">Board feet</th>
+                      <th className="py-1 text-right font-medium">Amount (₱)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="font-mono">
+                    {rows.map((row, k) => (
+                      <tr key={k} className="border-b border-slate-100">
+                        <td className="py-1 pr-3">
+                          {row.item}
+                          <span className="ml-1 text-[11px] text-slate-400">
+                            {k === 0
+                              ? `${f0(sizes[0].count)} pc · ${f2(sizes[0].L)} m · ${f3(sizes[0].m3)} m³`
+                              : `${f2(r.takeoff.deckAreaM2)} m² · ${f3(sizes[1].m3)} m³${r.takeoff.bambooSlatCount != null ? ` · ${f0(r.takeoff.bambooSlatCount)} slats` : ''}`}
+                          </span>
+                        </td>
+                        <td className="py-1 pr-3 text-right">{f0(row.qty)}</td>
+                        <td className="py-1 text-right">{row.amount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                      </tr>
+                    ))}
+                    <tr className="font-semibold text-slate-700">
+                      <td className="py-1 pr-3">Timber sub-total</td>
+                      <td className="py-1 pr-3 text-right">{f0(sizes.reduce((s, x) => s + x.boardFeet, 0))}</td>
+                      <td className="py-1 text-right">{total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )
+          })()}
           <p className="mt-2 text-[10px] text-slate-500">
             Demands wL²/8 (simple) or wL²/10 (continuous ≥3 spans); deflection on the service modulus E′.
-            Board feet = m³ × {`423.776`}. Verify joist-to-support bearing, fastener schedule and diaphragm
-            action separately.
+            Board feet = m³ × 423.776, priced with the same <code>costTimberRows</code> (₱/board-foot) as the
+            wood-frame model bill of materials. Verify joist-to-support bearing, fastener schedule and
+            diaphragm action separately.
           </p>
         </section>
       )}

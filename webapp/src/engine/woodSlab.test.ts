@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { designWoodSlab, BAMBOO_SLAT_REF, type WoodSlabInput } from './woodSlab'
+import { designWoodSlab, woodSlabTimberSizes, BAMBOO_SLAT_REF, type WoodSlabInput } from './woodSlab'
 import { getWoodRef, woodSectionProps, woodAdjusted } from './woodDesign'
-import { BDFT_PER_M3 } from './takeoff'
+import { BDFT_PER_M3, costTimberRows } from './takeoff'
 
 const DFL2 = getWoodRef('DFL-2')!.ref
 
@@ -86,5 +86,36 @@ describe('designWoodSlab — take-off / bill of materials', () => {
   it('bamboo reference values are the conservative preliminary set', () => {
     expect(BAMBOO_SLAT_REF.Fb).toBe(12)
     expect(BAMBOO_SLAT_REF.Emin).toBeLessThan(BAMBOO_SLAT_REF.E)
+  })
+})
+
+describe('woodSlabTimberSizes — wood-frame BOM connection', () => {
+  it('emits joist + deck rows in the TimberSizeQty vocabulary with matching board feet', () => {
+    const r = designWoodSlab(base)
+    const sizes = woodSlabTimberSizes(base, r, { joist: 'DFL No.2', deck: 'DFL No.2' })
+    expect(sizes).toHaveLength(2)
+    const [joist, deck] = sizes
+    expect(joist.name).toBe('50×200')
+    expect(joist.boardFeet).toBeCloseTo(r.takeoff.joistBoardFeet, 6)
+    expect(joist.count).toBe(r.takeoff.joistCount)
+    expect(deck.boardFeet).toBeCloseTo(r.takeoff.deckBoardFeet, 6)
+    // deck linear metres × width × thickness = deck volume
+    expect(deck.L * (140 / 1000) * (25 / 1000)).toBeCloseTo(r.takeoff.deckM3, 9)
+  })
+
+  it('costs through the shared costTimberRows at ₱/board-foot', () => {
+    const r = designWoodSlab(base)
+    const sizes = woodSlabTimberSizes(base, r)
+    const rows = costTimberRows(sizes, 55)
+    expect(rows).toHaveLength(2)
+    expect(rows.every((x) => x.unit === 'bd·ft' && x.priceKey === 'timberBdFt')).toBe(true)
+    const total = rows.reduce((s, x) => s + x.amount, 0)
+    expect(total).toBeCloseTo((r.takeoff.joistBoardFeet + r.takeoff.deckBoardFeet) * 55, 4)
+  })
+
+  it('labels a bamboo deck as bamboo', () => {
+    const r = designWoodSlab({ ...base, deckMaterial: 'bamboo-slat', deckWidth: 50 })
+    const [, deck] = woodSlabTimberSizes({ ...base, deckMaterial: 'bamboo-slat', deckWidth: 50 }, r)
+    expect(deck.species).toBe('bamboo')
   })
 })
