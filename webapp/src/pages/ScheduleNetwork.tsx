@@ -41,7 +41,7 @@ function Diagram({ nodes, edges, width, height }: ReturnType<typeof layoutNetwor
       <svg width={w} height={h} onPointerMove={onMove} onPointerUp={onUp} onPointerLeave={onUp} style={{ touchAction: 'none' }}>
         <defs>
           <marker id="net-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
-            <path d="M0,0 L7,3 L0,6 Z" fill="#9aa3ad" />
+            <path d="M0,0 L7,3 L0,6 Z" fill="#b7b0a0" />
           </marker>
           <marker id="net-arrow-crit" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
             <path d="M0,0 L7,3 L0,6 Z" fill={CRITICAL} />
@@ -56,7 +56,7 @@ function Diagram({ nodes, edges, width, height }: ReturnType<typeof layoutNetwor
           const c = Math.max(30, (tx - sx) / 2)
           return (
             <path key={i} d={`M ${sx} ${sy} C ${sx + c} ${sy}, ${tx - c} ${ty}, ${tx} ${ty}`} fill="none"
-              stroke={e.critical ? CRITICAL : '#9aa3ad'} strokeWidth={e.critical ? 2 : 1}
+              stroke={e.critical ? CRITICAL : '#b7b0a0'} strokeWidth={e.critical ? 2 : 1}
               markerEnd={`url(#${e.critical ? 'net-arrow-crit' : 'net-arrow'})`} />
           )
         })}

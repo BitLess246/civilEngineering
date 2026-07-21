@@ -66,3 +66,47 @@ describe('layoutNetwork', () => {
     expect(L.height).toBeGreaterThan(0)
   })
 })
+
+describe('critical edges require a binding link (diamond of equal-length paths)', () => {
+  // A(5)→P(5)→S(10); A→R(10); Q(5) after P and R. Two equal 20-day paths
+  // A-P-S and A-R-Q ⇒ A,P,R,S,Q all critical, but P→Q is slack (R drives Q).
+  const acts: NetActivity[] = [
+    { id: 'A', name: 'A', predecessors: [] },
+    { id: 'P', name: 'P', predecessors: [dep('A')] },
+    { id: 'R', name: 'R', predecessors: [dep('A')] },
+    { id: 'S', name: 'S', predecessors: [dep('P')] },
+    { id: 'Q', name: 'Q', predecessors: [dep('P'), dep('R')] },
+  ]
+  const cpm = computeCPM([
+    { id: 'A', duration: 5, predecessors: [] },
+    { id: 'P', duration: 5, predecessors: [dep('A')] },
+    { id: 'R', duration: 10, predecessors: [dep('A')] },
+    { id: 'S', duration: 10, predecessors: [dep('P')] },
+    { id: 'Q', duration: 5, predecessors: [dep('P'), dep('R')] },
+  ])
+  const L = layoutNetwork(acts, cpm)
+  const edge = (from: string, to: string) => L.edges.find((e) => e.from === from && e.to === to)!
+  const node = (id: string) => L.nodes.find((n) => n.id === id)!
+
+  it('all five activities are critical (zero float)', () => {
+    for (const id of ['A', 'P', 'R', 'S', 'Q']) expect(node(id).critical).toBe(true)
+  })
+  it('binding critical links are red; the slack P→Q link is not', () => {
+    expect(edge('A', 'P').critical).toBe(true)
+    expect(edge('A', 'R').critical).toBe(true)
+    expect(edge('P', 'S').critical).toBe(true)
+    expect(edge('R', 'Q').critical).toBe(true)   // R drives Q (EF 15 = ES(Q) 15)
+    expect(edge('P', 'Q').critical).toBe(false)  // both critical, but P (EF 10) does not drive Q
+  })
+})
+
+describe('empty project', () => {
+  it('lays out with no nodes/edges and positive dimensions (no Math.max(-Infinity))', () => {
+    const L = layoutNetwork([], computeCPM([]))
+    expect(L.nodes).toHaveLength(0)
+    expect(L.edges).toHaveLength(0)
+    expect(L.cols).toBe(0)
+    expect(L.width).toBeGreaterThan(0)
+    expect(L.height).toBeGreaterThan(0)
+  })
+})

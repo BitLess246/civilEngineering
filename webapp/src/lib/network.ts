@@ -107,13 +107,30 @@ export function layoutNetwork(activities: NetActivity[], cpm: Cpm, opts: LayoutO
     }
   })
 
+  // An edge lies on the critical path only when both endpoints are critical AND
+  // the link is *binding* — the predecessor's constraint exactly sets the
+  // successor's driving date. (Two critical nodes can be joined by a slack link
+  // in a diamond with equal-length paths; that link is not critical.)
   const critical = new Set(nodes.filter((n) => n.critical).map((n) => n.id))
+  const EPS = 1e-6
+  const isBinding = (dep: Dependency, predId: string, succId: string): boolean => {
+    const p = cpm.activities.get(predId), s = cpm.activities.get(succId)
+    if (!p || !s) return false
+    const lag = dep.lag ?? 0
+    switch (dep.type) {
+      case 'FS': return Math.abs(p.ef + lag - s.es) < EPS
+      case 'SS': return Math.abs(p.es + lag - s.es) < EPS
+      case 'FF': return Math.abs(p.ef + lag - s.ef) < EPS
+      case 'SF': return Math.abs(p.es + lag - s.ef) < EPS
+    }
+  }
   const edges: NetEdge[] = []
   for (const a of activities) {
     if (!byId.has(a.id)) continue
     for (const dep of a.predecessors) {
       if (!byId.has(dep.predecessor)) continue
-      edges.push({ from: dep.predecessor, to: a.id, type: dep.type, critical: critical.has(a.id) && critical.has(dep.predecessor) })
+      const crit = critical.has(a.id) && critical.has(dep.predecessor) && isBinding(dep, dep.predecessor, a.id)
+      edges.push({ from: dep.predecessor, to: a.id, type: dep.type, critical: crit })
     }
   }
 
