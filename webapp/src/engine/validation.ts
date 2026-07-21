@@ -239,6 +239,8 @@ const woodSlabJoist = (() => {
   //   f_b = (w·L²/8)·1e6 / (b·d²/6) = 3.571 MPa
   const ref = getWoodRef('DFL-2')!.ref
   const gamma = ref.G * 9.81                                   // kN/m³ (= woodUnitWeight)
+  // Plank deck ⇒ deckRef defaults to joistRef, so deck and joist share γ here.
+  // (A bamboo-slat deck would use BAMBOO_SLAT_REF.G = 0.65 for the deck self-weight.)
   const deckSelf = gamma * (25 / 1000)                        // kPa
   const joistSelf = gamma * ((50 * 200) / 1e6)               // kN/m
   const w = (0.5 + deckSelf + 1.9) * (400 / 1000) + joistSelf // kN/m ≈ 1.0581
