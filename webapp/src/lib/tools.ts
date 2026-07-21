@@ -51,7 +51,8 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
   {
     label: 'Project Planning',
     tools: [
-      { to: '/schedule', name: 'Project Schedule', sub: 'CPM · PERT · progress' },
+      { to: '/schedule',       name: 'Project Schedule', sub: 'CPM · PERT · progress' },
+      { to: '/schedule/gantt',  name: 'Gantt Chart',      sub: 'Timeline · baseline' },
     ],
   },
   {

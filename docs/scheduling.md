@@ -151,13 +151,16 @@ columns (dates + total float + critical tag) and an expandable ES/EF/LS/LF/float
   schema-versioned `ScheduleProject` store over a swappable backend
   (localStorage / in-memory), JSON import/export, baseline capture + date
   variance, and a worked RC-building sample fixture + 25 tests.
-- **Phase 4 — WBS + activity grid UI** *(this PR)*: the `/schedule` page +
+- **Phase 4 — WBS + activity grid UI** ✅: the `/schedule` page +
   `useScheduleProject` / `useScheduleSolve` hooks — add/edit/delete/reorder,
   WBS-group collapse, live CPM recompute, cycle-prevented dependency editor,
   project new/sample/import/export. Drag-and-drop reorder is a later polish
   (up/down buttons ship now).
-- **Phase 5 — Gantt chart**: baseline/actual/forecast bars, critical highlight,
-  zoom (day→year), milestones, dependency arrows.
+- **Phase 5 — Gantt chart** *(this PR)*: `/schedule/gantt` + pure timeline
+  geometry in `lib/gantt.ts` (zoom day→year, date→pixel, ticks, bar widths;
+  tested). Status-coloured bars with a %-complete fill, critical highlight,
+  milestone diamonds, optional baseline underlay, dependency connectors and a
+  data-date line. Arrow routing is a simple elbow (polish later).
 - **Phase 6 — AON network diagram**: draggable nodes, critical-path styling.
 - **Phase 7 — dashboard**: progress vs plan, SPI/CPI, variance, EAC, EVM charts.
 - **Phase 8 — resource loading**: labor/equipment/material, over-allocation.
