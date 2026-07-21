@@ -175,12 +175,17 @@ columns (dates + total float + critical tag) and an expandable ES/EF/LS/LF/float
   PV/EV/AC/SV/CV/CPI/EAC/VAC/ETC/TCPI), and critical/delayed/upcoming lists.
   Date↔offset conversions live in the tested `lib/scheduleDates.ts` (inclusive
   data-date offset + forecast finish, consistent with `finishDate`).
-- **Phase 8 — resource loading** *(this PR)*: `/schedule/resources` — per-resource
+- **Phase 8 — resource loading** ✅: `/schedule/resources` — per-resource
   daily load (assignment quantity spread over the activity's scheduled span) with
   a load histogram and **over-allocation** flagged where daily demand exceeds
   `availablePerDay`; pure tested `lib/resourceLoad.ts`.
-- **Phase 9 — reports**: schedule / critical-path / EVM / progress / resource →
-  PDF, Excel, CSV.
+- **Phase 9 — reports** *(this PR)*: `/schedule/reports` — pure
+  `lib/scheduleReport.ts` builds a sectioned payload (schedule, critical path,
+  progress + value, resource loading) which the exporters render uniformly:
+  `lib/scheduleCsv.ts` (inline), `lib/schedulePdf.ts` (jsPDF + autotable) and
+  `lib/scheduleExcel.ts` (ExcelJS, one sheet per section), the last two
+  lazy-loaded. Each exporter splits a node-testable `build*` from the browser
+  download wrapper, so PDF/Excel generation is unit-tested (real bytes).
 - **Phase 10 — daily-report integration & delay analysis** + user docs.
 
 ## Known limitations / future extensions

@@ -47,6 +47,7 @@ import ScheduleGantt from './pages/ScheduleGantt'
 import ScheduleNetwork from './pages/ScheduleNetwork'
 import ScheduleDashboard from './pages/ScheduleDashboard'
 import ScheduleResources from './pages/ScheduleResources'
+import ScheduleReports from './pages/ScheduleReports'
 
 export default function App() {
   const [auth, setAuth] = useState<'login' | 'signup' | null>(null)
@@ -111,6 +112,7 @@ export default function App() {
         <Route path="/schedule/network" element={<ScheduleNetwork />} />
         <Route path="/schedule/dashboard" element={<ScheduleDashboard />} />
         <Route path="/schedule/resources" element={<ScheduleResources />} />
+        <Route path="/schedule/reports" element={<ScheduleReports />} />
             </Routes>
           </AppShell>
         } />
