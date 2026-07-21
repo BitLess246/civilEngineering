@@ -7,7 +7,7 @@
 //   factored reactions → isolated footing) → concrete totals.
 // Every stage reuses the existing engines unchanged.
 // ─────────────────────────────────────────────────────────────────────────
-import type { StructuralModel, RectSection, ModelLoad, Member } from './model'
+import type { StructuralModel, RectSection, ModelLoad, Member, WoodDeck } from './model'
 import { enforceSectionHierarchy, refreshSelfWeight, barContinuityGroups } from './modelBuilder'
 import { modelToFrame3D } from './modelBridge'
 import { precomputeFrame, solveWithGeometry, applyF3Combo, serializePrecomp, type F3Result, type F3MemberResult, type F3Load } from './frame3d'
@@ -1163,7 +1163,7 @@ export async function optimizeStructureAsync(
         const u = act.utils.get(s.id)
         return [s.id, u !== undefined ? jumpSection(s, u, secRole.get(s.id) ?? '') : s]
       }))
-      const grown = settle(withWallThickness(withPlateThickness(withSizes(work, sizes), act.plates, soil.gammaConc), act.walls))
+      const grown = settle(withDecks(withWallThickness(withPlateThickness(withSizes(work, sizes), act.plates, soil.gammaConc), act.walls), act.decks))
       if (!sectionsChanged(work, grown)) {     // nothing can grow (catalog top / unsupported shape)
         stopReason = stopReasonFor(design, 'no failing section can grow any further (top of the W catalog, an unsupported shape family, or the cast-in-place size limit)')
         break
@@ -1464,6 +1464,10 @@ const sectionsChanged = (a: StructuralModel, b: StructuralModel): boolean =>
     return s.b !== t.b || s.h !== t.h || s.shape !== t.shape
   })
   || a.plates.some((p, i) => p.thickness !== b.plates[i]?.thickness)
+  || a.plates.some((p, i) => {
+    const q = b.plates[i]?.deck
+    return p.deck?.joistD !== q?.joistD || p.deck?.joistSpacing !== q?.joistSpacing || p.deck?.deckThickness !== q?.deckThickness
+  })
   || (a.walls ?? []).some((w, i) => w.thickness !== (b.walls ?? [])[i]?.thickness)
 
 /** Re-thickness plates and shift each panel's area-D load by Δt·γc — the slab
@@ -1491,7 +1495,7 @@ const withWallThickness = (model: StructuralModel, t: Map<string, number>): Stru
 /** Everything the grow phase can change in one iteration: member-section
  *  demand/capacity ratios (incl. SCWB column bumps), slab thickness targets
  *  and shear-wall thickness targets. n = number of distinct actions. */
-interface GrowActions { utils: Map<string, number>; plates: Map<string, number>; walls: Map<string, number>; n: number }
+interface GrowActions { utils: Map<string, number>; plates: Map<string, number>; walls: Map<string, number>; decks: Map<string, WoodDeck>; n: number }
 
 function buildGrowActions(design: StructureDesign, model: StructuralModel, memSecId: Map<string, string>): GrowActions {
   const utils = buildUtilMap(design, memSecId)
@@ -1524,7 +1528,33 @@ function buildGrowActions(design: StructureDesign, model: StructuralModel, memSe
   // Shear walls: in-plane shear failure → thicken the panel one step per iteration.
   const walls = new Map<string, number>()
   for (const w of design.walls) if (!w.ok) walls.set(w.id, w.thickness + 25)
-  return { utils, plates, walls, n: utils.size + plates.size + walls.size }
+  // Timber deck slabs: grow the joist depth (bending ∝ d², deflection ∝ d³); if the
+  // joist is capped and still short, tighten spacing; thicken the deck board if it
+  // governs. 50-mm joist / 5-mm board steps, capped like the section jump.
+  const decks = new Map<string, WoodDeck>()
+  const plateById = new Map(model.plates.map((p) => [p.id, p]))
+  for (const s of design.woodSlabs) {
+    if (s.ok) continue
+    const deck = plateById.get(s.plate)?.deck
+    if (!deck) continue
+    const nd: WoodDeck = { ...deck }
+    const jUtil = s.design.joist.ratio, dUtil = s.design.deck.ratio
+    if (jUtil > 1) {
+      const steps = Math.max(1, Math.min(8, Math.ceil((Math.sqrt(jUtil) - 1) * deck.joistD / 50)))
+      nd.joistD = Math.min(600, deck.joistD + 50 * steps)
+      if (nd.joistD >= 600 && jUtil > 1.5) nd.joistSpacing = Math.max(200, deck.joistSpacing - 50)
+    }
+    if (dUtil > 1) nd.deckThickness = Math.min(75, deck.deckThickness + 5)
+    if (nd.joistD !== deck.joistD || nd.joistSpacing !== deck.joistSpacing || nd.deckThickness !== deck.deckThickness)
+      decks.set(s.plate, nd)
+  }
+  return { utils, plates, walls, decks, n: utils.size + plates.size + walls.size + decks.size }
+}
+
+/** Apply grown timber decks back onto their plates (optimizer). */
+function withDecks(model: StructuralModel, decks: Map<string, WoodDeck>): StructuralModel {
+  if (decks.size === 0) return model
+  return { ...model, plates: model.plates.map((p) => (decks.has(p.id) ? { ...p, deck: decks.get(p.id) } : p)) }
 }
 
 /** Copy shape geometry into the section's bounding-box fields so metadata stays consistent. */
@@ -1553,6 +1583,8 @@ function buildUtilMap(
   for (const c of design.columns)      if (!c.ok) bump(memSecId.get(c.id), Math.max(2, c.util))
   for (const b of design.steelBeams)   if (!b.ok) bump(memSecId.get(b.id), Math.max(2, b.utilM, b.utilV, b.deflLim > 0 ? b.defl / b.deflLim : 2))
   for (const c of design.steelColumns) if (!c.ok) bump(memSecId.get(c.id), Math.max(2, c.ratio))
+  for (const b of design.woodBeams)    if (!b.ok) bump(memSecId.get(b.id), Math.max(2, b.utilM, b.utilV))
+  for (const c of design.woodColumns)  if (!c.ok) bump(memSecId.get(c.id), Math.max(2, c.ratio))
   return out
 }
 
@@ -1572,6 +1604,8 @@ function sectionUtilMap(design: StructureDesign, memSecId: Map<string, string>):
   for (const c of design.columns)      bump(memSecId.get(c.id), c.util)
   for (const b of design.steelBeams)   bump(memSecId.get(b.id), Math.max(b.utilM, b.utilV, b.deflLim > 0 ? b.defl / b.deflLim : 0))
   for (const c of design.steelColumns) bump(memSecId.get(c.id), c.ratio)
+  for (const b of design.woodBeams)    bump(memSecId.get(b.id), Math.max(b.utilM, b.utilV))
+  for (const c of design.woodColumns)  bump(memSecId.get(c.id), c.ratio)
   return out
 }
 
@@ -1681,7 +1715,7 @@ export function optimizeStructure(
       const u = act.utils.get(s.id)
       return [s.id, u !== undefined ? jumpSection(s, u, secRole.get(s.id) ?? '') : s]
     }))
-    const grown = settle(withWallThickness(withPlateThickness(withSizes(work, sizes), act.plates, soil.gammaConc), act.walls))
+    const grown = settle(withDecks(withWallThickness(withPlateThickness(withSizes(work, sizes), act.plates, soil.gammaConc), act.walls), act.decks))
     if (!sectionsChanged(work, grown)) {       // nothing can grow (catalog top / unsupported shape)
       stopReason = stopReasonFor(design, 'no failing section can grow any further (top of the W catalog, an unsupported shape family, or the cast-in-place size limit)')
       break
