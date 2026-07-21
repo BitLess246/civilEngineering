@@ -607,3 +607,44 @@ each as **Problem → Reference solution → Software output → Error % → PAS
 Surface the pass counts on the `/validation` page and a public "Validation"
 section. This is the highest-leverage next body of work; treat each chapter as
 its own PR (engine benchmark test + a `docs/validation/*.md` write-up).
+
+## Verified backlog (code-vs-docs reconciliation, July 2026)
+
+An audit of the actual engine (`webapp/src/engine/`) against the CLAUDE.md
+priority backlog. **Already shipped** (docs lagged the code): cracked-section
+modifiers (#327, `modelBridge` role factors), accidental torsion, orthogonal
+100 %+30 % & vertical `Ev`, Timoshenko shear, and steel **block shear (§J4.3)**
++ **prying (§J3.9)** + shear-tab / moment connections (`steelDesign.ts`,
+`steelConnections.ts`) — so the old P4 "steel connections" item is effectively
+complete. New disciplines landed too: **timber wood-frame** (#379–#386),
+**plumbing RNPCP** (#381–#383), **project scheduling CPM/PERT** (#387–#390).
+
+**Still genuinely missing** (verified absent from the engine):
+
+_Analysis completeness (P3):_
+- **Direct-integration MDOF time-history** with Rayleigh damping — `timeHistory.ts`
+  is modal-superposition only (no full-system Newmark); prerequisite for nonlinear TH.
+- **Tension-only / compression-only members** (braces, uplift springs) and a
+  **consistent-mass** option beside lumped — neither exists anywhere.
+- **Irregularity auto-flags** — NSCP Table 208-9/10 (torsional, soft-storey,
+  mass) are not detected/reported. *(Smallest, high-value: pure checks off the
+  existing modal/drift results.)*
+
+_Geotech / foundations (P4):_
+- **Slope stability by method of slices** (Bishop / Janbu) — `geotech.ts` has only
+  `infiniteSlopeFS`; no global slope stability.
+- **Settlement** (immediate + consolidation) and **laterally loaded piles**
+  (Broms / p-y) — absent.
+- **Offset framing / beam-on-girder-flange bearing** (seat detail, AISC §J10) —
+  still blocked on the model supporting vertically offset framing.
+
+_v1.0 gate:_
+- **Formal validation manual** (`docs/validation/`, one file per case:
+  Problem → Reference → Software output → Error % → PASS) + the external-tool
+  cross-checks (ETABS/STAAD/PCA/Excel — open items X001–X004). The unit suite is
+  the seed; it is not yet assembled into a documented manual.
+
+_Minor / partial:_
+- Cracked-section deflection (`beamDeflection`/`slabDeflection` exist standalone)
+  is not clearly threaded into Model-Space serviceability results.
+- Pressure grouting — intentionally skipped (empirical).

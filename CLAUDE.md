@@ -146,10 +146,11 @@ mm, forces kN, stress MPa) and state them at module boundaries.
 Ordered: correctness first, then code completeness, then new capability.
 
 ## P1 — results correctness
-1. **Cracked-section stiffness modifiers** (ACI 318-14 §6.6.3.1.1: 0.35Ig
-   beams, 0.70Ig columns, 0.25Ig walls/flat plates). The frame runs on gross
-   EI → drifts and P-Δ are unconservative. Implement as per-role factors in
-   `modelBridge` section props (opt-out toggle), not inside `frame3d`.
+1. ~~**Cracked-section stiffness modifiers** (ACI 318-14 §6.6.3.1.1: 0.35Ig
+   beams, 0.70Ig columns, 0.25Ig walls/flat plates)~~ — ✔ shipped (#327):
+   per-role factors via `BridgeOpts.crackedSections` in `modelBridge` section
+   props (ON in the Model Space UI, OFF at the API level so closed-form
+   benchmarks stay gross-section) — never inside `frame3d`.
 2. ~~**Accidental torsion, 5% eccentricity** (NSCP §208.7.2.7)~~ — ✔ shipped:
    `accidentalTorsionLoads` applies ±0.05·L⊥ storey torques as mass-weighted
    node-force couples (works with and without the diaphragm).
@@ -176,8 +177,9 @@ Ordered: correctness first, then code completeness, then new capability.
 8. Irregularity auto-flags (torsional, soft-storey, mass — NSCP Table 208-9/10).
 
 ## P4 — design & geotech capability
-9. Steel **moment connections, shear tabs, block shear, prying** (HANDOFF
-   already flags connections + Lb bracing inputs).
+9. ~~Steel **moment connections, shear tabs, block shear, prying**~~ — ✔ shipped:
+   `steelConnections.ts` (shear-tab, moment-flange-weld, moment-web-plate) +
+   `steelDesign.ts` block shear §J4.3 (`shearTabBlockShear`) and prying §J3.9.
 10. Thread cracked deflection (`beamDeflection`/`slabDeflection`) into
     model-space serviceability results.
 11. **Slope stability by method of slices** (Bishop simplified / Janbu) —
