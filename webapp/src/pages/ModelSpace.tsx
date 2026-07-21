@@ -3,7 +3,7 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Text } from '@react-three/drei'
 import * as THREE from 'three'
 import { generateGridModel, removeElements, removeNode, buildGravityLoads, splitSharedSections } from '../engine/modelBuilder'
-import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole, MemberReleases, NodeSupport, SupportFixity } from '../engine/model'
+import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole, MemberReleases, NodeSupport, SupportFixity, WoodDeck } from '../engine/model'
 import { distributePanel } from '../engine/tributary'
 import { type F3Analysis, type F3MemberResult, type V3 } from '../engine/frame3d'
 import { memberDiagramRibbon, diagramScale, type DiagramComp } from '../engine/memberDiagram3d'
@@ -63,6 +63,12 @@ import { loadCustomMaterials, saveCustomMaterials, type CustomMaterial } from '.
 import { buildSectionShapes } from '../lib/sectionShapes3d'
 import { SectionShape } from '../components/SectionShape'
 import { f0, f1, f2 } from '../lib/format'
+
+/** A sensible default timber deck (DFL No.2 joists 50×200 @ 400, 25 mm plank). */
+const DEFAULT_DECK: WoodDeck = {
+  joistSpecies: 'DFL-2', joistKind: 'sawn', joistB: 50, joistD: 200, joistSpacing: 400,
+  joistSupport: 'simple', deckMaterial: 'plank', deckThickness: 25, deckSupport: 'continuous',
+}
 
 const AUTOSAVE_KEY = 'model-space-autosave'
 const INPUTS_KEY = 'model-space-inputs'
@@ -1290,6 +1296,20 @@ export default function ModelSpace() {
   const setSlabLive = (plateId: string, occId: string) => {
     if (!model) return
     commitPlates(model.plates.map((p) => (p.id === plateId ? { ...p, live: liveOf(occId) } : p)))
+  }
+  // ── Timber deck (wood slab) per panel ──
+  const setPlateDeck = (plateId: string, deck: WoodDeck | undefined) => {
+    if (!model) return
+    commitPlates(model.plates.map((p) => {
+      if (p.id !== plateId) return p
+      if (deck) return { ...p, deck }
+      const rest = { ...p }; delete rest.deck; return rest
+    }))
+  }
+  /** Patch fields of the selected plate's deck (leaves others intact). */
+  const patchDeck = (plateId: string, patch: Partial<WoodDeck>) => {
+    if (!model) return
+    commitPlates(model.plates.map((p) => (p.id === plateId && p.deck ? { ...p, deck: { ...p.deck, ...patch } } : p)))
   }
 
   const runPipeline = () => {
@@ -2734,6 +2754,7 @@ export default function ModelSpace() {
                           <th className="py-1 pr-2 font-semibold">SDL source</th>
                           <th className="py-1 pr-2 text-right font-semibold">LL</th>
                           <th className="py-1 pr-2 font-semibold">Occupancy (205-1 / 206)</th>
+                          <th className="py-1 pr-2 font-semibold">Deck</th>
                           <th className="py-1 font-semibold" />
                         </tr>
                       </thead>
@@ -2753,6 +2774,13 @@ export default function ModelSpace() {
                                   {[...TABLE_205_1, ...TABLE_206].map((o) => <option key={o.id} value={o.id}>{o.label} — {o.kPa}</option>)}
                                 </select>
                               </td>
+                              <td className="py-0.5 pr-2">
+                                <button type="button" onClick={() => setPlateDeck(p.id, p.deck ? undefined : DEFAULT_DECK)}
+                                  title={p.deck ? 'Remove the timber deck (revert to RC slab)' : 'Make this a timber deck-on-joist floor (wood slab)'}
+                                  className={`rounded px-1.5 py-0.5 text-[10.5px] font-semibold ${p.deck ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'text-[#0f4c92] hover:bg-blue-50'}`}>
+                                  {p.deck ? 'timber ✓' : '+ timber'}
+                                </button>
+                              </td>
                               <td className="py-0.5 whitespace-nowrap text-right">
                                 <button type="button" onClick={() => setSlabSdl(p.id, false)} title="Apply the composed SDL above to this slab"
                                   className="rounded px-1.5 text-[#0f4c92] hover:bg-blue-50">set SDL</button>
@@ -2766,8 +2794,58 @@ export default function ModelSpace() {
                     </table>
                   </div>
                   <p className="mt-1 text-[11px] text-slate-500">
-                    “set SDL” writes the composition built above to that panel; the occupancy dropdown sets its NSCP-205 live load. Click a slab id to select it in 3D.
+                    “set SDL” writes the composition built above to that panel; the occupancy dropdown sets its NSCP-205 live load.
+                    “+ timber” turns a panel into a timber deck-on-joist floor (designed by the wood-slab engine, reported like RC). Click a slab id to select it in 3D.
                   </p>
+                  {selPlate && selPlate.role !== 'wall' && selPlate.deck && (() => {
+                    const d = selPlate.deck!
+                    const gopts = gradesOf(d.joistSpecies?.split('-')[0] ?? 'DFL')
+                    return (
+                      <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/40 p-3">
+                        <h4 className="mb-2 text-[10px] font-bold uppercase tracking-[.12em] text-amber-700">Timber deck — {selPlate.id} (NDS §3 / NSCP §6)</h4>
+                        <div className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
+                          <label className="flex flex-col">Species
+                            <select value={d.joistSpecies?.split('-')[0] ?? 'DFL'} onChange={(e) => { const sp = e.target.value; const g = gradesOf(sp); patchDeck(selPlate.id, { joistSpecies: g.length ? g[0].id : `${sp}-2`, joistKind: g[0]?.kind ?? 'sawn' }) }}
+                              className="mt-0.5 rounded border border-slate-300 px-1 py-0.5">
+                              {speciesList().map((s) => <option key={s.species} value={s.species}>{s.label}</option>)}
+                            </select>
+                          </label>
+                          <label className="flex flex-col">Grade
+                            <select value={d.joistSpecies ?? ''} onChange={(e) => patchDeck(selPlate.id, { joistSpecies: e.target.value })}
+                              className="mt-0.5 rounded border border-slate-300 px-1 py-0.5">
+                              {gopts.map((g) => <option key={g.id} value={g.id}>{g.gradeLabel}</option>)}
+                            </select>
+                          </label>
+                          <label className="flex flex-col">Joist b (mm)
+                            <input type="number" value={d.joistB} onChange={(e) => patchDeck(selPlate.id, { joistB: +e.target.value || 0 })} className="mt-0.5 rounded border border-slate-300 px-1 py-0.5" />
+                          </label>
+                          <label className="flex flex-col">Joist d (mm)
+                            <input type="number" value={d.joistD} onChange={(e) => patchDeck(selPlate.id, { joistD: +e.target.value || 0 })} className="mt-0.5 rounded border border-slate-300 px-1 py-0.5" />
+                          </label>
+                          <label className="flex flex-col">Spacing (mm)
+                            <input type="number" value={d.joistSpacing} onChange={(e) => patchDeck(selPlate.id, { joistSpacing: +e.target.value || 0 })} className="mt-0.5 rounded border border-slate-300 px-1 py-0.5" />
+                          </label>
+                          <label className="flex flex-col">Deck
+                            <select value={d.deckMaterial} onChange={(e) => patchDeck(selPlate.id, { deckMaterial: e.target.value as WoodDeck['deckMaterial'], deckWidth: e.target.value === 'bamboo-slat' ? 50 : 140 })}
+                              className="mt-0.5 rounded border border-slate-300 px-1 py-0.5">
+                              <option value="plank">Plank</option>
+                              <option value="bamboo-slat">Bamboo slat</option>
+                            </select>
+                          </label>
+                          <label className="flex flex-col">Deck t (mm)
+                            <input type="number" value={d.deckThickness} onChange={(e) => patchDeck(selPlate.id, { deckThickness: +e.target.value || 0 })} className="mt-0.5 rounded border border-slate-300 px-1 py-0.5" />
+                          </label>
+                          <label className="flex flex-col">Joist support
+                            <select value={d.joistSupport ?? 'simple'} onChange={(e) => patchDeck(selPlate.id, { joistSupport: e.target.value as WoodDeck['joistSupport'] })}
+                              className="mt-0.5 rounded border border-slate-300 px-1 py-0.5">
+                              <option value="simple">Simple</option>
+                              <option value="continuous">Continuous</option>
+                            </select>
+                          </label>
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
 
