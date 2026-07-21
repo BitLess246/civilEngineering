@@ -228,15 +228,28 @@ const woodCL = (() => {
 })()
 
 const woodSlabJoist = (() => {
-  // DFL-No.2 joist 50 × 200 mm @ 400 mm o.c., 3.0 m simple span; deck 25 mm plank.
-  // Closed form: f_b = M/S with the assembled UDL M = wL²/8.
-  const r = designWoodSlab({
-    Lx: 3.0, Ly: 3.6, joistRef: getWoodRef('DFL-2')!.ref, joistB: 50, joistD: 200,
+  // DFL-No.2 joist 50 × 200 mm @ 400 mm o.c., 3.0 m simple span; 25 mm plank deck.
+  // INDEPENDENT hand assembly of the joist line load and f_b — the manual side
+  // rebuilds the whole load path from the inputs (it does NOT reuse the engine's
+  // w), so a wrong tributary width, missing/duplicated self-weight or wrong UDL
+  // coefficient would break the check:
+  //   γ = G·9.81 = 4.905 kN/m³; deck self = γ·0.025 = 0.1226 kPa;
+  //   joist self = γ·(0.05·0.20) = 0.04905 kN/m; tributary = 0.40 m spacing →
+  //   w = (0.5 + 0.1226 + 1.9)·0.40 + 0.04905 = 1.0581 kN/m
+  //   f_b = (w·L²/8)·1e6 / (b·d²/6) = 3.571 MPa
+  const ref = getWoodRef('DFL-2')!.ref
+  const gamma = ref.G * 9.81                                   // kN/m³ (= woodUnitWeight)
+  const deckSelf = gamma * (25 / 1000)                        // kPa
+  const joistSelf = gamma * ((50 * 200) / 1e6)               // kN/m
+  const w = (0.5 + deckSelf + 1.9) * (400 / 1000) + joistSelf // kN/m ≈ 1.0581
+  const S = (50 * 200 * 200) / 6                              // mm³
+  const manual = ((w * 3.0 * 3.0) / 8) * 1e6 / S             // MPa ≈ 3.571
+  const software = designWoodSlab({
+    Lx: 3.0, Ly: 3.6, joistRef: ref, joistB: 50, joistD: 200,
     joistSpacing: 400, joistSupport: 'simple', deckMaterial: 'plank', deckThickness: 25,
     deckWidth: 140, deckSupport: 'continuous', deadKpa: 0.5, liveKpa: 1.9,
-  })
-  const S = (50 * 200 * 200) / 6
-  return { manual: ((r.joist.w * 3.0 * 3.0) / 8) * 1e6 / S, software: r.joist.fb }
+  }).joist.fb
+  return { manual, software }
 })()
 
 // ── Plumbing (RNPCP 2000) — water-supply hydraulics ─────────────────────────

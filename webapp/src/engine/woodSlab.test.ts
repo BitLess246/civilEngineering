@@ -13,6 +13,18 @@ const base: WoodSlabInput = {
 }
 
 describe('designWoodSlab — flexural demands (NSCP/ACI UDL coefficients)', () => {
+  it('assembles the joist line load and f_b to an independent hand value', () => {
+    const r = designWoodSlab(base)
+    // Independent of the engine's own w. DFL-2: γ = G·9.81 = 0.5·9.81 = 4.905 kN/m³.
+    //   deck self  = γ·0.025               = 0.12263 kPa
+    //   joist self = γ·(0.05·0.20)         = 0.04905 kN/m
+    //   tributary  = 0.40 m spacing →
+    //   w  = (0.5 + 0.12263 + 1.9)·0.40 + 0.04905 = 1.0581 kN/m
+    //   fb = (w·3²/8)·1e6 / (50·200²/6)           = 3.571 MPa
+    expect(r.joist.w).toBeCloseTo(1.0581, 3)     // pins the tributary + self-weight assembly
+    expect(r.joist.fb).toBeCloseTo(3.571, 2)     // pins f_b = M/S from that load
+  })
+
   it('joist moment & shear follow the simple-span coefficients wL²/8, wL/2', () => {
     const r = designWoodSlab(base)
     const L = base.Lx
