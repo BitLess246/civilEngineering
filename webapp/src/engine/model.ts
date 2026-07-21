@@ -109,6 +109,27 @@ export interface Plate {
   sdlItems?: SdlItem[]
   /** Per-slab live load from NSCP Table 205-1 occupancy (overrides global LL). */
   live?: LiveItem
+  /** Timber deck-on-joist floor (wood slab). When present the panel is designed
+   *  by the woodSlab engine (NDS §3 / NSCP §6) instead of the RC Direct Design
+   *  Method: plan span/width come from the plate geometry, D/L from its area
+   *  loads (superimposed — the deck adds its own self weight). */
+  deck?: WoodDeck
+}
+
+/** A timber deck-on-joist floor carried by a plate. JSON-serialisable. */
+export interface WoodDeck {
+  joistSpecies?: string          // wood-library id ('DFL-2', …) — resolves joistRef when absent
+  joistRef?: WoodRefValues       // explicit reference values (custom material; travels with the model)
+  joistKind?: 'sawn' | 'glulam'
+  joistB: number                 // mm
+  joistD: number                 // mm
+  joistSpacing: number           // mm c/c
+  joistSupport?: 'simple' | 'continuous'
+  deckMaterial: 'plank' | 'bamboo-slat'
+  deckThickness: number          // mm
+  deckWidth?: number             // mm (board / slat face width)
+  deckSupport?: 'simple' | 'continuous'
+  wet?: boolean                  // wet-service C_M
 }
 
 /** A wall sitting on a member: its self-weight is applied to that member as a
