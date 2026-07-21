@@ -27,7 +27,7 @@ import { designShearWall, type ShearWallResult } from './shearWallDesign'
 import { checkModelSCWB, type SCWBJointRow } from './scwb'
 import { shapeByName, nextHeavierW, nextLighterW, type AiscShape } from './aiscSections'
 import { deriveWSection, beamFlexure, beamShear, columnAxial, combinedLoading } from './steelDesign'
-import { woodRefOf, checkWoodBeam, checkWoodColumn, getWoodRef } from './woodDesign'
+import { woodRefOf, checkWoodBeam, checkWoodColumn, getWoodRef, woodAdjusted } from './woodDesign'
 import { designWoodSlab, type WoodSlabResult } from './woodSlab'
 import { designBasePlate, adoptPlateThickness, type BasePlateResult } from './baseplate'
 import { designSteelJoints, designBeamBeamJoints, type SteelJoint, type BeamBeamJoint } from './steelConnections'
@@ -215,6 +215,9 @@ export interface WoodBeamScheduleRow {
   utilM: number; utilV: number
   ok: boolean
   gov?: string
+  // worked-solution intermediates
+  S: number; A: number             // mm³, mm² (section modulus, area)
+  RB: number; Emin: number; FbStar: number   // beam slenderness, stability modulus, Fb* (pre-CL)
 }
 export interface WoodColumnScheduleRow {
   id: string; L: number
@@ -224,6 +227,8 @@ export interface WoodColumnScheduleRow {
   ratio: number                    // governing (axial or §3.9.2 interaction)
   ok: boolean
   gov?: string
+  // worked-solution intermediates
+  A: number; FcE: number; Emin: number; FcStar: number   // mm², Euler stress, stability modulus, Fc* (pre-CP)
 }
 
 /** Prestressed member check (sections with RectSection.ps): the pipeline
@@ -375,15 +380,17 @@ function designWoodBeamRow(
   const ref = woodRefOf(sec)
   if (!ref) return null
   const kind = sec.woodKind === 'glulam' ? 'glulam' : 'sawn'
+  const opts = { method: 'LRFD' as const, lambda, wet: sec.woodWet }
   const r = checkWoodBeam({
     ref, kind, b: sec.b, d: sec.h, length: mr.L * 1000,
-    M: mr.Mmax, V: mr.Vmax, lu: lu && lu > 0 ? lu * 1000 : undefined,
-    opts: { method: 'LRFD', lambda, wet: sec.woodWet },
+    M: mr.Mmax, V: mr.Vmax, lu: lu && lu > 0 ? lu * 1000 : undefined, opts,
   })
+  const adj = woodAdjusted(ref, kind, sec.h, opts)
   return {
     id: mr.id, role, L: mr.L, species: sec.woodSpecies ?? '', kind, b: sec.b, d: sec.h,
     Mu: mr.Mmax, Vu: mr.Vmax, fb: r.fb, FbPrime: r.FbPrime, CL: r.CL,
     fv: r.fv, FvPrime: r.FvPrime, utilM: r.bendingRatio, utilV: r.shearRatio, ok: r.ok,
+    S: r.S, A: r.A, RB: r.RB, Emin: adj.Emin, FbStar: adj.FbStar,
   }
 }
 
@@ -393,15 +400,17 @@ function designWoodColumnRow(mr: F3MemberResult, sec: RectSection, lambda: numbe
   const ref = woodRefOf(sec)
   if (!ref) return null
   const kind = sec.woodKind === 'glulam' ? 'glulam' : 'sawn'
+  const opts = { method: 'LRFD' as const, lambda, wet: sec.woodWet }
   const Pu = Math.max(0, -Math.min(...mr.N))   // compression (N < 0)
   const r = checkWoodColumn({
-    ref, kind, b: sec.b, d: sec.h, length: mr.L * 1000,
-    P: Pu, Mx: mr.Mmax, opts: { method: 'LRFD', lambda, wet: sec.woodWet },
+    ref, kind, b: sec.b, d: sec.h, length: mr.L * 1000, P: Pu, Mx: mr.Mmax, opts,
   })
+  const adj = woodAdjusted(ref, kind, sec.h, opts)
   return {
     id: mr.id, L: mr.L, species: sec.woodSpecies ?? '', kind, b: sec.b, d: sec.h,
     Pu, Mu: mr.Mmax, fc: r.fc, FcPrime: r.FcPrime, CP: r.CP, slenderness: r.slenderness,
     ratio: r.ratio, ok: r.ok,
+    A: r.A, FcE: r.FcE, Emin: adj.Emin, FcStar: adj.FcStar,
   }
 }
 
