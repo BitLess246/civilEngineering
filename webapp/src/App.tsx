@@ -44,6 +44,7 @@ import LoadCombinations from './pages/LoadCombinations'
 import PlumbingDesign from './pages/PlumbingDesign'
 import Schedule from './pages/Schedule'
 import ScheduleGantt from './pages/ScheduleGantt'
+import ScheduleNetwork from './pages/ScheduleNetwork'
 
 export default function App() {
   const [auth, setAuth] = useState<'login' | 'signup' | null>(null)
@@ -105,6 +106,7 @@ export default function App() {
         <Route path="/plumbing" element={<PlumbingDesign />} />
         <Route path="/schedule" element={<Schedule />} />
         <Route path="/schedule/gantt" element={<ScheduleGantt />} />
+        <Route path="/schedule/network" element={<ScheduleNetwork />} />
             </Routes>
           </AppShell>
         } />

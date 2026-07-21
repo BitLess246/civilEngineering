@@ -156,12 +156,16 @@ columns (dates + total float + critical tag) and an expandable ES/EF/LS/LF/float
   WBS-group collapse, live CPM recompute, cycle-prevented dependency editor,
   project new/sample/import/export. Drag-and-drop reorder is a later polish
   (up/down buttons ship now).
-- **Phase 5 — Gantt chart** *(this PR)*: `/schedule/gantt` + pure timeline
+- **Phase 5 — Gantt chart** ✅: `/schedule/gantt` + pure timeline
   geometry in `lib/gantt.ts` (zoom day→year, date→pixel, ticks, bar widths;
   tested). Status-coloured bars with a %-complete fill, critical highlight,
   milestone diamonds, optional baseline underlay, dependency connectors and a
   data-date line. Arrow routing is a simple elbow (polish later).
-- **Phase 6 — AON network diagram**: draggable nodes, critical-path styling.
+- **Phase 6 — AON network diagram** *(this PR)*: `/schedule/network` + pure
+  layered-DAG layout in `lib/network.ts` (longest-path columns, rows, critical
+  edges; tested). SVG nodes carry ES/EF and total float, the critical path is
+  in brick red, dependency links are bezier arrows, and nodes are **draggable**
+  (view-only — moving a node never touches the schedule).
 - **Phase 7 — dashboard**: progress vs plan, SPI/CPI, variance, EAC, EVM charts.
 - **Phase 8 — resource loading**: labor/equipment/material, over-allocation.
 - **Phase 9 — reports**: schedule / critical-path / EVM / progress / resource →
