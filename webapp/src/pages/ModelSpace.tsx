@@ -210,8 +210,8 @@ function MemberSteel3D({ a, b, role, shapeName, selected, tint = 0, axisRotation
   )
 }
 
-function Slab3D({ corners, selected, shell, onPick }: {
-  corners: THREE.Vector3[]; selected: boolean; shell?: boolean; onPick: () => void
+function Slab3D({ corners, selected, shell, deck, onPick }: {
+  corners: THREE.Vector3[]; selected: boolean; shell?: boolean; deck?: WoodDeck; onPick: () => void
 }) {
   const { mid, sx, sz } = useMemo(() => {
     const mid = corners.reduce((s, c) => s.add(c.clone()), new THREE.Vector3()).multiplyScalar(0.25)
@@ -219,6 +219,30 @@ function Slab3D({ corners, selected, shell, onPick }: {
     const sz = Math.abs(corners[3].z - corners[0].z) || Math.abs(corners[2].z - corners[0].z)
     return { mid, sx, sz }
   }, [corners])
+
+  // Timber deck: joist lines spanning the shorter edge, repeated at the joist
+  // spacing along the longer edge (matching the woodSlab design), drawn just
+  // above a faint wood-tinted panel so the deck-on-joist framing is visible.
+  const deckGeo = useMemo(() => {
+    if (!deck || shell || corners.length < 4) return null
+    const [c0, c1, , c3] = corners
+    const eA = c1.clone().sub(c0), eB = c3.clone().sub(c0)
+    const spanVec = eA.length() <= eB.length() ? eA : eB     // joists span the shorter edge
+    const repVec = eA.length() <= eB.length() ? eB : eA      // repeat along the longer edge
+    const repLen = repVec.length()
+    const spacing = Math.max(0.05, deck.joistSpacing / 1000)
+    const n = Math.max(2, Math.floor(repLen / spacing) + 1)
+    const pts: number[] = []
+    for (let i = 0; i < n; i++) {
+      const t = Math.min(1, (i * spacing) / repLen)
+      const b = c0.clone().add(repVec.clone().multiplyScalar(t))
+      const e = b.clone().add(spanVec)
+      pts.push(b.x, b.y + 0.11, b.z, e.x, e.y + 0.11, e.z)
+    }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3))
+    return g
+  }, [deck, shell, corners])
 
   // Shell mode: draw the real triangulated panel (two triangles on the c0–c2
   // diagonal, the exact mesh the solver assembles) — works for any orientation,
@@ -245,6 +269,20 @@ function Slab3D({ corners, selected, shell, onPick }: {
             side={THREE.DoubleSide} depthWrite={false} />
         </mesh>
         <primitive object={new THREE.Line(shellGeo.diag, new THREE.LineBasicMaterial({ color: selected ? SEL : '#0f766e' }))} />
+      </group>
+    )
+  }
+
+  if (deckGeo) {
+    return (
+      <group onClick={(e) => { e.stopPropagation(); onPick() }}>
+        <mesh position={[mid.x, mid.y + 0.05, mid.z]}>
+          <boxGeometry args={[sx * 0.96, 0.06, sz * 0.96]} />
+          <meshStandardMaterial color={selected ? SEL : '#c8a06a'} transparent opacity={selected ? 0.6 : 0.3} />
+        </mesh>
+        <lineSegments geometry={deckGeo}>
+          <lineBasicMaterial color={selected ? SEL : '#7a4a1e'} />
+        </lineSegments>
       </group>
     )
   }
@@ -1823,7 +1861,7 @@ export default function ModelSpace() {
                 {model.plates.map((p) => {
                   const cs = p.corners.map((c) => nodePos.get(c))
                   if (cs.some((c) => !c)) return null
-                  return <Slab3D key={p.id} corners={cs as THREE.Vector3[]} shell={model.shellElements}
+                  return <Slab3D key={p.id} corners={cs as THREE.Vector3[]} shell={model.shellElements} deck={p.deck}
                     selected={p.id === selected} onPick={() => setSelected(p.id)} />
                 })}
                 {model.supports.map((s) => {
