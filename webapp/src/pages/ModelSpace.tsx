@@ -32,7 +32,8 @@ import { JointConnections3D } from '../components/JointConnections3D'
 import { ConnectionDetail2D } from '../components/ConnectionDetail2D'
 import { connectionRowSolution } from '../lib/connectionSolution'
 import { WorkedSolution } from '../components/WorkedSolution'
-import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution } from '../lib/modelSpaceSolutions'
+import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution,
+  woodBeamRowSolution, woodColumnRowSolution, woodSlabRowSolution } from '../lib/modelSpaceSolutions'
 import { Diagram } from '../components/Diagram'
 import { MemberForcesTable } from '../components/MemberForcesTable'
 import { ReactionsPanel } from '../components/ReactionsPanel'
@@ -1599,6 +1600,11 @@ export default function ModelSpace() {
       beam: steel ? steelRole(beaShape, 'BEA') : wood ? woodRole(beaB, beaH, 'BEA') : role(beaB, beaH, 'BEA'),
       slabThickness: slabThk,
     })
+    // Wood frame → the floor slabs are timber decks too: give every floor panel a
+    // default deck-on-joist (joists in the chosen species) so it designs as a
+    // wood slab. Concrete/steel frames keep RC slabs.
+    if (wood) m.plates = m.plates.map((p) => p.role === 'wall' ? p
+      : { ...p, deck: { ...DEFAULT_DECK, joistSpecies: wsel.id, joistKind: wsel.kind, wet } })
     // gravity loads: member self-weight (D), slab self-weight + SDL (D), LL (L)
     m.loads = buildGravityLoads(m, qD, qL, gammaC)
     setSelected(null)
@@ -2426,7 +2432,7 @@ export default function ModelSpace() {
                   {material === 'steel'
                     ? 'Members become AISC W-shapes designed to AISC 360-16 LRFD (§F flexure, §G shear, §E/§H1 columns); base plates per §J8. Slabs/footings stay reinforced concrete.'
                     : material === 'wood'
-                      ? 'Members become solid-rectangular timber designed to NDS §3 / NSCP §6 (LRFD via Appendix N). Slabs/footings stay reinforced concrete.'
+                      ? 'Members become solid-rectangular timber designed to NDS §3 / NSCP §6 (LRFD via Appendix N). Floor slabs become timber deck-on-joist floors (wood slab); footings stay reinforced concrete.'
                       : 'Members are reinforced concrete designed to NSCP 2015 / ACI 318-14.'}
                 </p>
               </Sec>
@@ -2498,7 +2504,7 @@ export default function ModelSpace() {
                   <p className="col-span-full text-[11px] text-slate-500">
                     Designed to NDS §3 / NSCP §6: reference values ({woodKind === 'glulam' ? 'glulam' : 'sawn'}, {activeWood.origin})
                     adjusted by C<sub>D</sub>/C<sub>M</sub>/C<sub>F</sub>/C<sub>V</sub>, beam stability C<sub>L</sub> and column
-                    stability C<sub>P</sub>; factored demands checked LRFD (Appendix N, K<sub>F</sub>·φ·λ). Slabs/footings stay reinforced concrete.
+                    stability C<sub>P</sub>; factored demands checked LRFD (Appendix N, K<sub>F</sub>·φ·λ). Floor slabs become timber decks; footings stay reinforced concrete.
                   </p>
                 </Sec>
               ) : (
@@ -4626,6 +4632,148 @@ export default function ModelSpace() {
                 t = ℓ√(2fp/(0.9Fy)); ℓ = max(m, n, n′). Uplift sizes anchor rods (φt·0.75·Fu).
                 Adopted t rounded to plate stock.
               </p>
+            </div>
+          )}
+
+          {/* Timber beam & girder schedule — NDS §3 / NSCP §6 */}
+          {design.woodBeams.length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Timber beam &amp; girder schedule — NDS §3 / NSCP §6<SchedChip items={design.woodBeams} ok={(b) => b.ok} /></h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Member</th>
+                    <th className="py-1 pr-2 font-semibold">Section</th>
+                    <th className="py-1 pr-2 font-semibold">Species</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Mu (kN·m)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Vu (kN)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Util</th>
+                    <th className="py-1 font-semibold">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {design.woodBeams.flatMap((b) => {
+                    const key = `wbeam:${b.id}`, open = expanded === key || reportOpen
+                    return [
+                      <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${b.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                        <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {b.id}</td>
+                        <td className="py-1 pr-2">{f0(b.b)}×{f0(b.d)}</td>
+                        <td className="py-1 pr-2">{b.species || '—'} ({b.kind})</td>
+                        <td className="py-1 pr-2 text-right">{f1(b.Mu)}</td>
+                        <td className="py-1 pr-2 text-right">{f1(b.Vu)}</td>
+                        <td className="py-1 pr-2 text-right">{(Math.max(b.utilM, b.utilV) * 100).toFixed(0)}%</td>
+                        <td className="py-1 text-slate-500">{b.ok ? '✓ OK' : '✗ check'}</td>
+                      </tr>,
+                      open && wantSol && (
+                        <tr key={`${key}:sol`}>
+                          <td colSpan={7} className="bg-slate-50/60 px-2 pb-2">
+                            <WorkedSolution steps={woodBeamRowSolution(b)} title={`${b.id} — worked solution`} />
+                          </td>
+                        </tr>
+                      ),
+                    ]
+                  })}
+                </tbody>
+              </table>
+              <p className="mt-1 text-[11px] text-slate-500">§3.3 bending with beam-stability C_L, §3.4 horizontal shear; factored demand vs LRFD-adjusted F′ (Appendix N K_F·φ·λ). Click a row for the worked solution.</p>
+            </div>
+          )}
+
+          {/* Timber column schedule — NDS §3.7 / §3.9 */}
+          {design.woodColumns.length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Timber column schedule — NDS §3.7 / §3.9<SchedChip items={design.woodColumns} ok={(c) => c.ok} /></h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Column</th>
+                    <th className="py-1 pr-2 font-semibold">Section</th>
+                    <th className="py-1 pr-2 font-semibold">Species</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Pu (kN)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Mu (kN·m)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">C_P</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Ratio</th>
+                    <th className="py-1 font-semibold">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {design.woodColumns.flatMap((c) => {
+                    const key = `wcol:${c.id}`, open = expanded === key || reportOpen
+                    return [
+                      <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                        <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {c.id}</td>
+                        <td className="py-1 pr-2">{f0(c.b)}×{f0(c.d)}</td>
+                        <td className="py-1 pr-2">{c.species || '—'} ({c.kind})</td>
+                        <td className="py-1 pr-2 text-right">{f1(c.Pu)}</td>
+                        <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
+                        <td className="py-1 pr-2 text-right">{f2(c.CP)}</td>
+                        <td className="py-1 pr-2 text-right">{(c.ratio * 100).toFixed(0)}%</td>
+                        <td className="py-1 text-slate-500">{c.ok ? '✓ OK' : '✗ check'}</td>
+                      </tr>,
+                      open && wantSol && (
+                        <tr key={`${key}:sol`}>
+                          <td colSpan={8} className="bg-slate-50/60 px-2 pb-2">
+                            <WorkedSolution steps={woodColumnRowSolution(c)} title={`${c.id} — worked solution`} />
+                          </td>
+                        </tr>
+                      ),
+                    ]
+                  })}
+                </tbody>
+              </table>
+              <p className="mt-1 text-[11px] text-slate-500">§3.7 axial with column-stability C_P; §3.9.2 combined axial + flexure interaction. Ratio ≤ 100% passes. Click a row for the worked solution.</p>
+            </div>
+          )}
+
+          {/* Timber deck slab schedule — NDS §3 / NSCP §6 */}
+          {design.woodSlabs.length > 0 && report !== 'draw-only' && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Timber deck slab schedule — NDS §3 / NSCP §6<SchedChip items={design.woodSlabs} ok={(s) => s.ok} /></h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Panel</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Span (m)</th>
+                    <th className="py-1 pr-2 font-semibold">Species</th>
+                    <th className="py-1 pr-2 font-semibold">Joists</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Deck t</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Deck util</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Joist util</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Bd·ft</th>
+                    <th className="py-1 font-semibold">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {design.woodSlabs.flatMap((s) => {
+                    const key = `wslab:${s.plate}`, open = expanded === key || reportOpen
+                    const t = s.design.takeoff
+                    return [
+                      <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${s.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                        <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {s.plate}</td>
+                        <td className="py-1 pr-2 text-right">{f2(s.design.joist.span)}</td>
+                        <td className="py-1 pr-2">{s.species}</td>
+                        <td className="py-1 pr-2">{t.joistCount}·{f0(s.design.joist.b)}×{f0(s.design.joist.d)}</td>
+                        <td className="py-1 pr-2 text-right">{f0(s.design.deck.d)}</td>
+                        <td className="py-1 pr-2 text-right">{(s.design.deck.ratio * 100).toFixed(0)}%</td>
+                        <td className="py-1 pr-2 text-right">{(s.design.joist.ratio * 100).toFixed(0)}%</td>
+                        <td className="py-1 pr-2 text-right">{f0(t.joistBoardFeet + t.deckBoardFeet)}</td>
+                        <td className="py-1 text-slate-500">{s.ok ? '✓ OK' : '✗ check'}</td>
+                      </tr>,
+                      open && wantSol && (
+                        <tr key={`${key}:sol`}>
+                          <td colSpan={9} className="bg-slate-50/60 px-2 pb-2">
+                            <WorkedSolution steps={woodSlabRowSolution(s)} title={`${s.plate} — worked solution`} />
+                          </td>
+                        </tr>
+                      ),
+                    ]
+                  })}
+                </tbody>
+              </table>
+              <p className="mt-1 text-[11px] text-slate-500">Deck-on-joist: the deck board spans the joist spacing, the joist spans the panel; bending + shear + service deflection (L/360 live, L/240 total). Board feet by size. Click a row for the worked solution.</p>
             </div>
           )}
 

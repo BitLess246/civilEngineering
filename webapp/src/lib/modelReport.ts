@@ -7,10 +7,10 @@ import type { StructuralModel, RectSection, Node } from '../engine/model'
 import type {
   StructureDesign, SoilOptions,
   SteelBeamScheduleRow, SteelColumnScheduleRow,
-  WoodBeamScheduleRow, WoodColumnScheduleRow, WoodSlabScheduleRow,
 } from '../engine/pipeline'
 import { designOK } from '../engine/pipeline'
-import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution } from './modelSpaceSolutions'
+import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution,
+  woodBeamRowSolution, woodColumnRowSolution, woodSlabRowSolution } from './modelSpaceSolutions'
 import { connectionRowSolution } from './connectionSolution'
 import { buildPrestressedSolution } from './prestressedSolution'
 import type { SolutionStep, SolutionLine } from './solution'
@@ -90,62 +90,6 @@ export function steelColumnRowSolution(r: SteelColumnScheduleRow): SolutionStep[
     { title: 'Combined axial + flexure', clause: 'AISC 360-16 §H1-1', pass: r.ok, lines: [
       txt(`Mu = ${f1(r.Mu)} kN·m · φMn = ${f1(r.phiMn)} kN·m · equation ${r.equation}`),
       txt(`Interaction ratio = ${f2(r.ratio)} ≤ 1.00 ${r.ok ? '✓' : '✗'}`),
-    ] },
-  ]
-}
-
-// ── Timber worked "solutions" from the stored row detail (NDS §3 / NSCP §6) ───
-// The wood schedule rows carry the LRFD-adjusted stresses and stability factors;
-// these steps narrate them (no re-calculation), mirroring the steel builders.
-export function woodBeamRowSolution(r: WoodBeamScheduleRow): SolutionStep[] {
-  return [
-    { title: `Section ${f0(r.b)}×${f0(r.d)} mm — ${r.species || 'timber'} (${r.kind})`, clause: 'NDS 2018 §3 / NSCP §6', lines: [
-      txt(`b = ${f0(r.b)} mm · d = ${f0(r.d)} mm · L = ${f2(r.L)} m · role ${r.role}`),
-    ] },
-    { title: 'Flexure — bending with beam stability', clause: 'NDS §3.3', pass: r.utilM <= 1, lines: [
-      txt(`f_b = M/S = ${f2(r.fb)} MPa · C_L = ${f2(r.CL)} → F′b = ${f2(r.FbPrime)} MPa`),
-      txt(`Mu = ${f1(r.Mu)} kN·m → util f_b/F′b = ${f2(r.utilM)} ${r.utilM <= 1 ? '✓' : '✗'}`),
-    ] },
-    { title: 'Horizontal shear', clause: 'NDS §3.4', pass: r.utilV <= 1, lines: [
-      txt(`f_v = 1.5V/A = ${f2(r.fv)} MPa ≤ F′v = ${f2(r.FvPrime)} MPa`),
-      txt(`Vu = ${f1(r.Vu)} kN → util f_v/F′v = ${f2(r.utilV)} ${r.utilV <= 1 ? '✓' : '✗'}`),
-    ] },
-  ]
-}
-
-export function woodColumnRowSolution(r: WoodColumnScheduleRow): SolutionStep[] {
-  return [
-    { title: `Section ${f0(r.b)}×${f0(r.d)} mm — ${r.species || 'timber'} (${r.kind})`, clause: 'NDS 2018 §3 / NSCP §6', lines: [
-      txt(`b = ${f0(r.b)} mm · d = ${f0(r.d)} mm · L = ${f2(r.L)} m`),
-    ] },
-    { title: 'Axial compression with column stability', clause: 'NDS §3.7', pass: r.fc <= r.FcPrime, lines: [
-      txt(`slenderness le/d = ${f1(r.slenderness)} → C_P = ${f2(r.CP)} · F′c = ${f2(r.FcPrime)} MPa`),
-      txt(`f_c = P/A = ${f2(r.fc)} MPa · Pu = ${f1(r.Pu)} kN ${r.fc <= r.FcPrime ? '✓' : '✗'}`),
-    ] },
-    { title: 'Combined axial + flexure', clause: 'NDS §3.9.2', pass: r.ok, lines: [
-      txt(`Mu = ${f1(r.Mu)} kN·m → governing ratio = ${f2(r.ratio)} ≤ 1.00 ${r.ok ? '✓' : '✗'}`),
-    ] },
-  ]
-}
-
-// ── Timber deck (wood slab) worked solution from the stored row detail ────────
-export function woodSlabRowSolution(r: WoodSlabScheduleRow): SolutionStep[] {
-  const d = r.design, tk = d.takeoff
-  const chk = (label: string, c: typeof d.joist): SolutionStep => ({
-    title: label, clause: 'NDS §3.3–§3.4 / NSCP §6', pass: c.ok, lines: [
-      txt(`${f0(c.b)}×${f0(c.d)} mm · span ${f2(c.span)} m · w = ${f2(c.w)} kN/m → M = ${f2(c.M)} kN·m, V = ${f2(c.V)} kN`),
-      txt(`bending f_b/F′b = ${f2(c.fb)}/${f2(c.FbPrime)} (util ${f2(c.bendingRatio)}) · shear f_v/F′v = ${f2(c.fv)}/${f2(c.FvPrime)} (util ${f2(c.shearRatio)})`),
-      txt(`Δ live ${f2(c.deflLive)}/${f2(c.deflLiveAllow)} mm · Δ total ${f2(c.deflTotal)}/${f2(c.deflTotalAllow)} mm ${c.ok ? '✓' : '✗'}`),
-    ],
-  })
-  return [
-    { title: 'Loads', clause: 'NSCP §203', lines: [
-      txt(`superimposed dead ${f2(d.loads.deadKpa)} kPa · live ${f2(d.loads.liveKpa)} kPa · deck self ${f2(d.loads.deckSelfKpa)} · joist self ${f2(d.loads.joistSelfKpa)} → total ${f2(d.loads.totalKpa)} kPa`),
-    ] },
-    chk('Decking', d.deck),
-    chk('Joist', d.joist),
-    { title: 'Take-off (board feet)', clause: 'BOM', lines: [
-      txt(`${f0(tk.joistCount)} joists · ${f2(tk.joistLengthM)} m · ${f0(tk.joistBoardFeet)} bd·ft · deck ${f2(tk.deckAreaM2)} m² · ${f0(tk.deckBoardFeet)} bd·ft${tk.bambooSlatCount != null ? ` · ${f0(tk.bambooSlatCount)} bamboo slats` : ''}`),
     ] },
   ]
 }
