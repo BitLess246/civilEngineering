@@ -24,6 +24,7 @@ import { solveBoltedConnection } from './boltedConnection'
 import { solveWeldedConnection } from './weldedConnection'
 import { boltGeomFromPositions, outOfPlaneBoltGroup, pryingAction } from './steelDesign'
 import { columnStabilityFactor, beamStabilityFactor, getWoodRef } from './woodDesign'
+import { designWoodSlab } from './woodSlab'
 import { velocity, hazenWilliamsHead, gpmToLps } from './waterSupply'
 import { designDrainage } from './drainage'
 import { designSepticTank } from './septicTank'
@@ -226,6 +227,18 @@ const woodCL = (() => {
   return { manual: a - Math.sqrt(a * a - r / 0.95), software: beamStabilityFactor(100, 300, 4000, Emin, FbStar).CL }
 })()
 
+const woodSlabJoist = (() => {
+  // DFL-No.2 joist 50 × 200 mm @ 400 mm o.c., 3.0 m simple span; deck 25 mm plank.
+  // Closed form: f_b = M/S with the assembled UDL M = wL²/8.
+  const r = designWoodSlab({
+    Lx: 3.0, Ly: 3.6, joistRef: getWoodRef('DFL-2')!.ref, joistB: 50, joistD: 200,
+    joistSpacing: 400, joistSupport: 'simple', deckMaterial: 'plank', deckThickness: 25,
+    deckWidth: 140, deckSupport: 'continuous', deadKpa: 0.5, liveKpa: 1.9,
+  })
+  const S = (50 * 200 * 200) / 6
+  return { manual: ((r.joist.w * 3.0 * 3.0) / 8) * 1e6 / S, software: r.joist.fb }
+})()
+
 // ── Plumbing (RNPCP 2000) — water-supply hydraulics ─────────────────────────
 const plumbVelocity = (() => {
   // ¾" Type L copper (19.94 mm ID) at 10 gpm — continuity v = Q/A.
@@ -370,6 +383,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'wood-cl', category: 'Timber', title: 'Timber beam stability factor CL',
     reference: 'NDS 2018 §3.3.3 / NSCP §6', formula: 'CL = a − √(a² − (FbE/Fb*)/0.95),  a = (1+FbE/Fb*)/1.9',
     manual: woodCL.manual, software: woodCL.software, unit: '—', tol: 1e-9,
+  },
+  {
+    id: 'wood-slab-joist', category: 'Timber', title: 'Wood-slab joist bending stress',
+    reference: 'NDS 2018 §3.3 / NSCP §6 (ASD)', formula: 'f_b = M/S,  M = wL²/8 (simple span)',
+    manual: woodSlabJoist.manual, software: woodSlabJoist.software, unit: 'MPa', tol: 1e-9,
   },
   {
     id: 'plumb-velocity', category: 'Plumbing', title: 'Supply pipe velocity (continuity)',

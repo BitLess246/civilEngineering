@@ -174,6 +174,7 @@ export function effectiveBendingLength(lu: number, d: number): number {
 export interface BeamStability { RB: number; FbE: number; CL: number }
 /** CL from the reference-with-all-other-factors bending stress FbStar (Fb*). */
 export function beamStabilityFactor(b: number, d: number, le: number, Emin: number, FbStar: number): BeamStability {
+  if (le <= 0) return { RB: 0, FbE: Infinity, CL: 1 }      // continuously braced compression edge → CL = 1 (§3.3.3.3)
   const RB = Math.sqrt((le * d) / (b * b))                 // §3.3.3.6 (≤ 50)
   const FbE = (1.2 * Emin) / (RB * RB)                     // §3.3.3.8
   const a = (1 + FbE / FbStar) / 1.9
