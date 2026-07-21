@@ -126,18 +126,36 @@ inconsistent data). `baseline.ts` captures the live CPM schedule as dated
 snapshots and reports per-activity start/finish/duration variance. `sample.ts` is
 a worked RC-building schedule used as the UI seed and an end-to-end fixture.
 
+## UI (separate routes, store-shared project)
+
+The scheduling views are **separate routes** (`/schedule`, later
+`/schedule/gantt`, `/schedule/network`, …), each in the sidebar under a
+"Planning" group. They share the active project through the localStorage store,
+not React context — `useScheduleProject` (`lib/`) loads the active project (an
+id under `schedule:active`), auto-saves every edit, and exposes new/sample/
+open/import/export; `useScheduleSolve` memoises validate → CPM → calendar-date
+projection, guarding cycles so a half-built project never throws. Pages follow
+the drawing-sheet design system (`components/calc.tsx`, AppShell). The Phase-4
+`/schedule` page is the WBS-grouped activity grid: inline edit, add/delete,
+row reorder + WBS collapse, a cycle-prevented dependency editor, live CPM
+columns (dates + total float + critical tag) and an expandable ES/EF/LS/LF/float
++ PERT panel per row.
+
 ## Roadmap (one PR per phase)
 
 - **Phase 1 — engine core** ✅: model, calendar, CPM, PERT + 50 tests.
 - **Phase 2 — progress & earned value** ✅: %-complete roll-up, status
   derivation, PV/EV/AC → SPI/CPI/SV/CV/BAC/EAC/VAC/ETC/TCPI, earned-schedule
   time variance, baseline variance + 24 tests.
-- **Phase 3 — persistence** *(this PR)*: project integrity validation, a
+- **Phase 3 — persistence** ✅: project integrity validation, a
   schema-versioned `ScheduleProject` store over a swappable backend
   (localStorage / in-memory), JSON import/export, baseline capture + date
   variance, and a worked RC-building sample fixture + 25 tests.
-- **Phase 4 — WBS + activity grid UI**: add/edit/delete/reorder/collapse, live
-  CPM recompute, dependency editor with cycle prevention.
+- **Phase 4 — WBS + activity grid UI** *(this PR)*: the `/schedule` page +
+  `useScheduleProject` / `useScheduleSolve` hooks — add/edit/delete/reorder,
+  WBS-group collapse, live CPM recompute, cycle-prevented dependency editor,
+  project new/sample/import/export. Drag-and-drop reorder is a later polish
+  (up/down buttons ship now).
 - **Phase 5 — Gantt chart**: baseline/actual/forecast bars, critical highlight,
   zoom (day→year), milestones, dependency arrows.
 - **Phase 6 — AON network diagram**: draggable nodes, critical-path styling.

@@ -41,6 +41,7 @@ import BeamEstimate from './pages/BeamEstimate'
 import BoxCulvertEstimate from './pages/BoxCulvertEstimate'
 import LoadCombinations from './pages/LoadCombinations'
 import PlumbingDesign from './pages/PlumbingDesign'
+import Schedule from './pages/Schedule'
 
 export default function App() {
   const [auth, setAuth] = useState<'login' | 'signup' | null>(null)
@@ -99,6 +100,7 @@ export default function App() {
         <Route path="/estimate/box-culvert" element={<BoxCulvertEstimate />} />
               <Route path="/load-combinations" element={<LoadCombinations />} />
         <Route path="/plumbing" element={<PlumbingDesign />} />
+        <Route path="/schedule" element={<Schedule />} />
             </Routes>
           </AppShell>
         } />
