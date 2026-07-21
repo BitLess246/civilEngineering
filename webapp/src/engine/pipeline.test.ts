@@ -375,6 +375,33 @@ describe('optimizeStructure', () => {
     expect(col.h).toBeLessThanOrEqual(500)
     expect(designOK(r.design)).toBe(true)
   })
+
+  it('wood frame with failing timber members and deck → optimizer grows both to pass', () => {
+    const woodSec: RectSection = {
+      id: 'W', name: '150×200', b: 150, h: 200, material: 'wood', woodSpecies: 'DFL-2', woodKind: 'sawn',
+      fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40,
+    }
+    const m = generateGridModel({ baysX: [5], baysZ: [4], storeyH: [3], section: woodSec, slabThickness: 150 })
+    m.loads = m.plates.flatMap((p) => [
+      { kind: 'area' as const, plate: p.id, q: 2.0, cat: 'D' as const },
+      { kind: 'area' as const, plate: p.id, q: 1.9, cat: 'L' as const },
+    ])
+    // undersized timber decks on every floor panel
+    m.plates = m.plates.map((p) => p.role === 'wall' ? p : { ...p, deck: {
+      joistSpecies: 'DFL-2', joistKind: 'sawn' as const, joistB: 50, joistD: 150, joistSpacing: 400,
+      deckMaterial: 'plank' as const, deckThickness: 20,
+    } })
+    const first = designStructure(m, soil)!
+    expect(designOK(first)).toBe(false)
+    expect(first.woodSlabs.length).toBeGreaterThan(0)
+    const r = optimizeStructure(m, soil)!
+    expect(r.converged).toBe(true)
+    expect(designOK(r.design)).toBe(true)
+    // the timber members grew, and the deck joists grew past their undersized start
+    expect(r.model.sections.some((s) => s.material === 'wood' && (s.h > 200 || s.b > 150))).toBe(true)
+    const grownDeck = r.model.plates.find((p) => p.deck)?.deck
+    expect(grownDeck && grownDeck.joistD).toBeGreaterThan(150)
+  })
 })
 
 describe('RC serviceability — NSCP Table 409.3.1.1 minimum thickness gate', () => {
