@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import type { Activity, ActivityStatus, ScheduleProject } from '../engine/schedule/model'
 import { useScheduleProject } from '../lib/useScheduleProject'
 import { useScheduleSolve, type ScheduleSolve } from '../lib/useScheduleSolve'
-import { buildScale, buildTicks, ZOOM, ZOOM_LEVELS, type ZoomLevel } from '../lib/gantt'
+import { buildScale, buildTicks, barEdgeX, ZOOM, ZOOM_LEVELS, type ZoomLevel } from '../lib/gantt'
 import { PageHeader } from '../components/calc'
 
 // Phase 5 — Gantt chart at /schedule/gantt. Reads the same store-backed project
@@ -108,8 +108,8 @@ function GanttChart({ project, solve, zoom, baselineId }: {
         if (!pd || py == null) continue
         const fromFinish = dep.type === 'FS' || dep.type === 'FF'
         const toStart = dep.type === 'FS' || dep.type === 'SS'
-        const sx = fromFinish ? scale.x(pd.finish) + scale.barWidth(pd.start, pd.finish) : scale.x(pd.start)
-        const tx = toStart ? scale.x(ad.start) : scale.x(ad.finish) + scale.barWidth(ad.start, ad.finish)
+        const sx = barEdgeX(scale, pd.start, pd.finish, fromFinish ? 'finish' : 'start')
+        const tx = barEdgeX(scale, ad.start, ad.finish, toStart ? 'start' : 'finish')
         const sy = py + ROW_H / 2, ty = ay + ROW_H / 2
         const midx = Math.max(sx + 8, tx - 12)
         out.push({ d: `M ${sx} ${sy} H ${midx} V ${ty} H ${tx}`, tx, ty })

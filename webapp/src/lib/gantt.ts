@@ -60,6 +60,18 @@ export function buildScale(startIso: string, finishIso: string, pxPerDay: number
   }
 }
 
+export type EdgeSide = 'start' | 'finish'
+
+/**
+ * Pixel x of a bar's start or finish edge — the SAME geometry the bar renders
+ * with (`left = x(start)`, `width = barWidth`), so the finish edge is
+ * `x(start) + barWidth`, NOT `x(finish) + barWidth`. Used to anchor dependency
+ * connectors to the real bar edges.
+ */
+export function barEdgeX(scale: GanttScale, startIso: string, finishIso: string, side: EdgeSide): number {
+  return side === 'start' ? scale.x(startIso) : scale.x(startIso) + scale.barWidth(startIso, finishIso)
+}
+
 export interface GanttTick { x: number; label: string; major: boolean }
 
 /** Axis ticks at the given granularity, positioned on the scale. */
