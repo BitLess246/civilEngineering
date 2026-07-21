@@ -4283,19 +4283,30 @@ export default function ModelSpace() {
                   </tr>
                 </thead>
                 <tbody>
-                  {design.woodBeams.map((b) => (
-                    <tr key={b.id} className={`sched-row border-t border-slate-100 ${b.ok ? '' : 'bg-red-50 text-red-700'}`}>
-                      <td className="py-1 pr-2 font-medium">{b.id}</td>
-                      <td className="py-1 pr-2 font-mono">{b.b}×{b.d}</td>
-                      <td className="py-1 pr-2" title={WOOD_SPECIES[b.species]?.label ?? b.species}>{b.species}{b.kind === 'glulam' ? ' (GL)' : ''}</td>
-                      <td className="py-1 pr-2 text-right">{f1(b.Mu)}</td>
-                      <td className="py-1 pr-2 text-right">{b.FbPrime.toFixed(2)}</td>
-                      <td className="py-1 pr-2 text-right">{b.CL.toFixed(2)}</td>
-                      <td className={`py-1 pr-2 text-right font-semibold ${b.utilM > 1 ? 'text-red-600' : b.utilM > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(b.utilM * 100).toFixed(0)}%</td>
-                      <td className={`py-1 pr-2 text-right font-semibold ${b.utilV > 1 ? 'text-red-600' : b.utilV > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(b.utilV * 100).toFixed(0)}%</td>
-                      <td className="py-1 text-[11px] text-slate-500">{b.gov}</td>
-                    </tr>
-                  ))}
+                  {design.woodBeams.flatMap((b) => {
+                    const key = `wbeam:${b.id}`, open = expanded === key || reportOpen
+                    return [
+                      <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${b.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                        <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {b.id}</td>
+                        <td className="py-1 pr-2 font-mono">{b.b}×{b.d}</td>
+                        <td className="py-1 pr-2" title={WOOD_SPECIES[b.species]?.label ?? b.species}>{b.species}{b.kind === 'glulam' ? ' (GL)' : ''}</td>
+                        <td className="py-1 pr-2 text-right">{f1(b.Mu)}</td>
+                        <td className="py-1 pr-2 text-right">{b.FbPrime.toFixed(2)}</td>
+                        <td className="py-1 pr-2 text-right">{b.CL.toFixed(2)}</td>
+                        <td className={`py-1 pr-2 text-right font-semibold ${b.utilM > 1 ? 'text-red-600' : b.utilM > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(b.utilM * 100).toFixed(0)}%</td>
+                        <td className={`py-1 pr-2 text-right font-semibold ${b.utilV > 1 ? 'text-red-600' : b.utilV > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(b.utilV * 100).toFixed(0)}%</td>
+                        <td className="py-1 text-[11px] text-slate-500">{b.gov}</td>
+                      </tr>,
+                      open && wantSol && (
+                        <tr key={`${key}:sol`}>
+                          <td colSpan={9} className="bg-slate-50/60 px-2 pb-2">
+                            <WorkedSolution steps={woodBeamRowSolution(b)} title={`${b.id} — worked solution`} />
+                          </td>
+                        </tr>
+                      ),
+                    ]
+                  })}
                 </tbody>
               </table>
               <p className="mt-1 text-[11px] text-slate-500">
@@ -4324,20 +4335,31 @@ export default function ModelSpace() {
                   </tr>
                 </thead>
                 <tbody>
-                  {design.woodColumns.map((c) => (
-                    <tr key={c.id} className={`sched-row border-t border-slate-100 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
-                      <td className="py-1 pr-2 font-medium">{c.id}</td>
-                      <td className="py-1 pr-2 font-mono">{c.b}×{c.d}</td>
-                      <td className="py-1 pr-2" title={WOOD_SPECIES[c.species]?.label ?? c.species}>{c.species}{c.kind === 'glulam' ? ' (GL)' : ''}</td>
-                      <td className="py-1 pr-2 text-right">{f1(c.Pu)}</td>
-                      <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
-                      <td className="py-1 pr-2 text-right">{c.FcPrime.toFixed(2)}</td>
-                      <td className="py-1 pr-2 text-right">{c.CP.toFixed(2)}</td>
-                      <td className="py-1 pr-2 text-right">{c.slenderness.toFixed(0)}</td>
-                      <td className={`py-1 pr-2 text-right font-semibold ${c.ratio > 1 ? 'text-red-600' : c.ratio > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(c.ratio * 100).toFixed(0)}%</td>
-                      <td className="py-1 text-[11px] text-slate-500">{c.gov}</td>
-                    </tr>
-                  ))}
+                  {design.woodColumns.flatMap((c) => {
+                    const key = `wcol:${c.id}`, open = expanded === key || reportOpen
+                    return [
+                      <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
+                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
+                        <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {c.id}</td>
+                        <td className="py-1 pr-2 font-mono">{c.b}×{c.d}</td>
+                        <td className="py-1 pr-2" title={WOOD_SPECIES[c.species]?.label ?? c.species}>{c.species}{c.kind === 'glulam' ? ' (GL)' : ''}</td>
+                        <td className="py-1 pr-2 text-right">{f1(c.Pu)}</td>
+                        <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
+                        <td className="py-1 pr-2 text-right">{c.FcPrime.toFixed(2)}</td>
+                        <td className="py-1 pr-2 text-right">{c.CP.toFixed(2)}</td>
+                        <td className="py-1 pr-2 text-right">{c.slenderness.toFixed(0)}</td>
+                        <td className={`py-1 pr-2 text-right font-semibold ${c.ratio > 1 ? 'text-red-600' : c.ratio > 0.9 ? 'text-amber-600' : 'text-green-700'}`}>{(c.ratio * 100).toFixed(0)}%</td>
+                        <td className="py-1 text-[11px] text-slate-500">{c.gov}</td>
+                      </tr>,
+                      open && wantSol && (
+                        <tr key={`${key}:sol`}>
+                          <td colSpan={10} className="bg-slate-50/60 px-2 pb-2">
+                            <WorkedSolution steps={woodColumnRowSolution(c)} title={`${c.id} — worked solution`} />
+                          </td>
+                        </tr>
+                      ),
+                    ]
+                  })}
                 </tbody>
               </table>
               <p className="mt-1 text-[11px] text-slate-500">
@@ -4632,98 +4654,6 @@ export default function ModelSpace() {
                 t = ℓ√(2fp/(0.9Fy)); ℓ = max(m, n, n′). Uplift sizes anchor rods (φt·0.75·Fu).
                 Adopted t rounded to plate stock.
               </p>
-            </div>
-          )}
-
-          {/* Timber beam & girder schedule — NDS §3 / NSCP §6 */}
-          {design.woodBeams.length > 0 && (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Timber beam &amp; girder schedule — NDS §3 / NSCP §6<SchedChip items={design.woodBeams} ok={(b) => b.ok} /></h3>
-              <table className="w-full border-collapse text-xs">
-                <thead>
-                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
-                    <th className="py-1 pr-2 font-semibold">Member</th>
-                    <th className="py-1 pr-2 font-semibold">Section</th>
-                    <th className="py-1 pr-2 font-semibold">Species</th>
-                    <th className="py-1 pr-2 text-right font-semibold">Mu (kN·m)</th>
-                    <th className="py-1 pr-2 text-right font-semibold">Vu (kN)</th>
-                    <th className="py-1 pr-2 text-right font-semibold">Util</th>
-                    <th className="py-1 font-semibold">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {design.woodBeams.flatMap((b) => {
-                    const key = `wbeam:${b.id}`, open = expanded === key || reportOpen
-                    return [
-                      <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
-                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${b.ok ? '' : 'bg-red-50 text-red-700'}`}>
-                        <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {b.id}</td>
-                        <td className="py-1 pr-2">{f0(b.b)}×{f0(b.d)}</td>
-                        <td className="py-1 pr-2">{b.species || '—'} ({b.kind})</td>
-                        <td className="py-1 pr-2 text-right">{f1(b.Mu)}</td>
-                        <td className="py-1 pr-2 text-right">{f1(b.Vu)}</td>
-                        <td className="py-1 pr-2 text-right">{(Math.max(b.utilM, b.utilV) * 100).toFixed(0)}%</td>
-                        <td className="py-1 text-slate-500">{b.ok ? '✓ OK' : '✗ check'}</td>
-                      </tr>,
-                      open && wantSol && (
-                        <tr key={`${key}:sol`}>
-                          <td colSpan={7} className="bg-slate-50/60 px-2 pb-2">
-                            <WorkedSolution steps={woodBeamRowSolution(b)} title={`${b.id} — worked solution`} />
-                          </td>
-                        </tr>
-                      ),
-                    ]
-                  })}
-                </tbody>
-              </table>
-              <p className="mt-1 text-[11px] text-slate-500">§3.3 bending with beam-stability C_L, §3.4 horizontal shear; factored demand vs LRFD-adjusted F′ (Appendix N K_F·φ·λ). Click a row for the worked solution.</p>
-            </div>
-          )}
-
-          {/* Timber column schedule — NDS §3.7 / §3.9 */}
-          {design.woodColumns.length > 0 && (
-            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Timber column schedule — NDS §3.7 / §3.9<SchedChip items={design.woodColumns} ok={(c) => c.ok} /></h3>
-              <table className="w-full border-collapse text-xs">
-                <thead>
-                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
-                    <th className="py-1 pr-2 font-semibold">Column</th>
-                    <th className="py-1 pr-2 font-semibold">Section</th>
-                    <th className="py-1 pr-2 font-semibold">Species</th>
-                    <th className="py-1 pr-2 text-right font-semibold">Pu (kN)</th>
-                    <th className="py-1 pr-2 text-right font-semibold">Mu (kN·m)</th>
-                    <th className="py-1 pr-2 text-right font-semibold">C_P</th>
-                    <th className="py-1 pr-2 text-right font-semibold">Ratio</th>
-                    <th className="py-1 font-semibold">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {design.woodColumns.flatMap((c) => {
-                    const key = `wcol:${c.id}`, open = expanded === key || reportOpen
-                    return [
-                      <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
-                        className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${c.ok ? '' : 'bg-red-50 text-red-700'}`}>
-                        <td className="py-1 pr-2 font-medium">{open ? '▾' : '▸'} {c.id}</td>
-                        <td className="py-1 pr-2">{f0(c.b)}×{f0(c.d)}</td>
-                        <td className="py-1 pr-2">{c.species || '—'} ({c.kind})</td>
-                        <td className="py-1 pr-2 text-right">{f1(c.Pu)}</td>
-                        <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
-                        <td className="py-1 pr-2 text-right">{f2(c.CP)}</td>
-                        <td className="py-1 pr-2 text-right">{(c.ratio * 100).toFixed(0)}%</td>
-                        <td className="py-1 text-slate-500">{c.ok ? '✓ OK' : '✗ check'}</td>
-                      </tr>,
-                      open && wantSol && (
-                        <tr key={`${key}:sol`}>
-                          <td colSpan={8} className="bg-slate-50/60 px-2 pb-2">
-                            <WorkedSolution steps={woodColumnRowSolution(c)} title={`${c.id} — worked solution`} />
-                          </td>
-                        </tr>
-                      ),
-                    ]
-                  })}
-                </tbody>
-              </table>
-              <p className="mt-1 text-[11px] text-slate-500">§3.7 axial with column-stability C_P; §3.9.2 combined axial + flexure interaction. Ratio ≤ 100% passes. Click a row for the worked solution.</p>
             </div>
           )}
 

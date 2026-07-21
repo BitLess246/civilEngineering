@@ -10,7 +10,7 @@ import { buildBeamSolution } from './beamSolution'
 import { axialColumnSolution, eccentricColumnSolution, type SeismicTieOverride } from './columnSolution'
 import { buildFoundationSolution, type SolutionCtx } from './foundationSolution'
 import { buildCombinedFootingSolution } from './combinedFootingSolution'
-import type { SolutionStep, SolutionLine } from './solution'
+import type { SolutionStep } from './solution'
 
 /** Worked solution for one beam/girder critical section. */
 export function beamSectionSolution(sec: RectSection, s: BeamSectionDesign): SolutionStep[] {
@@ -83,61 +83,97 @@ export function combinedRowSolution(secA: RectSection, secB: RectSection, soil: 
   return buildCombinedFootingSolution(input, row.design)
 }
 
-// ── Timber worked "solutions" (NDS §3 / NSCP §6) — narrate the stored LRFD
-// stresses and stability factors; shared by the on-screen schedules and the PDF. ──
+// ── Timber worked solutions (NDS §3 / NSCP §6, LRFD via Appendix N) — a full
+// step-by-step in KaTeX, narrating the stored intermediates. Shared by the
+// on-screen schedules and the direct PDF. ──
 const wf0 = (v: number) => v.toFixed(0)
 const wf1 = (v: number) => v.toFixed(1)
 const wf2 = (v: number) => v.toFixed(2)
-const wtxt = (text: string): SolutionLine => ({ text })
+const e3 = (v: number) => `${(v / 1e3).toFixed(1)}\\times10^{3}`   // mm³/mm² compact form
+const chk = (u: number) => (u <= 1 ? '\\le 1\\ \\checkmark' : '> 1\\ \\Rightarrow \\text{overstressed}')
 
 export function woodBeamRowSolution(r: WoodBeamScheduleRow): SolutionStep[] {
+  const braced = r.RB <= 1e-9
+  const FbE = braced ? Infinity : (1.2 * r.Emin) / (r.RB * r.RB)
   return [
-    { title: `Section ${wf0(r.b)}×${wf0(r.d)} mm — ${r.species || 'timber'} (${r.kind})`, clause: 'NDS 2018 §3 / NSCP §6', lines: [
-      wtxt(`b = ${wf0(r.b)} mm · d = ${wf0(r.d)} mm · L = ${wf2(r.L)} m · role ${r.role}`),
+    { title: 'Section properties & factored demands', clause: 'NDS 2018 §3 / NSCP §6', lines: [
+      { text: `${r.species || 'Timber'} (${r.kind}) — ${r.role}, span L = ${wf2(r.L)} m.` },
+      { tex: `b\\times d = ${wf0(r.b)}\\times${wf0(r.d)}\\ \\text{mm}` },
+      { tex: `S = \\dfrac{b\\,d^{2}}{6} = \\dfrac{${wf0(r.b)}\\cdot ${wf0(r.d)}^{2}}{6} = ${e3(r.S)}\\ \\text{mm}^{3}` },
+      { tex: `A = b\\,d = ${e3(r.A)}\\ \\text{mm}^{2}` },
+      { tex: `M_u = ${wf1(r.Mu)}\\ \\text{kN·m}, \\quad V_u = ${wf1(r.Vu)}\\ \\text{kN}` },
     ] },
-    { title: 'Flexure — bending with beam stability', clause: 'NDS §3.3', pass: r.utilM <= 1, lines: [
-      wtxt(`f_b = M/S = ${wf2(r.fb)} MPa · C_L = ${wf2(r.CL)} → F′b = ${wf2(r.FbPrime)} MPa`),
-      wtxt(`Mu = ${wf1(r.Mu)} kN·m → util f_b/F′b = ${wf2(r.utilM)} ${r.utilM <= 1 ? '✓' : '✗'}`),
+    { title: 'Bending stress', clause: 'NDS §3.3', lines: [
+      { tex: `f_b = \\dfrac{M_u}{S} = \\dfrac{${wf1(r.Mu)}\\times10^{6}}{${e3(r.S)}} = ${wf2(r.fb)}\\ \\text{MPa}` },
+    ] },
+    { title: 'Beam stability factor C_L', clause: 'NDS §3.3.3', lines: braced
+      ? [ { text: 'Compression edge continuously braced (le = 0) ⇒ CL = 1.00.' } ]
+      : [
+          { tex: `R_B = \\sqrt{\\dfrac{\\ell_e\\,d}{b^{2}}} = ${wf2(r.RB)} \\quad(\\le 50)` },
+          { tex: `F_{bE} = \\dfrac{1.2\\,E'_{min}}{R_B^{2}} = \\dfrac{1.2\\times ${wf0(r.Emin)}}{${wf2(r.RB)}^{2}} = ${wf1(FbE)}\\ \\text{MPa}` },
+          { tex: `C_L = ${wf2(r.CL)} \\quad\\text{from } F_{bE}/F_b^{*}` },
+        ] },
+    { title: 'Adjusted bending value & check', clause: 'NDS §3.3 · Appendix N', pass: r.utilM <= 1, lines: [
+      { tex: `F'_b = F_b^{*}\\,C_L = ${wf2(r.FbStar)}\\times ${wf2(r.CL)} = ${wf2(r.FbPrime)}\\ \\text{MPa}` },
+      { tex: `\\dfrac{f_b}{F'_b} = \\dfrac{${wf2(r.fb)}}{${wf2(r.FbPrime)}} = ${wf2(r.utilM)}\\ ${chk(r.utilM)}` },
     ] },
     { title: 'Horizontal shear', clause: 'NDS §3.4', pass: r.utilV <= 1, lines: [
-      wtxt(`f_v = 1.5V/A = ${wf2(r.fv)} MPa ≤ F′v = ${wf2(r.FvPrime)} MPa`),
-      wtxt(`Vu = ${wf1(r.Vu)} kN → util f_v/F′v = ${wf2(r.utilV)} ${r.utilV <= 1 ? '✓' : '✗'}`),
+      { tex: `f_v = \\dfrac{1.5\\,V_u}{A} = \\dfrac{1.5\\times ${wf1(r.Vu)}\\times10^{3}}{${e3(r.A)}} = ${wf2(r.fv)}\\ \\text{MPa}` },
+      { tex: `\\dfrac{f_v}{F'_v} = \\dfrac{${wf2(r.fv)}}{${wf2(r.FvPrime)}} = ${wf2(r.utilV)}\\ ${chk(r.utilV)}` },
     ] },
   ]
 }
 
 export function woodColumnRowSolution(r: WoodColumnScheduleRow): SolutionStep[] {
-  return [
-    { title: `Section ${wf0(r.b)}×${wf0(r.d)} mm — ${r.species || 'timber'} (${r.kind})`, clause: 'NDS 2018 §3 / NSCP §6', lines: [
-      wtxt(`b = ${wf0(r.b)} mm · d = ${wf0(r.d)} mm · L = ${wf2(r.L)} m`),
+  const axial = r.fc / r.FcPrime
+  const steps: SolutionStep[] = [
+    { title: 'Section properties & factored demands', clause: 'NDS 2018 §3 / NSCP §6', lines: [
+      { text: `${r.species || 'Timber'} (${r.kind}) column, length L = ${wf2(r.L)} m.` },
+      { tex: `A = b\\,d = ${wf0(r.b)}\\times${wf0(r.d)} = ${e3(r.A)}\\ \\text{mm}^{2}` },
+      { tex: `P_u = ${wf1(r.Pu)}\\ \\text{kN}, \\quad M_u = ${wf1(r.Mu)}\\ \\text{kN·m}` },
     ] },
-    { title: 'Axial compression with column stability', clause: 'NDS §3.7', pass: r.fc <= r.FcPrime, lines: [
-      wtxt(`slenderness le/d = ${wf1(r.slenderness)} → C_P = ${wf2(r.CP)} · F′c = ${wf2(r.FcPrime)} MPa`),
-      wtxt(`f_c = P/A = ${wf2(r.fc)} MPa · Pu = ${wf1(r.Pu)} kN ${r.fc <= r.FcPrime ? '✓' : '✗'}`),
+    { title: 'Axial stress', clause: 'NDS §3.6', lines: [
+      { tex: `f_c = \\dfrac{P_u}{A} = \\dfrac{${wf1(r.Pu)}\\times10^{3}}{${e3(r.A)}} = ${wf2(r.fc)}\\ \\text{MPa}` },
     ] },
-    { title: 'Combined axial + flexure', clause: 'NDS §3.9.2', pass: r.ok, lines: [
-      wtxt(`Mu = ${wf1(r.Mu)} kN·m → governing ratio = ${wf2(r.ratio)} ≤ 1.00 ${r.ok ? '✓' : '✗'}`),
+    { title: 'Column stability factor C_P', clause: 'NDS §3.7.1', lines: [
+      { tex: `\\dfrac{\\ell_e}{d} = ${wf1(r.slenderness)} \\quad(\\le 50)` },
+      { tex: `F_{cE} = \\dfrac{0.822\\,E'_{min}}{(\\ell_e/d)^{2}} = \\dfrac{0.822\\times ${wf0(r.Emin)}}{${wf1(r.slenderness)}^{2}} = ${wf1(r.FcE)}\\ \\text{MPa}` },
+      { tex: `C_P = ${wf2(r.CP)} \\quad\\text{from } F_{cE}/F_c^{*}` },
+      { tex: `F'_c = F_c^{*}\\,C_P = ${wf2(r.FcStar)}\\times ${wf2(r.CP)} = ${wf2(r.FcPrime)}\\ \\text{MPa}` },
     ] },
   ]
+  if (r.Mu > 1e-6) {
+    steps.push({ title: 'Combined axial + flexure (beam-column)', clause: 'NDS §3.9.2', pass: r.ok, lines: [
+      { tex: `\\left(\\dfrac{f_c}{F'_c}\\right)^{2} + \\dfrac{f_b}{F'_b\\left(1-f_c/F_{cE}\\right)} = ${wf2(r.ratio)}\\ ${chk(r.ratio)}` },
+      { text: `Axial term f_c/F′c = ${wf2(axial)}; the §3.9.2 interaction governs at ${wf2(r.ratio)}.` },
+    ] })
+  } else {
+    steps.push({ title: 'Axial check', clause: 'NDS §3.7', pass: r.ok, lines: [
+      { tex: `\\dfrac{f_c}{F'_c} = \\dfrac{${wf2(r.fc)}}{${wf2(r.FcPrime)}} = ${wf2(r.ratio)}\\ ${chk(r.ratio)}` },
+    ] })
+  }
+  return steps
 }
 
 export function woodSlabRowSolution(r: WoodSlabScheduleRow): SolutionStep[] {
   const d = r.design, tk = d.takeoff
-  const chk = (label: string, c: typeof d.joist): SolutionStep => ({
-    title: label, clause: 'NDS §3.3–§3.4 / NSCP §6', pass: c.ok, lines: [
-      wtxt(`${wf0(c.b)}×${wf0(c.d)} mm · span ${wf2(c.span)} m · w = ${wf2(c.w)} kN/m → M = ${wf2(c.M)} kN·m, V = ${wf2(c.V)} kN`),
-      wtxt(`bending f_b/F′b = ${wf2(c.fb)}/${wf2(c.FbPrime)} (util ${wf2(c.bendingRatio)}) · shear f_v/F′v = ${wf2(c.fv)}/${wf2(c.FvPrime)} (util ${wf2(c.shearRatio)})`),
-      wtxt(`Δ live ${wf2(c.deflLive)}/${wf2(c.deflLiveAllow)} mm · Δ total ${wf2(c.deflTotal)}/${wf2(c.deflTotalAllow)} mm ${c.ok ? '✓' : '✗'}`),
+  const member = (label: string, clause: string, c: typeof d.joist): SolutionStep => ({
+    title: label, clause, pass: c.ok, lines: [
+      { tex: `${wf0(c.b)}\\times${wf0(c.d)}\\ \\text{mm}, \\quad \\text{span } L = ${wf2(c.span)}\\ \\text{m}, \\quad w = ${wf2(c.w)}\\ \\text{kN/m}` },
+      { tex: `M = ${wf2(c.M)}\\ \\text{kN·m}, \\quad V = ${wf2(c.V)}\\ \\text{kN}` },
+      { tex: `\\dfrac{f_b}{F'_b} = \\dfrac{${wf2(c.fb)}}{${wf2(c.FbPrime)}} = ${wf2(c.bendingRatio)}\\ ${chk(c.bendingRatio)}` },
+      { tex: `\\dfrac{f_v}{F'_v} = \\dfrac{${wf2(c.fv)}}{${wf2(c.FvPrime)}} = ${wf2(c.shearRatio)}\\ ${chk(c.shearRatio)}` },
+      { tex: `\\Delta_{L} = ${wf2(c.deflLive)}\\ \\text{mm} \\le \\dfrac{L}{360} = ${wf2(c.deflLiveAllow)}\\ \\text{mm}, \\quad \\Delta_{T} = ${wf2(c.deflTotal)} \\le \\dfrac{L}{240} = ${wf2(c.deflTotalAllow)}` },
     ],
   })
   return [
-    { title: 'Loads', clause: 'NSCP §203', lines: [
-      wtxt(`superimposed dead ${wf2(d.loads.deadKpa)} kPa · live ${wf2(d.loads.liveKpa)} kPa · deck self ${wf2(d.loads.deckSelfKpa)} · joist self ${wf2(d.loads.joistSelfKpa)} → total ${wf2(d.loads.totalKpa)} kPa`),
+    { title: 'Floor loads', clause: 'NSCP §203', lines: [
+      { tex: `w_{tot} = ${wf2(d.loads.deadKpa)}_{SDL} + ${wf2(d.loads.deckSelfKpa)}_{deck} + ${wf2(d.loads.joistSelfKpa)}_{joist} + ${wf2(d.loads.liveKpa)}_{L} = ${wf2(d.loads.totalKpa)}\\ \\text{kPa}` },
     ] },
-    chk('Decking', d.deck),
-    chk('Joist', d.joist),
-    { title: 'Take-off (board feet)', clause: 'BOM', lines: [
-      wtxt(`${wf0(tk.joistCount)} joists · ${wf2(tk.joistLengthM)} m · ${wf0(tk.joistBoardFeet)} bd·ft · deck ${wf2(tk.deckAreaM2)} m² · ${wf0(tk.deckBoardFeet)} bd·ft${tk.bambooSlatCount != null ? ` · ${wf0(tk.bambooSlatCount)} bamboo slats` : ''}`),
+    member('Decking — spans the joist spacing', 'NDS §3.3–§3.4', d.deck),
+    member('Joist — spans the panel', 'NDS §3.3–§3.4', d.joist),
+    { title: 'Take-off (bill of materials)', clause: 'BOM', lines: [
+      { text: `${wf0(tk.joistCount)} joists · ${wf2(tk.joistLengthM)} m total · ${wf0(tk.joistBoardFeet)} bd·ft; deck ${wf2(tk.deckAreaM2)} m² · ${wf0(tk.deckBoardFeet)} bd·ft${tk.bambooSlatCount != null ? ` · ${wf0(tk.bambooSlatCount)} bamboo slats` : ''}.` },
     ] },
   ]
 }
