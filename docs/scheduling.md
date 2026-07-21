@@ -167,13 +167,18 @@ columns (dates + total float + critical tag) and an expandable ES/EF/LS/LF/float
   link is binding; tested). SVG nodes carry ES/EF and total float, the critical
   path is brick red, dependency links are bezier arrows, and nodes are
   **draggable** (view-only — moving a node never touches the schedule).
-- **Phase 7 — dashboard** *(this PR)*: `/schedule/dashboard` composes the engine
+- **Phase 7 — dashboard** ✅: `/schedule/dashboard` composes the engine
   `projectProgress` + `earnedValue` at a user-chosen data date — KPIs (actual vs
   planned %, schedule variance, SPI, days ahead/behind, forecast finish date),
   a status breakdown, a planned-vs-actual **S-curve** (pure `lib/progressCurve.ts`,
   tested), **cost EVM** (BAC from resource rates + an actual-cost input →
   PV/EV/AC/SV/CV/CPI/EAC/VAC/ETC/TCPI), and critical/delayed/upcoming lists.
-- **Phase 8 — resource loading**: labor/equipment/material, over-allocation.
+  Date↔offset conversions live in the tested `lib/scheduleDates.ts` (inclusive
+  data-date offset + forecast finish, consistent with `finishDate`).
+- **Phase 8 — resource loading** *(this PR)*: `/schedule/resources` — per-resource
+  daily load (assignment quantity spread over the activity's scheduled span) with
+  a load histogram and **over-allocation** flagged where daily demand exceeds
+  `availablePerDay`; pure tested `lib/resourceLoad.ts`.
 - **Phase 9 — reports**: schedule / critical-path / EVM / progress / resource →
   PDF, Excel, CSV.
 - **Phase 10 — daily-report integration & delay analysis** + user docs.
