@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useScheduleProject } from '../lib/useScheduleProject'
 import { useScheduleSolve } from '../lib/useScheduleSolve'
 import { resourceLoad, hasOverAllocation, type ResourceLoad } from '../lib/resourceLoad'
+import type { ResourceType } from '../engine/schedule/model'
 import { PageHeader } from '../components/calc'
 
 // Phase 8 — resource loading at /schedule/resources. Spreads each activity's
@@ -12,7 +13,7 @@ import { PageHeader } from '../components/calc'
 
 const btn = 'inline-flex items-center gap-1.5 rounded-md border border-[#d6d3c9] bg-white px-2.5 py-1.5 text-[12px] font-semibold text-[#3d4a5c] hover:border-[#0f4c92] hover:text-[#0f4c92]'
 const CRITICAL = '#c2402a'
-const TYPE_COLOR: Record<string, string> = { labor: '#0f4c92', equipment: '#7a5cc0', material: '#1a7f4b' }
+const TYPE_COLOR: Record<ResourceType, string> = { labor: '#0f4c92', equipment: '#7c3aed', material: '#1a7f4b' }
 const n1 = (v: number) => (Number.isFinite(v) ? v.toFixed(1) : '—')
 
 function Histogram({ load }: { load: ResourceLoad }) {
@@ -32,10 +33,16 @@ function Histogram({ load }: { load: ResourceLoad }) {
         {load.perDay.map((v, t) => {
           const h = (v / max) * H
           const over = load.available != null && v > load.available + 1e-9
-          return <rect key={t} x={t * bw} y={H - h} width={Math.max(1, bw - 1)} height={h} fill={over ? CRITICAL : base} opacity={over ? 0.95 : 0.6} />
+          return (
+            <rect key={t} x={t * bw} y={H - h} width={Math.max(1, bw - 1)} height={h} fill={over ? CRITICAL : base} opacity={over ? 0.95 : 0.6}>
+              <title>day {t}: {n1(v)} {load.resource.unit}{over ? ' (over)' : ''}</title>
+            </rect>
+          )
         })}
-        <text x={0} y={H + 12} style={{ fontSize: 8, fill: '#a39d8d' }}>day 0</text>
-        <text x={load.perDay.length * bw} textAnchor="end" y={H + 12} style={{ fontSize: 8, fill: '#a39d8d' }}>day {load.perDay.length - 1}</text>
+        {load.perDay.length > 0 && <>
+          <text x={0} y={H + 12} style={{ fontSize: 8, fill: '#a39d8d' }}>day 0</text>
+          <text x={load.perDay.length * bw} textAnchor="end" y={H + 12} style={{ fontSize: 8, fill: '#a39d8d' }}>day {load.perDay.length - 1}</text>
+        </>}
       </svg>
     </div>
   )
@@ -65,7 +72,7 @@ export default function ScheduleResources() {
             <Link to="/schedule" className="mt-4 inline-flex rounded-md bg-[#0f4c92] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#0d3f78]">Go to the schedule grid</Link>
           </div>
         ) : project.resources.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-[#d6d3c9] bg-white px-6 py-16 text-center text-[13px] text-[#a39d8d]">No resources defined. Add labor / equipment / material resources with per-day availability to see the loading.</div>
+          <div className="rounded-lg border border-dashed border-[#d6d3c9] bg-white px-6 py-16 text-center text-[13px] text-[#a39d8d]">This project has no resources. Load the sample, or import a project whose activities carry resource assignments and per-day availability, to see the loading.</div>
         ) : !solve.ok ? (
           <div className="rounded-lg border border-[#efd9cc] bg-[#fdf3ee] px-4 py-2.5 text-[12px] text-[#8f4a2f]">The schedule has {solve.errorCount} blocking issue(s); fix them in the grid to compute resource loading.</div>
         ) : (

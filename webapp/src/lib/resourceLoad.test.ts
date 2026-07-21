@@ -56,6 +56,22 @@ describe('edge cases', () => {
     expect(load.total).toBe(0)
     expect(hasOverAllocation([load])).toBe(false)
   })
+  it('sums multiple assignments of the same resource on one activity', () => {
+    const [load] = resourceLoad(
+      [{ id: 'A', duration: 3, resources: [{ resourceId: 'R', quantity: 10 }, { resourceId: 'R', quantity: 5 }] }],
+      mkCpm([{ id: 'A', es: 0, ef: 3, duration: 3 }]), [R], 3,
+    )
+    expect(load.total).toBe(15)               // 10 + 5
+    expect(load.perDay).toEqual([5, 5, 5])    // 15 / 3 days
+  })
+  it('an empty project yields an empty load with no peak', () => {
+    const emptyCpm = { activities: new Map(), order: [], duration: 0, finish: 0, criticalPath: [] } as CpmResult
+    const [load] = resourceLoad([], emptyCpm, [R], 0)
+    expect(load.perDay).toEqual([])
+    expect(load.total).toBe(0)
+    expect(load.peak).toBe(0)
+    expect(hasOverAllocation([load])).toBe(false)
+  })
   it('clamps activity spans to the timeline window', () => {
     const [load] = resourceLoad(
       [{ id: 'A', duration: 5, resources: [{ resourceId: 'R', quantity: 10 }] }],
