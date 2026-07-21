@@ -48,6 +48,12 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
     ],
   },
   {
+    label: 'Project Planning',
+    tools: [
+      { to: '/schedule', name: 'Project Schedule', sub: 'CPM · PERT · progress' },
+    ],
+  },
+  {
     label: 'Quantity Take-Off',
     tools: [
       { to: '/estimate/slab',        name: 'Slab',        sub: 'Concrete + rebar' },
@@ -78,6 +84,7 @@ export function toolGroups(category: ToolCategory): { group: string; tools: Tool
 export interface SidebarGroup { label: string; tools: ToolDef[] }
 export const SIDEBAR_GROUPS: SidebarGroup[] = (() => {
   const structural = TOOL_CATEGORIES.find((c) => c.label === 'Structural')!
+  const planning = TOOL_CATEGORIES.find((c) => c.label === 'Project Planning')!
   const takeoff = TOOL_CATEGORIES.find((c) => c.label === 'Quantity Take-Off')!
   const reference = TOOL_CATEGORIES.find((c) => c.label === 'Reference')!
   const short: Record<string, string> = {
@@ -85,7 +92,7 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = (() => {
     'Steel & Connections': 'Steel',
   }
   const groups = toolGroups(structural).map(({ group, tools }) => ({ label: short[group] ?? group, tools }))
-  return [...groups, { label: 'Estimates', tools: takeoff.tools }, { label: 'Reference', tools: reference.tools }]
+  return [...groups, { label: 'Planning', tools: planning.tools }, { label: 'Estimates', tools: takeoff.tools }, { label: 'Reference', tools: reference.tools }]
 })()
 
 /** Every tool with its sidebar group label — drives the ⌘K palette and the
