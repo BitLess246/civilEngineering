@@ -27,6 +27,7 @@ import RetainingWall from './pages/RetainingWall'
 import Geotech from './pages/Geotech'
 import SoilNail from './pages/SoilNail'
 import StairDesign from './pages/StairDesign'
+import WoodSlab from './pages/WoodSlab'
 import Micropile from './pages/Micropile'
 import RockAnchor from './pages/RockAnchor'
 import SeismicWizard from './pages/SeismicWizard'
@@ -86,6 +87,7 @@ export default function App() {
         <Route path="/geotech" element={<Geotech />} />
         <Route path="/soil-nail" element={<SoilNail />} />
         <Route path="/stair" element={<StairDesign />} />
+        <Route path="/wood-slab" element={<WoodSlab />} />
         <Route path="/micropile" element={<Micropile />} />
         <Route path="/rock-anchor" element={<RockAnchor />} />
         <Route path="/seismic-wizard" element={<SeismicWizard />} />
