@@ -2,9 +2,10 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { ScheduleProject, WorkingCalendar } from '../engine/schedule/model'
 import { projectProgress } from '../engine/schedule/progress'
-import { earnedValue, type EvmActivityInput } from '../engine/schedule/earnedValue'
+import { earnedValue, plannedFraction, type EvmActivityInput } from '../engine/schedule/earnedValue'
 import { plannedCurve } from '../lib/progressCurve'
-import { parseISO, toISO, offsetToDate, workingDaysBetween, defaultCalendar } from '../engine/schedule/calendar'
+import { defaultCalendar } from '../engine/schedule/calendar'
+import { dataDateOffset, forecastFinishISO } from '../lib/scheduleDates'
 import { useScheduleProject } from '../lib/useScheduleProject'
 import { useScheduleSolve, type ScheduleSolve } from '../lib/useScheduleSolve'
 import { PageHeader } from '../components/calc'
@@ -18,7 +19,7 @@ import { PageHeader } from '../components/calc'
 const btn = 'inline-flex items-center gap-1.5 rounded-md border border-[#d6d3c9] bg-white px-2.5 py-1.5 text-[12px] font-semibold text-[#3d4a5c] hover:border-[#0f4c92] hover:text-[#0f4c92]'
 const n1 = (v: number | null) => (v == null || !Number.isFinite(v) ? '—' : v.toFixed(1))
 const n2 = (v: number | null) => (v == null || !Number.isFinite(v) ? '—' : v.toFixed(2))
-const peso = (v: number) => '₱' + Math.round(v).toLocaleString('en-US')
+const peso = (v: number) => '₱' + Math.round(v).toLocaleString('en-PH', { maximumFractionDigits: 0 })
 
 function projectCalendar(p: ScheduleProject): WorkingCalendar {
   return p.calendars.find((c) => c.id === p.defaultCalendarId) ?? defaultCalendar(p.defaultCalendarId)
@@ -95,7 +96,7 @@ function Dashboard({ project, solve }: { project: ScheduleProject; solve: Schedu
 
   const [dataDate, setDataDate] = useState(defaultData)
   const [acInput, setAcInput] = useState(0)
-  const dataOffset = Math.max(0, workingDaysBetween(cal, parseISO(start), parseISO(dataDate)))
+  const dataOffset = dataDateOffset(cal, start, dataDate)
 
   const nameOf = useMemo(() => new Map(project.activities.map((a) => [a.id, a.name])), [project])
   const prog = useMemo(() => projectProgress(project.activities, solve.cpm!, dataOffset), [project, solve.cpm, dataOffset])
@@ -103,21 +104,29 @@ function Dashboard({ project, solve }: { project: ScheduleProject; solve: Schedu
   // Cost EVM — BAC from resource costs; AC from the input, split by earned share.
   const costOf = useMemo(() => new Map(project.resources.map((r) => [r.id, r.costPerUnit ?? 0])), [project])
   const evm = useMemo(() => {
-    const rows = project.activities.map((a) => {
+    let bac = 0, pv = 0, ev = 0, hasCost = false
+    for (const a of project.activities) {
       const c = solve.cpm!.activities.get(a.id)
-      const bac = (a.resources ?? []).reduce((s, r) => s + r.quantity * (costOf.get(r.resourceId) ?? 0), 0)
+      const b = (a.resources ?? []).reduce((s, r) => s + r.quantity * (costOf.get(r.resourceId) ?? 0), 0)
+      if (b > 0) hasCost = true
       const pct = Math.min(100, Math.max(0, a.percentComplete ?? 0))
-      return { id: a.id, bac, pct, ev: bac * (pct / 100), pf: c ? (c.ef > c.es ? Math.min(1, Math.max(0, (dataOffset - c.es) / (c.ef - c.es))) : dataOffset >= c.ef ? 1 : 0) : 0 }
-    })
-    const totalEv = rows.reduce((s, r) => s + r.ev, 0)
-    const items: EvmActivityInput[] = rows.map((r) => ({
-      id: r.id, bac: r.bac, percentComplete: r.pct, plannedFraction: r.pf,
-      actualCost: totalEv > 0 ? acInput * (r.ev / totalEv) : 0,
-    }))
-    return { result: earnedValue(items), hasCost: items.some((i) => i.bac > 0) }
+      bac += b
+      pv += b * (c ? plannedFraction(c.es, c.ef, dataOffset) : 0)
+      ev += b * (pct / 100)
+    }
+    // Feed AC at the project level (single aggregate row that reproduces
+    // PV/EV/BAC) so the entered actual cost is honoured in every case —
+    // including EV = 0, where an earned-share split would zero it out.
+    const item: EvmActivityInput = {
+      id: 'project', bac,
+      percentComplete: bac > 0 ? (ev / bac) * 100 : 0,
+      plannedFraction: bac > 0 ? pv / bac : 0,
+      actualCost: acInput,
+    }
+    return { result: earnedValue([item]), hasCost }
   }, [project, solve.cpm, costOf, dataOffset, acInput])
 
-  const forecastFinish = toISO(offsetToDate(cal, parseISO(start), Math.round(prog.forecastDuration)))
+  const forecastFinish = forecastFinishISO(cal, start, prog.forecastDuration)
   const ahead = prog.daysAheadBehind
   const varTone = prog.scheduleVariancePercent < -0.5 ? 'bad' : prog.scheduleVariancePercent > 0.5 ? 'ok' : undefined
 
@@ -205,6 +214,7 @@ function Dashboard({ project, solve }: { project: ScheduleProject; solve: Schedu
             <Stat label="TCPI" value={n2(evm.result.tcpi)} />
           </div>
         )}
+        {evm.hasCost && <p className="mt-3 text-[10.5px] text-[#a39d8d]">AC is your entered cost to date; PV, EV and BAC are computed from the schedule and resource rates. CPI, EAC and VAC appear once AC &gt; 0.</p>}
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-3">
