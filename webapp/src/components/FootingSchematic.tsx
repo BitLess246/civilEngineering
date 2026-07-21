@@ -50,7 +50,9 @@ export function FootingSchematic({ Bx, By, Dc, columnWidth, H }: SchematicProps)
   const slabH = Math.max(8, (Dc / 1000) * sV)
   const slabY = gl + (Hpx - slabH)
   const baseY = gl + Hpx
-  const stubW = 28
+  // column stub scaled to the section's horizontal scale (sW px ≙ Bx m), so it
+  // matches the plan's column-to-footing proportion instead of a fixed width.
+  const stubW = Math.max(6, cm * (sW / Bx))
   const soilTicks: JSX.Element[] = []
   for (let x = slabX; x < slabX + sW; x += 12) {
     soilTicks.push(<line key={`s${x}`} x1={x} y1={gl} x2={x - 6} y2={gl + 6} stroke="#caa472" strokeWidth={0.8} />)
