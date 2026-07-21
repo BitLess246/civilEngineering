@@ -7,6 +7,7 @@ import type { StructuralModel, RectSection, Node } from '../engine/model'
 import type {
   StructureDesign, SoilOptions,
   SteelBeamScheduleRow, SteelColumnScheduleRow,
+  WoodBeamScheduleRow, WoodColumnScheduleRow,
 } from '../engine/pipeline'
 import { designOK } from '../engine/pipeline'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution } from './modelSpaceSolutions'
@@ -93,6 +94,40 @@ export function steelColumnRowSolution(r: SteelColumnScheduleRow): SolutionStep[
   ]
 }
 
+// ── Timber worked "solutions" from the stored row detail (NDS §3 / NSCP §6) ───
+// The wood schedule rows carry the LRFD-adjusted stresses and stability factors;
+// these steps narrate them (no re-calculation), mirroring the steel builders.
+export function woodBeamRowSolution(r: WoodBeamScheduleRow): SolutionStep[] {
+  return [
+    { title: `Section ${f0(r.b)}×${f0(r.d)} mm — ${r.species || 'timber'} (${r.kind})`, clause: 'NDS 2018 §3 / NSCP §6', lines: [
+      txt(`b = ${f0(r.b)} mm · d = ${f0(r.d)} mm · L = ${f2(r.L)} m · role ${r.role}`),
+    ] },
+    { title: 'Flexure — bending with beam stability', clause: 'NDS §3.3', pass: r.utilM <= 1, lines: [
+      txt(`f_b = M/S = ${f2(r.fb)} MPa · C_L = ${f2(r.CL)} → F′b = ${f2(r.FbPrime)} MPa`),
+      txt(`Mu = ${f1(r.Mu)} kN·m → util f_b/F′b = ${f2(r.utilM)} ${r.utilM <= 1 ? '✓' : '✗'}`),
+    ] },
+    { title: 'Horizontal shear', clause: 'NDS §3.4', pass: r.utilV <= 1, lines: [
+      txt(`f_v = 1.5V/A = ${f2(r.fv)} MPa ≤ F′v = ${f2(r.FvPrime)} MPa`),
+      txt(`Vu = ${f1(r.Vu)} kN → util f_v/F′v = ${f2(r.utilV)} ${r.utilV <= 1 ? '✓' : '✗'}`),
+    ] },
+  ]
+}
+
+export function woodColumnRowSolution(r: WoodColumnScheduleRow): SolutionStep[] {
+  return [
+    { title: `Section ${f0(r.b)}×${f0(r.d)} mm — ${r.species || 'timber'} (${r.kind})`, clause: 'NDS 2018 §3 / NSCP §6', lines: [
+      txt(`b = ${f0(r.b)} mm · d = ${f0(r.d)} mm · L = ${f2(r.L)} m`),
+    ] },
+    { title: 'Axial compression with column stability', clause: 'NDS §3.7', pass: r.fc <= r.FcPrime, lines: [
+      txt(`slenderness le/d = ${f1(r.slenderness)} → C_P = ${f2(r.CP)} · F′c = ${f2(r.FcPrime)} MPa`),
+      txt(`f_c = P/A = ${f2(r.fc)} MPa · Pu = ${f1(r.Pu)} kN ${r.fc <= r.FcPrime ? '✓' : '✗'}`),
+    ] },
+    { title: 'Combined axial + flexure', clause: 'NDS §3.9.2', pass: r.ok, lines: [
+      txt(`Mu = ${f1(r.Mu)} kN·m → governing ratio = ${f2(r.ratio)} ≤ 1.00 ${r.ok ? '✓' : '✗'}`),
+    ] },
+  ]
+}
+
 // ── Payload assembly ──────────────────────────────────────────────────────────
 export function buildModelReport(
   model: StructuralModel, design: StructureDesign, props: [string, string][], soil: SoilOptions,
@@ -170,6 +205,14 @@ export function buildModelReport(
     const w = worst(design.steelColumns, (c) => c.ratio)!
     checks.push({ name: 'Steel columns (§H1-1)', detail: `${design.steelColumns.length} members · governing ${w.row.id}`, ratio: w.r, ok: design.steelColumns.every((c) => c.ok) })
   }
+  if (design.woodBeams.length) {
+    const w = worst(design.woodBeams, (b) => Math.max(b.utilM, b.utilV))!
+    checks.push({ name: 'Timber beams & girders (NDS §3)', detail: `${design.woodBeams.length} members · governing ${w.row.id}`, ratio: w.r, ok: design.woodBeams.every((b) => b.ok) })
+  }
+  if (design.woodColumns.length) {
+    const w = worst(design.woodColumns, (c) => c.ratio)!
+    checks.push({ name: 'Timber columns (NDS §3.9)', detail: `${design.woodColumns.length} members · governing ${w.row.id}`, ratio: w.r, ok: design.woodColumns.every((c) => c.ok) })
+  }
   if (design.basePlates.length) {
     const w = worst(design.basePlates, (p) => p.design.bearingUtil)!
     checks.push({ name: 'Base plates', detail: `${design.basePlates.length} plates · governing ${w.row.node}`, ratio: w.r, ok: design.basePlates.every((p) => p.ok) })
@@ -200,9 +243,10 @@ export function buildModelReport(
 
   const stats: ReportStat[] = [
     { label: 'Load cases', value: String(design.cases.length) },
-    { label: 'Members checked', value: String(design.beams.length + design.columns.length + design.steelBeams.length + design.steelColumns.length) },
+    { label: 'Members checked', value: String(design.beams.length + design.columns.length + design.steelBeams.length + design.steelColumns.length + design.woodBeams.length + design.woodColumns.length) },
     { label: 'Concrete', value: f1(design.totals.concrete), unit: 'm³' },
     ...(design.totals.steelKg > 0 ? [{ label: 'Steel', value: f2(design.totals.steelKg / 1000), unit: 't' }] : []),
+    ...(design.totals.woodVolume > 0 ? [{ label: 'Timber', value: f2(design.totals.woodVolume), unit: 'm³' }] : []),
     { label: 'Footings', value: String(design.footings.length + design.combined.length) },
     { label: 'Governing combo', value: design.govName },
   ]
@@ -281,6 +325,21 @@ export function buildModelReport(
     right: [2, 3, 4, 5, 6, 7, 8],
     rows: design.steelColumns.map((c) => [c.id, c.shape, f2(c.L), f1(c.Pu), f1(c.phiPn), f1(c.Mu), f1(c.phiMn),
       f1(c.slenderness), f2(c.ratio), c.gov ?? '']),
+  })
+  if (design.woodBeams.length) tables.push({
+    title: 'Timber beam & girder schedule (NDS §3 / NSCP §6)',
+    head: ['Member', 'Section', 'Species', 'L (m)', 'Mu (kN·m)', 'f_b/F′b', 'Vu (kN)', 'f_v/F′v', 'Util', 'Status'],
+    right: [3, 4, 5, 6, 7, 8],
+    rows: design.woodBeams.map((b) => [b.id, `${f0(b.b)}×${f0(b.d)}`, `${b.species || '—'} (${b.kind})`, f2(b.L),
+      f1(b.Mu), `${f2(b.fb)}/${f2(b.FbPrime)}`, f1(b.Vu), `${f2(b.fv)}/${f2(b.FvPrime)}`,
+      f2(Math.max(b.utilM, b.utilV)), b.ok ? 'PASS' : 'FAIL']),
+  })
+  if (design.woodColumns.length) tables.push({
+    title: 'Timber column schedule (NDS §3.7 / §3.9)',
+    head: ['Member', 'Section', 'Species', 'L (m)', 'Pu (kN)', 'f_c/F′c', 'C_P', 'Mu (kN·m)', 'Ratio', 'Status'],
+    right: [3, 4, 5, 6, 7, 8],
+    rows: design.woodColumns.map((c) => [c.id, `${f0(c.b)}×${f0(c.d)}`, `${c.species || '—'} (${c.kind})`, f2(c.L),
+      f1(c.Pu), `${f2(c.fc)}/${f2(c.FcPrime)}`, f2(c.CP), f1(c.Mu), f2(c.ratio), c.ok ? 'PASS' : 'FAIL']),
   })
   if (design.basePlates.length) tables.push({
     title: 'Base plate schedule',
@@ -379,6 +438,14 @@ export function buildModelReport(
   if (design.steelColumns.length) groups.push({
     title: 'Steel columns',
     items: design.steelColumns.map((c) => ({ title: c.id, sub: `${c.shape} · L = ${f2(c.L)} m · ${c.gov ?? ''}`, steps: steelColumnRowSolution(c) })),
+  })
+  if (design.woodBeams.length) groups.push({
+    title: 'Timber beams & girders',
+    items: design.woodBeams.map((b) => ({ title: b.id, sub: `${f0(b.b)}×${f0(b.d)} mm · ${b.species || 'timber'} · L = ${f2(b.L)} m · ${b.gov ?? ''}`, steps: woodBeamRowSolution(b) })),
+  })
+  if (design.woodColumns.length) groups.push({
+    title: 'Timber columns',
+    items: design.woodColumns.map((c) => ({ title: c.id, sub: `${f0(c.b)}×${f0(c.d)} mm · ${c.species || 'timber'} · L = ${f2(c.L)} m · ${c.gov ?? ''}`, steps: woodColumnRowSolution(c) })),
   })
   const connItems: ReportSolution[] = [
     ...design.joints.flatMap((j) => j.connections.map((c) => ({
