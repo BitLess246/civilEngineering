@@ -90,3 +90,53 @@ describe('buildModelReport', () => {
           }
   })
 })
+
+describe('buildModelReport — timber members', () => {
+  const woodSection: RectSection = {
+    id: 'W1', name: '100×300', b: 100, h: 300, material: 'wood', woodSpecies: 'DFL-2', woodKind: 'sawn',
+    fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40,
+  }
+  const model = (() => {
+    const m = generateGridModel({ baysX: [5], baysZ: [4], storeyH: [3], section: woodSection, slabThickness: 150 })
+    m.loads = m.plates.flatMap((p) => [
+      { kind: 'area' as const, plate: p.id, q: 2.0, cat: 'D' as const },
+      { kind: 'area' as const, plate: p.id, q: 1.9, cat: 'L' as const },
+    ])
+    return m
+  })()
+  const design = designStructure(model, soil)!
+  const rpt = buildModelReport(model, design, [], soil)
+
+  it('the model actually produced timber members', () => {
+    expect(design.woodBeams.length + design.woodColumns.length).toBeGreaterThan(0)
+    expect(design.totals.woodVolume).toBeGreaterThan(0)
+  })
+
+  it('summary checks include the timber groups, matching row verdicts', () => {
+    const names = rpt.checks.map((c) => c.name)
+    if (design.woodBeams.length) {
+      expect(names).toContain('Timber beams & girders (NDS §3)')
+      expect(rpt.checks.find((c) => c.name === 'Timber beams & girders (NDS §3)')!.ok)
+        .toBe(design.woodBeams.every((b) => b.ok))
+    }
+    if (design.woodColumns.length) expect(names).toContain('Timber columns (NDS §3.9)')
+  })
+
+  it('schedule tables and worked-solution groups cover every timber member', () => {
+    if (design.woodBeams.length) {
+      const t = rpt.tables.find((x) => x.title.startsWith('Timber beam'))!
+      expect(t.rows).toHaveLength(design.woodBeams.length)
+      for (const r of t.rows) expect(r).toHaveLength(t.head.length)
+      expect(rpt.groups.find((g) => g.title === 'Timber beams & girders')!.items).toHaveLength(design.woodBeams.length)
+    }
+    if (design.woodColumns.length) {
+      const t = rpt.tables.find((x) => x.title.startsWith('Timber column'))!
+      expect(t.rows).toHaveLength(design.woodColumns.length)
+      expect(rpt.groups.find((g) => g.title === 'Timber columns')!.items).toHaveLength(design.woodColumns.length)
+    }
+  })
+
+  it('the timber volume appears in the report stats', () => {
+    expect(rpt.stats.some((s) => s.label === 'Timber' && s.unit === 'm³')).toBe(true)
+  })
+})
