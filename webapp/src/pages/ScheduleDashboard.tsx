@@ -101,7 +101,7 @@ function Dashboard({ project, solve }: { project: ScheduleProject; solve: Schedu
   const nameOf = useMemo(() => new Map(project.activities.map((a) => [a.id, a.name])), [project])
   const prog = useMemo(() => projectProgress(project.activities, solve.cpm!, dataOffset), [project, solve.cpm, dataOffset])
 
-  // Cost EVM — BAC from resource costs; AC from the input, split by earned share.
+  // Cost EVM — BAC from resource costs; PV/EV from the schedule; AC entered.
   const costOf = useMemo(() => new Map(project.resources.map((r) => [r.id, r.costPerUnit ?? 0])), [project])
   const evm = useMemo(() => {
     let bac = 0, pv = 0, ev = 0, hasCost = false
