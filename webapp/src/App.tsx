@@ -45,6 +45,7 @@ import PlumbingDesign from './pages/PlumbingDesign'
 import Schedule from './pages/Schedule'
 import ScheduleGantt from './pages/ScheduleGantt'
 import ScheduleNetwork from './pages/ScheduleNetwork'
+import ScheduleDashboard from './pages/ScheduleDashboard'
 
 export default function App() {
   const [auth, setAuth] = useState<'login' | 'signup' | null>(null)
@@ -107,6 +108,7 @@ export default function App() {
         <Route path="/schedule" element={<Schedule />} />
         <Route path="/schedule/gantt" element={<ScheduleGantt />} />
         <Route path="/schedule/network" element={<ScheduleNetwork />} />
+        <Route path="/schedule/dashboard" element={<ScheduleDashboard />} />
             </Routes>
           </AppShell>
         } />
