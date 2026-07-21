@@ -7,7 +7,7 @@ import type { StructuralModel, RectSection, Node } from '../engine/model'
 import type {
   StructureDesign, SoilOptions,
   SteelBeamScheduleRow, SteelColumnScheduleRow,
-  WoodBeamScheduleRow, WoodColumnScheduleRow,
+  WoodBeamScheduleRow, WoodColumnScheduleRow, WoodSlabScheduleRow,
 } from '../engine/pipeline'
 import { designOK } from '../engine/pipeline'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution } from './modelSpaceSolutions'
@@ -128,6 +128,28 @@ export function woodColumnRowSolution(r: WoodColumnScheduleRow): SolutionStep[] 
   ]
 }
 
+// ── Timber deck (wood slab) worked solution from the stored row detail ────────
+export function woodSlabRowSolution(r: WoodSlabScheduleRow): SolutionStep[] {
+  const d = r.design, tk = d.takeoff
+  const chk = (label: string, c: typeof d.joist): SolutionStep => ({
+    title: label, clause: 'NDS §3.3–§3.4 / NSCP §6', pass: c.ok, lines: [
+      txt(`${f0(c.b)}×${f0(c.d)} mm · span ${f2(c.span)} m · w = ${f2(c.w)} kN/m → M = ${f2(c.M)} kN·m, V = ${f2(c.V)} kN`),
+      txt(`bending f_b/F′b = ${f2(c.fb)}/${f2(c.FbPrime)} (util ${f2(c.bendingRatio)}) · shear f_v/F′v = ${f2(c.fv)}/${f2(c.FvPrime)} (util ${f2(c.shearRatio)})`),
+      txt(`Δ live ${f2(c.deflLive)}/${f2(c.deflLiveAllow)} mm · Δ total ${f2(c.deflTotal)}/${f2(c.deflTotalAllow)} mm ${c.ok ? '✓' : '✗'}`),
+    ],
+  })
+  return [
+    { title: 'Loads', clause: 'NSCP §203', lines: [
+      txt(`superimposed dead ${f2(d.loads.deadKpa)} kPa · live ${f2(d.loads.liveKpa)} kPa · deck self ${f2(d.loads.deckSelfKpa)} · joist self ${f2(d.loads.joistSelfKpa)} → total ${f2(d.loads.totalKpa)} kPa`),
+    ] },
+    chk('Decking', d.deck),
+    chk('Joist', d.joist),
+    { title: 'Take-off (board feet)', clause: 'BOM', lines: [
+      txt(`${f0(tk.joistCount)} joists · ${f2(tk.joistLengthM)} m · ${f0(tk.joistBoardFeet)} bd·ft · deck ${f2(tk.deckAreaM2)} m² · ${f0(tk.deckBoardFeet)} bd·ft${tk.bambooSlatCount != null ? ` · ${f0(tk.bambooSlatCount)} bamboo slats` : ''}`),
+    ] },
+  ]
+}
+
 // ── Payload assembly ──────────────────────────────────────────────────────────
 export function buildModelReport(
   model: StructuralModel, design: StructureDesign, props: [string, string][], soil: SoilOptions,
@@ -193,6 +215,10 @@ export function buildModelReport(
   }
   if (design.slabs.length)
     checks.push({ name: 'Slabs (DDM)', detail: `${design.slabs.length} panels`, ratio: null, ok: design.slabs.every((s) => s.ok) })
+  if (design.woodSlabs.length) {
+    const w = worst(design.woodSlabs, (s) => s.design.ratio)!
+    checks.push({ name: 'Timber deck slabs (NDS §3)', detail: `${design.woodSlabs.length} panels · governing ${w.row.plate}`, ratio: w.r, ok: design.woodSlabs.every((s) => s.ok) })
+  }
   if (design.walls.length) {
     const w = worst(design.walls, (x) => (x.design.phiVn > 0 ? x.Vu / x.design.phiVn : 99))!
     checks.push({ name: 'Shear walls', detail: `${design.walls.length} walls · governing ${w.row.id}`, ratio: w.r, ok: design.walls.every((x) => x.ok) })
@@ -303,6 +329,15 @@ export function buildModelReport(
     right: [2, 3],
     rows: design.slabs.map((s) => [s.plate, `${f2(s.lx)} × ${f2(s.ly)}`, f0(s.design.h), f2(s.design.wu),
       s.design.twoWay ? 'two-way' : 'one-way', s.ok ? 'PASS' : 'FAIL']),
+  })
+  if (design.woodSlabs.length) tables.push({
+    title: 'Timber deck slab schedule (NDS §3 / NSCP §6)',
+    head: ['Panel', 'Span (m)', 'Species', 'Joists', 'Deck t (mm)', 'Deck util', 'Joist util', 'Bd·ft', 'Status'],
+    right: [1, 4, 5, 6, 7],
+    rows: design.woodSlabs.map((s) => [s.plate, f2(s.design.joist.span), s.species,
+      `${s.design.takeoff.joistCount}·${f0(s.design.joist.b)}×${f0(s.design.joist.d)}`, f0(s.design.deck.d),
+      f2(s.design.deck.ratio), f2(s.design.joist.ratio),
+      f0(s.design.takeoff.joistBoardFeet + s.design.takeoff.deckBoardFeet), s.ok ? 'PASS' : 'FAIL']),
   })
   if (design.walls.length) tables.push({
     title: 'Shear wall schedule',
@@ -446,6 +481,10 @@ export function buildModelReport(
   if (design.woodColumns.length) groups.push({
     title: 'Timber columns',
     items: design.woodColumns.map((c) => ({ title: c.id, sub: `${f0(c.b)}×${f0(c.d)} mm · ${c.species || 'timber'} · L = ${f2(c.L)} m · ${c.gov ?? ''}`, steps: woodColumnRowSolution(c) })),
+  })
+  if (design.woodSlabs.length) groups.push({
+    title: 'Timber deck slabs',
+    items: design.woodSlabs.map((s) => ({ title: s.plate, sub: `${f2(s.lx)} × ${f2(s.ly)} m · ${s.species} · deck-on-joist`, steps: woodSlabRowSolution(s) })),
   })
   const connItems: ReportSolution[] = [
     ...design.joints.flatMap((j) => j.connections.map((c) => ({

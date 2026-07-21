@@ -140,3 +140,32 @@ describe('buildModelReport — timber members', () => {
     expect(rpt.stats.some((s) => s.label === 'Timber' && s.unit === 'm³')).toBe(true)
   })
 })
+
+describe('buildModelReport — timber deck (wood slab on a plate)', () => {
+  const model = (() => {
+    const m = makeModel()   // concrete frame + area D/L loads on the plate
+    m.plates[0].deck = {
+      joistSpecies: 'DFL-2', joistKind: 'sawn', joistB: 50, joistD: 200, joistSpacing: 400,
+      joistSupport: 'simple', deckMaterial: 'plank', deckThickness: 25, deckSupport: 'continuous',
+    }
+    return m
+  })()
+  const design = designStructure(model, soil)!
+  const rpt = buildModelReport(model, design, [], soil)
+
+  it('the deck plate is designed as a wood slab, not an RC DDM slab', () => {
+    expect(design.woodSlabs.length).toBe(1)
+    expect(design.slabs.some((s) => s.plate === model.plates[0].id)).toBe(false)
+    expect(design.totals.woodVolume).toBeGreaterThan(0)
+  })
+
+  it('the wood slab appears in checks, schedule table and worked-solution groups', () => {
+    expect(rpt.checks.map((c) => c.name)).toContain('Timber deck slabs (NDS §3)')
+    const t = rpt.tables.find((x) => x.title.startsWith('Timber deck slab'))!
+    expect(t.rows).toHaveLength(1)
+    for (const r of t.rows) expect(r).toHaveLength(t.head.length)
+    const grp = rpt.groups.find((g) => g.title === 'Timber deck slabs')!
+    expect(grp.items).toHaveLength(1)
+    expect(grp.items[0].steps.length).toBeGreaterThan(0)
+  })
+})

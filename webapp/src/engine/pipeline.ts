@@ -27,7 +27,8 @@ import { designShearWall, type ShearWallResult } from './shearWallDesign'
 import { checkModelSCWB, type SCWBJointRow } from './scwb'
 import { shapeByName, nextHeavierW, nextLighterW, type AiscShape } from './aiscSections'
 import { deriveWSection, beamFlexure, beamShear, columnAxial, combinedLoading } from './steelDesign'
-import { woodRefOf, checkWoodBeam, checkWoodColumn } from './woodDesign'
+import { woodRefOf, checkWoodBeam, checkWoodColumn, getWoodRef } from './woodDesign'
+import { designWoodSlab, type WoodSlabResult } from './woodSlab'
 import { designBasePlate, adoptPlateThickness, type BasePlateResult } from './baseplate'
 import { designSteelJoints, designBeamBeamJoints, type SteelJoint, type BeamBeamJoint } from './steelConnections'
 
@@ -137,6 +138,15 @@ export interface SlabScheduleRow {
   design: SlabDesignResult
   ok: boolean
 }
+/** A plate carrying a timber deck-on-joist floor, designed by the woodSlab
+ *  engine (NDS §3 / NSCP §6) rather than the RC DDM. */
+export interface WoodSlabScheduleRow {
+  plate: string
+  lx: number; ly: number
+  species: string
+  design: WoodSlabResult
+  ok: boolean
+}
 export interface WallScheduleRow {
   id: string
   member: string
@@ -243,6 +253,8 @@ export interface StructureDesign {
   /** Beam-to-beam fin plates: beams framing into a girder web (steel only). */
   beamJoints: BeamBeamJoint[]
   slabs: SlabScheduleRow[]
+  /** Plates carrying a timber deck (Plate.deck), designed by the woodSlab engine. */
+  woodSlabs: WoodSlabScheduleRow[]
   walls: WallScheduleRow[]
   footings: FootingScheduleRow[]
   combined: CombinedScheduleRow[]
@@ -268,7 +280,7 @@ export function designOK(d: StructureDesign): boolean {
     && d.woodBeams.every((b) => b.ok) && d.woodColumns.every((c) => c.ok)
     && d.basePlates.every((p) => p.ok)
     && d.footings.every((f) => f.ok) && d.combined.every((c) => c.ok)
-    && d.slabs.every((s) => s.ok) && d.walls.every((w) => w.ok)
+    && d.slabs.every((s) => s.ok) && d.woodSlabs.every((s) => s.ok) && d.walls.every((w) => w.ok)
     && d.joints.every((j) => j.ok) && d.beamJoints.every((j) => j.ok) && d.scwb.every((j) => j.ok)
     && d.unchecked.length === 0
     && d.pDeltaIssues.length === 0
@@ -905,6 +917,7 @@ function designFromRuns(
   }
   let concreteSlabs = 0
   for (const p of model.plates) {
+    if (p.deck) continue                                 // timber deck — no concrete
     const c = p.corners.map((id) => nm.get(id))
     if (c.some((q) => !q)) continue
     const [c0, c1, , c3] = c as { x: number; y: number; z: number }[]
@@ -917,6 +930,7 @@ function designFromRuns(
   const xMin = Math.min(...model.nodes.map((n) => n.x)), xMax = Math.max(...model.nodes.map((n) => n.x))
   const zMin = Math.min(...model.nodes.map((n) => n.z)), zMax = Math.max(...model.nodes.map((n) => n.z))
   const slabs: SlabScheduleRow[] = []
+  const woodSlabs: WoodSlabScheduleRow[] = []
   for (const p of model.plates) {
     if (p.role === 'wall') continue
     const c = p.corners.map((id) => nm.get(id)); if (c.some((q) => !q)) continue
@@ -927,6 +941,25 @@ function designFromRuns(
     const areaD = model.loads.filter((l) => l.kind === 'area' && l.plate === p.id && l.cat === 'D').reduce((s, l) => s + (l as { q: number }).q, 0)
     const areaL = model.loads.filter((l) => l.kind === 'area' && l.plate === p.id && l.cat === 'L').reduce((s, l) => s + (l as { q: number }).q, 0)
     if (areaD + areaL < 1e-9) continue
+    // Timber deck: design the wood slab (joists span the shorter dimension) and
+    // skip the RC Direct Design Method for this panel. D/L are superimposed —
+    // the deck engine adds its own deck + joist self weight.
+    if (p.deck) {
+      const ref = p.deck.joistRef ?? (p.deck.joistSpecies ? getWoodRef(p.deck.joistSpecies)?.ref : undefined)
+      if (ref) {
+        const span = Math.min(lx, lz), across = Math.max(lx, lz)
+        const design = designWoodSlab({
+          Lx: span, Ly: across, joistRef: ref, joistKind: p.deck.joistKind,
+          joistB: p.deck.joistB, joistD: p.deck.joistD, joistSpacing: p.deck.joistSpacing,
+          joistSupport: p.deck.joistSupport, deckMaterial: p.deck.deckMaterial,
+          deckThickness: p.deck.deckThickness, deckWidth: p.deck.deckWidth,
+          deckSupport: p.deck.deckSupport, deadKpa: areaD, liveKpa: areaL,
+          opts: { wet: p.deck.wet },
+        })
+        woodSlabs.push({ plate: p.id, lx: span, ly: across, species: p.deck.joistSpecies ?? 'custom', design, ok: design.ok })
+        continue
+      }
+    }
     const cs = footSec(p.corners[0])
     const extX = cc.some((q) => Math.abs(q.x - xMin) < 1e-4) || cc.some((q) => Math.abs(q.x - xMax) < 1e-4)
     const extZ = cc.some((q) => Math.abs(q.z - zMin) < 1e-4) || cc.some((q) => Math.abs(q.z - zMax) < 1e-4)
@@ -945,6 +978,8 @@ function designFromRuns(
         && design.deflection.liveOK && design.deflection.totalOK,
     })
   }
+  // timber-deck panels add their joist + decking volume to the timber total
+  for (const s of woodSlabs) woodVolume += s.design.takeoff.joistM3 + s.design.takeoff.deckM3
 
   // ── Shear walls — in-plane reinforcement ──
   // The bridge models each shear wall as an X of two diagonal struts
@@ -983,7 +1018,7 @@ function designFromRuns(
     beams, prestressed, columns, steelBeams, steelColumns, woodBeams, woodColumns, basePlates,
     joints: [] as SteelJoint[],
     beamJoints: [] as BeamBeamJoint[],
-    slabs, walls, footings, combined,
+    slabs, woodSlabs, walls, footings, combined,
     scwb: [] as SCWBJointRow[],
     totals: { concreteMembers, concreteSlabs, concrete: concreteMembers + concreteSlabs, steelKg, woodVolume },
     orphanEdges: br.orphanEdges.length,

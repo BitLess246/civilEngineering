@@ -163,6 +163,17 @@ export function validateMesh(model: StructuralModel): MeshIssue[] {
       issues.push({ severity: 'error', code: 'WOOD_DIMS', message: `section ${sec.id}: timber b and d must be positive`, refs: [sec.id] })
   }
 
+  // ── timber deck sanity (L1 rule for Plate.deck / wood slab) ─────────────
+  for (const p of model.plates) {
+    const d = p.deck; if (!d) continue
+    if (d.joistSpecies && !WOOD_SPECIES[d.joistSpecies] && !d.joistRef)
+      issues.push({ severity: 'error', code: 'DECK_SPECIES', message: `plate ${p.id}: unknown timber species "${d.joistSpecies}" — not in the WOOD_SPECIES library`, refs: [p.id] })
+    if (!(d.joistB > 0) || !(d.joistD > 0) || !(d.joistSpacing > 0))
+      issues.push({ severity: 'error', code: 'DECK_JOIST', message: `plate ${p.id}: deck joist b, d and spacing must be positive`, refs: [p.id] })
+    if (!(d.deckThickness > 0))
+      issues.push({ severity: 'error', code: 'DECK_THICKNESS', message: `plate ${p.id}: deck thickness must be positive`, refs: [p.id] })
+  }
+
   // ── prestressing sanity (L1 rule for RectSection.ps) ────────────────────
   for (const sec of model.sections) {
     if (!sec.ps) continue
