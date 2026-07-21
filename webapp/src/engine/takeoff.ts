@@ -135,10 +135,18 @@ export function costBill(t: TakeoffResult, p: PriceList): CostedBill {
   for (const s of [...t.steelByShape].sort((a, b) => a.shape.localeCompare(b.shape)))
     rows.push(row(`Structural steel — ${s.shape}`, s.kg, 'kg', steelRate, 'structuralSteelKg'))
   // Timber — one costed line per section size, priced per board foot (PH commercial unit).
-  const timberRate = p.timberBdFt ?? 55
-  for (const t2 of [...t.timberBySize].sort((a, b) => a.name.localeCompare(b.name)))
-    rows.push(row(`Timber — ${t2.name} (${t2.species})`, t2.boardFeet, 'bd·ft', timberRate, 'timberBdFt'))
+  rows.push(...costTimberRows(t.timberBySize, p.timberBdFt ?? 55))
   return { rows, total: rows.reduce((s, r) => s + r.amount, 0) }
+}
+
+/** Cost a set of timber sizes at ₱/board-foot — shared by the model wood-frame
+ *  BOM (costBill) and any standalone timber bill (e.g. the wood slab), so both
+ *  price timber identically. */
+export function costTimberRows(sizes: TimberSizeQty[], ratePerBdFt = 55): BillRow[] {
+  return [...sizes].sort((a, b) => a.name.localeCompare(b.name)).map((t) => ({
+    item: `Timber — ${t.name} (${t.species})`, qty: t.boardFeet, unit: 'bd·ft',
+    unitPrice: ratePerBdFt, amount: t.boardFeet * ratePerBdFt, priceKey: 'timberBdFt' as const,
+  }))
 }
 
 export interface TakeoffOptions {

@@ -25,7 +25,7 @@ import {
   type WoodRefValues, type WoodKind, type WoodAdjustOpts,
   woodAdjusted, woodSectionProps, woodUnitWeight, checkWoodBeam,
 } from './woodDesign'
-import { BDFT_PER_M3 } from './takeoff'
+import { BDFT_PER_M3, type TimberSizeQty } from './takeoff'
 
 /** Indicative ASD allowable stresses for flattened / laminated STRUCTURAL BAMBOO
  *  (e.g. Guadua, Bambusa / kawayan).  NOT an NDS-tabulated species — these are
@@ -212,4 +212,26 @@ export function designWoodSlab(i: WoodSlabInput): WoodSlabResult {
     takeoff, ratio, ok: ratio <= 1,
     clause: 'NDS §3.3–§3.4 / NSCP §6 (ASD)',
   }
+}
+
+/** Express a wood-slab take-off as wood-frame BOM rows (TimberSizeQty, board-feet
+ *  by size × species), so the slab's joists and decking aggregate into — and cost
+ *  through the same `costTimberRows` as — the wood-frame bill of materials. */
+export function woodSlabTimberSizes(
+  i: WoodSlabInput, r: WoodSlabResult, labels: { joist?: string; deck?: string } = {},
+): TimberSizeQty[] {
+  const bamboo = i.deckMaterial === 'bamboo-slat'
+  const deckWidth = i.deckWidth ?? (bamboo ? 50 : 140)
+  const deckLenM = r.takeoff.deckM3 / ((deckWidth / 1000) * (i.deckThickness / 1000))  // total board linear metres
+  return [
+    {
+      name: `${i.joistB}×${i.joistD}`, species: labels.joist ?? '—', kind: i.joistKind ?? 'sawn',
+      count: r.takeoff.joistCount, L: r.takeoff.joistLengthM, m3: r.takeoff.joistM3, boardFeet: r.takeoff.joistBoardFeet,
+    },
+    {
+      name: `deck ${deckWidth}×${i.deckThickness}`, species: labels.deck ?? (bamboo ? 'bamboo' : labels.joist ?? '—'),
+      kind: 'sawn', count: r.takeoff.bambooSlatCount ?? Math.ceil(i.Lx / (deckWidth / 1000)),
+      L: deckLenM, m3: r.takeoff.deckM3, boardFeet: r.takeoff.deckBoardFeet,
+    },
+  ]
 }
