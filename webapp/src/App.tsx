@@ -48,6 +48,7 @@ import ScheduleNetwork from './pages/ScheduleNetwork'
 import ScheduleDashboard from './pages/ScheduleDashboard'
 import ScheduleResources from './pages/ScheduleResources'
 import ScheduleReports from './pages/ScheduleReports'
+import ScheduleDaily from './pages/ScheduleDaily'
 
 export default function App() {
   const [auth, setAuth] = useState<'login' | 'signup' | null>(null)
@@ -113,6 +114,7 @@ export default function App() {
         <Route path="/schedule/dashboard" element={<ScheduleDashboard />} />
         <Route path="/schedule/resources" element={<ScheduleResources />} />
         <Route path="/schedule/reports" element={<ScheduleReports />} />
+        <Route path="/schedule/daily" element={<ScheduleDaily />} />
             </Routes>
           </AppShell>
         } />
