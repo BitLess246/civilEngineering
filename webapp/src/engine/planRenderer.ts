@@ -19,7 +19,7 @@ export type PlanPrimitive =
   | { kind: 'rect'; x: number; y: number; w: number; h: number; stroke?: string; fill?: string; width?: number; dash?: number[] }
   | { kind: 'circle'; cx: number; cy: number; r: number; stroke?: string; fill?: string; width?: number }
   | { kind: 'text'; x: number; y: number; text: string; size: number; anchor?: 'start' | 'middle' | 'end'; rotate?: number; color?: string; weight?: number }
-  | { kind: 'dim'; x1: number; y1: number; x2: number; y2: number; text: string; off: number }
+  | { kind: 'dim'; x1: number; y1: number; x2: number; y2: number; text: string; off: number; size: number }
 
 export interface BeamScheduleRow { mark: string; size: string }
 
@@ -71,18 +71,23 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
   const P: PlanPrimitive[] = []
   const ext = Math.max(0.6, Math.max(x1 - x0, z1 - z0, 1) * 0.04)   // grid-line overrun / bubble radius
   const r = ext
+  const dimTextH = r * 0.8   // dimension text height (world m)
+  // stand the bubbles off from the plan by three dimension-text-heights so the
+  // (enlarged) chained dimensions clear the bubble ring
+  const bubbleShift = 3 * dimTextH
 
   // ── grid lines (column lines ‖ Y at each x, rows ‖ X at each z) ──
-  for (const x of xs) P.push({ kind: 'line', x1: x, y1: z0 - ext, x2: x, y2: z1 + ext, stroke: GRID, width: 0.6, dash: [0.25, 0.18] })
-  for (const z of zs) P.push({ kind: 'line', x1: x0 - ext, y1: z, x2: x1 + ext, y2: z, stroke: GRID, width: 0.6, dash: [0.25, 0.18] })
+  // top/left ends run out to meet the shifted bubbles
+  for (const x of xs) P.push({ kind: 'line', x1: x, y1: z0 - ext - bubbleShift, x2: x, y2: z1 + ext, stroke: GRID, width: 0.6, dash: [0.25, 0.18] })
+  for (const z of zs) P.push({ kind: 'line', x1: x0 - ext - bubbleShift, y1: z, x2: x1 + ext, y2: z, stroke: GRID, width: 0.6, dash: [0.25, 0.18] })
   // bubbles: letters across the top, numbers down the left
   xs.forEach((x, i) => {
-    const cy = z0 - ext - r
+    const cy = z0 - ext - r - bubbleShift
     P.push({ kind: 'circle', cx: x, cy, r, stroke: INK, fill: '#fff', width: 0.6 })
     P.push({ kind: 'text', x, y: cy, text: gridLabel(i), size: r * 1.1, anchor: 'middle', color: INK, weight: 700 })
   })
   zs.forEach((z, i) => {
-    const cx = x0 - ext - r
+    const cx = x0 - ext - r - bubbleShift
     P.push({ kind: 'circle', cx, cy: z, r, stroke: INK, fill: '#fff', width: 0.6 })
     P.push({ kind: 'text', x: cx, y: z, text: String(i + 1), size: r * 1.1, anchor: 'middle', color: INK, weight: 700 })
   })
@@ -148,10 +153,10 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
   // ring and the framing), not beyond them ──
   const dimOffTop = z0 - ext * 0.75
   for (let i = 0; i < xs.length - 1; i++)
-    P.push({ kind: 'dim', x1: xs[i], y1: dimOffTop, x2: xs[i + 1], y2: dimOffTop, text: `${Math.round((xs[i + 1] - xs[i]) * 1000)} mm`, off: 0 })
+    P.push({ kind: 'dim', x1: xs[i], y1: dimOffTop, x2: xs[i + 1], y2: dimOffTop, text: `${Math.round((xs[i + 1] - xs[i]) * 1000)} mm`, off: 0, size: dimTextH })
   const dimOffLeft = x0 - ext * 0.75
   for (let i = 0; i < zs.length - 1; i++)
-    P.push({ kind: 'dim', x1: dimOffLeft, y1: zs[i], x2: dimOffLeft, y2: zs[i + 1], text: `${Math.round((zs[i + 1] - zs[i]) * 1000)} mm`, off: 0 })
+    P.push({ kind: 'dim', x1: dimOffLeft, y1: zs[i], x2: dimOffLeft, y2: zs[i + 1], text: `${Math.round((zs[i + 1] - zs[i]) * 1000)} mm`, off: 0, size: dimTextH })
 
   // ── title block (detail tag) + beam schedule, below the plan ──
   const detailNo = opts.detailNo ?? '1', sheetRef = opts.sheetRef ?? 'S-1', scale = opts.scale ?? 'NTS'
@@ -228,7 +233,8 @@ export function planToSvg(d: PlanDrawing, pxWidth = 1100): string {
       out.push(`<text x="${px.toFixed(1)}" y="${py.toFixed(1)}" font-size="${L(p.size).toFixed(1)}" text-anchor="${p.anchor ?? 'start'}" dominant-baseline="middle" fill="${p.color ?? INK}" font-weight="${p.weight ?? 400}"${rot}>${esc(p.text)}</text>`)
     } else if (p.kind === 'dim') {
       const x1 = X(p.x1), y1 = Y(p.y1), x2 = X(p.x2), y2 = Y(p.y2)
-      const tick = 4
+      const fs = L(p.size)
+      const tick = fs * 0.45
       out.push(`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${INK}" stroke-width="0.8"/>`)
       // 45° ticks at both ends
       for (const [tx, ty] of [[x1, y1], [x2, y2]] as const)
@@ -236,7 +242,7 @@ export function planToSvg(d: PlanDrawing, pxWidth = 1100): string {
       const mx = (x1 + x2) / 2, my = (y1 + y2) / 2
       const vertical = Math.abs(y2 - y1) > Math.abs(x2 - x1)
       const rot = vertical ? ` transform="rotate(-90 ${mx.toFixed(1)} ${my.toFixed(1)})"` : ''
-      out.push(`<text x="${mx.toFixed(1)}" y="${(my - 3).toFixed(1)}" font-size="11" text-anchor="middle" fill="${INK}"${rot}>${esc(p.text)}</text>`)
+      out.push(`<text x="${mx.toFixed(1)}" y="${(my - fs * 0.35).toFixed(1)}" font-size="${fs.toFixed(1)}" text-anchor="middle" fill="${INK}"${rot}>${esc(p.text)}</text>`)
     }
   }
   out.push('</svg>')
