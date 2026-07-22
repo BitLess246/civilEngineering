@@ -73,9 +73,26 @@ const round1 = (v: number) => Math.round(v * 10) / 10
 const FS = (id: string, lag = 0): ActivityLink => ({ id, type: 'FS', lag })
 const SS = (id: string, lag = 0): ActivityLink => ({ id, type: 'SS', lag })
 
-/** Build the model's construction schedule (split trades, overlaps, parallel
- *  branches) and solve CPM + PERT. */
-export function buildModelSchedule(model: StructuralModel, design: StructureDesign): ModelSchedule | null {
+/** Recompute the duration-derived PERT three-point (O/M/P) for an activity — used
+ *  when the user edits a duration in the schedule views. */
+export function withDuration(a: ModelActivity, duration: number): ModelActivity {
+  const d = Math.max(SCHEDULE_RATES.minDays, Math.round(duration))
+  return { ...a, duration: d, o: Math.max(1, Math.round(d * 0.8)), m: d, p: Math.max(1, Math.round(d * 1.5)) }
+}
+
+/** Solve CPM + PERT for a set of activities (base or user-edited). */
+export function solveModelSchedule(activities: ModelActivity[]): Omit<ModelSchedule, 'activities' | 'frame'> {
+  const pert = computePert(activities.map((a) => ({
+    id: a.id, optimistic: a.o, mostLikely: a.m, pessimistic: a.p,
+    predecessors: a.predecessors.map((l) => ({ predecessor: l.id, type: l.type, lag: l.lag })),
+  })))
+  return { pert, projectDays: pert.projectTe, projectSd: pert.projectSd, criticalPath: pert.cpm.criticalPath }
+}
+
+/** Derive the construction activities (split trades, overlaps, parallel branches)
+ *  from the model + design — before CPM/PERT is solved, so callers can edit the
+ *  activities and re-solve. */
+export function buildModelActivities(model: StructuralModel, design: StructureDesign): { activities: ModelActivity[]; frame: FrameMaterial } | null {
   if (!model.nodes.length || !model.members.length) return null
   const nm = new Map(model.nodes.map((n) => [n.id, n]))
   const secById = new Map(model.sections.map((s) => [s.id, s]))
@@ -183,13 +200,14 @@ export function buildModelSchedule(model: StructuralModel, design: StructureDesi
     prevExit = exit
   }
 
-  const pert = computePert(acts.map((a) => ({
-    id: a.id, optimistic: a.o, mostLikely: a.m, pessimistic: a.p,
-    predecessors: a.predecessors.map((l) => ({ predecessor: l.id, type: l.type, lag: l.lag })),
-  })))
-
   const frame: FrameMaterial = [hasConc, hasSteel, hasWood].filter(Boolean).length > 1 ? 'mixed'
     : hasSteel ? 'steel' : hasWood ? 'wood' : 'concrete'
+  return { activities: acts, frame }
+}
 
-  return { activities: acts, pert, projectDays: pert.projectTe, projectSd: pert.projectSd, criticalPath: pert.cpm.criticalPath, frame }
+/** Build the model's construction schedule and solve CPM + PERT (convenience). */
+export function buildModelSchedule(model: StructuralModel, design: StructureDesign): ModelSchedule | null {
+  const b = buildModelActivities(model, design)
+  if (!b) return null
+  return { activities: b.activities, frame: b.frame, ...solveModelSchedule(b.activities) }
 }
