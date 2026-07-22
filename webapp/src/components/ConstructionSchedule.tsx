@@ -4,7 +4,7 @@ import type { StructureDesign } from '../engine/pipeline'
 import { buildModelSchedule, type Trade } from '../engine/modelSchedule'
 
 const TRADE_COLOR: Record<Trade, string> = {
-  sitework: '#a3792e', foundation: '#6b7280', columns: '#0f4c92', floor: '#0f766e',
+  sitework: '#a3792e', foundation: '#6b7280', columns: '#0f4c92', floor: '#0f766e', finishes: '#9333ea',
 }
 const f1 = (v: number) => v.toFixed(1)
 
@@ -97,7 +97,7 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
                   <td className="py-1 pr-2 font-semibold">{a.id}</td>
                   <td className="py-1 pr-2 font-sans text-slate-700">{a.name}</td>
                   <td className="py-1 pr-2 text-slate-500">{a.quantity} {a.unit}</td>
-                  <td className="py-1 pr-2 text-slate-500">{a.predecessors.join(', ') || '—'}</td>
+                  <td className="py-1 pr-2 text-slate-500">{a.predecessors.map((l) => `${l.id} ${l.type}${l.lag ? `+${l.lag}` : ''}`).join(', ') || '—'}</td>
                   <td className="py-1 pr-2 text-right">{a.o}/{a.m}/{a.p}</td>
                   <td className="py-1 pr-2 text-right font-semibold">{f1(te)}</td>
                   <td className="py-1 pr-2 text-right">{c.es}</td>
