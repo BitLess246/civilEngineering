@@ -31,7 +31,7 @@ export interface DelaySummary {
   activities: ActivityDelay[]
   delayedCount: number
   criticalDelayedCount: number
-  /** Project finish slip vs baseline (the current end activity's finish slip), days. */
+  /** Project finish slip: current project finish − baseline project finish, calendar days. */
   projectSlipDays: number
   /** The activity with the greatest finish slip, or null when nothing slipped. */
   worst: ActivityDelay | null
