@@ -57,6 +57,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/schedule/dashboard', name: 'Dashboard',      sub: 'Progress · EVM · SPI/CPI' },
       { to: '/schedule/resources', name: 'Resource Loading', sub: 'Histogram · over-allocation' },
       { to: '/schedule/reports',   name: 'Reports',          sub: 'PDF · Excel · CSV' },
+      { to: '/schedule/daily',     name: 'Daily & Delays',   sub: 'Actuals · baseline · delay' },
     ],
   },
   {

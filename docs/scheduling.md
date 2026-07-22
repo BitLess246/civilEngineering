@@ -179,14 +179,21 @@ columns (dates + total float + critical tag) and an expandable ES/EF/LS/LF/float
   daily load (assignment quantity spread over the activity's scheduled span) with
   a load histogram and **over-allocation** flagged where daily demand exceeds
   `availablePerDay`; pure tested `lib/resourceLoad.ts`.
-- **Phase 9 — reports** *(this PR)*: `/schedule/reports` — pure
+- **Phase 9 — reports** ✅: `/schedule/reports` — pure
   `lib/scheduleReport.ts` builds a sectioned payload (schedule, critical path,
   progress + value, resource loading) which the exporters render uniformly:
   `lib/scheduleCsv.ts` (inline), `lib/schedulePdf.ts` (jsPDF + autotable) and
   `lib/scheduleExcel.ts` (ExcelJS, one sheet per section), the last two
   lazy-loaded. Each exporter splits a node-testable `build*` from the browser
-  download wrapper, so PDF/Excel generation is unit-tested (real bytes).
-- **Phase 10 — daily-report integration & delay analysis** + user docs.
+  download wrapper, so PDF/Excel generation is unit-tested (real bytes). The
+  project cost-EVM roll-up is shared with the dashboard via `earnedValue.projectEvm`.
+- **Phase 10 — daily-report integration & delay analysis** *(this PR)*:
+  `/schedule/daily` — capture/restore baselines, a per-activity daily-progress
+  log (% complete, actual start/finish, remarks) that updates the schedule's
+  actuals and recomputes live, and **delay analysis** (pure tested
+  `lib/delayAnalysis.ts`): per-activity finish slip vs the baseline, **critical
+  delays** flagged when a slipped activity is on the critical path, and a
+  project-slip summary.
 
 ## Known limitations / future extensions
 
