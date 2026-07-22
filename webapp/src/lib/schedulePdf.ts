@@ -7,7 +7,7 @@ import type { ScheduleReport } from './scheduleReport'
 const BRAND: [number, number, number] = [15, 76, 146]
 const INK: [number, number, number] = [15, 27, 42]
 
-/** jsPDF's built-in Helvetica lacks ₱ / en-dash / minus glyphs — normalise them. */
+/** jsPDF's built-in Helvetica lacks ₱ / em-dash / minus glyphs — normalise them. */
 const safe = (v: string | number): string =>
   String(v).replace(/₱/g, 'PHP ').replace(/[—−]/g, '-')
 

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { ScheduleProject, WorkingCalendar } from '../engine/schedule/model'
 import { projectProgress } from '../engine/schedule/progress'
-import { earnedValue, plannedFraction, type EvmActivityInput } from '../engine/schedule/earnedValue'
+import { projectEvm } from '../engine/schedule/earnedValue'
 import { plannedCurve } from '../lib/progressCurve'
 import { defaultCalendar } from '../engine/schedule/calendar'
 import { dataDateOffset, forecastFinishISO } from '../lib/scheduleDates'
@@ -102,29 +102,12 @@ function Dashboard({ project, solve }: { project: ScheduleProject; solve: Schedu
   const prog = useMemo(() => projectProgress(project.activities, solve.cpm!, dataOffset), [project, solve.cpm, dataOffset])
 
   // Cost EVM — BAC from resource costs; PV/EV from the schedule; AC entered.
+  // Shared with the report via projectEvm so the two can't drift.
   const costOf = useMemo(() => new Map(project.resources.map((r) => [r.id, r.costPerUnit ?? 0])), [project])
-  const evm = useMemo(() => {
-    let bac = 0, pv = 0, ev = 0, hasCost = false
-    for (const a of project.activities) {
-      const c = solve.cpm!.activities.get(a.id)
-      const b = (a.resources ?? []).reduce((s, r) => s + r.quantity * (costOf.get(r.resourceId) ?? 0), 0)
-      if (b > 0) hasCost = true
-      const pct = Math.min(100, Math.max(0, a.percentComplete ?? 0))
-      bac += b
-      pv += b * (c ? plannedFraction(c.es, c.ef, dataOffset) : 0)
-      ev += b * (pct / 100)
-    }
-    // Feed AC at the project level (single aggregate row that reproduces
-    // PV/EV/BAC) so the entered actual cost is honoured in every case —
-    // including EV = 0, where an earned-share split would zero it out.
-    const item: EvmActivityInput = {
-      id: 'project', bac,
-      percentComplete: bac > 0 ? (ev / bac) * 100 : 0,
-      plannedFraction: bac > 0 ? pv / bac : 0,
-      actualCost: acInput,
-    }
-    return { result: earnedValue([item]), hasCost }
-  }, [project, solve.cpm, costOf, dataOffset, acInput])
+  const evm = useMemo(
+    () => projectEvm(project.activities, solve.cpm!.activities, dataOffset, costOf, acInput),
+    [project, solve.cpm, costOf, dataOffset, acInput],
+  )
 
   const forecastFinish = forecastFinishISO(cal, start, prog.forecastDuration)
   const ahead = prog.daysAheadBehind

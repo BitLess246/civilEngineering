@@ -8,7 +8,7 @@
 import type { ScheduleProject } from '../engine/schedule/model'
 import type { ScheduleSolve } from './useScheduleSolve'
 import { projectProgress } from '../engine/schedule/progress'
-import { earnedValue, plannedFraction, type EvmActivityInput } from '../engine/schedule/earnedValue'
+import { projectEvm } from '../engine/schedule/earnedValue'
 import { resourceLoad } from './resourceLoad'
 import { defaultCalendar } from '../engine/schedule/calendar'
 import { dataDateOffset, forecastFinishISO } from './scheduleDates'
@@ -27,7 +27,7 @@ export interface ScheduleReport {
 }
 
 const n1 = (v: number): string => (Number.isFinite(v) ? v.toFixed(1) : '—')
-const money = (v: number): string => Math.round(v).toLocaleString('en-PH', { maximumFractionDigits: 0 })
+const money = (v: number): string => '₱' + Math.round(v).toLocaleString('en-PH', { maximumFractionDigits: 0 })
 
 /**
  * Build the report payload for a solved project. `opts.dataDate` (ISO) sets the
@@ -61,9 +61,10 @@ export function buildScheduleReport(
 
   // 1 — Schedule
   if (cpm) {
+    const byId = new Map(project.activities.map((x) => [x.id, x]))
     const rows: (string | number)[][] = []
     for (const id of cpm.order) {
-      const a = project.activities.find((x) => x.id === id)
+      const a = byId.get(id)
       const c = cpm.activities.get(id)
       const d = solve.dates.get(id)
       if (!a || !c) continue
@@ -86,15 +87,7 @@ export function buildScheduleReport(
     // 3 — Progress & value
     const prog = projectProgress(project.activities, cpm, dataOffset)
     const costOf = new Map(project.resources.map((r) => [r.id, r.costPerUnit ?? 0]))
-    let bac = 0, pv = 0, ev = 0, hasCost = false
-    for (const a of project.activities) {
-      const c = cpm.activities.get(a.id)
-      const b = (a.resources ?? []).reduce((s, r) => s + r.quantity * (costOf.get(r.resourceId) ?? 0), 0)
-      if (b > 0) hasCost = true
-      bac += b
-      pv += b * (c ? plannedFraction(c.es, c.ef, dataOffset) : 0)
-      ev += b * (Math.min(100, Math.max(0, a.percentComplete ?? 0)) / 100)
-    }
+    const { result: evm, hasCost } = projectEvm(project.activities, cpm.activities, dataOffset, costOf, 0)
     const progRows: (string | number)[][] = [
       ['Planned % complete', n1(prog.plannedPercent)],
       ['Actual % complete', n1(prog.actualPercent)],
@@ -106,12 +99,12 @@ export function buildScheduleReport(
       ['Remaining duration (d)', n1(prog.remainingDuration)],
     ]
     if (hasCost) {
-      const evm = earnedValue([{ id: 'project', bac, percentComplete: bac > 0 ? (ev / bac) * 100 : 0, plannedFraction: bac > 0 ? pv / bac : 0, actualCost: 0 } as EvmActivityInput])
       progRows.push(
-        ['Budget at completion (BAC, ₱)', money(evm.bac)],
-        ['Planned value (PV, ₱)', money(evm.pv)],
-        ['Earned value (EV, ₱)', money(evm.ev)],
-        ['Cost schedule variance (SV, ₱)', money(evm.sv)],
+        ['Budget at completion (BAC)', money(evm.bac)],
+        ['Planned value (PV)', money(evm.pv)],
+        ['Earned value (EV)', money(evm.ev)],
+        ['Cost schedule variance (SV)', money(evm.sv)],
+        ['(actual cost / CPI / EAC are entered on the Dashboard)', ''],
       )
     }
     sections.push({ title: 'Progress & value', columns: ['Metric', 'Value'], rows: progRows })

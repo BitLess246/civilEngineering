@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   plannedFraction, earnedValue, pvAtOffset, earnedScheduleOffset,
-  scheduleVarianceTime, type EvmActivityInput, type PvActivity,
+  scheduleVarianceTime, projectEvm, type EvmActivityInput, type PvActivity,
 } from './earnedValue'
 
 describe('plannedFraction', () => {
@@ -79,5 +79,34 @@ describe('earned schedule (time-based)', () => {
   })
   it('scheduleVarianceTime: earned 75 at data date 12 is 3 days ahead', () => {
     expect(scheduleVarianceTime(pv, 75, 12, 20)).toBeCloseTo(3, 3)
+  })
+})
+
+describe('projectEvm (cost EVM from resource budgets)', () => {
+  const cpm = new Map([['A', { es: 0, ef: 5 }], ['B', { es: 5, ef: 10 }]])
+  const costOf = new Map([['R', 100]])
+  const acts = [
+    { id: 'A', percentComplete: 100, resources: [{ resourceId: 'R', quantity: 10 }] },
+    { id: 'B', percentComplete: 0, resources: [{ resourceId: 'R', quantity: 20 }] },
+  ]
+
+  it('rolls BAC/PV/EV/SV from budgets and feeds AC at project level', () => {
+    const { result, hasCost } = projectEvm(acts, cpm, 7, costOf, 1200)
+    expect(hasCost).toBe(true)
+    expect(result.bac).toBe(3000)             // 10·100 + 20·100
+    expect(result.pv).toBeCloseTo(1800, 6)    // A 1000·1 + B 2000·0.4
+    expect(result.ev).toBeCloseTo(1000, 6)    // A complete (float round-trip via % aggregate)
+    expect(result.sv).toBeCloseTo(-800, 6)    // EV − PV, AC-independent
+    expect(result.ac).toBe(1200)
+    expect(result.cpi!).toBeCloseTo(1000 / 1200, 6)
+  })
+
+  it('AC survives EV = 0; hasCost false without costed resources', () => {
+    const z = projectEvm([{ id: 'A', percentComplete: 0, resources: [{ resourceId: 'R', quantity: 10 }] }], cpm, 0, costOf, 500)
+    expect(z.result.ev).toBe(0)
+    expect(z.result.ac).toBe(500)             // not collapsed to 0
+    const none = projectEvm([{ id: 'A', resources: [] }], cpm, 0, new Map(), 0)
+    expect(none.hasCost).toBe(false)
+    expect(none.result.bac).toBe(0)
   })
 })
