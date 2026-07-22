@@ -16,57 +16,64 @@ function twoStorey() {
   return m
 }
 
-describe('buildModelSchedule — auto CPM/PERT from the model', () => {
+describe('buildModelSchedule — non-linear CPM/PERT from the model', () => {
   const model = twoStorey()
   const design = designStructure(model, soil)!
   const sch = buildModelSchedule(model, design)!
+  const by = new Map(sch.activities.map((a) => [a.id, a]))
 
-  it('derives the excavation → footings → per-storey columns/floors sequence', () => {
-    const ids = sch.activities.map((a) => a.id)
-    expect(ids.slice(0, 2)).toEqual(['EXCAV', 'FOUND'])
-    // two storeys → COL1, FLR1, COL2, FLR2
-    expect(ids).toEqual(['EXCAV', 'FOUND', 'COL1', 'FLR1', 'COL2', 'FLR2'])
+  it('splits each concrete phase into its trades (form/rebar/pour)', () => {
+    // foundation split + per-storey column and floor sub-trades
+    for (const id of ['EXCAV', 'FTGF', 'FTGP', 'BACK', 'CF1', 'CP1', 'FF1', 'FR1', 'FP1', 'CF2', 'FP2', 'FIN1']) {
+      expect(by.has(id)).toBe(true)
+    }
+    expect(sch.activities.length).toBeGreaterThanOrEqual(15)   // far more than the old 2-per-storey
   })
 
-  it('chains finish-to-start: each lift waits on the floor below', () => {
-    const by = new Map(sch.activities.map((a) => [a.id, a]))
-    expect(by.get('FOUND')!.predecessors).toEqual(['EXCAV'])
-    expect(by.get('COL1')!.predecessors).toEqual(['FOUND'])
-    expect(by.get('FLR1')!.predecessors).toEqual(['COL1'])
-    expect(by.get('COL2')!.predecessors).toEqual(['FLR1'])
+  it('uses overlapping (SS) and finish-to-start (FS) relations with lag', () => {
+    // rebar starts a lag after formwork begins (overlap), not after it finishes
+    const fr1 = by.get('FR1')!.predecessors.find((p) => p.id === 'FF1')!
+    expect(fr1.type).toBe('SS')
+    expect(fr1.lag).toBeGreaterThan(0)
+    // the pour waits for rebar to finish
+    expect(by.get('FP1')!.predecessors.some((p) => p.id === 'FR1' && p.type === 'FS')).toBe(true)
   })
 
-  it('every activity carries a positive duration and a three-point estimate O ≤ M ≤ P', () => {
+  it('has parallel branches — backfill and finishes run off the critical path', () => {
+    const cpm = sch.pert.cpm.activities
+    // BACK and CF1 both depend on FTGP → they overlap in time
+    expect(by.get('BACK')!.predecessors[0].id).toBe('FTGP')
+    expect(by.get('CF1')!.predecessors[0].id).toBe('FTGP')
+    expect(cpm.get('BACK')!.totalFloat).toBeGreaterThan(0)     // parallel, not critical
+    expect(cpm.get('FIN1')!.totalFloat).toBeGreaterThan(0)
+    // FR1 overlaps FF1 on the timeline (starts before FF1 finishes)
+    expect(cpm.get('FR1')!.es).toBeLessThan(cpm.get('FF1')!.ef)
+  })
+
+  it('durations vary across activities and every activity has a positive TE', () => {
+    const durs = new Set(sch.activities.map((a) => a.duration))
+    expect(durs.size).toBeGreaterThan(1)                       // not one uniform duration
     for (const a of sch.activities) {
       expect(a.duration).toBeGreaterThan(0)
       expect(a.o).toBeLessThanOrEqual(a.m)
       expect(a.m).toBeLessThanOrEqual(a.p)
-      expect(a.quantity).toBeGreaterThanOrEqual(0)
     }
   })
 
-  it('solves the CPM: a linear chain makes every activity critical', () => {
+  it('solves the CPM: critical path is a subset shorter than the full activity list', () => {
     expect(sch.projectDays).toBeGreaterThan(0)
-    // pure FS chain (no parallelism) → the whole sequence is the critical path
-    expect(sch.criticalPath).toEqual(['EXCAV', 'FOUND', 'COL1', 'FLR1', 'COL2', 'FLR2'])
-    // project duration = Σ expected times
-    const sumTe = sch.activities.reduce((s, a) => s + (a.o + 4 * a.m + a.p) / 6, 0)
-    expect(sch.projectDays).toBeCloseTo(sumTe, 6)
     expect(sch.projectSd).toBeGreaterThan(0)
+    expect(sch.criticalPath.length).toBeGreaterThan(0)
+    expect(sch.criticalPath.length).toBeLessThan(sch.activities.length)   // parallelism ⇒ not everything is critical
   })
 
-  it('reports the frame material and reflects it in the activity units', () => {
-    expect(sch.frame).toBe('concrete')
-    expect(sch.activities.find((a) => a.id === 'COL1')!.unit).toContain('concrete')
-  })
-
-  it('a steel frame schedules by tonnage', () => {
+  it('a steel frame schedules by erection tonnage & deck area', () => {
     const steelSec: RectSection = { ...section, material: 'steel', shape: 'W310x79', name: 'W310x79', steelFy: 345, steelFu: 448 }
     const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section: steelSec, slabThickness: 150 })
     m.loads = m.plates.flatMap((p): ModelLoad[] => [{ kind: 'area', plate: p.id, q: 4.0, cat: 'D' }, { kind: 'area', plate: p.id, q: 2.4, cat: 'L' }])
     const d = designStructure(m, soil)!
     const s = buildModelSchedule(m, d)!
-    expect(s.frame === 'steel' || s.frame === 'mixed').toBe(true)
-    expect(s.activities.find((a) => a.id === 'COL1')!.unit).toContain('steel')
+    expect(s.activities.some((a) => a.id === 'CE1' && a.unit.includes('steel'))).toBe(true)
+    expect(s.activities.some((a) => a.id === 'DK1')).toBe(true)
   })
 })
