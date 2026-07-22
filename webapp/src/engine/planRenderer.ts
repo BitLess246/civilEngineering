@@ -21,16 +21,23 @@ export type PlanPrimitive =
   | { kind: 'text'; x: number; y: number; text: string; size: number; anchor?: 'start' | 'middle' | 'end'; rotate?: number; color?: string; weight?: number }
   | { kind: 'dim'; x1: number; y1: number; x2: number; y2: number; text: string; off: number }
 
+export interface BeamScheduleRow { mark: string; size: string }
+
 export interface PlanDrawing {
   primitives: PlanPrimitive[]
   bounds: { minX: number; minY: number; maxX: number; maxY: number }
   title: string
+  beamSchedule: BeamScheduleRow[]
 }
 
 export interface PlanOptions {
   kind?: 'framing' | 'foundation'
   /** Storey level index (1 = first floor above base). Default: first framed level. */
   level?: number
+  /** Title-block detail number, sheet reference and scale note. */
+  detailNo?: string
+  sheetRef?: string
+  scale?: string
 }
 
 const INK = '#1e293b', GRID = '#94a3b8', BEAM = '#0f4c92', COL = '#1e293b', PANEL = '#0f766e'
@@ -80,7 +87,17 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     P.push({ kind: 'text', x: cx, y: z, text: String(i + 1), size: r * 1.1, anchor: 'middle', color: INK, weight: 700 })
   })
 
-  // ── framing beams/girders at the level (centreline + size label) ──
+  // ── framing beams/girders at the level: centreline + BEAM MARK (FB1, FB2…) ──
+  // marks group by section size; each first-seen size gets the next FB number and
+  // a schedule row.
+  const markBySize = new Map<string, string>()
+  const schedule: BeamScheduleRow[] = []
+  const markFor = (sec: RectSection): string => {
+    const key = `${sec.b}×${sec.h}`
+    let mk = markBySize.get(key)
+    if (!mk) { mk = `FB${markBySize.size + 1}`; markBySize.set(key, mk); schedule.push({ mark: mk, size: key }) }
+    return mk
+  }
   for (const mem of model.members) {
     if (mem.role === 'column') continue
     const a = nm.get(mem.i), b = nm.get(mem.j); if (!a || !b) continue
@@ -90,7 +107,9 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     if (sec) {
       const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2
       const vertical = Math.abs(b.z - a.z) > Math.abs(b.x - a.x)
-      P.push({ kind: 'text', x: mx, y: mz - (vertical ? 0 : r * 0.5), text: sec.name, size: r * 0.5, anchor: 'middle', rotate: vertical ? -90 : 0, color: BEAM, weight: 600 })
+      // horizontal marks sit just BELOW their beam (toward the interior) so the
+      // perimeter row never clashes with the grid-dimension chain above it
+      P.push({ kind: 'text', x: mx + (vertical ? r * 0.45 : 0), y: mz + (vertical ? 0 : r * 0.55), text: markFor(sec), size: r * 0.55, anchor: 'middle', rotate: vertical ? -90 : 0, color: BEAM, weight: 700 })
     }
   }
 
@@ -125,13 +144,43 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     P.push({ kind: 'text', x: mx, y: mz, text: `h=${Math.round(p.thickness)}`, size: r * 0.5, anchor: 'middle', color: PANEL, weight: 600 })
   }
 
-  // ── chained grid dimensions (top for X spacings, left for Y spacings) ──
-  const dimOffTop = z0 - ext - 2 * r - r
+  // ── chained grid dimensions — placed INSIDE the bubbles (between the bubble
+  // ring and the framing), not beyond them ──
+  const dimOffTop = z0 - ext * 0.75
   for (let i = 0; i < xs.length - 1; i++)
     P.push({ kind: 'dim', x1: xs[i], y1: dimOffTop, x2: xs[i + 1], y2: dimOffTop, text: `${Math.round((xs[i + 1] - xs[i]) * 1000)}`, off: 0 })
-  const dimOffLeft = x0 - ext - 2 * r - r
+  const dimOffLeft = x0 - ext * 0.75
   for (let i = 0; i < zs.length - 1; i++)
     P.push({ kind: 'dim', x1: dimOffLeft, y1: zs[i], x2: dimOffLeft, y2: zs[i + 1], text: `${Math.round((zs[i + 1] - zs[i]) * 1000)}`, off: 0 })
+
+  // ── title block (detail tag) + beam schedule, below the plan ──
+  const detailNo = opts.detailNo ?? '1', sheetRef = opts.sheetRef ?? 'S-1', scale = opts.scale ?? 'NTS'
+  const title = foundation ? 'FOUNDATION PLAN' : 'FRAMING PLAN'
+  const tbR = r * 1.15, tbY = z1 + ext + r * 2, tbX = x0 - ext
+  P.push({ kind: 'circle', cx: tbX + tbR, cy: tbY, r: tbR, stroke: INK, fill: '#fff', width: 1 })
+  P.push({ kind: 'line', x1: tbX, y1: tbY, x2: tbX + 2 * tbR, y2: tbY, stroke: INK, width: 1 })
+  P.push({ kind: 'text', x: tbX + tbR, y: tbY - tbR * 0.5, text: detailNo, size: tbR * 0.75, anchor: 'middle', color: INK, weight: 700 })
+  P.push({ kind: 'text', x: tbX + tbR, y: tbY + tbR * 0.5, text: sheetRef, size: tbR * 0.6, anchor: 'middle', color: INK, weight: 700 })
+  const lnX0 = tbX + 2 * tbR + r * 0.3, lnX1 = x1 + ext
+  P.push({ kind: 'line', x1: lnX0, y1: tbY, x2: lnX1, y2: tbY, stroke: INK, width: 1.4 })
+  P.push({ kind: 'text', x: lnX0 + r * 0.15, y: tbY - tbR * 0.55, text: title, size: tbR * 0.95, anchor: 'start', color: INK, weight: 700 })
+  P.push({ kind: 'text', x: lnX0 + r * 0.15, y: tbY + tbR * 0.55, text: 'SCALE', size: tbR * 0.4, anchor: 'start', color: INK, weight: 600 })
+  P.push({ kind: 'text', x: lnX1 - r * 0.3, y: tbY + tbR * 0.55, text: scale, size: tbR * 0.4, anchor: 'end', color: INK, weight: 600 })
+
+  // beam schedule table (only marks used on this level)
+  if (schedule.length) {
+    const rowH = r * 0.85, cMark = r * 1.6, cSize = r * 3.2
+    const tX = tbX, tY = tbY + tbR + r * 1.2
+    P.push({ kind: 'text', x: tX, y: tY - r * 0.35, text: 'BEAM SCHEDULE', size: r * 0.5, anchor: 'start', color: BEAM, weight: 700 })
+    const rows: [string, string][] = [['MARK', 'SIZE (mm)'], ...schedule.map((s): [string, string] => [s.mark, s.size])]
+    rows.forEach((row, i) => {
+      const y = tY + i * rowH, head = i === 0
+      P.push({ kind: 'rect', x: tX, y, w: cMark, h: rowH, stroke: INK, width: 0.6, fill: head ? '#eef2f7' : '#fff' })
+      P.push({ kind: 'rect', x: tX + cMark, y, w: cSize, h: rowH, stroke: INK, width: 0.6, fill: head ? '#eef2f7' : '#fff' })
+      P.push({ kind: 'text', x: tX + cMark / 2, y: y + rowH / 2, text: row[0], size: r * 0.42, anchor: 'middle', color: INK, weight: head ? 700 : 500 })
+      P.push({ kind: 'text', x: tX + cMark + r * 0.2, y: y + rowH / 2, text: row[1], size: r * 0.42, anchor: 'start', color: INK, weight: head ? 700 : 500 })
+    })
+  }
 
   // ── bounds = span of every primitive coordinate ──
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
@@ -145,7 +194,8 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
   return {
     primitives: P,
     bounds: { minX, minY, maxX, maxY },
-    title: foundation ? 'FOUNDATION PLAN' : 'FRAMING PLAN',
+    title,
+    beamSchedule: schedule,
   }
 }
 
