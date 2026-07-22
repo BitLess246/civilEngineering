@@ -1,10 +1,15 @@
 import { useMemo, useState, type JSX } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { StructuralModel } from '../engine/model'
 import type { StructureDesign } from '../engine/pipeline'
 import { buildModelActivities, solveModelSchedule, withDuration, type Trade, type ActivityLink } from '../engine/modelSchedule'
 import { findCycle } from '../engine/schedule/cpm'
 import type { RelationType } from '../engine/schedule/model'
+import { createStore, defaultBackend } from '../engine/schedule/store'
+import { modelActivitiesToProject } from '../lib/modelToScheduleProject'
 import { CriticalPathDiagram } from './CriticalPathDiagram'
+
+const SCHEDULE_ACTIVE_KEY = 'schedule:active'   // mirrors useScheduleProject
 
 const REL_TYPES: RelationType[] = ['FS', 'SS', 'FF', 'SF']
 
@@ -18,6 +23,7 @@ const f1 = (v: number) => v.toFixed(1)
  *  diagram or the table) re-solves the network so the diagram, mini-Gantt and
  *  activity table all update together. */
 export function ConstructionSchedule({ model, design }: { model: StructuralModel; design: StructureDesign }): JSX.Element {
+  const navigate = useNavigate()
   const base = useMemo(() => buildModelActivities(model, design), [model, design])
   const [durOverride, setDurOverride] = useState<Record<string, number>>({})
   const [depOverride, setDepOverride] = useState<Record<string, ActivityLink[]>>({})
@@ -41,6 +47,16 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
   const setDuration = (id: string, d: number) => setDurOverride((o) => ({ ...o, [id]: d }))
   const resetAll = () => { setDurOverride({}); setDepOverride({}); setDepErr(null) }
 
+  /** Push the (edited) network into the /schedule module as a new active project. */
+  const openInScheduler = () => {
+    const project = modelActivitiesToProject(activities, { name: `${model.name || 'Model'} — construction schedule` })
+    const backend = defaultBackend()
+    const id = `p_${Date.now().toString(36)}`
+    createStore(backend).save(id, project)
+    backend.setItem(SCHEDULE_ACTIVE_KEY, id)
+    navigate('/schedule')
+  }
+
   /** Commit a new predecessor list for `id`, unless it creates a cycle. */
   const setLinks = (id: string, links: ActivityLink[]) => {
     const cand = activities.map((a) => (a.id === id ? { ...a, predecessors: links } : a))
@@ -63,6 +79,8 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
           <span>auto-derived from the model · {base.frame} frame</span>
           {edited && <button type="button" onClick={resetAll}
             className="no-print rounded border border-slate-300 px-2 py-0.5 text-xs font-semibold text-[#0f4c92] hover:bg-blue-50">↺ reset edits</button>}
+          <button type="button" onClick={openInScheduler}
+            className="no-print rounded-md bg-[#0f4c92] px-3 py-1 text-xs font-bold text-white hover:bg-[#0d3f78]">Open in Scheduler →</button>
         </span>
       </div>
 
