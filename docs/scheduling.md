@@ -187,13 +187,20 @@ columns (dates + total float + critical tag) and an expandable ES/EF/LS/LF/float
   lazy-loaded. Each exporter splits a node-testable `build*` from the browser
   download wrapper, so PDF/Excel generation is unit-tested (real bytes). The
   project cost-EVM roll-up is shared with the dashboard via `earnedValue.projectEvm`.
-- **Phase 10 — daily-report integration & delay analysis** *(this PR)*:
+- **Phase 10 — daily-report integration & delay analysis** ✅:
   `/schedule/daily` — capture/restore baselines, a per-activity daily-progress
   log (% complete, actual start/finish, remarks) that updates the schedule's
   actuals and recomputes live, and **delay analysis** (pure tested
   `lib/delayAnalysis.ts`): per-activity finish slip vs the baseline, **critical
   delays** flagged when a slipped activity is on the critical path, and a
-  project-slip summary.
+  project-slip summary (current − baseline project finish).
+
+**The 10-phase module is complete** — routes `/schedule`, `/schedule/gantt`,
+`/schedule/network`, `/schedule/dashboard`, `/schedule/resources`,
+`/schedule/reports`, `/schedule/daily`, all sharing one store-backed
+`ScheduleProject`. Merged in PRs #387, #389, #390, #392, #397, #398, #399, #400,
+#401, #410. Each phase passed a two-subagent (code + peer) review gate before
+merge.
 
 ## Known limitations / future extensions
 

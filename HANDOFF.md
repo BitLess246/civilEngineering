@@ -10,6 +10,25 @@ react-three-fiber) of structural-design tools and material take-off estimators
 to **NSCP 2015 / ACI 318-14**. Every tool computes live and prints a PDF report.
 App code lives in **`webapp/`**.
 
+## Project Scheduling module (Phases 1–10 — COMPLETE)
+A Primavera/MS-Project-style **PERT/CPM & progress-tracking** module, built
+**client-side** (pure engines + localStorage, no backend) — see
+[`docs/scheduling.md`](docs/scheduling.md) for the full architecture. Routes:
+`/schedule` (WBS + activity grid), `/schedule/gantt`, `/schedule/network` (AON),
+`/schedule/dashboard` (progress + EVM), `/schedule/resources`, `/schedule/reports`
+(PDF/Excel/CSV), `/schedule/daily` (actuals + delay analysis) — all sharing one
+store-backed `ScheduleProject`.
+- **Engines** (pure, tested): `webapp/src/engine/schedule/` — `model`, `calendar`,
+  `cpm` (FS/FF/SS/SF + lead/lag, floats, critical path, cycle detection), `pert`,
+  `earnedValue` (+ `projectEvm`), `progress`, `validate`, `baseline`, `sample`.
+- **View/support** (pure, tested): `webapp/src/lib/` — `gantt`, `network`,
+  `resourceLoad`, `progressCurve`, `scheduleDates`, `scheduleReport`(+`Csv`/`Pdf`/
+  `Excel`), `delayAnalysis`; hooks `useScheduleProject`/`useScheduleSolve`.
+- Merged in PRs #387/#389/#390/#392/#397/#398/#399/#400/#401/#410; each passed a
+  two-subagent code+peer review gate. Deferred items (delay classification,
+  delay-report export, photos, resource levelling, per-activity calendars/
+  constraints) are listed in `docs/scheduling.md`.
+
 ## Continue from your phone / cloud (PC off)
 The local terminal session needs your PC on. To keep working without it:
 1. Open **claude.ai/code** (mobile browser) or the **Claude app**, same account.
