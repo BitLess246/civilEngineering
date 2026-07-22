@@ -32,6 +32,7 @@ import { JointConnections3D } from '../components/JointConnections3D'
 import { ConnectionDetail2D } from '../components/ConnectionDetail2D'
 import { connectionRowSolution } from '../lib/connectionSolution'
 import { WorkedSolution } from '../components/WorkedSolution'
+import { ConstructionSchedule } from '../components/ConstructionSchedule'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution,
   woodBeamRowSolution, woodColumnRowSolution, woodSlabRowSolution } from '../lib/modelSpaceSolutions'
 import { Diagram } from '../components/Diagram'
@@ -998,7 +999,8 @@ export default function ModelSpace() {
   const [design, setDesign] = useState<StructureDesign | null>(null)
   const [opt, setOpt] = useState<OptimizeResult | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)   // open schedule-row solution
-  const [report, setReport] = useState<'' | 'schedules' | 'drawings' | 'solutions' | 'full' | 'sol-only' | 'draw-only'>('')  // consolidated report template
+  const [report] = useState<'' | 'schedules' | 'drawings' | 'solutions' | 'full' | 'sol-only' | 'draw-only'>('')  // consolidated report template (interactive on screen; PDF carries everything)
+  const [resultsTab, setResultsTab] = useState<'schedules' | 'boq' | 'schedule'>('schedules')  // results section tab
   const [modelImg, setModelImg] = useState<string | null>(null)   // 3D snapshot for the PDF report
   const [lh, setLh] = useState<LetterheadState>({ project: '', sheet: '', preparedBy: '' })
   const [exporting, setExporting] = useState(false)               // PDF build in flight
@@ -3835,30 +3837,24 @@ export default function ModelSpace() {
             </div>
           )}
           <LetterheadCard lh={lh} onChange={(p) => setLh((s) => ({ ...s, ...p }))} />
-          <div className="no-print flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-            <span className="text-sm font-semibold text-[#0f4c92]">Schedule view</span>
-            <select value={report} onChange={(e) => setReport(e.target.value as typeof report)}
-              className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm">
-              <option value="">Interactive (click a row)</option>
-              <option value="schedules">Schedules only</option>
-              <option value="drawings">Schedules + drawings</option>
-              <option value="solutions">Schedules + solutions</option>
-              <option value="full">Full — solutions + drawings</option>
-              <option value="sol-only">Solutions only (no tables)</option>
-              <option value="draw-only">Drawing sections only (no tables)</option>
-            </select>
-            <span className="text-xs text-slate-500">
-              {report === '' ? 'rows expand one at a time' : 'every row expanded'}
-            </span>
+          {/* Results tabs — Schedules · Bill of Quantities · Construction Schedule */}
+          <div className="no-print flex flex-wrap items-center gap-1.5 border-b border-slate-200">
+            {([['schedules', 'Schedules'], ['boq', 'Bill of Quantities'], ['schedule', 'Construction Schedule']] as const).map(([id, label]) => (
+              <button key={id} type="button" onClick={() => setResultsTab(id)}
+                className={`rounded-t-md px-3.5 py-2 text-[13px] font-semibold ${resultsTab === id ? 'border-b-2 border-[#0f4c92] text-[#0f4c92]' : 'text-slate-500 hover:text-[#0f4c92]'}`}>
+                {label}
+              </button>
+            ))}
             <button type="button" onClick={() => void exportPdf()} disabled={exporting}
-              className="ml-auto rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-bold text-white hover:bg-[#0d3f78] disabled:opacity-40">
+              className="mb-1 ml-auto rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-bold text-white hover:bg-[#0d3f78] disabled:opacity-40">
               {exporting ? '⏳ Building PDF…' : '⎙ Export PDF report'}
             </button>
           </div>
-          <p className="-mt-3 text-xs text-slate-500">
+
+          {resultsTab === 'schedules' && (<>
+          <p className="text-xs text-slate-500">
             Envelope of <b>{design.cases.length}</b> load case{design.cases.length === 1 ? '' : 's'} (NSCP combinations × lateral directions).
-            Each element is designed for its own governing case, shown in the “Case” column.
-            <span className="no-print"> The PDF report carries the letterhead, design summary, schedules and every worked solution.</span>
+            Each element is designed for its own governing case, shown in the “Case” column. Click any row for its worked solution.
           </p>
 
           {/* PAGE 2+ — project & design inputs (every template) */}
@@ -4949,12 +4945,15 @@ export default function ModelSpace() {
             critical sections (SRRB/DRRB) → column P–M → base reactions → isolated footings. Open any standalone
             page for the full worked solution of a given element.
           </p>
+          </>)}
+
+          {resultsTab === 'schedule' && model && <ConstructionSchedule model={model} design={design} />}
         </div>
         )
       })()}
 
       {/* ── Material take-off — BOM / BOQ (full width) ── */}
-      {design && takeoff && (
+      {design && takeoff && resultsTab === 'boq' && (
         <div className="mt-6 space-y-4 break-before-page">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-xl font-extrabold tracking-tight text-[#0f4c92]">
