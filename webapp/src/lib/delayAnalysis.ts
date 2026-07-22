@@ -9,6 +9,7 @@
 import type { ScheduleProject, Baseline } from '../engine/schedule/model'
 import type { CpmResult } from '../engine/schedule/cpm'
 import { baselineDateVariance } from '../engine/schedule/baseline'
+import { parseISO, calendarDaysBetween } from '../engine/schedule/calendar'
 
 export interface ActivityDelay {
   id: string
@@ -36,8 +37,9 @@ export interface DelaySummary {
   worst: ActivityDelay | null
 }
 
-/** Analyse delays of the live schedule (`cpm`) against `baseline`. */
-export function analyzeDelays(project: ScheduleProject, cpm: CpmResult, baseline: Baseline): DelaySummary {
+/** Analyse delays of the live schedule against `baseline`. `currentFinishIso` is
+ *  the live project finish date (e.g. `useScheduleSolve.finishDate`). */
+export function analyzeDelays(project: ScheduleProject, cpm: CpmResult, baseline: Baseline, currentFinishIso: string): DelaySummary {
   const variance = baselineDateVariance(project, baseline)
   const nameOf = new Map(project.activities.map((a) => [a.id, a.name]))
 
@@ -55,10 +57,15 @@ export function analyzeDelays(project: ScheduleProject, cpm: CpmResult, baseline
   }
   activities.sort((a, b) => b.finishVarianceDays - a.finishVarianceDays)
 
-  // Project slip = the finish slip of the current project-ending activity.
-  let endId = '', maxEf = -Infinity
-  for (const [id, c] of cpm.activities) if (c.ef > maxEf) { maxEf = c.ef; endId = id }
-  const projectSlipDays = variance.get(endId)?.finishVarianceDays ?? 0
+  // Project slip = current project finish − baseline project finish, in calendar
+  // days. Measured over ALL finishes (not one governing activity's own row), so
+  // it stays correct when the tail activity changes identity vs the baseline or
+  // the current end activity postdates the baseline. ISO dates compare in order.
+  const baselineFinishes = Object.values(baseline.activities).map((e) => e.finish)
+  const baselineFinishIso = baselineFinishes.length
+    ? baselineFinishes.reduce((a, b) => (b > a ? b : a))
+    : currentFinishIso
+  const projectSlipDays = calendarDaysBetween(parseISO(baselineFinishIso), parseISO(currentFinishIso))
 
   const delayedCount = activities.filter((a) => a.delayed).length
   const criticalDelayedCount = activities.filter((a) => a.criticalDelay).length

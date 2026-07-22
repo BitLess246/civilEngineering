@@ -27,7 +27,10 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: 'ok
 
 function DelayAnalysis({ project, solve, baselineId }: { project: ScheduleProject; solve: ScheduleSolve; baselineId: string }) {
   const baseline = project.baselines.find((b) => b.id === baselineId)
-  const delays = useMemo(() => (baseline && solve.cpm ? analyzeDelays(project, solve.cpm, baseline) : null), [project, solve.cpm, baseline])
+  const delays = useMemo(
+    () => (baseline && solve.cpm ? analyzeDelays(project, solve.cpm, baseline, solve.finishDate ?? project.meta.start) : null),
+    [project, solve.cpm, solve.finishDate, baseline],
+  )
   if (!delays) return null
   const slipped = delays.activities.filter((a) => a.finishVarianceDays !== 0)
   const td = 'px-2.5 py-1.5'
@@ -35,12 +38,14 @@ function DelayAnalysis({ project, solve, baselineId }: { project: ScheduleProjec
 
   return (
     <section className="space-y-3">
-      <div className={`rounded-lg border px-4 py-2.5 text-[12px] ${delays.criticalDelayedCount > 0 ? 'border-[#efd4cc] bg-[#fbeeea] text-[#8f2f1e]' : delays.projectSlipDays > 0 ? 'border-[#f0e2c8] bg-[#fdf6e9] text-[#8a6a1e]' : 'border-[#d3e8da] bg-[#ecf6ef] text-[#14603a]'}`}>
-        {delays.criticalDelayedCount > 0
-          ? <><b>Project delayed {delays.projectSlipDays} day{delays.projectSlipDays === 1 ? '' : 's'}.</b> {delays.criticalDelayedCount} critical activit{delays.criticalDelayedCount === 1 ? 'y is' : 'ies are'} behind baseline and pushing the finish.</>
-          : delays.projectSlipDays > 0
-            ? <>The project finish has slipped {delays.projectSlipDays} day(s), but no delay is on the critical path.</>
-            : <>On or ahead of baseline — no project delay.</>}
+      <div className={`rounded-lg border px-4 py-2.5 text-[12px] ${delays.projectSlipDays > 0 ? (delays.criticalDelayedCount > 0 ? 'border-[#efd4cc] bg-[#fbeeea] text-[#8f2f1e]' : 'border-[#f0e2c8] bg-[#fdf6e9] text-[#8a6a1e]') : 'border-[#d3e8da] bg-[#ecf6ef] text-[#14603a]'}`}>
+        {delays.projectSlipDays > 0
+          ? (delays.criticalDelayedCount > 0
+              ? <><b>Project delayed {delays.projectSlipDays} day{delays.projectSlipDays === 1 ? '' : 's'} vs baseline.</b> {delays.criticalDelayedCount} critical activit{delays.criticalDelayedCount === 1 ? 'y is' : 'ies are'} behind and pushing the finish.</>
+              : <>The project finish has slipped {delays.projectSlipDays} day(s) vs baseline.</>)
+          : delays.projectSlipDays < 0
+            ? <>Ahead of baseline — the project finishes {-delays.projectSlipDays} day(s) earlier.{delays.criticalDelayedCount > 0 ? ` (${delays.criticalDelayedCount} activity(ies) slipped locally but don't push the finish.)` : ''}</>
+            : <>On baseline — no project delay.</>}
       </div>
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
         <Stat label="Project slip" value={`${delays.projectSlipDays} d`} tone={delays.projectSlipDays > 0 ? 'bad' : 'ok'} />
@@ -70,7 +75,7 @@ function DelayAnalysis({ project, solve, baselineId }: { project: ScheduleProjec
           </table>
         </div>
       )}
-      <p className="text-[11px] text-[#a39d8d]">Δ = current schedule minus the selected baseline, in calendar days (+ = later). A finish slip on the critical path (red) pushes the project completion.</p>
+      <p className="text-[11px] text-[#a39d8d]">Δ = current schedule minus the selected baseline (start/finish in calendar days, duration in working days; + = later/longer). A finish slip on the critical path (red) pushes the project completion. The delay reflects the current <em>plan</em> vs baseline — record actuals in the log below (they feed the dashboard, EVM and Gantt).</p>
     </section>
   )
 }
@@ -118,6 +123,7 @@ export default function ScheduleDaily() {
   const project = api.project
 
   const capture = () => {
+    if (!solve.ok) return   // captureBaseline runs CPM — a cyclic schedule would throw
     const id = `bl_${Date.now().toString(36)}`
     api.update((d) => { d.baselines.push(captureBaseline(d, id, `Baseline ${d.baselines.length + 1}`, new Date().toISOString())) })
     setBaselineId(id)
@@ -125,7 +131,7 @@ export default function ScheduleDaily() {
 
   const actions = project && (
     <div className="flex items-center gap-2">
-      <button type="button" onClick={capture} className={btn}>+ Capture baseline</button>
+      <button type="button" onClick={capture} disabled={!solve.ok} className={`${btn} disabled:opacity-40`} title={solve.ok ? '' : 'Fix schedule errors first'}>+ Capture baseline</button>
       <Link to="/schedule" className={btn}>Grid</Link>
     </div>
   )

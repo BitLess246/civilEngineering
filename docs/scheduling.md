@@ -205,3 +205,11 @@ columns (dates + total float + critical tag) and an expandable ES/EF/LS/LF/float
   full probabilistic path merge is a future refinement).
 - Activity date/imposed constraints (SNET/FNLT/MSO) are modelled at the project
   level (imposed finish) for now; per-activity constraints come with the UI.
+- **Delay analysis** flags *critical* delays (slip on the critical path) but does
+  not yet classify delays by cause (weather / owner / contractor — no cause field
+  on the model), nor export a dedicated delay report (delays are screen-only);
+  the schedule reflects the current plan vs baseline, and recorded actuals drive
+  progress/EVM rather than re-scheduling successors. Daily-report **photo
+  attachments** are deferred (no file storage in this client-side app). Resource
+  **levelling** (auto re-sequencing) and baseline **rename/delete/compare** UI
+  are future work — over-allocation detection and capture/select ship today.
