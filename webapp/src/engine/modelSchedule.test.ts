@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel } from './modelBuilder'
 import { designStructure } from './pipeline'
-import { buildModelSchedule } from './modelSchedule'
+import { buildModelSchedule, buildModelActivities, solveModelSchedule, withDuration } from './modelSchedule'
 import type { RectSection, ModelLoad } from './model'
 
 const section: RectSection = { id: 'S1', name: '400×400', b: 400, h: 400, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
@@ -65,6 +65,20 @@ describe('buildModelSchedule — non-linear CPM/PERT from the model', () => {
     expect(sch.projectSd).toBeGreaterThan(0)
     expect(sch.criticalPath.length).toBeGreaterThan(0)
     expect(sch.criticalPath.length).toBeLessThan(sch.activities.length)   // parallelism ⇒ not everything is critical
+  })
+
+  it('editing a critical activity re-solves the network (longer critical duration → longer project)', () => {
+    const b = buildModelActivities(model, design)!
+    const s0 = solveModelSchedule(b.activities)
+    const critId = s0.criticalPath[s0.criticalPath.length - 1]   // last critical activity → its finish is the project end
+    const before = b.activities.find((a) => a.id === critId)!.duration
+    const edited = b.activities.map((a) => (a.id === critId ? withDuration(a, before + 10) : a))
+    const s1 = solveModelSchedule(edited)
+    expect(s1.projectDays).toBeGreaterThan(s0.projectDays)
+    // a non-critical (parallel) activity has slack, so bumping it a little keeps the project length
+    const slackId = [...s0.pert.cpm.activities.values()].find((c) => c.totalFloat > 2)!.id
+    const edited2 = b.activities.map((a) => (a.id === slackId ? withDuration(a, a.duration + 1) : a))
+    expect(solveModelSchedule(edited2).projectDays).toBeCloseTo(s0.projectDays, 6)
   })
 
   it('a steel frame schedules by erection tonnage & deck area', () => {
