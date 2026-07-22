@@ -6,10 +6,11 @@ import { buildModelActivities, solveModelSchedule, withDuration, type Trade, typ
 import { findCycle } from '../engine/schedule/cpm'
 import type { RelationType } from '../engine/schedule/model'
 import { createStore, defaultBackend } from '../engine/schedule/store'
-import { modelActivitiesToProject } from '../lib/modelToScheduleProject'
+import { modelActivitiesToProject, mergeModelIntoProject } from '../lib/modelToScheduleProject'
 import { CriticalPathDiagram } from './CriticalPathDiagram'
 
 const SCHEDULE_ACTIVE_KEY = 'schedule:active'   // mirrors useScheduleProject
+const SCHEDULE_LINK_KEY = 'schedule:model-link' // remembers the model's linked project
 
 const REL_TYPES: RelationType[] = ['FS', 'SS', 'FF', 'SF']
 
@@ -47,13 +48,25 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
   const setDuration = (id: string, d: number) => setDurOverride((o) => ({ ...o, [id]: d }))
   const resetAll = () => { setDurOverride({}); setDepOverride({}); setDepErr(null) }
 
-  /** Push the (edited) network into the /schedule module as a new active project. */
+  /** Push the (edited) network into the /schedule module. Re-opening UPDATES the
+   *  same linked project — refreshing structure while keeping the scheduler-side
+   *  calendar, resources, baselines and per-activity actuals — instead of making
+   *  a new copy each time. */
+  const [linked, setLinked] = useState<boolean>(() => {
+    const id = defaultBackend().getItem(SCHEDULE_LINK_KEY)
+    return !!(id && createStore(defaultBackend()).exists(id))
+  })
   const openInScheduler = () => {
-    const project = modelActivitiesToProject(activities, { name: `${model.name || 'Model'} — construction schedule` })
     const backend = defaultBackend()
-    const id = `p_${Date.now().toString(36)}`
-    createStore(backend).save(id, project)
+    const store = createStore(backend)
+    const fresh = modelActivitiesToProject(activities, { name: `${model.name || 'Model'} — construction schedule` })
+    const linkedId = backend.getItem(SCHEDULE_LINK_KEY)
+    const existing = linkedId && store.exists(linkedId) ? store.load(linkedId) : null
+    const id = existing && linkedId ? linkedId : `p_${Date.now().toString(36)}`
+    store.save(id, existing ? mergeModelIntoProject(existing, fresh) : fresh)
+    backend.setItem(SCHEDULE_LINK_KEY, id)
     backend.setItem(SCHEDULE_ACTIVE_KEY, id)
+    setLinked(true)
     navigate('/schedule')
   }
 
@@ -79,8 +92,8 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
           <span>auto-derived from the model · {base.frame} frame</span>
           {edited && <button type="button" onClick={resetAll}
             className="no-print rounded border border-slate-300 px-2 py-0.5 text-xs font-semibold text-[#0f4c92] hover:bg-blue-50">↺ reset edits</button>}
-          <button type="button" onClick={openInScheduler}
-            className="no-print rounded-md bg-[#0f4c92] px-3 py-1 text-xs font-bold text-white hover:bg-[#0d3f78]">Open in Scheduler →</button>
+          <button type="button" onClick={openInScheduler} title={linked ? 'Refresh the linked scheduler project (keeps calendar, resources, baselines & actuals)' : 'Create a scheduler project from this schedule'}
+            className="no-print rounded-md bg-[#0f4c92] px-3 py-1 text-xs font-bold text-white hover:bg-[#0d3f78]">{linked ? 'Update in Scheduler →' : 'Open in Scheduler →'}</button>
         </span>
       </div>
 

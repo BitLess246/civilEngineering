@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { generateGridModel } from '../engine/modelBuilder'
 import { designStructure } from '../engine/pipeline'
 import { buildModelActivities } from '../engine/modelSchedule'
-import { modelActivitiesToProject } from './modelToScheduleProject'
+import { modelActivitiesToProject, mergeModelIntoProject } from './modelToScheduleProject'
 import { validateProject, isProjectValid } from '../engine/schedule/validate'
 import { computeCPM } from '../engine/schedule/cpm'
 import type { RectSection, ModelLoad } from '../engine/model'
@@ -52,5 +52,29 @@ describe('modelActivitiesToProject', () => {
     const cpm = computeCPM(project.activities.map((a) => ({ id: a.id, duration: a.duration, predecessors: a.predecessors })))
     expect(cpm.duration).toBeGreaterThan(0)
     expect(cpm.criticalPath.length).toBeGreaterThan(0)
+  })
+
+  it('merge keeps scheduler-side setup + actuals while taking the model structure', () => {
+    // a user has set up the scheduler side: resources, a baseline, and progress
+    const existing = {
+      ...project,
+      resources: [{ id: 'r1', name: 'Crew A', type: 'labor' as const, unit: 'man-day' }],
+      baselines: [{ id: 'b1', name: 'BL1', createdAt: '2026-01-01', activities: {} }],
+      meta: { ...project.meta, client: 'Acme' },
+      activities: project.activities.map((a) => (a.id === 'FP1' ? { ...a, percentComplete: 40, status: 'in-progress' as const, actualStart: '2026-02-01' } : a)),
+    }
+    // the model is re-derived with an edited duration on FP1
+    const edited = modelActivitiesToProject(
+      acts.map((a) => (a.id === 'FP1' ? { ...a, duration: a.duration + 9, m: a.m + 9 } : a)), { name: 'Test schedule' })
+    const merged = mergeModelIntoProject(existing, edited)
+
+    expect(merged.resources).toHaveLength(1)             // scheduler resources kept
+    expect(merged.baselines).toHaveLength(1)             // baseline kept
+    expect(merged.meta.client).toBe('Acme')             // scheduler meta kept
+    const fp1 = merged.activities.find((a) => a.id === 'FP1')!
+    expect(fp1.duration).toBe(acts.find((a) => a.id === 'FP1')!.duration + 9)   // model duration flows in
+    expect(fp1.percentComplete).toBe(40)                // actuals preserved
+    expect(fp1.actualStart).toBe('2026-02-01')
+    expect(fp1.status).toBe('in-progress')
   })
 })

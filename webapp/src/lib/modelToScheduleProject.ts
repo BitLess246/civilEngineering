@@ -53,3 +53,22 @@ export function modelActivitiesToProject(activities: ModelActivity[], opts: Proj
     baselines: [],
   }
 }
+
+/** Refresh an existing linked project with the model's latest structure while
+ *  KEEPING the scheduler-side setup — calendars, resources, baselines, meta — and
+ *  each activity's progress/actuals/assignments (matched by id). Model edits
+ *  (durations, predecessors, three-point) flow in; the user's plan is preserved. */
+export function mergeModelIntoProject(existing: ScheduleProject, fresh: ScheduleProject): ScheduleProject {
+  const prev = new Map(existing.activities.map((a) => [a.id, a]))
+  const activities: Activity[] = fresh.activities.map((a) => {
+    const p = prev.get(a.id)
+    return p ? {
+      ...a,
+      calendarId: p.calendarId,
+      actualStart: p.actualStart, actualFinish: p.actualFinish,
+      percentComplete: p.percentComplete, status: p.status ?? a.status,
+      responsible: p.responsible, resources: p.resources,
+    } : a
+  })
+  return { ...existing, activities, wbs: fresh.wbs }
+}
