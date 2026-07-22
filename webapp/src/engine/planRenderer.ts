@@ -151,10 +151,10 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
 
   // ── chained grid dimensions — placed INSIDE the bubbles (between the bubble
   // ring and the framing), not beyond them ──
-  const dimOffTop = z0 - ext * 0.75
+  const dimOffTop = z0 - ext * 0.75 - dimTextH * 1.5
   for (let i = 0; i < xs.length - 1; i++)
     P.push({ kind: 'dim', x1: xs[i], y1: dimOffTop, x2: xs[i + 1], y2: dimOffTop, text: `${Math.round((xs[i + 1] - xs[i]) * 1000)} mm`, off: 0, size: dimTextH })
-  const dimOffLeft = x0 - ext * 0.75
+  const dimOffLeft = x0 - ext * 0.75 - dimTextH * 1.5
   for (let i = 0; i < zs.length - 1; i++)
     P.push({ kind: 'dim', x1: dimOffLeft, y1: zs[i], x2: dimOffLeft, y2: zs[i + 1], text: `${Math.round((zs[i + 1] - zs[i]) * 1000)} mm`, off: 0, size: dimTextH })
 
