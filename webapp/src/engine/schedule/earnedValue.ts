@@ -129,3 +129,45 @@ export function scheduleVarianceTime(
 ): number {
   return earnedScheduleOffset(activities, ev, tMax) - dataDate
 }
+
+// ── Project-level cost EVM from resource budgets ────────────────────────────
+
+/** Minimal activity shape for the project EVM roll-up (full `Activity` fits). */
+export interface EvmActivity {
+  id: string
+  percentComplete?: number
+  resources?: { resourceId: string; quantity: number }[]
+}
+
+/**
+ * Project cost EVM at a data date, from resource budgets. Each activity's BAC =
+ * Σ(quantity · rate); PV spreads BAC by the schedule's planned fraction; EV by
+ * actual %; the entered `actualCost` is fed at the project level (a single
+ * aggregate row) so AC is honoured even when EV = 0. `hasCost` is false when no
+ * activity carries a costed resource (the caller can hide the cost panel).
+ * Shared by the dashboard and the report so they can't drift.
+ */
+export function projectEvm(
+  activities: EvmActivity[],
+  cpmActivities: Map<string, { es: number; ef: number }>,
+  dataOffset: number,
+  costOf: Map<string, number>,
+  actualCost: number,
+): { result: EvmResult; hasCost: boolean } {
+  let bac = 0, pv = 0, ev = 0, hasCost = false
+  for (const a of activities) {
+    const c = cpmActivities.get(a.id)
+    const b = (a.resources ?? []).reduce((s, r) => s + r.quantity * (costOf.get(r.resourceId) ?? 0), 0)
+    if (b > 0) hasCost = true
+    bac += b
+    pv += b * (c ? plannedFraction(c.es, c.ef, dataOffset) : 0)
+    ev += b * (Math.min(100, Math.max(0, a.percentComplete ?? 0)) / 100)
+  }
+  const item: EvmActivityInput = {
+    id: 'project', bac,
+    percentComplete: bac > 0 ? (ev / bac) * 100 : 0,
+    plannedFraction: bac > 0 ? pv / bac : 0,
+    actualCost,
+  }
+  return { result: earnedValue([item]), hasCost }
+}

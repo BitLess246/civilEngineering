@@ -56,6 +56,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/schedule/network', name: 'Network Diagram',  sub: 'AON · critical path' },
       { to: '/schedule/dashboard', name: 'Dashboard',      sub: 'Progress · EVM · SPI/CPI' },
       { to: '/schedule/resources', name: 'Resource Loading', sub: 'Histogram · over-allocation' },
+      { to: '/schedule/reports',   name: 'Reports',          sub: 'PDF · Excel · CSV' },
     ],
   },
   {
