@@ -141,17 +141,17 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
       P.push({ kind: 'line', x1: u.x, y1: u.z, x2: v.x, y2: v.z, stroke: PANEL, width: 0.5, dash: [0.15, 0.12] })
     }
     const mx = (cc[0].x + cc[2].x) / 2, mz = (cc[0].z + cc[2].z) / 2
-    P.push({ kind: 'text', x: mx, y: mz, text: `h=${Math.round(p.thickness)}`, size: r * 0.5, anchor: 'middle', color: PANEL, weight: 600 })
+    P.push({ kind: 'text', x: mx, y: mz, text: `h=${Math.round(p.thickness)} mm`, size: r * 0.5, anchor: 'middle', color: PANEL, weight: 600 })
   }
 
   // ── chained grid dimensions — placed INSIDE the bubbles (between the bubble
   // ring and the framing), not beyond them ──
   const dimOffTop = z0 - ext * 0.75
   for (let i = 0; i < xs.length - 1; i++)
-    P.push({ kind: 'dim', x1: xs[i], y1: dimOffTop, x2: xs[i + 1], y2: dimOffTop, text: `${Math.round((xs[i + 1] - xs[i]) * 1000)}`, off: 0 })
+    P.push({ kind: 'dim', x1: xs[i], y1: dimOffTop, x2: xs[i + 1], y2: dimOffTop, text: `${Math.round((xs[i + 1] - xs[i]) * 1000)} mm`, off: 0 })
   const dimOffLeft = x0 - ext * 0.75
   for (let i = 0; i < zs.length - 1; i++)
-    P.push({ kind: 'dim', x1: dimOffLeft, y1: zs[i], x2: dimOffLeft, y2: zs[i + 1], text: `${Math.round((zs[i + 1] - zs[i]) * 1000)}`, off: 0 })
+    P.push({ kind: 'dim', x1: dimOffLeft, y1: zs[i], x2: dimOffLeft, y2: zs[i + 1], text: `${Math.round((zs[i + 1] - zs[i]) * 1000)} mm`, off: 0 })
 
   // ── title block (detail tag) + beam schedule, below the plan ──
   const detailNo = opts.detailNo ?? '1', sheetRef = opts.sheetRef ?? 'S-1', scale = opts.scale ?? 'NTS'

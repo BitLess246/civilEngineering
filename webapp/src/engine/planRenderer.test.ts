@@ -28,6 +28,10 @@ describe('planRenderer — framing plan geometry', () => {
     expect(texts(plan.primitives)).toContain('BEAM SCHEDULE')
   })
 
+  it('labels slab panels with a thickness carrying units (h=150 mm)', () => {
+    expect(texts(plan.primitives)).toContain('h=150 mm')
+  })
+
   it('emits a title block with the sheet title, detail tag and scale', () => {
     const t = texts(plan.primitives)
     expect(t).toContain('FRAMING PLAN')
@@ -38,7 +42,7 @@ describe('planRenderer — framing plan geometry', () => {
   it('places chained grid dimensions BELOW the bubbles (not above them)', () => {
     const dims = plan.primitives.filter((p) => p.kind === 'dim') as { text: string; y1: number }[]
     const bubbles = plan.primitives.filter((p) => p.kind === 'circle') as { cy: number }[]
-    expect(dims.some((d) => d.text === '6000')).toBe(true)
+    expect(dims.some((d) => d.text === '6000 mm')).toBe(true)
     // the top dim chain must sit below (greater Y = drafting-down) the topmost bubble row
     const topBubbleY = Math.min(...bubbles.map((b) => b.cy))
     expect(Math.min(...dims.map((d) => d.y1))).toBeGreaterThan(topBubbleY)
