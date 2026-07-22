@@ -22,12 +22,21 @@ export type PlanPrimitive =
   | { kind: 'dim'; x1: number; y1: number; x2: number; y2: number; text: string; off: number; size: number }
 
 export interface BeamScheduleRow { mark: string; size: string }
+export interface FootingScheduleRow { mark: string; size: string; thk: string; reinf: string }
+export interface ColumnScheduleRow { mark: string; size: string; notes: string }
+
+/** Minimal per-footing shape the foundation plan needs — mapped from the
+ *  pipeline's `design.footings` by the caller, so this module stays decoupled
+ *  from the design pipeline. Geometry in m; thickness/spacing in mm. */
+export interface PlanFooting { node: string; B: number; Dc: number; bars: number; barSpacing: number; barDia?: number }
 
 export interface PlanDrawing {
   primitives: PlanPrimitive[]
   bounds: { minX: number; minY: number; maxX: number; maxY: number }
   title: string
   beamSchedule: BeamScheduleRow[]
+  footingSchedule: FootingScheduleRow[]
+  columnSchedule: ColumnScheduleRow[]
 }
 
 export interface PlanOptions {
@@ -38,6 +47,10 @@ export interface PlanOptions {
   detailNo?: string
   sheetRef?: string
   scale?: string
+  /** Foundation plan: designed footings (from `design.footings`) to draw + schedule. */
+  footings?: PlanFooting[]
+  /** Foundation plan: top-of-footing elevation (m, −down) for per-footing ELEV tags. */
+  foundingElev?: number
 }
 
 const INK = '#1e293b', GRID = '#94a3b8', BEAM = '#0f4c92', COL = '#1e293b', PANEL = '#0f766e'
@@ -103,6 +116,30 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     if (!mk) { mk = `FB${markBySize.size + 1}`; markBySize.set(key, mk); schedule.push({ mark: mk, size: key }) }
     return mk
   }
+  // column marks (C1, C2…) group by section id
+  const colMarkBySec = new Map<string, string>()
+  const columnSchedule: ColumnScheduleRow[] = []
+  const colMarkFor = (sec: RectSection): string => {
+    const key = `${sec.b}×${sec.h}|${sec.fc}|${sec.fy}`   // identical columns share a mark
+    let mk = colMarkBySec.get(key)
+    if (!mk) { mk = `C${colMarkBySec.size + 1}`; colMarkBySec.set(key, mk); columnSchedule.push({ mark: mk, size: `${sec.b}×${sec.h}`, notes: `f'c=${sec.fc} MPa` }) }
+    return mk
+  }
+  // footing marks (WF-1, WF-2…) group by side × thickness
+  const footMarkBySize = new Map<string, string>()
+  const footingSchedule: FootingScheduleRow[] = []
+  const footMarkFor = (f: PlanFooting): string => {
+    const Bmm = Math.round(f.B * 1000)
+    const key = `${Bmm}x${Math.round(f.Dc)}`
+    let mk = footMarkBySize.get(key)
+    if (!mk) {
+      mk = `WF-${footMarkBySize.size + 1}`; footMarkBySize.set(key, mk)
+      const sp = Math.round(f.barSpacing)
+      const reinf = f.barDia ? `${f.bars}-⌀${f.barDia}@${sp} E.W.` : `${f.bars}@${sp} E.W.`
+      footingSchedule.push({ mark: mk, size: `${Bmm}×${Bmm}`, thk: `${Math.round(f.Dc)}`, reinf })
+    }
+    return mk
+  }
   for (const mem of model.members) {
     if (mem.role === 'column') continue
     const a = nm.get(mem.i), b = nm.get(mem.j); if (!a || !b) continue
@@ -115,6 +152,46 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
       // horizontal marks sit just BELOW their beam (toward the interior) so the
       // perimeter row never clashes with the grid-dimension chain above it
       P.push({ kind: 'text', x: mx + (vertical ? r * 0.45 : 0), y: mz + (vertical ? 0 : r * 0.55), text: markFor(sec), size: r * 0.55, anchor: 'middle', rotate: vertical ? -90 : 0, color: BEAM, weight: 700 })
+    }
+  }
+
+  // ── foundation: designed footing pads + tie beams (drawn under the column
+  // stubs so the stub reads on top) ──
+  if (foundation && opts.footings?.length) {
+    const foots = opts.footings
+      .map((f) => ({ f, n: nm.get(f.node) }))
+      .filter((x): x is { f: PlanFooting; n: NonNullable<typeof x.n> } => !!x.n && near(x.n.y, levelY))
+    // tie beams: connect footing centres that are adjacent along a grid line
+    const tieDrawn = new Set<string>()
+    const drawTies = (groups: Map<number, { x: number; z: number }[]>, axis: 'x' | 'z') => {
+      for (const pts of groups.values()) {
+        pts.sort((p, q) => (axis === 'x' ? p.z - q.z : p.x - q.x))
+        for (let i = 0; i < pts.length - 1; i++) {
+          const u = pts[i], v = pts[i + 1]
+          const kk = `${u.x.toFixed(2)},${u.z.toFixed(2)}-${v.x.toFixed(2)},${v.z.toFixed(2)}`
+          if (tieDrawn.has(kk)) continue; tieDrawn.add(kk)
+          P.push({ kind: 'line', x1: u.x, y1: u.z, x2: v.x, y2: v.z, stroke: BEAM, width: 1.2, dash: [0.35, 0.18] })
+          const mx = (u.x + v.x) / 2, mz = (u.z + v.z) / 2, vertical = axis === 'x'
+          P.push({ kind: 'text', x: mx + (vertical ? r * 0.4 : 0), y: mz + (vertical ? 0 : r * 0.45), text: 'FTB1', size: r * 0.42, anchor: 'middle', rotate: vertical ? -90 : 0, color: BEAM, weight: 600 })
+        }
+      }
+    }
+    const byX = new Map<number, { x: number; z: number }[]>()
+    const byZ = new Map<number, { x: number; z: number }[]>()
+    for (const { n } of foots) {
+      const kx = Math.round(n.x * 20) / 20, kz = Math.round(n.z * 20) / 20
+      ;(byX.get(kx) ?? byX.set(kx, []).get(kx)!).push({ x: n.x, z: n.z })
+      ;(byZ.get(kz) ?? byZ.set(kz, []).get(kz)!).push({ x: n.x, z: n.z })
+    }
+    drawTies(byX, 'x'); drawTies(byZ, 'z')
+    // footing pads + marks + ELEV tags
+    for (const { f, n } of foots) {
+      const B = f.B, mk = footMarkFor(f)
+      P.push({ kind: 'rect', x: n.x - B / 2, y: n.z - B / 2, w: B, h: B, stroke: COL, fill: 'none', width: 1.1, dash: [0.3, 0.18] })
+      // mark centred above the pad, elevation tag below — clear of the stub
+      P.push({ kind: 'text', x: n.x, y: n.z - B / 2 - r * 0.32, text: mk, size: r * 0.46, anchor: 'middle', color: COL, weight: 700 })
+      if (opts.foundingElev != null)
+        P.push({ kind: 'text', x: n.x, y: n.z + B / 2 + r * 0.34, text: `EL ${opts.foundingElev.toFixed(2)}`, size: r * 0.34, anchor: 'middle', color: PANEL, weight: 500 })
     }
   }
 
@@ -132,7 +209,11 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     drawn.add(key)
     const sec = secOf(mem.id)
     const cw = (sec?.b ?? 400) / 1000, ch = (sec?.h ?? 400) / 1000
-    P.push({ kind: 'rect', x: node.x - cw / 2, y: node.z - ch / 2, w: cw, h: ch, stroke: COL, fill: foundation ? 'none' : COL, width: 1.2, dash: foundation ? [0.2, 0.15] : undefined })
+    // on the foundation plan a designed footing sits under the stub → draw the
+    // stub solid so it reads inside the dashed pad; otherwise dashed outline
+    const footed = foundation && !!opts.footings?.length
+    P.push({ kind: 'rect', x: node.x - cw / 2, y: node.z - ch / 2, w: cw, h: ch, stroke: COL, fill: foundation && !footed ? 'none' : COL, width: 1.2, dash: foundation && !footed ? [0.2, 0.15] : undefined })
+    if (sec) colMarkFor(sec)   // collect the column schedule (marks shown in the table)
   }
 
   // ── slab panels at the level (outline + thickness label) ──
@@ -172,19 +253,36 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
   P.push({ kind: 'text', x: lnX0 + r * 0.15, y: tbY + tbR * 0.55, text: 'SCALE', size: tbR * 0.4, anchor: 'start', color: INK, weight: 600 })
   P.push({ kind: 'text', x: lnX1 - r * 0.3, y: tbY + tbR * 0.55, text: scale, size: tbR * 0.4, anchor: 'end', color: INK, weight: 600 })
 
-  // beam schedule table (only marks used on this level)
-  if (schedule.length) {
-    const rowH = r * 0.85, cMark = r * 1.6, cSize = r * 3.2
-    const tX = tbX, tY = tbY + tbR + r * 1.2
-    P.push({ kind: 'text', x: tX, y: tY - r * 0.35, text: 'BEAM SCHEDULE', size: r * 0.5, anchor: 'start', color: BEAM, weight: 700 })
-    const rows: [string, string][] = [['MARK', 'SIZE (mm)'], ...schedule.map((s): [string, string] => [s.mark, s.size])]
-    rows.forEach((row, i) => {
-      const y = tY + i * rowH, head = i === 0
-      P.push({ kind: 'rect', x: tX, y, w: cMark, h: rowH, stroke: INK, width: 0.6, fill: head ? '#eef2f7' : '#fff' })
-      P.push({ kind: 'rect', x: tX + cMark, y, w: cSize, h: rowH, stroke: INK, width: 0.6, fill: head ? '#eef2f7' : '#fff' })
-      P.push({ kind: 'text', x: tX + cMark / 2, y: y + rowH / 2, text: row[0], size: r * 0.42, anchor: 'middle', color: INK, weight: head ? 700 : 500 })
-      P.push({ kind: 'text', x: tX + cMark + r * 0.2, y: y + rowH / 2, text: row[1], size: r * 0.42, anchor: 'start', color: INK, weight: head ? 700 : 500 })
+  // schedule tables below the title block — beam (framing) or footing + column
+  // (foundation).  Returns the Y just past the drawn table so tables can stack.
+  const rowH = r * 0.85
+  const drawTable = (tX: number, tY: number, heading: string, hColor: string, colW: number[], rows: string[][]): number => {
+    P.push({ kind: 'text', x: tX, y: tY - r * 0.35, text: heading, size: r * 0.5, anchor: 'start', color: hColor, weight: 700 })
+    rows.forEach((row, ri) => {
+      const y = tY + ri * rowH, head = ri === 0
+      let cx = tX
+      row.forEach((cell, ci) => {
+        P.push({ kind: 'rect', x: cx, y, w: colW[ci], h: rowH, stroke: INK, width: 0.6, fill: head ? '#eef2f7' : '#fff' })
+        P.push({ kind: 'text', x: ci === 0 ? cx + colW[ci] / 2 : cx + r * 0.2, y: y + rowH / 2, text: cell, size: r * 0.42, anchor: ci === 0 ? 'middle' : 'start', color: INK, weight: head ? 700 : 500 })
+        cx += colW[ci]
+      })
     })
+    return tY + rows.length * rowH
+  }
+  const tblY0 = tbY + tbR + r * 1.2
+  if (foundation) {
+    let y = tblY0
+    if (footingSchedule.length) {
+      const rows = [['MARK', 'SIZE (mm)', 'THK', 'REINF.'], ...footingSchedule.map((f) => [f.mark, f.size, f.thk, f.reinf])]
+      y = drawTable(tbX, y, 'FOOTING SCHEDULE', BEAM, [r * 1.9, r * 3.0, r * 1.6, r * 5.2], rows) + r * 1.4
+    }
+    if (columnSchedule.length) {
+      const rows = [['MARK', 'SIZE (mm)', 'REMARKS'], ...columnSchedule.map((c) => [c.mark, c.size, c.notes])]
+      drawTable(tbX, y, 'COLUMN SCHEDULE', COL, [r * 1.6, r * 3.0, r * 4.4], rows)
+    }
+  } else if (schedule.length) {
+    const rows = [['MARK', 'SIZE (mm)'], ...schedule.map((s) => [s.mark, s.size])]
+    drawTable(tbX, tblY0, 'BEAM SCHEDULE', BEAM, [r * 1.6, r * 3.2], rows)
   }
 
   // ── bounds = span of every primitive coordinate ──
@@ -201,6 +299,8 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     bounds: { minX, minY, maxX, maxY },
     title,
     beamSchedule: schedule,
+    footingSchedule,
+    columnSchedule,
   }
 }
 
