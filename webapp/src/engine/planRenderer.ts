@@ -30,9 +30,14 @@ export interface ColumnScheduleRow { mark: string; size: string; notes: string }
  *  from the design pipeline. Geometry in m; thickness/spacing in mm. */
 export interface PlanFooting { node: string; B: number; Dc: number; bars: number; barSpacing: number; barDia?: number }
 
-export interface PlanDrawing {
+/** Anything the serializer can paint: typed primitives + their world bounds.
+ *  Both plan drawings and standalone details satisfy this. */
+export interface Drawing {
   primitives: PlanPrimitive[]
   bounds: { minX: number; minY: number; maxX: number; maxY: number }
+}
+
+export interface PlanDrawing extends Drawing {
   title: string
   beamSchedule: BeamScheduleRow[]
   footingSchedule: FootingScheduleRow[]
@@ -306,8 +311,9 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-/** Serialise a plan drawing to an SVG string (world metres → px, Y downward). */
-export function planToSvg(d: PlanDrawing, pxWidth = 1100): string {
+/** Serialise a drawing (plan or detail) to an SVG string (world metres → px,
+ *  Y downward). Only `primitives` + `bounds` are read. */
+export function planToSvg(d: Drawing, pxWidth = 1100): string {
   const wW = Math.max(0.001, d.bounds.maxX - d.bounds.minX)
   const wH = Math.max(0.001, d.bounds.maxY - d.bounds.minY)
   const pad = 24
