@@ -290,48 +290,6 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
     P.push({ kind: 'text', x: secL, y: footTop - ts * 0.5, text: `T.O.F. EL ${f.foundingElev.toFixed(2)} m`, size: ts * 0.5, anchor: 'start', color: PANEL, weight: 600 })
   P.push({ kind: 'text', x: sx0, y: gravBot + ts * 2.4, text: 'SECTION A-A', size: ts * 0.85, anchor: 'middle', color: INK, weight: 700 })
 
-  // ══ COLUMN SECTION inset — enlarged column cross-section showing the exact
-  // tie wrap: a perimeter tie hugging the corner bars + interior crossties that
-  // hook 180° around the interior bars (mirrors the report / ColumnSchematic) ══
-  {
-    const side = Math.min(gap * 0.56, B * 0.55)   // drawn column size (enlarged)
-    const sc = side / cw
-    const cxI = hp + gap * 0.4, cyI = 0           // sit in the clear part of the gap, left of the section's dim chain
-    const halfW = side / 2, halfH = (cd / cw) * side / 2
-    const bx = (fx: number) => cxI + fx * sc
-    const by = (fy: number) => cyI + fy * sc
-    const br = Math.max((colBarDia / 2000) * sc, side * 0.03)
-    const rTt = Math.max((tieDia / 2000) * sc, side * 0.012)
-    const tx0 = bx(colX1), tx1 = bx(colX2), ty0 = by(colY1), ty1 = by(colY2)
-    // column concrete outline
-    P.push({ kind: 'rect', x: cxI - halfW, y: cyI - halfH, w: side, h: 2 * halfH, stroke: INK, fill: '#fff', width: 1.4 })
-    // perimeter tie — rounded rectangle around the corner bars
-    const rr = Math.min(tx1 - tx0, ty1 - ty0) * 0.26
-    P.push({ kind: 'path', stroke: REBAR, width: 1.4, fill: 'none', closed: true, cmds: [
-      { c: 'M', x: tx0 + rr, y: ty0 }, { c: 'L', x: tx1 - rr, y: ty0 }, { c: 'A', rx: rr, ry: rr, x: tx1, y: ty0 + rr, sweep: 1 },
-      { c: 'L', x: tx1, y: ty1 - rr }, { c: 'A', rx: rr, ry: rr, x: tx1 - rr, y: ty1, sweep: 1 },
-      { c: 'L', x: tx0 + rr, y: ty1 }, { c: 'A', rx: rr, ry: rr, x: tx0, y: ty1 - rr, sweep: 1 },
-      { c: 'L', x: tx0, y: ty0 + rr }, { c: 'A', rx: rr, ry: rr, x: tx0 + rr, y: ty0, sweep: 1 },
-    ] })
-    // crosstie: a stadium loop grabbing bars A and B with a 180° hook at each
-    const hookR = br + rTt * 1.2
-    const stadium = (ax: number, ay: number, bx2: number, by2: number, odx: number, ody: number) =>
-      P.push({ kind: 'path', stroke: REBAR, width: 1.1, fill: 'none', closed: true, cmds: [
-        { c: 'M', x: ax + odx * hookR, y: ay + ody * hookR },
-        { c: 'L', x: bx2 + odx * hookR, y: by2 + ody * hookR },
-        { c: 'A', rx: hookR, ry: hookR, x: bx2 - odx * hookR, y: by2 - ody * hookR, sweep: 1 },
-        { c: 'L', x: ax - odx * hookR, y: ay - ody * hookR },
-        { c: 'A', rx: hookR, ry: hookR, x: ax + odx * hookR, y: ay + ody * hookR, sweep: 1 },
-      ] })
-    for (const fx of rowFx.slice(1, -1)) stadium(bx(fx), ty0, bx(fx), ty1, 1, 0)   // interior top/bottom bars
-    for (const fy of sideFy) stadium(tx0, by(fy), tx1, by(fy), 0, 1)               // interior side bars
-    // vertical bars (dots)
-    for (const fx of rowFx) { P.push({ kind: 'circle', cx: bx(fx), cy: ty0, r: br, stroke: REBAR, fill: REBAR, width: 0.4 }); P.push({ kind: 'circle', cx: bx(fx), cy: ty1, r: br, stroke: REBAR, fill: REBAR, width: 0.4 }) }
-    for (const fy of sideFy) { P.push({ kind: 'circle', cx: tx0, cy: by(fy), r: br, stroke: REBAR, fill: REBAR, width: 0.4 }); P.push({ kind: 'circle', cx: tx1, cy: by(fy), r: br, stroke: REBAR, fill: REBAR, width: 0.4 }) }
-    P.push({ kind: 'text', x: cxI, y: cyI + halfH + ts * 1.0, text: 'COLUMN SECTION', size: ts * 0.6, anchor: 'middle', color: INK, weight: 700 })
-    P.push({ kind: 'text', x: cxI, y: cyI + halfH + ts * 1.8, text: `${colBars}-⌀${colBarDia} · TIES ⌀${tieDia}`, size: ts * 0.45, anchor: 'middle', color: REBAR, weight: 600 })
-  }
-
   // ══ detail-tag title block ═════════════════════════════════════════════
   const detailNo = opts.detailNo ?? '1', sheetRef = opts.sheetRef ?? 'S-05', scale = opts.scale ?? '1:25 MTS'
   const title = `COLUMN FOOTING DETAIL — ${f.mark}`
