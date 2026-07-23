@@ -38,24 +38,31 @@ function Sheet({ title, svg, file }: { title: string; svg: string; file: string 
 export function PlansPanel({ model, design, soil }: { model: StructuralModel; design: StructureDesign | null; soil: SoilInput }): JSX.Element {
   const [hooked, setHooked] = useState(false)
 
-  // one floor framing plan per framed level (beams + the columns through that
-  // floor); level index = the node-y ordinal above the base
+  // per floor: a BEAM framing plan and a COLUMN framing plan (split sheets);
+  // level index = the node-y ordinal above the base
   const framings = useMemo(() => {
     const ys = [...new Set(model.nodes.map((n) => Math.round(n.y * 100) / 100))].sort((a, b) => a - b)
     const floors = ys.slice(1)   // skip the base (foundation)
     const idxs = floors.length ? floors.map((_, i) => i + 1) : [ys.length > 1 ? 1 : 0]
-    return idxs.map((level, i) => {
+    const out: { heading: string; file: string; svg: string }[] = []
+    let sheet = 2
+    for (const level of idxs) {
       const y = ys[level] ?? ys[ys.length - 1]
       const single = floors.length <= 1
+      const suffix = single ? '' : ` — Level ${level} · EL +${y.toFixed(2)} m`
       const label = single ? undefined : `L${level} (EL +${y.toFixed(2)} m)`
-      const d = buildPlan(model, { kind: 'framing', level, detailNo: '1', sheetRef: `S-${2 + i}`, label })
-      if (!d) return null
-      return {
-        heading: single ? 'Framing plan' : `Framing plan — Level ${level} · EL +${y.toFixed(2)} m`,
-        file: single ? 'framing-plan.svg' : `framing-plan-L${level}.svg`,
-        svg: planToSvg(d),
+      const tag = single ? '' : `-L${level}`
+      for (const layer of ['beam', 'column'] as const) {
+        const d = buildPlan(model, { kind: 'framing', layer, level, detailNo: '1', sheetRef: `S-${sheet++}`, label })
+        if (!d) continue
+        out.push({
+          heading: `${layer === 'beam' ? 'Beam framing plan' : 'Column framing plan'}${suffix}`,
+          file: `${layer}-framing${tag}.svg`,
+          svg: planToSvg(d),
+        })
       }
-    }).filter((x): x is { heading: string; file: string; svg: string } => x != null)
+    }
+    return out
   }, [model])
 
   const foundation = useMemo(() => {

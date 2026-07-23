@@ -52,6 +52,9 @@ export interface PlanDrawing extends Drawing {
 
 export interface PlanOptions {
   kind?: 'framing' | 'foundation'
+  /** Framing sub-sheet: 'beam' (beams + slab, columns as reference) or 'column'
+   *  (columns + schedule only). Omit for the combined framing plan. */
+  layer?: 'beam' | 'column'
   /** Storey level index (1 = first floor above base). Default: first framed level. */
   level?: number
   /** Title-block detail number, sheet reference and scale note. */
@@ -92,6 +95,7 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
 
   // level to draw: default the first framed level above the base (or the base for foundation)
   const foundation = opts.kind === 'foundation'
+  const layer = foundation ? undefined : opts.layer   // 'beam' | 'column' | undefined (both)
   const levelY = foundation ? ys[0] : (opts.level != null ? ys[opts.level] : (ys[1] ?? ys[0]))
 
   const P: PlanPrimitive[] = []
@@ -154,6 +158,7 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     return mk
   }
   for (const mem of model.members) {
+    if (layer === 'column') break   // column layout sheet — no beams
     if (mem.role === 'column') continue
     const a = nm.get(mem.i), b = nm.get(mem.j); if (!a || !b) continue
     if (!(near(a.y, levelY) && near(b.y, levelY))) continue   // only members on this level
@@ -222,15 +227,20 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     drawn.add(key)
     const sec = secOf(mem.id)
     const cw = (sec?.b ?? 400) / 1000, ch = (sec?.h ?? 400) / 1000
+    const mk = sec ? colMarkFor(sec) : ''   // collect the column schedule (marks shown in the table)
     // on the foundation plan a designed footing sits under the stub → draw the
-    // stub solid so it reads inside the dashed pad; otherwise dashed outline
+    // stub solid so it reads inside the dashed pad; on the BEAM sheet columns are
+    // drawn as a light reference outline; on the COLUMN sheet they are solid + marked
     const footed = foundation && !!opts.footings?.length
-    P.push({ kind: 'rect', x: node.x - cw / 2, y: node.z - ch / 2, w: cw, h: ch, stroke: COL, fill: foundation && !footed ? 'none' : COL, width: 1.2, dash: foundation && !footed ? [0.2, 0.15] : undefined })
-    if (sec) colMarkFor(sec)   // collect the column schedule (marks shown in the table)
+    const outline = (foundation && !footed) || layer === 'beam'
+    P.push({ kind: 'rect', x: node.x - cw / 2, y: node.z - ch / 2, w: cw, h: ch, stroke: layer === 'beam' ? GRID : COL, fill: outline ? 'none' : COL, width: layer === 'beam' ? 0.8 : 1.2, dash: outline ? [0.2, 0.15] : undefined })
+    if (layer === 'column' && sec)
+      P.push({ kind: 'text', x: node.x + cw / 2 + r * 0.25, y: node.z - ch / 2 - r * 0.25, text: mk, size: r * 0.55, anchor: 'start', color: COL, weight: 700 })
   }
 
   // ── slab panels at the level (outline + thickness label) ──
   for (const p of model.plates) {
+    if (layer === 'column') break   // column layout sheet — no slab panels
     if (p.role === 'wall') continue
     const c = p.corners.map((id) => nm.get(id)); if (c.some((q) => !q)) continue
     const cc = c as { x: number; y: number; z: number }[]
@@ -254,7 +264,8 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
 
   // ── title block (detail tag) + beam schedule, below the plan ──
   const detailNo = opts.detailNo ?? '1', sheetRef = opts.sheetRef ?? 'S-1', scale = opts.scale ?? 'NTS'
-  const title = `${foundation ? 'FOUNDATION PLAN' : 'FRAMING PLAN'}${opts.label ? ` — ${opts.label}` : ''}`
+  const baseTitle = foundation ? 'FOUNDATION PLAN' : layer === 'beam' ? 'BEAM FRAMING PLAN' : layer === 'column' ? 'COLUMN FRAMING PLAN' : 'FRAMING PLAN'
+  const title = `${baseTitle}${opts.label ? ` — ${opts.label}` : ''}`
   const tbR = r * 1.15, tbY = z1 + ext + r * 2, tbX = x0 - ext
   P.push({ kind: 'circle', cx: tbX + tbR, cy: tbY, r: tbR, stroke: INK, fill: '#fff', width: 1 })
   P.push({ kind: 'line', x1: tbX, y1: tbY, x2: tbX + 2 * tbR, y2: tbY, stroke: INK, width: 1 })
@@ -292,6 +303,11 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     if (columnSchedule.length) {
       const rows = [['MARK', 'SIZE (mm)', 'REMARKS'], ...columnSchedule.map((c) => [c.mark, c.size, c.notes])]
       drawTable(tbX, y, 'COLUMN SCHEDULE', COL, [r * 1.6, r * 3.0, r * 4.4], rows)
+    }
+  } else if (layer === 'column') {
+    if (columnSchedule.length) {
+      const rows = [['MARK', 'SIZE (mm)', 'REMARKS'], ...columnSchedule.map((c) => [c.mark, c.size, c.notes])]
+      drawTable(tbX, tblY0, 'COLUMN SCHEDULE', COL, [r * 1.6, r * 3.0, r * 4.4], rows)
     }
   } else if (schedule.length) {
     const rows = [['MARK', 'SIZE (mm)'], ...schedule.map((s) => [s.mark, s.size])]
