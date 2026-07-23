@@ -39,6 +39,7 @@ import { Diagram } from '../components/Diagram'
 import { MemberForcesTable } from '../components/MemberForcesTable'
 import { ReactionsPanel } from '../components/ReactionsPanel'
 import { DisplacementTable } from '../components/DisplacementTable'
+import { PlansPanel } from '../components/PlansPanel'
 import { ValidationPanel } from '../components/ValidationPanel'
 import { ModalPanel } from '../components/ModalPanel'
 import { ResponseSpectrumPanel } from '../components/ResponseSpectrumPanel'
@@ -695,7 +696,7 @@ function DirPicker({ value, onChange }: { value: string[]; onChange: (v: string[
 }
 
 // ── Right-panel tabs ────────────────────────────────────────────────────────
-type Tab = 'geometry' | 'properties' | 'supports' | 'loading' | 'analysis' | 'modal' | 'pushover' | 'design'
+type Tab = 'geometry' | 'properties' | 'supports' | 'loading' | 'analysis' | 'modal' | 'pushover' | 'design' | 'plans'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'geometry', label: 'Geometry' },
   { id: 'properties', label: 'Properties' },
@@ -705,6 +706,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'modal', label: 'Modal' },
   { id: 'pushover', label: 'Pushover' },
   { id: 'design', label: 'Design' },
+  { id: 'plans', label: 'Plans' },
 ]
 /** Flat panel section (3D Model Space mockup): uppercase mini-title, no card
  *  chrome — hairline separation comes from the parent's divide-y. */
@@ -3731,6 +3733,11 @@ export default function ModelSpace() {
                   Click any schedule row for its step-by-step solution and plan/elevation drawings.
                 </p>
               </Sec>
+            </div>
+          )}
+          {tab === 'plans' && model && (
+            <div className="px-4 py-3">
+              <PlansPanel model={model} design={design} soil={soil} />
             </div>
           )}
         </div>
