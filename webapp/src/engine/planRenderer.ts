@@ -191,7 +191,7 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
       // mark centred above the pad, elevation tag below — clear of the stub
       P.push({ kind: 'text', x: n.x, y: n.z - B / 2 - r * 0.32, text: mk, size: r * 0.46, anchor: 'middle', color: COL, weight: 700 })
       if (opts.foundingElev != null)
-        P.push({ kind: 'text', x: n.x, y: n.z + B / 2 + r * 0.34, text: `EL ${opts.foundingElev.toFixed(2)}`, size: r * 0.34, anchor: 'middle', color: PANEL, weight: 500 })
+        P.push({ kind: 'text', x: n.x, y: n.z + B / 2 + r * 0.34, text: `EL ${opts.foundingElev.toFixed(2)} m`, size: r * 0.34, anchor: 'middle', color: PANEL, weight: 500 })
     }
   }
 

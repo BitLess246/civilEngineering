@@ -90,6 +90,6 @@ describe('planRenderer — foundation plan with designed footings', () => {
   })
 
   it('tags each footing with its ELEV when foundingElev is given', () => {
-    expect(texts(f.primitives).some((s) => s.startsWith('EL '))).toBe(true)
+    expect(texts(f.primitives).some((s) => s === 'EL -1.50 m')).toBe(true)
   })
 })
