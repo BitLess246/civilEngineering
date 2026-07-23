@@ -17,6 +17,7 @@
 // Units: geometry m; bar/column sizes mm.
 // ─────────────────────────────────────────────────────────────────────────
 import type { PlanPrimitive, PathCmd, Drawing } from './planRenderer'
+import { columnSectionPrimitives } from './columnSection'
 
 type Pt = [number, number]
 /** Intersection of the infinite lines p1→p2 and p3→p4 (null if parallel). */
@@ -47,6 +48,8 @@ export interface FootingDetailInput {
   /** Column vertical bars — count and diameter (default 8 × mat bar). */
   colBars?: number
   colBarDia?: number
+  /** Column clear cover, mm (default 40) — for the column cross-section. */
+  colCover?: number
   /** Column LATERAL TIE diameter, mm (default 10). */
   tieDia?: number
   /** Lateral-tie set from the footing up: [count, spacing mm] groups, then rest @ … */
@@ -125,16 +128,13 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   const aboveGrade = f.aboveGrade ?? 0.3
   const embed = f.foundingElev != null ? Math.abs(f.foundingElev) : Math.max(1.0, H * 3)
 
-  // Column bar layout — 4 corners + the rest split between the b/h faces in
-  // proportion to face length (mirrors ColumnSchematic / the engine's
-  // 'all-around' layers). Gives the plan its dots and the section its verticals.
+  // Column bar x-positions visible in the SECTION cut — 4 corners + the rest
+  // split between faces (mirrors ColumnSchematic's 'all-around' layers).
   const cInset = c + tieDia / 1000 + colBarDia / 2000   // cover + tie + ½bar, m
   const N = Math.max(4, 2 * Math.round(colBars / 2))
   const bwIn = Math.max(1e-3, cw - 2 * cInset), hIn = Math.max(1e-3, cd - 2 * cInset)
   const nx = Math.max(2, Math.min(2 + Math.round(((N - 4) / 2) * (bwIn / (bwIn + hIn))), N / 2))
-  const ny = N / 2 + 2 - nx
   const rowFx = Array.from({ length: nx }, (_, i) => (nx === 1 ? 0 : -cw / 2 + cInset + ((cw - 2 * cInset) * i) / (nx - 1)))   // bar x, column-local
-  const sideFy = Array.from({ length: Math.max(0, ny - 2) }, (_, i) => -cd / 2 + cInset + ((cd - 2 * cInset) * (i + 1)) / (ny - 1))
 
   // ══ PLAN (centred at origin) ═══════════════════════════════════════════
   P.push({ kind: 'rect', x: -hp, y: -hp, w: B, h: B, stroke: INK, fill: 'none', width: 1.4 })
@@ -156,14 +156,11 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
     const p = matPos(i)
     rod(hookLen ? [[p + hd(p), xo], [p, xo], [p, xf], [p + hd(p), xf]] : [[p, xo], [p, xf]], rMain, '#fff')
   }
-  // column footprint + LATERAL TIE outline + the full ring of vertical bars
-  P.push({ kind: 'rect', x: -cw / 2, y: -cd / 2, w: cw, h: cd, stroke: COL, fill: '#fff', width: 1.1 })
-  P.push({ kind: 'rect', x: -cw / 2 + cInset, y: -cd / 2 + cInset, w: cw - 2 * cInset, h: cd - 2 * cInset, stroke: REBAR, fill: 'none', width: 1.0 })
-  const vr = Math.max(colBarDia / 2000, B * 0.008)
-  const colX1 = -cw / 2 + cInset, colX2 = cw / 2 - cInset, colY1 = -cd / 2 + cInset, colY2 = cd / 2 - cInset
-  const dot = (x: number, y: number) => P.push({ kind: 'circle', cx: x, cy: y, r: vr, stroke: REBAR, fill: REBAR, width: 0.5 })
-  for (const x of rowFx) { dot(x, colY1); dot(x, colY2) }   // top & bottom faces
-  for (const y of sideFy) { dot(colX1, y); dot(colX2, y) }  // interior side-face bars
+  // column — the tied column CROSS-SECTION drawn in the footing sheet's palette
+  // (orange bars/ties on a white column), i.e. the report's ColumnSchematic
+  // rendered by the engine, placed where the column sits in the plan
+  columnSectionPrimitives(P, 0, 0, cw, { b: f.colB, h: f.colH ?? f.colB, cover: f.colCover ?? 40, barDia: colBarDia, tieDia, bars: colBars },
+    { concrete: '#fff', outline: COL, rebar: REBAR }, 1.3)
   // A–A cut line through the centre
   const aExt = hp + ts * 1.6
   P.push({ kind: 'line', x1: -aExt, y1: 0, x2: aExt, y2: 0, stroke: INK, width: 0.6, dash: [0.12, 0.06, 0.03, 0.06] })
