@@ -29,6 +29,43 @@ store-backed `ScheduleProject`.
   delay-report export, photos, resource levelling, per-activity calendars/
   constraints) are listed in `docs/scheduling.md`.
 
+## Structural plan renderer / drawing sheets (PRs #419–#422 — COMPLETE)
+CAD-style structural **drawings generated from the 3D model + design**, emitted as
+scalable **SVG** and surfaced in a **"Plans" tab** in Model Space (`/model`). Pure
+engine + a thin React panel; every sheet exports to SVG.
+
+- **Engine** (pure, tested): `webapp/src/engine/`
+  - `planRenderer.ts` — `buildPlan(model, opts)` → typed `PlanPrimitive[]` in world
+    metres + bounds; `planToSvg(drawing, pxWidth)` serialises (Y-down). Draws the
+    **framing plan** (grid + bubbles, chained dims w/ units, framing beams with
+    grouped marks FB1/FB2… + a BEAM SCHEDULE, column squares, slab panels, detail-tag
+    title block) and the **foundation plan** (dashed footing pads sized from
+    `design.footings`, WF-n marks + FOOTING SCHEDULE, FTB tie beams, per-pad EL
+    elevation tags, COLUMN SCHEDULE). Primitive kinds: line/rect/circle/text/dim +
+    **`path`** (world-space M/L/A with fill-rule, opacity, join/cap) for outlined rebar.
+  - `footingDetail.ts` — `buildFootingDetail(input, opts)` → a column-footing detail
+    sheet: **bar-mat PLAN + SECTION A-A**. Rebar drawn as **outline tubes** (`rod()`),
+    design-driven **90° end hooks** (`endHook`, default straight) that hug the
+    perpendicular bar with a guard, **stacked mat layers** (over/under at crossings via
+    white-filled top bars; §13.3), column dowels + variable-spaced **lateral ties**,
+    **packed-gravel** bedding, natural-grade line + soil hatch, chained depth dims,
+    element-anchored leaders. ACI 318-14 §25.3/§25.4/§13.3.
+  - `columnSection.ts` — `columnSectionPrimitives(P, cx, cy, side, p, colors, sw)`: an
+    engine port of the report's `<ColumnSchematic>` (tied) — rounded concrete square,
+    perimeter tie + interior 180° crossties, full bar ring, and a **135° corner tie
+    hook drawn as two lines tangent to the corner bar**. Colour-parameterised; the
+    footing sheet draws it **as the column IN the plan** (orange/white), reusing the
+    all-around bar-layout math shared with `ColumnSchematic`.
+- **UI**: `components/PlansPanel.tsx` (+ `lib/planDetails.ts`, pure/tested — maps a
+  `StructureDesign` to `PlanFooting[]` and one `FootingDetailInput` per distinct
+  footing type WF-n, recovering the footing bar Ø from the designed steel area);
+  new **`plans`** right-panel tab in `pages/ModelSpace.tsx`.
+- Phases → PRs: **#419** framing (P1–2), **#420** foundation (P3), **#421** footing
+  detail sheet (P4), **#422** "Plans" tab + engine column section (P5). Suite **1444**.
+- **Follow-ups** (not built): SVG→PDF sheet export/print layout; beam/column
+  **schedule detail sheets** and a tie-bend detail; slab reinforcement plans;
+  wiring the plan-renderer drawings into the direct PDF report (`lib/modelPdf.ts`).
+
 ## Continue from your phone / cloud (PC off)
 The local terminal session needs your PC on. To keep working without it:
 1. Open **claude.ai/code** (mobile browser) or the **Claude app**, same account.
