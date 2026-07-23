@@ -35,15 +35,24 @@ describe('footingDetail — column-footing detail sheet', () => {
     const rebar = d.primitives.filter((p) => p.kind === 'path' && (p as { stroke?: string }).stroke === '#b45309')
     expect(rebar.length).toBeGreaterThanOrEqual(2 * base.bars)
     expect(rebar.every((p) => (p as { closed?: boolean }).closed)).toBe(true)
-    // filled rebar circles = n section bar-ends + colBars plan vertical bars
     const ends = d.primitives.filter((p) => p.kind === 'circle' && (p as { fill?: string }).fill === '#b45309')
-    expect(ends.length).toBe(base.bars + (base.colBars ?? 8))
+    // plan column ring (colBars) + section bar-ends (n) + column-section inset ring (colBars)
+    expect(ends.length).toBe(base.bars + 2 * (base.colBars ?? 8))
   })
 
   it('shows the full ring of column vertical bars in plan (not just corners)', () => {
-    const ends = d.primitives.filter((p) => p.kind === 'circle' && (p as { fill?: string }).fill === '#b45309')
-    // colBars column dots + n section bar-ends; the column ring alone must be colBars
-    expect(ends.length - base.bars).toBe(base.colBars)
+    // the plan column dots cluster at the origin; section/inset dots sit far to the right
+    const planDots = d.primitives.filter((p) => p.kind === 'circle' && (p as { fill?: string }).fill === '#b45309'
+      && Math.abs((p as { cx: number }).cx) < base.colB / 1000)
+    expect(planDots.length).toBe(base.colBars)
+  })
+
+  it('draws a COLUMN SECTION inset with the tie wrap (perimeter tie + crossties)', () => {
+    const t = texts(d.primitives)
+    expect(t).toContain('COLUMN SECTION')
+    // the tie wrap is drawn as closed rebar paths that are NOT filled (outlines)
+    const tiePaths = d.primitives.filter((p) => p.kind === 'path' && (p as { stroke?: string; fill?: string }).stroke === '#b45309' && (p as { fill?: string }).fill === 'none' && (p as { closed?: boolean }).closed)
+    expect(tiePaths.length).toBeGreaterThan(0)
   })
 
   it('labels the column ties as LATERAL TIES with a spacing schedule', () => {
