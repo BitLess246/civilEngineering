@@ -47,11 +47,14 @@ export interface FootingDetailInput {
   /** Column vertical bars — count and diameter (default 8 × mat bar). */
   colBars?: number
   colBarDia?: number
-  /** Tie/stirrup diameter, mm (default 10). */
-  stirrupDia?: number
-  /** Tie set from the footing up: [count, spacing mm] groups, then rest @ … */
-  stirrupSchedule?: [number, number][]
-  stirrupRest?: number
+  /** Column LATERAL TIE diameter, mm (default 10). */
+  tieDia?: number
+  /** Lateral-tie set from the footing up: [count, spacing mm] groups, then rest @ … */
+  tieSchedule?: [number, number][]
+  tieRest?: number
+  /** Mat-bar end detail — '90' hook or 'none' (straight). Design-driven; only
+   *  hook footings whose design calls for it. Default 'none'. */
+  endHook?: '90' | 'none'
   /** Gravel/lean base thickness, m (default 0.1). */
   gravel?: number
   /** Column projection above natural grade, m (default 0.3). */
@@ -111,35 +114,47 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   const barX = (i: number) => -hp + c + (inner * i) / (n - 1)
   const ts = B * 0.075
   const gap = B * 1.05
-  const hook = Math.min(0.12, B * 0.07)        // 90° hook leg length (m)
+  const hookLen = (f.endHook ?? 'none') === '90' ? Math.min(0.12, B * 0.07) : 0   // mat-bar end hook (0 = straight)
   const rMain = Math.max(bd / 2, B * 0.007)    // drawn bar radius (mat/dowels)
-  const rTie = Math.max((f.stirrupDia ?? 10) / 2000, B * 0.005)   // stirrups thinner
   const colBars = f.colBars ?? 8, colBarDia = f.colBarDia ?? f.barDia
-  const stDia = f.stirrupDia ?? 10
-  const stSched = f.stirrupSchedule ?? [[2, 50], [2, 75], [5, 100], [7, 150]]
-  const stRest = f.stirrupRest ?? 200
+  const tieDia = f.tieDia ?? 10
+  const rTie = Math.max(tieDia / 2000, B * 0.005)   // lateral ties thinner
+  const tieSched = f.tieSchedule ?? [[2, 50], [2, 75], [5, 100], [7, 150]]
+  const tieRest = f.tieRest ?? 200
   const hg = f.gravel ?? 0.1
   const aboveGrade = f.aboveGrade ?? 0.3
   const embed = f.foundingElev != null ? Math.abs(f.foundingElev) : Math.max(1.0, H * 3)
 
+  // Column bar layout — 4 corners + the rest split between the b/h faces in
+  // proportion to face length (mirrors ColumnSchematic / the engine's
+  // 'all-around' layers). Gives the plan its dots and the section its verticals.
+  const cInset = c + tieDia / 1000 + colBarDia / 2000   // cover + tie + ½bar, m
+  const N = Math.max(4, 2 * Math.round(colBars / 2))
+  const bwIn = Math.max(1e-3, cw - 2 * cInset), hIn = Math.max(1e-3, cd - 2 * cInset)
+  const nx = Math.max(2, Math.min(2 + Math.round(((N - 4) / 2) * (bwIn / (bwIn + hIn))), N / 2))
+  const ny = N / 2 + 2 - nx
+  const rowFx = Array.from({ length: nx }, (_, i) => (nx === 1 ? 0 : -cw / 2 + cInset + ((cw - 2 * cInset) * i) / (nx - 1)))   // bar x, column-local
+  const sideFy = Array.from({ length: Math.max(0, ny - 2) }, (_, i) => -cd / 2 + cInset + ((cd - 2 * cInset) * (i + 1)) / (ny - 1))
+
   // ══ PLAN (centred at origin) ═══════════════════════════════════════════
   P.push({ kind: 'rect', x: -hp, y: -hp, w: B, h: B, stroke: INK, fill: 'none', width: 1.4 })
-  // bottom mat, both ways, each bar hooked 90° toward the footing interior
+  // bottom mat, both ways — straight, or (when the design calls for it) with a
+  // 90° end hook that hugs the perpendicular perimeter bar
   const xo = -hp + c, xf = hp - c   // outermost mat-bar lines (= perimeter bars)
-  const hd = (p: number) => (p < 0 ? hook : -hook)   // 90° hook, turned toward the footing centre
+  const hd = (p: number) => (p < 0 ? hookLen : -hookLen)
   for (let i = 0; i < n; i++) {
     const p = barX(i)
-    // ∥x bar: straight run xo→xf, each end hooking along the perpendicular
-    // perimeter bar it meets (at xo and xf) — i.e. the hook hugs that bar
-    rod([[xo, p + hd(p)], [xo, p], [xf, p], [xf, p + hd(p)]], rMain)
-    rod([[p + hd(p), xo], [p, xo], [p, xf], [p + hd(p), xf]], rMain)   // ∥y bar, mirror
+    rod(hookLen ? [[xo, p + hd(p)], [xo, p], [xf, p], [xf, p + hd(p)]] : [[xo, p], [xf, p]], rMain)
+    rod(hookLen ? [[p + hd(p), xo], [p, xo], [p, xf], [p + hd(p), xf]] : [[p, xo], [p, xf]], rMain)
   }
-  // column footprint + vertical bars (corner circles) + a tie square
+  // column footprint + LATERAL TIE outline + the full ring of vertical bars
   P.push({ kind: 'rect', x: -cw / 2, y: -cd / 2, w: cw, h: cd, stroke: COL, fill: '#fff', width: 1.1 })
-  P.push({ kind: 'rect', x: -cw / 2 + c * 0.5, y: -cd / 2 + c * 0.5, w: cw - c, h: cd - c, stroke: REBAR, fill: 'none', width: 1.0 })
+  P.push({ kind: 'rect', x: -cw / 2 + cInset, y: -cd / 2 + cInset, w: cw - 2 * cInset, h: cd - 2 * cInset, stroke: REBAR, fill: 'none', width: 1.0 })
   const vr = Math.max(colBarDia / 2000, B * 0.008)
-  for (const sxp of [-1, 1]) for (const szp of [-1, 1])
-    P.push({ kind: 'circle', cx: sxp * (cw / 2 - c * 0.7), cy: szp * (cd / 2 - c * 0.7), r: vr, stroke: REBAR, fill: REBAR, width: 0.5 })
+  const colX1 = -cw / 2 + cInset, colX2 = cw / 2 - cInset, colY1 = -cd / 2 + cInset, colY2 = cd / 2 - cInset
+  const dot = (x: number, y: number) => P.push({ kind: 'circle', cx: x, cy: y, r: vr, stroke: REBAR, fill: REBAR, width: 0.5 })
+  for (const x of rowFx) { dot(x, colY1); dot(x, colY2) }   // top & bottom faces
+  for (const y of sideFy) { dot(colX1, y); dot(colX2, y) }  // interior side-face bars
   // A–A cut line through the centre
   const aExt = hp + ts * 1.6
   P.push({ kind: 'line', x1: -aExt, y1: 0, x2: aExt, y2: 0, stroke: INK, width: 0.6, dash: [0.12, 0.06, 0.03, 0.06] })
@@ -205,22 +220,28 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   const zLong = H - c - rMain                       // in-plane bar centre (bottom layer, on cover)
   const rDot = rMain * 0.9
   const zPerp = zLong - rMain - rDot                 // perpendicular bars sit tangent on top
-  rod([[secL + c, zPerp - rDot], [secL + c, zLong], [secR - c, zLong], [secR - c, zPerp - rDot]], rMain)
+  const upHook = hookLen ? Math.min(hookLen, H * 0.45) : 0
+  rod(upHook ? [[secL + c, zLong - upHook], [secL + c, zLong], [secR - c, zLong], [secR - c, zLong - upHook]]
+             : [[secL + c, zLong], [secR - c, zLong]], rMain)
   for (let i = 0; i < n; i++)
     P.push({ kind: 'circle', cx: sx0 + barX(i), cy: zPerp, r: rDot, stroke: REBAR, fill: REBAR, width: 0.4 })
-  // column vertical bars / dowels — full height, footed out to rest on the mat
-  const vx = [cl + c, cr - c]
-  for (const dx of vx) {
+  // column vertical bars — one per bar x-position visible in the section (from
+  // the same layout as the plan); the two outer bars foot out onto the mat
+  const secVx = rowFx.map((fx) => sx0 + fx)
+  for (const dx of secVx) {
+    const outer = Math.abs(dx - sx0) > cw / 2 - cInset - 1e-6
     const dir = dx < sx0 ? -1 : 1
-    rod([[dx, colTop + c], [dx, zLong], [dx + dir * (cw * 0.42), zLong]], rMain)
+    rod(outer ? [[dx, colTop + c], [dx, zLong], [dx + dir * (cw * 0.3), zLong]]
+              : [[dx, colTop + c], [dx, zLong]], rMain)
   }
-  // stirrups up the column at the scheduled spacing (each a thin closed tube)
+  // lateral ties up the column at the scheduled spacing (each a thin closed tube)
   const stX0 = cl + c * 0.6, stX1 = cr - c * 0.6
   let z = 0
   const stopZ = -(embed + aboveGrade) + c
-  const drawStirrup = () => { if (-z > stopZ) rod([[stX0, -z], [stX1, -z]], rTie) }
-  for (const [count, sp] of stSched) for (let k = 0; k < count; k++) { z += sp / 1000; drawStirrup() }
-  while (-z > stopZ) { z += stRest / 1000; drawStirrup() }
+  const tieZs: number[] = []
+  const drawTie = () => { if (-z > stopZ) { rod([[stX0, -z], [stX1, -z]], rTie); tieZs.push(-z) } }
+  for (const [count, sp] of tieSched) for (let k = 0; k < count; k++) { z += sp / 1000; drawTie() }
+  while (-z > stopZ) { z += tieRest / 1000; drawTie() }
   // depth dimension chain (embedment / footing / gravel) + overall
   const dX = secL - ts * 1.4
   for (const [a, b] of [[gradeZ, footTop], [footTop, footBot], [footBot, gravBot]] as const)
@@ -232,15 +253,24 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   for (const zb of [gradeZ, footTop, footBot, gravBot]) ext(dX, zb, secL, zb)
   for (const zb of [gradeZ, gravBot]) ext(dX - ts * 1.4, zb, dX, zb)
   for (const xb of [secL, secR]) ext(xb, gravBot + ts * 1.2, xb, gravBot)
-  // callouts with leaders
-  const lead = (x1: number, y1: number, x2: number, y2: number) => P.push({ kind: 'line', x1, y1, x2, y2, stroke: INK, width: 0.5 })
-  lead(cr, colTop * 0.75, secR + ts * 0.6, colTop * 0.75)
-  P.push({ kind: 'text', x: secR + ts * 0.8, y: colTop * 0.75, text: `${colBars}-${colBarDia}mmØ VERT. BARS`, size: ts * 0.55, anchor: 'start', color: REBAR, weight: 600 })
-  lead(cr, gradeZ * 0.55, secR + ts * 0.6, gradeZ * 0.55)
-  const stLines = [`STIRRUPS = ⌀${stDia} REBAR`, `${stSched.map(([cc, ss]) => `${cc}@${ss}`).join(', ')},`, `REST @ ${stRest} mm O.C.`]
-  stLines.forEach((s, i) => P.push({ kind: 'text', x: secR + ts * 0.8, y: gradeZ * 0.55 + i * ts * 0.72, text: s, size: ts * 0.5, anchor: 'start', color: INK, weight: 500 }))
-  lead(secR - c, zLong, secR + ts * 0.6, zLong + ts * 0.6)
-  P.push({ kind: 'text', x: secR + ts * 0.8, y: zLong + ts * 0.6, text: `${n}-${f.barDia}mmØ BOTHWAY`, size: ts * 0.55, anchor: 'start', color: REBAR, weight: 600 })
+  // callouts — each leader starts ON the element it names (a dot marks the tap)
+  const lead = (ex: number, ey: number, tx: number, ty: number) => {
+    P.push({ kind: 'line', x1: ex, y1: ey, x2: tx, y2: ty, stroke: INK, width: 0.5 })
+    P.push({ kind: 'circle', cx: ex, cy: ey, r: ts * 0.06, stroke: INK, fill: INK, width: 0.4 })
+  }
+  // → a column vertical bar
+  const rightVx = secVx.length ? Math.max(...secVx) : cr - c
+  const vy = colTop * 0.6
+  lead(rightVx, vy, secR + ts * 0.7, vy)
+  P.push({ kind: 'text', x: secR + ts * 0.9, y: vy, text: `${colBars}-${colBarDia}mmØ VERT. BARS`, size: ts * 0.55, anchor: 'start', color: REBAR, weight: 600 })
+  // → a lateral tie
+  const tieY = tieZs.length ? tieZs[Math.floor(tieZs.length * 0.55)] : gradeZ * 0.55
+  lead(stX1, tieY, secR + ts * 0.7, tieY)
+  const tieLines = [`LATERAL TIES = ⌀${tieDia}`, `${tieSched.map(([cc, ss]) => `${cc}@${ss}`).join(', ')},`, `REST @ ${tieRest} mm O.C.`]
+  tieLines.forEach((s, i) => P.push({ kind: 'text', x: secR + ts * 0.9, y: tieY + (i - 1) * ts * 0.72, text: s, size: ts * 0.5, anchor: 'start', color: INK, weight: 500 }))
+  // → the bottom mat bar
+  lead(secR - c, zLong, secR + ts * 0.7, zLong + ts * 0.7)
+  P.push({ kind: 'text', x: secR + ts * 0.9, y: zLong + ts * 0.7, text: `${n}-${f.barDia}mmØ BOTHWAY`, size: ts * 0.55, anchor: 'start', color: REBAR, weight: 600 })
   if (f.foundingElev != null)
     P.push({ kind: 'text', x: secL, y: footTop - ts * 0.5, text: `T.O.F. EL ${f.foundingElev.toFixed(2)} m`, size: ts * 0.5, anchor: 'start', color: PANEL, weight: 600 })
   P.push({ kind: 'text', x: sx0, y: gravBot + ts * 2.4, text: 'SECTION A-A', size: ts * 0.85, anchor: 'middle', color: INK, weight: 700 })

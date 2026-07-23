@@ -35,15 +35,29 @@ describe('footingDetail — column-footing detail sheet', () => {
     const rebar = d.primitives.filter((p) => p.kind === 'path' && (p as { stroke?: string }).stroke === '#b45309')
     expect(rebar.length).toBeGreaterThanOrEqual(2 * base.bars)
     expect(rebar.every((p) => (p as { closed?: boolean }).closed)).toBe(true)
-    // filled rebar circles = n section bar-ends + 4 plan column vertical bars
+    // filled rebar circles = n section bar-ends + colBars plan vertical bars
     const ends = d.primitives.filter((p) => p.kind === 'circle' && (p as { fill?: string }).fill === '#b45309')
-    expect(ends.length).toBe(base.bars + 4)
+    expect(ends.length).toBe(base.bars + (base.colBars ?? 8))
   })
 
-  it('shows a variable-spaced stirrup schedule callout', () => {
+  it('shows the full ring of column vertical bars in plan (not just corners)', () => {
+    const ends = d.primitives.filter((p) => p.kind === 'circle' && (p as { fill?: string }).fill === '#b45309')
+    // colBars column dots + n section bar-ends; the column ring alone must be colBars
+    expect(ends.length - base.bars).toBe(base.colBars)
+  })
+
+  it('labels the column ties as LATERAL TIES with a spacing schedule', () => {
     const t = texts(d.primitives)
-    expect(t.some((s) => s.startsWith('STIRRUPS = ⌀'))).toBe(true)
+    expect(t.some((s) => s.startsWith('LATERAL TIES = ⌀'))).toBe(true)
     expect(t.some((s) => s.includes('2@50'))).toBe(true)
+  })
+
+  it('mat bars are straight by default and hooked only when endHook="90"', () => {
+    const straight = buildFootingDetail({ ...base, endHook: 'none' }, {})
+    const hooked = buildFootingDetail({ ...base, endHook: '90' }, {})
+    // a hooked bar path has more vertices than the straight two-point run
+    const verts = (dw: typeof straight) => dw.primitives.filter((p) => p.kind === 'path').reduce((m, p) => Math.max(m, (p as { cmds: unknown[] }).cmds.length), 0)
+    expect(verts(hooked)).toBeGreaterThan(verts(straight))
   })
 
   it('chained sub-dimensions in plan and a depth chain in section (mm)', () => {
