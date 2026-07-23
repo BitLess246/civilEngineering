@@ -152,7 +152,7 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     if (!mk) {
       mk = `WF-${footMarkBySize.size + 1}`; footMarkBySize.set(key, mk)
       const sp = Math.round(f.barSpacing)
-      const reinf = f.barDia ? `${f.bars}-⌀${f.barDia}@${sp} E.W.` : `${f.bars}@${sp} E.W.`
+      const reinf = f.barDia ? `${f.bars}-⌀${f.barDia}@${sp} mm E.W.` : `${f.bars}@${sp} mm E.W.`
       footingSchedule.push({ mark: mk, size: `${Bmm}×${Bmm}`, thk: `${Math.round(f.Dc)}`, reinf })
     }
     return mk
@@ -163,7 +163,13 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     const a = nm.get(mem.i), b = nm.get(mem.j); if (!a || !b) continue
     if (!(near(a.y, levelY) && near(b.y, levelY))) continue   // only members on this level
     const sec = secOf(mem.id)
-    P.push({ kind: 'line', x1: a.x, y1: a.z, x2: b.x, y2: b.z, stroke: BEAM, width: 1.6 })
+    // draw the beam/girder to its real WIDTH b — two edge lines offset ±b/2
+    // perpendicular to the member axis (not a single centreline)
+    const bw = (sec?.b ?? 300) / 1000
+    const dx = b.x - a.x, dz = b.z - a.z, len = Math.hypot(dx, dz) || 1
+    const ox = (-dz / len) * (bw / 2), oz = (dx / len) * (bw / 2)
+    for (const s of [1, -1])
+      P.push({ kind: 'line', x1: a.x + s * ox, y1: a.z + s * oz, x2: b.x + s * ox, y2: b.z + s * oz, stroke: BEAM, width: 1.0 })
     if (sec) {
       const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2
       const vertical = Math.abs(b.z - a.z) > Math.abs(b.x - a.x)
@@ -293,25 +299,21 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     })
     return tY + rows.length * rowH
   }
+  const withUnit = (v: string, u = 'mm') => `${v} ${u}`   // units on every schedule value
+  const colRows = () => [['MARK', 'SIZE', 'REMARKS'], ...columnSchedule.map((c) => [c.mark, withUnit(c.size), c.notes])]
   const tblY0 = tbY + tbR + r * 1.2
   if (foundation) {
     let y = tblY0
     if (footingSchedule.length) {
-      const rows = [['MARK', 'SIZE (mm)', 'THK', 'REINF.'], ...footingSchedule.map((f) => [f.mark, f.size, f.thk, f.reinf])]
-      y = drawTable(tbX, y, 'FOOTING SCHEDULE', BEAM, [r * 1.9, r * 3.0, r * 1.6, r * 5.2], rows) + r * 1.4
+      const rows = [['MARK', 'SIZE', 'THK', 'REINF.'], ...footingSchedule.map((f) => [f.mark, withUnit(f.size), withUnit(f.thk), f.reinf])]
+      y = drawTable(tbX, y, 'FOOTING SCHEDULE', BEAM, [r * 1.9, r * 3.4, r * 2.0, r * 5.4], rows) + r * 1.4
     }
-    if (columnSchedule.length) {
-      const rows = [['MARK', 'SIZE (mm)', 'REMARKS'], ...columnSchedule.map((c) => [c.mark, c.size, c.notes])]
-      drawTable(tbX, y, 'COLUMN SCHEDULE', COL, [r * 1.6, r * 3.0, r * 4.4], rows)
-    }
+    if (columnSchedule.length) drawTable(tbX, y, 'COLUMN SCHEDULE', COL, [r * 1.6, r * 3.4, r * 4.4], colRows())
   } else if (layer === 'column') {
-    if (columnSchedule.length) {
-      const rows = [['MARK', 'SIZE (mm)', 'REMARKS'], ...columnSchedule.map((c) => [c.mark, c.size, c.notes])]
-      drawTable(tbX, tblY0, 'COLUMN SCHEDULE', COL, [r * 1.6, r * 3.0, r * 4.4], rows)
-    }
+    if (columnSchedule.length) drawTable(tbX, tblY0, 'COLUMN SCHEDULE', COL, [r * 1.6, r * 3.4, r * 4.4], colRows())
   } else if (schedule.length) {
-    const rows = [['MARK', 'SIZE (mm)'], ...schedule.map((s) => [s.mark, s.size])]
-    drawTable(tbX, tblY0, 'BEAM SCHEDULE', BEAM, [r * 1.6, r * 3.2], rows)
+    const rows = [['MARK', 'SIZE'], ...schedule.map((s) => [s.mark, withUnit(s.size)])]
+    drawTable(tbX, tblY0, 'BEAM SCHEDULE', BEAM, [r * 1.6, r * 3.6], rows)
   }
 
   // ── bounds = span of every primitive coordinate ──
