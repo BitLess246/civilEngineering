@@ -30,11 +30,11 @@ describe('footingDetail — column-footing detail sheet', () => {
     expect(t.some((s) => s === '8-16mmØ VERT. BARS')).toBe(true)
   })
 
-  it('draws the bottom mat with END HOOKS (bars are polylines, not plain spans)', () => {
-    // each plan mat bar is a 3-segment hooked polyline → ≥ 3 rebar segments per bar,
-    // both ways ⇒ well over 2·bars rebar lines
-    const rebar = d.primitives.filter((p) => p.kind === 'line' && (p as { stroke?: string }).stroke === '#b45309')
-    expect(rebar.length).toBeGreaterThan(4 * base.bars)
+  it('draws each bar as an OUTLINE tube (closed rebar path), both ways', () => {
+    // every bar is one closed rebar-coloured path; plan has 2·bars (both ways)
+    const rebar = d.primitives.filter((p) => p.kind === 'path' && (p as { stroke?: string }).stroke === '#b45309')
+    expect(rebar.length).toBeGreaterThanOrEqual(2 * base.bars)
+    expect(rebar.every((p) => (p as { closed?: boolean }).closed)).toBe(true)
     // filled rebar circles = n section bar-ends + 4 plan column vertical bars
     const ends = d.primitives.filter((p) => p.kind === 'circle' && (p as { fill?: string }).fill === '#b45309')
     expect(ends.length).toBe(base.bars + 4)
@@ -58,8 +58,8 @@ describe('footingDetail — column-footing detail sheet', () => {
     const t = texts(d.primitives)
     expect(t).toContain('NATURAL GRADE LINE')
     expect(t).toContain('T.O.F. EL -1.05 m')
-    // gravel aggregate circles (unfilled, hatch stroke) under the footing
-    expect(d.primitives.some((p) => p.kind === 'circle' && (p as { stroke?: string }).stroke === '#94a3b8')).toBe(true)
+    // gravel aggregate stones (unfilled, stone stroke) under the footing
+    expect(d.primitives.some((p) => p.kind === 'circle' && (p as { stroke?: string }).stroke === '#64748b')).toBe(true)
   })
 
   it('bounds enclose everything and serialise to valid SVG', () => {

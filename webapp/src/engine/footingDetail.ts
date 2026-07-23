@@ -16,7 +16,16 @@
 //
 // Units: geometry m; bar/column sizes mm.
 // ─────────────────────────────────────────────────────────────────────────
-import type { PlanPrimitive, Drawing } from './planRenderer'
+import type { PlanPrimitive, PathCmd, Drawing } from './planRenderer'
+
+type Pt = [number, number]
+/** Intersection of the infinite lines p1→p2 and p3→p4 (null if parallel). */
+function lineX(p1: Pt, p2: Pt, p3: Pt, p4: Pt): Pt | null {
+  const d = (p1[0] - p2[0]) * (p3[1] - p4[1]) - (p1[1] - p2[1]) * (p3[0] - p4[0])
+  if (Math.abs(d) < 1e-9) return null
+  const t = ((p1[0] - p3[0]) * (p3[1] - p4[1]) - (p1[1] - p3[1]) * (p3[0] - p4[0])) / d
+  return [p1[0] + t * (p2[0] - p1[0]), p1[1] + t * (p2[1] - p1[1])]
+}
 
 export interface FootingDetailInput {
   /** Footing mark (WF-1…). */
@@ -54,15 +63,40 @@ export interface FootingDetailInput {
 export interface FootingDetailOptions { detailNo?: string; sheetRef?: string; scale?: string }
 export interface DetailDrawing extends Drawing { title: string }
 
-const INK = '#1e293b', COL = '#1e293b', REBAR = '#b45309', HATCH = '#94a3b8', GRID = '#9aa5b5', PANEL = '#0f766e'
-const RW = 1.1   // rebar stroke weight (px) — a line, not a filled rod
+const INK = '#1e293b', COL = '#1e293b', REBAR = '#b45309', HATCH = '#94a3b8', GRID = '#9aa5b5', STONE = '#64748b', PANEL = '#0f766e'
+const RW = 0.8   // rebar outline stroke weight (px) — a thin tube edge, not a filled rod
 
 /** Build a column-footing detail (plan + section) from a designed footing. */
 export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOptions = {}): DetailDrawing {
   const P: PlanPrimitive[] = []
-  const bar = (pts: [number, number][], w = RW) => {   // thin rebar polyline (stroke)
-    for (let i = 0; i < pts.length - 1; i++)
-      P.push({ kind: 'line', x1: pts[i][0], y1: pts[i][1], x2: pts[i + 1][0], y2: pts[i + 1][1], stroke: REBAR, width: w })
+  // Draw a reinforcing bar as its OUTLINE (a thin-stroked tube of radius `r`
+  // about the centreline `pts`): offset both sides with mitred corners and cap
+  // the two free ends with a semicircle — so the bar reads as a rod of real
+  // diameter with rounded (hooked) ends, not a single centreline.
+  const rod = (pts: Pt[], r: number) => {
+    const ns = pts.length - 1
+    const nrm: Pt[] = []
+    for (let i = 0; i < ns; i++) {
+      const dx = pts[i + 1][0] - pts[i][0], dy = pts[i + 1][1] - pts[i][1]
+      const l = Math.hypot(dx, dy) || 1
+      nrm.push([-dy / l, dx / l])   // left normal
+    }
+    const side = (s: number): Pt[] => pts.map((p, i) => {
+      if (i === 0) return [p[0] + s * r * nrm[0][0], p[1] + s * r * nrm[0][1]]
+      if (i === ns) return [p[0] + s * r * nrm[ns - 1][0], p[1] + s * r * nrm[ns - 1][1]]
+      const a0: Pt = [pts[i - 1][0] + s * r * nrm[i - 1][0], pts[i - 1][1] + s * r * nrm[i - 1][1]]
+      const a1: Pt = [p[0] + s * r * nrm[i - 1][0], p[1] + s * r * nrm[i - 1][1]]
+      const b0: Pt = [p[0] + s * r * nrm[i][0], p[1] + s * r * nrm[i][1]]
+      const b1: Pt = [pts[i + 1][0] + s * r * nrm[i][0], pts[i + 1][1] + s * r * nrm[i][1]]
+      return lineX(a0, a1, b0, b1) ?? b0
+    })
+    const L = side(1), R = side(-1)
+    const cmds: PathCmd[] = [{ c: 'M', x: L[0][0], y: L[0][1] }]
+    for (let i = 1; i < L.length; i++) cmds.push({ c: 'L', x: L[i][0], y: L[i][1] })
+    cmds.push({ c: 'A', rx: r, ry: r, x: R[R.length - 1][0], y: R[R.length - 1][1], sweep: 1 })
+    for (let i = R.length - 2; i >= 0; i--) cmds.push({ c: 'L', x: R[i][0], y: R[i][1] })
+    cmds.push({ c: 'A', rx: r, ry: r, x: L[0][0], y: L[0][1], sweep: 1 })
+    P.push({ kind: 'path', cmds, stroke: REBAR, width: RW, fill: 'none', closed: true })
   }
   const ext = (x1: number, y1: number, x2: number, y2: number) =>   // dashed dimension extension line
     P.push({ kind: 'line', x1, y1, x2, y2, stroke: GRID, width: 0.6, dash: [0.05, 0.04] })
@@ -78,6 +112,8 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   const ts = B * 0.075
   const gap = B * 1.05
   const hook = Math.min(0.12, B * 0.07)        // 90° hook leg length (m)
+  const rMain = Math.max(bd / 2, B * 0.007)    // drawn bar radius (mat/dowels)
+  const rTie = Math.max((f.stirrupDia ?? 10) / 2000, B * 0.005)   // stirrups thinner
   const colBars = f.colBars ?? 8, colBarDia = f.colBarDia ?? f.barDia
   const stDia = f.stirrupDia ?? 10
   const stSched = f.stirrupSchedule ?? [[2, 50], [2, 75], [5, 100], [7, 150]]
@@ -95,8 +131,8 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
     const p = barX(i)
     // ∥x bar: straight run xo→xf, each end hooking along the perpendicular
     // perimeter bar it meets (at xo and xf) — i.e. the hook hugs that bar
-    bar([[xo, p + hd(p)], [xo, p], [xf, p], [xf, p + hd(p)]])
-    bar([[p + hd(p), xo], [p, xo], [p, xf], [p + hd(p), xf]])   // ∥y bar, mirror
+    rod([[xo, p + hd(p)], [xo, p], [xf, p], [xf, p + hd(p)]], rMain)
+    rod([[p + hd(p), xo], [p, xo], [p, xf], [p + hd(p), xf]], rMain)   // ∥y bar, mirror
   }
   // column footprint + vertical bars (corner circles) + a tie square
   P.push({ kind: 'rect', x: -cw / 2, y: -cd / 2, w: cw, h: cd, stroke: COL, fill: '#fff', width: 1.1 })
@@ -147,33 +183,42 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
         P.push({ kind: 'line', x1: x, y1: z, x2: x + step * 0.5, y2: z - step * 0.5, stroke: HATCH, width: 0.4 })
   }
   P.push({ kind: 'text', x: secL - ts, y: gradeZ - ts * 0.5, text: 'NATURAL GRADE LINE', size: ts * 0.5, anchor: 'start', color: INK, weight: 600 })
-  // footing + gravel base + column
+  // footing + column
   P.push({ kind: 'rect', x: secL, y: footTop, w: B, h: H, stroke: INK, fill: 'none', width: 1.5 })
-  P.push({ kind: 'rect', x: secL, y: footBot, w: B, h: hg, stroke: HATCH, fill: 'none', width: 0.9 })
-  for (let x = secL + hg * 0.6; x < secR; x += hg * 1.1)
-    P.push({ kind: 'circle', cx: x, cy: footBot + hg / 2, r: hg * 0.28, stroke: HATCH, fill: 'none', width: 0.5 })
   P.push({ kind: 'rect', x: cl, y: colTop, w: cw, h: -colTop, stroke: INK, fill: 'none', width: 1.5 })
-  // bottom mat in TWO stacked layers (bars can't pass through one another):
-  // the in-plane bar (continuous line) sits at the bottom; the perpendicular
-  // bars (into the page → circles) rest ON TOP of it.  The bottom bar's end
-  // hook turns up and HUGS the outermost perpendicular bar above it.
-  const rv = Math.max(bd / 2, B * 0.009)          // drawn bar radius
-  const zLong = H - c - rv                          // in-plane bar (bottom layer)
-  const zPerp = zLong - 2.6 * rv                    // perpendicular bars, stacked clearly on top
-  bar([[secL + c, zPerp - rv * 1.6], [secL + c, zLong], [secR - c, zLong], [secR - c, zPerp - rv * 1.6]])
+  // gravel bedding — packed aggregate between two lines (two staggered rows of
+  // rounded stones of mixed size, so it can't be mistaken for reinforcement)
+  P.push({ kind: 'line', x1: secL, y1: footBot, x2: secR, y2: footBot, stroke: INK, width: 0.9 })
+  P.push({ kind: 'line', x1: secL, y1: gravBot, x2: secR, y2: gravBot, stroke: INK, width: 0.9 })
+  const gs = hg * 0.42
+  let gi = 0
+  for (let x = secL + gs * 0.8; x < secR - gs * 0.4; x += gs * 1.15, gi++) {
+    const rTop = gs * (0.42 + 0.16 * ((gi % 3) - 1))
+    const rBot = gs * (0.5 - 0.14 * ((gi % 2)))
+    P.push({ kind: 'circle', cx: x, cy: footBot + gs * 0.72, r: rTop, stroke: STONE, fill: 'none', width: 0.5 })
+    P.push({ kind: 'circle', cx: x + gs * 0.55, cy: gravBot - gs * 0.72, r: rBot, stroke: STONE, fill: 'none', width: 0.5 })
+  }
+  // bottom mat in TWO stacked layers (bars cannot pass through one another):
+  // the in-plane bar runs at the BOTTOM (on the cover); the perpendicular bars
+  // (into the page → dots) REST ON TOP of it, touching. The bottom bar's end
+  // hooks up and around, hugging the outer perpendicular bar above it.
+  const zLong = H - c - rMain                       // in-plane bar centre (bottom layer, on cover)
+  const rDot = rMain * 0.9
+  const zPerp = zLong - rMain - rDot                 // perpendicular bars sit tangent on top
+  rod([[secL + c, zPerp - rDot], [secL + c, zLong], [secR - c, zLong], [secR - c, zPerp - rDot]], rMain)
   for (let i = 0; i < n; i++)
-    P.push({ kind: 'circle', cx: sx0 + barX(i), cy: zPerp, r: rv, stroke: REBAR, fill: REBAR, width: 0.5 })
-  // column vertical bars / dowels — full height, bent out onto the mat
+    P.push({ kind: 'circle', cx: sx0 + barX(i), cy: zPerp, r: rDot, stroke: REBAR, fill: REBAR, width: 0.4 })
+  // column vertical bars / dowels — full height, footed out to rest on the mat
   const vx = [cl + c, cr - c]
   for (const dx of vx) {
     const dir = dx < sx0 ? -1 : 1
-    bar([[dx, colTop + c], [dx, zLong], [dx + dir * (cw * 0.42), zLong]])
+    rod([[dx, colTop + c], [dx, zLong], [dx + dir * (cw * 0.42), zLong]], rMain)
   }
-  // stirrups up the column at the scheduled spacing
+  // stirrups up the column at the scheduled spacing (each a thin closed tube)
   const stX0 = cl + c * 0.6, stX1 = cr - c * 0.6
   let z = 0
   const stopZ = -(embed + aboveGrade) + c
-  const drawStirrup = () => { if (-z > stopZ) P.push({ kind: 'line', x1: stX0, y1: -z, x2: stX1, y2: -z, stroke: REBAR, width: 1.1 }) }
+  const drawStirrup = () => { if (-z > stopZ) rod([[stX0, -z], [stX1, -z]], rTie) }
   for (const [count, sp] of stSched) for (let k = 0; k < count; k++) { z += sp / 1000; drawStirrup() }
   while (-z > stopZ) { z += stRest / 1000; drawStirrup() }
   // depth dimension chain (embedment / footing / gravel) + overall
@@ -222,6 +267,7 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
     if (pr.kind === 'line' || pr.kind === 'dim') { acc(pr.x1, pr.y1); acc(pr.x2, pr.y2) }
     else if (pr.kind === 'rect') { acc(pr.x, pr.y); acc(pr.x + pr.w, pr.y + pr.h) }
     else if (pr.kind === 'circle') { acc(pr.cx - pr.r, pr.cy - pr.r); acc(pr.cx + pr.r, pr.cy + pr.r) }
+    else if (pr.kind === 'path') { for (const cmd of pr.cmds) acc(cmd.x, cmd.y) }
     else {   // text: include the rendered extent so labels aren't clipped
       const w = pr.text.length * pr.size * 0.58, a = pr.anchor ?? 'start'
       acc(a === 'start' ? pr.x : a === 'end' ? pr.x - w : pr.x - w / 2, pr.y - pr.size * 0.6)

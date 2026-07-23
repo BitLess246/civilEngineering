@@ -14,12 +14,18 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, RectSection } from './model'
 
+export type PathCmd =
+  | { c: 'M' | 'L'; x: number; y: number }
+  | { c: 'A'; rx: number; ry: number; x: number; y: number; large?: 0 | 1; sweep?: 0 | 1 }
+
 export type PlanPrimitive =
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; stroke: string; width?: number; dash?: number[] }
   | { kind: 'rect'; x: number; y: number; w: number; h: number; stroke?: string; fill?: string; width?: number; dash?: number[] }
   | { kind: 'circle'; cx: number; cy: number; r: number; stroke?: string; fill?: string; width?: number }
   | { kind: 'text'; x: number; y: number; text: string; size: number; anchor?: 'start' | 'middle' | 'end'; rotate?: number; color?: string; weight?: number }
   | { kind: 'dim'; x1: number; y1: number; x2: number; y2: number; text: string; off: number; size: number }
+  // world-space path (coords in m, arc radii in m) — used for outlined rebar tubes
+  | { kind: 'path'; cmds: PathCmd[]; stroke?: string; fill?: string; width?: number; dash?: number[]; closed?: boolean }
 
 export interface BeamScheduleRow { mark: string; size: string }
 export interface FootingScheduleRow { mark: string; size: string; thk: string; reinf: string }
@@ -297,6 +303,7 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     if (pr.kind === 'line' || pr.kind === 'dim') { acc(pr.x1, pr.y1); acc(pr.x2, pr.y2) }
     else if (pr.kind === 'rect') { acc(pr.x, pr.y); acc(pr.x + pr.w, pr.y + pr.h) }
     else if (pr.kind === 'circle') { acc(pr.cx - pr.r, pr.cy - pr.r); acc(pr.cx + pr.r, pr.cy + pr.r) }
+    else if (pr.kind === 'path') { for (const cmd of pr.cmds) acc(cmd.x, cmd.y) }
     else acc(pr.x, pr.y)
   }
   return {
@@ -349,6 +356,11 @@ export function planToSvg(d: Drawing, pxWidth = 1100): string {
       const vertical = Math.abs(y2 - y1) > Math.abs(x2 - x1)
       const rot = vertical ? ` transform="rotate(-90 ${mx.toFixed(1)} ${my.toFixed(1)})"` : ''
       out.push(`<text x="${mx.toFixed(1)}" y="${(my - fs * 0.35).toFixed(1)}" font-size="${fs.toFixed(1)}" text-anchor="middle" fill="${INK}"${rot}>${esc(p.text)}</text>`)
+    } else if (p.kind === 'path') {
+      const d = p.cmds.map((cmd) => cmd.c === 'A'
+        ? `A ${L(cmd.rx).toFixed(1)} ${L(cmd.ry).toFixed(1)} 0 ${cmd.large ?? 0} ${cmd.sweep ?? 0} ${X(cmd.x).toFixed(1)} ${Y(cmd.y).toFixed(1)}`
+        : `${cmd.c} ${X(cmd.x).toFixed(1)} ${Y(cmd.y).toFixed(1)}`).join(' ') + (p.closed ? ' Z' : '')
+      out.push(`<path d="${d}" fill="${p.fill ?? 'none'}" stroke="${p.stroke ?? 'none'}" stroke-width="${p.width ?? 1}"${p.dash ? ` stroke-dasharray="${p.dash.map((v) => L(v).toFixed(1)).join(',')}"` : ''}/>`)
     }
   }
   out.push('</svg>')
