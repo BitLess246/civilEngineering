@@ -62,6 +62,8 @@ export interface PlanOptions {
   footings?: PlanFooting[]
   /** Foundation plan: top-of-footing elevation (m, −down) for per-footing ELEV tags. */
   foundingElev?: number
+  /** Extra title suffix, e.g. a floor label — 'FRAMING PLAN — L2 (EL +6.00 m)'. */
+  label?: string
 }
 
 const INK = '#1e293b', GRID = '#94a3b8', BEAM = '#0f4c92', COL = '#1e293b', PANEL = '#0f766e'
@@ -252,7 +254,7 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
 
   // ── title block (detail tag) + beam schedule, below the plan ──
   const detailNo = opts.detailNo ?? '1', sheetRef = opts.sheetRef ?? 'S-1', scale = opts.scale ?? 'NTS'
-  const title = foundation ? 'FOUNDATION PLAN' : 'FRAMING PLAN'
+  const title = `${foundation ? 'FOUNDATION PLAN' : 'FRAMING PLAN'}${opts.label ? ` — ${opts.label}` : ''}`
   const tbR = r * 1.15, tbY = z1 + ext + r * 2, tbX = x0 - ext
   P.push({ kind: 'circle', cx: tbX + tbR, cy: tbY, r: tbR, stroke: INK, fill: '#fff', width: 1 })
   P.push({ kind: 'line', x1: tbX, y1: tbY, x2: tbX + 2 * tbR, y2: tbY, stroke: INK, width: 1 })

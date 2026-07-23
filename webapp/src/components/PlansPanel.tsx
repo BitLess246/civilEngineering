@@ -38,9 +38,24 @@ function Sheet({ title, svg, file }: { title: string; svg: string; file: string 
 export function PlansPanel({ model, design, soil }: { model: StructuralModel; design: StructureDesign | null; soil: SoilInput }): JSX.Element {
   const [hooked, setHooked] = useState(false)
 
-  const framing = useMemo(() => {
-    const d = buildPlan(model, { kind: 'framing', detailNo: '1', sheetRef: 'S-2' })
-    return d ? planToSvg(d) : null
+  // one floor framing plan per framed level (beams + the columns through that
+  // floor); level index = the node-y ordinal above the base
+  const framings = useMemo(() => {
+    const ys = [...new Set(model.nodes.map((n) => Math.round(n.y * 100) / 100))].sort((a, b) => a - b)
+    const floors = ys.slice(1)   // skip the base (foundation)
+    const idxs = floors.length ? floors.map((_, i) => i + 1) : [ys.length > 1 ? 1 : 0]
+    return idxs.map((level, i) => {
+      const y = ys[level] ?? ys[ys.length - 1]
+      const single = floors.length <= 1
+      const label = single ? undefined : `L${level} (EL +${y.toFixed(2)} m)`
+      const d = buildPlan(model, { kind: 'framing', level, detailNo: '1', sheetRef: `S-${2 + i}`, label })
+      if (!d) return null
+      return {
+        heading: single ? 'Framing plan' : `Framing plan — Level ${level} · EL +${y.toFixed(2)} m`,
+        file: single ? 'framing-plan.svg' : `framing-plan-L${level}.svg`,
+        svg: planToSvg(d),
+      }
+    }).filter((x): x is { heading: string; file: string; svg: string } => x != null)
   }, [model])
 
   const foundation = useMemo(() => {
@@ -70,7 +85,7 @@ export function PlansPanel({ model, design, soil }: { model: StructuralModel; de
         </label>
       </div>
 
-      {framing && <Sheet title="Framing plan" svg={framing} file="framing-plan.svg" />}
+      {framings.map((f) => <Sheet key={f.file} title={f.heading} svg={f.svg} file={f.file} />)}
       {foundation
         ? <Sheet title="Foundation plan" svg={foundation} file="foundation-plan.svg" />
         : <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400">Run the design to generate the foundation plan &amp; footing details.</p>}

@@ -61,6 +61,19 @@ describe('planRenderer — framing plan geometry', () => {
     expect(f.title).toBe('FOUNDATION PLAN')
     expect(f.primitives.some((p) => p.kind === 'rect' && (p as { dash?: number[] }).dash)).toBe(true)
   })
+
+  it('draws a per-floor framing plan for each level, titled with a label', () => {
+    const twoStorey = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3, 3], section, slabThickness: 150 })
+    const l1 = buildPlan(twoStorey, { kind: 'framing', level: 1, label: 'L1 (EL +3.00 m)' })!
+    const l2 = buildPlan(twoStorey, { kind: 'framing', level: 2, label: 'L2 (EL +6.00 m)' })!
+    expect(l1.title).toBe('FRAMING PLAN — L1 (EL +3.00 m)')
+    expect(l2.title).toBe('FRAMING PLAN — L2 (EL +6.00 m)')
+    // each level draws its own beams (the two levels' beam centrelines differ in count/extent is not guaranteed,
+    // but both must produce beam marks) and the plans are distinct primitive sets
+    expect(l1.beamSchedule.length).toBeGreaterThan(0)
+    expect(l2.beamSchedule.length).toBeGreaterThan(0)
+    expect(l1.primitives.length).toBeGreaterThan(0)
+  })
 })
 
 describe('planRenderer — foundation plan with designed footings', () => {
