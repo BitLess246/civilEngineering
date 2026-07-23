@@ -65,7 +65,7 @@ export function footingDetailBundles(model: StructuralModel, design: StructureDe
         mark, B: r.design.B, H: r.design.Dc / 1000, cover: 75,
         barDia: recoverBarDia(r.design.steelArea, r.design.bars),
         bars: r.design.bars, barSpacing: r.design.barSpacing,
-        colB, colH, colBars, colBarDia, tieDia,
+        colB, colH, colBars, colBarDia, tieDia, colCover: sec?.cover ?? 40,
         foundingElev: soil.H != null ? -Math.abs(soil.H) : undefined,
         endHook: 'none',
       },
