@@ -85,12 +85,14 @@ export function columnSectionPrimitives(
   for (const bx of rowX.slice(1, -1)) stroke(cTie([bx, yT], [bx, yB], [0, 1], [bx <= midX ? 1 : -1, 0]))
   for (const sy of sideY) stroke(cTie([x1, sy], [x2, sy], [1, 0], [0, sy <= midY ? 1 : -1]))
 
-  // 135° tie hook at the top-left corner bar — runs TANGENT to the bar's side
-  const inv = Math.SQRT1_2, d: Pt = [inv, inv], nrm: Pt = [-inv, inv]   // dir into core, tangent offset
-  const off = br + (p.tieDia / 2) * sc                                   // tangent to the bar edge
-  const hStart: Pt = [x1 + nrm[0] * off, yT + nrm[1] * off]
-  const hk = stub * 1.9
-  stroke([hStart, [hStart[0] + d[0] * hk, hStart[1] + d[1] * hk]])
+  // 135° tie hook at the top-left corner bar — the two hook legs run TANGENT to
+  // the corner bar on either side (two tangent lines on the circle)
+  const inv = Math.SQRT1_2, d: Pt = [inv, inv], nrm: Pt = [-inv, inv]   // dir into core, tangent normal
+  const off = br + (p.tieDia / 2) * sc, hk = stub * 1.9
+  for (const s of [1, -1]) {
+    const hs: Pt = [x1 + s * nrm[0] * off, yT + s * nrm[1] * off]
+    stroke([hs, [hs[0] + d[0] * hk, hs[1] + d[1] * hk]])
+  }
 
   // vertical bars
   const dot = (x: number, y: number) => P.push({ kind: 'circle', cx: x, cy: y, r: br, fill: rebar })
