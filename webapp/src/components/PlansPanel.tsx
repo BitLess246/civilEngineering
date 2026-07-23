@@ -38,9 +38,31 @@ function Sheet({ title, svg, file }: { title: string; svg: string; file: string 
 export function PlansPanel({ model, design, soil }: { model: StructuralModel; design: StructureDesign | null; soil: SoilInput }): JSX.Element {
   const [hooked, setHooked] = useState(false)
 
-  const framing = useMemo(() => {
-    const d = buildPlan(model, { kind: 'framing', detailNo: '1', sheetRef: 'S-2' })
-    return d ? planToSvg(d) : null
+  // per floor: a BEAM framing plan and a COLUMN framing plan (split sheets);
+  // level index = the node-y ordinal above the base
+  const framings = useMemo(() => {
+    const ys = [...new Set(model.nodes.map((n) => Math.round(n.y * 100) / 100))].sort((a, b) => a - b)
+    const floors = ys.slice(1)   // skip the base (foundation)
+    const idxs = floors.length ? floors.map((_, i) => i + 1) : [ys.length > 1 ? 1 : 0]
+    const out: { heading: string; file: string; svg: string }[] = []
+    let sheet = 2
+    for (const level of idxs) {
+      const y = ys[level] ?? ys[ys.length - 1]
+      const single = floors.length <= 1
+      const suffix = single ? '' : ` — Level ${level} · EL +${y.toFixed(2)} m`
+      const label = single ? undefined : `L${level} (EL +${y.toFixed(2)} m)`
+      const tag = single ? '' : `-L${level}`
+      for (const layer of ['beam', 'column'] as const) {
+        const d = buildPlan(model, { kind: 'framing', layer, level, detailNo: '1', sheetRef: `S-${sheet++}`, label })
+        if (!d) continue
+        out.push({
+          heading: `${layer === 'beam' ? 'Beam framing plan' : 'Column framing plan'}${suffix}`,
+          file: `${layer}-framing${tag}.svg`,
+          svg: planToSvg(d),
+        })
+      }
+    }
+    return out
   }, [model])
 
   const foundation = useMemo(() => {
@@ -70,7 +92,7 @@ export function PlansPanel({ model, design, soil }: { model: StructuralModel; de
         </label>
       </div>
 
-      {framing && <Sheet title="Framing plan" svg={framing} file="framing-plan.svg" />}
+      {framings.map((f) => <Sheet key={f.file} title={f.heading} svg={f.svg} file={f.file} />)}
       {foundation
         ? <Sheet title="Foundation plan" svg={foundation} file="foundation-plan.svg" />
         : <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400">Run the design to generate the foundation plan &amp; footing details.</p>}
