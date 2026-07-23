@@ -25,7 +25,7 @@ export type PlanPrimitive =
   | { kind: 'text'; x: number; y: number; text: string; size: number; anchor?: 'start' | 'middle' | 'end'; rotate?: number; color?: string; weight?: number }
   | { kind: 'dim'; x1: number; y1: number; x2: number; y2: number; text: string; off: number; size: number }
   // world-space path (coords in m, arc radii in m) — used for outlined rebar tubes
-  | { kind: 'path'; cmds: PathCmd[]; stroke?: string; fill?: string; width?: number; dash?: number[]; closed?: boolean }
+  | { kind: 'path'; cmds: PathCmd[]; stroke?: string; fill?: string; width?: number; dash?: number[]; closed?: boolean; fillRule?: 'evenodd' | 'nonzero'; opacity?: number }
 
 export interface BeamScheduleRow { mark: string; size: string }
 export interface FootingScheduleRow { mark: string; size: string; thk: string; reinf: string }
@@ -360,7 +360,7 @@ export function planToSvg(d: Drawing, pxWidth = 1100): string {
       const d = p.cmds.map((cmd) => cmd.c === 'A'
         ? `A ${L(cmd.rx).toFixed(1)} ${L(cmd.ry).toFixed(1)} 0 ${cmd.large ?? 0} ${cmd.sweep ?? 0} ${X(cmd.x).toFixed(1)} ${Y(cmd.y).toFixed(1)}`
         : `${cmd.c} ${X(cmd.x).toFixed(1)} ${Y(cmd.y).toFixed(1)}`).join(' ') + (p.closed ? ' Z' : '')
-      out.push(`<path d="${d}" fill="${p.fill ?? 'none'}" stroke="${p.stroke ?? 'none'}" stroke-width="${p.width ?? 1}"${p.dash ? ` stroke-dasharray="${p.dash.map((v) => L(v).toFixed(1)).join(',')}"` : ''}/>`)
+      out.push(`<path d="${d}" fill="${p.fill ?? 'none'}" stroke="${p.stroke ?? 'none'}" stroke-width="${p.width ?? 1}"${p.fillRule ? ` fill-rule="${p.fillRule}"` : ''}${p.opacity != null ? ` opacity="${p.opacity}"` : ''}${p.dash ? ` stroke-dasharray="${p.dash.map((v) => L(v).toFixed(1)).join(',')}"` : ''}/>`)
     }
   }
   out.push('</svg>')

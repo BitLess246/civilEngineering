@@ -17,6 +17,7 @@
 // Units: geometry m; bar/column sizes mm.
 // ─────────────────────────────────────────────────────────────────────────
 import type { PlanPrimitive, PathCmd, Drawing } from './planRenderer'
+import { columnSectionPrimitives } from './columnSection'
 
 type Pt = [number, number]
 /** Intersection of the infinite lines p1→p2 and p3→p4 (null if parallel). */
@@ -289,6 +290,16 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   if (f.foundingElev != null)
     P.push({ kind: 'text', x: secL, y: footTop - ts * 0.5, text: `T.O.F. EL ${f.foundingElev.toFixed(2)} m`, size: ts * 0.5, anchor: 'start', color: PANEL, weight: 600 })
   P.push({ kind: 'text', x: sx0, y: gravBot + ts * 2.4, text: 'SECTION A-A', size: ts * 0.85, anchor: 'middle', color: INK, weight: 700 })
+
+  // ══ COLUMN SECTION — the report's tied-column section, engine-drawn, placed
+  // in the clear part of the gap between the plan and the section ══
+  {
+    const side = Math.min(gap * 0.5, B * 0.5)
+    const cxI = hp + gap * 0.42, cyI = 0
+    columnSectionPrimitives(P, cxI, cyI, side, { b: f.colB, h: f.colH ?? f.colB, cover: c * 1000, barDia: colBarDia, tieDia, bars: colBars, tieSpacing: tieSched[0]?.[1] })
+    const halfH = ((f.colH ?? f.colB) / f.colB) * side / 2
+    P.push({ kind: 'text', x: cxI, y: cyI + halfH + ts * 1.0, text: 'COLUMN SECTION', size: ts * 0.6, anchor: 'middle', color: INK, weight: 700 })
+  }
 
   // ══ detail-tag title block ═════════════════════════════════════════════
   const detailNo = opts.detailNo ?? '1', sheetRef = opts.sheetRef ?? 'S-05', scale = opts.scale ?? '1:25 MTS'

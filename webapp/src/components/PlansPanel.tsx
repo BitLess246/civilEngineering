@@ -4,7 +4,6 @@ import type { StructureDesign } from '../engine/pipeline'
 import { buildPlan, planToSvg } from '../engine/planRenderer'
 import { buildFootingDetail } from '../engine/footingDetail'
 import { footingsForPlan, footingDetailBundles, type SoilInput } from '../lib/planDetails'
-import { ColumnSchematic } from './ColumnSchematic'
 
 /** Render a trusted, engine-generated SVG string. */
 function RawSvg({ svg, className }: { svg: string; className?: string }): JSX.Element {
@@ -88,12 +87,7 @@ export function PlansPanel({ model, design, soil }: { model: StructuralModel; de
                   ↓ SVG
                 </button>
               </div>
-              <div className="flex flex-col gap-3 p-3 lg:flex-row">
-                <RawSvg svg={d.svg} className="min-w-0 flex-1 overflow-x-auto" />
-                <div className="w-full shrink-0 lg:w-64">
-                  <ColumnSchematic {...d.column} />
-                </div>
-              </div>
+              <RawSvg svg={d.svg} className="overflow-x-auto p-3" />
             </div>
           ))}
         </div>
