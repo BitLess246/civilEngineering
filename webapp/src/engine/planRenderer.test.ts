@@ -62,3 +62,34 @@ describe('planRenderer — framing plan geometry', () => {
     expect(f.primitives.some((p) => p.kind === 'rect' && (p as { dash?: number[] }).dash)).toBe(true)
   })
 })
+
+describe('planRenderer — foundation plan with designed footings', () => {
+  const model = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3], section, slabThickness: 150 })
+  const base = model.nodes.filter((n) => Math.abs(n.y) < 1e-6)
+  // two distinct footing sizes → two WF marks
+  const footings = base.map((n, i) => ({ node: n.id, B: i % 2 === 0 ? 1.5 : 2.0, Dc: 350, bars: 8, barSpacing: 180, barDia: 16 }))
+  const f = buildPlan(model, { kind: 'foundation', footings, foundingElev: -1.5 })!
+
+  it('draws dashed footing pads marked WF-n, grouped by size, with a schedule', () => {
+    const t = texts(f.primitives)
+    expect(t).toContain('WF-1'); expect(t).toContain('WF-2')
+    expect(f.footingSchedule.map((r) => r.mark)).toEqual(['WF-1', 'WF-2'])
+    expect(f.footingSchedule[0]).toMatchObject({ mark: 'WF-1', size: '1500×1500', thk: '350' })
+    expect(f.footingSchedule[0].reinf).toContain('180')
+  })
+
+  it('emits FOOTING SCHEDULE and COLUMN SCHEDULE tables', () => {
+    const t = texts(f.primitives)
+    expect(t).toContain('FOOTING SCHEDULE'); expect(t).toContain('COLUMN SCHEDULE')
+    expect(f.columnSchedule.length).toBeGreaterThan(0)
+    expect(f.columnSchedule[0].mark).toBe('C1')
+  })
+
+  it('draws tie beams (FTB1) between adjacent footings', () => {
+    expect(texts(f.primitives)).toContain('FTB1')
+  })
+
+  it('tags each footing with its ELEV when foundingElev is given', () => {
+    expect(texts(f.primitives).some((s) => s === 'EL -1.50 m')).toBe(true)
+  })
+})
