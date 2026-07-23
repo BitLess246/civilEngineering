@@ -54,16 +54,18 @@ export interface FootingDetailInput {
 export interface FootingDetailOptions { detailNo?: string; sheetRef?: string; scale?: string }
 export interface DetailDrawing extends Drawing { title: string }
 
-const INK = '#1e293b', COL = '#1e293b', REBAR = '#b45309', HATCH = '#94a3b8', PANEL = '#0f766e'
-const RW = 2.4   // rebar line weight (px) — bars read as solid rod, not hairline
+const INK = '#1e293b', COL = '#1e293b', REBAR = '#b45309', HATCH = '#94a3b8', GRID = '#9aa5b5', PANEL = '#0f766e'
+const RW = 1.1   // rebar stroke weight (px) — a line, not a filled rod
 
 /** Build a column-footing detail (plan + section) from a designed footing. */
 export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOptions = {}): DetailDrawing {
   const P: PlanPrimitive[] = []
-  const bar = (pts: [number, number][], w = RW) => {   // bold rebar polyline
+  const bar = (pts: [number, number][], w = RW) => {   // thin rebar polyline (stroke)
     for (let i = 0; i < pts.length - 1; i++)
       P.push({ kind: 'line', x1: pts[i][0], y1: pts[i][1], x2: pts[i + 1][0], y2: pts[i + 1][1], stroke: REBAR, width: w })
   }
+  const ext = (x1: number, y1: number, x2: number, y2: number) =>   // dashed dimension extension line
+    P.push({ kind: 'line', x1, y1, x2, y2, stroke: GRID, width: 0.6, dash: [0.05, 0.04] })
 
   const B = f.B, H = f.H
   const c = f.cover / 1000
@@ -87,11 +89,14 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   // ══ PLAN (centred at origin) ═══════════════════════════════════════════
   P.push({ kind: 'rect', x: -hp, y: -hp, w: B, h: B, stroke: INK, fill: 'none', width: 1.4 })
   // bottom mat, both ways, each bar hooked 90° toward the footing interior
+  const xo = -hp + c, xf = hp - c   // outermost mat-bar lines (= perimeter bars)
+  const hd = (p: number) => (p < 0 ? hook : -hook)   // 90° hook, turned toward the footing centre
   for (let i = 0; i < n; i++) {
     const p = barX(i)
-    const dz = p < 0 ? hook : -hook, dx = p < 0 ? hook : -hook
-    bar([[-hp + c, p + dz], [-hp + c, p], [hp - c, p], [hp - c, p + dz]])   // bar ∥ x
-    bar([[p + dx, -hp + c], [p, -hp + c], [p, hp - c], [p + dx, hp - c]])   // bar ∥ y
+    // ∥x bar: straight run xo→xf, each end hooking along the perpendicular
+    // perimeter bar it meets (at xo and xf) — i.e. the hook hugs that bar
+    bar([[xo, p + hd(p)], [xo, p], [xf, p], [xf, p + hd(p)]])
+    bar([[p + hd(p), xo], [p, xo], [p, xf], [p + hd(p), xf]])   // ∥y bar, mirror
   }
   // column footprint + vertical bars (corner circles) + a tie square
   P.push({ kind: 'rect', x: -cw / 2, y: -cd / 2, w: cw, h: cd, stroke: COL, fill: '#fff', width: 1.1 })
@@ -118,6 +123,10 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   const zseg = [[-hp, -cd / 2], [-cd / 2, cd / 2], [cd / 2, hp]] as const
   for (const [a, b] of zseg)
     P.push({ kind: 'dim', x1: pL, y1: a, x2: pL, y2: b, text: `${Math.round((b - a) * 1000)}`, off: 0, size: ts * 0.6 })
+  // dashed extension lines at every dimension boundary
+  for (const x of [-hp, -cw / 2, cw / 2, hp]) ext(x, pTop, x, -hp)
+  for (const x of [-hp, hp]) ext(x, pTop2, x, pTop)
+  for (const z of [-hp, -cd / 2, cd / 2, hp]) ext(pL, z, -hp, z)
   void edge
   // labels
   P.push({ kind: 'text', x: 0, y: hp + ts * 1.4, text: `${n}-${f.barDia}mmØ BOTHWAY`, size: ts * 0.7, anchor: 'middle', color: REBAR, weight: 700 })
@@ -144,17 +153,21 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   for (let x = secL + hg * 0.6; x < secR; x += hg * 1.1)
     P.push({ kind: 'circle', cx: x, cy: footBot + hg / 2, r: hg * 0.28, stroke: HATCH, fill: 'none', width: 0.5 })
   P.push({ kind: 'rect', x: cl, y: colTop, w: cw, h: -colTop, stroke: INK, fill: 'none', width: 1.5 })
-  // bottom mat — longitudinal bar hooked up at both ends + transverse bar ends
-  const matZ = H - c - bd / 2
-  const hs = Math.min(H * 0.55, 0.22)
-  bar([[secL + c, matZ - hs], [secL + c, matZ], [secR - c, matZ], [secR - c, matZ - hs]])
+  // bottom mat in TWO stacked layers (bars can't pass through one another):
+  // the in-plane bar (continuous line) sits at the bottom; the perpendicular
+  // bars (into the page → circles) rest ON TOP of it.  The bottom bar's end
+  // hook turns up and HUGS the outermost perpendicular bar above it.
+  const rv = Math.max(bd / 2, B * 0.009)          // drawn bar radius
+  const zLong = H - c - rv                          // in-plane bar (bottom layer)
+  const zPerp = zLong - 2.6 * rv                    // perpendicular bars, stacked clearly on top
+  bar([[secL + c, zPerp - rv * 1.6], [secL + c, zLong], [secR - c, zLong], [secR - c, zPerp - rv * 1.6]])
   for (let i = 0; i < n; i++)
-    P.push({ kind: 'circle', cx: sx0 + barX(i), cy: matZ, r: Math.max(bd / 2, B * 0.009), stroke: REBAR, fill: REBAR, width: 0.5 })
+    P.push({ kind: 'circle', cx: sx0 + barX(i), cy: zPerp, r: rv, stroke: REBAR, fill: REBAR, width: 0.5 })
   // column vertical bars / dowels — full height, bent out onto the mat
   const vx = [cl + c, cr - c]
   for (const dx of vx) {
     const dir = dx < sx0 ? -1 : 1
-    bar([[dx, colTop + c], [dx, matZ], [dx + dir * (cw * 0.42), matZ]])
+    bar([[dx, colTop + c], [dx, zLong], [dx + dir * (cw * 0.42), zLong]])
   }
   // stirrups up the column at the scheduled spacing
   const stX0 = cl + c * 0.6, stX1 = cr - c * 0.6
@@ -170,6 +183,10 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   P.push({ kind: 'dim', x1: dX - ts * 1.4, y1: gradeZ, x2: dX - ts * 1.4, y2: gravBot, text: `${Math.round((gravBot - gradeZ) * 1000)} mm`, off: 0, size: ts * 0.7 })
   // width dimension below the gravel
   P.push({ kind: 'dim', x1: secL, y1: gravBot + ts * 1.2, x2: secR, y2: gravBot + ts * 1.2, text: `${Math.round(B * 1000)} mm`, off: 0, size: ts * 0.7 })
+  // dashed extension lines at every section dimension boundary
+  for (const zb of [gradeZ, footTop, footBot, gravBot]) ext(dX, zb, secL, zb)
+  for (const zb of [gradeZ, gravBot]) ext(dX - ts * 1.4, zb, dX, zb)
+  for (const xb of [secL, secR]) ext(xb, gravBot + ts * 1.2, xb, gravBot)
   // callouts with leaders
   const lead = (x1: number, y1: number, x2: number, y2: number) => P.push({ kind: 'line', x1, y1, x2, y2, stroke: INK, width: 0.5 })
   lead(cr, colTop * 0.75, secR + ts * 0.6, colTop * 0.75)
@@ -177,8 +194,8 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   lead(cr, gradeZ * 0.55, secR + ts * 0.6, gradeZ * 0.55)
   const stLines = [`STIRRUPS = ⌀${stDia} REBAR`, `${stSched.map(([cc, ss]) => `${cc}@${ss}`).join(', ')},`, `REST @ ${stRest} mm O.C.`]
   stLines.forEach((s, i) => P.push({ kind: 'text', x: secR + ts * 0.8, y: gradeZ * 0.55 + i * ts * 0.72, text: s, size: ts * 0.5, anchor: 'start', color: INK, weight: 500 }))
-  lead(secR - c, matZ, secR + ts * 0.6, matZ + ts * 0.6)
-  P.push({ kind: 'text', x: secR + ts * 0.8, y: matZ + ts * 0.6, text: `${n}-${f.barDia}mmØ BOTHWAY`, size: ts * 0.55, anchor: 'start', color: REBAR, weight: 600 })
+  lead(secR - c, zLong, secR + ts * 0.6, zLong + ts * 0.6)
+  P.push({ kind: 'text', x: secR + ts * 0.8, y: zLong + ts * 0.6, text: `${n}-${f.barDia}mmØ BOTHWAY`, size: ts * 0.55, anchor: 'start', color: REBAR, weight: 600 })
   if (f.foundingElev != null)
     P.push({ kind: 'text', x: secL, y: footTop - ts * 0.5, text: `T.O.F. EL ${f.foundingElev.toFixed(2)} m`, size: ts * 0.5, anchor: 'start', color: PANEL, weight: 600 })
   P.push({ kind: 'text', x: sx0, y: gravBot + ts * 2.4, text: 'SECTION A-A', size: ts * 0.85, anchor: 'middle', color: INK, weight: 700 })
