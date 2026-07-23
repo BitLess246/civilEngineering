@@ -76,7 +76,7 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   // about the centreline `pts`): offset both sides with mitred corners and cap
   // the two free ends with a semicircle — so the bar reads as a rod of real
   // diameter with rounded (hooked) ends, not a single centreline.
-  const rod = (pts: Pt[], r: number) => {
+  const rod = (pts: Pt[], r: number, fill: string = 'none') => {
     const ns = pts.length - 1
     const nrm: Pt[] = []
     for (let i = 0; i < ns; i++) {
@@ -99,7 +99,7 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
     cmds.push({ c: 'A', rx: r, ry: r, x: R[R.length - 1][0], y: R[R.length - 1][1], sweep: 1 })
     for (let i = R.length - 2; i >= 0; i--) cmds.push({ c: 'L', x: R[i][0], y: R[i][1] })
     cmds.push({ c: 'A', rx: r, ry: r, x: L[0][0], y: L[0][1], sweep: 1 })
-    P.push({ kind: 'path', cmds, stroke: REBAR, width: RW, fill: 'none', closed: true })
+    P.push({ kind: 'path', cmds, stroke: REBAR, width: RW, fill, closed: true })
   }
   const ext = (x1: number, y1: number, x2: number, y2: number) =>   // dashed dimension extension line
     P.push({ kind: 'line', x1, y1, x2, y2, stroke: GRID, width: 0.6, dash: [0.05, 0.04] })
@@ -138,14 +138,23 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
 
   // ══ PLAN (centred at origin) ═══════════════════════════════════════════
   P.push({ kind: 'rect', x: -hp, y: -hp, w: B, h: B, stroke: INK, fill: 'none', width: 1.4 })
-  // bottom mat, both ways — straight, or (when the design calls for it) with a
-  // 90° end hook that hugs the perpendicular perimeter bar
+  // bottom mat, both ways.  Layering (matches the section): the ∥y bars sit ON
+  // TOP of the ∥x bars, so the ∥x bars are drawn first (hollow) and the ∥y bars
+  // over them WHITE-FILLED — masking the ∥x lines at each crossing so the
+  // over/under reads correctly (the under-bar is trimmed where the top bar crosses).
   const xo = -hp + c, xf = hp - c   // outermost mat-bar lines (= perimeter bars)
   const hd = (p: number) => (p < 0 ? hookLen : -hookLen)
-  for (let i = 0; i < n; i++) {
-    const p = barX(i)
+  // guard: when hooked, nudge the outermost transverse bar inward so an end hook
+  // wraps AROUND it instead of landing on top of it
+  const guard = hookLen ? rMain * 2.8 : 0
+  const matPos = (i: number) => (i === 0 ? barX(0) + guard : i === n - 1 ? barX(n - 1) - guard : barX(i))
+  for (let i = 0; i < n; i++) {   // ∥x bars — bottom layer (hollow)
+    const p = matPos(i)
     rod(hookLen ? [[xo, p + hd(p)], [xo, p], [xf, p], [xf, p + hd(p)]] : [[xo, p], [xf, p]], rMain)
-    rod(hookLen ? [[p + hd(p), xo], [p, xo], [p, xf], [p + hd(p), xf]] : [[p, xo], [p, xf]], rMain)
+  }
+  for (let i = 0; i < n; i++) {   // ∥y bars — top layer (white-filled → masks the ∥x lines under it)
+    const p = matPos(i)
+    rod(hookLen ? [[p + hd(p), xo], [p, xo], [p, xf], [p + hd(p), xf]] : [[p, xo], [p, xf]], rMain, '#fff')
   }
   // column footprint + LATERAL TIE outline + the full ring of vertical bars
   P.push({ kind: 'rect', x: -cw / 2, y: -cd / 2, w: cw, h: cd, stroke: COL, fill: '#fff', width: 1.1 })
@@ -221,27 +230,33 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   const rDot = rMain * 0.9
   const zPerp = zLong - rMain - rDot                 // perpendicular bars sit tangent on top
   const upHook = hookLen ? Math.min(hookLen, H * 0.45) : 0
+  // the longitudinal bar's hook clears (guards) the outer perpendicular bar
   rod(upHook ? [[secL + c, zLong - upHook], [secL + c, zLong], [secR - c, zLong], [secR - c, zLong - upHook]]
              : [[secL + c, zLong], [secR - c, zLong]], rMain)
   for (let i = 0; i < n; i++)
-    P.push({ kind: 'circle', cx: sx0 + barX(i), cy: zPerp, r: rDot, stroke: REBAR, fill: REBAR, width: 0.4 })
-  // column vertical bars — one per bar x-position visible in the section (from
-  // the same layout as the plan); the two outer bars foot out onto the mat
+    P.push({ kind: 'circle', cx: sx0 + matPos(i), cy: zPerp, r: rDot, stroke: REBAR, fill: REBAR, width: 0.4 })
+  // LATERAL TIES first (each a thin closed tube whose ends hook around the outer
+  // vertical bars) — then the vertical bars are drawn OVER them white-filled, so
+  // the ties read as wrapping around / passing behind the bars (as in the report)
   const secVx = rowFx.map((fx) => sx0 + fx)
+  const xL = secVx[0], xR = secVx[secVx.length - 1]
+  const g = rMain * 1.3      // tie reaches just OUTSIDE the corner bar…
+  const tw = rTie * 3.2      // …then hooks up around it (stays clear of the white-filled bar)
+  let z = 0
+  const stopZ = -(embed + aboveGrade) + c
+  const tieZs: number[] = []
+  const drawTie = () => { if (-z > stopZ) { rod([[xL - g, -z + tw], [xL - g, -z], [xR + g, -z], [xR + g, -z + tw]], rTie); tieZs.push(-z) } }
+  for (const [count, sp] of tieSched) for (let k = 0; k < count; k++) { z += sp / 1000; drawTie() }
+  while (-z > stopZ) { z += tieRest / 1000; drawTie() }
+  const stX1 = xR + g
+  // column vertical bars (white-filled, on top of the ties) — one per section
+  // x-position from the plan layout; the two outer bars foot out onto the mat
   for (const dx of secVx) {
     const outer = Math.abs(dx - sx0) > cw / 2 - cInset - 1e-6
     const dir = dx < sx0 ? -1 : 1
     rod(outer ? [[dx, colTop + c], [dx, zLong], [dx + dir * (cw * 0.3), zLong]]
-              : [[dx, colTop + c], [dx, zLong]], rMain)
+              : [[dx, colTop + c], [dx, zLong]], rMain, '#fff')
   }
-  // lateral ties up the column at the scheduled spacing (each a thin closed tube)
-  const stX0 = cl + c * 0.6, stX1 = cr - c * 0.6
-  let z = 0
-  const stopZ = -(embed + aboveGrade) + c
-  const tieZs: number[] = []
-  const drawTie = () => { if (-z > stopZ) { rod([[stX0, -z], [stX1, -z]], rTie); tieZs.push(-z) } }
-  for (const [count, sp] of tieSched) for (let k = 0; k < count; k++) { z += sp / 1000; drawTie() }
-  while (-z > stopZ) { z += tieRest / 1000; drawTie() }
   // depth dimension chain (embedment / footing / gravel) + overall
   const dX = secL - ts * 1.4
   for (const [a, b] of [[gradeZ, footTop], [footTop, footBot], [footBot, gravBot]] as const)

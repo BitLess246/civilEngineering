@@ -55,8 +55,8 @@ describe('footingDetail — column-footing detail sheet', () => {
   it('mat bars are straight by default and hooked only when endHook="90"', () => {
     const straight = buildFootingDetail({ ...base, endHook: 'none' }, {})
     const hooked = buildFootingDetail({ ...base, endHook: '90' }, {})
-    // a hooked bar path has more vertices than the straight two-point run
-    const verts = (dw: typeof straight) => dw.primitives.filter((p) => p.kind === 'path').reduce((m, p) => Math.max(m, (p as { cmds: unknown[] }).cmds.length), 0)
+    // hooked mat bars add vertices → more total path vertices than straight runs
+    const verts = (dw: typeof straight) => dw.primitives.filter((p) => p.kind === 'path').reduce((m, p) => m + (p as { cmds: unknown[] }).cmds.length, 0)
     expect(verts(hooked)).toBeGreaterThan(verts(straight))
   })
 
