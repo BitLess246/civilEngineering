@@ -31,8 +31,8 @@ describe('footingDetail — column-footing detail sheet', () => {
   })
 
   it('draws each bar as an OUTLINE tube (closed rebar path), both ways', () => {
-    // every bar is one closed rebar-coloured path; plan has 2·bars (both ways)
-    const rebar = d.primitives.filter((p) => p.kind === 'path' && (p as { stroke?: string }).stroke === '#b45309')
+    // each mat bar is one closed rebar tube (rod → no round-join); plan has 2·bars
+    const rebar = d.primitives.filter((p) => p.kind === 'path' && (p as { stroke?: string }).stroke === '#b45309' && !(p as { join?: string }).join)
     expect(rebar.length).toBeGreaterThanOrEqual(2 * base.bars)
     expect(rebar.every((p) => (p as { closed?: boolean }).closed)).toBe(true)
     // filled rebar circles = n section bar-ends + colBars plan vertical bars
