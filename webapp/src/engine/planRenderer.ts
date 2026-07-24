@@ -52,9 +52,6 @@ export interface PlanDrawing extends Drawing {
 
 export interface PlanOptions {
   kind?: 'framing' | 'foundation'
-  /** Framing sub-sheet: 'beam' (beams + slab, columns as reference) or 'column'
-   *  (columns + schedule only). Omit for the combined framing plan. */
-  layer?: 'beam' | 'column'
   /** Storey level index (1 = first floor above base). Default: first framed level. */
   level?: number
   /** Title-block detail number, sheet reference and scale note. */
@@ -65,8 +62,8 @@ export interface PlanOptions {
   footings?: PlanFooting[]
   /** Foundation plan: top-of-footing elevation (m, −down) for per-footing ELEV tags. */
   foundingElev?: number
-  /** Extra title suffix, e.g. a floor label — 'FRAMING PLAN — L2 (EL +6.00 m)'. */
-  label?: string
+  /** Full sheet title override, e.g. 'GROUND FLOOR FRAMING PLAN'. */
+  title?: string
 }
 
 const INK = '#1e293b', GRID = '#94a3b8', BEAM = '#0f4c92', COL = '#1e293b', PANEL = '#0f766e'
@@ -95,7 +92,6 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
 
   // level to draw: default the first framed level above the base (or the base for foundation)
   const foundation = opts.kind === 'foundation'
-  const layer = foundation ? undefined : opts.layer   // 'beam' | 'column' | undefined (both)
   const levelY = foundation ? ys[0] : (opts.level != null ? ys[opts.level] : (ys[1] ?? ys[0]))
 
   const P: PlanPrimitive[] = []
@@ -158,7 +154,6 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     return mk
   }
   for (const mem of model.members) {
-    if (layer === 'column') break   // column layout sheet — no beams
     if (mem.role === 'column') continue
     const a = nm.get(mem.i), b = nm.get(mem.j); if (!a || !b) continue
     if (!(near(a.y, levelY) && near(b.y, levelY))) continue   // only members on this level
@@ -233,20 +228,14 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     drawn.add(key)
     const sec = secOf(mem.id)
     const cw = (sec?.b ?? 400) / 1000, ch = (sec?.h ?? 400) / 1000
-    const mk = sec ? colMarkFor(sec) : ''   // collect the column schedule (marks shown in the table)
-    // on the foundation plan a designed footing sits under the stub → draw the
-    // stub solid so it reads inside the dashed pad; on the BEAM sheet columns are
-    // drawn as a light reference outline; on the COLUMN sheet they are solid + marked
-    const footed = foundation && !!opts.footings?.length
-    const outline = (foundation && !footed) || layer === 'beam'
-    P.push({ kind: 'rect', x: node.x - cw / 2, y: node.z - ch / 2, w: cw, h: ch, stroke: layer === 'beam' ? GRID : COL, fill: outline ? 'none' : COL, width: layer === 'beam' ? 0.8 : 1.2, dash: outline ? [0.2, 0.15] : undefined })
-    if (layer === 'column' && sec)
-      P.push({ kind: 'text', x: node.x + cw / 2 + r * 0.25, y: node.z - ch / 2 - r * 0.25, text: mk, size: r * 0.55, anchor: 'start', color: COL, weight: 700 })
+    if (sec) colMarkFor(sec)   // collect the column schedule (shown on the foundation plan)
+    // framing: solid black column section; foundation without a footing: dashed outline
+    const outline = foundation && !opts.footings?.length
+    P.push({ kind: 'rect', x: node.x - cw / 2, y: node.z - ch / 2, w: cw, h: ch, stroke: COL, fill: outline ? 'none' : COL, width: 1.2, dash: outline ? [0.2, 0.15] : undefined })
   }
 
   // ── slab panels at the level (outline + thickness label) ──
   for (const p of model.plates) {
-    if (layer === 'column') break   // column layout sheet — no slab panels
     if (p.role === 'wall') continue
     const c = p.corners.map((id) => nm.get(id)); if (c.some((q) => !q)) continue
     const cc = c as { x: number; y: number; z: number }[]
@@ -270,15 +259,15 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
 
   // ── title block (detail tag) + beam schedule, below the plan ──
   const detailNo = opts.detailNo ?? '1', sheetRef = opts.sheetRef ?? 'S-1', scale = opts.scale ?? 'NTS'
-  const baseTitle = foundation ? 'FOUNDATION PLAN' : layer === 'beam' ? 'BEAM FRAMING PLAN' : layer === 'column' ? 'COLUMN FRAMING PLAN' : 'FRAMING PLAN'
-  const title = `${baseTitle}${opts.label ? ` — ${opts.label}` : ''}`
+  const title = opts.title ?? (foundation ? 'FOUNDATION PLAN' : 'FRAMING PLAN')
   const tbR = r * 1.15, tbY = z1 + ext + r * 2, tbX = x0 - ext
-  P.push({ kind: 'circle', cx: tbX + tbR, cy: tbY, r: tbR, stroke: INK, fill: '#fff', width: 1 })
-  P.push({ kind: 'line', x1: tbX, y1: tbY, x2: tbX + 2 * tbR, y2: tbY, stroke: INK, width: 1 })
+  const lnX1 = x1 + ext, lnX0 = tbX + 2 * tbR + r * 0.3
+  // one continuous divider line — it bisects the tag circle AND runs under the
+  // sheet title (title above, scale below), so the circle chord is a continuation
+  P.push({ kind: 'line', x1: tbX, y1: tbY, x2: lnX1, y2: tbY, stroke: INK, width: 1.2 })
+  P.push({ kind: 'circle', cx: tbX + tbR, cy: tbY, r: tbR, stroke: INK, fill: 'none', width: 1 })
   P.push({ kind: 'text', x: tbX + tbR, y: tbY - tbR * 0.5, text: detailNo, size: tbR * 0.75, anchor: 'middle', color: INK, weight: 700 })
   P.push({ kind: 'text', x: tbX + tbR, y: tbY + tbR * 0.5, text: sheetRef, size: tbR * 0.6, anchor: 'middle', color: INK, weight: 700 })
-  const lnX0 = tbX + 2 * tbR + r * 0.3, lnX1 = x1 + ext
-  P.push({ kind: 'line', x1: lnX0, y1: tbY, x2: lnX1, y2: tbY, stroke: INK, width: 1.4 })
   P.push({ kind: 'text', x: lnX0 + r * 0.15, y: tbY - tbR * 0.55, text: title, size: tbR * 0.95, anchor: 'start', color: INK, weight: 700 })
   P.push({ kind: 'text', x: lnX0 + r * 0.15, y: tbY + tbR * 0.55, text: 'SCALE', size: tbR * 0.4, anchor: 'start', color: INK, weight: 600 })
   P.push({ kind: 'text', x: lnX1 - r * 0.3, y: tbY + tbR * 0.55, text: scale, size: tbR * 0.4, anchor: 'end', color: INK, weight: 600 })
@@ -300,7 +289,6 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     return tY + rows.length * rowH
   }
   const withUnit = (v: string, u = 'mm') => `${v} ${u}`   // units on every schedule value
-  const colRows = () => [['MARK', 'SIZE', 'REMARKS'], ...columnSchedule.map((c) => [c.mark, withUnit(c.size), c.notes])]
   const tblY0 = tbY + tbR + r * 1.2
   if (foundation) {
     let y = tblY0
@@ -308,9 +296,10 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
       const rows = [['MARK', 'SIZE', 'THK', 'REINF.'], ...footingSchedule.map((f) => [f.mark, withUnit(f.size), withUnit(f.thk), f.reinf])]
       y = drawTable(tbX, y, 'FOOTING SCHEDULE', BEAM, [r * 1.9, r * 3.4, r * 2.0, r * 5.4], rows) + r * 1.4
     }
-    if (columnSchedule.length) drawTable(tbX, y, 'COLUMN SCHEDULE', COL, [r * 1.6, r * 3.4, r * 4.4], colRows())
-  } else if (layer === 'column') {
-    if (columnSchedule.length) drawTable(tbX, tblY0, 'COLUMN SCHEDULE', COL, [r * 1.6, r * 3.4, r * 4.4], colRows())
+    if (columnSchedule.length) {
+      const rows = [['MARK', 'SIZE', 'REMARKS'], ...columnSchedule.map((c) => [c.mark, withUnit(c.size), c.notes])]
+      drawTable(tbX, y, 'COLUMN SCHEDULE', COL, [r * 1.6, r * 3.4, r * 4.4], rows)
+    }
   } else if (schedule.length) {
     const rows = [['MARK', 'SIZE'], ...schedule.map((s) => [s.mark, withUnit(s.size)])]
     drawTable(tbX, tblY0, 'BEAM SCHEDULE', BEAM, [r * 1.6, r * 3.6], rows)
@@ -324,7 +313,11 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     else if (pr.kind === 'rect') { acc(pr.x, pr.y); acc(pr.x + pr.w, pr.y + pr.h) }
     else if (pr.kind === 'circle') { acc(pr.cx - pr.r, pr.cy - pr.r); acc(pr.cx + pr.r, pr.cy + pr.r) }
     else if (pr.kind === 'path') { for (const cmd of pr.cmds) acc(cmd.x, cmd.y) }
-    else acc(pr.x, pr.y)
+    else if (pr.kind === 'text' && !pr.rotate) {   // include rendered width so long titles aren't clipped
+      const w = pr.text.length * pr.size * 0.58, a = pr.anchor ?? 'start'
+      acc(a === 'start' ? pr.x : a === 'end' ? pr.x - w : pr.x - w / 2, pr.y)
+      acc(a === 'start' ? pr.x + w : a === 'end' ? pr.x : pr.x + w / 2, pr.y)
+    } else acc(pr.x, pr.y)
   }
   return {
     primitives: P,

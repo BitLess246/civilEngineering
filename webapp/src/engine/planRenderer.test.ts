@@ -62,32 +62,23 @@ describe('planRenderer — framing plan geometry', () => {
     expect(f.primitives.some((p) => p.kind === 'rect' && (p as { dash?: number[] }).dash)).toBe(true)
   })
 
-  it('draws a per-floor framing plan for each level, titled with a label', () => {
+  it('draws a per-floor framing plan for each level with a title override', () => {
     const twoStorey = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3, 3], section, slabThickness: 150 })
-    const l1 = buildPlan(twoStorey, { kind: 'framing', level: 1, label: 'L1 (EL +3.00 m)' })!
-    const l2 = buildPlan(twoStorey, { kind: 'framing', level: 2, label: 'L2 (EL +6.00 m)' })!
-    expect(l1.title).toBe('FRAMING PLAN — L1 (EL +3.00 m)')
-    expect(l2.title).toBe('FRAMING PLAN — L2 (EL +6.00 m)')
+    const l1 = buildPlan(twoStorey, { kind: 'framing', level: 1, title: 'GROUND FLOOR FRAMING PLAN' })!
+    const l2 = buildPlan(twoStorey, { kind: 'framing', level: 2, title: 'SECOND FLOOR FRAMING PLAN' })!
+    expect(l1.title).toBe('GROUND FLOOR FRAMING PLAN')
+    expect(l2.title).toBe('SECOND FLOOR FRAMING PLAN')
     expect(l1.beamSchedule.length).toBeGreaterThan(0)
     expect(l2.beamSchedule.length).toBeGreaterThan(0)
   })
 
-  it('splits framing into a BEAM sheet (beams + schedule, no column marks) and a COLUMN sheet (columns + schedule, no beams)', () => {
-    const beam = buildPlan(model, { kind: 'framing', layer: 'beam' })!
-    const col = buildPlan(model, { kind: 'framing', layer: 'column' })!
-    expect(beam.title).toBe('BEAM FRAMING PLAN')
-    expect(col.title).toBe('COLUMN FRAMING PLAN')
-    // beam sheet: has beam centrelines (BEAM stroke) + BEAM SCHEDULE, no C-marks
-    expect(beam.primitives.some((p) => p.kind === 'line' && (p as { stroke?: string }).stroke === '#0f4c92')).toBe(true)
-    expect(texts(beam.primitives)).toContain('BEAM SCHEDULE')
-    expect(texts(beam.primitives).some((t) => /^C\d+$/.test(t))).toBe(false)
-    // beam sheet: columns are a light dashed reference outline (no solid fill)
-    expect(beam.primitives.some((p) => p.kind === 'rect' && (p as { fill?: string }).fill === '#1e293b')).toBe(false)
-    // column sheet: solid column squares + C-marks + COLUMN SCHEDULE, no beams
-    expect(col.primitives.some((p) => p.kind === 'rect' && (p as { fill?: string }).fill === '#1e293b')).toBe(true)
-    expect(texts(col.primitives).some((t) => /^C\d+$/.test(t))).toBe(true)
-    expect(texts(col.primitives)).toContain('COLUMN SCHEDULE')
-    expect(col.primitives.some((p) => p.kind === 'line' && (p as { stroke?: string }).stroke === '#0f4c92')).toBe(false)
+  it('framing plan draws solid black columns + beams (both), with a beam schedule', () => {
+    const f = buildPlan(model, { kind: 'framing' })!
+    expect(f.title).toBe('FRAMING PLAN')
+    // solid black column squares AND beam centrelines both present
+    expect(f.primitives.filter((p) => p.kind === 'rect' && (p as { fill?: string }).fill === '#1e293b').length).toBe(6)
+    expect(f.primitives.some((p) => p.kind === 'line' && (p as { stroke?: string }).stroke === '#0f4c92')).toBe(true)
+    expect(texts(f.primitives)).toContain('BEAM SCHEDULE')
   })
 })
 
