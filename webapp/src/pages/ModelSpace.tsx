@@ -22,6 +22,7 @@ import { TABLE_204_1, TABLE_204_2, sdlItemKPa, sdlTotal, type SdlItem } from '..
 import { TABLE_205_1, TABLE_206 } from '../engine/liveLoads'
 import type { ConcreteClass } from '../engine/quantities'
 import { computeSeismic, buildECases, type SeismicResult, type DriftRow } from '../engine/seismic'
+import type { IrregularityFlag } from '../engine/irregularity'
 import { columnKFactors, type ColumnK } from '../engine/effectiveLength'
 import { freqFromDeflection, dg11Walking, DG11_OCCUPANCY } from '../engine/floorVibration'
 import { buildSeismicMass, GRAVITY } from '../engine/modal'
@@ -927,6 +928,7 @@ export default function ModelSpace() {
   const [rsaRegular, setRsaRegular] = useState(b('rsaRegular', true)) // §208.6.4.2 floors: 0.9·V_B & 0.8·V_A vs 1.0·V_B
   const [rsaGen, setRsaGen] = useState<{ x: RsaLateralResult; z: RsaLateralResult } | null>(null)   // RSA-derived E cases
   const [drift, setDrift] = useState<DriftRow[] | null>(null)
+  const [irregular, setIrregular] = useState<IrregularityFlag[] | null>(null)
   // Wind (NSCP 207B directional procedure, MWFRS)
   const [Vw, setVw] = useState(n('Vw', 50)); const [expo, setExpo] = useState<'B' | 'C' | 'D'>((si.expo as 'B' | 'C' | 'D') ?? 'C')
   const [Kzt, setKzt] = useState(n('Kzt', 1.0))
@@ -1074,6 +1076,7 @@ export default function ModelSpace() {
     setOpt(null)
     setExpanded(null)
     setDrift(null)
+    setIrregular(null)
     try {
       if (m) sessionStorage.setItem(AUTOSAVE_KEY, JSON.stringify(m))
       else sessionStorage.removeItem(AUTOSAVE_KEY)
@@ -1090,6 +1093,7 @@ export default function ModelSpace() {
     setOpt(null)
     setExpanded(null)
     setDrift(null)
+    setIrregular(null)
     try { sessionStorage.setItem(AUTOSAVE_KEY, JSON.stringify(m)) } catch { /* quota — ignore */ }
   }
 
@@ -1112,10 +1116,11 @@ export default function ModelSpace() {
     run('analyze', {
       model, opts: anaOpts, drift: { hasSeis: !!seis, T: seis?.T ?? 0, R: Rw, axis: primAxis, pDelta }, crackedSections: cracked, shearDeformation: shearDef,
     }).then((r) => {
-      const res = r as { analysis: F3Analysis | null; orphans: number; drift: DriftRow[] | null }
+      const res = r as { analysis: F3Analysis | null; orphans: number; drift: DriftRow[] | null; irregularities: IrregularityFlag[] | null }
       setOrphans(res.orphans)
       setAnalysis(res.analysis)
       setDrift(res.drift)
+      setIrregular(res.irregularities)
     }).catch((e) => console.error('analyze failed', e))
   }
 
@@ -3412,6 +3417,23 @@ export default function ModelSpace() {
                   ))}
                   <p className="mt-1 text-[11px] text-slate-500">
                     Limit {seis.T < 0.7 ? '0.025' : '0.020'}·hs (T {seis.T < 0.7 ? '<' : '≥'} 0.7 s) — NSCP 208.5.10.
+                  </p>
+                </Sec>
+              )}
+
+              {irregular && seis && (
+                <Sec grid={false} title={`Structural irregularities — ${(eDirs[0] ?? '+X').replace(/[+-]/, '')}`}>
+                  {irregular.length === 0
+                    ? <Row label="NSCP Table 208-9 / 208-10" value="Regular ✓" sub="Torsional, soft-storey, mass & vertical-geometric checks all pass" />
+                    : irregular.map((f, i) => (
+                      <Row key={`${f.code}-${f.elevation ?? i}`} alert={f.verdict === 'extreme'}
+                        label={`${f.code} · ${f.name}`}
+                        value={`${f.verdict === 'extreme' ? '✗ extreme' : '△ irregular'}${f.elevation != null ? ` · EL ${f1(f.elevation)} m` : ''}`}
+                        sub={`${f.table} — ${f.detail}`} />
+                    ))}
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Auto-flags off the E-case drift field + storey weights: P1 torsional (208-10 §1a/1b),
+                    V1 soft-storey, V2 mass, V3 vertical-geometric (208-9 §1–3). Capacity/plan-shape types are not auto-checked.
                   </p>
                 </Sec>
               )}

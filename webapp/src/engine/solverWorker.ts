@@ -13,6 +13,7 @@ import { modalAnalysis } from './modal'
 import { runPushoverModel, type PushoverModelOpts } from './pushoverModel'
 import { runTimeHistoryModel, type TimeHistoryModelOpts } from './timeHistoryModel'
 import { driftCheck } from './seismic'
+import { assessIrregularities } from './irregularity'
 import { designStructureAsync, optimizeStructureAsync, selectBarDiameters, type SoilOptions, type FootingPlan, type AnalyzeOptions } from './pipeline'
 import type { SolveProgress } from './progress'
 
@@ -36,13 +37,27 @@ ctx.onmessage = async (e: MessageEvent<SolverRequest>) => {
       const br = modelToFrame3D(msg.model, { crackedSections: msg.crackedSections, shearDeformation: msg.shearDeformation })
       const analysis = analyzeFrame3D(br.nodes, br.members, br.supports, br.loads, msg.opts, onProgress, br.diaphragmGroups, br.shells)
       let drift = null
+      let irregularities = null
       if (msg.drift.hasSeis) {
         onProgress({ phase: 'Storey-drift check' })
         const eOnly = applyF3Combo(br.loads, { E: 1 })
         const sol = eOnly.length ? solveFrame3D(br.nodes, br.members, br.supports, eOnly, { pDelta: msg.drift.pDelta }, br.shells) : null
         drift = sol ? driftCheck(msg.model, br.nodes, sol.d, msg.drift.R, msg.drift.T, msg.drift.axis) : null
+        if (sol) {
+          // applied lateral storey force per level (E-case, run direction) → storey shear
+          const yById = new Map(br.nodes.map((n) => [n.id, n.y]))
+          const fByLevel = new Map<number, number>()
+          for (const ld of eOnly) {
+            if (ld.kind !== 'node') continue
+            const y = yById.get(ld.node); if (y === undefined) continue
+            const F = (msg.drift.axis === 'x' ? ld.Fx : ld.Fz) ?? 0
+            fByLevel.set(y, (fByLevel.get(y) ?? 0) + F)
+          }
+          const storeyForce = [...fByLevel].map(([elevation, F]) => ({ elevation, F }))
+          irregularities = assessIrregularities(msg.model, { nodeOrder: br.nodes, d: sol.d, storeyForce, dir: msg.drift.axis })
+        }
       }
-      ctx.postMessage({ id: msg.id, ok: true, result: { analysis, orphans: br.orphanEdges.length, drift } })
+      ctx.postMessage({ id: msg.id, ok: true, result: { analysis, orphans: br.orphanEdges.length, drift, irregularities } })
     } else if (msg.kind === 'modal') {
       onProgress({ phase: 'Modal analysis' })
       const modal = modalAnalysis(msg.model, msg.nModes)
