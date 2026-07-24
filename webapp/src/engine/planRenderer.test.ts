@@ -28,8 +28,11 @@ describe('planRenderer — framing plan geometry', () => {
     expect(texts(plan.primitives)).toContain('BEAM SCHEDULE')
   })
 
-  it('labels slab panels with a thickness carrying units (h=150 mm)', () => {
-    expect(texts(plan.primitives)).toContain('h=150 mm')
+  it('marks slab panels with a slab number (S1) + a SLAB SCHEDULE, not h=…', () => {
+    expect(texts(plan.primitives)).toContain('S1')
+    expect(texts(plan.primitives)).toContain('SLAB SCHEDULE')
+    expect(texts(plan.primitives).some((t) => t.startsWith('h='))).toBe(false)
+    expect(plan.slabSchedule[0]).toMatchObject({ mark: 'S1' })
   })
 
   it('emits a title block with the sheet title, detail tag and scale', () => {

@@ -30,6 +30,7 @@ export type PlanPrimitive =
 export interface BeamScheduleRow { mark: string; size: string }
 export interface FootingScheduleRow { mark: string; size: string; thk: string; reinf: string }
 export interface ColumnScheduleRow { mark: string; size: string; notes: string }
+export interface SlabScheduleRow { mark: string; thk: string; type: string }
 
 /** Minimal per-footing shape the foundation plan needs — mapped from the
  *  pipeline's `design.footings` by the caller, so this module stays decoupled
@@ -48,6 +49,7 @@ export interface PlanDrawing extends Drawing {
   beamSchedule: BeamScheduleRow[]
   footingSchedule: FootingScheduleRow[]
   columnSchedule: ColumnScheduleRow[]
+  slabSchedule: SlabScheduleRow[]
 }
 
 export interface PlanOptions {
@@ -136,6 +138,15 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     const key = `${sec.b}×${sec.h}|${sec.fc}|${sec.fy}`   // identical columns share a mark
     let mk = colMarkBySec.get(key)
     if (!mk) { mk = `C${colMarkBySec.size + 1}`; colMarkBySec.set(key, mk); columnSchedule.push({ mark: mk, size: `${sec.b}×${sec.h}`, notes: `f'c=${sec.fc} MPa` }) }
+    return mk
+  }
+  // slab marks (S1, S2…) group by thickness × span type
+  const slabMarkByKey = new Map<string, string>()
+  const slabSchedule: SlabScheduleRow[] = []
+  const slabMarkFor = (thk: number, type: string): string => {
+    const key = `${thk}|${type}`
+    let mk = slabMarkByKey.get(key)
+    if (!mk) { mk = `S${slabMarkByKey.size + 1}`; slabMarkByKey.set(key, mk); slabSchedule.push({ mark: mk, thk: `${thk}`, type }) }
     return mk
   }
   // footing marks (WF-1, WF-2…) group by side × thickness
@@ -234,18 +245,51 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     P.push({ kind: 'rect', x: node.x - cw / 2, y: node.z - ch / 2, w: cw, h: ch, stroke: COL, fill: outline ? 'none' : COL, width: 1.2, dash: outline ? [0.2, 0.15] : undefined })
   }
 
-  // ── slab panels at the level (outline + thickness label) ──
-  for (const p of model.plates) {
-    if (p.role === 'wall') continue
-    const c = p.corners.map((id) => nm.get(id)); if (c.some((q) => !q)) continue
-    const cc = c as { x: number; y: number; z: number }[]
-    if (!cc.every((q) => near(q.y, levelY))) continue
-    for (let i = 0; i < 4; i++) {
-      const u = cc[i], v = cc[(i + 1) % 4]
-      P.push({ kind: 'line', x1: u.x, y1: u.z, x2: v.x, y2: v.z, stroke: PANEL, width: 0.5, dash: [0.15, 0.12] })
+  // ── slab panels at the level: outline + a span-direction symbol (double
+  // arrows = two-way, a single pair = one-way) and the slab mark (S1, S2…) ──
+  const ah = r * 0.22                       // arrowhead size
+  const arrowHead = (ex: number, ez: number, ux: number, uz: number) => {
+    const px = -uz, pz = ux
+    P.push({ kind: 'line', x1: ex, y1: ez, x2: ex - ux * ah + px * ah * 0.5, y2: ez - uz * ah + pz * ah * 0.5, stroke: PANEL, width: 0.7 })
+    P.push({ kind: 'line', x1: ex, y1: ez, x2: ex - ux * ah - px * ah * 0.5, y2: ez - uz * ah - pz * ah * 0.5, stroke: PANEL, width: 0.7 })
+  }
+  const spanArm = (mx: number, mz: number, ux: number, uz: number, gap: number, sh: number) => {
+    P.push({ kind: 'line', x1: mx + ux * gap, y1: mz + uz * gap, x2: mx + ux * sh, y2: mz + uz * sh, stroke: PANEL, width: 0.7 })
+    arrowHead(mx + ux * sh, mz + uz * sh, ux, uz)
+  }
+  const platesOnLevel = model.plates
+    .filter((p) => p.role !== 'wall')
+    .map((p) => ({ p, cc: p.corners.map((id) => nm.get(id)) }))
+    .filter((x): x is { p: typeof x.p; cc: NonNullable<(typeof x.cc)[number]>[] } => x.cc.every((q) => q != null) && x.cc.every((q) => near(q!.y, levelY)))
+    .map(({ p, cc }) => {
+      const xsp = cc.map((q) => q.x), zsp = cc.map((q) => q.z)
+      return { p, minX: Math.min(...xsp), maxX: Math.max(...xsp), minZ: Math.min(...zsp), maxZ: Math.max(...zsp) }
+    })
+  for (const { p, minX, maxX, minZ, maxZ } of platesOnLevel) {
+    const cs: [number, number][] = [[minX, minZ], [maxX, minZ], [maxX, maxZ], [minX, maxZ]]
+    for (let i = 0; i < 4; i++)
+      P.push({ kind: 'line', x1: cs[i][0], y1: cs[i][1], x2: cs[(i + 1) % 4][0], y2: cs[(i + 1) % 4][1], stroke: PANEL, width: 0.5, dash: [0.15, 0.12] })
+    const lx = maxX - minX, ly = maxZ - minZ
+    const mx = (minX + maxX) / 2, mz = (minZ + maxZ) / 2
+    const twoWay = Math.max(lx, ly) / Math.max(1e-6, Math.min(lx, ly)) <= 2
+    const mk = slabMarkFor(Math.round(p.thickness), twoWay ? 'Two-way' : 'One-way')
+    const gap = r * 0.55, sh = Math.min(lx, ly) * 0.32
+    const dirs: [number, number][] = twoWay ? [[1, 0], [-1, 0], [0, 1], [0, -1]]
+      : lx <= ly ? [[1, 0], [-1, 0]] : [[0, 1], [0, -1]]   // one-way spans the SHORT direction
+    for (const [ux, uz] of dirs) spanArm(mx, mz, ux, uz, gap, sh)
+    P.push({ kind: 'text', x: mx, y: mz, text: mk, size: r * 0.55, anchor: 'middle', color: PANEL, weight: 700 })
+  }
+
+  // ── grid bays with NO slab → an X from corner to corner ──
+  if (!foundation) {
+    for (let i = 0; i < xs.length - 1; i++) for (let j = 0; j < zs.length - 1; j++) {
+      const bx0 = xs[i], bx1 = xs[i + 1], bz0 = zs[j], bz1 = zs[j + 1]
+      const cx = (bx0 + bx1) / 2, cz = (bz0 + bz1) / 2
+      const covered = platesOnLevel.some((s) => cx >= s.minX - 0.05 && cx <= s.maxX + 0.05 && cz >= s.minZ - 0.05 && cz <= s.maxZ + 0.05)
+      if (covered) continue
+      P.push({ kind: 'line', x1: bx0, y1: bz0, x2: bx1, y2: bz1, stroke: GRID, width: 0.7 })
+      P.push({ kind: 'line', x1: bx1, y1: bz0, x2: bx0, y2: bz1, stroke: GRID, width: 0.7 })
     }
-    const mx = (cc[0].x + cc[2].x) / 2, mz = (cc[0].z + cc[2].z) / 2
-    P.push({ kind: 'text', x: mx, y: mz, text: `h=${Math.round(p.thickness)} mm`, size: r * 0.5, anchor: 'middle', color: PANEL, weight: 600 })
   }
 
   // ── chained grid dimensions — placed INSIDE the bubbles (between the bubble
@@ -300,9 +344,16 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
       const rows = [['MARK', 'SIZE', 'REMARKS'], ...columnSchedule.map((c) => [c.mark, withUnit(c.size), c.notes])]
       drawTable(tbX, y, 'COLUMN SCHEDULE', COL, [r * 1.6, r * 3.4, r * 4.4], rows)
     }
-  } else if (schedule.length) {
-    const rows = [['MARK', 'SIZE'], ...schedule.map((s) => [s.mark, withUnit(s.size)])]
-    drawTable(tbX, tblY0, 'BEAM SCHEDULE', BEAM, [r * 1.6, r * 3.6], rows)
+  } else {
+    let y = tblY0
+    if (schedule.length) {
+      const rows = [['MARK', 'SIZE'], ...schedule.map((s) => [s.mark, withUnit(s.size)])]
+      y = drawTable(tbX, y, 'BEAM SCHEDULE', BEAM, [r * 1.6, r * 3.6], rows) + r * 1.4
+    }
+    if (slabSchedule.length) {
+      const rows = [['MARK', 'THK', 'TYPE'], ...slabSchedule.map((s) => [s.mark, withUnit(s.thk), s.type])]
+      drawTable(tbX, y, 'SLAB SCHEDULE', PANEL, [r * 1.6, r * 2.2, r * 3.6], rows)
+    }
   }
 
   // ── bounds = span of every primitive coordinate ──
@@ -326,6 +377,7 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     beamSchedule: schedule,
     footingSchedule,
     columnSchedule,
+    slabSchedule,
   }
 }
 
