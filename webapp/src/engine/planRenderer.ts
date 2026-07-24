@@ -247,26 +247,21 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
 
   // ── slab panels at the level: outline + a span-direction symbol (double
   // arrows = two-way, a single pair = one-way) and the slab mark (S1, S2…) ──
-  const ah = r * 0.22                       // arrowhead size
-  const arrowHead = (ex: number, ez: number, ux: number, uz: number) => {
-    const px = -uz, pz = ux
-    P.push({ kind: 'line', x1: ex, y1: ez, x2: ex - ux * ah + px * ah * 0.5, y2: ez - uz * ah + pz * ah * 0.5, stroke: PANEL, width: 0.7 })
-    P.push({ kind: 'line', x1: ex, y1: ez, x2: ex - ux * ah - px * ah * 0.5, y2: ez - uz * ah - pz * ah * 0.5, stroke: PANEL, width: 0.7 })
+  const ah = r * 0.28                       // half-arrow barb length
+  // a single barb at tip (tx,tz), pointing outward (ox,oz), on one perpendicular side
+  const halfArrow = (tx: number, tz: number, ox: number, oz: number, side: number) => {
+    const px = -oz, pz = ox
+    P.push({ kind: 'line', x1: tx, y1: tz, x2: tx - ox * ah + px * ah * side, y2: tz - oz * ah + pz * ah * side, stroke: PANEL, width: 0.8 })
   }
-  // a double-headed span arrow with a Z-crank in the middle, centred at (mx,mz),
-  // running ±half along (ux,uz) — the standard slab span-direction symbol
+  // the standard slab span symbol: a STRAIGHT line centred at (mx,mz) running
+  // ±half along (ux,uz), with a half-arrow (single barb) at each end, on
+  // opposite sides
   const spanSymbol = (mx: number, mz: number, ux: number, uz: number, half: number) => {
-    const px = -uz, pz = ux                            // unit perpendicular
-    const off = Math.min(half * 0.18, r * 0.55)        // crank perpendicular offset
-    const g = half * 0.22                              // half-length of the crank diagonal
-    const a = [mx - ux * half + px * off, mz - uz * half + pz * off]   // raised end (arrow out)
-    const b = [mx - ux * g + px * off, mz - uz * g + pz * off]
-    const c = [mx + ux * g - px * off, mz + uz * g - pz * off]
-    const d = [mx + ux * half - px * off, mz + uz * half - pz * off]   // lowered end (arrow out)
-    for (const [p0, p1] of [[a, b], [b, c], [c, d]])
-      P.push({ kind: 'line', x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1], stroke: PANEL, width: 0.8 })
-    arrowHead(a[0], a[1], -ux, -uz)
-    arrowHead(d[0], d[1], ux, uz)
+    const ax = mx - ux * half, az = mz - uz * half
+    const bx = mx + ux * half, bz = mz + uz * half
+    P.push({ kind: 'line', x1: ax, y1: az, x2: bx, y2: bz, stroke: PANEL, width: 0.8 })
+    halfArrow(ax, az, -ux, -uz, +1)
+    halfArrow(bx, bz, ux, uz, +1)
   }
   const platesOnLevel = model.plates
     .filter((p) => p.role !== 'wall')
