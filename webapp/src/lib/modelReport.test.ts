@@ -4,6 +4,7 @@ import { designStructure, designOK } from '../engine/pipeline'
 import type { RectSection } from '../engine/model'
 import { buildModelReport } from './modelReport'
 import { texToPlain } from './texText'
+import type { IrregularityFlag } from '../engine/irregularity'
 
 // The PDF payload assembler must mirror the pipeline results 1:1: same member
 // counts, same verdict, a worked solution for EVERY designed member (the
@@ -88,6 +89,40 @@ describe('buildModelReport', () => {
               expect(plain).not.toContain('{')
             }
           }
+  })
+})
+
+describe('buildModelReport — seismic irregularities', () => {
+  const model = makeModel()
+  const design = designStructure(model, soil)!
+
+  it('omits the regularity check when no seismic run is supplied', () => {
+    const rpt = buildModelReport(model, design, [], soil)
+    expect(rpt.checks.some((c) => c.name.startsWith('Seismic regularity'))).toBe(false)
+    expect(rpt.tables.some((t) => t.title.startsWith('Structural irregularities'))).toBe(false)
+  })
+
+  it('reports a passing regularity check for a regular structure (empty flags)', () => {
+    const rpt = buildModelReport(model, design, [], soil, [])
+    const chk = rpt.checks.find((c) => c.name.startsWith('Seismic regularity'))!
+    expect(chk.ok).toBe(true)
+    expect(rpt.tables.some((t) => t.title.startsWith('Structural irregularities'))).toBe(false)  // no rows ⇒ no table
+  })
+
+  it('folds flags into a not-ok check + an irregularities table without gating the overall verdict', () => {
+    const flags: IrregularityFlag[] = [
+      { code: 'P1b', name: 'Extreme torsional irregularity', table: 'Table 208-10', dir: 'x', elevation: 3, ratio: 1.6, limit: 1.4, verdict: 'extreme', detail: 'X: δmax/δavg = 1.6 > 1.4' },
+      { code: 'V2', name: 'Weight (mass) irregularity', table: 'Table 208-9', elevation: 6, ratio: 1.7, limit: 1.5, verdict: 'irregular', detail: 'W/W(adjacent) = 1.7 > 1.5' },
+    ]
+    const rpt = buildModelReport(model, design, [], soil, flags)
+    const chk = rpt.checks.find((c) => c.name.startsWith('Seismic regularity'))!
+    expect(chk.ok).toBe(false)
+    expect(chk.detail).toContain('P1b')
+    expect(rpt.ok).toBe(designOK(design))            // advisory only — does not flip the verdict
+    const t = rpt.tables.find((x) => x.title.startsWith('Structural irregularities'))!
+    expect(t.rows).toHaveLength(2)
+    for (const r of t.rows) expect(r).toHaveLength(t.head.length)
+    expect(t.rows[0][0]).toBe('P1b')
   })
 })
 

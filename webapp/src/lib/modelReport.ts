@@ -9,6 +9,7 @@ import type {
   SteelBeamScheduleRow, SteelColumnScheduleRow,
 } from '../engine/pipeline'
 import { designOK } from '../engine/pipeline'
+import type { IrregularityFlag } from '../engine/irregularity'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution,
   woodBeamRowSolution, woodColumnRowSolution, woodSlabRowSolution } from './modelSpaceSolutions'
 import { connectionRowSolution } from './connectionSolution'
@@ -97,6 +98,7 @@ export function steelColumnRowSolution(r: SteelColumnScheduleRow): SolutionStep[
 // ── Payload assembly ──────────────────────────────────────────────────────────
 export function buildModelReport(
   model: StructuralModel, design: StructureDesign, props: [string, string][], soil: SoilOptions,
+  irregular?: IrregularityFlag[] | null,
 ): ModelReport {
   const sectionFor = (memberId: string): RectSection | undefined => {
     const m = model.members.find((x) => x.id === memberId)
@@ -203,6 +205,16 @@ export function buildModelReport(
     checks.push({ name: 'Unchecked members', detail: design.unchecked.map((u) => `${u.id} (${u.shape})`).join(', '), ratio: null, ok: false })
   if (design.pDeltaIssues.length)
     checks.push({ name: 'P-Δ convergence', detail: `failed: ${design.pDeltaIssues.join(', ')}`, ratio: null, ok: false })
+  // seismic regularity (advisory — does not gate designOK; irregular structures
+  // are permitted but trigger the code's added detailing/analysis requirements)
+  if (irregular)
+    checks.push({
+      name: 'Seismic regularity (NSCP 208-9/10)',
+      detail: irregular.length === 0
+        ? 'Regular — torsional, soft-storey, mass & vertical-geometric checks all pass'
+        : irregular.map((f) => `${f.code} ${f.name.toLowerCase()}${f.elevation != null ? ` @ EL ${f2(f.elevation)} m` : ''}`).join('; '),
+      ratio: null, ok: irregular.length === 0,
+    })
 
   const ok = designOK(design)
   const withRatio = checks.filter((c) => c.ratio !== null)
@@ -356,6 +368,15 @@ export function buildModelReport(
     rows: design.combined.map((c) => [c.nodes.join(' + '), c.design.shape, f2(c.spacing), f2(c.design.Bx),
       c.design.shape === 'Trapezoidal (CTF)' ? `${f2(c.design.By1)}/${f2(c.design.By2)}` : f2(c.design.By),
       f0(c.design.Dc), c.ok ? 'PASS' : 'FAIL']),
+  })
+  if (irregular && irregular.length) tables.push({
+    title: 'Structural irregularities (NSCP Table 208-9/10)',
+    head: ['Code', 'Type', 'Location', 'Ratio', 'Limit', 'Classification'],
+    right: [3, 4],
+    rows: irregular.map((f) => [
+      f.code, f.name, f.elevation != null ? `EL ${f2(f.elevation)} m${f.dir ? ` · ${f.dir.toUpperCase()}` : ''}` : (f.dir ? f.dir.toUpperCase() : '—'),
+      f2(f.ratio), f2(f.limit), f.verdict === 'extreme' ? 'Extreme' : 'Irregular',
+    ]),
   })
 
   // ── Worked solutions — every member (user-selected depth) ──

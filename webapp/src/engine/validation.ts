@@ -16,6 +16,7 @@ import { shapeByName } from './aiscSections'
 import { designAxialColumn } from './columnDesign'
 import { activeThrust, rankineKa, bearingFactors, infiniteSlopeFS } from './geotech'
 import { computeSeismic } from './seismic'
+import { torsionalVerdict } from './irregularity'
 import { jacobiEigen } from './modal'
 import { elasticResponseSpectrum } from './accelSpectrum'
 import { generateGridModel } from './modelBuilder'
@@ -353,6 +354,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'seismic-base-shear', category: 'Seismic', title: 'NSCP 208 static base shear',
     reference: 'NSCP 208.5.2.1', formula: 'V = Cv·I·W / (R·T)',
     manual: seismic.baseShear.manual, software: seismic.baseShear.software, unit: 'kN', tol: 1e-6,
+  },
+  {
+    id: 'torsional-irregularity', category: 'Seismic', title: 'Torsional irregularity ratio',
+    reference: 'NSCP Table 208-10 §1', formula: 'δmax/δavg, δavg = (δmax+δmin)/2  →  13/10',
+    manual: 1.3, software: torsionalVerdict(13, 7).ratio, unit: '—', tol: 1e-9,
   },
   {
     id: 'eigen-jacobi', category: 'Dynamics', title: 'Jacobi eigenvalue of [[2,1],[1,2]]',
