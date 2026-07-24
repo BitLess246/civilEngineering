@@ -282,7 +282,7 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     // two-way → one span arrow per axis (crossing); one-way → a single arrow in
     // the SHORT direction; each spans ~60% of its panel dimension
     const axes: [number, number][] = twoWay ? [[1, 0], [0, 1]] : lx <= ly ? [[1, 0]] : [[0, 1]]
-    for (const [ux, uz] of axes) spanSymbol(mx, mz, ux, uz, (ux ? lx : ly) * 0.3)
+    for (const [ux, uz] of axes) spanSymbol(mx, mz, ux, uz, (ux ? lx : ly) * 0.15)
     // slab mark tucked into the upper-left quadrant, clear of the crossing arrows
     const q = Math.min(lx, ly) * 0.18
     P.push({ kind: 'text', x: mx - q, y: mz - q, text: mk, size: r * 0.55, anchor: 'middle', color: PANEL, weight: 700 })
