@@ -1455,7 +1455,7 @@ export default function ModelSpace() {
         ...(design.woodBeams.length || design.woodColumns.length ? ['NDS §3 / NSCP §6'] : [])]
       await generateModelPdf({
         lh, modelImg: img, badges,
-        report: buildModelReport(model, design, reportProps(design), soil),
+        report: buildModelReport(model, design, reportProps(design), soil, irregular),
         fileName: `structure-report${lh.sheet ? '-' + lh.sheet.split('·')[0].trim() : ''}.pdf`,
       })
     } catch (e) {

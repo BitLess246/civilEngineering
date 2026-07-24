@@ -697,12 +697,15 @@ _Analysis completeness (P3):_
 - **Tension-only / compression-only members** (braces, uplift springs) and a
   **consistent-mass** option beside lumped — neither exists anywhere.
 - ~~**Irregularity auto-flags** — NSCP Table 208-9/10 (torsional, soft-storey,
-  mass)~~ — ✔ shipped (#427 engine, #428 wiring/UI): `engine/irregularity.ts`
-  flags P1 torsional (208-10 §1a/1b), V1 soft-storey, V2 mass, V3
-  vertical-geometric as pure post-processing of the E-case drift field + storey
-  weights; `solverWorker` runs `assessIrregularities` beside the drift check and
-  the Model Space Analysis tab shows an **Irregularities** panel. Not
-  auto-checked (need capacity/plan-shape/offset topology): 208-9 Types 4/5,
+  mass)~~ — ✔ shipped (#427 engine, #428 wiring/UI, #429 report/validation):
+  `engine/irregularity.ts` flags P1 torsional (208-10 §1a/1b), V1 soft-storey,
+  V2 mass, V3 vertical-geometric as pure post-processing of the E-case drift
+  field + storey weights; `solverWorker` runs `assessIrregularities` beside the
+  drift check and the Model Space Analysis tab shows an **Irregularities** panel.
+  The flags also fold into the direct **PDF report** (advisory regularity check +
+  a "Structural irregularities" table, does not gate `designOK`) and carry a
+  `/validation` row (`torsional-irregularity`) + a ValidationMap coverage entry.
+  Not auto-checked (need capacity/plan-shape/offset topology): 208-9 Types 4/5,
   208-10 Types 2–5.
 
 _Geotech / foundations (P4):_

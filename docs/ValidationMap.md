@@ -100,6 +100,7 @@ asserted by that file; all run in CI.
 |------|--------------|-------|
 | NSCP §208 static seismic | `seismic.test.ts`, `nscpSeismic.test.ts` | every V branch (208-9/10/11) + Ft + w·h distribution vs hand formulas; Method-B caps 1.3/1.4·Ta; accidental-torsion couple statics (ΣΔF = 0, ΣΔF·d = 0.05·L⊥·F); `validation.ts` `seismic-period`/`seismic-base-shear` |
 | RSA → design loads | `responseSpectrum.test.ts` | equivalent-load base shear ≡ CQC/SRSS combination (1e-9), single-mode Sa·effMass hand calc, §208.6.4.2 floor scaling |
+| Structural irregularities | `irregularity.test.ts` | NSCP Table 208-9/10 thresholds as hand calcs — P1 torsional δmax/δavg (1.2/1.4), V1 soft-storey (0.7/0.6 of above, 0.8/0.7 of avg-3), V2 mass (1.5), V3 vertical-geometric (1.3); real bridge+solver integration (symmetric grid ⇒ regular); `validation.ts` `torsional-irregularity` |
 | Load combinations | `loadCombinations.test.ts`, `pipeline.test.ts` | NSCP 203 factor sets as data; Ev = 0.5·Ca·I·D shifts (1.42D/0.68D) |
 | Time history | `timeHistory.test.ts`, `timeHistoryModel.test.ts`, `accelerogram.test.ts` | Newmark SDOF vs analytical free/forced responses; modal superposition |
 | Buckling | `buckling.test.ts` | linearized Pcr vs Euler closed forms (cantilever, fixed-fixed) |
