@@ -5,6 +5,10 @@ import { buildPlan, planToSvg } from '../engine/planRenderer'
 import { buildFootingDetail } from '../engine/footingDetail'
 import { footingsForPlan, footingDetailBundles, type SoilInput } from '../lib/planDetails'
 
+const FLOOR_ORD = ['Ground', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth', 'Eleventh', 'Twelfth']
+/** Framed-level ordinal (1 = first floor above the base) → floor name. */
+function floorName(k: number): string { return `${FLOOR_ORD[k - 1] ?? `${k}th`} Floor` }
+
 /** Render a trusted, engine-generated SVG string. */
 function RawSvg({ svg, className }: { svg: string; className?: string }): JSX.Element {
   return <div className={className} dangerouslySetInnerHTML={{ __html: svg }} />
@@ -38,31 +42,17 @@ function Sheet({ title, svg, file }: { title: string; svg: string; file: string 
 export function PlansPanel({ model, design, soil }: { model: StructuralModel; design: StructureDesign | null; soil: SoilInput }): JSX.Element {
   const [hooked, setHooked] = useState(false)
 
-  // per floor: a BEAM framing plan and a COLUMN framing plan (split sheets);
-  // level index = the node-y ordinal above the base
+  // one framing plan per framed floor, named 'Ground/Second/… Floor Framing Plan'
   const framings = useMemo(() => {
     const ys = [...new Set(model.nodes.map((n) => Math.round(n.y * 100) / 100))].sort((a, b) => a - b)
     const floors = ys.slice(1)   // skip the base (foundation)
-    const idxs = floors.length ? floors.map((_, i) => i + 1) : [ys.length > 1 ? 1 : 0]
-    const out: { heading: string; file: string; svg: string }[] = []
-    let sheet = 2
-    for (const level of idxs) {
-      const y = ys[level] ?? ys[ys.length - 1]
-      const single = floors.length <= 1
-      const suffix = single ? '' : ` — Level ${level} · EL +${y.toFixed(2)} m`
-      const label = single ? undefined : `L${level} (EL +${y.toFixed(2)} m)`
-      const tag = single ? '' : `-L${level}`
-      for (const layer of ['beam', 'column'] as const) {
-        const d = buildPlan(model, { kind: 'framing', layer, level, detailNo: '1', sheetRef: `S-${sheet++}`, label })
-        if (!d) continue
-        out.push({
-          heading: `${layer === 'beam' ? 'Beam framing plan' : 'Column framing plan'}${suffix}`,
-          file: `${layer}-framing${tag}.svg`,
-          svg: planToSvg(d),
-        })
-      }
-    }
-    return out
+    const idxs = floors.length ? floors.map((_, i) => i + 1) : [1]
+    return idxs.map((level, i) => {
+      const name = floorName(level)
+      const d = buildPlan(model, { kind: 'framing', level, detailNo: '1', sheetRef: `S-${2 + i}`, title: `${name} FRAMING PLAN`.toUpperCase() })
+      if (!d) return null
+      return { heading: `${name} framing plan`, file: `framing-${name.toLowerCase().replace(/\s+/g, '-')}.svg`, svg: planToSvg(d) }
+    }).filter((x): x is { heading: string; file: string; svg: string } => x != null)
   }, [model])
 
   const foundation = useMemo(() => {
