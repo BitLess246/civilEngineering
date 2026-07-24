@@ -3,6 +3,9 @@ import {
   torsionalVerdict, softStoreyVerdicts, massVerdicts, geometricVerdicts, assessIrregularities,
 } from './irregularity'
 import { emptyModel, type StructuralModel, type Node, type Member, type RectSection, type Storey } from './model'
+import { generateGridModel } from './modelBuilder'
+import { modelToFrame3D } from './modelBridge'
+import { solveFrame3D, applyF3Combo } from './frame3d'
 
 // ── pure checks vs NSCP thresholds ──────────────────────────────────────
 describe('irregularity — torsional (Table 208-10 Type 1a/1b)', () => {
@@ -124,5 +127,36 @@ describe('irregularity — model adapter', () => {
     for (const n of nodeOrder) dU.push(n.y === 0 ? 0 : n.y === 3 ? 0.010 : 0.020, 0, 0, 0, 0, 0)
     const flags = assessIrregularities(model, { nodeOrder, d: dU, storeyForce, dir: 'x' })
     expect(flags.some((f) => f.code.startsWith('P1'))).toBe(false)
+  })
+})
+
+// ── worker-path integration: a symmetric grid under uniform E is regular ──
+describe('irregularity — integration through the real bridge + solver', () => {
+  it('a symmetric 2×2-bay, 2-storey frame under uniform X shows no plan/mass/geometry flags', () => {
+    const section: RectSection = { id: 'C', name: '400×400', b: 400, h: 400, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+    const m = generateGridModel({ baysX: [6, 6], baysZ: [6, 6], storeyH: [3, 3], section, slabThickness: 150 })
+    // uniform lateral E node loads on every framed node (symmetric ⇒ no twist)
+    for (const n of m.nodes) if (n.y > 1e-6) m.loads.push({ kind: 'node', node: n.id, Fx: 10, cat: 'E' })
+
+    const br = modelToFrame3D(m)
+    const eOnly = applyF3Combo(br.loads, { E: 1 })
+    const sol = solveFrame3D(br.nodes, br.members, br.supports, eOnly, {}, br.shells)
+    expect(sol).toBeTruthy()
+    if (!sol) return
+    // storey force per level (X), mirroring solverWorker
+    const yById = new Map(br.nodes.map((n) => [n.id, n.y]))
+    const fByLevel = new Map<number, number>()
+    for (const ld of eOnly) {
+      if (ld.kind !== 'node') continue
+      const y = yById.get(ld.node); if (y === undefined) continue
+      fByLevel.set(y, (fByLevel.get(y) ?? 0) + (ld.Fx ?? 0))
+    }
+    const storeyForce = [...fByLevel].map(([elevation, F]) => ({ elevation, F }))
+
+    const flags = assessIrregularities(m, { nodeOrder: br.nodes, d: sol.d, storeyForce, dir: 'x' })
+    // symmetric geometry/mass and an untwisted field ⇒ no torsional, mass, or geometric flags
+    expect(flags.some((f) => f.code.startsWith('P1'))).toBe(false)
+    expect(flags.some((f) => f.code === 'V2')).toBe(false)
+    expect(flags.some((f) => f.code === 'V3')).toBe(false)
   })
 })
