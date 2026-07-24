@@ -253,9 +253,20 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     P.push({ kind: 'line', x1: ex, y1: ez, x2: ex - ux * ah + px * ah * 0.5, y2: ez - uz * ah + pz * ah * 0.5, stroke: PANEL, width: 0.7 })
     P.push({ kind: 'line', x1: ex, y1: ez, x2: ex - ux * ah - px * ah * 0.5, y2: ez - uz * ah - pz * ah * 0.5, stroke: PANEL, width: 0.7 })
   }
-  const spanArm = (mx: number, mz: number, ux: number, uz: number, gap: number, sh: number) => {
-    P.push({ kind: 'line', x1: mx + ux * gap, y1: mz + uz * gap, x2: mx + ux * sh, y2: mz + uz * sh, stroke: PANEL, width: 0.7 })
-    arrowHead(mx + ux * sh, mz + uz * sh, ux, uz)
+  // a double-headed span arrow with a Z-crank in the middle, centred at (mx,mz),
+  // running ±half along (ux,uz) — the standard slab span-direction symbol
+  const spanSymbol = (mx: number, mz: number, ux: number, uz: number, half: number) => {
+    const px = -uz, pz = ux                            // unit perpendicular
+    const off = Math.min(half * 0.18, r * 0.55)        // crank perpendicular offset
+    const g = half * 0.22                              // half-length of the crank diagonal
+    const a = [mx - ux * half + px * off, mz - uz * half + pz * off]   // raised end (arrow out)
+    const b = [mx - ux * g + px * off, mz - uz * g + pz * off]
+    const c = [mx + ux * g - px * off, mz + uz * g - pz * off]
+    const d = [mx + ux * half - px * off, mz + uz * half - pz * off]   // lowered end (arrow out)
+    for (const [p0, p1] of [[a, b], [b, c], [c, d]])
+      P.push({ kind: 'line', x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1], stroke: PANEL, width: 0.8 })
+    arrowHead(a[0], a[1], -ux, -uz)
+    arrowHead(d[0], d[1], ux, uz)
   }
   const platesOnLevel = model.plates
     .filter((p) => p.role !== 'wall')
@@ -273,11 +284,13 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     const mx = (minX + maxX) / 2, mz = (minZ + maxZ) / 2
     const twoWay = Math.max(lx, ly) / Math.max(1e-6, Math.min(lx, ly)) <= 2
     const mk = slabMarkFor(Math.round(p.thickness), twoWay ? 'Two-way' : 'One-way')
-    const gap = r * 0.55, sh = Math.min(lx, ly) * 0.32
-    const dirs: [number, number][] = twoWay ? [[1, 0], [-1, 0], [0, 1], [0, -1]]
-      : lx <= ly ? [[1, 0], [-1, 0]] : [[0, 1], [0, -1]]   // one-way spans the SHORT direction
-    for (const [ux, uz] of dirs) spanArm(mx, mz, ux, uz, gap, sh)
-    P.push({ kind: 'text', x: mx, y: mz, text: mk, size: r * 0.55, anchor: 'middle', color: PANEL, weight: 700 })
+    // two-way → one span arrow per axis (crossing); one-way → a single arrow in
+    // the SHORT direction; each spans ~60% of its panel dimension
+    const axes: [number, number][] = twoWay ? [[1, 0], [0, 1]] : lx <= ly ? [[1, 0]] : [[0, 1]]
+    for (const [ux, uz] of axes) spanSymbol(mx, mz, ux, uz, (ux ? lx : ly) * 0.3)
+    // slab mark tucked into the upper-left quadrant, clear of the crossing arrows
+    const q = Math.min(lx, ly) * 0.18
+    P.push({ kind: 'text', x: mx - q, y: mz - q, text: mk, size: r * 0.55, anchor: 'middle', color: PANEL, weight: 700 })
   }
 
   // ── grid bays with NO slab → an X from corner to corner ──
