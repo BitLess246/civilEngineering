@@ -29,7 +29,7 @@ store-backed `ScheduleProject`.
   delay-report export, photos, resource levelling, per-activity calendars/
   constraints) are listed in `docs/scheduling.md`.
 
-## Structural plan renderer / drawing sheets (PRs #419–#422 — COMPLETE)
+## Structural plan renderer / drawing sheets (PRs #419–#422, #424–#425 — COMPLETE)
 CAD-style structural **drawings generated from the 3D model + design**, emitted as
 scalable **SVG** and surfaced in a **"Plans" tab** in Model Space (`/model`). Pure
 engine + a thin React panel; every sheet exports to SVG.
@@ -61,10 +61,24 @@ engine + a thin React panel; every sheet exports to SVG.
   footing type WF-n, recovering the footing bar Ø from the designed steel area);
   new **`plans`** right-panel tab in `pages/ModelSpace.tsx`.
 - Phases → PRs: **#419** framing (P1–2), **#420** foundation (P3), **#421** footing
-  detail sheet (P4), **#422** "Plans" tab + engine column section (P5). Suite **1444**.
+  detail sheet (P4), **#422** "Plans" tab + engine column section (P5).
+- **Per-floor framing + slab symbols (#424 → #425)**: one **combined framing plan
+  per floor**, named by floor (`GROUND/SECOND FLOOR FRAMING PLAN`, via a
+  `PlanOptions.title` override; `PlansPanel` derives floor names from node
+  elevations) with **solid-black columns**, **beams drawn to their real width**
+  (band from section `b`), and **units on every dimension/schedule value**. Slab
+  panels now carry a **span-direction symbol** (a straight line with a half-arrow
+  at each end, on opposite sides — two-way = a perpendicular copy crossing as `+`,
+  one-way = a single line in the short direction; two-way when long/short ≤ 2, ACI)
+  + a **slab mark** (`S1…`, pooled by thickness/type into a new **SLAB SCHEDULE**)
+  in the upper-left quadrant, replacing the old `h=… mm` label; grid bays with **no
+  slab** get a corner-to-corner **X**. (#424 shipped the interim beam/column-split
+  version; #425 reverted the split back to combined and added the slab symbols.)
+  Suite **1446**.
 - **Follow-ups** (not built): SVG→PDF sheet export/print layout; beam/column
-  **schedule detail sheets** and a tie-bend detail; slab reinforcement plans;
-  wiring the plan-renderer drawings into the direct PDF report (`lib/modelPdf.ts`).
+  **schedule detail sheets** and a tie-bend detail; full slab **reinforcement**
+  plans (bar layout, not just the span symbol); wiring the plan-renderer drawings
+  into the direct PDF report (`lib/modelPdf.ts`).
 
 ## Continue from your phone / cloud (PC off)
 The local terminal session needs your PC on. To keep working without it:
