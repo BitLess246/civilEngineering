@@ -170,8 +170,10 @@ Ordered: correctness first, then code completeness, then new capability.
    Φ-modified `kLocal` + per-family shear areas in the bridge (opt-in
    `shearDeformation`, UI default on). FEMs stay Euler; modal/pushover/
    buckling still run the Euler element (follow-up if needed).
-6. **Direct-integration time-history** on the full MDOF system with Rayleigh
-   damping (currently modal superposition only) — prerequisite for nonlinear TH.
+6. ~~**Direct-integration time-history** on the full MDOF system with Rayleigh
+   damping~~ — ✔ shipped (#432): `directTimeHistory.ts` — Newmark-β on the full
+   free-DOF system with `C = αM + βK`, K̂ LU-factored once and reused per step;
+   `rayleighCoeffs` inverts the two-anchor ζ(ω) curve. Unblocks nonlinear TH.
 7. Tension-only / compression-only members (braces, uplift springs);
    consistent-mass option beside lumped.
 8. Irregularity auto-flags (torsional, soft-storey, mass — NSCP Table 208-9/10).

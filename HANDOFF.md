@@ -692,8 +692,16 @@ complete. New disciplines landed too: **timber wood-frame** (#379–#386),
 **Still genuinely missing** (verified absent from the engine):
 
 _Analysis completeness (P3):_
-- **Direct-integration MDOF time-history** with Rayleigh damping — `timeHistory.ts`
-  is modal-superposition only (no full-system Newmark); prerequisite for nonlinear TH.
+- ~~**Direct-integration MDOF time-history** with Rayleigh damping~~ — ✔ shipped
+  (#432): `engine/directTimeHistory.ts` — Newmark-β on the FULL free-DOF system
+  `M ü + C u̇ + K u = P(t)` with `C = αM + βK`; the effective stiffness
+  `K̂ = K + a₀M + a₁C` is constant for fixed dt so it is LU-factored **once** and
+  reused every step (same shared-factorization discipline as the static solver).
+  `rayleighCoeffs(ω₁,ζ₁,ω₂,ζ₂)` inverts the two-anchor curve; the model driver
+  anchors to two modal frequencies. No mode truncation and damping need not be
+  modally diagonalizable — the prerequisite for **nonlinear TH**. Validated by
+  reproducing mode-by-mode superposition to 1e-9 on a 2-DOF shear building.
+  Diaphragm constraints are not applied on this path (same as `modal.ts`).
 - **Tension-only / compression-only members** (braces, uplift springs) and a
   **consistent-mass** option beside lumped — neither exists anywhere.
 - ~~**Irregularity auto-flags** — NSCP Table 208-9/10 (torsional, soft-storey,

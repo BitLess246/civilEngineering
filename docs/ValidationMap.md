@@ -103,6 +103,7 @@ asserted by that file; all run in CI.
 | Structural irregularities | `irregularity.test.ts` | NSCP Table 208-9/10 thresholds as hand calcs — P1 torsional δmax/δavg (1.2/1.4), V1 soft-storey (0.7/0.6 of above, 0.8/0.7 of avg-3), V2 mass (1.5), V3 vertical-geometric (1.3); real bridge+solver integration (symmetric grid ⇒ regular); `validation.ts` `torsional-irregularity` |
 | Load combinations | `loadCombinations.test.ts`, `pipeline.test.ts` | NSCP 203 factor sets as data; Ev = 0.5·Ca·I·D shifts (1.42D/0.68D) |
 | Time history | `timeHistory.test.ts`, `timeHistoryModel.test.ts`, `accelerogram.test.ts` | Newmark SDOF vs analytical free/forced responses; modal superposition |
+| Direct-integration TH (Rayleigh) | `directTimeHistory.test.ts` | full-MDOF Newmark ≡ mode-by-mode superposition to 1e-9 on a 2-DOF shear building (Rayleigh C is diagonalized by the modes, so the two paths are algebraically identical); 1-DOF ≡ `newmarkSDOF` to 1e-10; free-vibration log decrement exp(−2πζ/√(1−ζ²)); Rayleigh α/β inversion hits both target ζ exactly, sags between anchors; `validation.ts` `direct-th-decay` |
 | Buckling | `buckling.test.ts` | linearized Pcr vs Euler closed forms (cantilever, fixed-fixed) |
 | Pushover | `pushover.test.ts`, `pushoverModel.test.ts` | event-to-event capacity curve vs hand-tracked hinge sequence (review-problem anchors) |
 | Floor vibration | `floorVibration.test.ts` | AISC DG11 fn = 0.18√(g/Δ) + tolerance thresholds |
