@@ -11,7 +11,8 @@ import { modelToFrame3D } from './modelBridge'
 import { analyzeFrame3D, solveFrame3D, applyF3Combo, type F3AnalyzeOpts } from './frame3d'
 import { modalAnalysis } from './modal'
 import { runPushoverModel, type PushoverModelOpts } from './pushoverModel'
-import { runTimeHistoryModel, type TimeHistoryModelOpts } from './timeHistoryModel'
+import { runTimeHistoryModel, makeGroundMotion, type TimeHistoryModelOpts, type GroundMotionSpec } from './timeHistoryModel'
+import { runNonlinearModel, type NonlinearModelOpts } from './nonlinearModel'
 import { driftCheck } from './seismic'
 import { assessIrregularities } from './irregularity'
 import { designStructureAsync, optimizeStructureAsync, selectBarDiameters, type SoilOptions, type FootingPlan, type AnalyzeOptions } from './pipeline'
@@ -25,6 +26,7 @@ export type SolverRequest =
   | { id: number; kind: 'modal'; model: StructuralModel; nModes: number }
   | { id: number; kind: 'pushover'; model: StructuralModel; opts: PushoverModelOpts }
   | { id: number; kind: 'timeHistory'; model: StructuralModel; opts: TimeHistoryModelOpts }
+  | { id: number; kind: 'nonlinearTH'; model: StructuralModel; spec: GroundMotionSpec; opts: NonlinearModelOpts }
 
 const ctx = self as unknown as Worker
 
@@ -70,6 +72,14 @@ ctx.onmessage = async (e: MessageEvent<SolverRequest>) => {
       onProgress({ phase: 'Time-history (modal Newmark-β)' })
       const timeHistory = runTimeHistoryModel(msg.model, msg.opts)
       ctx.postMessage({ id: msg.id, ok: true, result: { timeHistory } })
+    } else if (msg.kind === 'nonlinearTH') {
+      onProgress({ phase: 'Nonlinear time-history (Newmark + Newton-Raphson)' })
+      const gm = makeGroundMotion(msg.spec)
+      // never ship the full displacement field back across the worker boundary
+      const inelastic = runNonlinearModel(msg.model, gm, { ...msg.opts, collect: false })
+      onProgress({ phase: 'Elastic reference run' })
+      const elastic = runNonlinearModel(msg.model, gm, { ...msg.opts, elastic: true, collect: false })
+      ctx.postMessage({ id: msg.id, ok: true, result: { nonlinear: { inelastic, elastic } } })
     } else if (msg.kind === 'design') {
       let m = msg.model
       if (msg.tryBars) {

@@ -52,6 +52,7 @@ import { RecordedSpectrumPanel } from '../components/RecordedSpectrumPanel'
 import { elasticResponseSpectrum, nscp208DesignCurve, type AccelSpectrum, type DesignSpectrumPoint } from '../engine/accelSpectrum'
 import { parseAccelerogram } from '../engine/accelerogram'
 import type { TimeHistoryModelResult, GroundMotionKind, CsvAccelerogramOpts } from '../engine/timeHistoryModel'
+import type { NonlinearModelResult } from '../engine/nonlinearModel'
 import { BeamSchematic } from '../components/BeamSchematic'
 import { TSection } from '../components/TSection'
 import { ColumnSchematic } from '../components/ColumnSchematic'
@@ -697,7 +698,7 @@ function DirPicker({ value, onChange }: { value: string[]; onChange: (v: string[
 }
 
 // ── Right-panel tabs ────────────────────────────────────────────────────────
-type Tab = 'geometry' | 'properties' | 'supports' | 'loading' | 'analysis' | 'modal' | 'pushover' | 'design' | 'plans'
+type Tab = 'geometry' | 'properties' | 'supports' | 'loading' | 'analysis' | 'modal' | 'pushover' | 'nonlinear' | 'design' | 'plans'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'geometry', label: 'Geometry' },
   { id: 'properties', label: 'Properties' },
@@ -706,6 +707,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'analysis', label: 'Analysis' },
   { id: 'modal', label: 'Modal' },
   { id: 'pushover', label: 'Pushover' },
+  { id: 'nonlinear', label: 'Nonlinear' },
   { id: 'design', label: 'Design' },
   { id: 'plans', label: 'Plans' },
 ]
@@ -992,6 +994,16 @@ export default function ModelSpace() {
   const [thFreq, setThFreq] = useState(2)        // Hz
   const [thDur, setThDur] = useState(10)         // s
   const [thZeta, setThZeta] = useState(5)        // %
+  // Nonlinear time-history (hysteretic shear-building reduction) inputs + result
+  const [nlDir, setNlDir] = useState<'x' | 'z'>('x')
+  const [nlKind, setNlKind] = useState<GroundMotionKind>('rampedSine')
+  const [nlPga, setNlPga] = useState(0.4)        // g
+  const [nlFreq, setNlFreq] = useState(2)        // Hz
+  const [nlDur, setNlDur] = useState(10)         // s
+  const [nlZeta, setNlZeta] = useState(5)        // %
+  const [nlB, setNlB] = useState(3)              // post-yield stiffness ratio, %
+  const [nlRho, setNlRho] = useState(1.5)        // assumed tension steel ratio, %
+  const [nl, setNl] = useState<{ inelastic: NonlinearModelResult | null; elastic: NonlinearModelResult | null } | null>(null)
   const [shellStress, setShellStress] = useState<{ nodes: ShellNode[]; elems: ShellElem[]; stresses: ElementStress[] } | null>(null)
   const [slabFE, setSlabFE] = useState<SlabFEScheduleRow[] | null>(null)
   const [recSpec, setRecSpec] = useState<{ spec: AccelSpectrum; design: DesignSpectrumPoint[]; name: string } | null>(null)
@@ -1148,6 +1160,16 @@ export default function ModelSpace() {
       opts: { dir: poDir === 'x' ? 0 : 2, pattern: poPattern, rho: poRho / 100, mpScale: poMpScale, pmInteraction: poPM, pDelta: poPDelta },
     }).then((r) => setPo((r as { pushover: PushoverModelResult | null }).pushover))
       .catch((e) => console.error('pushover failed', e))
+  }
+
+  const runNonlinear = () => {
+    if (!model || busy || meshErrors) return
+    run('nonlinearTH', {
+      model,
+      spec: { kind: nlKind, dt: 0.01, duration: nlDur, pga: nlPga * GRAVITY, freq: nlFreq, dir: nlDir === 'x' ? 0 : 2 },
+      opts: { dir: nlDir, zeta: nlZeta / 100, b: nlB / 100, rho: nlRho / 100 },
+    }).then((r) => setNl((r as { nonlinear: { inelastic: NonlinearModelResult | null; elastic: NonlinearModelResult | null } }).nonlinear))
+      .catch((e) => console.error('nonlinear time-history failed', e))
   }
 
   const runTimeHistory = () => {
@@ -3720,6 +3742,115 @@ export default function ModelSpace() {
                   <p className="text-sm text-slate-600">
                     No yield events — the model has no hingeable members or no lateral mass to push.
                     Assign sections and ensure the frame carries self-weight.
+                  </p>
+                </Sec>
+              )}
+            </div>
+          )}
+
+          {tab === 'nonlinear' && (
+            <div className="divide-y divide-[#eeece5] px-4 py-1">
+              <Sec title="Nonlinear time-history (hysteretic, Newmark + Newton-Raphson)">
+                <Pick label="Direction" value={nlDir} onChange={setNlDir} options={[['x', '+X'], ['z', '+Z']]} />
+                <Pick label="Ground motion" value={nlKind} onChange={setNlKind}
+                  options={[['rampedSine', 'Ramped sine'], ['harmonic', 'Harmonic'], ['pulse', 'Pulse']]} />
+                <Num label="Peak ground accel" unit="g" value={nlPga} onChange={setNlPga} step="0.05" />
+                <Num label="Frequency" unit="Hz" value={nlFreq} onChange={setNlFreq} step="0.5" />
+                <Num label="Duration" unit="s" value={nlDur} onChange={setNlDur} step="1" />
+                <Num label="Damping ζ" unit="%" value={nlZeta} onChange={setNlZeta} step="0.5" />
+                <Num label="Post-yield ratio b" unit="%" value={nlB} onChange={setNlB} step="0.5"
+                  hint="storey spring hardening (0 = elastic-perfectly-plastic)" />
+                <Num label="Concrete ρ (tension)" unit="%" value={nlRho} onChange={setNlRho} step="0.1"
+                  hint="assumed steel ratio for Mp (concrete only)" />
+                <p className="col-span-full text-[11px] text-slate-500">
+                  The frame is reduced to an equivalent nonlinear <strong>shear building</strong>: one bilinear
+                  hysteretic spring per storey — mass from the seismic mass, stiffness k₀ = V/Δ from a static
+                  lateral probe, capacity Fy = Σ2·Mp/h. Newmark-β with Newton-Raphson iteration each step;
+                  Rayleigh damping on the initial stiffness. An elastic reference run is solved alongside so the
+                  inelastic force reduction is visible.
+                </p>
+                <p className="col-span-full rounded-md bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
+                  <strong>Assumes a shear-type (strong-beam / weak-column) mechanism.</strong> A frame that hinges
+                  in its beams has a lower real capacity than Σ2·Mp/h, so Fy would be unconservative — confirm the
+                  governing mechanism with the Pushover tab first. One direction at a time; torsion ignored.
+                </p>
+                <div className="col-span-full">
+                  <button type="button" onClick={runNonlinear} disabled={!model || !!busy || meshErrors} className={btn}>
+                    {busy === 'nonlinearTH' ? '⏳ Integrating…' : '⚡ Run nonlinear time-history'}
+                  </button>
+                  {meshErrors && <p className="mt-1 text-[11px] font-medium text-red-600">Resolve the mesh errors in the Analysis tab to enable this run.</p>}
+                </div>
+                {busy === 'nonlinearTH' && <SolverProgress p={progress} />}
+              </Sec>
+
+              {model && <ValidationPanel issues={meshIssues} />}
+
+              {nl?.inelastic && (() => {
+                const ie = nl.inelastic!, el = nl.elastic
+                const R = el && ie.response.peakBaseForce > 0
+                  ? el.response.peakBaseForce / ie.response.peakBaseForce : null
+                return (
+                  <>
+                    <Sec grid={false} title="Response summary">
+                      <Row label="Reduced period T₁" value={`${f2(ie.period)} s`}
+                        sub={`Rayleigh α ${ie.rayleigh.alpha.toFixed(3)} · β ${ie.rayleigh.beta.toFixed(5)}`} />
+                      <Row label="Yielded" value={ie.response.yielded ? 'yes — inelastic' : 'no — stayed elastic'}
+                        alert={!ie.response.converged} />
+                      <Row label="Peak base force" value={`${f1(ie.response.peakBaseForce)} kN`}
+                        sub={el ? `elastic demand ${f1(el.response.peakBaseForce)} kN` : undefined} />
+                      {R != null && R > 1.01 && (
+                        <Row label="Force reduction (elastic / inelastic)" value={`${f2(R)}×`}
+                          sub="ductility-derived demand reduction, not a code R factor" />
+                      )}
+                      <Row label="Hysteretic energy dissipated" value={`${f1(ie.response.totalDissipated)} kN·m`} />
+                      <Row label="Newton convergence" value={ie.response.converged ? `✓ ≤ ${ie.response.maxIterations} iterations` : '✗ did not converge'}
+                        alert={!ie.response.converged} />
+                    </Sec>
+
+                    <Sec grid={false} title="Storey reduction & demand">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-right text-[12px]">
+                          <thead className="text-slate-500">
+                            <tr className="border-b border-slate-200">
+                              <th className="py-1 pr-2 text-left">Storey</th><th className="py-1 pr-2">EL (m)</th>
+                              <th className="py-1 pr-2">m (t)</th><th className="py-1 pr-2">k₀ (kN/m)</th>
+                              <th className="py-1 pr-2">Fy (kN)</th><th className="py-1 pr-2">Δpeak (mm)</th>
+                              <th className="py-1 pr-2">μ</th><th className="py-1 pr-2">E (kN·m)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="font-mono">
+                            {ie.storeys.map((s, i) => {
+                              const mu = ie.response.ductility[i] ?? 0
+                              return (
+                                <tr key={s.storey} className={`border-b border-slate-100 ${mu > 1 ? 'bg-amber-50' : ''}`}>
+                                  <td className="py-0.5 pr-2 text-left">{s.storey}</td>
+                                  <td className="py-0.5 pr-2">{f2(s.elevation)}</td>
+                                  <td className="py-0.5 pr-2">{f1(s.mass)}</td>
+                                  <td className="py-0.5 pr-2">{f0(s.k0)}</td>
+                                  <td className="py-0.5 pr-2">{f0(s.Fy)}</td>
+                                  <td className="py-0.5 pr-2">{f1((ie.response.peak[i] ?? 0) * 1000)}</td>
+                                  <td className="py-0.5 pr-2">{f2(mu)}</td>
+                                  <td className="py-0.5 pr-2">{f1(ie.response.dissipated[i] ?? 0)}</td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <p className="mt-2 text-[10px] text-slate-500">
+                        μ = peak storey drift / yield drift (μ &gt; 1 ⇒ that storey yielded, highlighted).
+                        Δpeak is the spring deformation, i.e. the interstorey drift. E is the energy that storey
+                        dissipated hysteretically.
+                      </p>
+                    </Sec>
+                  </>
+                )
+              })()}
+              {nl && !nl.inelastic && (
+                <Sec grid={false} title="Nonlinear time-history">
+                  <p className="text-sm text-slate-600">
+                    The frame could not be reduced — every storey needs a positive mass, a finite lateral
+                    stiffness and at least one column carrying a plastic moment.
                   </p>
                 </Sec>
               )}
