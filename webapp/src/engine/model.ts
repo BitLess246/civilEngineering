@@ -96,6 +96,12 @@ export interface Member {
    *  right-hand rule. Absent ⇒ 0 for beams; VERTICAL members default to 90° so
    *  the depth lands on global X — the drawn orientation. */
   axisRotation?: number
+  /** Axial participation limit — cross-braces that buckle out under compression
+   *  ('tension-only'), or contact/bearing struts that cannot pull ('compression-only').
+   *  Resolved by the active-set iteration in `axialOnly.ts`, which makes the
+   *  analysis NONLINEAR: results may not be superposed across load combinations.
+   *  Absent ⇒ 'both' (an ordinary two-way member). */
+  axialMode?: 'both' | 'tension-only' | 'compression-only'
 }
 
 export type PlateRole = 'slab' | 'wall'

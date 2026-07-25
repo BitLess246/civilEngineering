@@ -184,6 +184,38 @@ export function validateMesh(model: StructuralModel): MeshIssue[] {
     if (!(sec.ps.e > 0) || sec.ps.e > sec.h / 2 - 40)
       issues.push({ severity: 'error', code: 'PS_ECC', message: `section ${sec.id}: tendon eccentricity must satisfy 0 < e ≤ h/2 − 40 mm`, refs: [sec.id] })
   }
+
+  // ── tension-only / compression-only members (axialOnly active set) ──
+  const limited = model.members.filter((m) => m.axialMode && m.axialMode !== 'both')
+  for (const m of limited) {
+    // releasing the axial DOF makes the axial mode meaningless — the member
+    // could never carry the force the mode is meant to limit.
+    if (m.releases?.iEnd?.Fx || m.releases?.jEnd?.Fx)
+      issues.push({
+        severity: 'error', code: 'AXIAL_MODE_RELEASED', refs: [m.id],
+        message: `member ${m.id}: ${m.axialMode} cannot be combined with an axial (ux) release — the member would carry no axial force at all`,
+      })
+  }
+  if (limited.length) {
+    // a node held only by limited members can float free once they deactivate
+    const supported = new Set(model.supports.map((s) => s.node))
+    const byNode = new Map<string, { total: number; limited: number }>()
+    for (const m of model.members) {
+      const lim = m.axialMode && m.axialMode !== 'both' ? 1 : 0
+      for (const id of [m.i, m.j]) {
+        const e = byNode.get(id) ?? { total: 0, limited: 0 }
+        e.total++; e.limited += lim
+        byNode.set(id, e)
+      }
+    }
+    for (const [id, e] of byNode) {
+      if (e.total > 0 && e.total === e.limited && !supported.has(id))
+        issues.push({
+          severity: 'warning', code: 'AXIAL_MODE_ISOLATED', refs: [id],
+          message: `node ${id} is connected only by tension/compression-only members — it becomes unrestrained if they all deactivate, which can make the solve singular`,
+        })
+    }
+  }
   return issues
 }
 
