@@ -710,9 +710,20 @@ _Analysis completeness (P3):_
   Newton-Raphson equilibrium iteration on a hysteretic spring network;
   initial-stiffness Rayleigh damping; LU refactored only when the yield pattern
   changes; returns {converged, maxIterations, worstResidual} per the L5 rule).
-  Reduces EXACTLY to `newmarkDirect` when nothing yields (1e-9). **Next: wire it
-  to the 3D frame** — storey springs / member-end hinge states from the model, so
-  it runs off a `StructuralModel` rather than a hand-built spring network.
+  Reduces EXACTLY to `newmarkDirect` when nothing yields (1e-9).
+  **Wired to the 3D frame** (#434): `engine/nonlinearModel.ts` reduces a
+  `StructuralModel` to the equivalent nonlinear SHEAR BUILDING — per storey,
+  mass from `buildSeismicMass`, secant stiffness `k₀ = V/Δ` from a unit-per-level
+  static probe (the same definition the NSCP soft-storey check uses, so the two
+  agree by construction), and shear-type capacity `Fy = Σ 2·Mp/h` via
+  `plasticMoment`. `runNonlinearModel(model, gm)` returns the reduction, its
+  period and the response. Validated: the reduced period matches the FULL 3D
+  modal T₁ within 10% (0.937–0.973) for 1–3 storeys. **Assumptions to state with
+  any result**: shear-type (strong-beam/weak-column) mechanism — a beam-hinging
+  frame has LOWER real capacity, so check the governing mechanism with the
+  pushover engine first; one direction at a time; torsion ignored.
+  **Next**: a Model-Space UI tab for it, and distributed member-end hinge states
+  (fibre/concentrated) instead of the storey-spring reduction.
 - **Tension-only / compression-only members** (braces, uplift springs) and a
   **consistent-mass** option beside lumped — neither exists anywhere.
 - ~~**Irregularity auto-flags** — NSCP Table 208-9/10 (torsional, soft-storey,
