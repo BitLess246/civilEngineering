@@ -15,6 +15,7 @@ import { beamFlexure, beamShear, deriveWSection } from './steelDesign'
 import { shapeByName } from './aiscSections'
 import { designAxialColumn } from './columnDesign'
 import { activeThrust, rankineKa, bearingFactors, infiniteSlopeFS } from './geotech'
+import { felleniusFS, type Slice } from './slopeStability'
 import { computeSeismic } from './seismic'
 import { torsionalVerdict } from './irregularity'
 import { jacobiEigen } from './modal'
@@ -139,6 +140,20 @@ const slopeFS = (() => {
   const phiDeg = 32, betaDeg = 18
   const tan = (d: number) => Math.tan((d * Math.PI) / 180)
   return { manual: tan(phiDeg) / tan(betaDeg), software: infiniteSlopeFS({ c: 0, phiDeg, gamma: 18, z: 3, betaDeg }) }
+})()
+
+// ── 11. Method of slices — Fellenius FS vs a 3-slice hand calc ───────────────
+// c = 10 kPa, φ = 20°; slices b = 2 m at α = −10°/15°/35°, W = 100/150/120 kN/m.
+// driving Σ W·sinα = 90.28717 ; resisting Σ c·l + Σ W·cosα·tanφ = 189.7893
+//   FS = 189.7893 / 90.28717 = 2.10205
+const slopeSlices = (() => {
+  const rr = (d: number) => (d * Math.PI) / 180
+  const mk = (aDeg: number, W: number): Slice => {
+    const alpha = rr(aDeg), b = 2
+    return { x: 0, b, h: 1, alpha, W, u: 0, l: b / Math.cos(alpha) }
+  }
+  const sl = [mk(-10, 100), mk(15, 150), mk(35, 120)]
+  return { manual: 2.10205, software: felleniusFS(sl, { c: 10, phiDeg: 20, gamma: 18 }).FS }
 })()
 
 // ── Dynamics — eigen-solver & response spectrum ──────────────────────────────
@@ -344,6 +359,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'slope-fs', category: 'Geotech', title: 'Infinite-slope FS (cohesionless, dry)',
     reference: 'Soil mechanics', formula: 'FS = tanφ / tanβ',
     manual: slopeFS.manual, software: slopeFS.software, unit: '—', tol: 1e-9,
+  },
+  {
+    id: 'slope-slices-fellenius', category: 'Geotech', title: 'Method of slices — Fellenius FS',
+    reference: 'Fellenius / OMS', formula: 'FS = Σ[c·l + (W·cosα − u·l)·tanφ] / Σ[W·sinα]',
+    manual: slopeSlices.manual, software: slopeSlices.software, unit: '—', tol: 1e-3,
   },
   {
     id: 'seismic-period', category: 'Seismic', title: 'NSCP 208 fundamental period (Method A)',
