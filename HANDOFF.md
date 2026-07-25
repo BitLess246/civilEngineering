@@ -702,6 +702,17 @@ _Analysis completeness (P3):_
   modally diagonalizable — the prerequisite for **nonlinear TH**. Validated by
   reproducing mode-by-mode superposition to 1e-9 on a 2-DOF shear building.
   Diaphragm constraints are not applied on this path (same as `modal.ts`).
+- **Nonlinear time-history** — ✔ engine shipped (#433), built on #432:
+  `engine/hysteresis.ts` (bilinear kinematic hardening: yields at Fy, post-yield
+  slope b·k₀, **elastic unloading at k₀** and reverse yielding — what the
+  event-to-event pushover hinge structurally cannot do, since a released DOF can
+  never re-stiffen) + `engine/nonlinearTimeHistory.ts` (Newmark-β with
+  Newton-Raphson equilibrium iteration on a hysteretic spring network;
+  initial-stiffness Rayleigh damping; LU refactored only when the yield pattern
+  changes; returns {converged, maxIterations, worstResidual} per the L5 rule).
+  Reduces EXACTLY to `newmarkDirect` when nothing yields (1e-9). **Next: wire it
+  to the 3D frame** — storey springs / member-end hinge states from the model, so
+  it runs off a `StructuralModel` rather than a hand-built spring network.
 - **Tension-only / compression-only members** (braces, uplift springs) and a
   **consistent-mass** option beside lumped — neither exists anywhere.
 - ~~**Irregularity auto-flags** — NSCP Table 208-9/10 (torsional, soft-storey,
