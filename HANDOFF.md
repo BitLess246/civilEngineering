@@ -709,15 +709,16 @@ _Analysis completeness (P3):_
   208-10 Types 2–5.
 
 _Geotech / foundations (P4):_
-- **Slope stability by method of slices** (Bishop / Janbu) — engine ✔ shipped
-  (#430, Phase 1): `engine/slopeStability.ts` — vertical-slice discretisation of
-  a circular surface + Fellenius/OMS, Bishop's simplified (iterative mα), and
-  Janbu's simplified (f0 correction), with a grid search for the critical
-  (min-Bishop-FS) circle; ru / piezometric-line pore pressure; orientation-
-  agnostic driving. Tests vs a 3-slice hand calc + Bishop ≥ Fellenius +
-  monotonic steeper→lower; `validation.ts` `slope-slices-fellenius`. **Phase 2
-  (TODO): the `/slope` page** (geometry input, worked solution, slip-circle
-  drawing, PDF).
+- ~~**Slope stability by method of slices** (Bishop / Janbu)~~ — ✔ shipped
+  (#430 engine, #431 page): `engine/slopeStability.ts` — vertical-slice
+  discretisation of a circular surface + Fellenius/OMS, Bishop's simplified
+  (iterative mα), and Janbu's simplified (f0 correction), with a grid search for
+  the critical (min-Bishop-FS) circle; ru / piezometric-line pore pressure;
+  orientation-agnostic driving. **`/slope` page** (`pages/SlopeStability.tsx`):
+  slope-geometry + soil + ru inputs, the three-method FS on the critical circle,
+  a vector slope + slip-circle + slices drawing, a slice table, and the print
+  report. Tests vs a 3-slice hand calc + Bishop ≥ Fellenius + monotonic
+  steeper→lower; `validation.ts` `slope-slices-fellenius`.
 - **Settlement** (immediate + consolidation) and **laterally loaded piles**
   (Broms / p-y) — absent.
 - **Offset framing / beam-on-girder-flange bearing** (seat detail, AISC §J10) —
