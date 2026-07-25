@@ -17,6 +17,7 @@ import { designAxialColumn } from './columnDesign'
 import { activeThrust, rankineKa, bearingFactors, infiniteSlopeFS } from './geotech'
 import { felleniusFS, type Slice } from './slopeStability'
 import { newmarkDirect } from './directTimeHistory'
+import { bilinearPath, bilinearCycleEnergy } from './hysteresis'
 import { computeSeismic } from './seismic'
 import { torsionalVerdict } from './irregularity'
 import { jacobiEigen } from './modal'
@@ -170,6 +171,24 @@ const directDecay = (() => {
     manual: Math.exp((-2 * Math.PI * zeta) / Math.sqrt(1 - zeta * zeta)),
     software: r ? r.u[idx][0] : NaN,
   }
+})()
+
+// ── 13. Hysteretic loop energy — 4·Fy·(A − u_y) per steady-state cycle ───────
+// Elastic-perfectly-plastic spring, k₀ = 100, Fy = 10 (u_y = 0.1), cycled to
+// A = 0.4. The measured loop area is taken as (energy after one full cycle)
+// minus (energy of the virgin half-excursion), matching the closed form's
+// steady-state definition.
+const hystLoop = (() => {
+  const p = { k0: 100, Fy: 10 }
+  const A = 0.4
+  const seg = (pts: number[], from: number, to: number) => {
+    for (let i = 1; i <= 400; i++) pts.push(from + ((to - from) * i) / 400)
+  }
+  const first: number[] = []; seg(first, 0, A)
+  const cyc = [...first]; seg(cyc, A, -A); seg(cyc, -A, A)
+  const e1 = bilinearPath(first, p).state.dissipated
+  const e2 = bilinearPath(cyc, p).state.dissipated
+  return { manual: bilinearCycleEnergy(A, p), software: e2 - e1 }
 })()
 
 // ── Dynamics — eigen-solver & response spectrum ──────────────────────────────
@@ -395,6 +414,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'torsional-irregularity', category: 'Seismic', title: 'Torsional irregularity ratio',
     reference: 'NSCP Table 208-10 §1', formula: 'δmax/δavg, δavg = (δmax+δmin)/2  →  13/10',
     manual: 1.3, software: torsionalVerdict(13, 7).ratio, unit: '—', tol: 1e-9,
+  },
+  {
+    id: 'hysteretic-loop-energy', category: 'Dynamics', title: 'Hysteretic loop energy per cycle',
+    reference: 'Chopra, Dynamics of Structures §7', formula: 'E = 4·Fy·(A − u_y)',
+    manual: hystLoop.manual, software: hystLoop.software, unit: 'kN·m', tol: 1e-6,
   },
   {
     id: 'direct-th-decay', category: 'Dynamics', title: 'Direct-integration free-vibration decay',
