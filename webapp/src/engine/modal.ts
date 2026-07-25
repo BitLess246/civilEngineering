@@ -120,7 +120,8 @@ export function buildSeismicMass(model: StructuralModel): Map<string, number> {
 
 /**
  * Eigen-decomposition of a symmetric n×n matrix by cyclic Jacobi rotations.
- * Returns eigenvalues and eigenvectors (vectors[k] is the k-th column / mode).
+ * Returns eigenvalues and eigenvectors, where `vectors[k]` is the k-th mode as
+ * a ROW (i.e. `vectors[k][c]` is component c of mode k), paired with `values[k]`.
  */
 export function jacobiEigen(Ain: number[][], maxSweeps = 100): { values: number[]; vectors: number[][] } {
   const n = Ain.length

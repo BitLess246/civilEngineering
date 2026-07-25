@@ -16,6 +16,7 @@ import { shapeByName } from './aiscSections'
 import { designAxialColumn } from './columnDesign'
 import { activeThrust, rankineKa, bearingFactors, infiniteSlopeFS } from './geotech'
 import { felleniusFS, type Slice } from './slopeStability'
+import { newmarkDirect } from './directTimeHistory'
 import { computeSeismic } from './seismic'
 import { torsionalVerdict } from './irregularity'
 import { jacobiEigen } from './modal'
@@ -154,6 +155,21 @@ const slopeSlices = (() => {
   }
   const sl = [mk(-10, 100), mk(15, 150), mk(35, 120)]
   return { manual: 2.10205, software: felleniusFS(sl, { c: 10, phiDeg: 20, gamma: 18 }).FS }
+})()
+
+// ── 12. Direct-integration MDOF — free-vibration logarithmic decrement ───────
+// A damped oscillator released from u₀ = 1 returns, one damped period later, to
+// u/u₀ = exp(−2πζ/√(1−ζ²)). Integrated here through the FULL MDOF Newmark path
+// (1×1 system) with Rayleigh mass-proportional damping α = 2ζω.
+const directDecay = (() => {
+  const omega = 3.0, zeta = 0.05, dt = 0.001
+  const idx = Math.round((2 * Math.PI) / omega / dt)
+  const zeros = Array.from({ length: idx + 5 }, () => [0])
+  const r = newmarkDirect([[1]], [[2 * zeta * omega]], [[omega * omega]], zeros, dt, { u0: [1] })
+  return {
+    manual: Math.exp((-2 * Math.PI * zeta) / Math.sqrt(1 - zeta * zeta)),
+    software: r ? r.u[idx][0] : NaN,
+  }
 })()
 
 // ── Dynamics — eigen-solver & response spectrum ──────────────────────────────
@@ -379,6 +395,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'torsional-irregularity', category: 'Seismic', title: 'Torsional irregularity ratio',
     reference: 'NSCP Table 208-10 §1', formula: 'δmax/δavg, δavg = (δmax+δmin)/2  →  13/10',
     manual: 1.3, software: torsionalVerdict(13, 7).ratio, unit: '—', tol: 1e-9,
+  },
+  {
+    id: 'direct-th-decay', category: 'Dynamics', title: 'Direct-integration free-vibration decay',
+    reference: 'Chopra, Dynamics of Structures', formula: 'u(T)/u₀ = exp(−2πζ/√(1−ζ²))',
+    manual: directDecay.manual, software: directDecay.software, unit: '—', tol: 1e-3,
   },
   {
     id: 'eigen-jacobi', category: 'Dynamics', title: 'Jacobi eigenvalue of [[2,1],[1,2]]',
