@@ -41,7 +41,8 @@ function groundOf(H: number, betaDeg: number, crestW: number, toeW: number): Pt[
 function SlopeSvg({ ground, res, water }: { ground: Pt[]; res: CircleResult | null; water?: Pt[] }) {
   const W = 640, Hpx = 320, pad = 30
   const xs = ground.map((p) => p.x), ys = ground.map((p) => p.y)
-  let minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys)
+  const minX = Math.min(...xs), maxX = Math.max(...xs)
+  let minY = Math.min(...ys), maxY = Math.max(...ys)
   if (res) { minY = Math.min(minY, res.circle.yc - res.circle.R); maxY = Math.max(maxY, res.circle.yc) }
   const sx = (W - 2 * pad) / Math.max(1e-6, maxX - minX)
   const sy = (Hpx - 2 * pad) / Math.max(1e-6, maxY - minY)
@@ -50,7 +51,8 @@ function SlopeSvg({ ground, res, water }: { ground: Pt[]; res: CircleResult | nu
   const Y = (y: number) => Hpx - pad - (y - minY) * s
 
   const groundPath = ground.map((p, i) => `${i ? 'L' : 'M'}${X(p.x).toFixed(1)},${Y(p.y).toFixed(1)}`).join(' ')
-  let arcPath = '', slicePts: string[] = [], massPath = '', center = null as null | { cx: number; cy: number }
+  const slicePts: string[] = []
+  let arcPath = '', massPath = '', center = null as null | { cx: number; cy: number }
   if (res) {
     const sl = res.slices, { xc, yc, R } = res.circle
     const yArc = (x: number) => yc - Math.sqrt(Math.max(0, R * R - (x - xc) ** 2))

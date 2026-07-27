@@ -140,7 +140,7 @@ export function nonlinearTimeHistory(inp: NonlinearTHInput): NonlinearTHResult |
   })
 
   let states: BilinearState[] = inp.springs.map(() => newBilinearState())
-  let u = new Array(n).fill(0), v = new Array(n).fill(0)
+  const u = new Array(n).fill(0), v = new Array(n).fill(0)
   let uPrev = new Array(n).fill(0)
 
   /** Internal force vector and tangent at a trial u, given the committed states. */

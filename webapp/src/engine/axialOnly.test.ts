@@ -85,6 +85,29 @@ describe('axialOnly — active-set solve', () => {
     expect(axialOf(r.result, kept)).toBeLessThan(0)   // the survivor is in compression
   })
 
+  it('equilibrium still holds after members deactivate (ΣR = ΣF)', () => {
+    // the invariant that matters most: dropping a member must not leave
+    // unbalanced force. Checked in both load directions and at two magnitudes.
+    for (const P of [50, -50, 120]) {
+      const r = solveActiveSet(nodes, members, supports, push(P), tensionOnly)!
+      const R = r.result.reactions.reduce(
+        (acc, q) => [acc[0] + q.F[0], acc[1] + q.F[1], acc[2] + q.F[2]], [0, 0, 0])
+      expect(r.inactive).toHaveLength(1)          // a member really did drop out
+      expect(R[0]).toBeCloseTo(-P, 9)             // reactions balance the push
+      expect(R[1]).toBeCloseTo(0, 9)
+      expect(R[2]).toBeCloseTo(0, 9)
+    }
+  })
+
+  it('response scales linearly while the active set is unchanged', () => {
+    // within one active set the problem is linear again — a useful guard that
+    // the iteration is not injecting spurious state between solves
+    const a = solveActiveSet(nodes, members, supports, push(50), tensionOnly)!
+    const b = solveActiveSet(nodes, members, supports, push(120), tensionOnly)!
+    expect(b.inactive).toEqual(a.inactive)
+    expect(axialOf(b.result, 'd14') / axialOf(a.result, 'd14')).toBeCloseTo(120 / 50, 9)
+  })
+
   it('converges in a handful of iterations', () => {
     const r = solveActiveSet(nodes, members, supports, push(50), tensionOnly)!
     expect(r.iterations).toBeGreaterThan(0)
