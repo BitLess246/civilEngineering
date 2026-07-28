@@ -765,16 +765,28 @@ _Analysis completeness (P3):_
   hinges ordered by plastic rotation. When nothing yields it says so explicitly
   rather than showing a blank panel — an elastic outcome is a result.
   **Still open**: 3D/biaxial hinges; true arc-length (Riks) control for
-  snap-BACK, where even displacement control at a single DOF fails; and the
-  `axialMode` UI + per-combo active-set routing.
-- **Load combinations with nonlinear members (DECIDED)**: tension/compression-only
-  members break superposition, and the owner's decision is **per-combo active
-  set** — solve every NSCP combo independently with its own active-set iteration
-  and envelope the results, accepting the loss of the shared-LU fast path for
-  models that contain limited members. Not yet implemented; this is the spec for
-  when `axialMode` is routed into the design pipeline.
-- **Tension-only / compression-only members** (braces, uplift springs) and a
-  **consistent-mass** option beside lumped — neither exists anywhere.
+  snap-BACK, where even displacement control at a single DOF fails.
+- ~~**Load combinations with nonlinear members**~~ — ✔ shipped (#444), to the
+  owner's **per-combo active set** decision. `analyzeActiveSet` in `axialOnly.ts`
+  runs every NSCP combination on its OWN active-set iteration and reports
+  `{ inactive, iterations, converged }` per combo alongside the usual
+  `F3Analysis`; `solveActiveSet` gained diaphragm support so the condensed model
+  is solved identically. `solverWorker` routes the analyze request (and the
+  E-case drift solve) through it whenever any member carries an `axialMode`, and
+  through the ordinary shared-LU `analyzeFrame3D` when none does — so models
+  without limited members pay nothing. Superposition is deliberately given up,
+  never patched: results are never scaled or summed across combos.
+  **UI**: the member editor has an **Axial mode** selector (both / tension-only /
+  compression-only); the Analysis tab shows a *Tension / compression-only
+  members* panel (limited-member counts, the governing combo's off-list,
+  convergence, and a per-combination table of which members switched off); the
+  selected member reports whether it is active in the governing combo; and
+  members off in the governing combo are overlaid with a dashed red sleeve in
+  the viewport (`dashPattern.ts` — the dash geometry is a pure tested module, so
+  it is verified without depending on a WebGL screenshot).
+  Note that an inactive member is genuinely absent from that combo's solve, so
+  it does not appear in that combo's member-force table — by design.
+- **Consistent-mass option** beside lumped — does not exist anywhere.
 - ~~**Irregularity auto-flags** — NSCP Table 208-9/10 (torsional, soft-storey,
   mass)~~ — ✔ shipped (#427 engine, #428 wiring/UI, #429 report/validation):
   `engine/irregularity.ts` flags P1 torsional (208-10 §1a/1b), V1 soft-storey,

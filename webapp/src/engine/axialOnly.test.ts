@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { solveActiveSet, axialModes, type AxialMode } from './axialOnly'
-import { solveFrame3D, rectJ, type F3Node, type F3Member, type F3Support, type F3Load } from './frame3d'
+import { solveActiveSet, analyzeActiveSet, axialModes, type AxialMode } from './axialOnly'
+import { solveFrame3D, analyzeFrame3D, rectJ, type F3Node, type F3Member, type F3Support, type F3Load } from './frame3d'
 import { validateMesh } from './meshValidation'
 import { emptyModel, type Member } from './model'
 
@@ -112,6 +112,85 @@ describe('axialOnly — active-set solve', () => {
     const r = solveActiveSet(nodes, members, supports, push(50), tensionOnly)!
     expect(r.iterations).toBeGreaterThan(0)
     expect(r.iterations).toBeLessThanOrEqual(5)
+  })
+})
+
+describe('axialOnly — per-combo active set (analyzeActiveSet)', () => {
+  const tensionOnly = new Map<string, AxialMode>([['d14', 'tension-only'], ['d23', 'tension-only']])
+  // gravity at both top nodes + a lateral push: the combos then differ in the
+  // D:E ratio, which is exactly what changes the active set combo-to-combo
+  const mixed: F3Load[] = [
+    { kind: 'node', node: 'n3', Fy: -40, cat: 'D' },
+    { kind: 'node', node: 'n4', Fy: -40, cat: 'D' },
+    { kind: 'node', node: 'n3', Fx: 60, cat: 'E' },
+  ]
+
+  it('with no limited members it reproduces analyzeFrame3D combo for combo', () => {
+    const a = analyzeActiveSet(nodes, members, supports, mixed, new Map())!
+    const b = analyzeFrame3D(nodes, members, supports, mixed)!
+    expect(a.govIdx).toBe(b.govIdx)
+    expect(a.perCombo).toHaveLength(b.perCombo.length)
+    a.perCombo.forEach((c, i) => {
+      expect(c.combo.name).toBe(b.perCombo[i].combo.name)
+      expect(c.result?.Mmax ?? null).toBeCloseTo(b.perCombo[i].result?.Mmax ?? 0, 9)
+    })
+    // the no-op path still reports a converged, empty active set per combo
+    expect(a.axial.every((x) => x === null || (x.converged && x.inactive.length === 0))).toBe(true)
+  })
+
+  it('reports one active set per combination, parallel to perCombo', () => {
+    const a = analyzeActiveSet(nodes, members, supports, mixed, tensionOnly)!
+    expect(a.axial).toHaveLength(a.perCombo.length)
+    a.perCombo.forEach((c, i) => {
+      if (c.skipped) expect(a.axial[i]).toBeNull()
+      else { expect(a.axial[i]).not.toBeNull(); expect(a.axial[i]!.converged).toBe(true) }
+    })
+  })
+
+  it('the active set differs between the gravity combo and the seismic combos', () => {
+    const a = analyzeActiveSet(nodes, members, supports, mixed, tensionOnly)!
+    const of = (name: string) => a.axial[a.perCombo.findIndex((c) => c.combo.name === name)]!
+    // 1.4D has no lateral term. Downward load at the top nodes SHORTENS both
+    // diagonals (they are part of the gravity path down to the far base), so a
+    // tension-only brace carries nothing and both switch off.
+    expect(of('1.4D').inactive).toEqual(['d14', 'd23'])
+    // the seismic combos push sideways: one diagonal is stretched and comes
+    // back in, the other stays out
+    expect(of('0.9D + 1.0E').inactive).toHaveLength(1)
+  })
+
+  it('each combo is solved on its own set — the sets genuinely differ', () => {
+    const a = analyzeActiveSet(nodes, members, supports, mixed, tensionOnly)!
+    const sets = new Set(a.axial.filter(Boolean).map((x) => x!.inactive.join('|')))
+    expect(sets.size).toBeGreaterThan(1)      // a single shared active set would give 1
+  })
+
+  it('superposition is broken — this is why one shared factorization is invalid', () => {
+    // solve the SAME factored load two ways: (a) as one active-set problem, and
+    // (b) by summing the D-only and E-only active-set solutions. They disagree,
+    // because the two parts settle on different active sets.
+    const D: F3Load[] = mixed.filter((l) => l.cat === 'D').map((l) => ({ ...l, Fy: (l as { Fy: number }).Fy * 0.9 }))
+    const E: F3Load[] = mixed.filter((l) => l.cat === 'E')
+    const both = solveActiveSet(nodes, members, supports, [...D, ...E], tensionOnly)!
+    const dOnly = solveActiveSet(nodes, members, supports, D, tensionOnly)!
+    const eOnly = solveActiveSet(nodes, members, supports, E, tensionOnly)!
+    expect(dOnly.inactive).toEqual(['d14', 'd23'])           // gravity drops both
+    expect(eOnly.inactive).toHaveLength(1)                   // the push keeps one
+    const sum = dOnly.result.d[6 * 2] + eOnly.result.d[6 * 2]
+    expect(Math.abs(both.result.d[6 * 2] - sum)).toBeGreaterThan(1e-9)
+  })
+
+  it('every combo satisfies equilibrium on its own active set', () => {
+    const a = analyzeActiveSet(nodes, members, supports, mixed, tensionOnly)!
+    a.perCombo.forEach((c, i) => {
+      if (!c.result) return
+      const applied = c.factored.reduce((acc, l) => l.kind === 'node'
+        ? [acc[0] + (l.Fx ?? 0), acc[1] + (l.Fy ?? 0), acc[2] + (l.Fz ?? 0)] : acc, [0, 0, 0])
+      const R = c.result.reactions.reduce(
+        (acc, q) => [acc[0] + q.F[0], acc[1] + q.F[1], acc[2] + q.F[2]], [0, 0, 0])
+      for (let k = 0; k < 3; k++) expect(R[k] + applied[k]).toBeCloseTo(0, 8)
+      expect(a.axial[i]!.converged).toBe(true)
+    })
   })
 })
 

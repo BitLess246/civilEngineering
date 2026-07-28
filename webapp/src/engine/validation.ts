@@ -25,6 +25,7 @@ import { jacobiEigen } from './modal'
 import { elasticResponseSpectrum } from './accelSpectrum'
 import { generateGridModel } from './modelBuilder'
 import { solveFrame3D, rectJ, type F3Node, type F3Member, type F3Support } from './frame3d'
+import { solveActiveSet, type AxialMode } from './axialOnly'
 import { solveBoltedConnection } from './boltedConnection'
 import { solveWeldedConnection } from './weldedConnection'
 import { boltGeomFromPositions, outOfPlaneBoltGroup, pryingAction } from './steelDesign'
@@ -190,6 +191,35 @@ const hystLoop = (() => {
   const e1 = bilinearPath(first, p).state.dissipated
   const e2 = bilinearPath(cyc, p).state.dissipated
   return { manual: bilinearCycleEnergy(A, p), software: e2 - e1 }
+})()
+
+// ── 13b. Tension-only cross-brace — active set ≡ removing the slack brace ────
+// The active-set iteration's entire claim is that a limited member which
+// violates its mode contributes nothing. The independent check is therefore a
+// SEPARATE model with that diagonal physically deleted: the two lateral drifts
+// must agree to solver precision. A cross-braced bay pushed +X: d14 is
+// stretched, d23 shortened, so a tension-only d23 must drop out.
+const braceActiveSet = (() => {
+  const E = 200000, G = 76900
+  const col = { A: 5000, Iy: 2e7, Iz: 2e7, J: rectJ(70, 70) }
+  const brc = { A: 1200, Iy: 1e5, Iz: 1e5, J: rectJ(30, 30) }
+  const nodes: F3Node[] = [
+    { id: 'n1', x: 0, y: 0, z: 0 }, { id: 'n2', x: 4, y: 0, z: 0 },
+    { id: 'n3', x: 0, y: 3, z: 0 }, { id: 'n4', x: 4, y: 3, z: 0 },
+  ]
+  const all: F3Member[] = [
+    { id: 'c13', i: 'n1', j: 'n3', E, G, ...col },
+    { id: 'c24', i: 'n2', j: 'n4', E, G, ...col },
+    { id: 'b34', i: 'n3', j: 'n4', E, G, ...col },
+    { id: 'd14', i: 'n1', j: 'n4', E, G, ...brc },
+    { id: 'd23', i: 'n2', j: 'n3', E, G, ...brc },
+  ]
+  const sup: F3Support[] = [{ node: 'n1', fixity: 'fixed' }, { node: 'n2', fixity: 'fixed' }]
+  const load = [{ kind: 'node' as const, node: 'n3', Fx: 50, cat: 'E' as const }]
+  const modes = new Map<string, AxialMode>([['d14', 'tension-only'], ['d23', 'tension-only']])
+  const act = solveActiveSet(nodes, all, sup, load, modes)
+  const cut = solveFrame3D(nodes, all.filter((m) => m.id !== (act?.inactive[0] ?? '')), sup, load)
+  return { manual: cut ? cut.d[6 * 2] * 1000 : NaN, software: act ? act.result.d[6 * 2] * 1000 : NaN }
 })()
 
 // ── 14. Plastic collapse of a fixed–fixed beam — 3-hinge mechanism ───────────
@@ -461,6 +491,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'direct-th-decay', category: 'Dynamics', title: 'Direct-integration free-vibration decay',
     reference: 'Chopra, Dynamics of Structures', formula: 'u(T)/u₀ = exp(−2πζ/√(1−ζ²))',
     manual: directDecay.manual, software: directDecay.software, unit: '—', tol: 1e-3,
+  },
+  {
+    id: 'brace-active-set', category: 'Analysis', title: 'Tension-only brace — active set vs slack brace removed',
+    reference: 'Equivalent-model check (no closed form)', formula: 'Δ(active set) = Δ(model without the slack diagonal)',
+    manual: braceActiveSet.manual, software: braceActiveSet.software, unit: 'mm', tol: 1e-9,
   },
   {
     id: 'eigen-jacobi', category: 'Dynamics', title: 'Jacobi eigenvalue of [[2,1],[1,2]]',
