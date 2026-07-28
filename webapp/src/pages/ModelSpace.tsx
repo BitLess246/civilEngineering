@@ -53,6 +53,7 @@ import { elasticResponseSpectrum, nscp208DesignCurve, type AccelSpectrum, type D
 import { parseAccelerogram } from '../engine/accelerogram'
 import type { TimeHistoryModelResult, GroundMotionKind, CsvAccelerogramOpts } from '../engine/timeHistoryModel'
 import type { NonlinearModelResult } from '../engine/nonlinearModel'
+import type { NonlinearFrameModelResult } from '../engine/nonlinearFrameModel'
 import { BeamSchematic } from '../components/BeamSchematic'
 import { TSection } from '../components/TSection'
 import { ColumnSchematic } from '../components/ColumnSchematic'
@@ -1004,6 +1005,8 @@ export default function ModelSpace() {
   const [nlB, setNlB] = useState(3)              // post-yield stiffness ratio, %
   const [nlRho, setNlRho] = useState(1.5)        // assumed tension steel ratio, %
   const [nl, setNl] = useState<{ inelastic: NonlinearModelResult | null; elastic: NonlinearModelResult | null } | null>(null)
+  const [nlKindModel, setNlKindModel] = useState<'shear' | 'hinges'>('hinges')
+  const [nlHinge, setNlHinge] = useState<{ inelastic: NonlinearFrameModelResult | null; elastic: NonlinearFrameModelResult | null } | null>(null)
   const [shellStress, setShellStress] = useState<{ nodes: ShellNode[]; elems: ShellElem[]; stresses: ElementStress[] } | null>(null)
   const [slabFE, setSlabFE] = useState<SlabFEScheduleRow[] | null>(null)
   const [recSpec, setRecSpec] = useState<{ spec: AccelSpectrum; design: DesignSpectrumPoint[]; name: string } | null>(null)
@@ -1164,12 +1167,19 @@ export default function ModelSpace() {
 
   const runNonlinear = () => {
     if (!model || busy || meshErrors) return
+    setNl(null); setNlHinge(null)
     run('nonlinearTH', {
-      model,
+      model, hingeModel: nlKindModel,
       spec: { kind: nlKind, dt: 0.01, duration: nlDur, pga: nlPga * GRAVITY, freq: nlFreq, dir: nlDir === 'x' ? 0 : 2 },
       opts: { dir: nlDir, zeta: nlZeta / 100, b: nlB / 100, rho: nlRho / 100 },
-    }).then((r) => setNl((r as { nonlinear: { inelastic: NonlinearModelResult | null; elastic: NonlinearModelResult | null } }).nonlinear))
-      .catch((e) => console.error('nonlinear time-history failed', e))
+    }).then((r) => {
+      const res = r as {
+        nonlinear?: { inelastic: NonlinearModelResult | null; elastic: NonlinearModelResult | null }
+        hinge?: { inelastic: NonlinearFrameModelResult | null; elastic: NonlinearFrameModelResult | null }
+      }
+      setNl(res.nonlinear ?? null)
+      setNlHinge(res.hinge ?? null)
+    }).catch((e) => console.error('nonlinear time-history failed', e))
   }
 
   const runTimeHistory = () => {
@@ -3751,6 +3761,8 @@ export default function ModelSpace() {
           {tab === 'nonlinear' && (
             <div className="divide-y divide-[#eeece5] px-4 py-1">
               <Sec title="Nonlinear time-history (hysteretic, Newmark + Newton-Raphson)">
+                <Pick label="Plasticity model" value={nlKindModel} onChange={setNlKindModel}
+                  options={[['hinges', 'Member-end plastic hinges'], ['shear', 'Shear building (storey springs)']]} />
                 <Pick label="Direction" value={nlDir} onChange={setNlDir} options={[['x', '+X'], ['z', '+Z']]} />
                 <Pick label="Ground motion" value={nlKind} onChange={setNlKind}
                   options={[['rampedSine', 'Ramped sine'], ['harmonic', 'Harmonic'], ['pulse', 'Pulse']]} />
@@ -3762,18 +3774,37 @@ export default function ModelSpace() {
                   hint="storey spring hardening (0 = elastic-perfectly-plastic)" />
                 <Num label="Concrete ρ (tension)" unit="%" value={nlRho} onChange={setNlRho} step="0.1"
                   hint="assumed steel ratio for Mp (concrete only)" />
-                <p className="col-span-full text-[11px] text-slate-500">
-                  The frame is reduced to an equivalent nonlinear <strong>shear building</strong>: one bilinear
-                  hysteretic spring per storey — mass from the seismic mass, stiffness k₀ = V/Δ from a static
-                  lateral probe, capacity Fy = Σ2·Mp/h. Newmark-β with Newton-Raphson iteration each step;
-                  Rayleigh damping on the initial stiffness. An elastic reference run is solved alongside so the
-                  inelastic force reduction is visible.
-                </p>
-                <p className="col-span-full rounded-md bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
-                  <strong>Assumes a shear-type (strong-beam / weak-column) mechanism.</strong> A frame that hinges
-                  in its beams has a lower real capacity than Σ2·Mp/h, so Fy would be unconservative — confirm the
-                  governing mechanism with the Pushover tab first. One direction at a time; torsion ignored.
-                </p>
+                {nlKindModel === 'hinges' ? (
+                  <>
+                    <p className="col-span-full text-[11px] text-slate-500">
+                      The 3D model is condensed to an <strong>equivalent plane frame</strong> (all frame lines
+                      parallel to the loading direction are combined), then integrated with a bilinear hysteretic
+                      plastic hinge at <strong>every member end</strong> — Newmark-β with Newton-Raphson each step.
+                      Hinge capacity is reduced by <strong>P–M interaction</strong>, so axial load lowers Mp.
+                      An elastic reference run is solved alongside.
+                    </p>
+                    <p className="col-span-full rounded-md bg-slate-50 px-2 py-1.5 text-[11px] text-slate-600">
+                      No shear-type assumption — a beam-hinging frame hinges in its beams, because every member end
+                      carries its own hinge. Plane-frame idealization: exact when the parallel frames are identical
+                      and deform together; one direction at a time, torsion ignored.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="col-span-full text-[11px] text-slate-500">
+                      The frame is reduced to an equivalent nonlinear <strong>shear building</strong>: one bilinear
+                      hysteretic spring per storey — mass from the seismic mass, stiffness k₀ = V/Δ from a static
+                      lateral probe, capacity Fy = Σ2·Mp/h. Newmark-β with Newton-Raphson iteration each step;
+                      Rayleigh damping on the initial stiffness. An elastic reference run is solved alongside so the
+                      inelastic force reduction is visible.
+                    </p>
+                    <p className="col-span-full rounded-md bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
+                      <strong>Assumes a shear-type (strong-beam / weak-column) mechanism.</strong> A frame that hinges
+                      in its beams has a lower real capacity than Σ2·Mp/h, so Fy would be unconservative — confirm the
+                      governing mechanism with the Pushover tab first. One direction at a time; torsion ignored.
+                    </p>
+                  </>
+                )}
                 <div className="col-span-full">
                   <button type="button" onClick={runNonlinear} disabled={!model || !!busy || meshErrors} className={btn}>
                     {busy === 'nonlinearTH' ? '⏳ Integrating…' : '⚡ Run nonlinear time-history'}
@@ -3784,6 +3815,84 @@ export default function ModelSpace() {
               </Sec>
 
               {model && <ValidationPanel issues={meshIssues} />}
+
+              {nlHinge?.inelastic && (() => {
+                const ie = nlHinge.inelastic!, el = nlHinge.elastic
+                const R = el && ie.response.peakBaseShear > 0
+                  ? el.response.peakBaseShear / ie.response.peakBaseShear : null
+                const yielded = ie.response.hinges.filter((h) => h.yielded)
+                  .sort((a, b) => Math.abs(b.plastic) - Math.abs(a.plastic))
+                return (
+                  <>
+                    <Sec grid={false} title="Response summary — member-end hinges">
+                      <Row label="Equivalent frame period T₁" value={`${f2(ie.period)} s`}
+                        sub={`${ie.frame.nodes.length} nodes · ${ie.frame.members.length} members · ${ie.frame.framesCombined} parallel frame lines combined`} />
+                      <Row label="Hinges yielded" value={`${ie.response.yieldedHinges} of ${ie.response.hinges.length}`}
+                        alert={!ie.response.converged} />
+                      <Row label="Peak base shear" value={`${f1(ie.response.peakBaseShear)} kN`}
+                        sub={el ? `elastic demand ${f1(el.response.peakBaseShear)} kN` : undefined} />
+                      {R != null && R > 1.01 && (
+                        <Row label="Force reduction (elastic / inelastic)" value={`${f2(R)}×`}
+                          sub="ductility-derived demand reduction, not a code R factor" />
+                      )}
+                      <Row label="Peak roof displacement" value={`${f1(ie.response.peakDisp * 1000)} mm`} />
+                      <Row label="Hysteretic energy dissipated" value={`${f1(ie.response.totalDissipated)} kN·m`} />
+                      <Row label="Newton convergence" value={ie.response.converged ? `✓ ≤ ${ie.response.maxIterations} iterations` : '✗ did not converge'}
+                        alert={!ie.response.converged} />
+                    </Sec>
+
+                    {yielded.length === 0 && (
+                      <Sec grid={false} title="Hinge state">
+                        <p className="text-sm text-slate-600">
+                          No hinge yielded — the frame stayed <strong>elastic</strong> under this record. That is a
+                          result, not a failure: raise the PGA, lower the frequency toward the {f2(ie.period)} s
+                          period, or use lighter sections to drive it inelastic.
+                        </p>
+                      </Sec>
+                    )}
+                    {yielded.length > 0 && (
+                      <Sec grid={false} title="Yielded hinges (largest plastic rotation first)">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-right text-[12px]">
+                            <thead className="text-slate-500">
+                              <tr className="border-b border-slate-200">
+                                <th className="py-1 pr-2 text-left">Member</th><th className="py-1 pr-2 text-left">End</th>
+                                <th className="py-1 pr-2">M (kN·m)</th><th className="py-1 pr-2">θ (mrad)</th>
+                                <th className="py-1 pr-2">θp (mrad)</th><th className="py-1 pr-2">E (kN·m)</th>
+                              </tr>
+                            </thead>
+                            <tbody className="font-mono">
+                              {yielded.slice(0, 20).map((h) => (
+                                <tr key={`${h.member}-${h.end}`} className="border-b border-slate-100 bg-amber-50">
+                                  <td className="py-0.5 pr-2 text-left">{h.member}</td>
+                                  <td className="py-0.5 pr-2 text-left">{h.end}</td>
+                                  <td className="py-0.5 pr-2">{f1(h.moment)}</td>
+                                  <td className="py-0.5 pr-2">{f1(h.rotation * 1000)}</td>
+                                  <td className="py-0.5 pr-2">{f1(h.plastic * 1000)}</td>
+                                  <td className="py-0.5 pr-2">{f1(h.dissipated)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <p className="mt-2 text-[10px] text-slate-500">
+                          θp is the permanent (plastic) rotation left in the hinge. Member ids are the condensed
+                          frame&rsquo;s — each combines the parallel 3D members at that grid position.
+                          {yielded.length > 20 && ` Showing the 20 worst of ${yielded.length}.`}
+                        </p>
+                      </Sec>
+                    )}
+                  </>
+                )
+              })()}
+              {nlHinge && !nlHinge.inelastic && (
+                <Sec grid={false} title="Nonlinear time-history — member-end hinges">
+                  <p className="text-sm text-slate-600">
+                    The model could not be condensed to a plane frame in this direction — it needs members lying
+                    in the loading plane, at least one support, and a positive seismic mass.
+                  </p>
+                </Sec>
+              )}
 
               {nl?.inelastic && (() => {
                 const ie = nl.inelastic!, el = nl.elastic
