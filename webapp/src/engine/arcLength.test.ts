@@ -141,7 +141,102 @@ describe('arcLength — agreement with displacement control where both apply', (
   })
 })
 
-describe('arcLength — snap-back (see the scope note in the module)', () => {
+describe('arcLength — smooth material: ROBUST snap-back', () => {
+  // The bilinear tangent jumps by ~10³ at yield and changes sign when the hinge
+  // softens; a corrector landing on the wrong side is thrown onto a different
+  // branch. `material: 'smooth'` swaps in the C^∞ backbone and resolves the
+  // knee, which is what makes snap-back reproducible instead of incidental.
+  const sm = (b: number, arc: number): ArcLengthInput => ({
+    ...cant({ Mp: 100, b }), material: 'smooth',
+    arcLength: arc, arcSteps: 500, dispStop: 0.06, maxCuts: 10,
+  })
+
+  it('traces a sustained snap-back for |b| > 3 — hundreds of reversals, no failure', () => {
+    for (const b of [-4, -6, -12]) {
+      const r = arcLengthFrame(sm(b, 5e-4))!
+      expect(r.snapBack).toBe(true)
+      expect(r.mechanism).toBe(false)              // it never gave up
+      let reversals = 0
+      for (let i = 1; i < r.steps.length; i++) {
+        const dl = r.steps[i].lambda - r.steps[i - 1].lambda
+        const dd = Math.abs(r.steps[i].disp) - Math.abs(r.steps[i - 1].disp)
+        if (dl < 0 && dd < 0) reversals++
+      }
+      // this is the difference from the bilinear path, which managed 3 at best
+      expect(reversals).toBeGreaterThan(100)
+      for (const s of r.steps) expect(s.converged).toBe(true)
+    }
+  })
+
+  it('the traced path is INDEPENDENT of the arc length — the robustness claim', () => {
+    // A result that changes when you change the step size is not a result. The
+    // peak must agree across a 4x change in arc, for every softening level.
+    for (const b of [-4, -6, -12]) {
+      const fine = arcLengthFrame(sm(b, 5e-4))!
+      const coarse = arcLengthFrame(sm(b, 2e-3))!
+      expect(coarse.peakLambda).toBeCloseTo(fine.peakLambda, 3)
+      expect(coarse.peakDisp).toBeCloseTo(fine.peakDisp, 5)
+      expect(coarse.snapBack).toBe(fine.snapBack)
+    }
+  })
+
+  it('mild softening still gives a monotone descending branch, no false snap-back', () => {
+    for (const b of [1e-4, -0.02, -2]) {
+      const r = arcLengthFrame(sm(b, 5e-4))!
+      expect(r.snapBack).toBe(false)
+      expect(r.mechanism).toBe(false)
+      for (let i = 1; i < r.steps.length; i++)
+        expect(Math.abs(r.steps[i].disp)).toBeGreaterThanOrEqual(Math.abs(r.steps[i - 1].disp) - 1e-12)
+    }
+  })
+
+  it('a PERFECTLY PLASTIC hinge still reaches the exact collapse load', () => {
+    // The smooth backbone's asymptote is the same plateau, so rounding the
+    // corner costs nothing once the hinge is well past it: both materials land
+    // on Mp/L. Smoothing is not a systematic under-estimate of collapse.
+    const exact = 100 / L
+    const smooth = arcLengthFrame(sm(0, 5e-4))!
+    const bilinear = arcLengthFrame({ ...cant({ Mp: 100, b: 0 }), arcLength: 5e-4, arcSteps: 900, dispStop: 0.06 })!
+    expect(smooth.peakLambda).toBeCloseTo(exact, 5)
+    expect(bilinear.peakLambda).toBeCloseTo(exact, 5)
+    expect(smooth.peakLambda).toBeCloseTo(bilinear.peakLambda, 5)
+  })
+
+  it('with SOFTENING the peak sits at the knee, so smoothing shaves it slightly', () => {
+    // Here the maximum occurs AT the corner rather than on a plateau beyond it,
+    // so the rounding does show up — a few tenths of a percent, always low,
+    // never high. This is the one place the smooth material is not neutral.
+    const exact = 100 / L
+    for (const b of [-4, -6, -12]) {
+      const r = arcLengthFrame(sm(b, 5e-4))!
+      expect(r.peakLambda).toBeLessThan(exact)
+      expect(r.peakLambda / exact).toBeGreaterThan(0.99)
+    }
+  })
+
+  it('is nonlinear elastic: no dissipation and no permanent set', () => {
+    const r = arcLengthFrame(sm(-6, 5e-4))!
+    expect(r.totalDissipated).toBe(0)
+    for (const h of r.hinges) {
+      expect(h.dissipated).toBe(0)
+      expect(h.plastic).toBe(0)
+    }
+    expect(r.hinges.some((h) => h.yielded)).toBe(true)   // past the knee, though
+  })
+
+  it('agrees with the bilinear path before anything yields', () => {
+    // away from the knee the two materials are the same curve, so the elastic
+    // branch must not depend on which one is selected
+    const a = arcLengthFrame({ ...cant({ Mp: 100, b: 1e-4 }), arcLength: 5e-4, arcSteps: 20, dispStop: 0.01 })!
+    const b = arcLengthFrame({ ...cant({ Mp: 100, b: 1e-4 }), material: 'smooth', arcLength: 5e-4, arcSteps: 20, dispStop: 0.01 })!
+    for (let i = 0; i < Math.min(a.steps.length, b.steps.length); i++) {
+      expect(b.steps[i].disp).toBeCloseTo(a.steps[i].disp, 6)
+      expect(Math.abs(b.steps[i].lambda / a.steps[i].lambda - 1)).toBeLessThan(2e-3)
+    }
+  })
+})
+
+describe('arcLength — snap-back on the BILINEAR material (limited, see scope note)', () => {
   // Snap-back needs the elastic member to recover displacement FASTER than the
   // softening hinge adds it. For this cantilever the elastic tip recovery per
   // unit hinge rotation is |b|·L/3 against the hinge's own L, so the threshold

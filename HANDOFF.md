@@ -783,12 +783,29 @@ _Analysis completeness (P3):_
   Validated: elastic path exact, peak λ = Mp/L to 4e-14 % for a perfectly
   plastic hinge (`validation.ts` `arc-length-collapse`), and point-by-point
   agreement with displacement control to 1e-3 relative.
-  **Still open**: 3D/biaxial hinges; and **robust snap-back** — a true reversal
-  IS traced for |b| > 3 and reported via `snapBack`, but whether the branch is
-  picked up depends on the arc length and it terminates after a few steps. The
-  obstacle is the non-smooth elastic→plastic switch; fixing it properly needs a
-  smoothed yield transition or a nonsmooth line search. The module header says
-  so; do not rely on it for snap-back-governed problems yet.
+  ~~**Robust snap-back**~~ — ✔ shipped (#448) via the smooth-material route.
+  `smoothHinge.ts` is the bilinear law's two asymptotes with the corner rounded,
+  f = b·k0·u + Fp·tanh(kp·u/Fp), C^∞ everywhere. `arcLength` gains
+  `material: 'smooth'`, which additionally converges on the RESIDUAL (an
+  increment test can pass while the state is out of balance — that silently
+  produced equilibrium points ABOVE the plastic capacity), adds a backtracking
+  LINE SEARCH, and applies KNEE-RESOLVING step control (the smooth transition is
+  only ~one yield rotation wide, so a coarse arc steps over it and sees a
+  discontinuity again). Result: hundreds of sustained reversals for |b| > 3
+  versus 3 at best before, and the traced path no longer depends on the arc
+  length — peak λ and δ agree across a 4× change in Δl.
+  **Cost, stated in the module**: the smooth material is nonlinear ELASTIC — no
+  dissipation, no permanent set — so it is for static path tracing only and must
+  not be used for cyclic or dynamic work, which keep the bilinear law. A
+  perfectly plastic hinge still reaches the EXACT collapse load on either
+  material; only where the peak sits at the knee (softening) does the rounding
+  shave it, always low and under 1%. `material` defaults to `'bilinear'`, so
+  every previously validated result is unchanged.
+  **A failed first attempt is worth recording**: regularizing only the TANGENT
+  of the bilinear law (exact force, smoothed Kt) did NOT work — it produced
+  equilibrium points above capacity, then a Zeno stall at the yield boundary,
+  and was a net regression. The force itself has to be smooth.
+  **Still open**: 3D/biaxial hinges.
 - ~~**Load combinations with nonlinear members**~~ — ✔ shipped (#444), to the
   owner's **per-combo active set** decision. `analyzeActiveSet` in `axialOnly.ts`
   runs every NSCP combination on its OWN active-set iteration and reports
