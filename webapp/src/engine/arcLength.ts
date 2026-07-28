@@ -14,16 +14,30 @@
 //                         det(Kt) rather than on a guess, and it can shorten
 //                         itself automatically where the path turns sharply.
 //
-// SCOPE, honestly stated. This reliably traces the ascending branch, the load
-// limit point and the descending branch, and it agrees with displacement
-// control point-for-point wherever both apply. TRUE SNAP-BACK — where the
-// control displacement itself reverses — is detected and reported when it
-// happens (`snapBack`), and the tests show one case being traced, but it is NOT
-// robust: whether the branch is picked up depends on the arc length, and it
-// terminates after a few steps. The obstacle is the non-smooth elastic→plastic
-// switch (the hinge tangent jumps by ~10³ and changes sign), which needs a
-// smoothed yield transition or a nonsmooth line search to handle properly.
-// Do not rely on this for snap-back-governed problems yet.
+// SCOPE. On the default BILINEAR material this reliably traces the ascending
+// branch, the load limit point and the descending branch, and agrees with
+// displacement control point-for-point wherever both apply. True SNAP-BACK is
+// detected and reported (`snapBack`) but only incidentally traced: the hinge
+// tangent jumps by ~10³ at yield and changes sign when it softens, and a
+// corrector landing on the wrong side of that jump is thrown onto a different
+// branch.
+//
+// `material: 'smooth'` removes that obstacle. It swaps in the C^∞ backbone from
+// `smoothHinge.ts` — the same two asymptotes with the corner rounded — and adds
+// the three things a continuation method needs around a non-smooth feature:
+//   • convergence on the RESIDUAL, not the increment (an increment test can
+//     report success while the state is still out of balance),
+//   • a backtracking LINE SEARCH so a corrector cannot overshoot onto another
+//     branch,
+//   • KNEE-RESOLVING step control — the smooth transition is only about one
+//     yield rotation wide, so a coarse arc would step clean over it and see a
+//     discontinuity again.
+// Together these trace hundreds of sustained snap-back reversals, and the path
+// no longer depends on the arc length. The cost: the smooth material is
+// nonlinear ELASTIC (no dissipation, no permanent set, so not for cyclic or
+// dynamic work), and where the peak sits AT the knee — softening hinges — the
+// rounding shaves a few tenths of a percent off it. A perfectly plastic hinge
+// still reaches the exact collapse load, so the collapse benchmark is unaffected.
 //
 // Constraint (Crisfield, generalized-spherical):
 //
@@ -48,6 +62,7 @@ import {
   assembleFrame,
   type NLFrameInput, type NLFrameStep, type HingeReport,
 } from './nonlinearFrame'
+import { smoothHinge } from './smoothHinge'
 
 export interface ArcLengthInput extends Omit<NLFrameInput, 'control' | 'schedule' | 'dispSchedule' | 'lambdaMax' | 'dispMax'> {
   /** Arc length Δl of one step. Default: 1/40 of `dispStop` (a displacement-like
@@ -63,6 +78,34 @@ export interface ArcLengthInput extends Omit<NLFrameInput, 'control' | 'schedule
   lambdaStop?: number
   /** Stop once the control displacement passes this magnitude (default 0.5 m). */
   dispStop?: number
+  /**
+   * Hinge material.
+   *
+   * `'bilinear'` (default) is the engine's plastic law — the same one pushover
+   * and time-history use, so collapse loads land exactly on limit analysis. Its
+   * tangent is discontinuous at yield, which bounds how far past a limit point
+   * the path can be followed.
+   *
+   * `'smooth'` swaps in the C^∞ backbone from `smoothHinge.ts` — the same two
+   * asymptotes with the corner rounded — and turns on knee-resolving step
+   * control. THIS is what makes snap-back tractable. It is nonlinear ELASTIC,
+   * so no energy is dissipated and no permanent set is left, and the rounded
+   * corner puts the limit load a few tenths of a percent low.
+   */
+  material?: 'bilinear' | 'smooth'
+  /**
+   * With `material: 'smooth'`, the largest hinge-rotation advance allowed in one
+   * step while a hinge is inside its knee, as a fraction of the yield rotation
+   * (default 0.25). This is what stops a coarse arc from jumping over the
+   * (narrow) smooth transition and seeing a discontinuity again.
+   */
+  kneeStep?: number
+  /** Residual convergence tolerance, relative to the largest force in the
+   *  balance. Used with `material: 'smooth'` (default 1e-9). */
+  tolR?: number
+  /** Backtracking line-search halvings allowed per corrector, smooth material
+   *  only (default 8). */
+  maxBacktrack?: number
 }
 
 export interface ArcStep extends NLFrameStep {
@@ -139,6 +182,10 @@ export function arcLengthFrame(inp: ArcLengthInput): ArcLengthResult | null {
   if (ctrlIdx === undefined) return null
 
   const tol = inp.tol ?? 1e-9
+  const tolR = inp.tolR ?? 1e-9
+  const maxBacktrack = inp.maxBacktrack ?? 8
+  const smooth = inp.material === 'smooth'
+  const kneeStep = inp.kneeStep ?? 0.25
   const maxIter = inp.maxIter ?? 40
   const psi = inp.psi ?? 0
   const maxCuts = inp.maxCuts ?? 6
@@ -153,6 +200,42 @@ export function arcLengthFrame(inp: ArcLengthInput): ArcLengthResult | null {
   const steps: ArcStep[] = []
   let mechanism = false, allConverged = true, snapBack = false
   let peakLambda = 0, peakDisp = 0
+
+  /**
+   * Internal force and tangent. `'bilinear'` defers to the assembly's own
+   * plastic law; `'smooth'` uses the C^∞ backbone, whose continuous tangent is
+   * what lets the corrector cross the knee without being thrown onto another
+   * branch.
+   */
+  const contrib = (dv: number[]) => {
+    if (!smooth) return hingeContrib(dv)
+    const fs = new Array(nf).fill(0)
+    const Kh: number[][] = Array.from({ length: nf }, () => new Array(nf).fill(0))
+    for (const h of hinges) {
+      const { f: M, kt } = smoothHinge(hingeDeform(dv, h), { k0: h.k0, Fy: hingeCapacity(dv, h), b: h.b })
+      const a = fpos.get(h.nodeRotDof), q = fpos.get(h.beamRotDof)
+      if (a !== undefined) { fs[a] += M; Kh[a][a] += kt }
+      if (q !== undefined) { fs[q] -= M; Kh[q][q] += kt }
+      if (a !== undefined && q !== undefined) { Kh[a][q] -= kt; Kh[q][a] -= kt }
+    }
+    return { fs, Kh }
+  }
+
+  /** Out-of-balance force at (dv, lam) and the force scale to judge it by. The
+   *  scale includes the elastic force K·d, the largest term in the balance and
+   *  therefore the one that sets the cancellation floor. */
+  const residualNorm = (dv: number[], lam: number) => {
+    const { fs } = contrib(dv)
+    let sum = 0, scale = 1e-12
+    for (let r = 0; r < nf; r++) {
+      let kd = 0
+      for (let q = 0; q < nf; q++) kd += Kbeam[r][q] * dv[q]
+      const R = lam * Pref[r] - kd - fs[r]
+      sum += R * R
+      scale = Math.max(scale, Math.abs(lam * Pref[r]), Math.abs(fs[r]), Math.abs(kd))
+    }
+    return { norm: Math.sqrt(sum), scale }
+  }
 
   const snapshot = () => hinges.map((h) => ({ ...h.state }))
   const restore = (snap: BilinearState[]) => hinges.forEach((h, i) => { h.state = { ...snap[i] } })
@@ -178,13 +261,21 @@ export function arcLengthFrame(inp: ArcLengthInput): ArcLengthResult | null {
       let failed = false, trimmed = false
 
       for (it = 0; it < maxIter; it++) {
-        const { fs, Kh } = hingeContrib(d)
+        const { fs, Kh } = contrib(d)
         const R = new Array(nf).fill(0)
+        let rSum = 0, rScale = 1e-12
         for (let r = 0; r < nf; r++) {
           let kd = 0
           for (let q = 0; q < nf; q++) kd += Kbeam[r][q] * d[q]
           R[r] = lambda * Pref[r] - kd - fs[r]
+          rSum += R[r] * R[r]
+          rScale = Math.max(rScale, Math.abs(lambda * Pref[r]), Math.abs(fs[r]), Math.abs(kd))
         }
+        const rNorm = Math.sqrt(rSum)
+        // The smooth material converges on the RESIDUAL. An increment-only test
+        // can report success while the state is still out of balance, which
+        // silently yields "equilibrium" points above the plastic capacity.
+        if (smooth && it > 0 && rNorm / rScale <= tolR) { ok = true; break }
         const Kt: number[][] = Array.from({ length: nf }, (_, r) => {
           const row = new Array<number>(nf)
           for (let q = 0; q < nf; q++) row[q] = Kbeam[r][q] + Kh[r][q]
@@ -213,7 +304,26 @@ export function arcLengthFrame(inp: ArcLengthInput): ArcLengthResult | null {
           // entirely). So trim the step to land just PAST the first crossing,
           // exactly as the event-to-event pushover does, and let the next step
           // start with an unambiguous tangent.
-          if (events < 3) {
+          if (smooth) {
+            // KNEE RESOLUTION. The smooth transition is only ~one yield
+            // rotation wide, so a coarse arc can still step clean over it and
+            // present Newton with an effective discontinuity. Cap the hinge
+            // rotation advance while any hinge sits inside its knee. This is
+            // what makes the traced path independent of the arc length.
+            if (events < 6) {
+              let scale = 1
+              for (const h of hinges) {
+                const Fy = hingeCapacity(d, h)
+                if (!Number.isFinite(Fy)) continue
+                const yieldθ = Fy / h.k0
+                const { x } = smoothHinge(hingeDeform(d, h), { k0: h.k0, Fy, b: h.b })
+                const dθ = Math.abs(hingeDeform(dP, h) * dl)
+                const cap = (Math.abs(x) < 6 ? kneeStep : 8 * kneeStep) * yieldθ
+                if (dθ > cap) scale = Math.min(scale, cap / dθ)
+              }
+              if (scale < 1) { arc *= Math.max(scale, 0.02); events++; trimmed = true; break }
+            }
+          } else if (events < 3) {
             let alpha = 1
             for (const h of hinges) {
               const Fy = hingeCapacity(d, h)
@@ -265,16 +375,34 @@ export function arcLengthFrame(inp: ArcLengthInput): ArcLengthResult | null {
             : (Math.abs(r1) <= Math.abs(r2) ? r1 : r2)
         }
 
+        const stepInc = new Array(nf)
+        for (let r = 0; r < nf; r++) stepInc[r] = (it === 0 ? 0 : dR[r]) + dl * dP[r]
+
+        // LINE SEARCH (smooth material, correctors only). Even with a
+        // continuous tangent a full Newton step can overshoot a sharply curving
+        // branch; backtracking on the residual keeps the corrector on the
+        // branch it started from. The predictor has no residual to improve.
+        let eta = 1
+        if (smooth && it > 0) {
+          const trial = new Array(nf)
+          for (let k = 0; k < maxBacktrack; k++) {
+            for (let r = 0; r < nf; r++) trial[r] = d[r] + eta * stepInc[r]
+            if (residualNorm(trial, lambda + eta * dl).norm <= rNorm) break
+            eta *= 0.5
+          }
+        }
+
         let dn = 0, dnorm = 0
         for (let r = 0; r < nf; r++) {
-          const inc = (it === 0 ? 0 : dR[r]) + dl * dP[r]
+          const inc = eta * stepInc[r]
           d[r] += inc; Delta[r] += inc
           dn += inc * inc; dnorm += d[r] * d[r]
         }
-        lambda += dl; dLambda += dl
+        lambda += eta * dl; dLambda += eta * dl
 
-        // the predictor is never a convergence test — it has no residual behind it
-        if (it > 0 && Math.sqrt(dn) / Math.max(1, Math.sqrt(dnorm)) <= tol) { it++; ok = true; break }
+        // Bilinear keeps the increment test (its tangent is exact, so a stalled
+        // increment IS convergence). Smooth deliberately does not — see above.
+        if (!smooth && it > 0 && Math.sqrt(dn) / Math.max(1, Math.sqrt(dnorm)) <= tol) { it++; ok = true; break }
       }
 
       if (ok) break
@@ -306,6 +434,12 @@ export function arcLengthFrame(inp: ArcLengthInput): ArcLengthResult | null {
     let yielded = 0
     for (const h of hinges) {
       const θ = hingeDeform(d, h), θp = hingeDeform(dPrev, h)
+      if (smooth) {
+        // Nonlinear elastic: there is no plastic state to commit. "Yielded"
+        // means past the knee, which is the comparable observable.
+        if (Math.abs(smoothHinge(θ, { k0: h.k0, Fy: hingeCapacity(d, h), b: h.b }).x) > 1) yielded++
+        continue
+      }
       const { resp, state } = bilinearCommit(θ, θp, h.state, { k0: h.k0, Fy: hingeCapacity(d, h), b: h.b })
       h.state = state
       if (resp.yielding) yielded++
@@ -325,7 +459,14 @@ export function arcLengthFrame(inp: ArcLengthInput): ArcLengthResult | null {
 
   const report: HingeReport[] = hinges.map((h) => {
     const θ = hingeDeform(d, h)
-    const { f: M, yielding } = bilinearProbe(θ, h.state, { k0: h.k0, Fy: hingeCapacity(d, h), b: h.b })
+    const p = { k0: h.k0, Fy: hingeCapacity(d, h), b: h.b }
+    if (smooth) {
+      // Nonlinear elastic: no permanent set and no dissipation to report, by
+      // construction. `yielded` means the hinge is past its knee.
+      const { f: M, x } = smoothHinge(θ, p)
+      return { member: h.member, end: h.end, moment: M, rotation: θ, plastic: 0, yielded: Math.abs(x) > 1, dissipated: 0 }
+    }
+    const { f: M, yielding } = bilinearProbe(θ, h.state, p)
     return {
       member: h.member, end: h.end, moment: M, rotation: θ,
       plastic: h.state.up, yielded: yielding || h.state.cumPlastic > 0,

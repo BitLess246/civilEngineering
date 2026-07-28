@@ -234,6 +234,24 @@ const arcCollapse = (() => {
   return { manual: Mp / L, software: r ? r.peakLambda : NaN }
 })()
 
+// ── 13d. Smooth-material arc-length — same collapse load as the plastic law ──
+// The C^∞ hinge backbone rounds the corner of the bilinear law, so the question
+// is whether that costs limit capacity. For a PERFECTLY PLASTIC hinge it does
+// not: both asymptotes are the same plateau, and the traced peak lands on the
+// rigid-plastic cantilever mechanism Mp/L just as the bilinear material does.
+const arcSmoothCollapse = (() => {
+  const E = 200000, I = 1e8, A = 1e4, L = 3, Mp = 100
+  const r = arcLengthFrame({
+    nodes: [{ id: 'n1', x: 0, y: 0 }, { id: 'n2', x: L, y: 0 }],
+    members: [{ id: 'm', i: 'n1', j: 'n2', E, I, A, Mp, b: 0 }],
+    supports: [{ node: 'n1', type: 'fixed' }],
+    loads: [{ node: 'n2', Fy: -1 }],
+    controlNode: 'n2', controlDir: 'y',
+    material: 'smooth', arcLength: 5e-4, arcSteps: 900, dispStop: 0.06,
+  })
+  return { manual: Mp / L, software: r ? r.peakLambda : NaN }
+})()
+
 // ── 13b. Tension-only cross-brace — active set ≡ removing the slack brace ────
 // The active-set iteration's entire claim is that a limited member which
 // violates its mode contributes nothing. The independent check is therefore a
@@ -542,6 +560,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'arc-length-collapse', category: 'Analysis', title: 'Arc-length peak load — cantilever mechanism',
     reference: 'Limit analysis (rigid-plastic)', formula: 'λpeak = Mp / L',
     manual: arcCollapse.manual, software: arcCollapse.software, unit: 'kN', tol: 1e-9,
+  },
+  {
+    id: 'arc-length-smooth-collapse', category: 'Analysis', title: 'Smooth-hinge arc-length peak — cantilever mechanism',
+    reference: 'Limit analysis (rigid-plastic)', formula: 'λpeak = Mp / L, C^∞ backbone',
+    manual: arcSmoothCollapse.manual, software: arcSmoothCollapse.software, unit: 'kN', tol: 1e-5,
   },
   {
     id: 'brace-active-set', category: 'Analysis', title: 'Tension-only brace — active set vs slack brace removed',
