@@ -293,17 +293,16 @@ export function biaxialProbe(
   // r2 = Mz − Mz_tr + kpz·Δγ·∂Φ/∂Mz
   // r3 = Φ(My, Mz)
   let dg = 0
-  let ev = trial
   let converged = false
   // moment scale for the residual test; the surface residual is dimensionless
   const scale = Math.max(Math.abs(trialY), Math.abs(trialZ), 1e-12)
   for (let it = 0; it < 60; it++) {
-    ev = evalSurface(My / Fpy, Mz / Fpz, p, surface)
-    const NY = ev.gy / Fpy, NZ = ev.gz / Fpz
-    const HYY = ev.hyy / (Fpy * Fpy), HYZ = ev.hyz / (Fpy * Fpz), HZZ = ev.hzz / (Fpz * Fpz)
+    const e = evalSurface(My / Fpy, Mz / Fpz, p, surface)
+    const NY = e.gy / Fpy, NZ = e.gz / Fpz
+    const HYY = e.hyy / (Fpy * Fpy), HYZ = e.hyz / (Fpy * Fpz), HZZ = e.hzz / (Fpz * Fpz)
     const r1 = My - trialY + kpy * dg * NY
     const r2 = Mz - trialZ + kpz * dg * NZ
-    const r3 = ev.phi
+    const r3 = e.phi
     if (Math.abs(r1) <= 1e-12 * scale && Math.abs(r2) <= 1e-12 * scale && Math.abs(r3) <= 1e-13) {
       converged = true
       break
@@ -320,7 +319,9 @@ export function biaxialProbe(
     // the elastic domain, and clamping keeps the map on the plastic branch.
     if (dg < 0) dg = 0
   }
-  ev = evalSurface(My / Fpy, Mz / Fpz, p, surface)
+  // the loop leaves My/Mz one update ahead of its last surface evaluation, so
+  // the returned Φ and the tangent below are taken from a fresh one
+  const ev = evalSurface(My / Fpy, Mz / Fpz, p, surface)
 
   // ── algorithmic (consistent) tangent ──
   // dMp = [Ξ − (Ξn)(Ξn)ᵀ / (nᵀΞn)] dθ,  Ξ = [kp⁻¹ + Δγ·H]⁻¹   (Simo & Hughes)
