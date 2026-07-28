@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 470
+export const SOLVER_TEST_COUNT = 485
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -2063,6 +2063,74 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "nonlinearFrame3d — P–M interaction and hinge reporting",
         "name": "unloads elastically and re-yields under a reversed push"
+      }
+    ]
+  },
+  {
+    "module": "biaxialFrameModel",
+    "group": "Nonlinear",
+    "title": "Model → biaxial frame + skew pushover",
+    "integration": false,
+    "tests": [
+      {
+        "suite": "weakPlasticMoment",
+        "name": "equals the strong-axis capacity for a square section"
+      },
+      {
+        "suite": "weakPlasticMoment",
+        "name": "is the strong-axis formula on the section with b and h swapped"
+      },
+      {
+        "suite": "weakPlasticMoment",
+        "name": "uses Fy·Zy for a steel W-shape"
+      },
+      {
+        "suite": "modelToBiaxialFrame — bridge",
+        "name": "maps members 1:1 and inherits geometry from modelToFrame3D"
+      },
+      {
+        "suite": "modelToBiaxialFrame — bridge",
+        "name": "gives every member both plastic capacities and an axial capacity"
+      },
+      {
+        "suite": "modelToBiaxialFrame — bridge",
+        "name": "leaves every member elastic under `elastic`"
+      },
+      {
+        "suite": "modelToBiaxialFrame — bridge",
+        "name": "reports — never silently drops — releases and offsets it cannot represent"
+      },
+      {
+        "suite": "runBiaxialPushover — skew push on the real 3-D model",
+        "name": "normalises the pattern so the load factor IS the base shear"
+      },
+      {
+        "suite": "runBiaxialPushover — skew push on the real 3-D model",
+        "name": "converges at every step of the push"
+      },
+      {
+        "suite": "runBiaxialPushover — skew push on the real 3-D model",
+        "name": "respects plan symmetry — 0°, 90° and 180° give the same capacity"
+      },
+      {
+        "suite": "runBiaxialPushover — skew push on the real 3-D model",
+        "name": "yields hinges and reports a monotone-rising capacity curve"
+      },
+      {
+        "suite": "runBiaxialPushover — skew push on the real 3-D model",
+        "name": "stays elastic and linear when hinges are switched off"
+      },
+      {
+        "suite": "runBiaxialPushover — skew push on the real 3-D model",
+        "name": "the diagonal push engages both frame lines, so it is not simply weaker"
+      },
+      {
+        "suite": "runBiaxialPushover — skew push on the real 3-D model",
+        "name": "the biaxial COUPLING is what limits the diagonal capacity"
+      },
+      {
+        "suite": "runBiaxialPushover — skew push on the real 3-D model",
+        "name": "is independent of the hinge penalty stiffness once converged"
       }
     ]
   },
