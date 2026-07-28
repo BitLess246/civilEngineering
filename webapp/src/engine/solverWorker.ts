@@ -9,6 +9,7 @@
 import type { StructuralModel } from './model'
 import { modelToFrame3D } from './modelBridge'
 import { analyzeFrame3D, solveFrame3D, applyF3Combo, type F3AnalyzeOpts } from './frame3d'
+import { analyzeActiveSet, solveActiveSet, axialModes } from './axialOnly'
 import { modalAnalysis } from './modal'
 import { runPushoverModel, type PushoverModelOpts } from './pushoverModel'
 import { runTimeHistoryModel, makeGroundMotion, type TimeHistoryModelOpts, type GroundMotionSpec } from './timeHistoryModel'
@@ -43,13 +44,26 @@ ctx.onmessage = async (e: MessageEvent<SolverRequest>) => {
   try {
     if (msg.kind === 'analyze') {
       const br = modelToFrame3D(msg.model, { crackedSections: msg.crackedSections, shearDeformation: msg.shearDeformation })
-      const analysis = analyzeFrame3D(br.nodes, br.members, br.supports, br.loads, msg.opts, onProgress, br.diaphragmGroups, br.shells)
+      // Tension/compression-only members break superposition: the shared-LU
+      // combo sweep is only valid while every combo sees the same structure.
+      // When any member is limited, each combo gets its own active set instead.
+      const modes = axialModes(msg.model.members)
+      const analysis = modes.size
+        ? analyzeActiveSet(br.nodes, br.members, br.supports, br.loads,
+            modes, { ...msg.opts, diaphragms: br.diaphragmGroups }, onProgress, br.shells)
+        : analyzeFrame3D(br.nodes, br.members, br.supports, br.loads, msg.opts, onProgress, br.diaphragmGroups, br.shells)
       let drift = null
       let irregularities = null
       if (msg.drift.hasSeis) {
         onProgress({ phase: 'Storey-drift check' })
         const eOnly = applyF3Combo(br.loads, { E: 1 })
-        const sol = eOnly.length ? solveFrame3D(br.nodes, br.members, br.supports, eOnly, { pDelta: msg.drift.pDelta }, br.shells) : null
+        // the E-case gets its own active set too — the braces that carry the
+        // seismic push are exactly the ones a tension-only rule switches off
+        const sol = !eOnly.length ? null
+          : modes.size
+            ? solveActiveSet(br.nodes, br.members, br.supports, eOnly, modes,
+                { pDelta: msg.drift.pDelta, diaphragms: br.diaphragmGroups }, br.shells)?.result ?? null
+            : solveFrame3D(br.nodes, br.members, br.supports, eOnly, { pDelta: msg.drift.pDelta }, br.shells)
         drift = sol ? driftCheck(msg.model, br.nodes, sol.d, msg.drift.R, msg.drift.T, msg.drift.axis) : null
         if (sol) {
           // applied lateral storey force per level (E-case, run direction) → storey shear

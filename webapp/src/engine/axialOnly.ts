@@ -22,9 +22,12 @@
 // Units: forces kN, displacement m, E MPa, A mm², L m.
 // ─────────────────────────────────────────────────────────────────────────
 import {
-  solveFrame3D,
+  solveFrame3D, precomputeFrame, solveWithGeometry, applyF3Combo,
   type F3Node, type F3Member, type F3Support, type F3Load, type F3Result, type F3Shell,
+  type F3DiaphragmGroup, type F3Analysis, type F3ComboRun, type F3AnalyzeOpts,
 } from './frame3d'
+import { nscpCombos } from './beamAnalysis'
+import type { ProgressFn } from './progress'
 
 /** How a member may carry axial force. */
 export type AxialMode = 'both' | 'tension-only' | 'compression-only'
@@ -35,6 +38,8 @@ export interface ActiveSetOpts {
   /** Iteration cap on the active-set search (default 20). */
   maxIter?: number
   pDelta?: boolean
+  /** Rigid floor diaphragms, applied to every active-set solve. */
+  diaphragms?: F3DiaphragmGroup[]
 }
 
 export interface ActiveSetResult {
@@ -70,9 +75,14 @@ export function solveActiveSet(
     const md = modes.get(m.id)
     return md === 'tension-only' || md === 'compression-only'
   })
+  const solve = (act: F3Member[]) =>
+    opts.diaphragms?.length
+      ? solveWithGeometry(precomputeFrame(nodes, act, supports, opts.diaphragms, shells), loads, { pDelta: opts.pDelta })
+      : solveFrame3D(nodes, act, supports, loads, { pDelta: opts.pDelta }, shells)
+
   // no limited members ⇒ one ordinary linear solve
   if (limited.length === 0) {
-    const r = solveFrame3D(nodes, members, supports, loads, { pDelta: opts.pDelta }, shells)
+    const r = solve(members)
     return r ? { result: r, inactive: [], iterations: 1, converged: true } : null
   }
 
@@ -83,7 +93,7 @@ export function solveActiveSet(
 
   for (let it = 1; it <= maxIter; it++) {
     const active = members.filter((m) => !off.has(m.id))
-    const r = solveFrame3D(nodes, active, supports, loads, { pDelta: opts.pDelta }, shells)
+    const r = solve(active)
     if (!r) return null
     last = r
 
@@ -118,6 +128,47 @@ export function solveActiveSet(
   return last
     ? { result: last, inactive: [...off].sort(), iterations: maxIter, converged: false }
     : null
+}
+
+// ── NSCP combination orchestration, per-combo active set ──────────────────
+/** `F3Analysis` plus the active-set status of every combination. */
+export interface ActiveSetAnalysis extends F3Analysis {
+  /** Parallel to `perCombo`; null for skipped/failed combos. */
+  axial: (Omit<ActiveSetResult, 'result'> | null)[]
+}
+
+/**
+ * Analyze all NSCP combinations with tension/compression-only members.
+ *
+ * `analyzeFrame3D` shares ONE K factorization across every combination, which
+ * is only valid while the structure is the same for all of them. With limited
+ * members it is not: each combination settles on its OWN active set, so the
+ * shared-LU fast path is deliberately given up and every combo is iterated
+ * independently. Results must never be scaled or summed across combos.
+ *
+ * Falls back to no-op behaviour (one active set, converged in 1 iteration)
+ * when `modes` is empty, so callers can route through this unconditionally.
+ */
+export function analyzeActiveSet(
+  nodes: F3Node[], members: F3Member[], supports: F3Support[], loads: F3Load[],
+  modes: Map<string, AxialMode>, opts?: F3AnalyzeOpts & { diaphragms?: F3DiaphragmGroup[] },
+  onProgress?: ProgressFn, shells?: F3Shell[],
+): ActiveSetAnalysis | null {
+  const perCombo: F3ComboRun[] = []
+  const axial: (Omit<ActiveSetResult, 'result'> | null)[] = []
+  let govIdx = -1, govM = -1
+  const combos = nscpCombos(opts?.f1 ?? 1.0)
+  combos.forEach((combo, i) => {
+    onProgress?.({ phase: 'Analyzing load cases (active set)', current: i + 1, total: combos.length, detail: combo.name })
+    const factored = applyF3Combo(loads, combo.f)
+    if (factored.length === 0) { perCombo.push({ combo, result: null, factored, skipped: true }); axial.push(null); return }
+    const a = solveActiveSet(nodes, members, supports, factored, modes,
+      { pDelta: opts?.pDelta, diaphragms: opts?.diaphragms }, shells)
+    perCombo.push({ combo, result: a?.result ?? null, factored, skipped: false })
+    axial.push(a ? { inactive: a.inactive, iterations: a.iterations, converged: a.converged } : null)
+    if (a && a.result.Mmax > govM) { govM = a.result.Mmax; govIdx = perCombo.length - 1 }
+  })
+  return govIdx < 0 ? null : { perCombo, govIdx, axial }
 }
 
 /** Collect the axial-mode map from a model's members (skips plain 'both'). */

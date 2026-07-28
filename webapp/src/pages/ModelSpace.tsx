@@ -6,6 +6,8 @@ import { generateGridModel, removeElements, removeNode, buildGravityLoads, split
 import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole, MemberReleases, NodeSupport, SupportFixity, WoodDeck } from '../engine/model'
 import { distributePanel } from '../engine/tributary'
 import { type F3Analysis, type F3MemberResult, type V3 } from '../engine/frame3d'
+import { type ActiveSetAnalysis, type AxialMode } from '../engine/axialOnly'
+import { dashSpans } from '../engine/dashPattern'
 import { memberDiagramRibbon, diagramScale, type DiagramComp } from '../engine/memberDiagram3d'
 import { validateMesh, hasMeshErrors } from '../engine/meshValidation'
 import { type ModalResult } from '../engine/modal'
@@ -158,6 +160,31 @@ function RigidArm3D({ a, b }: { a: THREE.Vector3; b: THREE.Vector3 }) {
       <boxGeometry args={[len, 0.06, 0.06]} />
       <meshStandardMaterial color="#9333ea" />
     </mesh>
+  )
+}
+
+/** Overlay for a tension/compression-only member that DROPPED OUT of the
+ *  governing combo's active set — a dashed red sleeve along the member axis.
+ *  Drawn on top of the member so its geometry and section stay readable. */
+function SlackMember3D({ a, b }: { a: THREE.Vector3; b: THREE.Vector3 }) {
+  const { segs, dash, quat } = useMemo(() => {
+    const dir = new THREE.Vector3().subVectors(b, a)
+    const len = dir.length()
+    const q = len > 1e-9
+      ? new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir.clone().normalize())
+      : new THREE.Quaternion()
+    const pat = dashSpans(len)
+    return { segs: pat.t.map((t) => a.clone().lerp(b, t)), dash: pat.dash, quat: q }
+  }, [a, b])
+  return (
+    <group>
+      {segs.map((p, i) => (
+        <mesh key={i} position={p} quaternion={quat}>
+          <boxGeometry args={[dash, 0.1, 0.1]} />
+          <meshStandardMaterial color="#dc2626" transparent opacity={0.9} />
+        </mesh>
+      ))}
+    </group>
   )
 }
 
@@ -963,6 +990,8 @@ export default function ModelSpace() {
   })
   const [selected, setSelected] = useState<string | null>(null)
   const [analysis, setAnalysis] = useState<F3Analysis | null>(null)
+  /** Per-combo active set (tension/compression-only members); null when none. */
+  const [axialSets, setAxialSets] = useState<ActiveSetAnalysis['axial'] | null>(null)
   const [modal, setModal] = useState<ModalResult | null>(null)
   const [modeShapeIdx, setModeShapeIdx] = useState<number | null>(null)
   const [modeAmp, setModeAmp] = useState(1.5)
@@ -1134,6 +1163,7 @@ export default function ModelSpace() {
       const res = r as { analysis: F3Analysis | null; orphans: number; drift: DriftRow[] | null; irregularities: IrregularityFlag[] | null }
       setOrphans(res.orphans)
       setAnalysis(res.analysis)
+      setAxialSets((res.analysis as ActiveSetAnalysis | null)?.axial ?? null)
       setDrift(res.drift)
       setIrregular(res.irregularities)
     }).catch((e) => console.error('analyze failed', e))
@@ -1692,6 +1722,16 @@ export default function ModelSpace() {
     return { byId, scale, maxAbs }
   }, [forceDiag, forceDiagScale, govRes, modelBox])
 
+  // Members switched OFF by the active set of the GOVERNING combo. Each combo
+  // settles on its own set, so this is combo-specific — the table below the
+  // viewport lists every combo.
+  const inactiveIds = useMemo(() => {
+    if (!axialSets || !analysis) return new Set<string>()
+    return new Set(axialSets[analysis.govIdx]?.inactive ?? [])
+  }, [axialSets, analysis])
+  const axialUnconverged = useMemo(
+    () => (axialSets ?? []).filter((a) => a && !a.converged).length, [axialSets])
+
   const selMember: Member | undefined = model?.members.find((m) => m.id === selected)
   const selPlate: Plate | undefined = model?.plates.find((p) => p.id === selected)
 
@@ -1902,6 +1942,7 @@ export default function ModelSpace() {
                       {memberEl}
                       {manI && <RigidArm3D a={a} b={aV} />}
                       {manJ && <RigidArm3D a={bb} b={bV} />}
+                      {inactiveIds.has(m.id) && <SlackMember3D a={aV} b={bV} />}
                     </group>
                   )
                 })}
@@ -2331,6 +2372,26 @@ export default function ModelSpace() {
                             <span className="text-[10px] text-slate-500">§F2 LTB brace spacing — blank = full member length (conservative)</span>
                           </label>
                         )}
+                        <label className="mt-2 flex flex-wrap items-center gap-2 border-t border-violet-200 pt-2 text-[11px] text-slate-700">
+                          <span>Axial mode</span>
+                          <select value={sel.axialMode ?? 'both'}
+                            onChange={(e) => {
+                              const v = e.target.value as AxialMode
+                              updMember(sel.id, { axialMode: v === 'both' ? undefined : v })
+                            }}
+                            className="rounded border border-violet-200 px-1 py-0.5">
+                            <option value="both">Both (ordinary member)</option>
+                            <option value="tension-only">Tension-only (cross-brace, tie)</option>
+                            <option value="compression-only">Compression-only (strut, bearing)</option>
+                          </select>
+                          <span className="block text-[10px] text-slate-500">
+                            Limited members are solved by an active-set iteration: one that violates its
+                            mode is switched off and the model re-solved. This breaks superposition, so
+                            every NSCP combination gets its OWN active set (the shared-factorization fast
+                            path is dropped — analysis takes longer). Members off in the governing combo
+                            are dashed red in the viewport.
+                          </span>
+                        </label>
                         <div className="mt-2 border-t border-violet-200 pt-2">
                           <p className="mb-1 text-[11px] font-semibold text-violet-800">End connections — {sel.id}</p>
                           <div className="flex flex-wrap gap-3">
@@ -3470,11 +3531,67 @@ export default function ModelSpace() {
                 </Sec>
               )}
 
+              {axialSets && analysis && model && (
+                <Sec grid={false} title="Tension / compression-only members">
+                  {(() => {
+                    const limited = model.members.filter((m) => m.axialMode && m.axialMode !== 'both')
+                    const rows = analysis.perCombo
+                      .map((c, i) => ({ c, a: axialSets[i] }))
+                      .filter((r) => r.a)
+                    const everOff = new Set(rows.flatMap((r) => r.a!.inactive))
+                    return (
+                      <>
+                        <Row label="Limited members" value={`${limited.length}`}
+                          sub={`${limited.filter((m) => m.axialMode === 'tension-only').length} tension-only · ${limited.filter((m) => m.axialMode === 'compression-only').length} compression-only`} />
+                        <Row label="Governing combo" value={analysis.perCombo[analysis.govIdx]?.combo.name ?? '—'}
+                          sub={inactiveIds.size === 0
+                            ? 'all limited members active — dashed red overlay hidden'
+                            : `off: ${[...inactiveIds].join(', ')}`} />
+                        <Row alert={axialUnconverged > 0} label="Active-set convergence"
+                          value={axialUnconverged === 0 ? `${rows.length} combos converged ✓` : `${axialUnconverged} of ${rows.length} hit the iteration cap`}
+                          sub="Each combo is iterated on its own active set — superposition does not hold, so results are never scaled or summed across combos" />
+                        <div className="mt-2 max-h-60 overflow-auto">
+                          <table className="w-full border-collapse text-[11px]">
+                            <thead>
+                              <tr className="text-left text-[10px] uppercase tracking-wide text-slate-500">
+                                <th className="pr-2 pb-1">Combination</th>
+                                <th className="pr-2 pb-1 text-right">Iter</th>
+                                <th className="pb-1">Members switched off</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {rows.map(({ c, a }) => (
+                                <tr key={c.combo.name} className={c === analysis.perCombo[analysis.govIdx] ? 'bg-amber-50 font-semibold' : ''}>
+                                  <td className="pr-2 py-0.5 text-slate-700">{c.combo.name}</td>
+                                  <td className={`pr-2 py-0.5 text-right ${a!.converged ? 'text-slate-600' : 'text-red-600'}`}>{a!.iterations}</td>
+                                  <td className="py-0.5 text-slate-600">{a!.inactive.length ? a!.inactive.join(', ') : '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <p className="mt-1 text-[11px] text-slate-500">
+                          {everOff.size === 0
+                            ? 'No limited member violated its mode in any combination — the model behaves linearly and the results match an ordinary solve.'
+                            : `${everOff.size} member(s) drop out in at least one combination; which one depends on the load direction, so the envelope needs every combo.`}
+                        </p>
+                      </>
+                    )
+                  })()}
+                </Sec>
+              )}
+
               {selMember && model && (
                 <Sec grid={false} title={`Member — ${selMember.id}`}>
                   <Row label="Role" value={selMember.role} />
                   <Row label="Length" value={`${f2(memberLen)} m`} />
                   <Row label="Section" value={sectionFor(selMember.id)?.name ?? selMember.section} />
+                  {selMember.axialMode && selMember.axialMode !== 'both' && (
+                    <Row alert={inactiveIds.has(selMember.id)} label="Axial mode" value={selMember.axialMode}
+                      sub={!axialSets ? 'run Analyze to resolve the active set'
+                        : inactiveIds.has(selMember.id) ? 'switched OFF in the governing combination'
+                        : 'active in the governing combination'} />
+                  )}
                   {(() => {
                     const mr = govRes?.members.find((m) => m.id === selMember.id)
                     if (!mr) return null
