@@ -115,7 +115,7 @@ export function eccentricColumnSolution(
     clause: 'strain compatibility',
     lines: [
       txt(`${i.numBars} bars are detailed around the cage: ${r.nx} per ${i.b}-mm face and ${r.ny} per ${i.h}-mm face (corners shared). Each row enters the P–M sum as its own layer — side bars near the neutral axis contribute little moment, so this layout gives a lower Mb than the two-face idealisation.`),
-      eq(String.raw`\text{layers } d_i = [${r.layers.map((L) => sn1(L.d)).join(',\ ')}]\ \text{mm},\quad n_i = [${r.layers.map((L) => L.n).join(',\ ')}]`),
+      eq(String.raw`\text{layers } d_i = [${r.layers.map((L) => sn1(L.d)).join(', ')}]\ \text{mm},\quad n_i = [${r.layers.map((L) => L.n).join(', ')}]`),
     ],
   }] : []
 

@@ -375,7 +375,7 @@ export function nonlinearFrame(inp: NLFrameInput): NLFrameResult | null {
     : (inp.schedule
       ?? Array.from({ length: nSteps }, (_, i) => ((i + 1) * (inp.lambdaMax ?? 3)) / nSteps))
 
-  let d = new Array(nf).fill(0)
+  const d = new Array(nf).fill(0)
   let dPrev = new Array(nf).fill(0)
   const steps: NLFrameStep[] = []
   let mechanism = false, allConverged = true

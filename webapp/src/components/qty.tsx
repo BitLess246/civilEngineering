@@ -92,6 +92,3 @@ export function QtyPage({ title, reportTitle, intro, children }: {
   )
 }
 
-export const kg = (v: number) => (Number.isFinite(v) ? `${v.toFixed(1)} kg` : '—')
-export const m3 = (v: number) => (Number.isFinite(v) ? `${v.toFixed(2)} m³` : '—')
-export const m = (v: number) => (Number.isFinite(v) ? `${v.toFixed(2)} m` : '—')

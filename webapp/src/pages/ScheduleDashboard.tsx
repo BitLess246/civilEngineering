@@ -96,7 +96,7 @@ function Dashboard({ project, solve }: { project: ScheduleProject; solve: Schedu
 
   const [dataDate, setDataDate] = useState(defaultData)
   const [acInput, setAcInput] = useState(0)
-  const dataOffset = dataDateOffset(cal, start, dataDate)
+  const dataOffset = useMemo(() => dataDateOffset(cal, start, dataDate), [cal, start, dataDate])
 
   const nameOf = useMemo(() => new Map(project.activities.map((a) => [a.id, a.name])), [project])
   const prog = useMemo(() => projectProgress(project.activities, solve.cpm!, dataOffset), [project, solve.cpm, dataOffset])

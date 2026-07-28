@@ -13,10 +13,12 @@ export default function LoadCombinations() {
     setD(s => ({ ...s, [k]: v }))
 
   const allFinite = Object.values(d).every(Number.isFinite)
+  // `d` is a fresh object every render, so memoize on its VALUE identity
+  const dKey = JSON.stringify(d)
   const r = useMemo(
     () => (allFinite ? calcLoadCombinations(d) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [JSON.stringify(d), allFinite],
+    [dKey, allFinite],
   )
 
   return (

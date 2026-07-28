@@ -41,6 +41,8 @@ export default function PunchingShear() {
 
   const d = f.h - f.cover - f.barDia / 2     // effective depth
 
+  // `f` is a fresh object every render, so memoize on its VALUE identity
+  const fKey = JSON.stringify(f)
   const r = useMemo((): ReturnType<typeof designPunchingShear> | null => {
     if (!allFinite || d <= 0) return null
     const inp: PunchingInput = {
@@ -53,7 +55,7 @@ export default function PunchingShear() {
     }
     return designPunchingShear(inp)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(f), allFinite, d])
+  }, [fKey, allFinite, d])
 
   return (
     <div className="mx-auto max-w-[1500px] p-6">

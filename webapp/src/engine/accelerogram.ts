@@ -46,7 +46,7 @@ export function parseAccelerogram(
   let dtHint: number | undefined = opts?.dt
   if (dtHint == null) {
     for (const line of csv.split('\n')) {
-      const m = line.match(/DT\s*=\s*([\d.eE+\-]+)\s*SEC/i)
+      const m = line.match(/DT\s*=\s*([\d.eE+-]+)\s*SEC/i)
       if (m) {
         const v = parseFloat(m[1])
         if (v > 0) { dtHint = v; break }

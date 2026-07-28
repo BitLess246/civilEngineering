@@ -5,10 +5,19 @@ import { ALL_TOOLS } from '../lib/tools'
 // ⌘K command palette — fuzzy tool finder over the registry. Opened by the
 // sidebar / home search boxes or Ctrl/⌘+K anywhere; arrow keys + Enter
 // navigate, Escape closes. Pure UI on top of lib/tools.
-export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
+//
+// Mount it CONDITIONALLY (`{open && <CommandPalette … />}`) rather than passing
+// an `open` prop: a fresh mount gives fresh query/selection state, so the reset
+// does not need an effect that sets state on every open.
+export function CommandPalette({ onClose }: { onClose: () => void }) {
   const nav = useNavigate()
   const [q, setQ] = useState('')
   const [sel, setSel] = useState(0)
+  // Selection resets when the query changes. Adjusting state during render (the
+  // pattern React documents for derived state) rather than in an effect avoids
+  // rendering one frame with a stale, possibly out-of-range index.
+  const [prevQ, setPrevQ] = useState(q)
+  if (q !== prevQ) { setPrevQ(q); setSel(0) }
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
@@ -19,13 +28,10 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       `${t.name} ${t.sub} ${t.groupLabel}`.toLowerCase().includes(needle))
   }, [q])
 
-  useEffect(() => { if (open) { setQ(''); setSel(0); setTimeout(() => inputRef.current?.focus(), 0) } }, [open])
-  useEffect(() => { setSel(0) }, [q])
+  useEffect(() => { inputRef.current?.focus() }, [])
   useEffect(() => {
     listRef.current?.querySelector('[data-selected="true"]')?.scrollIntoView({ block: 'nearest' })
   }, [sel])
-
-  if (!open) return null
 
   const go = (to: string) => { onClose(); nav(to) }
   const onKey = (e: React.KeyboardEvent) => {
@@ -60,15 +66,4 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       </div>
     </div>
   )
-}
-
-/** Global Ctrl/⌘+K listener for the mounting shell. */
-export function usePaletteHotkey(setOpen: (v: boolean | ((o: boolean) => boolean)) => void) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setOpen((o) => !o) }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [setOpen])
 }

@@ -70,11 +70,12 @@ export function generateTruss(spec: TrussSpec): TrussModel {
   // triangle b–b–t), keeping every generated truss statically determinate.
   for (let i = 0; i < n; i++) {
     if (gable && (i === 0 || i === n - 1)) continue
-    let a: string, b: string
-    if (spec.type === 'warren') { (i % 2 === 0) ? (a = `b${i}`, b = top(i + 1)) : (a = top(i), b = `b${i + 1}`) }
-    else if (spec.type === 'fink') { (i % 2 === 0) ? (a = `b${i}`, b = top(i + 1)) : (a = top(i), b = `b${i + 1}`) }  // W-pattern web
-    else if (spec.type === 'howe') { (i < mid) ? (a = top(i), b = `b${i + 1}`) : (a = `b${i}`, b = top(i + 1)) }
-    else { (i < mid) ? (a = `b${i}`, b = top(i + 1)) : (a = top(i), b = `b${i + 1}`) }   // pratt + roof + scissor
+    // warren & fink alternate the diagonal each panel (fink = W-pattern web);
+    // howe and pratt/roof/scissor mirror about mid-span, in opposite senses.
+    const alt = spec.type === 'warren' || spec.type === 'fink'
+      ? i % 2 === 0
+      : spec.type === 'howe' ? i >= mid : i < mid
+    const [a, b] = alt ? [`b${i}`, top(i + 1)] : [top(i), `b${i + 1}`]
     add(a, b, 'diagonal')
   }
 

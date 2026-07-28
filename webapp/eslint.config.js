@@ -18,5 +18,12 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // `_`-prefixed names are the conventional "deliberately discarded" marker
+      // — most often the omitted key of an object rest-destructure.
+      '@typescript-eslint/no-unused-vars': ['error', {
+        varsIgnorePattern: '^_', argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_',
+      }],
+    },
   },
 ])
