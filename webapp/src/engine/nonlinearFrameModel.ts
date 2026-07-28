@@ -28,11 +28,12 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel } from './model'
 import { buildSeismicMass, jacobiEigen } from './modal'
-import { plasticMoment } from './pushoverModel'
+import { plasticMoment, axialCapacity } from './pushoverModel'
 import { shapeByName } from './aiscSections'
 import { luFactor, luSolve } from './fem'
 import { rayleighCoeffs, type RayleighCoeffs } from './directTimeHistory'
 import { assembleFrame, type NLNode, type NLMember, type NLSupport, type NLFrameInput } from './nonlinearFrame'
+import type { PmKind } from './pmInteraction'
 import { nonlinearFrameDynamic, type NLDynamicResult } from './nonlinearFrameDynamic'
 import type { GroundMotion } from './timeHistory'
 
@@ -61,6 +62,9 @@ export interface EquivalentFrameOpts {
   b?: number
   /** Treat every member as elastic (Mp = ∞) — the linear reference frame. */
   elastic?: boolean
+  /** Reduce hinge capacity by P–M interaction (default true). Axial load lowers
+   *  the plastic moment; ignoring it is unconservative for columns. */
+  pmInteraction?: boolean
 }
 
 const key = (a: number, b: number) => `${Math.round(a * 1000)}|${Math.round(b * 1000)}`
@@ -102,7 +106,7 @@ export function equivalentPlaneFrame(model: StructuralModel, opts: EquivalentFra
   }
 
   // members → combined equivalent members
-  interface Acc { i: string; j: string; EA: number; EI: number; Mp: number; n: number }
+  interface Acc { i: string; j: string; EA: number; EI: number; Mp: number; Pcap: number; steel: boolean; n: number }
   const acc = new Map<string, Acc>()
   let transverseDropped = 0
   for (const m of model.members) {
@@ -115,18 +119,23 @@ export function equivalentPlaneFrame(model: StructuralModel, opts: EquivalentFra
     const { A, I } = sectionAI(sec)
     const E = sec.material === 'steel' ? 200000 : 4700 * Math.sqrt(Math.max(sec.fc, 1))
     const Mp = plasticMoment(sec, opts.rho ?? 0.015)
+    const Pcap = axialCapacity(sec)                    // Py (steel) or Pn0 (concrete)
+    const steel = sec.material === 'steel'
     const id = ka < kb ? `${ka}~${kb}` : `${kb}~${ka}`
     const cur = acc.get(id)
-    if (cur) { cur.EA += E * A; cur.EI += E * I; cur.Mp += Mp; cur.n++ }
-    else acc.set(id, { i: ka, j: kb, EA: E * A, EI: E * I, Mp, n: 1 })
+    // capacities ADD across the combined parallel frames, same as stiffness
+    if (cur) { cur.EA += E * A; cur.EI += E * I; cur.Mp += Mp; cur.Pcap += Pcap; cur.n++ }
+    else acc.set(id, { i: ka, j: kb, EA: E * A, EI: E * I, Mp, Pcap, steel, n: 1 })
   }
   if (acc.size === 0) return null
 
+  const pm = opts.pmInteraction !== false && !opts.elastic
   const members: NLMember[] = [...acc].map(([id, v]) => ({
     id, i: v.i, j: v.j, E: E_REF,
     A: v.EA / E_REF, I: v.EI / E_REF,
     Mp: opts.elastic ? Infinity : v.Mp,
     b: opts.b ?? 0.02,
+    ...(pm ? { Pcap: v.Pcap, pmKind: v.steel ? ('steel-strong' as PmKind) : ('concrete' as PmKind) } : {}),
   }))
 
   // supports: any 3D support at a collapsed node; 'fixed' wins

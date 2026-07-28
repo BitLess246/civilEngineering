@@ -37,6 +37,7 @@
 // Refs: Chopra §7; Clough & Penzien; plastic-hinge limit analysis (Neal).
 // ─────────────────────────────────────────────────────────────────────────
 import { luFactor, luSolve } from './fem'
+import { reducedPlasticMoment, type PmKind } from './pmInteraction'
 import {
   bilinearProbe, bilinearCommit, newBilinearState,
   type BilinearState,
@@ -59,6 +60,12 @@ export interface NLMember {
   b?: number
   /** Elastic hinge stiffness as a multiple of EI/L (default 1e4 = effectively rigid). */
   rigidity?: number
+  /** Axial capacity for P–M interaction: Py = Fy·A (steel) or Pn0 (concrete), kN.
+   *  Supply with `pmKind` to reduce the hinge capacity to Mpc(P); omit to keep
+   *  the pure-bending Mp (unconservative for columns carrying real axial load). */
+  Pcap?: number
+  /** Which P–M surface to reduce on. Requires `Pcap`. */
+  pmKind?: PmKind
 }
 
 export type NLSupportType = 'pin' | 'roller' | 'fixed'
@@ -175,6 +182,10 @@ export interface FrameAssembly {
   Pref: number[]
   hingeDeform: (d: number[], h: FrameHinge) => number
   hingeContrib: (d: number[]) => { fs: number[]; Kh: number[][] }
+  /** Axial force in a P–M-tracked member at the current state, kN (+tension). */
+  axialForce: (d: number[], memberId: string) => number
+  /** Hinge yield moment at the current state — Mpc(P) when P–M is supplied. */
+  hingeCapacity: (d: number[], h: FrameHinge) => number
 }
 
 /**
@@ -250,12 +261,18 @@ export function assembleFrame(inp: NLFrameInput): FrameAssembly | null {
   /** Elastic (constant) part of the tangent: the beam elements. */
   const Kbeam: number[][] = Array.from({ length: nf }, () => new Array(nf).fill(0))
   const memberDofs = new Map<string, number[]>()
+  /** member id → data to recover its axial force (only for P–M members) */
+  const axialOf = new Map<string, { dofs: number[]; EA: number; L: number; c: number; s: number }>()
+  const pmOf = new Map(members.filter((m) => m.Pcap != null && m.pmKind)
+    .map((m) => [m.id, { Pcap: m.Pcap!, kind: m.pmKind! }]))
   for (const g of geom) {
     const { m, L, c, s, EI, EA } = g!
     const ia = nodeIdx.get(m.i)!, ib = nodeIdx.get(m.j)!
     const rot = beamRot.get(m.id)!
     const dofs = [ia * 3, ia * 3 + 1, rot[0], ib * 3, ib * 3 + 1, rot[1]]
     memberDofs.set(m.id, dofs)
+    // axial-force recovery data: N = EA/L · (Δu · axis), used for P–M interaction
+    if (m.Pcap != null && m.pmKind) axialOf.set(m.id, { dofs, EA, L, c, s })
     const kl = localK(EA, EI, L)
     // rotation matrix (rotations are invariant in-plane)
     const T = [
@@ -297,12 +314,30 @@ export function assembleFrame(inp: NLFrameInput): FrameAssembly | null {
   }
 
   /** Internal force + tangent contribution of the hinge springs. */
+  /** Current axial force in a member, kN (+tension). 0 when not tracked. */
+  const axialForce = (d: number[], memberId: string): number => {
+    const g = axialOf.get(memberId)
+    if (!g) return 0
+    const get = (dof: number) => { const p = fpos.get(dof); return p !== undefined ? d[p] : 0 }
+    // relative displacement of the two ends, projected on the member axis
+    const du = get(g.dofs[3]) - get(g.dofs[0])
+    const dv = get(g.dofs[4]) - get(g.dofs[1])
+    return (g.EA / g.L) * (du * g.c + dv * g.s)
+  }
+
+  /** Hinge yield moment, reduced by P–M interaction when the member supplies it. */
+  const hingeCapacity = (d: number[], h: Hinge): number => {
+    const pm = pmOf.get(h.member)
+    if (!pm) return h.Mp
+    return reducedPlasticMoment(h.Mp, axialForce(d, h.member), pm.Pcap, pm.kind)
+  }
+
   const hingeContrib = (d: number[]) => {
     const fs = new Array(nf).fill(0)
     const Kh: number[][] = Array.from({ length: nf }, () => new Array(nf).fill(0))
     for (const h of hinges) {
       const θ = hingeDeform(d, h)
-      const { f: M, kt } = bilinearProbe(θ, h.state, { k0: h.k0, Fy: h.Mp, b: h.b })
+      const { f: M, kt } = bilinearProbe(θ, h.state, { k0: h.k0, Fy: hingeCapacity(d, h), b: h.b })
       const a = fpos.get(h.nodeRotDof), b = fpos.get(h.beamRotDof)
       if (a !== undefined) { fs[a] += M; Kh[a][a] += kt }
       if (b !== undefined) { fs[b] -= M; Kh[b][b] += kt }
@@ -311,13 +346,13 @@ export function assembleFrame(inp: NLFrameInput): FrameAssembly | null {
     return { fs, Kh }
   }
 
-  return { nodeIdx, hinges, fpos, nf, Kbeam, Pref, hingeDeform, hingeContrib }
+  return { nodeIdx, hinges, fpos, nf, Kbeam, Pref, hingeDeform, hingeContrib, axialForce, hingeCapacity }
 }
 
 export function nonlinearFrame(inp: NLFrameInput): NLFrameResult | null {
   const asm = assembleFrame(inp)
   if (!asm) return null
-  const { nodeIdx, hinges, fpos, nf, Kbeam, Pref, hingeDeform, hingeContrib } = asm
+  const { nodeIdx, hinges, fpos, nf, Kbeam, Pref, hingeDeform, hingeContrib, hingeCapacity } = asm
   const tol = inp.tol ?? 1e-9
   const maxIter = inp.maxIter ?? 40
   const ctrlDir = inp.controlDir ?? 'x'
@@ -365,7 +400,7 @@ export function nonlinearFrame(inp: NLFrameInput): NLFrameResult | null {
     let yielded = 0
     for (const h of hinges) {
       const θ = hingeDeform(d, h), θp = hingeDeform(dPrev, h)
-      const { resp, state } = bilinearCommit(θ, θp, h.state, { k0: h.k0, Fy: h.Mp, b: h.b })
+      const { resp, state } = bilinearCommit(θ, θp, h.state, { k0: h.k0, Fy: hingeCapacity(d, h), b: h.b })
       h.state = state
       if (resp.yielding) yielded++
     }
@@ -381,7 +416,7 @@ export function nonlinearFrame(inp: NLFrameInput): NLFrameResult | null {
 
   const report: HingeReport[] = hinges.map((h) => {
     const θ = hingeDeform(d, h)
-    const { f: M, yielding } = bilinearProbe(θ, h.state, { k0: h.k0, Fy: h.Mp, b: h.b })
+    const { f: M, yielding } = bilinearProbe(θ, h.state, { k0: h.k0, Fy: hingeCapacity(d, h), b: h.b })
     return {
       member: h.member, end: h.end, moment: M, rotation: θ,
       plastic: h.state.up, yielded: yielding || h.state.cumPlastic > 0,
