@@ -765,8 +765,30 @@ _Analysis completeness (P3):_
   roof drift, dissipated energy, Newton convergence, and a table of yielded
   hinges ordered by plastic rotation. When nothing yields it says so explicitly
   rather than showing a blank panel — an elastic outcome is a result.
-  **Still open**: 3D/biaxial hinges; true arc-length (Riks) control for
-  snap-BACK, where even displacement control at a single DOF fails.
+  **Arc-length (Riks/Crisfield)** (#447): `arcLength.ts` adds the third control
+  mode — `arcLengthFrame` prescribes the LENGTH of the step in (d, λ) space and
+  solves for both, under the cylindrical constraint ‖Δd‖² + ψ²Δλ²‖P‖² = Δl²
+  (ψ = 0 default). Three pieces make it work:
+  1. the predictor takes **sign(Δλ) = sign(det Kt)** — det flips at every load
+     limit point, so the step reverses into the descending branch by itself;
+     the obvious "continue in the last direction" rule reflects off the peak and
+     retraces the path it came from;
+  2. a **yield-event trim** shortens the step to land just past the first hinge
+     crossing (the same event-to-event idea `pushover.ts` uses) — the hinge
+     tangent jumps by ~10³ and changes sign there, and a corrector starting on
+     the wrong side flies onto a different branch;
+  3. a negligibly negative discriminant (the sphere TANGENT to the path, which
+     happens exactly at that switch) is taken as the double root instead of
+     being called a failure; a genuine miss still halves the arc.
+  Validated: elastic path exact, peak λ = Mp/L to 4e-14 % for a perfectly
+  plastic hinge (`validation.ts` `arc-length-collapse`), and point-by-point
+  agreement with displacement control to 1e-3 relative.
+  **Still open**: 3D/biaxial hinges; and **robust snap-back** — a true reversal
+  IS traced for |b| > 3 and reported via `snapBack`, but whether the branch is
+  picked up depends on the arc length and it terminates after a few steps. The
+  obstacle is the non-smooth elastic→plastic switch; fixing it properly needs a
+  smoothed yield transition or a nonsmooth line search. The module header says
+  so; do not rely on it for snap-back-governed problems yet.
 - ~~**Load combinations with nonlinear members**~~ — ✔ shipped (#444), to the
   owner's **per-combo active set** decision. `analyzeActiveSet` in `axialOnly.ts`
   runs every NSCP combination on its OWN active-set iteration and reports
