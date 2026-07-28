@@ -422,6 +422,21 @@ After Tier 4, four cleanup / capability items from an external code review shipp
   engine output against independent closed-form results (RC beam Mn, cantilever
   deflection/moment via the frame solver, compact W-beam φMp, wind qz, footing
   area). Shown side-by-side with %Δ and enforced by `validation.test.ts`.
+  **Solver engine coverage (#449).** The same page now also lists, in full, the
+  **426 vitest cases across 28 modules** that exercise a *solver* — the
+  model→solver bridge, the FEM solvers, dynamics/stability, and the nonlinear
+  path followers. The benchmarks pin a NUMBER against a hand calc; these assert
+  what a single number cannot (equilibrium ΣR = ΣF, agreement between
+  independent solution paths, closed-form deflections and periods, convergence
+  order, behaviour at limit points). Sources of truth:
+  `engine/solverCoverageParse.ts` declares which modules count as solvers and
+  parses the test names; `npm run gen:coverage` writes the generated
+  `engine/solverCoverage.ts`; `solverCoverage.test.ts` re-parses and FAILS if it
+  is stale, so a solver test cannot be added or renamed without the page
+  noticing. The manifest deliberately records only which cases EXIST — nothing
+  is executed to build it, so it never claims a pass state it did not observe;
+  CI running the whole suite is what establishes passing. Design checks, load
+  generation, geotech and quantities stay with the hand-calc benchmarks.
 - **#278 — geotechnical toolkit (`/geotech`).** `engine/geotech.ts`: Rankine earth
   pressure, Terzaghi/Meyerhof bearing capacity (Vesić Nγ), infinite-slope FS — with
   N-factors checked against published tables.

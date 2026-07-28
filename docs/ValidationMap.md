@@ -6,6 +6,15 @@ Actions `ci` job on every PR, and the `engine/validation.ts` benchmark IDs
 referenced below are additionally rendered side-by-side (manual vs software vs
 %diff) on the live `/validation` page.
 
+That page also carries a **Solver engine coverage** section: the full inventory
+of the 426 vitest cases across 28 modules that exercise a *solver* — the
+model→solver bridge, the FEM solvers, dynamics and stability, and the nonlinear
+path followers. It is generated from the test sources by
+`npm run gen:coverage`, and `solverCoverage.test.ts` fails if it goes stale, so
+the published coverage cannot drift from the suite. It records which cases
+exist; CI running the whole suite on every PR is what establishes that they
+pass.
+
 **Status legend**
 - ✅ verified in CI against the row's stated method (hand calc / closed form / textbook / code table)
 - 🔶 verified in CI by an *equivalent* method; the originally-planned external cross-check (ETABS / STAAD / PCA / Excel) is still open

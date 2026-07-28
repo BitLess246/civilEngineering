@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { VALIDATION_CASES, pctDiff, type ValidationCase } from '../engine/validation'
+import { SOLVER_COVERAGE, SOLVER_TEST_COUNT, type SolverModuleCoverage } from '../engine/solverCoverage'
 
 const CATS = ['RC', 'Steel', 'Connections', 'Analysis', 'Seismic', 'Dynamics', 'Wind', 'Geotech'] as const
 
@@ -29,6 +31,52 @@ function Row({ c }: { c: ValidationCase }) {
 }
 
 const passes = (c: ValidationCase) => pctDiff(c) <= c.tol * 100 + 1e-9 || pctDiff(c) < 0.01
+
+const SOLVER_GROUPS = ['Bridge', 'FEM solver', 'Dynamics', 'Nonlinear'] as const
+
+/** One solver module: header row, expandable to the individual cases. */
+function SolverModuleRow({ m }: { m: SolverModuleCoverage }) {
+  const [open, setOpen] = useState(false)
+  // group the cases under their describe block, preserving file order
+  const suites: { suite: string; names: string[] }[] = []
+  for (const t of m.tests) {
+    const last = suites[suites.length - 1]
+    if (last && last.suite === t.suite) last.names.push(t.name)
+    else suites.push({ suite: t.suite, names: [t.name] })
+  }
+  return (
+    <div className="border-t border-slate-100 first:border-t-0">
+      <button type="button" onClick={() => setOpen(!open)}
+        className="flex w-full items-baseline gap-2 py-1.5 text-left hover:bg-blue-50/40">
+        <span className="w-3 text-slate-400">{open ? '▾' : '▸'}</span>
+        <span className="font-mono text-[11px] font-semibold text-slate-800">
+          engine/{m.module}.ts
+          {m.integration && <span className="ml-1 font-sans font-normal text-[10px] text-slate-400">(integration)</span>}
+        </span>
+        <span className="text-[11px] text-slate-500">{m.title}</span>
+        <span className="ml-auto rounded bg-slate-100 px-1.5 py-px font-mono text-[10px] text-slate-600">
+          {m.tests.length}
+        </span>
+      </button>
+      {open && (
+        <div className="pb-2 pl-5">
+          {suites.map((s) => (
+            <div key={s.suite} className="mt-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{s.suite}</p>
+              <ul className="mt-0.5 space-y-px">
+                {s.names.map((n) => (
+                  <li key={n} className="flex gap-1.5 text-[11px] text-slate-700">
+                    <span className="text-slate-300">·</span><span>{n}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function Validation() {
   const total = VALIDATION_CASES.length
@@ -93,6 +141,50 @@ export default function Validation() {
           </section>
         )
       })}
+
+      {/* ── Solver-engine test coverage ── */}
+      <section className="mt-10">
+        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">Solver engine coverage</h2>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="max-w-3xl text-xs text-slate-600">
+            The benchmarks above pin a number against a hand calculation. The <b>solvers</b> — the modules that
+            actually compute a structural response — are additionally covered by{' '}
+            <b>{SOLVER_TEST_COUNT} automated cases</b> across {SOLVER_COVERAGE.length} modules, listed in full below.
+            These assert things a single number cannot: equilibrium (ΣR = ΣF), agreement between independent
+            solution paths, closed-form deflections and periods, convergence order, and behaviour at limit points.
+          </p>
+          <p className="mt-2 max-w-3xl text-[11px] text-slate-500">
+            Scope: the model→solver bridge, the FEM solvers, dynamics and stability, and the nonlinear path
+            followers. Design checks, load generation, geotech and quantities are covered by the benchmarks above
+            instead. This inventory is generated from the test sources, so it cannot drift from them — a test
+            added or renamed without regenerating fails the suite. It records which cases <i>exist</i>; the
+            <b> whole suite runs in CI on every pull request</b>, which is what establishes that they pass.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {SOLVER_GROUPS.map((g) => {
+              const mods = SOLVER_COVERAGE.filter((m) => m.group === g)
+              const n = mods.reduce((s2, m) => s2 + m.tests.length, 0)
+              return (
+                <span key={g} className="rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-medium text-slate-700">
+                  {g} · {mods.length} modules · {n} tests
+                </span>
+              )
+            })}
+          </div>
+          {SOLVER_GROUPS.map((g) => {
+            const mods = SOLVER_COVERAGE.filter((m) => m.group === g)
+            if (!mods.length) return null
+            return (
+              <div key={g} className="mt-4">
+                <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-[#0f4c92]">{g}</p>
+                <div className="rounded-lg border border-slate-200">
+                  {mods.map((m) => <SolverModuleRow key={m.module} m={m} />)}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </section>
 
       <p className="mt-8 text-[11px] text-slate-500">
         Codes: NSCP 2015 · ACI 318-14 · AISC 360. See the{' '}
