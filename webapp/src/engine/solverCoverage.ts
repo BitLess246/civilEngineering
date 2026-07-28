@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 485
+export const SOLVER_TEST_COUNT = 489
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -2131,6 +2131,22 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "runBiaxialPushover — skew push on the real 3-D model",
         "name": "is independent of the hinge penalty stiffness once converged"
+      },
+      {
+        "suite": "summarizeBiaxialPushover",
+        "name": "reports the headline numbers straight from the trace"
+      },
+      {
+        "suite": "summarizeBiaxialPushover",
+        "name": "ranks hinges by utilisation and honours the limit"
+      },
+      {
+        "suite": "summarizeBiaxialPushover",
+        "name": "warns — in words — about model features the hinge element dropped"
+      },
+      {
+        "suite": "summarizeBiaxialPushover",
+        "name": "says so when nothing could yield"
       }
     ]
   },

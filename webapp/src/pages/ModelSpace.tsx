@@ -48,7 +48,9 @@ import { ValidationPanel } from '../components/ValidationPanel'
 import { ModalPanel } from '../components/ModalPanel'
 import { ResponseSpectrumPanel } from '../components/ResponseSpectrumPanel'
 import { PushoverPanel } from '../components/PushoverPanel'
+import { BiaxialPushoverPanel } from '../components/BiaxialPushoverPanel'
 import type { PushoverModelResult } from '../engine/pushoverModel'
+import type { BiaxialPushoverResult } from '../engine/biaxialFrameModel'
 import { TimeHistoryPanel } from '../components/TimeHistoryPanel'
 import { ShellContourPanel } from '../components/ShellContourPanel'
 import { RecordedSpectrumPanel } from '../components/RecordedSpectrumPanel'
@@ -1066,6 +1068,14 @@ export default function ModelSpace() {
   const [poPM, setPoPM] = useState(false)        // apply P–M interaction at hinges
   const [poPDelta, setPoPDelta] = useState(false) // include second-order P-Δ (gravity)
   const [po, setPo] = useState<PushoverModelResult | null>(null)
+  // Biaxial (skew) pushover — full 3D model, P–My–Mz hinges
+  const [bxAngle, setBxAngle] = useState(45)     // plan angle, degrees from +X toward +Z
+  const [bxSurface, setBxSurface] = useState<'power' | 'orbison'>('power')
+  const [bxAlpha, setBxAlpha] = useState(2)      // power-surface exponent
+  const [bxSteps, setBxSteps] = useState(40)
+  const [bxDrift, setBxDrift] = useState(4)      // target roof drift, % of H
+  const [bxPM, setBxPM] = useState(true)
+  const [bx, setBx] = useState<BiaxialPushoverResult | null>(null)
   // Time-history (modal Newmark-β) inputs + result
   const [thKind, setThKind] = useState<GroundMotionKind>('rampedSine')
   const [thDir, setThDir] = useState<'x' | 'z'>('x')
@@ -1242,6 +1252,20 @@ export default function ModelSpace() {
       opts: { dir: poDir === 'x' ? 0 : 2, pattern: poPattern, rho: poRho / 100, mpScale: poMpScale, pmInteraction: poPM, pDelta: poPDelta },
     }).then((r) => setPo((r as { pushover: PushoverModelResult | null }).pushover))
       .catch((e) => console.error('pushover failed', e))
+  }
+
+  const runBiaxialPushover = () => {
+    if (!model || busy || meshErrors) return
+    setBx(null)
+    run('biaxialPushover', {
+      model,
+      opts: {
+        angleDeg: bxAngle, pattern: poPattern, rho: poRho / 100, mpScale: poMpScale,
+        pmInteraction: bxPM, steps: bxSteps, targetDispRatio: bxDrift / 100,
+        surface: bxSurface === 'orbison' ? { kind: 'orbison' } : { kind: 'power', alpha: bxAlpha },
+      },
+    }).then((r) => setBx((r as { biaxialPushover: BiaxialPushoverResult | null }).biaxialPushover))
+      .catch((e) => console.error('biaxial pushover failed', e))
   }
 
   const runNonlinear = () => {
@@ -3918,6 +3942,49 @@ export default function ModelSpace() {
                   <p className="text-sm text-slate-600">
                     No yield events — the model has no hingeable members or no lateral mass to push.
                     Assign sections and ensure the frame carries self-weight.
+                  </p>
+                </Sec>
+              )}
+
+              <Sec title="Biaxial pushover — skew push on the full 3-D model">
+                <Num label="Push angle in plan" unit="°" value={bxAngle} onChange={setBxAngle} step="5"
+                  hint="0° = +X, 90° = +Z; 45° bends every column about both axes at once" />
+                <Num label="Target roof drift" unit="% of H" value={bxDrift} onChange={setBxDrift} step="0.5" />
+                <Num label="Displacement steps" value={bxSteps} onChange={setBxSteps} step="10"
+                  hint="more steps = smoother curve and easier convergence" />
+                <Pick label="Yield surface" value={bxSurface} onChange={setBxSurface}
+                  options={[['power', 'Bresler contour (RC)'], ['orbison', 'Orbison (steel I-shapes)']]} />
+                {bxSurface === 'power' && (
+                  <Num label="Contour exponent α" value={bxAlpha} onChange={setBxAlpha} step="0.5"
+                    hint="1 = linear chord, 1.5 typical RC, 2 = ellipse; above ~6 the return map stops converging" />
+                )}
+                <label className="col-span-full flex items-center gap-2 text-sm">
+                  <input type="checkbox" disabled={!model} checked={bxPM}
+                    onChange={(e) => setBxPM(e.target.checked)} />
+                  <span>P–M interaction (axial load reduces the hinge capacities)</span>
+                </label>
+                <p className="col-span-full text-[11px] text-slate-500">
+                  Unlike the pushover above, this one runs on the <strong>real 3-D model</strong> — no reduction to an
+                  equivalent plane frame — and each member end carries a <strong>biaxial</strong> hinge whose two bending
+                  axes yield on one coupled surface. That is what lets the push run at any plan angle: at 45° a corner
+                  column can sit at 0.8·Mpy <em>and</em> 0.8·Mpz, which two independent 1-D hinges would call elastic.
+                  {' '}Concrete ρ and Mp scale are shared with the pushover settings above. Member end releases and rigid
+                  offsets cannot be represented by the hinge element; if the model uses them, the result panel says so.
+                </p>
+                <div className="col-span-full">
+                  <button type="button" onClick={runBiaxialPushover} disabled={!model || !!busy || meshErrors} className={btn}>
+                    {busy === 'biaxialPushover' ? '⏳ Pushing…' : '◈ Run biaxial pushover'}
+                  </button>
+                </div>
+                {busy === 'biaxialPushover' && <SolverProgress p={progress} />}
+              </Sec>
+
+              {bx && bx.curve.length > 0 && <BiaxialPushoverPanel res={bx} />}
+              {bx && bx.curve.length === 0 && (
+                <Sec grid={false} title="Biaxial pushover">
+                  <p className="text-sm text-slate-600">
+                    The push produced no converged steps — the model has no lateral mass, or no member could be
+                    given a plastic capacity. Assign sections and ensure the frame carries self-weight.
                   </p>
                 </Sec>
               )}
