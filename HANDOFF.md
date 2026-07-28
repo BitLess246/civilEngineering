@@ -916,3 +916,60 @@ _Minor / partial:_
 - Cracked-section deflection (`beamDeflection`/`slabDeflection` exist standalone)
   is not clearly threaded into Model-Space serviceability results.
 - Pressure grouting — intentionally skipped (empirical).
+
+## 3D / biaxial plastic hinges (PRs #451, #452, July 2026)
+
+Shipped in phases; the plane-frame engines are untouched and still ship.
+
+- **#451 — `engine/biaxialHinge.ts`, the constitutive law.** Moment vector
+  (My, Mz) and rotation vector (θy, θz) coupled by a yield surface, replacing
+  the assumption that a section's two bending axes yield independently. Vector
+  return mapping with kinematic hardening, associative flow, closest-point
+  projection by a 3×3 Newton, and the ALGORITHMIC (consistent) tangent.
+  Surfaces: Orbison Eq. 10.18 (McGuire/Gallagher/Ziemian) for compact I-shapes,
+  which takes P/Py directly; and the Bresler power contour for RC, whose
+  capacities are pre-reduced through the existing `reducedPlasticMoment` chords.
+  For α < 2 the exact |m|^α has an unbounded second derivative at m = 0 — the
+  uniaxial state — so it is regularised as (m² + ε²)^(α/2), a ~1e-9 shift.
+  `validation.ts`: `biaxial-orbison-contour`, `biaxial-skew-projection`.
+
+- **#452 — `engine/nonlinearFrame3d.ts`, the space frame.** 6 DOF/node plus TWO
+  extra rotation DOFs per hinged end, taken in the member's LOCAL axes because
+  the yield surface lives in the section's own axes. The hinge deformation is
+  the node's global rotation vector projected onto y′/z′ minus the beam-end DOF
+  (a 2×5 matrix B); the element is `frame3d`'s own `kLocal` wired through a
+  rectangular transform A that degenerates to frame3d's T when nothing is
+  hinged — which is why the elastic case reproduces `solveFrame3D` to 1e-12.
+  Handling orientation once in B/A makes the whole thing orientation-independent
+  for free, verified by rotating an entire model through arbitrary Rodrigues
+  rotations. `validation.ts`: `biaxial-frame-skew-collapse`.
+
+**Two things worth remembering.**
+
+1. *Convergence must be residual-based here.* An increment test
+   ‖Δd‖/max(1,‖d‖) cannot distinguish convergence from divergence: once a bad
+   step makes ‖d‖ astronomical the relative increment is trivially small. A
+   fully plastic biaxial hinge leaves a genuine zero-stiffness direction, and
+   where the control DOF failed to restrain it the load factor ran away while
+   every step still reported `converged`. `nonlinearFrame3d` therefore converges
+   on the residual (scaled by the internal force as well as the applied load)
+   plus the displacement-control constraint error. **`nonlinearFrame.ts` (2-D)
+   still uses the increment test** — lower risk there, since one hinge rotation
+   per end means the control DOF always captures the mechanism, but it is the
+   same latent shape of bug and worth revisiting.
+2. *A perfectly plastic mechanism has an exactly singular tangent*, so whether
+   the factorisation survives it is floating-point luck. The engine reports
+   `mechanism` and stops when it does not, which is honest; the tests carry a
+   token b = 1e-6 that keeps the tangent positive definite and lifts the plateau
+   by only ~3e-6 relative.
+
+**Remaining phase 3:** bridge `StructuralModel` → 3D hinge input and surface
+biaxial hinge state in Model Space. `nonlinearFrameModel`'s equivalent-plane-
+frame reduction (which collapses all frame lines parallel to the loading
+direction) stops applying once hinges are genuinely biaxial, so phase 3 has to
+resolve that rather than work around it.
+
+**Flagged, not fixed (out of scope):** `webapp/index.html` declares no favicon
+`<link>`, so every page load 404s on the browser's default `/favicon.ico`
+request — `/vite.svg` ships in `dist` but is never referenced. Cosmetic, and
+pre-existing.

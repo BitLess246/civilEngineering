@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 454
+export const SOLVER_TEST_COUNT = 470
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -1991,6 +1991,78 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "arcLength — robustness",
         "name": "energy dissipation is monotone along the path"
+      }
+    ]
+  },
+  {
+    "module": "nonlinearFrame3d",
+    "group": "Nonlinear",
+    "title": "Space frame with biaxial hinges",
+    "integration": false,
+    "tests": [
+      {
+        "suite": "nonlinearFrame3d — elastic behaviour is the linear solver",
+        "name": "reproduces solveFrame3D to machine precision when no member is hinged"
+      },
+      {
+        "suite": "nonlinearFrame3d — elastic behaviour is the linear solver",
+        "name": "matches the elastic cantilever formulas on both bending axes"
+      },
+      {
+        "suite": "nonlinearFrame3d — elastic behaviour is the linear solver",
+        "name": "an unyielded hinge softens the frame only by the penalty stiffness"
+      },
+      {
+        "suite": "nonlinearFrame3d — elastic behaviour is the linear solver",
+        "name": "adds exactly two DOFs per hinged member end, and none for an unhinged member"
+      },
+      {
+        "suite": "nonlinearFrame3d — uniaxial collapse reproduces the plane frame",
+        "name": "gives λpeak = Mpz/L for a strong-axis cantilever mechanism"
+      },
+      {
+        "suite": "nonlinearFrame3d — uniaxial collapse reproduces the plane frame",
+        "name": "gives λpeak = Mpy/L for a weak-axis cantilever mechanism"
+      },
+      {
+        "suite": "nonlinearFrame3d — uniaxial collapse reproduces the plane frame",
+        "name": "agrees with the 2-D engine on the same strong-axis problem"
+      },
+      {
+        "suite": "nonlinearFrame3d — uniaxial collapse reproduces the plane frame",
+        "name": "keeps torsion continuous across a hinge"
+      },
+      {
+        "suite": "nonlinearFrame3d — biaxial coupling",
+        "name": "is independent of the load angle on a circular surface"
+      },
+      {
+        "suite": "nonlinearFrame3d — biaxial coupling",
+        "name": "matches the closed-form ellipse at every skew angle"
+      },
+      {
+        "suite": "nonlinearFrame3d — biaxial coupling",
+        "name": "costs capacity relative to treating the axes independently"
+      },
+      {
+        "suite": "nonlinearFrame3d — orientation independence",
+        "name": "gives the same collapse load after an arbitrary rigid rotation of the model"
+      },
+      {
+        "suite": "nonlinearFrame3d — orientation independence",
+        "name": "matches the closed-form ellipse for a skewed member, in its own local axes"
+      },
+      {
+        "suite": "nonlinearFrame3d — P–M interaction and hinge reporting",
+        "name": "reduces the collapse load as axial compression grows"
+      },
+      {
+        "suite": "nonlinearFrame3d — P–M interaction and hinge reporting",
+        "name": "reports per-hinge moments, rotations, utilisation and axial force"
+      },
+      {
+        "suite": "nonlinearFrame3d — P–M interaction and hinge reporting",
+        "name": "unloads elastically and re-yields under a reversed push"
       }
     ]
   },
