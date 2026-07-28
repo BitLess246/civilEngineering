@@ -418,6 +418,20 @@ After Tier 4, four cleanup / capability items from an external code review shipp
   `tailwind.config.js`) was deleted — it was fully replaced by `webapp/` (deployed
   via `webapp/vercel.json`). **The repo root is now just `webapp/`, `docs/` and the
   markdown docs.** `README.md` was rewritten to describe the live app.
+- **Documentation page (`/docs`) — control reference (#450).** Replaced the
+  three-card overview with a searchable reference for every user-facing control:
+  38 entries covering all 45 routes, 423 documented controls (field / choice /
+  toggle / button / tab / result), sticky sidebar TOC, deep-linkable anchors per
+  tool and per section, "Open tool →" links and a whole-page search that
+  requires every word to match. Content lives in `lib/docsContent*.ts` behind the
+  `lib/docsModel.ts` types; `docsContent.test.ts` compares the catalogue against
+  the ROUTER, so a new page cannot ship undocumented and a removed page cannot
+  leave a dangling entry — it also rejects a control whose explanation is
+  shorter than 25 characters, which is what forced ~50 one-liners to be
+  rewritten into something useful. Labels were extracted from the page sources
+  rather than written from memory. Thinner spots, documented at section level
+  rather than per field: Seismic Wizard, Welded Connection and the Schedule
+  sub-views.
 - **#277 — validation page (`/validation`).** `engine/validation.ts` benchmarks
   engine output against independent closed-form results (RC beam Mn, cantilever
   deflection/moment via the frame solver, compact W-beam φMp, wind qz, footing
