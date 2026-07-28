@@ -259,7 +259,7 @@ export default function FoundationDesign() {
       long: view.long, short: view.short, ecc: view.ecc,
     }
     return buildFoundationSolution(ctx)
-  }, [view, form, serviceLoad, ultimateLoad, individual])
+  }, [view, form, serviceLoad, ultimateLoad, individual, circular, colWidth, colWidthY])
 
   // Verdict data — presentation of engine outputs only: utilization is the
   // required-over-provided effective depth per shear mode (capacity grows with

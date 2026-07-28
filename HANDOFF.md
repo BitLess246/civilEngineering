@@ -566,9 +566,10 @@ backlog — and this fix round. Remaining work lives in #325's unticked boxes.
   the next N-vs-kN slip fails loud.
 
 **Process / UI:**
-- **#320 — real CI gate**: `tsc -b` + lint (non-blocking: 28 pre-existing
-  eslint errors) + `npm test` gate the Pages deploy; optimizer-test timeout
-  headroom; Roadmap truth-up.
+- **#320 — real CI gate**: `tsc -b` + lint + `npm test` gate the Pages deploy;
+  optimizer-test timeout headroom; Roadmap truth-up. (Lint ran with
+  `continue-on-error` until #445 cleared the backlog — it now blocks, with
+  `--max-warnings 0`.)
 - **#331 — discoverability**: searchable “All tools” grid on Home; Structural
   dropdown sub-grouped into 6 disciplines (two-column panel); ARIA menu
   semantics.
@@ -584,7 +585,7 @@ _Tests after #334: **1028 passing**; `tsc -b` clean._
 _Remaining roadmap: Pressure Grouting (empirical — skipped by design); Phase 4
 items are owner-driven (marketing/monetisation). Prioritised follow-ups: the
 unticked boxes in **issue #325** (page-shell unification, mobile tables, FEM
-run feedback, eslint zero-out, bundle splitting, ModelSpace split,
+run feedback, ~~eslint zero-out~~ (done, #445), bundle splitting, ModelSpace split,
 ValidationMap transcription, project save/load…). The xlsx vuln + optimizer-test
 timeout from that list are now resolved — see the PRs #362–#371 section below._
 

@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { SIDEBAR_GROUPS, ALL_TOOLS } from '../lib/tools'
-import { CommandPalette, usePaletteHotkey } from '../components/CommandPalette'
+import { CommandPalette } from '../components/CommandPalette'
+import { usePaletteHotkey } from '../lib/usePaletteHotkey'
 
 // Home — search-first tool directory on the drawing-sheet workbench theme
 // (docs/design/uiux-2026-07/Redesign - Home): dark hero with drafting grid,
@@ -154,7 +155,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
         </div>
       </section>
 
-      <CommandPalette open={palette} onClose={() => setPalette(false)} />
+      {palette && <CommandPalette onClose={() => setPalette(false)} />}
     </div>
   )
 }

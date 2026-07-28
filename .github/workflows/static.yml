@@ -36,12 +36,10 @@ jobs:
         run: npm ci
       - name: Typecheck
         run: npx tsc -b
-      # Non-blocking for now: main has 28 pre-existing eslint errors (react-hooks
-      # render-safety in ModelSpace/Diagram/useCalcResult + assorted no-useless-*).
-      # Remove continue-on-error once they're fixed so lint gates like the rest.
+      # Gating. `npm run lint` runs with --max-warnings 0, so warnings fail too —
+      # main is clean and the point of the gate is to keep it that way.
       - name: Lint
         run: npm run lint
-        continue-on-error: true
       - name: Test
         run: npm test
 

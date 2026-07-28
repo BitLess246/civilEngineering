@@ -438,7 +438,7 @@ function ConnectionTab() {
         ]),
       },
     ]
-  }, [res, boltGrade, db, nRows, nCols, sy, ex_edge, tPlate, FuPlate, FyPlate, threads, Vu, Hu, ex_load, ey_load, e_out, b_gage])
+  }, [res, boltGrade, db, nRows, nCols, sy, ex_edge, tPlate, FuPlate, threads, Vu, Hu, ex_load, ey_load, e_out, b_gage])
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_0.9fr_1fr]">

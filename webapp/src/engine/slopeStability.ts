@@ -84,7 +84,10 @@ export function sliceCircle(ground: Pt[], circle: SlipCircle, n: number, water?:
     else if (gp * gc < 0) {
       // bisection
       let a = xp, bb = x
-      for (let k = 0; k < 40; k++) { const mid = (a + bb) / 2; (g(a) * g(mid) <= 0 ? (bb = mid) : (a = mid)) }
+      for (let k = 0; k < 40; k++) {
+        const mid = (a + bb) / 2
+        if (g(a) * g(mid) <= 0) bb = mid; else a = mid
+      }
       roots.push((a + bb) / 2)
     }
     xp = x; gp = gc

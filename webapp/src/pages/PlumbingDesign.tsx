@@ -61,10 +61,11 @@ export default function PlumbingDesign() {
   const [flowOverride, setFlowOverride] = useState(0)   // L/s; 0 ⇒ use Hunter's curve
   const [material, setMaterial] = useState<keyof typeof HAZEN_C>('copper')
 
-  const supplyInput: WaterSupplyInput = {
+  // memoized so the two solves below don't re-run on every unrelated render
+  const supplyInput: WaterSupplyInput = useMemo(() => ({
     items, occupancy: occ, hunterSystem, designFlowLps: flowOverride > 0 ? flowOverride : undefined,
     Lpipe, fittingLength, riseZ, pMainKPa: pMain, pMeterKPa: pMeter, pFixtureKPa: pFixture, material,
-  }
+  }), [items, occ, hunterSystem, flowOverride, Lpipe, fittingLength, riseZ, pMain, pMeter, pFixture, material])
   const supply = useMemo(() => designWaterSupply(supplyInput), [supplyInput])
   const supplySteps = useMemo(() => waterSupplySolution(supplyInput, supply), [supplyInput, supply])
 

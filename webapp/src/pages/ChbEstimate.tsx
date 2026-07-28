@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { estimateChb, type ChbInput, type ChbSize } from '../engine/quantities'
-import { Num, Pick, Card, ResultCard, Row, QtyPage, m3 } from '../components/qty'
+import { Num, Pick, Card, ResultCard, Row, QtyPage } from '../components/qty'
+import { m3 } from '../lib/format'
 
 const DEFAULTS: ChbInput = { wallArea: 30, holeArea: 4, size: '6' }
 

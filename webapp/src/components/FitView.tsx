@@ -28,6 +28,10 @@ export function FitView({ box, dir = [1, 0.8, 1], margin = 1.3 }: {
     const dist = (radius / Math.sin(fov / 2)) * margin
     const d = new THREE.Vector3(...dir).normalize()
     persp.position.copy(center.clone().add(d.multiplyScalar(dist)))
+    // The three.js camera is an external mutable object owned by the r3f
+    // renderer, not React state — repositioning it imperatively is the whole
+    // point of this component, and there is no declarative equivalent.
+    // eslint-disable-next-line react-hooks/immutability
     persp.near = Math.max(dist / 100, 0.01)
     persp.far = dist * 10
     persp.updateProjectionMatrix()

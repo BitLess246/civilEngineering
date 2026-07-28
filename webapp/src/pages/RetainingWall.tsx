@@ -35,10 +35,12 @@ export default function RetainingWall() {
   const allFinite = REQUIRED.every((k) => Number.isFinite(f[k] as number))
     && Number.isFinite(f.q_sur)
 
+  // `f` is a fresh object every render, so memoize on its VALUE identity
+  const fKey = JSON.stringify(f)
   const r = useMemo(
     () => (allFinite ? designRetainingWall(f) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [JSON.stringify(f), allFinite],
+    [fKey, allFinite],
   )
 
   return (

@@ -512,10 +512,12 @@ function ModeShapePlayer({ shape, nodePos, members, amp }: {
   members: { id: string; i: string; j: string }[]
   amp: number
 }) {
+  // Latest-value refs so `useFrame` reads the current amp/shape without the
+  // animation restarting on every prop change. Written after commit — assigning
+  // during render would make the render impure.
   const ampRef = useRef(amp)
-  ampRef.current = amp
   const shapeRef = useRef(shape)
-  shapeRef.current = shape
+  useEffect(() => { ampRef.current = amp; shapeRef.current = shape }, [amp, shape])
 
   const { group, lineGeos } = useMemo(() => {
     const g = new THREE.Group()
@@ -532,6 +534,10 @@ function ModeShapePlayer({ shape, nodePos, members, amp }: {
     return { group: g, lineGeos: geos }
   }, [members, nodePos])
 
+  // Writes straight into the GPU buffers each frame. The geometries are
+  // three.js objects owned by the renderer, not React state — re-rendering 60×
+  // a second to animate a mode shape is exactly what this avoids.
+  // eslint-disable-next-line react-hooks/immutability
   useFrame(({ clock }) => {
     const scale = ampRef.current * Math.sin(clock.elapsedTime * Math.PI * 1.2)
     const sh = shapeRef.current
@@ -542,6 +548,7 @@ function ModeShapePlayer({ shape, nodePos, members, amp }: {
       const pos = geo.attributes.position as THREE.BufferAttribute
       pos.setXYZ(0, aO.x + (da?.[0] ?? 0) * scale, aO.y + (da?.[1] ?? 0) * scale, aO.z + (da?.[2] ?? 0) * scale)
       pos.setXYZ(1, bO.x + (db?.[0] ?? 0) * scale, bO.y + (db?.[1] ?? 0) * scale, bO.z + (db?.[2] ?? 0) * scale)
+      // eslint-disable-next-line react-hooks/immutability
       pos.needsUpdate = true
     }
   })
@@ -1923,7 +1930,7 @@ export default function ModelSpace() {
                   // framing beam. Intermediate columns keep meeting at the node,
                   // so the storey above fills the joint block.
                   const fo = faceOff?.get(m.id)
-                  let aV = a, bV = bb
+                  let aV: THREE.Vector3, bV: THREE.Vector3
                   if (m.role === 'column') {
                     const contAt = (nid: string) => model.members.some((o) => o.id !== m.id && o.role === 'column' && (o.i === nid || o.j === nid))
                     aV = manI ? a.clone().add(v3(manI)) : (fo?.offI && !contAt(m.i) ? a.clone().sub(v3(fo.offI)) : a)
@@ -3728,7 +3735,7 @@ export default function ModelSpace() {
                             // Quick sample count (non-comment, non-empty lines with at least one number)
                             const npts = text.split('\n').filter((l) => {
                               const t = l.trim()
-                              return t && !/^[#%!]/.test(t) && /[\d.\-]/.test(t) && !isNaN(parseFloat(t.split(/[\s,;]+/)[0]))
+                              return t && !/^[#%!]/.test(t) && /[\d.-]/.test(t) && !isNaN(parseFloat(t.split(/[\s,;]+/)[0]))
                             }).length
                             setThCsv({ text, name: f.name, npts })
                           })

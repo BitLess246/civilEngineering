@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { estimateSlab, type SlabInput, type ConcreteClass } from '../engine/quantities'
-import { Num, ClassPick, Card, ResultCard, Row, QtyPage, kg, m3, m } from '../components/qty'
+import { Num, ClassPick, Card, ResultCard, Row, QtyPage } from '../components/qty'
+import { kg, m3, m } from '../lib/format'
 
 const DEFAULTS: SlabInput = {
   slabArea: 20, thickness: 0.125, numStructures: 1, concreteClass: 'A', customFactor: 9, spliceLength: 0.3,

@@ -29,6 +29,15 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
   const [durOverride, setDurOverride] = useState<Record<string, number>>({})
   const [depOverride, setDepOverride] = useState<Record<string, ActivityLink[]>>({})
   const [depErr, setDepErr] = useState<string | null>(null)
+  /** Push the (edited) network into the /schedule module. Re-opening UPDATES the
+   *  same linked project — refreshing structure while keeping the scheduler-side
+   *  calendar, resources, baselines and per-activity actuals — instead of making
+   *  a new copy each time. Declared with the other hooks, ABOVE the early
+   *  return below, so the hook order can never depend on the model. */
+  const [linked, setLinked] = useState<boolean>(() => {
+    const id = defaultBackend().getItem(SCHEDULE_LINK_KEY)
+    return !!(id && createStore(defaultBackend()).exists(id))
+  })
 
   const activities = useMemo(() =>
     (base?.activities ?? []).map((a) => {
@@ -48,14 +57,6 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
   const setDuration = (id: string, d: number) => setDurOverride((o) => ({ ...o, [id]: d }))
   const resetAll = () => { setDurOverride({}); setDepOverride({}); setDepErr(null) }
 
-  /** Push the (edited) network into the /schedule module. Re-opening UPDATES the
-   *  same linked project — refreshing structure while keeping the scheduler-side
-   *  calendar, resources, baselines and per-activity actuals — instead of making
-   *  a new copy each time. */
-  const [linked, setLinked] = useState<boolean>(() => {
-    const id = defaultBackend().getItem(SCHEDULE_LINK_KEY)
-    return !!(id && createStore(defaultBackend()).exists(id))
-  })
   const openInScheduler = () => {
     const backend = defaultBackend()
     const store = createStore(backend)

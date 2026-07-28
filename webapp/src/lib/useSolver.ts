@@ -20,6 +20,9 @@ export function useSolver() {
   const [progress, setProgress] = useState<SolveProgress | null>(null)
 
   useEffect(() => {
+    // capture the map for the cleanup closure — `pending.current` could point
+    // at a different object by the time the effect tears down
+    const inflight = pending.current
     const w = new Worker(new URL('../engine/solverWorker.ts', import.meta.url), { type: 'module' })
     w.onmessage = (e: MessageEvent<WorkerMsg>) => {
       const { id, ok, result, error, progress: prog } = e.data
@@ -31,7 +34,7 @@ export function useSolver() {
     }
     w.onerror = (e) => { for (const p of pending.current.values()) p.reject(new Error(e.message)); pending.current.clear(); setBusy(''); setProgress(null) }
     worker.current = w
-    return () => { w.terminate(); pending.current.clear() }
+    return () => { w.terminate(); inflight.clear() }
   }, [])
 
   const run = useCallback(<K extends Kind>(kind: K, payload: PayloadByKind[K]): Promise<unknown> => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sanitizeTex } from './math'
+import { sanitizeTex } from './tex'
 
 describe('sanitizeTex — KaTeX-incompatible glyph replacement', () => {
   it('bare ⌀ (math mode) becomes \\varnothing', () => {

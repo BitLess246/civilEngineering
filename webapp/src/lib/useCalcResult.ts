@@ -15,11 +15,15 @@ export function useCalcResult<T>(
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   // Use a ref so the effect always calls the latest closure without re-running.
+  // Written after commit — assigning during render would make the render impure.
   const latestFn = useRef(fetchFn)
-  latestFn.current = fetchFn
+  useEffect(() => { latestFn.current = fetchFn })
 
   useEffect(() => {
     let cancelled = false
+    // Entering the debounce IS the loading state; there is nothing to derive it
+    // from, because the trigger is a deps change rather than a value.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     const t = setTimeout(() => {
       latestFn.current()

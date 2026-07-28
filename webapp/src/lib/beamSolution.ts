@@ -95,7 +95,7 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
     title: 'Bar layout — spacing check & layers (§407.7)',
     lines: [
       txt(`Minimum clear spacing between parallel bars in a layer is max(d_b, 25 mm) = ${sn0(r.sMinClear)} mm (§407.7.1). The clear web width is b − 2(cover + dₛ) = ${sn0(bw)} mm, so at most ${r.maxPerLayer} bars fit per layer.`),
-      eq(String.raw`n = \lceil A_s / A_b \rceil = \lceil ${sn0(r.As)} / ${sn0(Ab)} \rceil = ${r.bars}\ \text{bars} \Rightarrow \text{layers: } [${r.layers.join(',\ ')}]`),
+      eq(String.raw`n = \lceil A_s / A_b \rceil = \lceil ${sn0(r.As)} / ${sn0(Ab)} \rceil = ${r.bars}\ \text{bars} \Rightarrow \text{layers: } [${r.layers.join(', ')}]`),
       eq(String.raw`s_{clear} = \dfrac{${sn0(bw)} - ${r.layers[0]}(${sn0(i.barDia)})}{${Math.max(1, r.layers[0] - 1)}} = ${sn0(r.sClear)}\ \text{mm} \;\ge\; ${sn0(r.sMinClear)}\ \text{mm}\ \checkmark`),
       ...(multiLayer ? [
         txt('With more than one layer (25 mm clear between layers, §407.7.2) the bar-group centroid rises above the extreme layer — Varignon: ȳ = Σnᵢyᵢ/Σnᵢ — which reduces d, so the design re-runs at the new d until the layer arrangement stops changing.'),
@@ -105,7 +105,7 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
       ]),
       ...(r.comprLayers.length > 0 ? [
         txt(`Compression side — same rule: s_min = max(d_b′, 25) = ${sn0(r.comprSMinClear)} mm, so at most ${r.comprMaxPerLayer} compression bars fit per layer.`),
-        eq(String.raw`n' = ${r.comprBars}\ \text{bars} \Rightarrow \text{layers: } [${r.comprLayers.join(',\ ')}],\quad s_{clear}' = ${sn0(r.comprSClear)}\ \text{mm} \ge ${sn0(r.comprSMinClear)}\ \checkmark`),
+        eq(String.raw`n' = ${r.comprBars}\ \text{bars} \Rightarrow \text{layers: } [${r.comprLayers.join(', ')}],\quad s_{clear}' = ${sn0(r.comprSClear)}\ \text{mm} \ge ${sn0(r.comprSMinClear)}\ \checkmark`),
         ...(r.comprLayers.length > 1 ? [
           txt('Stacking compression layers drops the compression-steel centroid (Varignon), DEEPENING d′ — which reduces the (d − d′) lever arm and feeds back into As2 and A′s.'),
           eq(String.raw`\bar{y}' = ${sn1(r.comprYBar)}\ \text{mm} \Rightarrow d' = ${sn1(r.dPrime - r.comprYBar)} + ${sn1(r.comprYBar)} = \mathbf{${sn1(r.dPrime)}}\ \text{mm}`),

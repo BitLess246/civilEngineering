@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { estimateBeam, type BeamInput, type BeamBarGroup, type ConcreteClass } from '../engine/quantities'
-import { Num, ClassPick, Card, ResultCard, Row, QtyPage, kg, m3, m } from '../components/qty'
+import { Num, ClassPick, Card, ResultCard, Row, QtyPage } from '../components/qty'
+import { kg, m3, m } from '../lib/format'
 
 const g = (lengthPerPiece: number, numPieces: number, diaMm: number): BeamBarGroup => ({ lengthPerPiece, numPieces, diaMm })
 

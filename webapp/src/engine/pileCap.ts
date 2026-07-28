@@ -229,11 +229,13 @@ export function designPileCap(inp: PileCapInput): PileCapResult {
   for (let i = 0; i < N; i++) {
     const armX = Math.abs(coords[i].x) - inp.colX / 2;
     if (armX > 0) {
-      (coords[i].x > 0 ? (MuXpos += factReactions[i] * armX) : (MuXneg += factReactions[i] * armX));
+      if (coords[i].x > 0) MuXpos += factReactions[i] * armX;
+      else MuXneg += factReactions[i] * armX;
     }
     const armY = Math.abs(coords[i].y) - inp.colY / 2;
     if (armY > 0) {
-      (coords[i].y > 0 ? (MuYpos += factReactions[i] * armY) : (MuYneg += factReactions[i] * armY));
+      if (coords[i].y > 0) MuYpos += factReactions[i] * armY;
+      else MuYneg += factReactions[i] * armY;
     }
   }
   const MuX = Math.max(MuXpos, MuXneg) / 1e3; // kN·mm → kN·m

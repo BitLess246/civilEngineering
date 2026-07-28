@@ -57,7 +57,10 @@ export function Diagram({
 
   const fmt = (v: number) => v.toFixed(decimals)
 
-  function Marker({ i, place }: { i: number; place: 'above' | 'below' }) {
+  // A plain render helper, not a nested component: declaring a component inside
+  // another component's body gives it a new identity every render (remounting
+  // its subtree). Called as `marker(i, place)`, it is just more JSX inline.
+  const marker = (i: number, place: 'above' | 'below') => {
     const x = sx(xs[i]), y = sy(ys[i])
     const ly = place === 'above' ? y - 9 : y + 15
     return (
@@ -106,8 +109,8 @@ export function Diagram({
       <polygon points={fillPts} fill={color} opacity={0.12} />
       <polyline points={linePts} fill="none" stroke={color} strokeWidth={1.8} />
 
-      {markExtrema && Math.abs(ys[iMax]) > 1e-6 && <Marker i={iMax} place="above" />}
-      {markExtrema && Math.abs(ys[iMin]) > 1e-6 && <Marker i={iMin} place="below" />}
+      {markExtrema && Math.abs(ys[iMax]) > 1e-6 && marker(iMax, 'above')}
+      {markExtrema && Math.abs(ys[iMin]) > 1e-6 && marker(iMin, 'below')}
     </svg>
   )
 }
