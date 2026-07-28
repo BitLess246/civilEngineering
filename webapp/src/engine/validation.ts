@@ -28,6 +28,7 @@ import { solveFrame3D, rectJ, type F3Node, type F3Member, type F3Support } from 
 import { solveActiveSet, type AxialMode } from './axialOnly'
 import { memberServiceDeflection } from './memberDeflection'
 import { arcLengthFrame } from './arcLength'
+import { biaxialProbe, newBiaxialState } from './biaxialHinge'
 import { Ec as concreteE } from './slabDeflection'
 import { solveBoltedConnection } from './boltedConnection'
 import { solveWeldedConnection } from './weldedConnection'
@@ -232,6 +233,33 @@ const arcCollapse = (() => {
     arcLength: 0.002, arcSteps: 300, dispStop: 0.3,
   })
   return { manual: Mp / L, software: r ? r.peakLambda : NaN }
+})()
+
+// ── 13c-bis. Biaxial hinge — the return map must land on the published surface
+// Orbison's surface (McGuire/Gallagher/Ziemian Eq. 10.18) can be solved in
+// closed form on either bending axis, because setting the other normalised
+// moment to zero collapses it to a quadratic. Pushing the hinge far past yield
+// about the strong axis alone must therefore reproduce
+//     m_z = √((1 − 1.15p²) / (1 + 3.67p²))
+// exactly. This checks the closest-point projection against the SURFACE ITSELF
+// rather than against another solver, so it is a true external reference.
+const biaxOrbison = (() => {
+  const Mpz = 200, p = 0.3, p2 = p * p
+  const r = biaxialProbe(0, 0.01, newBiaxialState(), {
+    k0y: 1e5, k0z: 1e5, Mpy: 100, Mpz, p, surface: { kind: 'orbison' },
+  })
+  return { manual: Math.sqrt((1 - 1.15 * p2) / (1 + 3.67 * p2)) * Mpz, software: r.Mz }
+})()
+
+// ── 13c-ter. Biaxial hinge — skew projection onto the circular surface ───────
+// With equal capacities the α = 2 surface is a CIRCLE of radius Mp, so a 45°
+// radial push must project to Mp/√2 on each axis. Two uncoupled 1-D hinges
+// would instead report Mp on each — 41% unconservative — which is the whole
+// reason the coupled surface exists.
+const biaxSkew = (() => {
+  const Mp = 100
+  const r = biaxialProbe(0.01, 0.01, newBiaxialState(), { k0y: 1e5, k0z: 1e5, Mpy: Mp, Mpz: Mp })
+  return { manual: Mp / Math.SQRT2, software: r.My }
 })()
 
 // ── 13d. Smooth-material arc-length — same collapse load as the plastic law ──
@@ -565,6 +593,17 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'arc-length-smooth-collapse', category: 'Analysis', title: 'Smooth-hinge arc-length peak — cantilever mechanism',
     reference: 'Limit analysis (rigid-plastic)', formula: 'λpeak = Mp / L, C^∞ backbone',
     manual: arcSmoothCollapse.manual, software: arcSmoothCollapse.software, unit: 'kN', tol: 1e-5,
+  },
+  {
+    id: 'biaxial-orbison-contour', category: 'Analysis', title: 'Biaxial hinge — Orbison contour under axial load',
+    reference: 'McGuire/Gallagher/Ziemian, Matrix Structural Analysis Eq. 10.18',
+    formula: 'm_z = √((1 − 1.15p²)/(1 + 3.67p²)),  p = 0.3',
+    manual: biaxOrbison.manual, software: biaxOrbison.software, unit: 'kN·m', tol: 1e-9,
+  },
+  {
+    id: 'biaxial-skew-projection', category: 'Analysis', title: 'Biaxial hinge — 45° projection onto the circular surface',
+    reference: 'Closest-point projection (Simo & Hughes Box 3.2)', formula: 'M = Mp/√2 per axis',
+    manual: biaxSkew.manual, software: biaxSkew.software, unit: 'kN·m', tol: 1e-9,
   },
   {
     id: 'brace-active-set', category: 'Analysis', title: 'Tension-only brace — active set vs slack brace removed',
