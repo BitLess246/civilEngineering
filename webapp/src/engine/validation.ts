@@ -30,6 +30,7 @@ import { memberServiceDeflection } from './memberDeflection'
 import { arcLengthFrame } from './arcLength'
 import { biaxialProbe, newBiaxialState } from './biaxialHinge'
 import { nonlinearFrame3D, type NL3Input } from './nonlinearFrame3d'
+import { runBiaxialPushover } from './biaxialFrameModel'
 import { Ec as concreteE } from './slabDeflection'
 import { solveBoltedConnection } from './boltedConnection'
 import { solveWeldedConnection } from './weldedConnection'
@@ -286,6 +287,21 @@ const biaxSkewFrame = (() => {
   const r = nonlinearFrame3D(inp)
   const peak = r ? Math.max(...r.steps.filter((s) => s.converged).map((s) => Math.abs(s.lambda))) : NaN
   return { manual: 1 / (L * Math.hypot(Math.sin(a) / Mpy, Math.cos(a) / Mpz)), software: peak }
+})()
+
+// ── 13c-quinquies. Biaxial pushover on the real 3-D model — plan symmetry ───
+// A square-plan frame with square sections is 4-fold symmetric, so pushing it
+// along +X and along +Z are the SAME problem relabelled and the capacity curves
+// must coincide exactly. No closed form is involved; the value of the check is
+// that it is exact, and that essentially every way of getting the 3-D bridge
+// wrong — a swapped local axis, a mis-projected hinge, an axis-preferring
+// control scheme — breaks it. It also guards the convergence fix: a push that
+// silently fails to converge reports a capacity that is not symmetric.
+const biaxPlanSymmetry = (() => {
+  const sec = { id: 's', name: 's', b: 400, h: 400, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+  const model = generateGridModel({ baysX: [5], baysZ: [5], storeyH: [3, 3], section: sec })
+  const at = (angleDeg: number) => runBiaxialPushover(model, { angleDeg, steps: 8 })?.peakShear ?? NaN
+  return { manual: at(0), software: at(90) }
 })()
 
 // ── 13d. Smooth-material arc-length — same collapse load as the plastic law ──
@@ -635,6 +651,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'biaxial-frame-skew-collapse', category: 'Analysis', title: 'Biaxial hinge frame — skew cantilever collapse',
     reference: 'Limit analysis on the P–M–M surface', formula: 'P = 1/(L·√((sinα/Mpy)² + (cosα/Mpz)²)), α = 45°',
     manual: biaxSkewFrame.manual, software: biaxSkewFrame.software, unit: 'kN', tol: 1e-4,
+  },
+  {
+    id: 'biaxial-plan-symmetry', category: 'Analysis', title: 'Biaxial pushover — plan symmetry of a square frame',
+    reference: 'Equivalent-model check (no closed form)', formula: 'peak base shear at 0° ≡ at 90° (4-fold symmetric plan)',
+    manual: biaxPlanSymmetry.manual, software: biaxPlanSymmetry.software, unit: 'kN', tol: 1e-9,
   },
   {
     id: 'brace-active-set', category: 'Analysis', title: 'Tension-only brace — active set vs slack brace removed',

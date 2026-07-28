@@ -61,6 +61,7 @@ export const SOLVER_MODULES: SolverModuleSpec[] = [
   { module: 'nonlinearTimeHistory', group: 'Nonlinear', title: 'Newmark + Newton-Raphson' },
   { module: 'arcLength', group: 'Nonlinear', title: 'Arc-length (Riks/Crisfield) continuation' },
   { module: 'nonlinearFrame3d', group: 'Nonlinear', title: 'Space frame with biaxial hinges' },
+  { module: 'biaxialFrameModel', group: 'Nonlinear', title: 'Model → biaxial frame + skew pushover' },
   { module: 'axialOnly', group: 'Nonlinear', title: 'Tension/compression-only active set' },
 ]
 

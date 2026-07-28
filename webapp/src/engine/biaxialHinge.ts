@@ -58,7 +58,16 @@ import { reducedPlasticMoment, type PmKind } from './pmInteraction'
 
 /** Which surface couples the two bending axes. */
 export type BiaxialSurfaceSpec =
-  /** Bresler load contour |m_y|^α + |m_z|^α = 1. Capacities must be P-reduced. */
+  /**
+   * Bresler load contour |m_y|^α + |m_z|^α = 1. Capacities must be P-reduced.
+   *
+   * Useful range is roughly α ∈ [1, 6]: 1 is the linear chord, 1.15–1.55 the
+   * usual RC column fits, 2 the ellipse. Beyond ~6 the contour approaches a
+   * sharp-cornered box — the uncoupled limit — where the normal swings almost
+   * discontinuously near the axes and the return map stops converging reliably.
+   * Measured on a two-storey frame, α = 20 failed to converge on most steps.
+   * If you want genuinely uncoupled axes, run two 1-D hinges, not α → ∞.
+   */
   | { kind: 'power'; alpha?: number }
   /** Orbison steel surface; takes P/Py directly, so capacities stay pure-bending. */
   | { kind: 'orbison' }

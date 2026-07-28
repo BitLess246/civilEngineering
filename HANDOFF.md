@@ -963,11 +963,43 @@ Shipped in phases; the plane-frame engines are untouched and still ship.
    token b = 1e-6 that keeps the tangent positive definite and lifts the plateau
    by only ~3e-6 relative.
 
-**Remaining phase 3:** bridge `StructuralModel` → 3D hinge input and surface
-biaxial hinge state in Model Space. `nonlinearFrameModel`'s equivalent-plane-
-frame reduction (which collapses all frame lines parallel to the loading
-direction) stops applying once hinges are genuinely biaxial, so phase 3 has to
-resolve that rather than work around it.
+- **#453 — `engine/biaxialFrameModel.ts`, the model bridge + skew pushover.**
+  Resolves the equivalent-plane-frame problem by NOT condensing: model members
+  map 1:1 onto `nonlinearFrame3d`, with section properties inherited from
+  `modelToFrame3D` so cracked sections, local-axis rotation and moduli are not
+  re-derived. Adds `weakPlasticMoment` (the weak-axis companion to
+  `pushoverModel`'s strong-axis `plasticMoment`) and `runBiaxialPushover`, a
+  lateral push at ANY plan angle — the thing the plane-frame reduction could
+  never express. Releases and rigid offsets are not representable in the hinge
+  element and are REPORTED in `unsupported`, never silently dropped.
+  `validation.ts`: `biaxial-plan-symmetry`.
+
+**A convergence defect found and fixed in #453 (in `nonlinearFrame3d`).** On the
+cantilevers of #452 everything converged; on a real two-storey frame with 32
+hinges, most steps did not, and the residual sat at ~0.99 — Newton was stuck,
+not slow. Two wrong diagnoses on the way (tolerance, then linear-solve
+conditioning) were each disproved by measurement before the real cause showed
+up: a hinge's tangent falls by k0/(b·k0) ≈ 5e5 at yield, so when a step yields
+twenty hinges the full Newton direction is wildly wrong. A backtracking line
+search fixes it, but only with a DEEP default — 6 halvings left 1 of 12 steps
+converged and reported 287 kN; 25 halvings converged all 12 and reported 405 kN
+**at every penalty rigidity from 1e2 to 1e4**. That invariance is now a test:
+a converged capacity must not depend on the penalty constant. `NL3Step` also
+gained a `residual` field, per the L5 convention that iterative routines report
+one — its absence is what made this take three attempts to diagnose.
+
+Diagonal equilibration was added around the solve and KEPT, but it is not what
+fixed convergence (measured: no effect). It earns its place because
+`luFactor`'s singularity test is an absolute 1e-14, meaningless against entries
+of order 1e10 — scaling the diagonal to ~1 makes mechanism detection real.
+
+**Remaining phase 3b:** the Model Space UI — a panel to run the skew pushover,
+pick the plan angle and surface, and show the capacity curve plus hinge states.
+The engine side is done and tested; nothing is wired into a page yet.
+
+**Also worth knowing:** the power surface is only usable for α ≲ 6. Beyond that
+it approaches a sharp-cornered box and the return map stops converging (α = 20
+failed on most steps). Genuinely uncoupled axes should use two 1-D hinges.
 
 **Flagged, not fixed (out of scope):** `webapp/index.html` declares no favicon
 `<link>`, so every page load 404s on the browser's default `/favicon.ico`

@@ -123,6 +123,10 @@ export interface NL3Step {
   hinges: number
   converged: boolean
   iterations: number
+  /** Relative out-of-balance ‖R‖/scale left at the end of the step. Reported per
+   *  the L5 convention that iterative routines hand back their residual so the
+   *  caller — not the engine — decides how to present a step that fell short. */
+  residual: number
 }
 
 export interface NL3Result {
@@ -173,6 +177,20 @@ export interface NL3Input {
    */
   tol?: number
   maxIter?: number
+  /**
+   * Backtracking halvings allowed per Newton iteration (default 25). 0 disables
+   * the line search and gives plain full Newton.
+   *
+   * The default is deliberately deep. A hinge's tangent falls by k0/(b·k0) at
+   * yield — 5e5 at the default rigidity and hardening — so when a step yields
+   * twenty hinges at once the full Newton direction can be wildly wrong and a
+   * handful of halvings is not enough to recover. Measured on a two-storey
+   * frame: with 6 halvings only 1 of 12 steps converged and the reported peak
+   * base shear was 287 kN; with 25, all 12 converged and the peak was 405 kN
+   * **at every penalty rigidity from 1e2 to 1e4**. That invariance is the real
+   * check — a converged answer must not depend on the penalty constant.
+   */
+  maxBacktrack?: number
 }
 
 const DOF = 6
@@ -214,6 +232,10 @@ export interface Frame3Assembly {
   hingeDeform: (d: number[], h: Frame3Hinge) => [number, number]
   /** Internal force + tangent contribution of every hinge. */
   hingeContrib: (d: number[]) => { fs: number[]; Kh: number[][] }
+  /** Internal hinge force ALONE. The line search evaluates the residual several
+   *  times per iteration and never needs the tangent; skipping it avoids
+   *  allocating an nf×nf matrix per trial step. */
+  hingeForce: (d: number[]) => number[]
   /** Axial force in a member at the current state, kN (+tension). */
   axialForce: (d: number[], memberId: string) => number
   /** Constitutive parameters of a hinge, with P–M applied at the current state. */
@@ -408,6 +430,24 @@ export function assembleFrame3D(inp: NL3Input): Frame3Assembly | null {
     return { ...base, Mpy: red.Mpy, Mpz: red.Mpz }
   }
 
+  const hingeForce = (d: number[]): number[] => {
+    const fs = new Array(nf).fill(0)
+    for (const h of hinges) {
+      const [thY, thZ] = hingeDeform(d, h)
+      const { My, Mz } = biaxialProbe(thY, thZ, h.state, hingeParams(d, h))
+      const cols = [h.nodeRot[0], h.nodeRot[1], h.nodeRot[2], h.beamY, h.beamZ]
+      const B = [
+        [h.ey[0], h.ey[1], h.ey[2], -1, 0],
+        [h.ez[0], h.ez[1], h.ez[2], 0, -1],
+      ]
+      for (let r = 0; r < 5; r++) {
+        const P = fpos.get(cols[r])
+        if (P !== undefined) fs[P] += B[0][r] * My + B[1][r] * Mz
+      }
+    }
+    return fs
+  }
+
   const hingeContrib = (d: number[]) => {
     const fs = new Array(nf).fill(0)
     const Kh: number[][] = Array.from({ length: nf }, () => new Array(nf).fill(0))
@@ -439,7 +479,7 @@ export function assembleFrame3D(inp: NL3Input): Frame3Assembly | null {
 
   return {
     nodeIdx, hinges, fpos, nf, Kbeam, Pref,
-    hingeDeform, hingeContrib, axialForce, hingeParams,
+    hingeDeform, hingeContrib, hingeForce, axialForce, hingeParams,
   }
 }
 
@@ -452,9 +492,32 @@ export function assembleFrame3D(inp: NL3Input): Frame3Assembly | null {
 export function nonlinearFrame3D(inp: NL3Input): NL3Result | null {
   const asm = assembleFrame3D(inp)
   if (!asm) return null
-  const { nodeIdx, hinges, fpos, nf, Kbeam, Pref, hingeDeform, hingeContrib, hingeParams, axialForce } = asm
+  const {
+    nodeIdx, hinges, fpos, nf, Kbeam, Pref,
+    hingeDeform, hingeContrib, hingeForce, hingeParams, axialForce,
+  } = asm
   const tol = inp.tol ?? 1e-9
-  const maxIter = inp.maxIter ?? 40
+  const maxIter = inp.maxIter ?? 60
+  const maxBacktrack = inp.maxBacktrack ?? 25
+
+  /** Out-of-balance force at a trial state, with the scale its norm is judged
+   *  against. No tangent — the line search calls this repeatedly. */
+  const residual = (dv: number[], lam: number) => {
+    const fs = hingeForce(dv)
+    const R = new Array(nf)
+    let rn = 0, intN = 0, extN = 0
+    for (let r = 0; r < nf; r++) {
+      let kd = 0
+      for (let q = 0; q < nf; q++) kd += Kbeam[r][q] * dv[q]
+      const internal = kd + fs[r], ext = lam * Pref[r]
+      R[r] = ext - internal
+      rn += R[r] * R[r]; intN += internal * internal; extN += ext * ext
+    }
+    // Scale on the INTERNAL force as well as the applied load: a diverged state
+    // has enormous internal forces, so its residual can never look small
+    // relative to them.
+    return { R, rn: Math.sqrt(rn), scale: Math.max(Math.sqrt(intN), Math.sqrt(extN), 1e-12) }
+  }
   const dirIdx = { x: 0, y: 1, z: 2 }[inp.controlDir ?? 'x']
   const dispControl = inp.control === 'displacement'
   const nSteps = inp.steps ?? 60
@@ -479,40 +542,95 @@ export function nonlinearFrame3D(inp: NL3Input): NL3Result | null {
     if (!dispControl) lambda = target
     let it = 0, ok = false
     for (; it < maxIter; it++) {
-      const { fs, Kh } = hingeContrib(d)
-      const R = new Array(nf).fill(0)
-      let rn = 0, intN = 0, extN = 0
-      for (let r = 0; r < nf; r++) {
-        let kd = 0
-        for (let q = 0; q < nf; q++) kd += Kbeam[r][q] * d[q]
-        const internal = kd + fs[r], ext = lambda * Pref[r]
-        R[r] = ext - internal
-        rn += R[r] * R[r]; intN += internal * internal; extN += ext * ext
-      }
-      // Scale on the INTERNAL force as well as the applied load: a diverged
-      // state has enormous internal forces, so its residual can never look
-      // small relative to them.
-      const scale = Math.max(Math.sqrt(intN), Math.sqrt(extN), 1e-12)
+      const cur = residual(d, lambda)
       const ctrlErr = dispControl && ctrlIdx !== undefined ? Math.abs(d[ctrlIdx] - target) : 0
-      if (Math.sqrt(rn) <= tol * scale && ctrlErr <= 1e-10 * Math.max(1, Math.abs(target))) {
+      if (cur.rn <= tol * cur.scale && ctrlErr <= 1e-10 * Math.max(1, Math.abs(target))) {
         ok = true
         break
       }
+      const R = cur.R
+      const { Kh } = hingeContrib(d)
       const Kt: number[][] = Array.from({ length: nf }, (_, r) => {
         const row = new Array<number>(nf)
         for (let q = 0; q < nf; q++) row[q] = Kbeam[r][q] + Kh[r][q]
         return row
       })
+      /**
+       * Symmetric diagonal equilibration before factorising.
+       *
+       * The hinge penalty stiffness is `rigidity`·EI/L, so the tangent's
+       * diagonal spans four orders of magnitude between beam DOFs and hinge
+       * DOFs. `luFactor`'s singularity test is an ABSOLUTE 1e-14, which entries
+       * of order 1e10 can never trip — so an actually singular tangent would be
+       * factored anyway and return nonsense instead of being reported as a
+       * mechanism. Scaling the diagonal to ~1 makes that test mean something,
+       * and costs the factorisation nothing.
+       *
+       * To be clear about what this does NOT do: it is not what fixed the
+       * multi-hinge convergence failure. Measured on a two-storey frame it
+       * changed the outcome not at all; the backtracking depth did. It is kept
+       * for the singularity test and for factorisation accuracy.
+       *
+       * Solving (S·K·S)·y = S·b with S = diag(1/√|Kii|) and recovering x = S·y
+       * is exact in real arithmetic — this buys conditioning, not a shortcut.
+       */
+      const S = new Array(nf)
+      for (let r = 0; r < nf; r++) {
+        const v = Math.abs(Kt[r][r])
+        S[r] = v > 0 ? 1 / Math.sqrt(v) : 1
+      }
+      for (let r = 0; r < nf; r++) {
+        const row = Kt[r], sr = S[r]
+        for (let q = 0; q < nf; q++) row[q] *= sr * S[q]
+      }
       const lu = luFactor(Kt)
       if (!lu) { mechanism = true; break }
-      const du = luSolve(lu, R)
+      const solveScaled = (b: number[]): number[] => {
+        const bs = new Array(nf)
+        for (let r = 0; r < nf; r++) bs[r] = b[r] * S[r]
+        const y = luSolve(lu, bs)
+        for (let r = 0; r < nf; r++) y[r] *= S[r]
+        return y
+      }
+      const du = solveScaled(R)
+
+      /**
+       * Backtracking line search on the residual.
+       *
+       * Full Newton cycles badly here: the bilinear hinge tangent jumps by a
+       * factor of ~1/b as a hinge crosses yield, so with dozens of hinges near
+       * the surface at once, successive iterates flip hinges in and out and the
+       * residual never settles — the iteration cap is hit at ANY tolerance,
+       * which is how this was found. Halving the step until the residual
+       * actually decreases restores convergence.
+       */
+      const step = (inc: number[], dl: number): boolean => {
+        // Iteration 0 is the PREDICTOR: under displacement control it raises λ
+        // to meet the new target, which legitimately raises the residual before
+        // the displacement catches up. Line-searching it would reject the very
+        // step the constraint prescribes, so damping starts with the corrections.
+        let s = 1
+        for (let k = 0; k <= (it > 0 ? maxBacktrack : 0); k++) {
+          const trial = new Array(nf)
+          for (let r = 0; r < nf; r++) trial[r] = d[r] + s * inc[r]
+          const tl = lambda + s * dl
+          const tr = residual(trial, tl)
+          if (tr.rn < cur.rn || k === (it > 0 ? maxBacktrack : 0)) {
+            for (let r = 0; r < nf; r++) d[r] = trial[r]
+            lambda = tl
+            return true
+          }
+          s *= 0.5
+        }
+        return true
+      }
 
       if (dispControl) {
         // δd = δd_R + δλ·δd_P with Kt·δd_P = Pref; the constraint d[ctrl] =
         // target fixes δλ, making the load factor an OUTPUT — which is what
         // lets the curve descend past its peak.
         if (ctrlIdx === undefined) { mechanism = true; break }
-        const dP = luSolve(lu, Pref)
+        const dP = solveScaled(Pref)
         // The control DOF has to actually participate in the load-response mode.
         // Measured RELATIVE to ‖dP‖: an absolute floor passes a denominator that
         // is negligible next to the rest of the vector, and dividing by it throws
@@ -522,10 +640,11 @@ export function nonlinearFrame3D(inp: NL3Input): NL3Result | null {
         const denom = dP[ctrlIdx]
         if (!(Math.abs(denom) > 1e-10 * Math.max(dPmax, 1e-30))) { mechanism = true; break }
         const dl = (target - d[ctrlIdx] - du[ctrlIdx]) / denom
-        lambda += dl
-        for (let r = 0; r < nf; r++) d[r] += du[r] + dl * dP[r]
+        const inc = new Array(nf)
+        for (let r = 0; r < nf; r++) inc[r] = du[r] + dl * dP[r]
+        step(inc, dl)
       } else {
-        for (let r = 0; r < nf; r++) d[r] += du[r]
+        step(du, 0)
       }
     }
     if (mechanism) break
@@ -547,6 +666,7 @@ export function nonlinearFrame3D(inp: NL3Input): NL3Result | null {
       disp: ctrlIdx !== undefined ? d[ctrlIdx] : 0,
       load: lambda * (ctrlIdx !== undefined ? Pref[ctrlIdx] : 0),
       hinges: yielded, converged: ok, iterations: it,
+      residual: (() => { const f = residual(d, lambda); return f.rn / f.scale })(),
     })
   }
 
