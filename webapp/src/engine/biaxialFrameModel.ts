@@ -42,6 +42,7 @@ import { effectiveReleases } from './modelBridge'
 import {
   nonlinearFrame3D,
   type NL3Input, type NL3Member, type NL3Node, type NL3Support, type NL3Result,
+  type Hinge3Report,
 } from './nonlinearFrame3d'
 import type { BiaxialSurfaceSpec } from './biaxialHinge'
 
@@ -182,6 +183,81 @@ export function modelToBiaxialFrame(
     mass: buildSeismicMass(model),
     nHingeable,
     unsupported: { releases, offsets },
+  }
+}
+
+export interface BiaxialPushoverSummary {
+  /** Peak base shear reached, kN. */
+  peakShear: number
+  /** Largest control-axis displacement reached, m. */
+  peakDisp: number
+  /** That displacement as a fraction of total height. */
+  drift: number
+  /** Hinges past yield / hinges that could yield. */
+  yielded: number
+  nHingeable: number
+  /** Steps that did not reach the residual tolerance. */
+  nonConverged: number
+  /** Worst relative residual over the whole trace. */
+  worstResidual: number
+  /** Most-utilised hinges first, capped at `limit`. */
+  worst: Hinge3Report[]
+  /**
+   * Plain-language cautions for the reader — modelling features the hinge
+   * element dropped, a push that did not fully converge, a mechanism. Empty
+   * means the run is clean. The UI renders these; it does not decide them.
+   */
+  warnings: string[]
+}
+
+/**
+ * Condense a pushover run into the handful of numbers and cautions a reader
+ * needs. Pure, so the panel that shows it carries no judgement of its own.
+ */
+export function summarizeBiaxialPushover(
+  r: BiaxialPushoverResult, limit = 10,
+): BiaxialPushoverSummary {
+  const steps = r.result.steps
+  const nonConverged = steps.filter((s) => !s.converged).length
+  const worstResidual = steps.length ? Math.max(...steps.map((s) => s.residual)) : 0
+  const peakDisp = r.curve.length ? Math.max(...r.curve.map((c) => Math.abs(c.disp))) : 0
+  const yielded = r.result.hinges.filter((h) => h.yielded).length
+
+  const warnings: string[] = []
+  const { releases, offsets } = r.bridge.unsupported
+  if (releases.length) {
+    warnings.push(
+      `${releases.length} member${releases.length === 1 ? '' : 's'} carry end releases, which the hinge `
+      + 'element cannot represent — they were analysed as fully continuous, so this run is stiffer '
+      + 'and stronger than the real frame.')
+  }
+  if (offsets.length) {
+    warnings.push(
+      `${offsets.length} member${offsets.length === 1 ? '' : 's'} carry rigid end offsets, which were `
+      + 'ignored — members span node to node here.')
+  }
+  if (nonConverged > 0) {
+    warnings.push(
+      `${nonConverged} of ${steps.length} steps did not converge (worst residual `
+      + `${worstResidual.toExponential(1)}). Treat the capacity beyond that point as unreliable rather `
+      + 'than as a result — try more steps.')
+  }
+  if (r.result.mechanism) {
+    warnings.push('A collapse mechanism formed, so the push stopped before the target drift.')
+  }
+  if (r.bridge.nHingeable === 0) {
+    warnings.push('No member was given a plastic capacity, so this run is purely elastic.')
+  }
+
+  return {
+    peakShear: r.peakShear,
+    peakDisp,
+    drift: r.totalHeight > 0 ? peakDisp / r.totalHeight : 0,
+    yielded,
+    nHingeable: r.bridge.nHingeable,
+    nonConverged, worstResidual,
+    worst: [...r.result.hinges].sort((a, b) => b.utilisation - a.utilisation).slice(0, limit),
+    warnings,
   }
 }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  weakPlasticMoment, modelToBiaxialFrame, runBiaxialPushover,
+  weakPlasticMoment, modelToBiaxialFrame, runBiaxialPushover, summarizeBiaxialPushover,
 } from './biaxialFrameModel'
 import { plasticMoment } from './pushoverModel'
 import { modelToFrame3D } from './modelBridge'
@@ -183,5 +183,50 @@ describe('runBiaxialPushover — skew push on the real 3-D model', () => {
     // converge at high rigidity and reported 287 kN instead of 405 kN.
     const peaks = [1e2, 1e3, 1e4].map((rigidity) => push({ angleDeg: 0, rigidity }).peakShear)
     for (const p of peaks) expect(p / peaks[0]).toBeCloseTo(1, 2)
+  })
+})
+
+describe('summarizeBiaxialPushover', () => {
+  const model = symmetricModel()
+  const run = runBiaxialPushover(model, { angleDeg: 45, steps: 10 })!
+
+  it('reports the headline numbers straight from the trace', () => {
+    const s = summarizeBiaxialPushover(run)
+    expect(s.peakShear).toBe(run.peakShear)
+    expect(s.yielded).toBe(run.result.hinges.filter((h) => h.yielded).length)
+    expect(s.nHingeable).toBe(run.bridge.nHingeable)
+    expect(s.drift).toBeCloseTo(s.peakDisp / run.totalHeight, 12)
+    expect(s.nonConverged).toBe(0)
+    expect(s.warnings).toEqual([])
+  })
+
+  it('ranks hinges by utilisation and honours the limit', () => {
+    const s = summarizeBiaxialPushover(run, 5)
+    expect(s.worst.length).toBe(5)
+    for (let k = 1; k < s.worst.length; k++) {
+      expect(s.worst[k].utilisation).toBeLessThanOrEqual(s.worst[k - 1].utilisation)
+    }
+    // the most-utilised hinge is the most-utilised hinge in the full result
+    expect(s.worst[0].utilisation).toBe(Math.max(...run.result.hinges.map((h) => h.utilisation)))
+  })
+
+  it('warns — in words — about model features the hinge element dropped', () => {
+    const withRel: StructuralModel = {
+      ...model,
+      members: model.members.map((m, k) => (k === 0 ? { ...m, releases: { jEnd: { Mz: true } } } : m)),
+    }
+    const r = runBiaxialPushover(withRel, { angleDeg: 0, steps: 6 })!
+    const s = summarizeBiaxialPushover(r)
+    expect(s.warnings.length).toBeGreaterThan(0)
+    expect(s.warnings.join(' ')).toMatch(/release/i)
+    // the caution says what it means for the answer, not just that it happened
+    expect(s.warnings.join(' ')).toMatch(/stiffer and stronger/i)
+  })
+
+  it('says so when nothing could yield', () => {
+    const r = runBiaxialPushover(model, { angleDeg: 0, steps: 4, elastic: true })!
+    const s = summarizeBiaxialPushover(r)
+    expect(s.nHingeable).toBe(0)
+    expect(s.warnings.join(' ')).toMatch(/purely elastic/i)
   })
 })

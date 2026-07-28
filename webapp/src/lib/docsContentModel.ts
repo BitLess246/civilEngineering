@@ -170,6 +170,29 @@ export const MODEL_TOOLS: DocTool[] = [
         ],
       },
       {
+        id: 'ms-biaxial-pushover',
+        title: 'Pushover tab — biaxial (skew) pushover',
+        body: 'A second pushover on the same tab, and a different idealisation. The one above reduces the '
+          + 'building to an equivalent plane frame and gives each member end a hinge that bends about ONE axis. '
+          + 'This one runs on the real 3-D model with no reduction, and each hinge carries a moment vector whose '
+          + 'two bending axes yield on a single coupled surface. That is what makes a push at an arbitrary plan '
+          + 'angle meaningful: at 45° a corner column can sit at 0.8·Mpy AND 0.8·Mpz, which two independent 1-D '
+          + 'hinges would call elastic and the real section calls well past yield.',
+        controls: [
+          { kind: 'field', name: 'Push angle in plan', unit: '°', default: '45', what: 'Direction of the lateral push measured from +X toward +Z. 0° and 90° are the principal directions; intermediate angles bend every column about both local axes at once, which is the case this analysis exists for.' },
+          { kind: 'field', name: 'Target roof drift', unit: '% of H', default: '4', what: 'How far the control node is pushed, as a fraction of the total frame height. The push is displacement-controlled, so the curve can descend past its peak instead of stopping there.' },
+          { kind: 'field', name: 'Displacement steps', default: '40', what: 'Number of increments the target drift is reached in. More steps give a smoother capacity curve and make convergence easier when many hinges yield at once; the result panel reports any step that fell short.' },
+          { kind: 'choice', name: 'Yield surface', default: 'Bresler contour', what: 'Which surface couples the two bending axes. Bresler is the ACI load contour for reinforced-concrete columns and takes axial load through the uniaxial P–M chords. Orbison is the standard fitted surface for compact steel I-shapes and carries the axial term inside the surface itself.' },
+          { kind: 'field', name: 'Contour exponent α', default: '2', what: 'Shape of the Bresler contour. 1 is the conservative linear chord, about 1.5 the usual reinforced-concrete fit, 2 the ellipse. Larger values weaken the coupling toward independent axes, but above roughly 6 the surface approaches a sharp-cornered box and the hinge return map stops converging.' },
+          { kind: 'toggle', name: 'P–M interaction (biaxial)', default: 'on', what: 'Reduces both hinge capacities for the member\u2019s current axial force. Turning it off leaves the pure-bending capacities, which overstates column strength.' },
+          { kind: 'button', name: 'Run biaxial pushover', what: 'Runs the skew push in the background worker. Concrete ρ and Mp scale are shared with the pushover settings above rather than duplicated.' },
+          { kind: 'output', name: 'Peak base shear', unit: 'kN', what: 'Largest total lateral force carried, measured on whichever global axis takes the larger share of the push.' },
+          { kind: 'output', name: 'Converged at every step', what: 'Whether every increment reached the residual tolerance, and the worst residual over the trace. A push that fell short is flagged rather than quietly reported, because the capacity beyond that point is not trustworthy.' },
+          { kind: 'output', name: 'Most-utilised hinges', what: 'The worst hinges by demand/capacity on the yield surface, with My and Mz about the member\u2019s own local axes, the axial force, and the accumulated plastic rotation.' },
+          { kind: 'output', name: 'Warnings', what: 'Plain-language cautions: member end releases and rigid offsets that the hinge element cannot represent (the run is then stiffer and stronger than the real frame), steps that did not converge, a collapse mechanism, or a model where nothing could yield.' },
+        ],
+      },
+      {
         id: 'ms-nonlinear',
         title: 'Nonlinear tab',
         body: 'Nonlinear time history. Two plasticity models are offered; they differ in how the structure is idealised, not just in numerics.',

@@ -993,9 +993,19 @@ fixed convergence (measured: no effect). It earns its place because
 `luFactor`'s singularity test is an absolute 1e-14, meaningless against entries
 of order 1e10 — scaling the diagonal to ~1 makes mechanism detection real.
 
-**Remaining phase 3b:** the Model Space UI — a panel to run the skew pushover,
-pick the plan angle and surface, and show the capacity curve plus hinge states.
-The engine side is done and tested; nothing is wired into a page yet.
+- **#454 — phase 3b, the Model Space UI.** A `biaxialPushover` worker task, a
+  "Biaxial pushover" section on the existing Pushover tab (plan angle, target
+  drift, steps, yield surface, contour exponent, P–M), and
+  `components/BiaxialPushoverPanel.tsx` — capacity curve, headline rows, the
+  most-utilised hinges with My/Mz in the member's own local axes, and warnings.
+  All judgement lives in the pure, tested `summarizeBiaxialPushover`; the panel
+  only renders it. The six new controls were added to the `/docs` catalogue in
+  the same PR, per the promise #450 made. Browser-verified end to end: a
+  generated grid pushed at 45° gives 888.9 kN at 2.83% drift, 16 of 26 hinges
+  yielded, converged at every one of 40 steps (worst residual 8.7e-10).
+
+**The biaxial hinge series is complete** (#451 law → #452 space frame → #453
+bridge + skew pushover → #454 UI).
 
 **Also worth knowing:** the power surface is only usable for α ≲ 6. Beyond that
 it approaches a sharp-cornered box and the return map stops converging (α = 20

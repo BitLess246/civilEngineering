@@ -12,6 +12,7 @@ import { analyzeFrame3D, solveFrame3D, applyF3Combo, type F3AnalyzeOpts } from '
 import { analyzeActiveSet, solveActiveSet, axialModes } from './axialOnly'
 import { modalAnalysis } from './modal'
 import { runPushoverModel, type PushoverModelOpts } from './pushoverModel'
+import { runBiaxialPushover, type BiaxialPushoverOpts } from './biaxialFrameModel'
 import { runTimeHistoryModel, makeGroundMotion, type TimeHistoryModelOpts, type GroundMotionSpec } from './timeHistoryModel'
 import { runNonlinearModel, type NonlinearModelOpts } from './nonlinearModel'
 import { runNonlinearFrameModel } from './nonlinearFrameModel'
@@ -27,6 +28,7 @@ export type SolverRequest =
   | { id: number; kind: 'optimize'; model: StructuralModel; soil: SoilOptions; plan: FootingPlan; opts: AnalyzeOptions; tryBars: boolean; maxIter: number }
   | { id: number; kind: 'modal'; model: StructuralModel; nModes: number }
   | { id: number; kind: 'pushover'; model: StructuralModel; opts: PushoverModelOpts }
+  | { id: number; kind: 'biaxialPushover'; model: StructuralModel; opts: BiaxialPushoverOpts }
   | { id: number; kind: 'timeHistory'; model: StructuralModel; opts: TimeHistoryModelOpts }
   | {
       id: number; kind: 'nonlinearTH'; model: StructuralModel; spec: GroundMotionSpec
@@ -88,6 +90,10 @@ ctx.onmessage = async (e: MessageEvent<SolverRequest>) => {
       onProgress({ phase: 'Pushover (event-to-event)' })
       const pushover = runPushoverModel(msg.model, msg.opts)
       ctx.postMessage({ id: msg.id, ok: true, result: { pushover } })
+    } else if (msg.kind === 'biaxialPushover') {
+      onProgress({ phase: 'Biaxial pushover (skew, P–My–Mz hinges)' })
+      const biaxialPushover = runBiaxialPushover(msg.model, msg.opts)
+      ctx.postMessage({ id: msg.id, ok: true, result: { biaxialPushover } })
     } else if (msg.kind === 'timeHistory') {
       onProgress({ phase: 'Time-history (modal Newmark-β)' })
       const timeHistory = runTimeHistoryModel(msg.model, msg.opts)
