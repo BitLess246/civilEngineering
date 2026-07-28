@@ -167,7 +167,10 @@ export function appliedResultant(loads: F3Load[], memberLen: (id: string) => num
  *  Matrix Structural Analysis §5.6): the bending blocks become
  *    12EI/L³(1+Φ), 6EI/L²(1+Φ), (4+Φ)EI/L(1+Φ), (2−Φ)EI/L(1+Φ)
  *  Φ = 0 (the default) recovers the Euler–Bernoulli element exactly. */
-function kLocal(EA: number, GJ: number, EIy: number, EIz: number, L: number, phiY = 0, phiZ = 0): number[][] {
+/** Exported so `nonlinearFrame3d` builds its elements from THIS element rather
+ *  than a re-derivation — which is what makes "the elastic case reproduces
+ *  solveFrame3D exactly" a real check instead of a coincidence. */
+export function kLocal(EA: number, GJ: number, EIy: number, EIz: number, L: number, phiY = 0, phiZ = 0): number[][] {
   const k = Array.from({ length: 12 }, () => new Array(12).fill(0))
   const set = (r: number, c: number, v: number) => { k[r][c] = v; k[c][r] = v }
   set(0, 0, EA / L); set(0, 6, -EA / L); set(6, 6, EA / L)

@@ -60,6 +60,7 @@ export const SOLVER_MODULES: SolverModuleSpec[] = [
   { module: 'nonlinearModel', group: 'Nonlinear', title: 'Shear-building reduction' },
   { module: 'nonlinearTimeHistory', group: 'Nonlinear', title: 'Newmark + Newton-Raphson' },
   { module: 'arcLength', group: 'Nonlinear', title: 'Arc-length (Riks/Crisfield) continuation' },
+  { module: 'nonlinearFrame3d', group: 'Nonlinear', title: 'Space frame with biaxial hinges' },
   { module: 'axialOnly', group: 'Nonlinear', title: 'Tension/compression-only active set' },
 ]
 

@@ -29,6 +29,7 @@ import { solveActiveSet, type AxialMode } from './axialOnly'
 import { memberServiceDeflection } from './memberDeflection'
 import { arcLengthFrame } from './arcLength'
 import { biaxialProbe, newBiaxialState } from './biaxialHinge'
+import { nonlinearFrame3D, type NL3Input } from './nonlinearFrame3d'
 import { Ec as concreteE } from './slabDeflection'
 import { solveBoltedConnection } from './boltedConnection'
 import { solveWeldedConnection } from './weldedConnection'
@@ -260,6 +261,31 @@ const biaxSkew = (() => {
   const Mp = 100
   const r = biaxialProbe(0.01, 0.01, newBiaxialState(), { k0y: 1e5, k0z: 1e5, Mpy: Mp, Mpz: Mp })
   return { manual: Mp / Math.SQRT2, software: r.My }
+})()
+
+// ── 13c-quater. Space frame with biaxial hinges — skew cantilever collapse ──
+// A cantilever pushed at angle α in its local y′–z′ plane puts My = P·L·sinα
+// and Mz = P·L·cosα on the base hinge, so the elliptical yield surface fixes
+// the mechanism load in closed form:
+//     P = 1 / (L·√((sinα/Mpy)² + (cosα/Mpz)²))
+// Two UNCOUPLED 1-D hinges would instead report min(Mpy/sinα, Mpz/cosα)·(1/L)
+// — 41% high at 45° with equal capacities — so this is the check that the
+// coupling actually reaches the frame level and is not just in the hinge law.
+// A token hardening (b = 1e-6) keeps the mechanism tangent non-singular; it
+// lifts the plateau by ~1e-6 relative, which is inside the tolerance below.
+const biaxSkewFrame = (() => {
+  const E = 200000, G = 77000, A = 1e4, Iy = 5e7, Iz = 1e8, J = 1e6
+  const L = 3, Mpy = 100, Mpz = 200, a = Math.PI / 4, b = 1e-6
+  const inp: NL3Input = {
+    nodes: [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: L, y: 0, z: 0 }],
+    members: [{ id: 'm', i: 'a', j: 'b', E, G, A, Iy, Iz, J, Mpy, Mpz, by: b, bz: b }],
+    supports: [{ node: 'a', fixity: 'fixed' }],
+    loads: [{ node: 'b', Fy: -Math.cos(a), Fz: -Math.sin(a) }],
+    controlNode: 'b', controlDir: 'y', control: 'displacement', dispMax: 0.2, steps: 200,
+  }
+  const r = nonlinearFrame3D(inp)
+  const peak = r ? Math.max(...r.steps.filter((s) => s.converged).map((s) => Math.abs(s.lambda))) : NaN
+  return { manual: 1 / (L * Math.hypot(Math.sin(a) / Mpy, Math.cos(a) / Mpz)), software: peak }
 })()
 
 // ── 13d. Smooth-material arc-length — same collapse load as the plastic law ──
@@ -604,6 +630,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'biaxial-skew-projection', category: 'Analysis', title: 'Biaxial hinge — 45° projection onto the circular surface',
     reference: 'Closest-point projection (Simo & Hughes Box 3.2)', formula: 'M = Mp/√2 per axis',
     manual: biaxSkew.manual, software: biaxSkew.software, unit: 'kN·m', tol: 1e-9,
+  },
+  {
+    id: 'biaxial-frame-skew-collapse', category: 'Analysis', title: 'Biaxial hinge frame — skew cantilever collapse',
+    reference: 'Limit analysis on the P–M–M surface', formula: 'P = 1/(L·√((sinα/Mpy)² + (cosα/Mpz)²)), α = 45°',
+    manual: biaxSkewFrame.manual, software: biaxSkewFrame.software, unit: 'kN', tol: 1e-4,
   },
   {
     id: 'brace-active-set', category: 'Analysis', title: 'Tension-only brace — active set vs slack brace removed',
