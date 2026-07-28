@@ -733,10 +733,20 @@ _Analysis completeness (P3):_
   assembly (`assembleFrame` is shared, so a pushover and a time history see
   identical geometry and hinge state); with `Mp = ∞` it reproduces `newmarkDirect`
   to 1e-9. This supersedes the shear-building reduction's strong-beam/weak-column
-  assumption — every member end can hinge. **Still open**: bridge from
-  `StructuralModel` (extract/condense an equivalent plane frame), 3D/biaxial
-  hinges, P–M interaction on hinge capacity (reuse `pmInteraction`), and
-  displacement/arc-length control for post-peak softening.
+  assumption — every member end can hinge.
+  `engine/nonlinearFrameModel.ts` (#440) is the **`StructuralModel` bridge**: it
+  condenses a 3D building by COMBINING every frame line parallel to the loading
+  direction into one equivalent plane frame (perpendicular coordinate collapses,
+  transverse members dropped, EI/EA and Mp summed, mass aggregated). Exact when
+  the parallel frames are identical and deform together (the rigid-diaphragm
+  assumption); validated by reproducing the full 3D modal T₁ within 10%
+  (0.937–0.969), independently agreeing with the shear-building reduction.
+  `runNonlinearFrameModel(model, gm)` runs the hinge time history straight off a
+  `StructuralModel`; the same condensed frame also drives a static pushover.
+  **Still open**: 3D/biaxial hinges, P–M interaction on hinge capacity (reuse
+  `pmInteraction` — axial load reduces Mp, currently ignored and unconservative
+  for columns), displacement/arc-length control for post-peak softening, and a
+  UI surface for the hinge engines.
 - **Load combinations with nonlinear members (DECIDED)**: tension/compression-only
   members break superposition, and the owner's decision is **per-combo active
   set** — solve every NSCP combo independently with its own active-set iteration
