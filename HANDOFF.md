@@ -724,6 +724,25 @@ _Analysis completeness (P3):_
   pushover engine first; one direction at a time; torsion ignored.
   **Next**: a Model-Space UI tab for it, and distributed member-end hinge states
   (fibre/concentrated) instead of the storey-spring reduction.
+- **Distributed member-end plastic hinges** — ✔ shipped (#438 statics, #439
+  dynamics): `engine/nonlinearFrame.ts` puts the hinge ROTATION on its own global
+  DOF (node θ —[spring]— θb ═ beam), so the frame is a linear elastic assembly
+  plus 1-D hysteretic springs and hinge state determination is exact. Validated
+  against limit analysis — cantilever `P = Mp/L`, fixed–fixed `P = 8·Mp/L`.
+  `engine/nonlinearFrameDynamic.ts` adds Newmark-β + Newton-Raphson over the same
+  assembly (`assembleFrame` is shared, so a pushover and a time history see
+  identical geometry and hinge state); with `Mp = ∞` it reproduces `newmarkDirect`
+  to 1e-9. This supersedes the shear-building reduction's strong-beam/weak-column
+  assumption — every member end can hinge. **Still open**: bridge from
+  `StructuralModel` (extract/condense an equivalent plane frame), 3D/biaxial
+  hinges, P–M interaction on hinge capacity (reuse `pmInteraction`), and
+  displacement/arc-length control for post-peak softening.
+- **Load combinations with nonlinear members (DECIDED)**: tension/compression-only
+  members break superposition, and the owner's decision is **per-combo active
+  set** — solve every NSCP combo independently with its own active-set iteration
+  and envelope the results, accepting the loss of the shared-LU fast path for
+  models that contain limited members. Not yet implemented; this is the spec for
+  when `axialMode` is routed into the design pipeline.
 - **Tension-only / compression-only members** (braces, uplift springs) and a
   **consistent-mass** option beside lumped — neither exists anywhere.
 - ~~**Irregularity auto-flags** — NSCP Table 208-9/10 (torsional, soft-storey,
