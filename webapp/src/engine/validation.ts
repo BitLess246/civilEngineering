@@ -27,6 +27,7 @@ import { generateGridModel } from './modelBuilder'
 import { solveFrame3D, rectJ, type F3Node, type F3Member, type F3Support } from './frame3d'
 import { solveActiveSet, type AxialMode } from './axialOnly'
 import { memberServiceDeflection } from './memberDeflection'
+import { arcLengthFrame } from './arcLength'
 import { Ec as concreteE } from './slabDeflection'
 import { solveBoltedConnection } from './boltedConnection'
 import { solveWeldedConnection } from './weldedConnection'
@@ -210,6 +211,27 @@ const beamDeflIntegration = (() => {
   })
   const EI = concreteE(fc) * ((b * h ** 3) / 12) * 1e-9      // kN·m²
   return { manual: ((5 * w * L ** 4) / (384 * EI)) * 1000, software: r.deltaD }
+})()
+
+// ── 13c. Arc-length path following — peak λ IS the collapse load ────────────
+// Load control cannot reach the peak (no equilibrium exists above it) and has
+// to bracket it by the last converged step. Arc-length walks THROUGH the limit
+// point on the sign of det(Kt), so the peak of the traced path is a directly
+// reported number and must equal the rigid-plastic cantilever mechanism Mp/L.
+// The hinge is PERFECTLY plastic (b = 0) so the plateau is exactly Mp/L; with
+// hardening the peak legitimately rises above it and the comparison would be
+// against the wrong reference, not a solver error.
+const arcCollapse = (() => {
+  const E = 200000, I = 1e8, A = 1e4, L = 3, Mp = 100
+  const r = arcLengthFrame({
+    nodes: [{ id: 'n1', x: 0, y: 0 }, { id: 'n2', x: L, y: 0 }],
+    members: [{ id: 'm', i: 'n1', j: 'n2', E, I, A, Mp, b: 0 }],
+    supports: [{ node: 'n1', type: 'fixed' }],
+    loads: [{ node: 'n2', Fy: -1 }],
+    controlNode: 'n2', controlDir: 'y',
+    arcLength: 0.002, arcSteps: 300, dispStop: 0.3,
+  })
+  return { manual: Mp / L, software: r ? r.peakLambda : NaN }
 })()
 
 // ── 13b. Tension-only cross-brace — active set ≡ removing the slack brace ────
@@ -515,6 +537,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'beam-defl-integration', category: 'RC', title: 'Service deflection by moment-diagram integration',
     reference: 'NSCP 424.2 / ACI 318-14 §24.2', formula: 'δ = ∬(M/EcIe) dx  ≡  5wℓ⁴/384EcIg (uncracked SS span)',
     manual: beamDeflIntegration.manual, software: beamDeflIntegration.software, unit: 'mm', tol: 1e-4,
+  },
+  {
+    id: 'arc-length-collapse', category: 'Analysis', title: 'Arc-length peak load — cantilever mechanism',
+    reference: 'Limit analysis (rigid-plastic)', formula: 'λpeak = Mp / L',
+    manual: arcCollapse.manual, software: arcCollapse.software, unit: 'kN', tol: 1e-9,
   },
   {
     id: 'brace-active-set', category: 'Analysis', title: 'Tension-only brace — active set vs slack brace removed',
