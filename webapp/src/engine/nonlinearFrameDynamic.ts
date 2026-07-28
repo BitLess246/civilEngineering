@@ -64,7 +64,7 @@ export function nonlinearFrameDynamic(inp: NLDynamicInput): NLDynamicResult | nu
   if (inp.ag.length === 0) return null
   const asm = assembleFrame(inp)
   if (!asm) return null
-  const { nodeIdx, hinges, fpos, nf, Kbeam, hingeDeform, hingeContrib } = asm
+  const { nodeIdx, hinges, fpos, nf, Kbeam, hingeDeform, hingeContrib, hingeCapacity } = asm
   if (nf === 0) return null
 
   const dt = inp.dt, beta = inp.beta ?? 0.25, gamma = inp.gamma ?? 0.5
@@ -169,7 +169,7 @@ export function nonlinearFrameDynamic(inp: NLDynamicInput): NLDynamicResult | nu
     }
     for (const h of hinges) {
       const { state } = bilinearCommit(hingeDeform(u, h), hingeDeform(uPrev, h), h.state,
-        { k0: h.k0, Fy: h.Mp, b: h.b })
+        { k0: h.k0, Fy: hingeCapacity(u, h), b: h.b })
       h.state = state
     }
     uPrev = [...u]
@@ -178,7 +178,7 @@ export function nonlinearFrameDynamic(inp: NLDynamicInput): NLDynamicResult | nu
 
   const report: HingeReport[] = hinges.map((h) => {
     const θ = hingeDeform(u, h)
-    const { f: M, yielding } = bilinearProbe(θ, h.state, { k0: h.k0, Fy: h.Mp, b: h.b })
+    const { f: M, yielding } = bilinearProbe(θ, h.state, { k0: h.k0, Fy: hingeCapacity(u, h), b: h.b })
     return {
       member: h.member, end: h.end, moment: M, rotation: θ,
       plastic: h.state.up, yielded: yielding || h.state.cumPlastic > 0,

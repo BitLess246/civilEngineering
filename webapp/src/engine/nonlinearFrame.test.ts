@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { nonlinearFrame, type NLMember, type NLFrameInput } from './nonlinearFrame'
+import { nonlinearFrame, assembleFrame, type NLMember, type NLFrameInput } from './nonlinearFrame'
 
 // EI = 200000 MPa × 1e8 mm⁴ = 20 000 kN·m²
 const E = 200000, I = 1e8, A = 1e4
@@ -128,5 +128,69 @@ describe('nonlinearFrame — guards', () => {
       members: [{ id: 'm', i: 'a', j: 'ghost', E, I, A }],
       supports: [{ node: 'a', type: 'fixed' }], loads: [], controlNode: 'a',
     })).toBeNull()
+  })
+})
+
+// ── P–M interaction on the hinge capacity ───────────────────────────────
+describe('nonlinearFrame — P–M interaction reduces the hinge capacity', () => {
+  // Portal frame: a lateral push puts the windward column in tension and the
+  // leeward one in compression, so their hinge capacities diverge under P–M.
+  // NOTE all pushes below stop near the collapse load (~110). Load control
+  // cannot equilibrate past collapse — displacement runs away and the tiny
+  // hardening lets moments creep above Mp, which is meaningless. Arc-length /
+  // displacement control is the fix and is on the backlog.
+  const portal = (pm: boolean, Pcap = 900) => ({
+    nodes: [
+      { id: 'b1', x: 0, y: 0 }, { id: 'b2', x: 4, y: 0 },
+      { id: 't1', x: 0, y: 3 }, { id: 't2', x: 4, y: 3 },
+    ],
+    members: [
+      { id: 'c1', i: 'b1', j: 't1', E, I, A, Mp: 100, b: 1e-4, ...(pm ? { Pcap, pmKind: 'concrete' as const } : {}) },
+      { id: 'c2', i: 'b2', j: 't2', E, I, A, Mp: 100, b: 1e-4, ...(pm ? { Pcap, pmKind: 'concrete' as const } : {}) },
+      { id: 'bm', i: 't1', j: 't2', E, I, A, Mp: 100, b: 1e-4 },
+    ],
+    supports: [{ node: 'b1', type: 'fixed' as const }, { node: 'b2', type: 'fixed' as const }],
+    loads: [{ node: 't1', Fx: 1 }],
+    controlNode: 't1', controlDir: 'x' as const,
+  })
+  const push = (pm: boolean, Pcap?: number) =>
+    nonlinearFrame({ ...portal(pm, Pcap), lambdaMax: 130, steps: 520 })!
+
+  it('yields EARLIER with P–M than without — the unconservative case it fixes', () => {
+    const first = (r: ReturnType<typeof push>) => r.steps.find((s) => s.hinges > 0)!.lambda
+    expect(first(push(true))).toBeLessThan(first(push(false)))
+  })
+
+  it('is inert when Pcap is not supplied — capacity stays at the pure-bending Mp', () => {
+    const inp = { ...portal(false), lambdaMax: 60, steps: 240 }
+    const asm = assembleFrame(inp)!
+    const r = nonlinearFrame(inp)!
+    for (const h of asm.hinges) expect(asm.hingeCapacity(r.d, h)).toBeCloseTo(100, 9)
+  })
+
+  it('reduces the COLUMN capacities below Mp while the beam keeps its own', () => {
+    const inp = { ...portal(true), lambdaMax: 60, steps: 240 }
+    const asm = assembleFrame(inp)!
+    const r = nonlinearFrame(inp)!
+    for (const h of asm.hinges) {
+      const cap = asm.hingeCapacity(r.d, h)
+      if (h.member.startsWith('c')) { expect(cap).toBeLessThan(100); expect(cap).toBeGreaterThan(0) }
+      else expect(cap).toBeCloseTo(100, 9)      // beam carries no P–M data
+    }
+  })
+
+  it('recovers opposite axial forces in the two columns', () => {
+    const inp = { ...portal(true), lambdaMax: 60, steps: 240 }
+    const asm = assembleFrame(inp)!
+    const r = nonlinearFrame(inp)!
+    const N1 = asm.axialForce(r.d, 'c1'), N2 = asm.axialForce(r.d, 'c2')
+    expect(Math.abs(N1)).toBeGreaterThan(1)
+    expect(Math.sign(N1)).toBe(-Math.sign(N2))        // one tension, one compression
+    expect(N1 + N2).toBeCloseTo(0, 6)                 // and they balance
+  })
+
+  it('a smaller axial capacity means a bigger reduction and earlier yield', () => {
+    const first = (r: ReturnType<typeof push>) => r.steps.find((s) => s.hinges > 0)!.lambda
+    expect(first(push(true, 300))).toBeLessThan(first(push(true, 900)))
   })
 })

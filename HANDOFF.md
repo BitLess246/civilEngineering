@@ -743,10 +743,18 @@ _Analysis completeness (P3):_
   (0.937–0.969), independently agreeing with the shear-building reduction.
   `runNonlinearFrameModel(model, gm)` runs the hinge time history straight off a
   `StructuralModel`; the same condensed frame also drives a static pushover.
-  **Still open**: 3D/biaxial hinges, P–M interaction on hinge capacity (reuse
-  `pmInteraction` — axial load reduces Mp, currently ignored and unconservative
-  for columns), displacement/arc-length control for post-peak softening, and a
-  UI surface for the hinge engines.
+  **P–M interaction** (#441): the hinge yield moment is reduced to `Mpc(P)` via
+  `reducedPlasticMoment`, with P recovered from the member's current axial state
+  each Newton iteration (not a frozen gravity preload), so column capacities fall
+  as overturning builds. Opt-in on `NLMember` (`Pcap` + `pmKind`); the model
+  bridge supplies both automatically from `axialCapacity`, summing Pcap across
+  combined parallel frames. Caveat recorded in the module: moving the yield
+  surface mid-analysis is the standard concentrated-plasticity approximation, not
+  a rigorously consistent plasticity formulation.
+  **Still open**: 3D/biaxial hinges; **displacement / arc-length control** — load
+  control cannot equilibrate past collapse, so a push beyond the collapse load
+  runs displacement away and lets moments creep above Mp (a real limitation, seen
+  while testing, not a bug); and a UI surface for the hinge engines.
 - **Load combinations with nonlinear members (DECIDED)**: tension/compression-only
   members break superposition, and the owner's decision is **per-combo active
   set** — solve every NSCP combo independently with its own active-set iteration

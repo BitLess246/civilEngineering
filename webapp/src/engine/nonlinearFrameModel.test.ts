@@ -126,3 +126,27 @@ describe('nonlinearFrameModel — analyses on the condensed frame', () => {
     expect(runNonlinearFrameModel(model, { dt, dir: 0, ag: [] })).toBeNull()
   })
 })
+
+describe('nonlinearFrameModel — P–M interaction through the bridge', () => {
+  const model = grid([3, 3])
+
+  it('supplies Pcap and a material-appropriate P–M surface by default', () => {
+    const eq = equivalentPlaneFrame(model, { dir: 'x' })!
+    for (const m of eq.members) {
+      expect(m.Pcap).toBeGreaterThan(0)
+      expect(m.pmKind).toBe('concrete')          // RC model
+    }
+  })
+
+  it('sums axial capacity across the combined parallel frames, like stiffness', () => {
+    const two = equivalentPlaneFrame(grid([3], [5]), { dir: 'x' })!
+    const three = equivalentPlaneFrame(grid([3], [5, 5]), { dir: 'x' })!
+    const col = (e: typeof two) => e.members.find((m) => m.i.split('|')[0] === m.j.split('|')[0])!
+    expect(col(three).Pcap! / col(two).Pcap!).toBeCloseTo(1.5, 6)
+  })
+
+  it('can be switched off, and is off for the elastic reference frame', () => {
+    expect(equivalentPlaneFrame(model, { dir: 'x', pmInteraction: false })!.members[0].Pcap).toBeUndefined()
+    expect(equivalentPlaneFrame(model, { dir: 'x', elastic: true })!.members[0].Pcap).toBeUndefined()
+  })
+})
