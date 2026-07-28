@@ -18,6 +18,7 @@ import { activeThrust, rankineKa, bearingFactors, infiniteSlopeFS } from './geot
 import { felleniusFS, type Slice } from './slopeStability'
 import { newmarkDirect } from './directTimeHistory'
 import { bilinearPath, bilinearCycleEnergy } from './hysteresis'
+import { nonlinearFrame } from './nonlinearFrame'
 import { computeSeismic } from './seismic'
 import { torsionalVerdict } from './irregularity'
 import { jacobiEigen } from './modal'
@@ -189,6 +190,37 @@ const hystLoop = (() => {
   const e1 = bilinearPath(first, p).state.dissipated
   const e2 = bilinearPath(cyc, p).state.dissipated
   return { manual: bilinearCycleEnergy(A, p), software: e2 - e1 }
+})()
+
+// ── 14. Plastic collapse of a fixed–fixed beam — 3-hinge mechanism ───────────
+// Central point load, span L: the work equation P·(L/2)·θ = 4·Mp·θ gives the
+// rigid-plastic collapse load P = 8·Mp/L. Recovered here by pushing the
+// concentrated-hinge frame solver until the mechanism forms (the reported value
+// is the first load step at which a hinge yields, so it lands within one
+// increment above the exact answer).
+const plasticCollapse = (() => {
+  const E = 200000, I = 1e8, A = 1e4, Mp = 100, L = 6
+  // "does the mechanism form at this load?" — bisected, so the reported value is
+  // not limited by a load-step size (and the bracket is not tuned to the answer).
+  const yieldsAt = (lambda: number): boolean => {
+    const r = nonlinearFrame({
+      nodes: [{ id: 'a', x: 0, y: 0 }, { id: 'c', x: L / 2, y: 0 }, { id: 'b', x: L, y: 0 }],
+      members: [
+        { id: 'm1', i: 'a', j: 'c', E, I, A, Mp, b: 1e-4 },
+        { id: 'm2', i: 'c', j: 'b', E, I, A, Mp, b: 1e-4 },
+      ],
+      supports: [{ node: 'a', type: 'fixed' }, { node: 'b', type: 'fixed' }],
+      loads: [{ node: 'c', Fy: -1 }],
+      controlNode: 'c', controlDir: 'y', schedule: [lambda],
+    })
+    return (r?.steps[0]?.hinges ?? 0) > 0
+  }
+  let lo = 0, hi = 400
+  for (let k = 0; k < 60; k++) {
+    const mid = (lo + hi) / 2
+    if (yieldsAt(mid)) hi = mid; else lo = mid
+  }
+  return { manual: (8 * Mp) / L, software: (lo + hi) / 2 }
 })()
 
 // ── Dynamics — eigen-solver & response spectrum ──────────────────────────────
@@ -414,6 +446,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'torsional-irregularity', category: 'Seismic', title: 'Torsional irregularity ratio',
     reference: 'NSCP Table 208-10 §1', formula: 'δmax/δavg, δavg = (δmax+δmin)/2  →  13/10',
     manual: 1.3, software: torsionalVerdict(13, 7).ratio, unit: '—', tol: 1e-9,
+  },
+  {
+    id: 'plastic-collapse-fixed-beam', category: 'Analysis', title: 'Plastic collapse — fixed–fixed beam',
+    reference: 'Limit analysis (Neal)', formula: 'P = 8·Mp/L (3-hinge mechanism)',
+    manual: plasticCollapse.manual, software: plasticCollapse.software, unit: 'kN', tol: 2e-3,
   },
   {
     id: 'hysteretic-loop-energy', category: 'Dynamics', title: 'Hysteretic loop energy per cycle',
