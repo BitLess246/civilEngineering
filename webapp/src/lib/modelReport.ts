@@ -151,6 +151,20 @@ export function buildModelReport(
     const bad = design.beams.filter((b) => !b.ok).length
     checks.push({ name: 'RC beams & girders', detail: `${design.beams.length} members · ${design.beams.reduce((s, b) => s + b.sections.length, 0)} critical sections${bad ? ` · ${bad} failing` : ''}`, ratio: null, ok: bad === 0 })
   }
+  // §424.2 computed deflection, where the service solves made it available.
+  // §409.3.1.1 lets a member skip the calculation when h ≥ hMin, so a computed
+  // exceedance is only a FAILURE for a member that is also below hMin.
+  const withDefl = design.beams.filter((b) => b.deflection)
+  if (withDefl.length) {
+    const w = worst(withDefl, (b) => b.deflection!.deltaTotal / Math.max(b.deflection!.limitL240, 1e-9))!
+    const failing = withDefl.filter((b) => !b.thickOK && !(b.deflection!.liveOK && b.deflection!.totalOK))
+    checks.push({
+      name: 'RC beam serviceability (§424.2)',
+      detail: `${withDefl.length} members · governing ${w.row.id} at δtotal/(L/240) = ${f2(w.r)}`
+        + `${failing.length ? ` · ${failing.length} exceeding` : ''}`,
+      ratio: w.r, ok: failing.length === 0,
+    })
+  }
   if (design.columns.length) {
     const w = worst(design.columns, (c) => c.util)!
     checks.push({ name: 'RC columns', detail: `${design.columns.length} members · governing ${w.row.id}`, ratio: w.r, ok: design.columns.every((c) => c.ok) })
@@ -252,6 +266,21 @@ export function buildModelReport(
           k === 0 ? (bm.gov ?? '') : '',
         ]
       })
+    }),
+  })
+  if (withDefl.length) tables.push({
+    title: 'RC beam serviceability — NSCP §424.2 computed deflection',
+    head: ['Member', 'Span (m)', 'Support', 'Ie/Ig', 'δ dead (mm)', 'λΔ·δD (mm)', 'δ live (mm)', 'δ total (mm)', 'L/240 (mm)', 'h ≥ hmin', 'Verdict'],
+    right: [1, 3, 4, 5, 6, 7, 8],
+    rows: withDefl.map((bm) => {
+      const r = bm.deflection!
+      const within = r.liveOK && r.totalOK
+      return [
+        bm.id, f1(bm.L), r.support,
+        f2(r.Ie / r.Ig), f2(r.deltaD), f2(r.deltaLong), f2(r.deltaL), f2(r.deltaTotal), f1(r.limitL240),
+        r.hMinOK ? `yes (${f0(r.hMin)})` : `no (${f0(r.hMin)})`,
+        within ? 'within limits' : r.hMinOK ? 'deemed to comply (§409.3.1.1)' : 'EXCEEDS',
+      ]
     }),
   })
   if (design.columns.length) tables.push({
