@@ -13,6 +13,7 @@ import { validateMesh, hasMeshErrors } from '../engine/meshValidation'
 import { type ModalResult } from '../engine/modal'
 import { computeResponseSpectrum, rsaEquivalentLoads, type ResponseSpectrumResult, type RsaLateralResult } from '../engine/responseSpectrum'
 import { type StructureDesign, type FootingPlan, type OptimizeResult, type LateralCase } from '../engine/pipeline'
+import { type MemberDeflectionResult } from '../engine/memberDeflection'
 import type { SteelJoint } from '../engine/steelConnections'
 import { estimateTakeoff, costBill, type PriceList } from '../engine/takeoff'
 import { footingLayout } from '../engine/footingLayout'
@@ -780,6 +781,47 @@ function SchedChip<T>({ items, ok }: { items: T[]; ok: (r: T) => boolean }) {
       good ? 'bg-[#ddefe3] text-[#14603a]' : 'bg-[#fbeeea] text-[#c2402a]'}`}>
       {good ? 'all passed' : `${failed} failed`}
     </span>
+  )
+}
+
+/** §424.2 computed service deflection for one beam, integrated from its own
+ *  D-only / L-only moment diagrams. Shown once per member in the accordion (and
+ *  therefore in the printed report, which force-expands every row). */
+function BeamServiceability({ r, id, L }: { r: MemberDeflectionResult; id: string; L: number }) {
+  const serviceOK = r.liveOK && r.totalOK
+  const cell = (label: string, value: string, sub?: string, alert?: boolean) => (
+    <div className={`rounded border px-2 py-1 ${alert ? 'border-red-200 bg-red-50' : 'border-slate-200 bg-white'}`}>
+      <div className="text-[9px] uppercase tracking-wide text-slate-500">{label}</div>
+      <div className={`font-mono text-[11px] font-semibold ${alert ? 'text-red-700' : 'text-slate-800'}`}>{value}</div>
+      {sub && <div className="text-[9px] text-slate-500">{sub}</div>}
+    </div>
+  )
+  return (
+    <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50/70 p-2">
+      <p className="mb-1.5 text-[11px] font-semibold text-[#0f4c92]">
+        Serviceability — NSCP §424.2 computed deflection · {id} ({f2(L)} m, {r.support})
+        <span className={`ml-2 rounded px-1.5 py-px font-mono text-[10px] ${
+          serviceOK ? 'bg-[#ddefe3] text-[#14603a]' : 'bg-[#fbeeea] text-[#c2402a]'}`}>
+          {serviceOK ? 'within limits' : 'exceeds limit'}
+        </span>
+      </p>
+      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 lg:grid-cols-6">
+        {cell('Ig', `${(r.Ig / 1e6).toFixed(0)}×10⁶ mm⁴`)}
+        {cell('Icr', `${(r.Icr / 1e6).toFixed(0)}×10⁶ mm⁴`)}
+        {cell('Ie (Branson)', `${(r.Ie / 1e6).toFixed(0)}×10⁶ mm⁴`, r.cracked ? `cracked · Ma ${f1(r.Ma)} > Mcr ${f1(r.Mcr)}` : `uncracked · Ma ${f1(r.Ma)} ≤ Mcr ${f1(r.Mcr)}`)}
+        {cell('δ dead (immediate)', `${f2(r.deltaD)} mm`)}
+        {cell('λΔ · δ dead', `${f2(r.deltaLong)} mm`, `λΔ = ${f2(r.lambdaDelta)}`)}
+        {cell('δ live', `${f2(r.deltaL)} mm`, `limit L/360 = ${f1(r.limitL360)}`, !r.liveOK)}
+        {cell('δ total', `${f2(r.deltaTotal)} mm`, `limit L/240 = ${f1(r.limitL240)}`, !r.totalOK)}
+        {cell('peak at', `${f2(r.xMax)} m`, 'from the i-end')}
+        {cell('h min (Table 409.3.1.1)', `${f0(r.hMin)} mm`, r.hMinOK ? 'satisfied — deflections need not be computed' : 'not satisfied — computed check governs', !r.hMinOK && !serviceOK)}
+      </div>
+      <p className="mt-1 text-[10px] text-slate-500">
+        Ie from Branson (§424.2.3.5) at the peak service D+L moment; δ obtained by integrating this member's own
+        moment diagram (M/EcIe, twice) with the model's end restraint, not an assumed uniform load. Total = λΔ·δD + δL
+        (§424.2.2). §409.3.1.1 permits skipping the calculation when h ≥ hMin, so the member passes on either route.
+      </p>
+    </div>
   )
 }
 
@@ -4291,7 +4333,16 @@ export default function ModelSpace() {
                   return [
                     <tr key={key} onClick={() => setExpanded(expanded === key ? null : key)}
                       className={`sched-row cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${bad ? 'bg-red-50 text-red-700' : ''}`}>
-                      <td className="py-1 pr-2 font-medium">{k === 0 ? `${open ? '▾' : '▸'} ${bm.id} (${bm.role} ${sec?.name ?? ''}, ${f1(bm.L)} m)` : ''}</td>
+                      <td className="py-1 pr-2 font-medium">
+                        {k === 0 ? `${open ? '▾' : '▸'} ${bm.id} (${bm.role} ${sec?.name ?? ''}, ${f1(bm.L)} m)` : ''}
+                        {k === 0 && bm.deflection && (
+                          <span className={`ml-1.5 whitespace-nowrap rounded px-1 py-px text-[10px] font-semibold ${
+                            bm.deflection.liveOK && bm.deflection.totalOK ? 'bg-emerald-50 text-emerald-700' : 'bg-red-100 text-red-700'}`}
+                            title={`§424.2 total deflection ${f1(bm.deflection.deltaTotal)} mm vs L/240 = ${f1(bm.deflection.limitL240)} mm`}>
+                            δ {f1(bm.deflection.deltaTotal)}/{f1(bm.deflection.limitL240)}
+                          </span>
+                        )}
+                      </td>
                       <td className="py-1 pr-2">{s.label}{s.hogging ? ' (hog)' : s.bf ? ` · T bf=${Math.round(s.bf)}` : ''}</td>
                       <td className="py-1 pr-2 text-right">{f1(Math.abs(s.Mu))}</td>
                       <td className="py-1 pr-2 text-right">{f1(s.Vu)}</td>
@@ -4303,6 +4354,7 @@ export default function ModelSpace() {
                     open && model && sec && (
                       <tr key={`${key}:sol`}>
                         <td colSpan={8} className="bg-slate-50/60 px-2 pb-2">
+                          {k === 0 && bm.deflection && <BeamServiceability r={bm.deflection} id={bm.id} L={bm.L} />}
                           {wantDraw && bm.diag && (
                             <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                               <Diagram xs={bm.diag.xs} ys={loadFromShear(bm.diag.xs, bm.diag.Vy)} title="LOAD w (≈ −dV/dx)" unit="kN/m"

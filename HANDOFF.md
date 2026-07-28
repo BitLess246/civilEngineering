@@ -788,6 +788,28 @@ _Analysis completeness (P3):_
   Note that an inactive member is genuinely absent from that combo's solve, so
   it does not appear in that combo's member-force table — by design.
 - **Consistent-mass option** beside lumped — does not exist anywhere.
+- ~~**Cracked service deflection in model space**~~ — ✔ shipped (#446).
+  `engine/memberDeflection.ts` computes §424.2 deflections for every RC beam in
+  the model by DOUBLE-INTEGRATING that member's own moment diagram, taken from
+  the D-only and L-only service solves the pipeline already ran:
+  `chordDeflection(xs, M, EI, cantilever)` treats the curvature φ = M/EI as
+  piecewise linear and evaluates both integrals in closed form (exact for a
+  linear M, O(Δx²) for a parabolic one), with v(0) = v(L) = 0 for a spanning
+  member — the CHORD-relative deflection the L/360 and L/240 limits are written
+  against — and v = v′ = 0 at the built-in end for a cantilever.
+  `memberServiceDeflection` wraps it with Branson's Ie (`bransonIe`) at the peak
+  service D+L moment, the cracked inertia of the reinforcement actually designed
+  at the critical sagging section, and λΔ = ξ/(1+50ρ′).
+  This replaces nothing — it ADDS the calculation that NSCP §409.3.1.1 makes the
+  alternative to the deemed-to-comply thickness table, so a beam row now passes
+  on **either** h ≥ hMin **or** the computed check (strictly less restrictive
+  than before, where h < hMin failed outright).
+  Surfaced as a δ chip on every RC beam schedule row, a full serviceability card
+  in the expanded accordion, and a dedicated check + table in the PDF report.
+  **Open**: proper T-section gross properties — the web rectangle is used even
+  where flexure designed a T, which lowers Ig/Mcr/Icr together and so errs
+  conservative. Slabs already had their own §424.2 path (`slabDeflection`); this
+  is the beam counterpart.
 - ~~**Irregularity auto-flags** — NSCP Table 208-9/10 (torsional, soft-storey,
   mass)~~ — ✔ shipped (#427 engine, #428 wiring/UI, #429 report/validation):
   `engine/irregularity.ts` flags P1 torsional (208-10 §1a/1b), V1 soft-storey,

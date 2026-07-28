@@ -26,6 +26,8 @@ import { elasticResponseSpectrum } from './accelSpectrum'
 import { generateGridModel } from './modelBuilder'
 import { solveFrame3D, rectJ, type F3Node, type F3Member, type F3Support } from './frame3d'
 import { solveActiveSet, type AxialMode } from './axialOnly'
+import { memberServiceDeflection } from './memberDeflection'
+import { Ec as concreteE } from './slabDeflection'
 import { solveBoltedConnection } from './boltedConnection'
 import { solveWeldedConnection } from './weldedConnection'
 import { boltGeomFromPositions, outOfPlaneBoltGroup, pryingAction } from './steelDesign'
@@ -191,6 +193,23 @@ const hystLoop = (() => {
   const e1 = bilinearPath(first, p).state.dissipated
   const e2 = bilinearPath(cyc, p).state.dissipated
   return { manual: bilinearCycleEnergy(A, p), software: e2 - e1 }
+})()
+
+// ── 13a. Cracked service deflection — moment-diagram integration ≡ 5wL⁴/384EI ─
+// A simply supported span carrying a uniform service load: integrating the
+// member's own M/EcIe diagram twice must reproduce the textbook coefficient.
+// Kept UNCRACKED (Ma < Mcr) so the closed form applies exactly — the cracked
+// path only swaps Ig for Branson's Ie in the same integral.
+const beamDeflIntegration = (() => {
+  const L = 7, b = 300, h = 500, fc = 28, w = 3      // m, mm, mm, MPa, kN/m
+  const N = 400
+  const xs = Array.from({ length: N + 1 }, (_, k) => (L * k) / N)
+  const M = xs.map((x) => (w * x * (L - x)) / 2)
+  const r = memberServiceDeflection({
+    xs, MD: M, ML: xs.map(() => 0), L, b, h, d: 437.5, As: 1200, fc, support: 'simple',
+  })
+  const EI = concreteE(fc) * ((b * h ** 3) / 12) * 1e-9      // kN·m²
+  return { manual: ((5 * w * L ** 4) / (384 * EI)) * 1000, software: r.deltaD }
 })()
 
 // ── 13b. Tension-only cross-brace — active set ≡ removing the slack brace ────
@@ -491,6 +510,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'direct-th-decay', category: 'Dynamics', title: 'Direct-integration free-vibration decay',
     reference: 'Chopra, Dynamics of Structures', formula: 'u(T)/u₀ = exp(−2πζ/√(1−ζ²))',
     manual: directDecay.manual, software: directDecay.software, unit: '—', tol: 1e-3,
+  },
+  {
+    id: 'beam-defl-integration', category: 'RC', title: 'Service deflection by moment-diagram integration',
+    reference: 'NSCP 424.2 / ACI 318-14 §24.2', formula: 'δ = ∬(M/EcIe) dx  ≡  5wℓ⁴/384EcIg (uncracked SS span)',
+    manual: beamDeflIntegration.manual, software: beamDeflIntegration.software, unit: 'mm', tol: 1e-4,
   },
   {
     id: 'brace-active-set', category: 'Analysis', title: 'Tension-only brace — active set vs slack brace removed',

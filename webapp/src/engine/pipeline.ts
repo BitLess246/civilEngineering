@@ -19,6 +19,7 @@ import { designBeam, type BeamDesignResult } from './beamDesign'
 import { effectiveFlange } from './tbeam'
 import { designPrestressed, type PrestressedResult } from './prestressedBeam'
 import { minBeamThickness, type BeamSupport } from './beamDeflection'
+import { memberServiceDeflection, type MemberDeflectionResult } from './memberDeflection'
 import { designAxialColumn, capacityAtEccentricity, interaction, type BarLayout } from './columnDesign'
 import { designSquareFooting, type SquareFootingResult } from './isolatedFooting'
 import { designCombinedFooting, type CombinedFootingResult } from './combinedFooting'
@@ -93,6 +94,10 @@ export interface BeamScheduleRow {
   support: BeamSupport
   hMin: number
   thickOK: boolean
+  /** §424.2 computed service deflection, integrated from the member's own
+   *  D-only and L-only moment diagrams with Branson's Ie. Absent when the
+   *  service solves are unavailable (e.g. a model with no D/L cases). */
+  deflection?: MemberDeflectionResult
   ok: boolean
   gov?: string   // governing load case (envelope)
   /** Governing-case force diagrams along the member (for the worked solution). */
@@ -361,6 +366,46 @@ function designSteelColumnRow(mr: F3MemberResult, sec: RectSection): SteelColumn
 
 const beamOK = (d: BeamDesignResult) =>
   d.flexOK && d.comprEffective && d.comprNAOK && d.region !== 'inadequate'
+
+/**
+ * §424.2 service deflection for one designed RC beam row.
+ *
+ * The FEM never computes an interior deflection, so `memberServiceDeflection`
+ * integrates this member's OWN moment diagram from the D-only and L-only
+ * service solves — the load pattern, continuity and end restraint therefore
+ * come from the model rather than a tabulated coefficient.
+ *
+ * Branson's Ie needs the reinforcement actually provided, so the cracked
+ * inertia is taken at the member's most heavily reinforced SAGGING section
+ * (where the span deflects); with no sagging section the worst section is used.
+ *
+ * The section is treated as the RECTANGULAR WEB even where the flexural design
+ * used T-beam action: a bf-wide rectangle is not a T (it badly overstates Ig,
+ * and yt ≠ h/2 for a real T), and ignoring the flange lowers Ig, Mcr and Icr
+ * together — so the deflection comes out on the conservative side. Proper
+ * T-section gross properties are a follow-up.
+ *
+ * Returns null when either service solve is missing.
+ */
+function beamDeflectionOf(
+  row: BeamScheduleRow, memberId: string, sec: RectSection,
+  dRes: F3Result | null, lRes: F3Result | null,
+): MemberDeflectionResult | null {
+  const dm = dRes?.members.find((x) => x.id === memberId)
+  const lm = lRes?.members.find((x) => x.id === memberId)
+  if (!dm || !lm || dm.xs.length < 2 || row.sections.length === 0) return null
+
+  const sag = row.sections.filter((s) => !s.hogging)
+  const pool = sag.length ? sag : row.sections
+  const crit = pool.reduce((a, s) => (s.design.As > a.design.As ? s : a), pool[0])
+  const g = crit.design
+  return memberServiceDeflection({
+    xs: dm.xs, MD: dm.Mz, ML: lm.Mz, L: row.L,
+    b: sec.b, h: sec.h, d: g.d,
+    As: g.As, AsPrime: g.AsPrime, dPrime: g.dPrime,
+    fc: sec.fc, fy: sec.fy, support: row.support,
+  })
+}
 
 // ── Timber member design (NDS §3 / NSCP §6, LRFD via Appendix N) ─────────────
 /** NDS Appendix N time-effect factor λ from the governing LRFD combo name:
@@ -767,7 +812,22 @@ function designFromRuns(
           const sev = beamSeverity(row)
           if (sev > bestSev) { bestSev = sev; best = row; gov = run.name }
         }
-        if (best) beams.push({ ...best, gov })
+        if (best) {
+          // §424.2 computed deflection. NSCP §409.3.1.1 lets a section skip the
+          // calculation when h ≥ hMin — so the computed check is what RESCUES a
+          // shallower member, and the row passes on EITHER route. Integrated
+          // from this member's own D-only and L-only moment diagrams, so the
+          // real load pattern and end restraint are inherited from the FEM.
+          const defl = beamDeflectionOf(best, m.id, sec, dRes, lRes)
+          if (defl) {
+            const serviceOK = defl.liveOK && defl.totalOK
+            best = {
+              ...best, deflection: defl,
+              ok: best.sections.every((s) => beamOK(s.design)) && (best.thickOK || serviceOK),
+            }
+          }
+          beams.push({ ...best, gov })
+        }
         // prestressed check (section tagged with ps): equivalent UDLs from the
         // D-only / L-only sagging peaks — simple-span gravity idealisation
         if (sec.ps && best) {

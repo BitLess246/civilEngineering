@@ -182,8 +182,15 @@ Ordered: correctness first, then code completeness, then new capability.
 9. ~~Steel **moment connections, shear tabs, block shear, prying**~~ — ✔ shipped:
    `steelConnections.ts` (shear-tab, moment-flange-weld, moment-web-plate) +
    `steelDesign.ts` block shear §J4.3 (`shearTabBlockShear`) and prying §J3.9.
-10. Thread cracked deflection (`beamDeflection`/`slabDeflection`) into
-    model-space serviceability results.
+10. ~~Thread cracked deflection (`beamDeflection`/`slabDeflection`) into
+    model-space serviceability results.~~ — ✔ shipped (#446):
+    `memberDeflection.ts` double-integrates each beam's own FEM moment diagram
+    (D-only and L-only service solves) over Ec·Ie with Branson's Ie, so §424.2
+    deflections carry the model's real load pattern and end restraint instead of
+    an assumed UDL. Surfaced per member in the RC beam schedule and the PDF
+    report; per §409.3.1.1 a row passes on EITHER h ≥ hMin or the computed
+    check. Open: proper T-section gross properties (the web rectangle is used,
+    which is the conservative side).
 11. **Slope stability by method of slices** (Bishop simplified / Janbu) —
     infinite slope alone can't cover global stability of protected slopes.
 12. Settlement (immediate + consolidation), laterally loaded piles
