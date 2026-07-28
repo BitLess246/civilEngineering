@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 426
+export const SOLVER_TEST_COUNT = 454
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -1291,6 +1291,126 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "smoothHinge — degenerate inputs",
         "name": "the yield deformation is Fy/k0"
+      }
+    ]
+  },
+  {
+    "module": "biaxialHinge",
+    "group": "Nonlinear",
+    "title": "Biaxial (P–My–Mz) hinge constitutive law",
+    "integration": false,
+    "tests": [
+      {
+        "suite": "biaxialHinge — elastic range",
+        "name": "is uncoupled and linear below the surface"
+      },
+      {
+        "suite": "biaxialHinge — elastic range",
+        "name": "never yields when neither axis has capacity"
+      },
+      {
+        "suite": "biaxialHinge — degenerates to the 1-D bilinear hinge",
+        "name": "matches bilinearPath exactly when the other axis has no capacity"
+      },
+      {
+        "suite": "biaxialHinge — degenerates to the 1-D bilinear hinge",
+        "name": "matches bilinearPath exactly when the other axis is simply unloaded"
+      },
+      {
+        "suite": "biaxialHinge — degenerates to the 1-D bilinear hinge",
+        "name": "unloads elastically — the tangent snaps back to k₀"
+      },
+      {
+        "suite": "biaxialHinge — the coupled surface is the whole point",
+        "name": "yields at 0.8Mpy + 0.8Mpz, which two 1-D hinges would call elastic"
+      },
+      {
+        "suite": "biaxialHinge — the coupled surface is the whole point",
+        "name": "projects a 45° push onto the circle when the capacities are equal"
+      },
+      {
+        "suite": "biaxialHinge — the coupled surface is the whole point",
+        "name": "lands on the ellipse for unequal capacities"
+      },
+      {
+        "suite": "biaxialHinge — the coupled surface is the whole point",
+        "name": "flows normal to the surface (associativity)"
+      },
+      {
+        "suite": "biaxialHinge — consistent tangent",
+        "name": "matches finite differences on the elliptical surface"
+      },
+      {
+        "suite": "biaxialHinge — consistent tangent",
+        "name": "matches finite differences on the Bresler contour (α = 1.5)"
+      },
+      {
+        "suite": "biaxialHinge — consistent tangent",
+        "name": "matches finite differences on the Orbison surface under axial load"
+      },
+      {
+        "suite": "biaxialHinge — consistent tangent",
+        "name": "softens the unloaded axis at a uniaxial yielded state"
+      },
+      {
+        "suite": "biaxialHinge — Orbison surface (McGuire/Ziemian Eq. 10.18)",
+        "name": "reaches the full plastic moment on each axis at zero axial load"
+      },
+      {
+        "suite": "biaxialHinge — Orbison surface (McGuire/Ziemian Eq. 10.18)",
+        "name": "matches the closed-form contour at p = 0.3"
+      },
+      {
+        "suite": "biaxialHinge — Orbison surface (McGuire/Ziemian Eq. 10.18)",
+        "name": "squashes at p = 1/√1.15 = 0.933 — Orbison’s fit, slightly conservative"
+      },
+      {
+        "suite": "biaxialHinge — Orbison surface (McGuire/Ziemian Eq. 10.18)",
+        "name": "shrinks the moment capacity monotonically with axial load"
+      },
+      {
+        "suite": "biaxialHinge — Orbison surface (McGuire/Ziemian Eq. 10.18)",
+        "name": "is sign-agnostic in axial force (even powers only)"
+      },
+      {
+        "suite": "biaxialHinge — power (Bresler) surface",
+        "name": "reproduces the Bresler contour at α = 1.5"
+      },
+      {
+        "suite": "biaxialHinge — power (Bresler) surface",
+        "name": "is more permissive as α grows — α = 1 is the conservative linear chord"
+      },
+      {
+        "suite": "biaxialHinge — power (Bresler) surface",
+        "name": "keeps the |m|^α regularisation far below any working tolerance"
+      },
+      {
+        "suite": "biaxialHinge — power (Bresler) surface",
+        "name": "handles a hinge whose capacity has been reduced to zero by axial load"
+      },
+      {
+        "suite": "biaxialHinge — capacities, utilisation and dissipation",
+        "name": "reduces both axes through the codified uniaxial P–M chords"
+      },
+      {
+        "suite": "biaxialHinge — capacities, utilisation and dissipation",
+        "name": "reports utilisation as demand/capacity, like every other check in the repo"
+      },
+      {
+        "suite": "biaxialHinge — capacities, utilisation and dissipation",
+        "name": "agrees with the yield function on which side of the surface a point is"
+      },
+      {
+        "suite": "biaxialHinge — capacities, utilisation and dissipation",
+        "name": "dissipates only through plastic flow, and never negatively"
+      },
+      {
+        "suite": "biaxialHinge — capacities, utilisation and dissipation",
+        "name": "matches the 1-D dissipated energy on a uniaxial cycle"
+      },
+      {
+        "suite": "biaxialHinge — capacities, utilisation and dissipation",
+        "name": "converges the return map everywhere on a dense skew sweep"
       }
     ]
   },

@@ -51,6 +51,7 @@ export const SOLVER_MODULES: SolverModuleSpec[] = [
   // ── nonlinear path following ──
   { module: 'hysteresis', group: 'Nonlinear', title: 'Bilinear kinematic hysteresis' },
   { module: 'smoothHinge', group: 'Nonlinear', title: 'Smooth (C^∞) hinge backbone' },
+  { module: 'biaxialHinge', group: 'Nonlinear', title: 'Biaxial (P–My–Mz) hinge constitutive law' },
   { module: 'pushover', group: 'Nonlinear', title: 'Event-to-event pushover' },
   { module: 'pushoverModel', group: 'Nonlinear', title: 'Model-level pushover' },
   { module: 'nonlinearFrame', group: 'Nonlinear', title: 'Member-end plastic hinges (static)' },
