@@ -757,9 +757,16 @@ _Analysis completeness (P3):_
   collapse load flat at Mp/L over a 6× drift range where load control instead
   runs the displacement to >10 m, and traces a monotonically descending branch
   when the hinge softens (b < 0) — which load control structurally cannot do.
+  **UI** (#443): the Model Space **Nonlinear** tab has a *Plasticity model*
+  selector — "Member-end plastic hinges" (default) or "Shear building (storey
+  springs)". The hinge path reports the equivalent-frame period and condensation
+  summary, hinges yielded / total, peak base shear vs the elastic demand, peak
+  roof drift, dissipated energy, Newton convergence, and a table of yielded
+  hinges ordered by plastic rotation. When nothing yields it says so explicitly
+  rather than showing a blank panel — an elastic outcome is a result.
   **Still open**: 3D/biaxial hinges; true arc-length (Riks) control for
-  snap-BACK, where even displacement control at a single DOF fails; and a UI
-  surface for the hinge engines.
+  snap-BACK, where even displacement control at a single DOF fails; and the
+  `axialMode` UI + per-combo active-set routing.
 - **Load combinations with nonlinear members (DECIDED)**: tension/compression-only
   members break superposition, and the owner's decision is **per-combo active
   set** — solve every NSCP combo independently with its own active-set iteration
