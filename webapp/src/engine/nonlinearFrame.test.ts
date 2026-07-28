@@ -194,3 +194,61 @@ describe('nonlinearFrame — P–M interaction reduces the hinge capacity', () =
     expect(first(push(true, 300))).toBeLessThan(first(push(true, 900)))
   })
 })
+
+// ── displacement control: tracing what load control structurally cannot ──
+describe('nonlinearFrame — displacement control', () => {
+  const cant = (b: number, extra: Record<string, unknown>) => nonlinearFrame({
+    nodes: [{ id: 'n1', x: 0, y: 0 }, { id: 'n2', x: 3, y: 0 }],
+    members: [{ id: 'm', i: 'n1', j: 'n2', E, I, A, Mp: 100, b }],
+    supports: [{ node: 'n1', type: 'fixed' }],
+    loads: [{ node: 'n2', Fy: -1 }],
+    controlNode: 'n2', controlDir: 'y', ...extra,
+  })!
+
+  it('hits the prescribed control displacement at every step', () => {
+    const r = cant(1e-4, { control: 'displacement', dispMax: -0.2, steps: 20 })
+    for (let i = 0; i < r.steps.length; i++)
+      expect(r.steps[i].disp).toBeCloseTo((-0.2 * (i + 1)) / 20, 9)
+  })
+
+  it('agrees with the elastic closed form while the response is elastic', () => {
+    // elastic tip deflection under λ: δ = λ·L³/3EI  ⇒  λ = |δ|·3EI/L³.
+    // Matched to 1e-3 relative, not exactly: the hinge penalty stiffness is
+    // 1e4·EI/L rather than infinite, which leaves the same <0.1% softening the
+    // 'rigid unyielded hinge' test above bounds.
+    const r = cant(1e-4, { control: 'displacement', dispMax: -0.01, steps: 5 })
+    for (const s of r.steps) {
+      const exact = (Math.abs(s.disp) * 3 * EI) / 3 ** 3
+      expect(Math.abs(s.lambda / exact - 1)).toBeLessThan(1e-3)
+    }
+  })
+
+  it('HOLDS the collapse load flat instead of running away (load control cannot)', () => {
+    const r = cant(1e-4, { control: 'displacement', dispMax: -0.4, steps: 40 })
+    const exact = 100 / 3                                    // Mp/L = 33.33
+    const past = r.steps.filter((s) => Math.abs(s.disp) > 0.05)
+    expect(past.length).toBeGreaterThan(20)
+    for (const s of past) expect(s.lambda).toBeCloseTo(exact, 1)   // plateau, 6× the drift
+    // the same push under LOAD control instead runs the displacement away
+    const lc = cant(1e-4, { lambdaMax: 45, steps: 180 })
+    expect(Math.abs(lc.steps[lc.steps.length - 1].disp)).toBeGreaterThan(10)
+  })
+
+  it('traces a DESCENDING post-peak branch when the hinge softens', () => {
+    const r = cant(-0.05, { control: 'displacement', dispMax: -0.4, steps: 40 })
+    const peak = Math.max(...r.steps.map((s) => s.lambda))
+    const last = r.steps[r.steps.length - 1].lambda
+    expect(peak).toBeGreaterThan(30)
+    expect(last).toBeLessThan(peak * 0.7)          // genuinely descended
+    // and it descends monotonically once past the peak
+    const after = r.steps.slice(r.steps.findIndex((s) => s.lambda === peak) + 1)
+    for (let i = 1; i < after.length; i++) expect(after[i].lambda).toBeLessThan(after[i - 1].lambda)
+  })
+
+  it('reports the solved load factor as an output', () => {
+    const r = cant(1e-4, { control: 'displacement', dispMax: -0.3, steps: 30 })
+    expect(r.converged).toBe(true)
+    for (const s of r.steps) expect(Number.isFinite(s.lambda)).toBe(true)
+    expect(r.steps[0].lambda).toBeGreaterThan(0)
+  })
+})

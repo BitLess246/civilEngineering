@@ -127,6 +127,17 @@ export interface NLFrameInput {
   steps?: number
   /** Maximum λ for the default monotonic schedule (default 3). */
   lambdaMax?: number
+  /**
+   * Control mode. 'load' (default) prescribes λ and solves for displacement —
+   * it CANNOT follow a curve past its peak, because no equilibrium exists above
+   * the collapse load. 'displacement' prescribes the control-node displacement
+   * and solves for λ, so a softening / descending branch can be traced.
+   */
+  control?: 'load' | 'displacement'
+  /** Target control displacements, m (displacement control). */
+  dispSchedule?: number[]
+  /** Max control displacement for the default ramp, m (displacement control). */
+  dispMax?: number
   tol?: number
   maxIter?: number
 }
@@ -356,8 +367,13 @@ export function nonlinearFrame(inp: NLFrameInput): NLFrameResult | null {
   const tol = inp.tol ?? 1e-9
   const maxIter = inp.maxIter ?? 40
   const ctrlDir = inp.controlDir ?? 'x'
-  const schedule = inp.schedule
-    ?? Array.from({ length: inp.steps ?? 60 }, (_, i) => ((i + 1) * (inp.lambdaMax ?? 3)) / (inp.steps ?? 60))
+  const dispControl = inp.control === 'displacement'
+  const nSteps = inp.steps ?? 60
+  const schedule = dispControl
+    ? (inp.dispSchedule
+      ?? Array.from({ length: nSteps }, (_, i) => ((i + 1) * (inp.dispMax ?? 0.1)) / nSteps))
+    : (inp.schedule
+      ?? Array.from({ length: nSteps }, (_, i) => ((i + 1) * (inp.lambdaMax ?? 3)) / nSteps))
 
   let d = new Array(nf).fill(0)
   let dPrev = new Array(nf).fill(0)
@@ -370,7 +386,10 @@ export function nonlinearFrame(inp: NLFrameInput): NLFrameResult | null {
     return fpos.get(i * 3 + (ctrlDir === 'x' ? 0 : 1))
   })()
 
-  for (const lambda of schedule) {
+  // λ is prescribed under load control and SOLVED FOR under displacement control
+  let lambda = 0
+  for (const target of schedule) {
+    if (!dispControl) lambda = target
     let it = 0, ok = false
     for (; it < maxIter; it++) {
       const { fs, Kh } = hingeContrib(d)
@@ -388,10 +407,29 @@ export function nonlinearFrame(inp: NLFrameInput): NLFrameResult | null {
       })
       const lu = luFactor(Kt)
       if (!lu) { mechanism = true; break }
+
       const du = luSolve(lu, R)
-      let dn = 0, dnorm = 0
-      for (let r = 0; r < nf; r++) { d[r] += du[r]; dn += du[r] * du[r]; dnorm += d[r] * d[r] }
-      if (Math.sqrt(dn) / Math.max(1, Math.sqrt(dnorm)) <= tol) { it++; ok = true; break }
+      if (dispControl) {
+        // Split the increment: δd = δd_R + δλ·δd_P, with Kt·δd_P = Pref. The
+        // constraint d[ctrl] = target then fixes δλ, so the load factor becomes
+        // an OUTPUT — which is what lets the curve descend past its peak.
+        if (ctrlIdx === undefined) { mechanism = true; break }
+        const dP = luSolve(lu, Pref)
+        const denom = dP[ctrlIdx]
+        if (!(Math.abs(denom) > 1e-14)) { mechanism = true; break }
+        const dl = (target - d[ctrlIdx] - du[ctrlIdx]) / denom
+        lambda += dl
+        let dn = 0, dnorm = 0
+        for (let r = 0; r < nf; r++) {
+          const inc = du[r] + dl * dP[r]
+          d[r] += inc; dn += inc * inc; dnorm += d[r] * d[r]
+        }
+        if (Math.sqrt(dn) / Math.max(1, Math.sqrt(dnorm)) <= tol) { it++; ok = true; break }
+      } else {
+        let dn = 0, dnorm = 0
+        for (let r = 0; r < nf; r++) { d[r] += du[r]; dn += du[r] * du[r]; dnorm += d[r] * d[r] }
+        if (Math.sqrt(dn) / Math.max(1, Math.sqrt(dnorm)) <= tol) { it++; ok = true; break }
+      }
     }
     if (mechanism) break
     if (!ok) allConverged = false
