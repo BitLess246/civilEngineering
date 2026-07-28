@@ -149,27 +149,49 @@ function localK(EA: number, EI: number, L: number): number[][] {
  * Newton-Raphson at each step, and reports the capacity curve plus per-hinge
  * state. Returns null for a degenerate model.
  */
-export function nonlinearFrame(inp: NLFrameInput): NLFrameResult | null {
+/** Per-hinge state carried between solves. */
+export interface FrameHinge {
+  member: string; end: 'i' | 'j'
+  /** The node's own θ DOF. */
+  nodeRotDof: number
+  /** The extra beam-end rotation DOF introduced for this hinge. */
+  beamRotDof: number
+  /** Elastic (penalty) hinge stiffness, kN·m/rad. */
+  k0: number
+  Mp: number
+  /** Post-yield ratio already scaled onto k0. */
+  b: number
+  state: BilinearState
+}
+
+export interface FrameAssembly {
+  nodeIdx: Map<string, number>
+  hinges: FrameHinge[]
+  fpos: Map<number, number>
+  nf: number
+  /** Constant elastic beam stiffness on the free DOFs. */
+  Kbeam: number[][]
+  /** Reference load vector on the free DOFs. */
+  Pref: number[]
+  hingeDeform: (d: number[], h: FrameHinge) => number
+  hingeContrib: (d: number[]) => { fs: number[]; Kh: number[][] }
+}
+
+/**
+ * Assemble the frame once — DOF map (3 per node plus one extra rotation per
+ * HINGED member end), the constant elastic beam stiffness, the reference load
+ * vector and the hinge closures. Shared by the static (load-control) and the
+ * dynamic (Newmark) drivers so both see identical geometry and hinge state.
+ */
+export function assembleFrame(inp: NLFrameInput): FrameAssembly | null {
   const { nodes, members, supports, loads } = inp
   if (nodes.length === 0 || members.length === 0) return null
-  const tol = inp.tol ?? 1e-9
-  const maxIter = inp.maxIter ?? 40
-  const ctrlDir = inp.controlDir ?? 'x'
-
   const nodeIdx = new Map(nodes.map((n, i) => [n.id, i]))
   const nm = new Map(nodes.map((n) => [n.id, n]))
 
   // ── DOF map: 3 per node, then one extra rotation per HINGED member end ──
   let ndof = nodes.length * DOF_PER_NODE
-  interface Hinge {
-    member: string; end: 'i' | 'j'
-    nodeRotDof: number     // the node's θ DOF
-    beamRotDof: number     // the extra beam-end rotation DOF
-    k0: number             // elastic hinge stiffness, kN·m/rad
-    Mp: number
-    b: number
-    state: BilinearState
-  }
+  type Hinge = FrameHinge
   const hinges: Hinge[] = []
   /** member id → [rot DOF used at end i, at end j] */
   const beamRot = new Map<string, [number, number]>()
@@ -289,6 +311,16 @@ export function nonlinearFrame(inp: NLFrameInput): NLFrameResult | null {
     return { fs, Kh }
   }
 
+  return { nodeIdx, hinges, fpos, nf, Kbeam, Pref, hingeDeform, hingeContrib }
+}
+
+export function nonlinearFrame(inp: NLFrameInput): NLFrameResult | null {
+  const asm = assembleFrame(inp)
+  if (!asm) return null
+  const { nodeIdx, hinges, fpos, nf, Kbeam, Pref, hingeDeform, hingeContrib } = asm
+  const tol = inp.tol ?? 1e-9
+  const maxIter = inp.maxIter ?? 40
+  const ctrlDir = inp.controlDir ?? 'x'
   const schedule = inp.schedule
     ?? Array.from({ length: inp.steps ?? 60 }, (_, i) => ((i + 1) * (inp.lambdaMax ?? 3)) / (inp.steps ?? 60))
 
