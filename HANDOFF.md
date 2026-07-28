@@ -751,10 +751,15 @@ _Analysis completeness (P3):_
   combined parallel frames. Caveat recorded in the module: moving the yield
   surface mid-analysis is the standard concentrated-plasticity approximation, not
   a rigorously consistent plasticity formulation.
-  **Still open**: 3D/biaxial hinges; **displacement / arc-length control** — load
-  control cannot equilibrate past collapse, so a push beyond the collapse load
-  runs displacement away and lets moments creep above Mp (a real limitation, seen
-  while testing, not a bug); and a UI surface for the hinge engines.
+  **Displacement control** (#442): `control: 'displacement'` prescribes the
+  control-node displacement and SOLVES for λ (δd = δd_R + δλ·δd_P, the constraint
+  fixing δλ), so the capacity curve can descend past its peak. It holds the
+  collapse load flat at Mp/L over a 6× drift range where load control instead
+  runs the displacement to >10 m, and traces a monotonically descending branch
+  when the hinge softens (b < 0) — which load control structurally cannot do.
+  **Still open**: 3D/biaxial hinges; true arc-length (Riks) control for
+  snap-BACK, where even displacement control at a single DOF fails; and a UI
+  surface for the hinge engines.
 - **Load combinations with nonlinear members (DECIDED)**: tension/compression-only
   members break superposition, and the owner's decision is **per-combo active
   set** — solve every NSCP combo independently with its own active-set iteration
