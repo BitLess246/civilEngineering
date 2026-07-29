@@ -21,6 +21,9 @@ export default defineConfig(({ command }) => ({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    // The Supabase Edge Function's pure logic (webhook signature verification
+    // and event parsing) lives outside src/ but is plain Web-Crypto TypeScript,
+    // so the one suite covers it rather than leaving the money path untested.
+    include: ['src/**/*.{test,spec}.{ts,tsx}', '../supabase/functions/**/*.test.ts'],
   },
 }))
