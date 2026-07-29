@@ -450,6 +450,9 @@ export function arcLengthFrame(inp: ArcLengthInput): ArcLengthResult | null {
     steps.push({
       lambda, disp: d[ctrlIdx], load: lambda * Pref[ctrlIdx],
       hinges: yielded, converged: true, iterations: it,
+      // reported for the same reason the frame drivers report it: a caller
+      // should be able to see how well balanced a step actually is
+      residual: (() => { const f = residualNorm(d, lambda); return f.norm / f.scale })(),
       arc, cuts,
     })
 

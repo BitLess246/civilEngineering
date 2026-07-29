@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { nonlinearFrame, assembleFrame, type NLMember, type NLFrameInput } from './nonlinearFrame'
+import { nonlinearFrame, assembleFrame, type NLMember, type NLNode, type NLFrameInput } from './nonlinearFrame'
 
 // EI = 200000 MPa × 1e8 mm⁴ = 20 000 kN·m²
 const E = 200000, I = 1e8, A = 1e4
@@ -250,5 +250,64 @@ describe('nonlinearFrame — displacement control', () => {
     expect(r.converged).toBe(true)
     for (const s of r.steps) expect(Number.isFinite(s.lambda)).toBe(true)
     expect(r.steps[0].lambda).toBeGreaterThan(0)
+  })
+})
+
+describe('nonlinearFrame — multi-hinge convergence', () => {
+  /** Multi-bay, multi-storey plane frame — dozens of hinges yielding together. */
+  function frame(nBays: number, nStoreys: number, span = 5, h = 3) {
+    const nodes: NLNode[] = [], members: NLMember[] = []
+    const id = (i: number, k: number) => `n${i}_${k}`
+    for (let k = 0; k <= nStoreys; k++) for (let i = 0; i <= nBays; i++) nodes.push({ id: id(i, k), x: i * span, y: k * h })
+    const E = 25000, I = (400 * 500 ** 3) / 12, A = 400 * 500, Mp = 180
+    for (let k = 0; k < nStoreys; k++) for (let i = 0; i <= nBays; i++)
+      members.push({ id: `C${i}_${k}`, i: id(i, k), j: id(i, k + 1), E, I, A, Mp, b: 0.02 })
+    for (let k = 1; k <= nStoreys; k++) for (let i = 0; i < nBays; i++)
+      members.push({ id: `B${i}_${k}`, i: id(i, k), j: id(i + 1, k), E, I, A, Mp, b: 0.02 })
+    return {
+      nodes, members,
+      supports: Array.from({ length: nBays + 1 }, (_, i) => ({ node: id(i, 0), type: 'fixed' as const })),
+      loads: Array.from({ length: nStoreys }, (_, k) => ({ node: id(0, k + 1), Fx: (k + 1) / nStoreys })),
+      top: id(0, nStoreys), H: nStoreys * h,
+    }
+  }
+  const push = (nBays: number, nStoreys: number, steps: number) => {
+    const f = frame(nBays, nStoreys)
+    return nonlinearFrame({
+      nodes: f.nodes, members: f.members, supports: f.supports, loads: f.loads,
+      controlNode: f.top, controlDir: 'x', control: 'displacement',
+      dispMax: f.H * 0.05, steps,
+    })!
+  }
+
+  it('converges at every step of a 56-hinge frame', () => {
+    // Regression. Plain full Newton with an increment-based convergence test
+    // converged NONE of these steps: the hinge tangent drops by ~k0/(b·k0) at
+    // yield, so the full step is wildly wrong once many hinges yield together,
+    // and ‖Δd‖/‖d‖ cannot tell a stalled iteration from a converged one.
+    const r = push(3, 4, 30)
+    expect(r.hinges.length).toBe(56)
+    const bad = r.steps.filter((s) => !s.converged)
+    expect(bad.length, `${bad.length} of ${r.steps.length} steps short of tolerance`).toBe(0)
+    expect(Math.max(...r.steps.map((s) => s.residual))).toBeLessThan(1e-8)
+    expect(r.converged).toBe(true)
+  })
+
+  it('reports a capacity that does not depend on the step count', () => {
+    // The check that the converged answer is actually right, not merely
+    // reachable: halving the increment must not move the peak. While the steps
+    // were failing to converge this differed by 0.2%.
+    const peak = (steps: number) =>
+      Math.max(...push(3, 4, steps).steps.filter((s) => s.converged).map((s) => Math.abs(s.lambda)))
+    const a = peak(30), b = peak(60)
+    expect(Math.abs(a - b) / a).toBeLessThan(2e-3)
+  })
+
+  it('reports the residual it actually achieved', () => {
+    const r = push(2, 3, 20)
+    for (const s of r.steps) {
+      expect(Number.isFinite(s.residual)).toBe(true)
+      if (s.converged) expect(s.residual).toBeLessThan(1e-8)
+    }
   })
 })
