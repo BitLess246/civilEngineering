@@ -76,7 +76,7 @@ export default function TBeamDesign() {
                 footnote={r.notes.join(' · ') || undefined} />
             )}
             {r && (
-              <DrawingCard title="Section & stress block" meta={`${f0(r.bf)}×${hf} flange · ${bw}×${h} web`}>
+              <DrawingCard pdfDrawing title="Section & stress block" meta={`${f0(r.bf)}×${hf} flange · ${bw}×${h} web`}>
                 <TSection bf={r.bf} bw={bw} h={h} hf={hf} a={r.a} bars={r.bars} barDia={barDia} layers={r.layers} cover={cover} stirrupDia={stirrupDia} />
               </DrawingCard>
             )}

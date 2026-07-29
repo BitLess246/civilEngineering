@@ -116,7 +116,7 @@ export default function PrestressedBeam() {
                 ]} />
             )}
             {r && (
-              <DrawingCard title="Elevation & tendon profile" meta={`${b}×${h} · L = ${span} m`}>
+              <DrawingCard pdfDrawing title="Elevation & tendon profile" meta={`${b}×${h} · L = ${span} m`}>
                 <PSElevation h={h} e={e} span={span} />
               </DrawingCard>
             )}

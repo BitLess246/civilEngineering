@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { ExportPdfButton } from './ExportPdfButton'
 import type { SolutionStep } from '../lib/solution'
 import { Math as KTex } from '../lib/math'
 
@@ -93,15 +94,24 @@ export function VerdictPanel({ ok, headline, governing, stats, checks, footnote 
   )
 }
 
-/** Right-rail card with the drawing-sheet grid backdrop. */
-export function DrawingCard({ title, meta, children }: { title: string; meta?: string; children: ReactNode }) {
+/**
+ * Right-rail card with the drawing-sheet grid backdrop.
+ *
+ * `pdfDrawing` marks this card as the one whose SVG goes into the generated PDF
+ * (see `ExportPdfButton`). Set it on exactly one card per page — the export
+ * takes the first match.
+ */
+export function DrawingCard({ title, meta, children, pdfDrawing }: {
+  title: string; meta?: string; children: ReactNode; pdfDrawing?: boolean
+}) {
   return (
     <section className="rail-card rounded-lg border border-[#e3e1da] bg-white print-avoid-break">
       <div className="flex items-center justify-between border-b border-[#eeece5] px-4 py-3">
         <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">{title}</h2>
         {meta && <span className="font-mono text-[10px] text-[#a39d8d]">{meta}</span>}
       </div>
-      <div className="p-3 [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
+      <div {...(pdfDrawing ? { 'data-pdf-drawing': '' } : {})}
+        className="p-3 [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
         {children}
       </div>
     </section>
@@ -160,6 +170,29 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, stat
     ['Element', docTitle, false], ['Codes', badges.join(' · '), true],
   ]
   return (
+    <>
+    {/*
+      Export bar — rendered HERE rather than wired into each page's header
+      because this component already receives every field the PDF needs.
+      Hoisting the same prop soup out of eight pages to pass it to a second
+      component would be eight chances to let the printed sheet and the
+      generated PDF drift apart; taking both from one props object means they
+      cannot.
+    */}
+    <div className="no-print mt-4 flex items-center justify-between gap-3 rounded-lg border border-[#e3e1da] bg-white px-4 py-3">
+      <div>
+        <p className="text-[13px] font-bold text-[#0f1b2a]">Calculation report</p>
+        <p className="mt-0.5 text-[11.5px] text-[#5c6675]">
+          {docTitle} · {badges.join(' · ')} — summary, design data, worked solution
+          {drawing ? ' and drawing' : ''}, as an A4 PDF.
+        </p>
+      </div>
+      <ExportPdfButton
+        docTitle={docTitle} docCode={docCode} badges={badges} ok={ok} governing={governing} lh={lh}
+        stats={stats} checks={checks} data={data} steps={steps} drawingTitle={drawingTitle}
+        className="flex-none rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-[#0d3f78] disabled:opacity-50"
+      />
+    </div>
     <div className="print-only">
       <div className="flex items-baseline justify-between border-b border-[#eeece5] pb-1.5 font-mono text-[9px] text-[#a39d8d]">
         <span>CIVENG TOOLKIT · {docTitle.toUpperCase()} — CALCULATION REPORT</span>
@@ -264,6 +297,7 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, stat
       </div>
       <p className="mt-4 text-[8.5px] leading-relaxed text-[#a39d8d]">Computed client-side by the CivEng Toolkit engine · verify before construction use. Load factors per NSCP 2015 §203.3; strength reduction factors per ACI 318-14 Table 21.2.1. Project: {lh.project || '—'}.</p>
     </div>
+    </>
   )
 }
 
