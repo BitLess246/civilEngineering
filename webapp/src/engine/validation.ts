@@ -16,6 +16,7 @@ import { shapeByName } from './aiscSections'
 import { designAxialColumn } from './columnDesign'
 import { activeThrust, rankineKa, bearingFactors, infiniteSlopeFS } from './geotech'
 import { felleniusFS, type Slice } from './slopeStability'
+import { consolidationSettlement, timeFactor, effectiveStress, stressUnderRect } from './settlement'
 import { newmarkDirect } from './directTimeHistory'
 import { bilinearPath, bilinearCycleEnergy } from './hysteresis'
 import { nonlinearFrame } from './nonlinearFrame'
@@ -236,6 +237,32 @@ const arcCollapse = (() => {
   })
   return { manual: Mp / L, software: r ? r.peakLambda : NaN }
 })()
+
+// NOTE on Boussinesq: the tabulated corner factor (0.1752 at m = n = 1) is
+// published to four decimals, so it cannot meet this page's 0.01% bar — the
+// gap is the table's rounding, not the engine's error. That comparison lives in
+// `settlement.test.ts` at the precision the reference actually carries, rather
+// than being forced in here by loosening the gate.
+
+// ── 11c. Terzaghi 1-D consolidation of a normally consolidated layer ────────
+// Sc = Cc·H/(1+e₀)·log₁₀((σ′₀+Δσ)/σ′₀) evaluated at mid-height — the textbook
+// hand calculation. Driving the engine with ONE slice makes it evaluate at the
+// same point, so any difference is a formula error, not a discretisation one.
+const consolidation = (() => {
+  const H = 2, gamma = 18, e0 = 0.9, Cc = 0.3, q = 100, B = 2, L = 2
+  const layers = [{ H, gamma, e0, Cc }]
+  const zMid = H / 2
+  const s0 = effectiveStress(layers, zMid)
+  const sf = s0 + stressUnderRect(q, B, L, zMid)
+  return {
+    manual: ((Cc * H) / (1 + e0)) * Math.log10(sf / s0) * 1000,
+    software: consolidationSettlement({ layers, q, B, L, slices: 1 }).total,
+  }
+})()
+
+// ── 11d. Consolidation time factor at U = 90% ───────────────────────────────
+// Tv = 1.781 − 0.933·log₁₀(100 − U%) → 0.848, the standard tabulated value.
+const tv90 = (() => ({ manual: 0.848, software: timeFactor(0.9) }))()
 
 // ── 12b. T-section gross inertia — composite vs the transfer-axis identity ──
 // A monolithic beam and its slab form a T for stiffness. The engine sums the
@@ -640,6 +667,16 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'beam-defl-integration', category: 'RC', title: 'Service deflection by moment-diagram integration',
     reference: 'NSCP 424.2 / ACI 318-14 §24.2', formula: 'δ = ∬(M/EcIe) dx  ≡  5wℓ⁴/384EcIg (uncracked SS span)',
     manual: beamDeflIntegration.manual, software: beamDeflIntegration.software, unit: 'mm', tol: 1e-4,
+  },
+  {
+    id: 'consolidation-nc', category: 'Geotech', title: 'Primary consolidation — normally consolidated layer',
+    reference: 'Terzaghi 1-D consolidation', formula: 'Sc = Cc·H/(1+e₀)·log₁₀((σ′₀+Δσ)/σ′₀)',
+    manual: consolidation.manual, software: consolidation.software, unit: 'mm', tol: 1e-9,
+  },
+  {
+    id: 'consolidation-tv90', category: 'Geotech', title: 'Consolidation time factor at U = 90%',
+    reference: 'Terzaghi', formula: 'Tv = 1.781 − 0.933·log₁₀(100 − U%)',
+    manual: tv90.manual, software: tv90.software, unit: '—', tol: 1e-9,
   },
   {
     id: 'tbeam-gross-inertia', category: 'RC', title: 'T-section gross inertia — composite section',
