@@ -1,4 +1,5 @@
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls, Text } from '@react-three/drei'
 import * as THREE from 'three'
@@ -74,6 +75,9 @@ import { loadCustomMaterials, saveCustomMaterials, type CustomMaterial } from '.
 import { buildSectionShapes } from '../lib/sectionShapes3d'
 import { SectionShape } from '../components/SectionShape'
 import { f0, f1, f2 } from '../lib/format'
+import { usePlanGate } from '../lib/auth/usePlan'
+import { UpgradeNotice } from '../components/UpgradeNotice'
+import type { SolverKind } from '../lib/featureGate'
 
 /** A sensible default timber deck (DFL No.2 joists 50×200 @ 400, 25 mm plank). */
 const DEFAULT_DECK: WoodDeck = {
@@ -1132,7 +1136,40 @@ export default function ModelSpace() {
   const [wallT, setWallT] = useState(150); const [wallShear, setWallShear] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const controlsRef = useRef<React.ComponentRef<typeof OrbitControls>>(null)
-  const { busy, run, progress } = useSolver()   // off-thread FEM/design/optimise
+  const { busy, run: runSolver, progress } = useSolver()   // off-thread FEM/design/optimise
+  const gate = usePlanGate()
+  const [planBlock, setPlanBlock] = useState<string | null>(null)
+
+  /**
+   * Every heavy job goes through here, so the plan check happens ONCE at the
+   * single choke point instead of at each of the dozen call sites. The buttons
+   * below are also disabled when a feature is off-plan, so this should never be
+   * the thing a user hits — it is the backstop that makes a missed button the
+   * cheap kind of mistake.
+   *
+   * Not a security boundary: this runs in the browser, like every calculation
+   * in this app. See the header of lib/featureGate.ts.
+   */
+  const run = ((kind, payload) => {
+    const v = gate.solve(kind as SolverKind, model?.members.length ?? 0)
+    if (!v.allowed) {
+      setPlanBlock(v.message)
+      return Promise.reject(new Error(v.message))
+    }
+    setPlanBlock(null)
+    return runSolver(kind, payload)
+    // Cast to the solver's own signature: the wrapper is transparent, and
+    // re-deriving the per-kind payload mapping here would duplicate useSolver's
+    // types for no gain.
+  }) as typeof runSolver
+
+  // Verdicts for the sections a Pro account can see but not necessarily use.
+  // Computed once here rather than at each button so the wording stays
+  // identical wherever the same feature is refused.
+  const nMembers = model?.members.length ?? 0
+  const nonlinearGate = gate.solve('pushover', nMembers)
+  const optimizeGate = gate.solve('optimize', nMembers)
+  const reportsGate = gate.action('reports')
 
   // Hold Shift to PAN with a left-drag (otherwise left-drag orbits); right-drag
   // pans too. Toggles the OrbitControls left-button mode on Shift down/up.
@@ -1577,6 +1614,12 @@ export default function ModelSpace() {
    *  bundle). Replaces the old print-the-page path. */
   const exportPdf = async () => {
     if (!model || !design || exporting) return
+    // Backstop, for the same reason `run` has one: there are TWO buttons that
+    // reach this (the workspace header and the results bar), and a check that
+    // lives only on the buttons is one refactor away from being bypassed. The
+    // second one was in fact missed on the first pass here.
+    const v = gate.action('reports')
+    if (!v.allowed) { setPlanBlock(v.message); return }
     setExporting(true)
     try {
       let img = modelImg
@@ -1919,6 +1962,20 @@ export default function ModelSpace() {
 
   return (
     <div className="mx-auto max-w-[1700px] p-4">
+      {/* Backstop message from the gated `run`. The buttons for off-plan
+          features are already disabled, so reaching this means a path was
+          missed — it is shown rather than swallowed so that shows up. */}
+      {planBlock && (
+        <div className="no-print mb-3 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <span aria-hidden>🔒</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[12.5px] leading-6 text-amber-900">{planBlock}</p>
+            <Link to="/pricing" className="text-[12px] font-semibold text-amber-900 underline">Compare plans</Link>
+          </div>
+          <button type="button" onClick={() => setPlanBlock(null)}
+            className="text-[11px] font-semibold text-amber-900/70 hover:text-amber-900" aria-label="Dismiss">✕</button>
+        </div>
+      )}
       {/* ── Workspace header (docs/design/uiux-2026-07) ── */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2.5">
@@ -1955,8 +2012,9 @@ export default function ModelSpace() {
             className="rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-bold text-white hover:bg-[#0d3f78] disabled:opacity-40">
             Design all
           </button>
-          <button type="button" onClick={() => void exportPdf()} disabled={!design || exporting}
-            title={design ? 'Download the calculation report as a PDF' : 'Run “Design all” first'}
+          <button type="button" onClick={() => void exportPdf()} disabled={!design || exporting || !reportsGate.allowed}
+            title={!reportsGate.allowed ? reportsGate.message
+              : design ? 'Download the calculation report as a PDF' : 'Run “Design all” first'}
             className="rounded-md border border-[#0f4c92] bg-white px-3.5 py-2 text-[12.5px] font-bold text-[#0f4c92] hover:bg-[#eaf1f9] disabled:opacity-40">
             {exporting ? '⏳ Building PDF…' : '⎙ Export PDF'}
           </button>
@@ -3836,9 +3894,10 @@ export default function ModelSpace() {
                   record (two-column t/ag, one-column with Δt, or PEER AT2) or use the built-in synthetic motion.
                 </p>
                 <div className="col-span-full flex flex-wrap gap-2">
-                  <button type="button" onClick={runTimeHistory} disabled={!model || !!busy || meshErrors} className={btn}>
+                  <button type="button" onClick={runTimeHistory} disabled={!model || !!busy || meshErrors || !nonlinearGate.allowed} className={btn}>
                     {busy === 'timeHistory' ? '⏳ Integrating…' : '∿ Run time-history'}
                   </button>
+                  {!nonlinearGate.allowed && <UpgradeNotice compact message={nonlinearGate.message} />}
                   {thCsv && (
                     <button type="button" onClick={runResponseSpectrum} className={btn}>
                       ⌁ Response spectrum
@@ -3924,9 +3983,10 @@ export default function ModelSpace() {
                   lateral tangent — drift is amplified, hinges form earlier, and the collapse base shear drops.
                 </p>
                 <div className="col-span-full">
-                  <button type="button" onClick={runPushover} disabled={!model || !!busy || meshErrors} className={btn}>
+                  <button type="button" onClick={runPushover} disabled={!model || !!busy || meshErrors || !nonlinearGate.allowed} className={btn}>
                     {busy === 'pushover' ? '⏳ Pushing…' : '⤧ Run pushover'}
                   </button>
+                  {!nonlinearGate.allowed && <UpgradeNotice compact message={nonlinearGate.message} />}
                   {meshErrors && <p className="mt-1 text-[11px] font-medium text-red-600">Resolve the mesh errors in the Analysis tab to enable pushover.</p>}
                 </div>
                 {busy === 'pushover' && <SolverProgress p={progress} />}
@@ -3972,9 +4032,10 @@ export default function ModelSpace() {
                   offsets cannot be represented by the hinge element; if the model uses them, the result panel says so.
                 </p>
                 <div className="col-span-full">
-                  <button type="button" onClick={runBiaxialPushover} disabled={!model || !!busy || meshErrors} className={btn}>
+                  <button type="button" onClick={runBiaxialPushover} disabled={!model || !!busy || meshErrors || !nonlinearGate.allowed} className={btn}>
                     {busy === 'biaxialPushover' ? '⏳ Pushing…' : '◈ Run biaxial pushover'}
                   </button>
+                  {!nonlinearGate.allowed && <UpgradeNotice compact message={nonlinearGate.message} />}
                 </div>
                 {busy === 'biaxialPushover' && <SolverProgress p={progress} />}
               </Sec>
@@ -4207,10 +4268,11 @@ export default function ModelSpace() {
                   <button type="button" onClick={runPipeline} disabled={!model || !!busy || meshErrors} className={btn}>
                     {busy === 'design' ? '⏳ Designing…' : '🏗 Design structure'}
                   </button>
-                  <button type="button" onClick={optimize} disabled={!model || !!busy || meshErrors} className={btn}
+                  <button type="button" onClick={optimize} disabled={!model || !!busy || meshErrors || !optimizeGate.allowed} className={btn}
                     title="Grow each failing member's own section until nothing fails, then trim back">
                     {busy === 'optimize' ? '⏳ Optimizing…' : '🏁 Optimize design'}
                   </button>
+                  {!optimizeGate.allowed && <UpgradeNotice compact message={optimizeGate.message} />}
                 </div>
                 {meshErrors && (
                   <p className="col-span-full text-[11px] font-medium text-red-600">
@@ -4347,7 +4409,8 @@ export default function ModelSpace() {
                 {label}
               </button>
             ))}
-            <button type="button" onClick={() => void exportPdf()} disabled={exporting}
+            <button type="button" onClick={() => void exportPdf()} disabled={exporting || !reportsGate.allowed}
+              title={reportsGate.allowed ? 'Download the calculation report as a PDF' : reportsGate.message}
               className="mb-1 ml-auto rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-bold text-white hover:bg-[#0d3f78] disabled:opacity-40">
               {exporting ? '⏳ Building PDF…' : '⎙ Export PDF report'}
             </button>
