@@ -1070,7 +1070,25 @@ tested. And the Boussinesq table value is published to four decimals, so it
 cannot meet `validation.ts`'s 0.01% gate; that comparison stays in the unit test
 at the precision the reference carries rather than the gate being loosened.
 
-**Remaining from P4 #12:** laterally loaded piles (Broms / p-y). Nothing else on
-the recorded backlog is open except the `,\ ` LaTeX thin-space question in
-`beamSolution`/`columnSolution`, which changes rendered output and needs the
-user's call.
+- **#460 — `engine/lateralPile.ts`**, closing P4 #12: Broms ultimate capacity
+  (clay/sand × short/long × free/fixed) and a p-y analysis solving the pile as a
+  beam on nonlinear soil springs, with Matlock soft-clay and API sand curves.
+  `validation.ts`: `broms-sand-short`, `broms-clay-short`.
+
+  **Two defects the tests caught, both silent.** The head-moment sign was
+  inverted relative to the solver's DOF convention, so an eccentric load made
+  the pile deflect LESS — the API now states the moment physically and negates
+  internally, and exposes `e` directly since that is the number to hand. And
+  Matlock's p ∝ y^(1/3) has an INFINITE tangent at y = 0, which stalled every
+  service-load solve at a residual around 2e-6 no matter how many iterations it
+  was given (the deflections were right; the residual simply could not be
+  driven down, because near-zero springs down the shaft had unbounded
+  stiffness). Regularised below 1e-3·y50 — about 0.015 mm on a 600 mm pile —
+  after which the same cases converge in 5–9 iterations at 1e-12. A backtracking
+  line search was added first and helped, but did not fix it; measuring showed
+  the stall, not slow convergence.
+
+**The recorded backlog is now clear** apart from the `,\ ` LaTeX thin-space
+question in `beamSolution`/`columnSolution`, which changes rendered output and
+needs the user's call. A `/lateral-pile` page would be the natural follow-up if
+the engine should be reachable from the UI.
