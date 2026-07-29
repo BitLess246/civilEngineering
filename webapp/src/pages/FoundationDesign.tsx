@@ -443,7 +443,7 @@ export default function FoundationDesign() {
             />
           )}
 
-          <DrawingCard title="Drawing" meta="plan · section">
+          <DrawingCard pdfDrawing title="Drawing" meta="plan · section">
             {view ? (
               <FootingSchematic Bx={view.Bx} By={view.By} Dc={view.Dc} columnWidth={colWidth} H={form.H} />
             ) : (

@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
-import { ExportPdfButton } from '../components/ExportPdfButton'
 import { designBeam, beamServiceDeflection, type BeamDesignInput, type BeamDesignResult } from '../engine/beamDesign'
 import type { BeamSupport } from '../engine/beamDeflection'
 import type { CriticalSection } from '../engine/beamSections'
@@ -177,7 +176,6 @@ export default function BeamDesign() {
                 {t}
               </button>
             ))}
-            {reportData && <ExportPdfButton {...reportData} />}
           </div>
         } />
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
