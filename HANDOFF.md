@@ -1090,5 +1090,8 @@ at the precision the reference carries rather than the gate being loosened.
 
 **The recorded backlog is now clear** apart from the `,\ ` LaTeX thin-space
 question in `beamSolution`/`columnSolution`, which changes rendered output and
-needs the user's call. A `/lateral-pile` page would be the natural follow-up if
-the engine should be reachable from the UI.
+needs the user's call. - **#461 — the `/lateral-pile` page.** Broms capacity card (both mechanisms,
+  with the governing one named) beside a p-y working-load panel showing
+  deflection / moment / reaction profiles, head deflection against the 25 mm
+  yardstick, and the solver's iteration count and residual. Documented in the
+  `/docs` catalogue in the same PR.

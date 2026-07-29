@@ -195,6 +195,66 @@ export const ANALYSIS_TOOLS: DocTool[] = [
     ],
   },
   {
+    id: 'lateral-pile',
+    name: 'Lateral Pile',
+    route: '/lateral-pile',
+    group: 'Foundations & geotechnical',
+    summary: 'Ultimate lateral capacity and working-load response of a single pile, by Broms and by p-y analysis.',
+    basis: 'Broms (1964) limit equilibrium; Matlock soft-clay and API RP 2A sand p-y curves.',
+    sections: [
+      {
+        id: 'lp-pile',
+        title: 'Pile & loading',
+        body: 'Two methods answer two different questions and are both shown. Broms gives the ultimate load and '
+          + 'which mechanism fails first; p-y gives deflection and the moment diagram at a working load, which is '
+          + 'what a serviceability check needs and Broms cannot provide.',
+        controls: [
+          { kind: 'field', name: 'Embedded length L', unit: 'm', what: 'Length below ground. Beyond the pile\u2019s active length extra depth stops changing the head response — that is the signature of a "long" pile.' },
+          { kind: 'field', name: 'Diameter D', unit: 'm', what: 'Pile diameter or width. Scales the soil resistance directly, and sets the reference deflection y50 in the clay curve.' },
+          { kind: 'field', name: 'Rigidity EI', unit: 'kN·m²', what: 'Flexural rigidity of the pile section. A stiffer pile deflects less and carries more moment over a shorter depth.' },
+          { kind: 'field', name: 'Yield moment My', unit: 'kN·m', what: 'Plastic moment of the section. Broms compares it against the soil mechanism to decide which one governs, so a low My turns a short pile into a hinge failure.' },
+          { kind: 'field', name: 'Lateral load H', unit: 'kN', what: 'Working lateral load for the p-y analysis. Broms is independent of it — the ratio H/Hu is reported separately.' },
+          { kind: 'field', name: 'Load height e', unit: 'm', what: 'Height of the load above ground. It adds an overturning moment at the head, which reduces capacity and increases deflection. Ignored for a fixed head, which cannot rotate.' },
+          { kind: 'choice', name: 'Head condition', what: 'Free lets the head rotate; fixed represents a pile capped into a rigid cap. A fixed head is stronger and deflects less, and in Broms it allows a second plastic hinge at the head.' },
+          { kind: 'choice', name: 'Soil type', what: 'Clay uses the 9·cu·d Broms resistance with Matlock\u2019s p-y curve; sand uses 3·Kp·γ·z·d with the API RP 2A curve. The choice switches both methods together.' },
+        ],
+      },
+      {
+        id: 'lp-soil',
+        title: 'Soil',
+        controls: [
+          { kind: 'field', name: "Unit weight γ′", unit: 'kN/m³', what: 'Effective unit weight, which builds the confining stress down the pile.' },
+          { kind: 'field', name: 'Undrained cu', unit: 'kPa', what: 'Clay only. Sets both the Broms 9·cu·d resistance and the Matlock ultimate reaction.' },
+          { kind: 'field', name: 'Strain ε₅₀', what: 'Clay only. Strain at half the failure stress, which fixes y50 = 2.5·ε₅₀·D — the deflection at which half the ultimate reaction is mobilised. Larger values mean a softer, more ductile response.' },
+          { kind: 'field', name: "Friction φ′", unit: '°', what: 'Sand only. Drives Kp in Broms and the API wedge coefficients in the p-y curve.' },
+          { kind: 'field', name: 'Subgrade k', unit: 'kN/m³', what: 'Sand only. Initial modulus of subgrade reaction, giving the p-y curve its slope k·z at the origin.' },
+        ],
+      },
+      {
+        id: 'lp-broms',
+        title: 'Ultimate capacity — Broms',
+        controls: [
+          { kind: 'output', name: 'Ultimate lateral load Hu', unit: 'kN', what: 'The governing capacity — always the lower of the two mechanisms below. An ultimate value: apply your own factor of safety, typically 2 to 3 for a working load.' },
+          { kind: 'output', name: 'Short-pile (soil) capacity', unit: 'kN', what: 'Load at which the soil fails and the pile rotates as a rigid body.' },
+          { kind: 'output', name: 'Long-pile (hinge) capacity', unit: 'kN', what: 'Load at which a plastic hinge forms in the pile section (two hinges when the head is fixed).' },
+          { kind: 'output', name: 'Governing mechanism', what: 'Which of the two came out lower. This is what makes a pile "short" or "long" — it is a verdict about the pile and soil together, not a length.' },
+          { kind: 'output', name: 'Applied H / Hu', what: 'Utilisation against the ultimate capacity, flagged when it exceeds 1.' },
+        ],
+      },
+      {
+        id: 'lp-py',
+        title: 'Response at working load — p-y',
+        controls: [
+          { kind: 'output', name: 'Deflection / moment / reaction profiles', what: 'Three panels down the pile: y in mm, bending moment, and mobilised soil reaction. The peak of each is printed beneath it.' },
+          { kind: 'output', name: 'Head deflection', unit: 'mm', what: 'Deflection at ground level, checked against the 25 mm figure commonly taken as the serviceability limit.' },
+          { kind: 'output', name: 'Maximum moment', unit: 'kN·m', what: 'Peak bending moment and the depth it occurs at — usually a few diameters down, not at the head, which is what sizes the reinforcement.' },
+          { kind: 'output', name: 'Moment utilisation M/My', what: 'Peak moment against the section\u2019s yield moment.' },
+          { kind: 'output', name: 'Solution', what: 'Iterations and the final residual. Reported rather than hidden, so a solve that fell short of tolerance is visible instead of being presented as an answer.' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'settlement',
     name: 'Settlement',
     route: '/settlement',

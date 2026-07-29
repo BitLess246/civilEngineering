@@ -31,6 +31,7 @@ import WoodSlab from './pages/WoodSlab'
 import Micropile from './pages/Micropile'
 import SlopeStability from './pages/SlopeStability'
 import Settlement from './pages/Settlement'
+import LateralPile from './pages/LateralPile'
 import RockAnchor from './pages/RockAnchor'
 import SeismicWizard from './pages/SeismicWizard'
 import WaterTank from './pages/WaterTank'
@@ -99,6 +100,7 @@ export default function App() {
         <Route path="/micropile" element={<Micropile />} />
         <Route path="/slope" element={<SlopeStability />} />
         <Route path="/settlement" element={<Settlement />} />
+        <Route path="/lateral-pile" element={<LateralPile />} />
         <Route path="/rock-anchor" element={<RockAnchor />} />
         <Route path="/seismic-wizard" element={<SeismicWizard />} />
         <Route path="/water-tank" element={<WaterTank />} />

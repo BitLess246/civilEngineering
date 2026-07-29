@@ -44,6 +44,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/shotcrete-facing', name: 'Shotcrete Facing', sub: 'FHWA · flexure · punching', group: 'Geotechnical' },
       { to: '/slope',            name: 'Slope Stability',  sub: 'Slices · Bishop/Fellenius/Janbu', group: 'Geotechnical' },
       { to: '/settlement',       name: 'Settlement',       sub: 'Boussinesq · Terzaghi · Schmertmann', group: 'Geotechnical' },
+      { to: '/lateral-pile',     name: 'Lateral Pile',     sub: 'Broms · p-y (Matlock/API)', group: 'Geotechnical' },
       { to: '/seismic-wizard',   name: 'Seismic Wizard',   sub: 'NSCP 208 Ca/Cv/I/R',       group: 'Seismic & Loads' },
       { to: '/load-combinations', name: 'Load Combinations', sub: 'NSCP 2015 §203.3 LRFD',  group: 'Seismic & Loads' },
       { to: '/wood-slab',        name: 'Wood Slab',        sub: 'Deck-on-joist · NDS §3 / NSCP §6', group: 'Timber' },
