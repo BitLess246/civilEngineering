@@ -93,15 +93,24 @@ export function VerdictPanel({ ok, headline, governing, stats, checks, footnote 
   )
 }
 
-/** Right-rail card with the drawing-sheet grid backdrop. */
-export function DrawingCard({ title, meta, children }: { title: string; meta?: string; children: ReactNode }) {
+/**
+ * Right-rail card with the drawing-sheet grid backdrop.
+ *
+ * `pdfDrawing` marks this card as the one whose SVG goes into the generated PDF
+ * (see `ExportPdfButton`). Set it on exactly one card per page — the export
+ * takes the first match.
+ */
+export function DrawingCard({ title, meta, children, pdfDrawing }: {
+  title: string; meta?: string; children: ReactNode; pdfDrawing?: boolean
+}) {
   return (
     <section className="rail-card rounded-lg border border-[#e3e1da] bg-white print-avoid-break">
       <div className="flex items-center justify-between border-b border-[#eeece5] px-4 py-3">
         <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">{title}</h2>
         {meta && <span className="font-mono text-[10px] text-[#a39d8d]">{meta}</span>}
       </div>
-      <div className="p-3 [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
+      <div {...(pdfDrawing ? { 'data-pdf-drawing': '' } : {})}
+        className="p-3 [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
         {children}
       </div>
     </section>

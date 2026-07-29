@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import { ExportPdfButton } from '../components/ExportPdfButton'
 import { designBeam, beamServiceDeflection, type BeamDesignInput, type BeamDesignResult } from '../engine/beamDesign'
 import type { BeamSupport } from '../engine/beamDeflection'
 import type { CriticalSection } from '../engine/beamSections'
@@ -138,6 +139,33 @@ export default function BeamDesign() {
     { name: `Bar spacing (${r.layers.length} layer${r.layers.length > 1 ? 's' : ''})`, ratio: r.sMinClear / Math.max(r.sClear, 1e-9) },
   ] : []
 
+  // One payload for both report paths — the printed calc sheet and the
+  // generated PDF. Sharing it is the point: two copies of this drift, and the
+  // PDF quietly stops matching what the page shows.
+  const reportData = r && solution ? {
+    docTitle: multi && active ? `RC Beam — ${active.label}` : 'Rectangular RC Beam',
+    docCode: 'S-01',
+    badges: ['ACI 318-14', 'NSCP 2015'],
+    ok: allOK,
+    governing: `Governing: flexure · utilization ${cap ? (demand.Mu / cap.phiMn).toFixed(2) : '—'}${r.mode === 'DRRB' ? ' · DRRB' : ''}`,
+    lh,
+    stats: [
+      { label: hogging ? 'Tension (top)' : 'Tension steel', value: `${r.bars}-⌀${f.barDia}` },
+      { label: 'Stirrups', value: r.sAdopt > 0 ? `⌀${f.stirrupDia} @${f0(r.sAdopt)}` : REGION[r.region] },
+      { label: 'Eff. depth d', value: f0(r.d), unit: 'mm' },
+    ],
+    checks: checks.map((c) => ({ ...c, ok: c.ratio <= 1.0001 })),
+    data: [
+      ['Section b × h', `${f.b} × ${f.h} mm`], ['Clear cover', `${f.cover} mm`],
+      ["Concrete f'c", `${f.fc} MPa`], ['Steel fy / fyt', `${f.fy} / ${f.fyt} MPa`],
+      ['Bar ⌀ / stirrup ⌀', `${f.barDia} / ${f.stirrupDia} mm (${f.legs}-leg)`],
+      ['Moment Mu', `${f1(demand.Mu)} kN·m${hogging ? ' (hogging)' : ''}`],
+      ['Shear Vu', `${f1(demand.Vu)} kN`], ['ρ / ρmin / ρmax', `${r.rho.toFixed(4)} / ${r.rhoMin.toFixed(4)} / ${r.rhoMax.toFixed(4)}`],
+    ] as [string, string][],
+    steps: solution,
+    drawingTitle: 'Beam Section',
+  } : null
+
   return (
     <div>
       <PageHeader title="Rectangular RC Beam" badges={['ACI 318-14', 'NSCP 2015']}
@@ -149,8 +177,7 @@ export default function BeamDesign() {
                 {t}
               </button>
             ))}
-            <button type="button" onClick={() => { const prev = document.title; document.title = `Beam Design Report${lh.project ? ` — ${lh.project}` : ''}`; window.print(); window.setTimeout(() => { document.title = prev }, 500) }}
-              className="ml-1.5 inline-flex items-center gap-2 rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-[#0d3f78]">⎙ Export report</button>
+            {reportData && <ExportPdfButton {...reportData} />}
           </div>
         } />
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
@@ -277,7 +304,7 @@ export default function BeamDesign() {
             </ResultCard>
           )}
 
-          <DrawingCard title={`Section${multi && active ? ` — ${active.label}` : ''}`} meta={`${f0(f.b)} × ${f0(f.h)} · to scale`}>
+          <DrawingCard pdfDrawing title={`Section${multi && active ? ` — ${active.label}` : ''}`} meta={`${f0(f.b)} × ${f0(f.h)} · to scale`}>
             {r ? (
               <BeamSchematic b={f.b} h={f.h} cover={f.cover} barDia={f.barDia} stirrupDia={f.stirrupDia}
                 bars={r.bars} d={r.d} dPrime={r.comprLayers.length > 0 ? r.dPrime : undefined}
@@ -366,30 +393,12 @@ export default function BeamDesign() {
             title={multi && active ? `Calculation report — ${active.label}` : 'Calculation report — worked solution'} />
         )}
       </div>
-      {r && solution && (
-        <PrintReport
-          docTitle={multi && active ? `RC Beam — ${active.label}` : 'Rectangular RC Beam'} docCode="S-01" badges={['ACI 318-14', 'NSCP 2015']}
-          ok={allOK} governing={`Governing: flexure · utilization ${cap ? (demand.Mu / cap.phiMn).toFixed(2) : '—'}${r.mode === 'DRRB' ? ' · DRRB' : ''}`}
-          lh={lh}
-          stats={[
-            { label: hogging ? 'Tension (top)' : 'Tension steel', value: `${r.bars}-⌀${f.barDia}` },
-            { label: 'Stirrups', value: r.sAdopt > 0 ? `⌀${f.stirrupDia} @${f0(r.sAdopt)}` : REGION[r.region] },
-            { label: 'Eff. depth d', value: f0(r.d), unit: 'mm' },
-          ]}
-          checks={checks.map((c) => ({ ...c, ok: c.ratio <= 1.0001 }))}
-          data={[
-            ['Section b × h', `${f.b} × ${f.h} mm`], ['Clear cover', `${f.cover} mm`],
-            ["Concrete f'c", `${f.fc} MPa`], ['Steel fy / fyt', `${f.fy} / ${f.fyt} MPa`],
-            ['Bar ⌀ / stirrup ⌀', `${f.barDia} / ${f.stirrupDia} mm (${f.legs}-leg)`],
-            ['Moment Mu', `${f1(demand.Mu)} kN·m${hogging ? ' (hogging)' : ''}`],
-            ['Shear Vu', `${f1(demand.Vu)} kN`], ['ρ / ρmin / ρmax', `${r.rho.toFixed(4)} / ${r.rhoMin.toFixed(4)} / ${r.rhoMax.toFixed(4)}`],
-          ]}
-          steps={solution}
-          drawingTitle="Beam Section"
+      {reportData && (
+        <PrintReport {...reportData}
           drawing={<BeamSchematic b={f.b} h={f.h} cover={f.cover} barDia={f.barDia} stirrupDia={f.stirrupDia}
-            bars={r.bars} d={r.d} dPrime={r.comprLayers.length > 0 ? r.dPrime : undefined}
-            layers={r.layers} comprLayers={r.comprLayers} comprBars={r.comprBars} comprBarDia={f.comprBarDia}
-            naDepth={r.cNA} flexOK={r.flexOK} hogging={hogging} />}
+            bars={r!.bars} d={r!.d} dPrime={r!.comprLayers.length > 0 ? r!.dPrime : undefined}
+            layers={r!.layers} comprLayers={r!.comprLayers} comprBars={r!.comprBars} comprBarDia={f.comprBarDia}
+            naDepth={r!.cNA} flexOK={r!.flexOK} hogging={hogging} />}
         />
       )}
       </div>
