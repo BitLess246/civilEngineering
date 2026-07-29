@@ -22,6 +22,7 @@ export const DOC_TOOLS: DocTool[] = [
  * page — it only passes for routes deliberately folded into a parent.
  */
 export const DOC_ROUTE_ALIASES: Record<string, string> = {
+  '/signup': 'account', '/forgot-password': 'account', '/reset-password': 'account',
   // the five estimators share one page in the docs
   '/estimate/beam': 'estimates',
   '/estimate/column': 'estimates',

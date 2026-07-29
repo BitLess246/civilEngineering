@@ -1,7 +1,6 @@
-import { lazy, Suspense, useState } from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
+import { Routes, Route, useNavigate } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
-import { AuthModal } from './components/AuthModal'
 import Home from './pages/Home'
 import FoundationDesign from './pages/FoundationDesign'
 import PileCapDesign from './pages/PileCapDesign'
@@ -32,6 +31,11 @@ import Micropile from './pages/Micropile'
 import SlopeStability from './pages/SlopeStability'
 import Settlement from './pages/Settlement'
 import LateralPile from './pages/LateralPile'
+import SignIn from './pages/auth/SignIn'
+import SignUp from './pages/auth/SignUp'
+import ForgotPassword from './pages/auth/ForgotPassword'
+import ResetPassword from './pages/auth/ResetPassword'
+import { RequireAuth } from './components/RequireAuth'
 import RockAnchor from './pages/RockAnchor'
 import SeismicWizard from './pages/SeismicWizard'
 import WaterTank from './pages/WaterTank'
@@ -54,14 +58,14 @@ import ScheduleReports from './pages/ScheduleReports'
 import ScheduleDaily from './pages/ScheduleDaily'
 
 export default function App() {
-  const [auth, setAuth] = useState<'login' | 'signup' | null>(null)
+  const nav = useNavigate()
 
   // Home carries its own hero navigation; every tool route lives inside the
   // workbench shell (sidebar + breadcrumb header + command palette).
   return (
     <>
       <Routes>
-        <Route path="/" element={<Home onAuth={setAuth} />} />
+        <Route path="/" element={<Home onAuth={(m) => nav(m === 'signup' ? '/signup' : '/signin')} />} />
         <Route path="*" element={
           <AppShell>
             <Routes>
@@ -75,7 +79,7 @@ export default function App() {
         <Route path="/prestressed-beam" element={<PrestressedBeam />} />
         <Route path="/beam-analysis" element={<BeamAnalysis />} />
         <Route path="/column-design" element={<ColumnDesign />} />
-        <Route path="/frame" element={<FrameAnalysis />} />
+        <Route path="/frame" element={<RequireAuth><FrameAnalysis /></RequireAuth>} />
         <Route path="/load-path" element={<LoadPath />} />
         <Route path="/model" element={
           <Suspense fallback={<p className="p-8 text-center text-sm text-slate-500">Loading 3D model space…</p>}>
@@ -101,31 +105,34 @@ export default function App() {
         <Route path="/slope" element={<SlopeStability />} />
         <Route path="/settlement" element={<Settlement />} />
         <Route path="/lateral-pile" element={<LateralPile />} />
+        <Route path="/signin" element={<SignIn />} />
+        <Route path="/signup" element={<SignUp />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/rock-anchor" element={<RockAnchor />} />
-        <Route path="/seismic-wizard" element={<SeismicWizard />} />
+        <Route path="/seismic-wizard" element={<RequireAuth><SeismicWizard /></RequireAuth>} />
         <Route path="/water-tank" element={<WaterTank />} />
         <Route path="/shotcrete-facing" element={<ShotcreteFacing />} />
         <Route path="/bolted-connection" element={<BoltedConnection />} />
         <Route path="/welded-connection" element={<WeldedConnection />} />
-        <Route path="/estimate/slab" element={<SlabEstimate />} />
-        <Route path="/estimate/beam" element={<BeamEstimate />} />
-        <Route path="/estimate/column" element={<ColumnEstimate />} />
-        <Route path="/estimate/chb" element={<ChbEstimate />} />
-        <Route path="/estimate/box-culvert" element={<BoxCulvertEstimate />} />
+        <Route path="/estimate/slab" element={<RequireAuth><SlabEstimate /></RequireAuth>} />
+        <Route path="/estimate/beam" element={<RequireAuth><BeamEstimate /></RequireAuth>} />
+        <Route path="/estimate/column" element={<RequireAuth><ColumnEstimate /></RequireAuth>} />
+        <Route path="/estimate/chb" element={<RequireAuth><ChbEstimate /></RequireAuth>} />
+        <Route path="/estimate/box-culvert" element={<RequireAuth><BoxCulvertEstimate /></RequireAuth>} />
               <Route path="/load-combinations" element={<LoadCombinations />} />
         <Route path="/plumbing" element={<PlumbingDesign />} />
-        <Route path="/schedule" element={<Schedule />} />
-        <Route path="/schedule/gantt" element={<ScheduleGantt />} />
-        <Route path="/schedule/network" element={<ScheduleNetwork />} />
-        <Route path="/schedule/dashboard" element={<ScheduleDashboard />} />
-        <Route path="/schedule/resources" element={<ScheduleResources />} />
-        <Route path="/schedule/reports" element={<ScheduleReports />} />
-        <Route path="/schedule/daily" element={<ScheduleDaily />} />
+        <Route path="/schedule" element={<RequireAuth><Schedule /></RequireAuth>} />
+        <Route path="/schedule/gantt" element={<RequireAuth><ScheduleGantt /></RequireAuth>} />
+        <Route path="/schedule/network" element={<RequireAuth><ScheduleNetwork /></RequireAuth>} />
+        <Route path="/schedule/dashboard" element={<RequireAuth><ScheduleDashboard /></RequireAuth>} />
+        <Route path="/schedule/resources" element={<RequireAuth><ScheduleResources /></RequireAuth>} />
+        <Route path="/schedule/reports" element={<RequireAuth><ScheduleReports /></RequireAuth>} />
+        <Route path="/schedule/daily" element={<RequireAuth><ScheduleDaily /></RequireAuth>} />
             </Routes>
           </AppShell>
         } />
       </Routes>
-      {auth && <AuthModal mode={auth} onClose={() => setAuth(null)} />}
     </>
   )
 }

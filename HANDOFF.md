@@ -1095,3 +1095,43 @@ needs the user's call. - **#461 — the `/lateral-pile` page.** Broms capacity c
   deflection / moment / reaction profiles, head deflection against the 25 mm
   yardstick, and the solver's iteration count and residual. Documented in the
   `/docs` catalogue in the same PR.
+
+## Accounts and access control (PR #462, July 2026)
+
+Supabase email+password auth, with the tool split the user asked for: the
+single-purpose calculators are free to try, the heavy stateful features need an
+account.
+
+- `lib/trialQuota.ts` — PURE and tested. Owns the route classification and the
+  guest allowance (5 runs per tool), so the rules are inspectable in one place
+  rather than scattered as `if (user)` checks. An unlisted route defaults to
+  members-only, which is the safe direction. **A guard test compares the lists
+  against the router**: the first draft was written from memory and 15 of 27
+  trial routes did not exist.
+- `lib/auth/authClient.ts` — the Supabase adapter behind a provider-agnostic
+  surface, created LAZILY so importing it is free and a deployment without keys
+  still builds and runs.
+- `lib/auth/validation.ts` — pure form rules, separately tested.
+- Pages: `/signin`, `/signup`, `/forgot-password`, `/reset-password`. The old
+  `AuthModal` "coming soon" placeholder is deleted rather than left alongside.
+
+**Three deliberate security choices, each with a test:**
+1. A failed sign-in always says "Email or password is incorrect", never which
+   was wrong — otherwise the form is an account-enumeration oracle.
+2. Password reset always reports success, even for an unknown address, for the
+   same reason.
+3. Provider error text is never passed through raw; unrecognised errors become
+   a generic message rather than leaking internals like JWT or table names.
+
+**And one deliberate failure direction:** when the Supabase keys are absent
+NOTHING is gated. A missing env var must not brick the app behind a form that
+cannot work. Verified in a browser — `/model` stays reachable unconfigured.
+
+**Not done, and needing a decision:** subscriptions. Plans and a pricing page
+are straightforward; taking card payments is not, because a static SPA cannot
+verify a webhook. That needs a server (Supabase Edge Functions would do) and is
+its own piece of work.
+
+**Not verifiable here:** a real sign-in round trip, since this environment has
+no Supabase project. Everything up to the network call is tested; the call
+itself needs your keys.
