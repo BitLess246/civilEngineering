@@ -26,7 +26,7 @@ import { elasticResponseSpectrum } from './accelSpectrum'
 import { generateGridModel } from './modelBuilder'
 import { solveFrame3D, rectJ, type F3Node, type F3Member, type F3Support } from './frame3d'
 import { solveActiveSet, type AxialMode } from './axialOnly'
-import { memberServiceDeflection } from './memberDeflection'
+import { memberServiceDeflection, tSectionGross } from './memberDeflection'
 import { arcLengthFrame } from './arcLength'
 import { biaxialProbe, newBiaxialState } from './biaxialHinge'
 import { nonlinearFrame3D, type NL3Input } from './nonlinearFrame3d'
@@ -235,6 +235,21 @@ const arcCollapse = (() => {
     arcLength: 0.002, arcSteps: 300, dispStop: 0.3,
   })
   return { manual: Mp / L, software: r ? r.peakLambda : NaN }
+})()
+
+// ── 12b. T-section gross inertia — composite vs the transfer-axis identity ──
+// A monolithic beam and its slab form a T for stiffness. The engine sums the
+// two rectangles about the centroid; the reference builds the SAME section's
+// inertia about the top fibre and transfers it with I_c = I_top − A·ȳ². Two
+// different pieces of algebra for one number, so agreement is a real check
+// rather than a restatement.
+const tBeamGross = (() => {
+  const b = 300, h = 600, bf = 1000, hf = 120
+  const hw = h - hf, Af = bf * hf, Aw = b * hw
+  const yf = hf / 2, yw = hf + hw / 2, A = Af + Aw
+  const Itop = (bf * hf ** 3) / 12 + Af * yf ** 2 + (b * hw ** 3) / 12 + Aw * yw ** 2
+  const yBar = (Af * yf + Aw * yw) / A
+  return { manual: (Itop - A * yBar ** 2) / 1e6, software: tSectionGross({ b, h, bf, hf }).Ig / 1e6 }
 })()
 
 // ── 13c-bis. Biaxial hinge — the return map must land on the published surface
@@ -625,6 +640,12 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'beam-defl-integration', category: 'RC', title: 'Service deflection by moment-diagram integration',
     reference: 'NSCP 424.2 / ACI 318-14 §24.2', formula: 'δ = ∬(M/EcIe) dx  ≡  5wℓ⁴/384EcIg (uncracked SS span)',
     manual: beamDeflIntegration.manual, software: beamDeflIntegration.software, unit: 'mm', tol: 1e-4,
+  },
+  {
+    id: 'tbeam-gross-inertia', category: 'RC', title: 'T-section gross inertia — composite section',
+    reference: 'Parallel-axis theorem (NSCP 424.2 / ACI 318-14 §24.2)',
+    formula: 'I_c = Σ(I_i + A_i·y_i²) − A·ȳ²,  300×600 web + 1000×120 flange',
+    manual: tBeamGross.manual, software: tBeamGross.software, unit: '×10⁶ mm⁴', tol: 1e-9,
   },
   {
     id: 'arc-length-collapse', category: 'Analysis', title: 'Arc-length peak load — cantilever mechanism',
