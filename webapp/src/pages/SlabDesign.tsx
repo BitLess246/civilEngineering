@@ -103,6 +103,43 @@ export default function SlabDesign() {
 
   const defl = r?.deflection
 
+  const report = r ? {
+    docCode: 'S-SL',
+    ok: r.applicable && (!defl || (defl.liveOK && defl.totalOK)),
+    governing: r.applicable
+      ? `Two-way DDM · h = ${r.h} mm · wu = ${f1(r.wu)} kPa`
+      : 'DDM not fully applicable — see notes',
+    stats: [
+      { label: 'Adopted thickness h', value: String(r.h), unit: 'mm' },
+      { label: 'Factored load wu', value: f1(r.wu), unit: 'kPa' },
+      { label: 'Panel ratio ly/lx', value: f2(r.ratio) },
+    ],
+    checks: [
+      // Thickness and deflection are the two the slab can actually fail on;
+      // the strip moments are satisfied by design, not checked against a demand.
+      { name: 'Minimum thickness h/hmin', ratio: r.h > 0 ? r.hmin / r.h : 0, ok: r.h >= r.hmin },
+      ...(defl ? [
+        { name: 'Immediate live deflection (L/360)', ratio: defl.immLive / defl.limitLive, ok: defl.liveOK },
+        { name: 'Total long-term deflection (L/240)', ratio: defl.total / defl.limitTotal, ok: defl.totalOK },
+      ] : []),
+    ],
+    data: [
+      ['Spans lx × ly', `${f2(f.lx)} × ${f2(f.ly)} m`],
+      ['Column width', `${f.colWidth} mm`],
+      ['Dead load D', `${f1(f.D)} kPa`],
+      ['Live load L', `${f1(f.L)} kPa`],
+      ["Concrete f'c", `${f.fc} MPa`],
+      ['Steel fy', `${f.fy} MPa`],
+      ['Cover / bar ⌀', `${f.cover} / ${f.barDia} mm`],
+      ['Minimum thickness', `${Math.round(r.hmin)} mm`],
+      ['Panel action', r.twoWay ? 'two-way' : 'one-way'],
+      ['Exterior x / y', `${f.extX} / ${f.extY}`],
+      ['Beams on edges', f.withBeams],
+      ['Mo (x / y)', `${f1(r.x.Mo)} / ${f1(r.y.Mo)} kN·m`],
+      ...(r.notes.length ? [['DDM notes', r.notes.join(' · ')] as [string, string]] : []),
+    ] as [string, string][],
+  } : undefined
+
   return (
     <div className="mx-auto max-w-[1500px] p-6">
       <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
@@ -112,7 +149,7 @@ export default function SlabDesign() {
         column-strip / middle-strip flexure; temp/shrinkage minimum; §408.7.2.2 spacing; mid-panel deflection by
         crossing-strip method (Branson I_e).
       </p>
-      <ReportControls title="Two-Way Slab Design Report" />
+      <ReportControls title="Two-Way Slab (DDM)" badges={['ACI 318-14 §8.10', 'NSCP 2015 §408.10']} report={report} />
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
         {/* ── INPUTS ── */}

@@ -1,10 +1,29 @@
 import { useState, type JSX } from 'react'
+import type { CalcPdfInput } from '../lib/calcPdf'
+import { ExportPdfButton } from './ExportPdfButton'
+
+/**
+ * A page's report payload, minus the parts this component already owns.
+ *
+ * `docTitle` comes from `title`, `badges` from `badges`, and `lh` from the
+ * letterhead fields rendered below — so a page supplies only what is genuinely
+ * its own: the verdict, the numbers and the input echo.
+ */
+export type CalcReportData = Omit<CalcPdfInput, 'docTitle' | 'badges' | 'lh' | 'drawing'>
 
 export interface ReportControlsProps {
   /** Report heading, also used as the print/PDF document title. */
   title: string
   /** Code badges shown on the printed letterhead (e.g. ['ACI 318-14']). */
   badges?: string[]
+  /**
+   * Structured results. When present the page exports a real PDF calc sheet —
+   * the same one Model Space produces, via the shared `pdfKit`.
+   *
+   * Optional because the pages are being converted in batches: one without it
+   * still falls back to the browser print path rather than losing its export.
+   */
+  report?: CalcReportData
 }
 
 /**
@@ -15,7 +34,7 @@ export interface ReportControlsProps {
  * grid — ahead of the page's themed content. Pages with structured results
  * use the full PrintReport instead (components/calc.tsx).
  */
-export function ReportControls({ title, badges = ['NSCP 2015', 'ACI 318-14'] }: ReportControlsProps): JSX.Element {
+export function ReportControls({ title, badges = ['NSCP 2015', 'ACI 318-14'], report }: ReportControlsProps): JSX.Element {
   const [project, setProject] = useState('')
   const [sheet, setSheet] = useState('')
   const [preparedBy, setPreparedBy] = useState('')
@@ -53,10 +72,16 @@ export function ReportControls({ title, badges = ['NSCP 2015', 'ACI 318-14'] }: 
           {field('Project / job', project, setProject, 'Lot 12 Residence')}
           {field('Sheet', sheet, setSheet, 'S-01 · Rev A', true)}
           {field('Prepared by', preparedBy, setPreparedBy, 'Engineer, CE')}
-          <button type="button" onClick={print}
-            className="ml-auto inline-flex items-center gap-2 rounded-md bg-[#0f4c92] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0d3f78]">
-            ⎙ Export report
-          </button>
+          {report ? (
+            <ExportPdfButton {...report} docTitle={title} badges={badges}
+              lh={{ project, sheet, preparedBy }}
+              className="ml-auto inline-flex items-center gap-2 rounded-md bg-[#0f4c92] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0d3f78] disabled:opacity-50" />
+          ) : (
+            <button type="button" onClick={print}
+              className="ml-auto inline-flex items-center gap-2 rounded-md bg-[#0f4c92] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0d3f78]">
+              ⎙ Export report
+            </button>
+          )}
         </div>
       </div>
 

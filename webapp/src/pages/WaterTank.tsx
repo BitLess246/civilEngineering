@@ -40,11 +40,42 @@ export default function WaterTank() {
 
   const r = designCircularTank({ H, D, t, freeboard, fc, sigmaSt, sigmaCt, cover, barDia })
 
+  const report = {
+    docCode: 'S-WT',
+    ok: r.thicknessOK && r.freeboardOK,
+    governing: `Hoop tension T = ${f2(r.T)} kN/m at base · concrete tensile stress ${f2(r.fct)} MPa`,
+    stats: [
+      { label: 'Hoop steel', value: `⌀${barDia} @${f0(r.hoopSpacing)}`, unit: 'mm' },
+      { label: 'Vertical steel', value: `⌀${barDia} @${f0(r.vertSpacing)}`, unit: 'mm' },
+      { label: 'Hoop tension T', value: f2(r.T), unit: 'kN/m' },
+    ],
+    checks: [
+      // Serviceability governs a liquid-retaining wall: the wall is sized so
+      // uncracked concrete carries the ring tension, not so steel yields late.
+      { name: 'Concrete tensile stress fct/σct', ratio: sigmaCt > 0 ? r.fct / sigmaCt : 0, ok: r.thicknessOK },
+    ],
+    data: [
+      ['Water depth H', `${f2(H)} m`],
+      ['Internal diameter D', `${f2(D)} m`],
+      ['Wall thickness t', `${t} mm`],
+      ['Freeboard', `${f2(freeboard)} m${r.freeboardOK ? '' : ' — below recommended'}`],
+      ["Concrete f'c", `${fc} MPa`],
+      ['Permissible steel stress σst', `${sigmaSt} MPa`],
+      ['Permissible concrete tension σct', `${sigmaCt} MPa`],
+      ['Cover / bar ⌀', `${cover} / ${barDia} mm`],
+      ['Effective depth d', `${f0(r.d)} mm`],
+      ['Base moment M', `${f2(r.M)} kN·m/m`],
+      ['Hoop As', `${f0(r.hoopAs)} mm²/m`],
+      ['Vertical As', `${f0(r.vertAs)} mm²/m`],
+      ['Concrete tensile stress fct', `${f2(r.fct)} MPa`],
+    ] as [string, string][],
+  }
+
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Structural</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Circular RC water tank — wall</h1>
-      <ReportControls title="Water Tank Design Report" badges={['IS 3370', 'ACI 350']} />
+      <ReportControls title="Circular Water Tank" badges={['IS 3370', 'ACI 350']} report={report} />
       <p className="mt-2 text-sm text-slate-600">
         Permissible-stress (working-stress) wall design for a circular liquid-retaining tank, following the
         crack-control philosophy of IS 3370 / ACI 350. Hoop (ring) tension governs the horizontal steel;
