@@ -173,4 +173,35 @@ export const SHELL_TOOLS: DocTool[] = [
       },
     ],
   },
+  {
+    id: 'pricing',
+    name: 'Pricing — plans and what each unlocks',
+    route: '/pricing',
+    group: 'Getting around',
+    summary: 'The three tiers, what each includes, and why paid plans are not open for sign-up yet.',
+    sections: [
+      {
+        id: 'pricing-tiers',
+        title: 'The tiers',
+        body: 'Cumulative: a dearer plan never takes anything away, which is asserted by a test rather than left '
+          + 'to care when a feature is added.',
+        controls: [
+          { kind: 'output', name: 'Guest', what: 'No account. Five runs of each single-purpose calculator, plus unlimited access to the documentation and validation pages.' },
+          { kind: 'output', name: 'Free', what: 'An account, no payment. Removes the trial limits entirely and opens the 3D Model Space and the design pipeline, up to 50 members per model, with saved projects.' },
+          { kind: 'output', name: 'Pro', what: 'Unlimited model size, plus the section optimiser, nonlinear analysis, report export, estimating and construction scheduling.' },
+        ],
+      },
+      {
+        id: 'pricing-checkout',
+        title: 'Why Pro cannot be bought yet',
+        body: 'Taking card payments safely needs a server to verify the payment provider\u2019s webhook. A browser '
+          + 'cannot do that, because anything checked in the browser can be forged by the person paying. Rather '
+          + 'than show a button that looks like it charges a card and does not, Pro is listed so its contents are '
+          + 'visible and marked as not open for sign-up. No card details are collected anywhere in this app.',
+        notes: [
+          'A plan is read from the account\u2019s server-side metadata and can never be granted by the browser — otherwise the paywall would be a suggestion. An unrecognised plan value falls back to the least-privileged tier.',
+        ],
+      },
+    ],
+  },
 ]

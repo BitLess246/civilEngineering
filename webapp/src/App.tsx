@@ -31,6 +31,7 @@ import Micropile from './pages/Micropile'
 import SlopeStability from './pages/SlopeStability'
 import Settlement from './pages/Settlement'
 import LateralPile from './pages/LateralPile'
+import Pricing from './pages/Pricing'
 import SignIn from './pages/auth/SignIn'
 import SignUp from './pages/auth/SignUp'
 import ForgotPassword from './pages/auth/ForgotPassword'
@@ -105,6 +106,7 @@ export default function App() {
         <Route path="/slope" element={<SlopeStability />} />
         <Route path="/settlement" element={<Settlement />} />
         <Route path="/lateral-pile" element={<LateralPile />} />
+        <Route path="/pricing" element={<Pricing />} />
         <Route path="/signin" element={<SignIn />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />

@@ -1127,10 +1127,23 @@ account.
 NOTHING is gated. A missing env var must not brick the app behind a form that
 cannot work. Verified in a browser — `/model` stays reachable unconfigured.
 
-**Not done, and needing a decision:** subscriptions. Plans and a pricing page
-are straightforward; taking card payments is not, because a static SPA cannot
-verify a webhook. That needs a server (Supabase Edge Functions would do) and is
-its own piece of work.
+**Plans shipped in #463.** `lib/plans.ts` is pure and tested: three tiers
+(guest / free / pro), FEATURE-based entitlements rather than route-based, model
+size ceilings, and `upgradeMessage` which names the plan that actually unlocks
+a thing instead of a generic "upgrade to continue". Tests assert the properties
+people assume but that silently break: the tiers are strictly CUMULATIVE, limits
+never tighten as price rises, the top plan holds every feature that exists, and
+an unknown plan id falls back to the LEAST privileged tier.
+
+A plan is read from Supabase user metadata and can never be granted by the
+browser — otherwise the paywall would be a suggestion. Until a checkout webhook
+exists, every account is `free`.
+
+**Payments are still not done, and should not be faked.** `CHECKOUT_ENABLED` is
+a named constant pinned to false by a test, so flipping it on without adding a
+server to verify the webhook makes the suite object. The pricing page lists Pro
+so its contents are visible and says plainly that it is not open for sign-up;
+no card details are collected anywhere in the app.
 
 **Not verifiable here:** a real sign-in round trip, since this environment has
 no Supabase project. Everything up to the network call is tested; the call
