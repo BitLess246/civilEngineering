@@ -27,6 +27,15 @@ export interface AuthUser {
   name: string | null
   /** True once the address has been confirmed. */
   emailVerified: boolean
+  /**
+   * Subscription plan id from user metadata.
+   *
+   * Read-only here, and null until something sets it. Nothing in the browser
+   * may grant itself a plan — that has to come from the server side (a
+   * checkout webhook, or an admin setting it by hand), or the paywall would be
+   * a suggestion. `planOf` maps an unknown value to the least-privileged plan.
+   */
+  plan: string | null
 }
 
 export type AuthErrorKind =
@@ -111,7 +120,8 @@ const toUser = (s: Session | null): AuthUser | null => {
   if (!u) return null
   const meta = (u.user_metadata ?? {}) as Record<string, unknown>
   const name = typeof meta.name === 'string' ? meta.name : null
-  return { id: u.id, email: u.email ?? null, name, emailVerified: !!u.email_confirmed_at }
+  const plan = typeof meta.plan === 'string' ? meta.plan : null
+  return { id: u.id, email: u.email ?? null, name, emailVerified: !!u.email_confirmed_at, plan }
 }
 
 export async function signIn(email: string, password: string): Promise<AuthResult<AuthUser | null>> {

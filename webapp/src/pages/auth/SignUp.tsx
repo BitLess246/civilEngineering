@@ -48,8 +48,8 @@ export default function SignUp() {
   return (
     <AuthCard
       title="Create an account"
-      subtitle="Free. Unlocks the 3D model space, the design pipeline, reports and saved projects."
-      footer={<>Already registered? <Link to="/signin" className="font-medium text-[#0056b3] underline">Sign in</Link></>}
+      subtitle="Free. Removes the trial limits and opens the 3D Model Space, the design pipeline and saved projects."
+      footer={<>Already registered? <Link to="/signin" className="font-medium text-[#0056b3] underline">Sign in</Link>{' · '}<Link to="/pricing" className="font-medium text-[#0056b3] underline">Compare plans</Link></>}
     >
       {!configured ? <NotConfigured /> : (
         <form onSubmit={submit} noValidate>
