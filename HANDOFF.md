@@ -1041,3 +1041,36 @@ pre-existing.
   intensities, because Newmark adds a0·M to the tangent diagonal and
   regularises it. It shares `assembleFrame` but keeps its own Newton loop, and
   it was deliberately left unchanged.
+
+## Backlog closeout (PRs #457–#459, July 2026)
+
+- **#457 — T-section gross & cracked properties** for the §424.2 deflection
+  check, removing the conservatism #446 recorded as follow-up. The true T sits
+  BETWEEN the two rectangles people substitute for it: web-only 0.61·Ig (what
+  #446 used) and full-depth-at-bf 2.0·Ig (what #446 rejected). Hogging is
+  handled separately — the flange is then in tension and cracked, so a T-beam
+  over a support is a rectangular beam — and Mcr's yt now follows the governing
+  moment's sign. Threaded through `pipeline` from the same effective flange the
+  design already computes.
+
+- **#458 — `engine/settlement.ts`** (P4 #12, first half): Boussinesq stress
+  distribution, elastic and Schmertmann immediate settlement, Terzaghi 1-D
+  consolidation with the recompression / virgin / crossing branches, and U ↔ Tv.
+  `validation.ts`: `consolidation-nc`, `consolidation-tv90`.
+
+- **#459 — the `/settlement` page**, following the #430/#431 engine-then-page
+  split. Editable layer table, Boussinesq-vs-2:1 stress profile, per-layer
+  branch and contribution. Documented in the `/docs` catalogue in the same PR.
+
+**Two judgement calls worth remembering from #458.** The Tv expressions are the
+published closed-form FITS to Terzaghi's series, not the series: 0.1963 vs the
+tabulated 0.197 at U = 50%, and a 1.3% step between branches at U = 60%. My
+first docstring claimed they "meet by construction" — false, now stated and
+tested. And the Boussinesq table value is published to four decimals, so it
+cannot meet `validation.ts`'s 0.01% gate; that comparison stays in the unit test
+at the precision the reference carries rather than the gate being loosened.
+
+**Remaining from P4 #12:** laterally loaded piles (Broms / p-y). Nothing else on
+the recorded backlog is open except the `,\ ` LaTeX thin-space question in
+`beamSolution`/`columnSolution`, which changes rendered output and needs the
+user's call.
