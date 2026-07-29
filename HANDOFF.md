@@ -1155,11 +1155,37 @@ exists, every account is `free`. To grant yourself a paid tier for testing, set
 `{"plan": "pro"}` (or `"max"`) on your user in the Supabase dashboard under
 Authentication → Users → User Metadata.
 
-**Payments are still not done, and should not be faked.** `CHECKOUT_ENABLED` is
-a named constant pinned to false by a test, so flipping it on without adding a
-server to verify the webhook makes the suite object. The pricing page lists Pro
-and Max so their contents are visible and says plainly that they are not open
-for sign-up; no card details are collected anywhere in the app.
+**Billing webhook shipped in #467 — the server half of checkout.**
+`supabase/functions/billing-webhook/` (Deno) verifies the provider's HMAC, maps
+the event to a plan and writes `user_metadata.plan` with the service-role key.
+Idempotent: the applied event id is stored beside the plan, so provider retries
+are no-ops. Pure logic in `supabase/functions/_shared/` is covered by the app's
+vitest suite (48 tests) — vite.config's `test.include` was extended to reach it,
+so the money path is not the one untested corner.
+
+Three providers verified: **Paddle**, **Stripe** and **PayMongo** (chosen for
+this audience — Philippine engineers, so GCash/Maya matter). Constant-time
+digest comparison, ±300 s replay window checked both directions, missing secret
+rejects. PayMongo's `te=`/`li=` split is resolved by explicit mode, because
+accepting either would let a widely-shared test secret approve a live payment.
+
+Two invariants pinned by tests: an unrecognised price NEVER resolves to a plan,
+and anything not-active resolves DOWN to free. Everything fails CLOSED — the
+opposite of `authClient`/`usePlan`, deliberately.
+
+Full setup steps and the pre-launch checklist are in `docs/Billing.md`.
+
+**Checkout itself is still not wired, and payments are still not faked.**
+`CHECKOUT_ENABLED` remains pinned false by a test. What is missing is a
+`billing-checkout` function creating a session with `metadata.user_id` attached
+(PayMongo has no static link that carries per-user metadata), the pricing-page
+buttons, and a `/billing/success` page. The pricing page still says plainly that
+paid plans are not open; no card details are collected anywhere in the app.
+
+**Unverified, flagged rather than assumed:** PayMongo's event field paths were
+written from the documented envelope, not a captured event — send one test event
+through before launch. Also confirm PayMongo subscriptions are available on the
+account, and settle the PHP-vs-USD mismatch between the provider and `/pricing`.
 
 **Enforcement shipped in #466.** `lib/featureGate.ts` maps every gated thing
 onto the feature it needs, in one pure tested place:
