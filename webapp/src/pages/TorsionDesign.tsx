@@ -36,6 +36,42 @@ export default function TorsionDesign() {
     [fKey, allFinite],
   )
 
+  const report = r ? {
+    docCode: 'S-TO',
+    ok: r.interactionOK,
+    governing: r.torsionNeeded
+      ? `Section interaction ${(r.lhs / r.rhs).toFixed(2)} · torsion required (Tu ≥ Tu,th)`
+      : `Torsion negligible — Tu < Tu,th = ${f1(r.Tu_th)} kN·m`,
+    stats: [
+      { label: 'Stirrups (Av+2At)/s', value: f3(r.AvPlus2At), unit: 'mm²/mm' },
+      { label: 'Spacing adopted', value: f1(r.sAdopt), unit: 'mm' },
+      { label: 'Long. steel Al', value: f1(r.Al_design), unit: 'mm²' },
+    ],
+    checks: [
+      // §22.7.7.1 is a stress-interaction limit, so the "ratio" is lhs/rhs.
+      { name: 'Section interaction √[(Vu/bwd)²+(Tuph/1.7Aoh²)²] ≤ φ(Vc/bwd+⅔√f′c)',
+        ratio: r.rhs > 0 ? r.lhs / r.rhs : 0, ok: r.interactionOK },
+    ],
+    data: [
+      ['Section b × h', `${f.b} × ${f.h} mm`],
+      ['Clear cover', `${f.cover} mm`],
+      ['Stirrup ⌀ / bar ⌀', `${f.stirrupDia} / ${f.barDia} mm`],
+      ["Concrete f'c", `${f.fc} MPa`],
+      ['Steel fy / fyt', `${f.fy} / ${f.fyt} MPa`],
+      ['Torsion Tu', `${f1(f.Tu)} kN·m`],
+      ['Shear Vu', `${f1(f.Vu)} kN`],
+      ['Stirrup legs', String(f.legs)],
+      ['Effective depth d', `${f1(r.d)} mm`],
+      ['Acp / pcp', `${f1(r.Acp)} mm² / ${f1(r.pcp)} mm`],
+      ['Aoh / ph', `${f1(r.Aoh)} mm² / ${f1(r.ph)} mm`],
+      ['Ao = 0.85·Aoh', `${f1(r.Ao)} mm²`],
+      ['Threshold Tu,th', `${f1(r.Tu_th)} kN·m`],
+      ['Cracking torsion Tcr', `${f1(r.Tcr)} kN·m`],
+      ['φVc', `${f1(r.phiVc)} kN`],
+      ['Max spacing', `${f1(r.sMax)} mm`],
+    ] as [string, string][],
+  } : undefined
+
   return (
     <div className="mx-auto max-w-[1500px] p-6">
       <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
@@ -45,7 +81,7 @@ export default function TorsionDesign() {
       <p className="no-print mt-1 text-slate-600">
         Rectangular RC section — ACI 318-14 §22.7 combined shear + torsion. SI units (mm, kN, MPa).
       </p>
-      <ReportControls title="Torsion Design" />
+      <ReportControls title="Torsion Design" badges={['ACI 318-14 §22.7', 'NSCP 2015']} report={report} />
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
         {/* ── INPUTS ── */}

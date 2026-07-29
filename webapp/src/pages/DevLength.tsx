@@ -54,6 +54,34 @@ export default function DevLength() {
     })
   }, [f])
 
+  // Development length has no pass/fail — it produces required lengths rather
+  // than checking a demand — so the report carries no checks and the verdict
+  // line states the governing tension length instead.
+  const report = r ? {
+    docCode: 'S-DL',
+    ok: true,
+    governing: `ld = ${f0(r.ld)} mm tension · ldc = ${f0(r.ldc)} mm compression`,
+    stats: [
+      { label: 'ld (tension)', value: f0(r.ld), unit: 'mm' },
+      { label: 'Class B splice', value: f0(r.ls_B), unit: 'mm' },
+      { label: 'ldc (compression)', value: f0(r.ldc), unit: 'mm' },
+    ],
+    data: [
+      ['Bar ⌀ db', `${f.db} mm`],
+      ["Concrete f'c", `${f.fc} MPa`],
+      ['Steel fy', `${f.fy} MPa`],
+      ['Casting position ψt', `${r.psi_t.toFixed(2)}${f.topBar ? ' (top bar)' : ''}`],
+      ['Epoxy ψe', `${r.psi_e.toFixed(2)} (${f.epoxy})`],
+      ['Bar size ψs', r.psi_s.toFixed(2)],
+      ['ψt·ψe (capped 1.7)', r.psi_te.toFixed(2)],
+      ['λ (lightweight)', f.lambda],
+      ['Confinement (cb+Ktr)/db', r.confine.toFixed(2)],
+      ['ld before 300 mm floor', `${f0(r.ld_raw)} mm`],
+      ['Class A splice', `${f0(r.ls_A)} mm`],
+      ['Compression splice', `${f0(r.lsc)} mm`],
+    ] as [string, string][],
+  } : undefined
+
   return (
     <div className="mx-auto max-w-[1500px] p-6">
       <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
@@ -64,7 +92,7 @@ export default function DevLength() {
         ACI 318-14 §25.4 development + §25.5 splices. SI units (mm, MPa).
         Tension §25.4.2.3 · Compression §25.4.9.2 · Splices §25.5.2/5.
       </p>
-      <ReportControls title="Development & Splice Lengths" />
+      <ReportControls title="Development & Splice Lengths" badges={['ACI 318-14 §25.4', 'NSCP 2015']} report={report} />
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
         {/* ── INPUTS ── */}

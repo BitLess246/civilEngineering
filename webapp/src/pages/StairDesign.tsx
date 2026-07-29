@@ -42,11 +42,40 @@ export default function StairDesign() {
 
   const r = designStair({ span, t, R, G, fc, fy, barDia, cover, finishes, live, support })
 
+  const report = {
+    docCode: 'S-ST',
+    ok: r.ok,
+    governing: `Mu = ${f2(r.Mu)} kN·m/m · waist ${t} mm at ${f2(r.geom.thetaDeg)}°`,
+    stats: [
+      { label: 'Main steel', value: `⌀${barDia} @${f0(r.mainSpacing)}`, unit: 'mm' },
+      { label: 'Distribution', value: `⌀${barDia} @${f0(r.distSpacing)}`, unit: 'mm' },
+      { label: 'Effective depth d', value: f0(r.d), unit: 'mm' },
+    ],
+    checks: [
+      { name: 'Waist thickness t/tmin', ratio: t > 0 ? r.tMin / t : 0, ok: r.tMinOK },
+    ],
+    data: [
+      ['Span', `${f2(span)} m`],
+      ['Waist thickness t', `${t} mm`],
+      ['Riser / going', `${R} / ${G} mm`],
+      ['Inclination θ', `${f2(r.geom.thetaDeg)}°`],
+      ["Concrete f'c", `${fc} MPa`],
+      ['Steel fy', `${fy} MPa`],
+      ['Cover / bar ⌀', `${cover} / ${barDia} mm`],
+      ['Finishes', `${f2(finishes)} kPa`],
+      ['Live load', `${f2(live)} kPa`],
+      ['Support', support],
+      ['Design moment Mu', `${f2(r.Mu)} kN·m/m`],
+      ['As main / distribution', `${f0(r.AsMain)} / ${f0(r.AsDist)} mm²/m`],
+      ['Minimum waist tmin', `${f0(r.tMin)} mm`],
+    ] as [string, string][],
+  }
+
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Structural</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">RC stair flight — waist slab</h1>
-      <ReportControls title="Stair Design Report" badges={['NSCP 2015', 'ACI 318-14']} />
+      <ReportControls title="Stair Design" badges={['NSCP 2015', 'ACI 318-14']} report={report} />
       <p className="mt-2 text-sm text-slate-600">
         One-way waist-slab stair to NSCP 2015 / ACI 318-14. Self-weight of the inclined waist plus
         triangular treads, finishes, and the NSCP 205 stair live load (4.8 kPa), designed per metre width.

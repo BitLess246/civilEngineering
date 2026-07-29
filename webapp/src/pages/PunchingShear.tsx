@@ -57,6 +57,30 @@ export default function PunchingShear() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fKey, allFinite, d])
 
+  const report = r ? {
+    docCode: 'S-PS',
+    ok: r.ok,
+    governing: `Vu/φVc = ${r.ratio.toFixed(2)} · b₀ = ${f0(r.b0)} mm · αs = ${r.alphaS}`,
+    stats: [
+      { label: 'φVc', value: f1(r.phiVc), unit: 'kN' },
+      { label: 'Critical perimeter b₀', value: f0(r.b0), unit: 'mm' },
+      { label: 'Effective depth d', value: f1(d), unit: 'mm' },
+    ],
+    checks: [{ name: 'Punching shear Vu/φVc', ratio: r.ratio, ok: r.ok }],
+    data: [
+      ['Column c₁ × c₂', `${f.c1} × ${f.c2} mm`],
+      ['Slab thickness h', `${f.h} mm`],
+      ['Clear cover', `${f.cover} mm`],
+      ['Bar ⌀', `${f.barDia} mm`],
+      ["Concrete f'c", `${f.fc} MPa`],
+      ['λ (lightweight)', f.lambda],
+      ['Factored shear Vu', `${f1(f.Vu)} kN`],
+      ['Column position', f.position],
+      ['βc (aspect)', r.betac.toFixed(2)],
+      ['Vc governing', `${f1(r.Vc)} kN (min of ${f1(r.Vc1)} / ${f1(r.Vc2)} / ${f1(r.Vc3)})`],
+    ] as [string, string][],
+  } : undefined
+
   return (
     <div className="mx-auto max-w-[1500px] p-6">
       <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
@@ -67,7 +91,7 @@ export default function PunchingShear() {
         Two-way slab–column punching shear — ACI 318-14 §22.6.
         Critical perimeter at d/2 from column face. φ = 0.75.
       </p>
-      <ReportControls title="Punching Shear" />
+      <ReportControls title="Punching Shear" badges={['ACI 318-14 §22.6', 'NSCP 2015']} report={report} />
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
         {/* ── INPUTS ── */}
