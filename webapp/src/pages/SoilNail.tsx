@@ -44,11 +44,44 @@ export default function SoilNail() {
     drillDia, bondLength, qu, FSpullout: 2.0, FStensile: 1.8,
   })
 
+  // A geotechnical check states a FACTOR OF SAFETY, not a demand/capacity
+  // ratio, so the report's utilisation is FS_required / FS_achieved — which is
+  // ≤ 1 exactly when the design passes, matching every other check in the app.
+  const report = {
+    docCode: 'G-SN',
+    ok: r.tensileOK && r.pulloutOK,
+    governing: `Tmax = ${f2(r.Tmax)} kN · FS pullout ${f2(r.fsPullout)} · FS tensile ${f2(r.fsTensile)}`,
+    stats: [
+      { label: 'Nail force Tmax', value: f2(r.Tmax), unit: 'kN' },
+      { label: 'Allowable bond Qall', value: f2(r.Qall), unit: 'kN' },
+      { label: 'Bond length required', value: f2(r.bondLengthReq), unit: 'm' },
+    ],
+    checks: [
+      { name: 'Bar tensile (FS 1.8)', ratio: r.fsTensile > 0 ? 1.8 / r.fsTensile : 0, ok: r.tensileOK },
+      { name: 'Grout pullout (FS 2.0)', ratio: r.fsPullout > 0 ? 2.0 / r.fsPullout : 0, ok: r.pulloutOK },
+    ],
+    data: [
+      ['Depth z', `${f2(z)} m`],
+      ['Spacing Sh × Sv', `${f2(Sh)} × ${f2(Sv)} m`],
+      ['Unit weight γ', `${f2(gamma)} kN/m³`],
+      ['Friction angle φ', `${f2(phi)}°`],
+      ['Surcharge q', `${f2(q)} kPa`],
+      ['Bar ⌀ / fy', `${barDia} mm / ${fy} MPa`],
+      ['Drill ⌀', `${f2(drillDia)} m`],
+      ['Bond length provided', `${f2(bondLength)} m`],
+      ['Bond strength qu', `${f2(qu)} kPa`],
+      ['Active coefficient Ka', f2(r.Ka)],
+      ['Nominal bar strength Tn', `${f2(r.Tn)} kN`],
+      ['Allowable bar strength Tall', `${f2(r.Tall)} kN`],
+      ['Ultimate pullout Qult', `${f2(r.Qult)} kN`],
+    ] as [string, string][],
+  }
+
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Soil-nail wall — per-nail check</h1>
-      <ReportControls title="Soil-Nail Wall Report" badges={['FHWA GEC-7']} />
+      <ReportControls title="Soil-Nail Wall" badges={['FHWA GEC-7']} report={report} />
       <p className="mt-2 text-sm text-slate-600">
         Preliminary FHWA GEC-7 checks for a single nail: tributary active demand vs bar-tensile and
         grout-ground pullout capacities. Global (slip-surface) stability is separate — use the{' '}

@@ -42,11 +42,43 @@ export default function ShotcreteFacing() {
 
   const r = designFacing({ SH, SV, hc, cover, AsVert, AsHoriz, fc, fy, bearingPlate, CF, nailHeadForce })
 
+  const report = {
+    docCode: 'G-SF',
+    ok: r.ok,
+    governing: `${r.governs === 'flexure' ? 'Flexure' : 'Punching'} governs · facing strength ${f2(r.strength)} kN vs nail head ${f2(nailHeadForce)} kN`,
+    stats: [
+      { label: 'Facing strength', value: f2(r.strength), unit: 'kN' },
+      { label: 'Nail-head force', value: f2(nailHeadForce), unit: 'kN' },
+      { label: 'Effective depth d', value: f2(r.d), unit: 'mm' },
+    ],
+    checks: [
+      { name: `Facing capacity (${r.governs}, CF ${f2(CF)})`,
+        ratio: r.strength > 0 ? (nailHeadForce * CF) / r.strength : 0, ok: r.ok },
+    ],
+    data: [
+      ['Nail spacing SH × SV', `${f2(SH)} × ${f2(SV)} m`],
+      ['Facing thickness hc', `${hc} mm`],
+      ['Cover', `${cover} mm`],
+      ['Vertical steel AsVert', `${f2(AsVert)} mm²/m`],
+      ['Horizontal steel AsHoriz', `${f2(AsHoriz)} mm²/m`],
+      ["Shotcrete f'c", `${fc} MPa`],
+      ['Steel fy', `${fy} MPa`],
+      ['Bearing plate', `${f2(bearingPlate)} m`],
+      ['Critical factor CF', f2(CF)],
+      ['Nail-head force', `${f2(nailHeadForce)} kN`],
+      ['Panel moment vertical', `${f2(r.mVert)} kN·m/m`],
+      ['Panel moment horizontal', `${f2(r.mHoriz)} kN·m/m`],
+      ['Flexural strength Rff', `${f2(r.Rff)} kN`],
+      ['Punching strength Rfp', `${f2(r.Rfp)} kN`],
+      ['Governing mode', r.governs],
+    ] as [string, string][],
+  }
+
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Soil-nail shotcrete facing</h1>
-      <ReportControls title="Shotcrete Facing Report" badges={['FHWA GEC-7']} />
+      <ReportControls title="Shotcrete Facing" badges={['FHWA GEC-7']} report={report} />
       <p className="mt-2 text-sm text-slate-600">
         FHWA GEC-7 facing check. The thin shotcrete panel spans <b>between</b> the nail heads, so earth
         pressure bends it like a two-way slab on point supports — hogging over each nail, sagging at

@@ -117,11 +117,49 @@ export default function LateralPile() {
   const util = broms.Hu > 0 ? H / broms.Hu : Infinity
   const headOK = py.yHead <= 25    // 25 mm is the usual serviceability yardstick
 
+  const report = {
+    docCode: 'G-LP',
+    ok: util <= 1 && headOK && py.converged,
+    governing: `Broms ${broms.mode}-pile Hu = ${f1(broms.Hu)} kN · head deflection ${f1(py.yHead)} mm`,
+    stats: [
+      { label: 'Ultimate capacity Hu', value: f1(broms.Hu), unit: 'kN' },
+      { label: 'Head deflection', value: f1(py.yHead), unit: 'mm' },
+      { label: 'Max moment (p–y)', value: f1(py.Mmax), unit: 'kN·m' },
+    ],
+    checks: [
+      { name: `Lateral capacity H/Hu (Broms, ${broms.mode} pile)`, ratio: util, ok: util <= 1 },
+      // 25 mm is the usual serviceability yardstick, not a code limit — stated
+      // in the check name so it reads as the convention it is.
+      { name: 'Head deflection vs 25 mm', ratio: py.yHead / 25, ok: headOK },
+    ],
+    data: [
+      ['Soil model', soilKind],
+      ['Pile length L', `${f2(L)} m`],
+      ['Diameter D', `${f2(D)} m`],
+      ['Flexural stiffness EI', `${f0(EI)} kN·m²`],
+      ['Yield moment My', `${f1(My)} kN·m`],
+      ['Lateral load H', `${f1(H)} kN`],
+      ['Load eccentricity e', `${f2(e)} m`],
+      ['Head fixity', head],
+      ...(soilKind === 'clay'
+        ? [['Undrained strength cu', `${f1(cu)} kPa`] as [string, string],
+           ['Strain ε₅₀', f2(e50)] as [string, string]]
+        : [['Friction angle φ', `${f1(phi)}°`] as [string, string],
+           ['Subgrade modulus k', `${f0(k)} kN/m³`] as [string, string]]),
+      ['Effective unit weight γ′', `${f1(gamma)} kN/m³`],
+      ['Broms short-pile capacity', `${f1(broms.shortPile)} kN`],
+      ['Broms long-pile capacity', `${f1(broms.longPile)} kN`],
+      ['Broms Mmax at Hu', `${f1(broms.Mmax)} kN·m`],
+      ['p–y max moment depth', `${f2(py.zMmax)} m`],
+      ['p–y convergence', `${py.converged ? 'converged' : 'DID NOT CONVERGE'} in ${py.iterations} iterations (residual ${py.residual.toExponential(1)})`],
+    ] as [string, string][],
+  }
+
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Laterally loaded pile</h1>
-      <ReportControls title="Lateral Pile Report" badges={['Broms', 'Matlock', 'API RP 2A']} />
+      <ReportControls title="Laterally Loaded Pile" badges={['Broms', 'Matlock', 'API RP 2A']} report={report} />
       <p className="mt-2 text-sm text-slate-600">
         Two questions, two methods. <strong>Broms</strong> gives the ultimate lateral capacity in closed form and
         says whether the soil or the pile section fails first. <strong>p-y</strong> solves the pile as a beam on
