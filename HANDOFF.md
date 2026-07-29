@@ -1161,22 +1161,42 @@ server to verify the webhook makes the suite object. The pricing page lists Pro
 and Max so their contents are visible and says plainly that they are not open
 for sign-up; no card details are collected anywhere in the app.
 
-**KNOWN GAP — the tiers are catalogued but NOT ENFORCED.** `planAllows`,
-`withinModelLimit` and `withinProjectLimit` have no call sites outside the
-pricing badge, so a signed-in Free account can still open `/model`, run the
-optimiser and export a report. Routes are gated on the *session* (`RequireAuth`
-+ `trialQuota`); nothing yet gates on the *plan*. The wiring was drafted against
-the single choke point that all heavy work funnels through — `useSolver.run(kind,
-…)` in `lib/useSolver.ts`, whose `kind` maps 1:1 onto a feature — plus the
-`Optimize design` and `Export PDF report` buttons in `pages/ModelSpace.tsx`.
-Worth pairing with a guard test that reads `SolverRequest['kind']` from
-`engine/solverWorker.ts` and fails when a new solver kind is unclassified, since
-an unmapped kind would default to allowed.
+**Enforcement shipped in #466.** `lib/featureGate.ts` maps every gated thing
+onto the feature it needs, in one pure tested place:
 
-Note also that whatever ships must say plainly what it is: **every calculation
-in this app runs in the browser**, so a client-side gate is a product boundary,
-not a security one — the same caveat `trialQuota` already carries. Real
-enforcement would mean moving the solver behind an authenticated API.
+- `SOLVER_FEATURE` — each `SolverRequest['kind']` → its feature. A guard test
+  parses `engine/solverWorker.ts` and fails if a kind is unclassified OR stale,
+  because an unmapped kind reads as `undefined` and would run on any plan. The
+  guard was checked by deleting a mapping and confirming it fails.
+- `ROUTE_FEATURE` — each gated route prefix → its feature, key-set-equal to
+  `trialQuota.GATED_PREFIXES` by test, so "must I sign in?" and "is it on my
+  plan?" cannot drift. Matching is on a segment boundary: `/modelling-guide` is
+  not swallowed by `/model`.
+- `gateSolve` reports the FEATURE before the size when both would block —
+  "your model is too big" is misleading when paying for size alone would not
+  help.
+
+Wiring: `RequireAuth` renders `UpgradeGate` (a page naming the plan) instead of
+redirecting; `ModelSpace` wraps `useSolver.run` so the check happens once at the
+choke point, with the nonlinear/optimiser buttons disabled and an inline notice.
+
+**Both backstops earned their place.** `exportPdf` has TWO buttons reaching it
+(workspace header and results bar) and the header one was missed on the first
+pass — found by dumping every button in the browser, not by reading the file.
+
+**Fail-open when auth is unconfigured**, matching `RequireAuth`: `usePlan`
+returns the top plan so a fork, CI or preview build stays fully usable rather
+than becoming a demo of a paywall nobody can pass. Verified in a browser.
+
+**Nobody can buy a plan yet**, so in practice every account is `free` and sees
+only the calculators. Grant yourself a tier for testing in the Supabase
+dashboard: Authentication → Users → your user → User Metadata → `{"plan":"pro"}`
+or `"max"`.
+
+**This is a product boundary, not a security one.** Every calculation runs in
+the browser; anyone with devtools can flip the plan object. Real enforcement
+means moving the solver behind an authenticated API. The header of
+`featureGate.ts` says so, so nobody later reads these checks as protection.
 
 **Not verifiable here:** a real sign-in round trip, since this environment has
 no Supabase project. Everything up to the network call is tested; the call
