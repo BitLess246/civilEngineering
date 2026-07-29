@@ -1,9 +1,35 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { PLANS, CHECKOUT_ENABLED, type Plan } from '../lib/plans'
+import {
+  PLANS, CHECKOUT_ENABLED, planOf, priceFor, monthlyEquivalent, annualSaving,
+  annualDiscountOf, formatPeso, ANNUAL_DISCOUNT, type Plan, type BillingPeriod,
+} from '../lib/plans'
 import { useAuth } from '../lib/auth/authContext'
-import { planOf } from '../lib/plans'
 
-function PlanCard({ plan, current }: { plan: Plan; current: boolean }) {
+function PriceLine({ plan, period }: { plan: Plan; period: BillingPeriod }) {
+  const price = priceFor(plan, period)
+  if (price === null) return <p className="mt-3 text-2xl font-bold text-slate-800">—</p>
+  if (price === 0) return <p className="mt-3 text-2xl font-bold text-slate-800">Free</p>
+
+  const perMonth = monthlyEquivalent(plan, period)!
+  return (
+    <div className="mt-3">
+      <p className="text-2xl font-bold text-slate-800">
+        {formatPeso(perMonth)}
+        <span className="text-sm font-medium text-slate-500"> /month</span>
+      </p>
+      {period === 'annual' ? (
+        <p className="mt-0.5 text-[12px] leading-5 text-slate-500">
+          {formatPeso(price)} billed yearly · save {formatPeso(annualSaving(plan))}
+        </p>
+      ) : (
+        <p className="mt-0.5 text-[12px] leading-5 text-slate-500">billed monthly</p>
+      )}
+    </div>
+  )
+}
+
+function PlanCard({ plan, current, period }: { plan: Plan; current: boolean; period: BillingPeriod }) {
   const featured = plan.id === 'pro'
   return (
     <div className={`flex flex-col rounded-xl border bg-white p-5 shadow-sm ${
@@ -17,10 +43,7 @@ function PlanCard({ plan, current }: { plan: Plan; current: boolean }) {
         )}
       </div>
       <p className="mt-1 text-[13px] leading-5 text-slate-600">{plan.tagline}</p>
-      <p className="mt-3 text-2xl font-bold text-slate-800">
-        {plan.price === null ? '—' : plan.price === 0 ? 'Free' : `$${plan.price}`}
-        {plan.price ? <span className="text-sm font-medium text-slate-500"> /month</span> : null}
-      </p>
+      <PriceLine plan={plan} period={period} />
       <ul className="mt-4 flex-1 space-y-1.5">
         {plan.highlights.map((h) => (
           <li key={h} className="flex gap-2 text-[13px] leading-5 text-slate-700">
@@ -31,7 +54,7 @@ function PlanCard({ plan, current }: { plan: Plan; current: boolean }) {
       <div className="mt-5">
         {plan.id === 'guest' ? (
           <p className="text-center text-[12px] text-slate-500">No sign-up needed</p>
-        ) : plan.price === 0 ? (
+        ) : plan.priceMonthly === 0 ? (
           <Link to="/signup"
             className="block rounded-md bg-[#0056b3] px-4 py-2 text-center text-sm font-semibold text-white hover:bg-[#0f4c92]">
             Create a free account
@@ -51,9 +74,33 @@ function PlanCard({ plan, current }: { plan: Plan; current: boolean }) {
   )
 }
 
+/** Monthly / annual switch. Annual is preselected — it is the better deal. */
+function PeriodToggle({ period, onChange }: { period: BillingPeriod; onChange: (p: BillingPeriod) => void }) {
+  const btn = (p: BillingPeriod, label: string) => (
+    <button key={p} type="button" onClick={() => onChange(p)}
+      aria-pressed={period === p}
+      className={`rounded-md px-4 py-1.5 text-[13px] font-semibold transition ${
+        period === p ? 'bg-white text-[#0056b3] shadow-sm' : 'text-slate-600 hover:text-[#0056b3]'}`}>
+      {label}
+    </button>
+  )
+  return (
+    <div className="mt-5 flex flex-wrap items-center gap-3">
+      <div className="inline-flex rounded-lg bg-slate-100 p-1">
+        {btn('monthly', 'Monthly')}
+        {btn('annual', 'Annual')}
+      </div>
+      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11.5px] font-semibold text-emerald-700">
+        Save {Math.round(ANNUAL_DISCOUNT * 100)}% paying yearly
+      </span>
+    </div>
+  )
+}
+
 export default function Pricing() {
   const { user } = useAuth()
   const current = planOf(user ? (user.plan ?? 'free') : 'guest')
+  const [period, setPeriod] = useState<BillingPeriod>('annual')
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-10">
@@ -65,18 +112,26 @@ export default function Pricing() {
         built on it, and Max adds the nonlinear and dynamic solvers plus construction scheduling.
       </p>
 
+      <PeriodToggle period={period} onChange={setPeriod} />
+
       {!CHECKOUT_ENABLED && (
         <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] leading-6 text-amber-900">
-          <strong>Paid plans are not open for sign-up yet.</strong> Taking card payments safely needs a server to
-          verify the payment provider&rsquo;s webhook — a browser cannot do that, because anything checked in the
-          browser can be forged by the person paying. Until that exists, Pro and Max are listed so you can see what
-          they cover, and no card details are collected anywhere in this app. Guest and Free are fully available.
+          <strong>Paid plans are not open for sign-up yet.</strong> Payments are handled by PayMongo, and the
+          server that verifies a payment is in place — but nothing yet starts one, so no card details are collected
+          anywhere in this app. Pro and Max are listed so you can see what they cover. Guest and Free are fully
+          available.
         </div>
       )}
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {PLANS.map((p) => <PlanCard key={p.id} plan={p} current={p.id === current.id} />)}
+        {PLANS.map((p) => <PlanCard key={p.id} plan={p} current={p.id === current.id} period={period} />)}
       </div>
+
+      <p className="mt-4 text-[12px] leading-6 text-slate-500">
+        Prices are in Philippine pesos and include no hidden fees. Annual billing saves{' '}
+        {formatPeso(annualSaving('pro'))} on Pro ({(annualDiscountOf('pro') * 100).toFixed(1)}%) and{' '}
+        {formatPeso(annualSaving('max'))} on Max ({(annualDiscountOf('max') * 100).toFixed(1)}%) over a year.
+      </p>
 
       <h2 className="mt-10 text-[1.05rem] font-bold text-[#0056b3]">What counts as a &ldquo;calculator&rdquo;</h2>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
