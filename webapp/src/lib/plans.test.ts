@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   PLANS, planOf, planAllows, withinModelLimit, withinProjectLimit, lowestPlanWith,
   upgradeMessage, featureLabel, CHECKOUT_ENABLED,
+  priceFor, monthlyEquivalent, annualSaving, annualDiscountOf, formatPeso,
+  ANNUAL_DISCOUNT, CURRENCY,
   type Feature,
 } from './plans'
 
@@ -14,7 +16,7 @@ describe('plan catalogue', () => {
   it('is ordered cheapest first and has no duplicate ids', () => {
     const ids = PLANS.map((p) => p.id)
     expect(new Set(ids).size).toBe(ids.length)
-    const prices = PLANS.map((p) => p.price ?? 0)
+    const prices = PLANS.map((p) => p.priceMonthly ?? 0)
     for (let k = 1; k < prices.length; k++) expect(prices[k]).toBeGreaterThanOrEqual(prices[k - 1])
   })
 
@@ -199,5 +201,90 @@ describe('checkout', () => {
     // Asserted rather than assumed: if someone flips this on without adding a
     // server to verify the webhook, this test is the thing that objects.
     expect(CHECKOUT_ENABLED).toBe(false)
+  })
+})
+
+
+describe('pricing', () => {
+  const paid = PLANS.filter((p) => p.priceMonthly)
+
+  it('prices everything in pesos, because that is what PayMongo settles in', () => {
+    expect(CURRENCY).toBe('PHP')
+    expect(formatPeso(1399)).toBe('₱1,399')
+    expect(formatPeso(15099)).toBe('₱15,099')
+    expect(formatPeso(0)).toBe('₱0')
+  })
+
+  it('rounds rather than printing centavos', () => {
+    expect(formatPeso(1258.25)).toBe('₱1,258')
+    expect(formatPeso(2699.92)).toBe('₱2,700')
+  })
+
+  it('gives every paid plan BOTH a monthly and an annual price', () => {
+    expect(paid.length).toBeGreaterThan(0)
+    for (const p of paid) {
+      expect(p.priceMonthly, p.id).toBeGreaterThan(0)
+      expect(p.priceAnnual, p.id).toBeGreaterThan(0)
+    }
+  })
+
+  it('honours the advertised annual discount, within the rounding band', () => {
+    // The number a customer is charged is stored, not computed, so this is what
+    // stops a tidied-up figure drifting away from the "10% off" printed beside
+    // it. The prices are deliberately rounded to a 99 ending, which cannot land
+    // on exactly 10%: Pro is 10.06% off and Max 9.97%. A tenth of a PERCENTAGE
+    // POINT is the band that rounding needs and that a real mistake — a digit
+    // dropped, a discount applied twice — would blow straight through.
+    const BAND = 0.001
+    for (const p of paid) {
+      const off = annualDiscountOf(p)
+      expect(Math.abs(off - ANNUAL_DISCOUNT), `${p.id} is ${(off * 100).toFixed(2)}% off`)
+        .toBeLessThan(BAND)
+    }
+  })
+
+  it('states the actual discount each plan achieves', () => {
+    // Written down rather than left implicit, so the marketing claim and the
+    // arithmetic are visibly the same thing.
+    expect(annualDiscountOf('pro') * 100).toBeCloseTo(10.06, 1)
+    expect(annualDiscountOf('max') * 100).toBeCloseTo(9.97, 1)
+  })
+
+  it('always makes annual cheaper per month than monthly', () => {
+    // The property the whole annual option rests on. If a rounding edit ever
+    // inverted it, the page would be advertising a saving that costs more.
+    for (const p of paid) {
+      expect(monthlyEquivalent(p, 'annual')!, p.id).toBeLessThan(monthlyEquivalent(p, 'monthly')!)
+      expect(p.priceAnnual!, p.id).toBeLessThan(p.priceMonthly! * 12)
+    }
+  })
+
+  it('reports a real peso saving for paying yearly', () => {
+    for (const p of paid) {
+      expect(annualSaving(p), p.id).toBe(p.priceMonthly! * 12 - p.priceAnnual!)
+      expect(annualSaving(p), p.id).toBeGreaterThan(0)
+    }
+  })
+
+  it('quotes the agreed headline figures', () => {
+    expect(priceFor('pro', 'monthly')).toBe(1399)
+    expect(priceFor('max', 'monthly')).toBe(2999)
+    expect(priceFor('pro', 'annual')).toBe(15099)
+    expect(priceFor('max', 'annual')).toBe(32399)
+  })
+
+  it('charges nothing for free and nothing at all for guest', () => {
+    expect(priceFor('free', 'monthly')).toBe(0)
+    expect(priceFor('free', 'annual')).toBe(0)
+    expect(priceFor('guest', 'monthly')).toBeNull()
+    expect(priceFor('guest', 'annual')).toBeNull()
+    expect(annualSaving('free')).toBe(0)
+    expect(annualSaving('guest')).toBe(0)
+    expect(annualDiscountOf('guest')).toBe(0)
+  })
+
+  it('keeps monthly prices ordered by tier', () => {
+    expect(priceFor('pro', 'monthly')!).toBeLessThan(priceFor('max', 'monthly')!)
+    expect(priceFor('pro', 'annual')!).toBeLessThan(priceFor('max', 'annual')!)
   })
 })

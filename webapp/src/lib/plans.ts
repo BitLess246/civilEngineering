@@ -11,9 +11,13 @@
 // questions and conflating them is how a paywall ends up inconsistent, with a
 // page reachable but its main button dead for no stated reason.
 //
-// NO PAYMENTS ARE TAKEN. Nothing here charges anyone or claims to. A plan is
-// read from the user's Supabase metadata, so it can be set by hand today and by
-// a checkout webhook later; until that webhook exists every account is `free`.
+// PRICED IN PESOS, because PayMongo settles in pesos. Showing a dollar figure
+// while charging a peso one is how a customer ends up disputing a card charge
+// they did not recognise.
+//
+// NO PAYMENTS ARE TAKEN YET. The billing webhook exists (supabase/functions/
+// billing-webhook) and verifies real provider signatures, but nothing starts a
+// payment, so `CHECKOUT_ENABLED` is still false and every account is `free`.
 // The pricing page says so plainly rather than showing a button that pretends.
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -37,11 +41,36 @@ export type Feature =
   /** Save projects to the account. */
   | 'saved-projects'
 
+/** How often a paid plan is billed. */
+export type BillingPeriod = 'monthly' | 'annual'
+
+/**
+ * Everything is priced in Philippine pesos.
+ *
+ * Not a cosmetic choice: PayMongo settles in PHP, and a page quoting dollars
+ * while the card statement reads pesos is a support ticket at best and a
+ * chargeback at worst. The currency the customer is shown must be the currency
+ * they are charged.
+ */
+export const CURRENCY = 'PHP'
+
+/** Headline discount for paying yearly. */
+export const ANNUAL_DISCOUNT = 0.10
+
 export interface Plan {
   id: PlanId
   name: string
-  /** Monthly price in USD. 0 = free; null = not purchasable (guest). */
-  price: number | null
+  /** Price per month when billed monthly, in PHP. 0 = free; null = guest. */
+  priceMonthly: number | null
+  /**
+   * Total charged once per year, in PHP — already discounted, not a rate.
+   *
+   * Stored rather than computed from `priceMonthly · 12 · 0.9` so the number a
+   * customer is charged is the number written here, and rounding to a tidy
+   * figure cannot drift from what the page displays. A test pins each one to
+   * within a tenth of a percent of the headline discount.
+   */
+  priceAnnual: number | null
   tagline: string
   features: readonly Feature[]
   /** Hard ceiling on model size, or null for no limit. */
@@ -75,7 +104,8 @@ export const PLANS: readonly Plan[] = [
   {
     id: 'guest',
     name: 'Guest',
-    price: null,
+    priceMonthly: null,
+    priceAnnual: null,
     tagline: 'Try every calculator without an account.',
     features: [],
     maxMembers: 0,
@@ -90,7 +120,8 @@ export const PLANS: readonly Plan[] = [
   {
     id: 'free',
     name: 'Free',
-    price: 0,
+    priceMonthly: 0,
+    priceAnnual: 0,
     tagline: 'The same calculators, without the trial counter.',
     features: ['saved-projects'],
     maxMembers: 0,
@@ -106,7 +137,8 @@ export const PLANS: readonly Plan[] = [
   {
     id: 'pro',
     name: 'Pro',
-    price: 19,
+    priceMonthly: 1_399,
+    priceAnnual: 15_099,
     tagline: 'The 3D Model Space and the tools built on it.',
     features: ['model-space', 'design-pipeline', 'optimizer', 'reports', 'estimating', 'saved-projects'],
     maxMembers: 400,
@@ -124,7 +156,8 @@ export const PLANS: readonly Plan[] = [
   {
     id: 'max',
     name: 'Max',
-    price: 49,
+    priceMonthly: 2_999,
+    priceAnnual: 32_399,
     tagline: 'Everything, including the nonlinear and dynamic solvers.',
     features: ALL_FEATURES,
     maxMembers: null,
@@ -169,9 +202,52 @@ export function withinProjectLimit(plan: PlanId | Plan, projects: number): boole
   return projects < p.maxProjects
 }
 
+/** Price for a plan on a given billing period, in PHP. */
+export function priceFor(plan: PlanId | Plan, period: BillingPeriod): number | null {
+  const p = typeof plan === 'string' ? planOf(plan) : plan
+  return period === 'annual' ? p.priceAnnual : p.priceMonthly
+}
+
+/**
+ * What a plan works out to per month on a given period.
+ *
+ * The number to put next to an annual price: "₱1,258/month, billed annually" is
+ * the comparison a customer is actually making, and making them divide by
+ * twelve is how a good deal goes unnoticed.
+ */
+export function monthlyEquivalent(plan: PlanId | Plan, period: BillingPeriod): number | null {
+  const price = priceFor(plan, period)
+  if (price === null) return null
+  return period === 'annual' ? price / 12 : price
+}
+
+/** Pesos saved over a year by paying annually. 0 when there is nothing to save. */
+export function annualSaving(plan: PlanId | Plan): number {
+  const p = typeof plan === 'string' ? planOf(plan) : plan
+  if (!p.priceMonthly || !p.priceAnnual) return 0
+  return Math.max(0, p.priceMonthly * 12 - p.priceAnnual)
+}
+
+/** The actual discount achieved by a plan's annual price, as a fraction. */
+export function annualDiscountOf(plan: PlanId | Plan): number {
+  const p = typeof plan === 'string' ? planOf(plan) : plan
+  if (!p.priceMonthly || !p.priceAnnual) return 0
+  return 1 - p.priceAnnual / (p.priceMonthly * 12)
+}
+
+/**
+ * Peso amount for display — `₱1,399`, no decimals.
+ *
+ * Fixed to en-PH rather than the visitor's locale so the grouping matches the
+ * amount the payment page will show; a price that reads differently in two
+ * places invites a double-take at exactly the wrong moment.
+ */
+export const formatPeso = (amount: number): string =>
+  `₱${Math.round(amount).toLocaleString('en-PH')}`
+
 /** The cheapest plan that includes a feature, or null if none does. */
 export function lowestPlanWith(feature: Feature): Plan | null {
-  const ranked = [...PLANS].sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity))
+  const ranked = [...PLANS].sort((a, b) => (a.priceMonthly ?? Infinity) - (b.priceMonthly ?? Infinity))
   return ranked.find((p) => p.features.includes(feature)) ?? null
 }
 
@@ -187,7 +263,7 @@ export function upgradeMessage(current: PlanId, feature: Feature): string | null
   const target = lowestPlanWith(feature)
   if (!target) return 'That feature is not available on any plan yet.'
   if (current === 'guest') {
-    return target.price === 0
+    return target.priceMonthly === 0
       ? `Create a free account to use ${featureLabel(feature)}.`
       : `${featureLabel(feature)} needs the ${target.name} plan — create an account to get started.`
   }

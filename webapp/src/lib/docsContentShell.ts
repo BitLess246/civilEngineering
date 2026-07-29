@@ -194,7 +194,7 @@ export const SHELL_TOOLS: DocTool[] = [
           { kind: 'output', name: 'Guest', what: 'No account. Five runs of each single-purpose calculator, plus unlimited access to the documentation and validation pages.' },
           { kind: 'output', name: 'Free', what: 'The same calculators with no trial counter, and up to three saved projects. No payment, no model space.' },
           { kind: 'output', name: 'Pro', what: 'The 3D Model Space up to 400 members and everything built on it \u2014 design pipeline, section optimiser, estimating and take-off, structure reports \u2014 with unlimited saved projects.' },
-          { kind: 'output', name: 'Max', what: 'Everything in Pro with no model-size limit, plus the nonlinear and dynamic solvers (pushover, biaxial pushover, time history) and construction scheduling.' },
+          { kind: 'output', name: 'Max', what: '\u20b12,999/month or \u20b132,399/year. Everything in Pro with no model-size limit, plus the nonlinear and dynamic solvers (pushover, biaxial pushover, time history) and construction scheduling.' },
         ],
       },
       {
