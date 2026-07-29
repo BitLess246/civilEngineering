@@ -4,7 +4,7 @@ import { useAuth } from '../lib/auth/authContext'
 import { planOf } from '../lib/plans'
 
 function PlanCard({ plan, current }: { plan: Plan; current: boolean }) {
-  const featured = plan.id === 'free'
+  const featured = plan.id === 'pro'
   return (
     <div className={`flex flex-col rounded-xl border bg-white p-5 shadow-sm ${
       featured ? 'border-[#0056b3] ring-1 ring-[#0056b3]/20' : 'border-slate-200'}`}>
@@ -60,29 +60,30 @@ export default function Pricing() {
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Plans</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Pricing</h1>
       <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-        Every calculator is free to try without an account. A free account removes the trial limits and opens the
-        3D Model Space; Pro adds the optimiser, nonlinear analysis, reports, estimating and scheduling.
+        Every calculator is free, with or without an account — a free account only removes the trial counter and
+        lets you save work. The paid tiers are for project-scale tools: Pro opens the 3D Model Space and everything
+        built on it, and Max adds the nonlinear and dynamic solvers plus construction scheduling.
       </p>
 
       {!CHECKOUT_ENABLED && (
         <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] leading-6 text-amber-900">
           <strong>Paid plans are not open for sign-up yet.</strong> Taking card payments safely needs a server to
           verify the payment provider&rsquo;s webhook — a browser cannot do that, because anything checked in the
-          browser can be forged by the person paying. Until that exists, Pro is listed so you can see what it
-          covers, and no card details are collected anywhere in this app. The free tier is fully available.
+          browser can be forged by the person paying. Until that exists, Pro and Max are listed so you can see what
+          they cover, and no card details are collected anywhere in this app. Guest and Free are fully available.
         </div>
       )}
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {PLANS.map((p) => <PlanCard key={p.id} plan={p} current={p.id === current.id} />)}
       </div>
 
       <h2 className="mt-10 text-[1.05rem] font-bold text-[#0056b3]">What counts as a &ldquo;calculator&rdquo;</h2>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
         The single-purpose pages — beam, column, footing, retaining wall, settlement, lateral pile, connections,
-        slope stability and the rest. Each gives one answer from one set of inputs. The 3D Model Space, the frame
-        and truss workbenches, estimating and scheduling are project-scale tools that hold state across a whole
-        building, and those need an account.
+        slope stability and the rest. Each gives one answer from one set of inputs, and every one of them stays
+        free. The 3D Model Space, the frame and truss workbenches, estimating and scheduling are project-scale
+        tools that hold state across a whole building, and those are what the paid tiers are for.
       </p>
       <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
         Documentation and the{' '}

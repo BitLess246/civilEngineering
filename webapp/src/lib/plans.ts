@@ -17,7 +17,7 @@
 // The pricing page says so plainly rather than showing a button that pretends.
 // ─────────────────────────────────────────────────────────────────────────
 
-export type PlanId = 'guest' | 'free' | 'pro'
+export type PlanId = 'guest' | 'free' | 'pro' | 'max'
 
 export type Feature =
   /** The 3D model space at all. */
@@ -48,6 +48,8 @@ export interface Plan {
   maxMembers: number | null
   /** Runs per calculator; null = unlimited. */
   calculatorRuns: number | null
+  /** Saved projects the account may keep; 0 = cannot save, null = no limit. */
+  maxProjects: number | null
   /** Shown as bullet points on the pricing page. */
   highlights: readonly string[]
 }
@@ -58,15 +60,27 @@ const ALL_FEATURES: readonly Feature[] = [
   'estimating', 'scheduling', 'nonlinear', 'saved-projects',
 ]
 
+/**
+ * The tiers, cheapest first.
+ *
+ * The shape of the ladder: Guest and Free are deliberately the SAME product —
+ * the single-purpose calculators — and differ only in that Free has an account
+ * behind it, which removes the trial counter and lets a few projects be saved.
+ * Nobody should have to pay to finish a beam check. The paid tiers are where
+ * the project-scale tools live: Pro carries the 3D Model Space and everything
+ * built on it, and Max adds the analyses that are heaviest to run and rarest to
+ * need — nonlinear/dynamic solves and construction scheduling.
+ */
 export const PLANS: readonly Plan[] = [
   {
     id: 'guest',
     name: 'Guest',
     price: null,
-    tagline: 'Try the calculators without an account.',
+    tagline: 'Try every calculator without an account.',
     features: [],
     maxMembers: 0,
     calculatorRuns: 5,
+    maxProjects: 0,
     highlights: [
       '5 runs of each single-purpose calculator',
       'Full documentation and validation pages',
@@ -77,31 +91,50 @@ export const PLANS: readonly Plan[] = [
     id: 'free',
     name: 'Free',
     price: 0,
-    tagline: 'Everything a student or a single check needs.',
-    features: ['model-space', 'design-pipeline', 'saved-projects'],
-    maxMembers: 50,
+    tagline: 'The same calculators, without the trial counter.',
+    features: ['saved-projects'],
+    maxMembers: 0,
     calculatorRuns: null,
+    maxProjects: 3,
     highlights: [
       'Unlimited use of every calculator',
-      '3D Model Space, up to 50 members',
-      'Full design pipeline on those models',
-      'Save projects to your account',
+      'Save up to 3 projects to your account',
+      'Worked solutions and PDF calc sheets on every page',
+      'Full documentation and validation pages',
     ],
   },
   {
     id: 'pro',
     name: 'Pro',
     price: 19,
-    tagline: 'For production work on real buildings.',
+    tagline: 'The 3D Model Space and the tools built on it.',
+    features: ['model-space', 'design-pipeline', 'optimizer', 'reports', 'estimating', 'saved-projects'],
+    maxMembers: 400,
+    calculatorRuns: null,
+    maxProjects: null,
+    highlights: [
+      '3D Model Space, up to 400 members',
+      'Full design pipeline — slabs, beams, columns, footings',
+      'Section optimiser',
+      'Estimating and take-off',
+      'Structure reports and PDF drawings',
+      'Unlimited saved projects',
+    ],
+  },
+  {
+    id: 'max',
+    name: 'Max',
+    price: 49,
+    tagline: 'Everything, including the nonlinear and dynamic solvers.',
     features: ALL_FEATURES,
     maxMembers: null,
     calculatorRuns: null,
+    maxProjects: null,
     highlights: [
-      'Unlimited model size',
-      'Section optimiser',
-      'Nonlinear analysis — pushover, time history, buckling',
-      'Printable and PDF reports',
-      'Estimating, take-off and construction scheduling',
+      'Everything in Pro, with no model-size limit',
+      'Nonlinear analysis — pushover, biaxial pushover, time history',
+      'Construction scheduling and the critical path',
+      'Priority on new engines as they ship',
     ],
   },
 ]
@@ -124,6 +157,16 @@ export function withinModelLimit(plan: PlanId | Plan, members: number): boolean 
   const p = typeof plan === 'string' ? planOf(plan) : plan
   if (p.maxMembers === null) return true
   return members <= p.maxMembers
+}
+
+/**
+ * Whether an account holding `projects` saved projects may save another.
+ * `maxProjects: 0` (guest) cannot save at all; `null` means no limit.
+ */
+export function withinProjectLimit(plan: PlanId | Plan, projects: number): boolean {
+  const p = typeof plan === 'string' ? planOf(plan) : plan
+  if (p.maxProjects === null) return true
+  return projects < p.maxProjects
 }
 
 /** The cheapest plan that includes a feature, or null if none does. */
