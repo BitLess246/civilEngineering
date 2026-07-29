@@ -121,4 +121,56 @@ export const SHELL_TOOLS: DocTool[] = [
       },
     ],
   },
+  {
+    id: 'account',
+    name: 'Account — sign in, sign up, password reset',
+    route: '/signin',
+    group: 'Getting around',
+    summary: 'Create an account or sign in. An account unlocks the 3D model space, the design pipeline, reports and the schedule module.',
+    basis: 'Supabase email + password authentication.',
+    sections: [
+      {
+        id: 'acct-why',
+        title: 'What an account changes',
+        body: 'The single-purpose calculators are free to try without one — five runs of each. The heavy, stateful '
+          + 'features (3D Model Space, the frame and truss workbenches, the estimating and scheduling modules, the '
+          + 'seismic wizard) need an account. Documentation and the validation page are always open to everyone.',
+        notes: [
+          'The guest run counter is stored in your browser, so clearing site data resets it. It exists to prompt sign-up on tools that are deliberately free to try — it is not a security boundary, and the features that require an account are gated on the session itself.',
+          'If the deployment has no Supabase keys configured, sign-in is unavailable and NOTHING is gated — the app stays fully usable rather than locking behind a form that cannot work.',
+        ],
+      },
+      {
+        id: 'acct-signin',
+        title: 'Sign in',
+        controls: [
+          { kind: 'field', name: 'Email', what: 'The address the account was created with. Checked for obvious typos before the request is sent.' },
+          { kind: 'field', name: 'Password', what: 'Your password. The Show/Hide control reveals it, since typing a password blind is the usual cause of a failed sign-in.' },
+          { kind: 'button', name: 'Sign in', what: 'Signs you in and returns you to the page you were trying to reach, rather than dumping you on the home page.' },
+          { kind: 'button', name: 'Forgot your password?', what: 'Sends a reset link to your address.' },
+          { kind: 'output', name: 'Error message', what: 'A failed sign-in always reads "Email or password is incorrect", whichever was wrong. That is deliberate: distinguishing them would let anyone test which addresses have accounts.' },
+        ],
+      },
+      {
+        id: 'acct-signup',
+        title: 'Create an account',
+        controls: [
+          { kind: 'field', name: 'Name', what: 'Optional display name, stored with the account.' },
+          { kind: 'field', name: 'Email', what: 'Where the confirmation link is sent. The account is not usable until that link is opened.' },
+          { kind: 'field', name: 'Password', what: 'At least 8 characters. The strength meter is advice, not a gate — a long passphrase of one character class scores well and is accepted, because length matters more than variety.' },
+          { kind: 'field', name: 'Confirm password', what: 'Must match; checked as you type rather than on submit.' },
+          { kind: 'button', name: 'Create account', what: 'Registers the account and sends the confirmation email.' },
+        ],
+      },
+      {
+        id: 'acct-reset',
+        title: 'Password reset',
+        controls: [
+          { kind: 'field', name: 'Email', what: 'The address to send the reset link to.' },
+          { kind: 'button', name: 'Send reset link', what: 'Always reports success, whether or not the address has an account — otherwise the form would reveal which addresses are registered.' },
+          { kind: 'field', name: 'New password', what: 'Set on the page the emailed link opens. Same 8-character minimum as sign-up.' },
+        ],
+      },
+    ],
+  },
 ]
