@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 489
+export const SOLVER_TEST_COUNT = 492
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -1671,6 +1671,18 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "nonlinearFrame — displacement control",
         "name": "reports the solved load factor as an output"
+      },
+      {
+        "suite": "nonlinearFrame — multi-hinge convergence",
+        "name": "converges at every step of a 56-hinge frame"
+      },
+      {
+        "suite": "nonlinearFrame — multi-hinge convergence",
+        "name": "reports a capacity that does not depend on the step count"
+      },
+      {
+        "suite": "nonlinearFrame — multi-hinge convergence",
+        "name": "reports the residual it actually achieved"
       }
     ]
   },

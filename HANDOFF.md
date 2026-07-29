@@ -1015,3 +1015,29 @@ failed on most steps). Genuinely uncoupled axes should use two 1-D hinges.
 `<link>`, so every page load 404s on the browser's default `/favicon.ico`
 request — `/vite.svg` ships in `dist` but is never referenced. Cosmetic, and
 pre-existing.
+
+## Follow-ups after the biaxial series (PRs #455, #456, July 2026)
+
+- **#455 — favicon.** `webapp/public/favicon.svg` always shipped but
+  `index.html` never linked it, so every page load requested `/favicon.ico`,
+  404'd, and logged an unhandled `TypeError: Failed to fetch`. One line. (An
+  earlier flag of mine claimed `/vite.svg` was the unreferenced asset — wrong;
+  that path only returned 200 because `vite preview` serves the SPA fallback.)
+
+- **#456 — `nonlinearFrame` (2-D) multi-hinge convergence.** I had recorded this
+  as "lower risk" than the 3-D case. That was wrong, and measuring it first is
+  the only reason it got caught: on a 3-bay × 4-storey frame with 56 hinges,
+  plain full Newton with the increment test converged **none** of 30 steps.
+  Same two fixes as the 3-D engine — residual-based convergence and a
+  backtracking line search (predictor exempt) — plus a relative guard on the
+  displacement-control denominator, `residual` on `NLFrameStep` (and on
+  `ArcStep`), and `maxIter` default raised to 120 because a backtracking chain
+  counts as one iteration. Every step now converges below 1e-8 and the peak load
+  is step-count independent; while it was failing, the peak was under-reported
+  by 0.2%.
+
+  **The dynamic driver was measured, not assumed.** `nonlinearFrameDynamic`
+  converges in 3 iterations on the same 56-hinge frame at three shaking
+  intensities, because Newmark adds a0·M to the tangent diagonal and
+  regularises it. It shares `assembleFrame` but keeps its own Newton loop, and
+  it was deliberately left unchanged.
