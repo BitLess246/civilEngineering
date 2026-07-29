@@ -390,6 +390,7 @@ const beamOK = (d: BeamDesignResult) =>
 function beamDeflectionOf(
   row: BeamScheduleRow, memberId: string, sec: RectSection,
   dRes: F3Result | null, lRes: F3Result | null,
+  flange?: { bf: number; hf: number },
 ): MemberDeflectionResult | null {
   const dm = dRes?.members.find((x) => x.id === memberId)
   const lm = lRes?.members.find((x) => x.id === memberId)
@@ -404,6 +405,9 @@ function beamDeflectionOf(
     b: sec.b, h: sec.h, d: g.d,
     As: g.As, AsPrime: g.AsPrime, dPrime: g.dPrime,
     fc: sec.fc, fy: sec.fy, support: row.support,
+    // The slab that the design already treats as a flange is also a flange for
+    // STIFFNESS; passing it removes the deliberate conservatism noted in #446.
+    ...(flange ? { bf: flange.bf, hf: flange.hf } : {}),
   })
 }
 
@@ -818,7 +822,7 @@ function designFromRuns(
           // shallower member, and the row passes on EITHER route. Integrated
           // from this member's own D-only and L-only moment diagrams, so the
           // real load pattern and end restraint are inherited from the FEM.
-          const defl = beamDeflectionOf(best, m.id, sec, dRes, lRes)
+          const defl = beamDeflectionOf(best, m.id, sec, dRes, lRes, flange ?? undefined)
           if (defl) {
             const serviceOK = defl.liveOK && defl.totalOK
             best = {

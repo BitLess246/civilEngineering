@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { chordDeflection, bransonIe, ruptureModulus, memberServiceDeflection } from './memberDeflection'
+import { chordDeflection, bransonIe, ruptureModulus, memberServiceDeflection, tSectionGross, crackedInertiaT } from './memberDeflection'
 import { crackedInertia } from './beamDeflection'
 import { Ec } from './slabDeflection'
 import { solveFrame3D, rectJ, type F3Node, type F3Member, type F3Support, type F3Load } from './frame3d'
@@ -346,5 +346,121 @@ describe('memberDeflection — against a real frame3d member', () => {
     expect(res.deltaL).toBeGreaterThan(0)
     // live-load fraction tracks the load ratio (same Ie, linear integration)
     expect(res.deltaL / res.deltaD).toBeCloseTo(14 / 22, 6)
+  })
+})
+
+describe('tSectionGross', () => {
+  it('degenerates to the rectangle with no usable flange', () => {
+    const rect = { Ig: (300 * 600 ** 3) / 12, yTop: 300, yBot: 300, A: 300 * 600 }
+    for (const p of [
+      { b: 300, h: 600 },                        // no flange at all
+      { b: 300, h: 600, bf: 250, hf: 120 },      // "flange" narrower than the web
+      { b: 300, h: 600, bf: 1000, hf: 0 },       // zero thickness
+      { b: 300, h: 600, bf: 1000, hf: 600 },     // flange swallows the section
+    ]) {
+      const g = tSectionGross(p)
+      expect(g.Ig).toBeCloseTo(rect.Ig, 6)
+      expect(g.yTop).toBeCloseTo(rect.yTop, 9)
+      expect(g.A).toBeCloseTo(rect.A, 9)
+    }
+  })
+
+  it('satisfies the parallel-axis identity against a first-moment calc', () => {
+    // Independent route: build I about the TOP fibre from the two rectangles,
+    // then transfer to the centroid with I_c = I_top − A·ȳ². Different algebra
+    // from the implementation, so agreement is a real check.
+    const b = 300, h = 600, bf = 1000, hf = 120
+    const g = tSectionGross({ b, h, bf, hf })
+    const hw = h - hf
+    const Af = bf * hf, Aw = b * hw
+    const yf = hf / 2, yw = hf + hw / 2
+    const Itop = (bf * hf ** 3) / 12 + Af * yf ** 2 + (b * hw ** 3) / 12 + Aw * yw ** 2
+    const A = Af + Aw
+    const yBar = (Af * yf + Aw * yw) / A
+    expect(g.A).toBeCloseTo(A, 9)
+    expect(g.yTop).toBeCloseTo(yBar, 9)
+    expect(g.Ig).toBeCloseTo(Itop - A * yBar ** 2, 3)
+  })
+
+  it('sits between the two rectangles people substitute for it', () => {
+    // The web-only rectangle understates the section (the conservatism this
+    // replaces); a full-depth rectangle of width bf overstates it badly, which
+    // is why #446 rejected that shortcut. The real T must be strictly between.
+    const b = 300, h = 600, bf = 1000, hf = 120
+    const web = (b * h ** 3) / 12
+    const fullWidth = (bf * h ** 3) / 12
+    const g = tSectionGross({ b, h, bf, hf })
+    expect(g.Ig).toBeGreaterThan(web)
+    expect(g.Ig).toBeLessThan(fullWidth)
+    expect(g.Ig / web).toBeCloseTo(1.63, 2)       // measured, not asserted loosely
+    expect(g.yTop).toBeLessThan(h / 2)            // flange pulls the centroid up
+    expect(g.yBot).toBeGreaterThan(h / 2)
+  })
+})
+
+describe('crackedInertiaT', () => {
+  const base = { b: 300, d: 540, As: 2500, fc: 28 }
+
+  it('is a rectangle of width bf when the neutral axis stays in the flange', () => {
+    const got = crackedInertiaT({ ...base, bf: 1200, hf: 150, positive: true })
+    expect(got).toBeCloseTo(crackedInertia({ ...base, b: 1200 }), 3)
+  })
+
+  it('is the WEB rectangle when hogging — the flange is cracked in tension', () => {
+    const got = crackedInertiaT({ ...base, bf: 1200, hf: 150, positive: false })
+    expect(got).toBeCloseTo(crackedInertia(base), 6)
+  })
+
+  it('matches an independently bisected neutral axis when it drops into the web', () => {
+    // heavy steel + thin flange pushes the NA below hf
+    const p = { b: 300, d: 540, As: 9000, fc: 28, bf: 900, hf: 80 }
+    const n = 200000 / Ec(p.fc)
+    // defining equation: first moments about the NA balance
+    const f = (c: number) =>
+      p.bf * p.hf * (c - p.hf / 2) + (p.b * (c - p.hf) ** 2) / 2 - n * p.As * (p.d - c)
+    let lo = p.hf, hi = p.d
+    for (let k = 0; k < 200; k++) { const m = (lo + hi) / 2; if (f(m) < 0) lo = m; else hi = m }
+    const c = (lo + hi) / 2
+    expect(c).toBeGreaterThan(p.hf)          // confirms the case under test
+    const want = (p.bf * p.hf ** 3) / 12 + p.bf * p.hf * (c - p.hf / 2) ** 2
+      + (p.b * (c - p.hf) ** 3) / 3 + n * p.As * (p.d - c) ** 2
+    expect(crackedInertiaT({ ...p, positive: true })).toBeCloseTo(want, 2)
+  })
+})
+
+describe('memberServiceDeflection — flange action', () => {
+  const L = 8, N = 80
+  const xs = Array.from({ length: N + 1 }, (_, k) => (L * k) / N)
+  const sag = (w: number) => xs.map((x) => (w * x * (L - x)) / 2)
+  const common = {
+    xs, L, b: 300, h: 600, d: 540, As: 2500, fc: 28, fy: 420, support: 'both-ends' as const,
+  }
+
+  it('is byte-identical to the rectangle when no flange is supplied', () => {
+    const a = memberServiceDeflection({ ...common, MD: sag(20), ML: sag(10) })
+    expect(a.flanged).toBe(false)
+    expect(a.Ig).toBeCloseTo((300 * 600 ** 3) / 12, 6)
+    expect(a.yt).toBeCloseTo(300, 9)
+  })
+
+  it('a flanged member is stiffer, cracks later and deflects less', () => {
+    const bare = memberServiceDeflection({ ...common, MD: sag(20), ML: sag(10) })
+    const tee = memberServiceDeflection({ ...common, MD: sag(20), ML: sag(10), bf: 1500, hf: 120 })
+    expect(tee.flanged).toBe(true)
+    expect(tee.Ig).toBeGreaterThan(bare.Ig)
+    expect(tee.Mcr).toBeGreaterThan(bare.Mcr)      // bigger Ig, and yt only grows to h−ȳ
+    expect(tee.Ie).toBeGreaterThan(bare.Ie)
+    expect(tee.deltaTotal).toBeLessThan(bare.deltaTotal)
+  })
+
+  it('uses the top fibre for Mcr when the governing moment is hogging', () => {
+    const hog = memberServiceDeflection({
+      ...common, MD: sag(20).map((m) => -m), ML: sag(10).map((m) => -m), bf: 1500, hf: 120,
+    })
+    const g = tSectionGross({ b: 300, h: 600, bf: 1500, hf: 120 })
+    expect(hog.sagging).toBe(false)
+    expect(hog.yt).toBeCloseTo(g.yTop, 6)
+    // and the cracked section reverts to the web, so Icr matches the rectangle
+    expect(hog.Icr).toBeCloseTo(crackedInertia({ b: 300, d: 540, As: 2500, fc: 28 }), 6)
   })
 })

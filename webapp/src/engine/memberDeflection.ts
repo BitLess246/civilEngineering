@@ -45,6 +45,87 @@ export function ruptureModulus(fc: number, lambda = 1): number {
   return 0.62 * lambda * Math.sqrt(Math.max(fc, 1))
 }
 
+export interface GrossSection {
+  /** Gross moment of inertia about the centroid, mm⁴. */
+  Ig: number
+  /** Centroid depth from the TOP fibre, mm. */
+  yTop: number
+  /** Centroid distance to the BOTTOM fibre, mm. */
+  yBot: number
+  /** Gross area, mm². */
+  A: number
+}
+
+/**
+ * Gross properties of a T-section: a flange `bf × hf` on top of a web
+ * `b × (h − hf)`. Degenerates exactly to the rectangle when `bf ≤ b` or
+ * `hf ≤ 0`, which is how a member with no slab acting with it stays unchanged.
+ *
+ * A monolithic beam-and-slab pour IS a T-beam for stiffness (§424.2 / §406.3.2),
+ * and the true section sits BETWEEN the two rectangles anyone is tempted to
+ * substitute for it. On a 300×600 web with a 1000×120 flange: the web-only
+ * rectangle gives 0.61·Ig (what #446 used, conservative) and a full-depth
+ * rectangle of width bf gives 2.0·Ig (what #446 rejected, unconservative).
+ * Getting it right raises Mcr, so the member cracks when it actually cracks.
+ */
+export function tSectionGross(p: { b: number; h: number; bf?: number; hf?: number }): GrossSection {
+  const { b, h } = p
+  const bf = p.bf ?? 0, hf = p.hf ?? 0
+  if (!(bf > b) || !(hf > 0) || !(hf < h)) {
+    return { Ig: (b * h ** 3) / 12, yTop: h / 2, yBot: h / 2, A: b * h }
+  }
+  const hw = h - hf
+  const Af = bf * hf, Aw = b * hw
+  const A = Af + Aw
+  // centroid from the top fibre
+  const yTop = (Af * (hf / 2) + Aw * (hf + hw / 2)) / A
+  const Ig = (bf * hf ** 3) / 12 + Af * (yTop - hf / 2) ** 2
+    + (b * hw ** 3) / 12 + Aw * (hf + hw / 2 - yTop) ** 2
+  return { Ig, yTop, yBot: h - yTop, A }
+}
+
+const ES = 200000   // MPa, §420.2.2.2
+
+/**
+ * Cracked transformed inertia of a T-section, mm⁴.
+ *
+ * Which way the member bends decides everything:
+ *  • SAGGING (positive M) — the flange is in compression. If the neutral axis
+ *    falls inside the flange the section is simply a rectangle of width `bf`;
+ *    only when it drops into the web does the flanged algebra apply.
+ *  • HOGGING (negative M) — the flange is in TENSION and therefore cracked, so
+ *    the compression zone is the web alone and the section is a rectangle of
+ *    width `b`. A T-beam over a support is a rectangular beam.
+ *
+ * Falls back to the rectangle whenever there is no usable flange.
+ */
+export function crackedInertiaT(p: {
+  b: number; d: number; As: number; fc: number
+  bf?: number; hf?: number
+  /** True for sagging (flange in compression). */
+  positive: boolean
+}): number {
+  const { b, d, As, fc, positive } = p
+  const bf = p.bf ?? 0, hf = p.hf ?? 0
+  const flanged = positive && bf > b && hf > 0
+  if (As <= 0 || b <= 0 || d <= 0) return (b * d ** 3) / 12
+  const n = ES / Ec(fc)
+
+  // rectangular trial on the compression width
+  const bc = flanged ? bf : b
+  const rhoN = (n * As) / (bc * d)
+  const kd = (Math.sqrt(2 * rhoN + rhoN * rhoN) - rhoN) * d
+  if (!flanged || kd <= hf) return (bc * kd ** 3) / 3 + n * As * (d - kd) ** 2
+
+  // neutral axis in the web: (b/2)·c² + [hf(bf−b) + nAs]·c + [hf²(b−bf)/2 − nAs·d] = 0
+  const A2 = b / 2
+  const B = hf * (bf - b) + n * As
+  const C = (hf * hf * (b - bf)) / 2 - n * As * d
+  const c = (-B + Math.sqrt(Math.max(B * B - 4 * A2 * C, 0))) / (2 * A2)
+  return (bf * hf ** 3) / 12 + bf * hf * (c - hf / 2) ** 2
+    + (b * (c - hf) ** 3) / 3 + n * As * (d - c) ** 2
+}
+
 export interface ChordDeflection {
   /** Deflection at each station, mm. Positive = downward (sagging). */
   v: number[]
@@ -141,10 +222,20 @@ export interface MemberDeflectionInput {
   /** Span type — only used for the deemed-to-comply hMin and to detect a
    *  cantilever's boundary condition. */
   support?: BeamSupport
+  /** Effective flange width and thickness of the slab acting with the beam, mm.
+   *  Omit (or bf ≤ b) for a bare rectangle — which is exactly the previous
+   *  behaviour, so a member with no slab is unaffected. */
+  bf?: number; hf?: number
 }
 
 export interface MemberDeflectionResult {
   Ig: number; Icr: number; Ie: number
+  /** True when flange action was used for the gross/cracked properties. */
+  flanged: boolean
+  /** Sign of the governing service moment: true = sagging (flange compressed). */
+  sagging: boolean
+  /** Distance from the centroid to the tension fibre used for Mcr, mm. */
+  yt: number
   /** Cracking moment and the service moment that governs Ie, kN·m. */
   Mcr: number; Ma: number
   cracked: boolean
@@ -178,13 +269,27 @@ export function memberServiceDeflection(i: MemberDeflectionInput): MemberDeflect
   const support = i.support ?? 'both-ends'
   const AsPrime = i.AsPrime ?? 0
 
-  const Ig = (b * h ** 3) / 12
-  const Icr = crackedInertia({ b, d, As, fc, AsPrime, dPrime: i.dPrime })
-  const Mcr = (ruptureModulus(fc, lambda) * Ig) / (h / 2) / 1e6      // kN·m
-
+  // Governing service moment AND ITS SIGN — the sign decides which face is in
+  // tension, which changes both Mcr (through yt) and Icr (through whether the
+  // flange is a compression block or a cracked tension zone).
   const n = Math.min(xs.length, MD.length, ML.length)
-  let Ma = 0
-  for (let k = 0; k < n; k++) Ma = Math.max(Ma, Math.abs(MD[k] + ML[k]))
+  let Ma = 0, MaSigned = 0
+  for (let k = 0; k < n; k++) {
+    const M = MD[k] + ML[k]
+    if (Math.abs(M) > Ma) { Ma = Math.abs(M); MaSigned = M }
+  }
+  const sagging = MaSigned >= 0
+
+  const gross = tSectionGross({ b, h, bf: i.bf, hf: i.hf })
+  const Ig = gross.Ig
+  const Icr = i.bf && i.bf > b && i.hf
+    ? crackedInertiaT({ b, d, As, fc, bf: i.bf, hf: i.hf, positive: sagging })
+    : crackedInertia({ b, d, As, fc, AsPrime, dPrime: i.dPrime })
+  // yt is the distance to the TENSION fibre: bottom when sagging, top when
+  // hogging. For a rectangle both are h/2, so this reduces to the old formula.
+  const yt = sagging ? gross.yBot : gross.yTop
+  const Mcr = (ruptureModulus(fc, lambda) * Ig) / yt / 1e6           // kN·m
+
   const Ie = bransonIe(Ma, Mcr, Ig, Icr)
   const cracked = Ma > Mcr && Ma > 0
 
@@ -209,6 +314,8 @@ export function memberServiceDeflection(i: MemberDeflectionInput): MemberDeflect
 
   return {
     Ig, Icr, Ie, Mcr, Ma, cracked,
+    flanged: !!(i.bf && i.bf > b && i.hf && i.hf > 0),
+    sagging, yt,
     deltaD, deltaL, lambdaDelta, deltaLong, deltaTotal,
     limitL360, limitL240,
     liveOK: deltaL <= limitL360 + 1e-9,
