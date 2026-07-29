@@ -1127,23 +1127,56 @@ account.
 NOTHING is gated. A missing env var must not brick the app behind a form that
 cannot work. Verified in a browser — `/model` stays reachable unconfigured.
 
-**Plans shipped in #463.** `lib/plans.ts` is pure and tested: three tiers
-(guest / free / pro), FEATURE-based entitlements rather than route-based, model
-size ceilings, and `upgradeMessage` which names the plan that actually unlocks
-a thing instead of a generic "upgrade to continue". Tests assert the properties
-people assume but that silently break: the tiers are strictly CUMULATIVE, limits
-never tighten as price rises, the top plan holds every feature that exists, and
-an unknown plan id falls back to the LEAST privileged tier.
+**Plans shipped in #463, restructured to four tiers in #464.** `lib/plans.ts` is
+pure and tested, with FEATURE-based entitlements rather than route-based:
+
+| | Guest | Free ($0) | Pro ($19) | Max ($49) |
+|---|---|---|---|---|
+| Calculators | 5 runs each | unlimited | unlimited | unlimited |
+| Saved projects | — | 3 | unlimited | unlimited |
+| Model Space | — | — | ≤ 400 members | unlimited |
+| Design pipeline, optimiser, reports, estimating | — | — | ✓ | ✓ |
+| Nonlinear analysis, scheduling | — | — | — | ✓ |
+
+The shape is deliberate: **Guest and Free are the same product**, differing only
+in that Free has an account behind it (no trial counter, a few saved projects).
+Nobody should have to pay to finish a beam check. The paid tiers carry the
+project-scale tools.
+
+Tests assert the properties people assume but that silently break: the tiers are
+strictly CUMULATIVE, limits never tighten as price rises, the top plan holds
+every feature that exists, an unknown plan id falls back to the LEAST privileged
+tier, and `upgradeMessage` names **Max** — not Pro — for the features only Max
+has.
 
 A plan is read from Supabase user metadata and can never be granted by the
 browser — otherwise the paywall would be a suggestion. Until a checkout webhook
-exists, every account is `free`.
+exists, every account is `free`. To grant yourself a paid tier for testing, set
+`{"plan": "pro"}` (or `"max"`) on your user in the Supabase dashboard under
+Authentication → Users → User Metadata.
 
 **Payments are still not done, and should not be faked.** `CHECKOUT_ENABLED` is
 a named constant pinned to false by a test, so flipping it on without adding a
 server to verify the webhook makes the suite object. The pricing page lists Pro
-so its contents are visible and says plainly that it is not open for sign-up;
-no card details are collected anywhere in the app.
+and Max so their contents are visible and says plainly that they are not open
+for sign-up; no card details are collected anywhere in the app.
+
+**KNOWN GAP — the tiers are catalogued but NOT ENFORCED.** `planAllows`,
+`withinModelLimit` and `withinProjectLimit` have no call sites outside the
+pricing badge, so a signed-in Free account can still open `/model`, run the
+optimiser and export a report. Routes are gated on the *session* (`RequireAuth`
++ `trialQuota`); nothing yet gates on the *plan*. The wiring was drafted against
+the single choke point that all heavy work funnels through — `useSolver.run(kind,
+…)` in `lib/useSolver.ts`, whose `kind` maps 1:1 onto a feature — plus the
+`Optimize design` and `Export PDF report` buttons in `pages/ModelSpace.tsx`.
+Worth pairing with a guard test that reads `SolverRequest['kind']` from
+`engine/solverWorker.ts` and fails when a new solver kind is unclassified, since
+an unmapped kind would default to allowed.
+
+Note also that whatever ships must say plainly what it is: **every calculation
+in this app runs in the browser**, so a client-side gate is a product boundary,
+not a security one — the same caveat `trialQuota` already carries. Real
+enforcement would mean moving the solver behind an authenticated API.
 
 **Not verifiable here:** a real sign-in round trip, since this environment has
 no Supabase project. Everything up to the network call is tested; the call

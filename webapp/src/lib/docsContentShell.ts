@@ -132,10 +132,13 @@ export const SHELL_TOOLS: DocTool[] = [
       {
         id: 'acct-why',
         title: 'What an account changes',
-        body: 'The single-purpose calculators are free to try without one — five runs of each. The heavy, stateful '
-          + 'features (3D Model Space, the frame and truss workbenches, the estimating and scheduling modules, the '
-          + 'seismic wizard) need an account. Documentation and the validation page are always open to everyone.',
+        body: 'The single-purpose calculators are free to try without one — five runs of each — and an account '
+          + 'removes that counter and lets you save projects. It does not unlock a different set of calculators. '
+          + 'The heavy, stateful features (3D Model Space, the frame and truss workbenches, the estimating and '
+          + 'scheduling modules, the seismic wizard) need an account AND a paid plan. Documentation and the '
+          + 'validation page are always open to everyone.',
         notes: [
+          'Routes are gated on the session today; the per-plan feature checks are catalogued in lib/plans.ts but are not yet wired into those pages, so a signed-in free account can still reach the project-scale tools. That gap is tracked in HANDOFF.md.',
           'The guest run counter is stored in your browser, so clearing site data resets it. It exists to prompt sign-up on tools that are deliberately free to try — it is not a security boundary, and the features that require an account are gated on the session itself.',
           'If the deployment has no Supabase keys configured, sign-in is unavailable and NOTHING is gated — the app stays fully usable rather than locking behind a form that cannot work.',
         ],
@@ -178,26 +181,30 @@ export const SHELL_TOOLS: DocTool[] = [
     name: 'Pricing — plans and what each unlocks',
     route: '/pricing',
     group: 'Getting around',
-    summary: 'The three tiers, what each includes, and why paid plans are not open for sign-up yet.',
+    summary: 'The four tiers, what each includes, and why paid plans are not open for sign-up yet.',
     sections: [
       {
         id: 'pricing-tiers',
         title: 'The tiers',
-        body: 'Cumulative: a dearer plan never takes anything away, which is asserted by a test rather than left '
-          + 'to care when a feature is added.',
+        body: 'Guest and Free are the same product \u2014 every single-purpose calculator \u2014 and differ only in that '
+          + 'Free has an account behind it. Nobody should have to pay to finish a beam check. The paid tiers carry '
+          + 'the project-scale tools. Cumulative: a dearer plan never takes anything away, which is asserted by a '
+          + 'test rather than left to care when a feature is added.',
         controls: [
           { kind: 'output', name: 'Guest', what: 'No account. Five runs of each single-purpose calculator, plus unlimited access to the documentation and validation pages.' },
-          { kind: 'output', name: 'Free', what: 'An account, no payment. Removes the trial limits entirely and opens the 3D Model Space and the design pipeline, up to 50 members per model, with saved projects.' },
-          { kind: 'output', name: 'Pro', what: 'Unlimited model size, plus the section optimiser, nonlinear analysis, report export, estimating and construction scheduling.' },
+          { kind: 'output', name: 'Free', what: 'The same calculators with no trial counter, and up to three saved projects. No payment, no model space.' },
+          { kind: 'output', name: 'Pro', what: 'The 3D Model Space up to 400 members and everything built on it \u2014 design pipeline, section optimiser, estimating and take-off, structure reports \u2014 with unlimited saved projects.' },
+          { kind: 'output', name: 'Max', what: 'Everything in Pro with no model-size limit, plus the nonlinear and dynamic solvers (pushover, biaxial pushover, time history) and construction scheduling.' },
         ],
       },
       {
         id: 'pricing-checkout',
-        title: 'Why Pro cannot be bought yet',
+        title: 'Why the paid tiers cannot be bought yet',
         body: 'Taking card payments safely needs a server to verify the payment provider\u2019s webhook. A browser '
           + 'cannot do that, because anything checked in the browser can be forged by the person paying. Rather '
-          + 'than show a button that looks like it charges a card and does not, Pro is listed so its contents are '
-          + 'visible and marked as not open for sign-up. No card details are collected anywhere in this app.',
+          + 'than show a button that looks like it charges a card and does not, Pro and Max are listed so their '
+          + 'contents are visible and marked as not open for sign-up. No card details are collected anywhere in '
+          + 'this app.',
         notes: [
           'A plan is read from the account\u2019s server-side metadata and can never be granted by the browser — otherwise the paywall would be a suggestion. An unrecognised plan value falls back to the least-privileged tier.',
         ],
