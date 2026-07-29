@@ -17,6 +17,7 @@ import { designAxialColumn } from './columnDesign'
 import { activeThrust, rankineKa, bearingFactors, infiniteSlopeFS } from './geotech'
 import { felleniusFS, type Slice } from './slopeStability'
 import { consolidationSettlement, timeFactor, effectiveStress, stressUnderRect } from './settlement'
+import { bromsSand, bromsClay } from './lateralPile'
 import { newmarkDirect } from './directTimeHistory'
 import { bilinearPath, bilinearCycleEnergy } from './hysteresis'
 import { nonlinearFrame } from './nonlinearFrame'
@@ -263,6 +264,33 @@ const consolidation = (() => {
 // ── 11d. Consolidation time factor at U = 90% ───────────────────────────────
 // Tv = 1.781 − 0.933·log₁₀(100 − U%) → 0.848, the standard tabulated value.
 const tv90 = (() => ({ manual: 0.848, software: timeFactor(0.9) }))()
+
+// ── 11e. Broms short free-head pile in sand ────────────────────────────────
+// Moments about the toe: the triangular 3·Kp·γ·z·d resultant is 1.5·Kp·γ·d·L²
+// acting L/3 above the toe, so H(e+L) = 0.5·Kp·γ·d·L³. The published closed
+// form, derived independently here from the resultant and its lever arm.
+const bromsSandShort = (() => {
+  const L = 10, d = 0.6, gamma = 10, phiDeg = 32, e = 1.5
+  const Kp = Math.tan(((45 + phiDeg / 2) * Math.PI) / 180) ** 2
+  const P = 1.5 * Kp * gamma * d * L * L      // resultant, kN
+  return {
+    manual: (P * (L / 3)) / (e + L),
+    software: bromsSand({ L, d, gamma, phiDeg, e, My: 1e12 }).shortPile,
+  }
+})()
+
+// ── 11f. Broms short free-head pile in clay — the 0.414 result ─────────────
+// With the load at ground level and the 1.5d gap zone collapsed, the free-head
+// rigid-pile equilibrium has the exact answer H = (√2 − 1)·q·L. Reproducing it
+// checks the derivation rather than a remembered chart value.
+const bromsClayShort = (() => {
+  const L = 10, cu = 40, d = 1e-9
+  const q = 9 * cu * d
+  return {
+    manual: (Math.SQRT2 - 1) * q * L,
+    software: bromsClay({ L, d, cu, My: 1e12, e: 0 }).shortPile,
+  }
+})()
 
 // ── 12b. T-section gross inertia — composite vs the transfer-axis identity ──
 // A monolithic beam and its slab form a T for stiffness. The engine sums the
@@ -667,6 +695,16 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'beam-defl-integration', category: 'RC', title: 'Service deflection by moment-diagram integration',
     reference: 'NSCP 424.2 / ACI 318-14 §24.2', formula: 'δ = ∬(M/EcIe) dx  ≡  5wℓ⁴/384EcIg (uncracked SS span)',
     manual: beamDeflIntegration.manual, software: beamDeflIntegration.software, unit: 'mm', tol: 1e-4,
+  },
+  {
+    id: 'broms-sand-short', category: 'Geotech', title: 'Broms short free-head pile in sand',
+    reference: 'Broms (1964b)', formula: 'H·(e+L) = 0.5·Kp·γ·d·L³  (resultant 1.5·Kp·γ·d·L² at L/3)',
+    manual: bromsSandShort.manual, software: bromsSandShort.software, unit: 'kN', tol: 1e-9,
+  },
+  {
+    id: 'broms-clay-short', category: 'Geotech', title: 'Broms short free-head pile in clay',
+    reference: 'Broms (1964a)', formula: 'H = (√2 − 1)·q·L,  q = 9·cu·d, load at ground level',
+    manual: bromsClayShort.manual, software: bromsClayShort.software, unit: 'kN', tol: 1e-6,
   },
   {
     id: 'consolidation-nc', category: 'Geotech', title: 'Primary consolidation — normally consolidated layer',
