@@ -1317,3 +1317,36 @@ because flagging the unusual as an error trains people to ignore errors.
 8. **Postgres, CPT, 3D subsurface.**
 
 **Open for the user:** which plan tier gates this (suggest `pro`+).
+
+## Soil investigation — progress
+
+| Phase | PR | State |
+|---|---|---|
+| 0 — model, provenance, registry, store | #476 | merged |
+| 1 — classification (Atterberg, sieve, USCS, AASHTO) | #477 | merged |
+| 2 — SPT corrections, correlations, overburden | #478 | merged |
+| 3a — borehole log renderer (geometry) | #479 | open |
+| 3b — investigation UI, routes, profile editor | — | next |
+| 4 — laboratory suite | — | |
+| 5 — parameter engine + wiring to existing analysis | — | the payoff |
+| 6 — liquefaction, bearing methods, Coulomb | — | |
+| 7 — report document builder | — | |
+| 8 — Postgres, CPT, 3D subsurface | — | |
+
+**Everything so far is engine-only** — 364 tests across 12 modules, and not one
+line of it is reachable from the app yet. Phase 3b is the first with routes, and
+therefore the first to hit `docsContent.test.ts` (every route needs a docs
+entry) and `featureGate.ts` (`ROUTE_FEATURE` key-set equality with
+`trialQuota.GATED_PREFIXES`).
+
+**Two recurring lessons from these phases**, both worth remembering:
+
+1. *Tests can enshrine a bug.* The log renderer drew "Silty Sand" with silt
+   hatching, and the test asserted that behaviour with a comment explaining it
+   ("'silt' matches first") — I had written down what the code did rather than
+   what was right. Only rendering the log and looking at it caught it. In a soil
+   name the adjective comes first and the noun governs.
+2. *Check the standard, not the plausible reading of it.* `groupIndex` clamped
+   each term of AASHTO M 145 at zero before summing, which is a different
+   equation from the one the standard prints — 40% fines at LL 20 / PI 2 is 0,
+   not 1.
