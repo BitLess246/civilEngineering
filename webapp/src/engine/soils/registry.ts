@@ -174,7 +174,64 @@ export const CALCULATIONS = {
     limitations: ['Meaningless for a non-plastic soil (PI = 0 divides by zero).'],
   },
 
+  'atterberg.liquid-limit-flow': {
+    title: 'Liquid limit from the flow curve',
+    category: 'index',
+    equation: String.raw`w = a + b\log_{10} N \Rightarrow LL = w|_{N = 25}, \qquad I_f = -b`,
+    unit: '%',
+    symbols: {
+      w: 'water content of a trial, %',
+      N: 'blows to closure, blows',
+      LL: 'liquid limit, %',
+      I_f: 'flow index, % per log cycle',
+      a: 'intercept of the flow line, %',
+      b: 'slope of the flow line, % per log cycle',
+    },
+    standard: 'd4318',
+    assumptions: ['The flow curve is a straight line on water content vs log blows.'],
+    limitations: [
+      'D4318 asks for trials between 15 and 40 blows bracketing 25; outside that range the liquid limit is extrapolated.',
+    ],
+  },
+
   // ── Classification ──
+  'aashto.group-index': {
+    title: 'AASHTO group index',
+    category: 'classification',
+    equation: String.raw`GI = (F - 35)\left[0.2 + 0.005(LL - 40)\right] + 0.01(F - 15)(PI - 10)`,
+    unit: '—',
+    symbols: {
+      GI: 'group index, dimensionless',
+      F: 'percent passing the 0.075 mm (No. 200) sieve, %',
+      LL: 'liquid limit, %',
+      PI: 'plasticity index, %',
+    },
+    standard: 'm145',
+    limitations: [
+      'Evaluated signed; a negative result is reported as zero per M 145, not clamped term by term.',
+      'Defined for the silt-clay groups (F > 35) and, in partial form, for A-2-6 and A-2-7. Outside that domain the expression is arithmetic, not a soil property.',
+    ],
+  },
+
+  'aashto.classify': {
+    title: 'AASHTO group',
+    category: 'classification',
+    equation: String.raw`\text{gradation } (P_{10}, P_{40}, P_{200}) \text{ and plasticity } (LL, PI) \Rightarrow \text{A-group}`,
+    unit: '—',
+    symbols: {
+      P_10: 'percent passing the 2.00 mm (No. 10) sieve, %',
+      P_40: 'percent passing the 0.425 mm (No. 40) sieve, %',
+      P_200: 'percent passing the 0.075 mm (No. 200) sieve, %',
+      LL: 'liquid limit, %',
+      PI: 'plasticity index, %',
+    },
+    standard: 'm145',
+    assumptions: ['The table is read left to right — the first group whose criteria are all met is the answer.'],
+    limitations: [
+      'AASHTO puts the granular / silt-clay boundary at 35% fines where USCS puts the coarse / fine boundary at 50%. The two systems answer different questions and their results should not be reconciled.',
+    ],
+  },
+
   'uscs.classify': {
     title: 'USCS group symbol',
     category: 'classification',
