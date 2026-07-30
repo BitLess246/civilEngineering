@@ -56,6 +56,10 @@ export const GATED_PREFIXES: readonly string[] = [
 export const PUBLIC_ROUTES: readonly string[] = [
   '/', '/docs', '/validation', '/about', '/pricing',
   '/signin', '/signup', '/forgot-password', '/reset-password',
+  // Policy and contact pages. A customer must be able to read the terms and
+  // find a way to complain WITHOUT an account — and a payment provider
+  // reviewing the site will not have one either.
+  '/terms', '/privacy', '/refunds', '/contact',
 ]
 
 export type AccessVerdict =

@@ -58,6 +58,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
             <a href="#tools" className="rounded-md px-2.5 py-1.5 text-[12.5px] font-semibold text-[#b6c2d0] hover:bg-white/5 hover:text-white">Tools</a>
             <Link to="/docs" className="rounded-md px-2.5 py-1.5 text-[12.5px] font-semibold text-[#b6c2d0] hover:bg-white/5 hover:text-white">Docs</Link>
             <Link to="/validation" className="rounded-md px-2.5 py-1.5 text-[12.5px] font-semibold text-[#b6c2d0] hover:bg-white/5 hover:text-white">Validation</Link>
+            <Link to="/pricing" className="rounded-md px-2.5 py-1.5 text-[12.5px] font-semibold text-[#b6c2d0] hover:bg-white/5 hover:text-white">Plans</Link>
           </div>
           <div className="ml-auto flex items-center gap-2.5">
             <div className="hidden sm:block">{searchBox(false)}</div>

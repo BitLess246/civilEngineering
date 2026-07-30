@@ -14,6 +14,10 @@ import FrameAnalysis from './pages/FrameAnalysis'
 import LoadPath from './pages/LoadPath'
 import Documentation from './pages/Documentation'
 import Validation from './pages/Validation'
+import Terms from './pages/legal/Terms'
+import Privacy from './pages/legal/Privacy'
+import Refunds from './pages/legal/Refunds'
+import Contact from './pages/legal/Contact'
 // three.js is heavy — the 3D pages load in their own lazy chunks.
 const ModelSpace = lazy(() => import('./pages/ModelSpace'))
 const TrussSpace = lazy(() => import('./pages/TrussSpace'))
@@ -71,6 +75,10 @@ export default function App() {
           <AppShell>
             <Routes>
         <Route path="/docs" element={<Documentation />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/refunds" element={<Refunds />} />
+        <Route path="/contact" element={<Contact />} />
         <Route path="/validation" element={<Validation />} />
         <Route path="/foundation" element={<FoundationDesign />} />
         <Route path="/pile-cap" element={<PileCapDesign />} />
