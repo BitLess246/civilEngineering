@@ -14,6 +14,8 @@ import {
   LAB_TESTS, labSpec, isImplemented, evaluateTest, summarise,
 } from '../engine/soils/lab'
 import { classifySample } from '../engine/soils/classifySample'
+import { resolveParameters, bearingInputs, PARAMETER_LABEL } from '../engine/soils/parameters'
+import { describeProvenance, PROVENANCE_LABEL, type SourcedValue } from '../engine/soils/provenance'
 import { cite } from '../engine/soils/standards'
 
 const f2 = (n: number | undefined) => (n == null || !Number.isFinite(n) ? '—' : n.toFixed(2))
@@ -127,7 +129,7 @@ function describeN60(n60: number, layer: SoilLayer | undefined): string {
 
 // ── Page ──────────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'boreholes' | 'profile' | 'spt' | 'lab' | 'classification'
+type Tab = 'overview' | 'boreholes' | 'profile' | 'spt' | 'lab' | 'classification' | 'parameters'
 
 export default function SoilInvestigation() {
   const api = useInvestigation()
@@ -244,7 +246,7 @@ export default function SoilInvestigation() {
       )}
 
       <nav className="mt-6 flex flex-wrap gap-1 border-b border-slate-200">
-        {(['overview', 'boreholes', 'profile', 'spt', 'lab', 'classification'] as Tab[]).map((t) => (
+        {(['overview', 'boreholes', 'profile', 'spt', 'lab', 'parameters', 'classification'] as Tab[]).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`rounded-t-md px-3 py-1.5 text-[13px] font-medium capitalize ${
               tab === t ? 'border-b-2 border-[#0056b3] text-[#0056b3]' : 'text-slate-600 hover:text-slate-900'
@@ -600,6 +602,12 @@ export default function SoilInvestigation() {
               sample.tests = sample.tests.filter((x) => x.id !== testId)
             })}
           />
+        </section>
+      )}
+
+      {tab === 'parameters' && bh && (
+        <section className="mt-5">
+          <ParametersPanel bh={bh} unitWeights={unitWeights} />
         </section>
       )}
 
@@ -1089,6 +1097,139 @@ function ShearPoints({
         className="mt-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50">
         + specimen
       </button>
+    </div>
+  )
+}
+
+// ── Design parameters ─────────────────────────────────────────────────────
+
+const PROVENANCE_STYLE: Record<string, string> = {
+  measured: 'bg-emerald-100 text-emerald-800',
+  derived: 'bg-sky-100 text-sky-800',
+  correlated: 'bg-amber-100 text-amber-900',
+  assumed: 'bg-violet-100 text-violet-800',
+}
+
+/**
+ * A parameter printed to the precision its SOURCE supports.
+ *
+ * A correlated friction angle carries roughly ±3° of scatter — the registry
+ * entry says so in as many words — so printing "46.6°" claims a precision the
+ * relation does not have and invites a reader to treat it like a measurement.
+ * Correlations are shown whole; measurements keep a decimal.
+ */
+function formatParameter(v: SourcedValue): string {
+  if (v.unit === '—' || v.unit === '') return v.value.toFixed(3)
+  const dp = v.provenance.kind === 'correlated' ? 0 : 1
+  return `${v.value.toFixed(dp)} ${v.unit}`
+}
+
+
+function ParametersPanel({
+  bh, unitWeights,
+}: { bh: Borehole; unitWeights: Record<string, LayerUnitWeight> }) {
+  const resolutions = useMemo(
+    () => bh.layers.map((layer) => ({
+      layer,
+      r: resolveParameters({ borehole: bh, layer, unitWeights }),
+    })),
+    [bh, unitWeights],
+  )
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Design parameters</h2>
+        <p className="text-[11px] text-slate-500">
+          Resolved once per layer from every piece of evidence available, each carrying where it came from. A stated
+          engineer override beats a measurement, a measurement beats a correlation, and a parameter with no evidence
+          at all stays <strong>absent</strong> — it is never filled in with a textbook value, because a number that
+          looks measured but is not is the failure this module exists to prevent.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2 text-[10px]">
+          {(['measured', 'derived', 'correlated', 'assumed'] as const).map((k) => (
+            <span key={k} className={`rounded px-1.5 py-0.5 font-semibold ${PROVENANCE_STYLE[k]}`}>
+              {PROVENANCE_LABEL[k]}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {resolutions.map(({ layer, r }) => {
+        const bearing = bearingInputs(r, unitWeights[layer.id]?.gamma)
+        return (
+          <div key={layer.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className="text-[1rem] font-bold text-[#0056b3]">
+                {layer.name}
+                <span className="ml-2 font-mono text-[12px] font-normal text-slate-500">
+                  {f2(layer.depthTop)}–{f2(layer.depthBottom)} m{layer.symbol ? ` · ${layer.symbol}` : ''}
+                </span>
+              </h3>
+            </div>
+
+            {r.resolved.length ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-[12px]">
+                  <thead className="text-slate-500">
+                    <tr className="border-b border-slate-200">
+                      <th className="py-1 pr-3">Parameter</th>
+                      <th className="py-1 pr-3 text-right">Value</th>
+                      <th className="py-1 pr-3">Source</th>
+                      <th className="py-1 pr-3">Basis</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {r.resolved.map((p) => (
+                      <tr key={p.key} className="border-b border-slate-100 align-top">
+                        <td className="py-1 pr-3">{PARAMETER_LABEL[p.key] ?? p.key}</td>
+                        <td className="py-1 pr-3 text-right font-mono font-semibold">
+                          {formatParameter(p.value)}
+                        </td>
+                        <td className="py-1 pr-3">
+                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${PROVENANCE_STYLE[p.value.provenance.kind]}`}>
+                            {PROVENANCE_LABEL[p.value.provenance.kind]}
+                          </span>
+                        </td>
+                        <td className="py-1 pr-3 text-[11px] text-slate-600">
+                          {describeProvenance(p.value.provenance)}
+                          {p.value.note && <span className="block text-slate-500">{p.value.note}</span>}
+                          {p.alternatives.length > 0 && (
+                            <span className="mt-0.5 block text-[10px] text-slate-500">
+                              Also available: {p.alternatives.map((a) =>
+                                `${formatParameter(a)} (${PROVENANCE_LABEL[a.provenance.kind].toLowerCase()})`,
+                              ).join(', ')}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-[12px] text-slate-600">
+                No evidence for any parameter in this layer yet — no laboratory tests on its samples and no usable
+                field tests within it.
+              </p>
+            )}
+
+            {bearing.missing.length > 0 && (
+              <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+                A bearing-capacity check on this layer still needs:{' '}
+                <strong>{bearing.missing.map((k) => PARAMETER_LABEL[k] ?? k).join(', ')}</strong>. Nothing has been
+                assumed on your behalf.
+              </p>
+            )}
+
+            {r.notes.map((n, k) => (
+              <p key={k} className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-700">
+                {n}
+              </p>
+            ))}
+          </div>
+        )
+      })}
     </div>
   )
 }
