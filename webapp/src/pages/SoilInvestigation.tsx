@@ -569,6 +569,16 @@ export default function SoilInvestigation() {
                 .find((x) => x.id === sampleId)?.tests.find((x) => x.id === testId)
               if (t) t.data = { ...t.data, readings: rows }
             })}
+            onPoints={(sampleId, testId, rows) => set((d) => {
+              const t = d.boreholes[holeIdx].samples
+                .find((x) => x.id === sampleId)?.tests.find((x) => x.id === testId)
+              if (t) t.data = { ...t.data, points: rows }
+            })}
+            onChoice={(sampleId, testId, key, value) => set((d) => {
+              const t = d.boreholes[holeIdx].samples
+                .find((x) => x.id === sampleId)?.tests.find((x) => x.id === testId)
+              if (t) t.data = { ...t.data, [key]: value }
+            })}
             onApplySymbol={(layerId, symbol) => set((d) => {
               const l = d.boreholes[holeIdx].layers.find((x) => x.id === layerId)
               if (l) l.symbol = symbol
@@ -677,12 +687,27 @@ function ClassificationPanel() {
 
 // ── Laboratory ────────────────────────────────────────────────────────────
 
+/**
+ * A laboratory result printed to the precision the measurement supports. A
+ * strength read off a proving ring is not known to three decimal places, and
+ * "qu = 97.456 kPa" claims a precision the test does not have. Only the
+ * dimensionless ratios (Gs) earn three.
+ */
+function formatOutcome(s: { label: string; value: number; unit: string }): string {
+  const dp = s.unit === '' ? 3 : 1
+  // No space before a degree sign; one before every other unit.
+  const gap = s.unit === '°' ? '' : ' '
+  return `${s.label} = ${s.value.toFixed(dp)}${s.unit ? gap + s.unit : ''}`
+}
+
 function TestCard({
-  test, onData, onRows, onStatus, onRemove,
+  test, onData, onRows, onPoints, onChoice, onStatus, onRemove,
 }: {
   test: LabTest
   onData: (key: string, value: number) => void
   onRows: (rows: StackRow[]) => void
+  onPoints: (rows: ShearRow[]) => void
+  onChoice: (key: string, value: string) => void
   onStatus: (s: LabTestStatus) => void
   onRemove: () => void
 }) {
@@ -725,6 +750,30 @@ function TestCard({
               onChange={(rows) => onRows(rows)} />
           )}
 
+          {spec!.formKind === 'shear-points' && (
+            <ShearPoints
+              rows={(test.data?.points as ShearRow[] | undefined) ?? []}
+              onChange={(rows) => onPoints(rows)} />
+          )}
+
+          {test.type === 'ucs' && (
+            <label className="mt-2 flex flex-col text-[11px]">
+              <span className="mb-0.5 text-slate-600">Soil condition</span>
+              <select
+                value={(test.data?.soil as string | undefined) ?? 'saturated-cohesive'}
+                onChange={(e) => onChoice('soil', e.target.value)}
+                className="rounded border border-slate-300 px-1.5 py-1">
+                <option value="saturated-cohesive">Saturated cohesive (cu = qu/2 applies)</option>
+                <option value="fissured">Fissured</option>
+                <option value="partly-saturated">Partly saturated</option>
+                <option value="granular">Granular</option>
+              </select>
+              <span className="mt-0.5 text-[10px] text-slate-500">
+                cu = qu/2 assumes φ = 0. Outside a saturated cohesive soil the module reports qu and declines cu.
+              </span>
+            </label>
+          )}
+
           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {spec!.fields.map((f) => (
               <label key={f.key} className="flex flex-col text-[11px]">
@@ -749,9 +798,7 @@ function TestCard({
           {outcome && (
             <div className="mt-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5">
               <p className="font-mono text-[13px] font-semibold text-emerald-900">
-                {summarise(outcome).label} = {summarise(outcome).value.toFixed(
-                  summarise(outcome).unit === '%' ? 1 : 3,
-                )}{summarise(outcome).unit ? ` ${summarise(outcome).unit}` : ''}
+                {formatOutcome(summarise(outcome))}
               </p>
               {outcome.result.notes.map((n, k) => (
                 <p key={k} className="mt-1 text-[10px] text-amber-900">{n}</p>
@@ -769,12 +816,14 @@ function TestCard({
 }
 
 function LabPanel({
-  bh, onAdd, onData, onRows, onStatus, onRemove, onApplySymbol,
+  bh, onAdd, onData, onRows, onPoints, onChoice, onStatus, onRemove, onApplySymbol,
 }: {
   bh: Borehole
   onAdd: (sampleId: string, type: LabTestType) => void
   onData: (sampleId: string, testId: string, key: string, value: number) => void
   onRows: (sampleId: string, testId: string, rows: StackRow[]) => void
+  onPoints: (sampleId: string, testId: string, rows: ShearRow[]) => void
+  onChoice: (sampleId: string, testId: string, key: string, value: string) => void
   onStatus: (sampleId: string, testId: string, status: LabTestStatus) => void
   onRemove: (sampleId: string, testId: string) => void
   onApplySymbol: (layerId: string, symbol: string) => void
@@ -827,6 +876,8 @@ function LabPanel({
                 <TestCard key={t.id} test={t}
                   onData={(key, value) => onData(s.id, t.id, key, value)}
                   onRows={(rows) => onRows(s.id, t.id, rows)}
+                  onPoints={(rows) => onPoints(s.id, t.id, rows)}
+                  onChoice={(key, value) => onChoice(s.id, t.id, key, value)}
                   onStatus={(status) => onStatus(s.id, t.id, status)}
                   onRemove={() => onRemove(s.id, t.id)} />
               ))}
@@ -977,6 +1028,67 @@ function SampleClassificationCard({
           This sample is not attributed to a layer, so there is nothing to apply the symbol to.
         </p>
       )}
+    </div>
+  )
+}
+
+// ── Direct-shear specimens ────────────────────────────────────────────────
+
+interface ShearRow { normalStress: number; peakShear: number; residualShear?: number }
+
+function ShearPoints({
+  rows, onChange,
+}: { rows: ShearRow[]; onChange: (rows: ShearRow[]) => void }) {
+  const pts = rows.length ? rows : [
+    { normalStress: 50, peakShear: 0 },
+    { normalStress: 100, peakShear: 0 },
+    { normalStress: 200, peakShear: 0 },
+  ]
+  const set = (i: number, patch: Partial<ShearRow>) =>
+    onChange(pts.map((r, k) => (k === i ? { ...r, ...patch } : r)))
+
+  return (
+    <div className="mt-2">
+      <table className="w-full text-left text-[11px]">
+        <thead className="text-slate-500">
+          <tr className="border-b border-slate-200">
+            <th className="py-1 pr-2">Specimen</th>
+            <th className="py-1 pr-2 text-right">σ′n (kPa)</th>
+            <th className="py-1 pr-2 text-right">τ peak (kPa)</th>
+            <th className="py-1 pr-2 text-right">τ residual (kPa)</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {pts.map((r, i) => (
+            <tr key={i} className="border-b border-slate-100">
+              <td className="py-0.5 pr-2 text-slate-600">{i + 1}</td>
+              {([
+                ['normalStress', r.normalStress] as const,
+                ['peakShear', r.peakShear] as const,
+                ['residualShear', r.residualShear] as const,
+              ]).map(([key, v]) => (
+                <td key={key} className="py-0.5 pr-2 text-right">
+                  <input type="number" step="any" value={v ?? ''}
+                    placeholder={key === 'residualShear' ? 'optional' : ''}
+                    onChange={(e) => set(i, {
+                      [key]: e.target.value === '' ? undefined : num(e.target.value),
+                    } as Partial<ShearRow>)}
+                    className="w-24 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                </td>
+              ))}
+              <td className="py-0.5 text-right">
+                <button onClick={() => onChange(pts.filter((_, k) => k !== i))}
+                  className="rounded px-1 text-[10px] text-red-600 hover:bg-red-50">×</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <button onClick={() => onChange([...pts, { normalStress: 0, peakShear: 0 }])}
+        className="mt-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50">
+        + specimen
+      </button>
     </div>
   )
 }

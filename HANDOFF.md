@@ -1328,8 +1328,9 @@ because flagging the unusual as an error trains people to ignore errors.
 | 3a — borehole log renderer (geometry) | #479 | open |
 | 3b — investigation UI, routes, profile editor | #480 | merged |
 | 4a — lab plumbing + index tests (moisture, Gs) | #481 | merged |
-| 4b — sieve + Atterberg wired, sample classification | — | open |
-| 4c… — compaction, shear, UCS, triaxial, consolidation, k, CBR | — | |
+| 4b — sieve + Atterberg wired, sample classification | #482 | merged |
+| 4c — direct shear + UCS | — | open |
+| 4d… — compaction, triaxial, consolidation, permeability, CBR | — | |
 | 5 — parameter engine + wiring to existing analysis | — | the payoff |
 | 6 — liquefaction, bearing methods, Coulomb | — | |
 | 7 — report document builder | — | |

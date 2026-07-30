@@ -27,6 +27,10 @@ import {
 } from './specificGravity'
 import { type SieveInput, type SieveReading, gradation, type GradationResult } from '../sieve'
 import { type AtterbergInput, atterberg, type AtterbergResult } from '../atterberg'
+import {
+  type DirectShearData, type ShearPoint, directShear, type DirectShearResult,
+} from './directShear'
+import { type UcsData, type UcsSoil, ucs, type UcsResult } from './ucs'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -107,6 +111,53 @@ export function readAtterberg(test: LabTest): AtterbergInput | undefined {
   }
 }
 
+/**
+ * Direct shear. Like the sieve stack this carries a variable-length table —
+ * one row per specimen — and a row missing either stress is DROPPED, because a
+ * specimen with no recorded normal stress cannot sit on an envelope.
+ */
+export function readDirectShear(test: LabTest): DirectShearData | undefined {
+  const d = test.data
+  if (!isRecord(d) || !Array.isArray(d.points)) return undefined
+
+  const points: ShearPoint[] = []
+  for (const r of d.points) {
+    if (!isRecord(r) || !finite(r.normalStress) || !finite(r.peakShear)) continue
+    points.push({
+      normalStress: r.normalStress,
+      peakShear: r.peakShear,
+      residualShear: finite(r.residualShear) ? r.residualShear : undefined,
+    })
+  }
+  if (points.length < 2) return undefined
+
+  const t = d.testType
+  return {
+    points,
+    testType: t === 'CD' || t === 'CU' || t === 'UU' ? t : undefined,
+  }
+}
+
+const UCS_SOILS: UcsSoil[] = ['saturated-cohesive', 'fissured', 'partly-saturated', 'granular']
+
+export function readUcs(test: LabTest): { data: UcsData; soil: UcsSoil } | undefined {
+  const d = test.data
+  if (!isRecord(d) || !hasNumbers(d, ['diameter', 'height', 'failureLoad', 'failureDeformation'])) {
+    return undefined
+  }
+  const soil = UCS_SOILS.find((s) => s === d.soil) ?? 'saturated-cohesive'
+  return {
+    soil,
+    data: {
+      diameter: d.diameter as number,
+      height: d.height as number,
+      failureLoad: d.failureLoad as number,
+      failureDeformation: d.failureDeformation as number,
+      unitWeight: finite(d.unitWeight) ? d.unitWeight : undefined,
+    },
+  }
+}
+
 // ── Catalogue ─────────────────────────────────────────────────────────────
 
 /** One numeric input on a test form. */
@@ -124,7 +175,7 @@ export interface LabField {
  * How a test's form is laid out. Most tests are a flat list of numbers; a sieve
  * stack is a variable-length table, which no `LabField[]` can express.
  */
-export type LabFormKind = 'fields' | 'sieve-stack'
+export type LabFormKind = 'fields' | 'sieve-stack' | 'shear-points'
 
 export interface LabTestSpec {
   type: LabTestType
@@ -208,9 +259,32 @@ export const LAB_TESTS: readonly LabTestSpec[] = [
     ],
   },
   { type: 'compaction', label: 'Compaction', standard: 'd698', needsUndisturbed: false, fields: [], purpose: 'Maximum dry density and optimum moisture content.' },
-  { type: 'direct-shear', label: 'Direct shear', standard: 'd3080', needsUndisturbed: true, fields: [], purpose: 'Effective cohesion and friction angle from the failure envelope.' },
+  {
+    type: 'direct-shear',
+    label: 'Direct shear',
+    standard: 'd3080',
+    formKind: 'shear-points',
+    calculation: 'directshear.envelope',
+    needsUndisturbed: true,
+    purpose: 'Effective cohesion and friction angle from the Mohr–Coulomb failure envelope.',
+    fields: [],
+  },
   { type: 'triaxial', label: 'Triaxial', standard: 'd4767', needsUndisturbed: true, fields: [], purpose: 'Shear strength under controlled drainage and confinement.' },
-  { type: 'ucs', label: 'Unconfined compression', standard: 'd2166', needsUndisturbed: true, fields: [], purpose: 'Undrained shear strength of a cohesive soil.' },
+  {
+    type: 'ucs',
+    label: 'Unconfined compression',
+    standard: 'd2166',
+    calculation: 'ucs.qu',
+    needsUndisturbed: true,
+    purpose: 'Undrained shear strength of a saturated cohesive soil.',
+    fields: [
+      { key: 'diameter', label: 'Diameter', unit: 'mm', placeholder: 38 },
+      { key: 'height', label: 'Height', unit: 'mm', placeholder: 76 },
+      { key: 'failureLoad', label: 'Load at failure', unit: 'N', placeholder: 120 },
+      { key: 'failureDeformation', label: 'Deformation at failure', unit: 'mm', placeholder: 6 },
+      { key: 'unitWeight', label: 'Bulk unit weight', unit: 'kN/m³', optional: true, placeholder: 18 },
+    ],
+  },
   { type: 'consolidation', label: 'Consolidation', standard: 'd2435', needsUndisturbed: true, fields: [], purpose: 'Compressibility and the rate of settlement.' },
   { type: 'permeability', label: 'Permeability', standard: 'd5084', needsUndisturbed: true, fields: [], purpose: 'Hydraulic conductivity.' },
   { type: 'cbr', label: 'CBR', standard: 'd1883', needsUndisturbed: false, fields: [], purpose: 'Bearing ratio for pavement design.' },
@@ -220,12 +294,23 @@ export const LAB_TESTS: readonly LabTestSpec[] = [
 export const labSpec = (type: LabTestType): LabTestSpec | undefined =>
   LAB_TESTS.find((t) => t.type === type)
 
+/**
+ * Whether a spec has a data form. Flat forms declare `fields`; table-driven
+ * ones (a sieve stack, a set of shear specimens) carry their inputs in a table
+ * and may declare none, so counting fields alone reports them as unimplemented
+ * — which it did for direct shear until a test caught it.
+ */
+const hasForm = (t: LabTestSpec): boolean =>
+  t.fields.length > 0 || (t.formKind != null && t.formKind !== 'fields')
+
 /** Tests that have a data form today. */
-export const implementedTests = (): LabTestSpec[] => LAB_TESTS.filter((t) => t.fields.length > 0)
+export const implementedTests = (): LabTestSpec[] => LAB_TESTS.filter(hasForm)
 
 /** Whether a test type can currently accept results. */
-export const isImplemented = (type: LabTestType): boolean =>
-  (labSpec(type)?.fields.length ?? 0) > 0
+export const isImplemented = (type: LabTestType): boolean => {
+  const spec = labSpec(type)
+  return spec ? hasForm(spec) : false
+}
 
 // ── Evaluation ────────────────────────────────────────────────────────────
 
@@ -234,6 +319,8 @@ export type LabOutcome =
   | { kind: 'specific-gravity'; result: SpecificGravityResult }
   | { kind: 'sieve'; result: GradationResult }
   | { kind: 'atterberg'; result: AtterbergResult }
+  | { kind: 'direct-shear'; result: DirectShearResult }
+  | { kind: 'ucs'; result: UcsResult }
 
 /**
  * Compute a test's result from its stored data.
@@ -265,6 +352,16 @@ export function evaluateTest(test: LabTest): { outcome?: LabOutcome; error?: str
         if (!d) return {}
         return { outcome: { kind: 'atterberg', result: atterberg(d) } }
       }
+      case 'direct-shear': {
+        const d = readDirectShear(test)
+        if (!d) return {}
+        return { outcome: { kind: 'direct-shear', result: directShear(d) } }
+      }
+      case 'ucs': {
+        const d = readUcs(test)
+        if (!d) return {}
+        return { outcome: { kind: 'ucs', result: ucs(d.data, d.soil) } }
+      }
       default:
         return {}
     }
@@ -284,5 +381,9 @@ export function summarise(outcome: LabOutcome): { label: string; value: number; 
       return { label: 'fines', value: outcome.result.fines, unit: '%' }
     case 'atterberg':
       return { label: 'PI', value: outcome.result.plasticityIndex, unit: '%' }
+    case 'direct-shear':
+      return { label: "φ'", value: outcome.result.peak.frictionAngle, unit: '°' }
+    case 'ucs':
+      return { label: 'qu', value: outcome.result.qu, unit: 'kPa' }
   }
 }
