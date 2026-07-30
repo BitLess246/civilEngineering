@@ -49,7 +49,7 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
  * behind a counter.
  */
 export const GATED_PREFIXES: readonly string[] = [
-  '/model', '/frame', '/truss', '/schedule', '/estimate', '/seismic-wizard',
+  '/model', '/frame', '/truss', '/schedule', '/estimate', '/seismic-wizard', '/soils',
 ]
 
 /** Freely readable by anyone, signed in or not — no counter, no gate. */

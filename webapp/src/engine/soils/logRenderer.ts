@@ -23,7 +23,7 @@
 
 import type { PlanPrimitive, Drawing } from '../planRenderer'
 import type { Borehole, SoilLayer } from './model'
-import { layerThickness } from './model'
+import { layerThickness, soilFamily, type SoilFamily } from './model'
 import { fieldN } from './model'
 
 /** Column x-positions and widths, mm of paper. */
@@ -58,34 +58,15 @@ export const DEFAULT_LAYOUT: LogLayout = {
  * get dense lines — the convention on a hand-drafted log, kept because an
  * engineer reads the column before reading the words.
  */
-export type HatchKind = 'gravel' | 'sand' | 'silt' | 'clay' | 'organic' | 'fill' | 'rock' | 'unknown'
+export type HatchKind = SoilFamily
 
-export function hatchFor(symbol: string | undefined, name: string): HatchKind {
-  const s = (symbol ?? '').toUpperCase()
-  const n = name.toLowerCase()
-  if (n.includes('fill')) return 'fill'
-  if (n.includes('rock') || n.includes('bedrock')) return 'rock'
-  if (s.startsWith('G')) return 'gravel'
-  if (s.startsWith('S')) return 'sand'
-  if (s.startsWith('O') || n.includes('organic') || n.includes('peat')) return 'organic'
-  if (s.startsWith('C')) return 'clay'
-  if (s.startsWith('M')) return 'silt'
-
-  // No group symbol: fall back to the description, where THE NOUN GOVERNS.
-  // "Silty Sand" is a sand that happens to be silty — SM, drawn as sand. A
-  // first-match scan returns silt and draws the wrong column, which misleads
-  // an engineer who reads the strata before the words. Soil names put the
-  // adjective first and the noun last, so the LAST match wins.
-  const nouns: [string, HatchKind][] = [
-    ['gravel', 'gravel'], ['sand', 'sand'], ['silt', 'silt'], ['clay', 'clay'],
-  ]
-  let best: { at: number; kind: HatchKind } | undefined
-  for (const [word, kind] of nouns) {
-    const at = n.lastIndexOf(word)
-    if (at >= 0 && (!best || at > best.at)) best = { at, kind }
-  }
-  return best?.kind ?? 'unknown'
-}
+/**
+ * Hatch family for a layer. Delegates to `soilFamily` so the drawing and the
+ * SPT table cannot disagree about what a layer is — they did once, and a
+ * "Silty Sand" came out drawn as silt and described as "firm".
+ */
+export const hatchFor = (symbol: string | undefined, name: string): HatchKind =>
+  soilFamily(symbol, name)
 
 const HATCH_FILL: Record<HatchKind, string> = {
   gravel: '#d6d3d1',

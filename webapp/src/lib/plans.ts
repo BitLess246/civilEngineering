@@ -40,6 +40,8 @@ export type Feature =
   | 'nonlinear'
   /** Save projects to the account. */
   | 'saved-projects'
+  /** Soil-investigation management: boreholes, lab tests, parameters, report. */
+  | 'soil-investigation'
 
 /** How often a paid plan is billed. */
 export type BillingPeriod = 'monthly' | 'annual'
@@ -86,7 +88,7 @@ export interface Plan {
 /** Everything a paid tier unlocks — listed once so the tiers cannot drift. */
 const ALL_FEATURES: readonly Feature[] = [
   'model-space', 'design-pipeline', 'optimizer', 'reports',
-  'estimating', 'scheduling', 'nonlinear', 'saved-projects',
+  'estimating', 'scheduling', 'nonlinear', 'saved-projects', 'soil-investigation',
 ]
 
 /**
@@ -140,7 +142,7 @@ export const PLANS: readonly Plan[] = [
     priceMonthly: 1_399,
     priceAnnual: 15_099,
     tagline: 'The 3D Model Space and the tools built on it.',
-    features: ['model-space', 'design-pipeline', 'optimizer', 'reports', 'estimating', 'saved-projects'],
+    features: ['model-space', 'design-pipeline', 'optimizer', 'reports', 'estimating', 'saved-projects', 'soil-investigation'],
     maxMembers: 400,
     calculatorRuns: null,
     maxProjects: null,
@@ -281,6 +283,7 @@ export function featureLabel(f: Feature): string {
     case 'scheduling': return 'construction scheduling'
     case 'nonlinear': return 'nonlinear analysis'
     case 'saved-projects': return 'saved projects'
+    case 'soil-investigation': return 'the soil-investigation module'
   }
 }
 

@@ -309,6 +309,46 @@ export function parameterValues(p: LayerParameters): SourcedValue[] {
 
 // ── Derived views ─────────────────────────────────────────────────────────
 
+/**
+ * Broad soil family of a layer, from its USCS symbol when classified and
+ * otherwise from its description.
+ *
+ * IN A SOIL NAME THE NOUN GOVERNS. "Silty Sand" is a sand that happens to be
+ * silty (SM); "Sandy Clay" is a clay. A first-match scan of the description
+ * gets both backwards, which then propagates: the log draws the wrong hatch,
+ * and an SPT of 6 in a silty sand gets described as "firm" — a cohesive
+ * consistency term — instead of "loose". So the rule lives here, once, and
+ * both the renderer and the SPT table read it.
+ */
+export type SoilFamily = 'gravel' | 'sand' | 'silt' | 'clay' | 'organic' | 'fill' | 'rock' | 'unknown'
+
+export function soilFamily(symbol: string | undefined, name: string): SoilFamily {
+  const s = (symbol ?? '').toUpperCase()
+  const n = name.toLowerCase()
+  if (n.includes('fill')) return 'fill'
+  if (n.includes('rock') || n.includes('bedrock')) return 'rock'
+  if (s.startsWith('G')) return 'gravel'
+  if (s.startsWith('S')) return 'sand'
+  if (s.startsWith('O') || n.includes('organic') || n.includes('peat')) return 'organic'
+  if (s.startsWith('C')) return 'clay'
+  if (s.startsWith('M')) return 'silt'
+
+  // Description fallback: the LAST noun wins.
+  const nouns: [string, SoilFamily][] = [
+    ['gravel', 'gravel'], ['sand', 'sand'], ['silt', 'silt'], ['clay', 'clay'],
+  ]
+  let best: { at: number; family: SoilFamily } | undefined
+  for (const [word, family] of nouns) {
+    const at = n.lastIndexOf(word)
+    if (at >= 0 && (!best || at > best.at)) best = { at, family }
+  }
+  return best?.family ?? 'unknown'
+}
+
+/** Whether a family is described by consistency (cohesive) or density (granular). */
+export const isCohesive = (f: SoilFamily): boolean =>
+  f === 'clay' || f === 'silt' || f === 'organic'
+
 /** Layer thickness, m. */
 export const layerThickness = (l: SoilLayer): number => l.depthBottom - l.depthTop
 

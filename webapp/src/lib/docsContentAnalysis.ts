@@ -370,4 +370,75 @@ export const ANALYSIS_TOOLS: DocTool[] = [
       },
     ],
   },
+  {
+    id: 'soil-investigation',
+    name: 'Soil Investigation',
+    route: '/soils',
+    group: 'Foundations & geotechnical',
+    summary: 'Manage a site investigation — boreholes, strata, samples, SPT — and classify the soil, so parameters are entered once instead of retyped on every geotechnical page.',
+    basis: 'ASTM D1586 (SPT), D2487 (USCS), D4318 (Atterberg), D6913 (gradation); AASHTO M 145; Skempton (1986) and Youd et al. (2001) corrections.',
+    sections: [
+      {
+        id: 'si-overview',
+        title: 'Investigation',
+        body: 'An investigation is stored in this browser, not on a server. Export the JSON to keep a copy — that is '
+          + 'the backup mechanism, not a convenience. Every edit saves immediately, because field and laboratory data '
+          + 'is expensive to re-enter and an edit lost to a refresh is not a minor annoyance here.',
+        controls: [
+          { kind: 'field', name: 'Reference', what: 'Investigation number as it appears on the report cover, e.g. SI-2026-014.' },
+          { kind: 'field', name: 'Project / Client / Location', what: 'Site identity carried onto the report cover and the borehole logs.' },
+          { kind: 'choice', name: 'Status', what: 'Draft, fieldwork, laboratory, analysis, review or completed — the stage the investigation has reached.' },
+          { kind: 'output', name: 'Data integrity', what: 'Errors are the physically impossible: overlapping layers, groundwater below the hole, a plastic limit above the liquid limit. Warnings are the merely unusual, which is often perfectly real. Nothing is repaired automatically — an unlogged interval may be a logging error or an unrecovered run, and only whoever was on the rig knows which.' },
+        ],
+      },
+      {
+        id: 'si-boreholes',
+        title: 'Boreholes',
+        body: 'Each hole carries its collar elevation, termination depth, diameter and groundwater level. The '
+          + 'diameter feeds the SPT borehole-diameter correction C_B, so it is data rather than description.',
+        controls: [
+          { kind: 'field', name: 'Ground elevation', unit: 'm', what: 'Collar elevation. Optional — without it the log shows depths only, not elevations.' },
+          { kind: 'field', name: 'Depth', unit: 'm', what: 'Termination depth. A profile logged deeper than this is an error; one that stops short is a warning.' },
+          { kind: 'field', name: 'Diameter', unit: 'mm', what: 'Hole diameter, which sets C_B: 1.00 up to 115 mm, 1.05 at 150 mm, 1.15 at 200 mm.' },
+          { kind: 'field', name: 'Groundwater', unit: 'm', what: 'Depth to the water table. Leave blank when it was not encountered — the log then says so rather than drawing a table at an assumed depth.' },
+          { kind: 'output', name: 'Borehole log', what: 'Graphical log with the strata column, hatching, depth scale, water table and SPT values. Hatching follows the USCS symbol where one is entered, otherwise the description, in which the noun governs — "Silty Sand" is drawn as a sand.' },
+        ],
+      },
+      {
+        id: 'si-profile',
+        title: 'Soil profile',
+        controls: [
+          { kind: 'field', name: 'Layer top / base', unit: 'm', what: 'Layer boundaries. Overlaps are an error — two soils cannot occupy the same ground. Gaps are a warning, since an unrecovered run is a real thing to record.' },
+          { kind: 'field', name: 'USCS symbol', what: 'Group symbol once the soil has been classified. Left blank until then: an unclassified layer is an honest state and a guessed symbol is not.' },
+          { kind: 'field', name: 'Description', what: 'Full log description, printed in the log column and wrapped to fit its band.' },
+          { kind: 'output', name: 'Samples', what: 'Samples with their type, depth, recovery ratio and the laboratory tests booked against them. Recovery below 50% is flagged, since results on a poorly recovered sample carry reduced confidence.' },
+        ],
+      },
+      {
+        id: 'si-spt',
+        title: 'SPT',
+        body: 'The raw blow count is not a soil property — it is the response of one hammer, on one rig, through one '
+          + 'length of rod, at one depth. N60 removes the equipment; (N1)60 additionally removes the overburden so '
+          + 'tests at 3 m and 15 m in the same sand can be compared.',
+        controls: [
+          { kind: 'field', name: 'Unit weights γ, γsat', unit: 'kN/m³', what: 'Entered per layer to build the effective-stress profile that (N1)60 needs. They are an interpretation rather than measured data, so they live on the page rather than in the stored investigation. Layers left blank stop the stress profile there — the blow counts below are still corrected for equipment, just not for overburden.' },
+          { kind: 'output', name: 'N60', what: 'Field N corrected for hammer energy, borehole diameter, sampler and rod length.' },
+          { kind: 'output', name: '(N1)60', what: 'N60 further corrected to a 100 kPa reference overburden, with C_N capped at 1.7 so a shallow test is not inflated without limit.' },
+          { kind: 'output', name: 'Refusal', what: 'A drive that did not achieve full penetration is marked with an asterisk and shaded. Its N is a LOWER BOUND, not a measurement, and correlations are declined on it — correcting a lower bound makes it look more precise without making it more accurate.' },
+        ],
+      },
+      {
+        id: 'si-classification',
+        title: 'Classification',
+        body: 'USCS to ASTM D2487, taken branch by branch. It will not collapse a dual symbol — a sand with 5-12% '
+          + 'fines is genuinely SW-SC, not SW with a footnote — and it will not classify from incomplete data.',
+        controls: [
+          { kind: 'field', name: 'Gravel / Sand / Fines', unit: '%', what: 'Fractions from the gradation curve, split at 4.75 mm and 0.075 mm.' },
+          { kind: 'field', name: 'Cu, Cc', what: 'Gradation shape parameters. A gravel is well graded at Cu ≥ 4, a sand needs Cu ≥ 6, and both need 1 ≤ Cc ≤ 3.' },
+          { kind: 'field', name: 'LL, PL', unit: '%', what: 'Atterberg limits. PI = LL − PL decides whether the fines behave as clay or silt, against the Casagrande A-line.' },
+          { kind: 'output', name: 'Group symbol and name', what: 'The D2487 result, with the reasoning printed underneath. Where a needed test has not been run the classifier says which one rather than picking the likeliest symbol.' },
+        ],
+      },
+    ],
+  },
 ]
