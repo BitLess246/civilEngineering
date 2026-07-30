@@ -8,11 +8,12 @@ import { classifyUSCS } from '../engine/soils/uscs'
 import { densityFromN60, consistencyFromN60 } from '../engine/soils/spt'
 import {
   layerThickness, recoveryRatio, soilFamily, isCohesive,
-  type Borehole, type SoilLayer, type LabTest, type LabTestType, type LabTestStatus,
+  type Borehole, type SoilLayer, type Sample, type LabTest, type LabTestType, type LabTestStatus,
 } from '../engine/soils/model'
 import {
   LAB_TESTS, labSpec, isImplemented, evaluateTest, summarise,
 } from '../engine/soils/lab'
+import { classifySample } from '../engine/soils/classifySample'
 import { cite } from '../engine/soils/standards'
 
 const f2 = (n: number | undefined) => (n == null || !Number.isFinite(n) ? '—' : n.toFixed(2))
@@ -563,6 +564,15 @@ export default function SoilInvestigation() {
                 status: isImplemented(type) ? 'in-progress' : 'planned',
               })
             })}
+            onRows={(sampleId, testId, rows) => set((d) => {
+              const t = d.boreholes[holeIdx].samples
+                .find((x) => x.id === sampleId)?.tests.find((x) => x.id === testId)
+              if (t) t.data = { ...t.data, readings: rows }
+            })}
+            onApplySymbol={(layerId, symbol) => set((d) => {
+              const l = d.boreholes[holeIdx].layers.find((x) => x.id === layerId)
+              if (l) l.symbol = symbol
+            })}
             onData={(sampleId, testId, key, value) => set((d) => {
               const t = d.boreholes[holeIdx].samples
                 .find((x) => x.id === sampleId)?.tests.find((x) => x.id === testId)
@@ -668,10 +678,11 @@ function ClassificationPanel() {
 // ── Laboratory ────────────────────────────────────────────────────────────
 
 function TestCard({
-  test, onData, onStatus, onRemove,
+  test, onData, onRows, onStatus, onRemove,
 }: {
   test: LabTest
   onData: (key: string, value: number) => void
+  onRows: (rows: StackRow[]) => void
   onStatus: (s: LabTestStatus) => void
   onRemove: () => void
 }) {
@@ -708,6 +719,12 @@ function TestCard({
         </p>
       ) : (
         <>
+          {spec!.formKind === 'sieve-stack' && (
+            <SieveStack
+              rows={(test.data?.readings as StackRow[] | undefined) ?? []}
+              onChange={(rows) => onRows(rows)} />
+          )}
+
           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {spec!.fields.map((f) => (
               <label key={f.key} className="flex flex-col text-[11px]">
@@ -752,13 +769,15 @@ function TestCard({
 }
 
 function LabPanel({
-  bh, onAdd, onData, onStatus, onRemove,
+  bh, onAdd, onData, onRows, onStatus, onRemove, onApplySymbol,
 }: {
   bh: Borehole
   onAdd: (sampleId: string, type: LabTestType) => void
   onData: (sampleId: string, testId: string, key: string, value: number) => void
+  onRows: (sampleId: string, testId: string, rows: StackRow[]) => void
   onStatus: (sampleId: string, testId: string, status: LabTestStatus) => void
   onRemove: (sampleId: string, testId: string) => void
+  onApplySymbol: (layerId: string, symbol: string) => void
 }) {
   if (!bh.samples.length) {
     return (
@@ -807,6 +826,7 @@ function LabPanel({
               {s.tests.map((t) => (
                 <TestCard key={t.id} test={t}
                   onData={(key, value) => onData(s.id, t.id, key, value)}
+                  onRows={(rows) => onRows(s.id, t.id, rows)}
                   onStatus={(status) => onStatus(s.id, t.id, status)}
                   onRemove={() => onRemove(s.id, t.id)} />
               ))}
@@ -814,8 +834,149 @@ function LabPanel({
           ) : (
             <p className="text-[12px] text-slate-500">No tests booked on this sample.</p>
           )}
+
+          <SampleClassificationCard sample={s} layers={bh.layers} onApply={onApplySymbol} />
         </div>
       ))}
+    </div>
+  )
+}
+
+// ── Sieve stack ───────────────────────────────────────────────────────────
+
+/** Standard stack a blank sieve test starts from. */
+const DEFAULT_STACK: { size: number; designation: string }[] = [
+  { size: 9.5, designation: '3/8 in' },
+  { size: 4.75, designation: 'No. 4' },
+  { size: 2.0, designation: 'No. 10' },
+  { size: 0.85, designation: 'No. 20' },
+  { size: 0.425, designation: 'No. 40' },
+  { size: 0.15, designation: 'No. 100' },
+  { size: 0.075, designation: 'No. 200' },
+]
+
+interface StackRow { size: number; designation?: string; massRetained: number }
+
+function SieveStack({
+  rows, onChange,
+}: { rows: StackRow[]; onChange: (rows: StackRow[]) => void }) {
+  const stack = rows.length ? rows : DEFAULT_STACK.map((r) => ({ ...r, massRetained: 0 }))
+  const set = (i: number, patch: Partial<StackRow>) =>
+    onChange(stack.map((r, k) => (k === i ? { ...r, ...patch } : r)))
+
+  return (
+    <div className="mt-2">
+      <table className="w-full text-left text-[11px]">
+        <thead className="text-slate-500">
+          <tr className="border-b border-slate-200">
+            <th className="py-1 pr-2">Sieve</th>
+            <th className="py-1 pr-2">Opening (mm)</th>
+            <th className="py-1 pr-2 text-right">Mass retained (g)</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {stack.map((r, i) => (
+            <tr key={i} className="border-b border-slate-100">
+              <td className="py-0.5 pr-2">
+                <input value={r.designation ?? ''} placeholder="—"
+                  onChange={(e) => set(i, { designation: e.target.value || undefined })}
+                  className="w-20 rounded border border-slate-200 px-1 py-0.5" />
+              </td>
+              <td className="py-0.5 pr-2">
+                <input type="number" step="any" value={r.size}
+                  onChange={(e) => set(i, { size: num(e.target.value) })}
+                  className="w-20 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+              </td>
+              <td className="py-0.5 pr-2 text-right">
+                <input type="number" step="any" value={r.massRetained}
+                  onChange={(e) => set(i, { massRetained: num(e.target.value) })}
+                  className="w-24 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+              </td>
+              <td className="py-0.5 text-right">
+                <button onClick={() => onChange(stack.filter((_, k) => k !== i))}
+                  className="rounded px-1 text-[10px] text-red-600 hover:bg-red-50">×</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <button
+        onClick={() => onChange([...stack, { size: 0.075, massRetained: 0 }])}
+        className="mt-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50">
+        + sieve
+      </button>
+    </div>
+  )
+}
+
+// ── Sample classification ─────────────────────────────────────────────────
+
+function SampleClassificationCard({
+  sample, layers, onApply,
+}: {
+  sample: Sample
+  layers: SoilLayer[]
+  onApply: (layerId: string, symbol: string) => void
+}) {
+  const c = useMemo(() => classifySample(sample), [sample])
+  const layer = layers.find((l) => l.id === sample.layerId)
+  const symbol = c.uscs?.symbol
+
+  return (
+    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">
+        Classification from this sample
+      </p>
+
+      {symbol ? (
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="font-mono text-[16px] font-semibold text-[#0056b3]">{symbol}</span>
+          <span className="text-[12px] text-slate-700">{c.uscs!.name}</span>
+          {c.aashto?.label && (
+            <span className="font-mono text-[11px] text-slate-500">AASHTO {c.aashto.label}</span>
+          )}
+        </div>
+      ) : (
+        <p className="mt-1 text-[12px] text-slate-600">
+          {c.uscs?.reason ?? 'Not enough laboratory data to classify this sample yet.'}
+        </p>
+      )}
+
+      {c.missing.length > 0 && (
+        <p className="mt-1.5 text-[11px] text-slate-600">
+          Run to complete it: <strong>{c.missing.join(', ')}</strong>
+        </p>
+      )}
+
+      {symbol && c.uscs!.reason && (
+        <p className="mt-1.5 text-[11px] text-slate-600">{c.uscs!.reason}</p>
+      )}
+
+      {c.notes.map((n, k) => (
+        <p key={k} className="mt-1 text-[10px] text-amber-900">{n}</p>
+      ))}
+
+      {symbol && layer && (
+        layer.symbol === symbol ? (
+          <p className="mt-2 text-[11px] text-emerald-700">
+            Layer &ldquo;{layer.name}&rdquo; already carries {symbol}.
+          </p>
+        ) : (
+          <button onClick={() => onApply(layer.id, symbol)}
+            className="mt-2 rounded-md bg-[#0056b3] px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-[#004a99]">
+            {layer.symbol
+              ? `Replace ${layer.symbol} with ${symbol} on “${layer.name}”`
+              : `Apply ${symbol} to “${layer.name}”`}
+          </button>
+        )
+      )}
+
+      {symbol && !layer && (
+        <p className="mt-2 text-[11px] text-slate-500">
+          This sample is not attributed to a layer, so there is nothing to apply the symbol to.
+        </p>
+      )}
     </div>
   )
 }
