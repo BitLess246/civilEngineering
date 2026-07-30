@@ -1,0 +1,163 @@
+// A realistic, VALID sample investigation — two boreholes on a Baguio City
+// site with a fill crust over soft clay over dense sand.
+//
+// Used as the seed for "load an example" in the UI and as the fixture the
+// validation tests measure against: the suite asserts this passes clean, then
+// breaks one field at a time. A fixture that already carries warnings would
+// make those tests unable to tell a new warning from an old one.
+
+import type { Investigation } from './model'
+
+export function sampleInvestigation(): Investigation {
+  return {
+    meta: {
+      investigationNo: 'SI-2026-014',
+      title: 'Geotechnical Investigation — 6-Storey Commercial Building',
+      site: {
+        projectName: 'ABC Commercial Building',
+        client: 'ABC Development Corp.',
+        location: 'Session Road, Baguio City',
+        latitude: 16.4108,
+        longitude: 120.5960,
+        elevation: 1_450,
+        description: 'Gently sloping corner lot, previously occupied by a two-storey structure since demolished.',
+        existingConditions: 'Slab-on-grade of the former structure remains over the northern half of the lot.',
+      },
+      consultant: '',
+      engineer: '',
+      investigationDate: '2026-06-15',
+      status: 'laboratory',
+    },
+    fieldObservations: 'Seepage observed at the base of the cut along the eastern boundary during fieldwork.',
+    boreholes: [
+      {
+        id: 'bh1',
+        name: 'BH-01',
+        kind: 'borehole',
+        latitude: 16.41082,
+        longitude: 120.59605,
+        groundElevation: 1_450.35,
+        plannedDepth: 20,
+        actualDepth: 20,
+        diameter: 100,
+        method: 'rotary-wash',
+        startDate: '2026-06-15',
+        completionDate: '2026-06-17',
+        groundwaterDepth: 7.8,
+        terminationReason: 'Planned depth reached in dense sand.',
+        layers: [
+          {
+            id: 'bh1-l1', depthTop: 0, depthBottom: 1.5, name: 'Fill',
+            description: 'Loose silty sand fill with brick and concrete fragments.',
+            colour: 'brown', density: 'loose', moisture: 'moist',
+          },
+          {
+            id: 'bh1-l2', depthTop: 1.5, depthBottom: 4.2, name: 'Silty Sand',
+            description: 'Medium dense silty fine to medium SAND, trace gravel.',
+            colour: 'light brown', density: 'medium-dense', moisture: 'moist',
+          },
+          {
+            id: 'bh1-l3', depthTop: 4.2, depthBottom: 8.5, name: 'Lean Clay',
+            description: 'Soft to firm lean CLAY with sand, occasional organic partings.',
+            colour: 'grey', consistency: 'soft', moisture: 'wet',
+          },
+          {
+            id: 'bh1-l4', depthTop: 8.5, depthBottom: 20, name: 'Poorly Graded Sand',
+            description: 'Dense to very dense poorly graded SAND, trace fines.',
+            colour: 'grey-brown', density: 'dense', moisture: 'saturated',
+          },
+        ],
+        samples: [
+          {
+            id: 'bh1-s1', name: 'S-01', layerId: 'bh1-l2', type: 'split-spoon',
+            depthTop: 1.5, depthBottom: 1.95, standard: 'd1586',
+            recoveryLength: 0.38, driveLength: 0.45, sampleDate: '2026-06-15',
+            tests: [
+              { id: 'bh1-s1-t1', type: 'moisture', standard: 'd2216', status: 'complete', testDate: '2026-06-18' },
+              { id: 'bh1-s1-t2', type: 'sieve', standard: 'd6913', status: 'complete', testDate: '2026-06-19' },
+            ],
+          },
+          {
+            id: 'bh1-s2', name: 'S-02', layerId: 'bh1-l3', type: 'shelby-tube',
+            depthTop: 5, depthBottom: 5.75, standard: 'd1587',
+            recoveryLength: 0.71, driveLength: 0.75, sampleDate: '2026-06-16',
+            tests: [
+              { id: 'bh1-s2-t1', type: 'moisture', standard: 'd2216', status: 'complete', testDate: '2026-06-18' },
+              { id: 'bh1-s2-t2', type: 'atterberg', standard: 'd4318', status: 'complete', testDate: '2026-06-19' },
+              { id: 'bh1-s2-t3', type: 'ucs', standard: 'd2166', status: 'complete', testDate: '2026-06-22' },
+              { id: 'bh1-s2-t4', type: 'consolidation', standard: 'd2435', status: 'in-progress' },
+            ],
+          },
+          {
+            id: 'bh1-s3', name: 'S-03', layerId: 'bh1-l4', type: 'split-spoon',
+            depthTop: 9, depthBottom: 9.45, standard: 'd1586',
+            recoveryLength: 0.3, driveLength: 0.45, sampleDate: '2026-06-16',
+            tests: [
+              { id: 'bh1-s3-t1', type: 'sieve', standard: 'd6913', status: 'complete', testDate: '2026-06-19' },
+            ],
+          },
+        ],
+        spt: [
+          { id: 'bh1-n1', depth: 1.5, blows: [3, 4, 4], penetration: [150, 150, 150], hammer: 'safety', rodLength: 3, sampleId: 'bh1-s1' },
+          { id: 'bh1-n2', depth: 3, blows: [5, 7, 7], penetration: [150, 150, 150], hammer: 'safety', rodLength: 4.5 },
+          { id: 'bh1-n3', depth: 4.5, blows: [1, 2, 2], penetration: [150, 150, 150], hammer: 'safety', rodLength: 6 },
+          { id: 'bh1-n4', depth: 6, blows: [1, 2, 3], penetration: [150, 150, 150], hammer: 'safety', rodLength: 7.5 },
+          { id: 'bh1-n5', depth: 9, blows: [12, 16, 19], penetration: [150, 150, 150], hammer: 'safety', rodLength: 10.5, sampleId: 'bh1-s3' },
+          { id: 'bh1-n6', depth: 12, blows: [15, 21, 24], penetration: [150, 150, 150], hammer: 'safety', rodLength: 13.5 },
+          { id: 'bh1-n7', depth: 15, blows: [18, 25, 28], penetration: [150, 150, 150], hammer: 'safety', rodLength: 16.5 },
+          { id: 'bh1-n8', depth: 18, blows: [22, 29, 33], penetration: [150, 150, 150], hammer: 'safety', rodLength: 19.5 },
+        ],
+      },
+      {
+        id: 'bh2',
+        name: 'BH-02',
+        kind: 'borehole',
+        latitude: 16.41075,
+        longitude: 120.59618,
+        groundElevation: 1_449.10,
+        plannedDepth: 20,
+        actualDepth: 20,
+        diameter: 100,
+        method: 'rotary-wash',
+        startDate: '2026-06-18',
+        completionDate: '2026-06-20',
+        groundwaterDepth: 7.2,
+        terminationReason: 'Planned depth reached in dense sand.',
+        layers: [
+          {
+            id: 'bh2-l1', depthTop: 0, depthBottom: 2.1, name: 'Fill',
+            description: 'Loose silty sand fill.', colour: 'brown', density: 'loose', moisture: 'moist',
+          },
+          {
+            id: 'bh2-l2', depthTop: 2.1, depthBottom: 9.4, name: 'Lean Clay',
+            description: 'Soft lean CLAY with sand.', colour: 'grey', consistency: 'soft', moisture: 'wet',
+          },
+          {
+            id: 'bh2-l3', depthTop: 9.4, depthBottom: 20, name: 'Poorly Graded Sand',
+            description: 'Dense poorly graded SAND.', colour: 'grey-brown', density: 'dense', moisture: 'saturated',
+          },
+        ],
+        samples: [
+          {
+            id: 'bh2-s1', name: 'S-01', layerId: 'bh2-l2', type: 'shelby-tube',
+            depthTop: 4, depthBottom: 4.75, standard: 'd1587',
+            recoveryLength: 0.68, driveLength: 0.75, sampleDate: '2026-06-18',
+            tests: [
+              { id: 'bh2-s1-t1', type: 'moisture', standard: 'd2216', status: 'complete', testDate: '2026-06-21' },
+              { id: 'bh2-s1-t2', type: 'atterberg', standard: 'd4318', status: 'complete', testDate: '2026-06-22' },
+              { id: 'bh2-s1-t3', type: 'triaxial', standard: 'd4767', status: 'planned' },
+            ],
+          },
+        ],
+        spt: [
+          { id: 'bh2-n1', depth: 1.5, blows: [2, 3, 4], penetration: [150, 150, 150], hammer: 'safety', rodLength: 3 },
+          { id: 'bh2-n2', depth: 4.5, blows: [1, 2, 2], penetration: [150, 150, 150], hammer: 'safety', rodLength: 6, sampleId: 'bh2-s1' },
+          { id: 'bh2-n3', depth: 7.5, blows: [2, 2, 3], penetration: [150, 150, 150], hammer: 'safety', rodLength: 9 },
+          { id: 'bh2-n4', depth: 10.5, blows: [14, 18, 21], penetration: [150, 150, 150], hammer: 'safety', rodLength: 12 },
+          { id: 'bh2-n5', depth: 15, blows: [19, 26, 30], penetration: [150, 150, 150], hammer: 'safety', rodLength: 16.5 },
+        ],
+      },
+    ],
+    parameters: [],
+  }
+}
