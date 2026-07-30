@@ -8,8 +8,12 @@ import { classifyUSCS } from '../engine/soils/uscs'
 import { densityFromN60, consistencyFromN60 } from '../engine/soils/spt'
 import {
   layerThickness, recoveryRatio, soilFamily, isCohesive,
-  type Borehole, type SoilLayer,
+  type Borehole, type SoilLayer, type LabTest, type LabTestType, type LabTestStatus,
 } from '../engine/soils/model'
+import {
+  LAB_TESTS, labSpec, isImplemented, evaluateTest, summarise,
+} from '../engine/soils/lab'
+import { cite } from '../engine/soils/standards'
 
 const f2 = (n: number | undefined) => (n == null || !Number.isFinite(n) ? '—' : n.toFixed(2))
 const f1 = (n: number | undefined) => (n == null || !Number.isFinite(n) ? '—' : n.toFixed(1))
@@ -122,7 +126,7 @@ function describeN60(n60: number, layer: SoilLayer | undefined): string {
 
 // ── Page ──────────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'boreholes' | 'profile' | 'spt' | 'classification'
+type Tab = 'overview' | 'boreholes' | 'profile' | 'spt' | 'lab' | 'classification'
 
 export default function SoilInvestigation() {
   const api = useInvestigation()
@@ -239,12 +243,12 @@ export default function SoilInvestigation() {
       )}
 
       <nav className="mt-6 flex flex-wrap gap-1 border-b border-slate-200">
-        {(['overview', 'boreholes', 'profile', 'spt', 'classification'] as Tab[]).map((t) => (
+        {(['overview', 'boreholes', 'profile', 'spt', 'lab', 'classification'] as Tab[]).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`rounded-t-md px-3 py-1.5 text-[13px] font-medium capitalize ${
               tab === t ? 'border-b-2 border-[#0056b3] text-[#0056b3]' : 'text-slate-600 hover:text-slate-900'
             }`}>
-            {t === 'spt' ? 'SPT' : t}
+            {t === 'spt' ? 'SPT' : t === 'lab' ? 'Laboratory' : t}
           </button>
         ))}
       </nav>
@@ -546,6 +550,39 @@ export default function SoilInvestigation() {
       )}
 
       {/* ── Classification ── */}
+      {tab === 'lab' && bh && (
+        <section className="mt-5">
+          <LabPanel
+            bh={bh}
+            onAdd={(sampleId, type) => set((d) => {
+              const spec = labSpec(type)!
+              const sample = d.boreholes[holeIdx].samples.find((x) => x.id === sampleId)
+              sample?.tests.push({
+                id: `t_${Date.now().toString(36)}`,
+                type, standard: spec.standard,
+                status: isImplemented(type) ? 'in-progress' : 'planned',
+              })
+            })}
+            onData={(sampleId, testId, key, value) => set((d) => {
+              const t = d.boreholes[holeIdx].samples
+                .find((x) => x.id === sampleId)?.tests.find((x) => x.id === testId)
+              if (!t) return
+              t.data = { ...t.data, [key]: value }
+            })}
+            onStatus={(sampleId, testId, status) => set((d) => {
+              const t = d.boreholes[holeIdx].samples
+                .find((x) => x.id === sampleId)?.tests.find((x) => x.id === testId)
+              if (t) t.status = status
+            })}
+            onRemove={(sampleId, testId) => set((d) => {
+              const sample = d.boreholes[holeIdx].samples.find((x) => x.id === sampleId)
+              if (!sample) return
+              sample.tests = sample.tests.filter((x) => x.id !== testId)
+            })}
+          />
+        </section>
+      )}
+
       {tab === 'classification' && (
         <section className="mt-5">
           <ClassificationPanel />
@@ -624,6 +661,161 @@ function ClassificationPanel() {
           </p>
         )}
       </div>
+    </div>
+  )
+}
+
+// ── Laboratory ────────────────────────────────────────────────────────────
+
+function TestCard({
+  test, onData, onStatus, onRemove,
+}: {
+  test: LabTest
+  onData: (key: string, value: number) => void
+  onStatus: (s: LabTestStatus) => void
+  onRemove: () => void
+}) {
+  const spec = labSpec(test.type)
+  const { outcome, error } = evaluateTest(test)
+  const implemented = isImplemented(test.type)
+
+  return (
+    <div className={`rounded-lg border p-3 ${test.status === 'void' ? 'border-slate-200 bg-slate-50 opacity-70' : 'border-slate-200 bg-white'}`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <span className="text-[13px] font-semibold text-slate-800">{spec?.label ?? test.type}</span>
+          <span className="ml-2 font-mono text-[10px] text-slate-500">{cite(test.standard)}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <select value={test.status} onChange={(e) => onStatus(e.target.value as LabTestStatus)}
+            className="rounded border border-slate-300 px-1.5 py-0.5 text-[11px]">
+            {(['planned', 'in-progress', 'complete', 'void'] as LabTestStatus[]).map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+          <button onClick={onRemove} className="rounded px-1.5 py-0.5 text-[11px] text-red-600 hover:bg-red-50">
+            remove
+          </button>
+        </div>
+      </div>
+
+      {spec?.purpose && <p className="mt-1 text-[11px] text-slate-500">{spec.purpose}</p>}
+
+      {!implemented ? (
+        <p className="mt-2 rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] text-slate-600">
+          Booked against this sample. No data form yet — this test&rsquo;s engine has not shipped, and the schedule
+          shows it rather than hiding it.
+        </p>
+      ) : (
+        <>
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {spec!.fields.map((f) => (
+              <label key={f.key} className="flex flex-col text-[11px]">
+                <span className="mb-0.5 text-slate-600">
+                  {f.label}{f.unit ? ` (${f.unit})` : ''}{f.optional ? '' : ' *'}
+                </span>
+                <input type="number" step="any"
+                  value={(test.data?.[f.key] as number | undefined) ?? ''}
+                  placeholder={f.placeholder != null ? String(f.placeholder) : ''}
+                  onChange={(e) => onData(f.key, num(e.target.value))}
+                  className="rounded border border-slate-300 px-1.5 py-1 text-right font-mono" />
+              </label>
+            ))}
+          </div>
+
+          {error && (
+            <p className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-800">
+              {error}
+            </p>
+          )}
+
+          {outcome && (
+            <div className="mt-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5">
+              <p className="font-mono text-[13px] font-semibold text-emerald-900">
+                {summarise(outcome).label} = {summarise(outcome).value.toFixed(
+                  summarise(outcome).unit === '%' ? 1 : 3,
+                )}{summarise(outcome).unit ? ` ${summarise(outcome).unit}` : ''}
+              </p>
+              {outcome.result.notes.map((n, k) => (
+                <p key={k} className="mt-1 text-[10px] text-amber-900">{n}</p>
+              ))}
+            </div>
+          )}
+
+          {!outcome && !error && (
+            <p className="mt-2 text-[11px] text-slate-500">Enter every required field to compute a result.</p>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function LabPanel({
+  bh, onAdd, onData, onStatus, onRemove,
+}: {
+  bh: Borehole
+  onAdd: (sampleId: string, type: LabTestType) => void
+  onData: (sampleId: string, testId: string, key: string, value: number) => void
+  onStatus: (sampleId: string, testId: string, status: LabTestStatus) => void
+  onRemove: (sampleId: string, testId: string) => void
+}) {
+  if (!bh.samples.length) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <p className="text-[12px] text-slate-600">
+          No samples in {bh.name}. Laboratory tests are booked against a sample, not a layer — a sample recovered
+          across a stratigraphic boundary belongs to the hole at a depth.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {bh.samples.map((s) => (
+        <div key={s.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-[1.05rem] font-bold text-[#0056b3]">
+              {s.name}
+              <span className="ml-2 font-mono text-[12px] font-normal text-slate-500">
+                {f2(s.depthTop)}–{f2(s.depthBottom)} m · {s.type}
+              </span>
+            </h2>
+            <select value="" onChange={(e) => { if (e.target.value) onAdd(s.id, e.target.value as LabTestType) }}
+              className="rounded-md border border-slate-300 px-2 py-1 text-[12px]">
+              <option value="">+ add a test…</option>
+              {LAB_TESTS.map((t) => (
+                <option key={t.type} value={t.type}>
+                  {t.label}{isImplemented(t.type) ? '' : ' (no form yet)'}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* A strength or compressibility test needs an undisturbed specimen. */}
+          {s.tests.some((t) => labSpec(t.type)?.needsUndisturbed && t.status !== 'void')
+            && !['undisturbed', 'shelby-tube', 'core'].includes(s.type) && (
+            <p className="mb-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+              A strength or compressibility test is booked on a <strong>{s.type}</strong> sample. Those need an
+              undisturbed specimen — the result will understate the in-situ soil.
+            </p>
+          )}
+
+          {s.tests.length ? (
+            <div className="space-y-2">
+              {s.tests.map((t) => (
+                <TestCard key={t.id} test={t}
+                  onData={(key, value) => onData(s.id, t.id, key, value)}
+                  onStatus={(status) => onStatus(s.id, t.id, status)}
+                  onRemove={() => onRemove(s.id, t.id)} />
+              ))}
+            </div>
+          ) : (
+            <p className="text-[12px] text-slate-500">No tests booked on this sample.</p>
+          )}
+        </div>
+      ))}
     </div>
   )
 }

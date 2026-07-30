@@ -1326,18 +1326,23 @@ because flagging the unusual as an error trains people to ignore errors.
 | 1 — classification (Atterberg, sieve, USCS, AASHTO) | #477 | merged |
 | 2 — SPT corrections, correlations, overburden | #478 | merged |
 | 3a — borehole log renderer (geometry) | #479 | open |
-| 3b — investigation UI, routes, profile editor | — | next |
-| 4 — laboratory suite | — | |
+| 3b — investigation UI, routes, profile editor | #480 | merged |
+| 4a — lab plumbing + index tests (moisture, Gs) | — | open |
+| 4b… — remaining lab tests | — | |
 | 5 — parameter engine + wiring to existing analysis | — | the payoff |
 | 6 — liquefaction, bearing methods, Coulomb | — | |
 | 7 — report document builder | — | |
 | 8 — Postgres, CPT, 3D subsurface | — | |
 
-**Everything so far is engine-only** — 364 tests across 12 modules, and not one
-line of it is reachable from the app yet. Phase 3b is the first with routes, and
-therefore the first to hit `docsContent.test.ts` (every route needs a docs
-entry) and `featureGate.ts` (`ROUTE_FEATURE` key-set equality with
-`trialQuota.GATED_PREFIXES`).
+**`/soils` is live**, gated behind the `soil-investigation` feature on pro and
+max. Six tabs: overview and integrity, boreholes with the graphical log,
+stratigraphy and samples, corrected SPT, laboratory tests, and a USCS
+classifier.
+
+**Storage decision, settled:** stay on the `SoilsStore` interface over
+localStorage; swap in a Supabase backend at Phase 8. Confirmed with the user
+before Phase 4 started, since that is the phase where lab-test shapes make a
+schema change expensive.
 
 **Two recurring lessons from these phases**, both worth remembering:
 
@@ -1350,3 +1355,7 @@ entry) and `featureGate.ts` (`ROUTE_FEATURE` key-set equality with
    each term of AASHTO M 145 at zero before summing, which is a different
    equation from the one the standard prints — 40% fines at LL 20 / PI 2 is 0,
    not 1.
+3. *One rule, one home.* The noun bug came back in Phase 3b because the page
+   grew its own `/clay|silt/` regex — a second independent reading of the same
+   field, which disagreed with the first within a day. `soilFamily` now lives in
+   `model.ts` and a test asserts the renderer and the page cannot drift apart.
