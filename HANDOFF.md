@@ -1325,30 +1325,31 @@ because flagging the unusual as an error trains people to ignore errors.
 | 0 — model, provenance, registry, store | #476 | merged |
 | 1 — classification (Atterberg, sieve, USCS, AASHTO) | #477 | merged |
 | 2 — SPT corrections, correlations, overburden | #478 | merged |
-| 3a — borehole log renderer (geometry) | #479 | open |
+| 3a — borehole log renderer (geometry) | #479 | merged |
 | 3b — investigation UI, routes, profile editor | #480 | merged |
 | 4a — lab plumbing + index tests (moisture, Gs) | #481 | merged |
 | 4b — sieve + Atterberg wired, sample classification | #482 | merged |
 | 4c — direct shear + UCS | #483 | merged |
 | 5 — parameter engine (resolution + provenance) | #484 | merged |
 | 5b — parameters wired into bearing capacity and slope | #485 | merged |
-| 4d — consolidation (Cc, Cr, σ′p, cv) | — | open |
-| 4e… — compaction, triaxial, permeability, CBR, hydrometer | — | |
+| 4d — consolidation (Cc, Cr, σ′p, cv) | #486 | merged |
+| 4e — lab charts (envelope, e–log σ′, grading) | #487 | open |
+| 4f… — compaction, triaxial, permeability, CBR, hydrometer | — | |
 | 6 — liquefaction, bearing methods, Coulomb | — | |
 | 7 — report document builder | — | |
 | 8 — Postgres, CPT, 3D subsurface | — | |
 
 **`/soils` is live**, gated behind the `soil-investigation` feature on pro and
-max. Six tabs: overview and integrity, boreholes with the graphical log,
-stratigraphy and samples, corrected SPT, laboratory tests, and a USCS
-classifier.
+max. Seven tabs: overview and integrity, boreholes with the graphical log,
+stratigraphy and samples, corrected SPT, laboratory tests (each test card now
+draws its own curve), interpreted parameters, and a USCS classifier.
 
 **Storage decision, settled:** stay on the `SoilsStore` interface over
 localStorage; swap in a Supabase backend at Phase 8. Confirmed with the user
 before Phase 4 started, since that is the phase where lab-test shapes make a
 schema change expensive.
 
-**Two recurring lessons from these phases**, both worth remembering:
+**Recurring lessons from these phases**, all worth remembering:
 
 1. *Tests can enshrine a bug.* The log renderer drew "Silty Sand" with silt
    hatching, and the test asserted that behaviour with a comment explaining it
@@ -1363,3 +1364,21 @@ schema change expensive.
    grew its own `/clay|silt/` regex — a second independent reading of the same
    field, which disagreed with the first within a day. `soilFamily` now lives in
    `model.ts` and a test asserts the renderer and the page cannot drift apart.
+4. *A loose tolerance hides a broken method.* Phase 4d's first σ′p used a
+   numerical Casagrande construction that returned 536 kPa for a break planted
+   at 100 — wrong by a factor of five — and the assertion (`120 < σ′p < 320` for
+   a planted 200) was wide enough to pass. The test now plants the break at
+   100, 200 and 400 and demands each one back. Where a range is the honest
+   assertion, probe the actual value once before trusting the range.
+5. *Render it and look at it.* Every visual defect in this module was found by
+   looking at output, never by a test: the silt hatching, the rock hatch
+   escaping its band, a fraction boundary struck through "sand 86%", and in
+   Phase 4e a rounded axis that clipped the extrapolated envelope off the top
+   of the frame. Each one is now covered by a test written *after* the render
+   showed it.
+
+**Chart conventions (Phase 4e), so the next chart matches:** log data gets a
+log axis; linear axes get 1–2–5 round ticks via `linearTicks`; extrapolation
+beyond the tested range is dashed; annotations sit on an opaque `plate` in the
+corner the curve structurally cannot reach. Charts are `PlanPrimitive` lists
+serialised by the shared `planToSvg` — no chart draws pixels of its own.
