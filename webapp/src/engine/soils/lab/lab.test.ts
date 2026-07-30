@@ -201,10 +201,14 @@ describe('the lab catalogue stays in step with the schema', () => {
     expect(isImplemented('specific-gravity')).toBe(true)
     expect(isImplemented('sieve')).toBe(true)
     expect(isImplemented('atterberg')).toBe(true)
+    // Direct shear declares no flat fields — its specimens are a table — so a
+    // fields-only check reported it as unimplemented.
+    expect(isImplemented('direct-shear')).toBe(true)
+    expect(isImplemented('ucs')).toBe(true)
     expect(isImplemented('triaxial')).toBe(false)
     expect(isImplemented('consolidation')).toBe(false)
     expect(implementedTests().map((t) => t.type))
-      .toEqual(['moisture', 'specific-gravity', 'sieve', 'atterberg'])
+      .toEqual(['moisture', 'specific-gravity', 'sieve', 'atterberg', 'direct-shear', 'ucs'])
   })
 
   it('gives every implemented test enough fields to drive its engine', () => {
@@ -213,7 +217,7 @@ describe('the lab catalogue stays in step with the schema', () => {
     // fields — the earlier version of this test demanded three from everything
     // and failed the sieve for being shaped correctly.
     for (const t of implementedTests()) {
-      const floor = t.formKind === 'sieve-stack' ? 1 : 3
+      const floor = t.formKind && t.formKind !== 'fields' ? 0 : 3
       expect(t.fields.length, t.type).toBeGreaterThanOrEqual(floor)
       for (const f of t.fields) {
         expect(f.label.length, `${t.type}/${f.key}`).toBeGreaterThan(2)
@@ -229,6 +233,8 @@ describe('the lab catalogue stays in step with the schema', () => {
       'specific-gravity': ['solidMass', 'pycWaterMass', 'pycWaterSolidMass'],
       sieve: ['totalMass'],
       atterberg: ['liquidLimit'],
+      'direct-shear': [],
+      ucs: ['diameter', 'height', 'failureLoad', 'failureDeformation'],
     }
     for (const t of implementedTests()) {
       const declared = t.fields.filter((f) => !f.optional).map((f) => f.key).sort()
