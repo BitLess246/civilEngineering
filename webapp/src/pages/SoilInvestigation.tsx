@@ -789,6 +789,12 @@ function TestCard({
               onChange={(rows) => onPoints(rows)} />
           )}
 
+          {spec!.formKind === 'load-increments' && (
+            <LoadIncrements
+              rows={(test.data?.points as LoadRow[] | undefined) ?? []}
+              onChange={(rows) => onPoints(rows as unknown as ShearRow[])} />
+          )}
+
           {test.type === 'ucs' && (
             <label className="mt-2 flex flex-col text-[11px]">
               <span className="mb-0.5 text-slate-600">Soil condition</span>
@@ -1262,6 +1268,63 @@ function ParametersPanel({
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ── Oedometer increments ──────────────────────────────────────────────────
+
+interface LoadRow { stress: number; compression: number; t50?: number }
+
+const DEFAULT_INCREMENTS = [12.5, 25, 50, 100, 200, 400, 800]
+
+function LoadIncrements({
+  rows, onChange,
+}: { rows: LoadRow[]; onChange: (rows: LoadRow[]) => void }) {
+  const pts: LoadRow[] = rows.length ? rows : DEFAULT_INCREMENTS.map((stress) => ({ stress, compression: 0 }))
+  const set = (i: number, patch: Partial<LoadRow>) =>
+    onChange(pts.map((r, k) => (k === i ? { ...r, ...patch } : r)))
+
+  return (
+    <div className="mt-2">
+      <table className="w-full text-left text-[11px]">
+        <thead className="text-slate-500">
+          <tr className="border-b border-slate-200">
+            <th className="py-1 pr-2 text-right">σ′ (kPa)</th>
+            <th className="py-1 pr-2 text-right">Compression (mm)</th>
+            <th className="py-1 pr-2 text-right">t₅₀ (min)</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {pts.map((r, i) => (
+            <tr key={i} className="border-b border-slate-100">
+              {([['stress', r.stress] as const, ['compression', r.compression] as const, ['t50', r.t50] as const])
+                .map(([key, v]) => (
+                  <td key={key} className="py-0.5 pr-2 text-right">
+                    <input type="number" step="any" value={v ?? ''}
+                      placeholder={key === 't50' ? 'optional' : ''}
+                      onChange={(e) => set(i, {
+                        [key]: e.target.value === '' ? undefined : num(e.target.value),
+                      } as Partial<LoadRow>)}
+                      className="w-24 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                  </td>
+                ))}
+              <td className="py-0.5 text-right">
+                <button onClick={() => onChange(pts.filter((_, k) => k !== i))}
+                  className="rounded px-1 text-[10px] text-red-600 hover:bg-red-50">×</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-1 text-[10px] text-slate-500">
+        Without t₅₀ the magnitude of settlement can be computed but not its rate.
+      </p>
+      <button onClick={() => onChange([...pts, { stress: 0, compression: 0 }])}
+        className="mt-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50">
+        + increment
+      </button>
     </div>
   )
 }

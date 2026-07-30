@@ -70,6 +70,8 @@ export type ParameterKey =
   | 'cohesion' | 'frictionAngle'
   | 'effectiveCohesion' | 'effectiveFrictionAngle' | 'undrainedShearStrength'
   | 'specificGravity' | 'voidRatio' | 'relativeDensity'
+  | 'compressionIndex' | 'recompressionIndex' | 'preconsolidationPressure'
+  | 'coefficientOfConsolidation'
 
 /**
  * Readable names, kept HERE rather than in the page, because the engine writes
@@ -89,6 +91,10 @@ export const PARAMETER_LABEL: Record<ParameterKey, string> = {
   specificGravity: 'Specific gravity Gs',
   voidRatio: 'Void ratio e',
   relativeDensity: 'Relative density Dr',
+  compressionIndex: 'Compression index Cc',
+  recompressionIndex: 'Recompression index Cr',
+  preconsolidationPressure: "Preconsolidation pressure σ'p",
+  coefficientOfConsolidation: 'Coefficient of consolidation cv',
 }
 
 export interface ResolvedParameter {
@@ -177,6 +183,35 @@ export function resolveParameters(i: ResolveInput): ParameterResolution {
         add('effectiveFrictionAngle', measured(e.frictionAngle, '°', {
           testId: dsTest.id, standard: 'd3080', sampleId: s.name,
         }, e.refittedThroughOrigin ? 'envelope refitted through the origin' : undefined))
+      }
+    }
+
+    // Consolidation → Cc, Cr, σ′p and cv.
+    const consTest = governingTest(s, 'consolidation').test
+    if (consTest) {
+      const { outcome, error } = evaluateTest(consTest)
+      if (error) notes.push(`Consolidation on ${s.name} could not be evaluated: ${error}`)
+      else if (outcome?.kind === 'consolidation') {
+        const c = outcome.result
+        const p = { testId: consTest.id, standard: 'd2435' as const, sampleId: s.name }
+        add('compressionIndex', measured(c.cc, '—', p))
+        if (c.cr != null) add('recompressionIndex', measured(c.cr, '—', p))
+        if (c.preconsolidationPressure != null) {
+          // σ′p is inferred from the curve's shape, not read off a dial, so it
+          // enters as DERIVED rather than measured — the distinction is the
+          // whole point of the provenance model.
+          add('preconsolidationPressure', derived(c.preconsolidationPressure, 'kPa', {
+            calculation: 'consolidation.cc',
+            from: [`${c.rows.length} load increments on ${s.name}`],
+          }, 'two-segment fit of the e–log σ′ curve; check against the plotted curve'))
+        }
+        const cvs = c.rows.map((r) => r.cv).filter((v): v is number => v != null)
+        if (cvs.length) {
+          add('coefficientOfConsolidation', measured(
+            cvs.reduce((a, b) => a + b, 0) / cvs.length, 'm²/yr', p,
+            `mean of ${cvs.length} increments`,
+          ))
+        }
       }
     }
 
@@ -274,6 +309,8 @@ export function resolveParameters(i: ResolveInput): ParameterResolution {
     'unitWeight', 'dryUnitWeight', 'saturatedUnitWeight',
     'cohesion', 'frictionAngle', 'effectiveCohesion', 'effectiveFrictionAngle',
     'undrainedShearStrength', 'specificGravity', 'voidRatio', 'relativeDensity',
+    'compressionIndex', 'recompressionIndex', 'preconsolidationPressure',
+    'coefficientOfConsolidation',
   ]
   const absent = ALL.filter((k) => !candidates.has(k))
 

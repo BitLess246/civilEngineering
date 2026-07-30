@@ -1331,8 +1331,9 @@ because flagging the unusual as an error trains people to ignore errors.
 | 4b — sieve + Atterberg wired, sample classification | #482 | merged |
 | 4c — direct shear + UCS | #483 | merged |
 | 5 — parameter engine (resolution + provenance) | #484 | merged |
-| 5b — parameters wired into bearing capacity and slope | — | open |
-| 4d… — compaction, triaxial, consolidation, permeability, CBR | — | |
+| 5b — parameters wired into bearing capacity and slope | #485 | merged |
+| 4d — consolidation (Cc, Cr, σ′p, cv) | — | open |
+| 4e… — compaction, triaxial, permeability, CBR, hydrometer | — | |
 | 6 — liquefaction, bearing methods, Coulomb | — | |
 | 7 — report document builder | — | |
 | 8 — Postgres, CPT, 3D subsurface | — | |
