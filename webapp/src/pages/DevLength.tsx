@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { calcDevLength, type DevLengthInput, type EpoxyCase } from '../engine/devLength'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
+import { buildDevLengthSolution } from '../lib/devLengthSolution'
 import { f0, f1, f2 } from '../lib/format'
 
 const BAR_SIZES: [string, string][] = [
@@ -57,6 +58,11 @@ export default function DevLength() {
   // Development length has no pass/fail — it produces required lengths rather
   // than checking a demand — so the report carries no checks and the verdict
   // line states the governing tension length instead.
+  const solution = r ? buildDevLengthSolution({
+    db: parseFloat(f.db), fc: f.fc, fy: f.fy, topBar: f.topBar,
+    epoxy: f.epoxy, lambda: parseFloat(f.lambda), cbKtr_db: f.cbKtr_db,
+  }, r) : null
+
   const report = r ? {
     docCode: 'S-DL',
     ok: true,
@@ -80,6 +86,7 @@ export default function DevLength() {
       ['Class A splice', `${f0(r.ls_A)} mm`],
       ['Compression splice', `${f0(r.lsc)} mm`],
     ] as [string, string][],
+    steps: solution ?? undefined,
   } : undefined
 
   return (

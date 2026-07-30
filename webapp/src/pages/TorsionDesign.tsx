@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { designTorsion, type TorsionInput } from '../engine/torsionDesign'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
+import { buildTorsionSolution } from '../lib/torsionSolution'
 import { f1, f2, f3 } from '../lib/format'
 
 interface FormState extends Omit<TorsionInput, 'legs' | 'lambda'> {
@@ -35,6 +36,8 @@ export default function TorsionDesign() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [fKey, allFinite],
   )
+
+  const solution = r ? buildTorsionSolution(f, r) : null
 
   const report = r ? {
     docCode: 'S-TO',
@@ -70,6 +73,7 @@ export default function TorsionDesign() {
       ['φVc', `${f1(r.phiVc)} kN`],
       ['Max spacing', `${f1(r.sMax)} mm`],
     ] as [string, string][],
+    steps: solution ?? undefined,
   } : undefined
 
   return (
