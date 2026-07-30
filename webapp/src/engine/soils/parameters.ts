@@ -54,6 +54,13 @@ export interface ResolveInput {
   layer: SoilLayer
   /** Unit weights per layer id, for the effective-stress profile. */
   unitWeights: Record<string, LayerUnitWeight>
+  /**
+   * Parameters already stored on the investigation for this layer. Each keeps
+   * the provenance it was saved with, so a unit weight the engineer typed
+   * enters the hierarchy as an ASSUMPTION rather than as a bare number with no
+   * source — which is what it is.
+   */
+  stored?: LayerParameters
   /** Engineer overrides, keyed by parameter name. */
   overrides?: Partial<Record<ParameterKey, ParameterOverride>>
 }
@@ -136,6 +143,14 @@ export function resolveParameters(i: ResolveInput): ParameterResolution {
   const samples = samplesInLayer(bh, layer)
   const family = soilFamily(layer.symbol, layer.name)
   const cohesive = isCohesive(family)
+
+  // ── 0. Stored parameters, each keeping the provenance it was saved with ──
+  if (i.stored) {
+    const { layerId: _l, boreholeId: _b, ...rest } = i.stored
+    for (const [key, v] of Object.entries(rest)) {
+      if (v && typeof v === 'object' && 'value' in v) add(key as ParameterKey, v as SourcedValue)
+    }
+  }
 
   // ── 1. Laboratory measurements ──
   for (const s of samples) {

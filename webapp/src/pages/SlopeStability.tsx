@@ -5,6 +5,7 @@ import {
   type Pt, type SlopeSoil, type WaterModel, type CircleResult,
 } from '../engine/slopeStability'
 import { buildSlopeSolution } from '../lib/slopeSolution'
+import { SoilLayerPicker } from '../components/SoilLayerPicker'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -159,7 +160,17 @@ export default function SlopeStability() {
         Janbu&rsquo;s simplified — with a grid search for the critical (minimum-FS) circle. Pore pressure via ru.
       </p>
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="mt-6">
+        <SoilLayerPicker
+          want={['c', 'phiDeg', 'gamma']}
+          onApply={(f) => {
+            if (f.c != null) setC(f.c)
+            if (f.phiDeg != null) setPhi(f.phiDeg)
+            if (f.gamma != null) setGamma(f.gamma)
+          }} />
+      </section>
+
+      <section className="mt-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Slope geometry</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Field label="Height H" unit="m" value={H} onChange={setH} />
