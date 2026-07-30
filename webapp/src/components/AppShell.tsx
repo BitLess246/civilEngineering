@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { SIDEBAR_GROUPS, ALL_TOOLS } from '../lib/tools'
 import { CommandPalette } from './CommandPalette'
 import { usePaletteHotkey } from '../lib/usePaletteHotkey'
+import { SiteFooter } from './SiteFooter'
 
 // Workbench shell (docs/design/uiux-2026-07): persistent ink-navy sidebar with
 // the grouped tool catalog + ⌘K search, and a slim breadcrumb header. Wraps
@@ -101,6 +102,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         {children}
+        <SiteFooter />
       </div>
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
     </div>

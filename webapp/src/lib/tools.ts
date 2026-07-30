@@ -10,6 +10,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
     tools: [
       { to: '/docs', name: 'Documentation', sub: 'Toolkit guide' },
       { to: '/validation', name: 'Validation', sub: 'Engine vs hand calc' },
+      { to: '/pricing', name: 'Plans', sub: 'Pricing · PHP' },
     ],
   },
   {
