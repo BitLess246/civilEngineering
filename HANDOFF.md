@@ -1227,3 +1227,93 @@ means moving the solver behind an authenticated API. The header of
 **Not verifiable here:** a real sign-in round trip, since this environment has
 no Supabase project. Everything up to the network call is tested; the call
 itself needs your keys.
+---
+
+# Soil Investigation module — Phase 0 shipped
+
+A geotechnical investigation-management module: enter a site investigation once
+(boreholes, layers, samples, field and laboratory tests), interpret design
+parameters from it, and feed those into the analysis engines that already exist
+rather than retyping soil properties on every calculator page.
+
+## The architectural decision, and its cost
+
+The module was specified against a ~30-table Postgres schema. **This repo has no
+database.** `supabase/` contains only the billing webhook function — no
+`migrations/`, no tables; Supabase is used for auth only, and every project in
+the app (schedules, models) persists to localStorage.
+
+So Phase 0 builds the model on `engine/soils/store.ts`, a versioned key-value
+store over a swappable `StorageBackend` — the same arrangement the scheduling
+module has been running on. Designing thirty tables plus RLS policies against a
+schema that will still move as the laboratory engines land means writing
+migrations for guesses.
+
+**The cost is real:** until the backend swap lands (Phase 8), an investigation
+lives in one browser on one machine, and laboratory data is expensive to
+re-enter. `exportJSON` is the backup mechanism, not a convenience, and the UI
+must treat it that way.
+
+## What Phase 0 contains (no UI)
+
+| Module | Role |
+|---|---|
+| `soils/model.ts` | Investigation → Borehole → Layer → Sample → LabTest, plus SPT. JSON-serialisable throughout. |
+| `soils/provenance.ts` | `measured` / `derived` / `correlated` / `assumed` as a discriminated union on every parameter value. |
+| `soils/registry.ts` | 21 calculations declared with equation, units, symbols, assumptions, limitations and source — *before* they are implemented. |
+| `soils/standards.ts` | 25 ASTM/AASHTO designations as a typed const. |
+| `soils/store.ts` | Versioned persistence + JSON import/export. |
+| `soils/validate.ts` | Integrity rules that report and never repair. |
+| `soils/sample.ts` | A valid two-borehole Baguio City fixture. |
+
+## Three decisions worth not re-litigating
+
+**Provenance is on the value, not in a parallel result type.** `φ = 32°` from a
+triaxial, from an SPT correlation, and from Friday-afternoon judgement carry
+different confidence and different liability, and once all three render as "32°"
+the difference is gone — including from the engineer defending the report two
+years later. Retrofitting this across thirty engines later would not happen, so
+it is in from day one. The proposed `CalculationResult<T>` was dropped: the
+existing `SolutionStep[]` convention already carries method, clause, substituted
+inputs and pass/fail, and renders to both screen and PDF.
+
+**`engineering_standards` is a const, not a table.** The goal behind it — one
+place to change a designation, no string literals in forty modules — is right; a
+table is the wrong mechanism client-side. `StandardId` derives from the object,
+so a mistyped citation fails to compile.
+
+**Validation reports, never repairs.** A gap between 4.20 m and 4.50 m is either
+a logging error or an unrecovered run, and only whoever was on the rig knows
+which. Errors are the impossible (PL > LL, overlapping layers, groundwater below
+the hole); warnings are the merely unusual (N = 2, 33% recovery, a gap) —
+because flagging the unusual as an error trains people to ignore errors.
+
+## Guards that will bite on later phases
+
+- Every correlation must state a reference AND at least one limitation. A
+  correlation without a stated range of validity reads exactly like a
+  measurement — the most dangerous thing this module could ship.
+- Every symbol in a registry equation must appear in its symbol table.
+- Every registry equation must survive `texToPlain` with no stray commands.
+- The clean fixture must validate with zero errors *and* zero warnings.
+- Route-carrying phases also hit `docsContent.test.ts` (every route needs a docs
+  entry) and `featureGate.ts` (`ROUTE_FEATURE` key-set equality).
+
+## Remaining phases
+
+1. **Classification** — Atterberg, sieve (D10/D30/D60, Cu, Cc), USCS D2487,
+   AASHTO, plasticity chart, grain-size curve.
+2. **SPT** — N60 corrections, (N₁)₆₀, correlation library (every entry tagged
+   `correlated` with its source).
+3. **Investigation UI** — borehole page, graphical log column, profile editor.
+4. **Laboratory suite** — moisture, Gs, compaction, direct shear, UCS, triaxial,
+   consolidation, permeability, CBR.
+5. **Parameter engine + wiring** — one parameter table per layer feeding the
+   existing bearing/settlement/slope/earth-pressure/pile pages. *The payoff
+   phase; everything before it is data entry.*
+6. **Engine gaps** — liquefaction (NCEER, can consume PGA from `nscpSeismic`),
+   bearing depth/inclination factors and method selection, Coulomb.
+7. **Report** — the 22-section document builder on `pdfKit` chrome.
+8. **Postgres, CPT, 3D subsurface.**
+
+**Open for the user:** which plan tier gates this (suggest `pro`+).
