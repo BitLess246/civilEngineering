@@ -25,6 +25,8 @@ import { type MoistureData, moistureContent, type MoistureResult } from './moist
 import {
   type SpecificGravityData, specificGravity, type SpecificGravityResult,
 } from './specificGravity'
+import { type SieveInput, type SieveReading, gradation, type GradationResult } from '../sieve'
+import { type AtterbergInput, atterberg, type AtterbergResult } from '../atterberg'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -61,6 +63,50 @@ export function readSpecificGravity(test: LabTest): SpecificGravityData | undefi
   }
 }
 
+/**
+ * Sieve stack. The readings are a variable-length array rather than a fixed set
+ * of fields, so the guard walks them: a row missing its size or its mass is
+ * DROPPED rather than read as zero, because a zero mass retained is a real
+ * measurement and an absent one is not.
+ */
+export function readSieve(test: LabTest): SieveInput | undefined {
+  const d = test.data
+  if (!isRecord(d) || !finite(d.totalMass) || !Array.isArray(d.readings)) return undefined
+
+  const readings: SieveReading[] = []
+  for (const r of d.readings) {
+    if (!isRecord(r) || !finite(r.size) || !finite(r.massRetained)) continue
+    readings.push({
+      size: r.size,
+      designation: typeof r.designation === 'string' ? r.designation : undefined,
+      massRetained: r.massRetained,
+    })
+  }
+  if (!readings.length) return undefined
+
+  return {
+    totalMass: d.totalMass,
+    readings,
+    panMass: finite(d.panMass) ? d.panMass : undefined,
+  }
+}
+
+/**
+ * Atterberg limits. A liquid limit is required; the plastic limit may be
+ * absent, which means NON-PLASTIC and is a different claim from PI = 0.
+ */
+export function readAtterberg(test: LabTest): AtterbergInput | undefined {
+  const d = test.data
+  if (!isRecord(d) || !finite(d.liquidLimit)) return undefined
+  return {
+    liquidLimit: d.liquidLimit,
+    plasticLimit: finite(d.plasticLimit) ? d.plasticLimit : undefined,
+    nonPlastic: d.nonPlastic === true,
+    shrinkageLimit: finite(d.shrinkageLimit) ? d.shrinkageLimit : undefined,
+    naturalMoisture: finite(d.naturalMoisture) ? d.naturalMoisture : undefined,
+  }
+}
+
 // ── Catalogue ─────────────────────────────────────────────────────────────
 
 /** One numeric input on a test form. */
@@ -74,9 +120,17 @@ export interface LabField {
   placeholder?: number
 }
 
+/**
+ * How a test's form is laid out. Most tests are a flat list of numbers; a sieve
+ * stack is a variable-length table, which no `LabField[]` can express.
+ */
+export type LabFormKind = 'fields' | 'sieve-stack'
+
 export interface LabTestSpec {
   type: LabTestType
   label: string
+  /** Defaults to 'fields'. */
+  formKind?: LabFormKind
   standard: StandardId
   /** Registry calculation this test's result is derived by. */
   calculation?: CalcId
@@ -125,9 +179,34 @@ export const LAB_TESTS: readonly LabTestSpec[] = [
     ],
   },
   // Declared but not yet implemented — see the note above.
-  { type: 'sieve', label: 'Sieve analysis', standard: 'd6913', needsUndisturbed: false, fields: [], purpose: 'Grain-size distribution by sieving.' },
+  {
+    type: 'sieve',
+    label: 'Sieve analysis',
+    standard: 'd6913',
+    formKind: 'sieve-stack',
+    calculation: 'sieve.percent-passing',
+    needsUndisturbed: false,
+    purpose: 'Grain-size distribution by sieving — the fractions the USCS classifier needs.',
+    fields: [
+      { key: 'totalMass', label: 'Total dry specimen', unit: 'g', placeholder: 500 },
+      { key: 'panMass', label: 'Pan', unit: 'g', optional: true, placeholder: 20 },
+    ],
+  },
   { type: 'hydrometer', label: 'Hydrometer', standard: 'd7928', needsUndisturbed: false, fields: [], purpose: 'Grain-size distribution of the fines by sedimentation.' },
-  { type: 'atterberg', label: 'Atterberg limits', standard: 'd4318', needsUndisturbed: false, fields: [], purpose: 'Liquid and plastic limits, which classify the fines.' },
+  {
+    type: 'atterberg',
+    label: 'Atterberg limits',
+    standard: 'd4318',
+    calculation: 'atterberg.plasticity-index',
+    needsUndisturbed: false,
+    purpose: 'Liquid and plastic limits, which decide whether the fines behave as clay or silt.',
+    fields: [
+      { key: 'liquidLimit', label: 'Liquid limit', unit: '%', placeholder: 42 },
+      { key: 'plasticLimit', label: 'Plastic limit', unit: '%', optional: true, placeholder: 23 },
+      { key: 'naturalMoisture', label: 'Natural moisture', unit: '%', optional: true, placeholder: 30 },
+      { key: 'shrinkageLimit', label: 'Shrinkage limit', unit: '%', optional: true, placeholder: 12 },
+    ],
+  },
   { type: 'compaction', label: 'Compaction', standard: 'd698', needsUndisturbed: false, fields: [], purpose: 'Maximum dry density and optimum moisture content.' },
   { type: 'direct-shear', label: 'Direct shear', standard: 'd3080', needsUndisturbed: true, fields: [], purpose: 'Effective cohesion and friction angle from the failure envelope.' },
   { type: 'triaxial', label: 'Triaxial', standard: 'd4767', needsUndisturbed: true, fields: [], purpose: 'Shear strength under controlled drainage and confinement.' },
@@ -153,6 +232,8 @@ export const isImplemented = (type: LabTestType): boolean =>
 export type LabOutcome =
   | { kind: 'moisture'; result: MoistureResult }
   | { kind: 'specific-gravity'; result: SpecificGravityResult }
+  | { kind: 'sieve'; result: GradationResult }
+  | { kind: 'atterberg'; result: AtterbergResult }
 
 /**
  * Compute a test's result from its stored data.
@@ -174,6 +255,16 @@ export function evaluateTest(test: LabTest): { outcome?: LabOutcome; error?: str
         if (!d) return {}
         return { outcome: { kind: 'specific-gravity', result: specificGravity(d) } }
       }
+      case 'sieve': {
+        const d = readSieve(test)
+        if (!d) return {}
+        return { outcome: { kind: 'sieve', result: gradation(d) } }
+      }
+      case 'atterberg': {
+        const d = readAtterberg(test)
+        if (!d) return {}
+        return { outcome: { kind: 'atterberg', result: atterberg(d) } }
+      }
       default:
         return {}
     }
@@ -189,5 +280,9 @@ export function summarise(outcome: LabOutcome): { label: string; value: number; 
       return { label: 'w', value: outcome.result.waterContent, unit: '%' }
     case 'specific-gravity':
       return { label: 'Gs', value: outcome.result.gs, unit: '' }
+    case 'sieve':
+      return { label: 'fines', value: outcome.result.fines, unit: '%' }
+    case 'atterberg':
+      return { label: 'PI', value: outcome.result.plasticityIndex, unit: '%' }
   }
 }

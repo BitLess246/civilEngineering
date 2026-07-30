@@ -199,17 +199,40 @@ describe('the lab catalogue stays in step with the schema', () => {
     // than hiding it and making the schedule look shorter than it is.
     expect(isImplemented('moisture')).toBe(true)
     expect(isImplemented('specific-gravity')).toBe(true)
+    expect(isImplemented('sieve')).toBe(true)
+    expect(isImplemented('atterberg')).toBe(true)
     expect(isImplemented('triaxial')).toBe(false)
-    expect(implementedTests().map((t) => t.type)).toEqual(['moisture', 'specific-gravity'])
+    expect(isImplemented('consolidation')).toBe(false)
+    expect(implementedTests().map((t) => t.type))
+      .toEqual(['moisture', 'specific-gravity', 'sieve', 'atterberg'])
   })
 
-  it('gives every implemented test a field for each of its engine inputs', () => {
+  it('gives every implemented test enough fields to drive its engine', () => {
+    // A plain form carries every input in `fields`. A sieve stack carries its
+    // readings in a variable-length table instead, so it needs fewer flat
+    // fields — the earlier version of this test demanded three from everything
+    // and failed the sieve for being shaped correctly.
     for (const t of implementedTests()) {
-      expect(t.fields.length, t.type).toBeGreaterThanOrEqual(3)
+      const floor = t.formKind === 'sieve-stack' ? 1 : 3
+      expect(t.fields.length, t.type).toBeGreaterThanOrEqual(floor)
       for (const f of t.fields) {
         expect(f.label.length, `${t.type}/${f.key}`).toBeGreaterThan(2)
         expect(f.key, `${t.type}/${f.key}`).toMatch(/^[a-zA-Z]+$/)
       }
+    }
+  })
+
+  it('every required field is one the engine actually reads', () => {
+    // A required field the reader ignores would block a form for no reason.
+    const required: Record<string, string[]> = {
+      moisture: ['containerMass', 'wetMass', 'dryMass'],
+      'specific-gravity': ['solidMass', 'pycWaterMass', 'pycWaterSolidMass'],
+      sieve: ['totalMass'],
+      atterberg: ['liquidLimit'],
+    }
+    for (const t of implementedTests()) {
+      const declared = t.fields.filter((f) => !f.optional).map((f) => f.key).sort()
+      expect(declared, t.type).toEqual(required[t.type].sort())
     }
   })
 
