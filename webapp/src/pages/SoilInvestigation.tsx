@@ -12,9 +12,13 @@ import {
   type LayerParameters,
 } from '../engine/soils/model'
 import {
-  LAB_TESTS, labSpec, isImplemented, evaluateTest, summarise,
+  LAB_TESTS, labSpec, isImplemented, evaluateTest, summarise, readDirectShear,
+  type LabOutcome,
 } from '../engine/soils/lab'
 import { classifySample } from '../engine/soils/classifySample'
+import {
+  shearEnvelopeChart, consolidationChart, gradingChart,
+} from '../engine/soils/lab/plots'
 import { resolveParameters, bearingInputs, PARAMETER_LABEL } from '../engine/soils/parameters'
 import { describeProvenance, PROVENANCE_LABEL, type SourcedValue } from '../engine/soils/provenance'
 import { cite } from '../engine/soils/standards'
@@ -834,6 +838,8 @@ function TestCard({
             </p>
           )}
 
+          {outcome && <TestChart test={test} outcome={outcome} />}
+
           {outcome && (
             <div className="mt-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5">
               <p className="font-mono text-[13px] font-semibold text-emerald-900">
@@ -1327,4 +1333,35 @@ function LoadIncrements({
       </button>
     </div>
   )
+}
+
+// ── Test charts ───────────────────────────────────────────────────────────
+
+/**
+ * The plot for a test whose key number is traditionally read off a graph.
+ *
+ * The consolidation result tells the reader to "check σ′p against the plotted
+ * curve" and the shear result warns about a poor fit; both were unactionable
+ * until there was a curve to look at.
+ */
+function TestChart({ test, outcome }: { test: LabTest; outcome: LabOutcome }) {
+  const svg = useMemo(() => {
+    switch (outcome.kind) {
+      // The envelope needs the specimens themselves, which live on the test
+      // data rather than the fitted result — plotting the fit without the
+      // points it was fitted through is exactly the picture that hides an
+      // outlier.
+      case 'direct-shear':
+        return planToSvg(shearEnvelopeChart(outcome.result, readDirectShear(test)?.points ?? []), 460)
+      case 'consolidation':
+        return planToSvg(consolidationChart(outcome.result), 460)
+      case 'sieve':
+        return planToSvg(gradingChart(outcome.result), 460)
+      default:
+        return null
+    }
+  }, [test, outcome])
+
+  if (!svg) return null
+  return <div className="mt-2 overflow-x-auto" dangerouslySetInnerHTML={{ __html: svg }} />
 }
