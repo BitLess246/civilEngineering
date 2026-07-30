@@ -31,6 +31,10 @@ import {
   type DirectShearData, type ShearPoint, directShear, type DirectShearResult,
 } from './directShear'
 import { type UcsData, type UcsSoil, ucs, type UcsResult } from './ucs'
+import {
+  type ConsolidationData, type ConsolidationPoint, consolidation,
+  type ConsolidationResult,
+} from './consolidation'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -158,6 +162,33 @@ export function readUcs(test: LabTest): { data: UcsData; soil: UcsSoil } | undef
   }
 }
 
+/** Oedometer increments — another variable-length table; malformed rows drop. */
+export function readConsolidation(test: LabTest): ConsolidationData | undefined {
+  const d = test.data
+  if (!isRecord(d)) return undefined
+  if (!hasNumbers(d, ['initialHeight', 'diameter', 'dryMass', 'specificGravity'])) return undefined
+  if (!Array.isArray(d.points)) return undefined
+
+  const points: ConsolidationPoint[] = []
+  for (const r of d.points) {
+    if (!isRecord(r) || !finite(r.stress) || !finite(r.compression)) continue
+    points.push({
+      stress: r.stress,
+      compression: r.compression,
+      t50: finite(r.t50) ? r.t50 : undefined,
+    })
+  }
+  if (points.length < 3) return undefined
+
+  return {
+    initialHeight: d.initialHeight as number,
+    diameter: d.diameter as number,
+    dryMass: d.dryMass as number,
+    specificGravity: d.specificGravity as number,
+    points,
+  }
+}
+
 // ── Catalogue ─────────────────────────────────────────────────────────────
 
 /** One numeric input on a test form. */
@@ -175,7 +206,7 @@ export interface LabField {
  * How a test's form is laid out. Most tests are a flat list of numbers; a sieve
  * stack is a variable-length table, which no `LabField[]` can express.
  */
-export type LabFormKind = 'fields' | 'sieve-stack' | 'shear-points'
+export type LabFormKind = 'fields' | 'sieve-stack' | 'shear-points' | 'load-increments'
 
 export interface LabTestSpec {
   type: LabTestType
@@ -285,7 +316,21 @@ export const LAB_TESTS: readonly LabTestSpec[] = [
       { key: 'unitWeight', label: 'Bulk unit weight', unit: 'kN/m³', optional: true, placeholder: 18 },
     ],
   },
-  { type: 'consolidation', label: 'Consolidation', standard: 'd2435', needsUndisturbed: true, fields: [], purpose: 'Compressibility and the rate of settlement.' },
+  {
+    type: 'consolidation',
+    label: 'Consolidation',
+    standard: 'd2435',
+    formKind: 'load-increments',
+    calculation: 'consolidation.cc',
+    needsUndisturbed: true,
+    purpose: 'Cc, Cr and σ′p — the three numbers a settlement analysis runs on.',
+    fields: [
+      { key: 'initialHeight', label: 'Initial height', unit: 'mm', placeholder: 20 },
+      { key: 'diameter', label: 'Diameter', unit: 'mm', placeholder: 75 },
+      { key: 'dryMass', label: 'Oven-dry mass', unit: 'g', placeholder: 79.5 },
+      { key: 'specificGravity', label: 'Specific gravity Gs', placeholder: 2.7 },
+    ],
+  },
   { type: 'permeability', label: 'Permeability', standard: 'd5084', needsUndisturbed: true, fields: [], purpose: 'Hydraulic conductivity.' },
   { type: 'cbr', label: 'CBR', standard: 'd1883', needsUndisturbed: false, fields: [], purpose: 'Bearing ratio for pavement design.' },
   { type: 'swell', label: 'Swell / collapse', standard: 'd4546', needsUndisturbed: true, fields: [], purpose: 'One-dimensional swell or collapse on wetting.' },
@@ -321,6 +366,7 @@ export type LabOutcome =
   | { kind: 'atterberg'; result: AtterbergResult }
   | { kind: 'direct-shear'; result: DirectShearResult }
   | { kind: 'ucs'; result: UcsResult }
+  | { kind: 'consolidation'; result: ConsolidationResult }
 
 /**
  * Compute a test's result from its stored data.
@@ -362,6 +408,11 @@ export function evaluateTest(test: LabTest): { outcome?: LabOutcome; error?: str
         if (!d) return {}
         return { outcome: { kind: 'ucs', result: ucs(d.data, d.soil) } }
       }
+      case 'consolidation': {
+        const d = readConsolidation(test)
+        if (!d) return {}
+        return { outcome: { kind: 'consolidation', result: consolidation(d) } }
+      }
       default:
         return {}
     }
@@ -385,5 +436,7 @@ export function summarise(outcome: LabOutcome): { label: string; value: number; 
       return { label: "φ'", value: outcome.result.peak.frictionAngle, unit: '°' }
     case 'ucs':
       return { label: 'qu', value: outcome.result.qu, unit: 'kPa' }
+    case 'consolidation':
+      return { label: 'Cc', value: outcome.result.cc, unit: '' }
   }
 }

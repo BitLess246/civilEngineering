@@ -205,10 +205,11 @@ describe('the lab catalogue stays in step with the schema', () => {
     // fields-only check reported it as unimplemented.
     expect(isImplemented('direct-shear')).toBe(true)
     expect(isImplemented('ucs')).toBe(true)
+    expect(isImplemented('consolidation')).toBe(true)
     expect(isImplemented('triaxial')).toBe(false)
-    expect(isImplemented('consolidation')).toBe(false)
+    expect(isImplemented('permeability')).toBe(false)
     expect(implementedTests().map((t) => t.type))
-      .toEqual(['moisture', 'specific-gravity', 'sieve', 'atterberg', 'direct-shear', 'ucs'])
+      .toEqual(['moisture', 'specific-gravity', 'sieve', 'atterberg', 'direct-shear', 'ucs', 'consolidation'])
   })
 
   it('gives every implemented test enough fields to drive its engine', () => {
@@ -235,6 +236,7 @@ describe('the lab catalogue stays in step with the schema', () => {
       atterberg: ['liquidLimit'],
       'direct-shear': [],
       ucs: ['diameter', 'height', 'failureLoad', 'failureDeformation'],
+      consolidation: ['initialHeight', 'diameter', 'dryMass', 'specificGravity'],
     }
     for (const t of implementedTests()) {
       const declared = t.fields.filter((f) => !f.optional).map((f) => f.key).sort()
