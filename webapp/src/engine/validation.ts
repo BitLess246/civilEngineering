@@ -42,6 +42,7 @@ import { designWoodSlab } from './woodSlab'
 import { velocity, hazenWilliamsHead, gpmToLps } from './waterSupply'
 import { designDrainage } from './drainage'
 import { designSepticTank } from './septicTank'
+import { cyclicStressRatio, crr75 } from './soils/liquefaction'
 import type { RectSection } from './model'
 
 export interface ValidationCase {
@@ -660,6 +661,20 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'slope-slices-fellenius', category: 'Geotech', title: 'Method of slices — Fellenius FS',
     reference: 'Fellenius / OMS', formula: 'FS = Σ[c·l + (W·cosα − u·l)·tanφ] / Σ[W·sinα]',
     manual: slopeSlices.manual, software: slopeSlices.software, unit: '—', tol: 1e-3,
+  },
+  {
+    id: 'liq-csr', category: 'Geotech', title: 'Liquefaction cyclic stress ratio',
+    reference: 'Youd et al. (2001) NCEER eq. 2', formula: "CSR = 0.65(a_max/g)(σv0/σ'v0)·rd",
+    // 6 m in sand, WT 1.5 m, γ = 18/20 kN/m³, a_max = 0.40 g:
+    //   σv0 = 117.0, σ'v0 = 72.855, rd = 1 − 0.00765(6) = 0.95410
+    //   CSR = 0.65(0.40)(117/72.855)(0.95410) = 0.39838
+    manual: 0.39838, software: cyclicStressRatio(0.40, 117.0, 72.855, 6), unit: '—', tol: 1e-4,
+  },
+  {
+    id: 'liq-crr', category: 'Geotech', title: 'Liquefaction clean-sand resistance at (N₁)₆₀ = 10',
+    reference: 'Youd et al. (2001) NCEER eq. 4', formula: '1/(34−N) + N/135 + 50/(10N+45)² − 1/200',
+    // The published clean-sand base curve is read at CRR ≈ 0.113 for N = 10.
+    manual: 0.11312, software: crr75(10) ?? NaN, unit: '—', tol: 1e-4,
   },
   {
     id: 'seismic-period', category: 'Seismic', title: 'NSCP 208 fundamental period (Method A)',

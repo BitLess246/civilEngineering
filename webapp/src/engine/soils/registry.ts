@@ -314,6 +314,91 @@ export const CALCULATIONS = {
     ],
   },
 
+  // ── Analysis: liquefaction triggering ──
+  'liquefaction.csr': {
+    title: 'Cyclic stress ratio (seismic demand)',
+    category: 'analysis',
+    equation: String.raw`CSR = 0.65\,\frac{a_{max}}{g}\,\frac{\sigma_{v0}}{\sigma'_{v0}}\,r_d`,
+    unit: '—',
+    symbols: {
+      CSR: 'cyclic stress ratio, a dimensionless ratio of shear stress to effective stress',
+      'a_{max}': 'peak horizontal ground acceleration at the surface, as a fraction of g',
+      '\\sigma_{v0}': 'total vertical stress at the depth, kPa',
+      "\\sigma'_{v0}": 'effective vertical stress at the depth, kPa',
+      r_d: 'stress reduction coefficient for column flexibility, a dimensionless factor',
+    },
+    reference: 'Seed & Idriss (1971); Youd et al. (2001) NCEER eq. 2',
+    assumptions: [
+      'Level ground and a soil column whose response is captured by the r_d curve.',
+      '0.65 converts an irregular time history to an equivalent number of uniform cycles.',
+    ],
+    limitations: [
+      'a_max is a SURFACE acceleration. Using a bedrock value without a site-response analysis understates the demand on soft ground.',
+      'r_d is poorly constrained below about 23 m — below that depth a site-response analysis is the defensible route.',
+    ],
+  },
+
+  'liquefaction.fines-correction': {
+    title: 'Equivalent clean-sand blow count',
+    category: 'analysis',
+    equation: String.raw`(N_1)_{60cs} = \alpha + \beta (N_1)_{60}`,
+    unit: 'blows/300 mm',
+    symbols: {
+      '(N_1)_{60cs}': 'equivalent clean-sand blow count, blows/300 mm',
+      '(N_1)_{60}': 'overburden- and energy-corrected blow count, blows/300 mm',
+      '\\alpha': 'fines intercept correction, blows/300 mm',
+      '\\beta': 'fines slope correction, a dimensionless factor',
+    },
+    reference: 'Youd et al. (2001) NCEER eqs. 6a–7c',
+    limitations: [
+      'Needs a measured fines content. Treating a silty sand as clean sand OVERSTATES its resistance.',
+      'Saturates at 35% fines; beyond that the correction stops distinguishing soils that behave differently.',
+    ],
+  },
+
+  'liquefaction.crr': {
+    title: 'Cyclic resistance ratio',
+    category: 'analysis',
+    equation: String.raw`CRR = \left[\frac{1}{34 - (N_1)_{60cs}} + \frac{(N_1)_{60cs}}{135} + \frac{50}{[10(N_1)_{60cs} + 45]^2} - \frac{1}{200}\right] MSF \cdot K_\sigma \cdot K_\alpha`,
+    unit: '—',
+    symbols: {
+      CRR: 'cyclic resistance ratio, a dimensionless ratio of shear stress to effective stress',
+      '(N_1)_{60cs}': 'equivalent clean-sand blow count, blows/300 mm',
+      MSF: 'magnitude scaling factor, a dimensionless factor',
+      'K_\\sigma': 'overburden correction, a dimensionless factor',
+      'K_\\alpha': 'sloping-ground correction, a dimensionless factor',
+    },
+    reference: 'Youd et al. (2001) NCEER eq. 4 (Rauch approximation of the Seed et al. base curve)',
+    assumptions: [
+      'The bracketed base curve is for clean sand, M 7.5, σ′v0 ≈ 100 kPa and level ground; MSF, K_σ and K_α move it off those conditions.',
+    ],
+    limitations: [
+      'The base curve ends at (N₁)₆₀cs = 30. Denser granular soils are taken as non-liquefiable — the expression keeps returning numbers past that point and they are meaningless.',
+      'K_σ must not be taken greater than 1.0, so no shallow soil is credited with resistance the case histories do not support.',
+      'K_α is recommended by the NCEER workshop for use by specialists only.',
+      'The whole procedure is for SATURATED COHESIONLESS soils. Fine-grained soils are governed by Bray & Sancio (2006), a different check entirely.',
+    ],
+  },
+
+  'liquefaction.lpi': {
+    title: 'Liquefaction potential index',
+    category: 'analysis',
+    equation: String.raw`LPI = \int_0^{20} F(z)\,w(z)\,dz, \quad F = 1 - FS \ (FS < 1), \quad w = 10 - 0.5z`,
+    unit: '—',
+    symbols: {
+      LPI: 'liquefaction potential index, a dimensionless severity index',
+      F: 'severity at depth z, a dimensionless factor',
+      FS: 'factor of safety against triggering, a dimensionless ratio',
+      w: 'depth weighting, a dimensionless factor',
+      z: 'depth below ground, m',
+    },
+    reference: 'Iwasaki et al. (1978)',
+    limitations: [
+      'One number for a whole profile: a thin very loose seam and a thick marginal one can share an LPI and behave nothing alike. It never replaces reading the FS profile.',
+      'Defined over the top 20 m only.',
+    ],
+  },
+
   'stress.effective-vertical': {
     title: 'Effective vertical stress',
     category: 'field',
