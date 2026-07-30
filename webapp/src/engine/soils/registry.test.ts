@@ -41,7 +41,9 @@ describe('every registry entry is fully described', () => {
   it.each(IDS)('%s — every symbol description states its units', (id) => {
     // "mass of water" is not enough; "mass of water, g" is. A genuinely
     // dimensionless quantity says so by being a coefficient/index/ratio.
-    const HAS_UNIT = /,\s*[^,]*(%|\bg\b|\bmm\b|\bm\b|mm²|m²|m³|m\/s|kPa|MPa|kN\/m³|\bN\b|degrees|blows|°C)\s*$/i
+    // The unit follows the last comma but need not END the string: compound
+    // units like "% per log cycle" and "blows/300 mm" are legitimate.
+    const HAS_UNIT = /,\s*[^,]*(%|\bg\b|\bmm\b|\bm\b|mm²|m²|m³|m\/s|kPa|MPa|kN\/m³|\bN\b|degrees|blows|°C)/i
     const DIMENSIONLESS = /\b(coefficient|index|ratio|factor|correction|specific gravity|group symbol|strain)\b/i
     for (const [sym, desc] of Object.entries(calc(id).symbols)) {
       expect(desc.length, `${id}/${sym}`).toBeGreaterThan(5)
