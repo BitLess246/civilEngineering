@@ -332,6 +332,23 @@ export function createSheet(): Sheet {
       steps.forEach((st, si) => {
         s.ensure(12)
         const stepTop = s.y
+        // Margin column FIRST, beside the step's opening line.
+        //
+        // It used to be drawn after the body at `min(stepTop, y)`, which put it
+        // at the top of the CONTINUATION page whenever a step broke across a
+        // page — a PASS chip and a clause floating alone above the next step,
+        // colliding with its margin. Drawing it up front keeps it attached to
+        // the step it describes, which is the only place it means anything.
+        {
+          const rx = M + LEFT_W + 4
+          let ry = stepTop
+          if (st.pass !== undefined) { s.chip(rx, ry + 0.2, st.pass); ry += 4.6 }
+          const margin = st.clause ?? st.note
+          if (margin) {
+            s.setF('sans', 'normal', 5.6, FAINT)
+            doc.text(doc.splitTextToSize(margin, RIGHT_W - 2), rx, ry)
+          }
+        }
         s.setF('mono', 'bold', 6, FAINT)
         doc.text(indexPrefix ? `${indexPrefix}${si + 1}` : `${si + 1}`.padStart(2, '0'), M, s.y + 0.2)
         s.setF('sans', 'bold', 7, INK)
@@ -353,16 +370,6 @@ export function createSheet(): Sheet {
             for (const w of wrapped) { doc.text(w, M + 8, ly); ly += 3.2 }
             s.y += boxH + 1.3
           }
-        }
-        // right margin — PASS/FAIL chip + clause/note, at the step's first
-        // position on the page (not after it may have broken)
-        const rx = M + LEFT_W + 4
-        let ry = Math.min(stepTop, s.y)
-        if (st.pass !== undefined) { s.chip(rx, ry + 0.2, st.pass); ry += 4.6 }
-        const margin = st.clause ?? st.note
-        if (margin) {
-          s.setF('sans', 'normal', 5.6, FAINT)
-          doc.text(doc.splitTextToSize(margin, RIGHT_W - 2), rx, ry)
         }
         s.y += 1
         doc.setDrawColor(...HAIR_SOFT); doc.setLineWidth(0.15)

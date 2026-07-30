@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { designPunchingShear, type PunchingInput, type ColPosition } from '../engine/punchingShear'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
+import { buildPunchingSolution } from '../lib/punchingSolution'
 import { f0, f1, f2, f3 } from '../lib/format'
 
 interface FormState {
@@ -57,6 +58,8 @@ export default function PunchingShear() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fKey, allFinite, d])
 
+  const solution = r ? buildPunchingSolution({ c1: f.c1, c2: f.c2, d, fc: f.fc, lambda: parseFloat(f.lambda), Vu: f.Vu, position: f.position }, r) : null
+
   const report = r ? {
     docCode: 'S-PS',
     ok: r.ok,
@@ -79,6 +82,7 @@ export default function PunchingShear() {
       ['βc (aspect)', r.betac.toFixed(2)],
       ['Vc governing', `${f1(r.Vc)} kN (min of ${f1(r.Vc1)} / ${f1(r.Vc2)} / ${f1(r.Vc3)})`],
     ] as [string, string][],
+    steps: solution ?? undefined,
   } : undefined
 
   return (
