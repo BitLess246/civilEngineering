@@ -4,6 +4,7 @@ import {
   bromsClay, bromsSand, pyAnalysis,
   type PileHead, type SoilModel, type PyResult, type BromsResult,
 } from '../engine/lateralPile'
+import { buildLateralPileSolution } from '../lib/lateralPileSolution'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -117,6 +118,10 @@ export default function LateralPile() {
   const util = broms.Hu > 0 ? H / broms.Hu : Infinity
   const headOK = py.yHead <= 25    // 25 mm is the usual serviceability yardstick
 
+  const solution = buildLateralPileSolution(
+    { soilKind, L, D, EI, My, H, e, head, cu, e50, phiDeg: phi, k, gamma }, broms, py,
+  )
+
   const report = {
     docCode: 'G-LP',
     ok: util <= 1 && headOK && py.converged,
@@ -153,6 +158,7 @@ export default function LateralPile() {
       ['p–y max moment depth', `${f2(py.zMmax)} m`],
       ['p–y convergence', `${py.converged ? 'converged' : 'DID NOT CONVERGE'} in ${py.iterations} iterations (residual ${py.residual.toExponential(1)})`],
     ] as [string, string][],
+    steps: solution,
   }
 
   return (

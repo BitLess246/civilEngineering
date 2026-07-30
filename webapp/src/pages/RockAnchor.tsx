@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { designRockAnchor } from '../engine/rockAnchor'
 import { ReportControls } from '../components/ReportControls'
+import { buildRockAnchorSolution } from '../lib/geotechSolutions'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -38,6 +39,8 @@ export default function RockAnchor() {
   const r = designRockAnchor({ fpu, Aps, holeDia, bondLength, tauUlt, FS: 2, T })
 
   // Utilisation from the factor of safety, as in the other geotechnical pages.
+  const solution = buildRockAnchorSolution({ fpu, Aps, holeDia, bondLength, tauUlt, FS: 2, T }, r)
+
   const report = {
     docCode: 'G-RA',
     ok: r.ok,
@@ -65,6 +68,7 @@ export default function RockAnchor() {
       ['Allowable ground bond Qall', `${f2(r.Qall)} kN`],
       ['Governing mode', r.governs],
     ] as [string, string][],
+    steps: solution,
   }
 
   return (

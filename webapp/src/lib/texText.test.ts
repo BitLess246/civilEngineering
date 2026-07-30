@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { texToPlain } from './texText'
+import { MONO } from './pdfFonts'
 
 // Real formula shapes from the lib/*Solution builders (the strings the PDF
 // report converts), checked against hand-written plain-text equivalents.
@@ -53,4 +54,76 @@ describe('texToPlain', () => {
     ]
     for (const s of samples) expect(texToPlain(s)).not.toMatch(/\\[a-zA-Z]/)
   })
+
+  // ── Regressions found by reading an exported PDF, not by reading the code ──
+  it('does not stall on a superscript it cannot convert', () => {
+    // `^\circ` renders back to something starting with the same character the
+    // scanner is looking for. Restarting the scan at index 0 made the loop
+    // find it forever, so every LATER superscript in the same equation was
+    // dropped: "γ = 18.0 kN/m³" printed as "γ = 18.0 kN/m^3".
+    expect(texToPlain(String.raw`\phi = 25.0^\circ,\ \gamma = 18.0\ \text{kN/m}^3`))
+      .toBe('φ = 25.0°, γ = 18.0 kN/m³')
+    expect(texToPlain(String.raw`a^\circ b^2 c^3 d^{10}`)).toBe('a° b² c³ d¹⁰')
+  })
+
+  it('renders a degree symbol without a stray caret', () => {
+    expect(texToPlain(String.raw`\beta = 30.0^\circ`)).toBe('β = 30.0°')
+    expect(texToPlain(String.raw`45^\circ + \tfrac{\phi}{2}`)).toBe('45° + φ/2')
+  })
+
+  it('uses only glyphs the embedded PDF fonts can actually draw', () => {
+    // jsPDF draws a glyph the embedded subset lacks as NOTHING — no tofu, no
+    // warning, just a gap. "c'ℓ + N tanφ'" was printing as "c' + N tanφ'" and
+    // "ℓe/d" as "e/d", because DejaVu Sans MONO (which sets the equations) has
+    // no U+2113 and the combining macron U+0304 is outside the subset.
+    // This walks the whole conversion vocabulary so the next addition that
+    // reaches for an exotic glyph fails here instead of in a printed sheet.
+    const vocabulary = [
+      String.raw`\checkmark \Rightarrow \rightarrow \leftarrow \to \varepsilon \varnothing`,
+      String.raw`\lambda \alpha \beta \gamma \delta \Delta \epsilon \theta \kappa \sigma \Sigma \omega \Omega`,
+      String.raw`\phi \Phi \psi \rho \tau \mu \nu \eta \pi \chi \zeta`,
+      String.raw`\approx \infty \propto \lceil x \rceil \lfloor y \rfloor`,
+      String.raw`\cdot \times \div \pm \leq \geq \le \ge \neq \ne \sum`,
+      String.raw`\circ \degree \prime \ell \min \max \tan \cos \sin \ln \log`,
+      String.raw`\sqrt{x} \frac{a}{b} \bar{y} \overline{y} \bar{q}`,
+      String.raw`x^0 x^1 x^2 x^3 x^4 x^5 x^6 x^7 x^8 x^9 x^{-1} x^{+1} x^\circ`,
+    ].map(texToPlain).join('')
+
+    const missing = [...new Set(vocabulary)]
+      .filter((ch) => ch !== ' ')
+      .filter((ch) => !MONO_GLYPHS.has(ch.codePointAt(0)!))
+    expect(missing.map((c) => `${c} U+${c.codePointAt(0)!.toString(16)}`)).toEqual([])
+  })
 })
+
+/**
+ * Character codes the embedded mono subset can draw, read from the TTF's own
+ * cmap. Reading the font is the point: a hand-maintained allow-list would drift
+ * from the bytes that actually ship.
+ */
+const MONO_GLYPHS: Set<number> = (() => {
+  const bin = atob(MONO)
+  const b = new DataView(Uint8Array.from(bin, (c) => c.charCodeAt(0)).buffer)
+  const tag = (o: number) => String.fromCharCode(...[0, 1, 2, 3].map((k) => b.getUint8(o + k)))
+
+  let cmap = 0
+  for (let i = 0; i < b.getUint16(4); i++) {
+    const o = 12 + i * 16
+    if (tag(o) === 'cmap') cmap = b.getUint32(o + 8)
+  }
+  let sub = 0
+  for (let i = 0; i < b.getUint16(cmap + 2); i++) {
+    const o = cmap + 4 + i * 8
+    const pid = b.getUint16(o), eid = b.getUint16(o + 2)
+    if (pid === 3 && (eid === 1 || eid === 10)) sub = cmap + b.getUint32(o + 4)
+  }
+  // format 4: parallel endCode / startCode arrays, 0xffff-terminated
+  const segX2 = b.getUint16(sub + 6)
+  const endO = sub + 14, startO = endO + segX2 + 2
+  const set = new Set<number>()
+  for (let i = 0; i < segX2 / 2; i++) {
+    const end = b.getUint16(endO + i * 2), start = b.getUint16(startO + i * 2)
+    for (let c = start; c <= end && c !== 0xffff; c++) set.add(c)
+  }
+  return set
+})()

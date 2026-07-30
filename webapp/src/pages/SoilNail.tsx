@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { designSoilNail } from '../engine/soilNail'
 import { ReportControls } from '../components/ReportControls'
+import { buildSoilNailSolution } from '../lib/geotechSolutions'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -47,6 +48,8 @@ export default function SoilNail() {
   // A geotechnical check states a FACTOR OF SAFETY, not a demand/capacity
   // ratio, so the report's utilisation is FS_required / FS_achieved — which is
   // ≤ 1 exactly when the design passes, matching every other check in the app.
+  const solution = buildSoilNailSolution({ z, Sh, Sv, gamma, phiDeg: phi, surcharge: q, barDia, fy, drillDia, bondLength, qu, FSpullout: 2.0, FStensile: 1.8 }, r)
+
   const report = {
     docCode: 'G-SN',
     ok: r.tensileOK && r.pulloutOK,
@@ -75,6 +78,7 @@ export default function SoilNail() {
       ['Allowable bar strength Tall', `${f2(r.Tall)} kN`],
       ['Ultimate pullout Qult', `${f2(r.Qult)} kN`],
     ] as [string, string][],
+    steps: solution,
   }
 
   return (
