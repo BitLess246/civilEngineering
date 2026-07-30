@@ -122,11 +122,41 @@ export default function Settlement() {
   const t90 = govSoil ? timeToConsolidation(govSoil, 0.9) : Infinity
   const Uat = govSoil ? consolidationAfter(govSoil, years) : 0
 
+  // Settlement is a PREDICTION, not a code check — there is no capacity to
+  // divide by — so this report carries no pass/fail. The verdict line states
+  // the total instead. A 25 mm serviceability limit is common but is a project
+  // decision, not something to assert on the engineer's behalf.
+  const report = {
+    docCode: 'G-ST',
+    ok: true,
+    governing: `Total ${f1(total)} mm — ${f1(elastic)} immediate + ${f1(cons.total)} consolidation`,
+    stats: [
+      { label: 'Total settlement', value: f1(total), unit: 'mm' },
+      { label: 'Immediate (elastic)', value: f1(elastic), unit: 'mm' },
+      { label: 'Primary consolidation', value: f1(cons.total), unit: 'mm' },
+    ],
+    data: [
+      ['Applied pressure q', `${f1(q)} kPa`],
+      ['Footing B × L', `${f2(B)} × ${f2(L)} m`],
+      ['Founding depth Df', `${f2(Df)} m`],
+      ['Water table', `${f2(wt)} m`],
+      ['Elastic modulus Es', `${f0(Es)} kPa`],
+      ["Poisson's ratio ν", f2(nu)],
+      ['Profile depth', `${f2(totalDepth)} m in ${layers.length} layers`],
+      ['Elastic settlement', `${f1(elastic)} mm`],
+      ['Consolidation settlement', `${f1(cons.total)} mm`],
+      [`Schmertmann at ${years} y`, `${f1(schmert.settlement)} mm (C₁ ${f2(schmert.C1)}, C₂ ${f2(schmert.C2)})`],
+      ['Governing layer', `#${govLayer + 1} — ${f1(cons.layers[govLayer]?.settlement ?? 0)} mm`],
+      ['t₉₀ (governing layer)', Number.isFinite(t90) ? `${f2(t90)} years` : '—'],
+      ['U at ' + years + ' years', `${f0(Uat * 100)} %`],
+    ] as [string, string][],
+  }
+
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Foundation settlement</h1>
-      <ReportControls title="Settlement Report" badges={['Boussinesq', 'Terzaghi', 'Schmertmann']} />
+      <ReportControls title="Foundation Settlement" badges={['Boussinesq', 'Terzaghi', 'Schmertmann']} report={report} />
       <p className="mt-2 text-sm text-slate-600">
         Immediate (elastic and Schmertmann) plus primary consolidation settlement of a rectangular footing on a
         layered profile. Stress increase by Boussinesq; consolidation layer by layer with the overconsolidated

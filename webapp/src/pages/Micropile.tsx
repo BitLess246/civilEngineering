@@ -47,11 +47,39 @@ export default function Micropile() {
     mode, bondDia, bondLength, alphaBond, FS: 2, P,
   })
 
+  const report = {
+    docCode: 'G-MP',
+    ok: r.ok,
+    governing: `${r.governs === 'bond' ? 'Grout-to-ground bond' : 'Structural capacity'} governs · FS ${f2(r.fs)}`,
+    stats: [
+      { label: 'Allowable capacity', value: f2(r.allowable), unit: 'kN' },
+      { label: 'Applied load P', value: f2(P), unit: 'kN' },
+      { label: 'Bond length required', value: f2(r.bondLengthReq), unit: 'm' },
+    ],
+    checks: [
+      { name: `Governing capacity (${r.governs})`, ratio: r.allowable > 0 ? P / r.allowable : 0, ok: r.ok },
+    ],
+    data: [
+      ['Load case', mode],
+      ['Applied load P', `${f2(P)} kN`],
+      ['Bar ⌀ / fy', `${barDia} mm / ${fyBar} MPa`],
+      ['Grout ⌀ / f′c', `${groutDia} mm / ${fcGrout} MPa`],
+      ['Permanent casing', casing ? `yes — OD ${casingOD} / ID ${casingID} mm, fy ${fyCasing} MPa` : 'no'],
+      ['Bond ⌀', `${f2(bondDia)} m`],
+      ['Bond length provided', `${f2(bondLength)} m`],
+      ['Grout-to-ground bond αbond', `${f2(alphaBond)} kPa`],
+      ['Allowable structural', `${f2(r.structural)} kN`],
+      ['Ultimate bond Qult', `${f2(r.Qult)} kN`],
+      ['Allowable bond Qbond', `${f2(r.Qbond)} kN`],
+      ['Governing mode', r.governs],
+    ] as [string, string][],
+  }
+
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Micropile — axial capacity</h1>
-      <ReportControls title="Micropile Design Report" badges={['FHWA-NHI-05-039']} />
+      <ReportControls title="Micropile" badges={['FHWA-NHI-05-039']} report={report} />
       <p className="mt-2 text-sm text-slate-600">
         FHWA-NHI-05-039 allowable-stress check: structural capacity of the bar/casing/grout vs the
         grout-ground bond capacity of the bonded zone. Governing allowable = the smaller of the two.

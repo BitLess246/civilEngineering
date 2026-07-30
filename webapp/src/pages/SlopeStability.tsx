@@ -112,11 +112,44 @@ export default function SlopeStability() {
   const FS = crit ? { bishop: crit.bishop.FS, fellenius: crit.fellenius.FS, janbu: crit.janbu.FS }[method] : NaN
   const govOK = FS >= 1.5
 
+  // Utilisation from the factor of safety: 1.5 is the conventional long-term
+  // requirement for a permanent slope, so FS_required / FS_achieved is ≤ 1
+  // exactly when it passes.
+  const report = crit ? {
+    docCode: 'G-SS',
+    ok: govOK,
+    governing: `${method} FS = ${f2(FS)} on the critical circle (target 1.5)`,
+    stats: [
+      { label: `FS (${method})`, value: f2(FS) },
+      { label: 'Circle radius R', value: f2(crit.circle.R), unit: 'm' },
+      { label: 'Centre (x, y)', value: `${f2(crit.circle.xc)}, ${f2(crit.circle.yc)}` },
+    ],
+    checks: [
+      { name: 'Factor of safety vs 1.5', ratio: FS > 0 ? 1.5 / FS : 0, ok: govOK },
+    ],
+    data: [
+      ['Slope height H', `${f2(H)} m`],
+      ['Face angle β', `${f2(beta)}°`],
+      ['Crest / toe width', `${f2(crestW)} / ${f2(toeW)} m`],
+      ['Cohesion c', `${f2(c)} kPa`],
+      ['Friction angle φ', `${f2(phi)}°`],
+      ['Unit weight γ', `${f2(gamma)} kN/m³`],
+      ['Pore pressure ru', f2(ru)],
+      ['Reported method', method],
+      ['FS Bishop', f2(crit.bishop.FS)],
+      ['FS Fellenius', f2(crit.fellenius.FS)],
+      ['FS Janbu', f2(crit.janbu.FS)],
+      ['Driving ΣW·sinα', `${f2(crit.bishop.driving)} kN`],
+      ['Resisting Σ', `${f2(crit.bishop.resisting)} kN`],
+      ['Bishop converged', `${crit.bishop.converged ? 'yes' : 'NO'} (${crit.bishop.iterations} iterations)`],
+    ] as [string, string][],
+  } : undefined
+
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Slope stability — method of slices</h1>
-      <ReportControls title="Slope Stability Report" badges={['Bishop', 'Fellenius', 'Janbu']} />
+      <ReportControls title="Slope Stability" badges={['Bishop', 'Fellenius', 'Janbu']} report={report} />
       <p className="mt-2 text-sm text-slate-600">
         Circular-failure factor of safety by the method of slices — Fellenius/OMS, Bishop&rsquo;s simplified and
         Janbu&rsquo;s simplified — with a grid search for the critical (minimum-FS) circle. Pore pressure via ru.

@@ -37,11 +37,41 @@ export default function RockAnchor() {
 
   const r = designRockAnchor({ fpu, Aps, holeDia, bondLength, tauUlt, FS: 2, T })
 
+  // Utilisation from the factor of safety, as in the other geotechnical pages.
+  const report = {
+    docCode: 'G-RA',
+    ok: r.ok,
+    governing: `${r.governs === 'tendon' ? 'Tendon' : 'Ground bond'} governs · FS ${f2(r.fs)}`,
+    stats: [
+      { label: 'Allowable load', value: f2(r.allowable), unit: 'kN' },
+      { label: 'Design load Td', value: f2(r.Td), unit: 'kN' },
+      { label: 'Bond length required', value: f2(r.bondLengthReq), unit: 'm' },
+    ],
+    checks: [
+      { name: 'Tendon capacity', ratio: r.Td > 0 ? T / r.Td : 0, ok: r.tendonOK },
+      { name: 'Ground bond (FS 2.0)', ratio: r.Qall > 0 ? T / r.Qall : 0, ok: r.bondOK },
+    ],
+    data: [
+      ['Tendon fpu', `${f2(fpu)} MPa`],
+      ['Tendon area Aps', `${f2(Aps)} mm²`],
+      ['Hole ⌀', `${f2(holeDia)} m`],
+      ['Bond length provided', `${f2(bondLength)} m`],
+      ['Ultimate bond τ', `${f2(tauUlt)} kPa`],
+      ['Service load T', `${f2(T)} kN`],
+      ['GUTS', `${f2(r.GUTS)} kN`],
+      ['Design load Td', `${f2(r.Td)} kN`],
+      ['Proof / acceptance test load', `${f2(r.testLoad)} kN`],
+      ['Ultimate ground bond Qult', `${f2(r.Qult)} kN`],
+      ['Allowable ground bond Qall', `${f2(r.Qall)} kN`],
+      ['Governing mode', r.governs],
+    ] as [string, string][],
+  }
+
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Rock / ground anchor</h1>
-      <ReportControls title="Rock Anchor Report" badges={['PTI DC35.1']} />
+      <ReportControls title="Rock Anchor" badges={['PTI DC35.1']} report={report} />
       <p className="mt-2 text-sm text-slate-600">
         PTI DC35.1 / FHWA-IF-99-015 check: prestressing-tendon design load (0.60·GUTS) and grout-ground
         (rock socket) bond capacity vs the applied anchor tension. Governing allowable = the smaller.
