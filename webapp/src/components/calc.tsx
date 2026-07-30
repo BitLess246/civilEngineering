@@ -120,6 +120,7 @@ export function DrawingCard({ title, meta, children, pdfDrawing }: {
 
 // ── Report letterhead (screen card) ─────────────────────────────────────────
 export interface LetterheadState { project: string; sheet: string; preparedBy: string }
+
 export function LetterheadCard({ lh, onChange }: { lh: LetterheadState; onChange: (p: Partial<LetterheadState>) => void }) {
   const today = new Date().toISOString().slice(0, 10)
   const cell = (label: string, value: string, key: keyof LetterheadState, ph: string, mono = false) => (

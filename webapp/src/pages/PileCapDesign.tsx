@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { designPileCap, type PileArrangement } from '../engine/pileCap'
 import { PileCapSchematic } from '../components/PileCapSchematic'
 import { PageHeader, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import { initialLetterhead } from '../lib/letterhead'
 import { Math as KTex } from '../lib/math'
 import { f0, f2, f3 } from '../lib/format'
 import 'katex/dist/katex.min.css'
@@ -124,7 +125,7 @@ function steelRow(label: ReactNode, s: { bars: number; spacing: number; As: numb
 
 export default function PileCapDesign() {
   const [form, setForm] = useState<FormState>(DEFAULTS)
-  const [lh, setLh] = useState<LetterheadState>({ project: '', sheet: 'PC-01 · Rev A', preparedBy: '' })
+  const [lh, setLh] = useState<LetterheadState>(() => initialLetterhead('PC-01 · Rev A'))
   const set = <K extends keyof FormState>(k: K) => (v: FormState[K]) => setForm(s => ({ ...s, [k]: v }))
 
   const valid = Object.values(form).every(v => typeof v === 'string' || Number.isFinite(v as number))

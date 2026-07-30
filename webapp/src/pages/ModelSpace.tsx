@@ -33,6 +33,7 @@ import { buildSeismicMass, GRAVITY } from '../engine/modal'
 import { autoRigidOffsets } from '../engine/rigidEndZones'
 import { computeWind, computeCladding, type WindResult, type WindEnclosure, type CladdingResult } from '../engine/wind'
 import { LetterheadCard, type LetterheadState } from '../components/calc'
+import { initialLetterhead } from '../lib/letterhead'
 import { JointConnections3D } from '../components/JointConnections3D'
 import { ConnectionDetail2D } from '../components/ConnectionDetail2D'
 import { connectionRowSolution } from '../lib/connectionSolution'
@@ -1113,7 +1114,7 @@ export default function ModelSpace() {
   const [report] = useState<'' | 'schedules' | 'drawings' | 'solutions' | 'full' | 'sol-only' | 'draw-only'>('')  // consolidated report template (interactive on screen; PDF carries everything)
   const [resultsTab, setResultsTab] = useState<'schedules' | 'boq' | 'schedule'>('schedules')  // results section tab
   const [modelImg, setModelImg] = useState<string | null>(null)   // 3D snapshot for the PDF report
-  const [lh, setLh] = useState<LetterheadState>({ project: '', sheet: '', preparedBy: '' })
+  const [lh, setLh] = useState<LetterheadState>(() => initialLetterhead(''))
   const [exporting, setExporting] = useState(false)               // PDF build in flight
   const [ioMenu, setIoMenu] = useState(false)                     // Import/Export dropdown
   const [concreteClass, setConcreteClass] = useState<ConcreteClass>((si.concreteClass as ConcreteClass) ?? 'A')   // mix class for the take-off

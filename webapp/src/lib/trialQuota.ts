@@ -60,6 +60,8 @@ export const PUBLIC_ROUTES: readonly string[] = [
   // find a way to complain WITHOUT an account — and a payment provider
   // reviewing the site will not have one either.
   '/terms', '/privacy', '/refunds', '/contact',
+  // Profile: the letterhead settings are browser-local and work signed out.
+  '/profile',
 ]
 
 export type AccessVerdict =

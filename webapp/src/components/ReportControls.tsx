@@ -1,6 +1,7 @@
 import { useState, type JSX } from 'react'
 import type { CalcPdfInput } from '../lib/calcPdf'
 import { ExportPdfButton } from './ExportPdfButton'
+import { loadProfile, letterheadDefaults } from '../lib/auth/profile'
 
 /**
  * A page's report payload, minus the parts this component already owns.
@@ -35,9 +36,13 @@ export interface ReportControlsProps {
  * use the full PrintReport instead (components/calc.tsx).
  */
 export function ReportControls({ title, badges = ['NSCP 2015', 'ACI 318-14'], report }: ReportControlsProps): JSX.Element {
-  const [project, setProject] = useState('')
+  // Seeded from the saved profile, as INITIAL state rather than an effect —
+  // an effect would overwrite whatever the user had already typed on a
+  // re-render, and this is a starting value, not a binding.
+  const [defaults] = useState(() => letterheadDefaults(loadProfile()))
+  const [project, setProject] = useState(defaults.project)
   const [sheet, setSheet] = useState('')
-  const [preparedBy, setPreparedBy] = useState('')
+  const [preparedBy, setPreparedBy] = useState(defaults.preparedBy)
   const today = new Date().toISOString().slice(0, 10)
 
   const print = () => {

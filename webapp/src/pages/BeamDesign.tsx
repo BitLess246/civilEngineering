@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import { initialLetterhead } from '../lib/letterhead'
 import { designBeam, beamServiceDeflection, type BeamDesignInput, type BeamDesignResult } from '../engine/beamDesign'
 import type { BeamSupport } from '../engine/beamDeflection'
 import type { CriticalSection } from '../engine/beamSections'
@@ -67,7 +68,7 @@ export default function BeamDesign() {
   }, [params])
 
   const [f, setF] = useState<FormState>({ ...DEFAULTS, ...(handoff.multi ? {} : handoff.single) })
-  const [lh, setLh] = useState<LetterheadState>({ project: '', sheet: 'S-01 · Rev A', preparedBy: '' })
+  const [lh, setLh] = useState<LetterheadState>(() => initialLetterhead('S-01 · Rev A'))
   const [span, setSpan] = useState<number>(NaN)
   const [support, setSupport] = useState<BeamSupport>('simple')
   const [svcWD, setSvcWD] = useState<number>(NaN)

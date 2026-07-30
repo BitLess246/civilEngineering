@@ -6,6 +6,7 @@ import {
 import { factoredLoad } from '../engine/loads'
 import { ColumnSchematic } from '../components/ColumnSchematic'
 import { PageHeader, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import { initialLetterhead } from '../lib/letterhead'
 import { InteractionDiagram } from '../components/InteractionDiagram'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { axialColumnSolution, eccentricColumnSolution, slendernessSolution } from '../lib/columnSolution'
@@ -21,7 +22,7 @@ type BarMode = 'design' | 'analyze'
 
 export default function ColumnDesign() {
   const [mode, setMode] = useState<Mode>('axial')
-  const [lh, setLh] = useState<LetterheadState>({ project: '', sheet: 'C-01 · Rev A', preparedBy: '' })
+  const [lh, setLh] = useState<LetterheadState>(() => initialLetterhead('C-01 · Rev A'))
   const [shape, setShape] = useState<ColumnShape>('tied')
   const [b, setB] = useState(400); const [h, setH] = useState(400); const [D, setD] = useState(400)
   const [cover, setCover] = useState(40)

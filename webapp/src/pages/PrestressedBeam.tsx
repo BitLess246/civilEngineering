@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { designPrestressed } from '../engine/prestressedBeam'
 import { buildPrestressedSolution } from '../lib/prestressedSolution'
 import { PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import { initialLetterhead } from '../lib/letterhead'
 import { Num, Pick, Card } from '../components/qty'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { DimBelow, DimSide } from '../components/dims'
@@ -59,7 +60,7 @@ export default function PrestressedBeam() {
   const [wSDL, setWSDL] = useState(6); const [wLL, setWLL] = useState(12)
   const [RH, setRH] = useState(75)
   const [klass, setKlass] = useState<'U' | 'T'>('U')
-  const [lh, setLh] = useState<LetterheadState>({ project: '', sheet: '', preparedBy: '' })
+  const [lh, setLh] = useState<LetterheadState>(() => initialLetterhead(''))
 
   const inp = useMemo(() => ({
     b, h, span, fc, fci, Aps, fpu, e, fpj: (fpjPct / 100) * fpu, wSDL, wLL, RH, klass,
