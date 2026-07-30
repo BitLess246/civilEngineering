@@ -6,6 +6,7 @@ import {
   timeToConsolidation, consolidationAfter, drainagePath,
   type SoilLayer,
 } from '../engine/settlement'
+import { buildSettlementSolution } from '../lib/settlementSolution'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -126,6 +127,11 @@ export default function Settlement() {
   // divide by — so this report carries no pass/fail. The verdict line states
   // the total instead. A 25 mm serviceability limit is common but is a project
   // decision, not something to assert on the engineer's behalf.
+  const solution = buildSettlementSolution(
+    { q, B, L, Df, waterTable: wt, Es, nu, years, layers },
+    { cons, elastic, schmert, total, govLayer, t90, Uat, sigma0: effectiveStress(layers, Df, wt) },
+  )
+
   const report = {
     docCode: 'G-ST',
     ok: true,
@@ -150,6 +156,7 @@ export default function Settlement() {
       ['t₉₀ (governing layer)', Number.isFinite(t90) ? `${f2(t90)} years` : '—'],
       ['U at ' + years + ' years', `${f0(Uat * 100)} %`],
     ] as [string, string][],
+    steps: solution,
   }
 
   return (

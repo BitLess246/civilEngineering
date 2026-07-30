@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { designMicropile } from '../engine/micropile'
 import { ReportControls } from '../components/ReportControls'
+import { buildMicropileSolution } from '../lib/geotechSolutions'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -47,6 +48,8 @@ export default function Micropile() {
     mode, bondDia, bondLength, alphaBond, FS: 2, P,
   })
 
+  const solution = buildMicropileSolution({ mode, barDia, fyBar, groutDia, fcGrout, casing, casingOD, casingID, fyCasing, bondDia, bondLength, alphaBond, P }, r)
+
   const report = {
     docCode: 'G-MP',
     ok: r.ok,
@@ -73,6 +76,7 @@ export default function Micropile() {
       ['Allowable bond Qbond', `${f2(r.Qbond)} kN`],
       ['Governing mode', r.governs],
     ] as [string, string][],
+    steps: solution,
   }
 
   return (

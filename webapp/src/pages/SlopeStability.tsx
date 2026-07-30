@@ -4,6 +4,7 @@ import {
   searchCriticalCircle, surfaceY,
   type Pt, type SlopeSoil, type WaterModel, type CircleResult,
 } from '../engine/slopeStability'
+import { buildSlopeSolution } from '../lib/slopeSolution'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -143,6 +144,9 @@ export default function SlopeStability() {
       ['Resisting Σ', `${f2(crit.bishop.resisting)} kN`],
       ['Bishop converged', `${crit.bishop.converged ? 'yes' : 'NO'} (${crit.bishop.iterations} iterations)`],
     ] as [string, string][],
+    steps: buildSlopeSolution(
+      { H, beta, crestW, toeW, soil, ru, method }, res!, crit,
+    ),
   } : undefined
 
   return (

@@ -26,7 +26,12 @@ const SYMBOLS: [string, string][] = [
   ['\\cdot', '·'], ['\\times', '×'], ['\\div', '÷'], ['\\pm', '±'],
   ['\\leq', '≤'], ['\\geq', '≥'], ['\\le', '≤'], ['\\ge', '≥'],
   ['\\neq', '≠'], ['\\ne', '≠'], ['\\sum', 'Σ'], ['\\to', '→'],
-  ['\\circ', '°'], ['\\degree', '°'], ['\\prime', '′'], ['\\ell', 'ℓ'],
+  ['\\circ', '°'], ['\\degree', '°'], ['\\prime', '′'],
+  // ℓ (U+2113) deliberately becomes a plain l: equations are set in DejaVu Sans
+  // MONO, which has no U+2113 at all — the character is not in the upstream
+  // font, so no subset can add it — and jsPDF draws a missing glyph as nothing.
+  // "c'ℓ" was silently printing as "c'". A plain l is legible; a blank is not.
+  ['\\ell', 'l'],
   ['\\min', 'min'], ['\\max', 'max'], ['\\tan', 'tan'], ['\\cos', 'cos'],
   ['\\sin', 'sin'], ['\\ln', 'ln'], ['\\log', 'log'],
   ['\\qquad', '    '], ['\\quad', '  '],
@@ -59,6 +64,18 @@ function grabArg(s: string, at: number): [string, number] {
   return [s[at] ?? '', at + 1]
 }
 
+/**
+ * Precomposed macron letters. The combining macron U+0304 is NOT in the
+ * embedded subsets, so `x` + U+0304 drew as a bare `x` — the bar vanished and
+ * a mean silently read as an instantaneous value. Anything without a
+ * precomposed form falls back to the explicit `_bar` shorthand instead.
+ */
+const MACRON: Record<string, string> = {
+  a: 'ā', e: 'ē', i: 'ī', o: 'ō', u: 'ū', y: 'ȳ',
+  A: 'Ā', E: 'Ē', I: 'Ī', O: 'Ō', U: 'Ū', Y: 'Ȳ',
+}
+const overbar = (a: string) => MACRON[a.trim()] ?? `${a.trim()}_bar`
+
 /** Does a fraction/sqrt operand need parentheses in linear form? */
 const needsParens = (s: string) => /[+\-−·×/ ]/.test(s.trim())
 const wrap = (s: string) => (needsParens(s) ? `(${s.trim()})` : s.trim())
@@ -66,8 +83,15 @@ const wrap = (s: string) => (needsParens(s) ? `(${s.trim()})` : s.trim())
 /** Replace every \cmd{a}(…{b}) via a handler, innermost-safe (single pass per
  *  occurrence, called until the command disappears). */
 function replaceCommand(s: string, cmd: string, nArgs: number, render: (args: string[]) => string): string {
-  for (let guard = 0; guard < 200; guard++) {
-    const at = s.indexOf(cmd)
+  // The cursor must advance PAST what was just emitted. Restarting the scan at
+  // index 0 deadlocks whenever a handler re-emits its own command — `^\circ`
+  // renders back to `^°`, so the loop found the same caret 200 times and every
+  // LATER superscript in the same equation was silently dropped ("kN/m³" came
+  // out as "kN/m^3"). Args are converted recursively, so nothing before the
+  // cursor still needs processing.
+  let from = 0
+  for (let guard = 0; guard < 500; guard++) {
+    const at = s.indexOf(cmd, from)
     if (at < 0) return s
     let i = at + cmd.length
     const args: string[] = []
@@ -77,7 +101,9 @@ function replaceCommand(s: string, cmd: string, nArgs: number, render: (args: st
       args.push(content)
       i = next
     }
-    s = s.slice(0, at) + render(args.map((a) => texToPlain(a))) + s.slice(i)
+    const out = render(args.map((a) => texToPlain(a)))
+    s = s.slice(0, at) + out + s.slice(i)
+    from = at + out.length
   }
   return s
 }
@@ -91,8 +117,7 @@ export function texToPlain(tex: string): string {
   s = replaceCommand(s, '\\sqrt', 1, ([a]) => `√${needsParens(a) ? `(${a.trim()})` : a.trim()}`)
   for (const t of ['\\textbf', '\\text', '\\mathbf', '\\mathrm', '\\operatorname'])
     s = replaceCommand(s, t, 1, ([a]) => a)
-  s = replaceCommand(s, '\\overline', 1, ([a]) => (a === 'y' ? 'ȳ' : a === 'x' ? 'x̄' : `${a}̄`))
-  s = replaceCommand(s, '\\bar', 1, ([a]) => (a === 'y' ? 'ȳ' : a === 'x' ? 'x̄' : `${a}̄`))
+  for (const c of ['\\overline', '\\bar']) s = replaceCommand(s, c, 1, ([a]) => overbar(a))
   // delimiter sizing → keep the delimiter
   s = s.replace(/\\left\s*/g, '').replace(/\\right\s*/g, '').replace(/\\[bB]igg?[lr]?\s*/g, '')
   // symbols (order matters: longest names first in the table)
@@ -100,7 +125,10 @@ export function texToPlain(tex: string): string {
   // superscripts: ^{…} then ^c — digits/sign to unicode, else caret notation
   s = replaceCommand(s, '^', 1, ([a]) => {
     const t = a.trim()
-    if ([...t].every((ch) => SUP[ch] !== undefined)) return [...t].map((ch) => SUP[ch]).join('')
+    // ° and ′ are already superscript-height glyphs — `30^\circ` reads as 30°,
+    // never as 30^°.
+    if (t === '°' || t === '′' || t === '″') return t
+    if (t.length > 0 && [...t].every((ch) => SUP[ch] !== undefined)) return [...t].map((ch) => SUP[ch]).join('')
     return `^${needsParens(t) ? `(${t})` : t}`
   })
   // subscripts flatten: M_u → Mu, A_{s,max} → As,max

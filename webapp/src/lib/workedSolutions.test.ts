@@ -12,6 +12,22 @@ import { designCircularTank } from '../engine/waterTank'
 import { buildSlabSolution } from './slabSolution'
 import { buildStairSolution } from './stairSolution'
 import { buildWaterTankSolution } from './waterTankSolution'
+import { designSoilNail } from '../engine/soilNail'
+import { designMicropile } from '../engine/micropile'
+import { designRockAnchor } from '../engine/rockAnchor'
+import { designFacing } from '../engine/shotcreteFacing'
+import {
+  buildSoilNailSolution, buildMicropileSolution, buildRockAnchorSolution, buildFacingSolution,
+} from './geotechSolutions'
+import {
+  consolidationSettlement, elasticSettlement, schmertmannSettlement, effectiveStress,
+  timeToConsolidation, consolidationAfter, type SoilLayer,
+} from '../engine/settlement'
+import { buildSettlementSolution } from './settlementSolution'
+import { searchCriticalCircle, type Pt, type SlopeSoil } from '../engine/slopeStability'
+import { buildSlopeSolution } from './slopeSolution'
+import { bromsClay, pyAnalysis } from '../engine/lateralPile'
+import { buildLateralPileSolution } from './lateralPileSolution'
 
 // ─────────────────────────────────────────────────────────────────────────
 // What a worked solution has to be, applied to every builder at once.
@@ -44,6 +60,67 @@ const tankIn = {
   sigmaSt: 130, sigmaCt: 1.3, cover: 40, barDia: 16,
 }
 
+// ── Geotechnical ─────────────────────────────────────────────────────────
+const nailIn = {
+  z: 5, Sh: 1.5, Sv: 1.5, gamma: 18, phiDeg: 30, surcharge: 10,
+  barDia: 25, fy: 415, drillDia: 150, bondLength: 8, qu: 100,
+}
+const mpSection = { barDia: 32, fyBar: 517, groutDia: 200, fcGrout: 28 }
+const mpIn = {
+  mode: 'compression' as const, ...mpSection,
+  casing: false, casingOD: 0, casingID: 0, fyCasing: 248,
+  bondDia: 200, bondLength: 10, alphaBond: 200, P: 600,
+}
+const anchorIn = {
+  fpu: 1860, Aps: 1400, holeDia: 150, bondLength: 6, tauUlt: 700, T: 800,
+}
+const facingIn = {
+  SH: 1.5, SV: 1.5, hc: 150, cover: 40, AsVert: 335, AsHoriz: 335,
+  fc: 21, fy: 415, bearingPlate: 0.225, nailHeadForce: 60,
+}
+
+const setLayers: SoilLayer[] = [
+  { name: 'Sand fill', H: 3, gamma: 18, gammaSat: 20 },
+  { name: 'Soft clay', H: 6, gamma: 17, gammaSat: 18, e0: 1.1, Cc: 0.35, cv: 1.5, sigmaP: 90 },
+  { name: 'Stiff clay', H: 5, gamma: 19, gammaSat: 20, e0: 0.7, Cc: 0.18, cv: 4, sigmaP: 300 },
+]
+const setIn = { q: 120, B: 2.5, L: 3.5, Df: 1.5, waterTable: 3, Es: 25000, nu: 0.3, years: 10, layers: setLayers }
+
+function settlementCase() {
+  const cons = consolidationSettlement({
+    layers: setLayers, q: setIn.q, B: setIn.B, L: setIn.L, Df: setIn.Df,
+    waterTable: setIn.waterTable, slices: 20,
+  })
+  const elastic = elasticSettlement({ q: setIn.q, B: setIn.B, L: setIn.L, Es: setIn.Es, nu: setIn.nu })
+  const schmert = schmertmannSettlement({
+    dp: setIn.q, B: setIn.B, L: setIn.L,
+    sigma0: effectiveStress(setLayers, setIn.Df, setIn.waterTable), gamma: setLayers[0].gamma,
+    layers: Array.from({ length: 40 }, () => ({ H: 0.2, Es: setIn.Es })), years: setIn.years,
+  })
+  const govLayer = cons.layers.reduce(
+    (best, l, k) => (l.settlement > (cons.layers[best]?.settlement ?? -1) ? k : best), 0)
+  const govSoil = setLayers[govLayer]
+  return {
+    cons, elastic, schmert, total: elastic + cons.total, govLayer,
+    t90: timeToConsolidation(govSoil, 0.9), Uat: consolidationAfter(govSoil, setIn.years),
+    sigma0: effectiveStress(setLayers, setIn.Df, setIn.waterTable),
+  }
+}
+
+// 10 m slope at 30°, c-φ soil — the same default the page ships with.
+const slopeGround: Pt[] = [
+  { x: 0, y: 10 }, { x: 8, y: 10 },
+  { x: 8 + 10 / Math.tan((30 * Math.PI) / 180), y: 0 },
+  { x: 8 + 10 / Math.tan((30 * Math.PI) / 180) + 12, y: 0 },
+]
+const slopeSoil: SlopeSoil = { c: 20, phiDeg: 25, gamma: 18 }
+
+const pileIn = {
+  soilKind: 'clay' as const, L: 12, D: 0.6, EI: 180000, My: 900,
+  H: 150, e: 0.5, head: 'free' as const,
+  cu: 40, e50: 0.01, phiDeg: 33, k: 25000, gamma: 9,
+}
+
 const BUILDERS: [string, () => SolutionStep[]][] = [
   ['punching shear', () => buildPunchingSolution(punchIn, designPunchingShear(punchIn))],
   ['torsion', () => buildTorsionSolution(torsIn, designTorsion(torsIn))],
@@ -51,6 +128,26 @@ const BUILDERS: [string, () => SolutionStep[]][] = [
   ['two-way slab', () => buildSlabSolution(slabIn, designSlabDDM(slabIn))],
   ['stair', () => buildStairSolution(stairIn, designStair(stairIn))],
   ['water tank', () => buildWaterTankSolution(tankIn, designCircularTank(tankIn))],
+  ['soil nail', () => buildSoilNailSolution(nailIn, designSoilNail(nailIn))],
+  ['micropile', () => buildMicropileSolution(mpIn, designMicropile({ section: mpSection, ...mpIn }))],
+  ['rock anchor', () => buildRockAnchorSolution(anchorIn, designRockAnchor(anchorIn))],
+  ['shotcrete facing', () => buildFacingSolution(facingIn, designFacing(facingIn))],
+  ['settlement', () => buildSettlementSolution(setIn, settlementCase())],
+  ['slope stability', () => {
+    const res = searchCriticalCircle(slopeGround, slopeSoil, { n: 30 })!
+    return buildSlopeSolution(
+      { H: 10, beta: 30, crestW: 8, toeW: 12, soil: slopeSoil, ru: 0, method: 'bishop' },
+      res, res.critical,
+    )
+  }],
+  ['lateral pile', () => {
+    const broms = bromsClay({ L: pileIn.L, d: pileIn.D, cu: pileIn.cu, My: pileIn.My, e: pileIn.e, head: pileIn.head })
+    const py = pyAnalysis({
+      L: pileIn.L, D: pileIn.D, EI: pileIn.EI, H: pileIn.H, e: pileIn.e, head: pileIn.head,
+      soil: { kind: 'clay', cu: pileIn.cu, gamma: pileIn.gamma, e50: pileIn.e50 }, elements: 60,
+    })
+    return buildLateralPileSolution(pileIn, broms, py)
+  }],
 ]
 
 const eqs = (steps: SolutionStep[]) =>
@@ -72,7 +169,14 @@ describe.each(BUILDERS)('%s worked solution', (_name, build) => {
     // that the citation contains a § character. (My first version demanded §
     // and failed on "ACI 318-14 Table 9.3.1.1" and "IS 3370 / ACI 350", both
     // of which are perfectly good references.)
-    const STANDARD = /ACI|NSCP|AISC|IS \d|PTI|FHWA|Broms|Terzaghi|Boussinesq|working stress|thin-cylinder|Good practice/i
+    const STANDARD = new RegExp([
+      'ACI', 'NSCP', 'AISC', String.raw`IS \d`, 'PTI', 'FHWA', 'API RP',
+      // Named methods are citations too — each is a published paper an
+      // engineer can pull, which is exactly what this test is protecting.
+      'Broms', 'Terzaghi', 'Boussinesq', 'Bishop', 'Fellenius', 'Janbu',
+      'Schmertmann', 'Steinbrenner', 'Matlock', 'Skempton',
+      'working stress', 'thin-cylinder', 'Good practice',
+    ].join('|'), 'i')
     for (const s of steps) {
       expect(s.clause, s.title).toBeTruthy()
       expect(s.clause!, s.title).toMatch(STANDARD)
@@ -139,5 +243,46 @@ describe('degenerate inputs do not produce a broken sheet', () => {
     const ldStep = steps.find((s) => s.title.includes('tension'))!
     if (r.ld_raw < 300) expect(ldStep.note).toMatch(/300 mm floor/)
     expect(eqs(steps).join(' ')).toContain(r.ld.toFixed(0))
+  })
+
+  it('states a dry settlement profile in words instead of printing Infinity', () => {
+    // waterTable: Infinity is the engine's "no water table" sentinel, and
+    // sn2(Infinity) would print the word Infinity into the sheet.
+    const dry = { ...setIn, waterTable: Infinity }
+    const steps = buildSettlementSolution(dry, settlementCase())
+    expect(eqs(steps).join(' ')).toContain('not encountered')
+    for (const t of eqs(steps)) expect(t).not.toMatch(/NaN|undefined|Infinity/)
+  })
+
+  it('calls an unstable slope unstable', () => {
+    // Steep and weak: the critical circle should fall well short of FS 1.5.
+    const weak: SlopeSoil = { c: 5, phiDeg: 18, gamma: 19 }
+    const res = searchCriticalCircle(slopeGround, weak, { n: 30 })!
+    const steps = buildSlopeSolution(
+      { H: 10, beta: 30, crestW: 8, toeW: 12, soil: weak, ru: 0.3, method: 'bishop' }, res, res.critical)
+    const verdict = steps.find((s) => s.pass !== undefined)!
+    expect(verdict.pass).toBe(res.critical.bishop.FS >= 1.5)
+    expect(verdict.pass).toBe(false)
+    expect(eqs(steps).join(' ')).toContain('UNSTABLE')
+    // Fellenius ignores interslice forces, so it must not exceed Bishop.
+    expect(res.critical.fellenius.FS).toBeLessThanOrEqual(res.critical.bishop.FS + 1e-9)
+  })
+
+  it('names the Broms mechanism that actually governs', () => {
+    // A weak section yields before the soil does ⇒ long pile; a very strong
+    // one cannot, so the soil governs ⇒ short pile. The sheet has to say which.
+    const py = pyAnalysis({
+      L: 12, D: 0.6, EI: 180000, H: 150, e: 0.5, head: 'free',
+      soil: { kind: 'clay', cu: 40, gamma: 9, e50: 0.01 }, elements: 60,
+    })
+    for (const My of [50, 1e7]) {
+      const broms = bromsClay({ L: 12, d: 0.6, cu: 40, My, e: 0.5, head: 'free' })
+      const steps = buildLateralPileSolution({ ...pileIn, My }, broms, py)
+      const gov = steps.find((s) => s.title.includes('Governing'))!
+      expect(eqs([gov]).join(' ')).toContain(`\\text{${broms.mode} pile}`)
+      for (const t of eqs(steps)) expect(t).not.toMatch(/NaN|undefined|Infinity/)
+    }
+    expect(bromsClay({ L: 12, d: 0.6, cu: 40, My: 50, e: 0.5, head: 'free' }).mode).toBe('long')
+    expect(bromsClay({ L: 12, d: 0.6, cu: 40, My: 1e7, e: 0.5, head: 'free' }).mode).toBe('short')
   })
 })

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { designFacing } from '../engine/shotcreteFacing'
 import { ReportControls } from '../components/ReportControls'
+import { buildFacingSolution } from '../lib/geotechSolutions'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -42,6 +43,8 @@ export default function ShotcreteFacing() {
 
   const r = designFacing({ SH, SV, hc, cover, AsVert, AsHoriz, fc, fy, bearingPlate, CF, nailHeadForce })
 
+  const solution = buildFacingSolution({ SH, SV, hc, cover, AsVert, AsHoriz, fc, fy, bearingPlate, CF, nailHeadForce }, r)
+
   const report = {
     docCode: 'G-SF',
     ok: r.ok,
@@ -72,6 +75,7 @@ export default function ShotcreteFacing() {
       ['Punching strength Rfp', `${f2(r.Rfp)} kN`],
       ['Governing mode', r.governs],
     ] as [string, string][],
+    steps: solution,
   }
 
   return (
