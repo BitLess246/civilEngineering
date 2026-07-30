@@ -9,6 +9,7 @@ import { densityFromN60, consistencyFromN60 } from '../engine/soils/spt'
 import {
   layerThickness, recoveryRatio, soilFamily, isCohesive,
   type Borehole, type SoilLayer, type Sample, type LabTest, type LabTestType, type LabTestStatus,
+  type LayerParameters,
 } from '../engine/soils/model'
 import {
   LAB_TESTS, labSpec, isImplemented, evaluateTest, summarise,
@@ -141,11 +142,39 @@ export default function SoilInvestigation() {
   const issues = useMemo(() => (inv ? validateInvestigation(inv) : []), [inv])
   const bh: Borehole | undefined = inv?.boreholes[holeIdx]
 
-  // Unit weights entered per layer for the stress profile. They are an
-  // INTERPRETATION, not data, so they live in page state rather than in the
-  // stored investigation until the Phase 5 parameter engine gives them a home
-  // with provenance attached.
-  const [unitWeights, setUnitWeights] = useState<Record<string, LayerUnitWeight>>({})
+  // Unit weights are stored on the investigation as ASSUMED values with a
+  // rationale, not held in page state. They are an interpretation, which is
+  // exactly what `assumed` provenance is for — and storing them is what lets
+  // the analysis pages read a layer through SoilLayerPicker without the number
+  // arriving from nowhere.
+  const unitWeights: Record<string, LayerUnitWeight> = useMemo(() => {
+    const out: Record<string, LayerUnitWeight> = {}
+    for (const p of inv?.parameters ?? []) {
+      const g = p.unitWeight?.value
+      if (g != null) out[p.layerId] = { gamma: g, gammaSat: p.saturatedUnitWeight?.value }
+    }
+    return out
+  }, [inv])
+
+  const setUnitWeight = (layerId: string, key: 'gamma' | 'gammaSat', value: number) => api.update((d) => {
+    const bhId = d.boreholes[holeIdx]?.id
+    if (!bhId) return
+    let entry = d.parameters.find((p) => p.layerId === layerId)
+    if (!entry) {
+      entry = { layerId, boreholeId: bhId }
+      d.parameters.push(entry)
+    }
+    const field = key === 'gamma' ? 'unitWeight' : 'saturatedUnitWeight'
+    entry[field] = {
+      value, unit: 'kN/m³',
+      provenance: {
+        kind: 'assumed',
+        rationale: key === 'gamma'
+          ? 'Bulk unit weight entered by the engineer for the effective-stress profile.'
+          : 'Saturated unit weight entered by the engineer for the effective-stress profile.',
+      },
+    }
+  })
 
   const profile = useMemo(
     () => (bh ? sptProfile(bh, unitWeights) : null),
@@ -470,8 +499,10 @@ export default function SoilInvestigation() {
             <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Unit weights for the stress profile</h2>
             <p className="mb-3 text-[11px] text-slate-500">
               (N₁)₆₀ needs the effective stress at each test depth, which needs a unit weight per layer. These are an
-              interpretation, so they are entered here rather than stored as data. Layers left blank stop the stress
-              profile at that depth — the blow counts below are still corrected for equipment, just not for overburden.
+              interpretation, so they are stored as ASSUMED values with that stated on them — which is also what
+              lets the bearing-capacity and slope pages read this layer without the number arriving from nowhere.
+              Layers left blank stop the stress profile at that depth; the blow counts below are still corrected for
+              equipment, just not for overburden.
             </p>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-[12px]">
@@ -487,18 +518,12 @@ export default function SoilInvestigation() {
                       <td className="py-0.5 pr-3">{l.name}</td>
                       <td className="py-0.5 pr-3">
                         <input type="number" step="0.5" value={unitWeights[l.id]?.gamma ?? ''}
-                          onChange={(e) => setUnitWeights((u) => ({
-                            ...u,
-                            [l.id]: { ...u[l.id], gamma: num(e.target.value) },
-                          }))}
+                          onChange={(e) => setUnitWeight(l.id, 'gamma', num(e.target.value))}
                           className="w-20 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
                       </td>
                       <td className="py-0.5 pr-3">
                         <input type="number" step="0.5" value={unitWeights[l.id]?.gammaSat ?? ''}
-                          onChange={(e) => setUnitWeights((u) => ({
-                            ...u,
-                            [l.id]: { gamma: u[l.id]?.gamma ?? 18, gammaSat: num(e.target.value) },
-                          }))}
+                          onChange={(e) => setUnitWeight(l.id, 'gammaSat', num(e.target.value))}
                           className="w-20 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
                       </td>
                     </tr>
@@ -607,7 +632,7 @@ export default function SoilInvestigation() {
 
       {tab === 'parameters' && bh && (
         <section className="mt-5">
-          <ParametersPanel bh={bh} unitWeights={unitWeights} />
+          <ParametersPanel bh={bh} unitWeights={unitWeights} stored={inv.parameters} />
         </section>
       )}
 
@@ -1126,14 +1151,21 @@ function formatParameter(v: SourcedValue): string {
 
 
 function ParametersPanel({
-  bh, unitWeights,
-}: { bh: Borehole; unitWeights: Record<string, LayerUnitWeight> }) {
+  bh, unitWeights, stored,
+}: {
+  bh: Borehole
+  unitWeights: Record<string, LayerUnitWeight>
+  stored: LayerParameters[]
+}) {
   const resolutions = useMemo(
     () => bh.layers.map((layer) => ({
       layer,
-      r: resolveParameters({ borehole: bh, layer, unitWeights }),
+      r: resolveParameters({
+        borehole: bh, layer, unitWeights,
+        stored: stored.find((p) => p.layerId === layer.id),
+      }),
     })),
-    [bh, unitWeights],
+    [bh, unitWeights, stored],
   )
 
   return (

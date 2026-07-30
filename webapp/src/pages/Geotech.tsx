@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { activeThrust, passiveThrust, bearingCapacity, infiniteSlopeFS, type FootingShape } from '../engine/geotech'
 import { ReportControls } from '../components/ReportControls'
+import { SoilLayerPicker } from '../components/SoilLayerPicker'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 
@@ -74,6 +75,15 @@ function Bearing() {
   const r = bearingCapacity({ c, phiDeg: phi, gamma, B, Df, shape, FS })
   return (
     <Card title="Bearing capacity — Terzaghi/Meyerhof (Vesić Nγ)" sub="qult = c·Nc·sc + q·Nq + ½·γ·B·Nγ·sγ,  q = γ·Df.">
+      <div className="mb-3">
+        <SoilLayerPicker
+          want={['c', 'phiDeg', 'gamma']}
+          onApply={(f) => {
+            if (f.c != null) setC(f.c)
+            if (f.phiDeg != null) setPhi(f.phiDeg)
+            if (f.gamma != null) setGamma(f.gamma)
+          }} />
+      </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Field label="Cohesion c" unit="kPa" value={c} onChange={setC} />
         <Field label="φ" unit="°" value={phi} onChange={setPhi} />
@@ -112,6 +122,16 @@ function Slope() {
   const fs = infiniteSlopeFS({ c, phiDeg: phi, gamma, z, betaDeg: beta, seepage, gammaSat })
   return (
     <Card title="Slope stability — infinite slope" sub="Planar failure at depth z; optional seepage parallel to the slope.">
+      <div className="mb-3">
+        <SoilLayerPicker
+          want={['c', 'phiDeg', 'gamma', 'gammaSat']}
+          onApply={(f) => {
+            if (f.c != null) setC(f.c)
+            if (f.phiDeg != null) setPhi(f.phiDeg)
+            if (f.gamma != null) setGamma(f.gamma)
+            if (f.gammaSat != null) setGammaSat(f.gammaSat)
+          }} />
+      </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Field label="Cohesion c" unit="kPa" value={c} onChange={setC} />
         <Field label="φ" unit="°" value={phi} onChange={setPhi} />
