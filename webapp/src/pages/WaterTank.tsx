@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { designCircularTank } from '../engine/waterTank'
 import { ReportControls } from '../components/ReportControls'
+import { buildWaterTankSolution } from '../lib/waterTankSolution'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -40,6 +41,8 @@ export default function WaterTank() {
 
   const r = designCircularTank({ H, D, t, freeboard, fc, sigmaSt, sigmaCt, cover, barDia })
 
+  const solution = buildWaterTankSolution({ H, D, t, freeboard, fc, sigmaSt, sigmaCt, cover, barDia }, r)
+
   const report = {
     docCode: 'S-WT',
     ok: r.thicknessOK && r.freeboardOK,
@@ -69,6 +72,7 @@ export default function WaterTank() {
       ['Vertical As', `${f0(r.vertAs)} mm²/m`],
       ['Concrete tensile stress fct', `${f2(r.fct)} MPa`],
     ] as [string, string][],
+    steps: solution,
   }
 
   return (

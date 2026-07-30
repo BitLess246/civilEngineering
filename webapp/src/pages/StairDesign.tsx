@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { designStair, type StairSupport } from '../engine/stair'
 import { ReportControls } from '../components/ReportControls'
+import { buildStairSolution } from '../lib/stairSolution'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -42,6 +43,8 @@ export default function StairDesign() {
 
   const r = designStair({ span, t, R, G, fc, fy, barDia, cover, finishes, live, support })
 
+  const solution = buildStairSolution({ span, t, R, G, fc, fy, barDia, cover, finishes, live, support }, r)
+
   const report = {
     docCode: 'S-ST',
     ok: r.ok,
@@ -69,6 +72,7 @@ export default function StairDesign() {
       ['As main / distribution', `${f0(r.AsMain)} / ${f0(r.AsDist)} mm²/m`],
       ['Minimum waist tmin', `${f0(r.tMin)} mm`],
     ] as [string, string][],
+    steps: solution,
   }
 
   return (

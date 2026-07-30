@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { designSlabDDM, type SlabInput, type SlabDirResult, type SlabSectionSteel } from '../engine/slabDDM'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
+import { buildSlabSolution } from '../lib/slabSolution'
 import { Math as KTex } from '../lib/math'
 import { f0, f1, f2 } from '../lib/format'
 import 'katex/dist/katex.min.css'
@@ -103,6 +104,8 @@ export default function SlabDesign() {
 
   const defl = r?.deflection
 
+  const solution = r ? buildSlabSolution(input, r) : null
+
   const report = r ? {
     docCode: 'S-SL',
     ok: r.applicable && (!defl || (defl.liveOK && defl.totalOK)),
@@ -138,6 +141,7 @@ export default function SlabDesign() {
       ['Mo (x / y)', `${f1(r.x.Mo)} / ${f1(r.y.Mo)} kN·m`],
       ...(r.notes.length ? [['DDM notes', r.notes.join(' · ')] as [string, string]] : []),
     ] as [string, string][],
+    steps: solution ?? undefined,
   } : undefined
 
   return (
