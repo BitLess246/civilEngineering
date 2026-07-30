@@ -314,6 +314,27 @@ export const CALCULATIONS = {
     ],
   },
 
+  'stress.effective-vertical': {
+    title: 'Effective vertical stress',
+    category: 'field',
+    equation: String.raw`\sigma'_{v0} = \sum \gamma_i h_i - \gamma_w \max(z - z_w,\ 0)`,
+    unit: 'kPa',
+    symbols: {
+      "\\sigma'_{v0}": 'effective vertical stress, kPa',
+      '\\gamma_i': 'unit weight of layer i — moist above the water table, saturated below, kN/m³',
+      h_i: 'thickness of layer i contributing above the depth, m',
+      '\\gamma_w': 'unit weight of water, 9.81 kN/m³',
+      z: 'depth of interest, m',
+      z_w: 'depth to the water table, m',
+    },
+    reference: 'Terzaghi effective-stress principle',
+    assumptions: ['Hydrostatic pore pressure below a static water table.'],
+    limitations: [
+      'A layer straddling the water table must be integrated in two parts. Taking whichever unit weight applies at its midpoint reads the stress high and flows straight into an unconservative (N₁)₆₀.',
+      'Artesian or perched conditions are not hydrostatic and need a measured piezometric profile.',
+    ],
+  },
+
   // ── Strength ──
   'ucs.qu': {
     title: 'Unconfined compressive strength',
