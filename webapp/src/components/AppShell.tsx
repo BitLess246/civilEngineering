@@ -4,6 +4,7 @@ import { SIDEBAR_GROUPS, ALL_TOOLS } from '../lib/tools'
 import { CommandPalette } from './CommandPalette'
 import { usePaletteHotkey } from '../lib/usePaletteHotkey'
 import { SiteFooter } from './SiteFooter'
+import { AccountMenu } from './AccountMenu'
 
 // Workbench shell (docs/design/uiux-2026-07): persistent ink-navy sidebar with
 // the grouped tool catalog + ⌘K search, and a slim breadcrumb header. Wraps
@@ -93,12 +94,15 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <span className="ml-1 hidden rounded border border-[#cddcf0] bg-[#eaf1f9] px-1.5 py-px font-mono text-[9.5px] font-medium text-[#0f4c92] sm:inline">{tool.sub}</span>
               </>)}
             </div>
+            <div className="ml-auto flex items-center gap-2.5">
             <button type="button" onClick={() => setPalette(true)}
-              className="ml-auto flex items-center gap-2 rounded-md border border-[#d6d3c9] bg-[#fcfbf8] px-2.5 py-1 text-xs text-[#8b8574] hover:border-[#0f4c92] hover:text-[#0f4c92]">
+              className="flex items-center gap-2 rounded-md border border-[#d6d3c9] bg-[#fcfbf8] px-2.5 py-1 text-xs text-[#8b8574] hover:border-[#0f4c92] hover:text-[#0f4c92]">
               <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.5" y2="16.5" /></svg>
               <span className="hidden sm:inline">Find a tool</span>
               <span className="rounded border border-[#d6d3c9] px-1 py-px font-mono text-[9.5px]">⌘K</span>
             </button>
+            <AccountMenu />
+            </div>
           </div>
         </header>
         {children}

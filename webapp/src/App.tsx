@@ -18,6 +18,7 @@ import Terms from './pages/legal/Terms'
 import Privacy from './pages/legal/Privacy'
 import Refunds from './pages/legal/Refunds'
 import Contact from './pages/legal/Contact'
+import Profile from './pages/auth/Profile'
 // three.js is heavy — the 3D pages load in their own lazy chunks.
 const ModelSpace = lazy(() => import('./pages/ModelSpace'))
 const TrussSpace = lazy(() => import('./pages/TrussSpace'))
@@ -119,6 +120,7 @@ export default function App() {
         <Route path="/signup" element={<SignUp />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/profile" element={<Profile />} />
         <Route path="/rock-anchor" element={<RockAnchor />} />
         <Route path="/seismic-wizard" element={<RequireAuth><SeismicWizard /></RequireAuth>} />
         <Route path="/water-tank" element={<WaterTank />} />

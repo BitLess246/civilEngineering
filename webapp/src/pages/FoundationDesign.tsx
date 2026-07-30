@@ -12,6 +12,7 @@ import { WorkedSolution } from '../components/WorkedSolution'
 import { buildFoundationSolution, type SolutionCtx } from '../lib/foundationSolution'
 import { Math } from '../lib/math'
 import { PageHeader, CalcSection, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import { initialLetterhead } from '../lib/letterhead'
 import { f0, f2, f3 } from '../lib/format'
 import 'katex/dist/katex.min.css'
 
@@ -164,7 +165,7 @@ function steelRow(label: ReactNode, s: DirSteel, db: number) {
 
 export default function FoundationDesign() {
   const [form, setForm] = useState<FormState>(DEFAULTS)
-  const [lh, setLh] = useState<LetterheadState>({ project: '', sheet: 'F-01 · Rev A', preparedBy: '' })
+  const [lh, setLh] = useState<LetterheadState>(() => initialLetterhead('F-01 · Rev A'))
   const [batch, setBatch] = useState<BatchResult | null>(null)
   const set = <K extends keyof FormState>(k: K) => (v: FormState[K]) => setForm((s) => ({ ...s, [k]: v }))
   const ecc = form.loadingType === 'eccentric'

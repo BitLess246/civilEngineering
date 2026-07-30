@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { designRetainingWall, type RetainingWallInput } from '../engine/retainingWall'
 import { Num, Card, ResultCard, Row } from '../components/qty'
 import { PageHeader, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import { initialLetterhead } from '../lib/letterhead'
 import { f1, f2, f3 } from '../lib/format'
 
 type FormState = RetainingWallInput & { gamma_c: number }
@@ -28,7 +29,7 @@ function Status({ ok, label }: { ok: boolean; label: string }) {
 
 export default function RetainingWall() {
   const [f, setF] = useState<FormState>(DEFAULTS)
-  const [lh, setLh] = useState<LetterheadState>({ project: '', sheet: 'RW-01 · Rev A', preparedBy: '' })
+  const [lh, setLh] = useState<LetterheadState>(() => initialLetterhead('RW-01 · Rev A'))
   const set = <K extends keyof FormState>(k: K) => (v: FormState[K]) =>
     setF((s) => ({ ...s, [k]: v }))
 

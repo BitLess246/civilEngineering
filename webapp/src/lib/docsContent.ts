@@ -23,6 +23,7 @@ export const DOC_TOOLS: DocTool[] = [
  */
 export const DOC_ROUTE_ALIASES: Record<string, string> = {
   '/signup': 'account', '/forgot-password': 'account', '/reset-password': 'account',
+  '/profile': 'account',
   // the four public policy pages share one docs entry
   '/privacy': 'legal', '/refunds': 'legal', '/contact': 'legal',
   // the five estimators share one page in the docs

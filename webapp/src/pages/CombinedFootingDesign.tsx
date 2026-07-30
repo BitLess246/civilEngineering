@@ -3,6 +3,7 @@ import { designCombinedFooting, type CombinedFootingInput } from '../engine/comb
 import { designFlexibleCombinedFooting } from '../engine/flexibleCombinedFooting'
 import { CombinedFootingSchematic } from '../components/CombinedFootingSchematic'
 import { PageHeader, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import { initialLetterhead } from '../lib/letterhead'
 import { Diagram } from '../components/Diagram'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { buildCombinedFootingSolution } from '../lib/combinedFootingSolution'
@@ -120,7 +121,7 @@ function Row({ label, value, check }: { label: ReactNode; value: ReactNode; chec
 
 export default function CombinedFootingDesign() {
   const [form, setForm] = useState<FormState>(DEFAULTS)
-  const [lh, setLh] = useState<LetterheadState>({ project: '', sheet: 'F-02 · Rev A', preparedBy: '' })
+  const [lh, setLh] = useState<LetterheadState>(() => initialLetterhead('F-02 · Rev A'))
   const set = <K extends keyof FormState>(k: K) => (v: FormState[K]) => setForm((s) => ({ ...s, [k]: v }))
 
   const valid = useMemo(() => {

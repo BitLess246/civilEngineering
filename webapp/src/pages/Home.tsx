@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { AccountMenu } from '../components/AccountMenu'
 import { Link } from 'react-router-dom'
 import { SIDEBAR_GROUPS, ALL_TOOLS } from '../lib/tools'
 import { CommandPalette } from '../components/CommandPalette'
@@ -62,8 +63,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
           </div>
           <div className="ml-auto flex items-center gap-2.5">
             <div className="hidden sm:block">{searchBox(false)}</div>
-            <button onClick={() => onAuth('login')} className="px-2 py-1.5 text-[12.5px] font-semibold text-[#b6c2d0] hover:text-white">Log in</button>
-            <button onClick={() => onAuth('signup')} className="rounded-md bg-[#0f4c92] px-3.5 py-2 text-[12.5px] font-semibold text-white hover:bg-[#135caf]">Sign up</button>
+            <AccountMenu dark />
           </div>
         </div>
       </nav>

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { designTBeam, type TBeamKind } from '../engine/tbeam'
 import { buildTBeamSolution } from '../lib/tbeamSolution'
 import { PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import { initialLetterhead } from '../lib/letterhead'
 import { Num, Pick, Card } from '../components/qty'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { TSection } from '../components/TSection'
@@ -19,7 +20,7 @@ export default function TBeamDesign() {
   const [cover, setCover] = useState(40); const [stirrupDia, setStirrupDia] = useState(10); const [barDia, setBarDia] = useState(25)
   const [fc, setFc] = useState(21); const [fy, setFy] = useState(415)
   const [Mu, setMu] = useState(400)
-  const [lh, setLh] = useState<LetterheadState>({ project: '', sheet: '', preparedBy: '' })
+  const [lh, setLh] = useState<LetterheadState>(() => initialLetterhead(''))
 
   const inp = useMemo(() => ({
     kind, bw, h, hf, bfGiven: bfGiven > 0 ? bfGiven : undefined, ln, sw,
