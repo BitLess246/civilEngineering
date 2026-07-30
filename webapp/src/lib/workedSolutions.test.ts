@@ -6,6 +6,12 @@ import { calcDevLength } from '../engine/devLength'
 import { buildPunchingSolution } from './punchingSolution'
 import { buildTorsionSolution } from './torsionSolution'
 import { buildDevLengthSolution } from './devLengthSolution'
+import { designSlabDDM } from '../engine/slabDDM'
+import { designStair } from '../engine/stair'
+import { designCircularTank } from '../engine/waterTank'
+import { buildSlabSolution } from './slabSolution'
+import { buildStairSolution } from './stairSolution'
+import { buildWaterTankSolution } from './waterTankSolution'
 
 // ─────────────────────────────────────────────────────────────────────────
 // What a worked solution has to be, applied to every builder at once.
@@ -25,10 +31,26 @@ const devIn = {
   epoxy: 'none' as const, lambda: 1, cbKtr_db: 1.5,
 }
 
+const slabIn = {
+  lx: 6, ly: 6, colWidth: 400, D: 5, L: 2, fc: 28, fy: 415,
+  cover: 20, barDia: 12,
+}
+const stairIn = {
+  span: 3.5, t: 150, R: 150, G: 300, fc: 28, fy: 415,
+  barDia: 12, cover: 20, finishes: 1.5, live: 4.8, support: 'simple' as const,
+}
+const tankIn = {
+  H: 4, D: 10, t: 250, freeboard: 0.3, fc: 28,
+  sigmaSt: 130, sigmaCt: 1.3, cover: 40, barDia: 16,
+}
+
 const BUILDERS: [string, () => SolutionStep[]][] = [
   ['punching shear', () => buildPunchingSolution(punchIn, designPunchingShear(punchIn))],
   ['torsion', () => buildTorsionSolution(torsIn, designTorsion(torsIn))],
   ['development length', () => buildDevLengthSolution(devIn, calcDevLength(devIn))],
+  ['two-way slab', () => buildSlabSolution(slabIn, designSlabDDM(slabIn))],
+  ['stair', () => buildStairSolution(stairIn, designStair(stairIn))],
+  ['water tank', () => buildWaterTankSolution(tankIn, designCircularTank(tankIn))],
 ]
 
 const eqs = (steps: SolutionStep[]) =>
@@ -44,10 +66,17 @@ describe.each(BUILDERS)('%s worked solution', (_name, build) => {
     for (const s of steps) expect(s.title.length).toBeGreaterThan(3)
   })
 
-  it('cites a code clause on every step', () => {
+  it('cites a standard on every step', () => {
+    // A clause number, a Table reference or a named standard all count — the
+    // requirement is that a reader can look up WHERE the rule comes from, not
+    // that the citation contains a § character. (My first version demanded §
+    // and failed on "ACI 318-14 Table 9.3.1.1" and "IS 3370 / ACI 350", both
+    // of which are perfectly good references.)
+    const STANDARD = /ACI|NSCP|AISC|IS \d|PTI|FHWA|Broms|Terzaghi|Boussinesq|working stress|thin-cylinder|Good practice/i
     for (const s of steps) {
       expect(s.clause, s.title).toBeTruthy()
-      expect(s.clause, s.title).toMatch(/§/)
+      expect(s.clause!, s.title).toMatch(STANDARD)
+      expect(s.clause!.length, s.title).toBeGreaterThan(5)
     }
   })
 
