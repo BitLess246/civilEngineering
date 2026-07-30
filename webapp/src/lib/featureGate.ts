@@ -127,6 +127,7 @@ export const ROUTE_FEATURE: Record<string, Feature> = {
   '/seismic-wizard': 'model-space',
   '/estimate': 'estimating',
   '/schedule': 'scheduling',
+  '/soils': 'soil-investigation',
 }
 
 /**
