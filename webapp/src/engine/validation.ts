@@ -44,6 +44,7 @@ import { designDrainage } from './drainage'
 import { designSepticTank } from './septicTank'
 import { cyclicStressRatio, crr75 } from './soils/liquefaction'
 import { nGamma, generalBearingCapacity } from './bearingGeneral'
+import { coulombKa, mononobeOkabe } from './coulomb'
 import type { RectSection } from './model'
 
 export interface ValidationCase {
@@ -662,6 +663,23 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'slope-slices-fellenius', category: 'Geotech', title: 'Method of slices — Fellenius FS',
     reference: 'Fellenius / OMS', formula: 'FS = Σ[c·l + (W·cosα − u·l)·tanφ] / Σ[W·sinα]',
     manual: slopeSlices.manual, software: slopeSlices.software, unit: '—', tol: 1e-3,
+  },
+  {
+    id: 'coulomb-reduces-to-rankine', category: 'Geotech', title: 'Coulomb Ka at δ = θ = β = 0',
+    reference: 'Coulomb (1776); reduction to Rankine', formula: 'Ka → tan²(45 − φ/2) when δ = θ = β = 0',
+    manual: rankineKa(30), software: coulombKa({ phiDeg: 30 }), unit: '—', tol: 1e-12,
+  },
+  {
+    id: 'coulomb-ka-wall-friction', category: 'Geotech', title: 'Coulomb Ka with wall friction (φ 30°, δ 20°)',
+    reference: 'Das §7, Coulomb active', formula: 'Ka = cos²(φ−θ) / {cos²θ cos(δ+θ)[1 + √(…)]²}',
+    manual: 0.29731, software: coulombKa({ phiDeg: 30, deltaDeg: 20 }), unit: '—', tol: 1e-4,
+  },
+  {
+    id: 'mononobe-okabe-kae', category: 'Geotech', title: 'Mononobe–Okabe Kae (kh = 0.2)',
+    reference: 'Mononobe–Okabe; Seed & Whitman', formula: 'ψ = arctan[kh/(1−kv)];  Kae per M–O',
+    manual: 0.45396,
+    software: mononobeOkabe({ phiDeg: 30, deltaDeg: 20, gamma: 18, H: 5, kh: 0.2 }).K,
+    unit: '—', tol: 1e-4,
   },
   {
     id: 'bearing-ngamma-vesic', category: 'Geotech', title: 'Nγ — Vesić (φ = 35°)',

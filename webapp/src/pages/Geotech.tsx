@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { activeThrust, passiveThrust, infiniteSlopeFS } from '../engine/geotech'
+import { coulombActiveThrust, coulombPassiveThrust, mononobeOkabe } from '../engine/coulomb'
 import {
   generalBearingCapacity, compareMethods, BEARING_METHOD_LABEL, type BearingMethod,
 } from '../engine/bearingGeneral'
@@ -63,6 +64,106 @@ function EarthPressure() {
         <Out label="Kp" value={f2(p.K)} />
         <Out label="Passive thrust Pp" value={`${f2(p.P)} kN/m`} />
       </div>
+    </Card>
+  )
+}
+
+function Coulomb() {
+  const [phi, setPhi] = useState(30)
+  const [delta, setDelta] = useState(20)
+  const [theta, setTheta] = useState(0)
+  const [beta, setBeta] = useState(0)
+  const [gamma, setGamma] = useState(18)
+  const [H, setH] = useState(5)
+  const [q, setQ] = useState(0)
+  const [kh, setKh] = useState(0)
+  const [kv, setKv] = useState(0)
+
+  const g = { phiDeg: phi, deltaDeg: delta, thetaDeg: theta, betaDeg: beta, gamma, H }
+  let active: ReturnType<typeof coulombActiveThrust> | null = null
+  let passive: ReturnType<typeof coulombPassiveThrust> | null = null
+  let seismic: ReturnType<typeof mononobeOkabe> | null = null
+  let error: string | null = null
+  let seismicError: string | null = null
+  try {
+    active = coulombActiveThrust({ ...g, surcharge: q })
+    passive = coulombPassiveThrust(g)
+  } catch (e) {
+    error = e instanceof Error ? e.message : String(e)
+  }
+  if (kh > 0 && !error) {
+    try {
+      seismic = mononobeOkabe({ ...g, kh, kv })
+    } catch (e) {
+      seismicError = e instanceof Error ? e.message : String(e)
+    }
+  }
+
+  return (
+    <Card
+      title="Coulomb earth pressure — wall friction, inclined face, sloping fill"
+      sub="Rankine cannot carry wall friction or an inclined back face. At δ = θ = β = 0 this reduces exactly to Rankine. Set kh for the Mononobe–Okabe seismic case.">
+      <div className="mb-3">
+        <SoilLayerPicker
+          want={['phiDeg', 'gamma']}
+          onApply={(f) => {
+            if (f.phiDeg != null) setPhi(f.phiDeg)
+            if (f.gamma != null) setGamma(f.gamma)
+          }} />
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Field label="φ" unit="°" value={phi} onChange={setPhi} />
+        <Field label="Wall friction δ" unit="°" value={delta} onChange={setDelta} />
+        <Field label="Back face θ from vert." unit="°" value={theta} onChange={setTheta} />
+        <Field label="Backfill slope β" unit="°" value={beta} onChange={setBeta} />
+        <Field label="γ" unit="kN/m³" value={gamma} onChange={setGamma} />
+        <Field label="Height H" unit="m" value={H} onChange={setH} />
+        <Field label="Surcharge q" unit="kPa" value={q} onChange={setQ} />
+        <Field label="Seismic kh" value={kh} onChange={setKh} />
+        <Field label="Seismic kv" value={kv} onChange={setKv} />
+      </div>
+
+      {error && (
+        <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">{error}</p>
+      )}
+
+      {active && (
+        <div className="mt-3">
+          <Out label="Ka (Coulomb)" value={f2(active.K)} />
+          <Out label="Active thrust Pa" value={`${f2(active.P)} kN/m at ${f2(active.inclinationDeg)}° from horizontal`} />
+          <Out label="  horizontal / vertical" value={`${f2(active.horizontal)} / ${f2(active.vertical)} kN/m`} />
+          <Out label="  acts at" value={`${f2(active.lineOfAction)} m above base`} />
+        </div>
+      )}
+      {passive && (
+        <div className="mt-2">
+          <Out label="Kp (Coulomb)" value={f2(passive.K)} />
+          <Out label="Passive thrust Pp" value={`${f2(passive.P)} kN/m`} />
+        </div>
+      )}
+
+      {seismicError && (
+        <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">
+          {seismicError}
+        </p>
+      )}
+      {seismic && (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <p className="mb-1 text-[11px] font-semibold text-amber-900">Mononobe–Okabe (seismic)</p>
+          <Out label="ψ" value={`${f2(seismic.psiDeg)}°`} />
+          <Out label="Kae" value={f2(seismic.K)} />
+          <Out label="Total Pae" value={`${f2(seismic.P)} kN/m`} />
+          <Out label="Static Pa" value={`${f2(seismic.staticP)} kN/m`} />
+          <Out label="Increment ΔPae" value={`${f2(seismic.increment)} kN/m at ${f2(seismic.incrementLineOfAction)} m`} />
+          <Out label="Combined line of action" value={`${f2(seismic.lineOfAction)} m above base`} />
+        </div>
+      )}
+
+      <ul className="mt-3 space-y-1">
+        {[...(active?.notes ?? []), ...(passive?.notes ?? []), ...(seismic?.notes ?? [])].map((n, k) => (
+          <li key={k} className="text-[11px] text-amber-900">{n}</li>
+        ))}
+      </ul>
     </Card>
   )
 }
@@ -240,18 +341,21 @@ export default function Geotech() {
       <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Geotechnical toolkit</h1>
       <ReportControls title="Geotechnical Report" badges={['NSCP 2015']} />
       <p className="mt-2 max-w-3xl text-sm text-slate-600">
-        Classic soil-mechanics checks — Rankine lateral earth pressure, shallow-foundation bearing
-        capacity, and infinite-slope stability. All formulas are closed-form and cross-checked against
+        Classic soil-mechanics checks — Rankine and Coulomb lateral earth pressure (with the
+        Mononobe–Okabe seismic case), shallow-foundation bearing capacity by Meyerhof, Hansen or
+        Vesić, and infinite-slope stability. All formulas are closed-form and cross-checked against
         the <a href="/validation" className="text-[#0056b3] underline">validation benchmarks</a>.
       </p>
       <div className="mt-6 space-y-5">
         <EarthPressure />
+        <Coulomb />
         <Bearing />
         <Slope />
       </div>
       <p className="mt-6 text-[11px] text-slate-500">
-        Bearing factors: Nq, Nc per Prandtl/Reissner; Nγ per Vesić (2(Nq+1)tanφ). Shape factors per Meyerhof.
-        Use engineering judgement and site-specific investigation; these are preliminary checks.
+        Nq and Nc are Prandtl/Reissner in every method; only Nγ and the shape/depth factors differ, and
+        the result records which method produced it. Use engineering judgement and site-specific
+        investigation; these are preliminary checks.
       </p>
     </main>
   )
