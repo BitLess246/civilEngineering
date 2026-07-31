@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useInvestigation } from '../lib/useInvestigation'
+import { useSoilsSync } from '../lib/useSoilsSync'
 import { buildBoreholeLog } from '../engine/soils/logRenderer'
 import { planToSvg } from '../engine/planRenderer'
 import { validateInvestigation, type ValidationIssue } from '../engine/soils/validate'
@@ -322,6 +323,7 @@ export default function SoilInvestigation() {
       {/* ── Overview ── */}
       {tab === 'overview' && (
         <section className="mt-5 space-y-5">
+          <SyncPanel />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat label="Boreholes" value={String(inv.boreholes.length)} />
             <Stat label="Samples" value={String(inv.boreholes.reduce((n, b) => n + b.samples.length, 0))} />
@@ -693,6 +695,134 @@ export default function SoilInvestigation() {
       )}
 
     </main>
+  )
+}
+
+// ── Sync ──────────────────────────────────────────────────────────────────
+// Manual, never automatic. Two-sided edits are reported as conflicts and
+// resolved by keeping ONE SIDE WHOLE — there is no field-by-field merge,
+// because deciding which of two blow counts is right is an engineer's call.
+
+function SyncPanel() {
+  const s = useSoilsSync()
+  const [open, setOpen] = useState(false)
+
+  const badge =
+    s.availability.kind === 'ready' ? { text: 'signed in', cls: 'bg-emerald-100 text-emerald-800' }
+      : s.availability.kind === 'signed-out' ? { text: 'signed out', cls: 'bg-amber-100 text-amber-900' }
+      : { text: 'not configured', cls: 'bg-slate-200 text-slate-700' }
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-[1.05rem] font-bold text-[#0056b3]">
+            Cloud backup
+            <span className={`ml-2 rounded px-1.5 py-0.5 align-middle text-[10px] font-semibold ${badge.cls}`}>
+              {badge.text}
+            </span>
+          </h2>
+          <p className="mt-0.5 text-[11px] text-slate-500">
+            Investigations live in THIS BROWSER until you sync. Nothing syncs on a timer or on save — moving data
+            between machines is a decision, not something that happens while you type.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => { setOpen(true); void s.check() }} disabled={s.busy || s.availability.kind === 'not-configured'}
+            className="rounded-md border border-slate-300 px-2.5 py-1 text-[12px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40">
+            Check connection
+          </button>
+          <button onClick={() => { setOpen(true); void s.sync() }} disabled={s.busy || s.availability.kind !== 'ready'}
+            className="rounded-md bg-[#0056b3] px-2.5 py-1 text-[12px] font-semibold text-white hover:bg-[#004a99] disabled:opacity-40">
+            {s.busy ? 'Working…' : 'Sync now'}
+          </button>
+        </div>
+      </div>
+
+      {s.availability.kind === 'not-configured' && (
+        <p className="mt-2 text-[11px] text-slate-600">
+          Cloud storage is not configured for this deployment, so everything stays local. Export JSON is the backup.
+        </p>
+      )}
+      {s.availability.kind === 'signed-out' && (
+        <p className="mt-2 text-[11px] text-amber-800">
+          Sign in to sync. The connection check still runs signed out, but it can only verify the schema and the
+          security policies — not a real save.
+        </p>
+      )}
+
+      {s.error && (
+        <p className="mt-3 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[12px] text-red-800">{s.error}</p>
+      )}
+
+      {open && s.diagnostics && (
+        <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <p className="mb-1.5 text-[11px] font-semibold text-slate-700">
+            Connection check {s.diagnostics.ok ? '— all clear' : '— PROBLEMS FOUND'}
+          </p>
+          <ul className="space-y-1">
+            {s.diagnostics.results.map((r) => (
+              <li key={r.name} className="flex items-baseline gap-2 text-[11px]">
+                <span className={`rounded px-1 text-[9px] font-bold ${
+                  r.status === 'pass' ? 'bg-emerald-100 text-emerald-800'
+                    : r.status === 'fail' ? 'bg-red-100 text-red-800' : 'bg-slate-200 text-slate-600'
+                }`}>{r.status.toUpperCase()}</span>
+                <span className="font-medium text-slate-700">{r.name}</span>
+                <span className="text-slate-600">{r.detail}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {open && s.report && (
+        <div className="mt-3">
+          <p className="text-[11px] font-semibold text-slate-700">Last sync</p>
+          <ul className="mt-1 space-y-0.5 text-[11px]">
+            {s.report.outcomes.map((o) => (
+              <li key={`${o.kind}-${o.id}`} className="text-slate-600">
+                <span className="font-mono">{o.id}</span> — {o.kind === 'failed' ? `failed: ${o.error}` : o.kind}
+              </li>
+            ))}
+            {!s.report.outcomes.length && <li className="text-slate-500">Nothing to sync.</li>}
+          </ul>
+
+          {s.report.conflicts.length > 0 && (
+            <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3">
+              <p className="text-[12px] font-bold text-amber-900">
+                {s.report.conflicts.length} conflict{s.report.conflicts.length === 1 ? '' : 's'} — nothing was changed
+              </p>
+              <p className="mt-0.5 text-[11px] text-amber-900">
+                These were edited in both places. Choose which version to keep; the other is discarded, so export
+                first if you are not sure. There is no automatic merge — deciding which of two readings is right is
+                yours to make.
+              </p>
+              {s.report.conflicts.map((c) => (
+                <div key={c.id} className="mt-2 rounded border border-amber-200 bg-white p-2">
+                  <p className="font-mono text-[11px] font-semibold text-slate-800">
+                    {c.local.meta.investigationNo || c.id}
+                  </p>
+                  <p className="text-[10px] text-slate-600">
+                    This browser: {c.local.boreholes.length} hole(s) · Server: {c.remote.investigation.boreholes.length} hole(s),
+                    saved {new Date(c.remote.updatedAt).toLocaleString()}
+                  </p>
+                  <div className="mt-1 flex gap-2">
+                    <button onClick={() => void s.resolve(c.id, 'local')} disabled={s.busy}
+                      className="rounded border border-slate-300 px-2 py-0.5 text-[11px] hover:bg-slate-50 disabled:opacity-40">
+                      Keep this browser&apos;s
+                    </button>
+                    <button onClick={() => void s.resolve(c.id, 'remote')} disabled={s.busy}
+                      className="rounded border border-slate-300 px-2 py-0.5 text-[11px] hover:bg-slate-50 disabled:opacity-40">
+                      Keep the server&apos;s
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 

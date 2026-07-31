@@ -1347,7 +1347,8 @@ because flagging the unusual as an error trains people to ignore errors.
 | 8d — subsurface cross-sections | #496 | merged |
 | 8e — section wired into the report and the profile tab | #497 | merged |
 | 8f — CPT in the model, validation and a UI tab | #498 | merged |
-| fix — remove the mixed-method `bearingCapacity()` | — | open |
+| fix — remove the mixed-method `bearingCapacity()` | #499 | merged |
+| 8b — sync UI + live connection self-test | — | open |
 
 **`/soils` is live**, gated behind the `soil-investigation` feature on pro and
 max. Eight tabs: overview and integrity, boreholes with the graphical log,
@@ -1359,10 +1360,13 @@ generates the 22-section investigation report.
 **Every engine is now reachable from the UI.**
 
 **Supabase:** the migration is applied (user confirmed, 31 Jul). The sync UI
-(8b) is still unbuilt because this container's network egress allowlist blocks
-`*.supabase.co`, so no round-trip against the live database has been run — the
-adapter's column names and error-code branches remain unverified against real
-Postgres. Allowlist the host, or test on the deployed app, before building on it.
+ships with a **Check connection** self-test (`remoteDiagnostics.ts`) that runs
+the five probes a developer would run by hand, in the app, against the live
+database. It exists because this container's egress allowlist blocks
+`*.supabase.co` — an allowlist change only takes effect for a NEW session, so
+no round-trip has been run from here. The first click of that button on a
+deployment settles the three things the fake cannot: the column names, the
+duplicate-insert code, and zero-rows-on-stale-update.
 
 **Storage decision, settled:** the local `SoilsStore` over localStorage stays;
 Phase 8a adds an ASYNC `RemoteStore` beside it rather than behind it, because a
