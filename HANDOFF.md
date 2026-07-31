@@ -1337,8 +1337,8 @@ because flagging the unusual as an error trains people to ignore errors.
 | 4f… — compaction, triaxial, permeability, CBR, hydrometer | — | |
 | 6a — liquefaction triggering engine (NCEER) | #488 | merged |
 | 6b — liquefaction tab, FS profile, fines from sieve | #489 | merged |
-| 6c — bearing general equation + method selection | — | open |
-| 6d — Coulomb earth pressure | — | |
+| 6c — bearing general equation + method selection | #490 | merged |
+| 6d — Coulomb + Mononobe–Okabe earth pressure | — | open |
 | 7 — report document builder | — | |
 | 8 — Postgres, CPT, 3D subsurface | — | |
 
