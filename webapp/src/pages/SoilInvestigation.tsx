@@ -19,6 +19,10 @@ import { classifySample } from '../engine/soils/classifySample'
 import {
   shearEnvelopeChart, consolidationChart, gradingChart,
 } from '../engine/soils/lab/plots'
+import { liquefactionProfile } from '../engine/soils/liquefaction'
+import { liquefactionChart, skipText } from '../engine/soils/liquefactionPlot'
+import { finesByLayer, finesMap } from '../engine/soils/finesContent'
+import { seismicCoefficients, type SeismicZone, type SoilProfile } from '../engine/nscpSeismic'
 import { resolveParameters, bearingInputs, PARAMETER_LABEL } from '../engine/soils/parameters'
 import { describeProvenance, PROVENANCE_LABEL, type SourcedValue } from '../engine/soils/provenance'
 import { cite } from '../engine/soils/standards'
@@ -134,7 +138,7 @@ function describeN60(n60: number, layer: SoilLayer | undefined): string {
 
 // ── Page ──────────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'boreholes' | 'profile' | 'spt' | 'lab' | 'classification' | 'parameters'
+type Tab = 'overview' | 'boreholes' | 'profile' | 'spt' | 'lab' | 'liquefaction' | 'classification' | 'parameters'
 
 export default function SoilInvestigation() {
   const api = useInvestigation()
@@ -279,7 +283,7 @@ export default function SoilInvestigation() {
       )}
 
       <nav className="mt-6 flex flex-wrap gap-1 border-b border-slate-200">
-        {(['overview', 'boreholes', 'profile', 'spt', 'lab', 'parameters', 'classification'] as Tab[]).map((t) => (
+        {(['overview', 'boreholes', 'profile', 'spt', 'lab', 'liquefaction', 'parameters', 'classification'] as Tab[]).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`rounded-t-md px-3 py-1.5 text-[13px] font-medium capitalize ${
               tab === t ? 'border-b-2 border-[#0056b3] text-[#0056b3]' : 'text-slate-600 hover:text-slate-900'
@@ -640,6 +644,12 @@ export default function SoilInvestigation() {
         </section>
       )}
 
+      {tab === 'liquefaction' && bh && (
+        <section className="mt-5">
+          <LiquefactionPanel bh={bh} unitWeights={unitWeights} />
+        </section>
+      )}
+
       {tab === 'classification' && (
         <section className="mt-5">
           <ClassificationPanel />
@@ -647,6 +657,169 @@ export default function SoilInvestigation() {
       )}
 
     </main>
+  )
+}
+
+// ── Liquefaction ──────────────────────────────────────────────────────────
+// The NCEER triggering check run down the hole, with the FS profile drawn.
+//
+// The seismic input is ENTERED, not inferred. a_max is a surface peak ground
+// acceleration and the honest sources for it are a hazard study or a site
+// response analysis; NSCP's Ca is offered as a screening stand-in with that
+// said plainly, because quietly substituting a design coefficient for a PGA is
+// the kind of shortcut that is invisible in the output.
+
+function LiquefactionPanel({ bh, unitWeights }: { bh: Borehole; unitWeights: Record<string, LayerUnitWeight> }) {
+  const [amax, setAmax] = useState(0.4)
+  const [magnitude, setMagnitude] = useState(7.5)
+  const [zone, setZone] = useState<SeismicZone>(4)
+  const [soil, setSoil] = useState<SoilProfile>('SD')
+
+  const fines = useMemo(() => finesByLayer(bh), [bh])
+  const profile = useMemo(
+    () => liquefactionProfile(bh, unitWeights, { amax, magnitude, finesContent: finesMap(fines) }),
+    [bh, unitWeights, amax, magnitude, fines],
+  )
+  const svg = useMemo(
+    () => planToSvg(liquefactionChart(profile, { waterTable: bh.groundwaterDepth, holeDepth: bh.actualDepth }), 560),
+    [profile, bh],
+  )
+  const ca = useMemo(() => seismicCoefficients(zone, soil).Ca, [zone, soil])
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Design earthquake</h2>
+        <p className="mb-3 text-[11px] text-slate-500">
+          a_max is the peak acceleration at the GROUND SURFACE. A site-specific hazard or site-response study is the
+          defensible source; the NSCP seismic coefficient below is a screening stand-in only, and using it is a
+          decision worth recording in the report.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex flex-col text-[11px]">
+            <span className="mb-0.5 text-slate-600">a_max (g)</span>
+            <input type="number" step="0.05" min="0" value={amax}
+              onChange={(e) => setAmax(num(e.target.value))}
+              className="w-24 rounded border border-slate-300 px-1.5 py-1 text-right font-mono" />
+          </label>
+          <label className="flex flex-col text-[11px]">
+            <span className="mb-0.5 text-slate-600">Magnitude M<sub>w</sub></span>
+            <input type="number" step="0.1" min="0" value={magnitude}
+              onChange={(e) => setMagnitude(num(e.target.value))}
+              className="w-24 rounded border border-slate-300 px-1.5 py-1 text-right font-mono" />
+          </label>
+          <div className="flex items-end gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2">
+            <label className="flex flex-col text-[11px]">
+              <span className="mb-0.5 text-slate-600">NSCP zone</span>
+              <select value={zone} onChange={(e) => setZone(Number(e.target.value) as SeismicZone)}
+                className="rounded border border-slate-300 px-1.5 py-1">
+                <option value={2}>2</option><option value={4}>4</option>
+              </select>
+            </label>
+            <label className="flex flex-col text-[11px]">
+              <span className="mb-0.5 text-slate-600">Soil profile</span>
+              <select value={soil} onChange={(e) => setSoil(e.target.value as SoilProfile)}
+                className="rounded border border-slate-300 px-1.5 py-1">
+                {(['SA', 'SB', 'SC', 'SD', 'SE'] as SoilProfile[]).map((x) => (
+                  <option key={x} value={x}>{x}</option>
+                ))}
+              </select>
+            </label>
+            <button onClick={() => setAmax(Number(ca.toFixed(2)))}
+              className="rounded-md border border-slate-300 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50">
+              use Ca = {ca.toFixed(2)}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Fines content</h2>
+        {fines.length ? (
+          <ul className="text-[11px] text-slate-600">
+            {fines.map((f) => (
+              <li key={f.layerId} className="font-mono">
+                {bh.layers.find((l) => l.id === f.layerId)?.name ?? f.layerId}: {f.fines.toFixed(1)}%
+                <span className="ml-1.5 font-sans text-slate-500">
+                  from {f.fromSamples.map((x) => x.sampleName).join(', ')}
+                  {f.fromSamples.length > 1 ? ' (mean)' : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[11px] text-amber-800">
+            No sieve analysis on any sample, so every layer is corrected as CLEAN SAND. That overstates the resistance
+            of a silty sand — run a sieve on the samples in the liquefiable layers before relying on these numbers.
+          </p>
+        )}
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="overflow-x-auto" dangerouslySetInnerHTML={{ __html: svg }} />
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Triggering by test</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-right text-[12px]">
+            <thead className="text-slate-500">
+              <tr className="border-b border-slate-200">
+                <th className="py-1 pr-3 text-left">Depth (m)</th>
+                <th className="py-1 pr-3 text-left">Layer</th>
+                <th className="py-1 pr-3">(N₁)₆₀cs</th>
+                <th className="py-1 pr-3">CSR</th>
+                <th className="py-1 pr-3">CRR</th>
+                <th className="py-1 pr-3">FS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {profile.rows.map((r) => (
+                <tr key={r.testId} className="border-b border-slate-100">
+                  <td className="py-0.5 pr-3 text-left font-mono">{f2(r.depth)}</td>
+                  <td className="py-0.5 pr-3 text-left">{r.layerName ?? '—'}</td>
+                  {r.result ? (
+                    <>
+                      <td className="py-0.5 pr-3 font-mono">{f1(r.result.n160cs)}</td>
+                      <td className="py-0.5 pr-3 font-mono">{r.result.csr.toFixed(3)}</td>
+                      <td className="py-0.5 pr-3 font-mono">{r.result.crr != null ? r.result.crr.toFixed(3) : '—'}</td>
+                      <td className={`py-0.5 pr-3 font-mono font-semibold ${
+                        r.result.factorOfSafety == null ? 'text-slate-500'
+                          : r.result.factorOfSafety < 1 ? 'text-red-700'
+                          : r.result.factorOfSafety < 1.3 ? 'text-amber-700' : 'text-emerald-700'
+                      }`}>
+                        {r.result.factorOfSafety != null ? r.result.factorOfSafety.toFixed(2) : 'too dense'}
+                      </td>
+                    </>
+                  ) : (
+                    <td colSpan={4} className="py-0.5 pr-3 text-left text-[11px] text-slate-500">
+                      {r.skipped ? skipText(r.skipped) : '—'}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {profile.rows.flatMap((r) => r.result?.notes ?? []).length > 0 && (
+          <ul className="mt-3 space-y-1">
+            {[...new Set(profile.rows.flatMap((r) => r.result?.notes ?? []))].map((n, k) => (
+              <li key={k} className="text-[10px] text-amber-900">{n}</li>
+            ))}
+          </ul>
+        )}
+        {profile.notes.map((n, k) => (
+          <p key={k} className="mt-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-900">{n}</p>
+        ))}
+
+        <p className="mt-3 text-[10px] text-slate-500">
+          {cite('d1586')} blow counts through the NCEER simplified procedure (Youd et al. 2001). FS here is TRIGGERING
+          only — it does not predict post-liquefaction settlement, bearing loss or lateral spread, each of which is a
+          separate analysis.
+        </p>
+      </div>
+    </div>
   )
 }
 

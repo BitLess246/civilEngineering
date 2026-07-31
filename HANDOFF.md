@@ -1335,14 +1335,17 @@ because flagging the unusual as an error trains people to ignore errors.
 | 4d — consolidation (Cc, Cr, σ′p, cv) | #486 | merged |
 | 4e — lab charts (envelope, e–log σ′, grading) | #487 | open |
 | 4f… — compaction, triaxial, permeability, CBR, hydrometer | — | |
-| 6 — liquefaction, bearing methods, Coulomb | — | |
+| 6a — liquefaction triggering engine (NCEER) | #488 | merged |
+| 6b — liquefaction tab, FS profile, fines from sieve | — | open |
+| 6c/6d — bearing methods (Meyerhof/Hansen/Vesić), Coulomb | — | |
 | 7 — report document builder | — | |
 | 8 — Postgres, CPT, 3D subsurface | — | |
 
 **`/soils` is live**, gated behind the `soil-investigation` feature on pro and
-max. Seven tabs: overview and integrity, boreholes with the graphical log,
-stratigraphy and samples, corrected SPT, laboratory tests (each test card now
-draws its own curve), interpreted parameters, and a USCS classifier.
+max. Eight tabs: overview and integrity, boreholes with the graphical log,
+stratigraphy and samples, corrected SPT, laboratory tests (each test card draws
+its own curve), liquefaction triggering with an FS profile, interpreted
+parameters, and a USCS classifier.
 
 **Storage decision, settled:** stay on the `SoilsStore` interface over
 localStorage; swap in a Supabase backend at Phase 8. Confirmed with the user
