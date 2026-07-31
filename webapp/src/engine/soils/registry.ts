@@ -314,6 +314,64 @@ export const CALCULATIONS = {
     ],
   },
 
+  // ── Field: CPT ──
+  'cpt.qt': {
+    title: 'Corrected cone resistance',
+    category: 'field',
+    equation: String.raw`q_t = q_c + u_2 (1 - a)`,
+    unit: 'MPa',
+    symbols: {
+      q_t: 'corrected cone resistance, MPa',
+      q_c: 'measured cone resistance, MPa',
+      u_2: 'pore pressure behind the cone shoulder, kPa',
+      a: 'net area ratio of the cone, a dimensionless factor',
+    },
+    standard: 'd5778',
+    reference: 'Robertson & Cabal, Guide to Cone Penetration Testing',
+    limitations: [
+      'Needs a u₂ measurement. In soft clay the correction is the dominant term, not a refinement — pore pressure on the shoulder can exceed the cone resistance itself.',
+      'a is a property of the specific cone and belongs on its calibration certificate, not a default.',
+    ],
+  },
+
+  'cpt.ic': {
+    title: 'Soil behaviour type index',
+    category: 'classification',
+    equation: String.raw`I_c = \sqrt{(3.47 - \log_{10} Q_{tn})^2 + (\log_{10} F_r + 1.22)^2}`,
+    unit: '—',
+    symbols: {
+      I_c: 'soil behaviour type index, a dimensionless index',
+      'Q_{tn}': 'stress-normalised cone resistance, a dimensionless ratio',
+      F_r: 'normalised friction ratio, %',
+    },
+    reference: 'Robertson (2009, 2010)',
+    assumptions: [
+      'The stress exponent n and I_c are mutually dependent and are solved to a fixed point rather than assumed.',
+    ],
+    limitations: [
+      'BEHAVIOUR, not classification. A CPT takes no sample; a clayey sand and a sandy clay can plot in the same zone, and only a sample settles it.',
+      'I_c above about 2.6 is treated as too clay-rich to liquefy — a screening boundary, and soils near it need sampling.',
+    ],
+  },
+
+  'cpt.su': {
+    title: 'Undrained shear strength from cone resistance',
+    category: 'correlation',
+    equation: String.raw`s_u = \frac{q_t - \sigma_{v0}}{N_{kt}}`,
+    unit: 'kPa',
+    symbols: {
+      s_u: 'undrained shear strength, kPa',
+      q_t: 'corrected cone resistance, kPa',
+      '\\sigma_{v0}': 'total vertical stress at the depth, kPa',
+      'N_{kt}': 'cone factor, a dimensionless factor',
+    },
+    reference: 'Robertson & Cabal; N_kt commonly 14–16',
+    limitations: [
+      'The strength is directly proportional to N_kt, which ranges 10–20 between sites. Without a local calibration against vane or triaxial data the answer carries that whole spread.',
+      'Applies to fine-grained soils only.',
+    ],
+  },
+
   // ── Analysis: liquefaction triggering ──
   'liquefaction.csr': {
     title: 'Cyclic stress ratio (seismic demand)',
