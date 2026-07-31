@@ -1339,8 +1339,8 @@ because flagging the unusual as an error trains people to ignore errors.
 | 6b — liquefaction tab, FS profile, fines from sieve | #489 | merged |
 | 6c — bearing general equation + method selection | #490 | merged |
 | 6d — Coulomb + Mononobe–Okabe earth pressure | #491 | merged |
-| 7a — report document model (22 sections) | — | open |
-| 7b — report PDF renderer + UI | — | |
+| 7a — report document model (22 sections) | #492 | merged |
+| 7b — report PDF renderer + vector drawing painter | — | open |
 | 8 — Postgres, CPT, 3D subsurface | — | |
 
 **`/soils` is live**, gated behind the `soil-investigation` feature on pro and
