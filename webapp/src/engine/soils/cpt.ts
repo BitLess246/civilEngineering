@@ -21,19 +21,13 @@
 // UNITS: q_c and q_t MPa; f_s and u₂ kPa; stresses kPa; depth m; angles degrees.
 // ─────────────────────────────────────────────────────────────────────────
 
+import type { CptReading } from './model'
 import { P_ATM } from './spt'
 import { verticalStress, type StressLayer } from './overburden'
 
-/** One cone reading at one depth. */
-export interface CptReading {
-  depth: number
-  /** Cone resistance, MPa. */
-  qc: number
-  /** Sleeve friction, kPa. */
-  fs: number
-  /** Pore pressure behind the cone (u₂), kPa. Omit for a cone without it. */
-  u2?: number
-}
+// The reading shape lives in `model.ts` with the rest of the schema, so a
+// sounding stored on a borehole and one passed to this engine cannot drift.
+export type { CptReading } from './model'
 
 export interface CptOptions {
   /** Net area ratio of the cone, typically 0.70–0.85. */

@@ -125,7 +125,26 @@ export interface Borehole {
   layers: SoilLayer[]
   samples: Sample[]
   spt: SptTest[]
+  /**
+   * Cone readings, for a CPT or CPTu sounding. Absent for a drilled hole.
+   *
+   * A cone takes no sample, so a sounding carries readings and NO `samples` —
+   * which is why this sits beside `samples` rather than replacing it, and why
+   * `meshValidation` flags a sounding that claims laboratory tests.
+   */
+  cpt?: CptReading[]
 }
+
+/** One cone reading. Units: depth m, q_c MPa, f_s and u₂ kPa. */
+export interface CptReading {
+  depth: number
+  qc: number
+  fs: number
+  u2?: number
+}
+
+/** True for exploration kinds that push a cone rather than drill and sample. */
+export const isCone = (kind: ExplorationKind): boolean => kind === 'cpt' || kind === 'cptu'
 
 // ── Stratigraphy ──────────────────────────────────────────────────────────
 

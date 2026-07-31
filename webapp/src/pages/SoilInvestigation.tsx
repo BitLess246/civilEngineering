@@ -4,12 +4,13 @@ import { buildBoreholeLog } from '../engine/soils/logRenderer'
 import { planToSvg } from '../engine/planRenderer'
 import { validateInvestigation, type ValidationIssue } from '../engine/soils/validate'
 import { sptProfile, type LayerUnitWeight } from '../engine/soils/sptProfile'
+import type { StressLayer } from '../engine/soils/overburden'
 import { classifyUSCS } from '../engine/soils/uscs'
 import { densityFromN60, consistencyFromN60 } from '../engine/soils/spt'
 import {
   layerThickness, recoveryRatio, soilFamily, isCohesive,
   type Borehole, type SoilLayer, type Sample, type LabTest, type LabTestType, type LabTestStatus,
-  type LayerParameters,
+  type LayerParameters, type CptReading,
 } from '../engine/soils/model'
 import {
   LAB_TESTS, labSpec, isImplemented, evaluateTest, summarise, readDirectShear,
@@ -20,6 +21,10 @@ import {
   shearEnvelopeChart, consolidationChart, gradingChart,
 } from '../engine/soils/lab/plots'
 import { buildSection, sectionDrawing } from '../engine/soils/section'
+import {
+  processSounding, sbtProfile, relativeDensity, frictionAngle, undrainedStrength,
+} from '../engine/soils/cpt'
+import { layerThickness as _lt } from '../engine/soils/model'
 import { liquefactionProfile } from '../engine/soils/liquefaction'
 import { liquefactionChart, skipText } from '../engine/soils/liquefactionPlot'
 import { finesByLayer, finesMap } from '../engine/soils/finesContent'
@@ -139,7 +144,7 @@ function describeN60(n60: number, layer: SoilLayer | undefined): string {
 
 // ── Page ──────────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'boreholes' | 'profile' | 'spt' | 'lab' | 'liquefaction' | 'classification' | 'parameters'
+type Tab = 'overview' | 'boreholes' | 'profile' | 'spt' | 'cpt' | 'lab' | 'liquefaction' | 'classification' | 'parameters'
 
 export default function SoilInvestigation() {
   const api = useInvestigation()
@@ -304,12 +309,12 @@ export default function SoilInvestigation() {
       )}
 
       <nav className="mt-6 flex flex-wrap gap-1 border-b border-slate-200">
-        {(['overview', 'boreholes', 'profile', 'spt', 'lab', 'liquefaction', 'parameters', 'classification'] as Tab[]).map((t) => (
+        {(['overview', 'boreholes', 'profile', 'spt', 'cpt', 'lab', 'liquefaction', 'parameters', 'classification'] as Tab[]).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`rounded-t-md px-3 py-1.5 text-[13px] font-medium capitalize ${
               tab === t ? 'border-b-2 border-[#0056b3] text-[#0056b3]' : 'text-slate-600 hover:text-slate-900'
             }`}>
-            {t === 'spt' ? 'SPT' : t === 'lab' ? 'Laboratory' : t}
+            {t === 'spt' ? 'SPT' : t === 'cpt' ? 'CPT' : t === 'lab' ? 'Laboratory' : t}
           </button>
         ))}
       </nav>
@@ -666,6 +671,15 @@ export default function SoilInvestigation() {
         </section>
       )}
 
+      {tab === 'cpt' && bh && (
+        <section className="mt-5">
+          <CptPanel bh={bh} unitWeights={unitWeights} onChange={(rows) => api.update((d) => {
+            const target = d.boreholes[holeIdx]
+            if (target) target.cpt = rows
+          })} />
+        </section>
+      )}
+
       {tab === 'liquefaction' && bh && (
         <section className="mt-5">
           <LiquefactionPanel bh={bh} unitWeights={unitWeights} onSeismic={setReportSeismic} />
@@ -679,6 +693,202 @@ export default function SoilInvestigation() {
       )}
 
     </main>
+  )
+}
+
+// ── CPT ───────────────────────────────────────────────────────────────────
+// A cone takes NO SAMPLE, so everything here is behaviour inferred from
+// resistance. The table says "behaviour" and never prints a USCS symbol.
+
+function CptPanel({ bh, unitWeights, onChange }: {
+  bh: Borehole
+  unitWeights: Record<string, LayerUnitWeight>
+  onChange: (rows: CptReading[]) => void
+}) {
+  // Memoised so the `?? []` fallback does not hand the memos below a new array
+  // identity on every render.
+  const rows = useMemo(() => bh.cpt ?? [], [bh.cpt])
+  const [nkt, setNkt] = useState(15)
+
+  const layers = useMemo(() => {
+    const ordered = [...bh.layers].sort((a, b) => a.depthTop - b.depthTop)
+    const out: StressLayer[] = []
+    for (const l of ordered) {
+      const uw = unitWeights[l.id]
+      if (!uw) break
+      out.push({ thickness: _lt(l), gamma: uw.gamma, gammaSat: uw.gammaSat })
+    }
+    // With no logged strata a cone sounding still needs a stress profile, so
+    // fall back to a single column of whatever the first layer weighs — and the
+    // engine's own note about assumptions still applies.
+    return out
+  }, [bh.layers, unitWeights])
+
+  const sounding = useMemo(
+    () => processSounding(rows, layers, bh.groundwaterDepth, { nkt }),
+    [rows, layers, bh.groundwaterDepth, nkt],
+  )
+  const zones = useMemo(() => sbtProfile(sounding), [sounding])
+
+  const patch = (i: number, key: keyof CptReading, v: number | undefined) => {
+    const next = rows.map((r, k) => (k === i ? { ...r, [key]: v } : r))
+    onChange(next)
+  }
+
+  if (!layers.length) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Cone penetration test</h2>
+        <p className="text-[12px] text-amber-800">
+          Every normalised cone quantity needs the effective stress at the reading depth, which needs a logged
+          layer with a unit weight. Log the strata and enter unit weights on the SPT tab first — nothing here is
+          computed from an assumed profile.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-2 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-[1.05rem] font-bold text-[#0056b3]">Cone penetration test</h2>
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              {cite('d5778')}. A cone recovers NO SAMPLE, so the classification below is a soil BEHAVIOUR type —
+              a clayey sand and a sandy clay can plot in the same zone, and only a sample settles it.
+            </p>
+          </div>
+          <label className="flex flex-col text-[11px]">
+            <span className="mb-0.5 text-slate-600">N<sub>kt</sub> for s<sub>u</sub></span>
+            <input type="number" step="1" value={nkt} onChange={(e) => setNkt(num(e.target.value, 15))}
+              className="w-20 rounded border border-slate-300 px-1.5 py-1 text-right font-mono" />
+          </label>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-right text-[12px]">
+            <thead className="text-slate-500">
+              <tr className="border-b border-slate-200">
+                <th className="py-1 pr-2 text-left">Depth (m)</th>
+                <th className="py-1 pr-2">q<sub>c</sub> (MPa)</th>
+                <th className="py-1 pr-2">f<sub>s</sub> (kPa)</th>
+                <th className="py-1 pr-2">u₂ (kPa)</th>
+                <th className="py-1 pr-2">q<sub>t</sub></th>
+                <th className="py-1 pr-2">I<sub>c</sub></th>
+                <th className="py-1 pr-3 text-left">Behaviour</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => {
+                const out = sounding.rows[i]
+                return (
+                  <tr key={i} className="border-b border-slate-100">
+                    <td className="py-0.5 pr-2">
+                      <input type="number" step="0.25" value={r.depth}
+                        onChange={(e) => patch(i, 'depth', num(e.target.value))}
+                        className="w-20 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                    </td>
+                    <td className="py-0.5 pr-2">
+                      <input type="number" step="0.1" value={r.qc}
+                        onChange={(e) => patch(i, 'qc', num(e.target.value))}
+                        className="w-20 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                    </td>
+                    <td className="py-0.5 pr-2">
+                      <input type="number" step="1" value={r.fs}
+                        onChange={(e) => patch(i, 'fs', num(e.target.value))}
+                        className="w-20 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                    </td>
+                    <td className="py-0.5 pr-2">
+                      <input type="number" step="1" value={r.u2 ?? ''} placeholder="—"
+                        onChange={(e) => patch(i, 'u2', e.target.value === '' ? undefined : num(e.target.value))}
+                        className="w-20 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                    </td>
+                    <td className="py-0.5 pr-2 font-mono text-slate-600">
+                      {out ? f2(out.qt) : '—'}{out && !out.corrected ? '*' : ''}
+                    </td>
+                    <td className="py-0.5 pr-2 font-mono font-semibold">
+                      {out?.normalised ? f2(out.normalised.ic) : '—'}
+                    </td>
+                    <td className="py-0.5 pr-3 text-left">{out?.sbt?.label ?? out?.skipped ?? '—'}</td>
+                    <td className="py-0.5">
+                      <button onClick={() => onChange(rows.filter((_, k) => k !== i))}
+                        className="rounded px-1 text-[10px] text-red-600 hover:bg-red-50">×</button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        <button
+          onClick={() => onChange([...rows, { depth: rows.length ? rows[rows.length - 1].depth + 0.5 : 1, qc: 5, fs: 50 }])}
+          className="mt-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[11px] text-slate-600 hover:bg-slate-50">
+          + reading
+        </button>
+        {sounding.rows.some((r) => !r.corrected) && (
+          <p className="mt-1 text-[10px] text-slate-500">* q<sub>t</sub> could not be corrected — no u₂ at that depth.</p>
+        )}
+
+        {sounding.notes.map((n, k) => (
+          <p key={k} className="mt-2 text-[11px] text-amber-900">{n}</p>
+        ))}
+      </div>
+
+      {zones.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-2 text-[1.05rem] font-bold text-[#0056b3]">Behaviour over the sounding</h2>
+          <ul className="space-y-0.5 text-[12px]">
+            {zones.map((z) => (
+              <li key={z.zone} className="flex items-baseline gap-2">
+                <span className="font-mono text-slate-500">zone {z.zone}</span>
+                <span className="text-slate-800">{z.label}</span>
+                <span className="font-mono text-slate-600">{(z.fraction * 100).toFixed(0)}%</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {sounding.rows.some((r) => r.normalised) && (
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-2 text-[1.05rem] font-bold text-[#0056b3]">Correlations</h2>
+          <p className="mb-2 text-[11px] text-slate-500">
+            Each is refused outside the soil it applies to, with the reason — the same rule the SPT correlations follow.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[12px]">
+              <thead className="text-slate-500">
+                <tr className="border-b border-slate-200">
+                  <th className="py-1 pr-3">Depth</th><th className="py-1 pr-3">D<sub>r</sub></th>
+                  <th className="py-1 pr-3">φ′</th><th className="py-1 pr-3">s<sub>u</sub></th>
+                </tr>
+              </thead>
+              <tbody>
+                {sounding.rows.filter((r) => r.normalised).map((r) => {
+                  const dr = relativeDensity(r.normalised!)
+                  const phi = frictionAngle(r.normalised!)
+                  const su = undrainedStrength(r.normalised!, r.totalStress, nkt)
+                  const cell = (c: { value?: number; unit: string; refusal?: string }) =>
+                    c.value != null
+                      ? <span className="font-mono">{f1(c.value)} {c.unit}</span>
+                      : <span className="text-[10px] text-slate-500">{c.refusal}</span>
+                  return (
+                    <tr key={r.depth} className="border-b border-slate-100 align-top">
+                      <td className="py-0.5 pr-3 font-mono">{f2(r.depth)}</td>
+                      <td className="py-0.5 pr-3">{cell(dr)}</td>
+                      <td className="py-0.5 pr-3">{cell(phi)}</td>
+                      <td className="py-0.5 pr-3">{cell(su)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 

@@ -1345,7 +1345,8 @@ because flagging the unusual as an error trains people to ignore errors.
 | 8b — sync UI (status, conflict resolution) | — | BLOCKED: apply the migration to the live project first |
 | 8c — CPT (Robertson SBT, correlations) | #495 | merged |
 | 8d — subsurface cross-sections | #496 | merged |
-| 8e — section wired into the report and the profile tab | — | open |
+| 8e — section wired into the report and the profile tab | #497 | merged |
+| 8f — CPT in the model, validation and a UI tab | — | open |
 
 **`/soils` is live**, gated behind the `soil-investigation` feature on pro and
 max. Eight tabs: overview and integrity, boreholes with the graphical log,
@@ -1354,9 +1355,13 @@ tests (each test card draws its own curve), liquefaction triggering with an FS
 profile, interpreted parameters, and a USCS classifier. A "Report PDF" button
 generates the 22-section investigation report.
 
-**Engines built but not yet reachable from the UI:** `cpt.ts` (Phase 8c). The
-model has no field for cone readings — `Borehole` would need `cpt?: CptReading[]`
-plus a `meshValidation` rule — so wiring it is a schema change, not a page.
+**Every engine is now reachable from the UI.**
+
+**Supabase:** the migration is applied (user confirmed, 31 Jul). The sync UI
+(8b) is still unbuilt because this container's network egress allowlist blocks
+`*.supabase.co`, so no round-trip against the live database has been run — the
+adapter's column names and error-code branches remain unverified against real
+Postgres. Allowlist the host, or test on the deployed app, before building on it.
 
 **Storage decision, settled:** the local `SoilsStore` over localStorage stays;
 Phase 8a adds an ASYNC `RemoteStore` beside it rather than behind it, because a

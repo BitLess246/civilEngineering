@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { validateInvestigation, validateAtterberg, hasErrors } from './validate'
 import { sampleInvestigation } from './sample'
-import type { Investigation } from './model'
+import { isCone } from './model'
+import type { Investigation, Borehole } from './model'
 
 /** Deep-clone the fixture so each case can corrupt one field in isolation. */
 const fixture = (): Investigation => structuredClone(sampleInvestigation())
@@ -207,5 +208,82 @@ describe('validateAtterberg', () => {
     // The form validates as the user types; a half-filled form is not an error.
     expect(validateAtterberg({})).toEqual([])
     expect(validateAtterberg({ liquidLimit: 48 })).toEqual([])
+  })
+})
+
+// ── CPT soundings ─────────────────────────────────────────────────────────
+
+const sounding = (over: Partial<Borehole> = {}): Investigation => ({
+  meta: {
+    investigationNo: 'SI-1', title: 'T', site: { projectName: 'P' }, status: 'draft',
+  },
+  boreholes: [{
+    id: 'c1', name: 'CPT-01', kind: 'cpt', actualDepth: 20,
+    layers: [], samples: [], spt: [],
+    cpt: [{ depth: 1, qc: 5, fs: 40, u2: 10 }, { depth: 2, qc: 6, fs: 45, u2: 12 }],
+    ...over,
+  }],
+  parameters: [],
+})
+
+describe('cone soundings', () => {
+  it('accepts a clean sounding', () => {
+    expect(codes(sounding())).not.toContain('cone-without-readings')
+    expect(codes(sounding())).not.toContain('cone-with-samples')
+  })
+
+  it('knows which exploration kinds push a cone', () => {
+    expect(isCone('cpt')).toBe(true)
+    expect(isCone('cptu')).toBe(true)
+    expect(isCone('borehole')).toBe(false)
+    expect(isCone('trial-pit')).toBe(false)
+  })
+
+  it('flags a sounding that claims SAMPLES — a cone recovers nothing', () => {
+    // The record has been mixed with an adjacent borehole, and every lab result
+    // is then attributed to ground nobody sampled.
+    const inv = sounding({
+      samples: [{ id: 's', name: 'S-01', type: 'disturbed', depthTop: 1, depthBottom: 1.5, tests: [] }],
+    })
+    expect(codes(inv)).toContain('cone-with-samples')
+  })
+
+  it('flags a sounding that claims SPT', () => {
+    const inv = sounding({
+      spt: [{ id: 'n', depth: 3, blows: [2, 3, 4], penetration: [150, 150, 150] }],
+    })
+    expect(codes(inv)).toContain('cone-with-spt')
+  })
+
+  it('flags a cone kind with no readings, and readings on a drilled hole', () => {
+    expect(codes(sounding({ cpt: [] }))).toContain('cone-without-readings')
+    expect(codes(sounding({ kind: 'borehole' }))).toContain('readings-without-cone')
+  })
+
+  it('REJECTS a reading below the sounding depth or above ground', () => {
+    expect(codes(sounding({ cpt: [{ depth: 25, qc: 5, fs: 40 }] }))).toContain('cpt-below-hole')
+    expect(codes(sounding({ cpt: [{ depth: -1, qc: 5, fs: 40 }] }))).toContain('cpt-negative-depth')
+  })
+
+  it('REJECTS a negative resistance', () => {
+    expect(codes(sounding({ cpt: [{ depth: 1, qc: -5, fs: 40 }] }))).toContain('cpt-negative-resistance')
+    expect(codes(sounding({ cpt: [{ depth: 1, qc: 5, fs: -40 }] }))).toContain('cpt-negative-resistance')
+  })
+
+  it('warns about duplicated depths', () => {
+    const inv = sounding({ cpt: [{ depth: 1, qc: 5, fs: 40 }, { depth: 1, qc: 6, fs: 41 }] })
+    expect(codes(inv)).toContain('cpt-duplicate-depth')
+  })
+
+  it('warns when NO reading carries u₂, and says where that bites', () => {
+    const inv = sounding({ cpt: [{ depth: 1, qc: 5, fs: 40 }, { depth: 2, qc: 6, fs: 45 }] })
+    expect(codes(inv)).toContain('cpt-no-pore-pressure')
+    const msg = validateInvestigation(inv).find((i) => i.code === 'cpt-no-pore-pressure')!.message
+    expect(msg).toMatch(/dominant term, not a refinement/)
+  })
+
+  it('says nothing about cones for an ordinary borehole', () => {
+    const inv = sounding({ kind: 'borehole', cpt: undefined })
+    expect(codes(inv).filter((c) => c.startsWith('cpt-') || c.startsWith('cone-'))).toEqual([])
   })
 })
