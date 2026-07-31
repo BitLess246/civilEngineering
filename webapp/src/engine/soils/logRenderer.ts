@@ -68,7 +68,12 @@ export type HatchKind = SoilFamily
 export const hatchFor = (symbol: string | undefined, name: string): HatchKind =>
   soilFamily(symbol, name)
 
-const HATCH_FILL: Record<HatchKind, string> = {
+/**
+ * Fill colour per soil family. Exported so the cross-section paints a stratum
+ * the same colour the borehole log does — a section whose clay is a different
+ * blue from the log beside it reads as a different material.
+ */
+export const HATCH_FILL: Record<HatchKind, string> = {
   gravel: '#d6d3d1',
   sand: '#fde68a',
   silt: '#d9f99d',
