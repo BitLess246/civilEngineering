@@ -20,7 +20,7 @@
 
 import {
   type Investigation, type Borehole,
-  fieldN, layerThickness, recoveryRatio,
+  fieldN, layerThickness, recoveryRatio, isCone,
 } from './model'
 
 export type IssueSeverity = 'error' | 'warning'
@@ -162,6 +162,7 @@ function validateBorehole(bh: Borehole, err: Report, warn: Report, seenLayerIds:
   }
 
   validateSpt(bh, err, warn, sampleIds)
+  validateCpt(bh, err, warn)
 }
 
 /**
@@ -222,6 +223,59 @@ function validateStratigraphy(bh: Borehole, err: Report, warn: Report, seenLayer
   if (base > bh.actualDepth + DEPTH_TOL) {
     err('profile-below-termination',
       `${bh.name}: the logged profile reaches ${base.toFixed(2)} m, deeper than the ${bh.actualDepth.toFixed(2)} m termination depth.`, ref)
+  }
+}
+
+/**
+ * Cone soundings.
+ *
+ * The rule worth stating: a cone RECOVERS NOTHING. A sounding that lists
+ * samples means the record has been mixed with an adjacent borehole, and every
+ * laboratory result attributed to this hole is then attributed to ground that
+ * nobody sampled.
+ */
+function validateCpt(bh: Borehole, err: Report, warn: Report): void {
+  const ref = { boreholeId: bh.id }
+  const cone = isCone(bh.kind)
+  const readings = bh.cpt ?? []
+
+  if (cone && !readings.length) {
+    warn('cone-without-readings', `${bh.name} is logged as a ${bh.kind} but carries no cone readings.`, ref)
+  }
+  if (!cone && readings.length) {
+    warn('readings-without-cone',
+      `${bh.name} carries cone readings but is logged as a ${bh.kind}. Set the exploration type to cpt or cptu.`, ref)
+  }
+  if (cone && bh.samples.length) {
+    warn('cone-with-samples',
+      `${bh.name} is a ${bh.kind} but lists ${bh.samples.length} sample${bh.samples.length === 1 ? '' : 's'}. A cone recovers no sample — check these are not from an adjacent borehole.`, ref)
+  }
+  if (cone && bh.spt.length) {
+    warn('cone-with-spt',
+      `${bh.name} is a ${bh.kind} but lists ${bh.spt.length} SPT. A cone sounding drives no split spoon.`, ref)
+  }
+
+  const seen = new Set<number>()
+  for (const r of readings) {
+    if (r.depth < 0) {
+      err('cpt-negative-depth', `${bh.name}: cone reading above ground level (${r.depth.toFixed(2)} m).`, ref)
+    }
+    if (r.depth > bh.actualDepth + DEPTH_TOL) {
+      err('cpt-below-hole',
+        `${bh.name}: cone reading at ${r.depth.toFixed(2)} m, below the ${bh.actualDepth.toFixed(2)} m termination depth.`, ref)
+    }
+    if (r.qc < 0 || r.fs < 0) {
+      err('cpt-negative-resistance',
+        `${bh.name}: negative resistance at ${r.depth.toFixed(2)} m — q_c and f_s cannot be negative.`, ref)
+    }
+    if (seen.has(r.depth)) {
+      warn('cpt-duplicate-depth', `${bh.name}: two cone readings at ${r.depth.toFixed(2)} m.`, ref)
+    }
+    seen.add(r.depth)
+  }
+  if (readings.length && readings.every((r) => r.u2 == null)) {
+    warn('cpt-no-pore-pressure',
+      `${bh.name}: no u₂ on any reading, so q_c cannot be corrected. In soft clay that correction is the dominant term, not a refinement.`, ref)
   }
 }
 
