@@ -43,6 +43,7 @@ import { velocity, hazenWilliamsHead, gpmToLps } from './waterSupply'
 import { designDrainage } from './drainage'
 import { designSepticTank } from './septicTank'
 import { cyclicStressRatio, crr75 } from './soils/liquefaction'
+import { nGamma, generalBearingCapacity } from './bearingGeneral'
 import type { RectSection } from './model'
 
 export interface ValidationCase {
@@ -661,6 +662,24 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'slope-slices-fellenius', category: 'Geotech', title: 'Method of slices — Fellenius FS',
     reference: 'Fellenius / OMS', formula: 'FS = Σ[c·l + (W·cosα − u·l)·tanφ] / Σ[W·sinα]',
     manual: slopeSlices.manual, software: slopeSlices.software, unit: '—', tol: 1e-3,
+  },
+  {
+    id: 'bearing-ngamma-vesic', category: 'Geotech', title: 'Nγ — Vesić (φ = 35°)',
+    reference: 'Vesić (1973); Das Table 3.3', formula: 'Nγ = 2(Nq + 1)tanφ',
+    manual: 48.029, software: nGamma(35, 'vesic'), unit: '—', tol: 1e-3,
+  },
+  {
+    id: 'bearing-ngamma-meyerhof', category: 'Geotech', title: 'Nγ — Meyerhof (φ = 35°)',
+    reference: 'Meyerhof (1963); Das Table 3.3', formula: 'Nγ = (Nq − 1)tan(1.4φ)',
+    manual: 37.152, software: nGamma(35, 'meyerhof'), unit: '—', tol: 1e-3,
+  },
+  {
+    id: 'bearing-general-qult', category: 'Geotech', title: 'General bearing equation (Vesić, square)',
+    reference: 'Das §3, Vesić factors', formula: 'qu = q·Nq·sq·dq + ½γB·Nγ·sγ  (c = 0)',
+    // 2×2 m at Df = 1.5 m, φ = 32°, γ = 18 kN/m³, dry, vertical concentric load.
+    manual: 1553.72,
+    software: generalBearingCapacity({ c: 0, phiDeg: 32, gamma: 18, B: 2, L: 2, Df: 1.5, method: 'vesic' }).qult,
+    unit: 'kPa', tol: 1e-3,
   },
   {
     id: 'liq-csr', category: 'Geotech', title: 'Liquefaction cyclic stress ratio',

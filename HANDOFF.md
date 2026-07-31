@@ -1336,8 +1336,9 @@ because flagging the unusual as an error trains people to ignore errors.
 | 4e — lab charts (envelope, e–log σ′, grading) | #487 | open |
 | 4f… — compaction, triaxial, permeability, CBR, hydrometer | — | |
 | 6a — liquefaction triggering engine (NCEER) | #488 | merged |
-| 6b — liquefaction tab, FS profile, fines from sieve | — | open |
-| 6c/6d — bearing methods (Meyerhof/Hansen/Vesić), Coulomb | — | |
+| 6b — liquefaction tab, FS profile, fines from sieve | #489 | merged |
+| 6c — bearing general equation + method selection | — | open |
+| 6d — Coulomb earth pressure | — | |
 | 7 — report document builder | — | |
 | 8 — Postgres, CPT, 3D subsurface | — | |
 

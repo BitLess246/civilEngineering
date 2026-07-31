@@ -1,5 +1,8 @@
 import { useState } from 'react'
-import { activeThrust, passiveThrust, bearingCapacity, infiniteSlopeFS, type FootingShape } from '../engine/geotech'
+import { activeThrust, passiveThrust, infiniteSlopeFS } from '../engine/geotech'
+import {
+  generalBearingCapacity, compareMethods, BEARING_METHOD_LABEL, type BearingMethod,
+} from '../engine/bearingGeneral'
 import { ReportControls } from '../components/ReportControls'
 import { SoilLayerPicker } from '../components/SoilLayerPicker'
 
@@ -68,45 +71,123 @@ function Bearing() {
   const [c, setC] = useState(20)
   const [phi, setPhi] = useState(30)
   const [gamma, setGamma] = useState(18)
+  const [gammaSat, setGammaSat] = useState(20)
   const [B, setB] = useState(2)
+  const [L, setL] = useState(2)
+  const [strip, setStrip] = useState(false)
   const [Df, setDf] = useState(1.5)
-  const [shape, setShape] = useState<FootingShape>('strip')
+  const [dw, setDw] = useState<number | ''>('')
+  const [eB, setEB] = useState(0)
+  const [incl, setIncl] = useState(0)
+  const [method, setMethod] = useState<BearingMethod>('vesic')
   const [FS, setFS] = useState(3)
-  const r = bearingCapacity({ c, phiDeg: phi, gamma, B, Df, shape, FS })
+
+  const input = {
+    c, phiDeg: phi, gamma, gammaSat, B, L: strip ? Infinity : L, Df,
+    waterTable: dw === '' ? undefined : dw,
+    eB, loadInclination: incl, FS,
+  }
+
+  let r: ReturnType<typeof generalBearingCapacity> | null = null
+  let error: string | null = null
+  try {
+    r = generalBearingCapacity({ ...input, method })
+  } catch (e) {
+    error = e instanceof Error ? e.message : String(e)
+  }
+  const all = r ? compareMethods(input) : null
+
   return (
-    <Card title="Bearing capacity — Terzaghi/Meyerhof (Vesić Nγ)" sub="qult = c·Nc·sc + q·Nq + ½·γ·B·Nγ·sγ,  q = γ·Df.">
+    <Card
+      title="Bearing capacity — general equation"
+      sub="qu = c·Nc·sc·dc·ic + q·Nq·sq·dq·iq + ½·γ′·B′·Nγ·sγ·dγ·iγ.  Method chosen explicitly; the three differ on Nγ and on their shape/depth factors.">
       <div className="mb-3">
         <SoilLayerPicker
-          want={['c', 'phiDeg', 'gamma']}
+          want={['c', 'phiDeg', 'gamma', 'gammaSat']}
           onApply={(f) => {
             if (f.c != null) setC(f.c)
             if (f.phiDeg != null) setPhi(f.phiDeg)
             if (f.gamma != null) setGamma(f.gamma)
+            if (f.gammaSat != null) setGammaSat(f.gammaSat)
           }} />
       </div>
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Field label="Cohesion c" unit="kPa" value={c} onChange={setC} />
         <Field label="φ" unit="°" value={phi} onChange={setPhi} />
         <Field label="γ" unit="kN/m³" value={gamma} onChange={setGamma} />
+        <Field label="γsat" unit="kN/m³" value={gammaSat} onChange={setGammaSat} />
         <Field label="Width B" unit="m" value={B} onChange={setB} />
+        {!strip && <Field label="Length L" unit="m" value={L} onChange={setL} />}
         <Field label="Depth Df" unit="m" value={Df} onChange={setDf} />
         <label className="flex flex-col text-sm">
-          <span className="mb-1 font-medium text-slate-600">Shape</span>
-          <select value={shape} onChange={(e) => setShape(e.target.value as FootingShape)}
+          <span className="mb-1 font-medium text-slate-600">Water table (m)</span>
+          <input type="number" step="0.5" value={dw} placeholder="none"
+            onChange={(e) => setDw(e.target.value === '' ? '' : parseFloat(e.target.value))}
+            className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+        </label>
+        <Field label="Eccentricity eB" unit="m" value={eB} onChange={setEB} />
+        <Field label="Load inclination β" unit="°" value={incl} onChange={setIncl} />
+        <label className="flex flex-col text-sm">
+          <span className="mb-1 font-medium text-slate-600">Method</span>
+          <select value={method} onChange={(e) => setMethod(e.target.value as BearingMethod)}
             className="rounded-md border border-slate-300 px-2.5 py-1.5">
-            <option value="strip">Strip</option>
-            <option value="square">Square</option>
-            <option value="circular">Circular</option>
+            {(['meyerhof', 'hansen', 'vesic'] as BearingMethod[]).map((m) => (
+              <option key={m} value={m}>{BEARING_METHOD_LABEL[m]}</option>
+            ))}
           </select>
         </label>
         <Field label="FS" value={FS} onChange={setFS} />
       </div>
-      <div className="mt-3">
-        <Out label="Nc / Nq / Nγ" value={`${f2(r.Nc)} / ${f2(r.Nq)} / ${f2(r.Ngamma)}`} />
-        <Out label="Ultimate qult" value={`${f2(r.qult)} kPa`} />
-        <Out label="Net ultimate qnet" value={`${f2(r.qnet)} kPa`} />
-        <Out label={`Allowable qallow (FS ${f2(FS)})`} value={`${f2(r.qallow)} kPa`} />
-      </div>
+
+      <label className="mt-2 flex items-center gap-2 text-[12px] text-slate-600">
+        <input type="checkbox" checked={strip} onChange={(e) => setStrip(e.target.checked)} />
+        Strip footing (L → ∞)
+      </label>
+
+      {error && (
+        <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">{error}</p>
+      )}
+
+      {r && (
+        <>
+          <div className="mt-3">
+            <Out label="Nc / Nq / Nγ" value={`${f2(r.Nc)} / ${f2(r.Nq)} / ${f2(r.Ngamma)}`} />
+            <Out label="Shape sc / sq / sγ" value={`${f2(r.sc)} / ${f2(r.sq)} / ${f2(r.sgamma)}`} />
+            <Out label="Depth dc / dq / dγ" value={`${f2(r.dc)} / ${f2(r.dq)} / ${f2(r.dgamma)}`} />
+            <Out label="Inclination ic / iq / iγ" value={`${f2(r.ic)} / ${f2(r.iq)} / ${f2(r.igamma)}`} />
+            <Out label="Effective B′" value={`${f2(r.effectiveB)} m`} />
+            <Out label="Surcharge q" value={`${f2(r.surcharge)} kPa`} />
+            <Out label="γ in the Nγ term" value={`${f2(r.gammaEffective)} kN/m³`} />
+            <Out label="Ultimate qult" value={`${f2(r.qult)} kPa`} />
+            <Out label="Net ultimate qnet" value={`${f2(r.qnet)} kPa`} />
+            <Out label={`Allowable NET (FS ${f2(FS)})`} value={`${f2(r.qallowNet)} kPa`} />
+            <Out label="Allowable gross" value={`${f2(r.qallowGross)} kPa`} />
+          </div>
+
+          {all && (
+            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="mb-1 text-[11px] font-semibold text-slate-700">All three methods, same footing</p>
+              <div className="flex flex-wrap gap-3 text-[12px]">
+                {(['meyerhof', 'hansen', 'vesic'] as BearingMethod[]).map((m) => (
+                  <span key={m} className={`font-mono ${m === method ? 'font-bold text-[#0056b3]' : 'text-slate-600'}`}>
+                    {BEARING_METHOD_LABEL[m].split(' ')[0]}: {f2(all[m].qult)} kPa
+                  </span>
+                ))}
+              </div>
+              <p className="mt-1 text-[10px] text-slate-500">
+                They disagree by design. A bearing pressure quoted without naming its method is not reproducible.
+              </p>
+            </div>
+          )}
+
+          <ul className="mt-3 space-y-1">
+            {r.notes.map((n, k) => (
+              <li key={k} className="text-[11px] text-amber-900">{n}</li>
+            ))}
+          </ul>
+        </>
+      )}
     </Card>
   )
 }
