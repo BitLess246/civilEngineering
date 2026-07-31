@@ -86,6 +86,16 @@ export interface BearingResult extends BearingFactors {
  * Terzaghi/Meyerhof bearing capacity  qult = c·Nc·sc + q·Nq + ½·γ·B·Nγ·sγ,
  * with Meyerhof shape factors for square/circular footings (strip → 1.0).
  *   q = γ·Df is the surcharge from the embedment Df.
+ *
+ * SUPERSEDED by `generalBearingCapacity`, which carries depth, inclination and
+ * water-table effects and lets the N-factor method be chosen. Kept because the
+ * footing pages and their pinned results were built against it.
+ *
+ * KNOWN INCONSISTENCY, left in place deliberately rather than changed under a
+ * different PR's cover: it applies a Meyerhof s_c and a De Beer s_γ but NO s_q
+ * at all. Omitting s_q understates a square footing's capacity, so the error is
+ * on the safe side — but it is an error, and `generalBearingCapacity` is the
+ * one to use for design.
  */
 export function bearingCapacity(p: {
   c: number; phiDeg: number; gamma: number; B: number; Df: number;
