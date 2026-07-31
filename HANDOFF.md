@@ -1343,8 +1343,8 @@ because flagging the unusual as an error trains people to ignore errors.
 | 7b — report PDF renderer + vector drawing painter | #493 | merged |
 | 8a — async remote store, sync, Supabase adapter + SQL | #494 | merged |
 | 8b — sync UI (status, conflict resolution) | — | BLOCKED: apply the migration to the live project first |
-| 8c — CPT (Robertson SBT, correlations) | — | open |
-| 8d — 3D subsurface | — | |
+| 8c — CPT (Robertson SBT, correlations) | #495 | merged |
+| 8d — subsurface cross-sections | — | open |
 
 **`/soils` is live**, gated behind the `soil-investigation` feature on pro and
 max. Eight tabs: overview and integrity, boreholes with the graphical log,
