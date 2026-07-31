@@ -71,47 +71,19 @@ export function bearingFactors(phiDeg: number): BearingFactors {
   return { Nc, Nq, Ngamma }
 }
 
-export type FootingShape = 'strip' | 'square' | 'circular'
-
-export interface BearingResult extends BearingFactors {
-  /** Ultimate gross bearing capacity, kPa. */
-  qult: number
-  /** Net ultimate (qult − surcharge), kPa. */
-  qnet: number
-  /** Allowable gross bearing capacity = qult / FS, kPa. */
-  qallow: number
-}
-
-/**
- * Terzaghi/Meyerhof bearing capacity  qult = c·Nc·sc + q·Nq + ½·γ·B·Nγ·sγ,
- * with Meyerhof shape factors for square/circular footings (strip → 1.0).
- *   q = γ·Df is the surcharge from the embedment Df.
- *
- * SUPERSEDED by `generalBearingCapacity`, which carries depth, inclination and
- * water-table effects and lets the N-factor method be chosen. Kept because the
- * footing pages and their pinned results were built against it.
- *
- * KNOWN INCONSISTENCY, left in place deliberately rather than changed under a
- * different PR's cover: it applies a Meyerhof s_c and a De Beer s_γ but NO s_q
- * at all. Omitting s_q understates a square footing's capacity, so the error is
- * on the safe side — but it is an error, and `generalBearingCapacity` is the
- * one to use for design.
- */
-export function bearingCapacity(p: {
-  c: number; phiDeg: number; gamma: number; B: number; Df: number;
-  shape?: FootingShape; FS?: number;
-}): BearingResult {
-  const f = bearingFactors(p.phiDeg)
-  const q = p.gamma * p.Df
-  const shape = p.shape ?? 'strip'
-  // Meyerhof shape factors for B/L = 1 (square/circular); strip = 1.0
-  const Kp = rankineKp(p.phiDeg)
-  const sc = shape === 'strip' ? 1 : 1 + 0.2 * Kp        // 1 + 0.2·Kp·(B/L)
-  const sg = shape === 'strip' ? 1 : 0.6                 // 1 − 0.4·(B/L)
-  const qult = p.c * f.Nc * sc + q * f.Nq + 0.5 * p.gamma * p.B * f.Ngamma * sg
-  const FS = p.FS ?? 3
-  return { ...f, qult, qnet: qult - q, qallow: qult / FS }
-}
+// ── Bearing capacity ────────────────────────────────────────────────────────
+// The bearing-capacity equation lives in `bearingGeneral.ts`, which carries
+// shape, depth and inclination factors and makes the METHOD an explicit input.
+//
+// A second, simpler `bearingCapacity()` used to live here. It was removed
+// rather than repaired because it was not a simplification of any published
+// procedure — it combined a Vesić Nγ, a Meyerhof s_c, NO s_q at all (which
+// only Terzaghi's formulation omits) and a De Beer s_γ. Four sources, so the
+// number it returned corresponded to no method anyone could check it against.
+//
+// Repairing it would have meant choosing which of those methods to align to,
+// which is exactly the choice `generalBearingCapacity` asks the caller to make
+// out loud. `bearingFactors` below is still shared by both.
 
 // ── Infinite-slope stability ────────────────────────────────────────────────
 /**

@@ -1346,7 +1346,8 @@ because flagging the unusual as an error trains people to ignore errors.
 | 8c — CPT (Robertson SBT, correlations) | #495 | merged |
 | 8d — subsurface cross-sections | #496 | merged |
 | 8e — section wired into the report and the profile tab | #497 | merged |
-| 8f — CPT in the model, validation and a UI tab | — | open |
+| 8f — CPT in the model, validation and a UI tab | #498 | merged |
+| fix — remove the mixed-method `bearingCapacity()` | — | open |
 
 **`/soils` is live**, gated behind the `soil-investigation` feature on pro and
 max. Eight tabs: overview and integrity, boreholes with the graphical log,

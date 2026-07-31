@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   rankineKa, rankineKp, activeThrust, passiveThrust,
-  bearingFactors, bearingCapacity, infiniteSlopeFS,
+  bearingFactors, infiniteSlopeFS,
 } from './geotech'
+import { generalBearingCapacity } from './bearingGeneral'
 
 describe('Rankine earth-pressure coefficients', () => {
   it('Ka = (1−sinφ)/(1+sinφ); Kp is its reciprocal', () => {
@@ -51,24 +52,52 @@ describe('bearing-capacity factors (Vesić Nγ)', () => {
   })
 })
 
-describe('Terzaghi/Meyerhof bearing capacity', () => {
-  it('strip footing qult = c·Nc + q·Nq + ½·γ·B·Nγ', () => {
-    const r = bearingCapacity({ c: 20, phiDeg: 30, gamma: 18, B: 2, Df: 1.5, shape: 'strip' })
+describe('bearing capacity moved to bearingGeneral', () => {
+  // The simple `bearingCapacity()` that used to live here was DELETED, not
+  // repaired: it mixed a Vesić Nγ, a Meyerhof s_c, no s_q (only Terzaghi omits
+  // one) and a De Beer s_γ, so its answer matched no published method. These
+  // cases now exercise the engine that replaced it, and the last one records
+  // what the old function got wrong so the bug cannot quietly return.
+
+  it('strip footing is the bare equation, with every shape factor at 1', () => {
+    const r = generalBearingCapacity({ c: 20, phiDeg: 30, gamma: 18, B: 2, Df: 1.5, L: Infinity, method: 'vesic' })
+    expect(r.sc).toBeCloseTo(1, 9)
+    expect(r.sq).toBeCloseTo(1, 9)
+    expect(r.sgamma).toBeCloseTo(1, 9)
     const q = 18 * 1.5
-    const expected = 20 * r.Nc + q * r.Nq + 0.5 * 18 * 2 * r.Ngamma
-    expect(r.qult).toBeCloseTo(expected, 4)
-    expect(r.qnet).toBeCloseTo(r.qult - q, 6)
-    expect(r.qallow).toBeCloseTo(r.qult / 3, 6)
+    expect(r.surcharge).toBeCloseTo(q, 9)
+    // Depth factors still apply to a strip — that is the part the old function
+    // never had at all.
+    expect(r.qult).toBeCloseTo(
+      20 * r.Nc * r.dc + q * r.Nq * r.dq + 0.5 * 18 * 2 * r.Ngamma * r.dgamma, 4,
+    )
   })
-  it('square footing applies Meyerhof shape factors (higher cohesion term, lower γ term)', () => {
-    const strip = bearingCapacity({ c: 20, phiDeg: 30, gamma: 18, B: 2, Df: 1.5, shape: 'strip' })
-    const square = bearingCapacity({ c: 20, phiDeg: 30, gamma: 18, B: 2, Df: 1.5, shape: 'square' })
-    // sc = 1 + 0.2·Kp > 1 and sγ = 0.6 < 1; cohesion dominates here ⇒ square is larger
+
+  it('a square footing raises the cohesion and surcharge terms and lowers the γ term', () => {
+    const strip = generalBearingCapacity({ c: 20, phiDeg: 30, gamma: 18, B: 2, Df: 1.5, L: Infinity, method: 'vesic' })
+    const square = generalBearingCapacity({ c: 20, phiDeg: 30, gamma: 18, B: 2, Df: 1.5, L: 2, method: 'vesic' })
+    expect(square.sc).toBeGreaterThan(1)
+    expect(square.sq).toBeGreaterThan(1)
+    expect(square.sgamma).toBeLessThan(1)
     expect(square.qult).toBeGreaterThan(strip.qult)
   })
-  it('custom FS scales the allowable', () => {
-    const a = bearingCapacity({ c: 10, phiDeg: 25, gamma: 17, B: 1.5, Df: 1, FS: 2.5 })
-    expect(a.qallow).toBeCloseTo(a.qult / 2.5, 6)
+
+  it('custom FS scales the allowable, on the NET capacity', () => {
+    const a = generalBearingCapacity({ c: 10, phiDeg: 25, gamma: 17, B: 1.5, L: 1.5, Df: 1, FS: 2.5 })
+    expect(a.qallowNet).toBeCloseTo(a.qnet / 2.5, 6)
+  })
+
+  it('APPLIES an s_q, which the deleted function did not', () => {
+    // The whole defect in one assertion. With no embedment the surcharge term
+    // is zero and the omission is invisible (0.5% on the old numbers); with
+    // embedment it understated a square footing by roughly 17%.
+    const square = generalBearingCapacity({ c: 20, phiDeg: 30, gamma: 18, B: 2, L: 2, Df: 1.5, method: 'vesic' })
+    expect(square.sq).toBeCloseTo(1 + Math.tan((30 * Math.PI) / 180), 6)
+
+    const withoutSq = 20 * square.Nc * square.sc * square.dc
+      + square.surcharge * square.Nq * square.dq                       // s_q omitted
+      + 0.5 * 18 * 2 * square.Ngamma * square.sgamma * square.dgamma
+    expect(square.qult / withoutSq).toBeGreaterThan(1.15)
   })
 })
 
