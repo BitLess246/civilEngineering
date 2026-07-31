@@ -28,6 +28,7 @@ import type { Drawing } from '../planRenderer'
 import type { Investigation, Borehole } from './model'
 import { layerThickness, soilFamily, isCohesive } from './model'
 import { buildBoreholeLog } from './logRenderer'
+import { buildSection, sectionDrawing } from './section'
 import { sptProfile, type LayerUnitWeight } from './sptProfile'
 import { liquefactionProfile, type LiquefactionProfileInput } from './liquefaction'
 import { liquefactionChart } from './liquefactionPlot'
@@ -157,6 +158,7 @@ function s4FieldWork(inv: Investigation): ReportSection {
 
 function s5Stratigraphy(inv: Investigation): ReportSection {
   const layers = inv.boreholes.flatMap((b) => b.layers.map((l) => ({ b, l })))
+  const section = buildSection(inv.boreholes)
   if (!layers.length) {
     return missing(5, 'Subsurface conditions', 'No strata have been logged. Stratigraphy is the basis of every other section, so nothing downstream can be reported either.')
   }
@@ -167,7 +169,12 @@ function s5Stratigraphy(inv: Investigation): ReportSection {
     gap: unclassified.length
       ? `${unclassified.length} layer${unclassified.length === 1 ? ' has' : 's have'} no USCS group symbol (${unclassified.slice(0, 4).join(', ')}${unclassified.length > 4 ? ', …' : ''}). A described layer without a classification cannot be correlated between holes with confidence.`
       : undefined,
-    paragraphs: ['The strata encountered in each exploration are logged below. Descriptions follow the visual-manual procedure, confirmed by laboratory classification where samples were tested.'],
+    paragraphs: [
+      'The strata encountered in each exploration are logged below. Descriptions follow the visual-manual procedure, confirmed by laboratory classification where samples were tested.',
+      ...(section.holes.length > 1
+        ? ['The correlated section that follows the logs is an INTERPRETATION. Only the vertical hole traces on it are measured; every boundary drawn between holes is inferred, and is dashed to say so.']
+        : []),
+    ],
     tables: inv.boreholes.filter((b) => b.layers.length).map((b) => ({
       title: `${b.name} — stratigraphy`,
       head: ['From (m)', 'To (m)', 'Thickness (m)', 'Symbol', 'Description'],
@@ -177,11 +184,21 @@ function s5Stratigraphy(inv: Investigation): ReportSection {
       ]),
       right: [0, 1, 2],
     })),
-    figures: inv.boreholes.filter((b) => b.layers.length).map((b) => ({
-      caption: `${b.name} — borehole log`,
-      drawing: buildBoreholeLog(b),
-    })),
-    notes: [],
+    figures: [
+      ...inv.boreholes.filter((b) => b.layers.length).map((b) => ({
+        caption: `${b.name} — borehole log`,
+        drawing: buildBoreholeLog(b),
+      })),
+      // The section is an INTERPRETATION between the logs, so it follows them
+      // rather than leading — a reader should meet the measured holes first.
+      ...(section.holes.length > 1
+        ? [{
+            caption: 'Correlated section — solid where a hole proves a boundary, dashed where it is inferred',
+            drawing: sectionDrawing(section),
+          }]
+        : []),
+    ],
+    notes: section.holes.length > 1 ? section.notes : [],
   }
 }
 
