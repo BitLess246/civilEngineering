@@ -19,6 +19,7 @@ import { classifySample } from '../engine/soils/classifySample'
 import {
   shearEnvelopeChart, consolidationChart, gradingChart,
 } from '../engine/soils/lab/plots'
+import { buildSection, sectionDrawing } from '../engine/soils/section'
 import { liquefactionProfile } from '../engine/soils/liquefaction'
 import { liquefactionChart, skipText } from '../engine/soils/liquefactionPlot'
 import { finesByLayer, finesMap } from '../engine/soils/finesContent'
@@ -444,6 +445,7 @@ export default function SoilInvestigation() {
       {/* ── Soil profile ── */}
       {tab === 'profile' && bh && (
         <section className="mt-5 space-y-4">
+          <SectionPanel boreholes={inv.boreholes} />
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-[1.05rem] font-bold text-[#0056b3]">{bh.name} — stratigraphy</h2>
@@ -677,6 +679,44 @@ export default function SoilInvestigation() {
       )}
 
     </main>
+  )
+}
+
+// ── Correlated section ────────────────────────────────────────────────────
+// The one drawing in this module that is an INTERPRETATION rather than a
+// record, so the caption says which parts are measured before the reader
+// scrolls to it.
+
+function SectionPanel({ boreholes }: { boreholes: Borehole[] }) {
+  const section = useMemo(() => buildSection(boreholes), [boreholes])
+  const svg = useMemo(
+    () => (section.holes.length > 1 ? planToSvg(sectionDrawing(section), 720) : null),
+    [section],
+  )
+  if (!svg) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Correlated section</h2>
+        <p className="text-[12px] text-slate-600">
+          A section needs at least two boreholes. With one there is nothing to correlate.
+        </p>
+      </div>
+    )
+  }
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Correlated section</h2>
+      <p className="mb-3 text-[11px] text-slate-500">
+        Only the vertical hole traces are measured. Every boundary between holes is inferred and is drawn
+        dashed to say so — this is the most over-read drawing in a geotechnical report, and it is an
+        interpretation, not a record. Layers are correlated by USCS symbol or name, never by their position
+        in the sequence.
+      </p>
+      <div className="overflow-x-auto" dangerouslySetInnerHTML={{ __html: svg }} />
+      {section.notes.map((n, k) => (
+        <p key={k} className="mt-2 text-[11px] text-amber-900">{n}</p>
+      ))}
+    </div>
   )
 }
 

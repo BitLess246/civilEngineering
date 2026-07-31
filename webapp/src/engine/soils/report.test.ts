@@ -216,12 +216,33 @@ describe('metadata and headers', () => {
   })
 })
 
+describe('the section is presented as an interpretation', () => {
+  it('follows the logs rather than leading, and says what is measured', () => {
+    // A reader should meet the measured holes before the drawing that guesses
+    // between them.
+    const s = section(buildSoilsReport(sampleInvestigation()), 5)
+    expect(s.figures.at(-1)!.caption).toMatch(/Correlated section/)
+    expect(s.paragraphs.join(' ')).toMatch(/is an INTERPRETATION/)
+    expect(s.paragraphs.join(' ')).toMatch(/dashed to say so/)
+  })
+
+  it('omits it entirely when there is only one hole', () => {
+    const inv = sampleInvestigation()
+    inv.boreholes = inv.boreholes.slice(0, 1)
+    const s = section(buildSoilsReport(inv), 5)
+    expect(s.figures.every((f) => !/Correlated section/.test(f.caption))).toBe(true)
+    expect(s.paragraphs.join(' ')).not.toMatch(/is an INTERPRETATION/)
+  })
+})
+
 describe('figures come from the shared drawing engines', () => {
   it('includes a borehole log per logged hole and an FS profile per hole with SPT', () => {
     const r = buildSoilsReport(sampleInvestigation(), { seismic: SEISMIC })
     const logs = section(r, 5).figures
     const fs = section(r, 12).figures
-    expect(logs.length).toBe(2)
+    // Two borehole logs plus the correlated section between them.
+    expect(logs.length).toBe(3)
+    expect(logs.at(-1)!.caption).toMatch(/dashed where it is inferred/)
     expect(fs.length).toBeGreaterThan(0)
     for (const f of [...logs, ...fs]) {
       expect(f.drawing.primitives.length).toBeGreaterThan(0)

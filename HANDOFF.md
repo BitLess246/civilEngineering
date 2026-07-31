@@ -1344,13 +1344,19 @@ because flagging the unusual as an error trains people to ignore errors.
 | 8a — async remote store, sync, Supabase adapter + SQL | #494 | merged |
 | 8b — sync UI (status, conflict resolution) | — | BLOCKED: apply the migration to the live project first |
 | 8c — CPT (Robertson SBT, correlations) | #495 | merged |
-| 8d — subsurface cross-sections | — | open |
+| 8d — subsurface cross-sections | #496 | merged |
+| 8e — section wired into the report and the profile tab | — | open |
 
 **`/soils` is live**, gated behind the `soil-investigation` feature on pro and
 max. Eight tabs: overview and integrity, boreholes with the graphical log,
-stratigraphy and samples, corrected SPT, laboratory tests (each test card draws
-its own curve), liquefaction triggering with an FS profile, interpreted
-parameters, and a USCS classifier.
+stratigraphy and samples with the correlated section, corrected SPT, laboratory
+tests (each test card draws its own curve), liquefaction triggering with an FS
+profile, interpreted parameters, and a USCS classifier. A "Report PDF" button
+generates the 22-section investigation report.
+
+**Engines built but not yet reachable from the UI:** `cpt.ts` (Phase 8c). The
+model has no field for cone readings — `Borehole` would need `cpt?: CptReading[]`
+plus a `meshValidation` rule — so wiring it is a schema change, not a page.
 
 **Storage decision, settled:** the local `SoilsStore` over localStorage stays;
 Phase 8a adds an ASYNC `RemoteStore` beside it rather than behind it, because a
