@@ -118,7 +118,8 @@ export interface Sheet {
   setF(family: 'sans' | 'mono', style: 'normal' | 'bold', size: number, color: RGB): void
   /** Start a new page when fewer than `need` mm remain. */
   ensure(need: number): void
-  /** Numbered section rule — `1 · DESIGN SUMMARY` over a heavy line. */
+  /** Numbered section rule — `1 · DESIGN SUMMARY` over a heavy line.
+   *  Pass n = 0 for unnumbered front matter, which prints the title alone. */
   rule(n: number, title: string): void
   /** PASS/FAIL pill at (x, cy). Returns its width. */
   chip(x: number, cy: number, pass: boolean): number
@@ -148,6 +149,12 @@ export interface BrandHeader {
   ok: boolean
   governing: string
   badges: readonly string[]
+  /**
+   * Overrides the verdict-chip text. A design sheet passes or fails; an
+   * investigation REPORT does neither, and printing "DESIGN OK" on one that is
+   * 23% supported by its data would be actively misleading.
+   */
+  verdictLabel?: string
 }
 
 /** A fresh A4 sheet with the embedded font subsets registered. */
@@ -174,7 +181,8 @@ export function createSheet(): Sheet {
       s.ensure(16)
       s.y += 6
       s.setF('sans', 'bold', 9.5, INK)
-      doc.text(`${n} · ${title.toUpperCase()}`, M, s.y, { charSpace: 0.25 })
+      // n = 0 is front matter, not "section zero".
+      doc.text(n > 0 ? `${n} · ${title.toUpperCase()}` : title.toUpperCase(), M, s.y, { charSpace: 0.25 })
       s.y += 1.6
       doc.setDrawColor(...INK); doc.setLineWidth(0.5)
       doc.line(M, s.y, M + CONTENT_W, s.y)
@@ -218,7 +226,7 @@ export function createSheet(): Sheet {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     lastY: () => (doc as any).lastAutoTable?.finalY as number | undefined,
 
-    brandHeader({ docLabel, title, sheet, today, ok, governing, badges }) {
+    brandHeader({ docLabel, title, sheet, today, ok, governing, badges, verdictLabel }) {
       s.setF('mono', 'normal', 6.4, FAINT)
       doc.text(docLabel, M, s.y)
       doc.text(`${sheet} · ${today}`, M + CONTENT_W, s.y, { align: 'right' })
@@ -253,7 +261,7 @@ export function createSheet(): Sheet {
         doc.setLineWidth(0.25)
         doc.roundedRect(x, cy, w, 13, 1.6, 1.6, 'FD')
         s.setF('sans', 'bold', 8.4, ok ? OK_FG : FAIL_FG)
-        doc.text(ok ? 'DESIGN OK' : 'CHECK FAILED', x + 3.5, cy + 5.4, { charSpace: 0.2 })
+        doc.text(verdictLabel ?? (ok ? 'DESIGN OK' : 'CHECK FAILED'), x + 3.5, cy + 5.4, { charSpace: 0.2 })
         s.setF('sans', 'normal', 5.6, ok ? [77, 122, 95] : [169, 91, 71])
         doc.text(doc.splitTextToSize(governing, w - 7).slice(0, 2), x + 3.5, cy + 8.8)
       }

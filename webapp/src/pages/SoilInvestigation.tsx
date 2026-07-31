@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useInvestigation } from '../lib/useInvestigation'
 import { buildBoreholeLog } from '../engine/soils/logRenderer'
 import { planToSvg } from '../engine/planRenderer'
@@ -145,6 +145,10 @@ export default function SoilInvestigation() {
   const { investigation: inv } = api
   const [tab, setTab] = useState<Tab>('overview')
   const [holeIdx, setHoleIdx] = useState(0)
+  // Design earthquake, shared between the liquefaction tab and the report.
+  // Undefined until the engineer enters one — the report then states that
+  // liquefaction was not assessed instead of inventing a ground motion.
+  const [reportSeismic, setReportSeismic] = useState<{ amax: number; magnitude: number } | undefined>(undefined)
   const [importError, setImportError] = useState<string | null>(null)
 
   const issues = useMemo(() => (inv ? validateInvestigation(inv) : []), [inv])
@@ -253,6 +257,22 @@ export default function SoilInvestigation() {
           }}
           className="rounded-md border border-slate-300 px-2.5 py-1 text-[12px] font-medium text-slate-700 hover:bg-slate-50">
           Export JSON
+        </button>
+        <button
+          onClick={async () => {
+            if (!inv) return
+            const { buildSoilsReport } = await import('../engine/soils/report')
+            const { downloadSoilsReport } = await import('../lib/soilsPdf')
+            downloadSoilsReport(buildSoilsReport(inv, {
+              // The liquefaction section is only run when a design earthquake
+              // has been entered on its tab; otherwise the report says so
+              // rather than assuming one.
+              seismic: reportSeismic,
+              preparedBy: inv.meta.engineer,
+            }))
+          }}
+          className="rounded-md bg-[#0056b3] px-2.5 py-1 text-[12px] font-semibold text-white hover:bg-[#004a99]">
+          Report PDF
         </button>
         <label className="cursor-pointer rounded-md border border-slate-300 px-2.5 py-1 text-[12px] font-medium text-slate-700 hover:bg-slate-50">
           Import JSON
@@ -646,7 +666,7 @@ export default function SoilInvestigation() {
 
       {tab === 'liquefaction' && bh && (
         <section className="mt-5">
-          <LiquefactionPanel bh={bh} unitWeights={unitWeights} />
+          <LiquefactionPanel bh={bh} unitWeights={unitWeights} onSeismic={setReportSeismic} />
         </section>
       )}
 
@@ -669,7 +689,10 @@ export default function SoilInvestigation() {
 // said plainly, because quietly substituting a design coefficient for a PGA is
 // the kind of shortcut that is invisible in the output.
 
-function LiquefactionPanel({ bh, unitWeights }: { bh: Borehole; unitWeights: Record<string, LayerUnitWeight> }) {
+function LiquefactionPanel({ bh, unitWeights, onSeismic }: {
+  bh: Borehole; unitWeights: Record<string, LayerUnitWeight>
+  onSeismic?: (s: { amax: number; magnitude: number }) => void
+}) {
   const [amax, setAmax] = useState(0.4)
   const [magnitude, setMagnitude] = useState(7.5)
   const [zone, setZone] = useState<SeismicZone>(4)
@@ -685,6 +708,9 @@ function LiquefactionPanel({ bh, unitWeights }: { bh: Borehole; unitWeights: Rec
     [profile, bh],
   )
   const ca = useMemo(() => seismicCoefficients(zone, soil).Ca, [zone, soil])
+
+  // Publish the design earthquake so the report can run the same assessment.
+  useEffect(() => { onSeismic?.({ amax, magnitude }) }, [amax, magnitude, onSeismic])
 
   return (
     <div className="space-y-4">
