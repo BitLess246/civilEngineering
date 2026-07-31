@@ -181,7 +181,8 @@ export function importJSON(json: string): Investigation {
   return investigation
 }
 
-function isInvestigation(v: unknown): v is Investigation {
+/** Shape guard, exported so the remote store can vet what a server returned. */
+export function isInvestigation(v: unknown): v is Investigation {
   if (typeof v !== 'object' || v === null) return false
   const p = v as Partial<Investigation>
   return (
