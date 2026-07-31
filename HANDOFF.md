@@ -1340,8 +1340,10 @@ because flagging the unusual as an error trains people to ignore errors.
 | 6c — bearing general equation + method selection | #490 | merged |
 | 6d — Coulomb + Mononobe–Okabe earth pressure | #491 | merged |
 | 7a — report document model (22 sections) | #492 | merged |
-| 7b — report PDF renderer + vector drawing painter | — | open |
-| 8 — Postgres, CPT, 3D subsurface | — | |
+| 7b — report PDF renderer + vector drawing painter | #493 | merged |
+| 8a — async remote store, sync, Supabase adapter + SQL | — | open |
+| 8b — sync UI (status, conflict resolution) | — | |
+| 8c/8d — CPT, 3D subsurface | — | |
 
 **`/soils` is live**, gated behind the `soil-investigation` feature on pro and
 max. Eight tabs: overview and integrity, boreholes with the graphical log,
@@ -1349,10 +1351,19 @@ stratigraphy and samples, corrected SPT, laboratory tests (each test card draws
 its own curve), liquefaction triggering with an FS profile, interpreted
 parameters, and a USCS classifier.
 
-**Storage decision, settled:** stay on the `SoilsStore` interface over
-localStorage; swap in a Supabase backend at Phase 8. Confirmed with the user
-before Phase 4 started, since that is the phase where lab-test shapes make a
-schema change expensive.
+**Storage decision, settled:** the local `SoilsStore` over localStorage stays;
+Phase 8a adds an ASYNC `RemoteStore` beside it rather than behind it, because a
+database cannot be wrapped in a synchronous key-value interface.
+
+**One row per investigation, jsonb — NOT thirty tables.** The normalised schema
+is right once the module needs to query across investigations; today nothing
+does, the `Investigation` type is still moving, and thirty tables written
+against a moving type are thirty tables of guesses. Normalising later is a
+migration, not a rewrite. Argued in full at the top of `remoteStore.ts`.
+
+**Sync never picks a winner.** Two-sided edits are reported as conflicts and
+both versions are left untouched. Laboratory data costs a week to produce;
+last-write-wins would destroy it silently.
 
 **Recurring lessons from these phases**, all worth remembering:
 
