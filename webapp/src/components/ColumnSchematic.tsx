@@ -16,14 +16,24 @@ export interface ColumnSchematicProps {
 
 /** Column cross-section to scale: rectangular tied (bars on two faces, tie at
  *  real thickness) or circular spiral (ring of bars + spiral wire). */
+/** Drawing area, in viewBox units. The frame is this plus the margins, so a
+ *  square column does not sit in a landscape box with dead space beside it. */
+const W_DRAW = 190, H_DRAW = 200
+
 export function ColumnSchematic({ shape, b = 0, h = 0, D = 0, cover, barDia, tieDia, bars, tieSpacing }: ColumnSchematicProps): JSX.Element {
-  const W = 320, H = 280
-  const padT = 28, availW = 170, availH = 190
+  // Margins carry the dimension lines: `h` and its rotated label on the left,
+  // `b` and the bar callout below. The drawing is CENTRED in what is left —
+  // it used to start at a hard-coded x = 70, which left the right side empty
+  // whenever the section was narrower than the space allowed for it.
+  const ML = 62, MR = 30, MT = 14, MB = 46
+  const availW = W_DRAW, availH = H_DRAW
+  const padT = MT
   const tied = shape === 'tied'
   const bb = tied ? b : D, hh0 = tied ? h : D
   const s = Math.min(availW / bb, availH / hh0)
   const bw = bb * s, hgt = hh0 * s
-  const x0 = 70 + (availW - bw) / 2, y0 = padT
+  const x0 = ML + (availW - bw) / 2, y0 = padT
+  const W = ML + availW + MR, H = MT + hgt + MB
   const stW = Math.max(1, tieDia * s)
   const br = Math.max(3, (barDia / 2) * s)
 
@@ -96,7 +106,6 @@ export function ColumnSchematic({ shape, b = 0, h = 0, D = 0, cover, barDia, tie
   return (
     <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
       style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
-      <text x={70} y={14} fontSize={11} fontWeight={700} fill="#0056b3">SECTION</text>
       {body}
       <text x={x0 + bw / 2} y={y0 + hgt + 12} fontSize={8.5} fill={BAR} textAnchor="middle">
         {bars} ⌀{barDia} mm · {tied ? `ties ⌀${tieDia}` : `spiral ⌀${tieDia}`}{tieSpacing ? ` @ ${Math.round(tieSpacing)} mm` : ''}

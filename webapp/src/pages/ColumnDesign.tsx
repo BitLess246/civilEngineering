@@ -5,7 +5,7 @@ import {
 } from '../engine/columnDesign'
 import { factoredLoad } from '../engine/loads'
 import { ColumnSchematic } from '../components/ColumnSchematic'
-import { PageHeader, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import { PageHeader, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
 import { initialLetterhead } from '../lib/letterhead'
 import { InteractionDiagram } from '../components/InteractionDiagram'
 import { WorkedSolution } from '../components/WorkedSolution'
@@ -205,12 +205,15 @@ export default function ColumnDesign() {
         </div>
 
         <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
-          <div data-pdf-drawing className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Section</h2>
+          {/* The same card the beam page uses — graph-paper ground, title and
+              section meta in a header strip above the drawing. The two pages
+              draw the same kind of thing and should look like it. */}
+          <DrawingCard pdfDrawing title="Section"
+            meta={`${tied ? `${f0(b)} × ${f0(h)}` : `⌀${f0(D)}`} · ${axial?.bars ?? numBars} ⌀${barDia} · to scale`}>
             <ColumnSchematic shape={tied ? 'tied' : 'spiral'} b={b} h={h} D={D} cover={cover}
               barDia={barDia} tieDia={tieDia} bars={axial?.bars ?? numBars}
               tieSpacing={axial ? (tied ? axial.tieSpacingFinal : axial.spiralPitch) : undefined} />
-          </div>
+          </DrawingCard>
 
           {axial && (
             <ResultCard title="Results">
