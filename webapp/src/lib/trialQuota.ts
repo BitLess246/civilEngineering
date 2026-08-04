@@ -6,13 +6,19 @@
 // can and cannot do, so they should be inspectable and provable rather than
 // scattered through components as `if (user)` checks.
 //
-// WHAT THIS IS NOT: a security boundary. The counter lives in localStorage and
-// anyone can clear it. That is fine — it exists to prompt sign-up on tools that
-// are deliberately free to try, not to protect anything. The tools that DO
-// require an account are gated on the session itself (see `RequireAuth`), and
-// anything genuinely sensitive would have to be enforced server-side. Treating
-// a client-side counter as protection is the mistake this comment exists to
-// prevent.
+// WHERE THE COUNT LIVES. The `usage` map passed in here is the MERGE of a
+// localStorage cache and a server-side record kept per visitor — see
+// `guestTrials.ts` and `supabase/functions/guest-quota`. Clearing site data
+// therefore no longer resets the allowance, which it used to.
+//
+// WHAT THIS IS STILL NOT: a security boundary. A different browser, a private
+// window on another network, or a VPN is a new visitor as far as the server can
+// tell, and every calculation runs in the visitor's own browser regardless —
+// there is no server to withhold it from them. The tools that genuinely require
+// an account are gated on the session itself (see `RequireAuth`). Treating this
+// counter as protection is the mistake this comment exists to prevent; what it
+// buys is that the prompt to sign up cannot be dismissed by one click in
+// devtools.
 // ─────────────────────────────────────────────────────────────────────────
 
 /** Tools a signed-out visitor may try, with a per-tool run allowance. */
@@ -160,4 +166,19 @@ export function saveUsage(usage: Record<string, number>, store?: Pick<Storage, '
     const s = store ?? (typeof localStorage !== 'undefined' ? localStorage : undefined)
     s?.setItem(STORAGE_KEY, JSON.stringify(usage))
   } catch { /* ignore — see loadUsage */ }
+}
+
+/**
+ * The "N runs left" line for a guest, or null when there is nothing to say.
+ *
+ * A counter that blocks with no warning is a trap: the visitor is mid-task
+ * when the page they were using turns into a sign-up form. Silence for members
+ * and public routes is equally deliberate — a signed-in engineer does not need
+ * reminding of a limit that does not apply to them.
+ */
+export function trialNotice(v: AccessVerdict): string | null {
+  if (v.kind !== 'trial') return null
+  return v.remaining === 1
+    ? 'Last free run of this calculator — a free account removes the limit.'
+    : `${v.remaining} free runs left on this calculator.`
 }
