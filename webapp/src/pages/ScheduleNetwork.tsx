@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } fro
 import { Link } from 'react-router-dom'
 import { useScheduleProject } from '../lib/useScheduleProject'
 import { useScheduleSolve } from '../lib/useScheduleSolve'
-import { layoutNetwork, type NetActivity, type NetNode } from '../lib/network'
+import { layoutNetwork, edgePath, type NetActivity, type NetNode } from '../lib/network'
 import { PageHeader } from '../components/calc'
 
 // Phase 6 — Activity-on-node network diagram at /schedule/network. Layered
@@ -50,12 +50,18 @@ function Diagram({ nodes, edges, width, height }: ReturnType<typeof layoutNetwor
         {edges.map((e, i) => {
           const a = nodeById.get(e.from), b = nodeById.get(e.to)
           if (!a || !b) return null
+          // The route comes from the layout, which already steered any
+          // multi-column edge around the nodes in between. Dragging a node
+          // only shifts the endpoint that moved; the waypoints are layout
+          // property, not view state.
           const pa = posOf(a), pb = posOf(b)
-          const sx = pa.x + a.w, sy = pa.y + a.h / 2
-          const tx = pb.x, ty = pb.y + b.h / 2
-          const c = Math.max(30, (tx - sx) / 2)
+          const pts = e.points.map((p, k) => {
+            if (k === 0) return { x: p.x + (pa.x - a.x), y: p.y + (pa.y - a.y) }
+            if (k === e.points.length - 1) return { x: p.x + (pb.x - b.x), y: p.y + (pb.y - b.y) }
+            return p
+          })
           return (
-            <path key={i} d={`M ${sx} ${sy} C ${sx + c} ${sy}, ${tx - c} ${ty}, ${tx} ${ty}`} fill="none"
+            <path key={i} d={edgePath(pts)} fill="none"
               stroke={e.critical ? CRITICAL : '#b7b0a0'} strokeWidth={e.critical ? 2 : 1}
               markerEnd={`url(#${e.critical ? 'net-arrow-crit' : 'net-arrow'})`} />
           )
