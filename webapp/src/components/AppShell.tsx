@@ -6,6 +6,7 @@ import { usePaletteHotkey } from '../lib/usePaletteHotkey'
 import { SiteFooter } from './SiteFooter'
 import { AccountMenu } from './AccountMenu'
 import { BRAND_MARK, BRAND_TAIL } from '../lib/brand'
+import { TrialGate } from './TrialGate'
 
 // Workbench shell (docs/design/uiux-2026-07): persistent ink-navy sidebar with
 // the grouped tool catalog + ⌘K search, and a slim breadcrumb header. Wraps
@@ -106,7 +107,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </header>
-        {children}
+        {/* Every tool route renders through here, which is why the guest
+            allowance is spent in ONE place rather than in twenty-eight route
+            elements. TrialGate passes non-trial routes straight through. */}
+        <TrialGate>{children}</TrialGate>
         <SiteFooter />
       </div>
       {palette && <CommandPalette onClose={() => setPalette(false)} />}

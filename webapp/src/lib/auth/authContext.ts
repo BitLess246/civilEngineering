@@ -11,7 +11,7 @@ export interface AuthState {
   /** What the visitor may do on a route, given their session and trials used. */
   access: (route: string) => AccessVerdict
   /** Count a run against the guest allowance. No-op for members. */
-  useTrial: (route: string) => void
+  spendTrial: (route: string) => void
 }
 
 /** Split from the provider component so the file exporting hooks exports no
