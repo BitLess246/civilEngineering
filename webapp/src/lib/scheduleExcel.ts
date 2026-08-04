@@ -2,6 +2,7 @@
 // Loaded lazily via dynamic import so ExcelJS stays out of the main bundle.
 import ExcelJS from 'exceljs'
 import type { ScheduleReport } from './scheduleReport'
+import { BRAND_NAME } from './brand'
 
 /** Excel sheet names: ≤31 chars, none of : \ / ? * [ ]. */
 const sheetName = (t: string): string => t.replace(/[:\\/?*[\]]/g, ' ').slice(0, 31)
@@ -9,7 +10,7 @@ const sheetName = (t: string): string => t.replace(/[:\\/?*[\]]/g, ' ').slice(0,
 /** Build the report workbook (no I/O — node-testable). */
 export function buildScheduleWorkbook(report: ScheduleReport): ExcelJS.Workbook {
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'CivEng Toolkit'
+  wb.creator = BRAND_NAME
 
   const summary = wb.addWorksheet('Summary')
   summary.addRow([report.title]).font = { bold: true, size: 13 }

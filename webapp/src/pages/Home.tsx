@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { AccountMenu } from '../components/AccountMenu'
 import { Link } from 'react-router-dom'
+import { BRAND_MARK, BRAND_TAIL } from '../lib/brand'
 import { SIDEBAR_GROUPS, ALL_TOOLS } from '../lib/tools'
 import { CommandPalette } from '../components/CommandPalette'
 import { usePaletteHotkey } from '../lib/usePaletteHotkey'
@@ -52,8 +53,8 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
       <nav className="no-print sticky top-0 z-50 border-b border-white/10 bg-[#0f1b2a]">
         <div className="mx-auto flex h-[52px] max-w-[1200px] items-center gap-5 px-6">
           <Link to="/" className="flex items-baseline gap-2">
-            <span className="text-[15px] font-extrabold tracking-[.14em] text-white">CIVENG</span>
-            <span className="text-[9px] font-semibold uppercase tracking-[.22em] text-[#7d8ea3]">Toolkit</span>
+            <span className="text-[15px] font-extrabold tracking-[.14em] text-white">{BRAND_MARK}</span>
+            <span className="text-[9px] font-semibold uppercase tracking-[.22em] text-[#7d8ea3]">{BRAND_TAIL}</span>
           </Link>
           <div className="hidden items-center gap-0.5 md:flex">
             <a href="#tools" className="rounded-md px-2.5 py-1.5 text-[12.5px] font-semibold text-[#b6c2d0] hover:bg-white/5 hover:text-white">Tools</a>

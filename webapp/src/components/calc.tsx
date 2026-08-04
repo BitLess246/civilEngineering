@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { ExportPdfButton } from './ExportPdfButton'
 import type { SolutionStep } from '../lib/solution'
 import { Math as KTex } from '../lib/math'
+import { BRAND_MARK, BRAND_TAIL, COMPUTED_BY, docLabel } from '../lib/brand'
 
 // Calculator-template building blocks (docs/design/uiux-2026-07, Foundation /
 // Beam mockups): numbered input sections on the left, a sticky verdict panel
@@ -196,14 +197,14 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, stat
     </div>
     <div className="print-only">
       <div className="flex items-baseline justify-between border-b border-[#eeece5] pb-1.5 font-mono text-[9px] text-[#a39d8d]">
-        <span>CIVENG TOOLKIT · {docTitle.toUpperCase()} — CALCULATION REPORT</span>
+        <span>{docLabel(`${docTitle} — Calculation Report`)}</span>
         <span>{lh.sheet || docCode} · {today}</span>
       </div>
       <div className="mt-3 flex items-start justify-between gap-4">
         <div>
           <div className="flex items-baseline gap-2">
-            <span className="text-[14px] font-extrabold tracking-[.14em]">CIVENG</span>
-            <span className="text-[8px] font-semibold uppercase tracking-[.22em] text-[#7a7568]">Toolkit</span>
+            <span className="text-[14px] font-extrabold tracking-[.14em]">{BRAND_MARK}</span>
+            <span className="text-[8px] font-semibold uppercase tracking-[.22em] text-[#7a7568]">{BRAND_TAIL}</span>
           </div>
           <h1 className="mt-2 text-[24px] font-extrabold tracking-tight">{docTitle} — Design Calculation</h1>
           <div className="mt-2 flex gap-2">
@@ -296,7 +297,7 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, stat
         <div><div className="h-11 border-b border-[#0f1b2a]" /><p className="mt-1.5 text-[10px] font-bold">{lh.preparedBy || '\u00a0'}</p><p className="text-[9px] text-[#7a7568]">Prepared by</p></div>
         <div><div className="h-11 border-b border-[#0f1b2a]" /><p className="mt-1.5 text-[10px] font-bold">{'\u00a0'}</p><p className="text-[9px] text-[#7a7568]">Reviewed by · Date</p></div>
       </div>
-      <p className="mt-4 text-[8.5px] leading-relaxed text-[#a39d8d]">Computed client-side by the CivEng Toolkit engine · verify before construction use. Load factors per NSCP 2015 §203.3; strength reduction factors per ACI 318-14 Table 21.2.1. Project: {lh.project || '—'}.</p>
+      <p className="mt-4 text-[8.5px] leading-relaxed text-[#a39d8d]">{COMPUTED_BY} Load factors per NSCP 2015 §203.3; strength reduction factors per ACI 318-14 Table 21.2.1. Project: {lh.project || '—'}.</p>
     </div>
     </>
   )
