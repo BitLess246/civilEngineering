@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls, Text } from '@react-three/drei'
+import { OrbitControls } from '@react-three/drei'
+import { SceneText } from '../components/SceneText'
 import * as THREE from 'three'
 import { generateTruss, solveTrussEnvelope, selfWeightLoads, type TrussType, type TrussModel } from '../engine/truss'
 import { designTruss, type MemberDesign, type TrussSection } from '../engine/trussDesign'
@@ -194,10 +195,10 @@ export default function TrussSpace() {
               {model.supports.map((s) => { const p = pos.get(s.node); return p ? <Support3D key={s.node} p={p} roller={!s.ux} /> : null })}
               {serviceLoad > 1e-6 && loadedNodes.map((n) => { const p = pos.get(n); return p ? <Load3D key={n} p={p} mag={serviceLoad} /> : null })}
               {selForce && pos.get(selForce.i) && pos.get(selForce.j) && (
-                <Text position={[(pos.get(selForce.i)!.x + pos.get(selForce.j)!.x) / 2, (pos.get(selForce.i)!.y + pos.get(selForce.j)!.y) / 2 + 0.25, 0]}
+                <SceneText position={[(pos.get(selForce.i)!.x + pos.get(selForce.j)!.x) / 2, (pos.get(selForce.i)!.y + pos.get(selForce.j)!.y) / 2 + 0.25, 0]}
                   fontSize={0.3} color="#0f172a" anchorX="center" anchorY="middle" outlineWidth={0.012} outlineColor="#ffffff">
                   {`${f1(selForce.N)} kN`}
-                </Text>
+                </SceneText>
               )}
               <OrbitControls ref={controlsRef} makeDefault enablePan target={[cx, cyc, 0]} />
             </Canvas>
