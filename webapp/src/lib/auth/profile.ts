@@ -5,13 +5,19 @@
 // page: their name, their licence number, their firm. This holds them once so
 // the letterhead can start filled in.
 //
-// STORED LOCALLY, NOT IN THE ACCOUNT — deliberately. Writing to Supabase
-// `user_metadata` from the browser is possible, but that is the SAME field the
-// billing webhook writes `plan` into, and a client that can PATCH its own
-// metadata is a client that can try to set `plan: 'max'`. Row-level security
-// would be the answer, and until that exists these preferences are worth far
-// less than the risk of opening that door. They are cosmetic — a name printed
-// on a sheet — so localStorage is the honest place for them.
+// STORED LOCALLY, NOT IN THE ACCOUNT — deliberately.
+//
+// The original reason was that `user_metadata` was also where the billing
+// webhook wrote `plan`, so a client able to PATCH its own metadata was a client
+// able to try `plan: 'max'`. THAT REASON IS GONE: the plan moved to
+// `app_metadata`, which only the service-role key can write, and a test pins
+// that a plan planted in user_metadata is ignored.
+//
+// These stay local anyway, for a plainer reason: they are cosmetic and
+// per-machine — a name and a firm printed on a sheet — and syncing them would
+// buy a round trip and a conflict case for no benefit. If they ever need to
+// follow an engineer between devices, user_metadata is now a safe home for
+// them.
 //
 // The consequence is stated in the UI: these follow the browser, not the login.
 // ─────────────────────────────────────────────────────────────────────────

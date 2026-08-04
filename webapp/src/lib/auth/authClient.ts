@@ -28,7 +28,7 @@ export interface AuthUser {
   /** True once the address has been confirmed. */
   emailVerified: boolean
   /**
-   * Subscription plan id from user metadata.
+   * Subscription plan id, read from APP METADATA.
    *
    * Read-only here, and null until something sets it. Nothing in the browser
    * may grant itself a plan — that has to come from the server side (a
@@ -115,12 +115,26 @@ export function classifyError(message: string, status?: number): AuthError {
   return { kind: 'unknown', message: 'Something went wrong. Please try again.' }
 }
 
-const toUser = (s: Session | null): AuthUser | null => {
+/**
+ * Map a session to the app's user. Exported so the plan's provenance can be
+ * pinned by a test — that it comes from app_metadata and that a plan planted
+ * in user_metadata is ignored is a SECURITY property, not a detail.
+ */
+export const toUser = (s: Session | null): AuthUser | null => {
   const u = s?.user
   if (!u) return null
   const meta = (u.user_metadata ?? {}) as Record<string, unknown>
   const name = typeof meta.name === 'string' ? meta.name : null
-  const plan = typeof meta.plan === 'string' ? meta.plan : null
+
+  // THE PLAN COMES FROM app_metadata, NOT user_metadata, and there is
+  // deliberately NO FALLBACK to user_metadata. `updateUser({ data })` writes
+  // user_metadata, so a signed-in account could set its own plan there; a
+  // fallback "for the transition" would leave that door open permanently.
+  // app_metadata is writable only with the service-role key, which lives in
+  // the billing webhook and nowhere else.
+  const appMeta = (u.app_metadata ?? {}) as Record<string, unknown>
+  const plan = typeof appMeta.plan === 'string' ? appMeta.plan : null
+
   return { id: u.id, email: u.email ?? null, name, emailVerified: !!u.email_confirmed_at, plan }
 }
 

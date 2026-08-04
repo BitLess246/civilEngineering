@@ -82,13 +82,19 @@ Deno.serve(async (req: Request): Promise<Response> => {
     console.error('no such user:', outcome.userId, readErr?.message ?? '')
     return deny(404)
   }
-  const meta = (existing.user.user_metadata ?? {}) as Record<string, unknown>
+  // THE PLAN LIVES IN app_metadata. `updateUser({ data })` from the browser
+  // writes user_metadata, so a plan kept there could be granted by the account
+  // itself; app_metadata is writable only with the service-role key, which is
+  // held here and nowhere else. The client reads app_metadata with no fallback.
+  const meta = (existing.user.app_metadata ?? {}) as Record<string, unknown>
   if (meta.billing_event_id === outcome.eventId) {
     return new Response('already applied', { status: 200 })
   }
 
   const { error } = await admin.auth.admin.updateUserById(outcome.userId, {
-    user_metadata: {
+    // SPREAD, never replace: app_metadata also carries Supabase's own
+    // `provider` and `providers` fields, and dropping those breaks sign-in.
+    app_metadata: {
       ...meta,
       plan: outcome.plan,
       billing_event_id: outcome.eventId,
