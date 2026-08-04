@@ -4,6 +4,8 @@ import { designTorsion, type TorsionInput } from '../engine/torsionDesign'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
 import { buildTorsionSolution } from '../lib/torsionSolution'
+import { TorsionSection } from '../components/TorsionSection'
+import { WorkedSolution } from '../components/WorkedSolution'
 import { f1, f2, f3 } from '../lib/format'
 
 interface FormState extends Omit<TorsionInput, 'legs' | 'lambda'> {
@@ -119,6 +121,14 @@ export default function TorsionDesign() {
         {/* ── RESULTS ── */}
         {r ? (
           <div className="flex flex-col gap-6">
+            <section data-pdf-drawing className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm
+              [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
+              <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Section — torsion tube</h2>
+              <TorsionSection b={f.b} h={f.h} x1={r.x1} y1={r.y1} barDia={f.barDia}
+                stirrupDia={f.stirrupDia} Aoh={r.Aoh} ph={r.ph} Ao={r.Ao} Al={r.Al_design}
+                stirrupNote={`closed ⌀${f.stirrupDia} @ ${Math.round(r.sAdopt)} mm`} />
+            </section>
+
             <ResultCard title="Section Geometry">
               <Row label="Effective depth d"          value={`${f1(r.d)} mm`} />
               <Row label="Gross area Acp"             value={`${f1(r.Acp)} mm²`}   sub={`pcp = ${f1(r.pcp)} mm`} />
@@ -185,6 +195,13 @@ export default function TorsionDesign() {
           </p>
         )}
       </div>
+
+      {/* The step-by-step already existed and only ever reached the PDF. */}
+      {solution && solution.length > 0 && (
+        <div className="mt-5">
+          <WorkedSolution steps={solution} title="Calculation report — worked solution" />
+        </div>
+      )}
     </div>
   )
 }
