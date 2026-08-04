@@ -9,6 +9,8 @@
 // (§22.2); φ from εt (§21.2.2); As,min per §9.6.1.2 (with the 2bw rule when a
 // flange is in tension on statically determinate spans).
 
+import { splitLayers, centroidRise } from './barLayers'
+
 export type TBeamKind = 'interior' | 'edge' | 'isolated'
 
 export interface TBeamInput {
@@ -146,19 +148,19 @@ export function designTBeam(i: TBeamInput): TBeamResult {
   const minGoverns = !(i.AsGiven && i.AsGiven > 0) && As <= AsMin + 1e-9
 
   // bar layout in the web: fit per layer with §25.2.1 clear spacing
-  const bars = Math.max(2, Math.ceil(As / Ab))
   const sClearMin = Math.max(25, i.barDia)
   const web = i.bw - 2 * (i.cover + i.stirrupDia)
   const perLayer = Math.max(2, Math.floor((web + sClearMin) / (i.barDia + sClearMin)))
-  const layers: number[] = []
-  for (let left = bars; left > 0; left -= perLayer) layers.push(Math.min(perLayer, left))
+  // `splitLayers` — the SAME rule the rectangular-beam engine uses — pairs a
+  // lone bar in the upper layer. This engine used to stack them greedily, so a
+  // T-beam could be detailed with one bar sitting alone with nothing to tie to
+  // on either side. The pairing bumps the count, so `bars` (not the strength
+  // demand) is what As-provided must be computed from.
+  const { bars, layers } = splitLayers(Math.max(2, Math.ceil(As / Ab)), perLayer)
   const sClear = layers[0] > 1 ? (web - layers[0] * i.barDia) / (layers[0] - 1) : web
   if (layers.length > 1) {
-    // shift d to the group centroid (25 mm clear between layers)
-    const pitch = i.barDia + 25
-    const n = layers.reduce((s, x) => s + x, 0)
-    const yBar = layers.reduce((s, x, k) => s + x * k * pitch, 0) / n
-    d = dt - yBar
+    // shift d to the group centroid (25 mm clear between layers, §425.2.2)
+    d = dt - centroidRise(layers, i.barDia + 25)
     notes.push(`${layers.length} bar layers — d reduced to the group centroid`)
   }
 
