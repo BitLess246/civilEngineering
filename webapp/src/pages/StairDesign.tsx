@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { designStair, type StairSupport } from '../engine/stair'
 import { ReportControls } from '../components/ReportControls'
 import { buildStairSolution } from '../lib/stairSolution'
+import { StairElevation } from '../components/StairElevation'
+import { WorkedSolution } from '../components/WorkedSolution'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -113,6 +115,14 @@ export default function StairDesign() {
         </div>
       </section>
 
+      <section data-pdf-drawing className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm
+        [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
+        <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Flight elevation</h2>
+        <StairElevation span={span} t={t} R={R} G={G} thetaDeg={r.geom.thetaDeg} support={support}
+          mainBars={`⌀${barDia} @ ${f0(r.mainSpacing)} mm`}
+          distBars={`⌀10 @ ${f0(r.distSpacing)} mm`} />
+      </section>
+
       <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Results</h2>
         <Out label="Slope θ" value={`${f2(r.geom.thetaDeg)}°`} />
@@ -129,6 +139,11 @@ export default function StairDesign() {
           at min(3t, 450). Verify the landing and support detailing separately.
         </p>
       </section>
+
+      {/* The step-by-step already existed and only ever reached the PDF. */}
+      <div className="mt-5">
+        <WorkedSolution steps={solution} title="Calculation report — worked solution" />
+      </div>
     </main>
   )
 }
