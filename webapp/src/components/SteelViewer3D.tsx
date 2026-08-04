@@ -58,11 +58,17 @@ function Arrow({ from, to, color = '#16a34a', r = 0.04, headR = 0.10, headH = 0.
 
 function CanvasWrap({ children, box }: { children: React.ReactNode; box: { min:[number,number,number]; max:[number,number,number] } }) {
   return (
-    <div className="no-print h-72 w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-900">
+    <div className="no-print h-72 w-full overflow-hidden rounded-xl border border-slate-200 bg-white">
       <Canvas camera={{ fov: 45, near: 0.01, far: 500 }}>
-        <ambientLight intensity={0.5} />
-        <directionalLight position={[5, 10, 5]} intensity={1.2} castShadow />
-        <directionalLight position={[-5, -3, -5]} intensity={0.4} />
+        {/* The Canvas paints its own background, so the wrapper's colour never
+            showed through — the viewport has to be told, not the div. */}
+        <color attach="background" args={['#ffffff']} />
+        {/* Lighting rebalanced for a white ground: on the old dark background
+            an ambient of 0.5 read as "lit", and against white the same member
+            came out flat and washed. */}
+        <ambientLight intensity={0.75} />
+        <directionalLight position={[5, 10, 5]} intensity={1.05} castShadow />
+        <directionalLight position={[-5, -3, -5]} intensity={0.35} />
         <OrbitControls makeDefault enableDamping={false} />
         <FitView box={box} dir={[1.2, 0.9, 1.5]} margin={1.4} />
         {children}
@@ -123,13 +129,18 @@ export function BeamViewer3D({ shape, span, wDead, wLive }: {
 
   return (
     <CanvasWrap box={box}>
-      <group rotation={[-Math.PI / 2, 0, 0]}>
-        <ExtrudedSection shapes={shapes} length={span} color="#8b9fc1" />
-      </group>
+      {/* NO ROTATION. `ExtrudedSection` already extrudes along +Z, which is the
+          span direction the supports (z = 0 and z = span), the UDL and the
+          section label all use. The old −90° about X stood the member UP along
+          Y, so the beam ran vertically out of a scene whose supports and loads
+          ran horizontally — the member appeared as a thin line off to one side
+          while everything else pointed elsewhere. (The COLUMN view rotates by
+          +90° on purpose: a column should stand up.) */}
+      <ExtrudedSection shapes={shapes} length={span} color="#8b9fc1" />
       <DistLoad span={span} w={wDead + wLive} />
       <PinSupport3D pos={[0, -d, 0]} />
       <RollerSupport3D pos={[0, -d, span]} />
-      <SceneText position={[bf + 0.15, 0, span / 2]} rotation={[0, -Math.PI / 2, 0]} fontSize={0.18} color="#e2e8f0" anchorX="center">
+      <SceneText position={[bf + 0.15, 0, span / 2]} rotation={[0, -Math.PI / 2, 0]} fontSize={0.18} color="#0f1b2a" anchorX="center">
         {shape.name}
       </SceneText>
     </CanvasWrap>
@@ -164,7 +175,7 @@ export function ColumnViewer3D({ shape, L, Pu, Mux }: {
       {Mux > 0 && <Arrow from={[-0.6, L + 0.1, 0]} to={[0.1, L + 0.1, 0]} color="#f59e0b" headR={0.10} headH={0.22} />}
       {/* fixed base */}
       <mesh position={[0, -0.03, 0]}><boxGeometry args={[0.8, 0.06, 0.5]} /><meshStandardMaterial color="#0056b3" /></mesh>
-      <SceneText position={[bf + 0.35, L / 2, 0]} rotation={[0, 0, 0]} fontSize={0.18} color="#e2e8f0" anchorX="center">
+      <SceneText position={[bf + 0.35, L / 2, 0]} rotation={[0, 0, 0]} fontSize={0.18} color="#0f1b2a" anchorX="center">
         {shape.name}
       </SceneText>
     </CanvasWrap>
@@ -202,7 +213,7 @@ export function ConnectionViewer3D({ geom, db, t_plate, critical }: {
               <cylinderGeometry args={[dbm / 2, dbm / 2, 0.4, 12]} />
               <meshStandardMaterial color={isCrit ? '#f59e0b' : '#d4a017'} metalness={0.7} roughness={0.3} />
             </mesh>
-            <SceneText position={[dbm * 0.8, dbm * 0.8, 0.05]} fontSize={0.018} color={isCrit ? '#fbbf24' : '#e2e8f0'}>
+            <SceneText position={[dbm * 0.8, dbm * 0.8, 0.05]} fontSize={0.018} color={isCrit ? '#b45309' : '#0f1b2a'}>
               {b.id}
             </SceneText>
           </group>

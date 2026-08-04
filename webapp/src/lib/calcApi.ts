@@ -32,6 +32,14 @@ async function localFallback<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
+  // NO API CONFIGURED → DO NOT ASK. Without VITE_API_URL the fetch goes to a
+  // same-origin path that a static deploy does not serve, so every calculation
+  // waited on a round trip that was always going to 404 before falling back to
+  // the identical local engine. On the steel page that was the "computing…"
+  // badge sitting there on first load. The fallback is the same engine, so
+  // skipping the doomed request costs nothing but the wait.
+  if (!BASE) return localFallback<T>(path, body)
+
   let res: Response
   try {
     res = await fetch(`${BASE}${path}`, {

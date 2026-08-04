@@ -150,7 +150,7 @@ function BeamTab() {
         </Card>
       </div>
 
-      <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+      <div className="space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto lg:pr-1">
         <Suspense fallback={<Spinner />}>
           <BeamViewer3D shape={shape} span={span} wDead={wD} wLive={wL} />
         </Suspense>
@@ -281,7 +281,7 @@ function ColumnTab() {
         </Card>
       </div>
 
-      <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+      <div className="space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto lg:pr-1">
         <Suspense fallback={<Spinner />}>
           <ColumnViewer3D shape={shape} L={L} Pu={Pu} Mux={Mux} />
         </Suspense>
@@ -523,7 +523,7 @@ function ConnectionTab() {
       </div>
 
       {/* ── results ── */}
-      <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+      <div className="space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto lg:pr-1">
         {res && connType === 'bolt' && (<>
           <ResultCard title="Bolt capacity / bolt">
             <Row label="φRn shear" value={`${f2(res.phiRnBolt.phiRn_shear)} kN`} />
