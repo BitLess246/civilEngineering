@@ -215,7 +215,7 @@ export default function PileCapDesign() {
           <div data-pdf-drawing className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Cap plan</h2>
             {result ? (
-              <PileCapSchematic
+              <PileCapSchematic d={result.d}
                 capBx={result.capBx}
                 capBy={result.capBy}
                 coords={result.coords}
@@ -343,7 +343,7 @@ export default function PileCapDesign() {
             ['Effective depth d', `${result.d.toFixed(0)} mm`],
           ]}
           drawingTitle="Pile Cap Plan"
-          drawing={<PileCapSchematic capBx={result.capBx} capBy={result.capBy} coords={result.coords}
+          drawing={<PileCapSchematic d={result.d} capBx={result.capBx} capBy={result.capBy} coords={result.coords}
             pileDia={form.pileDia} colX={form.colX} colY={form.colY} reactions={result.reactions} />}
         />
       )}
