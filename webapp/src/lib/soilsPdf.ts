@@ -25,6 +25,7 @@
 
 import type { SoilsReport, ReportSection } from '../engine/soils/report'
 import { createSheet, autoTable, MUTED, INK, BRAND, FAIL_FG, OK_FG, CONTENT_W, M, PAGE_W } from './pdfKit'
+import { docLabel as brandDocLabel } from './brand'
 import { paintDrawing, paintedSize } from './drawingPdf'
 
 const STATUS_LABEL = {
@@ -53,7 +54,7 @@ export function renderSoilsReport(
   const today = new Date().toISOString().slice(0, 10)
 
   s.brandHeader({
-    docLabel: 'CIVENG TOOLKIT · GEOTECHNICAL INVESTIGATION REPORT',
+    docLabel: brandDocLabel('Geotechnical Investigation Report'),
     title: r.title,
     sheet: r.investigationNo || 'GI-01',
     today: r.reportDate,

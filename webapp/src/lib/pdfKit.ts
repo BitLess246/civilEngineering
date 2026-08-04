@@ -2,7 +2,7 @@
 // PDF CALC-SHEET KIT — the shared chrome behind every generated report.
 //
 // The Model Space structure report and the calculator-page reports are meant to
-// look like sheets from the same set: mono document strip, CIVENG brand block,
+// look like sheets from the same set: mono document strip, the wordmark,
 // verdict chip, letterhead grid, numbered section rules, PASS/FAIL chips,
 // equation boxes, signature blocks, per-page footer. This module owns all of
 // that, ONCE, so "similar" survives the next edit to either report. Two copies
@@ -21,6 +21,7 @@ import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { SolutionStep } from './solution'
 import { texToPlain } from './texText'
+import { BRAND_NAME, BRAND_MARK, BRAND_TAIL } from './brand'
 import { SANS, SANS_BOLD, MONO, MONO_BOLD } from './pdfFonts'
 
 export type RGB = [number, number, number]
@@ -140,7 +141,7 @@ export interface Sheet {
 }
 
 export interface BrandHeader {
-  /** Mono strip text, e.g. 'CIVENG TOOLKIT · STRUCTURE — CALCULATION REPORT'. */
+  /** Mono strip text — build it with `docLabel()` from `brand.ts`. */
   docLabel: string
   /** Large heading, e.g. 'Structure — Design Calculation'. */
   title: string
@@ -235,9 +236,9 @@ export function createSheet(): Sheet {
       doc.line(M, s.y, M + CONTENT_W, s.y)
       s.y += 7
       s.setF('sans', 'bold', 11.5, INK)
-      doc.text('CIVENG', M, s.y, { charSpace: 0.9 })
+      doc.text(BRAND_MARK, M, s.y, { charSpace: 0.9 })
       s.setF('sans', 'bold', 5.4, SUBTLE)
-      doc.text('TOOLKIT', M + doc.getTextWidth('CIVENG') + 13, s.y, { charSpace: 0.7 })
+      doc.text(BRAND_TAIL, M + doc.getTextWidth(BRAND_MARK) + 13, s.y, { charSpace: 0.7 })
       s.y += 8
       // The verdict chip occupies the top-right 52 mm, so the title has to fit
       // in what is left or it runs underneath it. Model Space's title is short
@@ -421,7 +422,7 @@ export function createSheet(): Sheet {
         doc.setDrawColor(...HAIR_SOFT); doc.setLineWidth(0.15)
         doc.line(M, FOOT_Y + 3, M + CONTENT_W, FOOT_Y + 3)
         s.setF('mono', 'normal', 5.6, FAINT)
-        doc.text(`${sheet} · ${project || 'CivEng Toolkit'}`, M, FOOT_Y + 6.5)
+        doc.text(`${sheet} · ${project || BRAND_NAME}`, M, FOOT_Y + 6.5)
         doc.text(`page ${p} / ${pages}`, M + CONTENT_W, FOOT_Y + 6.5, { align: 'right' })
       }
     },

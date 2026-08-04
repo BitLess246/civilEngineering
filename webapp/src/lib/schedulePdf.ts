@@ -3,6 +3,7 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { ScheduleReport } from './scheduleReport'
+import { BRAND_NAME } from './brand'
 
 const BRAND: [number, number, number] = [15, 76, 146]
 const INK: [number, number, number] = [15, 27, 42]
@@ -49,7 +50,7 @@ export function buildSchedulePdf(report: ScheduleReport): jsPDF {
   for (let p = 1; p <= pages; p++) {
     doc.setPage(p)
     doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(163, 157, 141)
-    doc.text(`CivEng Toolkit · schedule report · ${today}`, 14, doc.internal.pageSize.getHeight() - 8)
+    doc.text(`${BRAND_NAME} · schedule report · ${today}`, 14, doc.internal.pageSize.getHeight() - 8)
     doc.text(`${p} / ${pages}`, pageW - 14, doc.internal.pageSize.getHeight() - 8, { align: 'right' })
   }
   return doc

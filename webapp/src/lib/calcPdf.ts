@@ -22,6 +22,7 @@
 import type { LetterheadState, VerdictStat } from '../components/calc'
 import type { SolutionStep } from './solution'
 import { createSheet, autoTable, MUTED } from './pdfKit'
+import { COMPUTED_BY, docLabel as brandDocLabel } from './brand'
 
 export interface CalcCheckRow { name: string; ratio: number; ok: boolean }
 
@@ -59,7 +60,7 @@ export async function generateCalcPdf(input: CalcPdfInput): Promise<void> {
   const { doc } = s
   const today = new Date().toISOString().slice(0, 10)
   const sheet = lh.sheet || docCode
-  const docLabel = `CIVENG TOOLKIT · ${docTitle.toUpperCase()} — CALCULATION REPORT`
+  const docLabel = brandDocLabel(`${docTitle} — Calculation Report`)
 
   s.brandHeader({ docLabel, title: `${docTitle} — Design Calculation`, sheet, today, ok, governing, badges })
   s.letterheadGrid([
@@ -125,7 +126,7 @@ export async function generateCalcPdf(input: CalcPdfInput): Promise<void> {
 
   s.signatures(lh.preparedBy)
   s.disclaimer(
-    'Computed client-side by the CivEng Toolkit engine · verify before construction use. '
+    COMPUTED_BY + ' '
     + 'Load factors per NSCP 2015 §203.3; strength reduction factors per ACI 318-14 Table 21.2.1. '
     + `Project: ${lh.project || '—'}.`,
   )

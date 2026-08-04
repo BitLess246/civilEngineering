@@ -47,7 +47,7 @@ export interface SiteConfig {
 }
 
 export const SITE: SiteConfig = {
-  tradeName: 'CivEng Toolkit',
+  tradeName: 'CivEngg Toolkit',
 
   // ── FILL THESE IN ────────────────────────────────────────────────────
   legalName: '',

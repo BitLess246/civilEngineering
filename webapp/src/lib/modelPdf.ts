@@ -1,6 +1,6 @@
 // Direct PDF export of the Model Space structure report — A4 portrait calc
-// sheet built from the SHARED chrome in `pdfKit` (mono header strip, CIVENG
-// brand, verdict chip, letterhead grid, numbered section rules, PASS/FAIL
+// sheet built from the SHARED chrome in `pdfKit` (mono header strip, the
+// wordmark, verdict chip, letterhead grid, numbered section rules, PASS/FAIL
 // chips, equation boxes, signature blocks, per-page footer). The calculator
 // pages' `calcPdf` is built from the same kit, which is what keeps the two
 // reports looking like sheets from one set instead of two lookalikes that
@@ -13,6 +13,7 @@
 // loaded lazily via dynamic import.
 import type { LetterheadState } from '../components/calc'
 import type { ModelReport, ReportSection } from './modelReport'
+import { COMPUTED_BY, docLabel as brandDocLabel } from './brand'
 import {
   createSheet, autoTable,
   INK, MUTED, FAINT, BRAND, HAIR, M, CONTENT_W,
@@ -37,7 +38,7 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
 
   const today = new Date().toISOString().slice(0, 10)
   const sheet = lh.sheet || 'S-3D'
-  const docLabel = 'CIVENG TOOLKIT · STRUCTURE — CALCULATION REPORT'
+  const docLabel = brandDocLabel('Structure — Calculation Report')
 
   const CONC: [number, number, number] = [238, 243, 248]
   /** Vector cross-section (bar layout + stirrup hooks + dimension lines) drawn
@@ -306,7 +307,7 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
 
   sh.signatures(lh.preparedBy)
   sh.disclaimer(
-    'Computed client-side by the CivEng Toolkit engine · verify before construction use. '
+    COMPUTED_BY + ' '
     + 'Load factors per NSCP 2015 §203.3; strength reduction factors per ACI 318-14 Table 21.2.1; '
     + `steel design per AISC 360-16 LRFD. Project: ${lh.project || '—'}.`,
   )

@@ -5,6 +5,7 @@ import { CommandPalette } from './CommandPalette'
 import { usePaletteHotkey } from '../lib/usePaletteHotkey'
 import { SiteFooter } from './SiteFooter'
 import { AccountMenu } from './AccountMenu'
+import { BRAND_MARK, BRAND_TAIL } from '../lib/brand'
 
 // Workbench shell (docs/design/uiux-2026-07): persistent ink-navy sidebar with
 // the grouped tool catalog + ⌘K search, and a slim breadcrumb header. Wraps
@@ -30,8 +31,8 @@ function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }) {
     <aside className="no-print sticky top-0 hidden h-screen w-[230px] flex-none flex-col overflow-y-auto bg-[#0f1b2a] text-[#e8eaed] lg:flex">
       <div className="border-b border-white/10 p-4 pb-3.5">
         <Link to="/" className="flex items-baseline gap-2">
-          <span className="text-[15px] font-extrabold tracking-[.14em] text-white">CIVENG</span>
-          <span className="text-[9px] font-semibold uppercase tracking-[.22em] text-[#7d8ea3]">Toolkit</span>
+          <span className="text-[15px] font-extrabold tracking-[.14em] text-white">{BRAND_MARK}</span>
+          <span className="text-[9px] font-semibold uppercase tracking-[.22em] text-[#7d8ea3]">{BRAND_TAIL}</span>
         </Link>
         <div className="mt-3"><SearchBox onOpen={onOpenPalette} compact /></div>
       </div>
@@ -84,7 +85,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <header className="no-print sticky top-0 z-40 border-b border-[#e3e1da] bg-white/95 backdrop-blur">
           <div className="flex h-11 items-center gap-3 px-4 sm:px-6">
             <Link to="/" className="flex items-baseline gap-1.5 lg:hidden">
-              <span className="text-[13px] font-extrabold tracking-[.14em] text-[#0f1b2a]">CIVENG</span>
+              <span className="text-[13px] font-extrabold tracking-[.14em] text-[#0f1b2a]">{BRAND_MARK}</span>
             </Link>
             <div className="flex min-w-0 items-center gap-2 text-[11px] text-[#7a7568]">
               <Link to="/" className="hover:text-[#0f4c92]">Workbench</Link>

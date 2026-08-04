@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { SITE, businessName, addressLines, missingSiteFields } from '../lib/siteConfig'
+import { BRAND_MARK, BRAND_TAIL } from '../lib/brand'
 
 /**
  * Public footer.
@@ -17,8 +18,8 @@ export function SiteFooter() {
       <div className="mx-auto grid max-w-[1200px] gap-6 px-6 py-8 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <div className="flex items-baseline gap-2">
-            <span className="text-[13px] font-extrabold tracking-[.14em] text-[#0f1b2a]">CIVENG</span>
-            <span className="text-[8.5px] font-semibold uppercase tracking-[.22em] text-[#7a7568]">Toolkit</span>
+            <span className="text-[13px] font-extrabold tracking-[.14em] text-[#0f1b2a]">{BRAND_MARK}</span>
+            <span className="text-[8.5px] font-semibold uppercase tracking-[.22em] text-[#7a7568]">{BRAND_TAIL}</span>
           </div>
           <p className="mt-2 text-[12px] leading-5 text-slate-500">
             Structural and geotechnical calculation software to NSCP 2015, ACI 318-14 and AISC 360-16.

@@ -2,6 +2,7 @@ import { useState, type JSX } from 'react'
 import type { CalcPdfInput } from '../lib/calcPdf'
 import { ExportPdfButton } from './ExportPdfButton'
 import { loadProfile, letterheadDefaults } from '../lib/auth/profile'
+import { BRAND_MARK, BRAND_TAIL, docLabel } from '../lib/brand'
 
 /**
  * A page's report payload, minus the parts this component already owns.
@@ -31,7 +32,7 @@ export interface ReportControlsProps {
  * Report letterhead for every calculator page (docs/design/uiux-2026-07,
  * Report Print): on screen a letterhead card (Project / Sheet / Prepared by /
  * Date) with the ⎙ Export action; in print, the calc-sheet header — mono
- * document strip, CIVENG brand block, title, code badges and the letterhead
+ * document strip, wordmark block, title, code badges and the letterhead
  * grid — ahead of the page's themed content. Pages with structured results
  * use the full PrintReport instead (components/calc.tsx).
  */
@@ -93,12 +94,12 @@ export function ReportControls({ title, badges = ['NSCP 2015', 'ACI 318-14'], re
       {/* Print: calc-sheet letterhead header */}
       <div className="print-only mb-4">
         <div className="flex items-baseline justify-between border-b border-[#eeece5] pb-1.5 font-mono text-[9px] text-[#a39d8d]">
-          <span>CIVENG TOOLKIT · {title.toUpperCase()}</span>
+          <span>{docLabel(title)}</span>
           <span>{sheet || '—'} · {today}</span>
         </div>
         <div className="mt-3 flex items-baseline gap-2">
-          <span className="text-[14px] font-extrabold tracking-[.14em]">CIVENG</span>
-          <span className="text-[8px] font-semibold uppercase tracking-[.22em] text-[#7a7568]">Toolkit</span>
+          <span className="text-[14px] font-extrabold tracking-[.14em]">{BRAND_MARK}</span>
+          <span className="text-[8px] font-semibold uppercase tracking-[.22em] text-[#7a7568]">{BRAND_TAIL}</span>
         </div>
         <h1 className="mt-2 text-[24px] font-extrabold tracking-tight text-[#0f1b2a]">{title}</h1>
         <div className="mt-2 flex gap-2">
