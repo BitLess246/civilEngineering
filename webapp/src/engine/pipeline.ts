@@ -32,6 +32,9 @@ import { woodRefOf, checkWoodBeam, checkWoodColumn, getWoodRef, woodAdjusted } f
 import { designWoodSlab, type WoodSlabResult } from './woodSlab'
 import { designBasePlate, adoptPlateThickness, type BasePlateResult } from './baseplate'
 import { designSteelJoints, designBeamBeamJoints, type SteelJoint, type BeamBeamJoint } from './steelConnections'
+import {
+  chooseBar, crackControlOK, constructabilityOK, type BarCandidate,
+} from './barSelection'
 
 export interface SoilOptions {
   qAllow: number; gammaSoil: number; gammaConc: number; H: number
@@ -1429,23 +1432,53 @@ export function selectBarDiameters(
   // §407.7.1 clear-spacing / layer-fit check (both folded into beamOK).
   for (const row of design.beams) {
     const sec = secById.get(memSecId.get(row.id) ?? ''); if (!sec) continue
-    for (const db of ladder(BAR_LADDER_BEAM, sec.barDia)) {
-      const allOK = row.sections.every((s) => beamOK(designBeam({
+    // Each candidate is scored on all four gates across EVERY critical section
+    // of the member — one section failing serviceability rejects the size for
+    // the whole member — and then ranked on steel. See `barSelection` for why
+    // the stages are ordered and why a tie goes to the smaller bar.
+    const cands: BarCandidate[] = ladder(BAR_LADDER_BEAM, sec.barDia).map((db) => {
+      const designs = row.sections.map((s) => designBeam({
         b: sec.b, h: sec.h, cover: sec.cover, barDia: db, comprBarDia: 16,
         stirrupDia: sec.tieDia, fc: sec.fc, fy: sec.fy, Mu: Math.abs(s.Mu), Vu: s.Vu,
-      })))
-      if (allOK) { if (db !== sec.barDia) chosen.set(sec.id, db); break }
-    }
+      }))
+      return {
+        db,
+        strength: designs.every((d) => d.region !== 'inadequate' && d.comprEffective && d.comprNAOK),
+        // Crack control uses the CENTRE-TO-CENTRE spacing the clause is written
+        // in terms of; `sClear` is the clear gap, so the bar itself is added.
+        serviceability: designs.every((d) =>
+          crackControlOK(d.sClear + db, sec.fy, sec.cover)),
+        detailing: designs.every((d) => d.flexOK),
+        constructability: designs.every((d) => constructabilityOK(d.bars, d.layers.length)),
+        steelArea: Math.max(...designs.map((d) => d.bars * (Math.PI / 4) * db * db)),
+      }
+    })
+    const pick = chooseBar(cands)
+    if (pick.db !== null && pick.db !== sec.barDia) chosen.set(sec.id, pick.db)
   }
 
   // columns: smallest bar Ø that passes P–M + ρ AND fits the §425.2.1 minimum
   // clear bar spacing across the section face (≥ max(1.5db, 40 mm)).
   for (const row of design.columns) {
     const sec = secById.get(memSecId.get(row.id) ?? ''); if (!sec) continue
-    for (const db of ladder(BAR_LADDER_COLUMN, sec.barDia)) {
+    const cands: BarCandidate[] = ladder(BAR_LADDER_COLUMN, sec.barDia).map((db) => {
       const r = designColumnFromPM({ ...sec, barDia: db }, row.Pu, row.Mu)
-      if (r.ok && columnBarsFit(sec, db, r.bars)) { if (db !== sec.barDia) chosen.set(sec.id, db); break }
-    }
+      return {
+        db,
+        strength: r.ok,
+        // A column's bars are distributed around the perimeter by construction,
+        // so the crack-control spacing rule is not the governing serviceability
+        // question it is for a beam's tension face. Nothing to check here yet —
+        // said explicitly rather than left as an unexplained `true`.
+        serviceability: true,
+        detailing: columnBarsFit(sec, db, r.bars),
+        // One layer per face, so the layer limit cannot bite; the bar count can.
+        constructability: constructabilityOK(r.bars, 1),
+        steelArea: r.bars * (Math.PI / 4) * db * db,
+      }
+    })
+    const pick = chooseBar(cands)
+    if (pick.db !== null && pick.db !== sec.barDia) chosen.set(sec.id, pick.db)
   }
 
   // ── Bar-diameter continuity guard: one Ø through each continuous beam line
