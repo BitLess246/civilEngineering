@@ -6,6 +6,7 @@ import { SceneText } from '../components/SceneText'
 import * as THREE from 'three'
 import { generateTruss, solveTrussEnvelope, selfWeightLoads, type TrussType, type TrussModel } from '../engine/truss'
 import { designTruss, type MemberDesign, type TrussSection } from '../engine/trussDesign'
+import { optimizeTruss, type GroupingMode } from '../engine/trussOptimize'
 import { FAMILIES, shapesOf, shapeByName, effectiveSection, type SectionFamily, type EffectiveSection } from '../engine/aiscSections'
 import { trussTakeoff, costTrussBill } from '../engine/trussTakeoff'
 import { SectionShape } from '../components/SectionShape'
@@ -89,6 +90,10 @@ export default function TrussSpace() {
   // free-form editor: when non-null, this model replaces the parametric one
   const [custom, setCustom] = useState<TrussModel | null>(null)
   // custom section: enter A & radii directly instead of picking an AISC shape
+  // Auto-sizing: one section per DESIGN GROUP instead of one for the truss.
+  const [optimize, setOptimize] = useState(false)
+  const [grouping, setGrouping] = useState<GroupingMode>('role')
+  const [searchAllFamilies, setSearchAllFamilies] = useState(false)
   const [customSec, setCustomSec] = useState(false)
   const [csA, setCsA] = useState(1500); const [csRx, setCsRx] = useState(30); const [csRy, setCsRy] = useState(30)
   const controlsRef = useRef<React.ComponentRef<typeof OrbitControls>>(null)
@@ -128,7 +133,33 @@ export default function TrussSpace() {
   ], [model, includeSW, eff.A, loadedNodes, deadLoad])
   const live = useMemo(() => loadedNodes.map((n) => ({ node: n, fx: 0, fy: -liveLoad })), [loadedNodes, liveLoad])
   const result = useMemo(() => solveTrussEnvelope(model, dead, live), [model, dead, live])
-  const design = useMemo(() => (result ? designTruss(result.forces, section) : null), [result, section])
+  // The optimiser sizes each group from the catalogue; the hand-picked
+  // section stays the fallback and the baseline it is measured against.
+  const opt = useMemo(() => {
+    if (!optimize || !result) return null
+    return optimizeTruss(result.forces, family, {
+      grouping,
+      families: searchAllFamilies ? ['L', 'C', 'W', 'HSS', 'PIPE', 'WT'] : [family],
+      doubleAngles: double, gap, E, Fy, K,
+    })
+  }, [optimize, result, family, grouping, searchAllFamilies, double, gap, E, Fy, K])
+
+  /** Section adopted for a member — per group when optimising, else the one
+   *  picked by hand. Everything downstream (table, 3D colour, take-off) reads
+   *  this, so the drawing and the bill cannot disagree with the design. */
+  const sectionOfMember = useMemo(() => {
+    const m = new Map<string, EffectiveSection>()
+    for (const g of opt?.groups ?? []) {
+      if (!g.section) continue
+      for (const mem of g.group.members) m.set(mem.id, g.section)
+    }
+    return m
+  }, [opt])
+
+  const design = useMemo(() => {
+    if (opt) return { members: opt.members, maxUtil: Math.max(0, ...opt.members.map((m) => m.util)), allOK: opt.ok && opt.members.every((m) => m.ok) }
+    return result ? designTruss(result.forces, section) : null
+  }, [opt, result, section])
   const shapes3d = useMemo(() => {
     if (customSec) {   // illustrative solid square (no real profile for a custom section)
       const h = Math.sqrt(eff.A) / 1000 / 2
@@ -138,8 +169,11 @@ export default function TrussSpace() {
     return buildSectionShapes(eff)   // true-scale section profiles for the 3D extrusion
   }, [eff, customSec])
   const takeoff = useMemo(
-    () => result ? trussTakeoff(result.forces, eff, { gussetFraction: gussetPct / 100 }) : null,
-    [result, eff, gussetPct],
+    () => result ? trussTakeoff(result.forces, eff, {
+      gussetFraction: gussetPct / 100,
+      sectionOf: opt ? (id) => sectionOfMember.get(id) : undefined,
+    }) : null,
+    [result, eff, gussetPct, opt, sectionOfMember],
   )
   const bill = useMemo(
     () => takeoff ? costTrussBill(takeoff, { steelKg: steelUnitPrice }) : null,
@@ -248,6 +282,39 @@ export default function TrussSpace() {
             </p>
           </Card>
 
+          <Card title="Auto-size sections">
+            <label className="col-span-full flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={optimize} onChange={(e) => setOptimize(e.target.checked)}
+                disabled={customSec} />
+              <span>
+                Size each design group from the catalogue
+                {customSec && <span className="ml-1 text-slate-400">(turn off the custom section first)</span>}
+              </span>
+            </label>
+            {optimize && !customSec && (
+              <>
+                <Pick label="Split sections by" value={grouping} onChange={(v) => setGrouping(v as GroupingMode)}
+                  options={[
+                    ['role', 'Chords + web struts + web ties'],
+                    ['sign', 'Tension / compression'],
+                    ['uniform', 'One section for the whole truss'],
+                  ]} />
+                <label className="col-span-full flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={searchAllFamilies}
+                    onChange={(e) => setSearchAllFamilies(e.target.checked)} />
+                  <span>Search every family, not just {family}</span>
+                </label>
+                <p className="col-span-full text-[11px] text-slate-500">
+                  Each group takes the <b>lightest</b> section that carries every one of its members:
+                  strength first (AISC D2 / E3), then KL/r ≤ 200 for compression (§E2), then least steel.
+                  A group is buckling-limited by its <b>longest</b> member, not its largest force — so a
+                  bottom chord in pure tension ends up much lighter than a top chord of the same length.
+                  Zero-force members are sized as struts.
+                </p>
+              </>
+            )}
+          </Card>
+
           <Card title="Section & material (AISC steel)">
             <label className="col-span-full flex items-center gap-2 text-sm">
               <input type="checkbox" checked={customSec} onChange={(e) => setCustomSec(e.target.checked)} />
@@ -301,6 +368,42 @@ export default function TrussSpace() {
               {design && <Row alert={!design.allOK} label="Design" value={design.allOK ? `OK · max util ${(design.maxUtil * 100).toFixed(0)}%` : `✗ max util ${(design.maxUtil * 100).toFixed(0)}%`} />}
             </ResultCard>
           )}
+
+          {opt && (
+            <ResultCard title="Auto-sized sections">
+              {opt.groups.map((g) => (
+                <Row key={g.group.id}
+                  alert={!g.ok}
+                  label={g.group.label}
+                  value={g.section?.label ?? 'no section fits'}
+                  sub={g.section
+                    ? `util ${(g.maxUtil * 100).toFixed(0)}% · KL/r ${g.maxSlenderness.toFixed(0)}${g.tensionSlendernessOK ? '' : ' ⚠'} · ${g.group.members.length} members · ${g.weightKg.toFixed(0)} kg`
+                    : `${g.rejected.length} candidates rejected`} />
+              ))}
+              <Row label="Steel in members" value={`${opt.totalWeightKg.toFixed(0)} kg`}
+                sub={opt.uniformWeightKg
+                  ? `one section for all: ${opt.uniformWeightKg.toFixed(0)} kg`
+                  : undefined} />
+              {opt.savedFraction > 0 && (
+                <Row label="Saved against one section"
+                  value={`${(opt.savedFraction * 100).toFixed(1)}%`}
+                  sub={opt.uniformWeightKg ? `${(opt.uniformWeightKg - opt.totalWeightKg).toFixed(0)} kg` : undefined} />
+              )}
+              {opt.groups.some((g) => g.section && !g.tensionSlendernessOK) && (
+                <p className="mt-2 text-[11px] text-amber-700">
+                  ⚠ A tension group exceeds L/r = 300. §D1 states that as a <b>preference</b>, not a
+                  limit — the member is strong enough, but it will sag, vibrate and is easy to damage
+                  in handling. Pick a stiffer section by hand if that matters here.
+                </p>
+              )}
+              {!opt.ok && (
+                <p className="mt-2 text-[11px] text-red-600">
+                  At least one group has no adequate section in the families searched — widen
+                  the search, or the truss geometry needs changing.
+                </p>
+              )}
+            </ResultCard>
+          )}
         </div>
       </div>
 
@@ -310,7 +413,7 @@ export default function TrussSpace() {
           <h2 className="text-xl font-extrabold tracking-tight text-[#0056b3]">
             Truss member schedule — {custom ? 'custom truss' : `${type} · ${f1(span)} m span`}
             <span className="ml-3 text-sm font-normal text-slate-500">
-              {result.determinacy.status} · {eff.label} · Fy {Fy} MPa · max util {(design.maxUtil * 100).toFixed(0)}%
+              {result.determinacy.status} · {opt ? `${opt.groups.length} auto-sized sections` : eff.label} · Fy {Fy} MPa · max util {(design.maxUtil * 100).toFixed(0)}%
             </span>
           </h2>
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -319,6 +422,7 @@ export default function TrussSpace() {
                 <tr className="text-left uppercase tracking-wide text-slate-500">
                   <th className="py-1 pr-2 font-semibold">Member</th>
                   <th className="py-1 pr-2 font-semibold">Type</th>
+                  {opt && <th className="py-1 pr-2 font-semibold">Section</th>}
                   <th className="py-1 pr-2 text-right font-semibold">L (m)</th>
                   <th className="py-1 pr-2 text-right font-semibold">Force (kN)</th>
                   <th className="py-1 pr-2 font-semibold">Sense</th>
@@ -337,6 +441,7 @@ export default function TrussSpace() {
                       className={`cursor-pointer border-t border-slate-100 hover:bg-blue-50/40 ${bad ? 'bg-red-50 text-red-700' : ''} ${selected === f.id ? 'bg-amber-50' : ''}`}>
                       <td className="py-1 pr-2 font-medium">{f.id} <span className="text-slate-500">({f.i}–{f.j})</span></td>
                       <td className="py-1 pr-2">{f.kind}</td>
+                      {opt && <td className="py-1 pr-2 font-mono text-[10px]">{sectionOfMember.get(f.id)?.label ?? '—'}</td>}
                       <td className="py-1 pr-2 text-right">{f2(f.L)}</td>
                       <td className="py-1 pr-2 text-right">{f1(Math.abs(f.N))}</td>
                       <td className={`py-1 pr-2 ${f.N >= 0 ? 'text-blue-700' : 'text-red-600'}`}>{d.mode === 'zero' ? '—' : f.N >= 0 ? 'T' : 'C'}</td>
