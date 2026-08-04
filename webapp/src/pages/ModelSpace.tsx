@@ -1,7 +1,8 @@
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls, Text } from '@react-three/drei'
+import { OrbitControls } from '@react-three/drei'
+import { SceneText } from '../components/SceneText'
 import * as THREE from 'three'
 import { generateGridModel, removeElements, removeNode, buildGravityLoads, splitSharedSections } from '../engine/modelBuilder'
 import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole, MemberReleases, NodeSupport, SupportFixity, WoodDeck } from '../engine/model'
@@ -381,7 +382,7 @@ function AxisBubble({ x, y, z, r, label }: { x: number; y: number; z: number; r:
     <group position={[x, y + 0.02, z]} rotation={[-Math.PI / 2, 0, 0]}>
       <mesh><circleGeometry args={[r, 40]} /><meshBasicMaterial color="#ffffff" /></mesh>
       <mesh position={[0, 0, 0.001]}><ringGeometry args={[r * 0.94, r, 40]} /><meshBasicMaterial color="#475569" /></mesh>
-      <Text position={[0, 0, 0.004]} fontSize={r * 0.95} color="#1e293b" anchorX="center" anchorY="middle">{label}</Text>
+      <SceneText position={[0, 0, 0.004]} fontSize={r * 0.95} color="#1e293b" anchorX="center" anchorY="middle">{label}</SceneText>
     </group>
   )
 }
@@ -450,13 +451,13 @@ function GridBubbles3D({ model }: { model: StructuralModel }) {
       ))}
       {/* bay dimensions across the top (X), text above the line */}
       {g.xDims.map((d, i) => (
-        <Text key={`dx${i}`} position={[d.mid, g.y0 + 0.03, g.zDim - tOff]} rotation={[-Math.PI / 2, 0, 0]}
-          fontSize={dimFont} color="#475569" anchorX="center" anchorY="middle">{`${d.val.toFixed(2)} m`}</Text>
+        <SceneText key={`dx${i}`} position={[d.mid, g.y0 + 0.03, g.zDim - tOff]} rotation={[-Math.PI / 2, 0, 0]}
+          fontSize={dimFont} color="#475569" anchorX="center" anchorY="middle">{`${d.val.toFixed(2)} m`}</SceneText>
       ))}
       {/* bay dimensions down the left (Z), text above the line */}
       {g.zDims.map((d, i) => (
-        <Text key={`dz${i}`} position={[g.xDim - tOff, g.y0 + 0.03, d.mid]} rotation={[-Math.PI / 2, 0, Math.PI / 2]}
-          fontSize={dimFont} color="#475569" anchorX="center" anchorY="middle">{`${d.val.toFixed(2)} m`}</Text>
+        <SceneText key={`dz${i}`} position={[g.xDim - tOff, g.y0 + 0.03, d.mid]} rotation={[-Math.PI / 2, 0, Math.PI / 2]}
+          fontSize={dimFont} color="#475569" anchorX="center" anchorY="middle">{`${d.val.toFixed(2)} m`}</SceneText>
       ))}
     </group>
   )
@@ -476,10 +477,10 @@ function Footing3D({ cx, cz, bx, bz, dc, angle = 0, overlap = false, label }: {
         <meshStandardMaterial color={overlap ? '#dc2626' : '#b45309'} transparent opacity={overlap ? 0.6 : 0.45} />
       </mesh>
       {label && (
-        <Text position={[0, dc / 2 + 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.32}
+        <SceneText position={[0, dc / 2 + 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.32}
           color={overlap ? '#991b1b' : '#7c2d12'} anchorX="center" anchorY="middle" outlineWidth={0.012} outlineColor="#ffffff">
           {label}
-        </Text>
+        </SceneText>
       )}
     </group>
   )
@@ -2029,10 +2030,12 @@ export default function ModelSpace() {
           <div className="relative h-[80vh] min-h-[460px] overflow-hidden rounded-lg border border-[#e3e1da] bg-[#0f1b2a]">
             {model ? (
               <Canvas camera={{ position: [14, 11, 14], fov: 45 }} gl={{ preserveDrawingBuffer: true }} onPointerMissed={() => setSelected(null)}>
-                {/* Local boundary: drei <Text> suspends while troika fetches its
-                    font-resolver data — without this, the suspension bubbles to the
-                    route-level <Suspense> and React hides the WHOLE page (blank page
-                    after "Design all" on networks that block cdn.jsdelivr.net). */}
+                {/* Outer net only: it stops ANY suspension in here from bubbling
+                    to the route-level <Suspense> and blanking the whole page.
+                    Text is NOT what it catches — <SceneText> carries its own
+                    per-label boundary and a bundled font, because a boundary at
+                    this level turns one unresolvable label into an empty
+                    viewport (see components/SceneText.tsx). */}
                 <Suspense fallback={null}>
                 <color attach="background" args={['#f8fafc']} />
                 <ambientLight intensity={0.85} />
@@ -2140,7 +2143,7 @@ export default function ModelSpace() {
               </Canvas>
             ) : (
               <div className="flex h-full items-center justify-center font-mono text-sm text-[#7d8ea3]">
-                Set the grid and hit “Generate model”.
+                Set the grid and hit “Regenerate grid model”.
               </div>
             )}
             {model && selInfo && (

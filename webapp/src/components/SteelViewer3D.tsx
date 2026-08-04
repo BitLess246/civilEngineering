@@ -4,7 +4,8 @@
 
 import { useMemo } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls, Text } from '@react-three/drei'
+import { OrbitControls } from '@react-three/drei'
+import { SceneText } from './SceneText'
 import * as THREE from 'three'
 import { FitView } from './FitView'
 import type { AiscShape } from '../engine/aiscSections'
@@ -128,9 +129,9 @@ export function BeamViewer3D({ shape, span, wDead, wLive }: {
       <DistLoad span={span} w={wDead + wLive} />
       <PinSupport3D pos={[0, -d, 0]} />
       <RollerSupport3D pos={[0, -d, span]} />
-      <Text position={[bf + 0.15, 0, span / 2]} rotation={[0, -Math.PI / 2, 0]} fontSize={0.18} color="#e2e8f0" anchorX="center">
+      <SceneText position={[bf + 0.15, 0, span / 2]} rotation={[0, -Math.PI / 2, 0]} fontSize={0.18} color="#e2e8f0" anchorX="center">
         {shape.name}
-      </Text>
+      </SceneText>
     </CanvasWrap>
   )
 }
@@ -163,9 +164,9 @@ export function ColumnViewer3D({ shape, L, Pu, Mux }: {
       {Mux > 0 && <Arrow from={[-0.6, L + 0.1, 0]} to={[0.1, L + 0.1, 0]} color="#f59e0b" headR={0.10} headH={0.22} />}
       {/* fixed base */}
       <mesh position={[0, -0.03, 0]}><boxGeometry args={[0.8, 0.06, 0.5]} /><meshStandardMaterial color="#0056b3" /></mesh>
-      <Text position={[bf + 0.35, L / 2, 0]} rotation={[0, 0, 0]} fontSize={0.18} color="#e2e8f0" anchorX="center">
+      <SceneText position={[bf + 0.35, L / 2, 0]} rotation={[0, 0, 0]} fontSize={0.18} color="#e2e8f0" anchorX="center">
         {shape.name}
-      </Text>
+      </SceneText>
     </CanvasWrap>
   )
 }
@@ -201,9 +202,9 @@ export function ConnectionViewer3D({ geom, db, t_plate, critical }: {
               <cylinderGeometry args={[dbm / 2, dbm / 2, 0.4, 12]} />
               <meshStandardMaterial color={isCrit ? '#f59e0b' : '#d4a017'} metalness={0.7} roughness={0.3} />
             </mesh>
-            <Text position={[dbm * 0.8, dbm * 0.8, 0.05]} fontSize={0.018} color={isCrit ? '#fbbf24' : '#e2e8f0'}>
+            <SceneText position={[dbm * 0.8, dbm * 0.8, 0.05]} fontSize={0.018} color={isCrit ? '#fbbf24' : '#e2e8f0'}>
               {b.id}
-            </Text>
+            </SceneText>
           </group>
         )
       })}
