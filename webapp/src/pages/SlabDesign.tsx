@@ -5,6 +5,8 @@ import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
 import { buildSlabSolution } from '../lib/slabSolution'
 import { Math as KTex } from '../lib/math'
+import { SlabBarSection } from '../components/SlabBarSection'
+import { tempSteelArea, tempSpacingMax } from '../engine/slabBarDetail'
 import { f0, f1, f2 } from '../lib/format'
 import 'katex/dist/katex.min.css'
 
@@ -101,6 +103,9 @@ export default function SlabDesign() {
   }, [f])
 
   const r = useMemo(() => (valid ? designSlabDDM(input) : null), [valid, input])
+  // §424.4.3 shrinkage and temperature steel — a slab detail the DDM result
+  // does not carry, because it is not a flexural demand.
+  const temp = useMemo(() => tempSteelArea(r?.h ?? 0, f.fy), [r, f.fy])
 
   const defl = r?.deflection
 
@@ -225,6 +230,34 @@ export default function SlabDesign() {
 
               {/* Y direction */}
               <DirCard title={`Direction y (l₁ = ${f2(r.y.l1)} m)`} dir={r.y} barDia={f.barDia} />
+
+              {/* ── Bar arrangement ─────────────────────────────────── */}
+              <ResultCard title="Bar arrangement — section through the span">
+                <div className="-mx-1 space-y-4">
+                  {(['column', 'middle'] as const).map((strip) => {
+                    const loc = r.x.locations.find((l) => l.name === '+M') ?? r.x.locations[0]
+                    const neg = r.x.locations.find((l) => l.name.includes('−M')) ?? loc
+                    const sec = strip === 'column' ? loc.column : loc.middle
+                    const negSec = strip === 'column' ? neg.column : neg.middle
+                    return (
+                      <SlabBarSection key={strip} strip={strip}
+                        l1={r.x.l1} support={f.colWidth / 1000} h={r.h} cover={f.cover}
+                        topBars={`⌀${f.barDia} @ ${f0(negSec.spacing)} mm`}
+                        bottomBars={`⌀${f.barDia} @ ${f0(sec.spacing)} mm`}
+                        tempBars={`As ${f0(temp.As)} mm²/m · max s ${f0(tempSpacingMax(r.h))} mm`} />
+                    )
+                  })}
+                </div>
+                <p className="mt-2 text-[11px] leading-5 text-slate-500">
+                  Sections are taken along <KTex tex="l_1" /> in the x-direction. Top steel is the
+                  negative-moment mat over the supports; bottom steel is the positive-moment mat
+                  through mid-span. The shrinkage and temperature bars run perpendicular, so a
+                  section cuts them end-on.{' '}
+                  <strong className="font-semibold text-amber-800">
+                    Check the cut-off fractions against ACI 318-14 Fig. 8.7.4.1.3(a) before detailing.
+                  </strong>
+                </p>
+              </ResultCard>
 
               {/* Deflection */}
               {defl && (
