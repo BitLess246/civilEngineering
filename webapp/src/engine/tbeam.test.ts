@@ -104,3 +104,39 @@ describe('tension-controlled cap', () => {
     expect(r.notes.join(' ')).toContain('tension-controlled')
   })
 })
+
+describe('bar layering — no layer carries a single bar', () => {
+  // This engine used to stack bars with its own greedy loop and had no pairing
+  // rule, so a T-beam could be detailed with one bar sitting alone in the top
+  // layer with nothing to tie to on either side. `beamDesign` had the rule all
+  // along; both now share `barLayers.splitLayers`.
+  it('never produces a lone bar, across a sweep of moments and bar sizes', () => {
+    for (const barDia of [16, 20, 25, 28, 32]) {
+      for (let Mu = 60; Mu <= 900; Mu += 20) {
+        const r = designTBeam({ ...base, barDia, Mu })
+        expect(r.layers.every((n) => n >= 2)).toBe(true)
+        expect(r.layers.reduce((s, n) => s + n, 0)).toBe(r.bars)
+      }
+    }
+  })
+
+  it('narrow webs too, where layers stack fastest', () => {
+    for (const bw of [200, 250, 300, 400]) {
+      for (let Mu = 100; Mu <= 700; Mu += 50) {
+        const r = designTBeam({ ...base, bw, Mu })
+        expect(r.layers.every((n) => n >= 2)).toBe(true)
+      }
+    }
+  })
+
+  it('details at least the steel the strength calculation asked for', () => {
+    // Pairing ADDS a bar, so the detailed count can only exceed the demand.
+    // The direction that would matter is the other one: a schedule showing
+    // fewer bars than the section needs.
+    const Ab = (Math.PI / 4) * base.barDia ** 2
+    for (let Mu = 200; Mu <= 800; Mu += 25) {
+      const r = designTBeam({ ...base, Mu })
+      expect(r.bars * Ab).toBeGreaterThanOrEqual(r.As - 1e-6)
+    }
+  })
+})

@@ -15,6 +15,7 @@ import { rhoMin } from './flexure'
 import { beta1 } from './loads'
 import { Ec as concreteEc } from './slabDeflection'
 import { crackedInertia, deflCoeff, longTermMultiplier, minBeamThickness, type BeamSupport } from './beamDeflection'
+import { splitLayers, centroidRise } from './barLayers'
 
 export interface BeamDesignInput {
   b: number            // web width, mm
@@ -93,36 +94,11 @@ export interface BeamDesignResult {
 const PHI_FLEX = 0.90
 const PHI_SHEAR = 0.75
 const LAYER_CLEAR = 25       // §407.7.2 clear distance between layers, mm
+// The lone-bar pairing rule and the Varignon centroid live in `barLayers` so
+// the T-beam engine uses the SAME rule — it used to have its own greedy loop
+// and could detail a single bar alone in the top layer.
 const roundDown = (v: number, step: number) => Math.floor(v / step) * step
 
-/** Split n bars into layers of at most maxPerLayer, fullest at the bottom.
- *  Detailing rule: no layer carries a single bar — a lone bar in the top
- *  (least-full) layer is paired with a second so the two sit beside the
- *  stirrup legs on each side. Pairing adds one bar (conservative on As).
- *  Returns the (possibly bumped) total count alongside the layer vector. */
-function splitLayers(n: number, maxPerLayer: number): { bars: number; layers: number[] } {
-  let total = n
-  const build = (m: number): number[] => {
-    const out: number[] = []
-    let left = m
-    while (left > 0) { const take = Math.min(left, maxPerLayer); out.push(take); left -= take }
-    return out
-  }
-  let layers = build(total)
-  // pair a lone top-layer bar (only meaningful once the section holds ≥ 2/layer)
-  if (maxPerLayer >= 2 && layers.length > 1 && layers[layers.length - 1] === 1) {
-    total += 1
-    layers = build(total)
-  }
-  return { bars: total, layers }
-}
-
-/** Centroid rise of the bar group above the extreme (bottom) layer — Varignon. */
-function centroidRise(layers: number[], pitch: number): number {
-  const n = layers.reduce((s, k) => s + k, 0)
-  const sum = layers.reduce((s, k, i) => s + k * i * pitch, 0)
-  return n > 0 ? sum / n : 0
-}
 
 /** Minimum practical stirrup spacing, mm — the tightest a designer will place
  *  transverse steel before adding legs instead (placement / congestion). Used as
