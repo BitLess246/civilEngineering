@@ -40,7 +40,7 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   // steel, timber and connections
   '/steel', '/bolted-connection', '/welded-connection', '/wood-slab',
   // geotechnical
-  '/geotech', '/slope', '/settlement', '/lateral-pile',
+  '/geotech', '/earth-pressure', '/bearing-capacity', '/slope', '/settlement', '/lateral-pile',
   '/soil-nail', '/micropile', '/rock-anchor', '/shotcrete-facing',
   // standalone analysis helpers
   '/load-combinations', '/load-path', '/plumbing',

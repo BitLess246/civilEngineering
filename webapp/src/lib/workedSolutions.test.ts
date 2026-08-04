@@ -30,6 +30,12 @@ import { bromsClay, pyAnalysis } from '../engine/lateralPile'
 import { buildLateralPileSolution } from './lateralPileSolution'
 import { designRetainingWall } from '../engine/retainingWall'
 import { buildRetainingWallSolution } from './retainingWallSolution'
+import { activeThrust, passiveThrust, infiniteSlopeFS } from '../engine/geotech'
+import { coulombActiveThrust, coulombPassiveThrust, mononobeOkabe } from '../engine/coulomb'
+import { generalBearingCapacity } from '../engine/bearingGeneral'
+import {
+  buildEarthPressureSolution, buildBearingSolution, buildInfiniteSlopeSolution,
+} from './geotechPageSolutions'
 
 // ─────────────────────────────────────────────────────────────────────────
 // What a worked solution has to be, applied to every builder at once.
@@ -157,6 +163,28 @@ const BUILDERS: [string, () => SolutionStep[]][] = [
     return buildLateralPileSolution(pileIn, broms, py)
   }],
   ['retaining wall', () => buildRetainingWallSolution(rwIn, designRetainingWall(rwIn))],
+  ['earth pressure', () => {
+    const g = { phiDeg: 32, deltaDeg: 20, thetaDeg: 5, betaDeg: 10, gamma: 18, H: 5 }
+    return buildEarthPressureSolution(
+      { gamma: 18, H: 5, phiDeg: 32, surcharge: 12, deltaDeg: 20, thetaDeg: 5, betaDeg: 10, kh: 0.15, kv: 0 },
+      activeThrust({ gamma: 18, H: 5, phiDeg: 32, surcharge: 12 }),
+      passiveThrust({ gamma: 18, H: 5, phiDeg: 32 }),
+      coulombActiveThrust({ ...g, surcharge: 12 }),
+      coulombPassiveThrust(g),
+      mononobeOkabe({ ...g, kh: 0.15, kv: 0 }),
+    )
+  }],
+  ['bearing capacity', () => {
+    const bi = {
+      c: 20, phiDeg: 30, gamma: 18, gammaSat: 20, B: 2, L: 2.5, Df: 1.5,
+      waterTable: 2.5, eB: 0.1, loadInclination: 5, method: 'vesic' as const, FS: 3,
+    }
+    return buildBearingSolution(bi, generalBearingCapacity(bi))
+  }],
+  ['infinite slope', () => {
+    const si = { c: 5, phiDeg: 30, gamma: 18, z: 3, betaDeg: 20, seepage: true, gammaSat: 20 }
+    return buildInfiniteSlopeSolution(si, infiniteSlopeFS({ ...si, phiDeg: si.phiDeg }))
+  }],
 ]
 
 const eqs = (steps: SolutionStep[]) =>
@@ -184,6 +212,7 @@ describe.each(BUILDERS)('%s worked solution', (_name, build) => {
       // engineer can pull, which is exactly what this test is protecting.
       'Broms', 'Terzaghi', 'Boussinesq', 'Bishop', 'Fellenius', 'Janbu',
       'Schmertmann', 'Steinbrenner', 'Matlock', 'Skempton', 'Rankine', 'Coulomb',
+      'Prandtl', 'Reissner', 'Vesi', 'Meyerhof', 'Hansen', 'Taylor', 'Mononobe',
       'working stress', 'thin-cylinder', 'Good practice',
     ].join('|'), 'i')
     for (const s of steps) {
@@ -213,7 +242,9 @@ describe.each(BUILDERS)('%s worked solution', (_name, build) => {
   })
 
   it('carries units on the results', () => {
-    const united = eqs(steps).filter((t) => /\\text\{\s*(mm|kN|MPa|kN·m|m)/.test(t) || /\\text\{mm\}\^2/.test(t))
+    // kPa is as much a unit as MPa — the geotechnical sheets are written in
+    // it, and its absence here was a gap in the list, not in the sheets.
+    const united = eqs(steps).filter((t) => /\\text\{\s*(mm|kN|kPa|MPa|kN·m|m)/.test(t) || /\\text\{mm\}\^2/.test(t))
     expect(united.length).toBeGreaterThanOrEqual(3)
   })
 

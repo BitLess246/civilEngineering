@@ -29,6 +29,8 @@ import DevLength from './pages/DevLength'
 import PunchingShear from './pages/PunchingShear'
 import RetainingWall from './pages/RetainingWall'
 import Geotech from './pages/Geotech'
+import EarthPressure from './pages/EarthPressure'
+import BearingCapacity from './pages/BearingCapacity'
 import SoilNail from './pages/SoilNail'
 import StairDesign from './pages/StairDesign'
 import WoodSlab from './pages/WoodSlab'
@@ -109,6 +111,8 @@ export default function App() {
         <Route path="/punching-shear" element={<PunchingShear />} />
         <Route path="/retaining-wall" element={<RetainingWall />} />
         <Route path="/geotech" element={<Geotech />} />
+        <Route path="/earth-pressure" element={<EarthPressure />} />
+        <Route path="/bearing-capacity" element={<BearingCapacity />} />
         <Route path="/soil-nail" element={<SoilNail />} />
         <Route path="/stair" element={<StairDesign />} />
         <Route path="/wood-slab" element={<WoodSlab />} />
