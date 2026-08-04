@@ -5,6 +5,7 @@ import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
 import { buildPunchingSolution } from '../lib/punchingSolution'
 import { f0, f1, f2, f3 } from '../lib/format'
+import { WorkedSolution } from '../components/WorkedSolution'
 
 interface FormState {
   c1: number; c2: number         // column dimensions, mm
@@ -167,6 +168,12 @@ export default function PunchingShear() {
           </p>
         )}
       </div>
+      {/* The step-by-step already existed and only ever reached the PDF. */}
+      {solution && solution.length > 0 && (
+        <div className="mt-5">
+          <WorkedSolution steps={solution} title="Calculation report — worked solution" />
+        </div>
+      )}
     </div>
   )
 }
