@@ -1416,3 +1416,66 @@ log axis; linear axes get 1–2–5 round ticks via `linearTicks`; extrapolation
 beyond the tested range is dashed; annotations sit on an opaque `plate` in the
 corner the curve structurally cannot reach. Charts are `PlanPrimitive` lists
 serialised by the shared `planToSvg` — no chart draws pixels of its own.
+
+---
+
+# Page-polish backlog — CLOSED (PRs #504–#525, August 2026)
+
+An 18-item list of page-level defects and gaps, worked one PR per item. All
+closed. The engine-level items each turned up a **correctness** bug that the
+cosmetic complaint was sitting on top of — those are the parts worth
+remembering.
+
+## Correctness bugs found while doing cosmetic work
+
+| where | what was wrong | PR |
+|---|---|---|
+| `retainingWall` | `Mu_stem` / `Vu_stem` were SERVICE actions compared against φMn and φVc. ACI §5.3.1(e) gives U = 1.2D + 1.6L + **1.6H**, so the stem was under-designed by the full 1.6 (27.0 → 43.2 kN·m/m on the default wall). A test asserted the old behaviour. | #521 |
+| `retainingWall` | Base slab used the §9.6.1.2 **beam** minimum on b·d. It is a one-way slab: §7.6.1.1 → §24.4.3.2, ρ·Ag on the gross section. 41% less steel, and the applicable clause. | #521 |
+| `retainingWall` | The PDF divided B and H by 1000 when both were already in metres — every report printed "0.00 m" for base width and total height. | #521 |
+| `devLength` | **§25.4.1.4 was not implemented.** √f'c must be capped at 8.3 MPa for every §25.4 length; without it, concrete above ~69 MPa bought a shorter ld than the tests behind the clause support. | #522 |
+| `devLengthSolution` | `\text{d_b = 20 mm}` — an underscore in text mode is a KaTeX parse error, so that line printed as **raw LaTeX on every visit**. `EPOXY_WHY` was keyed on values the engine never emits. | #522 |
+| `sample.ts` (schedule) | The fixture was a 13-activity **chain**. The network diagram drew a straight line because that is what the data was, and in a chain every activity is critical, so float and resource levelling had nothing to say. | #523 |
+| Truss Space | Every member sized from one hand-picked section — 20% utilisation. Sizing per design group: 93%, 29% less steel. | #524 |
+
+## Two habits that paid, repeatedly
+
+**Render it and read it.** Every drawing shipped in this series had defects
+that green tests did not catch, and an automated overlap audit — every
+`<text>` box against every other and against the frame, over several
+geometries — caught them all:
+
+- labels printing through each other and running past the frame (#521, #522)
+- a `q,max` of **158 320 000 000 kPa** when the resultant left the base — a
+  divide-by-3x̄ that now reports "the wall overturns" instead (#521)
+- rebar drawn **outside the concrete** on a thin stem (#521, #522)
+- a hook tail poking out through the bottom of the member (#522)
+- an edge route that swung back **through** an activity box because the `T`
+  path command reflects its control point and overshoots (#523)
+
+The audit is worth keeping: it is ~30 lines of Playwright and it found more
+real defects than any unit test in the series.
+
+**Guard tests are worth their maintenance.** In #525 three separate guards
+fired on the new routes — the worked-solution contract (no prose, no units),
+`docsContent` (undocumented route), `trialQuota` (unclassified route) — and
+every one was right. Where a guard's *list* was the thing at fault (missing
+citations, missing `kPa`), the list grew; the guard was never weakened.
+
+## Things now shared rather than duplicated
+
+`splitLayers` / `centroidRise` (`barLayers.ts`), `udlStations` (`udl.ts`),
+`SceneText` + the bundled scene font, `CodeHint` (reusable clause popover,
+content held as testable data in `devLengthHints.ts`).
+
+## Left open, deliberately
+
+- **T-section gross properties** in `memberDeflection` still use the web
+  rectangle — conservative, flagged in #446.
+- **Slab cut-off fractions** (`DEFAULT_EXT` in `slabBarDetail.ts`) were
+  written from memory: the proxy blocks the ACI figure. **Verify against
+  ACI 318-14 Fig. 8.7.4.1.3(a) before trusting them.**
+- **Supabase migrations still need running by hand**: `20260731120000`
+  (app_metadata), `20260804000000` (guest_trials), `20260804010000`
+  (projects); then `supabase secrets set GUEST_TRIAL_SALT="$(openssl rand -hex 32)"`
+  and `supabase functions deploy guest-quota`.
