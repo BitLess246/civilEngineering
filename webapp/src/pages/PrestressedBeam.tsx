@@ -7,6 +7,7 @@ import { initialLetterhead } from '../lib/letterhead'
 import { Num, Pick, Card } from '../components/qty'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { DimBelow, DimSide } from '../components/dims'
+import { udlStations } from '../components/udl'
 
 const f1 = (v: number) => v.toFixed(1)
 
@@ -17,15 +18,17 @@ function PSElevation({ h, e, span }: { h: number; e: number; span: number }) {
   const x0 = 46, bw = 248
   const y0 = 74, H = 56
   const yc = y0 + H / 2, yTendon = Math.min(y0 + H - 5, yc + (e / h) * H)
-  const arrows = [0.08, 0.26, 0.44, 0.62, 0.8, 0.96].map((f) => x0 + f * bw)
+  const arrows = udlStations(bw).map((t) => x0 + t * bw)
   return (
     <svg viewBox={`0 0 ${W} ${HT}`} className="mx-auto block w-full max-w-[380px]" style={{ fontFamily: 'Arial, sans-serif' }}>
       {/* UDL: top line + arrows touching the beam's top edge */}
       <line x1={x0} y1={y0 - 26} x2={x0 + bw} y2={y0 - 26} stroke="#5c6675" strokeWidth="1.4" />
       {arrows.map((x) => (
         <g key={x} stroke="#5c6675" strokeWidth="1.4">
-          <line x1={x} y1={y0 - 26} x2={x} y2={y0 - 5} />
-          <path d={`M${x - 3.2} ${y0 - 6.5} L${x} ${y0 - 0.5} L${x + 3.2} ${y0 - 6.5} z`} fill="#5c6675" stroke="none" />
+          {/* The tip lands ON the top edge (y0). It used to stop at y0 − 0.5,
+              which with a 1.4 stroke reads as a load floating above the beam. */}
+          <line x1={x} y1={y0 - 26} x2={x} y2={y0 - 6} />
+          <path d={`M${x - 3.2} ${y0 - 6} L${x} ${y0} L${x + 3.2} ${y0 - 6} z`} fill="#5c6675" stroke="none" />
         </g>
       ))}
       <text x={x0 + bw / 2} y={y0 - 32} fontSize="8.5" fill="#5c6675" textAnchor="middle">w (D + L)</text>
