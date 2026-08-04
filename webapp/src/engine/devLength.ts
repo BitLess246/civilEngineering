@@ -2,9 +2,26 @@
 // Development and splice lengths — ACI 318-14 §25.4 + §25.5.
 // SI units: lengths mm, stress MPa.
 // Tension development: §25.4.2.3  (SI coefficient 1/1.1 ≈ 0.909).
+// Standard hook in tension: §25.4.3.1, with the §25.3.1 hook geometry.
 // Compression development: §25.4.9.2.
 // Splice — tension Class A/B: §25.5.2; compression: §25.5.5.1–2.
 // ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * §25.4.1.4 — the value of √f'c used to calculate a development length shall
+ * not exceed 8.3 MPa, i.e. f'c is effectively capped at about 69 MPa.
+ *
+ * The clause exists because the splitting bond tests behind §25.4 were run on
+ * ordinary-strength concrete; above that range the measured bond strength
+ * stops tracking √f'c. Without the cap, a high-strength mix buys a shorter
+ * development length than it has been shown to deliver — which is why this is
+ * a cap and not a convenience.
+ */
+export const SQRT_FC_MAX = 8.3
+
+/** √f'c as §25.4.1.4 allows it to be used. */
+export const devSqrtFc = (fc: number): number =>
+  Math.min(Math.sqrt(Math.max(fc, 1)), SQRT_FC_MAX)
 
 /** Epoxy-coating case for ψe factor (§25.4.2.4b). */
 export type EpoxyCase =
@@ -26,6 +43,17 @@ export interface DevLengthInput {
   epoxy: EpoxyCase     // coating → ψe
   lambda: number       // lightweight factor §19.2.4.1: 1.0 normal, 0.75 lightweight
   cbKtr_db: number     // (cb + Ktr)/db confinement term; internally capped at 2.5
+
+  /**
+   * §25.4.3.2 ψc — side cover to the hook ≥ 65 mm AND, for a 90° hook, cover
+   * on the tail extension ≥ 50 mm. Worth 0.7 for ⌀36 and smaller.
+   */
+  hookCover?: boolean
+  /**
+   * §25.4.3.2 ψr — the hook is enclosed within ties or stirrups perpendicular
+   * to the bar at s ≤ 3db. Worth 0.8 for ⌀36 and smaller.
+   */
+  hookTies?: boolean
 }
 
 export interface DevLengthResult {
@@ -51,11 +79,26 @@ export interface DevLengthResult {
 
   // Compression splice §25.5.5
   lsc: number          // compression splice length, mm (≥ 300)
+
+  /** √f'c as §25.4.1.4 permits it to be used, and whether the cap bit. */
+  sqrtFc: number
+  sqrtFcCapped: boolean
+
+  // Standard hook in tension §25.4.3
+  psi_c: number        // §25.4.3.2 cover factor  (0.7 or 1.0)
+  psi_r: number        // §25.4.3.2 confining factor (0.8 or 1.0)
+  ldh_raw: number      // formula result, before the 8db / 150 mm floor
+  ldh: number          // adopted, mm
+  /** §25.3.1 hook geometry, for detailing and for the drawing. */
+  hookTail: number     // 90° hook tail extension, 12db
+  hookBendDia: number  // minimum inside bend diameter, 6db or 8db
 }
 
 export function calcDevLength(i: DevLengthInput): DevLengthResult {
   const { db, fc, fy, lambda } = i
-  const sqrtFc = Math.sqrt(Math.max(fc, 1))
+  // §25.4.1.4 — the cap applies to every length in §25.4, not just to ld.
+  const sqrtFc = devSqrtFc(fc)
+  const sqrtFcCapped = Math.sqrt(Math.max(fc, 1)) > SQRT_FC_MAX + 1e-12
 
   // §25.4.2.4 modification factors
   const psi_t = i.topBar ? 1.3 : 1.0
@@ -87,5 +130,32 @@ export function calcDevLength(i: DevLengthInput): DevLengthResult {
   const lsc_fc  = fc < 21 ? (4 / 3) : 1.0
   const lsc     = Math.max(lsc_raw * lsc_fc, 300)
 
-  return { psi_t, psi_e, psi_s, psi_te, confine, ld_raw, ld, ldc, ls_A, ls_B, lsc }
+  // ── Standard hook in tension §25.4.3.1 ─────────────────────────────────
+  //
+  //     ldh = ( 0.24 · ψe · ψc · ψr · fy ) / ( λ √f'c ) · db
+  //
+  // measured from the CRITICAL SECTION to the OUTSIDE END of the hook, not to
+  // the bend. ψt does NOT appear: the casting-position penalty is a straight-
+  // bar bond effect, and a hook anchors mostly by bearing inside the bend.
+  //
+  // The ψc / ψr reductions apply only to ⌀36 and smaller (§25.4.3.2).
+  const hookEligible = db <= 36
+  const psi_c = hookEligible && i.hookCover ? 0.7 : 1.0
+  const psi_r = hookEligible && i.hookTies ? 0.8 : 1.0
+  // §25.4.3.2: ψe for a hook is 1.2 for epoxy-coated bars and 1.0 otherwise —
+  // it does not carry the 1.5 heavy-coating case that straight bars do.
+  const psi_e_hook = i.epoxy === 'none' ? 1.0 : 1.2
+  const ldh_raw = (0.24 * psi_e_hook * psi_c * psi_r * fy * db) / (lambda * sqrtFc)
+  const ldh = Math.max(ldh_raw, 8 * db, 150)
+
+  // §25.3.1 hook geometry — a 90° hook carries a 12db tail, and the minimum
+  // inside bend diameter steps up at ⌀28.
+  const hookTail = 12 * db
+  const hookBendDia = (db <= 25 ? 6 : 8) * db
+
+  return {
+    psi_t, psi_e, psi_s, psi_te, confine, ld_raw, ld, ldc, ls_A, ls_B, lsc,
+    sqrtFc, sqrtFcCapped,
+    psi_c, psi_r, ldh_raw, ldh, hookTail, hookBendDia,
+  }
 }
