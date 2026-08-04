@@ -1,361 +1,96 @@
-import { useState } from 'react'
-import { activeThrust, passiveThrust, infiniteSlopeFS } from '../engine/geotech'
-import { coulombActiveThrust, coulombPassiveThrust, mononobeOkabe } from '../engine/coulomb'
-import {
-  generalBearingCapacity, compareMethods, BEARING_METHOD_LABEL, type BearingMethod,
-} from '../engine/bearingGeneral'
-import { ReportControls } from '../components/ReportControls'
-import { SoilLayerPicker } from '../components/SoilLayerPicker'
+import { Link } from 'react-router-dom'
+import { ALL_TOOLS } from '../lib/tools'
 
-function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
+// ─────────────────────────────────────────────────────────────────────────
+// The geotechnical index.
+//
+// This route used to BE four calculators stacked on one screen: Rankine earth
+// pressure, Coulomb earth pressure, bearing capacity and infinite-slope
+// stability. They answer unrelated questions, are reached from different
+// points in a job, and none of them had room for a worked solution. They now
+// live at /earth-pressure, /bearing-capacity and (the infinite slope) beside
+// the method of slices at /slope, where a slope-stability method belongs.
+//
+// The route stays, as the index for the group — so an existing link still
+// lands somewhere useful, and there is one page that says what each tool is
+// for and when to reach for it.
+// ─────────────────────────────────────────────────────────────────────────
 
-function Field({ label, value, onChange, unit, step = 'any' }: {
-  label: string; value: number; onChange: (v: number) => void; unit?: string; step?: string
-}) {
-  return (
-    <label className="flex flex-col text-sm">
-      <span className="mb-1 font-medium text-slate-600">{label}{unit ? ` (${unit})` : ''}</span>
-      <input type="number" step={step} value={value} onChange={(e) => onChange(num(e.target.value))}
-        className="rounded-md border border-slate-300 px-2.5 py-1.5" />
-    </label>
-  )
+/** What each tool answers, and when it is the right one. */
+const WHEN: Record<string, string> = {
+  '/earth-pressure':
+    'Thrust on a wall from the soil behind it. Rankine for a smooth vertical wall and level fill; Coulomb when there is wall friction, an inclined face or a sloping backfill; Mononobe–Okabe for the seismic case.',
+  '/bearing-capacity':
+    'How much a shallow footing can carry before the soil shears. Meyerhof, Hansen or Vesić — named explicitly, because they disagree by design.',
+  '/retaining-wall':
+    'A whole cantilever wall: stability against overturning and sliding, bearing pressure, and the reinforcement in the stem, toe and heel.',
+  '/slope':
+    'Will the slope stand? Circular failure by the method of slices with a critical-circle search, plus the planar infinite-slope case for a shallow mantle.',
+  '/settlement':
+    'How far it will sink and how long that takes — immediate, consolidation and Schmertmann, layer by layer.',
+  '/lateral-pile':
+    'A pile pushed sideways: Broms for the ultimate load, p-y for the deflection and moment profile.',
+  '/soil-nail':
+    'Reinforcing an existing slope or excavation face in place, to FHWA GEC-7.',
+  '/shotcrete-facing':
+    'The facing that spans between soil nails — flexure and punching at the nail head.',
+  '/micropile':
+    'A small-diameter drilled pile: structural capacity of the bar and casing, and grout-to-ground bond.',
+  '/rock-anchor':
+    'A prestressed tendon anchored in rock — tendon capacity and bond length, to PTI.',
+  '/soils':
+    'The borehole log itself: SPT N-values, USCS classification and the layer properties every page above reads from.',
 }
 
-function Card({ title, sub, children }: { title: string; sub: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 className="text-[1.05rem] font-bold text-[#0056b3]">{title}</h2>
-      <p className="mb-3 text-[11px] text-slate-500">{sub}</p>
-      {children}
-    </section>
-  )
-}
-
-function Out({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between border-t border-slate-100 py-1 text-sm">
-      <span className="text-slate-500">{label}</span>
-      <span className="font-mono font-medium text-slate-800">{value}</span>
-    </div>
-  )
-}
-
-const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
-
-function EarthPressure() {
-  const [gamma, setGamma] = useState(18)
-  const [H, setH] = useState(5)
-  const [phi, setPhi] = useState(30)
-  const [q, setQ] = useState(10)
-  const a = activeThrust({ gamma, H, phiDeg: phi, surcharge: q })
-  const p = passiveThrust({ gamma, H, phiDeg: phi })
-  return (
-    <Card title="Lateral earth pressure — Rankine" sub="Level cohesionless backfill, smooth vertical wall.">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Field label="γ" unit="kN/m³" value={gamma} onChange={setGamma} />
-        <Field label="Wall height H" unit="m" value={H} onChange={setH} />
-        <Field label="φ" unit="°" value={phi} onChange={setPhi} />
-        <Field label="Surcharge q" unit="kPa" value={q} onChange={setQ} />
-      </div>
-      <div className="mt-3">
-        <Out label="Ka" value={f2(a.K)} />
-        <Out label="Active thrust Pa" value={`${f2(a.P)} kN/m`} />
-        <Out label="Acts at (above base)" value={`${f2(a.lineOfAction)} m`} />
-        <Out label="Kp" value={f2(p.K)} />
-        <Out label="Passive thrust Pp" value={`${f2(p.P)} kN/m`} />
-      </div>
-    </Card>
-  )
-}
-
-function Coulomb() {
-  const [phi, setPhi] = useState(30)
-  const [delta, setDelta] = useState(20)
-  const [theta, setTheta] = useState(0)
-  const [beta, setBeta] = useState(0)
-  const [gamma, setGamma] = useState(18)
-  const [H, setH] = useState(5)
-  const [q, setQ] = useState(0)
-  const [kh, setKh] = useState(0)
-  const [kv, setKv] = useState(0)
-
-  const g = { phiDeg: phi, deltaDeg: delta, thetaDeg: theta, betaDeg: beta, gamma, H }
-  let active: ReturnType<typeof coulombActiveThrust> | null = null
-  let passive: ReturnType<typeof coulombPassiveThrust> | null = null
-  let seismic: ReturnType<typeof mononobeOkabe> | null = null
-  let error: string | null = null
-  let seismicError: string | null = null
-  try {
-    active = coulombActiveThrust({ ...g, surcharge: q })
-    passive = coulombPassiveThrust(g)
-  } catch (e) {
-    error = e instanceof Error ? e.message : String(e)
-  }
-  if (kh > 0 && !error) {
-    try {
-      seismic = mononobeOkabe({ ...g, kh, kv })
-    } catch (e) {
-      seismicError = e instanceof Error ? e.message : String(e)
-    }
-  }
-
-  return (
-    <Card
-      title="Coulomb earth pressure — wall friction, inclined face, sloping fill"
-      sub="Rankine cannot carry wall friction or an inclined back face. At δ = θ = β = 0 this reduces exactly to Rankine. Set kh for the Mononobe–Okabe seismic case.">
-      <div className="mb-3">
-        <SoilLayerPicker
-          want={['phiDeg', 'gamma']}
-          onApply={(f) => {
-            if (f.phiDeg != null) setPhi(f.phiDeg)
-            if (f.gamma != null) setGamma(f.gamma)
-          }} />
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Field label="φ" unit="°" value={phi} onChange={setPhi} />
-        <Field label="Wall friction δ" unit="°" value={delta} onChange={setDelta} />
-        <Field label="Back face θ from vert." unit="°" value={theta} onChange={setTheta} />
-        <Field label="Backfill slope β" unit="°" value={beta} onChange={setBeta} />
-        <Field label="γ" unit="kN/m³" value={gamma} onChange={setGamma} />
-        <Field label="Height H" unit="m" value={H} onChange={setH} />
-        <Field label="Surcharge q" unit="kPa" value={q} onChange={setQ} />
-        <Field label="Seismic kh" value={kh} onChange={setKh} />
-        <Field label="Seismic kv" value={kv} onChange={setKv} />
-      </div>
-
-      {error && (
-        <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">{error}</p>
-      )}
-
-      {active && (
-        <div className="mt-3">
-          <Out label="Ka (Coulomb)" value={f2(active.K)} />
-          <Out label="Active thrust Pa" value={`${f2(active.P)} kN/m at ${f2(active.inclinationDeg)}° from horizontal`} />
-          <Out label="  horizontal / vertical" value={`${f2(active.horizontal)} / ${f2(active.vertical)} kN/m`} />
-          <Out label="  acts at" value={`${f2(active.lineOfAction)} m above base`} />
-        </div>
-      )}
-      {passive && (
-        <div className="mt-2">
-          <Out label="Kp (Coulomb)" value={f2(passive.K)} />
-          <Out label="Passive thrust Pp" value={`${f2(passive.P)} kN/m`} />
-        </div>
-      )}
-
-      {seismicError && (
-        <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">
-          {seismicError}
-        </p>
-      )}
-      {seismic && (
-        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-          <p className="mb-1 text-[11px] font-semibold text-amber-900">Mononobe–Okabe (seismic)</p>
-          <Out label="ψ" value={`${f2(seismic.psiDeg)}°`} />
-          <Out label="Kae" value={f2(seismic.K)} />
-          <Out label="Total Pae" value={`${f2(seismic.P)} kN/m`} />
-          <Out label="Static Pa" value={`${f2(seismic.staticP)} kN/m`} />
-          <Out label="Increment ΔPae" value={`${f2(seismic.increment)} kN/m at ${f2(seismic.incrementLineOfAction)} m`} />
-          <Out label="Combined line of action" value={`${f2(seismic.lineOfAction)} m above base`} />
-        </div>
-      )}
-
-      <ul className="mt-3 space-y-1">
-        {[...(active?.notes ?? []), ...(passive?.notes ?? []), ...(seismic?.notes ?? [])].map((n, k) => (
-          <li key={k} className="text-[11px] text-amber-900">{n}</li>
-        ))}
-      </ul>
-    </Card>
-  )
-}
-
-function Bearing() {
-  const [c, setC] = useState(20)
-  const [phi, setPhi] = useState(30)
-  const [gamma, setGamma] = useState(18)
-  const [gammaSat, setGammaSat] = useState(20)
-  const [B, setB] = useState(2)
-  const [L, setL] = useState(2)
-  const [strip, setStrip] = useState(false)
-  const [Df, setDf] = useState(1.5)
-  const [dw, setDw] = useState<number | ''>('')
-  const [eB, setEB] = useState(0)
-  const [incl, setIncl] = useState(0)
-  const [method, setMethod] = useState<BearingMethod>('vesic')
-  const [FS, setFS] = useState(3)
-
-  const input = {
-    c, phiDeg: phi, gamma, gammaSat, B, L: strip ? Infinity : L, Df,
-    waterTable: dw === '' ? undefined : dw,
-    eB, loadInclination: incl, FS,
-  }
-
-  let r: ReturnType<typeof generalBearingCapacity> | null = null
-  let error: string | null = null
-  try {
-    r = generalBearingCapacity({ ...input, method })
-  } catch (e) {
-    error = e instanceof Error ? e.message : String(e)
-  }
-  const all = r ? compareMethods(input) : null
-
-  return (
-    <Card
-      title="Bearing capacity — general equation"
-      sub="qu = c·Nc·sc·dc·ic + q·Nq·sq·dq·iq + ½·γ′·B′·Nγ·sγ·dγ·iγ.  Method chosen explicitly; the three differ on Nγ and on their shape/depth factors.">
-      <div className="mb-3">
-        <SoilLayerPicker
-          want={['c', 'phiDeg', 'gamma', 'gammaSat']}
-          onApply={(f) => {
-            if (f.c != null) setC(f.c)
-            if (f.phiDeg != null) setPhi(f.phiDeg)
-            if (f.gamma != null) setGamma(f.gamma)
-            if (f.gammaSat != null) setGammaSat(f.gammaSat)
-          }} />
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Field label="Cohesion c" unit="kPa" value={c} onChange={setC} />
-        <Field label="φ" unit="°" value={phi} onChange={setPhi} />
-        <Field label="γ" unit="kN/m³" value={gamma} onChange={setGamma} />
-        <Field label="γsat" unit="kN/m³" value={gammaSat} onChange={setGammaSat} />
-        <Field label="Width B" unit="m" value={B} onChange={setB} />
-        {!strip && <Field label="Length L" unit="m" value={L} onChange={setL} />}
-        <Field label="Depth Df" unit="m" value={Df} onChange={setDf} />
-        <label className="flex flex-col text-sm">
-          <span className="mb-1 font-medium text-slate-600">Water table (m)</span>
-          <input type="number" step="0.5" value={dw} placeholder="none"
-            onChange={(e) => setDw(e.target.value === '' ? '' : parseFloat(e.target.value))}
-            className="rounded-md border border-slate-300 px-2.5 py-1.5" />
-        </label>
-        <Field label="Eccentricity eB" unit="m" value={eB} onChange={setEB} />
-        <Field label="Load inclination β" unit="°" value={incl} onChange={setIncl} />
-        <label className="flex flex-col text-sm">
-          <span className="mb-1 font-medium text-slate-600">Method</span>
-          <select value={method} onChange={(e) => setMethod(e.target.value as BearingMethod)}
-            className="rounded-md border border-slate-300 px-2.5 py-1.5">
-            {(['meyerhof', 'hansen', 'vesic'] as BearingMethod[]).map((m) => (
-              <option key={m} value={m}>{BEARING_METHOD_LABEL[m]}</option>
-            ))}
-          </select>
-        </label>
-        <Field label="FS" value={FS} onChange={setFS} />
-      </div>
-
-      <label className="mt-2 flex items-center gap-2 text-[12px] text-slate-600">
-        <input type="checkbox" checked={strip} onChange={(e) => setStrip(e.target.checked)} />
-        Strip footing (L → ∞)
-      </label>
-
-      {error && (
-        <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[12px] text-red-800">{error}</p>
-      )}
-
-      {r && (
-        <>
-          <div className="mt-3">
-            <Out label="Nc / Nq / Nγ" value={`${f2(r.Nc)} / ${f2(r.Nq)} / ${f2(r.Ngamma)}`} />
-            <Out label="Shape sc / sq / sγ" value={`${f2(r.sc)} / ${f2(r.sq)} / ${f2(r.sgamma)}`} />
-            <Out label="Depth dc / dq / dγ" value={`${f2(r.dc)} / ${f2(r.dq)} / ${f2(r.dgamma)}`} />
-            <Out label="Inclination ic / iq / iγ" value={`${f2(r.ic)} / ${f2(r.iq)} / ${f2(r.igamma)}`} />
-            <Out label="Effective B′" value={`${f2(r.effectiveB)} m`} />
-            <Out label="Surcharge q" value={`${f2(r.surcharge)} kPa`} />
-            <Out label="γ in the Nγ term" value={`${f2(r.gammaEffective)} kN/m³`} />
-            <Out label="Ultimate qult" value={`${f2(r.qult)} kPa`} />
-            <Out label="Net ultimate qnet" value={`${f2(r.qnet)} kPa`} />
-            <Out label={`Allowable NET (FS ${f2(FS)})`} value={`${f2(r.qallowNet)} kPa`} />
-            <Out label="Allowable gross" value={`${f2(r.qallowGross)} kPa`} />
-          </div>
-
-          {all && (
-            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <p className="mb-1 text-[11px] font-semibold text-slate-700">All three methods, same footing</p>
-              <div className="flex flex-wrap gap-3 text-[12px]">
-                {(['meyerhof', 'hansen', 'vesic'] as BearingMethod[]).map((m) => (
-                  <span key={m} className={`font-mono ${m === method ? 'font-bold text-[#0056b3]' : 'text-slate-600'}`}>
-                    {BEARING_METHOD_LABEL[m].split(' ')[0]}: {f2(all[m].qult)} kPa
-                  </span>
-                ))}
-              </div>
-              <p className="mt-1 text-[10px] text-slate-500">
-                They disagree by design. A bearing pressure quoted without naming its method is not reproducible.
-              </p>
-            </div>
-          )}
-
-          <ul className="mt-3 space-y-1">
-            {r.notes.map((n, k) => (
-              <li key={k} className="text-[11px] text-amber-900">{n}</li>
-            ))}
-          </ul>
-        </>
-      )}
-    </Card>
-  )
-}
-
-function Slope() {
-  const [c, setC] = useState(5)
-  const [phi, setPhi] = useState(30)
-  const [gamma, setGamma] = useState(18)
-  const [z, setZ] = useState(3)
-  const [beta, setBeta] = useState(20)
-  const [seepage, setSeepage] = useState(false)
-  const [gammaSat, setGammaSat] = useState(20)
-  const fs = infiniteSlopeFS({ c, phiDeg: phi, gamma, z, betaDeg: beta, seepage, gammaSat })
-  return (
-    <Card title="Slope stability — infinite slope" sub="Planar failure at depth z; optional seepage parallel to the slope.">
-      <div className="mb-3">
-        <SoilLayerPicker
-          want={['c', 'phiDeg', 'gamma', 'gammaSat']}
-          onApply={(f) => {
-            if (f.c != null) setC(f.c)
-            if (f.phiDeg != null) setPhi(f.phiDeg)
-            if (f.gamma != null) setGamma(f.gamma)
-            if (f.gammaSat != null) setGammaSat(f.gammaSat)
-          }} />
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Field label="Cohesion c" unit="kPa" value={c} onChange={setC} />
-        <Field label="φ" unit="°" value={phi} onChange={setPhi} />
-        <Field label="γ" unit="kN/m³" value={gamma} onChange={setGamma} />
-        <Field label="Depth z" unit="m" value={z} onChange={setZ} />
-        <Field label="Slope β" unit="°" value={beta} onChange={setBeta} />
-        {seepage && <Field label="γsat" unit="kN/m³" value={gammaSat} onChange={setGammaSat} />}
-      </div>
-      <label className="mt-3 flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={seepage} onChange={(e) => setSeepage(e.target.checked)} />
-        <span>Seepage parallel to slope (water table at surface)</span>
-      </label>
-      <div className="mt-2">
-        <Out label="Factor of safety" value={f2(fs)} />
-        <Out label="Assessment" value={fs >= 1.5 ? '✓ Stable (FS ≥ 1.5)' : fs >= 1 ? '⚠ Marginal' : '✗ Unstable'} />
-      </div>
-    </Card>
-  )
-}
+/** Order the index by how a job actually runs: site data, then the ground
+ *  checks, then the things you build into it. */
+const ORDER = [
+  '/soils',
+  '/bearing-capacity', '/settlement',
+  '/earth-pressure', '/retaining-wall',
+  '/slope', '/soil-nail', '/shotcrete-facing',
+  '/lateral-pile', '/micropile', '/rock-anchor',
+]
 
 export default function Geotech() {
+  const tools = ALL_TOOLS.filter((t) => t.group === 'Geotechnical' && t.to !== '/geotech')
+  const sorted = [...tools].sort((a, b) => {
+    const ia = ORDER.indexOf(a.to), ib = ORDER.indexOf(b.to)
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
+  })
+
   return (
-    <main className="mx-auto max-w-[1400px] px-5 py-10">
+    <main className="mx-auto max-w-[1100px] px-5 py-10 sm:px-7">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
-      <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Geotechnical toolkit</h1>
-      <ReportControls title="Geotechnical Report" badges={['NSCP 2015']} />
+      <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-[#0056b3]">Geotechnical tools</h1>
       <p className="mt-2 max-w-3xl text-sm text-slate-600">
-        Classic soil-mechanics checks — Rankine and Coulomb lateral earth pressure (with the
-        Mononobe–Okabe seismic case), shallow-foundation bearing capacity by Meyerhof, Hansen or
-        Vesić, and infinite-slope stability. All formulas are closed-form and cross-checked against
-        the <a href="/validation" className="text-[#0056b3] underline">validation benchmarks</a>.
+        Every calculation is closed-form and cross-checked against the{' '}
+        <Link to="/validation" className="text-[#0056b3] underline">validation benchmarks</Link>.
+        Soil properties entered on{' '}
+        <Link to="/soils" className="text-[#0056b3] underline">Soil Investigation</Link>{' '}
+        can be pulled into any of these with the layer picker, so a φ typed once is the φ used everywhere.
       </p>
-      <div className="mt-6 space-y-5">
-        <EarthPressure />
-        <Coulomb />
-        <Bearing />
-        <Slope />
+
+      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {sorted.map((t) => (
+          <Link key={t.to} to={t.to}
+            className="group rounded-lg border border-[#e3e1da] bg-white p-4 transition-colors hover:border-[#0f4c92]">
+            <div className="flex items-baseline gap-2">
+              <h2 className="text-[13.5px] font-bold text-[#0f1b2a] group-hover:text-[#0f4c92]">{t.name}</h2>
+              <span className="font-mono text-[10px] text-[#a39d8d]">{t.sub}</span>
+            </div>
+            <p className="mt-1 text-[12px] leading-relaxed text-[#5c6675]">
+              {WHEN[t.to] ?? t.sub}
+            </p>
+          </Link>
+        ))}
       </div>
-      <p className="mt-6 text-[11px] text-slate-500">
-        Nq and Nc are Prandtl/Reissner in every method; only Nγ and the shape/depth factors differ, and
-        the result records which method produced it. Use engineering judgement and site-specific
-        investigation; these are preliminary checks.
+
+      <p className="mt-8 max-w-3xl text-[11px] text-slate-500">
+        Earth pressure, bearing capacity and slope stability used to share this one page. They are
+        now three separate tools, each with a step-by-step solution: a bearing pressure and a wall
+        thrust are reached at different points in a job and have nothing to say to each other.
+        These remain preliminary checks — use engineering judgement and a site-specific investigation.
       </p>
     </main>
   )

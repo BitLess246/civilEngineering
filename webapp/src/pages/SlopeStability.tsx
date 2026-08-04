@@ -5,6 +5,9 @@ import {
   type Pt, type SlopeSoil, type WaterModel, type CircleResult,
 } from '../engine/slopeStability'
 import { buildSlopeSolution } from '../lib/slopeSolution'
+import { infiniteSlopeFS } from '../engine/geotech'
+import { buildInfiniteSlopeSolution } from '../lib/geotechPageSolutions'
+import { WorkedSolution } from '../components/WorkedSolution'
 import { SoilLayerPicker } from '../components/SoilLayerPicker'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
@@ -103,6 +106,18 @@ export default function SlopeStability() {
   const [gamma, setGamma] = useState(18)
   const [ru, setRu] = useState(0)
   const [method, setMethod] = useState<'bishop' | 'fellenius' | 'janbu'>('bishop')
+  // Infinite slope — moved here from the combined "Geotechnical toolkit" page.
+  // It is a slope-stability method, so it belongs beside the method of slices
+  // rather than three screens away next to bearing capacity.
+  const [infZ, setInfZ] = useState(3)
+  const [infSeepage, setInfSeepage] = useState(false)
+  const [infGammaSat, setInfGammaSat] = useState(20)
+  const infFS = useMemo(
+    () => infiniteSlopeFS({ c, phiDeg: phi, gamma, z: infZ, betaDeg: beta, seepage: infSeepage, gammaSat: infGammaSat }),
+    [c, phi, gamma, infZ, beta, infSeepage, infGammaSat])
+  const infSteps = useMemo(
+    () => buildInfiniteSlopeSolution({ c, phiDeg: phi, gamma, z: infZ, betaDeg: beta, seepage: infSeepage, gammaSat: infGammaSat }, infFS),
+    [c, phi, gamma, infZ, beta, infSeepage, infGammaSat, infFS])
 
   const ground = useMemo(() => groundOf(H, beta, crestW, toeW), [H, beta, crestW, toeW])
   const soil: SlopeSoil = { c, phiDeg: phi, gamma }
@@ -158,6 +173,8 @@ export default function SlopeStability() {
       <p className="mt-2 text-sm text-slate-600">
         Circular-failure factor of safety by the method of slices — Fellenius/OMS, Bishop&rsquo;s simplified and
         Janbu&rsquo;s simplified — with a grid search for the critical (minimum-FS) circle. Pore pressure via ru.
+        The infinite-slope check below covers the other failure mode: a planar slide in a shallow
+        mantle, where every slice is identical and the answer is closed-form.
       </p>
 
       <section className="mt-6">
@@ -249,6 +266,45 @@ export default function SlopeStability() {
           </p>
         </section>
       )}
+
+      {/* ── Infinite slope — the OTHER failure mode ────────────────────── */}
+      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-[1.05rem] font-bold text-[#0056b3]">Infinite slope — planar failure</h2>
+        <p className="mb-3 text-[11px] text-slate-500">
+          A shallow soil mantle sliding on a plane parallel to the ground — over rock, or a firm
+          stratum. Uses the same c, φ, γ and slope angle β entered above.
+        </p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <label className="flex flex-col text-sm">
+            <span className="mb-1 font-medium text-slate-600">Failure depth z (m)</span>
+            <input type="number" step="0.5" value={infZ}
+              onChange={(e) => setInfZ(parseFloat(e.target.value) || 0)}
+              className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+          </label>
+          {infSeepage && (
+            <label className="flex flex-col text-sm">
+              <span className="mb-1 font-medium text-slate-600">γsat (kN/m³)</span>
+              <input type="number" step="0.5" value={infGammaSat}
+                onChange={(e) => setInfGammaSat(parseFloat(e.target.value) || 0)}
+                className="rounded-md border border-slate-300 px-2.5 py-1.5" />
+            </label>
+          )}
+        </div>
+        <label className="mt-3 flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={infSeepage} onChange={(e) => setInfSeepage(e.target.checked)} />
+          <span>Seepage parallel to the slope (water table at the surface)</span>
+        </label>
+        <div className="mt-3 flex items-baseline justify-between border-t border-slate-100 pt-2">
+          <span className="text-sm text-slate-500">Factor of safety</span>
+          <span className={`font-mono text-lg font-bold ${infFS >= 1.5 ? 'text-green-700' : infFS >= 1 ? 'text-amber-700' : 'text-red-700'}`}>
+            {Number.isFinite(infFS) ? infFS.toFixed(2) : '—'}
+            <span className="ml-2 text-[11px] font-normal">
+              {infFS >= 1.5 ? '✓ stable' : infFS >= 1 ? '⚠ marginal' : '✗ unstable'}
+            </span>
+          </span>
+        </div>
+        <WorkedSolution steps={infSteps} title="Infinite slope — worked solution" />
+      </section>
     </main>
   )
 }
