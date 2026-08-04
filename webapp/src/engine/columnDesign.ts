@@ -23,6 +23,12 @@ export type ColumnShape  = 'tied' | 'spiral'
 export type LateralSystem = 'gravity' | 'imf' | 'smf'
 
 // ── Axial (short, concentric) ────────────────────────────────────────────
+/** Longitudinal steel ratio limits for a compression member — ACI 318-14
+ *  §10.6.1.1 / NSCP §410.6.1.1. Exported so the page's footnote quotes the
+ *  numbers the check actually uses. */
+export const RHO_MIN = 0.01
+export const RHO_MAX = 0.08
+
 export interface AxialColumnInput {
   shape: ColumnShape
   b?: number; h?: number       // tied rectangular, mm
@@ -51,7 +57,7 @@ export interface AxialColumnResult {
   bars: number
   Ast: number                  // provided, mm²
   rho: number
-  rhoOK: boolean               // 0.01 ≤ ρ ≤ 0.08
+  rhoOK: boolean               // RHO_MIN ≤ ρ ≤ RHO_MAX
   minBars: number
   Po: number                   // kN
   PnMax: number                // kN
@@ -93,7 +99,7 @@ export function designAxialColumn(i: AxialColumnInput): AxialColumnResult {
   const bars = i.numBars ?? Math.max(minBars, Math.ceil(AstReq / Ab))
   const Ast = bars * Ab
   const rho = Ast / Ag
-  const rhoOK = rho >= 0.01 - 1e-9 && rho <= 0.08 + 1e-9
+  const rhoOK = rho >= RHO_MIN - 1e-9 && rho <= RHO_MAX + 1e-9
 
   const Po = (0.85 * i.fc * (Ag - Ast) + i.fy * Ast) / 1000
   const PnMax = alpha * Po

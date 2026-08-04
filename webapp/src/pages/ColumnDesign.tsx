@@ -1,11 +1,15 @@
 import { useMemo, useState } from 'react'
 import {
   designAxialColumn, interaction, capacityAtEccentricity, momentMagnificationNonsway,
+  RHO_MIN, RHO_MAX,
   type ColumnShape, type LateralSystem, type BarLayout,
 } from '../engine/columnDesign'
 import { factoredLoad } from '../engine/loads'
 import { ColumnSchematic } from '../components/ColumnSchematic'
-import { PageHeader, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import {
+  PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport,
+  type LetterheadState, type VerdictStat, type VerdictCheck,
+} from '../components/calc'
 import { initialLetterhead } from '../lib/letterhead'
 import { InteractionDiagram } from '../components/InteractionDiagram'
 import { WorkedSolution } from '../components/WorkedSolution'
@@ -92,6 +96,48 @@ export default function ColumnDesign() {
   }, [slender, eccentric, inter, cap, axial, Pu, MuEff])
 
   const util = cap && cap.phi * cap.Pn > 1e-9 ? Pu / (cap.phi * cap.Pn) : null
+
+  /**
+   * The on-screen verdict, and the SAME object the printed report uses.
+   *
+   * Built once rather than assembled twice: the PDF already carried a headline,
+   * a governing line, stat tiles and utilisation checks, and the page carried
+   * none of them. Two hand-built copies of a pass/fail verdict is how a sheet
+   * ends up saying OK while the screen says otherwise.
+   */
+  const verdict = useMemo(() => {
+    if (!axial) return null
+    const ok = (eccentric ? util !== null && util <= 1 && !unstable : axial.axialOK) && axial.rhoOK
+    const spacing = tied ? axial.tieSpacingFinal : axial.spiralPitch
+    const checks: VerdictCheck[] = []
+    // Axial capacity is meaningful in both modes; the P–M check only exists
+    // once there is a moment to interact with.
+    if (axial.phiPnMax > 1e-9) checks.push({ name: 'Axial Pu/φPn,max', ratio: Pu / axial.phiPnMax })
+    if (eccentric && util !== null) checks.push({ name: 'P–M interaction Pu/φPn', ratio: util })
+    // ρ against the 8% ceiling (§410.6.1.1). The 1% floor is a minimum, not a
+    // utilisation, so it belongs in the footnote rather than on a bar.
+    checks.push({ name: 'Steel ratio ρ/ρmax', ratio: axial.rho / RHO_MAX })
+    return {
+      ok,
+      headline: ok
+        ? `DESIGN OK — ${tied ? 'tied' : 'spiral'}, ${eccentric && slender?.slender ? 'slender' : 'short'}`
+        : 'CHECK FAILED — revise the section',
+      governing: eccentric
+        ? (unstable
+          ? 'Slender column unstable — Pu ≥ 0.75·Pc (§406.6.4)'
+          : `Governing: P–M interaction · utilization ${util !== null ? util.toFixed(2) : '—'}`)
+        : `Governing: axial · φPn,max = ${f1(axial.phiPnMax)} kN`,
+      stats: [
+        { label: 'Longitudinal', value: `${axial.bars}-⌀${barDia}`, unit: `ρ ${(axial.rho * 100).toFixed(2)}%` },
+        { label: tied ? 'Ties' : 'Spiral',
+          value: `⌀${tied ? Math.max(tieDia, axial.tieDiaMin) : tieDia}`,
+          unit: `@${f0(spacing)} mm` },
+        { label: 'φPn,max', value: f1(axial.phiPnMax), unit: 'kN' },
+      ] as VerdictStat[],
+      checks,
+      footnote: `ρ = ${(axial.rho * 100).toFixed(2)}% within ${(RHO_MIN * 100).toFixed(0)} … ${(RHO_MAX * 100).toFixed(0)}% — §410.6.1.1${eccentric && slender ? ` · δ = ${slender.delta.toFixed(3)}` : ''}`,
+    }
+  }, [axial, eccentric, util, unstable, tied, slender, Pu, barDia, tieDia])
 
   // ~12 representative rows for the P-M table, balanced point always included.
   const tableRows = useMemo(() => {
@@ -205,6 +251,11 @@ export default function ColumnDesign() {
         </div>
 
         <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
+          {verdict && (
+            <VerdictPanel ok={verdict.ok} headline={verdict.headline} governing={verdict.governing}
+              stats={verdict.stats} checks={verdict.checks} footnote={verdict.footnote} />
+          )}
+
           {/* The same card the beam page uses — graph-paper ground, title and
               section meta in a header strip above the drawing. The two pages
               draw the same kind of thing and should look like it. */}
