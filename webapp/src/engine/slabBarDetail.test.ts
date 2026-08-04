@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  slabBarRuns, tempSteelArea, tempSpacingMax, DEFAULT_EXT, type BarRun,
+  slabBarRuns, tempSteelArea, tempSpacingMax, DEFAULT_EXT, DROP_PANEL_EXT, type BarRun,
 } from './slabBarDetail'
 
 // 6 m centres, 400 mm columns → ℓn = 5.6 m, faces at 0.2 and 5.8 m.
@@ -61,13 +61,29 @@ describe('slabBarRuns', () => {
     expect(cont.x2).toBeLessThanOrEqual(6)
   })
 
-  it('stops the discontinuous bottom bars short of the supports', () => {
-    const b = bottom(layout().runs)
-    const short = b.find((r) => r.label.includes('from face'))!
-    expect(short.x1).toBeCloseTo(0.2 + 0.20 * 5.6, 9)
-    expect(short.x2).toBeCloseTo(5.8 - 0.20 * 5.6, 9)
-    // …and that they still overlap mid-span rather than leaving a gap.
+  it('gives the COLUMN strip no short bottom run — its bottom mat is 100% continuous', () => {
+    // Fig. 8.7.4.1.3(a): the column-strip bottom row reads "100% …
+    // Continuous bars", with splices permitted only in the mid-span region.
+    // An earlier version cut these at 0.20ℓn from each face — a run the
+    // figure does not contain, and one that would have removed the very bars
+    // §8.7.4.2 keeps through the column core.
+    expect(DEFAULT_EXT.column.bottomShort).toBeNull()
+    const b = bottom(layout('column').runs)
+    expect(b).toHaveLength(1)
+    expect(b[0].label).toMatch(/^continuous/)
+  })
+
+  it('stops the MIDDLE strip remainder at 0.15ℓn from the support centreline', () => {
+    const b = bottom(layout('middle').runs)
+    const short = b.find((r) => r.label.includes('0.15'))!
+    // Measured from the CENTRELINE (x = 0 and x = L1), not the face.
+    expect(short.x1).toBeCloseTo(0.15 * 5.6, 9)
+    expect(short.x2).toBeCloseTo(6 - 0.15 * 5.6, 9)
+    // …and it still spans mid-span rather than leaving a gap.
     expect(short.x1).toBeLessThan(short.x2)
+    // It must reach CLOSER to the support than a face-datum reading would,
+    // which is the conservative direction if the datum were misread.
+    expect(short.x1).toBeLessThan(0.2 + 0.15 * 5.6)
   })
 
   it('gives the middle strip shorter top runs than the column strip', () => {
@@ -116,5 +132,52 @@ describe('tempSpacingMax — §24.4.3.3', () => {
     expect(tempSpacingMax(80)).toBe(400)    // 5h governs on a thin slab
     expect(tempSpacingMax(200)).toBe(450)   // the 450 cap governs
     expect(tempSpacingMax(90)).toBe(450)    // 5h = 450, the boundary
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// Every number pinned to ACI 318-14 Fig. 8.7.4.1.3(a), so a future edit that
+// drifts from the figure fails here rather than on a drawing.
+// ─────────────────────────────────────────────────────────────────────────
+describe('the extensions match Fig. 8.7.4.1.3(a)', () => {
+  it('column strip, without drop panels: top 0.30 / 0.20, bottom continuous', () => {
+    expect(DEFAULT_EXT.column.topLong).toBe(0.30)
+    expect(DEFAULT_EXT.column.topShort).toBe(0.20)
+    expect(DEFAULT_EXT.column.bottomShort).toBeNull()
+  })
+
+  it('middle strip: top 100% at 0.22, bottom remainder at 0.15', () => {
+    // The figure gives ONE top extension for the middle strip at 100%, so
+    // both runs carry the same fraction rather than a long/short split.
+    expect(DEFAULT_EXT.middle.topLong).toBe(0.22)
+    expect(DEFAULT_EXT.middle.topShort).toBe(0.22)
+    expect(DEFAULT_EXT.middle.bottomShort).toBe(0.15)
+  })
+
+  it('carries the 6 in. embedment as 150 mm in both strips', () => {
+    expect(DEFAULT_EXT.column.supportEmbed).toBe(150)
+    expect(DEFAULT_EXT.middle.supportEmbed).toBe(150)
+  })
+
+  it('with drop panels, ONLY the column-strip long top run moves — 0.30 → 0.33', () => {
+    expect(DROP_PANEL_EXT.column.topLong).toBe(0.33)
+    expect(DROP_PANEL_EXT.column.topShort).toBe(DEFAULT_EXT.column.topShort)
+    expect(DROP_PANEL_EXT.column.bottomShort).toBeNull()
+    expect(DROP_PANEL_EXT.middle).toEqual(DEFAULT_EXT.middle)
+  })
+
+  it('the drop panel lengthens the top steel — it does not shorten it', () => {
+    const noDrop = slabBarRuns(L1, C, H, COVER, DEFAULT_EXT.column)
+    const drop = slabBarRuns(L1, C, H, COVER, DROP_PANEL_EXT.column)
+    const longest = (r: BarRun[]) => Math.max(...top(r).map((x) => x.x2 - x.x1))
+    expect(longest(drop.runs)).toBeGreaterThan(longest(noDrop.runs))
+  })
+
+  it('labels say which datum each cut-off is measured from', () => {
+    // A cut-off length on a drawing is useless without its datum, and the
+    // two mats use different ones: top from the face, bottom from the ℄.
+    const mid = layout('middle').runs
+    expect(bottom(mid).find((r) => r.label.includes('0.15'))!.label).toContain('℄')
+    expect(top(mid)[0].label).toMatch(/ℓn/)
   })
 })
