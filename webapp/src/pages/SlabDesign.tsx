@@ -9,6 +9,7 @@ import { SlabBarSection } from '../components/SlabBarSection'
 import { tempSteelArea, tempSpacingMax } from '../engine/slabBarDetail'
 import { f0, f1, f2 } from '../lib/format'
 import 'katex/dist/katex.min.css'
+import { WorkedSolution } from '../components/WorkedSolution'
 
 interface FormState {
   lx: number; ly: number
@@ -283,6 +284,12 @@ export default function SlabDesign() {
           )}
         </div>
       </div>
+      {/* The step-by-step already existed and only ever reached the PDF. */}
+      {solution && solution.length > 0 && (
+        <div className="mt-5">
+          <WorkedSolution steps={solution} title="Calculation report — worked solution" />
+        </div>
+      )}
     </div>
   )
 }

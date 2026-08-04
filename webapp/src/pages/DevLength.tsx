@@ -5,6 +5,7 @@ import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
 import { buildDevLengthSolution } from '../lib/devLengthSolution'
 import { f0, f1, f2 } from '../lib/format'
+import { WorkedSolution } from '../components/WorkedSolution'
 
 const BAR_SIZES: [string, string][] = [
   ['10', '10 mm (ø10)'],
@@ -172,6 +173,12 @@ export default function DevLength() {
           </p>
         )}
       </div>
+      {/* The step-by-step already existed and only ever reached the PDF. */}
+      {solution && solution.length > 0 && (
+        <div className="mt-5">
+          <WorkedSolution steps={solution} title="Calculation report — worked solution" />
+        </div>
+      )}
     </div>
   )
 }

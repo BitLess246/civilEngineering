@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { designMicropile } from '../engine/micropile'
 import { ReportControls } from '../components/ReportControls'
 import { buildMicropileSolution } from '../lib/geotechSolutions'
+import { WorkedSolution } from '../components/WorkedSolution'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -137,6 +138,10 @@ export default function Micropile() {
           π·Dbond·Lbond·αbond / FS. Verify buckling in very soft soils and group/settlement effects separately.
         </p>
       </section>
+      {/* The step-by-step already existed and only ever reached the PDF. */}
+      <div className="mt-5">
+        <WorkedSolution steps={solution} title="Calculation report — worked solution" />
+      </div>
     </main>
   )
 }

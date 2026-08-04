@@ -7,6 +7,7 @@ import {
   type SoilLayer,
 } from '../engine/settlement'
 import { buildSettlementSolution } from '../lib/settlementSolution'
+import { WorkedSolution } from '../components/WorkedSolution'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -281,6 +282,10 @@ export default function Settlement() {
           about 1% — not the series itself.
         </p>
       </section>
+      {/* The step-by-step already existed and only ever reached the PDF. */}
+      <div className="mt-5">
+        <WorkedSolution steps={solution} title="Calculation report — worked solution" />
+      </div>
     </main>
   )
 }
