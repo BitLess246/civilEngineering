@@ -222,7 +222,12 @@ function ActivityGrid({ project, solve, update }: {
               <FragmentGroup key={key || 'unassigned'}>
                 <tr className="border-b border-[#eeece5] bg-[#f4f3ef]">
                   <td className={td}>
-                    <button type="button" onClick={() => toggleGroup(key)} className="text-[#7a7568] hover:text-[#0f1b2a]" aria-label="collapse">
+                    {/* A bare grey glyph read as decoration. It is a control:
+                        give it a border, a hit area and a title. */}
+                    <button type="button" onClick={() => toggleGroup(key)}
+                      title={isCollapsed ? 'Expand this WBS group' : 'Collapse this WBS group'}
+                      aria-expanded={!isCollapsed}
+                      className="flex h-[18px] w-[18px] items-center justify-center rounded border border-[#d6d3c9] bg-white text-[10px] leading-none text-[#5b5648] hover:border-[#0056b3] hover:text-[#0056b3]">
                       {isCollapsed ? '▸' : '▾'}
                     </button>
                   </td>
@@ -238,7 +243,10 @@ function ActivityGrid({ project, solve, update }: {
                     <FragmentGroup key={a.id}>
                       <tr className={`border-b border-[#f1efe8] ${critical ? 'bg-[#fdf3f0]' : 'hover:bg-[#faf9f5]'}`}>
                         <td className={td}>
-                          <button type="button" onClick={() => setOpen(isOpen ? null : a.id)} className="text-[#7a7568] hover:text-[#0f4c92]" aria-label="expand">{isOpen ? '▾' : '▸'}</button>
+                          <button type="button" onClick={() => setOpen(isOpen ? null : a.id)}
+                            title={isOpen ? 'Hide activity detail' : 'Show activity detail'}
+                            aria-expanded={isOpen}
+                            className="flex h-[18px] w-[18px] items-center justify-center rounded border border-[#d6d3c9] bg-white text-[10px] leading-none text-[#5b5648] hover:border-[#0056b3] hover:text-[#0056b3]">{isOpen ? '▾' : '▸'}</button>
                         </td>
                         <td className={`${td} font-mono text-[11px] text-[#5c6675]`}>{a.id}</td>
                         <td className={td}>
@@ -330,6 +338,7 @@ function ValidationPanel({ solve }: { solve: ScheduleSolve }) {
 function ProjectBar({ api }: { api: ReturnType<typeof useScheduleProject> }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [confirmDel, setConfirmDel] = useState(false)
 
   const onImport = (file: File) => {
     const reader = new FileReader()
@@ -358,6 +367,21 @@ function ProjectBar({ api }: { api: ReturnType<typeof useScheduleProject> }) {
       )}
       <button type="button" onClick={() => api.newProject()} className={btn}>New</button>
       <button type="button" onClick={() => api.loadSample()} className={btn}>Load sample</button>
+      {/* Deleting ASKS. A schedule is weeks of sequencing and there is no undo
+          — the same rule the Projects panel follows. `api.remove` already
+          existed; nothing had ever called it. */}
+      {api.activeId && (confirmDel
+        ? (
+          <span className="inline-flex items-center gap-1.5 rounded border border-red-200 bg-red-50 px-2 py-1">
+            <span className="text-[11.5px] text-red-900">Delete “{api.projects.find((p) => p.id === api.activeId)?.name}”?</span>
+            <button type="button" onClick={() => { api.remove(api.activeId!); setConfirmDel(false) }}
+              className="rounded bg-red-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-red-700">Delete</button>
+            <button type="button" onClick={() => setConfirmDel(false)} className={btn}>Keep</button>
+          </span>
+        )
+        : <button type="button" onClick={() => setConfirmDel(true)}
+            className="rounded-md border border-red-200 px-2 py-1.5 text-[12px] font-semibold text-red-700 hover:bg-red-50">Delete</button>
+      )}
       <button type="button" onClick={() => fileRef.current?.click()} className={btn}>Import</button>
       <button type="button" onClick={onExport} className={btn}>Export</button>
       <input ref={fileRef} type="file" accept=".json,application/json" className="hidden"
