@@ -8,6 +8,7 @@ import {
 } from '../engine/settlement'
 import { buildSettlementSolution } from '../lib/settlementSolution'
 import { WorkedSolution } from '../components/WorkedSolution'
+import { SoilProfile } from '../components/SoilProfile'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -183,6 +184,17 @@ export default function Settlement() {
           <Field label="Poisson ν" value={nu} onChange={setNu} step="0.05" />
           <Field label="Time horizon" unit="yr" value={years} onChange={setYears} step="1" />
         </div>
+      </section>
+
+      <section data-pdf-drawing className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm
+        [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
+        <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Soil profile</h2>
+        <SoilProfile
+          layers={cons.layers.map((l, i) => ({
+            name: l.name || `Layer ${i + 1}`, zTop: l.zTop, H: l.H,
+            dSigma: l.dSigma, sigma0: l.sigma0, settlement: l.settlement,
+          }))}
+          Df={Df} B={B} waterTable={wt} q={q} governing={govLayer} />
       </section>
 
       <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
