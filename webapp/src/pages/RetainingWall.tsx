@@ -2,6 +2,9 @@ import { useMemo, useState } from 'react'
 import { designRetainingWall, type RetainingWallInput } from '../engine/retainingWall'
 import { Num, Card, ResultCard, Row } from '../components/qty'
 import { PageHeader, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import { RetainingWallSection } from '../components/RetainingWallSection'
+import { WorkedSolution } from '../components/WorkedSolution'
+import { buildRetainingWallSolution, retainingWallBarNote } from '../lib/retainingWallSolution'
 import { initialLetterhead } from '../lib/letterhead'
 import { f1, f2, f3 } from '../lib/format'
 
@@ -49,15 +52,19 @@ export default function RetainingWall() {
       <PageHeader title="Cantilever Retaining Wall" badges={['NSCP 2015', 'ACI 318-14']} />
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
 
-      {/* Schematic legend */}
-      <pre className="no-print mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-[0.65rem] leading-tight text-slate-500">
-{`         |← ts →|
-         +-------+  ← top (Hs)
-         | stem  |
-─────────+───────+──────────  ← top of base
-|← bt →|← ts →|←── bh ──→|
-|           base  (tb)      |`}
-      </pre>
+      {/* The section drawing carries what the numbers cannot: which FACE each
+          mat of bars goes on, and where the two thrust resultants act. */}
+      {r && (
+        <div className="mt-5 rounded-xl border border-slate-200 bg-white p-4 print-avoid-break">
+          <RetainingWallSection
+            Hs={f.Hs} tb={f.tb} ts={f.ts} bt={f.bt} bh={f.bh}
+            Pa={r.Pa} Pq={r.Pq} q_sur={f.q_sur}
+            H={r.H} B={r.B}
+            q_max={r.q_max} q_min={r.q_min} xbar={r.xbar} e={r.e}
+            bars={retainingWallBarNote(f, r)}
+          />
+        </div>
+      )}
 
       <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
         {/* ── INPUTS ── */}
@@ -138,12 +145,52 @@ export default function RetainingWall() {
 
             <ResultCard title="Stem Design (at base)">
               <Row label="Effective depth d"  value={`${f1(r.d_stem)} mm`} />
-              <Row label="Vu (shear demand)"  value={`${f1(r.Vu_stem)} kN/m`} />
+              <Row label="Vu (factored)"      value={`${f1(r.Vu_stem)} kN/m`} sub="1.6H per §5.3.1(e)" />
               <Row label="φVc"                value={`${f1(r.Vc_stem)} kN/m`} alert={!r.shearOK} />
-              <Row label="Mu (moment demand)" value={`${f1(r.Mu_stem)} kN·m/m`} />
+              <Row label="Mu (factored)"      value={`${f1(r.Mu_stem)} kN·m/m`} />
               <Row label="As required"        value={`${f1(r.As_stem)} mm²/m`} />
               <Row label="As minimum"         value={`${f1(r.As_min)} mm²/m`} />
               <Row label="As design"          value={`${f1(r.As_design)} mm²/m`} />
+              <Row label="Vertical bars (earth face)"
+                value={`⌀${f.barDia} @ ${f1(r.s_stem)} mm`}
+                sub={`provides ${f1(r.As_stem_prov)} mm²/m · s,max ${f1(r.s_stem_max)} mm`} />
+              <Row label="Horizontal bars"
+                value={`⌀${f.barDia} @ ${f1(r.s_horiz)} mm`}
+                sub={`§11.6.1 ρt = 0.0020 → ${f1(r.As_horiz)} mm²/m`} />
+            </ResultCard>
+
+            <ResultCard title="Base Slab — factored pressure">
+              <Row label="ΣVu"        value={`${f1(r.sumVu)} kN/m`} sub="1.2D + 1.6L" />
+              <Row label="x̄u from toe" value={`${f2(r.xbar_u)} m`} />
+              <Row label="qu at toe"  value={`${f1(r.qu_toe)} kPa`} />
+              <Row label="qu at heel" value={`${f1(r.qu_heel)} kPa`}
+                sub={r.uplift_u ? 'triangular block — resultant outside the middle third' : undefined}
+                alert={r.uplift_u} />
+            </ResultCard>
+
+            <ResultCard title="Toe (bottom steel)">
+              <Row label="Projection"     value={`${f2(r.toe.L)} m`} />
+              <Row label="Mu at stem face" value={`${f1(r.toe.Mu)} kN·m/m`} />
+              <Row label="Vu at d from face" value={`${f1(r.toe.Vu)} kN/m`} />
+              <Row label="φVc"            value={`${f1(r.toe.phiVc)} kN/m`} alert={!r.toe.shearOK} />
+              <Row label="As design"      value={`${f1(r.toe.As_design)} mm²/m`}
+                sub={r.toe.As_min >= r.toe.As ? '§7.6.1.1 minimum governs' : 'flexure governs'} />
+              <Row label="Bars"           value={`⌀${f.barDiaBase ?? f.barDia} @ ${f1(r.toe.spacing)} mm`}
+                sub={`provides ${f1(r.toe.As_prov)} mm²/m`} />
+            </ResultCard>
+
+            <ResultCard title="Heel (top steel)">
+              <Row label="Projection"      value={`${f2(r.heel.L)} m`} />
+              <Row label="Mu at stem face" value={`${f1(r.heel.Mu)} kN·m/m`} />
+              <Row label="Vu at face"      value={`${f1(r.heel.Vu)} kN/m`} />
+              <Row label="φVc"             value={`${f1(r.heel.phiVc)} kN/m`} alert={!r.heel.shearOK} />
+              <Row label="As design"       value={`${f1(r.heel.As_design)} mm²/m`}
+                sub={r.heel.As_min >= r.heel.As ? '§7.6.1.1 minimum governs' : 'flexure governs'} />
+              <Row label="Bars"            value={`⌀${f.barDiaBase ?? f.barDia} @ ${f1(r.heel.spacing)} mm`}
+                sub={`provides ${f1(r.heel.As_prov)} mm²/m`} />
+              <Row label="Temperature steel"
+                value={`⌀${f.barDiaBase ?? f.barDia} @ ${f1(r.s_temp_base)} mm`}
+                sub={`§24.4.3.2 → ${f1(r.As_temp_base)} mm²/m`} />
             </ResultCard>
           </div>
         ) : (
@@ -152,22 +199,29 @@ export default function RetainingWall() {
           </p>
         )}
       </div>
+      {r && <WorkedSolution steps={buildRetainingWallSolution(f, r)} />}
+
       <div className="no-print mt-5"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>
       {r && (
         <PrintReport
           docTitle="Cantilever Retaining Wall" docCode="RW-01" badges={['NSCP 2015', 'ACI 318-14']}
-          ok={r.stableSL && r.stableOT && r.bearingOK && r.tensionOK && r.shearOK}
+          ok={r.stableSL && r.stableOT && r.bearingOK && r.tensionOK && r.shearOK && r.toe.shearOK && r.heel.shearOK}
           governing={`FS sliding ${f2(r.FS_SL)} · FS overturning ${f2(r.FS_OT)} · q,max ${f1(r.q_max)} kPa`}
           lh={lh}
           stats={[
-            { label: 'Base width B', value: f2(r.B / 1000), unit: 'm' },
-            { label: 'Total height H', value: f2(r.H / 1000), unit: 'm' },
+            // B and H are ALREADY in metres — dividing by 1000 again printed
+            // a 2.3 m base as "0.00 m" on every report this page produced.
+            { label: 'Base width B', value: f2(r.B), unit: 'm' },
+            { label: 'Total height H', value: f2(r.H), unit: 'm' },
             { label: 'q,max', value: f1(r.q_max), unit: 'kPa' },
           ]}
           checks={[
             { name: 'Sliding (FS req 1.5 / FS)', ratio: 1.5 / r.FS_SL, ok: r.stableSL },
             { name: 'Overturning (FS req 2.0 / FS)', ratio: 2.0 / r.FS_OT, ok: r.stableOT },
             { name: 'Bearing q,max / qa', ratio: r.q_max / f.qa, ok: r.bearingOK },
+            { name: 'Stem shear Vu / φVc', ratio: r.Vu_stem / r.Vc_stem, ok: r.shearOK },
+            { name: 'Toe shear Vu / φVc', ratio: r.toe.Vu / r.toe.phiVc, ok: r.toe.shearOK },
+            { name: 'Heel shear Vu / φVc', ratio: r.heel.Vu / r.heel.phiVc, ok: r.heel.shearOK },
           ]}
           data={[
             ['Stem height Hs', `${f.Hs} mm`], ['Base thickness tb', `${f.tb} mm`],
