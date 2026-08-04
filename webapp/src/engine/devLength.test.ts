@@ -153,3 +153,99 @@ describe('calcDevLength — compression splices §25.5.5', () => {
     expect(r.lsc).toBeGreaterThanOrEqual(300)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────
+// §25.4.1.4 — the √f'c cap, and the standard hook of §25.4.3.
+// ─────────────────────────────────────────────────────────────────────────
+describe("§25.4.1.4 — √f'c is capped at 8.3 MPa", () => {
+  const at = (fc: number) => calcDevLength({
+    db: 20, fc, fy: 415, topBar: false, epoxy: 'none', lambda: 1, cbKtr_db: 1.5,
+  })
+
+  it('leaves ordinary strengths alone', () => {
+    expect(at(28).sqrtFc).toBeCloseTo(Math.sqrt(28), 9)
+    expect(at(28).sqrtFcCapped).toBe(false)
+  })
+
+  it('caps at 8.3 and says so', () => {
+    // √69 = 8.307 — just over the cap; √100 = 10 is well over.
+    expect(at(100).sqrtFc).toBe(8.3)
+    expect(at(100).sqrtFcCapped).toBe(true)
+  })
+
+  it('stops ld shrinking with strength once the cap bites', () => {
+    // Without the cap, ld ∝ 1/√f'c would keep falling. It must not.
+    expect(at(100).ld).toBeCloseTo(at(200).ld, 9)
+    expect(at(100).ld).toBeGreaterThan(0)
+  })
+
+  it('applies the cap to EVERY §25.4 length, not just ld', () => {
+    expect(at(100).ldc).toBeCloseTo(at(200).ldc, 9)
+    expect(at(100).ldh).toBeCloseTo(at(200).ldh, 9)
+  })
+
+  it('the cap is conservative — capped ld is LONGER than uncapped would be', () => {
+    const capped = at(100).ld
+    const uncapped = (415 * at(100).psi_te * at(100).psi_s * 20) / (1.1 * 1 * Math.sqrt(100) * 1.5)
+    expect(capped).toBeGreaterThan(uncapped)
+  })
+})
+
+describe('standard hook in tension — §25.4.3', () => {
+  const base = {
+    db: 20, fc: 28, fy: 415, topBar: false, epoxy: 'none' as const,
+    lambda: 1, cbKtr_db: 1.5,
+  }
+  const r = calcDevLength(base)
+
+  it('matches the hand calculation for the reference bar', () => {
+    // ldh = 0.24(1.0)(1.0)(1.0)(415)/(1.0·√28) · 20
+    //     = 99.6/5.2915 · 20 = 376.5 mm
+    expect(r.ldh_raw).toBeCloseTo((0.24 * 415 * 20) / Math.sqrt(28), 3)
+    expect(r.ldh_raw).toBeCloseTo(376.5, 0)
+    expect(r.ldh).toBeCloseTo(r.ldh_raw, 6)
+  })
+
+  it('is much shorter than the straight ld — the whole reason hooks exist', () => {
+    expect(r.ldh).toBeLessThan(r.ld)
+  })
+
+  it('applies the max(8db, 150) floor', () => {
+    // A small bar in strong concrete drives the formula below 8db.
+    const small = calcDevLength({ ...base, db: 10, fy: 275, fc: 55 })
+    expect(small.ldh).toBe(Math.max(8 * 10, 150))
+    expect(small.ldh).toBeGreaterThan(small.ldh_raw)
+  })
+
+  it('ψc = 0.7 for adequate cover, ψr = 0.8 for confining ties', () => {
+    expect(calcDevLength({ ...base, hookCover: true }).psi_c).toBe(0.7)
+    expect(calcDevLength({ ...base, hookTies: true }).psi_r).toBe(0.8)
+    const both = calcDevLength({ ...base, hookCover: true, hookTies: true })
+    expect(both.ldh_raw).toBeCloseTo(r.ldh_raw * 0.7 * 0.8, 6)
+  })
+
+  it('withholds ψc and ψr from bars larger than ⌀36 — §25.4.3.2', () => {
+    const big = calcDevLength({ ...base, db: 40, hookCover: true, hookTies: true })
+    expect(big.psi_c).toBe(1.0)
+    expect(big.psi_r).toBe(1.0)
+  })
+
+  it('uses ψe = 1.2 for a coated hook, never the straight-bar 1.5', () => {
+    const heavy = calcDevLength({ ...base, epoxy: 'coated-heavy' })
+    expect(heavy.psi_e).toBe(1.5)                       // straight bar
+    expect(heavy.ldh_raw).toBeCloseTo(r.ldh_raw * 1.2, 6)  // hook
+  })
+
+  it('ignores the casting-position penalty — ψt does not apply to hooks', () => {
+    const top = calcDevLength({ ...base, topBar: true })
+    expect(top.psi_t).toBe(1.3)                 // still reported for ld
+    expect(top.ldh).toBeCloseTo(r.ldh, 9)       // but the hook is unchanged
+    expect(top.ld).toBeGreaterThan(r.ld)        // while ld does grow
+  })
+
+  it('gives the §25.3.1 hook geometry', () => {
+    expect(r.hookTail).toBe(12 * 20)
+    expect(r.hookBendDia).toBe(6 * 20)                        // ⌀25 and smaller
+    expect(calcDevLength({ ...base, db: 32 }).hookBendDia).toBe(8 * 32)  // ⌀28+
+  })
+})

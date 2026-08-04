@@ -6,6 +6,9 @@ import { ReportControls } from '../components/ReportControls'
 import { buildDevLengthSolution } from '../lib/devLengthSolution'
 import { f0, f1, f2 } from '../lib/format'
 import { WorkedSolution } from '../components/WorkedSolution'
+import { CodeHint } from '../components/CodeHint'
+import { DevLengthDetail } from '../components/DevLengthDetail'
+import { DEV_HINTS } from '../lib/devLengthHints'
 
 const BAR_SIZES: [string, string][] = [
   ['10', '10 mm (ø10)'],
@@ -20,7 +23,9 @@ const BAR_SIZES: [string, string][] = [
 
 interface FormState extends Omit<DevLengthInput, 'db' | 'lambda'> {
   db: string
-  lambda: '1' | '0.75'
+  lambda: '1' | '0.85' | '0.75'
+  hookCover: boolean
+  hookTies: boolean
 }
 
 const DEFAULTS: FormState = {
@@ -30,6 +35,8 @@ const DEFAULTS: FormState = {
   epoxy: 'none',
   lambda: '1',
   cbKtr_db: 1.5,
+  hookCover: false,
+  hookTies: false,
 }
 
 const EPOXY_OPTS: [EpoxyCase, string][] = [
@@ -53,6 +60,7 @@ export default function DevLength() {
       epoxy: f.epoxy,
       lambda: parseFloat(f.lambda),
       cbKtr_db: f.cbKtr_db,
+      hookCover: f.hookCover, hookTies: f.hookTies,
     })
   }, [f])
 
@@ -62,6 +70,7 @@ export default function DevLength() {
   const solution = r ? buildDevLengthSolution({
     db: parseFloat(f.db), fc: f.fc, fy: f.fy, topBar: f.topBar,
     epoxy: f.epoxy, lambda: parseFloat(f.lambda), cbKtr_db: f.cbKtr_db,
+    hookCover: f.hookCover, hookTies: f.hookTies,
   }, r) : null
 
   const report = r ? {
@@ -71,6 +80,7 @@ export default function DevLength() {
     stats: [
       { label: 'ld (tension)', value: f0(r.ld), unit: 'mm' },
       { label: 'Class B splice', value: f0(r.ls_B), unit: 'mm' },
+      { label: 'ldh (hook)', value: f0(r.ldh), unit: 'mm' },
       { label: 'ldc (compression)', value: f0(r.ldc), unit: 'mm' },
     ],
     data: [
@@ -84,6 +94,9 @@ export default function DevLength() {
       ['λ (lightweight)', f.lambda],
       ['Confinement (cb+Ktr)/db', r.confine.toFixed(2)],
       ['ld before 300 mm floor', `${f0(r.ld_raw)} mm`],
+      ["√f'c used (§25.4.1.4 cap 8.3)", r.sqrtFc.toFixed(2)],
+      ['Hook ψc / ψr', `${r.psi_c.toFixed(2)} / ${r.psi_r.toFixed(2)}`],
+      ['Hook ℓdh', `${f0(r.ldh)} mm`],
       ['Class A splice', `${f0(r.ls_A)} mm`],
       ['Compression splice', `${f0(r.lsc)} mm`],
     ] as [string, string][],
@@ -106,27 +119,48 @@ export default function DevLength() {
         {/* ── INPUTS ── */}
         <div className="flex flex-col gap-6">
           <Card title="Bar &amp; Concrete">
-            <Pick label="Bar diameter db" value={f.db} onChange={set('db')} options={BAR_SIZES} />
-            <Num  label="f'c" unit="MPa" value={f.fc} onChange={set('fc')} />
-            <Num  label="fy"  unit="MPa" value={f.fy} onChange={set('fy')} />
-            <Pick label="Lightweight concrete λ" value={f.lambda} onChange={set('lambda')}
-              options={[['1', '1.0 — Normal weight'], ['0.75', '0.75 — Lightweight']]} />
+            <Pick label={<>Bar diameter db<CodeHint spec={DEV_HINTS.db} /></>}
+              value={f.db} onChange={set('db')} options={BAR_SIZES} />
+            <Num  label={<>f'c<CodeHint spec={DEV_HINTS.fc} /></>}
+              unit="MPa" value={f.fc} onChange={set('fc')} />
+            <Num  label={<>fy<CodeHint spec={DEV_HINTS.fy} /></>}
+              unit="MPa" value={f.fy} onChange={set('fy')} />
+            <Pick label={<>Lightweight concrete λ<CodeHint spec={DEV_HINTS.lambda} /></>}
+              value={f.lambda} onChange={set('lambda')}
+              options={[
+                ['1', '1.0 — Normalweight'],
+                ['0.85', '0.85 — Sand-lightweight'],
+                ['0.75', '0.75 — All-lightweight'],
+              ]} />
           </Card>
 
           <Card title="Modification Factors §25.4.2.4">
-            <Pick label="Bar position" value={f.topBar ? 'top' : 'other'}
+            <Pick label={<>Bar position<CodeHint spec={DEV_HINTS.psiT} /></>}
+              value={f.topBar ? 'top' : 'other'}
               onChange={(v) => set('topBar')(v === 'top')}
               options={[['other', 'Other bars (ψt = 1.0)'], ['top', 'Top bar >300 mm (ψt = 1.3)']]} />
-            <Pick label="Epoxy coating" value={f.epoxy} onChange={set('epoxy')}
-              options={EPOXY_OPTS} />
+            <Pick label={<>Epoxy coating<CodeHint spec={DEV_HINTS.psiE} /></>}
+              value={f.epoxy} onChange={set('epoxy')} options={EPOXY_OPTS} />
           </Card>
 
           <Card title="Confinement §25.4.2.3">
-            <Num label="(cb + Ktr) / db" value={f.cbKtr_db} onChange={set('cbKtr_db')}
-              step="0.1" />
+            <Num label={<>(cb + Ktr) / db<CodeHint spec={DEV_HINTS.confine} /></>}
+              value={f.cbKtr_db} onChange={set('cbKtr_db')} step="0.1" />
             <div className="col-span-full text-xs text-slate-500 -mt-2">
               cb = smaller of cover-to-bar-CL or half cc spacing · Ktr = 40Atr/(s·n) · cap 2.5.
               Use 1.5 when in doubt (conservative), 2.5 with adequate cover and ties.
+            </div>
+          </Card>
+
+          <Card title={<>Standard Hook §25.4.3<CodeHint spec={DEV_HINTS.hook} /></>}>
+            <Pick label="Side / tail cover ψc" value={f.hookCover ? 'yes' : 'no'}
+              onChange={(v) => set('hookCover')(v === 'yes')}
+              options={[['no', 'Not satisfied (ψc = 1.0)'], ['yes', 'Cover ≥ 65/50 mm (ψc = 0.7)']]} />
+            <Pick label="Confining ties ψr" value={f.hookTies ? 'yes' : 'no'}
+              onChange={(v) => set('hookTies')(v === 'yes')}
+              options={[['no', 'Not satisfied (ψr = 1.0)'], ['yes', 'Ties at s ≤ 3db (ψr = 0.8)']]} />
+            <div className="col-span-full -mt-2 text-xs text-slate-500">
+              ψc and ψr apply to ⌀36 and smaller only. ψt does NOT apply to hooks.
             </div>
           </Card>
         </div>
@@ -142,12 +176,25 @@ export default function DevLength() {
                 alert={r.psi_t * r.psi_e > 1.7} />
               <Row label="(cb+Ktr)/db used"      value={f2(r.confine)}
                 sub={r.confine < f.cbKtr_db ? 'capped at 2.5' : ''} />
+              <Row label="√f'c used" value={f2(r.sqrtFc)}
+                sub={r.sqrtFcCapped ? '§25.4.1.4 cap 8.3 applied' : ''}
+                alert={r.sqrtFcCapped} />
             </ResultCard>
 
             <ResultCard title="Development Length — Tension §25.4.2.3">
               <Row label="ℓd (formula)" value={`${f0(r.ld_raw)} mm`} />
               <Row label="ℓd (adopted ≥ 300 mm)" value={`${f0(r.ld)} mm`}
                 sub={`${f1(r.ld / parseFloat(f.db))} db`} />
+            </ResultCard>
+
+            <ResultCard title="Standard Hook — Tension §25.4.3">
+              <Row label="ψc — cover" value={f2(r.psi_c)} />
+              <Row label="ψr — confining ties" value={f2(r.psi_r)} />
+              <Row label="ℓdh (formula)" value={`${f0(r.ldh_raw)} mm`} />
+              <Row label="ℓdh (adopted)" value={`${f0(r.ldh)} mm`}
+                sub={`${f1(r.ldh / parseFloat(f.db))} db · floor max(8db, 150)`} />
+              <Row label="Tail 12db (not part of ℓdh)" value={`${f0(r.hookTail)} mm`} />
+              <Row label="Min inside bend ⌀" value={`${f0(r.hookBendDia)} mm`} />
             </ResultCard>
 
             <ResultCard title="Development Length — Compression §25.4.9.2">
@@ -173,6 +220,20 @@ export default function DevLength() {
           </p>
         )}
       </div>
+      {/* What the four lengths are measured BETWEEN — the part the numbers
+          on their own cannot carry. */}
+      {r && (
+        <div className="mt-6 rounded-lg border border-[#e3e1da] bg-white p-4 print-avoid-break">
+          <h2 className="mb-3 text-[13.5px] font-bold text-[#0f1b2a]">
+            Detail — where each length is measured from
+          </h2>
+          <DevLengthDetail
+            db={parseFloat(f.db)} ld={r.ld} ldh={r.ldh} ls_B={r.ls_B}
+            hookTail={r.hookTail} hookBendDia={r.hookBendDia}
+          />
+        </div>
+      )}
+
       {/* The step-by-step already existed and only ever reached the PDF. */}
       {solution && solution.length > 0 && (
         <div className="mt-5">

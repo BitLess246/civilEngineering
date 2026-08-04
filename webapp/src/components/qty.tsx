@@ -21,7 +21,9 @@ export function Num({ label, unit, value, onChange, step = 'any', hint }: {
 }
 
 export function Pick<T extends string>({ label, value, onChange, options }: {
-  label: string; value: T; onChange: (v: T) => void; options: [T, string][]
+  // ReactNode, not string, so a label can carry a `<CodeHint>` beside it —
+  // the same widening `Num` already had.
+  label: ReactNode; value: T; onChange: (v: T) => void; options: [T, string][]
 }) {
   return (
     <label className="flex flex-col text-sm">
