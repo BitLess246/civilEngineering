@@ -3,6 +3,10 @@ import { Link } from 'react-router-dom'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { SceneText } from '../components/SceneText'
+import { ProjectsPanel } from '../components/ProjectsPanel'
+// The session keys are shared with the Projects panel, which saves and
+// restores exactly what the page autosaves — see lib/modelSpaceSession.
+import { AUTOSAVE_KEY, INPUTS_KEY } from '../lib/modelSpaceSession'
 import * as THREE from 'three'
 import { generateGridModel, removeElements, removeNode, buildGravityLoads, splitSharedSections } from '../engine/modelBuilder'
 import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole, MemberReleases, NodeSupport, SupportFixity, WoodDeck } from '../engine/model'
@@ -87,8 +91,6 @@ const DEFAULT_DECK: WoodDeck = {
   joistSupport: 'simple', deckMaterial: 'plank', deckThickness: 25, deckSupport: 'continuous',
 }
 
-const AUTOSAVE_KEY = 'model-space-autosave'
-const INPUTS_KEY = 'model-space-inputs'
 
 
 /** The design inputs persisted alongside the autosaved model so a reload keeps
@@ -742,7 +744,7 @@ function DirPicker({ value, onChange }: { value: string[]; onChange: (v: string[
 }
 
 // ── Right-panel tabs ────────────────────────────────────────────────────────
-type Tab = 'geometry' | 'properties' | 'supports' | 'loading' | 'analysis' | 'modal' | 'pushover' | 'nonlinear' | 'design' | 'plans'
+type Tab = 'geometry' | 'properties' | 'supports' | 'loading' | 'analysis' | 'modal' | 'pushover' | 'nonlinear' | 'design' | 'plans' | 'projects'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'geometry', label: 'Geometry' },
   { id: 'properties', label: 'Properties' },
@@ -754,6 +756,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'nonlinear', label: 'Nonlinear' },
   { id: 'design', label: 'Design' },
   { id: 'plans', label: 'Plans' },
+  { id: 'projects', label: 'Projects' },
 ]
 /** Flat panel section (3D Model Space mockup): uppercase mini-title, no card
  *  chrome — hairline separation comes from the parent's divide-y. */
@@ -4296,6 +4299,8 @@ export default function ModelSpace() {
               </Sec>
             </div>
           )}
+          {tab === 'projects' && <ProjectsPanel />}
+
           {tab === 'plans' && model && (
             <div className="px-4 py-3">
               <PlansPanel model={model} design={design} soil={soil} />

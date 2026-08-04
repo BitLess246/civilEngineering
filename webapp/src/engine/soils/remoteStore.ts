@@ -29,6 +29,7 @@
 
 import type { Investigation } from './model'
 import { SOILS_SCHEMA_VERSION, isInvestigation, type InvestigationSummary, type SoilsStore } from './store'
+import { contentHash as hashOf } from '../../lib/contentHash'
 
 
 export interface RemoteRecord {
@@ -127,38 +128,12 @@ export interface SyncReport {
 }
 
 /**
- * Stable JSON — keys sorted at every level, so two structurally equal
- * investigations hash the same regardless of the order their fields were set.
+ * Content fingerprint of an investigation — the shared rule from
+ * `lib/contentHash`, re-exported so this module's callers keep one import.
+ * The argument is narrowed to `Investigation` on purpose: hashing anything
+ * else here would be a call-site mistake, not a feature.
  */
-function stableStringify(v: unknown): string {
-  if (v === null || typeof v !== 'object') return JSON.stringify(v) ?? 'null'
-  if (Array.isArray(v)) return `[${v.map(stableStringify).join(',')}]`
-  const keys = Object.keys(v as Record<string, unknown>).sort()
-  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify((v as Record<string, unknown>)[k])}`).join(',')}}`
-}
-
-/**
- * Content fingerprint of an investigation (FNV-1a over its stable JSON).
- *
- * Local change is detected by CONTENT, not by timestamp. The local store
- * stamps `savedAt` from the wall clock, so two saves inside one millisecond
- * are indistinguishable — and a genuine edit that collided with the previous
- * stamp would never be uploaded. Silent data loss is the one outcome this
- * module cannot accept, and a hash removes the clock from the question
- * entirely. It also means a no-op save does not cause a pointless upload.
- *
- * Not cryptographic, and does not need to be: it detects accidental sameness,
- * not adversarial collisions.
- */
-export function contentHash(inv: Investigation): string {
-  const s = stableStringify(inv)
-  let h = 0x811c9dc5
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i)
-    h = Math.imul(h, 0x01000193) >>> 0
-  }
-  return h.toString(16).padStart(8, '0') + ':' + s.length
-}
+export const contentHash = (inv: Investigation): string => hashOf(inv)
 
 /**
  * The watermark for one investigation, as of the last reconciliation: what the
