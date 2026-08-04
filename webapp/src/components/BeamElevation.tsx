@@ -1,4 +1,5 @@
 import type { JSX } from 'react'
+import { udlStations } from './udl'
 import type { Support, BeamLoad } from '../engine/beamAnalysis'
 
 const BEAM = '#37526e'
@@ -82,13 +83,12 @@ export function BeamElevation({ L, supports, loads }: {
     const xa = sx(ld.x1), xb = sx(ld.x2)
     const h1 = ld.type === 'udl' ? 26 : Math.max(8, 26 * (Math.abs(ld.w1) / Math.max(Math.abs(ld.w1), Math.abs(ld.w2), 1e-9)))
     const h2 = ld.type === 'udl' ? 26 : Math.max(8, 26 * (Math.abs(ld.w2) / Math.max(Math.abs(ld.w1), Math.abs(ld.w2), 1e-9)))
-    const nA = Math.max(3, Math.floor((xb - xa) / 26))
+    const stations = udlStations(xb - xa)
     const label = ld.type === 'udl' ? `${ld.w} kN/m (${ld.cat})` : `${ld.w1}→${ld.w2} kN/m (${ld.cat})`
     return (
       <g key={`l${i}`}>
         <line x1={xa} y1={by - 4 - h1} x2={xb} y2={by - 4 - h2} stroke={LOAD} strokeWidth={1.2} />
-        {Array.from({ length: nA + 1 }, (_, j) => {
-          const t = j / nA
+        {stations.map((t) => {
           const x = xa + (xb - xa) * t
           const hh = h1 + (h2 - h1) * t
           return arrow(x, by - 4 - hh, by - 3, LOAD)
