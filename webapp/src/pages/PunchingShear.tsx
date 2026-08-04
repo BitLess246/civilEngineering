@@ -6,6 +6,7 @@ import { ReportControls } from '../components/ReportControls'
 import { buildPunchingSolution } from '../lib/punchingSolution'
 import { f0, f1, f2, f3 } from '../lib/format'
 import { WorkedSolution } from '../components/WorkedSolution'
+import { PunchingPlan } from '../components/PunchingPlan'
 
 interface FormState {
   c1: number; c2: number         // column dimensions, mm
@@ -125,6 +126,12 @@ export default function PunchingShear() {
         {/* ── RESULTS ── */}
         {r ? (
           <div className="flex flex-col gap-6">
+            <section data-pdf-drawing className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm
+              [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
+              <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Critical section</h2>
+              <PunchingPlan c1={f.c1} c2={f.c2} d={d} position={f.position} b0={r.b0} alphaS={r.alphaS} />
+            </section>
+
             <ResultCard title="Geometry">
               <Row label="Effective depth d"
                 value={`${f1(d)} mm`}
