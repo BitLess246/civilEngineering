@@ -1,4 +1,5 @@
 import { DimBelow, DimSide } from './dims'
+import { sectionFrame } from './sectionLayout'
 
 /** Flanged (T / L) beam cross-section to scale: outline, optional compression
  *  stress block, stirrup + tension-bar layers in the web, and the shared
@@ -8,11 +9,11 @@ export function TSection({ bf, bw, h, hf, a = 0, bars = 0, barDia = 0, layers = 
   bf: number; bw: number; h: number; hf: number; a?: number
   bars?: number; barDia?: number; layers?: number[]; cover?: number; stirrupDia?: number; legs?: number
 }) {
-  const W = 340, HT = 285
-  const availW = 210, availH = 200
-  const S = Math.min(availW / bf, availH / h)
-  const w = bf * S, ht = h * S, wf = bw * S, hff = hf * S, A = Math.min(a, h) * S
-  const x0 = (W - w) / 2, y0 = 40
+  // Frame arithmetic lives in `sectionLayout` so it can be tested — the
+  // complaint that started this ("too small, area not fully used") is a
+  // statement about these numbers and nothing else.
+  const { scale: S, W, HT, x0, y0, w, ht } = sectionFrame(bf, h, bars)
+  const wf = bw * S, hff = hf * S, A = Math.min(a, h) * S
   const xw = x0 + (w - wf) / 2
   const inset = (cover + stirrupDia / 2) * S
   const br = Math.max(2.5, (barDia / 2) * S)
@@ -23,14 +24,17 @@ export function TSection({ bf, bw, h, hf, a = 0, bars = 0, barDia = 0, layers = 
   const bx1 = xw + (cover + stirrupDia + barDia / 2) * S
   const bx2 = xw + wf - (cover + stirrupDia + barDia / 2) * S
   return (
-    <svg viewBox={`0 0 ${W} ${HT}`} className="mx-auto block w-full max-w-[360px]" style={{ fontFamily: 'Arial, sans-serif' }}>
+    <svg viewBox={`0 0 ${W} ${HT}`} className="mx-auto block h-auto max-h-[440px] w-full max-w-[560px]" style={{ fontFamily: 'Arial, sans-serif' }}>
       <path d={`M${x0} ${y0} h${w} v${hff} h${-(w - wf) / 2} v${ht - hff} h${-wf} v${-(ht - hff)} h${-(w - wf) / 2} z`}
         fill="#eef3f8" stroke="#37526e" strokeWidth="1.6" />
       {a > 0 && <>
         <rect x={x0} y={y0} width={w} height={Math.min(A, hff)} fill="#0f4c92" opacity="0.16" />
         {A > hff && <rect x={xw} y={y0 + hff} width={wf} height={A - hff} fill="#0f4c92" opacity="0.16" />}
         <line x1={x0 - 6} y1={y0 + A} x2={x0 + w + 6} y2={y0 + A} stroke="#0f4c92" strokeWidth="1.2" strokeDasharray="5 3" />
-        <text x={x0 + w - 4} y={y0 + A + 11} fontSize="8.5" fontFamily="IBM Plex Mono, monospace" fill="#0f4c92" textAnchor="end">a = {a.toFixed(0)}</text>
+        {/* Anchored at the LEFT end of the block. On the right it sat on top of
+            the `hf` dimension line, which only became visible once the section
+            grew to fill the card. */}
+        <text x={x0 + 5} y={y0 + A + 11} fontSize="8.5" fontFamily="IBM Plex Mono, monospace" fill="#0f4c92" textAnchor="start">a = {a.toFixed(0)}</text>
       </>}
       {/* stirrup in the web */}
       <rect x={xw + inset} y={y0 + hff * 0.35} width={wf - 2 * inset} height={ht - hff * 0.35 - inset}
