@@ -28,6 +28,8 @@ import { searchCriticalCircle, type Pt, type SlopeSoil } from '../engine/slopeSt
 import { buildSlopeSolution } from './slopeSolution'
 import { bromsClay, pyAnalysis } from '../engine/lateralPile'
 import { buildLateralPileSolution } from './lateralPileSolution'
+import { designRetainingWall } from '../engine/retainingWall'
+import { buildRetainingWallSolution } from './retainingWallSolution'
 
 // ─────────────────────────────────────────────────────────────────────────
 // What a worked solution has to be, applied to every builder at once.
@@ -121,6 +123,12 @@ const pileIn = {
   cu: 40, e50: 0.01, phiDeg: 33, k: 25000, gamma: 9,
 }
 
+const rwIn = {
+  Hs: 3000, tb: 500, ts: 300, bt: 500, bh: 1500,
+  gamma_s: 18, phi_deg: 30, q_sur: 10, mu: 0.5, qa: 200,
+  fc: 28, fy: 415, cover: 75, barDia: 16,
+}
+
 const BUILDERS: [string, () => SolutionStep[]][] = [
   ['punching shear', () => buildPunchingSolution(punchIn, designPunchingShear(punchIn))],
   ['torsion', () => buildTorsionSolution(torsIn, designTorsion(torsIn))],
@@ -148,6 +156,7 @@ const BUILDERS: [string, () => SolutionStep[]][] = [
     })
     return buildLateralPileSolution(pileIn, broms, py)
   }],
+  ['retaining wall', () => buildRetainingWallSolution(rwIn, designRetainingWall(rwIn))],
 ]
 
 const eqs = (steps: SolutionStep[]) =>
@@ -174,7 +183,7 @@ describe.each(BUILDERS)('%s worked solution', (_name, build) => {
       // Named methods are citations too — each is a published paper an
       // engineer can pull, which is exactly what this test is protecting.
       'Broms', 'Terzaghi', 'Boussinesq', 'Bishop', 'Fellenius', 'Janbu',
-      'Schmertmann', 'Steinbrenner', 'Matlock', 'Skempton',
+      'Schmertmann', 'Steinbrenner', 'Matlock', 'Skempton', 'Rankine', 'Coulomb',
       'working stress', 'thin-cylinder', 'Good practice',
     ].join('|'), 'i')
     for (const s of steps) {
