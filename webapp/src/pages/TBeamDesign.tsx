@@ -34,6 +34,27 @@ export default function TBeamDesign() {
     <div className="min-h-screen">
       <PageHeader title="T-Beam Design" badges={[...badges, kind]} />
       <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(p) => setLh((s) => ({ ...s, ...p }))} /></div>
+      {r && (
+        <PrintReport docTitle="T-Beam" docCode="TB-01" badges={badges} ok={r.ok}
+          governing={`${r.tBehavior ? 'true T behaviour' : 'rectangular behaviour'} · utilization ${(Math.abs(Mu) / Math.max(r.phiMn, 1e-9)).toFixed(2)}`}
+          lh={lh}
+          stats={[
+            { label: 'Steel', value: `${r.bars}-⌀${barDia}` },
+            { label: 'φMn', value: f1(r.phiMn), unit: 'kN·m' },
+            { label: 'bf', value: f0(r.bf), unit: 'mm' },
+          ]}
+          checks={[
+            { name: 'Flexure Mu/φMn', ratio: Math.abs(Mu) / Math.max(r.phiMn, 1e-9), ok: r.phiMn >= Math.abs(Mu) },
+            { name: 'Tension-controlled', ratio: r.As / Math.max(r.AsMax, 1e-9), ok: r.As <= r.AsMax },
+          ]}
+          data={[
+            ['Type', kind], ['Web bw × h', `${bw} × ${h} mm`], ['Flange bf × hf', `${f0(r.bf)} × ${hf} mm`],
+            ["f'c / fy", `${fc} / ${fy} MPa`], ['Mu', `${Mu} kN·m`], ['d / dt', `${f1(r.d)} / ${f1(r.dt)} mm`],
+          ]}
+          steps={steps}
+          drawing={<TSection bf={r.bf} bw={bw} h={h} hf={hf} a={r.a} bars={r.bars} barDia={barDia} layers={r.layers} cover={cover} stirrupDia={stirrupDia} />}
+          drawingTitle="T-beam section" />
+      )}
       <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
         <p className="no-print text-[13px] text-[#5c6675]">
           <Link to="/" className="font-semibold text-[#0f4c92]">← Home</Link> · Flanged-beam flexure: §6.3.2 effective width,
@@ -90,27 +111,6 @@ export default function TBeamDesign() {
           </div>
         )}
       </div>
-      {r && (
-        <PrintReport docTitle="T-Beam" docCode="TB-01" badges={badges} ok={r.ok}
-          governing={`${r.tBehavior ? 'true T behaviour' : 'rectangular behaviour'} · utilization ${(Math.abs(Mu) / Math.max(r.phiMn, 1e-9)).toFixed(2)}`}
-          lh={lh}
-          stats={[
-            { label: 'Steel', value: `${r.bars}-⌀${barDia}` },
-            { label: 'φMn', value: f1(r.phiMn), unit: 'kN·m' },
-            { label: 'bf', value: f0(r.bf), unit: 'mm' },
-          ]}
-          checks={[
-            { name: 'Flexure Mu/φMn', ratio: Math.abs(Mu) / Math.max(r.phiMn, 1e-9), ok: r.phiMn >= Math.abs(Mu) },
-            { name: 'Tension-controlled', ratio: r.As / Math.max(r.AsMax, 1e-9), ok: r.As <= r.AsMax },
-          ]}
-          data={[
-            ['Type', kind], ['Web bw × h', `${bw} × ${h} mm`], ['Flange bf × hf', `${f0(r.bf)} × ${hf} mm`],
-            ["f'c / fy", `${fc} / ${fy} MPa`], ['Mu', `${Mu} kN·m`], ['d / dt', `${f1(r.d)} / ${f1(r.dt)} mm`],
-          ]}
-          steps={steps}
-          drawing={<TSection bf={r.bf} bw={bw} h={h} hf={hf} a={r.a} bars={r.bars} barDia={barDia} layers={r.layers} cover={cover} stirrupDia={stirrupDia} />}
-          drawingTitle="T-beam section" />
-      )}
     </div>
   )
 }

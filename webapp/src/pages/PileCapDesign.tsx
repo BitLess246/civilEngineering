@@ -163,6 +163,38 @@ export default function PileCapDesign() {
     <div>
       <PageHeader title="Pile Cap" badges={['ACI 318-14', 'NSCP 2015']} />
       <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>
+      {result && (
+        <PrintReport
+          docTitle="Pile Cap" docCode="PC-01" badges={['ACI 318-14', 'NSCP 2015']}
+          ok={!!allOK}
+          governing={`Governing ratio ${globalThis.Math.max(
+            result.VuPunchCol / result.phiVcPunchCol, result.VuPunchPile / result.phiVcPunchPile,
+            result.VuBeamX / result.phiVcBeamX, result.VuBeamY / result.phiVcBeamY).toFixed(2)} across punching / beam shear`}
+          lh={lh}
+          stats={[
+            { label: 'Cap plan', value: `${f2(result.capBx)} × ${f2(result.capBy)}`, unit: 'm' },
+            { label: 'Thickness Dc', value: f0(result.Dc), unit: 'mm' },
+            { label: 'Piles', value: `${form.nPiles}-⌀${form.pileDia}`, unit: 'mm' },
+          ]}
+          checks={[
+            { name: 'Column punching Vu/φVc', ratio: result.VuPunchCol / result.phiVcPunchCol, ok: result.punchColOK },
+            { name: 'Pile punching Vu/φVc', ratio: result.VuPunchPile / result.phiVcPunchPile, ok: result.punchPileOK },
+            { name: 'One-way shear X Vu/φVc', ratio: result.VuBeamX / result.phiVcBeamX, ok: result.beamXOK },
+            { name: 'One-way shear Y Vu/φVc', ratio: result.VuBeamY / result.phiVcBeamY, ok: result.beamYOK },
+            { name: 'Development ld,req/avail', ratio: result.ldRequired / globalThis.Math.max(result.ldAvailable, 1e-9), ok: result.ldOK },
+          ]}
+          data={[
+            ['Service / ultimate load', `${form.serviceLoad} / ${form.ultimateLoad} kN`],
+            ['Moments MuX / MuY', `${result.MuX.toFixed(1)} / ${result.MuY.toFixed(1)} kN·m`],
+            ['Pile capacity', `${form.pileCapacity} kN`], ['Pile spacing / edge', `${form.spacing} / ${form.edgeDist} mm`],
+            ['Column', `${form.colX} × ${form.colY} mm`], ["Concrete f'c / fy", `${form.fc} / ${form.fy} MPa`],
+            ['Effective depth d', `${result.d.toFixed(0)} mm`],
+          ]}
+          drawingTitle="Pile Cap Plan"
+          drawing={<PileCapSchematic d={result.d} capBx={result.capBx} capBy={result.capBy} coords={result.coords}
+            pileDia={form.pileDia} colX={form.colX} colY={form.colY} reactions={result.reactions} />}
+        />
+      )}
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
 
       <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
@@ -315,38 +347,6 @@ export default function PileCapDesign() {
           )}
         </div>
       </div>
-      {result && (
-        <PrintReport
-          docTitle="Pile Cap" docCode="PC-01" badges={['ACI 318-14', 'NSCP 2015']}
-          ok={!!allOK}
-          governing={`Governing ratio ${globalThis.Math.max(
-            result.VuPunchCol / result.phiVcPunchCol, result.VuPunchPile / result.phiVcPunchPile,
-            result.VuBeamX / result.phiVcBeamX, result.VuBeamY / result.phiVcBeamY).toFixed(2)} across punching / beam shear`}
-          lh={lh}
-          stats={[
-            { label: 'Cap plan', value: `${f2(result.capBx)} × ${f2(result.capBy)}`, unit: 'm' },
-            { label: 'Thickness Dc', value: f0(result.Dc), unit: 'mm' },
-            { label: 'Piles', value: `${form.nPiles}-⌀${form.pileDia}`, unit: 'mm' },
-          ]}
-          checks={[
-            { name: 'Column punching Vu/φVc', ratio: result.VuPunchCol / result.phiVcPunchCol, ok: result.punchColOK },
-            { name: 'Pile punching Vu/φVc', ratio: result.VuPunchPile / result.phiVcPunchPile, ok: result.punchPileOK },
-            { name: 'One-way shear X Vu/φVc', ratio: result.VuBeamX / result.phiVcBeamX, ok: result.beamXOK },
-            { name: 'One-way shear Y Vu/φVc', ratio: result.VuBeamY / result.phiVcBeamY, ok: result.beamYOK },
-            { name: 'Development ld,req/avail', ratio: result.ldRequired / globalThis.Math.max(result.ldAvailable, 1e-9), ok: result.ldOK },
-          ]}
-          data={[
-            ['Service / ultimate load', `${form.serviceLoad} / ${form.ultimateLoad} kN`],
-            ['Moments MuX / MuY', `${result.MuX.toFixed(1)} / ${result.MuY.toFixed(1)} kN·m`],
-            ['Pile capacity', `${form.pileCapacity} kN`], ['Pile spacing / edge', `${form.spacing} / ${form.edgeDist} mm`],
-            ['Column', `${form.colX} × ${form.colY} mm`], ["Concrete f'c / fy", `${form.fc} / ${form.fy} MPa`],
-            ['Effective depth d', `${result.d.toFixed(0)} mm`],
-          ]}
-          drawingTitle="Pile Cap Plan"
-          drawing={<PileCapSchematic d={result.d} capBx={result.capBx} capBy={result.capBy} coords={result.coords}
-            pileDia={form.pileDia} colX={form.colX} colY={form.colY} reactions={result.reactions} />}
-        />
-      )}
       </div>
     </div>
   )

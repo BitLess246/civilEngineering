@@ -51,6 +51,37 @@ export default function RetainingWall() {
     <div>
       <PageHeader title="Cantilever Retaining Wall" badges={['NSCP 2015', 'ACI 318-14']} />
       <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>
+      {r && (
+        <PrintReport
+          docTitle="Cantilever Retaining Wall" docCode="RW-01" badges={['NSCP 2015', 'ACI 318-14']}
+          ok={r.stableSL && r.stableOT && r.bearingOK && r.tensionOK && r.shearOK && r.toe.shearOK && r.heel.shearOK}
+          governing={`FS sliding ${f2(r.FS_SL)} · FS overturning ${f2(r.FS_OT)} · q,max ${f1(r.q_max)} kPa`}
+          lh={lh}
+          stats={[
+            // B and H are ALREADY in metres — dividing by 1000 again printed
+            // a 2.3 m base as "0.00 m" on every report this page produced.
+            { label: 'Base width B', value: f2(r.B), unit: 'm' },
+            { label: 'Total height H', value: f2(r.H), unit: 'm' },
+            { label: 'q,max', value: f1(r.q_max), unit: 'kPa' },
+          ]}
+          checks={[
+            { name: 'Sliding (FS req 1.5 / FS)', ratio: 1.5 / r.FS_SL, ok: r.stableSL },
+            { name: 'Overturning (FS req 2.0 / FS)', ratio: 2.0 / r.FS_OT, ok: r.stableOT },
+            { name: 'Bearing q,max / qa', ratio: r.q_max / f.qa, ok: r.bearingOK },
+            { name: 'Stem shear Vu / φVc', ratio: r.Vu_stem / r.Vc_stem, ok: r.shearOK },
+            { name: 'Toe shear Vu / φVc', ratio: r.toe.Vu / r.toe.phiVc, ok: r.toe.shearOK },
+            { name: 'Heel shear Vu / φVc', ratio: r.heel.Vu / r.heel.phiVc, ok: r.heel.shearOK },
+          ]}
+          data={[
+            ['Stem height Hs', `${f.Hs} mm`], ['Base thickness tb', `${f.tb} mm`],
+            ['Stem thickness ts', `${f.ts} mm`], ['Toe / heel', `${f.bt} / ${f.bh} mm`],
+            ['Soil γs / φ', `${f.gamma_s} kN/m³ / ${f.phi_deg}°`], ['Surcharge', `${f.q_sur} kPa`],
+            ['Friction μ', `${f.mu}`], ['Allowable qa', `${f.qa} kPa`],
+            ["Concrete f'c / fy", `${f.fc} / ${f.fy} MPa`], ['Ka (Rankine)', `${f3(r.Ka)}`],
+            ['Active thrust Pa + Pq', `${f1(r.Pa)} + ${f1(r.Pq)} kN/m`], ['Stem Mu', `${f1(r.Mu_stem)} kN·m/m`],
+          ]}
+        />
+      )}
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
 
       {/* The section drawing carries what the numbers cannot: which FACE each
@@ -202,37 +233,6 @@ export default function RetainingWall() {
       </div>
       {r && <WorkedSolution steps={buildRetainingWallSolution(f, r)} />}
 
-      {r && (
-        <PrintReport
-          docTitle="Cantilever Retaining Wall" docCode="RW-01" badges={['NSCP 2015', 'ACI 318-14']}
-          ok={r.stableSL && r.stableOT && r.bearingOK && r.tensionOK && r.shearOK && r.toe.shearOK && r.heel.shearOK}
-          governing={`FS sliding ${f2(r.FS_SL)} · FS overturning ${f2(r.FS_OT)} · q,max ${f1(r.q_max)} kPa`}
-          lh={lh}
-          stats={[
-            // B and H are ALREADY in metres — dividing by 1000 again printed
-            // a 2.3 m base as "0.00 m" on every report this page produced.
-            { label: 'Base width B', value: f2(r.B), unit: 'm' },
-            { label: 'Total height H', value: f2(r.H), unit: 'm' },
-            { label: 'q,max', value: f1(r.q_max), unit: 'kPa' },
-          ]}
-          checks={[
-            { name: 'Sliding (FS req 1.5 / FS)', ratio: 1.5 / r.FS_SL, ok: r.stableSL },
-            { name: 'Overturning (FS req 2.0 / FS)', ratio: 2.0 / r.FS_OT, ok: r.stableOT },
-            { name: 'Bearing q,max / qa', ratio: r.q_max / f.qa, ok: r.bearingOK },
-            { name: 'Stem shear Vu / φVc', ratio: r.Vu_stem / r.Vc_stem, ok: r.shearOK },
-            { name: 'Toe shear Vu / φVc', ratio: r.toe.Vu / r.toe.phiVc, ok: r.toe.shearOK },
-            { name: 'Heel shear Vu / φVc', ratio: r.heel.Vu / r.heel.phiVc, ok: r.heel.shearOK },
-          ]}
-          data={[
-            ['Stem height Hs', `${f.Hs} mm`], ['Base thickness tb', `${f.tb} mm`],
-            ['Stem thickness ts', `${f.ts} mm`], ['Toe / heel', `${f.bt} / ${f.bh} mm`],
-            ['Soil γs / φ', `${f.gamma_s} kN/m³ / ${f.phi_deg}°`], ['Surcharge', `${f.q_sur} kPa`],
-            ['Friction μ', `${f.mu}`], ['Allowable qa', `${f.qa} kPa`],
-            ["Concrete f'c / fy", `${f.fc} / ${f.fy} MPa`], ['Ka (Rankine)', `${f3(r.Ka)}`],
-            ['Active thrust Pa + Pq', `${f1(r.Pa)} + ${f1(r.Pq)} kN/m`], ['Stem Mu', `${f1(r.Mu_stem)} kN·m/m`],
-          ]}
-        />
-      )}
       </div>
     </div>
   )

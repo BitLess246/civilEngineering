@@ -10,7 +10,7 @@ import { WorkedSolution } from '../components/WorkedSolution'
 import { buildBeamSolution, beamProvidedCapacities } from '../lib/beamSolution'
 import { optimizeBeamRebar, optimizeBeamMember } from '../engine/beamRebarOptimize'
 import { RebarRanking } from '../components/RebarRanking'
-import { buildRebarSelectionSolution } from '../lib/rebarSolution'
+import { buildRebarSelectionSolution, withRebarSelection } from '../lib/rebarSolution'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { Math as KTex } from '../lib/math'
 import { f0, f1 } from '../lib/format'
@@ -149,10 +149,10 @@ export default function BeamDesign() {
   // the steel the flexure steps above derived, so it reads after them.
   const solution = useMemo(
     () => (r
-      ? [
-          ...buildBeamSolution({ ...fd, ...demand }, r),
-          ...(selection ? buildRebarSelectionSolution(selection, 'cage') : []),
-        ]
+      ? withRebarSelection(
+          buildBeamSolution({ ...fd, ...demand }, r),
+          selection ? buildRebarSelectionSolution(selection, 'cage') : [],
+        )
       : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [r, fd, demand.Mu, demand.Vu, selection],
@@ -225,6 +225,14 @@ export default function BeamDesign() {
           </div>
         } />
         <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>
+        {reportData && (
+          <PrintReport {...reportData}
+            drawing={<BeamSchematic b={fd.b} h={fd.h} cover={fd.cover} barDia={fd.barDia} stirrupDia={fd.stirrupDia}
+              bars={r!.bars} d={r!.d} dPrime={r!.comprLayers.length > 0 ? r!.dPrime : undefined}
+              layers={r!.layers} comprLayers={r!.comprLayers} comprBars={r!.comprBars} comprBarDia={f.comprBarDia}
+              naDepth={r!.cNA} flexOK={r!.flexOK} hogging={hogging} />}
+          />
+        )}
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
 
       <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
@@ -305,6 +313,10 @@ export default function BeamDesign() {
               </div>
             </fieldset>
           )}
+          {selection && (
+            <RebarRanking selection={selection}
+              title={multi ? 'Bar selection — whole member' : 'Bar selection'} />
+          )}
         </div>
 
         <div className="space-y-3.5 lg:sticky lg:top-14 lg:self-start">
@@ -323,10 +335,6 @@ export default function BeamDesign() {
               checks={checks}
               footnote={`ρ = ${r.rho.toFixed(4)} within ρmin ${r.rhoMin.toFixed(4)} … ρmax ${r.rhoMax.toFixed(4)} — §9.6.1.2 / §21.2.2`}
             />
-          )}
-          {selection && (
-            <RebarRanking selection={selection}
-              title={multi ? 'Bar selection — whole member' : 'Bar selection'} />
           )}
           {multi && (
             <ResultCard title="Section schedule">
@@ -452,14 +460,6 @@ export default function BeamDesign() {
             title={multi && active ? `Calculation report — ${active.label}` : 'Calculation report — worked solution'} />
         )}
       </div>
-      {reportData && (
-        <PrintReport {...reportData}
-          drawing={<BeamSchematic b={fd.b} h={fd.h} cover={fd.cover} barDia={fd.barDia} stirrupDia={fd.stirrupDia}
-            bars={r!.bars} d={r!.d} dPrime={r!.comprLayers.length > 0 ? r!.dPrime : undefined}
-            layers={r!.layers} comprLayers={r!.comprLayers} comprBars={r!.comprBars} comprBarDia={f.comprBarDia}
-            naDepth={r!.cNA} flexOK={r!.flexOK} hogging={hogging} />}
-        />
-      )}
       </div>
     </div>
   )

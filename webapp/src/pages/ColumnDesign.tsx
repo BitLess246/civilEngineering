@@ -16,7 +16,7 @@ import { WorkedSolution } from '../components/WorkedSolution'
 import { axialColumnSolution, eccentricColumnSolution, slendernessSolution } from '../lib/columnSolution'
 import { optimizeColumnRebar } from '../engine/columnRebarOptimize'
 import { RebarRanking } from '../components/RebarRanking'
-import { buildRebarSelectionSolution } from '../lib/rebarSolution'
+import { buildRebarSelectionSolution, withRebarSelection } from '../lib/rebarSolution'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { Math as KTex } from '../lib/math'
 import { f0, f1, f2 } from '../lib/format'
@@ -115,8 +115,9 @@ export default function ColumnDesign() {
       shape: tied ? 'tied' : 'spiral', b, h, D, cover, barDia: dbEff, tieDia, fc, fy, fyt, Pu,
       numBars: barMode === 'analyze' || eccentric ? numBars : cageChoice?.bars ?? undefined,
     }, axial))
-    if (cageChoice) steps.push(...buildRebarSelectionSolution(cageChoice.selection, 'cage'))
-    return steps
+    return withRebarSelection(
+      steps, cageChoice ? buildRebarSelectionSolution(cageChoice.selection, 'cage') : [],
+    )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slender, eccentric, inter, cap, axial, Pu, MuEff, cageChoice])
 
@@ -283,6 +284,7 @@ export default function ColumnDesign() {
               </>}
             </Card>
           )}
+          {cageChoice && <RebarRanking selection={cageChoice.selection} title="Cage selection" />}
         </div>
 
         <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
@@ -291,7 +293,6 @@ export default function ColumnDesign() {
               stats={verdict.stats} checks={verdict.checks} footnote={verdict.footnote} />
           )}
 
-          {cageChoice && <RebarRanking selection={cageChoice.selection} title="Cage selection" />}
 
           {/* The same card the beam page uses — graph-paper ground, title and
               section meta in a header strip above the drawing. The two pages
