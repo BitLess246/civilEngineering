@@ -208,9 +208,12 @@ describe('the lab catalogue stays in step with the schema', () => {
     expect(isImplemented('consolidation')).toBe(true)
     expect(isImplemented('compaction')).toBe(true)
     expect(isImplemented('triaxial')).toBe(true)
-    expect(isImplemented('permeability')).toBe(false)
+    expect(isImplemented('permeability')).toBe(true)
+    expect(isImplemented('cbr')).toBe(true)
+    expect(isImplemented('swell')).toBe(false)
     expect(implementedTests().map((t) => t.type))
-      .toEqual(['moisture', 'specific-gravity', 'sieve', 'atterberg', 'compaction', 'direct-shear', 'triaxial', 'ucs', 'consolidation'])
+      .toEqual(['moisture', 'specific-gravity', 'sieve', 'atterberg', 'compaction',
+        'direct-shear', 'triaxial', 'ucs', 'consolidation', 'permeability', 'cbr'])
   })
 
   it('gives every implemented test enough fields to drive its engine', () => {
@@ -238,6 +241,8 @@ describe('the lab catalogue stays in step with the schema', () => {
       compaction: ['mouldVolume', 'mouldMass'],
       'direct-shear': [],
       triaxial: [],
+      permeability: ['length', 'area', 'time'],
+      cbr: [],
       ucs: ['diameter', 'height', 'failureLoad', 'failureDeformation'],
       consolidation: ['initialHeight', 'diameter', 'dryMass', 'specificGravity'],
     }

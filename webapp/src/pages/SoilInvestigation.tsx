@@ -14,12 +14,12 @@ import {
   type LayerParameters, type CptReading,
 } from '../engine/soils/model'
 import {
-  LAB_TESTS, labSpec, isImplemented, evaluateTest, summarise, readDirectShear, readCompaction,
+  LAB_TESTS, labSpec, isImplemented, evaluateTest, summarise, readDirectShear, readCompaction, readCbr,
   type LabOutcome,
 } from '../engine/soils/lab'
 import { classifySample } from '../engine/soils/classifySample'
 import {
-  shearEnvelopeChart, consolidationChart, gradingChart, compactionChart, mohrChart,
+  shearEnvelopeChart, consolidationChart, gradingChart, compactionChart, mohrChart, cbrChart,
 } from '../engine/soils/lab/plots'
 import { buildSection, sectionDrawing } from '../engine/soils/section'
 import {
@@ -1315,6 +1315,13 @@ function ClassificationPanel() {
  * dimensionless ratios (Gs) earn three.
  */
 function formatOutcome(s: { label: string; value: number; unit: string }): string {
+  // A permeability is 1e-6 m/s and a fixed-point format prints it as "0.0".
+  // Anything spanning orders of magnitude gets an exponent instead.
+  const mag = Math.abs(s.value)
+  if (mag > 0 && (mag < 0.01 || mag >= 1e5)) {
+    const gap = s.unit === '°' ? '' : ' '
+    return `${s.label} = ${s.value.toExponential(2)}${s.unit ? gap + s.unit : ''}`
+  }
   const dp = s.unit === '' ? 3 : 1
   // No space before a degree sign; one before every other unit.
   const gap = s.unit === '°' ? '' : ' '
@@ -1382,6 +1389,43 @@ function TestCard({
             <LoadIncrements
               rows={(test.data?.points as LoadRow[] | undefined) ?? []}
               onChange={(rows) => onPoints(rows as unknown as ShearRow[])} />
+          )}
+
+          {spec!.formKind === 'cbr-points' && (
+            <>
+              <label className="mt-2 flex flex-col text-[11px]">
+                <span className="mb-0.5 text-slate-600">Condition</span>
+                <select
+                  value={(test.data?.soaked as string | undefined) ?? 'false'}
+                  onChange={(e) => onChoice('soaked', e.target.value)}
+                  className="rounded border border-slate-300 px-1.5 py-1">
+                  <option value="false">Unsoaked</option>
+                  <option value="true">Soaked — four days (D1883 §10)</option>
+                </select>
+                <span className="mt-0.5 text-[10px] text-slate-500">
+                  On a plastic subgrade the soaked value can be a third of the unsoaked one.
+                </span>
+              </label>
+              <CbrPoints
+                rows={(test.data?.points as PenetrationRow[] | undefined) ?? []}
+                onChange={(rows) => onPoints(rows as unknown as ShearRow[])} />
+            </>
+          )}
+
+          {test.type === 'permeability' && (
+            <label className="mt-2 flex flex-col text-[11px]">
+              <span className="mb-0.5 text-slate-600">Method</span>
+              <select
+                value={(test.data?.method as string | undefined) ?? 'constant-head'}
+                onChange={(e) => onChoice('method', e.target.value)}
+                className="rounded border border-slate-300 px-1.5 py-1">
+                <option value="constant-head">Constant head — D2434 (sands, k &gt; 1e-5 m/s)</option>
+                <option value="falling-head">Falling head — D5084 (fines, k &lt; 1e-6 m/s)</option>
+              </select>
+              <span className="mt-0.5 text-[10px] text-slate-500">
+                Fill the fields belonging to the method chosen; the other set is ignored.
+              </span>
+            </label>
           )}
 
           {spec!.formKind === 'triaxial-specimens' && (
@@ -2095,6 +2139,64 @@ function TriaxialSpecimens({
   )
 }
 
+interface PenetrationRow { penetration: number; stress: number }
+
+/** D1883 reads to 7.62 mm; the two reference penetrations are inside it. */
+const DEFAULT_PENETRATIONS = [0, 0.64, 1.27, 1.91, 2.54, 3.18, 3.81, 5.08, 6.35, 7.62]
+
+/** Plunger stress against penetration — the curve CBR is read off. */
+function CbrPoints({
+  rows, onChange,
+}: { rows: PenetrationRow[]; onChange: (rows: PenetrationRow[]) => void }) {
+  const pts: PenetrationRow[] = rows.length
+    ? rows
+    : DEFAULT_PENETRATIONS.map((penetration) => ({ penetration, stress: 0 }))
+  const set = (i: number, patch: Partial<PenetrationRow>) =>
+    onChange(pts.map((r, k) => (k === i ? { ...r, ...patch } : r)))
+
+  return (
+    <div className="mt-2">
+      <table className="w-full text-left text-[11px]">
+        <thead className="text-slate-500">
+          <tr className="border-b border-slate-200">
+            <th className="py-1 pr-2 text-right">Penetration (mm)</th>
+            <th className="py-1 pr-2 text-right">Plunger stress (MPa)</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {pts.map((r, i) => (
+            <tr key={i} className="border-b border-slate-100">
+              {([['penetration', r.penetration] as const, ['stress', r.stress] as const])
+                .map(([key, v]) => (
+                  <td key={key} className="py-0.5 pr-2 text-right">
+                    <input type="number" step="any" value={v ?? ''}
+                      onChange={(e) => set(i, {
+                        [key]: e.target.value === '' ? undefined : num(e.target.value),
+                      } as Partial<PenetrationRow>)}
+                      className="w-28 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                  </td>
+                ))}
+              <td className="py-0.5 text-right">
+                <button onClick={() => onChange(pts.filter((_, k) => k !== i))}
+                  className="rounded px-1 text-[10px] text-red-600 hover:bg-red-50">×</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-1 text-[10px] text-slate-500">
+        Stress is load ÷ 1935 mm² for the standard plunger. The curve is corrected for a concave start
+        before either ordinate is read — that correction is drawn on the chart.
+      </p>
+      <button onClick={() => onChange([...pts, { penetration: 0, stress: 0 }])}
+        className="mt-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50">
+        + reading
+      </button>
+    </div>
+  )
+}
+
 // ── Test charts ───────────────────────────────────────────────────────────
 
 /**
@@ -2127,6 +2229,11 @@ function TestChart({ test, outcome }: { test: LabTest; outcome: LabOutcome }) {
       // can check without seeing what it is tangent to.
       case 'triaxial':
         return planToSvg(mohrChart(outcome.result), 520)
+      // The raw readings, not the corrected ones: the origin correction is a
+      // judgement, and a reader can only disagree with it if the curve is
+      // drawn where it was measured.
+      case 'cbr':
+        return planToSvg(cbrChart(outcome.result, readCbr(test)?.points ?? []), 460)
       default:
         return null
     }

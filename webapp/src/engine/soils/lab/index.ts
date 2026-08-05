@@ -43,6 +43,10 @@ import {
   type TriaxialData, type TriaxialSpecimen, type TriaxialType, triaxial,
   type TriaxialResult,
 } from './triaxial'
+import {
+  type PermeabilityData, permeability, type PermeabilityResult,
+} from './permeability'
+import { type CbrData, type CbrPoint, cbr, type CbrResult } from './cbr'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -250,6 +254,60 @@ export function readTriaxial(test: LabTest): TriaxialData | undefined {
   return { testType, specimens }
 }
 
+/**
+ * Permeability. The METHOD decides which fields are required, so the guard
+ * reads it first and then insists on that method's own set — a falling-head
+ * blob missing its standpipe area is not a constant-head test with extra
+ * fields, it is an incomplete falling-head test.
+ */
+export function readPermeability(test: LabTest): PermeabilityData | undefined {
+  const d = test.data
+  if (!isRecord(d)) return undefined
+  const common = ['length', 'area', 'time']
+  const temperature = finite(d.temperature) ? d.temperature : undefined
+  if (d.method === 'falling-head') {
+    if (!hasNumbers(d, [...common, 'standpipeArea', 'headStart', 'headEnd'])) return undefined
+    return {
+      method: 'falling-head',
+      length: d.length as number,
+      area: d.area as number,
+      standpipeArea: d.standpipeArea as number,
+      headStart: d.headStart as number,
+      headEnd: d.headEnd as number,
+      time: d.time as number,
+      temperature,
+    }
+  }
+  if (!hasNumbers(d, [...common, 'head', 'volume'])) return undefined
+  return {
+    method: 'constant-head',
+    length: d.length as number,
+    area: d.area as number,
+    head: d.head as number,
+    volume: d.volume as number,
+    time: d.time as number,
+    temperature,
+  }
+}
+
+/** CBR load–penetration readings; a row missing either coordinate drops. */
+export function readCbr(test: LabTest): CbrData | undefined {
+  const d = test.data
+  if (!isRecord(d) || !Array.isArray(d.points)) return undefined
+  const points: CbrPoint[] = []
+  for (const r of d.points) {
+    if (!isRecord(r) || !finite(r.penetration) || !finite(r.stress)) continue
+    points.push({ penetration: r.penetration, stress: r.stress })
+  }
+  if (points.length < 3) return undefined
+  return {
+    points,
+    soaked: d.soaked === true || d.soaked === 'true',
+    swell: finite(d.swell) ? d.swell : undefined,
+    dryDensity: finite(d.dryDensity) ? d.dryDensity : undefined,
+  }
+}
+
 // ── Catalogue ─────────────────────────────────────────────────────────────
 
 /** One numeric input on a test form. */
@@ -269,7 +327,7 @@ export interface LabField {
  */
 export type LabFormKind =
   | 'fields' | 'sieve-stack' | 'shear-points' | 'load-increments' | 'compaction-points'
-  | 'triaxial-specimens'
+  | 'triaxial-specimens' | 'cbr-points'
 
 export interface LabTestSpec {
   type: LabTestType
@@ -416,8 +474,38 @@ export const LAB_TESTS: readonly LabTestSpec[] = [
       { key: 'specificGravity', label: 'Specific gravity Gs', placeholder: 2.7 },
     ],
   },
-  { type: 'permeability', label: 'Permeability', standard: 'd5084', needsUndisturbed: true, fields: [], purpose: 'Hydraulic conductivity.' },
-  { type: 'cbr', label: 'CBR', standard: 'd1883', needsUndisturbed: false, fields: [], purpose: 'Bearing ratio for pavement design.' },
+  {
+    type: 'permeability',
+    label: 'Permeability',
+    standard: 'd5084',
+    calculation: 'permeability.falling-head',
+    needsUndisturbed: true,
+    purpose: 'Hydraulic conductivity — constant head for sands, falling head for fines.',
+    fields: [
+      { key: 'length', label: 'Specimen length', unit: 'mm', placeholder: 100 },
+      { key: 'area', label: 'Specimen area', unit: 'mm²', placeholder: 7854 },
+      { key: 'time', label: 'Elapsed time', unit: 's', placeholder: 600 },
+      { key: 'head', label: 'Head (constant head)', unit: 'mm', optional: true, placeholder: 500 },
+      { key: 'volume', label: 'Volume collected (constant head)', unit: 'cm³', optional: true, placeholder: 120 },
+      { key: 'standpipeArea', label: 'Standpipe area (falling head)', unit: 'mm²', optional: true, placeholder: 78.5 },
+      { key: 'headStart', label: 'Head at start (falling head)', unit: 'mm', optional: true, placeholder: 900 },
+      { key: 'headEnd', label: 'Head at end (falling head)', unit: 'mm', optional: true, placeholder: 400 },
+      { key: 'temperature', label: 'Water temperature', unit: '°C', optional: true, placeholder: 25 },
+    ],
+  },
+  {
+    type: 'cbr',
+    label: 'CBR',
+    standard: 'd1883',
+    formKind: 'cbr-points',
+    calculation: 'cbr.ratio',
+    needsUndisturbed: false,
+    purpose: 'Bearing ratio for pavement design, with the D1883 origin correction applied to the curve.',
+    fields: [
+      { key: 'swell', label: 'Swell on soaking', unit: '%', optional: true, placeholder: 1.2 },
+      { key: 'dryDensity', label: 'Dry density', unit: 'Mg/m³', optional: true, placeholder: 1.85 },
+    ],
+  },
   { type: 'swell', label: 'Swell / collapse', standard: 'd4546', needsUndisturbed: true, fields: [], purpose: 'One-dimensional swell or collapse on wetting.' },
 ]
 
@@ -454,6 +542,8 @@ export type LabOutcome =
   | { kind: 'consolidation'; result: ConsolidationResult }
   | { kind: 'compaction'; result: CompactionResult }
   | { kind: 'triaxial'; result: TriaxialResult }
+  | { kind: 'permeability'; result: PermeabilityResult }
+  | { kind: 'cbr'; result: CbrResult }
 
 /**
  * Compute a test's result from its stored data.
@@ -510,6 +600,16 @@ export function evaluateTest(test: LabTest): { outcome?: LabOutcome; error?: str
         if (!d) return {}
         return { outcome: { kind: 'triaxial', result: triaxial(d) } }
       }
+      case 'permeability': {
+        const d = readPermeability(test)
+        if (!d) return {}
+        return { outcome: { kind: 'permeability', result: permeability(d) } }
+      }
+      case 'cbr': {
+        const d = readCbr(test)
+        if (!d) return {}
+        return { outcome: { kind: 'cbr', result: cbr(d) } }
+      }
       default:
         return {}
     }
@@ -550,5 +650,11 @@ export function summarise(outcome: LabOutcome): { label: string; value: number; 
       const e = t.effective ?? t.total
       return { label: t.effective ? "φ'" : 'φ', value: e.frictionAngle, unit: '°' }
     }
+    case 'permeability':
+      // At 20 °C, in m/s — the module convention. The chart-free tests print
+      // their headline in the unit the rest of the module consumes.
+      return { label: 'k₂₀', value: outcome.result.k20, unit: 'm/s' }
+    case 'cbr':
+      return { label: `CBR @ ${outcome.result.governing} mm`, value: outcome.result.cbr, unit: '%' }
   }
 }
