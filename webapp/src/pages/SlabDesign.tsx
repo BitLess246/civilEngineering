@@ -301,10 +301,11 @@ export default function SlabDesign() {
                   Sections are taken along <KTex tex="l_1" /> in the x-direction. Top steel is the
                   negative-moment mat over the supports; bottom steel is the positive-moment mat
                   through mid-span. The shrinkage and temperature bars run perpendicular, so a
-                  section cuts them end-on.{' '}
-                  <strong className="font-semibold text-amber-800">
-                    Check the cut-off fractions against ACI 318-14 Fig. 8.7.4.1.3(a) before detailing.
-                  </strong>
+                  section cuts them end-on. Cut-offs follow ACI 318-14
+                  Fig. 8.7.4.1.3(a) for a flat plate without drop panels: top steel from the
+                  FACE of support, the bottom remainder from the support CENTRELINE. The column
+                  strip's bottom mat is 100% continuous — at least two bars pass through the
+                  column core per §8.7.4.2.
                 </p>
               </ResultCard>
 
