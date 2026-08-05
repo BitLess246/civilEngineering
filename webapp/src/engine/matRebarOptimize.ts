@@ -47,7 +47,9 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import { designSquareFooting, type SquareFootingInput, type SquareFootingResult } from './isolatedFooting'
-import { designSlabDDM, type SlabInput, type SlabDesignResult } from './slabDDM'
+import {
+  designSlabDDM, type SlabInput, type SlabDesignResult, type SlabDirResult,
+} from './slabDDM'
 import {
   dominantBlocker, selectRebar, type Candidate, type ComplianceCheck,
   type RebarLayout, type RebarSelection, type ScoreContext,
@@ -424,6 +426,32 @@ export function slabStrips(r: SlabDesignResult): MatStrip[] {
     }
   }
   return out
+}
+
+/**
+ * Fold the adopted per-strip mats back into a DDM result.
+ *
+ * `optimizeSlabRebar` chooses one diameter for the panel and a spacing per
+ * strip; `designSlabDDM` lays out whatever it was handed. Leaving both in play
+ * puts two different mats on one panel — the schedule saying one thing and the
+ * selection it cites saying another. The strip labels are built here, so the
+ * mapping back belongs here too.
+ */
+export function applySlabMats(
+  r: SlabDesignResult, strips: readonly SlabRebarChoice['strips'][number][],
+): SlabDesignResult {
+  const by = new Map(strips.map((s) => [s.label, s]))
+  const dir = (dr: SlabDirResult): SlabDirResult => ({
+    ...dr,
+    locations: dr.locations.map((loc) => {
+      const cut = (which: 'column' | 'middle') => {
+        const m = by.get(`${dr.dir}-dir ${loc.name} ${which} strip`)
+        return m ? { ...loc[which], bars: m.bars, spacing: m.spacing } : loc[which]
+      }
+      return { ...loc, column: cut('column'), middle: cut('middle') }
+    }),
+  })
+  return { ...r, x: dir(r.x), y: dir(r.y) }
 }
 
 /**

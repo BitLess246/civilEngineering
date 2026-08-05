@@ -4701,6 +4701,11 @@ export default function ModelSpace() {
                       open && (
                         <tr key={`${key}:sol`}>
                           <td colSpan={6} className="bg-slate-50/60 px-3 pb-3">
+                            {!sl.selection.best && (
+                              <div className="mb-3 rounded border border-[#efd4cc] bg-[#fbeeea] px-3 py-2 text-[11.5px] text-[#8f2f1e]">
+                                <b>No compliant mat.</b> {sl.selection.margin}
+                              </div>
+                            )}
                             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                               {[dd.x, dd.y].map((dr) => (
                                 <div key={dr.dir}>
@@ -4721,8 +4726,16 @@ export default function ModelSpace() {
                                         <tr key={li} className="border-t border-slate-100">
                                           <td className="py-0.5 pr-2">{loc.name} <span className="text-slate-500">({loc.coeff.toFixed(2)})</span></td>
                                           <td className="py-0.5 pr-2 text-right">{f1(loc.M)}</td>
-                                          <td className="py-0.5 pr-2">⌀12 @ {Math.round(loc.column.spacing)}{loc.column.usedMin ? ' (min)' : ''}</td>
-                                          <td className="py-0.5">{loc.middle.b > 1 ? `⌀12 @ ${Math.round(loc.middle.spacing)}${loc.middle.usedMin ? ' (min)' : ''}` : '—'}</td>
+                                          {/* When nothing complies there is no mat to quote. Printing the
+                                              fallback layout would present a §8.7.2.2 violation as a design. */}
+                                          <td className="py-0.5 pr-2">{sl.selection.best
+                                            ? `⌀${sl.barDia} @ ${Math.round(loc.column.spacing)}${loc.column.usedMin ? ' (min)' : ''}`
+                                            : <span className="text-[#c2402a]">no compliant mat</span>}</td>
+                                          <td className="py-0.5">{loc.middle.b > 1
+                                            ? (sl.selection.best
+                                              ? `⌀${sl.barDia} @ ${Math.round(loc.middle.spacing)}${loc.middle.usedMin ? ' (min)' : ''}`
+                                              : <span className="text-[#c2402a]">no compliant mat</span>)
+                                            : '—'}</td>
                                         </tr>
                                       ))}
                                     </tbody>
@@ -5455,7 +5468,7 @@ export default function ModelSpace() {
                       <td className="py-1 pr-2 text-right">{f1(f.P)} / {f1(f.Pu)}</td>
                       <td className="py-1 pr-2">B = {f2(f.design.B)} m</td>
                       <td className="py-1 pr-2">{Math.round(f.design.Dc)} mm</td>
-                      <td className="py-1 pr-2">{f.design.bars}⌀{cs?.barDia} @ {Math.round(f.design.barSpacing)} e.w.</td>
+                      <td className="py-1 pr-2">{f.design.bars}⌀{f.barDia} @ {Math.round(f.design.barSpacing)} e.w.</td>
                       <td className="py-1 text-slate-500">{f.gov}</td>
                     </tr>,
                     open && model && (

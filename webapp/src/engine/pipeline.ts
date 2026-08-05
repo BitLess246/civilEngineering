@@ -35,7 +35,7 @@ import { designSteelJoints, designBeamBeamJoints, type SteelJoint, type BeamBeam
 import {
   chooseBar, crackControlOK, constructabilityOK, type BarCandidate,
 } from './barSelection'
-import { optimizeFootingRebar } from './matRebarOptimize'
+import { optimizeFootingRebar, optimizeSlabRebar, applySlabMats } from './matRebarOptimize'
 import type { RebarSelection } from './rebarScore'
 
 export interface SoilOptions {
@@ -158,6 +158,17 @@ export interface SlabScheduleRow {
   plate: string
   lx: number; ly: number
   design: SlabDesignResult
+  /**
+   * The panel's bar diameter, mm.
+   *
+   * It used to be a hard-coded 12 here and again in the take-off and again in
+   * the on-screen schedule — three copies of an assumption nobody had chosen.
+   * One diameter serves the whole panel; the SPACING varies per strip, which
+   * is how a slab is drawn.
+   */
+  barDia: number
+  /** Ranked alternatives and the reason this mat was adopted. */
+  selection: RebarSelection
   ok: boolean
 }
 /** A plate carrying a timber deck-on-joist floor, designed by the woodSlab
@@ -1075,19 +1086,33 @@ function designFromRuns(
     const cs = footSec(p.corners[0])
     const extX = cc.some((q) => Math.abs(q.x - xMin) < 1e-4) || cc.some((q) => Math.abs(q.x - xMax) < 1e-4)
     const extZ = cc.some((q) => Math.abs(q.z - zMin) < 1e-4) || cc.some((q) => Math.abs(q.z - zMax) < 1e-4)
-    const design = designSlabDDM({
+    const sin = {
       lx, ly: lz, colWidth: Math.min(cs.b, cs.h), D: areaD, L: areaL,
       fc: cs.fc, fy: cs.fy, h: p.thickness, cover: 20, barDia: 12,
       exterior: { x: extX, y: extZ }, withBeams: true,
-    })
+    }
+    // One diameter for the panel, spacing per strip. The 12 above is only a
+    // seed for the degenerate path — the search replaces it.
+    const mat = optimizeSlabRebar(sin)
+    const barDia = mat.db ?? 12
+    // Quote the mats that were actually selected, not the layout designSlabDDM
+    // fell back to; the two differ and a schedule citing a reason that
+    // describes a different mat is worse than no reason at all.
+    const design = mat.design && mat.db !== null
+      ? applySlabMats(mat.design, mat.strips)
+      : designSlabDDM(sin)
     // Pass = §408.3.1.2 minimum thickness AND §424.2 immediate-live + long-term
     // deflection. DDM inapplicability (one-way panel, L > 2D) stays a schedule
     // note — the strips are still detailed conservatively — so it does not
     // dead-end the optimizer; serviceability violations DO fail the design.
     slabs.push({
-      plate: p.id, lx, ly: lz, design,
+      plate: p.id, lx, ly: lz, design, barDia, selection: mat.selection,
       ok: design.h >= design.hmin - 1e-9
-        && design.deflection.liveOK && design.deflection.totalOK,
+        && design.deflection.liveOK && design.deflection.totalOK
+        // No compliant mat is a design failure, not a detailing note: on a
+        // panel at its §408.3.1.2 minimum thickness it means the steel it
+        // needs is past the tension-controlled limit at φ = 0.90.
+        && mat.db !== null,
     })
   }
   // timber-deck panels add their joist + decking volume to the timber total
