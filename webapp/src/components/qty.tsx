@@ -3,16 +3,21 @@ import type { ConcreteClass } from '../engine/quantities'
 import { ReportControls } from './ReportControls'
 
 /** Numeric input. */
-export function Num({ label, unit, value, onChange, step = 'any', hint }: {
-  label: ReactNode; unit?: string; value: number; onChange: (v: number) => void; step?: string; hint?: string
+export function Num({ label, unit, value, onChange, step = 'any', hint, disabled }: {
+  label: ReactNode; unit?: string; value: number; onChange: (v: number) => void
+  step?: string; hint?: string
+  /** Read-only: something upstream owns this value (e.g. an optimiser). */
+  disabled?: boolean
 }) {
   return (
-    <label className="flex flex-col text-sm">
+    <label className={`flex flex-col text-sm ${disabled ? 'opacity-70' : ''}`}>
       <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">{label}</span>
-      <span className="flex overflow-hidden rounded-md border border-[#d6d3c9] bg-[#fcfbf8] focus-within:border-[#0f4c92] focus-within:shadow-[0_0_0_3px_rgba(15,76,146,.14)]">
+      <span className={`flex overflow-hidden rounded-md border border-[#d6d3c9] ${
+        disabled ? 'bg-[#f2f0ea]' : 'bg-[#fcfbf8]'
+      } focus-within:border-[#0f4c92] focus-within:shadow-[0_0_0_3px_rgba(15,76,146,.14)]`}>
         <input type="number" inputMode="decimal" step={step} value={Number.isFinite(value) ? value : ''}
-          onChange={(e) => onChange(parseFloat(e.target.value))}
-          className="min-w-0 flex-1 !rounded-none !border-0 !bg-transparent text-[13px] !shadow-none" />
+          disabled={disabled} onChange={(e) => onChange(parseFloat(e.target.value))}
+          className="min-w-0 flex-1 !rounded-none !border-0 !bg-transparent text-[13px] !shadow-none disabled:cursor-not-allowed" />
         {unit && <span className="flex items-center border-l border-[#eeece5] bg-[#f7f6f1] px-2.5 font-mono text-[10.5px] text-[#a39d8d]">{unit}</span>}
       </span>
       {hint ? <span className="mt-0.5 text-[10px] text-[#a39d8d]">{hint}</span> : null}

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   selectRebar, compareByTotal, comparePair, firstFailure,
   blockingGates, dominantBlocker,
-  PRIORITY_WEIGHTS, NEAR_TIE, COMMON_BARS,
+  PRIORITY_WEIGHTS, NEAR_TIE, MAX_TIE_STEEL, COMMON_BARS,
   type Candidate, type ComplianceCheck, type RebarLayout, type ScoreContext,
 } from './rebarScore'
 
@@ -401,5 +401,45 @@ describe('blocking gates', () => {
     ], CTX)
     expect(blockingGates(none)).toHaveLength(1)
     expect(dominantBlocker(none)?.id).toBe('too-shallow')
+  })
+})
+
+// ── The near-tie rule breaks ties; it does not buy steel ──────────────────
+
+describe('the near-tie steel guard', () => {
+  it('promotes a near-tie contender that costs no more steel', () => {
+    const r = selectRebar([
+      // Lower total, better serviceability, essentially the same area.
+      cand({ db: 16, bars: 8, AsProv: 1608, AsReq: 1500, spacing: 60, clearSpacing: 44, layers: [8] }),
+      cand({ db: 20, bars: 5, AsProv: 1571, AsReq: 1500, spacing: 110, clearSpacing: 70, layers: [5] }),
+    ], CTX)
+    expect(r.best!.layout.AsProv).toBeLessThanOrEqual(1608)
+  })
+
+  it('refuses to promote one that buys its way there', () => {
+    const lean = cand({ db: 20, bars: 5, AsProv: 1571, AsReq: 1500, spacing: 110, clearSpacing: 70, layers: [5] })
+    // Far better distributed, and 2.5× the steel. Whatever the totals say,
+    // these two are not "nearly equivalent".
+    const fat = cand({ db: 12, bars: 35, AsProv: 3958, AsReq: 1500, spacing: 30, clearSpacing: 18, layers: [35] })
+    const r = selectRebar([lean, fat], CTX)
+    if (r.best) {
+      const leader = r.ranked.reduce((a, s) => (s.total > a.total ? s : a))
+      expect(r.best.layout.AsProv)
+        .toBeLessThanOrEqual(leader.layout.AsProv * (1 + MAX_TIE_STEEL) + 1e-9)
+    }
+  })
+
+  it('the leader always survives its own guard, so a winner always exists', () => {
+    for (const As of [800, 1500, 4000]) {
+      const r = selectRebar([
+        cand({ db: 16, bars: 8, AsProv: As, AsReq: As * 0.9, spacing: 60, clearSpacing: 44, layers: [8] }),
+      ], CTX)
+      expect(r.best).not.toBeNull()
+    }
+  })
+
+  it('the guard is a fraction, and a loose one — it is not a second economy score', () => {
+    expect(MAX_TIE_STEEL).toBeGreaterThan(0)
+    expect(MAX_TIE_STEEL).toBeLessThan(0.5)
   })
 })

@@ -14,6 +14,8 @@ import { initialLetterhead } from '../lib/letterhead'
 import { InteractionDiagram } from '../components/InteractionDiagram'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { axialColumnSolution, eccentricColumnSolution, slendernessSolution } from '../lib/columnSolution'
+import { optimizeColumnRebar } from '../engine/columnRebarOptimize'
+import { RebarRanking } from '../components/RebarRanking'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { Math as KTex } from '../lib/math'
 import { f0, f1, f2 } from '../lib/format'
@@ -38,6 +40,10 @@ export default function ColumnDesign() {
   const [Mu, setMu] = useState(200)
   const [barMode, setBarMode] = useState<BarMode>('design')
   const [numBars, setNumBars] = useState(8)
+  // Auto-selection applies to the AXIAL design only. Analyze mode and the
+  // eccentric pilot both exist to check a cage the user already has, so
+  // choosing one for them would defeat the point.
+  const [autoBar, setAutoBar] = useState(true)
   const [layout, setLayout] = useState<BarLayout>('all-around')   // P–M bar distribution
   // Seismic / lateral system
   const [system, setSystem] = useState<LateralSystem>('gravity')
@@ -53,16 +59,33 @@ export default function ColumnDesign() {
   const tied = shape === 'tied' || eccentric    // eccentric pilot is tied-rect only
   const Pu = loadInput === 'individual' ? factoredLoad({ dead, live }) : PuDirect
 
+  // ── Cage selection ───────────────────────────────────────────────────
+  // Both axes are searched: diameter AND count. Unlike a beam, a column's
+  // count is not fixed once the diameter is — 8⌀20 and 4⌀25 are both real.
+  const cageChoice = useMemo(() => {
+    if (!autoBar || eccentric || barMode !== 'design') return null
+    if (!(fc > 0 && fy > 0 && Pu > 0)) return null
+    try {
+      return optimizeColumnRebar({
+        shape: tied ? 'tied' : 'spiral', b, h, D, cover, barDia, tieDia, fc, fy, fyt, Pu,
+        system, columnLength: colLen, hx: hx > 0 ? hx : undefined,
+      })
+    } catch { return null }
+  }, [autoBar, eccentric, barMode, tied, b, h, D, cover, barDia, tieDia, fc, fy, fyt, Pu, system, colLen, hx])
+
+  /** The diameter actually detailed — the optimiser's, or the user's field. */
+  const dbEff = cageChoice?.db ?? barDia
+
   const axial = useMemo(() => {
     if (!(fc > 0 && fy > 0 && Pu > 0)) return null
     try {
       return designAxialColumn({
-        shape: tied ? 'tied' : 'spiral', b, h, D, cover, barDia, tieDia, fc, fy, fyt, Pu,
-        numBars: barMode === 'analyze' || eccentric ? numBars : undefined,
+        shape: tied ? 'tied' : 'spiral', b, h, D, cover, barDia: dbEff, tieDia, fc, fy, fyt, Pu,
+        numBars: barMode === 'analyze' || eccentric ? numBars : cageChoice?.bars ?? undefined,
         system, columnLength: colLen, hx: hx > 0 ? hx : undefined,
       })
     } catch { return null }
-  }, [tied, b, h, D, cover, barDia, tieDia, fc, fy, fyt, Pu, barMode, numBars, eccentric, system, colLen, hx])
+  }, [tied, b, h, D, cover, dbEff, tieDia, fc, fy, fyt, Pu, barMode, numBars, eccentric, system, colLen, hx, cageChoice])
 
   const slender = useMemo(() => {
     if (!eccentric || !slenderOn) return null
@@ -88,8 +111,8 @@ export default function ColumnDesign() {
     if (slender) steps.push(...slendernessSolution({ Pu, M1, M2, k: kEff, Lu, h, EI: EIin > 0 ? EIin : undefined, fc, b }, slender))
     if (eccentric && inter && cap) steps.push(...eccentricColumnSolution({ b, h, cover, barDia, tieDia, fc, fy, numBars, layout }, inter, Pu, MuEff, cap))
     if (axial) steps.push(...axialColumnSolution({
-      shape: tied ? 'tied' : 'spiral', b, h, D, cover, barDia, tieDia, fc, fy, fyt, Pu,
-      numBars: barMode === 'analyze' || eccentric ? numBars : undefined,
+      shape: tied ? 'tied' : 'spiral', b, h, D, cover, barDia: dbEff, tieDia, fc, fy, fyt, Pu,
+      numBars: barMode === 'analyze' || eccentric ? numBars : cageChoice?.bars ?? undefined,
     }, axial))
     return steps
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -128,7 +151,7 @@ export default function ColumnDesign() {
           : `Governing: P–M interaction · utilization ${util !== null ? util.toFixed(2) : '—'}`)
         : `Governing: axial · φPn,max = ${f1(axial.phiPnMax)} kN`,
       stats: [
-        { label: 'Longitudinal', value: `${axial.bars}-⌀${barDia}`, unit: `ρ ${(axial.rho * 100).toFixed(2)}%` },
+        { label: 'Longitudinal', value: `${axial.bars}-⌀${dbEff}`, unit: `ρ ${(axial.rho * 100).toFixed(2)}%` },
         { label: tied ? 'Ties' : 'Spiral',
           value: `⌀${tied ? Math.max(tieDia, axial.tieDiaMin) : tieDia}`,
           unit: `@${f0(spacing)} mm` },
@@ -137,7 +160,7 @@ export default function ColumnDesign() {
       checks,
       footnote: `ρ = ${(axial.rho * 100).toFixed(2)}% within ${(RHO_MIN * 100).toFixed(0)} … ${(RHO_MAX * 100).toFixed(0)}% — §410.6.1.1${eccentric && slender ? ` · δ = ${slender.delta.toFixed(3)}` : ''}`,
     }
-  }, [axial, eccentric, util, unstable, tied, slender, Pu, barDia, tieDia])
+  }, [axial, eccentric, util, unstable, tied, slender, Pu, dbEff, tieDia])
 
   // ~12 representative rows for the P-M table, balanced point always included.
   const tableRows = useMemo(() => {
@@ -167,7 +190,14 @@ export default function ColumnDesign() {
 
       <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
         <div className="space-y-5">
-          <Card title="Column">
+          <Card title="Column"
+            hint={!eccentric && barMode === 'design' ? (
+              <label className="no-print flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-[#5c6675]">
+                <input type="checkbox" checked={autoBar} onChange={(e) => setAutoBar(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-[#0f4c92]" />
+                Auto-select cage
+              </label>
+            ) : undefined}>
             <Pick label="Loading" value={mode} onChange={(v) => setMode(v as Mode)}
               options={[['axial', 'Concentric (axial)'], ['eccentric', 'Eccentric (P + M)']]} />
             <Pick label="Shape" value={eccentric ? 'tied' : shape} onChange={(v) => setShape(v as ColumnShape)}
@@ -179,7 +209,9 @@ export default function ColumnDesign() {
               <Num label="Diameter D" unit="mm" value={D} onChange={setD} />
             )}
             <Num label="Clear cover" unit="mm" value={cover} onChange={setCover} />
-            <Num label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={barDia} onChange={setBarDia} />
+            <Num label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={dbEff} onChange={setBarDia}
+              disabled={!!cageChoice}
+              hint={cageChoice ? (cageChoice.db ? 'chosen by the optimiser' : 'no compliant cage — see the ranking') : undefined} />
             <Num label={tied ? <>Tie <KTex tex="d_t" /></> : <>Spiral <KTex tex="d_s" /></>} unit="mm" value={tieDia} onChange={setTieDia} />
             <Pick label="Bars" value={eccentric ? 'analyze' : barMode} onChange={(v) => setBarMode(v as BarMode)}
               options={eccentric ? [['analyze', 'Given count']] : [['design', 'Design automatically'], ['analyze', 'Given count']]} />
@@ -256,13 +288,15 @@ export default function ColumnDesign() {
               stats={verdict.stats} checks={verdict.checks} footnote={verdict.footnote} />
           )}
 
+          {cageChoice && <RebarRanking selection={cageChoice.selection} title="Cage selection" />}
+
           {/* The same card the beam page uses — graph-paper ground, title and
               section meta in a header strip above the drawing. The two pages
               draw the same kind of thing and should look like it. */}
           <DrawingCard pdfDrawing title="Section"
-            meta={`${tied ? `${f0(b)} × ${f0(h)}` : `⌀${f0(D)}`} · ${axial?.bars ?? numBars} ⌀${barDia} · to scale`}>
+            meta={`${tied ? `${f0(b)} × ${f0(h)}` : `⌀${f0(D)}`} · ${axial?.bars ?? numBars} ⌀${dbEff} · to scale`}>
             <ColumnSchematic shape={tied ? 'tied' : 'spiral'} b={b} h={h} D={D} cover={cover}
-              barDia={barDia} tieDia={tieDia} bars={axial?.bars ?? numBars}
+              barDia={dbEff} tieDia={tieDia} bars={axial?.bars ?? numBars}
               tieSpacing={axial ? (tied ? axial.tieSpacingFinal : axial.spiralPitch) : undefined} />
           </DrawingCard>
 
@@ -279,7 +313,7 @@ export default function ColumnDesign() {
                 <Row alert={util > 1} label="Utilisation" value={`${(util * 100).toFixed(0)} %`}
                   sub={`φPn=${f1(cap.phi * cap.Pn)} kN @ e=${f0((MuEff / Pu) * 1000)} mm`} />
               )}
-              <Row label="Bars" value={`${axial.bars} ⌀${barDia} mm`}
+              <Row label="Bars" value={`${axial.bars} ⌀${dbEff} mm`}
                 sub={`ρ=${(axial.rho * 100).toFixed(2)}% ${axial.rhoOK ? '✓' : '✗ (1–8%)'}`} />
               <Row alert={!axial.axialOK && !eccentric} label={<KTex tex="\phi P_{n,max}" />}
                 value={`${f1(axial.phiPnMax)} kN`}
@@ -388,7 +422,7 @@ export default function ColumnDesign() {
             : `Axial φPn,max = ${f1(axial.phiPnMax)} kN`}
           lh={lh}
           stats={[
-            { label: 'Bars', value: `${axial.bars}-⌀${barDia}` },
+            { label: 'Bars', value: `${axial.bars}-⌀${dbEff}` },
             { label: tied ? 'Ties' : 'Spiral pitch', value: tied ? `⌀${Math.max(tieDia, axial.tieDiaMin)} @${f0(axial.tieSpacingFinal)}` : `@${f0(axial.spiralPitch)}`, unit: 'mm' },
             { label: 'φPn,max', value: f1(axial.phiPnMax), unit: 'kN' },
             ...(eccentric && slender ? [{
