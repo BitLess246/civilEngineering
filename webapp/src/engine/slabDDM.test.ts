@@ -67,3 +67,56 @@ describe('slab DDM — steel & checks', () => {
     expect(heavyLL.notes.some((n) => /Live load/.test(n))).toBe(true)
   })
 })
+
+// ── Tension control vs the §408.3.1.2 minimum thickness ───────────────────
+
+describe('the minimum thickness is not always enough', () => {
+  const panel = (o: Record<string, unknown> = {}) => designSlabDDM({
+    lx: 6, ly: 7, colWidth: 400, D: 8, L: 6, fc: 28, fy: 415, cover: 20, barDia: 12, ...o,
+  } as Parameters<typeof designSlabDDM>[0])
+
+  it('ρ at εt = 0.005 matches the hand calc', () => {
+    // 0.85 · β1(28)=0.85 · (28/415) · 3/8 = 0.0182801
+    expect(panel().rhoMax).toBeCloseTo(0.0182801, 7)
+  })
+
+  it('grows h when it owns the thickness', () => {
+    // §408.3.1.2's hmin is the with-beams (αfm ≥ 2) form, but this module
+    // does NOT credit beam stiffness for the slab steel — so on a heavily
+    // loaded beamless panel the minimum leaves the section over-reinforced.
+    const r = panel()
+    expect(r.h).toBeGreaterThan(Math.ceil(r.hmin / 5) * 5)
+    expect(r.hGrownForSteel).toBe(true)
+    expect(r.tensionControlled).toBe(true)
+    expect(r.notes.some((n) => /Thickness raised/.test(n))).toBe(true)
+  })
+
+  it('reports, and does not repair, a thickness the caller pinned', () => {
+    const r = panel({ h: 155 })
+    expect(r.h).toBe(155)                 // left exactly where it was put
+    expect(r.hGrownForSteel).toBe(false)
+    expect(r.tensionControlled).toBe(false)
+    expect(r.applicable).toBe(false)      // φ = 0.90 does not apply
+    expect(r.notes.some((n) => /Over-reinforced/.test(n))).toBe(true)
+  })
+
+  it('flags the individual strip, not just the panel', () => {
+    const r = panel({ h: 155 })
+    const strips = [r.x, r.y].flatMap((d) => d.locations.flatMap((l) => [l.column, l.middle]))
+    expect(strips.some((st) => !st.tensionControlled)).toBe(true)
+    for (const st of strips) {
+      if (st.b <= 0) continue
+      const d = st === r.x.locations[0].column ? r.x.d : undefined
+      if (d) expect(st.tensionControlled).toBe(st.As / (st.b * d) <= r.rhoMax + 1e-9)
+    }
+  })
+
+  it('leaves an ordinary panel alone', () => {
+    const easy = designSlabDDM({
+      lx: 6, ly: 6, colWidth: 400, D: 5, L: 2, fc: 28, fy: 415, cover: 20, barDia: 12,
+    })
+    expect(easy.hGrownForSteel).toBe(false)
+    expect(easy.tensionControlled).toBe(true)
+    expect(easy.applicable).toBe(true)
+  })
+})

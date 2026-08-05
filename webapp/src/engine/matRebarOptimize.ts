@@ -47,6 +47,8 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import { designSquareFooting, type SquareFootingInput, type SquareFootingResult } from './isolatedFooting'
+import { designRectangularFooting, type RectFootingInput, type RectFootingResult } from './rectangularFooting'
+import { designEccentricSquareFooting, type EccentricFootingInput, type EccentricFootingResult } from './eccentricFooting'
 import {
   designSlabDDM, type SlabInput, type SlabDesignResult, type SlabDirResult,
 } from './slabDDM'
@@ -328,12 +330,13 @@ export function optimizeMatRebar(
 
 // ── Footings ──────────────────────────────────────────────────────────────
 
-export interface FootingRebarChoice extends MatRebarChoice {
-  /** The footing design at the adopted diameter — B and Dc move with db. */
-  design: SquareFootingResult | null
-  /** Every design tried, keyed by diameter. */
-  designs: Map<number, SquareFootingResult>
-}
+/**
+ * A concentric square footing's mat choice.
+ *
+ * Kept as a name because callers use it; it is now just the generic search
+ * result, so the square, rectangular and eccentric paths share one shape.
+ */
+export type FootingRebarChoice = MatSearchChoice<SquareFootingResult>
 
 /**
  * Optimise an isolated footing's bottom mat.
@@ -344,50 +347,96 @@ export interface FootingRebarChoice extends MatRebarChoice {
  * designer is re-run per diameter rather than the mat being re-cut against a
  * fixed section.
  */
-export function optimizeFootingRebar(
-  i: SquareFootingInput, opts: MatRebarOptions = {},
-): FootingRebarChoice {
+/**
+ * A footing designed at ONE bar diameter: the section it produced and the
+ * strips its steel spreads over.
+ *
+ * Every footing engine sizes its own thickness from `d_required + cover + db`,
+ * so the whole design travels with the bar and has to be re-run per diameter
+ * rather than the mat being re-cut against a fixed section.
+ */
+export interface MatTrial<T> {
+  design: T
+  sec: MatSection
+  strips: MatStrip[]
+}
+
+export interface MatSearchChoice<T> extends MatRebarChoice {
+  design: T | null
+  designs: Map<number, T>
+  /**
+   * The mat adopted for each strip at the chosen diameter.
+   *
+   * A rectangular footing has two directions carrying different steel; giving
+   * both the governing strip's spacing over-provides the lighter one. One
+   * diameter, spacing per direction — the same rule the slab panel follows.
+   */
+  strips: { label: string; b: number; AsReq: number; spacing: number; bars: number }[]
+}
+
+/**
+ * Search diameter × spacing over a family of per-diameter designs.
+ *
+ * Shared by every footing shape. Was written inline for the concentric square
+ * one; the rectangular and eccentric footings need exactly the same loop, and
+ * three copies of it would be three chances for the gates to drift.
+ */
+export function optimizeMatSearch<T>(
+  trial: (db: number) => MatTrial<T> | null, opts: MatRebarOptions = {},
+): MatSearchChoice<T> {
   const sizes = opts.sizes ?? MAT_BAR_SIZES
-  const designs = new Map<number, SquareFootingResult>()
+  const designs = new Map<number, T>()
+  const trialsAt = new Map<number, MatTrial<T>>()
   const candidates: Candidate[] = []
+  let govSec: MatSection | null = null
+  let govStrip: MatStrip | null = null
+  let hMax = 0
 
   for (const db of sizes) {
-    let r: SquareFootingResult
+    let t: MatTrial<T> | null
     try {
-      r = designSquareFooting({ ...i, barDia: db })
+      t = trial(db)
     } catch {
       continue
     }
-    designs.set(db, r)
-    // Footings are detailed as one-way slabs — ACI 318-14 §13.3.2.1.
-    const sec: MatSection = { h: r.Dc, cover: i.cover, fc: i.fc, fy: i.fy, kind: 'one-way' }
-    const strip: MatStrip = {
-      label: 'bottom mat', b: r.B * 1000, d: r.dFlex, AsReq: r.steelArea,
-    }
-    candidates.push(...matCandidates([strip], sec, db, opts))
+    if (!t || t.strips.length === 0) continue
+    designs.set(db, t.design)
+    trialsAt.set(db, t)
+    candidates.push(...matCandidates(t.strips, t.sec, db, opts))
+    // Score every candidate against ONE spacing cap — the deepest section any
+    // diameter produced. Otherwise a bigger bar scores better merely because
+    // the thicker footing it forces has a looser §7.7.2.3 limit.
+    if (t.sec.h > hMax) { hMax = t.sec.h; govSec = t.sec }
+    const gov = t.strips.reduce((a, c) => (c.AsReq / c.b > a.AsReq / a.b ? c : a))
+    if (!govStrip || gov.AsReq / gov.b > govStrip.AsReq / govStrip.b) govStrip = gov
   }
 
-  if (candidates.length === 0) {
+  if (candidates.length === 0 || !govSec || !govStrip) {
     return {
       selection: { best: null, ranked: [], rejected: [], margin: 'no candidates were generated' },
-      db: null, spacing: null, bars: null, blocker: null, design: null, designs,
+      db: null, spacing: null, bars: null, blocker: null, design: null, designs, strips: [],
     }
   }
 
-  // Score in the context of the largest section produced, so the spacing cap
-  // every candidate is measured against is one figure rather than one per
-  // diameter — otherwise a thicker footing would score better simply for
-  // having a looser limit.
-  const hMax = Math.max(...[...designs.values()].map((r) => r.Dc))
-  const govB = Math.max(...[...designs.values()].map((r) => r.B * 1000))
-  const govDesign = [...designs.values()][0]
-  const sec: MatSection = { h: hMax, cover: i.cover, fc: i.fc, fy: i.fy, kind: 'one-way' }
-  const ctx = matContext(
-    { label: 'bottom mat', b: govB, d: govDesign.dFlex, AsReq: govDesign.steelArea }, sec,
-  )
-
-  const selection = selectRebar(candidates, ctx)
+  const selection = selectRebar(candidates, matContext(govStrip, govSec))
   const best = selection.best?.layout ?? null
+
+  // Re-cut every strip at the adopted diameter to its OWN best spacing.
+  const strips: MatSearchChoice<T>['strips'] = []
+  if (best) {
+    const t = trialsAt.get(best.db)
+    for (const strip of t?.strips ?? []) {
+      const per = selectRebar(
+        matCandidates([strip], t!.sec, best.db, opts), matContext(strip, t!.sec),
+      )
+      const l = per.best?.layout
+      strips.push({
+        label: strip.label, b: strip.b, AsReq: strip.AsReq,
+        spacing: l?.spacing ?? best.spacing, bars: l?.bars ?? best.bars,
+      })
+    }
+  }
+
   return {
     selection,
     db: best?.db ?? null,
@@ -395,8 +444,61 @@ export function optimizeFootingRebar(
     bars: best?.bars ?? null,
     blocker: dominantBlocker(selection),
     design: best ? designs.get(best.db) ?? null : null,
-    designs,
+    designs, strips,
   }
+}
+
+/** Concentric square footing — one bottom mat, each way. */
+export function optimizeFootingRebar(
+  i: SquareFootingInput, opts: MatRebarOptions = {},
+): FootingRebarChoice {
+  return optimizeMatSearch<SquareFootingResult>((db) => {
+    const r = designSquareFooting({ ...i, barDia: db })
+    return {
+      design: r,
+      // Footings are detailed as one-way slabs — ACI 318-14 §13.3.2.1.
+      sec: { h: r.Dc, cover: i.cover, fc: i.fc, fy: i.fy, kind: 'one-way' },
+      strips: [{ label: 'bottom mat', b: r.B * 1000, d: r.dFlex, AsReq: r.steelArea }],
+    }
+  }, opts)
+}
+
+/**
+ * Rectangular footing — TWO mats, and they are not interchangeable.
+ *
+ * The long direction spreads across By and the short across Bx, with the
+ * short direction's central band concentrated per §13.3.3.3. One diameter
+ * serves both (a footing detailed in two bar sizes is a schedule nobody
+ * thanks you for); the spacing differs per direction.
+ */
+export function optimizeRectFootingRebar(
+  i: RectFootingInput, opts: MatRebarOptions = {},
+): MatSearchChoice<RectFootingResult> {
+  return optimizeMatSearch<RectFootingResult>((db) => {
+    const r = designRectangularFooting({ ...i, barDia: db })
+    return {
+      design: r,
+      sec: { h: r.Dc, cover: i.cover, fc: i.fc, fy: i.fy, kind: 'one-way' },
+      strips: [
+        { label: 'long direction', b: r.By * 1000, d: r.dFlex, AsReq: r.long.As },
+        { label: 'short direction', b: r.Bx * 1000, d: r.dFlex, AsReq: r.short.As },
+      ],
+    }
+  }, opts)
+}
+
+/** Eccentric square footing — one mat, sized from the peak bearing pressure. */
+export function optimizeEccentricFootingRebar(
+  i: EccentricFootingInput, opts: MatRebarOptions = {},
+): MatSearchChoice<EccentricFootingResult> {
+  return optimizeMatSearch<EccentricFootingResult>((db) => {
+    const r = designEccentricSquareFooting({ ...i, barDia: db })
+    return {
+      design: r,
+      sec: { h: r.Dc, cover: i.cover, fc: i.fc, fy: i.fy, kind: 'one-way' },
+      strips: [{ label: 'bottom mat', b: r.B * 1000, d: r.dFlex, AsReq: r.steelArea }],
+    }
+  }, opts)
 }
 
 // ── Two-way slabs ─────────────────────────────────────────────────────────

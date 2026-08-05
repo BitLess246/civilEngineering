@@ -406,11 +406,16 @@ const beamOK = (d: BeamDesignResult) =>
  * inertia is taken at the member's most heavily reinforced SAGGING section
  * (where the span deflects); with no sagging section the worst section is used.
  *
- * The section is treated as the RECTANGULAR WEB even where the flexural design
- * used T-beam action: a bf-wide rectangle is not a T (it badly overstates Ig,
- * and yt ≠ h/2 for a real T), and ignoring the flange lowers Ig, Mcr and Icr
- * together — so the deflection comes out on the conservative side. Proper
- * T-section gross properties are a follow-up.
+ * The section carries its FLANGE where the flexural design used T-beam action
+ * (`opts.tBeamAction`), because a monolithic beam-and-slab pour is a T for
+ * stiffness as much as for strength — §424.2 / §406.3.2. The true section sits
+ * between the two rectangles anyone is tempted to substitute for it: on a
+ * 300×600 web with a 1000×120 flange the web-only rectangle gives 0.61·Ig and
+ * a bf-wide full-depth rectangle 2.0·Ig.
+ *
+ * This docstring used to say the opposite — that the web rectangle was used
+ * and proper T properties were a follow-up. The follow-up landed; the comment
+ * did not, and two lines below it the flange is passed straight through.
  *
  * Returns null when either service solve is missing.
  */

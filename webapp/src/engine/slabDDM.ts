@@ -9,7 +9,7 @@
 //   pipeline), so the slab carries the full column-strip share.
 // Units: spans m; loads kPa; h/cover/db mm; moments kN·m; steel mm².
 // ─────────────────────────────────────────────────────────────────────────
-import { flexuralSteel } from './flexure'
+import { flexuralSteel, rhoTensionControlled } from './flexure'
 import { slabPanelDeflection, type SlabDeflectionResult } from './slabDeflection'
 
 export interface SlabInput {
@@ -29,6 +29,15 @@ export interface SlabSectionSteel {
   M: number                       // kN·m on the strip
   b: number                       // strip width, mm
   As: number; bars: number; spacing: number; usedMin: boolean
+  /**
+   * ρ = As/(b·d) is within the εt = 0.005 limit, so the φ = 0.90 this design
+   * was computed at actually applies (§21.2.2).
+   *
+   * `flexuralSteel` clamps a negative radicand to zero, which means an
+   * over-reinforced section comes back looking like a valid answer. Without
+   * this flag nothing downstream could tell the difference.
+   */
+  tensionControlled: boolean
 }
 export interface SlabLocation {
   name: 'Ext −M' | '+M' | 'Int −M' | 'Support −M'
@@ -48,6 +57,21 @@ export interface SlabDirResult {
 }
 export interface SlabDesignResult {
   h: number; hmin: number; wu: number
+  /** ρ at εt = 0.005 for this concrete and steel — §21.2.2. */
+  rhoMax: number
+  /** Every strip is tension-controlled at the adopted thickness. */
+  tensionControlled: boolean
+  /**
+   * §408.3.1.2's thickness was not enough and the engine raised it.
+   *
+   * `hmin` is the with-beams (αfm ≥ 2) form, but this module deliberately
+   * does NOT credit beam stiffness when it designs the slab steel — so on a
+   * heavily loaded beamless panel the two disagree and the slab lands past
+   * the tension-controlled limit. When the caller leaves `h` open the engine
+   * owns the thickness and grows it; when the caller PINS `h` it is reported
+   * and left alone.
+   */
+  hGrownForSteel: boolean
   ratio: number                   // long/short
   twoWay: boolean
   applicable: boolean
@@ -65,6 +89,46 @@ const csInteriorNeg = (r: number) => interp(r, 0.90, 0.75, 0.45)
 const csPositive = (r: number) => interp(r, 0.60, 0.60, 0.45)
 const csExteriorNeg = () => 1.0       // no edge beam → column strip takes all
 
+/**
+ * Every DDM strip at thickness `h` is tension-controlled.
+ *
+ * Deliberately a cheap re-derivation of the moments rather than a full design
+ * pass — it is called in a loop while the thickness grows, and it only needs
+ * the answer to one question.
+ */
+function stripsTensionControlled(
+  i: SlabInput, h: number, cover: number, db: number, rhoMax: number,
+): boolean {
+  const short = Math.min(i.lx, i.ly), long = Math.max(i.lx, i.ly)
+  const wu = 1.2 * i.D + 1.6 * i.L
+  for (const which of ['x', 'y'] as const) {
+    const l1 = which === 'x' ? i.lx : i.ly
+    const l2 = which === 'x' ? i.ly : i.lx
+    const ln = Math.max(0.65 * l1, l1 - i.colWidth / 1000)
+    const Mo = (wu * l2 * ln * ln) / 8
+    const r = l2 / l1
+    const csWidth = 2 * Math.min(0.25 * l1, 0.25 * l2)
+    const d = which === (short === i.lx ? 'x' : 'y') ? h - cover - db / 2 : h - cover - 1.5 * db
+    if (d <= 0) return false
+    const isEnd = i.exterior?.[which] ?? false
+    const spec: [number, number][] = isEnd
+      ? [[0.16, csExteriorNeg()], [0.57, csPositive(r)], [0.70, csInteriorNeg(r)]]
+      : [[0.65, csInteriorNeg(r)], [0.35, csPositive(r)]]
+    for (const [coeff, csFrac] of spec) {
+      const M = coeff * Mo
+      for (const [share, b] of [[csFrac, csWidth * 1000], [1 - csFrac, Math.max(0, l2 - csWidth) * 1000]] as const) {
+        if (b <= 0) continue
+        const flex = flexuralSteel({ Mu: Math.abs(share * M), b, d, fc: i.fc, fy: i.fy })
+        if (flex.As / (b * d) > rhoMax + 1e-9) return false
+      }
+    }
+  }
+  // `long` is unused beyond the short/long test above; referenced so the
+  // ratio convention stays visible to a reader.
+  void long
+  return true
+}
+
 export function designSlabDDM(i: SlabInput): SlabDesignResult {
   const cover = i.cover ?? 20, db = i.barDia ?? 12, Ab = (Math.PI / 4) * db * db
   const short = Math.min(i.lx, i.ly), long = Math.max(i.lx, i.ly)
@@ -77,7 +141,23 @@ export function designSlabDDM(i: SlabInput): SlabDesignResult {
   const lnShort = short - i.colWidth / 1000
   const beta = lnLong / Math.max(lnShort, 1e-9)
   const hmin = Math.max(90, (lnLong * 1000 * (0.8 + i.fy / 1400)) / (36 + 9 * beta))
-  const h = i.h ?? Math.ceil(hmin / 5) * 5
+  const rhoMax = rhoTensionControlled(i.fc, i.fy)
+
+  // ── Thickness ─────────────────────────────────────────────────────────
+  // A pinned h is the caller's; an open one is ours, and handing back a
+  // thickness whose steel cannot be tension-controlled is not an answer. Grow
+  // in 5 mm steps until every strip clears §21.2.2, or give up at 3× hmin and
+  // let `tensionControlled` carry the failure.
+  const hStart = Math.ceil(hmin / 5) * 5
+  let h = i.h ?? hStart
+  let hGrownForSteel = false
+  if (i.h === undefined) {
+    const cap = Math.max(hStart * 3, hStart + 400)
+    while (h < cap && !stripsTensionControlled(i, h, cover, db, rhoMax)) {
+      h += 5
+      hGrownForSteel = true
+    }
+  }
 
   const notes: string[] = []
   if (!twoWay) notes.push('Long/short > 2 → behaves one-way; DDM (two-way) not applicable.')
@@ -112,7 +192,11 @@ export function designSlabDDM(i: SlabInput): SlabDesignResult {
       const As = Math.max(flex.As, asMin)
       const smax = Math.min(2 * h, 450)                        // §408.7.2.2
       const n = Math.max(2, Math.ceil(As / Ab), Math.ceil(b / smax))
-      return { M: Math.abs(M), b, As, bars: n, spacing: (b - db) / (n - 1), usedMin: As <= asMin + 1e-9 }
+      return {
+        M: Math.abs(M), b, As, bars: n, spacing: (b - db) / (n - 1),
+        usedMin: As <= asMin + 1e-9,
+        tensionControlled: b * d > 0 ? As / (b * d) <= rhoMax + 1e-9 : false,
+      }
     }
 
     const locations: SlabLocation[] = spec.map(([coeff, name, csFrac]) => {
@@ -148,9 +232,28 @@ export function designSlabDDM(i: SlabInput): SlabDesignResult {
   })
   if (!deflection.totalOK) notes.push(`Long-term + live deflection ${deflection.total.toFixed(1)} mm > ℓn/240 = ${deflection.limitTotal.toFixed(1)} mm — increase thickness.`)
 
+  const allTC = [x, y].every((dr) => dr.locations.every((l) =>
+    l.column.tensionControlled && (l.middle.b <= 0 || l.middle.tensionControlled)))
+  if (!allTC) {
+    notes.push(
+      `Over-reinforced at h = ${h} mm: a strip needs ρ past the εt = 0.005 limit ` +
+      `(${rhoMax.toFixed(4)}), so φ = 0.90 does not apply (§21.2.2). Increase the thickness.`,
+    )
+  }
+  if (hGrownForSteel) {
+    notes.push(
+      `Thickness raised from the §408.3.1.2 minimum ${Math.round(hmin)} mm to ${h} mm: ` +
+      'that formula assumes edge beams with αfm ≥ 2, and beam stiffness is not credited ' +
+      'for the slab steel here, so the minimum alone left the section over-reinforced.',
+    )
+  }
+
   return {
-    h, hmin, wu, ratio, twoWay,
-    applicable: twoWay && i.L <= 2 * i.D,
+    h, hmin, wu, ratio, twoWay, rhoMax,
+    tensionControlled: allTC, hGrownForSteel,
+    // An over-reinforced panel is not a DDM applicability note — the φ the
+    // numbers were computed at is simply wrong, so it fails outright.
+    applicable: twoWay && i.L <= 2 * i.D && allTC,
     notes, x, y, deflection,
   }
 }

@@ -206,7 +206,13 @@ export function optimizeBeamRebar(
     // The compression bars follow the tension bars unless the caller pinned
     // them; a beam detailed with two different main sizes is a schedule
     // nobody thanks you for.
-    const trial: BeamDesignInput = { ...i, barDia: db, comprBarDia: i.comprBarDia ?? db }
+    const trial: BeamDesignInput = {
+      ...i, barDia: db, comprBarDia: i.comprBarDia ?? db,
+      // Hand the designer the SAME aggregate this module gates on. It used
+      // to keep its own §25.2.1 figure and let `designBeam` default to
+      // 20 mm — so a 40 mm mix was checked here and ignored there.
+      aggregate: opts.aggregate,
+    }
     let r: BeamDesignResult
     try {
       r = designBeam(trial)
@@ -216,8 +222,9 @@ export function optimizeBeamRebar(
     designs.set(db, r)
     inputs.set(db, trial)
 
-    // §25.2.1 clear spacing: the greater of db, 25 mm and 4/3 the aggregate.
-    const sMinClear = Math.max(db, 25, (4 / 3) * (opts.aggregate ?? 20))
+    // §25.2.1 clear spacing — taken from the design result rather than
+    // recomputed, so the gate and the layout can never disagree.
+    const sMinClear = r.sMinClear
     const sMaxCrack = crackSpacingLimit(i.fy, i.cover)
 
     const Ab = (Math.PI / 4) * db * db
@@ -314,6 +321,7 @@ export function optimizeBeamMember(
     // Mu/Vu are placeholders here; each section supplies its own below.
     const trial: BeamDesignInput = {
       ...geom, barDia: db, comprBarDia: geom.comprBarDia ?? db, Mu: 0, Vu: 0,
+      aggregate: opts.aggregate,
     }
     const designs: { id: string; label?: string; design: BeamDesignResult }[] = []
     let failed = false
@@ -328,7 +336,8 @@ export function optimizeBeamMember(
     if (failed || designs.length !== demands.length) continue
     perSize.set(db, designs)
 
-    const sMinClear = Math.max(db, 25, (4 / 3) * (opts.aggregate ?? 20))
+    // From the design result, not recomputed — see `optimizeBeamRebar`.
+    const sMinClear = designs[0].design.sMinClear
     const sMaxCrack = crackSpacingLimit(geom.fy, geom.cover)
 
     // Compliance across the WHOLE member: a check passes only if it passes at

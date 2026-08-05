@@ -137,8 +137,11 @@ describe('beam design — shear', () => {
 
 describe('beam design — compression-bar layout & stirrup detailing', () => {
   it("compression bars get the same spacing/layer treatment; d' deepens (Varignon)", () => {
-    // Heavy DRRB → 9 ⌀16 compression bars: two layers [5, 4].
-    const r = designBeam({ ...base, Mu: 460, comprBarDia: 16 })
+    // Heavy DRRB → two compression layers. The old fixture was a 300 mm web
+    // at Mu = 460, which only fitted 5 bars per layer because the layout
+    // omitted §25.2.1's 4/3·d_agg term: 5⌀20 needs 100 + 4(26.7) = 206.7 mm of
+    // a 200 mm web. It is 400 mm now, and genuinely fits.
+    const r = designBeam({ ...base, b: 400, Mu: 600, comprBarDia: 16 })
     expect(r.mode).toBe('DRRB')
     expect(r.flexOK).toBe(true)
     expect(r.comprLayers.length).toBeGreaterThanOrEqual(2)
@@ -227,7 +230,7 @@ describe('beamServiceDeflection — ACI 318-14 §24.2', () => {
 
 describe('beam design — compression NA check', () => {
   it('deepest layer depth = base + (nLayers−1)·pitch; above NA passes', () => {
-    const r = designBeam({ ...base, Mu: 460, comprBarDia: 16 })   // compr layers [5,4]
+    const r = designBeam({ ...base, b: 400, Mu: 600, comprBarDia: 16 })  // compr layers [7,3]
     const expected = (40 + 10 + 8) + (r.comprLayers.length - 1) * (16 + 25)
     expect(r.dPrimeExtreme).toBeCloseTo(expected, 9)
     expect(r.dPrimeExtreme).toBeLessThan(r.cNA)

@@ -6,6 +6,7 @@ import {
   type MatSection, type MatStrip,
 } from './matRebarOptimize'
 import { designSquareFooting, type SquareFootingInput } from './isolatedFooting'
+import { optimizeRectFootingRebar, optimizeEccentricFootingRebar } from './matRebarOptimize'
 import { designSlabDDM, type SlabInput } from './slabDDM'
 import { firstFailure, MAX_TIE_STEEL } from './rebarScore'
 
@@ -358,5 +359,49 @@ describe('how a mat is named', () => {
   it('a rejected mat names itself the same way', () => {
     const c = optimizeMatRebar([strip()], section())
     for (const r of c.selection.rejected) expect(r.reason).toMatch(/⌀\d+ @ \d+/)
+  })
+})
+
+// ── Every footing shape, not just the concentric square ───────────────────
+
+describe('rectangular and eccentric footings search too', () => {
+  const common = {
+    serviceLoad: 1200, ultimateLoad: 1700, columnWidth: 400, fc: 28, fy: 415,
+    qAllow: 200, gammaSoil: 18, gammaConc: 24, H: 1.5, cover: 75,
+    barDia: 32,   // a deliberately silly seed — the search must ignore it
+  }
+
+  it('all three shapes pick their own bar, not the seed', () => {
+    const shapes = [
+      optimizeFootingRebar(common as never),
+      optimizeRectFootingRebar({ ...common, sizing: { mode: 'ratio', ratio: 1.5 } } as never),
+      optimizeEccentricFootingRebar({ ...common, serviceMoment: 120, ultimateMoment: 170 } as never),
+    ]
+    for (const c of shapes) {
+      expect(c.db).not.toBeNull()
+      expect(c.db).toBeLessThan(32)
+      expect(firstFailure(c.selection.best!.compliance)).toBeNull()
+    }
+  })
+
+  it('a rectangular footing gets ONE diameter and a spacing per direction', () => {
+    // The two directions carry different steel; quoting the governing strip's
+    // spacing on both would over-provide the lighter one.
+    const c = optimizeRectFootingRebar({ ...common, sizing: { mode: 'ratio', ratio: 1.5 } } as never)
+    expect(c.strips).toHaveLength(2)
+    expect(c.strips.map((s) => s.label)).toEqual(['long direction', 'short direction'])
+    expect(new Set(c.strips.map((s) => s.spacing)).size).toBeGreaterThan(1)
+    for (const st of c.strips) {
+      const Ab = (Math.PI / 4) * c.db! * c.db!
+      expect(st.bars * Ab).toBeGreaterThanOrEqual(st.AsReq - 1e-6)
+      expect(SPACING_MODULES).toContain(st.spacing as (typeof SPACING_MODULES)[number])
+    }
+  })
+
+  it('re-running the designer at the adopted diameter reproduces the design', () => {
+    const c = optimizeEccentricFootingRebar({
+      ...common, serviceMoment: 120, ultimateMoment: 170,
+    } as never)
+    expect(c.design).toBe(c.designs.get(c.db!))
   })
 })

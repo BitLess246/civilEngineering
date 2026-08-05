@@ -874,10 +874,10 @@ _Analysis completeness (P3):_
   than before, where h < hMin failed outright).
   Surfaced as a δ chip on every RC beam schedule row, a full serviceability card
   in the expanded accordion, and a dedicated check + table in the PDF report.
-  **Open**: proper T-section gross properties — the web rectangle is used even
-  where flexure designed a T, which lowers Ig/Mcr/Icr together and so errs
-  conservative. Slabs already had their own §424.2 path (`slabDeflection`); this
-  is the beam counterpart.
+  ~~**Open**: proper T-section gross properties~~ — ✔ closed by #457:
+  `tSectionGross` computes the real flanged Ig and the pipeline passes
+  `bf`/`hf` whenever `tBeamAction` is on. Slabs already had their own §424.2
+  path (`slabDeflection`); this is the beam counterpart.
 - ~~**Irregularity auto-flags** — NSCP Table 208-9/10 (torsional, soft-storey,
   mass)~~ — ✔ shipped (#427 engine, #428 wiring/UI, #429 report/validation):
   `engine/irregularity.ts` flags P1 torsional (208-10 §1a/1b), V1 soft-storey,
@@ -1470,8 +1470,10 @@ content held as testable data in `devLengthHints.ts`).
 
 ## Left open, deliberately
 
-- **T-section gross properties** in `memberDeflection` still use the web
-  rectangle — conservative, flagged in #446.
+- ~~**T-section gross properties** in `memberDeflection` use the web
+  rectangle~~ — ✔ shipped: `tSectionGross` computes the real flanged Ig and
+  the pipeline passes `bf`/`hf` whenever `tBeamAction` is on. The entry (and
+  the docstring in `pipeline.ts`) had gone stale after the work landed.
 - ~~**Slab cut-off fractions** (`DEFAULT_EXT` in `slabBarDetail.ts`) written
   from memory~~ — ✔ verified against ACI 318-14 Fig. 8.7.4.1.3(a) in #527.
   One was wrong: the column strip has **no** bottom cut-off, the bars run
@@ -1566,15 +1568,16 @@ Yes, it is maintained, at both scales:
 
 ## Left open, deliberately
 
-- **`designBeam` omits §25.2.1's 4/3·d_agg term** when packing a layer (it uses
-  `max(db, 25)`). On 20 mm aggregate that is 26.7 mm, so the engine can lay out
-  a layer that is not compliant. The optimiser re-checks *with* the aggregate
-  and rejects, which is the safe direction — but the engine should carry it.
-- **`designSlabDDM` can over-reinforce at its own minimum thickness.**
-  §408.3.1.2's `hmin` assumes edge beams with αfm ≥ 2, and the module
-  deliberately does not credit αf for slab steel. A 6×7 panel at D 5.5 / L 4.8
-  has **no** compliant mat at `hmin` = 160 mm and an ordinary one at h = 220.
-  Surfaced as a blocked section naming both gates, not papered over.
-- **Rectangular and eccentric footings** keep the manual ⌀ field — the mat
-  optimiser covers the concentric square path only.
+- ~~**`designBeam` omits §25.2.1's 4/3·d_agg term**~~ — ✔ shipped: `aggregate`
+  is an input (default 20 mm) and applies to both faces, and the optimiser now
+  hands the designer the same figure instead of keeping its own.
+- ~~**`designSlabDDM` can over-reinforce at its own minimum thickness**~~ —
+  ✔ shipped: every strip carries `tensionControlled`, the result carries
+  `rhoMax`, and `applicable` folds it in. An OPEN `h` is the engine's and it
+  grows until §21.2.2 is satisfied; a PINNED `h` is the caller's and is
+  reported, not repaired.
+- ~~**Rectangular and eccentric footings** keep the manual ⌀ field~~ —
+  ✔ shipped: `optimizeMatSearch` generalises the per-diameter loop and all
+  three shapes search. A rectangular footing takes one diameter and a spacing
+  per direction.
 - KaTeX cannot render ⌀ in math mode, so the score equations read `S(4D20)`.

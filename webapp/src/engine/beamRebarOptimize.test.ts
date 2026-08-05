@@ -99,15 +99,29 @@ describe('it does not pick the minimum-steel layout by default', () => {
 })
 
 describe('the §25.2.1 aggregate term is enforced', () => {
-  it('rejects a layout whose clear spacing clears max(db,25) but not 4/3 d_agg', () => {
-    // `designBeam` packs a layer on max(db, 25). §25.2.1 also asks for
-    // 4/3 the nominal aggregate, which on 20 mm stone is 26.7 mm — so a
-    // layout the engine laid out can still be non-compliant, and it must be
-    // rejected here rather than adopted.
+  it('is no longer needed as a backstop — designBeam carries the term itself', () => {
+    // This case used to catch layouts `designBeam` produced but should not
+    // have: it packed a layer on max(db, 25) and ignored 4/3·d_agg, and the
+    // optimiser rejected the result with §25.2.1. The engine applies the term
+    // now, so there is nothing left to reject — the check stays as a guard
+    // that the two never disagree again.
     const r = optimizeBeamRebar(BASE, { aggregate: 20 })
     const rejected = r.selection.rejected.filter((x) => x.failedGate!.id === 'bars-fit')
-    expect(rejected.length).toBeGreaterThan(0)
-    for (const x of rejected) expect(x.failedGate!.clause).toContain('25.2.1')
+    expect(rejected).toHaveLength(0)
+    for (const s of r.selection.ranked) {
+      expect(s.layout.clearSpacing).toBeGreaterThanOrEqual((4 / 3) * 20 - 1e-9)
+    }
+  })
+
+  it('a coarser mix still narrows what fits', () => {
+    // 40 mm aggregate needs 53.3 mm clear, which no longer fits as many bars
+    // per layer — so the same section admits fewer layouts.
+    const fine = optimizeBeamRebar(BASE, { aggregate: 20 })
+    const coarse = optimizeBeamRebar(BASE, { aggregate: 40 })
+    expect(coarse.selection.ranked.length).toBeLessThanOrEqual(fine.selection.ranked.length)
+    for (const s of coarse.selection.ranked) {
+      expect(s.layout.clearSpacing).toBeGreaterThanOrEqual((4 / 3) * 40 - 1e-9)
+    }
   })
 
   it('a smaller aggregate lets more layouts through', () => {

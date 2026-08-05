@@ -82,6 +82,28 @@ export function maxBarSpacing(kind: MatKind, h: number): number {
   return Math.min(kind === 'one-way' ? 3 * h : 2 * h, 450);
 }
 
+/**
+ * β1 per ACI 318-14 Table 22.2.2.4.3.
+ *
+ * The SI table is not continuous and must not be written as one: the sloped
+ * row runs 28 < f′c < 55, and the last row is a flat 0.65 for f′c ≥ 55. The
+ * slope evaluated at 55 gives 0.657, so `max(0.65, slope)` returns the wrong
+ * branch.
+ */
+export function beta1(fc: number): number {
+  if (fc <= 28) return 0.85;
+  if (fc >= 55) return 0.65;
+  return 0.85 - 0.05 * (fc - 28) / 7;
+}
+
+/**
+ * ρ at the tension-controlled limit — εt = 0.005, so c/d = 3/8 (ACI 318-14
+ * §21.2.2 with §22.2.2.1's εcu = 0.003). Past this, φ = 0.90 does not apply.
+ */
+export function rhoTensionControlled(fc: number, fy: number): number {
+  return 0.85 * beta1(fc) * (fc / fy) * (3 / 8);
+}
+
 /** §25.2.1 minimum clear spacing — max(db, 25 mm, 4/3·d_agg), mm. */
 export function minClearSpacing(db: number, aggregate = 20): number {
   return Math.max(db, 25, (4 / 3) * aggregate);
