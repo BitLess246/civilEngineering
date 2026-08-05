@@ -561,6 +561,80 @@ export const CALCULATIONS = {
     limitations: ['Taken on the straight virgin portion only — points below σ′_p give C_r, not C_c.'],
   },
 
+  // ── Compaction ──
+  'compaction.dry-density': {
+    title: 'Dry density of a compacted specimen',
+    category: 'index',
+    equation: String.raw`\rho = \frac{M_t - M_m}{V}, \qquad \rho_d = \frac{\rho}{1 + w/100}`,
+    unit: 'Mg/m³',
+    symbols: {
+      '\\rho': 'wet (bulk) density of the compacted specimen, Mg/m³',
+      '\\rho_d': 'dry density, Mg/m³',
+      M_t: 'mass of the mould plus compacted wet soil, g',
+      M_m: 'mass of the empty mould, g',
+      V: 'volume of the mould, cm³ (0.000944 m³ for the 4-inch mould)',
+      w: 'water content of that specimen, %',
+    },
+    standard: 'd698',
+    assumptions: ['The specimen fills the mould exactly and is struck off flush with its rim.'],
+  },
+
+  'compaction.zav': {
+    title: 'Zero-air-voids density',
+    category: 'index',
+    equation: String.raw`\rho_{d,zav} = \frac{G_s \rho_w}{1 + w G_s / 100}`,
+    unit: 'Mg/m³',
+    symbols: {
+      '\\rho_{d,zav}': 'dry density at 100% saturation, Mg/m³',
+      G_s: 'specific gravity of solids',
+      '\\rho_w': 'density of water, Mg/m³',
+      w: 'water content, %',
+    },
+    standard: 'd698',
+    assumptions: ['S = 100%: every void is water-filled, which is the upper bound no compaction can pass.'],
+    limitations: [
+      'Not a curve the soil can reach — it is a bound. A measured point plotting above it is a measurement error (mould volume, specific gravity, or a water content read from the wrong specimen), not a dense soil.',
+    ],
+  },
+
+  'compaction.optimum': {
+    title: 'Maximum dry density and optimum moisture',
+    category: 'index',
+    equation: String.raw`w_{opt} = \frac{-b}{2a}, \qquad \rho_{d,max} = c - \frac{b^2}{4a} \quad (\rho_d = a w^2 + b w + c)`,
+    unit: 'Mg/m³',
+    symbols: {
+      '\\rho_{d,max}': 'maximum dry density at the peak of the curve, Mg/m³',
+      'w_{opt}': 'optimum water content at that peak, %',
+      a: 'quadratic coefficient of the fitted curve, dimensionless ratio of density to squared water content',
+      b: 'linear coefficient of the fitted curve, dimensionless ratio',
+      c: 'constant of the fitted curve, Mg/m³',
+    },
+    standard: 'd698',
+    assumptions: [
+      'The compaction curve is parabolic near its peak, which is what the hand construction assumes when the curve is drawn by eye.',
+    ],
+    limitations: [
+      'No specimen is compacted AT the optimum — it is interpolated between the points either side, so a vertex outside the water contents tested is an extrapolation and is reported as one.',
+      'Standard (D698) and modified (D1557) effort give different peaks: modified sits higher and drier, so a percentage of one is not a percentage of the other.',
+    ],
+  },
+
+  'compaction.relative': {
+    title: 'Relative compaction',
+    category: 'index',
+    equation: String.raw`RC = \frac{\rho_{d,field}}{\rho_{d,max}} \times 100`,
+    unit: '%',
+    symbols: {
+      RC: 'relative compaction, %',
+      '\\rho_{d,field}': 'dry density measured in the fill, Mg/m³',
+      '\\rho_{d,max}': 'laboratory maximum dry density, Mg/m³',
+    },
+    standard: 'd698',
+    limitations: [
+      'Both densities must refer to the SAME compaction effort. "95% of MDD" against a D698 curve is a different requirement from 95% against D1557.',
+    ],
+  },
+
   // ── Correlations (never presented as measurements) ──
   'correlation.phi-from-n60': {
     title: 'Friction angle from corrected SPT',

@@ -25,6 +25,7 @@
 import type { PlanPrimitive, Drawing } from '../../planRenderer'
 import type { DirectShearResult } from './directShear'
 import type { ConsolidationResult } from './consolidation'
+import { type CompactionResult, zeroAirVoids } from './compaction'
 import type { GradationResult } from '../sieve'
 
 import {
@@ -174,6 +175,128 @@ export function consolidationChart(r: ConsolidationResult): Drawing {
   p.push(...plate(box.left + 2, box.top + box.h - 3.2, 2.4, [{
     text: `Cc = ${r.cc.toFixed(3)}${r.cr != null ? `   Cr = ${r.cr.toFixed(3)}` : ''}`,
   }]))
+
+  return {
+    primitives: p,
+    bounds: { minX: 0, minY: 0, maxX: box.left + box.w + 4, maxY: box.top + box.h + 13 },
+  }
+}
+
+// ── Compaction ────────────────────────────────────────────────────────────
+
+/**
+ * The Proctor curve with its zero-air-voids bound.
+ *
+ * The peak is the whole reading, so the y-axis is NOT zero-based: a compaction
+ * curve spans a few tenths of a Mg/m³ and an axis from zero flattens it into a
+ * horizontal line, hiding the one feature the test exists to find. (The shear
+ * envelope argues the opposite for itself, and for the opposite reason — c′ is
+ * an intercept at zero, so its axis must start there.)
+ *
+ * ZAV IS DRAWN WHEREVER IT FITS, and its left end is cut at the frame rather
+ * than at the data: at low water content the saturation bound climbs far above
+ * any density the soil reaches, so the curve enters the frame from the top edge
+ * — the intersection is solved exactly rather than clipped, since ZAV is
+ * monotone and invertible.
+ *
+ * The bottom quarter of the frame is reserved for the annotation plate, and the
+ * axis is built from the data minimum so no measured point can enter it.
+ */
+export function compactionChart(r: CompactionResult, gs?: number): Drawing {
+  const box = BOX
+  const p: PlanPrimitive[] = frame(box, 'water content  w (%)', 'dry density  (Mg/m³)', 'Compaction curve')
+
+  const ws = r.rows.map((q) => q.moisture)
+  const wPad = Math.max((Math.max(...ws) - Math.min(...ws)) * 0.08, 0.5)
+  const xa = linearTicks(Math.min(...ws) - wPad, Math.max(...ws) + wPad)
+  const X = (v: number) => box.left + ((v - xa.lo) / (xa.hi - xa.lo)) * box.w
+
+  const dens = r.rows.map((q) => q.dryDensity)
+  const lo = Math.min(...dens), hi = Math.max(Math.max(...dens), r.maxDryDensity)
+  const span = Math.max(hi - lo, 0.05)
+  // A quarter of the range below the lowest point, an eighth above the highest:
+  // the plate lives in that bottom band.
+  const ya = linearTicks(lo - span * 0.35, hi + span * 0.15)
+  const Y = (v: number) => box.top + box.h - ((v - ya.lo) / (ya.hi - ya.lo)) * box.h
+
+  const dpY = tickDp((ya.ticks[1] ?? 0.1) - (ya.ticks[0] ?? 0))
+  for (const t of xa.ticks) {
+    p.push({ kind: 'line', x1: X(t), y1: box.top, x2: X(t), y2: box.top + box.h, stroke: GRID, width: 0.2 })
+    p.push({ kind: 'text', x: X(t), y: box.top + box.h + 4, text: String(t), size: 2.2, anchor: 'middle', color: AXIS })
+  }
+  for (const t of ya.ticks) {
+    p.push({ kind: 'line', x1: box.left, y1: Y(t), x2: box.left + box.w, y2: Y(t), stroke: GRID, width: 0.2 })
+    p.push({ kind: 'text', x: box.left - 1.5, y: Y(t) + 0.8, text: t.toFixed(Math.max(dpY, 2)), size: 2.2, anchor: 'end', color: AXIS })
+  }
+
+  // ZAV first, so the compaction curve draws over it where they crowd.
+  if (gs && gs > 0) {
+    // ρ = Gs/(1 + wGs/100) ⇒ w = 100(Gs/ρ − 1)/Gs. Start where ZAV drops to the
+    // top of the frame, or at the left edge if it never rises that high.
+    const wAtTop = (100 * (gs / ya.hi - 1)) / gs
+    const from = Math.max(xa.lo, wAtTop)
+    if (from < xa.hi) {
+      const N = 24
+      let prev: [number, number] | null = null
+      for (let i = 0; i <= N; i++) {
+        const w = from + ((xa.hi - from) * i) / N
+        const pt: [number, number] = [X(w), Y(zeroAirVoids(w, gs))]
+        if (prev) {
+          p.push({ kind: 'line', x1: prev[0], y1: prev[1], x2: pt[0], y2: pt[1], stroke: WARN, width: 0.4, dash: [3, 2] })
+        }
+        prev = pt
+      }
+      // On a plate and inside the frame: the label sat ON its own line, which
+      // read as a strikethrough — the same defect the grading chart's fraction
+      // boundary had.
+      p.push(...plate(X(xa.hi) - 24, Y(zeroAirVoids(xa.hi, gs)) - 3.4, 2.0, [
+        { text: 'zero air voids', color: WARN },
+      ]))
+    }
+  }
+
+  // The curve the peak was actually read from — the engine's own coefficients,
+  // never a second fit — or the measured polyline when the fit was rejected.
+  if (r.fit) {
+    const { a, b, c } = r.fit
+    const N = 40
+    let prev: [number, number] | null = null
+    for (let i = 0; i <= N; i++) {
+      const w = r.moistureRange.min + ((r.moistureRange.max - r.moistureRange.min) * i) / N
+      const pt: [number, number] = [X(w), Y(a * w * w + b * w + c)]
+      if (prev) p.push({ kind: 'line', x1: prev[0], y1: prev[1], x2: pt[0], y2: pt[1], stroke: ACCENT, width: 0.6 })
+      prev = pt
+    }
+    p.push({ kind: 'line', x1: X(r.optimumMoisture), y1: Y(ya.lo), x2: X(r.optimumMoisture), y2: Y(r.maxDryDensity), stroke: ACCENT, width: 0.3, dash: [1.5, 1.5] })
+    p.push({ kind: 'line', x1: X(xa.lo), y1: Y(r.maxDryDensity), x2: X(r.optimumMoisture), y2: Y(r.maxDryDensity), stroke: ACCENT, width: 0.3, dash: [1.5, 1.5] })
+    p.push({ kind: 'circle', cx: X(r.optimumMoisture), cy: Y(r.maxDryDensity), r: 1.4, stroke: ACCENT, width: 0.5 })
+  } else {
+    for (let i = 1; i < r.rows.length; i++) {
+      p.push({
+        kind: 'line',
+        x1: X(r.rows[i - 1].moisture), y1: Y(r.rows[i - 1].dryDensity),
+        x2: X(r.rows[i].moisture), y2: Y(r.rows[i].dryDensity),
+        stroke: ACCENT, width: 0.4, dash: [2, 1.5],
+      })
+    }
+  }
+
+  for (const q of r.rows) {
+    p.push({ kind: 'circle', cx: X(q.moisture), cy: Y(q.dryDensity), r: 1.1, fill: INK })
+  }
+
+  p.push(...plate(box.left + 2, box.top + box.h - 6.6, 2.3, [
+    {
+      text: `γd,max = ${r.maxDryUnitWeight.toFixed(2)} kN/m³ (${r.maxDryDensity.toFixed(3)} Mg/m³)   OMC = ${r.optimumMoisture.toFixed(1)}%`,
+      color: r.peakFrom === 'fit' ? INK : WARN,
+    },
+    {
+      text: r.peakFrom === 'fit'
+        ? `${r.effort} effort — peak interpolated between the points either side`
+        : `${r.effort} effort — HIGHEST MEASURED point; no peak inside the range tested`,
+      color: r.peakFrom === 'fit' ? AXIS : WARN,
+    },
+  ]))
 
   return {
     primitives: p,

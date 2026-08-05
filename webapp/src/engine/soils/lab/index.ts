@@ -35,6 +35,10 @@ import {
   type ConsolidationData, type ConsolidationPoint, consolidation,
   type ConsolidationResult,
 } from './consolidation'
+import {
+  type CompactionData, type CompactionPoint, type CompactionEffort, compaction,
+  type CompactionResult,
+} from './compaction'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -189,6 +193,34 @@ export function readConsolidation(test: LabTest): ConsolidationData | undefined 
   }
 }
 
+/**
+ * Proctor points — one compacted mould per row. A row missing either its water
+ * content or its mould mass is DROPPED: a point with no water content has no
+ * position on the curve, and one at an assumed zero would drag the fitted peak
+ * toward the dry end of the axis.
+ */
+export function readCompaction(test: LabTest): CompactionData | undefined {
+  const d = test.data
+  if (!isRecord(d) || !hasNumbers(d, ['mouldVolume', 'mouldMass'])) return undefined
+  if (!Array.isArray(d.points)) return undefined
+
+  const points: CompactionPoint[] = []
+  for (const r of d.points) {
+    if (!isRecord(r) || !finite(r.moisture) || !finite(r.mouldSoilMass)) continue
+    points.push({ moisture: r.moisture, mouldSoilMass: r.mouldSoilMass })
+  }
+  if (points.length < 3) return undefined
+
+  const e = d.effort
+  return {
+    mouldVolume: d.mouldVolume as number,
+    mouldMass: d.mouldMass as number,
+    specificGravity: finite(d.specificGravity) ? d.specificGravity : undefined,
+    effort: e === 'modified' || e === 'standard' ? (e as CompactionEffort) : undefined,
+    points,
+  }
+}
+
 // ── Catalogue ─────────────────────────────────────────────────────────────
 
 /** One numeric input on a test form. */
@@ -206,7 +238,8 @@ export interface LabField {
  * How a test's form is laid out. Most tests are a flat list of numbers; a sieve
  * stack is a variable-length table, which no `LabField[]` can express.
  */
-export type LabFormKind = 'fields' | 'sieve-stack' | 'shear-points' | 'load-increments'
+export type LabFormKind =
+  | 'fields' | 'sieve-stack' | 'shear-points' | 'load-increments' | 'compaction-points'
 
 export interface LabTestSpec {
   type: LabTestType
@@ -289,7 +322,20 @@ export const LAB_TESTS: readonly LabTestSpec[] = [
       { key: 'shrinkageLimit', label: 'Shrinkage limit', unit: '%', optional: true, placeholder: 12 },
     ],
   },
-  { type: 'compaction', label: 'Compaction', standard: 'd698', needsUndisturbed: false, fields: [], purpose: 'Maximum dry density and optimum moisture content.' },
+  {
+    type: 'compaction',
+    label: 'Compaction (Proctor)',
+    standard: 'd698',
+    formKind: 'compaction-points',
+    calculation: 'compaction.optimum',
+    needsUndisturbed: false,
+    purpose: 'Maximum dry density and optimum moisture content — what every field density test is a percentage of.',
+    fields: [
+      { key: 'mouldVolume', label: 'Mould volume', unit: 'cm³', placeholder: 944 },
+      { key: 'mouldMass', label: 'Empty mould', unit: 'g', placeholder: 4250 },
+      { key: 'specificGravity', label: 'Specific gravity Gs', optional: true, placeholder: 2.7 },
+    ],
+  },
   {
     type: 'direct-shear',
     label: 'Direct shear',
@@ -367,6 +413,7 @@ export type LabOutcome =
   | { kind: 'direct-shear'; result: DirectShearResult }
   | { kind: 'ucs'; result: UcsResult }
   | { kind: 'consolidation'; result: ConsolidationResult }
+  | { kind: 'compaction'; result: CompactionResult }
 
 /**
  * Compute a test's result from its stored data.
@@ -413,6 +460,11 @@ export function evaluateTest(test: LabTest): { outcome?: LabOutcome; error?: str
         if (!d) return {}
         return { outcome: { kind: 'consolidation', result: consolidation(d) } }
       }
+      case 'compaction': {
+        const d = readCompaction(test)
+        if (!d) return {}
+        return { outcome: { kind: 'compaction', result: compaction(d) } }
+      }
       default:
         return {}
     }
@@ -438,5 +490,9 @@ export function summarise(outcome: LabOutcome): { label: string; value: number; 
       return { label: 'qu', value: outcome.result.qu, unit: 'kPa' }
     case 'consolidation':
       return { label: 'Cc', value: outcome.result.cc, unit: '' }
+    case 'compaction':
+      // The peak as a unit weight, which is the module's reporting convention
+      // (model.ts) and the form the bearing and earth-pressure engines take.
+      return { label: 'γd,max', value: outcome.result.maxDryUnitWeight, unit: 'kN/m³' }
   }
 }

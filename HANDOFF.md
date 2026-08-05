@@ -1334,7 +1334,8 @@ because flagging the unusual as an error trains people to ignore errors.
 | 5b — parameters wired into bearing capacity and slope | #485 | merged |
 | 4d — consolidation (Cc, Cr, σ′p, cv) | #486 | merged |
 | 4e — lab charts (envelope, e–log σ′, grading) | #487 | open |
-| 4f… — compaction, triaxial, permeability, CBR, hydrometer | — | |
+| 4f — compaction (Proctor, ZAV bound, curve) | — | open |
+| 4g… — triaxial (Mohr circles), permeability, CBR, hydrometer | — | |
 | 6a — liquefaction triggering engine (NCEER) | #488 | merged |
 | 6b — liquefaction tab, FS profile, fines from sieve | #489 | merged |
 | 6c — bearing general equation + method selection | #490 | merged |
