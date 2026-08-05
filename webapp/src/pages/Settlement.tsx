@@ -9,6 +9,7 @@ import {
 import { buildSettlementSolution } from '../lib/settlementSolution'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { SoilProfile } from '../components/SoilProfile'
+import { PageHeader } from '../components/calc'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -162,9 +163,9 @@ export default function Settlement() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
-      <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Foundation settlement</h1>
+        <div>
+      <PageHeader title="Foundation settlement" badges={['Boussinesq', 'Terzaghi', 'Schmertmann']} />
+      <main className="mx-auto max-w-3xl px-5 py-6">
       <ReportControls title="Foundation Settlement" badges={['Boussinesq', 'Terzaghi', 'Schmertmann']} report={report} />
       <p className="mt-2 text-sm text-slate-600">
         Immediate (elastic and Schmertmann) plus primary consolidation settlement of a rectangular footing on a
@@ -299,5 +300,6 @@ export default function Settlement() {
         <WorkedSolution steps={solution} title="Calculation report — worked solution" />
       </div>
     </main>
+    </div>
   )
 }

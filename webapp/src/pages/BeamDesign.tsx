@@ -224,6 +224,7 @@ export default function BeamDesign() {
             ))}
           </div>
         } />
+        <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
 
       <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
@@ -442,7 +443,6 @@ export default function BeamDesign() {
                 sub={`L/240 = ${deflection.limitL240.toFixed(1)} mm${deflection.totalOK ? ' ✓' : ' ✗'}`} />
             </ResultCard>
           )}
-          <LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} />
         </div>
       </div>
 

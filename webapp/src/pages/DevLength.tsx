@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { calcDevLength, type DevLengthInput, type EpoxyCase } from '../engine/devLength'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
@@ -9,6 +8,7 @@ import { WorkedSolution } from '../components/WorkedSolution'
 import { CodeHint } from '../components/CodeHint'
 import { DevLengthDetail } from '../components/DevLengthDetail'
 import { DEV_HINTS } from '../lib/devLengthHints'
+import { PageHeader } from '../components/calc'
 
 const BAR_SIZES: [string, string][] = [
   ['10', '10 mm (ø10)'],
@@ -104,11 +104,9 @@ export default function DevLength() {
   } : undefined
 
   return (
-    <div className="mx-auto max-w-[1500px] p-6">
-      <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
-      <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">
-        Development &amp; Splice Lengths
-      </h1>
+        <div>
+      <PageHeader title="Development & Splice Lengths" badges={['ACI 318-14 §25.4', 'NSCP 2015']} />
+      <div className="mx-auto max-w-[1500px] p-6">
       <p className="no-print mt-1 text-slate-600">
         ACI 318-14 §25.4 development + §25.5 splices. SI units (mm, MPa).
         Tension §25.4.2.3 · Compression §25.4.9.2 · Splices §25.5.2/5.
@@ -240,6 +238,7 @@ export default function DevLength() {
           <WorkedSolution steps={solution} title="Calculation report — worked solution" />
         </div>
       )}
+    </div>
     </div>
   )
 }

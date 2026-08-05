@@ -4,6 +4,7 @@ import {
   nscpSeismicParams, baseShearCoeff, STRUCTURAL_SYSTEMS,
   type SoilProfile, type SeismicSource, type SeismicZone, type Occupancy,
 } from '../engine/nscpSeismic'
+import { PageHeader } from '../components/calc'
 
 const f3 = (n: number) => (Number.isFinite(n) ? n.toFixed(3) : '—')
 
@@ -56,9 +57,9 @@ export default function SeismicWizard() {
   const cur = steps[Math.min(step, steps.length - 1)]
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Structural</p>
-      <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">NSCP 208 Seismic Wizard</h1>
+        <div>
+      <PageHeader title="NSCP 208 Seismic Wizard" badges={['NSCP 2015 §208']} />
+      <main className="mx-auto max-w-3xl px-5 py-6">
       <ReportControls title="Seismic Parameters Report" badges={['NSCP 2015 §208']} />
       <p className="mt-2 text-sm text-slate-600">
         Walk through the NSCP 2015 §208 static lateral-force tables — zone, soil, near-source, occupancy and
@@ -182,5 +183,6 @@ export default function SeismicWizard() {
         </p>
       </section>
     </main>
+    </div>
   )
 }

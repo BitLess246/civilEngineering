@@ -9,6 +9,7 @@ import { infiniteSlopeFS } from '../engine/geotech'
 import { buildInfiniteSlopeSolution } from '../lib/geotechPageSolutions'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { SoilLayerPicker } from '../components/SoilLayerPicker'
+import { PageHeader } from '../components/calc'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -166,9 +167,9 @@ export default function SlopeStability() {
   } : undefined
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
-      <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Slope stability — method of slices</h1>
+        <div>
+      <PageHeader title="Slope stability — method of slices" badges={['Bishop', 'Fellenius', 'Janbu']} />
+      <main className="mx-auto max-w-3xl px-5 py-6">
       <ReportControls title="Slope Stability" badges={['Bishop', 'Fellenius', 'Janbu']} report={report} />
       <p className="mt-2 text-sm text-slate-600">
         Circular-failure factor of safety by the method of slices — Fellenius/OMS, Bishop&rsquo;s simplified and
@@ -306,5 +307,6 @@ export default function SlopeStability() {
         <WorkedSolution steps={infSteps} title="Infinite slope — worked solution" />
       </section>
     </main>
+    </div>
   )
 }

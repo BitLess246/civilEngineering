@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { designPunchingShear, type PunchingInput, type ColPosition } from '../engine/punchingShear'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
@@ -7,6 +6,7 @@ import { buildPunchingSolution } from '../lib/punchingSolution'
 import { f0, f1, f2, f3 } from '../lib/format'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { PunchingPlan } from '../components/PunchingPlan'
+import { PageHeader } from '../components/calc'
 
 interface FormState {
   c1: number; c2: number         // column dimensions, mm
@@ -88,11 +88,9 @@ export default function PunchingShear() {
   } : undefined
 
   return (
-    <div className="mx-auto max-w-[1500px] p-6">
-      <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
-      <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">
-        Punching Shear
-      </h1>
+        <div>
+      <PageHeader title="Punching Shear" badges={['ACI 318-14 §22.6', 'NSCP 2015']} />
+      <div className="mx-auto max-w-[1500px] p-6">
       <p className="no-print mt-1 text-slate-600">
         Two-way slab–column punching shear — ACI 318-14 §22.6.
         Critical perimeter at d/2 from column face. φ = 0.75.
@@ -181,6 +179,7 @@ export default function PunchingShear() {
           <WorkedSolution steps={solution} title="Calculation report — worked solution" />
         </div>
       )}
+    </div>
     </div>
   )
 }

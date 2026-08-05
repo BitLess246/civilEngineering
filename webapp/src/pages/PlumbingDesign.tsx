@@ -5,6 +5,7 @@ import { designDrainage, drainageSolution } from '../engine/drainage'
 import { designSepticTank, septicSolution } from '../engine/septicTank'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { ReportControls } from '../components/ReportControls'
+import { PageHeader } from '../components/calc'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -88,9 +89,9 @@ export default function PlumbingDesign() {
   )
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Plumbing &amp; Sanitary</p>
-      <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Plumbing System Design</h1>
+        <div>
+      <PageHeader title="Plumbing System Design" badges={['RNPCP 2000']} />
+      <main className="mx-auto max-w-3xl px-5 py-6">
       <ReportControls title="Plumbing Design Report" badges={['RNPCP 2000']} />
       <p className="mt-2 text-sm text-slate-600">
         Water supply, sanitary drainage (DWV) and on-site sewage treatment to the Revised National Plumbing Code
@@ -243,5 +244,6 @@ export default function PlumbingDesign() {
         </>
       )}
     </main>
+    </div>
   )
 }

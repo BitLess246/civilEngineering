@@ -3,6 +3,7 @@ import { designMicropile } from '../engine/micropile'
 import { ReportControls } from '../components/ReportControls'
 import { buildMicropileSolution } from '../lib/geotechSolutions'
 import { WorkedSolution } from '../components/WorkedSolution'
+import { PageHeader } from '../components/calc'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -81,9 +82,9 @@ export default function Micropile() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
-      <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Micropile — axial capacity</h1>
+        <div>
+      <PageHeader title="Micropile — axial capacity" badges={['FHWA-NHI-05-039']} />
+      <main className="mx-auto max-w-3xl px-5 py-6">
       <ReportControls title="Micropile" badges={['FHWA-NHI-05-039']} report={report} />
       <p className="mt-2 text-sm text-slate-600">
         FHWA-NHI-05-039 allowable-stress check: structural capacity of the bar/casing/grout vs the
@@ -143,5 +144,6 @@ export default function Micropile() {
         <WorkedSolution steps={solution} title="Calculation report — worked solution" />
       </div>
     </main>
+    </div>
   )
 }

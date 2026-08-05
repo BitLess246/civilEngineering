@@ -75,6 +75,7 @@ export default function PrestressedBeam() {
   return (
     <div className="min-h-screen">
       <PageHeader title="Prestressed Beam" badges={[...badges, `class ${klass}`]} />
+      <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(p) => setLh((s) => ({ ...s, ...p }))} /></div>
       <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
         <p className="no-print text-[13px] text-[#5c6675]">
           <Link to="/" className="font-semibold text-[#0f4c92]">← Home</Link> · Pretensioned bonded beam: PCI losses
@@ -124,7 +125,6 @@ export default function PrestressedBeam() {
                 <PSElevation h={h} e={e} span={span} />
               </DrawingCard>
             )}
-            <LetterheadCard lh={lh} onChange={(p) => setLh((s) => ({ ...s, ...p }))} />
           </div>
         </div>
         {r && (

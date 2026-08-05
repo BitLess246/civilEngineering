@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { distributePanel, wallLineLoad, type AreaLoad } from '../engine/tributary'
 import type { LoadCategory } from '../engine/beamAnalysis'
 import { PanelSketch } from '../components/PanelSketch'
@@ -9,6 +9,7 @@ import { tributarySolution } from '../lib/tributarySolution'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { f1, f2 } from '../lib/format'
 import 'katex/dist/katex.min.css'
+import { PageHeader } from '../components/calc'
 
 export const BEAM_LOADS_HANDOFF_KEY = 'beam-analysis-loads-handoff'
 
@@ -48,9 +49,9 @@ export default function LoadPath() {
   }
 
   return (
-    <div className="mx-auto max-w-[1500px] p-6">
-      <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
-      <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">Slab Load Path (Tributary)</h1>
+        <div>
+      <PageHeader title="Slab Load Path (Tributary)" badges={['NSCP 2015', 'ACI 318-14']} />
+      <div className="mx-auto max-w-[1500px] p-6">
       <p className="no-print mt-1 text-slate-600">
         Distribute a slab panel's area loads to its edge beams — one-way (UDL on the long edges) or two-way
         (45° tributary triangles & trapezoids) — with categories preserved for the NSCP combinations. Send any
@@ -140,6 +141,7 @@ export default function LoadPath() {
       </div>
 
       {solution && <WorkedSolution steps={solution} title="Load path — step by step" />}
+    </div>
     </div>
   )
 }

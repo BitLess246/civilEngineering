@@ -122,7 +122,12 @@ export function DrawingCard({ title, meta, children, pdfDrawing }: {
 // ── Report letterhead (screen card) ─────────────────────────────────────────
 export interface LetterheadState { project: string; sheet: string; preparedBy: string }
 
-export function LetterheadCard({ lh, onChange }: { lh: LetterheadState; onChange: (p: Partial<LetterheadState>) => void }) {
+export function LetterheadCard({ lh, onChange, action }: {
+  lh: LetterheadState
+  onChange: (p: Partial<LetterheadState>) => void
+  /** Optional export control, rendered beside the heading. */
+  action?: ReactNode
+}) {
   const today = new Date().toISOString().slice(0, 10)
   const cell = (label: string, value: string, key: keyof LetterheadState, ph: string, mono = false) => (
     <div>
@@ -133,9 +138,9 @@ export function LetterheadCard({ lh, onChange }: { lh: LetterheadState; onChange
   )
   return (
     <section className="rail-card no-print rounded-lg border border-[#e3e1da] bg-white p-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">Report letterhead</h2>
-        <span className="font-mono text-[10px] text-[#a39d8d]">prints on the calc sheet</span>
+        {action ?? <span className="font-mono text-[10px] text-[#a39d8d]">prints on the calc sheet</span>}
       </div>
       <div className="mt-2.5 grid grid-cols-2 gap-x-3.5 gap-y-2">
         {cell('Project', lh.project, 'project', 'Lot 12 Residence')}

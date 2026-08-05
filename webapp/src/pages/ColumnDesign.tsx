@@ -188,6 +188,7 @@ export default function ColumnDesign() {
   return (
     <div>
       <PageHeader title="RC Column" badges={['ACI 318-14', 'NSCP 2015']} />
+      <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
 
       <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
@@ -413,7 +414,6 @@ export default function ColumnDesign() {
         </div>
       )}
 
-      <div className="no-print mt-5"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>
       <div className="no-print">{solution.length > 0 && <WorkedSolution steps={solution} title="Calculation report — worked solution" />}</div>
       {axial && solution.length > 0 && (
         <PrintReport

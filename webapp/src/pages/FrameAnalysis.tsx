@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import {
   analyzeFrame2D, type FNode, type FMember, type FSupport, type FSupportType, type FLoad,
 } from '../engine/frame2d'
@@ -10,6 +9,7 @@ import { ReportControls } from '../components/ReportControls'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { f1, f2 } from '../lib/format'
 import 'katex/dist/katex.min.css'
+import { PageHeader } from '../components/calc'
 
 const CATS: [LoadCategory, string][] = [
   ['D', 'D — dead'], ['L', 'L — live'], ['Lr', 'Lr — roof live'],
@@ -88,9 +88,9 @@ export default function FrameAnalysis() {
   const updMember = upd(setMembers)
 
   return (
-    <div className="mx-auto max-w-[1500px] p-6">
-      <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
-      <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">Frame Analysis (2D)</h1>
+    <div>
+      <PageHeader title="Frame Analysis (2D)" badges={['NSCP 2015', 'ACI 318-14']} />
+      <div className="mx-auto max-w-[1500px] px-6 pb-6 pt-5">
       <p className="no-print mt-1 text-slate-600">
         2D frame FEM — 6-DOF members (axial + Hermite bending) built on the shared core, with pinned / roller /
         fixed nodes, nodal & member gravity loads, and all 7 NSCP 2015 load combinations. Phase 2 of the 3D
@@ -268,6 +268,7 @@ export default function FrameAnalysis() {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }
