@@ -226,10 +226,9 @@ export function estimateTakeoff(
 
   // ── Isolated footings ──
   for (const f of design.footings) {
-    const cs = (() => { const col = colAtNode(f.node); return col ? secOf(col.id) : fallback })()
     const B = f.design.B, Dc = f.design.Dc / 1000
     const tag = `Footing ${f.node}`
-    const steelKg = add(tag, 'Bottom (each way)', cs.barDia, 2 * f.design.bars, Math.max(0.1, B - 0.15))
+    const steelKg = add(tag, 'Bottom (each way)', f.barDia, 2 * f.design.bars, Math.max(0.1, B - 0.15))
     byElement.push({
       kind: 'Footing', id: f.node, concreteM3: B * B * Dc, formworkM2: 4 * B * Dc, steelKg,
       intersections: f.design.bars * f.design.bars,

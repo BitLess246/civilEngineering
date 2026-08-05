@@ -35,7 +35,12 @@ export interface SlabScheduleRow { mark: string; thk: string; type: string }
 /** Minimal per-footing shape the foundation plan needs — mapped from the
  *  pipeline's `design.footings` by the caller, so this module stays decoupled
  *  from the design pipeline. Geometry in m; thickness/spacing in mm. */
-export interface PlanFooting { node: string; B: number; Dc: number; bars: number; barSpacing: number; barDia?: number }
+/** A designed footing, as the foundation plan needs it. `barDia` is the mat's
+ *  own bar — it used to be optional because the pipeline did not carry one and
+ *  callers inverted it out of As/count. */
+export interface PlanFooting {
+  node: string; B: number; Dc: number; bars: number; barSpacing: number; barDia: number
+}
 
 /** Anything the serializer can paint: typed primitives + their world bounds.
  *  Both plan drawings and standalone details satisfy this. */
@@ -159,7 +164,7 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
     if (!mk) {
       mk = `WF-${footMarkBySize.size + 1}`; footMarkBySize.set(key, mk)
       const sp = Math.round(f.barSpacing)
-      const reinf = f.barDia ? `${f.bars}-⌀${f.barDia}@${sp} mm E.W.` : `${f.bars}@${sp} mm E.W.`
+      const reinf = `${f.bars}-⌀${f.barDia}@${sp} mm E.W.`
       footingSchedule.push({ mark: mk, size: `${Bmm}×${Bmm}`, thk: `${Math.round(f.Dc)}`, reinf })
     }
     return mk

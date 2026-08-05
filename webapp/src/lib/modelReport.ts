@@ -385,9 +385,8 @@ export function buildModelReport(
     head: ['Node', 'P (kN)', 'Pu (kN)', 'B (m)', 'Dc (mm)', 'Reinforcement', 'Status'],
     right: [1, 2, 3, 4],
     rows: design.footings.map((f) => {
-      const cs = colSectionAt(f.node)
       return [f.node, f0(f.P), f0(f.Pu), f2(f.design.B), f0(f.design.Dc),
-        `${f.design.bars}⌀${cs?.barDia ?? fallbackSec.barDia}@${Math.round(f.design.barSpacing)} e.w.`, f.ok ? 'PASS' : 'FAIL']
+        `${f.design.bars}⌀${f.barDia}@${Math.round(f.design.barSpacing)} e.w.`, f.ok ? 'PASS' : 'FAIL']
     }),
   })
   if (design.combined.length) tables.push({
