@@ -1472,10 +1472,109 @@ content held as testable data in `devLengthHints.ts`).
 
 - **T-section gross properties** in `memberDeflection` still use the web
   rectangle — conservative, flagged in #446.
-- **Slab cut-off fractions** (`DEFAULT_EXT` in `slabBarDetail.ts`) were
-  written from memory: the proxy blocks the ACI figure. **Verify against
-  ACI 318-14 Fig. 8.7.4.1.3(a) before trusting them.**
+- ~~**Slab cut-off fractions** (`DEFAULT_EXT` in `slabBarDetail.ts`) written
+  from memory~~ — ✔ verified against ACI 318-14 Fig. 8.7.4.1.3(a) in #527.
+  One was wrong: the column strip has **no** bottom cut-off, the bars run
+  100% continuous (`bottomShort: null`), and the drop-panel remainder is
+  measured from the support **centreline**.
 - **Supabase migrations still need running by hand**: `20260731120000`
   (app_metadata), `20260804000000` (guest_trials), `20260804010000`
   (projects); then `supabase secrets set GUEST_TRIAL_SALT="$(openssl rand -hex 32)"`
   and `supabase functions deploy guest-quota`.
+
+---
+
+# Reinforcement selection — enumerate, gate, score, adopt (PRs #528–#531, August 2026)
+
+Every RC engine used to take the bar diameter as an **input** and compute
+`n = ceil(As/Ab)`. Whatever the user typed is what got detailed — there was no
+search at all. The one place that did search (`barSelection`, in the
+model-space pipeline) ranked purely on **steel area** with a smaller-bar
+tie-break. Both are wrong the same way: a layout is not just an area. 6⌀16 and
+3⌀25 carry nearly the same steel and are not remotely the same thing on a
+drawing.
+
+Four phases, one PR each. Where the code lives:
+
+| file | role |
+|---|---|
+| `engine/rebarScore.ts` | the core: gate → score → rank → adopt. Weights, near-tie rule, blocking gates. |
+| `engine/beamRebarOptimize.ts` | beam: diameter only, plus `optimizeBeamMember` (one ⌀ per member) and `resolveBarContinuity` (one ⌀ per run) |
+| `engine/columnRebarOptimize.ts` | column: diameter × count |
+| `engine/matRebarOptimize.ts` | slab + footing: diameter × spacing module |
+| `components/RebarRanking.tsx` | the card, shared by all four pages |
+| `lib/rebarSolution.ts` | the four calc-sheet steps, shared by all four reports |
+| `lib/rebarLabel.ts` | `nameCage` / `nameMat` — how a layout is written on a drawing |
+
+## Three different search shapes, and why
+
+This is the part worth not re-deriving:
+
+- **Beam** — diameter only. Once the diameter is fixed the count follows from
+  `n = ceil(As/Ab)`, and any larger `n` is strictly worse: more steel, no
+  benefit.
+- **Column** — diameter **×** count. That is *not* true here. 8⌀20 and 4⌀25
+  are both legitimate, both sit well inside §10.6.1.1, and they are different
+  columns. Symmetry is an **exclusion**, not a preference: counts are
+  restricted to even ≥ 4 (tied) / ≥ 6 (spiral), because an unsymmetric cage is
+  not the section the P–M interaction was computed for.
+- **Mat** — diameter **×** spacing module. Nobody writes "17 bars" on a slab;
+  they write ⌀12 @ 150. The count is a consequence: `n = floor((b − 2c)/s) + 1`.
+  A mat has no centreline, so `wantSymmetric: false`.
+
+## Decisions worth not re-litigating
+
+1. **Compliance is a gate, never a score.** A layout failing any check is
+   infeasible and is never ranked, however well it scores elsewhere.
+2. **No engine re-derives strength.** Every optimiser runs the existing,
+   verified designer once per candidate and reads compliance off the result. A
+   second implementation of §22.2 that drifts from the first is worse than no
+   search at all.
+3. **Scores are relative to the candidate set generated**, not to hard-coded
+   references — so a set where every option is a ⌀32 scores them all *equally*
+   on diameter rather than all badly. Normalisation runs over the **feasible**
+   set so an infeasible outlier cannot stretch the scale.
+4. **The near-tie rule is a leading-group promotion, not a comparator.** As a
+   comparator it is not transitive (A ties B, B ties C, A and C do not), and
+   `Array.sort` with a non-transitive comparator gives implementation-defined
+   order — which is no way to produce a schedule.
+5. **`ScoreContext.naming`** carries the vocabulary. A cage is counted, a mat
+   is spaced; a reason that does not match the headline reads as two answers.
+
+## Correctness bugs found on the way
+
+| where | what was wrong | PR |
+|---|---|---|
+| `rebarScore` | The near-tie rule **bought steel**. On a slab strip the modules span 75–300 mm, so the areas at one diameter run 1.3×–4.4× the requirement while the totals compress into one 0.03 band; promoting on serviceability alone reached the tight end every time — the middle strips came out at **2.63×** the required steel for a 0.014 score difference, and the whole panel quoted one mat. `MAX_TIE_STEEL = 0.15` caps what a promotion may buy. | #531 |
+| `rebarScore` | First version of the near-tie rule was a **non-transitive comparator** — a candidate with a *higher* total ranked below one with a lower total. | #528 |
+| `matRebarOptimize` | `beta1` written as `max(0.65, sloped-row)`. ACI Table 22.2.2.4.3 (SI) is **not continuous**: the slope covers 28 < f′c < 55 and the last row is a flat 0.65 for f′c ≥ 55. The slope at 55 gives 0.657. | #530 |
+| `beamRebarOptimize` | `governing` named the wrong section — bar count is rounded, so 210 and 240 kN·m tied and list order decided it. Now compares `As`. | #528 |
+
+## Continuity — the question that keeps coming up
+
+Yes, it is maintained, at both scales:
+
+- **Within a member**: `optimizeBeamMember` scores each diameter across *every*
+  critical section and adopts one for the whole member. A size that works at
+  midspan and fails over the support is not a size the beam can be built with.
+  Bar *counts* differ between sections; only the diameter is shared.
+- **Along a run**: `resolveBarContinuity` makes a continuity group adopt the
+  **largest** diameter any member in it needs. It is member-type agnostic, so a
+  column stack lapping storey to storey works the same way as a beam line.
+- **Across a slab panel**: one diameter for the panel, spacing **per strip** —
+  which is exactly how a slab is drawn.
+
+## Left open, deliberately
+
+- **`designBeam` omits §25.2.1's 4/3·d_agg term** when packing a layer (it uses
+  `max(db, 25)`). On 20 mm aggregate that is 26.7 mm, so the engine can lay out
+  a layer that is not compliant. The optimiser re-checks *with* the aggregate
+  and rejects, which is the safe direction — but the engine should carry it.
+- **`designSlabDDM` can over-reinforce at its own minimum thickness.**
+  §408.3.1.2's `hmin` assumes edge beams with αfm ≥ 2, and the module
+  deliberately does not credit αf for slab steel. A 6×7 panel at D 5.5 / L 4.8
+  has **no** compliant mat at `hmin` = 160 mm and an ordinary one at h = 220.
+  Surfaced as a blocked section naming both gates, not papered over.
+- **Rectangular and eccentric footings** keep the manual ⌀ field — the mat
+  optimiser covers the concentric square path only.
+- KaTeX cannot render ⌀ in math mode, so the score equations read `S(4D20)`.
