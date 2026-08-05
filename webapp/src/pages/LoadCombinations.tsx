@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { calcLoadCombinations, type LoadDemands } from '../engine/loadCombinations'
 import { Num, Card } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
 import { f2 } from '../lib/format'
+import { PageHeader } from '../components/calc'
 
 const DEFAULTS: LoadDemands = { D: 0, L: 0, Lr: 0, W: 0, E: 0 }
 
@@ -22,11 +22,9 @@ export default function LoadCombinations() {
   )
 
   return (
-    <div className="mx-auto max-w-[1200px] p-6">
-      <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
-      <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">
-        Load Combinations
-      </h1>
+        <div>
+      <PageHeader title="Load Combinations" badges={['NSCP 2015', 'ACI 318-14']} />
+      <div className="mx-auto max-w-[1200px] p-6">
       <p className="no-print mt-1 text-slate-600">
         NSCP 2015 §203.3 Strength Design (LRFD) — 13 factored combinations.
         Enter unfactored characteristic loads; the table shows every factored result
@@ -109,6 +107,7 @@ export default function LoadCombinations() {
           </p>
         )}
       </div>
+    </div>
     </div>
   )
 }

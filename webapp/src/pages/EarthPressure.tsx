@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react'
-import { Link } from 'react-router-dom'
 import { activeThrust, passiveThrust } from '../engine/geotech'
 import { coulombActiveThrust, coulombPassiveThrust, mononobeOkabe } from '../engine/coulomb'
 import { ReportControls } from '../components/ReportControls'
@@ -8,6 +7,7 @@ import { WorkedSolution } from '../components/WorkedSolution'
 import { buildEarthPressureSolution } from '../lib/geotechPageSolutions'
 import { Num, Card, ResultCard, Row } from '../components/qty'
 import { f1, f2, f3 } from '../lib/format'
+import { PageHeader } from '../components/calc'
 
 // Split out of the old combined "Geotechnical toolkit" page, which stacked
 // earth pressure, bearing capacity and slope stability on one screen. They
@@ -63,9 +63,9 @@ export default function EarthPressure() {
   const notes = [...(coulomb.active?.notes ?? []), ...(coulomb.passive?.notes ?? []), ...(seismic.r?.notes ?? [])]
 
   return (
-    <main className="mx-auto max-w-[1400px] px-5 py-8 sm:px-7">
-      <Link to="/geotech" className="no-print text-sm text-[#0056b3] hover:underline">← Geotechnical</Link>
-      <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-[#0056b3]">Lateral Earth Pressure</h1>
+        <div>
+      <PageHeader title="Lateral Earth Pressure" badges={['Rankine', 'Coulomb', 'NSCP 2015']} />
+      <main className="mx-auto max-w-[1400px] px-5 py-6 sm:px-7">
       <p className="no-print mt-1 max-w-3xl text-sm text-slate-600">
         Rankine and Coulomb active and passive thrust, with the Mononobe–Okabe seismic case.
         Rankine needs a smooth vertical wall and level fill; Coulomb carries wall friction, an
@@ -151,5 +151,6 @@ export default function EarthPressure() {
 
       <WorkedSolution steps={steps} />
     </main>
+    </div>
   )
 }

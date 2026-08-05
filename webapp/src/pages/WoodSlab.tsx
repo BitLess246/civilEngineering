@@ -4,6 +4,7 @@ import { speciesList, gradesOf, resolveWoodSpecies } from '../engine/woodDesign'
 import type { LoadDuration } from '../engine/woodDesign'
 import { costTimberRows } from '../engine/takeoff'
 import { ReportControls } from '../components/ReportControls'
+import { PageHeader } from '../components/calc'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -92,9 +93,9 @@ export default function WoodSlab() {
   }) : null
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Structural · Timber</p>
-      <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Wood slab — deck on joists</h1>
+        <div>
+      <PageHeader title="Wood slab — deck on joists" badges={['NDS 2018 §3', 'NSCP 2015 §6']} />
+      <main className="mx-auto max-w-3xl px-5 py-6">
       <ReportControls title="Wood Slab Design Report" badges={['NDS 2018 §3', 'NSCP 2015 §6']} />
       <p className="mt-2 text-sm text-slate-600">
         ASD design of a wood floor slab: decking (planks or bamboo slats) spanning between repetitive
@@ -265,5 +266,6 @@ export default function WoodSlab() {
         </section>
       )}
     </main>
+    </div>
   )
 }

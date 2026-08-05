@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react'
-import { Link } from 'react-router-dom'
 import {
   generalBearingCapacity, compareMethods, BEARING_METHOD_LABEL, type BearingMethod,
 } from '../engine/bearingGeneral'
@@ -9,6 +8,7 @@ import { WorkedSolution } from '../components/WorkedSolution'
 import { buildBearingSolution } from '../lib/geotechPageSolutions'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { f1, f2, f3 } from '../lib/format'
+import { PageHeader } from '../components/calc'
 
 // Split out of the old combined "Geotechnical toolkit" page. Bearing capacity
 // is reached from foundation design, earth pressure from retaining walls —
@@ -53,9 +53,9 @@ export default function BearingCapacity() {
   const r = solved.r
 
   return (
-    <main className="mx-auto max-w-[1400px] px-5 py-8 sm:px-7">
-      <Link to="/geotech" className="no-print text-sm text-[#0056b3] hover:underline">← Geotechnical</Link>
-      <h1 className="mt-1 text-2xl font-extrabold tracking-tight text-[#0056b3]">Bearing Capacity</h1>
+        <div>
+      <PageHeader title="Bearing Capacity" badges={['Meyerhof', 'Hansen', 'Vesić']} />
+      <main className="mx-auto max-w-[1400px] px-5 py-6 sm:px-7">
       <p className="no-print mt-1 max-w-3xl text-sm text-slate-600">
         Shallow-foundation bearing capacity by the general equation, with shape, depth and
         inclination factors and Meyerhof&rsquo;s effective area for eccentric load. Nq and Nc are
@@ -155,5 +155,6 @@ export default function BearingCapacity() {
 
       {steps.length > 0 && <WorkedSolution steps={steps} />}
     </main>
+    </div>
   )
 }

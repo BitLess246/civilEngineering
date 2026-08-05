@@ -299,6 +299,7 @@ export default function FoundationDesign() {
             ⎙ Export report
           </button>
         } />
+        <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
       <div className="no-print"><ExcelImport onResult={setBatch} /></div>
 
@@ -526,7 +527,6 @@ export default function FoundationDesign() {
             </div>
           )}
 
-          <LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} />
         </div>
       </div>
 

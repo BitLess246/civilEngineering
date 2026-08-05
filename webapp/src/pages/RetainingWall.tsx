@@ -50,6 +50,7 @@ export default function RetainingWall() {
   return (
     <div>
       <PageHeader title="Cantilever Retaining Wall" badges={['NSCP 2015', 'ACI 318-14']} />
+      <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
 
       {/* The section drawing carries what the numbers cannot: which FACE each
@@ -201,7 +202,6 @@ export default function RetainingWall() {
       </div>
       {r && <WorkedSolution steps={buildRetainingWallSolution(f, r)} />}
 
-      <div className="no-print mt-5"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>
       {r && (
         <PrintReport
           docTitle="Cantilever Retaining Wall" docCode="RW-01" badges={['NSCP 2015', 'ACI 318-14']}

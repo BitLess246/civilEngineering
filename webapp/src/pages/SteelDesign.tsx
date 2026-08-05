@@ -1,5 +1,4 @@
 import { lazy, Suspense, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { shapesOf, shapeByName } from '../engine/aiscSections'
 import type { AiscShape } from '../engine/aiscSections'
 // type-only imports — no engine code bundled into the browser from here
@@ -14,6 +13,7 @@ import { ConnectionDrawing } from '../components/ConnectionDrawing'
 import type { SolutionStep } from '../lib/solution'
 import { f1, f2, f3 } from '../lib/format'
 import { sn1, sn2, sn3 } from '../lib/solution'
+import { PageHeader } from '../components/calc'
 
 const BeamViewer3D       = lazy(() => import('../components/SteelViewer3D').then(m => ({ default: m.BeamViewer3D })))
 const ColumnViewer3D     = lazy(() => import('../components/SteelViewer3D').then(m => ({ default: m.ColumnViewer3D })))
@@ -656,9 +656,9 @@ export default function SteelDesign() {
     </button>
   )
   return (
-    <div className="mx-auto max-w-[1500px] p-6">
-      <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
-      <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">Steel Design</h1>
+    <div>
+      <PageHeader title="Steel Design" badges={['NSCP 2015', 'ACI 318-14']} />
+      <div className="mx-auto max-w-[1500px] px-6 pb-6 pt-5">
       <p className="no-print mt-1 text-slate-600">
         AISC 360-16 LRFD — beams (§F/G + deflections), columns (§E3 + §H1-1), connections
         (bolt group with in-plane eccentricity, bearing/shear stresses, block shear §J4.3;
@@ -674,6 +674,7 @@ export default function SteelDesign() {
         {tab === 'beam'       && <BeamTab />}
         {tab === 'column'     && <ColumnTab />}
         {tab === 'connection' && <ConnectionTab />}
+      </div>
       </div>
     </div>
   )

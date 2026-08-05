@@ -1,6 +1,7 @@
 import { useState, type JSX } from 'react'
 import type { CalcPdfInput } from '../lib/calcPdf'
 import { ExportPdfButton } from './ExportPdfButton'
+import { LetterheadCard } from './calc'
 import { loadProfile, letterheadDefaults } from '../lib/auth/profile'
 import { BRAND_MARK, BRAND_TAIL, docLabel } from '../lib/brand'
 
@@ -53,14 +54,6 @@ export function ReportControls({ title, badges = ['NSCP 2015', 'ACI 318-14'], re
     window.setTimeout(() => { document.title = prev }, 500)
   }
 
-  const field = (label: string, value: string, set: (v: string) => void, ph: string, mono = false) => (
-    <label className="flex min-w-36 flex-1 flex-col text-sm">
-      <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">{label}</span>
-      <input value={value} onChange={(e) => set(e.target.value)} placeholder={ph}
-        className={`text-[13px] ${mono ? 'font-mono' : ''}`} />
-    </label>
-  )
-
   const lhCells: [string, string, boolean][] = [
     ['Project', project || '—', false], ['Sheet', sheet || '—', true],
     ['Prepared by', preparedBy || '—', false], ['Date', today, true],
@@ -68,27 +61,28 @@ export function ReportControls({ title, badges = ['NSCP 2015', 'ACI 318-14'], re
 
   return (
     <>
-      {/* Screen: letterhead card + export */}
-      <div className="no-print mt-4 rounded-lg border border-[#e3e1da] bg-white p-3">
-        <div className="mb-2 flex items-center justify-between px-1">
-          <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">Report letterhead</h2>
-          <span className="font-mono text-[10px] text-[#a39d8d]">prints on the calc sheet</span>
-        </div>
-        <div className="flex flex-wrap items-end gap-3">
-          {field('Project / job', project, setProject, 'Lot 12 Residence')}
-          {field('Sheet', sheet, setSheet, 'S-01 · Rev A', true)}
-          {field('Prepared by', preparedBy, setPreparedBy, 'Engineer, CE')}
-          {report ? (
+      {/* Screen: the SAME letterhead card the calc-template pages use. It used
+          to be a second implementation here — outlined inputs in a flex row
+          rather than the borderless grid — so the two halves of the app looked
+          like two apps. One card, one style. */}
+      <div className="no-print mt-4">
+        <LetterheadCard
+          lh={{ project, sheet, preparedBy }}
+          onChange={(p) => {
+            if (p.project !== undefined) setProject(p.project)
+            if (p.sheet !== undefined) setSheet(p.sheet)
+            if (p.preparedBy !== undefined) setPreparedBy(p.preparedBy)
+          }}
+          action={report ? (
             <ExportPdfButton {...report} docTitle={title} badges={badges}
               lh={{ project, sheet, preparedBy }}
-              className="ml-auto inline-flex items-center gap-2 rounded-md bg-[#0f4c92] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0d3f78] disabled:opacity-50" />
+              className="inline-flex flex-none items-center gap-2 rounded-md bg-[#0f4c92] px-3.5 py-1.5 text-[12.5px] font-semibold text-white hover:bg-[#0d3f78] disabled:opacity-50" />
           ) : (
             <button type="button" onClick={print}
-              className="ml-auto inline-flex items-center gap-2 rounded-md bg-[#0f4c92] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0d3f78]">
+              className="inline-flex flex-none items-center gap-2 rounded-md bg-[#0f4c92] px-3.5 py-1.5 text-[12.5px] font-semibold text-white hover:bg-[#0d3f78]">
               ⎙ Export report
             </button>
-          )}
-        </div>
+          )} />
       </div>
 
       {/* Print: calc-sheet letterhead header */}

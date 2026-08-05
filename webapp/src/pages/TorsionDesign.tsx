@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { designTorsion, type TorsionInput } from '../engine/torsionDesign'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
@@ -7,6 +6,7 @@ import { buildTorsionSolution } from '../lib/torsionSolution'
 import { TorsionSection } from '../components/TorsionSection'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { f1, f2, f3 } from '../lib/format'
+import { PageHeader } from '../components/calc'
 
 interface FormState extends Omit<TorsionInput, 'legs' | 'lambda'> {
   legs: 2 | 4
@@ -79,11 +79,9 @@ export default function TorsionDesign() {
   } : undefined
 
   return (
-    <div className="mx-auto max-w-[1500px] p-6">
-      <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
-      <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">
-        Torsion Design
-      </h1>
+        <div>
+      <PageHeader title="Torsion Design" badges={['ACI 318-14 §22.7', 'NSCP 2015']} />
+      <div className="mx-auto max-w-[1500px] p-6">
       <p className="no-print mt-1 text-slate-600">
         Rectangular RC section — ACI 318-14 §22.7 combined shear + torsion. SI units (mm, kN, MPa).
       </p>
@@ -202,6 +200,7 @@ export default function TorsionDesign() {
           <WorkedSolution steps={solution} title="Calculation report — worked solution" />
         </div>
       )}
+    </div>
     </div>
   )
 }

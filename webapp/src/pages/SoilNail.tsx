@@ -3,6 +3,7 @@ import { designSoilNail } from '../engine/soilNail'
 import { ReportControls } from '../components/ReportControls'
 import { buildSoilNailSolution } from '../lib/geotechSolutions'
 import { WorkedSolution } from '../components/WorkedSolution'
+import { PageHeader } from '../components/calc'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -83,9 +84,9 @@ export default function SoilNail() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-10">
-      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">Geotechnical</p>
-      <h1 className="mt-1 text-2xl font-bold text-[#0056b3]">Soil-nail wall — per-nail check</h1>
+        <div>
+      <PageHeader title="Soil-nail wall — per-nail check" badges={['FHWA GEC-7']} />
+      <main className="mx-auto max-w-3xl px-5 py-6">
       <ReportControls title="Soil-Nail Wall" badges={['FHWA GEC-7']} report={report} />
       <p className="mt-2 text-sm text-slate-600">
         Preliminary FHWA GEC-7 checks for a single nail: tributary active demand vs bar-tensile and
@@ -133,5 +134,6 @@ export default function SoilNail() {
         <WorkedSolution steps={solution} title="Calculation report — worked solution" />
       </div>
     </main>
+    </div>
   )
 }

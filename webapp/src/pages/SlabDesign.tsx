@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { designSlabDDM, type SlabInput, type SlabDirResult, type SlabSectionSteel } from '../engine/slabDDM'
 import { optimizeSlabRebar } from '../engine/matRebarOptimize'
 import { RebarRanking } from '../components/RebarRanking'
@@ -14,6 +13,7 @@ import { tempSteelArea, tempSpacingMax } from '../engine/slabBarDetail'
 import { f0, f1, f2 } from '../lib/format'
 import 'katex/dist/katex.min.css'
 import { WorkedSolution } from '../components/WorkedSolution'
+import { PageHeader } from '../components/calc'
 
 interface FormState {
   lx: number; ly: number
@@ -187,9 +187,9 @@ export default function SlabDesign() {
   } : undefined
 
   return (
-    <div className="mx-auto max-w-[1500px] p-6">
-      <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
-      <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-[#0056b3]">Two-Way Slab Design</h1>
+        <div>
+      <PageHeader title="Two-Way Slab Design" badges={['ACI 318-14 §8.10', 'NSCP 2015 §408.10']} />
+      <div className="mx-auto max-w-[1500px] p-6">
       <p className="no-print mt-1 text-slate-600">
         Direct Design Method — NSCP 2015 §408.10 / ACI 318-14 §8.10. Square or rectangular interior and end panels;
         column-strip / middle-strip flexure; temp/shrinkage minimum; §408.7.2.2 spacing; mid-panel deflection by
@@ -338,6 +338,7 @@ export default function SlabDesign() {
           <WorkedSolution steps={solution} title="Calculation report — worked solution" />
         </div>
       )}
+    </div>
     </div>
   )
 }

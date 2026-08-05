@@ -33,6 +33,7 @@ export default function TBeamDesign() {
   return (
     <div className="min-h-screen">
       <PageHeader title="T-Beam Design" badges={[...badges, kind]} />
+      <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(p) => setLh((s) => ({ ...s, ...p }))} /></div>
       <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
         <p className="no-print text-[13px] text-[#5c6675]">
           <Link to="/" className="font-semibold text-[#0f4c92]">← Home</Link> · Flanged-beam flexure: §6.3.2 effective width,
@@ -81,7 +82,6 @@ export default function TBeamDesign() {
                 <TSection bf={r.bf} bw={bw} h={h} hf={hf} a={r.a} bars={r.bars} barDia={barDia} layers={r.layers} cover={cover} stirrupDia={stirrupDia} />
               </DrawingCard>
             )}
-            <LetterheadCard lh={lh} onChange={(p) => setLh((s) => ({ ...s, ...p }))} />
           </div>
         </div>
         {r && (
