@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { designSlabDDM, type SlabInput, type SlabDirResult, type SlabSectionSteel } from '../engine/slabDDM'
 import { optimizeSlabRebar } from '../engine/matRebarOptimize'
 import { RebarRanking } from '../components/RebarRanking'
-import { buildRebarSelectionSolution } from '../lib/rebarSolution'
+import { buildRebarSelectionSolution, withRebarSelection } from '../lib/rebarSolution'
 import { nameMat } from '../lib/rebarLabel'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
@@ -142,10 +142,10 @@ export default function SlabDesign() {
   const defl = r?.deflection
 
   const solution = r
-    ? [
-        ...buildSlabSolution(inputEff, r),
-        ...(slabChoice ? buildRebarSelectionSolution(slabChoice.selection, 'mat') : []),
-      ]
+    ? withRebarSelection(
+        buildSlabSolution(inputEff, r),
+        slabChoice ? buildRebarSelectionSolution(slabChoice.selection, 'mat') : [],
+      )
     : null
 
   const report = r ? {
@@ -239,13 +239,13 @@ export default function SlabDesign() {
             <Pick label="Beams on all edges?" value={f.withBeams} onChange={set('withBeams')}
               options={[['yes', 'Yes (grid beams)'], ['no', 'No (flat plate)']]} />
           </Card>
+          {slabChoice && (
+            <RebarRanking selection={slabChoice.selection} title="Mat selection — whole panel" name={nameMat} />
+          )}
         </div>
 
         {/* ── RESULTS ── */}
         <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
-          {slabChoice && (
-            <RebarRanking selection={slabChoice.selection} title="Mat selection — whole panel" name={nameMat} />
-          )}
           {r ? (
             <>
               {/* Summary */}

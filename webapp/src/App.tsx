@@ -66,6 +66,21 @@ import ScheduleResources from './pages/ScheduleResources'
 import ScheduleReports from './pages/ScheduleReports'
 import ScheduleDaily from './pages/ScheduleDaily'
 
+
+/**
+ * Suspense fallback for a lazily-loaded page.
+ *
+ * It reserves roughly a screen of height. The bare `<p>` it replaces had none,
+ * so the footer rendered directly beneath the one-line message and then jumped
+ * down the moment the chunk arrived — the page appeared to load backwards.
+ */
+function PageLoading({ what }: { what: string }) {
+  return (
+    <div className="flex min-h-[70vh] items-center justify-center p-8">
+      <p className="text-sm text-slate-500">Loading {what}…</p>
+    </div>
+  )
+}
 export default function App() {
   const nav = useNavigate()
 
@@ -95,12 +110,12 @@ export default function App() {
         <Route path="/frame" element={<RequireAuth><FrameAnalysis /></RequireAuth>} />
         <Route path="/load-path" element={<LoadPath />} />
         <Route path="/model" element={
-          <Suspense fallback={<p className="p-8 text-center text-sm text-slate-500">Loading 3D model space…</p>}>
+          <Suspense fallback={<PageLoading what="3D model space" />}>
             <ModelSpace />
           </Suspense>
         } />
         <Route path="/truss" element={
-          <Suspense fallback={<p className="p-8 text-center text-sm text-slate-500">Loading truss space…</p>}>
+          <Suspense fallback={<PageLoading what="truss space" />}>
             <TrussSpace />
           </Suspense>
         } />

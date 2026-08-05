@@ -76,6 +76,30 @@ export default function PrestressedBeam() {
     <div className="min-h-screen">
       <PageHeader title="Prestressed Beam" badges={[...badges, `class ${klass}`]} />
       <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(p) => setLh((s) => ({ ...s, ...p }))} /></div>
+      {r && (
+        <PrintReport docTitle="Prestressed Beam" docCode="PS-01" badges={badges} ok={r.ok}
+          governing={`losses ${r.lossPct.toFixed(1)}% · utilization ${(r.Mu / Math.max(r.phiMn, 1e-9)).toFixed(2)}`}
+          lh={lh}
+          stats={[
+            { label: 'φMn', value: f1(r.phiMn), unit: 'kN·m' },
+            { label: 'fse', value: f1(r.fse), unit: 'MPa' },
+            { label: 'Pe', value: f1(r.Pe), unit: 'kN' },
+          ]}
+          checks={[
+            { name: 'Transfer stresses §24.5.3', ratio: r.transfer.bot / r.limTransferC, ok: r.transferOK },
+            { name: 'Service stresses §24.5.4', ratio: Number.isFinite(r.limServiceT) ? Math.max(0, -r.service.bot) / r.limServiceT : 0, ok: r.serviceOK },
+            { name: 'Strength Mu/φMn', ratio: r.Mu / Math.max(r.phiMn, 1e-9), ok: r.strengthOK },
+            { name: 'φMn ≥ 1.2Mcr', ratio: (1.2 * r.Mcr) / Math.max(r.phiMn, 1e-9), ok: r.crackingOK },
+          ]}
+          data={[
+            ['Section', `${b} × ${h} mm`], ['Span', `${span} m`], ["f'c / f'ci", `${fc} / ${fci} MPa`],
+            ['Tendons', `Aps ${Aps} mm² · fpu ${fpu} · e ${e} mm`], ['Loads', `SDL ${wSDL} · LL ${wLL} kN/m`],
+            ['Losses', `${r.lossPct.toFixed(1)} % → fse ${f1(r.fse)} MPa`],
+          ]}
+          steps={steps}
+          drawing={<PSElevation h={h} e={e} span={span} />}
+          drawingTitle="Prestressed beam" />
+      )}
       <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
         <p className="no-print text-[13px] text-[#5c6675]">
           <Link to="/" className="font-semibold text-[#0f4c92]">← Home</Link> · Pretensioned bonded beam: PCI losses
@@ -133,30 +157,6 @@ export default function PrestressedBeam() {
           </div>
         )}
       </div>
-      {r && (
-        <PrintReport docTitle="Prestressed Beam" docCode="PS-01" badges={badges} ok={r.ok}
-          governing={`losses ${r.lossPct.toFixed(1)}% · utilization ${(r.Mu / Math.max(r.phiMn, 1e-9)).toFixed(2)}`}
-          lh={lh}
-          stats={[
-            { label: 'φMn', value: f1(r.phiMn), unit: 'kN·m' },
-            { label: 'fse', value: f1(r.fse), unit: 'MPa' },
-            { label: 'Pe', value: f1(r.Pe), unit: 'kN' },
-          ]}
-          checks={[
-            { name: 'Transfer stresses §24.5.3', ratio: r.transfer.bot / r.limTransferC, ok: r.transferOK },
-            { name: 'Service stresses §24.5.4', ratio: Number.isFinite(r.limServiceT) ? Math.max(0, -r.service.bot) / r.limServiceT : 0, ok: r.serviceOK },
-            { name: 'Strength Mu/φMn', ratio: r.Mu / Math.max(r.phiMn, 1e-9), ok: r.strengthOK },
-            { name: 'φMn ≥ 1.2Mcr', ratio: (1.2 * r.Mcr) / Math.max(r.phiMn, 1e-9), ok: r.crackingOK },
-          ]}
-          data={[
-            ['Section', `${b} × ${h} mm`], ['Span', `${span} m`], ["f'c / f'ci", `${fc} / ${fci} MPa`],
-            ['Tendons', `Aps ${Aps} mm² · fpu ${fpu} · e ${e} mm`], ['Loads', `SDL ${wSDL} · LL ${wLL} kN/m`],
-            ['Losses', `${r.lossPct.toFixed(1)} % → fse ${f1(r.fse)} MPa`],
-          ]}
-          steps={steps}
-          drawing={<PSElevation h={h} e={e} span={span} />}
-          drawingTitle="Prestressed beam" />
-      )}
     </div>
   )
 }

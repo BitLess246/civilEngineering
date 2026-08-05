@@ -95,6 +95,10 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
     title: 'Bar layout — spacing check & layers (§407.7)',
     lines: [
       txt(`Minimum clear spacing between parallel bars in a layer is max(d_b, 25 mm) = ${sn0(r.sMinClear)} mm (§407.7.1). The clear web width is b − 2(cover + dₛ) = ${sn0(bw)} mm, so at most ${r.maxPerLayer} bars fit per layer.`),
+      // A_b appeared here as a bare number for a bar the sheet had not yet
+      // named. Both come first now: which bar, and the area it gives.
+      txt(`The bar adopted above is ⌀${sn0(i.barDia)}, so one bar carries:`),
+      eq(String.raw`A_b = \tfrac{\pi}{4} d_b^2 = \tfrac{\pi}{4}(${sn0(i.barDia)})^2 = ${sn0(Ab)}\ \text{mm}^2`),
       eq(String.raw`n = \lceil A_s / A_b \rceil = \lceil ${sn0(r.As)} / ${sn0(Ab)} \rceil = ${r.bars}\ \text{bars} \Rightarrow \text{layers: } [${r.layers.join(', ')}]`),
       eq(String.raw`s_{clear} = \dfrac{${sn0(bw)} - ${r.layers[0]}(${sn0(i.barDia)})}{${Math.max(1, r.layers[0] - 1)}} = ${sn0(r.sClear)}\ \text{mm} \;\ge\; ${sn0(r.sMinClear)}\ \text{mm}\ \checkmark`),
       ...(multiLayer ? [

@@ -171,6 +171,30 @@ export default function CombinedFootingDesign() {
     <div>
       <PageHeader title="Combined Footing" badges={['ACI 318-14', 'NSCP 2015']} />
       <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>
+      {result && solutionSteps && (
+        <PrintReport
+          docTitle={result.shape === 'Trapezoidal (CTF)' ? 'Combined Footing (Trapezoidal)' : 'Combined Footing (Rectangular)'}
+          docCode="F-02" badges={['ACI 318-14', 'NSCP 2015']}
+          ok={result.qNet > 0} governing="Rigid (conventional) method — resultant matched to factored column loads"
+          lh={lh}
+          stats={[
+            { label: 'Plan', value: result.shape === 'Trapezoidal (CTF)' ? `${f2(result.Bx)} × ${f2(result.By1)}→${f2(result.By2)}` : `${f2(result.Bx)} × ${f2(result.By)}`, unit: 'm' },
+            { label: 'Thickness Dc', value: f0(result.Dc), unit: 'mm' },
+            { label: 'q net', value: f2(result.qNet), unit: 'kPa' },
+          ]}
+          data={[
+            ['Column 1 DL / LL', `${f0(form.dl1)} / ${f0(form.ll1)} kN`], ['Column 2 DL / LL', `${f0(form.dl2)} / ${f0(form.ll2)} kN`],
+            ['Column spacing', `${f2(form.spacing)} m`], ["Concrete f'c", `${form.fc} MPa`],
+            ['Steel fy', `${form.fy} MPa`], ['Allowable qa', `${form.qAllow} kPa`],
+            ['Total depth H', `${f2(form.H)} m`], ['Bar ⌀', `${form.barDia} mm`],
+          ]}
+          steps={solutionSteps}
+          drawingTitle="Combined Footing Plan"
+          drawing={<CombinedFootingSchematic
+            shape={result.shape} Bx={result.Bx} By={result.By} By1={result.By1} By2={result.By2}
+            x1={result.x1} x2={result.x2} col1Width={form.col1Width} col2Width={form.col2Width} />}
+        />
+      )}
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
 
       <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
@@ -350,30 +374,6 @@ export default function CombinedFootingDesign() {
           <WorkedSolution steps={solutionSteps} title="Combined footing — worked solution (rigid method)" />
         )}
       </div>
-      {result && solutionSteps && (
-        <PrintReport
-          docTitle={result.shape === 'Trapezoidal (CTF)' ? 'Combined Footing (Trapezoidal)' : 'Combined Footing (Rectangular)'}
-          docCode="F-02" badges={['ACI 318-14', 'NSCP 2015']}
-          ok={result.qNet > 0} governing="Rigid (conventional) method — resultant matched to factored column loads"
-          lh={lh}
-          stats={[
-            { label: 'Plan', value: result.shape === 'Trapezoidal (CTF)' ? `${f2(result.Bx)} × ${f2(result.By1)}→${f2(result.By2)}` : `${f2(result.Bx)} × ${f2(result.By)}`, unit: 'm' },
-            { label: 'Thickness Dc', value: f0(result.Dc), unit: 'mm' },
-            { label: 'q net', value: f2(result.qNet), unit: 'kPa' },
-          ]}
-          data={[
-            ['Column 1 DL / LL', `${f0(form.dl1)} / ${f0(form.ll1)} kN`], ['Column 2 DL / LL', `${f0(form.dl2)} / ${f0(form.ll2)} kN`],
-            ['Column spacing', `${f2(form.spacing)} m`], ["Concrete f'c", `${form.fc} MPa`],
-            ['Steel fy', `${form.fy} MPa`], ['Allowable qa', `${form.qAllow} kPa`],
-            ['Total depth H', `${f2(form.H)} m`], ['Bar ⌀', `${form.barDia} mm`],
-          ]}
-          steps={solutionSteps}
-          drawingTitle="Combined Footing Plan"
-          drawing={<CombinedFootingSchematic
-            shape={result.shape} Bx={result.Bx} By={result.By} By1={result.By1} By2={result.By2}
-            x1={result.x1} x2={result.x2} col1Width={form.col1Width} col2Width={form.col2Width} />}
-        />
-      )}
       </div>
     </div>
   )

@@ -166,3 +166,23 @@ export function buildRebarSelectionSolution(
 
   return steps
 }
+
+/**
+ * Splice the selection steps in AHEAD of the step that first uses a bar area.
+ *
+ * They used to be appended. That reads backwards: the layout step divides
+ * As by A_b — a number belonging to a bar the sheet has not yet named or
+ * justified — and only pages later does it explain which bar and why. A
+ * checker meets the consequence before the decision.
+ *
+ * Falls back to appending when a sheet has no layout step to sit ahead of.
+ */
+export function withRebarSelection(
+  base: readonly SolutionStep[], selection: readonly SolutionStep[],
+): SolutionStep[] {
+  if (selection.length === 0) return [...base]
+  const at = base.findIndex((s) => /bar layout|bar arrangement|reinforcement layout/i.test(s.title))
+  return at < 0
+    ? [...base, ...selection]
+    : [...base.slice(0, at), ...selection, ...base.slice(at)]
+}

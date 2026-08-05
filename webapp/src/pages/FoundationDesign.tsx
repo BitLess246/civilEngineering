@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { designSquareFooting } from '../engine/isolatedFooting'
 import { optimizeFootingRebar } from '../engine/matRebarOptimize'
 import { RebarRanking } from '../components/RebarRanking'
-import { buildRebarSelectionSolution } from '../lib/rebarSolution'
+import { buildRebarSelectionSolution, withRebarSelection } from '../lib/rebarSolution'
 import { nameMat } from '../lib/rebarLabel'
 // The page used to carry its own byte-identical copy of this input.
 import { Num as NumField } from '../components/qty'
@@ -276,10 +276,10 @@ export default function FoundationDesign() {
       punchOK: view.punchOK, beamOK: view.beamOK,
       long: view.long, short: view.short, ecc: view.ecc,
     }
-    return [
-      ...buildFoundationSolution(ctx),
-      ...(matChoice ? buildRebarSelectionSolution(matChoice.selection, 'mat') : []),
-    ]
+    return withRebarSelection(
+      buildFoundationSolution(ctx),
+      matChoice ? buildRebarSelectionSolution(matChoice.selection, 'mat') : [],
+    )
   }, [view, form, dbEff, matChoice, serviceLoad, ultimateLoad, individual, circular, colWidth, colWidthY])
 
   // Verdict data — presentation of engine outputs only: utilization is the
@@ -300,6 +300,33 @@ export default function FoundationDesign() {
           </button>
         } />
         <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>
+        {view && solutionSteps && (
+          <PrintReport
+            docTitle="Isolated Footing" docCode="F-01" badges={['ACI 318-14', 'NSCP 2015']}
+            ok={allOK} governing={`Governing: ${governing} · ${globalThis.Math.max(punchRatio, beamRatio).toFixed(2)}`}
+            lh={lh}
+            stats={[
+              { label: 'Plan size', value: `${f2(view.Bx)} × ${f2(view.By)}`, unit: 'm' },
+              { label: 'Thickness Dc', value: f0(view.Dc), unit: 'mm' },
+              { label: view.type === 'square' ? 'Steel each way' : 'Steel — long', value: `${view.long.bars}-⌀${dbEff}`, unit: `@${f0(view.long.spacing)}` },
+            ]}
+            checks={[
+              { name: 'Two-way (punching) shear — d req/prov', ratio: punchRatio, ok: view.punchOK },
+              { name: 'One-way (beam) shear — d req/prov', ratio: beamRatio, ok: view.beamOK },
+            ]}
+            data={[
+              ['Service load P', `${f0(serviceLoad)} kN`], ['Ultimate load Pu', `${f0(ultimateLoad)} kN`],
+              ["Concrete f'c", `${form.fc} MPa`], ['Steel fy', `${form.fy} MPa`],
+              ['Column width c', `${f0(colWidth)} mm (${form.position})`], ['Bar diameter db', `⌀${dbEff} mm`],
+              ['Allowable bearing qa', `${form.qAllow} kPa`], ['Clear cover', `${form.cover} mm`],
+              ['Unit weight, soil γs', `${form.gammaSoil} kN/m³`], ['Unit weight, concrete γc', `${form.gammaConc} kN/m³`],
+              ['Total depth H', `${f2(form.H)} m`], ['Surcharge', `${form.surcharge} kPa`],
+            ]}
+            steps={solutionSteps}
+            drawingTitle="Isolated Footing"
+            drawing={<FootingSchematic Bx={view.Bx} By={view.By} Dc={view.Dc} columnWidth={colWidth} H={form.H} />}
+          />
+        )}
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
       <div className="no-print"><ExcelImport onResult={setBatch} /></div>
 
@@ -448,6 +475,9 @@ export default function FoundationDesign() {
             <NumField label={<>Total depth <Math tex="H" /></>} unit="m" value={form.H} onChange={set('H')} />
             <NumField label="Surcharge" unit="kPa" value={form.surcharge} onChange={set('surcharge')} />
           </Card>
+          {matChoice && (
+            <RebarRanking selection={matChoice.selection} title="Mat selection" name={nameMat} />
+          )}
         </div>
 
         {/* ── Verdict rail ── */}
@@ -472,10 +502,6 @@ export default function FoundationDesign() {
                 ? 'Flexure: As,min = 0.0018·b·h governs (ρmin) — §24.4.3.2'
                 : `Flexure: ρ = ${view.long.rho.toFixed(4)} — §24.4.3.2 satisfied`}
             />
-          )}
-
-          {matChoice && (
-            <RebarRanking selection={matChoice.selection} title="Mat selection" name={nameMat} />
           )}
 
           <DrawingCard pdfDrawing title="Drawing" meta="plan · section">
@@ -531,33 +557,6 @@ export default function FoundationDesign() {
       </div>
 
       <div className="no-print">{solutionSteps && <WorkedSolution steps={solutionSteps} title="Calculation report — worked solution" />}</div>
-      {view && solutionSteps && (
-        <PrintReport
-          docTitle="Isolated Footing" docCode="F-01" badges={['ACI 318-14', 'NSCP 2015']}
-          ok={allOK} governing={`Governing: ${governing} · ${globalThis.Math.max(punchRatio, beamRatio).toFixed(2)}`}
-          lh={lh}
-          stats={[
-            { label: 'Plan size', value: `${f2(view.Bx)} × ${f2(view.By)}`, unit: 'm' },
-            { label: 'Thickness Dc', value: f0(view.Dc), unit: 'mm' },
-            { label: view.type === 'square' ? 'Steel each way' : 'Steel — long', value: `${view.long.bars}-⌀${dbEff}`, unit: `@${f0(view.long.spacing)}` },
-          ]}
-          checks={[
-            { name: 'Two-way (punching) shear — d req/prov', ratio: punchRatio, ok: view.punchOK },
-            { name: 'One-way (beam) shear — d req/prov', ratio: beamRatio, ok: view.beamOK },
-          ]}
-          data={[
-            ['Service load P', `${f0(serviceLoad)} kN`], ['Ultimate load Pu', `${f0(ultimateLoad)} kN`],
-            ["Concrete f'c", `${form.fc} MPa`], ['Steel fy', `${form.fy} MPa`],
-            ['Column width c', `${f0(colWidth)} mm (${form.position})`], ['Bar diameter db', `⌀${dbEff} mm`],
-            ['Allowable bearing qa', `${form.qAllow} kPa`], ['Clear cover', `${form.cover} mm`],
-            ['Unit weight, soil γs', `${form.gammaSoil} kN/m³`], ['Unit weight, concrete γc', `${form.gammaConc} kN/m³`],
-            ['Total depth H', `${f2(form.H)} m`], ['Surcharge', `${form.surcharge} kPa`],
-          ]}
-          steps={solutionSteps}
-          drawingTitle="Isolated Footing"
-          drawing={<FootingSchematic Bx={view.Bx} By={view.By} Dc={view.Dc} columnWidth={colWidth} H={form.H} />}
-        />
-      )}
       </div>
     </div>
   )
