@@ -1024,3 +1024,69 @@ describe('footing mats are the footing\'s, not the column\'s', () => {
     expect(f.selection.best!.reason).toMatch(/⌀\d+ @ \d+/)
   })
 })
+
+// ── Slab mats ─────────────────────────────────────────────────────────────
+
+describe('slab mats are searched, not assumed', () => {
+  const panelAt = (thickness: number, D: number, L: number) => {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section, slabThickness: thickness })
+    m.loads = m.plates.flatMap((p): ModelLoad[] => [
+      { kind: 'area', plate: p.id, q: D, cat: 'D' },
+      { kind: 'area', plate: p.id, q: L, cat: 'L' },
+    ])
+    return designStructure(m, soil)!.slabs
+  }
+
+  it('the diameter responds to the load instead of being a hard-coded 12', () => {
+    // It was literally `barDia: 12` in the pipeline, again in the take-off as
+    // SLAB_BAR, and again in the on-screen schedule as the string "⌀12".
+    const light = panelAt(200, 4.8, 2.4)
+    const heavy = panelAt(250, 6.0, 5.0)
+    expect(light[0].barDia).toBeLessThan(heavy[0].barDia)
+    expect(light.every((s) => s.barDia > 0)).toBe(true)
+  })
+
+  it('one diameter serves a panel, but the spacing varies by strip', () => {
+    // Mixing bar sizes within a panel is how the wrong bar reaches the wrong
+    // strip; varying the SPACING is how a slab is actually drawn.
+    for (const sl of panelAt(150, 3.0, 2.0)) {
+      const spacings = [sl.design.x, sl.design.y].flatMap((dr) =>
+        dr.locations.flatMap((l) => [l.column.spacing, ...(l.middle.b > 1 ? [l.middle.spacing] : [])]))
+      expect(new Set(spacings.map((x) => Math.round(x))).size).toBeGreaterThan(1)
+    }
+  })
+
+  it('every strip satisfies §8.7.2.2', () => {
+    for (const sl of panelAt(200, 4.8, 2.4)) {
+      const sMax = Math.min(2 * sl.design.h, 450)
+      for (const dr of [sl.design.x, sl.design.y]) {
+        for (const loc of dr.locations) {
+          expect(loc.column.spacing, `${sl.plate} ${dr.dir} ${loc.name} CS`).toBeLessThanOrEqual(sMax + 1e-6)
+          if (loc.middle.b > 1) {
+            expect(loc.middle.spacing, `${sl.plate} ${dr.dir} ${loc.name} MS`).toBeLessThanOrEqual(sMax + 1e-6)
+          }
+        }
+      }
+    }
+  })
+
+  it('the schedule quotes the diameter its own selection adopted', () => {
+    for (const sl of panelAt(200, 4.8, 2.4)) {
+      expect(sl.selection.best).not.toBeNull()
+      expect(sl.barDia).toBe(sl.selection.best!.layout.db)
+      expect(sl.selection.best!.reason).toMatch(/⌀\d+ @ \d+/)
+    }
+  })
+
+  it('every strip still carries at least the steel its flexure check demanded', () => {
+    for (const sl of panelAt(250, 6.0, 5.0)) {
+      const Ab = (Math.PI / 4) * sl.barDia * sl.barDia
+      for (const dr of [sl.design.x, sl.design.y]) {
+        for (const loc of dr.locations) {
+          expect(loc.column.bars * Ab).toBeGreaterThanOrEqual(loc.column.As - 1e-6)
+          if (loc.middle.b > 1) expect(loc.middle.bars * Ab).toBeGreaterThanOrEqual(loc.middle.As - 1e-6)
+        }
+      }
+    }
+  })
+})

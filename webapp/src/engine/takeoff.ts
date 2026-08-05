@@ -28,7 +28,6 @@ const STEEL_DENSITY = 7850            // kg/m³
 const BAR_LENGTH = 6                  // m, commercial length
 const TIE_WIRE_ROLL = 2385            // m per roll (#16 G.I.)
 const GI_WIRE_KG_PER_M = 0.0189       // #16 G.I. tie wire, ~1.6 mmØ
-const SLAB_BAR = 12                   // slab mat bar Ø, mm (matches designSlabDDM)
 
 const barAreaM2 = (dia: number) => (Math.PI / 4) * (dia / 1000) ** 2
 const kgPerM = (dia: number) => barAreaM2(dia) * STEEL_DENSITY
@@ -269,9 +268,9 @@ export function estimateTakeoff(
         if (bars <= 0) continue
         if (loc.name === '+M') {
           bottomBarsOf.push(bars)
-          steelKg += add(tag, `Bottom +M (${label})`, SLAB_BAR, bars, span)        // full-span bottom mat
+          steelKg += add(tag, `Bottom +M (${label})`, sl.barDia, bars, span)       // full-span bottom mat
         } else {
-          steelKg += add(tag, `Top ${loc.name} (${label})`, SLAB_BAR, bars, 0.3 * dir.ln) // cutoff over support
+          steelKg += add(tag, `Top ${loc.name} (${label})`, sl.barDia, bars, 0.3 * dir.ln) // cutoff over support
         }
       }
     }
