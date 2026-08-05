@@ -326,12 +326,14 @@ export default function FoundationDesign() {
             ⎙ Export report
           </button>
         } />
-        <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>
+        {/* PrintReport carries the letterhead card AND the export button in one; this
+          bare one is the fallback for when the design has not solved. */}
+      {!(view && solutionSteps) && <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>}
         {view && solutionSteps && (
           <PrintReport
             docTitle="Isolated Footing" docCode="F-01" badges={['ACI 318-14', 'NSCP 2015']}
             ok={allOK} governing={`Governing: ${governing} · ${globalThis.Math.max(punchRatio, beamRatio).toFixed(2)}`}
-            lh={lh}
+            lh={lh} onLhChange={(patch) => setLh((v) => ({ ...v, ...patch }))}
             stats={[
               { label: 'Plan size', value: `${f2(view.Bx)} × ${f2(view.By)}`, unit: 'm' },
               { label: 'Thickness Dc', value: f0(view.Dc), unit: 'mm' },

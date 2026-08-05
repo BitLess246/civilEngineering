@@ -194,6 +194,7 @@ export default function BeamDesign() {
     ok: allOK,
     governing: `Governing: flexure · utilization ${cap ? (demand.Mu / cap.phiMn).toFixed(2) : '—'}${r.mode === 'DRRB' ? ' · DRRB' : ''}`,
     lh,
+    onLhChange: (patch: Partial<LetterheadState>) => setLh((v) => ({ ...v, ...patch })),
     stats: [
       { label: hogging ? 'Tension (top)' : 'Tension steel', value: `${r.bars}-⌀${fd.barDia}` },
       { label: 'Stirrups', value: r.sAdopt > 0 ? `⌀${f.stirrupDia} @${f0(r.sAdopt)}` : REGION[r.region] },
@@ -224,7 +225,9 @@ export default function BeamDesign() {
             ))}
           </div>
         } />
-        <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>
+        {/* PrintReport carries the letterhead card AND the export button in one; this
+          bare one is the fallback for when the design has not solved. */}
+      {!(reportData) && <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>}
         {reportData && (
           <PrintReport {...reportData}
             drawing={<BeamSchematic b={fd.b} h={fd.h} cover={fd.cover} barDia={fd.barDia} stirrupDia={fd.stirrupDia}

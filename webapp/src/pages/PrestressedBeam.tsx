@@ -75,11 +75,13 @@ export default function PrestressedBeam() {
   return (
     <div className="min-h-screen">
       <PageHeader title="Prestressed Beam" badges={[...badges, `class ${klass}`]} />
-      <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(p) => setLh((s) => ({ ...s, ...p }))} /></div>
+      {/* PrintReport carries the letterhead card AND the export button in one; this
+          bare one is the fallback for when the design has not solved. */}
+      {!(r) && <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(p) => setLh((s) => ({ ...s, ...p }))} /></div>}
       {r && (
         <PrintReport docTitle="Prestressed Beam" docCode="PS-01" badges={badges} ok={r.ok}
           governing={`losses ${r.lossPct.toFixed(1)}% · utilization ${(r.Mu / Math.max(r.phiMn, 1e-9)).toFixed(2)}`}
-          lh={lh}
+          lh={lh} onLhChange={(p) => setLh((s) => ({ ...s, ...p }))}
           stats={[
             { label: 'φMn', value: f1(r.phiMn), unit: 'kN·m' },
             { label: 'fse', value: f1(r.fse), unit: 'MPa' },

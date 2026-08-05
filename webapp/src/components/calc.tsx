@@ -130,25 +130,27 @@ export function LetterheadCard({ lh, onChange, action }: {
 }) {
   const today = new Date().toISOString().slice(0, 10)
   const cell = (label: string, value: string, key: keyof LetterheadState, ph: string, mono = false) => (
-    <div>
-      <span className="text-[10px] font-semibold uppercase tracking-widest text-[#a39d8d]">{label}</span>
+    <div className="min-w-0">
+      <span className="text-[9.5px] font-semibold uppercase tracking-widest text-[#a39d8d]">{label}</span>
       <input value={value} onChange={(e) => onChange({ [key]: e.target.value })} placeholder={ph}
-        className={`mt-0.5 w-full !border-0 !bg-transparent !p-0 text-[12px] font-semibold text-[#0f1b2a] !shadow-none placeholder:text-[#c8c2b4] ${mono ? 'font-mono font-medium' : ''}`} />
+        className={`w-full !border-0 !bg-transparent !p-0 text-[12px] font-semibold leading-[1.35] text-[#0f1b2a] !shadow-none placeholder:text-[#c8c2b4] ${mono ? 'font-mono font-medium' : ''}`} />
     </div>
   )
+  // Four fields on ONE row from `sm` up — the two-row grid was the whole of the
+  // card's height, and none of these values is long enough to need half a card.
   return (
-    <section className="rail-card no-print rounded-lg border border-[#e3e1da] bg-white p-4">
+    <section className="rail-card no-print rounded-lg border border-[#e3e1da] bg-white px-4 py-3">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">Report letterhead</h2>
+        <h2 className="text-[12.5px] font-bold text-[#0f1b2a]">Report letterhead</h2>
         {action ?? <span className="font-mono text-[10px] text-[#a39d8d]">prints on the calc sheet</span>}
       </div>
-      <div className="mt-2.5 grid grid-cols-2 gap-x-3.5 gap-y-2">
+      <div className="mt-2 grid grid-cols-2 gap-x-5 gap-y-1.5 sm:grid-cols-4">
         {cell('Project', lh.project, 'project', 'Lot 12 Residence')}
         {cell('Sheet', lh.sheet, 'sheet', 'F-01 · Rev A', true)}
         {cell('Prepared by', lh.preparedBy, 'preparedBy', 'Engineer, CE')}
-        <div>
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-[#a39d8d]">Date</span>
-          <p className="mt-0.5 font-mono text-[12px] font-medium text-[#0f1b2a]">{today}</p>
+        <div className="min-w-0">
+          <span className="text-[9.5px] font-semibold uppercase tracking-widest text-[#a39d8d]">Date</span>
+          <p className="font-mono text-[12px] font-medium leading-[1.35] text-[#0f1b2a]">{today}</p>
         </div>
       </div>
     </section>
@@ -161,10 +163,12 @@ export interface ReportCheckRow { name: string; ratio: number; ok: boolean }
 const SectionRule = ({ n, title }: { n: number; title: string }) => (
   <h2 className="mt-6 border-b-2 border-[#0f1b2a] pb-1.5 text-[12px] font-extrabold uppercase tracking-[.12em] text-[#0f1b2a]">{n} · {title}</h2>
 )
-export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, stats = [], checks = [], data = [], steps, drawing, drawingTitle }: {
+export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, onLhChange, stats = [], checks = [], data = [], steps, drawing, drawingTitle }: {
   docTitle: string; docCode: string; badges: string[]
   ok: boolean; governing: string
   lh: LetterheadState
+  /** Edit handler for the on-screen letterhead this component now renders. */
+  onLhChange?: (p: Partial<LetterheadState>) => void
   stats?: VerdictStat[]; checks?: ReportCheckRow[]
   data?: [string, string][]
   steps?: SolutionStep[]
@@ -179,26 +183,26 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, stat
   return (
     <>
     {/*
-      Export bar — rendered HERE rather than wired into each page's header
-      because this component already receives every field the PDF needs.
-      Hoisting the same prop soup out of eight pages to pass it to a second
-      component would be eight chances to let the printed sheet and the
+      Letterhead + export, in ONE card — rendered HERE rather than wired into
+      each page because this component already receives every field the PDF
+      needs. Hoisting the same prop soup out of eight pages to pass it to a
+      second component would be eight chances to let the printed sheet and the
       generated PDF drift apart; taking both from one props object means they
       cannot.
+
+      It used to be a separate "Calculation report" bar BELOW the page's own
+      letterhead card — two cards where `ReportControls` (slab, stair, water
+      tank, torsion, dev & splice, punching shear) has always had one, and
+      wherever the page happened to place `PrintReport`: on the column page,
+      the bottom. Same card, same place, on every calculator now.
     */}
-    <div className="no-print mt-4 flex items-center justify-between gap-3 rounded-lg border border-[#e3e1da] bg-white px-4 py-3">
-      <div>
-        <p className="text-[13px] font-bold text-[#0f1b2a]">Calculation report</p>
-        <p className="mt-0.5 text-[11.5px] text-[#5c6675]">
-          {docTitle} · {badges.join(' · ')} — summary, design data, worked solution
-          {drawing ? ' and drawing' : ''}, as an A4 PDF.
-        </p>
-      </div>
-      <ExportPdfButton
-        docTitle={docTitle} docCode={docCode} badges={badges} ok={ok} governing={governing} lh={lh}
-        stats={stats} checks={checks} data={data} steps={steps} drawingTitle={drawingTitle}
-        className="flex-none rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-[#0d3f78] disabled:opacity-50"
-      />
+    <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7">
+      <LetterheadCard lh={lh} onChange={onLhChange ?? (() => {})}
+        action={<ExportPdfButton
+          docTitle={docTitle} docCode={docCode} badges={badges} ok={ok} governing={governing} lh={lh}
+          stats={stats} checks={checks} data={data} steps={steps} drawingTitle={drawingTitle}
+          className="inline-flex flex-none items-center gap-2 rounded-md bg-[#0f4c92] px-3.5 py-1.5 text-[12.5px] font-semibold text-white hover:bg-[#0d3f78] disabled:opacity-50"
+        />} />
     </div>
     <div className="print-only">
       <div className="flex items-baseline justify-between border-b border-[#eeece5] pb-1.5 font-mono text-[9px] text-[#a39d8d]">
