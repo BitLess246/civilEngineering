@@ -42,12 +42,16 @@ describe('designTBeam — rectangular behaviour (a ≤ hf)', () => {
     expect(r.phiMn).toBeGreaterThanOrEqual(400)
     expect(r.ok).toBe(true)
   })
-  it('hand calc: Rn with b = bf = 1800 → As ≈ Mu/(0.9·fy·(d−a/2))', () => {
-    // a = As·fy/(0.85·f'c·bf); iterate ≈ jd ~ 0.98d. With d = 537.5:
-    // Rn = 400e6/(0.9·1800·537.5²) = 0.855 MPa → ρ = 0.85·21/415·(1−√(1−2·0.855/17.85))
-    const Rn = 400e6 / (0.9 * 1800 * 537.5 ** 2)
+  it('hand calc: Rn with b = bf = 1800, at the CONVERGED d', () => {
+    // 5 bars are needed and only 4 fit per layer, so the cage is [4, 2] and the
+    // Varignon centroid sits (2·50)/6 = 16.667 mm above the extreme layer:
+    // d = 537.5 − 16.667 = 520.833, NOT dt. Solving at dt and then dropping d
+    // is the bug this case now pins — it left the section short of its own Mu.
+    const dConv = 537.5 - (2 * (25 + 25)) / 6
+    expect(r.d).toBeCloseTo(dConv, 9)
+    const Rn = 400e6 / (0.9 * 1800 * dConv ** 2)
     const rho = ((0.85 * 21) / 415) * (1 - Math.sqrt(1 - (2 * Rn) / (0.85 * 21)))
-    expect(r.As).toBeCloseTo(Math.max(rho * 1800 * 537.5, r.AsMin), 6)
+    expect(r.As).toBeCloseTo(Math.max(rho * 1800 * dConv, r.AsMin), 6)
   })
   it('εt ≥ 0.005 → φ = 0.90 (shallow block, tension-controlled)', () => {
     expect(r.et).toBeGreaterThan(0.005)
@@ -76,12 +80,64 @@ describe('designTBeam — true T behaviour (a > hf)', () => {
   })
 })
 
+describe('how `a` is derived — C = T in both branches', () => {
+  // `a` is never assumed; it is solved FROM horizontal equilibrium, and the two
+  // branches differ only in which area the compression acts on:
+  //
+  //   a ≤ hf  the block is entirely inside the flange, so the section behaves as
+  //           a rectangle of width bf:      C = 0.85 f'c bf a       → a = T/(0.85 f'c bf)
+  //   a > hf  the flange alone cannot carry T. The overhangs are FULL at depth
+  //           hf and only the web carries the remainder:
+  //           C = 0.85 f'c (bf−bw) hf + 0.85 f'c bw a
+  //                                        → a = (T − C_over)/(0.85 f'c bw)
+  //
+  // Hogging passes bf = bw, which makes C_over = 0 and degenerates the second
+  // form back into the first — one equation, not a special case.
+  const compression = (bf: number, bw: number, hf: number, fc: number, a: number) =>
+    a <= hf ? 0.85 * fc * bf * a : 0.85 * fc * ((bf - bw) * hf + bw * a)
+
+  it('equilibrium holds exactly, flange block and web block alike', () => {
+    const sec = { bw: 300, hf: 100, fc: 21, fy: 415 }
+    for (const bf of [300, 600, 1200, 1800]) {          // 300 = the hogging case
+      for (const As of [1500, 3000, 4500, 8000, 12000]) {
+        const cap = tBeamCapacity(sec, bf, 600, 620, As)
+        const T = As * sec.fy
+        expect(compression(bf, sec.bw, sec.hf, sec.fc, cap.a)).toBeCloseTo(T, 6)
+        expect(cap.tBehavior).toBe(cap.a > sec.hf)
+        expect(cap.c * beta1(sec.fc)).toBeCloseTo(cap.a, 9)   // a = β1·c
+      }
+    }
+  })
+
+  it('β1 is the ACI Table 22.2.2.4.3 step, not the sloped row clamped', () => {
+    // The sloped row evaluated at 55 MPa gives 0.657; the table says a flat 0.65
+    // from 55 MPa up. This module used to carry its own `max(0.65, slope)` copy.
+    expect(beta1(28)).toBeCloseTo(0.85, 9)
+    expect(beta1(35)).toBeCloseTo(0.80, 9)
+    expect(beta1(55)).toBe(0.65)
+    expect(beta1(80)).toBe(0.65)
+  })
+})
+
 describe('minimum steel and hogging (flange in tension)', () => {
   it('As,min = max(0.25√f\'c, 1.4)/fy·bw·d governs tiny moments', () => {
     const r = designTBeam({ ...base, Mu: 20 })
     expect(r.minGoverns).toBe(true)
     expect(r.As).toBeCloseTo((Math.max(0.25 * Math.sqrt(21), 1.4) / 415) * 300 * r.d, 3)
   })
+  it('hogging is never reported as T behaviour, however deep the web block gets', () => {
+    // The flange is in TENSION here, so there is no flange couple to speak of.
+    // `tBeamCapacity` is handed bf = bw, which zeroes the overhang term and
+    // degenerates it to the rectangle — but its own `a > hf` flag then compares
+    // a web block depth against a flange thickness that plays no part. A 700 mm
+    // flange, 75 mm thick, under Mu = −150 came out "true T" on that accident.
+    const r = designTBeam({ ...base, bfGiven: 700, hf: 75, h: 650, Mu: -150 })
+    expect(r.a).toBeGreaterThan(75)               // the block IS deeper than hf
+    expect(r.tBehavior).toBe(false)               // and that means nothing here
+    // a still comes from the plain rectangle b = bw, as the hogging case demands
+    expect(r.a).toBeCloseTo((r.bars * (Math.PI / 4) * 25 ** 2 * 415) / (0.85 * 21 * 300), 6)
+  })
+
   it('negative moment designs the web rectangle (b = bw) and doubles bw,min when determinate', () => {
     const r = designTBeam({ ...base, Mu: -150 })
     expect(r.tBehavior).toBe(false)
@@ -125,6 +181,48 @@ describe('bar layering — no layer carries a single bar', () => {
       for (let Mu = 100; Mu <= 700; Mu += 50) {
         const r = designTBeam({ ...base, bw, Mu })
         expect(r.layers.every((n) => n >= 2)).toBe(true)
+      }
+    }
+  })
+
+  it('the design covers its own demand once the cage stacks', () => {
+    // The engine solved As at d = dt and only THEN dropped d to the bar-group
+    // centroid, never redesigning. The cage it handed back was sized for a lever
+    // arm the cage itself had destroyed, so multi-layer T-beams came back with
+    // MORE steel than the As printed beside them and still φMn < Mu:
+    //
+    //   bf 600  hf 80  Mu 700   As 2905 → 2945 provided, φMn 690.7  ✗
+    //   bf 1200 hf 100 Mu 1900  As 8153 → 8836 provided, φMn 1732.6 ✗
+    //
+    // These four are the true-T cases from that probe. All are tension-
+    // controlled (φ = 0.90), so nothing but d explained the shortfall.
+    const cases = [
+      { bfGiven: 600, hf: 80, Mu: 700, h: 750 },
+      { bfGiven: 600, hf: 80, Mu: 900, h: 750 },
+      { bfGiven: 1200, hf: 100, Mu: 1900, h: 750 },
+      { bfGiven: 700, hf: 90, Mu: 1100, h: 750 },
+    ]
+    for (const c of cases) {
+      const r = designTBeam({ ...base, ...c })
+      expect(r.tBehavior).toBe(true)
+      expect(r.layers.length).toBeGreaterThan(1)      // the cage does stack
+      expect(r.d).toBeLessThan(r.dt)                  // and d does drop
+      if (r.ok) expect(r.phiMn).toBeGreaterThanOrEqual(c.Mu - 1e-6)
+    }
+  })
+
+  it('a reported-ok design is self-consistent: recomputing at its own d reproduces φMn ≥ Mu', () => {
+    // Convergence, stated as a property rather than a fixture: if the engine
+    // says ok, then As solved at the RETURNED d must still fit the returned bars.
+    const Ab = (Math.PI / 4) * base.barDia ** 2
+    for (const bfGiven of [500, 700, 900, 1200, 1800]) {
+      for (let Mu = 200; Mu <= 1200; Mu += 100) {
+        const r = designTBeam({ ...base, bfGiven, Mu, h: 700 })
+        if (!r.ok) continue
+        expect(r.bars * Ab).toBeGreaterThanOrEqual(r.As - 1e-6)
+        const cap = tBeamCapacity({ ...base, hf: base.hf }, r.bf, r.d, r.dt, r.bars * Ab)
+        expect(cap.phiMn).toBeCloseTo(r.phiMn, 6)
+        expect(r.phiMn).toBeGreaterThanOrEqual(Mu - 1e-6)
       }
     }
   })

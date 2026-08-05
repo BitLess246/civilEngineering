@@ -21,10 +21,13 @@ export function factoredLoad({ dead, live }: ServiceLoad): number {
 }
 
 /**
- * β₁ equivalent-stress-block depth factor (NSCP 2015 §422.2.2.4.3).
+ * β₁ equivalent-stress-block depth factor (NSCP 2015 §422.2.2.4.3 /
+ * ACI 318-14 Table 22.2.2.4.3) — re-exported from `flexure`, which owns it.
+ *
+ * The form written here was `max(0.65, 0.85 − 0.05(f′c − 28)/7)`. That is the
+ * sloped row clamped, and the SI table is not continuous: the slope is valid
+ * only for 28 < f′c < 55 and evaluates to 0.657 at 55 MPa, where the table
+ * gives a flat 0.65. Three copies of the clamped form were in the engine.
  * @param fc concrete compressive strength f′c, MPa
  */
-export function beta1(fc: number): number {
-  if (fc <= 28) return 0.85;
-  return Math.max(0.65, 0.85 - (0.05 * (fc - 28)) / 7);
-}
+export { beta1 } from './flexure';

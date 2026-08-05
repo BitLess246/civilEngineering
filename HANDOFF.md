@@ -1581,3 +1581,64 @@ Yes, it is maintained, at both scales:
   three shapes search. A rectangular footing takes one diameter and a spacing
   per direction.
 - KaTeX cannot render ⌀ in math mode, so the score equations read `S(4D20)`.
+
+# T-beam: `a` from equilibrium, and the depth the cage destroys (PR #540, August 2026)
+
+Asked how `a` is derived in a T-beam and whether it satisfies C = T, the answer
+turned out to be **yes, exactly, in both branches** — and verifying it found a
+design defect sitting next to it.
+
+## How `a` is derived (`tBeamCapacity`)
+
+`a` is never assumed. It is solved from horizontal equilibrium; the branches
+differ only in which concrete area supplies C.
+
+| case | compression zone | solved a |
+|---|---|---|
+| `a ≤ hf` | rectangle of width **bf** | `a = T / (0.85 f′c bf)` |
+| `a > hf` | overhangs **full** at hf + web block | `a = (T − 0.85 f′c (bf−bw) hf) / (0.85 f′c bw)` |
+
+Hogging is passed `bf = bw`, so the overhang term is zero and the second form
+degenerates into the first — one equation, not a special case. Verified across
+20 combinations at **0.0000 %** residual, with `a = β1·c` exact.
+
+## The defect it exposed
+
+`designTBeam` solved `As` at `d = dt` and only **then** dropped `d` to the
+bar-group centroid, never redesigning. `designBeam` has iterated both faces all
+along; the T-beam engine never did. The cage came back sized for a lever arm the
+cage itself had destroyed:
+
+```
+bf 600  hf 80  Mu 700   As 2905 → 2945 provided, φMn 690.7  ✗
+bf 1200 hf 100 Mu 1900  As 8153 → 8836 provided, φMn 1732.6 ✗   (d fell 89 mm)
+```
+
+More steel than the As printed beside it, and still short. Now the layout and
+`As` are solved together. The map `d ↦ d_next` is monotone (deeper d → less
+steel → fewer bars → shallower stack → deeper d_next) and starts at `d = dt`, the
+largest d the section has, so it only falls and the integer bar count makes it
+settle — typically in 2 passes.
+
+## Three more found while verifying, all in the browser
+
+| where | what was wrong |
+|---|---|
+| `designTBeam` | Oscillated forever when the web ran out of singly-reinforced capacity: `As` collapsed to `Asf` (a *lighter* cage the worse the overload) and the stack sprang back. That is a failed design, not a convergence problem — it now reports `Asw` at the tension-controlled ceiling and stops. |
+| `designTBeam` | **Hogging reported as "true T"**. `tBeamCapacity` gets `bf = bw` there, so its own `a > hf` flag compares a web block depth against a flange thickness that plays no part. A 700×75 flange under Mu = −150 came out "true T" on that accident, and the worked solution then printed the overhang formula for a section whose flange is in tension. |
+| `TBeamDesign` | Summary read `6-⌀25 (2112 mm²)` — the bar count beside the area **required**, which reads as the area those bars supply. Same on the tension-controlled bar, which compared the demand against a cap that governs what gets built (0.24 shown where 0.34 was true). |
+
+`designTBeam` also gained §25.2.1's **4/3·d_agg** term, which `designBeam` got in
+#539 — the T-beam engine was still packing layers on `max(db, 25)`.
+
+## β1, consolidated
+
+Three copies of `max(0.65, sloped-row)` remained after #530 — `loads.ts`
+(feeding `beamDesign`, `columnDesign`, `scwb`, `columnSolution`), `tbeam.ts` and
+`prestressedBeam.ts`. All now re-export `flexure.beta1`, the table form.
+
+## Worked solution
+
+`/tbeam-design` now shows the equilibrium derivation itself: T, the C expression
+for the branch taken, `a` solved from it, and a `C = T` closing check — plus a
+step for the stacked-cage `d` when the bars need more than one layer.

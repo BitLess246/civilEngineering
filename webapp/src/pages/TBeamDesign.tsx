@@ -29,6 +29,11 @@ export default function TBeamDesign() {
   const r = useMemo(() => { try { return designTBeam(inp) } catch { return null } }, [inp])
   const steps = useMemo(() => (r ? buildTBeamSolution(inp, r) : []), [inp, r])
   const badges = ['ACI 318-14', 'NSCP 2015']
+  // Steel the detailed cage actually has. The summary printed "6-⌀25 (2112 mm²)"
+  // — the bar count beside the area REQUIRED, which reads as the area those bars
+  // supply and is not. The tension-controlled ratio has the same problem: the cap
+  // applies to the steel that gets built.
+  const AsProv = r ? r.bars * (Math.PI / 4) * barDia ** 2 : 0
 
   return (
     <div className="min-h-screen">
@@ -39,17 +44,18 @@ export default function TBeamDesign() {
           governing={`${r.tBehavior ? 'true T behaviour' : 'rectangular behaviour'} · utilization ${(Math.abs(Mu) / Math.max(r.phiMn, 1e-9)).toFixed(2)}`}
           lh={lh}
           stats={[
-            { label: 'Steel', value: `${r.bars}-⌀${barDia}` },
+            { label: 'Steel', value: `${r.bars}-⌀${barDia}`, unit: `(${f0(AsProv)} mm²)` },
             { label: 'φMn', value: f1(r.phiMn), unit: 'kN·m' },
             { label: 'bf', value: f0(r.bf), unit: 'mm' },
           ]}
           checks={[
             { name: 'Flexure Mu/φMn', ratio: Math.abs(Mu) / Math.max(r.phiMn, 1e-9), ok: r.phiMn >= Math.abs(Mu) },
-            { name: 'Tension-controlled', ratio: r.As / Math.max(r.AsMax, 1e-9), ok: r.As <= r.AsMax },
+            { name: 'Tension-controlled', ratio: AsProv / Math.max(r.AsMax, 1e-9), ok: AsProv <= r.AsMax },
           ]}
           data={[
             ['Type', kind], ['Web bw × h', `${bw} × ${h} mm`], ['Flange bf × hf', `${f0(r.bf)} × ${hf} mm`],
             ["f'c / fy", `${fc} / ${fy} MPa`], ['Mu', `${Mu} kN·m`], ['d / dt', `${f1(r.d)} / ${f1(r.dt)} mm`],
+            ['As req / prov', `${f0(r.As)} / ${f0(AsProv)} mm²`],
           ]}
           steps={steps}
           drawing={<TSection bf={r.bf} bw={bw} h={h} hf={hf} a={r.a} bars={r.bars} barDia={barDia} layers={r.layers} cover={cover} stirrupDia={stirrupDia} />}
@@ -88,13 +94,13 @@ export default function TBeamDesign() {
               <VerdictPanel ok={r.ok} headline={r.ok ? 'DESIGN OK' : 'CHECK FAILED'}
                 governing={`${r.tBehavior ? 'true T (a > hf)' : Mu < 0 ? 'web rectangle (hogging)' : 'rectangular (a ≤ hf)'} · bf ${f0(r.bf)} mm`}
                 stats={[
-                  { label: 'Steel', value: `${r.bars}-⌀${barDia}`, unit: `mm (${f0(r.As)} mm²)` },
+                  { label: 'Steel', value: `${r.bars}-⌀${barDia}`, unit: `mm (${f0(AsProv)} mm² prov · ${f0(r.As)} req)` },
                   { label: 'φMn', value: f1(r.phiMn), unit: 'kN·m' },
                   { label: 'εt / φ', value: `${r.et.toFixed(4)} / ${r.phi.toFixed(2)}` },
                 ]}
                 checks={[
                   { name: 'Flexure Mu/φMn', ratio: r.phiMn > 0 ? Math.abs(Mu) / r.phiMn : 99 },
-                  { name: 'Tension-controlled As/As,max', ratio: r.AsMax > 0 ? r.As / r.AsMax : 99 },
+                  { name: 'Tension-controlled As,prov/As,max', ratio: r.AsMax > 0 ? AsProv / r.AsMax : 99 },
                 ]}
                 footnote={r.notes.join(' · ') || undefined} />
             )}

@@ -8,6 +8,10 @@
 // and the §9.6.2.1 φMn ≥ 1.2Mcr guard → Vci/Vcw web/flexure shear (§22.5.8.3)
 // → midspan camber/deflection. Rectangular or direct (A, I, yt, yb) sections.
 
+// β1 per ACI Table 22.2.2.4.3 — the table's flat 0.65 above 55 MPa, not the
+// sloped row clamped (which reads 0.657 there). Owned by `flexure`.
+import { beta1 } from './flexure'
+
 export interface PrestressedInput {
   // section: rectangular b×h OR direct properties
   b?: number; h: number
@@ -54,8 +58,6 @@ export interface PrestressedResult {
   ok: boolean
   notes: string[]
 }
-
-const beta1 = (fc: number) => (fc <= 28 ? 0.85 : Math.max(0.65, 0.85 - (0.05 * (fc - 28)) / 7))
 
 export function designPrestressed(i: PrestressedInput): PrestressedResult {
   const notes: string[] = []
