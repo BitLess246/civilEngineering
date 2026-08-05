@@ -276,6 +276,35 @@ export function firstFailure(checks: readonly ComplianceCheck[]): ComplianceChec
   return checks.find((c) => !c.pass) ?? null
 }
 
+/**
+ * When NOTHING complies, which gates did the rejecting — most first.
+ *
+ * "No layout satisfies every check" is true and useless. What the user needs
+ * is the thing to change, and that is almost always a section property rather
+ * than a bar: a beam too shallow, a slab too thin, a column too small.
+ *
+ * More than one gate usually fires, and the combination is the diagnosis. A
+ * slab where the small bars fail on capacity AND the large ones fail on
+ * tension-control is not short of steel — it is short of depth, and neither
+ * gate says that on its own. Returns empty when something did comply.
+ */
+export function blockingGates(sel: RebarSelection): { check: ComplianceCheck; n: number }[] {
+  if (sel.best || sel.rejected.length === 0) return []
+  const tally = new Map<string, { check: ComplianceCheck; n: number }>()
+  for (const r of sel.rejected) {
+    if (!r.failedGate) continue
+    const e = tally.get(r.failedGate.id)
+    if (e) e.n++
+    else tally.set(r.failedGate.id, { check: r.failedGate, n: 1 })
+  }
+  return [...tally.values()].sort((a, b) => b.n - a.n)
+}
+
+/** The single gate that rejected the most candidates, or null if any complied. */
+export function dominantBlocker(sel: RebarSelection): ComplianceCheck | null {
+  return blockingGates(sel)[0]?.check ?? null
+}
+
 // ── Scoring and ranking ───────────────────────────────────────────────────
 
 export interface Candidate {
@@ -361,8 +390,15 @@ export function selectRebar(candidates: readonly Candidate[], ctx: ScoreContext)
     ? [best, ...byTotal.filter((s) => s !== best)]
     : byTotal
 
+  // Name the gates that did the rejecting: "no layout complies" tells the user
+  // nothing they can act on, and the thing to change is nearly always the
+  // section rather than the bar.
+  const gates = blockingGates({ best, ranked, rejected, margin: '' })
+    .slice(0, 2)
+    .map((g) => `${g.n} on ${g.check.label} (${g.check.clause})`)
   const margin = !best
-    ? `no layout satisfies every check — ${rejected.length} candidate${rejected.length === 1 ? '' : 's'} rejected`
+    ? `no layout satisfies every check — ${rejected.length} candidate${rejected.length === 1 ? '' : 's'} rejected` +
+      (gates.length ? `: ${gates.join(', ')}` : '')
     : ranked.length === 1
       ? 'the only compliant layout in the set'
       : marginText(best, ranked[1], contenders.length > 1)

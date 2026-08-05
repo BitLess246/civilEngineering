@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   selectRebar, compareByTotal, comparePair, firstFailure,
+  blockingGates, dominantBlocker,
   PRIORITY_WEIGHTS, NEAR_TIE, COMMON_BARS,
   type Candidate, type ComplianceCheck, type RebarLayout, type ScoreContext,
 } from './rebarScore'
@@ -358,5 +359,47 @@ describe('the result carries the ranking and the reason', () => {
       cand({ db: 25 }, [fail('x')]),
     ], CTX)
     expect(one.margin).toMatch(/only compliant/)
+  })
+})
+
+// ── Saying what to fix when nothing complies ──────────────────────────────
+
+describe('blocking gates', () => {
+  it('names nothing while something complies — there is nothing to fix', () => {
+    const some = selectRebar([cand({ db: 20 }), cand({ db: 25 }, [fail('x')])], CTX)
+    expect(blockingGates(some)).toEqual([])
+    expect(dominantBlocker(some)).toBeNull()
+  })
+
+  it('tallies the gates by how many candidates each rejected, most first', () => {
+    const none = selectRebar([
+      cand({ db: 12 }, [fail('too-shallow', '§9.3.1')]),
+      cand({ db: 16 }, [fail('too-shallow', '§9.3.1')]),
+      cand({ db: 20 }, [fail('too-shallow', '§9.3.1')]),
+      cand({ db: 25 }, [fail('no-room', '§25.2.1')]),
+    ], CTX)
+    const gates = blockingGates(none)
+    expect(gates.map((g) => [g.check.id, g.n])).toEqual([['too-shallow', 3], ['no-room', 1]])
+    expect(dominantBlocker(none)?.id).toBe('too-shallow')
+  })
+
+  it('puts the gates and their clauses into the margin, not just a count', () => {
+    // "no layout complies" is true and useless; the combination of gates is
+    // the diagnosis, so up to two of them are named with their clauses.
+    const none = selectRebar([
+      cand({ db: 12 }, [fail('too-shallow', '§9.3.1')]),
+      cand({ db: 25 }, [fail('no-room', '§25.2.1')]),
+    ], CTX)
+    expect(none.margin).toMatch(/2 candidates rejected/)
+    expect(none.margin).toMatch(/§9.3.1/)
+    expect(none.margin).toMatch(/§25.2.1/)
+  })
+
+  it('only ever reports the FIRST failure of each candidate, so the tally is not double-counted', () => {
+    const none = selectRebar([
+      cand({ db: 12 }, [fail('too-shallow', '§9.3.1'), fail('no-room', '§25.2.1')]),
+    ], CTX)
+    expect(blockingGates(none)).toHaveLength(1)
+    expect(dominantBlocker(none)?.id).toBe('too-shallow')
   })
 })
