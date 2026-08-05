@@ -170,13 +170,15 @@ export default function CombinedFootingDesign() {
   return (
     <div>
       <PageHeader title="Combined Footing" badges={['ACI 318-14', 'NSCP 2015']} />
-      <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>
+      {/* PrintReport carries the letterhead card AND the export button in one; this
+          bare one is the fallback for when the design has not solved. */}
+      {!(result && solutionSteps) && <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>}
       {result && solutionSteps && (
         <PrintReport
           docTitle={result.shape === 'Trapezoidal (CTF)' ? 'Combined Footing (Trapezoidal)' : 'Combined Footing (Rectangular)'}
           docCode="F-02" badges={['ACI 318-14', 'NSCP 2015']}
           ok={result.qNet > 0} governing="Rigid (conventional) method — resultant matched to factored column loads"
-          lh={lh}
+          lh={lh} onLhChange={(patch) => setLh((v) => ({ ...v, ...patch }))}
           stats={[
             { label: 'Plan', value: result.shape === 'Trapezoidal (CTF)' ? `${f2(result.Bx)} × ${f2(result.By1)}→${f2(result.By2)}` : `${f2(result.Bx)} × ${f2(result.By)}`, unit: 'm' },
             { label: 'Thickness Dc', value: f0(result.Dc), unit: 'mm' },

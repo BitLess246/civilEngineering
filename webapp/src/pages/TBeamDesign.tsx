@@ -38,11 +38,13 @@ export default function TBeamDesign() {
   return (
     <div className="min-h-screen">
       <PageHeader title="T-Beam Design" badges={[...badges, kind]} />
-      <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(p) => setLh((s) => ({ ...s, ...p }))} /></div>
+      {/* PrintReport carries the letterhead card AND the export button in one;
+          this bare one is the fallback for when the design has not solved. */}
+      {!r && <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(p) => setLh((s) => ({ ...s, ...p }))} /></div>}
       {r && (
         <PrintReport docTitle="T-Beam" docCode="TB-01" badges={badges} ok={r.ok}
           governing={`${r.tBehavior ? 'true T behaviour' : 'rectangular behaviour'} · utilization ${(Math.abs(Mu) / Math.max(r.phiMn, 1e-9)).toFixed(2)}`}
-          lh={lh}
+          lh={lh} onLhChange={(p) => setLh((s) => ({ ...s, ...p }))}
           stats={[
             { label: 'Steel', value: `${r.bars}-⌀${barDia}`, unit: `(${f0(AsProv)} mm²)` },
             { label: 'φMn', value: f1(r.phiMn), unit: 'kN·m' },

@@ -189,7 +189,42 @@ export default function ColumnDesign() {
   return (
     <div>
       <PageHeader title="RC Column" badges={['ACI 318-14', 'NSCP 2015']} />
-      <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>
+      {/* PrintReport carries the letterhead card AND the export button in one; this
+          bare one is the fallback for when the design has not solved. It lives HERE,
+          under the page header, because the report card had been rendering at the very
+          bottom of the column page while every other calculator puts it at the top. */}
+      {!(axial && solution.length > 0) && <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>}
+      {axial && solution.length > 0 && (
+        <PrintReport
+          docTitle={tied ? 'Tied RC Column' : 'Spiral RC Column'} docCode="C-01" badges={['ACI 318-14', 'NSCP 2015']}
+          ok={(eccentric ? util !== null && util <= 1 && !unstable : axial.axialOK) && axial.rhoOK}
+          governing={eccentric
+            ? (unstable ? 'Slender column unstable — Pu ≥ 0.75·Pc' : `P–M interaction · utilization ${util !== null ? util.toFixed(2) : '—'}`)
+            : `Axial φPn,max = ${f1(axial.phiPnMax)} kN`}
+          lh={lh} onLhChange={(patch) => setLh((v) => ({ ...v, ...patch }))}
+          stats={[
+            { label: 'Bars', value: `${axial.bars}-⌀${dbEff}` },
+            { label: tied ? 'Ties' : 'Spiral pitch', value: tied ? `⌀${Math.max(tieDia, axial.tieDiaMin)} @${f0(axial.tieSpacingFinal)}` : `@${f0(axial.spiralPitch)}`, unit: 'mm' },
+            { label: 'φPn,max', value: f1(axial.phiPnMax), unit: 'kN' },
+            ...(eccentric && slender ? [{
+              label: 'Column class',
+              value: slender.slender ? 'LONG (slender)' : 'SHORT',
+            }] : []),
+          ]}
+          checks={eccentric && util !== null ? [{ name: 'P–M interaction Pu/φPn', ratio: util, ok: util <= 1.0001 }] : []}
+          data={[
+            ['Section', tied ? `${b} × ${h} mm (tied)` : `⌀${D} mm (spiral)`], ['Clear cover', `${cover} mm`],
+            ["Concrete f'c", `${fc} MPa`], ['Steel fy / fyt', `${fy} / ${fyt} MPa`],
+            ['Bar ⌀ / tie ⌀', `${barDia} / ${tieDia} mm`], ['ρ provided', `${(axial.rho * 100).toFixed(2)} %`],
+            ['Pu', `${f1(Pu)} kN`], ...(eccentric ? [['Mu', `${f1(Mu)} kN·m`] as [string, string]] : []),
+          ]}
+          steps={solution}
+          drawingTitle="Column Section"
+          drawing={<ColumnSchematic shape={tied ? 'tied' : 'spiral'} b={b} h={h} D={D} cover={cover}
+            barDia={barDia} tieDia={tieDia} bars={axial.bars}
+            tieSpacing={tied ? axial.tieSpacingFinal : axial.spiralPitch} />}
+        />
+      )}
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
 
       <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
@@ -416,37 +451,6 @@ export default function ColumnDesign() {
       )}
 
       <div className="no-print">{solution.length > 0 && <WorkedSolution steps={solution} title="Calculation report — worked solution" />}</div>
-      {axial && solution.length > 0 && (
-        <PrintReport
-          docTitle={tied ? 'Tied RC Column' : 'Spiral RC Column'} docCode="C-01" badges={['ACI 318-14', 'NSCP 2015']}
-          ok={(eccentric ? util !== null && util <= 1 && !unstable : axial.axialOK) && axial.rhoOK}
-          governing={eccentric
-            ? (unstable ? 'Slender column unstable — Pu ≥ 0.75·Pc' : `P–M interaction · utilization ${util !== null ? util.toFixed(2) : '—'}`)
-            : `Axial φPn,max = ${f1(axial.phiPnMax)} kN`}
-          lh={lh}
-          stats={[
-            { label: 'Bars', value: `${axial.bars}-⌀${dbEff}` },
-            { label: tied ? 'Ties' : 'Spiral pitch', value: tied ? `⌀${Math.max(tieDia, axial.tieDiaMin)} @${f0(axial.tieSpacingFinal)}` : `@${f0(axial.spiralPitch)}`, unit: 'mm' },
-            { label: 'φPn,max', value: f1(axial.phiPnMax), unit: 'kN' },
-            ...(eccentric && slender ? [{
-              label: 'Column class',
-              value: slender.slender ? 'LONG (slender)' : 'SHORT',
-            }] : []),
-          ]}
-          checks={eccentric && util !== null ? [{ name: 'P–M interaction Pu/φPn', ratio: util, ok: util <= 1.0001 }] : []}
-          data={[
-            ['Section', tied ? `${b} × ${h} mm (tied)` : `⌀${D} mm (spiral)`], ['Clear cover', `${cover} mm`],
-            ["Concrete f'c", `${fc} MPa`], ['Steel fy / fyt', `${fy} / ${fyt} MPa`],
-            ['Bar ⌀ / tie ⌀', `${barDia} / ${tieDia} mm`], ['ρ provided', `${(axial.rho * 100).toFixed(2)} %`],
-            ['Pu', `${f1(Pu)} kN`], ...(eccentric ? [['Mu', `${f1(Mu)} kN·m`] as [string, string]] : []),
-          ]}
-          steps={solution}
-          drawingTitle="Column Section"
-          drawing={<ColumnSchematic shape={tied ? 'tied' : 'spiral'} b={b} h={h} D={D} cover={cover}
-            barDia={barDia} tieDia={tieDia} bars={axial.bars}
-            tieSpacing={tied ? axial.tieSpacingFinal : axial.spiralPitch} />}
-        />
-      )}
       </div>
     </div>
   )
