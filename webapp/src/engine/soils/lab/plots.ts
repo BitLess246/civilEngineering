@@ -26,10 +26,11 @@ import type { PlanPrimitive, Drawing } from '../../planRenderer'
 import type { DirectShearResult } from './directShear'
 import type { ConsolidationResult } from './consolidation'
 import { type CompactionResult, zeroAirVoids } from './compaction'
+import type { TriaxialResult, MohrCircle, TriaxialEnvelope } from './triaxial'
 import type { GradationResult } from '../sieve'
 
 import {
-  AXIS, GRID, INK, ACCENT, WARN, BOX, frame, plate,
+  AXIS, GRID, INK, ACCENT, WARN, OK, BOX, frame, plate,
   decadeTicks, linearTicks, tickDp,
 } from '../chartKit'
 
@@ -175,6 +176,143 @@ export function consolidationChart(r: ConsolidationResult): Drawing {
   p.push(...plate(box.left + 2, box.top + box.h - 3.2, 2.4, [{
     text: `Cc = ${r.cc.toFixed(3)}${r.cr != null ? `   Cr = ${r.cr.toFixed(3)}` : ''}`,
   }]))
+
+  return {
+    primitives: p,
+    bounds: { minX: 0, minY: 0, maxX: box.left + box.w + 4, maxY: box.top + box.h + 13 },
+  }
+}
+
+// ── Triaxial: Mohr circles ────────────────────────────────────────────────
+
+/**
+ * Mohr circles with the tangent failure envelope.
+ *
+ * THE TWO AXES ARE AT THE SAME SCALE, and that is not a stylistic choice. A
+ * Mohr circle drawn with different σ and τ scales is an ellipse, the envelope
+ * no longer touches it where the tangency says it does, and the picture stops
+ * being a construction and becomes decoration. So one scale is computed for
+ * both axes and the drawing takes whatever fraction of the frame that leaves —
+ * a squat diagram is right and a stretched one is wrong.
+ *
+ * σ starts at the ORIGIN: c is the intercept at σ = 0, and where the circles
+ * sit relative to zero is half of what the diagram shows (a UU family stacked
+ * at the same diameter, a CU family shifted left by u).
+ *
+ * When both bases are present the effective circles are drawn DASHED in a
+ * second colour beside the total ones, because "φ = 21° or φ′ = 34°?" is the
+ * question this chart exists to answer.
+ */
+export function mohrChart(r: TriaxialResult): Drawing {
+  const box = BOX
+  const p: PlanPrimitive[] = frame(box, "σ, σ'  (kPa)", 'τ  (kPa)', `Mohr circles — ${r.testType}`)
+
+  const all: MohrCircle[] = [...r.circles, ...(r.effectiveCircles ?? [])]
+  const tanOf = (e?: TriaxialEnvelope) => (e ? Math.tan((e.frictionAngle * Math.PI) / 180) : 0)
+  const sigHi = Math.max(...all.map((c) => c.sigma1)) * 1.08
+  const sigLo = Math.min(0, ...all.map((c) => c.sigma3))
+  const tauHi = Math.max(
+    ...all.map((c) => c.radius),
+    r.total ? r.total.cohesion + sigHi * tanOf(r.total) : 0,
+    r.effective ? r.effective.cohesion + sigHi * tanOf(r.effective) : 0,
+  ) * 1.05
+
+  // ONE scale for both axes. Whichever axis runs out first sets it.
+  const scale = Math.min(box.w / Math.max(sigHi - sigLo, 1e-9), box.h / Math.max(tauHi, 1e-9))
+  const baseY = box.top + box.h
+  const X = (v: number) => box.left + (v - sigLo) * scale
+  const Y = (v: number) => baseY - v * scale
+  const xEdge = box.left + box.w
+  const inFrame = (v: number) => Math.min(Math.max(v, box.left), xEdge)
+
+  const xTicks = linearTicks(sigLo, sigLo + box.w / scale).ticks
+  const xDp = tickDp(xTicks.length > 1 ? xTicks[1] - xTicks[0] : 1)
+  for (const t of xTicks) {
+    if (X(t) > xEdge + 1e-9) continue
+    p.push({ kind: 'line', x1: X(t), y1: box.top, x2: X(t), y2: baseY, stroke: GRID, width: 0.2 })
+    p.push({ kind: 'text', x: X(t), y: baseY + 4, text: t.toFixed(xDp), size: 2.2, anchor: 'middle', color: AXIS })
+  }
+  // τ gets its OWN round step. Equal scales is a statement about the mapping,
+  // not about the tick interval: τ spans a fraction of what σ does, so reusing
+  // σ's step leaves the axis with one label on it.
+  const yTicks = linearTicks(0, box.h / scale).ticks
+  const yDp = tickDp(yTicks.length > 1 ? yTicks[1] - yTicks[0] : 1)
+  for (const t of yTicks) {
+    const ty = Y(t)
+    if (t <= 0 || ty < box.top - 1e-9) continue
+    p.push({ kind: 'line', x1: box.left, y1: ty, x2: xEdge, y2: ty, stroke: GRID, width: 0.2 })
+    p.push({ kind: 'text', x: box.left - 1.5, y: ty + 0.8, text: t.toFixed(yDp), size: 2.2, anchor: 'end', color: AXIS })
+  }
+
+  /**
+   * Upper semicircle from σ3 to σ1 — the half a Mohr diagram is drawn on —
+   * with the TANGENT POINT marked.
+   *
+   * The crown of the circle is the tempting place for a dot and the wrong one:
+   * it is the Kf-line point, it is not on the envelope, and marking it invites
+   * exactly the misreading this module's header is about. The tangency sits at
+   * (p − r·sin φ, r·cos φ), which is the stress on the failure plane and is the
+   * point the envelope actually touches.
+   */
+  const arc = (c: MohrCircle, e: TriaxialEnvelope | undefined, stroke: string, dash?: number[]) => {
+    p.push({
+      kind: 'path',
+      cmds: [
+        { c: 'M', x: X(c.sigma3), y: Y(0) },
+        { c: 'A', rx: c.radius * scale, ry: c.radius * scale, x: X(c.sigma1), y: Y(0), sweep: 1 },
+      ],
+      stroke, width: 0.5, dash,
+    })
+    if (!e) return
+    const phi = (e.frictionAngle * Math.PI) / 180
+    p.push({
+      kind: 'circle',
+      cx: X(c.center - c.radius * Math.sin(phi)),
+      cy: Y(c.radius * Math.cos(phi)),
+      r: 0.7, fill: stroke,
+    })
+  }
+
+  const envelopeLine = (e: TriaxialEnvelope, stroke: string, dash?: number[]) => {
+    const tan = tanOf(e)
+    const x2 = Math.min(sigHi, sigLo + box.w / scale)
+    p.push({
+      kind: 'line',
+      x1: X(sigLo), y1: Y(e.cohesion + sigLo * tan),
+      x2: inFrame(X(x2)), y2: Y(e.cohesion + x2 * tan),
+      stroke, width: 0.6, dash,
+    })
+  }
+
+  for (const c of r.circles) arc(c, r.total, ACCENT)
+  if (r.total) envelopeLine(r.total, ACCENT)
+  for (const c of r.effectiveCircles ?? []) arc(c, r.effective, OK, [2, 1.5])
+  if (r.effective) envelopeLine(r.effective, OK, [2, 1.5])
+
+  const lines: { text: string; color?: string }[] = []
+  if (r.total) {
+    lines.push({
+      text: `total:  c = ${r.total.cohesion.toFixed(1)} kPa   φ = ${r.total.frictionAngle.toFixed(1)}°`,
+      color: ACCENT,
+    })
+  }
+  if (r.effective) {
+    lines.push({
+      text: `effective:  c' = ${r.effective.cohesion.toFixed(1)} kPa   φ' = ${r.effective.frictionAngle.toFixed(1)}°`,
+      color: OK,
+    })
+  }
+  if (r.undrainedStrength != null) {
+    lines.push({ text: `su = ${r.undrainedStrength.toFixed(1)} kPa (mean radius)`, color: INK })
+  }
+  // Said whenever there is no envelope, not only when the plate would be empty:
+  // a UU single specimen still prints su, and "su and no φ" must not read as
+  // "su, and the φ is somewhere else on the chart".
+  if (!r.total) lines.push({ text: 'no envelope — a single circle has infinitely many tangents', color: WARN })
+  // Top-left: the envelope rises to the right and the circles sit on the axis,
+  // so this is the corner the data cannot reach — the same argument the shear
+  // envelope makes for itself.
+  p.push(...plate(box.left + 2, box.top + 4, 2.3, lines))
 
   return {
     primitives: p,

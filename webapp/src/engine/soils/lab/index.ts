@@ -39,6 +39,10 @@ import {
   type CompactionData, type CompactionPoint, type CompactionEffort, compaction,
   type CompactionResult,
 } from './compaction'
+import {
+  type TriaxialData, type TriaxialSpecimen, type TriaxialType, triaxial,
+  type TriaxialResult,
+} from './triaxial'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -221,6 +225,31 @@ export function readCompaction(test: LabTest): CompactionData | undefined {
   }
 }
 
+/**
+ * Triaxial specimens. The pore pressure is optional PER ROW and its absence is
+ * meaningful — the engine draws an effective envelope only when every specimen
+ * has one, so a row that simply omits it must not arrive as a zero.
+ */
+export function readTriaxial(test: LabTest): TriaxialData | undefined {
+  const d = test.data
+  if (!isRecord(d) || !Array.isArray(d.specimens)) return undefined
+
+  const specimens: TriaxialSpecimen[] = []
+  for (const r of d.specimens) {
+    if (!isRecord(r) || !finite(r.cellPressure) || !finite(r.deviatorStress)) continue
+    specimens.push({
+      cellPressure: r.cellPressure,
+      deviatorStress: r.deviatorStress,
+      porePressure: finite(r.porePressure) ? r.porePressure : undefined,
+    })
+  }
+  if (!specimens.length) return undefined
+
+  const t = d.testType
+  const testType: TriaxialType = t === 'CU' || t === 'CD' || t === 'UU' ? (t as TriaxialType) : 'UU'
+  return { testType, specimens }
+}
+
 // ── Catalogue ─────────────────────────────────────────────────────────────
 
 /** One numeric input on a test form. */
@@ -240,6 +269,7 @@ export interface LabField {
  */
 export type LabFormKind =
   | 'fields' | 'sieve-stack' | 'shear-points' | 'load-increments' | 'compaction-points'
+  | 'triaxial-specimens'
 
 export interface LabTestSpec {
   type: LabTestType
@@ -346,7 +376,16 @@ export const LAB_TESTS: readonly LabTestSpec[] = [
     purpose: 'Effective cohesion and friction angle from the Mohr–Coulomb failure envelope.',
     fields: [],
   },
-  { type: 'triaxial', label: 'Triaxial', standard: 'd4767', needsUndisturbed: true, fields: [], purpose: 'Shear strength under controlled drainage and confinement.' },
+  {
+    type: 'triaxial',
+    label: 'Triaxial',
+    standard: 'd4767',
+    formKind: 'triaxial-specimens',
+    calculation: 'triaxial.envelope',
+    needsUndisturbed: true,
+    purpose: 'Shear strength under controlled drainage and confinement — one Mohr circle per specimen, c and φ from their common tangent.',
+    fields: [],
+  },
   {
     type: 'ucs',
     label: 'Unconfined compression',
@@ -414,6 +453,7 @@ export type LabOutcome =
   | { kind: 'ucs'; result: UcsResult }
   | { kind: 'consolidation'; result: ConsolidationResult }
   | { kind: 'compaction'; result: CompactionResult }
+  | { kind: 'triaxial'; result: TriaxialResult }
 
 /**
  * Compute a test's result from its stored data.
@@ -465,6 +505,11 @@ export function evaluateTest(test: LabTest): { outcome?: LabOutcome; error?: str
         if (!d) return {}
         return { outcome: { kind: 'compaction', result: compaction(d) } }
       }
+      case 'triaxial': {
+        const d = readTriaxial(test)
+        if (!d) return {}
+        return { outcome: { kind: 'triaxial', result: triaxial(d) } }
+      }
       default:
         return {}
     }
@@ -494,5 +539,16 @@ export function summarise(outcome: LabOutcome): { label: string; value: number; 
       // The peak as a unit weight, which is the module's reporting convention
       // (model.ts) and the form the bearing and earth-pressure engines take.
       return { label: 'γd,max', value: outcome.result.maxDryUnitWeight, unit: 'kN/m³' }
+    case 'triaxial': {
+      // A UU test's headline is su; a CU/CD test's is the friction angle, and
+      // the EFFECTIVE one when it exists — quoting φ from a CU test when φ′ is
+      // available is the error this module exists to prevent.
+      const t = outcome.result
+      if (t.testType === 'UU' || !t.total) {
+        return { label: 'su', value: t.undrainedStrength ?? 0, unit: 'kPa' }
+      }
+      const e = t.effective ?? t.total
+      return { label: t.effective ? "φ'" : 'φ', value: e.frictionAngle, unit: '°' }
+    }
   }
 }

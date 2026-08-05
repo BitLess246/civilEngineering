@@ -561,6 +561,52 @@ export const CALCULATIONS = {
     limitations: ['Taken on the straight virgin portion only — points below σ′_p give C_r, not C_c.'],
   },
 
+  'triaxial.envelope': {
+    title: 'Mohr–Coulomb envelope from triaxial circles',
+    category: 'strength',
+    equation: String.raw`q = a + p \tan\alpha, \quad p = \frac{\sigma_1 + \sigma_3}{2}, \; q = \frac{\sigma_1 - \sigma_3}{2} \;\Rightarrow\; \sin\phi = \tan\alpha, \; c = \frac{a}{\cos\phi}`,
+    unit: 'kPa and degrees',
+    symbols: {
+      p: 'centre of the Mohr circle, kPa',
+      q: 'radius of the Mohr circle (maximum shear stress), kPa',
+      a: 'intercept of the fitted K_f line, kPa',
+      '\\alpha': 'slope angle of the K_f line, degrees',
+      '\\sigma_1': 'major principal stress at failure, kPa',
+      '\\sigma_3': 'minor principal (cell) stress, kPa',
+      '\\phi': 'friction angle, degrees',
+      c: 'cohesion intercept on the σ–τ plane, kPa',
+    },
+    standard: 'd4767',
+    assumptions: [
+      'The envelope is straight over the cell pressures tested, so one c and one φ describe them all.',
+      'The failure envelope is the COMMON TANGENT to the circles; the K_f line through their crowns is a different line whose slope is sin φ, not tan φ.',
+    ],
+    limitations: [
+      'A line through the tops of the circles read as tan φ overstates the friction angle — α = 30° is φ = 34.4°, not 30°.',
+      'Total-stress and effective-stress envelopes of the same CU specimens are different lines; the pair must be used with the stress basis it was fitted in.',
+      'Valid only over the cell pressures tested — a real envelope curves, and extrapolating it to a much higher stress overstates strength.',
+    ],
+  },
+
+  'triaxial.su': {
+    title: 'Undrained shear strength from a UU test',
+    category: 'strength',
+    equation: String.raw`s_u = \frac{\sigma_1 - \sigma_3}{2} = \frac{\Delta\sigma_f}{2}`,
+    unit: 'kPa',
+    symbols: {
+      s_u: 'undrained shear strength, kPa',
+      '\\sigma_1': 'major principal stress at failure, kPa',
+      '\\sigma_3': 'cell pressure, kPa',
+      '\\Delta\\sigma_f': 'deviator stress at failure, kPa',
+    },
+    standard: 'd2850',
+    assumptions: ['The specimen is saturated, so φ = 0 and every circle has the same diameter whatever the cell pressure.'],
+    limitations: [
+      'A UU series whose deviator stress at failure varies with cell pressure is not saturated — the apparent friction angle is an artefact, and su is the only number worth quoting.',
+      'Sample disturbance lowers su; a UU strength is a lower bound on a good sample and can be badly low on a poor one.',
+    ],
+  },
+
   // ── Compaction ──
   'compaction.dry-density': {
     title: 'Dry density of a compacted specimen',

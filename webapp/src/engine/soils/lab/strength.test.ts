@@ -278,6 +278,8 @@ describe('evaluateTest covers the new tests', () => {
   it('marks both as implemented now', () => {
     expect(isImplemented('direct-shear')).toBe(true)
     expect(isImplemented('ucs')).toBe(true)
-    expect(isImplemented('triaxial')).toBe(false)
+    // triaxial joined them in Phase 4g; permeability has no engine yet
+    expect(isImplemented('triaxial')).toBe(true)
+    expect(isImplemented('permeability')).toBe(false)
   })
 })
