@@ -155,3 +155,144 @@ describe('the search is bounded by what the caller asks for', () => {
       .toBeGreaterThanOrEqual(relaxed.selection.best!.layout.clearSpacing)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────
+// CONTINUITY. Bars run through a member and on through the joint, so one
+// diameter has to serve the whole run. These are the tests that stop the
+// optimiser handing the same beam three different bar sizes.
+// ─────────────────────────────────────────────────────────────────────────
+
+import { optimizeBeamMember, resolveBarContinuity, type BeamSectionDemand } from './beamRebarOptimize'
+
+const GEOM = {
+  b: 300, h: 550, cover: 40, barDia: 20, stirrupDia: 10, fc: 28, fy: 415,
+}
+
+/** A three-section run: support hogging, midspan sagging, support hogging —
+ *  with very different demands, which is exactly when a per-section optimiser
+ *  would drift. */
+const THREE: BeamSectionDemand[] = [
+  { id: 'A', label: 'Left support', Mu: 210, Vu: 190 },
+  { id: 'B', label: 'Midspan', Mu: 95, Vu: 40 },
+  { id: 'C', label: 'Right support', Mu: 240, Vu: 200 },
+]
+
+describe('one member, many sections', () => {
+  const m = optimizeBeamMember(GEOM, THREE)
+
+  it('adopts ONE diameter for the whole member', () => {
+    expect(m.db).not.toBeNull()
+    expect(m.sections).toHaveLength(3)
+    const dias = new Set(m.sections.map((s) => s.design.bars > 0 ? m.db : m.db))
+    expect(dias.size).toBe(1)
+  })
+
+  it('is NOT what three independent per-section runs would give', () => {
+    // The point of the member-level API. If the per-section optimiser happened
+    // to agree here the test would be vacuous, so assert the demands really do
+    // pull in different directions.
+    const each = THREE.map((s) =>
+      optimizeBeamRebar({ ...GEOM, Mu: s.Mu, Vu: s.Vu }).selection.best!.layout.db)
+    expect(new Set(each).size).toBeGreaterThan(1)     // they DO disagree…
+    expect(new Set([m.db]).size).toBe(1)              // …and the member does not
+  })
+
+  it('lets the bar COUNT differ per section — only the diameter is shared', () => {
+    // Cuts and splices absorb the count. Forcing one count would buy the
+    // midspan steel it does not need.
+    const counts = m.sections.map((s) => s.design.bars)
+    expect(new Set(counts).size).toBeGreaterThan(1)
+  })
+
+  it('every section is compliant at the adopted diameter', () => {
+    for (const c of m.selection.best!.compliance) {
+      expect(c.pass, `${c.id} — ${c.label}`).toBe(true)
+    }
+    for (const s of m.sections) expect(s.design.flexOK).toBe(true)
+  })
+
+  it('names the section that sized the member', () => {
+    expect(m.governing).toBe('C')      // the largest hogging moment
+  })
+
+  it('rejects a diameter that fails at ANY section, naming where', () => {
+    // A member whose support is far too heavily loaded for a small bar: the
+    // small sizes must be rejected for the whole member, not adopted because
+    // midspan was happy with them.
+    const hard = optimizeBeamMember(GEOM, [
+      { id: 'A', label: 'Support', Mu: 480, Vu: 300 },
+      { id: 'B', label: 'Midspan', Mu: 40, Vu: 30 },
+    ])
+    const rejected = hard.selection.rejected
+    expect(rejected.length).toBeGreaterThan(0)
+    const withPlace = rejected.filter((x) => (x.failedGate!.detail ?? '').includes('at '))
+    expect(withPlace.length).toBeGreaterThan(0)
+    expect(withPlace[0].failedGate!.detail).toContain('Support')
+  })
+
+  it('a single-section member matches the per-section optimiser', () => {
+    const one = optimizeBeamMember(GEOM, [{ id: 'X', Mu: 150, Vu: 120 }])
+    const solo = optimizeBeamRebar({ ...GEOM, Mu: 150, Vu: 120 })
+    expect(one.db).toBe(solo.selection.best!.layout.db)
+  })
+
+  it('handles a member with no sections without throwing', () => {
+    const none = optimizeBeamMember(GEOM, [])
+    expect(none.db).toBeNull()
+    expect(none.sections).toHaveLength(0)
+    expect(none.selection.margin).toMatch(/no critical sections/)
+  })
+
+  it('is deterministic', () => {
+    expect(optimizeBeamMember(GEOM, THREE).db).toBe(m.db)
+  })
+})
+
+describe('one run, many members — resolveBarContinuity', () => {
+  it('pulls a collinear run onto ONE diameter', () => {
+    // Beam A wants ⌀20, Beam B wants ⌀25, and they meet at a column.
+    const chosen = new Map([['A', 20], ['B', 25], ['C', 16]])
+    const out = resolveBarContinuity(chosen, [['A', 'B', 'C']])
+    expect([...new Set(out.values())]).toEqual([25])
+  })
+
+  it('adopts the LARGEST, because a smaller bar would fail the span that asked', () => {
+    const out = resolveBarContinuity(new Map([['A', 16], ['B', 32]]), [['A', 'B']])
+    expect(out.get('A')).toBe(32)
+    expect(out.get('B')).toBe(32)
+  })
+
+  it('keeps separate runs separate', () => {
+    const chosen = new Map([['A', 20], ['B', 25], ['X', 12], ['Y', 16]])
+    const out = resolveBarContinuity(chosen, [['A', 'B'], ['X', 'Y']])
+    expect(out.get('A')).toBe(25)
+    expect(out.get('X')).toBe(16)
+  })
+
+  it('leaves a member with no adopted diameter alone rather than inheriting one', () => {
+    // It is already a reported failure; silently giving it a size would hide
+    // that the section does not work.
+    const chosen = new Map([['A', 20]])
+    const out = resolveBarContinuity(chosen, [['A', 'B']])
+    expect(out.has('B')).toBe(false)
+    expect(out.get('A')).toBe(20)
+  })
+
+  it('does not touch a group that is already consistent', () => {
+    const chosen = new Map([['A', 20], ['B', 20]])
+    const out = resolveBarContinuity(chosen, [['A', 'B']])
+    expect(out).toEqual(chosen)
+  })
+
+  it('ignores a group with nothing to reconcile', () => {
+    const chosen = new Map([['A', 20]])
+    expect(resolveBarContinuity(chosen, [['A']])).toEqual(chosen)
+    expect(resolveBarContinuity(chosen, [[]])).toEqual(chosen)
+  })
+
+  it('is idempotent — resolving twice changes nothing', () => {
+    const chosen = new Map([['A', 20], ['B', 25]])
+    const once = resolveBarContinuity(chosen, [['A', 'B']])
+    expect(resolveBarContinuity(once, [['A', 'B']])).toEqual(once)
+  })
+})
