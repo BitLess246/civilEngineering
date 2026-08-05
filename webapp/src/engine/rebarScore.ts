@@ -73,6 +73,25 @@ export const PRIORITY_WEIGHTS = {
 export const NEAR_TIE = 0.03
 
 /**
+ * How much extra steel a near-tie promotion may buy, as a fraction.
+ *
+ * The tie-break exists to choose between layouts the weighted total cannot
+ * separate. It must not be a way to BUY the better-distributed one: two mats
+ * differing by 2.6× in steel are not "nearly equivalent" in any sense an
+ * engineer would accept, however close their totals land.
+ *
+ * That case is real and is what this guard was written for. On a slab strip
+ * the spacing modules span 75–300 mm, so the candidates at one diameter run
+ * from 1.3× to 4.4× the required area; the totals compress into a band of
+ * 0.03 while the steel varies fourfold, and promoting on serviceability alone
+ * reached the tight end every time. On a beam or a column the candidates are
+ * much closer in area and this rarely binds.
+ *
+ * The leader always satisfies it, so the contender set is never empty.
+ */
+export const MAX_TIE_STEEL = 0.15
+
+/**
  * Bar sizes a Philippine yard stocks and a bender handles without comment.
  * Simplicity only — never a compliance matter, and never a reason to reject.
  */
@@ -133,6 +152,14 @@ export interface ScoreContext {
   /** Whether an even (symmetric) bar count is preferred. Beams and columns
    *  yes; a slab mat has no centreline to be symmetric about. */
   wantSymmetric?: boolean
+  /**
+   * How a layout is named in the prose this module writes.
+   *
+   * A cage is counted — "4⌀20". A mat is spaced — "⌀12 @ 100". Calling a mat
+   * "30⌀12" is not wrong so much as not what the drawing says, and a reason
+   * that does not match the headline reads as two different answers.
+   */
+  naming?: 'count' | 'spacing'
 }
 
 export interface LayoutScores {
@@ -312,15 +339,26 @@ export interface Candidate {
   compliance: ComplianceCheck[]
 }
 
-function describe(l: RebarLayout, s: LayoutScores): string {
-  const arrangement = l.layers.length > 1
-    ? `${l.bars}⌀${l.db} in ${l.layers.length} layers (${l.layers.join('+')})`
-    : `${l.bars}⌀${l.db} in one layer`
+/** What this layout is called — see `ScoreContext.naming`. */
+function nameOf(l: RebarLayout, ctx: ScoreContext): string {
+  return ctx.naming === 'spacing' ? `⌀${l.db} @ ${l.spacing.toFixed(0)}` : `${l.bars}⌀${l.db}`
+}
+
+function describe(l: RebarLayout, s: LayoutScores, ctx: ScoreContext): string {
+  const name = nameOf(l, ctx)
+  const arrangement = ctx.naming === 'spacing'
+    ? `${name} — ${l.bars} bars across the strip`
+    : l.layers.length > 1
+      ? `${name} in ${l.layers.length} layers (${l.layers.join('+')})`
+      : `${name} in one layer`
   const strengths: string[] = []
   if (s.serviceability >= 0.7) strengths.push('well distributed for crack control')
   if (s.constructability >= 0.8) strengths.push('easy to place')
   if (s.economy >= 0.8) strengths.push('economical')
-  if (s.simplicity >= 0.9) strengths.push('symmetric and standard')
+  // Symmetry is only a virtue where there is something to be symmetric about.
+  if (s.simplicity >= 0.9) {
+    strengths.push(ctx.wantSymmetric === false ? 'a standard bar size' : 'symmetric and standard')
+  }
   return strengths.length
     ? `${arrangement} — ${strengths.join(', ')}.`
     : `${arrangement}.`
@@ -367,8 +405,8 @@ export function selectRebar(candidates: readonly Candidate[], ctx: ScoreContext)
       scores,
       total,
       reason: gate
-        ? `${c.layout.bars}⌀${c.layout.db} — rejected: ${gate.label} (${gate.clause}).`
-        : describe(c.layout, scores),
+        ? `${nameOf(c.layout, ctx)} — rejected: ${gate.label} (${gate.clause}).`
+        : describe(c.layout, scores, ctx),
     }
   })
 
@@ -382,7 +420,10 @@ export function selectRebar(candidates: readonly Candidate[], ctx: ScoreContext)
   // between them is made on serviceability + constructability alone.
   const leader = byTotal[0]
   const contenders = leader
-    ? byTotal.filter((s) => leader.total - s.total <= NEAR_TIE)
+    ? byTotal.filter((s) =>
+        leader.total - s.total <= NEAR_TIE
+        // ...and does not buy its way there, see MAX_TIE_STEEL.
+        && s.layout.AsProv <= leader.layout.AsProv * (1 + MAX_TIE_STEEL) + 1e-9)
     : []
   const best = contenders.length > 0 ? [...contenders].sort(comparePair)[0] : null
 
@@ -401,7 +442,7 @@ export function selectRebar(candidates: readonly Candidate[], ctx: ScoreContext)
       (gates.length ? `: ${gates.join(', ')}` : '')
     : ranked.length === 1
       ? 'the only compliant layout in the set'
-      : marginText(best, ranked[1], contenders.length > 1)
+      : marginText(best, ranked[1], contenders.length > 1, ctx)
 
   return { best, ranked, rejected, margin }
 }
@@ -429,8 +470,10 @@ function breakTies(a: ScoredLayout, b: ScoredLayout): number {
   return a.layout.bars - b.layout.bars
 }
 
-function marginText(best: ScoredLayout, next: ScoredLayout, nearTie: boolean): string {
-  const label = (s: ScoredLayout) => `${s.layout.bars}⌀${s.layout.db}`
+function marginText(
+  best: ScoredLayout, next: ScoredLayout, nearTie: boolean, ctx: ScoreContext,
+): string {
+  const label = (s: ScoredLayout) => nameOf(s.layout, ctx)
   if (!nearTie) {
     const driver = biggestGain(best, next)
     return `${label(best)} scores ${best.total.toFixed(3)} against ${label(next)} at ` +

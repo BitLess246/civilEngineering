@@ -7,7 +7,7 @@ import {
 } from './matRebarOptimize'
 import { designSquareFooting, type SquareFootingInput } from './isolatedFooting'
 import { designSlabDDM, type SlabInput } from './slabDDM'
-import { firstFailure } from './rebarScore'
+import { firstFailure, MAX_TIE_STEEL } from './rebarScore'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -191,14 +191,36 @@ describe('what it is not', () => {
     expect(c.spacing).toBeGreaterThan(tightest)
   })
 
-  it('does not simply take the smallest bar, despite serviceability leading', () => {
-    // Serviceability rewards small diameters, so the smallest FEASIBLE bar is
-    // the choice the priority order is most likely to over-reach for. It does
-    // not: on this strip ⌀10 complies at several spacings and still loses.
-    const c = optimizeMatRebar([strip()], section())
-    const feasible = new Set(c.selection.ranked.map((s) => s.layout.db))
-    expect(feasible.has(10)).toBe(true)
-    expect(c.db).toBeGreaterThan(10)
+  it('does not simply take the smallest bar — the footing skips ⌀10 and ⌀12', () => {
+    const c = optimizeFootingRebar(footing())
+    expect(c.designs.has(10)).toBe(true)     // it was searched
+    expect(c.db).toBeGreaterThan(12)         // and lost anyway
+  })
+
+  it('never buys its way to a tighter mat through the near-tie rule', () => {
+    // The failure this guards against, measured: on a lightly loaded strip
+    // the spacing modules run 75–300 mm, so the areas at one diameter span
+    // 1.3× to 4.4× the requirement while the totals compress into one 0.03
+    // band. Promoting on serviceability alone reached the tight end every
+    // time — 2.6× the steel for a 0.014 difference in score.
+    const light = strip({ b: 3000, d: 114, AsReq: 1032 })
+    const c = optimizeMatRebar([light], section({ h: 140 }))
+    const best = c.selection.best!
+    const leader = c.selection.ranked.reduce((a, s) => (s.total > a.total ? s : a))
+    expect(best.layout.AsProv)
+      .toBeLessThanOrEqual(leader.layout.AsProv * (1 + MAX_TIE_STEEL) + 1e-9)
+    // and the concrete outcome: nothing near 2.6× survives
+    expect(best.layout.AsProv / best.layout.AsReq).toBeLessThan(2)
+  })
+
+  it('detailing a whole panel gives the light strips a looser mat than the heavy ones', () => {
+    const c = optimizeSlabRebar(panel())
+    const byLoad = [...c.strips].sort((a, b) => a.AsReq / a.b - b.AsReq / b.b)
+    const lightest = byLoad[0], heaviest = byLoad[byLoad.length - 1]
+    expect(heaviest.AsReq / heaviest.b).toBeGreaterThan(lightest.AsReq / lightest.b)
+    // One diameter, different spacings — which is what "⌀12 @ 100 T, @ 175 B"
+    // on a drawing means, and what quoting one mat everywhere would lose.
+    expect(lightest.spacing).toBeGreaterThan(heaviest.spacing)
   })
 })
 
@@ -313,5 +335,28 @@ describe('two-way slab panels', () => {
     expect(heavy.db).not.toBeNull()
     const per = (c: typeof light) => c.selection.best!.layout.AsProv / c.selection.best!.layout.spacing
     expect(per(heavy)).toBeGreaterThan(per(light))
+  })
+})
+
+// ── The prose matches the drawing ─────────────────────────────────────────
+
+describe('how a mat is named', () => {
+  it('quotes a spacing, not a bar count, in the reason and the margin', () => {
+    const c = optimizeMatRebar([strip()], section())
+    const spaced = /⌀\d+ @ \d+/
+    expect(c.selection.best!.reason).toMatch(spaced)
+    expect(c.selection.margin).toMatch(spaced)
+    // "30⌀12" is what a beam schedule says; a slab drawing does not.
+    expect(c.selection.best!.reason).not.toMatch(/^\d+⌀/)
+  })
+
+  it('never calls a mat symmetric — there is no centreline to be symmetric about', () => {
+    const c = optimizeMatRebar([strip()], section())
+    for (const s of c.selection.ranked) expect(s.reason).not.toMatch(/symmetric/)
+  })
+
+  it('a rejected mat names itself the same way', () => {
+    const c = optimizeMatRebar([strip()], section())
+    for (const r of c.selection.rejected) expect(r.reason).toMatch(/⌀\d+ @ \d+/)
   })
 })

@@ -36,6 +36,9 @@ import { generalBearingCapacity } from '../engine/bearingGeneral'
 import {
   buildEarthPressureSolution, buildBearingSolution, buildInfiniteSlopeSolution,
 } from './geotechPageSolutions'
+import { buildRebarSelectionSolution } from './rebarSolution'
+import { optimizeBeamRebar } from '../engine/beamRebarOptimize'
+import { optimizeFootingRebar } from '../engine/matRebarOptimize'
 
 // ─────────────────────────────────────────────────────────────────────────
 // What a worked solution has to be, applied to every builder at once.
@@ -185,6 +188,16 @@ const BUILDERS: [string, () => SolutionStep[]][] = [
     const si = { c: 5, phiDeg: 30, gamma: 18, z: 3, betaDeg: 20, seepage: true, gammaSat: 20 }
     return buildInfiniteSlopeSolution(si, infiniteSlopeFS({ ...si, phiDeg: si.phiDeg }))
   }],
+  ['rebar selection (cage)', () => buildRebarSelectionSolution(
+    optimizeBeamRebar({
+      b: 300, h: 500, cover: 40, stirrupDia: 10, fc: 28, fy: 415, Mu: 180, Vu: 150,
+      barDia: 20,   // ignored — the optimiser searches every diameter
+    }).selection, 'cage')],
+  ['rebar selection (mat)', () => buildRebarSelectionSolution(
+    optimizeFootingRebar({
+      serviceLoad: 1200, ultimateLoad: 1700, columnWidth: 400, fc: 21, fy: 415,
+      qAllow: 200, gammaSoil: 18, gammaConc: 24, H: 1.5, barDia: 20, cover: 75,
+    }).selection, 'mat')],
 ]
 
 const eqs = (steps: SolutionStep[]) =>

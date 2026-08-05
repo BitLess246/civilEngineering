@@ -243,6 +243,7 @@ export function matContext(strip: MatStrip, sec: MatSection): ScoreContext {
     // well: this is the bar count a perfectly ordinary 150 mm mat produces.
     barComfort: barsAt(strip.b, sec.cover, 150),
     wantSymmetric: false,
+    naming: 'spacing',
   }
 }
 

@@ -1,5 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { designSquareFooting } from '../engine/isolatedFooting'
+import { optimizeFootingRebar } from '../engine/matRebarOptimize'
+import { RebarRanking } from '../components/RebarRanking'
+import { buildRebarSelectionSolution } from '../lib/rebarSolution'
+import { nameMat } from '../lib/rebarLabel'
+// The page used to carry its own byte-identical copy of this input.
+import { Num as NumField } from '../components/qty'
 import { designRectangularFooting } from '../engine/rectangularFooting'
 import { designEccentricSquareFooting } from '../engine/eccentricFooting'
 import { netBearing } from '../engine/bearing'
@@ -104,24 +110,6 @@ interface View {
 }
 
 
-function NumField({ label, unit, value, onChange, step = 'any' }: {
-  label: ReactNode; unit?: string; value: number; onChange: (v: number) => void; step?: string
-}) {
-  return (
-    <label className="flex flex-col text-sm">
-      <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">{label}</span>
-      <span className="flex overflow-hidden rounded-md border border-[#d6d3c9] bg-[#fcfbf8] focus-within:border-[#0f4c92] focus-within:shadow-[0_0_0_3px_rgba(15,76,146,.14)]">
-        <input
-          type="number" inputMode="decimal" step={step} value={Number.isFinite(value) ? value : ''}
-          onChange={(e) => onChange(parseFloat(e.target.value))}
-          className="min-w-0 flex-1 !rounded-none !border-0 !bg-transparent text-[13px] !shadow-none"
-        />
-        {unit && <span className="flex items-center border-l border-[#eeece5] bg-[#f7f6f1] px-2.5 font-mono text-[10.5px] text-[#a39d8d]">{unit}</span>}
-      </span>
-    </label>
-  )
-}
-
 function Select<T extends string>({ label, value, onChange, options }: {
   label: string; value: T; onChange: (v: T) => void; options: [T, string][]
 }) {
@@ -192,12 +180,34 @@ export default function FoundationDesign() {
   const serviceLoad = individual ? form.deadLoad + form.liveLoad : form.serviceLoad
   const ultimateLoad = individual ? factoredLoad({ dead: form.deadLoad, live: form.liveLoad }) : form.ultimateLoad
 
-  const view: View | null = useMemo(() => {
+  // ── Mat selection ────────────────────────────────────────────────────
+  // Only the concentric SQUARE path for now — that is the footing the mat
+  // optimiser covers. The rectangular and eccentric paths keep the ⌀ field.
+  const [autoBar, setAutoBar] = useState(true)
+  const squareConcentric = !rect && !ecc
+  const matChoice = useMemo(() => {
+    if (!autoBar || !valid || !squareConcentric) return null
+    try {
+      return optimizeFootingRebar({
+        serviceLoad, ultimateLoad, columnWidth: colWidth, columnWidthY: colWidthY,
+        fc: form.fc, fy: form.fy, qAllow: form.qAllow, gammaSoil: form.gammaSoil,
+        gammaConc: form.gammaConc, H: form.H, barDia: form.barDia, cover: form.cover,
+        surcharge: form.surcharge, position: form.position,
+        analysis: form.analysisMethod, solutionMethod: form.solutionMethod,
+        givenB: form.givenB, givenDc: form.givenDc,
+      })
+    } catch { return null }
+  }, [autoBar, valid, squareConcentric, serviceLoad, ultimateLoad, colWidth, colWidthY, form])
+
+  /** The diameter actually detailed. */
+  const dbEff = matChoice?.db ?? form.barDia
+
+  const viewRaw: View | null = useMemo(() => {
     if (!valid) return null
     const common = {
       serviceLoad, ultimateLoad, columnWidth: colWidth, columnWidthY: colWidthY,
       fc: form.fc, fy: form.fy, qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc,
-      H: form.H, barDia: form.barDia, cover: form.cover, surcharge: form.surcharge, position: form.position,
+      H: form.H, barDia: dbEff, cover: form.cover, surcharge: form.surcharge, position: form.position,
     }
     const methods = {
       analysis: form.analysisMethod, solutionMethod: form.solutionMethod,
@@ -241,7 +251,14 @@ export default function FoundationDesign() {
       punchOK: r.punchOK, beamOK: r.beamOK,
       long: r.long, short: r.short, ecc: null,
     }
-  }, [form, valid, rect, ecc, serviceLoad, ultimateLoad, colWidth, colWidthY])
+  }, [form, dbEff, valid, rect, ecc, serviceLoad, ultimateLoad, colWidth, colWidthY])
+
+  // The mat is drawn on a spacing module, so the adopted spacing — not the
+  // count that falls out of As/Ab — is what goes on the schedule.
+  const view: View | null = useMemo(() => {
+    if (!viewRaw || !matChoice?.bars || !matChoice.spacing) return viewRaw
+    return { ...viewRaw, long: { ...viewRaw.long, bars: matChoice.bars, spacing: matChoice.spacing } }
+  }, [viewRaw, matChoice])
 
   const solutionSteps = useMemo(() => {
     if (!view) return null
@@ -253,14 +270,17 @@ export default function FoundationDesign() {
       columnWidth: colWidth, columnWidthY: colWidthY, fc: form.fc, fy: form.fy,
       column: circular ? { shape: 'circular' as const, dia: form.columnWidth } : null,
       qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc, H: form.H,
-      barDia: form.barDia, cover: form.cover, surcharge: form.surcharge, position: form.position,
+      barDia: dbEff, cover: form.cover, surcharge: form.surcharge, position: form.position,
       Bx: view.Bx, By: view.By, Dc: view.Dc, qNet: view.qNet, qu: view.qu,
       dPunch: view.dPunch, dBeamLong: view.dBeamLong, dBeamShort: view.dBeamShort, dProvided: view.dProvided,
       punchOK: view.punchOK, beamOK: view.beamOK,
       long: view.long, short: view.short, ecc: view.ecc,
     }
-    return buildFoundationSolution(ctx)
-  }, [view, form, serviceLoad, ultimateLoad, individual, circular, colWidth, colWidthY])
+    return [
+      ...buildFoundationSolution(ctx),
+      ...(matChoice ? buildRebarSelectionSolution(matChoice.selection, 'mat') : []),
+    ]
+  }, [view, form, dbEff, matChoice, serviceLoad, ultimateLoad, individual, circular, colWidth, colWidthY])
 
   // Verdict data — presentation of engine outputs only: utilization is the
   // required-over-provided effective depth per shear mode (capacity grows with
@@ -405,9 +425,18 @@ export default function FoundationDesign() {
           </Card>
 
           <Card title="Materials">
+            {squareConcentric && (
+              <label className="col-span-full flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-[#5c6675]">
+                <input type="checkbox" checked={autoBar} onChange={(e) => setAutoBar(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-[#0f4c92]" />
+                Auto-select bar ⌀ and spacing
+              </label>
+            )}
             <NumField label={<Math tex="f'_c" />} unit="MPa" value={form.fc} onChange={set('fc')} />
             <NumField label={<Math tex="f_y" />} unit="MPa" value={form.fy} onChange={set('fy')} />
-            <NumField label={<>Bar <Math tex="d_b" /></>} unit="mm" value={form.barDia} onChange={set('barDia')} />
+            <NumField label={<>Bar <Math tex="d_b" /></>} unit="mm" value={dbEff} onChange={set('barDia')}
+              disabled={!!matChoice}
+              hint={matChoice ? (matChoice.db ? 'chosen by the optimiser' : 'no compliant mat — see the ranking') : undefined} />
             <NumField label="Clear cover" unit="mm" value={form.cover} onChange={set('cover')} />
           </Card>
 
@@ -432,7 +461,7 @@ export default function FoundationDesign() {
               stats={[
                 { label: 'Plan size', value: view.type === 'square' ? `${f2(view.Bx)} × ${f2(view.By)}` : `${f2(view.Bx)} × ${f2(view.By)}`, unit: 'm' },
                 { label: 'Thickness Dc', value: f0(view.Dc), unit: 'mm' },
-                { label: view.type === 'square' ? 'Steel each way' : 'Steel — long', value: `${view.long.bars}-⌀${form.barDia}`, unit: `@${f0(view.long.spacing)}` },
+                { label: view.type === 'square' ? 'Steel each way' : 'Steel — long', value: `${view.long.bars}-⌀${dbEff}`, unit: `@${f0(view.long.spacing)}` },
               ]}
               checks={[
                 { name: 'Punching shear (d req / prov)', ratio: punchRatio },
@@ -442,6 +471,10 @@ export default function FoundationDesign() {
                 ? 'Flexure: As,min = 0.0018·b·h governs (ρmin) — §24.4.3.2'
                 : `Flexure: ρ = ${view.long.rho.toFixed(4)} — §24.4.3.2 satisfied`}
             />
+          )}
+
+          {matChoice && (
+            <RebarRanking selection={matChoice.selection} title="Mat selection" name={nameMat} />
           )}
 
           <DrawingCard pdfDrawing title="Drawing" meta="plan · section">
@@ -478,11 +511,11 @@ export default function FoundationDesign() {
                 value={`${f0(view.dPunch)} mm`}
                 check={view.type === 'square' ? `beam ${f0(view.dBeamLong)} mm` : `beam x/y ${f0(view.dBeamLong)}/${f0(view.dBeamShort)} mm`} />
               {view.type === 'square'
-                ? steelRow('Steel (each way)', view.long, form.barDia)
+                ? steelRow('Steel (each way)', view.long, dbEff)
                 : (
                   <>
-                    {steelRow('Steel — long (x)', view.long, form.barDia)}
-                    {view.short && steelRow('Steel — short (y)', view.short, form.barDia)}
+                    {steelRow('Steel — long (x)', view.long, dbEff)}
+                    {view.short && steelRow('Steel — short (y)', view.short, dbEff)}
                     {view.short && (
                       <Row label="Central band (short)"
                         value={`${view.short.bandBars} of ${view.short.bars} bars`}
@@ -506,7 +539,7 @@ export default function FoundationDesign() {
           stats={[
             { label: 'Plan size', value: `${f2(view.Bx)} × ${f2(view.By)}`, unit: 'm' },
             { label: 'Thickness Dc', value: f0(view.Dc), unit: 'mm' },
-            { label: view.type === 'square' ? 'Steel each way' : 'Steel — long', value: `${view.long.bars}-⌀${form.barDia}`, unit: `@${f0(view.long.spacing)}` },
+            { label: view.type === 'square' ? 'Steel each way' : 'Steel — long', value: `${view.long.bars}-⌀${dbEff}`, unit: `@${f0(view.long.spacing)}` },
           ]}
           checks={[
             { name: 'Two-way (punching) shear — d req/prov', ratio: punchRatio, ok: view.punchOK },
@@ -515,7 +548,7 @@ export default function FoundationDesign() {
           data={[
             ['Service load P', `${f0(serviceLoad)} kN`], ['Ultimate load Pu', `${f0(ultimateLoad)} kN`],
             ["Concrete f'c", `${form.fc} MPa`], ['Steel fy', `${form.fy} MPa`],
-            ['Column width c', `${f0(colWidth)} mm (${form.position})`], ['Bar diameter db', `⌀${form.barDia} mm`],
+            ['Column width c', `${f0(colWidth)} mm (${form.position})`], ['Bar diameter db', `⌀${dbEff} mm`],
             ['Allowable bearing qa', `${form.qAllow} kPa`], ['Clear cover', `${form.cover} mm`],
             ['Unit weight, soil γs', `${form.gammaSoil} kN/m³`], ['Unit weight, concrete γc', `${form.gammaConc} kN/m³`],
             ['Total depth H', `${f2(form.H)} m`], ['Surcharge', `${form.surcharge} kPa`],

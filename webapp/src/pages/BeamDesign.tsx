@@ -8,6 +8,9 @@ import type { CriticalSection } from '../engine/beamSections'
 import { BeamSchematic } from '../components/BeamSchematic'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { buildBeamSolution, beamProvidedCapacities } from '../lib/beamSolution'
+import { optimizeBeamRebar, optimizeBeamMember } from '../engine/beamRebarOptimize'
+import { RebarRanking } from '../components/RebarRanking'
+import { buildRebarSelectionSolution } from '../lib/rebarSolution'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { Math as KTex } from '../lib/math'
 import { f0, f1 } from '../lib/format'
@@ -74,6 +77,10 @@ export default function BeamDesign() {
   const [svcWD, setSvcWD] = useState<number>(NaN)
   const [svcWL, setSvcWL] = useState<number>(NaN)
   const [multi, setMulti] = useState<boolean>(handoff.multi)
+  // The optimiser chooses the diameter; everything else on the page is still
+  // the user's. Off puts the ⌀ field back in charge, which is what checking an
+  // existing drawing needs.
+  const [autoBar, setAutoBar] = useState(true)
   const [sections, setSections] = useState<SecRow[]>(handoff.multi ? handoff.sections : DEF_SECTIONS)
   const [selId, setSelId] = useState<number | null>(handoff.multi ? handoff.sections[0].id : null)
   const set = <K extends keyof FormState>(k: K) => (v: FormState[K]) => setF((s) => ({ ...s, [k]: v }))
@@ -86,14 +93,45 @@ export default function BeamDesign() {
       && f.h - f.cover - f.stirrupDia - f.barDia / 2 > 0
   }, [f])
 
+  // ── Bar selection ────────────────────────────────────────────────────
+  // In multi-section mode the whole member gets ONE diameter, scored across
+  // every critical section — three sections of one beam detailed with three
+  // different bars is not a beam anybody builds.
+  const memberChoice = useMemo(() => {
+    if (!autoBar || !sectionGeomOK || !multi) return null
+    const valid = sections.filter((s) => Number.isFinite(s.Mu) && Number.isFinite(s.Vu))
+    if (valid.length === 0) return null
+    return optimizeBeamMember(f, valid.map((s) => ({
+      id: String(s.id), label: s.label, Mu: Math.abs(s.Mu), Vu: Math.abs(s.Vu),
+    })))
+  }, [autoBar, sectionGeomOK, multi, f, sections])
+
+  const singleChoice = useMemo(() => {
+    if (!autoBar || !sectionGeomOK || multi) return null
+    if (!Number.isFinite(f.Mu) || !Number.isFinite(f.Vu)) return null
+    return optimizeBeamRebar({ ...f, Mu: Math.abs(f.Mu) })
+  }, [autoBar, sectionGeomOK, multi, f])
+
+  const adoptedDb = multi
+    ? memberChoice?.db ?? null
+    : singleChoice?.selection.best?.layout.db ?? null
+
+  /** The form as designed with — identical to `f` unless the optimiser chose. */
+  const fd: FormState = useMemo(
+    () => (adoptedDb === null ? f : { ...f, barDia: adoptedDb, comprBarDia: adoptedDb }),
+    [f, adoptedDb],
+  )
+
+  const selection = multi ? memberChoice?.selection ?? null : singleChoice?.selection ?? null
+
   // Per-section designs (multi) — hogging sections design with |Mu|.
   const designs = useMemo(() => {
     if (!sectionGeomOK || !multi) return []
     return sections.map((s) => {
       if (!Number.isFinite(s.Mu) || !Number.isFinite(s.Vu)) return null
-      return designBeam({ ...f, Mu: Math.abs(s.Mu), Vu: Math.abs(s.Vu) })
+      return designBeam({ ...fd, Mu: Math.abs(s.Mu), Vu: Math.abs(s.Vu) })
     })
-  }, [f, sections, multi, sectionGeomOK])
+  }, [fd, sections, multi, sectionGeomOK])
 
   // The active demand: selected section (multi) or the single Mu/Vu fields.
   const selIdx = multi ? Math.max(0, sections.findIndex((s) => s.id === selId)) : -1
@@ -103,14 +141,21 @@ export default function BeamDesign() {
   const singleValid = sectionGeomOK && Number.isFinite(f.Mu) && Number.isFinite(f.Vu)
   const r = multi
     ? designs[selIdx] ?? null
-    : singleValid ? designBeam({ ...f, Mu: Math.abs(f.Mu) }) : null
+    : singleValid ? designBeam({ ...fd, Mu: Math.abs(fd.Mu) }) : null
   const demand = multi
     ? { Mu: Math.abs(active?.Mu ?? 0), Vu: Math.abs(active?.Vu ?? 0) }
     : { Mu: Math.abs(f.Mu), Vu: f.Vu }
+  // The selection is appended, not prepended: it justifies the bar chosen for
+  // the steel the flexure steps above derived, so it reads after them.
   const solution = useMemo(
-    () => (r ? buildBeamSolution({ ...f, ...demand }, r) : null),
+    () => (r
+      ? [
+          ...buildBeamSolution({ ...fd, ...demand }, r),
+          ...(selection ? buildRebarSelectionSolution(selection, 'cage') : []),
+        ]
+      : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [r, f, demand.Mu, demand.Vu],
+    [r, fd, demand.Mu, demand.Vu, selection],
   )
 
   const deflection = useMemo(() => {
@@ -132,7 +177,7 @@ export default function BeamDesign() {
   // required-over-provided clear spacing, shear Vu/φVc while no stirrups are
   // demanded — all existing outputs, no new calculation.
   const allOK = !!r && sectionOK(r) && (!deflection || (deflection.liveOK && deflection.totalOK))
-  const cap = r ? beamProvidedCapacities(f, r) : null
+  const cap = r ? beamProvidedCapacities(fd, r) : null
   const checks = r && cap ? [
     { name: 'Flexure Mu/φMn', ratio: demand.Mu / cap.phiMn },
     { name: 'Shear Vu/φVn', ratio: demand.Vu / cap.phiVn },
@@ -150,7 +195,7 @@ export default function BeamDesign() {
     governing: `Governing: flexure · utilization ${cap ? (demand.Mu / cap.phiMn).toFixed(2) : '—'}${r.mode === 'DRRB' ? ' · DRRB' : ''}`,
     lh,
     stats: [
-      { label: hogging ? 'Tension (top)' : 'Tension steel', value: `${r.bars}-⌀${f.barDia}` },
+      { label: hogging ? 'Tension (top)' : 'Tension steel', value: `${r.bars}-⌀${fd.barDia}` },
       { label: 'Stirrups', value: r.sAdopt > 0 ? `⌀${f.stirrupDia} @${f0(r.sAdopt)}` : REGION[r.region] },
       { label: 'Eff. depth d', value: f0(r.d), unit: 'mm' },
     ],
@@ -158,7 +203,7 @@ export default function BeamDesign() {
     data: [
       ['Section b × h', `${f.b} × ${f.h} mm`], ['Clear cover', `${f.cover} mm`],
       ["Concrete f'c", `${f.fc} MPa`], ['Steel fy / fyt', `${f.fy} / ${f.fyt} MPa`],
-      ['Bar ⌀ / stirrup ⌀', `${f.barDia} / ${f.stirrupDia} mm (${f.legs}-leg)`],
+      ['Bar ⌀ / stirrup ⌀', `${fd.barDia} / ${fd.stirrupDia} mm (${fd.legs}-leg)`],
       ['Moment Mu', `${f1(demand.Mu)} kN·m${hogging ? ' (hogging)' : ''}`],
       ['Shear Vu', `${f1(demand.Vu)} kN`], ['ρ / ρmin / ρmax', `${r.rho.toFixed(4)} / ${r.rhoMin.toFixed(4)} / ${r.rhoMax.toFixed(4)}`],
     ] as [string, string][],
@@ -183,12 +228,23 @@ export default function BeamDesign() {
 
       <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
         <div className="space-y-3.5">
-          <Card title="Section">
+          <Card title="Section"
+            hint={
+              <label className="no-print flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-[#5c6675]">
+                <input type="checkbox" checked={autoBar} onChange={(e) => setAutoBar(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-[#0f4c92]" />
+                Auto-select bar ⌀
+              </label>
+            }>
             <Num label="Width b" unit="mm" value={f.b} onChange={set('b')} />
             <Num label="Total depth h" unit="mm" value={f.h} onChange={set('h')} />
             <Num label="Clear cover" unit="mm" value={f.cover} onChange={set('cover')} />
-            <Num label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={f.barDia} onChange={set('barDia')} />
-            <Num label={<>Compr. bar <KTex tex="d_b'" /></>} unit="mm" value={f.comprBarDia} onChange={set('comprBarDia')} />
+            <Num label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={fd.barDia} onChange={set('barDia')}
+              disabled={autoBar}
+              hint={autoBar ? (adoptedDb ? 'chosen by the optimiser' : 'no compliant ⌀ — see the ranking') : undefined} />
+            <Num label={<>Compr. bar <KTex tex="d_b'" /></>} unit="mm" value={fd.comprBarDia} onChange={set('comprBarDia')}
+              disabled={autoBar}
+              hint={autoBar ? 'follows the tension bar' : undefined} />
             <Num label={<>Stirrup <KTex tex="d_s" /></>} unit="mm" value={f.stirrupDia} onChange={set('stirrupDia')} />
             <Num label="Stirrup legs" value={f.legs} onChange={set('legs')} />
           </Card>
@@ -259,13 +315,17 @@ export default function BeamDesign() {
                 : 'CHECK FAILED — revise the section'}
               governing={`Governing: flexure · utilization ${cap ? (demand.Mu / cap.phiMn).toFixed(2) : '—'}${r.mode === 'DRRB' ? ' · DRRB (compression steel engaged)' : ''}`}
               stats={[
-                { label: hogging ? 'Tension (top)' : 'Tension steel', value: `${r.bars}-⌀${f.barDia}`, unit: hogging ? 'top' : 'bottom' },
+                { label: hogging ? 'Tension (top)' : 'Tension steel', value: `${r.bars}-⌀${fd.barDia}`, unit: hogging ? 'top' : 'bottom' },
                 { label: 'Stirrups', value: r.sAdopt > 0 ? `⌀${f.stirrupDia}` : '—', unit: r.sAdopt > 0 ? `${f.legs}-leg @${f0(r.sAdopt)}` : REGION[r.region] },
                 { label: 'Eff. depth d', value: f0(r.d), unit: 'mm' },
               ]}
               checks={checks}
               footnote={`ρ = ${r.rho.toFixed(4)} within ρmin ${r.rhoMin.toFixed(4)} … ρmax ${r.rhoMax.toFixed(4)} — §9.6.1.2 / §21.2.2`}
             />
+          )}
+          {selection && (
+            <RebarRanking selection={selection}
+              title={multi ? 'Bar selection — whole member' : 'Bar selection'} />
           )}
           {multi && (
             <ResultCard title="Section schedule">
@@ -290,8 +350,8 @@ export default function BeamDesign() {
                             bad ? 'bg-red-50 text-red-700' : ''} ${s.id === active?.id ? 'outline outline-1 outline-[#0056b3]' : ''}`}>
                           <td className="py-1 pr-2">{s.label}{s.Mu < 0 ? ' (hog)' : ''}</td>
                           <td className="py-1 pr-2">{d ? d.mode : '—'}</td>
-                          <td className="py-1 pr-2">{d ? `${d.bars}⌀${f.barDia}${d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}` : '—'}</td>
-                          <td className="py-1 pr-2">{d && d.comprBars > 0 ? `${d.comprBars}⌀${f.comprBarDia}` : '—'}</td>
+                          <td className="py-1 pr-2">{d ? `${d.bars}⌀${fd.barDia}${d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}` : '—'}</td>
+                          <td className="py-1 pr-2">{d && d.comprBars > 0 ? `${d.comprBars}⌀${fd.comprBarDia}` : '—'}</td>
                           <td className="py-1">{d ? (d.sAdopt > 0 ? `@${f0(d.sAdopt)}` : d.region === 'none' ? 'none' : '⚠') : '—'}</td>
                         </tr>
                       )
@@ -305,10 +365,10 @@ export default function BeamDesign() {
 
           <DrawingCard pdfDrawing title={`Section${multi && active ? ` — ${active.label}` : ''}`} meta={`${f0(f.b)} × ${f0(f.h)} · to scale`}>
             {r ? (
-              <BeamSchematic b={f.b} h={f.h} cover={f.cover} barDia={f.barDia} stirrupDia={f.stirrupDia}
+              <BeamSchematic b={fd.b} h={fd.h} cover={fd.cover} barDia={fd.barDia} stirrupDia={fd.stirrupDia}
                 bars={r.bars} d={r.d} dPrime={r.comprLayers.length > 0 ? r.dPrime : undefined}
                 layers={r.layers} comprLayers={r.comprLayers}
-                comprBars={r.comprBars} comprBarDia={f.comprBarDia}
+                comprBars={r.comprBars} comprBarDia={fd.comprBarDia}
                 naDepth={r.cNA} flexOK={r.flexOK} hogging={hogging} />
             ) : (
               <p className="py-8 text-center text-sm text-[#a39d8d]">Enter a valid section (d must be positive).</p>
@@ -394,7 +454,7 @@ export default function BeamDesign() {
       </div>
       {reportData && (
         <PrintReport {...reportData}
-          drawing={<BeamSchematic b={f.b} h={f.h} cover={f.cover} barDia={f.barDia} stirrupDia={f.stirrupDia}
+          drawing={<BeamSchematic b={fd.b} h={fd.h} cover={fd.cover} barDia={fd.barDia} stirrupDia={fd.stirrupDia}
             bars={r!.bars} d={r!.d} dPrime={r!.comprLayers.length > 0 ? r!.dPrime : undefined}
             layers={r!.layers} comprLayers={r!.comprLayers} comprBars={r!.comprBars} comprBarDia={f.comprBarDia}
             naDepth={r!.cNA} flexOK={r!.flexOK} hogging={hogging} />}

@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { designSlabDDM, type SlabInput, type SlabDirResult, type SlabSectionSteel } from '../engine/slabDDM'
+import { optimizeSlabRebar } from '../engine/matRebarOptimize'
+import { RebarRanking } from '../components/RebarRanking'
+import { buildRebarSelectionSolution } from '../lib/rebarSolution'
+import { nameMat } from '../lib/rebarLabel'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
 import { buildSlabSolution } from '../lib/slabSolution'
@@ -33,14 +37,25 @@ const DEFAULTS: FormState = {
   withBeams: 'yes',
 }
 
-function steelText(s: SlabSectionSteel, db: number) {
-  return `${s.bars}⌀${db} @${f0(s.spacing)} mm`
+/** The mat adopted for one strip: bars laid on a spacing MODULE, not the
+ *  arithmetic spacing that falls out of As/Ab. */
+export interface StripMat { bars: number; spacing: number }
+
+function steelText(s: SlabSectionSteel, db: number, mat?: StripMat) {
+  const m = mat ?? s
+  return `${m.bars}⌀${db} @${f0(m.spacing)} mm`
 }
 function steelSub(s: SlabSectionSteel) {
   return `As=${f0(s.As)} mm²${s.usedMin ? ' (T/S min)' : ''}`
 }
 
-function DirCard({ title, dir, barDia }: { title: string; dir: SlabDirResult; barDia: number }) {
+function DirCard({ title, dir, barDia, mats }: {
+  title: string; dir: SlabDirResult; barDia: number
+  /** Keyed by `slabStrips`' label, so the schedule quotes the adopted mat. */
+  mats?: Map<string, StripMat>
+}) {
+  const mat = (loc: string, which: 'column' | 'middle') =>
+    mats?.get(`${dir.dir}-dir ${loc} ${which} strip`)
   return (
     <ResultCard title={title}>
       <Row label="Span l₁" value={`${f2(dir.l1)} m`} sub={`l₂=${f2(dir.l2)} m`} />
@@ -64,13 +79,13 @@ function DirCard({ title, dir, barDia }: { title: string; dir: SlabDirResult; ba
                 <td className="py-1 pr-2 font-medium text-slate-700">{loc.name}</td>
                 <td className="py-1 pr-2 text-slate-600">{f1(loc.M)}</td>
                 <td className="py-1 pr-2">
-                  <div className="font-semibold text-slate-800">{steelText(loc.column, barDia)}</div>
+                  <div className="font-semibold text-slate-800">{steelText(loc.column, barDia, mat(loc.name, 'column'))}</div>
                   <div className="text-slate-500">{steelSub(loc.column)}</div>
                 </td>
                 <td className="py-1">
                   {loc.middle.b > 0 ? (
                     <>
-                      <div className="font-semibold text-slate-800">{steelText(loc.middle, barDia)}</div>
+                      <div className="font-semibold text-slate-800">{steelText(loc.middle, barDia, mat(loc.name, 'middle'))}</div>
                       <div className="text-slate-500">{steelSub(loc.middle)}</div>
                     </>
                   ) : <span className="text-slate-500">—</span>}
@@ -86,6 +101,7 @@ function DirCard({ title, dir, barDia }: { title: string; dir: SlabDirResult; ba
 
 export default function SlabDesign() {
   const [f, setF] = useState<FormState>(DEFAULTS)
+  const [autoBar, setAutoBar] = useState(true)
   const set = <K extends keyof FormState>(k: K) => (v: FormState[K]) => setF((s) => ({ ...s, [k]: v }))
 
   const input = useMemo((): SlabInput => ({
@@ -103,14 +119,34 @@ export default function SlabDesign() {
     return nums.every((k) => Number.isFinite(f[k] as number)) && f.lx > 0 && f.ly > 0 && f.fc > 0 && f.fy > 0 && f.D >= 0 && f.L >= 0
   }, [f])
 
-  const r = useMemo(() => (valid ? designSlabDDM(input) : null), [valid, input])
+  // ── Mat selection ────────────────────────────────────────────────────
+  // ONE diameter for the panel, spacing chosen per strip — which is how a
+  // slab is drawn, and why the strips carry their own spacing below.
+  const slabChoice = useMemo(
+    () => (autoBar && valid ? optimizeSlabRebar(input) : null),
+    [autoBar, valid, input],
+  )
+  const dbEff = slabChoice?.db ?? f.barDia
+  const inputEff = useMemo(() => ({ ...input, barDia: dbEff }), [input, dbEff])
+  const mats = useMemo(() => {
+    const m = new Map<string, StripMat>()
+    for (const st of slabChoice?.strips ?? []) m.set(st.label, { bars: st.bars, spacing: st.spacing })
+    return m
+  }, [slabChoice])
+
+  const r = useMemo(() => (valid ? designSlabDDM(inputEff) : null), [valid, inputEff])
   // §424.4.3 shrinkage and temperature steel — a slab detail the DDM result
   // does not carry, because it is not a flexural demand.
   const temp = useMemo(() => tempSteelArea(r?.h ?? 0, f.fy), [r, f.fy])
 
   const defl = r?.deflection
 
-  const solution = r ? buildSlabSolution(input, r) : null
+  const solution = r
+    ? [
+        ...buildSlabSolution(inputEff, r),
+        ...(slabChoice ? buildRebarSelectionSolution(slabChoice.selection, 'mat') : []),
+      ]
+    : null
 
   const report = r ? {
     docCode: 'S-SL',
@@ -139,7 +175,7 @@ export default function SlabDesign() {
       ['Live load L', `${f1(f.L)} kPa`],
       ["Concrete f'c", `${f.fc} MPa`],
       ['Steel fy', `${f.fy} MPa`],
-      ['Cover / bar ⌀', `${f.cover} / ${f.barDia} mm`],
+      ['Cover / bar ⌀', `${f.cover} / ${dbEff} mm`],
       ['Minimum thickness', `${Math.round(r.hmin)} mm`],
       ['Panel action', r.twoWay ? 'two-way' : 'one-way'],
       ['Exterior x / y', `${f.extX} / ${f.extY}`],
@@ -180,10 +216,19 @@ export default function SlabDesign() {
             <Num label={<KTex tex="f_y" />} unit="MPa" value={f.fy} onChange={set('fy')} />
           </Card>
 
-          <Card title="Detailing">
+          <Card title="Detailing"
+            hint={
+              <label className="no-print flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-[#5c6675]">
+                <input type="checkbox" checked={autoBar} onChange={(e) => setAutoBar(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-[#0f4c92]" />
+                Auto-select bar ⌀ and spacing
+              </label>
+            }>
             <Num label="Thickness h (blank = auto)" unit="mm" value={f.h} onChange={set('h')} />
             <Num label="Clear cover" unit="mm" value={f.cover} onChange={set('cover')} />
-            <Num label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={f.barDia} onChange={set('barDia')} />
+            <Num label={<>Bar <KTex tex="d_b" /></>} unit="mm" value={dbEff} onChange={set('barDia')}
+              disabled={autoBar}
+              hint={autoBar ? (slabChoice?.db ? 'chosen by the optimiser' : 'no compliant mat — see the ranking') : undefined} />
           </Card>
 
           <Card title="Span type">
@@ -198,6 +243,9 @@ export default function SlabDesign() {
 
         {/* ── RESULTS ── */}
         <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
+          {slabChoice && (
+            <RebarRanking selection={slabChoice.selection} title="Mat selection — whole panel" name={nameMat} />
+          )}
           {r ? (
             <>
               {/* Summary */}
@@ -227,10 +275,10 @@ export default function SlabDesign() {
               )}
 
               {/* X direction */}
-              <DirCard title={`Direction x (l₁ = ${f2(r.x.l1)} m)`} dir={r.x} barDia={f.barDia} />
+              <DirCard title={`Direction x (l₁ = ${f2(r.x.l1)} m)`} dir={r.x} barDia={dbEff} mats={mats} />
 
               {/* Y direction */}
-              <DirCard title={`Direction y (l₁ = ${f2(r.y.l1)} m)`} dir={r.y} barDia={f.barDia} />
+              <DirCard title={`Direction y (l₁ = ${f2(r.y.l1)} m)`} dir={r.y} barDia={dbEff} mats={mats} />
 
               {/* ── Bar arrangement ─────────────────────────────────── */}
               <ResultCard title="Bar arrangement — section through the span">
@@ -243,8 +291,8 @@ export default function SlabDesign() {
                     return (
                       <SlabBarSection key={strip} strip={strip}
                         l1={r.x.l1} support={f.colWidth / 1000} h={r.h} cover={f.cover}
-                        topBars={`⌀${f.barDia} @ ${f0(negSec.spacing)} mm`}
-                        bottomBars={`⌀${f.barDia} @ ${f0(sec.spacing)} mm`}
+                        topBars={`⌀${dbEff} @ ${f0(negSec.spacing)} mm`}
+                        bottomBars={`⌀${dbEff} @ ${f0(sec.spacing)} mm`}
                         tempBars={`As ${f0(temp.As)} mm²/m · max s ${f0(tempSpacingMax(r.h))} mm`} />
                     )
                   })}
