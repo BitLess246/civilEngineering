@@ -24,6 +24,16 @@ export interface BeamDesignInput {
   barDia: number       // main tension bar Ø, mm
   comprBarDia?: number // compression bar Ø, mm (default barDia)
   stirrupDia: number   // stirrup Ø, mm
+  /**
+   * Nominal maximum aggregate size, mm — §25.2.1's third term.
+   *
+   * Defaults to the usual local 20 mm mix. It was missing entirely, so a
+   * layer was packed on max(db, 25) alone; on 20 mm aggregate the real
+   * minimum is 4/3 · 20 = 26.7 mm, and the engine could lay out a layer that
+   * did not comply. The optimiser re-checked and rejected those with the
+   * clause, which is the safe direction, but the number belongs here.
+   */
+  aggregate?: number
   fc: number; fy: number
   fyt?: number         // stirrup yield (default fy)
   Mu: number           // factored moment, kN·m
@@ -53,7 +63,7 @@ export interface BeamDesignResult {
   As: number; rho: number; usedMin: boolean
   bars: number
   // Bar layout (§407.7)
-  sMinClear: number    // required clear spacing = max(db, 25), mm
+  sMinClear: number    // required clear spacing = max(db, 25, 4/3·d_agg), mm
   maxPerLayer: number  // bars that fit one layer at s_min
   layers: number[]     // bars per layer, bottom (extreme) first
   sClear: number       // actual clear spacing in the fullest layer, mm
@@ -119,13 +129,16 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
   const dt = i.h - i.cover - i.stirrupDia - i.barDia / 2
   const dPrimeBase = i.cover + i.stirrupDia + dbC / 2
 
-  // §407.7.1 — clear spacing ≥ max(db, 25 mm); bars per layer that fit:
-  // n·db + (n−1)·s_min ≤ b − 2(cover + ds). Same rule on both faces.
+  // §407.7.1 / ACI 318-14 §25.2.1 — clear spacing ≥ max(db, 25 mm, 4/3·d_agg);
+  // bars per layer that fit: n·db + (n−1)·s_min ≤ b − 2(cover + ds). Same rule
+  // on both faces. The aggregate term is what keeps a poker-vibrated mix able
+  // to pass between the bars, and it governs whenever db < 4/3·d_agg.
+  const dAgg = i.aggregate ?? 20
   const bw = i.b - 2 * (i.cover + i.stirrupDia)
-  const sMinClear = Math.max(i.barDia, 25)
+  const sMinClear = Math.max(i.barDia, 25, (4 / 3) * dAgg)
   const maxPerLayer = Math.max(1, Math.floor((bw + sMinClear) / (i.barDia + sMinClear)))
   const pitch = i.barDia + LAYER_CLEAR     // layer-to-layer centroid distance
-  const comprSMinClear = Math.max(dbC, 25)
+  const comprSMinClear = Math.max(dbC, 25, (4 / 3) * dAgg)
   const comprMaxPerLayer = Math.max(1, Math.floor((bw + comprSMinClear) / (dbC + comprSMinClear)))
   const pitchC = dbC + LAYER_CLEAR
 

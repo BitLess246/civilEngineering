@@ -1,3 +1,4 @@
+import type { Key } from 'react'
 import type { JSX } from 'react'
 import { udlStations } from './udl'
 import type { Support, BeamLoad } from '../engine/beamAnalysis'
@@ -52,8 +53,11 @@ export function BeamElevation({ L, supports, loads }: {
     )
   }
 
-  const arrow = (x: number, y0: number, y1: number, color: string) => (
-    <g stroke={color} strokeWidth={1.4}>
+  // `key` is threaded in because this helper is called inside a .map for the
+  // UDL/VDL station arrows — React cannot key an element the caller did not
+  // create, and without it every distributed load logged a key warning.
+  const arrow = (x: number, y0: number, y1: number, color: string, key?: Key) => (
+    <g key={key} stroke={color} strokeWidth={1.4}>
       <line x1={x} y1={y0} x2={x} y2={y1} />
       <path d={`M ${x - 3.5} ${y1 - 6} L ${x} ${y1} L ${x + 3.5} ${y1 - 6}`} fill="none" />
     </g>
@@ -88,10 +92,10 @@ export function BeamElevation({ L, supports, loads }: {
     return (
       <g key={`l${i}`}>
         <line x1={xa} y1={by - 4 - h1} x2={xb} y2={by - 4 - h2} stroke={LOAD} strokeWidth={1.2} />
-        {stations.map((t) => {
+        {stations.map((t, k) => {
           const x = xa + (xb - xa) * t
           const hh = h1 + (h2 - h1) * t
-          return arrow(x, by - 4 - hh, by - 3, LOAD)
+          return arrow(x, by - 4 - hh, by - 3, LOAD, k)
         })}
         <text x={(xa + xb) / 2} y={by - 10 - Math.max(h1, h2)} fontSize={8.5} fill={LOAD} textAnchor="middle">{label}</text>
       </g>
