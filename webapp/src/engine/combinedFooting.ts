@@ -7,7 +7,7 @@
 // The Winkler "flexible" method is a separate follow-up.
 // ─────────────────────────────────────────────────────────────────────────
 import { punchingDepth } from './shear';
-import { flexuralSteel, barLayout } from './flexure';
+import { flexuralSteel, matLayout } from './flexure';
 
 export interface CombinedFootingInput {
   col1Width: number;     // mm (square)
@@ -176,7 +176,11 @@ export function designCombinedFooting(i: CombinedFootingInput): CombinedFootingR
   const mkSection = (label: string, x: number): FlexSection => {
     const Mu = Math.abs(Mat(x)), b = ByAt(x) * 1000;
     const flex = flexuralSteel({ Mu, b, d: dFlex, fc: i.fc, fy: i.fy });
-    const layout = barLayout({ As: flex.As, db: i.barDia, b, cover: i.cover });
+    // One-way slab detailing (ACI 318-14 §13.3.2.1) — §7.7.2.3's maximum
+    // spacing sets the count whenever the required area does not.
+    const layout = matLayout({
+      As: flex.As, db: i.barDia, b, cover: i.cover, h: Dc, kind: 'one-way',
+    });
     return { label, x, Mu, b, As: flex.As, bars: layout.n, spacing: layout.spacing, top: Mat(x) < 0 };
   };
   const longSections = [

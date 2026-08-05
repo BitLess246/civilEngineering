@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import { twoWayVc, oneWayVc } from './shear';
-import { flexuralSteel, barLayout } from './flexure';
+import { flexuralSteel, matLayout } from './flexure';
 
 const PHI_V = 0.75;
 
@@ -243,11 +243,15 @@ export function designPileCap(inp: PileCapInput): PileCapResult {
 
   // x-direction bars (running in x, moment about y, width = capBy)
   const flexX   = flexuralSteel({ Mu: MuX, b: capBy, d, fc: inp.fc, fy: inp.fy });
-  const layoutX = barLayout({ As: flexX.As, db: inp.barDia, b: capBy, cover: inp.cover });
+  const layoutX = matLayout({
+    As: flexX.As, db: inp.barDia, b: capBy, cover: inp.cover, h: Dc, kind: 'one-way',
+  });
 
   // y-direction bars (running in y, moment about x, width = capBx)
   const flexY   = flexuralSteel({ Mu: MuY, b: capBx, d, fc: inp.fc, fy: inp.fy });
-  const layoutY = barLayout({ As: flexY.As, db: inp.barDia, b: capBx, cover: inp.cover });
+  const layoutY = matLayout({
+    As: flexY.As, db: inp.barDia, b: capBx, cover: inp.cover, h: Dc, kind: 'one-way',
+  });
 
   // ── Development length ───────────────────────────────────────────────────
   const ldReq    = devLength(inp.barDia, inp.fc, inp.fy, inp.cover, lambda);

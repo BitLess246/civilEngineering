@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { netBearing, squareSize } from './bearing';
 import { punchingDepth, oneWayShearDepth, type ColumnPosition } from './shear';
-import { flexuralSteel, barLayout } from './flexure';
+import { flexuralSteel, matLayout } from './flexure';
 
 export interface SquareFootingInput {
   /** Service (unfactored) axial load P, kN. */
@@ -68,7 +68,14 @@ export interface SquareFootingResult {
   rho: number;
   usedMinSteel: boolean;
   bars: number;
+  /** Centre-to-centre spacing, mm. */
   barSpacing: number;
+  /** §7.7.2.3 limit the mat was laid out against, mm. */
+  barSpacingMax: number;
+  /** True when §7.7.2.3 — not the area — decided the bar count. */
+  spacingGoverned: boolean;
+  /** §25.2.1 clear spacing satisfied. False = the bars do not fit. */
+  barsFit: boolean;
   /** Which paths produced this result. */
   analysis: 'design' | 'analyze';
   method: 'iteration' | 'approximate';
@@ -141,12 +148,18 @@ export function designSquareFooting(i: SquareFootingInput): SquareFootingResult 
   const Mu = qu * B * (arm * arm) / 2;              // kN·m over the full width B
   const b = B * 1000;                               // design width, mm
   const flex = flexuralSteel({ Mu, b, d: dFlex, fc: i.fc, fy: i.fy });
-  const layout = barLayout({ As: flex.As, db: i.barDia, b, cover: i.cover });
+  // A footing is detailed as a one-way slab (ACI 318-14 §13.3.2.1), so the
+  // §7.7.2.3 maximum spacing sets the bar count whenever the area does not.
+  const layout = matLayout({
+    As: flex.As, db: i.barDia, b, cover: i.cover, h: DcMm, kind: 'one-way',
+  });
 
   return {
     B, Dc: DcMm, qNet, qu, dPunch, dBeam, dFlex,
     steelArea: flex.As, rho: flex.rho, usedMinSteel: flex.usedMin,
     bars: layout.n, barSpacing: layout.spacing,
+    barSpacingMax: layout.sMax, spacingGoverned: layout.spacingGoverned,
+    barsFit: layout.clearOK,
     analysis, method, dProvided: DcMm - i.cover - i.barDia, punchOK, beamOK,
   };
 }

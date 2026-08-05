@@ -40,10 +40,88 @@ export interface BarLayout {
   spacing: number;
 }
 
-/** Bar count + spacing for a required As across width b, using ⌀db bars and clear cover. */
+/**
+ * Bar count + spacing for a required As across width b, using ⌀db bars and
+ * clear cover.
+ *
+ * Bars sit a cover in from each edge, so the outermost bar CENTRES are
+ * (b − 2·cover − db) apart and there are (n − 1) gaps between them. The
+ * earlier form subtracted n·db, which is the CLEAR gap between bar faces —
+ * one diameter narrower than the centre-to-centre figure this returns and
+ * every drawing prints.
+ *
+ * For a slab or footing mat use `matLayout` instead: it applies the maximum
+ * spacing clause, which this does not.
+ */
 export function barLayout(params: { As: number; db: number; b: number; cover: number }): BarLayout {
   const Ab = (Math.PI / 4) * params.db * params.db;
   const n = Math.max(2, Math.ceil(params.As / Ab));
-  const spacing = n > 1 ? (params.b - 2 * params.cover - n * params.db) / (n - 1) : params.b;
+  const spacing = n > 1 ? (params.b - 2 * params.cover - params.db) / (n - 1) : params.b;
   return { n, spacing };
+}
+
+// ── Mat rules ─────────────────────────────────────────────────────────────
+//
+// A slab or footing mat is not a beam cage, and the two differ in the rule
+// that sets the MINIMUM number of bars.
+//
+// In a beam the floor is a count: §9.7.2.1, never fewer than two. In a mat it
+// is a spacing — §7.7.2.3 for one-way slabs and footings, §8.7.2.2 for
+// two-way slabs — and a count floor of two says nothing at all. Applying the
+// beam rule to a mat is how a 0.95 m footing came to be detailed 2⌀32 at
+// 736 mm centres and reported as adequate: the area was satisfied, and
+// nothing else was being asked.
+//
+// These live here, next to `barLayout`, so there is one home for the rule.
+
+/** Which maximum-spacing clause governs a mat. */
+export type MatKind = 'one-way' | 'two-way';
+
+/** §7.7.2.3 (one-way slabs, footings) or §8.7.2.2 (two-way slabs), mm. */
+export function maxBarSpacing(kind: MatKind, h: number): number {
+  return Math.min(kind === 'one-way' ? 3 * h : 2 * h, 450);
+}
+
+/** §25.2.1 minimum clear spacing — max(db, 25 mm, 4/3·d_agg), mm. */
+export function minClearSpacing(db: number, aggregate = 20): number {
+  return Math.max(db, 25, (4 / 3) * aggregate);
+}
+
+export interface MatBarLayout extends BarLayout {
+  /** Clear gap between bar faces, mm — what §25.2.1 limits. */
+  clear: number;
+  /** The maximum-spacing limit applied, mm. */
+  sMax: number;
+  /** True when §7.7.2.3/§8.7.2.2 added bars beyond the area requirement. */
+  spacingGoverned: boolean;
+  /** §25.2.1 satisfied. False means the bars do not fit across this width. */
+  clearOK: boolean;
+}
+
+/**
+ * Bar count + centre-to-centre spacing for a MAT, with the maximum-spacing
+ * clause folded into the count.
+ *
+ * `h` is the total thickness, which is what the clause is written against.
+ */
+export function matLayout(params: {
+  As: number; db: number; b: number; cover: number; h: number;
+  kind?: MatKind; aggregate?: number;
+}): MatBarLayout {
+  const { As, db, b, cover, h } = params;
+  const kind = params.kind ?? 'one-way';
+  const Ab = (Math.PI / 4) * db * db;
+  const sMax = maxBarSpacing(kind, h);
+  // Span between the outermost bar centres — the length the spacing divides.
+  const run = Math.max(0, b - 2 * cover - db);
+  const nArea = Math.ceil(As / Ab);
+  const nSpacing = Math.ceil(run / sMax) + 1;
+  const n = Math.max(2, nArea, nSpacing);
+  const spacing = n > 1 ? run / (n - 1) : b;
+  const clear = spacing - db;
+  return {
+    n, spacing, clear, sMax,
+    spacingGoverned: nSpacing > nArea,
+    clearOK: clear >= minClearSpacing(db, params.aggregate) - 1e-9,
+  };
 }
