@@ -14,12 +14,12 @@ import {
   type LayerParameters, type CptReading,
 } from '../engine/soils/model'
 import {
-  LAB_TESTS, labSpec, isImplemented, evaluateTest, summarise, readDirectShear,
+  LAB_TESTS, labSpec, isImplemented, evaluateTest, summarise, readDirectShear, readCompaction,
   type LabOutcome,
 } from '../engine/soils/lab'
 import { classifySample } from '../engine/soils/classifySample'
 import {
-  shearEnvelopeChart, consolidationChart, gradingChart,
+  shearEnvelopeChart, consolidationChart, gradingChart, compactionChart,
 } from '../engine/soils/lab/plots'
 import { buildSection, sectionDrawing } from '../engine/soils/section'
 import {
@@ -1378,6 +1378,27 @@ function TestCard({
               onChange={(rows) => onPoints(rows as unknown as ShearRow[])} />
           )}
 
+          {spec!.formKind === 'compaction-points' && (
+            <>
+              <label className="mt-2 flex flex-col text-[11px]">
+                <span className="mb-0.5 text-slate-600">Compaction effort</span>
+                <select
+                  value={(test.data?.effort as string | undefined) ?? 'standard'}
+                  onChange={(e) => onChoice('effort', e.target.value)}
+                  className="rounded border border-slate-300 px-1.5 py-1">
+                  <option value="standard">Standard — D698 (600 kN·m/m³)</option>
+                  <option value="modified">Modified — D1557 (2 700 kN·m/m³)</option>
+                </select>
+                <span className="mt-0.5 text-[10px] text-slate-500">
+                  The modified curve sits higher and drier. &ldquo;95% of MDD&rdquo; means nothing until it says which.
+                </span>
+              </label>
+              <CompactionPoints
+                rows={(test.data?.points as ProctorRow[] | undefined) ?? []}
+                onChange={(rows) => onPoints(rows as unknown as ShearRow[])} />
+            </>
+          )}
+
           {test.type === 'ucs' && (
             <label className="mt-2 flex flex-col text-[11px]">
               <span className="mb-0.5 text-slate-600">Soil condition</span>
@@ -1914,6 +1935,68 @@ function LoadIncrements({
   )
 }
 
+interface ProctorRow { moisture: number; mouldSoilMass: number }
+
+/** Five points is the usual practice; D698 asks for at least four. */
+const DEFAULT_PROCTOR = [10, 12, 14, 16, 18]
+
+/**
+ * One compacted mould per row. The water content is the companion D2216
+ * determination on THAT specimen — the form says so, because a curve built from
+ * one water content applied to every point is a straight line through nothing.
+ */
+function CompactionPoints({
+  rows, onChange,
+}: { rows: ProctorRow[]; onChange: (rows: ProctorRow[]) => void }) {
+  const pts: ProctorRow[] = rows.length
+    ? rows
+    : DEFAULT_PROCTOR.map((moisture) => ({ moisture, mouldSoilMass: 0 }))
+  const set = (i: number, patch: Partial<ProctorRow>) =>
+    onChange(pts.map((r, k) => (k === i ? { ...r, ...patch } : r)))
+
+  return (
+    <div className="mt-2">
+      <table className="w-full text-left text-[11px]">
+        <thead className="text-slate-500">
+          <tr className="border-b border-slate-200">
+            <th className="py-1 pr-2 text-right">w (%)</th>
+            <th className="py-1 pr-2 text-right">Mould + wet soil (g)</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {pts.map((r, i) => (
+            <tr key={i} className="border-b border-slate-100">
+              {([['moisture', r.moisture] as const, ['mouldSoilMass', r.mouldSoilMass] as const])
+                .map(([key, v]) => (
+                  <td key={key} className="py-0.5 pr-2 text-right">
+                    <input type="number" step="any" value={v ?? ''}
+                      onChange={(e) => set(i, {
+                        [key]: e.target.value === '' ? undefined : num(e.target.value),
+                      } as Partial<ProctorRow>)}
+                      className="w-28 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                  </td>
+                ))}
+              <td className="py-0.5 text-right">
+                <button onClick={() => onChange(pts.filter((_, k) => k !== i))}
+                  className="rounded px-1 text-[10px] text-red-600 hover:bg-red-50">×</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-1 text-[10px] text-slate-500">
+        Each row is one compacted mould: its own water content from its own oven-dry specimen.
+        Two points either side of the peak, or the optimum rests on a single measurement.
+      </p>
+      <button onClick={() => onChange([...pts, { moisture: 0, mouldSoilMass: 0 }])}
+        className="mt-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50">
+        + point
+      </button>
+    </div>
+  )
+}
+
 // ── Test charts ───────────────────────────────────────────────────────────
 
 /**
@@ -1936,6 +2019,11 @@ function TestChart({ test, outcome }: { test: LabTest; outcome: LabOutcome }) {
         return planToSvg(consolidationChart(outcome.result), 460)
       case 'sieve':
         return planToSvg(gradingChart(outcome.result), 460)
+      // Gs lives on the test data, not the result: without it there is no
+      // zero-air-voids bound, and the chart draws the curve without one rather
+      // than inventing a specific gravity to bound it with.
+      case 'compaction':
+        return planToSvg(compactionChart(outcome.result, readCompaction(test)?.specificGravity), 460)
       default:
         return null
     }
