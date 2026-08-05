@@ -43,7 +43,9 @@ describe('every registry entry is fully described', () => {
     // dimensionless quantity says so by being a coefficient/index/ratio.
     // The unit follows the last comma but need not END the string: compound
     // units like "% per log cycle" and "blows/300 mm" are legitimate.
-    const HAS_UNIT = /,\s*[^,]*(%|\bg\b|\bmm\b|\bm\b|mm²|m²|m³|m\/s|kPa|MPa|kN\/m³|\bN\b|degrees|blows|°C)/i
+    // `s` and `seconds` joined the vocabulary with the permeability engine —
+    // the first entries in the registry whose symbols include a time.
+    const HAS_UNIT = /,\s*[^,]*(%|\bg\b|\bmm\b|\bm\b|mm²|m²|m³|m\/s|kPa|MPa|kN\/m³|\bN\b|\bs\b|seconds|degrees|blows|°C)/i
     const DIMENSIONLESS = /\b(coefficient|index|ratio|factor|correction|specific gravity|group symbol|strain)\b/i
     for (const [sym, desc] of Object.entries(calc(id).symbols)) {
       expect(desc.length, `${id}/${sym}`).toBeGreaterThan(5)

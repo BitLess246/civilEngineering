@@ -607,6 +607,99 @@ export const CALCULATIONS = {
     ],
   },
 
+  'permeability.constant-head': {
+    title: 'Hydraulic conductivity, constant head',
+    category: 'index',
+    equation: String.raw`k = \frac{Q L}{A h t}`,
+    unit: 'm/s',
+    symbols: {
+      k: 'hydraulic conductivity, m/s',
+      Q: 'volume of water collected, cm³ (0.000001 m³ each)',
+      L: 'length of the specimen along the flow path, mm',
+      A: 'cross-sectional area of the specimen, mm²',
+      h: 'constant head difference across the specimen, mm',
+      t: 'collection time, s',
+    },
+    standard: 'd2434',
+    assumptions: ['Darcy flow: laminar, steady, and fully saturated.'],
+    limitations: [
+      'D2434 is for clean sands and gravels, k > 1e-5 m/s. On a finer soil the volume collected is comparable with evaporation in the burette, and the result measures the apparatus.',
+      'A steep hydraulic gradient turns the flow turbulent and reads LOW; keep it near 5 for coarse soils.',
+    ],
+  },
+
+  'permeability.falling-head': {
+    title: 'Hydraulic conductivity, falling head',
+    category: 'index',
+    equation: String.raw`k = \frac{a L}{A t} \ln\frac{h_1}{h_2}`,
+    unit: 'm/s',
+    symbols: {
+      k: 'hydraulic conductivity, m/s',
+      a: 'internal area of the standpipe, mm²',
+      L: 'length of the specimen along the flow path, mm',
+      A: 'cross-sectional area of the specimen, mm²',
+      t: 'elapsed time of the interval, s',
+      h_1: 'head at the start of the interval, mm',
+      h_2: 'head at the end of the interval, mm',
+    },
+    standard: 'd5084',
+    assumptions: ['Darcy flow, and a specimen saturated under back pressure before the interval is timed.'],
+    limitations: [
+      'Above about 1e-4 m/s the head falls faster than it can be read and the interval is dominated by reading error — that is a constant-head test.',
+      'A laboratory k measures the specimen, not the deposit: fabric, layering and fissures make the field value larger, often by an order of magnitude.',
+    ],
+  },
+
+  'permeability.temperature': {
+    title: 'Temperature correction of k to 20 °C',
+    category: 'index',
+    equation: String.raw`k_{20} = k_T R_T, \qquad R_T = \frac{2.2902 \cdot 0.9842^{T}}{T^{0.1702}}`,
+    unit: 'm/s',
+    symbols: {
+      'k_{20}': 'hydraulic conductivity at 20 °C, m/s',
+      k_T: 'hydraulic conductivity measured at the test temperature, m/s',
+      R_T: 'viscosity ratio η_T/η_20, dimensionless factor',
+      T: 'water temperature during the test, °C',
+    },
+    standard: 'd5084',
+    limitations: ['k scales with 1/η, so an uncorrected value carries the laboratory room temperature in it — about 30% between 10 and 30 °C.'],
+  },
+
+  'cbr.ratio': {
+    title: 'California Bearing Ratio',
+    category: 'strength',
+    equation: String.raw`CBR = \frac{\sigma_{test}}{\sigma_{std}} \times 100, \qquad \sigma_{std} = 6.9\;\text{MPa at 2.54 mm},\; 10.3\;\text{MPa at 5.08 mm}`,
+    unit: '%',
+    symbols: {
+      CBR: 'California bearing ratio, %',
+      '\\sigma_{test}': 'corrected plunger stress at the reference penetration, MPa',
+      '\\sigma_{std}': 'stress the standard crushed stone takes at that penetration, MPa',
+    },
+    standard: 'd1883',
+    assumptions: ['The plunger stress is read off the curve AFTER the origin correction.'],
+    limitations: [
+      'CBR belongs to a compaction state and a moisture condition: the same soil unsoaked and at 90% of maximum dry density is a different number from soaked at 95%.',
+      'When the 5.08 mm value exceeds the 2.54 mm value, D1883 §11.3 requires the test to be re-run before the higher value is reported.',
+    ],
+  },
+
+  'cbr.origin-correction': {
+    title: 'Origin correction of a load–penetration curve',
+    category: 'strength',
+    equation: String.raw`\delta_0 = \delta_a - \frac{\sigma_a}{m}, \qquad m = \max \frac{\Delta\sigma}{\Delta\delta}`,
+    unit: 'mm',
+    symbols: {
+      '\\delta_0': 'corrected origin — where the straight portion meets zero stress, mm',
+      '\\delta_a': 'penetration at the start of the steepest segment, mm',
+      '\\sigma_a': 'stress at the start of that segment, MPa',
+      m: 'steepest slope of the early curve, MPa per mm',
+    },
+    standard: 'd1883',
+    limitations: [
+      'A curve concave upward at the start has spent load bedding the plunger into a surface that is not plane; reading CBR without the correction understates it, sometimes by a third.',
+    ],
+  },
+
   // ── Compaction ──
   'compaction.dry-density': {
     title: 'Dry density of a compacted specimen',

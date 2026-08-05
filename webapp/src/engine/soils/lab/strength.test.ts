@@ -280,6 +280,6 @@ describe('evaluateTest covers the new tests', () => {
     expect(isImplemented('ucs')).toBe(true)
     // triaxial joined them in Phase 4g; permeability has no engine yet
     expect(isImplemented('triaxial')).toBe(true)
-    expect(isImplemented('permeability')).toBe(false)
+    expect(isImplemented('permeability')).toBe(true)   // Phase 4h
   })
 })

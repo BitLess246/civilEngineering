@@ -1335,8 +1335,9 @@ because flagging the unusual as an error trains people to ignore errors.
 | 4d — consolidation (Cc, Cr, σ′p, cv) | #486 | merged |
 | 4e — lab charts (envelope, e–log σ′, grading) | #487 | open |
 | 4f — compaction (Proctor, ZAV bound, curve) | #543 | merged |
-| 4g — triaxial UU/CU/CD + Mohr circle diagram | — | open |
-| 4h… — permeability, CBR, hydrometer | — | |
+| 4g — triaxial UU/CU/CD + Mohr circle diagram | #544 | merged |
+| 4h — permeability (constant/falling head) + CBR | — | open |
+| 4i — hydrometer (the last of the 4x series) | — | |
 | 6a — liquefaction triggering engine (NCEER) | #488 | merged |
 | 6b — liquefaction tab, FS profile, fines from sieve | #489 | merged |
 | 6c — bearing general equation + method selection | #490 | merged |

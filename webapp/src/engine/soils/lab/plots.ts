@@ -27,6 +27,7 @@ import type { DirectShearResult } from './directShear'
 import type { ConsolidationResult } from './consolidation'
 import { type CompactionResult, zeroAirVoids } from './compaction'
 import type { TriaxialResult, MohrCircle, TriaxialEnvelope } from './triaxial'
+import { type CbrResult, type CbrPoint, STANDARD_STRESS } from './cbr'
 import type { GradationResult } from '../sieve'
 
 import {
@@ -176,6 +177,102 @@ export function consolidationChart(r: ConsolidationResult): Drawing {
   p.push(...plate(box.left + 2, box.top + box.h - 3.2, 2.4, [{
     text: `Cc = ${r.cc.toFixed(3)}${r.cr != null ? `   Cr = ${r.cr.toFixed(3)}` : ''}`,
   }]))
+
+  return {
+    primitives: p,
+    bounds: { minX: 0, minY: 0, maxX: box.left + box.w + 4, maxY: box.top + box.h + 13 },
+  }
+}
+
+// ── CBR: load–penetration ─────────────────────────────────────────────────
+
+/**
+ * The load–penetration curve with the D1883 origin correction drawn.
+ *
+ * The correction is the whole reason this chart exists. A number that says
+ * "the origin moved 0.38 mm" is unactionable; the extended straight portion,
+ * drawn back to where it meets zero load, is the construction an engineer can
+ * agree or disagree with — and disagreeing with it is the point, because the
+ * choice of the straight segment is a judgement.
+ *
+ * Penetration is plotted RAW, with the corrected origin marked on the axis, so
+ * the reader sees the shift rather than a curve silently slid to the left.
+ */
+export function cbrChart(r: CbrResult, points: CbrPoint[]): Drawing {
+  const box = BOX
+  const p: PlanPrimitive[] = frame(box, 'penetration  (mm)', 'plunger stress  (MPa)', 'CBR — load / penetration')
+
+  const pts = [...points].filter((q) => Number.isFinite(q.penetration)).sort((a, b) => a.penetration - b.penetration)
+  if (pts.length < 2) return { primitives: p, bounds: { minX: 0, minY: 0, maxX: box.left + box.w + 4, maxY: box.top + box.h + 13 } }
+
+  const xa = linearTicks(0, Math.max(...pts.map((q) => q.penetration), 5.08 + r.originShift))
+  const ya = linearTicks(0, Math.max(...pts.map((q) => q.stress), r.stress5_08))
+  const X = (v: number) => box.left + ((v - xa.lo) / (xa.hi - xa.lo)) * box.w
+  const Y = (v: number) => box.top + box.h - ((v - ya.lo) / (ya.hi - ya.lo)) * box.h
+  const xDp = tickDp(xa.ticks[1] - xa.ticks[0])
+  const yDp = tickDp(ya.ticks[1] - ya.ticks[0])
+
+  for (const t of xa.ticks) {
+    p.push({ kind: 'line', x1: X(t), y1: box.top, x2: X(t), y2: box.top + box.h, stroke: GRID, width: 0.2 })
+    p.push({ kind: 'text', x: X(t), y: box.top + box.h + 4, text: t.toFixed(xDp), size: 2.2, anchor: 'middle', color: AXIS })
+  }
+  for (const t of ya.ticks) {
+    p.push({ kind: 'line', x1: box.left, y1: Y(t), x2: box.left + box.w, y2: Y(t), stroke: GRID, width: 0.2 })
+    p.push({ kind: 'text', x: box.left - 1.5, y: Y(t) + 0.8, text: t.toFixed(Math.max(yDp, 1)), size: 2.2, anchor: 'end', color: AXIS })
+  }
+
+  for (let i = 1; i < pts.length; i++) {
+    p.push({
+      kind: 'line',
+      x1: X(pts[i - 1].penetration), y1: Y(pts[i - 1].stress),
+      x2: X(pts[i].penetration), y2: Y(pts[i].stress),
+      stroke: ACCENT, width: 0.6,
+    })
+  }
+  for (const q of pts) p.push({ kind: 'circle', cx: X(q.penetration), cy: Y(q.stress), r: 0.9, fill: INK })
+
+  // The construction: corrected origin, and the straight portion extended to it.
+  if (r.originShift > 0) {
+    const anchor = pts.find((q) => q.penetration > r.originShift)
+    if (anchor) {
+      p.push({
+        kind: 'line',
+        x1: X(r.originShift), y1: Y(0), x2: X(anchor.penetration), y2: Y(anchor.stress),
+        stroke: WARN, width: 0.4, dash: [2, 1.5],
+      })
+    }
+    p.push({ kind: 'line', x1: X(r.originShift), y1: Y(0) - 2.5, x2: X(r.originShift), y2: Y(0) + 1, stroke: WARN, width: 0.6 })
+    // ABOVE the axis, not below it: below is where the tick labels live, and
+    // the caption ran straight through the "0" it was explaining.
+    p.push(...plate(X(r.originShift) + 1.2, Y(0) - 3.4, 1.9, [
+      { text: `corrected 0 (+${r.originShift.toFixed(2)})`, color: WARN },
+    ]))
+  }
+
+  // The two reference penetrations, measured FROM the corrected origin.
+  for (const [pen, stress, std] of [
+    [2.54, r.stress2_54, STANDARD_STRESS.at2_54],
+    [5.08, r.stress5_08, STANDARD_STRESS.at5_08],
+  ] as [number, number, number][]) {
+    const x = X(pen + r.originShift)
+    if (x > box.left + box.w + 1e-9) continue
+    p.push({ kind: 'line', x1: x, y1: Y(stress), x2: x, y2: Y(ya.lo), stroke: OK, width: 0.35, dash: [1.5, 1.5] })
+    p.push({ kind: 'line', x1: X(xa.lo), y1: Y(stress), x2: x, y2: Y(stress), stroke: OK, width: 0.35, dash: [1.5, 1.5] })
+    p.push({ kind: 'circle', cx: x, cy: Y(stress), r: 1.2, stroke: OK, width: 0.5 })
+    // On a plate: the curve passes within a millimetre of this label and was
+    // striking through it.
+    p.push(...plate(x + 1.8, Y(stress) - 1.8, 2.0, [
+      { text: `${((stress / std) * 100).toFixed(1)}% @ ${pen}`, color: OK },
+    ]))
+  }
+
+  // Bottom-right: a load–penetration curve rises to the right, so the free
+  // corner is under it only near the origin — and the plate would sit on the
+  // corrected-origin tick there. Top-left it is.
+  p.push(...plate(box.left + 2, box.top + 4, 2.3, [
+    { text: `CBR = ${r.cbr.toFixed(1)}% at ${r.governing} mm${r.governing === 5.08 ? ' — RE-RUN per §11.3' : ''}`, color: r.governing === 5.08 ? WARN : INK },
+    { text: `${r.soaked ? 'soaked (4 day)' : 'UNSOAKED'}${r.swell != null ? `   swell ${r.swell.toFixed(1)}%` : ''}`, color: r.soaked ? AXIS : WARN },
+  ]))
 
   return {
     primitives: p,
