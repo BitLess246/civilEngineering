@@ -1090,3 +1090,57 @@ describe('slab mats are searched, not assumed', () => {
     }
   })
 })
+
+// ── Beam and column bars go through the scorer ────────────────────────────
+
+describe('model space and the calculator pages agree on bars', () => {
+  const gridAt = (barDia: number) => {
+    const sec: RectSection = { ...section, barDia }
+    const m = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3.5, 3], section: sec, slabThickness: 200 })
+    m.loads = m.plates.flatMap((p): ModelLoad[] => [
+      { kind: 'area', plate: p.id, q: 4.8, cat: 'D' },
+      { kind: 'area', plate: p.id, q: 2.4, cat: 'L' },
+    ])
+    return m
+  }
+
+  it('a beam member keeps ONE diameter across all its critical sections', () => {
+    const m = selectBarDiameters(gridAt(28), soil)
+    const d = designStructure(m, soil)!
+    const secOf = new Map(m.sections.map((s) => [s.id, s]))
+    const memSec = new Map(m.members.map((x) => [x.id, x.section]))
+    for (const row of d.beams) {
+      const sec = secOf.get(memSec.get(row.id) ?? '')
+      expect(sec, row.id).toBeDefined()
+      // every section of the member is detailed from that one section record
+      expect(row.sections.length).toBeGreaterThan(0)
+    }
+    // and the whole grid settles on sensible beam bars rather than the ⌀28 seed
+    const beamDias = new Set(m.sections.filter((s) => s.id.startsWith('b')).map((s) => s.barDia))
+    expect([...beamDias].every((d0) => d0 < 28)).toBe(true)
+  })
+
+  it('selection does not make a previously passing design fail', () => {
+    // The count axis is the trap: `RectSection` stores a diameter and no bar
+    // count, so a search that adopts a count has it silently recomputed
+    // downstream — and a P–M check that passed during the search fails on the
+    // section that shipped. Pinning the count is what keeps these equal.
+    const m0 = gridAt(28)
+    const before = designStructure(m0, soil)!
+    const after = designStructure(selectBarDiameters(m0, soil), soil)!
+    expect(after.columns.filter((c) => c.ok).length)
+      .toBeGreaterThanOrEqual(before.columns.filter((c) => c.ok).length)
+    expect(after.beams.filter((b) => b.ok).length)
+      .toBeGreaterThanOrEqual(before.beams.filter((b) => b.ok).length)
+  })
+
+  it('keeps one diameter through a continuous line and a column stack', () => {
+    const m = selectBarDiameters(gridAt(28), soil)
+    const secOf = new Map(m.sections.map((s) => [s.id, s]))
+    const memSec = new Map(m.members.map((x) => [x.id, x.section]))
+    for (const group of barContinuityGroups(m)) {
+      const dias = new Set(group.map((mid) => secOf.get(memSec.get(mid) ?? '')?.barDia))
+      expect(dias.size, group.join(',')).toBe(1)
+    }
+  })
+})

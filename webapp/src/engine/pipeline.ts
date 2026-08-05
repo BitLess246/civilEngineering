@@ -32,10 +32,9 @@ import { woodRefOf, checkWoodBeam, checkWoodColumn, getWoodRef, woodAdjusted } f
 import { designWoodSlab, type WoodSlabResult } from './woodSlab'
 import { designBasePlate, adoptPlateThickness, type BasePlateResult } from './baseplate'
 import { designSteelJoints, designBeamBeamJoints, type SteelJoint, type BeamBeamJoint } from './steelConnections'
-import {
-  chooseBar, crackControlOK, constructabilityOK, type BarCandidate,
-} from './barSelection'
 import { optimizeFootingRebar, optimizeSlabRebar, applySlabMats } from './matRebarOptimize'
+import { optimizeBeamMember } from './beamRebarOptimize'
+import { optimizeColumnRebar } from './columnRebarOptimize'
 import type { RebarSelection } from './rebarScore'
 
 export interface SoilOptions {
@@ -587,6 +586,35 @@ function designBeamRow(
 
 /** Column capacity for a given section and a known factored P/M demand (no frame
  *  solve — bar diameter does not change demands, so this is reused for bar trials). */
+/**
+ * φPn for a GIVEN cage at the eccentricity Mu/Pu, kN.
+ *
+ * Split out of `designColumnFromPM` so the bar search can gate on the same
+ * P–M capacity the schedule reports instead of carrying a second reading of
+ * the interaction diagram. `designAxialColumn` is pure axial; this is where
+ * the moment enters.
+ */
+function pmCapacity(
+  sec: RectSection, barDia: number, numBars: number, Pu: number, Mu: number,
+  phiPnMax: number, layout: BarLayout = 'two-face',
+): number {
+  const e = Pu > 1e-9 ? Mu / Pu : 0
+  if (e <= 1e-4) return phiPnMax
+  const g = { b: sec.b, h: sec.h, cover: sec.cover, barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, numBars, layout }
+  const cap = capacityAtEccentricity(g, e)
+  const inter = interaction(g)
+  return Math.min(cap.phi * cap.Pn, 0.65 * inter.PnMax)
+}
+
+/** Utilisation Pu/φPn for a given cage under P and M. */
+export function pmUtilisation(
+  sec: RectSection, barDia: number, numBars: number, Pu: number, Mu: number,
+  phiPnMax = Infinity,
+): number {
+  const phiPn = pmCapacity(sec, barDia, numBars, Pu, Mu, phiPnMax)
+  return phiPn > 1e-9 ? Pu / phiPn : Infinity
+}
+
 function designColumnFromPM(
   sec: RectSection, Pu: number, Mu: number,
   system: 'gravity' | 'imf' | 'smf' = 'gravity', columnLength?: number,
@@ -597,16 +625,8 @@ function designColumnFromPM(
     barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, Pu,
     system, columnLength,
   })
-  let phiPn = ax.phiPnMax
   const e = Pu > 1e-9 ? Mu / Pu : 0
-  if (e > 1e-4) {
-    const cap = capacityAtEccentricity(
-      { b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, numBars: ax.bars, layout },
-      e,
-    )
-    const inter = interaction({ b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, numBars: ax.bars, layout })
-    phiPn = Math.min(cap.phi * cap.Pn, 0.65 * inter.PnMax)
-  }
+  const phiPn = pmCapacity(sec, sec.barDia, ax.bars, Pu, Mu, ax.phiPnMax, layout)
   const util = phiPn > 1e-9 ? Pu / phiPn : Infinity
   return {
     e, bars: ax.bars, Ast: ax.Ast, phiPn, util,
@@ -1459,17 +1479,6 @@ export async function optimizeStructureAsync(
 export const BAR_LADDER_BEAM = [16, 20, 25, 28, 32]
 export const BAR_LADDER_COLUMN = [20, 25, 28, 32]
 
-/** §425.2.1 — do `bars` of Ø `db` fit one face of the column at the minimum
- *  clear spacing max(1.5db, 40 mm)? Bars split evenly over the two faces ⟂ to h
- *  (the interaction model's layout), spread across width b. */
-function columnBarsFit(sec: RectSection, db: number, bars: number): boolean {
-  const perFace = Math.ceil(bars / 2)
-  if (perFace <= 1) return true
-  const clearWidth = sec.b - 2 * (sec.cover + sec.tieDia) - perFace * db
-  const sClear = clearWidth / (perFace - 1)
-  return sClear >= Math.max(1.5 * db, 40) - 1e-6
-}
-
 /**
  * Pick the most economical bar diameter for every beam/girder and column from a
  * candidate ladder: the smallest-steel size that still passes, falling back to
@@ -1489,57 +1498,62 @@ export function selectBarDiameters(
   // candidate sizes, SMALLEST first — we adopt the first one that passes.
   const ladder = (cands: number[], current: number) => [...new Set([current, ...cands])].sort((a, b) => a - b)
 
-  // beams/girders: smallest bar Ø whose every section passes capacity AND the
-  // §407.7.1 clear-spacing / layer-fit check (both folded into beamOK).
+  // Beams/girders: ONE diameter for the whole member, scored across every one
+  // of its critical sections.
+  //
+  // This is the same `optimizeBeamMember` the Beam Design page uses. Model
+  // space ran its own four-gate ladder ranked on STEEL AREA, so the two halves
+  // of the app could answer the same question differently for the same beam —
+  // and the ladder's "smallest that passes" is exactly the min-steel rule the
+  // scorer exists to replace.
   for (const row of design.beams) {
     const sec = secById.get(memSecId.get(row.id) ?? ''); if (!sec) continue
-    // Each candidate is scored on all four gates across EVERY critical section
-    // of the member — one section failing serviceability rejects the size for
-    // the whole member — and then ranked on steel. See `barSelection` for why
-    // the stages are ordered and why a tie goes to the smaller bar.
-    const cands: BarCandidate[] = ladder(BAR_LADDER_BEAM, sec.barDia).map((db) => {
-      const designs = row.sections.map((s) => designBeam({
-        b: sec.b, h: sec.h, cover: sec.cover, barDia: db, comprBarDia: 16,
-        stirrupDia: sec.tieDia, fc: sec.fc, fy: sec.fy, Mu: Math.abs(s.Mu), Vu: s.Vu,
-      }))
-      return {
-        db,
-        strength: designs.every((d) => d.region !== 'inadequate' && d.comprEffective && d.comprNAOK),
-        // Crack control uses the CENTRE-TO-CENTRE spacing the clause is written
-        // in terms of; `sClear` is the clear gap, so the bar itself is added.
-        serviceability: designs.every((d) =>
-          crackControlOK(d.sClear + db, sec.fy, sec.cover)),
-        detailing: designs.every((d) => d.flexOK),
-        constructability: designs.every((d) => constructabilityOK(d.bars, d.layers.length)),
-        steelArea: Math.max(...designs.map((d) => d.bars * (Math.PI / 4) * db * db)),
-      }
-    })
-    const pick = chooseBar(cands)
-    if (pick.db !== null && pick.db !== sec.barDia) chosen.set(sec.id, pick.db)
+    const choice = optimizeBeamMember(
+      {
+        b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, comprBarDia: 16,
+        stirrupDia: sec.tieDia, fc: sec.fc, fy: sec.fy,
+      },
+      row.sections.map((sx, i) => ({
+        id: `${row.id}:${i}`, label: sx.label, Mu: Math.abs(sx.Mu), Vu: sx.Vu,
+      })),
+      { sizes: ladder(BAR_LADDER_BEAM, sec.barDia) },
+    )
+    if (choice.db !== null && choice.db !== sec.barDia) chosen.set(sec.id, choice.db)
   }
 
-  // columns: smallest bar Ø that passes P–M + ρ AND fits the §425.2.1 minimum
-  // clear bar spacing across the section face (≥ max(1.5db, 40 mm)).
+  // Columns: diameter AND count, the same two-axis search the Column Design
+  // page runs. `designAxialColumn` inside the optimiser sizes the cage; the
+  // moment is added here as an extra gate, because a model-space column
+  // carries Mu and the optimiser deliberately does not know about
+  // eccentricity. Same P–M capacity the schedule already reports — no second
+  // interaction implementation.
   for (const row of design.columns) {
     const sec = secById.get(memSecId.get(row.id) ?? ''); if (!sec) continue
-    const cands: BarCandidate[] = ladder(BAR_LADDER_COLUMN, sec.barDia).map((db) => {
-      const r = designColumnFromPM({ ...sec, barDia: db }, row.Pu, row.Mu)
-      return {
-        db,
-        strength: r.ok,
-        // A column's bars are distributed around the perimeter by construction,
-        // so the crack-control spacing rule is not the governing serviceability
-        // question it is for a beam's tension face. Nothing to check here yet —
-        // said explicitly rather than left as an unexplained `true`.
-        serviceability: true,
-        detailing: columnBarsFit(sec, db, r.bars),
-        // One layer per face, so the layer limit cannot bite; the bar count can.
-        constructability: constructabilityOK(r.bars, 1),
-        steelArea: r.bars * (Math.PI / 4) * db * db,
-      }
-    })
-    const pick = chooseBar(cands)
-    if (pick.db !== null && pick.db !== sec.barDia) chosen.set(sec.id, pick.db)
+    const choice = optimizeColumnRebar(
+      {
+        shape: 'tied', b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia,
+        tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, fyt: sec.fy, Pu: row.Pu,
+      },
+      {
+        sizes: ladder(BAR_LADDER_COLUMN, sec.barDia),
+        // `RectSection` stores a diameter and no bar count, so the count is
+        // re-derived downstream. Pin the search to the count the final design
+        // will use — searching it here adopts a cage the schedule then
+        // recomputes into a different one.
+        counts: (i, db) => [designAxialColumn({ ...i, barDia: db }).bars],
+        extraChecks: (i, r) => {
+          const util = pmUtilisation(sec, i.barDia, r.bars, row.Pu, row.Mu)
+          return [{
+            id: 'pm-capacity',
+            clause: 'ACI 318-14 §22.4 · §10.5',
+            label: 'φPn at e = Mu/Pu ≥ Pu',
+            pass: util <= 1 + 1e-6,
+            detail: `utilisation ${Number.isFinite(util) ? util.toFixed(2) : '∞'}`,
+          }]
+        },
+      },
+    )
+    if (choice.db !== null && choice.db !== sec.barDia) chosen.set(sec.id, choice.db)
   }
 
   // ── Bar-diameter continuity guard: one Ø through each continuous beam line
