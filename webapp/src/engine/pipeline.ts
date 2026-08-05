@@ -35,6 +35,8 @@ import { designSteelJoints, designBeamBeamJoints, type SteelJoint, type BeamBeam
 import {
   chooseBar, crackControlOK, constructabilityOK, type BarCandidate,
 } from './barSelection'
+import { optimizeFootingRebar } from './matRebarOptimize'
+import type { RebarSelection } from './rebarScore'
 
 export interface SoilOptions {
   qAllow: number; gammaSoil: number; gammaConc: number; H: number
@@ -130,6 +132,18 @@ export interface ColumnScheduleRow {
 export interface FootingScheduleRow {
   node: string; P: number; Pu: number
   design: SquareFootingResult
+  /**
+   * The mat's OWN bar diameter, mm.
+   *
+   * It used to be the column's: the footing was handed `section.barDia`, so a
+   * ⌀32 column cage detailed the footing mat in ⌀32 too. Downstream then had
+   * to guess it back — `planDetails` reverse-engineered it from As/count and
+   * the report and take-off each reached for the column section — three
+   * independent guesses at a number nothing was carrying.
+   */
+  barDia: number
+  /** Ranked alternatives and the reason this mat was adopted. */
+  selection: RebarSelection
   ok: boolean
   gov?: string
 }
@@ -939,13 +953,35 @@ function designFromRuns(
     if (Pu < 1e-6) continue
     const P = Math.max(serviceAt(ru.node), Pu / 1.4)
     const fs = footSec(ru.node)
-    const d = designSquareFooting({
+    // The mat picks its own diameter and spacing. `fs` is the COLUMN section
+    // and only supplies the concrete grade, the steel grade and the column
+    // width the footing cantilevers from — its bar size is not the footing's
+    // business, and passing it was what produced 2⌀32 mats.
+    const fin = {
       serviceLoad: P, ultimateLoad: Pu, columnWidth: Math.min(fs.b, fs.h),
       fc: fs.fc, fy: fs.fy, qAllow: soil.qAllow,
       gammaSoil: soil.gammaSoil, gammaConc: soil.gammaConc, H: soil.H,
       barDia: fs.barDia, cover: 75,
+    }
+    const choice = optimizeFootingRebar(fin)
+    // No compliant mat is a real answer, but the row still needs a section to
+    // report — design it at the seed diameter and let `ok` carry the failure.
+    const base = choice.design ?? designSquareFooting(fin)
+    const barDia = choice.db ?? fs.barDia
+    // Quote the mat the optimiser ADOPTED, not the one `designSquareFooting`
+    // fell back to. The two differ: the engine lays out the bare §7.7.2.3
+    // minimum (2⌀10 @ 390 on a 0.55 m pad), the optimiser picks off the
+    // spacing module and scores it (3⌀10 @ 150). Leaving both in the row
+    // would put two different mats on the same footing — the schedule saying
+    // one thing and the selection it cites saying another.
+    const d: SquareFootingResult = choice.bars !== null && choice.spacing !== null
+      ? { ...base, bars: choice.bars, barSpacing: choice.spacing }
+      : base
+    footings.push({
+      node: ru.node, P, Pu, design: d, barDia, selection: choice.selection,
+      ok: d.qNet > 0 && d.punchOK && d.beamOK && d.barsFit && choice.db !== null,
+      gov,
     })
-    footings.push({ node: ru.node, P, Pu, design: d, ok: d.qNet > 0 && d.punchOK && d.beamOK, gov })
   }
 
   // ── Base plates (steel columns landing on a base support) ──

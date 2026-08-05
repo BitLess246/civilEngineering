@@ -962,3 +962,65 @@ describe('engine integrations — prestressed member check', () => {
     expect(plain.prestressed).toEqual([])
   })
 })
+
+// ── Footing mats ──────────────────────────────────────────────────────────
+
+describe('footing mats are the footing\'s, not the column\'s', () => {
+  const designAt = (barDia: number) => {
+    const sec: RectSection = { ...section, barDia }
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section: sec, slabThickness: 200 })
+    m.loads = m.plates.flatMap((p): ModelLoad[] => [
+      { kind: 'area', plate: p.id, q: 4.8, cat: 'D' },
+      { kind: 'area', plate: p.id, q: 2.4, cat: 'L' },
+    ])
+    return designStructure(m, soil)!
+  }
+
+  it('does not inherit the column cage diameter', () => {
+    // THE BUG. `pipeline` handed the footing `section.barDia`, so a ⌀32 column
+    // cage detailed the footing mat in ⌀32 — and with only the area to satisfy
+    // that came out as two bars at 700+ mm centres.
+    const mats = [20, 25, 32].map((db) => designAt(db).footings.map((f) => f.barDia))
+    for (const m of mats) expect(m).toEqual(mats[0])
+    // and the mat is not simply the column bar
+    expect(designAt(32).footings.every((f) => f.barDia < 32)).toBe(true)
+  })
+
+  it('every scheduled mat satisfies §7.7.2.3', () => {
+    for (const db of [20, 32]) {
+      for (const f of designAt(db).footings) {
+        expect(f.design.barSpacing, `${f.node} @⌀${db}`)
+          .toBeLessThanOrEqual(f.design.barSpacingMax + 1e-9)
+        expect(f.design.barsFit).toBe(true)
+        expect(f.design.bars).toBeGreaterThanOrEqual(2)
+      }
+    }
+  })
+
+  it('the row quotes the mat its own selection adopted', () => {
+    // Two sources of truth is how a schedule ends up citing a reason that
+    // describes a different mat: `designSquareFooting` lays out the bare
+    // §7.7.2.3 minimum, the optimiser picks off the spacing module.
+    for (const f of designAt(25).footings) {
+      const best = f.selection.best
+      expect(best, f.node).not.toBeNull()
+      expect(f.design.bars).toBe(best!.layout.bars)
+      expect(f.design.barSpacing).toBeCloseTo(best!.layout.spacing, 9)
+      expect(f.barDia).toBe(best!.layout.db)
+    }
+  })
+
+  it('provides at least the steel the flexure check demanded', () => {
+    for (const f of designAt(25).footings) {
+      const Ab = (Math.PI / 4) * f.barDia * f.barDia
+      expect(f.design.bars * Ab).toBeGreaterThanOrEqual(f.design.steelArea - 1e-6)
+    }
+  })
+
+  it('reports a ranking, so the choice can be argued with', () => {
+    const f = designAt(20).footings[0]
+    expect(f.selection.ranked.length).toBeGreaterThan(1)
+    expect(f.selection.margin.length).toBeGreaterThan(10)
+    expect(f.selection.best!.reason).toMatch(/⌀\d+ @ \d+/)
+  })
+})

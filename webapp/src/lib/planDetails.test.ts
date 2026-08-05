@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel } from '../engine/modelBuilder'
 import { designStructure } from '../engine/pipeline'
-import { footingsForPlan, footingDetailBundles, recoverBarDia } from './planDetails'
+import { footingsForPlan, footingDetailBundles } from './planDetails'
 import type { RectSection, ModelLoad } from '../engine/model'
 
 const section: RectSection = { id: 'S1', name: '400×400', b: 400, h: 400, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
@@ -19,13 +19,21 @@ function designed() {
 describe('planDetails — design → plan/detail inputs', () => {
   const { model, design } = designed()
 
-  it('recoverBarDia snaps a steel area + count back to a standard bar', () => {
-    const As = 4 * (Math.PI / 4) * 20 * 20   // 4 × ⌀20
-    expect(recoverBarDia(As, 4)).toBe(20)
-    expect(recoverBarDia(0, 0)).toBe(16)      // safe fallback
+  it('takes the bar Ø from the schedule row rather than recovering it', () => {
+    // There used to be a `recoverBarDia` here that inverted As/count back to a
+    // standard size, because the row did not carry the diameter. It does now,
+    // and the plan quotes it directly — an inversion cannot be wrong about a
+    // number it is no longer computing.
+    const fs = footingsForPlan(design)
+    for (const [i, f] of fs.entries()) {
+      expect(f.barDia).toBe(design.footings[i].barDia)
+      // and the area it reports is consistent with that bar and that count
+      const Ab = (Math.PI / 4) * f.barDia * f.barDia
+      expect(f.bars * Ab).toBeGreaterThanOrEqual(design.footings[i].design.steelArea - 1e-6)
+    }
   })
 
-  it('maps every designed footing to a PlanFooting with a recovered bar Ø', () => {
+  it('maps every designed footing to a PlanFooting with its own bar Ø', () => {
     const fs = footingsForPlan(design)
     expect(fs).toHaveLength(design.footings.length)
     for (const f of fs) {

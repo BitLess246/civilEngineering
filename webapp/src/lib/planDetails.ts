@@ -11,22 +11,13 @@ import type { ColumnSchematicProps } from '../components/ColumnSchematic'
 
 export interface SoilInput { qAllow?: number; gammaSoil?: number; gammaConc?: number; H?: number }
 
-const STD_BARS = [10, 12, 16, 20, 25, 28, 32, 36]   // mm ladder
-
-/** Recover the main-bar diameter from a designed steel area + bar count
- *  (the footing result carries As and count, not the diameter). */
-export function recoverBarDia(As: number, bars: number): number {
-  if (!bars || As <= 0) return 16
-  const d = Math.sqrt((4 * (As / bars)) / Math.PI)
-  return STD_BARS.reduce((p, c) => (Math.abs(c - d) < Math.abs(p - d) ? c : p), STD_BARS[0])
-}
 
 /** Designed footings → the plan renderer's minimal PlanFooting shape. */
 export function footingsForPlan(design: StructureDesign): PlanFooting[] {
   return design.footings.map((r) => ({
     node: r.node, B: r.design.B, Dc: r.design.Dc,
     bars: r.design.bars, barSpacing: r.design.barSpacing,
-    barDia: recoverBarDia(r.design.steelArea, r.design.bars),
+    barDia: r.barDia,
   }))
 }
 
@@ -63,7 +54,7 @@ export function footingDetailBundles(model: StructuralModel, design: StructureDe
       mark,
       detail: {
         mark, B: r.design.B, H: r.design.Dc / 1000, cover: 75,
-        barDia: recoverBarDia(r.design.steelArea, r.design.bars),
+        barDia: r.barDia,
         bars: r.design.bars, barSpacing: r.design.barSpacing,
         colB, colH, colBars, colBarDia, tieDia, colCover: sec?.cover ?? 40,
         foundingElev: soil.H != null ? -Math.abs(soil.H) : undefined,
