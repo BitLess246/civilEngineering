@@ -1,6 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { designSquareFooting } from '../engine/isolatedFooting'
-import { optimizeFootingRebar } from '../engine/matRebarOptimize'
+import {
+  optimizeFootingRebar, optimizeRectFootingRebar, optimizeEccentricFootingRebar,
+} from '../engine/matRebarOptimize'
 import { RebarRanking } from '../components/RebarRanking'
 import { buildRebarSelectionSolution, withRebarSelection } from '../lib/rebarSolution'
 import { nameMat } from '../lib/rebarLabel'
@@ -181,23 +183,36 @@ export default function FoundationDesign() {
   const ultimateLoad = individual ? factoredLoad({ dead: form.deadLoad, live: form.liveLoad }) : form.ultimateLoad
 
   // ── Mat selection ────────────────────────────────────────────────────
-  // Only the concentric SQUARE path for now — that is the footing the mat
-  // optimiser covers. The rectangular and eccentric paths keep the ⌀ field.
+  // All three shapes now. The rectangular and eccentric paths used to keep
+  // the ⌀ field because the optimiser only covered the concentric square one.
   const [autoBar, setAutoBar] = useState(true)
-  const squareConcentric = !rect && !ecc
   const matChoice = useMemo(() => {
-    if (!autoBar || !valid || !squareConcentric) return null
+    if (!autoBar || !valid) return null
+    const common = {
+      serviceLoad, ultimateLoad, columnWidth: colWidth, columnWidthY: colWidthY,
+      fc: form.fc, fy: form.fy, qAllow: form.qAllow, gammaSoil: form.gammaSoil,
+      gammaConc: form.gammaConc, H: form.H, barDia: form.barDia, cover: form.cover,
+      surcharge: form.surcharge, position: form.position,
+      analysis: form.analysisMethod, solutionMethod: form.solutionMethod,
+    }
     try {
-      return optimizeFootingRebar({
-        serviceLoad, ultimateLoad, columnWidth: colWidth, columnWidthY: colWidthY,
-        fc: form.fc, fy: form.fy, qAllow: form.qAllow, gammaSoil: form.gammaSoil,
-        gammaConc: form.gammaConc, H: form.H, barDia: form.barDia, cover: form.cover,
-        surcharge: form.surcharge, position: form.position,
-        analysis: form.analysisMethod, solutionMethod: form.solutionMethod,
-        givenB: form.givenB, givenDc: form.givenDc,
-      })
+      if (ecc) {
+        return optimizeEccentricFootingRebar({
+          ...common, givenB: form.givenB, givenDc: form.givenDc,
+          serviceMoment: form.serviceMoment, ultimateMoment: form.ultimateMoment,
+        })
+      }
+      if (rect) {
+        const sizing = form.sizingMode === 'ratio'
+          ? { mode: 'ratio' as const, ratio: form.ratio }
+          : { mode: 'fixedWidth' as const, By: form.fixedBy }
+        return optimizeRectFootingRebar({
+          ...common, sizing, givenBx: form.givenB, givenBy: form.givenBy, givenDc: form.givenDc,
+        })
+      }
+      return optimizeFootingRebar({ ...common, givenB: form.givenB, givenDc: form.givenDc })
     } catch { return null }
-  }, [autoBar, valid, squareConcentric, serviceLoad, ultimateLoad, colWidth, colWidthY, form])
+  }, [autoBar, valid, rect, ecc, serviceLoad, ultimateLoad, colWidth, colWidthY, form])
 
   /** The diameter actually detailed. */
   const dbEff = matChoice?.db ?? form.barDia
@@ -257,7 +272,19 @@ export default function FoundationDesign() {
   // count that falls out of As/Ab — is what goes on the schedule.
   const view: View | null = useMemo(() => {
     if (!viewRaw || !matChoice?.bars || !matChoice.spacing) return viewRaw
-    return { ...viewRaw, long: { ...viewRaw.long, bars: matChoice.bars, spacing: matChoice.spacing } }
+    // Each direction takes its OWN adopted mat. A rectangular footing carries
+    // different steel each way, so quoting the governing strip's spacing on
+    // both over-provides the lighter one.
+    const at = (label: string) => matChoice.strips.find((x) => x.label === label)
+    const long = at('long direction') ?? at('bottom mat')
+    const short = at('short direction')
+    return {
+      ...viewRaw,
+      long: long ? { ...viewRaw.long, bars: long.bars, spacing: long.spacing } : viewRaw.long,
+      short: viewRaw.short && short
+        ? { ...viewRaw.short, bars: short.bars, spacing: short.spacing }
+        : viewRaw.short,
+    }
   }, [viewRaw, matChoice])
 
   const solutionSteps = useMemo(() => {
@@ -453,7 +480,7 @@ export default function FoundationDesign() {
           </Card>
 
           <Card title="Materials">
-            {squareConcentric && (
+            {(
               <label className="col-span-full flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-[#5c6675]">
                 <input type="checkbox" checked={autoBar} onChange={(e) => setAutoBar(e.target.checked)}
                   className="h-3.5 w-3.5 accent-[#0f4c92]" />
