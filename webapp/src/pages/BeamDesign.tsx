@@ -10,6 +10,7 @@ import { WorkedSolution } from '../components/WorkedSolution'
 import { buildBeamSolution, beamProvidedCapacities } from '../lib/beamSolution'
 import { optimizeBeamRebar, optimizeBeamMember } from '../engine/beamRebarOptimize'
 import { RebarRanking } from '../components/RebarRanking'
+import { buildRebarSelectionSolution } from '../lib/rebarSolution'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { Math as KTex } from '../lib/math'
 import { f0, f1 } from '../lib/format'
@@ -144,10 +145,17 @@ export default function BeamDesign() {
   const demand = multi
     ? { Mu: Math.abs(active?.Mu ?? 0), Vu: Math.abs(active?.Vu ?? 0) }
     : { Mu: Math.abs(f.Mu), Vu: f.Vu }
+  // The selection is appended, not prepended: it justifies the bar chosen for
+  // the steel the flexure steps above derived, so it reads after them.
   const solution = useMemo(
-    () => (r ? buildBeamSolution({ ...fd, ...demand }, r) : null),
+    () => (r
+      ? [
+          ...buildBeamSolution({ ...fd, ...demand }, r),
+          ...(selection ? buildRebarSelectionSolution(selection, 'cage') : []),
+        ]
+      : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [r, fd, demand.Mu, demand.Vu],
+    [r, fd, demand.Mu, demand.Vu, selection],
   )
 
   const deflection = useMemo(() => {

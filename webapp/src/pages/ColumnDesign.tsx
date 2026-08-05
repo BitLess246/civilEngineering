@@ -16,6 +16,7 @@ import { WorkedSolution } from '../components/WorkedSolution'
 import { axialColumnSolution, eccentricColumnSolution, slendernessSolution } from '../lib/columnSolution'
 import { optimizeColumnRebar } from '../engine/columnRebarOptimize'
 import { RebarRanking } from '../components/RebarRanking'
+import { buildRebarSelectionSolution } from '../lib/rebarSolution'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { Math as KTex } from '../lib/math'
 import { f0, f1, f2 } from '../lib/format'
@@ -114,9 +115,10 @@ export default function ColumnDesign() {
       shape: tied ? 'tied' : 'spiral', b, h, D, cover, barDia: dbEff, tieDia, fc, fy, fyt, Pu,
       numBars: barMode === 'analyze' || eccentric ? numBars : cageChoice?.bars ?? undefined,
     }, axial))
+    if (cageChoice) steps.push(...buildRebarSelectionSolution(cageChoice.selection, 'cage'))
     return steps
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slender, eccentric, inter, cap, axial, Pu, MuEff])
+  }, [slender, eccentric, inter, cap, axial, Pu, MuEff, cageChoice])
 
   const util = cap && cap.phi * cap.Pn > 1e-9 ? Pu / (cap.phi * cap.Pn) : null
 

@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { designSquareFooting } from '../engine/isolatedFooting'
 import { optimizeFootingRebar } from '../engine/matRebarOptimize'
 import { RebarRanking } from '../components/RebarRanking'
+import { buildRebarSelectionSolution } from '../lib/rebarSolution'
 import { nameMat } from '../lib/rebarLabel'
 // The page used to carry its own byte-identical copy of this input.
 import { Num as NumField } from '../components/qty'
@@ -275,8 +276,11 @@ export default function FoundationDesign() {
       punchOK: view.punchOK, beamOK: view.beamOK,
       long: view.long, short: view.short, ecc: view.ecc,
     }
-    return buildFoundationSolution(ctx)
-  }, [view, form, dbEff, serviceLoad, ultimateLoad, individual, circular, colWidth, colWidthY])
+    return [
+      ...buildFoundationSolution(ctx),
+      ...(matChoice ? buildRebarSelectionSolution(matChoice.selection, 'mat') : []),
+    ]
+  }, [view, form, dbEff, matChoice, serviceLoad, ultimateLoad, individual, circular, colWidth, colWidthY])
 
   // Verdict data — presentation of engine outputs only: utilization is the
   // required-over-provided effective depth per shear mode (capacity grows with

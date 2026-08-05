@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { designSlabDDM, type SlabInput, type SlabDirResult, type SlabSectionSteel } from '../engine/slabDDM'
 import { optimizeSlabRebar } from '../engine/matRebarOptimize'
 import { RebarRanking } from '../components/RebarRanking'
+import { buildRebarSelectionSolution } from '../lib/rebarSolution'
 import { nameMat } from '../lib/rebarLabel'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
@@ -140,7 +141,12 @@ export default function SlabDesign() {
 
   const defl = r?.deflection
 
-  const solution = r ? buildSlabSolution(inputEff, r) : null
+  const solution = r
+    ? [
+        ...buildSlabSolution(inputEff, r),
+        ...(slabChoice ? buildRebarSelectionSolution(slabChoice.selection, 'mat') : []),
+      ]
+    : null
 
   const report = r ? {
     docCode: 'S-SL',
