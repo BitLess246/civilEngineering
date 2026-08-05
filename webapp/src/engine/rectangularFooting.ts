@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { netBearing } from './bearing';
 import { punchingDepth, oneWayShearDepth, type ColumnPosition } from './shear';
-import { flexuralSteel, barLayout } from './flexure';
+import { flexuralSteel, matLayout } from './flexure';
 
 /** How the plan dimensions are determined. */
 export type RectSizing =
@@ -138,7 +138,11 @@ export function designRectangularFooting(i: RectFootingInput): RectFootingResult
   const MuLong = qu * By * (armX * armX) / 2;
   const bLong = By * 1000;
   const flexLong = flexuralSteel({ Mu: MuLong, b: bLong, d: dFlex, fc: i.fc, fy: i.fy });
-  const layoutLong = barLayout({ As: flexLong.As, db: i.barDia, b: bLong, cover: i.cover });
+  // Detailed as a one-way slab (ACI 318-14 §13.3.2.1): §7.7.2.3's maximum
+  // spacing sets the bar count whenever the required area does not.
+  const layoutLong = matLayout({
+    As: flexLong.As, db: i.barDia, b: bLong, cover: i.cover, h: DcMm, kind: 'one-way',
+  });
 
   // Short direction: cantilever in y, bars run along y and spread across Bx,
   // with the central-band concentration.
@@ -146,7 +150,9 @@ export function designRectangularFooting(i: RectFootingInput): RectFootingResult
   const MuShort = qu * Bx * (armY * armY) / 2;
   const bShort = Bx * 1000;
   const flexShort = flexuralSteel({ Mu: MuShort, b: bShort, d: dFlex, fc: i.fc, fy: i.fy });
-  const layoutShort = barLayout({ As: flexShort.As, db: i.barDia, b: bShort, cover: i.cover });
+  const layoutShort = matLayout({
+    As: flexShort.As, db: i.barDia, b: bShort, cover: i.cover, h: DcMm, kind: 'one-way',
+  });
   const beta = Bx / By;                               // long / short
   const bandFraction = 2 / (beta + 1);
   const bandBars = Math.max(2, Math.ceil(layoutShort.n * bandFraction));

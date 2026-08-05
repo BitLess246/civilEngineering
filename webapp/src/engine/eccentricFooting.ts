@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { netBearing } from './bearing';
 import { punchingDepth, oneWayShearDepth, type ColumnPosition } from './shear';
-import { flexuralSteel, barLayout } from './flexure';
+import { flexuralSteel, matLayout } from './flexure';
 
 export interface EccentricFootingInput {
   serviceLoad: number;    // P, kN
@@ -135,7 +135,11 @@ export function designEccentricSquareFooting(i: EccentricFootingInput): Eccentri
   const Mu = quMax * B * (arm * arm) / 2;   // conservative: peak pressure across the width
   const b = B * 1000;
   const flex = flexuralSteel({ Mu, b, d: dFlex, fc: i.fc, fy: i.fy });
-  const layout = barLayout({ As: flex.As, db: i.barDia, b, cover: i.cover });
+  // Detailed as a one-way slab (ACI 318-14 §13.3.2.1): §7.7.2.3's maximum
+  // spacing sets the bar count whenever the required area does not.
+  const layout = matLayout({
+    As: flex.As, db: i.barDia, b, cover: i.cover, h: DcMm, kind: 'one-way',
+  });
   const qMinService = (i.serviceLoad / (B * B)) * (1 - (6 * e) / B);
 
   return {

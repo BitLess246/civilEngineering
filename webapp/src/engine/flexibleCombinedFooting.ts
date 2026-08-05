@@ -11,7 +11,7 @@
 // distribution and the resulting longitudinal steel differ.
 // ─────────────────────────────────────────────────────────────────────────
 import { designCombinedFooting, type CombinedFootingInput, type FlexSection } from './combinedFooting';
-import { flexuralSteel, barLayout } from './flexure';
+import { flexuralSteel, matLayout } from './flexure';
 
 export interface FlexibleCombinedInput extends CombinedFootingInput {
   /** Modulus of subgrade reaction, kN/m³. */
@@ -171,7 +171,11 @@ export function designFlexibleCombinedFooting(i: FlexibleCombinedInput): Flexibl
   const mkSection = (label: string, x: number): FlexSection => {
     const m = Mabs(x), Mu = Math.abs(m), b = By * 1000;
     const flex = flexuralSteel({ Mu, b, d: dFlex, fc: i.fc, fy: i.fy });
-    const layout = barLayout({ As: flex.As, db: i.barDia, b, cover: i.cover });
+    // One-way slab detailing (ACI 318-14 §13.3.2.1) — §7.7.2.3's maximum
+    // spacing sets the count whenever the required area does not.
+    const layout = matLayout({
+      As: flex.As, db: i.barDia, b, cover: i.cover, h: Dc, kind: 'one-way',
+    });
     return { label, x, Mu, b, As: flex.As, bars: layout.n, spacing: layout.spacing, top: m < 0 };
   };
   const cx1m = i.col1Width / 1000, cx2m = i.col2Width / 1000;
