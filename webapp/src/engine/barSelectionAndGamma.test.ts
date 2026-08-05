@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { generateGridModel, buildGravityLoads, refreshSelfWeight } from './modelBuilder'
 import { storeyWeights } from './seismic'
 import { designStructure, selectBarDiameters } from './pipeline'
-import type { RectSection, ModelLoad } from './model'
+import { validateMesh } from './meshValidation'
+import type { RectSection, ModelLoad, StructuralModel } from './model'
 
 const section: RectSection = { id: 'S1', name: '300×500', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
 const soil = { qAllow: 200, gammaSoil: 18, gammaConc: 24, H: 1.5 }
@@ -71,5 +72,67 @@ describe('selectBarDiameters — bar choice is a pure detailing pass', () => {
   it('keeps chosen diameters within the standard ladder', () => {
     const allowed = new Set([16, 20, 25, 28, 32])
     for (const s of picked.sections) expect(allowed.has(s.barDia)).toBe(true)
+  })
+})
+
+// ── The count axis (L1 `RectSection.barCount`) ─────────────────────────────
+describe('selectBarDiameters — the column search adopts a COUNT, not just a Ø', () => {
+  const m = makeModel()
+  const big = { ...m, sections: m.sections.map((s) => ({ ...s, barDia: 32 })) }
+  const picked = selectBarDiameters(big, soil, {}, {}, designStructure(big, soil)!)
+  const colSecs = picked.sections.filter((s) => picked.members.some((x) => x.id === s.id && x.role === 'column'))
+
+  it('stores a cage on every column section it searched', () => {
+    expect(colSecs.length).toBeGreaterThan(0)
+    for (const s of colSecs) {
+      expect(s.barCount, s.id).toBeDefined()
+      expect(s.barCount! % 2, s.id).toBe(0)          // symmetric
+      expect(s.barCount!, s.id).toBeGreaterThanOrEqual(4)   // §10.7.3.1
+    }
+  })
+
+  it('leaves beam sections without one — a beam count follows As per section', () => {
+    const beamSecs = picked.sections.filter((s) => picked.members.some((x) => x.id === s.id && x.role !== 'column'))
+    for (const s of beamSecs) expect(s.barCount, s.id).toBeUndefined()
+  })
+
+  it('the schedule details the stored cage, bar for bar', () => {
+    // This is what the field is for: before it, the count was pinned to the one
+    // `designAxialColumn` re-derives, because anything else was recomputed here.
+    const d = designStructure(picked, soil)!
+    const secOf = new Map(picked.members.map((x) => [x.id, x.section]))
+    for (const row of d.columns) {
+      const sec = picked.sections.find((s) => s.id === secOf.get(row.id))!
+      expect(row.bars, row.id).toBe(sec.barCount)
+    }
+  })
+
+  it('every cage it stores passes the L1 rules that police one', () => {
+    const bad = validateMesh(picked).filter((i) => i.code.startsWith('BAR_COUNT'))
+    expect(bad.map((i) => `${i.code} ${i.refs.join(',')}`)).toEqual([])
+  })
+})
+
+describe('a stored cage is ANALYSED, not re-designed', () => {
+  const m = makeModel()
+  const colId = m.members.find((x) => x.role === 'column')!.id
+
+  const withCage = (n: number | undefined): StructuralModel =>
+    ({ ...m, sections: m.sections.map((s) => (s.id === colId ? { ...s, barCount: n } : s)) })
+
+  it('the column schedule reports the bars the section carries', () => {
+    const derived = designStructure(m, soil)!.columns.find((c) => c.id === colId)!
+    const forced = designStructure(withCage(derived.bars + 4), soil)!.columns.find((c) => c.id === colId)!
+    expect(forced.bars).toBe(derived.bars + 4)
+    expect(forced.phiPn).toBeGreaterThan(derived.phiPn)  // more steel, more capacity
+    expect(forced.Pu).toBeCloseTo(derived.Pu, 6)         // and the demand is untouched
+  })
+
+  it('an undersized cage is REPORTED as failing, not quietly repaired', () => {
+    // 4⌀20 in this column is under §10.6.1.1's ρmin = 1%; the derived cage
+    // never is, because AstReq starts at 0.01·Ag.
+    const row = designStructure(withCage(4), soil)!.columns.find((c) => c.id === colId)!
+    expect(row.bars).toBe(4)
+    expect(row.ok).toBe(false)
   })
 })

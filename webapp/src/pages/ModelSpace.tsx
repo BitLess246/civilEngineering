@@ -1477,7 +1477,9 @@ export default function ModelSpace() {
    *  section and refresh the gravity loads with the current SDL/LL and γc — so
    *  Design/Optimize reflect Properties edits without regenerating the grid. */
   const applyMaterial = (m: StructuralModel): StructuralModel => {
-    const sections = m.sections.map((s) => ({ ...s, fc, fy, barDia, tieDia, cover }))
+    // barCount goes with the Ø it was searched at — a new Ø means a new cage,
+    // so drop it and let the design re-derive (or bar selection re-adopt) one.
+    const sections = m.sections.map((s) => ({ ...s, fc, fy, barDia, tieDia, cover, barCount: undefined }))
     const withMat = { ...m, sections }
     return { ...withMat, loads: buildGravityLoads(withMat, qD, qL, gammaC) }
   }

@@ -34,7 +34,7 @@ import { designBasePlate, adoptPlateThickness, type BasePlateResult } from './ba
 import { designSteelJoints, designBeamBeamJoints, type SteelJoint, type BeamBeamJoint } from './steelConnections'
 import { optimizeFootingRebar, optimizeSlabRebar, applySlabMats } from './matRebarOptimize'
 import { optimizeBeamMember } from './beamRebarOptimize'
-import { optimizeColumnRebar } from './columnRebarOptimize'
+import { optimizeColumnRebar, type ColumnRebarChoice } from './columnRebarOptimize'
 import type { RebarSelection } from './rebarScore'
 
 export interface SoilOptions {
@@ -628,6 +628,11 @@ function designColumnFromPM(
   const ax = designAxialColumn({
     shape: 'tied', b: sec.b, h: sec.h, cover: sec.cover,
     barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, Pu,
+    // A stored cage is ANALYSED, not re-designed: `barCount` is the count the
+    // two-axis search adopted (or the user set), and re-deriving it here would
+    // detail a different column than the one that passed the P–M gate. Absent
+    // ⇒ designAxialColumn sizes the steel, as it always did.
+    numBars: sec.barCount,
     system, columnLength,
   })
   const e = Pu > 1e-9 ? Mu / Pu : 0
@@ -1488,7 +1493,8 @@ export const BAR_LADDER_COLUMN = [20, 25, 28, 32]
  * Pick the most economical bar diameter for every beam/girder and column from a
  * candidate ladder: the smallest-steel size that still passes, falling back to
  * the section's current bar when none of the candidates work (so the section can
- * grow instead). Returns a new model with the chosen per-member section.barDia.
+ * grow instead). Returns a new model with the chosen per-member section.barDia,
+ * and for columns the `barCount` that went with it.
  * Pass `base` (an already-computed design of `model`) to skip the internal solve.
  */
 export function selectBarDiameters(
@@ -1499,7 +1505,8 @@ export function selectBarDiameters(
   if (!design) return model
   const secById = new Map(model.sections.map((s) => [s.id, s]))
   const memSecId = new Map(model.members.map((m) => [m.id, m.section]))
-  const chosen = new Map<string, number>()
+  /** Per section: the detailing adopted. `barCount` is columns only. */
+  const chosen = new Map<string, { barDia: number; barCount?: number }>()
   // candidate sizes, SMALLEST first — we adopt the first one that passes.
   const ladder = (cands: number[], current: number) => [...new Set([current, ...cands])].sort((a, b) => a - b)
 
@@ -1523,29 +1530,31 @@ export function selectBarDiameters(
       })),
       { sizes: ladder(BAR_LADDER_BEAM, sec.barDia) },
     )
-    if (choice.db !== null && choice.db !== sec.barDia) chosen.set(sec.id, choice.db)
+    if (choice.db !== null && choice.db !== sec.barDia) chosen.set(sec.id, { barDia: choice.db })
   }
 
   // Columns: diameter AND count, the same two-axis search the Column Design
-  // page runs. `designAxialColumn` inside the optimiser sizes the cage; the
-  // moment is added here as an extra gate, because a model-space column
-  // carries Mu and the optimiser deliberately does not know about
-  // eccentricity. Same P–M capacity the schedule already reports — no second
-  // interaction implementation.
+  // page runs — and now adopted WHOLE. `RectSection.barCount` stores the
+  // count, so the cage that wins the search is the cage the schedule details;
+  // while the field did not exist the count had to be pinned to the derived
+  // one, because anything else was recomputed downstream into a different
+  // column than the one the gates had passed.
+  //
+  // The moment enters as an extra gate: `designAxialColumn` inside the
+  // optimiser is pure axial and a model-space column carries Mu. Same P–M
+  // capacity the schedule reports — no second interaction implementation.
+  const colSearch = new Map<string, (sizes: readonly number[]) => ColumnRebarChoice>()
+  /** Governing cage per section, ordered on provided steel (see below). */
+  const colBest = new Map<string, { barDia: number; barCount: number; Ast: number }>()
   for (const row of design.columns) {
     const sec = secById.get(memSecId.get(row.id) ?? ''); if (!sec) continue
-    const choice = optimizeColumnRebar(
+    const search = (sizes: readonly number[]) => optimizeColumnRebar(
       {
         shape: 'tied', b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia,
         tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, fyt: sec.fy, Pu: row.Pu,
       },
       {
-        sizes: ladder(BAR_LADDER_COLUMN, sec.barDia),
-        // `RectSection` stores a diameter and no bar count, so the count is
-        // re-derived downstream. Pin the search to the count the final design
-        // will use — searching it here adopts a cage the schedule then
-        // recomputes into a different one.
-        counts: (i, db) => [designAxialColumn({ ...i, barDia: db }).bars],
+        sizes,
         extraChecks: (i, r) => {
           const util = pmUtilisation(sec, i.barDia, r.bars, row.Pu, row.Mu)
           return [{
@@ -1558,7 +1567,22 @@ export function selectBarDiameters(
         },
       },
     )
-    if (choice.db !== null && choice.db !== sec.barDia) chosen.set(sec.id, choice.db)
+    colSearch.set(sec.id, search)
+    const choice = search(ladder(BAR_LADDER_COLUMN, sec.barDia))
+    if (choice.db === null || choice.bars === null) continue
+    // One section can carry several columns, and a stored count no longer
+    // adapts per member the way the derived one did — so the WORST column
+    // governs, the same rule `buildUtilMap` applies when sections grow.
+    // Provided steel orders them: a cage short for the heaviest column in the
+    // group is not repaired anywhere downstream.
+    const Ast = choice.bars * (Math.PI / 4) * choice.db ** 2
+    const prev = colBest.get(sec.id)
+    if (!prev || Ast > prev.Ast) colBest.set(sec.id, { barDia: choice.db, barCount: choice.bars, Ast })
+  }
+  for (const [id, best] of colBest) {
+    const sec = secById.get(id)!
+    if (best.barDia !== sec.barDia || best.barCount !== sec.barCount)
+      chosen.set(id, { barDia: best.barDia, barCount: best.barCount })
   }
 
   // ── Bar-diameter continuity guard: one Ø through each continuous beam line
@@ -1570,19 +1594,24 @@ export function selectBarDiameters(
   for (const group of barContinuityGroups(model)) {
     const diaOf = (mid: string) => {
       const sec = secById.get(memSecId.get(mid) ?? '')
-      return sec ? (chosen.get(sec.id) ?? sec.barDia) : 0
+      return sec ? (chosen.get(sec.id)?.barDia ?? sec.barDia) : 0
     }
     const dmax = Math.max(...group.map(diaOf))
     for (const mid of group) {
       const sec = secById.get(memSecId.get(mid) ?? '')
-      if (sec && diaOf(mid) !== dmax) chosen.set(sec.id, dmax)
+      if (!sec || diaOf(mid) === dmax) continue
+      // The count was searched at the Ø this section lost, so it cannot ship
+      // with the Ø it just gained. Re-run the column search pinned to dmax; if
+      // nothing there is compliant the count is dropped rather than left
+      // stale, which returns the section to the derived cage.
+      chosen.set(sec.id, { barDia: dmax, barCount: colSearch.get(sec.id)?.([dmax]).bars ?? undefined })
     }
   }
 
   if (chosen.size === 0) return model
   return {
     ...model,
-    sections: model.sections.map((s) => (chosen.has(s.id) ? { ...s, barDia: chosen.get(s.id)! } : s)),
+    sections: model.sections.map((s) => (chosen.has(s.id) ? { ...s, ...chosen.get(s.id)! } : s)),
   }
 }
 
@@ -1625,8 +1654,20 @@ const countFails = (d: StructureDesign): number =>
   + d.scwb.filter((x) => !x.ok).length
   + d.unchecked.length
 
+/** Swap in re-sized sections. A stored column cage belongs to the geometry it
+ *  was searched on — ρ = n·Ab/(b·h) moves with the concrete — so a section
+ *  whose b/h/shape changes drops its `barCount` and reverts to the derived
+ *  cage, until the next `selectBarDiameters` pass adopts one for the new size.
+ *  Keeping it would let the optimizer grow a column straight out of §10.6.1.1's
+ *  ρmin and then report the section it just built as failing. */
 const withSizes = (model: StructuralModel, sizes: Map<string, RectSection>): StructuralModel =>
-  ({ ...model, sections: model.sections.map((s) => sizes.get(s.id) ?? s) })
+  ({ ...model, sections: model.sections.map((s) => {
+    const t = sizes.get(s.id)
+    if (!t) return s
+    return t.barCount !== undefined && (t.b !== s.b || t.h !== s.h || t.shape !== s.shape)
+      ? { ...t, barCount: undefined }
+      : t
+  }) })
 
 /** True when any design geometry differs between two settled models — sections,
  *  slab thicknesses or wall thicknesses.

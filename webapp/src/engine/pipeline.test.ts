@@ -1121,10 +1121,10 @@ describe('model space and the calculator pages agree on bars', () => {
   })
 
   it('selection does not make a previously passing design fail', () => {
-    // The count axis is the trap: `RectSection` stores a diameter and no bar
-    // count, so a search that adopts a count has it silently recomputed
-    // downstream — and a P–M check that passed during the search fails on the
-    // section that shipped. Pinning the count is what keeps these equal.
+    // The count axis used to be the trap: with no place to store a count, a
+    // search that adopted one had it silently recomputed downstream, and a P–M
+    // check that passed during the search failed on the section that shipped.
+    // `RectSection.barCount` is what keeps the two equal now.
     const m0 = gridAt(28)
     const before = designStructure(m0, soil)!
     const after = designStructure(selectBarDiameters(m0, soil), soil)!
@@ -1141,6 +1141,66 @@ describe('model space and the calculator pages agree on bars', () => {
     for (const group of barContinuityGroups(m)) {
       const dias = new Set(group.map((mid) => secOf.get(memSec.get(mid) ?? '')?.barDia))
       expect(dias.size, group.join(',')).toBe(1)
+    }
+  })
+
+  it('a stack whose Ø the continuity guard raises does not keep the count searched at the old Ø', () => {
+    // Seed the stack base at ⌀32 so the guard has a diameter to push up
+    // through the storey above; the count that shipped with the smaller bar
+    // cannot ride along, or the cage nobody checked is the cage that gets
+    // detailed.
+    const m0 = gridAt(20)
+    m0.sections.find((s) => s.id === 'c0.0.0')!.barDia = 32
+    const m = selectBarDiameters(m0, soil)
+    const secOf = new Map(m.sections.map((s) => [s.id, s]))
+    const memSec = new Map(m.members.map((x) => [x.id, x.section]))
+    for (const group of barContinuityGroups(m)) {
+      const secs = group.map((mid) => secOf.get(memSec.get(mid) ?? '')!)
+      expect(new Set(secs.map((s) => s.barDia)).size, group.join(',')).toBe(1)
+    }
+    // every stored cage still satisfies the L1 rules at the Ø it ended on
+    expect(validateMesh(m).filter((i) => i.code.startsWith('BAR_COUNT'))).toEqual([])
+  })
+
+  it('a saved cage does not survive the size change that outgrew it', () => {
+    // 4⌀20 is fine in a 300×300 column (ρ = 0.0140) and under §10.6.1.1's ρmin
+    // the moment the optimizer grows the concrete. Frozen, it is a floor the
+    // column can never meet: growing makes ρ *smaller*, so the section chases
+    // the cast-in-place cap and the run ends with every column failing on a
+    // cage nothing asked for. Dropping it at the size change is what lets the
+    // derived cage take over.
+    const m0 = generateGridModel({ baysX: [7], baysZ: [6], storeyH: [3, 3], section, slabThickness: 200 })
+    m0.loads = m0.plates.flatMap((p): ModelLoad[] => [
+      { kind: 'area', plate: p.id, q: 9.0, cat: 'D' },
+      { kind: 'area', plate: p.id, q: 6.0, cat: 'L' },
+    ])
+    for (const s of m0.sections) if (s.id.startsWith('c')) { s.b = 300; s.h = 300; s.barCount = 4 }
+    const r = optimizeStructure(m0, soil)!         // no bar pass: nothing re-adopts a count
+    const colSecs = r.model.sections.filter((s) => s.id.startsWith('c'))
+    expect(colSecs.some((s) => s.h !== 300)).toBe(true)              // they did grow
+    for (const s of colSecs) expect(s.barCount, s.id).toBeUndefined()
+    expect(r.converged).toBe(true)
+    for (const c of r.design.columns) expect(c.ok, c.id).toBe(true)
+  })
+
+  it('the optimizer ends on a cage that fits the size it settled on', () => {
+    // ρ = n·Ab/(b·h) moves with the concrete, so a cage carried across a size
+    // change can land outside §10.6.1.1 — a section the optimizer itself built,
+    // then reported as failing. Every b×h change clears the count and the next
+    // bar pass re-adopts one, so the model that comes out is self-consistent.
+    const m0 = makeModel()
+    // start the columns small enough that the grow loop has to run first
+    for (const s of m0.sections) if (s.id.startsWith('c')) { s.b = 250; s.h = 300 }
+    const r = optimizeStructure(m0, soil, {}, 30, {}, true)!
+    const colSecs = r.model.sections.filter((s) => s.id.startsWith('c'))
+    expect(colSecs.some((s) => s.b !== 250 || s.h !== 300)).toBe(true)   // the columns did move
+    expect(validateMesh(r.model).filter((i) => i.code.startsWith('BAR_COUNT'))).toEqual([])
+    const secOf = new Map(r.model.members.map((x) => [x.id, x.section]))
+    for (const c of r.design.columns) {
+      const sec = r.model.sections.find((s) => s.id === secOf.get(c.id))!
+      expect(sec.barCount, c.id).toBeDefined()
+      expect(c.bars, c.id).toBe(sec.barCount)      // the schedule details what the model stores
+      expect(c.ok, c.id).toBe(true)
     }
   })
 })

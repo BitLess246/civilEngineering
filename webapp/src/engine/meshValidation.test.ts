@@ -99,3 +99,81 @@ describe('validateMesh — advisory warnings', () => {
     expect(issues.some((i) => i.code === 'duplicate-member')).toBe(true)
   })
 })
+
+// ── L1: RectSection.barCount ──────────────────────────────────────────────
+describe('validateMesh — column cage bar count', () => {
+  /** A 400×400 column section carrying 4 members' worth of grid, plus the id
+   *  of one column that uses it. `generateGridModel` clones a section per
+   *  member (id = member id), so 'c0.0.0' is the ground-storey column. */
+  const gridWith = (patch: Partial<RectSection>): StructuralModel => {
+    const m = generateGridModel({
+      baysX: [6], baysZ: [5], storeyH: [3],
+      column: { ...section, id: 'C', name: '400×400', b: 400, h: 400 },
+      beam: section, girder: section,
+    })
+    const col = m.sections.find((s) => s.id === 'c0.0.0')!
+    Object.assign(col, patch)
+    return m
+  }
+  const issuesFor = (patch: Partial<RectSection>) =>
+    validateMesh(gridWith(patch)).filter((i) => i.refs.includes('c0.0.0'))
+
+  it('a well-formed cage is silent', () => {
+    // 8⌀20 in 400×400: ρ = 8·314.2/160000 = 0.0157 ✓; four per face, clear
+    // (400 − 2·50 − 4·20)/3 = 73 mm ≥ max(1.5·20, 40) = 40 ✓
+    expect(issuesFor({ barCount: 8 })).toEqual([])
+  })
+
+  it('rejects a count below the §10.7.3.1 minimum, and a fractional one', () => {
+    expect(issuesFor({ barCount: 2 }).map((i) => i.code)).toContain('BAR_COUNT')
+    expect(issuesFor({ barCount: 6.5 }).map((i) => i.code)).toContain('BAR_COUNT')
+    expect(issuesFor({ barCount: 2 })[0].severity).toBe('error')
+  })
+
+  it('rejects an odd count — the cage must be symmetric', () => {
+    const i = issuesFor({ barCount: 7 })
+    expect(i.map((x) => x.code)).toContain('BAR_COUNT_SYMMETRY')
+    expect(i.find((x) => x.code === 'BAR_COUNT_SYMMETRY')!.severity).toBe('error')
+    // a well-formed count is not also reported as malformed
+    expect(i.map((x) => x.code)).not.toContain('BAR_COUNT')
+  })
+
+  it('rejects a bar count on a steel or timber section', () => {
+    expect(issuesFor({ barCount: 8, material: 'steel', shape: 'W310x38.7' }).map((i) => i.code))
+      .toContain('BAR_COUNT_MATERIAL')
+    expect(issuesFor({ barCount: 8, material: 'wood', woodSpecies: 'DFL-2' }).map((i) => i.code))
+      .toContain('BAR_COUNT_MATERIAL')
+  })
+
+  it('warns when ρ leaves §10.6.1.1 — 4⌀16 in 400×400 is under 1%', () => {
+    // 4·201.1/160000 = 0.0050 < 0.01
+    const i = issuesFor({ barCount: 4, barDia: 16 })
+    const rho = i.find((x) => x.code === 'BAR_COUNT_RHO')!
+    expect(rho.severity).toBe('warning')
+    expect(rho.message).toContain('0.0050')
+    // and above 8%: 24⌀32 → 24·804.2/160000 = 0.1206
+    expect(issuesFor({ barCount: 24, barDia: 32 }).map((x) => x.code)).toContain('BAR_COUNT_RHO')
+  })
+
+  it('warns when the bars cannot fit the face at §25.2.3 clear spacing', () => {
+    // 16⌀32 in 400: eight per face, clear (400 − 2·50 − 8·32)/7 = 6.3 mm < 48
+    const i = issuesFor({ barCount: 16, barDia: 32 })
+    const sp = i.find((x) => x.code === 'BAR_COUNT_SPACING')!
+    expect(sp.severity).toBe('warning')
+    expect(sp.message).toContain('48 mm')
+  })
+
+  it('warns when a count sits on a section no column uses', () => {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section })
+    const beam = m.sections.find((s) => m.members.some((x) => x.id === s.id && x.role !== 'column'))!
+    beam.barCount = 8
+    const i = validateMesh(m).filter((x) => x.refs.includes(beam.id))
+    expect(i.map((x) => x.code)).toContain('BAR_COUNT_UNUSED')
+    expect(i.find((x) => x.code === 'BAR_COUNT_UNUSED')!.severity).toBe('warning')
+  })
+
+  it('says nothing at all when no section carries a count', () => {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section })
+    expect(validateMesh(m).filter((i) => i.code.startsWith('BAR_COUNT'))).toEqual([])
+  })
+})

@@ -19,6 +19,20 @@ export interface RectSection {
   b: number; h: number          // mm  (concrete/wood b × d; for steel a bounding box ≈ bf × d)
   fc: number; fy: number
   barDia: number; tieDia: number; cover: number
+  /** COLUMN cage: total number of longitudinal bars in the section.
+   *
+   *  Absent ⇒ the count is DERIVED from the required steel by
+   *  `designAxialColumn` (`max(minBars, ceil(AstReq/Ab))`) — how every model
+   *  behaved before this field, so old JSON loads unchanged. Present ⇒ the
+   *  cage is the stored one, which is what lets the two-axis (Ø × count)
+   *  column rebar search adopt a count instead of pinning it to the derived
+   *  one: 8⌀20 and 4⌀25 are different columns and only a stored count can tell
+   *  the schedule which was chosen.
+   *
+   *  Even and ≥ 4 (tied) — a cage is symmetric or the P–M interaction is not
+   *  the one it was computed for; `meshValidation` enforces it. BEAM sections
+   *  ignore it: a beam's count follows As at each critical section. */
+  barCount?: number
   /** Material of the member. Absent ⇒ 'concrete' (back-compatible). */
   material?: SectionMaterial
   /** AISC shape name (steel only), e.g. 'W310x38.7'. Resolved via aiscSections. */
