@@ -1642,3 +1642,50 @@ Three copies of `max(0.65, sloped-row)` remained after #530 — `loads.ts`
 `/tbeam-design` now shows the equilibrium derivation itself: T, the C expression
 for the branch taken, `a` solved from it, and a `C = T` closing check — plus a
 step for the stacked-cage `d` when the bars need more than one layer.
+
+# Bar count in the model schema — the column's second axis (August 2026)
+
+`RectSection` stored a diameter and no bar count, so the count was re-derived
+downstream by `designAxialColumn` on every read. That single missing field was
+what pinned model space to a **one-axis** column rebar search: `columnRebarOptimize`
+enumerates Ø × count, but the pipeline had to hand it
+`counts: (i, db) => [designAxialColumn({ ...i, barDia: db }).bars]` — pin the count
+to the one that will be re-derived — because a cage it adopted instead would be
+silently recomputed into a different one, and a P–M check that passed during the
+search would fail on the section that shipped.
+
+## What changed
+
+- **L1** `RectSection.barCount?: number` — absent ⇒ derived (old JSON loads
+  unchanged), present ⇒ the cage is the stored one.
+- **L1** `meshValidation` polices it: `BAR_COUNT` (whole number ≥ 4, §10.7.3.1),
+  `BAR_COUNT_SYMMETRY` (even — equal counts on opposing faces), `BAR_COUNT_MATERIAL`
+  (concrete only) as errors; `BAR_COUNT_RHO` (§10.6.1.1), `BAR_COUNT_SPACING`
+  (§25.2.3 clear spacing along b) and `BAR_COUNT_UNUSED` (a count on a section no
+  column carries) as warnings.
+- **L6** `selectBarDiameters` drops the pin and searches both axes; the winning
+  `{db, bars}` is stored. `designColumnFromPM` and `columnRowSolution` pass
+  `numBars: sec.barCount`, so schedule, drawings, take-off, PDF and the worked
+  solution all read the same cage.
+- Shared sections: the **worst** column governs (ordered on provided steel), the
+  same rule `buildUtilMap` uses when sections grow — a stored count no longer
+  adapts per member the way the derived one did.
+- A count is dropped, never carried, when the thing it was searched against
+  changes: `withSizes` on any b×h/shape change (ρ = n·Ab/Ag moves with the
+  concrete) and `applyMaterial` when the global Ø changes.
+
+## What it fixed, visible in the browser
+
+Default grid, one click of **Design structure**: the RC column schedule went from
+**"2 failed"** — `c1.0.1` and `c1.1.1` at `6⌀20`, **117 %** — to **"all passed"** at
+`8⌀20`, **92 %**. The 6-bar cage was the axially-derived one; the P–M gate could
+only reject it, never raise it, because there was nowhere to put the answer.
+
+## Left open
+
+- No per-section bar-count input in the Properties panel — the count is adopted by
+  the search and shown in the schedule. `applyMaterial` clears it on every run, so
+  a hand-set (or imported) count survives only until the next Design/Optimize,
+  exactly as a hand-set Ø does.
+- Spiral columns: `barCount` is validated against the tied minimum (4). §10.7.3.1's
+  6-bar spiral minimum arrives with spiral sections in model space.

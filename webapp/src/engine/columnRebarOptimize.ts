@@ -83,13 +83,12 @@ export interface ColumnRebarOptions {
    * Which bar counts to consider for a diameter. Defaults to the full even
    * sweep, which is the two-axis search this module exists for.
    *
-   * A caller that cannot STORE a count must narrow it. The model-space
-   * pipeline is one: `RectSection` carries `barDia` and no bar count, so the
-   * count is re-derived downstream by `designAxialColumn`. Searching a count
-   * there would adopt a cage the schedule then silently recomputes into a
-   * different one — and a P–M check that passed during the search would fail
-   * on the section that actually shipped. It pins the count to the one the
-   * final design will use, and gets the scoring without the mismatch.
+   * A caller that cannot STORE a count must narrow it to the one its own
+   * downstream will re-derive — otherwise the search adopts a cage that is
+   * silently recomputed into a different one, and a P–M check that passed
+   * during the search fails on the section that actually shipped. The
+   * model-space pipeline used to be exactly that caller; `RectSection.barCount`
+   * now carries the count, so it searches both axes and stores the winner.
    */
   counts?: (i: AxialColumnInput, db: number) => readonly number[]
 }

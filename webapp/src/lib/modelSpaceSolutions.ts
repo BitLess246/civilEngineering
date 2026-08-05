@@ -27,6 +27,9 @@ export function columnRowSolution(sec: RectSection, row: ColumnScheduleRow): Sol
   const base = {
     shape: 'tied' as const, b: sec.b, h: sec.h, cover: sec.cover,
     barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, Pu: row.Pu,
+    // the stored cage is analysed, not re-designed — same as the pipeline, so
+    // the printed solution shows the bars the schedule row reports
+    numBars: sec.barCount,
   }
   const ax = designAxialColumn(base)
   const steps: SolutionStep[] = []

@@ -20,6 +20,7 @@
 // valid model with a false error.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel } from './model'
+import { RHO_MIN, RHO_MAX } from './columnDesign'
 import { barContinuityGroups } from './modelBuilder'
 import { WOOD_SPECIES } from './woodDesign'
 
@@ -183,6 +184,46 @@ export function validateMesh(model: StructuralModel): MeshIssue[] {
       issues.push({ severity: 'error', code: 'PS_PARAMS', message: `section ${sec.id}: Aps, fpu and f'ci must be positive`, refs: [sec.id] })
     if (!(sec.ps.e > 0) || sec.ps.e > sec.h / 2 - 40)
       issues.push({ severity: 'error', code: 'PS_ECC', message: `section ${sec.id}: tendon eccentricity must satisfy 0 < e ≤ h/2 − 40 mm`, refs: [sec.id] })
+  }
+
+  // ── column cage bar count (L1 rule for RectSection.barCount) ────────────
+  // A stored count is a cage that ships as written — nothing downstream
+  // re-derives it — so the placement rules that make it buildable are checked
+  // here, upstream, against the section that carries it.
+  const columnSecs = new Set(model.members.filter((m) => m.role === 'column').map((m) => m.section))
+  for (const sec of model.sections) {
+    const n = sec.barCount
+    if (n === undefined) continue
+    const wellFormed = Number.isInteger(n) && n >= 4
+    if (!wellFormed)
+      issues.push({ severity: 'error', code: 'BAR_COUNT', refs: [sec.id],
+        message: `section ${sec.id}: bar count must be a whole number ≥ 4 (ACI 318-14 §10.7.3.1 — four bars minimum in a tied column); got ${n}` })
+    else if (n % 2 !== 0)
+      issues.push({ severity: 'error', code: 'BAR_COUNT_SYMMETRY', refs: [sec.id],
+        message: `section ${sec.id}: bar count ${n} is odd — a column cage needs equal counts on opposing faces, which is the section the P–M interaction is computed for` })
+    if (sec.material === 'steel' || sec.material === 'wood')
+      issues.push({ severity: 'error', code: 'BAR_COUNT_MATERIAL', refs: [sec.id],
+        message: `section ${sec.id}: a bar count is only meaningful on a concrete section` })
+    if (!columnSecs.has(sec.id))
+      issues.push({ severity: 'warning', code: 'BAR_COUNT_UNUSED', refs: [sec.id],
+        message: `section ${sec.id}: carries a bar count but no column — a beam's count follows As at each critical section, so the stored count is ignored` })
+    if (!wellFormed || !(sec.b > 0) || !(sec.h > 0)) continue
+    // ρ = n·Ab/Ag, §10.6.1.1 — the count and the concrete size have to agree.
+    const rho = (n * (Math.PI / 4) * sec.barDia ** 2) / (sec.b * sec.h)
+    if (rho < RHO_MIN - 1e-9 || rho > RHO_MAX + 1e-9)
+      issues.push({ severity: 'warning', code: 'BAR_COUNT_RHO', refs: [sec.id],
+        message: `section ${sec.id}: ${n}⌀${sec.barDia} in ${sec.b}×${sec.h} gives ρ = ${rho.toFixed(4)}, outside ACI 318-14 §10.6.1.1's ${RHO_MIN}–${RHO_MAX}` })
+    // §25.2.3 clear spacing, read TWO-FACE along b — the same reading
+    // `columnRebarOptimize.clearSpacingOf` makes, and the layout the pipeline
+    // designs the column for.
+    const perFace = Math.ceil(n / 2)
+    const sClear = perFace > 1
+      ? (sec.b - 2 * (sec.cover + sec.tieDia) - perFace * sec.barDia) / (perFace - 1)
+      : sec.b
+    const sMin = Math.max(1.5 * sec.barDia, 40)
+    if (sClear < sMin - 1e-6)
+      issues.push({ severity: 'warning', code: 'BAR_COUNT_SPACING', refs: [sec.id],
+        message: `section ${sec.id}: ${n}⌀${sec.barDia} leaves ${sClear.toFixed(0)} mm clear along the ${sec.b} mm face — ACI 318-14 §25.2.3 needs ≥ ${sMin.toFixed(0)} mm; use fewer, larger bars or widen the column` })
   }
 
   // ── tension-only / compression-only members (axialOnly active set) ──
