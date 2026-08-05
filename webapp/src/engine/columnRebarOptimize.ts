@@ -69,6 +69,29 @@ export interface ColumnRebarOptions {
   maxBars?: number
   /** Clear spacing below which placing concrete around the cage is awkward. */
   sComfort?: number
+  /**
+   * Extra gates for THIS cage, appended to the code checks.
+   *
+   * `designAxialColumn` is a pure axial design, and a real column usually
+   * carries a moment too. Rather than a second search that re-derives the P–M
+   * interaction here, the caller supplies the check it already knows how to
+   * make — the model-space pipeline gates on utilisation at the eccentricity
+   * Mu/Pu, using the same `capacityAtEccentricity` its schedule reports.
+   */
+  extraChecks?: (i: AxialColumnInput, r: AxialColumnResult) => ComplianceCheck[]
+  /**
+   * Which bar counts to consider for a diameter. Defaults to the full even
+   * sweep, which is the two-axis search this module exists for.
+   *
+   * A caller that cannot STORE a count must narrow it. The model-space
+   * pipeline is one: `RectSection` carries `barDia` and no bar count, so the
+   * count is re-derived downstream by `designAxialColumn`. Searching a count
+   * there would adopt a cage the schedule then silently recomputes into a
+   * different one — and a P–M check that passed during the search would fail
+   * on the section that actually shipped. It pins the count to the one the
+   * final design will use, and gets the scoring without the mismatch.
+   */
+  counts?: (i: AxialColumnInput, db: number) => readonly number[]
 }
 
 export interface ColumnRebarChoice {
@@ -178,7 +201,9 @@ export function optimizeColumnRebar(
 
   for (const db of sizes) {
     const Ab = (Math.PI / 4) * db * db
-    for (let bars = minBars; bars <= maxBars; bars += 2) {
+    const sweep: number[] = []
+    for (let n = minBars; n <= maxBars; n += 2) sweep.push(n)
+    for (const bars of opts.counts?.(i, db) ?? sweep) {
       const trial: AxialColumnInput = { ...i, barDia: db, numBars: bars }
       let r: AxialColumnResult
       try {
@@ -204,7 +229,13 @@ export function optimizeColumnRebar(
         d: r.Ag > 0 ? (i.h ?? i.D ?? 0) : 0,
         utilization: r.phiPnMax > 0 ? i.Pu / r.phiPnMax : Infinity,
       }
-      candidates.push({ layout, compliance: complianceOf(trial, r, bars, sClear) })
+      candidates.push({
+        layout,
+        compliance: [
+          ...complianceOf(trial, r, bars, sClear),
+          ...(opts.extraChecks?.(trial, r) ?? []),
+        ],
+      })
     }
   }
 
