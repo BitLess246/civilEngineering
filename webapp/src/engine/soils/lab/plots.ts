@@ -28,6 +28,7 @@ import type { ConsolidationResult } from './consolidation'
 import { type CompactionResult, zeroAirVoids } from './compaction'
 import type { TriaxialResult, MohrCircle, TriaxialEnvelope } from './triaxial'
 import { type CbrResult, type CbrPoint, STANDARD_STRESS } from './cbr'
+import type { HydrometerResult } from './hydrometer'
 import type { GradationResult } from '../sieve'
 
 import {
@@ -524,6 +525,85 @@ export function compactionChart(r: CompactionResult, gs?: number): Drawing {
         ? `${r.effort} effort — peak interpolated between the points either side`
         : `${r.effort} effort — HIGHEST MEASURED point; no peak inside the range tested`,
       color: r.peakFrom === 'fit' ? AXIS : WARN,
+    },
+  ]))
+
+  return {
+    primitives: p,
+    bounds: { minX: 0, minY: 0, maxX: box.left + box.w + 4, maxY: box.top + box.h + 13 },
+  }
+}
+
+// ── Hydrometer: the fine end of the grading curve ─────────────────────────
+
+/**
+ * Percent finer against log diameter, drawn on the SAME conventions as the
+ * sieve grading curve — coarse to fine, left to right — so the two read as one
+ * distribution even while they are still two tests.
+ *
+ * The clay/silt boundary at 0.002 mm is marked because it is what the fine end
+ * of this curve is read for; the sand boundary at 0.075 mm is marked when it is
+ * in range, since that is where a sieve curve would take over.
+ */
+export function hydrometerChart(r: HydrometerResult): Drawing {
+  const box = BOX
+  const p: PlanPrimitive[] = frame(box, 'particle size  (mm, log)', '% finer', 'Hydrometer — sedimentation')
+
+  const rows = [...r.rows].filter((q) => q.diameter > 0).sort((a, b) => b.diameter - a.diameter)
+  if (rows.length < 2) return { primitives: p, bounds: { minX: 0, minY: 0, maxX: box.left + box.w + 4, maxY: box.top + box.h + 13 } }
+
+  // Padded past 0.075 mm so the sand/fines boundary — the size a sieve curve
+  // takes over at — lands INSIDE the frame rather than on the axis itself.
+  const dHi = Math.max(rows[0].diameter * 1.6, 0.1)
+  const dLo = Math.min(rows[rows.length - 1].diameter / 1.6, 0.001)
+  const X = (v: number) =>
+    box.left + ((Math.log10(dHi) - Math.log10(v)) / (Math.log10(dHi) - Math.log10(dLo))) * box.w
+  const Y = (v: number) => box.top + box.h - (v / 100) * box.h
+
+  for (const t of decadeTicks(dLo, dHi)) {
+    p.push({ kind: 'line', x1: X(t), y1: box.top, x2: X(t), y2: box.top + box.h, stroke: GRID, width: 0.2 })
+    p.push({ kind: 'text', x: X(t), y: box.top + box.h + 4, text: t < 0.01 ? t.toFixed(3) : t.toFixed(t < 0.1 ? 3 : 2), size: 2.0, anchor: 'middle', color: AXIS })
+  }
+  for (const pc of [0, 25, 50, 75, 100]) {
+    p.push({ kind: 'line', x1: box.left, y1: Y(pc), x2: box.left + box.w, y2: Y(pc), stroke: GRID, width: 0.2 })
+    p.push({ kind: 'text', x: box.left - 1.5, y: Y(pc) + 0.8, text: String(pc), size: 2.1, anchor: 'end', color: AXIS })
+  }
+
+  for (const [size, label] of [[0.075, 'sand | fines'], [0.002, 'silt | clay']] as [number, string][]) {
+    if (size > dHi || size < dLo) continue
+    const x = X(size)
+    p.push({ kind: 'line', x1: x, y1: box.top, x2: x, y2: box.top + box.h, stroke: WARN, width: 0.4, dash: [2, 1.5] })
+    // A centred label on a boundary near an edge hangs over the axis; anchor it
+    // inward instead, which is the same fix the grading chart needs when a
+    // boundary sits at the end of its range.
+    const near = 12
+    const anchor = x < box.left + near ? 'start' : x > box.left + box.w - near ? 'end' : 'middle'
+    p.push({
+      kind: 'text', x: anchor === 'start' ? x + 1 : anchor === 'end' ? x - 1 : x,
+      y: box.top - 0.5, text: label, size: 1.9, anchor, color: WARN,
+    })
+  }
+
+  for (let i = 1; i < rows.length; i++) {
+    p.push({
+      kind: 'line',
+      x1: X(rows[i - 1].diameter), y1: Y(rows[i - 1].percentFiner),
+      x2: X(rows[i].diameter), y2: Y(rows[i].percentFiner),
+      stroke: ACCENT, width: 0.6,
+    })
+  }
+  for (const q of rows) p.push({ kind: 'circle', cx: X(q.diameter), cy: Y(q.percentFiner), r: 0.9, fill: INK })
+
+  // Bottom-left, as on the grading curve: this curve descends left to right.
+  p.push(...plate(box.left + 2, box.top + box.h - 6.6, 2.3, [
+    {
+      text: r.clayFraction != null
+        ? `clay (< 2 μm) = ${r.clayFraction.toFixed(1)}%`
+        : 'clay fraction outside the sizes measured',
+      color: r.clayFraction != null ? INK : WARN,
+    },
+    {
+      text: r.d50 != null ? `D50 = ${r.d50.toFixed(4)} mm   a = ${r.gravityFactor.toFixed(3)}` : `a = ${r.gravityFactor.toFixed(3)}`,
     },
   ]))
 

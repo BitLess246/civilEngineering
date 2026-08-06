@@ -700,6 +700,49 @@ export const CALCULATIONS = {
     ],
   },
 
+  'hydrometer.stokes': {
+    title: 'Equivalent spherical diameter (Stokes)',
+    category: 'index',
+    equation: String.raw`D = \sqrt{\frac{18 \mu L}{(G_s - 1)\rho_w g\, t}}`,
+    unit: 'mm',
+    symbols: {
+      D: 'equivalent spherical diameter, mm',
+      '\\mu': 'dynamic viscosity of water at the suspension temperature, poise (0.1 Pa s)',
+      L: 'effective depth of the hydrometer bulb, cm (0.01 m each)',
+      G_s: 'specific gravity of solids',
+      '\\rho_w': 'density of water, g/cm³ (1000 kg/m³)',
+      g: 'gravitational acceleration, 980 cm/s² (9.8 m/s²)',
+      t: 'elapsed sedimentation time, minutes (60 s each)',
+    },
+    standard: 'd7928',
+    assumptions: [
+      'Grains settle as isolated smooth spheres in still water at their terminal velocity.',
+    ],
+    limitations: [
+      'The result is an EQUIVALENT diameter — the sphere that would settle at the observed speed. Clay platelets are not spheres, so the fine end describes settling behaviour rather than a measured dimension.',
+      'Viscosity follows temperature, so a suspension that drifts more than about 1 °C moves every diameter with it.',
+    ],
+  },
+
+  'hydrometer.percent-finer': {
+    title: 'Percent finer from a hydrometer reading',
+    category: 'index',
+    equation: String.raw`P = \frac{a R_c}{M_s} \times 100, \qquad a = \frac{1.65 G_s}{2.65 (G_s - 1)}`,
+    unit: '%',
+    symbols: {
+      P: 'percent of the suspended specimen finer than D, %',
+      a: 'specific-gravity correction factor, dimensionless (1.00 at Gs = 2.65)',
+      R_c: 'hydrometer reading after the composite correction, g per litre (0.001 kg each)',
+      M_s: 'oven-dry mass of soil in suspension, g',
+      G_s: 'specific gravity of solids',
+    },
+    standard: 'd7928',
+    limitations: [
+      'The composite correction (dispersant, meniscus and temperature, read on a control cylinder) is commonly 5–7 g/L against readings of 10–50 — omitting it shifts the whole curve by a tenth of the sample.',
+      'A suspension taken from the minus-No.200 fraction reports percentages OF THAT FRACTION; they must be scaled by the fines content before they join a sieve curve.',
+    ],
+  },
+
   // ── Compaction ──
   'compaction.dry-density': {
     title: 'Dry density of a compacted specimen',

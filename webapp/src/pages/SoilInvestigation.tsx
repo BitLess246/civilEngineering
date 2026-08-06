@@ -21,6 +21,7 @@ import {
 import { classifySample } from '../engine/soils/classifySample'
 import {
   shearEnvelopeChart, consolidationChart, gradingChart, compactionChart, mohrChart, cbrChart,
+  hydrometerChart,
 } from '../engine/soils/lab/plots'
 import { buildSection, sectionDrawing } from '../engine/soils/section'
 import {
@@ -1392,6 +1393,12 @@ function TestCard({
               onChange={(rows) => onPoints(rows as unknown as ShearRow[])} />
           )}
 
+          {spec!.formKind === 'hydrometer-readings' && (
+            <HydrometerReadings
+              rows={(test.data?.readings as SedimentRow[] | undefined) ?? []}
+              onChange={(rows) => onRows(rows as unknown as StackRow[])} />
+          )}
+
           {spec!.formKind === 'cbr-points' && (
             <>
               <label className="mt-2 flex flex-col text-[11px]">
@@ -2200,6 +2207,66 @@ function CbrPoints({
   )
 }
 
+interface SedimentRow { time: number; reading: number; temperature: number }
+
+/** D7928's reading schedule: two decades of time, ending after a day. */
+const DEFAULT_SEDIMENT = [2, 5, 15, 30, 60, 250, 1440]
+
+/** One hydrometer reading per row: time, scale, and the suspension temperature. */
+function HydrometerReadings({
+  rows, onChange,
+}: { rows: SedimentRow[]; onChange: (rows: SedimentRow[]) => void }) {
+  const pts: SedimentRow[] = rows.length
+    ? rows
+    : DEFAULT_SEDIMENT.map((time) => ({ time, reading: 0, temperature: 20 }))
+  const set = (i: number, patch: Partial<SedimentRow>) =>
+    onChange(pts.map((r, k) => (k === i ? { ...r, ...patch } : r)))
+
+  return (
+    <div className="mt-2">
+      <table className="w-full text-left text-[11px]">
+        <thead className="text-slate-500">
+          <tr className="border-b border-slate-200">
+            <th className="py-1 pr-2 text-right">Time (min)</th>
+            <th className="py-1 pr-2 text-right">Reading (g/L)</th>
+            <th className="py-1 pr-2 text-right">Temperature (°C)</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {pts.map((r, i) => (
+            <tr key={i} className="border-b border-slate-100">
+              {([['time', r.time] as const, ['reading', r.reading] as const, ['temperature', r.temperature] as const])
+                .map(([key, v]) => (
+                  <td key={key} className="py-0.5 pr-2 text-right">
+                    <input type="number" step="any" value={v ?? ''}
+                      onChange={(e) => set(i, {
+                        [key]: e.target.value === '' ? undefined : num(e.target.value),
+                      } as Partial<SedimentRow>)}
+                      className="w-24 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                  </td>
+                ))}
+              <td className="py-0.5 text-right">
+                <button onClick={() => onChange(pts.filter((_, k) => k !== i))}
+                  className="rounded px-1 text-[10px] text-red-600 hover:bg-red-50">×</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-1 text-[10px] text-slate-500">
+        Read at the top of the meniscus. The composite correction below comes from a control cylinder
+        of the same dispersant solution — it is subtracted from every reading, and at 5–7 g/L against
+        readings of 10–50 it is a tenth of the sample, not a rounding.
+      </p>
+      <button onClick={() => onChange([...pts, { time: 0, reading: 0, temperature: 20 }])}
+        className="mt-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50">
+        + reading
+      </button>
+    </div>
+  )
+}
+
 // ── Test charts ───────────────────────────────────────────────────────────
 
 /**
@@ -2299,6 +2366,8 @@ function TestChart({ test, outcome }: { test: LabTest; outcome: LabOutcome }) {
       // drawn where it was measured.
       case 'cbr':
         return planToSvg(cbrChart(outcome.result, readCbr(test)?.points ?? []), 460)
+      case 'hydrometer':
+        return planToSvg(hydrometerChart(outcome.result), 460)
       default:
         return null
     }
