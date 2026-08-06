@@ -1393,6 +1393,29 @@ function TestCard({
               onChange={(rows) => onPoints(rows as unknown as ShearRow[])} />
           )}
 
+          {spec!.formKind === 'swell-reload' && (
+            <>
+              <label className="mt-2 flex flex-col text-[11px]">
+                <span className="mb-0.5 text-slate-600">Method</span>
+                <select
+                  value={(test.data?.method as string | undefined) ?? 'A'}
+                  onChange={(e) => onChoice('method', e.target.value)}
+                  className="rounded border border-slate-300 px-1.5 py-1">
+                  <option value="A">A — wetted at a seating pressure (free swell)</option>
+                  <option value="B">B — wetted at the in-situ vertical stress</option>
+                  <option value="C">C — height held constant (swelling pressure measured)</option>
+                </select>
+                <span className="mt-0.5 text-[10px] text-slate-500">
+                  A gives the largest figure the soil can produce; B gives what that depth would do if it
+                  got wet. C holds the height, so its strain is zero by construction.
+                </span>
+              </label>
+              <SwellReload
+                rows={(test.data?.points as ReloadRow[] | undefined) ?? []}
+                onChange={(rows) => onPoints(rows as unknown as ShearRow[])} />
+            </>
+          )}
+
           {spec!.formKind === 'hydrometer-readings' && (
             <HydrometerReadings
               rows={(test.data?.readings as SedimentRow[] | undefined) ?? []}
@@ -2262,6 +2285,59 @@ function HydrometerReadings({
       <button onClick={() => onChange([...pts, { time: 0, reading: 0, temperature: 20 }])}
         className="mt-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50">
         + reading
+      </button>
+    </div>
+  )
+}
+
+interface ReloadRow { stress: number; height: number }
+
+/** Re-loading the swollen specimen: the curve the swelling pressure is read from. */
+function SwellReload({
+  rows, onChange,
+}: { rows: ReloadRow[]; onChange: (rows: ReloadRow[]) => void }) {
+  const pts: ReloadRow[] = rows.length ? rows : [25, 50, 100, 200, 400].map((stress) => ({ stress, height: 0 }))
+  const set = (i: number, patch: Partial<ReloadRow>) =>
+    onChange(pts.map((r, k) => (k === i ? { ...r, ...patch } : r)))
+
+  return (
+    <div className="mt-2">
+      <table className="w-full text-left text-[11px]">
+        <thead className="text-slate-500">
+          <tr className="border-b border-slate-200">
+            <th className="py-1 pr-2 text-right">Stress (kPa)</th>
+            <th className="py-1 pr-2 text-right">Height (mm)</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {pts.map((r, i) => (
+            <tr key={i} className="border-b border-slate-100">
+              {([['stress', r.stress] as const, ['height', r.height] as const]).map(([key, v]) => (
+                <td key={key} className="py-0.5 pr-2 text-right">
+                  <input type="number" step="any" value={v ?? ''}
+                    onChange={(e) => set(i, {
+                      [key]: e.target.value === '' ? undefined : num(e.target.value),
+                    } as Partial<ReloadRow>)}
+                    className="w-28 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+                </td>
+              ))}
+              <td className="py-0.5 text-right">
+                <button onClick={() => onChange(pts.filter((_, k) => k !== i))}
+                  className="rounded px-1 text-[10px] text-red-600 hover:bg-red-50">×</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-1 text-[10px] text-slate-500">
+        Optional, and only for methods A and B: the swelling pressure is the stress that brings the
+        swollen specimen back to its original height. Leave it empty and the strain on wetting is the
+        whole result.
+      </p>
+      <button onClick={() => onChange([...pts, { stress: 0, height: 0 }])}
+        className="mt-1 rounded border border-dashed border-slate-300 px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50">
+        + step
       </button>
     </div>
   )
