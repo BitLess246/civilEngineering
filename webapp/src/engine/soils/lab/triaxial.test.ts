@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { triaxial, fitTangent, type TriaxialSpecimen, type MohrCircle } from './triaxial'
+import { triaxial, fitTangent, failurePoint, type TriaxialSpecimen, type MohrCircle } from './triaxial'
 import { mohrChart } from './plots'
 import { evaluateTest, summarise, readTriaxial, labSpec, isImplemented } from './index'
 import type { LabTest } from '../model'
@@ -106,6 +106,98 @@ describe('the envelope is the common tangent to the circles', () => {
     })
     expect(r.total!.frictionAngle).toBeGreaterThan(80)
     expect(r.notes.join(' ')).toMatch(/above anything a soil sustains/)
+  })
+})
+
+describe('the stresses ON the failure plane', () => {
+  // The pair the results table prints, and the one it is easy to get wrong:
+  // the crown of the circle is τmax on a plane at 45°, which is NOT where the
+  // specimen failed and is larger by 1/cos φ.
+  const r = triaxial({
+    testType: 'CD',
+    specimens: [100, 200, 300].map((s3) => tangentSpecimen(s3, 15, 30)),
+  })
+
+  it('is attached to every circle once an envelope exists', () => {
+    expect(r.circles.every((c) => c.failure)).toBe(true)
+    const one = triaxial({ testType: 'UU', specimens: [{ cellPressure: 100, deviatorStress: 90 }] })
+    expect(one.circles[0].failure).toBeUndefined()   // no envelope, no tangency
+  })
+
+  it('matches σf = p − r·sin φ and τf = r·cos φ', () => {
+    const phi = (30 * Math.PI) / 180
+    for (const c of r.circles) {
+      expect(c.failure!.sigma).toBeCloseTo(c.center - c.radius * Math.sin(phi), 8)
+      expect(c.failure!.tau).toBeCloseTo(c.radius * Math.cos(phi), 8)
+    }
+  })
+
+  it('lies ON the envelope and ON the circle — it is the tangency', () => {
+    const { cohesion, frictionAngle } = r.total!
+    const tan = Math.tan((frictionAngle * Math.PI) / 180)
+    for (const c of r.circles) {
+      const f = c.failure!
+      // on the line τ = c + σ·tan φ
+      expect(f.tau).toBeCloseTo(cohesion + f.sigma * tan, 8)
+      // and on the circle: distance from the centre is the radius
+      expect(Math.hypot(f.sigma - c.center, f.tau)).toBeCloseTo(c.radius, 8)
+    }
+  })
+
+  it('carries LESS shear than the crown, by exactly cos φ', () => {
+    for (const c of r.circles) {
+      expect(c.failure!.tau).toBeLessThan(c.radius)
+      expect(c.radius * Math.cos((30 * Math.PI) / 180)).toBeCloseTo(c.failure!.tau, 8)
+      // quoting τmax would overstate the failure shear by 1/cos 30° = 15.5%
+      expect(c.radius / c.failure!.tau).toBeCloseTo(1 / Math.cos((30 * Math.PI) / 180), 8)
+    }
+  })
+
+  it('puts the failure plane at θ = 45 + φ/2', () => {
+    expect(r.circles[0].failure!.theta).toBeCloseTo(60, 8)         // 45 + 30/2
+    // and the arc from the σ1 end to the tangency subtends 2θ
+    const c = r.circles[0], f = c.failure!
+    const twoTheta = (Math.atan2(f.tau, f.sigma - c.center) * 180) / Math.PI
+    expect(twoTheta).toBeCloseTo(2 * f.theta, 6)
+  })
+
+  it('degenerates correctly for a φ = 0 saturated UU test', () => {
+    // Horizontal envelope: the failure plane IS the plane of maximum shear, at
+    // 45°, and τf = su exactly.
+    const uu = triaxial({
+      testType: 'UU',
+      specimens: [50, 100, 200].map((c) => ({ cellPressure: c, deviatorStress: 90 })),
+    })
+    for (const c of uu.circles) {
+      expect(c.failure!.theta).toBeCloseTo(45, 6)
+      expect(c.failure!.tau).toBeCloseTo(c.radius, 6)
+      expect(c.failure!.tau).toBeCloseTo(uu.undrainedStrength!, 6)
+      expect(c.failure!.sigma).toBeCloseTo(c.center, 6)
+    }
+  })
+
+  it('is computed once — the chart reads the same point the table prints', () => {
+    // failurePoint is exported so this identity is checkable rather than
+    // duplicated: two readings of one construction is how they drift apart.
+    const c = r.circles[1]
+    expect(failurePoint(c, r.total!)).toEqual(c.failure)
+  })
+
+  it('is attached in the EFFECTIVE basis from the effective envelope', () => {
+    const cu = triaxial({
+      testType: 'CU',
+      specimens: [100, 200, 300].map((s3, i) => {
+        const sp = tangentSpecimen(s3, 5, 32)
+        return { cellPressure: s3 + 40 * (i + 1), deviatorStress: sp.deviatorStress, porePressure: 40 * (i + 1) }
+      }),
+    })
+    const e = cu.effective!
+    for (const c of cu.effectiveCircles!) {
+      expect(c.failure!.tau).toBeCloseTo(e.cohesion + c.failure!.sigma * Math.tan((e.frictionAngle * Math.PI) / 180), 8)
+      expect(c.failure!.theta).toBeCloseTo(45 + 32 / 2, 6)
+    }
+    // the total circles use the TOTAL envelope, so their planes differ
+    expect(cu.circles[0].failure!.theta).not.toBeCloseTo(cu.effectiveCircles![0].failure!.theta, 3)
   })
 })
 
