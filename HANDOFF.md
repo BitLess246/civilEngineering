@@ -1336,8 +1336,15 @@ because flagging the unusual as an error trains people to ignore errors.
 | 4e — lab charts (envelope, e–log σ′, grading) | #487 | open |
 | 4f — compaction (Proctor, ZAV bound, curve) | #543 | merged |
 | 4g — triaxial UU/CU/CD + Mohr circle diagram | #544 | merged |
-| 4h — permeability (constant/falling head) + CBR | — | open |
-| 4i — hydrometer (the last of the 4x series) | — | |
+| 4h — permeability (constant/falling head) + CBR | #545 | merged |
+| 4i — hydrometer (Stokes, corrections, fine-end curve) | — | open |
+
+**The 4x laboratory series is complete**: every `LabTestType` except `swell` now has an
+engine, a form and (where a number is read off a curve) a chart. Left open deliberately:
+the hydrometer and sieve curves are still two tests on one sample rather than one merged
+distribution — the hydrometer reports on the whole-sample basis when told what fraction it
+represents, so the join at 0.075 mm is arithmetically ready, but pairing the two tests
+automatically is a UI decision (which sieve test on which sample) that has not been made.
 | 6a — liquefaction triggering engine (NCEER) | #488 | merged |
 | 6b — liquefaction tab, FS profile, fines from sieve | #489 | merged |
 | 6c — bearing general equation + method selection | #490 | merged |

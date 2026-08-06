@@ -210,9 +210,10 @@ describe('the lab catalogue stays in step with the schema', () => {
     expect(isImplemented('triaxial')).toBe(true)
     expect(isImplemented('permeability')).toBe(true)
     expect(isImplemented('cbr')).toBe(true)
-    expect(isImplemented('swell')).toBe(false)
+    expect(isImplemented('hydrometer')).toBe(true)
+    expect(isImplemented('swell')).toBe(false)      // the last one without an engine
     expect(implementedTests().map((t) => t.type))
-      .toEqual(['moisture', 'specific-gravity', 'sieve', 'atterberg', 'compaction',
+      .toEqual(['moisture', 'specific-gravity', 'sieve', 'hydrometer', 'atterberg', 'compaction',
         'direct-shear', 'triaxial', 'ucs', 'consolidation', 'permeability', 'cbr'])
   })
 
@@ -237,6 +238,7 @@ describe('the lab catalogue stays in step with the schema', () => {
       moisture: ['containerMass', 'wetMass', 'dryMass'],
       'specific-gravity': ['solidMass', 'pycWaterMass', 'pycWaterSolidMass'],
       sieve: ['totalMass'],
+      hydrometer: ['dryMass', 'specificGravity', 'compositeCorrection', 'meniscusCorrection'],
       atterberg: ['liquidLimit'],
       compaction: ['mouldVolume', 'mouldMass'],
       'direct-shear': [],

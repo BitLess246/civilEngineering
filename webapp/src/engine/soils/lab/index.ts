@@ -47,6 +47,9 @@ import {
   type PermeabilityData, permeability, type PermeabilityResult,
 } from './permeability'
 import { type CbrData, type CbrPoint, cbr, type CbrResult } from './cbr'
+import {
+  type HydrometerData, type HydrometerReading, hydrometer, type HydrometerResult,
+} from './hydrometer'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -308,6 +311,33 @@ export function readCbr(test: LabTest): CbrData | undefined {
   }
 }
 
+/**
+ * Hydrometer readings. The corrections are REQUIRED, not defaulted: a composite
+ * correction read as zero moves the whole curve by a tenth of the sample, and a
+ * missing one is a sheet that has not been read off the control cylinder yet.
+ */
+export function readHydrometer(test: LabTest): HydrometerData | undefined {
+  const d = test.data
+  if (!isRecord(d) || !Array.isArray(d.readings)) return undefined
+  if (!hasNumbers(d, ['dryMass', 'specificGravity', 'compositeCorrection', 'meniscusCorrection'])) {
+    return undefined
+  }
+  const readings: HydrometerReading[] = []
+  for (const r of d.readings) {
+    if (!isRecord(r) || !finite(r.time) || !finite(r.reading) || !finite(r.temperature)) continue
+    readings.push({ time: r.time, reading: r.reading, temperature: r.temperature })
+  }
+  if (readings.length < 2) return undefined
+  return {
+    dryMass: d.dryMass as number,
+    specificGravity: d.specificGravity as number,
+    compositeCorrection: d.compositeCorrection as number,
+    meniscusCorrection: d.meniscusCorrection as number,
+    fractionOfTotal: finite(d.fractionOfTotal) ? d.fractionOfTotal : undefined,
+    readings,
+  }
+}
+
 // ── Catalogue ─────────────────────────────────────────────────────────────
 
 /** One numeric input on a test form. */
@@ -327,7 +357,7 @@ export interface LabField {
  */
 export type LabFormKind =
   | 'fields' | 'sieve-stack' | 'shear-points' | 'load-increments' | 'compaction-points'
-  | 'triaxial-specimens' | 'cbr-points'
+  | 'triaxial-specimens' | 'cbr-points' | 'hydrometer-readings'
 
 export interface LabTestSpec {
   type: LabTestType
@@ -395,7 +425,22 @@ export const LAB_TESTS: readonly LabTestSpec[] = [
       { key: 'panMass', label: 'Pan', unit: 'g', optional: true, placeholder: 20 },
     ],
   },
-  { type: 'hydrometer', label: 'Hydrometer', standard: 'd7928', needsUndisturbed: false, fields: [], purpose: 'Grain-size distribution of the fines by sedimentation.' },
+  {
+    type: 'hydrometer',
+    label: 'Hydrometer',
+    standard: 'd7928',
+    formKind: 'hydrometer-readings',
+    calculation: 'hydrometer.stokes',
+    needsUndisturbed: false,
+    purpose: 'Grain-size distribution of the fines by sedimentation — the part of the curve a sieve cannot reach.',
+    fields: [
+      { key: 'dryMass', label: 'Dry soil in suspension', unit: 'g', placeholder: 50 },
+      { key: 'specificGravity', label: 'Specific gravity Gs', placeholder: 2.7 },
+      { key: 'compositeCorrection', label: 'Composite correction', unit: 'g/L', placeholder: 6 },
+      { key: 'meniscusCorrection', label: 'Meniscus correction', unit: 'g/L', placeholder: 1 },
+      { key: 'fractionOfTotal', label: 'Fines this represents', unit: '%', optional: true, placeholder: 100 },
+    ],
+  },
   {
     type: 'atterberg',
     label: 'Atterberg limits',
@@ -544,6 +589,7 @@ export type LabOutcome =
   | { kind: 'triaxial'; result: TriaxialResult }
   | { kind: 'permeability'; result: PermeabilityResult }
   | { kind: 'cbr'; result: CbrResult }
+  | { kind: 'hydrometer'; result: HydrometerResult }
 
 /**
  * Compute a test's result from its stored data.
@@ -610,6 +656,11 @@ export function evaluateTest(test: LabTest): { outcome?: LabOutcome; error?: str
         if (!d) return {}
         return { outcome: { kind: 'cbr', result: cbr(d) } }
       }
+      case 'hydrometer': {
+        const d = readHydrometer(test)
+        if (!d) return {}
+        return { outcome: { kind: 'hydrometer', result: hydrometer(d) } }
+      }
       default:
         return {}
     }
@@ -656,5 +707,9 @@ export function summarise(outcome: LabOutcome): { label: string; value: number; 
       return { label: 'k₂₀', value: outcome.result.k20, unit: 'm/s' }
     case 'cbr':
       return { label: `CBR @ ${outcome.result.governing} mm`, value: outcome.result.cbr, unit: '%' }
+    case 'hydrometer':
+      // The clay fraction is what the rest of the module asks a hydrometer for
+      // — activity, shrink–swell, and the fines the USCS classifier splits on.
+      return { label: 'clay (< 2 μm)', value: outcome.result.clayFraction ?? 0, unit: '%' }
   }
 }
