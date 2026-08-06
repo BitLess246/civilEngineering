@@ -351,7 +351,7 @@ export function mohrChart(r: TriaxialResult): Drawing {
    * (p − r·sin φ, r·cos φ), which is the stress on the failure plane and is the
    * point the envelope actually touches.
    */
-  const arc = (c: MohrCircle, e: TriaxialEnvelope | undefined, stroke: string, dash?: number[]) => {
+  const arc = (c: MohrCircle, stroke: string, dash?: number[]) => {
     p.push({
       kind: 'path',
       cmds: [
@@ -360,14 +360,8 @@ export function mohrChart(r: TriaxialResult): Drawing {
       ],
       stroke, width: 0.5, dash,
     })
-    if (!e) return
-    const phi = (e.frictionAngle * Math.PI) / 180
-    p.push({
-      kind: 'circle',
-      cx: X(c.center - c.radius * Math.sin(phi)),
-      cy: Y(c.radius * Math.cos(phi)),
-      r: 0.7, fill: stroke,
-    })
+    if (!c.failure) return
+    p.push({ kind: 'circle', cx: X(c.failure.sigma), cy: Y(c.failure.tau), r: 0.7, fill: stroke })
   }
 
   const envelopeLine = (e: TriaxialEnvelope, stroke: string, dash?: number[]) => {
@@ -381,9 +375,9 @@ export function mohrChart(r: TriaxialResult): Drawing {
     })
   }
 
-  for (const c of r.circles) arc(c, r.total, ACCENT)
+  for (const c of r.circles) arc(c, ACCENT)
   if (r.total) envelopeLine(r.total, ACCENT)
-  for (const c of r.effectiveCircles ?? []) arc(c, r.effective, OK, [2, 1.5])
+  for (const c of r.effectiveCircles ?? []) arc(c, OK, [2, 1.5])
   if (r.effective) envelopeLine(r.effective, OK, [2, 1.5])
 
   const lines: { text: string; color?: string }[] = []

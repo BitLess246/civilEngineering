@@ -6,6 +6,7 @@ import { planToSvg } from '../engine/planRenderer'
 import { validateInvestigation, type ValidationIssue } from '../engine/soils/validate'
 import { sptProfile, type LayerUnitWeight } from '../engine/soils/sptProfile'
 import type { StressLayer } from '../engine/soils/overburden'
+import type { TriaxialResult } from '../engine/soils/lab/triaxial'
 import { classifyUSCS } from '../engine/soils/uscs'
 import { densityFromN60, consistencyFromN60 } from '../engine/soils/spt'
 import {
@@ -1513,6 +1514,8 @@ function TestCard({
 
           {outcome && <TestChart test={test} outcome={outcome} />}
 
+          {outcome?.kind === 'triaxial' && <MohrFailureTable result={outcome.result} />}
+
           {outcome && (
             <div className="mt-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5">
               <p className="font-mono text-[13px] font-semibold text-emerald-900">
@@ -2206,6 +2209,68 @@ function CbrPoints({
  * curve" and the shear result warns about a poor fit; both were unactionable
  * until there was a curve to look at.
  */
+/**
+ * Per-specimen failure stresses for a triaxial series.
+ *
+ * The pair that matters is the state ON THE FAILURE PLANE — σf = p − r·sin φ
+ * and τf = r·cos φ — not the crown of the circle. The crown is τmax on a plane
+ * at 45°, which is not the plane the specimen failed on and is larger by
+ * 1/cos φ; a table that printed it would quietly overstate the shear at failure.
+ */
+function MohrFailureTable({ result }: { result: TriaxialResult }) {
+  const blocks: { label: string; circles: typeof result.circles }[] = [
+    { label: 'Total stress', circles: result.circles },
+    ...(result.effectiveCircles ? [{ label: 'Effective stress', circles: result.effectiveCircles }] : []),
+  ]
+  if (!result.circles.some((c) => c.failure)) return null
+
+  return (
+    <div className="mt-2 space-y-2">
+      {blocks.map((b) => (
+        <div key={b.label}>
+          <p className="mb-0.5 text-[11px] font-semibold text-slate-700">{b.label} — at failure</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-[11px]">
+              <thead className="text-slate-500">
+                <tr className="border-b border-slate-200">
+                  <th className="py-1 pr-2 text-left">Specimen</th>
+                  <th className="py-1 pr-2">σ₃</th>
+                  <th className="py-1 pr-2">σ₁</th>
+                  <th className="py-1 pr-2">p</th>
+                  <th className="py-1 pr-2">r = τmax</th>
+                  <th className="py-1 pr-2">σf</th>
+                  <th className="py-1 pr-2">τf</th>
+                  <th className="py-1 pr-2">θ</th>
+                </tr>
+              </thead>
+              <tbody className="font-mono">
+                {b.circles.map((c, i) => (
+                  <tr key={i} className="border-b border-slate-100">
+                    <td className="py-0.5 pr-2 text-left">#{i + 1}</td>
+                    <td className="py-0.5 pr-2">{c.sigma3.toFixed(1)}</td>
+                    <td className="py-0.5 pr-2">{c.sigma1.toFixed(1)}</td>
+                    <td className="py-0.5 pr-2">{c.center.toFixed(1)}</td>
+                    <td className="py-0.5 pr-2 text-slate-500">{c.radius.toFixed(1)}</td>
+                    <td className="py-0.5 pr-2">{c.failure ? c.failure.sigma.toFixed(1) : '—'}</td>
+                    <td className="py-0.5 pr-2">{c.failure ? c.failure.tau.toFixed(1) : '—'}</td>
+                    <td className="py-0.5 pr-2">{c.failure ? `${c.failure.theta.toFixed(1)}°` : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+      <p className="text-[10px] text-slate-500">
+        Stresses in kPa. σf = p − r·sin φ and τf = r·cos φ are the normal and shear stresses on the
+        FAILURE PLANE, where the envelope touches the circle — not the crown, which carries τmax on a
+        plane at 45° and is larger by 1/cos φ. θ = 45 + φ/2 is that plane&rsquo;s inclination to the major
+        principal plane.
+      </p>
+    </div>
+  )
+}
+
 function TestChart({ test, outcome }: { test: LabTest; outcome: LabOutcome }) {
   const svg = useMemo(() => {
     switch (outcome.kind) {

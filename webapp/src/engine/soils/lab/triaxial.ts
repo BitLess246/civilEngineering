@@ -64,6 +64,24 @@ export interface TriaxialData {
   specimens: TriaxialSpecimen[]
 }
 
+/**
+ * The stresses ON THE FAILURE PLANE — the point where the envelope touches the
+ * circle, which is the state the specimen actually failed at.
+ *
+ * Not the maximum shear stress: that is the crown, τmax = r, on a plane at 45°.
+ * The soil fails on the plane where τ first reaches its available strength, and
+ * that plane carries LESS shear than the crown and less normal stress than the
+ * centre. Quoting τmax as the failure shear stress overstates it by 1/cos φ.
+ */
+export interface FailurePoint {
+  /** Normal stress on the failure plane, kPa: σf = p − r·sin φ. */
+  sigma: number
+  /** Shear stress on the failure plane, kPa: τf = r·cos φ. */
+  tau: number
+  /** Inclination of the failure plane to the major principal plane, degrees: θ = 45 + φ/2. */
+  theta: number
+}
+
 /** One specimen as a Mohr circle, in whichever stress basis it was built. */
 export interface MohrCircle {
   /** Minor principal stress σ3, kPa. */
@@ -74,6 +92,13 @@ export interface MohrCircle {
   center: number
   /** Radius q = (σ1−σ3)/2, kPa — the maximum shear stress in the specimen. */
   radius: number
+  /**
+   * Where the fitted envelope touches this circle. Attached after the fit, so
+   * it is absent when no envelope could be fitted (a single specimen) — and
+   * computed ONCE here rather than in each of the chart and the results table,
+   * which would be two readings of the same construction.
+   */
+  failure?: FailurePoint
 }
 
 export interface TriaxialEnvelope {
@@ -147,6 +172,27 @@ export function fitTangent(circles: MohrCircle[]): TriaxialEnvelope | undefined 
     refittedThroughOrigin: line.refittedThroughOrigin,
   }
 }
+
+/**
+ * The tangent point of an envelope on a circle.
+ *
+ * The radius to the tangency is perpendicular to the envelope, so it points at
+ * (−sin φ, cos φ) from the centre — hence σf = p − r·sin φ and τf = r·cos φ.
+ * The corresponding plane is at θ = 45 + φ/2 to the major principal plane,
+ * because the arc from the σ1 end to the tangency subtends 2θ = 90 + φ.
+ */
+export function failurePoint(c: MohrCircle, e: TriaxialEnvelope): FailurePoint {
+  const phi = e.frictionAngle / DEG
+  return {
+    sigma: c.center - c.radius * Math.sin(phi),
+    tau: c.radius * Math.cos(phi),
+    theta: 45 + e.frictionAngle / 2,
+  }
+}
+
+/** Attach the failure point to every circle an envelope was fitted through. */
+const withFailure = (circles: MohrCircle[], e?: TriaxialEnvelope): MohrCircle[] =>
+  (e ? circles.map((c) => ({ ...c, failure: failurePoint(c, e) })) : circles)
 
 export function triaxial(d: TriaxialData): TriaxialResult {
   const notes: string[] = []
@@ -244,8 +290,8 @@ export function triaxial(d: TriaxialData): TriaxialResult {
 
   return {
     testType: d.testType,
-    circles,
-    effectiveCircles,
+    circles: withFailure(circles, total),
+    effectiveCircles: effectiveCircles ? withFailure(effectiveCircles, effective) : undefined,
     total,
     effective,
     undrainedStrength,
