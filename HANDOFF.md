@@ -1352,14 +1352,14 @@ automatically is a UI decision (which sieve test on which sample) that has not b
 | 7a — report document model (22 sections) | #492 | merged |
 | 7b — report PDF renderer + vector drawing painter | #493 | merged |
 | 8a — async remote store, sync, Supabase adapter + SQL | #494 | merged |
-| 8b — sync UI (status, conflict resolution) | — | BLOCKED: apply the migration to the live project first |
+| 8b — sync UI (status, conflict resolution) | #500 | merged; **verified live 6 Aug** — all five probes pass |
 | 8c — CPT (Robertson SBT, correlations) | #495 | merged |
 | 8d — subsurface cross-sections | #496 | merged |
 | 8e — section wired into the report and the profile tab | #497 | merged |
 | 8f — CPT in the model, validation and a UI tab | #498 | merged |
 | fix — remove the mixed-method `bearingCapacity()` | #499 | merged |
 | 8b — sync UI + live connection self-test | #500 | merged |
-| fix — plan moved to `app_metadata` (self-grant closed) | — | open |
+| fix — plan moved to `app_metadata` (self-grant closed) | — | migration applied; confirmed live from the JWT claims |
 
 **`/soils` is live**, gated behind the `soil-investigation` feature on pro and
 max. Eight tabs: overview and integrity, boreholes with the graphical log,
@@ -1370,14 +1370,46 @@ generates the 22-section investigation report.
 
 **Every engine is now reachable from the UI.**
 
-**Supabase:** the migration is applied (user confirmed, 31 Jul). The sync UI
-ships with a **Check connection** self-test (`remoteDiagnostics.ts`) that runs
-the five probes a developer would run by hand, in the app, against the live
-database. It exists because this container's egress allowlist blocks
-`*.supabase.co` — an allowlist change only takes effect for a NEW session, so
-no round-trip has been run from here. The first click of that button on a
-deployment settles the three things the fake cannot: the column names, the
-duplicate-insert code, and zero-rows-on-stale-update.
+**Supabase: SETTLED AGAINST THE LIVE DATABASE, 6 Aug.** Egress to
+`*.supabase.co` was opened on the environment and took effect without a new
+session, so `runRemoteDiagnostics` was run from here against the real project —
+the shipped code path, not a curl imitation, signed in as the owner. All five
+probes **passed**:
+
+| probe | result |
+|---|---|
+| Table and column names | every column the adapter reads exists on the table |
+| Column check is meaningful | a deliberately wrong column name was rejected, so the check above is a real test |
+| Row-level security | a write under another user's id was refused (**42501**) |
+| Round trip | written, read back intact, removed |
+| Conflict detection | an update carrying an out-of-date version matched **no rows** — a stale write is refused rather than overwriting newer work |
+
+`ok=true ranAll=true`, and a follow-up `select … like '__diag_%'` returned `[]`,
+so the probe rows cleaned themselves up. That closes what the postgrest-shaped
+fake could never prove: the column names and the error codes Postgres actually
+returns are the ones the adapter branches on.
+
+The three migrations are confirmed present by their own responses, which is
+worth writing down because the *shape* of each answer is the evidence:
+
+- `soil_investigations` — 200 `[]` (exists, RLS filtering an anonymous read)
+- `projects` — 200 `[]` (same)
+- `guest_trials` — **42501 permission denied** (exists, and `anon` deliberately
+  has no SELECT grant: only the `SECURITY DEFINER` `consume_guest_trial` should
+  touch it)
+- control: a table that does not exist answers **PGRST205 "Could not find the
+  table"**, which is what makes the three answers above meaningful rather than
+  three different flavours of failure
+
+The `plan → app_metadata` migration is confirmed the only way it can be — from
+the JWT: `app_metadata` carries `{"plan":"max"}` and `user_metadata` carries no
+`plan` key at all. A user calling `auth.updateUser({ data: { plan: 'max' } })`
+writes `user_metadata`, so the self-grant hole is closed on the live project.
+
+**Still outstanding on the user's side:** the `guest-quota` edge function is
+**not deployed** — `POST /functions/v1/guest-quota` returns **404** — and the
+`GUEST_TRIAL_SALT` secret goes with it. The `guest_trials` table and its
+`consume_guest_trial` function are in place and waiting for it.
 
 **Storage decision, settled:** the local `SoilsStore` over localStorage stays;
 Phase 8a adds an ASYNC `RemoteStore` beside it rather than behind it, because a
