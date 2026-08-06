@@ -1337,10 +1337,13 @@ because flagging the unusual as an error trains people to ignore errors.
 | 4f — compaction (Proctor, ZAV bound, curve) | #543 | merged |
 | 4g — triaxial UU/CU/CD + Mohr circle diagram | #544 | merged |
 | 4h — permeability (constant/falling head) + CBR | #545 | merged |
-| 4i — hydrometer (Stokes, corrections, fine-end curve) | — | open |
+| 4i — hydrometer (Stokes, corrections, fine-end curve) | #547 | merged |
+| 4j — swell / collapse (D4546 A, B, C) | — | open |
 
-**The 4x laboratory series is complete**: every `LabTestType` except `swell` now has an
-engine, a form and (where a number is read off a curve) a chart. Left open deliberately:
+**The 4x laboratory series is COMPLETE — every `LabTestType` now has an engine**, a form
+and (where a number is read off a curve) a chart. `swell` was the last, and it is the
+one where the SIGN is the result: the same apparatus measures an expansive clay heaving
+and a loose fill collapsing, and a magnitude without its sign describes neither. Left open deliberately:
 the hydrometer and sieve curves are still two tests on one sample rather than one merged
 distribution — the hydrometer reports on the whole-sample basis when told what fraction it
 represents, so the join at 0.075 mm is arithmetically ready, but pairing the two tests

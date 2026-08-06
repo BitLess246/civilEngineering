@@ -211,10 +211,10 @@ describe('the lab catalogue stays in step with the schema', () => {
     expect(isImplemented('permeability')).toBe(true)
     expect(isImplemented('cbr')).toBe(true)
     expect(isImplemented('hydrometer')).toBe(true)
-    expect(isImplemented('swell')).toBe(false)      // the last one without an engine
+    expect(isImplemented('swell')).toBe(true)       // the last one, shipped in 4j
     expect(implementedTests().map((t) => t.type))
       .toEqual(['moisture', 'specific-gravity', 'sieve', 'hydrometer', 'atterberg', 'compaction',
-        'direct-shear', 'triaxial', 'ucs', 'consolidation', 'permeability', 'cbr'])
+        'direct-shear', 'triaxial', 'ucs', 'consolidation', 'permeability', 'cbr', 'swell'])
   })
 
   it('gives every implemented test enough fields to drive its engine', () => {
@@ -245,6 +245,7 @@ describe('the lab catalogue stays in step with the schema', () => {
       triaxial: [],
       permeability: ['length', 'area', 'time'],
       cbr: [],
+      swell: ['initialHeight', 'inundationStress'],
       ucs: ['diameter', 'height', 'failureLoad', 'failureDeformation'],
       consolidation: ['initialHeight', 'diameter', 'dryMass', 'specificGravity'],
     }

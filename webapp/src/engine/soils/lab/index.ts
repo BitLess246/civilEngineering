@@ -50,6 +50,9 @@ import { type CbrData, type CbrPoint, cbr, type CbrResult } from './cbr'
 import {
   type HydrometerData, type HydrometerReading, hydrometer, type HydrometerResult,
 } from './hydrometer'
+import {
+  type SwellData, type SwellPoint, type SwellMethod, swell, type SwellResult,
+} from './swell'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -338,6 +341,45 @@ export function readHydrometer(test: LabTest): HydrometerData | undefined {
   }
 }
 
+/**
+ * Swell / collapse. The METHOD decides which fields are required — C measures a
+ * pressure and holds the height, A and B measure a height at a known stress —
+ * so the guard reads it first and insists on that method's own set.
+ */
+export function readSwell(test: LabTest): SwellData | undefined {
+  const d = test.data
+  if (!isRecord(d)) return undefined
+  if (!hasNumbers(d, ['initialHeight', 'inundationStress'])) return undefined
+  const m = d.method
+  const method: SwellMethod = m === 'A' || m === 'B' || m === 'C' ? (m as SwellMethod) : 'A'
+
+  const points: SwellPoint[] = []
+  if (Array.isArray(d.points)) {
+    for (const r of d.points) {
+      if (!isRecord(r) || !finite(r.stress) || !finite(r.height)) continue
+      points.push({ stress: r.stress, height: r.height })
+    }
+  }
+
+  if (method === 'C') {
+    if (!finite(d.constantVolumePressure)) return undefined
+    return {
+      method, initialHeight: d.initialHeight as number,
+      inundationStress: d.inundationStress as number,
+      constantVolumePressure: d.constantVolumePressure,
+      points: points.length ? points : undefined,
+    }
+  }
+  if (!finite(d.wettedHeight)) return undefined
+  return {
+    method,
+    initialHeight: d.initialHeight as number,
+    inundationStress: d.inundationStress as number,
+    wettedHeight: d.wettedHeight,
+    points: points.length ? points : undefined,
+  }
+}
+
 // ── Catalogue ─────────────────────────────────────────────────────────────
 
 /** One numeric input on a test form. */
@@ -357,7 +399,7 @@ export interface LabField {
  */
 export type LabFormKind =
   | 'fields' | 'sieve-stack' | 'shear-points' | 'load-increments' | 'compaction-points'
-  | 'triaxial-specimens' | 'cbr-points' | 'hydrometer-readings'
+  | 'triaxial-specimens' | 'cbr-points' | 'hydrometer-readings' | 'swell-reload'
 
 export interface LabTestSpec {
   type: LabTestType
@@ -551,7 +593,21 @@ export const LAB_TESTS: readonly LabTestSpec[] = [
       { key: 'dryDensity', label: 'Dry density', unit: 'Mg/m³', optional: true, placeholder: 1.85 },
     ],
   },
-  { type: 'swell', label: 'Swell / collapse', standard: 'd4546', needsUndisturbed: true, fields: [], purpose: 'One-dimensional swell or collapse on wetting.' },
+  {
+    type: 'swell',
+    label: 'Swell / collapse',
+    standard: 'd4546',
+    formKind: 'swell-reload',
+    calculation: 'swell.strain',
+    needsUndisturbed: true,
+    purpose: 'One-dimensional swell or collapse on wetting — the same test measures both, and the sign is the result.',
+    fields: [
+      { key: 'initialHeight', label: 'Height before wetting', unit: 'mm', placeholder: 20 },
+      { key: 'inundationStress', label: 'Stress when wetted', unit: 'kPa', placeholder: 25 },
+      { key: 'wettedHeight', label: 'Height after wetting (A/B)', unit: 'mm', optional: true, placeholder: 20.9 },
+      { key: 'constantVolumePressure', label: 'Pressure to hold height (C)', unit: 'kPa', optional: true, placeholder: 180 },
+    ],
+  },
 ]
 
 export const labSpec = (type: LabTestType): LabTestSpec | undefined =>
@@ -590,6 +646,7 @@ export type LabOutcome =
   | { kind: 'permeability'; result: PermeabilityResult }
   | { kind: 'cbr'; result: CbrResult }
   | { kind: 'hydrometer'; result: HydrometerResult }
+  | { kind: 'swell'; result: SwellResult }
 
 /**
  * Compute a test's result from its stored data.
@@ -661,6 +718,11 @@ export function evaluateTest(test: LabTest): { outcome?: LabOutcome; error?: str
         if (!d) return {}
         return { outcome: { kind: 'hydrometer', result: hydrometer(d) } }
       }
+      case 'swell': {
+        const d = readSwell(test)
+        if (!d) return {}
+        return { outcome: { kind: 'swell', result: swell(d) } }
+      }
       default:
         return {}
     }
@@ -711,5 +773,12 @@ export function summarise(outcome: LabOutcome): { label: string; value: number; 
       // The clay fraction is what the rest of the module asks a hydrometer for
       // — activity, shrink–swell, and the fines the USCS classifier splits on.
       return { label: 'clay (< 2 μm)', value: outcome.result.clayFraction ?? 0, unit: '%' }
+    case 'swell': {
+      // Method C holds the height, so its strain is zero by construction and
+      // the pressure is the measurement; A and B report the signed strain.
+      const w = outcome.result
+      if (w.method === 'C') return { label: 'σs', value: w.swellPressure ?? 0, unit: 'kPa' }
+      return { label: w.behaviour === 'collapse' ? 'collapse' : 'swell', value: w.strain, unit: '%' }
+    }
   }
 }

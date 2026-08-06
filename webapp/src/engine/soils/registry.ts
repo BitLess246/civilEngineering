@@ -743,6 +743,41 @@ export const CALCULATIONS = {
     ],
   },
 
+  'swell.strain': {
+    title: 'Swell or collapse strain on wetting',
+    category: 'consolidation',
+    equation: String.raw`\varepsilon_s = \frac{H_w - H_0}{H_0} \times 100`,
+    unit: '%',
+    symbols: {
+      '\\varepsilon_s': 'strain on wetting, % (positive swell, negative collapse)',
+      H_0: 'specimen height before inundation, mm',
+      H_w: 'specimen height at equilibrium after wetting, mm',
+    },
+    standard: 'd4546',
+    assumptions: ['One-dimensional: the specimen is laterally confined by the ring, so all the volume change is height.'],
+    limitations: [
+      'The strain belongs to the stress it was measured at. The same soil swells several times more at a seating load than under a real surcharge, so a percentage quoted without its inundation stress states nothing.',
+      'Swell and collapse are properties of a fabric: a remoulded specimen does not answer for the ground it came from, and a compacted fill answers only for the density and water content it was compacted at.',
+    ],
+  },
+
+  'swell.pressure': {
+    title: 'Swelling pressure',
+    category: 'consolidation',
+    equation: String.raw`\sigma_s = \sigma \big|_{H = H_0}`,
+    unit: 'kPa',
+    symbols: {
+      '\\sigma_s': 'swelling pressure, kPa',
+      '\\sigma': 'applied vertical stress on the re-loading curve, kPa',
+      H_0: 'specimen height before inundation, mm',
+    },
+    standard: 'd4546',
+    limitations: [
+      'Method C measures it at constant volume; methods A and B infer it by re-loading the swollen specimen back to its original height, a different stress path that usually reports a HIGHER value. The number means little without the method.',
+      'If re-loading never returns the specimen to its original height, the pressure is greater than the largest stress applied and is not reported — extrapolating the curve would invent it.',
+    ],
+  },
+
   // ── Compaction ──
   'compaction.dry-density': {
     title: 'Dry density of a compacted specimen',
