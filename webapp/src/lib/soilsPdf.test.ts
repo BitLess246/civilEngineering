@@ -145,3 +145,64 @@ describe('the header does not claim a design verdict', () => {
     expect(has('0 · WHAT THIS REPORT')).toBe(false)
   })
 })
+
+// ── Laboratory plots reach the page ───────────────────────────────────────
+
+describe('the laboratory plots are painted into the document', () => {
+  /** One hole, one sample, three tests — with their data or without it. */
+  const withLabData = (data = true) => {
+    const inv = sampleInvestigation()
+    const COMPACTION = {
+      mouldVolume: 944, mouldMass: 4250, specificGravity: 2.68,
+      points: [10, 12.5, 15, 17.5, 20].map((w) => {
+        const rho = -0.006 * w * w + 0.18 * w + 0.43
+        return { moisture: w, mouldSoilMass: 4250 + rho * (1 + w / 100) * 944 }
+      }),
+    }
+    inv.boreholes = [{
+      ...inv.boreholes[0],
+      samples: [{
+        ...inv.boreholes[0].samples[0],
+        tests: [
+          {
+            id: 'b', type: 'sieve', standard: 'd6913', status: 'complete',
+            data: !data ? undefined : {
+              totalMass: 500,
+              readings: [
+                { size: 4.75, massRetained: 50 },
+                { size: 0.425, massRetained: 200 },
+                { size: 0.075, massRetained: 150 },
+              ],
+            },
+          },
+          { id: 'c', type: 'compaction', standard: 'd698', status: 'complete', data: data ? COMPACTION : undefined },
+          { id: 'd', type: 'ucs', standard: 'd2166', status: 'planned' },
+        ],
+      }],
+    }] as typeof inv.boreholes
+    return inv
+  }
+
+  it('prints a caption for every laboratory figure', () => {
+    build(buildSoilsReport(withLabData(), { seismic: SEISMIC }))
+    // The caption is drawn text, so it is visible to the recorder even though
+    // the curve itself is vector geometry.
+    expect(drawn.some((t) => /Sieve analysis —/.test(t))).toBe(true)
+    expect(drawn.some((t) => /Compaction \(Proctor\) —/.test(t))).toBe(true)
+  })
+
+  it('does not print a row or a caption for the test that produced nothing', () => {
+    build(buildSoilsReport(withLabData(), { seismic: SEISMIC }))
+    expect(drawn.some((t) => /Unconfined compression —/.test(t))).toBe(false)
+    // and the omission is stated instead
+    expect(drawn.some((t) => /booked tests? produced no result/.test(t))).toBe(true)
+  })
+
+  it('grows the document — vector plots take space rather than being skipped', () => {
+    // The SAME investigation either way: only the presence of the data, and
+    // therefore of the two plots, differs.
+    const noData = build(buildSoilsReport(withLabData(false), { seismic: SEISMIC })).getNumberOfPages()
+    const withPlots = build(buildSoilsReport(withLabData(true), { seismic: SEISMIC })).getNumberOfPages()
+    expect(withPlots).toBeGreaterThan(noData)
+  })
+})
