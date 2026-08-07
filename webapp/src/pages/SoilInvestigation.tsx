@@ -15,14 +15,11 @@ import {
   type LayerParameters, type CptReading,
 } from '../engine/soils/model'
 import {
-  LAB_TESTS, labSpec, isImplemented, evaluateTest, summarise, readDirectShear, readCompaction, readCbr,
+  LAB_TESTS, labSpec, isImplemented, evaluateTest, summarise,
   type LabOutcome,
 } from '../engine/soils/lab'
 import { classifySample } from '../engine/soils/classifySample'
-import {
-  shearEnvelopeChart, consolidationChart, gradingChart, compactionChart, mohrChart, cbrChart,
-  hydrometerChart,
-} from '../engine/soils/lab/plots'
+import { labChart } from '../engine/soils/lab/testChart'
 import { buildSection, sectionDrawing } from '../engine/soils/section'
 import {
   processSounding, sbtProfile, relativeDensity, frictionAngle, undrainedStrength,
@@ -2415,38 +2412,12 @@ function MohrFailureTable({ result }: { result: TriaxialResult }) {
 }
 
 function TestChart({ test, outcome }: { test: LabTest; outcome: LabOutcome }) {
+  // The mapping from result to drawing lives in the engine (`lab/testChart`),
+  // so this card and the investigation report cannot show different curves for
+  // the same specimen.
   const svg = useMemo(() => {
-    switch (outcome.kind) {
-      // The envelope needs the specimens themselves, which live on the test
-      // data rather than the fitted result — plotting the fit without the
-      // points it was fitted through is exactly the picture that hides an
-      // outlier.
-      case 'direct-shear':
-        return planToSvg(shearEnvelopeChart(outcome.result, readDirectShear(test)?.points ?? []), 460)
-      case 'consolidation':
-        return planToSvg(consolidationChart(outcome.result), 460)
-      case 'sieve':
-        return planToSvg(gradingChart(outcome.result), 460)
-      // Gs lives on the test data, not the result: without it there is no
-      // zero-air-voids bound, and the chart draws the curve without one rather
-      // than inventing a specific gravity to bound it with.
-      case 'compaction':
-        return planToSvg(compactionChart(outcome.result, readCompaction(test)?.specificGravity), 460)
-      // The circles ARE the result — this is the one chart in the module the
-      // numbers cannot substitute for, since c and φ describe a tangent nobody
-      // can check without seeing what it is tangent to.
-      case 'triaxial':
-        return planToSvg(mohrChart(outcome.result), 520)
-      // The raw readings, not the corrected ones: the origin correction is a
-      // judgement, and a reader can only disagree with it if the curve is
-      // drawn where it was measured.
-      case 'cbr':
-        return planToSvg(cbrChart(outcome.result, readCbr(test)?.points ?? []), 460)
-      case 'hydrometer':
-        return planToSvg(hydrometerChart(outcome.result), 460)
-      default:
-        return null
-    }
+    const drawing = labChart(test, outcome)
+    return drawing ? planToSvg(drawing, outcome.kind === 'triaxial' ? 520 : 460) : null
   }, [test, outcome])
 
   if (!svg) return null

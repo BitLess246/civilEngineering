@@ -1373,6 +1373,26 @@ generates the 22-section investigation report.
 
 **Every engine is now reachable from the UI.**
 
+**The report's §8 shows RESULTS, not bookings (Aug 2026).** A test with nothing
+entered — booked-but-unrun, or marked complete with an empty form — is no longer
+tabulated; the count and the reason go in the section gap instead, so the
+omission is stated once rather than repeated as a dozen "no result recorded"
+rows. A test whose DATA is impossible keeps its row: an error is data, a blank
+is not. Every result that is read off a curve now carries that curve into the
+PDF as a vector figure, captioned `test — hole, sample (standard)`.
+
+`lab/testChart.ts` holds the one mapping from result to drawing, and both the
+test card and the report read it — a report whose compaction curve differed
+from the one on screen would be worse than a report with no curve at all. That
+is the fourth time this module has needed the one-rule-one-home fix.
+
+**Note for anyone demoing:** the bundled example fixture books 10 laboratory
+tests and enters data for NONE, so the example report's §8 now reads "10 booked
+tests produced no result" rather than showing a table. Entering data for one
+test is enough to see the table and its plot. Giving the fixture real
+laboratory data would make the example far better, and is not done here because
+it shifts every classification-dependent assertion that leans on it.
+
 **Supabase: SETTLED AGAINST THE LIVE DATABASE, 6 Aug.** Egress to
 `*.supabase.co` was opened on the environment and took effect without a new
 session, so `runRemoteDiagnostics` was run from here against the real project —

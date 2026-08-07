@@ -37,6 +37,7 @@ import { resolveParameters, PARAMETER_LABEL } from './parameters'
 import { describeProvenance, PROVENANCE_LABEL } from './provenance'
 import { validateInvestigation } from './validate'
 import { evaluateTest, summarise, LAB_TESTS } from './lab'
+import { labChart } from './lab/testChart'
 import { cite } from './standards'
 
 export type SectionStatus = 'complete' | 'partial' | 'not-assessed'
@@ -279,44 +280,77 @@ function s7Spt(inv: Investigation): ReportSection {
 function s8Laboratory(inv: Investigation): ReportSection {
   const all = inv.boreholes.flatMap((b) =>
     b.samples.flatMap((s) => s.tests.map((t) => ({ b, s, t }))))
-  if (!all.length) {
-    return missing(8, 'Laboratory testing', 'No laboratory tests are recorded. Every soil parameter in this report therefore rests on field correlation or engineering assumption rather than measurement.')
-  }
 
+  // A TEST WITH NO DATA IS NOT REPORTED. A booked-but-unrun test tells the
+  // reader nothing about the ground, and a table padded with "no result
+  // recorded" buries the rows that do carry a measurement. What it IS worth
+  // saying is how many were left out and why, so the omission is stated once
+  // in the gap rather than repeated as a dozen empty rows — this report is not
+  // a record of absence, but it does not pretend the absences are not there.
   const rows: string[][] = []
-  let unevaluated = 0
+  const figures: ReportFigure[] = []
+  let omittedPending = 0
+  let omittedEmpty = 0
+
   for (const { b, s, t } of all) {
     const spec = LAB_TESTS.find((x) => x.type === t.type)
     const { outcome, error } = evaluateTest(t)
-    let result: string
-    if (outcome) {
-      const sum = summarise(outcome)
-      result = `${sum.label} = ${f2(sum.value)}${sum.unit ? ` ${sum.unit}` : ''}`
-    } else if (error) {
-      result = `data error: ${error}`
-    } else if (t.status !== 'complete') {
-      result = t.status
-    } else {
-      // Marked complete with nothing entered — counted, because a blank result
-      // in a "complete" row is a gap, not a formatting problem.
-      unevaluated++
-      result = 'no result recorded'
+
+    if (!outcome && !error) {
+      // Nothing computable: either it has not been run, or it is marked
+      // complete with an empty form. Both are counted, neither is tabulated.
+      if (t.status === 'planned' || t.status === 'in-progress') omittedPending++
+      else omittedEmpty++
+      continue
     }
+
+    // A data ERROR is data — the specimen was entered and the numbers are
+    // impossible — so it is reported rather than dropped with the blanks.
+    const result = outcome
+      ? (() => {
+          const sum = summarise(outcome)
+          return `${sum.label} = ${f2(sum.value)}${sum.unit ? ` ${sum.unit}` : ''}`
+        })()
+      : `data error: ${error}`
+
     rows.push([b.name, s.name, spec?.label ?? t.type, cite(t.standard), t.status, result])
+
+    if (outcome) {
+      const drawing = labChart(t, outcome)
+      if (drawing) {
+        figures.push({
+          caption: `${spec?.label ?? t.type} — ${b.name}, ${s.name} (${cite(t.standard)})`,
+          drawing,
+        })
+      }
+    }
   }
 
-  const planned = all.filter(({ t }) => t.status === 'planned' || t.status === 'in-progress').length
+  if (!rows.length) {
+    return missing(8, 'Laboratory testing', all.length
+      ? `${all.length} laboratory test${all.length === 1 ? ' is' : 's are'} booked against the samples but none has a result, so nothing is tabulated. Every soil parameter in this report rests on field correlation or engineering assumption rather than measurement.`
+      : 'No laboratory tests are recorded. Every soil parameter in this report therefore rests on field correlation or engineering assumption rather than measurement.')
+  }
+
+  const omitted = omittedPending + omittedEmpty
+  const gapParts: string[] = []
+  if (omittedPending) gapParts.push(`${omittedPending} not yet run`)
+  if (omittedEmpty) gapParts.push(`${omittedEmpty} marked complete with an empty form`)
+
   return {
     no: 8, title: 'Laboratory testing',
-    status: planned || unevaluated ? 'partial' : 'complete',
-    gap: planned || unevaluated
-      ? `${planned} test${planned === 1 ? '' : 's'} not yet complete and ${unevaluated} complete test${unevaluated === 1 ? '' : 's'} with no result entered. Parameters that would have come from those tests rest on correlation instead.`
+    status: omitted ? 'partial' : 'complete',
+    gap: omitted
+      ? `${omitted} of ${all.length} booked test${all.length === 1 ? '' : 's'} produced no result and ${omitted === 1 ? 'is' : 'are'} therefore not tabulated (${gapParts.join(', ')}). Parameters that would have come from them rest on correlation instead.`
       : undefined,
-    paragraphs: ['The laboratory programme and its results are tabulated below. Void tests are retained in the record: a specimen that failed on a seating error is part of the history of the sample.'],
+    paragraphs: [
+      'The laboratory programme and its results are tabulated below, followed by the plot for every test whose result is read off a curve. Tests that produced no result are excluded from the table and accounted for above; a specimen that failed on a seating error is reported with its error rather than dropped, because that is part of the history of the sample.',
+    ],
     tables: [{ head: ['Hole', 'Sample', 'Test', 'Standard', 'Status', 'Result'], rows }],
-    figures: [], notes: [],
+    figures, notes: [],
   }
 }
+
 
 function s10Parameters(inv: Investigation): ReportSection {
   const rows: string[][] = []
