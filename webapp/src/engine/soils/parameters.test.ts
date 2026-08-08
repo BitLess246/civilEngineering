@@ -169,10 +169,21 @@ describe('correlations respect the soil they were fitted to', () => {
     expect(r.notes.join(' ')).toMatch(/this layer is cohesive/)
   })
 
-  it('correlates cu in a clay and not in a sand', () => {
+  it('cu in a clay comes from the MEASUREMENT when there is one', () => {
+    // The fixture's clay sample carries a UCS test, and a measurement always
+    // beats the SPT correlation — they are never averaged.
     const clay = resolve(bh(), 2)
-    expect(find(clay, 'undrainedShearStrength')?.value.provenance.kind).toBe('correlated')
+    expect(find(clay, 'undrainedShearStrength')?.value.provenance.kind).toBe('measured')
+  })
 
+  it('falls back to the correlation in a clay with no test on it', () => {
+    const b = bh()
+    for (const s of b.samples) s.tests = s.tests.filter((t) => t.type !== 'ucs')
+    const clay = resolve(b, 2)
+    expect(find(clay, 'undrainedShearStrength')?.value.provenance.kind).toBe('correlated')
+  })
+
+  it('offers no cu at all in a sand — neither measured nor correlated', () => {
     const sand = resolve(bh(), 1)
     expect(find(sand, 'undrainedShearStrength')).toBeUndefined()
   })
