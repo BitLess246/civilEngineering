@@ -30,6 +30,8 @@
 // percentages 0–100.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { type LabNote, info, warn } from '../notes'
+
 /** One reading: elapsed time, hydrometer scale, temperature. */
 export interface HydrometerReading {
   /** Elapsed time from the start of sedimentation, minutes. */
@@ -86,7 +88,7 @@ export interface HydrometerResult {
   d50?: number
   /** Clay fraction, % of the whole sample finer than 0.002 mm. */
   clayFraction?: number
-  notes: string[]
+  notes: LabNote[]
 }
 
 /** Dynamic viscosity of water, poise (dyne·s/cm²), from the Vogel equation. */
@@ -135,7 +137,7 @@ export function stokesDiameter(L: number, timeMin: number, gs: number, tempC: nu
 }
 
 export function hydrometer(d: HydrometerData): HydrometerResult {
-  const notes: string[] = []
+  const notes: LabNote[] = []
   if (!(d.dryMass > 0)) throw new Error('The dry mass of soil in suspension must be greater than zero.')
   const a = gravityFactor(d.specificGravity)
   const scale = (d.fractionOfTotal ?? 100) / 100
@@ -169,35 +171,35 @@ export function hydrometer(d: HydrometerData): HydrometerResult {
   // ── What the numbers can and cannot be ──
   const negative = rows.filter((r) => r.correctedReading <= 0)
   if (negative.length) {
-    notes.push(
+    notes.push(warn(
       `${negative.length} reading(s) fall at or below the composite correction of ${d.compositeCorrection} g/L, which puts no solid in suspension above the bulb. Either sedimentation was complete or the correction is wrong — read it again on the control cylinder before using this curve.`,
-    )
+    ))
   }
   const over = rows.filter((r) => r.percentFinerOfSpecimen > 100.5)
   if (over.length) {
-    notes.push(
+    notes.push(warn(
       `A reading gives ${Math.max(...over.map((r) => r.percentFinerOfSpecimen)).toFixed(0)}% finer, which is more soil than was put in the cylinder. Check the dry mass and the composite correction — those two set the whole curve's height.`,
-    )
+    ))
   }
   if (rows.some((r, i) => i > 0 && r.percentFiner > rows[i - 1].percentFiner + 1e-9)) {
-    notes.push(
+    notes.push(warn(
       'The percent finer RISES between two readings. Sedimentation only removes particles from suspension, so the curve cannot climb — a reading was taken at the wrong time, or the suspension was disturbed.',
-    )
+    ))
   }
   const temps = rows.map((r) => r.temperature)
   if (Math.max(...temps) - Math.min(...temps) > 2) {
-    notes.push(
+    notes.push(warn(
       `The suspension moved ${(Math.max(...temps) - Math.min(...temps)).toFixed(1)} °C during the run. Viscosity, and therefore every diameter, follows it — D7928 asks for a bath held within about 1 °C.`,
-    )
+    ))
   }
   if (d.fractionOfTotal != null && d.fractionOfTotal < 100) {
-    notes.push(
+    notes.push(info(
       `Percentages are scaled to ${d.fractionOfTotal}% of the whole sample — the fines this suspension was taken from — so they sit on the same basis as the sieve curve and the two join at 0.075 mm.`,
-    )
+    ))
   }
-  notes.push(
+  notes.push(info(
     'Every diameter is an EQUIVALENT SPHERICAL diameter: the size of a sphere that would settle at the speed this fraction settled. Clay platelets are not spheres, so the fine end of this curve describes settling behaviour rather than a measured dimension.',
-  )
+  ))
 
   // D50 and the clay fraction, by interpolation on the log-size curve.
   const asc = [...rows].sort((x, y) => x.diameter - y.diameter)

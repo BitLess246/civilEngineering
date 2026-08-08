@@ -31,6 +31,8 @@
 // in.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { type LabNote, info, warn } from '../notes'
+
 export type PermeabilityMethod = 'constant-head' | 'falling-head'
 
 export interface ConstantHeadData {
@@ -78,7 +80,7 @@ export interface PermeabilityResult {
   temperatureFactor: number
   /** Hydraulic gradient i = h/L (constant head) or the mean over the interval. */
   gradient: number
-  notes: string[]
+  notes: LabNote[]
 }
 
 /**
@@ -98,7 +100,7 @@ export function viscosityRatio(tempC: number): number {
 const PLAUSIBLE = { min: 1e-12, max: 1e-1 }
 
 export function permeability(d: PermeabilityData): PermeabilityResult {
-  const notes: string[] = []
+  const notes: LabNote[] = []
   if (!(d.length > 0)) throw new Error('Specimen length must be greater than zero.')
   if (!(d.area > 0)) throw new Error('Specimen area must be greater than zero.')
   if (!(d.time > 0)) throw new Error('Elapsed time must be greater than zero.')
@@ -130,40 +132,40 @@ export function permeability(d: PermeabilityData): PermeabilityResult {
   const k20 = kMps * temperatureFactor
 
   if (d.temperature == null) {
-    notes.push(
+    notes.push(warn(
       'No water temperature recorded, so k is reported as measured. Water is about 30% less viscous at 30 °C than at 10 °C and k scales with 1/η, so an uncorrected value carries the laboratory\'s room temperature in it.',
-    )
+    ))
   } else if (Math.abs(temperatureFactor - 1) > 0.02) {
-    notes.push(
+    notes.push(info(
       `Corrected to 20 °C by RT = η_T/η_20 = ${temperatureFactor.toFixed(3)} (D5084) — a ${((temperatureFactor - 1) * 100).toFixed(0)}% change from the value measured at ${d.temperature} °C.`,
-    )
+    ))
   }
 
   // ── Is this the right apparatus for the answer it produced? ──
   if (d.method === 'constant-head' && k20 < 1e-5) {
-    notes.push(
+    notes.push(warn(
       `k = ${k20.toExponential(1)} m/s is below the range a constant-head test measures (D2434 is for clean sands and gravels, k > 1e-5 m/s). At this permeability the volume collected is comparable with evaporation and temperature drift in the burette — the number is the apparatus, not the soil. Use a falling-head or flexible-wall test.`,
-    )
+    ))
   }
   if (d.method === 'falling-head' && k20 > 1e-4) {
-    notes.push(
+    notes.push(warn(
       `k = ${k20.toExponential(1)} m/s is above the range a falling-head test resolves: the head drops faster than it can be read, so the timed interval is dominated by reading error. A constant-head test (D2434) is the right apparatus here.`,
-    )
+    ))
   }
   if (k20 > PLAUSIBLE.max || k20 < PLAUSIBLE.min) {
-    notes.push(
+    notes.push(warn(
       `k = ${k20.toExponential(1)} m/s is outside the range real soils occupy (about 1e-12 for an intact clay to 1e-1 for an open gravel). Check the units on the specimen dimensions and the volume before reading anything into this.`,
-    )
+    ))
   }
   if (gradient > 30) {
-    notes.push(
+    notes.push(warn(
       `The hydraulic gradient is ${gradient.toFixed(0)}. High gradients turn the flow turbulent, and Darcy's law — which every form of this test rearranges — assumes it is laminar. D2434 suggests gradients under about 5 for coarse soils; a result from a steep gradient reads LOW.`,
-    )
+    ))
   }
 
-  notes.push(
+  notes.push(info(
     'Permeability spans ten orders of magnitude across soils, and a good laboratory value is trusted to within a factor of two or three — not to three significant figures. A laboratory k also measures the specimen, not the deposit: fabric, layering and fissures make the field value larger, often by an order of magnitude.',
-  )
+  ))
 
   return {
     method: d.method,

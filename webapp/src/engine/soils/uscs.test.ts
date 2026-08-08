@@ -188,12 +188,12 @@ describe('the result always explains itself', () => {
 describe('data sanity', () => {
   it('notes fractions that do not sum to 100%', () => {
     const r = classifyUSCS({ gravel: 10, sand: 50, fines: 30, liquidLimit: 40, plasticityIndex: 20 })
-    expect(r.notes.join(' ')).toMatch(/sum to 90%/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/sum to 90%/)
   })
 
   it('notes a fine-grained point above the U-line', () => {
     const r = classifyUSCS({ gravel: 0, sand: 10, fines: 90, liquidLimit: 30, plasticityIndex: 30 })
-    expect(r.notes.join(' ')).toMatch(/above the U-line/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/above the U-line/)
   })
 })
 

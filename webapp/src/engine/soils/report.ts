@@ -37,7 +37,8 @@ import { resolveParameters, PARAMETER_LABEL } from './parameters'
 import { describeProvenance, PROVENANCE_LABEL } from './provenance'
 import { validateInvestigation } from './validate'
 import { evaluateTest, summarise, LAB_TESTS } from './lab'
-import { classifySample } from './classifySample'
+import { classifySample, isStaleHydrometerAdvice } from './classifySample'
+import { type LabNote, info, warningsOf } from './notes'
 import { labChart } from './lab/testChart'
 import { combinedGradingChart } from './lab/plots'
 import { cite } from './standards'
@@ -66,7 +67,13 @@ export interface ReportSection {
   paragraphs: string[]
   tables: ReportTable[]
   figures: ReportFigure[]
-  notes: string[]
+  /**
+   * Remarks under the tables and figures. Typed rather than `string[]` so a
+   * WARNING carried up from an engine — "this specimen plots above the
+   * zero-air-voids curve, which is impossible" — is not printed in the same
+   * grey italic as a statement of what a method measures.
+   */
+  notes: LabNote[]
 }
 
 export interface SoilsReport {
@@ -201,7 +208,7 @@ function s5Stratigraphy(inv: Investigation): ReportSection {
           }]
         : []),
     ],
-    notes: section.holes.length > 1 ? section.notes : [],
+    notes: (section.holes.length > 1 ? section.notes : []).map(info),
   }
 }
 
@@ -275,7 +282,7 @@ function s7Spt(inv: Investigation): ReportSection {
     paragraphs: [
       `Blow counts are corrected for hammer energy, borehole diameter, sampler type and rod length to N₆₀, and for effective overburden to (N₁)₆₀ per ${cite('d1586')} and the NCEER recommendations.`,
     ],
-    tables, figures: [], notes,
+    tables, figures: [], notes: notes.map(info),
   }
 }
 
@@ -293,6 +300,28 @@ function s8Laboratory(inv: Investigation): ReportSection {
   const figures: ReportFigure[] = []
   let omittedPending = 0
   let omittedEmpty = 0
+
+  // WARNINGS CARRIED UP FROM THE ENGINES. A result of "γd,max = 1.78 Mg/m³"
+  // sitting alone in a table looks like a measurement; the engine's "no
+  // downward parabola fits these points, so the HIGHEST MEASURED point is
+  // reported instead" is what tells the reader it is not. Until now that note
+  // existed only on screen, and the report — the document somebody signs — was
+  // the one place it never reached.
+  //
+  // Only `warning` notes come through. The `info` ones are conventions and
+  // method caveats, correct and worth reading once, and reprinting a dozen of
+  // them per report is how the four that matter get skimmed past.
+  //
+  // One exception is filtered: the sieve engine advises a hydrometer whenever
+  // its curve stops short of 10% passing, and it cannot see that the sample
+  // already has one. `classifySample` suppresses that advice from the same
+  // definition, so the two cannot disagree.
+  const labWarnings: LabNote[] = []
+  const joined = new Map<string, boolean>()
+  const hasSedimentation = (id: string, sample: Parameters<typeof classifySample>[0]) => {
+    if (!joined.has(id)) joined.set(id, Boolean(classifySample(sample).curve?.combined))
+    return joined.get(id)!
+  }
 
   for (const { b, s, t } of all) {
     const spec = LAB_TESTS.find((x) => x.type === t.type)
@@ -325,6 +354,13 @@ function s8Laboratory(inv: Investigation): ReportSection {
           drawing,
         })
       }
+      // Prefixed with the specimen: a warning in a report is useless unless
+      // the reader can tell which row of the table above it belongs to.
+      const stale = t.type === 'sieve' && hasSedimentation(s.id, s)
+      for (const w of warningsOf(outcome.result.notes)) {
+        if (stale && isStaleHydrometerAdvice(w)) continue
+        labWarnings.push({ ...w, text: `${b.name} / ${s.name}, ${spec?.label ?? t.type}: ${w.text}` })
+      }
     }
   }
 
@@ -349,7 +385,7 @@ function s8Laboratory(inv: Investigation): ReportSection {
       'The laboratory programme and its results are tabulated below, followed by the plot for every test whose result is read off a curve. Tests that produced no result are excluded from the table and accounted for above; a specimen that failed on a seating error is reported with its error rather than dropped, because that is part of the history of the sample.',
     ],
     tables: [{ head: ['Hole', 'Sample', 'Test', 'Standard', 'Status', 'Result'], rows }],
-    figures, notes: [],
+    figures, notes: labWarnings,
   }
 }
 
@@ -398,7 +434,7 @@ function s10Parameters(inv: Investigation): ReportSection {
     }],
     figures: [],
     notes: correlated || assumed
-      ? ['A correlated or assumed parameter carries far more scatter than a measured one. Where such a parameter governs the design, targeted laboratory testing is the cheapest way to reduce risk.']
+      ? [info('A correlated or assumed parameter carries far more scatter than a measured one. Where such a parameter governs the design, targeted laboratory testing is the cheapest way to reduce risk.')]
       : [],
   }
 }
@@ -467,7 +503,7 @@ function s12Liquefaction(inv: Investigation, opts: ReportOptions): ReportSection
     status: anyEvaluated ? 'complete' : 'partial',
     gap: anyEvaluated ? undefined
       : 'No test met the conditions for a triggering check — all lay above the water table, in cohesive soil, or without a usable blow count. The profile is empty rather than clear.',
-    paragraphs, tables, figures, notes,
+    paragraphs, tables, figures, notes: notes.map(info),
   }
 }
 
@@ -600,7 +636,7 @@ function s9Classification(inv: Investigation): ReportSection {
   // an agronomic name would tell an engineer their report is short of something
   // it never needed.
   const notes = noTexture
-    ? [`${noTexture} of ${rows.length} layers carry no USDA texture. The triangle is drawn on the clay fraction finer than 0.002 mm, which no sieve reaches — a hydrometer analysis (${cite('d7928')}) on a sample from each layer is what supplies it.`]
+    ? [info(`${noTexture} of ${rows.length} layers carry no USDA texture. The triangle is drawn on the clay fraction finer than 0.002 mm, which no sieve reaches — a hydrometer analysis (${cite('d7928')}) on a sample from each layer is what supplies it.`)]
     : []
 
   // The JOINED grading curve is a property of the sample, not of either test,

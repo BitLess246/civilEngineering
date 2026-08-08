@@ -37,6 +37,8 @@
 // UNITS: sizes mm; percentages 0–100, of the WHOLE sample.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { type LabNote, info, warn } from './notes'
+
 import { type GradationResult, type SizePassing, interpolateD, passingAt } from './sieve'
 import type { HydrometerResult } from './lab/hydrometer'
 
@@ -80,7 +82,7 @@ export interface CombinedGrading {
   clay?: number
   /** Between 0.002 mm and the No. 200 sieve, % of the whole sample. */
   silt?: number
-  notes: string[]
+  notes: LabNote[]
 }
 
 /**
@@ -91,7 +93,7 @@ export interface CombinedGrading {
  * of these and never branch on whether a sedimentation run exists.
  */
 export function combineGrading(g: GradationResult, h?: HydrometerResult): CombinedGrading {
-  const notes: string[] = []
+  const notes: LabNote[] = []
   const sievePoints: GradingPoint[] = [...g.rows]
     .filter((r) => r.size > 0)
     .sort((a, b) => b.size - a.size)
@@ -127,27 +129,27 @@ export function combineGrading(g: GradationResult, h?: HydrometerResult): Combin
     if (atJoin != null) {
       joinMismatch = atJoin - passingAtJoin
       if (Math.abs(joinMismatch) > 2) {
-        notes.push(
+        notes.push(warn(
           `At the ${joinSize} mm join the sieve says ${passingAtJoin.toFixed(1)}% passed and the suspension says ${atJoin.toFixed(1)}% is finer — a disagreement of ${joinMismatch.toFixed(1)} points on one specimen. The usual cause is the fraction of the whole sample the suspension represents; check it before reading anything off the fine end of this curve.`,
-        )
+        ))
       }
     }
-    notes.push(
+    notes.push(info(
       `${overlap.length} sedimentation reading${overlap.length === 1 ? ' is' : 's are'} coarser than the ${joinSize} mm sieve and ${overlap.length === 1 ? 'was' : 'were'} dropped: the sieve weighed those grains directly, which beats inferring them from a settling velocity.`,
-    )
+    ))
   } else if (below.length) {
     joinGap = joinSize / below[0].diameter
     if (joinGap > 3) {
-      notes.push(
+      notes.push(warn(
         `Nothing was measured between ${joinSize} mm and ${below[0].diameter.toFixed(4)} mm — a factor of ${joinGap.toFixed(1)} in size. The curve is drawn across it, but an earlier first reading would measure that band instead of interpolating it.`,
-      )
+      ))
     }
   }
 
   if (below.length && below[0].percentFiner > passingAtJoin + 0.5) {
-    notes.push(
+    notes.push(warn(
       `The suspension reports ${below[0].percentFiner.toFixed(1)}% finer than ${below[0].diameter.toFixed(4)} mm, which is more than the ${passingAtJoin.toFixed(1)}% that passed the ${joinSize} mm sieve. A subset of the sample cannot be larger than the sample; the scaling to the whole specimen is wrong.`,
-    )
+    ))
   }
 
   const points: GradingPoint[] = [
@@ -168,24 +170,24 @@ export function combineGrading(g: GradationResult, h?: HydrometerResult): Combin
     d != null && below.length > 0 && d < joinSize && d > below[0].diameter
   const dAcrossGap = Boolean(joinGap && joinGap > 3 && [d10, d30, d60].some(inGap))
   if (dAcrossGap) {
-    notes.push(
+    notes.push(warn(
       'One of D₁₀, D₃₀ or D₆₀ falls inside the unmeasured band at the join, so Cu and Cc below are read off the interpolation rather than off a measurement.',
-    )
+    ))
   }
 
   if (g.d10 == null && d10 != null) {
-    notes.push(
+    notes.push(info(
       `D₁₀ = ${d10.toFixed(4)} mm comes from the sedimentation run — the sieve curve alone stopped at ${passingAtJoin.toFixed(0)}% passing and could not reach it.`,
-    )
+    ))
   }
 
   // ── Size-based silt and clay ──
   const clay = passingOnCurve(points, CLAY_SIZE)
   const silt = clay != null ? Math.max(g.fines - clay, 0) : undefined
   if (clay == null) {
-    notes.push(
+    notes.push(warn(
       `The combined curve stops at ${points[points.length - 1].size.toFixed(4)} mm, above the 0.002 mm clay boundary, so the clay fraction is still unknown. A longer sedimentation run — the 24-hour reading — is what reaches it.`,
-    )
+    ))
   }
 
   return {

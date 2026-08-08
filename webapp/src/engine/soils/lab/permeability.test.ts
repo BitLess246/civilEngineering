@@ -40,8 +40,8 @@ describe('constant head (ASTM D2434)', () => {
       method: 'constant-head', length: 100, area: 7854, head: 400, volume: 0.02, time: 3600,
     })
     expect(r.k20).toBeLessThan(1e-5)
-    expect(r.notes.join(' ')).toMatch(/below the range a constant-head test measures/)
-    expect(r.notes.join(' ')).toMatch(/the number is the apparatus, not the soil/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/below the range a constant-head test measures/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/the number is the apparatus, not the soil/)
   })
 
   it('warns when the gradient is steep enough to break Darcy', () => {
@@ -49,7 +49,7 @@ describe('constant head (ASTM D2434)', () => {
       method: 'constant-head', length: 100, area: 7854, head: 5000, volume: 500, time: 60,
     })
     expect(r.gradient).toBeCloseTo(50, 8)
-    expect(r.notes.join(' ')).toMatch(/turbulent/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/turbulent/)
   })
 })
 
@@ -63,7 +63,7 @@ describe('falling head (ASTM D5084)', () => {
       headStart: 900, headEnd: 400, time: 600,
     })
     expect(r.k).toBeCloseTo(1.3508620e-6, 13)
-    expect(r.notes.join(' ')).toMatch(/No water temperature recorded/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/No water temperature recorded/)
   })
 
   it('refuses a head that rises', () => {
@@ -79,7 +79,7 @@ describe('falling head (ASTM D5084)', () => {
       headStart: 900, headEnd: 100, time: 10,
     })
     expect(r.k20).toBeGreaterThan(1e-4)
-    expect(r.notes.join(' ')).toMatch(/faster than it can be read/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/faster than it can be read/)
   })
 })
 
@@ -103,7 +103,7 @@ describe('the 20 °C correction', () => {
     expect(at30.temperatureFactor).toBeCloseTo(viscosityRatio(30), 12)
     expect(at30.k20).toBeCloseTo(at30.k * viscosityRatio(30), 12)
     expect(at30.k20).toBeLessThan(at30.k)
-    expect(at30.notes.join(' ')).toMatch(/Corrected to 20 °C/)
+    expect(at30.notes.map((n) => n.text).join(' ')).toMatch(/Corrected to 20 °C/)
   })
 
   it('rejects a temperature at or below freezing', () => {
@@ -139,8 +139,8 @@ describe('the D1883 origin correction', () => {
     expect(r.stress2_54).toBeCloseTo(5.08, 6)
     expect(r.cbr2_54).toBeCloseTo((5.08 / STANDARD_STRESS.at2_54) * 100, 6)
     expect(r.cbr2_54).toBeCloseTo(73.6, 1)
-    expect(r.notes.join(' ')).toMatch(/origin correction moved the zero by 0\.50 mm/)
-    expect(r.notes.join(' ')).toMatch(/59\.1%/)      // what it would have read
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/origin correction moved the zero by 0\.50 mm/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/59\.1%/)      // what it would have read
   })
 })
 
@@ -173,8 +173,8 @@ describe('CBR (ASTM D1883)', () => {
     })
     expect(r.governing).toBe(5.08)
     expect(r.cbr).toBeCloseTo(60, 6)
-    expect(r.notes.join(' ')).toMatch(/RE-RUN/)
-    expect(r.notes.join(' ')).toMatch(/§11\.3/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/RE-RUN/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/§11\.3/)
   })
 
   it('says when the 5.08 mm ordinate was extrapolated', () => {
@@ -186,7 +186,7 @@ describe('CBR (ASTM D1883)', () => {
         { penetration: 3.81, stress: 4.4 },
       ],
     })
-    expect(r.notes.join(' ')).toMatch(/EXTRAPOLATED/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/EXTRAPOLATED/)
   })
 
   it('never lets an unsoaked value pass without saying so', () => {
@@ -194,10 +194,10 @@ describe('CBR (ASTM D1883)', () => {
       { penetration: 0, stress: 0 }, { penetration: 2.54, stress: 3.45 },
       { penetration: 5.08, stress: 5.15 }, { penetration: 7.62, stress: 6 },
     ]
-    expect(cbr({ points: pts }).notes.join(' ')).toMatch(/UNSOAKED/)
-    expect(cbr({ points: pts, soaked: true }).notes.join(' ')).toMatch(/Soaked \(four-day\)/)
-    expect(cbr({ points: pts, soaked: true, swell: 4.5 }).notes.join(' ')).toMatch(/expansive/)
-    expect(cbr({ points: pts }).notes.join(' ')).toMatch(/belongs to a compaction state/)
+    expect(cbr({ points: pts }).notes.map((n) => n.text).join(' ')).toMatch(/UNSOAKED/)
+    expect(cbr({ points: pts, soaked: true }).notes.map((n) => n.text).join(' ')).toMatch(/Soaked \(four-day\)/)
+    expect(cbr({ points: pts, soaked: true, swell: 4.5 }).notes.map((n) => n.text).join(' ')).toMatch(/expansive/)
+    expect(cbr({ points: pts }).notes.map((n) => n.text).join(' ')).toMatch(/belongs to a compaction state/)
   })
 
   it('refuses a curve too short to read', () => {

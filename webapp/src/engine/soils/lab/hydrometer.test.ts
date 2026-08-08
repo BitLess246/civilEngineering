@@ -117,7 +117,7 @@ describe('the reading sets the percent finer', () => {
     ] })
     expect(fines.rows[0].percentFinerOfSpecimen).toBeCloseTo(whole.rows[0].percentFinerOfSpecimen, 10)
     expect(fines.rows[0].percentFiner).toBeCloseTo(whole.rows[0].percentFiner * 0.4, 10)
-    expect(fines.notes.join(' ')).toMatch(/same basis as the sieve curve/)
+    expect(fines.notes.map((n) => n.text).join(' ')).toMatch(/same basis as the sieve curve/)
   })
 
   it('refuses a fraction outside 0–100%', () => {
@@ -141,12 +141,12 @@ describe('what the curve refuses to hide', () => {
 
   it('flags a reading that is all correction and no soil', () => {
     const r = run({ compositeCorrection: 14 })
-    expect(r.notes.join(' ')).toMatch(/at or below the composite correction/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/at or below the composite correction/)
   })
 
   it('flags more soil in suspension than was put in', () => {
     const r = run({ dryMass: 10 })
-    expect(r.notes.join(' ')).toMatch(/more soil than was put in the cylinder/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/more soil than was put in the cylinder/)
   })
 
   it('flags a curve that climbs, which sedimentation cannot do', () => {
@@ -154,7 +154,7 @@ describe('what the curve refuses to hide', () => {
       { time: 2, reading: 20, temperature: 20 },
       { time: 60, reading: 30, temperature: 20 },     // more in suspension, later
     ] })
-    expect(r.notes.join(' ')).toMatch(/cannot climb/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/cannot climb/)
   })
 
   it('flags a bath that drifted', () => {
@@ -162,11 +162,11 @@ describe('what the curve refuses to hide', () => {
       { time: 2, reading: 30, temperature: 19 },
       { time: 1440, reading: 12, temperature: 26 },
     ] })
-    expect(r.notes.join(' ')).toMatch(/moved 7\.0 °C/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/moved 7\.0 °C/)
   })
 
   it('always says the diameters are equivalent, not measured', () => {
-    expect(run({}).notes.join(' ')).toMatch(/EQUIVALENT SPHERICAL diameter/)
+    expect(run({}).notes.map((n) => n.text).join(' ')).toMatch(/EQUIVALENT SPHERICAL diameter/)
   })
 
   it('needs two readings to be a curve at all', () => {

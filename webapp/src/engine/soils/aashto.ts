@@ -20,6 +20,8 @@
 // UNITS: percentages 0–100; LL and PI in %.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { type LabNote, warn } from './notes'
+
 export interface AashtoInput {
   /** Percent passing the 2.00 mm (No. 10) sieve, %. */
   passing10: number
@@ -46,7 +48,7 @@ export interface AashtoResult {
   /** Granular when 35% or less passes the No. 200 sieve. */
   granular: boolean
   reason: string
-  notes: string[]
+  notes: LabNote[]
 }
 
 /**
@@ -81,13 +83,13 @@ export function partialGroupIndex(passing200: number, PI: number): number {
 }
 
 export function classifyAASHTO(i: AashtoInput): AashtoResult {
-  const notes: string[] = []
+  const notes: LabNote[] = []
   const { passing10, passing40, passing200 } = i
   const LL = i.liquidLimit
   const PI = i.plasticityIndex
 
   if (passing200 > passing40 + 1e-9 || passing40 > passing10 + 1e-9) {
-    notes.push('Percent passing must not increase with sieve size — check the grading before relying on this.')
+    notes.push(warn('Percent passing must not increase with sieve size — check the grading before relying on this.'))
   }
 
   const granular = passing200 <= 35
@@ -168,7 +170,7 @@ export function classifyAASHTO(i: AashtoInput): AashtoResult {
 }
 
 function granularResult(
-  group: string, gi: number, granular: boolean, notes: string[], reason: string,
+  group: string, gi: number, granular: boolean, notes: LabNote[], reason: string,
 ): AashtoResult {
   return {
     group,

@@ -20,6 +20,7 @@ import {
 } from '../engine/soils/lab'
 import { classifySample } from '../engine/soils/classifySample'
 import type { CombinedGrading } from '../engine/soils/grading'
+import type { LabNote } from '../engine/soils/notes'
 import { combinedGradingChart } from '../engine/soils/lab/plots'
 import { labChart } from '../engine/soils/lab/testChart'
 import { buildSection, sectionDrawing } from '../engine/soils/section'
@@ -1292,8 +1293,10 @@ function ClassificationPanel() {
           {result.reason}
         </p>
         {result.notes.map((n, k) => (
-          <p key={k} className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
-            {n}
+          <p key={k} className={n.severity === 'warning'
+            ? 'mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900'
+            : 'mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600'}>
+            {n.text}
           </p>
         ))}
         {!result.symbol && (
@@ -1550,9 +1553,7 @@ function TestCard({
               <p className="font-mono text-[13px] font-semibold text-emerald-900">
                 {formatOutcome(summarise(outcome))}
               </p>
-              {outcome.result.notes.map((n, k) => (
-                <p key={k} className="mt-1 text-[10px] text-amber-900">{n}</p>
-              ))}
+              <EngineNotes notes={outcome.result.notes} />
             </div>
           )}
 
@@ -1713,6 +1714,30 @@ function SieveStack({
   )
 }
 
+/**
+ * Engine notes, told apart by severity.
+ *
+ * Every note used to render in the same amber, which is how a real warning
+ * gets skimmed: "this specimen plots above the zero-air-voids curve, which is
+ * impossible" looked exactly like "percentages are of the fine earth". A
+ * warning keeps the amber; a caveat about the method goes quiet.
+ */
+function EngineNotes({ notes, className = '' }: { notes: LabNote[]; className?: string }) {
+  if (!notes.length) return null
+  return (
+    <div className={className}>
+      {notes.map((n, k) => (
+        <p key={k} className={n.severity === 'warning'
+          ? 'mt-1 text-[10px] text-amber-900'
+          : 'mt-1 text-[10px] text-slate-500'}>
+          {n.severity === 'warning' && <span className="font-bold">! </span>}
+          {n.text}
+        </p>
+      ))}
+    </div>
+  )
+}
+
 // ── Sample classification ─────────────────────────────────────────────────
 
 function SampleClassificationCard({
@@ -1786,9 +1811,7 @@ function SampleClassificationCard({
 
       {c.curve?.combined && <CombinedCurve curve={c.curve} />}
 
-      {c.notes.map((n, k) => (
-        <p key={k} className="mt-1 text-[10px] text-amber-900">{n}</p>
-      ))}
+      <EngineNotes notes={c.notes} />
 
       {symbol && layer && (
         layer.symbol === symbol ? (

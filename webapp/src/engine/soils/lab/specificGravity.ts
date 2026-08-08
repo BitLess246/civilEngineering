@@ -17,6 +17,8 @@
 // UNITS: masses g; temperature °C; Gs dimensionless.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { type LabNote, info, warn } from '../notes'
+
 export interface SpecificGravityData {
   /** Pycnometer identifier. */
   pycnometer?: string
@@ -39,7 +41,7 @@ export interface SpecificGravityResult {
   k: number
   /** Gs corrected to 20 °C — the reported value. */
   gs: number
-  notes: string[]
+  notes: LabNote[]
 }
 
 /**
@@ -58,7 +60,7 @@ export const temperatureCorrection = (tempC: number): number =>
   waterDensity(tempC) / waterDensity(20)
 
 export function specificGravity(d: SpecificGravityData): SpecificGravityResult {
-  const notes: string[] = []
+  const notes: LabNote[] = []
   const { solidMass: Ms, pycWaterMass: Mpw, pycWaterSolidMass: Mpws } = d
 
   if (!(Ms > 0)) throw new Error('The oven-dry mass of solids must be greater than zero.')
@@ -76,19 +78,19 @@ export function specificGravity(d: SpecificGravityData): SpecificGravityResult {
   const gs = gsAtTest * k
 
   if (gs < 2.4 || gs > 2.9) {
-    notes.push(
+    notes.push(warn(
       `Gs = ${gs.toFixed(3)} falls outside the 2.60–2.80 range most mineral soils occupy. Below it suggests organic matter or trapped air from incomplete de-airing, which reads low; above it suggests heavy minerals. Verify before using this in a void-ratio calculation.`,
-    )
+    ))
   }
   if (Math.abs(temp - 20) > 0.1) {
-    notes.push(
+    notes.push(info(
       `Corrected from ${temp.toFixed(1)} °C to 20 °C with K = ${k.toFixed(5)}. D854 reports Gs at 20 °C.`,
-    )
+    ))
   }
   if (Ms < 10) {
-    notes.push(
+    notes.push(warn(
       `Only ${Ms.toFixed(1)} g of solids. Gs is a difference between two nearly equal masses, so a small specimen magnifies every weighing error.`,
-    )
+    ))
   }
 
   return { displacedMass, gsAtTest, k, gs, notes }

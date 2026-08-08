@@ -109,9 +109,9 @@ describe('preconsolidation pressure — an estimate, not a measurement', () => {
 
   it('says in as many words that it is an estimate, and not Casagrande', () => {
     const r = consolidation(curveWithBreak())
-    expect(r.notes.join(' ')).toMatch(/ESTIMATE from a two-segment fit, not a measurement/)
-    expect(r.notes.join(' ')).toMatch(/not the graphical Casagrande construction/)
-    expect(r.notes.join(' ')).toMatch(/changes a prediction by a factor/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/ESTIMATE from a two-segment fit, not a measurement/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/not the graphical Casagrande construction/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/changes a prediction by a factor/)
   })
 
   it('returns undefined for a curve with no break, and explains both causes', () => {
@@ -125,8 +125,8 @@ describe('preconsolidation pressure — an estimate, not a measurement', () => {
     })
     const r = consolidation({ ...SPECIMEN, points })
     expect(r.preconsolidationPressure).toBeUndefined()
-    expect(r.notes.join(' ')).toMatch(/normally consolidated/)
-    expect(r.notes.join(' ')).toMatch(/too few increments were run below the break/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/normally consolidated/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/too few increments were run below the break/)
   })
 
   it('will not report a σ′p outside the stresses actually applied', () => {
@@ -202,7 +202,7 @@ describe('warnings that matter', () => {
       return { stress, compression: SPECIMEN.initialHeight - (1 + e) * hs }
     })
     const r = consolidation({ ...SPECIMEN, points })
-    expect(r.notes.join(' ')).toMatch(/wrong way round/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/wrong way round/)
   })
 
   it('says the RATE is unavailable without t50, but the magnitude is not', () => {
@@ -210,12 +210,12 @@ describe('warnings that matter', () => {
     d.points = d.points.map(({ stress, compression }) => ({ stress, compression }))
     const r = consolidation(d)
     expect(r.rows.every((x) => x.cv === undefined)).toBe(true)
-    expect(r.notes.join(' ')).toMatch(/RATE of settlement — cannot be computed. The magnitude can/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/RATE of settlement — cannot be computed. The magnitude can/)
   })
 
   it('warns when too few increments were run', () => {
     const d = curveWithBreak()
     d.points = d.points.slice(0, 4)
-    expect(consolidation(d).notes.join(' ')).toMatch(/Only 4 increments/)
+    expect(consolidation(d).notes.map((n) => n.text).join(' ')).toMatch(/Only 4 increments/)
   })
 })

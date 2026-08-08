@@ -21,6 +21,8 @@
 // — the module keeps them apart rather than blurring them.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { type LabNote, warn } from './notes'
+
 import { aLine, uLine } from './atterberg'
 import { isWellGraded } from './sieve'
 
@@ -52,7 +54,7 @@ export interface UscsResult {
   coarseGrained: boolean
   /** Why the classification came out as it did, or what is missing. */
   reason: string
-  notes: string[]
+  notes: LabNote[]
 }
 
 /** Fines plot as clay (on/above A-line, PI > 7) rather than silt. */
@@ -74,11 +76,11 @@ function coarseModifier(primary: 'gravel' | 'sand', gravel: number, sand: number
 }
 
 export function classifyUSCS(i: UscsInput): UscsResult {
-  const notes: string[] = []
+  const notes: LabNote[] = []
   const { gravel, sand, fines } = i
   const total = gravel + sand + fines
   if (Math.abs(total - 100) > 1) {
-    notes.push(`Fractions sum to ${total.toFixed(0)}%, not 100% — check the grading before relying on this.`)
+    notes.push(warn(`Fractions sum to ${total.toFixed(0)}%, not 100% — check the grading before relying on this.`))
   }
 
   const coarseGrained = fines < 50
@@ -167,10 +169,10 @@ export function classifyUSCS(i: UscsInput): UscsResult {
 }
 
 function classifyFine(
-  LL: number, PI: number, gravel: number, sand: number, organic: boolean, notes: string[],
+  LL: number, PI: number, gravel: number, sand: number, organic: boolean, notes: LabNote[],
 ): UscsResult {
   if (PI > uLine(LL)) {
-    notes.push('The point plots above the U-line — no natural soil does. Re-run the limits before accepting this classification.')
+    notes.push(warn('The point plots above the U-line — no natural soil does. Re-run the limits before accepting this classification.'))
   }
 
   const high = LL >= 50

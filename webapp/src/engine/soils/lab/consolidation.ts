@@ -20,6 +20,8 @@
 // UNITS: stress kPa; heights mm; masses g; void ratio and indices dimensionless.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { type LabNote, info, warn } from '../notes'
+
 /** One load increment held to the end of primary consolidation. */
 export interface ConsolidationPoint {
   /** Applied effective vertical stress, kPa. */
@@ -67,7 +69,7 @@ export interface ConsolidationResult {
   preconsolidationPressure?: number
   /** Points used for the Cc fit, for a plot to highlight. */
   virginRange?: { from: number; to: number }
-  notes: string[]
+  notes: LabNote[]
 }
 
 /**
@@ -184,7 +186,7 @@ export function fitBreak(rows: ConsolidationRow[]): BreakFit | undefined {
 }
 
 export function consolidation(d: ConsolidationData): ConsolidationResult {
-  const notes: string[] = []
+  const notes: LabNote[] = []
   if (!(d.initialHeight > 0)) throw new Error('Initial specimen height must be greater than zero.')
   if (!(d.diameter > 0)) throw new Error('Specimen diameter must be greater than zero.')
 
@@ -235,26 +237,26 @@ export function consolidation(d: ConsolidationData): ConsolidationResult {
   const preconsolidationPressure = fit?.sigmaP
 
   if (preconsolidationPressure == null) {
-    notes.push(
+    notes.push(warn(
       'No break in the curve fits materially better than a single straight line. That is the honest result for a normally consolidated clay, where σ′p sits at or below the lowest stress applied — but it also happens when too few increments were run below the break, so check the plot before concluding either.',
-    )
+    ))
   } else {
-    notes.push(
+    notes.push(info(
       `σ′p = ${preconsolidationPressure.toFixed(0)} kPa is an ESTIMATE from a two-segment fit, not a measurement, and not the graphical Casagrande construction — the two agree on a sharp break and diverge on a rounded one. Settlement below σ′p follows Cr and above it follows Cc, which is several times larger, so where the break is placed changes a prediction by a factor rather than a percentage. Check it against the plotted curve.`,
-    )
+    ))
   }
 
   if (cr != null && cr >= cc) {
-    notes.push('The recompression index is not smaller than the compression index, which no real soil does — the two branches have probably been read the wrong way round.')
+    notes.push(warn('The recompression index is not smaller than the compression index, which no real soil does — the two branches have probably been read the wrong way round.'))
   }
   if (cc <= 0) {
-    notes.push('The compression index came out zero or negative: the specimen did not compress with increasing stress. Check the compression column.')
+    notes.push(warn('The compression index came out zero or negative: the specimen did not compress with increasing stress. Check the compression column.'))
   }
   if (rows.length < 6) {
-    notes.push(`Only ${rows.length} increments. D2435 asks for enough to define both branches and the break between them; with this few the Casagrande construction is poorly constrained.`)
+    notes.push(warn(`Only ${rows.length} increments. D2435 asks for enough to define both branches and the break between them; with this few the Casagrande construction is poorly constrained.`))
   }
   if (!rows.some((r) => r.cv != null)) {
-    notes.push('No t50 recorded on any increment, so cv — and therefore the RATE of settlement — cannot be computed. The magnitude can.')
+    notes.push(warn('No t50 recorded on any increment, so cv — and therefore the RATE of settlement — cannot be computed. The magnitude can.'))
   }
 
   return {

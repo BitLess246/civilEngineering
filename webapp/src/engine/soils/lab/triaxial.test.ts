@@ -105,7 +105,7 @@ describe('the envelope is the common tangent to the circles', () => {
       specimens: [{ cellPressure: 0, deviatorStress: 100 }, { cellPressure: 0.001, deviatorStress: 300 }],
     })
     expect(r.total!.frictionAngle).toBeGreaterThan(80)
-    expect(r.notes.join(' ')).toMatch(/above anything a soil sustains/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/above anything a soil sustains/)
   })
 })
 
@@ -224,15 +224,15 @@ describe('UU on a saturated clay', () => {
       ],
     })
     expect(r.total!.frictionAngle).toBeGreaterThan(2)
-    expect(r.notes.join(' ')).toMatch(/not fully saturated/)
-    expect(r.notes.join(' ')).toMatch(/Use su/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/not fully saturated/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/Use su/)
   })
 
   it('reports su but no envelope from a single specimen', () => {
     const r = triaxial({ testType: 'UU', specimens: [{ cellPressure: 100, deviatorStress: 90 }] })
     expect(r.total).toBeUndefined()
     expect(r.undrainedStrength).toBeCloseTo(45, 10)
-    expect(r.notes.join(' ')).toMatch(/infinitely many tangents/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/infinitely many tangents/)
   })
 })
 
@@ -254,7 +254,7 @@ describe('CU: total and effective are two envelopes of one test', () => {
     expect(r.effective!.cohesion).toBeCloseTo(5, 8)
     expect(r.total).toBeDefined()
     expect(r.total!.frictionAngle).toBeLessThan(r.effective!.frictionAngle)
-    expect(r.notes.join(' ')).toMatch(/not interchangeable/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/not interchangeable/)
   })
 
   it('shifts the circles left by u without changing their diameter', () => {
@@ -276,7 +276,7 @@ describe('CU: total and effective are two envelopes of one test', () => {
     })
     expect(r.effective).toBeUndefined()
     expect(r.effectiveCircles).toBeUndefined()
-    expect(r.notes.join(' ')).toMatch(/2 of 3 specimens/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/2 of 3 specimens/)
   })
 
   it('says total-stress parameters from a CU test apply to nothing in particular', () => {
@@ -284,7 +284,7 @@ describe('CU: total and effective are two envelopes of one test', () => {
       testType: 'CU',
       specimens: [100, 200, 300].map((s3) => tangentSpecimen(s3, 10, 20)),
     })
-    expect(r.notes.join(' ')).toMatch(/neither the drained strength nor su/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/neither the drained strength nor su/)
   })
 
   it('flags a pore pressure that puts σ′3 below zero', () => {
@@ -296,7 +296,7 @@ describe('CU: total and effective are two envelopes of one test', () => {
         { cellPressure: 300, deviatorStress: 320, porePressure: 130 },
       ],
     })
-    expect(r.notes.join(' ')).toMatch(/cannot sustain tension/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/cannot sustain tension/)
   })
 })
 
@@ -314,7 +314,7 @@ describe('input the engine refuses', () => {
   })
   it('warns that two specimens fit a line with nothing left over', () => {
     const r = triaxial({ testType: 'CD', specimens: [100, 200].map((s) => tangentSpecimen(s, 10, 30)) })
-    expect(r.notes.join(' ')).toMatch(/no residual/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/no residual/)
   })
 })
 

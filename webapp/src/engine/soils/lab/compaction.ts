@@ -38,6 +38,8 @@
 // kN/m³; water content % (0–100).
 // ─────────────────────────────────────────────────────────────────────────
 
+import { type LabNote, info, warn } from '../notes'
+
 /** Gravity used to turn a density (Mg/m³) into a unit weight (kN/m³). */
 export const G = 9.807
 
@@ -110,7 +112,7 @@ export interface CompactionResult {
   fit?: { a: number; b: number; c: number }
   /** Degree of saturation at the optimum, %. Needs Gs. */
   saturationAtOptimum?: number
-  notes: string[]
+  notes: LabNote[]
 }
 
 /**
@@ -167,7 +169,7 @@ function fitQuadratic(xs: number[], ys: number[]): { a: number; b: number; c: nu
 }
 
 export function compaction(d: CompactionData): CompactionResult {
-  const notes: string[] = []
+  const notes: LabNote[] = []
   if (!(d.mouldVolume > 0)) throw new Error('Mould volume must be greater than zero.')
   if (!(d.mouldMass >= 0)) throw new Error('Mould mass cannot be negative.')
 
@@ -227,23 +229,23 @@ export function compaction(d: CompactionData): CompactionResult {
   }
 
   if (peakFrom === 'highest-point') {
-    notes.push(
+    notes.push(warn(
       'No downward parabola with its vertex inside the water contents tested fits these points, so the HIGHEST MEASURED point is reported instead of an interpolated peak. The true optimum is at or beyond one end of the range — run points on the missing side before accepting γd,max.',
-    )
+    ))
   }
 
   // ── Checks worth failing on ─────────────────────────────────────────────
   if (gs) {
     const impossible = rows.filter((r) => r.dryDensity > (r.zavDensity ?? Infinity) + 1e-9)
     for (const r of impossible) {
-      notes.push(
+      notes.push(warn(
         `The point at w = ${r.moisture.toFixed(1)}% plots ABOVE the zero-air-voids curve (ρd = ${r.dryDensity.toFixed(3)} vs ZAV ${(r.zavDensity ?? 0).toFixed(3)} Mg/m³, implying S = ${(r.saturation ?? 0).toFixed(0)}%). That is impossible, not merely dense — check the mould volume, the specific gravity, and that this point's water content came from its own specimen.`,
-      )
+      ))
     }
   } else {
-    notes.push(
+    notes.push(warn(
       'No specific gravity given, so no zero-air-voids curve can be drawn and the one check that can prove a point impossible — a dry density above full saturation — cannot run.',
-    )
+    ))
   }
 
   // Points ON the optimum support neither arm, and the vertex lands a rounding
@@ -253,19 +255,19 @@ export function compaction(d: CompactionData): CompactionResult {
   const below = rows.filter((r) => r.moisture < optimumMoisture - AT_PEAK).length
   const above = rows.filter((r) => r.moisture > optimumMoisture + AT_PEAK).length
   if (below < 2 || above < 2) {
-    notes.push(
+    notes.push(warn(
       `Only ${below} point(s) dry of the optimum and ${above} wet of it. D698 asks for enough points to define both arms — with fewer than two on a side the peak is held by one measurement, and a single bad specimen moves γd,max and OMC together.`,
-    )
+    ))
   }
   if (rows.length < 4) {
-    notes.push(`Only ${rows.length} points. D698 §10 expects at least four, and five is the usual practice.`)
+    notes.push(warn(`Only ${rows.length} points. D698 §10 expects at least four, and five is the usual practice.`))
   }
 
-  notes.push(
+  notes.push(info(
     effort === 'modified'
       ? 'Modified effort (D1557, 2 700 kN·m/m³). This curve sits higher and drier than the standard-effort curve for the same soil, so a "95% compaction" specification written against D698 is NOT satisfied by 95% of this value.'
       : 'Standard effort (D698, 600 kN·m/m³). A specification written against modified effort (D1557) refers to a higher, drier curve — state which one the field densities are being judged against.',
-  )
+  ))
 
   return {
     effort,

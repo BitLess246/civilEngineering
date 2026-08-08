@@ -31,6 +31,8 @@
 // UNITS: heights mm; stresses kPa; strains % (positive = swell).
 // ─────────────────────────────────────────────────────────────────────────
 
+import { type LabNote, info, warn } from '../notes'
+
 export type SwellMethod = 'A' | 'B' | 'C'
 
 /** One point on the re-loading curve after the specimen has swollen. */
@@ -76,7 +78,7 @@ export interface SwellResult {
   swellPressureFrom?: 'constant-volume' | 'reload-to-original-height'
   /** Re-loading rows, when supplied: stress and the strain still remaining. */
   rows?: { stress: number; height: number; strain: number }[]
-  notes: string[]
+  notes: LabNote[]
 }
 
 /** Strain, %, of a height change against the original. Signed. */
@@ -109,7 +111,7 @@ export function reloadPressure(h0: number, points: SwellPoint[]): number | undef
 }
 
 export function swell(d: SwellData): SwellResult {
-  const notes: string[] = []
+  const notes: LabNote[] = []
   if (!(d.initialHeight > 0)) throw new Error('The initial specimen height must be greater than zero.')
   if (d.inundationStress < 0) throw new Error('The inundation stress cannot be negative.')
 
@@ -126,9 +128,9 @@ export function swell(d: SwellData): SwellResult {
     }
     swellPressure = d.constantVolumePressure
     swellPressureFrom = 'constant-volume'
-    notes.push(
+    notes.push(info(
       'Method C holds the height constant, so the strain is zero BY CONSTRUCTION and carries no information — the measurement is the pressure required to hold it.',
-    )
+    ))
   } else {
     if (d.wettedHeight == null) {
       throw new Error('Methods A and B need the height after wetting; without it there is no strain to report.')
@@ -140,9 +142,9 @@ export function swell(d: SwellData): SwellResult {
       swellPressureFrom = swellPressure != null ? 'reload-to-original-height' : undefined
       if (swellPressure == null) {
         const maxStress = Math.max(...d.points.map((p) => p.stress))
-        notes.push(
+        notes.push(warn(
           `Re-loading to ${maxStress.toFixed(0)} kPa never brought the specimen back to its original height, so the swelling pressure is GREATER than that and is not reported. Extrapolating the curve past the last point would invent it.`,
-        )
+        ))
       }
     }
   }
@@ -158,42 +160,42 @@ export function swell(d: SwellData): SwellResult {
 
   // ── What the number does and does not say ──
   if (behaviour === 'collapse') {
-    notes.push(
+    notes.push(info(
       `The specimen COLLAPSED on wetting: ${Math.abs(strain).toFixed(2)}% of its height, downward. This is the opposite behaviour to swelling and the same test measures both — a loose or dry-of-optimum fabric loses the suction holding it open the moment water arrives. A foundation on this soil settles when the ground gets wet; it does not heave.`,
-    )
+    ))
   } else if (behaviour === 'swell') {
-    notes.push(
+    notes.push(info(
       `The specimen SWELLED ${strain.toFixed(2)}% under ${d.inundationStress.toFixed(1)} kPa. That percentage belongs to that stress and to no other: the same soil swells several times more at a seating load than under a real surcharge, because the surcharge does the work the swelling pressure must overcome.`,
-    )
+    ))
   } else if (d.method !== 'C') {
-    notes.push(
+    notes.push(info(
       `The height barely moved (${strain.toFixed(3)}%). At ${d.inundationStress.toFixed(1)} kPa this soil is neither expansive nor collapsible — but a specimen wetted under a heavy surcharge can read flat while the same soil at a seating load does not, so the stress is part of the answer.`,
-    )
+    ))
   }
 
   if (d.method === 'A') {
-    notes.push(
+    notes.push(info(
       'Method A wets at a token seating pressure, which gives FREE swell — the largest figure this soil can produce and an upper bound rather than a prediction. What a footing will see is method B, at the stress the ground will actually carry.',
-    )
+    ))
   } else if (d.method === 'B') {
-    notes.push(
+    notes.push(info(
       'Method B wets at the estimated in-situ vertical stress, so the strain is what that depth would do if it got wet — provided the estimate was right. A stress guessed too high reports too little swell.',
-    )
+    ))
   }
 
   if (swellPressureFrom === 'reload-to-original-height') {
-    notes.push(
+    notes.push(info(
       `Swelling pressure ${swellPressure!.toFixed(0)} kPa, INFERRED by re-loading the swollen specimen back to its original height. That is a different stress path from method C's constant-volume measurement and usually reports a higher value, so quote the method with the number.`,
-    )
+    ))
   }
 
   if (d.method !== 'C' && !d.points?.length) {
-    notes.push('No re-loading curve, so no swelling pressure — the strain on wetting is the whole result. Method C measures the pressure directly if that is the number needed.')
+    notes.push(warn('No re-loading curve, so no swelling pressure — the strain on wetting is the whole result. Method C measures the pressure directly if that is the number needed.'))
   }
 
-  notes.push(
+  notes.push(info(
     'Swell and collapse are properties of a FABRIC as much as a mineralogy: a remoulded or disturbed specimen does not answer for the ground it came from, and a compacted fill answers only for the density and water content it was compacted at.',
-  )
+  ))
 
   return {
     method: d.method,

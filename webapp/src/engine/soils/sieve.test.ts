@@ -39,7 +39,7 @@ describe('gradation table', () => {
 
   it('closes the mass balance', () => {
     expect(r.massError).toBeCloseTo(0, 10)
-    expect(r.notes.join(' ')).not.toMatch(/Mass balance/)
+    expect(r.notes.map((n) => n.text).join(' ')).not.toMatch(/Mass balance/)
   })
 
   it('splits gravel, sand and fines at the D2487 boundaries', () => {
@@ -55,7 +55,7 @@ describe('mass balance is reported, never silently corrected', () => {
   it('flags a stack that does not close within 1%', () => {
     const r = gradation({ ...wellGradedSand, panMass: 60 })   // 40 g surplus = 8%
     expect(Math.abs(r.massError)).toBeGreaterThan(1)
-    expect(r.notes.join(' ')).toMatch(/Mass balance is off by 8\.0%/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/Mass balance is off by 8\.0%/)
   })
 
   it('never prints a negative percent passing', () => {
@@ -67,7 +67,7 @@ describe('mass balance is reported, never silently corrected', () => {
       readings: [{ size: 4.75, massRetained: 80 }, { size: 0.075, massRetained: 40 }],
     })
     expect(r.rows.every((x) => x.percentPassing >= 0)).toBe(true)
-    expect(r.notes.join(' ')).toMatch(/Mass balance/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/Mass balance/)
   })
 
   it('refuses a zero or negative total mass', () => {
@@ -115,7 +115,7 @@ describe('D-sizes interpolate on a LOG scale', () => {
     expect(r.d10).toBeUndefined()
     expect(r.cu).toBeUndefined()
     expect(r.cc).toBeUndefined()
-    expect(r.notes.join(' ')).toMatch(/hydrometer/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/hydrometer/)
   })
 })
 
@@ -179,6 +179,6 @@ describe('cobbles', () => {
     expect(r.gravel).toBeCloseTo(50, 10)
     expect(r.sand).toBeCloseTo(25, 10)
     expect(r.fines).toBeCloseTo(5, 10)
-    expect(r.notes.join(' ')).toMatch(/coarser than 75 mm/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/coarser than 75 mm/)
   })
 })

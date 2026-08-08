@@ -62,12 +62,12 @@ describe('direct shear (ASTM D3080)', () => {
     expect(r.peak.cohesion).toBeCloseTo(20, 0)
     expect(r.peak.frictionAngle).toBeCloseTo(30, 0)
     expect(r.stressRange).toEqual({ min: 50, max: 200 })
-    expect(r.notes.join(' ')).toMatch(/valid only there/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/valid only there/)
   })
 
   it('warns when only two specimens were run', () => {
     const r = directShear({ points: clean.points.slice(0, 2) })
-    expect(r.notes.join(' ')).toMatch(/at least three/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/at least three/)
   })
 
   it('says when it refitted through the origin', () => {
@@ -79,7 +79,7 @@ describe('direct shear (ASTM D3080)', () => {
       ],
     })
     expect(r.peak.cohesion).toBe(0)
-    expect(r.notes.join(' ')).toMatch(/NEGATIVE cohesion intercept.*fitting artefact/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/NEGATIVE cohesion intercept.*fitting artefact/)
   })
 
   it('warns on a poor fit rather than reporting c′ and φ′ as if they were solid', () => {
@@ -91,7 +91,7 @@ describe('direct shear (ASTM D3080)', () => {
       ],
     })
     expect(r.peak.r2).toBeLessThan(0.95)
-    expect(r.notes.join(' ')).toMatch(/plot the points before trusting/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/plot the points before trusting/)
   })
 
   it('fits a residual envelope when residual stresses were recorded', () => {
@@ -109,7 +109,7 @@ describe('direct shear (ASTM D3080)', () => {
         { normalStress: 200, peakShear: 60, residualShear: 160 },
       ],
     })
-    expect(r.notes.join(' ')).toMatch(/cannot happen in a real soil/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/cannot happen in a real soil/)
   })
 
   it('refuses a single specimen', () => {
@@ -154,14 +154,14 @@ describe('unconfined compression (ASTM D2166)', () => {
   it('says how much the correction moved the answer', () => {
     // Omitting it would overstate the strength — always unconservatively.
     const r = ucs(spec)
-    expect(r.notes.join(' ')).toMatch(/lowering qu from 106 to 97 kPa/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/lowering qu from 106 to 97 kPa/)
   })
 
   it('halves qu for a saturated cohesive soil and states the assumption', () => {
     const r = ucs(spec)
     expect(r.cu).toBeCloseTo(r.qu / 2, 10)
-    expect(r.notes.join(' ')).toMatch(/assumes φ = 0/)
-    expect(r.notes.join(' ')).toMatch(/LOWER BOUND/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/assumes φ = 0/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/LOWER BOUND/)
   })
 
   it('DECLINES cu when the φ = 0 assumption does not hold', () => {
@@ -176,12 +176,12 @@ describe('unconfined compression (ASTM D2166)', () => {
   })
 
   it('warns about a specimen outside the 2.0–2.5 slenderness range', () => {
-    expect(ucs({ ...spec, height: 60 }).notes.join(' ')).toMatch(/restrained by the platens/)
-    expect(ucs({ ...spec, height: 76 }).notes.join(' ')).not.toMatch(/2\.0–2\.5/)
+    expect(ucs({ ...spec, height: 60 }).notes.map((n) => n.text).join(' ')).toMatch(/restrained by the platens/)
+    expect(ucs({ ...spec, height: 76 }).notes.map((n) => n.text).join(' ')).not.toMatch(/2\.0–2\.5/)
   })
 
   it('warns past 20% strain, where the specimen is barrelling not shearing', () => {
-    expect(ucs({ ...spec, failureDeformation: 18 }).notes.join(' ')).toMatch(/barrelling/)
+    expect(ucs({ ...spec, failureDeformation: 18 }).notes.map((n) => n.text).join(' ')).toMatch(/barrelling/)
   })
 
   it('rejects impossible geometry rather than returning nonsense', () => {

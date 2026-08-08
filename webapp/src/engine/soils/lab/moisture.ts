@@ -19,6 +19,8 @@
 // UNITS: masses g (any consistent unit — only ratios are used); w in %.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { type LabNote, warn } from '../notes'
+
 export interface MoistureData {
   /** Specimen identifier on the tin, e.g. 'A-14'. */
   container?: string
@@ -39,11 +41,11 @@ export interface MoistureResult {
   solidMass: number
   /** Water content, %. Can legitimately exceed 100. */
   waterContent: number
-  notes: string[]
+  notes: LabNote[]
 }
 
 export function moistureContent(d: MoistureData): MoistureResult {
-  const notes: string[] = []
+  const notes: LabNote[] = []
 
   const waterMass = d.wetMass - d.dryMass
   const solidMass = d.dryMass - d.containerMass
@@ -63,15 +65,15 @@ export function moistureContent(d: MoistureData): MoistureResult {
 
   const temp = d.temperature ?? 110
   if (temp > 60 && waterContent > 100) {
-    notes.push(
+    notes.push(warn(
       'Water content above 100% — ordinary in a soft or organic clay, where the soil holds more water than solids by mass. If the soil is organic, D2216 asks for drying at 60 °C instead; structural water is lost at 110 °C and the result reads high.',
-    )
+    ))
   }
   if (temp < 105 && temp !== 60) {
-    notes.push(`Dried at ${temp} °C. D2216 specifies 110 ± 5 °C unless the soil is organic or gypsiferous, in which case 60 °C and a stated deviation.`)
+    notes.push(warn(`Dried at ${temp} °C. D2216 specifies 110 ± 5 °C unless the soil is organic or gypsiferous, in which case 60 °C and a stated deviation.`))
   }
   if (solidMass < 10) {
-    notes.push(`Only ${solidMass.toFixed(1)} g of solids — D2216 asks for a minimum specimen mass that grows with particle size, and a small specimen carries a large proportional weighing error.`)
+    notes.push(warn(`Only ${solidMass.toFixed(1)} g of solids — D2216 asks for a minimum specimen mass that grows with particle size, and a small specimen carries a large proportional weighing error.`))
   }
 
   return { waterMass, solidMass, waterContent, notes }
@@ -83,18 +85,18 @@ export function moistureContent(d: MoistureData): MoistureResult {
  * usually a tare or a transcription error rather than natural variation.
  */
 export function meanWaterContent(results: MoistureResult[]): {
-  mean: number; range: number; notes: string[]
+  mean: number; range: number; notes: LabNote[]
 } {
   if (!results.length) throw new Error('No determinations to average.')
   const ws = results.map((r) => r.waterContent)
   const mean = ws.reduce((s, w) => s + w, 0) / ws.length
   const range = Math.max(...ws) - Math.min(...ws)
-  const notes: string[] = []
+  const notes: LabNote[] = []
   // 2 percentage points is a common repeatability expectation for duplicates.
   if (ws.length > 1 && range > 2) {
-    notes.push(
+    notes.push(warn(
       `The determinations spread ${range.toFixed(1)} percentage points. That is wider than duplicate repeatability — check the tare masses before averaging.`,
-    )
+    ))
   }
   return { mean, range, notes }
 }

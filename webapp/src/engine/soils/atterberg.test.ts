@@ -52,7 +52,7 @@ describe('non-plastic is not PI = 0', () => {
   it('marks a soil with no obtainable plastic limit as non-plastic', () => {
     const r = atterberg({ liquidLimit: 22, nonPlastic: true })
     expect(r.nonPlastic).toBe(true)
-    expect(r.notes.join(' ')).toMatch(/not the same as PI = 0/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/not the same as PI = 0/)
   })
 
   it('treats a missing plastic limit as non-plastic rather than assuming zero', () => {
@@ -75,13 +75,13 @@ describe('liquidity index', () => {
   it('warns when the soil is at or above its liquid limit', () => {
     const r = atterberg({ liquidLimit: 42, plasticLimit: 23, naturalMoisture: 50 })
     expect(r.liquidityIndex!).toBeGreaterThan(1)
-    expect(r.notes.join(' ')).toMatch(/sensitive or quick/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/sensitive or quick/)
   })
 
   it('warns when the soil is drier than its plastic limit', () => {
     const r = atterberg({ liquidLimit: 42, plasticLimit: 23, naturalMoisture: 15 })
     expect(r.liquidityIndex!).toBeLessThan(0)
-    expect(r.notes.join(' ')).toMatch(/desiccated|overconsolidated/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/desiccated|overconsolidated/)
   })
 
   it('maps LI onto a consistency description', () => {
@@ -116,7 +116,7 @@ describe('liquid limit from a multipoint flow curve (D4318 Method A)', () => {
       flowPoints: [{ blows: 30, moisture: 48 }, { blows: 38, moisture: 46 }],
       plasticLimit: 22,
     })
-    expect(r.notes.join(' ')).toMatch(/extrapolated/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/extrapolated/)
   })
 
   it('warns when a trial falls outside the 15–40 blow range D4318 asks for', () => {
@@ -124,7 +124,7 @@ describe('liquid limit from a multipoint flow curve (D4318 Method A)', () => {
       flowPoints: [{ blows: 12, moisture: 52 }, { blows: 25, moisture: 50 }, { blows: 44, moisture: 47 }],
       plasticLimit: 22,
     })
-    expect(r.notes.join(' ')).toMatch(/15 and 40/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/15 and 40/)
   })
 
   it('refuses a flow curve with fewer than two usable trials', () => {
@@ -148,13 +148,13 @@ describe('bad data is reported, not silently absorbed', () => {
   it('clamps a negative PI to zero AND says why', () => {
     const r = atterberg({ liquidLimit: 35, plasticLimit: 40 })
     expect(r.plasticityIndex).toBe(0)
-    expect(r.notes.join(' ')).toMatch(/plastic limit exceeds the liquid limit/i)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/plastic limit exceeds the liquid limit/i)
   })
 
   it('flags a point above the U-line', () => {
     const r = atterberg({ liquidLimit: 30, plasticLimit: 2 })   // PI 28 vs U-line 19.8
     expect(r.chart.aboveULine).toBe(true)
-    expect(r.notes.join(' ')).toMatch(/above the U-line/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/above the U-line/)
   })
 
   it('refuses to run with neither a liquid limit nor a flow curve', () => {
