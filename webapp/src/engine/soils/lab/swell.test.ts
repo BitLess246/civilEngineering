@@ -28,28 +28,28 @@ describe('the strain on wetting, signed', () => {
     const r = swell({ ...base, method: 'B', wettedHeight: 19.64 })
     expect(r.strain).toBeCloseTo(-1.8, 10)
     expect(r.behaviour).toBe('collapse')
-    expect(r.notes.join(' ')).toMatch(/COLLAPSED on wetting/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/COLLAPSED on wetting/)
     // and it says which way a foundation moves, since that is the point
-    expect(r.notes.join(' ')).toMatch(/settles when the ground gets wet; it does not heave/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/settles when the ground gets wet; it does not heave/)
   })
 
   it('calls a hair of movement negligible rather than a behaviour', () => {
     const r = swell({ ...base, method: 'B', wettedHeight: 20.01 })
     expect(r.behaviour).toBe('negligible')
-    expect(r.notes.join(' ')).toMatch(/neither expansive nor collapsible/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/neither expansive nor collapsible/)
   })
 
   it('carries the inundation stress into the result and the note', () => {
     const r = swell({ initialHeight: 20, inundationStress: 7, method: 'A', wettedHeight: 21.4 })
     expect(r.inundationStress).toBe(7)
-    expect(r.notes.join(' ')).toMatch(/under 7\.0 kPa/)
-    expect(r.notes.join(' ')).toMatch(/belongs to that stress and to no other/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/under 7\.0 kPa/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/belongs to that stress and to no other/)
   })
 
   it('distinguishes free swell (A) from swell at the in-situ stress (B)', () => {
-    expect(swell({ ...base, method: 'A', wettedHeight: 21 }).notes.join(' '))
+    expect(swell({ ...base, method: 'A', wettedHeight: 21 }).notes.map((n) => n.text).join(' '))
       .toMatch(/FREE swell — the largest figure this soil can produce/)
-    expect(swell({ ...base, method: 'B', wettedHeight: 21 }).notes.join(' '))
+    expect(swell({ ...base, method: 'B', wettedHeight: 21 }).notes.map((n) => n.text).join(' '))
       .toMatch(/estimated in-situ vertical stress/)
   })
 
@@ -88,8 +88,8 @@ describe('swelling pressure', () => {
     const r = swell({ ...base, method: 'B', wettedHeight: 20.9, points })
     expect(r.swellPressure).toBeCloseTo(141.42, 2)
     expect(r.swellPressureFrom).toBe('reload-to-original-height')
-    expect(r.notes.join(' ')).toMatch(/INFERRED by re-loading/)
-    expect(r.notes.join(' ')).toMatch(/usually reports a higher value/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/INFERRED by re-loading/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/usually reports a higher value/)
   })
 
   it('declines to extrapolate when the loading never gets back there', () => {
@@ -101,8 +101,8 @@ describe('swelling pressure', () => {
     expect(reloadPressure(20, points)).toBeUndefined()
     const r = swell({ ...base, method: 'B', wettedHeight: 20.9, points })
     expect(r.swellPressure).toBeUndefined()
-    expect(r.notes.join(' ')).toMatch(/GREATER than that and is not reported/)
-    expect(r.notes.join(' ')).toMatch(/would invent it/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/GREATER than that and is not reported/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/would invent it/)
   })
 
   it('method C measures it directly, and its zero strain is by construction', () => {
@@ -110,7 +110,7 @@ describe('swelling pressure', () => {
     expect(r.swellPressure).toBe(180)
     expect(r.swellPressureFrom).toBe('constant-volume')
     expect(r.strain).toBe(0)
-    expect(r.notes.join(' ')).toMatch(/zero BY CONSTRUCTION and carries no information/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/zero BY CONSTRUCTION and carries no information/)
   })
 
   it('refuses method C without the pressure it exists to measure', () => {
@@ -120,7 +120,7 @@ describe('swelling pressure', () => {
   it('says so when there is no re-loading curve at all', () => {
     const r = swell({ ...base, method: 'B', wettedHeight: 20.9 })
     expect(r.swellPressure).toBeUndefined()
-    expect(r.notes.join(' ')).toMatch(/No re-loading curve, so no swelling pressure/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/No re-loading curve, so no swelling pressure/)
   })
 
   it('reports the remaining strain at every re-loading stress', () => {
@@ -134,7 +134,7 @@ describe('swelling pressure', () => {
   })
 
   it('always warns that swell belongs to a fabric, not just a mineralogy', () => {
-    expect(swell({ ...base, method: 'A', wettedHeight: 21 }).notes.join(' '))
+    expect(swell({ ...base, method: 'A', wettedHeight: 21 }).notes.map((n) => n.text).join(' '))
       .toMatch(/remoulded or disturbed specimen does not answer for the ground/)
   })
 })

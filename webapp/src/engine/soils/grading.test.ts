@@ -75,7 +75,7 @@ describe('joining the curves is what produces D₁₀', () => {
     expect(c.d10!).toBeLessThan(0.075)     // below the finest sieve, by definition
     expect(c.cu).toBeCloseTo(c.d60! / c.d10!, 9)
     expect(c.cc).toBeCloseTo((c.d30! * c.d30!) / (c.d10! * c.d60!), 9)
-    expect(c.notes.join(' ')).toMatch(/D₁₀ = .* comes from the sedimentation run/)
+    expect(c.notes.map((n) => n.text).join(' ')).toMatch(/D₁₀ = .* comes from the sedimentation run/)
   })
 
   it('keeps the D2487 fractions where the sieve put them', () => {
@@ -122,7 +122,7 @@ describe('the join is policed, not papered over', () => {
       ],
     }))
     expect(c.points.filter((p) => p.source === 'hydrometer').every((p) => p.size < 0.075)).toBe(true)
-    expect(c.notes.join(' ')).toMatch(/coarser than the 0.075 mm sieve and .* dropped/)
+    expect(c.notes.map((n) => n.text).join(' ')).toMatch(/coarser than the 0.075 mm sieve and .* dropped/)
   })
 
   it('measures the disagreement at an overlapping join rather than averaging it', () => {
@@ -138,12 +138,12 @@ describe('the join is policed, not papered over', () => {
     }))
     expect(c.joinMismatch).toBeDefined()
     expect(c.joinMismatch!).toBeGreaterThan(2)
-    expect(c.notes.join(' ')).toMatch(/disagreement of .* points on one specimen/)
+    expect(c.notes.map((n) => n.text).join(' ')).toMatch(/disagreement of .* points on one specimen/)
   })
 
   it('refuses to let a subset of the sample be larger than the sample', () => {
     const c = combineGrading(gradation(DUAL_BAND), hyd({ fractionOfTotal: 90 }))
-    expect(c.notes.join(' ')).toMatch(/cannot be larger than the sample/)
+    expect(c.notes.map((n) => n.text).join(' ')).toMatch(/cannot be larger than the sample/)
   })
 
   it('names an unmeasured band at the join and flags a D-value read across it', () => {
@@ -156,9 +156,9 @@ describe('the join is policed, not papered over', () => {
       ],
     }))
     expect(c.joinGap!).toBeGreaterThan(3)
-    expect(c.notes.join(' ')).toMatch(/Nothing was measured between/)
+    expect(c.notes.map((n) => n.text).join(' ')).toMatch(/Nothing was measured between/)
     expect(c.dAcrossGap).toBe(true)
-    expect(c.notes.join(' ')).toMatch(/read off the interpolation rather than off a measurement/)
+    expect(c.notes.map((n) => n.text).join(' ')).toMatch(/read off the interpolation rather than off a measurement/)
   })
 
   it('says when even the joined curve never reaches 0.002 mm', () => {
@@ -171,7 +171,7 @@ describe('the join is policed, not papered over', () => {
     }))
     expect(c.clay).toBeUndefined()
     expect(c.silt).toBeUndefined()
-    expect(c.notes.join(' ')).toMatch(/above the 0.002 mm clay boundary/)
+    expect(c.notes.map((n) => n.text).join(' ')).toMatch(/above the 0.002 mm clay boundary/)
   })
 })
 

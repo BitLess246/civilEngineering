@@ -18,6 +18,8 @@
 // UNITS: all water contents in %, i.e. 0–100, not 0–1.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { type LabNote, info, warn } from './notes'
+
 /** One trial in a multipoint liquid-limit determination (D4318 Method A). */
 export interface FlowPoint {
   /** Blow count at closure, 25 ± range. */
@@ -54,7 +56,7 @@ export interface AtterbergResult {
   /** Position relative to the A-line and U-line. */
   chart: ChartPosition
   /** Advisory notes — an LI above 1, a point above the U-line, and so on. */
-  notes: string[]
+  notes: LabNote[]
 }
 
 // ── Casagrande chart lines ────────────────────────────────────────────────
@@ -135,7 +137,7 @@ export function liquidLimitFromFlow(points: FlowPoint[]): { liquidLimit: number;
 // ── Main entry ────────────────────────────────────────────────────────────
 
 export function atterberg(i: AtterbergInput): AtterbergResult {
-  const notes: string[] = []
+  const notes: LabNote[] = []
 
   let flowIndex: number | undefined
   let LL: number
@@ -145,10 +147,10 @@ export function atterberg(i: AtterbergInput): AtterbergResult {
     flowIndex = fit.flowIndex
     const spread = i.flowPoints.map((p) => p.blows)
     if (Math.min(...spread) > 25 || Math.max(...spread) < 25) {
-      notes.push('All trials fall on one side of 25 blows — the liquid limit is extrapolated, not interpolated.')
+      notes.push(warn('All trials fall on one side of 25 blows — the liquid limit is extrapolated, not interpolated.'))
     }
     if (i.flowPoints.some((p) => p.blows < 15 || p.blows > 40)) {
-      notes.push('D4318 asks for trials between 15 and 40 blows; a point outside that range weakens the fit.')
+      notes.push(warn('D4318 asks for trials between 15 and 40 blows; a point outside that range weakens the fit.'))
     }
   } else if (i.liquidLimit != null) {
     LL = i.liquidLimit
@@ -163,25 +165,25 @@ export function atterberg(i: AtterbergInput): AtterbergResult {
   const PI = nonPlastic ? 0 : Math.max(LL - PL, 0)
 
   if (!nonPlastic && LL - PL < 0) {
-    notes.push('The plastic limit exceeds the liquid limit — one of the two determinations is wrong.')
+    notes.push(warn('The plastic limit exceeds the liquid limit — one of the two determinations is wrong.'))
   }
 
   let liquidityIndex: number | undefined
   if (!nonPlastic && PI > 0 && i.naturalMoisture != null) {
     liquidityIndex = (i.naturalMoisture - PL) / PI
     if (liquidityIndex > 1) {
-      notes.push('Natural moisture is above the liquid limit (LI > 1) — the soil may be sensitive or quick.')
+      notes.push(info('Natural moisture is above the liquid limit (LI > 1) — the soil may be sensitive or quick.'))
     } else if (liquidityIndex < 0) {
-      notes.push('Natural moisture is below the plastic limit (LI < 0) — the soil is in a desiccated or overconsolidated state.')
+      notes.push(info('Natural moisture is below the plastic limit (LI < 0) — the soil is in a desiccated or overconsolidated state.'))
     }
   }
 
   const chart = chartPosition(LL, PI)
   if (chart.aboveULine && !nonPlastic) {
-    notes.push('The point plots above the U-line, which no natural soil does — re-run the limits before classifying.')
+    notes.push(warn('The point plots above the U-line, which no natural soil does — re-run the limits before classifying.'))
   }
   if (nonPlastic) {
-    notes.push('Reported non-plastic: no thread could be rolled, so the soil has no plastic range. This is not the same as PI = 0.')
+    notes.push(info('Reported non-plastic: no thread could be rolled, so the soil has no plastic range. This is not the same as PI = 0.'))
   }
 
   return {

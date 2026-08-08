@@ -38,6 +38,8 @@
 // UNITS: stresses kPa; angles degrees.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { type LabNote, info, warn } from '../notes'
+
 import { fitEnvelope } from './directShear'
 
 export type TriaxialType = 'UU' | 'CU' | 'CD'
@@ -132,7 +134,7 @@ export interface TriaxialResult {
   undrainedStrength?: number
   /** Cell pressures tested, kPa — the range c and φ may be trusted over. */
   cellRange: { min: number; max: number }
-  notes: string[]
+  notes: LabNote[]
 }
 
 const DEG = 180 / Math.PI
@@ -195,7 +197,7 @@ const withFailure = (circles: MohrCircle[], e?: TriaxialEnvelope): MohrCircle[] 
   (e ? circles.map((c) => ({ ...c, failure: failurePoint(c, e) })) : circles)
 
 export function triaxial(d: TriaxialData): TriaxialResult {
-  const notes: string[] = []
+  const notes: LabNote[] = []
   const specimens = [...d.specimens]
     .filter((s) => Number.isFinite(s.cellPressure) && Number.isFinite(s.deviatorStress))
     .sort((a, b) => a.cellPressure - b.cellPressure)
@@ -222,31 +224,31 @@ export function triaxial(d: TriaxialData): TriaxialResult {
   if (withU.length === specimens.length && specimens.length > 0) {
     effectiveCircles = specimens.map((s) => circleOf(s.cellPressure - (s.porePressure ?? 0), s.deviatorStress))
     if (effectiveCircles.some((c) => c.sigma3 < 0)) {
-      notes.push(
+      notes.push(warn(
         'A pore pressure at failure exceeds its cell pressure, which puts an effective minor principal stress below zero. Soil cannot sustain tension — check the sign convention on the pore-pressure column (a NEGATIVE u, from a dilating dense soil, is normal and shifts the circle to the RIGHT).',
-      )
+      ))
     }
   } else if (withU.length > 0) {
-    notes.push(
+    notes.push(warn(
       `Pore pressure recorded on ${withU.length} of ${specimens.length} specimens, so no effective-stress envelope is drawn. Fitting one through a mixture of total and effective circles would not be an envelope of anything.`,
-    )
+    ))
   }
 
   const total = fitTangent(circles)
   const effective = effectiveCircles ? fitTangent(effectiveCircles) : undefined
 
   if (specimens.length === 1) {
-    notes.push('One specimen gives one circle, and one circle has infinitely many tangents — su is reported, c and φ are not. A series needs three.')
+    notes.push(warn('One specimen gives one circle, and one circle has infinitely many tangents — su is reported, c and φ are not. A series needs three.'))
   } else if (specimens.length === 2) {
-    notes.push('Two specimens fix a line exactly, so the fit has no residual and R² carries no information about whether the envelope is straight. Three is the minimum that can disagree with itself.')
+    notes.push(warn('Two specimens fix a line exactly, so the fit has no residual and R² carries no information about whether the envelope is straight. Three is the minimum that can disagree with itself.'))
   }
   if (!total && specimens.length >= 2) {
-    notes.push('The fitted Kf line is at or beyond 45°, which converts to sin φ ≥ 1 — no soil has that. Check the cell pressures and deviator stresses for a transcription error.')
+    notes.push(warn('The fitted Kf line is at or beyond 45°, which converts to sin φ ≥ 1 — no soil has that. Check the cell pressures and deviator stresses for a transcription error.'))
   }
   if (total && total.frictionAngle > 50) {
-    notes.push(
+    notes.push(warn(
       `φ = ${total.frictionAngle.toFixed(1)}° is above anything a soil sustains — dense angular gravel reaches the high forties. The arithmetic is valid, so the input is what to check: a cell pressure entered as a total stress, or a deviator stress that is really σ1.`,
-    )
+    ))
   }
 
   const meanRadius = circles.reduce((s, c) => s + c.radius, 0) / circles.length
@@ -256,36 +258,36 @@ export function triaxial(d: TriaxialData): TriaxialResult {
     undrainedStrength = meanRadius
     const spread = Math.max(...circles.map((c) => c.radius)) - Math.min(...circles.map((c) => c.radius))
     const relative = meanRadius > 0 ? spread / meanRadius : 0
-    notes.push(
+    notes.push(info(
       `Unconsolidated–undrained: on a SATURATED specimen every circle has the same diameter whatever the cell pressure, the envelope is horizontal, and c = su = ${meanRadius.toFixed(1)} kPa with φ = 0.`,
-    )
+    ))
     if (specimens.length > 1 && relative > 0.1 && total && total.frictionAngle > 2) {
-      notes.push(
+      notes.push(warn(
         `The deviator stress at failure varies by ${(relative * 100).toFixed(0)}% across the cell pressures and the fit returns φ = ${total.frictionAngle.toFixed(1)}°. In a UU test that is not a friction angle — it says the specimens were not fully saturated, or were not all the same soil. Use su, and check B before quoting anything else.`,
-      )
+      ))
     }
   } else if (specimens.length === 1) {
     undrainedStrength = meanRadius
   }
 
   if (d.testType === 'CU' && !effective) {
-    notes.push(
+    notes.push(warn(
       'A consolidated–undrained test without pore pressures gives only the TOTAL envelope, and total-stress parameters from a CU test apply to nothing in particular — they are neither the drained strength nor su. Record u at failure, or run CD.',
-    )
+    ))
   }
   if (d.testType === 'CU' && effective && total) {
-    notes.push(
+    notes.push(info(
       `Effective φ′ = ${effective.frictionAngle.toFixed(1)}° with c′ = ${effective.cohesion.toFixed(1)} kPa, against total φ = ${total.frictionAngle.toFixed(1)}° and c = ${total.cohesion.toFixed(1)} kPa. These are two descriptions of the same specimens and are not interchangeable: use the effective pair with effective stresses in a drained analysis, the total pair only in the short term.`,
-    )
+    ))
   }
   if (d.testType === 'CD' && withU.length) {
-    notes.push('A drained test is run slowly so that u stays at the back pressure; its circles are already effective, and the pore pressures recorded here have not been subtracted a second time.')
+    notes.push(info('A drained test is run slowly so that u stays at the back pressure; its circles are already effective, and the pore pressures recorded here have not been subtracted a second time.'))
   }
   if (total && total.refittedThroughOrigin) {
-    notes.push('The free fit gave a NEGATIVE cohesion intercept, which is an artefact of scatter rather than a soil property, so the envelope was refitted through the origin — the c = 0 a cohesionless soil actually has.')
+    notes.push(warn('The free fit gave a NEGATIVE cohesion intercept, which is an artefact of scatter rather than a soil property, so the envelope was refitted through the origin — the c = 0 a cohesionless soil actually has.'))
   }
   if (total && specimens.length >= 3 && total.r2 < 0.95) {
-    notes.push(`R² = ${total.r2.toFixed(3)} on the Kf line. A real envelope curves, and over a wide range of cell pressures a straight line through it is an approximation — check the plotted circles before quoting a single c and φ.`)
+    notes.push(warn(`R² = ${total.r2.toFixed(3)} on the Kf line. A real envelope curves, and over a wide range of cell pressures a straight line through it is an approximation — check the plotted circles before quoting a single c and φ.`))
   }
 
   return {

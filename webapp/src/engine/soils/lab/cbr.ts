@@ -33,6 +33,8 @@
 // UNITS: penetration mm; stress MPa; CBR %.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { type LabNote, info, warn } from '../notes'
+
 /** Standard crushed-stone stresses, MPa, at the two reference penetrations. */
 export const STANDARD_STRESS = { at2_54: 6.9, at5_08: 10.3 } as const
 
@@ -69,7 +71,7 @@ export interface CbrResult {
   governing: 2.54 | 5.08
   soaked: boolean
   swell?: number
-  notes: string[]
+  notes: LabNote[]
 }
 
 /** Linear interpolation of stress at a penetration, on the corrected curve. */
@@ -119,7 +121,7 @@ export function originCorrection(points: CbrPoint[]): number {
 }
 
 export function cbr(d: CbrData): CbrResult {
-  const notes: string[] = []
+  const notes: LabNote[] = []
   const points = [...d.points]
     .filter((p) => Number.isFinite(p.penetration) && Number.isFinite(p.stress))
     .sort((a, b) => a.penetration - b.penetration)
@@ -146,33 +148,33 @@ export function cbr(d: CbrData): CbrResult {
   const value = governing === 5.08 ? cbr5_08 : cbr2_54
 
   if (originShift > 0) {
-    notes.push(
+    notes.push(info(
       `The curve was concave upward at the start, so the D1883 origin correction moved the zero by ${originShift.toFixed(2)} mm — the straight portion extended back to zero load. Without it this CBR would read ${((stressAt(points, 2.54) / STANDARD_STRESS.at2_54) * 100).toFixed(1)}% instead of ${cbr2_54.toFixed(1)}%.`,
-    )
+    ))
   }
   if (governing === 5.08) {
-    notes.push(
+    notes.push(warn(
       `CBR at 5.08 mm (${cbr5_08.toFixed(1)}%) exceeds the value at 2.54 mm (${cbr2_54.toFixed(1)}%). D1883 §11.3 asks for the test to be RE-RUN in that case; if the re-run repeats it, the 5.08 mm value is the one reported — which is what is reported here.`,
-    )
+    ))
   }
   const maxPen = corrected[corrected.length - 1].penetration
   if (maxPen < 5.08) {
-    notes.push(
+    notes.push(warn(
       `The curve stops at ${maxPen.toFixed(2)} mm of corrected penetration, so the 5.08 mm ordinate is EXTRAPOLATED along the last segment rather than read. D1883 takes readings to 7.62 mm; run the plunger further before trusting the 5.08 mm value.`,
-    )
+    ))
   }
 
   const soaked = d.soaked ?? false
-  notes.push(
+  notes.push(info(
     soaked
       ? 'Soaked (four-day) CBR — the condition a subgrade reaches under a pavement in the wet season, and the value pavement design normally uses.'
       : 'UNSOAKED CBR. On a plastic subgrade the soaked value can be a third of this one, and a pavement designed on an unsoaked number is designed for a dry season it will not always have. State the condition wherever this value is quoted.',
-  )
+  ))
   if (d.swell != null && d.swell > 3) {
-    notes.push(`Swell of ${d.swell.toFixed(1)}% during soaking is high — above about 3% the subgrade is expansive, and CBR alone does not describe how it will behave under a pavement.`)
+    notes.push(warn(`Swell of ${d.swell.toFixed(1)}% during soaking is high — above about 3% the subgrade is expansive, and CBR alone does not describe how it will behave under a pavement.`))
   }
   if (d.dryDensity == null) {
-    notes.push('No dry density recorded with this CBR. A bearing ratio belongs to a compaction state — the same soil at 90% and 95% of maximum dry density gives very different values, so the number is not transferable without it.')
+    notes.push(warn('No dry density recorded with this CBR. A bearing ratio belongs to a compaction state — the same soil at 90% and 95% of maximum dry density gives very different values, so the number is not transferable without it.'))
   }
 
   return {

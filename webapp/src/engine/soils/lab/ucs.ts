@@ -22,6 +22,8 @@
 // UNITS: dimensions mm; load N; stresses kPa; strain as a fraction.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { type LabNote, info, warn } from '../notes'
+
 export interface UcsData {
   /** Initial specimen diameter, mm. */
   diameter: number
@@ -54,7 +56,7 @@ export interface UcsResult {
   cuDeclined?: string
   /** Descriptive consistency from qu (Terzaghi & Peck). */
   consistency: string
-  notes: string[]
+  notes: LabNote[]
 }
 
 /** Consistency of a cohesive soil from qu, kPa (Terzaghi & Peck). */
@@ -68,7 +70,7 @@ export function consistencyFromQu(qu: number): string {
 }
 
 export function ucs(d: UcsData, soil: UcsSoil = 'saturated-cohesive'): UcsResult {
-  const notes: string[] = []
+  const notes: LabNote[] = []
 
   if (!(d.diameter > 0) || !(d.height > 0)) {
     throw new Error('Specimen diameter and height must both be greater than zero.')
@@ -89,33 +91,33 @@ export function ucs(d: UcsData, soil: UcsSoil = 'saturated-cohesive'): UcsResult
 
   const ratio = d.height / d.diameter
   if (ratio < 2 || ratio > 2.5) {
-    notes.push(
+    notes.push(warn(
       `Height/diameter is ${ratio.toFixed(2)}. D2166 asks for 2.0–2.5: a squatter specimen is restrained by the platens and reads high, a slenderer one can buckle.`,
-    )
+    ))
   }
   if (strain > 0.20) {
-    notes.push(
+    notes.push(warn(
       `Failure strain is ${(strain * 100).toFixed(1)}%. Beyond about 20% the specimen is barrelling rather than shearing, and the area correction stops describing it.`,
-    )
+    ))
   }
   if (strain > 0.05) {
-    notes.push(
+    notes.push(info(
       `The area correction raised the area by ${(((correctedArea / initialArea) - 1) * 100).toFixed(1)}%, lowering qu from ${quUncorrected.toFixed(0)} to ${qu.toFixed(0)} kPa. Omitting it would overstate the strength.`,
-    )
+    ))
   }
 
   let cu: number | undefined
   let cuDeclined: string | undefined
   if (soil === 'saturated-cohesive') {
     cu = qu / 2
-    notes.push('cu = qu/2 assumes φ = 0 — a saturated cohesive soil sheared undrained. A UCS is also a LOWER BOUND on the in-situ strength, since sampling disturbance only ever weakens a specimen.')
+    notes.push(info('cu = qu/2 assumes φ = 0 — a saturated cohesive soil sheared undrained. A UCS is also a LOWER BOUND on the in-situ strength, since sampling disturbance only ever weakens a specimen.'))
   } else {
     cuDeclined = {
       fissured: 'The specimen is fissured, so it fails on a discontinuity rather than through the matrix. qu/2 would overstate the operational strength.',
       'partly-saturated': 'The soil is partly saturated, so suction contributes to the measured strength and φ = 0 does not hold. qu/2 would be unconservative.',
       granular: 'A granular soil has no unconfined strength to speak of, and φ = 0 does not apply. Use a triaxial or direct shear test.',
     }[soil]
-    notes.push(cuDeclined)
+    notes.push(warn(cuDeclined))
   }
 
   return {

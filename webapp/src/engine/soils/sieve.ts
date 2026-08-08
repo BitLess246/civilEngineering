@@ -17,6 +17,8 @@
 // used); percentages 0–100.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { type LabNote, info, warn } from './notes'
+
 /** Standard sieve boundaries used by ASTM D2487, mm. */
 export const SIEVE_75MM = 75      // gravel / cobble boundary
 export const SIEVE_NO4 = 4.75     // gravel / sand boundary
@@ -78,7 +80,7 @@ export interface GradationResult {
   cc?: number
   /** Mass balance error, % of the total. */
   massError: number
-  notes: string[]
+  notes: LabNote[]
 }
 
 /**
@@ -124,7 +126,7 @@ export function passingAt(rows: SizePassing[], size: number): number {
 }
 
 export function gradation(i: SieveInput): GradationResult {
-  const notes: string[] = []
+  const notes: LabNote[] = []
   if (!(i.totalMass > 0)) throw new Error('Total specimen mass must be greater than zero.')
 
   const sorted = [...i.readings].sort((a, b) => b.size - a.size)
@@ -151,9 +153,9 @@ export function gradation(i: SieveInput): GradationResult {
   const accounted = sorted.reduce((s, r) => s + r.massRetained, 0) + pan
   const massError = ((accounted - i.totalMass) / i.totalMass) * 100
   if (Math.abs(massError) > 1) {
-    notes.push(
+    notes.push(warn(
       `Mass balance is off by ${massError.toFixed(1)}% — D6913 requires closure within 1%. Re-weigh before using this grading.`,
-    )
+    ))
   }
 
   const passing75 = passingAt(rows, SIEVE_75MM)
@@ -173,14 +175,14 @@ export function gradation(i: SieveInput): GradationResult {
   const cc = d10 && d30 && d60 ? (d30 * d30) / (d10 * d60) : undefined
 
   if (d10 == null && fines > 10) {
-    notes.push(
+    notes.push(warn(
       `The curve does not reach 10% passing (${fines.toFixed(0)}% fines) — D₁₀, Cu and Cc need a hydrometer analysis to complete the grading.`,
-    )
+    ))
   }
   if (cobbles > 0) {
-    notes.push(
+    notes.push(info(
       `${cobbles.toFixed(0)}% is coarser than 75 mm. D2487 classifies the minus-75 mm fraction and reports cobbles and boulders separately.`,
-    )
+    ))
   }
 
   return { rows, gravel, sand, fines, cobbles, d10, d30, d60, cu, cc, massError, notes }

@@ -177,6 +177,24 @@ function emitSection(s: ReturnType<typeof createSheet>, sec: ReportSection): voi
     s.y = (s.lastY() ?? s.y) + 5
   }
 
+  // NOTES COME BEFORE THE FIGURES because they annotate the TABLE. A section
+  // with five plots in it pushes its remarks three pages past the rows they
+  // are about, and a warning the reader has to hunt for is a warning that does
+  // not work.
+  //
+  // A note's SEVERITY is drawn, not just stored. An engine warning printed in
+  // the same grey italic as a methodological caveat is a warning nobody reads;
+  // these get the failure colour and a marker so they are findable by eye when
+  // the reader is flicking through the section rather than reading it.
+  for (const n of sec.notes) {
+    const isWarning = n.severity === 'warning'
+    s.setF('sans', isWarning ? 'bold' : 'normal', 7.8, isWarning ? FAIL_FG : MUTED)
+    const lines = doc.splitTextToSize(`${isWarning ? '! ' : '— '}${n.text}`, CONTENT_W) as string[]
+    s.ensure(lines.length * 3.8 + 3)
+    doc.text(lines, M, s.y)
+    s.y += lines.length * 3.8 + 2
+  }
+
   for (const f of sec.figures) {
     const box = { x: M, y: s.y + 4, w: Math.min(CONTENT_W, 150), maxH: 165 }
     const size = paintedSize(f.drawing, box)
@@ -190,14 +208,6 @@ function emitSection(s: ReturnType<typeof createSheet>, sec: ReportSection): voi
     s.setF('sans', 'normal', 7.6, MUTED)
     doc.text(f.caption, PAGE_W / 2, s.y, { align: 'center' })
     s.y += 6
-  }
-
-  for (const n of sec.notes) {
-    s.setF('sans', 'normal', 7.8, MUTED)
-    const lines = doc.splitTextToSize(`— ${n}`, CONTENT_W) as string[]
-    s.ensure(lines.length * 3.8 + 3)
-    doc.text(lines, M, s.y)
-    s.y += lines.length * 3.8 + 2
   }
 }
 

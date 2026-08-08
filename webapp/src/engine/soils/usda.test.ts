@@ -71,8 +71,8 @@ describe('what it does with fractions that do not sum to 100', () => {
     // with 20% gravel still in it.
     const r = classifyUSDA({ sand: 30, silt: 30, clay: 20 })
     expect(r.composition.sand).toBeCloseTo(37.5, 6)
-    expect(r.notes.join(' ')).toMatch(/rather than 100%/)
-    expect(r.notes.join(' ')).toMatch(/gravel was left in/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/rather than 100%/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/gravel was left in/)
   })
 
   it('refuses an empty composition rather than dividing by zero', () => {
@@ -115,7 +115,7 @@ describe('from a grading curve', () => {
     expect(r.texture).toBe('loam')
     expect(r.name).toBe('very gravelly loam')
     expect(r.gravel).toBeCloseTo(40, 9)
-    expect(r.notes.join(' ')).toMatch(/keeps that out of the triangle/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/keeps that out of the triangle/)
   })
 
   it('leaves the name alone below 15% gravel', () => {

@@ -37,6 +37,8 @@
 // UNITS: sizes mm; percentages 0–100.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { type LabNote, info, warn } from './notes'
+
 /** The twelve textures of the USDA triangle. */
 export type UsdaTexture =
   | 'sand' | 'loamy sand' | 'sandy loam' | 'loam' | 'silt loam' | 'silt'
@@ -59,7 +61,7 @@ export interface UsdaResult {
   gravel: number
   /** Why this texture and not its neighbours. */
   reason: string
-  notes: string[]
+  notes: LabNote[]
 }
 
 /** USDA size boundaries, mm — named because they differ from every other system. */
@@ -87,13 +89,13 @@ function gravelModifier(gravel: number): string {
  * says it does.
  */
 export function classifyUSDA(c: UsdaComposition): UsdaResult {
-  const notes: string[] = []
+  const notes: LabNote[] = []
   const total = c.sand + c.silt + c.clay
   if (!(total > 0)) throw new Error('Sand, silt and clay must sum to more than zero.')
   if (Math.abs(total - 100) > 1) {
-    notes.push(
+    notes.push(warn(
       `The three fractions sum to ${total.toFixed(1)}% rather than 100%; they have been normalised. A gap this size usually means the gravel was left in, or the hydrometer and sieve were read on different bases.`,
-    )
+    ))
   }
   // Normalise so a caller that passes fractions of the whole sample still lands
   // in the right region rather than off the triangle entirely.
@@ -192,9 +194,9 @@ export function usdaFromPassing(passing: Parameters<typeof usdaFractions>[0]): U
   const r = classifyUSDA(f.composition)
   const prefix = gravelModifier(f.gravel)
   if (prefix) {
-    r.notes.push(
+    r.notes.push(info(
       `${f.gravel.toFixed(0)}% of the whole sample is coarser than 2 mm. USDA keeps that out of the triangle and names it as a modifier, so the texture describes the fine earth only.`,
-    )
+    ))
   }
   return { ...r, gravel: f.gravel, name: prefix + r.texture }
 }

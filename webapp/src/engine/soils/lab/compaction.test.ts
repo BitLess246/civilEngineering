@@ -111,12 +111,12 @@ describe('the peak is recovered from a curve it was planted in', () => {
     expect(r.peakFrom).toBe('highest-point')
     expect(r.optimumMoisture).toBe(11)
     expect(r.fit).toBeUndefined()
-    expect(r.notes.join(' ')).toMatch(/HIGHEST MEASURED point/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/HIGHEST MEASURED point/)
   })
 
   it('flags a peak held by too few points on one side', () => {
     const r = compaction({ ...MOULD, points: plantedCurve(a, b, c, [14, 15, 16.5, 18, 20]) })
-    expect(r.notes.join(' ')).toMatch(/dry of the optimum/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/dry of the optimum/)
   })
 })
 
@@ -142,16 +142,16 @@ describe('the zero-air-voids bound', () => {
     // and pushes the wet-side points through full saturation.
     const pts = plantedCurve(-0.006, 0.18, 0.43, [10, 12.5, 15, 17.5, 20])
     const r = compaction({ mouldVolume: 844, mouldMass: MOULD.mouldMass, specificGravity: 2.65, points: pts })
-    const flagged = r.notes.filter((n) => /ABOVE the zero-air-voids/.test(n))
+    const flagged = r.notes.filter((n) => /ABOVE the zero-air-voids/.test(n.text))
     expect(flagged.length).toBeGreaterThan(0)
-    expect(flagged[0]).toMatch(/S = 1\d\d%/)          // saturation above 100
-    expect(flagged[0]).toMatch(/mould volume/)
+    expect(flagged[0].text).toMatch(/S = 1\d\d%/)          // saturation above 100
+    expect(flagged[0].text).toMatch(/mould volume/)
   })
 
   it('says the check cannot run when no specific gravity was given', () => {
     const r = compaction({ ...MOULD, points: plantedCurve(-0.006, 0.18, 0.43, [10, 12.5, 15, 17.5, 20]) })
     expect(r.rows.every((x) => x.zavDensity === undefined)).toBe(true)
-    expect(r.notes.join(' ')).toMatch(/no zero-air-voids curve/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/no zero-air-voids curve/)
   })
 
   it('a real compaction point sits below the bound and under 100% saturation', () => {
@@ -159,7 +159,7 @@ describe('the zero-air-voids bound', () => {
       ...MOULD, specificGravity: 2.68,
       points: plantedCurve(-0.006, 0.18, 0.43, [10, 12.5, 15, 17.5, 20]),
     })
-    expect(r.notes.some((n) => /ABOVE the zero-air-voids/.test(n))).toBe(false)
+    expect(r.notes.some((n) => /ABOVE the zero-air-voids/.test(n.text))).toBe(false)
     for (const row of r.rows) {
       expect(row.dryDensity).toBeLessThan(row.zavDensity!)
       expect(row.saturation!).toBeLessThan(100)
@@ -182,14 +182,14 @@ describe('effort is carried, never assumed away', () => {
   it('defaults to standard and says which specification that answers', () => {
     const r = compaction({ ...MOULD, points: pts })
     expect(r.effort).toBe('standard')
-    expect(r.notes.join(' ')).toMatch(/D698/)
-    expect(r.notes.join(' ')).toMatch(/D1557/)      // and warns the other exists
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/D698/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/D1557/)      // and warns the other exists
   })
 
   it('modified effort says a D698-written 95% is not satisfied by 95% of it', () => {
     const r = compaction({ ...MOULD, effort: 'modified', points: pts })
     expect(r.effort).toBe('modified')
-    expect(r.notes.join(' ')).toMatch(/NOT satisfied/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/NOT satisfied/)
   })
 })
 

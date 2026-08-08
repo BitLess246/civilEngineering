@@ -146,7 +146,7 @@ describe('boundaries and missing data', () => {
 
   it('notes a grading where passing increases with sieve size', () => {
     const r = classifyAASHTO({ passing10: 40, passing40: 60, passing200: 20, liquidLimit: 25, plasticityIndex: 4 })
-    expect(r.notes.join(' ')).toMatch(/must not increase with sieve size/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/must not increase with sieve size/)
   })
 })
 

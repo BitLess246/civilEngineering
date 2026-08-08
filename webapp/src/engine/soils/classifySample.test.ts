@@ -112,7 +112,7 @@ describe('choosing which test counts', () => {
     const newer = sieveTest(SIEVE_DATA, { testDate: '2026-06-20' })
     const s = sample([older, newer, atterbergTest({ liquidLimit: 42, plasticLimit: 23 })])
     expect(governingTest(s, 'sieve').test!.id).toBe(newer.id)
-    expect(classifySample(s).notes.join(' ')).toMatch(/2 sieve analyses.*most recent complete one was used/)
+    expect(classifySample(s).notes.map((n) => n.text).join(' ')).toMatch(/2 sieve analyses.*most recent complete one was used/)
   })
 
   it('falls back to a non-void test when none is complete', () => {
@@ -144,7 +144,7 @@ describe('classifying from the laboratory record', () => {
     const c = classifySample(full)
     // The stack has >10% fines, so D10 is off the curve and the gradation
     // module says a hydrometer would complete it.
-    expect(c.notes.join(' ')).toMatch(/hydrometer/)
+    expect(c.notes.map((n) => n.text).join(' ')).toMatch(/hydrometer/)
   })
 
   it('does NOT list a hydrometer as missing when it would not change the symbol', () => {
@@ -189,7 +189,7 @@ describe('it will not invent a missing input', () => {
     const c = classifySample(sample([atterbergTest({ liquidLimit: 42, plasticLimit: 23 })]))
     expect(c.uscs).toBeUndefined()
     expect(c.missing).toContain('sieve')
-    expect(c.notes.join(' ')).toMatch(/gravel\/sand\/fines split is unknown/)
+    expect(c.notes.map((n) => n.text).join(' ')).toMatch(/gravel\/sand\/fines split is unknown/)
   })
 
   it('names the Atterberg test when a fine-grained soil lacks it', () => {
@@ -206,7 +206,7 @@ describe('it will not invent a missing input', () => {
       atterbergTest({ liquidLimit: 42, plasticLimit: 23 }),
     ])
     const c = classifySample(broken)
-    expect(c.notes.join(' ')).toMatch(/could not be evaluated/)
+    expect(c.notes.map((n) => n.text).join(' ')).toMatch(/could not be evaluated/)
     expect(c.uscs).toBeUndefined()
   })
 })
@@ -290,19 +290,19 @@ describe('the USDA texture needs a sedimentation test, and says so when there is
     // test exists. Once it does, the joined curve either reached D₁₀ or did
     // not, and saying both at once reads as a contradiction.
     const withOut = classifySample(sample([sieveTest(), atterbergTest({ liquidLimit: 42, plasticLimit: 23 })]))
-    expect(withOut.notes.join(' ')).toMatch(/need a hydrometer analysis/)
+    expect(withOut.notes.map((n) => n.text).join(' ')).toMatch(/need a hydrometer analysis/)
     expect(withOut.curve!.combined).toBe(false)
     expect(withOut.curve!.d10).toBeUndefined()
 
     const withIt = classifySample(sample([
       sieveTest(), atterbergTest({ liquidLimit: 42, plasticLimit: 23 }), hydrometerTest(),
     ]))
-    expect(withIt.notes.join(' ')).not.toMatch(/need a hydrometer analysis/)
+    expect(withIt.notes.map((n) => n.text).join(' ')).not.toMatch(/need a hydrometer analysis/)
     // The sieve alone still cannot reach it; the JOINED curve can. That is the
     // whole point of the merge.
     expect(withIt.gradation!.d10).toBeUndefined()
     expect(withIt.curve!.d10).toBeDefined()
-    expect(withIt.notes.join(' ')).toMatch(/comes from the sedimentation run/)
+    expect(withIt.notes.map((n) => n.text).join(' ')).toMatch(/comes from the sedimentation run/)
   })
 
   it('completes the dual symbol D2487 could not finish from a sieve alone', () => {
@@ -360,7 +360,7 @@ describe('the USDA texture needs a sedimentation test, and says so when there is
     // The triangle itself sums over the fine earth only.
     const { sand, silt, clay } = c.usda!.composition
     expect(sand + silt + clay).toBeCloseTo(100, 6)
-    expect(c.notes.join(' ')).toMatch(/keeps that out of the triangle/)
+    expect(c.notes.map((n) => n.text).join(' ')).toMatch(/keeps that out of the triangle/)
   })
 
   it('reports an unreadable sedimentation run rather than classifying around it', () => {
@@ -370,7 +370,7 @@ describe('the USDA texture needs a sedimentation test, and says so when there is
     ]))
     expect(c.uscs!.symbol).toBe('SC')             // the sieve is still good
     expect(c.usda).toBeUndefined()
-    expect(c.notes.join(' ')).toMatch(/Hydrometer analysis could not be evaluated/)
+    expect(c.notes.map((n) => n.text).join(' ')).toMatch(/Hydrometer analysis could not be evaluated/)
   })
 })
 

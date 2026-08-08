@@ -38,6 +38,7 @@ import { classifyAASHTO, type AashtoResult } from './aashto'
 import { usdaFromPassing, type UsdaResult } from './usda'
 import { combineGrading, passingOnCurve, passingOrClamp, type CombinedGrading } from './grading'
 import { evaluateTest } from './lab'
+import { type LabNote, warn, info } from './notes'
 import { passingAt, type GradationResult } from './sieve'
 import type { AtterbergResult } from './atterberg'
 import type { HydrometerResult } from './lab/hydrometer'
@@ -60,7 +61,7 @@ export interface SampleClassification {
   /** Tests that would complete or improve the classification. */
   missing: LabTestType[]
   /** How the inputs were chosen, and anything odd about them. */
-  notes: string[]
+  notes: LabNote[]
 }
 
 /**
@@ -82,8 +83,20 @@ export function governingTest(sample: Sample, type: LabTestType): {
   return { test: sorted[sorted.length - 1], superseded: candidates.length - 1 }
 }
 
+/**
+ * The sieve engine's "a hydrometer analysis would complete the grading",
+ * which stops being true the moment one is on file.
+ *
+ * Exported because TWO places have to suppress it — this module, and the
+ * report's laboratory section, which tabulates each test on its own and would
+ * otherwise print the advice beside the very sedimentation run that answers
+ * it. One definition, so they cannot drift; matching on the text is the
+ * deliberate trade named in the header.
+ */
+export const isStaleHydrometerAdvice = (n: LabNote): boolean => /hydrometer/i.test(n.text)
+
 export function classifySample(sample: Sample): SampleClassification {
-  const notes: string[] = []
+  const notes: LabNote[] = []
   const missing: LabTestType[] = []
 
   // ── Gradation ──
@@ -91,12 +104,12 @@ export function classifySample(sample: Sample): SampleClassification {
   let grad: GradationResult | undefined
   if (sieve.test) {
     const { outcome, error } = evaluateTest(sieve.test)
-    if (error) notes.push(`Sieve analysis could not be evaluated: ${error}`)
+    if (error) notes.push(warn(`Sieve analysis could not be evaluated: ${error}`))
     else if (outcome?.kind === 'sieve') grad = outcome.result
     if (sieve.superseded > 0) {
-      notes.push(
+      notes.push(warn(
         `${sieve.superseded + 1} sieve analyses on this sample — the most recent complete one was used. Void the others if they should not count.`,
-      )
+      ))
     }
   } else {
     missing.push('sieve')
@@ -107,12 +120,12 @@ export function classifySample(sample: Sample): SampleClassification {
   let limits: AtterbergResult | undefined
   if (atter.test) {
     const { outcome, error } = evaluateTest(atter.test)
-    if (error) notes.push(`Atterberg limits could not be evaluated: ${error}`)
+    if (error) notes.push(warn(`Atterberg limits could not be evaluated: ${error}`))
     else if (outcome?.kind === 'atterberg') limits = outcome.result
     if (atter.superseded > 0) {
-      notes.push(
+      notes.push(warn(
         `${atter.superseded + 1} Atterberg determinations on this sample — the most recent complete one was used.`,
-      )
+      ))
     }
   } else {
     missing.push('atterberg')
@@ -126,7 +139,7 @@ export function classifySample(sample: Sample): SampleClassification {
   let hyd: HydrometerResult | undefined
   if (hydro.test) {
     const { outcome, error } = evaluateTest(hydro.test)
-    if (error) notes.push(`Hydrometer analysis could not be evaluated: ${error}`)
+    if (error) notes.push(warn(`Hydrometer analysis could not be evaluated: ${error}`))
     else if (outcome?.kind === 'hydrometer') hyd = outcome.result
   }
 
@@ -134,7 +147,7 @@ export function classifySample(sample: Sample): SampleClassification {
     return {
       atterberg: limits, missing, notes: [
         ...notes,
-        'No usable sieve analysis on this sample, so the gravel/sand/fines split is unknown and neither system can classify it.',
+        warn('No usable sieve analysis on this sample, so the gravel/sand/fines split is unknown and neither system can classify it.'),
       ],
     }
   }
@@ -179,19 +192,19 @@ export function classifySample(sample: Sample): SampleClassification {
   // replaced rather than stacked. Matching on the text is deliberate and
   // pinned by a test: the two modules are siblings, and the alternative is a
   // flag the sieve engine would have to keep in step with wording it owns.
-  const gradNotes = curve.combined ? grad.notes.filter((n) => !/hydrometer/i.test(n)) : grad.notes
+  const gradNotes = curve.combined ? grad.notes.filter((n) => !isStaleHydrometerAdvice(n)) : grad.notes
   if (gradNotes.length) notes.push(...gradNotes)
   if (curve.notes.length) notes.push(...curve.notes)
   if (curve.combined && curve.d10 == null) {
-    notes.push(
+    notes.push(info(
       'Even joined with the sedimentation run the curve does not reach 10% passing, so D₁₀, Cu and Cc remain unavailable. On a soil this fine that is the expected answer rather than a gap in the testing.',
-    )
+    ))
   }
   if (limits?.notes.length) notes.push(...limits.notes)
   if (usda?.notes.length) notes.push(...usda.notes)
 
   if (!uscs.symbol && !missing.includes('atterberg') && curve.d10 == null && !curve.combined) {
-    notes.push('The gradation curve does not reach 10% passing, so Cu and Cc are unavailable — a hydrometer analysis would complete it.')
+    notes.push(warn('The gradation curve does not reach 10% passing, so Cu and Cc are unavailable — a hydrometer analysis would complete it.'))
     if (!missing.includes('hydrometer')) missing.push('hydrometer')
   }
 

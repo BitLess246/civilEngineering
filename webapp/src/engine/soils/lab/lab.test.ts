@@ -31,7 +31,7 @@ describe('water content (ASTM D2216)', () => {
     // A soft organic clay holding more water than solids by mass.
     const r = moistureContent({ containerMass: 20, wetMass: 140, dryMass: 70 })
     expect(r.waterContent).toBeCloseTo(140, 10)
-    expect(r.notes.join(' ')).toMatch(/organic/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/organic/)
   })
 
   it('does not clamp a high water content', () => {
@@ -53,17 +53,17 @@ describe('water content (ASTM D2216)', () => {
 
   it('notes a non-standard drying temperature', () => {
     const r = moistureContent({ containerMass: 25, wetMass: 85, dryMass: 75, temperature: 90 })
-    expect(r.notes.join(' ')).toMatch(/110 ± 5 °C/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/110 ± 5 °C/)
   })
 
   it('does not complain about 60 °C, which D2216 allows for organics', () => {
     const r = moistureContent({ containerMass: 25, wetMass: 85, dryMass: 75, temperature: 60 })
-    expect(r.notes.join(' ')).not.toMatch(/110 ± 5/)
+    expect(r.notes.map((n) => n.text).join(' ')).not.toMatch(/110 ± 5/)
   })
 
   it('notes a specimen too small to weigh reliably', () => {
     const r = moistureContent({ containerMass: 25, wetMass: 31, dryMass: 30 })
-    expect(r.notes.join(' ')).toMatch(/proportional weighing error/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/proportional weighing error/)
   })
 })
 
@@ -80,7 +80,7 @@ describe('averaging determinations', () => {
   it('flags duplicates that disagree instead of averaging them silently', () => {
     // Usually a tare or transcription error rather than natural variation.
     const r = meanWaterContent([at(20), at(28)])
-    expect(r.notes.join(' ')).toMatch(/check the tare masses before averaging/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/check the tare masses before averaging/)
   })
 
   it('refuses an empty set', () => {
@@ -119,7 +119,7 @@ describe('specific gravity (ASTM D854)', () => {
     })
     expect(warm.k).toBeLessThan(1)
     expect(warm.gs).toBeLessThan(warm.gsAtTest)
-    expect(warm.notes.join(' ')).toMatch(/Corrected from 25\.0 °C to 20 °C/)
+    expect(warm.notes.map((n) => n.text).join(' ')).toMatch(/Corrected from 25\.0 °C to 20 °C/)
   })
 
   it('rejects solids that displaced no water', () => {
@@ -136,12 +136,12 @@ describe('specific gravity (ASTM D854)', () => {
     // Under-de-aired suspensions trap air, displace too little, and read LOW.
     const low = specificGravity({ solidMass: 25, pycWaterMass: 675, pycWaterSolidMass: 689 })
     expect(low.gs).toBeLessThan(2.4)
-    expect(low.notes.join(' ')).toMatch(/de-airing.*reads low/i)
+    expect(low.notes.map((n) => n.text).join(' ')).toMatch(/de-airing.*reads low/i)
   })
 
   it('notes a specimen small enough to magnify the weighing error', () => {
     const r = specificGravity({ solidMass: 5, pycWaterMass: 675, pycWaterSolidMass: 678.1 })
-    expect(r.notes.join(' ')).toMatch(/magnifies every weighing error/)
+    expect(r.notes.map((n) => n.text).join(' ')).toMatch(/magnifies every weighing error/)
   })
 })
 

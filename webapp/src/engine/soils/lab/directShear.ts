@@ -23,6 +23,8 @@
 // UNITS: stresses kPa; angles degrees.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { type LabNote, info, warn } from '../notes'
+
 export interface ShearPoint {
   /** Effective normal stress on the shear plane, kPa. */
   normalStress: number
@@ -55,7 +57,7 @@ export interface DirectShearResult {
   residual?: Envelope
   /** Lowest and highest normal stress tested, kPa. */
   stressRange: { min: number; max: number }
-  notes: string[]
+  notes: LabNote[]
 }
 
 /**
@@ -105,14 +107,14 @@ export function fitEnvelope(points: { x: number; y: number }[]): Envelope {
 }
 
 export function directShear(d: DirectShearData): DirectShearResult {
-  const notes: string[] = []
+  const notes: LabNote[] = []
   const pts = d.points.filter((p) => Number.isFinite(p.normalStress) && Number.isFinite(p.peakShear))
 
   if (pts.length < 2) {
     throw new Error('A direct-shear envelope needs at least two specimens with a normal and a peak shear stress.')
   }
   if (pts.length < 3) {
-    notes.push('Only two specimens. D3080 asks for at least three so the envelope can be seen to be straight — with two, any scatter is invisible.')
+    notes.push(warn('Only two specimens. D3080 asks for at least three so the envelope can be seen to be straight — with two, any scatter is invisible.'))
   }
 
   const peak = fitEnvelope(pts.map((p) => ({ x: p.normalStress, y: p.peakShear })))
@@ -126,25 +128,25 @@ export function directShear(d: DirectShearData): DirectShearResult {
   const stressRange = { min: Math.min(...stresses), max: Math.max(...stresses) }
 
   if (peak.refittedThroughOrigin) {
-    notes.push(
+    notes.push(warn(
       'The free fit gave a NEGATIVE cohesion intercept, which is a fitting artefact rather than a soil property. The envelope was refitted through the origin and c′ reported as 0.',
-    )
+    ))
   }
   if (peak.r2 < 0.95) {
-    notes.push(
+    notes.push(warn(
       `The envelope fits poorly (R² = ${peak.r2.toFixed(3)}). Either the soil's envelope is curved over this stress range, or one specimen is an outlier — plot the points before trusting c′ and φ′.`,
-    )
+    ))
   }
   if (peak.frictionAngle > 45) {
-    notes.push(`φ′ = ${peak.frictionAngle.toFixed(1)}° is above the range most soils reach. Verify the shear-box area correction.`)
+    notes.push(warn(`φ′ = ${peak.frictionAngle.toFixed(1)}° is above the range most soils reach. Verify the shear-box area correction.`))
   }
   if (residual && residual.frictionAngle > peak.frictionAngle + 0.5) {
-    notes.push('The residual friction angle exceeds the peak, which cannot happen in a real soil — check which column is which.')
+    notes.push(warn('The residual friction angle exceeds the peak, which cannot happen in a real soil — check which column is which.'))
   }
 
-  notes.push(
+  notes.push(info(
     `c′ and φ′ are fitted over ${stressRange.min.toFixed(0)}–${stressRange.max.toFixed(0)} kPa and are valid only there. A real envelope is curved; extrapolating to a much higher footing stress overestimates strength.`,
-  )
+  ))
 
   return { peak, residual, stressRange, notes }
 }
