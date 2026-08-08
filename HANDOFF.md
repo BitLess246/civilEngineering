@@ -1386,12 +1386,25 @@ test card and the report read it — a report whose compaction curve differed
 from the one on screen would be worse than a report with no curve at all. That
 is the fourth time this module has needed the one-rule-one-home fix.
 
-**Note for anyone demoing:** the bundled example fixture books 10 laboratory
-tests and enters data for NONE, so the example report's §8 now reads "10 booked
-tests produced no result" rather than showing a table. Entering data for one
-test is enough to see the table and its plot. Giving the fixture real
-laboratory data would make the example far better, and is not done here because
-it shifts every classification-dependent assertion that leans on it.
+**The example fixture now carries real laboratory data (Aug 2026).** It books 14
+tests and enters data for 13 — moisture, sieve and Atterberg pairs, a UCS and a
+full consolidation curve — leaving ONE planned triaxial unrun so the report's
+"not tabulated" path is exercised by the example itself. Every sample classifies
+and each agrees with the name it was logged under: S-01 SM "Silty sand", S-02 and
+BH-02/S-01 CL "Lean clay with sand", S-03 SP "Poorly graded sand". The four
+layers a sample speaks for carry their group symbol; the Fill layers and BH-02's
+sand do not, because nothing was tested in them — a real gap, left visible.
+
+The consolidation curve is planted to be lightly overconsolidated: Cc = 0.332
+against 0.009(LL-10) = 0.315 for its LL of 45, Cr = 0.042, and s'p ~ 127 kPa
+against ~85 kPa of effective overburden at 5 m. The example report runs to 11
+pages with five plots in section 8, and the fixture still validates with zero
+errors and zero warnings.
+
+An Atterberg blob needs a LIQUID LIMIT to be readable at all: `nonPlastic: true`
+alone is rejected by the guard, because non-plastic means the PLASTIC limit could
+not be obtained, not that nothing was measured. Two fixture tests were silently
+producing no result until that was fixed.
 
 **Supabase: SETTLED AGAINST THE LIVE DATABASE, 6 Aug.** Egress to
 `*.supabase.co` was opened on the environment and took effect without a new
