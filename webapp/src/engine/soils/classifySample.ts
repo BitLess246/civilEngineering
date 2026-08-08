@@ -36,8 +36,9 @@ import type { Sample, LabTest, LabTestType } from './model'
 import { classifyUSCS, type UscsResult } from './uscs'
 import { classifyAASHTO, type AashtoResult } from './aashto'
 import { usdaFromPassing, type UsdaResult } from './usda'
+import { combineGrading, passingOnCurve, passingOrClamp, type CombinedGrading } from './grading'
 import { evaluateTest } from './lab'
-import type { GradationResult } from './sieve'
+import { passingAt, type GradationResult } from './sieve'
 import type { AtterbergResult } from './atterberg'
 import type { HydrometerResult } from './lab/hydrometer'
 
@@ -47,8 +48,13 @@ export interface SampleClassification {
   usda?: UsdaResult
   /** Why there is no USDA texture, when there is none. */
   usdaGap?: string
-  /** The gradation the classification used, when one was found. */
+  /** The sieve result on its own, as the laboratory reported it. */
   gradation?: GradationResult
+  /**
+   * The curve everything above was read off: the sieve joined to the
+   * sedimentation run when there is one, the sieve alone when there is not.
+   */
+  curve?: CombinedGrading
   /** The limits the classification used, when they were found. */
   atterberg?: AtterbergResult
   /** Tests that would complete or improve the classification. */
@@ -112,10 +118,10 @@ export function classifySample(sample: Sample): SampleClassification {
     missing.push('atterberg')
   }
 
-  // ── Sedimentation, for the USDA triangle only ──
-  // Neither USCS nor AASHTO can use this curve: both stop at 0.075 mm and split
-  // the fines by plasticity instead. It is here because 0.002 mm exists nowhere
-  // else.
+  // ── Sedimentation ──
+  // Joined to the sieve curve below. It is what carries the grading past the
+  // finest sieve — the only route to D₁₀ on a soil with more than ~10% fines,
+  // and the only route to the 0.002 mm boundary the USDA triangle is drawn on.
   const hydro = governingTest(sample, 'hydrometer')
   let hyd: HydrometerResult | undefined
   if (hydro.test) {
@@ -139,131 +145,95 @@ export function classifySample(sample: Sample): SampleClassification {
   const LL = limits?.liquidLimit
   const PI = limits?.plasticityIndex
 
+  // ── One curve, sieve and sedimentation together ──
+  // Everything downstream reads THIS rather than the sieve result, so a sample
+  // with a hydrometer gets shape parameters the sieve alone could not reach.
+  // With no hydrometer it is the sieve curve unchanged.
+  const curve = combineGrading(grad, hyd)
+
   const uscs = classifyUSCS({
-    gravel: grad.gravel,
-    sand: grad.sand,
-    fines: grad.fines,
-    cu: grad.cu,
-    cc: grad.cc,
+    gravel: curve.gravel,
+    sand: curve.sand,
+    fines: curve.fines,
+    cu: curve.cu,
+    cc: curve.cc,
     liquidLimit: LL,
     plasticityIndex: PI,
   })
 
   // AASHTO needs percent passing at three sieves rather than the fractions.
   const aashto = classifyAASHTO({
-    passing10: passingAtSize(grad, 2.0),
-    passing40: passingAtSize(grad, 0.425),
+    passing10: passingAt(grad.rows, 2.0),
+    passing40: passingAt(grad.rows, 0.425),
     passing200: grad.fines,
     liquidLimit: LL,
     plasticityIndex: PI,
   })
 
-  // ── USDA texture, off the combined sieve + sedimentation curve ──
-  const { usda, usdaGap } = textureFrom(grad, hyd)
+  // ── USDA texture, off the same joined curve ──
+  const { usda, usdaGap } = textureFrom(curve)
 
-  // The sieve engine advises running a hydrometer when its curve stops short of
-  // 10% passing. Once one is on file that advice is stale, and printing it
-  // beside the note below reads as a contradiction — so it is replaced, not
-  // stacked. Matching on the text is deliberate and pinned by a test: the two
-  // modules are siblings, and the alternative is a flag the sieve engine would
-  // have to keep in step with wording it already owns.
-  const gradNotes = hyd ? grad.notes.filter((n) => !/hydrometer/i.test(n)) : grad.notes
+  // The sieve engine advises running a hydrometer when its own curve stops
+  // short of 10% passing. Once one is on file that advice is stale — the join
+  // either reached D₁₀ or did not, and `curve.notes` says which — so it is
+  // replaced rather than stacked. Matching on the text is deliberate and
+  // pinned by a test: the two modules are siblings, and the alternative is a
+  // flag the sieve engine would have to keep in step with wording it owns.
+  const gradNotes = curve.combined ? grad.notes.filter((n) => !/hydrometer/i.test(n)) : grad.notes
   if (gradNotes.length) notes.push(...gradNotes)
-  if (hyd && grad.d10 == null) {
-    // Its curve reached the USDA boundaries, but D10/Cu/Cc still come off the
-    // sieve alone — merging the two into one gradation is a separate change.
+  if (curve.notes.length) notes.push(...curve.notes)
+  if (curve.combined && curve.d10 == null) {
     notes.push(
-      'The sedimentation curve was used for the USDA texture, but D₁₀, Cu and Cc above still come from the sieve alone and remain unavailable — merging the two curves into a single gradation is not yet done.',
+      'Even joined with the sedimentation run the curve does not reach 10% passing, so D₁₀, Cu and Cc remain unavailable. On a soil this fine that is the expected answer rather than a gap in the testing.',
     )
   }
   if (limits?.notes.length) notes.push(...limits.notes)
   if (usda?.notes.length) notes.push(...usda.notes)
 
-  if (!uscs.symbol && !missing.includes('atterberg') && grad.d10 == null) {
+  if (!uscs.symbol && !missing.includes('atterberg') && curve.d10 == null && !curve.combined) {
     notes.push('The gradation curve does not reach 10% passing, so Cu and Cc are unavailable — a hydrometer analysis would complete it.')
     if (!missing.includes('hydrometer')) missing.push('hydrometer')
   }
 
-  return { uscs, aashto, usda, usdaGap, gradation: grad, atterberg: limits, missing, notes }
+  return { uscs, aashto, usda, usdaGap, gradation: grad, curve, atterberg: limits, missing, notes }
 }
 
-/** One point on a grading curve, whatever apparatus produced it. */
-interface CurvePoint { size: number; percentPassing: number }
-
 /**
- * The USDA texture from the laboratory record, or the reason there isn't one.
+ * The USDA texture from the joined curve, or the reason there isn't one.
  *
- * THE TWO CURVES ARE READ AS ONE. The sieve ends at 0.075 mm and the
- * sedimentation run begins around 0.05–0.07 mm, so the 0.05 mm sand/silt
- * boundary usually falls in the join between them — interpolating across it is
- * how a combined grading curve is read off a chart, and it is why this is done
- * here rather than inside `usda`, which takes finished percentages.
+ * The 0.05 mm sand/silt boundary usually falls in the join between the finest
+ * sieve and the first sedimentation reading, and the 0.002 mm clay boundary
+ * lies well inside the sedimentation range — so this is a read off
+ * `combineGrading`'s curve rather than arithmetic of its own.
  *
- * Without a hydrometer there is no 0.002 mm point at any price, and this
+ * Without a sedimentation run there is no 0.002 mm point at any price, and this
  * declines with a sentence rather than substituting the 0.075 mm fines content
- * for a clay fraction — those are different populations by a factor of about
- * two in a typical clay.
+ * for a clay fraction — those differ by about a factor of two in a typical clay.
  */
-function textureFrom(g: GradationResult, h?: HydrometerResult): {
-  usda?: UsdaResult; usdaGap?: string
-} {
-  if (!h) {
+function textureFrom(c: CombinedGrading): { usda?: UsdaResult; usdaGap?: string } {
+  if (!c.combined) {
     return {
       usdaGap: 'A USDA texture needs the clay fraction finer than 0.002 mm, which is two orders of magnitude below the finest sieve. Run a hydrometer (ASTM D7928) on this sample and the texture follows; the fines content from the sieve is not a substitute for it.',
     }
   }
-  const curve: CurvePoint[] = [
-    ...g.rows.map((r) => ({ size: r.size, percentPassing: r.percentPassing })),
-    ...h.rows.map((r) => ({ size: r.diameter, percentPassing: r.percentFiner })),
-  ]
-  const clay = interpolatePassing(curve, 0.002) ?? h.clayFraction
-  const silt = interpolatePassing(curve, 0.05)
+  const clay = c.clay
+  const silt = passingOnCurve(c.points, USDA_SILT_SIZE)
   if (clay == null || silt == null) {
-    const ends = [...curve].sort((a, b) => b.size - a.size)
+    const ends = c.points
     return {
-      usdaGap: `The combined grading curve runs from ${ends[0].size.toFixed(3)} mm down to ${ends[ends.length - 1].size.toFixed(4)} mm, which does not span both USDA boundaries (0.05 mm and 0.002 mm). Readings at either end of the sedimentation run would close it.`,
+      usdaGap: `The joined grading curve runs from ${ends[0].size.toFixed(3)} mm down to ${ends[ends.length - 1].size.toFixed(4)} mm, which does not span both USDA boundaries (0.05 mm and 0.002 mm). Readings at either end of the sedimentation run would close it.`,
     }
   }
   const usda = usdaFromPassing({
-    gravelBoundary: passingAtSize(g, 2.0),
+    gravelBoundary: passingOrClamp(c, USDA_GRAVEL_SIZE),
     sandBoundary: silt,
     clayBoundary: clay,
   })
   return usda
     ? { usda }
-    : { usdaGap: 'The combined grading curve does not descend with size across the USDA boundaries, so no texture can be read from it. Check that the hydrometer percentages were scaled to the whole sample.' }
+    : { usdaGap: 'The joined grading curve does not descend with size across the USDA boundaries, so no texture can be read from it. Check that the hydrometer percentages were scaled to the whole sample.' }
 }
 
-/**
- * Percent passing at a size, log-linear between the two bracketing points.
- * Undefined off either end of the curve — extrapolating a grading curve past
- * its finest reading is how a clay fraction gets invented.
- */
-function interpolatePassing(points: CurvePoint[], size: number): number | undefined {
-  const sorted = [...points].sort((a, b) => b.size - a.size)
-  const exact = sorted.find((r) => Math.abs(r.size - size) < 1e-9)
-  if (exact) return exact.percentPassing
-  for (let i = 1; i < sorted.length; i++) {
-    const hi = sorted[i - 1], lo = sorted[i]
-    if (size <= hi.size && size >= lo.size && hi.size > lo.size) {
-      const f = (Math.log10(size) - Math.log10(lo.size)) / (Math.log10(hi.size) - Math.log10(lo.size))
-      return lo.percentPassing + f * (hi.percentPassing - lo.percentPassing)
-    }
-  }
-  return undefined
-}
-
-/**
- * Percent passing a sieve size, read off the computed gradation rows. Clamps
- * off the ends — a size coarser than the top sieve passes 100% of the sample,
- * which is a fact rather than an extrapolation.
- */
-function passingAtSize(g: GradationResult, size: number): number {
-  const sorted = [...g.rows].sort((a, b) => b.size - a.size)
-  const exact = sorted.find((r) => Math.abs(r.size - size) < 1e-9)
-  if (exact) return exact.percentPassing
-  if (!sorted.length) return 0
-  if (size >= sorted[0].size) return 100
-  if (size <= sorted[sorted.length - 1].size) return sorted[sorted.length - 1].percentPassing
-  return interpolatePassing(sorted, size) ?? 0
-}
+/** USDA size boundaries, mm — deliberately not the sieve openings. */
+const USDA_GRAVEL_SIZE = 2.0
+const USDA_SILT_SIZE = 0.05

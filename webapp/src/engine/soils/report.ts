@@ -39,6 +39,7 @@ import { validateInvestigation } from './validate'
 import { evaluateTest, summarise, LAB_TESTS } from './lab'
 import { classifySample } from './classifySample'
 import { labChart } from './lab/testChart'
+import { combinedGradingChart } from './lab/plots'
 import { cite } from './standards'
 
 export type SectionStatus = 'complete' | 'partial' | 'not-assessed'
@@ -570,13 +571,12 @@ function s9Classification(inv: Investigation): ReportSection {
   // the LOGGED symbol, which may have come from a description rather than a
   // test, and is the one column that survives with no laboratory data at all.
   const withSample = layers.map(({ b, l }) => {
-    const classified = b.samples
-      .filter((s) => s.layerId === l.id)
-      .map((s) => classifySample(s))
+    const samples = b.samples.filter((s) => s.layerId === l.id)
+    const classified = samples.map((s) => ({ s, c: classifySample(s) }))
     return {
-      b, l,
-      usda: classified.find((c) => c.usda)?.usda,
-      aashto: classified.find((c) => c.aashto?.label)?.aashto,
+      b, l, classified,
+      usda: classified.find((x) => x.c.usda)?.c.usda,
+      aashto: classified.find((x) => x.c.aashto?.label)?.c.aashto,
     }
   })
 
@@ -603,6 +603,17 @@ function s9Classification(inv: Investigation): ReportSection {
     ? [`${noTexture} of ${rows.length} layers carry no USDA texture. The triangle is drawn on the clay fraction finer than 0.002 mm, which no sieve reaches — a hydrometer analysis (${cite('d7928')}) on a sample from each layer is what supplies it.`]
     : []
 
+  // The JOINED grading curve is a property of the sample, not of either test,
+  // so it belongs here beside the classification it produced rather than in §8
+  // with the sieve and sedimentation sheets it was built from.
+  const figures = withSample.flatMap(({ b, classified }) =>
+    classified
+      .filter((x) => x.c.curve?.combined)
+      .map((x) => ({
+        caption: `Combined grading, sieve + sedimentation — ${b.name}, ${x.s.name}`,
+        drawing: combinedGradingChart(x.c.curve!),
+      })))
+
   return {
     no: 9, title: 'Soil classification',
     status: unknown ? 'partial' : 'complete',
@@ -612,7 +623,7 @@ function s9Classification(inv: Investigation): ReportSection {
       'The USDA texture (Soil Survey Manual, NRCS) is reported alongside for agricultural, drainage and erosion work. The three systems set their size boundaries in different places — USDA splits sand from silt at 0.05 mm where the other two use the 0.075 mm No. 200 sieve, and USDA and AASHTO name their fines by size where USCS names them by plasticity — so the three columns are not expected to agree and are not reconciled here.',
     ],
     tables: [{ head: ['Layer', 'USCS', 'AASHTO', 'USDA texture', 'Family', 'Behaviour'], rows }],
-    figures: [], notes,
+    figures, notes,
   }
 }
 

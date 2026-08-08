@@ -77,6 +77,22 @@ describe('its laboratory data agrees with its geology', () => {
     expect(c.gradation!.fines).toBeCloseTo(75, 6)
   })
 
+  it('joins the two curves into one grading, and §9 plots it', () => {
+    const c = classifySample(inv().boreholes[0].samples[1])
+    expect(c.curve!.combined).toBe(true)
+    // The sieve stopped at 75% passing; the sedimentation run carries the same
+    // curve down past the clay boundary.
+    expect(c.gradation!.rows[c.gradation!.rows.length - 1].size).toBe(0.075)
+    expect(c.curve!.points[c.curve!.points.length - 1].size).toBeLessThan(0.002)
+    expect(c.curve!.clay).toBeCloseTo(33.6, 0)
+    expect(c.curve!.silt).toBeCloseTo(c.gradation!.fines - c.curve!.clay!, 6)
+
+    const s9 = buildSoilsReport(inv()).sections.find((s) => s.no === 9)!
+    expect(s9.figures.map((f) => f.caption)).toEqual([
+      'Combined grading, sieve + sedimentation — BH-01, S-02',
+    ])
+  })
+
   it('the samples without a hydrometer get the two engineering systems and a reason for the third', () => {
     const without = inv().boreholes.flatMap((b) => b.samples).filter((s) => s.id !== 'bh1-s2')
     for (const s of without) {

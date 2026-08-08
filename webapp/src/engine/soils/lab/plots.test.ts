@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { shearEnvelopeChart, consolidationChart, gradingChart, decadeTicks, linearTicks, tickDp } from './plots'
+import {
+  shearEnvelopeChart, consolidationChart, gradingChart, combinedGradingChart,
+  decadeTicks, linearTicks, tickDp,
+} from './plots'
+import { combineGrading } from '../grading'
+import { hydrometer } from './hydrometer'
 import { directShear } from './directShear'
 import { consolidation, heightOfSolids } from './consolidation'
 import { gradation } from '../sieve'
@@ -238,6 +243,84 @@ describe('grading chart', () => {
   it('survives an empty grading', () => {
     const empty = gradation({ totalMass: 100, readings: [{ size: 1, massRetained: 100 }] })
     expect(planToSvg(gradingChart(empty))).not.toMatch(/NaN/)
+  })
+
+  it('keeps every boundary label clear of the curve', () => {
+    // The defect this replaces: 'gravel | sand' was pinned to the top of the
+    // frame, which is exactly where the curve sits when the soil has no
+    // gravel — so on most soils the label ran through the curve and the title.
+    for (const g of [GRADING, gradation({
+      totalMass: 100,
+      readings: [
+        { size: 4.75, massRetained: 0 },      // no gravel: curve at 100% on the boundary
+        { size: 0.425, massRetained: 60 },
+        { size: 0.075, massRetained: 30 },
+      ],
+      panMass: 10,
+    })]) {
+      const d = gradingChart(g)
+      const labels = d.primitives.filter(
+        (p): p is Extract<PlanPrimitive, { kind: 'text' }> => p.kind === 'text' && /\|/.test(p.text))
+      expect(labels.length).toBeGreaterThan(0)
+      const curve = d.primitives.filter((p): p is Extract<PlanPrimitive, { kind: 'circle' }> => p.kind === 'circle')
+      for (const l of labels) {
+        for (const dot of curve) {
+          const far = Math.abs(dot.cx - l.x) > 10 || Math.abs(dot.cy - l.y) > 4
+          expect(far, `${l.text} at ${l.x.toFixed(1)},${l.y.toFixed(1)}`).toBe(true)
+        }
+      }
+    }
+  })
+})
+
+describe('the joined sieve + sedimentation curve', () => {
+  const joined = () => combineGrading(
+    gradation({
+      totalMass: 500,
+      readings: [
+        { size: 4.75, massRetained: 25 },
+        { size: 2.0, massRetained: 150 },
+        { size: 0.425, massRetained: 180 },
+        { size: 0.075, massRetained: 90 },
+      ],
+      panMass: 55,
+    }),
+    hydrometer({
+      dryMass: 50, specificGravity: 2.7, compositeCorrection: 5, meniscusCorrection: 1,
+      fractionOfTotal: 11,
+      readings: [
+        { time: 1, reading: 50, temperature: 22 },
+        { time: 30, reading: 38, temperature: 22 },
+        { time: 250, reading: 26, temperature: 22 },
+        { time: 1440, reading: 16, temperature: 22 },
+      ],
+    }),
+  )
+
+  it('draws sedimentation points as open rings against the sieve dots', () => {
+    // The reader is being asked to trust two different apparatus on one curve;
+    // which half a point came from is not a detail.
+    const circles = combinedGradingChart(joined()).primitives
+      .filter((p): p is Extract<PlanPrimitive, { kind: 'circle' }> => p.kind === 'circle')
+    expect(circles.filter((c) => c.fill === '#ffffff')).toHaveLength(4)
+    expect(circles.filter((c) => c.fill !== '#ffffff')).toHaveLength(4)
+  })
+
+  it('reports the clay and silt the join makes available', () => {
+    expect(texts(combinedGradingChart(joined())).join(' ')).toMatch(/silt \d+%\s+clay \d+%/)
+  })
+
+  it('moves the statistics off a steep curve instead of covering it', () => {
+    // Bottom-left is the natural home and the wrong one here: this curve is at
+    // 11% by the No. 200 sieve, so the block would sit on top of it.
+    const d = combinedGradingChart(joined())
+    const stats = d.primitives.filter(
+      (p): p is Extract<PlanPrimitive, { kind: 'text' }> => p.kind === 'text' && /^gravel \d/.test(p.text))
+    expect(stats).toHaveLength(1)
+    const curve = d.primitives.filter((p): p is Extract<PlanPrimitive, { kind: 'circle' }> => p.kind === 'circle')
+    for (const dot of curve) {
+      expect(Math.abs(dot.cx - stats[0].x) > 12 || Math.abs(dot.cy - stats[0].y) > 4).toBe(true)
+    }
   })
 })
 

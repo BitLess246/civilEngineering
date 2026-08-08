@@ -29,7 +29,8 @@ import { type CompactionResult, zeroAirVoids } from './compaction'
 import type { TriaxialResult, MohrCircle, TriaxialEnvelope } from './triaxial'
 import { type CbrResult, type CbrPoint, STANDARD_STRESS } from './cbr'
 import type { HydrometerResult } from './hydrometer'
-import type { GradationResult } from '../sieve'
+import { type GradationResult, passingAt, SIEVE_NO4, SIEVE_NO200 } from '../sieve'
+import { combineGrading, CLAY_SIZE, type CombinedGrading } from '../grading'
 
 import {
   AXIS, GRID, INK, ACCENT, WARN, OK, BOX, frame, plate,
@@ -621,10 +622,21 @@ export function hydrometerChart(r: HydrometerResult): Drawing {
  * size axis runs backwards.
  */
 export function gradingChart(g: GradationResult): Drawing {
+  return combinedGradingChart(combineGrading(g))
+}
+
+/**
+ * The same chart for a JOINED curve. Sedimentation points are drawn as open
+ * rings against the sieve's filled dots, because the two halves of the curve
+ * were measured by completely different means — one weighed the grains, the
+ * other timed how fast they fell — and a reader deciding how much to trust the
+ * fine end needs to see where the apparatus changed.
+ */
+export function combinedGradingChart(c: CombinedGrading): Drawing {
   const box = BOX
   const p: PlanPrimitive[] = frame(box, 'particle size  (mm, log)', '% passing', 'Grain-size distribution')
 
-  const rows = [...g.rows].filter((r) => r.size > 0).sort((a, b) => b.size - a.size)
+  const rows = c.points.filter((r) => r.size > 0)
   if (!rows.length) return { primitives: p, bounds: { minX: 0, minY: 0, maxX: box.left + box.w + 4, maxY: box.top + box.h + 13 } }
 
   const dHi = rows[0].size * 1.5
@@ -636,19 +648,33 @@ export function gradingChart(g: GradationResult): Drawing {
 
   for (const t of decadeTicks(dLo, dHi)) {
     p.push({ kind: 'line', x1: X(t), y1: box.top, x2: X(t), y2: box.top + box.h, stroke: GRID, width: 0.2 })
-    p.push({ kind: 'text', x: X(t), y: box.top + box.h + 4, text: t < 1 ? t.toFixed(t < 0.1 ? 3 : 2) : String(t), size: 2.0, anchor: 'middle', color: AXIS })
+    p.push({ kind: 'text', x: X(t), y: box.top + box.h + 4, text: sizeTick(t), size: 2.0, anchor: 'middle', color: AXIS })
   }
   for (const pc of [0, 25, 50, 75, 100]) {
     p.push({ kind: 'line', x1: box.left, y1: Y(pc), x2: box.left + box.w, y2: Y(pc), stroke: GRID, width: 0.2 })
     p.push({ kind: 'text', x: box.left - 1.5, y: Y(pc) + 0.8, text: String(pc), size: 2.1, anchor: 'end', color: AXIS })
   }
 
-  // The D2487 fraction boundaries, which is where a reader's eye goes first.
-  for (const [size, label] of [[4.75, 'gravel | sand'], [0.075, 'sand | fines']] as [number, string][]) {
-    if (size <= dHi && size >= dLo) {
-      p.push({ kind: 'line', x1: X(size), y1: box.top, x2: X(size), y2: box.top + box.h, stroke: WARN, width: 0.4, dash: [2, 1.5] })
-      p.push({ kind: 'text', x: X(size), y: box.top - 0.5, text: label, size: 1.9, anchor: 'middle', color: WARN })
-    }
+  // ── The fraction boundaries, and where their labels can safely go ──
+  // A grading curve descends left to right, so at any given size ONE side of
+  // the curve is empty and the other is not. Each label goes to the middle of
+  // the empty side on an opaque patch. Placing them all along the top — the
+  // obvious choice — puts the gravel/sand label straight through the curve
+  // whenever the soil has no gravel, which is most soils.
+  const boundaries: [number, string][] = [
+    [SIEVE_NO4, 'gravel | sand'],
+    [SIEVE_NO200, 'sand | fines'],
+    [CLAY_SIZE, 'silt | clay'],
+  ]
+  for (const [size, label] of boundaries) {
+    if (size > dHi || size < dLo) continue
+    const x = X(size)
+    p.push({ kind: 'line', x1: x, y1: box.top, x2: x, y2: box.top + box.h, stroke: WARN, width: 0.4, dash: [2, 1.5] })
+    const pass = passingAt(rows, size)
+    const y = pass > 50 ? Y(pass / 2) : Y((100 + pass) / 2)
+    const near = 14
+    const anchor = x < box.left + near ? 'start' : x > box.left + box.w - near ? 'end' : 'middle'
+    p.push(...tag(x, y, label, anchor))
   }
 
   for (let i = 1; i < rows.length; i++) {
@@ -660,22 +686,96 @@ export function gradingChart(g: GradationResult): Drawing {
     })
   }
   for (const r of rows) {
-    p.push({ kind: 'circle', cx: X(r.size), cy: Y(r.percentPassing), r: 0.9, fill: INK })
+    // Filled = weighed on a sieve; open = inferred from a settling velocity.
+    p.push(r.source === 'hydrometer'
+      ? { kind: 'circle', cx: X(r.size), cy: Y(r.percentPassing), r: 1.0, stroke: INK, fill: '#ffffff', width: 0.35 }
+      : { kind: 'circle', cx: X(r.size), cy: Y(r.percentPassing), r: 0.9, fill: INK })
   }
 
   // The statistics go BOTTOM-left. A grading curve descends left to right, so
-  // the top-left corner is exactly where the curve and the gravel/sand boundary
-  // label already are — putting text there overlapped both.
-  const shape = g.cu != null && g.cc != null
-    ? `Cu = ${g.cu.toFixed(1)}   Cc = ${g.cc.toFixed(2)}`
+  // the top-left corner is exactly where the curve already is.
+  const shape = c.cu != null && c.cc != null
+    ? `Cu = ${c.cu.toFixed(1)}   Cc = ${c.cc.toFixed(2)}`
     : 'Cu, Cc unavailable — the curve does not reach 10% passing'
-  p.push(...plate(box.left + 2, box.top + box.h - 6.6, 2.3, [
-    { text: shape, color: g.cu != null ? INK : WARN },
-    { text: `gravel ${g.gravel.toFixed(0)}%   sand ${g.sand.toFixed(0)}%   fines ${g.fines.toFixed(0)}%` },
-  ]))
+  const lines: { text: string; color?: string }[] = [
+    { text: shape, color: c.cu != null ? INK : WARN },
+    { text: `gravel ${c.gravel.toFixed(0)}%   sand ${c.sand.toFixed(0)}%   fines ${c.fines.toFixed(0)}%` },
+  ]
+  if (c.combined) {
+    lines.push({
+      text: c.clay != null
+        ? `sieve ● + sedimentation ○   silt ${c.silt!.toFixed(0)}%   clay ${c.clay.toFixed(0)}%`
+        : 'sieve ● + sedimentation ○',
+      color: AXIS,
+    })
+  }
+  p.push(...statsPlate(box, X, Y, rows, lines))
 
   return {
     primitives: p,
     bounds: { minX: 0, minY: 0, maxX: box.left + box.w + 4, maxY: box.top + box.h + 13 },
   }
 }
+
+/**
+ * The statistics block, put where the CURVE is not.
+ *
+ * Bottom-left is right for most grading curves and wrong for steep ones: a
+ * sand with 11% fines drops to the bottom of the frame before the axis ends,
+ * and the block then covers the very point the reader came for. So both
+ * candidate corners are measured against the curve's own height over the width
+ * the block needs, and the one with clearance wins.
+ */
+function statsPlate(
+  box: typeof BOX,
+  X: (v: number) => number,
+  Y: (v: number) => number,
+  rows: { size: number; percentPassing: number }[],
+  lines: { text: string; color?: string }[],
+): PlanPrimitive[] {
+  const size = 2.3
+  const w = Math.max(...lines.map((l) => l.text.length)) * size * 0.52 + 1.4
+  const h = (lines.length - 1) * size * 1.5 + size * 1.9
+  const pad = 1.2
+
+  // Percent passing across an x band, sampled at its edges and at every point
+  // inside it — a segment can cross a band without putting a point in it.
+  const sizeAt = (x: number) => {
+    const t = (x - box.left) / box.w
+    const lo = Math.log10(rows[rows.length - 1].size), hi = Math.log10(rows[0].size)
+    return Math.pow(10, hi - t * (hi - lo))
+  }
+  const band = (x1: number, x2: number) => {
+    const inside = rows.filter((r) => X(r.size) >= x1 && X(r.size) <= x2).map((r) => r.percentPassing)
+    return [passingAt(rows, sizeAt(x1)), passingAt(rows, sizeAt(x2)), ...inside]
+  }
+
+  const bottomLeftFirst = box.top + box.h - pad - h + size * 0.95
+  const lowest = Math.min(...band(box.left, box.left + 2 + w))
+  if (Y(lowest) <= box.top + box.h - pad - h) return plate(box.left + 2, bottomLeftFirst, size, lines)
+
+  const right = box.left + box.w - w - 2
+  const highest = Math.max(...band(right, box.left + box.w))
+  if (box.top + pad + h <= Y(highest) - pad) return plate(right, box.top + pad + size * 0.95, size, lines)
+
+  return plate(box.left + 2, bottomLeftFirst, size, lines)
+}
+
+/** A boundary label on an opaque patch, so grid lines do not run through it. */
+function tag(x: number, y: number, text: string, anchor: 'start' | 'middle' | 'end'): PlanPrimitive[] {
+  const size = 1.9
+  const w = text.length * size * 0.52 + 1.2
+  const left = anchor === 'start' ? x + 0.6 : anchor === 'end' ? x - 0.6 - w : x - w / 2
+  return [
+    { kind: 'rect', x: left, y: y - size * 0.95, w, h: size * 1.7, fill: '#ffffff' },
+    {
+      kind: 'text', x: anchor === 'start' ? x + 1.2 : anchor === 'end' ? x - 1.2 : x,
+      y, text, size, anchor, color: WARN,
+    },
+  ]
+}
+
+/** Tick text for a size axis spanning sieves down to clay. */
+const sizeTick = (t: number): string =>
+  t >= 1 ? String(t) : t >= 0.1 ? t.toFixed(2) : t >= 0.001 ? t.toFixed(3) : t.toFixed(4)
+
