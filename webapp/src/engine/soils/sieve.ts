@@ -40,13 +40,22 @@ export interface SieveInput {
   panMass?: number
 }
 
-export interface SieveRow {
+/**
+ * The least a curve needs to be read: a size and how much passed it. The
+ * interpolators below take this rather than a `SieveRow`, so the same two
+ * functions serve the sieve curve and the sieve+sedimentation curve joined in
+ * `grading.ts` — one log-interpolation, not two that can drift apart.
+ */
+export interface SizePassing {
   size: number
+  percentPassing: number
+}
+
+export interface SieveRow extends SizePassing {
   designation?: string
   massRetained: number
   percentRetained: number
   cumulativeRetained: number
-  percentPassing: number
 }
 
 export interface GradationResult {
@@ -78,7 +87,7 @@ export interface GradationResult {
  * which is the honest answer: a soil with 15% fines has no D10 from sieving
  * alone and needs a hydrometer.
  */
-export function interpolateD(rows: SieveRow[], percent: number): number | undefined {
+export function interpolateD(rows: SizePassing[], percent: number): number | undefined {
   // Rows coarse → fine, so percentPassing decreases down the list.
   const sorted = [...rows].sort((a, b) => b.size - a.size)
   for (let i = 1; i < sorted.length; i++) {
@@ -95,7 +104,7 @@ export function interpolateD(rows: SieveRow[], percent: number): number | undefi
 }
 
 /** Percent passing a given size, log-interpolated. Used for the D2487 fractions. */
-export function passingAt(rows: SieveRow[], size: number): number {
+export function passingAt(rows: SizePassing[], size: number): number {
   const sorted = [...rows].sort((a, b) => b.size - a.size)
   const exact = sorted.find((r) => Math.abs(r.size - size) < 1e-9)
   if (exact) return exact.percentPassing

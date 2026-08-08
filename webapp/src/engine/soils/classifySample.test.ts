@@ -285,19 +285,58 @@ describe('the USDA texture needs a sedimentation test, and says so when there is
     expect((clay * fineEarth) / 100).toBeLessThan(c.gradation!.fines)
   })
 
-  it('stops advising a hydrometer once one is on file, and says what is still missing', () => {
+  it('stops advising a hydrometer once one is on file, because the join answers it', () => {
     // The sieve engine's "a hydrometer would complete it" is correct until the
-    // test exists; printing it beside the sedimentation result reads as a
-    // contradiction. It is replaced rather than stacked.
+    // test exists. Once it does, the joined curve either reached D₁₀ or did
+    // not, and saying both at once reads as a contradiction.
     const withOut = classifySample(sample([sieveTest(), atterbergTest({ liquidLimit: 42, plasticLimit: 23 })]))
     expect(withOut.notes.join(' ')).toMatch(/need a hydrometer analysis/)
+    expect(withOut.curve!.combined).toBe(false)
+    expect(withOut.curve!.d10).toBeUndefined()
 
     const withIt = classifySample(sample([
       sieveTest(), atterbergTest({ liquidLimit: 42, plasticLimit: 23 }), hydrometerTest(),
     ]))
     expect(withIt.notes.join(' ')).not.toMatch(/need a hydrometer analysis/)
-    expect(withIt.notes.join(' ')).toMatch(/still come from the sieve alone/)
+    // The sieve alone still cannot reach it; the JOINED curve can. That is the
+    // whole point of the merge.
     expect(withIt.gradation!.d10).toBeUndefined()
+    expect(withIt.curve!.d10).toBeDefined()
+    expect(withIt.notes.join(' ')).toMatch(/comes from the sedimentation run/)
+  })
+
+  it('completes the dual symbol D2487 could not finish from a sieve alone', () => {
+    // 11% fines is the band where D2487 wants BOTH a gradation symbol and a
+    // fines symbol, and where the sieve curve never reaches 10% passing. This
+    // is the case the merge was built for.
+    const stack = {
+      totalMass: 500,
+      readings: [
+        { size: 4.75, massRetained: 25 },
+        { size: 2.0, massRetained: 150 },
+        { size: 0.425, massRetained: 180 },
+        { size: 0.075, massRetained: 90 },
+      ],
+      panMass: 55,
+    }
+    const limits = atterbergTest({ liquidLimit: 30, plasticLimit: 22 })
+
+    const sieveOnly = classifySample(sample([sieveTest(stack), limits]))
+    expect(sieveOnly.uscs!.symbol).toBeUndefined()
+    expect(sieveOnly.uscs!.reason).toMatch(/BOTH/)
+    expect(sieveOnly.missing).toContain('hydrometer')
+
+    const joined = classifySample(sample([
+      sieveTest(stack), limits, hydrometerTest({ fractionOfTotal: 11 }),
+    ]))
+    expect(joined.curve!.d10).toBeDefined()
+    // Cu is comfortably over the 6 a sand needs, but Cc lands above 3, so
+    // D2487 Table 1 calls it poorly graded — a verdict, where the sieve alone
+    // could only say "unknown".
+    expect(joined.curve!.cu!).toBeGreaterThan(6)
+    expect(joined.curve!.cc!).toBeGreaterThan(3)
+    expect(joined.uscs!.symbol).toBe('SP-SC')
+    expect(joined.missing).not.toContain('hydrometer')
   })
 
   it('keeps the gravel out of the triangle and names it as a modifier', () => {

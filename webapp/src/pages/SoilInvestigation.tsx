@@ -19,6 +19,8 @@ import {
   type LabOutcome,
 } from '../engine/soils/lab'
 import { classifySample } from '../engine/soils/classifySample'
+import type { CombinedGrading } from '../engine/soils/grading'
+import { combinedGradingChart } from '../engine/soils/lab/plots'
 import { labChart } from '../engine/soils/lab/testChart'
 import { buildSection, sectionDrawing } from '../engine/soils/section'
 import {
@@ -1782,6 +1784,8 @@ function SampleClassificationCard({
         <p className="mt-1.5 text-[11px] text-slate-600">{c.uscs!.reason}</p>
       )}
 
+      {c.curve?.combined && <CombinedCurve curve={c.curve} />}
+
       {c.notes.map((n, k) => (
         <p key={k} className="mt-1 text-[10px] text-amber-900">{n}</p>
       ))}
@@ -1808,6 +1812,17 @@ function SampleClassificationCard({
       )}
     </div>
   )
+}
+
+/**
+ * The sieve and sedimentation curves drawn as one. It lives on the
+ * CLASSIFICATION card rather than on either test card because it belongs to
+ * neither test — it is the sample's grading, and it is what the symbols above
+ * were read off.
+ */
+function CombinedCurve({ curve }: { curve: CombinedGrading }) {
+  const svg = useMemo(() => planToSvg(combinedGradingChart(curve), 460), [curve])
+  return <div className="mt-2 overflow-x-auto" dangerouslySetInnerHTML={{ __html: svg }} />
 }
 
 // ── Direct-shear specimens ────────────────────────────────────────────────
