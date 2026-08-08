@@ -90,6 +90,7 @@ export function sampleInvestigation(): Investigation {
                     { size: 0.15, designation: 'No. 100', massRetained: 145 },
                     { size: 0.075, designation: 'No. 200', massRetained: 45 },
                   ],
+                  panMass: 125,
                 },                                                                  // 25% fines — a silty SAND
               },
               {
@@ -117,10 +118,32 @@ export function sampleInvestigation(): Investigation {
                   totalMass: 400,
                   readings: [
                     { size: 4.75, designation: 'No. 4', massRetained: 0 },
+                    { size: 2.0, designation: 'No. 10', massRetained: 0 },
                     { size: 0.425, designation: 'No. 40', massRetained: 28 },
                     { size: 0.075, designation: 'No. 200', massRetained: 72 },
                   ],
+                  panMass: 300,
                 },                                                                  // 75% fines ⇒ fine-grained
+              },
+              {
+                // The minus-No.200 fraction of the sieve above, so `fractionOfTotal`
+                // is its 75% fines and the two curves join at 0.075 mm. Carries the
+                // 0.002 mm split no sieve can reach, which is what makes a USDA
+                // texture possible on this sample and impossible on the others.
+                id: 'bh1-s2-t6', type: 'hydrometer', standard: 'd7928', status: 'complete', testDate: '2026-06-20',
+                data: {
+                  dryMass: 50, specificGravity: 2.7,
+                  compositeCorrection: 5, meniscusCorrection: 1, fractionOfTotal: 75,
+                  readings: [
+                    { time: 2, reading: 52, temperature: 22 },
+                    { time: 5, reading: 49, temperature: 22 },
+                    { time: 15, reading: 44, temperature: 22 },
+                    { time: 30, reading: 40, temperature: 22 },
+                    { time: 60, reading: 36, temperature: 22 },
+                    { time: 250, reading: 30, temperature: 22 },
+                    { time: 1440, reading: 24, temperature: 22 },
+                  ],
+                },                                                                  // clay 34% ⇒ USDA clay loam
               },
               {
                 id: 'bh1-s2-t3', type: 'ucs', standard: 'd2166', status: 'complete', testDate: '2026-06-22',
@@ -164,6 +187,7 @@ export function sampleInvestigation(): Investigation {
                     { size: 0.15, designation: 'No. 100', massRetained: 120 },
                     { size: 0.075, designation: 'No. 200', massRetained: 12 },
                   ],
+                  panMass: 8,
                 },                                                                  // 1.6% fines, uniform ⇒ SP
               },
               {
@@ -236,6 +260,7 @@ export function sampleInvestigation(): Investigation {
                     { size: 0.425, designation: 'No. 40', massRetained: 24 },
                     { size: 0.075, designation: 'No. 200', massRetained: 60 },
                   ],
+                  panMass: 316,
                 },                                                                  // 79% fines
               },
               { id: 'bh2-s1-t3', type: 'triaxial', standard: 'd4767', status: 'planned' },

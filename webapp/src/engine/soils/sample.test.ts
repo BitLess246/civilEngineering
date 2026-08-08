@@ -22,6 +22,21 @@ describe('the example investigation is clean', () => {
     // validator teaches every reader to ignore the validator.
     expect(validateInvestigation(inv())).toEqual([])
   })
+
+  it('every sieve stack closes its mass balance', () => {
+    // D6913 wants closure within 1%. An example that shows the engine's
+    // "re-weigh before using this grading" warning on every sample teaches the
+    // reader that the warning is background noise.
+    const sieves = inv().boreholes
+      .flatMap((b) => b.samples)
+      .flatMap((s) => s.tests.filter((t) => t.type === 'sieve'))
+    expect(sieves.length).toBeGreaterThan(3)
+    for (const t of sieves) {
+      const { outcome } = evaluateTest(t)
+      if (outcome?.kind !== 'sieve') throw new Error(`${t.id} produced no gradation`)
+      expect(Math.abs(outcome.result.massError), t.id).toBeLessThanOrEqual(1)
+    }
+  })
 })
 
 describe('its laboratory data agrees with its geology', () => {
@@ -45,6 +60,31 @@ describe('its laboratory data agrees with its geology', () => {
       // Fill and BH-02's sand were never tested; leaving them unclassified is
       // the honest record, and it keeps a real gap in the example.
       expect(Boolean(l.symbol), l.name).toBe(sampled.has(l.id))
+    }
+  })
+
+  it('shows all three classification systems disagreeing on one sample, as they should', () => {
+    // BH-01 S-02 is the only sample carrying a hydrometer, and it is there so
+    // the example can show what each system actually answers: USCS names the
+    // soil, AASHTO rates it under a pavement, USDA names its grains by size.
+    const c = classifySample(inv().boreholes[0].samples[1])
+    expect(c.uscs!.symbol).toBe('CL')
+    expect(c.aashto!.group).toBe('A-7-6')
+    expect(c.usda!.texture).toBe('clay loam')
+    // 34% finer than 0.002 mm against 75% finer than the No. 200 sieve — the
+    // gap between "fines" and "clay" that makes the hydrometer necessary.
+    expect(c.usda!.composition.clay).toBeCloseTo(33.6, 0)
+    expect(c.gradation!.fines).toBeCloseTo(75, 6)
+  })
+
+  it('the samples without a hydrometer get the two engineering systems and a reason for the third', () => {
+    const without = inv().boreholes.flatMap((b) => b.samples).filter((s) => s.id !== 'bh1-s2')
+    for (const s of without) {
+      const c = classifySample(s)
+      expect(c.uscs!.symbol, s.name).toBeTruthy()
+      expect(c.aashto!.group, s.name).toBeTruthy()
+      expect(c.usda, s.name).toBeUndefined()
+      expect(c.usdaGap, s.name).toMatch(/0\.002 mm/)
     }
   })
 
@@ -77,7 +117,7 @@ describe('it exercises both halves of the report', () => {
     // never show what an incomplete programme looks like.
     const s = lab()
     expect(s.status).toBe('partial')
-    expect(s.gap).toMatch(/1 of 14 booked tests produced no result/)
+    expect(s.gap).toMatch(/1 of 15 booked tests produced no result/)
     expect(s.gap).toMatch(/1 not yet run/)
   })
 })

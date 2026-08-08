@@ -37,6 +37,7 @@ import { resolveParameters, PARAMETER_LABEL } from './parameters'
 import { describeProvenance, PROVENANCE_LABEL } from './provenance'
 import { validateInvestigation } from './validate'
 import { evaluateTest, summarise, LAB_TESTS } from './lab'
+import { classifySample } from './classifySample'
 import { labChart } from './lab/testChart'
 import { cite } from './standards'
 
@@ -563,21 +564,55 @@ function s9Classification(inv: Investigation): ReportSection {
   const layers = inv.boreholes.flatMap((b) => b.layers.map((l) => ({ b, l })))
   if (!layers.length) return missing(9, 'Soil classification', 'No strata to classify.')
 
-  const rows = layers.map(({ b, l }) => {
+  // THREE SYSTEMS SIDE BY SIDE, NOT RECONCILED. They answer different
+  // questions and disagree by design — see the header of each engine. A layer
+  // reads its systems off the sample that speaks for it; the USCS column keeps
+  // the LOGGED symbol, which may have come from a description rather than a
+  // test, and is the one column that survives with no laboratory data at all.
+  const withSample = layers.map(({ b, l }) => {
+    const classified = b.samples
+      .filter((s) => s.layerId === l.id)
+      .map((s) => classifySample(s))
+    return {
+      b, l,
+      usda: classified.find((c) => c.usda)?.usda,
+      aashto: classified.find((c) => c.aashto?.label)?.aashto,
+    }
+  })
+
+  const rows = withSample.map(({ b, l, usda, aashto }) => {
     const family = soilFamily(l.symbol, l.name)
     return [
-      `${b.name} / ${l.name}`, l.symbol ?? '—', family,
+      `${b.name} / ${l.name}`,
+      l.symbol ?? '—',
+      aashto?.label ?? '—',
+      usda?.name ?? '—',
+      family,
       isCohesive(family) ? 'cohesive' : family === 'unknown' ? '—' : 'cohesionless',
     ]
   })
-  const unknown = rows.filter((r) => r[2] === 'unknown').length
+
+  const unknown = rows.filter((r) => r[4] === 'unknown').length
+  const noTexture = rows.filter((r) => r[3] === '—').length
+
+  // A missing USDA texture is a NOTE, not a gap. It is supplementary to the
+  // engineering classification, and marking the section incomplete for want of
+  // an agronomic name would tell an engineer their report is short of something
+  // it never needed.
+  const notes = noTexture
+    ? [`${noTexture} of ${rows.length} layers carry no USDA texture. The triangle is drawn on the clay fraction finer than 0.002 mm, which no sieve reaches — a hydrometer analysis (${cite('d7928')}) on a sample from each layer is what supplies it.`]
+    : []
+
   return {
     no: 9, title: 'Soil classification',
     status: unknown ? 'partial' : 'complete',
     gap: unknown ? `${unknown} layer${unknown === 1 ? '' : 's'} could not be assigned a soil family from the description or symbol, so the cohesive/cohesionless split — which decides which methods apply — is undetermined for them.` : undefined,
-    paragraphs: [`Classification follows ${cite('d2487')}. The cohesive/cohesionless split governs which analysis methods apply: a sand method applied to a clay returns a number, and the number is wrong.`],
-    tables: [{ head: ['Layer', 'USCS', 'Family', 'Behaviour'], rows }],
-    figures: [], notes: [],
+    paragraphs: [
+      `Engineering classification follows ${cite('d2487')} (USCS) and ${cite('m145')} (AASHTO). The cohesive/cohesionless split governs which analysis methods apply: a sand method applied to a clay returns a number, and the number is wrong.`,
+      'The USDA texture (Soil Survey Manual, NRCS) is reported alongside for agricultural, drainage and erosion work. The three systems set their size boundaries in different places — USDA splits sand from silt at 0.05 mm where the other two use the 0.075 mm No. 200 sieve, and USDA and AASHTO name their fines by size where USCS names them by plasticity — so the three columns are not expected to agree and are not reconciled here.',
+    ],
+    tables: [{ head: ['Layer', 'USCS', 'AASHTO', 'USDA texture', 'Family', 'Behaviour'], rows }],
+    figures: [], notes,
   }
 }
 
