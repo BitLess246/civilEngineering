@@ -1734,15 +1734,43 @@ function SampleClassificationCard({
         <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <span className="font-mono text-[16px] font-semibold text-[#0056b3]">{symbol}</span>
           <span className="text-[12px] text-slate-700">{c.uscs!.name}</span>
-          {c.aashto?.label && (
-            <span className="font-mono text-[11px] text-slate-500">AASHTO {c.aashto.label}</span>
-          )}
         </div>
       ) : (
         <p className="mt-1 text-[12px] text-slate-600">
           {c.uscs?.reason ?? 'Not enough laboratory data to classify this sample yet.'}
         </p>
       )}
+
+      {/* The two other systems, each answering its own question. They are shown
+          side by side and never reconciled — see the engine headers. */}
+      <dl className="mt-2 grid grid-cols-[64px_1fr] gap-x-2 gap-y-1 border-t border-slate-200 pt-2 text-[11px]">
+        <dt className="font-semibold text-slate-500">AASHTO</dt>
+        <dd className="text-slate-700">
+          {c.aashto?.label ? (
+            <>
+              <span className="font-mono">{c.aashto.label}</span>
+              <span className="text-slate-500"> — {c.aashto.rating} as subgrade</span>
+            </>
+          ) : (
+            <span className="text-slate-500">{c.aashto?.reason ?? 'Not enough data for a highway group.'}</span>
+          )}
+        </dd>
+        <dt className="font-semibold text-slate-500">USDA</dt>
+        <dd className="text-slate-700">
+          {c.usda ? (
+            <>
+              <span className="font-medium">{c.usda.name}</span>
+              <span className="text-slate-500">
+                {' '}— sand {c.usda.composition.sand.toFixed(0)}%, silt {c.usda.composition.silt.toFixed(0)}%,
+                clay {c.usda.composition.clay.toFixed(0)}% of the fine earth
+              </span>
+              <span className="block text-[10px] text-slate-500">{c.usda.reason}</span>
+            </>
+          ) : (
+            <span className="text-slate-500">{c.usdaGap}</span>
+          )}
+        </dd>
+      </dl>
 
       {c.missing.length > 0 && (
         <p className="mt-1.5 text-[11px] text-slate-600">

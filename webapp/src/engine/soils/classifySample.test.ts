@@ -233,6 +233,108 @@ describe('non-plastic fines are a finding, not a gap', () => {
   })
 })
 
+// ── USDA texture ──────────────────────────────────────────────────────────
+
+describe('the USDA texture needs a sedimentation test, and says so when there is none', () => {
+  const full = sample([sieveTest(), atterbergTest({ liquidLimit: 42, plasticLimit: 23 })])
+
+  it('gives USCS and AASHTO but no texture from a sieve alone', () => {
+    const c = classifySample(full)
+    expect(c.uscs!.symbol).toBe('SC')
+    expect(c.aashto!.group).toBeTruthy()
+    expect(c.usda).toBeUndefined()
+    expect(c.usdaGap).toMatch(/0\.002 mm/)
+    expect(c.usdaGap).toMatch(/D7928/)
+  })
+
+  const hydrometerTest = (over: Record<string, unknown> = {}) =>
+    test({
+      type: 'hydrometer', standard: 'd7928',
+      data: {
+        dryMass: 50, specificGravity: 2.7,
+        compositeCorrection: 5, meniscusCorrection: 1, fractionOfTotal: 33,
+        readings: [
+          { time: 2, reading: 50, temperature: 22 },
+          { time: 30, reading: 38, temperature: 22 },
+          { time: 250, reading: 26, temperature: 22 },
+          { time: 1440, reading: 18, temperature: 22 },
+        ],
+        ...over,
+      },
+    })
+
+  it('reads the 0.05 mm boundary ACROSS the join between the two curves', () => {
+    // The sieve stops at 0.075 mm and this run starts near 0.025 mm, so the
+    // USDA sand/silt boundary at 0.05 mm falls between them and is reached by
+    // interpolating the combined curve — the sieve's fines content is NOT it.
+    const c = classifySample(sample([
+      sieveTest(), atterbergTest({ liquidLimit: 42, plasticLimit: 23 }), hydrometerTest(),
+    ]))
+    expect(c.usda).toBeDefined()
+    const { sand, silt, clay } = c.usda!.composition
+    expect(sand + silt + clay).toBeCloseTo(100, 6)
+    // Everything between 0.05 and 0.075 mm is USDA sand but USCS fines, so the
+    // texture carries MORE sand than reading the boundary off the No. 200 sieve
+    // would give. Quoting one system's fraction inside the other's name is the
+    // error this guards.
+    const fineEarth = 100 - c.usda!.gravel
+    const sandIfSieveWereTheBoundary = ((fineEarth - c.gradation!.fines) / fineEarth) * 100
+    expect(sand).toBeGreaterThan(sandIfSieveWereTheBoundary)
+    // and the clay is a part of the fines, never all of them
+    expect(clay).toBeGreaterThan(0)
+    expect((clay * fineEarth) / 100).toBeLessThan(c.gradation!.fines)
+  })
+
+  it('stops advising a hydrometer once one is on file, and says what is still missing', () => {
+    // The sieve engine's "a hydrometer would complete it" is correct until the
+    // test exists; printing it beside the sedimentation result reads as a
+    // contradiction. It is replaced rather than stacked.
+    const withOut = classifySample(sample([sieveTest(), atterbergTest({ liquidLimit: 42, plasticLimit: 23 })]))
+    expect(withOut.notes.join(' ')).toMatch(/need a hydrometer analysis/)
+
+    const withIt = classifySample(sample([
+      sieveTest(), atterbergTest({ liquidLimit: 42, plasticLimit: 23 }), hydrometerTest(),
+    ]))
+    expect(withIt.notes.join(' ')).not.toMatch(/need a hydrometer analysis/)
+    expect(withIt.notes.join(' ')).toMatch(/still come from the sieve alone/)
+    expect(withIt.gradation!.d10).toBeUndefined()
+  })
+
+  it('keeps the gravel out of the triangle and names it as a modifier', () => {
+    const c = classifySample(sample([
+      // 30% gravel: 150 g of a 500 g stack retained above 2.0 mm.
+      sieveTest({
+        totalMass: 500,
+        readings: [
+          { size: 4.75, massRetained: 90 },
+          { size: 2.0, massRetained: 60 },
+          { size: 0.425, massRetained: 130 },
+          { size: 0.075, massRetained: 120 },
+        ],
+        panMass: 100,
+      }),
+      atterbergTest({ liquidLimit: 42, plasticLimit: 23 }),
+      hydrometerTest({ fractionOfTotal: 20 }),
+    ]))
+    expect(c.usda!.gravel).toBeCloseTo(30, 6)
+    expect(c.usda!.name).toMatch(/^gravelly /)
+    // The triangle itself sums over the fine earth only.
+    const { sand, silt, clay } = c.usda!.composition
+    expect(sand + silt + clay).toBeCloseTo(100, 6)
+    expect(c.notes.join(' ')).toMatch(/keeps that out of the triangle/)
+  })
+
+  it('reports an unreadable sedimentation run rather than classifying around it', () => {
+    const c = classifySample(sample([
+      sieveTest(), atterbergTest({ liquidLimit: 42, plasticLimit: 23 }),
+      hydrometerTest({ specificGravity: 0.5 }),   // Gs below water
+    ]))
+    expect(c.uscs!.symbol).toBe('SC')             // the sieve is still good
+    expect(c.usda).toBeUndefined()
+    expect(c.notes.join(' ')).toMatch(/Hydrometer analysis could not be evaluated/)
+  })
+})
+
 describe('an empty sample', () => {
   it('returns both tests as missing without throwing', () => {
     const c = classifySample(sample([]))
