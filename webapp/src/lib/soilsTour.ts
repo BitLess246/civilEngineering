@@ -12,36 +12,16 @@
 // control they need is two tabs back, under Profile. That is the walkthrough's
 // reason for existing, and why the sample step spends the most words.
 //
-// THE STEPS ARE DATA, NOT JSX. Each names a DOM anchor (`data-tour="…"`) and
-// the tab it lives on, so the tour component is a generic spotlight with no
-// knowledge of soils, and this list can be tested without rendering anything.
-// A step whose anchor has been renamed away is caught by `soilsTour.test.ts`
-// against the page source rather than discovered by a user staring at an
-// overlay pointing into empty space.
+// THE STEPS ARE DATA, NOT JSX — see `tour.ts` for the shared shape and for
+// which pages earn a walkthrough at all.
 // ─────────────────────────────────────────────────────────────────────────
 
-/** The tabs of the soil-investigation page a step can require. */
-export type TourTab =
-  | 'overview' | 'boreholes' | 'profile' | 'spt' | 'cpt'
-  | 'lab' | 'liquefaction' | 'classification' | 'parameters'
+import type { Tour, TourStep } from './tour'
 
-export interface TourStep {
-  id: string
-  /** Tab that must be showing for the anchor to exist. */
-  tab: TourTab
-  /** `data-tour` value of the element to spotlight. Absent ⇒ centre the card. */
-  anchor?: string
-  title: string
-  /** What to do here, in one or two sentences. */
-  body: string
-  /** Why it works this way — shown smaller. Omit when the title says it all. */
-  why?: string
-}
-
-export const SOILS_TOUR: readonly TourStep[] = [
+export const SOILS_STEPS: readonly TourStep[] = [
   {
     id: 'start',
-    tab: 'overview',
+    // No tab: the header sits above the tab panels and is always on screen.
     anchor: 'header-actions',
     title: 'An investigation is built in one order',
     body: 'Borehole → strata → sample → laboratory test → classification → report. Each step needs the one before it, so the tabs are worked left to right rather than picked at random.',
@@ -86,6 +66,14 @@ export const SOILS_TOUR: readonly TourStep[] = [
     body: 'The Layer column defaults from the sample’s depth. Keep it set — it is what lets a classification be pushed back onto the stratum.',
   },
   {
+    id: 'spt',
+    tab: 'spt',
+    anchor: 'spt-panel',
+    title: 'Enter the blow counts',
+    body: 'Record all three 150 mm increments per test. N₆₀ and (N₁)₆₀ are corrected from them for hammer energy, hole diameter, sampler and rod length.',
+    why: 'Storing all three increments is what makes the seating drive discardable and the correction re-derivable.',
+  },
+  {
     id: 'lab',
     tab: 'lab',
     anchor: 'lab-panel',
@@ -101,14 +89,6 @@ export const SOILS_TOUR: readonly TourStep[] = [
     body: 'A sieve plus Atterberg limits gives a USCS symbol, an AASHTO group and — with a hydrometer — a USDA texture. Use the button on the classification card to apply the symbol to the layer.',
   },
   {
-    id: 'spt',
-    tab: 'spt',
-    anchor: 'spt-panel',
-    title: 'Enter the blow counts',
-    body: 'Record all three 150 mm increments per test. N₆₀ and (N₁)₆₀ are corrected from them for hammer energy, hole diameter, sampler and rod length.',
-    why: 'Storing all three increments is what makes the seating drive discardable and the correction re-derivable.',
-  },
-  {
     id: 'parameters',
     tab: 'parameters',
     anchor: 'parameters-panel',
@@ -117,26 +97,14 @@ export const SOILS_TOUR: readonly TourStep[] = [
   },
   {
     id: 'report',
-    tab: 'overview',
     anchor: 'report-button',
     title: 'Generate the report',
     body: 'The PDF assembles all 22 sections. Sections with nothing behind them are still printed, saying what would be needed — so a reader can tell “no liquefaction risk” from “never assessed”.',
   },
 ]
 
-/** Step at an index, clamped. Returns undefined only for an empty tour. */
-export const stepAt = (i: number): TourStep | undefined =>
-  SOILS_TOUR[Math.min(Math.max(i, 0), SOILS_TOUR.length - 1)]
-
-/** Next index, stopping at the end rather than wrapping. */
-export const nextIndex = (i: number): number => Math.min(i + 1, SOILS_TOUR.length - 1)
-
-/** Previous index, stopping at the start. */
-export const prevIndex = (i: number): number => Math.max(i - 1, 0)
-
-/** True when this index is the last step, so the button reads “Done”. */
-export const isLast = (i: number): boolean => i >= SOILS_TOUR.length - 1
-
-/** Every distinct anchor the tour points at — used by the test and the page. */
-export const TOUR_ANCHORS: readonly string[] =
-  [...new Set(SOILS_TOUR.map((s) => s.anchor).filter((a): a is string => Boolean(a)))]
+export const SOILS_TOUR: Tour = {
+  id: 'soil-investigation',
+  page: 'pages/SoilInvestigation.tsx',
+  steps: SOILS_STEPS,
+}

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { GuidedTour } from '../components/GuidedTour'
-import { SOILS_TOUR, nextIndex, prevIndex } from '../lib/soilsTour'
+import { TourButton } from '../components/TourButton'
+import { SOILS_STEPS } from '../lib/soilsTour'
+import { useTour } from '../lib/useTour'
 import { useInvestigation } from '../lib/useInvestigation'
 import { useSoilsSync } from '../lib/useSoilsSync'
 import { buildBoreholeLog } from '../engine/soils/logRenderer'
@@ -247,11 +249,8 @@ export default function SoilInvestigation() {
   const api = useInvestigation()
   const { investigation: inv } = api
   const [tab, setTab] = useState<Tab>('overview')
-  // The walkthrough. `tourAt` is an index into SOILS_TOUR; the step's own `tab`
-  // drives the page, so advancing the tour navigates for the user rather than
-  // telling them to navigate.
-  const [tourOn, setTourOn] = useState(false)
-  const [tourAt, setTourAt] = useState(0)
+  // The walkthrough. Advancing a step switches the tab too — see `useTour`.
+  const tour = useTour(SOILS_STEPS, (t) => setTab(t as Tab))
   const [holeIdx, setHoleIdx] = useState(0)
   // Design earthquake, shared between the liquefaction tab and the report.
   // Undefined until the engineer enters one — the report then states that
@@ -346,10 +345,7 @@ export default function SoilInvestigation() {
       </p>
 
       <div className="mt-4 flex flex-wrap items-center gap-2" data-tour="header-actions">
-        <button onClick={() => { setTourAt(0); setTab(SOILS_TOUR[0].tab as Tab); setTourOn(true) }}
-          className="rounded-md border border-[#0056b3] px-2.5 py-1 text-[12px] font-semibold text-[#0056b3] hover:bg-[#0056b3]/5">
-          Step-by-step guide
-        </button>
+        <TourButton onClick={tour.start} />
         <button onClick={() => api.newInvestigation()}
           className="rounded-md border border-slate-300 px-2.5 py-1 text-[12px] font-medium text-slate-700 hover:bg-slate-50">
           New
@@ -833,22 +829,9 @@ export default function SoilInvestigation() {
         </section>
       )}
 
-      {tourOn && (
-        <GuidedTour
-          step={SOILS_TOUR[tourAt]}
-          index={tourAt}
-          total={SOILS_TOUR.length}
-          onNext={() => {
-            const next = nextIndex(tourAt)
-            setTourAt(next)
-            setTab(SOILS_TOUR[next].tab as Tab)
-          }}
-          onPrev={() => {
-            const prev = prevIndex(tourAt)
-            setTourAt(prev)
-            setTab(SOILS_TOUR[prev].tab as Tab)
-          }}
-          onClose={() => setTourOn(false)} />
+      {tour.on && (
+        <GuidedTour step={tour.step} index={tour.at} total={tour.total}
+          onNext={tour.next} onPrev={tour.prev} onClose={tour.close} />
       )}
     </main>
   )
