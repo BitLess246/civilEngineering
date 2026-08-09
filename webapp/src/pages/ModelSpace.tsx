@@ -1,5 +1,9 @@
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { GuidedTour } from '../components/GuidedTour'
+import { TourButton } from '../components/TourButton'
+import { MODEL_STEPS } from '../lib/modelTour'
+import { useTour } from '../lib/useTour'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { SceneText } from '../components/SceneText'
@@ -1130,6 +1134,8 @@ export default function ModelSpace() {
   const [sdlMatT, setSdlMatT] = useState(50)                       // 204-2 thickness, mm
   const [liveOccId, setLiveOccId] = useState('')                   // NSCP 205-1 occupancy ('' = default LL)
   const [tab, setTab] = useState<Tab>('geometry')                 // right-panel tab
+  // The walkthrough. Advancing a step switches the tab too — see `useTour`.
+  const tour = useTour(MODEL_STEPS, (t) => setTab(t as Tab))
   const [orphans, setOrphans] = useState(0)
   // footing plan: base node → '' (isolated) or partner node id (combined)
   const [planSel, setPlanSel] = useState<Record<string, string>>((si.planSel as Record<string, string>) ?? {})
@@ -2221,8 +2227,9 @@ export default function ModelSpace() {
 
         {/* RIGHT — tabbed controls: one flat panel, hairline-separated sections (mockup) */}
         <div className="no-print overflow-hidden rounded-lg border border-[#e3e1da] bg-white">
-          <div className="flex flex-wrap gap-0.5 border-b border-[#eeece5] px-3 py-2.5">
+          <div className="flex flex-wrap items-center gap-0.5 border-b border-[#eeece5] px-3 py-2.5" data-tour="tab-bar">
             {TABS.map((t) => <TabBtn key={t.id} id={t.id} label={t.label} active={tab === t.id} onClick={setTab} />)}
+            <span className="ml-auto"><TourButton onClick={tour.start} label="Guide" /></span>
           </div>
 
           {/* ── GEOMETRY ── */}
@@ -2244,7 +2251,7 @@ export default function ModelSpace() {
                   <input value={storeyH} onChange={(e) => setStoreyH(e.target.value)}
                     className="rounded-md border border-slate-300 px-2.5 py-1.5" />
                 </label>
-                <div className="col-span-full">
+                <div className="col-span-full" data-tour="generate-grid">
                   <button type="button" onClick={() => generate()} className={`w-full ${btn}`}>Regenerate grid model</button>
                 </div>
               </Sec>
@@ -2662,7 +2669,7 @@ export default function ModelSpace() {
 
           {/* ── PROPERTIES ── */}
           {tab === 'properties' && (
-            <div className="divide-y divide-[#eeece5] px-4 py-1">
+            <div className="divide-y divide-[#eeece5] px-4 py-1" data-tour="properties-panel">
               <Sec title="Frame material">
                 <Pick label="Members" value={material} onChange={(v) => {
                   const next = v as 'concrete' | 'steel' | 'wood'
@@ -2832,7 +2839,7 @@ export default function ModelSpace() {
 
           {/* ── SUPPORTS ── */}
           {tab === 'supports' && (
-            <div className="divide-y divide-[#eeece5] px-4 py-1">
+            <div className="divide-y divide-[#eeece5] px-4 py-1" data-tour="supports-panel">
               <Sec title="Soil (footing design)">
                 <Num label="Soil qa" unit="kPa" value={qa} onChange={setQa} />
                 <Num label="Footing depth H" unit="m" value={Hf} onChange={setHf} />
@@ -2928,7 +2935,7 @@ export default function ModelSpace() {
 
           {/* ── LOADING ── */}
           {tab === 'loading' && (
-            <div className="divide-y divide-[#eeece5] px-4 py-1">
+            <div className="divide-y divide-[#eeece5] px-4 py-1" data-tour="loading-panel">
               <Sec title="Slab loads">
                 <Num label="Default SDL" unit="kPa" value={qD} onChange={setQD} />
                 <Num label="Live load" unit="kPa" value={qL} onChange={setQL} />
@@ -3471,7 +3478,7 @@ export default function ModelSpace() {
 
           {/* ── ANALYSIS ── */}
           {tab === 'analysis' && (
-            <div className="divide-y divide-[#eeece5] px-4 py-1">
+            <div className="divide-y divide-[#eeece5] px-4 py-1" data-tour="analysis-panel">
               <Sec title="Analysis options">
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={assembly} onChange={(e) => setAssembly(e.target.checked)} />
@@ -4274,7 +4281,8 @@ export default function ModelSpace() {
             <div className="divide-y divide-[#eeece5] px-4 py-1">
               <Sec title="Design & optimise">
                 <div className="col-span-full flex flex-wrap gap-2">
-                  <button type="button" onClick={runPipeline} disabled={!model || !!busy || meshErrors} className={btn}>
+                  <button type="button" onClick={runPipeline} disabled={!model || !!busy || meshErrors} className={btn}
+                    data-tour="design-button">
                     {busy === 'design' ? '⏳ Designing…' : '🏗 Design structure'}
                   </button>
                   <button type="button" onClick={optimize} disabled={!model || !!busy || meshErrors || !optimizeGate.allowed} className={btn}
@@ -4304,12 +4312,17 @@ export default function ModelSpace() {
           {tab === 'projects' && <ProjectsPanel />}
 
           {tab === 'plans' && model && (
-            <div className="px-4 py-3">
+            <div className="px-4 py-3" data-tour="plans-panel">
               <PlansPanel model={model} design={design} soil={soil} />
             </div>
           )}
         </div>
       </div>
+
+      {tour.on && (
+        <GuidedTour step={tour.step} index={tour.at} total={tour.total}
+          onNext={tour.next} onPrev={tour.prev} onClose={tour.close} />
+      )}
 
       {/* ── Optimisation log (full width) ── */}
       {opt && (() => {

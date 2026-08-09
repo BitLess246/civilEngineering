@@ -1,5 +1,9 @@
 import { useMemo, useState } from 'react'
 import { FIXTURE_LIST, type FixtureCount, type Occupancy, totalWSFU, totalDFU } from '../engine/plumbingFixtures'
+import { GuidedTour } from '../components/GuidedTour'
+import { TourButton } from '../components/TourButton'
+import { PLUMBING_STEPS } from '../lib/plumbingTour'
+import { useTour } from '../lib/useTour'
 import { designWaterSupply, waterSupplySolution, HAZEN_C, type HunterSystem, type WaterSupplyInput } from '../engine/waterSupply'
 import { designDrainage, drainageSolution } from '../engine/drainage'
 import { designSepticTank, septicSolution } from '../engine/septicTank'
@@ -38,6 +42,8 @@ type Tab = 'supply' | 'drainage' | 'septic'
 
 export default function PlumbingDesign() {
   const [tab, setTab] = useState<Tab>('supply')
+  // The walkthrough. Advancing a step switches the tab too — see `useTour`.
+  const tour = useTour(PLUMBING_STEPS, (t) => setTab(t as Tab))
   const [occ, setOcc] = useState<Occupancy>('private')
   // Shared fixture schedule — feeds every tab. Defaults reproduce the Module 2
   // design problem (26 WSFU).
@@ -99,7 +105,7 @@ export default function PlumbingDesign() {
       </p>
 
       {/* Shared fixture schedule */}
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm" data-tour="fixture-schedule">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-[1.05rem] font-bold text-[#0056b3]">Fixture schedule</h2>
           <label className="flex items-center gap-2 text-sm">
@@ -128,15 +134,16 @@ export default function PlumbingDesign() {
       </section>
 
       {/* Tabs */}
-      <div className="mt-6 flex gap-5 border-b border-slate-200">
+      <div className="mt-6 flex items-center gap-5 border-b border-slate-200">
         {tabBtn('supply', 'Water Supply')}
         {tabBtn('drainage', 'Drainage (DWV)')}
         {tabBtn('septic', 'Septic Tank')}
+        <span className="ml-auto pb-1"><TourButton onClick={tour.start} label="Guide" /></span>
       </div>
 
       {tab === 'supply' && (
         <>
-          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm" data-tour="supply-panel">
             <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Supply run &amp; pressures</h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Field label="Pipe length" unit="m" value={Lpipe} onChange={setLpipe} />
@@ -187,7 +194,7 @@ export default function PlumbingDesign() {
 
       {tab === 'drainage' && (
         <>
-          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm" data-tour="drainage-panel">
             <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Drainage run</h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <label className="flex flex-col text-sm">
@@ -219,7 +226,7 @@ export default function PlumbingDesign() {
       )}
       {tab === 'septic' && (
         <>
-          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm" data-tour="septic-panel">
             <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Tank geometry</h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Field label="Plan width" unit="m" value={tankWidth} onChange={setTankWidth} step="0.1" hint="≥ 0.9 m" />
@@ -242,6 +249,11 @@ export default function PlumbingDesign() {
           </section>
           <div className="no-print">{septicSteps.length > 0 && <WorkedSolution steps={septicSteps} />}</div>
         </>
+      )}
+
+      {tour.on && (
+        <GuidedTour step={tour.step} index={tour.at} total={tour.total}
+          onNext={tour.next} onPrev={tour.prev} onClose={tour.close} />
       )}
     </main>
     </div>
