@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import { GuidedTour } from '../components/GuidedTour'
+import { SOILS_TOUR, nextIndex, prevIndex } from '../lib/soilsTour'
 import { useInvestigation } from '../lib/useInvestigation'
 import { useSoilsSync } from '../lib/useSoilsSync'
 import { buildBoreholeLog } from '../engine/soils/logRenderer'
@@ -245,6 +247,11 @@ export default function SoilInvestigation() {
   const api = useInvestigation()
   const { investigation: inv } = api
   const [tab, setTab] = useState<Tab>('overview')
+  // The walkthrough. `tourAt` is an index into SOILS_TOUR; the step's own `tab`
+  // drives the page, so advancing the tour navigates for the user rather than
+  // telling them to navigate.
+  const [tourOn, setTourOn] = useState(false)
+  const [tourAt, setTourAt] = useState(0)
   const [holeIdx, setHoleIdx] = useState(0)
   // Design earthquake, shared between the liquefaction tab and the report.
   // Undefined until the engineer enters one — the report then states that
@@ -338,7 +345,11 @@ export default function SoilInvestigation() {
         {inv.meta.site.location ? ` · ${inv.meta.site.location}` : ''}
       </p>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="mt-4 flex flex-wrap items-center gap-2" data-tour="header-actions">
+        <button onClick={() => { setTourAt(0); setTab(SOILS_TOUR[0].tab as Tab); setTourOn(true) }}
+          className="rounded-md border border-[#0056b3] px-2.5 py-1 text-[12px] font-semibold text-[#0056b3] hover:bg-[#0056b3]/5">
+          Step-by-step guide
+        </button>
         <button onClick={() => api.newInvestigation()}
           className="rounded-md border border-slate-300 px-2.5 py-1 text-[12px] font-medium text-slate-700 hover:bg-slate-50">
           New
@@ -372,7 +383,8 @@ export default function SoilInvestigation() {
               preparedBy: inv.meta.engineer,
             }))
           }}
-          className="rounded-md bg-[#0056b3] px-2.5 py-1 text-[12px] font-semibold text-white hover:bg-[#004a99]">
+          className="rounded-md bg-[#0056b3] px-2.5 py-1 text-[12px] font-semibold text-white hover:bg-[#004a99]"
+          data-tour="report-button">
           Report PDF
         </button>
         <label className="cursor-pointer rounded-md border border-slate-300 px-2.5 py-1 text-[12px] font-medium text-slate-700 hover:bg-slate-50">
@@ -426,7 +438,7 @@ export default function SoilInvestigation() {
               value={String(inv.boreholes.reduce((n, b) => n + b.samples.reduce((m, s) => m + s.tests.length, 0), 0))} />
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" data-tour="meta-card">
             <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Investigation</h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {([
@@ -494,7 +506,8 @@ export default function SoilInvestigation() {
                 })
                 setHoleIdx(inv.boreholes.length)
               }}
-              className="rounded-md border border-dashed border-slate-300 px-2.5 py-1 text-[12px] text-slate-600 hover:bg-slate-50">
+              className="rounded-md border border-dashed border-slate-300 px-2.5 py-1 text-[12px] text-slate-600 hover:bg-slate-50"
+              data-tour="add-borehole">
               + borehole
             </button>
           </div>
@@ -559,7 +572,8 @@ export default function SoilInvestigation() {
                     depthTop: top, depthBottom: top + 1, name: 'New layer',
                   })
                 })}
-                className="rounded-md border border-dashed border-slate-300 px-2.5 py-1 text-[12px] text-slate-600 hover:bg-slate-50">
+                className="rounded-md border border-dashed border-slate-300 px-2.5 py-1 text-[12px] text-slate-600 hover:bg-slate-50"
+                data-tour="add-layer">
                 + layer
               </button>
             </div>
@@ -612,11 +626,12 @@ export default function SoilInvestigation() {
                     tests: [],
                   })
                 })}
-                className="rounded-md border border-dashed border-slate-300 px-2.5 py-1 text-[12px] text-slate-600 hover:bg-slate-50">
+                className="rounded-md border border-dashed border-slate-300 px-2.5 py-1 text-[12px] text-slate-600 hover:bg-slate-50"
+                data-tour="add-sample">
                 + sample
               </button>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" data-tour="samples-table">
               <table className="w-full text-left text-[12px]">
                 <thead className="text-slate-500">
                   <tr className="border-b border-slate-200">
@@ -650,7 +665,7 @@ export default function SoilInvestigation() {
 
       {/* ── SPT ── */}
       {tab === 'spt' && bh && profile && (
-        <section className="mt-5 space-y-4">
+        <section className="mt-5 space-y-4" data-tour="spt-panel">
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Unit weights for the stress profile</h2>
             <p className="mb-3 text-[11px] text-slate-500">
@@ -735,7 +750,7 @@ export default function SoilInvestigation() {
 
       {/* ── Classification ── */}
       {tab === 'lab' && bh && (
-        <section className="mt-5">
+        <section className="mt-5" data-tour="lab-panel">
           <LabPanel
             bh={bh}
             onAdd={(sampleId, type) => set((d) => {
@@ -792,7 +807,7 @@ export default function SoilInvestigation() {
       )}
 
       {tab === 'parameters' && bh && (
-        <section className="mt-5">
+        <section className="mt-5" data-tour="parameters-panel">
           <ParametersPanel bh={bh} unitWeights={unitWeights} stored={inv.parameters} />
         </section>
       )}
@@ -818,6 +833,23 @@ export default function SoilInvestigation() {
         </section>
       )}
 
+      {tourOn && (
+        <GuidedTour
+          step={SOILS_TOUR[tourAt]}
+          index={tourAt}
+          total={SOILS_TOUR.length}
+          onNext={() => {
+            const next = nextIndex(tourAt)
+            setTourAt(next)
+            setTab(SOILS_TOUR[next].tab as Tab)
+          }}
+          onPrev={() => {
+            const prev = prevIndex(tourAt)
+            setTourAt(prev)
+            setTab(SOILS_TOUR[prev].tab as Tab)
+          }}
+          onClose={() => setTourOn(false)} />
+      )}
     </main>
   )
 }
