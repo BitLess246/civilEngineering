@@ -27,7 +27,7 @@ import { buildSection, sectionDrawing } from '../engine/soils/section'
 import {
   processSounding, sbtProfile, relativeDensity, frictionAngle, undrainedStrength,
 } from '../engine/soils/cpt'
-import { layerThickness as _lt } from '../engine/soils/model'
+import { layerThickness as _lt, SAMPLE_TYPES, layerAtDepth } from '../engine/soils/model'
 import { liquefactionProfile } from '../engine/soils/liquefaction'
 import { liquefactionChart, skipText } from '../engine/soils/liquefactionPlot'
 import { finesByLayer, finesMap } from '../engine/soils/finesContent'
@@ -121,6 +121,98 @@ function LayerRow({
         <input value={layer.description ?? ''}
           onChange={(e) => onChange({ description: e.target.value || undefined })}
           className="w-full min-w-[12rem] rounded border border-slate-200 px-1 py-0.5" />
+      </td>
+      <td className="py-0.5 text-right">
+        <button onClick={onRemove} className="rounded px-1.5 py-0.5 text-[11px] text-red-600 hover:bg-red-50">
+          remove
+        </button>
+      </td>
+    </tr>
+  )
+}
+
+/** A standard SPT drive, m — the default length of a new split-spoon sample. */
+const SPT_DRIVE = 0.45
+
+/**
+ * One editable sample row.
+ *
+ * WHY THIS EXISTS AT ALL: until now samples could only arrive with the bundled
+ * example. A borehole built from scratch had `samples: []` and no way to add to
+ * it, so the Laboratory tab — and with it every lab engine, the classification
+ * and §8 of the report — was unreachable for a real investigation.
+ *
+ * The layer column is a PICKER, not free text, and defaults from the sample's
+ * mid-depth. An unattributed sample still classifies, but its symbol has no
+ * stratum to be applied to, which is most of the value.
+ */
+function SampleRow({
+  sample, layers, onChange, onRemove,
+}: {
+  sample: Sample
+  layers: SoilLayer[]
+  onChange: (patch: Partial<Sample>) => void
+  onRemove: () => void
+}) {
+  const rec = recoveryRatio(sample)
+  const spec = SAMPLE_TYPES.find((t) => t.type === sample.type)
+  // A strength or compressibility test needs an intact fabric. Flagging it on
+  // the row is cheaper than letting the validator find it later.
+  const disturbedWithUndisturbedTest = spec && !spec.undisturbed
+    && sample.tests.some((t) => t.type === 'consolidation' || t.type === 'triaxial' || t.type === 'ucs')
+
+  return (
+    <tr className="border-b border-slate-100">
+      <td className="py-0.5 pr-2">
+        <input value={sample.name} onChange={(e) => onChange({ name: e.target.value })}
+          className="w-20 rounded border border-slate-200 px-1 py-0.5 font-mono" />
+      </td>
+      <td className="py-0.5 pr-2">
+        <select value={sample.type} title={spec?.hint}
+          onChange={(e) => {
+            const next = SAMPLE_TYPES.find((t) => t.type === e.target.value)!
+            onChange({ type: next.type, standard: next.standard })
+          }}
+          className="rounded border border-slate-200 px-1 py-0.5">
+          {SAMPLE_TYPES.map((t) => <option key={t.type} value={t.type}>{t.label}</option>)}
+        </select>
+      </td>
+      <td className="py-0.5 pr-2">
+        <input type="number" step="0.1" value={sample.depthTop}
+          onChange={(e) => onChange({ depthTop: num(e.target.value) })}
+          className="w-16 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+      </td>
+      <td className="py-0.5 pr-2">
+        <input type="number" step="0.1" value={sample.depthBottom}
+          onChange={(e) => onChange({ depthBottom: num(e.target.value) })}
+          className="w-16 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+      </td>
+      <td className="py-0.5 pr-2">
+        <input type="number" step="0.01" value={sample.recoveryLength ?? ''} placeholder="—"
+          onChange={(e) => onChange({ recoveryLength: e.target.value === '' ? undefined : num(e.target.value) })}
+          className="w-16 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+      </td>
+      <td className="py-0.5 pr-2">
+        <input type="number" step="0.01" value={sample.driveLength ?? ''} placeholder="—"
+          onChange={(e) => onChange({ driveLength: e.target.value === '' ? undefined : num(e.target.value) })}
+          className="w-16 rounded border border-slate-200 px-1 py-0.5 text-right font-mono" />
+      </td>
+      <td className={`py-0.5 pr-2 text-right font-mono ${rec != null && rec < 50 ? 'text-amber-700' : 'text-slate-500'}`}>
+        {rec == null ? '—' : `${f0(rec)} %`}
+      </td>
+      <td className="py-0.5 pr-2">
+        <select value={sample.layerId ?? ''}
+          onChange={(e) => onChange({ layerId: e.target.value || undefined })}
+          className="max-w-[9rem] rounded border border-slate-200 px-1 py-0.5">
+          <option value="">— unattributed —</option>
+          {layers.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+        </select>
+      </td>
+      <td className="py-0.5 pr-2 text-[11px] text-slate-600">
+        {sample.tests.length ? `${sample.tests.length} booked` : '—'}
+        {disturbedWithUndisturbedTest && (
+          <span className="ml-1 font-bold text-amber-700" title="Strength and compressibility need an undisturbed specimen.">!</span>
+        )}
       </td>
       <td className="py-0.5 text-right">
         <button onClick={onRemove} className="rounded px-1.5 py-0.5 text-[11px] text-red-600 hover:bg-red-50">
@@ -497,36 +589,61 @@ export default function SoilInvestigation() {
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-2 text-[1.05rem] font-bold text-[#0056b3]">Samples</h2>
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-[1.05rem] font-bold text-[#0056b3]">{bh.name} — samples</h2>
+              <button
+                onClick={() => set((d) => {
+                  const hole = d.boreholes[holeIdx]
+                  // Start where the last sample ended, or at the top of the hole
+                  // — a driller works down, and a new row at 0 m every time is a
+                  // depth the user has to retype on every sample.
+                  const last = hole.samples[hole.samples.length - 1]
+                  const top = last ? last.depthBottom : 0
+                  const bottom = top + SPT_DRIVE
+                  hole.samples.push({
+                    id: `s_${Date.now().toString(36)}`,
+                    name: `S-${String(hole.samples.length + 1).padStart(2, '0')}`,
+                    type: 'split-spoon', standard: 'd1586',
+                    depthTop: top, depthBottom: bottom,
+                    // Attributed by DEPTH rather than left blank: the layer is
+                    // knowable from the log, and an unattributed sample cannot
+                    // push its classification back onto a stratum.
+                    layerId: layerAtDepth(hole, (top + bottom) / 2)?.id,
+                    tests: [],
+                  })
+                })}
+                className="rounded-md border border-dashed border-slate-300 px-2.5 py-1 text-[12px] text-slate-600 hover:bg-slate-50">
+                + sample
+              </button>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-[12px]">
                 <thead className="text-slate-500">
                   <tr className="border-b border-slate-200">
-                    <th className="py-1 pr-3">Sample</th><th className="py-1 pr-3">Type</th>
-                    <th className="py-1 pr-3">Depth (m)</th><th className="py-1 pr-3 text-right">Recovery</th>
-                    <th className="py-1 pr-3">Tests</th>
+                    <th className="py-1 pr-2">Sample</th><th className="py-1 pr-2">Type</th>
+                    <th className="py-1 pr-2">Top (m)</th><th className="py-1 pr-2">Base (m)</th>
+                    <th className="py-1 pr-2">Rec. (m)</th><th className="py-1 pr-2">Drive (m)</th>
+                    <th className="py-1 pr-2 text-right">Recovery</th>
+                    <th className="py-1 pr-2">Layer</th><th className="py-1 pr-2">Tests</th><th />
                   </tr>
                 </thead>
-                <tbody className="font-mono">
-                  {bh.samples.map((s) => (
-                    <tr key={s.id} className="border-b border-slate-100">
-                      <td className="py-0.5 pr-3">{s.name}</td>
-                      <td className="py-0.5 pr-3">{s.type}</td>
-                      <td className="py-0.5 pr-3">{f2(s.depthTop)}–{f2(s.depthBottom)}</td>
-                      <td className="py-0.5 pr-3 text-right">
-                        {recoveryRatio(s) == null ? '—' : `${f0(recoveryRatio(s))} %`}
-                      </td>
-                      <td className="py-0.5 pr-3 font-sans">
-                        {s.tests.length
-                          ? s.tests.map((t) => `${t.type}${t.status === 'complete' ? '' : ` (${t.status})`}`).join(', ')
-                          : '—'}
-                      </td>
-                    </tr>
+                <tbody>
+                  {bh.samples.map((s, i) => (
+                    <SampleRow key={s.id} sample={s} layers={bh.layers}
+                      onChange={(patch) => set((d) => {
+                        Object.assign(d.boreholes[holeIdx].samples[i], patch)
+                      })}
+                      onRemove={() => set((d) => { d.boreholes[holeIdx].samples.splice(i, 1) })} />
                   ))}
                 </tbody>
               </table>
             </div>
-            {!bh.samples.length && <p className="mt-3 text-[12px] text-slate-500">No samples recorded.</p>}
+            {!bh.samples.length && (
+              <p className="mt-3 text-[12px] text-slate-500">
+                No samples recorded. Add one here first — laboratory tests are booked against a
+                SAMPLE, not a layer, so the Laboratory tab stays empty until a sample exists.
+              </p>
+            )}
           </div>
         </section>
       )}

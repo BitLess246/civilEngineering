@@ -183,6 +183,50 @@ export interface SoilLayer {
 export type SampleType =
   | 'disturbed' | 'undisturbed' | 'split-spoon' | 'shelby-tube' | 'bulk' | 'core'
 
+/**
+ * The sample types, with what each one can answer for — ordered as a driller
+ * would meet them, and carrying `undisturbed` so a UI can warn before a
+ * consolidation test is booked against a split-spoon specimen.
+ *
+ * A list rather than a bare union because a picker has to render one, and a
+ * hand-typed `<option>` list is how a seventh type ends up unselectable.
+ */
+export const SAMPLE_TYPES: readonly {
+  type: SampleType
+  label: string
+  /** Whether the fabric survives recovery — strength and compressibility need it. */
+  undisturbed: boolean
+  /** The sampling standard usually cited for it. */
+  standard?: StandardId
+  hint: string
+}[] = [
+  {
+    type: 'split-spoon', label: 'Split-spoon (SPT)', undisturbed: false, standard: 'd1586',
+    hint: 'Driven with the SPT hammer. Index tests only — the driving destroys the fabric.',
+  },
+  {
+    type: 'shelby-tube', label: 'Shelby tube', undisturbed: true, standard: 'd1587',
+    hint: 'Pushed thin-wall tube. The usual source for consolidation and triaxial specimens.',
+  },
+  {
+    type: 'undisturbed', label: 'Undisturbed (other)', undisturbed: true,
+    hint: 'Block or piston sample where the fabric is preserved by another means.',
+  },
+  {
+    type: 'disturbed', label: 'Disturbed', undisturbed: false,
+    hint: 'Cuttings or a bag sample. Water content, gradation and Atterberg limits only.',
+  },
+  {
+    type: 'bulk', label: 'Bulk', undisturbed: false,
+    hint: 'Large disturbed sample, for compaction and CBR where a remoulded specimen is the point.',
+  },
+  {
+    type: 'core', label: 'Rock core', undisturbed: true, standard: 'd2113',
+    hint: 'Rotary-cored rock. Logged with RQD rather than an SPT count.',
+  },
+]
+
+
 export interface Sample {
   id: string
   /** Sample designation on the log, e.g. 'S-03'. */
