@@ -137,6 +137,10 @@ export const STANDARDS = {
     designation: 'ASTM D1587', body: 'ASTM', category: 'field',
     title: 'Thin-Walled Tube Sampling of Fine-Grained Soils for Geotechnical Purposes',
   },
+  d2113: {
+    designation: 'ASTM D2113', body: 'ASTM', category: 'field',
+    title: 'Rock Core Drilling and Sampling of Rock for Site Exploration',
+  },
   d2573: {
     designation: 'ASTM D2573', body: 'ASTM', category: 'field',
     title: 'Field Vane Shear Test in Saturated Fine-Grained Soils',
