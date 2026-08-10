@@ -3,7 +3,8 @@ import { designMicropile } from '../engine/micropile'
 import { ReportControls } from '../components/ReportControls'
 import { buildMicropileSolution } from '../lib/geotechSolutions'
 import { WorkedSolution } from '../components/WorkedSolution'
-import { PageHeader } from '../components/calc'
+import { PageHeader, CalcBody } from '../components/calc'
+import { Card, ResultCard } from '../components/qty'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -84,66 +85,58 @@ export default function Micropile() {
   return (
         <div>
       <PageHeader title="Micropile — axial capacity" badges={['FHWA-NHI-05-039']} />
-      <main className="mx-auto max-w-3xl px-5 py-6">
       <ReportControls title="Micropile" badges={['FHWA-NHI-05-039']} report={report} />
-      <p className="mt-2 text-sm text-slate-600">
-        FHWA-NHI-05-039 allowable-stress check: structural capacity of the bar/casing/grout vs the
-        grout-ground bond capacity of the bonded zone. Governing allowable = the smaller of the two.
-      </p>
+      <CalcBody>
+        <div className="space-y-5">
+          <p className="text-[13px] text-[#5c6675]">
+            FHWA-NHI-05-039 allowable-stress check: structural capacity of the bar/casing/grout vs the
+            grout-ground bond capacity of the bonded zone. Governing allowable = the smaller of the two.
+          </p>
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Section</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="Bar Ø" unit="mm" value={barDia} onChange={setBarDia} />
-          <Field label="Fy bar" unit="MPa" value={fyBar} onChange={setFyBar} />
-          <Field label="Grout Ø (drill)" unit="mm" value={groutDia} onChange={setGroutDia} />
-          <Field label="f′c grout" unit="MPa" value={fcGrout} onChange={setFcGrout} />
-        </div>
-        <label className="mt-3 flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={casing} onChange={(e) => setCasing(e.target.checked)} />
-          <span>Permanent steel casing</span>
-        </label>
-        {casing && (
-          <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <Field label="Casing OD" unit="mm" value={casingOD} onChange={setCasingOD} />
-            <Field label="Casing ID" unit="mm" value={casingID} onChange={setCasingID} />
-            <Field label="Fy casing" unit="MPa" value={fyCasing} onChange={setFyCasing} />
-          </div>
-        )}
-        <h2 className="mb-3 mt-5 text-[1.05rem] font-bold text-[#0056b3]">Bond zone &amp; demand</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <label className="flex flex-col text-sm">
-            <span className="mb-1 font-medium text-slate-600">Load mode</span>
-            <select value={mode} onChange={(e) => setMode(e.target.value as 'compression' | 'tension')}
-              className="rounded-md border border-slate-300 px-2.5 py-1.5">
-              <option value="compression">Compression</option>
-              <option value="tension">Tension</option>
-            </select>
-          </label>
-          <Field label="Bond Ø" unit="m" value={bondDia} onChange={setBondDia} step="0.01" />
-          <Field label="Bond length" unit="m" value={bondLength} onChange={setBondLength} />
-          <Field label="αbond" unit="kPa" value={alphaBond} onChange={setAlphaBond} />
-          <Field label="Axial demand P" unit="kN" value={P} onChange={setP} />
-        </div>
-      </section>
+          <Card title="Section">
+            <Field label="Bar Ø" unit="mm" value={barDia} onChange={setBarDia} />
+            <Field label="Fy bar" unit="MPa" value={fyBar} onChange={setFyBar} />
+            <Field label="Grout Ø (drill)" unit="mm" value={groutDia} onChange={setGroutDia} />
+            <Field label="f′c grout" unit="MPa" value={fcGrout} onChange={setFcGrout} />
+            <label className="col-span-full flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={casing} onChange={(e) => setCasing(e.target.checked)} />
+              <span>Permanent steel casing</span>
+            </label>
+            {casing && <Field label="Casing OD" unit="mm" value={casingOD} onChange={setCasingOD} />}
+            {casing && <Field label="Casing ID" unit="mm" value={casingID} onChange={setCasingID} />}
+            {casing && <Field label="Fy casing" unit="MPa" value={fyCasing} onChange={setFyCasing} />}
+          </Card>
 
-      <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Results</h2>
-        <Out label="Structural allowable" value={`${f0(r.structural)} kN`} />
-        <Out label="Bond Qult / allowable (FS 2)" value={`${f0(r.Qult)} / ${f0(r.Qbond)} kN`} />
-        <Out label={`Governing allowable (${r.governs})`} value={`${f0(r.allowable)} kN`} />
-        <Out label="FS (allowable / demand)" value={f2(r.fs)} ok={r.ok} />
-        <Out label="Bond length for FS = 2" value={`${f2(r.bondLengthReq)} m`} ok={bondLength >= r.bondLengthReq} />
-        <p className="mt-2 text-[10px] text-slate-500">
-          Structural: 0.40·f′c·Agrout + 0.47·Fy·As (compression), 0.55·Fy·As (tension). Bond:
-          π·Dbond·Lbond·αbond / FS. Verify buckling in very soft soils and group/settlement effects separately.
-        </p>
-      </section>
-      {/* The step-by-step already existed and only ever reached the PDF. */}
-      <div className="mt-5">
-        <WorkedSolution steps={solution} title="Calculation report — worked solution" />
-      </div>
-    </main>
+          <Card title="Bond zone & demand">
+            <label className="flex flex-col text-sm">
+              <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">Load mode</span>
+              <select value={mode} onChange={(e) => setMode(e.target.value as 'compression' | 'tension')}
+                className="text-[13px]">
+                <option value="compression">Compression</option>
+                <option value="tension">Tension</option>
+              </select>
+            </label>
+            <Field label="Bond Ø" unit="m" value={bondDia} onChange={setBondDia} step="0.01" />
+            <Field label="Bond length" unit="m" value={bondLength} onChange={setBondLength} />
+            <Field label="αbond" unit="kPa" value={alphaBond} onChange={setAlphaBond} />
+            <Field label="Axial demand P" unit="kN" value={P} onChange={setP} />
+          </Card>
+
+          <WorkedSolution steps={solution} title="Calculation report — worked solution" />
+        </div>
+
+        <ResultCard title="Results">
+          <Out label="Structural allowable" value={`${f0(r.structural)} kN`} />
+          <Out label="Bond Qult / allowable (FS 2)" value={`${f0(r.Qult)} / ${f0(r.Qbond)} kN`} />
+          <Out label={`Governing allowable (${r.governs})`} value={`${f0(r.allowable)} kN`} />
+          <Out label="FS (allowable / demand)" value={f2(r.fs)} ok={r.ok} />
+          <Out label="Bond length for FS = 2" value={`${f2(r.bondLengthReq)} m`} ok={bondLength >= r.bondLengthReq} />
+          <p className="mt-2 text-[10px] text-[#a39d8d]">
+            Structural: 0.40·f′c·Agrout + 0.47·Fy·As (compression), 0.55·Fy·As (tension). Bond:
+            π·Dbond·Lbond·αbond / FS. Verify buckling in very soft soils and group/settlement effects separately.
+          </p>
+        </ResultCard>
+      </CalcBody>
     </div>
   )
 }
