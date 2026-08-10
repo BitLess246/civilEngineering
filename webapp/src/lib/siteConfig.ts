@@ -6,14 +6,16 @@
 // is right in four places and stale in the fifth is worse than one that is
 // obviously missing everywhere.
 //
-// NOTHING HERE IS INVENTED. The blank fields are blank because they are facts
-// only the business owner knows — a registered name, a TIN, a real street
-// address. They appear in documents a customer and a payment provider will
-// rely on, so a plausible-looking placeholder would be a lie printed under a
-// heading that says "Terms and Conditions". `missingSiteFields()` lists what is
-// still unset, and the legal pages show that list rather than pretending.
+// NOTHING HERE IS INVENTED. Every value below is transcribed from the DTI
+// registration and the payment-provider application; a plausible-looking
+// placeholder would be a lie printed under a heading that says "Terms and
+// Conditions". `missingSiteFields()` lists anything still unset, and the legal
+// pages show that list rather than pretending.
 //
-// Fill these in before taking a single payment.
+// THESE MUST MATCH THE PROVIDER APPLICATION CHARACTER FOR CHARACTER. The legal
+// name, address and phone number are checked against the registration during
+// onboarding, so "CivEngg Website Application Service" in one place and
+// "CIVENGG WEBSITE APPLICATION SERVICE" in the other is a held application.
 // ─────────────────────────────────────────────────────────────────────────
 
 export interface PostalAddress {
@@ -30,11 +32,13 @@ export interface SiteConfig {
   tradeName: string
   /** Registered business name — DTI/SEC. Blank until registered. */
   legalName: string
-  /** Registered business address. Must match the PayMongo application. */
+  /** DTI/SEC business registration number, as printed on the certificate. */
+  registrationNumber: string
+  /** Registered business address. Must match the payment-provider application. */
   address: PostalAddress
   /** Where customers reach a human. */
   supportEmail: string
-  /** Customer-service number given to PayMongo; shown to payers. */
+  /** Customer-service number given to the payment provider; shown to payers. */
   supportPhone: string
   /** BIR Tax Identification Number. */
   tin: string
@@ -49,23 +53,29 @@ export interface SiteConfig {
 export const SITE: SiteConfig = {
   tradeName: 'CivEngg Toolkit',
 
-  // ── FILL THESE IN ────────────────────────────────────────────────────
-  legalName: '',
+  // Registered as a sole proprietorship, 9 August 2026. These are the details
+  // the payment provider's application was filed against, so they must match
+  // it exactly — a legal name or address that disagrees with the DTI
+  // certificate is the usual reason an application is held.
+  legalName: 'CIVENGG WEBSITE APPLICATION SERVICE',
+  registrationNumber: '8408482',
   address: {
-    line1: '',
-    city: '',
-    province: '',
-    postalCode: '',
+    line1: '14 Yangco Road',
+    city: 'Baguio City',
+    province: 'Benguet',
+    postalCode: '2600',
     country: 'Philippines',
   },
-  supportPhone: '',
-  tin: '',
-  siteUrl: '',
-  // ─────────────────────────────────────────────────────────────────────
+  supportPhone: '+63 992 280 4146',
+  // BIR TIN. Kept here because the provider application and the BIR need it;
+  // NOTHING RENDERS IT, and publishing it is a deliberate choice rather than a
+  // default — see `missingSiteFields`, which excludes it on purpose.
+  tin: '684281205',
+  siteUrl: 'https://civil-engineering-zeta.vercel.app',
 
-  // Already known: this is the support address given on the PayMongo
-  // application. A domain address reads better to customers, but this is real
-  // and reachable, which matters more than it looks.
+  // The support address given on the provider application. A domain address
+  // reads better to customers, but this is real and reachable, which matters
+  // more than it looks.
   supportEmail: 'raymval246@gmail.com',
 
   supportHours: 'Monday to Friday, 9:00–18:00 (PST, UTC+8)',
@@ -87,7 +97,7 @@ const REQUIRED: [keyof SiteConfig | 'address', string][] = [
  * Empty array means the public pages are complete. Anything else is rendered on
  * the page itself — the point is that an unfinished policy is visibly
  * unfinished rather than quietly wrong. TIN is deliberately NOT in this list:
- * it is needed for PayMongo onboarding and the BIR, not for a customer-facing
+ * it is needed for provider onboarding and the BIR, not for a customer-facing
  * policy, and printing it publicly is a choice the owner should make
  * deliberately rather than by default.
  */

@@ -116,7 +116,7 @@ export default function Pricing() {
 
       {!CHECKOUT_ENABLED && (
         <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] leading-6 text-amber-900">
-          <strong>Paid plans are not open for sign-up yet.</strong> Payments are handled by PayMongo, and the
+          <strong>Paid plans are not open for sign-up yet.</strong> Payments are handled by Xendit, and the
           server that verifies a payment is in place — but nothing yet starts one, so no card details are collected
           anywhere in this app. Pro and Max are listed so you can see what they cover. Guest and Free are fully
           available.
