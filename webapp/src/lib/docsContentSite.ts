@@ -127,25 +127,6 @@ export const SITE_TOOLS: DocTool[] = [
     ],
   },
   {
-    id: 'geotech',
-    name: 'Geotechnical',
-    route: '/geotech',
-    group: 'Foundations & geotechnical',
-    summary: 'Index of the geotechnical tools, with what each one answers and when to reach for it.',
-    basis: 'Navigation only — every calculation lives on its own page.',
-    sections: [
-      {
-        id: 'gt-index',
-        title: 'What moved where',
-        controls: [
-          { kind: 'button', name: 'Earth pressure', what: 'Rankine, Coulomb and Mononobe–Okabe now live at /earth-pressure.' },
-          { kind: 'button', name: 'Bearing capacity', what: 'The general equation now lives at /bearing-capacity.' },
-          { kind: 'button', name: 'Infinite slope', what: 'Moved beside the method of slices on /slope — it is a slope-stability method.' },
-        ],
-      },
-    ],
-  },
-  {
     id: 'earth-pressure',
     name: 'Earth Pressure',
     route: '/earth-pressure',

@@ -7,7 +7,7 @@ import {
   deriveWSection, beamFlexure, beamShear, beamLoadingSimple,
   columnAxial, weakAxisFlexure, combinedLoading,
   boltGroupGeom, boltShear, eccentricBoltGroup, outOfPlaneBoltGroup,
-  pryingAction, shearTabBlockShear, weldStrength,
+  pryingAction, shearTabBlockShear, boltGeomFromPositions,
 } from '../engine/steelDesign'
 import { shapeByName } from '../engine/aiscSections'
 import type {
@@ -47,8 +47,12 @@ export function localColumn(i: ColumnCalcInput): ColumnCalcResult {
 }
 
 export function localConnection(i: ConnectionCalcInput): ConnectionCalcResult {
-  const geom = boltGroupGeom(i.nRows, i.nCols, i.sx, i.sy, i.ex_edge, i.ey)
-  const phiRnBolt = boltShear(i.boltGrade, i.db, i.Vu, i.tPlate, i.FuPlate, i.threads)
+  const custom = !!i.bolts && i.bolts.length > 0
+  const geom = custom
+    ? boltGeomFromPositions(i.bolts!)
+    : boltGroupGeom(i.nRows, i.nCols, i.sx, i.sy, i.ex_edge, i.ey)
+  const nShear = i.nShear ?? 1
+  const phiRnBolt = boltShear(i.boltGrade, i.db, i.Vu, i.tPlate, i.FuPlate, i.threads, nShear)
   const eccentric = eccentricBoltGroup(geom, i.Vu, i.Hu, i.ex_load, i.ey_load, phiRnBolt.phiRn, i.db, i.tPlate)
   const outOfPlane = i.e_out > 0
     ? outOfPlaneBoltGroup(geom, eccentric.bolts, i.e_out, i.Vu, i.boltGrade, i.db, i.threads)
@@ -56,11 +60,15 @@ export function localConnection(i: ConnectionCalcInput): ConnectionCalcResult {
   const prying = outOfPlane && i.b_gage > 0
     ? pryingAction(outOfPlane.Tmax, outOfPlane.phiTn_crit, i.b_gage, i.ex_edge, i.sy, i.tPlate, i.db, i.FyPlate)
     : null
-  const weld = weldStrength(i.electrode, i.wSize, i.Vu)
   return {
     geom, phiRnBolt, eccentric, outOfPlane, prying,
-    blockShear: shearTabBlockShear(i.nRows, i.sy, i.ey, i.ey, i.ex_edge, i.db, i.tPlate, i.FyPlate, i.FuPlate),
-    weld,
-    weldCapacity: weld.phiRnw * 2 * geom.plateH,   // two vertical fillets, full tab height
+    // A free-form pattern has no single bolt line to tear out along, so the
+    // shear-tab paths do not apply; the page says so rather than printing a
+    // number derived from a geometry that is not there.
+    blockShear: custom
+      ? []
+      : shearTabBlockShear(i.nRows, i.sy, i.ey, i.ey, i.ex_edge, i.db, i.tPlate, i.FyPlate, i.FuPlate),
+    maxVu: eccentric.Rmax > 1e-9 ? (i.Vu * phiRnBolt.phiRn) / eccentric.Rmax : Infinity,
+    tauMax: (eccentric.Rmax * 1000) / (phiRnBolt.Ab * nShear),
   }
 }

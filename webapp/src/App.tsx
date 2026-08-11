@@ -22,13 +22,13 @@ import Profile from './pages/auth/Profile'
 // three.js is heavy — the 3D pages load in their own lazy chunks.
 const ModelSpace = lazy(() => import('./pages/ModelSpace'))
 const TrussSpace = lazy(() => import('./pages/TrussSpace'))
-import SteelDesign from './pages/SteelDesign'
+import SteelBeam from './pages/SteelBeam'
+import SteelColumn from './pages/SteelColumn'
 import SlabDesign from './pages/SlabDesign'
 import TorsionDesign from './pages/TorsionDesign'
 import DevLength from './pages/DevLength'
 import PunchingShear from './pages/PunchingShear'
 import RetainingWall from './pages/RetainingWall'
-import Geotech from './pages/Geotech'
 import EarthPressure from './pages/EarthPressure'
 import BearingCapacity from './pages/BearingCapacity'
 import SoilNail from './pages/SoilNail'
@@ -49,6 +49,7 @@ import RockAnchor from './pages/RockAnchor'
 import SeismicWizard from './pages/SeismicWizard'
 import WaterTank from './pages/WaterTank'
 import ShotcreteFacing from './pages/ShotcreteFacing'
+import BoltedConnection from './pages/BoltedConnection'
 import WeldedConnection from './pages/WeldedConnection'
 import SlabEstimate from './pages/SlabEstimate'
 import ChbEstimate from './pages/ChbEstimate'
@@ -118,13 +119,23 @@ export default function App() {
             <TrussSpace />
           </Suspense>
         } />
-        <Route path="/steel" element={<SteelDesign />} />
+        {/* Steel Design was one page with three tabs; it is now four pages,
+            one per calculator, each with its own trial allowance and its own
+            printable report. /steel keeps working and lands on the beam. */}
+        <Route path="/steel" element={<Navigate to="/steel/beam" replace />} />
+        <Route path="/steel/beam" element={<SteelBeam />} />
+        <Route path="/steel/column" element={<SteelColumn />} />
         <Route path="/slab-design" element={<SlabDesign />} />
         <Route path="/torsion" element={<TorsionDesign />} />
         <Route path="/dev-length" element={<DevLength />} />
         <Route path="/punching-shear" element={<PunchingShear />} />
         <Route path="/retaining-wall" element={<RetainingWall />} />
-        <Route path="/geotech" element={<Geotech />} />
+        {/* The geotechnical index is gone. It listed the tools the sidebar
+            already lists, so it was a page you passed THROUGH rather than
+            used. Redirected to the tool most people arriving at "geotechnical"
+            actually wanted — bearing capacity — rather than 404ing a route the
+            docs link to. */}
+        <Route path="/geotech" element={<Navigate to="/bearing-capacity" replace />} />
         <Route path="/earth-pressure" element={<EarthPressure />} />
         <Route path="/bearing-capacity" element={<BearingCapacity />} />
         <Route path="/soil-nail" element={<SoilNail />} />
@@ -145,12 +156,7 @@ export default function App() {
         <Route path="/seismic-wizard" element={<RequireAuth><SeismicWizard /></RequireAuth>} />
         <Route path="/water-tank" element={<WaterTank />} />
         <Route path="/shotcrete-facing" element={<ShotcreteFacing />} />
-        {/* The standalone bolted-connection page is gone: Steel Design's
-            Connection tab does the same analysis to LRFD, adds φRn per bolt
-            and block shear §J4.3, and prints a worked solution. Redirected
-            rather than dropped — the route was linked from the docs and is in
-            people's bookmarks. */}
-        <Route path="/bolted-connection" element={<Navigate to="/steel" replace />} />
+        <Route path="/bolted-connection" element={<BoltedConnection />} />
         <Route path="/welded-connection" element={<WeldedConnection />} />
         <Route path="/estimate/slab" element={<RequireAuth><SlabEstimate /></RequireAuth>} />
         <Route path="/estimate/beam" element={<RequireAuth><BeamEstimate /></RequireAuth>} />
