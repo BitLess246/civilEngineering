@@ -35,6 +35,25 @@ function BoltedConnectionCalc() {
   const [ey_load,    setEyLoad]     = useState(0)
   const [e_out,      setEOut]       = useState(0)
   const [b_gage,     setBGage]      = useState(0)
+  const [nShear,     setNShear]     = useState<1 | 2>(1)
+  // Free-form pattern. `null` means "use the grid above"; the editor seeds
+  // itself FROM the grid on the way in, so switching to custom starts from the
+  // pattern already on screen rather than from an empty table.
+  const [custom, setCustom] = useState<{ id: string; x: number; y: number }[] | null>(null)
+
+  const gridBolts = useMemo(() => {
+    const out: { id: string; x: number; y: number }[] = []
+    for (let r = 0; r < Math.max(1, nRows); r++)
+      for (let c = 0; c < Math.max(1, nCols); c++)
+        out.push({ id: `B${r * Math.max(1, nCols) + c + 1}`, x: ex_edge + c * sx, y: ey + r * sy })
+    return out
+  }, [nRows, nCols, sx, sy, ex_edge, ey])
+
+  const setBolt = (i: number, k: 'x' | 'y', v: number) =>
+    setCustom((bs) => (bs ?? []).map((b, j) => (j === i ? { ...b, [k]: v } : b)))
+  const addBolt = () => setCustom((bs) => [...(bs ?? []), { id: `B${(bs ?? []).length + 1}`, x: ex_edge, y: ey }])
+  const delBolt = (i: number) =>
+    setCustom((bs) => (bs ?? []).filter((_, j) => j !== i).map((b, k) => ({ ...b, id: `B${k + 1}` })))
 
   const input = useMemo(
     () => ({
@@ -43,15 +62,16 @@ function BoltedConnectionCalc() {
       threads: threads === 'yes',
       tPlate, FuPlate, FyPlate,
       ex_load, ey_load, e_out, b_gage,
+      nShear, ...(custom && custom.length > 0 ? { bolts: custom } : {}),
     }),
     [Vu, Hu, boltGrade, db, nRows, nCols, sy, sx, ey, ex_edge, threads,
-     tPlate, FuPlate, FyPlate, ex_load, ey_load, e_out, b_gage]
+     tPlate, FuPlate, FyPlate, ex_load, ey_load, e_out, b_gage, nShear, custom]
   )
   const { data: res, loading, error } = useCalcResult<ConnectionCalcResult>(
     () => calcConnection(input), [input]
   )
 
-  const govBlockShear = res
+  const govBlockShear = res && res.blockShear.length
     ? res.blockShear.reduce((mn, c) => c.phiRn < mn.phiRn ? c : mn, res.blockShear[0])
     : null
 
@@ -153,14 +173,71 @@ function BoltedConnectionCalc() {
             <Num label="Diameter db" unit="mm" value={db} onChange={setDb} />
             <Pick label="Threads in shear plane" value={threads} onChange={v => setThreads(v as 'yes'|'no')}
               options={[['yes','Yes (N)'],['no','No (X)']]} />
+            <Pick label="Shear planes" value={String(nShear)} onChange={v => setNShear(Number(v) as 1 | 2)}
+              options={[['1','Single shear (1)'],['2','Double shear (2)']]} />
+            <p className="col-span-full text-[10px] text-slate-500">
+              §J3.6 counts bolt shear per PLANE, so double shear doubles φRn,shear. Bearing is a
+              plate check and does not change — enter the thickness of the ply the bolt bears on.
+            </p>
           </Card>
-          <Card title="Bolt pattern">
-            <Num label="Rows (vertical) nR" value={nRows} onChange={setNRows} />
-            <Num label="Cols (horizontal) nC" value={nCols} onChange={setNCols} />
-            <Num label="Vertical spacing sv" unit="mm" value={sy} onChange={setSy} />
-            <Num label="Horizontal spacing sh" unit="mm" value={sx} onChange={setSx} />
-            <Num label="Edge dist vertical ey" unit="mm" value={ey} onChange={setEy} />
-            <Num label="Edge dist horiz ex" unit="mm" value={ex_edge} onChange={setExEdge} />
+          <Card title="Bolt pattern" grid={false}>
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+              <Pick label="Layout" value={custom ? 'custom' : 'grid'}
+                onChange={v => setCustom(v === 'custom' ? gridBolts : null)}
+                options={[['grid','Rectangular grid'],['custom','Free-form (any x, y)']]} />
+            </div>
+            {custom ? (
+              <div className="mt-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[11.5px] font-semibold text-[#5c6675]">Bolt coordinates (mm, from the plate corner)</span>
+                  <button type="button" onClick={addBolt}
+                    className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-semibold text-[#0f4c92] hover:bg-blue-50">+ Add bolt</button>
+                </div>
+                <div className="max-h-60 overflow-auto">
+                  <table className="w-full text-xs">
+                    <thead className="text-slate-500"><tr className="text-left">
+                      <th className="py-1 pr-2">Bolt</th><th className="pr-2">x</th><th className="pr-2">y</th>
+                      <th className="pr-2 text-right">R (kN)</th><th />
+                    </tr></thead>
+                    <tbody>
+                      {custom.map((b, i) => {
+                        const force = res?.eccentric.bolts.find(f => f.id === b.id)
+                        const crit = force && res && b.id === res.eccentric.critical
+                        return (
+                          <tr key={b.id} className={`border-t border-slate-100 ${crit ? 'font-semibold text-amber-700' : ''}`}>
+                            <td className="py-1 pr-2 font-medium">{b.id}</td>
+                            {(['x','y'] as const).map(k => (
+                              <td key={k} className="pr-2">
+                                <input type="number" value={b[k]} onChange={e => setBolt(i, k, Number(e.target.value))}
+                                  className="w-16 rounded border border-slate-200 px-1 py-0.5" />
+                              </td>
+                            ))}
+                            <td className="pr-2 text-right font-mono">{force ? f2(force.R) : '—'}</td>
+                            <td className="text-right">
+                              <button type="button" onClick={() => delBolt(i)} disabled={custom.length <= 1}
+                                className="text-slate-500 hover:text-red-600 disabled:opacity-30">✕</button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-1.5 text-[10px] text-slate-500">
+                  Seeded from the grid. Block shear is not reported for a free-form pattern —
+                  the shear-tab tear-out paths assume a single vertical bolt line.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-3 grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+                <Num label="Rows (vertical) nR" value={nRows} onChange={setNRows} />
+                <Num label="Cols (horizontal) nC" value={nCols} onChange={setNCols} />
+                <Num label="Vertical spacing sv" unit="mm" value={sy} onChange={setSy} />
+                <Num label="Horizontal spacing sh" unit="mm" value={sx} onChange={setSx} />
+                <Num label="Edge dist vertical ey" unit="mm" value={ey} onChange={setEy} />
+                <Num label="Edge dist horiz ex" unit="mm" value={ex_edge} onChange={setExEdge} />
+              </div>
+            )}
           </Card>
           <Card title="Eccentricity (load point from bolt centroid)">
             <Num label="In-plane e_x" unit="mm" value={ex_load} onChange={setExLoad} />
@@ -211,7 +288,8 @@ function BoltedConnectionCalc() {
           <ResultCard title="Bolt capacity / bolt">
             <Row label="φRn shear" value={`${f2(res.phiRnBolt.phiRn_shear)} kN`} />
             <Row label="φRn bearing" value={`${f2(res.phiRnBolt.phiRn_bearing)} kN`} />
-            <Row label="φRn governing" value={<b>{f2(res.phiRnBolt.phiRn)} kN</b>} />
+            <Row label="φRn governing" value={<b>{f2(res.phiRnBolt.phiRn)} kN</b>}
+              sub={nShear === 2 ? 'double shear — 2 planes' : 'single shear — 1 plane'} />
           </ResultCard>
           <ResultCard title={`Eccentric group (${res.geom.n} bolts)`}>
             <Row label="Ip" value={`${res.geom.Ip.toFixed(0)} mm²`} />
@@ -220,6 +298,10 @@ function BoltedConnectionCalc() {
             <Row alert={res.eccentric.Rmax > res.phiRnBolt.phiRn}
               label="Rmax / φRn"
               value={<Verdict pass={res.eccentric.Rmax <= res.phiRnBolt.phiRn} value={`${(res.eccentric.Rmax/res.phiRnBolt.phiRn*100).toFixed(0)} %`} />} />
+            <Row label="Bolt shear stress τmax" value={`${f1(res.tauMax)} MPa`}
+              sub={`Rmax / (Ab × ${nShear})`} />
+            <Row label="Maximum applied Vu" value={<b>{f2(res.maxVu)} kN</b>}
+              sub="at this eccentricity — the method is linear in the load" />
           </ResultCard>
           <ResultCard title="Per-bolt forces">
             <div className="overflow-x-auto">
@@ -243,6 +325,13 @@ function BoltedConnectionCalc() {
             </div>
           </ResultCard>
           <ResultCard title="Block shear §J4.3">
+            {res.blockShear.length === 0 && (
+              <p className="col-span-full text-[11px] text-slate-500">
+                Not applicable to a free-form bolt pattern: the §J4.3 shear-tab paths run along a
+                single vertical bolt line. Switch the layout back to a rectangular grid, or check
+                tear-out by hand against the pattern you have.
+              </p>
+            )}
             {res.blockShear.map(c => (
               <Row key={c.label} alert={Vu > c.phiRn}
                 label={<span className="text-[10px]">{c.label.replace('§J4.3 ', '')}</span>}

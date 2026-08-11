@@ -4,7 +4,7 @@ import {
   deriveWSection, beamFlexure, beamShear,
   columnAxial, weakAxisFlexure, combinedLoading,
   boltShear, weldStrength, beamLoadingSimple, E_STEEL,
-  boltGroupGeom, eccentricBoltGroup, shearTabBlockShear, outOfPlaneBoltGroup, pryingAction,
+  boltGroupGeom, boltGeomFromPositions, eccentricBoltGroup, shearTabBlockShear, outOfPlaneBoltGroup, pryingAction,
 } from './steelDesign'
 
 const W250x33 = shapeByName('W250x32.7')!
@@ -322,5 +322,76 @@ describe('pryingAction §J3.9', () => {
     const r = pryingAction(60, 100, b, a, p, tf, db, Fy)
     // t_no_prying is always ≥ t_req when prying present
     expect(r.t_no_prying).toBeGreaterThanOrEqual(r.t_req - 1e-9)
+  })
+})
+
+describe('double shear §J3.6', () => {
+  // Shear strength is counted PER SHEAR PLANE; bearing is a plate check and is
+  // not. Getting that wrong the other way — doubling bearing too — would make a
+  // splice look stronger than it is, in the direction that matters.
+  it('doubles the shear capacity and leaves bearing alone', () => {
+    const single = boltShear('A325M', 20, 150, 10, 400, true, 1)
+    const double = boltShear('A325M', 20, 150, 10, 400, true, 2)
+    expect(double.phiRn_shear).toBeCloseTo(2 * single.phiRn_shear, 9)
+    expect(double.phiRn_bearing).toBeCloseTo(single.phiRn_bearing, 9)
+  })
+
+  it('lets bearing govern once shear is doubled', () => {
+    // 20 mm A325M-N on a thin 6 mm ply: shear governs at one plane, bearing at
+    // two. If the governing min() were skipped this test would not move.
+    const single = boltShear('A325M', 20, 150, 6, 400, true, 1)
+    const double = boltShear('A325M', 20, 150, 6, 400, true, 2)
+    expect(single.phiRn).toBeCloseTo(single.phiRn_shear, 9)
+    expect(double.phiRn).toBeCloseTo(double.phiRn_bearing, 9)
+    expect(double.phiRn).toBeGreaterThan(single.phiRn)
+  })
+
+  it('defaults to one plane, so existing calls are unchanged', () => {
+    const implicit = boltShear('A490M', 22, 200, 12, 400)
+    const explicit = boltShear('A490M', 22, 200, 12, 400, true, 1)
+    expect(implicit).toEqual(explicit)
+  })
+})
+
+describe('a free-form bolt pattern is the same solver as the grid', () => {
+  // The custom-pattern path exists so an eccentric bracket can be checked. The
+  // risk is that it becomes a SECOND implementation that quietly disagrees with
+  // the grid one, so this feeds the grid's own absolute coordinates back
+  // through `boltGeomFromPositions` and demands an identical answer.
+  const grid = boltGroupGeom(3, 2, 70, 70, 40, 45)
+  const asPositions = grid.bolts.map((b) => ({ id: b.id, x: b.x + grid.Cx, y: b.y + grid.Cy }))
+  const rebuilt = boltGeomFromPositions(asPositions)
+
+  it('reproduces the geometry', () => {
+    expect(rebuilt.n).toBe(grid.n)
+    expect(rebuilt.Cx).toBeCloseTo(grid.Cx, 9)
+    expect(rebuilt.Cy).toBeCloseTo(grid.Cy, 9)
+    expect(rebuilt.Ip).toBeCloseTo(grid.Ip, 6)
+    for (let i = 0; i < grid.n; i++) {
+      expect(rebuilt.bolts[i].x).toBeCloseTo(grid.bolts[i].x, 9)
+      expect(rebuilt.bolts[i].y).toBeCloseTo(grid.bolts[i].y, 9)
+    }
+  })
+
+  it('reproduces the bolt forces, including which bolt is critical', () => {
+    const a = eccentricBoltGroup(grid,    150, 20, 90, 0, 73, 20, 10)
+    const b = eccentricBoltGroup(rebuilt, 150, 20, 90, 0, 73, 20, 10)
+    expect(b.Rmax).toBeCloseTo(a.Rmax, 9)
+    expect(b.critical).toBe(a.critical)
+    expect(b.M).toBeCloseTo(a.M, 9)
+    for (let i = 0; i < a.bolts.length; i++) expect(b.bolts[i].R).toBeCloseTo(a.bolts[i].R, 9)
+  })
+
+  it('handles a pattern that is NOT a rectangle', () => {
+    // The reason the feature exists: three bolts in a triangle have no rows.
+    const tri = boltGeomFromPositions([
+      { id: 'B1', x: 0, y: 0 }, { id: 'B2', x: 120, y: 0 }, { id: 'B3', x: 60, y: 100 },
+    ])
+    expect(tri.n).toBe(3)
+    expect(tri.Cx).toBeCloseTo(60, 9)
+    expect(tri.Cy).toBeCloseTo(100 / 3, 9)
+    const r = eccentricBoltGroup(tri, 100, 0, 150, 0, 73, 20, 10)
+    expect(r.bolts).toHaveLength(3)
+    expect(Number.isFinite(r.Rmax)).toBe(true)
   })
 })

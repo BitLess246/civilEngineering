@@ -194,16 +194,24 @@ export interface BoltResult {
   n_reqd: number        // bolts required for Vu
 }
 
+/**
+ * @param nShear shear planes crossing the bolt: 1 for a lap (single shear),
+ *   2 for a splice with plates both sides (double shear). AISC §J3.6 counts
+ *   strength PER SHEAR PLANE, so the shear capacity scales with it. BEARING
+ *   DOES NOT — it is a plate check, governed by the ply the bolt bears against,
+ *   and doubling the shear planes does not thicken that ply. Passing the tab
+ *   thickness for `t_conn` therefore stays the right, conservative input.
+ */
 export function boltShear(
   grade: BoltGrade, db: number,
   Vu: number, t_conn: number, Fu_conn: number,
-  threadsInPlane = true
+  threadsInPlane = true, nShear = 1
 ): BoltResult {
   const Ab  = (Math.PI / 4) * db * db
   const Fnv = grade === 'A325M'
     ? (threadsInPlane ? 310 : 372)
     : (threadsInPlane ? 372 : 457)   // Table J3.2
-  const phiRn_shear   = (PHI_J * Fnv * Ab) / 1000
+  const phiRn_shear   = (PHI_J * Fnv * Ab * nShear) / 1000
   const phiRn_bearing = (PHI_J * 2.4 * Fu_conn * db * t_conn) / 1000
   const phiRn  = Math.min(phiRn_shear, phiRn_bearing)
   return { Ab, Fnv, phiRn_shear, phiRn_bearing, phiRn, n_reqd: Math.ceil(Vu / phiRn) }

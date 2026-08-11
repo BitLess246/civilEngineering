@@ -100,6 +100,16 @@ export interface ConnectionCalcInput {
   boltGrade: 'A325M' | 'A490M'
   db: number; nRows: number; nCols: number
   sy: number; sx: number; ey: number; ex_edge: number
+  /**
+   * Bolts at ARBITRARY plate coordinates. When present the grid fields above
+   * are ignored for geometry — this is the eccentric-bracket case, where the
+   * pattern is not a rectangle. Block shear is skipped for a custom pattern:
+   * `shearTabBlockShear` walks a single vertical bolt line, which a free-form
+   * group need not have.
+   */
+  bolts?: { id: string; x: number; y: number }[]
+  /** Shear planes crossing each bolt: 1 single, 2 double (§J3.6). */
+  nShear?: number
   threads: boolean
   tPlate: number; FuPlate: number; FyPlate: number
   ex_load: number; ey_load: number; e_out: number; b_gage: number
@@ -115,6 +125,16 @@ export interface ConnectionCalcResult {
   outOfPlane: OutOfPlaneResult | null
   prying: PryingResult | null
   blockShear: BlockShearCase[]
+  /**
+   * The largest Vu this group carries at the current eccentricity, kN.
+   * The elastic method is linear in the applied load, so it is Vu scaled by
+   * phiRn/Rmax — no second solve. This is the LRFD statement of the question
+   * the old standalone page answered in allowable stress ("maximum load P").
+   */
+  maxVu: number
+  /** Shear stress on the critical bolt, MPa — Rmax over the bolt area times
+   *  the shear planes. Reported, not a check: the check is phiRn above. */
+  tauMax: number
 }
 export const calcConnection = (input: ConnectionCalcInput) =>
   post<ConnectionCalcResult>('/api/steel/connection', input)
