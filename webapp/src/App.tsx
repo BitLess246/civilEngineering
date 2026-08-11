@@ -28,7 +28,6 @@ import TorsionDesign from './pages/TorsionDesign'
 import DevLength from './pages/DevLength'
 import PunchingShear from './pages/PunchingShear'
 import RetainingWall from './pages/RetainingWall'
-import Geotech from './pages/Geotech'
 import EarthPressure from './pages/EarthPressure'
 import BearingCapacity from './pages/BearingCapacity'
 import SoilNail from './pages/SoilNail'
@@ -124,7 +123,12 @@ export default function App() {
         <Route path="/dev-length" element={<DevLength />} />
         <Route path="/punching-shear" element={<PunchingShear />} />
         <Route path="/retaining-wall" element={<RetainingWall />} />
-        <Route path="/geotech" element={<Geotech />} />
+        {/* The geotechnical index is gone. It listed the tools the sidebar
+            already lists, so it was a page you passed THROUGH rather than
+            used. Redirected to the tool most people arriving at "geotechnical"
+            actually wanted — bearing capacity — rather than 404ing a route the
+            docs link to. */}
+        <Route path="/geotech" element={<Navigate to="/bearing-capacity" replace />} />
         <Route path="/earth-pressure" element={<EarthPressure />} />
         <Route path="/bearing-capacity" element={<BearingCapacity />} />
         <Route path="/soil-nail" element={<SoilNail />} />

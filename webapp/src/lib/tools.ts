@@ -37,7 +37,6 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/pile-cap',      name: 'Pile Cap Design',    sub: 'Group pile cap',            group: 'Foundations' },
       { to: '/combined',      name: 'Combined Footing',   sub: 'Two-column footing',        group: 'Foundations' },
       { to: '/retaining-wall',   name: 'Retaining Wall',   sub: 'Cantilever · Rankine',     group: 'Geotechnical' },
-      { to: '/geotech',          name: 'Geotechnical',     sub: 'Index · all soil tools',   group: 'Geotechnical' },
       { to: '/earth-pressure',   name: 'Earth Pressure',   sub: 'Rankine · Coulomb · M-O',  group: 'Geotechnical' },
       { to: '/bearing-capacity', name: 'Bearing Capacity', sub: 'Meyerhof · Hansen · Vesić', group: 'Geotechnical' },
       { to: '/soil-nail',        name: 'Soil-Nail Wall',   sub: 'FHWA · tensile · pullout', group: 'Geotechnical' },
