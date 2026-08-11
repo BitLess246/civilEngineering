@@ -11,7 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import { describe, it, expect } from 'vitest'
-import { localConnection } from './calcLocal'
+import { localBeam, localColumn, localConnection } from './calcLocal'
 import type { ConnectionCalcInput } from './calcApi'
 
 const BASE: ConnectionCalcInput = {
@@ -93,5 +93,122 @@ describe('localConnection — the maximum applied load', () => {
   it('τmax is the critical bolt force over the bolt area', () => {
     const r = localConnection({ ...BASE, ex_load: 90 })
     expect(r.tauMax).toBeCloseTo((r.eccentric.Rmax * 1000) / r.phiRnBolt.Ab, 9)
+  })
+})
+
+// ── LRFD / ASD ────────────────────────────────────────────────────────────
+// The dual format is where a wrong answer looks right. These tests check the
+// two things that make it wrong: a capacity converted on one basis while the
+// demand stays on the other, and a φ left hard-coded somewhere downstream.
+
+const BEAM = { shapeName: 'W310x38.7', Fy: 345, span: 6, Lb: 2, Cb: 1, wDead: 15, wLive: 25 }
+const COL  = { shapeName: 'W250x67', Fy: 345, L: 4, Kx: 1, Ky: 1, Pu: 900, Mux: 60, Muy: 0 }
+
+describe('localBeam — design basis', () => {
+  it('defaults to LRFD, unchanged from before the basis existed', () => {
+    const r = localBeam(BEAM)
+    expect(r.basis).toBe('LRFD')
+    expect(r.avail.Mn).toBeCloseTo(r.flex.phiMn, 9)
+    expect(r.avail.Vn).toBeCloseTo(r.shear.phiVn, 9)
+    expect(r.loads.wu).toBeCloseTo(Math.max(1.4 * 15, 1.2 * 15 + 1.6 * 25), 9)
+  })
+
+  it('moves BOTH sides when switched to ASD', () => {
+    const lrfd = localBeam(BEAM)
+    const asd = localBeam({ ...BEAM, basis: 'ASD' })
+    // capacity down…
+    expect(asd.avail.Mn).toBeCloseTo(lrfd.flex.Mn / 1.67, 9)
+    // …and demand down too. A capacity-only switch would be the classic error.
+    expect(asd.loads.wu).toBeCloseTo(15 + 25, 9)
+    expect(asd.loads.Mu).toBeLessThan(lrfd.loads.Mu)
+  })
+
+  it('leaves the nominal strength alone — only the factor changes', () => {
+    expect(localBeam({ ...BEAM, basis: 'ASD' }).flex.Mn)
+      .toBeCloseTo(localBeam(BEAM).flex.Mn, 9)
+  })
+
+  it('uses the §G2.1(a) shear pair for a rolled web', () => {
+    const r = localBeam(BEAM)
+    expect(r.shear.slenderWeb).toBe(false)
+    // φv = 1.00 ⇒ the LRFD available equals the nominal
+    expect(r.avail.Vn).toBeCloseTo(r.shear.Vn, 9)
+    // and Ω = 1.50, not the 1.67 that flexure uses
+    expect(localBeam({ ...BEAM, basis: 'ASD' }).avail.Vn).toBeCloseTo(r.shear.Vn / 1.5, 9)
+  })
+
+  it('deflection is a SERVICE check and does not move with the basis', () => {
+    const lrfd = localBeam(BEAM), asd = localBeam({ ...BEAM, basis: 'ASD' })
+    expect(asd.loads.deltaL).toBeCloseTo(lrfd.loads.deltaL, 9)
+    expect(asd.loads.limL360).toBeCloseTo(lrfd.loads.limL360, 9)
+  })
+})
+
+describe('localColumn — design basis', () => {
+  it('checks §H1-1 against the available strengths, not the LRFD ones', () => {
+    const asd = localColumn({ ...COL, basis: 'ASD' })
+    // Rebuild the interaction by hand from the reported available values.
+    const pr = COL.Pu / asd.avail.Pn
+    const mr = COL.Mux / asd.avail.Mnx
+    const expected = pr >= 0.2 ? pr + (8 / 9) * mr : pr / 2 + mr
+    expect(asd.comb.ratio).toBeCloseTo(expected, 9)
+  })
+
+  it('reports a higher utilisation under ASD for the SAME entered load', () => {
+    // Same Pu against a smaller allowable — which is why the page relabels the
+    // input Pu → Pa: entering a factored load under ASD is the user's error to
+    // avoid, and the ratio has to move so it is visible.
+    expect(localColumn({ ...COL, basis: 'ASD' }).comb.ratio)
+      .toBeGreaterThan(localColumn(COL).comb.ratio)
+  })
+
+  it('defaults to LRFD with the pre-existing numbers', () => {
+    const r = localColumn(COL)
+    expect(r.basis).toBe('LRFD')
+    expect(r.avail.Pn).toBeCloseTo(r.axial.phiPn, 9)
+    expect(r.avail.Mnx).toBeCloseTo(r.flexX.phiMn, 9)
+  })
+})
+
+describe('localConnection — design basis', () => {
+  it('converts every capacity, including block shear', () => {
+    const lrfd = localConnection(BASE)
+    const asd = localConnection({ ...BASE, basis: 'ASD' })
+    expect(asd.avail.governing).toBeCloseTo(lrfd.phiRnBolt.Rn / 2.0, 9)
+    for (let k = 0; k < lrfd.blockShear.length; k++) {
+      expect(asd.availBlockShear[k]).toBeCloseTo(lrfd.availBlockShear[k] * (0.5 / 0.75), 9)
+    }
+  })
+
+  it('lowers the maximum applied load with the capacity', () => {
+    const inp = { ...BASE, ex_load: 90 }
+    expect(localConnection({ ...inp, basis: 'ASD' }).maxVu)
+      .toBeCloseTo(localConnection(inp).maxVu * (0.5 / 0.75), 6)
+  })
+
+  it('§J3.7 is re-derived, not rescaled', () => {
+    // The factor sits INSIDE the reduction: F'nt = 1.3Fnt − (Fnt / available
+    // Fnv)·frv. So the ASD tension capacity is NOT the LRFD one times
+    // (1/Ω)/φ — if it were, the formula had been treated as a multiplier.
+    const inp = { ...BASE, Vu: 60, e_out: 80, b_gage: 45, ex_load: 20 }
+    const lrfd = localConnection(inp)
+    const asd = localConnection({ ...inp, basis: 'ASD' })
+    // Both must be in the ACTIVE range of the reduction — a group loaded until
+    // F'nt clamps to zero gives 0 on both bases and proves nothing.
+    expect(lrfd.outOfPlane!.phiTn_crit).toBeGreaterThan(0)
+    expect(asd.outOfPlane!.phiTn_crit).toBeGreaterThan(0)
+    const naiveRescale = lrfd.outOfPlane!.phiTn_crit * (0.5 / 0.75)
+    expect(asd.outOfPlane!.phiTn_crit).not.toBeCloseTo(naiveRescale, 3)
+    // …and it is still lower than the LRFD value, as an allowable must be.
+    expect(asd.outOfPlane!.phiTn_crit).toBeLessThan(lrfd.outOfPlane!.phiTn_crit)
+  })
+
+  it('prying uses the ASD plate-flexure factor in the required thickness', () => {
+    const inp = { ...BASE, Vu: 60, e_out: 80, b_gage: 45, ex_load: 20 }
+    const lrfd = localConnection(inp)
+    const asd = localConnection({ ...inp, basis: 'ASD' })
+    expect(lrfd.prying).not.toBeNull()
+    // A thinner allowable plate-flexure capacity means MORE thickness needed.
+    expect(asd.prying!.t_req).toBeGreaterThan(lrfd.prying!.t_req)
   })
 })
