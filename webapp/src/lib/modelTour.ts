@@ -17,10 +17,20 @@
 //     explicitly, because the tab label points the wrong way and a model with
 //     no restraints does not give a wrong answer — it does not solve at all.
 //
-// The three tabs the tour SKIPS — Modal, Pushover, Nonlinear — are advanced
-// analyses, not steps on the path to a designed structure. Walking a beginner
-// through a pushover before they have a static solve is how a walkthrough
-// becomes something people close.
+// Pushover and Nonlinear are SKIPPED: advanced analyses, not steps on the path
+// to a designed structure, and walking a beginner through a pushover before
+// they have a static solve is how a walkthrough becomes something people close.
+//
+// MODAL IS NOT SKIPPED, for one reason: its mode-shape animation is started by
+// clicking a ROW in the results table, and nothing on screen suggests the rows
+// are clickable. A control that cannot be found by looking is precisely what a
+// walkthrough is for. The same goes for the results sub-tabs (Schedules /
+// BOQ / Construction Schedule), which only appear once a design exists and by
+// then are a long way down the page.
+//
+// The tour also needs something to POINT AT. On a first visit every panel here
+// is empty, so `ModelSpace` gives the guide a demo grid on open and clears it
+// on close — see the `useTour` hooks there.
 // ─────────────────────────────────────────────────────────────────────────
 
 import type { Tour, TourStep } from './tour'
@@ -73,6 +83,14 @@ export const MODEL_STEPS: readonly TourStep[] = [
     why: 'Cracked sections (ACI §6.6.3.1.1) are on by default here and off at the API level, so closed-form benchmarks stay gross-section.',
   },
   {
+    id: 'modal',
+    tab: 'modal',
+    anchor: 'modal-panel',
+    title: 'Modal — and the mode shape you have to click for',
+    body: 'Run the modal analysis, then CLICK A MODE ROW in the results table. The 3D canvas animates that mode as a purple skeleton, and it keeps animating while you work on other tabs.',
+    why: 'Nothing on screen says the rows are clickable, which is why it is worth saying here. Check the mass participation reaches 90% (NSCP §208.5.5) before trusting a response-spectrum run.',
+  },
+  {
     id: 'design',
     tab: 'design',
     anchor: 'design-button',
@@ -80,11 +98,25 @@ export const MODEL_STEPS: readonly TourStep[] = [
     body: 'The pipeline takes the governing combination and sizes slabs, beams, columns and footings, each with a utilisation and a code clause. It consumes analysis results, so it has nothing to work from until the previous step has run.',
   },
   {
+    id: 'results-tabs',
+    tab: 'design',
+    anchor: 'results-tabs',
+    title: 'The results have three tabs of their own',
+    body: 'Under the design: Schedules (bar-by-bar), Bill of Quantities (materials and cost) and Construction Schedule. They are easy to miss — the page is long by the time they appear.',
+    why: 'The bill’s concrete mix class follows the design f′c, and says so; override it there if the specification differs.',
+  },
+  {
     id: 'plans',
     tab: 'plans',
     anchor: 'plans-panel',
     title: 'Take the drawings and the take-off',
     body: 'Framing and foundation plans, footing details and the bill of quantities are generated from the model and the design — not redrawn. Every sheet exports to SVG.',
+  },
+  {
+    id: 'io',
+    anchor: 'io-menu',
+    title: 'Save the model before you close the tab',
+    body: 'Import / Export writes the whole model to a JSON file and reads it back. The autosave only survives the browser session — it is not a saved project.',
   },
 ]
 

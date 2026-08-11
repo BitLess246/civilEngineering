@@ -11,8 +11,25 @@
 // own `setTab`. There is no way to advance without navigating.
 // ─────────────────────────────────────────────────────────────────────────
 
-import { useCallback, useState } from 'react'
-import { nextIndex, prevIndex, type TourStep } from './tour'
+import { useCallback, useRef, useState } from 'react'
+import { nextIndex, prevIndex, tourLifecycle, type TourStep } from './tour'
+
+/**
+ * Optional lifecycle for a tour that has to SET SOMETHING UP to be worth
+ * running. The 3D Model Space is the case that forced it: its walkthrough
+ * points at a tab bar, a properties table and a design button, and on a first
+ * visit every one of those is empty — a guided tour of a blank canvas.
+ *
+ * `onStart` may load a demo; `onEnd` puts things back. They are paired: `onEnd`
+ * runs only if `onStart` ran, exactly once, whether the tour ended at the last
+ * step, by Esc, or by the close button. A tour that leaves a demo model behind
+ * when the user dismisses it has destroyed their work, which is a far worse
+ * failure than an unhelpful tour.
+ */
+export interface TourHooks {
+  onStart?: () => void
+  onEnd?: () => void
+}
 
 export interface TourController {
   /** Whether the overlay is showing. */
@@ -36,9 +53,16 @@ export interface TourController {
 export function useTour(
   steps: readonly TourStep[],
   setTab: (tab: string) => void,
+  hooks?: TourHooks,
 ): TourController {
   const [on, setOn] = useState(false)
   const [at, setAt] = useState(0)
+  // Whether `onStart` has run and `onEnd` is therefore owed. A ref, not state:
+  // it must be readable and writable inside the same handler that flips `on`,
+  // and it must never trigger a render of its own.
+  const started = useRef(false)
+  const onStart = hooks?.onStart
+  const onEnd = hooks?.onEnd
 
   const go = useCallback((i: number) => {
     setAt(i)
@@ -49,9 +73,19 @@ export function useTour(
   return {
     on, at, total: steps.length,
     step: steps[Math.min(at, steps.length - 1)],
-    start: useCallback(() => { setOn(true); go(0) }, [go]),
+    start: useCallback(() => {
+      const t = tourLifecycle(started.current, 'start')
+      started.current = t.started
+      if (t.fire === 'start') onStart?.()
+      setOn(true); go(0)
+    }, [go, onStart]),
     next: useCallback(() => go(nextIndex(at, steps.length)), [at, go, steps.length]),
     prev: useCallback(() => go(prevIndex(at)), [at, go]),
-    close: useCallback(() => setOn(false), []),
+    close: useCallback(() => {
+      setOn(false)
+      const t = tourLifecycle(started.current, 'close')
+      started.current = t.started
+      if (t.fire === 'end') onEnd?.()
+    }, [onEnd]),
   }
 }

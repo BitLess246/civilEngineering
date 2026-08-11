@@ -68,3 +68,22 @@ export const stepAt = (steps: readonly TourStep[], i: number): TourStep | undefi
 /** Every distinct anchor a tour points at. */
 export const anchorsOf = (steps: readonly TourStep[]): string[] =>
   [...new Set(steps.map((s) => s.anchor).filter((a): a is string => Boolean(a)))]
+
+/**
+ * Whether a start/close transition owes a lifecycle hook, and the flag that
+ * results. Extracted from `useTour` so the pairing rule can be tested without
+ * rendering: a page uses these hooks to LOAD AND UNLOAD A DEMO MODEL, so
+ * "fires `end` exactly once, and only after a `start`" is a data-loss rule
+ * rather than a cosmetic one.
+ *
+ *   start while stopped  → fire 'start'   (set up the demo)
+ *   start while started  → fire nothing   (re-opening must not re-load it)
+ *   close while started  → fire 'end'     (tear it down)
+ *   close while stopped  → fire nothing   (a stray close must not tear down
+ *                                          a model the tour never created)
+ */
+export function tourLifecycle(started: boolean, action: 'start' | 'close'):
+  { started: boolean; fire: 'start' | 'end' | null } {
+  if (action === 'start') return started ? { started: true, fire: null } : { started: true, fire: 'start' }
+  return started ? { started: false, fire: 'end' } : { started: false, fire: null }
+}
