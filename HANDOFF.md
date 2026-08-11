@@ -1767,3 +1767,67 @@ only reject it, never raise it, because there was nowhere to put the answer.
   exactly as a hand-set Ø does.
 - Spiral columns: `barCount` is validated against the tied minimum (4). §10.7.3.1's
   6-bar spiral minimum arrives with spiral sections in model space.
+
+---
+
+# UI consistency & walkthroughs pass (PRs #553–#562)
+
+A user-supplied list of 22 defects across 20 pages, worked as six PRs. Five of
+the six were *cosmetic on the surface and structural underneath* — the same root
+cause was reachable from a dozen symptoms — so the entries below are the causes,
+not the symptoms.
+
+| PR | What |
+|---|---|
+| #553 | sieve + hydrometer joined into one gradation (`engine/soils/grading.ts`) |
+| #554 | `LabNote { severity, text }` — lab warnings reach the report |
+| #555 / #556 | soil-investigation walkthrough; **there had been no way to add a sample at all** |
+| #557 | walkthrough machinery generalised — `lib/tour.ts`, `useTour.ts`, `tours.ts`, `GuidedTour` |
+| #558 | one card system: 10 pages off `max-w-3xl` onto `CalcBody`, legacy cards onto the shared `Card`, Truss header, `← Home` removed |
+| #559 | worked solutions for the weld group, pile cap and wood slab |
+| #560 | the Steel Design 3D scenes — fit, orientation, arrows, bolts |
+| #561 | the BOQ mix class follows the design f′c |
+| #562 | Model Space guide: demo model + the controls nobody finds |
+
+## Things now shared, that were not
+
+- **`CalcBody`** (`components/calc.tsx`) — the standard 1500 px body + results-rail
+  grid. Ten pages had their own narrow container.
+- **`Card`** gained `grid={false}`, mirroring `CalcSection`: a card holding a table
+  or a canvas must not be dealt across a three-column field grid.
+- **`FitView`** now fits. It framed a *sphere of the box diagonal*, so anything long
+  and thin sat ~3.5× too far away — every 3D scene in the app rendered at a fifth of
+  its frame. It projects the box corners onto the camera basis and honours aspect.
+  Model Space and Truss Space inherited the fix.
+- **`Arrow`** (`SteelViewer3D`) drew a stick and a detached cone for any arrow longer
+  than about twice its head.
+- **`useTour`** gained `onStart`/`onEnd`, and `tourLifecycle` in `tour.ts` is the
+  pairing rule as a pure function.
+
+## Traps worth remembering
+
+- **`<SceneText>` fails SILENTLY.** A character outside the bundled font subset
+  (`lib/sceneFont.ts`) sends troika to a blocked CDN and the per-label `<Suspense>`
+  never settles — the label is simply absent, with no error. `kN·m` (U+00B7) cost an
+  hour. `SceneText.test.ts` now scans every `<SceneText>` literal against the shipped
+  font's cmap and names the file and code point.
+- **A `col-span-full` row under a `lg:sticky` sibling.** The rail's sticky containing
+  block is the whole grid, so it floats over the extra row. That was the reported
+  "card z-index overlap" on Steel Design; the fix is to put the full-width content
+  outside the grid.
+- **Metalness without an environment map resolves to near-black.** The shear tab and
+  bolts were at 0.5–0.75.
+- **A tour needs something to point at.** On a first visit every Model Space panel is
+  empty. The guide generates a demo grid on open and clears it on close — and never
+  touches a model the user already has, which is the only "restore" that cannot lose
+  work.
+
+## Left open, deliberately
+
+- **Bolted Connection exists twice**: the standalone page computes client-side, the
+  Steel Design tab computes remotely through the protected calc API. That is a fork
+  tied to plan gating, not simple duplication — merging them is a product decision.
+- Steel Design's 3D card is unnumbered, so the card counter skips a number between
+  the inputs and the worked solution.
+- The `docs/ValidationMap.md` X001–X004 external cross-checks (ETABS/STAAD/PCA/Excel)
+  still need licences.
