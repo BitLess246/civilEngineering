@@ -38,7 +38,7 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   // foundations
   '/foundation', '/combined', '/pile-cap', '/retaining-wall',
   // steel, timber and connections
-  '/steel', '/bolted-connection', '/welded-connection', '/wood-slab',
+  '/steel', '/welded-connection', '/wood-slab',
   // geotechnical
   '/geotech', '/earth-pressure', '/bearing-capacity', '/slope', '/settlement', '/lateral-pile',
   '/soil-nail', '/micropile', '/rock-anchor', '/shotcrete-facing',
@@ -61,6 +61,12 @@ export const GATED_PREFIXES: readonly string[] = [
 /** Freely readable by anyone, signed in or not — no counter, no gate. */
 export const PUBLIC_ROUTES: readonly string[] = [
   '/', '/docs', '/validation', '/about', '/pricing',
+  // A REDIRECT STUB, not a calculator: /bolted-connection now bounces to
+  // /steel, which is where the run gets charged. Leaving it unclassified made
+  // it members-only by default, so a guest following an old link hit a wall
+  // instead of the page that replaced it — and charging it here would bill the
+  // same visit twice.
+  '/bolted-connection',
   '/signin', '/signup', '/forgot-password', '/reset-password',
   // Policy and contact pages. A customer must be able to read the terms and
   // find a way to complain WITHOUT an account — and a payment provider

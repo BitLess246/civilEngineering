@@ -32,7 +32,6 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/truss',         name: 'Truss Space',        sub: 'Plane truss solver',        group: 'Analysis & Modelling' },
       { to: '/load-path',     name: 'Slab Load Path',     sub: 'Two-way tributary',         group: 'Analysis & Modelling' },
       { to: '/steel',         name: 'Steel Design',       sub: 'AISC 360-16 LRFD',          group: 'Steel & Connections' },
-      { to: '/bolted-connection', name: 'Bolted Connection', sub: 'Eccentric bolt group',   group: 'Steel & Connections' },
       { to: '/welded-connection', name: 'Welded Connection', sub: 'Eccentric weld group',   group: 'Steel & Connections' },
       { to: '/foundation',    name: 'Foundation Design',  sub: 'Isolated pad footing',      group: 'Foundations' },
       { to: '/pile-cap',      name: 'Pile Cap Design',    sub: 'Group pile cap',            group: 'Foundations' },

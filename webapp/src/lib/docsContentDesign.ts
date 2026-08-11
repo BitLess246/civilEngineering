@@ -292,33 +292,6 @@ export const DESIGN_TOOLS: DocTool[] = [
     ],
   },
   {
-    id: 'bolted-connection',
-    name: 'Bolted Connection',
-    route: '/bolted-connection',
-    group: 'Steel & timber',
-    summary: 'Eccentric bolt group by the elastic method, with out-of-plane tension and prying.',
-    basis: 'AISC Manual Part 7 elastic method; AISC 360 §J3.7 combined tension and shear, §J3.9 prying.',
-    sections: [
-      {
-        id: 'bc-in',
-        title: 'Inputs',
-        controls: [
-          { kind: 'toggle', name: 'Out-of-plane eccentricity & prying (§J3.7 / §J3.9)', what: 'Adds the tension and prying check on top of the in-plane shear analysis.' },
-          { kind: 'toggle', name: 'Threads in shear plane (N)', what: 'Uses the reduced N-value bolt shear strength.' },
-          { kind: 'choice', name: 'A325M / A490M', what: 'Bolt grade, which fixes the nominal shear and tensile strengths.' },
-        ],
-      },
-      {
-        id: 'bc-out',
-        title: 'Results',
-        controls: [
-          { kind: 'output', name: 'Critical bolt force', what: 'Resultant on the worst bolt from the direct shear plus the torsional component.' },
-          { kind: 'output', name: 'Bolt-group plot', what: 'Drawing of the group with the resultant on each bolt.' },
-        ],
-      },
-    ],
-  },
-  {
     id: 'welded-connection',
     name: 'Welded Connection',
     route: '/welded-connection',

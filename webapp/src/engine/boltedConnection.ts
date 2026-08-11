@@ -10,6 +10,19 @@
 // from the allowable bolt shear (R scales linearly with P).
 // Bolts can be placed at ANY location in the plane (custom pattern).
 // Units: positions/eccentricity mm; P kN; stress MPa; forces kN.
+//
+// NO PAGE USES THIS ANY MORE, AND THAT IS DELIBERATE — do not delete it as dead
+// code. The standalone /bolted-connection page was removed in favour of Steel
+// Design's Connection tab, which checks the same group to LRFD (φRn per bolt,
+// block shear §J4.3) instead of against an allowable stress. What survives here
+// is the L9 VALIDATION BENCHMARK in `validation.ts`: an independent
+// allowable-stress statement of the elastic method, cross-checking the
+// `eccentricBoltGroup` path the tab actually runs. Two routes to the same
+// mechanics is the point — collapsing them would leave the benchmark checking
+// the code against itself.
+//
+// It is also where the custom-pattern capability still lives, if a future page
+// wants arbitrary bolt positions back.
 // ─────────────────────────────────────────────────────────────────────────
 import { boltGeomFromPositions, eccentricBoltGroup, type BoltPos, type BoltForce, type BoltGroupGeom } from './steelDesign'
 
