@@ -100,3 +100,49 @@ describe('bundled scene font', () => {
     expect(covered.size).toBeGreaterThan(SCENE_FONT_REQUIRED.length)
   })
 })
+
+// ── What the scenes actually ask for ──────────────────────────────────────
+// The test above proves the font covers the characters we DECLARED. This one
+// proves the scenes only ask for those: a `<SceneText>` holding a character
+// outside the subset renders NOTHING — troika goes to the CDN, the fetch is
+// blocked, and the per-label <Suspense> falls back to null forever. The label
+// just is not there, with no error anywhere, which is close to undiagnosable
+// from a screenshot. A `kN·m` label was shipped and lost exactly this way.
+describe('scene labels stay inside the bundled subset', () => {
+  const sources = import.meta.glob('../{components,pages}/*.tsx', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
+  const covered = coveredCodePoints(FONT)
+
+  /** Text nodes and `{`…`}` template children of a <SceneText> element. */
+  function sceneStrings(src: string): string[] {
+    const out: string[] = []
+    const re = /<SceneText\b[^>]*>([\s\S]*?)<\/SceneText>/g
+    for (let m = re.exec(src); m; m = re.exec(src)) {
+      // Strip `${…}` holes — those are numbers and section names at runtime —
+      // and JSX comment blocks, keeping the literal characters around them.
+      out.push(m[1].replace(/\$\{[^}]*\}/g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, ''))
+    }
+    return out
+  }
+
+  it('every literal character in a <SceneText> is in the bundled font', () => {
+    const bad: string[] = []
+    for (const [path, src] of Object.entries(sources)) {
+      for (const s of sceneStrings(src)) {
+        for (const ch of s) {
+          const cp = ch.codePointAt(0)!
+          if (cp === 0x0a || cp === 0x0d || cp === 0x09) continue          // layout whitespace
+          if (ch === '`' || ch === '{' || ch === '}') continue             // template syntax
+          if (!covered.has(cp)) {
+            bad.push(`${path}: "${ch}" U+${cp.toString(16).toUpperCase().padStart(4, '0')}`)
+          }
+        }
+      }
+    }
+    expect([...new Set(bad)]).toEqual([])
+  })
+
+  it('finds the SceneText elements at all (the regex still matches)', () => {
+    const total = Object.values(sources).reduce((n, s) => n + sceneStrings(s).length, 0)
+    expect(total).toBeGreaterThan(5)
+  })
+})

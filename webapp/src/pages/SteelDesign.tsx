@@ -132,7 +132,8 @@ function BeamTab() {
   }, [res, shape, Fy, wD, wL, span, Lb, utilM])
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
+    <div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
       <div className="space-y-5">
         <Card title={<>Section & grade<CalcBadge loading={loading} error={error} /></>}>
           <ShapePick value={shapeName} onChange={setShapeName} />
@@ -178,8 +179,10 @@ function BeamTab() {
         </>)}
       </div>
 
+      </div>
+
       {res && (
-        <div className="col-span-full">
+        <div>
           <WorkedSolution steps={steps} title="Beam Design — step-by-step (AISC 360-16 §F, §G)" />
         </div>
       )}
@@ -257,7 +260,8 @@ function ColumnTab() {
   }, [res, shape, Pu, Mux, Muy, Kx, Ky, L, Fy, dead, live, dlMode])
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
+    <div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
       <div className="space-y-5">
         <Card title={<>Section & grade<CalcBadge loading={loading} error={error} /></>}>
           <ShapePick value={shapeName} onChange={setShapeName} />
@@ -303,8 +307,10 @@ function ColumnTab() {
         </>)}
       </div>
 
+      </div>
+
       {res && (
-        <div className="col-span-full">
+        <div>
           <WorkedSolution steps={steps} title="Column Design — step-by-step (AISC 360-16 §E3, §H1-1)" />
         </div>
       )}
@@ -441,7 +447,8 @@ function ConnectionTab() {
   }, [res, boltGrade, db, nRows, nCols, sy, ex_edge, tPlate, FuPlate, threads, Vu, Hu, ex_load, ey_load, e_out, b_gage])
 
   return (
-    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_0.9fr_1fr]">
+    <div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_0.9fr_1fr]">
       {/* ── inputs ── */}
       <div className="space-y-5">
         <Card title={<>Connection<CalcBadge loading={loading} error={error} /></>}>
@@ -636,8 +643,10 @@ function ConnectionTab() {
         )}
       </div>
 
+      </div>
+
       {res && connType === 'bolt' && (
-        <div className="col-span-full">
+        <div>
           <WorkedSolution steps={boltSteps} title="Connection Design — step-by-step (AISC 360-16 §J3, §J4)" />
         </div>
       )}
