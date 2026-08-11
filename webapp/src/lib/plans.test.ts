@@ -208,7 +208,7 @@ describe('checkout', () => {
 describe('pricing', () => {
   const paid = PLANS.filter((p) => p.priceMonthly)
 
-  it('prices everything in pesos, because that is what PayMongo settles in', () => {
+  it('prices everything in pesos, because that is what the provider settles in', () => {
     expect(CURRENCY).toBe('PHP')
     expect(formatPeso(1399)).toBe('₱1,399')
     expect(formatPeso(15099)).toBe('₱15,099')

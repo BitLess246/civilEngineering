@@ -3,7 +3,8 @@ import { designFacing } from '../engine/shotcreteFacing'
 import { ReportControls } from '../components/ReportControls'
 import { buildFacingSolution } from '../lib/geotechSolutions'
 import { WorkedSolution } from '../components/WorkedSolution'
-import { PageHeader } from '../components/calc'
+import { PageHeader, CalcBody } from '../components/calc'
+import { Card, ResultCard } from '../components/qty'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -83,38 +84,39 @@ export default function ShotcreteFacing() {
   return (
         <div>
       <PageHeader title="Soil-nail shotcrete facing" badges={['FHWA GEC-7']} />
-      <main className="mx-auto max-w-3xl px-5 py-6">
       <ReportControls title="Shotcrete Facing" badges={['FHWA GEC-7']} report={report} />
-      <p className="mt-2 text-sm text-slate-600">
-        FHWA GEC-7 facing check. The thin shotcrete panel spans <b>between</b> the nail heads, so earth
-        pressure bends it like a two-way slab on point supports — hogging over each nail, sagging at
-        midspan. This checks the facing flexural nail-head strength R<sub>FF</sub> and the punching-shear
-        strength R<sub>FP</sub> against the nail-head force.
-      </p>
+      <CalcBody>
+        <div className="space-y-5">
+          <p className="text-[13px] text-[#5c6675]">
+            FHWA GEC-7 facing check. The thin shotcrete panel spans <b>between</b> the nail heads, so earth
+            pressure bends it like a two-way slab on point supports — hogging over each nail, sagging at
+            midspan. This checks the facing flexural nail-head strength R<sub>FF</sub> and the punching-shear
+            strength R<sub>FP</sub> against the nail-head force.
+          </p>
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Layout &amp; facing</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="Horiz. spacing SH" unit="m" value={SH} onChange={setSH} />
-          <Field label="Vert. spacing SV" unit="m" value={SV} onChange={setSV} />
-          <Field label="Facing thickness hc" unit="mm" value={hc} onChange={setHc} />
-          <Field label="Cover" unit="mm" value={cover} onChange={setCover} />
-          <Field label="Vert. steel As" unit="mm²/m" value={AsVert} onChange={setAsVert} />
-          <Field label="Horiz. steel As" unit="mm²/m" value={AsHoriz} onChange={setAsHoriz} />
-          <Field label="Bearing plate" unit="m" value={bearingPlate} onChange={setBearingPlate} step="0.05" />
-          <Field label="Pressure factor CF" value={CF} onChange={setCF} step="0.1" />
-        </div>
-        <h2 className="mb-3 mt-5 text-[1.05rem] font-bold text-[#0056b3]">Materials &amp; demand</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Field label="f′c" unit="MPa" value={fc} onChange={setFc} />
-          <Field label="fy" unit="MPa" value={fy} onChange={setFy} />
-          <Field label="Nail-head force" unit="kN" value={nailHeadForce} onChange={setNailHeadForce} />
-        </div>
-      </section>
+          <Card title="Layout & facing">
+            <Field label="Horiz. spacing SH" unit="m" value={SH} onChange={setSH} />
+            <Field label="Vert. spacing SV" unit="m" value={SV} onChange={setSV} />
+            <Field label="Facing thickness hc" unit="mm" value={hc} onChange={setHc} />
+            <Field label="Cover" unit="mm" value={cover} onChange={setCover} />
+            <Field label="Vert. steel As" unit="mm²/m" value={AsVert} onChange={setAsVert} />
+            <Field label="Horiz. steel As" unit="mm²/m" value={AsHoriz} onChange={setAsHoriz} />
+            <Field label="Bearing plate" unit="m" value={bearingPlate} onChange={setBearingPlate} step="0.05" />
+            <Field label="Pressure factor CF" value={CF} onChange={setCF} step="0.1" />
+          </Card>
 
-      <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Results</h2>
-        <Out label="Panel moment m (vert / horiz)" value={`${f2(r.mVert)} / ${f2(r.mHoriz)} kN·m/m`} />
+          <Card title="Materials & demand">
+            <Field label="f′c" unit="MPa" value={fc} onChange={setFc} />
+            <Field label="fy" unit="MPa" value={fy} onChange={setFy} />
+            <Field label="Nail-head force" unit="kN" value={nailHeadForce} onChange={setNailHeadForce} />
+          </Card>
+
+
+          <WorkedSolution steps={solution} title="Calculation report — worked solution" />
+        </div>
+
+        <ResultCard title="Results">
+          <Out label="Panel moment m (vert / horiz)" value={`${f2(r.mVert)} / ${f2(r.mHoriz)} kN·m/m`} />
         <Out label="Flexural R_FF (vert / horiz)" value={`${f0(r.RffVert)} / ${f0(r.RffHoriz)} kN`} />
         <Out label="Punching R_FP" value={`${f0(r.Rfp)} kN`} />
         <Out label={`Governing facing strength (${r.governs})`} value={`${f0(r.strength)} kN`} ok={r.ok} />
@@ -124,12 +126,8 @@ export default function ShotcreteFacing() {
           around the bearing plate. C_F ≈ 2.0 thin → 1.0 thick facing (FHWA GEC-7 Table). Headed-stud
           tension (permanent facing) and temporary-vs-final facing stages are checked separately.
         </p>
-      </section>
-      {/* The step-by-step already existed and only ever reached the PDF. */}
-      <div className="mt-5">
-        <WorkedSolution steps={solution} title="Calculation report — worked solution" />
-      </div>
-    </main>
+        </ResultCard>
+      </CalcBody>
     </div>
   )
 }

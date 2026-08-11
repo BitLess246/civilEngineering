@@ -62,7 +62,7 @@ export default function WeldedConnection() {
   return (
         <div>
       <PageHeader title="Eccentric weld group" badges={['AISC 360-16']} />
-      <main className="mx-auto max-w-[1400px] px-5 py-6">
+      <main className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
       <ReportControls title="Welded Connection Report" badges={['AISC 360-16']} />
       <p className="mt-2 max-w-3xl text-sm text-slate-600">
         Elastic (weld-as-a-line) method for an eccentrically-loaded fillet weld group. Each unit length
@@ -72,9 +72,9 @@ export default function WeldedConnection() {
       </p>
 
       <div className="mt-6 grid gap-5 lg:grid-cols-[1.1fr_1fr]">
-        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-[1.05rem] font-bold text-[#0056b3]">Weld segments (mm)</h2>
+            <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">Weld segments (mm)</h2>
             <button type="button" onClick={addSeg} className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-semibold text-[#0056b3] hover:bg-blue-50">+ Add segment</button>
           </div>
           <div className="max-h-56 overflow-auto">
@@ -95,7 +95,7 @@ export default function WeldedConnection() {
             </table>
           </div>
 
-          <h2 className="mb-2 mt-4 text-[1.05rem] font-bold text-[#0056b3]">Load &amp; weld</h2>
+          <h2 className="mb-2 mt-4 text-[13.5px] font-bold text-[#0f1b2a]">Load &amp; weld</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {([['Load P (kN)', P, setP], ['Angle (° from +X)', angle, setAngle], ['Fillet leg w (mm)', size, setSize],
               ['Load at x (mm)', px, setPx], ['Load at y (mm)', py, setPy], ['F_EXX (MPa)', FEXX, setFEXX],
@@ -109,11 +109,11 @@ export default function WeldedConnection() {
         </section>
 
         <section className="space-y-4">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div className="rounded-lg border border-[#e3e1da] bg-[#faf9f6] p-3">
             <WeldPlot r={r} segs={segs} px={px} py={py} />
           </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm text-sm">
-            <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Results</h2>
+          <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4 text-sm">
+            <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Results</h2>
             {[['Total weld length L_w', `${f2(r.Lw)} mm`],
               ['Centroid C', `(${f2(r.Cx)}, ${f2(r.Cy)}) mm`],
               ['Load components Pₓ / Pᵧ', `${f2(r.Px)} / ${f2(r.Py)} kN`],

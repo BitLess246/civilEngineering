@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { SceneText } from '../components/SceneText'
@@ -15,6 +14,7 @@ import { FitView } from '../components/FitView'
 import { buildSectionShapes } from '../lib/sectionShapes3d'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
+import { PageHeader } from '../components/calc'
 import { f1, f2 } from '../lib/format'
 
 const TENSION = '#1d4ed8', COMPRESSION = '#dc2626', ZERO = '#94a3b8', SEL = '#f59e0b'
@@ -198,15 +198,13 @@ export default function TrussSpace() {
   const serviceLoad = deadLoad + liveLoad
 
   return (
-    <div className="mx-auto max-w-[1700px] p-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <Link to="/" className="no-print text-sm text-[#0056b3] hover:underline">← Home</Link>
-          <h1 className="text-2xl font-extrabold tracking-tight text-[#0056b3]">Truss Space</h1>
-          <p className="text-xs text-slate-500">Planar pin-jointed truss — generate, analyse (axial forces) &amp; design (AISC LRFD).</p>
-        </div>
-        <ReportControls title="Truss Design Report" />
-      </div>
+    <div>
+      <PageHeader title="Truss Space" badges={['AISC LRFD']} />
+      <div className="mx-auto max-w-[1700px] px-5 py-5 sm:px-7">
+      <ReportControls title="Truss Design Report" />
+      <p className="mt-2 text-[13px] text-[#5c6675]">
+        Planar pin-jointed truss — generate, analyse (axial forces) &amp; design (AISC LRFD).
+      </p>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
         {/* 3D viewport */}
@@ -611,6 +609,7 @@ export default function TrussSpace() {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { designCombinedFooting, type CombinedFootingInput } from '../engine/comb
 import { designFlexibleCombinedFooting } from '../engine/flexibleCombinedFooting'
 import { CombinedFootingSchematic } from '../components/CombinedFootingSchematic'
 import { PageHeader, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import { Card } from '../components/qty'
 import { initialLetterhead } from '../lib/letterhead'
 import { Diagram } from '../components/Diagram'
 import { WorkedSolution } from '../components/WorkedSolution'
@@ -100,21 +101,14 @@ function Select<T extends string>({ label, value, onChange, options }: {
   )
 }
 
-function Card({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <fieldset className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <legend className="px-2 text-[1.02rem] font-bold text-[#0056b3]">{title}</legend>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
-    </fieldset>
-  )
-}
-
+/** Result row. `check` is a third column the shared `Row` calls `sub`; the name
+ *  differs but the palette must not — this matches `components/qty`. */
 function Row({ label, value, check }: { label: ReactNode; value: ReactNode; check?: ReactNode }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 border-b border-slate-100 py-1.5 last:border-0">
-      <span className="text-sm text-slate-600">{label}</span>
-      <span className="text-right text-sm font-semibold text-slate-800">{value}</span>
-      {check ? <span className="w-36 text-right text-xs text-slate-500">{check}</span> : null}
+    <div className="flex items-baseline justify-between gap-3 border-b border-[#f3f1ea] py-1.5 last:border-0">
+      <span className="text-[12px] text-[#5c6675]">{label}</span>
+      <span className="text-right font-mono text-[12.5px] font-semibold text-[#0f1b2a]">{value}</span>
+      {check ? <span className="w-32 text-right text-[10.5px] text-[#a39d8d]">{check}</span> : null}
     </div>
   )
 }

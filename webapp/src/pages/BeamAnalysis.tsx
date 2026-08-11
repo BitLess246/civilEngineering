@@ -124,8 +124,7 @@ export default function BeamAnalysis() {
             <Num label="Inertia I" unit="mm⁴" value={I} onChange={setI} />
           </Card>
 
-          <fieldset className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <legend className="px-2 text-[1.02rem] font-bold text-[#0056b3]">Supports</legend>
+          <Card title="Supports" grid={false}>
             <div className="no-print mb-3 flex flex-wrap gap-2">
               {(['pin', 'roller', 'fixed', 'spring'] as SupportType[]).map((t) => (
                 <button key={t} type="button" onClick={() => addSupport(t)}
@@ -145,10 +144,9 @@ export default function BeamAnalysis() {
                 </ItemShell>
               ))}
             </div>
-          </fieldset>
+          </Card>
 
-          <fieldset className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <legend className="px-2 text-[1.02rem] font-bold text-[#0056b3]">Loads</legend>
+          <Card title="Loads" grid={false}>
             <div className="no-print mb-3 flex flex-wrap gap-2">
               {([['point', '+ Point'], ['udl', '+ UDL'], ['vdl', '+ VDL'], ['moment', '+ Moment']] as const).map(([t, lbl]) => (
                 <button key={t} type="button" onClick={() => addLoad(t)}
@@ -184,7 +182,7 @@ export default function BeamAnalysis() {
                 </ItemShell>
               ))}
             </div>
-          </fieldset>
+          </Card>
         </div>
 
         <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
@@ -258,20 +256,20 @@ export default function BeamAnalysis() {
 
       {r && shown && (
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
             <Diagram xs={r.xs} ys={r.V} title={`SHEAR — ${shown.combo.name}`} unit="kN" color="#1f77b4" vlines={vlines} decimals={1} />
           </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
             <Diagram xs={r.xs} ys={r.M} title="MOMENT" unit="kN·m" color="#d62728" vlines={vlines} decimals={1} />
           </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
             <Diagram xs={r.xs} ys={r.D} title="DEFLECTION" unit="mm" color="#2ca02c" vlines={vlines} decimals={2} />
           </div>
         </div>
       )}
 
       {res?.tmt && (
-        <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm print-avoid-break">
+        <div className="rail-card mt-6 rounded-lg border border-[#e3e1da] bg-white p-4 print-avoid-break">
           <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">
             Three-moment theorem check <span className="text-xs font-normal text-slate-500">Clapeyron — governing combo, interior support moments</span>
           </h2>

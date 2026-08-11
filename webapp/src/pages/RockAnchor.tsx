@@ -3,7 +3,8 @@ import { designRockAnchor } from '../engine/rockAnchor'
 import { ReportControls } from '../components/ReportControls'
 import { buildRockAnchorSolution } from '../lib/geotechSolutions'
 import { WorkedSolution } from '../components/WorkedSolution'
-import { PageHeader } from '../components/calc'
+import { PageHeader, CalcBody } from '../components/calc'
+import { Card, ResultCard } from '../components/qty'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -76,28 +77,29 @@ export default function RockAnchor() {
   return (
         <div>
       <PageHeader title="Rock / ground anchor" badges={['PTI DC35.1']} />
-      <main className="mx-auto max-w-3xl px-5 py-6">
       <ReportControls title="Rock Anchor" badges={['PTI DC35.1']} report={report} />
-      <p className="mt-2 text-sm text-slate-600">
-        PTI DC35.1 / FHWA-IF-99-015 check: prestressing-tendon design load (0.60·GUTS) and grout-ground
-        (rock socket) bond capacity vs the applied anchor tension. Governing allowable = the smaller.
-      </p>
+      <CalcBody>
+        <div className="space-y-5">
+          <p className="text-[13px] text-[#5c6675]">
+            PTI DC35.1 / FHWA-IF-99-015 check: prestressing-tendon design load (0.60·GUTS) and grout-ground
+            (rock socket) bond capacity vs the applied anchor tension. Governing allowable = the smaller.
+          </p>
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Tendon &amp; bond zone</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Field label="fpu" unit="MPa" value={fpu} onChange={setFpu} />
-          <Field label="Tendon area Aps" unit="mm²" value={Aps} onChange={setAps} />
-          <Field label="Axial demand T" unit="kN" value={T} onChange={setT} />
-          <Field label="Hole Ø" unit="m" value={holeDia} onChange={setHoleDia} step="0.005" />
-          <Field label="Bond length" unit="m" value={bondLength} onChange={setBondLength} />
-          <Field label="Bond τult" unit="kPa" value={tauUlt} onChange={setTauUlt} />
+          <Card title="Tendon & bond zone">
+            <Field label="fpu" unit="MPa" value={fpu} onChange={setFpu} />
+            <Field label="Tendon area Aps" unit="mm²" value={Aps} onChange={setAps} />
+            <Field label="Axial demand T" unit="kN" value={T} onChange={setT} />
+            <Field label="Hole Ø" unit="m" value={holeDia} onChange={setHoleDia} step="0.005" />
+            <Field label="Bond length" unit="m" value={bondLength} onChange={setBondLength} />
+            <Field label="Bond τult" unit="kPa" value={tauUlt} onChange={setTauUlt} />
+          </Card>
+
+
+          <WorkedSolution steps={solution} title="Calculation report — worked solution" />
         </div>
-      </section>
 
-      <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Results</h2>
-        <Out label="GUTS = fpu·Aps" value={`${f0(r.GUTS)} kN`} />
+        <ResultCard title="Results">
+          <Out label="GUTS = fpu·Aps" value={`${f0(r.GUTS)} kN`} />
         <Out label="Tendon design load (0.60·GUTS)" value={`${f0(r.Td)} kN`} ok={r.tendonOK} />
         <Out label="Bond Qult / allowable (FS 2)" value={`${f0(r.Qult)} / ${f0(r.Qall)} kN`} ok={r.bondOK} />
         <Out label={`Governing allowable (${r.governs})`} value={`${f0(r.allowable)} kN`} ok={r.ok} />
@@ -108,12 +110,8 @@ export default function RockAnchor() {
           Td = 0.60·GUTS (PTI permanent max). Bond Qult = π·Dhole·Lbond·τult / FS. Proof load
           min(1.33·T, 0.80·GUTS). Provide the unbonded (free) length and corrosion protection separately.
         </p>
-      </section>
-      {/* The step-by-step already existed and only ever reached the PDF. */}
-      <div className="mt-5">
-        <WorkedSolution steps={solution} title="Calculation report — worked solution" />
-      </div>
-    </main>
+        </ResultCard>
+      </CalcBody>
     </div>
   )
 }

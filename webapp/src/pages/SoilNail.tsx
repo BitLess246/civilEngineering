@@ -3,7 +3,8 @@ import { designSoilNail } from '../engine/soilNail'
 import { ReportControls } from '../components/ReportControls'
 import { buildSoilNailSolution } from '../lib/geotechSolutions'
 import { WorkedSolution } from '../components/WorkedSolution'
-import { PageHeader } from '../components/calc'
+import { PageHeader, CalcBody } from '../components/calc'
+import { Card, ResultCard } from '../components/qty'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -86,54 +87,50 @@ export default function SoilNail() {
   return (
         <div>
       <PageHeader title="Soil-nail wall — per-nail check" badges={['FHWA GEC-7']} />
-      <main className="mx-auto max-w-3xl px-5 py-6">
       <ReportControls title="Soil-Nail Wall" badges={['FHWA GEC-7']} report={report} />
-      <p className="mt-2 text-sm text-slate-600">
-        Preliminary FHWA GEC-7 checks for a single nail: tributary active demand vs bar-tensile and
-        grout-ground pullout capacities. Global (slip-surface) stability is separate — use the{' '}
-        <a href="/geotech" className="text-[#0056b3] underline">slope-stability tool</a>.
-      </p>
+      <CalcBody>
+        <div className="space-y-5">
+          <p className="text-[13px] text-[#5c6675]">
+            Preliminary FHWA GEC-7 checks for a single nail: tributary active demand vs bar-tensile and
+            grout-ground pullout capacities. Global (slip-surface) stability is separate — use the{' '}
+            <a href="/slope" className="text-[#0f4c92] underline">slope-stability tool</a>.
+          </p>
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Geometry &amp; soil</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="Nail depth z" unit="m" value={z} onChange={setZ} />
-          <Field label="Horiz. spacing Sh" unit="m" value={Sh} onChange={setSh} />
-          <Field label="Vert. spacing Sv" unit="m" value={Sv} onChange={setSv} />
-          <Field label="γ" unit="kN/m³" value={gamma} onChange={setGamma} />
-          <Field label="φ" unit="°" value={phi} onChange={setPhi} />
-          <Field label="Surcharge q" unit="kPa" value={q} onChange={setQ} />
-        </div>
-        <h2 className="mb-3 mt-5 text-[1.05rem] font-bold text-[#0056b3]">Nail &amp; grout</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="Bar Ø" unit="mm" value={barDia} onChange={setBarDia} />
-          <Field label="fy" unit="MPa" value={fy} onChange={setFy} />
-          <Field label="Drill hole DDH" unit="m" value={drillDia} onChange={setDrillDia} step="0.01" />
-          <Field label="Bond length Le" unit="m" value={bondLength} onChange={setBondLength} />
-          <Field label="Bond strength qu" unit="kPa" value={qu} onChange={setQu} />
-        </div>
-      </section>
+          <Card title="Geometry & soil">
+            <Field label="Nail depth z" unit="m" value={z} onChange={setZ} />
+            <Field label="Horiz. spacing Sh" unit="m" value={Sh} onChange={setSh} />
+            <Field label="Vert. spacing Sv" unit="m" value={Sv} onChange={setSv} />
+            <Field label="γ" unit="kN/m³" value={gamma} onChange={setGamma} />
+            <Field label="φ" unit="°" value={phi} onChange={setPhi} />
+            <Field label="Surcharge q" unit="kPa" value={q} onChange={setQ} />
+          </Card>
 
-      <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Results</h2>
-        <Out label="Ka (Rankine)" value={f2(r.Ka)} />
-        <Out label="Demand Tmax = Ka·(γz+q)·Sh·Sv" value={`${f2(r.Tmax)} kN`} />
-        <Out label="Bar tensile Tn = Ab·fy" value={`${f2(r.Tn)} kN`} />
-        <Out label="FS tensile (Tn / Tmax ≥ 1.8)" value={f2(r.fsTensile)} ok={r.tensileOK} />
-        <Out label="Pullout Qult = π·DDH·Le·qu" value={`${f2(r.Qult)} kN`} />
-        <Out label="FS pullout (Qult / Tmax ≥ 2.0)" value={f2(r.fsPullout)} ok={r.pulloutOK} />
-        <Out label="Bond length for FS = 2.0" value={`${f2(r.bondLengthReq)} m`} ok={bondLength >= r.bondLengthReq} />
-        <p className="mt-2 text-[10px] text-slate-500">
-          FHWA GEC-7. Tmax is the tributary active load on one nail at depth z. Allowable bar load Tn/1.8,
-          allowable pullout Qult/2.0. Provide Le ≥ the required bond length beyond the slip surface.
-          This is a preliminary component check — verify global stability separately.
-        </p>
-      </section>
-      {/* The step-by-step already existed and only ever reached the PDF. */}
-      <div className="mt-5">
-        <WorkedSolution steps={solution} title="Calculation report — worked solution" />
-      </div>
-    </main>
+          <Card title="Nail & grout">
+            <Field label="Bar Ø" unit="mm" value={barDia} onChange={setBarDia} />
+            <Field label="fy" unit="MPa" value={fy} onChange={setFy} />
+            <Field label="Drill hole DDH" unit="m" value={drillDia} onChange={setDrillDia} step="0.01" />
+            <Field label="Bond length Le" unit="m" value={bondLength} onChange={setBondLength} />
+            <Field label="Bond strength qu" unit="kPa" value={qu} onChange={setQu} />
+          </Card>
+
+          <WorkedSolution steps={solution} title="Calculation report — worked solution" />
+        </div>
+
+        <ResultCard title="Results">
+          <Out label="Ka (Rankine)" value={f2(r.Ka)} />
+          <Out label="Demand Tmax = Ka·(γz+q)·Sh·Sv" value={`${f2(r.Tmax)} kN`} />
+          <Out label="Bar tensile Tn = Ab·fy" value={`${f2(r.Tn)} kN`} />
+          <Out label="FS tensile (Tn / Tmax ≥ 1.8)" value={f2(r.fsTensile)} ok={r.tensileOK} />
+          <Out label="Pullout Qult = π·DDH·Le·qu" value={`${f2(r.Qult)} kN`} />
+          <Out label="FS pullout (Qult / Tmax ≥ 2.0)" value={f2(r.fsPullout)} ok={r.pulloutOK} />
+          <Out label="Bond length for FS = 2.0" value={`${f2(r.bondLengthReq)} m`} ok={bondLength >= r.bondLengthReq} />
+          <p className="mt-2 text-[10px] text-[#a39d8d]">
+            FHWA GEC-7. Tmax is the tributary active load on one nail at depth z. Allowable bar load Tn/1.8,
+            allowable pullout Qult/2.0. Provide Le ≥ the required bond length beyond the slip surface.
+            This is a preliminary component check — verify global stability separately.
+          </p>
+        </ResultCard>
+      </CalcBody>
     </div>
   )
 }

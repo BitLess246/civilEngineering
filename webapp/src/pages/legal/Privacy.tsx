@@ -59,7 +59,7 @@ export default function Privacy() {
         <ul className="list-inside list-disc space-y-1">
           <li><strong>Supabase</strong> — accounts, authentication and saved projects.</li>
           <li><strong>Vercel</strong> — hosting and delivery of the website.</li>
-          <li><strong>PayMongo</strong> — payment processing. They are a separate controller of the
+          <li><strong>Xendit</strong> — payment processing. They are a separate controller of the
             payment details you give them; see their own privacy policy.</li>
         </ul>
         <p>

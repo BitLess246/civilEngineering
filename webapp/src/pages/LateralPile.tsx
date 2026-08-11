@@ -6,7 +6,8 @@ import {
 } from '../engine/lateralPile'
 import { buildLateralPileSolution } from '../lib/lateralPileSolution'
 import { WorkedSolution } from '../components/WorkedSolution'
-import { PageHeader } from '../components/calc'
+import { PageHeader, CalcBody } from '../components/calc'
+import { Card, ResultCard } from '../components/qty'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -166,7 +167,8 @@ export default function LateralPile() {
   return (
         <div>
       <PageHeader title="Laterally loaded pile" badges={['Broms', 'Matlock', 'API RP 2A']} />
-      <main className="mx-auto max-w-3xl px-5 py-6">
+      <CalcBody wide>
+        <div className="space-y-5">
       <ReportControls title="Laterally Loaded Pile" badges={['Broms', 'Matlock', 'API RP 2A']} report={report} />
       <p className="mt-2 text-sm text-slate-600">
         Two questions, two methods. <strong>Broms</strong> gives the ultimate lateral capacity in closed form and
@@ -174,9 +176,8 @@ export default function LateralPile() {
         nonlinear soil springs and gives what Broms cannot — head deflection, and where the maximum moment sits.
       </p>
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Pile &amp; loading</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <Card title="Pile & loading">
+        <div className="col-span-full grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Field label="Embedded length L" unit="m" value={L} onChange={setL} step="0.5" />
           <Field label="Diameter D" unit="m" value={D} onChange={setD} step="0.05" />
           <Field label="Rigidity EI" unit="kN·m²" value={EI} onChange={setEI} step="10000" />
@@ -200,9 +201,10 @@ export default function LateralPile() {
             </select>
           </label>
         </div>
+      </Card>
 
-        <h2 className="mb-3 mt-5 text-[1.05rem] font-bold text-[#0056b3]">Soil</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <Card title="Soil">
+        <div className="col-span-full grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Field label="Unit weight γ′" unit="kN/m³" value={gamma} onChange={setGamma} step="0.5" />
           {soilKind === 'clay' ? (
             <>
@@ -221,10 +223,9 @@ export default function LateralPile() {
             A fixed head has no free rotation, so the load height e is not used by either method.
           </p>
         )}
-      </section>
+      </Card>
 
-      <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Ultimate capacity — Broms</h2>
+      <ResultCard title="Ultimate capacity — Broms">
         <BromsCard r={broms} title={soilKind === 'clay' ? 'Cohesive (9·cu·d below 1.5d)' : 'Cohesionless (3·Kp·γ·z·d)'} />
         <div className="mt-3">
           <Out label="Applied H / Hu" value={f2(util)} ok={util <= 1}
@@ -235,10 +236,9 @@ export default function LateralPile() {
           this is — &ldquo;short&rdquo; is a verdict, not a length. Broms is an ultimate check: apply your own factor
           of safety, typically 2 to 3 on Hu for a working load.
         </p>
-      </section>
+      </ResultCard>
 
-      <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Response at working load — p-y</h2>
+      <ResultCard title="Response at working load — p-y">
         <PyProfiles res={py} L={L} />
         <div className="mt-3">
           <Out label="Head deflection" value={`${f2(py.yHead)} mm`} ok={headOK}
@@ -254,12 +254,13 @@ export default function LateralPile() {
           elements on nonlinear springs and solved by Newton; the residual is reported so a solve that fell short is
           visible rather than silently presented as an answer. Deflections are relative to the undeflected pile axis.
         </p>
-      </section>
+      </ResultCard>
       {/* The step-by-step already existed and only ever reached the PDF. */}
       <div className="mt-5">
         <WorkedSolution steps={solution} title="Calculation report — worked solution" />
       </div>
-    </main>
+        </div>
+      </CalcBody>
     </div>
   )
 }

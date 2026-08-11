@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { designTBeam, type TBeamKind } from '../engine/tbeam'
 import { buildTBeamSolution } from '../lib/tbeamSolution'
 import { PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
@@ -65,7 +64,7 @@ export default function TBeamDesign() {
       )}
       <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
         <p className="no-print text-[13px] text-[#5c6675]">
-          <Link to="/" className="font-semibold text-[#0f4c92]">← Home</Link> · Flanged-beam flexure: §6.3.2 effective width,
+          Flanged-beam flexure: §6.3.2 effective width,
           rectangular vs true-T stress block, §9.6.1.2 minimum steel, εt/φ per §21.2.2. Positive Mu = flange in compression.
         </p>
         <div className="no-print mt-4 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(330px,1fr)]">

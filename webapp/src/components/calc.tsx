@@ -23,6 +23,31 @@ export function PageHeader({ title, badges, actions }: { title: string; badges: 
   )
 }
 
+/**
+ * The standard calculation-page body: full-width container, inputs rail on the
+ * left, results on the right.
+ *
+ * WHY THIS EXISTS. Ten pages were still on `max-w-3xl`, a width chosen when
+ * they were single-column forms. Everything since — the numbered input cards,
+ * the verdict panel, the worked solution with its chips — is laid out for the
+ * 1500px two-column rail the foundation pages use, and cramming it into 768px
+ * is what makes the chips wrap out of their card. The container is the defect,
+ * not the cards inside it.
+ *
+ * Pass two children: the left rail, then the right column. One child fills the
+ * width, for a page that has no results side.
+ */
+export function CalcBody({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
+  return (
+    <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
+      <div className={`grid grid-cols-1 items-start gap-5 ${
+        wide ? '' : 'lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]'}`}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
 export function CalcSection({ num, title, hint, children, grid = true }: {
   num: string; title: string; hint?: string; children: ReactNode; grid?: boolean
 }) {

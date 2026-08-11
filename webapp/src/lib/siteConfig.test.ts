@@ -78,3 +78,31 @@ describe('businessName', () => {
     expect(businessName().length).toBeGreaterThan(0)
   })
 })
+
+describe('the shipped configuration is complete', () => {
+  it('has every customer-facing detail filled in', () => {
+    // The business is registered, so the legal pages must no longer be showing
+    // a list of holes. This is the assertion that turns "we filled the form in"
+    // into something that stays true.
+    expect(missingSiteFields()).toEqual([])
+    expect(isSiteConfigured()).toBe(true)
+  })
+
+  it('carries the registration details the provider application was filed with', () => {
+    // These are checked against the DTI certificate during onboarding, so a
+    // drifting legal name or address is a held application rather than a typo.
+    expect(SITE.legalName).toBe('CIVENGG WEBSITE APPLICATION SERVICE')
+    expect(SITE.registrationNumber).toBe('8408482')
+    expect(SITE.tin).toMatch(/^\d{9}$/)
+    expect(addressOneLine()).toBe('14 Yangco Road, Baguio City, Benguet 2600, Philippines')
+  })
+
+  it('uses the registered name in prose, not the trade name', () => {
+    expect(businessName()).toBe(SITE.legalName)
+  })
+
+  it('gives a site URL that is an origin, with no trailing slash', () => {
+    // It is concatenated into canonical links; a trailing slash produces '//'.
+    expect(SITE.siteUrl).toMatch(/^https:\/\/[^/]+$/)
+  })
+})

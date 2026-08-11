@@ -4,7 +4,8 @@ import { speciesList, gradesOf, resolveWoodSpecies } from '../engine/woodDesign'
 import type { LoadDuration } from '../engine/woodDesign'
 import { costTimberRows } from '../engine/takeoff'
 import { ReportControls } from '../components/ReportControls'
-import { PageHeader } from '../components/calc'
+import { PageHeader, CalcBody } from '../components/calc'
+import { Card, ResultCard } from '../components/qty'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -95,7 +96,8 @@ export default function WoodSlab() {
   return (
         <div>
       <PageHeader title="Wood slab — deck on joists" badges={['NDS 2018 §3', 'NSCP 2015 §6']} />
-      <main className="mx-auto max-w-3xl px-5 py-6">
+      <CalcBody wide>
+        <div className="space-y-5">
       <ReportControls title="Wood Slab Design Report" badges={['NDS 2018 §3', 'NSCP 2015 §6']} />
       <p className="mt-2 text-sm text-slate-600">
         ASD design of a wood floor slab: decking (planks or bamboo slats) spanning between repetitive
@@ -104,17 +106,18 @@ export default function WoodSlab() {
         from the decking (C_L = 1). Bamboo values are preliminary (ISO 22156 / published).
       </p>
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Plan &amp; loads</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <Card title="Plan & loads">
+        <div className="col-span-full grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Field label="Lx (joist span)" unit="m" value={Lx} onChange={setLx} />
           <Field label="Ly (joists repeat)" unit="m" value={Ly} onChange={setLy} />
           <Field label="Superimposed dead" unit="kPa" value={deadKpa} onChange={setDeadKpa} />
           <Field label="Live load" unit="kPa" value={liveKpa} onChange={setLiveKpa} />
         </div>
 
-        <h2 className="mb-3 mt-5 text-[1.05rem] font-bold text-[#0056b3]">Joists</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        </Card>
+
+      <Card title="Joists">
+        <div className="col-span-full grid grid-cols-2 gap-3 sm:grid-cols-4">
           <label className="flex flex-col text-sm">
             <span className="mb-1 font-medium text-slate-600">Species</span>
             <select value={species} onChange={(e) => { setSpecies(e.target.value); const g = gradesOf(e.target.value); if (g.length) setGrade(g[0].grade) }}
@@ -142,8 +145,10 @@ export default function WoodSlab() {
           </label>
         </div>
 
-        <h2 className="mb-3 mt-5 text-[1.05rem] font-bold text-[#0056b3]">Decking</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        </Card>
+
+      <Card title="Decking">
+        <div className="col-span-full grid grid-cols-2 gap-3 sm:grid-cols-4">
           <label className="flex flex-col text-sm">
             <span className="mb-1 font-medium text-slate-600">Material</span>
             <select value={deckMaterial} onChange={(e) => { const m = e.target.value as DeckMaterial; setDeckMaterial(m); setDeckWidth(m === 'bamboo-slat' ? 50 : 140) }}
@@ -164,8 +169,10 @@ export default function WoodSlab() {
           </label>
         </div>
 
-        <h2 className="mb-3 mt-5 text-[1.05rem] font-bold text-[#0056b3]">Service conditions</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        </Card>
+
+      <Card title="Service conditions">
+        <div className="col-span-full grid grid-cols-2 gap-3 sm:grid-cols-4">
           <label className="flex flex-col text-sm">
             <span className="mb-1 font-medium text-slate-600">Load duration (C_D)</span>
             <select value={duration} onChange={(e) => setDuration(e.target.value as LoadDuration)}
@@ -186,16 +193,17 @@ export default function WoodSlab() {
             </select>
           </label>
         </div>
-      </section>
+      </Card>
 
       {r && (
-        <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-3 flex items-baseline justify-between">
-            <h2 className="text-[1.05rem] font-bold text-[#0056b3]">Results</h2>
-            <span className={`rounded px-2.5 py-1 text-sm font-bold ${r.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+        <ResultCard title={
+          <span className="flex w-full items-baseline justify-between gap-3">
+            Results
+            <span className={`rounded px-2.5 py-1 text-[11px] font-bold ${r.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
               {r.ok ? 'SLAB OK' : 'INADEQUATE'} · governing {f2(r.ratio)}
             </span>
-          </div>
+          </span>
+        }>
           <div className="mb-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
             <Out label="Deck self-wt" value={`${f2(r.loads.deckSelfKpa)} kPa`} />
             <Out label="Joist self-wt" value={`${f2(r.loads.joistSelfKpa)} kPa`} />
@@ -263,9 +271,10 @@ export default function WoodSlab() {
             wood-frame model bill of materials. Verify joist-to-support bearing, fastener schedule and
             diaphragm action separately.
           </p>
-        </section>
+        </ResultCard>
       )}
-    </main>
+        </div>
+      </CalcBody>
     </div>
   )
 }

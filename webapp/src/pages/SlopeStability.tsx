@@ -9,7 +9,8 @@ import { infiniteSlopeFS } from '../engine/geotech'
 import { buildInfiniteSlopeSolution } from '../lib/geotechPageSolutions'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { SoilLayerPicker } from '../components/SoilLayerPicker'
-import { PageHeader } from '../components/calc'
+import { PageHeader, CalcBody } from '../components/calc'
+import { Card, ResultCard } from '../components/qty'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -169,7 +170,8 @@ export default function SlopeStability() {
   return (
         <div>
       <PageHeader title="Slope stability — method of slices" badges={['Bishop', 'Fellenius', 'Janbu']} />
-      <main className="mx-auto max-w-3xl px-5 py-6">
+      <CalcBody wide>
+        <div className="space-y-5">
       <ReportControls title="Slope Stability" badges={['Bishop', 'Fellenius', 'Janbu']} report={report} />
       <p className="mt-2 text-sm text-slate-600">
         Circular-failure factor of safety by the method of slices — Fellenius/OMS, Bishop&rsquo;s simplified and
@@ -188,26 +190,27 @@ export default function SlopeStability() {
           }} />
       </section>
 
-      <section className="mt-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Slope geometry</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <Card title="Slope geometry">
+        <div className="col-span-full grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Field label="Height H" unit="m" value={H} onChange={setH} />
           <Field label="Face angle β" unit="°" value={beta} onChange={setBeta} />
           <Field label="Crest width" unit="m" value={crestW} onChange={setCrestW} />
           <Field label="Toe width" unit="m" value={toeW} onChange={setToeW} />
         </div>
-        <h2 className="mb-3 mt-5 text-[1.05rem] font-bold text-[#0056b3]">Soil &amp; water</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        </Card>
+
+      <Card title="Soil & water">
+        <div className="col-span-full grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Field label="Cohesion c′" unit="kPa" value={c} onChange={setC} />
           <Field label="Friction φ′" unit="°" value={phi} onChange={setPhi} />
           <Field label="Unit weight γ" unit="kN/m³" value={gamma} onChange={setGamma} />
           <Field label="Pore ratio ru" value={ru} onChange={setRu} step="0.05" />
         </div>
-      </section>
+      </Card>
 
-      <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
         <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-[1.05rem] font-bold text-[#0056b3]">Critical circle</h2>
+          <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">Critical circle</h2>
           <label className="flex items-center gap-2 text-sm">
             <span className="text-slate-500">Governing method</span>
             <select value={method} onChange={(e) => setMethod(e.target.value as typeof method)}
@@ -239,8 +242,7 @@ export default function SlopeStability() {
       </section>
 
       {crit && (
-        <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="mb-2 text-[1.05rem] font-bold text-[#0056b3]">Slices (critical circle)</h2>
+        <ResultCard title="Slices (critical circle)">
           <div className="overflow-x-auto">
             <table className="w-full text-right text-[12px]">
               <thead className="text-slate-500">
@@ -265,17 +267,17 @@ export default function SlopeStability() {
             Bishop: FS = Σ[(c·b + (W − u·b)·tanφ)/mα] / Σ[W·sinα], mα = cosα + sinα·tanφ/FS (iterated).
             Fellenius drops the inter-slice terms; Janbu uses force equilibrium × f₀.
           </p>
-        </section>
+        </ResultCard>
       )}
 
       {/* ── Infinite slope — the OTHER failure mode ────────────────────── */}
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-[1.05rem] font-bold text-[#0056b3]">Infinite slope — planar failure</h2>
+      <section className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+        <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">Infinite slope — planar failure</h2>
         <p className="mb-3 text-[11px] text-slate-500">
           A shallow soil mantle sliding on a plane parallel to the ground — over rock, or a firm
           stratum. Uses the same c, φ, γ and slope angle β entered above.
         </p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="col-span-full grid grid-cols-2 gap-3 sm:grid-cols-4">
           <label className="flex flex-col text-sm">
             <span className="mb-1 font-medium text-slate-600">Failure depth z (m)</span>
             <input type="number" step="0.5" value={infZ}
@@ -304,9 +306,11 @@ export default function SlopeStability() {
             </span>
           </span>
         </div>
-        <WorkedSolution steps={infSteps} title="Infinite slope — worked solution" />
       </section>
-    </main>
+
+      <WorkedSolution steps={infSteps} title="Infinite slope — worked solution" />
+        </div>
+      </CalcBody>
     </div>
   )
 }

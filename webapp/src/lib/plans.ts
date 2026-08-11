@@ -11,7 +11,7 @@
 // questions and conflating them is how a paywall ends up inconsistent, with a
 // page reachable but its main button dead for no stated reason.
 //
-// PRICED IN PESOS, because PayMongo settles in pesos. Showing a dollar figure
+// PRICED IN PESOS, because Xendit settles in pesos. Showing a dollar figure
 // while charging a peso one is how a customer ends up disputing a card charge
 // they did not recognise.
 //
@@ -49,7 +49,7 @@ export type BillingPeriod = 'monthly' | 'annual'
 /**
  * Everything is priced in Philippine pesos.
  *
- * Not a cosmetic choice: PayMongo settles in PHP, and a page quoting dollars
+ * Not a cosmetic choice: Xendit settles in PHP, and a page quoting dollars
  * while the card statement reads pesos is a support ticket at best and a
  * chargeback at worst. The currency the customer is shown must be the currency
  * they are charged.

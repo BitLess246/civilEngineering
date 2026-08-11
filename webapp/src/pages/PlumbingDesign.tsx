@@ -9,7 +9,7 @@ import { designDrainage, drainageSolution } from '../engine/drainage'
 import { designSepticTank, septicSolution } from '../engine/septicTank'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { ReportControls } from '../components/ReportControls'
-import { PageHeader } from '../components/calc'
+import { PageHeader, CalcBody } from '../components/calc'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -97,7 +97,8 @@ export default function PlumbingDesign() {
   return (
         <div>
       <PageHeader title="Plumbing System Design" badges={['RNPCP 2000']} />
-      <main className="mx-auto max-w-3xl px-5 py-6">
+      <CalcBody wide>
+        <div className="space-y-5">
       <ReportControls title="Plumbing Design Report" badges={['RNPCP 2000']} />
       <p className="mt-2 text-sm text-slate-600">
         Water supply, sanitary drainage (DWV) and on-site sewage treatment to the Revised National Plumbing Code
@@ -105,9 +106,9 @@ export default function PlumbingDesign() {
       </p>
 
       {/* Shared fixture schedule */}
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm" data-tour="fixture-schedule">
+      <section className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4" data-tour="fixture-schedule">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-[1.05rem] font-bold text-[#0056b3]">Fixture schedule</h2>
+          <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">Fixture schedule</h2>
           <label className="flex items-center gap-2 text-sm">
             <span className="font-medium text-slate-600">Occupancy</span>
             <select value={occ} onChange={(e) => setOcc(e.target.value as Occupancy)}
@@ -143,8 +144,8 @@ export default function PlumbingDesign() {
 
       {tab === 'supply' && (
         <>
-          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm" data-tour="supply-panel">
-            <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Supply run &amp; pressures</h2>
+          <section className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4" data-tour="supply-panel">
+            <h2 className="mb-3 text-[13.5px] font-bold text-[#0f1b2a]">Supply run &amp; pressures</h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Field label="Pipe length" unit="m" value={Lpipe} onChange={setLpipe} />
               <Field label="Fittings (equiv. L)" unit="m" value={fittingLength} onChange={setFittingLength} hint="Table A-2" />
@@ -171,8 +172,8 @@ export default function PlumbingDesign() {
             </div>
           </section>
 
-          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Results</h2>
+          <section className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+            <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Results</h2>
             <Out label="Maximum demand (ΣFU×8)" value={`${f1(supply.demand.maxGpm)} gpm · ${f2(supply.demand.maxLps)} L/s`} />
             <Out label={`Design flow (${supply.flowSource === 'override' ? 'chart' : "Hunter's curve"})`} value={`${f1(supply.designFlowGpm)} gpm · ${f2(supply.designFlowLps)} L/s`} />
             <Out label="Static head (γw·Z)" value={`${f1(supply.staticKPa)} kPa`} />
@@ -194,8 +195,8 @@ export default function PlumbingDesign() {
 
       {tab === 'drainage' && (
         <>
-          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm" data-tour="drainage-panel">
-            <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Drainage run</h2>
+          <section className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4" data-tour="drainage-panel">
+            <h2 className="mb-3 text-[13.5px] font-bold text-[#0f1b2a]">Drainage run</h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <label className="flex flex-col text-sm">
                 <span className="mb-1 font-medium text-slate-600">Sewer slope</span>
@@ -208,8 +209,8 @@ export default function PlumbingDesign() {
               </label>
             </div>
           </section>
-          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Results</h2>
+          <section className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+            <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Results</h2>
             <Out label="Drainage fixture units" value={`${f0(drainage.dfu)} DFU${slopePct <= 1 ? ` · design ${f1(drainage.effectiveDfu)} (1% ×1.25)` : ''}`} />
             <Out label="Drain (horizontal & vertical)" value={`${f0(drainage.drainMm)} mm`} ok={drainage.wcCount === 0 || drainage.drainMm >= 75} />
             <Out label="Vent" value={`${f0(drainage.ventMm)} mm`} ok={drainage.ventOK} />
@@ -226,15 +227,15 @@ export default function PlumbingDesign() {
       )}
       {tab === 'septic' && (
         <>
-          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm" data-tour="septic-panel">
-            <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Tank geometry</h2>
+          <section className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4" data-tour="septic-panel">
+            <h2 className="mb-3 text-[13.5px] font-bold text-[#0f1b2a]">Tank geometry</h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Field label="Plan width" unit="m" value={tankWidth} onChange={setTankWidth} step="0.1" hint="≥ 0.9 m" />
               <Field label="Liquid depth" unit="m" value={liquidDepth} onChange={setLiquidDepth} step="0.1" hint="0.6–1.8 m" />
             </div>
           </section>
-          <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Results</h2>
+          <section className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+            <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Results</h2>
             <Out label="Drainage fixture units" value={`${f0(septic.dfu)} DFU`} />
             <Out label="Min capacity (Table B-2)" value={`${f0(septic.capacityL)} L · ${f2(septic.capacityL / 1000)} m³`} />
             <Out label="Plan length" value={`${f2(septic.length)} m`} ok={septic.capacityOK} />
@@ -255,7 +256,8 @@ export default function PlumbingDesign() {
         <GuidedTour step={tour.step} index={tour.at} total={tour.total}
           onNext={tour.next} onPrev={tour.prev} onClose={tour.close} />
       )}
-    </main>
+        </div>
+      </CalcBody>
     </div>
   )
 }

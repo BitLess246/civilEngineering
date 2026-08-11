@@ -9,7 +9,8 @@ import {
 import { buildSettlementSolution } from '../lib/settlementSolution'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { SoilProfile } from '../components/SoilProfile'
-import { PageHeader } from '../components/calc'
+import { PageHeader, CalcBody } from '../components/calc'
+import { Card, ResultCard } from '../components/qty'
 
 function num(v: string, d = 0): number { const n = parseFloat(v); return Number.isFinite(n) ? n : d }
 const f2 = (n: number) => (Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -165,7 +166,8 @@ export default function Settlement() {
   return (
         <div>
       <PageHeader title="Foundation settlement" badges={['Boussinesq', 'Terzaghi', 'Schmertmann']} />
-      <main className="mx-auto max-w-3xl px-5 py-6">
+      <CalcBody wide>
+        <div className="space-y-5">
       <ReportControls title="Foundation Settlement" badges={['Boussinesq', 'Terzaghi', 'Schmertmann']} report={report} />
       <p className="mt-2 text-sm text-slate-600">
         Immediate (elastic and Schmertmann) plus primary consolidation settlement of a rectangular footing on a
@@ -173,9 +175,8 @@ export default function Settlement() {
         branch handled separately, so a stiff crust is not charged virgin compression it will never see.
       </p>
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Footing &amp; groundwater</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <Card title="Footing & groundwater">
+        <div className="col-span-full grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Field label="Bearing pressure q" unit="kPa" value={q} onChange={setQ} />
           <Field label="Width B" unit="m" value={B} onChange={setB} step="0.1" />
           <Field label="Length L" unit="m" value={L} onChange={setL} step="0.1" />
@@ -185,7 +186,7 @@ export default function Settlement() {
           <Field label="Poisson ν" value={nu} onChange={setNu} step="0.05" />
           <Field label="Time horizon" unit="yr" value={years} onChange={setYears} step="1" />
         </div>
-      </section>
+      </Card>
 
       <section data-pdf-drawing className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm
         [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
@@ -235,17 +236,15 @@ export default function Settlement() {
         </p>
       </section>
 
-      <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Stress increase below the footing</h2>
+      <ResultCard title="Stress increase below the footing">
         <StressProfile q={q} B={B} L={L} Df={Df} zMax={Math.max(totalDepth, 2 * B)} />
         <p className="mt-2 text-[11px] text-slate-500">
           Boussinesq at the footing CENTRE, where the stress and therefore the settlement peak. The 2:1 rule is the
           average over the spread area, so it sits below the centre value and the two converge with depth.
         </p>
-      </section>
+      </ResultCard>
 
-      <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-2 text-[1.05rem] font-bold text-[#0056b3]">Settlement</h2>
+      <ResultCard title="Settlement">
         <Out label="Immediate — elastic" value={`${f1(elastic)} mm`} sub="q·B·(1−ν²)·If/Es" />
         <Out label="Immediate — Schmertmann" value={`${f1(schmert.settlement)} mm`}
           sub={`C₁ ${f2(schmert.C1)} · C₂ ${f2(schmert.C2)} · Izp ${f2(schmert.Izp)}`} />
@@ -257,10 +256,9 @@ export default function Settlement() {
         <Out label="Time to 90% consolidation"
           value={Number.isFinite(t90) ? `${f1(t90)} yr` : 'cv not given'}
           sub={govSoil ? `drainage path ${f2(drainagePath(govSoil))} m` : undefined} />
-      </section>
+      </ResultCard>
 
-      <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-2 text-[1.05rem] font-bold text-[#0056b3]">Consolidation by layer</h2>
+      <ResultCard title="Consolidation by layer">
         <div className="overflow-x-auto">
           <table className="w-full text-right text-[12px]">
             <thead className="text-slate-500">
@@ -294,12 +292,13 @@ export default function Settlement() {
           sampled at mid-height. Time factors are the standard closed-form fits to Terzaghi&rsquo;s series, good to
           about 1% — not the series itself.
         </p>
-      </section>
+      </ResultCard>
       {/* The step-by-step already existed and only ever reached the PDF. */}
       <div className="mt-5">
         <WorkedSolution steps={solution} title="Calculation report — worked solution" />
       </div>
-    </main>
+        </div>
+      </CalcBody>
     </div>
   )
 }
