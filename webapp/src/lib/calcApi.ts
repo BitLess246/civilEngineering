@@ -22,11 +22,35 @@ export interface AvailableBeam { Mn: number; Vn: number }
 export interface AvailableColumn { Pn: number; Mnx: number; Mny: number }
 export interface AvailableBolt { shear: number; bearing: number; governing: number }
 
-// Base URL from the build env. Empty ⇒ same-origin (run the api service on the
-// same host, or set VITE_API_URL in .env.local for local dev with split servers).
+// Base URL. Empty is the NORMAL case and now means same-origin: the endpoints
+// are Vercel Edge functions in `webapp/api/steel/`, served from this very
+// deployment at /api/steel/*. `VITE_API_URL` remains for the split-server case
+// (a separate host, or `vercel dev` on another port while Vite serves the SPA).
 const BASE = import.meta.env.VITE_API_URL ?? ''
 
 let warnedLocal = false
+
+/**
+ * The bearer token for a calculation request.
+ *
+ * A signed-in member sends their access token. A GUEST sends the anon key —
+ * which is a real JWT, is public by design (it is inlined into this bundle),
+ * and is what `guest-quota` already relies on for the same reason. Null means
+ * no session layer is configured at all, which is a deployment without
+ * Supabase; the caller falls back to computing in-browser rather than showing
+ * a 401 the visitor cannot act on.
+ *
+ * Imported lazily so the auth client is not pulled into the eager path of a
+ * page that may never calculate anything.
+ */
+async function calcToken(): Promise<string | null> {
+  const { getClient, isAuthConfigured } = await import('./auth/authClient')
+  if (!isAuthConfigured()) return null
+  const client = getClient()
+  if (!client) return null
+  const { data } = await client.auth.getSession()
+  return data.session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY ?? null
+}
 
 /** In-browser fallback when the API is unreachable (dev without the service,
  *  static deploys) or the route is absent (404). Dynamic import keeps the
@@ -35,7 +59,7 @@ async function localFallback<T>(path: string, body: unknown): Promise<T> {
   const local = await import('./calcLocal')
   if (!warnedLocal) {
     warnedLocal = true
-    console.warn(`calc API unreachable at ${BASE || 'same-origin'} — steel results are computed locally in-browser (same engine).`)
+    console.warn(`calc API unreachable at ${BASE || 'same-origin'} — steel results are computed in-browser (same solver module the endpoint runs).`)
   }
   if (path === '/api/steel/beam') return local.localBeam(body as never) as T
   if (path === '/api/steel/column') return local.localColumn(body as never) as T
@@ -44,25 +68,30 @@ async function localFallback<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
-  // NO API CONFIGURED → DO NOT ASK. Without VITE_API_URL the fetch goes to a
-  // same-origin path that a static deploy does not serve, so every calculation
-  // waited on a round trip that was always going to 404 before falling back to
-  // the identical local engine. On the steel page that was the "computing…"
-  // badge sitting there on first load. The fallback is the same engine, so
-  // skipping the doomed request costs nothing but the wait.
-  if (!BASE) return localFallback<T>(path, body)
+  // The endpoints require a Supabase JWT: a member's access token, or the anon
+  // key for a guest. Both are things the SPA already has; without either there
+  // is no session layer configured at all, and the fallback is the honest
+  // answer rather than a 401 the visitor can do nothing about.
+  const token = await calcToken()
+  if (!token) return localFallback<T>(path, body)
 
   let res: Response
   try {
     res = await fetch(`${BASE}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(body),
     })
   } catch {
     return localFallback<T>(path, body)          // network error — API not running
   }
-  if (res.status === 404) return localFallback<T>(path, body)  // route absent (static host)
+  // 404 IS THE SAFE DEGRADATION, AND IT IS DELIBERATE. If the functions are not
+  // deployed — wrong Vercel root directory, a build that dropped them — every
+  // steel page would otherwise break outright. Falling back keeps the site
+  // working on the identical solver. It also means shipping the endpoints
+  // cannot take the site down, which is why the browser copy is still here;
+  // removing it is a follow-up for once /api/steel/* is confirmed live.
+  if (res.status === 404) return localFallback<T>(path, body)
   if (!res.ok) {
     const detail = (await res.json().catch(() => null)) as { error?: string } | null
     const err = new Error(detail?.error ?? `Calculation API error (${res.status})`)

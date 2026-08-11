@@ -5,9 +5,10 @@
 // values the page prints as answers, so the branch and the derivation are
 // worth pinning.
 //
-// The API client falls back to this module whenever the calc service is
-// absent, which is every current deployment, so this is the code path users
-// actually run.
+// It is also what the Vercel Edge functions in `api/steel/` run, so these
+// tests cover the server path and the browser fallback at once — which is the
+// reason both sides share the module rather than each composing the engine
+// their own way.
 // ─────────────────────────────────────────────────────────────────────────
 
 import { describe, it, expect } from 'vitest'
