@@ -193,3 +193,41 @@ describe('persistence', () => {
     expect(canRun(accessFor('/model', false, loadUsage(s)))).toBe(false)
   })
 })
+
+describe('routes that only redirect', () => {
+  // A page folded into another leaves its route behind as a stub so old links
+  // and bookmarks still land somewhere. Two things can go wrong, and both are
+  // silent: the stub falls through to members-only and a guest hits a wall
+  // instead of the replacement, or it keeps its trial entry and the visit is
+  // billed twice — once at the stub, once at the page it redirects to.
+  const APP = Object.values(APP_SRC)[0]
+
+  /** Routes whose element is a bare <Navigate>, read from the router itself. */
+  const redirects = [...APP.matchAll(/<Route\s+path="([^"]+)"\s+element=\{<Navigate\s+to="([^"]+)"/g)]
+    .map((m) => ({ from: m[1], to: m[2] }))
+
+  it('has a redirect for the folded-in bolted-connection page', () => {
+    expect(redirects.map((r) => r.from)).toContain('/bolted-connection')
+    expect(redirects.find((r) => r.from === '/bolted-connection')?.to).toBe('/steel')
+  })
+
+  it('lets a guest through the stub without spending a run', () => {
+    for (const { from } of redirects) {
+      expect(isPublic(from), `${from} should be public`).toBe(true)
+      expect(isTrialRoute(from), `${from} must not hold its own allowance`).toBe(false)
+      expect(accessFor(from, false).kind, from).toBe('public')
+    }
+  })
+
+  it('charges the run at the destination instead', () => {
+    for (const { to } of redirects) {
+      const classified = isTrialRoute(to) || isGated(to) || isPublic(to)
+      expect(classified, `${to} is unclassified`).toBe(true)
+    }
+    // The one that matters: /steel is a trial route, so the visit is counted
+    // there — five free runs, then locked, like every other calculator.
+    expect(isTrialRoute('/steel')).toBe(true)
+    expect(accessFor('/steel', false, { '/steel': GUEST_TRIAL_LIMIT - 1 }).kind).toBe('trial')
+    expect(accessFor('/steel', false, { '/steel': GUEST_TRIAL_LIMIT }).kind).toBe('trial-exhausted')
+  })
+})

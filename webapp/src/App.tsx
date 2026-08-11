@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { Routes, Route, useNavigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import Home from './pages/Home'
 import FoundationDesign from './pages/FoundationDesign'
@@ -49,7 +49,6 @@ import RockAnchor from './pages/RockAnchor'
 import SeismicWizard from './pages/SeismicWizard'
 import WaterTank from './pages/WaterTank'
 import ShotcreteFacing from './pages/ShotcreteFacing'
-import BoltedConnection from './pages/BoltedConnection'
 import WeldedConnection from './pages/WeldedConnection'
 import SlabEstimate from './pages/SlabEstimate'
 import ChbEstimate from './pages/ChbEstimate'
@@ -146,7 +145,12 @@ export default function App() {
         <Route path="/seismic-wizard" element={<RequireAuth><SeismicWizard /></RequireAuth>} />
         <Route path="/water-tank" element={<WaterTank />} />
         <Route path="/shotcrete-facing" element={<ShotcreteFacing />} />
-        <Route path="/bolted-connection" element={<BoltedConnection />} />
+        {/* The standalone bolted-connection page is gone: Steel Design's
+            Connection tab does the same analysis to LRFD, adds φRn per bolt
+            and block shear §J4.3, and prints a worked solution. Redirected
+            rather than dropped — the route was linked from the docs and is in
+            people's bookmarks. */}
+        <Route path="/bolted-connection" element={<Navigate to="/steel" replace />} />
         <Route path="/welded-connection" element={<WeldedConnection />} />
         <Route path="/estimate/slab" element={<RequireAuth><SlabEstimate /></RequireAuth>} />
         <Route path="/estimate/beam" element={<RequireAuth><BeamEstimate /></RequireAuth>} />
