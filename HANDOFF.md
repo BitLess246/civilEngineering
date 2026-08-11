@@ -1909,9 +1909,45 @@ Deflection has no basis: it is a service check either way.
   from `ConnectionCalcInput`/`Result`; welds are solved client-side on their own
   page.
 
-## Still true, and worth knowing
+## The calculation API — now real
 
-`VITE_API_URL` is unset — it is not even in `.env.example` — so `calcApi` always
-takes `localFallback` and runs the identical engine **in the browser**. The live
-gate is the route-level trial counter, not the API. Getting the engine genuinely
-off the client is a deployment task, not a code one.
+~~`VITE_API_URL` is unset … the engine runs in the browser.~~ Superseded: the
+steel solvers now run as **Vercel Edge functions** in `webapp/api/steel/`,
+served same-origin at `/api/steel/{beam,column,connection}`.
+
+- **One solver module, two callers.** The endpoints import `src/lib/calcLocal.ts`
+  directly; so does the browser fallback. The name undersells it now — it is not
+  "local", it is the shared composition, and both sides share it so they cannot
+  disagree about what a beam weighs.
+- **`VITE_API_URL` stays unset.** Empty now means *same origin*, which is the
+  normal case. It exists only for a split setup (`vercel dev` on another port).
+- **`vercel.json` excludes `/api/` from the SPA rewrite.** Without that, a
+  missing function is answered with `index.html` and a 200, and the client tries
+  to parse the HTML shell as a result. With it, a missing function is a clean
+  404 — which `calcApi` treats as "not deployed" and degrades to the browser.
+- **The 404 fallback is deliberate and still there.** It means shipping the
+  endpoints cannot take the site down. Removing it — and with it the engine from
+  the client bundle — is a one-line follow-up, to be done only once
+  `/api/steel/*` is confirmed live in production.
+
+### What the auth check is, and is not
+
+Every call carries a Supabase JWT: a member's access token, or the anon key for
+a guest. Without one, 401. It is a **key** boundary, not an **entitlement**
+boundary — the anon key is public by design. The trial allowance is still
+decided client-side by `TrialGate` against the server-backed count from the
+`guest-quota` Supabase function. **Moving that decision into the endpoint is the
+next step**, and the endpoint is where it now has somewhere to live.
+
+`identify()` **fails closed**: if Supabase is unreachable it returns null and
+the call is refused. An auth check that passes when the auth service is down
+admits everyone exactly when nobody is watching.
+
+### Deploying it
+
+Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` in the Vercel project (the existing
+`VITE_`-prefixed pair also satisfies them). **No service-role key** — these
+endpoints read no tables. Missing config ⇒ 503, logged. See `webapp/api/README.md`.
+
+`vite dev` does not serve `/api/*`, so local development falls back to the
+browser; `vercel dev` exercises the real endpoints.

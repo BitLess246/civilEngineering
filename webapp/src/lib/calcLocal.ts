@@ -1,8 +1,12 @@
-// In-browser fallback for the steel calculation API. Loaded ONLY via dynamic
-// import from calcApi.ts when the API is unreachable (dev without the service,
-// static deploys) — so the engine code lands in a lazy chunk, never in the
-// main bundle, preserving calcApi's no-value-imports rule for the eager path.
-// Compositions mirror the API endpoints 1:1 using the same engine functions.
+// The steel solvers, composed into the shape the pages consume.
+//
+// TWO CALLERS, AND THE NAME NOW UNDERSELLS IT. The Vercel Edge functions in
+// `api/steel/` import these directly — this is what runs on the server. The
+// browser also imports it, but only as the FALLBACK `calcApi.ts` reaches for
+// when /api/steel/* is not deployed (a static preview, `vite dev`), and only
+// via dynamic import, so the engine stays in a lazy chunk and never enters the
+// main bundle. Keeping one module for both is the point: the endpoint and the
+// fallback cannot disagree about what a beam weighs.
 import {
   deriveWSection, beamFlexure, beamShear, beamLoadingSimple,
   columnAxial, weakAxisFlexure, combinedLoading,
