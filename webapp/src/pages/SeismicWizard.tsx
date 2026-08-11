@@ -4,7 +4,8 @@ import {
   nscpSeismicParams, baseShearCoeff, STRUCTURAL_SYSTEMS,
   type SoilProfile, type SeismicSource, type SeismicZone, type Occupancy,
 } from '../engine/nscpSeismic'
-import { PageHeader } from '../components/calc'
+import { PageHeader, CalcBody } from '../components/calc'
+import { ResultCard } from '../components/qty'
 
 const f3 = (n: number) => (Number.isFinite(n) ? n.toFixed(3) : '—')
 
@@ -59,7 +60,8 @@ export default function SeismicWizard() {
   return (
         <div>
       <PageHeader title="NSCP 208 Seismic Wizard" badges={['NSCP 2015 §208']} />
-      <main className="mx-auto max-w-3xl px-5 py-6">
+      <CalcBody wide>
+        <div className="space-y-5">
       <ReportControls title="Seismic Parameters Report" badges={['NSCP 2015 §208']} />
       <p className="mt-2 text-sm text-slate-600">
         Walk through the NSCP 2015 §208 static lateral-force tables — zone, soil, near-source, occupancy and
@@ -77,7 +79,7 @@ export default function SeismicWizard() {
         ))}
       </div>
 
-      <section className="mt-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
         {cur.key === 'zone' && (
           <>
             <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Seismic zone (§208.4.4.1)</h2>
@@ -157,8 +159,7 @@ export default function SeismicWizard() {
       </section>
 
       {/* live results summary */}
-      <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-2 text-[1.05rem] font-bold text-[#0056b3]">Seismic parameters</h2>
+      <ResultCard title="Seismic parameters">
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-4">
           {[['Z', params.Z], ['Na', params.Na], ['Nv', params.Nv], ['Ca', params.Ca],
             ['Cv', params.Cv], ['I', params.I], ['R', params.R], ['T (s)', T]].map(([k, v]) => (
@@ -181,8 +182,9 @@ export default function SeismicWizard() {
           V = Cs·W (§208.5.2.1). Feed Ca, Cv, I, R into the 3D model space seismic generator for the
           full storey-force distribution. Verify the soil profile with a geotechnical investigation.
         </p>
-      </section>
-    </main>
+      </ResultCard>
+        </div>
+      </CalcBody>
     </div>
   )
 }
