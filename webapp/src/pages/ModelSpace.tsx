@@ -33,7 +33,7 @@ import { useSolver } from '../lib/useSolver'
 import type { SolveProgress } from '../engine/progress'
 import { TABLE_204_1, TABLE_204_2, sdlItemKPa, sdlTotal, type SdlItem } from '../engine/deadLoads'
 import { TABLE_205_1, TABLE_206 } from '../engine/liveLoads'
-import type { ConcreteClass } from '../engine/quantities'
+import { concreteClassForFc, type ConcreteClass } from '../engine/quantities'
 import { computeSeismic, buildECases, type SeismicResult, type DriftRow } from '../engine/seismic'
 import type { IrregularityFlag } from '../engine/irregularity'
 import { columnKFactors, type ColumnK } from '../engine/effectiveLength'
@@ -1125,7 +1125,16 @@ export default function ModelSpace() {
   const [lh, setLh] = useState<LetterheadState>(() => initialLetterhead(''))
   const [exporting, setExporting] = useState(false)               // PDF build in flight
   const [ioMenu, setIoMenu] = useState(false)                     // Import/Export dropdown
-  const [concreteClass, setConcreteClass] = useState<ConcreteClass>((si.concreteClass as ConcreteClass) ?? 'A')   // mix class for the take-off
+  // Mix class for the take-off. It FOLLOWS the design f′c rather than sitting
+  // at a hard-coded 'A' — a model designed for 28 MPa was being priced with a
+  // 9-bag Class A mix, which is not the concrete that was designed. The user
+  // can still override it, and once they do the override sticks: `classPin`
+  // holds their choice, `null` means "track f′c". A saved project that already
+  // carries a class is treated as an override, so reopening it does not
+  // silently reprice.
+  const [classPin, setClassPin] = useState<ConcreteClass | null>((si.concreteClass as ConcreteClass) ?? null)
+  const fcClass = useMemo(() => concreteClassForFc(fc), [fc])
+  const concreteClass = useMemo<ConcreteClass>(() => classPin ?? fcClass.klass, [classPin, fcClass])
   const [prices, setPrices] = useState<PriceList>((si.prices as PriceList) ?? {   // unit prices for the costed bill (PHP)
     cementBag: 260, sandM3: 1500, gravelM3: 1600, steelKg: 65, tieWireRoll: 2500, plywoodSheet: 700, lumberM: 25, structuralSteelKg: 120, timberBdFt: 55,
   })
@@ -1205,7 +1214,7 @@ export default function ModelSpace() {
         fc, fy, barDia, tieDia, cover, slabThk, gammaC, qD, qL,
         qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs, methodB, accTor, orth30, evOn, rsaRegular,
         Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, shearDef, tryBars,
-        concreteClass, prices, planSel,
+        concreteClass: classPin ?? undefined, prices, planSel,
         material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu,
         woodSpeciesId, woodGrade, woodWet, matSource, customId,
       }))
@@ -1214,7 +1223,7 @@ export default function ModelSpace() {
     fc, fy, barDia, tieDia, cover, slabThk, gammaC, qD, qL,
     qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs, methodB, accTor, orth30, evOn, rsaRegular,
     Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, shearDef, tryBars,
-    concreteClass, prices, planSel,
+    classPin, prices, planSel,
     material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu,
     woodSpeciesId, woodGrade, woodWet, matSource, customId])
 
@@ -5571,17 +5580,40 @@ export default function ModelSpace() {
             <h2 className="text-xl font-extrabold tracking-tight text-[#0f4c92]">
               Material take-off — Bill of Quantities &amp; Materials
             </h2>
-            <label className="no-print flex items-center gap-2 text-sm">
-              <span className="font-medium text-slate-600">Concrete class</span>
-              <select value={concreteClass} onChange={(e) => setConcreteClass(e.target.value as ConcreteClass)}
-                className="rounded-md border border-slate-300 px-2 py-1 text-sm">
-                <option value="AA">AA (12 bags/m³)</option>
-                <option value="A">A (9)</option>
-                <option value="B">B (7.5)</option>
-                <option value="C">C (6)</option>
-              </select>
-            </label>
+            <div className="no-print flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-sm">
+              <label className="flex items-center gap-2">
+                <span className="font-medium text-slate-600">Concrete class</span>
+                <select value={concreteClass} onChange={(e) => setClassPin(e.target.value as ConcreteClass)}
+                  className="rounded-md border border-slate-300 px-2 py-1 text-sm">
+                  <option value="AA">AA (12 bags/m³)</option>
+                  <option value="A">A (9)</option>
+                  <option value="B">B (7.5)</option>
+                  <option value="C">C (6)</option>
+                </select>
+              </label>
+              {/* Which of the two it is has to be visible, or an overridden
+                  class looks the same as a derived one and the bill quietly
+                  stops matching the design. */}
+              {classPin === null ? (
+                <span className="text-[11.5px] text-slate-500">
+                  from f′c = {f2(fc)} MPa
+                </span>
+              ) : (
+                <button type="button" onClick={() => setClassPin(null)}
+                  className="text-[11.5px] font-semibold text-[#0f4c92] underline underline-offset-2">
+                  overridden — match f′c ({fcClass.klass})
+                </button>
+              )}
+            </div>
           </div>
+
+          {!fcClass.adequate && classPin === null && (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
+              f′c = {f2(fc)} MPa is above Class AA ({f2(fcClass.classFc)} MPa), so no standard NSCP mix
+              class reaches it. The bill below is priced at Class AA — a DESIGNED mix is required, and its
+              cement content will be higher than the 12 bags/m³ assumed here.
+            </p>
+          )}
 
           {/* BOM summary */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">

@@ -12,6 +12,41 @@ export type ConcreteClass = 'AA' | 'A' | 'B' | 'C' | 'custom';
 export const CONCRETE_CLASS_FACTORS: Record<Exclude<ConcreteClass, 'custom'>, number> = {
   AA: 12, A: 9, B: 7.5, C: 6,
 };
+
+/**
+ * Specified 28-day cylinder strength of each standard class, MPa
+ * (DPWH Standard Specifications Item 405 — the 4000 / 3000 / 2500 / 2000 psi
+ * mixes the NSCP class letters correspond to).
+ */
+export const CONCRETE_CLASS_FC: Record<Exclude<ConcreteClass, 'custom'>, number> = {
+  AA: 27.58, A: 20.68, B: 17.24, C: 13.79,
+};
+
+export interface ClassForFc {
+  klass: Exclude<ConcreteClass, 'custom'>;
+  /** The class's own specified strength, MPa. */
+  classFc: number;
+  /** False when the design f'c is above Class AA — a designed mix is needed. */
+  adequate: boolean;
+}
+
+/**
+ * The standard mix class that delivers a given design f'c: the WEAKEST class
+ * whose specified strength still reaches it, since a stronger class only
+ * costs cement.
+ *
+ * Above Class AA (27.58 MPa) no standard class qualifies. The strongest is
+ * returned anyway so the take-off still totals, with `adequate` false — a
+ * take-off that silently prices a 12-bag mix for f'c 35 concrete is worse
+ * than one that prices it and says so.
+ */
+export function concreteClassForFc(fc: number): ClassForFc {
+  const ascending: Exclude<ConcreteClass, 'custom'>[] = ['C', 'B', 'A', 'AA'];
+  for (const klass of ascending) {
+    if (CONCRETE_CLASS_FC[klass] >= fc - 1e-9) return { klass, classFc: CONCRETE_CLASS_FC[klass], adequate: true };
+  }
+  return { klass: 'AA', classFc: CONCRETE_CLASS_FC.AA, adequate: false };
+}
 const STEEL_DENSITY = 7850;   // kg/m³
 const BAR_LENGTH = 6;         // m, commercial length
 const TIE_WIRE_ROLL = 2385;   // m per roll
