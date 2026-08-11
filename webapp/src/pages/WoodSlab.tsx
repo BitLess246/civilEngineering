@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { designWoodSlab, woodSlabTimberSizes, type DeckMaterial, type SlabSupport } from '../engine/woodSlab'
+import { designWoodSlab, woodSlabSolution, woodSlabTimberSizes, type DeckMaterial, type SlabSupport, type WoodSlabInput } from '../engine/woodSlab'
+import { WorkedSolution } from '../components/WorkedSolution'
 import { speciesList, gradesOf, resolveWoodSpecies } from '../engine/woodDesign'
 import type { LoadDuration } from '../engine/woodDesign'
 import { costTimberRows } from '../engine/takeoff'
@@ -87,11 +88,14 @@ export default function WoodSlab() {
   const speciesOptions = speciesList()
   const gradeOptions = gradesOf(species)
 
-  const r = joistRef ? designWoodSlab({
+  // Kept as one object so the worked solution is generated from exactly the
+  // input the solve used, not a re-assembled copy of it.
+  const input: WoodSlabInput | null = joistRef ? {
     Lx, Ly, joistRef, joistKind: sp!.kind, joistB, joistD, joistSpacing, joistSupport,
     deckMaterial, deckThickness, deckWidth, deckSupport,
     deadKpa, liveKpa, opts: { duration, wet },
-  }) : null
+  } : null
+  const r = input ? designWoodSlab(input) : null
 
   return (
         <div>
@@ -273,6 +277,8 @@ export default function WoodSlab() {
           </p>
         </ResultCard>
       )}
+
+      {input && r && <WorkedSolution steps={woodSlabSolution(input, r)} />}
         </div>
       </CalcBody>
     </div>

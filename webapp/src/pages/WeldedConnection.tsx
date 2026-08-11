@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { solveWeldedConnection, type WeldSegment } from '../engine/weldedConnection'
+import { solveWeldedConnection, weldedConnectionSolution, type WeldSegment } from '../engine/weldedConnection'
+import { WorkedSolution } from '../components/WorkedSolution'
 import { ReportControls } from '../components/ReportControls'
 import { PageHeader } from '../components/calc'
 
@@ -139,6 +140,8 @@ export default function WeldedConnection() {
           </div>
         </section>
       </div>
+
+      <WorkedSolution steps={weldedConnectionSolution({ segments: segs, size, FEXX, phi, load: { P, angleDeg: angle, px, py } }, r)} />
     </main>
     </div>
   )

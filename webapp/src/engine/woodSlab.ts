@@ -26,6 +26,7 @@ import {
   woodAdjusted, woodSectionProps, woodUnitWeight, checkWoodBeam,
 } from './woodDesign'
 import { BDFT_PER_M3, type TimberSizeQty } from './takeoff'
+import { type SolutionStep, sn1, sn2, sn3, sn4 } from '../lib/solution'
 
 /** Indicative ASD allowable stresses for flattened / laminated STRUCTURAL BAMBOO
  *  (e.g. Guadua, Bambusa / kawayan).  NOT an NDS-tabulated species — these are
@@ -212,6 +213,90 @@ export function designWoodSlab(i: WoodSlabInput): WoodSlabResult {
     takeoff, ratio, ok: ratio <= 1,
     clause: 'NDS §3.3–§3.4 / NSCP §6 (ASD)',
   }
+}
+
+// ── Worked solution ────────────────────────────────────────────────────────
+// Both members are the same ASD check on a different span and tributary width,
+// so the bending / shear / deflection steps are generated once and reused. The
+// step titles name the member, because a reader scanning the report needs to
+// know whether a FAIL chip belongs to a 25 mm board or a 50×200 joist.
+
+/** The three checks on one flexural run, as steps. `cM`/`cD` are the UDL
+ *  coefficients actually used, so a continuous run prints wL²/10 not wL²/8. */
+function runSteps(name: string, c: FlexuralCheck, support: SlabSupport, tributary: string): SolutionStep[] {
+  const k = FLEX[support]
+  const S = (c.b * c.d * c.d) / 6                      // mm³
+  const { I } = woodSectionProps(c.b, c.d)             // mm⁴
+  const spanLabel = support === 'continuous' ? 'continuous (≥3 equal spans, end span governs)' : 'simple span'
+  return [
+    {
+      title: `${name} — bending`, clause: 'NDS §3.3 / NSCP §6',
+      lines: [
+        { text: `${c.b}×${c.d} mm over ${sn3(c.span)} m, ${spanLabel}. ${tributary}` },
+        { tex: `M = c_M\\,wL^2 = ${sn3(k.M)}\\times ${sn3(c.w)}\\times ${sn3(c.span)}^2 = ${sn3(c.M)}\\ \\text{kN·m}` },
+        { tex: `f_b = \\dfrac{M}{S} = \\dfrac{${sn3(c.M)}\\times 10^6}{${sn2(S)}} = ${sn2(c.fb)}\\ \\text{MPa} \\;${c.fb <= c.FbPrime ? '\\le' : '>'}\\; F_b' = ${sn2(c.FbPrime)}\\ \\text{MPa}` },
+        { text: `Utilisation ${sn2(c.bendingRatio)}. Fb′ is the reference Fb with every applicable NDS §4.3 adjustment; the compression edge is braced by the load it carries, so CL = 1.` },
+      ],
+      pass: c.bendingRatio <= 1,
+    },
+    {
+      title: `${name} — horizontal shear`, clause: 'NDS §3.4.2',
+      lines: [
+        { tex: `V = c_V\\,wL = ${sn2(k.V)}\\times ${sn3(c.w)}\\times ${sn3(c.span)} = ${sn3(c.V)}\\ \\text{kN}` },
+        { tex: `f_v = \\dfrac{3V}{2bd} = \\dfrac{3\\times ${sn3(c.V)}\\times 10^3}{2\\times ${c.b}\\times ${c.d}} = ${sn3(c.fv)}\\ \\text{MPa} \\;${c.fv <= c.FvPrime ? '\\le' : '>'}\\; F_v' = ${sn3(c.FvPrime)}\\ \\text{MPa}` },
+      ],
+      pass: c.shearRatio <= 1,
+      note: 'Shear rarely governs a floor member; deflection usually does.',
+    },
+    {
+      title: `${name} — deflection`, clause: 'NSCP Table 6 (L/360 live, L/240 total)',
+      lines: [
+        { tex: `\\Delta = c_\\Delta\\dfrac{wL^4}{E'I},\\quad c_\\Delta = ${sn4(k.D)},\\; I = ${sn2(I / 1e6)}\\times 10^6\\ \\text{mm}^4` },
+        { tex: `\\Delta_{L} = ${sn2(c.deflLive)}\\ \\text{mm} \\;${c.deflLiveRatio <= 1 ? '\\le' : '>'}\\; \\dfrac{L}{360} = ${sn2(c.deflLiveAllow)}\\ \\text{mm}` },
+        { tex: `\\Delta_{D+L} = ${sn2(c.deflTotal)}\\ \\text{mm} \\;${c.deflTotalRatio <= 1 ? '\\le' : '>'}\\; \\dfrac{L}{240} = ${sn2(c.deflTotalAllow)}\\ \\text{mm}` },
+        { text: 'Deflection uses the SERVICE modulus E′ — the load-duration factor CD raises stresses, never stiffness.' },
+      ],
+      pass: c.deflLiveRatio <= 1 && c.deflTotalRatio <= 1,
+    },
+  ]
+}
+
+/** Step-by-step ASD check of a wood slab, for the printable calculation report. */
+export function woodSlabSolution(i: WoodSlabInput, r: WoodSlabResult): SolutionStep[] {
+  const bamboo = i.deckMaterial === 'bamboo-slat'
+  const deckWidth = i.deckWidth ?? (bamboo ? 50 : 140)
+  const spacingM = i.joistSpacing / 1000
+  return [
+    {
+      title: 'Loads on the floor', clause: 'NSCP §204 / §205',
+      lines: [
+        { text: `Superimposed dead ${sn2(r.loads.deadKpa)} kPa, live ${sn2(r.loads.liveKpa)} kPa.` },
+        { tex: `w_{deck,self} = \\gamma t = ${sn3(woodUnitWeight((i.deckRef ?? (bamboo ? BAMBOO_SLAT_REF : i.joistRef)).G))}\\times \\dfrac{${i.deckThickness}}{1000} = ${sn3(r.loads.deckSelfKpa)}\\ \\text{kPa}` },
+        { tex: `w_{joist,self} = ${sn3(r.loads.joistSelfKpa)}\\ \\text{kPa}\\ \\text{(smeared over the } ${sn2(r.takeoff.area)}\\ \\text{m}^2 \\text{ floor)}` },
+        { tex: `w_{total} = ${sn3(r.loads.totalKpa)}\\ \\text{kPa}` },
+      ],
+      note: 'The deck carries finishes and its own weight only — it sits on the joists, so it never carries them.',
+    },
+    ...runSteps(
+      bamboo ? 'Deck (bamboo slat)' : 'Deck (plank)', r.deck, i.deckSupport ?? 'continuous',
+      `One board spans the ${i.joistSpacing} mm joist spacing and carries the floor pressure over its own ${deckWidth} mm face width.`,
+    ),
+    ...runSteps(
+      'Joist', r.joist, i.joistSupport ?? 'simple',
+      `Each joist carries a tributary strip one spacing wide (${sn3(spacingM)} m) plus its own weight; ${r.takeoff.joistCount} joists at ${i.joistSpacing} mm o.c.`,
+    ),
+    {
+      title: 'Governing utilisation', clause: r.clause,
+      lines: [
+        { tex: `\\text{ratio} = \\max(${sn2(r.deck.ratio)}_{deck},\\ ${sn2(r.joist.ratio)}_{joist}) = ${sn2(r.ratio)}` },
+        { text: r.ok
+          ? `The ${r.joist.ratio >= r.deck.ratio ? 'joist' : 'deck'} governs at ${sn1(r.ratio * 100)}% of its allowable.`
+          : `The ${r.joist.ratio >= r.deck.ratio ? 'joist' : 'deck'} is overstressed at ${sn1(r.ratio * 100)}% — increase the depth, or close the spacing.` },
+      ],
+      pass: r.ok,
+      note: 'Bearing at the joist supports, the fastener schedule and diaphragm action are separate checks, not covered here.',
+    },
+  ]
 }
 
 /** Express a wood-slab take-off as wood-frame BOM rows (TimberSizeQty, board-feet

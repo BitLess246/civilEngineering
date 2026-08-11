@@ -7,6 +7,7 @@
 
 import { twoWayVc, oneWayVc } from './shear';
 import { flexuralSteel, matLayout } from './flexure';
+import { type SolutionStep, sn0, sn1, sn2 } from '../lib/solution';
 
 const PHI_V = 0.75;
 
@@ -271,4 +272,94 @@ export function designPileCap(inp: PileCapInput): PileCapResult {
     steelY: { As: flexY.As, rho: flexY.rho, bars: layoutY.n, spacing: layoutY.spacing, usedMin: flexY.usedMin },
     ldRequired: ldReq, ldAvailable: ldAvail, ldOK: ldAvail >= ldReq,
   };
+}
+
+// ── Worked solution ────────────────────────────────────────────────────────
+// A pile cap fails four different ways and the depth is sized by whichever
+// comes first, so the report has to show all four — a reader who sees only the
+// governing one cannot tell whether the cap is 500 mm deep because of column
+// punching or because a corner pile punched through.
+export function pileCapSolution(inp: PileCapInput, r: PileCapResult): SolutionStep[] {
+  const N = r.coords.length;
+  const rMax = Math.max(...r.reactions);
+  const rMin = Math.min(...r.reactions);
+  const boCol = 2 * (inp.colX + r.d) + 2 * (inp.colY + r.d);
+  const boPile = Math.PI * (inp.pileDia + r.d);
+  const util = (Vu: number, phiVc: number) => (phiVc > 0 ? Vu / phiVc : Infinity);
+  const le = (ok: boolean) => (ok ? '\\le' : '>');
+
+  return [
+    {
+      title: 'Cap plan dimensions', clause: 'Pile layout + edge distance',
+      lines: [
+        { text: `${N} piles at ${inp.spacing} mm c/c, ⌀${inp.pileDia} mm, ${inp.edgeDist} mm from the pile centre to the cap edge.` },
+        { tex: `B_x = 2(x_{max} + e) = ${r.capBx}\\ \\text{mm}, \\quad B_y = 2(y_{max} + e) = ${r.capBy}\\ \\text{mm}` },
+        { text: 'Both are rounded up to the next 25 mm. The cap centroid is taken at the pile-group centroid, so the column is assumed concentric with the group.' },
+      ],
+    },
+    {
+      title: 'Service pile reactions', clause: 'Elastic: Rᵢ = P/N + Mₓ·yᵢ/Σyᵢ² + Mᵧ·xᵢ/Σxᵢ²',
+      lines: [
+        { tex: `R_{max} = \\dfrac{P}{N} + \\dfrac{M_x y_i}{\\sum y_i^2} + \\dfrac{M_y x_i}{\\sum x_i^2} = ${sn1(rMax)}\\ \\text{kN} \\ ${le(r.capacityOK)} \\ R_{allow} = ${sn0(inp.pileCapacity)}\\ \\text{kN}` },
+        { text: `Service load ${sn0(inp.serviceLoad)} kN over ${N} piles; reactions range ${sn1(rMin)} … ${sn1(rMax)} kN.${rMin < 0 ? ' A NEGATIVE reaction is uplift — that pile needs a tension connection into the cap, which this calculator does not size.' : ''}` },
+        { text: 'The cap is taken as rigid, so reactions vary linearly across the group. That is the usual assumption, and it is unconservative for a thin cap on soft piles.' },
+      ],
+      pass: r.capacityOK,
+    },
+    {
+      title: 'Cap thickness', clause: 'ACI 318-14 §13.4.2.1',
+      lines: [
+        { tex: `D = ${r.Dc}\\ \\text{mm}, \\quad d = D - c - \\tfrac{d_b}{2} = ${r.Dc} - ${inp.cover} - \\tfrac{${inp.barDia}}{2} = ${sn1(r.d)}\\ \\text{mm}` },
+        { text: `The depth is searched upward until all four shear checks below pass, then rounded to 25 mm and taken at least ${inp.pileEmbed} mm (pile embedment) + cover + bar.` },
+      ],
+    },
+    {
+      title: 'Two-way (punching) shear at the column', clause: 'ACI §22.6.5 — critical section d/2 from the column face',
+      lines: [
+        { tex: `b_o = 2(c_x + d) + 2(c_y + d) = ${sn0(boCol)}\\ \\text{mm}` },
+        { tex: `V_u = P_u - \\sum R_{u,inside} = ${sn1(r.VuPunchCol)}\\ \\text{kN} \\ ${le(r.punchColOK)} \\ \\phi V_c = ${sn1(r.phiVcPunchCol)}\\ \\text{kN}` },
+        { text: `Utilisation ${sn2(util(r.VuPunchCol, r.phiVcPunchCol))}. Piles whose centres fall inside the critical perimeter are deducted — their reaction never crosses it.` },
+      ],
+      pass: r.punchColOK,
+    },
+    {
+      title: 'Two-way (punching) shear at a pile', clause: 'ACI §22.6.5 — perimeter π(dₚ + d)',
+      lines: [
+        { tex: `b_o = \\pi(d_p + d) = \\pi(${inp.pileDia} + ${sn1(r.d)}) = ${sn0(boPile)}\\ \\text{mm}` },
+        { tex: `V_u = R_{u,max} = ${sn1(r.VuPunchPile)}\\ \\text{kN} \\ ${le(r.punchPileOK)} \\ \\phi V_c = ${sn1(r.phiVcPunchPile)}\\ \\text{kN}` },
+        { text: `Utilisation ${sn2(util(r.VuPunchPile, r.phiVcPunchPile))}. β_c = 1 for a circular pile. This is the check that governs a widely-spaced group, and the easiest of the four to forget by hand.` },
+      ],
+      pass: r.punchPileOK,
+    },
+    {
+      title: 'One-way (beam) shear, both directions', clause: 'ACI §22.5 — critical section d from the column face',
+      lines: [
+        { tex: `\\text{x:}\\quad V_u = ${sn1(r.VuBeamX)}\\ \\text{kN} \\ ${le(r.beamXOK)} \\ \\phi V_c = ${sn1(r.phiVcBeamX)}\\ \\text{kN} \\quad (b = B_y = ${r.capBy}\\ \\text{mm})` },
+        { tex: `\\text{y:}\\quad V_u = ${sn1(r.VuBeamY)}\\ \\text{kN} \\ ${le(r.beamYOK)} \\ \\phi V_c = ${sn1(r.phiVcBeamY)}\\ \\text{kN} \\quad (b = B_x = ${r.capBx}\\ \\text{mm})` },
+        { text: 'Only the piles whose centres lie beyond the critical section contribute; a pile straddling it is taken as fully outside, which is the conservative side.' },
+      ],
+      pass: r.beamXOK && r.beamYOK,
+    },
+    {
+      title: 'Flexure at the column face', clause: 'ACI §13.4.2.1 / §9.6.1.2 (minimum steel)',
+      lines: [
+        { tex: `M_{ux} = \\sum R_u\\left(|x_i| - \\tfrac{c_x}{2}\\right) = ${sn1(r.MuX)}\\ \\text{kN·m} \\ \\to \\ A_s = ${sn0(r.steelX.As)}\\ \\text{mm}^2` },
+        { text: `x-direction: ${r.steelX.bars}–⌀${inp.barDia} at ${sn0(r.steelX.spacing)} mm over the ${r.capBy} mm width, ρ = ${r.steelX.rho.toFixed(4)}${r.steelX.usedMin ? ' — MINIMUM steel governs' : ''}.` },
+        { tex: `M_{uy} = ${sn1(r.MuY)}\\ \\text{kN·m} \\ \\to \\ A_s = ${sn0(r.steelY.As)}\\ \\text{mm}^2` },
+        { text: `y-direction: ${r.steelY.bars}–⌀${inp.barDia} at ${sn0(r.steelY.spacing)} mm over the ${r.capBx} mm width, ρ = ${r.steelY.rho.toFixed(4)}${r.steelY.usedMin ? ' — MINIMUM steel governs' : ''}.` },
+      ],
+    },
+    {
+      title: 'Development of the bottom bars', clause: 'ACI §25.4.2.3',
+      lines: [
+        { tex: `\\ell_d = \\dfrac{3f_y}{40\\lambda\\sqrt{f'_c}\\,(c_b/d_b)}\\,d_b = ${sn0(r.ldRequired)}\\ \\text{mm}` },
+        { tex: `\\ell_{avail} = \\dfrac{B}{2} - \\dfrac{c_{col}}{2} - \\text{cover} = ${sn0(r.ldAvailable)}\\ \\text{mm} \\ ${r.ldOK ? '\\ge' : '<'} \\ ${sn0(r.ldRequired)}\\ \\text{mm}` },
+        { text: r.ldOK
+            ? 'Straight bars develop within the cap.'
+            : 'Straight bars do NOT develop — hook the bar ends (§25.4.3) or widen the cap.' },
+      ],
+      pass: r.ldOK,
+      note: 'K_tr is taken as zero (no confining reinforcement counted), which is the conservative side.',
+    },
+  ];
 }

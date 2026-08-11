@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { designWoodSlab, woodSlabTimberSizes, BAMBOO_SLAT_REF, type WoodSlabInput } from './woodSlab'
+import { designWoodSlab, woodSlabSolution, woodSlabTimberSizes, BAMBOO_SLAT_REF, type WoodSlabInput } from './woodSlab'
 import { getWoodRef, woodSectionProps, woodAdjusted } from './woodDesign'
 import { BDFT_PER_M3, costTimberRows } from './takeoff'
 
@@ -129,5 +129,56 @@ describe('woodSlabTimberSizes — wood-frame BOM connection', () => {
     const r = designWoodSlab({ ...base, deckMaterial: 'bamboo-slat', deckWidth: 50 })
     const [, deck] = woodSlabTimberSizes({ ...base, deckMaterial: 'bamboo-slat', deckWidth: 50 }, r)
     expect(deck.species).toBe('bamboo')
+  })
+})
+
+describe('woodSlabSolution — the printed report', () => {
+  // The solution is presentation, so what can actually break is a PASS chip
+  // disagreeing with the result it claims to report, or a renamed field
+  // silently interpolating `undefined` into an equation. Both are tested.
+  const stepsFor = (i: WoodSlabInput) => woodSlabSolution(i, designWoodSlab(i))
+  const allText = (s: ReturnType<typeof stepsFor>) =>
+    s.flatMap((st) => st.lines.map((ln) => ('tex' in ln ? ln.tex : ln.text))).join('\n')
+
+  it('covers loads, both members and the governing ratio', () => {
+    const s = stepsFor(base)
+    expect(s).toHaveLength(8)   // loads + 3 deck + 3 joist + governing
+    expect(s[0].title).toMatch(/Loads/)
+    expect(s.filter((st) => st.title.startsWith('Deck'))).toHaveLength(3)
+    expect(s.filter((st) => st.title.startsWith('Joist'))).toHaveLength(3)
+    expect(s[7].title).toMatch(/Governing/)
+  })
+
+  it('every PASS chip matches the check it reports', () => {
+    // Force a failure so both polarities are exercised: 5 m joists at 1.9 kPa.
+    for (const i of [base, { ...base, Lx: 5.0, joistSpan: 5.0 }]) {
+      const r = designWoodSlab(i)
+      const s = woodSlabSolution(i, r)
+      const pass = (t: string) => s.find((st) => st.title === t)!.pass
+      expect(pass('Joist — bending')).toBe(r.joist.bendingRatio <= 1)
+      expect(pass('Joist — horizontal shear')).toBe(r.joist.shearRatio <= 1)
+      expect(pass('Joist — deflection')).toBe(r.joist.deflLiveRatio <= 1 && r.joist.deflTotalRatio <= 1)
+      expect(s[s.length - 1].pass).toBe(r.ok)
+    }
+    // and the long span really does fail, or the loop above proved nothing
+    expect(designWoodSlab({ ...base, Lx: 5.0, joistSpan: 5.0 }).ok).toBe(false)
+  })
+
+  it('names the member that governs, and prints no undefined or NaN', () => {
+    const s = stepsFor(base)
+    const r = designWoodSlab(base)
+    expect(allText(s)).not.toMatch(/undefined|NaN/)
+    const last = allText([s[s.length - 1]])
+    expect(last).toMatch(r.joist.ratio >= r.deck.ratio ? /joist/ : /deck/)
+  })
+
+  it('prints the continuous coefficient for a continuous run, not wL²/8', () => {
+    // The deck defaults to continuous; the joist to simple. The two must not
+    // print the same c_M, which is exactly the copy-paste this guards.
+    const s = stepsFor(base)
+    const deckBending = s.find((st) => /^Deck.*bending$/.test(st.title))!
+    const joistBending = s.find((st) => /^Joist.*bending$/.test(st.title))!
+    expect(JSON.stringify(deckBending.lines)).toContain('0.100')   // 1/10
+    expect(JSON.stringify(joistBending.lines)).toContain('0.125')  // 1/8
   })
 })
