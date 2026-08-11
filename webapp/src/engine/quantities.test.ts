@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   concreteMaterials, barTakeoff, lateralTieTakeoff, tieWire,
   estimateSlab, estimateChb, estimateColumn, estimateBeam, estimateBoxCulvert,
+  concreteClassForFc, CONCRETE_CLASS_FC, CONCRETE_CLASS_FACTORS,
 } from './quantities';
 
 describe('shared helpers', () => {
@@ -95,5 +96,46 @@ describe('column / beam / box culvert', () => {
     expect(r.netArea).toBe(4);
     expect(r.volume).toBeCloseTo(20);
     expect(r.rsb.count).toBe(Math.ceil(5 / 0.2) + 1); // 26
+  });
+});
+
+describe('concreteClassForFc — mix class from the design strength', () => {
+  // DPWH Item 405: AA 27.58, A 20.68, B 17.24, C 13.79 MPa
+  // (4000 / 3000 / 2500 / 2000 psi).
+  it('picks the weakest class that still reaches f′c', () => {
+    expect(concreteClassForFc(13.79).klass).toBe('C');
+    expect(concreteClassForFc(17.24).klass).toBe('B');
+    expect(concreteClassForFc(20.68).klass).toBe('A');
+    expect(concreteClassForFc(27.58).klass).toBe('AA');
+  });
+
+  it('rounds UP to the next class, never down', () => {
+    // 21 MPa is the everyday Philippine spec and sits just above Class A.
+    expect(concreteClassForFc(21).klass).toBe('AA');
+    expect(concreteClassForFc(17.25).klass).toBe('A');
+    expect(concreteClassForFc(13.8).klass).toBe('B');
+  });
+
+  it('lands exactly on a class boundary without floating-point drift', () => {
+    // 20.68 must give A, not AA — a bare >= on binary floats is the bug here.
+    for (const [klass, fc] of Object.entries(CONCRETE_CLASS_FC)) {
+      expect(concreteClassForFc(fc).klass).toBe(klass);
+      expect(concreteClassForFc(fc).adequate).toBe(true);
+    }
+  });
+
+  it('flags a design above Class AA instead of pretending', () => {
+    const r = concreteClassForFc(35);
+    expect(r.klass).toBe('AA');       // still totals, so the BOQ is not blank
+    expect(r.adequate).toBe(false);   // but says a designed mix is required
+    expect(r.classFc).toBeCloseTo(27.58, 2);
+  });
+
+  it('a weak f′c does not fall through to nothing', () => {
+    expect(concreteClassForFc(10)).toEqual({ klass: 'C', classFc: 13.79, adequate: true });
+  });
+
+  it('every class the picker offers has both a strength and a cement factor', () => {
+    expect(Object.keys(CONCRETE_CLASS_FC).sort()).toEqual(Object.keys(CONCRETE_CLASS_FACTORS).sort());
   });
 });
