@@ -1143,8 +1143,6 @@ export default function ModelSpace() {
   const [sdlMatT, setSdlMatT] = useState(50)                       // 204-2 thickness, mm
   const [liveOccId, setLiveOccId] = useState('')                   // NSCP 205-1 occupancy ('' = default LL)
   const [tab, setTab] = useState<Tab>('geometry')                 // right-panel tab
-  // The walkthrough. Advancing a step switches the tab too — see `useTour`.
-  const tour = useTour(MODEL_STEPS, (t) => setTab(t as Tab))
   const [orphans, setOrphans] = useState(0)
   // footing plan: base node → '' (isolated) or partner node id (combined)
   const [planSel, setPlanSel] = useState<Record<string, string>>((si.planSel as Record<string, string>) ?? {})
@@ -1826,6 +1824,28 @@ export default function ModelSpace() {
     save(m)
   }
 
+  // The walkthrough. Advancing a step switches the tab too — see `useTour`.
+  //
+  // On a first visit every panel the tour points at is EMPTY, so without this
+  // the guide is a tour of a blank canvas: "assign sections to each member
+  // family" beside a table with no members in it. If there is no model when
+  // the guide opens, it generates the standard grid from the inputs already on
+  // the Geometry tab as a demo, and clears it again on close.
+  //
+  // A model the user ALREADY HAS is never touched. The guide then runs against
+  // their own structure — better than a demo anyway — and there is nothing to
+  // restore, which is the only version of "restore" that cannot lose work.
+  const demoModel = useRef(false)
+  const tour = useTour(MODEL_STEPS, (t) => setTab(t as Tab), {
+    onStart: () => { if (!model) { demoModel.current = true; generate() } },
+    onEnd: () => {
+      if (!demoModel.current) return
+      demoModel.current = false
+      setModeShapeIdx(null)   // stop the mode-shape animation with its model
+      save(null)              // clears the model, results and the autosave key
+    },
+  })
+
   const nodePos = useMemo(() => {
     const map = new Map<string, THREE.Vector3>()
     model?.nodes.forEach((n) => map.set(n.id, new THREE.Vector3(n.x, n.y, n.z)))
@@ -2006,7 +2026,7 @@ export default function ModelSpace() {
         </div>
         <div className="no-print ml-auto flex flex-wrap items-center gap-2">
           {/* Import / Export dropdown (mockup header: one combined button) */}
-          <div className="relative" onMouseLeave={() => setIoMenu(false)}>
+          <div className="relative" onMouseLeave={() => setIoMenu(false)} data-tour="io-menu">
             <button type="button" onClick={() => setIoMenu((v) => !v)}
               className="rounded-md border border-[#d6d3c9] bg-white px-3 py-2 text-[12.5px] font-semibold text-[#3d4a5c] hover:border-[#0f4c92] hover:text-[#0f4c92]">
               Import / Export ▾
@@ -3816,7 +3836,7 @@ export default function ModelSpace() {
                   Lumped-mass free vibration ([K]−ω²[M]). Mass from member &amp; slab self-weight (dead). Request enough
                   modes to accumulate ≥90% of the lateral mass (NSCP 208.5.5).
                 </p>
-                <div className="col-span-full">
+                <div className="col-span-full" data-tour="modal-panel">
                   <button type="button" onClick={runModal} disabled={!model || !!busy || meshErrors} className={btn}>
                     {busy === 'modal' ? '⏳ Solving modes…' : '〰 Run modal analysis'}
                   </button>
@@ -4435,7 +4455,7 @@ export default function ModelSpace() {
           )}
           <LetterheadCard lh={lh} onChange={(p) => setLh((s) => ({ ...s, ...p }))} />
           {/* Results tabs — Schedules · Bill of Quantities · Construction Schedule */}
-          <div className="no-print flex flex-wrap items-center gap-1.5 border-b border-slate-200">
+          <div className="no-print flex flex-wrap items-center gap-1.5 border-b border-slate-200" data-tour="results-tabs">
             {([['schedules', 'Schedules'], ['boq', 'Bill of Quantities'], ['schedule', 'Construction Schedule']] as const).map(([id, label]) => (
               <button key={id} type="button" onClick={() => setResultsTab(id)}
                 className={`rounded-t-md px-3.5 py-2 text-[13px] font-semibold ${resultsTab === id ? 'border-b-2 border-[#0f4c92] text-[#0f4c92]' : 'text-slate-500 hover:text-[#0f4c92]'}`}>

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { TOURS } from './tours'
-import { anchorsOf, nextIndex, prevIndex, isLast, stepAt } from './tour'
+import { anchorsOf, nextIndex, prevIndex, isLast, stepAt, tourLifecycle } from './tour'
 import { SOILS_STEPS } from './soilsTour'
 import { MODEL_STEPS } from './modelTour'
 
@@ -107,13 +107,25 @@ describe('the sequences that trip people up', () => {
     expect(at('analyse')).toBeLessThan(at('design'))
   })
 
-  it('model space skips the advanced analyses', () => {
-    // Modal, pushover and nonlinear are not steps on the way to a designed
-    // structure, and walking a beginner through them is how a guide gets shut.
+  it('model space still skips pushover and nonlinear', () => {
+    // Those two are not steps on the way to a designed structure, and walking
+    // a beginner through them is how a guide gets shut. MODAL is different and
+    // is now included: its mode-shape animation is started by clicking a row
+    // in a table that gives no sign of being clickable, so it is exactly the
+    // kind of thing a walkthrough is for.
     const tabs = MODEL_STEPS.map((s) => s.tab)
-    expect(tabs).not.toContain('modal')
     expect(tabs).not.toContain('pushover')
     expect(tabs).not.toContain('nonlinear')
+    expect(tabs).toContain('modal')
+  })
+
+  it('model space visits modal between the analysis and the design', () => {
+    // Modal needs a solved model and the design does not need modal, so it
+    // belongs after `analyse` and before `design` — which is also its position
+    // in the tab bar, keeping the tour walking forwards.
+    const at = (id: string) => MODEL_STEPS.findIndex((s) => s.id === id)
+    expect(at('analyse')).toBeLessThan(at('modal'))
+    expect(at('modal')).toBeLessThan(at('design'))
   })
 })
 
@@ -133,5 +145,47 @@ describe('navigation stops at the ends rather than wrapping', () => {
   it('never returns undefined for an out-of-range index', () => {
     expect(stepAt(SOILS_STEPS, -5)).toBe(SOILS_STEPS[0])
     expect(stepAt(SOILS_STEPS, 999)).toBe(SOILS_STEPS[SOILS_STEPS.length - 1])
+  })
+})
+
+describe('the demo-model lifecycle', () => {
+  // `ModelSpace` hangs a demo grid off these transitions, so getting them
+  // wrong loses the user's model rather than just showing a clumsy tour.
+  // Replayed as a sequence, because the bugs are all about ORDER.
+  const run = (actions: ('start' | 'close')[]) => {
+    let started = false
+    const fired: string[] = []
+    for (const a of actions) {
+      const t = tourLifecycle(started, a)
+      started = t.started
+      if (t.fire) fired.push(t.fire)
+    }
+    return fired
+  }
+
+  it('pairs one start with one end', () => {
+    expect(run(['start', 'close'])).toEqual(['start', 'end'])
+  })
+
+  it('does not re-load the demo when the guide is reopened mid-tour', () => {
+    expect(run(['start', 'start', 'start', 'close'])).toEqual(['start', 'end'])
+  })
+
+  it('never tears down a model the tour did not create', () => {
+    // A close with no start — a stray Esc, or a close handler that fires twice
+    // — must not reach `save(null)`.
+    expect(run(['close'])).toEqual([])
+    expect(run(['start', 'close', 'close'])).toEqual(['start', 'end'])
+  })
+
+  it('a second run of the guide sets up and tears down again', () => {
+    expect(run(['start', 'close', 'start', 'close'])).toEqual(['start', 'end', 'start', 'end'])
+  })
+
+  it('leaves nothing owed at the end of any balanced sequence', () => {
+    for (const seq of [['start', 'close'], ['start', 'start', 'close', 'close'], ['close', 'start', 'close']] as const) {
+      const fired = run([...seq])
+      expect(fired.filter((f) => f === 'start').length).toBe(fired.filter((f) => f === 'end').length)
+    }
   })
 })
