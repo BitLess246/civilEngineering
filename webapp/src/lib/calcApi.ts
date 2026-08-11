@@ -7,7 +7,7 @@ import type {
   BeamFlexureResult, BeamShearResult, BeamLoadsResult,
   ColumnAxialResult, WeakAxisResult, CombinedResult,
   BoltResult, BoltGroupGeom, EccentricBoltResult,
-  OutOfPlaneResult, PryingResult, BlockShearCase, WeldResult,
+  OutOfPlaneResult, PryingResult, BlockShearCase,
 } from '../engine/steelDesign'
 
 // Base URL from the build env. Empty ⇒ same-origin (run the api service on the
@@ -103,8 +103,10 @@ export interface ConnectionCalcInput {
   threads: boolean
   tPlate: number; FuPlate: number; FyPlate: number
   ex_load: number; ey_load: number; e_out: number; b_gage: number
-  electrode: 'E70' | 'E80' | 'E90' | 'E100'
-  wSize: number
+  // NO WELD FIELDS. The fillet-weld §J2.4 sizing that used to ride along here
+  // was the Steel Design page's weld tab, and that tab was a three-row subset
+  // of /welded-connection's eccentric weld-group solver. The connection
+  // endpoint is bolted-only; welds are solved on their own page.
 }
 export interface ConnectionCalcResult {
   geom: BoltGroupGeom
@@ -113,8 +115,6 @@ export interface ConnectionCalcResult {
   outOfPlane: OutOfPlaneResult | null
   prying: PryingResult | null
   blockShear: BlockShearCase[]
-  weld: WeldResult
-  weldCapacity: number
 }
 export const calcConnection = (input: ConnectionCalcInput) =>
   post<ConnectionCalcResult>('/api/steel/connection', input)

@@ -7,7 +7,7 @@ import {
   deriveWSection, beamFlexure, beamShear, beamLoadingSimple,
   columnAxial, weakAxisFlexure, combinedLoading,
   boltGroupGeom, boltShear, eccentricBoltGroup, outOfPlaneBoltGroup,
-  pryingAction, shearTabBlockShear, weldStrength,
+  pryingAction, shearTabBlockShear,
 } from '../engine/steelDesign'
 import { shapeByName } from '../engine/aiscSections'
 import type {
@@ -56,11 +56,8 @@ export function localConnection(i: ConnectionCalcInput): ConnectionCalcResult {
   const prying = outOfPlane && i.b_gage > 0
     ? pryingAction(outOfPlane.Tmax, outOfPlane.phiTn_crit, i.b_gage, i.ex_edge, i.sy, i.tPlate, i.db, i.FyPlate)
     : null
-  const weld = weldStrength(i.electrode, i.wSize, i.Vu)
   return {
     geom, phiRnBolt, eccentric, outOfPlane, prying,
     blockShear: shearTabBlockShear(i.nRows, i.sy, i.ey, i.ey, i.ex_edge, i.db, i.tPlate, i.FyPlate, i.FuPlate),
-    weld,
-    weldCapacity: weld.phiRnw * 2 * geom.plateH,   // two vertical fillets, full tab height
   }
 }

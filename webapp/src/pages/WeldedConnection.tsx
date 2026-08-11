@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { solveWeldedConnection, weldedConnectionSolution, type WeldSegment } from '../engine/weldedConnection'
+import { FEXX_BY_CLASS, type ElectrodeClass } from '../engine/steelDesign'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { ReportControls } from '../components/ReportControls'
 import { PageHeader } from '../components/calc'
@@ -50,7 +51,12 @@ export default function WeldedConnection() {
   const [angle, setAngle] = useState(90)
   const [px, setPx] = useState(400)
   const [py, setPy] = useState(125)
-  const [FEXX, setFEXX] = useState(480)
+  // Electrode CLASS rather than a bare F_EXX number. The Steel Design page had
+  // a weld tab whose only advantage over this page was that it named the
+  // electrode instead of asking for a stress; that tab is gone, so the naming
+  // moves here. 'custom' keeps the raw entry for a filler not in the table.
+  const [electrode, setElectrode] = useState<ElectrodeClass | 'custom'>('E70')
+  const [FEXX, setFEXX] = useState(FEXX_BY_CLASS.E70)
   const [phi, setPhi] = useState(0.75)
 
   const r = solveWeldedConnection({ segments: segs, size, FEXX, phi, load: { P, angleDeg: angle, px, py } })
@@ -98,8 +104,24 @@ export default function WeldedConnection() {
 
           <h2 className="mb-2 mt-4 text-[13.5px] font-bold text-[#0f1b2a]">Load &amp; weld</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <label className="flex flex-col text-sm">
+              <span className="mb-1 text-slate-600">Electrode</span>
+              <select value={electrode}
+                onChange={(e) => {
+                  const v = e.target.value as ElectrodeClass | 'custom'
+                  setElectrode(v)
+                  if (v !== 'custom') setFEXX(FEXX_BY_CLASS[v])
+                }}
+                className="rounded-md border border-slate-300 px-2.5 py-1.5">
+                {(Object.keys(FEXX_BY_CLASS) as ElectrodeClass[]).map((k) => (
+                  <option key={k} value={k}>{k}XX ({FEXX_BY_CLASS[k]} MPa)</option>
+                ))}
+                <option value="custom">Custom F_EXX…</option>
+              </select>
+            </label>
             {([['Load P (kN)', P, setP], ['Angle (° from +X)', angle, setAngle], ['Fillet leg w (mm)', size, setSize],
-              ['Load at x (mm)', px, setPx], ['Load at y (mm)', py, setPy], ['F_EXX (MPa)', FEXX, setFEXX],
+              ['Load at x (mm)', px, setPx], ['Load at y (mm)', py, setPy],
+              ...(electrode === 'custom' ? [['F_EXX (MPa)', FEXX, setFEXX] as const] : []),
               ['φ (LRFD)', phi, setPhi]] as const).map(([lbl, val, set]) => (
               <label key={lbl} className="flex flex-col text-sm">
                 <span className="mb-1 text-slate-600">{lbl}</span>

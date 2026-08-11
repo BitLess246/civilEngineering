@@ -206,9 +206,14 @@ describe('routes that only redirect', () => {
   const redirects = [...APP.matchAll(/<Route\s+path="([^"]+)"\s+element=\{<Navigate\s+to="([^"]+)"/g)]
     .map((m) => ({ from: m[1], to: m[2] }))
 
-  it('has a redirect for the folded-in bolted-connection page', () => {
-    expect(redirects.map((r) => r.from)).toContain('/bolted-connection')
-    expect(redirects.find((r) => r.from === '/bolted-connection')?.to).toBe('/steel')
+  it('keeps the routes of pages that were split or removed', () => {
+    // /steel was one page with three tabs and is now four pages; /geotech was
+    // an index of tools the sidebar already lists. Both are linked from the
+    // docs, so both still land somewhere useful.
+    const from = redirects.map((r) => r.from)
+    expect(from).toContain('/steel')
+    expect(from).toContain('/geotech')
+    expect(redirects.find((r) => r.from === '/steel')?.to).toBe('/steel/beam')
   })
 
   it('lets a guest through the stub without spending a run', () => {
@@ -224,10 +229,12 @@ describe('routes that only redirect', () => {
       const classified = isTrialRoute(to) || isGated(to) || isPublic(to)
       expect(classified, `${to} is unclassified`).toBe(true)
     }
-    // The one that matters: /steel is a trial route, so the visit is counted
-    // there — five free runs, then locked, like every other calculator.
-    expect(isTrialRoute('/steel')).toBe(true)
-    expect(accessFor('/steel', false, { '/steel': GUEST_TRIAL_LIMIT - 1 }).kind).toBe('trial')
-    expect(accessFor('/steel', false, { '/steel': GUEST_TRIAL_LIMIT }).kind).toBe('trial-exhausted')
+    // The one that matters: the four steel pages each hold their own
+    // allowance — five free runs, then locked, like every other calculator.
+    for (const r of ['/steel/beam', '/steel/column', '/bolted-connection', '/welded-connection']) {
+      expect(isTrialRoute(r), r).toBe(true)
+      expect(accessFor(r, false, { [r]: GUEST_TRIAL_LIMIT - 1 }).kind, r).toBe('trial')
+      expect(accessFor(r, false, { [r]: GUEST_TRIAL_LIMIT }).kind, r).toBe('trial-exhausted')
+    }
   })
 })

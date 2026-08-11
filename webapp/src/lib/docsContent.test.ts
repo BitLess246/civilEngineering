@@ -92,7 +92,9 @@ describe('docs — the catalogue is well formed', () => {
 describe('docs — search', () => {
   it('matches on a control label', () => {
     const hits = DOC_TOOLS.filter((t) => matchesQuery(t, 'unbraced'))
-    expect(hits.map((t) => t.id)).toContain('steel-design')
+    // "Unbraced Lb" is a beam input; since the split it is the beam page's
+    // entry that owns it, not a combined "steel design" one.
+    expect(hits.map((t) => t.id)).toContain('steel-beam')
   })
 
   it('requires every word to match', () => {

@@ -38,7 +38,7 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   // foundations
   '/foundation', '/combined', '/pile-cap', '/retaining-wall',
   // steel, timber and connections
-  '/steel', '/welded-connection', '/wood-slab',
+  '/steel/beam', '/steel/column', '/bolted-connection', '/welded-connection', '/wood-slab',
   // geotechnical
   '/earth-pressure', '/bearing-capacity', '/slope', '/settlement', '/lateral-pile',
   '/soil-nail', '/micropile', '/rock-anchor', '/shotcrete-facing',
@@ -66,7 +66,7 @@ export const PUBLIC_ROUTES: readonly string[] = [
   // it members-only by default, so a guest following an old link hit a wall
   // instead of the page that replaced it — and charging it here would bill the
   // same visit twice.
-  '/bolted-connection', '/geotech',
+  '/steel', '/geotech',
   '/signin', '/signup', '/forgot-password', '/reset-password',
   // Policy and contact pages. A customer must be able to read the terms and
   // find a way to complain WITHOUT an account — and a payment provider

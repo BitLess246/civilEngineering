@@ -221,9 +221,14 @@ export interface WeldResult {
   L_reqd: number   // mm total weld length for Vu
 }
 
+/** Nominal electrode tensile strength, MPa. Exported because the eccentric
+ *  weld-group page offers the same classes and must not carry its own copy of
+ *  the table — two tables is how E80 ends up at 550 on one page and 552 on the
+ *  other. */
+export const FEXX_BY_CLASS: Record<ElectrodeClass, number> = { E70: 482, E80: 550, E90: 620, E100: 690 }
+
 export function weldStrength(electrode: ElectrodeClass, wSize: number, Vu: number): WeldResult {
-  const Fexx: Record<ElectrodeClass, number> = { E70: 482, E80: 550, E90: 620, E100: 690 }
-  const Fex  = Fexx[electrode]
+  const Fex  = FEXX_BY_CLASS[electrode]
   const phiRnw = (PHI_J * 0.6 * Fex * 0.707 * wSize) / 1000   // kN/mm
   return { Fexx: Fex, phiRnw, L_reqd: phiRnw > 0 ? Vu / phiRnw : Infinity }
 }
