@@ -12,6 +12,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import { W_SHAPES } from '../lib/steelShapes'
+import type { DesignBasis } from '../engine/designBasis'
 
 /** Pass/fail value with a tick or a cross. */
 export function Verdict({ pass, value }: { pass: boolean; value: string }) {
@@ -46,5 +47,37 @@ export function ShapePick({ value, onChange }: { value: string; onChange: (v: st
         {W_SHAPES.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
       </select>
     </label>
+  )
+}
+
+/**
+ * LRFD / ASD. AISC 360 is a dual-format specification and the choice changes
+ * BOTH sides of every check — the resistance side (φRn vs Rn/Ω) and the demand
+ * side (factored vs service load combinations). It is deliberately one control
+ * per page rather than a global setting: a report mixing the two would be
+ * wrong, and a preference the user cannot see on the sheet is one they forget
+ * they set.
+ */
+export function BasisPick({ value, onChange }: { value: DesignBasis; onChange: (v: DesignBasis) => void }) {
+  return (
+    <label className="flex flex-col text-sm">
+      <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">Design basis</span>
+      <select value={value} onChange={e => onChange(e.target.value as DesignBasis)}
+        className="rounded-md border border-[#d6d3c9] px-2.5 py-1.5 text-[13px] text-slate-800 focus:border-[#0f4c92] focus:outline-none">
+        <option value="LRFD">LRFD — φRn vs 1.2D + 1.6L</option>
+        <option value="ASD">ASD — Rn/Ω vs D + L</option>
+      </select>
+    </label>
+  )
+}
+
+/** The basis stated where the report will print it. */
+export function BasisNote({ basis }: { basis: DesignBasis }) {
+  return (
+    <p className="col-span-full text-[10px] text-slate-500">
+      {basis === 'LRFD'
+        ? 'LRFD: capacities are φRn, compared against the governing factored combination max(1.4D, 1.2D + 1.6L).'
+        : 'ASD: capacities are the allowable Rn/Ω, compared against the service combination D + L. Do not compare these against factored loads.'}
+    </p>
   )
 }

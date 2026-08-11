@@ -1824,10 +1824,94 @@ not the symptoms.
 
 ## Left open, deliberately
 
-- **Bolted Connection exists twice**: the standalone page computes client-side, the
-  Steel Design tab computes remotely through the protected calc API. That is a fork
-  tied to plan gating, not simple duplication — merging them is a product decision.
+- ~~**Bolted Connection exists twice**~~ — resolved in #564/#565, see below.
 - Steel Design's 3D card is unnumbered, so the card counter skips a number between
   the inputs and the worked solution.
 - The `docs/ValidationMap.md` X001–X004 external cross-checks (ETABS/STAAD/PCA/Excel)
   still need licences.
+
+---
+
+# Steel: four pages, one dual-format engine (PRs #564, #565, and the basis toggle)
+
+## The shape of it now
+
+| Route | What |
+|---|---|
+| `/steel/beam` | §F2 flexure + LTB, §G2.1 shear, L/360 & L/240 deflection |
+| `/steel/column` | §E3 compression, §F6 weak axis, §H1-1 combined |
+| `/bolted-connection` | elastic bolt group, §J3.6/§J3.10, §J4.3 block shear, §J3.7, §J3.9 |
+| `/welded-connection` | eccentric weld group by the weld-as-a-line method, §J2.4 |
+
+`/steel` redirects to `/steel/beam`. Each page holds **its own trial allowance** —
+five free runs each, which is what the pricing page always promised a
+"single-purpose calculator".
+
+Shared: `components/steelUi.tsx` (widgets) and `lib/steelShapes.ts` (catalogue,
+grades). They are separate files because a module exporting **both** components and
+plain values breaks Fast Refresh — the lint rule enforces it, so don't merge them.
+
+## The bolted/welded question, settled
+
+The bolt group used to be solved twice. Steel Design's tab won on completeness
+(φRn per bolt, block shear, a worked solution) and the standalone was deleted —
+then the three things it did better were rebuilt on the survivor: **free-form
+(x, y) bolt patterns**, **double shear**, and the **maximum applied load**.
+
+The weld pair went the *other* way: Steel Design's weld tab was a three-row
+fillet-length check against a full eccentric weld-group solver, so the tab went and
+the standalone stayed, gaining the electrode-class picker the tab had.
+
+`engine/boltedConnection.ts` **is not dead code** — no page imports it, but it is
+the L9 validation benchmark: an independent allowable-stress statement of the
+elastic method cross-checking the `eccentricBoltGroup` path the page runs. Its
+header says so. It also still holds the free-form solver.
+
+## LRFD / ASD — the part to be careful with
+
+`engine/designBasis.ts` owns the φ/Ω pair **per limit state**, split by factor and
+not by chapter: §G2.1(a) rolled webs are 1.00/1.50, slender webs 0.90/1.67.
+
+**The basis changes both sides.** A capacity converted to Rn/Ω but still checked
+against a factored load is conservative by ~1.5; the reverse is unconservative by
+the same, and neither looks wrong on screen. So the load combination travels with
+the basis — `requiredFromDL` — not just the resistance factor.
+
+**The engine did not move to a basis.** `steelDesign.ts` still returns LRFD `phi…`
+fields, so the design pipeline, Model Space, pushover and the validation benchmarks
+— all LRFD-only — are untouched. What is new is that every result also carries its
+**nominal** strength (`Vn`, `Pn`, `Mny`, `Rn_shear`, `Rn_bearing`, `Rn`, `Rnw`), so
+the basis layer states Rn/Ω from Rn rather than dividing φ back out of φRn. The
+available strengths live under honest names on the **calc** result (`avail.…`),
+which only these four pages consume.
+
+Two checks are **re-derived, not rescaled** — the factor is inside the formula:
+
+- **§J3.7** — LRFD divides by φFnv where ASD multiplies by ΩFnt/Fnv. A test asserts
+  the ASD answer is *not* the LRFD one times (1/Ω)/φ, which is what it would be if
+  someone had treated it as a multiplier.
+- **§J3.9 prying** — the plate-flexure factor moves, so a thinner allowable means
+  *more* required thickness.
+
+Deflection has no basis: it is a service check either way.
+
+## Traps
+
+- **A page badge must not name the basis.** The toggle lives inside the calculator,
+  so a header reading "AISC 360-16 LRFD" while the sheet computes ASD would print
+  on the report. The badges say "AISC 360-16" and the basis is stated in the card.
+- **`capacityLabel(basis, 'M', 'x')`** puts the axis on the strength — `Mnx/Ω`, not
+  `Mn/Ωx`.
+- **Verifying a bolt-pattern change needs an eccentricity.** With the load through
+  the centroid there is no torsion, every bolt carries Vu/n, and moving a bolt
+  changes nothing — a check written that way passes without testing anything.
+- **The connection calc endpoint is bolted-only.** The weld fields were removed
+  from `ConnectionCalcInput`/`Result`; welds are solved client-side on their own
+  page.
+
+## Still true, and worth knowing
+
+`VITE_API_URL` is unset — it is not even in `.env.example` — so `calcApi` always
+takes `localFallback` and runs the identical engine **in the browser**. The live
+gate is the route-level trial counter, not the API. Getting the engine genuinely
+off the client is a deployment task, not a code one.

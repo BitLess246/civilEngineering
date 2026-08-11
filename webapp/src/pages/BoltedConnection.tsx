@@ -12,7 +12,8 @@ import type { SolutionStep } from '../lib/solution'
 import { f1, f2, f3 } from '../lib/format'
 import { sn1, sn2 } from '../lib/solution'
 import { PageHeader } from '../components/calc'
-import { CalcBadge, Spinner, Verdict } from '../components/steelUi'
+import { CalcBadge, Spinner, Verdict, BasisPick, BasisNote } from '../components/steelUi'
+import { capacityLabel, demandLabel, factorLabel, SAFETY, type DesignBasis } from '../engine/designBasis'
 
 const ConnectionViewer3D = lazy(() => import('../components/SteelViewer3D').then(m => ({ default: m.ConnectionViewer3D })))
 
@@ -36,6 +37,7 @@ function BoltedConnectionCalc() {
   const [e_out,      setEOut]       = useState(0)
   const [b_gage,     setBGage]      = useState(0)
   const [nShear,     setNShear]     = useState<1 | 2>(1)
+  const [basis,      setBasis]      = useState<DesignBasis>('LRFD')
   // Free-form pattern. `null` means "use the grid above"; the editor seeds
   // itself FROM the grid on the way in, so switching to custom starts from the
   // pattern already on screen rather than from an empty table.
@@ -62,23 +64,29 @@ function BoltedConnectionCalc() {
       threads: threads === 'yes',
       tPlate, FuPlate, FyPlate,
       ex_load, ey_load, e_out, b_gage,
-      nShear, ...(custom && custom.length > 0 ? { bolts: custom } : {}),
+      nShear, basis, ...(custom && custom.length > 0 ? { bolts: custom } : {}),
     }),
     [Vu, Hu, boltGrade, db, nRows, nCols, sy, sx, ey, ex_edge, threads,
-     tPlate, FuPlate, FyPlate, ex_load, ey_load, e_out, b_gage, nShear, custom]
+     tPlate, FuPlate, FyPlate, ex_load, ey_load, e_out, b_gage, nShear, basis, custom]
   )
   const { data: res, loading, error } = useCalcResult<ConnectionCalcResult>(
     () => calcConnection(input), [input]
   )
 
-  const govBlockShear = res && res.blockShear.length
-    ? res.blockShear.reduce((mn, c) => c.phiRn < mn.phiRn ? c : mn, res.blockShear[0])
+  // The governing path on the CHOSEN basis. Picking it off the LRFD `phiRn`
+  // and then printing an ASD number beside it would name the wrong case
+  // whenever the two orders differ.
+  const govAvailBlockShear = res && res.availBlockShear.length
+    ? Math.min(...res.availBlockShear)
     : null
 
   const boltSteps = useMemo((): SolutionStep[] => {
     if (!res) return []
     const { phiRnBolt, geom, eccentric, outOfPlane, prying, blockShear } = res
-    const { Fnv, Ab, phiRn_shear, phiRn_bearing, phiRn } = phiRnBolt
+    const { Fnv, Ab, Rn_shear, Rn_bearing } = phiRnBolt
+    const { basis, avail } = res
+    const F = basis === 'LRFD' ? SAFETY.connection.phi : 1 / SAFETY.connection.omega
+    const fTex = basis === 'LRFD' ? `\\phi` : `1/\\Omega`
     const { n, Ip } = geom
     const M = eccentric.M
     return [
@@ -87,14 +95,15 @@ function BoltedConnectionCalc() {
         lines: [
           { tex: `A_b = \\frac{\\pi}{4} d_b^2 = \\frac{\\pi}{4}(${db})^2 = ${Ab.toFixed(0)}\\text{ mm}^2` },
           { tex: `F_{nv} = ${Fnv}\\text{ MPa}\\quad (${threads==='yes'?'threads in shear plane, N':'threads excluded, X'})` },
-          { tex: `\\phi R_{n,\\text{shear}} = 0.75 F_{nv} A_b = 0.75 \\times ${Fnv} \\times ${Ab.toFixed(0)} / 1000 = ${sn2(phiRn_shear)}\\text{ kN/bolt}` },
+          { tex: `R_{n,\\text{shear}} = F_{nv} A_b n_s = ${sn2(Rn_shear)}\\text{ kN/bolt}` },
+          { tex: `${fTex} R_{n,\\text{shear}} = ${F.toFixed(3)} \\times ${sn2(Rn_shear)} = ${sn2(avail.shear)}\\text{ kN/bolt}\\quad(${basis})` },
         ],
       },
       {
         title: `Bearing on plate §J3.10 — t = ${tPlate} mm, F_u = ${FuPlate} MPa`,
         lines: [
-          { tex: `\\phi R_{n,\\text{br}} = 0.75 \\times 2.4 F_u d_b t = 0.75 \\times 2.4 \\times ${FuPlate} \\times ${db} \\times ${tPlate} / 1000 = ${sn2(phiRn_bearing)}\\text{ kN/bolt}` },
-          { tex: `\\phi R_n\\text{ (governing)} = \\min(${sn2(phiRn_shear)},\\;${sn2(phiRn_bearing)}) = ${sn2(phiRn)}\\text{ kN/bolt}` },
+          { tex: `R_{n,\\text{br}} = 2.4 F_u d_b t = 2.4 \\times ${FuPlate} \\times ${db} \\times ${tPlate} / 1000 = ${sn2(Rn_bearing)}\\text{ kN/bolt}` },
+          { tex: `\\text{Available (governing)} = \\min(${sn2(avail.shear)},\\;${sn2(avail.bearing)}) = ${sn2(avail.governing)}\\text{ kN/bolt}` },
         ],
       },
       {
@@ -105,7 +114,7 @@ function BoltedConnectionCalc() {
           { text: `Direct shear per bolt: Vx = Hu/n = ${(Hu/n).toFixed(2)} kN,  Vy = Vu/n = ${(Vu/n).toFixed(2)} kN` },
           { tex: `V_{x,i} = H_u/n - M y_i / I_p\\quad V_{y,i} = V_u/n + M x_i / I_p` },
           { tex: `R_{\\max} = ${sn2(eccentric.Rmax)}\\text{ kN on bolt }\\textit{${eccentric.critical}}` },
-          { tex: `\\text{Utilisation} = R_{\\max} / (\\phi R_n) = ${sn2(eccentric.Rmax)} / ${sn2(phiRn)} = ${sn2(eccentric.Rmax/phiRn)}\\quad ${eccentric.Rmax<=phiRn?'\\checkmark':'\\times'}` },
+          { tex: `\\text{Utilisation} = ${sn2(eccentric.Rmax)} / ${sn2(avail.governing)} = ${sn2(eccentric.Rmax/avail.governing)}\\quad ${eccentric.Rmax<=avail.governing?'\\checkmark':'\\times'}` },
         ],
       },
       {
@@ -115,8 +124,8 @@ function BoltedConnectionCalc() {
           if (!crit) return []
           const Ab2 = (Math.PI/4)*db*db
           return [
-            { tex: `f_{br} = \\frac{R_{\\max}}{d_b \\cdot t} = \\frac{${sn2(eccentric.Rmax)} \\times 1000}{${db} \\times ${tPlate}} = ${sn1(crit.fbr)}\\text{ MPa}\\quad \\phi F_{br} = 0.75 \\times 2.4 \\times ${FuPlate} = ${sn1(0.75*2.4*FuPlate)}\\text{ MPa}\\quad ${crit.fbr <= 0.75*2.4*FuPlate ? '\\checkmark':'\\times'}` },
-            { tex: `f_v = \\frac{R_{\\max}}{A_b} = \\frac{${sn2(eccentric.Rmax)} \\times 1000}{${Ab2.toFixed(0)}} = ${sn1(crit.fv)}\\text{ MPa}\\quad \\phi F_{nv} = 0.75 \\times ${Fnv} = ${sn1(0.75*Fnv)}\\text{ MPa}\\quad ${crit.fv <= 0.75*Fnv ? '\\checkmark':'\\times'}` },
+            { tex: `f_{br} = \\frac{R_{\\max}}{d_b \\cdot t} = \\frac{${sn2(eccentric.Rmax)} \\times 1000}{${db} \\times ${tPlate}} = ${sn1(crit.fbr)}\\text{ MPa}\\quad \\text{available } F_{br} = ${F.toFixed(3)} \\times 2.4 \\times ${FuPlate} = ${sn1(F*2.4*FuPlate)}\\text{ MPa}\\quad ${crit.fbr <= F*2.4*FuPlate ? '\\checkmark':'\\times'}` },
+            { tex: `f_v = \\frac{R_{\\max}}{A_b} = \\frac{${sn2(eccentric.Rmax)} \\times 1000}{${Ab2.toFixed(0)}} = ${sn1(crit.fv)}\\text{ MPa}\\quad \\text{available } F_{nv} = ${F.toFixed(3)} \\times ${Fnv} = ${sn1(F*Fnv)}\\text{ MPa}\\quad ${crit.fv <= F*Fnv ? '\\checkmark':'\\times'}` },
           ]
         })(),
       },
@@ -147,12 +156,12 @@ function BoltedConnectionCalc() {
       }] : [])] : []),
       {
         title: 'Block shear §J4.3 (shear tab, single bolt line)',
-        lines: blockShear.flatMap(c => [
+        lines: blockShear.flatMap((c, k) => [
           { text: c.label },
           { tex: `A_{gv} = ${c.Agv.toFixed(0)}\\text{ mm}^2\\quad A_{nv} = ${c.Anv.toFixed(0)}\\text{ mm}^2\\quad A_{nt} = ${c.Ant.toFixed(0)}\\text{ mm}^2` },
           { tex: `R_{n,\\text{fract}} = 0.6 F_u A_{nv} + U_{bs} F_u A_{nt} = ${sn1(c.Rn_fract)}\\text{ kN}` },
           { tex: `\\text{cap } = 0.6 F_y A_{gv} + U_{bs} F_u A_{nt} = ${sn1(c.Rn_cap)}\\text{ kN}` },
-          { tex: `\\phi R_n = 0.75 \\times ${sn1(Math.min(c.Rn_fract,c.Rn_cap))} = ${sn1(c.phiRn)}\\text{ kN}\\quad ${Vu<=c.phiRn?'\\checkmark':'\\times'}` },
+          { tex: `${fTex} R_n = ${F.toFixed(3)} \\times ${sn1(Math.min(c.Rn_fract,c.Rn_cap))} = ${sn1(res.availBlockShear[k])}\\text{ kN}\\quad ${Vu<=res.availBlockShear[k]?'\\checkmark':'\\times'}` },
         ]),
       },
     ]
@@ -164,8 +173,14 @@ function BoltedConnectionCalc() {
       {/* ── inputs ── */}
       <div className="space-y-5">
         <Card title={<>Applied load<CalcBadge loading={loading} error={error} /></>}>
-          <Num label="Applied Vu" unit="kN" value={Vu} onChange={setVu} />
-          <Num label="Applied Hu (horizontal)" unit="kN" value={Hu} onChange={setHu} />
+          <BasisPick value={basis} onChange={setBasis} />
+          <Num label={`Applied ${demandLabel(basis, 'V')}`} unit="kN" value={Vu} onChange={setVu} />
+          <Num label={`Applied ${demandLabel(basis, 'H')} (horizontal)`} unit="kN" value={Hu} onChange={setHu} />
+          <BasisNote basis={basis} />
+          <p className="col-span-full text-[10px] text-slate-500">
+            The load is entered directly here, so it is on you to enter a demand that matches the
+            basis — factored for LRFD, service for ASD.
+          </p>
         </Card>
         <Card title="Bolt properties">
             <Pick label="Grade" value={boltGrade} onChange={v => setBoltGrade(v as BoltGrade)}
@@ -286,21 +301,21 @@ function BoltedConnectionCalc() {
       <div className="space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto lg:pr-1">
         {res && (<>
           <ResultCard title="Bolt capacity / bolt">
-            <Row label="φRn shear" value={`${f2(res.phiRnBolt.phiRn_shear)} kN`} />
-            <Row label="φRn bearing" value={`${f2(res.phiRnBolt.phiRn_bearing)} kN`} />
-            <Row label="φRn governing" value={<b>{f2(res.phiRnBolt.phiRn)} kN</b>}
-              sub={nShear === 2 ? 'double shear — 2 planes' : 'single shear — 1 plane'} />
+            <Row label={`${capacityLabel(res.basis, 'R')} shear`} value={`${f2(res.avail.shear)} kN`} />
+            <Row label={`${capacityLabel(res.basis, 'R')} bearing`} value={`${f2(res.avail.bearing)} kN`} />
+            <Row label={`${capacityLabel(res.basis, 'R')} governing`} value={<b>{f2(res.avail.governing)} kN</b>}
+              sub={`${nShear === 2 ? 'double shear' : 'single shear'} · ${factorLabel(res.basis, 'connection')}`} />
           </ResultCard>
           <ResultCard title={`Eccentric group (${res.geom.n} bolts)`}>
             <Row label="Ip" value={`${res.geom.Ip.toFixed(0)} mm²`} />
             <Row label="In-plane M" value={`${res.eccentric.M.toFixed(0)} kN·mm`} />
             <Row label="Critical bolt" value={res.eccentric.critical} sub={`R = ${f2(res.eccentric.Rmax)} kN`} />
-            <Row alert={res.eccentric.Rmax > res.phiRnBolt.phiRn}
-              label="Rmax / φRn"
-              value={<Verdict pass={res.eccentric.Rmax <= res.phiRnBolt.phiRn} value={`${(res.eccentric.Rmax/res.phiRnBolt.phiRn*100).toFixed(0)} %`} />} />
+            <Row alert={res.eccentric.Rmax > res.avail.governing}
+              label={`Rmax / ${capacityLabel(res.basis, 'R')}`}
+              value={<Verdict pass={res.eccentric.Rmax <= res.avail.governing} value={`${(res.eccentric.Rmax/res.avail.governing*100).toFixed(0)} %`} />} />
             <Row label="Bolt shear stress τmax" value={`${f1(res.tauMax)} MPa`}
               sub={`Rmax / (Ab × ${nShear})`} />
-            <Row label="Maximum applied Vu" value={<b>{f2(res.maxVu)} kN</b>}
+            <Row label={`Maximum applied ${demandLabel(res.basis, 'V')}`} value={<b>{f2(res.maxVu)} kN</b>}
               sub="at this eccentricity — the method is linear in the load" />
           </ResultCard>
           <ResultCard title="Per-bolt forces">
@@ -332,15 +347,16 @@ function BoltedConnectionCalc() {
                 tear-out by hand against the pattern you have.
               </p>
             )}
-            {res.blockShear.map(c => (
-              <Row key={c.label} alert={Vu > c.phiRn}
+            {res.blockShear.map((c, k) => (
+              <Row key={c.label} alert={Vu > res.availBlockShear[k]}
                 label={<span className="text-[10px]">{c.label.replace('§J4.3 ', '')}</span>}
-                value={<Verdict pass={Vu <= c.phiRn} value={`φRn = ${f1(c.phiRn)} kN`} />} />
+                value={<Verdict pass={Vu <= res.availBlockShear[k]}
+                  value={`${capacityLabel(res.basis, 'R')} = ${f1(res.availBlockShear[k])} kN`} />} />
             ))}
-            {govBlockShear && (
-              <Row alert={Vu > govBlockShear.phiRn}
+            {govAvailBlockShear !== null && (
+              <Row alert={Vu > govAvailBlockShear}
                 label="Governing block shear"
-                value={<Verdict pass={Vu <= govBlockShear.phiRn} value={`${f1(govBlockShear.phiRn)} kN`} />} />
+                value={<Verdict pass={Vu <= govAvailBlockShear} value={`${f1(govAvailBlockShear)} kN`} />} />
             )}
           </ResultCard>
 
@@ -413,7 +429,7 @@ function BoltedConnectionCalc() {
 export default function BoltedConnection() {
   return (
     <div>
-      <PageHeader title="Bolted Connection" badges={['AISC 360-16 LRFD']} />
+      <PageHeader title="Bolted Connection" badges={['AISC 360-16']} />
       <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
         <p className="no-print mt-1 text-slate-600">
           Eccentrically-loaded bolt group by the elastic method — φRn per bolt in shear and

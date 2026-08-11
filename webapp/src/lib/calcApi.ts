@@ -9,6 +9,18 @@ import type {
   BoltResult, BoltGroupGeom, EccentricBoltResult,
   OutOfPlaneResult, PryingResult, BlockShearCase,
 } from '../engine/steelDesign'
+import type { DesignBasis } from '../engine/designBasis'
+
+/**
+ * AVAILABLE STRENGTHS, on the basis the request asked for: φRn under LRFD,
+ * Rn/Ω under ASD (AISC §B3). These are separate from the engine's `phi…`
+ * fields, which stay LRFD-always so the design pipeline and Model Space — both
+ * LRFD-only — keep reading the numbers they always read. A field named `phiMn`
+ * holding Mn/Ω would be a lie in a structural report.
+ */
+export interface AvailableBeam { Mn: number; Vn: number }
+export interface AvailableColumn { Pn: number; Mnx: number; Mny: number }
+export interface AvailableBolt { shear: number; bearing: number; governing: number }
 
 // Base URL from the build env. Empty ⇒ same-origin (run the api service on the
 // same host, or set VITE_API_URL in .env.local for local dev with split servers).
@@ -66,12 +78,16 @@ export interface BeamCalcInput {
   shapeName: string; Fy: number
   span: number; Lb: number; Cb: number
   wDead: number; wLive: number
+  /** Defaults to LRFD when absent, so an older caller is unaffected. */
+  basis?: DesignBasis
 }
 export interface BeamCalcResult {
   props: DerivedBeamProps
   flex: BeamFlexureResult
   shear: BeamShearResult
   loads: BeamLoadsResult
+  basis: DesignBasis
+  avail: AvailableBeam
 }
 export const calcBeam = (input: BeamCalcInput) =>
   post<BeamCalcResult>('/api/steel/beam', input)
@@ -82,6 +98,7 @@ export interface ColumnCalcInput {
   shapeName: string; Fy: number
   L: number; Kx: number; Ky: number
   Pu: number; Mux: number; Muy: number
+  basis?: DesignBasis
 }
 export interface ColumnCalcResult {
   props: DerivedBeamProps
@@ -89,6 +106,8 @@ export interface ColumnCalcResult {
   flexX: BeamFlexureResult
   weak: WeakAxisResult
   comb: CombinedResult
+  basis: DesignBasis
+  avail: AvailableColumn
 }
 export const calcColumn = (input: ColumnCalcInput) =>
   post<ColumnCalcResult>('/api/steel/column', input)
@@ -110,6 +129,7 @@ export interface ConnectionCalcInput {
   bolts?: { id: string; x: number; y: number }[]
   /** Shear planes crossing each bolt: 1 single, 2 double (§J3.6). */
   nShear?: number
+  basis?: DesignBasis
   threads: boolean
   tPlate: number; FuPlate: number; FyPlate: number
   ex_load: number; ey_load: number; e_out: number; b_gage: number
@@ -133,8 +153,12 @@ export interface ConnectionCalcResult {
    */
   maxVu: number
   /** Shear stress on the critical bolt, MPa — Rmax over the bolt area times
-   *  the shear planes. Reported, not a check: the check is phiRn above. */
+   *  the shear planes. Reported, not a check: the check is the capacity above. */
   tauMax: number
+  basis: DesignBasis
+  avail: AvailableBolt
+  /** Available block-shear strength per case, kN, in `blockShear` order. */
+  availBlockShear: number[]
 }
 export const calcConnection = (input: ConnectionCalcInput) =>
   post<ConnectionCalcResult>('/api/steel/connection', input)

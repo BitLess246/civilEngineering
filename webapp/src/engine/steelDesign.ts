@@ -3,9 +3,13 @@
 // Sections are AiscShape from aiscSections (W-family only for beam/column).
 
 import type { AiscShape } from './aiscSections'
+import { basisFactor, requiredFromDL, type DesignBasis } from './designBasis'
 
 export const E_STEEL = 200_000  // MPa
 
+// The phi values below are the LRFD half of the dual format. Every result type
+// also carries the NOMINAL strength, because `designBasis.ts` needs Rn to state
+// the ASD allowable Rn/Omega — see that module for why the two must not mix.
 const PHI_B = 0.90   // §F1 flexure
 const PHI_C = 0.90   // §E1 compression
 const PHI_J = 0.75   // §J connections
@@ -104,6 +108,11 @@ export function beamFlexure(
 
 export interface BeamShearResult {
   Aw: number; Cv1: number; phiV: number; phiVn: number; hwTw: number
+  /** Nominal shear strength 0.6·Fy·Aw·Cv1, kN. */
+  Vn: number
+  /** True when §G2.1(b) governs, which changes BOTH phi (1.00→0.90) and
+   *  Omega (1.50→1.67) — the basis layer needs to know which pair to use. */
+  slenderWeb: boolean
 }
 
 export function beamShear(s: AiscShape, p: DerivedBeamProps, Fy: number): BeamShearResult {
@@ -120,7 +129,8 @@ export function beamShear(s: AiscShape, p: DerivedBeamProps, Fy: number): BeamSh
     Cv1  = hwTw <= lim1 ? 1.0 : hwTw <= lim2 ? lim1 / hwTw : (1.51 * kv * E) / (Fy * hwTw * hwTw)
     phiV = 0.9
   }
-  return { Aw, Cv1, phiV, phiVn: (phiV * 0.6 * Fy * Aw * Cv1) / 1000, hwTw }
+  const Vn = (0.6 * Fy * Aw * Cv1) / 1000
+  return { Aw, Cv1, phiV, phiVn: phiV * Vn, hwTw, Vn, slenderWeb: phiV !== 1.0 }
 }
 
 // ─── Column axial §E3 ──────────────────────────────────────────────────────
@@ -130,6 +140,8 @@ export function beamShear(s: AiscShape, p: DerivedBeamProps, Fy: number): BeamSh
 export interface ColumnAxialResult {
   slendernessX: number; slendernessY: number; slenderness: number
   Fcr: number; phiPn: number; slenderOK: boolean
+  /** Nominal compressive strength Fcr·Ag, kN. */
+  Pn: number
 }
 
 export function columnAxial(
@@ -143,9 +155,10 @@ export function columnAxial(
   const limit = 4.71 * Math.sqrt(E / Fy)
   const Fe  = (Math.PI ** 2 * E) / slenderness ** 2
   const Fcr = slenderness <= limit ? Math.pow(0.658, Fy / Fe) * Fy : 0.877 * Fe
+  const Pn = (Fcr * s.A) / 1000
   return {
     slendernessX, slendernessY, slenderness, Fcr,
-    phiPn: (PHI_C * Fcr * s.A) / 1000,
+    phiPn: PHI_C * Pn, Pn,
     slenderOK: slenderness <= 200,
   }
 }
@@ -153,12 +166,17 @@ export function columnAxial(
 // ─── Weak-axis flexure §F6 ────────────────────────────────────────────────
 // Compact W-shapes, no LTB about weak axis → Mny = Mp_y = Fy·Zy ≤ 1.6·Fy·Sy.
 
-export interface WeakAxisResult { Sy: number; Zy: number; phiMny: number }
+export interface WeakAxisResult {
+  Sy: number; Zy: number; phiMny: number
+  /** Nominal weak-axis flexural strength, kN·m. */
+  Mny: number
+}
 
 export function weakAxisFlexure(s: AiscShape, p: DerivedBeamProps, Fy: number): WeakAxisResult {
   const Sy  = (2 * p.Iy) / s.bf!
   const cap = Math.min(p.Zy, 1.6 * Sy)   // §F6-1 cap
-  return { Sy, Zy: p.Zy, phiMny: (PHI_B * Fy * cap) / 1e6 }
+  const Mny = (Fy * cap) / 1e6
+  return { Sy, Zy: p.Zy, phiMny: PHI_B * Mny, Mny }
 }
 
 // ─── Combined loading §H1-1 ───────────────────────────────────────────────
@@ -192,6 +210,9 @@ export interface BoltResult {
   phiRn_bearing: number // kN per bolt
   phiRn: number         // governing
   n_reqd: number        // bolts required for Vu
+  /** Nominal strengths, kN per bolt — what `designBasis.available()` needs to
+   *  state the ASD allowable Rn/Ω rather than back it out of φRn. */
+  Rn_shear: number; Rn_bearing: number; Rn: number
 }
 
 /**
@@ -211,10 +232,15 @@ export function boltShear(
   const Fnv = grade === 'A325M'
     ? (threadsInPlane ? 310 : 372)
     : (threadsInPlane ? 372 : 457)   // Table J3.2
-  const phiRn_shear   = (PHI_J * Fnv * Ab * nShear) / 1000
-  const phiRn_bearing = (PHI_J * 2.4 * Fu_conn * db * t_conn) / 1000
+  const Rn_shear   = (Fnv * Ab * nShear) / 1000
+  const Rn_bearing = (2.4 * Fu_conn * db * t_conn) / 1000
+  const phiRn_shear   = PHI_J * Rn_shear
+  const phiRn_bearing = PHI_J * Rn_bearing
   const phiRn  = Math.min(phiRn_shear, phiRn_bearing)
-  return { Ab, Fnv, phiRn_shear, phiRn_bearing, phiRn, n_reqd: Math.ceil(Vu / phiRn) }
+  return {
+    Ab, Fnv, phiRn_shear, phiRn_bearing, phiRn, n_reqd: Math.ceil(Vu / phiRn),
+    Rn_shear, Rn_bearing, Rn: Math.min(Rn_shear, Rn_bearing),
+  }
 }
 
 // ─── Fillet weld §J2.4 ────────────────────────────────────────────────────
@@ -227,6 +253,8 @@ export interface WeldResult {
   Fexx: number
   phiRnw: number   // kN/mm per mm of weld length
   L_reqd: number   // mm total weld length for Vu
+  /** Nominal strength per unit length 0.6·Fexx·0.707·w, kN/mm. */
+  Rnw: number
 }
 
 /** Nominal electrode tensile strength, MPa. Exported because the eccentric
@@ -237,8 +265,9 @@ export const FEXX_BY_CLASS: Record<ElectrodeClass, number> = { E70: 482, E80: 55
 
 export function weldStrength(electrode: ElectrodeClass, wSize: number, Vu: number): WeldResult {
   const Fex  = FEXX_BY_CLASS[electrode]
-  const phiRnw = (PHI_J * 0.6 * Fex * 0.707 * wSize) / 1000   // kN/mm
-  return { Fexx: Fex, phiRnw, L_reqd: phiRnw > 0 ? Vu / phiRnw : Infinity }
+  const Rnw    = (0.6 * Fex * 0.707 * wSize) / 1000            // kN/mm
+  const phiRnw = PHI_J * Rnw
+  return { Fexx: Fex, phiRnw, L_reqd: phiRnw > 0 ? Vu / phiRnw : Infinity, Rnw }
 }
 
 // ─── Beam loading (simple span, uniform load) → Mu, Vu, deflections ───────
@@ -247,7 +276,7 @@ export function weldStrength(electrode: ElectrodeClass, wSize: number, Vu: numbe
 export interface BeamLoadInput { wDead: number; wLive: number; L: number }
 
 export interface BeamLoadsResult {
-  wu: number   // kN/m, factored (max of 1.4D, 1.2D+1.6L)
+  wu: number   // kN/m, required — factored under LRFD, service sum under ASD
   Mu: number   // kN·m
   Vu: number   // kN
   deltaD: number  // mm, dead-load deflection (unfactored)
@@ -256,9 +285,16 @@ export interface BeamLoadsResult {
   limL240: number // mm, L/240
 }
 
-export function beamLoadingSimple(bl: BeamLoadInput, Ix_mm4: number): BeamLoadsResult {
+export function beamLoadingSimple(
+  bl: BeamLoadInput, Ix_mm4: number,
+  /** ASD sums the service loads instead of factoring them. Comparing an ASD
+   *  allowable strength against a FACTORED demand — or the reverse — is the
+   *  error the whole dual format exists to keep apart, so the combination
+   *  travels with the basis rather than being fixed here. */
+  basis: DesignBasis = 'LRFD',
+): BeamLoadsResult {
   const { wDead, wLive, L } = bl
-  const wu   = Math.max(1.4 * wDead, 1.2 * wDead + 1.6 * wLive)
+  const wu   = requiredFromDL(basis, wDead, wLive)
   const Mu   = (wu * L * L) / 8
   const Vu   = (wu * L) / 2
   const Lmm  = L * 1000
@@ -441,9 +477,19 @@ export function outOfPlaneBoltGroup(
   Vu: number,           // kN, applied shear
   boltGrade: BoltGrade,
   db: number,           // mm
-  threadInPlane: boolean
+  threadInPlane: boolean,
+  /**
+   * §J3.7 is written twice in the specification:
+   *   LRFD  F'nt = 1.3Fnt − (Fnt / (φ Fnv)) frv ≤ Fnt
+   *   ASD   F'nt = 1.3Fnt − (Ω Fnt / Fnv)   frv ≤ Fnt
+   * Both are "Fnt over the AVAILABLE shear stress", so one expression covers
+   * them once the factor is chosen — which is why this takes a basis rather
+   * than rescaling an LRFD answer. Rescaling would be wrong here: the factor
+   * is inside the reduction, not outside the result.
+   */
+  basis: DesignBasis = 'LRFD',
 ): OutOfPlaneResult {
-  const phi = PHI_J
+  const k = basisFactor(basis, 'connection')   // φ, or 1/Ω
   const Fnt = BOLT_Fnt[boltGrade]
   const Fnv = boltGrade === 'A325M'
     ? (threadInPlane ? 310 : 372)
@@ -461,8 +507,8 @@ export function outOfPlaneBoltGroup(
     const T   = sumYi2 > 0 ? (M_op * yi) / sumYi2 : 0
     const frv = inPlaneBolts.find(ip => ip.id === b.id)?.fv ?? 0
     const frt = (T * 1000) / Ab
-    const phiFnt_prime = Math.max(0, Math.min(1.3 * Fnt - (Fnt / (phi * Fnv)) * frv, Fnt))
-    const phiTn = (phi * phiFnt_prime * Ab) / 1000
+    const phiFnt_prime = Math.max(0, Math.min(1.3 * Fnt - (Fnt / (k * Fnv)) * frv, Fnt))
+    const phiTn = (k * phiFnt_prime * Ab) / 1000
     const util = phiTn > 0 ? T / phiTn : (T > 0 ? Infinity : 0)
     return { id: b.id, yi, T, frt, frv, phiFnt_prime, phiTn, util, ok: util <= 1.0 }
   })
@@ -510,9 +556,12 @@ export interface PryingResult {
 export function pryingAction(
   T_req: number, phi_Bn: number,
   b: number, a: number, p: number,
-  _tf: number, db: number, Fy: number
+  _tf: number, db: number, Fy: number,
+  /** Affects the PLATE-flexure factor in t_req and t_0 only — `phi_Bn` is
+   *  already the available bolt tension on the caller's basis. */
+  basis: DesignBasis = 'LRFD',
 ): PryingResult {
-  const phi_f = 0.90
+  const phi_f = basisFactor(basis, 'plateFlexure')
   const dh     = db + 2
   const b_prime = b - db / 2
   const a_prime = Math.min(a, 1.25 * b)

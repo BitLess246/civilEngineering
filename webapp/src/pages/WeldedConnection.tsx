@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { solveWeldedConnection, weldedConnectionSolution, type WeldSegment } from '../engine/weldedConnection'
 import { FEXX_BY_CLASS, type ElectrodeClass } from '../engine/steelDesign'
+import { basisFactor, SAFETY, demandLabel, type DesignBasis } from '../engine/designBasis'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { ReportControls } from '../components/ReportControls'
 import { PageHeader } from '../components/calc'
@@ -57,7 +58,12 @@ export default function WeldedConnection() {
   // moves here. 'custom' keeps the raw entry for a filler not in the table.
   const [electrode, setElectrode] = useState<ElectrodeClass | 'custom'>('E70')
   const [FEXX, setFEXX] = useState(FEXX_BY_CLASS.E70)
-  const [phi, setPhi] = useState(0.75)
+  // The raw phi box is gone: 0.75 is the LRFD resistance factor for §J2, and
+  // typing 0.5 into it was the only way to get an ASD answer — with nothing on
+  // the sheet saying which basis the number belonged to. The basis is now the
+  // control, and it sets the factor (phi = 0.75, or 1/Omega = 1/2.00).
+  const [basis, setBasis] = useState<DesignBasis>('LRFD')
+  const phi = basisFactor(basis, 'connection')
 
   const r = solveWeldedConnection({ segments: segs, size, FEXX, phi, load: { P, angleDeg: angle, px, py } })
 
@@ -74,8 +80,10 @@ export default function WeldedConnection() {
       <p className="mt-2 max-w-3xl text-sm text-slate-600">
         Elastic (weld-as-a-line) method for an eccentrically-loaded fillet weld group. Each unit length
         carries the direct share P/L_w plus a torsional share T·ρ/(J/t), T = Pᵧ·eₓ − Pₓ·e_y and
-        J/t = Σ[L³/12 + L·ρ_c²]. The fillet throat is 0.707·w (NSCP 510.2.2 / AISC J2.2), so the design
-        strength per unit length is φ·0.60·F_EXX·0.707·w. Add straight segments anywhere.
+        J/t = Σ[L³/12 + L·ρ_c²]. The fillet throat is 0.707·w (NSCP 510.2.2 / AISC J2.2), so the
+        available strength per unit length is φ·0.60·F_EXX·0.707·w for LRFD, or the same over Ω for
+        ASD. The applied load must be on the same basis: factored for LRFD, service for ASD.
+        Add straight segments anywhere.
       </p>
 
       <div className="mt-6 grid gap-5 lg:grid-cols-[1.1fr_1fr]">
@@ -105,6 +113,14 @@ export default function WeldedConnection() {
           <h2 className="mb-2 mt-4 text-[13.5px] font-bold text-[#0f1b2a]">Load &amp; weld</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <label className="flex flex-col text-sm">
+              <span className="mb-1 text-slate-600">Design basis</span>
+              <select value={basis} onChange={(e) => setBasis(e.target.value as DesignBasis)}
+                className="rounded-md border border-slate-300 px-2.5 py-1.5">
+                <option value="LRFD">LRFD — φ = {SAFETY.connection.phi.toFixed(2)}</option>
+                <option value="ASD">ASD — Ω = {SAFETY.connection.omega.toFixed(2)}</option>
+              </select>
+            </label>
+            <label className="flex flex-col text-sm">
               <span className="mb-1 text-slate-600">Electrode</span>
               <select value={electrode}
                 onChange={(e) => {
@@ -119,10 +135,10 @@ export default function WeldedConnection() {
                 <option value="custom">Custom F_EXX…</option>
               </select>
             </label>
-            {([['Load P (kN)', P, setP], ['Angle (° from +X)', angle, setAngle], ['Fillet leg w (mm)', size, setSize],
+            {([[`Load ${demandLabel(basis, 'P')} (kN)`, P, setP], ['Angle (° from +X)', angle, setAngle], ['Fillet leg w (mm)', size, setSize],
               ['Load at x (mm)', px, setPx], ['Load at y (mm)', py, setPy],
               ...(electrode === 'custom' ? [['F_EXX (MPa)', FEXX, setFEXX] as const] : []),
-              ['φ (LRFD)', phi, setPhi]] as const).map(([lbl, val, set]) => (
+             ] as const).map(([lbl, val, set]) => (
               <label key={lbl} className="flex flex-col text-sm">
                 <span className="mb-1 text-slate-600">{lbl}</span>
                 <input type="number" value={val} onChange={(e) => set(num(e.target.value))} className="rounded-md border border-slate-300 px-2.5 py-1.5" />
@@ -144,7 +160,10 @@ export default function WeldedConnection() {
               ['Torsion T = Pᵧ·eₓ − Pₓ·e_y', `${f2(r.T / 1000)} kN·m`],
               ['Polar inertia J/t = Σ[L³/12 + Lρ²]', `${f2(r.Jt / 1e6)} ×10⁶ mm³`],
               ['Effective throat 0.707·w', `${f2(r.throat)} mm`],
-              ['Design strength / length', `${f2(r.capacityPerLen)} N/mm`]].map(([k, v]) => (
+              // "Design strength" is the LRFD name for it; under ASD the same
+              // number is the ALLOWABLE strength. AISC calls both the available
+              // strength, which is the one word that is true either way.
+              [`Available strength / length (${basis})`, `${f2(r.capacityPerLen)} N/mm`]].map(([k, v]) => (
               <div key={k} className="flex justify-between border-t border-slate-100 py-1"><span className="text-slate-500">{k}</span><span className="font-mono">{v}</span></div>
             ))}
             <div className="flex justify-between border-t border-slate-100 py-1">
@@ -156,7 +175,7 @@ export default function WeldedConnection() {
               <span className="font-mono">{f2(r.reqSize)} mm</span>
             </div>
             <div className="mt-2 flex items-baseline justify-between rounded-lg bg-blue-50 p-2">
-              <span className="text-sm font-semibold text-[#0056b3]">Max allowable load P</span>
+              <span className="text-sm font-semibold text-[#0056b3]">Maximum {demandLabel(basis, 'P')}</span>
               <span className="font-mono text-lg font-bold text-[#0056b3]">{f2(r.maxP)} kN</span>
             </div>
           </div>
