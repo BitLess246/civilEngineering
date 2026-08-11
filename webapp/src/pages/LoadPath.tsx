@@ -69,8 +69,7 @@ export default function LoadPath() {
             </p>
           </Card>
 
-          <fieldset className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <legend className="px-2 text-[1.02rem] font-bold text-[#0056b3]">Area loads</legend>
+          <Card title="Area loads" grid={false}>
             <button type="button" onClick={() => setAreaLoads((ls) => [...ls, { id: uid++, q: 2, cat: 'L' }])}
               className="no-print mb-3 rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">+ Area load</button>
             <div className="space-y-3">
@@ -91,7 +90,7 @@ export default function LoadPath() {
                 </div>
               ))}
             </div>
-          </fieldset>
+          </Card>
 
           <Card title="Wall on the edge beam (optional)">
             <Pick label="Include wall" value={wallOn ? 'yes' : 'no'} onChange={(v) => setWallOn(v === 'yes')}

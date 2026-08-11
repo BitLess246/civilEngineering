@@ -50,7 +50,18 @@ export function ClassPick({ value, onChange }: { value: ConcreteClass; onChange:
 /** Numbered input card (Foundation mockup): mono counter + title header row,
  *  hairline divider, field grid. Numbers auto-increment in DOM order via the
  *  `calc-card` CSS counter in index.css — no per-page wiring. */
-export function Card({ title, hint, children }: { title: ReactNode; hint?: ReactNode; children: ReactNode }) {
+export function Card({ title, hint, grid = true, children }: {
+  title: ReactNode; hint?: ReactNode
+  /**
+   * Lay the children out as a field grid. Off for a card holding a LIST — a
+   * repeating node/member/load editor — where a three-column grid would deal
+   * the rows across columns instead of stacking them. `CalcSection` has had
+   * this escape hatch since the mockup; `Card` needed it the moment the
+   * analysis pages stopped using bespoke fieldsets.
+   */
+  grid?: boolean
+  children: ReactNode
+}) {
   return (
     <section className="calc-card rail-card print-avoid-break rounded-lg border border-[#e3e1da] bg-white">
       <div className="flex items-baseline gap-2.5 border-b border-[#eeece5] px-4 py-3">
@@ -58,7 +69,7 @@ export function Card({ title, hint, children }: { title: ReactNode; hint?: React
         <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">{title}</h2>
         {hint && <span className="ml-auto text-[11px] text-[#a39d8d]">{hint}</span>}
       </div>
-      <div className="grid grid-cols-1 gap-3.5 p-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
+      <div className={grid ? 'grid grid-cols-1 gap-3.5 p-4 sm:grid-cols-2 lg:grid-cols-3' : 'p-4'}>{children}</div>
     </section>
   )
 }

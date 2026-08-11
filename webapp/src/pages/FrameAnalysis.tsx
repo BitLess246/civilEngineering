@@ -109,8 +109,7 @@ export default function FrameAnalysis() {
             </p>
           </Card>
 
-          <fieldset className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <legend className="px-2 text-[1.02rem] font-bold text-[#0056b3]">Nodes</legend>
+          <Card title="Nodes" grid={false}>
             <button type="button" onClick={() => setNodes((ns) => [...ns, { uid: uid++, id: `N${ns.length + 1}`, x: 0, y: 0 }])}
               className="no-print mb-3 rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">+ Node</button>
             <div className="space-y-3">
@@ -126,10 +125,9 @@ export default function FrameAnalysis() {
                 </Shell>
               ))}
             </div>
-          </fieldset>
+          </Card>
 
-          <fieldset className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <legend className="px-2 text-[1.02rem] font-bold text-[#0056b3]">Members</legend>
+          <Card title="Members" grid={false}>
             <button type="button" onClick={() => setMembers((ms) => [...ms, { uid: uid++, id: `m${ms.length + 1}`, i: nodeIds[0] ?? '', j: nodeIds[1] ?? '' }])}
               className="no-print mb-3 rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">+ Member</button>
             <div className="space-y-3">
@@ -145,10 +143,9 @@ export default function FrameAnalysis() {
                 </Shell>
               ))}
             </div>
-          </fieldset>
+          </Card>
 
-          <fieldset className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <legend className="px-2 text-[1.02rem] font-bold text-[#0056b3]">Supports</legend>
+          <Card title="Supports" grid={false}>
             <button type="button" onClick={() => setSupports((ss) => [...ss, { uid: uid++, node: nodeIds[0] ?? '', type: 'pin' }])}
               className="no-print mb-3 rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">+ Support</button>
             <div className="space-y-3">
@@ -160,10 +157,9 @@ export default function FrameAnalysis() {
                 </Shell>
               ))}
             </div>
-          </fieldset>
+          </Card>
 
-          <fieldset className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <legend className="px-2 text-[1.02rem] font-bold text-[#0056b3]">Loads</legend>
+          <Card title="Loads" grid={false}>
             <div className="no-print mb-3 flex flex-wrap gap-2">
               <button type="button" onClick={() => setLoads((ls) => [...ls, { uid: uid++, kind: 'node', node: nodeIds[0] ?? '', Fx: 0, Fy: -50, Mz: 0, cat: 'D' }])}
                 className="rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-3 py-1.5 text-sm font-semibold text-[#0f4c92] hover:bg-[#dce9f7]">+ Node load</button>
@@ -194,7 +190,7 @@ export default function FrameAnalysis() {
                 </Shell>
               ))}
             </div>
-          </fieldset>
+          </Card>
         </div>
 
         <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
@@ -248,7 +244,7 @@ export default function FrameAnalysis() {
       {r && mem && (
         <div className="mt-6">
           <div className="mb-2 flex flex-wrap items-center gap-3">
-            <h2 className="text-[1.02rem] font-bold text-[#0056b3]">Member diagrams</h2>
+            <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">Member diagrams</h2>
             <select value={selMember} onChange={(e) => setSelMember(e.target.value)}
               className="rounded-md border border-slate-300 px-2.5 py-1.5 text-sm">
               {r.members.map((m) => <option key={m.id} value={m.id}>{m.id}</option>)}
@@ -256,13 +252,13 @@ export default function FrameAnalysis() {
             <span className="text-xs text-slate-500">local x from node i · N &gt; 0 tension</span>
           </div>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
               <Diagram xs={mem.xs} ys={mem.N} title={`AXIAL — ${mem.id}`} unit="kN" color="#7c3aed" decimals={1} />
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
               <Diagram xs={mem.xs} ys={mem.V} title="SHEAR" unit="kN" color="#1f77b4" decimals={1} />
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
               <Diagram xs={mem.xs} ys={mem.M} title="MOMENT" unit="kN·m" color="#d62728" decimals={1} />
             </div>
           </div>

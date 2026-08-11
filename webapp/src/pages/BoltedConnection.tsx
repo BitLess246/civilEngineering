@@ -49,7 +49,7 @@ export default function BoltedConnection() {
   return (
         <div>
       <PageHeader title="Eccentric bolted connection" badges={['AISC 360-16']} />
-      <main className="mx-auto max-w-[1400px] px-5 py-6">
+      <main className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
       <ReportControls title="Bolted Connection Report" badges={['AISC 360-16']} />
       <p className="mt-2 max-w-3xl text-sm text-slate-600">
         Elastic (vector) method for an eccentrically-loaded bolt group. Each bolt carries the direct
@@ -58,9 +58,9 @@ export default function BoltedConnection() {
       </p>
 
       <div className="mt-6 grid gap-5 lg:grid-cols-[1.1fr_1fr]">
-        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-[1.05rem] font-bold text-[#0056b3]">Bolt pattern (mm)</h2>
+            <h2 className="text-[13.5px] font-bold text-[#0f1b2a]">Bolt pattern (mm)</h2>
             <button type="button" onClick={addBolt} className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-semibold text-[#0056b3] hover:bg-blue-50">+ Add bolt</button>
           </div>
           <div className="max-h-60 overflow-auto">
@@ -84,7 +84,7 @@ export default function BoltedConnection() {
             </table>
           </div>
 
-          <h2 className="mb-2 mt-4 text-[1.05rem] font-bold text-[#0056b3]">Load &amp; bolts</h2>
+          <h2 className="mb-2 mt-4 text-[13.5px] font-bold text-[#0f1b2a]">Load &amp; bolts</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {([['Load P (kN)', P, setP], ['Angle (° from +X)', angle, setAngle], ['Bolt Ø (mm)', dia, setDia],
               ['Load at x (mm)', px, setPx], ['Load at y (mm)', py, setPy], ['Allow. τ (MPa)', allow, setAllow]] as const).map(([lbl, val, set]) => (
@@ -103,12 +103,12 @@ export default function BoltedConnection() {
         </section>
 
         <section className="space-y-4">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div className="rounded-lg border border-[#e3e1da] bg-[#faf9f6] p-3">
             <ConnectionDrawing geom={r.geom} db={dia} boltForces={r.bolts} critical={r.criticalId}
               Vu={r.Py} Hu={r.Px} ex_load={r.ex} ey_load={r.ey} />
           </div>
-          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm text-sm">
-            <h2 className="mb-1 text-[1.05rem] font-bold text-[#0056b3]">Results</h2>
+          <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4 text-sm">
+            <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Results</h2>
             {[['Load components Pₓ / Pᵧ', `${f2(r.Px)} / ${f2(r.Py)} kN`],
               ['Eccentricity eₓ / e_y', `${f2(r.ex)} / ${f2(r.ey)} mm`],
               ['Torsion T = Pᵧ·eₓ − Pₓ·e_y', `${f2(r.T / 1000)} kN·m`],
@@ -129,10 +129,10 @@ export default function BoltedConnection() {
         </section>
       </div>
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rail-card mt-5 rounded-lg border border-[#e3e1da] bg-white p-4">
         <label className="flex cursor-pointer items-center gap-2">
           <input type="checkbox" checked={showOOP} onChange={(e) => setShowOOP(e.target.checked)} className="h-4 w-4" />
-          <span className="text-[1.05rem] font-bold text-[#0056b3]">Out-of-plane eccentricity &amp; prying (§J3.7 / §J3.9)</span>
+          <span className="text-[13.5px] font-bold text-[#0f1b2a]">Out-of-plane eccentricity &amp; prying (§J3.7 / §J3.9)</span>
         </label>
         {showOOP && (
           <>
@@ -193,7 +193,7 @@ export default function BoltedConnection() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+              <div className="rounded-lg border border-[#e3e1da] bg-[#faf9f6] p-4 text-sm">
                 <h3 className="mb-1 text-sm font-bold text-[#0056b3]">Prying — critical bolt {oop.critical}</h3>
                 {[['Required tension T', `${f2(oop.Tmax)} kN`],
                   ['Available φBn', `${f2(oop.phiTn_crit)} kN`],

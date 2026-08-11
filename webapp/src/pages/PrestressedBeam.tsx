@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { designPrestressed } from '../engine/prestressedBeam'
 import { buildPrestressedSolution } from '../lib/prestressedSolution'
 import { PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
@@ -104,7 +103,7 @@ export default function PrestressedBeam() {
       )}
       <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
         <p className="no-print text-[13px] text-[#5c6675]">
-          <Link to="/" className="font-semibold text-[#0f4c92]">← Home</Link> · Pretensioned bonded beam: PCI losses
+          Pretensioned bonded beam: PCI losses
           (ES/CR/SH/RE), §24.5 transfer & service stress limits, fps per §20.3.2.3.1, φMn ≥ 1.2Mcr, Vci/Vcw, camber.
         </p>
         <div className="no-print mt-4 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(330px,1fr)]">
