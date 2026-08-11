@@ -71,7 +71,11 @@ function CanvasWrap({ children, box, dir = [1.2, 0.9, 1.5] }: {
   dir?: [number,number,number]
 }) {
   return (
-    <div className="no-print h-80 w-full overflow-hidden rounded-lg border border-[#e3e1da] bg-white">
+    // Shorter on a phone. The fit is aspect-correct, so a nearly-square canvas
+    // against a long thin member leaves deep empty bands top and bottom and the
+    // member itself small. 56 (224 px) against a ~370 px width is much closer
+    // to what these scenes actually occupy.
+    <div className="no-print h-56 w-full overflow-hidden rounded-lg border border-[#e3e1da] bg-white sm:h-80">
       <Canvas camera={{ fov: 45, near: 0.01, far: 500 }}>
         {/* The Canvas paints its own background, so the wrapper's colour never
             showed through — the viewport has to be told, not the div. */}
@@ -99,28 +103,55 @@ function CanvasWrap({ children, box, dir = [1.2, 0.9, 1.5] }: {
 
 // ─── Beam 3D ───────────────────────────────────────────────────────────────
 
-function DistLoad({ span, w, top, step = 0.6, scale = 0.5 }: {
-  span: number; w: number; /** y of the top flange, so arrows land ON the beam */ top: number
-  step?: number; scale?: number
+/** Height of the load curtain above the member, m. See `DistLoad`. */
+function udlHeight(depth: number, span: number): number {
+  return Math.max(1.3 * depth, 0.05 * span)
+}
+
+function DistLoad({ span, w, top, bf }: {
+  span: number; w: number
+  /** y of the top flange. */ top: number
+  /** half the flange width — the arrows sit on the NEAR edge, see below. */ bf: number
 }) {
-  const h = top + Math.min(0.9, 0.2 + Math.abs(w) * scale)
-  const positions: number[] = []
-  for (let z = 0.1; z < span - 0.05; z += step) positions.push(z)
+  // THE ARROWS ARE SIZED TO THE MEMBER, NOT TO w.
+  //
+  // They used to be `0.2 + 0.5w` capped at 0.9 m, which for any real load hit
+  // the cap: a 0.31 m deep beam got a 0.9 m curtain — three times its own
+  // depth — so the picture read as a fence with a stick under it, and every
+  // load from 1.4 kN/m upwards drew the identical fence. The magnitude is on
+  // the label; the arrows only have to say "uniform, downward, all along".
+  const len = udlHeight(2 * top, span)
+  const h = top + len
+  // Head proportional to the shaft, or a long arrow degenerates into a line.
+  const headH = Math.min(0.3 * len, 0.22), headR = 0.42 * headH, r = 0.11 * headH
+
+  // ON THE NEAR FLANGE EDGE, NOT THE WEB CENTRELINE. At x = 0 the tips land on
+  // the member axis, which in this view projects ABOVE the silhouette — so the
+  // arrows appeared to stop short and float. x = +bf puts them on the edge the
+  // viewer can actually see them meet.
+  const x = bf * 0.92
+
+  // ARROWS AT BOTH ENDS, so the spine terminates ON one. The arrows used to sit
+  // at the mid-points of n equal strips — (i + ½)·span/n — which leaves half a
+  // strip of bare spine dangling past the outermost arrow at each end, as if
+  // the load ran off the beam. A UDL over the whole span is drawn from support
+  // to support, so the stations are the DIVISION POINTS, 0 … span inclusive.
+  const n = Math.max(4, Math.min(12, Math.round(span / 0.6)))
+  const positions = Array.from({ length: n + 1 }, (_, i) => (i * span) / n)
   return (
     <>
       {positions.map((z, i) => (
-        <Arrow key={i} from={[0, h, z]} to={[0, top + 0.02, z]} color="#16a34a" r={0.025} headR={0.07} headH={0.18} />
+        <Arrow key={i} from={[x, h, z]} to={[x, top, z]} color="#16a34a" r={r} headR={headR} headH={headH} />
       ))}
-      <mesh position={[0, h + 0.02, span / 2]}>
-        <boxGeometry args={[0.04, 0.04, span - 0.2]} />
+      <mesh position={[x, h, span / 2]}>
+        <boxGeometry args={[r * 1.6, r * 1.6, span]} />
         <meshStandardMaterial color="#16a34a" />
       </mesh>
-      {/* An unlabelled load is a decoration: 4 kN/m and 40 kN/m draw the same
-          picture, because the arrow height saturates at 0.9 m. Set above the
-          spine rather than across it, and turned to face the default camera
+      {/* An unlabelled load is a decoration — 4 kN/m and 40 kN/m draw the same
+          picture. Clear of the spine, and turned to face the default camera
           instead of edge-on to it. */}
-      <SceneText position={[0, h + 0.26, span / 2]} rotation={[0, Math.PI / 2, 0]}
-        fontSize={0.22} color="#15803d" anchorX="center">
+      <SceneText position={[x, h + 0.22, span / 2]} rotation={[0, Math.PI / 2, 0]}
+        fontSize={0.2} color="#15803d" anchorX="center">
         {`w = ${w.toFixed(1)} kN/m`}
       </SceneText>
     </>
@@ -151,13 +182,27 @@ export function BeamViewer3D({ shape, span, wDead, wLive }: {
   const shapes = useMemo(() => wShape(shape), [shape])
   const d = (shape.d ?? 250) / 1000 / 2
   const bf = (shape.bf ?? 150) / 1000 / 2
-  const box = useMemo<{ min:[number,number,number]; max:[number,number,number] }>(() => ({
-    min: [-bf * 2, -d * 2 - 0.4, -0.3],
-    max: [ bf * 2, d * 2 + 1.2, span + 0.3],
-  }), [bf, d, span])
+  // The box is what the fit crops to, so slack in it is dead space on screen —
+  // and on a phone, where the canvas is nearly square while the beam is long
+  // and thin, the fit is already leaving bands top and bottom. These bounds are
+  // now what is actually DRAWN: the supports below, the load curtain and its
+  // label above, and half a flange either side.
+  const box = useMemo<{ min:[number,number,number]; max:[number,number,number] }>(() => {
+    const loadTop = d + udlHeight(2 * d, span) + 0.34   // curtain + label
+    const below = d + 0.42                              // support cone + span label
+    return {
+      min: [-bf * 1.2, -below, -0.15],
+      max: [ bf * 1.2, loadTop, span + 0.15],
+    }
+  }, [bf, d, span])
 
   return (
-    <CanvasWrap box={box}>
+    // Flatter than the default three-quarter view. A 6 m beam drawn on a strong
+    // diagonal needs both the full width AND the full height of the frame, so
+    // it ends up small with two empty corners; swinging the camera towards the
+    // side lays the span across the frame instead, while keeping enough
+    // elevation for the I-section to still read as one.
+    <CanvasWrap box={box} dir={[1.4, 0.55, 0.45]}>
       {/* NO ROTATION. `ExtrudedSection` already extrudes along +Z, which is the
           span direction the supports (z = 0 and z = span), the UDL and the
           section label all use. The old −90° about X stood the member UP along
@@ -166,7 +211,7 @@ export function BeamViewer3D({ shape, span, wDead, wLive }: {
           while everything else pointed elsewhere. (The COLUMN view rotates by
           +90° on purpose: a column should stand up.) */}
       <ExtrudedSection shapes={shapes} length={span} color="#8b9fc1" />
-      <DistLoad span={span} w={wDead + wLive} top={d} />
+      <DistLoad span={span} w={wDead + wLive} top={d} bf={bf} />
       <PinSupport3D pos={[0, -d, 0]} />
       <RollerSupport3D pos={[0, -d, span]} />
       {/* +π/2 about Y turns the label's +Z face towards +X, which is where the
@@ -236,8 +281,10 @@ export function ColumnViewer3D({ shape, L, Pu, Mux }: {
           <Arrow from={[-0.75, L + 0.20, 0]} to={[-0.05, L + 0.20, 0]} color="#f59e0b" r={0.03} headR={0.10} headH={0.22} />
           <Arrow from={[ 0.75, L - 0.05, 0]} to={[ 0.05, L - 0.05, 0]} color="#f59e0b" r={0.03} headR={0.10} headH={0.22} />
           {/* Below the couple, not above it: above, the text ran straight
-              through the Pu arrow and its label. */}
-          <SceneText position={[-1.05, L - 0.32, 0]} fontSize={0.2} color="#b45309" anchorX="left">
+              through the Pu arrow and its label. Anchored RIGHT and stopped
+              short of the axis, because a left-anchored label at z = 0 runs
+              its second half inside the column and is occluded by it. */}
+          <SceneText position={[-0.22, L - 0.32, 0]} fontSize={0.2} color="#b45309" anchorX="right">
             {`Mux = ${Mux.toFixed(0)} kN-m`}
           </SceneText>
         </>
