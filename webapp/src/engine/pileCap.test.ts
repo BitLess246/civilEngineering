@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { designPileCap, pileCentres } from './pileCap';
+import { designPileCap, pileCapSolution, pileCentres } from './pileCap';
 
 // Shared base inputs — 4-pile square cap, concentric load
 const BASE = {
@@ -131,5 +131,60 @@ describe('designPileCap — 9-pile cap', () => {
     expect(r.coords).toHaveLength(9);
     expect(r.Dc).toBeGreaterThan(0);
     expect(r.capacityOK).toBe(true);
+  });
+});
+
+describe('pileCapSolution — the printed report', () => {
+  // Four failure modes size the cap and the report has to show all four, so
+  // the step list is asserted by name, not just by count.
+  it('shows every check that sized the cap', () => {
+    const r = designPileCap(BASE);
+    const s = pileCapSolution(BASE, r);
+    const titles = s.map(st => st.title);
+    expect(titles).toEqual([
+      'Cap plan dimensions',
+      'Service pile reactions',
+      'Cap thickness',
+      'Two-way (punching) shear at the column',
+      'Two-way (punching) shear at a pile',
+      'One-way (beam) shear, both directions',
+      'Flexure at the column face',
+      'Development of the bottom bars',
+    ]);
+  });
+
+  it('every PASS chip matches the result it reports', () => {
+    // An overloaded group and a well-behaved one, so both polarities run.
+    for (const inp of [BASE, { ...BASE, serviceLoad: 4000, ultimateLoad: 5600 }]) {
+      const r = designPileCap(inp);
+      const s = pileCapSolution(inp, r);
+      const pass = (t: string) => s.find(st => st.title === t)!.pass;
+      expect(pass('Service pile reactions')).toBe(r.capacityOK);
+      expect(pass('Two-way (punching) shear at the column')).toBe(r.punchColOK);
+      expect(pass('Two-way (punching) shear at a pile')).toBe(r.punchPileOK);
+      expect(pass('One-way (beam) shear, both directions')).toBe(r.beamXOK && r.beamYOK);
+      expect(pass('Development of the bottom bars')).toBe(r.ldOK);
+    }
+    expect(designPileCap({ ...BASE, serviceLoad: 4000, ultimateLoad: 5600 }).capacityOK).toBe(false);
+  });
+
+  it('prints the solver’s own dimensions, steel and no undefined', () => {
+    const r = designPileCap(BASE);
+    const text = pileCapSolution(BASE, r)
+      .flatMap(st => st.lines.map(ln => ('tex' in ln ? ln.tex : ln.text))).join('\n');
+    expect(text).not.toMatch(/undefined|NaN/);
+    expect(text).toContain(String(r.capBx));
+    expect(text).toContain(String(r.Dc));
+    expect(text).toContain(`${r.steelX.bars}–⌀${BASE.barDia}`);
+    expect(text).toContain(`${r.steelY.bars}–⌀${BASE.barDia}`);
+  });
+
+  it('calls out uplift when a pile goes into tension', () => {
+    // Big overturning moment on a 2-pile cap ⇒ one reaction negative.
+    const inp = { ...BASE, nPiles: 2 as const, serviceMomX: 0, serviceMomY: 2000 };
+    const r = designPileCap(inp);
+    expect(Math.min(...r.reactions)).toBeLessThan(0);
+    const step = pileCapSolution(inp, r).find(st => st.title === 'Service pile reactions')!;
+    expect(JSON.stringify(step.lines)).toMatch(/uplift/i);
   });
 });

@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { designPileCap, type PileArrangement } from '../engine/pileCap'
+import { designPileCap, pileCapSolution, type PileArrangement, type PileCapInput } from '../engine/pileCap'
+import { WorkedSolution } from '../components/WorkedSolution'
 import { PileCapSchematic } from '../components/PileCapSchematic'
 import { PageHeader, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
 import { Card } from '../components/qty'
@@ -126,9 +127,10 @@ export default function PileCapDesign() {
     && form.serviceLoad > 0 && form.ultimateLoad > 0
     && form.pileCapacity > 0 && form.spacing > 0 && form.edgeDist > 0
 
-  const result = useMemo(() => {
-    if (!valid) return null
-    return designPileCap({
+  // The solver input is memoised separately from the result: the worked
+  // solution needs the same inputs the solve used, and rebuilding the object
+  // at render would be a second source of truth.
+  const solverInput: PileCapInput = useMemo(() => ({
       serviceLoad: form.serviceLoad,
       serviceMomX: form.serviceMomX,
       serviceMomY: form.serviceMomY,
@@ -147,8 +149,9 @@ export default function PileCapDesign() {
       cover: form.cover,
       barDia: form.barDia,
       pileEmbed: form.pileEmbed,
-    })
-  }, [form, valid])
+  }), [form])
+
+  const result = useMemo(() => (valid ? designPileCap(solverInput) : null), [solverInput, valid])
 
   const allOK = result && result.capacityOK && result.punchColOK && result.punchPileOK
     && result.beamXOK && result.beamYOK && result.ldOK
@@ -241,8 +244,8 @@ export default function PileCapDesign() {
         {/* ── Results ── */}
         <div className="space-y-5 lg:sticky lg:top-6 lg:self-start">
           {/* Schematic */}
-          <div data-pdf-drawing className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Cap plan</h2>
+          <div data-pdf-drawing className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+            <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Cap plan</h2>
             {result ? (
               <PileCapSchematic d={result.d}
                 capBx={result.capBx}
@@ -261,15 +264,15 @@ export default function PileCapDesign() {
           {result && (
             <>
               {/* Summary banner */}
-              <div className={`rounded-xl border p-3 text-center text-sm font-semibold shadow-sm ${
+              <div className={`rounded-lg border p-3 text-center text-[12.5px] font-semibold ${
                 allOK ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'
               }`}>
                 {allOK ? '✓ All checks pass' : '✗ One or more checks fail — review results below'}
               </div>
 
               {/* Cap geometry */}
-              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Cap geometry</h2>
+              <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+                <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Cap geometry</h2>
                 <Row label="Plan (Bx × By)"
                   value={`${f2(result.capBx / 1000)} × ${f2(result.capBy / 1000)} m`} />
                 <Row label={<>Thickness <KTex tex="D_c" /></>} value={`${f0(result.Dc)} mm`} />
@@ -277,8 +280,8 @@ export default function PileCapDesign() {
               </div>
 
               {/* Pile reactions */}
-              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Pile reactions (service)</h2>
+              <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+                <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Pile reactions (service)</h2>
                 {result.reactions.map((r, i) => (
                   <Row key={i}
                     label={`Pile ${i + 1} (${(result.coords[i].x / 1000).toFixed(2)}, ${(result.coords[i].y / 1000).toFixed(2)}) m`}
@@ -293,8 +296,8 @@ export default function PileCapDesign() {
               </div>
 
               {/* Shear checks */}
-              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Shear checks (factored)</h2>
+              <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+                <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Shear checks (factored)</h2>
                 <CheckRow label="Column punching" Vu={result.VuPunchCol} phiVc={result.phiVcPunchCol} ok={result.punchColOK} />
                 <CheckRow label="Pile punching (worst)" Vu={result.VuPunchPile} phiVc={result.phiVcPunchPile} ok={result.punchPileOK} />
                 <CheckRow label={<>Beam shear — <KTex tex="x" /></>} Vu={result.VuBeamX} phiVc={result.phiVcBeamX} ok={result.beamXOK} />
@@ -302,8 +305,8 @@ export default function PileCapDesign() {
               </div>
 
               {/* Flexure & steel */}
-              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Flexure & reinforcement</h2>
+              <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+                <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Flexure & reinforcement</h2>
                 <Row label={<>Design moment <KTex tex="M_{u,x}" /></>} value={`${f3(result.MuX)} kN·m`} />
                 <Row label={<>Design moment <KTex tex="M_{u,y}" /></>} value={`${f3(result.MuY)} kN·m`} />
                 {steelRow(<>Bars — <KTex tex="x" />-direction (bottom)</>, result.steelX, form.barDia)}
@@ -311,8 +314,8 @@ export default function PileCapDesign() {
               </div>
 
               {/* Development length */}
-              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <h2 className="mb-2 text-[1.02rem] font-bold text-[#0056b3]">Development length</h2>
+              <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4">
+                <h2 className="mb-2 text-[13.5px] font-bold text-[#0f1b2a]">Development length</h2>
                 <Row
                   label={<>Required <KTex tex="\ell_d" /></>}
                   value={`${f0(result.ldRequired)} mm`}
@@ -329,8 +332,8 @@ export default function PileCapDesign() {
               </div>
 
               {/* Basis */}
-              <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
-                <h2 className="mb-1 text-[1.02rem] font-bold text-[#0056b3]">Basis</h2>
+              <div className="rail-card rounded-lg border border-[#e3e1da] bg-white p-4 text-sm text-[#5c6675]">
+                <h2 className="mb-1 text-[13.5px] font-bold text-[#0f1b2a]">Basis</h2>
                 <KTex block tex={String.raw`R_i = \frac{P}{N} + \frac{M_x \cdot y_i}{\sum y_i^2} + \frac{M_y \cdot x_i}{\sum x_i^2}`} />
                 <p className="mt-1 text-xs text-slate-500">
                   NSCP 2015 / ACI 318-14. φ_v = 0.75, φ_f = 0.90.
@@ -343,6 +346,11 @@ export default function PileCapDesign() {
           )}
         </div>
       </div>
+
+      {/* The rail shows WHAT the checks came to; this shows HOW — and it is the
+          part that prints, so a reviewer can follow the depth back to whichever
+          of the four shear checks actually sized it. */}
+      {result && <WorkedSolution steps={pileCapSolution(solverInput, result)} />}
       </div>
     </div>
   )

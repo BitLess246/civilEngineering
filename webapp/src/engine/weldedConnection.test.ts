@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { solveWeldedConnection, type WeldSegment } from './weldedConnection'
+import { solveWeldedConnection, weldedConnectionSolution, type WeldSegment } from './weldedConnection'
 
 describe('solveWeldedConnection — elastic weld-line method', () => {
   it('single vertical weld, eccentric vertical load (hand check)', () => {
@@ -73,5 +73,45 @@ describe('solveWeldedConnection — elastic weld-line method', () => {
     })
     expect(big.ok).toBe(false)
     expect(big.reqSize).toBeGreaterThan(3)
+  })
+})
+
+describe('weldedConnectionSolution — the printed report', () => {
+  const P = {
+    segments: [{ id: 'w', x1: 0, y1: 0, x2: 0, y2: 300 }] as WeldSegment[],
+    size: 6, FEXX: 480, phi: 0.75,
+    load: { P: 100, angleDeg: 90, px: 100, py: 150 },
+  }
+
+  it('prints the same numbers the solver returned', () => {
+    // The report is the only place a reviewer sees the intermediate values, so
+    // a drifted format string is a real defect, not cosmetics.
+    const r = solveWeldedConnection(P)
+    const s = weldedConnectionSolution(P, r)
+    const tex = s.flatMap((st) => st.lines.map((ln) => ('tex' in ln ? ln.tex : ln.text))).join('\n')
+    expect(tex).not.toMatch(/undefined|NaN/)
+    expect(tex).toContain('300.0')                     // Lw
+    expect(tex).toContain(r.fMax.toFixed(2))           // governing resultant
+    expect(tex).toContain(r.capacityPerLen.toFixed(2)) // φRn per unit length
+    expect(tex).toContain(r.reqSize.toFixed(2))        // required leg
+  })
+
+  it('the verdict chip follows r.ok in both directions', () => {
+    const ok = solveWeldedConnection(P)
+    expect(ok.ok).toBe(true)
+    expect(weldedConnectionSolution(P, ok).at(-1)!.pass).toBe(true)
+
+    const overloaded = { ...P, load: { ...P.load, P: 1000 } }
+    const bad = solveWeldedConnection(overloaded)
+    expect(bad.ok).toBe(false)
+    expect(weldedConnectionSolution(overloaded, bad).at(-1)!.pass).toBe(false)
+  })
+
+  it('reports the endpoint the solver actually chose as critical', () => {
+    const r = solveWeldedConnection(P)
+    const crit = r.points[r.criticalIndex]
+    const s = weldedConnectionSolution(P, r)
+    const step = s.find((st) => st.title === 'Governing endpoint')!
+    expect(JSON.stringify(step.lines)).toContain(`(${Math.round(crit.x)},`)
   })
 })

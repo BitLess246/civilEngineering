@@ -16,6 +16,8 @@
 // Units: coordinates mm; P kN; forces N/mm; FEXX MPa; weld size w mm.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { type SolutionStep, sn0, sn1, sn2 } from '../lib/solution'
+
 /** A straight fillet-weld segment given by its two endpoints (plate mm coords). */
 export interface WeldSegment { id: string; x1: number; y1: number; x2: number; y2: number }
 
@@ -125,4 +127,64 @@ export function solveWeldedConnection(p: {
     fMax, criticalIndex, throat, capacityPerLen, reqSize, maxP,
     ok: fMax <= capacityPerLen + 1e-6,
   }
+}
+
+// ── Worked solution ────────────────────────────────────────────────────────
+// The elastic method is five moves, and four of them are geometry. Printing it
+// this way matters more here than on most pages: the answer is a WELD SIZE, and
+// a reviewer's only way to disagree with it is to disagree with the centroid,
+// the polar moment or which endpoint was taken as critical.
+export function weldedConnectionSolution(p: {
+  segments: WeldSegment[]; size: number; load: WeldConnLoad; FEXX?: number; phi?: number
+}, r: WeldConnResult): SolutionStep[] {
+  const FEXX = p.FEXX ?? 480
+  const phi = p.phi ?? 0.75
+  const crit = r.points[r.criticalIndex]
+  return [
+    {
+      title: 'Weld group — length and centroid', clause: 'Elastic (weld-as-a-line) method',
+      lines: [
+        { text: `${p.segments.length} segment${p.segments.length === 1 ? '' : 's'}, treated as a line of unit throat: the group is solved for force per unit length, and the throat is applied only at the end.` },
+        { tex: `L_w = \\sum L_i = ${sn1(r.Lw)}\\ \\text{mm}` },
+        { tex: `\\bar{x} = \\dfrac{\\sum L_i x_i}{L_w} = ${sn1(r.Cx)}\\ \\text{mm},\\quad \\bar{y} = \\dfrac{\\sum L_i y_i}{L_w} = ${sn1(r.Cy)}\\ \\text{mm}` },
+      ],
+    },
+    {
+      title: 'Unit-throat polar moment', clause: 'J/t about the group centroid',
+      lines: [
+        { tex: `\\dfrac{J}{t} = \\sum\\left[\\dfrac{L_i^3}{12} + L_i\\left(x_{c,i}^2 + y_{c,i}^2\\right)\\right] = ${sn0(r.Jt)}\\ \\text{mm}^3` },
+        { text: 'L³/12 is the segment’s own second moment about its midpoint. Because sin²θ + cos²θ = 1, that single term is correct for a segment at any orientation — no separate Ix and Iy are needed.' },
+      ],
+    },
+    {
+      title: 'Load, eccentricity and torsion',
+      lines: [
+        { tex: `P_x = P\\cos\\theta = ${sn2(r.Px)}\\ \\text{kN},\\quad P_y = P\\sin\\theta = ${sn2(r.Py)}\\ \\text{kN}\\quad (\\theta = ${sn0(p.load.angleDeg)}^\\circ)` },
+        { tex: `e_x = ${sn1(r.ex)}\\ \\text{mm},\\quad e_y = ${sn1(r.ey)}\\ \\text{mm}` },
+        { tex: `T = P_y e_x - P_x e_y = ${sn1(r.T)}\\ \\text{kN·mm}` },
+        { text: 'Eccentricity is measured from the group CENTROID, not from the column face — moving the weld pattern moves the centroid and so changes T.' },
+      ],
+    },
+    {
+      title: 'Governing endpoint', clause: 'f = √(fx² + fy²), max over all endpoints',
+      lines: [
+        { tex: `f_{dx} = \\dfrac{P_x}{L_w} = ${sn2((r.Px * 1000) / r.Lw)},\\quad f_{dy} = \\dfrac{P_y}{L_w} = ${sn2((r.Py * 1000) / r.Lw)}\\ \\text{N/mm}` },
+        { tex: `f_{tx} = \\dfrac{-T\\,y_c}{J/t},\\quad f_{ty} = \\dfrac{T\\,x_c}{J/t}` },
+        { tex: `\\text{at } (${sn0(crit.x)},\\,${sn0(crit.y)}):\\; f = \\sqrt{${sn2(crit.fx)}^2 + ${sn2(crit.fy)}^2} = ${sn2(r.fMax)}\\ \\text{N/mm}` },
+        { text: 'The torsional component is perpendicular to the radius from the centroid, so the extreme fibre — the endpoint furthest from the centroid on the side where the two components add — governs.' },
+      ],
+    },
+    {
+      title: 'Fillet capacity and required size', clause: 'NSCP 510.2.2 / AISC §J2.2',
+      lines: [
+        { tex: `t_e = 0.707w = 0.707\\times ${sn1(p.size)} = ${sn2(r.throat)}\\ \\text{mm}` },
+        { tex: `\\phi R_n = \\phi\\,0.60F_{EXX}\\,t_e = ${sn2(phi)}\\times 0.60\\times ${sn0(FEXX)}\\times ${sn2(r.throat)} = ${sn2(r.capacityPerLen)}\\ \\text{N/mm}` },
+        { tex: `f_{max} = ${sn2(r.fMax)} \\;${r.ok ? '\\le' : '>'}\\; ${sn2(r.capacityPerLen)}\\ \\text{N/mm}` },
+        { tex: `w_{req} = w\\dfrac{f_{max}}{\\phi R_n} = ${sn2(r.reqSize)}\\ \\text{mm};\\quad P_{max} = P\\dfrac{\\phi R_n}{f_{max}} = ${sn1(r.maxP)}\\ \\text{kN}` },
+        { text: 'f is linear in both the applied load and the weld size, so the required size and the maximum load follow by proportion — no second solve.' },
+      ],
+      pass: r.ok,
+      note: 'Base-metal shear rupture at the weld line and the minimum/maximum fillet sizes of §J2.2b are separate checks.',
+    },
+  ]
 }
