@@ -1,3 +1,8 @@
+// NAMED AuthProvider, NOT AuthContext — the sibling holding the context object
+// is `authContext.ts`, and two files differing only in capitalisation cannot
+// coexist on Windows or macOS. `./AuthContext` resolved to `authContext.ts`
+// there, which exports no component, so `npm run build` failed on every
+// case-insensitive filesystem while Linux CI stayed green.
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { currentUser, onAuthChange, signOut as doSignOut, isAuthConfigured, type AuthUser } from './authClient'
 import { accessFor, loadUsage, recordRun, saveUsage } from '../trialQuota'
