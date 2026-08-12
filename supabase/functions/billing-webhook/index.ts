@@ -99,6 +99,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
       plan: outcome.plan,
       billing_event_id: outcome.eventId,
       billing_updated_at: new Date().toISOString(),
+      // The provider's ids, kept so `billing-portal` can open the customer
+      // portal later. Written only when the event carried them, so an event
+      // without ids cannot blank out what an earlier one established —
+      // otherwise a customer would lose the ability to cancel.
+      ...(outcome.customerId ? { paddle_customer_id: outcome.customerId } : {}),
+      ...(outcome.subscriptionId ? { paddle_subscription_id: outcome.subscriptionId } : {}),
     },
   })
   if (error) {

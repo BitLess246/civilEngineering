@@ -6,7 +6,7 @@ import {
   ANNUAL_DISCOUNT, CURRENCY,
   type Feature,
 } from './plans'
-import { CHECKOUT_ENABLED } from './billing/paddleConfig'
+import { CHECKOUT_ENABLED, PADDLE_CONFIG } from './billing/paddleConfig'
 
 const ALL: Feature[] = [
   'model-space', 'design-pipeline', 'optimizer', 'reports',
@@ -198,13 +198,16 @@ describe('upgradeMessage', () => {
 })
 
 describe('checkout', () => {
-  it('is off in a build with no Paddle configuration', () => {
-    // The flag now comes from billing/paddleConfig — it reflects whether THIS
-    // deploy has a Paddle token and four price ids, not a decision frozen in
-    // source. A test run configures none of them, so it must read false; the
-    // failure this guards against is a default that turns checkout on for
-    // everyone who has not set anything up.
-    expect(CHECKOUT_ENABLED).toBe(false)
+  it('is on exactly when a configuration was resolved, and never otherwise', () => {
+    // NOT `toBe(false)`, which is what this asserted until a developer with a
+    // working webapp/.env ran the suite and failed it — vitest loads .env
+    // through Vite, so the "no configuration" the old test assumed stopped
+    // being true the moment anyone set checkout up locally.
+    //
+    // The invariant holds in every environment: the flag is the config's
+    // presence, nothing else. That a MISSING config yields false is pinned in
+    // paddleConfig.test.ts, against a stubbed env rather than the ambient one.
+    expect(CHECKOUT_ENABLED).toBe(PADDLE_CONFIG !== null)
   })
 })
 

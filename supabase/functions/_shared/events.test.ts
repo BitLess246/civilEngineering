@@ -89,6 +89,85 @@ describe('fromPaddle', () => {
       expect(fromPaddle(junk, P).kind).toBe('reject')
     }
   })
+
+  // ── the two families ────────────────────────────────────────────────────
+  const txn = (over: Record<string, unknown> = {}) => ({
+    event_id: 'evt_txn', event_type: 'transaction.completed',
+    data: {
+      id: 'txn_01', status: 'completed', subscription_id: 'sub_01',
+      customer_id: 'ctm_01', custom_data: { user_id: 'user-1' },
+      items: [{ price: { id: 'pri_pro' } }],
+      ...over,
+    },
+  })
+
+  it('GRANTS on a completed transaction — a payment must never downgrade', () => {
+    // The regression this pins: `status` on a transaction is "completed",
+    // which is not a subscription status, so running it through the active
+    // check made a successful payment resolve to `free`. Paddle does not order
+    // its events, so that could land after the subscription.created that
+    // granted the tier and silently demote a customer who had just paid.
+    const r = fromPaddle(txn(), P)
+    expect(r.kind).toBe('set-plan')
+    if (r.kind !== 'set-plan') return
+    expect(r.plan).toBe('pro')
+  })
+
+  it('never downgrades on a transaction, whatever its status says', () => {
+    // Money arriving is not evidence that something should be taken away.
+    // Every genuine downgrade arrives as a subscription event instead.
+    for (const status of ['completed', 'paid', 'billed', '']) {
+      const r = fromPaddle(txn({ status }), P)
+      expect(r.kind, status).toBe('set-plan')
+      if (r.kind === 'set-plan') expect(r.plan, status).toBe('pro')
+    }
+  })
+
+  it('still downgrades on a cancelled SUBSCRIPTION', () => {
+    // The other half of the same rule — the fix must not have disarmed it.
+    const r = fromPaddle(evt({ status: 'canceled' }), P)
+    expect(r.kind).toBe('set-plan')
+    if (r.kind === 'set-plan') expect(r.plan).toBe('free')
+  })
+
+  // ── ids for the customer portal ─────────────────────────────────────────
+  it('carries the customer and subscription ids off a subscription event', () => {
+    // `data.id` IS the subscription id on this family — there is no
+    // `subscription_id` field to read.
+    const r = fromPaddle(evt({ id: 'sub_09', customer_id: 'ctm_09' }), P)
+    expect(r.kind).toBe('set-plan')
+    if (r.kind !== 'set-plan') return
+    expect(r.customerId).toBe('ctm_09')
+    expect(r.subscriptionId).toBe('sub_09')
+  })
+
+  it('reads the subscription id from its own field on a transaction event', () => {
+    // Here `data.id` is the TRANSACTION id, and taking it would store a
+    // `txn_…` where a `sub_…` belongs — the portal would then be handed an id
+    // that names nothing.
+    const r = fromPaddle(txn(), P)
+    if (r.kind !== 'set-plan') throw new Error('expected set-plan')
+    expect(r.subscriptionId).toBe('sub_01')
+    expect(r.customerId).toBe('ctm_01')
+  })
+
+  it('keeps the ids on a downgrade, so a cancelled customer can still reach the portal', () => {
+    // Losing them here would mean somebody who cancelled could not see their
+    // final invoice or resubscribe without contacting support.
+    const r = fromPaddle(evt({ status: 'canceled', id: 'sub_09', customer_id: 'ctm_09' }), P)
+    if (r.kind !== 'set-plan') throw new Error('expected set-plan')
+    expect(r.plan).toBe('free')
+    expect(r.customerId).toBe('ctm_09')
+  })
+
+  it('omits the ids rather than inventing them when an event has none', () => {
+    // The webhook writes these fields only when present, so `undefined` here
+    // is what stops a later event blanking out an earlier good value.
+    const r = fromPaddle(evt(), P)
+    if (r.kind !== 'set-plan') throw new Error('expected set-plan')
+    expect(r.customerId).toBeUndefined()
+    expect(r.subscriptionId).toBeUndefined()
+  })
 })
 
 describe('fromStripe', () => {
