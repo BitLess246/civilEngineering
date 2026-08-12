@@ -21,7 +21,22 @@
 export type PlanId = 'guest' | 'free' | 'pro' | 'max'
 
 export type EventOutcome =
-  | { kind: 'set-plan'; userId: string; plan: PlanId; eventId: string }
+  | {
+    kind: 'set-plan'
+    userId: string
+    plan: PlanId
+    eventId: string
+    /**
+     * The provider's customer id, when the event carries one.
+     *
+     * Stored so the customer portal can be opened later. Without it there is
+     * no way to get from a signed-in account to its billing record, and the
+     * only route to "cancel my subscription" is an email to support.
+     */
+    customerId?: string
+    /** The provider's subscription id, for per-subscription portal deep links. */
+    subscriptionId?: string
+  }
   /** Understood, but nothing to do (e.g. an event type we do not act on). */
   | { kind: 'ignore'; eventId: string; why: string }
   /** Malformed or unmappable — the caller must NOT treat this as success. */
@@ -66,30 +81,66 @@ interface PaddleEvent {
   event_id?: string
   event_type?: string
   data?: {
+    /** `sub_…` on subscription events, `txn_…` on transaction events. */
+    id?: string
     status?: string
+    customer_id?: string
+    /** Present on transaction events; the subscription the payment belongs to. */
+    subscription_id?: string
     custom_data?: { user_id?: string } | null
     items?: { price?: { id?: string } | null }[] | null
   }
 }
 
+/**
+ * TWO EVENT FAMILIES, TWO RULES — and conflating them was a real bug.
+ *
+ * `subscription.*` events carry a lifecycle status, so they decide a plan in
+ * both directions: active grants, anything else drops to `free`.
+ *
+ * `transaction.completed` carries `status: "completed"`, which is not a
+ * subscription status at all. Running it through the same check made
+ * `isActiveStatus('completed')` false, so **a successful payment downgraded
+ * the payer to `free`** — and because Paddle does not order the two events,
+ * that could land after the `subscription.created` that granted the tier.
+ *
+ * So a transaction only ever GRANTS. Money arriving is not evidence that
+ * anything should be taken away, and every genuine downgrade — cancellation,
+ * failed retries, a pause — arrives as a subscription event.
+ */
 export function fromPaddle(evt: unknown, prices: PriceMap): EventOutcome {
   const e = evt as PaddleEvent
   const eventId = e?.event_id
   if (!eventId) return { kind: 'reject', why: 'no-event-id' }
   const type = e.event_type ?? ''
-  if (!type.startsWith('subscription.') && !type.startsWith('transaction.completed')) {
+  const isSubscription = type.startsWith('subscription.')
+  const isPayment = type === 'transaction.completed'
+  if (!isSubscription && !isPayment) {
     return { kind: 'ignore', eventId, why: `unhandled type ${type}` }
   }
   const userId = e.data?.custom_data?.user_id
   if (!userId) return { kind: 'reject', why: 'no-user', detail: type }
 
-  const status = e.data?.status ?? ''
-  if (!isActiveStatus(status)) return { kind: 'set-plan', userId, plan: 'free', eventId }
+  // Carried through on every outcome that grants a plan, so the account ends
+  // up holding what the portal needs. `id` is the subscription's own id on a
+  // subscription event; a transaction names it separately.
+  const customerId = e.data?.customer_id
+  const subscriptionId = isSubscription ? e.data?.id : e.data?.subscription_id
+  const ids = {
+    ...(customerId ? { customerId } : {}),
+    ...(subscriptionId ? { subscriptionId } : {}),
+  }
+
+  if (isSubscription && !isActiveStatus(e.data?.status ?? '')) {
+    // Still records the ids: a cancelled subscriber must keep their portal
+    // access, or they cannot see the final invoice or resubscribe.
+    return { kind: 'set-plan', userId, plan: 'free', eventId, ...ids }
+  }
 
   const priceId = e.data?.items?.[0]?.price?.id
   const plan = priceId ? prices[priceId] : undefined
   if (!plan) return { kind: 'reject', why: 'unknown-price', detail: priceId ?? '(none)' }
-  return { kind: 'set-plan', userId, plan, eventId }
+  return { kind: 'set-plan', userId, plan, eventId, ...ids }
 }
 
 // ── Stripe ────────────────────────────────────────────────────────────────

@@ -66,6 +66,44 @@ fail open so an unconfigured fork stays usable. The asymmetry is deliberate: the
 cost of being wrong is "nobody can use the app" in one case and "anyone can
 grant themselves a paid plan" in the other.
 
+### Managing a subscription — `billing-portal`
+
+The mirror image of the webhook, and the difference matters: the webhook is
+called by **Paddle** and cannot verify a JWT, so its signature check is what
+authenticates it. `billing-portal` is called by a **signed-in user**, so it is
+deployed *with* JWT verification and checks the token again itself.
+
+```bash
+supabase functions deploy billing-portal        # note: NO --no-verify-jwt
+supabase secrets set PADDLE_API_KEY=pdl_… PADDLE_ENV=sandbox
+```
+
+It mints a Paddle customer-portal session — invoices, payment method,
+cancellation — and returns one URL. Two rules hold it up:
+
+**The customer id comes from the caller's own record, never from the request.**
+The function does not read the body at all. A portal URL is a key to somebody's
+billing history and saved cards; if a caller could name the customer, any
+signed-in user could open any other customer's portal by guessing a `ctm_…`.
+
+**Only the URL comes back.** Paddle's response also carries the customer id, the
+session id and the full deep-link table. The browser needs none of it.
+
+Sessions are single-use and time-limited, so nothing is cached — every click
+mints a new one.
+
+The ids this depends on (`paddle_customer_id`, `paddle_subscription_id`) are
+written into `app_metadata` by the webhook, and only when an event actually
+carries them, so a later event cannot blank out what an earlier one
+established. They are kept on a **downgrade too**: somebody who cancelled still
+needs their final invoice, and taking away portal access at that moment is how
+a cancellation becomes a support ticket.
+
+`PADDLE_ENV` defaults to **production** here, the opposite of the web app's
+fail-closed reading. Deliberate: guessing sandbox for a live deployment would
+403 real subscribers trying to cancel, while guessing production with a sandbox
+key only 403s a test account.
+
 ### Starting payment — `webapp/src/lib/billing/`
 
 `paddleConfig.ts` reads the six `VITE_PADDLE_*` variables and decides whether
@@ -194,12 +232,6 @@ pricing page's post-payment banner says so rather than promising an instant
 change.
 
 ## Still to do
-
-**Nobody can cancel from inside the app.** Paddle's customer portal needs a
-session minted with the API key, which means another Edge Function
-(`billing-portal`) and a link from `/profile`. Until it exists, cancellations go
-through support by email. This is the next billing phase and should not wait —
-"how do I cancel" is the first question a subscriber asks.
 
 **Displayed prices are the USD base, not the converted local amount.** Paddle
 converts at checkout, so a buyer outside the US sees a different currency there

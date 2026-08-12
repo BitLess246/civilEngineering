@@ -5,6 +5,57 @@ import { usePlan } from '../../lib/auth/usePlan'
 import { loadProfile, saveProfile, preparedByLine, type Profile as ProfileData } from '../../lib/auth/profile'
 import { formatUsd, priceFor } from '../../lib/plans'
 import { CHECKOUT_ENABLED } from '../../lib/billing/paddleConfig'
+import { openPortalSession, portalMessage } from '../../lib/billing/portal'
+
+/**
+ * "Manage subscription" — the way out.
+ *
+ * Shown to anyone on a paid plan, and it opens Paddle's portal, where the
+ * cancel button lives alongside invoices and card details. When the session
+ * carries a direct cancellation link, that is offered as a second, plainly
+ * labelled button: making somebody hunt for the exit is a dark pattern, and it
+ * costs more in support mail than the subscription is worth.
+ *
+ * The session is minted per click and never held, because a portal URL is
+ * single-use and expires.
+ */
+function ManageSubscription() {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [cancelUrl, setCancelUrl] = useState<string | null>(null)
+
+  const open = async () => {
+    setBusy(true)
+    setError(null)
+    const r = await openPortalSession()
+    setBusy(false)
+    if (!r.ok) { setError(portalMessage(r.reason)); return }
+    // Remembered only long enough to render the link on this screen; the
+    // navigation below leaves the page anyway.
+    setCancelUrl(r.cancelUrl)
+    window.location.href = r.url
+  }
+
+  return (
+    <div className="mt-4 border-t border-slate-100 pt-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" onClick={open} disabled={busy}
+          className="rounded-md border border-slate-300 px-3 py-1.5 text-[13px] font-semibold text-slate-700 hover:border-[#0056b3] hover:text-[#0056b3] disabled:opacity-60">
+          {busy ? 'Opening…' : 'Manage subscription'}
+        </button>
+        {cancelUrl && (
+          <a href={cancelUrl} className="text-[13px] font-semibold text-red-700 underline">
+            Cancel subscription
+          </a>
+        )}
+      </div>
+      <p className="mt-2 text-[12px] leading-5 text-slate-500">
+        Invoices, payment method and cancellation are handled by Paddle, who processed the payment.
+      </p>
+      {error && <p role="alert" className="mt-2 text-[12px] leading-5 text-red-700">{error}</p>}
+    </div>
+  )
+}
 
 function Field({ label, value, onChange, placeholder, hint }: {
   label: string; value: string; onChange: (v: string) => void; placeholder?: string; hint?: string
@@ -82,9 +133,15 @@ export default function Profile() {
             projects. The letterhead settings below work either way.
           </p>
         )}
+
+        {/* Offered on a paid plan only. `plan.priceMonthly` is 0 for Free and
+            null for Guest, so neither is asked to manage a subscription that
+            does not exist. */}
+        {user && CHECKOUT_ENABLED && !!plan.priceMonthly && <ManageSubscription />}
+
         <p className="mt-3 text-[12px] leading-5 text-slate-500">
           {CHECKOUT_ENABLED
-            ? <>Manage your subscription on the <Link to="/pricing" className="text-[#0056b3] underline">Plans page</Link>.</>
+            ? <>Compare plans on the <Link to="/pricing" className="text-[#0056b3] underline">Plans page</Link>.</>
             : <>Paid plans are not open for sign-up yet — see <Link to="/pricing" className="text-[#0056b3] underline">Plans</Link> for what they include.</>}
         </p>
       </section>
