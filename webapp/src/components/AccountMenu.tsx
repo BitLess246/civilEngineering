@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth/authContext'
 import { usePlan } from '../lib/auth/usePlan'
-import { CHECKOUT_ENABLED } from '../lib/plans'
+import { CHECKOUT_ENABLED } from '../lib/billing/paddleConfig'
 
 /**
  * Who am I, and how do I get out.

@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import {
   PLANS, planOf, planAllows, withinModelLimit, withinProjectLimit, lowestPlanWith,
-  upgradeMessage, featureLabel, CHECKOUT_ENABLED,
+  upgradeMessage, featureLabel,
   priceFor, monthlyEquivalent, annualSaving, annualDiscountOf, formatUsd,
   ANNUAL_DISCOUNT, CURRENCY,
   type Feature,
 } from './plans'
+import { CHECKOUT_ENABLED } from './billing/paddleConfig'
 
 const ALL: Feature[] = [
   'model-space', 'design-pipeline', 'optimizer', 'reports',
@@ -197,9 +198,12 @@ describe('upgradeMessage', () => {
 })
 
 describe('checkout', () => {
-  it('is off, because a static SPA cannot verify a payment webhook', () => {
-    // Asserted rather than assumed: if someone flips this on without adding a
-    // server to verify the webhook, this test is the thing that objects.
+  it('is off in a build with no Paddle configuration', () => {
+    // The flag now comes from billing/paddleConfig — it reflects whether THIS
+    // deploy has a Paddle token and four price ids, not a decision frozen in
+    // source. A test run configures none of them, so it must read false; the
+    // failure this guards against is a default that turns checkout on for
+    // everyone who has not set anything up.
     expect(CHECKOUT_ENABLED).toBe(false)
   })
 })
