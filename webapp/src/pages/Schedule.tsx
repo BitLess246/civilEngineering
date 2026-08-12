@@ -450,20 +450,41 @@ export default function Schedule() {
 
   /**
    * A walkthrough of an empty schedule is a walkthrough of an empty table, so
-   * the guide seeds the worked sample when there is nothing to point at —
-   * the same reasoning as the 3D Model Space demo model.
+   * the guide seeds the worked sample when there is nothing to point at, and
+   * REMOVES IT AGAIN on close — the same bargain the 3D Model Space demo model
+   * strikes, and for the same reason: a guide that leaves work behind is a
+   * guide people stop opening.
    *
-   * There is no `onEnd` teardown, and that is deliberate. `loadSample` creates
-   * a NEW project beside whatever exists; deleting it on close would be the
-   * one destructive act in a feature that never edits data, and the user may
-   * well want to keep it. It is a normal project and the Delete button removes
-   * it like any other.
+   * The rule is exact. No project (or an empty one) before the guide ⇒ none
+   * after it. A project the user ALREADY HAS is never touched, never replaced
+   * and never deleted; the tour simply runs against their own schedule, which
+   * is better than a sample anyway.
+   *
+   * `useTour` guarantees `onEnd` fires exactly once and only after `onStart`,
+   * whether the guide ended at the last step, by Esc, or by the close button —
+   * so a stray close can never delete a project this tour did not create.
    */
-  const seedIfEmpty = useCallback(() => {
-    if (!api.project || api.project.activities.length === 0) api.loadSample()
-  }, [api])
-
-  const tour = useTour(SCHEDULE_STEPS, setTourView, { onStart: seedIfEmpty })
+  const seeded = useRef<string | null>(null)
+  const restoreTo = useRef<string | null>(null)
+  const tour = useTour(SCHEDULE_STEPS, setTourView, {
+    onStart: () => {
+      if (api.project && api.project.activities.length > 0) return
+      restoreTo.current = api.activeId
+      seeded.current = api.loadSample()
+    },
+    onEnd: () => {
+      const id = seeded.current
+      if (!id) return
+      seeded.current = null
+      setOpen(null)
+      api.remove(id)
+      // Back to whatever was open before — `remove` falls to the first project
+      // in the list, which is not necessarily the one the user was on.
+      const prev = restoreTo.current
+      restoreTo.current = null
+      if (prev && prev !== id) api.open(prev)
+    },
+  })
 
   return (
     <>

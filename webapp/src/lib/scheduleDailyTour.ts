@@ -7,10 +7,11 @@
 // retroactively. A user who runs the job for two months and then discovers
 // this page has nothing to compare against, and no way to get it.
 //
-// The first step therefore CAPTURES one (see `setTourView` in the page) when
-// the project has none, so the two steps after it describe a populated delay
-// table rather than an empty panel. That is only defensible because a baseline
-// can now be deleted — a guide that left permanent litter behind would be a
+// The guide therefore CAPTURES one on opening (see the tour hooks in the page)
+// when the project has none, so the two steps after the first describe a
+// populated delay table rather than an empty panel — and REMOVES IT AGAIN on
+// close. No baseline before the guide means no baseline after it; one that
+// already existed is never touched. A walkthrough that leaves work behind is a
 // worse bargain than an unhelpful step.
 //
 // The second trap is what the comparison actually means. The delta is the
@@ -25,10 +26,9 @@ import type { Tour, TourStep } from './tour'
 export const DAILY_STEPS: readonly TourStep[] = [
   {
     id: 'capture',
-    tab: 'baselined',
     anchor: 'capture-baseline',
     title: 'Capture a baseline before work starts',
-    body: 'This freezes today’s computed dates and durations as the plan you will be measured against. Do it once the sequence is agreed and before site work begins — the guide has just captured one for you if you had none, so the rest of this page now has something to compare against.',
+    body: 'This freezes today’s computed dates and durations as the plan you will be measured against. Do it once the sequence is agreed and before site work begins. If you had none, the guide captured one on opening so the rest of this page has something to show — and removes it again when you close, leaving you exactly as you were.',
     why: 'There is no way to capture a baseline for a date that has passed. A baseline taken mid-project compares the job against a plan that already contains the delay, and reports no slip. The button stays disabled while the schedule has errors.',
   },
   {

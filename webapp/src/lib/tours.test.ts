@@ -173,6 +173,56 @@ describe('the daily walkthrough leads with the irreversible step', () => {
   })
 })
 
+describe('a guide that sets something up puts it back', () => {
+  // Both planning guides seed data when there is nothing to point at — the
+  // schedule grid loads the worked sample, the daily page captures a baseline
+  // — and both undo it on close. `tourLifecycle` is what makes that safe, so
+  // the rule is asserted as a SEQUENCE here and the pages only supply the
+  // create/undo pair.
+  //
+  // The property that matters: after any sequence of opens and closes, the
+  // number of set-ups equals the number of tear-downs. Anything else is either
+  // litter left behind or a teardown firing against data the guide never made.
+  const replay = (actions: ('start' | 'close')[]) => {
+    let started = false
+    let seeded = 0            // stands in for the sample project / baseline
+    for (const a of actions) {
+      const t = tourLifecycle(started, a)
+      started = t.started
+      if (t.fire === 'start') seeded++
+      if (t.fire === 'end') seeded--
+    }
+    return { seeded, started }
+  }
+
+  it('leaves nothing behind once the guide is closed', () => {
+    expect(replay(['start', 'close']).seeded).toBe(0)
+    expect(replay(['start', 'close', 'start', 'close']).seeded).toBe(0)
+  })
+
+  it('does not seed twice when the guide is reopened mid-run', () => {
+    // Clicking Guide again while it is open must not capture a second baseline
+    // or load a second sample project.
+    expect(replay(['start', 'start', 'start', 'close']).seeded).toBe(0)
+    expect(replay(['start', 'start']).seeded).toBe(1)
+  })
+
+  it('never tears down when the guide seeded nothing', () => {
+    // A stray Esc on a page the user opened themselves must not delete their
+    // project or their baseline.
+    expect(replay(['close']).seeded).toBe(0)
+    expect(replay(['close', 'close']).seeded).toBe(0)
+    expect(replay(['start', 'close', 'close']).seeded).toBe(0)
+  })
+
+  it('is still balanced while the guide is open', () => {
+    // Mid-tour there is exactly one thing outstanding, which is what the
+    // page's `seeded` ref holds.
+    expect(replay(['start']).seeded).toBe(1)
+    expect(replay(['start', 'close', 'start']).seeded).toBe(1)
+  })
+})
+
 describe('navigation stops at the ends rather than wrapping', () => {
   it('clamps forwards and backwards', () => {
     expect(prevIndex(0)).toBe(0)
