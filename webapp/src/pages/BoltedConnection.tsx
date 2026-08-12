@@ -12,7 +12,7 @@ import type { SolutionStep } from '../lib/solution'
 import { f1, f2, f3 } from '../lib/format'
 import { sn1, sn2 } from '../lib/solution'
 import { PageHeader } from '../components/calc'
-import { CalcBadge, Spinner, Verdict, BasisPick, BasisNote } from '../components/steelUi'
+import { CalcBadge, TrialWall, Spinner, Verdict, BasisPick, BasisNote } from '../components/steelUi'
 import { capacityLabel, demandLabel, factorLabel, SAFETY, type DesignBasis } from '../engine/designBasis'
 
 const ConnectionViewer3D = lazy(() => import('../components/SteelViewer3D').then(m => ({ default: m.ConnectionViewer3D })))
@@ -69,7 +69,7 @@ function BoltedConnectionCalc() {
     [Vu, Hu, boltGrade, db, nRows, nCols, sy, sx, ey, ex_edge, threads,
      tPlate, FuPlate, FyPlate, ex_load, ey_load, e_out, b_gage, nShear, basis, custom]
   )
-  const { data: res, loading, error } = useCalcResult<ConnectionCalcResult>(
+  const { data: res, loading, error, cause } = useCalcResult<ConnectionCalcResult>(
     () => calcConnection(input), [input]
   )
 
@@ -169,10 +169,11 @@ function BoltedConnectionCalc() {
 
   return (
     <div>
+      <TrialWall cause={cause} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.2fr_0.9fr_1fr]">
       {/* ── inputs ── */}
       <div className="space-y-5">
-        <Card title={<>Applied load<CalcBadge loading={loading} error={error} /></>}>
+        <Card title={<>Applied load<CalcBadge loading={loading} error={error} cause={cause} /></>}>
           <BasisPick value={basis} onChange={setBasis} />
           <Num label={`Applied ${demandLabel(basis, 'V')}`} unit="kN" value={Vu} onChange={setVu} />
           <Num label={`Applied ${demandLabel(basis, 'H')} (horizontal)`} unit="kN" value={Hu} onChange={setHu} />

@@ -27,6 +27,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../lib/auth/authContext'
 import { GUEST_TRIAL_LIMIT, trialNotice, type AccessVerdict } from '../lib/trialQuota'
+import { startRun } from '../lib/calcRun'
 
 export function TrialGate({ children }: { children: ReactNode }) {
   const { access, spendTrial, loading, configured } = useAuth()
@@ -58,6 +59,13 @@ export function TrialGate({ children }: { children: ReactNode }) {
     // after one extra render rather than looping.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setArrival({ key, verdict: snapshot })
+    // NAME THE RUN, for every arrival on every route — members and public
+    // pages included. The token is what tells the calculation endpoint which
+    // requests belong to one visit rather than to one keystroke, and this
+    // effect is the app's single definition of "an arrival". Minting it only
+    // for `trial` verdicts would leave a member's first request on a stale
+    // token from whatever page they were on before.
+    startRun()
     if (snapshot.kind === 'trial') spendTrial(pathname)
   }, [key, pathname, loading, configured, access, spendTrial, arrival])
 

@@ -11,7 +11,10 @@
 // Fast Refresh, and the lint rule says so.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { Link } from 'react-router-dom'
 import { W_SHAPES } from '../lib/steelShapes'
+import { TrialExhaustedError } from '../lib/calcRun'
+import { GUEST_TRIAL_LIMIT } from '../lib/trialQuota'
 import type { DesignBasis } from '../engine/designBasis'
 
 /** Pass/fail value with a tick or a cross. */
@@ -32,10 +35,43 @@ export function Spinner() {
 }
 
 /** In-flight / failed state of the calc API call, shown beside a card title. */
-export function CalcBadge({ loading, error }: { loading: boolean; error: string | null }) {
+export function CalcBadge({ loading, error, cause }: { loading: boolean; error: string | null; cause?: unknown }) {
+  // A spent trial is not a fault, and must not be reported as one — "check
+  // console" would send a paying-customer-to-be looking for a bug.
+  if (cause instanceof TrialExhaustedError)
+    return <span className="ml-2 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-900">free trial used up</span>
   if (error)   return <span className="ml-2 rounded bg-red-100 px-2 py-0.5 text-xs text-red-700">API error — check console</span>
   if (loading) return <span className="ml-2 rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-500">computing…</span>
   return null
+}
+
+/**
+ * Shown in place of the results when the SERVER refuses the calculation.
+ *
+ * `TrialGate` draws its own paywall from the browser's count, and that count
+ * can be behind — a cleared cache, another device on the same connection, a
+ * tab open since before the allowance ran out. This is the other half: the
+ * endpoint has the authoritative count, and when it says no, the numbers on
+ * screen are the last run's and will not update again.
+ *
+ * Saying that plainly matters more than the styling. A calculator that quietly
+ * stops refreshing is worse than one that says why.
+ */
+export function TrialWall({ cause }: { cause: unknown }) {
+  if (!(cause instanceof TrialExhaustedError)) return null
+  return (
+    <div className="mb-5 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-[13px] leading-6 text-amber-900">
+      <p className="font-semibold">You have used all {GUEST_TRIAL_LIMIT} free runs of this calculator.</p>
+      <p className="mt-0.5">
+        Any results still shown are from your last run and will not update. A free
+        account removes the counter from every single-purpose calculator — no card,
+        no trial period.{' '}
+        <Link to="/signup" className="font-semibold underline">Create a free account</Link>
+        {' '}or{' '}
+        <Link to="/signin" className="font-semibold underline">sign in</Link>.
+      </p>
+    </div>
+  )
 }
 
 export function ShapePick({ value, onChange }: { value: string; onChange: (v: string) => void }) {
