@@ -305,13 +305,12 @@ export function featureLabel(f: Feature): string {
   }
 }
 
-/**
- * Whether checkout is live.
- *
- * Hard-coded false, and deliberately a named constant rather than a comment: a
- * static SPA cannot verify a payment webhook, so a paid plan cannot be sold
- * from the browser alone. Until a server exists to do that, the pricing page
- * shows what a plan WOULD include and says checkout is not open, instead of a
- * button that looks like it charges a card and does not.
- */
-export const CHECKOUT_ENABLED = false
+// `CHECKOUT_ENABLED` used to live here, hard-coded false, because a static SPA
+// cannot verify a payment webhook. That reasoning still stands and is why the
+// flag MOVED rather than being deleted: the webhook now exists
+// (supabase/functions/billing-webhook), so the answer is no longer a constant
+// but a fact about the deploy — are the Paddle token and price ids present?
+//
+// It is exported from `billing/paddleConfig` for that reason. This module stays
+// pure and env-free; importing it here would drag `import.meta.env` into every
+// test that only wanted to know what a plan costs.

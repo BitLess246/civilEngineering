@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../lib/auth/authContext'
 import { usePlan } from '../../lib/auth/usePlan'
 import { loadProfile, saveProfile, preparedByLine, type Profile as ProfileData } from '../../lib/auth/profile'
-import { CHECKOUT_ENABLED, formatUsd, priceFor } from '../../lib/plans'
+import { formatUsd, priceFor } from '../../lib/plans'
+import { CHECKOUT_ENABLED } from '../../lib/billing/paddleConfig'
 
 function Field({ label, value, onChange, placeholder, hint }: {
   label: string; value: string; onChange: (v: string) => void; placeholder?: string; hint?: string
