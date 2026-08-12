@@ -1149,43 +1149,61 @@ every feature that exists, an unknown plan id falls back to the LEAST privileged
 tier, and `upgradeMessage` names **Max** — not Pro — for the features only Max
 has.
 
-A plan is read from Supabase user metadata and can never be granted by the
-browser — otherwise the paywall would be a suggestion. Until a checkout webhook
-exists, every account is `free`. To grant yourself a paid tier for testing, set
-`{"plan": "pro"}` (or `"max"`) on your user in the Supabase dashboard under
-Authentication → Users → User Metadata.
+A plan is read from Supabase **`app_metadata`** — not `user_metadata`, which the
+account itself can write — and can never be granted by the browser, or the
+paywall would be a suggestion. To grant yourself a tier by hand for testing, set
+`{"plan": "pro"}` on your user in the Supabase dashboard under Authentication →
+Users, in the **App Metadata** box.
 
-**Billing webhook shipped in #467 — the server half of checkout.**
-`supabase/functions/billing-webhook/` (Deno) verifies the provider's HMAC, maps
-the event to a plan and writes `user_metadata.plan` with the service-role key.
-Idempotent: the applied event id is stored beside the plan, so provider retries
-are no-ops. Pure logic in `supabase/functions/_shared/` is covered by the app's
-vitest suite (48 tests) — vite.config's `test.include` was extended to reach it,
-so the money path is not the one untested corner.
+### Billing is wired end to end, on Paddle, in sandbox (#570–#573)
 
-Three providers verified: **Paddle**, **Stripe** and **PayMongo** (chosen for
-this audience — Philippine engineers, so GCash/Maya matter). Constant-time
-digest comparison, ±300 s replay window checked both directions, missing secret
-rejects. PayMongo's `te=`/`li=` split is resolved by explicit mode, because
-accepting either would let a widely-shared test secret approve a live payment.
+**The provider is Paddle**, as merchant of record — it handles sales tax and VAT
+everywhere, which is why there is no tax logic in this repo. The peso pricing is
+gone: **Paddle cannot charge PHP**, so plans are priced in USD ($19/$205 Pro,
+$49/$529 Max) and Paddle converts at checkout. Stripe and PayMongo support
+survives in `_shared/` as an appendix, tests and all, in case Paddle ever falls
+through — the argument for going back is GCash.
 
-Two invariants pinned by tests: an unrecognised price NEVER resolves to a plan,
-and anything not-active resolves DOWN to free. Everything fails CLOSED — the
-opposite of `authClient`/`usePlan`, deliberately.
+Three moving parts, each with the security asymmetry that shaped it:
 
-Full setup steps and the pre-launch checklist are in `docs/Billing.md`.
+- **`billing-webhook`** (deployed `--no-verify-jwt`) — called by Paddle, so it
+  cannot check a JWT; its HMAC check is what authenticates the caller. Maps the
+  event to a plan and writes `app_metadata` with the service-role key.
+  Idempotent on `event_id`.
+- **`billing-portal`** (deployed **with** JWT verification) — called by a
+  signed-in user, so the opposite. Mints a Paddle portal session for
+  cancellation, invoices and card changes. The customer id comes from the
+  caller's own record and the body is never read, so nothing can steer it at
+  another customer's billing.
+- **`webapp/src/lib/billing/`** — `paddleConfig` decides whether this deploy may
+  open a checkout (half-configured counts as OFF, and a `live_` token in
+  sandbox is refused outright); `paddleCheckout` opens the overlay with
+  `customData.user_id`, which is the entire link between a Paddle subscription
+  and an account.
 
-**Checkout itself is still not wired, and payments are still not faked.**
-`CHECKOUT_ENABLED` remains pinned false by a test. What is missing is a
-`billing-checkout` function creating a session with `metadata.user_id` attached
-(PayMongo has no static link that carries per-user metadata), the pricing-page
-buttons, and a `/billing/success` page. The pricing page still says plainly that
-paid plans are not open; no card details are collected anywhere in the app.
+`CHECKOUT_ENABLED` is no longer a constant — it is the presence of the six
+`VITE_PADDLE_*` variables.
 
-**Unverified, flagged rather than assumed:** PayMongo's event field paths were
-written from the documented envelope, not a captured event — send one test event
-through before launch. Also confirm PayMongo subscriptions are available on the
-account, and settle the PHP-vs-USD mismatch between the provider and `/pricing`.
+**Sandbox is live and configured.** Catalog seeded (one Pro, one Max, four
+prices — an earlier duplicate set at the old $199 price is archived), client
+token minted, notification destination `ntfset_01kzvw6y…` active, all five
+Supabase secrets set, both functions deployed. Local config is in `webapp/.env`
+(git-ignored). Every webhook branch was verified against the DEPLOYED function
+with genuinely signed requests: good signature → 404 at the user lookup,
+unmapped price → 422, missing `user_id` → 422, unhandled type → 200, forged
+signature → 401, two-hour-old signature → 401.
+
+**What has never run:** the final metadata write, and `billing-portal`. Both
+need a real completed checkout, and Paddle's overlay is a cross-domain iframe
+that no automation can fill in — that step is a human with a test card
+(`4242 4242 4242 4242`). After it: check the Paddle transaction, the function
+log, `app_metadata.plan`, then sign out and in.
+
+**Going live** means a whole new universe: new catalog, new client token, new
+notification destination, new secret, and all six `VITE_` values changed
+together. Sandbox ids do not exist in production.
+
+Full setup and the pre-launch checklist are in `docs/Billing.md`.
 
 **Enforcement shipped in #466.** `lib/featureGate.ts` maps every gated thing
 onto the feature it needs, in one pure tested place:
