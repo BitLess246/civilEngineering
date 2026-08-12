@@ -1926,28 +1926,112 @@ served same-origin at `/api/steel/{beam,column,connection}`.
   to parse the HTML shell as a result. With it, a missing function is a clean
   404 — which `calcApi` treats as "not deployed" and degrades to the browser.
 - **The 404 fallback is deliberate and still there.** It means shipping the
-  endpoints cannot take the site down. Removing it — and with it the engine from
-  the client bundle — is a one-line follow-up, to be done only once
-  `/api/steel/*` is confirmed live in production.
+  endpoints cannot take the site down. ~~Removing it takes the engine out of the
+  client bundle.~~ **Measured, and that premise was wrong**: the fallback chunk
+  is 1.7 KB, while the solvers are already in the *eager* `index-*.js` because
+  only `ModelSpace` and `TrussSpace` are `lazy()` in `App.tsx` and `/validation`
+  eagerly imports `engine/validation`. Getting the engine out of the bundle is a
+  routing job, not a fallback job. The fallback stays; it is what keeps `vite
+  dev` and any preview without functions working.
 
-### What the auth check is, and is not
+### Authentication
 
 Every call carries a Supabase JWT: a member's access token, or the anon key for
-a guest. Without one, 401. It is a **key** boundary, not an **entitlement**
-boundary — the anon key is public by design. The trial allowance is still
-decided client-side by `TrialGate` against the server-backed count from the
-`guest-quota` Supabase function. **Moving that decision into the endpoint is the
-next step**, and the endpoint is where it now has somewhere to live.
+a guest. Without one, 401.
 
 `identify()` **fails closed**: if Supabase is unreachable it returns null and
 the call is refused. An auth check that passes when the auth service is down
 admits everyone exactly when nobody is watching.
 
+That alone is a **key** boundary, not an **entitlement** one — the anon key is
+public by design, so it says *a* guest, never *which* guest or what they have
+left. The gate below is the other half.
+
+## The trial gate now lives in the endpoint
+
+~~The trial allowance is decided client-side by `TrialGate`.~~ Superseded. A
+guest gets **five runs per calculator** and `/api/steel/*` is what enforces it.
+Members are never metered (`accessFor` gives a signed-in user everything) and
+the endpoint does not even ask the database about them.
+
+**A run is one ARRIVAL, not one computation.** This is the whole design
+constraint: the pages recompute on a 250 ms debounce as you type, so charging
+per request would spend five runs in a second. The browser mints an opaque
+token per arrival (`calcRun.ts`, minted by `TrialGate` — the app's single
+definition of "an arrival") and sends it as `x-calc-run`. `claim_guest_run`
+counts *distinct* tokens per (subject, route), **under a row lock**, so two
+tabs cannot both be admitted on the last remaining run.
+
+Replaying one token forever is one run — exactly what leaving a tab open has
+always bought. What is now impossible is what used to be trivial: clearing site
+data, or editing React state, for a sixth.
+
+- **402, not 401.** `{ error: 'trial-exhausted', route, used }`. The caller *is*
+  authenticated; another token would not help. `calcApi` raises a
+  `TrialExhaustedError`, `CalcBadge` shows "free trial used up" instead of "API
+  error", and `TrialWall` explains that the numbers on screen are the last run's.
+- **The client does NOT fall back on 402.** A 404 still degrades to the browser
+  (the endpoint is absent), but a 402 must not — computing locally would route
+  around the gate using the gate's own client. `calcApi.quota.test.ts` pins it.
+- **Tickets keep typing off the database.** The first request of a run gets
+  `x-calc-ticket`: an HMAC over (subject, route, run, expiry), keyed off the
+  salt. Later requests verify in one hash, no round trip. Bound to the subject,
+  so a leaked ticket is useless to anyone else. On expiry the endpoint re-claims
+  with the same run token, which the RPC recognises and admits **without
+  charging** — a long session costs one lookup per TTL, not one run.
+- **The quota fails OPEN**, unlike auth. An unreachable counter means the
+  calculator still works; refusing a free calculator because a courtesy counter
+  is down breaks the shop window to defend five runs. Every such decision is
+  logged and reported in `x-calc-quota`.
+- **No service-role key.** `claim_guest_run` is `SECURITY DEFINER` and `anon`
+  may execute it; `guest_trials` itself stays unreachable. The subject is a
+  salted digest whose salt lives only server-side, so the anon key cannot
+  compute anyone's subject.
+
+Two copies of the subject derivation now exist — `webapp/api/_lib/subject.ts`
+(Vercel deploys only `webapp/`) and `supabase/functions/_shared/guestSubject.ts`
+(Deno). They are pinned together by `subject.test.ts`, which runs BOTH over an
+ip × ua matrix. It earned its keep immediately: the Deno file held **literal NUL
+bytes** as the hash separator, invisible on read and enough to make git call the
+file binary. Both now spell it `\0`, and a test fails on a raw NUL returning.
+
+### Proving the migration
+
+`claim_guest_run.spec.sql` is a runnable behavioural spec — no Supabase needed,
+any Postgres will do:
+
+```sh
+psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260804000000_guest_trials.sql
+psql -v ON_ERROR_STOP=1 -f supabase/migrations/20260812000000_guest_run_claims.sql
+psql -v ON_ERROR_STOP=1 -f supabase/migrations/claim_guest_run.spec.sql
+```
+
+It covers the fifth-run boundary, 50 recomputes costing nothing, token memory
+ageing out, per-route and per-subject separation, and the malformed inputs. The
+row-lock claim was verified separately with two concurrent sessions racing for
+the last run: the loser blocked, re-read, and was refused — `used` finished at
+5, never 6.
+
 ### Deploying it
 
-Set `SUPABASE_URL` and `SUPABASE_ANON_KEY` in the Vercel project (the existing
-`VITE_`-prefixed pair also satisfies them). **No service-role key** — these
-endpoints read no tables. Missing config ⇒ 503, logged. See `webapp/api/README.md`.
+Set in the Vercel project:
+
+| Variable | Missing ⇒ |
+|---|---|
+| `SUPABASE_URL` / `VITE_SUPABASE_URL` | 503 |
+| `SUPABASE_ANON_KEY` / `VITE_SUPABASE_ANON_KEY` | 503 |
+| **`GUEST_TRIAL_SALT`** | **the gate is inert — every guest unlimited** |
+| `GUEST_TRIAL_LIMIT` | defaults to 5 |
+
+`GUEST_TRIAL_SALT` must be ≥24 chars (`openssl rand -hex 32`), must NOT be a
+`VITE_` variable, and must **match the `guest-quota` function's salt** — the
+browser's counter and the endpoint's key the same rows, and only derive the
+same subject under the same salt.
+
+Apply the migration (`supabase db push`, or paste
+`20260812000000_guest_run_claims.sql` into the SQL editor) BEFORE the deploy
+goes out: without it the RPC 404s, the quota degrades open, and nothing is
+metered.
 
 `vite dev` does not serve `/api/*`, so local development falls back to the
 browser; `vercel dev` exercises the real endpoints.
