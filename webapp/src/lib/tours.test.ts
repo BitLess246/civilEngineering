@@ -3,6 +3,8 @@ import { TOURS } from './tours'
 import { anchorsOf, nextIndex, prevIndex, isLast, stepAt, tourLifecycle } from './tour'
 import { SOILS_STEPS } from './soilsTour'
 import { MODEL_STEPS } from './modelTour'
+import { SCHEDULE_STEPS } from './scheduleTour'
+import { DAILY_STEPS } from './scheduleDailyTour'
 
 // ─────────────────────────────────────────────────────────────────────────
 // A walkthrough is the screen a STUCK user reaches for, so its failure mode
@@ -126,6 +128,48 @@ describe('the sequences that trip people up', () => {
     const at = (id: string) => MODEL_STEPS.findIndex((s) => s.id === id)
     expect(at('analyse')).toBeLessThan(at('modal'))
     expect(at('modal')).toBeLessThan(at('design'))
+  })
+})
+
+describe('the schedule grid walkthrough opens what it points at', () => {
+  // Four of its steps describe controls that exist ONLY inside an expanded
+  // activity. The tour drives that state through `tab`, so a step that talks
+  // about the dependency editor without asking for the detail view would show
+  // the overlay's "not on screen yet" notice instead of the thing it names —
+  // on the page whose entire difficulty is that the controls are hidden.
+  const NEEDS_DETAIL = ['detail', 'deps', 'cpm']
+
+  it('asks for the detail view on every step inside the panel', () => {
+    for (const id of NEEDS_DETAIL) {
+      const step = SCHEDULE_STEPS.find((s) => s.id === id)
+      expect(step, id).toBeDefined()
+      expect(step!.tab, `${id} must open the detail panel`).toBe('detail')
+    }
+  })
+
+  it('shows the row expander BEFORE the panel it opens', () => {
+    // Otherwise the tour explains the contents of a panel before saying how to
+    // open one, which is the exact thing users miss on this page.
+    const at = (id: string) => SCHEDULE_STEPS.findIndex((s) => s.id === id)
+    expect(at('group')).toBeLessThan(at('row'))
+    expect(at('row')).toBeLessThan(at('detail'))
+    expect(at('detail')).toBeLessThan(at('deps'))
+  })
+
+  it('covers the controls a schedule cannot be built without', () => {
+    const ids = SCHEDULE_STEPS.map((s) => s.id)
+    for (const need of ['add', 'grid', 'row', 'deps', 'cpm']) {
+      expect(ids, `no step covers ${need}`).toContain(need)
+    }
+  })
+})
+
+describe('the daily walkthrough leads with the irreversible step', () => {
+  it('puts capturing a baseline first', () => {
+    // A baseline cannot be captured retroactively, so a user who reads about
+    // the progress log first and the baseline last has already lost the
+    // comparison the rest of the page is built on.
+    expect(DAILY_STEPS[0].id).toBe('capture')
   })
 })
 

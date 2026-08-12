@@ -6,6 +6,10 @@ import { useScheduleSolve, type ScheduleSolve } from '../lib/useScheduleSolve'
 import { captureBaseline } from '../engine/schedule/baseline'
 import { analyzeDelays } from '../lib/delayAnalysis'
 import { PageHeader } from '../components/calc'
+import { GuidedTour } from '../components/GuidedTour'
+import { TourButton } from '../components/TourButton'
+import { DAILY_STEPS } from '../lib/scheduleDailyTour'
+import { useTour } from '../lib/useTour'
 
 // Phase 10 — daily reports + delay analysis at /schedule/daily. Capture/select
 // baselines, log per-activity actuals (% complete, actual start/finish, remarks)
@@ -122,6 +126,9 @@ export default function ScheduleDaily() {
   const [baselineId, setBaselineId] = useState<string>('')
   const project = api.project
 
+  // No tabs on this page, so the tour only spotlights — nothing to navigate.
+  const tour = useTour(DAILY_STEPS, () => {})
+
   const capture = () => {
     if (!solve.ok) return   // captureBaseline runs CPM — a cyclic schedule would throw
     const id = `bl_${Date.now().toString(36)}`
@@ -131,7 +138,8 @@ export default function ScheduleDaily() {
 
   const actions = project && (
     <div className="flex items-center gap-2">
-      <button type="button" onClick={capture} disabled={!solve.ok} className={`${btn} disabled:opacity-40`} title={solve.ok ? '' : 'Fix schedule errors first'}>+ Capture baseline</button>
+      <button type="button" onClick={capture} disabled={!solve.ok} className={`${btn} disabled:opacity-40`} title={solve.ok ? '' : 'Fix schedule errors first'} data-tour="capture-baseline">+ Capture baseline</button>
+      <TourButton onClick={tour.start} label="Guide" />
       <Link to="/schedule" className={btn}>Grid</Link>
     </div>
   )
@@ -157,25 +165,29 @@ export default function ScheduleDaily() {
               <div className="flex flex-wrap items-center gap-3">
                 <h2 className="text-[14px] font-bold text-[#0f1b2a]">Delay analysis</h2>
                 {project.baselines.length > 0 ? (
-                  <select value={activeBaseline} onChange={(e) => setBaselineId(e.target.value)} className="rounded-md border border-[#d6d3c9] bg-white px-2 py-1.5 text-[12px]">
+                  <select value={activeBaseline} onChange={(e) => setBaselineId(e.target.value)} className="rounded-md border border-[#d6d3c9] bg-white px-2 py-1.5 text-[12px]" data-tour="baseline-select">
                     {project.baselines.map((b) => <option key={b.id} value={b.id}>{b.name} · {b.createdAt.slice(0, 10)}</option>)}
                   </select>
                 ) : <span className="text-[12px] text-[#a39d8d]">No baseline yet — <button type="button" onClick={capture} className="font-semibold text-[#0f4c92] underline">capture one</button> to measure delays against.</span>}
               </div>
               {!solve.ok
                 ? <div className="rounded-lg border border-[#efd9cc] bg-[#fdf3ee] px-4 py-2.5 text-[12px] text-[#8f4a2f]">The schedule has {solve.errorCount} blocking issue(s); fix them in the grid to analyse delays.</div>
-                : activeBaseline && <DelayAnalysis project={project} solve={solve} baselineId={activeBaseline} />}
+                : activeBaseline && <div data-tour="delay-analysis"><DelayAnalysis project={project} solve={solve} baselineId={activeBaseline} /></div>}
             </section>
 
             {/* Daily progress log */}
             <section className="space-y-2">
               <h2 className="text-[14px] font-bold text-[#0f1b2a]">Daily progress log</h2>
-              <ProgressLog project={project} update={api.update} />
+              <div data-tour="progress-log"><ProgressLog project={project} update={api.update} /></div>
               <p className="text-[11px] text-[#a39d8d]">Record actual % complete, actual start/finish and remarks per activity. Edits save immediately and feed the dashboard, Gantt shading and reports. (Photo attachments are a future enhancement — no file storage yet.)</p>
             </section>
           </>
         )}
       </div>
+      {tour.on && (
+        <GuidedTour step={tour.step} index={tour.at} total={tour.total}
+          onNext={tour.next} onPrev={tour.prev} onClose={tour.close} />
+      )}
     </>
   )
 }

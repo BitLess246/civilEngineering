@@ -1,9 +1,13 @@
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { Activity, RelationType, ScheduleProject } from '../engine/schedule/model'
 import { wouldCreateCycle } from '../engine/schedule/cpm'
 import { useScheduleProject } from '../lib/useScheduleProject'
 import { useScheduleSolve, type ScheduleSolve } from '../lib/useScheduleSolve'
 import { PageHeader } from '../components/calc'
+import { GuidedTour } from '../components/GuidedTour'
+import { TourButton } from '../components/TourButton'
+import { SCHEDULE_STEPS } from '../lib/scheduleTour'
+import { useTour } from '../lib/useTour'
 
 // Phase 4 — WBS + activity grid. Edits flow through useScheduleProject (store-
 // backed, auto-saved); CPM/validation/dates come from useScheduleSolve and
@@ -68,7 +72,7 @@ function DependencyEditor({ project, activity, update }: {
   })
 
   return (
-    <div>
+    <div data-tour="dep-editor">
       <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-[#a39d8d]">Predecessors</p>
       <div className="flex flex-wrap items-center gap-1.5">
         {activity.predecessors.length === 0 && <span className="text-[11.5px] text-[#a39d8d]">None — starts at project start.</span>}
@@ -117,7 +121,7 @@ function ActivityDetail({ project, activity, solve, update }: {
   return (
     <div className="grid gap-4 border-t border-[#eeece5] bg-[#fcfbf8] px-4 py-3.5 lg:grid-cols-[1.1fr_1fr]">
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3" data-tour="detail-fields">
           <label className="flex flex-col text-[11px] text-[#5c6675]">WBS
             <select value={activity.wbsId ?? ''} onChange={(e) => set({ wbsId: e.target.value || undefined })}
               className="mt-0.5 rounded border border-[#e3e1da] px-1.5 py-1 text-[12px] text-[#0f1b2a]">
@@ -149,7 +153,7 @@ function ActivityDetail({ project, activity, solve, update }: {
       </div>
       <div className="space-y-3">
         <DependencyEditor project={project} activity={activity} update={update} />
-        <div>
+        <div data-tour="cpm-cells">
           <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-[#a39d8d]">CPM (working days)</p>
           <div className="grid grid-cols-3 gap-1.5">
             {cpmCell('ES', c?.es)}{cpmCell('EF', c?.ef)}{cpmCell('LS', c?.ls)}
@@ -162,12 +166,16 @@ function ActivityDetail({ project, activity, solve, update }: {
 }
 
 // ── Activity grid ───────────────────────────────────────────────────────────
-function ActivityGrid({ project, solve, update }: {
+// `open` and `collapsed` are OWNED BY THE PAGE, not by this component. The
+// walkthrough has to be able to open a WBS band and an activity's detail
+// panel, because four of its steps point at controls that only exist inside
+// one — a tour of this grid that could not expand a row would spend half its
+// steps saying "this control is not on screen yet".
+function ActivityGrid({ project, solve, update, open, setOpen, collapsed, setCollapsed }: {
   project: ScheduleProject; solve: ScheduleSolve; update: (m: (d: ScheduleProject) => void) => void
+  open: string | null; setOpen: (id: string | null) => void
+  collapsed: Set<string>; setCollapsed: React.Dispatch<React.SetStateAction<Set<string>>>
 }) {
-  const [open, setOpen] = useState<string | null>(null)
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
-
   // Group activities by WBS, preserving project.activities order within a group.
   const groupName = (wbsId: string | undefined) => {
     if (!wbsId) return { key: '', label: 'Unassigned', code: '~' }
@@ -194,11 +202,16 @@ function ActivityGrid({ project, solve, update }: {
   })
   const toggleGroup = (key: string) => setCollapsed((s) => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n })
 
+  // The two expanders carry their walkthrough anchor on EVERY row rather than
+  // on the first one. `GuidedTour` spotlights `querySelector`'s first match,
+  // which is the top group and its first activity — the same element a
+  // conditional attribute would have produced — and a literal attribute is what
+  // `tours.test.ts` can actually verify, since it reads this file as text.
   const th = 'px-2.5 py-2 text-left text-[9.5px] font-bold uppercase tracking-widest text-[#5c6675]'
   const td = 'px-2.5 py-1.5 align-middle'
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-[#e3e1da] bg-white">
+    <div className="overflow-x-auto rounded-lg border border-[#e3e1da] bg-white" data-tour="activity-grid">
       <table className="w-full min-w-[860px] border-collapse text-[12.5px]">
         <thead>
           <tr className="border-b-[1.5px] border-[#0f1b2a] bg-[#f9f8f4]">
@@ -225,6 +238,7 @@ function ActivityGrid({ project, solve, update }: {
                     {/* A bare grey glyph read as decoration. It is a control:
                         give it a border, a hit area and a title. */}
                     <button type="button" onClick={() => toggleGroup(key)}
+                      data-tour="wbs-group"
                       title={isCollapsed ? 'Expand this WBS group' : 'Collapse this WBS group'}
                       aria-expanded={!isCollapsed}
                       className="flex h-[18px] w-[18px] items-center justify-center rounded border border-[#d6d3c9] bg-white text-[10px] leading-none text-[#5b5648] hover:border-[#0056b3] hover:text-[#0056b3]">
@@ -244,6 +258,7 @@ function ActivityGrid({ project, solve, update }: {
                       <tr className={`border-b border-[#f1efe8] ${critical ? 'bg-[#fdf3f0]' : 'hover:bg-[#faf9f5]'}`}>
                         <td className={td}>
                           <button type="button" onClick={() => setOpen(isOpen ? null : a.id)}
+                            data-tour="activity-row"
                             title={isOpen ? 'Hide activity detail' : 'Show activity detail'}
                             aria-expanded={isOpen}
                             className="flex h-[18px] w-[18px] items-center justify-center rounded border border-[#d6d3c9] bg-white text-[10px] leading-none text-[#5b5648] hover:border-[#0056b3] hover:text-[#0056b3]">{isOpen ? '▾' : '▸'}</button>
@@ -304,7 +319,7 @@ function Summary({ project, solve }: { project: ScheduleProject; solve: Schedule
   )
   const criticalCount = solve.cpm ? solve.cpm.criticalPath.length : 0
   return (
-    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6" data-tour="summary">
       {stat('Duration', solve.ok ? `${solve.duration} d` : '—')}
       {stat('Start', project.meta.start)}
       {stat('Finish', solve.finishDate ?? '—')}
@@ -358,7 +373,7 @@ function ProjectBar({ api }: { api: ReturnType<typeof useScheduleProject> }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2" data-tour="project-bar">
       {api.projects.length > 0 && (
         <select value={api.activeId ?? ''} onChange={(e) => api.open(e.target.value)}
           className="rounded-md border border-[#d6d3c9] bg-white px-2 py-1.5 text-[12px] text-[#0f1b2a]">
@@ -397,15 +412,63 @@ export default function Schedule() {
   const solve = useScheduleSolve(api.project)
   const { project, update } = api
 
+  // Grid view state lives here so the walkthrough can drive it — see below.
+  const [open, setOpen] = useState<string | null>(null)
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+
   const addActivity = () => update((d) => {
     let n = d.activities.length + 1
     while (d.activities.some((a) => a.id === `A${n}`)) n++
     d.activities.push({ id: `A${n}`, name: 'New activity', duration: 1, unit: 'days', predecessors: [] })
   })
 
+  /**
+   * The walkthrough's view controller.
+   *
+   * `useTour` calls this with each step's `tab`. Every other page in the app
+   * interprets that string as a tab id; this page has no tabs, so it reads it
+   * as WHICH ROWS MUST BE OPEN — which is the same job. Four of the tour's
+   * steps point at controls that exist only inside an expanded activity, so
+   * without this the guide would spend its second half telling the user that
+   * the thing it is describing is not on screen.
+   *
+   * `tours.test.ts` reads these branches out of this file and checks the tour
+   * never walks them backwards, so their ORDER here is part of the contract.
+   */
+  // The FIRST activity with predecessors, not simply the first — the first is
+  // usually mobilisation, which by definition waits for nothing, so the step
+  // that says "this is where the programme is built" would open onto an empty
+  // editor reading "None — starts at project start."
+  const tourActivityId =
+    project?.activities.find((a) => a.predecessors.length > 0)?.id
+    ?? project?.activities[0]?.id
+    ?? null
+  const setTourView = useCallback((tab: string) => {
+    if (tab === 'grid') { setCollapsed(new Set()); setOpen(null) }
+    else if (tab === 'detail') { setCollapsed(new Set()); setOpen(tourActivityId) }
+  }, [tourActivityId])
+
+  /**
+   * A walkthrough of an empty schedule is a walkthrough of an empty table, so
+   * the guide seeds the worked sample when there is nothing to point at —
+   * the same reasoning as the 3D Model Space demo model.
+   *
+   * There is no `onEnd` teardown, and that is deliberate. `loadSample` creates
+   * a NEW project beside whatever exists; deleting it on close would be the
+   * one destructive act in a feature that never edits data, and the user may
+   * well want to keep it. It is a normal project and the Delete button removes
+   * it like any other.
+   */
+  const seedIfEmpty = useCallback(() => {
+    if (!api.project || api.project.activities.length === 0) api.loadSample()
+  }, [api])
+
+  const tour = useTour(SCHEDULE_STEPS, setTourView, { onStart: seedIfEmpty })
+
   return (
     <>
-      <PageHeader title="Project Schedule" badges={['CPM', 'PERT', 'EVM']} actions={<ProjectBar api={api} />} />
+      <PageHeader title="Project Schedule" badges={['CPM', 'PERT', 'EVM']}
+        actions={<><ProjectBar api={api} /><TourButton onClick={tour.start} label="Guide" /></>} />
       <div className="mx-auto max-w-[1400px] space-y-5 p-5 sm:p-7">
         {!project ? (
           <div className="rounded-lg border border-dashed border-[#d6d3c9] bg-white px-6 py-16 text-center">
@@ -418,7 +481,7 @@ export default function Schedule() {
           </div>
         ) : (
           <>
-            <section className="rounded-lg border border-[#e3e1da] bg-white p-4">
+            <section className="rounded-lg border border-[#e3e1da] bg-white p-4" data-tour="project-card">
               <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
                 <label className="flex min-w-[220px] flex-1 flex-col text-[11px] font-semibold uppercase tracking-widest text-[#a39d8d]">Project
                   <input value={project.meta.name} onChange={(e) => api.rename(e.target.value)}
@@ -442,9 +505,10 @@ export default function Schedule() {
 
             <div className="flex items-center justify-between">
               <h2 className="text-[14px] font-bold text-[#0f1b2a]">Activities &amp; WBS</h2>
-              <button type="button" onClick={addActivity} className={btnPrimary}>＋ Add activity</button>
+              <button type="button" onClick={addActivity} className={btnPrimary} data-tour="add-activity">＋ Add activity</button>
             </div>
-            <ActivityGrid project={project} solve={solve} update={update} />
+            <ActivityGrid project={project} solve={solve} update={update}
+              open={open} setOpen={setOpen} collapsed={collapsed} setCollapsed={setCollapsed} />
 
             <p className="text-[11px] text-[#a39d8d]">
               Critical activities (zero total float) are tinted and tagged <span className="rounded bg-[#c2402a] px-1 py-px font-mono text-[9px] font-semibold text-white">CRIT</span>.
@@ -453,6 +517,10 @@ export default function Schedule() {
           </>
         )}
       </div>
+      {tour.on && (
+        <GuidedTour step={tour.step} index={tour.at} total={tour.total}
+          onNext={tour.next} onPrev={tour.prev} onClose={tour.close} />
+      )}
     </>
   )
 }
