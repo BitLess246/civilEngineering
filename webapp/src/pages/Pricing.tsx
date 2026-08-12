@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   PLANS, CHECKOUT_ENABLED, planOf, priceFor, monthlyEquivalent, annualSaving,
-  annualDiscountOf, formatPeso, ANNUAL_DISCOUNT, type Plan, type BillingPeriod,
+  annualDiscountOf, formatUsd, ANNUAL_DISCOUNT, type Plan, type BillingPeriod,
 } from '../lib/plans'
 import { useAuth } from '../lib/auth/authContext'
 
@@ -15,12 +15,12 @@ function PriceLine({ plan, period }: { plan: Plan; period: BillingPeriod }) {
   return (
     <div className="mt-3">
       <p className="text-2xl font-bold text-slate-800">
-        {formatPeso(perMonth)}
+        {formatUsd(perMonth)}
         <span className="text-sm font-medium text-slate-500"> /month</span>
       </p>
       {period === 'annual' ? (
         <p className="mt-0.5 text-[12px] leading-5 text-slate-500">
-          {formatPeso(price)} billed yearly · save {formatPeso(annualSaving(plan))}
+          {formatUsd(price)} billed yearly · save {formatUsd(annualSaving(plan))}
         </p>
       ) : (
         <p className="mt-0.5 text-[12px] leading-5 text-slate-500">billed monthly</p>
@@ -116,7 +116,7 @@ export default function Pricing() {
 
       {!CHECKOUT_ENABLED && (
         <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] leading-6 text-amber-900">
-          <strong>Paid plans are not open for sign-up yet.</strong> Payments are handled by Xendit, and the
+          <strong>Paid plans are not open for sign-up yet.</strong> Payments are handled by Paddle, and the
           server that verifies a payment is in place — but nothing yet starts one, so no card details are collected
           anywhere in this app. Pro and Max are listed so you can see what they cover. Guest and Free are fully
           available.
@@ -128,9 +128,10 @@ export default function Pricing() {
       </div>
 
       <p className="mt-4 text-[12px] leading-6 text-slate-500">
-        Prices are in Philippine pesos and include no hidden fees. Annual billing saves{' '}
-        {formatPeso(annualSaving('pro'))} on Pro ({(annualDiscountOf('pro') * 100).toFixed(1)}%) and{' '}
-        {formatPeso(annualSaving('max'))} on Max ({(annualDiscountOf('max') * 100).toFixed(1)}%) over a year.
+        Prices are in US dollars and include no hidden fees; Paddle converts them to your local currency at
+        checkout, and any sales tax or VAT is shown there before you pay. Annual billing saves{' '}
+        {formatUsd(annualSaving('pro'))} on Pro ({(annualDiscountOf('pro') * 100).toFixed(1)}%) and{' '}
+        {formatUsd(annualSaving('max'))} on Max ({(annualDiscountOf('max') * 100).toFixed(1)}%) over a year.
       </p>
 
       <h2 className="mt-10 text-[1.05rem] font-bold text-[#0056b3]">What counts as a &ldquo;calculator&rdquo;</h2>

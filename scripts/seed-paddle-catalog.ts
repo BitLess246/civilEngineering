@@ -1,90 +1,106 @@
-// Run once to create the sandbox product catalog.
-// Prerequisites:
-//   1. cd webapp && npm install @paddle/paddle-node-sdk
-//   2. Set PADDLE_API_KEY to a sandbox key from
-//      https://sandbox-vendors.paddle.com/authentication-v2
-//      (needs product.write and price.write permission scopes)
-//   3. npx tsx ../scripts/seed-paddle-catalog.ts  (from the webapp dir)
-//      OR from repo root: cd webapp && npx tsx ../scripts/seed-paddle-catalog.ts
-
+// ─────────────────────────────────────────────────────────────────────────
+// SEED THE PADDLE CATALOG — run once per environment (sandbox, then live).
+//
+// Creates the two paid products and their four prices. The amounts here are
+// the SAME NUMBERS as webapp/src/lib/plans.ts, stated in cents because that is
+// Paddle's unit; a test in plans.test.ts pins the dollar side, and this header
+// is the reminder that the pair has to be edited together.
+//
+// USD, not PHP: Paddle's 33 payment currencies do not include the Philippine
+// peso. USD is the base price, and Paddle converts it to a buyer's local
+// currency at checkout (Paddle > Business account > Currencies).
+//
+// Usage, from the repo root:
+//   cd webapp
+//   PADDLE_ENV=sandbox PADDLE_API_KEY=pdl_sdbx_… npx tsx ../scripts/seed-paddle-catalog.ts
+//
+// The API key needs product.write and price.write scopes:
+//   sandbox  https://sandbox-vendors.paddle.com/authentication-v2
+//   live     https://vendors.paddle.com/authentication-v2
+//
+// RE-RUNNING CREATES DUPLICATES. Paddle has no upsert for products, and this
+// script deliberately does not invent one — check the dashboard first. Seeding
+// a second Pro product is how a price id in BILLING_PRICE_MAP ends up pointing
+// at a product nobody is actually being sold.
+// ─────────────────────────────────────────────────────────────────────────
 import { Environment, Paddle } from "@paddle/paddle-node-sdk";
 
-if (!process.env.PADDLE_API_KEY) {
+const apiKey = process.env.PADDLE_API_KEY;
+if (!apiKey) {
   console.error("PADDLE_API_KEY is not set.");
   process.exit(1);
 }
 
-const paddle = new Paddle(process.env.PADDLE_API_KEY, {
-  environment: Environment.sandbox,
+// Default to sandbox: the failure mode of guessing wrong in the other
+// direction is a live catalog created by accident.
+const envName = process.env.PADDLE_ENV === "live" ? "live" : "sandbox";
+const paddle = new Paddle(apiKey, {
+  environment: envName === "live" ? Environment.production : Environment.sandbox,
 });
 
-// Amounts in cents (USD). $19.00 → "1900", $199.00 → "19900", etc.
+/** Amounts in cents (USD): $19.00 → "1900". Mirrors plans.ts. */
+const CATALOG = [
+  {
+    key: "pro",
+    name: "Pro",
+    description: "The 3D Model Space and the tools built on it.",
+    monthly: "1900",
+    annual: "20500",
+  },
+  {
+    key: "max",
+    name: "Max",
+    description: "Everything, including the nonlinear and dynamic solvers.",
+    monthly: "4900",
+    annual: "52900",
+  },
+] as const;
 
 async function seed() {
-  // ── Pro ──────────────────────────────────────────────────────────────────
-  const pro = await paddle.products.create({
-    name: "Pro",
-    taxCategory: "saas",
-    description: "The 3D Model Space and the tools built on it.",
-  });
-  console.log("Created product Pro:", pro.id);
+  const ids: Record<string, string> = {};
 
-  const proMonthly = await paddle.prices.create({
-    productId: pro.id,
-    description: "Pro monthly USD",
-    unitPrice: { amount: "1900", currencyCode: "USD" },
-    billingCycle: { interval: "month", frequency: 1 },
-  });
-  console.log("Created Pro monthly:", proMonthly.id);
+  for (const tier of CATALOG) {
+    const product = await paddle.products.create({
+      name: tier.name,
+      taxCategory: "saas",
+      description: tier.description,
+    });
+    ids[`${tier.key}-product`] = product.id;
+    console.log(`Created product ${tier.name}: ${product.id}`);
 
-  const proAnnual = await paddle.prices.create({
-    productId: pro.id,
-    description: "Pro annual USD",
-    unitPrice: { amount: "19900", currencyCode: "USD" },
-    billingCycle: { interval: "year", frequency: 1 },
-  });
-  console.log("Created Pro annual:", proAnnual.id);
+    for (const [period, amount, interval] of [
+      ["monthly", tier.monthly, "month"],
+      ["annual", tier.annual, "year"],
+    ] as const) {
+      const price = await paddle.prices.create({
+        productId: product.id,
+        description: `${tier.name} ${period} USD`,
+        unitPrice: { amount, currencyCode: "USD" },
+        billingCycle: { interval, frequency: 1 },
+      });
+      ids[`${tier.key}-${period}`] = price.id;
+      console.log(`  ${period}: ${price.id} (${amount} cents)`);
+    }
+  }
 
-  // ── Max ──────────────────────────────────────────────────────────────────
-  const max = await paddle.products.create({
-    name: "Max",
-    taxCategory: "saas",
-    description: "Everything, including the nonlinear and dynamic solvers.",
-  });
-  console.log("Created product Max:", max.id);
+  console.log(`\n=== CATALOG IDs (${envName}) ===`);
+  console.log(JSON.stringify(ids, null, 2));
 
-  const maxMonthly = await paddle.prices.create({
-    productId: max.id,
-    description: "Max monthly USD",
-    unitPrice: { amount: "4900", currencyCode: "USD" },
-    billingCycle: { interval: "month", frequency: 1 },
-  });
-  console.log("Created Max monthly:", maxMonthly.id);
-
-  const maxAnnual = await paddle.prices.create({
-    productId: max.id,
-    description: "Max annual USD",
-    unitPrice: { amount: "52900", currencyCode: "USD" },
-    billingCycle: { interval: "year", frequency: 1 },
-  });
-  console.log("Created Max annual:", maxAnnual.id);
-
-  // ── Summary ───────────────────────────────────────────────────────────────
-  console.log("\n=== CATALOG IDs (sandbox) ===");
+  // The two configuration strings these ids feed, printed ready to paste —
+  // the webhook's price map is the thing that turns a payment into a plan, and
+  // hand-transcribing eight ids is where that goes wrong.
+  console.log("\n# supabase secrets set …");
   console.log(
-    JSON.stringify(
-      {
-        "pro-product": pro.id,
-        "pro-monthly": proMonthly.id,
-        "pro-annual": proAnnual.id,
-        "max-product": max.id,
-        "max-monthly": maxMonthly.id,
-        "max-annual": maxAnnual.id,
-      },
-      null,
-      2,
-    ),
+    `BILLING_PRICE_MAP='${CATALOG.flatMap((t) => [
+      `${ids[`${t.key}-monthly`]}=${t.key}`,
+      `${ids[`${t.key}-annual`]}=${t.key}`,
+    ]).join(",")}'`,
   );
+  console.log("\n# webapp/.env");
+  for (const t of CATALOG) {
+    console.log(`VITE_PADDLE_PRICE_${t.key.toUpperCase()}_MONTHLY=${ids[`${t.key}-monthly`]}`);
+    console.log(`VITE_PADDLE_PRICE_${t.key.toUpperCase()}_ANNUAL=${ids[`${t.key}-annual`]}`);
+  }
 }
 
 seed().catch((e) => {

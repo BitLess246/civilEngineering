@@ -11,12 +11,16 @@
 // questions and conflating them is how a paywall ends up inconsistent, with a
 // page reachable but its main button dead for no stated reason.
 //
-// PRICED IN PESOS, because Xendit settles in pesos. Showing a dollar figure
-// while charging a peso one is how a customer ends up disputing a card charge
-// they did not recognise.
+// PRICED IN US DOLLARS, because Paddle is the merchant of record and PADDLE
+// HAS NO PHP. Its 33 payment currencies do not include the Philippine peso, and
+// a Philippine-registered seller transacts in USD — so pesos were never an
+// option here, whatever the earlier Xendit plan assumed. The figures below are
+// the BASE price; Paddle converts them to a buyer's local currency at checkout,
+// and the pricing page reads those converted amounts back out of Paddle rather
+// than quoting a number nobody will be charged.
 //
 // NO PAYMENTS ARE TAKEN YET. The billing webhook exists (supabase/functions/
-// billing-webhook) and verifies real provider signatures, but nothing starts a
+// billing-webhook) and verifies real Paddle signatures, but nothing starts a
 // payment, so `CHECKOUT_ENABLED` is still false and every account is `free`.
 // The pricing page says so plainly rather than showing a button that pretends.
 // ─────────────────────────────────────────────────────────────────────────
@@ -47,14 +51,16 @@ export type Feature =
 export type BillingPeriod = 'monthly' | 'annual'
 
 /**
- * Everything is priced in Philippine pesos.
+ * The currency these figures are denominated in.
  *
- * Not a cosmetic choice: Xendit settles in PHP, and a page quoting dollars
- * while the card statement reads pesos is a support ticket at best and a
- * chargeback at worst. The currency the customer is shown must be the currency
- * they are charged.
+ * USD because Paddle cannot charge PHP — see the header. The rule that made the
+ * old peso pricing right still holds and is the reason the pricing page asks
+ * Paddle what a visitor will actually pay: the currency the customer is SHOWN
+ * must be the currency they are CHARGED. A page quoting dollars while the card
+ * statement reads something else is a support ticket at best, a chargeback at
+ * worst.
  */
-export const CURRENCY = 'PHP'
+export const CURRENCY = 'USD'
 
 /** Headline discount for paying yearly. */
 export const ANNUAL_DISCOUNT = 0.10
@@ -62,10 +68,10 @@ export const ANNUAL_DISCOUNT = 0.10
 export interface Plan {
   id: PlanId
   name: string
-  /** Price per month when billed monthly, in PHP. 0 = free; null = guest. */
+  /** Price per month when billed monthly, in USD. 0 = free; null = guest. */
   priceMonthly: number | null
   /**
-   * Total charged once per year, in PHP — already discounted, not a rate.
+   * Total charged once per year, in USD — already discounted, not a rate.
    *
    * Stored rather than computed from `priceMonthly · 12 · 0.9` so the number a
    * customer is charged is the number written here, and rounding to a tidy
@@ -139,8 +145,8 @@ export const PLANS: readonly Plan[] = [
   {
     id: 'pro',
     name: 'Pro',
-    priceMonthly: 1_399,
-    priceAnnual: 15_099,
+    priceMonthly: 19,
+    priceAnnual: 205,
     tagline: 'The 3D Model Space and the tools built on it.',
     features: ['model-space', 'design-pipeline', 'optimizer', 'reports', 'estimating', 'saved-projects', 'soil-investigation'],
     maxMembers: 400,
@@ -158,8 +164,8 @@ export const PLANS: readonly Plan[] = [
   {
     id: 'max',
     name: 'Max',
-    priceMonthly: 2_999,
-    priceAnnual: 32_399,
+    priceMonthly: 49,
+    priceAnnual: 529,
     tagline: 'Everything, including the nonlinear and dynamic solvers.',
     features: ALL_FEATURES,
     maxMembers: null,
@@ -204,7 +210,7 @@ export function withinProjectLimit(plan: PlanId | Plan, projects: number): boole
   return projects < p.maxProjects
 }
 
-/** Price for a plan on a given billing period, in PHP. */
+/** Price for a plan on a given billing period, in USD. */
 export function priceFor(plan: PlanId | Plan, period: BillingPeriod): number | null {
   const p = typeof plan === 'string' ? planOf(plan) : plan
   return period === 'annual' ? p.priceAnnual : p.priceMonthly
@@ -213,7 +219,7 @@ export function priceFor(plan: PlanId | Plan, period: BillingPeriod): number | n
 /**
  * What a plan works out to per month on a given period.
  *
- * The number to put next to an annual price: "₱1,258/month, billed annually" is
+ * The number to put next to an annual price: "$17.08/month, billed annually" is
  * the comparison a customer is actually making, and making them divide by
  * twelve is how a good deal goes unnoticed.
  */
@@ -223,7 +229,7 @@ export function monthlyEquivalent(plan: PlanId | Plan, period: BillingPeriod): n
   return period === 'annual' ? price / 12 : price
 }
 
-/** Pesos saved over a year by paying annually. 0 when there is nothing to save. */
+/** Dollars saved over a year by paying annually. 0 when there is nothing to save. */
 export function annualSaving(plan: PlanId | Plan): number {
   const p = typeof plan === 'string' ? planOf(plan) : plan
   if (!p.priceMonthly || !p.priceAnnual) return 0
@@ -238,14 +244,26 @@ export function annualDiscountOf(plan: PlanId | Plan): number {
 }
 
 /**
- * Peso amount for display — `₱1,399`, no decimals.
+ * Dollar amount for display — `$19`, or `$17.08` when there are cents.
  *
- * Fixed to en-PH rather than the visitor's locale so the grouping matches the
- * amount the payment page will show; a price that reads differently in two
- * places invites a double-take at exactly the wrong moment.
+ * Whole dollars lose the trailing `.00` because every headline price is whole;
+ * the cents appear only where they are real, which is the per-month equivalent
+ * of an annual plan ($205 ÷ 12). Rounding THAT to `$17` would advertise a
+ * number nobody is charged — the same mistake, one decimal place down, that
+ * quoting the wrong currency makes.
+ *
+ * Fixed to en-US rather than the visitor's locale so the grouping matches the
+ * amount Paddle's checkout shows for the base currency; a price that reads
+ * differently in two places invites a double-take at the wrong moment.
  */
-export const formatPeso = (amount: number): string =>
-  `₱${Math.round(amount).toLocaleString('en-PH')}`
+export const formatUsd = (amount: number): string => {
+  const cents = Math.round(amount * 100)
+  const body = (cents / 100).toLocaleString('en-US', {
+    minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  })
+  return `$${body}`
+}
 
 /** The cheapest plan that includes a feature, or null if none does. */
 export function lowestPlanWith(feature: Feature): Plan | null {
