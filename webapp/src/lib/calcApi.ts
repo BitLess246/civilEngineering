@@ -10,6 +10,8 @@ import type {
   OutOfPlaneResult, PryingResult, BlockShearCase,
 } from '../engine/steelDesign'
 import type { DesignBasis } from '../engine/designBasis'
+import { runToken, ticketFor, rememberTicket, TrialExhaustedError } from './calcRun'
+import { TRIAL_ROUTE } from './calcRoutes'
 
 /**
  * AVAILABLE STRENGTHS, on the basis the request asked for: φRn under LRFD,
@@ -67,7 +69,7 @@ async function localFallback<T>(path: string, body: unknown): Promise<T> {
   throw new Error(`No local fallback for ${path}`)
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
+async function post<T>(path: string, body: unknown, route: string): Promise<T> {
   // The endpoints require a Supabase JWT: a member's access token, or the anon
   // key for a guest. Both are things the SPA already has; without either there
   // is no session layer configured at all, and the fallback is the honest
@@ -75,13 +77,21 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   const token = await calcToken()
   if (!token) return localFallback<T>(path, body)
 
+  // The run token tells the endpoint which requests belong to one arrival, so
+  // a guest is charged per visit rather than per keystroke; the ticket is the
+  // server's own receipt for that run, replayed to save it a database lookup.
+  // Neither grants anything — see calcRun.ts.
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+    'X-Calc-Run': runToken(),
+  }
+  const ticket = ticketFor(route)
+  if (ticket) headers['X-Calc-Ticket'] = ticket
+
   let res: Response
   try {
-    res = await fetch(`${BASE}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify(body),
-    })
+    res = await fetch(`${BASE}${path}`, { method: 'POST', headers, body: JSON.stringify(body) })
   } catch {
     return localFallback<T>(path, body)          // network error — API not running
   }
@@ -92,12 +102,23 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   // cannot take the site down, which is why the browser copy is still here;
   // removing it is a follow-up for once /api/steel/* is confirmed live.
   if (res.status === 404) return localFallback<T>(path, body)
+  // 402 IS NOT AN ERROR TO FALL BACK FROM. It is the server saying this guest
+  // has used their five free runs of this calculator — the one refusal that
+  // must NOT be answered by computing the result in the browser instead, or
+  // the gate would exist only to be routed around by its own client.
+  if (res.status === 402) {
+    const d = (await res.json().catch(() => null)) as { route?: string; used?: number } | null
+    throw new TrialExhaustedError(d?.route ?? route, d?.used ?? 0)
+  }
   if (!res.ok) {
     const detail = (await res.json().catch(() => null)) as { error?: string } | null
     const err = new Error(detail?.error ?? `Calculation API error (${res.status})`)
     console.error(err)   // the UI badge says "check console" — make that true
     throw err
   }
+  // The receipt for this run, so the next recompute costs the endpoint one
+  // hash instead of a round trip to Postgres.
+  rememberTicket(route, res.headers.get('x-calc-ticket'))
   return (await res.json()) as T
 }
 
@@ -119,7 +140,7 @@ export interface BeamCalcResult {
   avail: AvailableBeam
 }
 export const calcBeam = (input: BeamCalcInput) =>
-  post<BeamCalcResult>('/api/steel/beam', input)
+  post<BeamCalcResult>('/api/steel/beam', input, TRIAL_ROUTE.beam)
 
 // ── Column ────────────────────────────────────────────────────────────────
 
@@ -139,7 +160,7 @@ export interface ColumnCalcResult {
   avail: AvailableColumn
 }
 export const calcColumn = (input: ColumnCalcInput) =>
-  post<ColumnCalcResult>('/api/steel/column', input)
+  post<ColumnCalcResult>('/api/steel/column', input, TRIAL_ROUTE.column)
 
 // ── Connection ────────────────────────────────────────────────────────────
 
@@ -190,4 +211,4 @@ export interface ConnectionCalcResult {
   availBlockShear: number[]
 }
 export const calcConnection = (input: ConnectionCalcInput) =>
-  post<ConnectionCalcResult>('/api/steel/connection', input)
+  post<ConnectionCalcResult>('/api/steel/connection', input, TRIAL_ROUTE.connection)

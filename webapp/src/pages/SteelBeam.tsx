@@ -10,7 +10,7 @@ import type { SolutionStep } from '../lib/solution'
 import { f1, f2 } from '../lib/format'
 import { sn1, sn2 } from '../lib/solution'
 import { PageHeader } from '../components/calc'
-import { ShapePick, CalcBadge, Spinner, Verdict, ZoneBadge, BasisPick, BasisNote } from '../components/steelUi'
+import { ShapePick, CalcBadge, TrialWall, Spinner, Verdict, ZoneBadge, BasisPick, BasisNote } from '../components/steelUi'
 import { capacityLabel, demandLabel, factorLabel, comboLabel, SAFETY, type DesignBasis } from '../engine/designBasis'
 import { GRADES, shapeOrFirst, type Grade } from '../lib/steelShapes'
 
@@ -35,7 +35,7 @@ function BeamTab() {
     () => ({ shapeName, Fy, span, Lb, Cb, wDead: wD, wLive: wL, basis }),
     [shapeName, Fy, span, Lb, Cb, wD, wL, basis]
   )
-  const { data: res, loading, error } = useCalcResult<BeamCalcResult>(
+  const { data: res, loading, error, cause } = useCalcResult<BeamCalcResult>(
     () => calcBeam(input), [input]
   )
 
@@ -106,9 +106,10 @@ function BeamTab() {
 
   return (
     <div>
+      <TrialWall cause={cause} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
       <div className="space-y-5">
-        <Card title={<>Section & grade<CalcBadge loading={loading} error={error} /></>}>
+        <Card title={<>Section & grade<CalcBadge loading={loading} error={error} cause={cause} /></>}>
           <ShapePick value={shapeName} onChange={setShapeName} />
           <BasisPick value={basis} onChange={setBasis} />
           <BasisNote basis={basis} />
