@@ -39,6 +39,57 @@ export function captureBaseline(
   return { id, name, createdAt, activities }
 }
 
+/**
+ * The name to give the next baseline, avoiding a collision with one already
+ * captured. "Baseline 2" appearing twice in the picker is unusable — the
+ * dropdown shows a name and a date, and two rows reading the same thing give
+ * the user no way to tell which snapshot they are measuring against.
+ */
+export function nextBaselineName(existing: readonly Baseline[]): string {
+  const taken = new Set(existing.map((b) => b.name))
+  let n = existing.length + 1
+  while (taken.has(`Baseline ${n}`)) n++
+  return `Baseline ${n}`
+}
+
+/**
+ * Rename a baseline. A blank or whitespace-only name is REFUSED rather than
+ * stored — an unnamed row in the picker is indistinguishable from its
+ * neighbours, and the field it identifies is the one every delay figure on the
+ * page is measured against.
+ *
+ * Returns a new array; the input is untouched.
+ */
+export function renameBaseline(
+  baselines: readonly Baseline[], id: string, name: string,
+): Baseline[] {
+  const clean = name.trim()
+  if (!clean) return [...baselines]
+  return baselines.map((b) => (b.id === id ? { ...b, name: clean } : b))
+}
+
+/** Drop a baseline. Returns a new array; unknown ids are a no-op. */
+export function removeBaseline(baselines: readonly Baseline[], id: string): Baseline[] {
+  return baselines.filter((b) => b.id !== id)
+}
+
+/**
+ * Which baseline should be selected after `removed` disappears.
+ *
+ * Falls to the newest of what is left, and to null when nothing is. The UI
+ * cannot simply keep its current selection: deleting the selected baseline
+ * would otherwise leave the delay analysis pointed at an id that no longer
+ * exists, which renders as an empty panel rather than an error.
+ */
+export function baselineAfterRemoval(
+  baselines: readonly Baseline[], removed: string, selected: string,
+): string | null {
+  const left = removeBaseline(baselines, removed)
+  if (left.length === 0) return null
+  if (selected !== removed && left.some((b) => b.id === selected)) return selected
+  return left[left.length - 1].id
+}
+
 export interface DateVariance {
   /** current start − baseline start, calendar days (>0 = starts later). */
   startVarianceDays: number
