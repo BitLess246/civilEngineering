@@ -19,8 +19,13 @@ import { PLANS, planOf } from './plans'
  * text instead fails on a comment that merely names the thing it is warning
  * you against — which is exactly what happened the first time this ran.
  */
+// No `$` anchor: `.` does not match `\r`, so on a CRLF checkout `/--.*$/`
+// matched nothing at all and every comment survived — including the one below
+// that names `user_metadata` while warning against it, which then failed the
+// assertion that the executed SQL never reads it. Green on Linux, red on
+// Windows, and about the file's punctuation rather than its meaning.
 const code = (sql: string): string =>
-  sql.split('\n').map((l) => l.replace(/--.*$/, '')).join('\n')
+  sql.split('\n').map((l) => l.replace(/--.*/, '')).join('\n')
 
 /** The `when '<plan>' then <null|N>` branches of `project_limit()`. */
 function sqlLimits(sql: string): Record<string, number | null> {
