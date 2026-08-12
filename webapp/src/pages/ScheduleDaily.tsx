@@ -1,11 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Activity, ScheduleProject } from '../engine/schedule/model'
 import { useScheduleProject } from '../lib/useScheduleProject'
 import { useScheduleSolve, type ScheduleSolve } from '../lib/useScheduleSolve'
-import { captureBaseline } from '../engine/schedule/baseline'
+import {
+  captureBaseline, nextBaselineName, renameBaseline, removeBaseline, baselineAfterRemoval,
+} from '../engine/schedule/baseline'
 import { analyzeDelays } from '../lib/delayAnalysis'
 import { PageHeader } from '../components/calc'
+import { GuidedTour } from '../components/GuidedTour'
+import { TourButton } from '../components/TourButton'
+import { DAILY_STEPS } from '../lib/scheduleDailyTour'
+import { useTour } from '../lib/useTour'
 
 // Phase 10 — daily reports + delay analysis at /schedule/daily. Capture/select
 // baselines, log per-activity actuals (% complete, actual start/finish, remarks)
@@ -116,6 +122,82 @@ function ProgressLog({ project, update }: { project: ScheduleProject; update: Up
   )
 }
 
+/**
+ * Choose a baseline, rename it, delete it.
+ *
+ * Capture used to be the only verb. A stray snapshot was therefore permanent,
+ * and "Baseline 4" told you nothing about which revision it was — the only way
+ * out of either was to export the project, edit the JSON and import it back.
+ *
+ * DELETING ASKS, renaming does not. A baseline is the reference every delay
+ * figure on this page is measured against and there is no undo, so it follows
+ * the same two-step the project delete uses. A name is recoverable by typing
+ * it again, so a confirmation there would only be in the way.
+ */
+function BaselinePicker({ project, activeId, onSelect, update }: {
+  project: ScheduleProject; activeId: string
+  onSelect: (id: string) => void; update: Update
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [confirmDel, setConfirmDel] = useState(false)
+
+  const active = project.baselines.find((b) => b.id === activeId)
+  if (!active) return null
+
+  const startEdit = () => { setDraft(active.name); setConfirmDel(false); setEditing(true) }
+  const commit = () => {
+    update((d) => { d.baselines = renameBaseline(d.baselines, active.id, draft) })
+    setEditing(false)
+  }
+  const remove = () => {
+    // Work out the survivor BEFORE the update, so the selection never points
+    // at an id that has just been deleted.
+    const next = baselineAfterRemoval(project.baselines, active.id, activeId)
+    update((d) => { d.baselines = removeBaseline(d.baselines, active.id) })
+    onSelect(next ?? '')
+    setConfirmDel(false)
+  }
+
+  if (editing) {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false) }}
+          placeholder="Baseline name"
+          className="w-48 rounded-md border border-[#0f4c92] px-2 py-1.5 text-[12px] text-[#0f1b2a] focus:outline-none" />
+        <button type="button" onClick={commit} disabled={!draft.trim()}
+          className="rounded-md bg-[#0f4c92] px-2.5 py-1.5 text-[12px] font-semibold text-white hover:bg-[#0d3f78] disabled:opacity-40">Save</button>
+        <button type="button" onClick={() => setEditing(false)} className={btn}>Cancel</button>
+      </span>
+    )
+  }
+
+  if (confirmDel) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded border border-red-200 bg-red-50 px-2 py-1">
+        <span className="text-[11.5px] text-red-900">Delete “{active.name}”? Delay figures measured against it go with it.</span>
+        <button type="button" onClick={remove}
+          className="rounded bg-red-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-red-700">Delete</button>
+        <button type="button" onClick={() => setConfirmDel(false)} className={btn}>Keep</button>
+      </span>
+    )
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5" data-tour="baseline-select">
+      <select value={activeId} onChange={(e) => onSelect(e.target.value)}
+        className="rounded-md border border-[#d6d3c9] bg-white px-2 py-1.5 text-[12px]">
+        {project.baselines.map((b) => <option key={b.id} value={b.id}>{b.name} · {b.createdAt.slice(0, 10)}</option>)}
+      </select>
+      <button type="button" onClick={startEdit} className={btn} title="Rename this baseline">Rename</button>
+      <button type="button" onClick={() => setConfirmDel(true)}
+        className="rounded-md border border-red-200 px-2 py-1.5 text-[12px] font-semibold text-red-700 hover:bg-red-50"
+        title="Delete this baseline">Delete</button>
+    </span>
+  )
+}
+
 export default function ScheduleDaily() {
   const api = useScheduleProject()
   const solve = useScheduleSolve(api.project)
@@ -125,13 +207,38 @@ export default function ScheduleDaily() {
   const capture = () => {
     if (!solve.ok) return   // captureBaseline runs CPM — a cyclic schedule would throw
     const id = `bl_${Date.now().toString(36)}`
-    api.update((d) => { d.baselines.push(captureBaseline(d, id, `Baseline ${d.baselines.length + 1}`, new Date().toISOString())) })
+    api.update((d) => { d.baselines.push(captureBaseline(d, id, nextBaselineName(d.baselines), new Date().toISOString())) })
     setBaselineId(id)
   }
 
+  /**
+   * The walkthrough's view controller.
+   *
+   * This page has no tabs, so it reads the step's `tab` as an action — the
+   * same latitude `tour.ts` gives every page over that string.
+   *
+   * `tab: 'baselined'` CAPTURES A BASELINE, because the two steps after it
+   * describe a delay table that does not render without one; they used to show
+   * the overlay's "not on screen yet" notice for exactly as long as the user
+   * had not taken the advice of step one.
+   *
+   * ONLY WHEN THERE IS NONE. Running the guide on a project that already has
+   * baselines must not add another — a second snapshot of the same schedule
+   * tells you nothing and pushes the real one down the picker. And it is safe
+   * to offer at all only because a baseline can now be deleted; while capture
+   * was the only verb, a guide that captured left permanent litter.
+   */
+  const setTourView = useCallback((tab: string) => {
+    if (tab === 'baselined' && solve.ok && project && project.baselines.length === 0) capture()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [solve.ok, project])
+
+  const tour = useTour(DAILY_STEPS, setTourView)
+
   const actions = project && (
     <div className="flex items-center gap-2">
-      <button type="button" onClick={capture} disabled={!solve.ok} className={`${btn} disabled:opacity-40`} title={solve.ok ? '' : 'Fix schedule errors first'}>+ Capture baseline</button>
+      <button type="button" onClick={capture} disabled={!solve.ok} className={`${btn} disabled:opacity-40`} title={solve.ok ? '' : 'Fix schedule errors first'} data-tour="capture-baseline">+ Capture baseline</button>
+      <TourButton onClick={tour.start} label="Guide" />
       <Link to="/schedule" className={btn}>Grid</Link>
     </div>
   )
@@ -157,25 +264,28 @@ export default function ScheduleDaily() {
               <div className="flex flex-wrap items-center gap-3">
                 <h2 className="text-[14px] font-bold text-[#0f1b2a]">Delay analysis</h2>
                 {project.baselines.length > 0 ? (
-                  <select value={activeBaseline} onChange={(e) => setBaselineId(e.target.value)} className="rounded-md border border-[#d6d3c9] bg-white px-2 py-1.5 text-[12px]">
-                    {project.baselines.map((b) => <option key={b.id} value={b.id}>{b.name} · {b.createdAt.slice(0, 10)}</option>)}
-                  </select>
+                  <BaselinePicker project={project} activeId={activeBaseline}
+                    onSelect={setBaselineId} update={api.update} />
                 ) : <span className="text-[12px] text-[#a39d8d]">No baseline yet — <button type="button" onClick={capture} className="font-semibold text-[#0f4c92] underline">capture one</button> to measure delays against.</span>}
               </div>
               {!solve.ok
                 ? <div className="rounded-lg border border-[#efd9cc] bg-[#fdf3ee] px-4 py-2.5 text-[12px] text-[#8f4a2f]">The schedule has {solve.errorCount} blocking issue(s); fix them in the grid to analyse delays.</div>
-                : activeBaseline && <DelayAnalysis project={project} solve={solve} baselineId={activeBaseline} />}
+                : activeBaseline && <div data-tour="delay-analysis"><DelayAnalysis project={project} solve={solve} baselineId={activeBaseline} /></div>}
             </section>
 
             {/* Daily progress log */}
             <section className="space-y-2">
               <h2 className="text-[14px] font-bold text-[#0f1b2a]">Daily progress log</h2>
-              <ProgressLog project={project} update={api.update} />
+              <div data-tour="progress-log"><ProgressLog project={project} update={api.update} /></div>
               <p className="text-[11px] text-[#a39d8d]">Record actual % complete, actual start/finish and remarks per activity. Edits save immediately and feed the dashboard, Gantt shading and reports. (Photo attachments are a future enhancement — no file storage yet.)</p>
             </section>
           </>
         )}
       </div>
+      {tour.on && (
+        <GuidedTour step={tour.step} index={tour.at} total={tour.total}
+          onNext={tour.next} onPrev={tour.prev} onClose={tour.close} />
+      )}
     </>
   )
 }

@@ -9,6 +9,10 @@ import { dataDateOffset, forecastFinishISO } from '../lib/scheduleDates'
 import { useScheduleProject } from '../lib/useScheduleProject'
 import { useScheduleSolve, type ScheduleSolve } from '../lib/useScheduleSolve'
 import { PageHeader } from '../components/calc'
+import { GuidedTour } from '../components/GuidedTour'
+import { TourButton } from '../components/TourButton'
+import { DASHBOARD_STEPS } from '../lib/scheduleDashboardTour'
+import { useTour } from '../lib/useTour'
 
 // Phase 7 — project dashboard at /schedule/dashboard. Composes the engine's
 // projectProgress (schedule/progress) + earnedValue (cost EVM) at a user-chosen
@@ -36,9 +40,15 @@ function Stat({ label, value, sub, tone }: { label: string; value: string; sub?:
   )
 }
 
-function Card({ title, right, children }: { title: string; right?: string; children: React.ReactNode }) {
+// `data-tour` is taken as a raw attribute and spread rather than as a named
+// prop, so the literal string stays in this file — `tours.test.ts` checks every
+// walkthrough anchor by reading the page SOURCE, and an attribute assembled
+// from a variable would read as a missing element.
+function Card({ title, right, children, ...rest }: {
+  title: string; right?: string; children: React.ReactNode; 'data-tour'?: string
+}) {
   return (
-    <section className="rounded-lg border border-[#e3e1da] bg-white">
+    <section className="rounded-lg border border-[#e3e1da] bg-white" {...rest}>
       <div className="flex items-center justify-between border-b border-[#eeece5] px-4 py-2.5">
         <h2 className="text-[13px] font-bold text-[#0f1b2a]">{title}</h2>
         {right && <span className="font-mono text-[10.5px] text-[#a39d8d]">{right}</span>}
@@ -132,7 +142,7 @@ function Dashboard({ project, solve }: { project: ScheduleProject; solve: Schedu
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-[#e3e1da] bg-white p-3">
+      <div className="flex flex-wrap items-end gap-3 rounded-lg border border-[#e3e1da] bg-white p-3" data-tour="data-date">
         <label className="flex flex-col text-[10px] font-semibold uppercase tracking-widest text-[#a39d8d]">Data date
           <input type="date" value={dataDate} min={start} max={finishIso} onChange={(e) => setDataDate(e.target.value || start)}
             className="mt-0.5 rounded border border-[#e3e1da] px-2 py-1 font-mono text-[12.5px] font-normal tracking-normal text-[#0f1b2a]" />
@@ -145,7 +155,7 @@ function Dashboard({ project, solve }: { project: ScheduleProject; solve: Schedu
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6" data-tour="kpi-row">
         <Stat label="Actual progress" value={`${n1(prog.actualPercent)}%`} />
         <Stat label="Planned progress" value={`${n1(prog.plannedPercent)}%`} />
         <Stat label="Schedule var." value={`${prog.scheduleVariancePercent > 0 ? '+' : ''}${n1(prog.scheduleVariancePercent)}%`} tone={varTone} />
@@ -155,7 +165,7 @@ function Dashboard({ project, solve }: { project: ScheduleProject; solve: Schedu
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
-        <Card title="Progress S-curve" right={`${prog.completed}/${prog.total} activities complete`}>
+        <Card title="Progress S-curve" right={`${prog.completed}/${prog.total} activities complete`} data-tour="s-curve">
           <SCurve curve={plannedCurve(prog.activities.map((a) => ({ es: a.es, ef: a.ef, weight: a.duration })), prog.plannedDuration, 48)}
             duration={prog.plannedDuration} actualPct={prog.actualPercent} dataOffset={dataOffset} />
         </Card>
@@ -180,7 +190,7 @@ function Dashboard({ project, solve }: { project: ScheduleProject; solve: Schedu
       </div>
 
       {/* Earned value (cost) */}
-      <Card title="Earned Value Management (cost)" right="BAC from resource rates · AC from input">
+      <Card title="Earned Value Management (cost)" right="BAC from resource rates · AC from input" data-tour="evm">
         {!evm.hasCost ? (
           <p className="text-[12px] text-[#a39d8d]">No resource costs are defined on the activities — add resource assignments with rates in the project to see cost EVM. Schedule performance (SPI, days ahead/behind) above is duration-based and needs no cost.</p>
         ) : (
@@ -213,10 +223,13 @@ export default function ScheduleDashboard() {
   const api = useScheduleProject()
   const solve = useScheduleSolve(api.project)
   const project = api.project
+  // No tabs on this page, so the tour only spotlights — nothing to navigate.
+  const tour = useTour(DASHBOARD_STEPS, () => {})
 
   return (
     <>
-      <PageHeader title="Dashboard" badges={['progress', 'EVM', 'SPI/CPI']} actions={project ? <Link to="/schedule" className={btn}>Grid</Link> : undefined} />
+      <PageHeader title="Dashboard" badges={['progress', 'EVM', 'SPI/CPI']}
+        actions={project ? <><TourButton onClick={tour.start} label="Guide" /><Link to="/schedule" className={btn}>Grid</Link></> : undefined} />
       <div className="mx-auto max-w-[1400px] space-y-4 p-5 sm:p-7">
         {!project ? (
           <div className="rounded-lg border border-dashed border-[#d6d3c9] bg-white px-6 py-16 text-center">
@@ -231,6 +244,10 @@ export default function ScheduleDashboard() {
           <Dashboard project={project} solve={solve} />
         )}
       </div>
+      {tour.on && (
+        <GuidedTour step={tour.step} index={tour.at} total={tour.total}
+          onNext={tour.next} onPrev={tour.prev} onClose={tour.close} />
+      )}
     </>
   )
 }

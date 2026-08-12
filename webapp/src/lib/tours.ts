@@ -16,5 +16,11 @@ import type { Tour } from './tour'
 import { SOILS_TOUR } from './soilsTour'
 import { MODEL_TOUR } from './modelTour'
 import { PLUMBING_TOUR } from './plumbingTour'
+import { SCHEDULE_TOUR } from './scheduleTour'
+import { DASHBOARD_TOUR } from './scheduleDashboardTour'
+import { DAILY_TOUR } from './scheduleDailyTour'
 
-export const TOURS: readonly Tour[] = [SOILS_TOUR, MODEL_TOUR, PLUMBING_TOUR]
+export const TOURS: readonly Tour[] = [
+  SOILS_TOUR, MODEL_TOUR, PLUMBING_TOUR,
+  SCHEDULE_TOUR, DASHBOARD_TOUR, DAILY_TOUR,
+]
