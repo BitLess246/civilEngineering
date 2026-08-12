@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../lib/auth/authContext'
 import { usePlan } from '../../lib/auth/usePlan'
 import { loadProfile, saveProfile, preparedByLine, type Profile as ProfileData } from '../../lib/auth/profile'
-import { CHECKOUT_ENABLED, formatPeso, priceFor } from '../../lib/plans'
+import { CHECKOUT_ENABLED, formatUsd, priceFor } from '../../lib/plans'
 
 function Field({ label, value, onChange, placeholder, hint }: {
   label: string; value: string; onChange: (v: string) => void; placeholder?: string; hint?: string
@@ -69,7 +69,7 @@ export default function Profile() {
               <dd className="font-medium text-slate-800">
                 {plan.name}
                 {plan.priceMonthly ? (
-                  <span className="text-slate-500"> · {formatPeso(priceFor(plan, 'monthly')!)}/month</span>
+                  <span className="text-slate-500"> · {formatUsd(priceFor(plan, 'monthly')!)}/month</span>
                 ) : null}
               </dd>
             </div>

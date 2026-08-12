@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   PLANS, planOf, planAllows, withinModelLimit, withinProjectLimit, lowestPlanWith,
   upgradeMessage, featureLabel, CHECKOUT_ENABLED,
-  priceFor, monthlyEquivalent, annualSaving, annualDiscountOf, formatPeso,
+  priceFor, monthlyEquivalent, annualSaving, annualDiscountOf, formatUsd,
   ANNUAL_DISCOUNT, CURRENCY,
   type Feature,
 } from './plans'
@@ -208,16 +208,25 @@ describe('checkout', () => {
 describe('pricing', () => {
   const paid = PLANS.filter((p) => p.priceMonthly)
 
-  it('prices everything in pesos, because that is what the provider settles in', () => {
-    expect(CURRENCY).toBe('PHP')
-    expect(formatPeso(1399)).toBe('₱1,399')
-    expect(formatPeso(15099)).toBe('₱15,099')
-    expect(formatPeso(0)).toBe('₱0')
+  it('prices everything in dollars, because Paddle cannot charge pesos', () => {
+    // The constraint, asserted rather than remembered: PHP is not among
+    // Paddle's payment currencies, so a peso figure here could never be the
+    // figure charged. Changing this back needs a provider that settles in PHP.
+    expect(CURRENCY).toBe('USD')
+    expect(formatUsd(19)).toBe('$19')
+    expect(formatUsd(205)).toBe('$205')
+    expect(formatUsd(0)).toBe('$0')
+    expect(formatUsd(1234)).toBe('$1,234')
   })
 
-  it('rounds rather than printing centavos', () => {
-    expect(formatPeso(1258.25)).toBe('₱1,258')
-    expect(formatPeso(2699.92)).toBe('₱2,700')
+  it('shows cents only where they are real', () => {
+    // A whole-dollar headline carries no `.00`, but the per-month equivalent of
+    // an annual plan genuinely has cents and must not be rounded away — $205/12
+    // is $17.08, and printing $17 would advertise a price nobody is charged.
+    expect(formatUsd(205 / 12)).toBe('$17.08')
+    expect(formatUsd(529 / 12)).toBe('$44.08')
+    expect(formatUsd(19.5)).toBe('$19.50')
+    expect(formatUsd(19.004)).toBe('$19')
   })
 
   it('gives every paid plan BOTH a monthly and an annual price', () => {
@@ -231,10 +240,11 @@ describe('pricing', () => {
   it('honours the advertised annual discount, within the rounding band', () => {
     // The number a customer is charged is stored, not computed, so this is what
     // stops a tidied-up figure drifting away from the "10% off" printed beside
-    // it. The prices are deliberately rounded to a 99 ending, which cannot land
-    // on exactly 10%: Pro is 10.06% off and Max 9.97%. A tenth of a PERCENTAGE
-    // POINT is the band that rounding needs and that a real mistake — a digit
-    // dropped, a discount applied twice — would blow straight through.
+    // it. The annual prices are whole dollars, which cannot land on exactly
+    // 10%: Pro is 10.09% off ($205 against $228) and Max 10.03% ($529 against
+    // $588). A tenth of a PERCENTAGE POINT is the band that rounding needs and
+    // that a real mistake — a digit dropped, a discount applied twice — would
+    // blow straight through.
     const BAND = 0.001
     for (const p of paid) {
       const off = annualDiscountOf(p)
@@ -246,8 +256,8 @@ describe('pricing', () => {
   it('states the actual discount each plan achieves', () => {
     // Written down rather than left implicit, so the marketing claim and the
     // arithmetic are visibly the same thing.
-    expect(annualDiscountOf('pro') * 100).toBeCloseTo(10.06, 1)
-    expect(annualDiscountOf('max') * 100).toBeCloseTo(9.97, 1)
+    expect(annualDiscountOf('pro') * 100).toBeCloseTo(10.09, 1)
+    expect(annualDiscountOf('max') * 100).toBeCloseTo(10.03, 1)
   })
 
   it('always makes annual cheaper per month than monthly', () => {
@@ -259,7 +269,7 @@ describe('pricing', () => {
     }
   })
 
-  it('reports a real peso saving for paying yearly', () => {
+  it('reports a real dollar saving for paying yearly', () => {
     for (const p of paid) {
       expect(annualSaving(p), p.id).toBe(p.priceMonthly! * 12 - p.priceAnnual!)
       expect(annualSaving(p), p.id).toBeGreaterThan(0)
@@ -267,10 +277,13 @@ describe('pricing', () => {
   })
 
   it('quotes the agreed headline figures', () => {
-    expect(priceFor('pro', 'monthly')).toBe(1399)
-    expect(priceFor('max', 'monthly')).toBe(2999)
-    expect(priceFor('pro', 'annual')).toBe(15099)
-    expect(priceFor('max', 'annual')).toBe(32399)
+    // These four numbers must equal the unit amounts on the Paddle prices the
+    // checkout opens; the seed script in scripts/seed-paddle-catalog.ts is the
+    // other half of the pair, and it states them in cents.
+    expect(priceFor('pro', 'monthly')).toBe(19)
+    expect(priceFor('max', 'monthly')).toBe(49)
+    expect(priceFor('pro', 'annual')).toBe(205)
+    expect(priceFor('max', 'annual')).toBe(529)
   })
 
   it('charges nothing for free and nothing at all for guest', () => {
