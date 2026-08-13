@@ -51,6 +51,13 @@ export type PriceMap = Record<string, PlanId>
  * Entries naming an unknown plan are dropped rather than trusted, so a typo
  * like `pri_abc=professional` fails closed at the mapping step instead of
  * producing a user with a nonsense tier.
+ *
+ * An optional `:period` suffix — `pri_abc=pro:annual` — is ACCEPTED AND IGNORED
+ * here. Plan changes need to know a price's billing period (see
+ * `planChange.ts`), and putting it in this same variable keeps one list of
+ * prices rather than two that can disagree. This function must therefore not
+ * choke on the longer form: dropping `pri_abc=pro:annual` as unrecognised would
+ * make the webhook reject a real payment on a price it does sell.
  */
 export function parsePriceMap(raw: string | undefined): PriceMap {
   const out: PriceMap = {}
@@ -59,7 +66,7 @@ export function parsePriceMap(raw: string | undefined): PriceMap {
     const i = pair.indexOf('=')
     if (i <= 0) continue
     const id = pair.slice(0, i).trim()
-    const plan = pair.slice(i + 1).trim()
+    const plan = pair.slice(i + 1).trim().split(':')[0].trim()
     if (id && (plan === 'pro' || plan === 'max' || plan === 'free')) out[id] = plan
   }
   return out
