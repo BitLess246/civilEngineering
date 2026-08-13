@@ -1244,6 +1244,19 @@ useful**, along with `supabase functions deploy billing-change-plan`.
 `AuthUser` now carries `hasSubscription` (a boolean from `app_metadata`, never
 the id) so the pricing page can tell "Switch to Max" from "Choose Max".
 
+**Billing history is on the profile page (#584).** `billing-history` is the
+fourth function, read-only, and its only input is a `txn_…` cursor. The
+`customer_id` filter is the security guarantee — an unscoped
+`GET /transactions` returns the whole account — so `historyQuery` refuses to
+build a query without one. `draft`/`ready` are excluded; `past_due` is included
+and is the only status phrased as an instruction. Transactions carry no
+pre-formatted total, so amounts reuse the pricing page's lowest-unit
+conversion. The panel renders nothing when there is no history. Deploy with
+`supabase functions deploy billing-history`.
+
+So all four functions now exist: `billing-webhook` (Paddle → us),
+`billing-portal`, `billing-change-plan` and `billing-history` (user → us).
+
 **Sandbox is live and configured.** Catalog seeded (one Pro, one Max, four
 prices — an earlier duplicate set at the old $199 price is archived), client
 token minted, notification destination `ntfset_01kzvw6y…` active, all five

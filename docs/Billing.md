@@ -149,6 +149,38 @@ webhook ignores the suffix (a test pins that), and a price with no period still
 maps to its tier; it just cannot be ranked for a term switch, which then lands
 on the side that charges nothing today.
 
+### Showing what was charged — `billing-history`
+
+```bash
+supabase functions deploy billing-history       # NO --no-verify-jwt
+```
+
+Read-only, and the fourth function with the same shape. **The only input is a
+cursor** — a `txn_…` id for the next page. Nothing else can be asked for: not
+the customer, not the filter, not the page size.
+
+**The `customer_id` filter is the security guarantee, not a convenience.** A
+`GET /transactions` without one returns every transaction in the account, so
+`historyQuery` refuses to build a query string without a customer id, and that
+id is looked up from the caller's own record. There is no path through the
+module that produces an unscoped request.
+
+`draft` and `ready` are excluded — in-flight internal states, and a `draft` on
+screen reads as a charge that never happened. `past_due` is deliberately
+INCLUDED and is the only status phrased as an instruction ("Payment failed —
+update your card"): it is the one row a customer can act on.
+
+Unlike `PricePreview`, a transaction carries **no pre-formatted total** — only
+the integer and a currency code — so amounts go through the same lowest-unit
+conversion the pricing page uses. `grand_total` wins over `total` because it is
+net of any credit balance, and a history that disagrees with a bank statement is
+worse than none. A row whose amount does not parse is dropped rather than shown
+as zero.
+
+The panel renders **nothing** when there is no history, and it is deliberately
+less than the portal: no downloads, no card changes, no cancellation. Those need
+a portal session, and a summary somebody glances at should not mint one.
+
 ### Starting payment — `webapp/src/lib/billing/`
 
 `paddleConfig.ts` reads the six `VITE_PADDLE_*` variables and decides whether
@@ -323,8 +355,11 @@ forcing `currencyCode: 'JPY'` on the preview, which rendered ¥2,722/month and
 ¥32,666 billed yearly with no decimal places — the code path works; the
 dashboard switch has not been flipped.
 
-**Billing history is not shown in-app** — invoices are reachable through the
-customer portal, which is Paddle's page rather than ours.
+**`billing-history` has never returned a real row**, for the same reason as
+above: no completed checkout, so no transactions exist. The field paths are the
+documented ones and unreadable rows are dropped rather than shown as zero, but
+one real transaction should be compared against the Paddle dashboard before the
+list is trusted.
 
 ### Confirm before going live
 
