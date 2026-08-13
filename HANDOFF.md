@@ -1295,7 +1295,13 @@ log, `app_metadata.plan`, then sign out and in.
 
 **Going live** means a whole new universe: new catalog, new client token, new
 notification destination, new secret, and all six `VITE_` values changed
-together. Sandbox ids do not exist in production.
+together. Sandbox ids do not exist in production. The ordered cutover — gates,
+commands, verification with real money, and rollback — is written up under
+**"Going live — the cutover"** in `docs/Billing.md`. The rule it turns on: the
+server side goes first and the front end last, because a front end on live
+prices with a webhook still mapping sandbox ids means money taken and no plan
+granted. Nothing gets built or deployed for this; it is all configuration, and
+the long pole is Paddle's seller verification.
 
 Full setup and the pre-launch checklist are in `docs/Billing.md`.
 
