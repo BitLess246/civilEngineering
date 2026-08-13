@@ -7,6 +7,7 @@ import { SiteFooter } from './SiteFooter'
 import { AccountMenu } from './AccountMenu'
 import { BRAND_MARK, BRAND_TAIL } from '../lib/brand'
 import { TrialGate } from './TrialGate'
+import { ErrorBoundary } from './ErrorBoundary'
 
 // Workbench shell (docs/design/uiux-2026-07): persistent ink-navy sidebar with
 // the grouped tool catalog + ⌘K search, and a slim breadcrumb header. Wraps
@@ -109,8 +110,16 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
         {/* Every tool route renders through here, which is why the guest
             allowance is spent in ONE place rather than in twenty-eight route
-            elements. TrialGate passes non-trial routes straight through. */}
-        <TrialGate>{children}</TrialGate>
+            elements. TrialGate passes non-trial routes straight through.
+
+            The boundary sits INSIDE the shell so a render failure keeps the
+            sidebar and the header — a fallback the user cannot navigate away
+            from is barely better than the blank page it replaced. Keying it on
+            the location rebuilds it on every navigation, so one broken page
+            does not poison the content area for the rest of the session. */}
+        <ErrorBoundary key={pathname}>
+          <TrialGate>{children}</TrialGate>
+        </ErrorBoundary>
         <SiteFooter />
       </div>
       {palette && <CommandPalette onClose={() => setPalette(false)} />}

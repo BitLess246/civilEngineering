@@ -18,8 +18,8 @@ mechanism was established by reading, not observed.
 |----|---------|-----|----------|-------|
 | E1 | Steel column §H1-1 collapses biaxial bending to one strong-axis term | critical | computed | ✅ #577 |
 | E2 | Steel column K hardcoded 1.0 with a first-order analysis | critical | computed | ✅ #577 |
-| R1 | One malformed entry bricks all seven planning routes | critical | reproduced | ☐ |
-| R2 | No error boundary anywhere | critical | mechanical | ☐ |
+| R1 | One malformed entry bricks all seven planning routes | critical | reproduced | ✅ #579 |
+| R2 | No error boundary anywhere | critical | mechanical | ✅ #579 |
 | R3 | Two tabs silently overwrite each other's schedule | critical | traced | ☐ |
 | S1 | Plan project-limit bypassed by one bulk INSERT | high | reproduced | ☐ |
 | E3 | RC column P–M ignores biaxial interaction | high | computed | ✅ #578 |
@@ -217,7 +217,26 @@ away.
 
 ---
 
-## Phase 4 — data loss (R1, R2, R4, R3)
+## Phase 4 — data loss (R1, R2, R4, R3) — R1 + R2 ✅ SHIPPED (#579)
+
+**R1 and R2 are done.** `isScheduleProject` is hoisted out of `extractProject`
+and called in `readStored`, matching what both sibling stores have always done;
+`migrate()` now actually reads `stored.version` and refuses a record from a
+newer build. `ErrorBoundary` is mounted inside `AppShell`, keyed on the
+location.
+
+Proof both ways round: the seven new store tests **fail on the old code** with
+exactly the audit's `TypeError: Cannot read properties of undefined (reading
+'name')`, and pass after. Then reproduced end to end in a browser — planting
+`{"version":1,"savedAt":"x","project":{}}` in localStorage and reloading now
+leaves the app up, the sidebar present, the healthy project intact at 32 rows,
+and all seven planning routes rendering.
+
+**R3 and R4 remain** — save-conflict detection and quota surfacing. More design
+than patch; see below.
+
+### Original plan
+
 
 **R1** — `engine/schedule/store.ts:79-104`. `readStored` wraps only
 `JSON.parse`; the shape is never checked, and `list()` then dereferences
