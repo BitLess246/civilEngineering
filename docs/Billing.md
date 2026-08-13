@@ -120,6 +120,32 @@ real card, and no error message gets that money back.
 `customData: { user_id }`. It grants nothing — a completed checkout only means
 the browser reached the end of the flow.
 
+### Quoting a price — `localizedPrices.ts` / `useLocalizedPrices.ts`
+
+`/pricing` asks Paddle.js `PricePreview` what this visitor will be charged, in
+one request covering all four price ids, and renders that instead of the USD
+base. No country is sent: Paddle infers it from the request IP, the same way the
+overlay does, so the page and the checkout cannot disagree. A country selector
+was deliberately not built — it lets a visitor shop for the cheapest market and
+then meet their own country's price at checkout, which is the mismatch this
+closes.
+
+**What is quoted and what is derived.** `formattedTotals.total` is passed
+through untouched — it is the amount charged, so nothing reformats it. The
+per-month figure (annual ÷ 12) and the annual saving are ours, computed from the
+raw integer totals of the two prices Paddle just quoted, never from the USD
+base; the percentage comes from the same pair, so it cannot drift from the
+amount beside it if regional overrides are ever added.
+
+**Amounts arrive in the currency's lowest unit**, and `1900` is $19.00 but also
+¥1,900 — the yen has no minor unit. The divisor comes from `Intl` rather than a
+hand-kept list, so JPY/KRW/CLP (0 decimals) and the three-decimal dinars are all
+right without this code knowing they exist.
+
+It fails quiet, not closed: a blocked Paddle.js, an offline visitor or a deploy
+with no token leaves an empty table and the page renders the USD base, which is
+a true statement about the price rather than a spinner where a number should be.
+
 ## Setup
 
 ### 1. Create the catalog
@@ -167,6 +193,12 @@ Turn on **Business account > Currencies > automatic currency conversion** so
 buyers see their own currency. Prices are set in USD because **Paddle has no
 PHP** — the peso is not among its 33 payment currencies, and a Philippine seller
 transacts in USD.
+
+**That setting also decides what `/pricing` shows.** With conversion off, a
+`PricePreview` for any country comes back in USD and the page quotes dollars —
+correct, just not localized. It is the one thing standing between the code and a
+buyer seeing their own currency before they click, and it is switched in the
+dashboard, not in this repo.
 
 ### 3. Deploy the webhook
 
@@ -233,13 +265,17 @@ change.
 
 ## Still to do
 
-**Displayed prices are the USD base, not the converted local amount.** Paddle
-converts at checkout, so a buyer outside the US sees a different currency there
-than on `/pricing`. Paddle.js `PricePreview` returns the localized figure and
-would close that gap.
-
 **Plan changes are not handled in-app** — upgrading Pro → Max means a second
 checkout rather than a proration-aware subscription update.
+
+**Automatic currency conversion is off in the sandbox account**, so the
+localized pricing above currently resolves to USD for every country. Verified by
+forcing `currencyCode: 'JPY'` on the preview, which rendered ¥2,722/month and
+¥32,666 billed yearly with no decimal places — the code path works; the
+dashboard switch has not been flipped.
+
+**Billing history is not shown in-app** — invoices are reachable through the
+customer portal, which is Paddle's page rather than ours.
 
 ### Confirm before going live
 
