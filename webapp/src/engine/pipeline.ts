@@ -20,7 +20,7 @@ import { effectiveFlange } from './tbeam'
 import { designPrestressed, type PrestressedResult } from './prestressedBeam'
 import { minBeamThickness, type BeamSupport } from './beamDeflection'
 import { memberServiceDeflection, type MemberDeflectionResult } from './memberDeflection'
-import { designAxialColumn, capacityAtEccentricity, interaction, type BarLayout } from './columnDesign'
+import { designAxialColumn, capacityAtEccentricity, interaction, breslerReciprocal, type BarLayout } from './columnDesign'
 import { designSquareFooting, type SquareFootingResult } from './isolatedFooting'
 import { designCombinedFooting, type CombinedFootingResult } from './combinedFooting'
 import { designSlabDDM, type SlabDesignResult } from './slabDDM'
@@ -124,7 +124,13 @@ export interface BeamScheduleRow {
 }
 export interface ColumnScheduleRow {
   id: string; L: number
-  Pu: number; Mu: number; e: number
+  /** `Mu` is the STRONG-axis demand (bending about `h`, from Mz); `Muy` is the
+   *  weak-axis one (about `b`, from My). Both are reported because the biaxial
+   *  check consumes both and a schedule showing one cannot be hand-verified. */
+  Pu: number; Mu: number; Muy: number; e: number
+  /** Which rule produced `util` — Bresler above 0.1 f′c Ag, a linear load
+   *  contour below it, or a uniaxial check when one moment is negligible. */
+  biaxialMethod: BiaxialMethod
   /** P–M bar layout used for the check (mirrors AnalyzeOptions.colLayout). */
   layout?: BarLayout
   bars: number; phiPn: number; util: number
@@ -687,6 +693,100 @@ function pmCapacity(
   return Math.min(cap.phi * cap.Pn, 0.65 * inter.PnMax)
 }
 
+/** What the biaxial check did, so the schedule can say which rule governed. */
+export type BiaxialMethod = 'uniaxial-x' | 'uniaxial-y' | 'bresler' | 'load-contour'
+
+export interface BiaxialCapacity {
+  /** Effective φPn against the resultant demand, kN. */
+  phiPn: number
+  /** Pu/φPn, or the load-contour sum when that governs. */
+  util: number
+  method: BiaxialMethod
+}
+
+/**
+ * Column capacity under P plus bending about BOTH axes.
+ *
+ * WHAT THIS REPLACES. The row used to take `mr.Mmax` — the larger of two
+ * ORTHOGONAL moments — and evaluate capacity at the single eccentricity
+ * `e = Mmax/Pu`. `pmAt` is strictly uniaxial: the compression block runs across
+ * `b` and every lever arm is measured from `h`, so the second moment was
+ * discarded and, on a rectangular column, a moment about the `b` axis was
+ * checked against the deeper `h` section. A 500×500 tied column at Pu = 1200 kN
+ * with Mx = Mz = 150 kN·m reported util 0.413 against a true 0.603 — capacity
+ * overstated 1.46×.
+ *
+ * It matters here specifically because the layer above is CORRECT: orthogonal
+ * seismic effects (100%+30%, NSCP §208.8.1) deliberately produce simultaneous
+ * Mx and Mz, and this threw one of them away.
+ *
+ * ── THE TWO REGIMES ──────────────────────────────────────────────────────
+ * Bresler's reciprocal load, `1/Pn = 1/Pnx + 1/Pny − 1/Po`, is the standard
+ * treatment and is what the module header of `columnDesign.ts` has cited all
+ * along — `breslerReciprocal` was written and unit-tested and had no caller.
+ * It is only reliable in the compression-controlled regime; ACI puts the floor
+ * at roughly `Pu ≥ 0.1 f′c Ag`. Below that the section is tension-controlled
+ * and the reciprocal form becomes unconservative, so a linear (α = 1) load
+ * contour governs instead — the conservative member of the PCA family.
+ *
+ * ── THE WEAK-AXIS EVALUATION USES THE SPREAD CAGE ───────────────────────
+ * `Pny` needs the section turned on its side, so `b` and `h` swap. The bar
+ * LAYOUT does not swap with them. A `two-face` cage has its bars on the two
+ * faces perpendicular to `h`; bending about the other axis sees those same
+ * bars spread ALONG the depth rather than concentrated at its extremes.
+ * Re-using `two-face` on the swapped section would place them at the extremes
+ * — maximum lever arm, higher Mn, capacity overstated. `all-around` spreads
+ * them, which is both the closer physical model and the conservative one, so
+ * the weak-axis evaluation always uses it.
+ */
+export function pmCapacityBiaxial(
+  sec: RectSection, barDia: number, numBars: number,
+  Pu: number, Mux: number, Muy: number,
+  phiPnMax: number, layout: BarLayout = 'two-face',
+): BiaxialCapacity {
+  const strong = { b: sec.b, h: sec.h, cover: sec.cover, barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, numBars, layout }
+  // Section on its side. See the note above on why the layout does not swap.
+  const weak = { ...strong, b: sec.h, h: sec.b, layout: 'all-around' as BarLayout }
+
+  const eX = Pu > 1e-9 ? Mux / Pu : 0
+  const eY = Pu > 1e-9 ? Muy / Pu : 0
+  const tinyX = eX <= 1e-4, tinyY = eY <= 1e-4
+
+  if (tinyX && tinyY) return { phiPn: phiPnMax, util: phiPnMax > 1e-9 ? Pu / phiPnMax : Infinity, method: 'uniaxial-x' }
+  if (tinyY) {
+    const phiPn = pmCapacity(sec, barDia, numBars, Pu, Mux, phiPnMax, layout)
+    return { phiPn, util: phiPn > 1e-9 ? Pu / phiPn : Infinity, method: 'uniaxial-x' }
+  }
+  if (tinyX) {
+    // Bending about the WEAK axis only — still wrong to check against the deep
+    // section, which is the second half of the old defect.
+    const cap = capacityAtEccentricity(weak, eY)
+    const phiPn = Math.min(cap.phi * cap.Pn, 0.65 * interaction(weak).PnMax)
+    return { phiPn, util: phiPn > 1e-9 ? Pu / phiPn : Infinity, method: 'uniaxial-y' }
+  }
+
+  const px = capacityAtEccentricity(strong, eX)
+  const py = capacityAtEccentricity(weak, eY)
+  const Ag = sec.b * sec.h
+  const compressionControlled = Pu >= 0.1 * sec.fc * Ag / 1000    // kN vs MPa·mm²
+
+  if (compressionControlled) {
+    const Po = interaction(strong).Po
+    const Pn = breslerReciprocal(px.Pn, py.Pn, Po)
+    // φ from the governing uniaxial point; both are compression-controlled here.
+    const phi = Math.min(px.phi, py.phi)
+    const phiPn = Math.min(phi * Pn, 0.65 * interaction(strong).PnMax)
+    return { phiPn, util: phiPn > 1e-9 ? Pu / phiPn : Infinity, method: 'bresler' }
+  }
+
+  // Tension-controlled: a linear moment contour, which is the conservative
+  // member of the PCA load-contour family (α = 1).
+  const phiMnx = px.phi * px.Mn
+  const phiMny = py.phi * py.Mn
+  const util = (phiMnx > 1e-9 ? Mux / phiMnx : Infinity) + (phiMny > 1e-9 ? Muy / phiMny : Infinity)
+  return { phiPn: util > 1e-9 ? Pu / util : Infinity, util, method: 'load-contour' }
+}
+
 /** Utilisation Pu/φPn for a given cage under P and M. */
 export function pmUtilisation(
   sec: RectSection, barDia: number, numBars: number, Pu: number, Mu: number,
@@ -697,9 +797,9 @@ export function pmUtilisation(
 }
 
 function designColumnFromPM(
-  sec: RectSection, Pu: number, Mu: number,
+  sec: RectSection, Pu: number, Mux: number,
   system: 'gravity' | 'imf' | 'smf' = 'gravity', columnLength?: number,
-  layout: BarLayout = 'two-face',
+  layout: BarLayout = 'two-face', Muy = 0,
 ) {
   const ax = designAxialColumn({
     shape: 'tied', b: sec.b, h: sec.h, cover: sec.cover,
@@ -709,13 +809,18 @@ function designColumnFromPM(
     // detail a different column than the one that passed the P–M gate. Absent
     // ⇒ designAxialColumn sizes the steel, as it always did.
     numBars: sec.barCount,
+    // The cage must carry the RESULTANT demand, so the axial designer sees the
+    // vector sum rather than one axis. Sizing on Mux alone would hand the
+    // biaxial check a cage chosen for half the problem.
     system, columnLength,
   })
-  const e = Pu > 1e-9 ? Mu / Pu : 0
-  const phiPn = pmCapacity(sec, sec.barDia, ax.bars, Pu, Mu, ax.phiPnMax, layout)
-  const util = phiPn > 1e-9 ? Pu / phiPn : Infinity
+  // Eccentricity is reported for the governing (strong-axis) direction, which
+  // is what the schedule has always shown.
+  const e = Pu > 1e-9 ? Mux / Pu : 0
+  const bi = pmCapacityBiaxial(sec, sec.barDia, ax.bars, Pu, Mux, Muy, ax.phiPnMax, layout)
+  const { phiPn, util } = bi
   return {
-    e, bars: ax.bars, Ast: ax.Ast, phiPn, util,
+    e, bars: ax.bars, Ast: ax.Ast, phiPn, util, biaxialMethod: bi.method,
     tieSpacing: ax.tieSpacing,
     tieSpacingFinal: ax.tieSpacingFinal,
     tieSpacingLabel: ax.tieSpacingLabel,
@@ -733,10 +838,14 @@ function designColumnRow(
   layout: BarLayout = 'two-face',
 ): ColumnScheduleRow {
   const Pu = Math.max(0, -Math.min(...mr.N))           // compression (N < 0)
-  const Mu = mr.Mmax
-  const r = designColumnFromPM(sec, Pu, Mu, system, mr.L * 1000, layout)   // L m → mm
+  // Per-axis envelopes. `modelBridge` maps the section's strong axis to Iz, so
+  // Mz bends about `h` and My about `b` — see `pmCapacityBiaxial`.
+  const Mux = Math.max(...mr.Mz.map(Math.abs))
+  const Muy = Math.max(...mr.My.map(Math.abs))
+  const r = designColumnFromPM(sec, Pu, Mux, system, mr.L * 1000, layout, Muy)   // L m → mm
   return {
-    id: mr.id, L: mr.L, Pu, Mu, e: r.e, bars: r.bars, phiPn: r.phiPn, util: r.util, layout,
+    id: mr.id, L: mr.L, Pu, Mu: Mux, Muy, biaxialMethod: r.biaxialMethod,
+    e: r.e, bars: r.bars, phiPn: r.phiPn, util: r.util, layout,
     tieSpacing: r.tieSpacing,
     tieSpacingFinal: r.tieSpacingFinal,
     tieSpacingLabel: r.tieSpacingLabel,

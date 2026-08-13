@@ -16,12 +16,13 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import { describe, it, expect } from 'vitest'
-import { designSteelColumnRowForTest as designRow } from './pipeline'
+import { designSteelColumnRowForTest as designRow, pmCapacityBiaxial } from './pipeline'
 // `?raw` rather than node:fs — the app project carries no @types/node.
 import pipelineSrc from './pipeline.ts?raw'
 import { shapeByName } from './aiscSections'
 import type { F3MemberResult } from './frame3d'
 import type { RectSection } from './model'
+import { designAxialColumn } from './columnDesign'
 import type { ColumnK } from './effectiveLength'
 
 const steelSection: RectSection = {
@@ -147,6 +148,86 @@ describe('no design path reads the Mmax display summary', () => {
     const fn = pipelineSrc.slice(
       pipelineSrc.indexOf('function designSteelColumnRow'),
       pipelineSrc.indexOf('const beamOK ='),
+    )
+    expect(fn).not.toMatch(/\bmr\.Mmax\b/)
+    expect(fn).toMatch(/mr\.Mz\.map/)
+    expect(fn).toMatch(/mr\.My\.map/)
+  })
+})
+
+// ── RC column ─────────────────────────────────────────────────────────────
+const rc: RectSection = {
+  id: 'RC1', name: '500×500', b: 500, h: 500, fc: 28, fy: 415,
+  barDia: 25, tieDia: 10, cover: 40, barCount: 12,
+}
+/** φPn,max for a cage, so the capacity call sees the same cap the pipeline does. */
+const capOf = (sec: RectSection, Pu: number) => designAxialColumn({
+  shape: 'tied', b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia,
+  tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, Pu, numBars: sec.barCount,
+}).phiPnMax
+
+describe('the RC column check sees BOTH bending axes', () => {
+  it('reports a higher utilisation for biaxial bending than for one axis alone', () => {
+    // THE ASSERTION THAT WOULD HAVE CAUGHT IT. The old row evaluated capacity
+    // at the single eccentricity Mmax/Pu, so a second orthogonal moment
+    // changed nothing at all.
+    const Pu = 1200, phiPnMax = capOf(rc, Pu)
+    const uni = pmCapacityBiaxial(rc, rc.barDia, 12, Pu, 150, 0, phiPnMax, 'all-around')
+    const bi = pmCapacityBiaxial(rc, rc.barDia, 12, Pu, 150, 150, phiPnMax, 'all-around')
+    expect(bi.util).toBeGreaterThan(uni.util)
+  })
+
+  it('matches the hand-computed Bresler result for the audit case', () => {
+    // 500×500, 12⌀25, Pu = 1200 kN, Mx = Mz = 150 kN·m. The old path reported
+    // 0.413; Bresler gives 0.603. Anything back near 0.41 means the second
+    // moment has gone missing again.
+    const Pu = 1200
+    const r = pmCapacityBiaxial(rc, rc.barDia, 12, Pu, 150, 150, capOf(rc, Pu), 'all-around')
+    expect(r.util).toBeCloseTo(0.603, 2)
+    expect(r.method).toBe('bresler')
+  })
+
+  it('does not check a weak-axis moment against the deep section', () => {
+    // On a RECTANGULAR column the old code compared a moment about the shallow
+    // axis to the capacity of the deep one. Same magnitude, opposite axes:
+    // the shallow direction must be the more heavily utilised.
+    const tall: RectSection = { ...rc, name: '300×600', b: 300, h: 600 }
+    const Pu = 900, phiPnMax = capOf(tall, Pu)
+    const aboutDeep = pmCapacityBiaxial(tall, tall.barDia, 12, Pu, 120, 0, phiPnMax, 'all-around')
+    const aboutShallow = pmCapacityBiaxial(tall, tall.barDia, 12, Pu, 0, 120, phiPnMax, 'all-around')
+    expect(aboutShallow.util).toBeGreaterThan(aboutDeep.util)
+    expect(aboutShallow.method).toBe('uniaxial-y')
+  })
+
+  it('switches to a load contour below 0.1·f′c·Ag, where Bresler is unreliable', () => {
+    // ACI puts the floor of the reciprocal-load method around 0.1 f′c Ag; the
+    // section is tension-controlled below it and the reciprocal form turns
+    // unconservative. 0.1·28·500·500/1000 = 700 kN for this column.
+    const phiPnMax = capOf(rc, 400)
+    const low = pmCapacityBiaxial(rc, rc.barDia, 12, 400, 150, 150, phiPnMax, 'all-around')
+    const high = pmCapacityBiaxial(rc, rc.barDia, 12, 900, 150, 150, capOf(rc, 900), 'all-around')
+    expect(low.method).toBe('load-contour')
+    expect(high.method).toBe('bresler')
+  })
+
+  it('falls back to a plain uniaxial check when one moment is negligible', () => {
+    const Pu = 1200
+    const r = pmCapacityBiaxial(rc, rc.barDia, 12, Pu, 150, 0, capOf(rc, Pu), 'all-around')
+    expect(r.method).toBe('uniaxial-x')
+  })
+})
+
+describe('the pipeline actually calls the engines it imports', () => {
+  it('breslerReciprocal has a caller outside its own test', () => {
+    // It shipped correct, tested, and unreachable — `columnDesign.ts` cited it
+    // in the module header while nothing in any design path called it.
+    expect(pipelineSrc).toMatch(/breslerReciprocal\(/)
+  })
+
+  it('the RC column row derives its demands from per-axis arrays, not Mmax', () => {
+    const fn = pipelineSrc.slice(
+      pipelineSrc.indexOf('function designColumnRow'),
+      pipelineSrc.indexOf('function designColumnRow') + 1400,
     )
     expect(fn).not.toMatch(/\bmr\.Mmax\b/)
     expect(fn).toMatch(/mr\.Mz\.map/)
