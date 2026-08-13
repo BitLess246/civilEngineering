@@ -36,8 +36,10 @@ export interface ScheduleProjectApi {
   /** Mutate a structural copy of the project; auto-persists. */
   update(mutate: (draft: ScheduleProject) => void): void
   replace(project: ScheduleProject): void
-  loadSample(): void
-  newProject(name?: string): void
+  /** Loads the worked sample as a NEW project; returns its id. */
+  loadSample(): string
+  /** Creates an empty project; returns its id. */
+  newProject(name?: string): string
   open(id: string): void
   remove(id: string): void
   rename(name: string): void
@@ -70,9 +72,14 @@ export function useScheduleProject(): ScheduleProjectApi {
     refreshList()
   }, [store, refreshList])
 
+  // Returns the id it activated. A caller that CREATED a project needs to be
+  // able to undo that later — the walkthroughs seed a sample when there is
+  // nothing to point at and remove it again on close — and reading `activeId`
+  // afterwards would see the state from before this render.
   const activate = useCallback((id: string, next: ScheduleProject) => {
     setActiveId(id)
     persist(id, next)
+    return id
   }, [persist])
 
   const update = useCallback((mutate: (draft: ScheduleProject) => void) => {

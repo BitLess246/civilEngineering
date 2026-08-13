@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Activity, ScheduleProject } from '../engine/schedule/model'
 import { useScheduleProject } from '../lib/useScheduleProject'
@@ -212,28 +212,43 @@ export default function ScheduleDaily() {
   }
 
   /**
-   * The walkthrough's view controller.
+   * The guide captures a baseline, then puts it back.
    *
-   * This page has no tabs, so it reads the step's `tab` as an action — the
-   * same latitude `tour.ts` gives every page over that string.
+   * Two of its steps describe a delay table that does not render without one,
+   * and they used to show the overlay's "not on screen yet" notice for exactly
+   * as long as the user had not taken the advice of step one.
    *
-   * `tab: 'baselined'` CAPTURES A BASELINE, because the two steps after it
-   * describe a delay table that does not render without one; they used to show
-   * the overlay's "not on screen yet" notice for exactly as long as the user
-   * had not taken the advice of step one.
+   * The rule is exact, and it is the same one the schedule grid's guide
+   * follows: NO BASELINE BEFORE ⇒ NO BASELINE AFTER. A project that already
+   * has one is left completely alone — the guide runs against the user's own
+   * snapshot, and removes nothing on the way out.
    *
-   * ONLY WHEN THERE IS NONE. Running the guide on a project that already has
-   * baselines must not add another — a second snapshot of the same schedule
-   * tells you nothing and pushes the real one down the picker. And it is safe
-   * to offer at all only because a baseline can now be deleted; while capture
-   * was the only verb, a guide that captured left permanent litter.
+   * Only ever the one it created. A baseline the user captures with the button
+   * WHILE the guide is open has a different id and survives, which is the
+   * behaviour someone following along expects.
+   *
+   * `useTour` pairs these: `onEnd` fires exactly once and only after `onStart`,
+   * whether the guide ended at the last step, by Esc, or by the close button.
    */
-  const setTourView = useCallback((tab: string) => {
-    if (tab === 'baselined' && solve.ok && project && project.baselines.length === 0) capture()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [solve.ok, project])
-
-  const tour = useTour(DAILY_STEPS, setTourView)
+  const seeded = useRef<string | null>(null)
+  const tour = useTour(DAILY_STEPS, () => {}, {
+    onStart: () => {
+      if (!solve.ok || !project || project.baselines.length > 0) return
+      const id = `bl_${Date.now().toString(36)}`
+      seeded.current = id
+      api.update((d) => {
+        d.baselines.push(captureBaseline(d, id, nextBaselineName(d.baselines), new Date().toISOString()))
+      })
+      setBaselineId(id)
+    },
+    onEnd: () => {
+      const id = seeded.current
+      if (!id) return
+      seeded.current = null
+      api.update((d) => { d.baselines = removeBaseline(d.baselines, id) })
+      setBaselineId('')
+    },
+  })
 
   const actions = project && (
     <div className="flex items-center gap-2">
