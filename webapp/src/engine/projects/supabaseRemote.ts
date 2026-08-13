@@ -52,17 +52,25 @@ function toRecord(row: Row): RemoteRecord {
 }
 
 /**
- * Postgres tells us the ceiling was hit by refusing the INSERT.
+ * Postgres tells us the ceiling was hit by refusing the INSERT — in one of two
+ * ways, because the ceiling is enforced in two places.
  *
- * A row blocked by a `with check` clause comes back as 42501
- * (insufficient_privilege) with a row-level-security message — indistinguishable
- * from any other policy refusal by code alone, hence the message sniff. The
- * fallback is a plain error, so a genuine permission problem is never
- * mislabelled as "buy a bigger plan".
+ * 42501 (insufficient_privilege) is the INSERT policy's `with check` turning
+ * away a single-row save before a row is written. It is indistinguishable from
+ * any other policy refusal by code alone, hence the message sniff.
+ *
+ * 23514 (check_violation) is the `projects_limit` constraint trigger, which is
+ * the authority: the policy's count is `STABLE` and cannot see rows from its
+ * own statement, so a multi-row insert gets past it and is stopped after the
+ * rows land. See `supabase/migrations/20260813000000_project_limit_trigger.sql`.
+ *
+ * The fallback in both cases is a plain error, so a genuine permission problem
+ * is never mislabelled as "buy a bigger plan".
  */
-function isLimitRefusal(error: { code?: string; message?: string }): boolean {
-  if (error.code !== '42501') return false
+export function isLimitRefusal(error: { code?: string; message?: string }): boolean {
   const m = (error.message ?? '').toLowerCase()
+  if (error.code === '23514') return m.includes('project limit reached')
+  if (error.code !== '42501') return false
   return m.includes('row-level security') || m.includes('row level security')
 }
 

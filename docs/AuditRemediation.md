@@ -21,7 +21,7 @@ mechanism was established by reading, not observed.
 | R1 | One malformed entry bricks all seven planning routes | critical | reproduced | ✅ #579 |
 | R2 | No error boundary anywhere | critical | mechanical | ✅ #579 |
 | R3 | Two tabs silently overwrite each other's schedule | critical | traced | ☐ |
-| S1 | Plan project-limit bypassed by one bulk INSERT | high | reproduced | ☐ |
+| S1 | Plan project-limit bypassed by one bulk INSERT | high | reproduced | ✅ #580 |
 | E3 | RC column P–M ignores biaxial interaction | high | computed | ✅ #578 |
 | R5 | `/truss` is a gated feature with no gate | high | verified | ☐ |
 | R4 | Full storage silently refuses the save and reverts the edit | high | traced | ☐ |
@@ -270,15 +270,41 @@ another tab writes the active project.
 
 ## Phase 5 — entitlement and gates (S1, R5, S3, S2)
 
-**S1** — `20260804010000_projects.sql:76-109`. `project_count()` is `STABLE`,
-so in a multi-row INSERT it returns the same pre-statement value for every row;
-PostgREST emits exactly that shape for a JSON-array body. Reproduced: four
-single-row inserts stop at 3, one bulk insert admits 100. `VOLATILE` does not
-help — same command-id reason.
+**S1 — ✅ SHIPPED (#580).** `20260804010000_projects.sql:76-109`.
+`project_count()` is `STABLE`, so in a multi-row INSERT it returns the same
+pre-statement value for every row; PostgREST emits exactly that shape for a
+JSON-array body. Reproduced: four single-row inserts stop at 3, one bulk insert
+admits 100. `VOLATILE` does not help — the rows are invisible for MVCC
+command-id reasons, not caching ones.
 
-Fix (verified on PG 16): a constraint trigger firing `after insert`, where the
-new rows are visible. Keep `auth.uid() = user_id` in the RLS policy. Add a test
-asserting the enforcement is not snapshot-based.
+Shipped as `20260813000000_project_limit_trigger.sql`: a constraint trigger
+firing `after insert`, where the new rows are visible to an ordinary count. The
+RLS policy is unchanged — `auth.uid() = user_id` is the ownership boundary, and
+its count survives as a fast path that refuses the ordinary single-row save
+with 42501 before a row is written. The trigger is what makes the ceiling true;
+the policy is what makes the common refusal cheap.
+
+Evidence, three layers:
+
+- `project_limit.spec.sql` — 18 assertions against a throwaway Postgres 16,
+  run as a non-superuser so RLS is live. It fails on the pre-fix schema with
+  exactly the reported symptom (`one bulk insert of 100 is refused — got not
+  blocked`) and passes with the migration loaded. Covers the cases a
+  heavy-handed fix would break: a legitimate bulk of exactly 3 is allowed, 2
+  existing + a bulk of 1 is allowed, an UPDATE at 100 rows on a lapsed free
+  plan still succeeds.
+- `plans.limits.test.ts` — structural guards. The numeric assertions in that
+  file all passed while the ceiling was bypassable, so the new block instead
+  pins that the trigger fires AFTER INSERT, counts with a plain query rather
+  than `project_count()`, and that the ownership half of the policy is intact.
+- `supabaseRemote.test.ts` — the trigger raises `check_violation` with
+  `project limit reached`, which `isLimitRefusal` now translates to
+  `ProjectLimitError`. Without that, a bulk refusal reached the user as a raw
+  SQLSTATE.
+
+Left alone deliberately: `auth.uid() is null` skips the check, since only the
+service role can get there (`anon` fails `auth.uid() = user_id` against NULL).
+A restore or a support fix should not meet the paywall.
 
 **R5** — `/truss` and `/model` are in `GATED_PREFIXES` with no `RequireAuth`,
 and `TrialGate` passes members-only verdicts through by design. Wrap both; add

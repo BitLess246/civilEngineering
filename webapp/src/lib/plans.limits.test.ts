@@ -10,6 +10,7 @@
 
 import { describe, it, expect } from 'vitest'
 import migration from '../../../supabase/migrations/20260804010000_projects.sql?raw'
+import triggerMigration from '../../../supabase/migrations/20260813000000_project_limit_trigger.sql?raw'
 import { PLANS, planOf } from './plans'
 
 /**
@@ -82,5 +83,60 @@ describe('the SQL project ceiling matches plans.ts', () => {
       if (!p.features.includes('saved-projects')) continue
       expect(Object.keys(limits)).toContain(p.id)
     }
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// The ceiling was countable around, and this file did not notice.
+//
+// Every assertion above is about the NUMBERS agreeing. All of them passed
+// while one PostgREST call with a JSON-array body inserted a hundred projects
+// on a Free plan, because `project_count()` is STABLE and a `with check`
+// clause cannot see the rows of its own statement. The numbers were right; the
+// enforcement was not.
+//
+// So these are structural. They cannot prove the ceiling holds — only
+// `supabase/migrations/project_limit.spec.sql` can, and it does, against a real
+// Postgres — but they stop the fix from being deleted or quietly reverted by
+// someone reading the policy and concluding the trigger is redundant.
+// ─────────────────────────────────────────────────────────────────────────
+describe('the ceiling is enforced after the rows land, not from a snapshot', () => {
+  const sql = code(triggerMigration)
+
+  it('ships a trigger that fires AFTER INSERT', () => {
+    // BEFORE would put us back where we started: the row being inserted is not
+    // in the table yet, so the count is short by exactly the rows that matter.
+    expect(sql).toMatch(/after\s+insert\s+on\s+public\.projects/)
+    expect(sql).toMatch(/create\s+constraint\s+trigger\s+projects_limit/)
+  })
+
+  it('counts with a plain query, never through the STABLE project_count()', () => {
+    // The one-word "fix" that looks right and is not. `project_count()` is
+    // invisible to its own command for MVCC reasons, not caching ones, so
+    // marking it VOLATILE would change nothing.
+    const fn = sql.slice(sql.indexOf('function public.enforce_project_limit'))
+    expect(fn).not.toContain('project_count')
+    expect(fn).toMatch(/count\(\*\)\s+into\s+n\s+from\s+public\.projects/)
+  })
+
+  it('reads the ceiling from the same project_limit() the policy uses', () => {
+    // Two copies of the plan table would be a third place to drift.
+    expect(sql).toContain('public.project_limit()')
+  })
+
+  it('leaves the service role alone', () => {
+    // `auth.uid()` is NULL only when RLS was bypassed, which nothing but the
+    // service role can do. A restore or a support fix must not meet the paywall.
+    expect(sql).toMatch(/if\s+auth\.uid\(\)\s+is\s+null\s+then\s+return\s+null/)
+  })
+
+  it('and the ownership half of the INSERT policy is still in the other file', () => {
+    // The trigger only counts. If someone removes `auth.uid() = user_id` on the
+    // grounds that the trigger now handles the limit, any signed-in account can
+    // plant rows under another user id.
+    const insert = code(migration).slice(
+      code(migration).indexOf('for insert'), code(migration).indexOf('for update'),
+    )
+    expect(insert).toContain('auth.uid() = user_id')
   })
 })
