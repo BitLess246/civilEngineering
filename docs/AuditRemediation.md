@@ -23,7 +23,7 @@ mechanism was established by reading, not observed.
 | R3 | Two tabs silently overwrite each other's schedule | critical | traced | ☐ |
 | S1 | Plan project-limit bypassed by one bulk INSERT | high | reproduced | ✅ #580 |
 | E3 | RC column P–M ignores biaxial interaction | high | computed | ✅ #578 |
-| R5 | `/truss` is a gated feature with no gate | high | verified | ☐ |
+| R5 | `/truss` is a gated feature with no gate | high | reproduced | ✅ #581 |
 | R4 | Full storage silently refuses the save and reverts the edit | high | traced | ☐ |
 | S2 | Guest subject derived from a caller-chosen header | medium | read | ☐ |
 | S3 | `claim_guest_run` takes its own caps from the caller | medium | read | ☐ |
@@ -306,10 +306,37 @@ Left alone deliberately: `auth.uid() is null` skips the check, since only the
 service role can get there (`anon` fails `auth.uid() = user_id` against NULL).
 A restore or a support fix should not meet the paywall.
 
-**R5** — `/truss` and `/model` are in `GATED_PREFIXES` with no `RequireAuth`,
-and `TrialGate` passes members-only verdicts through by design. Wrap both; add
-a guard test asserting every `GATED_PREFIXES` entry appears inside a
-`RequireAuth` in `App.tsx`.
+**R5 — ✅ SHIPPED (#581).** `/truss` and `/model` are in `GATED_PREFIXES` and
+mapped to the Pro-and-up `model-space` feature in `ROUTE_FEATURE`, and neither
+was wrapped in `RequireAuth`. `TrialGate` does not cover the gap and should not:
+it passes `members-only` through untouched so that one component owns the
+question, which means a gated route without `RequireAuth` has no gate at all.
+
+Upgraded from *verified* to **reproduced**. Driven signed-out in a headless
+browser against a dev server with auth configured:
+
+- `/truss` rendered the 3D canvas and a results table of solved member forces
+  (`825.8`, `94.7`, …). It has no in-page plan gate of any kind, so the full
+  truss solver was running for an anonymous visitor.
+- `/model` rendered the entire workbench — *Analyze*, *Design all*, *Export
+  PDF*. The solve itself is separately refused in-page by `gate.solve`, since a
+  guest plan carries `maxMembers: 0`, so the exposure there is the UI rather
+  than the solver.
+
+After the fix both redirect to `/signin`, matching `/schedule`, while
+`/beam-design` (trial) and `/docs` (public) are untouched. `RequireAuth` is
+mounted OUTSIDE `Suspense` so the lazy chunk is never fetched for a visitor who
+is about to be redirected.
+
+The guard test lives in `trialQuota.test.ts` and runs both directions: no gated
+route may lack `RequireAuth`, and no route may carry it without being listed —
+the second catches the opposite failure, where a trial route grows a gate and
+the five free runs the pricing page promises become a sign-in wall. Reverting
+`App.tsx` fails it with `gated routes with no RequireAuth: /model, /truss`.
+
+**Note for whoever picks up S5:** a signed-in Free user now meets the upgrade
+page on `/truss` where the page used to be open to everyone. That is the
+finding, not a regression — but it is a user-visible entitlement change.
 
 **S3, S2 — do these BEFORE setting `GUEST_TRIAL_SALT`.** The gate is currently
 inert in production (documented fail-open, `quota.ts:84-91`), so these are moot
