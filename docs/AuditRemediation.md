@@ -22,7 +22,7 @@ mechanism was established by reading, not observed.
 | R2 | No error boundary anywhere | critical | mechanical | ☐ |
 | R3 | Two tabs silently overwrite each other's schedule | critical | traced | ☐ |
 | S1 | Plan project-limit bypassed by one bulk INSERT | high | reproduced | ☐ |
-| E3 | RC column P–M ignores biaxial interaction | high | computed | ☐ |
+| E3 | RC column P–M ignores biaxial interaction | high | computed | ✅ #578 |
 | R5 | `/truss` is a gated feature with no gate | high | verified | ☐ |
 | R4 | Full storage silently refuses the save and reverts the edit | high | traced | ☐ |
 | S2 | Guest subject derived from a caller-chosen header | medium | read | ☐ |
@@ -169,7 +169,34 @@ nothing tests that.
 
 ---
 
-## Phase 3 — E3, RC column biaxial
+## Phase 3 — E3, RC column biaxial — ✅ SHIPPED (#578)
+
+`pmCapacityBiaxial` replaces the single-eccentricity check. Bresler's reciprocal
+load above 0.1 f′c Ag, a linear (α = 1) load contour below it where the
+reciprocal form turns unconservative. `breslerReciprocal` finally has a caller.
+
+Verified — reproduces the audit's predictions exactly:
+
+| Pu | Mx | Mz | before | after | method |
+|---|---|---|---|---|---|
+| 1500 | 180 | 120 | 0.504 | **0.638** | bresler |
+| 1200 | 150 | 150 | 0.413 | **0.603** | bresler |
+| 2000 | 120 | 90 | 0.499 | **0.591** | bresler |
+
+**One judgement call worth knowing.** `Pny` needs the section on its side, so
+`b` and `h` swap — but the bar LAYOUT does not swap with them. A `two-face`
+cage has its bars on the faces perpendicular to `h`; bending about the other
+axis sees those bars spread ALONG the depth rather than concentrated at its
+extremes. Re-using `two-face` on the swapped section would put them at the
+extremes, giving a longer lever arm and overstating `Pny` — unconservative. The
+weak-axis evaluation therefore always uses the `all-around` distribution, which
+is both the closer physical model and the conservative one.
+
+Follow-up: `Muy` and `biaxialMethod` are on `ColumnScheduleRow` but not yet
+rendered in the schedule or PDF report — same gap as Phase 1.
+
+### Original plan
+
 
 `pipeline.ts:660` repeats the `Mmax` collapse, then evaluates capacity at the
 single eccentricity `e = Mu/Pu`. `pmAt` is strictly uniaxial — the compression
