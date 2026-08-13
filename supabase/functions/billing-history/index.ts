@@ -22,18 +22,16 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { apiBase, customerIdFor, type BillingMetadata } from '../_shared/portal.ts'
 import { historyQuery, readHistory } from '../_shared/history.ts'
+import { preflight, jsonWithCors as json } from '../_shared/cors.ts'
 
 const env = (k: string) => Deno.env.get(k)
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  })
 
 const fail = (reason: string, status: number) => json({ error: reason }, status)
 
 Deno.serve(async (req: Request): Promise<Response> => {
+  // BEFORE the method check — see _shared/cors.ts.
+  const pre = preflight(req)
+  if (pre) return pre
   if (req.method !== 'POST') return fail('method-not-allowed', 405)
 
   const url = env('SUPABASE_URL'), serviceKey = env('SUPABASE_SERVICE_ROLE_KEY')

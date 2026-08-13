@@ -1257,6 +1257,27 @@ conversion. The panel renders nothing when there is no history. Deploy with
 So all four functions now exist: `billing-webhook` (Paddle → us),
 `billing-portal`, `billing-change-plan` and `billing-history` (user → us).
 
+### The first real checkout went through — 13 August 2026 (#585)
+
+Pro annual, `$205.00` inc. `$21.96` VAT, sandbox test card. Everything
+downstream ran for the first time: the webhook wrote `plan=pro` with
+`paddle_customer_id`, `paddle_subscription_id` and `billing_event_id`; the gate
+opened; billing history shows `Aug 13, 2026 · Paid · $205.00`; the portal opens
+on the real subscription; and the change-plan preview quoted "charged $323.99
+today, then $529.00 from August 13, 2027" — $529 − $205 prorated to the day,
+which is the proof that the direction and the proration mode are right. The
+switch was previewed, not committed.
+
+**Two things blocked it, and both are worth remembering.** The Paddle overlay
+opened on "Something went wrong" until a **default payment link** was set in
+Checkout settings — precisely what `docs/Billing.md` warned about. Then every
+user-facing function failed from the browser: `supabase-js` triggers a **CORS
+preflight**, and all three answered OPTIONS with 405 and no allow-origin, so
+the call never left the tab — no logs, nothing to see on the server.
+`_shared/cors.ts` now answers the preflight before the method check. That bug
+had been sitting in `billing-portal` since #573 and could not have been caught
+without a real subscription to click on.
+
 **Sandbox is live and configured.** Catalog seeded (one Pro, one Max, four
 prices — an earlier duplicate set at the old $199 price is archived), client
 token minted, notification destination `ntfset_01kzvw6y…` active, all five

@@ -149,6 +149,25 @@ webhook ignores the suffix (a test pins that), and a price with no period still
 maps to its tier; it just cannot be ranked for a term switch, which then lands
 on the side that charges nothing today.
 
+### CORS — why none of the three worked at first
+
+`supabase-js` sends `authorization` and `content-type`, which makes the request
+non-simple, so **the browser sends an OPTIONS preflight first**. All three
+user-facing functions answered it with `405 method-not-allowed` and no
+`Access-Control-Allow-Origin`, so the browser never sent the real request:
+`functions.invoke` threw a network error and the page showed its generic
+failure. Nothing in the logs, nothing wrong with the auth, nothing wrong with
+Paddle — the call never left the tab.
+
+`_shared/cors.ts` answers the preflight with 204 **before the method check**,
+and every response carries the headers, failures included; an error the browser
+cannot read is an error the page cannot explain. `billing-webhook` is
+deliberately untouched: its caller is Paddle's server, which sends no Origin.
+
+The wildcard origin is safe **only** because these endpoints carry no cookies —
+they require a bearer token that only the signed-in tab holds. If any of them
+ever accepts cookie auth, that decision has to change in the same commit.
+
 ### Showing what was charged — `billing-history`
 
 ```bash
@@ -340,14 +359,27 @@ The session carries the old metadata until it is refreshed, which is why the
 pricing page's post-payment banner says so rather than promising an instant
 change.
 
-## Still to do
+## Verified end to end, 13 August 2026
 
-**`billing-change-plan` has never run against a real subscription.** Nobody has
-completed a checkout yet, so there is nothing to change; the field paths in
-`summarizeChange` are written from Paddle's documented preview response and are
-read defensively — an unparseable total shows "Paddle will confirm the amount"
-rather than a wrong figure. Confirm them against one real preview before
-trusting the numbers on that screen.
+The first real sandbox checkout ran on that date, and everything downstream of
+it was exercised for the first time:
+
+| Step | Evidence |
+|---|---|
+| Checkout | Pro annual, `$205.00` inc. `$21.96` VAT, Test Mode, email pre-filled |
+| Webhook → `app_metadata` | `plan=pro`, plus `paddle_customer_id`, `paddle_subscription_id`, `billing_event_id` |
+| The gate | PRO badge, "Your current plan" on the Pro card |
+| `billing-history` | `Aug 13, 2026 · Paid · $205.00` |
+| `billing-change-plan` | Preview: "charged $323.99 today, then $529.00 from August 13, 2027" — $529 − $205 prorated to the day, so the direction and the mode are right. Not committed. |
+| `billing-portal` | Opens `sandbox-customer-portal.paddle.com/subscriptions/sub_…` |
+
+**Two things had to be fixed to get there.** A missing **default payment link**
+in Checkout settings made the overlay open on "Something went wrong" — exactly
+as this document warned. And every user-facing function answered the CORS
+preflight with 405 (see below), so none of them could be called from a browser
+at all.
+
+## Still to do
 
 **Automatic currency conversion is off in the sandbox account**, so the
 localized pricing above currently resolves to USD for every country. Verified by
@@ -355,11 +387,10 @@ forcing `currencyCode: 'JPY'` on the preview, which rendered ¥2,722/month and
 ¥32,666 billed yearly with no decimal places — the code path works; the
 dashboard switch has not been flipped.
 
-**`billing-history` has never returned a real row**, for the same reason as
-above: no completed checkout, so no transactions exist. The field paths are the
-documented ones and unreadable rows are dropped rather than shown as zero, but
-one real transaction should be compared against the Paddle dashboard before the
-list is trusted.
+**The profile page quotes the tier's monthly list price** (`Pro · $19/month`)
+even for an annual subscriber paying $205 a year. It reads the plan table, not
+the subscription, so it is a label rather than a statement about this account's
+billing — worth reconciling with the real subscription now that one exists.
 
 ### Confirm before going live
 
