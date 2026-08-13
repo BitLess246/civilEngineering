@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../lib/auth/authContext'
 import { usePlan } from '../../lib/auth/usePlan'
@@ -6,6 +6,9 @@ import { loadProfile, saveProfile, preparedByLine, type Profile as ProfileData }
 import { formatUsd, priceFor } from '../../lib/plans'
 import { CHECKOUT_ENABLED } from '../../lib/billing/paddleConfig'
 import { openPortalSession, portalMessage } from '../../lib/billing/portal'
+import {
+  fetchBillingHistory, rowAmount, rowDate, statusLabel, needsAttention, type HistoryRow,
+} from '../../lib/billing/history'
 
 /**
  * "Manage subscription" — the way out.
@@ -53,6 +56,75 @@ function ManageSubscription() {
         Invoices, payment method and cancellation are handled by Paddle, who processed the payment.
       </p>
       {error && <p role="alert" className="mt-2 text-[12px] leading-5 text-red-700">{error}</p>}
+    </div>
+  )
+}
+
+/**
+ * What this account has been charged.
+ *
+ * Renders NOTHING until there is something to show — no empty-state panel, no
+ * "no transactions yet". An account that has never bought anything is being
+ * told about a relationship it has not entered into, and an account whose
+ * history failed to load is better served by the portal button directly above
+ * than by an error about a list it did not ask for.
+ *
+ * Deliberately less than the portal: no downloads, no card changes. This is the
+ * glance-able summary; the portal is the system of record, and the line at the
+ * bottom says so.
+ */
+function BillingHistory() {
+  const [rows, setRows] = useState<HistoryRow[]>([])
+  const [hasMore, setHasMore] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let live = true
+    void fetchBillingHistory().then((r) => {
+      if (!live || !r.ok) return
+      setRows(r.page.items)
+      setHasMore(r.page.hasMore)
+    })
+    return () => { live = false }
+  }, [])
+
+  const more = async () => {
+    setBusy(true)
+    // Paddle paginates by cursor, so the last row on screen is the position.
+    const r = await fetchBillingHistory(rows[rows.length - 1]?.id)
+    setBusy(false)
+    if (!r.ok) { setHasMore(false); return }
+    setRows((prev) => [...prev, ...r.page.items])
+    setHasMore(r.page.hasMore)
+  }
+
+  if (!rows.length) return null
+
+  return (
+    <div className="mt-4 border-t border-slate-100 pt-4">
+      <h3 className="text-[13px] font-bold text-slate-700">Billing history</h3>
+      <ul className="mt-2 divide-y divide-slate-100">
+        {rows.map((row) => (
+          <li key={row.id} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2 text-[13px]">
+            <span className="text-slate-500">{rowDate(row.billedAt) || 'Not billed yet'}</span>
+            <span className="flex items-baseline gap-3">
+              <span className={needsAttention(row.status) ? 'text-[12px] font-semibold text-red-700' : 'text-[12px] text-slate-500'}>
+                {statusLabel(row.status)}
+              </span>
+              <span className="font-medium text-slate-800">{rowAmount(row)}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      {hasMore && (
+        <button type="button" onClick={more} disabled={busy}
+          className="mt-2 text-[12px] font-semibold text-[#0056b3] underline disabled:opacity-60">
+          {busy ? 'Loading…' : 'Show earlier payments'}
+        </button>
+      )}
+      <p className="mt-2 text-[12px] leading-5 text-slate-500">
+        Invoices to download are in the billing portal above.
+      </p>
     </div>
   )
 }
@@ -138,6 +210,11 @@ export default function Profile() {
             null for Guest, so neither is asked to manage a subscription that
             does not exist. */}
         {user && CHECKOUT_ENABLED && !!plan.priceMonthly && <ManageSubscription />}
+
+        {/* Asked for on any signed-in account, because a lapsed subscriber is
+            back on Free and still has payments worth seeing. It renders nothing
+            when there are none. */}
+        {user && CHECKOUT_ENABLED && <BillingHistory />}
 
         <p className="mt-3 text-[12px] leading-5 text-slate-500">
           {CHECKOUT_ENABLED
