@@ -64,3 +64,67 @@ describe('JSON import / export', () => {
     expect(() => importProjectJSON(exportProjectJSON(p))).toThrow(/integrity/i)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────
+// CORRUPTION RESISTANCE.
+//
+// `readStored` used to wrap only `JSON.parse`, so a value that was valid JSON
+// but the wrong SHAPE parsed cleanly and then threw a TypeError out of `list()`
+// — which dereferences `project.meta.name` OUTSIDE that try. Because
+// `useScheduleProject` calls `list()` and `load()` in `useState` initialisers,
+// during render, the throw unmounted the whole app on mount, and the user could
+// never reach the UI that would have deleted the bad entry. One malformed key
+// took out all seven planning routes with no in-app recovery.
+//
+// Every case below is a real thing that can end up in localStorage: a
+// half-written value, a record from a future build, something another tool
+// wrote under a colliding key.
+// ─────────────────────────────────────────────────────────────────────────
+describe('one corrupt entry does not take the listing down', () => {
+  const good = JSON.stringify({ version: 1, savedAt: '2026-08-01T00:00:00Z', project: sampleProject() })
+
+  const malformed: [string, string][] = [
+    ['an empty project object', JSON.stringify({ version: 1, savedAt: 'x', project: {} })],
+    ['a null project', JSON.stringify({ version: 1, savedAt: 'x', project: null })],
+    ['a bare array', JSON.stringify([1, 2, 3])],
+    ['a string', JSON.stringify('not a project')],
+    ['a project missing activities', JSON.stringify({ version: 1, savedAt: 'x', project: { meta: { name: 'x', start: '2026-01-01' }, calendars: [], wbs: [], resources: [], baselines: [], defaultCalendarId: 'c' } })],
+    ['unparseable text', '{oh no'],
+    ['an empty string', ''],
+  ]
+
+  it.each(malformed)('survives %s', (_label, raw) => {
+    const store = createStore(memoryBackend({ 'schedule:project:bad': raw }))
+    expect(() => store.list()).not.toThrow()
+    expect(store.list()).toEqual([])
+    expect(() => store.load('bad')).not.toThrow()
+    expect(store.load('bad')).toBeNull()
+  })
+
+  it('still lists the GOOD projects alongside a corrupt one', () => {
+    // The property that matters: a bad entry is skipped, not fatal, and it does
+    // not hide the user's other schedules.
+    const store = createStore(memoryBackend({
+      'schedule:project:ok': good,
+      'schedule:project:bad': JSON.stringify({ version: 1, savedAt: 'x', project: {} }),
+    }))
+    const list = store.list()
+    expect(list).toHaveLength(1)
+    expect(list[0].id).toBe('ok')
+    expect(list[0].activityCount).toBeGreaterThan(0)
+  })
+
+  it('refuses a record written by a NEWER app rather than half-rendering it', () => {
+    // `migrate` now reads `version`, which the module header always claimed it
+    // did while the body ignored it.
+    const future = JSON.stringify({ version: 99, savedAt: 'x', project: sampleProject() })
+    const store = createStore(memoryBackend({ 'schedule:project:future': future }))
+    expect(store.list()).toEqual([])
+    expect(store.load('future')).toBeNull()
+  })
+
+  it('accepts the current schema version', () => {
+    const store = createStore(memoryBackend({ 'schedule:project:ok': good }))
+    expect(store.load('ok')).not.toBeNull()
+  })
+})

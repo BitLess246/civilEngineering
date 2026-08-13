@@ -80,7 +80,12 @@ export function createStore(backend: StorageBackend = defaultBackend()): Schedul
     const raw = backend.getItem(key)
     if (raw == null) return null
     try {
-      return migrate(JSON.parse(raw) as StoredProject)
+      const parsed = JSON.parse(raw) as StoredProject
+      // Shape FIRST. Valid JSON is not a valid project, and everything
+      // downstream of here dereferences `project.meta` and `project.activities`
+      // outside a try — see `isScheduleProject`.
+      if (!parsed || typeof parsed !== 'object' || !isScheduleProject(parsed.project)) return null
+      return migrate(parsed)
     } catch {
       return null   // corrupt entry — treated as absent
     }
@@ -120,8 +125,20 @@ export function createStore(backend: StorageBackend = defaultBackend()): Schedul
 }
 
 /** Migrate a stored wrapper to the current schema version (no-op at v1). */
-function migrate(stored: StoredProject): StoredProject {
-  // Future: while (stored.version < SCHEDULE_SCHEMA_VERSION) { …; stored.version++ }
+/**
+ * Bring a stored record up to the current schema.
+ *
+ * It now READS `stored.version`, which the module header has always claimed it
+ * did ("wrapped with a schema version so future format changes migrate on read
+ * rather than corrupting old saves") while the body ignored it entirely. A
+ * record written by a NEWER client is refused rather than handed to pages that
+ * cannot understand it — the same failure direction as an unparseable one, and
+ * far better than rendering half a project.
+ */
+function migrate(stored: StoredProject): StoredProject | null {
+  const v = typeof stored.version === 'number' ? stored.version : 0
+  if (v > SCHEDULE_SCHEMA_VERSION) return null      // from a newer app
+  // Future: while (v < SCHEDULE_SCHEMA_VERSION) { …; stored.version++ }
   return stored
 }
 
@@ -156,14 +173,28 @@ export function importProjectJSON(json: string): ScheduleProject {
   return project
 }
 
-/** Pull a `ScheduleProject` out of either a wrapper or a bare object. */
-function extractProject(parsed: unknown): ScheduleProject | null {
-  if (typeof parsed !== 'object' || parsed === null) return null
-  const obj = parsed as Record<string, unknown>
-  const candidate = 'project' in obj ? obj.project : obj
-  if (typeof candidate !== 'object' || candidate === null) return null
+/**
+ * Is this really a schedule project?
+ *
+ * Hoisted out of `extractProject` so `readStored` can use it too. It could not,
+ * and that was a crash: `readStored` wrapped only `JSON.parse` in a `try`, so a
+ * stored value that was VALID JSON but the wrong SHAPE parsed cleanly and then
+ * threw a TypeError from `list()`, which dereferences `project.meta.name`
+ * outside that try. Because `useScheduleProject` calls `list()` and `load()` in
+ * `useState` INITIALISERS — during render — the throw unmounted the whole app,
+ * and it did so on mount, so the user could never reach the UI that would have
+ * deleted the bad entry. One malformed key took out all seven planning routes
+ * with no in-app recovery.
+ *
+ * Both sibling stores have carried this guard from the start, with the comment
+ * "One corrupt entry must not take the whole listing down" — see
+ * `engine/projects/store.ts` and `engine/soils/store.ts`. This one was never
+ * brought up to the pattern.
+ */
+export function isScheduleProject(candidate: unknown): candidate is ScheduleProject {
+  if (typeof candidate !== 'object' || candidate === null) return false
   const p = candidate as Partial<ScheduleProject>
-  const ok =
+  return (
     p.meta != null &&
     Array.isArray(p.activities) &&
     Array.isArray(p.calendars) &&
@@ -171,5 +202,13 @@ function extractProject(parsed: unknown): ScheduleProject | null {
     Array.isArray(p.resources) &&
     Array.isArray(p.baselines) &&
     typeof p.defaultCalendarId === 'string'
-  return ok ? (candidate as ScheduleProject) : null
+  )
+}
+
+/** Pull a `ScheduleProject` out of either a wrapper or a bare object. */
+function extractProject(parsed: unknown): ScheduleProject | null {
+  if (typeof parsed !== 'object' || parsed === null) return null
+  const obj = parsed as Record<string, unknown>
+  const candidate = 'project' in obj ? obj.project : obj
+  return isScheduleProject(candidate) ? candidate : null
 }
