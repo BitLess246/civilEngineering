@@ -109,15 +109,22 @@ export default function App() {
         <Route path="/column-design" element={<ColumnDesign />} />
         <Route path="/frame" element={<RequireAuth><FrameAnalysis /></RequireAuth>} />
         <Route path="/load-path" element={<LoadPath />} />
+        {/* RequireAuth OUTSIDE Suspense, so a signed-out visitor is redirected
+            without the lazy chunk being fetched at all. Inside, the import
+            starts before the gate has an answer. */}
         <Route path="/model" element={
-          <Suspense fallback={<PageLoading what="3D model space" />}>
-            <ModelSpace />
-          </Suspense>
+          <RequireAuth>
+            <Suspense fallback={<PageLoading what="3D model space" />}>
+              <ModelSpace />
+            </Suspense>
+          </RequireAuth>
         } />
         <Route path="/truss" element={
-          <Suspense fallback={<PageLoading what="truss space" />}>
-            <TrussSpace />
-          </Suspense>
+          <RequireAuth>
+            <Suspense fallback={<PageLoading what="truss space" />}>
+              <TrussSpace />
+            </Suspense>
+          </RequireAuth>
         } />
         {/* Steel Design was one page with three tabs; it is now four pages,
             one per calculator, each with its own trial allowance and its own

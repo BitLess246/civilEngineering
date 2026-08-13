@@ -48,6 +48,62 @@ describe('the lists match the router', () => {
   })
 })
 
+// ─────────────────────────────────────────────────────────────────────────
+// SAYING A ROUTE IS GATED IS NOT GATING IT.
+//
+// Every assertion above passed while `/model` and `/truss` — both in
+// `GATED_PREFIXES`, both mapped to the Pro-and-up `model-space` feature — were
+// mounted with no `RequireAuth` at all. The lists agreed with each other and
+// with the router; nothing checked that the component enforcing them was on the
+// route. `/truss` ran its full solver for a signed-out visitor.
+//
+// `TrialGate` does not cover this and should not: it passes `members-only`
+// through untouched, deliberately, so that one component owns the question. The
+// consequence is that a gated route with no `RequireAuth` has no gate whatever.
+//
+// So these assertions are about MOUNTING, in both directions — a gated route
+// that lost its gate, and a trial route that grew one and stopped being the
+// shop window.
+// ─────────────────────────────────────────────────────────────────────────
+describe('the gate the lists describe is actually mounted', () => {
+  /**
+   * Each `<Route>` paired with the JSX of its element.
+   *
+   * Splitting on the opening tag means every chunk runs to exactly where the
+   * next route begins, so a multi-line element — which is how the lazy pages
+   * are written — is captured whole. A regex over one line would miss them,
+   * and missing them here would read as "no gate" and fail loudly rather than
+   * silently pass, which is the right way for this parse to break.
+   */
+  const routes = Object.values(APP_SRC)[0].split('<Route path="').slice(1)
+    .map((part) => ({ path: part.slice(0, part.indexOf('"')), element: part }))
+    .filter((r) => r.path !== '*')
+
+  it('parsed elements, not just paths', () => {
+    // If this fails the two tests below are vacuous, so it is checked first.
+    expect(routes.length).toBeGreaterThan(40)
+    expect(routes.find((r) => r.path === '/schedule')?.element).toContain('RequireAuth')
+    expect(routes.find((r) => r.path === '/docs')?.element).not.toContain('RequireAuth')
+  })
+
+  it('wraps every gated route in RequireAuth', () => {
+    const open = routes
+      .filter((r) => isGated(r.path) && !r.element.includes('<RequireAuth>'))
+      .map((r) => r.path)
+    expect(open, `gated routes with no RequireAuth: ${open.join(', ')}`).toEqual([])
+  })
+
+  it('and wraps nothing else in it', () => {
+    // The opposite failure, and a real one: `RequireAuth` on a trial route
+    // turns the five free runs the pricing page promises into a sign-in wall,
+    // and on a public route it puts the terms of service behind an account.
+    const overGated = routes
+      .filter((r) => r.element.includes('<RequireAuth>') && !isGated(r.path))
+      .map((r) => r.path)
+    expect(overGated, `routes gated without being listed: ${overGated.join(', ')}`).toEqual([])
+  })
+})
+
 describe('route classification', () => {
   it('treats documentation and marketing pages as public', () => {
     for (const r of ['/', '/docs', '/validation', '/pricing', '/signin', '/signup']) {
