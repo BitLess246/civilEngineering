@@ -1228,6 +1228,22 @@ conversion is off in the sandbox account**, so every country currently previews
 in USD. Forcing `currencyCode: 'JPY'` proved the path — ¥2,722/month, ¥32,666
 billed yearly, no decimals. Flip it under **Business account > Currencies**.
 
+**Plan changes happen in-app (#583).** A third Edge Function,
+`billing-change-plan`, replaces the items on the subscription a customer already
+has instead of sending them through a second checkout — which would have left
+them paying for two tiers until they cancelled one themselves. It previews
+first (`PATCH …/preview`) and the confirm dialog quotes Paddle's own figure;
+committing sends the identical body. Upgrades are `prorated_immediately`,
+downgrades `prorated_next_billing_period` (immediate proration on the way down
+refunds the unused remainder, which nobody means by "downgrade"), and
+`on_payment_failure` stays `prevent_change` so a declined card moves nothing.
+`BILLING_PRICE_MAP` gained an optional `:period` suffix — `pri_x=pro:monthly` —
+which the webhook ignores; **that secret must be updated before the function is
+useful**, along with `supabase functions deploy billing-change-plan`.
+
+`AuthUser` now carries `hasSubscription` (a boolean from `app_metadata`, never
+the id) so the pricing page can tell "Switch to Max" from "Choose Max".
+
 **Sandbox is live and configured.** Catalog seeded (one Pro, one Max, four
 prices — an earlier duplicate set at the old $199 price is archived), client
 token minted, notification destination `ntfset_01kzvw6y…` active, all five

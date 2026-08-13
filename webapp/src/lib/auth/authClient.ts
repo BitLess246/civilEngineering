@@ -36,6 +36,16 @@ export interface AuthUser {
    * a suggestion. `planOf` maps an unknown value to the least-privileged plan.
    */
   plan: string | null
+  /**
+   * Whether the account has a Paddle subscription behind it.
+   *
+   * A BOOLEAN, not the id. The pricing page needs to know whether to offer
+   * "Switch to Max" (change the existing subscription) or "Choose Max" (start a
+   * new one), and that is the whole question — the id itself stays server-side,
+   * where every function that uses it reads it from the account record rather
+   * than from anything the browser sends.
+   */
+  hasSubscription: boolean
 }
 
 export type AuthErrorKind =
@@ -134,8 +144,17 @@ export const toUser = (s: Session | null): AuthUser | null => {
   // the billing webhook and nowhere else.
   const appMeta = (u.app_metadata ?? {}) as Record<string, unknown>
   const plan = typeof appMeta.plan === 'string' ? appMeta.plan : null
+  // Same provenance, same reason: the webhook writes it, the browser reads it.
+  const sub = typeof appMeta.paddle_subscription_id === 'string' ? appMeta.paddle_subscription_id : ''
 
-  return { id: u.id, email: u.email ?? null, name, emailVerified: !!u.email_confirmed_at, plan }
+  return {
+    id: u.id,
+    email: u.email ?? null,
+    name,
+    emailVerified: !!u.email_confirmed_at,
+    plan,
+    hasSubscription: sub.startsWith('sub_'),
+  }
 }
 
 export async function signIn(email: string, password: string): Promise<AuthResult<AuthUser | null>> {

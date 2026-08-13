@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   PLANS, planOf, priceFor, monthlyEquivalent, annualSaving,
@@ -9,6 +9,9 @@ import { CHECKOUT_ENABLED, PADDLE_CONFIG, type PaidPlanId } from '../lib/billing
 import { openPlanCheckout, checkoutErrorMessage } from '../lib/billing/paddleCheckout'
 import { localizedLine, tableCurrency, type PriceTable } from '../lib/billing/localizedPrices'
 import { useLocalizedPrices } from '../lib/billing/useLocalizedPrices'
+import {
+  previewPlanChange, commitPlanChange, describeChange, changeMessage, type PlanChange,
+} from '../lib/billing/changePlan'
 import { useAuth } from '../lib/auth/authContext'
 
 /** Where Paddle returns the browser after a payment. */
@@ -26,9 +29,95 @@ const lineFor = (prices: PriceTable, plan: PlanId, period: BillingPeriod) => {
 }
 
 /**
+ * Confirm a plan change, with Paddle's own numbers on it.
+ *
+ * Previews on open and commits only when the customer presses the button —
+ * two calls where one would do, deliberately. What a switch costs depends on
+ * where they are in their billing period, any credit balance and their tax, and
+ * none of that is on this page. Quoting a figure we worked out ourselves, or
+ * none at all, is how an upgrade becomes a chargeback.
+ *
+ * It never claims the plan has changed. The tier arrives when the webhook
+ * writes it, so the closing message says the same thing the post-checkout
+ * banner says: it follows shortly, and the session has to be refreshed.
+ */
+function PlanChangeDialog({ plan, priceId, onClose }: {
+  plan: Plan; priceId: string; onClose: () => void
+}) {
+  const [state, setState] = useState<'loading' | 'ready' | 'working' | 'done'>('loading')
+  const [change, setChange] = useState<PlanChange | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let live = true
+    void previewPlanChange(priceId).then((r) => {
+      if (!live) return
+      if (r.ok) { setChange(r.change); setState('ready') } else { setError(changeMessage(r.reason)); setState('ready') }
+    })
+    return () => { live = false }
+  }, [priceId])
+
+  const confirm = async () => {
+    setState('working')
+    setError(null)
+    const r = await commitPlanChange(priceId)
+    if (!r.ok) { setError(changeMessage(r.reason)); setState('ready'); return }
+    setState('done')
+  }
+
+  return (
+    <div role="dialog" aria-modal="true" aria-label={`Switch to ${plan.name}`}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">
+      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-lg">
+        <h2 className="text-[1.05rem] font-bold text-[#0056b3]">
+          {state === 'done' ? 'Switch confirmed' : `Switch to ${plan.name}`}
+        </h2>
+
+        {state === 'loading' && (
+          <p className="mt-3 text-[13px] leading-6 text-slate-600">Asking Paddle what this costs…</p>
+        )}
+
+        {state !== 'loading' && state !== 'done' && (
+          <>
+            {change && <p className="mt-3 text-[13px] leading-6 text-slate-700">{describeChange(change)}</p>}
+            {change?.direction === 'downgrade' && (
+              <p className="mt-2 text-[12px] leading-5 text-slate-500">
+                You keep your current plan until then — nothing is refunded and nothing is lost today.
+              </p>
+            )}
+            {error && <p role="alert" className="mt-3 text-[13px] leading-6 text-red-700">{error}</p>}
+          </>
+        )}
+
+        {state === 'done' && (
+          <p className="mt-3 text-[13px] leading-6 text-slate-700">
+            Paddle has accepted the change. Your plan is granted by our billing server once Paddle confirms it,
+            usually within a few seconds — sign out and back in to refresh your session if this page still shows
+            the old tier.
+          </p>
+        )}
+
+        <div className="mt-5 flex flex-wrap justify-end gap-3">
+          <button type="button" onClick={onClose}
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-[13px] font-semibold text-slate-700 hover:border-[#0056b3] hover:text-[#0056b3]">
+            {state === 'done' ? 'Close' : 'Cancel'}
+          </button>
+          {state !== 'done' && change && (
+            <button type="button" onClick={confirm} disabled={state !== 'ready'}
+              className="rounded-md bg-[#0056b3] px-4 py-1.5 text-[13px] font-semibold text-white hover:bg-[#0f4c92] disabled:opacity-60">
+              {state === 'working' ? 'Switching…' : `Confirm switch to ${plan.name}`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
  * The buy button for one paid tier.
  *
- * Four states, and the order matters — each answers a different question, and
+ * Five states, and the order matters — each answers a different question, and
  * showing a "Choose Pro" button to someone who cannot use it is the version of
  * this component that generates support mail:
  *
@@ -38,12 +127,16 @@ const lineFor = (prices: PriceTable, plan: PlanId, period: BillingPeriod) => {
  *                               paddleCheckout.ts) — a checkout without one
  *                               takes money and grants nothing
  *   3. already on this tier   → nothing to buy
- *   4. otherwise              → open the overlay
+ *   4. subscriber, other tier → SWITCH the existing subscription rather than
+ *                               opening a second checkout, which would leave
+ *                               them paying for both until they cancelled one
+ *   5. otherwise              → open the overlay
  */
 function PlanAction({ plan, period, current }: { plan: Plan; period: BillingPeriod; current: PlanId }) {
   const { user } = useAuth()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [switching, setSwitching] = useState(false)
 
   const btn = 'block w-full rounded-md bg-[#0056b3] px-4 py-2 text-center text-sm font-semibold text-white hover:bg-[#0f4c92] disabled:opacity-60'
 
@@ -62,10 +155,31 @@ function PlanAction({ plan, period, current }: { plan: Plan; period: BillingPeri
     )
   }
 
+  // The price this card is offering. Non-null here: `CHECKOUT_ENABLED` is the
+  // presence of all four ids, and this is a paid tier.
+  const priceId = PADDLE_CONFIG!.prices[plan.id as PaidPlanId][period]
+
   if (current === plan.id) {
     return (
-      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-[12px] font-semibold text-emerald-700">
-        Your current plan
+      <div>
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-[12px] font-semibold text-emerald-700">
+          Your current plan
+        </div>
+        {/*
+          The term is NOT in `app_metadata` — only the tier is — so this page
+          cannot tell a monthly subscriber from an annual one. Rather than guess,
+          it offers the move and lets the preview answer: somebody already on
+          this exact price is told so, by the server, which does know.
+        */}
+        {user?.hasSubscription && (
+          <button type="button" onClick={() => setSwitching(true)}
+            className="mt-2 block w-full text-center text-[12px] font-semibold text-[#0056b3] underline">
+            Switch to {period === 'annual' ? 'annual' : 'monthly'} billing
+          </button>
+        )}
+        {switching && (
+          <PlanChangeDialog plan={plan} priceId={priceId} onClose={() => setSwitching(false)} />
+        )}
       </div>
     )
   }
@@ -75,6 +189,22 @@ function PlanAction({ plan, period, current }: { plan: Plan; period: BillingPeri
       <Link to="/signin" state={{ from: '/pricing' }} className={btn}>
         Sign in to choose {plan.name}
       </Link>
+    )
+  }
+
+  // A SUBSCRIBER MOVING TIER CHANGES THE SUBSCRIPTION THEY HAVE. A second
+  // checkout would leave them paying for both until they noticed and cancelled
+  // one, and it is the customer who eats that mistake, not us.
+  if (user.hasSubscription) {
+    return (
+      <div>
+        <button type="button" onClick={() => setSwitching(true)} className={btn}>
+          Switch to {plan.name}
+        </button>
+        {switching && (
+          <PlanChangeDialog plan={plan} priceId={priceId} onClose={() => setSwitching(false)} />
+        )}
+      </div>
     )
   }
 

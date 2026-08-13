@@ -104,6 +104,51 @@ fail-closed reading. Deliberate: guessing sandbox for a live deployment would
 403 real subscribers trying to cancel, while guessing production with a sandbox
 key only 403s a test account.
 
+### Changing plan — `billing-change-plan`
+
+Same shape as `billing-portal` — JWT-verified, ids from the caller's own record
+— and it exists so a subscriber moving Pro → Max changes **the subscription
+they already have** rather than opening a second checkout and paying for both
+until they notice.
+
+```bash
+supabase functions deploy billing-change-plan   # NO --no-verify-jwt
+```
+
+**The browser may choose the target price and nothing else.** The id is checked
+against the catalog before it goes anywhere, so a caller can only ask for a tier
+we sell at the price we advertise. Which subscription is changed comes from
+`app_metadata`, so there is no input that could point it at somebody else's.
+
+**The direction decides the money**, and it is computed from Paddle's own
+subscription (not our metadata, which lags and holds no billing period):
+
+| Move | Mode | Why |
+|---|---|---|
+| Pro → Max, monthly → annual | `prorated_immediately` | They asked for more and expect to pay the difference now. |
+| Max → Pro, annual → monthly | `prorated_next_billing_period` | Immediate proration would *refund* the unused remainder mid-period, which is not what "downgrade" means to either side. |
+
+`on_payment_failure` stays at `prevent_change`: a declined card on an upgrade
+leaves the subscription exactly where it was. `apply_change` would hand over the
+higher tier against a past-due transaction — extending credit, decided by a
+button on a pricing page.
+
+**Two calls, on purpose.** The page previews (`PATCH …/preview`, changes
+nothing) and shows Paddle's own figure, then commits the identical body. What a
+switch costs depends on where the customer is in their period, any credit
+balance and their tax — quoting a number we worked out ourselves is how an
+upgrade becomes a chargeback. When Paddle's response carries no figure the
+screen says Paddle will confirm the amount rather than inventing one.
+
+It grants nothing: the tier still arrives through `billing-webhook` on the
+resulting `subscription.updated`.
+
+**`BILLING_PRICE_MAP` gains an optional period suffix** for this —
+`pri_x=pro:monthly` — so one variable stays the single list of prices. The
+webhook ignores the suffix (a test pins that), and a price with no period still
+maps to its tier; it just cannot be ranked for a term switch, which then lands
+on the side that charges nothing today.
+
 ### Starting payment — `webapp/src/lib/billing/`
 
 `paddleConfig.ts` reads the six `VITE_PADDLE_*` variables and decides whether
@@ -220,7 +265,7 @@ hand, and never put the service-role key in the web app.
 |---|---|
 | `BILLING_PROVIDER` | `paddle` |
 | `BILLING_WEBHOOK_SECRET` | the notification destination's secret key |
-| `BILLING_PRICE_MAP` | `priceId=plan` pairs. **All four ids**, since annual and monthly both resolve to the same tier. Many ids mapping to one tier is expected. |
+| `BILLING_PRICE_MAP` | `priceId=plan` pairs. **All four ids**, since annual and monthly both resolve to the same tier. Many ids mapping to one tier is expected. Add the period — `pri_x=pro:monthly` — so `billing-change-plan` can tell an upgrade from a downgrade; the webhook ignores the suffix. |
 | `BILLING_MODE` | PayMongo only — ignore for Paddle |
 
 ### 4. Point Paddle at it
@@ -265,8 +310,12 @@ change.
 
 ## Still to do
 
-**Plan changes are not handled in-app** — upgrading Pro → Max means a second
-checkout rather than a proration-aware subscription update.
+**`billing-change-plan` has never run against a real subscription.** Nobody has
+completed a checkout yet, so there is nothing to change; the field paths in
+`summarizeChange` are written from Paddle's documented preview response and are
+read defensively — an unparseable total shows "Paddle will confirm the amount"
+rather than a wrong figure. Confirm them against one real preview before
+trusting the numbers on that screen.
 
 **Automatic currency conversion is off in the sandbox account**, so the
 localized pricing above currently resolves to USD for every country. Verified by

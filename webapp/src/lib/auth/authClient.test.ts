@@ -64,5 +64,30 @@ describe('the rest of the mapping', () => {
     expect(u.plan).toBeNull()
     expect(u.name).toBeNull()
     expect(u.emailVerified).toBe(false)
+    expect(u.hasSubscription).toBe(false)
+  })
+})
+
+describe('hasSubscription', () => {
+  it('is true for an account the webhook has recorded a subscription on', () => {
+    expect(toUser(session({ plan: 'pro', paddle_subscription_id: 'sub_01xyz' }))!.hasSubscription).toBe(true)
+  })
+
+  it('is false for a paid account with no subscription id yet', () => {
+    // The pricing page must offer "Choose Max" here, not "Switch to Max" —
+    // there is nothing to switch, and the change function would 404.
+    expect(toUser(session({ plan: 'pro' }))!.hasSubscription).toBe(false)
+  })
+
+  // Same provenance rule as the plan: user_metadata is the account's own to
+  // write, so a subscription claimed there means nothing.
+  it('IGNORES a subscription id planted in user metadata', () => {
+    expect(toUser(session({}, { paddle_subscription_id: 'sub_01xyz' }))!.hasSubscription).toBe(false)
+  })
+
+  it('ignores a malformed or non-string id', () => {
+    for (const bad of ['', 'ctm_01abc', 'sub', 42, { id: 'sub_01xyz' }]) {
+      expect(toUser(session({ paddle_subscription_id: bad }))!.hasSubscription, String(bad)).toBe(false)
+    }
   })
 })
