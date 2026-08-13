@@ -19,10 +19,12 @@
 // and the pricing page reads those converted amounts back out of Paddle rather
 // than quoting a number nobody will be charged.
 //
-// NO PAYMENTS ARE TAKEN YET. The billing webhook exists (supabase/functions/
-// billing-webhook) and verifies real Paddle signatures, but nothing starts a
-// payment, so `CHECKOUT_ENABLED` is still false and every account is `free`.
-// The pricing page says so plainly rather than showing a button that pretends.
+// PAYMENT IS WIRED, AND WHETHER IT IS OPEN DEPENDS ON THE DEPLOY. The pricing
+// page opens a real Paddle checkout (`billing/paddleCheckout`) and the webhook
+// grants the plan (supabase/functions/billing-webhook), but only where the six
+// `VITE_PADDLE_*` variables are present — `CHECKOUT_ENABLED` is that fact, not
+// a constant. A deploy without them lists the tiers and says plainly that they
+// are not open for sign-up, rather than showing a button that pretends.
 // ─────────────────────────────────────────────────────────────────────────
 
 export type PlanId = 'guest' | 'free' | 'pro' | 'max'

@@ -1212,6 +1212,22 @@ Three moving parts, each with the security asymmetry that shaped it:
 `CHECKOUT_ENABLED` is no longer a constant — it is the presence of the six
 `VITE_PADDLE_*` variables.
 
+**`/pricing` now quotes Paddle, not the USD base.** `localizedPrices.ts` +
+`useLocalizedPrices.ts` ask Paddle.js `PricePreview` for all four price ids in
+one request and render the figure the checkout will charge. No country is sent —
+Paddle infers it from the IP exactly as the overlay does, and a country selector
+was left out on purpose so nobody can shop for the cheapest market and then meet
+their own price at checkout. Paddle's formatted string is passed through
+untouched; only the per-month figure (÷12) and the annual saving are ours, and
+the lowest-unit divisor comes from `Intl` so yen (no minor unit) is not quoted a
+hundred times too cheap. It fails quiet: no token, no network or a blocked
+Paddle.js all fall back to the USD base rather than a spinner.
+
+One caveat, and it is an account setting rather than code: **automatic currency
+conversion is off in the sandbox account**, so every country currently previews
+in USD. Forcing `currencyCode: 'JPY'` proved the path — ¥2,722/month, ¥32,666
+billed yearly, no decimals. Flip it under **Business account > Currencies**.
+
 **Sandbox is live and configured.** Catalog seeded (one Pro, one Max, four
 prices — an earlier duplicate set at the old $199 price is archived), client
 token minted, notification destination `ntfset_01kzvw6y…` active, all five

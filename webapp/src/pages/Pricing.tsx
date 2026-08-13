@@ -2,14 +2,28 @@ import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   PLANS, planOf, priceFor, monthlyEquivalent, annualSaving,
-  annualDiscountOf, formatUsd, ANNUAL_DISCOUNT, type Plan, type BillingPeriod, type PlanId,
+  annualDiscountOf, formatUsd, ANNUAL_DISCOUNT, CURRENCY,
+  type Plan, type BillingPeriod, type PlanId,
 } from '../lib/plans'
-import { CHECKOUT_ENABLED, type PaidPlanId } from '../lib/billing/paddleConfig'
+import { CHECKOUT_ENABLED, PADDLE_CONFIG, type PaidPlanId } from '../lib/billing/paddleConfig'
 import { openPlanCheckout, checkoutErrorMessage } from '../lib/billing/paddleCheckout'
+import { localizedLine, tableCurrency, type PriceTable } from '../lib/billing/localizedPrices'
+import { useLocalizedPrices } from '../lib/billing/useLocalizedPrices'
 import { useAuth } from '../lib/auth/authContext'
 
 /** Where Paddle returns the browser after a payment. */
 const successUrl = () => `${window.location.origin}/pricing?checkout=success`
+
+/**
+ * The previewed figures for one tier, or null to use the USD base.
+ *
+ * Null for Guest and Free, which have no Paddle price to preview, and null for
+ * everybody until the preview lands — see `useLocalizedPrices`.
+ */
+const lineFor = (prices: PriceTable, plan: PlanId, period: BillingPeriod) => {
+  const ids = PADDLE_CONFIG?.prices[plan as PaidPlanId]
+  return ids ? localizedLine(prices, ids, period) : null
+}
 
 /**
  * The buy button for one paid tier.
@@ -89,21 +103,34 @@ function PlanAction({ plan, period, current }: { plan: Plan; period: BillingPeri
   )
 }
 
-function PriceLine({ plan, period }: { plan: Plan; period: BillingPeriod }) {
+/**
+ * The price on a card, in the currency this visitor will be charged in.
+ *
+ * Two sources, and the fallback order is the point. Paddle's preview is the
+ * figure the checkout will quote, so it wins whenever it has arrived; the USD
+ * base renders otherwise, immediately, rather than holding a placeholder — it is
+ * not a guess but the amount the conversion starts from, and a card that shows
+ * a price late reads as a card that is hiding one.
+ */
+function PriceLine({ plan, period, prices }: { plan: Plan; period: BillingPeriod; prices: PriceTable }) {
   const price = priceFor(plan, period)
   if (price === null) return <p className="mt-3 text-2xl font-bold text-slate-800">—</p>
   if (price === 0) return <p className="mt-3 text-2xl font-bold text-slate-800">Free</p>
 
-  const perMonth = monthlyEquivalent(plan, period)!
+  const line = lineFor(prices, plan.id, period)
+  const perMonth = line ? line.perMonth : formatUsd(monthlyEquivalent(plan, period)!)
+  const total = line ? line.charged : formatUsd(price)
+  const saving = line ? line.saving : formatUsd(annualSaving(plan))
+
   return (
     <div className="mt-3">
       <p className="text-2xl font-bold text-slate-800">
-        {formatUsd(perMonth)}
+        {perMonth}
         <span className="text-sm font-medium text-slate-500"> /month</span>
       </p>
       {period === 'annual' ? (
         <p className="mt-0.5 text-[12px] leading-5 text-slate-500">
-          {formatUsd(price)} billed yearly · save {formatUsd(annualSaving(plan))}
+          {total} billed yearly{saving && <> · save {saving}</>}
         </p>
       ) : (
         <p className="mt-0.5 text-[12px] leading-5 text-slate-500">billed monthly</p>
@@ -112,7 +139,9 @@ function PriceLine({ plan, period }: { plan: Plan; period: BillingPeriod }) {
   )
 }
 
-function PlanCard({ plan, current, period }: { plan: Plan; current: PlanId; period: BillingPeriod }) {
+function PlanCard({ plan, current, period, prices }: {
+  plan: Plan; current: PlanId; period: BillingPeriod; prices: PriceTable
+}) {
   const featured = plan.id === 'pro'
   const isCurrent = current === plan.id
   return (
@@ -127,7 +156,7 @@ function PlanCard({ plan, current, period }: { plan: Plan; current: PlanId; peri
         )}
       </div>
       <p className="mt-1 text-[13px] leading-5 text-slate-600">{plan.tagline}</p>
-      <PriceLine plan={plan} period={period} />
+      <PriceLine plan={plan} period={period} prices={prices} />
       <ul className="mt-4 flex-1 space-y-1.5">
         {plan.highlights.map((h) => (
           <li key={h} className="flex gap-2 text-[13px] leading-5 text-slate-700">
@@ -194,6 +223,20 @@ export default function Pricing() {
   const { user } = useAuth()
   const current = planOf(user ? (user.plan ?? 'free') : 'guest')
   const [period, setPeriod] = useState<BillingPeriod>('annual')
+  const prices = useLocalizedPrices()
+
+  // Null while the preview is in flight, and `USD` for a US visitor — both mean
+  // the page keeps its base-currency wording.
+  const currency = tableCurrency(prices)
+  const converted = currency !== null && currency !== CURRENCY
+
+  /** "€23.00 (10.1%)" — both halves from the same source, localized or base. */
+  const savingText = (plan: PaidPlanId) => {
+    const line = lineFor(prices, plan, 'annual')
+    const amount = line?.saving ?? formatUsd(annualSaving(plan))
+    const fraction = line?.savingFraction ?? annualDiscountOf(plan)
+    return `${amount} (${(fraction * 100).toFixed(1)}%)`
+  }
 
   return (
     <main className="mx-auto max-w-5xl px-5 py-10">
@@ -219,14 +262,25 @@ export default function Pricing() {
       )}
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {PLANS.map((p) => <PlanCard key={p.id} plan={p} current={current.id} period={period} />)}
+        {PLANS.map((p) => (
+          <PlanCard key={p.id} plan={p} current={current.id} period={period} prices={prices} />
+        ))}
       </div>
 
       <p className="mt-4 text-[12px] leading-6 text-slate-500">
-        Prices are in US dollars and include no hidden fees; Paddle converts them to your local currency at
-        checkout, and any sales tax or VAT is shown there before you pay. Annual billing saves{' '}
-        {formatUsd(annualSaving('pro'))} on Pro ({(annualDiscountOf('pro') * 100).toFixed(1)}%) and{' '}
-        {formatUsd(annualSaving('max'))} on Max ({(annualDiscountOf('max') * 100).toFixed(1)}%) over a year.
+        {converted ? (
+          <>
+            Prices are shown in {currency} — the amount Paddle will charge you, converted from our US dollar
+            list price at today&rsquo;s rate. Any sales tax or VAT that applies where you are is added at
+            checkout and shown before you pay.
+          </>
+        ) : (
+          <>
+            Prices are in US dollars and include no hidden fees; Paddle converts them to your local currency at
+            checkout, and any sales tax or VAT is shown there before you pay.
+          </>
+        )}{' '}
+        Annual billing saves {savingText('pro')} on Pro and {savingText('max')} on Max over a year.
       </p>
 
       <h2 className="mt-10 text-[1.05rem] font-bold text-[#0056b3]">What counts as a &ldquo;calculator&rdquo;</h2>
