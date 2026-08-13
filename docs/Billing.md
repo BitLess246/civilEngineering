@@ -392,27 +392,152 @@ even for an annual subscriber paying $205 a year. It reads the plan table, not
 the subscription, so it is a label rather than a statement about this account's
 billing — worth reconciling with the real subscription now that one exists.
 
-### Confirm before going live
+---
 
-**One real event through the pipe.** The Paddle field paths in `fromPaddle` are
-the documented ones, but send one sandbox event through and confirm
-`custom_data.user_id` and `items[0].price.id` arrive where it expects. It fails
-closed, so a wrong guess denies a paying customer — visible and fixable —
-rather than granting a free one.
+## Going live — the cutover
 
-**Amounts in cents.** Every Paddle amount is an integer number of cents. Create
-prices as `1900`, never `19`.
+**Sandbox and live are separate universes.** Client tokens, API keys, price ids
+and webhook secrets are all environment-scoped, and none of the sandbox values
+mean anything in production. Going live is not a switch; it is building the
+whole thing a second time and swapping the app onto it.
 
-**Currency is settled.** `/pricing` is priced in USD and matches the catalog:
-$19 / $49 monthly, $205 / $529 annually. A test pins each annual price to within
-a tenth of a percentage point of the advertised 10% discount, and another pins
-the four headline figures, so the page and the Paddle catalog cannot drift apart
-unnoticed.
+Nothing in the code changes. Everything below is configuration.
 
-**Sandbox and live are separate universes.** Tokens, price ids and webhook
-secrets are all environment-scoped. Going live means a new catalog, a new
-notification destination, a new secret and all six `VITE_` values changed
-together.
+### Before you start — the gates
+
+| Gate | Who | Notes |
+|---|---|---|
+| **Paddle seller verification** | Paddle | A live account cannot take payment until the business, identity, payout bank account and website are approved. Days, not minutes, and the usual long pole. |
+| Live API key | You | `pdl_live_…` with `product.write` + `price.write` for the seed, and `subscription.read/write` + `transaction.read` for the three user-facing functions. |
+| Live client token | You | `live_…`. Public by design; it ships in the bundle. |
+| Vercel environment access | You | Production currently has **no** `VITE_PADDLE_*` variables at all, which is why the deployed site shows the coming-soon notice. |
+
+### The ordering rule
+
+**The server side goes first, always. The front end goes last.**
+
+The dangerous state is a front end offering live prices while the webhook still
+maps sandbox ids: every payment then rejects as `unknown-price`, which is
+**money taken and no plan granted** — the one failure this system is otherwise
+built to avoid. Doing it in the order below means the worst case mid-cutover is
+a checkout that will not open, which costs a sale rather than a customer.
+
+`paddleConfig` backs this up: it refuses a `test_` token with
+`VITE_PADDLE_ENV=production`, so a half-swapped front end shows the coming-soon
+notice instead of charging a real card against the wrong environment.
+
+### The checklist
+
+**1. Create the live catalog.**
+
+```bash
+cd webapp
+PADDLE_ENV=production PADDLE_API_KEY=pdl_live_… npx tsx ../scripts/seed-paddle-catalog.ts
+```
+
+Amounts are integers in cents — `1900`, never `19`. Re-running creates
+duplicates; Paddle has no upsert for products. Keep the printed output: it
+carries both the `BILLING_PRICE_MAP` line and the four `VITE_PADDLE_PRICE_*`
+lines.
+
+Seed the same figures the page advertises: $19 / $49 monthly, $205 / $529
+annually. Tests pin the four headline prices and hold each annual price within a
+tenth of a percentage point of the advertised 10% discount, so `plans.ts` and
+the catalog cannot drift apart unnoticed — if the live prices differ, change
+`plans.ts` in the same PR or the suite will say so.
+
+**2. Point the functions at production.**
+
+```bash
+supabase secrets set --project-ref <ref> \
+  PADDLE_ENV=production \
+  PADDLE_API_KEY=pdl_live_… \
+  BILLING_PRICE_MAP='<live pri_…>=pro:monthly,<live pri_…>=pro:annual,<live pri_…>=max:monthly,<live pri_…>=max:annual'
+```
+
+`PADDLE_ENV` defaults to production in `portal.ts` if unset, but set it
+explicitly — the default exists to fail safe, not to be relied on.
+
+**3. New notification destination**, in the **live** dashboard: same URL
+(`https://<ref>.supabase.co/functions/v1/billing-webhook`), same four events
+(`subscription.created/updated/canceled`, `transaction.completed`), then
+
+```bash
+supabase secrets set --project-ref <ref> BILLING_WEBHOOK_SECRET=<live pdl_ntfset_…>
+```
+
+The functions read secrets at runtime, so no redeploy is needed for 2 or 3 —
+**unless** the shared code changed, in which case redeploy before touching the
+secret (see the note under step 5).
+
+**4. Live checkout settings.** Both bit us in sandbox and neither is inherited:
+
+- **Checkout → Checkout settings → default payment link.** Missing is what
+  makes the overlay open on "Something went wrong".
+- **Checkout → Website approval.** Sandbox auto-approves; production does not.
+  Approve the real domain.
+- **Business account → Currencies → automatic currency conversion**, if buyers
+  should see their own currency rather than the USD base.
+
+**5. Only now, the front end.** Six variables in the Vercel project
+(Production scope), then redeploy:
+
+```
+VITE_PADDLE_CLIENT_TOKEN=live_…
+VITE_PADDLE_ENV=production
+VITE_PADDLE_PRICE_PRO_MONTHLY=pri_…
+VITE_PADDLE_PRICE_PRO_ANNUAL=pri_…
+VITE_PADDLE_PRICE_MAX_MONTHLY=pri_…
+VITE_PADDLE_PRICE_MAX_ANNUAL=pri_…
+```
+
+They are compiled into the bundle by Vite, so a redeploy is the only way they
+take effect. All six or none: half-configured counts as off.
+
+> **If `_shared/` code changed since the last deploy, redeploy the functions
+> before step 2, not after.** Setting a secret in a format the deployed parser
+> does not understand breaks the live path immediately — that is precisely how
+> the `:period` suffix nearly took the webhook down on 13 August 2026.
+
+### Verifying, with real money
+
+**Production has no test cards.** Verification is one real payment on a real
+card, then a refund from the dashboard. Do it in this order, and stop at the
+first thing that does not match:
+
+1. `/pricing` opens a checkout showing the live price and Test Mode **absent**.
+2. Pay. The transaction appears in the live dashboard.
+3. The Edge Function log shows `plan=pro user=… event=…`.
+4. `app_metadata.plan` is `pro`, with `paddle_customer_id` and
+   `paddle_subscription_id` beside it.
+5. Sign out and back in — the gate opens. (The session carries the old
+   metadata until it is refreshed; this is expected, and the post-payment
+   banner says so.)
+6. The profile page lists the payment; the portal opens; a switch preview
+   quotes a sane proration.
+7. Refund the transaction. Confirm the account drops to `free` after the
+   cancellation event.
+
+### Two things that will look like bugs and are not
+
+**Accounts carry sandbox ids.** Any account that bought during sandbox testing
+has a sandbox `ctm_…`/`sub_…` in `app_metadata`. Against a live API key those
+do not resolve, so the portal, history and switch buttons error **for those
+accounts only**. Clear the fields, or let the account buy again for real. It is
+easy to mistake for a broken deployment on cutover day.
+
+**Prices read in USD everywhere** until automatic currency conversion is on
+(step 4). The page and the checkout agree, so nothing is wrong — it is simply
+not the localized experience the code supports.
+
+### Rolling back
+
+Reverse order: clear the six Vercel variables and redeploy. `CHECKOUT_ENABLED`
+goes false, the pricing page returns to the coming-soon notice, and no card
+details are collected anywhere. The functions can keep their live secrets
+meanwhile — with nothing opening checkouts, they have nothing to do. Anyone who
+already paid keeps their plan, because the plan lives in `app_metadata` and
+nothing above touches it.
 
 ---
 
