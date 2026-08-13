@@ -22,14 +22,9 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { apiBase, customerIdFor, portalUrls, type BillingMetadata } from '../_shared/portal.ts'
+import { preflight, jsonWithCors as json } from '../_shared/cors.ts'
 
 const env = (k: string) => Deno.env.get(k)
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  })
 
 /**
  * Errors are named, not described.
@@ -42,6 +37,11 @@ const json = (body: unknown, status = 200) =>
 const fail = (reason: string, status: number) => json({ error: reason }, status)
 
 Deno.serve(async (req: Request): Promise<Response> => {
+  // BEFORE the method check: supabase-js sends an OPTIONS preflight, and
+  // answering it with 405 is how this function became unreachable from a
+  // browser without anything appearing in the logs. See _shared/cors.ts.
+  const pre = preflight(req)
+  if (pre) return pre
   if (req.method !== 'POST') return fail('method-not-allowed', 405)
 
   const url = env('SUPABASE_URL'), serviceKey = env('SUPABASE_SERVICE_ROLE_KEY')
