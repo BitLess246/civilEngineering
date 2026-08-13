@@ -4,6 +4,34 @@ A working note so a fresh session (on the web, phone, or another PC) can pick up
 instantly. The **repo is the source of truth** — terminal chat history does not
 transfer, but everything below does.
 
+## ⚠ Audit remediation — August 2026
+
+Three independent read-only audits (engine correctness, security/authorization,
+application reliability) produced **20 findings**. The working plan, status
+board and the full "verified sound" / "never audited" lists live in
+[`docs/AuditRemediation.md`](docs/AuditRemediation.md). **Read it before picking
+up engine or gate work.**
+
+**Shipped:** E1 and E2 (#577) — the steel column check was collapsing biaxial
+bending into a single strong-axis term and running on a hardcoded K = 1.0,
+overstating capacity 2–3× on ordinary moment frames.
+
+**The pattern worth remembering:** the L7 standalone engines are correct and
+well-tested; the L6 pipeline that consumes them was dropping information on the
+way in. `weakAxisFlexure`, `breslerReciprocal` and `columnKFactors` were all
+written, tested and passing while none reached the design path. Every function
+passed in isolation and nothing tested the composition — which is why 4067 tests
+stayed green over a 2–3× unconservative error. `pipelineComposition.test.ts`
+exists to close that class of gap; extend it whenever the pipeline consumes a
+new engine.
+
+**Highest open risks:** E3 (RC column biaxial — `breslerReciprocal` still has no
+non-test caller), R1/R2 (one malformed localStorage entry bricks all seven
+planning routes, and there is no error boundary anywhere), S1 (the project-limit
+paywall falls to a single bulk INSERT). Also: fix **S2 and S3 before setting
+`GUEST_TRIAL_SALT`** — the trial gate is inert until then, so both are moot
+today and live the moment the salt lands.
+
 ## What this is
 `civilEngineering` — a React 19 + TypeScript + Vite app (Tailwind v4, KaTeX,
 react-three-fiber) of structural-design tools and material take-off estimators

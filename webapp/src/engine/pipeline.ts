@@ -27,7 +27,8 @@ import { designSlabDDM, type SlabDesignResult } from './slabDDM'
 import { designShearWall, type ShearWallResult } from './shearWallDesign'
 import { checkModelSCWB, type SCWBJointRow } from './scwb'
 import { shapeByName, nextHeavierW, nextLighterW, type AiscShape } from './aiscSections'
-import { deriveWSection, beamFlexure, beamShear, columnAxial, combinedLoading } from './steelDesign'
+import { deriveWSection, beamFlexure, beamShear, columnAxial, combinedLoading, weakAxisFlexure } from './steelDesign'
+import { columnKFactors, type ColumnK } from './effectiveLength'
 import { woodRefOf, checkWoodBeam, checkWoodColumn, getWoodRef, woodAdjusted } from './woodDesign'
 import { designWoodSlab, type WoodSlabResult } from './woodSlab'
 import { designBasePlate, adoptPlateThickness, type BasePlateResult } from './baseplate'
@@ -51,6 +52,20 @@ export interface AnalyzeOptions {
   f1?: number
   /** Run the second-order P-Δ iteration. */
   pDelta?: boolean
+  /**
+   * Treat steel columns as being in a BRACED frame, so the alignment-chart K
+   * comes from the braced curve (K ≤ 1.0) rather than the sway curve.
+   *
+   * Default FALSE — sway. Nothing in the model declares a bracing system, and
+   * the unbraced K is the conservative reading, which is the right way to be
+   * wrong in a design tool. Set this only when the frame really is braced
+   * against sidesway; it implements AISC 360-16 App. 7.2.
+   *
+   * This is NOT the Direct Analysis Method. DAM would permit K = 1.0 outright,
+   * but only alongside a second-order analysis, notional loads (§C2.2b) and
+   * reduced stiffness (§C2.3) — none of which the engine implements yet.
+   */
+  bracedFrame?: boolean
   /** Directional lateral cases (E/W in ±X/±Z). When given, every combination
    *  with an E (or W) factor is run once per E (or W) case and the design is
    *  enveloped per member — STAAD-style. The list is used VERBATIM — include
@@ -218,8 +233,14 @@ export interface SteelBeamScheduleRow {
 }
 export interface SteelColumnScheduleRow {
   id: string; L: number; shape: string
-  Pu: number; Mu: number
-  phiPn: number; phiMn: number
+  /** `Mu` is the STRONG-axis demand (about Iz); `Muy` is the weak-axis one.
+   *  Both are reported because §H1-1 sums them and a schedule that shows only
+   *  one cannot be checked by hand. */
+  Pu: number; Mu: number; Muy: number
+  phiPn: number; phiMn: number; phiMny: number
+  /** Effective-length factors actually used, and on which assumption. A
+   *  capacity that depends on a bracing assumption has to show it. */
+  Kx: number; Ky: number; braced: boolean
   slenderness: number
   ratio: number; equation: string  // §H1-1
   ok: boolean
@@ -364,25 +385,71 @@ function designSteelBeamRow(
   }
 }
 
-/** Design a steel column from a member result (§E3 axial + §H1-1 combined). */
-function designSteelColumnRow(mr: F3MemberResult, sec: RectSection): SteelColumnScheduleRow | null {
+/**
+ * Design a steel column from a member result (§E3 axial + §H1-1 combined).
+ *
+ * TWO THINGS THIS USED TO GET WRONG, BOTH UNCONSERVATIVELY.
+ *
+ * 1. BIAXIAL BENDING WAS COLLAPSED TO ONE TERM. The demand was `mr.Mmax`,
+ *    which is `max(|My|, |Mz|)` (frame3d) — the larger of two ORTHOGONAL
+ *    moments, a display summary. Two errors compounded: the smaller moment was
+ *    discarded entirely, and when the WEAK-axis moment was the larger it was
+ *    divided by STRONG-axis capacity, which for a W-shape is 2–4× too big. A
+ *    W310x52 at Pu = 300 kN with 60 kN·m weak and 20 kN·m strong reported
+ *    0.645 (pass) against a true §H1-1 ratio of 1.692 (fail).
+ *
+ *    It matters most where the rest of the engine is at its best: orthogonal
+ *    seismic effects (100%+30%, NSCP §208.8.1) deliberately produce
+ *    simultaneous Mx and Mz, and this threw one away.
+ *
+ * 2. K WAS HARDCODED TO 1.0 alongside a first-order analysis. AISC 360-16
+ *    allows K = 1.0 only under the Direct Analysis Method, which also requires
+ *    a second-order analysis, notional loads Ni = 0.002αYi (§C2.2b) and
+ *    reduced stiffness 0.8τb·EI (§C2.3). None of the three exist here, so the
+ *    default was the one combination the specification does not permit —
+ *    overstating φPn by 1.9–3.0× on ordinary moment-frame columns.
+ *
+ * AXES. `modelBridge` maps the section's strong axis to Iz, so `mr.Mz` is the
+ * strong-axis moment and `mr.My` the weak one. `ColumnK` is named for the SWAY
+ * DIRECTION rather than the bending axis, so the two cross: `Kz` (sway in
+ * global Z, bending about Iz) is the strong-axis K and pairs with `rx`, while
+ * `Kx` pairs with `ry`. Getting that backwards silently swaps the capacities.
+ */
+function designSteelColumnRow(
+  mr: F3MemberResult, sec: RectSection, k?: ColumnK, braced = false,
+): SteelColumnScheduleRow | null {
   const shape = sec.shape ? shapeByName(sec.shape) : undefined
   if (!shape) return null
   const Fy = sec.steelFy ?? 248
   const Pu = Math.max(0, -Math.min(...mr.N))   // compression (N < 0)
-  const Mu = mr.Mmax
-  const axial = columnAxial(shape, Fy, mr.L, 1.0, 1.0)
-  let phiMn = Infinity
+  // Per-axis envelopes, not the `Mmax` summary.
+  const Mux = Math.max(...mr.Mz.map(Math.abs))   // strong axis (Iz)
+  const Muy = Math.max(...mr.My.map(Math.abs))   // weak axis (Iy)
+
+  // Sway is the default because nothing here can prove a frame is braced, and
+  // without DAM the alternative is the unconservative assumption. A caller who
+  // knows the frame is braced says so.
+  const pick = (kk: { braced: number; sway: number } | undefined) =>
+    kk ? (braced ? kk.braced : kk.sway) : 1.0
+  const Kx = pick(k?.Kz)   // strong axis ← sway about global Z
+  const Ky = pick(k?.Kx)   // weak axis   ← sway about global X
+
+  const axial = columnAxial(shape, Fy, mr.L, Kx, Ky)
+  const props = deriveWSection(shape)
+  let phiMnx = Infinity, phiMny = Infinity
   if (shape.family === 'W' || shape.family === 'WT') {
-    phiMn = beamFlexure(shape, deriveWSection(shape), Fy, mr.L * 1000, 1.0).phiMn
+    phiMnx = beamFlexure(shape, props, Fy, mr.L * 1000, 1.0).phiMn
+    phiMny = weakAxisFlexure(shape, props, Fy).phiMny   // §F6
   }
-  const comb = combinedLoading(Pu, axial.phiPn, Mu, phiMn)
+  const comb = combinedLoading(Pu, axial.phiPn, Mux, phiMnx, Muy, phiMny)
   const E_STEEL = 200000
   const Fe = axial.slenderness > 0 ? (Math.PI ** 2 * E_STEEL) / axial.slenderness ** 2 : Infinity
   const { d = 0, bf = 0, tf = 0, tw = 0, A, rx, ry } = shape
   return {
-    id: mr.id, L: mr.L, shape: shape.name, Pu, Mu,
-    phiPn: axial.phiPn, phiMn: Number.isFinite(phiMn) ? phiMn : 0,
+    id: mr.id, L: mr.L, shape: shape.name, Pu, Mu: Mux, Muy,
+    phiPn: axial.phiPn, phiMn: Number.isFinite(phiMnx) ? phiMnx : 0,
+    phiMny: Number.isFinite(phiMny) ? phiMny : 0,
+    Kx, Ky, braced,
     slenderness: axial.slenderness, ratio: comb.ratio, equation: comb.equation,
     ok: comb.ok && axial.slenderOK,
     d, bf: bf ?? 0, tf: tf ?? 0, tw: tw ?? 0, A, rx, ry,
@@ -390,6 +457,15 @@ function designSteelColumnRow(mr: F3MemberResult, sec: RectSection): SteelColumn
     slendernessX: axial.slendernessX, slendernessY: axial.slendernessY,
   }
 }
+
+/** Test seam for `pipelineComposition.test.ts`.
+ *
+ *  Exported deliberately: the composition tests exist because every function
+ *  this row consumes passed its own isolated unit test while the row wired
+ *  them together wrongly. Reaching the row through a full `designStructure`
+ *  run would make those assertions slow and indirect, and would hide which
+ *  layer broke. */
+export const designSteelColumnRowForTest = designSteelColumnRow
 
 const beamOK = (d: BeamDesignResult) =>
   d.flexOK && d.comprEffective && d.comprNAOK && d.region !== 'inadequate'
@@ -764,6 +840,13 @@ function designFromRuns(
   onProgress?: ProgressFn,
 ): StructureDesign | null {
   if (runs.length === 0) return null
+  // Alignment-chart K per column, computed once. `columnKFactors` has existed
+  // and been tested since the effective-length work shipped; until now the only
+  // thing that read it was the Model Space UI, which DISPLAYED it while the
+  // design check ran on a hardcoded K = 1.0.
+  const kByMember = new Map<string, ColumnK>(
+    columnKFactors(model).map((k) => [k.memberId, k]),
+  )
   const fallbackSec: RectSection = model.sections[0]
     ?? { id: '', name: '', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
   const secById = new Map(model.sections.map((s) => [s.id, s]))
@@ -914,7 +997,8 @@ function designFromRuns(
         let best: SteelColumnScheduleRow | null = null, bestRatio = -1, gov = ''
         for (const run of runs) {
           const mr = memberOf(run, m.id); if (!mr) continue
-          const row = designSteelColumnRow(mr, sec); if (!row) continue
+          const row = designSteelColumnRow(mr, sec, kByMember.get(m.id), opts.bracedFrame)
+          if (!row) continue
           if (row.ratio > bestRatio) { bestRatio = row.ratio; best = row; gov = run.name }
         }
         if (best) steelColumns.push({ ...best, gov })
