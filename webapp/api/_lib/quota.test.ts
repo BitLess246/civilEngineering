@@ -5,7 +5,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { claimRun, quotaConfig, GUEST_TRIAL_LIMIT, type QuotaConfig } from './quota'
 import { issueTicket, TICKET_TTL_MS } from './ticket'
-import { subjectHash, uaFamily } from './subject'
+import { subjectHash } from './subject'
 
 const SALT = 'a'.repeat(32)
 const CFG: QuotaConfig = {
@@ -46,7 +46,7 @@ describe('claimRun charges an arrival', () => {
     expect(calls[0].body.p_limit).toBe(5)
     // The address never leaves the process — only its salted digest does.
     expect(JSON.stringify(calls[0].body)).not.toContain('203.0.113.7')
-    expect(calls[0].body.p_subject).toBe(await subjectHash(SALT, '203.0.113.7', uaFamily(UA)))
+    expect(calls[0].body.p_subject).toBe(await subjectHash(SALT, '203.0.113.7'))
   })
 
   it('refuses once the allowance is spent', async () => {
@@ -66,7 +66,7 @@ describe('the ticket keeps typing off the database', () => {
   it('a valid ticket is accepted with NO round trip', async () => {
     // This is the performance claim in the module header, asserted rather than
     // assumed: `never` throws if the database is consulted at all.
-    const subject = await subjectHash(SALT, '203.0.113.7', uaFamily(UA))
+    const subject = await subjectHash(SALT, '203.0.113.7')
     const ticket = await issueTicket(SALT, subject, '/steel/beam', 'run-token-0001')
     const v = await claimRun(
       req({ 'x-calc-run': 'run-token-0001', 'x-calc-ticket': ticket }), '/steel/beam', CFG, never)
@@ -77,7 +77,7 @@ describe('the ticket keeps typing off the database', () => {
   it('an EXPIRED ticket falls back to the database with the same run token', async () => {
     // And the database, seeing a token it remembers, admits without charging —
     // which is why a long session does not cost a second run.
-    const subject = await subjectHash(SALT, '203.0.113.7', uaFamily(UA))
+    const subject = await subjectHash(SALT, '203.0.113.7')
     const t0 = 1_000_000
     const ticket = await issueTicket(SALT, subject, '/steel/beam', 'run-token-0001', t0)
     const { impl, calls } = rpc({ allowed: true, charged: false, used: 1, reason: null })
@@ -90,7 +90,7 @@ describe('the ticket keeps typing off the database', () => {
   })
 
   it('a ticket for ANOTHER route does not skip the check', async () => {
-    const subject = await subjectHash(SALT, '203.0.113.7', uaFamily(UA))
+    const subject = await subjectHash(SALT, '203.0.113.7')
     const ticket = await issueTicket(SALT, subject, '/steel/column', 'run-token-0001')
     const { impl, calls } = rpc({ allowed: true, charged: true, used: 1, reason: null })
     await claimRun(
@@ -99,7 +99,7 @@ describe('the ticket keeps typing off the database', () => {
   })
 
   it('a ticket from a DIFFERENT visitor does not skip the check', async () => {
-    const other = await subjectHash(SALT, '198.51.100.1', uaFamily(UA))
+    const other = await subjectHash(SALT, '198.51.100.1')
     const ticket = await issueTicket(SALT, other, '/steel/beam', 'run-token-0001')
     const { impl, calls } = rpc({ allowed: false, charged: false, used: 5, reason: 'exhausted' })
     const v = await claimRun(
@@ -136,6 +136,51 @@ describe('the run token cannot be used to dodge the counter', () => {
       req({ 'x-calc-run': 'run-token-0001', 'x-calc-route': '/anything-i-like' }),
       '/bolted-connection', CFG, impl)
     expect(calls[0].body.p_route).toBe('/bolted-connection')
+  })
+})
+
+describe('nothing the caller chooses reaches the subject', () => {
+  // The property that makes the digest a boundary. Each of these headers used
+  // to change the subject, and each is set entirely by whoever is calling.
+
+  const subjectFor = async (headers: Record<string, string>, ip?: string) => {
+    const { impl, calls } = rpc({ allowed: true, charged: true, used: 1, reason: null })
+    await claimRun(req({ 'x-calc-run': 'run-token-0001', ...headers }, ip), '/steel/beam', CFG, impl)
+    return calls[0].body.p_subject
+  }
+
+  it('the User-Agent does not, so one browser cannot be thirty-six visitors', async () => {
+    // `uaFamily` bucketed the UA into 6 engines × 6 platforms. All 36 were
+    // reachable by editing one header, which turned a five-run allowance into
+    // 180 and multiplied the row growth by the same factor.
+    const chromeWin = await subjectFor({ 'user-agent': 'Mozilla/5.0 (Windows NT 10.0) Chrome/120' })
+    const safariMac = await subjectFor({ 'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605' })
+    const firefox = await subjectFor({ 'user-agent': 'Mozilla/5.0 (X11; Linux) Firefox/121' })
+    const absent = await subjectFor({ 'user-agent': '' })
+    expect(new Set([chromeWin, safariMac, firefox, absent]).size).toBe(1)
+  })
+
+  it('cf-connecting-ip does not — nothing in front of this sets it', async () => {
+    const spoofed = await subjectFor({ 'cf-connecting-ip': '198.51.100.99' })
+    const plain = await subjectFor({})
+    expect(spoofed).toBe(plain)
+  })
+
+  it('x-real-ip does not, for the same reason', async () => {
+    expect(await subjectFor({ 'x-real-ip': '198.51.100.98' })).toBe(await subjectFor({}))
+  })
+
+  it('but the platform address still does — or nobody is told apart', async () => {
+    expect(await subjectFor({}, '203.0.113.7')).not.toBe(await subjectFor({}, '198.51.100.1'))
+  })
+
+  it('and x-vercel-forwarded-for wins over x-forwarded-for', async () => {
+    // Vercel overwrites `x-forwarded-for` and does not forward external IPs
+    // (their docs), so both are platform-written here — but the Vercel-specific
+    // one is the one a trusted-proxy configuration could never loosen.
+    const viaVercel = await subjectFor({ 'x-vercel-forwarded-for': '198.51.100.1' }, '203.0.113.7')
+    const direct = await subjectFor({}, '198.51.100.1')
+    expect(viaVercel).toBe(direct)
   })
 })
 
@@ -185,6 +230,26 @@ describe('failure is open, and says so', () => {
     const bad = (async () => new Response(JSON.stringify({ nope: 1 }), { status: 200 })) as unknown as typeof fetch
     const { v } = await degraded(CFG, bad)
     expect(v.ok && v.degraded).toBe('rpc-shape')
+  })
+
+  it('a full guest_trials table lets the visitor compute, and is reported', async () => {
+    // The whole-table backstop tripped, so no new subject may open a row. The
+    // function ALLOWS — a full table is our problem, not the visitor's — and
+    // this must not be read as a refusal or the shop window closes on everyone
+    // at once.
+    const { impl } = rpc({ allowed: true, charged: false, used: 0, reason: 'table-full' })
+    const { v, logged } = await degraded(CFG, impl)
+    expect(v).toEqual({ ok: true, degraded: 'table-full' })
+    expect(logged).toBe(1)
+  })
+
+  it('and issues no ticket for a run nothing charged for', async () => {
+    // A ticket asserts "this run is paid for". Nothing was.
+    const { impl } = rpc({ allowed: true, charged: false, used: 0, reason: 'table-full' })
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const v = await claimRun(req({ 'x-calc-run': 'run-token-0001' }), '/steel/beam', CFG, impl)
+    spy.mockRestore()
+    expect(v.ok && v.ticket).toBeUndefined()
   })
 })
 

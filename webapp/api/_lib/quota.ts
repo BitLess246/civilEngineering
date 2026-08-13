@@ -31,7 +31,7 @@
 // generous.
 // ─────────────────────────────────────────────────────────────────────────
 
-import { clientIp, uaFamily, saltUsable, subjectHash, ROUTE_CAP_PER_SUBJECT } from './subject'
+import { clientIp, saltUsable, subjectHash, ROUTE_CAP_PER_SUBJECT } from './subject'
 import { issueTicket, verifyTicket, RUN_HEADER, TICKET_HEADER } from './ticket'
 
 /** Runs per calculator for a visitor without an account. Mirrors
@@ -99,7 +99,7 @@ export async function claimRun(
     return { ok: true, degraded: 'no-subject' }
   }
 
-  const subject = await subjectHash(cfg.salt, ip, uaFamily(req.headers.get('user-agent')))
+  const subject = await subjectHash(cfg.salt, ip)
   const run = runToken(req.headers)
 
   // Already paid for, and provably so. This is the path almost every request
@@ -148,6 +148,17 @@ export async function claimRun(
       reason: row.reason === 'route-cap' ? 'route-cap' : 'exhausted',
       used: typeof row.used === 'number' ? row.used : cfg.limit,
     }
+  }
+
+  // ALLOWED, but the store declined to record it: `guest_trials` is over its
+  // whole-table backstop, so no new subject may open a row. The function chose
+  // to allow rather than refuse — a full table is our problem, not the
+  // visitor's — and this reports the condition so a deployment in that state is
+  // visible rather than silently generous. No ticket: nothing was charged, so
+  // there is nothing for a ticket to prove.
+  if (row.reason === 'table-full') {
+    console.error('calc quota: guest_trials is at its row ceiling — new guests are not being counted')
+    return { ok: true, degraded: 'table-full' }
   }
 
   // Paid for — hand back a ticket so the next recompute skips all of this.

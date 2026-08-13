@@ -25,12 +25,22 @@ stayed green over a 2–3× unconservative error. `pipelineComposition.test.ts`
 exists to close that class of gap; extend it whenever the pipeline consumes a
 new engine.
 
-**Highest open risks:** E3 (RC column biaxial — `breslerReciprocal` still has no
-non-test caller), R1/R2 (one malformed localStorage entry bricks all seven
-planning routes, and there is no error boundary anywhere), S1 (the project-limit
-paywall falls to a single bulk INSERT). Also: fix **S2 and S3 before setting
-`GUEST_TRIAL_SALT`** — the trial gate is inert until then, so both are moot
-today and live the moment the salt lands.
+**Shipped since:** E1/E2 (#577), E3 (#578), R1/R2 (#579), S1 (#580), R5 (#581),
+S2/S3 (#587). **Highest open risks now:** R3/R4 (two tabs silently overwrite
+each other's schedule; a full quota reverts the edit without saying so), S4
+(a stale webhook retry can restore a cancelled plan).
+
+**Two migrations are waiting to be applied by hand**, and each is inert —
+worse, *the thing it fixes stays broken* — until it is:
+`20260813000000_project_limit_trigger.sql` (the project ceiling is still
+bypassable by one bulk INSERT without it) and `20260813010000_guest_run_caps.sql`
+(the guest RPC still takes its ceilings from the caller without it).
+
+**`GUEST_TRIAL_SALT` is now safe to set.** S2 and S3 were the two that had to
+land first and did, in #587. Note that #587 also changed the subject derivation
+(the User-Agent is no longer an input), so any counts recorded under the old
+digests are orphaned and get swept by `prune_guest_trials` — which cost nothing,
+because the gate has never enforced.
 
 ## What this is
 `civilEngineering` — a React 19 + TypeScript + Vite app (Tailwind v4, KaTeX,

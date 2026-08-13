@@ -20,34 +20,17 @@ const IPS = [
   '203.0.113.7', '::1', '2001:db8::1', '10.0.0.1', '198.51.100.42',
 ]
 
-const UAS = [
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/120 Safari/537.36 Edg/120',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Safari/605.1.15',
-  'Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/121.0',
-  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Safari/604.1',
-  'Mozilla/5.0 (Linux; Android 14) Chrome/120 Mobile Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0) Chrome/120 Safari/537.36 OPR/106',
-  'curl/8.4.0',
-  '',
-]
+// The User-Agent matrix that used to live here is gone with the input it fed.
+// `quota.test.ts` asserts the behavioural half — that four wildly different
+// agents now produce ONE subject.
 
 const SALT = 'a'.repeat(32)
 
 describe('the Edge copy answers exactly like the Deno original', () => {
-  it('uaFamily agrees on every user agent, including the odd ones', () => {
-    for (const ua of [...UAS, null]) {
-      expect(edge.uaFamily(ua), `ua=${ua}`).toBe(deno.uaFamily(ua))
-    }
-  })
-
-  it('subjectHash agrees across the whole ip × ua matrix', async () => {
+  it('subjectHash agrees on every address', async () => {
     for (const ip of IPS) {
-      for (const ua of UAS) {
-        const family = edge.uaFamily(ua)
-        expect(await edge.subjectHash(SALT, ip, family))
-          .toBe(await deno.subjectHash(SALT, ip, family))
-      }
+      expect(await edge.subjectHash(SALT, ip), `ip=${ip}`)
+        .toBe(await deno.subjectHash(SALT, ip))
     }
   })
 
@@ -62,13 +45,15 @@ describe('the Edge copy answers exactly like the Deno original', () => {
     }
   })
 
-  it('clientIp agrees, and both take the FIRST hop of the chain', () => {
+  it('clientIp agrees, including on the headers both now ignore', () => {
     const cases: Record<string, string>[] = [
       { 'x-forwarded-for': '203.0.113.7, 70.41.3.18, 150.172.238.178' },
       { 'x-forwarded-for': '  203.0.113.7  ' },
       { 'x-forwarded-for': '', 'x-real-ip': '198.51.100.9' },
       { 'cf-connecting-ip': '198.51.100.10' },
       { 'x-real-ip': '198.51.100.11' },
+      { 'x-vercel-forwarded-for': '203.0.113.9' },
+      { 'x-vercel-forwarded-for': '203.0.113.9', 'x-forwarded-for': '198.51.100.1' },
       {},
     ]
     for (const c of cases) {
@@ -79,6 +64,20 @@ describe('the Edge copy answers exactly like the Deno original', () => {
     // keys every visitor behind that proxy to one subject.
     expect(edge.clientIp(new Headers({ 'x-forwarded-for': '203.0.113.7, 70.41.3.18' })))
       .toBe('203.0.113.7')
+  })
+
+  it('both prefer the platform header, and both ignore the caller-set ones', () => {
+    // `cf-connecting-ip` and `x-real-ip` are set by nothing in front of either
+    // deployment, so the only way one arrives is from the caller. Honouring
+    // them means a fresh subject — and a fresh allowance — per request.
+    for (const mod of [edge, deno]) {
+      expect(mod.clientIp(new Headers({ 'cf-connecting-ip': '198.51.100.10' }))).toBeNull()
+      expect(mod.clientIp(new Headers({ 'x-real-ip': '198.51.100.11' }))).toBeNull()
+      expect(mod.clientIp(new Headers({
+        'x-vercel-forwarded-for': '203.0.113.9',
+        'x-forwarded-for': '198.51.100.1',
+      }))).toBe('203.0.113.9')
+    }
   })
 
   it('agrees on which salts are usable, and on the constants', () => {
@@ -93,22 +92,20 @@ describe('the Edge copy answers exactly like the Deno original', () => {
 
 describe('the properties the database relies on', () => {
   it('produces exactly 64 hex chars — what claim_guest_run checks', async () => {
-    const h = await edge.subjectHash(SALT, '203.0.113.7', 'chrome/windows')
+    const h = await edge.subjectHash(SALT, '203.0.113.7')
     expect(h).toMatch(/^[0-9a-f]{64}$/)
   })
 
   it('separates visitors, and keeps one visitor stable', async () => {
-    const a = await edge.subjectHash(SALT, '203.0.113.7', 'chrome/windows')
-    const b = await edge.subjectHash(SALT, '203.0.113.8', 'chrome/windows')
-    const c = await edge.subjectHash(SALT, '203.0.113.7', 'firefox/windows')
+    const a = await edge.subjectHash(SALT, '203.0.113.7')
+    const b = await edge.subjectHash(SALT, '203.0.113.8')
     expect(a).not.toBe(b)
-    expect(a).not.toBe(c)
-    expect(await edge.subjectHash(SALT, '203.0.113.7', 'chrome/windows')).toBe(a)
+    expect(await edge.subjectHash(SALT, '203.0.113.7')).toBe(a)
   })
 
   it('changes completely with the salt, which is why the salt must be secret', async () => {
-    const a = await edge.subjectHash('a'.repeat(32), '203.0.113.7', 'chrome/windows')
-    const b = await edge.subjectHash('b'.repeat(32), '203.0.113.7', 'chrome/windows')
+    const a = await edge.subjectHash('a'.repeat(32), '203.0.113.7')
+    const b = await edge.subjectHash('b'.repeat(32), '203.0.113.7')
     expect(a).not.toBe(b)
   })
 
@@ -126,14 +123,24 @@ describe('the properties the database relies on', () => {
     ]
     for (const [name, src] of sources) {
       expect(src.includes('\0'), `${name} contains a raw NUL byte`).toBe(false)
-      expect(src, name).toContain('`${salt}\\0${ip}\\0${family}`')
+      expect(src, name).toContain('`${salt}\\0${ip}`')
     }
   })
 
-  it('drops the browser version, so an update does not reset the allowance', () => {
-    const v120 = edge.uaFamily('Mozilla/5.0 (Windows NT 10.0) Chrome/120 Safari/537.36')
-    const v121 = edge.uaFamily('Mozilla/5.0 (Windows NT 10.0) Chrome/121 Safari/537.36')
-    expect(v120).toBe(v121)
-    expect(v120).toBe('chrome/windows')
+  it('takes NOTHING the caller chooses — neither copy mentions the User-Agent', () => {
+    // The User-Agent was an input and is not any more: it is picked by the
+    // caller in full, so its 36 engine/platform buckets were 36 subjects
+    // reachable from devtools. A source guard rather than a behavioural one,
+    // because "the UA is absent from the derivation" leaves no observable
+    // signature once it is genuinely gone.
+    for (const [name, src] of [
+      ['api/_lib/subject.ts', edgeSrc],
+      ['supabase/functions/_shared/guestSubject.ts', denoSrc],
+    ] as [string, string][]) {
+      const fn = src.slice(src.indexOf('export async function subjectHash'))
+      expect(fn, name).not.toMatch(/user-agent|uaFamily|family/i)
+    }
+    expect('uaFamily' in edge, 'uaFamily is gone from the Edge copy').toBe(false)
+    expect('uaFamily' in deno, 'uaFamily is gone from the Deno copy').toBe(false)
   })
 })
