@@ -25,8 +25,8 @@ mechanism was established by reading, not observed.
 | E3 | RC column P–M ignores biaxial interaction | high | computed | ✅ #578 |
 | R5 | `/truss` is a gated feature with no gate | high | verified | ☐ |
 | R4 | Full storage silently refuses the save and reverts the edit | high | traced | ☐ |
-| S2 | Guest subject derived from a caller-chosen header | medium | read | ☐ |
-| S3 | `claim_guest_run` takes its own caps from the caller | medium | read | ☐ |
+| S2 | Guest subject derived from a caller-chosen header | medium | reproduced | ✅ #587 |
+| S3 | `claim_guest_run` takes its own caps from the caller | medium | reproduced | ✅ #587 |
 | S4 | Stale webhook retry can restore a cancelled plan | medium | read | ☐ |
 | R6 | Every Model Space solver failure is invisible | medium | verified | ☐ |
 | R8 | Calculation fetch has no timeout | medium | read | ☐ |
@@ -311,20 +311,55 @@ and `TrialGate` passes members-only verdicts through by design. Wrap both; add
 a guard test asserting every `GATED_PREFIXES` entry appears inside a
 `RequireAuth` in `App.tsx`.
 
-**S3, S2 — do these BEFORE setting `GUEST_TRIAL_SALT`.** The gate is currently
-inert in production (documented fail-open, `quota.ts:84-91`), so these are moot
-today and live the moment the salt lands.
+**S3, S2 — ✅ SHIPPED (#587), which unblocks `GUEST_TRIAL_SALT`.** Both were
+moot while the gate was inert (documented fail-open, `quota.ts:84-91`) and both
+would have gone live the moment the salt landed, so they went first.
 
-- S3: clamp the caller-supplied caps inside `claim_guest_run` —
-  `p_limit := least(coalesce(p_limit,5), 5)`, same for `p_cap`. Bound total row
-  growth, since `p_cap` bounds rows *per subject* and subjects are
-  attacker-chosen.
-- S2: prefer the platform-set address (`x-vercel-forwarded-for`) over
-  `x-forwarded-for`; drop `cf-connecting-ip`/`x-real-ip`, neither of which has a
-  proxy in front of this deployment. For the 36× User-Agent multiplier, either
-  drop `uaFamily` from the digest (accepting that a NAT'd office shares an
-  allowance, which the module header already accepts) or document that the token
-  is caller-chosen.
+**S3 — the RPC took its ceilings from the caller.** `20260813010000_guest_run_caps.sql`
+clamps `p_limit` and `p_cap` against server-side `guest_run_limit()` /
+`guest_route_cap()`: a caller may ask for *less*, never more. The arguments stay
+in the signature so the deployed Edge function keeps working mid-rollout.
+
+Verified on Postgres 16 — `guest_run_caps.spec.sql`, 25 assertions. Against the
+old function it fails with `a limit of two billion still buys five runs — got 6,
+want 5`; against the new one, six arrivals asking for `p_limit: 2000000000` get
+exactly five. `claim_guest_run.spec.sql` still passes unchanged, which is the
+point: clamping the ceilings must not change anything below them.
+
+One correction to the original finding, worth keeping. *"Bound total row
+growth"* is not something clamping `p_cap` achieves — `p_cap` is per subject,
+and subjects are 64 hex characters anyone may invent, so it never bounded the
+table at all. `guest_trials_full()` is the bound that does apply: a whole-table
+ceiling read from `pg_class.reltuples` (an estimate, deliberately — a `count(*)`
+on the insert path would be a sequential scan). It **fails open**: over the
+ceiling a new subject computes but is not counted, and the endpoint reports
+`degraded: table-full`. A full table is our problem, not the visitor's.
+
+**S2 — two caller-chosen inputs reached the subject.**
+
+- `cf-connecting-ip` and `x-real-ip` were consulted as fallbacks. Nothing in
+  front of either deployment sets them, so the only way one arrives is from the
+  caller: a fallback that can only ever return an attacker-chosen value. Both
+  are gone; `x-vercel-forwarded-for` is now preferred over `x-forwarded-for`.
+- The **User-Agent is no longer part of the digest**, taking the 36× multiplier
+  with it. `uaFamily` bucketed the UA into 6 engines × 6 platforms, all 36
+  reachable by editing one header — a five-run allowance was really 180, and
+  the row growth was multiplied by the same factor. The accepted cost is the one
+  the module header already states: an office behind one NAT now shares five
+  runs rather than five per browser family.
+
+**A claim in the original finding that did not survive checking.** S2 was
+written as though `x-forwarded-for` were spoofable on Vercel. It is not — Vercel's
+docs state the platform "overwrites this header and does not forward external
+IPs to prevent spoofing", except on Enterprise with a trusted proxy. Preferring
+`x-vercel-forwarded-for` is still the right call (it is the header a
+trusted-proxy setting could never loosen), but it closes a hole that was not
+open. The two that were open are the ones above.
+
+Removing an input changes every digest, so existing `guest_trials` rows are
+orphaned and swept by `prune_guest_trials`. That costs one fresh allowance per
+existing guest — free right now, and not free after the salt is set, which is
+why it went in this PR.
 
 ---
 

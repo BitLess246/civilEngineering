@@ -94,6 +94,6 @@ describe('the ticket key is separated from the subject key', () => {
     // being replayed as the other.
     const { subjectHash } = await import('./subject')
     const t = await issueTicket(SALT, SUB, ROUTE, RUN)
-    expect(t).not.toContain(await subjectHash(SALT, '203.0.113.7', 'chrome/windows'))
+    expect(t).not.toContain(await subjectHash(SALT, '203.0.113.7'))
   })
 })

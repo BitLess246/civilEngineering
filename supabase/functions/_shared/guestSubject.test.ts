@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  clientIp, uaFamily, normalizeRoute, subjectHash, saltUsable,
+  clientIp, normalizeRoute, subjectHash, saltUsable,
   ROUTE_MAX_LEN, MIN_SALT_LEN,
 } from './guestSubject.ts'
 
@@ -14,9 +14,19 @@ describe('clientIp', () => {
       .toBe('203.0.113.7')
   })
 
-  it('falls back through the other proxy headers', () => {
-    expect(clientIp(h({ 'cf-connecting-ip': '198.51.100.4' }))).toBe('198.51.100.4')
-    expect(clientIp(h({ 'x-real-ip': '198.51.100.9' }))).toBe('198.51.100.9')
+  it('prefers the Vercel header, which a caller cannot set', () => {
+    expect(clientIp(h({
+      'x-vercel-forwarded-for': '203.0.113.9',
+      'x-forwarded-for': '198.51.100.1',
+    }))).toBe('203.0.113.9')
+  })
+
+  it('IGNORES cf-connecting-ip and x-real-ip — nothing in front of us sets them', () => {
+    // These were fallbacks. Since no Cloudflare and no nginx sits in this path,
+    // the only way either arrives is from the caller, so honouring one is a way
+    // to mint a fresh subject — and a fresh allowance — with one extra header.
+    expect(clientIp(h({ 'cf-connecting-ip': '198.51.100.4' }))).toBeNull()
+    expect(clientIp(h({ 'x-real-ip': '198.51.100.9' }))).toBeNull()
   })
 
   it('returns null rather than an empty string when nothing carries an address', () => {
@@ -24,33 +34,6 @@ describe('clientIp', () => {
     // header-less request shares.
     expect(clientIp(h({}))).toBeNull()
     expect(clientIp(h({ 'x-forwarded-for': '  ,  ' }))).toBeNull()
-  })
-})
-
-describe('uaFamily', () => {
-  it('names Edge and Opera before Chrome — both also claim "Chrome"', () => {
-    expect(uaFamily('Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 Chrome/120 Safari/537.36 Edg/120'))
-      .toBe('edge/windows')
-    expect(uaFamily('Mozilla/5.0 (X11; Linux x86_64) Chrome/119 Safari/537.36 OPR/105'))
-      .toBe('opera/linux')
-  })
-
-  it('names Chrome before Safari — Chrome also claims "Safari"', () => {
-    expect(uaFamily('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120 Safari/537.36'))
-      .toBe('chrome/mac')
-    expect(uaFamily('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17.0 Safari/605.1.15'))
-      .toBe('safari/mac')
-  })
-
-  it('ignores the version, so a browser update is not a fresh allowance', () => {
-    const a = 'Mozilla/5.0 (Windows NT 10.0) Firefox/121.0'
-    const b = 'Mozilla/5.0 (Windows NT 10.0) Firefox/134.0'
-    expect(uaFamily(a)).toBe(uaFamily(b))
-  })
-
-  it('is total — a missing or junk UA still yields a key', () => {
-    expect(uaFamily(null)).toBe('other/other')
-    expect(uaFamily('')).toBe('other/other')
   })
 })
 
@@ -88,30 +71,30 @@ describe('subjectHash', () => {
   const SALT = 'x'.repeat(MIN_SALT_LEN)
 
   it('is stable for the same visitor', async () => {
-    const a = await subjectHash(SALT, '203.0.113.7', 'chrome/windows')
-    const b = await subjectHash(SALT, '203.0.113.7', 'chrome/windows')
+    const a = await subjectHash(SALT, '203.0.113.7')
+    const b = await subjectHash(SALT, '203.0.113.7')
     expect(a).toBe(b)
     expect(a).toMatch(/^[0-9a-f]{64}$/)
   })
 
-  it('separates different addresses and different browser families', async () => {
-    const base = await subjectHash(SALT, '203.0.113.7', 'chrome/windows')
-    expect(await subjectHash(SALT, '203.0.113.8', 'chrome/windows')).not.toBe(base)
-    expect(await subjectHash(SALT, '203.0.113.7', 'firefox/windows')).not.toBe(base)
+  it('separates different addresses', async () => {
+    const base = await subjectHash(SALT, '203.0.113.7')
+    expect(await subjectHash(SALT, '203.0.113.8')).not.toBe(base)
   })
 
   it('changes completely with the salt — the salt is what makes it non-reversible', async () => {
     // Without a secret salt, sha256(ip) is reversible by enumerating IPv4 in
     // minutes. The digest must be worthless to anyone who reads the table.
-    const other = await subjectHash('z'.repeat(MIN_SALT_LEN), '203.0.113.7', 'chrome/windows')
-    expect(other).not.toBe(await subjectHash(SALT, '203.0.113.7', 'chrome/windows'))
+    const other = await subjectHash('z'.repeat(MIN_SALT_LEN), '203.0.113.7')
+    expect(other).not.toBe(await subjectHash(SALT, '203.0.113.7'))
   })
 
-  it('does not confuse a field boundary', async () => {
-    // Naive concatenation would make ('1.2.3.4', 'a b') and ('1.2.3.4 a', 'b')
-    // collide. The separator is a space, so check the shifted pair differs.
-    const a = await subjectHash(SALT, '1.2.3.4', 'chrome/mac')
-    const b = await subjectHash(SALT, '1.2.3.4 chrome/mac', '')
+  it('separates the salt from the address', async () => {
+    // Naive concatenation would let a salt ending in the first octet collide
+    // with a shorter salt and a longer address. The NUL separator is what stops
+    // it, and it has been silently lost once already — see subject.test.ts.
+    const a = await subjectHash('x'.repeat(MIN_SALT_LEN), '1.2.3.4')
+    const b = await subjectHash('x'.repeat(MIN_SALT_LEN - 1), 'x1.2.3.4')
     expect(a).not.toBe(b)
   })
 })

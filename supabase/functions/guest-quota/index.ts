@@ -27,7 +27,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import {
-  clientIp, uaFamily, normalizeRoute, subjectHash, saltUsable, ROUTE_CAP_PER_SUBJECT,
+  clientIp, normalizeRoute, subjectHash, saltUsable, ROUTE_CAP_PER_SUBJECT,
 } from '../_shared/guestSubject.ts'
 
 const env = (k: string) => Deno.env.get(k)
@@ -85,7 +85,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return json({ error: 'no-subject' }, 422)
   }
 
-  const subject = await subjectHash(salt, ip, uaFamily(req.headers.get('user-agent')))
+  const subject = await subjectHash(salt, ip)
 
   const url = env('SUPABASE_URL'), key = env('SUPABASE_SERVICE_ROLE_KEY')
   if (!url || !key) {
