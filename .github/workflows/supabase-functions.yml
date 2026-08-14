@@ -1,0 +1,145 @@
+# Deploy the Supabase Edge Functions on merge to main.
+#
+# WHY THIS EXISTS. Every function change needed a linked CLI on someone's own
+# machine, so "deploy the function" was a manual step that waited for whoever
+# was at their PC. `guest-quota` sat undeployed for weeks that way while the
+# code that needed it was merged and tested — the gap between "merged" and
+# "live" is where this project keeps losing time.
+#
+# IT ONLY RUNS WHEN A FUNCTION ACTUALLY CHANGED. The path filter keeps ordinary
+# app merges from redeploying five functions for nothing. `workflow_dispatch`
+# is there for the case the filter cannot see: deploying a function whose source
+# has not changed, which is exactly the state `guest-quota` is in today.
+#
+# IT VERIFIES BEFORE IT DEPLOYS. The `_shared` modules are covered by the main
+# vitest suite (see `vitest.config.ts` — the include list reaches into
+# `../supabase/functions`), and they carry the subject derivation that both
+# halves of the guest counter must agree on. Shipping a broken one would be
+# silent: the two halves would simply key different rows.
+#
+# ── SETUP, ONE TIME ──────────────────────────────────────────────────────
+# Add a repository secret `SUPABASE_ACCESS_TOKEN`:
+#   Supabase dashboard → account menu → Access Tokens → Generate new token
+#   GitHub → Settings → Secrets and variables → Actions → New repository secret
+#
+# The project ref below is NOT a secret — it is in the hostname of every API
+# call this app makes, and it is already committed in
+# `supabase/.temp/linked-project.json`. The access token IS one: it can deploy
+# and read this project. Nothing else here needs a secret; function SECRETS
+# (GUEST_TRIAL_SALT, the Paddle keys) live in Supabase and are not touched by a
+# deploy, so a redeploy never has to re-enter them.
+#
+# ── WHAT THIS DOES NOT DO ────────────────────────────────────────────────
+# It does not run migrations. Applying SQL to a live database from a merge is a
+# different risk from replacing a stateless function, and this project applies
+# migrations by hand deliberately.
+name: Deploy Supabase Edge Functions
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "supabase/functions/**"
+      - ".github/workflows/supabase-functions.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time. Two overlapping runs would race to replace the same
+# functions, and the loser's version is whatever landed last rather than
+# whatever is newest.
+concurrency:
+  group: supabase-functions
+  cancel-in-progress: false
+
+env:
+  PROJECT_REF: xntobezelfndbdfiewhp
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webapp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+      - run: npm ci
+      # The whole suite: `_shared` is imported by the app-side equivalence tests
+      # (`api/_lib/subject.test.ts` runs BOTH implementations over the same
+      # inputs), so scoping this down to the function files would skip the
+      # assertions that actually pin the two copies together.
+      - name: Test
+        run: npm test
+      - name: Typecheck
+        run: npx tsc -b
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail early if the token is missing
+        # Without this the CLI fails several steps later with an access error
+        # that reads like the project is unreachable.
+        run: |
+          if [ -z "${{ secrets.SUPABASE_ACCESS_TOKEN }}" ]; then
+            echo "::error::SUPABASE_ACCESS_TOKEN is not set. Supabase dashboard → Access Tokens, then add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy each function
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # Functions whose caller cannot present a project key, and which
+          # therefore authenticate themselves some other way.
+          #
+          # `billing-webhook` is called by PADDLE and checks a signature instead
+          # (see docs/Billing.md). It is the only one, and it must stay the only
+          # one: --no-verify-jwt opens a function to the whole internet, so the
+          # function has to have its own answer to "who is calling".
+          #
+          # Everything else keeps JWT verification ON, including `guest-quota`.
+          # A signed-out visitor reaches it with the project's PUBLISHABLE key,
+          # which satisfies the gateway — verified against the live project:
+          # billing-portal with no auth returns a bodiless gateway 401, while
+          # the same call carrying the publishable key reaches the function and
+          # gets its own {"error":"unauthenticated"} JSON back.
+          NO_JWT="billing-webhook"
+
+          deployed=0
+          for dir in supabase/functions/*/; do
+            name="$(basename "$dir")"
+            # `_shared` is a library, not a function; the CLI bundles it in.
+            case "$name" in _*) continue ;; esac
+
+            flags=""
+            case " $NO_JWT " in *" $name "*) flags="--no-verify-jwt" ;; esac
+
+            echo "::group::deploy $name $flags"
+            supabase functions deploy "$name" --project-ref "$PROJECT_REF" $flags
+            echo "::endgroup::"
+            deployed=$((deployed + 1))
+          done
+
+          # A silent success that deployed nothing would look identical to a
+          # working run, and the first symptom would be a fix that never went
+          # live.
+          if [ "$deployed" -eq 0 ]; then
+            echo "::error::No functions found under supabase/functions — nothing was deployed."
+            exit 1
+          fi
+          echo "deployed $deployed function(s)"

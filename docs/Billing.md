@@ -38,6 +38,47 @@ Supabase Edge Function.
 The browser's only lasting contribution is `customData.user_id`. Everything
 else it does is presentation.
 
+## Deploying the functions
+
+**Merging to `main` deploys them.** `.github/workflows/supabase-functions.yml`
+runs on any push touching `supabase/functions/**`, and can be run by hand from
+the Actions tab (**Deploy Supabase Edge Functions** → *Run workflow*) for the
+case the path filter cannot see — deploying a function whose source has not
+changed.
+
+It runs the vitest suite and `tsc -b` first, then deploys every directory under
+`supabase/functions/` except `_shared`. New functions are picked up
+automatically.
+
+The `supabase functions deploy …` commands quoted throughout this document are
+still correct and still work from a linked CLI. They are now the manual path
+rather than the only one.
+
+**`--no-verify-jwt` is applied to `billing-webhook` and nothing else.** The flag
+removes the gateway's authentication and leaves a function reachable by anyone,
+which is right for a webhook that authenticates by signature and wrong for
+everything else — `billing-change-plan` without it would let a stranger move
+somebody else's subscription. `_shared/deploy.test.ts` reads the workflow and
+fails if the list ever grows.
+
+Note that `guest-quota` keeps JWT verification ON even though signed-out
+visitors call it: a guest reaches it with the project's **publishable** key,
+which satisfies the gateway. Verified against the live project — `billing-portal`
+with no auth returns a bodiless gateway 401, while the same call carrying the
+publishable key reaches the function and gets its own `{"error":"unauthenticated"}`
+back.
+
+**One-time setup:** a repository secret `SUPABASE_ACCESS_TOKEN` (Supabase
+dashboard → account menu → Access Tokens). The project ref in the workflow is
+not a secret — it is the hostname of every API call this app makes.
+
+**Function secrets are untouched by a deploy.** `GUEST_TRIAL_SALT`, the Paddle
+keys and the rest live in Supabase (Project Settings → Edge Functions → Secrets)
+and survive a redeploy, so nothing has to be re-entered.
+
+**Migrations are NOT run by this workflow**, deliberately. Applying SQL to a
+live database on merge is a different risk from replacing a stateless function.
+
 ## The two halves
 
 ### Receiving payment — `supabase/functions/`
