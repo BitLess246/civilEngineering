@@ -30,17 +30,32 @@ S2/S3 (#587). **Highest open risks now:** R3/R4 (two tabs silently overwrite
 each other's schedule; a full quota reverts the edit without saying so), S4
 (a stale webhook retry can restore a cancelled plan).
 
-**Two migrations are waiting to be applied by hand**, and each is inert —
-worse, *the thing it fixes stays broken* — until it is:
-`20260813000000_project_limit_trigger.sql` (the project ceiling is still
-bypassable by one bulk INSERT without it) and `20260813010000_guest_run_caps.sql`
-(the guest RPC still takes its ceilings from the caller without it).
+**The guest trial gate is LIVE, as of 14 August 2026.** Everything it needed is
+deployed: all three migrations applied (`20260813000000` project-limit trigger,
+`20260813010000` guest run caps, `20260813020000` claim idempotency),
+`GUEST_TRIAL_SALT` set on Vercel Production and in Supabase (the SAME value —
+different values would make the two halves key different rows), and all five
+Edge Functions deployed.
 
-**`GUEST_TRIAL_SALT` is now safe to set.** S2 and S3 were the two that had to
-land first and did, in #587. Note that #587 also changed the subject derivation
-(the User-Agent is no longer an input), so any counts recorded under the old
-digests are orphaned and get swept by `prune_guest_trials` — which cost nothing,
-because the gate has never enforced.
+Observed in production rather than assumed: `POST /functions/v1/guest-quota`
+went 404 → 401, a consume returned `{"/steel/column":1}`, and the tenth arrival
+at `/steel/beam` came back
+`402 {"error":"trial-exhausted","reason":"exhausted"}`. That is the first time
+the paywall has been seen refusing a real request.
+
+*One thing that could NOT be checked from a cloud container:* that both halves
+share one row (the #588 fix). It needs two calls to different hosts from one IP,
+and the container's egress rotates across a pool, so each request looked like a
+different visitor. The evidence for it stays `guest_run_race.spec.sh` against a
+real Postgres — 5 of 6 assertions fail pre-fix, all 6 pass after — plus
+`subject.test.ts` pinning the two derivations identical. Worth re-checking from
+a normal browser if it ever looks like guests are running out early.
+
+**Edge Functions now deploy on merge.** `.github/workflows/supabase-functions.yml`
+(#589) runs on any push touching `supabase/functions/**`, or by hand from the
+Actions tab. `--no-verify-jwt` goes to `billing-webhook` and nothing else, and
+`_shared/deploy.test.ts` fails if that list ever grows. Migrations are still
+applied by hand, deliberately.
 
 ## What this is
 `civilEngineering` — a React 19 + TypeScript + Vite app (Tailwind v4, KaTeX,
