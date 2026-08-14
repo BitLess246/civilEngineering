@@ -10,6 +10,7 @@
 
 import type { ScheduleProject } from './model'
 import { validateProject } from './validate'
+import { writeItem, type WriteOutcome } from '../storageWrite'
 
 /** Current on-disk schema version. Bump + add a migration when the shape changes. */
 export const SCHEDULE_SCHEMA_VERSION = 1
@@ -63,10 +64,29 @@ export interface ProjectSummary {
   activityCount: number
 }
 
+/**
+ * What a save did.
+ *
+ * `stored` is present whichever way it went, because the caller needs it even
+ * on failure: the edit stays on screen and unsaved, and the stamp is what a
+ * retry compares against. See `engine/storageWrite.ts` for why a full disk is
+ * a return value here rather than a thrown error.
+ */
+export type SaveOutcome =
+  | { ok: true; stored: StoredProject }
+  | { ok: false; reason: 'quota' | 'failed'; message: string; stored: StoredProject }
+
 export interface ScheduleStore {
   list(): ProjectSummary[]
   load(id: string): ScheduleProject | null
-  save(id: string, project: ScheduleProject, savedAt?: string): StoredProject
+  /**
+   * Persist, reporting rather than throwing.
+   *
+   * It USED to return `StoredProject` and let a `QuotaExceededError` escape.
+   * The throw travelled into a React event handler, so `setProject` never ran
+   * and the user's edit disappeared from the screen with no message.
+   */
+  save(id: string, project: ScheduleProject, savedAt?: string): SaveOutcome
   remove(id: string): void
   exists(id: string): boolean
 }
@@ -112,8 +132,8 @@ export function createStore(backend: StorageBackend = defaultBackend()): Schedul
     },
     save(id, project, savedAt = new Date().toISOString()) {
       const stored: StoredProject = { version: SCHEDULE_SCHEMA_VERSION, savedAt, project }
-      backend.setItem(keyOf(id), JSON.stringify(stored))
-      return stored
+      const w: WriteOutcome = writeItem(backend.setItem, keyOf(id), () => JSON.stringify(stored))
+      return w.ok ? { ok: true, stored } : { ok: false, reason: w.reason, message: w.message, stored }
     },
     remove(id) {
       backend.removeItem(keyOf(id))

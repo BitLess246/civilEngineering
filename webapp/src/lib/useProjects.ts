@@ -73,6 +73,15 @@ export interface ProjectsApi {
   sync(): Promise<void>
   /** Resolve one conflict by keeping one side whole. */
   resolve(id: string, keep: 'local' | 'remote'): Promise<void>
+  /**
+   * Why the last local write did not reach disk, or null.
+   *
+   * Separate from `error`, which is about SYNC. This one means the browser
+   * itself refused to store the project — a full quota, or private browsing —
+   * so the copy in Model Space's own state is the only one there is.
+   */
+  saveError: string | null
+  clearSaveError(): void
 }
 
 export function useProjects(): ProjectsApi {
@@ -80,6 +89,7 @@ export function useProjects(): ProjectsApi {
   const plan = usePlan()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [report, setReport] = useState<SyncReport | null>(null)
   // Bumped after every mutation so the listing re-reads. The store is
   // synchronous, so a version counter is honest about where the truth lives —
@@ -116,23 +126,34 @@ export function useProjects(): ProjectsApi {
     // `canCreate` above, so two quick clicks cannot both pass.
     if (!canSaveNew(plan, local.list().length).ok) return null
     const id = newId()
-    local.save(id, { ...emptyProject(name), ...seed, meta: { ...emptyProject(name).meta, ...seed?.meta } })
+    const out = local.save(id, { ...emptyProject(name), ...seed, meta: { ...emptyProject(name).meta, ...seed?.meta } })
     setRev((n) => n + 1)
+    // A create that did not persist has produced NOTHING — unlike `save`, there
+    // is no in-memory copy to fall back on here, since the store is the state.
+    // Returning the id would hand back a pointer to a project that does not
+    // exist, and the caller would open an empty editor. Callers already handle
+    // null: it is what a plan limit returns.
+    if (!out.ok) { setSaveError(out.message); return null }
+    setSaveError(null)
     return id
   }, [local, plan])
 
   const load = useCallback((id: string) => local.load(id), [local])
 
   const save = useCallback((id: string, project: Project) => {
-    local.save(id, project)
+    const out = local.save(id, project)
     setRev((n) => n + 1)
+    // Model Space holds the model in its own state, so the edit survives on
+    // screen whatever happens here. What must not happen is silence.
+    setSaveError(out.ok ? null : out.message)
   }, [local])
 
   const rename = useCallback((id: string, name: string) => {
     const p = local.load(id)
     if (!p) return
-    local.save(id, { ...p, meta: { ...p.meta, name } })
+    const out = local.save(id, { ...p, meta: { ...p.meta, name } })
     setRev((n) => n + 1)
+    setSaveError(out.ok ? null : out.message)
   }, [local])
 
   const remove = useCallback((id: string) => {
@@ -161,7 +182,11 @@ export function useProjects(): ProjectsApi {
       const current = await remote.load(id)
       if (!current) return
       if (keep === 'remote') {
-        local.save(id, current.project, current.project.meta.updatedAt)
+        const out = local.save(id, current.project, current.project.meta.updatedAt)
+        // Taking the remote copy and failing to store it would leave the marks
+        // saying "both sides agree" over a local copy that is still the old
+        // one — the next sync would then see no difference and never retry.
+        if (!out.ok) { setSaveError(out.message); return }
         // Mark BOTH sides as seen, or the next sync treats the copy it just
         // took as a local edit and pushes it straight back.
         marks.set(id, { localHash: contentHash(current.project), remote: current.updatedAt })
@@ -176,7 +201,12 @@ export function useProjects(): ProjectsApi {
     })
   }, [remote, local, marks, run])
 
-  return { list, cloud, busy, error, report, canCreate, create, load, save, rename, remove, sync, resolve }
+  const clearSaveError = useCallback(() => setSaveError(null), [])
+
+  return {
+    list, cloud, busy, error, report, canCreate, create, load, save, rename, remove,
+    sync, resolve, saveError, clearSaveError,
+  }
 }
 
 /** Conflicts in the latest report, for the panel. Re-exported so the component

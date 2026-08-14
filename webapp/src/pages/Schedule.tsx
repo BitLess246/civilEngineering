@@ -6,6 +6,7 @@ import { useScheduleSolve, type ScheduleSolve } from '../lib/useScheduleSolve'
 import { PageHeader } from '../components/calc'
 import { GuidedTour } from '../components/GuidedTour'
 import { TourButton } from '../components/TourButton'
+import { SaveAlert } from '../components/SaveAlert'
 import { SCHEDULE_STEPS } from '../lib/scheduleTour'
 import { useTour } from '../lib/useTour'
 
@@ -491,6 +492,7 @@ export default function Schedule() {
       <PageHeader title="Project Schedule" badges={['CPM', 'PERT', 'EVM']}
         actions={<><ProjectBar api={api} /><TourButton onClick={tour.start} label="Guide" /></>} />
       <div className="mx-auto max-w-[1400px] space-y-5 p-5 sm:p-7">
+        <SaveAlert message={api.saveError} onDismiss={api.clearSaveError} />
         {!project ? (
           <div className="rounded-lg border border-dashed border-[#d6d3c9] bg-white px-6 py-16 text-center">
             <h2 className="text-[16px] font-bold text-[#0f1b2a]">No schedule open</h2>
