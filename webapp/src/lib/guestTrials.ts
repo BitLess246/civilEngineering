@@ -22,6 +22,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import { getClient, isAuthConfigured } from './auth/authClient'
+import { runToken } from './calcRun'
 import { GUEST_TRIAL_ROUTES } from './trialQuota'
 
 /** Usage map, `route → runs used`, the shape `trialQuota` already speaks. */
@@ -100,6 +101,14 @@ export const peekRemote = (): Promise<RemoteResult> =>
  *
  * The RESULT is what to trust, not a local increment: the server may already
  * have counted runs this browser has no memory of, which is the entire point.
+ *
+ * THE RUN TOKEN IS WHY ONE ARRIVAL COSTS ONE RUN. Three calculators
+ * (`calcRoutes.ts`) also compute through the Vercel endpoint, which claims the
+ * SAME `(subject, route)` row. Sending the token this arrival was given means
+ * whichever of the two calls arrives second finds it already claimed and is
+ * admitted free, instead of charging a second time and turning five runs into
+ * two. `startRun()` has already run by here — `TrialGate` mints the token
+ * before it spends the trial, in the same effect.
  */
 export const consumeRemote = (route: string): Promise<RemoteResult> =>
-  call({ action: 'consume', route })
+  call({ action: 'consume', route, run: runToken() })

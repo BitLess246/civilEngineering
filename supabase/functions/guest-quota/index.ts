@@ -65,10 +65,20 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const limit = Math.max(1, Number(env('GUEST_TRIAL_LIMIT') ?? DEFAULT_LIMIT) || DEFAULT_LIMIT)
 
-  let body: { action?: unknown; route?: unknown; routes?: unknown }
+  let body: { action?: unknown; route?: unknown; routes?: unknown; run?: unknown }
   try { body = await req.json() } catch { return json({ error: 'body' }, 400) }
 
   const action = body.action === 'consume' ? 'consume' : 'peek'
+
+  // The token naming this ARRIVAL, minted by `calcRun.startRun()` on the client
+  // and sent by BOTH halves of the counter so one visit is charged once. Bounds
+  // and charset match what `claim_guest_run` is willing to remember; anything
+  // else becomes null, which charges every request rather than granting
+  // anything. Stripping it is therefore strictly worse for the caller, which is
+  // the direction a client-supplied value has to fail in.
+  const run = typeof body.run === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(body.run)
+    ? body.run
+    : null
 
   // `peek` asks about several routes at once (the whole trial list on page
   // load); `consume` is always exactly one.
@@ -97,17 +107,37 @@ Deno.serve(async (req: Request): Promise<Response> => {
   try {
     if (action === 'consume') {
       const route = routes[0]
-      // Increment inside the row lock. Reading, adding one and writing back
-      // from here would lose a count whenever two tabs run a calculator in the
-      // same moment — both read 2, both write 3, one run is free.
-      const { data: newUsed, error: rpcErr } = await db.rpc('consume_guest_trial', {
-        p_subject: subject, p_route: route, p_cap: ROUTE_CAP_PER_SUBJECT,
+      // ── ONE ARRIVAL, ONE RUN, ACROSS BOTH HALVES ────────────────────────
+      // This used to call `consume_guest_trial`, which only ever adds one. The
+      // calculation endpoint on Vercel calls `claim_guest_run`, which also adds
+      // one — and both key the SAME (subject, route) row, deliberately, since
+      // the subject derivations are pinned identical by `subject.test.ts`. So a
+      // guest arriving at one of the three API-served calculators was charged
+      // TWICE for a single visit and got two runs out of five.
+      //
+      // Both halves now go through `claim_guest_run` and both send the SAME run
+      // token, so the second call finds the token in `recent_runs` and is
+      // allowed WITHOUT being charged. That is the mechanism the function was
+      // built around — it exists so a page recomputing on every keystroke costs
+      // one run — and this is simply another caller of the same run.
+      //
+      // The ~25 browser-only calculators never reach the Vercel endpoint at
+      // all, so for them this call is the only one and charges normally. That
+      // is why the fix is here rather than "stop counting in guest-quota":
+      // dropping the write would leave every browser-only calculator unmetered.
+      const { data: claim, error: rpcErr } = await db.rpc('claim_guest_run', {
+        p_subject: subject, p_route: route, p_run: run,
+        p_limit: limit, p_cap: ROUTE_CAP_PER_SUBJECT,
       })
       if (rpcErr) throw rpcErr
-      // -1 means this subject has already opened the maximum number of
-      // distinct routes. Nobody legitimately tries sixty calculators as a
-      // guest, and unbounded rows per subject is the only way this table grows.
-      if (typeof newUsed === 'number' && newUsed < 0) return json({ error: 'route-cap' }, 429)
+
+      // PostgREST returns a RETURNS TABLE function as an array of rows.
+      const row = Array.isArray(claim) ? claim[0] : null
+      if (row?.reason === 'route-cap') return json({ error: 'route-cap' }, 429)
+      // `exhausted` is NOT an error here. The client needs the usage map to
+      // draw the paywall, and it derives "exhausted" from the count itself —
+      // returning 4xx would send it down the `unavailable` path, which falls
+      // back to the LOCAL count and shows the visitor runs they do not have.
     }
 
     const { data, error } = await db

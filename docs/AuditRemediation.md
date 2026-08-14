@@ -37,6 +37,15 @@ mechanism was established by reading, not observed.
 | S6 | `guest-quota` CORS lets any site burn a visitor's trial | low | read | ☐ |
 | E5 | `Cv1` uses the superseded AISC 360-10 form (conservative) | low | read | ☐ |
 
+**Found while deploying, not in the audit — R10, the double-charged arrival.**
+✅ SHIPPED (#588). `guest-quota` called `consume_guest_trial` while the
+calculation endpoint called `claim_guest_run`, and both key the same
+`(subject, route)` row by design. One arrival at any of the three API-served
+calculators (`calcRoutes.ts`) therefore cost TWO runs of five. Latent only
+because `guest-quota` has never been deployed. Both halves now go through
+`claim_guest_run` with the same run token, so the second claim is admitted
+free. Two concurrency bugs on the insert path came with it — see Phase 5.
+
 Informational, no ticket: `supabase/.temp/linked-project.json` is committed (not
 a secret); `modelSpaceSession` can pair a new model with old inputs if the
 second `setItem` hits quota; the stale `/bolted-connection` redirect comment at
