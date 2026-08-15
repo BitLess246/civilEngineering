@@ -133,7 +133,7 @@ engine + a thin React panel; every sheet exports to SVG.
   plans (bar layout, not just the span symbol); wiring the plan-renderer drawings
   into the direct PDF report (`lib/modelPdf.ts`).
 
-### Standard detail sheets on the Plans tab (PRs #593–#600)
+### Standard detail sheets on the Plans tab (PRs #593–#603)
 Typed `PlanPrimitive[]` sheets, painted by the same `planToSvg`, mapped from the
 design in `lib/planDetails.ts` and listed in `PlansPanel`.
 - **#593 `columnDetail.ts`** — typical column elevation: confinement zones ℓo,
@@ -184,9 +184,32 @@ design in `lib/planDetails.ts` and listed in `PlansPanel`.
   printing. New §5 *Drawings* section in `modelPdf`, grouped and captioned,
   carrying each sheet's own warnings. `PlansPanel` lost five duplicated
   `useMemo`s and is now a list renderer. Suite **4423**.
+- **#603 `beamDetail.ts` rebuilt — Phase 7, from user review of the render.**
+  Four corrections, one of them a real defect:
+  - **Hoops were TIGHTEST AT MIDSPAN.** `designBeam` reports `stirrupSpacing: 0`
+    at a section that needs none, and the sheet clamped that with
+    `Math.max(s, 50)` — drawing 50 mm hoops at midspan against 110 at the
+    supports, the densest steel where the shear is lowest. `zoneSpacing` now
+    reads a zero as "none required" and falls back to the §409.7.6.2.2 maximum
+    (d/2 ≤ 600). A test asserts the support gap is smaller than the midspan gap
+    on BOTH the ordinary fixture and the zero-stirrup one.
+  - **Continuous-beam bar arrangement** (user ref image): top continuous straight
+    bars + extra top at each support run 0.25L, bottom continuous + extra bottom
+    started 0.15L off each support, hoops dense over 2h from the face with the
+    first at 50 (§418.6.4.1/.4).
+  - **End-support anchorage** (user ref, ACI SP-17 joint): where the beam stops,
+    the bars turn down into the column with a 12db hook tail (§425.3.1), 60 mm
+    clear to the end of the hook (§418.8.3); joint hoops drawn through the
+    column. `beamDetailBundles` derives the column width and whether the beam
+    CONTINUES past each end (collinear neighbour test) from the model.
+  - **Title block moved BELOW the drawing and notes**, in the plan-sheet style:
+    AIA bubble (detail no. over sheet ref, split by a diameter), title, then a
+    rule with SCALE … NTS. Suite **4451**.
 - **Remaining**: Phase 6b — fold the detail steel (opening trimmers, wall corner
   and U-bars, diagonal corner bars) into `takeoff.ts`, which currently counts
-  none of it.
+  none of it; and the standalone beam-column JOINT sheet (plan section X-X +
+  vertical section Y-Y per the user's reference), which the elevation only
+  hints at.
 - **Drafting lesson, paid for three times**: assert on primitives and every sheet
   looks fine. RENDER it (headless Chromium at
   `/opt/pw-browsers/chromium-1194/chrome-linux/chrome --no-sandbox`, write the SVG

@@ -155,6 +155,42 @@ export interface BeamDetailBundle { mark: string; detail: BeamDetailInput }
 export function beamDetailBundles(model: StructuralModel, design: StructureDesign): BeamDetailBundle[] {
   const secById = new Map(model.sections.map((s) => [s.id, s]))
   const memById = new Map(model.members.map((m) => [m.id, m]))
+  const nodeById = new Map(model.nodes.map((n) => [n.id, n]))
+
+  /** Supporting column width at a node, mm — how much joint the sheet draws. */
+  const colWidthAt = (node: string): number | undefined => {
+    const col = model.members.find((m) => m.role === 'column' && (m.i === node || m.j === node))
+    const sec = col ? (secById.get(col.section) as RectSection | undefined) : undefined
+    return sec ? Math.min(sec.b, sec.h ?? sec.b) : undefined
+  }
+
+  /**
+   * Does the beam CONTINUE past this end?
+   *
+   * The sheet detail turns on it: a beam that stops at a support has to hook
+   * its bars down into the column (§425.4.3), and one that runs through does
+   * not. "Another beam touches this node" is not enough — a beam framing in at
+   * right angles is a different member. Continuity means another beam leaves
+   * the node along the SAME line.
+   */
+  const continuesPast = (memberId: string, node: string, other: string): boolean => {
+    const a = nodeById.get(node), o = nodeById.get(other)
+    if (!a || !o) return false
+    const dx = a.x - o.x, dz = a.z - o.z
+    const len = Math.hypot(dx, dz)
+    if (len < 1e-9) return false
+    return model.members.some((m) => {
+      if (m.id === memberId || (m.role !== 'beam' && m.role !== 'girder')) return false
+      const far = m.i === node ? m.j : m.j === node ? m.i : null
+      if (!far) return false
+      const f = nodeById.get(far); if (!f) return false
+      const ex = f.x - a.x, ez = f.z - a.z
+      const el = Math.hypot(ex, ez)
+      if (el < 1e-9) return false
+      // collinear and pointing AWAY — the span carries on past the support
+      return (dx * ex + dz * ez) / (len * el) > 0.9
+    })
+  }
 
   // greatest hogging bar count anywhere on each section — the continuity feed
   const worstTop = new Map<string, number>()
@@ -191,6 +227,10 @@ export function beamDetailBundles(model: StructuralModel, design: StructureDesig
         })),
         adjacentTopLeft: worstTop.get(mem.section),
         adjacentTopRight: worstTop.get(mem.section),
+        colB: colWidthAt(mem.i) ?? colWidthAt(mem.j),
+        continuousLeft: continuesPast(mem.id, mem.i, mem.j),
+        continuousRight: continuesPast(mem.id, mem.j, mem.i),
+        cover: sec.cover,
       },
     })
   }
