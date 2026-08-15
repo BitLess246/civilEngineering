@@ -38,11 +38,15 @@ export function LegalLayout({ title, subtitle, children }: {
       <div className="prose-sm mt-6 space-y-5 text-[14px] leading-7 text-slate-700">{children}</div>
 
       <div className="mt-10 border-t border-slate-200 pt-5 text-[13px] text-slate-500">
+        {/* The draft notice is gone: these have been through legal review.
+            What stays is the part that is still true of any policy — it
+            governs the relationship and is not advice about the reader's own
+            situation. The revision date is already in the header — repeating
+            it here would be a second thing to forget to update. */}
         <p>
-          These policies are drafts written for a Philippine software business. They are not legal
-          advice and have not been reviewed by a lawyer. Have them checked before relying on them
-          commercially — particularly the data-protection sections, which carry statutory duties
-          under the Data Privacy Act.
+          These policies were written for a Philippine software business and have been reviewed by a
+          lawyer. They govern your use of this service; they are not legal advice about your own
+          circumstances.
         </p>
         <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
           <Link to="/terms" className="text-[#0056b3] underline">Terms</Link>

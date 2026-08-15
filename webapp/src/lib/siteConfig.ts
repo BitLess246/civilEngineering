@@ -73,13 +73,19 @@ export const SITE: SiteConfig = {
   tin: '684281205',
   siteUrl: 'https://civil-engineering-zeta.vercel.app',
 
-  // The support address given on the provider application. A domain address
-  // reads better to customers, but this is real and reachable, which matters
-  // more than it looks.
-  supportEmail: 'raymval246@gmail.com',
+  // A dedicated support inbox rather than the owner's personal address. It is
+  // the address printed in the Terms, the Privacy Policy, the Refund Policy,
+  // the Contact page and the footer, so it is where statutory notices and
+  // data-subject requests arrive — it needs to outlive any one person's mail
+  // account and be answerable by whoever is on support.
+  //
+  // IF THIS CHANGES, IT MUST ALSO CHANGE ON THE PAYMENT PROVIDER'S
+  // APPLICATION. The support address is one of the details Paddle shows payers
+  // and checks during onboarding.
+  supportEmail: 'civengg.support@gmail.com',
 
   supportHours: 'Monday to Friday, 9:00–18:00 (PST, UTC+8)',
-  policiesUpdated: '30 July 2026',
+  policiesUpdated: '15 August 2026',
 }
 
 /** Human labels for the fields a customer-facing document needs. */
