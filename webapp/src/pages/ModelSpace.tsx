@@ -1645,8 +1645,8 @@ export default function ModelSpace() {
       let img = modelImg
       const c = document.querySelector('canvas') as HTMLCanvasElement | null
       if (c) { try { img = c.toDataURL('image/png') } catch { /* tainted — keep the last snapshot */ } }
-      const [{ buildModelReport }, { generateModelPdf }] = await Promise.all([
-        import('../lib/modelReport'), import('../lib/modelPdf'),
+      const [{ buildModelReport }, { generateModelPdf }, { buildSheetSet }] = await Promise.all([
+        import('../lib/modelReport'), import('../lib/modelPdf'), import('../lib/planSheets'),
       ])
       const badges = ['NSCP 2015', 'ACI 318-14',
         ...(design.steelBeams.length || design.steelColumns.length ? ['AISC 360-16'] : []),
@@ -1654,6 +1654,8 @@ export default function ModelSpace() {
       await generateModelPdf({
         lh, modelImg: img, badges,
         report: buildModelReport(model, design, reportProps(design), soil, irregular),
+        // The same sheet set the Plans tab renders — one list, two outputs.
+        sheets: buildSheetSet(model, design, soil),
         fileName: `structure-report${lh.sheet ? '-' + lh.sheet.split('·')[0].trim() : ''}.pdf`,
       })
     } catch (e) {
