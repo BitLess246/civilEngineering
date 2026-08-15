@@ -5,7 +5,8 @@ import { buildPlan, planToSvg } from '../engine/planRenderer'
 import { buildFootingDetail } from '../engine/footingDetail'
 import { buildColumnDetail } from '../engine/columnDetail'
 import { buildBeamDetail } from '../engine/beamDetail'
-import { footingsForPlan, footingDetailBundles, columnDetailBundles, beamDetailBundles, type SoilInput } from '../lib/planDetails'
+import { buildSlabOpeningDetail } from '../engine/slabOpening'
+import { footingsForPlan, footingDetailBundles, columnDetailBundles, beamDetailBundles, slabOpeningBundles, type SoilInput } from '../lib/planDetails'
 
 const FLOOR_ORD = ['Ground', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth', 'Eleventh', 'Twelfth']
 /** Framed-level ordinal (1 = first floor above the base) → floor name. */
@@ -91,6 +92,16 @@ export function PlansPanel({ model, design, soil }: { model: StructuralModel; de
     }))
   }, [model, design])
 
+  // Slab openings — one trimmer-bar sheet per opening cast through a designed
+  // panel. Nothing shows when no panel has one, which is the usual case.
+  const openingDetails = useMemo(() => {
+    if (!design) return []
+    return slabOpeningBundles(model, design).map((b, i) => {
+      const d = buildSlabOpeningDetail(b.detail, { detailNo: String(i + 1), sheetRef: 'S-08' })
+      return { mark: b.mark, detail: b.detail, result: d.result, svg: planToSvg(d, 1100) }
+    })
+  }, [model, design])
+
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between">
@@ -115,6 +126,24 @@ export function PlansPanel({ model, design, soil }: { model: StructuralModel; de
           {beamDetails.map((d) => (
             <Sheet key={d.mark} title={`${d.mark} — ${d.detail.b}×${d.detail.h} · span ${d.detail.L.toFixed(2)} m`}
               svg={d.svg} file={`beam-detail-${d.mark}.svg`} />
+          ))}
+        </div>
+      )}
+
+      {openingDetails.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Slab opening details</h4>
+          {openingDetails.map((d) => (
+            <div key={d.mark} className="space-y-1">
+              <Sheet
+                title={`${d.mark} — ${Math.round((d.result.box.x1 - d.result.box.x0) * 1000)}×${Math.round((d.result.box.y1 - d.result.box.y0) * 1000)} opening · ${d.result.x.eachSide}-⌀${d.detail.barDia} + ${d.result.y.eachSide}-⌀${d.detail.barDia} ea. side`}
+                svg={d.svg} file={`slab-opening-${d.mark.replace(/\//g, '-')}.svg`} />
+              {!d.result.ok && (
+                <ul className="space-y-0.5 px-1 text-[11px] leading-snug text-amber-700">
+                  {d.result.notes.map((n) => <li key={n}>⚠ {n}</li>)}
+                </ul>
+              )}
+            </div>
           ))}
         </div>
       )}
