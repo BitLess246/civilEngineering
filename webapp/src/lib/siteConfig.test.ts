@@ -106,3 +106,79 @@ describe('the shipped configuration is complete', () => {
     expect(SITE.siteUrl).toMatch(/^https:\/\/[^/]+$/)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE CONTACT DETAILS ARE PART OF THE LEGAL DOCUMENTS.
+//
+// The support address is where statutory notices and Data Privacy Act
+// data-subject requests arrive, and it is printed in the Terms, the Privacy
+// Policy, the Refund Policy, the Contact page and the footer. The whole point
+// of `siteConfig` is that it appears once and is read five times — a second
+// copy pasted into a page is how one of five goes stale, and a policy that
+// names an address nobody reads is worse than one that names none.
+// ─────────────────────────────────────────────────────────────────────────
+const PAGES = import.meta.glob('../pages/**/*.tsx', {
+  query: '?raw', import: 'default', eager: true,
+}) as Record<string, string>
+const COMPONENTS = import.meta.glob('../components/*.tsx', {
+  query: '?raw', import: 'default', eager: true,
+}) as Record<string, string>
+
+describe('no page hardcodes a contact address', () => {
+  it('found sources to scan — an empty glob would pass vacuously', () => {
+    expect(Object.keys(PAGES).length).toBeGreaterThan(30)
+  })
+
+  it('every email in a page comes from SITE, never a literal', () => {
+    const offenders: string[] = []
+    for (const [path, src] of [...Object.entries(PAGES), ...Object.entries(COMPONENTS)]) {
+      // A bare address in JSX or a mailto:. `mailto:${SITE.supportEmail}` is
+      // the correct form and contains no literal address to match.
+      const found = src.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g)
+      if (found) offenders.push(`${path.split('/').pop()}: ${found.join(', ')}`)
+    }
+    expect(offenders, `hardcoded addresses: ${offenders.join(' | ')}`).toEqual([])
+  })
+})
+
+describe('the support address', () => {
+  it('is set and looks like an address', () => {
+    expect(SITE.supportEmail).toMatch(/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i)
+  })
+
+  it('is not the owner’s personal account', () => {
+    // It was, and that is a reasonable way to start. It stops being reasonable
+    // once the address is the one on the payment provider's application and in
+    // four legal documents: it has to outlive any one person's mail account.
+    expect(SITE.supportEmail).not.toBe('raymval246@gmail.com')
+  })
+})
+
+describe('the legal pages do not contradict themselves', () => {
+  const layout = PAGES['../pages/legal/LegalLayout.tsx']
+
+  it('found the layout', () => {
+    expect(layout).toBeTruthy()
+  })
+
+  it('no longer calls the policies unreviewed drafts', () => {
+    // They have been through legal review. Leaving the old disclaimer would
+    // have the page tell a customer — and a payment provider reviewing the
+    // site — that its own terms are not to be relied on.
+    expect(layout).not.toMatch(/have not been reviewed by a lawyer/i)
+    expect(layout).not.toMatch(/are drafts/i)
+  })
+
+  it('still says it is not advice about the reader’s own situation', () => {
+    // Which remains true of any policy, reviewed or not, and is a different
+    // statement from "these are drafts".
+    expect(layout).toMatch(/not legal advice/i)
+  })
+
+  it('still shows the incomplete-details banner when something is blank', () => {
+    // Lawyer review does not fill in a missing address. The two guards are
+    // independent and both have to survive.
+    expect(layout).toMatch(/missingSiteFields\(\)/)
+    expect(layout).toMatch(/This document is incomplete/)
+  })
+})
