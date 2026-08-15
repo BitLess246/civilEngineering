@@ -3,7 +3,8 @@ import type { StructuralModel } from '../engine/model'
 import type { StructureDesign } from '../engine/pipeline'
 import { buildPlan, planToSvg } from '../engine/planRenderer'
 import { buildFootingDetail } from '../engine/footingDetail'
-import { footingsForPlan, footingDetailBundles, type SoilInput } from '../lib/planDetails'
+import { buildColumnDetail } from '../engine/columnDetail'
+import { footingsForPlan, footingDetailBundles, columnDetailBundles, type SoilInput } from '../lib/planDetails'
 
 const FLOOR_ORD = ['Ground', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth', 'Eleventh', 'Twelfth']
 /** Framed-level ordinal (1 = first floor above the base) → floor name. */
@@ -69,6 +70,18 @@ export function PlansPanel({ model, design, soil }: { model: StructuralModel; de
     }))
   }, [model, design, soil, hooked])
 
+  // Typical column details — one per column TYPE. Every figure on these sheets
+  // (lo, s_conf, s_out) was already computed by columnDesign and shown only as
+  // a number in the schedule; this draws it.
+  const colDetails = useMemo(() => {
+    if (!design) return []
+    return columnDetailBundles(model, design).map((b, i) => ({
+      mark: b.mark,
+      detail: b.detail,
+      svg: planToSvg(buildColumnDetail(b.detail, { detailNo: String(i + 1), sheetRef: 'S-06' }), 900),
+    }))
+  }, [model, design])
+
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between">
@@ -86,6 +99,16 @@ export function PlansPanel({ model, design, soil }: { model: StructuralModel; de
       {foundation
         ? <Sheet title="Foundation plan" svg={foundation} file="foundation-plan.svg" />
         : <p className="rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-400">Run the design to generate the foundation plan &amp; footing details.</p>}
+
+      {colDetails.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Typical column details</h4>
+          {colDetails.map((d) => (
+            <Sheet key={d.mark} title={`${d.mark} — ${d.detail.b}×${d.detail.h ?? d.detail.b} · ${d.detail.bars}-⌀${d.detail.barDia}`}
+              svg={d.svg} file={`column-detail-${d.mark}.svg`} />
+          ))}
+        </div>
+      )}
 
       {details.length > 0 && (
         <div className="space-y-3">
