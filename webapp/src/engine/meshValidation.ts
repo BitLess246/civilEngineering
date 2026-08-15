@@ -165,6 +165,54 @@ export function validateMesh(model: StructuralModel): MeshIssue[] {
   }
 
   // ── timber deck sanity (L1 rule for Plate.deck / wood slab) ─────────────
+  // ── Openings (§408.5.4 / the typical suspended-slab opening detail) ───────
+  //
+  // An opening only means anything relative to its panel, so every rule here is
+  // local to one plate. `x`/`y` are metres from corner 0 along the plate's two
+  // edges, so the panel's own edge lengths bound them.
+  for (const p of model.plates) {
+    if (!p.openings?.length) continue
+    const c = p.corners.map((id) => nodeById.get(id))
+    if (c.some((n) => !n)) continue          // already reported by the corner rule
+    const dist = (a: NonNullable<typeof c[0]>, b: NonNullable<typeof c[0]>) =>
+      Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)
+    const Lx = dist(c[0]!, c[1]!), Ly = dist(c[0]!, c[3]!)
+    const seen = new Set<string>()
+    // axis-aligned extent of each opening in the panel's local frame
+    const box = (o: NonNullable<typeof p.openings>[number]) => o.kind === 'circle'
+      ? { x0: o.x - (o.r ?? 0), y0: o.y - (o.r ?? 0), x1: o.x + (o.r ?? 0), y1: o.y + (o.r ?? 0) }
+      : { x0: o.x, y0: o.y, x1: o.x + (o.w ?? 0), y1: o.y + (o.h ?? 0) }
+
+    for (const o of p.openings) {
+      if (seen.has(o.id))
+        issues.push({ severity: 'error', code: 'OPENING_DUP_ID', message: `plate ${p.id}: duplicate opening id "${o.id}"`, refs: [p.id] })
+      seen.add(o.id)
+
+      if (o.kind === 'circle' ? !(o.r! > 0) : !((o.w ?? 0) > 0 && (o.h ?? 0) > 0))
+        issues.push({ severity: 'error', code: 'OPENING_SIZE', message: `plate ${p.id}, opening ${o.id}: ${o.kind === 'circle' ? 'radius' : 'width and height'} must be positive`, refs: [p.id] })
+
+      const b = box(o)
+      if (b.x0 < -1e-9 || b.y0 < -1e-9 || b.x1 > Lx + 1e-9 || b.y1 > Ly + 1e-9)
+        issues.push({ severity: 'error', code: 'OPENING_OUTSIDE', message: `plate ${p.id}, opening ${o.id}: extends outside the panel (${Lx.toFixed(2)} × ${Ly.toFixed(2)} m)`, refs: [p.id] })
+
+      // An opening taking most of the panel is not an opening — the remaining
+      // strips are beams, and the slab engines' assumptions no longer hold.
+      const area = o.kind === 'circle' ? Math.PI * o.r! * o.r! : (o.w ?? 0) * (o.h ?? 0)
+      const panel = Lx * Ly
+      if (panel > 0 && area > 0.5 * panel)
+        issues.push({ severity: 'warning', code: 'OPENING_LARGE', message: `plate ${p.id}, opening ${o.id}: covers ${Math.round((area / panel) * 100)}% of the panel — model the remaining strips as beams rather than a slab with a hole`, refs: [p.id] })
+    }
+
+    // overlapping openings would double-count the interrupted bars
+    for (let a = 0; a < p.openings.length; a++) {
+      for (let b2 = a + 1; b2 < p.openings.length; b2++) {
+        const A = box(p.openings[a]), B = box(p.openings[b2])
+        if (A.x0 < B.x1 - 1e-9 && B.x0 < A.x1 - 1e-9 && A.y0 < B.y1 - 1e-9 && B.y0 < A.y1 - 1e-9)
+          issues.push({ severity: 'error', code: 'OPENING_OVERLAP', message: `plate ${p.id}: openings ${p.openings[a].id} and ${p.openings[b2].id} overlap — merge them into one`, refs: [p.id] })
+      }
+    }
+  }
+
   for (const p of model.plates) {
     const d = p.deck; if (!d) continue
     if (d.joistSpecies && !WOOD_SPECIES[d.joistSpecies] && !d.joistRef)

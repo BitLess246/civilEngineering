@@ -119,6 +119,39 @@ export interface Member {
 }
 
 export type PlateRole = 'slab' | 'wall'
+/**
+ * An opening cast through a slab panel — a stair void, a duct or a service
+ * penetration.
+ *
+ * OWNED BY THE PLATE, not a top-level entity. Every other entity in this model
+ * is referenced by id by its peers; an opening is the only one whose existence
+ * is meaningless without its parent, which makes it a child. Keeping it here
+ * means it cannot orphan when the panel is deleted, the mesher already has it
+ * while meshing that panel, and "is it inside its plate" stays a single-entity
+ * validation rule.
+ *
+ * An opening crossing two panels is modelled as one opening per panel — which
+ * is also how it is detailed, since each panel gets its own trimmer bars.
+ *
+ * Coordinates are METRES from corner 0, along the plate's two edges (corner
+ * 0→1 is the local x axis, corner 0→3 the local y). Real dimensions rather than
+ * normalised fractions because the trimmer design, the take-off and the drawing
+ * all need them, and bar counts are rounding-sensitive.
+ */
+export interface SlabOpening {
+  id: string
+  kind: 'rect' | 'circle'
+  /** Position of the opening's ORIGIN (rect: its corner 0; circle: its centre),
+   *  m from the plate's corner 0 along the local x and y axes. */
+  x: number
+  y: number
+  /** Rectangular opening size, m. */
+  w?: number
+  h?: number
+  /** Circular opening radius, m. */
+  r?: number
+}
+
 export interface Plate {
   id: string
   corners: [string, string, string, string]  // node ids, CCW
@@ -134,6 +167,9 @@ export interface Plate {
    *  Method: plan span/width come from the plate geometry, D/L from its area
    *  loads (superimposed — the deck adds its own self weight). */
   deck?: WoodDeck
+  /** Openings cast through this panel (stair voids, ducts, penetrations).
+   *  Absent means a solid panel — the overwhelmingly common case. */
+  openings?: SlabOpening[]
 }
 
 /** A timber deck-on-joist floor carried by a plate. JSON-serialisable. */
