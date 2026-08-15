@@ -133,7 +133,7 @@ engine + a thin React panel; every sheet exports to SVG.
   plans (bar layout, not just the span symbol); wiring the plan-renderer drawings
   into the direct PDF report (`lib/modelPdf.ts`).
 
-### Standard detail sheets on the Plans tab (PRs #593–#597)
+### Standard detail sheets on the Plans tab (PRs #593–#598)
 Typed `PlanPrimitive[]` sheets, painted by the same `planToSvg`, mapped from the
 design in `lib/planDetails.ts` and listed in `PlansPanel`.
 - **#593 `columnDetail.ts`** — typical column elevation: confinement zones ℓo,
@@ -147,7 +147,7 @@ design in `lib/planDetails.ts` and listed in `PlansPanel`.
 - **#595 `beamDetail.ts`** — continuous beam elevation; top steel over a support
   is the greater of the two adjacent spans (§409.7.7), bar extension max(d, 12db).
 - **#596** — `SlabOpening` on `Plate` + the `OPENING_*` mesh-validation rules.
-- **#597 `slabOpening.ts`** — trimmer-bar design + its sheet. Counts the bars each
+- **#598 `slabOpening.ts`** — trimmer-bar design + its sheet. Counts the bars each
   way the hole interrupts as the **phase-independent upper bound ⌊cut/s⌋ + 1**
   (the mat is set out from the panel edge and the hole from the architect's plan,
   so the rounded quotient is one bar short on half of all set-outs), replaces them
