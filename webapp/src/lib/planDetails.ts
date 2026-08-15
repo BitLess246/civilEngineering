@@ -8,6 +8,7 @@ import type { StructureDesign } from '../engine/pipeline'
 import type { PlanFooting } from '../engine/planRenderer'
 import type { FootingDetailInput } from '../engine/footingDetail'
 import type { ColumnDetailInput } from '../engine/columnDetail'
+import type { BeamDetailInput } from '../engine/beamDetail'
 import type { ColumnSchematicProps } from '../components/ColumnSchematic'
 
 export interface SoilInput { qAllow?: number; gammaSoil?: number; gammaConc?: number; H?: number }
@@ -129,6 +130,64 @@ export function columnDetailBundles(model: StructuralModel, design: StructureDes
         sConf: r.seismicSConf ?? r.tieSpacingFinal,
         sOut: r.seismicSOut ?? r.tieSpacingFinal,
         cover: sec.cover ?? 40,
+      },
+    })
+  }
+  return out
+}
+
+// ── Typical beam details ────────────────────────────────────────────────────
+
+export interface BeamDetailBundle { mark: string; detail: BeamDetailInput }
+
+/**
+ * One typical beam detail per distinct beam TYPE.
+ *
+ * Grouped on section + the critical-section bar counts, so a floor of identical
+ * beams yields one sheet. The adjacent-span top steel is resolved across the
+ * whole schedule: the greatest hogging count found at any support of the same
+ * section is carried in, which is the continuity rule §409.7.7 states and the
+ * reason a support cannot be detailed from one span alone.
+ */
+export function beamDetailBundles(model: StructuralModel, design: StructureDesign): BeamDetailBundle[] {
+  const secById = new Map(model.sections.map((s) => [s.id, s]))
+  const memById = new Map(model.members.map((m) => [m.id, m]))
+
+  // greatest hogging bar count anywhere on each section — the continuity feed
+  const worstTop = new Map<string, number>()
+  for (const r of design.beams) {
+    const secId = memById.get(r.id)?.section
+    if (!secId) continue
+    for (const s of r.sections) {
+      if (!s.hogging) continue
+      worstTop.set(secId, Math.max(worstTop.get(secId) ?? 0, s.design.bars))
+    }
+  }
+
+  const seen = new Set<string>()
+  const out: BeamDetailBundle[] = []
+  for (const r of design.beams) {
+    const mem = memById.get(r.id)
+    if (!mem) continue
+    const sec = secById.get(mem.section) as RectSection | undefined
+    if (!sec) continue
+    const key = `${sec.b}x${sec.h}-${r.sections.map((s) => `${s.hogging ? 'H' : 'S'}${s.design.bars}`).join('.')}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const mark = `${r.role === 'girder' ? 'G' : 'B'}${seen.size}`
+    out.push({
+      mark,
+      detail: {
+        mark, L: r.L, b: sec.b, h: sec.h ?? sec.b,
+        barDia: sec.barDia ?? 16,
+        stirrupDia: sec.tieDia ?? 10,
+        legs: 2,
+        sections: r.sections.map((s) => ({
+          label: s.label, x: s.x, hogging: s.hogging,
+          bars: s.design.bars, stirrupSpacing: s.design.sAdopt,
+        })),
+        adjacentTopLeft: worstTop.get(mem.section),
+        adjacentTopRight: worstTop.get(mem.section),
       },
     })
   }
