@@ -89,6 +89,15 @@ export interface ScheduleStore {
   save(id: string, project: ScheduleProject, savedAt?: string): SaveOutcome
   remove(id: string): void
   exists(id: string): boolean
+  /**
+   * The on-disk save stamp for `id`, or null when absent or unreadable.
+   *
+   * This is how a tab notices that ANOTHER tab has written since it last read.
+   * Cheap on purpose — it is consulted before every save.
+   */
+  stampOf(id: string): string | null
+  /** The storage key `id` lives under, so a `storage` event can be matched. */
+  keyFor(id: string): string
 }
 
 /** Create a store over `backend` (defaults to localStorage / memory). */
@@ -141,6 +150,11 @@ export function createStore(backend: StorageBackend = defaultBackend()): Schedul
     exists(id) {
       return backend.getItem(keyOf(id)) != null
     },
+    stampOf(id) {
+      const stored = readStored(keyOf(id))
+      return stored ? stored.savedAt : null
+    },
+    keyFor: keyOf,
   }
 }
 
