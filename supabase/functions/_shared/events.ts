@@ -36,11 +36,49 @@ export type EventOutcome =
     customerId?: string
     /** The provider's subscription id, for per-subscription portal deep links. */
     subscriptionId?: string
+    /**
+     * WHEN THE EVENT HAPPENED AT THE PROVIDER, as an ISO-8601 UTC string.
+     *
+     * Not when we received it. Providers retry until they get a 2xx, and a
+     * retry can arrive AFTER a later event has already been applied: a
+     * redelivered `subscription.created` landing behind a
+     * `subscription.canceled` used to restore the paid plan permanently,
+     * because the only guard was "is this the same event id as last time".
+     *
+     * Undefined when the provider's payload carried no usable timestamp. The
+     * webhook then cannot order the event and says so rather than guessing —
+     * see `billing-webhook/index.ts`.
+     */
+    occurredAt?: string
   }
   /** Understood, but nothing to do (e.g. an event type we do not act on). */
   | { kind: 'ignore'; eventId: string; why: string }
   /** Malformed or unmappable — the caller must NOT treat this as success. */
   | { kind: 'reject'; why: 'no-user' | 'unknown-price' | 'unparseable' | 'no-event-id'; detail?: string }
+
+/**
+ * A provider timestamp as ISO-8601 UTC, or undefined when it is unusable.
+ *
+ * Providers disagree: Paddle sends an ISO string, Stripe a unix SECONDS
+ * integer, PayMongo the same. Seconds are multiplied rather than trusted as
+ * milliseconds — reading 1723680000 as ms would date every Stripe event to
+ * 1970 and make every ordering comparison meaningless in the same direction
+ * (everything looks old, so nothing is ever refused).
+ */
+export function eventTime(raw: unknown): string | undefined {
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    // Unix seconds. Anything past ~2001 in seconds is < 1e12; a value at or
+    // above that is already milliseconds, which some SDKs hand over.
+    const ms = raw >= 1e12 ? raw : raw * 1000
+    const d = new Date(ms)
+    return Number.isNaN(d.getTime()) ? undefined : d.toISOString()
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    const d = new Date(raw)
+    return Number.isNaN(d.getTime()) ? undefined : d.toISOString()
+  }
+  return undefined
+}
 
 /** price/product id → plan. Supplied from env so ids are not baked into code. */
 export type PriceMap = Record<string, PlanId>
@@ -87,6 +125,8 @@ export const isActiveStatus = (s: string): boolean => ACTIVE.has(s)
 interface PaddleEvent {
   event_id?: string
   event_type?: string
+  /** ISO-8601, e.g. "2026-08-15T00:12:31.123Z". */
+  occurred_at?: string
   data?: {
     /** `sub_…` on subscription events, `txn_…` on transaction events. */
     id?: string
@@ -136,6 +176,7 @@ export function fromPaddle(evt: unknown, prices: PriceMap): EventOutcome {
   const ids = {
     ...(customerId ? { customerId } : {}),
     ...(subscriptionId ? { subscriptionId } : {}),
+    ...(eventTime(e.occurred_at) ? { occurredAt: eventTime(e.occurred_at)! } : {}),
   }
 
   if (isSubscription && !isActiveStatus(e.data?.status ?? '')) {
@@ -154,6 +195,8 @@ export function fromPaddle(evt: unknown, prices: PriceMap): EventOutcome {
 interface StripeEvent {
   id?: string
   type?: string
+  /** Unix SECONDS, not milliseconds. */
+  created?: number
   data?: {
     object?: {
       status?: string
@@ -168,6 +211,8 @@ export function fromStripe(evt: unknown, prices: PriceMap): EventOutcome {
   const e = evt as StripeEvent
   const eventId = e?.id
   if (!eventId) return { kind: 'reject', why: 'no-event-id' }
+  const at = eventTime(e.created)
+  const when = at ? { occurredAt: at } : {}
   const type = e.type ?? ''
   if (!type.startsWith('customer.subscription.')) {
     return { kind: 'ignore', eventId, why: `unhandled type ${type}` }
@@ -178,12 +223,12 @@ export function fromStripe(evt: unknown, prices: PriceMap): EventOutcome {
   if (!userId) return { kind: 'reject', why: 'no-user', detail: type }
 
   const status = obj?.status ?? ''
-  if (!isActiveStatus(status)) return { kind: 'set-plan', userId, plan: 'free', eventId }
+  if (!isActiveStatus(status)) return { kind: 'set-plan', userId, plan: 'free', eventId, ...when }
 
   const priceId = obj?.items?.data?.[0]?.price?.id
   const plan = priceId ? prices[priceId] : undefined
   if (!plan) return { kind: 'reject', why: 'unknown-price', detail: priceId ?? '(none)' }
-  return { kind: 'set-plan', userId, plan, eventId }
+  return { kind: 'set-plan', userId, plan, eventId, ...when }
 }
 
 // ── PayMongo ──────────────────────────────────────────────────────────────
@@ -203,6 +248,8 @@ interface PaymongoEvent {
     id?: string
     attributes?: {
       type?: string
+      /** Unix SECONDS. */
+      created_at?: number
       data?: {
         id?: string
         attributes?: {
@@ -225,6 +272,8 @@ export function fromPaymongo(evt: unknown, prices: PriceMap): EventOutcome {
   const type = e.data?.attributes?.type ?? ''
   const acted = type.startsWith('subscription.') || type === 'payment.paid' || type === 'payment.failed'
   if (!acted) return { kind: 'ignore', eventId, why: `unhandled type ${type}` }
+  const at = eventTime(e.data?.attributes?.created_at)
+  const when = at ? { occurredAt: at } : {}
 
   const res = e.data?.attributes?.data?.attributes
   const userId = res?.metadata?.user_id
@@ -234,13 +283,13 @@ export function fromPaymongo(evt: unknown, prices: PriceMap): EventOutcome {
   // other providers — the risky direction is leaving a paid tier standing.
   const status = res?.status ?? ''
   if (type === 'payment.failed' || (type.startsWith('subscription.') && !isActiveStatus(status))) {
-    return { kind: 'set-plan', userId, plan: 'free', eventId }
+    return { kind: 'set-plan', userId, plan: 'free', eventId, ...when }
   }
 
   const priceId = res?.plan_id ?? res?.line_items?.[0]?.id
   const plan = priceId ? prices[priceId] : undefined
   if (!plan) return { kind: 'reject', why: 'unknown-price', detail: priceId ?? '(none)' }
-  return { kind: 'set-plan', userId, plan, eventId }
+  return { kind: 'set-plan', userId, plan, eventId, ...when }
 }
 
 export const parseEvent = (
