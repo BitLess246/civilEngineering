@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { parsePriceMap, isActiveStatus, fromPaddle, fromStripe, fromPaymongo, parseEvent } from './events'
+import { parsePriceMap, isActiveStatus, fromPaddle, fromStripe, fromPaymongo, parseEvent, eventTime } from './events'
+import webhookSrc from '../billing-webhook/index.ts?raw'
 
 const PRICES = { pri_pro: 'pro', pri_max: 'max' } as const
 const P = { ...PRICES } as Record<string, 'pro' | 'max' | 'free'>
@@ -259,5 +260,136 @@ describe('parseEvent dispatch', () => {
     for (const [prov, e] of active) {
       expect(parseEvent(prov, e, {}), prov).toMatchObject({ kind: 'reject', why: 'unknown-price' })
     }
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// WHEN THE EVENT HAPPENED — the half that stops a retry undoing a cancellation.
+//
+// Providers retry until they get a 2xx, so a redelivered `subscription.created`
+// can land AFTER a `subscription.canceled`. The webhook's only guard was "is
+// this the same event id as the last one applied", which that sequence walks
+// straight past: the last id is the cancellation's, so the stale creation is
+// applied and a customer who cancelled has a paid plan again, permanently.
+//
+// The webhook compares `occurredAt`. These tests are about getting it OUT of
+// each provider's payload — if the parser stops reading it, the ordering check
+// still runs, finds nothing to compare, and silently protects nothing.
+// ─────────────────────────────────────────────────────────────────────────
+describe('eventTime', () => {
+  it('takes Paddle ISO strings unchanged in meaning', () => {
+    expect(eventTime('2026-08-15T00:12:31.123Z')).toBe('2026-08-15T00:12:31.123Z')
+  })
+
+  it('reads Stripe/PayMongo unix SECONDS as seconds', () => {
+    // The trap: treating 1755216751 as milliseconds dates it to 1970. Every
+    // event would then look ancient, and — the dangerous part — they would all
+    // look ancient EQUALLY, so nothing is ever refused and the check is inert
+    // while appearing to work.
+    expect(eventTime(1755216751)).toBe('2025-08-15T00:12:31.000Z')
+  })
+
+  it('still handles a value already in milliseconds', () => {
+    expect(eventTime(1755216751000)).toBe('2025-08-15T00:12:31.000Z')
+  })
+
+  it('returns undefined rather than an Invalid Date', () => {
+    // Undefined means "cannot be ordered", which the webhook logs. An Invalid
+    // Date stringifies to something that compares unpredictably.
+    for (const junk of ['', '   ', 'not a date', null, undefined, {}, NaN, Infinity]) {
+      expect(eventTime(junk), String(junk)).toBeUndefined()
+    }
+  })
+
+  it('normalises everything to UTC, so string comparison is time comparison', () => {
+    const a = eventTime('2026-08-15T08:00:00+08:00')!
+    const b = eventTime('2026-08-15T00:00:00Z')!
+    expect(a).toBe(b)
+    expect(a.endsWith('Z')).toBe(true)
+  })
+})
+
+describe('occurredAt reaches the outcome', () => {
+  const MAP = { pri_pro: 'pro' as const }
+
+  it('from a Paddle subscription event', () => {
+    const out = fromPaddle({
+      event_id: 'evt_1', event_type: 'subscription.created',
+      occurred_at: '2026-08-15T00:12:31.123Z',
+      data: { id: 'sub_1', status: 'active', custom_data: { user_id: 'u1' }, items: [{ price: { id: 'pri_pro' } }] },
+    }, MAP)
+    expect(out.kind).toBe('set-plan')
+    expect(out.kind === 'set-plan' && out.occurredAt).toBe('2026-08-15T00:12:31.123Z')
+  })
+
+  it('from a Paddle CANCELLATION too — the event that must win', () => {
+    // The whole point: the cancellation has to carry a time, or the retried
+    // creation that follows it has nothing to be compared against.
+    const out = fromPaddle({
+      event_id: 'evt_2', event_type: 'subscription.canceled',
+      occurred_at: '2026-08-15T00:17:00.000Z',
+      data: { id: 'sub_1', status: 'canceled', custom_data: { user_id: 'u1' } },
+    }, MAP)
+    expect(out.kind === 'set-plan' && out.plan).toBe('free')
+    expect(out.kind === 'set-plan' && out.occurredAt).toBe('2026-08-15T00:17:00.000Z')
+  })
+
+  it('and the ordering it produces is the one that closes the hole', () => {
+    const created = fromPaddle({
+      event_id: 'evt_1', event_type: 'subscription.created', occurred_at: '2026-08-15T00:12:31.123Z',
+      data: { id: 'sub_1', status: 'active', custom_data: { user_id: 'u1' }, items: [{ price: { id: 'pri_pro' } }] },
+    }, MAP)
+    const canceled = fromPaddle({
+      event_id: 'evt_2', event_type: 'subscription.canceled', occurred_at: '2026-08-15T00:17:00.000Z',
+      data: { id: 'sub_1', status: 'canceled', custom_data: { user_id: 'u1' } },
+    }, MAP)
+    const a = created.kind === 'set-plan' ? created.occurredAt! : ''
+    const b = canceled.kind === 'set-plan' ? canceled.occurredAt! : ''
+    // A redelivered `created` arriving after `canceled` is strictly older, so
+    // the webhook refuses it.
+    expect(a < b).toBe(true)
+  })
+
+  it('from a Stripe event, whose `created` is in seconds', () => {
+    const out = fromStripe({
+      id: 'evt_1', type: 'customer.subscription.updated', created: 1755216751,
+      data: { object: { status: 'active', metadata: { user_id: 'u1' }, items: { data: [{ price: { id: 'pri_pro' } }] } } },
+    }, MAP)
+    expect(out.kind === 'set-plan' && out.occurredAt).toBe('2025-08-15T00:12:31.000Z')
+  })
+
+  it('and is simply absent when the payload carries no time', () => {
+    // Not an error: the webhook applies it and logs that it could not be
+    // ordered. Rejecting would drop real events if a provider changes shape.
+    const out = fromPaddle({
+      event_id: 'evt_1', event_type: 'subscription.created',
+      data: { id: 'sub_1', status: 'active', custom_data: { user_id: 'u1' }, items: [{ price: { id: 'pri_pro' } }] },
+    }, MAP)
+    expect(out.kind).toBe('set-plan')
+    expect(out.kind === 'set-plan' && out.occurredAt).toBeUndefined()
+  })
+})
+
+describe('the webhook enforces the ordering it is given', () => {
+  // A source guard: the comparison lives in the Deno entry point, which the
+  // vitest suite does not execute.
+  it('refuses a strictly older event, and allows equal', () => {
+    expect(webhookSrc).toMatch(/outcome\.occurredAt < lastAt/)
+  })
+
+  it('answers 200 to a stale event, not an error', () => {
+    // A non-2xx makes the provider redeliver the same stale event forever.
+    const block = webhookSrc.slice(webhookSrc.indexOf('outcome.occurredAt < lastAt'))
+    expect(block.slice(0, 400)).toMatch(/status: 200/)
+  })
+
+  it('stores the watermark only when the event carried a time', () => {
+    // Writing `undefined` would erase a good watermark and reopen the hole for
+    // every event after it.
+    expect(webhookSrc).toMatch(/outcome\.occurredAt \? \{ billing_event_at: outcome\.occurredAt \} : \{\}/)
+  })
+
+  it('keeps the event-id check as well — they catch different things', () => {
+    expect(webhookSrc).toMatch(/meta\.billing_event_id === outcome\.eventId/)
   })
 })

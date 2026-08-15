@@ -91,6 +91,40 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return new Response('already applied', { status: 200 })
   }
 
+  // ── ORDERING: A RETRY MUST NOT UNDO A LATER EVENT ──────────────────────
+  // The id check above only catches the SAME event arriving twice in a row.
+  // It does nothing about this sequence, which providers produce routinely
+  // because they retry until they get a 2xx:
+  //
+  //   1. subscription.created   (occurred 12:00)  → plan = pro
+  //   2. subscription.canceled  (occurred 12:05)  → plan = free
+  //   3. subscription.created   REDELIVERED       → plan = pro, permanently
+  //
+  // At step 3 the last applied id is the CANCELLED one, so the id check passes
+  // and a customer who cancelled gets their paid plan back for free, until
+  // somebody notices. Comparing when the event HAPPENED closes it.
+  //
+  // Strictly-older is refused; EQUAL is allowed. Two distinct events can share
+  // a timestamp, and a true redelivery carries the same event id and was
+  // already caught above — so refusing equal would only ever drop a real
+  // transition.
+  //
+  // ISO-8601 UTC is fixed-width, so string comparison is instant comparison.
+  const lastAt = typeof meta.billing_event_at === 'string' ? meta.billing_event_at : null
+  if (lastAt && outcome.occurredAt && outcome.occurredAt < lastAt) {
+    console.log(`stale event ${outcome.eventId} (${outcome.occurredAt} < ${lastAt}) — ignored`)
+    // 200, not an error: the provider did nothing wrong and a non-2xx would
+    // make it redeliver this same stale event forever.
+    return new Response('stale', { status: 200 })
+  }
+  if (!outcome.occurredAt) {
+    // Applied anyway — refusing would drop legitimate events from a provider
+    // whose payload shape changed — but it cannot be ordered, so say so. If
+    // this appears in the logs, the parser has stopped reading the timestamp
+    // and the protection above is silently off.
+    console.warn(`event ${outcome.eventId} carries no timestamp — applied without an ordering check`)
+  }
+
   const { error } = await admin.auth.admin.updateUserById(outcome.userId, {
     // SPREAD, never replace: app_metadata also carries Supabase's own
     // `provider` and `providers` fields, and dropping those breaks sign-in.
@@ -99,6 +133,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
       plan: outcome.plan,
       billing_event_id: outcome.eventId,
       billing_updated_at: new Date().toISOString(),
+      // The watermark the check above reads. Only written when the event
+      // carried a time: storing `undefined` would erase a good watermark and
+      // reopen the hole for every event after it.
+      ...(outcome.occurredAt ? { billing_event_at: outcome.occurredAt } : {}),
       // The provider's ids, kept so `billing-portal` can open the customer
       // portal later. Written only when the event carried them, so an event
       // without ids cannot blank out what an earlier one established —

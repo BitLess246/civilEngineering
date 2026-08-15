@@ -508,8 +508,13 @@ supabase secrets set --project-ref <ref> BILLING_WEBHOOK_SECRET=<live pdl_ntfset
 ```
 
 The functions read secrets at runtime, so no redeploy is needed for 2 or 3 —
-**unless** the shared code changed, in which case redeploy before touching the
-secret (see the note under step 5).
+**unless** the shared code changed, in which case the new code must be live
+first (see the note under step 5).
+
+Since #589 that is no longer a manual step: merging to `main` deploys every
+function, and the Actions tab has a **Run workflow** button for a deploy with
+no source change. Check that run is green before setting secrets, rather than
+assuming.
 
 **4. Live checkout settings.** Both bit us in sandbox and neither is inherited:
 
@@ -535,10 +540,29 @@ VITE_PADDLE_PRICE_MAX_ANNUAL=pri_…
 They are compiled into the bundle by Vite, so a redeploy is the only way they
 take effect. All six or none: half-configured counts as off.
 
-> **If `_shared/` code changed since the last deploy, redeploy the functions
+> **If `_shared/` code changed since the last deploy, get the new code live
 > before step 2, not after.** Setting a secret in a format the deployed parser
 > does not understand breaks the live path immediately — that is precisely how
 > the `:period` suffix nearly took the webhook down on 13 August 2026.
+>
+> **This applies to the cutover happening now.** #593 changed
+> `_shared/events.ts` and `billing-webhook`, so confirm the deploy workflow ran
+> green on that merge before step 2.
+
+### One new field, and why the first live event is unguarded
+
+#593 added `billing_event_at` to `app_metadata` — the timestamp of the last
+applied event, which is what stops a redelivered `subscription.created` undoing
+a later `subscription.canceled`.
+
+Existing accounts do not have it. The webhook only compares when it has **both**
+a stored watermark and an incoming timestamp, so the first event an account
+receives after this ships is applied without an ordering check and establishes
+the watermark; everything after it is guarded. That is the intended direction —
+the alternative would refuse the first event for every existing customer.
+
+Nothing to configure. It matters only if you are reading `app_metadata` by hand
+and wondering where the field came from.
 
 ### Verifying, with real money
 

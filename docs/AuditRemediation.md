@@ -27,7 +27,7 @@ mechanism was established by reading, not observed.
 | R4 | Full storage silently refuses the save and reverts the edit | high | reproduced | ✅ #591 |
 | S2 | Guest subject derived from a caller-chosen header | medium | reproduced | ✅ #587 |
 | S3 | `claim_guest_run` takes its own caps from the caller | medium | reproduced | ✅ #587 |
-| S4 | Stale webhook retry can restore a cancelled plan | medium | read | ☐ |
+| S4 | Stale webhook retry can restore a cancelled plan | medium | traced | ✅ #593 |
 | R6 | Every Model Space solver failure is invisible | medium | verified | ☐ |
 | R8 | Calculation fetch has no timeout | medium | read | ☐ |
 | R7 | Unknown URLs render an empty shell; `/about` missing | medium | verified | ☐ |
@@ -467,11 +467,40 @@ why it went in this PR.
 
 ## Phase 6 — billing and abuse (S4, S5, S6)
 
-**S4** — `billing-webhook/index.ts:88-92` compares only the last applied
-`billing_event_id`, with no ordering check. A retried `subscription.created`
-landing after a `subscription.canceled` restores the paid plan permanently.
-Store `occurred_at` and refuse anything not newer; thread `occurredAt` through
-`EventOutcome` from `fromPaddle`.
+**S4 — ✅ SHIPPED (#593).** `billing-webhook/index.ts` compared only the last
+applied `billing_event_id`. That catches the same event arriving twice in a
+row and nothing else, so this sequence walked straight past it:
+
+1. `subscription.created` (occurred 12:00) → plan = pro
+2. `subscription.canceled` (occurred 12:05) → plan = free
+3. `subscription.created` **redelivered** → plan = pro, permanently
+
+At step 3 the last applied id is the cancellation's, so the id check passes and
+a customer who cancelled has a paid plan again until somebody notices.
+Providers retry until they get a 2xx, so step 3 is routine rather than exotic.
+
+`occurredAt` now threads through `EventOutcome` from all three parsers, and the
+webhook refuses an event strictly older than the stored `billing_event_at`.
+
+**Decisions worth keeping.** *Equal timestamps are allowed* — two distinct
+events can share one, and a true redelivery carries the same event id and was
+already caught, so refusing equal would only ever drop a real transition. *A
+stale event answers 200*, because a non-2xx makes the provider redeliver the
+same stale event forever. *The watermark is written only when the event carried
+a time*, since storing `undefined` would erase a good watermark and reopen the
+hole for everything after it. *An event with no timestamp is applied anyway*
+and logged — refusing would drop legitimate events if a provider changes shape
+— so the log line is the signal that the protection has gone quiet.
+
+`eventTime` normalises the three formats: Paddle sends ISO, Stripe and PayMongo
+unix **seconds**. Reading seconds as milliseconds would date every event to 1970
+— and uniformly, so nothing would ever be refused and the check would be inert
+while appearing to work. That case is pinned in the tests.
+
+Still **traced** rather than reproduced: exercising it for real needs Paddle to
+redeliver a webhook, which the sandbox does not do on demand. The parsers and
+the comparison are covered by tests, including one that removes the ordering
+block and watches the guards fail.
 
 **S5** — no rate limiting anywhere, and members are never metered (by design),
 while sign-up is self-service. Cache `identify()` by token hash (or verify the
