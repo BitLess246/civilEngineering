@@ -13,10 +13,12 @@
 // loaded lazily via dynamic import.
 import type { LetterheadState } from '../components/calc'
 import type { ModelReport, ReportSection } from './modelReport'
+import type { PlanSheet } from './planSheets'
 import { COMPUTED_BY, docLabel as brandDocLabel } from './brand'
+import { paintDrawing, paintedSize } from './drawingPdf'
 import {
   createSheet, autoTable,
-  INK, MUTED, FAINT, BRAND, HAIR, M, CONTENT_W,
+  INK, MUTED, FAINT, BRAND, HAIR, M, CONTENT_W, PAGE_W,
 } from './pdfKit'
 
 export interface ModelPdfInput {
@@ -24,10 +26,14 @@ export interface ModelPdfInput {
   report: ModelReport
   modelImg: string | null      // PNG data URL of the 3D canvas
   badges: string[]
+  /** The plan + detail sheet set from `planSheets.buildSheetSet` — the SAME
+   *  `Drawing` objects the Plans tab shows, painted as vectors here. Omitted
+   *  (or empty) simply leaves the section out. */
+  sheets?: PlanSheet[]
   fileName?: string
 }
 
-export async function generateModelPdf({ lh, report, modelImg, badges, fileName }: ModelPdfInput): Promise<void> {
+export async function generateModelPdf({ lh, report, modelImg, badges, sheets, fileName }: ModelPdfInput): Promise<void> {
   const sh = createSheet()
   const { doc } = sh
   const setF = sh.setF
@@ -304,6 +310,45 @@ export async function generateModelPdf({ lh, report, modelImg, badges, fileName 
       sh.y += 2
     })
   })
+
+  // ── 5 · Drawings (the same sheets the Plans tab shows) ──
+  //
+  // Painted as VECTORS through the shared `paintDrawing`, not rasterised: a
+  // 261 mm dimension has to stay readable when the sheet is printed, and a
+  // screenshot of the tab would not be.
+  if (sheets?.length) {
+    rule(5, 'Drawings')
+    let n = 0
+    let lastGroup = ''
+    for (const s of sheets) {
+      if (s.group !== lastGroup) {
+        lastGroup = s.group
+        ensure(14)
+        sh.y += 2
+        setF('sans', 'bold', 8, INK)
+        doc.text(s.group.toUpperCase(), M, sh.y, { charSpace: 0.2 })
+        sh.y += 3
+      }
+      n += 1
+      const box = { x: M, y: sh.y, w: CONTENT_W, maxH: 150 }
+      const size = paintedSize(s.drawing, box)
+      // Keep a sheet with its caption rather than orphaning the caption on the
+      // next page — the same rule the soils report figures use.
+      ensure(size.height + 14)
+      const placed = { ...box, y: sh.y + 3, x: (PAGE_W - size.width) / 2 }
+      paintDrawing(doc, s.drawing, placed)
+      sh.y = placed.y + size.height + 3.5
+
+      setF('sans', 'bold', 7, INK)
+      doc.text(`5.${n}  ${s.title}${s.subtitle ? ` · ${s.subtitle}` : ''}`, M, sh.y)
+      sh.y += 3.4
+      for (const w of s.warnings) {
+        setF('sans', 'normal', 6.4, MUTED)
+        for (const line of doc.splitTextToSize(`\u26a0 ${w}`, CONTENT_W)) { doc.text(line, M, sh.y); sh.y += 3 }
+      }
+      sh.y += 3
+    }
+  }
 
   sh.signatures(lh.preparedBy)
   sh.disclaimer(

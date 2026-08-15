@@ -133,7 +133,7 @@ engine + a thin React panel; every sheet exports to SVG.
   plans (bar layout, not just the span symbol); wiring the plan-renderer drawings
   into the direct PDF report (`lib/modelPdf.ts`).
 
-### Standard detail sheets on the Plans tab (PRs #593–#599)
+### Standard detail sheets on the Plans tab (PRs #593–#600)
 Typed `PlanPrimitive[]` sheets, painted by the same `planToSvg`, mapped from the
 design in `lib/planDetails.ts` and listed in `PlansPanel`.
 - **#593 `columnDetail.ts`** — typical column elevation: confinement zones ℓo,
@@ -175,8 +175,18 @@ design in `lib/planDetails.ts` and listed in `PlansPanel`.
   §411.7.2.1/§411.7.3.1 spacing and §411.7.2.3 two curtains. `WallScheduleRow`
   now carries `barDia`/`fc`/`fy` so the sheets quote the designed bar. Benchmark
   `shear-friction-avf`; suite **4397**.
-- **Remaining**: Phase 6 — fold every detail sheet into the PDF report and the
-  take-off.
+- **#600 `lib/planSheets.ts` — Phase 6a, the sheet set.** The tab and the report
+  were about to grow two copies of "what is on the drawings", and the one nobody
+  looks at drifts first. `buildSheetSet(model, design, soil, opts)` assembles
+  every plan and detail ONCE as typed `Drawing`s; `PlansPanel` serialises them
+  with `planToSvg` and the PDF report paints the same objects with
+  `paintDrawing` — as vectors, not a screenshot, so a 261 mm dimension survives
+  printing. New §5 *Drawings* section in `modelPdf`, grouped and captioned,
+  carrying each sheet's own warnings. `PlansPanel` lost five duplicated
+  `useMemo`s and is now a list renderer. Suite **4423**.
+- **Remaining**: Phase 6b — fold the detail steel (opening trimmers, wall corner
+  and U-bars, diagonal corner bars) into `takeoff.ts`, which currently counts
+  none of it.
 - **Drafting lesson, paid for three times**: assert on primitives and every sheet
   looks fine. RENDER it (headless Chromium at
   `/opt/pw-browsers/chromium-1194/chrome-linux/chrome --no-sandbox`, write the SVG
