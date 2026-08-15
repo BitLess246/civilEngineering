@@ -31,9 +31,21 @@ if (!apiKey) {
   process.exit(1);
 }
 
-// Default to sandbox: the failure mode of guessing wrong in the other
-// direction is a live catalog created by accident.
-const envName = process.env.PADDLE_ENV === "live" ? "live" : "sandbox";
+// ACCEPTS BOTH "live" AND "production", because the rest of the system says
+// "production" and this script used to accept only "live".
+//
+// That mismatch was a trap with a cutover-day fuse on it. `docs/Billing.md`
+// and the Edge Functions both use PADDLE_ENV=production; running the
+// documented seed command with a live API key therefore fell through to
+// SANDBOX here, pointing the SDK at the sandbox API while carrying a
+// `pdl_live_…` key. It fails rather than creating anything by accident — but
+// it fails in the one hour where nobody wants to be debugging vocabulary.
+//
+// Still defaults to sandbox on anything unrecognised: guessing wrong in the
+// other direction creates a live catalog by accident, and re-running is how
+// duplicate products appear.
+const wanted = (process.env.PADDLE_ENV ?? "").trim().toLowerCase();
+const envName = wanted === "live" || wanted === "production" ? "live" : "sandbox";
 const paddle = new Paddle(apiKey, {
   environment: envName === "live" ? Environment.production : Environment.sandbox,
 });

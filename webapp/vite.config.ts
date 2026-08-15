@@ -24,6 +24,12 @@ export default defineConfig(({ command }) => ({
     // The Supabase Edge Function's pure logic (webhook signature verification
     // and event parsing) lives outside src/ but is plain Web-Crypto TypeScript,
     // so the one suite covers it rather than leaving the money path untested.
-    include: ['src/**/*.{test,spec}.{ts,tsx}', 'api/**/*.test.ts', '../supabase/functions/**/*.test.ts'],
+    // `scripts/` is in here for the same reason `supabase/functions` is: the
+    // Paddle seed script is deploy-critical, plain TypeScript, and untested
+    // code that only runs on cutover day is the worst kind to get wrong.
+    include: [
+      'src/**/*.{test,spec}.{ts,tsx}', 'api/**/*.test.ts',
+      '../supabase/functions/**/*.test.ts', '../scripts/**/*.test.ts',
+    ],
   },
 }))

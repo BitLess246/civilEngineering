@@ -467,6 +467,26 @@ a checkout that will not open, which costs a sale rather than a customer.
 `VITE_PADDLE_ENV=production`, so a half-swapped front end shows the coming-soon
 notice instead of charging a real card against the wrong environment.
 
+### Where each thing lives
+
+Click paths, because half the cutover is finding the screen. Paddle's **live**
+dashboard is `vendors.paddle.com`; the sandbox one is
+`sandbox-vendors.paddle.com`. Being on the wrong one is the single easiest
+mistake here — the two look identical and share no data.
+
+| What | Where |
+|---|---|
+| Live API key | vendors.paddle.com → **Developer tools → Authentication** → *New API key* |
+| Live client token | same page, **Client-side tokens** tab |
+| Notification destination (webhook) | **Developer tools → Notifications** → *New destination* |
+| Default payment link | **Checkout → Checkout settings** |
+| Website approval | **Checkout → Website approval** |
+| Currency conversion | **Business account → Currencies** |
+| Seller verification status | **Business account → Verification** |
+| Supabase function secrets | supabase.com/dashboard → project → **Project Settings → Edge Functions → Secrets** |
+| Vercel front-end vars | vercel.com → project → **Settings → Environment Variables** (scope: Production) |
+| Function logs | Supabase → **Edge Functions → billing-webhook → Logs** |
+
 ### The checklist
 
 **1. Create the live catalog.**
@@ -475,6 +495,12 @@ notice instead of charging a real card against the wrong environment.
 cd webapp
 PADDLE_ENV=production PADDLE_API_KEY=pdl_live_… npx tsx ../scripts/seed-paddle-catalog.ts
 ```
+
+The script accepts `production` **or** `live` for `PADDLE_ENV`, and treats
+anything else as sandbox. It only accepted `live` until #601, so this exact
+command used to run against the SANDBOX API while holding a live key —
+confirm the header it prints says `=== CATALOG IDs (live) ===` before you
+trust the ids.
 
 Amounts are integers in cents — `1900`, never `19`. Re-running creates
 duplicates; Paddle has no upsert for products. Keep the printed output: it
