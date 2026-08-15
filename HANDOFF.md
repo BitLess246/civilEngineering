@@ -133,7 +133,7 @@ engine + a thin React panel; every sheet exports to SVG.
   plans (bar layout, not just the span symbol); wiring the plan-renderer drawings
   into the direct PDF report (`lib/modelPdf.ts`).
 
-### Standard detail sheets on the Plans tab (PRs #593–#601)
+### Standard detail sheets on the Plans tab (PRs #593–#603)
 Typed `PlanPrimitive[]` sheets, painted by the same `planToSvg`, mapped from the
 design in `lib/planDetails.ts` and listed in `PlansPanel`.
 - **#593 `columnDetail.ts`** — typical column elevation: confinement zones ℓo,
@@ -184,7 +184,7 @@ design in `lib/planDetails.ts` and listed in `PlansPanel`.
   printing. New §5 *Drawings* section in `modelPdf`, grouped and captioned,
   carrying each sheet's own warnings. `PlansPanel` lost five duplicated
   `useMemo`s and is now a list renderer. Suite **4423**.
-- **#601 `beamDetail.ts` rebuilt — Phase 7, from user review of the render.**
+- **#603 `beamDetail.ts` rebuilt — Phase 7, from user review of the render.**
   Four corrections, one of them a real defect:
   - **Hoops were TIGHTEST AT MIDSPAN.** `designBeam` reports `stirrupSpacing: 0`
     at a section that needs none, and the sheet clamped that with
