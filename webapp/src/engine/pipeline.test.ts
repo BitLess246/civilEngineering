@@ -1183,6 +1183,26 @@ describe('model space and the calculator pages agree on bars', () => {
     for (const c of r.design.columns) expect(c.ok, c.id).toBe(true)
   })
 
+  it('every designed column carries its splice lengths — §425.5', () => {
+    // The column detail sheet prints the lap; before this the sheet simply
+    // omitted it, because nothing downstream of columnDesign ever called
+    // calcDevLength. §425.5 is a property of the bar and the concrete, not of
+    // the load case, so one figure per column is the right shape.
+    const r = designStructure(makeModel(), soil)!
+    expect(r.columns.length).toBeGreaterThan(0)
+    for (const c of r.columns) {
+      expect(c.lapB, c.id).toBeDefined()
+      expect(c.lapC, c.id).toBeDefined()
+      expect(c.lapB!).toBeGreaterThanOrEqual(300)        // §425.5.2 floor
+      expect(c.lapC!).toBeGreaterThanOrEqual(300)        // §425.5.5 floor
+      // NOT asserted: that the tension lap exceeds the compression one. It
+      // does not always. §425.5.5 takes no credit for confinement while
+      // §425.4.2 development does, so at the cbKtr/db cap Class B comes out
+      // 593 mm against a 602 mm compression splice here. The detail sheet
+      // therefore draws max(lapB, lapC), not lapB.
+    }
+  })
+
   it('the optimizer ends on a cage that fits the size it settled on', () => {
     // ρ = n·Ab/(b·h) moves with the concrete, so a cage carried across a size
     // change can land outside §10.6.1.1 — a section the optimizer itself built,
