@@ -7,6 +7,7 @@ import type { StructuralModel, RectSection } from '../engine/model'
 import type { StructureDesign } from '../engine/pipeline'
 import type { PlanFooting } from '../engine/planRenderer'
 import type { FootingDetailInput } from '../engine/footingDetail'
+import type { ColumnDetailInput } from '../engine/columnDetail'
 import type { ColumnSchematicProps } from '../components/ColumnSchematic'
 
 export interface SoilInput { qAllow?: number; gammaSoil?: number; gammaConc?: number; H?: number }
@@ -67,4 +68,64 @@ export function footingDetailBundles(model: StructuralModel, design: StructureDe
     })
   }
   return bundles
+}
+
+// ── Typical column details ──────────────────────────────────────────────────
+
+export interface ColumnDetailBundle { mark: string; detail: ColumnDetailInput }
+
+/**
+ * One typical column detail per distinct column TYPE, from the design.
+ *
+ * Grouped by section and tie schedule rather than per member: a 12-storey frame
+ * has one detail per column type, not per column. Every figure comes off
+ * `ColumnScheduleRow` — the confinement zone and both tie spacings were already
+ * being computed by `columnDesign` and shown only as schedule numbers.
+ *
+ * `lapB` is left to the caller: the Class B splice depends on bar size, cover
+ * and concrete strength through `calcDevLength`, and the sheet is honest
+ * without it rather than guessing one.
+ */
+export function columnDetailBundles(model: StructuralModel, design: StructureDesign): ColumnDetailBundle[] {
+  const secById = new Map(model.sections.map((s) => [s.id, s]))
+  const memById = new Map(model.members.map((m) => [m.id, m]))
+  const nodeById = new Map(model.nodes.map((n) => [n.id, n]))
+  // deepest beam framing in anywhere — the band the column passes through
+  const beamDepth = Math.max(
+    300,
+    ...model.members
+      .filter((m) => m.role === 'beam')
+      .map((m) => (secById.get(m.section) as RectSection | undefined)?.h ?? 0),
+  )
+
+  const seen = new Set<string>()
+  const out: ColumnDetailBundle[] = []
+  for (const r of design.columns) {
+    const mem = memById.get(r.id)
+    if (!mem) continue
+    const sec = secById.get(mem.section) as RectSection | undefined
+    if (!sec) continue
+    const key = `${sec.b}x${sec.h ?? sec.b}-${r.bars}-${Math.round(r.tieSpacingFinal)}-${Math.round(r.seismicLoZone ?? 0)}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const ni = nodeById.get(mem.i), nj = nodeById.get(mem.j)
+    const storey = ni && nj ? Math.abs(nj.y - ni.y) : r.L
+    out.push({
+      mark: `C${seen.size}`,
+      detail: {
+        mark: `C${seen.size}`,
+        b: sec.b, h: sec.h ?? sec.b,
+        storey: storey > 0 ? storey : r.L,
+        beamDepth,
+        bars: Math.max(4, r.bars),
+        barDia: sec.barDia ?? 20,
+        tieDia: sec.tieDia ?? 10,
+        loZone: r.seismicLoZone,
+        sConf: r.seismicSConf ?? r.tieSpacingFinal,
+        sOut: r.seismicSOut ?? r.tieSpacingFinal,
+        cover: sec.cover ?? 40,
+      },
+    })
+  }
+  return out
 }
