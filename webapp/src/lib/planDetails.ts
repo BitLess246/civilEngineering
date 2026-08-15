@@ -10,6 +10,7 @@ import type { FootingDetailInput } from '../engine/footingDetail'
 import type { ColumnDetailInput } from '../engine/columnDetail'
 import type { BeamDetailInput } from '../engine/beamDetail'
 import type { SlabOpeningInput } from '../engine/slabOpening'
+import type { WallDetailInput } from '../engine/wallDetail'
 import type { SlabDirResult } from '../engine/slabDDM'
 import type { ColumnSchematicProps } from '../components/ColumnSchematic'
 
@@ -271,6 +272,50 @@ export function slabOpeningBundles(model: StructuralModel, design: StructureDesi
         },
       })
     }
+  }
+  return out
+}
+
+// ── Wall standard details ───────────────────────────────────────────────────
+
+export interface WallDetailBundle { mark: string; wall: string; detail: WallDetailInput }
+
+/**
+ * One set of wall details (corner, intersection, construction joint) per
+ * distinct wall TYPE, from the designed shear walls.
+ *
+ * Grouped on thickness and the two curtain spacings, so a core of identical
+ * walls yields one set of sheets rather than one per wall. Every figure comes
+ * off `WallScheduleRow`: `designShearWall` already chose the spacings and the
+ * row now carries the bar diameter and the grades it was designed with.
+ *
+ * The in-plane shear is passed through as the CONSTRUCTION JOINT's demand —
+ * the joint is a horizontal cut through the web, so the shear that crosses it
+ * is the same Vu the web was designed for.
+ *
+ * Takes the design alone: unlike the beam and column bundlers, every figure a
+ * wall detail needs is already on the schedule row, so reaching back into the
+ * model would only add a way to disagree with it.
+ */
+export function wallDetailBundles(design: StructureDesign): WallDetailBundle[] {
+  const seen = new Set<string>()
+  const out: WallDetailBundle[] = []
+  for (const r of design.walls) {
+    const sH = Math.round(r.design.horiz.spacing), sV = Math.round(r.design.vert.spacing)
+    const key = `${Math.round(r.thickness)}-${sH}-${sV}-${Math.round(r.barDia)}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const mark = `W${seen.size}`
+    out.push({
+      mark, wall: r.id,
+      detail: {
+        mark, t: r.thickness,
+        barDia: r.barDia, spacing: sH,
+        vertDia: r.barDia, vertSpacing: sV,
+        cover: 20, fc: r.fc, fy: r.fy,
+        Vu: r.Vu, lw: r.lw, surface: 'roughened',
+      },
+    })
   }
   return out
 }
