@@ -5,7 +5,7 @@ import { useScheduleSolve } from '../lib/useScheduleSolve'
 import { resourceLoad, hasOverAllocation, type ResourceLoad } from '../lib/resourceLoad'
 import type { ResourceType } from '../engine/schedule/model'
 import { PageHeader } from '../components/calc'
-import { SaveAlert } from '../components/SaveAlert'
+import { PersistenceAlerts } from '../components/PersistenceAlerts'
 
 // Phase 8 — resource loading at /schedule/resources. Spreads each activity's
 // resource assignment over its scheduled span (lib/resourceLoad, pure+tested),
@@ -67,7 +67,9 @@ export default function ScheduleResources() {
     <>
       <PageHeader title="Resource Loading" badges={['labor', 'equipment', 'material']} actions={project ? <Link to="/schedule" className={btn}>Grid</Link> : undefined} />
       <div className="mx-auto max-w-[1400px] space-y-4 p-5 sm:p-7">
-        <SaveAlert message={api.saveError} onDismiss={api.clearSaveError} />
+        <PersistenceAlerts saveError={api.saveError} clearSaveError={api.clearSaveError}
+          conflict={api.conflict} reloadTheirs={api.reloadTheirs}
+          overwriteWithMine={api.overwriteWithMine} />
         {!project ? (
           <div className="rounded-lg border border-dashed border-[#d6d3c9] bg-white px-6 py-16 text-center">
             <h2 className="text-[16px] font-bold text-[#0f1b2a]">No schedule open</h2>

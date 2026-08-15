@@ -10,7 +10,7 @@ import { analyzeDelays } from '../lib/delayAnalysis'
 import { PageHeader } from '../components/calc'
 import { GuidedTour } from '../components/GuidedTour'
 import { TourButton } from '../components/TourButton'
-import { SaveAlert } from '../components/SaveAlert'
+import { PersistenceAlerts } from '../components/PersistenceAlerts'
 import { DAILY_STEPS } from '../lib/scheduleDailyTour'
 import { useTour } from '../lib/useTour'
 
@@ -266,7 +266,9 @@ export default function ScheduleDaily() {
     <>
       <PageHeader title="Daily Progress & Delays" badges={['actuals', 'baseline', 'delay']} actions={actions ?? undefined} />
       <div className="mx-auto max-w-[1400px] space-y-5 p-5 sm:p-7">
-        <SaveAlert message={api.saveError} onDismiss={api.clearSaveError} />
+        <PersistenceAlerts saveError={api.saveError} clearSaveError={api.clearSaveError}
+          conflict={api.conflict} reloadTheirs={api.reloadTheirs}
+          overwriteWithMine={api.overwriteWithMine} />
         {!project ? (
           <div className="rounded-lg border border-dashed border-[#d6d3c9] bg-white px-6 py-16 text-center">
             <h2 className="text-[16px] font-bold text-[#0f1b2a]">No schedule open</h2>

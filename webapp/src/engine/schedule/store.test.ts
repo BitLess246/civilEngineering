@@ -180,3 +180,64 @@ describe('saving when storage is full', () => {
     expect(out.ok).toBe(true)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE STAMP IS HOW A TAB NOTICES ANOTHER TAB.
+//
+// Two tabs on one schedule used to end with whichever typed last winning,
+// silently — reproduced in a browser: tab B renamed the project, tab A then
+// saved the copy it was still holding, and B's work was gone with nothing on
+// screen to say so. `stampOf` is what `useScheduleProject` compares against
+// the watermark it holds, and it has to be cheap and honest about absence.
+// ─────────────────────────────────────────────────────────────────────────
+describe('stampOf', () => {
+  it('returns the stamp a save wrote', () => {
+    const store = createStore(memoryBackend())
+    store.save('p1', sampleProject(), '2026-08-01T00:00:00.000Z')
+    expect(store.stampOf('p1')).toBe('2026-08-01T00:00:00.000Z')
+  })
+
+  it('moves when the project is written again', () => {
+    const store = createStore(memoryBackend())
+    store.save('p1', sampleProject(), '2026-08-01T00:00:00.000Z')
+    store.save('p1', sampleProject(), '2026-08-02T00:00:00.000Z')
+    expect(store.stampOf('p1')).toBe('2026-08-02T00:00:00.000Z')
+  })
+
+  it('is null for a project that is not there', () => {
+    // The hook treats null as "nothing to conflict with", so a wrong answer
+    // here would either block every save or detect nothing.
+    expect(createStore(memoryBackend()).stampOf('nope')).toBeNull()
+  })
+
+  it('is null for a corrupt entry rather than throwing', () => {
+    // It is consulted before EVERY save. A throw here would put us back to a
+    // crash on edit, which is what R1 was.
+    const backend = memoryBackend({ 'schedule:project:bad': '{"version":1,"savedAt":"x"}' })
+    expect(createStore(backend).stampOf('bad')).toBeNull()
+  })
+
+  it('stamps sort lexicographically, which is what the comparison relies on', () => {
+    // ISO-8601 UTC is fixed-width, so `>` on the strings is `>` on the instants.
+    // If the store ever writes a local-time or non-padded stamp, the conflict
+    // check silently stops working.
+    const store = createStore(memoryBackend())
+    store.save('p1', sampleProject())
+    const a = store.stampOf('p1')!
+    expect(a).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+    expect('2026-08-02T00:00:00.000Z' > '2026-08-01T23:59:59.999Z').toBe(true)
+  })
+})
+
+describe('keyFor', () => {
+  it('names the key a storage event will carry', () => {
+    // The cross-tab listener matches `e.key` against this. A mismatch means the
+    // listener never fires and the tabs go back to diverging silently.
+    const store = createStore(memoryBackend())
+    const backend = memoryBackend()
+    const s2 = createStore(backend)
+    s2.save('p1', sampleProject())
+    expect(store.keyFor('p1')).toBe('schedule:project:p1')
+    expect(backend.keys()).toContain(store.keyFor('p1'))
+  })
+})

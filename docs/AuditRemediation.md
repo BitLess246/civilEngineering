@@ -20,7 +20,7 @@ mechanism was established by reading, not observed.
 | E2 | Steel column K hardcoded 1.0 with a first-order analysis | critical | computed | ✅ #577 |
 | R1 | One malformed entry bricks all seven planning routes | critical | reproduced | ✅ #579 |
 | R2 | No error boundary anywhere | critical | mechanical | ✅ #579 |
-| R3 | Two tabs silently overwrite each other's schedule | critical | traced | ☐ |
+| R3 | Two tabs silently overwrite each other's schedule | critical | reproduced | ✅ #592 |
 | S1 | Plan project-limit bypassed by one bulk INSERT | high | reproduced | ✅ #580 |
 | E3 | RC column P–M ignores biaxial interaction | high | computed | ✅ #578 |
 | R5 | `/truss` is a gated feature with no gate | high | reproduced | ✅ #581 |
@@ -299,10 +299,47 @@ pattern (`useInvestigation.ts:57`), untouched here. Same one-line fix once
 someone wants it; behaviour is unchanged, so this is a gap rather than a
 regression.
 
-**R3** — two tabs overwrite. `store.save` already returns `savedAt` and nothing
-reads it back. Hold a watermark ref, refuse a write whose on-disk `savedAt` is
-newer than the one this tab loaded, and add a `storage` listener to reload when
-another tab writes the active project.
+**R3 — ✅ SHIPPED (#592).** Upgraded from *traced* to **reproduced** with two
+real tabs sharing one browser context. Tab B added an activity; Tab A, still
+holding the copy it loaded, renamed the project; A's write took the activity
+count back down and nothing appeared on screen:
+
+| | pre-fix | post-fix |
+|---|---|---|
+| B's added activity survives A's save | **false — destroyed** | true |
+| anything said about it | nothing | nothing needed — the tabs converged |
+
+*A measurement note worth keeping.* The first version of that test used the
+project NAME as the marker and showed no difference either way — A renames
+legitimately, so a changed name proves nothing. Only a marker A never touches
+(B's added activity) separates "A clobbered B's base" from "A renamed B's
+version". The first run looked like the fix had failed; it was the test.
+
+**Two mechanisms, in this order.** A `storage` listener reloads when another
+tab writes the ACTIVE project, so most of the time the tabs simply converge and
+no conflict ever arises — that is the post-fix row above. It deliberately does
+not reload over unsaved work (a conflict, or an edit that hit a full disk),
+since that state exists nowhere else.
+
+The watermark is the backstop for when the event is missed or arrives mid-edit:
+`persist` compares the on-disk `savedAt` against the stamp this tab last read or
+wrote, and a newer one refuses the write. Verified separately by writing a
+newer version from the page's own context, which fires no event in that page —
+the banner appeared, the other version survived untouched, the edit stayed on
+screen, and saving resumed after resolving.
+
+**No merge, and no silent winner.** Two versions of a construction programme
+differ in durations, logic and resourcing; a machine choosing field by field
+produces a schedule nobody wrote. The banner is not dismissible — nothing is
+saved until it is answered — and both buttons state what they discard.
+
+Known residue: two writes inside the same millisecond compare equal and slip
+past the watermark. The listener covers that in practice, and the remainder is
+a millisecond-wide window on a document a human is typing into.
+
+**Out of scope, flagged not fixed:** the projects (Model Space) store has no
+cross-tab detection. `ProjectsPanel` keeps the plain `<SaveAlert>` rather than
+offering resolution buttons that nothing implements.
 
 ---
 
