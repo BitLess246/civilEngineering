@@ -38,7 +38,7 @@ describe('the sheet set', () => {
 
   it('covers every group once the model has one of each thing', () => {
     const groups = new Set(sheets.map((s) => s.group))
-    for (const g of ['Plans', 'Beam details', 'Column details', 'Footing details', 'Slab opening details', 'Wall standard details']) {
+    for (const g of ['Plans', 'Beam details', 'Column details', 'Footing details', 'Slab opening details', 'Wall standard details', 'Beam–column joint details']) {
       expect(groups.has(g as PlanSheet['group']), `missing ${g}`).toBe(true)
     }
   })
@@ -62,6 +62,16 @@ describe('the sheet set', () => {
     // two storeys → two framing plans, and one foundation plan
     expect(plans.filter((s) => s.key.startsWith('framing-'))).toHaveLength(2)
     expect(plans.filter((s) => s.key === 'foundation-plan')).toHaveLength(1)
+  })
+
+  it('carries a beam–column joint sheet, after the members that meet in it', () => {
+    const joints = sheets.filter((s) => s.group === 'Beam–column joint details')
+    expect(joints.length).toBeGreaterThan(0)
+    for (const j of joints) expect(j.title).toContain('BEAM–COLUMN JOINT')
+    // the joint sheet follows the beam and column details it depends on
+    const iJoint = sheets.findIndex((s) => s.group === 'Beam–column joint details')
+    expect(iJoint).toBeGreaterThan(sheets.findIndex((s) => s.group === 'Beam details'))
+    expect(iJoint).toBeGreaterThan(sheets.findIndex((s) => s.group === 'Column details'))
   })
 
   it('carries three sheets per wall type — corner, intersection, joint', () => {

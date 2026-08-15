@@ -11,6 +11,7 @@ import type { ColumnDetailInput } from '../engine/columnDetail'
 import type { BeamDetailInput } from '../engine/beamDetail'
 import type { SlabOpeningInput } from '../engine/slabOpening'
 import type { WallDetailInput } from '../engine/wallDetail'
+import type { BeamColumnJointInput, JointConfinement } from '../engine/beamColumnJoint'
 import type { SlabDirResult } from '../engine/slabDDM'
 import type { ColumnSchematicProps } from '../components/ColumnSchematic'
 
@@ -354,6 +355,94 @@ export function wallDetailBundles(design: StructureDesign): WallDetailBundle[] {
         vertDia: r.barDia, vertSpacing: sV,
         cover: 20, fc: r.fc, fy: r.fy,
         Vu: r.Vu, lw: r.lw, surface: 'roughened',
+      },
+    })
+  }
+  return out
+}
+
+// ── Beam–column joints ──────────────────────────────────────────────────────
+
+export interface JointDetailBundle { mark: string; node: string; detail: BeamColumnJointInput }
+
+/**
+ * One joint detail per distinct beam-into-column TYPE.
+ *
+ * The joint is the one piece of the frame neither member design looks at: the
+ * beam sheet designs the beam, the column sheet the column, and §418.8 is about
+ * the block they share. Everything here comes off the two schedule rows that
+ * meet at the node — this adds no new analysis.
+ *
+ * `Vcol` is deliberately NOT passed. §418.8.2.1 allows the column shear to be
+ * subtracted from the joint demand, but taking a credit the schedule cannot
+ * confirm would quietly weaken every joint on the sheet; omitting it is the
+ * conservative side and it is stated in the notes.
+ */
+export function jointDetailBundles(model: StructuralModel, design: StructureDesign): JointDetailBundle[] {
+  const secById = new Map(model.sections.map((s) => [s.id, s]))
+  const memById = new Map(model.members.map((m) => [m.id, m]))
+  const nodeById = new Map(model.nodes.map((n) => [n.id, n]))
+  const beamRowById = new Map(design.beams.map((r) => [r.id, r]))
+  const isBeam = (role: string) => role === 'beam' || role === 'girder'
+
+  /** Beams framing into a node, with their plan directions. */
+  const beamsAt = (node: string) => model.members
+    .filter((m) => isBeam(m.role) && (m.i === node || m.j === node))
+    .map((m) => {
+      const a = nodeById.get(node), f = nodeById.get(m.i === node ? m.j : m.i)
+      const dx = a && f ? f.x - a.x : 0, dz = a && f ? f.z - a.z : 0
+      const len = Math.hypot(dx, dz) || 1
+      return { m, ux: dx / len, uz: dz / len }
+    })
+
+  const seen = new Set<string>()
+  const out: JointDetailBundle[] = []
+  for (const colRow of design.columns) {
+    const col = memById.get(colRow.id); if (!col) continue
+    const colSec = secById.get(col.section) as RectSection | undefined; if (!colSec) continue
+    // the joint is at the column's TOP node — where the beams frame in
+    const ni = nodeById.get(col.i), nj = nodeById.get(col.j)
+    if (!ni || !nj) continue
+    const node = ni.y >= nj.y ? col.i : col.j
+    const framing = beamsAt(node)
+    if (!framing.length) continue
+
+    // the deepest beam decides the detail; its own row carries the bar counts
+    const lead = framing.reduce((best, f) => {
+      const hb = (secById.get(f.m.section) as RectSection | undefined)?.h ?? 0
+      const hbest = (secById.get(best.m.section) as RectSection | undefined)?.h ?? 0
+      return hb > hbest ? f : best
+    })
+    const beamSec = secById.get(lead.m.section) as RectSection | undefined; if (!beamSec) continue
+    const beamRow = beamRowById.get(lead.m.id)
+    const topBars = Math.max(2, ...(beamRow?.sections ?? []).filter((s) => s.hogging).map((s) => s.design.bars))
+    const botBars = Math.max(2, ...(beamRow?.sections ?? []).filter((s) => !s.hogging).map((s) => s.design.bars))
+
+    // Confinement class — Table 418.8.4.3, from how many beams actually arrive.
+    const n = framing.length
+    const opposite = framing.some((f) => framing.some((g) => f !== g && f.ux * g.ux + f.uz * g.uz < -0.9))
+    const confinement: JointConfinement =
+      n >= 4 ? 'four-faces' : n === 3 ? 'three-faces' : n === 2 && opposite ? 'two-opposite' : 'other'
+    const interior = framing.some((f) => f !== lead && f.ux * lead.ux + f.uz * lead.uz < -0.9)
+    const wideBeams = framing.every((f) => ((secById.get(f.m.section) as RectSection | undefined)?.b ?? 0) >= 0.75 * colSec.b)
+
+    const key = `${colSec.b}x${colSec.h ?? colSec.b}-${beamSec.b}x${beamSec.h}-${beamSec.barDia ?? 16}-${topBars}.${botBars}-${confinement}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const mark = `J${seen.size}`
+    out.push({
+      mark, node,
+      detail: {
+        mark,
+        colB: colSec.b, colH: colSec.h ?? colSec.b,
+        colBarDia: colSec.barDia ?? 20, colBars: Math.max(4, colRow.bars),
+        hoopDia: colSec.tieDia ?? 10,
+        hoopSpacing: colRow.seismicSConf ?? colRow.tieSpacingFinal,
+        beamB: beamSec.b, beamH: beamSec.h ?? beamSec.b,
+        beamBarDia: beamSec.barDia ?? 16,
+        topBars, botBars,
+        interior, confinement, wideBeams,
+        fc: colSec.fc, fy: colSec.fy, cover: colSec.cover ?? 40,
       },
     })
   }
