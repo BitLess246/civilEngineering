@@ -133,7 +133,7 @@ engine + a thin React panel; every sheet exports to SVG.
   plans (bar layout, not just the span symbol); wiring the plan-renderer drawings
   into the direct PDF report (`lib/modelPdf.ts`).
 
-### Standard detail sheets on the Plans tab (PRs #593–#598)
+### Standard detail sheets on the Plans tab (PRs #593–#599)
 Typed `PlanPrimitive[]` sheets, painted by the same `planToSvg`, mapped from the
 design in `lib/planDetails.ts` and listed in `PlansPanel`.
 - **#593 `columnDetail.ts`** — typical column elevation: confinement zones ℓo,
@@ -158,8 +158,25 @@ design in `lib/planDetails.ts` and listed in `PlansPanel`.
   strip limits by zone and the §422.6.4.3 clearance (d/2 + 4h from the column);
   failures print on the sheet in red and under the card in the UI. Benchmark
   `slab-opening-trimmer` in `validation.ts`; suite **4359**.
-- **Remaining**: Phase 5 wall corner / intersection / construction-joint details;
-  Phase 6 fold every detail sheet into the PDF report and the take-off.
+- **#599 `wallDetail.ts`** — the three wall junctions, plus the two checks that
+  decide what they contain. **Corner**: an L corner bar with each leg a Class B
+  lap (§425.5.2), drawn offset beside the horizontal bar it continues, because
+  ending the horizontals at the corner face is what opens the corner.
+  **Intersection**: the branch wall's horizontals anchored into the through wall
+  — and the sheet CHECKS the hook fits, which for a ⌀12 bar (ℓdh 261) in a
+  200 mm wall (180 available) it does not, so the drawn detail becomes a Class B
+  lapped U-bar instead of a hook nobody could build. **Construction joint**:
+  §422.9 shear friction, where the wall's own VERTICAL bars crossing the joint
+  ARE the shear-friction steel — the sheet compares Avf provided against
+  required and prints the vertical spacing that would fix a shortfall, plus the
+  §422.9.4.4 interface ceiling and the §426.5.6 roughen-and-remove-laitance
+  note (μ 1.0 vs 0.6 is worth 67% more steel). Wall steel checked against Table
+  411.6.1 (the NSCP Grade-415 bar does NOT meet the fy ≥ 420 row → ρt 0.0025),
+  §411.7.2.1/§411.7.3.1 spacing and §411.7.2.3 two curtains. `WallScheduleRow`
+  now carries `barDia`/`fc`/`fy` so the sheets quote the designed bar. Benchmark
+  `shear-friction-avf`; suite **4397**.
+- **Remaining**: Phase 6 — fold every detail sheet into the PDF report and the
+  take-off.
 - **Drafting lesson, paid for three times**: assert on primitives and every sheet
   looks fine. RENDER it (headless Chromium at
   `/opt/pw-browsers/chromium-1194/chrome-linux/chrome --no-sandbox`, write the SVG

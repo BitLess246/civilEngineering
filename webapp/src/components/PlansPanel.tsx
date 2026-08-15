@@ -6,7 +6,8 @@ import { buildFootingDetail } from '../engine/footingDetail'
 import { buildColumnDetail } from '../engine/columnDetail'
 import { buildBeamDetail } from '../engine/beamDetail'
 import { buildSlabOpeningDetail } from '../engine/slabOpening'
-import { footingsForPlan, footingDetailBundles, columnDetailBundles, beamDetailBundles, slabOpeningBundles, type SoilInput } from '../lib/planDetails'
+import { buildWallCornerDetail, buildWallIntersectionDetail, buildWallJointDetail } from '../engine/wallDetail'
+import { footingsForPlan, footingDetailBundles, columnDetailBundles, beamDetailBundles, slabOpeningBundles, wallDetailBundles, type SoilInput } from '../lib/planDetails'
 
 const FLOOR_ORD = ['Ground', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Seventh', 'Eighth', 'Ninth', 'Tenth', 'Eleventh', 'Twelfth']
 /** Framed-level ordinal (1 = first floor above the base) → floor name. */
@@ -102,6 +103,23 @@ export function PlansPanel({ model, design, soil }: { model: StructuralModel; de
     })
   }, [model, design])
 
+  // Wall standard details — corner, intersection and construction joint per
+  // distinct wall type. Only shown when the model actually has shear walls.
+  const wallDetails = useMemo(() => {
+    if (!design) return []
+    return wallDetailBundles(design).map((b, i) => {
+      const sheets = [
+        buildWallCornerDetail(b.detail, { detailNo: String(3 * i + 1), sheetRef: 'S-09' }),
+        buildWallIntersectionDetail(b.detail, { detailNo: String(3 * i + 2), sheetRef: 'S-09' }),
+        buildWallJointDetail(b.detail, { detailNo: String(3 * i + 3), sheetRef: 'S-09' }),
+      ]
+      return {
+        mark: b.mark, detail: b.detail, result: sheets[0].result,
+        sheets: sheets.map((d) => ({ title: d.title, svg: planToSvg(d, 1100) })),
+      }
+    })
+  }, [design])
+
   return (
     <section className="space-y-4">
       <div className="flex items-center justify-between">
@@ -141,6 +159,29 @@ export function PlansPanel({ model, design, soil }: { model: StructuralModel; de
               {!d.result.ok && (
                 <ul className="space-y-0.5 px-1 text-[11px] leading-snug text-amber-700">
                   {d.result.notes.map((n) => <li key={n}>⚠ {n}</li>)}
+                </ul>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {wallDetails.length > 0 && (
+        <div className="space-y-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Wall standard details</h4>
+          {wallDetails.map((w) => (
+            <div key={w.mark} className="space-y-2">
+              <p className="text-[11px] text-slate-500">
+                {w.mark} — {Math.round(w.detail.t)} thk · {w.result.curtains} curtain{w.result.curtains > 1 ? 's' : ''} ·
+                ⌀{w.detail.barDia} @ {Math.round(w.detail.spacing)} horiz / {Math.round(w.detail.vertSpacing ?? w.detail.spacing)} vert
+              </p>
+              {w.sheets.map((sh) => (
+                <Sheet key={sh.title} title={sh.title} svg={sh.svg}
+                  file={`${sh.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.svg`} />
+              ))}
+              {!w.result.ok && (
+                <ul className="space-y-0.5 px-1 text-[11px] leading-snug text-amber-700">
+                  {w.result.notes.map((n) => <li key={n}>⚠ {n}</li>)}
                 </ul>
               )}
             </div>

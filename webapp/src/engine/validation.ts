@@ -40,6 +40,7 @@ import { boltGeomFromPositions, outOfPlaneBoltGroup, pryingAction } from './stee
 import { columnStabilityFactor, beamStabilityFactor, getWoodRef } from './woodDesign'
 import { designWoodSlab } from './woodSlab'
 import { designSlabOpening } from './slabOpening'
+import { shearFrictionSteel } from './wallDetail'
 import { velocity, hazenWilliamsHead, gpmToLps } from './waterSupply'
 import { designDrainage } from './drainage'
 import { designSepticTank } from './septicTank'
@@ -546,6 +547,20 @@ const slabOpeningTrimmer = (() => {
   return { manual: 1000 + 2 * ld, software: r.x.barLength }
 })()
 
+// ── Shear friction across a wall construction joint — NSCP §422.9 ──────────
+const shearFrictionJoint = (() => {
+  // 3.00 m × 200 mm wall web, Vu = 400 kN across a joint intentionally
+  // roughened to a 6 mm amplitude (μ = 1.0λ, Table 422.9.4.2), fy = 415 MPa.
+  //
+  // The manual side is the clause written out: Vn = μ·Avf·fy with φ = 0.75, so
+  // Avf = (Vu/φ)/(μ·fy). It also re-derives the §422.9.4.4 ceiling from its
+  // three limbs rather than reading the engine's answer back.
+  const Vu = 400, fy = 415, mu = 1.0
+  const manual = ((Vu / 0.75) * 1000) / (mu * fy)
+  const r = shearFrictionSteel({ Vu, Ac: 3000 * 200, fc: 21, fy, surface: 'roughened' })
+  return { manual, software: r.Avf }
+})()
+
 // ── Timber (wood) — NDS §3 / NSCP §6 ASD stability factors ──────────────────
 const woodCP = (() => {
   // 140 mm square DFL-SS post, le = 3.0 m, c = 0.8.  CF = 1 (d ≤ 300), CD = 1.
@@ -871,6 +886,12 @@ export const VALIDATION_CASES: ValidationCase[] = [
     reference: 'NSCP 408.5.4.2 / ACI 318-14 §8.5.4.2 + §25.4.2.3',
     formula: 'L = w_opening + 2·ℓd,  ℓd = fy·ψt·ψe·ψs·db / (1.1·λ·√f′c·(cb+Ktr)/db)',
     manual: slabOpeningTrimmer.manual, software: slabOpeningTrimmer.software, unit: 'mm', tol: 1e-9,
+  },
+  {
+    id: 'shear-friction-avf', category: 'RC', title: 'Shear friction — steel across a construction joint',
+    reference: 'NSCP 422.9 / ACI 318-14 §22.9, Table 422.9.4.2',
+    formula: 'Avf = (Vu/φ) / (μ·fy),  μ = 1.0λ roughened to 6 mm, φ = 0.75',
+    manual: shearFrictionJoint.manual, software: shearFrictionJoint.software, unit: 'mm²', tol: 1e-9,
   },
   {
     id: 'wood-cp', category: 'Timber', title: 'Timber column stability factor CP',

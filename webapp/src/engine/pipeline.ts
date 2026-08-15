@@ -211,6 +211,11 @@ export interface WallScheduleRow {
   lw: number; hw: number; thickness: number
   Vu: number
   design: ShearWallResult
+  /** The curtain's bar diameter, mm — the one the wall was designed with. */
+  barDia: number
+  /** Concrete and steel grades of the supporting member's section, MPa. */
+  fc: number
+  fy: number
   ok: boolean
   gov?: string
 }
@@ -1383,10 +1388,15 @@ function designFromRuns(
       if (v > Vu) { Vu = v; gov = run.name }
     }
     const sec = secOf(m.id)
+    // One diameter for the whole curtain; the SPACING is what designShearWall
+    // varies. Carried onto the row so the wall detail sheets quote the bar the
+    // wall was designed with instead of assuming one — the same fix the footing
+    // and slab rows already got.
+    const wallBarDia = 12
     const design = designShearWall({
-      lw, hw, thickness: w.thickness, fc: sec.fc, fy: sec.fy, Vu, barDia: 12,
+      lw, hw, thickness: w.thickness, fc: sec.fc, fy: sec.fy, Vu, barDia: wallBarDia,
     })
-    walls.push({ id: w.id, member: w.member, lw, hw, thickness: w.thickness, Vu, design, ok: design.shearOK, gov })
+    walls.push({ id: w.id, member: w.member, lw, hw, thickness: w.thickness, Vu, design, barDia: wallBarDia, fc: sec.fc, fy: sec.fy, ok: design.shearOK, gov })
   }
 
   const partialDesign = {

@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel } from '../engine/modelBuilder'
 import { designStructure } from '../engine/pipeline'
-import { footingsForPlan, footingDetailBundles, slabOpeningBundles } from './planDetails'
+import { footingsForPlan, footingDetailBundles, slabOpeningBundles, wallDetailBundles } from './planDetails'
 import { designSlabOpening } from '../engine/slabOpening'
+import { designWallDetail } from '../engine/wallDetail'
 import type { RectSection, ModelLoad } from '../engine/model'
 
 const section: RectSection = { id: 'S1', name: '400×400', b: 400, h: 400, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
@@ -107,5 +108,57 @@ describe('planDetails — slab opening trimmers', () => {
     expect(r.x.ld).toBeGreaterThanOrEqual(300)          // §425.4.2.3 floor
     expect(r.strip.zone).toBe('middle-middle')          // where it was placed
     expect(r.ok).toBe(true)
+  })
+})
+
+describe('planDetails — wall standard details', () => {
+  function withWalls() {
+    const m = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3], section, slabThickness: 150 })
+    m.loads = m.plates.flatMap((p): ModelLoad[] => [
+      { kind: 'area', plate: p.id, q: 4.0, cat: 'D' },
+      { kind: 'area', plate: p.id, q: 2.4, cat: 'L' },
+    ])
+    m.walls = [
+      { id: 'w0', member: m.members.find((x) => x.role === 'beam')!.id, height: 3, thickness: 200, shearWall: true },
+    ]
+    return { model: m, design: designStructure(m, soil)! }
+  }
+
+  it('bundles nothing when the model has no shear walls', () => {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section, slabThickness: 150 })
+    m.loads = m.plates.flatMap((p): ModelLoad[] => [{ kind: 'area', plate: p.id, q: 4, cat: 'D' }])
+    expect(wallDetailBundles(designStructure(m, soil)!)).toHaveLength(0)
+  })
+
+  it('bundles one set of details per wall type, off the DESIGNED curtains', () => {
+    const { design } = withWalls()
+    expect(design.walls.length).toBeGreaterThan(0)
+    const bundles = wallDetailBundles(design)
+    expect(bundles).toHaveLength(1)
+    const [b] = bundles
+    const row = design.walls[0]
+
+    expect(b.mark).toBe('W1')
+    expect(b.wall).toBe(row.id)
+    expect(b.detail.t).toBe(row.thickness)
+    expect(b.detail.barDia).toBe(row.barDia)         // carried on the row, not guessed
+    expect(b.detail.fc).toBe(section.fc)
+    expect(b.detail.fy).toBe(section.fy)
+    expect(b.detail.spacing).toBe(Math.round(row.design.horiz.spacing))
+    expect(b.detail.vertSpacing).toBe(Math.round(row.design.vert.spacing))
+    // the joint carries the web's own shear across the same length
+    expect(b.detail.Vu).toBe(row.Vu)
+    expect(b.detail.lw).toBe(row.lw)
+  })
+
+  it('the bundled input designs into a usable wall detail', () => {
+    const { design } = withWalls()
+    const r = designWallDetail(wallDetailBundles(design)[0].detail)
+    expect(r.curtains).toBe(1)                        // 200 mm wall
+    expect(r.sMax).toBe(450)
+    expect(r.lapB).toBeGreaterThanOrEqual(300)        // §425.5.2 floor
+    expect(r.ldh).toBeGreaterThanOrEqual(150)         // §425.4.3 floor
+    expect(r.joint).toBeDefined()
+    expect(r.joint!.mu).toBe(1.0)
   })
 })
