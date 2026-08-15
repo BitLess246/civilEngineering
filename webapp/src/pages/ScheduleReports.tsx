@@ -6,6 +6,7 @@ import { useScheduleSolve, type ScheduleSolve } from '../lib/useScheduleSolve'
 import { buildScheduleReport } from '../lib/scheduleReport'
 import { reportToCSV } from '../lib/scheduleCsv'
 import { PageHeader } from '../components/calc'
+import { SaveAlert } from '../components/SaveAlert'
 
 // Phase 9 — reports at /schedule/reports. Builds a structured report payload
 // (lib/scheduleReport, pure+tested) from the project + solve, previews it, and
@@ -107,6 +108,7 @@ export default function ScheduleReports() {
     <>
       <PageHeader title="Reports" badges={['PDF', 'Excel', 'CSV']} actions={project ? <Link to="/schedule" className={btn}>Grid</Link> : undefined} />
       <div className="mx-auto max-w-[1400px] space-y-4 p-5 sm:p-7">
+        <SaveAlert message={api.saveError} onDismiss={api.clearSaveError} />
         {!project ? (
           <div className="rounded-lg border border-dashed border-[#d6d3c9] bg-white px-6 py-16 text-center">
             <h2 className="text-[16px] font-bold text-[#0f1b2a]">No schedule open</h2>

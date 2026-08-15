@@ -45,6 +45,16 @@ export interface ScheduleProjectApi {
   rename(name: string): void
   importJSON(json: string): void
   exportJSON(): string
+  /**
+   * Why the last change is not on disk, or null when everything is saved.
+   *
+   * Non-null means the edit EXISTS ON SCREEN AND NOWHERE ELSE. Every schedule
+   * page renders `<SaveAlert>` for it; a page that forgets is caught by
+   * `saveAlert.test.ts`.
+   */
+  saveError: string | null
+  /** Dismiss the notice. It returns on the next failed save. */
+  clearSaveError(): void
 }
 
 export function useScheduleProject(): ScheduleProjectApi {
@@ -57,6 +67,7 @@ export function useScheduleProject(): ScheduleProjectApi {
     return id ? store.load(id) : null
   })
   const [projects, setProjects] = useState<ProjectSummary[]>(() => store.list())
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const refreshList = useCallback(() => setProjects(store.list()), [store])
 
@@ -67,8 +78,15 @@ export function useScheduleProject(): ScheduleProjectApi {
   }, [activeId, backend])
 
   const persist = useCallback((id: string, next: ScheduleProject) => {
-    store.save(id, next)
+    const outcome = store.save(id, next)
+    // THE EDIT IS KEPT WHETHER OR NOT IT PERSISTED, and the order matters. When
+    // storage is full the old code let the throw escape before this line, so
+    // `project` kept its previous value and the user watched their change
+    // disappear with no message — then retyped it and watched it disappear
+    // again. The in-memory copy is the only one they can still export or copy
+    // out, so it survives; what changes is that we say it is not saved.
     setProject(next)
+    setSaveError(outcome.ok ? null : outcome.message)
     refreshList()
   }, [store, refreshList])
 
@@ -114,6 +132,8 @@ export function useScheduleProject(): ScheduleProjectApi {
 
   const rename = useCallback((name: string) => update((d) => { d.meta.name = name }), [update])
 
+  const clearSaveError = useCallback(() => setSaveError(null), [])
+
   const importJSON = useCallback((json: string) => {
     const p = importProjectJSON(json)   // throws on invalid; caller surfaces it
     activate(newId(), p)
@@ -121,5 +141,8 @@ export function useScheduleProject(): ScheduleProjectApi {
 
   const exportJSON = useCallback(() => (project ? exportProjectJSON(project) : ''), [project])
 
-  return { project, activeId, projects, update, replace, loadSample, newProject, open, remove, rename, importJSON, exportJSON }
+  return {
+    project, activeId, projects, update, replace, loadSample, newProject, open, remove,
+    rename, importJSON, exportJSON, saveError, clearSaveError,
+  }
 }

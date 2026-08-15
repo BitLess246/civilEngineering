@@ -5,6 +5,7 @@ import { useScheduleProject } from '../lib/useScheduleProject'
 import { useScheduleSolve, type ScheduleSolve } from '../lib/useScheduleSolve'
 import { buildScale, buildTicks, barEdgeX, ZOOM, ZOOM_LEVELS, type ZoomLevel } from '../lib/gantt'
 import { PageHeader } from '../components/calc'
+import { SaveAlert } from '../components/SaveAlert'
 
 // Phase 5 — Gantt chart at /schedule/gantt. Reads the same store-backed project
 // and CPM/date solve as the grid. Status-coloured bars with a %-complete fill,
@@ -228,6 +229,7 @@ export default function ScheduleGantt() {
     <>
       <PageHeader title="Gantt Chart" badges={['CPM', 'baseline', 'progress']} actions={actions ?? undefined} />
       <div className="mx-auto max-w-[1400px] space-y-4 p-5 sm:p-7">
+        <SaveAlert message={api.saveError} onDismiss={api.clearSaveError} />
         {!project ? (
           <div className="rounded-lg border border-dashed border-[#d6d3c9] bg-white px-6 py-16 text-center">
             <h2 className="text-[16px] font-bold text-[#0f1b2a]">No schedule open</h2>

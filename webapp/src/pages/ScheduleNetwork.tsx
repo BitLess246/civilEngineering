@@ -4,6 +4,7 @@ import { useScheduleProject } from '../lib/useScheduleProject'
 import { useScheduleSolve } from '../lib/useScheduleSolve'
 import { layoutNetwork, edgePath, type NetActivity, type NetNode } from '../lib/network'
 import { PageHeader } from '../components/calc'
+import { SaveAlert } from '../components/SaveAlert'
 
 // Phase 6 — Activity-on-node network diagram at /schedule/network. Layered
 // left→right DAG (layout in lib/network.ts), status-neutral nodes with the CPM
@@ -119,6 +120,7 @@ export default function ScheduleNetwork() {
     <>
       <PageHeader title="Network Diagram" badges={['AON', 'critical path']} actions={actions ?? undefined} />
       <div className="mx-auto max-w-[1400px] space-y-4 p-5 sm:p-7">
+        <SaveAlert message={api.saveError} onDismiss={api.clearSaveError} />
         {!project ? (
           <div className="rounded-lg border border-dashed border-[#d6d3c9] bg-white px-6 py-16 text-center">
             <h2 className="text-[16px] font-bold text-[#0f1b2a]">No schedule open</h2>

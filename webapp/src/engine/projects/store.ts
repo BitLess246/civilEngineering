@@ -18,6 +18,15 @@
 
 import { isProject, cleanName, summaryOf, PROJECT_SCHEMA_VERSION, type Project, type ProjectSummary } from './model'
 import { withinProjectLimit, planOf, type Plan, type PlanId } from '../../lib/plans'
+import { writeItem } from '../storageWrite'
+
+/**
+ * What a save did. The stamped project comes back either way — on failure it
+ * is the copy the caller must keep in state, because it is now the only one.
+ */
+export type ProjectSaveOutcome =
+  | { ok: true; project: Project }
+  | { ok: false; reason: 'quota' | 'failed'; message: string; project: Project }
 
 const KEY_PREFIX = 'projects:'
 
@@ -67,7 +76,15 @@ export interface ProjectStore {
   list(): ProjectSummary[]
   load(id: string): Project | null
   /** Writes, stamping `updatedAt`. Never refuses on plan grounds — see the header. */
-  save(id: string, project: Project, now?: string): Project
+  /**
+   * Persist, reporting rather than throwing.
+   *
+   * `project` comes back either way — the stamped copy the caller should hold
+   * in state, saved or not. A full quota used to escape as a thrown
+   * `QuotaExceededError`, which took the user's edit off the screen with it.
+   * See `engine/storageWrite.ts`.
+   */
+  save(id: string, project: Project, now?: string): ProjectSaveOutcome
   remove(id: string): void
   exists(id: string): boolean
   count(): number
@@ -134,8 +151,11 @@ export function createStore(backend: StorageBackend = defaultBackend()): Project
         ...project,
         meta: { ...project.meta, name: cleanName(project.meta.name), updatedAt: now },
       }
-      backend.setItem(keyOf(id), JSON.stringify({ version: PROJECT_SCHEMA_VERSION, project: stamped }))
-      return stamped
+      const w = writeItem(backend.setItem, keyOf(id),
+        () => JSON.stringify({ version: PROJECT_SCHEMA_VERSION, project: stamped }))
+      return w.ok
+        ? { ok: true, project: stamped }
+        : { ok: false, reason: w.reason, message: w.message, project: stamped }
     },
 
     remove(id) {

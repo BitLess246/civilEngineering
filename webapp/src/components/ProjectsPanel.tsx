@@ -17,6 +17,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useProjects, conflictsIn } from '../lib/useProjects'
 import { readSession, writeSession, readOpenId, writeOpenId } from '../lib/modelSpaceSession'
+import { SaveAlert } from './SaveAlert'
 
 const when = (iso: string): string => {
   const d = new Date(iso)
@@ -74,6 +75,7 @@ export function ProjectsPanel() {
 
   return (
     <div className="space-y-4 p-4">
+      <SaveAlert message={api.saveError} onDismiss={api.clearSaveError} />
       {/* ── Save the open model ─────────────────────────────────────── */}
       <div>
         <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7a7568]">Save this project</p>

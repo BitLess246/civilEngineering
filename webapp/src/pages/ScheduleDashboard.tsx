@@ -11,6 +11,7 @@ import { useScheduleSolve, type ScheduleSolve } from '../lib/useScheduleSolve'
 import { PageHeader } from '../components/calc'
 import { GuidedTour } from '../components/GuidedTour'
 import { TourButton } from '../components/TourButton'
+import { SaveAlert } from '../components/SaveAlert'
 import { DASHBOARD_STEPS } from '../lib/scheduleDashboardTour'
 import { useTour } from '../lib/useTour'
 
@@ -231,6 +232,7 @@ export default function ScheduleDashboard() {
       <PageHeader title="Dashboard" badges={['progress', 'EVM', 'SPI/CPI']}
         actions={project ? <><TourButton onClick={tour.start} label="Guide" /><Link to="/schedule" className={btn}>Grid</Link></> : undefined} />
       <div className="mx-auto max-w-[1400px] space-y-4 p-5 sm:p-7">
+        <SaveAlert message={api.saveError} onDismiss={api.clearSaveError} />
         {!project ? (
           <div className="rounded-lg border border-dashed border-[#d6d3c9] bg-white px-6 py-16 text-center">
             <h2 className="text-[16px] font-bold text-[#0f1b2a]">No schedule open</h2>

@@ -61,8 +61,9 @@ describe('the local store', () => {
     const s = createStore(memoryBackend())
     s.save('a', emptyProject('x', T(0)), T(0))
     const later = s.save('a', s.load('a')!, T(90))
-    expect(later.meta.createdAt).toBe(T(0))
-    expect(later.meta.updatedAt).toBe(T(90))
+    expect(later.ok).toBe(true)
+    expect(later.project.meta.createdAt).toBe(T(0))
+    expect(later.project.meta.updatedAt).toBe(T(90))
   })
 
   it('lists newest first', () => {

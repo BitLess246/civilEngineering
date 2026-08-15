@@ -24,7 +24,7 @@ mechanism was established by reading, not observed.
 | S1 | Plan project-limit bypassed by one bulk INSERT | high | reproduced | ✅ #580 |
 | E3 | RC column P–M ignores biaxial interaction | high | computed | ✅ #578 |
 | R5 | `/truss` is a gated feature with no gate | high | reproduced | ✅ #581 |
-| R4 | Full storage silently refuses the save and reverts the edit | high | traced | ☐ |
+| R4 | Full storage silently refuses the save and reverts the edit | high | reproduced | ✅ #591 |
 | S2 | Guest subject derived from a caller-chosen header | medium | reproduced | ✅ #587 |
 | S3 | `claim_guest_run` takes its own caps from the caller | medium | reproduced | ✅ #587 |
 | S4 | Stale webhook retry can restore a cancelled plan | medium | read | ☐ |
@@ -264,11 +264,40 @@ read `stored.version`, which the header already claims it does.
 fallback keeps the sidebar and the user can navigate away. Key it on
 `useLocation().key` so it resets on navigation.
 
-**R4** — `useScheduleProject.ts:70` and `useProjects.ts:127` call `save()` then
-`setState()`, so a `QuotaExceededError` reverts the edit silently. Make
-`save()` return a verdict instead of throwing, and surface it — both callers
-already have somewhere to put a message. Silently swallowing is fine for a
-cache and **not** fine for the user's document.
+**R4 — ✅ SHIPPED (#591).** `useScheduleProject.ts:70` and `useProjects.ts:127`
+called `save()` then `setState()`, so a `QuotaExceededError` escaped into a
+React event handler and `setProject` never ran.
+
+Upgraded from *traced* to **reproduced**, in a real browser with
+`localStorage.setItem` throwing a genuine `QuotaExceededError`:
+
+| | pre-fix | post-fix |
+|---|---|---|
+| user's edit still on screen | **false — destroyed** | true |
+| anything said about it | none | the banner, with what to do |
+| uncaught page errors | `["quota"]` | none |
+
+`engine/storageWrite.ts` holds the one tested implementation: it detects the
+error across browsers (Chrome/Safari `QuotaExceededError`/22, Firefox
+`NS_ERROR_DOM_QUOTA_REACHED`/1014, old WebKit code 22 under another name) and
+never matches on message text, which is localised. Both stores now return a
+`SaveOutcome` rather than throwing.
+
+**The rule that came out of it:** a failed write must not destroy the edit. The
+in-memory copy is the only one the user can still export or copy out, so the
+callers keep the new state and mark it unsaved rather than reverting to
+whatever last fit on disk. `create()` is the exception and returns null — there
+the store IS the state, so a failed write means the project genuinely does not
+exist, and handing back an id would open an empty editor.
+
+Surfaced by `<SaveAlert>` on all seven schedule routes and in `ProjectsPanel`.
+`saveAlert.test.ts` fails if a page that persists ever stops rendering it —
+checked by removing it from one page.
+
+**Out of scope, flagged not fixed:** `engine/soils/store.ts` has the same
+pattern (`useInvestigation.ts:57`), untouched here. Same one-line fix once
+someone wants it; behaviour is unchanged, so this is a gap rather than a
+regression.
 
 **R3** — two tabs overwrite. `store.save` already returns `savedAt` and nothing
 reads it back. Hold a watermark ref, refuse a write whose on-disk `savedAt` is

@@ -64,7 +64,11 @@ export function ConstructionSchedule({ model, design }: { model: StructuralModel
     const linkedId = backend.getItem(SCHEDULE_LINK_KEY)
     const existing = linkedId && store.exists(linkedId) ? store.load(linkedId) : null
     const id = existing && linkedId ? linkedId : `p_${Date.now().toString(36)}`
-    store.save(id, existing ? mergeModelIntoProject(existing, fresh) : fresh)
+    const out = store.save(id, existing ? mergeModelIntoProject(existing, fresh) : fresh)
+    // Navigating to /schedule after a failed write would land the user on an
+    // empty scheduler with no explanation — the project they just asked for
+    // was never stored. Say so and stay put; the model is untouched.
+    if (!out.ok) { setDepErr(out.message); return }
     backend.setItem(SCHEDULE_LINK_KEY, id)
     backend.setItem(SCHEDULE_ACTIVE_KEY, id)
     setLinked(true)

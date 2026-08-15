@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   memoryBackend, createStore, exportProjectJSON, importProjectJSON,
-  SCHEDULE_SCHEMA_VERSION,
+  SCHEDULE_SCHEMA_VERSION, type StorageBackend,
 } from './store'
 import { sampleProject } from './sample'
 
@@ -11,8 +11,9 @@ describe('createStore over a memory backend', () => {
     expect(store.exists('p1')).toBe(false)
     expect(store.load('p1')).toBeNull()
 
-    const stored = store.save('p1', sampleProject(), '2026-08-01T00:00:00.000Z')
-    expect(stored.version).toBe(SCHEDULE_SCHEMA_VERSION)
+    const saved = store.save('p1', sampleProject(), '2026-08-01T00:00:00.000Z')
+    expect(saved.ok).toBe(true)
+    expect(saved.stored.version).toBe(SCHEDULE_SCHEMA_VERSION)
     expect(store.exists('p1')).toBe(true)
     expect(store.load('p1')!.meta.name).toBe(sampleProject().meta.name)
 
@@ -126,5 +127,56 @@ describe('one corrupt entry does not take the listing down', () => {
   it('accepts the current schema version', () => {
     const store = createStore(memoryBackend({ 'schedule:project:ok': good }))
     expect(store.load('ok')).not.toBeNull()
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// A FULL DISK IS AN ANSWER, NOT AN EXCEPTION.
+//
+// `save` used to let `QuotaExceededError` escape. The throw travelled out of
+// the hook's `persist` into a React event handler, so `setProject(next)` never
+// ran: the user's edit disappeared from the screen and nothing said why. They
+// retype it, and it disappears again.
+// ─────────────────────────────────────────────────────────────────────────
+describe('saving when storage is full', () => {
+  /** A backend whose writes fail exactly as a browser at its quota does. */
+  const fullBackend = (): StorageBackend => {
+    const inner = memoryBackend()
+    return {
+      ...inner,
+      setItem() {
+        throw Object.assign(new Error('quota exceeded'), { name: 'QuotaExceededError', code: 22 })
+      },
+    }
+  }
+
+  it('reports rather than throwing', () => {
+    const store = createStore(fullBackend())
+    let threw = false
+    let out
+    try { out = store.save('p1', sampleProject()) } catch { threw = true }
+    expect(threw, 'save must not throw — the caller loses the edit if it does').toBe(false)
+    expect(out!.ok).toBe(false)
+  })
+
+  it('names the reason, so the UI can say something useful', () => {
+    const out = createStore(fullBackend()).save('p1', sampleProject())
+    expect(out.ok).toBe(false)
+    expect(out.ok === false && out.reason).toBe('quota')
+    expect(out.ok === false && out.message).toMatch(/storage is full/i)
+  })
+
+  it('hands the project back anyway — it is now the only copy', () => {
+    // The caller keeps this in state. Reverting to what happened to fit on disk
+    // would destroy the very work the user is being told to export.
+    const p = sampleProject()
+    const out = createStore(fullBackend()).save('p1', p)
+    expect(out.stored.project).toBe(p)
+    expect(out.stored.version).toBe(SCHEDULE_SCHEMA_VERSION)
+  })
+
+  it('a working backend still reports ok', () => {
+    const out = createStore(memoryBackend()).save('p1', sampleProject())
+    expect(out.ok).toBe(true)
   })
 })
