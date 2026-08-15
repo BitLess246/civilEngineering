@@ -82,9 +82,12 @@ export interface ColumnDetailBundle { mark: string; detail: ColumnDetailInput }
  * `ColumnScheduleRow` — the confinement zone and both tie spacings were already
  * being computed by `columnDesign` and shown only as schedule numbers.
  *
- * `lapB` is left to the caller: the Class B splice depends on bar size, cover
- * and concrete strength through `calcDevLength`, and the sheet is honest
- * without it rather than guessing one.
+ * `lapB`/`lapC` now come off the schedule row — `pipeline` computes them once
+ * per column from the adopted section via `calcDevLength` (§425.5), so the
+ * sheet prints the real splice length instead of omitting it.
+ *
+ * A column that CHANGES SECTION between storeys also gets its §410.7.4 offset
+ * check, since the crank is part of this detail and nothing checked it before.
  */
 export function columnDetailBundles(model: StructuralModel, design: StructureDesign): ColumnDetailBundle[] {
   const secById = new Map(model.sections.map((s) => [s.id, s]))
@@ -121,6 +124,8 @@ export function columnDetailBundles(model: StructuralModel, design: StructureDes
         barDia: sec.barDia ?? 20,
         tieDia: sec.tieDia ?? 10,
         loZone: r.seismicLoZone,
+        lapB: r.lapB,
+        lapC: r.lapC,
         sConf: r.seismicSConf ?? r.tieSpacingFinal,
         sOut: r.seismicSOut ?? r.tieSpacingFinal,
         cover: sec.cover ?? 40,

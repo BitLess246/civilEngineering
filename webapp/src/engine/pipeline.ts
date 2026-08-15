@@ -21,6 +21,7 @@ import { designPrestressed, type PrestressedResult } from './prestressedBeam'
 import { minBeamThickness, type BeamSupport } from './beamDeflection'
 import { memberServiceDeflection, type MemberDeflectionResult } from './memberDeflection'
 import { designAxialColumn, capacityAtEccentricity, interaction, breslerReciprocal, type BarLayout } from './columnDesign'
+import { calcDevLength } from './devLength'
 import { designSquareFooting, type SquareFootingResult } from './isolatedFooting'
 import { designCombinedFooting, type CombinedFootingResult } from './combinedFooting'
 import { designSlabDDM, type SlabDesignResult } from './slabDDM'
@@ -146,6 +147,10 @@ export interface ColumnScheduleRow {
   seismicSConf?: number
   /** Max tie spacing outside confinement zone, mm (smf only). */
   seismicSOut?: number
+  /** Class B tension lap, mm — §425.5.2 (1.3·ℓd). Drawn on the column detail. */
+  lapB?: number
+  /** Compression lap, mm — §425.5.5. Used where the bars never see tension. */
+  lapC?: number
   ok: boolean
   gov?: string
 }
@@ -1136,7 +1141,19 @@ function designFromRuns(
           const row = designColumnRow(mr, sec, sysOpts, opts.colLayout ?? 'two-face')
           if (row.util > bestUtil) { bestUtil = row.util; best = row; gov = run.name }
         }
-        if (best) columns.push({ ...best, gov })
+        if (best) {
+          // Splice lengths for the detail sheet. §425.5 is a property of the
+          // BAR and the concrete, not of the load case, so it is computed once
+          // from the adopted section rather than per combo. cbKtr_db = 2.5 is
+          // the code cap and the realistic value for a tied column, where the
+          // bar is confined by ties on all four sides.
+          const dl = calcDevLength({
+            db: sec.barDia ?? 20,
+            fc: sec.fc ?? 21, fy: sec.fy ?? 415,
+            topBar: false, epoxy: 'none', lambda: 1, cbKtr_db: 2.5,
+          })
+          columns.push({ ...best, gov, lapB: dl.ls_B, lapC: dl.lsc })
+        }
       }
     }
   }
