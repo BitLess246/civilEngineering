@@ -1,18 +1,21 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel } from '../engine/modelBuilder'
 import { designStructure } from '../engine/pipeline'
-import { footingsForPlan, footingDetailBundles } from './planDetails'
+import { footingsForPlan, footingDetailBundles, slabOpeningBundles } from './planDetails'
+import { designSlabOpening } from '../engine/slabOpening'
 import type { RectSection, ModelLoad } from '../engine/model'
 
 const section: RectSection = { id: 'S1', name: '400×400', b: 400, h: 400, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
 const soil = { qAllow: 200, gammaSoil: 18, gammaConc: 24, H: 1.5 }
 
-function designed() {
+function designed(withOpening = false) {
   const m = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3], section, slabThickness: 150 })
   m.loads = m.plates.flatMap((p): ModelLoad[] => [
     { kind: 'area', plate: p.id, q: 4.0, cat: 'D' },
     { kind: 'area', plate: p.id, q: 2.4, cat: 'L' },
   ])
+  // a stair void in the first panel, clear of both column strips
+  if (withOpening) m.plates[0].openings = [{ id: 'O1', kind: 'rect', x: 2.0, y: 1.8, w: 1.0, h: 0.8 }]
   return { model: m, design: designStructure(m, soil)! }
 }
 
@@ -59,5 +62,50 @@ describe('planDetails — design → plan/detail inputs', () => {
     expect(b0.column.shape).toBe('tied')
     expect(b0.column.b).toBe(section.b)
     expect(b0.column.bars).toBeGreaterThanOrEqual(4)
+  })
+})
+
+describe('planDetails — slab opening trimmers', () => {
+  it('bundles nothing when no panel has an opening', () => {
+    const { model, design } = designed()
+    expect(slabOpeningBundles(model, design)).toHaveLength(0)
+  })
+
+  it('bundles one detail per opening, off the DESIGNED mat of its own panel', () => {
+    const { model, design } = designed(true)
+    const bundles = slabOpeningBundles(model, design)
+    expect(bundles).toHaveLength(1)
+    const [b] = bundles
+    expect(b.plate).toBe(model.plates[0].id)
+    expect(b.opening).toBe('O1')
+    expect(b.mark).toBe('S1/O1')
+
+    const row = design.slabs.find((s) => s.plate === b.plate)!
+    // panel geometry and mat come from the pipeline, not from a guess
+    expect(b.detail.lx).toBeCloseTo(row.lx, 9)
+    expect(b.detail.ly).toBeCloseTo(row.ly, 9)
+    expect(b.detail.h).toBeCloseTo(row.design.h, 9)
+    expect(b.detail.barDia).toBe(row.barDia)
+    expect(b.detail.fc).toBe(section.fc)
+    expect(b.detail.fy).toBe(section.fy)
+
+    // the spacing detailed is the TIGHTEST the panel was designed for, so the
+    // replacement can never be short of what the hole actually cut
+    const everySpacing = (d: typeof row.design.x) =>
+      d.locations.flatMap((l) => [l.column.spacing, l.middle.spacing])
+    expect(b.detail.spacingX).toBeCloseTo(Math.min(...everySpacing(row.design.x)), 9)
+    expect(b.detail.spacingY).toBeCloseTo(Math.min(...everySpacing(row.design.y)), 9)
+  })
+
+  it('the bundled input designs into a usable trimmer detail', () => {
+    const { model, design } = designed(true)
+    const r = designSlabOpening(slabOpeningBundles(model, design)[0].detail)
+    expect(r.x.interrupted).toBeGreaterThan(0)
+    expect(r.y.interrupted).toBeGreaterThan(0)
+    expect(2 * r.x.eachSide).toBeGreaterThanOrEqual(r.x.interrupted)
+    expect(2 * r.y.eachSide).toBeGreaterThanOrEqual(r.y.interrupted)
+    expect(r.x.ld).toBeGreaterThanOrEqual(300)          // §425.4.2.3 floor
+    expect(r.strip.zone).toBe('middle-middle')          // where it was placed
+    expect(r.ok).toBe(true)
   })
 })

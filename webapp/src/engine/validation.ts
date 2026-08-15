@@ -39,6 +39,7 @@ import { solveWeldedConnection } from './weldedConnection'
 import { boltGeomFromPositions, outOfPlaneBoltGroup, pryingAction } from './steelDesign'
 import { columnStabilityFactor, beamStabilityFactor, getWoodRef } from './woodDesign'
 import { designWoodSlab } from './woodSlab'
+import { designSlabOpening } from './slabOpening'
 import { velocity, hazenWilliamsHead, gpmToLps } from './waterSupply'
 import { designDrainage } from './drainage'
 import { designSepticTank } from './septicTank'
@@ -525,6 +526,26 @@ const pryingT0 = (() => {
   return { manual: Math.sqrt((4 * 60 * 1000 * 35) / (0.9 * 248 * 70)), software: r.t_no_prying }
 })()
 
+// ── Slab opening trimmer bars — NSCP §408.5.4.2 + §425.4.2.3 ────────────────
+const slabOpeningTrimmer = (() => {
+  // 6.0 × 5.0 m panel, h = 150 mm, ⌀12 @ 200 mat both ways, f'c 21 / fy 415,
+  // opening 1.00 × 0.80 m at (2.50, 2.00) — clear of both column strips.
+  //
+  // The manual side rebuilds the whole replacement bar from the inputs: the
+  // §425.4.2.3 development length from its own formula (cb = min(cover + db/2,
+  // s/2) = 26 mm, Ktr = 0 in a mat, ψt = ψe = λ = 1, ψs = 0.8 for db ≤ 20), and
+  // the bar as the opening plus ℓd beyond each face. It does NOT call
+  // calcDevLength, so a wrong confinement term or a dropped ψ shows up here.
+  const db = 12, fc = 21, fy = 415, s = 200, cover = 20
+  const cb = Math.min(cover + db / 2, s / 2)
+  const ld = (fy * 0.8 * db) / (1.1 * Math.sqrt(fc) * (cb / db))
+  const r = designSlabOpening({
+    lx: 6, ly: 5, h: 150, barDia: db, spacingX: s, spacingY: s, cover, fc, fy,
+    opening: { id: 'O1', kind: 'rect', x: 2.5, y: 2.0, w: 1.0, h: 0.8 },
+  })
+  return { manual: 1000 + 2 * ld, software: r.x.barLength }
+})()
+
 // ── Timber (wood) — NDS §3 / NSCP §6 ASD stability factors ──────────────────
 const woodCP = (() => {
   // 140 mm square DFL-SS post, le = 3.0 m, c = 0.8.  CF = 1 (d ≤ 300), CD = 1.
@@ -844,6 +865,12 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'prying-t0', category: 'Connections', title: 'Prying — thickness eliminating prying',
     reference: 'AISC Manual Part 9 / §J3.9', formula: 't₀ = √(4·φBn·b′ / (φf·Fy·p))',
     manual: pryingT0.manual, software: pryingT0.software, unit: 'mm', tol: 1e-9,
+  },
+  {
+    id: 'slab-opening-trimmer', category: 'RC', title: 'Slab opening — trimmer bar length',
+    reference: 'NSCP 408.5.4.2 / ACI 318-14 §8.5.4.2 + §25.4.2.3',
+    formula: 'L = w_opening + 2·ℓd,  ℓd = fy·ψt·ψe·ψs·db / (1.1·λ·√f′c·(cb+Ktr)/db)',
+    manual: slabOpeningTrimmer.manual, software: slabOpeningTrimmer.software, unit: 'mm', tol: 1e-9,
   },
   {
     id: 'wood-cp', category: 'Timber', title: 'Timber column stability factor CP',
