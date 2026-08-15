@@ -177,3 +177,68 @@ describe('validateMesh — column cage bar count', () => {
     expect(validateMesh(m).filter((i) => i.code.startsWith('BAR_COUNT'))).toEqual([])
   })
 })
+
+describe('validateMesh — slab openings', () => {
+  // A 6 × 5 m panel on four corner nodes at y = 3. `openings` are metres from
+  // corner 0 along the panel's two edges, so the panel bounds them directly.
+  const panel = (openings: NonNullable<StructuralModel['plates'][number]['openings']>): StructuralModel => {
+    const m = emptyModel()
+    m.nodes = [
+      { id: 'n0', x: 0, y: 3, z: 0 }, { id: 'n1', x: 6, y: 3, z: 0 },
+      { id: 'n2', x: 6, y: 3, z: 5 }, { id: 'n3', x: 0, y: 3, z: 5 },
+    ]
+    // Supports matter here for a non-obvious reason: validateMesh RETURNS
+    // EARLY on a model with none ("every component is a rigid body; one message
+    // is enough"), so a fixture without them never reaches the plate rules at
+    // all — the first version of this test passed vacuously.
+    m.supports = m.nodes.map((n) => ({ node: n.id, fixity: 'fixed' as const }))
+    m.plates = [{ id: 'P1', corners: ['n0', 'n1', 'n2', 'n3'], role: 'slab', thickness: 150, openings }]
+    return m
+  }
+  const rect = (id: string, x: number, y: number, w: number, h: number) =>
+    ({ id, kind: 'rect' as const, x, y, w, h })
+
+  // The bare fixture has no members, so `isolated-node` fires on it — a real,
+  // unrelated rule. These assertions are about openings, so they look at the
+  // OPENING_* codes rather than demanding a globally empty result.
+  const openingCodes = (m: StructuralModel) =>
+    [...codes(m)].filter((c) => c.startsWith('OPENING_')).sort()
+
+  it('a solid panel and a well-placed opening raise nothing', () => {
+    expect(openingCodes(panel([]))).toEqual([])
+    expect(openingCodes(panel([rect('O1', 1, 1, 1.2, 0.9)]))).toEqual([])
+    expect(openingCodes(panel([{ id: 'O1', kind: 'circle', x: 3, y: 2.5, r: 0.4 }]))).toEqual([])
+  })
+
+  it('flags an opening extending past the panel edge', () => {
+    expect(codes(panel([rect('O1', 5.5, 1, 1.0, 0.5)]))).toContain('OPENING_OUTSIDE')
+    expect(codes(panel([rect('O1', -0.2, 1, 1.0, 0.5)]))).toContain('OPENING_OUTSIDE')
+    // a circle is bounded by its radius, not its centre
+    expect(codes(panel([{ id: 'O1', kind: 'circle', x: 0.2, y: 2.5, r: 0.5 }]))).toContain('OPENING_OUTSIDE')
+    expect(codes(panel([{ id: 'O1', kind: 'circle', x: 0.6, y: 2.5, r: 0.5 }]))).not.toContain('OPENING_OUTSIDE')
+  })
+
+  it('flags a non-positive size', () => {
+    expect(codes(panel([rect('O1', 1, 1, 0, 0.5)]))).toContain('OPENING_SIZE')
+    expect(codes(panel([{ id: 'O1', kind: 'circle', x: 3, y: 2.5, r: 0 }]))).toContain('OPENING_SIZE')
+  })
+
+  it('flags overlapping openings — they would double-count the interrupted bars', () => {
+    expect(codes(panel([rect('O1', 1, 1, 2, 2), rect('O2', 2, 2, 2, 2)]))).toContain('OPENING_OVERLAP')
+    // touching edge-to-edge is not overlapping
+    expect(codes(panel([rect('O1', 1, 1, 1, 1), rect('O2', 2, 1, 1, 1)]))).not.toContain('OPENING_OVERLAP')
+  })
+
+  it('flags duplicate opening ids within a panel', () => {
+    expect(codes(panel([rect('O1', 1, 1, 1, 1), rect('O1', 3, 1, 1, 1)]))).toContain('OPENING_DUP_ID')
+  })
+
+  it('warns when the opening is most of the panel — that is not a slab with a hole', () => {
+    // 5 × 4 of a 6 × 5 panel is 67%: the strips left over are beams, and the
+    // slab engines' assumptions no longer describe what is being built.
+    const c = codes(panel([rect('O1', 0.5, 0.5, 5, 4)]))
+    expect(c).toContain('OPENING_LARGE')
+    expect(hasMeshErrors(validateMesh(panel([rect('O1', 0.5, 0.5, 5, 4)])))).toBe(false)  // warning, not error
+    expect(codes(panel([rect('O1', 1, 1, 1.2, 0.9)]))).not.toContain('OPENING_LARGE')
+  })
+})
