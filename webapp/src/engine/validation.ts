@@ -41,6 +41,7 @@ import { columnStabilityFactor, beamStabilityFactor, getWoodRef } from './woodDe
 import { designWoodSlab } from './woodSlab'
 import { designSlabOpening } from './slabOpening'
 import { shearFrictionSteel } from './wallDetail'
+import { designBeamColumnJoint } from './beamColumnJoint'
 import { velocity, hazenWilliamsHead, gpmToLps } from './waterSupply'
 import { designDrainage } from './drainage'
 import { designSepticTank } from './septicTank'
@@ -561,6 +562,29 @@ const shearFrictionJoint = (() => {
   return { manual, software: r.Avf }
 })()
 
+// ── Beam–column joint shear — NSCP §418.8.4 ────────────────────────────────
+const jointShear = (() => {
+  // 400 × 400 column, 250 × 300 beam framing in one side with 2-⌀28 top bars,
+  // joint confined on three faces, f'c 21 / fy 415.
+  //
+  // The manual side writes both clauses out — φγλ√f'c·Aj for the strength and
+  // 1.25·fy·As for the demand — and takes the effective width from its own
+  // least-of rather than from the engine. The pair is reported as the ratio
+  // Vu/φVn so one row exercises both halves of the check.
+  const fc = 21, fy = 415, colB = 400, colH = 400, beamB = 250, db = 28
+  const bj = Math.min(beamB + colH, beamB + colB, colB)      // 400
+  const Aj = bj * colH
+  const phiVn = 0.85 * 1.2 * Math.sqrt(fc) * Aj / 1000       // kN
+  const As = 2 * (Math.PI / 4) * db * db
+  const Vu = (1.25 * fy * As) / 1000                          // kN
+  const r = designBeamColumnJoint({
+    colB, colH, colBarDia: 20, colBars: 8, hoopDia: 10, hoopSpacing: 100,
+    beamB, beamH: 300, beamBarDia: db, topBars: 2, botBars: 2,
+    confinement: 'three-faces', fc, fy, cover: 40,
+  })
+  return { manual: Vu / phiVn, software: r.Vu / r.phiVn }
+})()
+
 // ── Timber (wood) — NDS §3 / NSCP §6 ASD stability factors ──────────────────
 const woodCP = (() => {
   // 140 mm square DFL-SS post, le = 3.0 m, c = 0.8.  CF = 1 (d ≤ 300), CD = 1.
@@ -892,6 +916,12 @@ export const VALIDATION_CASES: ValidationCase[] = [
     reference: 'NSCP 422.9 / ACI 318-14 §22.9, Table 422.9.4.2',
     formula: 'Avf = (Vu/φ) / (μ·fy),  μ = 1.0λ roughened to 6 mm, φ = 0.75',
     manual: shearFrictionJoint.manual, software: shearFrictionJoint.software, unit: 'mm²', tol: 1e-9,
+  },
+  {
+    id: 'joint-shear-ratio', category: 'RC', title: 'Beam–column joint — shear utilisation',
+    reference: 'NSCP 418.8.4 / ACI 318-14 §18.8, Table 418.8.4.3',
+    formula: 'Vu/φVn,  Vu = 1.25·fy·As,  φVn = 0.85·γ·λ·√f′c·bj·h',
+    manual: jointShear.manual, software: jointShear.software, unit: '—', tol: 1e-9,
   },
   {
     id: 'wood-cp', category: 'Timber', title: 'Timber column stability factor CP',

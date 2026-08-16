@@ -22,14 +22,15 @@ import { buildColumnDetail } from '../engine/columnDetail'
 import { buildBeamDetail } from '../engine/beamDetail'
 import { buildSlabOpeningDetail } from '../engine/slabOpening'
 import { buildWallCornerDetail, buildWallIntersectionDetail, buildWallJointDetail } from '../engine/wallDetail'
+import { buildBeamColumnJointDetail } from '../engine/beamColumnJoint'
 import {
   footingsForPlan, footingDetailBundles, columnDetailBundles, beamDetailBundles,
-  slabOpeningBundles, wallDetailBundles, type SoilInput,
+  slabOpeningBundles, wallDetailBundles, jointDetailBundles, type SoilInput,
 } from './planDetails'
 
 export type SheetGroup =
   | 'Plans' | 'Beam details' | 'Column details' | 'Footing details'
-  | 'Slab opening details' | 'Wall standard details'
+  | 'Slab opening details' | 'Wall standard details' | 'Beam–column joint details'
 
 export interface PlanSheet {
   /** Stable identity — also the SVG download file stem. */
@@ -62,6 +63,7 @@ const REF: Record<SheetGroup, string> = {
   'Beam details': 'S-07',
   'Slab opening details': 'S-08',
   'Wall standard details': 'S-09',
+  'Beam–column joint details': 'S-10',
 }
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -144,6 +146,19 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
       key: `slab-opening-${slug(b.mark)}`, group: 'Slab opening details',
       title: `${b.mark} — ${w}×${h} opening`,
       subtitle: `${d.result.x.eachSide}-⌀${b.detail.barDia} + ${d.result.y.eachSide}-⌀${b.detail.barDia} ea. side`,
+      warnings: d.result.notes,
+      drawing: d,
+    })
+  })
+
+  // The joint comes after the members that meet in it — the sheet only makes
+  // sense once the beam and column details have said what they are.
+  jointDetailBundles(model, design).forEach((b, i) => {
+    const d = buildBeamColumnJointDetail(b.detail, { detailNo: String(i + 1), sheetRef: ref('Beam–column joint details') })
+    out.push({
+      key: `beam-column-joint-${slug(b.mark)}`, group: 'Beam–column joint details',
+      title: d.title,
+      subtitle: `col ${b.detail.colB}×${b.detail.colH} · beam ${b.detail.beamB}×${b.detail.beamH} ⌀${b.detail.beamBarDia}`,
       warnings: d.result.notes,
       drawing: d,
     })

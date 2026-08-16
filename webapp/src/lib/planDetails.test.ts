@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel } from '../engine/modelBuilder'
 import { designStructure } from '../engine/pipeline'
-import { footingsForPlan, footingDetailBundles, slabOpeningBundles, wallDetailBundles } from './planDetails'
+import { footingsForPlan, footingDetailBundles, slabOpeningBundles, wallDetailBundles, jointDetailBundles } from './planDetails'
 import { designSlabOpening } from '../engine/slabOpening'
 import { designWallDetail } from '../engine/wallDetail'
+import { designBeamColumnJoint } from '../engine/beamColumnJoint'
 import type { RectSection, ModelLoad } from '../engine/model'
 
 const section: RectSection = { id: 'S1', name: '400×400', b: 400, h: 400, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
@@ -160,5 +161,48 @@ describe('planDetails — wall standard details', () => {
     expect(r.ldh).toBeGreaterThanOrEqual(150)         // §425.4.3 floor
     expect(r.joint).toBeDefined()
     expect(r.joint!.mu).toBe(1.0)
+  })
+})
+
+describe('planDetails — beam–column joints', () => {
+  const { model, design } = designed()
+
+  it('bundles one joint per distinct beam-into-column type', () => {
+    const bundles = jointDetailBundles(model, design)
+    expect(bundles.length).toBeGreaterThan(0)
+    expect(new Set(bundles.map((b) => b.mark)).size).toBe(bundles.length)
+    for (const b of bundles) {
+      // geometry off the two sections that meet, not invented
+      expect(b.detail.colB).toBe(section.b)
+      expect(b.detail.colH).toBe(section.h)
+      expect(b.detail.beamBarDia).toBeGreaterThan(0)
+      expect(b.detail.topBars).toBeGreaterThanOrEqual(2)
+      expect(b.detail.botBars).toBeGreaterThanOrEqual(2)
+      expect(b.detail.fc).toBe(section.fc)
+      expect(model.nodes.some((n) => n.id === b.node)).toBe(true)
+    }
+  })
+
+  it('classifies the confinement from the beams that actually arrive', () => {
+    const bundles = jointDetailBundles(model, design)
+    // The 2×1-bay grid has corner nodes (2 beams at right angles → 'other'),
+    // edge nodes (3 beams) and one interior node (4 beams).
+    const classes = new Set(bundles.map((b) => b.detail.confinement))
+    expect(classes.size).toBeGreaterThan(1)
+    expect([...classes].every((c) =>
+      ['four-faces', 'three-faces', 'two-opposite', 'other'].includes(c!))).toBe(true)
+  })
+
+  it('does NOT take the §418.8.2.1 column-shear credit the schedule cannot confirm', () => {
+    for (const b of jointDetailBundles(model, design)) expect(b.detail.Vcol).toBeUndefined()
+  })
+
+  it('the bundled input designs into a usable joint check', () => {
+    const r = designBeamColumnJoint(jointDetailBundles(model, design)[0].detail)
+    expect(r.Aj).toBeGreaterThan(0)
+    expect(r.phiVn).toBeGreaterThan(0)
+    expect(r.Vu).toBeGreaterThan(0)
+    expect(r.colDepthMin).toBe(20 * jointDetailBundles(model, design)[0].detail.beamBarDia)
+    expect(r.ldh).toBeGreaterThanOrEqual(150)
   })
 })
