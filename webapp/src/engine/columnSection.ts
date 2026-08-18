@@ -72,9 +72,23 @@ export function columnSectionPrimitives(
   const tRr = Math.max(br, 2.5 * p.tieDia * sc)
   P.push({ kind: 'path', cmds: roundRect(cx - hw + inset, cy - hh + inset, W - 2 * inset, Hh - 2 * inset, tRr), stroke: rebar, width: sw, fill: 'none', join: 'round', closed: true })
 
+  // §425.3.2 — the seismic-hook EXTENSION beyond the bend, max(6·db, 75) mm on
+  // the TIE diameter. It used to be `rw * 1.6`, a pure drawing constant: the
+  // section read correctly as a diagram but its hook legs were not to the
+  // dimension the schedule and the notes quote, so a ⌀10 tie drew a 27 mm leg
+  // where the detail calls for 75. Drawn to scale it is the same length a
+  // detailer would measure off the sheet.
+  const hookExt = Math.max(6 * p.tieDia, 75) * sc
+
   // interior crossties — 180° hooks around the interior face bars
-  const rw = br + (p.tieDia / 2) * sc, stub = rw * 1.6, NS = 12
+  const rw = br + (p.tieDia / 2) * sc, NS = 12
+  // The extension runs back toward the far bar, so on a narrow column it is
+  // capped short of it — a leg drawn past the bar it returns to would be
+  // reporting a tie that cannot be bent, not a longer hook.
+  const stubFor = (A: Pt, B: Pt) =>
+    Math.min(hookExt, Math.hypot(B[0] - A[0], B[1] - A[1]) * 0.4)
   const cTie = (A: Pt, B: Pt, u: Pt, od: Pt): Pt[] => {
+    const stub = stubFor(A, B)
     const pts: Pt[] = [[A[0] + od[0] * rw + u[0] * stub, A[1] + od[1] * rw + u[1] * stub]]
     for (let j = 0; j <= NS; j++) { const t = (Math.PI * j) / NS, c = Math.cos(t), sn = Math.sin(t); pts.push([A[0] + (od[0] * c - u[0] * sn) * rw, A[1] + (od[1] * c - u[1] * sn) * rw]) }
     pts.push([B[0] - od[0] * rw, B[1] - od[1] * rw])
@@ -86,9 +100,10 @@ export function columnSectionPrimitives(
   for (const sy of sideY) stroke(cTie([x1, sy], [x2, sy], [1, 0], [0, sy <= midY ? 1 : -1]))
 
   // 135° tie hook at the top-left corner bar — the two hook legs run TANGENT to
-  // the corner bar on either side (two tangent lines on the circle)
+  // the corner bar on either side (two tangent lines on the circle), each the
+  // §425.3.2 extension long. Was `stub * 1.9`, another drawing constant.
   const inv = Math.SQRT1_2, d: Pt = [inv, inv], nrm: Pt = [-inv, inv]   // dir into core, tangent normal
-  const off = br + (p.tieDia / 2) * sc, hk = stub * 1.9
+  const off = br + (p.tieDia / 2) * sc, hk = hookExt
   for (const s of [1, -1]) {
     const hs: Pt = [x1 + s * nrm[0] * off, yT + s * nrm[1] * off]
     stroke([hs, [hs[0] + d[0] * hk, hs[1] + d[1] * hk]])

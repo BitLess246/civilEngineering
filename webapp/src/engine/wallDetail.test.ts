@@ -304,6 +304,18 @@ describe('buildWallIntersectionDetail', () => {
     // that cannot be built, so the anchor becomes a Class B lapped U-bar.
     expect(d.result.ldhFits).toBe(false)
     expect(d.result.ldhAvail).toBe(180)
+    // A WALL deducts the clear cover and nothing else — no hoop crosses it and
+    // the bend turns against the far curtain, so the column's other two terms
+    // (tie Ø, far-face vertical Ø) do not exist here. Same helper, same concept,
+    // its own geometry: 200 − 20 = 180, not the 200 − 20 − tie − bar a column
+    // would take.
+    expect(d.result.ldhClear).toBe(20)
+    expect(d.result.ldhAvail).toBe(wall.t - d.result.ldhClear)
+    // …and the drawn leg sits at that same clear, so the sheet cannot show a
+    // bar at one cover while the check measures another
+    const legs = (d.primitives.filter((p) => p.kind === 'path') as { cmds: { y: number }[] }[])
+      .map((p) => p.cmds[1].y)
+    for (const y of legs) expect(y).toBeCloseTo(d.result.ldhClear / 1000, 9)
     const paths = d.primitives.filter((p) => p.kind === 'path') as { cmds: { x: number; y: number }[] }[]
     expect(paths).toHaveLength(d.result.curtains)
     for (const p of paths) {
