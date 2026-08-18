@@ -29,7 +29,7 @@
 // Units: wall length m; thickness, bar sizes, spacings and lengths mm; forces
 // kN; stresses MPa.
 // ─────────────────────────────────────────────────────────────────────────
-import { calcDevLength } from './devLength'
+import { calcDevLength, hookClearToFace, hookEmbedmentAvailable } from './devLength'
 import type { PlanPrimitive, Drawing } from './planRenderer'
 
 // ── §422.9 shear friction ──────────────────────────────────────────────────
@@ -200,8 +200,14 @@ export interface WallDetailResult {
   ldh: number
   /** 12db hook tail, §425.3.1. */
   hookTail: number
-  /** Straight embedment available for that hook in the through wall, mm. */
+  /** Straight embedment available for that hook in the through wall, mm —
+   *  t − cover. A wall deducts the clear cover ONLY: no hoop crosses it and the
+   *  bend turns against the far curtain, not behind a column vertical. */
   ldhAvail: number
+  /** Clear from the far FACE to the outside of the bend, mm — the cover, and
+   *  only the cover. The detail places the hook leg here, so the drawing and
+   *  `ldhAvail` cannot drift apart. */
+  ldhClear: number
   /**
    * ℓdh fits inside the through wall.
    *
@@ -281,7 +287,15 @@ export function designWallDetail(i: WallDetailInput): WallDetailResult {
   // of the hook, and all of that has to be INSIDE the through wall. A 200 mm
   // wall offers 180 mm and a ⌀12 hook needs 261 — the hook detail is simply not
   // available there, however carefully it is drawn.
-  const ldhAvail = Math.max(0, t - cover)
+  //
+  // Same question the column asks (`hookEmbedmentAvailable`), and asked through
+  // the same helper so the concept lives in one place — but a WALL deducts the
+  // clear cover ONLY. There is no hoop crossing that cover, and the bend turns
+  // against the far curtain rather than behind a column vertical the way a
+  // beam bar hooked into a joint does, so neither of the column's other two
+  // terms exists here.
+  const ldhClear = hookClearToFace(cover, 0, 0)
+  const ldhAvail = hookEmbedmentAvailable(t, cover, 0, 0)
   //
   // It is NOT pushed onto `notes`: those are the problems that make `ok` false
   // and every sheet prints them, and a hook that will not fit is no business of
@@ -322,7 +336,7 @@ export function designWallDetail(i: WallDetailInput): WallDetailResult {
     curtains, sMax, spacingOK,
     rhoLMin, rhoTMin, rhoL, rhoT, rhoOK,
     lapB: dev.ls_B, ldh: dev.ldh, hookTail: dev.hookTail,
-    ldhAvail, ldhFits,
+    ldhAvail, ldhClear, ldhFits,
     cornerLeg: dev.ls_B,
     joint, AvfProvided, jointOK,
     ok: spacingOK && rhoOK && jointOK,
@@ -532,7 +546,9 @@ export function buildWallIntersectionDetail(i: WallDetailInput, opts: WallDetail
   // hook the sheet would otherwise draw cannot be built.
   const anchorLen = (r.ldhFits ? tail : r.lapB / 1000)
   const bFaces = r.curtains === 2 ? [bx + cov, bx + t2 - cov] : [bx + t2 / 2]
-  const yLeg = Math.min(cov, t / 3)          // cover to the far face
+  // Cover to the far face — from `ldhClear`, the same number `ldhAvail` is
+  // measured against, so the drawn leg and the check cannot disagree.
+  const yLeg = Math.min(r.ldhClear / 1000, t / 3)
   bFaces.forEach((f, k) => {
     // alternate the turn so two bars do not lie on top of each other
     const inward = k % 2 === 0 ? -1 : 1
