@@ -1,12 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import {
   designBeamColumnJoint, buildBeamColumnJointDetail, effectiveJointWidth, jointHookLdh, wrapNote,
-  JOINT_GAMMA, PHI_JOINT, COLUMN_DEPTH_BAR_DIAS, PROBABLE_FY, JOINT_HOOP_SPACING_MAX,
+  JOINT_GAMMA, PHI_JOINT, THROUGH_BAR_DIAS, THROUGH_BAR_DIAS_LIGHTWEIGHT, PROBABLE_FY,
+  JOINT_HOOP_SPACING_MAX, throughBarCheck, jointForces,
   type BeamColumnJointInput,
 } from './beamColumnJoint'
 
 // ─────────────────────────────────────────────────────────────────────────
-// WORKED EXAMPLE — the joint the model actually produces, and it FAILS twice.
+// WORKED EXAMPLE — the joint the model actually produces, and what it does
+// and does NOT fail.
 //
 //   Column   400 × 400, ⌀20 verticals, ⌀10 hoops @ 100, cover 40
 //   Beam     250 × 300 framing in one side, ⌀28 bars, 2 top / 2 bottom
@@ -28,18 +30,24 @@ import {
 //     As,top = 2 · π/4 · 28² = 1231.50 mm²
 //     Vu = 1.25 · 415 · 1231.50 / 1000 = 638.84 kN  ≤ 747.87 ✓
 //
-//   §418.8.2.3 — column depth ≥ 20db = 20(28) = 560 mm; provided 400  ✗
-//   §418.8.5.1 — ℓdh = fy·db/(5.4λ√f'c) = 415(28)/(5.4·4.5826) = 469.6 mm
-//                available inside the column = 400 − 40 − 10 = 350   ✗
+//   §418.8.2.3 — NOT APPLICABLE. The rule is written "where longitudinal beam
+//                reinforcement EXTENDS THROUGH a beam-column joint"; these ⌀28
+//                bars terminate in the column with hooks, so they are governed
+//                by §418.8.2.2 and §418.8.5 instead. Asking the 20db rule of a
+//                terminated bar was this module's own bug, caught in review.
+//   §418.8.5.1 — ℓdh = fy·db/(5.4λ√f'c) = 415(28)/(5.4·1.00·√21)
+//                = 11620/24.746 = 469.6 mm
+//                available inside the confined core = 400 − 40 − 10 = 350  ✗
 //
-// Both failures are the same physical fact: a ⌀28 beam bar is too big for a
-// 400 mm column. That is what the sheet exists to say out loud.
+// So ONE failure, not two: the ⌀28 bar cannot be ANCHORED in a 400 mm column.
+// Whether it could pass through is a question nobody asked, because it does not.
 // ─────────────────────────────────────────────────────────────────────────
 const joint: BeamColumnJointInput = {
   mark: 'J1',
   colB: 400, colH: 400, colBarDia: 20, colBars: 8, hoopDia: 10, hoopSpacing: 100,
   beamB: 250, beamH: 300, beamBarDia: 28, topBars: 2, botBars: 2,
   confinement: 'three-faces', fc: 21, fy: 415, cover: 40,
+  // exterior joint: the beam stops here, so its bars are hooked, not through
 }
 /** The same joint sized so it works: a 600 column and ⌀20 beam bars. */
 const good: BeamColumnJointInput = {
@@ -79,6 +87,48 @@ describe('hook development in a joint — §418.8.5.1', () => {
   })
 })
 
+describe('throughBarCheck — §418.8.2.3, asked of the right bars', () => {
+  it('does not apply to bars that terminate, and cannot fail then', () => {
+    const t = throughBarCheck(false, 28, 400)
+    expect(t.applies).toBe(false)
+    expect(t.ok).toBe(true)                      // "not this rule", not "fail"
+  })
+
+  it('applies to bars that pass through, at 20db', () => {
+    const t = throughBarCheck(true, 28, 400)
+    expect(t.applies).toBe(true)
+    expect(t.required).toBe(560)
+    expect(t.ok).toBe(false)
+    expect(throughBarCheck(true, 20, 400).ok).toBe(true)
+  })
+
+  it('wants 26db in lightweight concrete', () => {
+    expect(THROUGH_BAR_DIAS_LIGHTWEIGHT).toBe(26)
+    expect(throughBarCheck(true, 20, 500, 0.75).required).toBe(520)
+    expect(throughBarCheck(true, 20, 500, 0.75).ok).toBe(false)
+    expect(throughBarCheck(true, 20, 500, 1.0).ok).toBe(true)
+  })
+})
+
+describe('jointForces — the free body, not a single product', () => {
+  it('is T + C − Vcol, with C only where a far beam delivers it', () => {
+    const As = 1000, fy = 415
+    const ext = jointForces(As, As, fy, false, 0)
+    expect(ext.T).toBeCloseTo(1.25 * fy * As / 1000, 9)
+    expect(ext.C).toBe(0)                        // no far beam at an exterior joint
+    expect(ext.Vu).toBeCloseTo(ext.T, 9)
+
+    const int = jointForces(As, As, fy, true, 0)
+    expect(int.C).toBeCloseTo(int.T, 9)          // C = the far beam's own bar tension
+    expect(int.Vu).toBeCloseTo(int.T + int.C, 9)
+
+    const held = jointForces(As, As, fy, true, 200)
+    expect(held.Vcol).toBe(200)
+    expect(held.Vu).toBeCloseTo(int.Vu - 200, 9)
+    expect(jointForces(As, As, fy, false, 1e6).Vu).toBe(0)
+  })
+})
+
 describe('designBeamColumnJoint — the worked example', () => {
   const r = designBeamColumnJoint(joint)
 
@@ -98,9 +148,13 @@ describe('designBeamColumnJoint — the worked example', () => {
     expect(r.phiVn).toBeCloseTo(747.87, 1)
   })
 
-  it('takes the demand from the BARS at 1.25fy, not from the factored moment', () => {
+  it('takes the demand from the joint FREE BODY, with the bars at 1.25fy', () => {
     expect(PROBABLE_FY).toBe(1.25)
-    expect(r.Vu).toBeCloseTo(638.84, 1)
+    // Vu is not "1.25fyAs" — that is only the T term of T + C − Vcol.
+    expect(r.forces.T).toBeCloseTo(638.84, 1)
+    expect(r.forces.C).toBe(0)                   // exterior joint: no far beam
+    expect(r.forces.Vcol).toBe(0)
+    expect(r.Vu).toBeCloseTo(r.forces.T + r.forces.C - r.forces.Vcol, 9)
     expect(r.shearOK).toBe(true)
   })
 
@@ -113,24 +167,60 @@ describe('designBeamColumnJoint — the worked example', () => {
     expect(designBeamColumnJoint({ ...joint, Vcol: 5000 }).Vu).toBe(0)
   })
 
-  it('FAILS the §418.8.2.3 column depth — a ⌀28 bar needs 560 mm of column', () => {
-    expect(COLUMN_DEPTH_BAR_DIAS).toBe(20)
-    expect(r.colDepthMin).toBe(560)
-    expect(r.colDepthOK).toBe(false)
-    expect(r.notes.join(' ')).toContain('§418.8.2.3')
+  it('does NOT apply §418.8.2.3 to bars that TERMINATE in the joint', () => {
+    // The correction. §418.8.2.3 is conditioned on reinforcement "extending
+    // through" the joint — it is a bond/slip rule for a bar pulled one way on
+    // one face and pushed the other way on the other. A ⌀28 bar hooked into the
+    // column never does that, so 20db(28) = 560 > 400 is not a failure of this
+    // joint; it is a rule asked of the wrong bar.
+    expect(THROUGH_BAR_DIAS).toBe(20)
+    expect(r.terminated).toBe(true)
+    expect(r.through.main.applies).toBe(false)
+    expect(r.through.main.ok).toBe(true)
+    expect(r.notes.join(' ')).not.toContain('§418.8.2.3')
+  })
+
+  it('DOES apply it once the same bars pass through', () => {
+    // Same column, same bar — now continuing through an interior joint.
+    const through = designBeamColumnJoint({ ...joint, interior: true, barsThrough: true })
+    expect(through.through.main.applies).toBe(true)
+    expect(through.through.main.required).toBe(560)
+    expect(through.through.main.provided).toBe(400)
+    expect(through.through.main.ok).toBe(false)
+    expect(through.notes.join(' ')).toContain('§418.8.2.3')
+    expect(through.notes.join(' ')).toContain('pass THROUGH the joint')
+  })
+
+  it('measures the SPANDREL\'s through bars against the column WIDTH', () => {
+    // The reviewer's sharper case: it is not the hooked ⌀28 that triggers the
+    // rule, it is whatever actually passes through — and for a spandrel that is
+    // the perpendicular dimension.
+    const withSpandrel = designBeamColumnJoint({ ...joint, spandrelBarDia: 25, spandrelThrough: true })
+    expect(withSpandrel.through.spandrel.applies).toBe(true)
+    expect(withSpandrel.through.spandrel.required).toBe(500)     // 20 × 25
+    expect(withSpandrel.through.spandrel.provided).toBe(joint.colB)
+    expect(withSpandrel.through.spandrel.ok).toBe(false)
+    expect(withSpandrel.notes.join(' ')).toContain('of column WIDTH parallel to them')
+    // …and a ⌀16 spandrel bar passes in the same 400 mm column
+    expect(designBeamColumnJoint({ ...joint, spandrelBarDia: 16, spandrelThrough: true })
+      .through.spandrel.ok).toBe(true)
   })
 
   it('FAILS the hook fit — 470 mm of ℓdh in 350 mm of column', () => {
     expect(r.ldh).toBeCloseTo(469.57, 1)
+    // the inputs the number came from travel with it, so a reader can check it
+    expect(r.ldhInputs).toEqual({ db: 28, fy: 415, fc: 21, lambda: 1 })
     expect(r.ldhAvail).toBe(350)                          // 400 − 40 cover − 10 hoop
     expect(r.ldhFits).toBe(false)
     expect(r.hookTail).toBe(336)                          // 12db
     expect(r.notes.join(' ')).toContain('§418.8.5.1')
   })
 
-  it('is not OK overall, and says why', () => {
+  it('is not OK overall — for the anchorage, and only the anchorage', () => {
     expect(r.ok).toBe(false)
-    expect(r.notes.length).toBeGreaterThanOrEqual(2)
+    expect(r.shearOK).toBe(true)
+    expect(r.through.main.ok).toBe(true)
+    expect(r.ldhFits).toBe(false)
   })
 })
 
@@ -138,8 +228,9 @@ describe('designBeamColumnJoint — a joint that works', () => {
   const r = designBeamColumnJoint(good)
 
   it('passes every check once the column is big enough for the bar', () => {
-    expect(r.colDepthMin).toBe(400)
-    expect(r.colDepthOK).toBe(true)
+    expect(r.through.main.applies).toBe(true)      // interior joint, bars through
+    expect(r.through.main.required).toBe(400)      // 20 × ⌀20
+    expect(r.through.main.ok).toBe(true)
     expect(r.ldhFits).toBe(true)
     expect(r.shearOK).toBe(true)
     expect(r.ok).toBe(true)
@@ -211,6 +302,23 @@ describe('buildBeamColumnJointDetail', () => {
     expect(flat).toContain('60 CL. TO END OF HOOKS')
   })
 
+  it('draws THROUGH bars straight through, and drops the hook notes with them', () => {
+    // A sheet must not carry a note about a detail it does not draw: the
+    // through case has no hook, so no ℓdh dimension and no 60 CL. callout.
+    const t = buildBeamColumnJointDetail({ ...joint, interior: true, barsThrough: true }, { detailNo: '2' })
+    const paths = t.primitives.filter((p) => p.kind === 'path') as { cmds: { x: number; y: number }[] }[]
+    expect(paths.length).toBe(4)
+    for (const p of paths) expect(p.cmds).toHaveLength(2)      // straight, no turn
+    const tf = textOf(t).join(' ').replace(/\s+/g, ' ')
+    expect(tf).toContain('RUN CONTINUOUS THROUGH THE JOINT')
+    expect(tf).not.toContain('60 CL. TO END OF HOOKS')
+    expect(tf).not.toContain('TAIL 12db')
+    expect(tf).not.toContain('ℓdh =')
+    // …while the terminated sheet does carry all three
+    expect(flat).toContain('60 CL. TO END OF HOOKS')
+    expect(flat).toContain('TAIL 12db')
+  })
+
   it('draws the column hoops continuing THROUGH the joint', () => {
     // Horizontal rebar lines inside the joint block (0 ≤ y ≤ beam depth).
     const bh = joint.beamH / 1000
@@ -224,7 +332,7 @@ describe('buildBeamColumnJointDetail', () => {
     expect(flat).toContain('§418.8.4')
     expect(flat).toContain('§418.8.2.3')
     expect(flat).toContain('§418.8.5.1')
-    expect(flat).toContain(`20db = ${d.result.colDepthMin}`)
+    expect(flat).toContain('NOT TO TERMINATED HOOKED BARS')
     const warn = d.primitives.filter((p) => p.kind === 'text' && p.color === '#b91c1c') as { text: string }[]
     expect(d.result.ok).toBe(false)
     expect(warn.length).toBeGreaterThan(0)

@@ -4,25 +4,38 @@
 //
 // The joint is the piece of the frame nothing else checks. The beam sheet
 // designs the beam, the column sheet designs the column, and the block of
-// concrete where they cross carries the sum of both their bar forces through a
-// depth nobody sized for it. §418.8 is about that block, and it says four
-// things the member designs never ask:
+// concrete where they cross carries the forces of both.
 //
-//   §418.8.2.3  the column dimension PARALLEL to the beam bars must be at least
-//               20db of the largest beam bar. A ⌀28 bar needs 560 mm of column
-//               to pass through — a 400 mm column cannot take it, whatever the
-//               beam design says.
+// §418.8.2 splits into two cases, and CONFLATING THEM IS THE EASY MISTAKE —
+// this module made it and was corrected in review:
+//
+//   §418.8.2.3  "Where longitudinal beam reinforcement EXTENDS THROUGH a
+//               beam-column joint", the column dimension parallel to that
+//               reinforcement shall be at least 20db (26db lightweight). It is
+//               a bond/slip rule: a bar passing through is pulled one way on
+//               one face and pushed the other way on the other, and it needs
+//               that much joint to do it. A bar that STOPS in the joint is not
+//               doing that, so the rule does not reach it.
+//   §418.8.2.2  Beam reinforcement TERMINATED in a column shall extend to the
+//               far face of the confined core and be developed in tension per
+//               §418.8.5. That — not 20db — is what governs a hooked bar.
+//
+// So the two checks are asked separately, per direction, of whichever bars are
+// actually doing that thing. A ⌀28 bar hooked into a 400 mm column may well
+// fail its anchorage; it does not fail the 20db rule, because it never passes
+// through. The bars that DO pass through may be the spandrel's, in which case
+// 20db is measured against the column dimension parallel to THEM.
+//
+// The rest:
+//
 //   §418.8.4    the joint has its own shear strength, φVn = φ·γ·λ·√f'c·Aj, and
-//               its own demand, taken with the beam steel at 1.25fy because a
-//               joint is checked against what the bars can actually deliver,
-//               not against the factored moment.
+//               its own demand — from the FREE BODY of the joint, with the beam
+//               steel stressed to 1.25fy (§418.8.2.1). See `JointForces`.
 //   §418.8.3    column confinement hoops CONTINUE through the joint. Where four
 //               beams frame in and each is at least ¾ the column width the
 //               amount may be halved, at up to 150 mm.
-//   §418.8.5.1  a beam bar hooked into the joint develops in
-//               ℓdh = fy·db / (5.4·λ·√f'c) — SHORTER than the §425.4.3 hook,
-//               because the joint core is confined, but it still has to fit
-//               inside the column with its 90° tail in the confined core.
+//   §418.8.5.1  ℓdh = fy·db / (5.4·λ·√f'c) — shorter than the §425.4.3 hook
+//               because the joint core is confined, floored at 8db and 150 mm.
 //
 // Nothing here re-designs the beam or the column: it takes what those two
 // designed and checks the block they share.
@@ -46,8 +59,10 @@ export const JOINT_GAMMA: Record<JointConfinement, number> = {
 
 /** §421.2.4.3 — φ for shear in a joint. NOT the 0.75 used for member shear. */
 export const PHI_JOINT = 0.85
-/** §418.8.2.3 — column depth parallel to the beam bars, in bar diameters. */
-export const COLUMN_DEPTH_BAR_DIAS = 20
+/** §418.8.2.3 — joint dimension parallel to bars PASSING THROUGH, in bar dias. */
+export const THROUGH_BAR_DIAS = 20
+/** §418.8.2.3 — the same rule for lightweight concrete. */
+export const THROUGH_BAR_DIAS_LIGHTWEIGHT = 26
 /** §418.8.2.1 — beam steel is taken at this multiple of fy at a joint. */
 export const PROBABLE_FY = 1.25
 /** §418.8.3.2 — hoop spacing allowed through a joint confined on four faces. */
@@ -84,6 +99,70 @@ export function jointHookLdh(db: number, fy: number, fc: number, lambda = 1): nu
   return Math.max(raw, 8 * db, 150)
 }
 
+/** §418.8.2.3 applied to ONE direction — and only to bars that pass through. */
+export interface ThroughBarCheck {
+  /** These bars extend THROUGH the joint, so §418.8.2.3 reaches them. */
+  applies: boolean
+  /** Largest bar diameter passing through in this direction, mm. */
+  dia: number
+  /** The column dimension PARALLEL to those bars, mm. */
+  provided: number
+  /** 20db, or 26db in lightweight concrete, mm. */
+  required: number
+  ok: boolean
+}
+
+/**
+ * §418.8.2.3 for one direction.
+ *
+ * `applies` is the whole point: the rule is conditioned on the bars extending
+ * through the joint. Asked of bars that terminate in it, the answer is "not
+ * this rule" — not "fail".
+ */
+export function throughBarCheck(through: boolean, dia: number, provided: number, lambda = 1): ThroughBarCheck {
+  const factor = lambda < 1 ? THROUGH_BAR_DIAS_LIGHTWEIGHT : THROUGH_BAR_DIAS
+  const required = factor * Math.max(dia, 0)
+  return {
+    applies: through && dia > 0,
+    dia, provided, required,
+    ok: !through || dia <= 0 || provided >= required - 1e-9,
+  }
+}
+
+/**
+ * The free body of the joint — §418.8.2.1 with §418.8.4.
+ *
+ * The demand is NOT "1.25·fy·As". It is the horizontal equilibrium of the block:
+ * the beam steel entering it is stressed to 1.25fy (§418.8.2.1), and the joint
+ * shear is what is left once the column shear is taken off.
+ *
+ *   Vu = T + C − Vcol
+ *
+ * At an INTERIOR joint the far beam's flexural couple pushes on the same face
+ * that the near beam's top steel pulls, and C equals that beam's own bar
+ * tension by section equilibrium — so the two add. At an EXTERIOR joint there
+ * is no far beam and C is zero.
+ */
+export interface JointForces {
+  /** Tension from the near beam's top steel at 1.25fy, kN. */
+  T: number
+  /** Compression delivered by the far beam, kN — zero at an exterior joint. */
+  C: number
+  /** Column shear acting against them, kN. */
+  Vcol: number
+  /** Vu = T + C − Vcol, floored at zero. */
+  Vu: number
+}
+
+export function jointForces(
+  AsTop: number, AsBot: number, fy: number, interior: boolean, Vcol = 0,
+): JointForces {
+  const T = (PROBABLE_FY * fy * AsTop) / 1000
+  const C = interior ? (PROBABLE_FY * fy * AsBot) / 1000 : 0
+  const V = Math.max(Vcol, 0)
+  return { T, C, Vcol: V, Vu: Math.max(T + C - V, 0) }
+}
+
 export interface BeamColumnJointInput {
   mark?: string
   /** Column width (perpendicular to the beam) and depth (parallel to it), mm. */
@@ -103,11 +182,24 @@ export interface BeamColumnJointInput {
   botBars: number
   /** Beams frame in from BOTH sides in the direction of the shear. */
   interior?: boolean
+  /**
+   * The beam's longitudinal bars EXTEND THROUGH the joint rather than
+   * terminating in it. Defaults to `interior`: a beam continuing past the
+   * column runs its bars through, one that stops there hooks them.
+   *
+   * This is the flag §418.8.2.3 turns on. Getting it wrong is how a hooked bar
+   * comes to "fail" a rule written for a different bar.
+   */
+  barsThrough?: boolean
+  /** Largest bar of the PERPENDICULAR (spandrel) beam, mm, and whether ITS bars
+   *  pass through — then §418.8.2.3 is measured against `colB`. */
+  spandrelBarDia?: number
+  spandrelThrough?: boolean
   /** Confinement class for γ — Table 418.8.4.3. */
   confinement?: JointConfinement
   /** Every framing beam covers ≥ ¾ of the column width (§418.8.3.2). */
   wideBeams?: boolean
-  /** Column shear from the analysis, kN — it relieves the joint demand. */
+  /** Column shear from the analysis, kN — part of the joint free body. */
   Vcol?: number
   /** Beam axis offset from the column centreline, mm. */
   eccentricity?: number
@@ -126,14 +218,19 @@ export interface BeamColumnJointResult {
   /** Nominal and design joint shear, kN. */
   Vn: number
   phiVn: number
-  /** Joint shear demand from the beam steel at 1.25fy, kN. */
+  /** The free body the demand comes from — §418.8.2.1. */
+  forces: JointForces
+  /** Vu from that free body, kN. */
   Vu: number
   shearOK: boolean
-  /** §418.8.2.3 — column depth the beam bars need, mm, and whether it is there. */
-  colDepthMin: number
-  colDepthOK: boolean
-  /** §418.8.5.1 hook, the straight embedment available for it, and the verdict. */
+  /** §418.8.2.3, asked separately of each direction's THROUGH bars. */
+  through: { main: ThroughBarCheck; spandrel: ThroughBarCheck }
+  /** The near beam's bars terminate in the joint — §418.8.2.2 / §418.8.5. */
+  terminated: boolean
+  /** §418.8.5.1 hook, with the values it was computed from. */
   ldh: number
+  ldhInputs: { db: number; fy: number; fc: number; lambda: number }
+  /** Straight embedment available inside the confined core, mm. */
   ldhAvail: number
   ldhFits: boolean
   /** 12db hook tail, §425.3.1. */
@@ -149,11 +246,10 @@ export interface BeamColumnJointResult {
 /**
  * Check the joint the beam and the column share.
  *
- * The demand side is the part worth reading twice: a joint is not checked
- * against the factored moment, it is checked against what the beam bars can
- * physically deliver — 1.25·fy·As (§418.8.2.1) — minus the column shear that
- * acts the other way. At an interior joint the top steel on one side and the
- * bottom steel on the other both pull, so they add.
+ * Each rule is asked of the bars it was written for: §418.8.2.3 of whatever
+ * passes THROUGH (in either direction, against the column dimension parallel to
+ * it), §418.8.2.2 / §418.8.5.1 of whatever TERMINATES, and §418.8.4 of the
+ * whole free body.
  */
 export function designBeamColumnJoint(i: BeamColumnJointInput): BeamColumnJointResult {
   const notes: string[] = []
@@ -167,19 +263,24 @@ export function designBeamColumnJoint(i: BeamColumnJointInput): BeamColumnJointR
   const Vn = (gamma * lambda * Math.sqrt(Math.max(fc, 1)) * Aj) / 1000        // kN
   const phiVn = PHI_JOINT * Vn
 
-  // §418.8.2.1 — the bars at 1.25fy. Interior joints get both faces pulling.
-  const AsTop = i.topBars * area(i.beamBarDia)
-  const AsBot = i.botBars * area(i.beamBarDia)
-  const As = i.interior ? AsTop + AsBot : AsTop
-  const Vu = Math.max((PROBABLE_FY * fy * As) / 1000 - Math.max(i.Vcol ?? 0, 0), 0)
-  const shearOK = Vu <= phiVn + 1e-9
+  const forces = jointForces(
+    i.topBars * area(i.beamBarDia), i.botBars * area(i.beamBarDia),
+    fy, !!i.interior, i.Vcol ?? 0,
+  )
+  const shearOK = forces.Vu <= phiVn + 1e-9
 
-  const colDepthMin = COLUMN_DEPTH_BAR_DIAS * i.beamBarDia
-  const colDepthOK = i.colH >= colDepthMin - 1e-9
+  // §418.8.2.3 — per direction, and only for bars that actually pass through.
+  // A beam that continues past the column runs its bars through; one that stops
+  // there terminates them, and this rule is not about those.
+  const barsThrough = i.barsThrough ?? !!i.interior
+  const main = throughBarCheck(barsThrough, i.beamBarDia, i.colH, lambda)
+  const spandrel = throughBarCheck(!!i.spandrelThrough, i.spandrelBarDia ?? 0, i.colB, lambda)
+  const terminated = !barsThrough
 
+  // §418.8.2.2 / §418.8.5.1 — the terminated bars' anchorage.
   const ldh = jointHookLdh(i.beamBarDia, fy, fc, lambda)
   const ldhAvail = Math.max(0, i.colH - cover - i.hoopDia)
-  const ldhFits = ldh <= ldhAvail + 1e-9
+  const ldhFits = !terminated || ldh <= ldhAvail + 1e-9
   const hookTail = 12 * i.beamBarDia
 
   // §418.8.3.2 — four beams, each ≥ ¾ the column width: half the hoops, ≤150.
@@ -188,28 +289,33 @@ export function designBeamColumnJoint(i: BeamColumnJointInput): BeamColumnJointR
     ? Math.min(JOINT_HOOP_SPACING_MAX, 2 * i.hoopSpacing)
     : i.hoopSpacing
 
-  if (!colDepthOK) {
-    notes.push(`column depth ${Math.round(i.colH)} mm is less than the ${Math.round(colDepthMin)} mm (20db) §418.8.2.3 needs for a ⌀${Math.round(i.beamBarDia)} beam bar — deepen the column or use a smaller beam bar`)
+  if (main.applies && !main.ok) {
+    notes.push(`⌀${Math.round(main.dia)} beam bars pass THROUGH the joint, so §418.8.2.3 needs a column depth of ${Math.round(main.required)} mm parallel to them — ${Math.round(main.provided)} mm provided`)
   }
-  if (!ldhFits) {
-    notes.push(`ℓdh ${Math.round(ldh)} mm does not fit the ${Math.round(ldhAvail)} mm available inside the column — the hook cannot be developed in this joint (§418.8.5.1)`)
+  if (spandrel.applies && !spandrel.ok) {
+    notes.push(`the spandrel's ⌀${Math.round(spandrel.dia)} bars pass THROUGH the joint, so §418.8.2.3 needs ${Math.round(spandrel.required)} mm of column WIDTH parallel to them — ${Math.round(spandrel.provided)} mm provided`)
+  }
+  if (terminated && !ldhFits) {
+    notes.push(`ℓdh ${Math.round(ldh)} mm = ${fy}(${Math.round(i.beamBarDia)}) / (5.4·${lambda.toFixed(2)}·√${fc}) does not fit the ${Math.round(ldhAvail)} mm available inside the confined core — the terminated bars cannot be developed in this joint (§418.8.2.2 / §418.8.5.1)`)
   }
   if (!shearOK) {
-    notes.push(`joint shear Vu ${Math.round(Vu)} kN exceeds φVn ${Math.round(phiVn)} kN (γ = ${gamma.toFixed(1)}, §418.8.4.3) — enlarge the joint or frame more beams into it`)
+    notes.push(`joint shear Vu ${Math.round(forces.Vu)} kN = T ${Math.round(forces.T)} + C ${Math.round(forces.C)} − Vcol ${Math.round(forces.Vcol)} exceeds φVn ${Math.round(phiVn)} kN (γ = ${gamma.toFixed(1)}, §418.8.4.3) — enlarge the joint or frame more beams into it`)
   }
   if (confinement === 'other') {
     notes.push(`γ = 1.0: the joint is not confined by beams on three or four faces, which is the lowest strength Table 418.8.4.3 allows`)
   }
 
   return {
-    gamma, bj, Aj, Vn, phiVn, Vu, shearOK,
-    colDepthMin, colDepthOK,
-    ldh, ldhAvail, ldhFits, hookTail,
+    gamma, bj, Aj, Vn, phiVn,
+    forces, Vu: forces.Vu, shearOK,
+    through: { main, spandrel }, terminated,
+    ldh, ldhInputs: { db: i.beamBarDia, fy, fc, lambda }, ldhAvail, ldhFits, hookTail,
     jointHoopSpacing, halvedHoops,
-    ok: shearOK && colDepthOK && ldhFits,
+    ok: shearOK && main.ok && spandrel.ok && ldhFits,
     notes,
   }
 }
+
 
 // ── the sheet ──────────────────────────────────────────────────────────────
 
@@ -301,27 +407,39 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
   const hookX = jx + cov + (60 / 1000)                  // 60 mm clear of the far face
   const tail = r.hookTail / 1000
   for (const [yBar, dir] of [[jy + cov, 1], [jy + bh - cov, -1]] as const) {
-    P.push({
-      kind: 'path', stroke: REBAR, width: 2.0, cap: 'round', join: 'round',
-      cmds: [
-        { c: 'M', x: jx + ch + beamRun * 0.96, y: yBar },
-        { c: 'L', x: hookX, y: yBar },
-        { c: 'L', x: hookX, y: yBar + dir * Math.min(tail, bh * 0.75) },
-      ],
-    })
+    P.push(r.terminated
+      // hooked: in to 60 mm clear of the far face, then turned into the core
+      ? {
+        kind: 'path', stroke: REBAR, width: 2.0, cap: 'round', join: 'round',
+        cmds: [
+          { c: 'M', x: jx + ch + beamRun * 0.96, y: yBar },
+          { c: 'L', x: hookX, y: yBar },
+          { c: 'L', x: hookX, y: yBar + dir * Math.min(tail, bh * 0.75) },
+        ],
+      }
+      // through: straight out the far face, which is what §418.8.2.3 is about
+      : {
+        kind: 'path', stroke: REBAR, width: 2.0, cap: 'round',
+        cmds: [
+          { c: 'M', x: jx + ch + beamRun * 0.96, y: yBar },
+          { c: 'L', x: jx - beamRun * 0.10, y: yBar },
+        ],
+      })
   }
 
   // ℓdh — measured from the column face the bar enters, into the joint
-  P.push({
+  if (r.terminated) P.push({
     kind: 'dim', x1: jx + ch, y1: jy - u * 2.8, x2: jx + ch - r.ldh / 1000, y2: jy - u * 2.8,
     text: `ℓdh = ${Math.round(r.ldh)}`, off: 0, size: u * 1.1,
   })
-  if (!r.ldhFits) {
+  if (r.terminated && !r.ldhFits) {
     P.push({ kind: 'line', x1: jx + ch - r.ldh / 1000, y1: jy - u * 3.6, x2: jx + ch - r.ldh / 1000, y2: jy + bh, stroke: WARN, width: 0.8, dash: [u * 0.4, u * 0.3] })
   }
   // the two callouts image 3 turns on
-  P.push({ kind: 'line', x1: hookX, y1: jy + cov, x2: jx - u * 1.0, y2: jy + bh * 0.45, stroke: NOTE, width: 0.5 })
-  P.push({ kind: 'text', x: jx - u * 1.2, y: jy + bh * 0.45, text: `60 CL. TO END OF HOOKS`, size: u * 1.05, anchor: 'end', color: NOTE })
+  if (r.terminated) {
+    P.push({ kind: 'line', x1: hookX, y1: jy + cov, x2: jx - u * 1.0, y2: jy + bh * 0.45, stroke: NOTE, width: 0.5 })
+    P.push({ kind: 'text', x: jx - u * 1.2, y: jy + bh * 0.45, text: `60 CL. TO END OF HOOKS`, size: u * 1.05, anchor: 'end', color: NOTE })
+  }
   if (jointHoopYs.length) {
     P.push({ kind: 'line', x1: jx + ch * 0.5, y1: jointHoopYs[0], x2: jx + ch + beamRun * 0.45, y2: jy - u * 1.0, stroke: NOTE, width: 0.5 })
     P.push({ kind: 'text', x: jx + ch + beamRun * 0.47, y: jy - u * 1.0, text: `JOINT HOOPS ⌀${Math.round(i.hoopDia)} @ ${Math.round(r.jointHoopSpacing)}`, size: u * 1.05, anchor: 'start', color: NOTE })
@@ -368,7 +486,10 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
     const y = py + (cb - bb) / 2 + bb * t
     P.push({
       kind: 'path', stroke: REBAR, width: 1.8, cap: 'round',
-      cmds: [{ c: 'M', x: jx + ch + beamRun * 0.96, y }, { c: 'L', x: hookX, y }],
+      cmds: [
+        { c: 'M', x: jx + ch + beamRun * 0.96, y },
+        { c: 'L', x: r.terminated ? hookX : jx - beamRun * 0.10, y },
+      ],
     })
   }
   // beam hoops in plan — across the beam width
@@ -389,11 +510,25 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
 
   // ═══ notes and the title block, below both views ═════════════════════════
   const bodyBottom = py + cb + spanRun + u * 3.4
+  const L = r.ldhInputs
   const notes = [
-    `JOINT SHEAR φVn = ${Math.round(r.phiVn)} kN (γ = ${r.gamma.toFixed(1)}, Aj = bj·h = ${Math.round(r.bj)}×${Math.round(i.colH)} mm) vs Vu = ${Math.round(r.Vu)} kN AT 1.25fy (§418.8.4 / §418.8.2.1)`,
-    `COLUMN DEPTH PARALLEL TO THE BEAM BARS ≥ 20db = ${Math.round(r.colDepthMin)} — PROVIDED ${Math.round(i.colH)} (§418.8.2.3)`,
-    `BEAM BARS HOOKED INTO THE JOINT DEVELOP IN ℓdh = fy·db/(5.4λ√f'c) = ${Math.round(r.ldh)}, TAIL 12db = ${Math.round(r.hookTail)} (§418.8.5.1 / §425.3.1)`,
-    `HOOKS TURN INTO THE CONFINED CORE, ${60} CLEAR TO THE END OF THE HOOK`,
+    // The free body, written out — not "Vu = 1.25fyAs", which is only the T term.
+    `JOINT SHEAR Vu = T + C − Vcol = ${Math.round(r.forces.T)} + ${Math.round(r.forces.C)} − ${Math.round(r.forces.Vcol)} = ${Math.round(r.Vu)} kN, BEAM STEEL AT 1.25fy (§418.8.2.1)`,
+    `φVn = ${Math.round(r.phiVn)} kN (γ = ${r.gamma.toFixed(1)}, φ = 0.85, Aj = bj·h = ${Math.round(r.bj)}×${Math.round(i.colH)} mm) — §418.8.4.3 / §421.2.4.3`,
+    // §418.8.2.3 only where bars actually pass through, per direction.
+    r.through.main.applies
+      ? `⌀${Math.round(r.through.main.dia)} BEAM BARS EXTEND THROUGH THE JOINT — §418.8.2.3 NEEDS ${Math.round(r.through.main.required)} OF COLUMN DEPTH PARALLEL TO THEM, PROVIDED ${Math.round(r.through.main.provided)}`
+      : `⌀${Math.round(i.beamBarDia)} BEAM BARS TERMINATE IN THE JOINT WITH STANDARD 90° HOOKS. §418.8.2.3's 20db JOINT-DEPTH RULE APPLIES TO REINFORCEMENT EXTENDING THROUGH THE JOINT, NOT TO TERMINATED HOOKED BARS — THEY ARE GOVERNED BY §418.8.2.2 AND §418.8.5`,
+    ...(r.through.spandrel.applies
+      ? [`SPANDREL ⌀${Math.round(r.through.spandrel.dia)} BARS EXTEND THROUGH — §418.8.2.3 NEEDS ${Math.round(r.through.spandrel.required)} OF COLUMN WIDTH PARALLEL TO THEM, PROVIDED ${Math.round(r.through.spandrel.provided)}`]
+      : []),
+    // The anchorage notes belong only on a sheet that DRAWS terminated bars.
+    ...(r.terminated
+      ? [
+        `ℓdh = fy·db/(5.4λ√f'c) = ${L.fy}(${Math.round(L.db)}) / (5.4·${L.lambda.toFixed(2)}·√${L.fc}) = ${Math.round(r.ldh)}, TAIL 12db = ${Math.round(r.hookTail)} (§418.8.5.1 / §425.3.1)`,
+        `TERMINATED BARS EXTEND TO THE FAR FACE OF THE CONFINED CORE, ${60} CLEAR TO THE END OF THE HOOK (§418.8.2.2)`,
+      ]
+      : [`BEAM BARS RUN CONTINUOUS THROUGH THE JOINT — NO ANCHORAGE IS DEVELOPED IN IT`]),
     r.halvedHoops
       ? `FOUR BEAMS FRAME IN, EACH ≥ ¾ THE COLUMN WIDTH — JOINT HOOPS MAY BE HALVED AT ≤ ${JOINT_HOOP_SPACING_MAX} (§418.8.3.2)`
       : `COLUMN CONFINEMENT HOOPS CONTINUE THROUGH THE JOINT AT ${Math.round(r.jointHoopSpacing)} (§418.8.3.1)`,
