@@ -43,7 +43,7 @@
 // Units: sections mm; forces kN; stresses MPa; drawing geometry m.
 // ─────────────────────────────────────────────────────────────────────────
 import type { PlanPrimitive, Drawing } from './planRenderer'
-import { hookEmbedmentAvailable } from './devLength'
+import { hookClearToFace, hookEmbedmentAvailable } from './devLength'
 
 // ── code constants ─────────────────────────────────────────────────────────
 
@@ -234,6 +234,10 @@ export interface BeamColumnJointResult {
   /** Straight embedment available inside the confined core, mm —
    *  colH − cover − hoop Ø − column bar Ø. */
   ldhAvail: number
+  /** Clear from the far FACE to the outside of the bend, mm — cover + hoop +
+   *  column bar. The drawing places the hook here and the notes quote it, so
+   *  neither can drift from the other or from `ldhAvail`. */
+  ldhClear: number
   ldhFits: boolean
   /** 12db hook tail, §425.3.1. */
   hookTail: number
@@ -285,6 +289,7 @@ export function designBeamColumnJoint(i: BeamColumnJointInput): BeamColumnJointR
   // it can occupy is the core less that bar. Shared with the §425.4.3 hook on
   // the dev-length page — one formula, so the joint sheet and that page cannot
   // quote different room for the same bar in the same column.
+  const ldhClear = hookClearToFace(cover, i.hoopDia, i.colBarDia)
   const ldhAvail = hookEmbedmentAvailable(i.colH, cover, i.hoopDia, i.colBarDia)
   const ldhFits = !terminated || ldh <= ldhAvail + 1e-9
   const hookTail = 12 * i.beamBarDia
@@ -315,7 +320,7 @@ export function designBeamColumnJoint(i: BeamColumnJointInput): BeamColumnJointR
     gamma, bj, Aj, Vn, phiVn,
     forces, Vu: forces.Vu, shearOK,
     through: { main, spandrel }, terminated,
-    ldh, ldhInputs: { db: i.beamBarDia, fy, fc, lambda }, ldhAvail, ldhFits, hookTail,
+    ldh, ldhInputs: { db: i.beamBarDia, fy, fc, lambda }, ldhAvail, ldhClear, ldhFits, hookTail,
     jointHoopSpacing, halvedHoops,
     ok: shearOK && main.ok && spandrel.ok && ldhFits,
     notes,
@@ -409,18 +414,33 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
     P.push({ kind: 'line', x1: x, y1: jy + cov * 0.6, x2: x, y2: jy + bh - cov * 0.6, stroke: REBAR, width: 0.8 })
   }
 
-  // beam top and bottom bars, hooked DOWN / UP into the confined core
-  const hookX = jx + cov + (60 / 1000)                  // 60 mm clear of the far face
+  // Beam top and bottom bars, hooked DOWN / UP into the confined core.
+  //
+  // The bend sits behind the far-face column vertical, inside the hoop — the
+  // same place `hookEmbedmentAvailable` stops measuring, and the same place the
+  // beam elevation draws it. This used to be `cov + 60`, which put the hook
+  // 100 mm from the face under a note that said 60: the drawing disagreed with
+  // its own annotation AND with the beam sheet for the same joint.
+  const clear = r.ldhClear / 1000
+  const hookX = jx + clear
   const tail = r.hookTail / 1000
-  for (const [yBar, dir] of [[jy + cov, 1], [jy + bh - cov, -1]] as const) {
+  // Top and bottom hooks share an x in elevation, and in a shallow beam their
+  // 12db tails pass each other. Drawn on the same line they merge into what
+  // reads as a closed loop, so they are separated by a bar diameter — the usual
+  // convention for two bars that coincide in view.
+  const hookSep = i.beamBarDia / 1000
+  for (const [yBar, dir, sx] of [
+    [jy + cov, 1, 0],
+    [jy + bh - cov, -1, hookSep],
+  ] as const) {
     P.push(r.terminated
       // hooked: in to 60 mm clear of the far face, then turned into the core
       ? {
         kind: 'path', stroke: REBAR, width: 2.0, cap: 'round', join: 'round',
         cmds: [
           { c: 'M', x: jx + ch + beamRun * 0.96, y: yBar },
-          { c: 'L', x: hookX, y: yBar },
-          { c: 'L', x: hookX, y: yBar + dir * Math.min(tail, bh * 0.75) },
+          { c: 'L', x: hookX + sx, y: yBar },
+          { c: 'L', x: hookX + sx, y: yBar + dir * Math.min(tail, bh * 0.75) },
         ],
       }
       // through: straight out the far face, which is what §418.8.2.3 is about
@@ -433,18 +453,29 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
       })
   }
 
-  // ℓdh — measured from the column face the bar enters, into the joint
-  if (r.terminated) P.push({
-    kind: 'dim', x1: jx + ch, y1: jy - u * 2.8, x2: jx + ch - r.ldh / 1000, y2: jy - u * 2.8,
-    text: `ℓdh = ${Math.round(r.ldh)}`, off: 0, size: u * 1.1,
-  })
-  if (r.terminated && !r.ldhFits) {
-    P.push({ kind: 'line', x1: jx + ch - r.ldh / 1000, y1: jy - u * 3.6, x2: jx + ch - r.ldh / 1000, y2: jy + bh, stroke: WARN, width: 0.8, dash: [u * 0.4, u * 0.3] })
+  // ℓdh — measured from the column face the bar enters, into the joint.
+  //
+  // The hoops are BROKEN behind it. Run straight across the hoop band, the
+  // dimension line, its ticks and its label all overprinted the very
+  // reinforcement the sheet exists to draw, and the number became unreadable
+  // exactly where it matters most.
+  const ldhY = jy - u * 3.0
+  if (r.terminated) {
+    const ldhX = jx + ch - r.ldh / 1000
+    const lo = Math.min(ldhX, jx + ch), hi = Math.max(ldhX, jx + ch)
+    P.push({ kind: 'rect', x: lo - u * 0.5, y: ldhY - u * 1.2, w: hi - lo + u, h: u * 2.4, fill: '#fff' })
+    P.push({
+      kind: 'dim', x1: jx + ch, y1: ldhY, x2: ldhX, y2: ldhY,
+      text: `ℓdh = ${Math.round(r.ldh)}`, off: 0, size: u * 1.1,
+    })
+    if (!r.ldhFits) {
+      P.push({ kind: 'line', x1: ldhX, y1: ldhY, x2: ldhX, y2: jy + bh, stroke: WARN, width: 0.8, dash: [u * 0.4, u * 0.3] })
+    }
   }
   // the two callouts image 3 turns on
   if (r.terminated) {
     P.push({ kind: 'line', x1: hookX, y1: jy + cov, x2: jx - u * 1.0, y2: jy + bh * 0.45, stroke: NOTE, width: 0.5 })
-    P.push({ kind: 'text', x: jx - u * 1.2, y: jy + bh * 0.45, text: `60 CL. TO END OF HOOKS`, size: u * 1.05, anchor: 'end', color: NOTE })
+    P.push({ kind: 'text', x: jx - u * 1.2, y: jy + bh * 0.45, text: `${Math.round(clear * 1000)} CL. TO END OF HOOKS`, size: u * 1.05, anchor: 'end', color: NOTE })
   }
   if (jointHoopYs.length) {
     P.push({ kind: 'line', x1: jx + ch * 0.5, y1: jointHoopYs[0], x2: jx + ch + beamRun * 0.45, y2: jy - u * 1.0, stroke: NOTE, width: 0.5 })
@@ -532,7 +563,7 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
     ...(r.terminated
       ? [
         `ℓdh = fy·db/(5.4λ√f'c) = ${L.fy}(${Math.round(L.db)}) / (5.4·${L.lambda.toFixed(2)}·√${L.fc}) = ${Math.round(r.ldh)}, TAIL 12db = ${Math.round(r.hookTail)} (§418.8.5.1 / §425.3.1)`,
-        `TERMINATED BARS EXTEND TO THE FAR FACE OF THE CONFINED CORE, ${60} CLEAR TO THE END OF THE HOOK (§418.8.2.2)`,
+        `TERMINATED BARS EXTEND TO THE FAR FACE OF THE CONFINED CORE, ${Math.round(r.ldhClear)} CLEAR TO THE END OF THE HOOK (§418.8.2.2)`,
       ]
       : [`BEAM BARS RUN CONTINUOUS THROUGH THE JOINT — NO ANCHORAGE IS DEVELOPED IN IT`]),
     r.halvedHoops

@@ -139,10 +139,22 @@ export interface HookFitResult {
   depthNeeded: number
 }
 
+/**
+ * Clear distance from the far FACE of the member to the outside of the bend, mm.
+ *
+ * This is where the hook physically sits, so it is both what the drawing must
+ * place it at and what the note beside it must say. Every sheet that draws a
+ * hooked bar takes it from here — a sheet that draws the hook at one distance
+ * and annotates it with another is worse than one that does neither.
+ */
+export const hookClearToFace = (
+  cover: number, tieDia: number, farBarDia: number,
+): number => cover + tieDia + farBarDia
+
 /** Embedment available to a hook inside a member, mm — never negative. */
 export const hookEmbedmentAvailable = (
   memberDepth: number, cover: number, tieDia: number, farBarDia: number,
-): number => Math.max(0, memberDepth - cover - tieDia - farBarDia)
+): number => Math.max(0, memberDepth - hookClearToFace(cover, tieDia, farBarDia))
 
 export function hookFit(i: HookFitInput): HookFitResult {
   const avail = hookEmbedmentAvailable(i.memberDepth, i.cover, i.tieDia, i.farBarDia)

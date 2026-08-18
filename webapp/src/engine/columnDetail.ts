@@ -198,26 +198,41 @@ export function buildColumnDetail(c: ColumnDetailInput, opts: ColumnDetailOption
     kind: 'text', x: x0 - bM * 0.85, y: Y(-lu * 0.16 - i * lu * 0.055), text: t, size: 0.046, anchor: 'start', color: NOTE,
   }))
 
-  P.push({
-    kind: 'text', x: x0 + bM / 2, y: Y(lu + bd + lu * 0.28),
-    text: `TYPICAL COLUMN DETAIL — ${c.mark}`, size: 0.075, anchor: 'middle', color: INK, weight: 700,
-  })
-  if (opts.detailNo) {
-    // Clear of the title. At bM 0.4 the title runs roughly x −0.4…0.8, so the
-    // bubble has to sit outside that — it was landing inside the word "TYPICAL".
-    const cx = x0 - bM * 1.5, cy = Y(lu + bd + lu * 0.28)
-    P.push({ kind: 'circle', cx, cy, r: bM * 0.17, stroke: INK, fill: '#fff', width: 0.8 })
-    P.push({ kind: 'text', x: cx, y: cy + bM * 0.055, text: opts.detailNo, size: 0.062, anchor: 'middle', color: INK, weight: 700 })
-    if (opts.sheetRef) P.push({ kind: 'text', x: cx, y: cy + bM * 0.36, text: opts.sheetRef, size: 0.042, anchor: 'middle', color: NOTE })
-  }
-  P.push({ kind: 'line', x1: x0 - bM * 1.6, y1: Y(-lu * 0.1), x2: x1 + bM * 1.6, y2: Y(-lu * 0.1), stroke: GRID, width: 0.6 })
+  // ── title block, BELOW the drawing and the notes ────────────────────────
+  //
+  // It used to sit ABOVE the column, alone among the detail sheets: printed
+  // beside the beam elevation and the joint detail — which both carry an AIA
+  // block under their notes — a set of three details read with one title in a
+  // different place and in a different form. Same block, same corner, here too.
+  const title = `TYPICAL COLUMN DETAIL — ${c.mark}`
+  const noteBot = -lu * 0.16 - (notes.length - 1) * lu * 0.055
+  const sheetL = x0 - bM * 1.6, sheetR = x1 + bM * 3.4
+  const rad = bM * 0.30
+  const bx = sheetL + rad + bM * 0.1
+  const blockTop = noteBot - lu * 0.10
+  P.push({ kind: 'line', x1: sheetL, y1: Y(blockTop), x2: sheetR, y2: Y(blockTop), stroke: INK, width: 1.0 })
+  // AIA detail bubble: detail number over sheet reference, split by a diameter
+  const cy = blockTop - rad - bM * 0.12
+  P.push({ kind: 'circle', cx: bx, cy: Y(cy), r: rad, stroke: INK, fill: '#fff', width: 0.9 })
+  P.push({ kind: 'line', x1: bx - rad, y1: Y(cy), x2: bx + rad, y2: Y(cy), stroke: INK, width: 0.9 })
+  P.push({ kind: 'text', x: bx, y: Y(cy + rad * 0.48), text: opts.detailNo ?? '1', size: rad * 0.90, anchor: 'middle', color: INK, weight: 700 })
+  P.push({ kind: 'text', x: bx, y: Y(cy - rad * 0.52), text: opts.sheetRef ?? 'S-06', size: rad * 0.58, anchor: 'middle', color: INK, weight: 600 })
+  const tx = bx + rad + bM * 0.25
+  P.push({ kind: 'text', x: tx, y: Y(cy + rad * 0.30), text: title, size: rad * 0.78, anchor: 'start', color: INK, weight: 700 })
+  P.push({ kind: 'line', x1: tx, y1: Y(cy - rad * 0.10), x2: sheetR, y2: Y(cy - rad * 0.10), stroke: GRID, width: 0.6 })
+  P.push({ kind: 'text', x: tx, y: Y(cy - rad * 0.62), text: 'SCALE', size: rad * 0.58, anchor: 'start', color: NOTE, weight: 600 })
+  P.push({ kind: 'text', x: sheetR, y: Y(cy - rad * 0.62), text: opts.scale ?? 'NTS', size: rad * 0.58, anchor: 'end', color: NOTE, weight: 600 })
+  const blockBot = cy - rad - bM * 0.12
+  P.push({ kind: 'line', x1: sheetL, y1: Y(blockBot), x2: sheetR, y2: Y(blockBot), stroke: INK, width: 1.0 })
 
   return {
     primitives: P,
     title: `TYPICAL COLUMN DETAIL — ${c.mark}`,
     bounds: {
+      // The title no longer sits above the column, so the sheet stops reserving
+      // a band of empty paper up there; it ends under the title block instead.
       minX: x0 - bM * 2.0, maxX: x1 + bM * 3.4,
-      minY: Y(lu + bd + lu * 0.4), maxY: Y(-lu * 0.16 - notes.length * lu * 0.055 - lu * 0.06),
+      minY: Y(lu + bd + lu * 0.12), maxY: Y(blockBot - lu * 0.05),
     },
   }
 }

@@ -19,9 +19,11 @@
 //   HOOPS   closely spaced over 2h from each support face, the first at 50 mm
 //           (§418.6.4.1 / §418.6.4.4), wider through the middle.
 //   ENDS    at an END support the beam bars have nowhere to continue to, so they
-//           are hooked DOWN into the column with a standard 90° hook and 60 mm
-//           clear to the end of the hook, inside the joint hoops (§425.4.3,
-//           §418.8.3; ACI SP-17 typical beam-column joint).
+//           are hooked DOWN into the column with a standard 90° hook, inside the
+//           joint hoops and behind the far-face column vertical (§425.4.3,
+//           §418.8.3; ACI SP-17 typical beam-column joint). Given the column,
+//           that clear distance is cover + hoop + column bar and ℓdh is
+//           dimensioned against it; without one it falls back to a nominal 60.
 //
 // What the drawing has to get right, and what a bar schedule cannot say:
 //
@@ -41,7 +43,7 @@
 // Units: geometry m; bar/stirrup sizes mm.
 // ─────────────────────────────────────────────────────────────────────────
 import type { PlanPrimitive, Drawing } from './planRenderer'
-import { hookFit, type HookFitResult } from './devLength'
+import { hookClearToFace, hookFit, type HookFitResult } from './devLength'
 import { jointHookLdh } from './beamColumnJoint'
 
 export interface BeamDetailSection {
@@ -235,8 +237,9 @@ export function endHookAnchorage(
     ldh, memberDepth: a.colH, cover: a.colCover,
     tieDia: a.colTieDia, farBarDia: a.colBarDia,
   })
-  // Clear distance from the far face of the column to the OUTSIDE of the bend.
-  return { ...fit, ldh, clear: a.colCover + a.colTieDia + a.colBarDia }
+  // Clear distance from the far face of the column to the OUTSIDE of the bend —
+  // the same helper the joint sheet places its hook with.
+  return { ...fit, ldh, clear: hookClearToFace(a.colCover, a.colTieDia, a.colBarDia) }
 }
 
 /** Build the continuous-beam reinforcement elevation. */
@@ -361,7 +364,9 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
       if (cont) continue
       const hx = cx - dir * (face - anch.clear / 1000)   // outside of the bend
       const faceX = cx + dir * face                       // critical section
-      const dy = Y(hM + colRise + u * 6.2)
+      // Above the SPAN label at u*7.4, which the right-hand dimension used to
+      // print straight through — the two shared a band and an anchor point.
+      const dy = Y(hM + colRise + u * 9.4)
       P.push({
         kind: 'dim', x1: hx, y1: dy, x2: faceX, y2: dy,
         text: `${Math.round(anch.avail)} AVAIL / ℓdh ${Math.round(anch.ldh)} REQ`,
@@ -371,11 +376,11 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
         // where ℓdh would have to reach — past the back of the column
         const need = faceX - dir * (anch.ldh / 1000)
         P.push({
-          kind: 'line', x1: need, y1: Y(hM + colRise + u * 7.4), x2: need, y2: Y(yTop2 - hookDrop),
+          kind: 'line', x1: need, y1: Y(hM + colRise + u * 9.4), x2: need, y2: Y(yTop2 - hookDrop),
           stroke: WARN, width: 0.8, dash: [u * 0.4, u * 0.3],
         })
         P.push({
-          kind: 'text', x: need, y: Y(hM + colRise + u * 8.6),
+          kind: 'text', x: need, y: Y(hM + colRise + u * 11.0),
           text: `ℓdh ${Math.round(anch.shortfall)} SHORT`,
           size: u * 1.25, anchor: dir > 0 ? 'start' : 'end', color: WARN,
         })
