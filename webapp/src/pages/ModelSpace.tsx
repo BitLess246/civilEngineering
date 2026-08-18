@@ -5074,17 +5074,19 @@ export default function ModelSpace() {
                               <table className="text-[11px] leading-5">
                                 <tbody>
                                   {[
-                                    ['Mp = Fy·Zx', `${f1(b.Mp / 1e6)} kN·m`],
+                                    ['Mp = Fy·Zx', `${f1(b.Mp)} kN·m`],
                                     ['Lp', `${(b.Lp / 1000).toFixed(2)} m`],
                                     ['Lr', `${(b.Lr / 1000).toFixed(2)} m`],
                                     ['Lb', `${(b.Lb / 1000).toFixed(2)} m`],
                                     ['LTB zone', b.ltbZone],
-                                    ['Mn', `${f1(b.Mn / 1e6)} kN·m`],
+                                    ['Mn', `${f1(b.Mn)} kN·m`],
                                     ['φMn (φ=0.9)', `${f1(b.phiMn)} kN·m`],
                                     ['Mu', `${f1(b.Mu)} kN·m`],
                                     ['Util (M)', `${(b.utilM * 100).toFixed(1)}%`],
-                                    ['Compact flange?', b.compactFlange ? `✓  λf=${b.lambdaF.toFixed(1)} ≤ λpf=${b.lambdaPF.toFixed(1)}` : `✗  λf=${b.lambdaF.toFixed(1)} > λpf=${b.lambdaPF.toFixed(1)}`],
-                                    ['Compact web?', b.compactWeb ? `✓  λw=${b.lambdaW.toFixed(1)} ≤ λpw=${b.lambdaPW.toFixed(1)}` : `✗  λw=${b.lambdaW.toFixed(1)} > λpw=${b.lambdaPW.toFixed(1)}`],
+                                    ['Flange (B4.1b)', `${b.flangeClass}  λf=${b.lambdaF.toFixed(1)} · λpf=${b.lambdaPF.toFixed(1)} · λrf=${b.lambdaRF.toFixed(1)}`],
+                                    ['Web (B4.1b)', `${b.webClass}  λw=${b.lambdaW.toFixed(1)} · λpw=${b.lambdaPW.toFixed(1)} · λrw=${b.lambdaRW.toFixed(1)}`],
+                                    ['Clause', `§${b.clause} — ${b.governing} governs`],
+                                    ...(Number.isFinite(b.MnFLB) ? [['Mn (FLB, §F3.2)', `${f1(b.MnFLB)} kN·m`]] : []),
                                   ].map(([lbl, val]) => (
                                     <tr key={lbl}><td className="pr-3 text-slate-500">{lbl}</td><td className="font-mono">{val}</td></tr>
                                   ))}

@@ -193,6 +193,41 @@ describe('steel design pipeline (AISC routing + base plates)', () => {
     // 34 m of W310x79 (A = 10000 mm²) at 7850 kg/m³
     expect(r.totals.steelKg).toBeCloseTo(34 * (10000 / 1e6) * 7850, 0)
   })
+
+  // AUD-001. W310x79 is compact at Fy 345, so the schedule above is a §F2
+  // baseline; these two say what happens when it is not.
+  it('a noncompact flange lands in §F3 and is REPORTED as such', () => {
+    const m = steelModel()
+    // W150x22 at Fy 345: λf = 11.52 > λpf = 9.15, web still compact.
+    m.sections = m.sections.map((s) => ({ ...s, shape: 'W150x22' }))
+    const d = designStructure(m, soil)!
+    expect(d.steelBeams.length).toBeGreaterThan(0)
+    for (const b of d.steelBeams) {
+      expect(b.flangeClass).toBe('noncompact')
+      expect(b.webClass).toBe('compact')
+      expect(b.clause).toBe('F3')
+      // the whole point: φMn is BELOW what the compact equations would give
+      expect(b.MnFLB).toBeLessThan(b.Mp)
+      expect(b.Mn).toBeLessThanOrEqual(b.MnFLB + 1e-9)
+    }
+  })
+
+  it('a tee beam goes UNCHECKED instead of collecting the compact §F2 strength', () => {
+    const m = steelModel()
+    m.sections = m.sections.map((s) => ({ ...s, shape: 'WT155x19.4' }))
+    const d = designStructure(m, soil)!
+    // no beam row invented for a shape §F2/§F3 does not cover…
+    expect(d.steelBeams).toHaveLength(0)
+    // …and the members are named, with the clause that would be needed
+    const beams = d.unchecked.filter((u) => u.role === 'beam' || u.role === 'girder')
+    expect(beams).toHaveLength(4)
+    for (const u of beams) {
+      expect(u.shape).toBe('WT155x19.4')
+      expect(u.reason).toMatch(/§F9/)
+    }
+    // and nothing green: an unchecked member fails the overall gate
+    expect(designOK(d)).toBe(false)
+  })
 })
 
 describe('Lb bracing override per member (A3)', () => {

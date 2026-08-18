@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { shapeByName } from './aiscSections'
 import {
-  deriveWSection, beamFlexure, beamShear,
+  deriveWSection, beamFlexure, beamFlexureScope, beamShear,
   columnAxial, weakAxisFlexure, combinedLoading,
   boltShear, weldStrength, beamLoadingSimple, E_STEEL,
   boltGroupGeom, boltGeomFromPositions, eccentricBoltGroup, shearTabBlockShear, outOfPlaneBoltGroup, pryingAction,
@@ -59,6 +59,142 @@ describe('beamFlexure §F2', () => {
   })
 })
 
+describe('beamFlexure §F3 — flange local buckling', () => {
+  // AUD-001. The old code computed compactness, PRINTED it, and then returned
+  // the compact §F2 strength regardless. A noncompact flange therefore came out
+  // at full Mp — a false pass. §F3 takes the lesser of LTB and FLB.
+
+  // W150x22 is the one shape in the library whose flange is noncompact at both
+  // grades: λf = bf/2tf = 152/(2×6.6) = 11.515.
+  const W150x22 = shapeByName('W150x22')!
+  const p22 = deriveWSection(W150x22)
+
+  it('classifies W150x22 as a noncompact flange on a compact web → §F3', () => {
+    const sc = beamFlexureScope(W150x22, p22, 248)
+    expect(sc.lambdaF).toBeCloseTo(11.515, 3)
+    expect(sc.lambdaPF).toBeCloseTo(0.38 * Math.sqrt(E_STEEL / 248), 6)   // 10.791
+    expect(sc.lambdaRF).toBeCloseTo(1.0 * Math.sqrt(E_STEEL / 248), 6)    // 28.398
+    expect(sc.flangeClass).toBe('noncompact')
+    expect(sc.webClass).toBe('compact')
+    expect(sc.clause).toBe('F3')
+    expect(sc.applicable).toBe(true)
+    expect(sc.compact).toBe(false)
+  })
+
+  it('reduces Mn by §F3-1 rather than handing back Mp — hand calc, Fy = 345', () => {
+    // Hand calc (mm, MPa, kN·m):
+    //   Zx = bf·tf(d−tf) + tw·hw²/4 = 152·6.6·145.4 + 5.8·138.8²/4 = 173 800 mm³
+    //   Sx = Ix/(d/2) = 156 633 mm³
+    //   Mp = 345 × 173 800 / 1e6 = 59.961 kN·m
+    //   λpf = 9.149, λrf = 24.077, λf = 11.515
+    //   Mn = Mp − (Mp − 0.7·Fy·Sx)·(λf−λpf)/(λrf−λpf)
+    //      = 59.961 − (59.961 − 37.827)·(2.366/14.928) = 56.453 kN·m
+    const r = beamFlexure(W150x22, p22, 345, 0)   // Lb = 0 ⇒ LTB gives Mp
+    expect(r.Mp).toBeCloseTo(59.961, 2)
+    expect(r.MnLTB).toBeCloseTo(r.Mp, 9)
+    expect(r.MnFLB).toBeCloseTo(56.453, 2)
+    expect(r.Mn).toBeCloseTo(56.453, 2)
+    expect(r.governing).toBe('FLB')
+    expect(r.phiMn).toBeCloseTo(0.9 * 56.453, 2)
+    // …and this is the regression: the old code returned the full Mp here.
+    expect(r.Mn).toBeLessThan(r.Mp)
+  })
+
+  it('at Fy = 248 the same shape is still noncompact, and still reduced', () => {
+    const r = beamFlexure(W150x22, p22, 248, 0)
+    expect(r.clause).toBe('F3')
+    expect(r.MnFLB).toBeCloseTo(42.448, 2)
+    expect(r.Mn / r.Mp).toBeCloseTo(0.9848, 3)
+  })
+
+  it('LTB still governs when it is the smaller of the two', () => {
+    const near = beamFlexure(W150x22, p22, 345, 0)
+    const far  = beamFlexure(W150x22, p22, 345, 12_000)
+    expect(far.MnFLB).toBeCloseTo(near.MnFLB, 9)      // FLB does not see Lb
+    expect(far.MnLTB).toBeLessThan(far.MnFLB)
+    expect(far.governing).toBe('LTB')
+    expect(far.Mn).toBeCloseTo(far.MnLTB, 9)
+  })
+
+  it('a compact flange has no FLB limit state, so §F2 is unchanged', () => {
+    const r = beamFlexure(W250x33, p, 345, 0)
+    expect(r.clause).toBe('F2')
+    expect(r.MnFLB).toBe(Infinity)
+    expect(r.Mn).toBeCloseTo(r.Mp, 9)
+    expect(r.governing).toBe('yielding')
+  })
+
+  it('§F3-2 governs a slender flange (synthetic plate girder flange)', () => {
+    // No rolled shape in the library has a slender flange, so the branch is
+    // exercised on a fabricated section: bf/2tf = 400/12 = 33.3 > λrf = 28.4.
+    const slender = { name: 'PG-slender', family: 'W' as const, A: 9600, rx: 200, ry: 90,
+                      d: 500, bf: 400, tf: 6, tw: 12 }
+    const ps = deriveWSection(slender)
+    const r = beamFlexure(slender, ps, 248, 0)
+    expect(r.flangeClass).toBe('slender')
+    expect(r.webClass).toBe('compact')
+    expect(r.clause).toBe('F3')
+    // kc = 4/√(hw/tw) = 4/√(488/12) = 0.627, inside [0.35, 0.76]
+    expect(r.kc).toBeCloseTo(4 / Math.sqrt(ps.hw / 12), 6)
+    expect(r.MnFLB).toBeCloseTo((0.9 * E_STEEL * r.kc * ps.Sx) / r.lambdaF ** 2 / 1e6, 6)
+    expect(r.Mn).toBeCloseTo(r.MnFLB, 9)
+    expect(r.governing).toBe('FLB')
+    expect(r.Mn).toBeLessThan(r.Mp)
+  })
+
+  it('clamps kc to [0.35, 0.76]', () => {
+    const stocky = { name: 'PG-stocky', family: 'W' as const, A: 9000, rx: 100, ry: 60,
+                     d: 200, bf: 400, tf: 6, tw: 40 }   // hw/tw = 4.7 → 4/√4.7 = 1.85
+    expect(beamFlexure(stocky, deriveWSection(stocky), 248, 0).kc).toBeCloseTo(0.76, 9)
+  })
+})
+
+describe('beamFlexure — sections with no implemented clause', () => {
+  // §F4/§F5 (noncompact/slender web) and §F9 (tees) are NOT implemented. The
+  // module must say so instead of returning the compact strength.
+  const mk = (over: Partial<{ d: number; bf: number; tf: number; tw: number }>) =>
+    ({ name: 'PG', family: 'W' as const, A: 12000, rx: 300, ry: 60,
+       d: 1200, bf: 300, tf: 20, tw: 10, ...over })
+
+  it('a noncompact web is §F4 → out of scope, Mn = 0', () => {
+    // hw/tw = 1160/10 = 116 → λpw = 106.8 < 116 ≤ λrw = 161.9
+    const s = mk({})
+    const r = beamFlexure(s, deriveWSection(s), 248, 0)
+    expect(r.webClass).toBe('noncompact')
+    expect(r.clause).toBe('out-of-scope')
+    expect(r.applicable).toBe(false)
+    expect(r.reason).toMatch(/§F4/)
+    expect(r.Mn).toBe(0)
+    expect(r.phiMn).toBe(0)
+    expect(r.Mp).toBeGreaterThan(0)      // Mp is still reported, just not used
+  })
+
+  it('a slender web is §F5 → out of scope', () => {
+    const s = mk({ tw: 6 })              // hw/tw = 193 > λrw = 161.9
+    const r = beamFlexure(s, deriveWSection(s), 248, 0)
+    expect(r.webClass).toBe('slender')
+    expect(r.reason).toMatch(/§F5/)
+    expect(r.applicable).toBe(false)
+    expect(r.phiMn).toBe(0)
+  })
+
+  it('a tee is §F9 → out of scope, because deriveWSection is wrong for it too', () => {
+    const wt = shapeByName('WT155x19.4')!
+    const r = beamFlexure(wt, deriveWSection(wt), 248, 0)
+    expect(r.clause).toBe('out-of-scope')
+    expect(r.reason).toMatch(/tee/)
+    expect(r.phiMn).toBe(0)
+  })
+
+  it('a channel is out of scope for the doubly-symmetric equations', () => {
+    const c = shapeByName('C100x10.8')!
+    expect(c.family).toBe('C')
+    const r = beamFlexureScope(c, deriveWSection(c), 248)
+    expect(r.applicable).toBe(false)
+    expect(r.reason).toMatch(/doubly-symmetric/)
+  })
+})
+
 describe('beamShear §G2.1', () => {
   it('compact web → phiV = 1.0, Cv1 = 1.0', () => {
     const r = beamShear(W250x33, p, 345)
@@ -95,6 +231,25 @@ describe('columnAxial §E3', () => {
 describe('weakAxisFlexure §F6', () => {
   it('phiMny > 0', () => {
     expect(weakAxisFlexure(W250x33, p, 345).phiMny).toBeGreaterThan(0)
+  })
+  it('a compact flange has no §F6.2 reduction — Mny = min(Fy·Zy, 1.6·Fy·Sy)', () => {
+    const r = weakAxisFlexure(W250x33, p, 345)
+    expect(r.flangeClass).toBe('compact')
+    expect(r.MnFLB).toBe(Infinity)
+    expect(r.Mny).toBeCloseTo(r.MnY, 9)
+    expect(r.Mny).toBeCloseTo(345 * Math.min(p.Zy, 1.6 * r.Sy) / 1e6, 6)
+  })
+  it('a noncompact flange takes the §F6-2 reduction', () => {
+    // Same AUD-001 failure class about the weak axis: §F6.1 alone would return
+    // the full plastic strength for a flange that buckles first.
+    const W150x22 = shapeByName('W150x22')!
+    const p22 = deriveWSection(W150x22)
+    const r = weakAxisFlexure(W150x22, p22, 345)
+    expect(r.flangeClass).toBe('noncompact')
+    expect(r.MnFLB).toBeLessThan(r.MnY)
+    expect(r.Mny).toBeCloseTo(r.MnFLB, 9)
+    const lf = 152 / (2 * 6.6), lpf = 0.38 * Math.sqrt(E_STEEL / 345), lrf = Math.sqrt(E_STEEL / 345)
+    expect(r.Mny).toBeCloseTo(r.MnY - (r.MnY - 0.7 * 345 * r.Sy / 1e6) * ((lf - lpf) / (lrf - lpf)), 6)
   })
 })
 

@@ -65,20 +65,32 @@ function BeamTab() {
         ],
       },
       {
-        title: 'Compact section (Table B4.1b)',
+        title: 'Section classification (Table B4.1b)',
         lines: [
           { tex: `\\lambda_f = \\frac{b_f}{2t_f} = \\frac{${shape.bf}}{2 \\times ${shape.tf}} = ${sn2(flex.lambdaF)}` },
-          { tex: `\\lambda_{pf} = 0.38\\sqrt{E/F_y} = 0.38\\sqrt{${E}/${Fy}} = ${sn2(flex.lambdaPF)}\\quad ${flex.compactFlange ? '\\checkmark\\text{ compact}' : '\\text{non-compact}'}` },
-          { tex: `\\lambda_w = h_w / t_w = ${sn1(props.hw)} / ${shape.tw} = ${sn1(flex.lambdaW)}\\quad \\lambda_{pw} = ${sn1(flex.lambdaPW)}\\quad ${flex.compactWeb ? '\\checkmark' : '\\times'}` },
+          { tex: `\\lambda_{pf} = 0.38\\sqrt{E/F_y} = ${sn2(flex.lambdaPF)}\\quad \\lambda_{rf} = 1.0\\sqrt{E/F_y} = ${sn2(flex.lambdaRF)}\\quad \\Rightarrow\\ \\text{${flex.flangeClass} flange}` },
+          { tex: `\\lambda_w = h_w / t_w = ${sn1(props.hw)} / ${shape.tw} = ${sn1(flex.lambdaW)}\\quad \\lambda_{pw} = ${sn1(flex.lambdaPW)}\\quad \\lambda_{rw} = ${sn1(flex.lambdaRW)}\\quad \\Rightarrow\\ \\text{${flex.webClass} web}` },
+          { text: flex.applicable
+              ? `Compact web + ${flex.flangeClass} flange → §${flex.clause} governs the flexural strength.`
+              : `Out of scope: ${flex.reason}` },
         ],
       },
       {
-        title: 'Flexural capacity §F2 — lateral-torsional buckling',
+        title: `Flexural capacity §${flex.clause} — lateral-torsional buckling${flex.flangeClass === 'compact' ? '' : ' + flange local buckling'}`,
         lines: [
           { tex: `M_p = F_y Z_x = ${Fy} \\times ${(props.Zx / 1000).toFixed(0)} \\times 10^3\\text{ mm}^3 = ${sn1(flex.Mp)}\\text{ kN·m}` },
           { tex: `L_p = 1.76\\, r_y \\sqrt{E/F_y} = 1.76 \\times ${shape.ry} \\times \\sqrt{${E}/${Fy}} = ${sn1(flex.Lp)}\\text{ mm} = ${sn2(flex.Lp/1000)}\\text{ m}` },
           { tex: `L_r = ${sn1(flex.Lr)}\\text{ mm} = ${sn2(flex.Lr/1000)}\\text{ m}` },
           { text: `L_b = ${Lb} m → zone: ${flex.ltbZone.toUpperCase()}` },
+          { text: `M_n(LTB) = ${sn1(flex.MnLTB)} kN·m` },
+          // §F3.2: a noncompact or slender flange buckles locally before the
+          // section can reach Mp, so §F2 alone would overstate the capacity.
+          ...(flex.flangeClass === 'compact' ? [] : [{
+            tex: flex.flangeClass === 'noncompact'
+              ? `M_n(FLB) = M_p - (M_p - 0.7F_yS_x)\\frac{\\lambda_f - \\lambda_{pf}}{\\lambda_{rf} - \\lambda_{pf}} = ${sn1(flex.MnFLB)}\\text{ kN·m}\\quad(\\S F3\\text{-}1)`
+              : `M_n(FLB) = \\frac{0.9Ek_cS_x}{\\lambda_f^2},\\ k_c = ${sn2(flex.kc)} \\Rightarrow ${sn1(flex.MnFLB)}\\text{ kN·m}\\quad(\\S F3\\text{-}2)`,
+          }]),
+          { text: `Governing limit state: ${flex.governing}.` },
           { tex: res.basis === 'LRFD'
               ? `M_n = ${sn1(flex.Mn)}\\text{ kN·m}\\quad \\phi M_n = ${SAFETY.flexure.phi.toFixed(2)} \\times ${sn1(flex.Mn)} = ${sn1(res.avail.Mn)}\\text{ kN·m}`
               : `M_n = ${sn1(flex.Mn)}\\text{ kN·m}\\quad \\frac{M_n}{\\Omega_b} = \\frac{${sn1(flex.Mn)}}{${SAFETY.flexure.omega.toFixed(2)}} = ${sn1(res.avail.Mn)}\\text{ kN·m}` },
@@ -140,9 +152,14 @@ function BeamTab() {
             <Row label="Zx" value={`${(res.props.Zx/1e3).toFixed(0)} ×10³ mm³`} />
             <Row label="Lp / Lr" value={`${f2(res.flex.Lp/1000)} / ${f2(res.flex.Lr/1000)} m`} />
           </ResultCard>
-          <ResultCard title={<>Flexure §F2 <ZoneBadge zone={res.flex.ltbZone} /></>}>
+          <ResultCard title={<>Flexure §{res.flex.clause} <ZoneBadge zone={res.flex.ltbZone} /></>}>
             <Row label={capacityLabel(res.basis, 'M')} value={`${f1(res.avail.Mn)} kN·m`}
-              sub={`Mn = ${f1(res.flex.Mn)} · ${factorLabel(res.basis, 'flexure')}`} />
+              sub={`Mn = ${f1(res.flex.Mn)} (${res.flex.governing}) · ${factorLabel(res.basis, 'flexure')}`} />
+            {/* A noncompact flange is not a footnote — it is the reason Mn is
+                below Mp, so the card says so rather than only the steps. */}
+            {res.flex.flangeClass !== 'compact' && (
+              <Row label="Flange (B4.1b)" value={`${res.flex.flangeClass} — §F3.2 Mn = ${f1(res.flex.MnFLB)} kN·m`} />
+            )}
             <Row alert={utilM>1} label={`${demandLabel(res.basis, 'M')} / ${capacityLabel(res.basis, 'M')}`}
               value={<Verdict pass={utilM<=1} value={`${(utilM*100).toFixed(0)} %`} />} />
           </ResultCard>
@@ -175,7 +192,7 @@ export default function SteelBeam() {
     <div>
       <PageHeader title="Steel Beam Design" badges={['AISC 360-16']} />
       <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
-        <p className="no-print mt-1 text-slate-600">AISC 360-16 §F2 flexure with lateral-torsional buckling, §G2.1 shear, and service deflections against L/360 and L/240. 3D scene and a step-by-step solution.</p>
+        <p className="no-print mt-1 text-slate-600">AISC 360-16 §F2/§F3 flexure — lateral-torsional buckling, plus §F3.2 flange local buckling when the flange is not compact — §G2.1 shear, and service deflections against L/360 and L/240. 3D scene and a step-by-step solution.</p>
         <ReportControls title="Steel Beam Design Report" />
         <div className="mt-5">
           <BeamTab />

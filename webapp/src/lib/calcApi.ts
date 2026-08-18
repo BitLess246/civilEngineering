@@ -126,6 +126,9 @@ async function post<T>(path: string, body: unknown, route: string): Promise<T> {
 
 export interface BeamCalcInput {
   shapeName: string; Fy: number
+  /** `span` and `Lb` are METRES — the units the page's inputs are labelled in.
+   *  `steelDesign.beamFlexure` takes Lb in mm, so `calcLocal` converts. It did
+   *  not, which pinned every result to the plastic LTB zone. */
   span: number; Lb: number; Cb: number
   wDead: number; wLive: number
   /** Defaults to LRFD when absent, so an older caller is unaffected. */

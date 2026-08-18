@@ -28,7 +28,8 @@ import { designSlabDDM, type SlabDesignResult } from './slabDDM'
 import { designShearWall, type ShearWallResult } from './shearWallDesign'
 import { checkModelSCWB, type SCWBJointRow } from './scwb'
 import { shapeByName, nextHeavierW, nextLighterW, type AiscShape } from './aiscSections'
-import { deriveWSection, beamFlexure, beamShear, columnAxial, combinedLoading, weakAxisFlexure } from './steelDesign'
+import { deriveWSection, beamFlexure, beamFlexureScope, beamShear, columnAxial, combinedLoading, weakAxisFlexure } from './steelDesign'
+import type { PlateClass, FlexureClause } from './steelDesign'
 import { columnKFactors, type ColumnK } from './effectiveLength'
 import { woodRefOf, checkWoodBeam, checkWoodColumn, getWoodRef, woodAdjusted } from './woodDesign'
 import { designWoodSlab, type WoodSlabResult } from './woodSlab'
@@ -245,6 +246,14 @@ export interface SteelBeamScheduleRow {
   Mp: number; Lp: number; Lr: number; Lb: number; Mn: number
   compact: boolean; compactFlange: boolean; compactWeb: boolean
   lambdaF: number; lambdaPF: number; lambdaW: number; lambdaPW: number
+  /** Table B4.1b noncompact limits and the resulting classification, plus the
+   *  clause that produced `Mn`. A schedule that prints λ and λp but not λr
+   *  cannot tell a noncompact flange from a slender one. */
+  lambdaRF: number; lambdaRW: number
+  flangeClass: PlateClass; webClass: PlateClass; clause: FlexureClause
+  /** §F3.2 flange-local-buckling strength (Infinity when the flange is
+   *  compact) and which limit state actually governed. */
+  MnFLB: number; governing: 'yielding' | 'LTB' | 'FLB'
   Aw: number; Cv1: number; phiV: number; hwTw: number
 }
 export interface SteelColumnScheduleRow {
@@ -260,6 +269,9 @@ export interface SteelColumnScheduleRow {
   slenderness: number
   ratio: number; equation: string  // §H1-1
   ok: boolean
+  /** Set when the shape has no implemented §F flexural strength, so the §H1-1
+   *  moment term could not be formed. Non-empty ⇒ the row is NOT a check. */
+  flexureNote?: string
   gov?: string
   // solution detail
   d: number; bf: number; tf: number; tw: number; A: number; rx: number; ry: number
@@ -374,6 +386,11 @@ function designSteelBeamRow(
   const p = deriveWSection(shape)
   const Lb = (lbOverride && lbOverride > 0 ? lbOverride : mr.L) * 1000
   const flex = beamFlexure(shape, p, Fy, Lb, 1.0)
+  // §F2/§F3 cover a compact web only, and only a doubly-symmetric I. A
+  // noncompact/slender web (§F4/§F5) or a tee (§F9) has no implemented
+  // strength, so the member goes UNCHECKED rather than collecting Mp — see
+  // `steelBeamScopeReason` for the message the caller shows.
+  if (!flex.applicable) return null
   const shear = beamShear(shape, p, Fy)
   const Mu = mr.Mmax, Vu = mr.Vmax
   const utilM = flex.phiMn > 1e-9 ? Mu / flex.phiMn : Infinity
@@ -397,8 +414,22 @@ function designSteelBeamRow(
     Mp: flex.Mp, Lp: flex.Lp, Lr: flex.Lr, Lb, Mn: flex.Mn,
     compact: flex.compact, compactFlange: flex.compactFlange, compactWeb: flex.compactWeb,
     lambdaF: flex.lambdaF, lambdaPF: flex.lambdaPF, lambdaW: flex.lambdaW, lambdaPW: flex.lambdaPW,
+    lambdaRF: flex.lambdaRF, lambdaRW: flex.lambdaRW,
+    flangeClass: flex.flangeClass, webClass: flex.webClass, clause: flex.clause,
+    MnFLB: flex.MnFLB, governing: flex.governing,
     Aw: shear.Aw, Cv1: shear.Cv1, phiV: shear.phiV, hwTw: shear.hwTw,
   }
+}
+
+/** Why `designSteelBeamRow` returned null, in the words the schedule shows.
+ *  Kept beside it so the two can never drift into disagreeing about scope. */
+function steelBeamScopeReason(sec: RectSection): string {
+  const shape = sec.shape ? shapeByName(sec.shape) : undefined
+  if (!shape) return `${sec.shape ?? '(no shape)'} not found in the AISC library — steel beam flexure check skipped`
+  if (shape.family !== 'W' && shape.family !== 'WT')
+    return `${shape.name} is family ${shape.family} — §F2/§F3 flexure covers doubly-symmetric I-shapes only`
+  return beamFlexureScope(shape, deriveWSection(shape), sec.steelFy ?? 248).reason
+    ?? 'no analysis result for this member in any load combination'
 }
 
 /**
@@ -452,9 +483,14 @@ function designSteelColumnRow(
 
   const axial = columnAxial(shape, Fy, mr.L, Kx, Ky)
   const props = deriveWSection(shape)
-  let phiMnx = Infinity, phiMny = Infinity
+  let phiMnx = Infinity, phiMny = Infinity, flexureNote: string | undefined
   if (shape.family === 'W' || shape.family === 'WT') {
-    phiMnx = beamFlexure(shape, props, Fy, mr.L * 1000, 1.0).phiMn
+    const flex = beamFlexure(shape, props, Fy, mr.L * 1000, 1.0)
+    // A section outside §F2/§F3 has no φMnx to put in §H1-1. Leaving the term
+    // out would drop the moment silently, so the row is marked instead and the
+    // caller records it as unchecked — φMnx = ∞ never reaches a green result.
+    if (flex.applicable) phiMnx = flex.phiMn
+    else flexureNote = flex.reason
     phiMny = weakAxisFlexure(shape, props, Fy).phiMny   // §F6
   }
   const comb = combinedLoading(Pu, axial.phiPn, Mux, phiMnx, Muy, phiMny)
@@ -467,7 +503,8 @@ function designSteelColumnRow(
     phiMny: Number.isFinite(phiMny) ? phiMny : 0,
     Kx, Ky, braced,
     slenderness: axial.slenderness, ratio: comb.ratio, equation: comb.equation,
-    ok: comb.ok && axial.slenderOK,
+    ok: comb.ok && axial.slenderOK && !flexureNote,
+    flexureNote,
     d, bf: bf ?? 0, tf: tf ?? 0, tw: tw ?? 0, A, rx, ry,
     Fcr: axial.Fcr, Fe,
     slendernessX: axial.slendernessX, slendernessY: axial.slendernessY,
@@ -1043,11 +1080,12 @@ function designFromRuns(
           if (sev > bestSev) { bestSev = sev; best = row; gov = run.name }
         }
         if (best) steelBeams.push({ ...best, gov })
-        // designSteelBeamRow covers W/WT only (§F2 doubly-symmetric / tee flexure).
-        // A C/L/HSS beam would otherwise vanish from the schedule and read as "OK".
+        // designSteelBeamRow refuses anything §F2/§F3 does not cover — another
+        // family, a tee, or a noncompact/slender web. Such a beam would
+        // otherwise vanish from the schedule and read as "OK".
         else unchecked.push({
           id: m.id, role, shape: sec.shape ?? '(no shape)',
-          reason: 'steel beam flexure covers W/WT shapes only — use a W/WT here or check this member separately',
+          reason: steelBeamScopeReason(sec),
         })
       } else if (isWood) {
         let best: WoodBeamScheduleRow | null = null, bestSev = -1, gov = ''
@@ -1120,7 +1158,15 @@ function designFromRuns(
           if (!row) continue
           if (row.ratio > bestRatio) { bestRatio = row.ratio; best = row; gov = run.name }
         }
-        if (best) steelColumns.push({ ...best, gov })
+        if (best) {
+          steelColumns.push({ ...best, gov })
+          // §E3 axial still ran, but §H1-1 has no moment term without a §F
+          // strength — that is not a completed check.
+          if (best.flexureNote) unchecked.push({
+            id: m.id, role, shape: sec.shape ?? '(no shape)',
+            reason: `${best.flexureNote} — §H1-1 moment term omitted`,
+          })
+        }
         // designSteelColumnRow bails only on an unresolvable shape name
         else unchecked.push({
           id: m.id, role, shape: sec.shape ?? '(no shape)',

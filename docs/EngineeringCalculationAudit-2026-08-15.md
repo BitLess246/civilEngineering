@@ -18,7 +18,7 @@ This audit reviewed the engineering calculation code under `webapp/src/engine` a
 
 **Highest-risk findings**
 
-1. **AISC steel beam flexure applies compact-section F2 strength even when flange or web compactness fails.** The function calculates and reports compactness, but still returns an LRFD flexural capacity for noncompact/slender sections instead of routing to the noncompact/slender provisions or failing applicability. This is a potential false pass.
+1. ~~**AISC steel beam flexure applies compact-section F2 strength even when flange or web compactness fails.**~~ **RESOLVED 2026-08-18** — §F3 flange local buckling is implemented and §F4/§F5/§F9 are gated as out of scope; see §9.
 2. **AISC bolt bearing omits edge distance, spacing, hole type, tear-out, and connected-ply limit states.** Bearing is reduced to `2.4 Fu d t`, which is only an upper cap for one J3.10 case, not a complete bearing/tear-out check. This is a potential false pass.
 3. **Rankine retaining-wall earth pressure is applied without validating level backfill, wall friction, drainage/hydrostatic condition, and soil cohesion assumptions.** The implementation states Rankine active theory but does not require the model state needed to prove Rankine applicability.
 4. **Two-way slab DDM has partial applicability validation only.** The model checks the two-way aspect ratio and panel ratio, but does not capture several DDM applicability conditions such as minimum panel count, rectangularity of successive spans, live/dead-load ratio limits, column offset limits, or beam stiffness limits.
@@ -30,7 +30,7 @@ No confirmed bug was patched automatically because the high-risk items above req
 
 | ID | Engine | File / Function | Severity | Status | Current behavior | Expected behavior | Why current behavior is wrong or risky | Governing code / provision | Applicability condition | Correct calculation / disposition | Recommended fix | Regression test |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| AUD-001 | Steel beam flexure | `src/engine/steelDesign.ts` / `beamFlexure` | HIGH | LIKELY BUG | Computes compactness but still applies AISC F2-style compact doubly-symmetric I-shape LTB equations for all W-shapes. | If flange or web is noncompact/slender, use the applicable F3/F4/F5 provisions or flag the section outside the implemented scope. | The equation can be numerically correct for compact sections but applied to a section classification for which it does not govern. | AISC 360-16 Chapter F, especially F2 vs noncompact/slender alternatives. | Doubly symmetric I-shape, compact web and compact flanges bending about major axis. | Capacity for noncompact/slender sections must account for local buckling reductions. | Add an `applicable`/`scopeOK` gate and refuse noncompact sections until F3/F4/F5 are implemented. | Add noncompact-flange and slender-web W-shape fixtures; old code should pass, corrected code should flag out-of-scope or reduced capacity. |
+| AUD-001 | Steel beam flexure | `src/engine/steelDesign.ts` / `beamFlexure` | HIGH | **RESOLVED 2026-08-18** — see §9 | Computes compactness but still applies AISC F2-style compact doubly-symmetric I-shape LTB equations for all W-shapes. | If flange or web is noncompact/slender, use the applicable F3/F4/F5 provisions or flag the section outside the implemented scope. | The equation can be numerically correct for compact sections but applied to a section classification for which it does not govern. | AISC 360-16 Chapter F, especially F2 vs noncompact/slender alternatives. | Doubly symmetric I-shape, compact web and compact flanges bending about major axis. | Capacity for noncompact/slender sections must account for local buckling reductions. | Add an `applicable`/`scopeOK` gate and refuse noncompact sections until F3/F4/F5 are implemented. | Add noncompact-flange and slender-web W-shape fixtures; old code should pass, corrected code should flag out-of-scope or reduced capacity. |
 | AUD-002 | Steel bolt connection | `src/engine/steelDesign.ts` / `boltShear`; `src/engine/boltedConnection.ts` | HIGH | LIKELY BUG | Bearing uses `2.4 Fu d t` per bolt and ignores edge distance, bolt spacing, hole type, deformation-at-service choice, and tear-out. | Check both bearing and tear-out per connected ply using actual clear distances and applicable J3.10 equations; separately check block shear where relevant. | `2.4 Fu d t` is an upper limit, not a complete applicability-independent bearing capacity. | AISC 360-16 J3.10, J4.3. | Requires geometry: clear end/edge distance, spacing in load direction, hole type, ply thickness and Fu for each connected element. | Use the minimum of tear-out and bearing capacities for each ply; require geometry. | Extend inputs and tests for edge-distance-governed and spacing-governed cases. | Edge-distance case where `2.4FuDt` passes but tear-out fails. |
 | AUD-003 | Retaining wall earth pressure | `src/engine/retainingWall.ts` / `designRetainingWall` | HIGH | POSSIBLE ISSUE | Always uses Rankine active `Ka = tan²(45 − φ/2)` and service stability checks. | Validate Rankine assumptions or expose method selection: level backfill, no wall friction, drained granular condition, no hydrostatic pressure unless included. | A Rankine equation is correct only for its assumed geometry and drainage/state; omitted water or wall friction can change pressure materially. | NSCP 2015 geotechnical stability references; Rankine theory. | Vertical smooth wall, level drained backfill, active state mobilized, no cohesion/water/seismic increment unless included. | If assumptions are not met, require Coulomb/at-rest/seismic/water inputs or flag manual review. | Add input model for backfill slope, wall friction, water table, drainage, cohesion, seismic earth pressure. | Sloping-backfill and hydrostatic cases should not be allowed to silently use dry level Rankine. |
 | AUD-004 | Two-way slab DDM | `src/engine/slabDDM.ts` / `designSlabDDM` | HIGH | POSSIBLE ISSUE | Checks two-way behavior and `L <= 2D`; uses DDM moment coefficients. | Confirm all DDM applicability requirements before applying DDM coefficients. | DDM coefficients depend on a specific regular slab system, not merely an aspect-ratio threshold. | ACI 318-14 / NSCP 2015 two-way slab Direct Design Method. | Multiple continuous spans, rectangular panels, span-ratio limits, column offset limits, load restrictions, and applicable beam/slab stiffness conditions. | Without missing panel-system data, mark DDM applicability as unverified. | Add panel-grid metadata and applicability checklist. | Irregular two-span/offset-column panel should be flagged not applicable. |
@@ -58,7 +58,7 @@ No confirmed bug was patched automatically because the high-risk items above req
 
 ### Provisions with incorrect or incomplete applicability determination
 
-- **AISC major-axis beam flexure**: compactness is calculated but not used to prevent F2-style compact-section design outside compact-section scope.
+- ~~**AISC major-axis beam flexure**: compactness is calculated but not used to prevent F2-style compact-section design outside compact-section scope.~~ Resolved — classification now selects §F2 or §F3, or refuses the section (§9).
 - **AISC bolt bearing**: bearing capacity is applied without the geometry required to decide whether tear-out or bearing controls.
 - **Rankine retaining wall pressure**: method is applied without input state proving level, drained, active, no-wall-friction assumptions.
 - **Two-way slab DDM**: only a subset of method applicability is represented in the input model.
@@ -84,13 +84,13 @@ Representative independent checks were performed from the code formulas and dime
 | Hook development | same, with cover/tie reductions | `ldh=max(0.24ψeψcψr fy db/(λ√fc),8db,150)` | With ψc=.7, ψr=.8: max(266.7,200,150)=266.7 mm | expected rounding only | 1 mm | PASS arithmetic |
 | Retaining wall Ka | φ=30° | `Ka=tan²(45−15)` | tan²30°=0.3333 | 0 | 1e-6 | PASS arithmetic; applicability unverified |
 | Steel shear compact web | Fy=345, E=200000, h/tw below 2.24√E/Fy | φv=1.0, Cv=1.0 | threshold = 2.24√(579.7)=53.9 | n/a | n/a | PASS arithmetic; compactness scope explicit |
-| Steel flexure compactness | noncompact flange hypothetical | capacity still returned | independent interpretation requires noncompact/local-buckling reduction or out-of-scope flag | n/a | n/a | FAIL applicability |
+| Steel flexure compactness | W150x22, Fy=345, Lb=0 (λf=11.52 > λpf=9.15) | Mn = 56.45 kN·m via §F3-1 (was 59.96 = Mp) | Mp − (Mp − 0.7FySx)(λf−λpf)/(λrf−λpf) = 59.961 − 22.134×(2.366/14.928) = 56.453 kN·m | <0.01 kN·m | 0.01 kN·m | PASS |
 | Bearing net pressure | qAllow=200, γs=18, γc=24, H=1.5, Dc=.5, surcharge=10 | `qnet=200-18(1.0)-24(.5)-10=160` | same if qAllow is gross | 0 | exact | PASS arithmetic; terminology applicability unverified |
 | Slab DDM aspect | L/D > 2 | notes not applicable | independent DDM screen: one-way behavior | 0 | n/a | PASS partial applicability |
 
 ## 5. Missing Checks
 
-1. AISC noncompact/slender flexural local-buckling routing for steel beams.
+1. ~~AISC noncompact/slender flexural local-buckling routing for steel beams.~~ Done for §F3 (compact web); §F4/§F5 (noncompact/slender web) and §F9 (tees) are now refused rather than missing silently.
 2. AISC bolt tear-out, edge distance, spacing, hole type, and connected-ply bearing checks.
 3. AISC block shear and net-section rupture checks for relevant connections, unless covered in specialized connection modules and routed consistently.
 4. Retaining-wall hydrostatic pressure, drainage condition, sloping backfill, wall friction, cohesion, and seismic earth-pressure increments.
@@ -106,7 +106,7 @@ Representative independent checks were performed from the code formulas and dime
 
 No new regression tests were added in this pass because no item was classified as a confirmed automatic-fix bug. Recommended high-priority tests are:
 
-- Noncompact AISC W-shape major-axis flexure should not silently use compact F2 capacity.
+- ~~Noncompact AISC W-shape major-axis flexure should not silently use compact F2 capacity.~~ Added: `steelDesign.test.ts` → `beamFlexure §F3 — flange local buckling` and `beamFlexure — sections with no implemented clause`; `pipeline.test.ts` → the tee beam goes unchecked.
 - Edge-distance-governed bolted connection should fail bearing/tear-out even when `2.4FuDt` passes.
 - Hooked terminating beam bar should not be checked as a through-joint straight bar unless the through-bar configuration is selected.
 - Sloping-backfill retaining wall should not silently use dry level Rankine pressure.
@@ -126,7 +126,7 @@ The recommended first implementation fixes are narrow applicability gates rather
 
 Manual engineering/code review should prioritize:
 
-1. AISC steel flexure classification routing and whether the app intends to support noncompact/slender W-shapes.
+1. ~~AISC steel flexure classification routing~~ — routing shipped (§9). Still open: whether the app should IMPLEMENT §F4/§F5 (plate girders) and §F9 (tees) rather than refuse them.
 2. AISC connection module completeness across bolt shear, bearing, tear-out, block shear, net-section rupture, prying, and weld directional strength.
 3. ACI/NSCP DDM applicability checklist and UI data model requirements.
 4. ACI punching shear implementation for interior/edge/corner/opening/unbalanced-moment cases.
@@ -144,3 +144,46 @@ Manual engineering/code review should prioritize:
 - `npx tsc --noEmit`
 - `rg -n "318|ACI|NSCP|AISC|phi|φ|development|splice|seismic|minimum|maximum|applic|hook|through|bar|spacing|slender|compact|K|load combination|combination|bearing|settlement|active|passive|at-rest|drained|undrained" src/engine src/lib --glob '!*.test.ts'`
 - targeted `sed` and Python inspections of engine modules.
+
+## 9. Resolution log
+
+### AUD-001 — steel beam flexure classification routing (2026-08-18)
+
+`beamFlexure` classified the flange and web against Table B4.1b, reported the
+result, and then returned the compact §F2 strength regardless. A noncompact
+flange therefore came back at the full Mp — a false pass.
+
+What shipped:
+
+- `beamFlexureScope(shape, props, Fy)` classifies both plate elements against
+  λp **and λr** (`compact | noncompact | slender`) and names the governing
+  clause: `F2`, `F3`, or `out-of-scope`.
+- **§F3.2 flange local buckling implemented.** `Mn = min(Mn_LTB, Mn_FLB)`, with
+  §F3-1 for a noncompact flange and §F3-2 (`0.9·E·kc·Sx/λ²`, `kc = 4/√(h/tw)`
+  clamped to [0.35, 0.76]) for a slender one. The result carries `MnLTB`,
+  `MnFLB` and `governing` so a reader can see which limit state won.
+- **§F4/§F5 (noncompact/slender web) and §F9 (tees) are refused**, not
+  approximated: `applicable: false`, `Mn = phiMn = 0`, and a `reason` string.
+  `deriveWSection` assumes two flanges about a mid-depth axis, so running a tee
+  through it produced wrong Ix/Sx/Zx as well as the wrong clause.
+- **Pipeline honours the gate.** `designSteelBeamRow` returns `null` for an
+  out-of-scope section, and the member is pushed to `unchecked` with the scope
+  reason — which already fails `designOK`. A steel column whose §F strength is
+  unavailable is recorded the same way rather than having the §H1-1 moment term
+  silently dropped.
+- **§F6.2 added for weak-axis flexure**, the same failure class about the other
+  axis: `weakAxisFlexure` applied §F6.1 yielding unconditionally.
+
+Two adjacent defects were found while verifying this in the browser and fixed
+in the same change:
+
+- `calcLocal` passed `Lb` (and the column's `L`) in **metres** into
+  `beamFlexure`, which compares against `Lp`/`Lr` in **millimetres** — so
+  `/steel/beam` and `/steel/column` reported the plastic LTB zone at `Mn = Mp`
+  for every input. The LTB check on both pages was inert.
+- The Model-Space steel-beam detail printed `Mp` and `Mn` divided by 1e6 (they
+  are already kN·m), and the PDF report labelled `Lp`/`Lr`/`Lb` in metres while
+  printing millimetres.
+
+Still open from this finding: §F4/§F5 plate-girder flexure and §F9 tee flexure
+remain unimplemented — the app now says so instead of guessing.

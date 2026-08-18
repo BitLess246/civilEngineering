@@ -115,6 +115,20 @@ const steelMp = (() => {
   return { manual: (0.9 * Fy * p.Zx) / 1e6, software: flex.phiMn }   // kN·m
 })()
 
+// ── 3b. Noncompact-flange steel beam — §F3-1 flange local buckling ───────────
+// W150x22 is the one library shape whose flange is noncompact at both grades
+// (λf = 152/(2×6.6) = 11.52). Lb = 0 removes LTB so §F3-1 is what is measured.
+const steelF3 = (() => {
+  const shape = shapeByName('W150x22')!, Fy = 345, E = 200_000
+  const p = deriveWSection(shape)
+  const flex = beamFlexure(shape, p, Fy, 0, 1.0)
+  const lf = shape.bf! / (2 * shape.tf!)
+  const lpf = 0.38 * Math.sqrt(E / Fy), lrf = Math.sqrt(E / Fy)
+  const Mp = (Fy * p.Zx) / 1e6
+  const manual = 0.9 * (Mp - (Mp - (0.7 * Fy * p.Sx) / 1e6) * ((lf - lpf) / (lrf - lpf)))
+  return { manual, software: flex.phiMn }   // kN·m
+})()
+
 // ── 4. Wind velocity pressure qz = 0.613·Kz·Kzt·Kd·V² ────────────────────────
 const windQz = (() => {
   const z = 10, V = 50, Kzt = 1.0, Kd = 0.85
@@ -683,6 +697,11 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'steel-phimp', category: 'Steel', title: 'Compact W-beam plastic moment (short Lb)',
     reference: 'AISC 360 §F2.1', formula: 'φMp = 0.90·Fy·Zx',
     manual: steelMp.manual, software: steelMp.software, unit: 'kN·m', tol: 1e-6,
+  },
+  {
+    id: 'steel-f3-flb', category: 'Steel', title: 'Noncompact-flange W-beam — flange local buckling',
+    reference: 'AISC 360 §F3.2(a)', formula: 'φMn = 0.90·[Mp − (Mp − 0.7FySx)(λf−λpf)/(λrf−λpf)]',
+    manual: steelF3.manual, software: steelF3.software, unit: 'kN·m', tol: 1e-6,
   },
   {
     id: 'wind-qz', category: 'Wind', title: 'Velocity pressure (Exposure C, z = 10 m)',

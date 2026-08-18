@@ -61,11 +61,14 @@ export function steelBeamRowSolution(r: SteelBeamScheduleRow): SolutionStep[] {
     { title: `Section ${r.shape}`, clause: 'AISC 360-16', lines: [
       txt(`d = ${f0(r.d)} mm · bf = ${f0(r.bf)} mm · tf = ${f1(r.tf)} mm · tw = ${f1(r.tw)} mm`),
       txt(`Ix = ${(r.Ix / 1e6).toFixed(1)}×10⁶ mm⁴ · Sx = ${(r.Sx / 1e3).toFixed(0)}×10³ mm³ · Zx = ${(r.Zx / 1e3).toFixed(0)}×10³ mm³ · ry = ${f1(r.ry)} mm`),
-      txt(`Compactness: flange λ = ${f1(r.lambdaF)} vs λp = ${f1(r.lambdaPF)}, web λ = ${f1(r.lambdaW)} vs λp = ${f1(r.lambdaPW)} → ${r.compact ? 'compact' : 'non-compact'}`),
+      txt(`Classification (Table B4.1b): flange λ = ${f1(r.lambdaF)} vs λp = ${f1(r.lambdaPF)}, λr = ${f1(r.lambdaRF)} → ${r.flangeClass}; web λ = ${f1(r.lambdaW)} vs λp = ${f1(r.lambdaPW)}, λr = ${f1(r.lambdaRW)} → ${r.webClass}  ⇒ §${r.clause}`),
     ] },
-    { title: 'Flexure — lateral-torsional buckling zone', clause: 'AISC 360-16 §F2', pass: r.utilM <= 1, lines: [
-      txt(`Mp = ${f1(r.Mp)} kN·m · Lp = ${f2(r.Lp)} m · Lr = ${f2(r.Lr)} m · Lb = ${f2(r.Lb)} m → ${r.ltbZone}`),
-      txt(`Mn = ${f1(r.Mn)} kN·m → φMn = 0.90·Mn = ${f1(r.phiMn)} kN·m`),
+    { title: `Flexure — §${r.clause}`, clause: `AISC 360-16 §${r.clause}`, pass: r.utilM <= 1, lines: [
+      txt(`Mp = ${f1(r.Mp)} kN·m · Lp = ${f2(r.Lp / 1000)} m · Lr = ${f2(r.Lr / 1000)} m · Lb = ${f2(r.Lb / 1000)} m → ${r.ltbZone}`),
+      // §F3 takes the LESSER of LTB and flange local buckling; a compact flange
+      // has no FLB limit state, so only the reduced case is worth printing.
+      ...(Number.isFinite(r.MnFLB) ? [txt(`Flange local buckling (§F3.2): Mn = ${f1(r.MnFLB)} kN·m — ${r.flangeClass} flange`)] : []),
+      txt(`Mn = ${f1(r.Mn)} kN·m (${r.governing} governs) → φMn = 0.90·Mn = ${f1(r.phiMn)} kN·m`),
       txt(`Mu = ${f1(r.Mu)} kN·m ≤ φMn = ${f1(r.phiMn)} kN·m → util ${f2(r.utilM)} ${r.utilM <= 1 ? '✓' : '✗'}`),
     ] },
     { title: 'Shear', clause: 'AISC 360-16 §G2.1', pass: r.utilV <= 1, lines: [
