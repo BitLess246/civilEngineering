@@ -10,9 +10,26 @@
 // peso. USD is the base price, and Paddle converts it to a buyer's local
 // currency at checkout (Paddle > Business account > Currencies).
 //
-// Usage, from the repo root:
+// Usage:
 //   cd webapp
-//   PADDLE_ENV=sandbox PADDLE_API_KEY=pdl_sdbx_… npx tsx ../scripts/seed-paddle-catalog.ts
+//   NODE_PATH=./node_modules PADDLE_ENV=sandbox PADDLE_API_KEY=pdl_sdbx_… \
+//     npx tsx ../scripts/seed-paddle-catalog.ts
+//
+// NODE_PATH IS NOT OPTIONAL, and `cd webapp` alone does not stand in for it.
+// The SDK is a dependency of `webapp`, but this file lives in `scripts/`, and
+// Node resolves an import by walking up from the IMPORTING FILE's directory —
+// `scripts/`, then the repo root — never from the working directory. Neither
+// has a `node_modules`, so without NODE_PATH the run dies on
+// `Cannot find module '@paddle/paddle-node-sdk'`. The `cd` is still needed for
+// a different reason: it is what lets `npx` find the local `tsx` binary.
+//
+// It fails at import, before the first API call, so a forgotten NODE_PATH
+// costs a re-run and creates nothing.
+//
+// PowerShell:
+//   cd webapp
+//   $env:NODE_PATH="./node_modules"; $env:PADDLE_ENV="sandbox"; $env:PADDLE_API_KEY="pdl_sdbx_…"
+//   npx tsx ../scripts/seed-paddle-catalog.ts
 //
 // The API key needs product.write and price.write scopes:
 //   sandbox  https://sandbox-vendors.paddle.com/authentication-v2
