@@ -105,6 +105,36 @@ describe('localConnection — the maximum applied load', () => {
 const BEAM = { shapeName: 'W310x38.7', Fy: 345, span: 6, Lb: 2, Cb: 1, wDead: 15, wLive: 25 }
 const COL  = { shapeName: 'W250x67', Fy: 345, L: 4, Kx: 1, Ky: 1, Pu: 900, Mux: 60, Muy: 0 }
 
+describe('localBeam / localColumn — Lb reaches the solver in mm', () => {
+  // The page labels its input "Unbraced Lb (m)" and passed the metres straight
+  // into beamFlexure, which compares Lb against Lp in MILLIMETRES. Every result
+  // therefore came back in the plastic zone at Mn = Mp — the LTB check on
+  // /steel/beam and /steel/column was inert.
+  it('an Lb past Lr lands in the elastic zone, not "plastic"', () => {
+    // W310x38.7, Fy 345: Lp ≈ 1.63 m, Lr ≈ 4.9 m.
+    const r = localBeam({ ...BEAM, Lb: 8 })
+    expect(r.flex.Lp).toBeGreaterThan(1000)          // Lp is mm, as documented
+    expect(8000).toBeGreaterThan(r.flex.Lr)
+    expect(r.flex.ltbZone).toBe('elastic')
+    expect(r.flex.Mn).toBeLessThan(r.flex.Mp)
+  })
+
+  it('Mn falls monotonically as the brace spacing grows', () => {
+    const at = (Lb: number) => localBeam({ ...BEAM, Lb }).flex.Mn
+    expect(at(1)).toBeGreaterThan(at(4))
+    expect(at(4)).toBeGreaterThan(at(8))
+    expect(at(1)).toBeCloseTo(localBeam({ ...BEAM, Lb: 1 }).flex.Mp, 9)   // Lb < Lp
+  })
+
+  it('the column §H1-1 moment term sees the member length in mm', () => {
+    // L = 12 m is well past Lr for a W250x67, so φMnx must be reduced.
+    const short = localColumn({ ...COL, L: 1 })
+    const long  = localColumn({ ...COL, L: 12 })
+    expect(long.flexX.ltbZone).not.toBe('plastic')
+    expect(long.flexX.Mn).toBeLessThan(short.flexX.Mn)
+  })
+})
+
 describe('localBeam — design basis', () => {
   it('defaults to LRFD, unchanged from before the basis existed', () => {
     const r = localBeam(BEAM)

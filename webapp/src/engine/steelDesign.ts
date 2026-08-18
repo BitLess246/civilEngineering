@@ -48,18 +48,94 @@ export function deriveWSection(s: AiscShape): DerivedBeamProps {
   return { Ix, Sx, Zx, Iy, Zy, J, ho, rts, hw }
 }
 
-// ─── Beam flexure §F2 (doubly-symmetric I, compact or near-compact) ───────
+// ─── Beam flexure §F2 / §F3 (doubly-symmetric I-shapes) ───────────────────
+// §F2 covers a COMPACT flange and a COMPACT web. §F3 keeps the compact web but
+// takes a flange-local-buckling reduction for a noncompact or slender flange.
+// Anything with a non-compact WEB is §F4/§F5 and a tee is §F9 — neither is
+// implemented, and both are reported as out of scope rather than silently given
+// the compact §F2 strength (which is what this module used to do: it computed
+// the compactness ratios, printed them, and then returned Mp regardless).
 
-export interface BeamFlexureResult {
+/** Width-to-thickness classification of one plate element, Table B4.1b. */
+export type PlateClass = 'compact' | 'noncompact' | 'slender'
+/** Which flexure clause the section actually falls under. */
+export type FlexureClause = 'F2' | 'F3' | 'out-of-scope'
+
+export interface FlexureScope {
+  lambdaF: number; lambdaPF: number; lambdaRF: number; flangeClass: PlateClass
+  lambdaW: number; lambdaPW: number; lambdaRW: number; webClass: PlateClass
+  compactFlange: boolean; compactWeb: boolean; compact: boolean
+  clause: FlexureClause
+  /** False when no implemented clause covers the section. A caller must NOT
+   *  use `Mn`/`phiMn` in that case — they are returned as 0 so that anything
+   *  that ignores this flag fails loudly instead of passing quietly. */
+  applicable: boolean
+  /** Why it is out of scope, in the words the schedule shows the user. */
+  reason?: string
+}
+
+/**
+ * Classify a shape for strong-axis flexure (Table B4.1b cases 10/15) and say
+ * which clause covers it. Exported so the pipeline can state the reason a
+ * member went unchecked without having to build the full result first.
+ */
+export function beamFlexureScope(s: AiscShape, p: DerivedBeamProps, Fy: number): FlexureScope {
+  const E = E_STEEL
+  const lambdaF  = s.bf! / (2 * s.tf!)
+  const lambdaPF = 0.38 * Math.sqrt(E / Fy)   // Table B4.1b case 10
+  const lambdaRF = 1.0  * Math.sqrt(E / Fy)
+  const lambdaW  = p.hw / s.tw!
+  const lambdaPW = 3.76 * Math.sqrt(E / Fy)   // Table B4.1b case 15
+  const lambdaRW = 5.70 * Math.sqrt(E / Fy)
+
+  const flangeClass: PlateClass = lambdaF <= lambdaPF ? 'compact' : lambdaF <= lambdaRF ? 'noncompact' : 'slender'
+  const webClass:    PlateClass = lambdaW <= lambdaPW ? 'compact' : lambdaW <= lambdaRW ? 'noncompact' : 'slender'
+  const compactFlange = flangeClass === 'compact'
+  const compactWeb    = webClass === 'compact'
+
+  let clause: FlexureClause, reason: string | undefined
+  if (s.family !== 'W') {
+    clause = 'out-of-scope'
+    // deriveWSection assumes two flanges about a mid-depth axis, so a tee run
+    // through it is not merely the wrong clause — Ix, Sx and Zx are wrong too.
+    reason = s.family === 'WT'
+      ? `${s.name} is a tee — strong-axis flexure of tees is §F9, which is not implemented`
+      : `${s.name} is family ${s.family} — §F2/§F3 cover doubly-symmetric I-shapes only`
+  } else if (webClass === 'noncompact') {
+    clause = 'out-of-scope'
+    reason = `${s.name} at Fy=${Fy} MPa has a noncompact web (λw=${lambdaW.toFixed(1)} > λpw=${lambdaPW.toFixed(1)}) — §F4 is not implemented`
+  } else if (webClass === 'slender') {
+    clause = 'out-of-scope'
+    reason = `${s.name} at Fy=${Fy} MPa has a slender web (λw=${lambdaW.toFixed(1)} > λrw=${lambdaRW.toFixed(1)}) — §F5 is not implemented`
+  } else {
+    clause = compactFlange ? 'F2' : 'F3'
+  }
+
+  return {
+    lambdaF, lambdaPF, lambdaRF, flangeClass,
+    lambdaW, lambdaPW, lambdaRW, webClass,
+    compactFlange, compactWeb, compact: compactFlange && compactWeb,
+    clause, applicable: clause !== 'out-of-scope', reason,
+  }
+}
+
+export interface BeamFlexureResult extends FlexureScope {
   Mp: number          // kN·m, Fy·Zx
   Lp: number          // mm, §F2-5
   Lr: number          // mm, §F2-6
   ltbZone: 'plastic' | 'inelastic' | 'elastic'
-  Mn: number          // kN·m
-  phiMn: number       // kN·m
-  lambdaF: number; lambdaPF: number; compactFlange: boolean
-  lambdaW: number; lambdaPW: number; compactWeb: boolean
-  compact: boolean
+  /** §F2.2 lateral-torsional buckling strength, kN·m. */
+  MnLTB: number
+  /** §F3.2 flange-local-buckling strength, kN·m — Infinity when the flange is
+   *  compact, i.e. when FLB is not a limit state (§F2 has no FLB term). */
+  MnFLB: number
+  /** Which of the two limit states produced `Mn`. */
+  governing: 'yielding' | 'LTB' | 'FLB'
+  Mn: number          // kN·m — 0 when `applicable` is false
+  phiMn: number       // kN·m — 0 when `applicable` is false
+  /** §F3.2(b) coefficient 4/√(h/tw), clamped to [0.35, 0.76]; only meaningful
+   *  for a slender flange. */
+  kc: number
 }
 
 export function beamFlexure(
@@ -67,16 +143,9 @@ export function beamFlexure(
   Fy: number, Lb: number, Cb = 1.0
 ): BeamFlexureResult {
   const E = E_STEEL
-  const { ry, bf, tf, tw } = s
+  const { ry } = s
   const { Sx, Zx, J, ho, hw, rts } = p
-
-  const lambdaF  = bf! / (2 * tf!)
-  const lambdaPF = 0.38 * Math.sqrt(E / Fy)
-  const lambdaW  = hw / tw!
-  const lambdaPW = 3.76 * Math.sqrt(E / Fy)
-  const compactFlange = lambdaF <= lambdaPF
-  const compactWeb    = lambdaW <= lambdaPW
-  const compact = compactFlange && compactWeb
+  const scope = beamFlexureScope(s, p, Fy)
 
   const Mp = (Fy * Zx) / 1e6   // kN·m
   const Lp = 1.76 * ry * Math.sqrt(E / Fy)
@@ -84,22 +153,43 @@ export function beamFlexure(
   const Lr = 1.95 * rts * (E / (0.7 * Fy)) *
              Math.sqrt(c + Math.sqrt(c * c + 6.76 * ((0.7 * Fy) / E) ** 2))
 
-  let Mn: number, ltbZone: BeamFlexureResult['ltbZone']
+  // §F2.2 lateral-torsional buckling — the same three zones apply under §F3.1.
+  let MnLTB: number, ltbZone: BeamFlexureResult['ltbZone']
   if (Lb <= Lp) {
-    ltbZone = 'plastic'; Mn = Mp
+    ltbZone = 'plastic'; MnLTB = Mp
   } else if (Lb <= Lr) {
     ltbZone = 'inelastic'
-    Mn = Cb * (Mp - (Mp - 0.7 * Fy * Sx / 1e6) * ((Lb - Lp) / (Lr - Lp)))
-    Mn = Math.min(Mn, Mp)
+    MnLTB = Cb * (Mp - (Mp - 0.7 * Fy * Sx / 1e6) * ((Lb - Lp) / (Lr - Lp)))
+    MnLTB = Math.min(MnLTB, Mp)
   } else {
     ltbZone = 'elastic'
     const Fcr = (Cb * Math.PI ** 2 * E) / (Lb / rts) ** 2 *
                 Math.sqrt(1 + 0.078 * (J / (Sx * ho)) * (Lb / rts) ** 2)
-    Mn = Math.min((Fcr * Sx) / 1e6, Mp)
+    MnLTB = Math.min((Fcr * Sx) / 1e6, Mp)
   }
 
-  return { Mp, Lp, Lr, ltbZone, Mn, phiMn: PHI_B * Mn,
-           lambdaF, lambdaPF, compactFlange, lambdaW, lambdaPW, compactWeb, compact }
+  // §F3.2 flange local buckling. Compact flange ⇒ not a limit state.
+  const kc = Math.min(0.76, Math.max(0.35, 4 / Math.sqrt(hw / s.tw!)))
+  let MnFLB = Infinity
+  if (scope.flangeClass === 'noncompact') {
+    // §F3-1
+    MnFLB = Mp - (Mp - 0.7 * Fy * Sx / 1e6) *
+            ((scope.lambdaF - scope.lambdaPF) / (scope.lambdaRF - scope.lambdaPF))
+  } else if (scope.flangeClass === 'slender') {
+    // §F3-2
+    MnFLB = (0.9 * E * kc * Sx) / (scope.lambdaF ** 2) / 1e6
+  }
+
+  const Mn = Math.min(MnLTB, MnFLB)
+  const governing: BeamFlexureResult['governing'] =
+    MnFLB < MnLTB ? 'FLB' : ltbZone === 'plastic' ? 'yielding' : 'LTB'
+
+  return {
+    ...scope,
+    Mp, Lp, Lr, ltbZone, MnLTB, MnFLB, governing, kc,
+    Mn: scope.applicable ? Mn : 0,
+    phiMn: scope.applicable ? PHI_B * Mn : 0,
+  }
 }
 
 // ─── Beam shear §G2.1 ─────────────────────────────────────────────────────
@@ -164,19 +254,45 @@ export function columnAxial(
 }
 
 // ─── Weak-axis flexure §F6 ────────────────────────────────────────────────
-// Compact W-shapes, no LTB about weak axis → Mny = Mp_y = Fy·Zy ≤ 1.6·Fy·Sy.
+// §F6.1 yielding: Mny = Mp,y = Fy·Zy ≤ 1.6·Fy·Sy.
+// §F6.2 flange local buckling: only a limit state when the flange is NOT
+// compact. Web slenderness is irrelevant about the weak axis (the web is at the
+// neutral axis), so §F6 has no web term and needs no scope gate for it.
 
 export interface WeakAxisResult {
   Sy: number; Zy: number; phiMny: number
   /** Nominal weak-axis flexural strength, kN·m. */
   Mny: number
+  /** §F6.1 yielding strength before any FLB reduction, kN·m. */
+  MnY: number
+  /** §F6.2 flange-local-buckling strength, kN·m; Infinity for a compact flange. */
+  MnFLB: number
+  flangeClass: PlateClass
 }
 
 export function weakAxisFlexure(s: AiscShape, p: DerivedBeamProps, Fy: number): WeakAxisResult {
+  const E = E_STEEL
   const Sy  = (2 * p.Iy) / s.bf!
   const cap = Math.min(p.Zy, 1.6 * Sy)   // §F6-1 cap
-  const Mny = (Fy * cap) / 1e6
-  return { Sy, Zy: p.Zy, phiMny: PHI_B * Mny, Mny }
+  const MnY = (Fy * cap) / 1e6
+
+  // λ for §F6 is the same half-flange ratio b/tf used by Table B4.1b case 10.
+  const lambdaF  = s.bf! / (2 * s.tf!)
+  const lambdaPF = 0.38 * Math.sqrt(E / Fy)
+  const lambdaRF = 1.0  * Math.sqrt(E / Fy)
+  const flangeClass: PlateClass = lambdaF <= lambdaPF ? 'compact' : lambdaF <= lambdaRF ? 'noncompact' : 'slender'
+
+  let MnFLB = Infinity
+  if (flangeClass === 'noncompact') {
+    // §F6-2
+    MnFLB = MnY - (MnY - 0.7 * Fy * Sy / 1e6) * ((lambdaF - lambdaPF) / (lambdaRF - lambdaPF))
+  } else if (flangeClass === 'slender') {
+    // §F6-3/§F6-4: Fcr = 0.69E/λ²
+    MnFLB = ((0.69 * E) / (lambdaF ** 2)) * Sy / 1e6
+  }
+
+  const Mny = Math.min(MnY, MnFLB)
+  return { Sy, Zy: p.Zy, phiMny: PHI_B * Mny, Mny, MnY, MnFLB, flangeClass }
 }
 
 // ─── Combined loading §H1-1 ───────────────────────────────────────────────

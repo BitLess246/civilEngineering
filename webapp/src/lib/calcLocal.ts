@@ -31,7 +31,8 @@ export function localBeam(i: BeamCalcInput): BeamCalcResult {
   const s = shapeOf(i.shapeName)
   const props = deriveWSection(s)
   const basis: DesignBasis = i.basis ?? 'LRFD'
-  const flex = beamFlexure(s, props, i.Fy, i.Lb, i.Cb)
+  // Lb arrives in METRES (the page's input unit); beamFlexure works in mm.
+  const flex = beamFlexure(s, props, i.Fy, i.Lb * 1000, i.Cb)
   const shear = beamShear(s, props, i.Fy)
   return {
     props, flex, shear, basis,
@@ -49,8 +50,9 @@ export function localColumn(i: ColumnCalcInput): ColumnCalcResult {
   const s = shapeOf(i.shapeName)
   const props = deriveWSection(s)
   const axial = columnAxial(s, i.Fy, i.L, i.Kx, i.Ky)
-  // strong-axis flexure with Lb = member length, Cb = 1 (uniform moment — conservative)
-  const flexX = beamFlexure(s, props, i.Fy, i.L, 1.0)
+  // strong-axis flexure with Lb = member length, Cb = 1 (uniform moment —
+  // conservative). `i.L` is in metres, as columnAxial takes it; beamFlexure mm.
+  const flexX = beamFlexure(s, props, i.Fy, i.L * 1000, 1.0)
   const weak = weakAxisFlexure(s, props, i.Fy)
   const basis: DesignBasis = i.basis ?? 'LRFD'
   const avail = {

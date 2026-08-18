@@ -136,7 +136,7 @@ asserted by that file; all run in CI.
 | Pushover | `pushover.test.ts`, `pushoverModel.test.ts` | event-to-event capacity curve vs hand-tracked hinge sequence (review-problem anchors) |
 | Floor vibration | `floorVibration.test.ts` | AISC DG11 fn = 0.18√(g/Δ) + tolerance thresholds |
 | Shells | `shell.test.ts`, `frame3dShell.test.ts`, `shellModel.test.ts` | CST/DKT element checks + frame↔shell model consistency |
-| Steel member design | `steelDesign.test.ts`, `aiscSections.test.ts`, `flexure.test.ts`, `shear.test.ts` | §F2/§G2.1/§E3/§H1-1 formula re-derivations; `validation.ts` `steel-phimp`/`steel-phivn` |
+| Steel member design | `steelDesign.test.ts`, `aiscSections.test.ts`, `flexure.test.ts`, `shear.test.ts` | §F2/§F3/§F6/§G2.1/§E3/§H1-1 formula re-derivations; `validation.ts` `steel-phimp`/`steel-f3-flb`/`steel-phivn`. §F4/§F5 (noncompact/slender web) and §F9 (tees) are OUT OF SCOPE and refused — see AUD-001 §9 |
 | Steel connections | `steelConnections.test.ts`, `boltedConnection.test.ts`, `weldedConnection.test.ts`, `connectionSolution.test.ts`, `baseplate.test.ts` | IC-method bolt/weld groups vs `validation.ts` `bolt-ecc-rmax`/`weld-ecc-fmax`/`bolt-oop-tension`/`prying-t0`; AISC DG1 base plates |
 | Effective length K | `effectiveLength.test.ts` | alignment-chart G-factors vs published values (review anchors) |
 | Timber (wood) member design | `woodDesign.test.ts` | NDS §3 / NSCP §6 ASD adjustment factors (CD/CM/CF/CV), beam CL (§3.3.3) + column CP (§3.7.1) closed-form anchors, beam-column §3.9.2 interaction; `validation.ts` `wood-cp`/`wood-cl` |
