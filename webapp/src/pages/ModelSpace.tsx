@@ -40,6 +40,7 @@ import { columnKFactors, type ColumnK } from '../engine/effectiveLength'
 import { freqFromDeflection, dg11Walking, DG11_OCCUPANCY } from '../engine/floorVibration'
 import { buildSeismicMass, GRAVITY } from '../engine/modal'
 import { autoRigidOffsets } from '../engine/rigidEndZones'
+import { AnalysisOptionsHelp } from '../components/AnalysisOptionsHelp'
 import { computeWind, computeCladding, type WindResult, type WindEnclosure, type CladdingResult } from '../engine/wind'
 import { LetterheadCard, type LetterheadState } from '../components/calc'
 import { initialLetterhead } from '../lib/letterhead'
@@ -2535,7 +2536,7 @@ export default function ModelSpace() {
                               updMember(sel.id, { axisRotation: Number.isFinite(v) ? v : undefined })
                             }}
                             className="w-16 rounded border border-violet-200 px-1 py-0.5 text-right" />
-                          <span className="text-[10px] text-slate-500">ETABS local-axis angle about the member axis. Blank = default (vertical members 90° — depth d on global X); orients section stiffness, rigid zones and the drawn shape.</span>
+                          <span className="text-[10px] text-slate-500">Local-axis angle about the member axis. Blank = default (vertical members 90° — depth d on global X); orients section stiffness, rigid zones and the drawn shape.</span>
                         </label>
                         {(sel.role === 'beam' || sel.role === 'girder') && (
                           <label className="mt-2 flex items-center gap-2 border-t border-violet-200 pt-2 text-[11px] text-slate-700">
@@ -3510,10 +3511,10 @@ export default function ModelSpace() {
           {/* ── ANALYSIS ── */}
           {tab === 'analysis' && (
             <div className="divide-y divide-[#eeece5] px-4 py-1" data-tour="analysis-panel">
-              <Sec title="Analysis options">
+              <Sec title="Analysis options" hint={<AnalysisOptionsHelp />}>
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={assembly} onChange={(e) => setAssembly(e.target.checked)} />
-                  <span>Public assembly / garage (f₁ = 1.0)</span>
+                  <span>Assembly or garage <span className="text-slate-500">(f₁ = 1.0)</span></span>
                 </label>
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={pDelta} onChange={(e) => setPDelta(e.target.checked)} />
@@ -3521,25 +3522,25 @@ export default function ModelSpace() {
                 </label>
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={cracked} onChange={(e) => setCracked(e.target.checked)} />
-                  <span>Cracked sections — ACI §6.6.3.1.1 (0.35Ig beams, 0.70Ig columns; concrete only)</span>
+                  <span>Cracked sections <span className="text-slate-500">(ACI §6.6.3.1.1)</span></span>
                 </label>
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={shearDef} onChange={(e) => setShearDef(e.target.checked)} />
-                  <span>Shear deformation (Timoshenko) — Φ = 12EI/(G·As·L²); softens deep girders &amp; squat columns</span>
+                  <span>Shear deformation <span className="text-slate-500">(Timoshenko)</span></span>
                 </label>
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={allAround} onChange={(e) => setAllAround(e.target.checked)} />
-                  <span>Column bars on all four faces — P–M strain-compatibility layers (real cage; lower Mb)</span>
+                  <span>Column bars on all four faces</span>
                 </label>
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" disabled={!model} checked={model?.diaphragm ?? false}
                     onChange={(e) => model && save({ ...model, diaphragm: e.target.checked })} />
-                  <span>Rigid floor diaphragm (ties in-plane lateral DOFs per storey)</span>
+                  <span>Rigid floor diaphragm</span>
                 </label>
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" disabled={!model} checked={model?.rigidEndZones ?? false}
                     onChange={(e) => model && save({ ...model, rigidEndZones: e.target.checked })} />
-                  <span>Auto rigid end zones (ETABS-style end length offsets from connectivity)</span>
+                  <span>Auto rigid end zones</span>
                 </label>
                 {model?.rigidEndZones && (
                   <label className="col-span-full flex items-center gap-2 pl-6 text-sm">
@@ -3547,28 +3548,38 @@ export default function ModelSpace() {
                     <input type="number" min={0} max={1} step={0.1} value={model.rigidZoneFactor ?? 0.5}
                       onChange={(e) => model && save({ ...model, rigidZoneFactor: Math.max(0, Math.min(1, parseFloat(e.target.value) || 0)) })}
                       className="w-20 rounded border border-slate-300 px-2 py-1" />
-                    <span className="text-[11px] text-slate-500">auto offsets = factor × ½·(connecting member depth) at each joint</span>
+                    <span className="text-[11px] text-slate-500">× ½·(framing member depth) at each joint</span>
                   </label>
                 )}
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" disabled={!model} checked={model?.shellElements ?? false}
                     onChange={(e) => model && save({ ...model, shellElements: e.target.checked })} />
-                  <span>Shell elements (slab/wall panels as CST+DKT finite elements, not load sources)</span>
+                  <span>Shell elements for slab / wall panels</span>
                 </label>
                 {model?.shellElements && (
                   <p className="col-span-full pl-6 text-[11px] text-slate-500">
-                    Each panel meshes to two triangles on its corner nodes; area loads lump to those nodes.
-                    Analysis-path feature — the NSCP design pipeline keeps the tributary load model.
+                    Two triangles per panel, corner nodes only — for stress plots and slab FE, not for loading a
+                    frame. The design pipeline keeps the tributary load model either way.
                   </p>
                 )}
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={tryBars} onChange={(e) => setTryBars(e.target.checked)} />
-                  <span>Try alternative bar sizes (Design / Optimize pick ⌀16–⌀32 beams, ⌀20–⌀32 columns)</span>
+                  <span>Try alternative bar sizes</span>
                 </label>
                 <p className="col-span-full text-[11px] text-slate-500">
                   §203.3.1 live-load factor f₁ = <b>{fLive.toFixed(1)}</b>
                   {fLive === 1 ? (assembly ? ' (assembly/garage)' : ' (Lo > 4.8 kPa)') : ' (ordinary occupancy)'}.
                   {pDelta ? ' Frame solved with the geometric-stiffness P-Δ iteration.' : ' First-order (linear) frame solve.'}
+                </p>
+                {/* Slab load path — the one place this frame solve is known to sit on the
+                    unconservative side, measured against a meshed-slab reference. Stated on the
+                    card rather than only in the ⓘ, because it changes what a girder result means. */}
+                <p className="col-span-full rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] leading-relaxed text-amber-900">
+                  <b>Slab loads reach beams by 45° tributary area</b>, not a slab mesh. Cross-checked against
+                  STAAD.Pro (2×1 bay, 2 storeys, slab meshed 10×10): reactions agree within 4.6% and joint
+                  deflections within 0.3%, but <b>interior girders come out ~31% low</b> (edge girders ~21%)
+                  because a continuous slab draws more to an interior support line than tributary area gives it.
+                  Long-span beams are ~7% conservative. Check interior girders separately.
                 </p>
                 <div className="col-span-full">
                   <button type="button" onClick={analyze} disabled={!model || !!busy || meshErrors} className={btn}>
