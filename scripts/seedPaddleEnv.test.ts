@@ -68,3 +68,48 @@ describe('the script says which catalog it built', () => {
     expect(src).toMatch(/RE-RUNNING CREATES DUPLICATES/)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE PRICE MAP THE SCRIPT PRINTS IS PASTED STRAIGHT INTO A SECRET.
+//
+// So what it prints has to be the form the functions actually want. It printed
+// the bare `pri_x=pro` shape, which the WEBHOOK reads fine — and which loses
+// the information `billing-change-plan` needs. With no period, a move between
+// two periods of the same plan has planDelta 0 and periodDelta 0, so it lands
+// in the downgrade branch: Pro monthly → Pro annual gets deferred to the next
+// billing period instead of being charged immediately.
+//
+// Nothing would look broken. The upgrade would simply arrive late and cheap.
+// ─────────────────────────────────────────────────────────────────────────
+describe('the printed BILLING_PRICE_MAP', () => {
+  it('carries the :period suffix on every entry', () => {
+    expect(src).toMatch(/\}=\$\{t\.key\}:monthly/)
+    expect(src).toMatch(/\}=\$\{t\.key\}:annual/)
+  })
+
+  it('does not print the bare plan form that loses the period', () => {
+    // `pri_x=pro` with nothing after it. Accepted by both readers, and silently
+    // degrades plan switching.
+    const line = src.slice(src.indexOf('BILLING_PRICE_MAP'), src.indexOf('# webapp/.env'))
+    expect(line).not.toMatch(/=\$\{t\.key\}`/)
+  })
+
+  it('still prints the four VITE price vars', () => {
+    expect(src).toMatch(/VITE_PADDLE_PRICE_\$\{t\.key\.toUpperCase\(\)\}_MONTHLY/)
+    expect(src).toMatch(/VITE_PADDLE_PRICE_\$\{t\.key\.toUpperCase\(\)\}_ANNUAL/)
+  })
+})
+
+describe('the seeded amounts match what the pricing page advertises', () => {
+  // plans.ts says $19 / $205 and $49 / $529. Cents, so 1900 not 19 — seeding
+  // 19 would create a $0.19 subscription and nobody would notice until the
+  // first payout.
+  it('pro', () => {
+    expect(src).toMatch(/monthly: "1900"/)
+    expect(src).toMatch(/annual: "20500"/)
+  })
+  it('max', () => {
+    expect(src).toMatch(/monthly: "4900"/)
+    expect(src).toMatch(/annual: "52900"/)
+  })
+})

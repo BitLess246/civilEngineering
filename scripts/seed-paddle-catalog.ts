@@ -101,11 +101,19 @@ async function seed() {
   // The two configuration strings these ids feed, printed ready to paste —
   // the webhook's price map is the thing that turns a payment into a plan, and
   // hand-transcribing eight ids is where that goes wrong.
+  // WITH THE `:period` SUFFIX. The webhook ignores it, but
+  // `billing-change-plan` reads it to tell an upgrade from a downgrade, and
+  // without it a move between two periods of the SAME plan has planDelta 0 and
+  // periodDelta 0 — which falls to the downgrade branch. Pro monthly → Pro
+  // annual would then be deferred to the next billing period instead of being
+  // charged immediately, which is the wrong answer for the customer and for
+  // the business. This line used to print the bare `pri_x=pro` form, so the
+  // output was paste-ready and quietly wrong.
   console.log("\n# supabase secrets set …");
   console.log(
     `BILLING_PRICE_MAP='${CATALOG.flatMap((t) => [
-      `${ids[`${t.key}-monthly`]}=${t.key}`,
-      `${ids[`${t.key}-annual`]}=${t.key}`,
+      `${ids[`${t.key}-monthly`]}=${t.key}:monthly`,
+      `${ids[`${t.key}-annual`]}=${t.key}:annual`,
     ]).join(",")}'`,
   );
   console.log("\n# webapp/.env");
