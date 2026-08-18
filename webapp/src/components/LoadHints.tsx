@@ -6,15 +6,16 @@ import { useState, type ReactNode } from 'react'
 // V, Kzt, exposure, shown in a popup next to the input.
 // ─────────────────────────────────────────────────────────────────────────
 
-/** A small "ⓘ Guide" button that opens a modal with reference content. */
-export function HintButton({ title, children }: { title: string; children: ReactNode }) {
+/** A small "ⓘ Guide" button that opens a modal with reference content.
+ *  `label` overrides the button text — a card header wants a compact "ⓘ". */
+export function HintButton({ title, label = 'ⓘ Guide', children }: { title: string; label?: ReactNode; children: ReactNode }) {
   const [open, setOpen] = useState(false)
   return (
     <>
       <button type="button" onClick={() => setOpen(true)}
         className="no-print inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-0.5 text-xs font-semibold text-[#0056b3] hover:border-[#0056b3] hover:bg-blue-50"
-        title={title}>
-        ⓘ Guide
+        title={title} aria-label={title}>
+        {label}
       </button>
       {open && (
         <div className="no-print fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/40 p-4"

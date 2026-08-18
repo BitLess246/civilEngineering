@@ -652,7 +652,7 @@ describe('rigid links / member offsets — Teff = T·H', () => {
   })
 })
 
-describe('frame3d — local-axis rotation (ETABS local axis 2 angle)', () => {
+describe('frame3d — local-axis rotation (section orientation about the member axis)', () => {
   it('localAxes(dir, 90) turns a vertical member’s depth axis onto global X', () => {
     const [xp, yp, zp] = localAxes([0, 4, 0], 90)
     expect(xp[1]).toBeCloseTo(1, 9)

@@ -28,7 +28,7 @@ describe('autoRigidOffsets', () => {
     expect(autoRigidOffsets(portal(), 0).size).toBe(0)
   })
 
-  it('beam gets an inward i-end offset = factor·(column DEPTH/2) along +X (ETABS face offset)', () => {
+  it('beam gets an inward i-end offset = factor·(column DEPTH/2) along +X (face offset)', () => {
     const m = autoRigidOffsets(portal(), 1)
     const bm = m.get('bm')!
     expect(bm).toBeTruthy()

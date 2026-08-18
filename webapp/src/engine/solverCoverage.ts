@@ -154,7 +154,7 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       },
       {
         "suite": "autoRigidOffsets",
-        "name": "beam gets an inward i-end offset = factor·(column DEPTH/2) along +X (ETABS face offset)"
+        "name": "beam gets an inward i-end offset = factor·(column DEPTH/2) along +X (face offset)"
       },
       {
         "suite": "autoRigidOffsets",
@@ -509,15 +509,15 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
         "name": "global equilibrium holds with an offset (ΣReactions + ΣApplied = 0)"
       },
       {
-        "suite": "frame3d — local-axis rotation (ETABS local axis 2 angle)",
+        "suite": "frame3d — local-axis rotation (section orientation about the member axis)",
         "name": "localAxes(dir, 90) turns a vertical member’s depth axis onto global X"
       },
       {
-        "suite": "frame3d — local-axis rotation (ETABS local axis 2 angle)",
+        "suite": "frame3d — local-axis rotation (section orientation about the member axis)",
         "name": "rotating a non-square vertical cantilever 90° swaps its strong/weak response"
       },
       {
-        "suite": "frame3d — local-axis rotation (ETABS local axis 2 angle)",
+        "suite": "frame3d — local-axis rotation (section orientation about the member axis)",
         "name": "the bridge defaults vertical members to rot 90 and honors an explicit value"
       },
       {
