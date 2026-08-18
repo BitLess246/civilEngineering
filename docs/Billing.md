@@ -289,8 +289,15 @@ a true statement about the price rather than a spinner where a number should be.
 
 ```bash
 cd webapp
-PADDLE_ENV=sandbox PADDLE_API_KEY=pdl_sdbx_… npx tsx ../scripts/seed-paddle-catalog.ts
+NODE_PATH=./node_modules PADDLE_ENV=sandbox PADDLE_API_KEY=pdl_sdbx_… \
+  npx tsx ../scripts/seed-paddle-catalog.ts
 ```
+
+`NODE_PATH` is not decoration. The script lives in `scripts/` and the SDK is
+installed under `webapp/`; Node resolves an import from the importing file's
+directory upwards, not from the working directory, so `cd webapp` on its own
+still ends in `Cannot find module '@paddle/paddle-node-sdk'`. It fails at
+import, before the first API call, so forgetting it creates nothing.
 
 The API key needs `product.write` and `price.write`
 ([sandbox](https://sandbox-vendors.paddle.com/authentication-v2) /
@@ -491,10 +498,18 @@ mistake here — the two look identical and share no data.
 
 **1. Create the live catalog.**
 
+> **Done — 18 August 2026.** The live catalog exists; do not run the seed
+> against production again, it has no upsert. The four live price ids are in
+> the table at the end of this section.
+
 ```bash
 cd webapp
-PADDLE_ENV=production PADDLE_API_KEY=pdl_live_… npx tsx ../scripts/seed-paddle-catalog.ts
+NODE_PATH=./node_modules PADDLE_ENV=production PADDLE_API_KEY=pdl_live_… \
+  npx tsx ../scripts/seed-paddle-catalog.ts
 ```
+
+`NODE_PATH` is not decoration — see step 1 of **Setup** above for why `cd
+webapp` alone leaves the SDK unresolvable.
 
 The script accepts `production` **or** `live` for `PADDLE_ENV`, and treats
 anything else as sandbox. It only accepted `live` until #601, so this exact
@@ -574,6 +589,26 @@ take effect. All six or none: half-configured counts as off.
 > **This applies to the cutover happening now.** #593 changed
 > `_shared/events.ts` and `billing-webhook`, so confirm the deploy workflow ran
 > green on that merge before step 2.
+
+### The live catalog, as seeded
+
+Seeded 18 August 2026. Price ids are **not** secret — they ship in the bundle —
+so they live here rather than in someone's terminal scrollback, which is what
+stops a "did we already seed this?" re-run.
+
+| Plan | Live price id | Amount |
+|---|---|---|
+| Pro monthly | `pri_01m0a3678gfk0f39fwd32hfbqn` | $19.00 / month |
+| Pro annual | `pri_01m0a367jcdsfyawm53r901qpn` | $205.00 / year |
+| Max monthly | `pri_01m0a368bryyg90qxgv43xwbsy` | $49.00 / month |
+| Max annual | `pri_01m0a368nsy8ytnpvw9gzjgq8m` | $529.00 / year |
+
+Products: Pro `pro_01m0a366ty3hdt3rfma144nfdy`, Max
+`pro_01m0a3681v58w9rds5tth5w2xj`, both `tax_category=saas`.
+
+```
+BILLING_PRICE_MAP='pri_01m0a3678gfk0f39fwd32hfbqn=pro:monthly,pri_01m0a367jcdsfyawm53r901qpn=pro:annual,pri_01m0a368bryyg90qxgv43xwbsy=max:monthly,pri_01m0a368nsy8ytnpvw9gzjgq8m=max:annual'
+```
 
 ### One new field, and why the first live event is unguarded
 
