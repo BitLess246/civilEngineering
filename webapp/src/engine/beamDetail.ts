@@ -41,6 +41,8 @@
 // Units: geometry m; bar/stirrup sizes mm.
 // ─────────────────────────────────────────────────────────────────────────
 import type { PlanPrimitive, Drawing } from './planRenderer'
+import { hookFit, type HookFitResult } from './devLength'
+import { jointHookLdh } from './beamColumnJoint'
 
 export interface BeamDetailSection {
   /** 'LEFT' | 'MID' | 'RIGHT' — position along the member. */
@@ -82,12 +84,31 @@ export interface BeamDetailInput {
   continuousRight?: boolean
   /** Clear cover to the stirrup, mm (default 40 — §420.6.1.3.1). */
   cover?: number
+  /**
+   * What the hooked end bars anchor INTO. Supplied, the sheet stops drawing
+   * the end hook by eye and dimensions it: ℓdh required against the embedment
+   * the column actually leaves, with the shortfall called out where there is
+   * one. Omitted, the hook is drawn as before and simply not dimensioned.
+   */
+  hookAnchorage?: {
+    /** Column depth PARALLEL to the beam bars, mm — also what gets drawn. */
+    colH: number
+    /** The column's far-face vertical the hook turns down behind, mm. */
+    colBarDia: number
+    /** Column tie/hoop Ø, mm. */
+    colTieDia: number
+    /** Column clear cover, mm. */
+    colCover: number
+    fc: number
+    fy: number
+  }
 }
 
 export interface BeamDetailOptions { detailNo?: string; sheetRef?: string; scale?: string }
 export interface BeamDetailDrawing extends Drawing { title: string }
 
 const INK = '#1e293b', REBAR = '#b45309', GRID = '#9aa5b5', NOTE = '#475569', ACCENT = '#0f766e'
+const WARN = '#b91c1c'
 const CONC = '#f1f5f9'
 
 /** Mean glyph width / font size for Arial capitals — note wrapping only. */
@@ -194,12 +215,39 @@ export function wrapNote(text: string, max: number): string[] {
   return out
 }
 
+/**
+ * The end-hook anchorage this sheet can dimension, or null when it was not
+ * given a column to check the hook against.
+ *
+ * ℓdh is the §418.8.5.1 seismic hook — the SAME clause the beam–column joint
+ * sheet prints — so one bar in one column can never be quoted two different
+ * hook lengths on two drawings of the same building. The room it is measured
+ * against comes from `hookFit`, which stops at the far-face column vertical
+ * the hook turns down behind.
+ */
+export function endHookAnchorage(
+  i: BeamDetailInput,
+): (HookFitResult & { ldh: number; clear: number }) | null {
+  const a = i.hookAnchorage
+  if (!a) return null
+  const ldh = jointHookLdh(i.barDia, a.fy, a.fc)
+  const fit = hookFit({
+    ldh, memberDepth: a.colH, cover: a.colCover,
+    tieDia: a.colTieDia, farBarDia: a.colBarDia,
+  })
+  // Clear distance from the far face of the column to the OUTSIDE of the bend.
+  return { ...fit, ldh, clear: a.colCover + a.colTieDia + a.colBarDia }
+}
+
 /** Build the continuous-beam reinforcement elevation. */
 export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}): BeamDetailDrawing {
   const P: PlanPrimitive[] = []
   const L = Math.max(i.L, 0.1)
   const hM = i.h / 1000
-  const cw = Math.max(i.colB ?? 400, 150) / 1000          // support width, m
+  // The horizontal extent of the support in an ELEVATION is the column
+  // dimension parallel to the beam, which is what ℓdh is measured along.
+  const anch = endHookAnchorage(i)
+  const cw = Math.max(i.hookAnchorage?.colH ?? i.colB ?? 400, 150) / 1000
   const cov = Math.max(i.cover ?? 40, 10) / 1000
   const Y = (z: number) => -z
   const u = L / 60                                        // one text unit
@@ -254,8 +302,10 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
     if (cont) {
       P.push({ kind: 'line', x1: cx - dir * face, y1: Y(yTop2), x2: end, y2: Y(yTop2), stroke: REBAR, width: 1.4 })
     } else {
-      // 90° standard hook turned DOWN into the column, 60 mm clear of its face
-      const hx = cx - dir * (face - HOOK_END_COVER / 1000)
+      // 90° standard hook turned DOWN into the column. Where the column is
+      // known the hook sits behind its far-face vertical (cover + tie + bar);
+      // otherwise it falls back to the nominal 60 mm clear.
+      const hx = cx - dir * (face - (anch?.clear ?? HOOK_END_COVER) / 1000)
       P.push({
         kind: 'path', stroke: REBAR, width: 2.2, cap: 'round', join: 'round',
         cmds: [{ c: 'M', x: end, y: Y(yTop2) }, { c: 'L', x: hx, y: Y(yTop2) }, { c: 'L', x: hx, y: Y(yTop2 - hookDrop) }],
@@ -304,15 +354,44 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   P.push({ kind: 'text', x: face, y: Y(-colDrop - u * 8.8), text: `${FIRST_HOOP} FIRST HOOP`, size: u * 1.2, anchor: 'start', color: NOTE })
   P.push({ kind: 'dim', x1: 0, y1: Y(-colDrop - u * 11.0), x2: L, y2: Y(-colDrop - u * 11.0), text: `L = ${Math.round(L * 1000)}`, off: 0, size: u * 1.5 })
 
+  // ℓdh at a hooked end — the anchorage the hook has to achieve, dimensioned
+  // against the room the column leaves it rather than drawn and hoped for.
+  if (anch) {
+    for (const [cont, cx, dir] of [[i.continuousLeft, 0, 1], [i.continuousRight, L, -1]] as const) {
+      if (cont) continue
+      const hx = cx - dir * (face - anch.clear / 1000)   // outside of the bend
+      const faceX = cx + dir * face                       // critical section
+      const dy = Y(hM + colRise + u * 6.2)
+      P.push({
+        kind: 'dim', x1: hx, y1: dy, x2: faceX, y2: dy,
+        text: `${Math.round(anch.avail)} AVAIL / ℓdh ${Math.round(anch.ldh)} REQ`,
+        off: 0, size: u * 1.25,
+      })
+      if (!anch.fits) {
+        // where ℓdh would have to reach — past the back of the column
+        const need = faceX - dir * (anch.ldh / 1000)
+        P.push({
+          kind: 'line', x1: need, y1: Y(hM + colRise + u * 7.4), x2: need, y2: Y(yTop2 - hookDrop),
+          stroke: WARN, width: 0.8, dash: [u * 0.4, u * 0.3],
+        })
+        P.push({
+          kind: 'text', x: need, y: Y(hM + colRise + u * 8.6),
+          text: `ℓdh ${Math.round(anch.shortfall)} SHORT`,
+          size: u * 1.25, anchor: dir > 0 ? 'start' : 'end', color: WARN,
+        })
+      }
+    }
+  }
+
   // hook cover at an end support — the dimension image 3 turns on
   for (const [cont, cx, dir] of [[i.continuousLeft, 0, 1], [i.continuousRight, L, -1]] as const) {
     if (cont) continue
-    const hx = cx - dir * (face - HOOK_END_COVER / 1000)
+    const hx = cx - dir * (face - (anch?.clear ?? HOOK_END_COVER) / 1000)
     const ty = yTop2 - hookDrop - u * 2.2
     P.push({ kind: 'line', x1: hx, y1: Y(yTop2 - hookDrop), x2: hx - dir * u * 2.4, y2: Y(ty), stroke: NOTE, width: 0.5 })
     P.push({
       kind: 'text', x: hx - dir * u * 2.6, y: Y(ty),
-      text: `${HOOK_END_COVER} CL.`, size: u * 1.15,
+      text: `${Math.round(anch?.clear ?? HOOK_END_COVER)} CL.`, size: u * 1.15,
       anchor: dir > 0 ? 'end' : 'start', color: NOTE,
     })
   }
@@ -323,9 +402,14 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
     `EXTRA TOP BARS RUN 0.25L FROM THE SUPPORT; EXTRA BOTTOM BARS START 0.15L OFF IT`,
     `HOOPS @ ${Math.round(sEnd)} OVER 2h = ${Math.round(zone * 1000)} FROM EACH SUPPORT FACE, FIRST AT ${FIRST_HOOP} (§418.6.4.1/§418.6.4.4)`,
     `HOOPS @ ${Math.round(sMid)} THROUGH THE MIDDLE — SPACING IS WIDEST WHERE THE SHEAR IS LOWEST`,
-    `AT AN END SUPPORT BEAM BARS ARE HOOKED INTO THE COLUMN, ${HOOK_END_COVER} CLEAR TO THE END OF THE HOOK (§425.4.3 / §418.8.3)`,
+    `AT AN END SUPPORT BEAM BARS ARE HOOKED INTO THE COLUMN, ${Math.round(anch?.clear ?? HOOK_END_COVER)} CLEAR TO THE END OF THE HOOK (§425.4.3 / §418.8.3)`,
     `TOP BARS EXTEND ${Math.round(barExtension(i.h - 60, i.barDia) * 1000)} MIN. PAST THE POINT NO LONGER REQUIRED — max(d, 12db) §409.7.3.8.4`,
   ]
+  if (anch) {
+    notes.push(anch.fits
+      ? `ℓdh = ${Math.round(anch.ldh)} DEVELOPS IN THE ${Math.round(anch.avail)} AVAILABLE INSIDE THE COLUMN CAGE (§418.8.5.1)`
+      : `ℓdh = ${Math.round(anch.ldh)} EXCEEDS THE ${Math.round(anch.avail)} AVAILABLE BY ${Math.round(anch.shortfall)} — ⌀${i.barDia} BARS DO NOT DEVELOP IN THIS COLUMN. DEEPEN IT TO ${Math.round(anch.depthNeeded)}, REDUCE THE BAR, OR USE A HEADED BAR (§425.4.4). LENGTHENING THE TAIL DOES NOT COUNT — ℓdh IS MEASURED TO THE OUTSIDE OF THE BEND`)
+  }
   const noteSize = u * 1.35
   const sheetW = L + u * 8
   const wrapped = notes.flatMap((t) => wrapNote(t, Math.max(24, Math.floor(sheetW / (GLYPH_W * noteSize)))))

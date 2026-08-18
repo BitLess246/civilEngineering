@@ -94,6 +94,67 @@ export interface DevLengthResult {
   hookBendDia: number  // minimum inside bend diameter, 6db or 8db
 }
 
+// ── Does the hook fit the member it anchors into? ──────────────────────────
+//
+// A hooked bar has to be developed INSIDE the supporting member, and ℓdh is
+// measured from the critical section (the face of the support) to the OUTSIDE
+// END OF THE BEND. The room available for that is not the member depth: the
+// hook turns down behind the far-face longitudinal bar, inside the ties, so
+//
+//     available = depth − cover − tie Ø − far-face bar Ø
+//
+// Two things this does NOT allow, both of them common on site:
+//
+//   • A LONGER TAIL does not buy anything. The 12db tail (§425.3.1) runs
+//     perpendicular to ℓdh, so lengthening it adds nothing the code counts.
+//     "Add the shortfall to the hook" is a real detailing habit and it does
+//     not develop the bar.
+//   • Measuring to the far face instead of to the far BAR overstates the room
+//     by one column-bar diameter, which is the whole margin on a small column.
+//
+// The code-legal ways out of a shortfall are a deeper member, a smaller bar,
+// a higher f'c, earning ψc/ψr (§425.4.3.2), or abandoning the hook for a
+// headed bar or mechanical anchorage (§425.4.4).
+
+export interface HookFitInput {
+  /** ℓdh required, mm — `calcDevLength(...).ldh`, or §418.8.5.1 at a joint. */
+  ldh: number
+  /** Depth of the supporting member PARALLEL to the hooked bar, mm. */
+  memberDepth: number
+  /** Clear cover on the far face, mm. */
+  cover: number
+  /** Tie or hoop diameter crossing that cover, mm. */
+  tieDia: number
+  /** The far-face longitudinal bar the hook turns down behind, mm. */
+  farBarDia: number
+}
+
+export interface HookFitResult {
+  /** Embedment the hook can actually occupy, mm. */
+  avail: number
+  fits: boolean
+  /** ℓdh with nowhere to go, mm — 0 when it fits. */
+  shortfall: number
+  /** Member depth that would just develop the bar, mm. */
+  depthNeeded: number
+}
+
+/** Embedment available to a hook inside a member, mm — never negative. */
+export const hookEmbedmentAvailable = (
+  memberDepth: number, cover: number, tieDia: number, farBarDia: number,
+): number => Math.max(0, memberDepth - cover - tieDia - farBarDia)
+
+export function hookFit(i: HookFitInput): HookFitResult {
+  const avail = hookEmbedmentAvailable(i.memberDepth, i.cover, i.tieDia, i.farBarDia)
+  const fits = i.ldh <= avail + 1e-9
+  return {
+    avail,
+    fits,
+    shortfall: fits ? 0 : i.ldh - avail,
+    depthNeeded: i.ldh + i.cover + i.tieDia + i.farBarDia,
+  }
+}
+
 export function calcDevLength(i: DevLengthInput): DevLengthResult {
   const { db, fc, fy, lambda } = i
   // §25.4.1.4 — the cap applies to every length in §25.4, not just to ld.

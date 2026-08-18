@@ -145,6 +145,26 @@ export function columnDetailBundles(model: StructuralModel, design: StructureDes
 export interface BeamDetailBundle { mark: string; detail: BeamDetailInput }
 
 /**
+ * What a hooked beam bar anchors into, from the supporting column's section.
+ *
+ * The beam's direction relative to the column is not resolved here, so the
+ * SMALLER column dimension is what the hook is checked against — the sheet
+ * would rather warn about a bar that in fact develops than pass one that does
+ * not. Without f'c and fy there is no ℓdh to dimension, so the sheet falls
+ * back to drawing the hook undimensioned.
+ */
+function hookAnchorageAt(sec: RectSection | undefined): BeamDetailInput['hookAnchorage'] {
+  if (!sec || !Number.isFinite(sec.fc) || !Number.isFinite(sec.fy)) return undefined
+  return {
+    colH: Math.min(sec.b, sec.h ?? sec.b),
+    colBarDia: sec.barDia ?? 20,
+    colTieDia: sec.tieDia ?? 10,
+    colCover: sec.cover ?? 40,
+    fc: sec.fc, fy: sec.fy,
+  }
+}
+
+/**
  * One typical beam detail per distinct beam TYPE.
  *
  * Grouped on section + the critical-section bar counts, so a floor of identical
@@ -158,10 +178,15 @@ export function beamDetailBundles(model: StructuralModel, design: StructureDesig
   const memById = new Map(model.members.map((m) => [m.id, m]))
   const nodeById = new Map(model.nodes.map((n) => [n.id, n]))
 
+  /** The supporting column's section at a node — the cage a hook anchors into. */
+  const colSectionAt = (node: string): RectSection | undefined => {
+    const col = model.members.find((m) => m.role === 'column' && (m.i === node || m.j === node))
+    return col ? (secById.get(col.section) as RectSection | undefined) : undefined
+  }
+
   /** Supporting column width at a node, mm — how much joint the sheet draws. */
   const colWidthAt = (node: string): number | undefined => {
-    const col = model.members.find((m) => m.role === 'column' && (m.i === node || m.j === node))
-    const sec = col ? (secById.get(col.section) as RectSection | undefined) : undefined
+    const sec = colSectionAt(node)
     return sec ? Math.min(sec.b, sec.h ?? sec.b) : undefined
   }
 
@@ -232,6 +257,7 @@ export function beamDetailBundles(model: StructuralModel, design: StructureDesig
         continuousLeft: continuesPast(mem.id, mem.i, mem.j),
         continuousRight: continuesPast(mem.id, mem.j, mem.i),
         cover: sec.cover,
+        hookAnchorage: hookAnchorageAt(colSectionAt(mem.i) ?? colSectionAt(mem.j)),
       },
     })
   }

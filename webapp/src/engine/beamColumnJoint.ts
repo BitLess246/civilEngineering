@@ -43,6 +43,7 @@
 // Units: sections mm; forces kN; stresses MPa; drawing geometry m.
 // ─────────────────────────────────────────────────────────────────────────
 import type { PlanPrimitive, Drawing } from './planRenderer'
+import { hookEmbedmentAvailable } from './devLength'
 
 // ── code constants ─────────────────────────────────────────────────────────
 
@@ -281,11 +282,10 @@ export function designBeamColumnJoint(i: BeamColumnJointInput): BeamColumnJointR
   // §418.8.2.2 / §418.8.5.1 — the terminated bars' anchorage.
   const ldh = jointHookLdh(i.beamBarDia, fy, fc, lambda)
   // The hook turns DOWN inside the far-face column longitudinals, so the depth
-  // it can occupy is the core less that bar: colH − cover − hoop − colBar. The
-  // column bar was missing here, which handed every hooked bar ⌀colBar more
-  // room than the cage leaves it — on the one check that decides whether the
-  // terminated bars can be developed at all.
-  const ldhAvail = Math.max(0, i.colH - cover - i.hoopDia - i.colBarDia)
+  // it can occupy is the core less that bar. Shared with the §425.4.3 hook on
+  // the dev-length page — one formula, so the joint sheet and that page cannot
+  // quote different room for the same bar in the same column.
+  const ldhAvail = hookEmbedmentAvailable(i.colH, cover, i.hoopDia, i.colBarDia)
   const ldhFits = !terminated || ldh <= ldhAvail + 1e-9
   const hookTail = 12 * i.beamBarDia
 

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   buildBeamDetail, continuousTopSteel, barExtension, zoneSpacing, hoopPositions, wrapNote,
   FIRST_HOOP, HOOP_ZONE_DEPTHS, HOOK_END_COVER, EXTRA_TOP_FRACTION, EXTRA_BOTTOM_FRACTION,
+  endHookAnchorage,
 } from './beamDetail'
 
 const sections = [
@@ -255,5 +256,78 @@ describe('buildBeamDetail', () => {
     const bare = buildBeamDetail({ ...b, L: 0, sections: [] })
     expect(bare.primitives.length).toBeGreaterThan(0)
     for (const v of Object.values(bare.bounds)) expect(Number.isFinite(v)).toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// ℓdh AT A HOOKED END — the sheet used to draw the end hook 60 mm inside the
+// far face and never ask whether the bar it drew could actually be developed.
+// Given the column, it now dimensions the anchorage and says so when it fails.
+// ─────────────────────────────────────────────────────────────────────────
+describe('buildBeamDetail — the end hook is dimensioned, not drawn by eye', () => {
+  /** An END span: the bars have to hook at both supports. */
+  const ends = { ...b, continuousLeft: false, continuousRight: false }
+  /** A 250 column with ⌀16 verticals and ⌀10 ties — 184 mm for the hook. */
+  const tightCol = {
+    ...ends,
+    hookAnchorage: { colH: 250, colBarDia: 16, colTieDia: 10, colCover: 40, fc: 20.7, fy: 414 },
+  }
+  /** The same beam in a 600 column, where the same bar develops comfortably. */
+  const roomyCol = {
+    ...ends,
+    hookAnchorage: { colH: 600, colBarDia: 16, colTieDia: 10, colCover: 40, fc: 20.7, fy: 414 },
+  }
+
+  it('reports the anchorage from the column, stopping at its far-face bar', () => {
+    const a = endHookAnchorage(tightCol)!
+    expect(a.avail).toBe(184)                      // 250 − 40 − 10 − 16
+    expect(a.clear).toBe(66)                       // cover + tie + bar
+    // §418.8.5.1 — the same clause the joint sheet prints, for ⌀16:
+    // 414(16)/(5.4·√20.7) = 269.6 mm
+    expect(a.ldh).toBeCloseTo(269.61, 1)
+    expect(a.fits).toBe(false)
+    expect(a.shortfall).toBeCloseTo(85.61, 1)
+  })
+
+  it('returns nothing to dimension when the sheet was given no column', () => {
+    expect(endHookAnchorage(ends)).toBeNull()
+    // …and the drawing still builds, with the hook at its nominal 60 clear
+    expect(allTextOf(buildBeamDetail(ends)).join(' ')).toContain(`${HOOK_END_COVER} CL.`)
+  })
+
+  it('dimensions ℓdh required against the embedment available', () => {
+    const flat = allTextOf(buildBeamDetail(tightCol)).join(' ').replace(/\s+/g, ' ')
+    expect(flat).toContain('184 AVAIL / ℓdh 270 REQ')
+    expect(flat).toContain('ℓdh 86 SHORT')
+  })
+
+  it('says the bar does not develop — and that a longer tail is not the fix', () => {
+    const flat = allTextOf(buildBeamDetail(tightCol)).join(' ').replace(/\s+/g, ' ')
+    expect(flat).toContain('DO NOT DEVELOP IN THIS COLUMN')
+    expect(flat).toContain('LENGTHENING THE TAIL DOES NOT COUNT')
+    expect(flat).toContain('336')                  // the depth that would work
+  })
+
+  it('passes the same bar in a column deep enough for it, with no warning', () => {
+    const a = endHookAnchorage(roomyCol)!
+    expect(a.avail).toBe(534)
+    expect(a.fits).toBe(true)
+    const flat = allTextOf(buildBeamDetail(roomyCol)).join(' ').replace(/\s+/g, ' ')
+    expect(flat).toContain('DEVELOPS IN THE 534 AVAILABLE')
+    expect(flat).not.toContain('SHORT')
+    // no warning geometry either
+    expect(buildBeamDetail(roomyCol).primitives
+      .some((p) => 'stroke' in p && p.stroke === '#b91c1c')).toBe(false)
+  })
+
+  it('places the hook behind the column cage rather than at a nominal 60', () => {
+    const drawn = buildBeamDetail(tightCol)
+    const flat = allTextOf(drawn).join(' ')
+    expect(flat).toContain('66 CL.')               // 40 + 10 + 16, not 60
+    // the drawn support is the column dimension PARALLEL to the bars — the one
+    // ℓdh runs in — so a 250 column is drawn 250 wide, not at the 400 default
+    const cols = drawn.primitives.filter((p) => p.kind === 'rect' && p.fill === '#f1f5f9') as { w: number }[]
+    expect(cols.length).toBeGreaterThan(0)
+    for (const c of cols) expect(c.w).toBeCloseTo(0.25, 9)
   })
 })

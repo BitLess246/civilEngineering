@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { calcDevLength } from './devLength'
+import { calcDevLength, hookEmbedmentAvailable, hookFit } from './devLength'
 
 // Reference inputs — Grade 415, fc=28, db=20 (≤20 → ψs=0.8), not top, uncoated, n.w., Ψ=1.5
 const BASE = {
@@ -247,5 +247,59 @@ describe('standard hook in tension — §25.4.3', () => {
     expect(r.hookTail).toBe(12 * 20)
     expect(r.hookBendDia).toBe(6 * 20)                        // ⌀25 and smaller
     expect(calcDevLength({ ...base, db: 32 }).hookBendDia).toBe(8 * 32)  // ⌀28+
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// HOOK FIT — the question the four lengths cannot answer on their own:
+// is there room in the member for the hook the bar needs?
+//
+// The video-worked case detailers use here: a 250 × 250 column, 40 cover,
+// ⌀10 lateral ties, ⌀16 verticals. The hook turns down BEHIND the far-face
+// vertical, so it has
+//
+//   250 − 40 − 10 − 16 = 184 mm
+//
+// and NOT the 250 mm of column, nor the 200 mm that stopping at the tie gives.
+// ─────────────────────────────────────────────────────────────────────────
+describe('hookFit — room for the hook, not just the length of it', () => {
+  const col = { memberDepth: 250, cover: 40, tieDia: 10, farBarDia: 16 }
+
+  it('stops at the far-face bar, not at the face or the tie', () => {
+    expect(hookEmbedmentAvailable(250, 40, 10, 16)).toBe(184)
+    expect(hookFit({ ldh: 150, ...col }).avail).toBe(184)
+  })
+
+  it('passes a hook that fits and reports what is spare', () => {
+    const r = hookFit({ ldh: 150, ...col })
+    expect(r.fits).toBe(true)
+    expect(r.shortfall).toBe(0)
+    expect(r.depthNeeded).toBe(150 + 40 + 10 + 16)      // 216 ≤ 250 provided
+  })
+
+  it('fails one that does not, and says how deep the member would have to be', () => {
+    // ⌀16 grade-414 bar in 20.7 MPa concrete: ℓdh ≈ 245 mm (§25.4.3 with ψc)
+    const need = calcDevLength({
+      db: 16, fc: 20.7, fy: 414, topBar: false, epoxy: 'none', lambda: 1,
+      cbKtr_db: 1.5, hookCover: true,
+    }).ldh
+    const r = hookFit({ ldh: need, ...col })
+    expect(r.fits).toBe(false)
+    expect(r.shortfall).toBeCloseTo(need - 184, 6)
+    expect(r.depthNeeded).toBeCloseTo(need + 66, 6)     // 66 = 40 + 10 + 16
+    // and the remedy is depth, not tail: a member deep enough by that margin
+    // is the thing that turns the check
+    expect(hookFit({ ldh: need, ...col, memberDepth: r.depthNeeded }).fits).toBe(true)
+  })
+
+  it('is exact at the boundary rather than off by a rounding', () => {
+    expect(hookFit({ ldh: 184, ...col }).fits).toBe(true)
+    expect(hookFit({ ldh: 184.001, ...col }).fits).toBe(false)
+  })
+
+  it('never reports negative room in a member thinner than its own cover', () => {
+    const r = hookFit({ ldh: 200, memberDepth: 50, cover: 40, tieDia: 10, farBarDia: 16 })
+    expect(r.avail).toBe(0)
+    expect(r.shortfall).toBe(200)
   })
 })
