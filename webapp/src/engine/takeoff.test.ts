@@ -42,6 +42,17 @@ describe('structure take-off / BOM-BOQ', () => {
   const design = designStructure(m, soil)!
   const t = estimateTakeoff(m, design, { concreteClass: 'A' })
 
+  it('buys each stirrup its bend allowance, not just the §425.3.2 extension', () => {
+    // 300 × 500 section, 40 cover, ⌀10 tie:
+    //   perimeter on the tie line = 2[(300−80) + (500−80)] = 1280 mm
+    //   two 135° hooks           = 2[max(6·10, 75) + 3·10] = 2(105) = 210 mm
+    // The extension alone (2 × 75 = 150) would cut every stirrup 60 mm short.
+    const stirrup = t.cutList.find((c) => c.mark === 'Stirrup' && c.dia === 10)!
+    expect(stirrup).toBeDefined()
+    expect(stirrup.cutLengthM).toBeCloseTo(1.28 + 0.21, 6)
+    expect(stirrup.tie).toBe(true)
+  })
+
   it('total concrete matches the design totals and yields cement/sand/gravel', () => {
     expect(t.totalConcreteM3).toBeGreaterThan(0)
     // members + slabs (footings add a little more) ≥ design member+slab concrete

@@ -37,7 +37,9 @@ import {
 //                terminated bar was this module's own bug, caught in review.
 //   §418.8.5.1 — ℓdh = fy·db/(5.4λ√f'c) = 415(28)/(5.4·1.00·√21)
 //                = 11620/24.746 = 469.6 mm
-//                available inside the confined core = 400 − 40 − 10 = 350  ✗
+//                available inside the confined core, measured to the inside of
+//                the far-face ⌀20 vertical the hook turns down behind:
+//                400 − 40 cover − 10 hoop − 20 col bar = 330  ✗
 //
 // So ONE failure, not two: the ⌀28 bar cannot be ANCHORED in a 400 mm column.
 // Whether it could pass through is a question nobody asked, because it does not.
@@ -206,11 +208,11 @@ describe('designBeamColumnJoint — the worked example', () => {
       .through.spandrel.ok).toBe(true)
   })
 
-  it('FAILS the hook fit — 470 mm of ℓdh in 350 mm of column', () => {
+  it('FAILS the hook fit — 470 mm of ℓdh in 330 mm of column', () => {
     expect(r.ldh).toBeCloseTo(469.57, 1)
     // the inputs the number came from travel with it, so a reader can check it
     expect(r.ldhInputs).toEqual({ db: 28, fy: 415, fc: 21, lambda: 1 })
-    expect(r.ldhAvail).toBe(350)                          // 400 − 40 cover − 10 hoop
+    expect(r.ldhAvail).toBe(330)              // 400 − 40 cover − 10 hoop − 20 col bar
     expect(r.ldhFits).toBe(false)
     expect(r.hookTail).toBe(336)                          // 12db
     expect(r.notes.join(' ')).toContain('§418.8.5.1')
@@ -221,6 +223,46 @@ describe('designBeamColumnJoint — the worked example', () => {
     expect(r.shearOK).toBe(true)
     expect(r.through.main.ok).toBe(true)
     expect(r.ldhFits).toBe(false)
+  })
+})
+
+describe('ℓdh available — measured to the far-face column bar', () => {
+  // A 250 × 250 column with ⌀10 lateral ties at 40 cover and ⌀16 verticals,
+  // a 200 × 300 beam with ⌀16 mains hooked into it. The hook turns down BEHIND
+  // the far vertical, so what it has to work with is
+  //
+  //   250 − 40 cover − 10 tie − 16 vertical = 184 mm
+  //
+  // and not the 200 mm that leaving the vertical out of the sum reports. The
+  // difference is the whole bar diameter and it lands on `ldhFits`.
+  const tight: BeamColumnJointInput = {
+    colB: 250, colH: 250, colBarDia: 16, colBars: 4, hoopDia: 10, hoopSpacing: 100,
+    beamB: 200, beamH: 300, beamBarDia: 16, topBars: 2, botBars: 2,
+    fc: 20.7, fy: 414, cover: 40,
+  }
+
+  it('takes the column vertical off the available embedment', () => {
+    const r = designBeamColumnJoint(tight)
+    expect(r.ldhAvail).toBe(184)
+    expect(r.terminated).toBe(true)
+  })
+
+  it('scales with the vertical, not just with the column', () => {
+    // same column, ⌀25 verticals — 9 mm more bar is 9 mm less room for the hook
+    expect(designBeamColumnJoint({ ...tight, colBarDia: 25 }).ldhAvail).toBe(175)
+  })
+
+  it('reports the shortfall the seismic hook leaves in that column', () => {
+    const r = designBeamColumnJoint(tight)
+    // §418.8.5.1  ℓdh = 414(16)/(5.4·1·√20.7) = 6624/24.569 = 269.6 mm,
+    // over the 8db = 128 and 150 mm floors, so the formula governs.
+    expect(r.ldh).toBeCloseTo(269.61, 1)
+    expect(r.ldhFits).toBe(false)             // 269.6 > 184 — the bar cannot develop
+    expect(r.notes.join(' ')).toContain('184 mm available')
+  })
+
+  it('never goes negative on a column smaller than its own cover', () => {
+    expect(designBeamColumnJoint({ ...tight, colH: 60 }).ldhAvail).toBe(0)
   })
 })
 
