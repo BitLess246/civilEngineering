@@ -13,8 +13,8 @@
 //   · a Bill of Quantities (per element kind) + a Bill of Materials summary.
 //
 // Detailing assumptions (documented, all editable via options): straight-bar
-// end allowance Ld = 40·db (lap/anchorage); stirrup/tie hook = 2·max(6·dt, 75
-// mm); commercial bar length 6 m; lap (splice) length 0.30 m; tie wire 0.30 m
+// end allowance Ld = 40·db (lap/anchorage); stirrup/tie hook = 2·(max(6·dt, 75
+// mm) + 3·dt bend); commercial bar length 6 m; lap (splice) length 0.30 m; tie wire 0.30 m
 // per intersection; plywood sheet 1.2×2.4 m at 3 re-uses; lumber 4 lm per m² of
 // formwork. Slab steel follows the DDM column/middle-strip layout (per location).
 // Units: lengths m, Ø mm, steel kg (ρ = 7850 kg/m³).
@@ -32,9 +32,20 @@ const GI_WIRE_KG_PER_M = 0.0189       // #16 G.I. tie wire, ~1.6 mmØ
 const barAreaM2 = (dia: number) => (Math.PI / 4) * (dia / 1000) ** 2
 const kgPerM = (dia: number) => barAreaM2(dia) * STEEL_DENSITY
 const Ld = (dia: number) => (40 * dia) / 1000                       // tension lap/anchorage, m
+/**
+ * Cut allowance for ONE 135° seismic hook on a stirrup or tie, mm.
+ *
+ * §425.3.2 gives the EXTENSION beyond the bend, max(6·dt, 75) — that is what
+ * the detail dimensions and what the bender measures after the bend is made.
+ * The bar being cut also has to travel AROUND the bend, which costs about
+ * 3·dt more. Buying to the extension alone leaves every stirrup in the job
+ * short by that much, twice over.
+ */
+const tieHook = (tieDia: number) => Math.max(6 * tieDia, 75) + 3 * tieDia
+
 /** Closed stirrup/tie cut length for a b×h section, m. */
 const tiePerimeter = (b: number, h: number, cover: number, tieDia: number) =>
-  (2 * ((b - 2 * cover) + (h - 2 * cover))) / 1000 + (2 * Math.max(6 * tieDia, 75)) / 1000
+  (2 * ((b - 2 * cover) + (h - 2 * cover))) / 1000 + (2 * tieHook(tieDia)) / 1000
 
 export interface CutItem {
   element: string          // e.g. 'Beam bx0.0.1'
