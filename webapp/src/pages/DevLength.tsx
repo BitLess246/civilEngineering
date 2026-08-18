@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { calcDevLength, type DevLengthInput, type EpoxyCase } from '../engine/devLength'
+import { calcDevLength, hookFit, type DevLengthInput, type EpoxyCase } from '../engine/devLength'
 import { Num, Pick, Card, ResultCard, Row } from '../components/qty'
 import { ReportControls } from '../components/ReportControls'
 import { buildDevLengthSolution } from '../lib/devLengthSolution'
@@ -26,6 +26,12 @@ interface FormState extends Omit<DevLengthInput, 'db' | 'lambda'> {
   lambda: '1' | '0.85' | '0.75'
   hookCover: boolean
   hookTies: boolean
+  /** The member the hook anchors INTO — see the fit card. */
+  checkFit: boolean
+  memberDepth: number
+  memberCover: number
+  memberTieDia: number
+  memberBarDia: number
 }
 
 const DEFAULTS: FormState = {
@@ -37,6 +43,8 @@ const DEFAULTS: FormState = {
   cbKtr_db: 1.5,
   hookCover: false,
   hookTies: false,
+  checkFit: false,
+  memberDepth: 400, memberCover: 40, memberTieDia: 10, memberBarDia: 20,
 }
 
 const EPOXY_OPTS: [EpoxyCase, string][] = [
@@ -63,6 +71,18 @@ export default function DevLength() {
       hookCover: f.hookCover, hookTies: f.hookTies,
     })
   }, [f])
+
+  // Does that hook fit the member it anchors into? The four lengths above are
+  // required lengths; this is the only place on the page where a number can
+  // come back as NOT ACHIEVABLE, so it is worth asking explicitly.
+  const fit = useMemo(() => {
+    if (!r || !f.checkFit) return null
+    if (![f.memberDepth, f.memberCover, f.memberTieDia, f.memberBarDia].every(Number.isFinite)) return null
+    return hookFit({
+      ldh: r.ldh, memberDepth: f.memberDepth, cover: f.memberCover,
+      tieDia: f.memberTieDia, farBarDia: f.memberBarDia,
+    })
+  }, [r, f.checkFit, f.memberDepth, f.memberCover, f.memberTieDia, f.memberBarDia])
 
   // Development length has no pass/fail — it produces required lengths rather
   // than checking a demand — so the report carries no checks and the verdict
@@ -99,6 +119,12 @@ export default function DevLength() {
       ['Hook ℓdh', `${f0(r.ldh)} mm`],
       ['Class A splice', `${f0(r.ls_A)} mm`],
       ['Compression splice', `${f0(r.lsc)} mm`],
+      ...(fit ? [
+        ['Hook embedment available', `${f0(fit.avail)} mm`],
+        ['Hook fit', fit.fits
+          ? `OK — ${f0(fit.avail - r.ldh)} mm spare`
+          : `SHORT by ${f0(fit.shortfall)} mm — needs ${f0(fit.depthNeeded)} mm depth`],
+      ] as [string, string][] : []),
     ] as [string, string][],
     steps: solution ?? undefined,
   } : undefined
@@ -161,6 +187,22 @@ export default function DevLength() {
               ψc and ψr apply to ⌀36 and smaller only. ψt does NOT apply to hooks.
             </div>
           </Card>
+
+          <Card title="Does the Hook Fit? — the member it anchors into">
+            <Pick label="Check the anchoring member" value={f.checkFit ? 'yes' : 'no'}
+              onChange={(v) => set('checkFit')(v === 'yes')}
+              options={[['no', 'Not checked'], ['yes', 'Check ℓdh against the member']]} />
+            {f.checkFit && (<>
+              <Num label="Member depth ∥ bar" unit="mm" value={f.memberDepth} onChange={set('memberDepth')} />
+              <Num label="Member cover" unit="mm" value={f.memberCover} onChange={set('memberCover')} />
+              <Num label="Tie / hoop ⌀" unit="mm" value={f.memberTieDia} onChange={set('memberTieDia')} />
+              <Num label="Far-face bar ⌀" unit="mm" value={f.memberBarDia} onChange={set('memberBarDia')} />
+              <div className="col-span-full -mt-2 text-xs text-slate-500">
+                The hook turns down BEHIND the far-face longitudinal bar, so the embedment
+                available is depth − cover − tie ⌀ − bar ⌀, not the member depth.
+              </div>
+            </>)}
+          </Card>
         </div>
 
         {/* ── RESULTS ── */}
@@ -194,6 +236,26 @@ export default function DevLength() {
               <Row label="Tail 12db (not part of ℓdh)" value={`${f0(r.hookTail)} mm`} />
               <Row label="Min inside bend ⌀" value={`${f0(r.hookBendDia)} mm`} />
             </ResultCard>
+
+            {fit && (
+              <ResultCard title="Hook Fit — is there room for it?">
+                <Row label="Embedment available" value={`${f0(fit.avail)} mm`}
+                  sub={`${f.memberDepth} − ${f.memberCover} cover − ${f.memberTieDia} tie − ${f.memberBarDia} bar`} />
+                <Row label="ℓdh required" value={`${f0(r.ldh)} mm`} />
+                <Row label={fit.fits ? 'Fits' : 'DOES NOT FIT'}
+                  value={fit.fits ? `${f0(fit.avail - r.ldh)} mm spare` : `${f0(fit.shortfall)} mm short`}
+                  alert={!fit.fits} />
+                <Row label="Depth that would develop it" value={`${f0(fit.depthNeeded)} mm`} />
+                {!fit.fits && (
+                  <div className="mt-2 rounded-md bg-[#fbeeea] p-2 text-[11.5px] leading-relaxed text-[#8f2f1e]">
+                    Deepen the member to {f0(fit.depthNeeded)} mm, use a smaller bar, raise f'c,
+                    earn ψc/ψr (§25.4.3.2), or anchor with a headed bar or mechanical device
+                    (§25.4.4). <strong>Lengthening the tail does not help</strong> — ℓdh is
+                    measured to the outside of the bend, and the 12db tail runs across it.
+                  </div>
+                )}
+              </ResultCard>
+            )}
 
             <ResultCard title="Development Length — Compression §25.4.9.2">
               <Row label="ℓdc" value={`${f0(r.ldc)} mm`}
