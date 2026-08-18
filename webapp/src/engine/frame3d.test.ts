@@ -57,6 +57,86 @@ describe('frame3d — closed forms (cantilever along x, L = 3)', () => {
   })
 })
 
+describe('frame3d — moment diagram sign, BOTH bending axes', () => {
+  // A fixed-base column whose top rotates but cannot translate has a
+  // carry-over factor of exactly 0.5 (slope-deflection: M_base = 2EI/L·θ,
+  // M_top = 4EI/L·θ). That has to hold whichever local axis does the bending.
+  //
+  // It did not. `My` recovered the i-end moment WITHOUT the sign flip that
+  // `Mz` applies, so every station past the i-end was out by 2·f[4]: the
+  // carry-over came back 0.25 about local y and 0.50 about local z. The i-end
+  // magnitude was right either way, which is why reactions and the statics
+  // check never noticed. Found by cross-checking the Gridframe model against
+  // STAAD.Pro, where the same column read 0.49.
+  const Lc = 3.5, Ic = 400 ** 4 / 12, Ac = 400 * 400
+  const col = { E, G: E / 2.4, A: Ac, Iy: Ic, Iz: Ic, J: rectJ(400, 400) }
+
+  /** Symmetric portal, fixed bases, UDL on the beam. Symmetry rules out sway,
+   *  so each column must show the 0.5 carry-over. Built in the X–Y plane and
+   *  again in the Z–Y plane so each local bending axis takes a turn. */
+  const portal = (plane: 'xy' | 'zy') => {
+    const at = (u: number, y: number) => plane === 'xy' ? { x: u, y, z: 0 } : { x: 0, y, z: u }
+    const Lb = 5
+    return solveFrame3D(
+      [{ id: 'a', ...at(0, 0) }, { id: 'b2', ...at(Lb, 0) },
+       { id: 'c', ...at(0, Lc) }, { id: 'd', ...at(Lb, Lc) }] as F3Node[],
+      [{ id: 'cl', i: 'a', j: 'c', ...col }, { id: 'cr', i: 'b2', j: 'd', ...col },
+       { id: 'bm', i: 'c', j: 'd', ...sec }] as F3Member[],
+      [{ node: 'a', fixity: 'fixed' }, { node: 'b2', fixity: 'fixed' }] as F3Support[],
+      [{ kind: 'member-udl', member: 'bm', w: 30, cat: 'D' }] as F3Load[],
+    )!
+  }
+  /** The column's own bending diagram, whichever local axis carries it. */
+  const colDiagram = (r: ReturnType<typeof portal>, id: string) => {
+    const m = r.members.find((x) => x.id === id)!
+    const d = Math.max(...m.My.map(Math.abs)) > Math.max(...m.Mz.map(Math.abs)) ? m.My : m.Mz
+    return { d, V: Math.max(...m.Vy.map(Math.abs), ...m.Vz.map(Math.abs)) }
+  }
+
+  const checkCarryOver = (plane: 'xy' | 'zy') => {
+    const r = portal(plane)
+    for (const id of ['cl', 'cr']) {
+      const { d, V } = colDiagram(r, id)
+      const [mi, mj] = [Math.abs(d[0]), Math.abs(d[d.length - 1])]
+      expect(mj).toBeGreaterThan(1)
+      expect(mi / mj).toBeCloseTo(0.5, 2)
+      // no transverse load on a column ⇒ linear diagram that closes on statics
+      expect(mi + mj).toBeCloseTo(V * Lc, 4)
+    }
+  }
+
+  it('carry-over is 0.5 for a portal in the XY plane (bending about local z)', () => {
+    checkCarryOver('xy')
+  })
+
+  it('carry-over is 0.5 for a portal in the ZY plane (bending about local y)', () => {
+    checkCarryOver('zy')
+  })
+
+  it('gives the same column moments whichever plane the portal is built in', () => {
+    const a = colDiagram(portal('xy'), 'cl'), b = colDiagram(portal('zy'), 'cl')
+    expect(Math.abs(b.d[0])).toBeCloseTo(Math.abs(a.d[0]), 6)
+    expect(Math.abs(b.d[b.d.length - 1])).toBeCloseTo(Math.abs(a.d[a.d.length - 1]), 6)
+  })
+
+  it('a cantilever moment diagram closes to zero at the free end, both axes', () => {
+    // The clearest statement of the same rule: nothing holds the free end, so
+    // the internal moment there is zero. With the sign wrong it came back at
+    // 2·M_fixed instead.
+    for (const [key, load] of [
+      ['Mz', { kind: 'member-udl' as const, member: 'm', w: 10, cat: 'D' as const }],
+      ['My', { kind: 'node' as const, node: 'b', Fz: 10, cat: 'D' as const }],
+    ] as const) {
+      const r = cant([load])
+      const m = r.members[0]
+      const d = key === 'My' ? m.My : m.Mz
+      expect(Math.abs(d[0]), `${key} at the fixed end`).toBeGreaterThan(1)
+      expect(Math.abs(d[d.length - 1]), `${key} at the free end`).toBeLessThan(1e-6)
+    }
+  })
+
+})
+
 describe('frame3d — square-section J', () => {
   it('rectJ(square) ≈ 0.1406·b⁴', () => {
     expect(rectJ(300, 300) / 300 ** 4).toBeCloseTo(0.1406, 3)

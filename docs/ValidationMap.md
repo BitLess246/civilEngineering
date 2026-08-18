@@ -186,7 +186,7 @@ asserted by that file; all run in CI.
 | ID | What | Blocker |
 |----|------|---------|
 | X001 | ETABS space-frame cross-check (F3D002, RS002, M003, B006) | needs an ETABS license + exported reference results checked into `docs/benchmarks/` |
-| X002 | STAAD continuous-beam / multi-bay cross-check (FR004, F3D003) | needs STAAD reference output |
+| X002 | STAAD space-frame cross-check (FR004, F3D003) | 🔶 **partly done, 2026-08-19.** Reference output checked in at `docs/benchmarks/staad-gridframe-2026-08-19.anl` (2×1-bay, 2-storey, meshed slab) against `gridframe.model.json`. Joint deflections agree to **0.27 %** of the ratio predicted from the two models' known input differences; support reactions to ±4.6 %; the column carry-over factor matches (0.510 vs 0.490, theory 0.500). The cross-check FOUND the `frame3d` My sign defect fixed in this PR. Still open: the tributary engine under-predicts the interior girder by ~31 % vs a meshed-slab FE model — see the artifact linked from the PR. |
 | X003 | PCA Column biaxial + slender cross-check (C003, C004) | needs spColumn reference curves |
 | X004 | Excel verification sheets (Roadmap Phase-2 goal) | authoring task — the `/validation` page already renders manual-vs-software tables that can seed them |
 | T-beam flexure (`tbeam.ts`) | §6.3.2 bf table + two-couple T flexure vs hand calc (Asf 1290 mm², rect/true-T switch, εt/φ) | ✅ `tbeam.test.ts` (14) |

@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 492
+export const SOLVER_TEST_COUNT = 496
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -363,6 +363,22 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "frame3d — closed forms (cantilever along x, L = 3)",
         "name": "axial nodal load (+X): δx = PL/EA"
+      },
+      {
+        "suite": "frame3d — moment diagram sign, BOTH bending axes",
+        "name": "carry-over is 0.5 for a portal in the XY plane (bending about local z)"
+      },
+      {
+        "suite": "frame3d — moment diagram sign, BOTH bending axes",
+        "name": "carry-over is 0.5 for a portal in the ZY plane (bending about local y)"
+      },
+      {
+        "suite": "frame3d — moment diagram sign, BOTH bending axes",
+        "name": "gives the same column moments whichever plane the portal is built in"
+      },
+      {
+        "suite": "frame3d — moment diagram sign, BOTH bending axes",
+        "name": "a cantilever moment diagram closes to zero at the free end, both axes"
       },
       {
         "suite": "frame3d — square-section J",
