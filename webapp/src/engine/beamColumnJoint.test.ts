@@ -330,7 +330,7 @@ describe('buildBeamColumnJointDetail', () => {
     expect(xx.y).toBeGreaterThan(yy.y)                    // y runs DOWN the sheet
   })
 
-  it('hooks the beam bars into the confined core, 60 clear, in both views', () => {
+  it('hooks the beam bars behind the far-face column bar, and SAYS the same number', () => {
     const paths = d.primitives.filter((p) => p.kind === 'path') as { cmds: { x: number; y: number }[] }[]
     // two hooked bars in the elevation (top + bottom) and two runs in the plan
     expect(paths.length).toBe(4)
@@ -341,23 +341,49 @@ describe('buildBeamColumnJointDetail', () => {
       expect(Math.abs(c.x - b2.x)).toBeLessThan(1e-9)      // the tail turns square
       expect(Math.abs(c.y - b2.y)).toBeGreaterThan(0)
     }
-    expect(flat).toContain('60 CL. TO END OF HOOKS')
+    // The clear is cover + hoop + column bar = 40 + 10 + 20, NOT a nominal 60,
+    // and NOT the cover-plus-60 (= 100) the sheet used to draw while annotating
+    // it as 60 — the drawing and its own note disagreed by 40 mm.
+    expect(d.result.ldhClear).toBe(70)
+    expect(flat).toContain('70 CL. TO END OF HOOKS')
+    expect(flat).toContain('70 CLEAR TO THE END OF THE HOOK')
+    // and the drawn bend really is at that clear, measured from the far face
+    const hookXs = hooked.map((p) => p.cmds[1].x).sort((a, b) => a - b)
+    expect(hookXs[0]).toBeCloseTo(70 / 1000, 9)
+    // the two hooks are separated by a bar Ø so they do not merge into what
+    // reads as one closed loop where their 12db tails pass each other
+    expect(hookXs[1] - hookXs[0]).toBeCloseTo(joint.beamBarDia / 1000, 9)
+  })
+
+  it('breaks the hoops behind the ℓdh dimension instead of printing over them', () => {
+    // A white mask sits under the dimension: the line, its ticks and its label
+    // used to overprint the very reinforcement the sheet is drawing.
+    const masks = d.primitives.filter((p) => p.kind === 'rect' && p.fill === '#fff')
+    expect(masks.length).toBeGreaterThan(0)
+    const dim = d.primitives.find((p) => p.kind === 'dim'
+      && (p as { text: string }).text.startsWith('ℓdh')) as { x1: number; x2: number; y1: number }
+    const covers = masks.some((m) => {
+      const r = m as { x: number; y: number; w: number; h: number }
+      return r.x <= Math.min(dim.x1, dim.x2) && r.x + r.w >= Math.max(dim.x1, dim.x2)
+        && r.y <= dim.y1 && r.y + r.h >= dim.y1
+    })
+    expect(covers).toBe(true)
   })
 
   it('draws THROUGH bars straight through, and drops the hook notes with them', () => {
     // A sheet must not carry a note about a detail it does not draw: the
-    // through case has no hook, so no ℓdh dimension and no 60 CL. callout.
+    // through case has no hook, so no ℓdh dimension and no clear-to-hook callout.
     const t = buildBeamColumnJointDetail({ ...joint, interior: true, barsThrough: true }, { detailNo: '2' })
     const paths = t.primitives.filter((p) => p.kind === 'path') as { cmds: { x: number; y: number }[] }[]
     expect(paths.length).toBe(4)
     for (const p of paths) expect(p.cmds).toHaveLength(2)      // straight, no turn
     const tf = textOf(t).join(' ').replace(/\s+/g, ' ')
     expect(tf).toContain('RUN CONTINUOUS THROUGH THE JOINT')
-    expect(tf).not.toContain('60 CL. TO END OF HOOKS')
+    expect(tf).not.toContain('CL. TO END OF HOOKS')
     expect(tf).not.toContain('TAIL 12db')
     expect(tf).not.toContain('ℓdh =')
     // …while the terminated sheet does carry all three
-    expect(flat).toContain('60 CL. TO END OF HOOKS')
+    expect(flat).toContain('70 CL. TO END OF HOOKS')
     expect(flat).toContain('TAIL 12db')
   })
 
