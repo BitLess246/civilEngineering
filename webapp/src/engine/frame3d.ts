@@ -799,7 +799,13 @@ function postprocessMember(m: F3Member, g: MemberGeom, ml: MemberLoads, d: numbe
     let vy = f[1] + integ(ml.qy, x)
     let vz = f[2] + integ(ml.qz, x)
     let mz = -f[5] + f[1] * x + integM(ml.qy, x)
-    let my = f[4] - f[2] * x - integM(ml.qz, x)
+    // `f` holds the local end forces ON the member, so the internal moment at
+    // the i-end is the NEGATIVE of the stored end moment — for both axes. This
+    // line used `+f[4]`, which left the i-end magnitude right (|±f[4]| is the
+    // same) and every other station wrong by 2·f[4]: a fixed-base column came
+    // back with a carry-over of 0.25 instead of the slope-deflection 0.50.
+    // Caught by the STAAD.Pro cross-check on the Gridframe model.
+    let my = -f[4] - f[2] * x - integM(ml.qz, x)
     for (const pt of ml.pts) {
       if (pt.a <= x) {
         n -= pt.Pa
