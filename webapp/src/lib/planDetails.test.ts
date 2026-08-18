@@ -202,7 +202,9 @@ describe('planDetails — beam–column joints', () => {
     expect(r.Aj).toBeGreaterThan(0)
     expect(r.phiVn).toBeGreaterThan(0)
     expect(r.Vu).toBeGreaterThan(0)
-    expect(r.colDepthMin).toBe(20 * jointDetailBundles(model, design)[0].detail.beamBarDia)
+    // §418.8.2.3 is asked per direction, of bars that pass THROUGH — never of
+    // the hooked bars merely because they are large.
+    expect(r.through.main.applies).toBe(!!jointDetailBundles(model, design)[0].detail.barsThrough)
     expect(r.ldh).toBeGreaterThanOrEqual(150)
   })
 })

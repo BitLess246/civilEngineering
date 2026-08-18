@@ -575,8 +575,11 @@ const jointShear = (() => {
   const bj = Math.min(beamB + colH, beamB + colB, colB)      // 400
   const Aj = bj * colH
   const phiVn = 0.85 * 1.2 * Math.sqrt(fc) * Aj / 1000       // kN
+  // The free body, not a single product: Vu = T + C − Vcol. This is an exterior
+  // joint, so there is no far beam and C = 0.
   const As = 2 * (Math.PI / 4) * db * db
-  const Vu = (1.25 * fy * As) / 1000                          // kN
+  const T = (1.25 * fy * As) / 1000, C = 0, Vcol = 0
+  const Vu = T + C - Vcol                                     // kN
   const r = designBeamColumnJoint({
     colB, colH, colBarDia: 20, colBars: 8, hoopDia: 10, hoopSpacing: 100,
     beamB, beamH: 300, beamBarDia: db, topBars: 2, botBars: 2,

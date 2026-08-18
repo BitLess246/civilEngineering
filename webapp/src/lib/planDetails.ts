@@ -424,9 +424,19 @@ export function jointDetailBundles(model: StructuralModel, design: StructureDesi
     const confinement: JointConfinement =
       n >= 4 ? 'four-faces' : n === 3 ? 'three-faces' : n === 2 && opposite ? 'two-opposite' : 'other'
     const interior = framing.some((f) => f !== lead && f.ux * lead.ux + f.uz * lead.uz < -0.9)
+    // §418.8.2.3 is conditioned on bars EXTENDING THROUGH the joint, so the
+    // bundler has to say, per direction, whether they do. A beam continuing
+    // past the column runs its bars through; one that stops there hooks them,
+    // and the 20db rule is not about those (§418.8.2.2 / §418.8.5 are).
+    const perpendicular = framing.filter((f) => Math.abs(f.ux * lead.ux + f.uz * lead.uz) < 0.1)
+    const spandrelThrough = perpendicular.some((f) =>
+      perpendicular.some((g) => f !== g && f.ux * g.ux + f.uz * g.uz < -0.9))
+    const spandrelBarDia = spandrelThrough
+      ? Math.max(...perpendicular.map((f) => (secById.get(f.m.section) as RectSection | undefined)?.barDia ?? 0))
+      : undefined
     const wideBeams = framing.every((f) => ((secById.get(f.m.section) as RectSection | undefined)?.b ?? 0) >= 0.75 * colSec.b)
 
-    const key = `${colSec.b}x${colSec.h ?? colSec.b}-${beamSec.b}x${beamSec.h}-${beamSec.barDia ?? 16}-${topBars}.${botBars}-${confinement}`
+    const key = `${colSec.b}x${colSec.h ?? colSec.b}-${beamSec.b}x${beamSec.h}-${beamSec.barDia ?? 16}-${topBars}.${botBars}-${confinement}-${interior ? 'through' : 'hooked'}-${spandrelThrough ? spandrelBarDia : 0}`
     if (seen.has(key)) continue
     seen.add(key)
     const mark = `J${seen.size}`
@@ -442,6 +452,9 @@ export function jointDetailBundles(model: StructuralModel, design: StructureDesi
         beamBarDia: beamSec.barDia ?? 16,
         topBars, botBars,
         interior, confinement, wideBeams,
+        // the near beam's bars pass through only if the beam itself continues
+        barsThrough: interior,
+        spandrelBarDia, spandrelThrough,
         fc: colSec.fc, fy: colSec.fy, cover: colSec.cover ?? 40,
       },
     })

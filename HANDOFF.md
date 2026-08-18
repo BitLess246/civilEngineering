@@ -206,17 +206,22 @@ design in `lib/planDetails.ts` and listed in `PlansPanel`.
     AIA bubble (detail no. over sheet ref, split by a diameter), title, then a
     rule with SCALE … NTS. Suite **4451**.
 - **#604 `beamColumnJoint.ts` — the joint sheet, two views.** §418.8, the block
-  of concrete neither member design looks at. Four checks: the §418.8.2.3 column
-  depth (≥ 20db of the beam bar), joint shear φVn = φγλ√f'c·Aj against a demand
-  taken from the BARS at 1.25fy (§418.8.2.1/§418.8.4), §418.8.3 confinement
-  hoops continuing through the joint (halved at ≤150 where four wide beams frame
-  in), and the §418.8.5.1 seismic hook ℓdh = fy·db/(5.4λ√f'c) — shorter than the
-  general §425.4.3 one, and checked for FIT inside the column. On the model's own
-  400 column with ⌀28 beam bars two of those fail, and they are the same fact:
-  the bar is too big for the column. Sheet is VERTICAL SECTION Y-Y over PLAN
-  SECTION X-X with the title block below. `jointDetailBundles` classifies the
-  confinement from how many beams actually arrive at the node. Benchmark
-  `joint-shear-ratio`; suite **4480**.
+  of concrete neither member design looks at. Sheet is VERTICAL SECTION Y-Y over
+  PLAN SECTION X-X with the title block below; `jointDetailBundles` classifies
+  the confinement from how many beams actually arrive at the node.
+  **Corrected in review — read this before touching §418.8.2:** the first cut
+  applied the 20db joint-depth rule to the beam bar diameter unconditionally.
+  It is conditioned on reinforcement **extending through** the joint
+  (§418.8.2.3) — a bond/slip rule for a bar pulled one way on one face and
+  pushed the other way on the other. Bars **terminated** in the column are
+  governed by §418.8.2.2 + §418.8.5 instead. So the module now asks it per
+  direction, of whatever actually passes through: the ⌀28 hooked into the
+  model's 400 column does NOT fail 20db, it fails its ANCHORAGE (ℓdh 470 in
+  350 available); and a spandrel passing through is measured against the column
+  WIDTH. The demand is likewise the joint FREE BODY, Vu = T + C − Vcol with the
+  steel at 1.25fy, not the single product `1.25fyAs`. `ldhInputs` travels with
+  the result so the printed ℓdh can be checked against its own fy/db/f'c/λ.
+  Benchmark `joint-shear-ratio`; suite **4487**.
 - **Remaining**: Phase 6b — fold the detail steel (opening trimmers, wall corner
   and U-bars, diagonal corner bars, and the wall curtains, which the BOM counts
   as ZERO today) into `takeoff.ts`.
