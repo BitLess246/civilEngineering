@@ -3576,10 +3576,11 @@ export default function ModelSpace() {
                     card rather than only in the ⓘ, because it changes what a girder result means. */}
                 <p className="col-span-full rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] leading-relaxed text-amber-900">
                   <b>Slab loads reach beams by 45° tributary area</b>, not a slab mesh. Cross-checked against
-                  STAAD.Pro (2×1 bay, 2 storeys, slab meshed 10×10): reactions agree within 4.6% and joint
-                  deflections within 0.3%, but <b>interior girders come out ~31% low</b> (edge girders ~21%)
-                  because a continuous slab draws more to an interior support line than tributary area gives it.
-                  Long-span beams are ~7% conservative. Check interior girders separately.
+                  STAAD.Pro with the slab meshed (2×1 bay, 2 storeys, matched E and ν): reactions agree within
+                  5% and joint deflections within 0.6%, but <b>interior girders come out ~30% low</b> (edge
+                  girders ~20%) and <b>column moments ~35–50% low</b> — a continuous slab carries moment into
+                  the girders and columns that a tributary line load cannot. Long-span beams are ~5–9%
+                  conservative. Check interior girders and column moments separately.
                 </p>
                 <div className="col-span-full">
                   <button type="button" onClick={analyze} disabled={!model || !!busy || meshErrors} className={btn}>
