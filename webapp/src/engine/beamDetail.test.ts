@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   buildBeamDetail, continuousTopSteel, barExtension, zoneSpacing, hoopPositions, wrapNote,
   FIRST_HOOP, HOOP_ZONE_DEPTHS, HOOK_END_COVER, EXTRA_TOP_FRACTION, EXTRA_BOTTOM_FRACTION,
-  endHookAnchorage,
+  endHookAnchorage, crankBars, hook90, hookBendDiameter, HOOK_TAIL_DB, REBAR_INK, CRANK_INK,
 } from './beamDetail'
 
 const sections = [
@@ -116,6 +116,120 @@ const hoopsOf = (d: ReturnType<typeof buildBeamDetail>) =>
 const spanHoopsOf = (d: ReturnType<typeof buildBeamDetail>, L: number, face: number) =>
   hoopsOf(d).filter((x) => x > face + 1e-9 && x < L - face - 1e-9)
 
+describe('hook90 — NSCP Table 425.3.1 standard hook', () => {
+  it('bends 6db up to ⌀25 and 8db above, 10db past ⌀36', () => {
+    expect(hookBendDiameter(16)).toBe(96)          // 6 x 16
+    expect(hookBendDiameter(25)).toBe(150)         // 6 x 25, still the smaller rule
+    expect(hookBendDiameter(28)).toBe(224)         // 8 x 28
+    expect(hookBendDiameter(36)).toBe(288)
+    expect(hookBendDiameter(43)).toBe(430)         // 10 x 43
+  })
+
+  it('carries a 12db tail and a centreline radius of (D + db)/2', () => {
+    const h = hook90(20)
+    expect(HOOK_TAIL_DB).toBe(12)
+    expect(h.bendDia).toBe(120)                    // 6 x 20
+    expect(h.ext).toBe(240)                        // 12 x 20
+    expect(h.radius).toBe(70)                      // 120/2 + 20/2
+    expect(h.depth).toBe(310)                      // radius + tail
+  })
+
+  it('a ⌀28 hook is deeper than the 12db a corner-drawn hook implies', () => {
+    // The sheet drew a square corner and dimensioned the tail alone, so a ⌀28
+    // hook read as 336 deep. The 8db bend adds another 126 before the tail
+    // even starts.
+    const h = hook90(28)
+    expect(h.ext).toBe(336)
+    expect(h.radius).toBe(126)                     // (224 + 28)/2
+    expect(h.depth).toBe(462)
+    expect(h.depth / h.ext).toBeCloseTo(1.375, 3)  // 37.5% more than the tail alone
+  })
+
+  it('measures ℓdh to the OUTSIDE of the turned-down leg (§425.4.3)', () => {
+    // outside = centreline radius + half a bar: the far face of the bend, which
+    // is the face the code dimensions to, not the bar centreline.
+    const h = hook90(20)
+    expect(h.outside).toBe(80)                     // 70 + 10
+  })
+})
+
+describe('crankBars — bent-up bars', () => {
+  const base = {
+    L: 6, h: 450, cover: 40, stirrupDia: 10, barDia: 20, colB: 400, botBars: 4,
+    continuousLeft: true, continuousRight: true,
+  }
+
+  it('keeps a quarter of the bottom steel straight into the support (§409.7.3.8.1)', () => {
+    expect(crankBars({ ...base, botBars: 4 }).count).toBe(2)   // keep max(2, 1) = 2
+    expect(crankBars({ ...base, botBars: 8 }).count).toBe(6)   // keep max(2, 2) = 2
+    expect(crankBars({ ...base, botBars: 12 }).count).toBe(9)  // keep max(2, 3) = 3
+    expect(crankBars({ ...base, botBars: 2 }).count).toBe(0)   // nothing spare
+  })
+
+  it('rises the full cage depth at 45°, so the run equals the rise', () => {
+    const c = crankBars(base)
+    // 450 - 2(40 + 10) - 20 = 330
+    expect(c.rise).toBe(330)
+    expect(c.run).toBeCloseTo(330, 6)
+    expect(c.inclined).toBeCloseTo(Math.hypot(330, 330), 6)
+  })
+
+  it('rises AS IT APPROACHES the support — top arrival is nearer than the bend', () => {
+    // The direction is the whole point: hogging grows toward the support, so the
+    // bar must be at the TOP there and at the bottom out in the span.
+    const c = crankBars(base)
+    expect(c.topL).toBeLessThan(c.bottomL)
+    expect(c.topR).toBeGreaterThan(c.bottomR)
+    expect(c.bottomL).toBeCloseTo(0.2 + 6 / 7, 6)   // face 0.2 m + L/7
+    expect(c.topL).toBeCloseTo(0.2 + 6 / 7 - 0.33, 6)
+  })
+
+  it('counts only the centre three-quarters of the incline (§409.7.6.2.3)', () => {
+    const c = crankBars(base)
+    expect(c.effective).toBeCloseTo(0.75 * c.inclined, 9)
+  })
+
+  it('splices top steel at midspan and bottom steel over the supports', () => {
+    // Each bar lapped where its own stress is lowest (§425.5.2.1 Class B).
+    const c = crankBars({ ...base, ld: 800 })
+    expect(c.topSplice).toEqual([1.5, 4.5])                   // centre half
+    expect(c.botSplice[0][0]).toBe(0)
+    expect(c.botSplice[1][1]).toBe(6)
+    expect(c.lapB).toBeCloseTo(1040, 6)                       // 1.3 x 800
+    expect(crankBars({ ...base, ld: 100 }).lapB).toBe(300)    // 300 floor
+  })
+
+  it('will not crank a simply supported beam — there is no hogging steel', () => {
+    const c = crankBars({ ...base, continuousLeft: false, continuousRight: false })
+    expect(c.count).toBe(0)
+    expect(c.ok).toBe(false)
+    expect(c.notes.join(' ')).toContain('SIMPLY SUPPORTED')
+  })
+
+  it('flags a span too short to fit the two bends', () => {
+    const c = crankBars({ ...base, L: 1.2, h: 900 })
+    expect(c.ok).toBe(false)
+    expect(c.notes.join(' ')).toMatch(/MEET OR CROSS AT MIDSPAN|PAST THE SUPPORT CENTRELINE/)
+  })
+
+  it('draws the cranked bar as one continuous path in its own ink', () => {
+    // One bar doing three jobs. Two straight bars plus a diagonal would be
+    // fabricated as three, which is the mistake the separate ink guards.
+    const d2 = buildBeamDetail({ ...b, continuousLeft: true, continuousRight: true })
+    const cranks = d2.primitives.filter((p) => p.kind === 'path' && p.stroke === CRANK_INK)
+      .map((p) => (p as Extract<typeof p, { kind: 'path' }>))
+    expect(cranks).toHaveLength(2)                            // one each end
+    for (const c of cranks) expect(c.cmds).toHaveLength(4)    // bottom, bend, incline, over the support
+  })
+
+  it('says bent-up bars cannot be counted for shear in a special moment frame', () => {
+    // §418.6.3.1 requires hoops there; the bar is still drawn as flexural steel.
+    const c = crankBars({ ...base, seismic: true })
+    expect(c.notes.join(' ')).toContain('§418.6.3.1')
+    expect(c.count).toBeGreaterThan(0)
+  })
+})
+
 describe('buildBeamDetail', () => {
   const d = buildBeamDetail(b, { detailNo: '1', sheetRef: 'S-07' })
   const texts = textsOf(d)
@@ -190,7 +304,10 @@ describe('buildBeamDetail', () => {
   it('hooks the beam bars into an END support and runs them through a continuous one', () => {
     // Image-3 rule: at an end support the bars have nowhere to go, so they turn
     // down into the column with 60 mm clear to the end of the hook.
-    const paths = (x: ReturnType<typeof buildBeamDetail>) => x.primitives.filter((p) => p.kind === 'path')
+    // Hook paths only. Cranked bars are paths too and are drawn in their own
+    // ink, so a bare `kind === 'path'` count would now conflate the two.
+    const paths = (x: ReturnType<typeof buildBeamDetail>) =>
+      x.primitives.filter((p) => p.kind === 'path' && p.stroke === REBAR_INK)
     expect(paths(d)).toHaveLength(2)                    // both ends are end supports
     expect(flat).toContain(`${HOOK_END_COVER} CL.`)
 
