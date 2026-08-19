@@ -44,6 +44,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { PlanPrimitive, Drawing } from './planRenderer'
 import { hookClearToFace, hookEmbedmentAvailable } from './devLength'
+import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock } from './detailSheet'
 
 // ── code constants ─────────────────────────────────────────────────────────
 
@@ -335,19 +336,8 @@ export interface JointDetailDrawing extends Drawing { title: string; result: Bea
 
 const INK = '#1e293b', REBAR = '#b45309', GRID = '#9aa5b5', NOTE = '#475569', WARN = '#b91c1c'
 const CONC = '#f1f5f9'
-const GLYPH_W = 0.63
 
 /** Wrap a note to `max` characters a line. */
-export function wrapNote(text: string, max: number): string[] {
-  if (max < 8) return [text]
-  const out: string[] = []
-  let line = ''
-  for (const word of text.split(' ')) {
-    if (line && line.length + 1 + word.length > max) { out.push(line); line = word } else line += (line ? ' ' : '') + word
-  }
-  if (line) out.push(line)
-  return out
-}
 
 /**
  * Build the two-view joint sheet: VERTICAL SECTION Y-Y over PLAN SECTION X-X.
@@ -574,48 +564,32 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
   ]
   const noteSize = u * 1.15
   const sheetW = Math.max(ch + beamRun, 1.6) + u * 10
-  const wrapped = notes.flatMap((t) => wrapNote(t, Math.max(24, Math.floor(sheetW / (GLYPH_W * noteSize)))))
-  wrapped.forEach((t, k) => P.push({
-    kind: 'text', x: jx, y: bodyBottom + k * u * 1.8, text: t, size: noteSize, anchor: 'start',
-    color: t.startsWith('⚠') ? WARN : NOTE,
-  }))
+  const step = u * 1.8
+  const plain = notes.filter((t) => !t.startsWith('⚠'))
+  const warn = notes.filter((t) => t.startsWith('⚠'))
+  const nb = notesBlock({ x: jx, w: sheetW, top: bodyBottom, size: noteSize, lines: plain, color: NOTE, step })
+  P.push(...nb.prims)
+  const wb = warn.length
+    ? notesBlock({ x: jx, w: sheetW, top: nb.bottom + step, size: noteSize, lines: warn, color: WARN, step })
+    : { prims: [], bottom: nb.bottom }
+  P.push(...wb.prims)
 
   const title = `TYPICAL BEAM–COLUMN JOINT — ${mark}`
-  const blockTop = bodyBottom + wrapped.length * u * 1.8 + u * 1.6
-  const rad = u * 2.2
-  const bx = jx + rad
-  P.push({ kind: 'line', x1: jx, y1: blockTop, x2: jx + sheetW, y2: blockTop, stroke: INK, width: 1.0 })
-  const cy = blockTop + rad + u * 0.7
-  P.push({ kind: 'circle', cx: bx, cy, r: rad, stroke: INK, fill: '#fff', width: 0.9 })
-  P.push({ kind: 'line', x1: bx - rad, y1: cy, x2: bx + rad, y2: cy, stroke: INK, width: 0.9 })
-  P.push({ kind: 'text', x: bx, y: cy - rad * 0.48, text: opts.detailNo ?? '1', size: u * 1.7, anchor: 'middle', color: INK, weight: 700 })
-  P.push({ kind: 'text', x: bx, y: cy + rad * 0.52, text: opts.sheetRef ?? 'S-10', size: u * 1.1, anchor: 'middle', color: INK, weight: 600 })
-  const tx = bx + rad + u * 1.4
-  P.push({ kind: 'text', x: tx, y: cy - rad * 0.30, text: title, size: u * 2.0, anchor: 'start', color: INK, weight: 700 })
-  P.push({ kind: 'line', x1: tx, y1: cy + rad * 0.10, x2: jx + sheetW, y2: cy + rad * 0.10, stroke: GRID, width: 0.6 })
-  P.push({ kind: 'text', x: tx, y: cy + rad * 0.62, text: 'SCALE', size: u * 1.1, anchor: 'start', color: NOTE, weight: 600 })
-  P.push({ kind: 'text', x: jx + sheetW, y: cy + rad * 0.62, text: opts.scale ?? 'NTS', size: u * 1.1, anchor: 'end', color: NOTE, weight: 600 })
-  P.push({ kind: 'line', x1: jx, y1: cy + rad + u * 0.7, x2: jx + sheetW, y2: cy + rad + u * 0.7, stroke: INK, width: 1.0 })
+  const tb = titleBlock({
+    x: jx, w: sheetW, top: wb.bottom + u * 1.6, u: u * 0.85,
+    title, detailNo: opts.detailNo, sheetRef: opts.sheetRef ?? 'S-10', scale: opts.scale,
+  })
+  P.push(...tb.prims)
 
   // ── bounds fitted to the content, text extents included ─────────────────
-  const b = {
+  const b = measureBounds(P, {
     minX: jx - u * 2.4, maxX: jx + sheetW,
-    minY: jy - colRun - u * 4.0, maxY: cy + rad + u * 2.0,
-  }
-  for (const p of P) {
-    let xs: number[] = [], ys: number[] = []
-    if (p.kind === 'line' || p.kind === 'dim') { xs = [p.x1, p.x2]; ys = [p.y1, p.y2] }
-    else if (p.kind === 'rect') { xs = [p.x, p.x + p.w]; ys = [p.y, p.y + p.h] }
-    else if (p.kind === 'circle') { xs = [p.cx - p.r, p.cx + p.r]; ys = [p.cy - p.r, p.cy + p.r] }
-    else if (p.kind === 'path') { xs = p.cmds.map((c) => c.x); ys = p.cmds.map((c) => c.y) }
-    else if (p.kind === 'text') {
-      const tw = p.text.length * GLYPH_W * p.size, th = p.size
-      const lead = p.anchor === 'middle' ? -tw / 2 : p.anchor === 'end' ? -tw : 0
-      xs = [p.x + lead, p.x + lead + tw]; ys = [p.y - th / 2, p.y + th / 2]
-    }
-    for (const x of xs) { b.minX = Math.min(b.minX, x); b.maxX = Math.max(b.maxX, x) }
-    for (const y of ys) { b.minY = Math.min(b.minY, y); b.maxY = Math.max(b.maxY, y) }
-  }
+    minY: jy - colRun - u * 4.0, maxY: tb.bottom + u * 2.0,
+  })
 
   return { primitives: P, title, result: r, bounds: b }
 }
+
+// Re-exported so the existing callers and tests keep their import site; the
+// implementation now lives in `detailSheet` as a single copy.
+export { GLYPH_W, wrapNote }

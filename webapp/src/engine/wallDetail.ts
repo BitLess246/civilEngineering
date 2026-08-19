@@ -31,6 +31,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { calcDevLength, hookClearToFace, hookEmbedmentAvailable } from './devLength'
 import type { PlanPrimitive, Drawing } from './planRenderer'
+import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock } from './detailSheet'
 
 // ── §422.9 shear friction ──────────────────────────────────────────────────
 
@@ -346,26 +347,11 @@ export function designWallDetail(i: WallDetailInput): WallDetailResult {
 
 // ── the sheets ─────────────────────────────────────────────────────────────
 
-export interface WallDetailOptions { detailNo?: string; sheetRef?: string }
+export interface WallDetailOptions { detailNo?: string; sheetRef?: string; scale?: string }
 export interface WallDetailDrawing extends Drawing { title: string; result: WallDetailResult }
 
 const INK = '#1e293b', REBAR = '#b45309', GRID = '#9aa5b5', NOTE = '#475569', WARN = '#b91c1c'
 const CONC = '#f1f5f9'
-
-/** Mean glyph width / font size for Arial capitals — note wrapping only. */
-const GLYPH_W = 0.63
-
-/** Wrap a note to `max` characters a line. */
-export function wrapNote(text: string, max: number): string[] {
-  if (max < 8) return [text]
-  const out: string[] = []
-  let line = ''
-  for (const word of text.split(' ')) {
-    if (line && line.length + 1 + word.length > max) { out.push(line); line = word } else line += (line ? ' ' : '') + word
-  }
-  if (line) out.push(line)
-  return out
-}
 
 /** Title block, notes block and bounds — shared by all three wall sheets. */
 function frame(
@@ -374,52 +360,41 @@ function frame(
 ): Drawing {
   const noteSize = u * 1.15
   const sheetW = w + u * 8.5
-  const all = [...notes, ...warn.map((t) => `⚠ ${t.toUpperCase()}`)]
-  const wrapped = all.flatMap((t) => wrapNote(t, Math.max(20, Math.floor(sheetW / (GLYPH_W * noteSize)))))
+  const step = u * 1.8
   const noteTop = h + u * 4.4
-  wrapped.forEach((t, k) => P.push({
-    kind: 'text', x: 0, y: noteTop + k * u * 1.8, text: t, size: noteSize, anchor: 'start',
-    color: t.startsWith('⚠') ? WARN : NOTE,
-  }))
 
-  const titleSize = u * 2.0
-  P.push({ kind: 'text', x: w / 2, y: -u * 7.0, text: title, size: titleSize, anchor: 'middle', color: INK, weight: 700 })
-  if (opts.detailNo) {
-    // LEFT OF THE TITLE, not left of the drawing: 'TYPICAL WALL CONSTRUCTION
-    // JOINT' is wider than the wall it describes, so a bubble placed off the
-    // drawing's own left edge lands inside the second word.
-    const titleHalf = (title.length * GLYPH_W * titleSize) / 2
-    const cx = Math.min(-u * 3.4, w / 2 - titleHalf - u * 2.6), cy = -u * 7.0
-    P.push({ kind: 'circle', cx, cy, r: u * 1.7, stroke: INK, fill: '#fff', width: 0.8 })
-    P.push({ kind: 'text', x: cx, y: cy, text: opts.detailNo, size: u * 1.7, anchor: 'middle', color: INK, weight: 700 })
-    if (opts.sheetRef) P.push({ kind: 'text', x: cx, y: cy + u * 2.6, text: opts.sheetRef, size: u * 1.1, anchor: 'middle', color: NOTE })
-  }
-  P.push({ kind: 'line', x1: -u * 5.2, y1: -u * 3.0, x2: w + u * 5.2, y2: -u * 3.0, stroke: GRID, width: 0.6 })
+  // Notes first, then warnings under them in the warning colour. Two calls
+  // rather than one so the two groups keep their own ink without the block
+  // needing a per-line colour.
+  const nb = notesBlock({ x: 0, w: sheetW, top: noteTop, size: noteSize, lines: notes, color: NOTE, step })
+  P.push(...nb.prims)
+  const wb = warn.length
+    ? notesBlock({
+        x: 0, w: sheetW, top: nb.bottom + step, size: noteSize,
+        lines: warn.map((t) => `⚠ ${t.toUpperCase()}`), color: WARN, step,
+      })
+    : { prims: [], bottom: nb.bottom }
+  P.push(...wb.prims)
+
+  // The title block goes at the BOTTOM, under the drawing and its notes — the
+  // same place every other detail sheet puts it. These three used to float a
+  // bare centred title ABOVE the drawing with a loose bubble beside it, which
+  // is why the wall sheets never matched the beam, column or footing sheets.
+  const tb = titleBlock({
+    x: 0, w: sheetW, top: wb.bottom + u * 2.6, u: u * 0.78,
+    title, detailNo: opts.detailNo, sheetRef: opts.sheetRef ?? 'S-09', scale: opts.scale,
+  })
+  P.push(...tb.prims)
 
   // The sheet is sized to FIT what is on it. Fixed bounds plus a long title is
   // how text ends up printed off the paper: 'TYPICAL WALL CONSTRUCTION JOINT'
   // is wider than a 3 m wall at any readable size, so the paper has to grow,
   // not the title shrink.
-  const b = {
-    minX: -u * 5.4, maxX: w + u * 8.5,
-    minY: -u * 9.0, maxY: noteTop + wrapped.length * u * 1.8,
-  }
-  for (const p of P) {
-    let xs: number[] = [], ys: number[] = []
-    if (p.kind === 'line' || p.kind === 'dim') { xs = [p.x1, p.x2]; ys = [p.y1, p.y2] }
-    else if (p.kind === 'rect') { xs = [p.x, p.x + p.w]; ys = [p.y, p.y + p.h] }
-    else if (p.kind === 'circle') { xs = [p.cx - p.r, p.cx + p.r]; ys = [p.cy - p.r, p.cy + p.r] }
-    else if (p.kind === 'path') { xs = p.cmds.map((c) => c.x); ys = p.cmds.map((c) => c.y) }
-    else if (p.kind === 'text') {
-      const tw = p.text.length * GLYPH_W * p.size, th = p.size
-      const lead = p.anchor === 'middle' ? -tw / 2 : p.anchor === 'end' ? -tw : 0
-      if (p.rotate) { xs = [p.x - th / 2, p.x + th / 2]; ys = [p.y + lead, p.y + lead + tw] }
-      else { xs = [p.x + lead, p.x + lead + tw]; ys = [p.y - th / 2, p.y + th / 2] }
-    }
-    for (const x of xs) { b.minX = Math.min(b.minX, x); b.maxX = Math.max(b.maxX, x) }
-    for (const y of ys) { b.minY = Math.min(b.minY, y); b.maxY = Math.max(b.maxY, y) }
-  }
-  return { primitives: P, bounds: b }
+  const b = measureBounds(P, {
+    minX: -u * 5.4, maxX: sheetW,
+    minY: -u * 3.0, maxY: tb.bottom,
+  })
+  return { primitives: P, bounds: { minX: b.minX - u, minY: b.minY - u, maxX: b.maxX + u, maxY: b.maxY + u } }
 }
 
 /** Bars of one curtain, drawn as dots along a face — the plan-section convention. */
@@ -676,3 +651,7 @@ export function buildWallJointDetail(i: WallDetailInput, opts: WallDetailOptions
   const d = frame(P, title, notes, r.notes, W, H, u, opts)
   return { ...d, title, result: r }
 }
+
+// Re-exported so the existing callers and tests keep their import site; the
+// implementation now lives in `detailSheet` as a single copy.
+export { GLYPH_W, wrapNote }

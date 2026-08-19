@@ -45,6 +45,7 @@
 import type { PlanPrimitive, Drawing } from './planRenderer'
 import { hookClearToFace, hookFit, type HookFitResult } from './devLength'
 import { jointHookLdh } from './beamColumnJoint'
+import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock } from './detailSheet'
 
 export interface BeamDetailSection {
   /** 'LEFT' | 'MID' | 'RIGHT' — position along the member. */
@@ -114,7 +115,6 @@ const WARN = '#b91c1c'
 const CONC = '#f1f5f9'
 
 /** Mean glyph width / font size for Arial capitals — note wrapping only. */
-const GLYPH_W = 0.63
 
 // ── the detailing rules the drawing is built from ──────────────────────────
 
@@ -206,16 +206,6 @@ export function hoopPositions(L: number, h: number, sEnd: number, sMid: number, 
 }
 
 /** Wrap a note to `max` characters a line. */
-export function wrapNote(text: string, max: number): string[] {
-  if (max < 8) return [text]
-  const out: string[] = []
-  let line = ''
-  for (const word of text.split(' ')) {
-    if (line && line.length + 1 + word.length > max) { out.push(line); line = word } else line += (line ? ' ' : '') + word
-  }
-  if (line) out.push(line)
-  return out
-}
 
 /**
  * The end-hook anchorage this sheet can dimension, or null when it was not
@@ -417,54 +407,32 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   }
   const noteSize = u * 1.35
   const sheetW = L + u * 8
-  const wrapped = notes.flatMap((t) => wrapNote(t, Math.max(24, Math.floor(sheetW / (GLYPH_W * noteSize)))))
   const noteTop = -colDrop - u * 14.5
-  wrapped.forEach((t, k) => P.push({
-    kind: 'text', x: x0, y: Y(noteTop - k * u * 2.0), text: t, size: noteSize, anchor: 'start', color: NOTE,
-  }))
+  const nb = notesBlock({ x: x0, w: sheetW, top: Y(noteTop), size: noteSize, lines: notes, color: NOTE, step: u * 2.0 })
+  P.push(...nb.prims)
 
   // ── title block, BELOW the drawing and the notes ────────────────────────
   const title = `TYPICAL DETAIL OF CONTINUOUS BEAM — ${i.mark} (${i.b}×${i.h})`
-  const blockTop = noteTop - wrapped.length * u * 2.0 - u * 2.4
-  const r = u * 2.6
-  const bx = x0 + r
-  P.push({ kind: 'line', x1: x0, y1: Y(blockTop), x2: x0 + sheetW, y2: Y(blockTop), stroke: INK, width: 1.0 })
-  // AIA detail bubble: detail number over sheet reference, split by a diameter
-  const cy = blockTop - r - u * 0.8
-  P.push({ kind: 'circle', cx: bx, cy: Y(cy), r, stroke: INK, fill: '#fff', width: 0.9 })
-  P.push({ kind: 'line', x1: bx - r, y1: Y(cy), x2: bx + r, y2: Y(cy), stroke: INK, width: 0.9 })
-  P.push({ kind: 'text', x: bx, y: Y(cy + r * 0.48), text: opts.detailNo ?? '1', size: u * 2.0, anchor: 'middle', color: INK, weight: 700 })
-  P.push({ kind: 'text', x: bx, y: Y(cy - r * 0.52), text: opts.sheetRef ?? 'S-07', size: u * 1.3, anchor: 'middle', color: INK, weight: 600 })
-  // title, then the scale line under it
-  const tx = bx + r + u * 1.6
-  P.push({ kind: 'text', x: tx, y: Y(cy + r * 0.30), text: title, size: u * 2.4, anchor: 'start', color: INK, weight: 700 })
-  P.push({ kind: 'line', x1: tx, y1: Y(cy - r * 0.10), x2: x0 + sheetW, y2: Y(cy - r * 0.10), stroke: GRID, width: 0.6 })
-  P.push({ kind: 'text', x: tx, y: Y(cy - r * 0.62), text: 'SCALE', size: u * 1.3, anchor: 'start', color: NOTE, weight: 600 })
-  P.push({ kind: 'text', x: x0 + sheetW, y: Y(cy - r * 0.62), text: opts.scale ?? 'NTS', size: u * 1.3, anchor: 'end', color: NOTE, weight: 600 })
-  const blockBot = cy - r - u * 0.8
-  P.push({ kind: 'line', x1: x0, y1: Y(blockBot), x2: x0 + sheetW, y2: Y(blockBot), stroke: INK, width: 1.0 })
+  const tb = titleBlock({
+    x: x0, w: sheetW, top: nb.bottom + u * 2.4, u,
+    title, detailNo: opts.detailNo, sheetRef: opts.sheetRef ?? 'S-07', scale: opts.scale,
+  })
+  P.push(...tb.prims)
 
   P.push({ kind: 'text', x: x1, y: Y(hM + colRise + u * 7.4), text: `SPAN ${L.toFixed(2)} m`, size: u * 1.35, anchor: 'end', color: ACCENT })
 
   // ── bounds: fit the content, so nothing is ever clipped ─────────────────
-  const b = {
+  // Seeded with the sheet rectangle so the block never collapses onto the
+  // geometry, then grown over every primitive — text included, which is what
+  // kept the ℓdh leader hanging off the top-left corner inside the page.
+  const b = measureBounds(P, {
     minX: x0 - u * 1.5, maxX: Math.max(x1, x0 + sheetW) + u * 1.5,
-    minY: Y(hM + colRise + u * 8.6), maxY: Y(blockBot - u * 1.5),
-  }
-  for (const p of P) {
-    let xs: number[] = [], ys: number[] = []
-    if (p.kind === 'line' || p.kind === 'dim') { xs = [p.x1, p.x2]; ys = [p.y1, p.y2] }
-    else if (p.kind === 'rect') { xs = [p.x, p.x + p.w]; ys = [p.y, p.y + p.h] }
-    else if (p.kind === 'circle') { xs = [p.cx - p.r, p.cx + p.r]; ys = [p.cy - p.r, p.cy + p.r] }
-    else if (p.kind === 'path') { xs = p.cmds.map((c) => c.x); ys = p.cmds.map((c) => c.y) }
-    else if (p.kind === 'text') {
-      const tw = p.text.length * GLYPH_W * p.size, th = p.size
-      const lead = p.anchor === 'middle' ? -tw / 2 : p.anchor === 'end' ? -tw : 0
-      xs = [p.x + lead, p.x + lead + tw]; ys = [p.y - th / 2, p.y + th / 2]
-    }
-    for (const x of xs) { b.minX = Math.min(b.minX, x); b.maxX = Math.max(b.maxX, x) }
-    for (const y of ys) { b.minY = Math.min(b.minY, y); b.maxY = Math.max(b.maxY, y) }
-  }
+    minY: Y(hM + colRise + u * 8.6), maxY: tb.bottom + u * 1.5,
+  })
 
   return { primitives: P, title: `TYPICAL DETAIL OF CONTINUOUS BEAM — ${i.mark}`, bounds: b }
 }
+
+// Re-exported so the existing callers and tests keep their import site; the
+// implementation now lives in `detailSheet` as a single copy.
+export { GLYPH_W, wrapNote }
