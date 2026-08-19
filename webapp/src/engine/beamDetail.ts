@@ -42,7 +42,7 @@
 //
 // Units: geometry m; bar/stirrup sizes mm.
 // ─────────────────────────────────────────────────────────────────────────
-import type { PlanPrimitive, Drawing } from './planRenderer'
+import type { PlanPrimitive, PathCmd, Drawing } from './planRenderer'
 import { hookClearToFace, hookFit, type HookFitResult } from './devLength'
 import { jointHookLdh } from './beamColumnJoint'
 import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock } from './detailSheet'
@@ -113,6 +113,10 @@ export interface BeamDetailDrawing extends Drawing { title: string }
 export const REBAR_INK = '#b45309'
 const INK = '#1e293b', REBAR = REBAR_INK, GRID = '#9aa5b5', NOTE = '#475569', ACCENT = '#0f766e'
 export const CRANK_INK = '#1d4ed8'
+/** Hoops sit behind the longitudinal steel — lighter, so the bars read first. */
+const HOOP = '#c7a17a'
+/** The band marking a lap, painted along the two bars that share it. */
+const LAP = '#0891b2'
 const CRANK = CRANK_INK   // bent-up bars — their own ink, they are one bar doing two jobs
 const WARN = '#b91c1c'
 const CONC = '#f1f5f9'
@@ -200,7 +204,7 @@ export function hook90(db: number): Hook90 {
   return { bendDia, radius, ext, depth: radius + ext, outside: radius + db / 2 }
 }
 
-// ── Cranked (bent-up) bars ───────────────────────────────────────────────
+// ── Cranked (bent-up) bars at a curtailment ──────────────────────────────
 
 export interface CrankInput {
   /** Span, m — support centreline to support centreline. */
@@ -210,103 +214,140 @@ export interface CrankInput {
   cover: number
   stirrupDia: number
   barDia: number
-  /** Support width, mm — the crank is set out from the support FACE. */
-  colB: number
-  /** Bottom bars available at midspan. */
-  botBars: number
-  /** Beam continues past the left / right support. A crank only makes sense
-   *  where there is hogging steel to become. */
-  continuousLeft: boolean
-  continuousRight: boolean
+  /** Where the extra TOP bars stop, m from each support centreline. */
+  topRun: number
+  /** Where the extra BOTTOM bars start, m from each support centreline. */
+  botStart: number
+  /** Support width, mm — the extra TOP bar's straight run reaches to the column
+   *  face and its hook beyond, so this is how far a lap may extend. */
+  colB?: number
   /** Bend angle from the horizontal, degrees. 45° is standard for beams of
    *  ordinary depth; 30° is used only on deep members. */
   angleDeg?: number
   /** Tension development length ℓd, mm — sets the Class B lap. */
   ld?: number
-  /** Special moment frame. Bent-up bars may NOT be counted as shear
+  /** Special moment frame. Bent bars may NOT be counted as shear
    *  reinforcement there (§418.6.3.1 requires hoops), so the sheet still draws
    *  them as flexural steel but says so. */
   seismic?: boolean
 }
 
+/**
+ * One cranked bar end, as three stations along the span (m from the left
+ * support centreline): the bar runs straight to `bend`, crosses to the other
+ * layer by `land`, and laps the bar already on that layer until `tail`.
+ */
+export interface CrankEnd {
+  bend: number
+  land: number
+  tail: number
+}
+
 export interface CrankResult {
-  /** How many bottom bars are cranked at each end. 0 = the detail does not apply. */
-  count: number
   angleDeg: number
-  /** Vertical rise from the bottom bar centroid to the top, mm. */
+  /** Vertical distance between the two bar layers, mm. */
   rise: number
   /** Horizontal projection of the inclined leg, mm. */
   run: number
-  /** Where the bar LEAVES THE BOTTOM, m from the left support centreline —
-   *  the bend point, set out from the support face. */
-  bottomL: number; bottomR: number
-  /** Where it ARRIVES AT THE TOP, m from the left support centreline. Closer to
-   *  the support than the bend point: the bar rises AS IT APPROACHES it. */
-  topL: number; topR: number
   /** Inclined length, and the centre three-quarters §409.7.6.2.3 counts as
    *  effective shear reinforcement, mm. */
   inclined: number
   effective: number
   /** Class B lap, mm (§425.5.2.1). */
-  lapB: number
-  /** Where laps may be made, m from the left support centreline: top steel at
-   *  midspan, bottom steel over the supports — each spliced where its own
-   *  stress is lowest. */
-  topSplice: [number, number]
-  botSplice: [[number, number], [number, number]]
+  lap: number
+  /** The extra TOP bar at each support, cranking DOWN where it stops.
+   *  [0] is the left-hand bar (running right), [1] the right-hand one. */
+  top: [CrankEnd, CrankEnd]
+  /** The extra BOTTOM bar, cranking UP at each of its ends.
+   *  [0] is its left end (running left), [1] its right end. */
+  bot: [CrankEnd, CrankEnd]
+  /** Where a cranked tail actually laps the bar it is spliced to, and which
+   *  layer that lap sits in. Empty when the span is too short for the crank to
+   *  land on anything. */
+  laps: { from: number; to: number; layer: 'top' | 'bot' }[]
   ok: boolean
   notes: string[]
 }
 
 /**
+ * The three stations of one cranked bar end.
+ *
+ * `dir` is the direction the bar continues past its curtailment: +1 towards
+ * increasing x, −1 back towards the left support.
+ */
+export function crankEnd(at: number, dir: 1 | -1, run: number, lap: number): CrankEnd {
+  return {
+    bend: at,
+    land: at + (dir * run) / 1000,
+    tail: at + (dir * (run + lap)) / 1000,
+  }
+}
+
+/**
  * Cranked-bar geometry for a continuous beam.
  *
- * A bottom bar bent up near the support does two jobs: it crosses the shear
- * span at 45° and it becomes hogging steel over the support. Both are code
- * recognised — §422.5.10.5 lets a bent-up bar act as shear reinforcement, and
+ * A curtailed bar is not cut off in mid-air: at the point it is no longer
+ * needed it is cranked across to the opposite face and lapped with the bar
+ * already there, so one bar becomes continuous reinforcement through the whole
+ * span and the splice falls where that bar's stress is lowest.
+ *
+ *   • the EXTRA TOP bar runs from the support to 0.25L, then cranks DOWN and
+ *     laps the bottom steel in the middle of the span;
+ *   • the EXTRA BOTTOM bar runs through midspan to 0.15L off each support,
+ *     then cranks UP and laps the top steel over the support.
+ *
+ * The two cranks pass each other between 0.15L and 0.25L, which is why the
+ * detail reads as a lap rather than as two bars stopping short. Both are code
+ * recognised — §422.5.10.5 lets a bent bar act as shear reinforcement, and
  * §409.7.6.2.3 counts only the centre three-quarters of the inclined portion.
  *
- * What limits the count is §409.7.3.8.1: at least a quarter of the positive
- * moment steel has to run into the support. Cranking every bottom bar leaves
- * nothing straight through, so the bars that may be bent are what is left after
- * that quarter (and never fewer than two) is set aside.
- *
- * The bend is set out from the support FACE at L/7, the usual detailing point:
- * far enough into the span to be past the face, close enough to still be in the
- * high-shear region and to arrive at the top before the hogging steel is needed.
+ * The through bars, which are not cranked, are what satisfies §409.7.3.8.1 —
+ * at least a quarter of the positive steel has to run straight into the
+ * support. Only the steel beyond that quarter is ever cranked.
  */
 export function crankBars(i: CrankInput): CrankResult {
   const angleDeg = i.angleDeg ?? 45
-  const keep = Math.max(2, Math.ceil(i.botBars / 4))          // §409.7.3.8.1
-  const count = Math.max(0, i.botBars - keep)
+  // Bar-centroid to bar-centroid: the crank crosses between the two layers,
+  // not between the two concrete faces.
   const rise = Math.max(0, i.h - 2 * (i.cover + i.stirrupDia) - i.barDia)
   const run = rise / Math.tan((angleDeg * Math.PI) / 180)
   const inclined = Math.hypot(rise, run)
-  const face = i.colB / 2 / 1000                              // m, CL → face
-  const bend = i.L / 7                                        // m, face → bend point
-  // The bar rises as it APPROACHES the support: it leaves the bottom out in the
-  // span and arrives at the top nearer the face, which is the direction the
-  // hogging moment grows.
-  const bottomL = face + bend
-  const topL = bottomL - run / 1000
-  const bottomR = i.L - face - bend
-  const topR = bottomR + run / 1000
-  const lapB = Math.max(1.3 * (i.ld ?? 0), 300)
+  const lap = Math.max(1.3 * (i.ld ?? 0), 300)                 // §425.5.2.1
+
+  const top: [CrankEnd, CrankEnd] = [
+    crankEnd(i.topRun, 1, run, lap),
+    crankEnd(i.L - i.topRun, -1, run, lap),
+  ]
+  const bot: [CrankEnd, CrankEnd] = [
+    crankEnd(i.botStart, -1, run, lap),
+    crankEnd(i.L - i.botStart, 1, run, lap),
+  ]
+
+  // A lap only counts where the tail lands on top of the bar it is splicing
+  // with. The top bar's tail has to finish inside the bottom bar's straight
+  // run, and the bottom bar's tail inside the top bar's.
+  const laps: { from: number; to: number; layer: 'top' | 'bot' }[] = []
+  const within = (a: number, b: number, lo: number, hi: number) =>
+    Math.min(a, b) >= lo - 1e-9 && Math.max(a, b) <= hi + 1e-9
+  const add = (a: number, b: number, layer: 'top' | 'bot') =>
+    laps.push({ from: Math.min(a, b), to: Math.max(a, b), layer })
+  // A top bar cranks DOWN, so its lap lies in the bottom layer, and vice versa.
+  if (within(top[0].land, top[0].tail, i.botStart, i.L - i.botStart)) add(top[0].land, top[0].tail, 'bot')
+  if (within(top[1].land, top[1].tail, i.botStart, i.L - i.botStart)) add(top[1].land, top[1].tail, 'bot')
+  const face = (i.colB ?? 400) / 2 / 1000
+  if (within(bot[0].land, bot[0].tail, -face, i.topRun)) add(bot[0].land, bot[0].tail, 'top')
+  if (within(bot[1].land, bot[1].tail, i.L - i.topRun, i.L + face)) add(bot[1].land, bot[1].tail, 'top')
 
   const notes: string[] = []
-  const any = i.continuousLeft || i.continuousRight
-  if (!any) notes.push('THE BEAM IS SIMPLY SUPPORTED AT BOTH ENDS — A CRANKED BAR HAS NO HOGGING STEEL TO BECOME')
-  if (count === 0) notes.push(`ONLY ${i.botBars} BOTTOM BARS — §409.7.3.8.1 KEEPS ¼ OF THEM STRAIGHT INTO THE SUPPORT, SO NONE MAY BE CRANKED`)
-  if (bottomL >= bottomR) notes.push('THE TWO BEND POINTS MEET OR CROSS AT MIDSPAN — THE SPAN IS TOO SHORT FOR A CRANKED BAR AT THIS DEPTH')
-  if (topL < 0 || topR > i.L) notes.push(`THE INCLINE REACHES THE TOP PAST THE SUPPORT CENTRELINE — A ${Math.round(rise)} RISE NEEDS ${Math.round(run)} OF RUN AT ${angleDeg}°, MORE THAN THE ${Math.round(bend * 1000)} AVAILABLE`)
+  if (rise <= 0) notes.push(`THE BEAM IS TOO SHALLOW TO CRANK — ${i.h} OVERALL LEAVES NO ROOM BETWEEN THE TWO BAR LAYERS`)
+  if (top[0].tail >= top[1].tail) notes.push('THE TWO TOP CRANKS MEET OR CROSS AT MIDSPAN — THE SPAN IS TOO SHORT FOR THIS DETAIL AT THIS DEPTH')
+  if (laps.length < 4) notes.push(`A CRANKED TAIL LANDS CLEAR OF THE BAR IT SHOULD LAP — ${Math.round(run)} OF RUN PLUS ${Math.round(lap)} OF LAP DOES NOT FIT BETWEEN 0.15L AND 0.25L; LENGTHEN THE EXTRA BARS OR SPLICE THEM MECHANICALLY`)
   if (i.seismic) notes.push('SPECIAL MOMENT FRAME — BENT-UP BARS MAY NOT BE COUNTED AS SHEAR REINFORCEMENT (§418.6.3.1); THE HOOPS CARRY ALL OF Vs')
 
   return {
-    count: any ? count : 0, angleDeg, rise, run, bottomL, topL, bottomR, topR,
-    inclined, effective: 0.75 * inclined, lapB,
-    topSplice: [0.25 * i.L, 0.75 * i.L],
-    botSplice: [[0, face + 0.15 * i.L], [i.L - face - 0.15 * i.L, i.L]],
-    ok: any && count > 0 && bottomL < bottomR && topL >= 0 && topR <= i.L,
+    angleDeg, rise, run, inclined, effective: 0.75 * inclined, lap,
+    top, bot, laps,
+    ok: rise > 0 && top[0].tail < top[1].tail && laps.length === 4,
     notes,
   }
 }
@@ -408,6 +449,17 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   const topR = continuousTopSteel(right?.bars ?? 0, i.adjacentTopRight)
   const botM = mid?.bars ?? 0
 
+  // Which bars run THROUGH and which are curtailed — the split the drawing is
+  // about. §409.7.3.8.4 keeps at least a third of the negative steel past the
+  // inflection point; §409.7.3.8.1 keeps at least a quarter of the positive
+  // steel running into the support. Those are the bars drawn straight; the
+  // rest are the extras, and every extra is cranked where it stops.
+  const thruTop = Math.min(Math.max(topL, topR), Math.max(2, Math.ceil(Math.max(topL, topR) / 3)))
+  const thruBot = Math.min(botM, Math.max(2, Math.ceil(botM / 4)))
+  const extraTopL = Math.max(0, topL - thruTop)
+  const extraTopR = Math.max(0, topR - thruTop)
+  const extraBot = Math.max(0, botM - thruBot)
+
   // Spacings: the ends take whichever support was designed tighter, the middle
   // its own — and neither is ever the drawing's floor. See `zoneSpacing`.
   const sEnd = Math.min(
@@ -416,7 +468,6 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   )
   const sMid = zoneSpacing(mid?.stirrupSpacing ?? 0, i.h, i.cover)
 
-  const yTop = hM - cov, yBot = cov
   const face = cw / 2                                     // support face from its centreline
   const x0 = -face, x1 = L + face                         // the drawn extent of the beam
 
@@ -436,118 +487,163 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   }
 
   // ── longitudinal steel ──────────────────────────────────────────────────
-  // TOP continuous straight bars, the pair that never stops
-  P.push({ kind: 'line', x1: x0 + cov, y1: Y(yTop), x2: x1 - cov, y2: Y(yTop), stroke: REBAR, width: 1.4 })
-  // BOTTOM continuous bars
-  P.push({ kind: 'line', x1: x0 + cov, y1: Y(yBot), x2: x1 - cov, y2: Y(yBot), stroke: REBAR, width: 1.4 })
+  // Bars sit at their real centroid — clear cover, then the hoop, then half a
+  // bar. Drawing them on the cover line put them under the tips of the hoop
+  // legs, so the pair read as an outline around the hoops rather than as
+  // steel, and the extra bars sat on top of them again.
+  const inset = (i.cover ?? 40) + i.stirrupDia + i.barDia / 2
+  const yTop = hM - inset / 1000, yBot = inset / 1000
+  // The curtailed bars run in the SAME layer as the through bars — side by side
+  // across the web, not stacked above them — so they are drawn on the same two
+  // lines. An earlier version offset them inward to make both visible, which
+  // shortened the drawn rise and left a crank labelled 45° drawn at 36°; the
+  // straight length of an extra bar is now told by the callout and the crank,
+  // and the geometry on the sheet is the geometry that gets built.
+  const yTop2 = yTop, yBot2 = yBot
 
-  // EXTRA top bars at each support — 0.25ℓ into the span from the centreline,
-  // hooked down into the column where the beam stops there.
-  const topRun = EXTRA_TOP_FRACTION * L
-  const yTop2 = yTop - 0.055 * hM * (300 / Math.max(i.h, 120))   // just under the continuous pair
-  for (const [cont, cx, dir] of [[i.continuousLeft, 0, 1], [i.continuousRight, L, -1]] as const) {
-    const end = cx + dir * topRun
-    if (cont) {
-      P.push({ kind: 'line', x1: cx - dir * face, y1: Y(yTop2), x2: end, y2: Y(yTop2), stroke: REBAR, width: 1.4 })
-    } else {
-      // 90° standard hook turned DOWN into the column. Where the column is
-      // known the hook sits behind its far-face vertical (cover + tie + bar);
-      // otherwise it falls back to the nominal 60 mm clear.
-      // A 90° standard hook is a BEND, not a corner: NSCP Table 425.3.1 sets a
-      // 6db (⌀≤25) or 8db inside diameter, and ℓext = 12db of straight tail
-      // beyond it. Drawing a square corner asks for a bar nobody can bend, and
-      // it hides the fact that the bend itself eats depth.
-      const hk = hook90(i.barDia)
-      const rTurn = hk.radius / 1000
-      // outside face of the turned-down leg, where ℓdh is measured to (§425.4.3)
-      const hOut = cx - dir * (face - (anch?.clear ?? HOOK_END_COVER) / 1000)
-      const hx = hOut + dir * hk.outside / 1000        // bar centreline of the leg
-      P.push({
-        kind: 'path', stroke: REBAR, width: 2.2, cap: 'round', join: 'round',
-        cmds: [
-          { c: 'M', x: end, y: Y(yTop2) },
-          { c: 'L', x: hx + dir * rTurn, y: Y(yTop2) },
-          { c: 'A', rx: rTurn, ry: rTurn, x: hx, y: Y(yTop2) + rTurn, large: 0, sweep: dir > 0 ? 1 : 0 },
-          { c: 'L', x: hx, y: Y(yTop2 - hk.ext / 1000) + rTurn },
-        ],
-      })
+  // A 90° standard hook is a BEND, not a corner: NSCP Table 425.3.1 sets a 6db
+  // (⌀≤25) or 8db inside diameter and ℓext = 12db of straight tail, and ℓdh is
+  // measured to the OUTSIDE of the bend (§425.4.3). Drawing a square corner
+  // asks for a bar nobody can bend and hides how much depth the bend eats.
+  //
+  // `dir` points INTO the span from the support centreline `cx`; `down` turns
+  // the tail towards the soffit, which is what a top bar does.
+  const hookCmds = (cx: number, dir: 1 | -1, z: number, down: boolean): PathCmd[] => {
+    const hk = hook90(i.barDia)
+    const r = hk.radius / 1000
+    const hOut = cx - dir * (face - (anch?.clear ?? HOOK_END_COVER) / 1000)
+    const hx = hOut + dir * hk.outside / 1000        // centreline of the turned leg
+    const sgn = down ? 1 : -1                        // screen y grows downward
+    return [
+      { c: 'M', x: hx, y: Y(z) + sgn * (hk.ext / 1000 + r) },
+      { c: 'L', x: hx, y: Y(z) + sgn * r },
+      { c: 'A', rx: r, ry: r, x: hx + dir * r, y: Y(z), large: 0, sweep: (dir > 0) === down ? 0 : 1 },
+    ]
+  }
+
+  // THROUGH bars — the pair that runs the whole length and is never cranked.
+  // At an end support they have nowhere to go, so they hook into the column;
+  // at a continuous one they run straight on through the joint.
+  for (const [z, down] of [[yTop, true], [yBot, false]] as const) {
+    P.push({ kind: 'line', x1: x0 + cov, y1: Y(z), x2: x1 - cov, y2: Y(z), stroke: REBAR, width: 1.8 })
+    for (const [cont, cx, dir] of [[i.continuousLeft, 0, 1], [i.continuousRight, L, -1]] as const) {
+      if (cont) continue
+      P.push({ kind: 'path', stroke: REBAR, width: 2.2, cap: 'round', join: 'round', fill: 'none', cmds: hookCmds(cx, dir, z, down) })
     }
   }
 
-  // EXTRA bottom bars through the middle, started 0.15ℓ off each support
+  const topRun = EXTRA_TOP_FRACTION * L
   const botStart = EXTRA_BOTTOM_FRACTION * L
-  if (botM > 0) {
-    P.push({ kind: 'line', x1: botStart, y1: Y(yBot + 0.055 * hM), x2: L - botStart, y2: Y(yBot + 0.055 * hM), stroke: REBAR, width: 1.4 })
-  }
-
-  // ── cranked (bent-up) bars ──────────────────────────────────────────────
-  // A bottom bar bent up at 45° near each support crosses the shear span and
-  // arrives over the support as hogging steel. Drawn in its own ink because it
-  // is one continuous bar doing two jobs, and a detailer reading a straight
-  // bottom bar plus a straight top bar would fabricate two.
   const crank = crankBars({
     L, h: i.h, cover: i.cover ?? 40, stirrupDia: i.stirrupDia, barDia: i.barDia,
-    colB: (i.colB ?? 400), botBars: botM,
-    continuousLeft: !!i.continuousLeft, continuousRight: !!i.continuousRight,
-    ld: anch ? anch.ldh / 0.7 : undefined,
+    topRun, botStart, colB: i.colB ?? 400, ld: anch ? anch.ldh / 0.7 : undefined,
   })
-  if (crank.count > 0) {
-    const zc = yBot + 0.055 * hM                    // the bottom layer it leaves
-    const zt = yTop2                                // the top layer it joins
-    for (const [on, bx, tx2, farX] of [
-      [i.continuousLeft, crank.bottomL, crank.topL, -face],
-      [i.continuousRight, crank.bottomR, crank.topR, L + face],
-    ] as const) {
-      if (!on) continue
-      // one bar: along the bottom, up the incline, then over the support
-      P.push({
-        kind: 'path', stroke: CRANK, width: 2.0, cap: 'round', join: 'round',
-        cmds: [
-          { c: 'M', x: L / 2, y: Y(zc) },
-          { c: 'L', x: bx, y: Y(zc) },
-          { c: 'L', x: tx2, y: Y(zt) },
-          { c: 'L', x: farX, y: Y(zt) },
-        ],
-      })
-    }
+
+  // ── curtailed bars, cranked where they stop ─────────────────────────────
+  // Neither extra bar is cut off in mid-air. Each one crosses to the opposite
+  // face at 45° and laps the bar already there, so the crank and the splice
+  // are the same detail. The two cranks pass each other between 0.15L and
+  // 0.25L, which is what makes the overlap read as a lap.
+  const CR = { stroke: CRANK, width: 2.0, cap: 'round', join: 'round' } as const
+
+  // EXTRA top bars: support → 0.25L → crank DOWN → lap along the bottom.
+  for (const [cont, cx, dir, ce, n] of [
+    [i.continuousLeft, 0, 1, crank.top[0], extraTopL],
+    [i.continuousRight, L, -1, crank.top[1], extraTopR],
+  ] as const) {
+    if (n <= 0) continue
+    const startX = cont
+      ? cx - dir * face                        // straight on through the joint
+      : cx - dir * (face - (anch?.clear ?? HOOK_END_COVER) / 1000)
+    const cmds: PathCmd[] = [{ c: 'M', x: startX, y: Y(yTop2) }]
+    // At an end support the extra bar hooks down into the column exactly as the
+    // through bar above it does — same bend, same 60 mm clear to the tail.
+    if (!cont) { cmds.length = 0; cmds.push(...hookCmds(cx, dir, yTop2, true)) }
+    cmds.push(
+      { c: 'L', x: ce.bend, y: Y(yTop2) },     // straight run to the cut-off
+      { c: 'L', x: ce.land, y: Y(yBot2) },     // the crank
+      { c: 'L', x: ce.tail, y: Y(yBot2) },     // lapped tail on the bottom layer
+    )
+    P.push({ kind: 'path', ...CR, cmds })
+  }
+
+  // EXTRA bottom bar: one bar through the middle, cranked UP at both ends so
+  // each end laps the top steel over its support.
+  if (extraBot > 0) {
+    P.push({
+      kind: 'path', ...CR,
+      cmds: [
+        { c: 'M', x: crank.bot[0].tail, y: Y(yTop2) },
+        { c: 'L', x: crank.bot[0].land, y: Y(yTop2) },
+        { c: 'L', x: crank.bot[0].bend, y: Y(yBot2) },
+        { c: 'L', x: crank.bot[1].bend, y: Y(yBot2) },
+        { c: 'L', x: crank.bot[1].land, y: Y(yTop2) },
+        { c: 'L', x: crank.bot[1].tail, y: Y(yTop2) },
+      ],
+    })
+  }
+
+  // The lap each crank buys, banded along the two bars that share it.
+  for (const lp of crank.laps) {
+    const z = lp.layer === 'top' ? yTop2 : yBot2
+    P.push({ kind: 'line', x1: lp.from, y1: Y(z), x2: lp.to, y2: Y(z), stroke: LAP, width: 3.4 })
   }
 
   // ── hoops ───────────────────────────────────────────────────────────────
+  // Drawn to the cover line, OUTSIDE the bars they enclose.
   const hoops = hoopPositions(L, hM, sEnd, sMid, face)
   for (const x of hoops) {
-    P.push({ kind: 'line', x1: x, y1: Y(cov * 0.8), x2: x, y2: Y(hM - cov * 0.8), stroke: REBAR, width: 0.75 })
+    P.push({ kind: 'line', x1: x, y1: Y(cov), x2: x, y2: Y(hM - cov), stroke: HOOP, width: 0.8 })
   }
   // JOINT hoops — inside the column, through the depth of the beam (§418.8.3)
   for (const cx of [0, L]) {
     for (const t of [-0.28, 0.28]) {
-      P.push({ kind: 'line', x1: cx + t * cw, y1: Y(cov * 0.8), x2: cx + t * cw, y2: Y(hM - cov * 0.8), stroke: REBAR, width: 0.75 })
+      P.push({ kind: 'line', x1: cx + t * cw, y1: Y(cov), x2: cx + t * cw, y2: Y(hM - cov), stroke: HOOP, width: 0.8 })
     }
   }
 
   // ── callouts ────────────────────────────────────────────────────────────
   const call = (x: number, z: number, text: string, anchor: 'start' | 'middle' | 'end' = 'middle') =>
     P.push({ kind: 'text', x, y: Y(z), text, size: u * 1.5, anchor, color: REBAR, weight: 600 })
-  call(L / 2, hM + colRise + u * 5.6, `${Math.max(topL, topR)}-⌀${i.barDia} TOP CONT.`)
-  if (crank.count > 0) {
-    // Above the beam with a leader down to the incline — the mid-depth position
-    // it used to take put the text straight through the bars it labels.
-    // Whichever end is actually cranked — labelling the left end of a beam that
-    // only continues to the right put the callout where there is no bar.
-    const mx = i.continuousLeft
-      ? (crank.bottomL + crank.topL) / 2
-      : (crank.bottomR + crank.topR) / 2
-    const mz = hM * 0.5
+  call(L / 2, hM + colRise + u * 5.6, `${thruTop}-⌀${i.barDia} TOP THRU — STRAIGHT, NEVER CRANKED`)
+  if (extraTopL > 0) call(topRun / 2, hM + colRise + u * 1.4, `${extraTopL}-⌀${i.barDia} EXTRA TOP`)
+  if (extraTopR > 0) call(L - topRun / 2, hM + colRise + u * 1.4, `${extraTopR}-⌀${i.barDia} EXTRA TOP`)
+  call(L / 2, -colDrop - u * 3.4, `${thruBot}-⌀${i.barDia} BOT. THRU${extraBot > 0 ? ` + ${extraBot}-⌀${i.barDia} EXTRA` : ''}`)
+  call(L / 2, -colDrop - u * 5.2, `${i.legs ?? 2}L-⌀${i.stirrupDia} HOOPS @ ${Math.round(sEnd)} O/ 2h EA. END, @ ${Math.round(sMid)} ELSEWHERE`)
+
+  // The crank itself, labelled on the incline it names. One leader per crank
+  // so the reader is never left guessing which bar the note is about.
+  const crankCall = (a: CrankEnd, n: number) => {
+    if (n <= 0) return
+    const mx = (a.bend + a.land) / 2
+    // Both labels go ABOVE the beam. Hanging the bottom-bar one below put it
+    // straight through the 0.15L dimension, which shares that band.
     const lz = hM + colRise * 0.55
-    P.push({ kind: 'line', x1: mx, y1: Y(mz), x2: mx, y2: Y(lz - u * 0.6), stroke: CRANK, width: 0.7 })
+    P.push({ kind: 'line', x1: mx, y1: Y((yTop2 + yBot2) / 2), x2: mx, y2: Y(lz - u * 0.7), stroke: CRANK, width: 0.7 })
+    // Anchored away from whichever end it is near, so a crank close to the
+    // right-hand support does not print its label over the column.
+    const near = mx > L * 0.6 ? 'end' : mx < L * 0.4 ? 'start' : 'middle'
     P.push({
-      kind: 'text', x: mx, y: Y(lz), text: `${crank.count}-⌀${i.barDia} CRANKED ${crank.angleDeg}°`,
-      size: u * 1.4, anchor: 'middle', color: CRANK, weight: 600,
+      kind: 'text', x: mx, y: Y(lz), text: `CRANK ${crank.angleDeg}° — ${Math.round(crank.rise)}/${Math.round(crank.run)}`,
+      size: u * 1.3, anchor: near, color: CRANK, weight: 600,
     })
   }
-  if (topL > 0) call(topRun / 2, hM + colRise + u * 1.4, `${topL}-⌀${i.barDia} EXTRA`)
-  if (topR > 0) call(L - topRun / 2, hM + colRise + u * 1.4, `${topR}-⌀${i.barDia} EXTRA`)
-  if (botM > 0) call(L / 2, -colDrop - u * 3.4, `${botM}-⌀${i.barDia} BOT. CONT. + EXTRA`)
-  call(L / 2, -colDrop - u * 5.2, `${i.legs ?? 2}L-⌀${i.stirrupDia} HOOPS @ ${Math.round(sEnd)} O/ 2h EA. END, @ ${Math.round(sMid)} ELSEWHERE`)
+  crankCall(crank.top[0], extraTopL)
+  crankCall(crank.bot[1], extraBot)
+
+  // One lap callout with a leader onto the nearest band. Labelling all four
+  // put text on top of the bars and hoops it was meant to describe.
+  const lp0 = crank.laps[0]
+  if (lp0) {
+    const z = lp0.layer === 'top' ? yTop2 : yBot2
+    const mx = (lp0.from + lp0.to) / 2
+    const lz = lp0.layer === 'top' ? hM + colRise * 0.18 : -colDrop * 0.42
+    P.push({ kind: 'line', x1: mx, y1: Y(z), x2: mx, y2: Y(lz), stroke: LAP, width: 0.7 })
+    P.push({
+      kind: 'text', x: mx, y: Y(lz + (lp0.layer === 'top' ? u * 0.9 : -u * 1.6)),
+      text: `LAP ${Math.round(crank.lap)} TYP. (CLASS B)`, size: u * 1.2, anchor: 'middle', color: LAP, weight: 600,
+    })
+  }
 
   // ── dimensions ──────────────────────────────────────────────────────────
   const dimTop = hM + colRise + u * 3.6
@@ -613,15 +709,16 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   // ── notes ───────────────────────────────────────────────────────────────
   const notes = [
     'TOP STEEL OVER A SUPPORT IS THE GREATER OF THE TWO ADJACENT SPANS (§409.7.7)',
-    ...(crank.count > 0 ? [
-      `${crank.count}-⌀${i.barDia} CRANKED AT ${crank.angleDeg}° — BENT UP ${Math.round(crank.rise)} OVER ${Math.round(crank.run)}, LEAVING THE BOTTOM ${Math.round(i.L / 7 * 1000)} CLEAR OF THE SUPPORT FACE`,
-      `THE CRANKED BAR IS ONE BAR: BOTTOM STEEL AT MIDSPAN, SHEAR STEEL ON THE INCLINE (§422.5.10.5), HOGGING STEEL OVER THE SUPPORT`,
-      `ONLY THE CENTRE ¾ OF THE INCLINE COUNTS AS SHEAR REINFORCEMENT — ${Math.round(crank.effective)} OF ${Math.round(crank.inclined)} (§409.7.6.2.3)`,
-      `¼ OF THE BOTTOM STEEL RUNS STRAIGHT INTO THE SUPPORT AND IS NEVER CRANKED (§409.7.3.8.1)`,
-      `LAP CLASS B ${Math.round(crank.lapB)} (§425.5.2.1) — TOP BARS IN THE CENTRE HALF, BOTTOM BARS OVER THE SUPPORTS: EACH SPLICED WHERE ITS OWN STRESS IS LOWEST`,
+    ...(extraTopL + extraTopR + extraBot > 0 ? [
+      `EVERY CURTAILED BAR IS CRANKED WHERE IT STOPS AND LAPPED WITH THE BAR ON THE OPPOSITE FACE — NO BAR IS CUT OFF IN MID-AIR`,
+      `CRANK AT ${crank.angleDeg}°: ${Math.round(crank.rise)} BETWEEN BAR LAYERS OVER ${Math.round(crank.run)} OF RUN, INCLINED LENGTH ${Math.round(crank.inclined)}`,
+      `EXTRA TOP BARS RUN 0.25L FROM THE SUPPORT, THEN CRANK DOWN AND LAP THE BOTTOM STEEL; EXTRA BOTTOM BARS RUN TO 0.15L OFF EACH SUPPORT, THEN CRANK UP AND LAP THE TOP STEEL`,
+      `THE TWO CRANKS PASS EACH OTHER BETWEEN 0.15L AND 0.25L — THE OVERLAP IS THE SPLICE, CLASS B ${Math.round(crank.lap)} (§425.5.2.1)`,
+      `ONLY THE CENTRE ¾ OF THE INCLINE COUNTS AS SHEAR REINFORCEMENT — ${Math.round(crank.effective)} OF ${Math.round(crank.inclined)} (§409.7.6.2.3 / §422.5.10.5)`,
+      `${thruTop}-⌀${i.barDia} TOP AND ${thruBot}-⌀${i.barDia} BOTTOM RUN THROUGH STRAIGHT AND ARE NEVER CRANKED (§409.7.3.8.4 / §409.7.3.8.1)`,
+      `EXTRA BARS SHARE THE THROUGH BARS' LAYER — SIDE BY SIDE ACROSS THE ${i.b} WEB AT 25 CLEAR (§425.2.2), NOT STACKED ABOVE THEM`,
       ...crank.notes,
     ] : []),
-    `EXTRA TOP BARS RUN 0.25L FROM THE SUPPORT; EXTRA BOTTOM BARS START 0.15L OFF IT`,
     `HOOPS @ ${Math.round(sEnd)} OVER 2h = ${Math.round(zone * 1000)} FROM EACH SUPPORT FACE, FIRST AT ${FIRST_HOOP} (§418.6.4.1/§418.6.4.4)`,
     `HOOPS @ ${Math.round(sMid)} THROUGH THE MIDDLE — SPACING IS WIDEST WHERE THE SHEAR IS LOWEST`,
     `AT AN END SUPPORT BEAM BARS ARE HOOKED INTO THE COLUMN, ${Math.round(anch?.clear ?? HOOK_END_COVER)} CLEAR TO THE END OF THE HOOK (§425.4.3 / §418.8.3)`,
