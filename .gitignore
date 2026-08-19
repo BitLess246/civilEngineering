@@ -108,3 +108,7 @@ dist
 
 # Commit the webapp lockfile so CI (Render) installs a deterministic, platform-correct dep tree
 !webapp/package-lock.json
+
+# svg-precision skill: Python bytecode + self-test render output
+.claude/skills/**/__pycache__/
+.claude/skills/svg-precision/scripts/_out/
