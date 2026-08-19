@@ -147,18 +147,21 @@ export function AnalysisOptionsHelp() {
           exactly, so reactions, columns and footings stay in equilibrium.
         </p>
         <p className="mb-1.5">
-          What it cannot reproduce is the elastic distribution of a slab that is <em>continuous</em> across an
-          interior support line. A cross-check against STAAD.Pro on a 2×1-bay, two-storey frame with the slab
-          meshed 10×10 per panel put the difference at:
+          What it cannot reproduce is a slab that is <em>continuous</em> over its supports. Such a slab draws
+          more to an interior support line than tributary area gives it, and it carries moment into the girders
+          and columns that a line load cannot. A cross-check against STAAD.Pro on a 2×1-bay, two-storey frame
+          with the slab meshed 10×10 per panel, run at the same E and ν, put the difference at:
         </p>
         <ul className="mb-1.5 list-disc space-y-0.5 pl-4">
-          <li>support reactions within <b>4.6 %</b>, joint deflections within <b>0.3 %</b></li>
-          <li>long-span beams <b>7 % conservative</b></li>
-          <li>edge girders <b>21 % low</b>, interior girders <b>31 % low</b></li>
+          <li>support reactions within <b>5 %</b>, joint deflections within <b>0.6 %</b></li>
+          <li>long-span beams <b>5–9 % conservative</b></li>
+          <li>edge girders <b>20 % low</b>, interior girders <b>30 % low</b></li>
+          <li>column moments <b>35–50 % low</b>; beam torsion essentially absent</li>
         </ul>
         <Note>
-          Interior support lines are the unconservative case. Where a girder carries continuous slab on both
-          sides, check it against a continuity factor or a meshed model before relying on the tributary result.
+          Interior support lines and column moments are the unconservative cases. Where a girder carries
+          continuous slab on both sides, or a column's design is moment-governed, check it against a continuity
+          factor or a meshed model before relying on the tributary result.
         </Note>
       </div>
     </HintButton>
