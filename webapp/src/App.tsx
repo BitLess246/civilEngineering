@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
+import { useScrollTopOnChange } from './lib/useScrollTop'
 import Home from './pages/Home'
 import FoundationDesign from './pages/FoundationDesign'
 import PileCapDesign from './pages/PileCapDesign'
@@ -83,6 +84,11 @@ function PageLoading({ what }: { what: string }) {
 }
 export default function App() {
   const nav = useNavigate()
+  // react-router does NOT reset scroll on a route change — that is left to the
+  // app. Without this, leaving a page you had scrolled deep into drops you into
+  // the middle of the next one. Keyed on pathname, so a query-string or hash
+  // change (an in-page anchor) does not yank the viewport.
+  useScrollTopOnChange(useLocation().pathname)
 
   // Home carries its own hero navigation; every tool route lives inside the
   // workbench shell (sidebar + breadcrumb header + command palette).
