@@ -47,6 +47,17 @@ export function wrapNote(text: string, max: number): string[] {
     if (line && line.length + 1 + word.length > max) { out.push(line); line = word } else line += (line ? ' ' : '') + word
   }
   if (line) out.push(line)
+  // A clause reference alone on the last line is an orphan — '(§409.7.6.2.3)'
+  // under a sentence reads as a new note rather than the end of the old one.
+  // Pull a word down with it so the reference always has something to sit with.
+  const last = out[out.length - 1]
+  if (out.length > 1 && /^\(?§/.test(last)) {
+    const prev = out[out.length - 2].split(' ')
+    if (prev.length > 1) {
+      out[out.length - 1] = `${prev.pop()} ${last}`
+      out[out.length - 2] = prev.join(' ')
+    }
+  }
   return out
 }
 
