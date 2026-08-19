@@ -156,116 +156,97 @@ describe('hook90 — NSCP Table 425.3.1 standard hook', () => {
   })
 })
 
-describe('crankBars — cranked curtailments', () => {
+describe('crankBars — cranked bar ends', () => {
   const base = {
     L: 6, h: 450, cover: 40, stirrupDia: 10, barDia: 20, colB: 400,
     topRun: 1.5, botStart: 0.9,
   }
 
-  it('crosses between the two bar layers at 45°, so the run equals the rise', () => {
+  it('sizes the crank off the member and turns it at 45°', () => {
     const c = crankBars(base)
-    // 450 - 2(40 + 10) - 20 = 330 between bar centroids
-    expect(c.rise).toBe(330)
-    expect(c.run).toBeCloseTo(330, 6)
-    expect(c.inclined).toBeCloseTo(Math.hypot(330, 330), 6)
+    expect(c.angleDeg).toBe(45)
+    expect(c.rise).toBeCloseTo(0.33 * 450, 6)               // 148.5, under the 0.05L cap
+    expect(c.run).toBeCloseTo(c.rise, 6)                    // 45° -> run equals rise
+    expect(c.inclined).toBeCloseTo(Math.hypot(c.rise, c.run), 9)
   })
 
-  it('cranks the extra TOP bar DOWN where it stops, then laps along the bottom', () => {
-    const c = crankBars({ ...base, ld: 400 })
-    const lap = 1.3 * 400                                     // 520 > 300 floor
-    expect(c.lap).toBeCloseTo(lap, 6)
-    // left-hand top bar: stops at 0.25L, lands 330 further into the span
-    expect(c.top[0].bend).toBeCloseTo(1.5, 9)
-    expect(c.top[0].land).toBeCloseTo(1.5 + 0.33, 9)
-    expect(c.top[0].tail).toBeCloseTo(1.5 + 0.33 + lap / 1000, 9)
-    // right-hand one is the mirror — it runs back towards midspan
-    expect(c.top[1].bend).toBeCloseTo(4.5, 9)
-    expect(c.top[1].land).toBeCloseTo(4.5 - 0.33, 9)
+  it('caps the crank on a short span so it cannot eat the run it sits in', () => {
+    // 0.05L governs below about a 6.7 m span for this depth.
+    const c = crankBars({ ...base, L: 2, topRun: 0.5, botStart: 0.3 })
+    expect(c.rise).toBeCloseTo(0.05 * 2000, 6)              // 100, not 148.5
   })
 
-  it('cranks the extra BOTTOM bar UP at each end, back over its support', () => {
+  it('cranks the extra TOP bar DOWN where it stops, continuing its direction', () => {
     const c = crankBars(base)
-    expect(c.bot[0].bend).toBeCloseTo(0.9, 9)
-    expect(c.bot[0].land).toBeCloseTo(0.9 - 0.33, 9)          // towards the support
-    expect(c.bot[0].tail).toBeLessThan(c.bot[0].land)
-    expect(c.bot[1].bend).toBeCloseTo(5.1, 9)
-    expect(c.bot[1].land).toBeCloseTo(5.1 + 0.33, 9)
+    const d = c.run / 1000
+    expect(c.top[0].at).toBeCloseTo(1.5, 9)
+    expect(c.top[0].tip).toBeCloseTo(1.5 + d, 9)            // left bar runs right
+    expect(c.top[1].at).toBeCloseTo(4.5, 9)
+    expect(c.top[1].tip).toBeCloseTo(4.5 - d, 9)            // right bar runs left
+    for (const e of c.top) expect(e.drop).toBeCloseTo(c.rise / 1000, 9)
   })
 
-  it('lands each cranked tail on the layer the bar it laps is in', () => {
+  it('cranks the extra BOTTOM bar UP at each of its two ends', () => {
     const c = crankBars(base)
-    expect(c.laps).toHaveLength(4)
-    // a top bar cranks DOWN, so its lap is in the bottom layer
-    const botLaps = c.laps.filter((l) => l.layer === 'bot')
-    const topLaps = c.laps.filter((l) => l.layer === 'top')
-    expect(botLaps).toHaveLength(2)
-    expect(topLaps).toHaveLength(2)
-    // and every lap lies inside the straight run of the bar it splices with
-    for (const l of botLaps) {
-      expect(l.from).toBeGreaterThanOrEqual(base.botStart)
-      expect(l.to).toBeLessThanOrEqual(base.L - base.botStart)
-    }
+    const d = c.run / 1000
+    expect(c.bot[0].at).toBeCloseTo(0.9, 9)
+    expect(c.bot[0].tip).toBeCloseTo(0.9 - d, 9)            // outward, towards the support
+    expect(c.bot[1].at).toBeCloseTo(5.1, 9)
+    expect(c.bot[1].tip).toBeCloseTo(5.1 + d, 9)
+  })
+
+  it('overlaps the two runs so no length of span is left with neither bar', () => {
+    const c = crankBars(base)
+    expect(c.overlaps).toHaveLength(2)
+    expect(c.overlaps[0]).toEqual({ from: 0.9, to: 1.5, length: 600 })
+    expect(c.overlaps[1].from).toBeCloseTo(4.5, 9)
+    expect(c.overlaps[1].to).toBeCloseTo(5.1, 9)
     expect(c.ok).toBe(true)
   })
 
-  it('lets a lap run into the column, where the top bar is still there', () => {
-    // 0.15L - run - lap can fall left of the support centreline. The top bar
-    // reaches the column face and hooks beyond it, so that still laps: an
-    // earlier check clipped the lap at x = 0 and reported a false shortfall.
-    const c = crankBars({ ...base, ld: 700, colB: 800 })      // lap 910, tail -0.34
-    expect(c.bot[0].tail).toBeLessThan(0)
-    expect(c.laps.filter((l) => l.layer === 'top')).toHaveLength(2)
-    expect(c.ok).toBe(true)
+  it('flags a gap when the bottom bar starts beyond where the top bar stops', () => {
+    const c = crankBars({ ...base, topRun: 0.6, botStart: 1.2 })
+    expect(c.overlaps).toHaveLength(0)
+    expect(c.ok).toBe(false)
+    expect(c.notes.join(' ')).toContain('NEITHER')
   })
 
-  it('counts only the centre three-quarters of the incline (§409.7.6.2.3)', () => {
-    const c = crankBars(base)
-    expect(c.effective).toBeCloseTo(0.75 * c.inclined, 9)
+  it('flags extra top bars that meet at midspan', () => {
+    const c = crankBars({ ...base, topRun: 3.2 })
+    expect(c.ok).toBe(false)
+    expect(c.notes.join(' ')).toContain('MEET OR CROSS AT MIDSPAN')
   })
 
-  it('holds the Class B lap to a 300 floor (§425.5.2.1)', () => {
+  it('quotes the Class B lap for the through bars, not for the extras', () => {
+    // A top bar and a bottom bar are in opposite faces and never splice with
+    // one another — the overlap is continuity, not a lap.
     expect(crankBars({ ...base, ld: 800 }).lap).toBeCloseTo(1040, 6)
     expect(crankBars({ ...base, ld: 100 }).lap).toBe(300)
   })
 
-  it('flags a span too short for the two cranks to clear each other', () => {
-    const c = crankBars({ ...base, L: 1.2, topRun: 0.3, botStart: 0.18, h: 900 })
-    expect(c.ok).toBe(false)
-    expect(c.notes.join(' ')).toMatch(/MEET OR CROSS AT MIDSPAN|DOES NOT FIT/)
-  })
-
-  it('flags a beam too shallow to have two layers to crank between', () => {
-    const c = crankBars({ ...base, h: 100 })
-    expect(c.rise).toBe(0)
-    expect(c.ok).toBe(false)
-    expect(c.notes.join(' ')).toContain('TOO SHALLOW TO CRANK')
-  })
-
   it('draws each cranked bar as one continuous path in its own ink', () => {
-    // One bar, not a straight bar plus a diagonal plus another straight bar —
-    // three pieces on the sheet get fabricated as three bars.
+    // One bar, not a straight bar plus a separate diagonal — two pieces on the
+    // sheet get fabricated as two bars.
     const d2 = buildBeamDetail({ ...b, continuousLeft: true, continuousRight: true })
     const cranks = d2.primitives.filter((p) => p.kind === 'path' && p.stroke === CRANK_INK)
       .map((p) => (p as Extract<typeof p, { kind: 'path' }>))
-    expect(cranks).toHaveLength(3)                            // two top bars, one bottom
-    // the two top bars: straight run, crank, lapped tail
-    expect(cranks.filter((c) => c.cmds.length === 4)).toHaveLength(2)
-    // the bottom bar is one piece cranked at BOTH ends
-    expect(cranks.filter((c) => c.cmds.length === 6)).toHaveLength(1)
+    expect(cranks).toHaveLength(3)                          // two top bars, one bottom
+    expect(cranks.filter((c) => c.cmds.length === 3)).toHaveLength(2)   // run + crank
+    expect(cranks.filter((c) => c.cmds.length === 4)).toHaveLength(1)   // cranked both ends
   })
 
   it('draws the crank at the true 45° it is labelled with', () => {
-    // The drawn rise has to be the bar-layer separation, or the sheet says one
-    // angle and the bender reads another off the paper.
+    // The drawn kink has to be the angle the note quotes, or the sheet says one
+    // thing and the bender reads another off the paper.
     const d2 = buildBeamDetail({ ...b, continuousLeft: true, continuousRight: true })
     const path = d2.primitives.find(
-      (p) => p.kind === 'path' && p.stroke === CRANK_INK && p.cmds.length === 6,
+      (p) => p.kind === 'path' && p.stroke === CRANK_INK && p.cmds.length === 4,
     ) as Extract<PlanPrimitive, { kind: 'path' }>
-    const [, p1, p2] = path.cmds                              // the first incline
-    expect(Math.abs(p2.x - p1.x)).toBeCloseTo(Math.abs(p2.y - p1.y), 9)
+    const [p0, p1] = path.cmds                              // the opening crank
+    expect(Math.abs(p1.x - p0.x)).toBeCloseTo(Math.abs(p1.y - p0.y), 9)
   })
 
-  it('says bent-up bars cannot be counted for shear in a special moment frame', () => {
+  it('says bent bars cannot be counted for shear in a special moment frame', () => {
     // §418.6.3.1 requires hoops there; the bar is still drawn as flexural steel.
     const c = crankBars({ ...base, seismic: true })
     expect(c.notes.join(' ')).toContain('§418.6.3.1')
@@ -310,14 +291,15 @@ describe('buildBeamDetail', () => {
     // the extra bottom bar really does run 0.15L in to 0.15L short — it is one
     // cranked path now, so the straight middle is its third and fourth points
     // The bottom bar is the cranked path with no arc in it — a top bar hooked
-    // into an end support also has six commands, but three of them are its hook.
+    // into an end support also has four commands, but three of them are its hook.
     const bot = d.primitives.find(
       (p) => p.kind === 'path' && p.stroke === CRANK_INK
-        && p.cmds.length === 6 && p.cmds.every((c) => c.c !== 'A'),
+        && p.cmds.length === 4 && p.cmds.every((c) => c.c !== 'A'),
     ) as Extract<PlanPrimitive, { kind: 'path' }>
     expect(bot).toBeDefined()
-    expect(bot.cmds[2].x).toBeCloseTo(0.15 * b.L, 9)
-    expect(bot.cmds[3].x).toBeCloseTo(b.L - 0.15 * b.L, 9)
+    // cmds[0] is the crank tip, cmds[1] and cmds[2] the straight run it ends
+    expect(bot.cmds[1].x).toBeCloseTo(0.15 * b.L, 9)
+    expect(bot.cmds[2].x).toBeCloseTo(b.L - 0.15 * b.L, 9)
   })
 
   it('HOOPS ARE TIGHTEST AT THE SUPPORTS — including when midspan needs none', () => {
