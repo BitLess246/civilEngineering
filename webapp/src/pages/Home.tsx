@@ -92,7 +92,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
       <section className="mx-auto max-w-[1200px] px-6 pt-9">
         <div className="mb-3.5 flex items-baseline gap-3.5">
           <h2 className="text-[19px] font-extrabold tracking-tight">See it run</h2>
-          <span className="font-mono text-[11px] text-[#a39d8d]">3×3 bay · 3 storeys · 61 s · no sound</span>
+          <span className="font-mono text-[11px] text-[#a39d8d]">3×3 bay · 3 storeys · 87 s · no sound</span>
         </div>
         <figure className="m-0 overflow-hidden rounded-lg border border-[#e3e1da] bg-[#0f1b2a]">
           {/* Click to play: the file is 4.3 MB and most visitors are on mobile
