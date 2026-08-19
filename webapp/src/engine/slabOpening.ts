@@ -42,6 +42,7 @@
 import type { SlabOpening } from './model'
 import { calcDevLength } from './devLength'
 import type { PlanPrimitive, Drawing } from './planRenderer'
+import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock } from './detailSheet'
 
 // ── code constants ─────────────────────────────────────────────────────────
 
@@ -329,7 +330,7 @@ export function designSlabOpening(i: SlabOpeningInput): SlabOpeningResult {
 
 // ── the detail sheet ───────────────────────────────────────────────────────
 
-export interface SlabOpeningDetailOptions { detailNo?: string; sheetRef?: string }
+export interface SlabOpeningDetailOptions { detailNo?: string; sheetRef?: string; scale?: string }
 export interface SlabOpeningDrawing extends Drawing { title: string; result: SlabOpeningResult }
 
 const INK = '#1e293b', REBAR = '#b45309', GRID = '#9aa5b5', NOTE = '#475569', ACCENT = '#0f766e', WARN = '#b91c1c'
@@ -346,20 +347,9 @@ const INK = '#1e293b', REBAR = '#b45309', GRID = '#9aa5b5', NOTE = '#475569', AC
  * collapses its leading whitespace, so the indent would only ever exist in the
  * string and in this wrap's character count.
  */
-export const GLYPH_W = 0.63
 
 /** Wrap a note to `max` characters a line, breaking on spaces. A drawing note
  *  that runs off the sheet edge is not a note. */
-export function wrapNote(text: string, max: number): string[] {
-  if (max < 8) return [text]
-  const out: string[] = []
-  let line = ''
-  for (const word of text.split(' ')) {
-    if (line && line.length + 1 + word.length > max) { out.push(line); line = word } else line += (line ? ' ' : '') + word
-  }
-  if (line) out.push(line)
-  return out
-}
 
 /** Clip a segment to the panel rectangle (Liang–Barsky), so no bar is ever
  *  drawn outside the slab it is cast in. Returns null when it lies wholly out. */
@@ -528,34 +518,34 @@ export function buildSlabOpeningDetail(i: SlabOpeningInput, opts: SlabOpeningDet
   // the RIGHT of the panel origin — not the full sheet, which also spans the
   // left margin the title bubble sits in.
   const sheetW = lx + u * 8.5
-  const wrapped = notes.flatMap((t) => wrapNote(t, Math.max(20, Math.floor(sheetW / (GLYPH_W * noteSize)))))
   const noteTop = ly + u * 6.4
-  wrapped.forEach((t, k) => P.push({
-    kind: 'text', x: 0, y: noteTop + k * u * 1.8, text: t, size: noteSize, anchor: 'start',
-    color: t.startsWith('⚠') ? WARN : NOTE,
-  }))
+  const plain = notes.filter((t) => !t.startsWith('⚠'))
+  const warn = notes.filter((t) => t.startsWith('⚠'))
+  const nb = notesBlock({ x: 0, w: sheetW, top: noteTop, size: noteSize, lines: plain, color: NOTE, step: u * 1.8 })
+  P.push(...nb.prims)
+  const wb = warn.length
+    ? notesBlock({ x: 0, w: sheetW, top: nb.bottom + u * 1.8, size: noteSize, lines: warn, color: WARN, step: u * 1.8 })
+    : { prims: [], bottom: nb.bottom }
+  P.push(...wb.prims)
 
-  // ── title block ──
+  // ── title block, at the BOTTOM like every other detail sheet ──
   const title = `SLAB OPENING DETAIL — ${mark}`
-  P.push({ kind: 'text', x: lx / 2, y: -u * 7.0, text: title, size: u * 2.2, anchor: 'middle', color: INK, weight: 700 })
-  if (opts.detailNo) {
-    // Left of the panel entirely: the title is centred on lx/2 and runs wide,
-    // so a bubble anywhere inside that span lands inside a word.
-    const cx = -u * 3.4, cy = -u * 7.0
-    P.push({ kind: 'circle', cx, cy, r: u * 1.7, stroke: INK, fill: '#fff', width: 0.8 })
-    P.push({ kind: 'text', x: cx, y: cy, text: opts.detailNo, size: u * 1.7, anchor: 'middle', color: INK, weight: 700 })
-    if (opts.sheetRef) P.push({ kind: 'text', x: cx, y: cy + u * 2.6, text: opts.sheetRef, size: u * 1.1, anchor: 'middle', color: NOTE })
-  }
-  P.push({ kind: 'line', x1: -u * 5.2, y1: -u * 3.0, x2: lx + u * 5.2, y2: -u * 3.0, stroke: GRID, width: 0.6 })
+  const tb = titleBlock({
+    x: 0, w: sheetW, top: wb.bottom + u * 2.6, u: u * 0.85,
+    title, detailNo: opts.detailNo, sheetRef: opts.sheetRef ?? 'S-08', scale: opts.scale,
+  })
+  P.push(...tb.prims)
   P.push({ kind: 'text', x: lx, y: -u * 2.3, text: `PANEL ${lx.toFixed(2)} × ${ly.toFixed(2)} m · SLAB ${Math.round(i.h)} THK`, size: u * 1.2, anchor: 'end', color: ACCENT })
 
+  const sb = measureBounds(P, { minX: -u * 5.4, maxX: sheetW, minY: -u * 4.0, maxY: tb.bottom })
   return {
     primitives: P,
     title,
     result: r,
-    bounds: {
-      minX: -u * 5.4, maxX: lx + u * 8.5,
-      minY: -u * 9.0, maxY: noteTop + wrapped.length * u * 1.8,
-    },
+    bounds: { minX: sb.minX - u, minY: sb.minY - u, maxX: sb.maxX + u, maxY: sb.maxY + u },
   }
 }
+
+// Re-exported so the existing callers and tests keep their import site; the
+// implementation now lives in `detailSheet` as a single copy.
+export { GLYPH_W, wrapNote }
