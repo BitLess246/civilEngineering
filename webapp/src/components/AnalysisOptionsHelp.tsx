@@ -150,13 +150,16 @@ export function AnalysisOptionsHelp() {
           What it cannot reproduce is a slab that is <em>continuous</em> over its supports. Such a slab draws
           more to an interior support line than tributary area gives it, and it carries moment into the girders
           and columns that a line load cannot. A cross-check against STAAD.Pro on a 2×1-bay, two-storey frame
-          with the slab meshed 10×10 per panel, run at the same E and ν, put the difference at:
+          with the slab meshed 10×10 per panel — same geometry, sections, E, ν, density and loads, nothing
+          normalised — put the difference at:
         </p>
         <ul className="mb-1.5 list-disc space-y-0.5 pl-4">
-          <li>support reactions within <b>5 %</b>, joint deflections within <b>0.6 %</b></li>
-          <li>long-span beams <b>5–9 % conservative</b></li>
-          <li>edge girders <b>20 % low</b>, interior girders <b>30 % low</b></li>
-          <li>column moments <b>35–50 % low</b>; beam torsion essentially absent</li>
+          <li>total reaction within <b>0.001 %</b>, joint deflections within <b>0.2 %</b> on average
+            (&plusmn;4 % joint by joint, corners high and interior low)</li>
+          <li>support reactions within <b>3 %</b>; column carry-over 0.510 vs 0.488, theory 0.500</li>
+          <li>long-span beams <b>7–11 % conservative</b></li>
+          <li>edge girders <b>10–19 % low</b>, interior girders <b>22–29 % low</b></li>
+          <li>column moments <b>25–49 % low</b>; beam torsion 0.4 vs 14.6 kN·m — essentially absent</li>
         </ul>
         <Note>
           Interior support lines and column moments are the unconservative cases. Where a girder carries
