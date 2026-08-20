@@ -85,6 +85,88 @@ describe('planRenderer — framing plan geometry', () => {
   })
 })
 
+describe('planRenderer — combined footings on the foundation plan', () => {
+  const model = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3], section, slabThickness: 150 })
+  const base = model.nodes.filter((n) => Math.abs(n.y) < 1e-6).sort((a, b) => a.x - b.x || a.z - b.z)
+  // two supports on the same z, 6 m apart — the pair a combined pad carries
+  const pair = base.filter((n) => Math.abs(n.z - base[0].z) < 1e-9).slice(0, 2)
+  const combined = {
+    kind: 'combined' as const,
+    nodes: [pair[0].id, pair[1].id] as [string, string],
+    Bx: 8, By1: 2.4, By2: 1.6, x1: 1, x2: 7,
+    Dc: 500, barDia: 20, barSpacing: 150, bars: 10,
+  }
+  const rest = base.filter((n) => !pair.some((p) => p.id === n.id))
+    .map((n) => ({ node: n.id, B: 1.5, Dc: 350, bars: 8, barSpacing: 180, barDia: 16 }))
+  const f = buildPlan(model, { kind: 'foundation', footings: [...rest, combined], foundingElev: -1.5 })!
+
+  const pads = () => f.primitives.filter(
+    (p): p is Extract<PlanPrimitive, { kind: 'path' }> => p.kind === 'path' && p.closed === true,
+  )
+
+  it('draws the pad as a closed four-sided polygon', () => {
+    const q = pads()
+    expect(q).toHaveLength(1)
+    expect(q[0].cmds).toHaveLength(4)
+  })
+
+  it('makes the two ends the widths the design gave, not one average', () => {
+    // A trapezoidal pad is trapezoidal because the two columns carry different
+    // loads. Drawing it as a rectangle on the mean width puts bearing pressure
+    // in the wrong place at both ends.
+    const c = pads()[0].cmds
+    const end1 = Math.hypot(c[0].x - c[1].x, c[0].y - c[1].y)
+    const end2 = Math.hypot(c[2].x - c[3].x, c[2].y - c[3].y)
+    expect(end1).toBeCloseTo(2.4, 9)
+    expect(end2).toBeCloseTo(1.6, 9)
+    expect(end1).not.toBeCloseTo(end2, 3)
+  })
+
+  it('runs the pad the full Bx, with the overhang beyond the FIRST column', () => {
+    // x1 is the overhang past column 1, so the pad origin sits x1 back along
+    // the axis. Centring it on the two nodes instead puts both overhangs wrong
+    // on any pad whose columns are not symmetric — which is every trapezoid.
+    const c = pads()[0].cmds
+    const mid1 = { x: (c[0].x + c[1].x) / 2, y: (c[0].y + c[1].y) / 2 }
+    const mid2 = { x: (c[2].x + c[3].x) / 2, y: (c[2].y + c[3].y) / 2 }
+    expect(Math.hypot(mid2.x - mid1.x, mid2.y - mid1.y)).toBeCloseTo(8, 9)
+    // the first column sits 1 m in from the near end
+    expect(Math.hypot(pair[0].x - mid1.x, pair[0].z - mid1.y)).toBeCloseTo(1, 9)
+    // …and the second 7 m in, so 1 m short of the far end
+    expect(Math.hypot(pair[1].x - mid2.x, pair[1].z - mid2.y)).toBeCloseTo(1, 9)
+  })
+
+  it('schedules it under its own CF- series, sized by both ends', () => {
+    const t = texts(f.primitives)
+    expect(t).toContain('CF-1')
+    const row = f.footingSchedule.find((r) => r.mark === 'CF-1')!
+    expect(row).toBeDefined()
+    expect(row.size).toBe('8000×2400/1600')
+    expect(row.thk).toBe('500')
+    // …and the isolated pads keep their own series, unbroken
+    expect(f.footingSchedule.filter((r) => r.mark.startsWith('WF-')).map((r) => r.mark)).toEqual(['WF-1'])
+  })
+
+  it('sizes a rectangular pad by one width', () => {
+    const r = buildPlan(model, {
+      kind: 'foundation',
+      footings: [{ ...combined, By1: 2.0, By2: 2.0 }],
+    })!
+    expect(r.footingSchedule.find((x) => x.mark === 'CF-1')!.size).toBe('8000×2000')
+  })
+
+  it('does not give a combined pad\'s nodes an isolated pad as well', () => {
+    // the pipeline excludes them; the plan must not reintroduce one
+    const rects = f.primitives.filter((p) => p.kind === 'rect')
+    for (const n of pair) {
+      const onNode = rects.filter((p) =>
+        p.kind === 'rect' && Math.abs(p.x + p.w / 2 - n.x) < 1e-6 && Math.abs(p.y + p.h / 2 - n.z) < 1e-6
+        && p.w > 1.0)
+      expect(onNode).toHaveLength(0)
+    }
+  })
+})
+
 describe('planRenderer — foundation plan with designed footings', () => {
   const model = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3], section, slabThickness: 150 })
   const base = model.nodes.filter((n) => Math.abs(n.y) < 1e-6)

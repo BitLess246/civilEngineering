@@ -40,12 +40,30 @@ describe('planDetails — design → plan/detail inputs', () => {
 
   it('maps every designed footing to a PlanFooting with its own bar Ø', () => {
     const fs = footingsForPlan(design)
-    expect(fs).toHaveLength(design.footings.length)
+    expect(fs).toHaveLength(design.footings.length + design.combined.length)
     for (const f of fs) {
-      expect(f.B).toBeGreaterThan(0)
       expect(f.barDia).toBeGreaterThan(0)
-      expect(f.node).toBeTruthy()
+      if (f.kind === 'combined') {
+        expect(f.Bx).toBeGreaterThan(0)
+        expect(f.By1).toBeGreaterThan(0)
+        expect(f.By2).toBeGreaterThan(0)
+        expect(f.nodes[0]).toBeTruthy()
+        expect(f.nodes[1]).toBeTruthy()
+      } else {
+        expect(f.B).toBeGreaterThan(0)
+        expect(f.node).toBeTruthy()
+      }
     }
+  })
+
+  it('carries the combined pads too, and keeps the two sets disjoint', () => {
+    // A combined pad was designed, checked, scheduled and costed — and then not
+    // drawn, because the plan was only ever handed the isolated list.
+    const fs = footingsForPlan(design)
+    const nodes = new Set(fs.flatMap((f) => f.kind === 'combined' ? f.nodes : [f.node]))
+    // no node is carried by two pads
+    const all = fs.flatMap((f) => f.kind === 'combined' ? f.nodes : [f.node])
+    expect(all).toHaveLength(nodes.size)
   })
 
   it('bundles one detail per distinct footing type, marked WF-n', () => {
