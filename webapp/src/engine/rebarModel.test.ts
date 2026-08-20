@@ -3,6 +3,7 @@ import {
   hookBendDiameter, stirrupBendDiameter, bendRadius, bendDeduction,
   polylineLength, turnAngles, cutLength, runWeight, cageWeight, kgPerM,
   elevationPlane, planPlane, projectPoint, projectPath, runToPrimitive,
+  continuousBars, splicesRequired, CORNER_BARS_PER_FACE, KEEP_TOP, KEEP_BOTTOM,
   type RebarRun, type Vec3,
 } from './rebarModel'
 
@@ -158,5 +159,53 @@ describe('projection', () => {
     if (prim.kind !== 'path') throw new Error('unreachable')
     expect(prim.closed).toBe(true)
     expect(prim.cmds.map((c) => c.c)).toEqual(['M', 'L', 'L'])
+  })
+})
+
+describe('the four corner bars', () => {
+  it('keeps two bars in a face the analysis asked nothing of', () => {
+    // A singly reinforced beam still has two bars on its compression side —
+    // the stirrups have to be tied to something. The old arithmetic clamped to
+    // the designed count and drew a beam with no top steel at all.
+    expect(continuousBars(0, KEEP_TOP)).toBe(CORNER_BARS_PER_FACE)
+    expect(continuousBars(0, KEEP_BOTTOM)).toBe(2)
+    expect(continuousBars(1, KEEP_BOTTOM)).toBe(2)
+  })
+
+  it('keeps the code share once that exceeds the corners', () => {
+    expect(continuousBars(6, KEEP_TOP)).toBe(2)      // ceil(6/3) = 2
+    expect(continuousBars(9, KEEP_TOP)).toBe(3)      // ceil(9/3) = 3
+    expect(continuousBars(12, KEEP_BOTTOM)).toBe(3)  // ceil(12/4) = 3
+    expect(continuousBars(8, KEEP_BOTTOM)).toBe(2)   // ceil(8/4) = 2, the corners
+  })
+
+  it('never keeps more bars than the face has', () => {
+    for (let n = 2; n <= 20; n++) {
+      expect(continuousBars(n, KEEP_TOP)).toBeLessThanOrEqual(n)
+      expect(continuousBars(n, KEEP_BOTTOM)).toBeLessThanOrEqual(n)
+    }
+  })
+
+  it('satisfies the clause it is quoting', () => {
+    // whatever the count, at least a quarter of the positive steel reaches the
+    // support and at least a third of the negative steel passes the inflection
+    for (let n = 4; n <= 24; n++) {
+      expect(continuousBars(n, KEEP_BOTTOM) / n).toBeGreaterThanOrEqual(0.25 - 1e-9)
+      expect(continuousBars(n, KEEP_TOP) / n).toBeGreaterThanOrEqual(1 / 3 - 1e-9)
+    }
+  })
+})
+
+describe('splicesRequired', () => {
+  it('leaves a bar that fits the stock alone', () => {
+    expect(splicesRequired(6, 0.5)).toBe(0)
+    expect(splicesRequired(5.2, 0.5)).toBe(0)
+  })
+
+  it('counts the laps a long bar needs, allowing for the lap itself', () => {
+    // 6 m sticks, 0.5 m lap -> 5.5 m of new reach per added stick
+    expect(splicesRequired(9, 0.5)).toBe(1)          // 6 + 5.5 = 11.5 >= 9
+    expect(splicesRequired(12, 0.5)).toBe(2)         // 6 + 5.5 = 11.5 < 12
+    expect(splicesRequired(11.5, 0.5)).toBe(1)
   })
 })

@@ -272,3 +272,58 @@ export function runToPrimitive(run: RebarRun, plane: ViewPlane, style: RunStyle)
 export function cageToPrimitives(cage: RebarCage, plane: ViewPlane, style: (r: RebarRun) => RunStyle): PlanPrimitive[] {
   return cage.runs.map((r) => runToPrimitive(r, plane, style(r)))
 }
+
+// ── the four corner bars ─────────────────────────────────────────────────
+
+/**
+ * Longitudinal bars in each face of a beam that are there whatever the
+ * analysis asked for.
+ *
+ * Every beam carries four corner bars, one in each corner of the cage — two
+ * top, two bottom. They are what the stirrups are tied to, so they exist even
+ * where the design needs no steel at all in that face. A singly reinforced
+ * beam still has two bars on its compression side; they simply do not appear
+ * in the analysis.
+ */
+export const CORNER_BARS_PER_FACE = 2
+
+/**
+ * Bars in one face that run the full length and are never cranked.
+ *
+ * Two rules, and the governing one wins:
+ *
+ *   • the two corner bars, always — nothing may curtail them;
+ *   • the code's share of the designed steel: §409.7.3.8.1 keeps at least a
+ *     quarter of the positive steel running into the support, §409.7.3.8.4 at
+ *     least a third of the negative steel past the inflection point.
+ *
+ * `designed` is what the analysis called for in this face, which may be zero;
+ * `keepFraction` is that code share. The result is never below two and never
+ * above `designed` once `designed` exceeds two, so a face with eight bars
+ * curtails six of them and still keeps its corners.
+ */
+export function continuousBars(designed: number, keepFraction: number): number {
+  const byCode = Math.ceil(Math.max(0, designed) * keepFraction)
+  return Math.max(CORNER_BARS_PER_FACE, Math.min(Math.max(0, designed), byCode))
+}
+
+/** §409.7.3.8.4 — a third of the negative steel continues past the inflection point. */
+export const KEEP_TOP = 1 / 3
+/** §409.7.3.8.1 — a quarter of the positive steel runs into the support. */
+export const KEEP_BOTTOM = 1 / 4
+
+/** Commercial bar stock length, m — what forces a splice on a long member. */
+export const STOCK_BAR_LENGTH = 6
+
+/**
+ * How many Class B laps a continuous bar of `length` needs, given stock.
+ *
+ * The corner bars are continuous by intent, so the only thing that may
+ * interrupt one is that it cannot be bought in one piece. Each lap consumes
+ * `lap` of the next stick, so the reach per stick is what is left after it.
+ */
+export function splicesRequired(length: number, lapM: number, stock = STOCK_BAR_LENGTH): number {
+  const reach = Math.max(0.1, stock - Math.max(0, lapM))
+  if (length <= stock + 1e-9) return 0
+  return Math.ceil((length - stock) / reach)
+}
