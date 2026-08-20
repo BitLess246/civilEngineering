@@ -46,6 +46,7 @@ import type { PlanPrimitive, PathCmd, Drawing } from './planRenderer'
 import { hookClearToFace, hookFit, type HookFitResult } from './devLength'
 import { jointHookLdh } from './beamColumnJoint'
 import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader } from './detailSheet'
+import { hookBendDiameter } from './rebarModel'
 
 export interface BeamDetailSection {
   /** 'LEFT' | 'MID' | 'RIGHT' — position along the member. */
@@ -166,16 +167,13 @@ export function barExtension(d: number, barDia: number): number {
 // ── 90° standard hook geometry (NSCP Table 425.3.1) ──────────────────────
 
 /**
- * Minimum INSIDE bend diameter for a standard hook, mm.
+ * Minimum INSIDE bend diameter for a standard hook, mm — NSCP Table 425.3.1.
  *
- * NSCP Table 425.3.1 / ACI 318-14 Table 25.3.1: 6db up to ⌀25, 8db for ⌀28–⌀36,
- * 10db above. The bend is not a corner — a ⌀28 bar turns through a 224 mm
- * inside diameter, and a sheet that draws a sharp corner tells the bar bender
- * something that cannot be fabricated.
+ * The table itself lives in `rebarModel`, which is where every consumer of bar
+ * geometry reads it. Re-exported here so the sheet's own callers and tests keep
+ * their import site; two copies of a code table is how they drift apart.
  */
-export function hookBendDiameter(db: number): number {
-  return (db <= 25 ? 6 : db <= 36 ? 8 : 10) * db
-}
+export { hookBendDiameter } from './rebarModel'
 
 /** Straight tail beyond the bend on a 90° hook, ℓext = 12db (Table 425.3.1). */
 export const HOOK_TAIL_DB = 12
