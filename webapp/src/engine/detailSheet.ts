@@ -205,7 +205,7 @@ export interface LeaderOpts {
   side?: 'left' | 'right'
   /** Horizontal landing length. Default 2.2 × size. */
   landing?: number
-  /** Arrowhead length. Default 0.95 × size. */
+  /** Arrowhead length. Default 0.285 × size. */
   arrow?: number
   /** Second landing/text line, printed under the first. */
   text2?: string
@@ -224,16 +224,27 @@ export function leader(o: LeaderOpts): PlanPrimitive[] {
   const ink = NOTE                        // the leader itself, always
   const color = o.color ?? NOTE           // the label
   const side = o.side ?? (o.x <= o.tx ? 'left' : 'right')
-  const s = side === 'left' ? -1 : 1
-  const gap = o.size * 0.45
+  const s = side === 'left' ? -1 : 1      // away from the label
+  const d = -s                            // towards the label
+  const gap = o.size * 0.34               // glyph to label
+  const gh = o.size * 1.30                // full height of the glyph
   const land = o.landing ?? o.size * 2.2
-  const kneeX = o.tx + s * (gap + land)
+
+  // The glyph the landing ends on: one continuous stroke that runs up, across,
+  // all the way down, across again, and part-way back up. It separates the
+  // leader from its label, so a landing never runs into the first letter and a
+  // leader never reads as a dimension line. Proportions are taken off the
+  // reference: 0.14 and 0.15 of the height for the two steps, the last riser
+  // stopping a tenth of the height above the landing.
+  const gEnd = o.tx + s * (gap + gh * 0.29)      // where the landing meets it
+  const kneeX = gEnd + s * land
+  const up = o.ty - gh * 0.5, dn = o.ty + gh * 0.5
 
   // The leg stops at the back of the arrowhead so the two do not overprint.
   const dx = o.x - kneeX, dy = o.y - o.ty
   const len = Math.hypot(dx, dy) || 1
   const ux = dx / len, uy = dy / len
-  const a = Math.min(o.arrow ?? o.size * 0.95, len * 0.6)
+  const a = Math.min(o.arrow ?? o.size * 0.285, len * 0.6)
   const bx = o.x - ux * a, by = o.y - uy * a
   const hw = a * 0.26
 
@@ -247,13 +258,24 @@ export function leader(o: LeaderOpts): PlanPrimitive[] {
       ],
     },
     { kind: 'line', x1: kneeX, y1: o.ty, x2: bx, y2: by, stroke: ink, width: 0.7 },
-    { kind: 'line', x1: kneeX, y1: o.ty, x2: o.tx + s * gap, y2: o.ty, stroke: ink, width: 0.7 },
     {
-      kind: 'text', x: o.tx, y: o.ty - o.size * 0.5, text: o.text, size: o.size,
+      kind: 'path', stroke: ink, width: 0.7, fill: 'none', cap: 'round', join: 'round',
+      cmds: [
+        { c: 'M', x: kneeX, y: o.ty },                          // the landing
+        { c: 'L', x: gEnd, y: o.ty },
+        { c: 'L', x: gEnd, y: up },                             // up
+        { c: 'L', x: gEnd + d * gh * 0.14, y: up },             // across
+        { c: 'L', x: gEnd + d * gh * 0.14, y: dn },             // all the way down
+        { c: 'L', x: gEnd + d * gh * 0.29, y: dn },             // across again
+        { c: 'L', x: gEnd + d * gh * 0.29, y: o.ty - gh * 0.1 },// part-way back up
+      ],
+    },
+    {
+      kind: 'text', x: o.tx, y: o.ty, text: o.text, size: o.size,
       anchor: side === 'left' ? 'start' : 'end', color, weight: o.weight ?? 600,
     },
     ...(o.text2 ? [{
-      kind: 'text' as const, x: o.tx, y: o.ty + o.size * 0.75, text: o.text2, size: o.size,
+      kind: 'text' as const, x: o.tx, y: o.ty + o.size * 1.25, text: o.text2, size: o.size,
       anchor: (side === 'left' ? 'start' : 'end') as 'start' | 'end', color, weight: o.weight ?? 600,
     }] : []),
   ]

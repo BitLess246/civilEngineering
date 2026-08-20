@@ -726,16 +726,35 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
     }
   }
 
-  // hook cover at an end support — the dimension image 3 turns on
+  // The hook, dimensioned at an end support: the clear cover to the end of the
+  // tail, and ℓext itself.
+  //
+  // ℓext is measured from the CENTRE OF THE BEND to the end of the tail — which
+  // on a 90° hook is the same level as where the straight leg leaves the arc,
+  // since the leg is tangent to the bend there. Dimensioning it from the bar's
+  // own centreline instead would overstate the tail by the bend radius.
   for (const [cont, cx, dir] of [[i.continuousLeft, 0, 1], [i.continuousRight, L, -1]] as const) {
     if (cont) continue
     const { hx, hk } = hookGeom(cx, dir, true)
+    const r = hk.radius / 1000, ext = hk.ext / 1000
+    const bendC = yTop2 - r                              // bend centre = tangent level
     P.push(...leader({
-      x: hx, y: Y(yTop2 - hk.ext / 1000),                 // the end of the tail
+      x: hx, y: Y(bendC - ext),                          // the end of the tail
       tx: cx - dir * (face + u * 1.2), ty: Y(-colDrop * 0.55),
       text: `${Math.round(anch?.clear ?? HOOK_END_COVER)} CL.`, size: u * 1.15,
       side: dir > 0 ? 'right' : 'left',
     }))
+    const dx = hx - dir * u * 1.7
+    P.push({
+      kind: 'dim', x1: dx, y1: Y(bendC), x2: dx, y2: Y(bendC - ext),
+      text: `ℓext = ${Math.round(hk.ext)}`, off: 0, size: u * 1.1,
+    })
+    // where the bend centre sits, so the datum the dimension starts from is
+    // visible rather than implied
+    P.push({
+      kind: 'line', x1: dx, y1: Y(bendC), x2: hx + dir * r, y2: Y(bendC),
+      stroke: GRID, width: 0.5, dash: [u * 0.35, u * 0.3],
+    })
   }
 
   // ── notes ───────────────────────────────────────────────────────────────
