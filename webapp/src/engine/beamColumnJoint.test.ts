@@ -6,6 +6,10 @@ import {
   type BeamColumnJointInput,
 } from './beamColumnJoint'
 
+/** Bar paths only. Leaders draw an arrowhead as a filled path in the annotation
+ *  ink, so a bare `kind === 'path'` filter counts those as bars too. */
+const REBAR_INK = '#b45309'
+
 // ─────────────────────────────────────────────────────────────────────────
 // WORKED EXAMPLE — the joint the model actually produces, and what it does
 // and does NOT fail.
@@ -331,7 +335,7 @@ describe('buildBeamColumnJointDetail', () => {
   })
 
   it('hooks the beam bars behind the far-face column bar, and SAYS the same number', () => {
-    const paths = d.primitives.filter((p) => p.kind === 'path') as { cmds: { x: number; y: number }[] }[]
+    const paths = d.primitives.filter((p) => p.kind === 'path' && p.stroke === REBAR_INK) as { cmds: { x: number; y: number }[] }[]
     // two hooked bars in the elevation (top + bottom) and two runs in the plan
     expect(paths.length).toBe(4)
     const hooked = paths.filter((p) => p.cmds.length === 3)
@@ -374,7 +378,7 @@ describe('buildBeamColumnJointDetail', () => {
     // A sheet must not carry a note about a detail it does not draw: the
     // through case has no hook, so no ℓdh dimension and no clear-to-hook callout.
     const t = buildBeamColumnJointDetail({ ...joint, interior: true, barsThrough: true }, { detailNo: '2' })
-    const paths = t.primitives.filter((p) => p.kind === 'path') as { cmds: { x: number; y: number }[] }[]
+    const paths = t.primitives.filter((p) => p.kind === 'path' && p.stroke === REBAR_INK) as { cmds: { x: number; y: number }[] }[]
     expect(paths.length).toBe(4)
     for (const p of paths) expect(p.cmds).toHaveLength(2)      // straight, no turn
     const tf = textOf(t).join(' ').replace(/\s+/g, ' ')

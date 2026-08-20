@@ -44,7 +44,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { PlanPrimitive, Drawing } from './planRenderer'
 import { hookClearToFace, hookEmbedmentAvailable } from './devLength'
-import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock } from './detailSheet'
+import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader } from './detailSheet'
 
 // ── code constants ─────────────────────────────────────────────────────────
 
@@ -464,15 +464,31 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
   }
   // the two callouts image 3 turns on
   if (r.terminated) {
-    P.push({ kind: 'line', x1: hookX, y1: jy + cov, x2: jx - u * 1.0, y2: jy + bh * 0.45, stroke: NOTE, width: 0.5 })
-    P.push({ kind: 'text', x: jx - u * 1.2, y: jy + bh * 0.45, text: `${Math.round(clear * 1000)} CL. TO END OF HOOKS`, size: u * 1.05, anchor: 'end', color: NOTE })
+    P.push(...leader({
+      x: hookX, y: jy + cov,
+      tx: jx - u * 1.2, ty: jy + bh * 0.45,
+      text: `${Math.round(clear * 1000)} CL. TO END OF HOOKS`, size: u * 1.05, side: 'right',
+    }))
   }
   if (jointHoopYs.length) {
-    P.push({ kind: 'line', x1: jx + ch * 0.5, y1: jointHoopYs[0], x2: jx + ch + beamRun * 0.45, y2: jy - u * 1.0, stroke: NOTE, width: 0.5 })
-    P.push({ kind: 'text', x: jx + ch + beamRun * 0.47, y: jy - u * 1.0, text: `JOINT HOOPS ⌀${Math.round(i.hoopDia)} @ ${Math.round(r.jointHoopSpacing)}`, size: u * 1.05, anchor: 'start', color: NOTE })
+    P.push(...leader({
+      x: jx + ch * 0.5, y: jointHoopYs[0],
+      tx: jx + ch + beamRun * 0.47, ty: jy - u * 1.0,
+      text: `JOINT HOOPS ⌀${Math.round(i.hoopDia)} @ ${Math.round(r.jointHoopSpacing)}`, size: u * 1.05, side: 'left',
+    }))
   }
-  P.push({ kind: 'text', x: jx + ch + beamRun, y: jy + bh + u * 1.6, text: `BEAM HOOPS`, size: u * 1.05, anchor: 'end', color: NOTE })
-  P.push({ kind: 'text', x: jx - u * 1.8, y: jy - colRun * 0.55, text: `COLUMN HOOPS ⌀${Math.round(i.hoopDia)} @ ${Math.round(i.hoopSpacing)}`, size: u * 1.05, anchor: 'end', color: NOTE })
+  // These two used to float unattached beside the drawing, which is the same
+  // defect as a leaderless callout: a label that names nothing in particular.
+  P.push(...leader({
+    x: jx + ch + beamRun * 0.72, y: jy + bh * 0.5,
+    tx: jx + ch + beamRun, ty: jy + bh + u * 1.6,
+    text: `BEAM HOOPS`, size: u * 1.05, side: 'right',
+  }))
+  P.push(...leader({
+    x: jx + ch * 0.5, y: jy - colRun * 0.42,
+    tx: jx - u * 1.8, ty: jy - colRun * 0.55,
+    text: `COLUMN HOOPS ⌀${Math.round(i.hoopDia)} @ ${Math.round(i.hoopSpacing)}`, size: u * 1.05, side: 'right',
+  }))
   // the joint depth, which is the §418.8.2.3 dimension
   P.push({ kind: 'dim', x1: jx, y1: jy + bh + colRun + u * 1.6, x2: jx + ch, y2: jy + bh + colRun + u * 1.6, text: `h = ${Math.round(i.colH)}`, off: 0, size: u * 1.2 })
 
@@ -529,9 +545,21 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
       P.push({ kind: 'line', x1: jx + (ch - spandrel) / 2 + cov * 0.4, y1: y, x2: jx + (ch + spandrel) / 2 - cov * 0.4, y2: y, stroke: REBAR, width: 0.7 })
     }
   }
-  P.push({ kind: 'text', x: jx - u * 0.6, y: py - u * 1.0, text: 'COL. HOOP', size: u * 1.05, anchor: 'end', color: NOTE })
-  P.push({ kind: 'text', x: jx + ch + beamRun, y: py + (cb - bb) / 2 - u * 1.2, text: 'BEAM BARS', size: u * 1.05, anchor: 'end', color: NOTE })
-  P.push({ kind: 'text', x: jx + (ch + spandrel) / 2 + u * 0.8, y: py - spanRun * 0.55, text: 'SPANDREL BEAM HOOPS', size: u * 1.05, anchor: 'start', color: NOTE })
+  P.push(...leader({
+    x: jx + cov * 0.5, y: py + cb * 0.5,
+    tx: jx - u * 0.6, ty: py - u * 1.0,
+    text: 'COL. HOOP', size: u * 1.05, side: 'right',
+  }))
+  P.push(...leader({
+    x: jx + ch + beamRun * 0.75, y: py + (cb - bb) / 2 + bb * 0.5,
+    tx: jx + ch + beamRun, ty: py + (cb - bb) / 2 - u * 1.2,
+    text: 'BEAM BARS', size: u * 1.05, side: 'right',
+  }))
+  P.push(...leader({
+    x: jx + (ch + spandrel) / 2 - u * 0.4, y: py - spanRun * 0.5,
+    tx: jx + (ch + spandrel) / 2 + u * 0.8, ty: py - spanRun * 0.72,
+    text: 'SPANDREL BEAM HOOPS', size: u * 1.05, side: 'left',
+  }))
   P.push({ kind: 'dim', x1: jx, y1: py + cb + spanRun + u * 1.6, x2: jx + ch, y2: py + cb + spanRun + u * 1.6, text: `${Math.round(i.colH)}`, off: 0, size: u * 1.2 })
   P.push({ kind: 'dim', x1: jx - u * 3.2, y1: py, x2: jx - u * 3.2, y2: py + cb, text: `${Math.round(i.colB)}`, off: 0, size: u * 1.2 })
 

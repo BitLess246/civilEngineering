@@ -42,7 +42,7 @@
 import type { SlabOpening } from './model'
 import { calcDevLength } from './devLength'
 import type { PlanPrimitive, Drawing } from './planRenderer'
-import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock } from './detailSheet'
+import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader } from './detailSheet'
 
 // ── code constants ─────────────────────────────────────────────────────────
 
@@ -463,8 +463,6 @@ export function buildSlabOpeningDetail(i: SlabOpeningInput, opts: SlabOpeningDet
   // Short on the drawing, full in the notes. The long form printed here first,
   // and the x callout ran straight through the rotated y one — the drawing has
   // room for a bar mark and a leader, not for a sentence.
-  const leader = (fx: number, fy: number, tx: number, ty: number) =>
-    P.push({ kind: 'line', x1: fx, y1: fy, x2: tx, y2: ty, stroke: NOTE, width: 0.5 })
   const bar = (n: number, dia: number, len: number) => `${n}-⌀${Math.round(dia)} × ${Math.round(len)}`
   const midX = (b.x0 + b.x1) / 2, midY = (b.y0 + b.y1) / 2
 
@@ -473,12 +471,20 @@ export function buildSlabOpeningDetail(i: SlabOpeningInput, opts: SlabOpeningDet
   // into the title block or the dimension chain, which is where the x callout
   // landed on top of the panel-size line the first time this was rendered.
   const cxY = Math.max(b.y0 - r.x.eachSide * pxTop - u * 1.5, -u * 0.6)
-  leader(midX, cxY + u * 0.7, midX, b.y0 - r.x.eachSide * pxTop)
-  P.push({ kind: 'text', x: midX, y: cxY, text: bar(r.x.eachSide, i.barDia, r.x.barLength), size: u * 1.3, anchor: 'middle', color: REBAR, weight: 600 })
+  P.push(...leader({
+    x: midX, y: b.y0 - r.x.eachSide * pxTop,
+    tx: midX + u * 3.0, ty: cxY,
+    text: bar(r.x.eachSide, i.barDia, r.x.barLength), size: u * 1.3, color: REBAR,
+  }))
 
   const cyX = Math.min(b.x1 + r.y.eachSide * pyRight + u * 1.5, lx + u * 1.0)
-  leader(cyX - u * 0.7, midY, b.x1 + r.y.eachSide * pyRight, midY)
-  P.push({ kind: 'text', x: cyX, y: midY, text: bar(r.y.eachSide, i.barDia, r.y.barLength), size: u * 1.3, anchor: 'middle', color: REBAR, weight: 600, rotate: -90 })
+  // The y bars' callout runs UPWARD out of the sheet rather than rotating the
+  // label: a rotated leader cannot carry a horizontal landing.
+  P.push(...leader({
+    x: b.x1 + r.y.eachSide * pyRight, y: midY,
+    tx: cyX + u * 1.2, ty: midY - u * 2.4,
+    text: bar(r.y.eachSide, i.barDia, r.y.barLength), size: u * 1.3, color: REBAR, side: 'left',
+  }))
 
   // The label lives INSIDE the hole, so it is sized to the hole — at a fixed
   // size a 600 mm opening in a 9 m panel wore its label out past the trimmer
@@ -491,12 +497,12 @@ export function buildSlabOpeningDetail(i: SlabOpeningInput, opts: SlabOpeningDet
   // straight across the opening.
   const near = diagMids.reduce<[number, number] | null>((best, m) =>
     !best || Math.hypot(m[0] - midX, m[1] - cdY) < Math.hypot(best[0] - midX, best[1] - cdY) ? m : best, null)
-  if (near) leader(midX, cdY - u * 0.7, near[0], near[1])
-  P.push({
-    kind: 'text', x: midX, y: cdY,
+  if (near) P.push(...leader({
+    x: near[0], y: near[1],
+    tx: midX + u * 3.0, ty: cdY,
     text: `⌀${Math.round(r.diagonal.dia)} × ${Math.round(r.diagonal.length)} DIAG.`,
-    size: u * 1.3, anchor: 'middle', color: REBAR, weight: 600,
-  })
+    size: u * 1.3, color: REBAR,
+  }))
 
   // ── notes ──
   const notes: string[] = [

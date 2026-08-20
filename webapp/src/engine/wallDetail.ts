@@ -31,7 +31,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { calcDevLength, hookClearToFace, hookEmbedmentAvailable } from './devLength'
 import type { PlanPrimitive, Drawing } from './planRenderer'
-import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock } from './detailSheet'
+import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader } from './detailSheet'
 
 // ── §422.9 shear friction ──────────────────────────────────────────────────
 
@@ -556,14 +556,14 @@ export function buildWallIntersectionDetail(i: WallDetailInput, opts: WallDetail
     kind: 'text', x: W, y: -u * 1.6, text: `THROUGH WALL — HORIZ. BARS CONTINUOUS`,
     size: u * 1.2, anchor: 'end', color: REBAR, weight: 600,
   })
-  P.push({ kind: 'line', x1: bx + t2 + u * 1.2, y1: D * 0.72, x2: bx + t2 / 2, y2: D * 0.72, stroke: NOTE, width: 0.5 })
-  P.push({
-    kind: 'text', x: bx + t2 + u * 1.4, y: D * 0.72,
+  P.push(...leader({
+    x: bx + t2 / 2, y: D * 0.72,
+    tx: bx + t2 + u * 3.6, ty: D * 0.72,
     text: r.ldhFits
       ? `BRANCH HORIZ. ⌀${Math.round(i.barDia)} — STD. 90° HOOK`
       : `BRANCH HORIZ. ⌀${Math.round(i.barDia)} — U-BAR, CLASS B LAP`,
-    size: u * 1.2, anchor: 'start', color: REBAR, weight: 600,
-  })
+    size: u * 1.2, color: REBAR,
+  }))
 
   const notes = r.ldhFits
     ? [

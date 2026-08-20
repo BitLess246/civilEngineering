@@ -77,7 +77,20 @@ export function measureBounds(prims: PlanPrimitive[], seed?: Bounds): Bounds {
     : { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity }
   for (const p of prims) {
     let xs: number[] = [], ys: number[] = []
-    if (p.kind === 'line' || p.kind === 'dim') { xs = [p.x1, p.x2]; ys = [p.y1, p.y2] }
+    if (p.kind === 'line') { xs = [p.x1, p.x2]; ys = [p.y1, p.y2] }
+    else if (p.kind === 'dim') {
+      // A dimension is its line PLUS the text riding above it and the 45° ticks
+      // at its ends. Measuring only the endpoints let the label hang off the
+      // top of the sheet, which is what clipped the ℓdh dimension on the beam
+      // detail. A vertical dim rotates its text, so the box turns with it.
+      const tick = p.size * 0.45
+      const mx = (p.x1 + p.x2) / 2, my = (p.y1 + p.y2) / 2
+      const tw = textWidth(p.text, p.size)
+      const vertical = Math.abs(p.y2 - p.y1) > Math.abs(p.x2 - p.x1)
+      const hw = (vertical ? p.size : tw) / 2, hh = (vertical ? tw : p.size) / 2
+      xs = [p.x1 - tick, p.x2 + tick, mx - hw, mx + hw]
+      ys = [p.y1 - tick, p.y2 + tick, my - p.size * 0.35 - hh, my - p.size * 0.35 + hh]
+    }
     else if (p.kind === 'rect') { xs = [p.x, p.x + p.w]; ys = [p.y, p.y + p.h] }
     else if (p.kind === 'circle') { xs = [p.cx - p.r, p.cx + p.r]; ys = [p.cy - p.r, p.cy + p.r] }
     else if (p.kind === 'path') { xs = p.cmds.map((c) => c.x); ys = p.cmds.map((c) => c.y) }
@@ -166,4 +179,104 @@ export function titleBlock(o: TitleOpts): { prims: PlanPrimitive[]; bottom: numb
   const bottom = cy + r + u * 0.8
   P.push({ kind: 'line', x1: x, y1: bottom, x2: right, y2: bottom, stroke: INK, width: 1.0 })
   return { prims: P, bottom }
+}
+
+// ── Leaders ───────────────────────────────────────────────────────────────
+
+export interface LeaderOpts {
+  /** The point being pointed AT — the arrowhead sits here. */
+  x: number
+  y: number
+  /** Where the landing ends and the label begins. The text sits just above
+   *  this level, the way a drafted leader puts it. */
+  tx: number
+  ty: number
+  text: string
+  size: number
+  /** Label colour. The leader's own geometry — arrowhead, leg and landing —
+   *  always draws in the annotation ink, whatever the label is: a leader in a
+   *  bar's colour reads as a bar, and every filter that counts bars by ink
+   *  picks it up as one. */
+  color?: string
+  weight?: number
+  /** Which side the landing comes in on. Defaults to the side the target is,
+   *  so the leader never has to cross its own label to reach the thing it
+   *  names. */
+  side?: 'left' | 'right'
+  /** Horizontal landing length. Default 2.2 × size. */
+  landing?: number
+  /** Arrowhead length. Default 0.285 × size. */
+  arrow?: number
+  /** Second landing/text line, printed under the first. */
+  text2?: string
+}
+
+/**
+ * The house leader: filled arrowhead, one inclined leg, a horizontal landing,
+ * and the label sitting on the landing.
+ *
+ * Every sheet used to draw its own — a bare hairline from somewhere near the
+ * text to somewhere near the target, with no arrowhead and no landing, so at
+ * a glance you could not tell a leader from a dimension extension or from a
+ * bar. This is the one shape they all use now.
+ */
+export function leader(o: LeaderOpts): PlanPrimitive[] {
+  const ink = NOTE                        // the leader itself, always
+  const color = o.color ?? NOTE           // the label
+  const side = o.side ?? (o.x <= o.tx ? 'left' : 'right')
+  const s = side === 'left' ? -1 : 1      // away from the label
+  const d = -s                            // towards the label
+  const gap = o.size * 0.34               // glyph to label
+  const gh = o.size * 1.30                // full height of the glyph
+  const land = o.landing ?? o.size * 2.2
+
+  // The glyph the landing ends on: one continuous stroke that runs up, across,
+  // all the way down, across again, and part-way back up. It separates the
+  // leader from its label, so a landing never runs into the first letter and a
+  // leader never reads as a dimension line. Proportions are taken off the
+  // reference: 0.14 and 0.15 of the height for the two steps, the last riser
+  // stopping a tenth of the height above the landing.
+  const gEnd = o.tx + s * (gap + gh * 0.29)      // where the landing meets it
+  const kneeX = gEnd + s * land
+  const up = o.ty - gh * 0.5, dn = o.ty + gh * 0.5
+
+  // The leg stops at the back of the arrowhead so the two do not overprint.
+  const dx = o.x - kneeX, dy = o.y - o.ty
+  const len = Math.hypot(dx, dy) || 1
+  const ux = dx / len, uy = dy / len
+  const a = Math.min(o.arrow ?? o.size * 0.285, len * 0.6)
+  const bx = o.x - ux * a, by = o.y - uy * a
+  const hw = a * 0.26
+
+  return [
+    {
+      kind: 'path', closed: true, fill: ink, stroke: ink, width: 0.3, join: 'miter',
+      cmds: [
+        { c: 'M', x: o.x, y: o.y },
+        { c: 'L', x: bx - uy * hw, y: by + ux * hw },
+        { c: 'L', x: bx + uy * hw, y: by - ux * hw },
+      ],
+    },
+    { kind: 'line', x1: kneeX, y1: o.ty, x2: bx, y2: by, stroke: ink, width: 0.7 },
+    {
+      kind: 'path', stroke: ink, width: 0.7, fill: 'none', cap: 'round', join: 'round',
+      cmds: [
+        { c: 'M', x: kneeX, y: o.ty },                          // the landing
+        { c: 'L', x: gEnd, y: o.ty },
+        { c: 'L', x: gEnd, y: up },                             // up
+        { c: 'L', x: gEnd + d * gh * 0.14, y: up },             // across
+        { c: 'L', x: gEnd + d * gh * 0.14, y: dn },             // all the way down
+        { c: 'L', x: gEnd + d * gh * 0.29, y: dn },             // across again
+        { c: 'L', x: gEnd + d * gh * 0.29, y: o.ty - gh * 0.1 },// part-way back up
+      ],
+    },
+    {
+      kind: 'text', x: o.tx, y: o.ty, text: o.text, size: o.size,
+      anchor: side === 'left' ? 'start' : 'end', color, weight: o.weight ?? 600,
+    },
+    ...(o.text2 ? [{
+      kind: 'text' as const, x: o.tx, y: o.ty + o.size * 1.25, text: o.text2, size: o.size,
+      anchor: (side === 'left' ? 'start' : 'end') as 'start' | 'end', color, weight: o.weight ?? 600,
+    }] : []),
+  ]
 }
