@@ -7,6 +7,9 @@ import { useTour } from '../lib/useTour'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { SceneText } from '../components/SceneText'
+import { RebarWireframe } from '../components/RebarWireframe'
+import { buildStructureCages } from '../engine/cageBuilder'
+import { REBAR_ROLE_COLOR } from '../engine/rebarWire'
 import { ProjectsPanel } from '../components/ProjectsPanel'
 // The session keys are shared with the Projects panel, which saves and
 // restores exactly what the page autosaves — see lib/modelSpaceSession.
@@ -1045,6 +1048,7 @@ export default function ModelSpace() {
   const [showLoads, setShowLoads] = useState(true)   // load-diagram overlay
   const [showFootings, setShowFootings] = useState(true)   // designed footing footprints
   const [showConns, setShowConns] = useState(true)         // designed steel joint hardware
+  const [showRebar, setShowRebar] = useState(false)        // the designed bar cages, in 3D
 
   const [model, setModel] = useState<StructuralModel | null>(() => {
     try {
@@ -1591,6 +1595,14 @@ export default function ModelSpace() {
 
   /** Project & design inputs — shown in the schedules block and printed as
    *  §2 of the PDF calculation report. */
+  // The bar cages, placed. Same objects the detail sheets project and the
+  // take-off weighs — a view that built its own would be a fourth description
+  // of the same steel, which is the thing this whole model set out to stop.
+  const rebarCages = useMemo(
+    () => (showRebar && model && design ? buildStructureCages(model, design).cages : []),
+    [showRebar, model, design],
+  )
+
   const reportProps = (d: StructureDesign): [string, string][] => {
     const distinct = (role: MemberRole) => {
       const ids = new Set((model?.members ?? []).filter((m) => m.role === role).map((m) => m.section))
@@ -2165,6 +2177,7 @@ export default function ModelSpace() {
                   return <Wall3D key={w.id} tA={tA} tB={tB} bA={bA} bB={bB} shear={w.shearWall} />
                 })}
                 {showLoads && <Loads3D model={model} nodePos={nodePos} />}
+                {showRebar && rebarCages.length > 0 && <RebarWireframe cages={rebarCages} />}
                 {forceDiag && forceDiagInfo && forceDiagInfo.scale > 0 && model.members.map((m) => {
                   const mr = forceDiagInfo.byId.get(m.id)
                   const a = nodePos.get(m.i), bb = nodePos.get(m.j)
@@ -2218,6 +2231,21 @@ export default function ModelSpace() {
               <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm" style={{ background: '#dc2626' }} />overlap</span>
             </label>
           )}
+          <label className="no-print mt-2 flex items-center gap-2 text-xs text-slate-600">
+            <input type="checkbox" checked={showRebar} onChange={(e) => setShowRebar(e.target.checked)}
+              disabled={!design} />
+            Show reinforcement cages
+            {!design && <span className="text-slate-400">— design the structure first</span>}
+            {showRebar && rebarCages.length > 0 && (
+              <span className="ml-2 flex flex-wrap gap-x-2 gap-y-0.5">
+                {([['top', 'top'], ['bottom', 'bottom'], ['stirrup', 'stirrups'], ['vertical', 'col. verticals'], ['tie', 'ties']] as const).map(([role, label]) => (
+                  <span key={role} className="inline-flex items-center gap-1">
+                    <span className="inline-block h-2 w-3 rounded-sm" style={{ background: REBAR_ROLE_COLOR[role] }} />{label}
+                  </span>
+                ))}
+              </span>
+            )}
+          </label>
           <label className="no-print mt-2 flex items-center gap-2 text-xs text-slate-600">
             <input type="checkbox" checked={showLoads} onChange={(e) => setShowLoads(e.target.checked)} />
             Show load diagrams on the model
