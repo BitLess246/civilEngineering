@@ -17,7 +17,8 @@
 // Units: plan dimensions, covers and bar sizes mm; positions and lengths m.
 // ─────────────────────────────────────────────────────────────────────────
 import {
-  stirrupBendDiameter, type RebarCage, type RebarRun, type Vec3,
+  stirrupBendDiameter, stirrupHookAllowance,
+  type RebarCage, type RebarRun, type Vec3,
 } from './rebarModel'
 
 export interface ColumnCageInput {
@@ -70,6 +71,27 @@ export const barInset = (cover: number, tieDia: number, barDia: number) =>
  * bars on the deep faces where the spacing rule needs them. Bars come in
  * opposite pairs; an odd remainder goes to the longer face.
  */
+/**
+ * How many bars a rectangular perimeter can actually take, given a request.
+ *
+ * Bars go on in mirrored pairs — every intermediate bar on one face has a twin
+ * on the opposite one — so after the four corners the remainder has to be even.
+ * An odd request cannot be placed symmetrically and is rounded UP to the next
+ * even count, which is what a detailer does and what `barLayers` already does
+ * for a lone bar in a beam layer.
+ *
+ * Rounding up ADDS steel, so it is conservative against the P–M check that was
+ * run on the requested count — the column is stronger than checked, not weaker.
+ * It does mean the count drawn and billed can exceed the count designed, which
+ * is why this is a function a caller can ask rather than something that only
+ * happens inside the layout.
+ */
+export function placedBarCount(bars: number): number {
+  const n = Math.max(4, Math.round(bars))
+  const rem = n - 4
+  return 4 + rem + (rem % 2)
+}
+
 export function perimeterBars(i: Pick<ColumnCageInput, 'b' | 'h' | 'cover' | 'barDia' | 'bars' | 'tieDia'>): [number, number][] {
   const ins = barInset(i.cover, i.tieDia, i.barDia)
   const xh = Math.max(0, i.h / 2 - ins)          // corner offset along h
@@ -171,6 +193,8 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
       ] as Vec3[],
       bendDia: [D, D, D, D],
       closed: true,
+      // the two 135° hooks the closed loop's vertices cannot express
+      hookAllowance: stirrupHookAllowance(i.tieDia),
       count: 1,
     })
   })

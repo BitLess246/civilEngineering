@@ -69,6 +69,12 @@ export interface RebarRun {
   bendDia: number[]
   /** True for a stirrup, tie or hoop: the last vertex joins back to the first. */
   closed?: boolean
+  /**
+   * Developed length beyond the polyline, mm — the anchoring hooks a closed
+   * tie's two free ends carry, which no vertex of a closed loop can express.
+   * See `stirrupHookAllowance`.
+   */
+  hookAllowance?: number
   /** Identical copies. */
   count: number
 }
@@ -184,7 +190,7 @@ export function cutLength(run: RebarRun): number {
     if (D == null || D <= 0) continue
     ded += bendDeduction(D, run.dia, turns[k])
   }
-  return Math.max(0, straight - ded)
+  return Math.max(0, straight - ded + (run.hookAllowance ?? 0))
 }
 
 /** Fabricated weight of a run — every copy of it, kg. */
@@ -271,6 +277,23 @@ export function runToPrimitive(run: RebarRun, plane: ViewPlane, style: RunStyle)
 /** Every run in a cage, painted the same way. */
 export function cageToPrimitives(cage: RebarCage, plane: ViewPlane, style: (r: RebarRun) => RunStyle): PlanPrimitive[] {
   return cage.runs.map((r) => runToPrimitive(r, plane, style(r)))
+}
+
+/**
+ * Cut allowance for the two 135° seismic hooks on a closed stirrup or tie, mm.
+ *
+ * §425.3.2 gives the EXTENSION beyond the bend, max(6·dt, 75) — that is what
+ * the detail dimensions and what the bender measures once the bend is made.
+ * The bar also has to travel AROUND the bend, about 3·dt more. Buying to the
+ * extension alone leaves every stirrup in the job short by that much, twice
+ * over.
+ *
+ * A closed loop's vertices cannot say this: the hooks are what happens at the
+ * two free ends the loop pretends it does not have. So it rides on the run as
+ * an allowance, and `cutLength` adds it.
+ */
+export function stirrupHookAllowance(dt: number): number {
+  return 2 * (Math.max(6 * dt, 75) + 3 * dt)
 }
 
 // ── the four corner bars ─────────────────────────────────────────────────

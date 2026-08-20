@@ -42,15 +42,42 @@ describe('structure take-off / BOM-BOQ', () => {
   const design = designStructure(m, soil)!
   const t = estimateTakeoff(m, design, { concreteClass: 'A' })
 
-  it('buys each stirrup its bend allowance, not just the §425.3.2 extension', () => {
-    // 300 × 500 section, 40 cover, ⌀10 tie:
-    //   perimeter on the tie line = 2[(300−80) + (500−80)] = 1280 mm
-    //   two 135° hooks           = 2[max(6·10, 75) + 3·10] = 2(105) = 210 mm
-    // The extension alone (2 × 75 = 150) would cut every stirrup 60 mm short.
+  it('develops each stirrup on its own centreline, bends deducted, hooks added', () => {
+    // 300 × 500 section, 40 cover, ⌀10 tie. Three terms, and the take-off used
+    // to get two of them wrong:
+    //
+    //   perimeter on the BAR CENTRELINE
+    //     = 2[(300 − 2·40 − 10) + (500 − 2·40 − 10)] = 2[210 + 410] = 1240 mm
+    //     …the old formula measured 2[(b − 2c) + (h − 2c)] = 1280, which is the
+    //     cover line: one bar diameter too big the whole way round.
+    //   less four 90° bends, R = 4·10/2 + 10/2 = 25 mm centreline radius
+    //     = 4 · 25 · (2 − π/2) = 42.92 mm
+    //     …never deducted at all, though a bent bar really is shorter than the
+    //     sharp-cornered rectangle drawn through its corners.
+    //   plus two 135° hooks = 2[max(6·10, 75) + 3·10] = 210 mm
+    //     …this part was right, and the extension alone (2 × 75) would have cut
+    //     every stirrup 60 mm short.
+    const perimeter = 2 * (210 + 410)
+    const bends = 4 * 25 * (2 - Math.PI / 2)
+    const hooks = 2 * (Math.max(6 * 10, 75) + 3 * 10)
     const stirrup = t.cutList.find((c) => c.mark === 'Stirrup' && c.dia === 10)!
     expect(stirrup).toBeDefined()
-    expect(stirrup.cutLengthM).toBeCloseTo(1.28 + 0.21, 6)
+    expect(stirrup.cutLengthM).toBeCloseTo((perimeter - bends + hooks) / 1000, 6)
     expect(stirrup.tie).toBe(true)
+  })
+
+  it('bills the bars the DETAIL draws, not every bar at the full span', () => {
+    // The old take-off billed every longitudinal bar at L + 2·40db whether the
+    // detail ran it through or curtailed it. It now reads the beam cage, so a
+    // curtailed bar is billed for the length it is actually cut to.
+    const tops = t.cutList.filter((c) => c.mark === 'Top main')
+    expect(tops.length).toBeGreaterThan(0)
+    const beam = design.beams[0]
+    // no bar is longer than the member plus a hook at each end
+    for (const c of tops) expect(c.cutLengthM).toBeLessThan(beam.L + 1.0)
+    // and the curtailed ones really are shorter than the through bars
+    const lens = [...new Set(tops.map((c) => Math.round(c.cutLengthM * 1000)))]
+    expect(lens.length).toBeGreaterThan(1)
   })
 
   it('total concrete matches the design totals and yields cement/sand/gravel', () => {
