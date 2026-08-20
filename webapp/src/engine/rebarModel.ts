@@ -330,6 +330,29 @@ export function continuousBars(designed: number, keepFraction: number): number {
   return Math.max(CORNER_BARS_PER_FACE, Math.min(Math.max(0, designed), byCode))
 }
 
+/**
+ * How many longitudinal bars a rectangular cage can actually take, given a
+ * request.
+ *
+ * Four corners, and every intermediate bar on one face has a twin on the
+ * opposite one — so the remainder after the corners has to be EVEN. An odd
+ * request cannot be placed symmetrically and is rounded UP, which is what a
+ * detailer does and what `barLayers` already does for a lone bar in a beam.
+ *
+ * Rounding up ADDS steel, so a column detailed this way carries at least what
+ * the analysis asked for. Every consumer has to agree on it: the P–M check,
+ * the cage, the schedule and the take-off must be talking about the same
+ * column, or the one that is checked is not the one that gets built.
+ *
+ * Bars on a SPIRAL sit on a circle, where any count from six up is placeable —
+ * this rule is for rectangular tied cages only.
+ */
+export function placedBarCount(bars: number): number {
+  const n = Math.max(4, Math.round(bars))
+  const rem = n - 4
+  return 4 + rem + (rem % 2)
+}
+
 /** §409.7.3.8.4 — a third of the negative steel continues past the inflection point. */
 export const KEEP_TOP = 1 / 3
 /** §409.7.3.8.1 — a quarter of the positive steel runs into the support. */

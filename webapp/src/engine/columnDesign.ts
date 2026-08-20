@@ -18,6 +18,7 @@
 // Units: mm, MPa, kN, kN·m.
 // ─────────────────────────────────────────────────────────────────────────
 import { beta1 } from './loads'
+import { placedBarCount } from './rebarModel'
 
 export type ColumnShape  = 'tied' | 'spiral'
 export type LateralSystem = 'gravity' | 'imf' | 'smf'
@@ -96,7 +97,20 @@ export function designAxialColumn(i: AxialColumnInput): AxialColumnResult {
   const AstReq = Math.max(0.01 * Ag, num / (i.fy - 0.85 * i.fc))
   const rhoReq = AstReq / Ag
 
-  const bars = i.numBars ?? Math.max(minBars, Math.ceil(AstReq / Ab))
+  // Only ever a count the cage can actually place. A rectangular tied cage
+  // takes four corners plus an EVEN remainder, so an odd count cannot be built
+  // symmetrically — and `perimeterBars` rounds it up regardless. Snapping here
+  // instead means the column that is CHECKED is the column that gets drawn,
+  // scheduled and bought: one truth, not three that happen to be close.
+  //
+  // It also removes a quieter defect. The two-face P–M layout splits N between
+  // the faces as N/2, so an odd N put HALF A BAR in each layer — a capacity
+  // computed on steel that cannot exist. Every N is even now.
+  //
+  // Spiral bars sit on a circle, where any count from six up is placeable, so
+  // the rule applies to tied sections only.
+  const asked = i.numBars ?? Math.max(minBars, Math.ceil(AstReq / Ab))
+  const bars = tied ? placedBarCount(asked) : Math.max(minBars, Math.round(asked))
   const Ast = bars * Ab
   const rho = Ast / Ag
   const rhoOK = rho >= RHO_MIN - 1e-9 && rho <= RHO_MAX + 1e-9
