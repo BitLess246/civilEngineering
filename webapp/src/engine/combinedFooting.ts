@@ -42,6 +42,9 @@ export interface CombinedFootingResult {
   widened: boolean;
   xPeak: number; mPeak: number;
   dPunch: number; dBeam: number; Dc: number;
+  /** The bar the design was carried out with, mm — so a consumer never has to
+   *  guess it or borrow one from an unrelated footing. */
+  barDia: number;
   longSections: FlexSection[];
   transverse: TransverseStrip[];
   /** Sampled along x for diagrams. */
@@ -205,7 +208,7 @@ export function designCombinedFooting(i: CombinedFootingInput): CombinedFootingR
   ];
 
   return {
-    shape, Bx, By, By1, By2, x1, x2, Pa, Pu, Pu1, Pu2, qNet, wu1, wu2, widened,
+    shape, Bx, By, By1, By2, x1, x2, Pa, Pu, Pu1, Pu2, qNet, wu1, wu2, widened, barDia: i.barDia,
     xPeak, mPeak, dPunch, dBeam: dB, Dc, longSections, transverse, samples,
   };
 }

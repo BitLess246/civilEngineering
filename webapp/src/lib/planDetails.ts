@@ -18,13 +18,40 @@ import type { ColumnSchematicProps } from '../components/ColumnSchematic'
 export interface SoilInput { qAllow?: number; gammaSoil?: number; gammaConc?: number; H?: number }
 
 
-/** Designed footings → the plan renderer's minimal PlanFooting shape. */
+/**
+ * Designed footings → the plan renderer's minimal PlanFooting shapes.
+ *
+ * Both kinds. The pipeline designs a combined pad wherever the footing plan
+ * pairs two supports, and excludes those nodes from the isolated list, so the
+ * two sets here are disjoint by construction. The foundation plan used to take
+ * only the isolated ones, which meant a combined footing was designed, checked,
+ * scheduled and costed — and then simply not drawn.
+ */
 export function footingsForPlan(design: StructureDesign): PlanFooting[] {
-  return design.footings.map((r) => ({
+  const isolated: PlanFooting[] = design.footings.map((r) => ({
+    kind: 'isolated' as const,
     node: r.node, B: r.design.B, Dc: r.design.Dc,
     bars: r.design.bars, barSpacing: r.design.barSpacing,
     barDia: r.barDia,
   }))
+  const combined: PlanFooting[] = design.combined.map((r) => {
+    const d = r.design
+    // The transverse strips carry the bar spacing; take the tightest, which is
+    // the one under the more heavily loaded column.
+    const sp = d.transverse.length
+      ? Math.min(...d.transverse.map((t) => t.spacing).filter((v) => v > 0))
+      : 0
+    return {
+      kind: 'combined' as const,
+      nodes: r.nodes,
+      Bx: d.Bx, By1: d.By1, By2: d.By2, x1: d.x1, x2: d.x2,
+      Dc: d.Dc,
+      barDia: d.barDia,
+      barSpacing: Number.isFinite(sp) ? sp : 0,
+      bars: d.longSections.reduce((m, sn) => Math.max(m, sn.bars), 0),
+    }
+  })
+  return [...isolated, ...combined]
 }
 
 export interface FootingDetailBundle {
