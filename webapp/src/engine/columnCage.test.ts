@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
-  buildColumnCage, perimeterBars, tieLevels, barInset, type ColumnCageInput,
+  buildColumnCage, perimeterBars, placedBarCount, tieLevels, barInset, type ColumnCageInput,
 } from './columnCage'
-import { cutLength, stirrupBendDiameter } from './rebarModel'
+import { cutLength, stirrupBendDiameter, stirrupHookAllowance,} from './rebarModel'
 
 // ─────────────────────────────────────────────────────────────────────────
 // WORKED EXAMPLE — a 400×600 SMF column, ⌀20 verticals, ⌀12 ties.
@@ -132,13 +132,42 @@ describe('buildColumnCage', () => {
     expect(stirrupBendDiameter(12)).toBe(48)
   })
 
-  it('develops a tie shorter than its own perimeter, by the four bends', () => {
-    // The bar cuts each corner, so the cut length is under the rectangle
+  it('develops a tie as its perimeter, less the four bends, PLUS both hooks', () => {
+    // Two corrections, and they pull opposite ways. The bar cuts each corner,
+    // so it is shorter than the rectangle by the bend deduction — but a closed
+    // tie also has two 135° hooks anchoring it into the core, which no vertex
+    // of a closed loop can express and which more than cancel the saving.
+    // Counting only the deduction buys every tie in the job short.
     const t = cage.runs.find((r) => r.role === 'tie')!
     const perimeter = 2 * (0.508 + 0.308) * 1000     // 2(2·0.254 + 2·0.154) mm
-    const cut = cutLength(t)
-    expect(cut).toBeLessThan(perimeter)
-    expect(perimeter - cut).toBeCloseTo(4 * (48 / 2 + 12 / 2) * (2 - Math.PI / 2), 6)
+    const bends = 4 * (48 / 2 + 12 / 2) * (2 - Math.PI / 2)
+    const hooks = stirrupHookAllowance(12)           // 2 × (max(6·12, 75) + 3·12)
+    expect(t.hookAllowance).toBeCloseTo(hooks, 9)
+    expect(cutLength(t)).toBeCloseTo(perimeter - bends + hooks, 6)
+    expect(cutLength(t)).toBeGreaterThan(perimeter)
+  })
+
+  it('rounds an odd bar count UP to one it can actually place', () => {
+    // Intermediate bars go on in mirrored pairs, so after the four corners the
+    // remainder has to be even. An odd request cannot be placed symmetrically.
+    // This is silent otherwise: the P–M check runs on 9 bars and the drawing
+    // and the bill carry 10.
+    for (const n of [4, 6, 8, 10, 12]) {
+      expect(placedBarCount(n)).toBe(n)
+      expect(perimeterBars({ ...col, bars: n }).length).toBe(n)
+    }
+    for (const [asked, placed] of [[5, 6], [7, 8], [9, 10], [11, 12], [13, 14]]) {
+      expect(placedBarCount(asked)).toBe(placed)
+      expect(perimeterBars({ ...col, bars: asked }).length).toBe(placed)
+    }
+  })
+
+  it('never places fewer bars than asked for', () => {
+    // The rounding must go UP — adding steel is conservative against the P–M
+    // check that was run on the requested count, dropping one is not.
+    for (let n = 4; n <= 24; n++) {
+      expect(perimeterBars({ ...col, bars: n }).length).toBeGreaterThanOrEqual(n)
+    }
   })
 
   it('places the cage about the centre it is given', () => {
