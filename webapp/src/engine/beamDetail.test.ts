@@ -372,6 +372,56 @@ describe('hoops and overlaps on a beam with no support design', () => {
   })
 })
 
+describe('the supporting columns\' own steel', () => {
+  const COLBAR = '#7c3aed'
+  const withCage = {
+    ...b,
+    columnCage: { bars: 12, sConfined: 100, sOutside: 150, lo: 600 },
+    hookAnchorage: { colH: 500, colBarDia: 25, colTieDia: 12, colCover: 40, fc: 28, fy: 415 },
+  }
+
+  it('draws nothing extra when no cage is supplied', () => {
+    expect(buildBeamDetail(b).primitives.filter((p) => p.kind === 'path' && p.stroke === COLBAR)).toHaveLength(0)
+  })
+
+  it('draws every column vertical, both columns', () => {
+    const d2 = buildBeamDetail(withCage)
+    const v = d2.primitives.filter((p) => p.kind === 'path' && p.stroke === COLBAR)
+    expect(v).toHaveLength(24)                          // 12 bars x 2 columns
+  })
+
+  it('runs the verticals past the beam, not just up to it', () => {
+    // A column bar is continuous through the joint. Stopping it at the beam
+    // soffit would draw a column spliced at every floor.
+    const d2 = buildBeamDetail(withCage)
+    const v = d2.primitives.filter(
+      (p) => p.kind === 'path' && p.stroke === COLBAR,
+    ) as Extract<PlanPrimitive, { kind: 'path' }>[]
+    const hM = b.h / 1000
+    for (const p of v) {
+      const ys = p.cmds.map((c) => c.y)
+      // primitive space is y-down, so the top of the beam is the SMALLER y
+      expect(Math.min(...ys)).toBeLessThan(-hM + 1e-9)
+      expect(Math.max(...ys)).toBeGreaterThan(1e-9)
+    }
+  })
+
+  it('leaves the joint band to the joint hoops', () => {
+    // §418.8.3 — the hoops through the joint belong to the joint, and the sheet
+    // already draws them. Column ties there too would draw the steel twice.
+    const d2 = buildBeamDetail(withCage)
+    const ties = d2.primitives.filter(
+      (p) => p.kind === 'path' && p.stroke === HOOP_INK,
+    ) as Extract<PlanPrimitive, { kind: 'path' }>[]
+    expect(ties.length).toBeGreaterThan(0)
+    const hM = b.h / 1000
+    for (const t of ties) {
+      const y = t.cmds[0].y                             // a tie is level
+      expect(y > -hM - 1e-9 && y < 1e-9).toBe(false)    // not inside the beam depth
+    }
+  })
+})
+
 describe('buildBeamDetail', () => {
   const d = buildBeamDetail(b, { detailNo: '1', sheetRef: 'S-07' })
   const texts = textsOf(d)

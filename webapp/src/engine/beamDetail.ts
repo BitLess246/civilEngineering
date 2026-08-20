@@ -46,7 +46,11 @@ import type { PlanPrimitive, PathCmd, Drawing } from './planRenderer'
 import { hookClearToFace, hookFit, type HookFitResult } from './devLength'
 import { jointHookLdh } from './beamColumnJoint'
 import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader } from './detailSheet'
-import { hookBendDiameter, continuousBars, CORNER_BARS_PER_FACE, KEEP_TOP, KEEP_BOTTOM, splicesRequired, STOCK_BAR_LENGTH } from './rebarModel'
+import { buildColumnCage } from './columnCage'
+import {
+  runToPrimitive, elevationPlane, hookBendDiameter, continuousBars,
+  CORNER_BARS_PER_FACE, KEEP_TOP, KEEP_BOTTOM, splicesRequired, STOCK_BAR_LENGTH,
+} from './rebarModel'
 
 export interface BeamDetailSection {
   /** 'LEFT' | 'MID' | 'RIGHT' — position along the member. */
@@ -113,6 +117,25 @@ export interface BeamDetailInput {
     fc: number
     fy: number
   }
+  /**
+   * The supporting column's own cage, so the sheet can draw the steel the beam
+   * bars hook behind instead of an empty rectangle.
+   *
+   * Spacings come straight from `columnDesign` — `tieSpacingFinal`,
+   * `seismicSOut` and `seismicLoZone`. Omitted, the columns are drawn as
+   * outlines exactly as before.
+   */
+  columnCage?: {
+    /** Longitudinal bars around the perimeter. */
+    bars: number
+    /** Tie spacing in the confinement zone and outside it, mm. */
+    sConfined: number
+    sOutside?: number
+    /** Confinement zone length from each end, mm (§418.7.5.1). Zero = none. */
+    lo?: number
+    /** Clear column height either side of the beam, m — how much is drawn. */
+    storey?: number
+  }
 }
 
 export interface BeamDetailOptions { detailNo?: string; sheetRef?: string; scale?: string }
@@ -125,6 +148,8 @@ export const CRANK_INK = '#1d4ed8'
 const HOOP = '#c7a17a'
 /** The band marking a lap, painted along the two bars that share it. */
 const LAP = '#0891b2'
+/** Column steel — its own ink, so it never reads as the beam's. */
+const COLBAR = '#7c3aed'
 const CRANK = CRANK_INK   // bent-up bars — their own ink, they are one bar doing two jobs
 const WARN = '#b91c1c'
 const CONC = '#f1f5f9'
@@ -512,6 +537,37 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
     }
   }
 
+  // ── the columns' own steel ──────────────────────────────────────────────
+  // Drawn from a real cage rather than sketched here, so the verticals the
+  // beam bars hook behind are the bars the take-off weighs and the 3D view
+  // will string. The joint band carries no COLUMN ties: hoops through the
+  // joint belong to the joint (§418.8.3), and the sheet already draws them.
+  if (i.columnCage) {
+    const cc = i.columnCage
+    const plane = elevationPlane([1, 0, 0])
+    for (const cx of [0, L]) {
+      const cage = buildColumnCage({
+        mark: `${i.mark}-COL`,
+        b: i.b, h: cw * 1000, cover: i.hookAnchorage?.colCover ?? (i.cover ?? 40),
+        barDia: i.hookAnchorage?.colBarDia ?? i.barDia,
+        bars: Math.max(4, Math.round(cc.bars)),
+        tieDia: i.hookAnchorage?.colTieDia ?? i.stirrupDia,
+        sConfined: cc.sConfined,
+        sOutside: cc.sOutside ?? cc.sConfined,
+        lo: cc.lo ?? 0,
+        centre: [cx, 0],
+        yBottom: -colDrop, yTop: hM + colRise,
+        jointGap: [0, hM],
+      })
+      for (const run of cage.runs) {
+        P.push(runToPrimitive(run, plane, {
+          stroke: run.role === 'tie' ? HOOP : COLBAR,
+          width: run.role === 'tie' ? 0.8 : 1.4,
+        }))
+      }
+    }
+  }
+
   // Beam top and soffit: the clear span, plus a stub past a continuous support
   // to show the member carries on into the next one.
   const bay: [number, number][] = [[face, L - face]]
@@ -769,21 +825,22 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
     const { hx, hk } = hookGeom(cx, dir, true)
     const r = hk.radius / 1000, ext = hk.ext / 1000
     const bendC = yTop2 - r                              // bend centre = tangent level
+    // One leader for the hook, two lines. These used to be a rotated ℓext
+    // dimension plus a separate clear-cover leader: the rotated text was three
+    // times longer than the 240 it dimensioned, so it overran its own extension
+    // lines and landed on top of the other callout.
     P.push(...leader({
       x: hx, y: Y(bendC - ext),                          // the end of the tail
-      tx: cx - dir * (face + u * 1.2), ty: Y(-colDrop * 0.55),
-      text: `${Math.round(anch?.clear ?? HOOK_END_COVER)} CL.`, size: u * 1.15,
+      tx: cx - dir * (face + u * 1.0), ty: Y(bendC - ext),
+      text: `ℓext = ${Math.round(hk.ext)}`,
+      text2: `${Math.round(anch?.clear ?? HOOK_END_COVER)} CL. TO END`,
+      size: u * 1.15,
       side: dir > 0 ? 'right' : 'left',
     }))
-    const dx = hx - dir * u * 1.7
+    // The datum ℓext is measured FROM — the centre of the bend, which on a 90°
+    // hook is the level the straight leg leaves the arc.
     P.push({
-      kind: 'dim', x1: dx, y1: Y(bendC), x2: dx, y2: Y(bendC - ext),
-      text: `ℓext = ${Math.round(hk.ext)}`, off: 0, size: u * 1.1,
-    })
-    // where the bend centre sits, so the datum the dimension starts from is
-    // visible rather than implied
-    P.push({
-      kind: 'line', x1: dx, y1: Y(bendC), x2: hx + dir * r, y2: Y(bendC),
+      kind: 'line', x1: hx - dir * u * 1.4, y1: Y(bendC), x2: hx + dir * r, y2: Y(bendC),
       stroke: GRID, width: 0.5, dash: [u * 0.35, u * 0.3],
     })
   }
