@@ -45,7 +45,7 @@
 import type { PlanPrimitive, PathCmd, Drawing } from './planRenderer'
 import { hookClearToFace, hookFit, type HookFitResult } from './devLength'
 import { jointHookLdh } from './beamColumnJoint'
-import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock } from './detailSheet'
+import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader } from './detailSheet'
 
 export interface BeamDetailSection {
   /** 'LEFT' | 'MID' | 'RIGHT' — position along the member. */
@@ -506,10 +506,11 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
     if (!cont) continue
     P.push({ kind: 'line', x1: ex, y1: Y(-hM * 0.06), x2: ex, y2: Y(hM * 1.06), stroke: GRID, width: 0.8, dash: [u * 1.2, u * 0.9] })
   }
-  // How far the longitudinal steel is drawn: to the stub end where the member
-  // carries on, into the column to its hook where it does not.
-  const barX0 = i.continuousLeft ? -face - stub : x0 + cov
-  const barX1 = i.continuousRight ? L + face + stub : x1 - cov
+  // How far a straight bar is drawn: to the stub end where the member carries
+  // on, and to the START OF ITS BEND where it hooks. Running it to the cover
+  // line instead left a stub of bar poking out past the hook it belongs to.
+  const barEnd = (cx: number, dir: 1 | -1, cont: boolean, down: boolean) =>
+    cont ? cx - dir * (face + stub) : hookGeom(cx, dir, down).turn
 
   // ── longitudinal steel ──────────────────────────────────────────────────
   // Bars sit at their real centroid — clear cover, then the hoop, then half a
@@ -533,16 +534,29 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   //
   // `dir` points INTO the span from the support centreline `cx`; `down` turns
   // the tail towards the soffit, which is what a top bar does.
-  const hookCmds = (cx: number, dir: 1 | -1, z: number, down: boolean): PathCmd[] => {
+  //
+  // The turned leg's centreline, and the station where the straight bar starts
+  // to bend. The top and bottom hooks are staggered by one bar diameter so
+  // their tails pass rather than collide: in a beam of ordinary depth two 12db
+  // tails are longer than the gap between the two bar layers.
+  const hookGeom = (cx: number, dir: 1 | -1, down: boolean) => {
     const hk = hook90(i.barDia)
     const r = hk.radius / 1000
     const hOut = cx - dir * (face - (anch?.clear ?? HOOK_END_COVER) / 1000)
-    const hx = hOut + dir * hk.outside / 1000        // centreline of the turned leg
+    const stagger = down ? 0 : i.barDia / 1000
+    const hx = hOut + dir * (hk.outside / 1000 + stagger)
+    return { hk, r, hx, turn: hx + dir * r }
+  }
+  const hookCmds = (cx: number, dir: 1 | -1, z: number, down: boolean): PathCmd[] => {
+    const { hk, r, hx, turn } = hookGeom(cx, dir, down)
     const sgn = down ? 1 : -1                        // screen y grows downward
+    // Sweep: the bend's centre sits on the INSIDE of the corner, so the arc
+    // bulges away from it. Inverted, the bar appeared to curl back into the
+    // corner it was turning out of — a fillet no bender could make.
     return [
       { c: 'M', x: hx, y: Y(z) + sgn * (hk.ext / 1000 + r) },
       { c: 'L', x: hx, y: Y(z) + sgn * r },
-      { c: 'A', rx: r, ry: r, x: hx + dir * r, y: Y(z), large: 0, sweep: (dir > 0) === down ? 0 : 1 },
+      { c: 'A', rx: r, ry: r, x: turn, y: Y(z), large: 0, sweep: (dir > 0) === down ? 1 : 0 },
     ]
   }
 
@@ -550,7 +564,11 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   // At an end support they have nowhere to go, so they hook into the column;
   // at a continuous one they run straight on through the joint.
   for (const [z, down] of [[yTop, true], [yBot, false]] as const) {
-    P.push({ kind: 'line', x1: barX0, y1: Y(z), x2: barX1, y2: Y(z), stroke: REBAR, width: 1.8 })
+    P.push({
+      kind: 'line', stroke: REBAR, width: 1.8,
+      x1: barEnd(0, 1, !!i.continuousLeft, down), y1: Y(z),
+      x2: barEnd(L, -1, !!i.continuousRight, down), y2: Y(z),
+    })
     for (const [cont, cx, dir] of [[i.continuousLeft, 0, 1], [i.continuousRight, L, -1]] as const) {
       if (cont) continue
       P.push({ kind: 'path', stroke: REBAR, width: 2.2, cap: 'round', join: 'round', fill: 'none', cmds: hookCmds(cx, dir, z, down) })
@@ -576,9 +594,7 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
     [i.continuousRight, L, -1, crank.top[1], extraTopR],
   ] as const) {
     if (n <= 0) continue
-    const startX = cont
-      ? (dir > 0 ? barX0 : barX1)              // straight on through the joint
-      : cx - dir * (face - (anch?.clear ?? HOOK_END_COVER) / 1000)
+    const startX = barEnd(cx, dir, !!cont, true)   // through the joint, or its bend
     const cmds: PathCmd[] = [{ c: 'M', x: startX, y: Y(yTop2) }]
     // At an end support the extra bar hooks down into the column exactly as the
     // through bar above it does — same bend, same clear to the tail.
@@ -634,36 +650,32 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
 
   // The crank itself, labelled on the incline it names. One leader per crank
   // so the reader is never left guessing which bar the note is about.
-  const crankCall = (a: CrankEnd, n: number) => {
-    if (n <= 0) return
-    const mx = (a.at + a.tip) / 2
-    // Both labels go ABOVE the beam. Hanging the bottom-bar one below put it
-    // straight through the 0.15L dimension, which shares that band.
-    const lz = hM + colRise * 0.55
-    P.push({ kind: 'line', x1: mx, y1: Y((yTop2 + yBot2) / 2), x2: mx, y2: Y(lz - u * 0.7), stroke: CRANK, width: 0.7 })
-    // Anchored away from whichever end it is near, so a crank close to the
-    // right-hand support does not print its label over the column.
-    const near = mx > L * 0.6 ? 'end' : mx < L * 0.4 ? 'start' : 'middle'
-    P.push({
-      kind: 'text', x: mx, y: Y(lz), text: `CRANK ${crank.angleDeg}° — ${Math.round(crank.rise)}/${Math.round(crank.run)}`,
-      size: u * 1.3, anchor: near, color: CRANK, weight: 600,
-    })
+  // ONE crank callout, marked typical. Labelling each crank in full printed the
+  // two labels over each other: at u = L/60 the text is a third of the span
+  // wide, so any two of them inside the middle half of the beam collide. The
+  // rise and run are in the notes, where there is room for them.
+  const crankAt = extraTopL > 0 ? crank.top[0] : extraBot > 0 ? crank.bot[1] : undefined
+  if (crankAt) {
+    const mx = (crankAt.at + crankAt.tip) / 2
+    const inward = mx < L / 2 ? 1 : -1
+    P.push(...leader({
+      x: mx, y: Y((yTop2 + yBot2) / 2),
+      tx: mx + inward * L * 0.07, ty: Y(hM + colRise * 0.55),
+      text: `CRANK ${crank.angleDeg}° TYP.`, size: u * 1.3, color: CRANK,
+    }))
   }
-  crankCall(crank.top[0], extraTopL)
-  crankCall(crank.bot[1], extraBot)
 
   // One overlap callout with a leader onto the band it names. Labelling every
   // band put text on top of the bars and hoops it was meant to describe.
   const ov0 = extraBot > 0 ? crank.overlaps[0] : undefined
   if (ov0) {
     const mx = (ov0.from + ov0.to) / 2
-    const lz = -colDrop * 0.42
-    P.push({ kind: 'line', x1: mx, y1: Y(hM / 2), x2: mx, y2: Y(lz), stroke: LAP, width: 0.7 })
-    P.push({
-      kind: 'text', x: mx, y: Y(lz - u * 1.6),
+    P.push(...leader({
+      x: mx, y: Y(hM / 2),
+      tx: mx + L * 0.06, ty: Y(-colDrop * 0.42),
       text: `TOP AND BOTTOM EXTRAS OVERLAP ${Math.round(ov0.length)}`,
-      size: u * 1.2, anchor: 'middle', color: LAP, weight: 600,
-    })
+      size: u * 1.2, color: LAP,
+    }))
   }
 
   // ── dimensions ──────────────────────────────────────────────────────────
@@ -717,14 +729,13 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   // hook cover at an end support — the dimension image 3 turns on
   for (const [cont, cx, dir] of [[i.continuousLeft, 0, 1], [i.continuousRight, L, -1]] as const) {
     if (cont) continue
-    const hx = cx - dir * (face - (anch?.clear ?? HOOK_END_COVER) / 1000)
-    const ty = yTop2 - hookDrop - u * 2.2
-    P.push({ kind: 'line', x1: hx, y1: Y(yTop2 - hookDrop), x2: hx - dir * u * 2.4, y2: Y(ty), stroke: NOTE, width: 0.5 })
-    P.push({
-      kind: 'text', x: hx - dir * u * 2.6, y: Y(ty),
+    const { hx, hk } = hookGeom(cx, dir, true)
+    P.push(...leader({
+      x: hx, y: Y(yTop2 - hk.ext / 1000),                 // the end of the tail
+      tx: cx - dir * (face + u * 1.2), ty: Y(-colDrop * 0.55),
       text: `${Math.round(anch?.clear ?? HOOK_END_COVER)} CL.`, size: u * 1.15,
-      anchor: dir > 0 ? 'end' : 'start', color: NOTE,
-    })
+      side: dir > 0 ? 'right' : 'left',
+    }))
   }
 
   // ── notes ───────────────────────────────────────────────────────────────
