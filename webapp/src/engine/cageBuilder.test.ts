@@ -119,6 +119,26 @@ describe('buildStructureCages', () => {
     for (const y of tieYs) expect(Math.abs(y - yTop)).toBeGreaterThan(0.5 / 2 - 1e-6)
   })
 
+  it('builds the column the P–M check actually checked', () => {
+    // The point of the whole rebar model: one truth. The design chooses a bar
+    // count the cage can place, so the count checked, the count drawn and the
+    // count billed are the same number. Before, the check ran on 9 while the
+    // cage placed 10 — conservative, but three engines describing three
+    // different columns.
+    for (const c of design.columns) {
+      const cage = cages.find((x) => x.member === c.id)!
+      const placed = cage.runs.filter((r) => r.role === 'vertical').length
+      expect(placed).toBe(c.bars)
+    }
+  })
+
+  it('never designs a column to a bar count that cannot be placed', () => {
+    for (const c of design.columns) {
+      expect(c.bars).toBeGreaterThanOrEqual(4)
+      expect((c.bars - 4) % 2).toBe(0)          // four corners plus an even remainder
+    }
+  })
+
   it('gives every bar a positive developed length and a mark of its own', () => {
     for (const cage of cages) {
       const marks = cage.runs.map((r) => r.mark)

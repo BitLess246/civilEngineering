@@ -573,16 +573,24 @@ describe('optimizer covers every design check (slabs, walls, SCWB)', () => {
   }, 120_000)
 
   it('a failing shear wall gates designOK and the optimizer thickens the panel', () => {
-    // With the RC size caps, the old ×400 seismic case can no longer converge
-    // (that unbounded convergence was the bug the caps fix). This milder case
-    // exercises the same mechanism: the thin wall fails DURING the loop as the
+    // The mechanism under test: the thin wall fails DURING the loop as the
     // stiffening frame sheds shear into it, and the optimizer thickens it.
+    //
+    // The amplification has to be strong enough to fail the wall and weak
+    // enough that the whole structure is still BUILDABLE inside the size caps.
+    // It has been walked down twice for that reason — ×400 first, then ×45.
+    // At ×45 one column now runs out of road: the optimizer grows it to the
+    // 1000×1000 cast-in-place limit with 32 bars and it still comes out at
+    // util 1.07, so the design cannot converge no matter how long it is given.
+    // That case sat a hair under 1.0 before columns started carrying their
+    // placeable bar count, which adds steel — and stiffer columns attract more
+    // seismic force. ×35 fails the wall and leaves the frame buildable.
     const m = makeModel()
     m.walls = [{ id: 'w0', member: 'bx0.0.1', height: 3, thickness: 50, shearWall: true }]
     const base = computeSeismic(m, { Ca: 0.44, Cv: 0.64, I: 1, R: 8.5, dir: 'x' })!.loads
     const eX: LateralCase = {
       name: 'E+X', kind: 'E',
-      loads: base.map((l) => ({ kind: 'node', node: (l as { node: string }).node, Fx: Math.abs((l as { Fx?: number }).Fx ?? 0) * 45, cat: 'E' })),
+      loads: base.map((l) => ({ kind: 'node', node: (l as { node: string }).node, Fx: Math.abs((l as { Fx?: number }).Fx ?? 0) * 35, cat: 'E' })),
     }
     const r = optimizeStructure(m, soil, {}, 30, { lateral: [eX] })!
     expect(r.converged).toBe(true)
