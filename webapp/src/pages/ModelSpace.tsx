@@ -1,4 +1,5 @@
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { scrollTop } from '../lib/useScrollTop'
 import { Link } from 'react-router-dom'
 import { GuidedTour } from '../components/GuidedTour'
 import { TourButton } from '../components/TourButton'
@@ -1148,6 +1149,12 @@ export default function ModelSpace() {
   const [sdlMatT, setSdlMatT] = useState(50)                       // 204-2 thickness, mm
   const [liveOccId, setLiveOccId] = useState('')                   // NSCP 205-1 occupancy ('' = default LL)
   const [tab, setTab] = useState<Tab>('geometry')                 // right-panel tab
+  // Scroll on the CLICK, not on an effect keyed to `tab`. The guided tour also
+  // drives setTab and scrolls its own target into view (GuidedTour scrollIntoView);
+  // an effect cannot tell a user's click from the tour's step change, and would
+  // yank the viewport back to the top of a step the tour had just centred.
+  const pickTab = (t: Tab) => { setTab(t); scrollTop() }
+
   const [orphans, setOrphans] = useState(0)
   // footing plan: base node → '' (isolated) or partner node id (combined)
   const [planSel, setPlanSel] = useState<Record<string, string>>((si.planSel as Record<string, string>) ?? {})
@@ -2288,7 +2295,7 @@ export default function ModelSpace() {
         {/* RIGHT — tabbed controls: one flat panel, hairline-separated sections (mockup) */}
         <div className="no-print overflow-hidden rounded-lg border border-[#e3e1da] bg-white">
           <div className="flex flex-wrap items-center gap-0.5 border-b border-[#eeece5] px-3 py-2.5" data-tour="tab-bar">
-            {TABS.map((t) => <TabBtn key={t.id} id={t.id} label={t.label} active={tab === t.id} onClick={setTab} />)}
+            {TABS.map((t) => <TabBtn key={t.id} id={t.id} label={t.label} active={tab === t.id} onClick={pickTab} />)}
             <span className="ml-auto"><TourButton onClick={tour.start} label="Guide" /></span>
           </div>
 

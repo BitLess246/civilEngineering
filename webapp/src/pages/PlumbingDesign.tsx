@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { scrollTop } from '../lib/useScrollTop'
 import { FIXTURE_LIST, type FixtureCount, type Occupancy, totalWSFU, totalDFU } from '../engine/plumbingFixtures'
 import { GuidedTour } from '../components/GuidedTour'
 import { TourButton } from '../components/TourButton'
@@ -42,6 +43,7 @@ type Tab = 'supply' | 'drainage' | 'septic'
 
 export default function PlumbingDesign() {
   const [tab, setTab] = useState<Tab>('supply')
+
   // The walkthrough. Advancing a step switches the tab too — see `useTour`.
   const tour = useTour(PLUMBING_STEPS, (t) => setTab(t as Tab))
   const [occ, setOcc] = useState<Occupancy>('private')
@@ -88,7 +90,7 @@ export default function PlumbingDesign() {
   const septicSteps = useMemo(() => septicSolution(septic), [septic])
 
   const tabBtn = (id: Tab, label: string) => (
-    <button type="button" onClick={() => setTab(id)}
+    <button type="button" onClick={() => { setTab(id); scrollTop() }}
       className={`border-b-2 px-1 pb-1.5 text-sm font-semibold ${tab === id ? 'border-[#0056b3] text-[#0056b3]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
       {label}
     </button>
