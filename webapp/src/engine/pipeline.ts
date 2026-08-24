@@ -963,8 +963,9 @@ function buildComboTasks(lateral: LateralCase[], opts: AnalyzeOptions): { name: 
 }
 
 /** Build the load cases to envelope: every NSCP combination, expanded once per
- *  directional lateral case (E/W) when the combination carries that factor. */
-function buildRuns(model: StructuralModel, opts: AnalyzeOptions, onProgress?: ProgressFn) {
+ *  directional lateral case (E/W) when the combination carries that factor.
+ *  If `neededCombos` is provided, only solve those combo names (governing-combo-only optimization). */
+function buildRuns(model: StructuralModel, opts: AnalyzeOptions, onProgress?: ProgressFn, neededCombos?: Set<string>) {
   // gravity (everything except lateral E/W) is bridged once — includes the
   // slab tributary line loads and member self-weight; lateral cases are pure
   // node loads applied on top per direction.
@@ -977,13 +978,16 @@ function buildRuns(model: StructuralModel, opts: AnalyzeOptions, onProgress?: Pr
 
   const precomp = precomputeFrame(br.nodes, br.members, br.supports)
   const runs: FrameRun[] = []
-  tasks.forEach((t, i) => {
+  for (let i = 0; i < tasks.length; i++) {
+    const t = tasks[i]
+    // Skip combos not in the needed set (governing-combo-only optimization)
+    if (neededCombos && !neededCombos.has(t.name)) continue
     onProgress?.({ phase: 'Solving load cases', current: i + 1, total: tasks.length, detail: t.name })
     const factored = applyF3Combo([...br.loads, ...t.lat], t.combo.f)
-    if (!factored.length) return
+    if (!factored.length) continue
     const result = solveWithGeometry(precomp, factored, opts)
     if (result) runs.push({ name: t.name, result })
-  })
+  }
   return { br, runs, precomp }
 }
 
@@ -1483,9 +1487,11 @@ export function designStructure(
 }
 
 /** Solve load cases in parallel using a pre-initialised FramePool.
- *  Returns the same `{ br, runs }` as buildRuns but with solves fanned across workers. */
+ *  Returns the same `{ br, runs }` as buildRuns but with solves fanned across workers.
+ *  If `neededCombos` is provided, only solve those combo names (governing-combo-only optimization). */
 async function buildRunsParallel(
   model: StructuralModel, opts: AnalyzeOptions, pool: FramePool, onProgress?: ProgressFn,
+  neededCombos?: Set<string>,
 ): Promise<{ br: BridgeResult; runs: FrameRun[] }> {
   const gravityModel = { ...model, loads: model.loads.filter((l) => l.cat !== 'E' && l.cat !== 'W') }
   const br = modelToFrame3D(gravityModel, { useShells: false, crackedSections: opts.crackedSections, shearDeformation: opts.shearDeformation })
@@ -1499,6 +1505,8 @@ async function buildRunsParallel(
   onProgress?.({ phase: 'Solving load cases', current: 0, total: tasks.length })
   let done = 0
   const promises = tasks.map(async (t) => {
+    // Skip combos not in the needed set (governing-combo-only optimization)
+    if (neededCombos && !neededCombos.has(t.name)) return null
     const factored = applyF3Combo([...br.loads, ...t.lat], t.combo.f)
     if (!factored.length) return null
     const result = await pool.solve(factored, opts)

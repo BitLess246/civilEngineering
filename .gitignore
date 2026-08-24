@@ -112,3 +112,6 @@ dist
 # svg-precision skill: Python bytecode + self-test render output
 .claude/skills/**/__pycache__/
 .claude/skills/svg-precision/scripts/_out/
+
+.qwen/
+gha-creds-*.json
