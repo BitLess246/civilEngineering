@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { scrollTop } from '../lib/useScrollTop'
 import { GuidedTour } from '../components/GuidedTour'
 import { TourButton } from '../components/TourButton'
 import { SOILS_STEPS } from '../lib/soilsTour'
@@ -249,6 +250,7 @@ export default function SoilInvestigation() {
   const api = useInvestigation()
   const { investigation: inv } = api
   const [tab, setTab] = useState<Tab>('overview')
+
   // The walkthrough. Advancing a step switches the tab too — see `useTour`.
   const tour = useTour(SOILS_STEPS, (t) => setTab(t as Tab))
   const [holeIdx, setHoleIdx] = useState(0)
@@ -413,7 +415,7 @@ export default function SoilInvestigation() {
 
       <nav className="mt-6 flex flex-wrap gap-1 border-b border-slate-200">
         {(['overview', 'boreholes', 'profile', 'spt', 'cpt', 'lab', 'liquefaction', 'parameters', 'classification'] as Tab[]).map((t) => (
-          <button key={t} onClick={() => setTab(t)}
+          <button key={t} onClick={() => { setTab(t); scrollTop() }}
             className={`rounded-t-md px-3 py-1.5 text-[13px] font-medium capitalize ${
               tab === t ? 'border-b-2 border-[#0056b3] text-[#0056b3]' : 'text-slate-600 hover:text-slate-900'
             }`}>

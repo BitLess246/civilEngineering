@@ -1,4 +1,5 @@
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { scrollTop } from '../lib/useScrollTop'
 import { Link } from 'react-router-dom'
 import { GuidedTour } from '../components/GuidedTour'
 import { TourButton } from '../components/TourButton'
@@ -7,6 +8,9 @@ import { useTour } from '../lib/useTour'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { SceneText } from '../components/SceneText'
+import { RebarWireframe } from '../components/RebarWireframe'
+import { buildStructureCages } from '../engine/cageBuilder'
+import { REBAR_ROLE_COLOR } from '../engine/rebarWire'
 import { ProjectsPanel } from '../components/ProjectsPanel'
 // The session keys are shared with the Projects panel, which saves and
 // restores exactly what the page autosaves — see lib/modelSpaceSession.
@@ -1045,6 +1049,7 @@ export default function ModelSpace() {
   const [showLoads, setShowLoads] = useState(true)   // load-diagram overlay
   const [showFootings, setShowFootings] = useState(true)   // designed footing footprints
   const [showConns, setShowConns] = useState(true)         // designed steel joint hardware
+  const [showRebar, setShowRebar] = useState(false)        // the designed bar cages, in 3D
 
   const [model, setModel] = useState<StructuralModel | null>(() => {
     try {
@@ -1144,6 +1149,12 @@ export default function ModelSpace() {
   const [sdlMatT, setSdlMatT] = useState(50)                       // 204-2 thickness, mm
   const [liveOccId, setLiveOccId] = useState('')                   // NSCP 205-1 occupancy ('' = default LL)
   const [tab, setTab] = useState<Tab>('geometry')                 // right-panel tab
+  // Scroll on the CLICK, not on an effect keyed to `tab`. The guided tour also
+  // drives setTab and scrolls its own target into view (GuidedTour scrollIntoView);
+  // an effect cannot tell a user's click from the tour's step change, and would
+  // yank the viewport back to the top of a step the tour had just centred.
+  const pickTab = (t: Tab) => { setTab(t); scrollTop() }
+
   const [orphans, setOrphans] = useState(0)
   // footing plan: base node → '' (isolated) or partner node id (combined)
   const [planSel, setPlanSel] = useState<Record<string, string>>((si.planSel as Record<string, string>) ?? {})
@@ -1591,6 +1602,14 @@ export default function ModelSpace() {
 
   /** Project & design inputs — shown in the schedules block and printed as
    *  §2 of the PDF calculation report. */
+  // The bar cages, placed. Same objects the detail sheets project and the
+  // take-off weighs — a view that built its own would be a fourth description
+  // of the same steel, which is the thing this whole model set out to stop.
+  const rebarCages = useMemo(
+    () => (showRebar && model && design ? buildStructureCages(model, design).cages : []),
+    [showRebar, model, design],
+  )
+
   const reportProps = (d: StructureDesign): [string, string][] => {
     const distinct = (role: MemberRole) => {
       const ids = new Set((model?.members ?? []).filter((m) => m.role === role).map((m) => m.section))
@@ -2165,6 +2184,7 @@ export default function ModelSpace() {
                   return <Wall3D key={w.id} tA={tA} tB={tB} bA={bA} bB={bB} shear={w.shearWall} />
                 })}
                 {showLoads && <Loads3D model={model} nodePos={nodePos} />}
+                {showRebar && rebarCages.length > 0 && <RebarWireframe cages={rebarCages} />}
                 {forceDiag && forceDiagInfo && forceDiagInfo.scale > 0 && model.members.map((m) => {
                   const mr = forceDiagInfo.byId.get(m.id)
                   const a = nodePos.get(m.i), bb = nodePos.get(m.j)
@@ -2219,6 +2239,21 @@ export default function ModelSpace() {
             </label>
           )}
           <label className="no-print mt-2 flex items-center gap-2 text-xs text-slate-600">
+            <input type="checkbox" checked={showRebar} onChange={(e) => setShowRebar(e.target.checked)}
+              disabled={!design} />
+            Show reinforcement cages
+            {!design && <span className="text-slate-400">— design the structure first</span>}
+            {showRebar && rebarCages.length > 0 && (
+              <span className="ml-2 flex flex-wrap gap-x-2 gap-y-0.5">
+                {([['top', 'top'], ['bottom', 'bottom'], ['stirrup', 'stirrups'], ['vertical', 'col. verticals'], ['tie', 'ties']] as const).map(([role, label]) => (
+                  <span key={role} className="inline-flex items-center gap-1">
+                    <span className="inline-block h-2 w-3 rounded-sm" style={{ background: REBAR_ROLE_COLOR[role] }} />{label}
+                  </span>
+                ))}
+              </span>
+            )}
+          </label>
+          <label className="no-print mt-2 flex items-center gap-2 text-xs text-slate-600">
             <input type="checkbox" checked={showLoads} onChange={(e) => setShowLoads(e.target.checked)} />
             Show load diagrams on the model
             {showLoads && model && model.loads.length > 0 && (
@@ -2260,7 +2295,7 @@ export default function ModelSpace() {
         {/* RIGHT — tabbed controls: one flat panel, hairline-separated sections (mockup) */}
         <div className="no-print overflow-hidden rounded-lg border border-[#e3e1da] bg-white">
           <div className="flex flex-wrap items-center gap-0.5 border-b border-[#eeece5] px-3 py-2.5" data-tour="tab-bar">
-            {TABS.map((t) => <TabBtn key={t.id} id={t.id} label={t.label} active={tab === t.id} onClick={setTab} />)}
+            {TABS.map((t) => <TabBtn key={t.id} id={t.id} label={t.label} active={tab === t.id} onClick={pickTab} />)}
             <span className="ml-auto"><TourButton onClick={tour.start} label="Guide" /></span>
           </div>
 

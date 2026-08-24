@@ -38,9 +38,35 @@ export interface SlabScheduleRow { mark: string; thk: string; type: string }
 /** A designed footing, as the foundation plan needs it. `barDia` is the mat's
  *  own bar — it used to be optional because the pipeline did not carry one and
  *  callers inverted it out of As/count. */
-export interface PlanFooting {
+export interface IsolatedPlanFooting {
+  kind?: 'isolated'
   node: string; B: number; Dc: number; bars: number; barSpacing: number; barDia: number
 }
+
+/**
+ * A pad carrying TWO columns, as `designCombinedFooting` produced it.
+ *
+ * The geometry is given along the pad's own axis, which runs from `nodes[0]`
+ * to `nodes[1]`: `Bx` is its length, `By1` and `By2` the widths at each end,
+ * and `x1`/`x2` where the two columns sit measured from the `By1` end. A
+ * rectangular pad simply has `By1 === By2`; there is no separate shape flag to
+ * get out of step with the numbers.
+ *
+ * The overhang beyond the first column is `x1`, which is why the pad's origin
+ * is NOT the node — it sits `x1` back along the axis.
+ */
+export interface CombinedPlanFooting {
+  kind: 'combined'
+  nodes: [string, string]
+  Bx: number; By1: number; By2: number
+  x1: number; x2: number
+  Dc: number; barDia: number; barSpacing: number; bars: number
+}
+
+export type PlanFooting = IsolatedPlanFooting | CombinedPlanFooting
+
+/** True when the pad's two ends are different widths. */
+export const isTrapezoidal = (f: CombinedPlanFooting) => Math.abs(f.By1 - f.By2) > 1e-6
 
 /** Anything the serializer can paint: typed primitives + their world bounds.
  *  Both plan drawings and standalone details satisfy this. */
@@ -157,17 +183,32 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
   // footing marks (WF-1, WF-2…) group by side × thickness
   const footMarkBySize = new Map<string, string>()
   const footingSchedule: FootingScheduleRow[] = []
-  const footMarkFor = (f: PlanFooting): string => {
-    const Bmm = Math.round(f.B * 1000)
-    const key = `${Bmm}x${Math.round(f.Dc)}`
+  const mark = (key: string, prefix: string, row: () => Omit<FootingScheduleRow, 'mark'>): string => {
     let mk = footMarkBySize.get(key)
     if (!mk) {
-      mk = `WF-${footMarkBySize.size + 1}`; footMarkBySize.set(key, mk)
-      const sp = Math.round(f.barSpacing)
-      const reinf = `${f.bars}-⌀${f.barDia}@${sp} mm E.W.`
-      footingSchedule.push({ mark: mk, size: `${Bmm}×${Bmm}`, thk: `${Math.round(f.Dc)}`, reinf })
+      // Marks are numbered per PREFIX, so an isolated pad and a combined one
+      // never collide and neither series has gaps in it.
+      const n = [...footMarkBySize.values()].filter((v) => v.startsWith(prefix)).length + 1
+      mk = `${prefix}${n}`
+      footMarkBySize.set(key, mk)
+      footingSchedule.push({ mark: mk, ...row() })
     }
     return mk
+  }
+  const footMarkFor = (f: IsolatedPlanFooting): string => {
+    const Bmm = Math.round(f.B * 1000)
+    return mark(`I:${Bmm}x${Math.round(f.Dc)}`, 'WF-', () => ({
+      size: `${Bmm}×${Bmm}`, thk: `${Math.round(f.Dc)}`,
+      reinf: `${f.bars}-⌀${f.barDia}@${Math.round(f.barSpacing)} mm E.W.`,
+    }))
+  }
+  const combMarkFor = (f: CombinedPlanFooting): string => {
+    const L = Math.round(f.Bx * 1000), w1 = Math.round(f.By1 * 1000), w2 = Math.round(f.By2 * 1000)
+    return mark(`C:${L}x${w1}x${w2}x${Math.round(f.Dc)}`, 'CF-', () => ({
+      size: isTrapezoidal(f) ? `${L}×${w1}/${w2}` : `${L}×${w1}`,
+      thk: `${Math.round(f.Dc)}`,
+      reinf: `⌀${f.barDia}@${Math.round(f.barSpacing)} mm B.W.`,
+    }))
   }
   for (const mem of model.members) {
     if (mem.role === 'column') continue
@@ -193,9 +234,19 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
   // ── foundation: designed footing pads + tie beams (drawn under the column
   // stubs so the stub reads on top) ──
   if (foundation && opts.footings?.length) {
+    // Isolated pads sit at a node; a combined pad spans two, so they are kept
+    // apart from here on. The pipeline already guarantees the two sets are
+    // disjoint — a node carried by a combined pad is not given one of its own.
+    const isCombined = (f: PlanFooting): f is CombinedPlanFooting => f.kind === 'combined'
     const foots = opts.footings
+      .filter((f): f is IsolatedPlanFooting => !isCombined(f))
       .map((f) => ({ f, n: nm.get(f.node) }))
-      .filter((x): x is { f: PlanFooting; n: NonNullable<typeof x.n> } => !!x.n && near(x.n.y, levelY))
+      .filter((x): x is { f: IsolatedPlanFooting; n: NonNullable<typeof x.n> } => !!x.n && near(x.n.y, levelY))
+    const combos = opts.footings
+      .filter(isCombined)
+      .map((f) => ({ f, a: nm.get(f.nodes[0]), b: nm.get(f.nodes[1]) }))
+      .filter((x): x is { f: CombinedPlanFooting; a: NonNullable<typeof x.a>; b: NonNullable<typeof x.b> } =>
+        !!x.a && !!x.b && near(x.a.y, levelY))
     // tie beams: connect footing centres that are adjacent along a grid line
     const tieDrawn = new Set<string>()
     const drawTies = (groups: Map<number, { x: number; z: number }[]>, axis: 'x' | 'z') => {
@@ -227,6 +278,41 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
       P.push({ kind: 'text', x: n.x, y: n.z - B / 2 - r * 0.32, text: mk, size: r * 0.46, anchor: 'middle', color: COL, weight: 700 })
       if (opts.foundingElev != null)
         P.push({ kind: 'text', x: n.x, y: n.z + B / 2 + r * 0.34, text: `EL ${opts.foundingElev.toFixed(2)} m`, size: r * 0.34, anchor: 'middle', color: PANEL, weight: 500 })
+    }
+
+    // ── combined pads: one polygon spanning two columns ──
+    //
+    // The pad's axis runs from the first node to the second, and its origin is
+    // x1 BACK along that axis — x1 is the overhang beyond the first column, not
+    // a distance from the pad's end to it. Drawing the pad centred on the two
+    // nodes instead would put the overhangs in the wrong places on any pad whose
+    // columns are not symmetric, which is every trapezoidal one.
+    for (const { f, a, b } of combos) {
+      const dx = b.x - a.x, dz = b.z - a.z
+      const len = Math.hypot(dx, dz)
+      if (len < 1e-9) continue
+      const ux = dx / len, uz = dz / len          // along the pad
+      const px = -uz, pz = ux                     // across it
+      const ox = a.x - ux * f.x1, oz = a.z - uz * f.x1
+      const at = (u: number, v: number): [number, number] =>
+        [ox + ux * u + px * v, oz + uz * u + pz * v]
+      const c1 = at(0, -f.By1 / 2), c2 = at(0, f.By1 / 2)
+      const c3 = at(f.Bx, f.By2 / 2), c4 = at(f.Bx, -f.By2 / 2)
+      P.push({
+        kind: 'path', stroke: COL, fill: 'none', width: 1.1, dash: [0.3, 0.18], closed: true,
+        cmds: [c1, c2, c3, c4].map(([x, y], k) => ({ c: k === 0 ? 'M' : 'L', x, y } as const)),
+      })
+      const mk = combMarkFor(f)
+      // INSIDE the pad, off the axis so it clears both column stubs. Outside it
+      // — where an isolated pad puts its mark — a pad this size lands its mark
+      // in the grid dimension string running above the row.
+      const half = Math.max(f.By1, f.By2) / 2
+      const [mx, mz] = at(f.Bx / 2, -half * 0.5)
+      P.push({ kind: 'text', x: mx, y: mz, text: mk, size: r * 0.46, anchor: 'middle', color: COL, weight: 700 })
+      if (opts.foundingElev != null) {
+        const [ex, ez] = at(f.Bx / 2, half * 0.5)
+        P.push({ kind: 'text', x: ex, y: ez, text: `EL ${opts.foundingElev.toFixed(2)} m`, size: r * 0.34, anchor: 'middle', color: PANEL, weight: 500 })
+      }
     }
   }
 

@@ -45,7 +45,12 @@
 import type { PlanPrimitive, PathCmd, Drawing } from './planRenderer'
 import { hookClearToFace, hookFit, type HookFitResult } from './devLength'
 import { jointHookLdh } from './beamColumnJoint'
-import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock } from './detailSheet'
+import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader } from './detailSheet'
+import { buildColumnCage } from './columnCage'
+import {
+  runToPrimitive, elevationPlane, hookBendDiameter, continuousBars,
+  CORNER_BARS_PER_FACE, KEEP_TOP, KEEP_BOTTOM, splicesRequired, STOCK_BAR_LENGTH,
+} from './rebarModel'
 
 export interface BeamDetailSection {
   /** 'LEFT' | 'MID' | 'RIGHT' — position along the member. */
@@ -54,8 +59,15 @@ export interface BeamDetailSection {
   x: number
   /** True for a hogging (top-steel) section. */
   hogging: boolean
-  /** Bars provided at this section. */
+  /** Bars provided at this section, in the TENSION face. */
   bars: number
+  /**
+   * Bars in the COMPRESSION face that the design actually counted — a doubly
+   * reinforced section. Omitted or zero means singly reinforced: the two
+   * corner bars in that face are still there and still drawn, but they are
+   * stirrup hangers and take no part in the analysis.
+   */
+  compressionBars?: number
   /** Stirrup spacing adopted here, mm. ZERO means the design needed none. */
   stirrupSpacing: number
 }
@@ -105,6 +117,25 @@ export interface BeamDetailInput {
     fc: number
     fy: number
   }
+  /**
+   * The supporting column's own cage, so the sheet can draw the steel the beam
+   * bars hook behind instead of an empty rectangle.
+   *
+   * Spacings come straight from `columnDesign` — `tieSpacingFinal`,
+   * `seismicSOut` and `seismicLoZone`. Omitted, the columns are drawn as
+   * outlines exactly as before.
+   */
+  columnCage?: {
+    /** Longitudinal bars around the perimeter. */
+    bars: number
+    /** Tie spacing in the confinement zone and outside it, mm. */
+    sConfined: number
+    sOutside?: number
+    /** Confinement zone length from each end, mm (§418.7.5.1). Zero = none. */
+    lo?: number
+    /** Clear column height either side of the beam, m — how much is drawn. */
+    storey?: number
+  }
 }
 
 export interface BeamDetailOptions { detailNo?: string; sheetRef?: string; scale?: string }
@@ -117,6 +148,8 @@ export const CRANK_INK = '#1d4ed8'
 const HOOP = '#c7a17a'
 /** The band marking a lap, painted along the two bars that share it. */
 const LAP = '#0891b2'
+/** Column steel — its own ink, so it never reads as the beam's. */
+const COLBAR = '#7c3aed'
 const CRANK = CRANK_INK   // bent-up bars — their own ink, they are one bar doing two jobs
 const WARN = '#b91c1c'
 const CONC = '#f1f5f9'
@@ -166,16 +199,13 @@ export function barExtension(d: number, barDia: number): number {
 // ── 90° standard hook geometry (NSCP Table 425.3.1) ──────────────────────
 
 /**
- * Minimum INSIDE bend diameter for a standard hook, mm.
+ * Minimum INSIDE bend diameter for a standard hook, mm — NSCP Table 425.3.1.
  *
- * NSCP Table 425.3.1 / ACI 318-14 Table 25.3.1: 6db up to ⌀25, 8db for ⌀28–⌀36,
- * 10db above. The bend is not a corner — a ⌀28 bar turns through a 224 mm
- * inside diameter, and a sheet that draws a sharp corner tells the bar bender
- * something that cannot be fabricated.
+ * The table itself lives in `rebarModel`, which is where every consumer of bar
+ * geometry reads it. Re-exported here so the sheet's own callers and tests keep
+ * their import site; two copies of a code table is how they drift apart.
  */
-export function hookBendDiameter(db: number): number {
-  return (db <= 25 ? 6 : db <= 36 ? 8 : 10) * db
-}
+export { hookBendDiameter } from './rebarModel'
 
 /** Straight tail beyond the bend on a 90° hook, ℓext = 12db (Table 425.3.1). */
 export const HOOK_TAIL_DB = 12
@@ -430,15 +460,24 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   const botM = mid?.bars ?? 0
 
   // Which bars run THROUGH and which are curtailed — the split the drawing is
-  // about. §409.7.3.8.4 keeps at least a third of the negative steel past the
-  // inflection point; §409.7.3.8.1 keeps at least a quarter of the positive
-  // steel running into the support. Those are the bars drawn straight; the
-  // rest are the extras, and every extra is cranked where it stops.
-  const thruTop = Math.min(Math.max(topL, topR), Math.max(2, Math.ceil(Math.max(topL, topR) / 3)))
-  const thruBot = Math.min(botM, Math.max(2, Math.ceil(botM / 4)))
+  // about. Two rules, governing one wins: the four corner bars are there
+  // whatever the analysis asked for, and on top of that §409.7.3.8.4 keeps a
+  // third of the negative steel past the inflection point and §409.7.3.8.1 a
+  // quarter of the positive steel into the support. See `continuousBars`.
+  //
+  // Clamping to the designed count instead — what this did — drew a simply
+  // supported beam with NO top steel, leaving the stirrups tied to nothing.
+  const thruTop = continuousBars(Math.max(topL, topR), KEEP_TOP)
+  const thruBot = continuousBars(botM, KEEP_BOTTOM)
   const extraTopL = Math.max(0, topL - thruTop)
   const extraTopR = Math.max(0, topR - thruTop)
   const extraBot = Math.max(0, botM - thruBot)
+
+  // Is the compression face counted, or is it just holding the stirrups?
+  // Midspan governs the top face: that is where a beam is singly reinforced.
+  const midComp = mid?.compressionBars ?? 0
+  const doublyReinforced = midComp > 0
+  const hangerTop = !doublyReinforced && Math.max(topL, topR) === 0
 
   // Spacings: the ends take whichever support was designed tighter, the middle
   // its own — and neither is ever the drawing's floor. See `zoneSpacing`.
@@ -446,7 +485,14 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
     zoneSpacing(left?.stirrupSpacing ?? 0, i.h, i.cover),
     zoneSpacing(right?.stirrupSpacing ?? 0, i.h, i.cover),
   )
-  const sMid = zoneSpacing(mid?.stirrupSpacing ?? 0, i.h, i.cover)
+  const sMidRaw = zoneSpacing(mid?.stirrupSpacing ?? 0, i.h, i.cover)
+  // Shear grows towards the support, so the end zone can never be looser than
+  // the middle. Where no support section was designed the end falls back to the
+  // §409.7.6.2.2 maximum, which on a beam whose midspan WAS designed comes out
+  // wider than midspan — a sheet with its hoops thinnest where the shear is
+  // highest, contradicting its own note.
+  const sMid = sMidRaw
+  const sEndUsed = Math.min(sEnd, sMid)
 
   const face = cw / 2                                     // support face from its centreline
   const x0 = -face, x1 = L + face                         // the drawn extent of the beam
@@ -491,6 +537,37 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
     }
   }
 
+  // ── the columns' own steel ──────────────────────────────────────────────
+  // Drawn from a real cage rather than sketched here, so the verticals the
+  // beam bars hook behind are the bars the take-off weighs and the 3D view
+  // will string. The joint band carries no COLUMN ties: hoops through the
+  // joint belong to the joint (§418.8.3), and the sheet already draws them.
+  if (i.columnCage) {
+    const cc = i.columnCage
+    const plane = elevationPlane([1, 0, 0])
+    for (const cx of [0, L]) {
+      const cage = buildColumnCage({
+        mark: `${i.mark}-COL`,
+        b: i.b, h: cw * 1000, cover: i.hookAnchorage?.colCover ?? (i.cover ?? 40),
+        barDia: i.hookAnchorage?.colBarDia ?? i.barDia,
+        bars: Math.max(4, Math.round(cc.bars)),
+        tieDia: i.hookAnchorage?.colTieDia ?? i.stirrupDia,
+        sConfined: cc.sConfined,
+        sOutside: cc.sOutside ?? cc.sConfined,
+        lo: cc.lo ?? 0,
+        centre: [cx, 0],
+        yBottom: -colDrop, yTop: hM + colRise,
+        jointGap: [0, hM],
+      })
+      for (const run of cage.runs) {
+        P.push(runToPrimitive(run, plane, {
+          stroke: run.role === 'tie' ? HOOP : COLBAR,
+          width: run.role === 'tie' ? 0.8 : 1.4,
+        }))
+      }
+    }
+  }
+
   // Beam top and soffit: the clear span, plus a stub past a continuous support
   // to show the member carries on into the next one.
   const bay: [number, number][] = [[face, L - face]]
@@ -506,10 +583,11 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
     if (!cont) continue
     P.push({ kind: 'line', x1: ex, y1: Y(-hM * 0.06), x2: ex, y2: Y(hM * 1.06), stroke: GRID, width: 0.8, dash: [u * 1.2, u * 0.9] })
   }
-  // How far the longitudinal steel is drawn: to the stub end where the member
-  // carries on, into the column to its hook where it does not.
-  const barX0 = i.continuousLeft ? -face - stub : x0 + cov
-  const barX1 = i.continuousRight ? L + face + stub : x1 - cov
+  // How far a straight bar is drawn: to the stub end where the member carries
+  // on, and to the START OF ITS BEND where it hooks. Running it to the cover
+  // line instead left a stub of bar poking out past the hook it belongs to.
+  const barEnd = (cx: number, dir: 1 | -1, cont: boolean, down: boolean) =>
+    cont ? cx - dir * (face + stub) : hookGeom(cx, dir, down).turn
 
   // ── longitudinal steel ──────────────────────────────────────────────────
   // Bars sit at their real centroid — clear cover, then the hoop, then half a
@@ -533,16 +611,29 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   //
   // `dir` points INTO the span from the support centreline `cx`; `down` turns
   // the tail towards the soffit, which is what a top bar does.
-  const hookCmds = (cx: number, dir: 1 | -1, z: number, down: boolean): PathCmd[] => {
+  //
+  // The turned leg's centreline, and the station where the straight bar starts
+  // to bend. The top and bottom hooks are staggered by one bar diameter so
+  // their tails pass rather than collide: in a beam of ordinary depth two 12db
+  // tails are longer than the gap between the two bar layers.
+  const hookGeom = (cx: number, dir: 1 | -1, down: boolean) => {
     const hk = hook90(i.barDia)
     const r = hk.radius / 1000
     const hOut = cx - dir * (face - (anch?.clear ?? HOOK_END_COVER) / 1000)
-    const hx = hOut + dir * hk.outside / 1000        // centreline of the turned leg
+    const stagger = down ? 0 : i.barDia / 1000
+    const hx = hOut + dir * (hk.outside / 1000 + stagger)
+    return { hk, r, hx, turn: hx + dir * r }
+  }
+  const hookCmds = (cx: number, dir: 1 | -1, z: number, down: boolean): PathCmd[] => {
+    const { hk, r, hx, turn } = hookGeom(cx, dir, down)
     const sgn = down ? 1 : -1                        // screen y grows downward
+    // Sweep: the bend's centre sits on the INSIDE of the corner, so the arc
+    // bulges away from it. Inverted, the bar appeared to curl back into the
+    // corner it was turning out of — a fillet no bender could make.
     return [
       { c: 'M', x: hx, y: Y(z) + sgn * (hk.ext / 1000 + r) },
       { c: 'L', x: hx, y: Y(z) + sgn * r },
-      { c: 'A', rx: r, ry: r, x: hx + dir * r, y: Y(z), large: 0, sweep: (dir > 0) === down ? 0 : 1 },
+      { c: 'A', rx: r, ry: r, x: turn, y: Y(z), large: 0, sweep: (dir > 0) === down ? 1 : 0 },
     ]
   }
 
@@ -550,7 +641,11 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   // At an end support they have nowhere to go, so they hook into the column;
   // at a continuous one they run straight on through the joint.
   for (const [z, down] of [[yTop, true], [yBot, false]] as const) {
-    P.push({ kind: 'line', x1: barX0, y1: Y(z), x2: barX1, y2: Y(z), stroke: REBAR, width: 1.8 })
+    P.push({
+      kind: 'line', stroke: REBAR, width: 1.8,
+      x1: barEnd(0, 1, !!i.continuousLeft, down), y1: Y(z),
+      x2: barEnd(L, -1, !!i.continuousRight, down), y2: Y(z),
+    })
     for (const [cont, cx, dir] of [[i.continuousLeft, 0, 1], [i.continuousRight, L, -1]] as const) {
       if (cont) continue
       P.push({ kind: 'path', stroke: REBAR, width: 2.2, cap: 'round', join: 'round', fill: 'none', cmds: hookCmds(cx, dir, z, down) })
@@ -576,9 +671,7 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
     [i.continuousRight, L, -1, crank.top[1], extraTopR],
   ] as const) {
     if (n <= 0) continue
-    const startX = cont
-      ? (dir > 0 ? barX0 : barX1)              // straight on through the joint
-      : cx - dir * (face - (anch?.clear ?? HOOK_END_COVER) / 1000)
+    const startX = barEnd(cx, dir, !!cont, true)   // through the joint, or its bend
     const cmds: PathCmd[] = [{ c: 'M', x: startX, y: Y(yTop2) }]
     // At an end support the extra bar hooks down into the column exactly as the
     // through bar above it does — same bend, same clear to the tail.
@@ -606,13 +699,17 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   // Where a top bar and the bottom bar are both present. They are in opposite
   // faces and do not splice with each other — the band marks that no length of
   // span is left with neither, which is what the staggered cut-offs buy.
-  if (extraBot > 0) for (const ov of crank.overlaps) {
+  // An overlap needs BOTH bars. On a simply supported beam there is no top
+  // extra to overlap with, and banding it anyway claimed a lap with a bar the
+  // sheet does not draw.
+  const overlapsShown = crank.overlaps.filter((_, k) => extraBot > 0 && (k === 0 ? extraTopL : extraTopR) > 0)
+  for (const ov of overlapsShown) {
     P.push({ kind: 'line', x1: ov.from, y1: Y(hM / 2), x2: ov.to, y2: Y(hM / 2), stroke: LAP, width: 3.4 })
   }
 
   // ── hoops ───────────────────────────────────────────────────────────────
   // Drawn to the cover line, OUTSIDE the bars they enclose.
-  const hoops = hoopPositions(L, hM, sEnd, sMid, face)
+  const hoops = hoopPositions(L, hM, sEndUsed, sMid, face)
   for (const x of hoops) {
     P.push({ kind: 'line', x1: x, y1: Y(cov), x2: x, y2: Y(hM - cov), stroke: HOOP, width: 0.8 })
   }
@@ -626,50 +723,52 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   // ── callouts ────────────────────────────────────────────────────────────
   const call = (x: number, z: number, text: string, anchor: 'start' | 'middle' | 'end' = 'middle') =>
     P.push({ kind: 'text', x, y: Y(z), text, size: u * 1.5, anchor, color: REBAR, weight: 600 })
-  call(L / 2, hM + colRise + u * 5.6, `${thruTop}-⌀${i.barDia} TOP THRU — STRAIGHT, NEVER CRANKED`)
+  // The corner bars, and whether the analysis counted them.
+  const topTail = doublyReinforced
+    ? `COUNTED AS A's AT MIDSPAN`
+    : hangerTop ? `STIRRUP HANGERS — NOT COUNTED` : `STRAIGHT, NEVER CRANKED`
+  call(L / 2, hM + colRise + u * 5.6, `${thruTop}-⌀${i.barDia} TOP THRU — ${topTail}`)
   if (extraTopL > 0) call(topRun / 2, hM + colRise + u * 1.4, `${extraTopL}-⌀${i.barDia} EXTRA TOP`)
   if (extraTopR > 0) call(L - topRun / 2, hM + colRise + u * 1.4, `${extraTopR}-⌀${i.barDia} EXTRA TOP`)
   call(L / 2, -colDrop - u * 3.4, `${thruBot}-⌀${i.barDia} BOT. THRU${extraBot > 0 ? ` + ${extraBot}-⌀${i.barDia} EXTRA` : ''}`)
-  call(L / 2, -colDrop - u * 5.2, `${i.legs ?? 2}L-⌀${i.stirrupDia} HOOPS @ ${Math.round(sEnd)} O/ 2h EA. END, @ ${Math.round(sMid)} ELSEWHERE`)
+  call(L / 2, -colDrop - u * 5.2, `${i.legs ?? 2}L-⌀${i.stirrupDia} HOOPS @ ${Math.round(sEndUsed)} O/ 2h EA. END, @ ${Math.round(sMid)} ELSEWHERE`)
 
   // The crank itself, labelled on the incline it names. One leader per crank
   // so the reader is never left guessing which bar the note is about.
-  const crankCall = (a: CrankEnd, n: number) => {
-    if (n <= 0) return
-    const mx = (a.at + a.tip) / 2
-    // Both labels go ABOVE the beam. Hanging the bottom-bar one below put it
-    // straight through the 0.15L dimension, which shares that band.
-    const lz = hM + colRise * 0.55
-    P.push({ kind: 'line', x1: mx, y1: Y((yTop2 + yBot2) / 2), x2: mx, y2: Y(lz - u * 0.7), stroke: CRANK, width: 0.7 })
-    // Anchored away from whichever end it is near, so a crank close to the
-    // right-hand support does not print its label over the column.
-    const near = mx > L * 0.6 ? 'end' : mx < L * 0.4 ? 'start' : 'middle'
-    P.push({
-      kind: 'text', x: mx, y: Y(lz), text: `CRANK ${crank.angleDeg}° — ${Math.round(crank.rise)}/${Math.round(crank.run)}`,
-      size: u * 1.3, anchor: near, color: CRANK, weight: 600,
-    })
+  // ONE crank callout, marked typical. Labelling each crank in full printed the
+  // two labels over each other: at u = L/60 the text is a third of the span
+  // wide, so any two of them inside the middle half of the beam collide. The
+  // rise and run are in the notes, where there is room for them.
+  const crankAt = extraTopL > 0 ? crank.top[0] : extraBot > 0 ? crank.bot[1] : undefined
+  if (crankAt) {
+    const mx = (crankAt.at + crankAt.tip) / 2
+    const inward = mx < L / 2 ? 1 : -1
+    P.push(...leader({
+      x: mx, y: Y((yTop2 + yBot2) / 2),
+      tx: mx + inward * L * 0.07, ty: Y(hM + colRise * 0.55),
+      text: `CRANK ${crank.angleDeg}° TYP.`, size: u * 1.3, color: CRANK,
+    }))
   }
-  crankCall(crank.top[0], extraTopL)
-  crankCall(crank.bot[1], extraBot)
 
   // One overlap callout with a leader onto the band it names. Labelling every
   // band put text on top of the bars and hoops it was meant to describe.
-  const ov0 = extraBot > 0 ? crank.overlaps[0] : undefined
+  const ov0 = overlapsShown[0]
   if (ov0) {
     const mx = (ov0.from + ov0.to) / 2
-    const lz = -colDrop * 0.42
-    P.push({ kind: 'line', x1: mx, y1: Y(hM / 2), x2: mx, y2: Y(lz), stroke: LAP, width: 0.7 })
-    P.push({
-      kind: 'text', x: mx, y: Y(lz - u * 1.6),
+    P.push(...leader({
+      x: mx, y: Y(hM / 2),
+      tx: mx + L * 0.06, ty: Y(-colDrop * 0.42),
       text: `TOP AND BOTTOM EXTRAS OVERLAP ${Math.round(ov0.length)}`,
-      size: u * 1.2, anchor: 'middle', color: LAP, weight: 600,
-    })
+      size: u * 1.2, color: LAP,
+    }))
   }
 
   // ── dimensions ──────────────────────────────────────────────────────────
   const dimTop = hM + colRise + u * 3.6
-  P.push({ kind: 'dim', x1: 0, y1: Y(dimTop), x2: topRun, y2: Y(dimTop), text: `0.25L = ${Math.round(topRun * 1000)}`, off: 0, size: u * 1.35 })
-  P.push({ kind: 'dim', x1: L - topRun, y1: Y(dimTop), x2: L, y2: Y(dimTop), text: `0.25L = ${Math.round(topRun * 1000)}`, off: 0, size: u * 1.35 })
+  // Only where the bar being dimensioned exists. A beam with no hogging steel
+  // has no extra top bar, and dimensioning its run described nothing.
+  if (extraTopL > 0) P.push({ kind: 'dim', x1: 0, y1: Y(dimTop), x2: topRun, y2: Y(dimTop), text: `0.25L = ${Math.round(topRun * 1000)}`, off: 0, size: u * 1.35 })
+  if (extraTopR > 0) P.push({ kind: 'dim', x1: L - topRun, y1: Y(dimTop), x2: L, y2: Y(dimTop), text: `0.25L = ${Math.round(topRun * 1000)}`, off: 0, size: u * 1.35 })
   if (botM > 0) {
     P.push({ kind: 'dim', x1: 0, y1: Y(-colDrop - u * 1.6), x2: botStart, y2: Y(-colDrop - u * 1.6), text: `0.15L`, off: 0, size: u * 1.3 })
     P.push({ kind: 'dim', x1: L - botStart, y1: Y(-colDrop - u * 1.6), x2: L, y2: Y(-colDrop - u * 1.6), text: `0.15L`, off: 0, size: u * 1.3 })
@@ -714,34 +813,62 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
     }
   }
 
-  // hook cover at an end support — the dimension image 3 turns on
+  // The hook, dimensioned at an end support: the clear cover to the end of the
+  // tail, and ℓext itself.
+  //
+  // ℓext is measured from the CENTRE OF THE BEND to the end of the tail — which
+  // on a 90° hook is the same level as where the straight leg leaves the arc,
+  // since the leg is tangent to the bend there. Dimensioning it from the bar's
+  // own centreline instead would overstate the tail by the bend radius.
   for (const [cont, cx, dir] of [[i.continuousLeft, 0, 1], [i.continuousRight, L, -1]] as const) {
     if (cont) continue
-    const hx = cx - dir * (face - (anch?.clear ?? HOOK_END_COVER) / 1000)
-    const ty = yTop2 - hookDrop - u * 2.2
-    P.push({ kind: 'line', x1: hx, y1: Y(yTop2 - hookDrop), x2: hx - dir * u * 2.4, y2: Y(ty), stroke: NOTE, width: 0.5 })
+    const { hx, hk } = hookGeom(cx, dir, true)
+    const r = hk.radius / 1000, ext = hk.ext / 1000
+    const bendC = yTop2 - r                              // bend centre = tangent level
+    // One leader for the hook, two lines. These used to be a rotated ℓext
+    // dimension plus a separate clear-cover leader: the rotated text was three
+    // times longer than the 240 it dimensioned, so it overran its own extension
+    // lines and landed on top of the other callout.
+    P.push(...leader({
+      x: hx, y: Y(bendC - ext),                          // the end of the tail
+      tx: cx - dir * (face + u * 1.0), ty: Y(bendC - ext),
+      text: `ℓext = ${Math.round(hk.ext)}`,
+      text2: `${Math.round(anch?.clear ?? HOOK_END_COVER)} CL. TO END`,
+      size: u * 1.15,
+      side: dir > 0 ? 'right' : 'left',
+    }))
+    // The datum ℓext is measured FROM — the centre of the bend, which on a 90°
+    // hook is the level the straight leg leaves the arc.
     P.push({
-      kind: 'text', x: hx - dir * u * 2.6, y: Y(ty),
-      text: `${Math.round(anch?.clear ?? HOOK_END_COVER)} CL.`, size: u * 1.15,
-      anchor: dir > 0 ? 'end' : 'start', color: NOTE,
+      kind: 'line', x1: hx - dir * u * 1.4, y1: Y(bendC), x2: hx + dir * r, y2: Y(bendC),
+      stroke: GRID, width: 0.5, dash: [u * 0.35, u * 0.3],
     })
   }
 
   // ── notes ───────────────────────────────────────────────────────────────
+  const spliceCount = splicesRequired(x1 - x0, crank.lap / 1000)
   const notes = [
+    `${CORNER_BARS_PER_FACE * 2}-⌀${i.barDia} CORNER BARS RUN THE FULL LENGTH — ${CORNER_BARS_PER_FACE} TOP, ${CORNER_BARS_PER_FACE} BOTTOM, ONE IN EACH CORNER OF THE CAGE. THEY ARE WHAT THE STIRRUPS ARE TIED TO AND ARE NEVER CRANKED`,
+    doublyReinforced
+      ? `MIDSPAN IS DOUBLY REINFORCED — ${midComp}-⌀${i.barDia} IN THE COMPRESSION FACE IS COUNTED AS A's IN THE ANALYSIS`
+      : `THE COMPRESSION FACE IS NOT COUNTED IN THE ANALYSIS — THE SECTION IS SINGLY REINFORCED AND ITS ${CORNER_BARS_PER_FACE} BARS ARE THERE TO HOLD THE STIRRUPS`,
+    spliceCount > 0
+      ? `THE CORNER BARS ARE ${Math.round((x1 - x0) * 1000)} LONG AND STOCK IS ${STOCK_BAR_LENGTH * 1000} — ${spliceCount} CLASS B LAP${spliceCount > 1 ? 'S' : ''} OF ${Math.round(crank.lap)} PER BAR, STAGGERED AND PLACED WHERE THAT BAR'S STRESS IS LOWEST (§425.5.2.1). THIS IS THE ONLY THING THAT MAY INTERRUPT A CORNER BAR`
+      : `THE CORNER BARS ARE ${Math.round((x1 - x0) * 1000)} LONG AND FIT ONE ${STOCK_BAR_LENGTH * 1000} STOCK LENGTH — NO SPLICE REQUIRED`,
     'TOP STEEL OVER A SUPPORT IS THE GREATER OF THE TWO ADJACENT SPANS (§409.7.7)',
     ...(extraTopL + extraTopR + extraBot > 0 ? [
       `EVERY CURTAILED BAR IS CRANKED WHERE IT STOPS — THE KINK MARKS THE END OF THAT BAR, NOT A BAR CONTINUING BEHIND THE NEXT ONE`,
       `CRANK AT ${crank.angleDeg}°: ${Math.round(crank.rise)} DEEP OVER ${Math.round(crank.run)} OF RUN, INCLINED LENGTH ${Math.round(crank.inclined)}`,
-      `EXTRA TOP BARS RUN 0.25L FROM THE SUPPORT AND CRANK DOWN; EXTRA BOTTOM BARS RUN TO 0.15L OFF EACH SUPPORT AND CRANK UP`,
-      ...(crank.overlaps[0] ? [`THE TWO RUNS OVERLAP ${Math.round(crank.overlaps[0].length)} BETWEEN 0.15L AND 0.25L, SO NO LENGTH OF SPAN IS LEFT WITH NEITHER. THEY ARE IN OPPOSITE FACES AND DO NOT SPLICE WITH EACH OTHER`] : []),
+      ...(extraTopL + extraTopR > 0 ? [`EXTRA TOP BARS RUN 0.25L FROM THE SUPPORT AND CRANK DOWN`] : []),
+      ...(extraBot > 0 ? [`EXTRA BOTTOM BARS RUN TO 0.15L OFF EACH SUPPORT AND CRANK UP`] : []),
+      ...(overlapsShown[0] ? [`THE TWO RUNS OVERLAP ${Math.round(overlapsShown[0].length)} BETWEEN 0.15L AND 0.25L, SO NO LENGTH OF SPAN IS LEFT WITH NEITHER. THEY ARE IN OPPOSITE FACES AND DO NOT SPLICE WITH EACH OTHER`] : []),
       `CLASS B LAP FOR THE THROUGH BARS' OWN SPLICES: ${Math.round(crank.lap)} (§425.5.2.1)`,
       `A CRANK THIS SMALL IS A BAR TERMINATOR, NOT SHEAR REINFORCEMENT — §422.5.10.5 AND §409.7.6.2.3 ARE NOT CLAIMED FOR IT`,
       `${thruTop}-⌀${i.barDia} TOP AND ${thruBot}-⌀${i.barDia} BOTTOM RUN THROUGH STRAIGHT AND ARE NEVER CRANKED (§409.7.3.8.4 / §409.7.3.8.1)`,
       `EXTRA BARS SHARE THE THROUGH BARS' LAYER — SIDE BY SIDE ACROSS THE ${i.b} WEB AT 25 CLEAR (§425.2.2), NOT STACKED ABOVE THEM`,
       ...crank.notes,
     ] : []),
-    `HOOPS @ ${Math.round(sEnd)} OVER 2h = ${Math.round(zone * 1000)} FROM EACH SUPPORT FACE, FIRST AT ${FIRST_HOOP} (§418.6.4.1/§418.6.4.4)`,
+    `HOOPS @ ${Math.round(sEndUsed)} OVER 2h = ${Math.round(zone * 1000)} FROM EACH SUPPORT FACE, FIRST AT ${FIRST_HOOP} (§418.6.4.1/§418.6.4.4)`,
     `HOOPS @ ${Math.round(sMid)} THROUGH THE MIDDLE — SPACING IS WIDEST WHERE THE SHEAR IS LOWEST`,
     `AT AN END SUPPORT BEAM BARS ARE HOOKED INTO THE COLUMN, ${Math.round(anch?.clear ?? HOOK_END_COVER)} CLEAR TO THE END OF THE HOOK (§425.4.3 / §418.8.3)`,
     `90° STANDARD HOOK: ${hookBendDiameter(i.barDia) / i.barDia}db INSIDE BEND ⌀${Math.round(hookBendDiameter(i.barDia))}, ℓext = 12db = ${Math.round(hook90(i.barDia).ext)}, OVERALL ${Math.round(hook90(i.barDia).depth)} DEEP (TABLE 425.3.1) — ℓdh IS MEASURED TO THE OUTSIDE OF THE BEND`,

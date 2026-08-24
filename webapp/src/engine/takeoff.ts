@@ -23,6 +23,8 @@ import type { StructuralModel, RectSection } from './model'
 import type { StructureDesign } from './pipeline'
 import { concreteMaterials, type ConcreteClass, type ConcreteMaterials } from './quantities'
 import { shapeByName } from './aiscSections'
+import { buildStructureCages } from './cageBuilder'
+import { cutLength, type RebarRole } from './rebarModel'
 
 const STEEL_DENSITY = 7850            // kg/m³
 const BAR_LENGTH = 6                  // m, commercial length
@@ -41,11 +43,19 @@ const Ld = (dia: number) => (40 * dia) / 1000                       // tension l
  * 3·dt more. Buying to the extension alone leaves every stirrup in the job
  * short by that much, twice over.
  */
-const tieHook = (tieDia: number) => Math.max(6 * tieDia, 75) + 3 * tieDia
-
-/** Closed stirrup/tie cut length for a b×h section, m. */
-const tiePerimeter = (b: number, h: number, cover: number, tieDia: number) =>
-  (2 * ((b - 2 * cover) + (h - 2 * cover))) / 1000 + (2 * tieHook(tieDia)) / 1000
+/**
+ * What a cage run is called on the cut list.
+ *
+ * The take-off's marks predate the rebar model, and estimators read them, so
+ * the roles map onto the existing names rather than the other way round.
+ */
+const CUT_MARK: Record<RebarRole, string> = {
+  top: 'Top main', bottom: 'Bottom main', side: 'Side face',
+  stirrup: 'Stirrup', tie: 'Tie', hoop: 'Hoop',
+  vertical: 'Vertical', mat: 'Mat', dowel: 'Dowel',
+  diagonal: 'Diagonal', trimmer: 'Trimmer',
+}
+const cutMark = (role: RebarRole) => CUT_MARK[role] ?? role
 
 export interface CutItem {
   element: string          // e.g. 'Beam bx0.0.1'
@@ -184,6 +194,13 @@ export function estimateTakeoff(
   const secOf = (memberId: string) => secById.get(memSecId.get(memberId) ?? '') ?? fallback
   const colAtNode = (node: string) => model.members.find((m) => m.role === 'column' && (m.i === node || m.j === node))
 
+  // Every cage in the structure, placed once. The take-off only needs lengths,
+  // but building them where they really are keeps this and the 3D view reading
+  // one geometry rather than two that happen to agree today.
+  const placed = buildStructureCages(model, design)
+  const cageByMember = new Map(placed.cages.map((c) => [c.member, c]))
+  const cageOf = (id: string) => cageByMember.get(id)
+
   const byElement: ElementQty[] = []
   const cutList: CutItem[] = []
   const add = (element: string, mark: string, dia: number, count: number, cut: number, tie = false): number => {
@@ -197,7 +214,7 @@ export function estimateTakeoff(
   // ── Beams & girders ──
   for (const b of design.beams) {
     const sec = secOf(b.id)
-    const L = b.L, db = sec.barDia
+    const L = b.L
     const tag = `${b.role === 'girder' ? 'Girder' : 'Beam'} ${b.id}`
     const concreteM3 = (sec.b / 1000) * (sec.h / 1000) * L
     const formworkM2 = (sec.b / 1000 + 2 * (sec.h / 1000)) * L          // soffit + 2 sides
@@ -205,15 +222,20 @@ export function estimateTakeoff(
     const hog = b.sections.filter((s) => s.hogging)
     const nBottom = Math.max(0, ...sag.map((s) => s.design.bars))
     const nTop = Math.max(0, ...hog.map((s) => s.design.bars))
-    let steelKg = 0, intersections = 0
-    steelKg += add(tag, 'Bottom main', db, nBottom, L + 2 * Ld(db))
-    steelKg += add(tag, 'Top main', db, nTop, L + 2 * Ld(db))
-    const spac = b.sections.map((s) => s.design.sAdopt).filter((s) => s > 0)
-    if (spac.length) {
-      const count = Math.ceil(L / (Math.min(...spac) / 1000)) + 1
-      steelKg += add(tag, 'Stirrup', sec.tieDia, count, tiePerimeter(sec.b, sec.h, sec.cover, sec.tieDia), true)
-      intersections = count * (nTop + nBottom)                          // each stirrup ties the long. bars
+    // The bars come from the CAGE — the same geometry the beam elevation draws
+    // and the 3D view strings. Costing them from closed-form spans instead is
+    // how the sheet and the bill drifted apart: every longitudinal bar was
+    // billed at L + 2·40db whether the detail ran it through or curtailed it at
+    // 0.15L, stirrups were billed at the tightest spacing over the whole beam
+    // though the detail only closes them up over 2h at each end, and the corner
+    // bars a face gets when the analysis asked for none were not billed at all.
+    const cage = cageOf(b.id)
+    let steelKg = 0
+    for (const r of cage?.runs ?? []) {
+      steelKg += add(tag, cutMark(r.role), r.dia, r.count, cutLength(r) / 1000, r.closed === true)
     }
+    const nStirrups = (cage?.runs ?? []).filter((r) => r.role === 'stirrup').length
+    const intersections = nStirrups * (nTop + nBottom)                  // each stirrup ties the long. bars
     byElement.push({ kind: b.role === 'girder' ? 'Girder' : 'Beam', id: b.id, concreteM3, formworkM2, steelKg, intersections })
   }
 
@@ -224,13 +246,17 @@ export function estimateTakeoff(
     const tag = `Column ${c.id}`
     const concreteM3 = (sec.b / 1000) * (sec.h / 1000) * H
     const formworkM2 = (2 * (sec.b / 1000 + sec.h / 1000)) * H
-    let steelKg = 0, intersections = 0
-    steelKg += add(tag, 'Vertical', sec.barDia, c.bars, H + Ld(sec.barDia))
-    if (c.tieSpacing > 0) {
-      const count = Math.ceil(H / (c.tieSpacing / 1000)) + 1
-      steelKg += add(tag, 'Tie', sec.tieDia, count, tiePerimeter(sec.b, sec.h, sec.cover, sec.tieDia), true)
-      intersections = count * c.bars
+    // Same again from the column cage, which places its ties at the §418.7.5.3
+    // confinement spacing over lo at each end and the designed spacing between.
+    // A single uniform spacing under-counts every seismic column in the job.
+    const cage = cageOf(c.id)
+    let steelKg = 0
+    for (const r of cage?.runs ?? []) {
+      steelKg += add(tag, cutMark(r.role), r.dia, r.count, cutLength(r) / 1000, r.closed === true)
     }
+    // A vertical is lapped into the storey above; the cage draws one storey.
+    steelKg += add(tag, 'Vertical lap', sec.barDia, c.bars, Ld(sec.barDia))
+    const intersections = (cage?.runs ?? []).filter((r) => r.role === 'tie').length * c.bars
     byElement.push({ kind: 'Column', id: c.id, concreteM3, formworkM2, steelKg, intersections })
   }
 

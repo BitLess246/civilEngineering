@@ -6,6 +6,12 @@ import {
   type WallDetailInput,
 } from './wallDetail'
 
+/** Bar paths only. Leaders draw an arrowhead as a filled path in the annotation
+ *  ink, so a bare `kind === 'path'` filter counts those as bars too. */
+const REBAR_INK = '#b45309'
+/** The construction-joint line is outline ink, not bar ink. */
+const INK = '#1e293b'
+
 // ─────────────────────────────────────────────────────────────────────────
 // WORKED EXAMPLE — the fixture every assertion below is checked against.
 //
@@ -250,7 +256,7 @@ describe('buildWallCornerDetail', () => {
   })
 
   it('draws an L-shaped corner bar per curtain, with both legs the Class B lap', () => {
-    const paths = d.primitives.filter((p) => p.kind === 'path') as { cmds: { x: number; y: number }[] }[]
+    const paths = d.primitives.filter((p) => p.kind === 'path' && p.stroke === REBAR_INK) as { cmds: { x: number; y: number }[] }[]
     expect(paths).toHaveLength(d.result.curtains)
     for (const p of paths) {
       expect(p.cmds).toHaveLength(3)
@@ -313,10 +319,10 @@ describe('buildWallIntersectionDetail', () => {
     expect(d.result.ldhAvail).toBe(wall.t - d.result.ldhClear)
     // …and the drawn leg sits at that same clear, so the sheet cannot show a
     // bar at one cover while the check measures another
-    const legs = (d.primitives.filter((p) => p.kind === 'path') as { cmds: { y: number }[] }[])
+    const legs = (d.primitives.filter((p) => p.kind === 'path' && p.stroke === REBAR_INK) as { cmds: { y: number }[] }[])
       .map((p) => p.cmds[1].y)
     for (const y of legs) expect(y).toBeCloseTo(d.result.ldhClear / 1000, 9)
-    const paths = d.primitives.filter((p) => p.kind === 'path') as { cmds: { x: number; y: number }[] }[]
+    const paths = d.primitives.filter((p) => p.kind === 'path' && p.stroke === REBAR_INK) as { cmds: { x: number; y: number }[] }[]
     expect(paths).toHaveLength(d.result.curtains)
     for (const p of paths) {
       const [, b, c] = p.cmds
@@ -331,7 +337,7 @@ describe('buildWallIntersectionDetail', () => {
     // 300 mm wall, cover 20 → 280 available against the same 261 required.
     const thick = buildWallIntersectionDetail({ ...wall, t: 300 })
     expect(thick.result.ldhFits).toBe(true)
-    const paths = thick.primitives.filter((p) => p.kind === 'path') as { cmds: { x: number; y: number }[] }[]
+    const paths = thick.primitives.filter((p) => p.kind === 'path' && p.stroke === REBAR_INK) as { cmds: { x: number; y: number }[] }[]
     for (const p of paths) {
       const [, b, c] = p.cmds
       expect(Math.hypot(c.x - b.x, c.y - b.y)).toBeCloseTo(thick.result.hookTail / 1000, 9)
@@ -364,7 +370,7 @@ describe('buildWallJointDetail', () => {
   })
 
   it('draws the joint as a roughened line, not a straight one', () => {
-    const joint = d.primitives.find((p) => p.kind === 'path') as { cmds: { x: number; y: number }[] }
+    const joint = d.primitives.find((p) => p.kind === 'path' && p.stroke === INK) as { cmds: { x: number; y: number }[] }
     expect(joint.cmds.length).toBeGreaterThan(8)
     const ys = new Set(joint.cmds.map((c) => Math.round(c.y * 1e6)))
     expect(ys.size).toBeGreaterThan(1)                     // it really zig-zags

@@ -253,6 +253,175 @@ describe('crankBars — cranked bar ends', () => {
   })
 })
 
+describe('the four corner bars', () => {
+  // The rule: every beam carries four longitudinal corner bars, two per face,
+  // continuous, never cranked. On a singly reinforced section the compression
+  // face's two are stirrup hangers and take no part in the analysis.
+
+  const simplySupported = {
+    ...b,
+    continuousLeft: false, continuousRight: false,
+    sections: [
+      // no hogging sections at all — nothing designed in the top face
+      { label: 'MID', x: 3, hogging: false, bars: 5, stirrupSpacing: 150 },
+    ],
+  }
+
+  it('still draws two top bars when the analysis asked for none', () => {
+    // The defect: the through count was clamped to the designed count, so a
+    // simply supported beam came out with NO top steel and its stirrups tied
+    // to nothing.
+    const d2 = buildBeamDetail(simplySupported)
+    const flat2 = allTextOf(d2).join(' ').replace(/\s+/g, ' ')
+    expect(flat2).toContain('2-⌀16 TOP THRU')
+    // and the sheet says why they are there
+    expect(flat2).toContain('STIRRUP HANGERS — NOT COUNTED')
+    expect(flat2).toContain('SINGLY REINFORCED')
+  })
+
+  it('draws the top bars as real bars, not as an annotation', () => {
+    const d2 = buildBeamDetail(simplySupported)
+    const bars = d2.primitives.filter(
+      (p) => p.kind === 'line' && p.stroke === REBAR_INK && Math.abs(p.y1 - p.y2) < 1e-9,
+    ) as { y1: number }[]
+    // one line per face, and the top one really is above the bottom one
+    expect(bars.length).toBeGreaterThanOrEqual(2)
+    const ys = bars.map((l) => l.y1).sort((p, q) => p - q)
+    expect(ys[0]).toBeLessThan(ys[ys.length - 1])
+  })
+
+  it('counts the compression face once the section is doubly reinforced', () => {
+    const dr = buildBeamDetail({
+      ...b,
+      sections: b.sections.map((sn) => sn.hogging ? sn : { ...sn, compressionBars: 3 }),
+    })
+    const f = allTextOf(dr).join(' ').replace(/\s+/g, ' ')
+    expect(f).toContain("COUNTED AS A's AT MIDSPAN")
+    expect(f).toContain('DOUBLY REINFORCED')
+    expect(f).not.toContain('SINGLY REINFORCED')
+  })
+
+  it('never cranks a corner bar', () => {
+    // The cranked paths are the extras. Whatever the beam, the through bars
+    // stay straight lines — a cranked corner bar would leave the stirrups
+    // unsupported where it left the face.
+    for (const fixture of [b, simplySupported, noMidStirrups]) {
+      const d2 = buildBeamDetail(fixture)
+      const straight = d2.primitives.filter(
+        (p) => p.kind === 'line' && p.stroke === REBAR_INK && Math.abs(p.y1 - p.y2) < 1e-9,
+      )
+      expect(straight.length).toBeGreaterThanOrEqual(2)
+    }
+  })
+
+  it('says a corner bar is only ever interrupted by a stock-length splice', () => {
+    // 6 m stock: a 6 m span plus its column widths does not fit in one stick
+    const long = buildBeamDetail({ ...b, L: 12 })
+    const lf = allTextOf(long).join(' ').replace(/\s+/g, ' ')
+    expect(lf).toMatch(/CLASS B LAPS? OF/)
+    expect(lf).toContain('ONLY THING THAT MAY INTERRUPT A CORNER BAR')
+
+    const short = buildBeamDetail({ ...b, L: 4, colB: 300 })
+    expect(allTextOf(short).join(' ')).toContain('NO SPLICE REQUIRED')
+  })
+})
+
+describe('hoops and overlaps on a beam with no support design', () => {
+  const ss = {
+    ...b,
+    continuousLeft: false, continuousRight: false,
+    sections: [{ label: 'MID', x: 3, hogging: false, bars: 5, stirrupSpacing: 150 }],
+  }
+
+  it('never draws the end hoops looser than the midspan ones', () => {
+    // With no support section designed the end falls back to the §409.7.6.2.2
+    // maximum, which can exceed a designed midspan spacing — putting the
+    // thinnest hoops where the shear is highest, and contradicting the sheet's
+    // own note that spacing is widest where shear is lowest.
+    const d2 = buildBeamDetail(ss)
+    const x = spanHoopsOf(d2, ss.L, (ss.colB ?? 400) / 2000)
+    const gaps = x.slice(1).map((v, k) => v - x[k])
+    const near = Math.min(...gaps.slice(0, 3))
+    const mid = Math.max(...gaps)
+    expect(near).toBeLessThanOrEqual(mid + 1e-9)
+    expect(allTextOf(d2).join(' ')).toContain('HOOPS @ 150 O/ 2h EA. END')
+  })
+
+  it('does not dimension the run of a bar it never draws', () => {
+    const f2 = allTextOf(buildBeamDetail(ss)).join(' ')
+    expect(f2).not.toContain('0.25L = ')                  // the dimension
+    expect(f2).not.toContain('EXTRA TOP BARS RUN')        // and the note
+    // …and a beam that has extra top bars still gets both
+    const f3 = allTextOf(buildBeamDetail(b)).join(' ')
+    expect(f3).toContain('0.25L = ')
+    expect(f3).toContain('EXTRA TOP BARS RUN')
+  })
+
+  it('does not band an overlap with a bar it never draws', () => {
+    // No hogging steel means no extra TOP bar, so there is nothing for the
+    // bottom extra to overlap with. Banding it anyway claimed a lap against a
+    // bar that is not on the sheet.
+    const d2 = buildBeamDetail(ss)
+    expect(allTextOf(d2).join(' ')).not.toContain('OVERLAP')
+    const bands = d2.primitives.filter((p) => p.kind === 'line' && p.stroke === '#0891b2')
+    expect(bands).toHaveLength(0)
+    // …but a beam that HAS both bars still gets its band
+    const both = buildBeamDetail(b)
+    expect(both.primitives.filter((p) => p.kind === 'line' && p.stroke === '#0891b2').length)
+      .toBeGreaterThan(0)
+  })
+})
+
+describe('the supporting columns\' own steel', () => {
+  const COLBAR = '#7c3aed'
+  const withCage = {
+    ...b,
+    columnCage: { bars: 12, sConfined: 100, sOutside: 150, lo: 600 },
+    hookAnchorage: { colH: 500, colBarDia: 25, colTieDia: 12, colCover: 40, fc: 28, fy: 415 },
+  }
+
+  it('draws nothing extra when no cage is supplied', () => {
+    expect(buildBeamDetail(b).primitives.filter((p) => p.kind === 'path' && p.stroke === COLBAR)).toHaveLength(0)
+  })
+
+  it('draws every column vertical, both columns', () => {
+    const d2 = buildBeamDetail(withCage)
+    const v = d2.primitives.filter((p) => p.kind === 'path' && p.stroke === COLBAR)
+    expect(v).toHaveLength(24)                          // 12 bars x 2 columns
+  })
+
+  it('runs the verticals past the beam, not just up to it', () => {
+    // A column bar is continuous through the joint. Stopping it at the beam
+    // soffit would draw a column spliced at every floor.
+    const d2 = buildBeamDetail(withCage)
+    const v = d2.primitives.filter(
+      (p) => p.kind === 'path' && p.stroke === COLBAR,
+    ) as Extract<PlanPrimitive, { kind: 'path' }>[]
+    const hM = b.h / 1000
+    for (const p of v) {
+      const ys = p.cmds.map((c) => c.y)
+      // primitive space is y-down, so the top of the beam is the SMALLER y
+      expect(Math.min(...ys)).toBeLessThan(-hM + 1e-9)
+      expect(Math.max(...ys)).toBeGreaterThan(1e-9)
+    }
+  })
+
+  it('leaves the joint band to the joint hoops', () => {
+    // §418.8.3 — the hoops through the joint belong to the joint, and the sheet
+    // already draws them. Column ties there too would draw the steel twice.
+    const d2 = buildBeamDetail(withCage)
+    const ties = d2.primitives.filter(
+      (p) => p.kind === 'path' && p.stroke === HOOP_INK,
+    ) as Extract<PlanPrimitive, { kind: 'path' }>[]
+    expect(ties.length).toBeGreaterThan(0)
+    const hM = b.h / 1000
+    for (const t of ties) {
+      const y = t.cmds[0].y                             // a tie is level
+      expect(y > -hM - 1e-9 && y < 1e-9).toBe(false)    // not inside the beam depth
+    }
+  })
+})
+
 describe('buildBeamDetail', () => {
   const d = buildBeamDetail(b, { detailNo: '1', sheetRef: 'S-07' })
   const texts = textsOf(d)
