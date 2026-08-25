@@ -23,8 +23,9 @@
 import type { StructuralModel, RectSection } from './model'
 import type { StructureDesign } from './pipeline'
 import { buildBeamCage } from './beamCage'
-import { buildColumnCage } from './columnCage'
+import { buildColumnCage, perimeterBars } from './columnCage'
 import { calcDevLength } from './devLength'
+import { buildFootingCage } from './footingCage'
 import type { RebarCage } from './rebarModel'
 
 const FALLBACK: RectSection = {
@@ -64,6 +65,10 @@ export interface StructureCages {
  * column's own ties stop clear of the band the joint hoops own (§418.8.3) and
  * the steel there is neither drawn nor paid for twice.
  */
+/** §20.6.1.3.1 — concrete cast against and permanently in contact with
+ *  ground gets 75 mm cover. */
+export const FOOTING_COVER = 75
+
 export function buildStructureCages(model: StructuralModel, design: StructureDesign): StructureCages {
   const pos = new Map(model.nodes.map((n) => [n.id, n]))
   const memById = new Map(model.members.map((m) => [m.id, m]))
@@ -83,9 +88,12 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
   const carriesOn = (mem: { id: string; i: string; j: string }, node: string) =>
     (beamsAtNode.get(node) ?? []).some((o) => o.id !== mem.id && collinear(o, mem, pos))
 
+  /** The column at a node — what a beam bar has to anchor into. */
+  const colAt = (node: string) =>
+    model.members.find((m) => m.role === 'column' && (m.i === node || m.j === node))
   /** Plan width of the column at a node, mm — 0 where none frames in. */
   const colWidthAt = (node: string): number => {
-    const col = model.members.find((m) => m.role === 'column' && (m.i === node || m.j === node))
+    const col = colAt(node)
     if (!col) return 0
     const cs = secOf(col.id)
     return Math.min(cs.b, cs.h)
@@ -131,6 +139,13 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       sMid: spac.length ? Math.max(...spac) : 0,
       continuousLeft: carriesOn(mem, mem.i),
       continuousRight: carriesOn(mem, mem.j),
+      // The support's own detailing, so the hook lands at the far face of the
+      // confined core rather than at some assumed cover (§418.8.4.1).
+      ...(() => {
+        const cs = colAt(mem.i) ?? colAt(mem.j)
+        const c = cs && secOf(cs.id)
+        return c ? { colCover: c.cover, colTieDia: c.tieDia, colBarDia: c.barDia } : {}
+      })(),
       axis: { x0: ni.x, z0: ni.z, x1: nj.x, z1: nj.z },
       // the node sits at the section centroid, so the soffit is h/2 below it
       ySoffit: ni.y - sec.h / 2000,
@@ -162,6 +177,37 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       yBottom: yLo, yTop: yHi,
       // the joint band at the top, which the joint's own hoops own (§418.8.3)
       jointGap: jd > 0 ? [yHi - jd / 2, yHi + jd / 2] : undefined,
+    }))
+  }
+
+  // ── footings: the mat, and the dowels the column laps onto ──────────────
+  //
+  // Placed last because a dowel copies the column's own bar positions, so the
+  // column has to have been resolved first. A footing whose column is missing
+  // is reported unplaced rather than given a guessed cage.
+  for (const f of design.footings) {
+    const col = model.members.find((m) => m.role === 'column' && (m.i === f.node || m.j === f.node))
+    const at = pos.get(f.node)
+    if (!col || !at) { unplaced.push(`footing@${f.node}`); continue }
+    const sec = secOf(col.id)
+    const cd = design.columns.find((c) => c.id === col.id)
+    const lap = calcDevLength({
+      db: sec.barDia, fc: sec.fc, fy: sec.fy,
+      topBar: false, epoxy: 'none', lambda: 1, cbKtr_db: 2.5,
+    }).lsc
+    cages.push(buildFootingCage({
+      mark: `F-${f.node}`,
+      B: f.design.B, Dc: f.design.Dc, cover: FOOTING_COVER,
+      barDia: f.barDia, bars: f.design.bars,
+      centre: [at.x, at.z],
+      // the pad's top sits directly under the column's base node
+      yTop: Math.min(pos.get(col.i)?.y ?? at.y, pos.get(col.j)?.y ?? at.y),
+      colBars: perimeterBars({
+        b: sec.b, h: sec.h, cover: sec.cover,
+        barDia: sec.barDia, bars: cd?.bars ?? 4, tieDia: sec.tieDia,
+      }),
+      colBarDia: sec.barDia,
+      lap,
     }))
   }
 

@@ -20,7 +20,7 @@ const memOf = (id: string) => model.members.find((m) => m.id === id)!
 describe('buildStructureCages', () => {
   it('places every designed member, and reports any it cannot', () => {
     expect(unplaced).toEqual([])
-    expect(cages).toHaveLength(design.beams.length + design.columns.length)
+    expect(cages).toHaveLength(design.beams.length + design.columns.length + design.footings.length)
     expect(new Set(cages.map((c) => c.member)).size).toBe(cages.length)
   })
 

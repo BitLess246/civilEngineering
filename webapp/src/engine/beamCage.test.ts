@@ -38,13 +38,32 @@ describe('buildBeamCage — longitudinal steel', () => {
     expect(bare.runs.filter((r) => r.role === 'bottom')).toHaveLength(CORNER_BARS_PER_FACE)
   })
 
-  it('runs a through bar the clear span at a continuous support, straight', () => {
+  it('runs a through bar to the SUPPORT CENTRELINE at a continuous support', () => {
+    // A bar at a continuous support is not anchored, it carries on. Stopping at
+    // the column face left the joint with no steel through it at all and made
+    // two adjacent beams' bars stop short of each other by a whole column.
     const t = marked('T')[0]
     expect(t.path).toHaveLength(2)
     expect(t.bendDia).toHaveLength(0)
-    expect(t.path[0][0]).toBeCloseTo(0.2, 9)          // left column face
-    expect(t.path[1][0]).toBeCloseTo(5.8, 9)          // right column face
-    expect(cutLength(t)).toBeCloseTo(5600, 6)
+    expect(t.path[0][0]).toBeCloseTo(0, 9)
+    expect(t.path[1][0]).toBeCloseTo(6, 9)
+    expect(cutLength(t)).toBeCloseTo(6000, 6)
+  })
+
+  it('reaches the FAR face of the confined core at an end support — §418.8.4.1', () => {
+    // The bar used to turn its hook down at the near face, so it had no
+    // embedment in the joint whatever. The turned-down leg belongs at
+    // `hookClearToFace` (cover + tie + the far-face vertical) off the far face,
+    // which is where the elevation dimensions ℓdh from.
+    const e = buildBeamCage({ ...beam, continuousLeft: false, continuousRight: false,
+      colCover: 40, colTieDia: 10, colBarDia: 20 })
+    const t = e.runs.find((r) => r.mark === 'B1-T1')!
+    const clear = 40 + 10 + 20                        // hookClearToFace, mm
+    const xHook = -(400 / 2 - clear - 20 / 2) / 1000  // past the centreline
+    expect(xHook).toBeLessThan(0)                     // …and it IS past it
+    expect(t.path[0][0]).toBeCloseTo(xHook, 9)
+    expect(t.path[1][0]).toBeCloseTo(xHook, 9)        // the tail is vertical
+    expect(t.path[3][0]).toBeCloseTo(6 - xHook, 9)    // mirrored at the far end
   })
 
   it('hooks a through bar into an END support, top down and bottom up', () => {
@@ -138,7 +157,7 @@ describe('buildBeamCage — placement', () => {
     const ns = buildBeamCage({ ...beam, axis: { x0: 2, z0: 1, x1: 2, z1: 7 } })
     const t = ns.runs.find((r) => r.mark === 'B1-T1')!
     // it runs in z now, so the web offset lands on x instead
-    expect(t.path[1][2] - t.path[0][2]).toBeCloseTo(5.6, 9)
+    expect(t.path[1][2] - t.path[0][2]).toBeCloseTo(6, 9)
     expect(t.path[0][0]).toBeCloseTo(t.path[1][0], 9)
     expect(Math.abs(t.path[0][0] - 2)).toBeCloseTo(0.088, 9)
   })

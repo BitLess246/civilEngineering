@@ -1,0 +1,86 @@
+import { describe, it, expect } from 'vitest'
+import { buildFootingCage, DOWEL_TAIL_DB, type FootingCageInput } from './footingCage'
+import { perimeterBars } from './columnCage'
+import { cutLength } from './rebarModel'
+
+// A 2.0 m square pad, 450 thick, ⌀16 mat at 8 bars each way, carrying a
+// 400×400 column with 8-⌀20 verticals. 75 mm cover against earth (§20.6.1.3.1).
+const colBars = perimeterBars({ b: 400, h: 400, cover: 40, barDia: 20, bars: 8, tieDia: 10 })
+const pad: FootingCageInput = {
+  mark: 'F-n1', B: 2.0, Dc: 450, cover: 75, barDia: 16, bars: 8,
+  centre: [3, 5], yTop: 0, colBars, colBarDia: 20, lap: 620,
+}
+const cage = buildFootingCage(pad)
+const byRole = (r: string) => cage.runs.filter((x) => x.role === r)
+
+describe('the mat', () => {
+  it('runs both ways, one bar per designed bar, on the pad centre', () => {
+    expect(byRole('mat')).toHaveLength(2 * 8)
+    for (const r of byRole('mat')) {
+      const xs = r.path.map((p) => p[0]), zs = r.path.map((p) => p[2])
+      expect(Math.min(...xs)).toBeGreaterThanOrEqual(3 - 1.0)
+      expect(Math.max(...xs)).toBeLessThanOrEqual(3 + 1.0)
+      expect(Math.min(...zs)).toBeGreaterThanOrEqual(5 - 1.0)
+      expect(Math.max(...zs)).toBeLessThanOrEqual(5 + 1.0)
+    }
+  })
+
+  it('stops a cover short of each edge — bars do not run out of the concrete', () => {
+    const x = cage.runs.find((r) => r.mark === 'F-n1-MX1')!
+    expect(cutLength(x)).toBeCloseTo(2000 - 2 * 75, 6)
+  })
+
+  it('stacks the two directions, so the upper layer really is a diameter higher', () => {
+    // `isolatedFooting` designs the second layer at d − db. Drawing both at the
+    // same level would contradict the effective depth the design used.
+    const yx = cage.runs.find((r) => r.mark === 'F-n1-MX1')!.path[0][1]
+    const yz = cage.runs.find((r) => r.mark === 'F-n1-MZ1')!.path[0][1]
+    expect(yz - yx).toBeCloseTo(16 / 1000, 9)
+    // …and the lower layer sits on its cover, measured off the pad SOFFIT
+    expect(yx).toBeCloseTo(-0.45 + (75 + 8) / 1000, 9)
+  })
+})
+
+describe('the dowels — the lap the column stands on', () => {
+  it('one per column vertical, on that bar\'s own line', () => {
+    expect(byRole('dowel')).toHaveLength(colBars.length)
+    byRole('dowel').forEach((d, k) => {
+      const [dx, dz] = colBars[k]
+      const top = d.path[d.path.length - 1]
+      expect(top[0]).toBeCloseTo(3 + dx / 1000, 9)
+      expect(top[2]).toBeCloseTo(5 + dz / 1000, 9)
+    })
+  })
+
+  it('projects the lap ABOVE the footing, which is what the column splices onto', () => {
+    // Without this the column cage stood on nothing and a single-storey frame
+    // contained no lap splice anywhere.
+    for (const d of byRole('dowel')) {
+      expect(Math.max(...d.path.map((p) => p[1]))).toBeCloseTo(0.62, 9)
+      expect(Math.min(...d.path.map((p) => p[1]))).toBeLessThan(-0.3)   // down onto the mat
+    }
+  })
+
+  it('turns a 12db hook across the mat, inboard, never out through the cover', () => {
+    const half = 1.0
+    for (const d of byRole('dowel')) {
+      const [tip, knee] = d.path
+      expect(tip[1]).toBeCloseTo(knee[1], 9)                      // the tail is horizontal
+      const run = Math.hypot(tip[0] - knee[0], tip[2] - knee[2])
+      expect(run).toBeCloseTo((DOWEL_TAIL_DB * 20) / 1000, 9)
+      // inboard: the tail end is closer to the pad centre than the knee
+      expect(Math.hypot(tip[0] - 3, tip[2] - 5)).toBeLessThan(Math.hypot(knee[0] - 3, knee[2] - 5))
+      expect(Math.abs(tip[0] - 3)).toBeLessThan(half - 0.075)
+      expect(Math.abs(tip[2] - 5)).toBeLessThan(half - 0.075)
+      expect(d.bendDia).toHaveLength(1)
+    }
+  })
+
+  it('sits the dowel hook ON the mat, not through it', () => {
+    const yz = cage.runs.find((r) => r.mark === 'F-n1-MZ1')!.path[0][1]
+    for (const d of byRole('dowel')) {
+      expect(d.path[0][1]).toBeGreaterThan(yz)
+      expect(d.path[0][1]).toBeCloseTo(yz + (16 + 20) / 2000, 9)
+    }
+  })
+})
