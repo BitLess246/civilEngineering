@@ -4,17 +4,31 @@ import { sectionFrame } from './sectionLayout'
 /** Flanged (T / L) beam cross-section to scale: outline, optional compression
  *  stress block, stirrup + tension-bar layers in the web, and the shared
  *  dimension-line template (bf above, h left, hf right, bw below). Reused by
- *  the standalone T-beam page and the 3D Model Space beam schedule. */
-export function TSection({ bf, bw, h, hf, a = 0, bars = 0, barDia = 0, layers = [], cover = 40, stirrupDia = 10, legs = 2 }: {
+ *  the standalone T-beam page and the 3D Model Space beam schedule.
+ *
+ *  `edge` draws the section an EDGE beam actually is: ACI Table 6.3.2.1 gives an
+ *  edge beam ONE overhang (bf = bw + min(6hf, sw/2, ln/12)), because there is no
+ *  slab on the outside face. Drawing that as a symmetric T — which is what this
+ *  did for every kind — showed a shape the code had already ruled out, with the
+ *  web floating in the middle of a flange that only exists on one side. The web
+ *  is drawn flush with the free edge and the slab runs inboard from it. */
+export function TSection({ bf, bw, h, hf, a = 0, aReq = 0, bars = 0, barDia = 0, layers = [], cover = 40, stirrupDia = 10, legs = 2, edge = false }: {
   bf: number; bw: number; h: number; hf: number; a?: number
+  /** Block depth the moment requires, when it differs from the delivered `a`. */
+  aReq?: number
   bars?: number; barDia?: number; layers?: number[]; cover?: number; stirrupDia?: number; legs?: number
+  /** Edge (L) beam — the flange projects on one side only. */
+  edge?: boolean
 }) {
   // Frame arithmetic lives in `sectionLayout` so it can be tested — the
   // complaint that started this ("too small, area not fully used") is a
   // statement about these numbers and nothing else.
   const { scale: S, W, HT, x0, y0, w, ht } = sectionFrame(bf, h, bars)
   const wf = bw * S, hff = hf * S, A = Math.min(a, h) * S
-  const xw = x0 + (w - wf) / 2
+  // Overhang split: symmetric for an interior/isolated T, all on one side for an
+  // L. Everything downstream reads `xw`, so the two shapes share one drawing.
+  const xw = x0 + (edge ? 0 : (w - wf) / 2)
+  const oL = xw - x0, oR = x0 + w - (xw + wf)
   const inset = (cover + stirrupDia / 2) * S
   const br = Math.max(2.5, (barDia / 2) * S)
   const barRows: { y: number; n: number }[] = []
@@ -25,17 +39,48 @@ export function TSection({ bf, bw, h, hf, a = 0, bars = 0, barDia = 0, layers = 
   const bx2 = xw + wf - (cover + stirrupDia + barDia / 2) * S
   return (
     <svg viewBox={`0 0 ${W} ${HT}`} className="mx-auto block h-auto max-h-[440px] w-full max-w-[560px]" style={{ fontFamily: 'Arial, sans-serif' }}>
-      <path d={`M${x0} ${y0} h${w} v${hff} h${-(w - wf) / 2} v${ht - hff} h${-wf} v${-(ht - hff)} h${-(w - wf) / 2} z`}
+      <path d={`M${x0} ${y0} h${w} v${hff} h${-oR} v${ht - hff} h${-wf} v${-(ht - hff)} h${-oL} z`}
         fill="#eef3f8" stroke="#37526e" strokeWidth="1.6" />
-      {a > 0 && <>
-        <rect x={x0} y={y0} width={w} height={Math.min(A, hff)} fill="#0f4c92" opacity="0.16" />
-        {A > hff && <rect x={xw} y={y0 + hff} width={wf} height={A - hff} fill="#0f4c92" opacity="0.16" />}
-        <line x1={x0 - 6} y1={y0 + A} x2={x0 + w + 6} y2={y0 + A} stroke="#0f4c92" strokeWidth="1.2" strokeDasharray="5 3" />
-        {/* Anchored at the LEFT end of the block. On the right it sat on top of
-            the `hf` dimension line, which only became visible once the section
-            grew to fill the card. */}
-        <text x={x0 + 5} y={y0 + A + 11} fontSize="8.5" fontFamily="IBM Plex Mono, monospace" fill="#0f4c92" textAnchor="start">a = {a.toFixed(0)}</text>
-      </>}
+      {a > 0 && (() => {
+        const Ar = Math.min(aReq, h) * S
+        // Both block labels sit ABOVE their own rule, on the overhang side —
+        // the one stretch of the drawing with no web, no stirrup and no
+        // dimension line in it. Anchored at x0 they landed on top of the cage
+        // for an L, whose web IS the left edge. Clamped so a hairline-shallow
+        // block does not push its label out through the top of the section.
+        const lx = edge ? x0 + w - 5 : x0 + 5
+        const anchor = edge ? 'end' : 'start'
+        // Nudge clear of the flange soffit when the label would land on it.
+        const raw = y0 + A + 10
+        const aLabelY = Math.abs(raw - (y0 + hff)) < 5 ? raw + 7 : raw
+        return (
+          <g>
+            <rect x={x0} y={y0} width={w} height={Math.min(A, hff)} fill="#0f4c92" opacity="0.16" />
+            {A > hff && <rect x={xw} y={y0 + hff} width={wf} height={A - hff} fill="#0f4c92" opacity="0.16" />}
+            <line x1={x0 - 6} y1={y0 + A} x2={x0 + w + 6} y2={y0 + A} stroke="#0f4c92" strokeWidth="1.2" strokeDasharray="5 3" />
+            {/* The block the MOMENT requires, drawn whenever the rounded-up bar
+                count has pushed the delivered block clear of it. a,req is the
+                quantity that tracks Mu continuously; `a` only moves when a whole
+                bar is added, so without this the drawing looks inert as Mu rises. */}
+            {aReq > 0 && A - Ar > 12 && (
+              <g opacity="0.85">
+                <line x1={x0 - 6} y1={y0 + Ar} x2={x0 + w + 6} y2={y0 + Ar} stroke="#0f4c92" strokeWidth="0.9" strokeDasharray="2 3" />
+                <text x={lx} y={y0 + Math.max(Ar, 10) - 4} fontSize="8" fontFamily="IBM Plex Mono, monospace" fill="#0f4c92"
+                  textAnchor={anchor} paintOrder="stroke" stroke="#fff" strokeWidth="2.4">a req = {aReq.toFixed(0)}</text>
+              </g>
+            )}
+            {/* Below its own rule, so it never sits on the a,req label above it —
+                and so a flange too thin to hold 8 pt of text (bf 1800 scales the
+                slab to a dozen units) puts the label in the clear instead. The
+                required depth rides along in the text whenever the separate rule
+                is too close to draw, so a,req is never off the drawing. */}
+            <text x={lx} y={aLabelY} fontSize="8.5" fontFamily="IBM Plex Mono, monospace" fill="#0f4c92"
+              textAnchor={anchor} paintOrder="stroke" stroke="#fff" strokeWidth="2.6">
+              a = {a.toFixed(0)}{aReq > 0 && a - aReq > 0.5 ? `  (req ${aReq.toFixed(0)})` : ''}
+            </text>
+          </g>
+        )
+      })()}
       {/* stirrup in the web */}
       <rect x={xw + inset} y={y0 + hff * 0.35} width={wf - 2 * inset} height={ht - hff * 0.35 - inset}
         rx={Math.max(2, 2 * stirrupDia * S)} fill="none" stroke="#37526e" strokeWidth={Math.max(1, stirrupDia * S)} opacity="0.8" />
@@ -92,10 +137,15 @@ export function TSection({ bf, bw, h, hf, a = 0, bars = 0, barDia = 0, layers = 
           {bars} ⌀{barDia} mm · stirrup ⌀{stirrupDia}
         </text>
       )}
+      {/* Say which section this is, so an L is not read as a T drawn off-centre.
+          Top-LEFT and short: the `bf` dimension label is centred just below. */}
+      <text x={x0} y={y0 - 26} fontSize="8.5" fontWeight="600" fill="#37526e" textAnchor="start">
+        {edge ? 'L-BEAM (EDGE)' : 'T-BEAM'}
+      </text>
       {/* dimension lines (shared template) */}
       <DimBelow xA={x0} xB={x0 + w} featY={y0} dY={y0 - 18} label={`bf = ${Math.round(bf)} mm`} />
       <DimBelow xA={xw} xB={xw + wf} featY={y0 + ht + (bars > 0 ? 18 : 4)} dY={y0 + ht + (bars > 0 ? 34 : 20)} label={`bw = ${Math.round(bw)} mm`} />
-      <DimSide yA={y0} yB={y0 + ht} featX={x0 > 40 ? x0 + (w - wf) / 2 : x0} dX={Math.min(x0, xw) - 16} label={`h = ${Math.round(h)} mm`} side="left" />
+      <DimSide yA={y0} yB={y0 + ht} featX={x0 > 40 ? xw : x0} dX={Math.min(x0, xw) - 16} label={`h = ${Math.round(h)} mm`} side="left" />
       <DimSide yA={y0} yB={y0 + hff} featX={x0 + w} dX={x0 + w + 16} label={`hf = ${Math.round(hf)}`} side="right" />
     </svg>
   )

@@ -4593,9 +4593,9 @@ export default function ModelSpace() {
                             <div className="space-y-3 self-start rounded-lg border border-slate-200 bg-white p-3">
                               <BeamRebarElevation L={bm.L} h={sec.h} sections={bm.sections} />
                               <div className="border-t border-slate-100 pt-2">
-                                <p className="mb-1 text-[11px] font-semibold text-[#0f4c92]">SECTION — {s.label}{s.bf ? ' (T-beam)' : ''}</p>
+                                <p className="mb-1 text-[11px] font-semibold text-[#0f4c92]">SECTION — {s.label}{s.bf ? (s.edge ? ' (L-beam)' : ' (T-beam)') : ''}</p>
                                 {s.bf && s.hf ? (
-                                  <TSection bf={s.bf} bw={sec.b} h={sec.h} hf={s.hf}
+                                  <TSection bf={s.bf} bw={sec.b} h={sec.h} hf={s.hf} edge={s.edge}
                                     a={(d.bars * (Math.PI / 4) * sec.barDia ** 2 * sec.fy) / (0.85 * sec.fc * s.bf)}
                                     bars={d.bars} barDia={sec.barDia} layers={d.layers} cover={sec.cover} stirrupDia={sec.tieDia} legs={d.legs} />
                                 ) : (
