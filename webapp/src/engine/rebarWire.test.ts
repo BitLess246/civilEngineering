@@ -91,75 +91,67 @@ describe('runPoints', () => {
   })
 })
 
-describe('hook tails on a closed tie', () => {
+describe('a tie is ONE bar, with a hook at each end', () => {
   const tie = {
     mark: 'T1', dia: 10, role: 'tie' as const, member: 'C1',
     path: [[0, 0, 0], [0.3, 0, 0], [0.3, 0, 0.3], [0, 0, 0.3]] as Vec3[],
     bendDia: [40, 40, 40, 40], closed: true,
     hookAllowance: stirrupHookAllowance(10), count: 1,
   }
+  const [bar] = runPolylines(tie)
 
-  it('a closed tie that carries hooks draws them — the loop plus two tails', () => {
-    // Stored as a length for the bill, the two 135° hooks were never drawn, so
-    // every tie in the 3D view was a bare rectangle with no ends.
-    expect(runPolylines(tie).length).toBe(3)
-    expect(runPolylines({ ...tie, hookAllowance: undefined }).length).toBe(1)
-    expect(runPolylines({ ...tie, closed: false }).length).toBe(1)
+  it('comes back as a single polyline, not a loop plus two branches', () => {
+    // Three polylines put three bars through the start corner — the loop and a
+    // branch per hook — and the branches' bends curled back over the loop's.
+    expect(runPolylines(tie)).toHaveLength(1)
+    expect(runPolylines({ ...tie, hookAllowance: undefined })).toHaveLength(1)
+    expect(runPolylines({ ...tie, closed: false })).toHaveLength(1)
   })
 
-  it('a hook is drawn as LEG → bend → tail, not as a tail springing off a point', () => {
-    // Drawn as a bare tail from the loop's mathematical corner it read as one
-    // diagonal tube cutting across that corner — the loop is FILLETED there and
-    // never goes near the point the tail started from. The approach leg lies on
-    // top of the loop, so the two read as one continuous bar.
-    const [, a, b] = runPolylines(tie)
-    for (const t of [a, b]) {
-      expect(t.length).toBeGreaterThan(3)              // leg, arc, tail
-      // the leg starts ON one of the two legs meeting at the corner
-      const onLegA = Math.abs(t[0][0]) < 1e-9 && t[0][2] > 0        // the z leg
-      const onLegB = Math.abs(t[0][2]) < 1e-9 && t[0][0] > 0        // the x leg
-      expect(onLegA || onLegB).toBe(true)
-      // …and every point stays in the tie's own plane
-      for (const p of t) expect(Math.abs(p[1])).toBeLessThan(1e-9)
+  it('runs right round the section and PAST the corner it started at', () => {
+    // within a bend radius or so — the corners are filleted, so the bar rounds
+    // them rather than passing through the point itself
+    const near = (p: Vec3, q: Vec3) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) < 0.07
+    for (const corner of tie.path) {
+      expect(bar.some((p) => near(p, corner))).toBe(true)
     }
+    // it visits the start corner twice — once on the way out, once coming back
+    expect(bar.filter((p) => near(p, tie.path[0])).length).toBeGreaterThan(1)
   })
 
-  it('both tails turn 135° from the leg they fold off', () => {
-    const [, a, b] = runPolylines(tie)
+  it('starts and finishes in a tail, both folded 135° off their own leg', () => {
     const unit = (p: Vec3, q: Vec3) => {
       const d = [q[0] - p[0], q[1] - p[1], q[2] - p[2]]
       const l = Math.hypot(d[0], d[1], d[2])
       return d.map((c) => c / l)
     }
-    const turnOf = (u: number[], v: number[]) =>
-      (Math.acos(Math.max(-1, Math.min(1, u[0] * v[0] + u[1] * v[1] + u[2] * v[2]))) * 180) / Math.PI
-    for (const t of [a, b]) {
-      const lead = unit(t[0], t[1])                    // along the approach leg
-      const tail = unit(t[t.length - 2], t[t.length - 1])   // the straight tail
-      expect(turnOf(lead, tail)).toBeCloseTo(135, 4)
-    }
+    const turnOf = (u: number[], w: number[]) =>
+      (Math.acos(Math.max(-1, Math.min(1, u[0] * w[0] + u[1] * w[1] + u[2] * w[2]))) * 180) / Math.PI
+    // leading tail into the first leg
+    expect(turnOf(unit(bar[0], bar[1]), [1, 0, 0])).toBeCloseTo(135, 3)
+    // last leg into the trailing tail
+    const m = bar.length
+    expect(turnOf([0, 0, -1], unit(bar[m - 2], bar[m - 1]))).toBeCloseTo(135, 3)
   })
 
-  it('the tails point INTO the core, never out through the cover', () => {
+  it('both tails point INTO the core, never out through the cover', () => {
     // The tie is in the y = 0 plane with its core at (0.15, 0, 0.15); a hook
     // folded the wrong way leaves the section entirely.
-    const [, a, b] = runPolylines(tie)
     const core = [0.15, 0, 0.15]
     const corner = tie.path[0]
     const at = Math.hypot(corner[0] - core[0], corner[2] - core[2])
-    for (const t of [a, b]) {
-      const tip = t[t.length - 1]
+    for (const tip of [bar[0], bar[bar.length - 1]]) {
       expect(Math.hypot(tip[0] - core[0], tip[2] - core[2])).toBeLessThan(at)
+      expect(Math.abs(tip[1])).toBeLessThan(1e-9)          // and stay in the plane
     }
   })
 
-  it('the tail is at least max(6d_t, 75 mm) beyond the bend', () => {
-    const [, a] = runPolylines(tie)
-    const tip = a[a.length - 1], knee = a[a.length - 2]
-    expect(Math.hypot(tip[0] - knee[0], tip[2] - knee[2])).toBeGreaterThan(0)
+  it('each tail is max(6d_t, 75 mm) from the corner it turns at', () => {
     const corner = tie.path[0]
-    expect(Math.hypot(tip[0] - corner[0], tip[2] - corner[2]))
-      .toBeGreaterThanOrEqual(hookTailLength(10) - 1e-9)
+    for (const tip of [bar[0], bar[bar.length - 1]]) {
+      expect(Math.hypot(tip[0] - corner[0], tip[2] - corner[2]))
+        .toBeCloseTo(hookTailLength(10), 9)
+    }
   })
 })
 

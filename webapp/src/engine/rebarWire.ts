@@ -121,48 +121,52 @@ export function hookTailLength(dia: number): number {
  * — joining them would draw a bar running through the core that does not exist.
  */
 export function runPolylines(run: RebarRun): Vec3[][] {
-  const spine = runPoints(run)
   const v = run.path
-  if (!run.closed || !run.hookAllowance || v.length < 3) return [spine]
-
-  const p0 = v[0], pNext = v[1], pPrev = v[v.length - 1]
-  const dOut = sub(pNext, p0), dIn = sub(p0, pPrev)
-  const lOut = len(dOut), lIn = len(dIn)
-  if (lOut < 1e-9 || lIn < 1e-9) return [spine]
-  const uOut = mul(dOut, 1 / lOut), uIn = mul(dIn, 1 / lIn)
+  if (!run.closed || !run.hookAllowance || v.length < 3) return [runPoints(run)]
+  const n = v.length
+  const p0 = v[0]
+  const dOut = sub(v[1], p0), dEnd = sub(p0, v[n - 1])
+  const lOut = len(dOut), lEnd = len(dEnd)
+  if (lOut < 1e-9 || lEnd < 1e-9) return [runPoints(run)]
+  const uOut = mul(dOut, 1 / lOut)          // leaving the corner
+  const uEnd = mul(dEnd, 1 / lEnd)          // arriving back at it
 
   // The loop's plane, and the direction into the core at this corner.
-  const nrm = cross(uOut, mul(uIn, -1))
+  const nrm = cross(uOut, uEnd)
   const lnrm = len(nrm)
-  if (lnrm < 1e-9) return [spine]
+  if (lnrm < 1e-9) return [runPoints(run)]
   const axis = mul(nrm, 1 / lnrm)
-  const inward = sub(mul(uOut, 1), uIn)      // corner bisector, pointing inboard
+  const inward = sub(uOut, mul(uEnd, 1))    // corner bisector, pointing inboard
   const lb = len(inward)
   const bis = lb > 1e-9 ? mul(inward, 1 / lb) : uOut
 
   const turn = (HOOK_TURN_DEG * Math.PI) / 180
   const tail = hookTailLength(run.dia)
-  const r = bendRadius(run.bendDia[0] > 0 ? run.bendDia[0] : 4 * run.dia, run.dia) / 1000
-  /** Fold `d` back by 135°, whichever way puts the tail inside the core. */
+  /** Fold `d` by 135°, whichever way puts the tail inside the core. */
   const fold = (d: Vec3): Vec3 => {
     const a = rotate(d, axis, turn), b = rotate(d, axis, -turn)
     return dot(a, bis) >= dot(b, bis) ? a : b
   }
-  // A hook is the END OF THE BAR bending away from the leg it is on — so it is
-  // drawn as leg → bend → tail, with the bend rounded like every other. Drawn
-  // as a bare tail springing from the loop's mathematical corner it read as a
-  // single diagonal tube cutting straight across that corner, because the loop
-  // itself is FILLETED there and never goes near the point the tail started at.
+
+  // ── ONE BAR, not a loop with two branches glued on ──────────────────────
   //
-  // The approach leg is long enough for `filletCorner` to fit the bend into,
-  // and it lies on top of the loop, so the two read as one continuous bar.
-  const lead = Math.max(2.2 * r, tail)
-  const hook = (arrive: Vec3): Vec3[] => {
-    const back = add(p0, mul(arrive, -Math.min(lead, 0.9 * len(sub(p0, arrive === uIn ? pPrev : pNext)))))
-    const tip = add(p0, mul(fold(arrive), tail + r))
-    return [back, ...filletCorner(back, p0, tip, r), tip]
-  }
-  return [spine, hook(uIn), hook(mul(uOut, -1))]
+  // A tie is a single length of steel: it starts at a hook tail, runs right
+  // round the section, comes back PAST the corner it started at, and finishes
+  // in a second tail. Drawing it as a closed loop plus two separate hook
+  // polylines put three bars through that corner — the loop, and a branch for
+  // each hook — and the branches' own bends curled back over the loop's, which
+  // is the blob that appeared there.
+  //
+  // Built as one open path the corner is filleted once, by the same rule as
+  // every other, and the two tails simply leave it at 135°.
+  const path: Vec3[] = [
+    add(p0, mul(fold(mul(uOut, -1)), tail)),      // the tail it starts from
+    ...v,                                          // …all the way round…
+    p0,                                            // …back past where it began…
+    add(p0, mul(fold(uEnd), tail)),                // …and the tail it ends in
+  ]
+  const bendDia = [...run.bendDia.slice(0, n), run.bendDia[0] ?? 0]
+  return [runPoints({ ...run, closed: false, path, bendDia })]
 }
 
 // ─────────────────────────────────────────────────────────────────────────
