@@ -70,6 +70,17 @@ export interface RebarRun {
   /** True for a stirrup, tie or hoop: the last vertex joins back to the first. */
   closed?: boolean
   /**
+   * Diameter of the longitudinal bar this transverse bar is bent AROUND, mm.
+   *
+   * A tie is not bent to some abstract radius: it is bent around the bar it
+   * restrains, and that bar sits INSIDE the curl. Set, the drawing rounds each
+   * corner to (wrapDia + dia)/2 — centre to centre — so the corner arc wraps
+   * the bar instead of passing behind it. `bendDia` is untouched, because the
+   * FABRICATED bend is still whatever §425.3.2 requires and that is what the
+   * cut length is measured against.
+   */
+  wrapDia?: number
+  /**
    * Developed length beyond the polyline, mm — the anchoring hooks a closed
    * tie's two free ends carry, which no vertex of a closed loop can express.
    * See `stirrupHookAllowance`.

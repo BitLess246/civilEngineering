@@ -156,6 +156,37 @@ export function rotateLoop<T>(loop: T[], k: number): T[] {
   return [...loop.slice(n), ...loop.slice(0, n)]
 }
 
+/**
+ * Push a tie's corners OUT off the bars they wrap.
+ *
+ * A supplementary tie is specified by the bars it engages, but the bar sits
+ * inside the curl — so the tie's own corner is further out, by exactly enough
+ * that its arc of radius `R` is centred on the bar. For an included angle θ
+ * that offset is R/sin(θ/2) along the outward bisector.
+ *
+ * Placed ON the bars, as they were, the tie's centreline ran straight through
+ * them: two bars in the same space, and the restraint drawn as an intersection
+ * rather than a grip.
+ */
+export function wrapCorners(pts: [number, number][], R: number): [number, number][] {
+  const n = pts.length
+  if (n < 3) return pts
+  return pts.map((c, i) => {
+    const p = pts[(i - 1 + n) % n], q = pts[(i + 1) % n]
+    const u = [p[0] - c[0], p[1] - c[1]], v = [q[0] - c[0], q[1] - c[1]]
+    const lu = Math.hypot(u[0], u[1]), lv = Math.hypot(v[0], v[1])
+    if (lu < 1e-9 || lv < 1e-9) return c
+    const un = [u[0] / lu, u[1] / lu], vn = [v[0] / lv, v[1] / lv]
+    const theta = Math.acos(Math.min(1, Math.max(-1, un[0] * vn[0] + un[1] * vn[1])))
+    const bx = un[0] + vn[0], bz = un[1] + vn[1]
+    const lb = Math.hypot(bx, bz)
+    const sin = Math.sin(theta / 2)
+    if (lb < 1e-9 || sin < 1e-6) return c
+    const d = R / sin
+    return [c[0] - (bx / lb) * d, c[1] - (bz / lb) * d] as [number, number]
+  })
+}
+
 export function buildColumnCage(i: ColumnCageInput): RebarCage {
   const runs: RebarRun[] = []
   const notes: string[] = []
@@ -210,6 +241,8 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
   const tx = Math.max(0, i.h / 2 - i.cover - i.tieDia / 2) / 1000
   const tz = Math.max(0, i.b / 2 - i.cover - i.tieDia / 2) / 1000
   const D = stirrupBendDiameter(i.tieDia)
+  /** Centre-to-centre radius of a tie bent around a longitudinal bar, mm. */
+  const R = (i.barDia + i.tieDia) / 2
   const hoop: Vec3[] = [
     [cx - tx, 0, cz - tz], [cx + tx, 0, cz - tz],
     [cx + tx, 0, cz + tz], [cx - tx, 0, cz + tz],
@@ -230,12 +263,17 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
       path: rotateLoop(hoop, k).map(([x, , z]) => [x, y, z] as Vec3),
       bendDia: [D, D, D, D],
       closed: true,
+      wrapDia: i.barDia,
       // the two 135° hooks the closed loop's vertices cannot express
       hookAllowance: stirrupHookAllowance(i.tieDia),
       count: 1,
     })
     extra.ties.forEach((t, j) => {
-      const pts = t.corners.map(([dx, dz]) => [cx + dx / 1000, y, cz + dz / 1000] as Vec3)
+      // Closed ties wrap the bars at their corners. A cross tie ENDS at its
+      // bars — pushing its ends outward to wrap them put the ends, and the
+      // hooks beyond them, outside the hoop and through the cover.
+      const plan = t.closed ? wrapCorners(t.corners, R) : t.corners
+      const pts = plan.map(([dx, dz]) => [cx + dx / 1000, y, cz + dz / 1000] as Vec3)
       runs.push({
         mark: `${i.mark}-${t.kind === 'cross' ? 'X' : t.kind === 'diamond' ? 'D' : 'I'}${k + 1}.${j + 1}`,
         dia: i.tieDia,
@@ -244,6 +282,7 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
         path: t.closed ? rotateLoop(pts, k) : (k % 2 ? [...pts].reverse() : pts),
         bendDia: pts.map(() => D),
         closed: t.closed,
+        wrapDia: i.barDia,
         // A cross tie is a single bar hooked at BOTH ends (§425.3.2), so it
         // carries the same allowance as a loop even though it is not one.
         hookAllowance: stirrupHookAllowance(i.tieDia),

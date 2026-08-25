@@ -91,35 +91,40 @@ describe('runPoints', () => {
   })
 })
 
-describe('a tie is ONE bar, with a hook at each end', () => {
+describe('the hook: one curl at the corner, two straight tails', () => {
   const tie = {
     mark: 'T1', dia: 10, role: 'tie' as const, member: 'C1',
     path: [[0, 0, 0], [0.3, 0, 0], [0.3, 0, 0.3], [0, 0, 0.3]] as Vec3[],
     bendDia: [40, 40, 40, 40], closed: true,
     hookAllowance: stirrupHookAllowance(10), count: 1,
   }
-  const [bar] = runPolylines(tie)
+  const [loop, a, b] = runPolylines(tie)
 
-  it('comes back as a single polyline, not a loop plus two branches', () => {
-    // Three polylines put three bars through the start corner — the loop and a
-    // branch per hook — and the branches' bends curled back over the loop's.
-    expect(runPolylines(tie)).toHaveLength(1)
+  it('is the loop plus exactly two tails, and each tail is STRAIGHT', () => {
+    // A bend on the tail itself draws a second and third curl on top of the
+    // corner's own — the knot. The corner already has its bend; the hooks are
+    // just what leaves it.
+    expect(runPolylines(tie)).toHaveLength(3)
+    expect(a).toHaveLength(2)
+    expect(b).toHaveLength(2)
     expect(runPolylines({ ...tie, hookAllowance: undefined })).toHaveLength(1)
-    expect(runPolylines({ ...tie, closed: false })).toHaveLength(1)
+    // an OPEN transverse bar — a cross tie — gets a hook at each end instead
+    expect(runPolylines({ ...tie, closed: false })).toHaveLength(3)
   })
 
-  it('runs right round the section and PAST the corner it started at', () => {
-    // within a bend radius or so — the corners are filleted, so the bar rounds
-    // them rather than passing through the point itself
-    const near = (p: Vec3, q: Vec3) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) < 0.07
-    for (const corner of tie.path) {
-      expect(bar.some((p) => near(p, corner))).toBe(true)
-    }
-    // it visits the start corner twice — once on the way out, once coming back
-    expect(bar.filter((p) => near(p, tie.path[0])).length).toBeGreaterThan(1)
+  it('each tail starts ON THE BAR, not at the corner point the loop misses', () => {
+    // The loop is filleted at that corner and never passes through the point
+    // itself, so a tail springing from it read as a diagonal cutting across.
+    const onLoop = (p: Vec3) =>
+      Math.min(...loop.map((q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2])))
+    expect(onLoop(a[0])).toBeLessThan(1e-6)
+    expect(onLoop(b[0])).toBeLessThan(1e-6)
+    // …and on OPPOSITE sides of the corner, one per leg
+    expect(a[0]).not.toEqual(b[0])
+    expect(Math.abs(a[0][2]) > 1e-9 || Math.abs(b[0][0]) > 1e-9).toBe(true)
   })
 
-  it('starts and finishes in a tail, both folded 135° off their own leg', () => {
+  it('both turn 135° off their own leg and are max(6d_t, 75 mm) long', () => {
     const unit = (p: Vec3, q: Vec3) => {
       const d = [q[0] - p[0], q[1] - p[1], q[2] - p[2]]
       const l = Math.hypot(d[0], d[1], d[2])
@@ -127,30 +132,21 @@ describe('a tie is ONE bar, with a hook at each end', () => {
     }
     const turnOf = (u: number[], w: number[]) =>
       (Math.acos(Math.max(-1, Math.min(1, u[0] * w[0] + u[1] * w[1] + u[2] * w[2]))) * 180) / Math.PI
-    // leading tail into the first leg
-    expect(turnOf(unit(bar[0], bar[1]), [1, 0, 0])).toBeCloseTo(135, 3)
-    // last leg into the trailing tail
-    const m = bar.length
-    expect(turnOf([0, 0, -1], unit(bar[m - 2], bar[m - 1]))).toBeCloseTo(135, 3)
-  })
-
-  it('both tails point INTO the core, never out through the cover', () => {
-    // The tie is in the y = 0 plane with its core at (0.15, 0, 0.15); a hook
-    // folded the wrong way leaves the section entirely.
-    const core = [0.15, 0, 0.15]
-    const corner = tie.path[0]
-    const at = Math.hypot(corner[0] - core[0], corner[2] - core[2])
-    for (const tip of [bar[0], bar[bar.length - 1]]) {
-      expect(Math.hypot(tip[0] - core[0], tip[2] - core[2])).toBeLessThan(at)
-      expect(Math.abs(tip[1])).toBeLessThan(1e-9)          // and stay in the plane
+    expect(turnOf([0, 0, -1], unit(a[0], a[1]))).toBeCloseTo(135, 4)   // arriving leg
+    expect(turnOf([-1, 0, 0], unit(b[0], b[1]))).toBeCloseTo(135, 4)   // leaving leg
+    for (const t of [a, b]) {
+      expect(Math.hypot(t[1][0] - t[0][0], t[1][2] - t[0][2])).toBeCloseTo(hookTailLength(10), 9)
     }
   })
 
-  it('each tail is max(6d_t, 75 mm) from the corner it turns at', () => {
-    const corner = tie.path[0]
-    for (const tip of [bar[0], bar[bar.length - 1]]) {
-      expect(Math.hypot(tip[0] - corner[0], tip[2] - corner[2]))
-        .toBeCloseTo(hookTailLength(10), 9)
+  it('both point INTO the core, never out through the cover', () => {
+    // The tie is in the y = 0 plane with its core at (0.15, 0, 0.15).
+    const core = [0.15, 0, 0.15]
+    for (const t of [a, b]) {
+      const before = Math.hypot(t[0][0] - core[0], t[0][2] - core[2])
+      const after = Math.hypot(t[1][0] - core[0], t[1][2] - core[2])
+      expect(after).toBeLessThan(before)
+      expect(Math.abs(t[1][1])).toBeLessThan(1e-9)     // and stay in the plane
     }
   })
 })
@@ -209,5 +205,56 @@ describe('a bar swept as a tube', () => {
     expect(tubeFromPolyline([[0, 0, 0]], 0.01, 6).indices.length).toBe(0)
     expect(tubeFromPolyline(straight, 0, 6).indices.length).toBe(0)
     expect(tubeFromPolyline(straight, 0.01, 2).indices.length).toBe(0)
+  })
+})
+
+
+describe('a cross tie is a single-legged stirrup: 180° at each end', () => {
+  const cross = {
+    mark: 'C1-X1', dia: 12, role: 'tie' as const, member: 'C1',
+    path: [[0, 0, 0], [0.4, 0, 0]] as Vec3[],
+    bendDia: [], closed: false, wrapDia: 25,
+    hookAllowance: stirrupHookAllowance(12), count: 1,
+  }
+  const R = (25 + 12) / 2000                       // wraps the bar it grips
+  const [bar, h0, h1] = runPolylines(cross)
+
+  it('is the leg plus a U at each end', () => {
+    expect(runPolylines(cross)).toHaveLength(3)
+    expect(bar).toHaveLength(2)
+    expect(h0.length).toBeGreaterThan(4)           // an arc, not a straight tail
+    expect(h1.length).toBeGreaterThan(4)
+    expect(runPolylines({ ...cross, hookAllowance: undefined })).toHaveLength(1)
+  })
+
+  it('each U starts at the bar end and turns a full 180°', () => {
+    // A 135° tail folded off the leg is the hook a CLOSED tie's ends carry; on
+    // an open bar it grips nothing.
+    for (const [h, end] of [[h0, cross.path[0]], [h1, cross.path[1]]] as const) {
+      expect(h[0][0]).toBeCloseTo(end[0], 9)
+      expect(h[0][2]).toBeCloseTo(end[2], 9)
+      // it comes back across the leg to twice the bend radius on the far side
+      const across = h.map((q) => q[2])
+      expect(Math.max(...across) - Math.min(...across)).toBeCloseTo(2 * R, 6)
+    }
+  })
+
+  it('the tail runs back beside the leg, inboard, never out past the end', () => {
+    for (const [h, out] of [[h0, -1], [h1, 1]] as const) {
+      const last = h[h.length - 1], prev = h[h.length - 2]
+      expect(Math.sign(last[0] - prev[0])).toBe(-out)     // back toward the leg
+      expect(Math.abs(last[2] - prev[2])).toBeLessThan(1e-9)   // and parallel to it
+      expect(Math.hypot(last[0] - prev[0], last[2] - prev[2]))
+        .toBeCloseTo(hookTailLength(12), 9)
+    }
+    // neither U reaches further out than one bend radius past its own end
+    expect(Math.min(...h0.map((q) => q[0]))).toBeGreaterThan(-R - 1e-9)
+    expect(Math.max(...h1.map((q) => q[0]))).toBeLessThan(0.4 + R + 1e-9)
+  })
+
+  it('both turn the same way, so the two tails lie on the same side', () => {
+    const side = (h: Vec3[]) => Math.sign(h[h.length - 1][2])
+    expect(side(h0)).toBe(side(h1))
+    expect(side(h0)).not.toBe(0)
   })
 })

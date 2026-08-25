@@ -236,6 +236,7 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
       path: rotateLoop(loop, k),
       bendDia: [D, D, D, D],
       closed: true,
+      wrapDia: i.barDia,
       hookAllowance: stirrupHookAllowance(i.stirrupDia),
       count: 1,
     })
