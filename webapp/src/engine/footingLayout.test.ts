@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { buildPlan, type PlanPrimitive } from './planRenderer'
 import { generateGridModel } from './modelBuilder'
 import type { RectSection } from './model'
-import { footingLayout, footingPrism, type FootingIn, type CombinedIn } from './footingLayout'
+import { footingLayout, footingPrism, overlappingPairs, type FootingIn, type CombinedIn } from './footingLayout'
 
 const xz = new Map([
   ['n0', { x: 0, z: 0 }],
@@ -169,5 +169,65 @@ describe('footingPrism — which axis is the thickness', () => {
     const uniq = new Set<string>()
     for (let k = 0; k < v.length; k += 3) uniq.add(`${v[k]},${v[k + 1]},${v[k + 2]}`)
     expect(uniq.size).toBe(8)
+  })
+})
+
+describe('overlappingPairs — which pads actually clash', () => {
+  const xz2 = new Map([
+    ['a', { x: 0, z: 0 }], ['b', { x: 1.2, z: 0 }],
+    ['c', { x: 8, z: 0 }], ['d', { x: 0, z: 1.0 }],
+  ])
+
+  it('pairs pads that interpenetrate and leaves the rest alone', () => {
+    // a and b are 1.2 apart with 1.6 m pads — reach 1.6 > 1.2, so they collide.
+    // c is 8 m away and never touches anything.
+    const p = overlappingPairs([
+      { node: 'a', B: 1.6, Dc: 400 }, { node: 'b', B: 1.6, Dc: 400 },
+      { node: 'c', B: 1.6, Dc: 400 },
+    ], xz2)
+    expect(p).toHaveLength(1)
+    expect(new Set(p[0].nodes)).toEqual(new Set(['a', 'b']))
+    expect(p[0].depth).toBeCloseTo(0.4, 9)          // 1.6 − 1.2
+  })
+
+  it('leaves pads that merely come close', () => {
+    // 1.2 apart with 1.15 m pads: reach 1.15 < 1.2, they miss. This is the
+    // ordinary case in a regular grid, where the tributary area shrinks with
+    // the bay so the pads shrink with it and never catch the spacing.
+    expect(overlappingPairs([
+      { node: 'a', B: 1.15, Dc: 400 }, { node: 'b', B: 1.15, Dc: 400 },
+    ], xz2)).toHaveLength(0)
+  })
+
+  it('uses each node once, worst clash first', () => {
+    // a clashes with both b and d; d is closer, so a pairs with d and b is
+    // left on its own pad rather than being dragged into a three-way.
+    const p = overlappingPairs([
+      { node: 'a', B: 2.0, Dc: 400 }, { node: 'b', B: 2.0, Dc: 400 },
+      { node: 'd', B: 2.0, Dc: 400 },
+    ], xz2)
+    expect(p).toHaveLength(1)
+    expect(new Set(p[0].nodes)).toEqual(new Set(['a', 'd']))
+  })
+
+  it('measures penetration on the tighter axis, not the looser one', () => {
+    // Offset in both directions: the pair is only as overlapped as its
+    // shallowest axis, which is what decides whether they really foul.
+    const p = overlappingPairs([
+      { node: 'a', B: 2.0, Dc: 400 }, { node: 'b', B: 2.0, Dc: 400 },
+    ], new Map([['a', { x: 0, z: 0 }], ['b', { x: 1.9, z: 0.5 }]]))
+    expect(p[0].depth).toBeCloseTo(0.1, 9)          // 2.0 − 1.9, not 2.0 − 0.5
+  })
+
+  it('agrees with the overlap set the 3D view paints red', () => {
+    // One rule, so what the model flags and what the optimiser acts on cannot
+    // drift apart.
+    const fs = [
+      { node: 'a', B: 1.6, Dc: 400 }, { node: 'b', B: 1.6, Dc: 400 },
+      { node: 'c', B: 1.6, Dc: 400 },
+    ]
+    const painted = footingLayout(fs, [], xz2).overlaps
+    const paired = new Set(overlappingPairs(fs, xz2).flatMap((p) => p.nodes).map((n) => `ft-${n}`))
+    expect(paired).toEqual(painted)
   })
 })

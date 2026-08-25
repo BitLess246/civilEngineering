@@ -114,3 +114,49 @@ export function footingPrism(bx: number, w1: number, w2: number, dc: number): nu
   ]
   return idx.flatMap((k) => V[k])
 }
+
+export interface OverlapPair {
+  nodes: [string, string]
+  /** How deep the two pads interpenetrate, m — the smaller of the two axis
+   *  overlaps, so a pair that barely clips a corner ranks below one that
+   *  genuinely collides. */
+  depth: number
+}
+
+/**
+ * Isolated pads that physically clash, worst first, each node used once.
+ *
+ * This is the honest reason to combine two footings: their pads will not both
+ * fit. Combining columns that are NOT in each other's way produces a pad
+ * stretched to centre its bearing resultant, which for unequal loads at any
+ * distance comes out as a grade beam — long, narrow and deep — while two
+ * isolated pads would have served.
+ *
+ * The 3D view paints these same pairs red, so what the model flags and what
+ * the optimiser acts on cannot drift apart.
+ */
+export function overlappingPairs(
+  footings: FootingIn[], nodeXZ: Map<string, { x: number; z: number }>,
+): OverlapPair[] {
+  const cand: OverlapPair[] = []
+  for (let i = 0; i < footings.length; i++) {
+    for (let j = i + 1; j < footings.length; j++) {
+      const A = footings[i], C = footings[j]
+      const a = nodeXZ.get(A.node), c = nodeXZ.get(C.node)
+      if (!a || !c) continue
+      const reach = (A.B + C.B) / 2
+      const dx = reach - Math.abs(a.x - c.x), dz = reach - Math.abs(a.z - c.z)
+      if (dx <= 1e-9 || dz <= 1e-9) continue
+      cand.push({ nodes: [A.node, C.node], depth: Math.min(dx, dz) })
+    }
+  }
+  cand.sort((p, q) => q.depth - p.depth)
+  const used = new Set<string>()
+  const out: OverlapPair[] = []
+  for (const p of cand) {
+    if (used.has(p.nodes[0]) || used.has(p.nodes[1])) continue
+    used.add(p.nodes[0]); used.add(p.nodes[1])
+    out.push(p)
+  }
+  return out
+}

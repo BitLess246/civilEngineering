@@ -1958,26 +1958,6 @@ export default function ModelSpace() {
     return { deflMm: worst * 1000, W: storeyT * GRAVITY } // mm, kN
   }, [model, govRes])
 
-  // immediate grid-neighbour base supports (share an x- or z-line and are the
-  // nearest column either side, nothing between) — the only sensible partners
-  // for a combined footing.
-  const adjacentBases = (nodeA: string): Set<string> => {
-    const out = new Set<string>()
-    const A = nodePos.get(nodeA); if (!A || !model) return out
-    const others = model.supports.map((s) => s.node).filter((id) => id !== nodeA && nodePos.has(id))
-    for (const [axis, other] of [['x', 'z'], ['z', 'x']] as const) {
-      const onLine = others.filter((id) => Math.abs(nodePos.get(id)![axis] - A[axis]) < 1e-4)
-      for (const dir of [1, -1]) {
-        let best: string | null = null, bestD = Infinity
-        for (const id of onLine) {
-          const d = (nodePos.get(id)![other] - A[other]) * dir
-          if (d > 1e-4 && d < bestD) { bestD = d; best = id }
-        }
-        if (best) out.add(best)
-      }
-    }
-    return out
-  }
 
   // human-readable label for the currently-selected element (shown on the 3D view)
   const selInfo: { kind: string; id: string; extra?: string } | null = !selected ? null
@@ -2994,32 +2974,17 @@ export default function ModelSpace() {
                 <div className="py-3.5">
                   <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Footing plan</h3>
                   <p className="mb-2 text-xs text-slate-500">
-                    Each base support gets an isolated square footing by default — pick a partner node to design the
-                    pair as one combined footing instead (close columns / property-line situations).
+                    Every base support gets an isolated square footing. Where two of those pads would physically
+                    collide, the design pairs them as one combined footing — the pairing follows the pads, so it
+                    only happens where a combined footing is the right answer. Overlapping pads are drawn
+                    <span className="mx-1 inline-block h-2 w-3 rounded-sm align-middle" style={{ background: '#dc2626' }} />
+                    red on the model until they are resolved.
                   </p>
-                  <div className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
-                    {model.supports.map((s) => {
-                      const partner = planSel[s.node] ?? ''
-                      const takenBy = Object.entries(planSel).find(([n, p]) => p === s.node && n !== s.node)?.[0]
-                      const adj = adjacentBases(s.node)            // only neighbours can be combined
-                      return (
-                        <label key={s.node} className="flex items-center gap-2 text-xs">
-                          <span className="w-16 font-medium">{s.node}</span>
-                          {takenBy ? (
-                            <span className="text-slate-500">combined with {takenBy}</span>
-                          ) : (
-                            <select value={partner}
-                              onChange={(e) => setPlanSel((p) => ({ ...p, [s.node]: e.target.value }))}
-                              className="flex-1 rounded border border-slate-200 px-1 py-0.5">
-                              <option value="">isolated</option>
-                              {model.supports.filter((o) => o.node !== s.node && !planSel[o.node] && adj.has(o.node))
-                                .map((o) => <option key={o.node} value={o.node}>combine with {o.node}</option>)}
-                            </select>
-                          )}
-                        </label>
-                      )
-                    })}
-                  </div>
+                  <p className="text-xs text-slate-500">
+                    Combining columns that are <em>not</em> in each other's way is what produces a grade beam: the
+                    pad is stretched until it is symmetric about the bearing resultant, and with unequal loads that
+                    runs far past the columns and leaves the width to fall out as area &divide; length.
+                  </p>
                 </div>
               )}
             </div>

@@ -24,6 +24,7 @@ import { designAxialColumn, capacityAtEccentricity, interaction, breslerReciproc
 import { calcDevLength } from './devLength'
 import { designSquareFooting, type SquareFootingResult } from './isolatedFooting'
 import { designCombinedFooting, type CombinedFootingResult } from './combinedFooting'
+import { overlappingPairs } from './footingLayout'
 import { designSlabDDM, type SlabDesignResult } from './slabDDM'
 import { designShearWall, type ShearWallResult } from './shearWallDesign'
 import { checkModelSCWB, type SCWBJointRow } from './scwb'
@@ -994,7 +995,7 @@ function buildRuns(model: StructuralModel, opts: AnalyzeOptions, onProgress?: Pr
 /** All member/footing/slab design given pre-solved FEM results. Shared by the
  *  synchronous and async paths to avoid code duplication. */
 function designFromRuns(
-  model: StructuralModel, soil: SoilOptions, plan: FootingPlan, opts: AnalyzeOptions,
+  model: StructuralModel, soil: SoilOptions, _plan: FootingPlan, opts: AnalyzeOptions,
   br: BridgeResult, runs: FrameRun[],
   serviceRes: F3Result | null, dRes: F3Result | null, lRes: F3Result | null,
   onProgress?: ProgressFn,
@@ -1213,14 +1214,82 @@ function designFromRuns(
     }
   }
 
-  // ── Footings (base supports) — isolated by default, combined per plan ──
+  // ── Footings (base supports) ──
+  //
+  // Isolated by default. Two columns share a pad only when their own pads
+  // physically CLASH — which is the honest reason to combine them, and the
+  // only regime a combined footing is good at.
+  //
+  // It used to be a user choice (`FootingPlan`), and pairing columns that were
+  // not in each other's way produced the shape a combined footing degenerates
+  // into: the pad is stretched until it is symmetric about the bearing
+  // resultant, and with unequal loads at any real spacing that runs far past
+  // the columns, the width falls out as area/length, and the strip that
+  // results has so little punching perimeter that the depth climbs again. A
+  // pair 6 m apart carrying 160 and 350 kN came out 8.7 m long, 0.6 m wide and
+  // 0.7 m deep, beside isolated pads of 1.15 × 1.15 × 0.20 on the same job.
+  //
+  // So the pads are designed first and the clashes decide, not the user.
   onProgress?.({ phase: 'Designing footings & slabs' })
   const nodeXYZ = new Map(model.nodes.map((n) => [n.id, n]))
+
+  /** One isolated pad, designed. */
+  const designIsolated = (node: string): FootingScheduleRow | null => {
+    let Pu = 0, gov = ''
+    for (const run of runs) {
+      const p = reactAt(run.result, node)
+      if (p > Pu) { Pu = p; gov = run.name }
+    }
+    if (Pu < 1e-6) return null
+    const P = Math.max(serviceAt(node), Pu / 1.4)
+    const fs = footSec(node)
+    // The mat picks its own diameter and spacing. `fs` is the COLUMN section
+    // and only supplies the concrete grade, the steel grade and the column
+    // width the footing cantilevers from — its bar size is not the footing's
+    // business, and passing it was what produced 2⌀32 mats.
+    const fin = {
+      serviceLoad: P, ultimateLoad: Pu, columnWidth: Math.min(fs.b, fs.h),
+      fc: fs.fc, fy: fs.fy, qAllow: soil.qAllow,
+      gammaSoil: soil.gammaSoil, gammaConc: soil.gammaConc, H: soil.H,
+      barDia: fs.barDia, cover: 75,
+    }
+    const choice = optimizeFootingRebar(fin)
+    // No compliant mat is a real answer, but the row still needs a section to
+    // report — design it at the seed diameter and let `ok` carry the failure.
+    const base = choice.design ?? designSquareFooting(fin)
+    const barDia = choice.db ?? fs.barDia
+    // Quote the mat the optimiser ADOPTED, not the one `designSquareFooting`
+    // fell back to. The two differ: the engine lays out the bare §7.7.2.3
+    // minimum (2⌀10 @ 390 on a 0.55 m pad), the optimiser picks off the
+    // spacing module and scores it (3⌀10 @ 150). Leaving both in the row
+    // would put two different mats on the same footing — the schedule saying
+    // one thing and the selection it cites saying another.
+    const d: SquareFootingResult = choice.bars !== null && choice.spacing !== null
+      ? { ...base, bars: choice.bars, barSpacing: choice.spacing }
+      : base
+    return {
+      node, P, Pu, design: d, barDia, selection: choice.selection,
+      ok: d.qNet > 0 && d.punchOK && d.beamOK && d.barsFit && choice.db !== null,
+      gov,
+    }
+  }
+
+  const isolated: FootingScheduleRow[] = []
+  for (const ru of runs[govIdx].result.reactions) {
+    const row = designIsolated(ru.node)
+    if (row) isolated.push(row)
+  }
+
+  // Which pads collide — the same rule the 3D view paints red, so what the
+  // model flags and what the design does cannot drift apart.
+  const nodeXZ = new Map([...nodeXYZ].map(([id, n]) => [id, { x: n.x, z: n.z }]))
+  const clashes = overlappingPairs(
+    isolated.map((r) => ({ node: r.node, B: r.design.B, Dc: r.design.Dc })), nodeXZ,
+  )
+
   const paired = new Set<string>()
   const combined: CombinedScheduleRow[] = []
-  for (const [nodeA, choice] of Object.entries(plan)) {
-    if (choice.type !== 'combined' || paired.has(nodeA) || paired.has(choice.with)) continue
-    const nodeB = choice.with
+  for (const { nodes: [nodeA, nodeB] } of clashes) {
     const a = nodeXYZ.get(nodeA), b2 = nodeXYZ.get(nodeB)
     if (!a || !b2) continue
     const spacing = Math.hypot(b2.x - a.x, b2.z - a.z)
@@ -1246,49 +1315,7 @@ function designFromRuns(
     paired.add(nodeA); paired.add(nodeB)
   }
 
-  const footings: FootingScheduleRow[] = []
-  for (const ru of runs[govIdx].result.reactions) {
-    if (paired.has(ru.node)) continue
-    // envelope the factored axial reaction across all runs (a lateral combo may
-    // load a base more than gravity); service load from the gravity solve.
-    let Pu = 0, gov = ''
-    for (const run of runs) {
-      const p = reactAt(run.result, ru.node)
-      if (p > Pu) { Pu = p; gov = run.name }
-    }
-    if (Pu < 1e-6) continue
-    const P = Math.max(serviceAt(ru.node), Pu / 1.4)
-    const fs = footSec(ru.node)
-    // The mat picks its own diameter and spacing. `fs` is the COLUMN section
-    // and only supplies the concrete grade, the steel grade and the column
-    // width the footing cantilevers from — its bar size is not the footing's
-    // business, and passing it was what produced 2⌀32 mats.
-    const fin = {
-      serviceLoad: P, ultimateLoad: Pu, columnWidth: Math.min(fs.b, fs.h),
-      fc: fs.fc, fy: fs.fy, qAllow: soil.qAllow,
-      gammaSoil: soil.gammaSoil, gammaConc: soil.gammaConc, H: soil.H,
-      barDia: fs.barDia, cover: 75,
-    }
-    const choice = optimizeFootingRebar(fin)
-    // No compliant mat is a real answer, but the row still needs a section to
-    // report — design it at the seed diameter and let `ok` carry the failure.
-    const base = choice.design ?? designSquareFooting(fin)
-    const barDia = choice.db ?? fs.barDia
-    // Quote the mat the optimiser ADOPTED, not the one `designSquareFooting`
-    // fell back to. The two differ: the engine lays out the bare §7.7.2.3
-    // minimum (2⌀10 @ 390 on a 0.55 m pad), the optimiser picks off the
-    // spacing module and scores it (3⌀10 @ 150). Leaving both in the row
-    // would put two different mats on the same footing — the schedule saying
-    // one thing and the selection it cites saying another.
-    const d: SquareFootingResult = choice.bars !== null && choice.spacing !== null
-      ? { ...base, bars: choice.bars, barSpacing: choice.spacing }
-      : base
-    footings.push({
-      node: ru.node, P, Pu, design: d, barDia, selection: choice.selection,
-      ok: d.qNet > 0 && d.punchOK && d.beamOK && d.barsFit && choice.db !== null,
-      gov,
-    })
-  }
+  const footings: FootingScheduleRow[] = isolated.filter((r) => !paired.has(r.node))
 
   // ── Base plates (steel columns landing on a base support) ──
   const basePlates: BasePlateScheduleRow[] = []
