@@ -224,6 +224,45 @@ export function beamDetailBundles(model: StructuralModel, design: StructureDesig
     return col ? design.columns.find((c) => c.id === col.id) : undefined
   }
 
+  /**
+   * Does a column reach out of this node, up (`+1`) or down (`−1`)?
+   *
+   * What the sheet needs to know before it turns a hook: a tail leaving the top
+   * of a joint is embedded in the column above, and at a roof there is none.
+   * The 3D cage asks `cageBuilder` the same question, so the two views turn the
+   * same bar the same way.
+   */
+  const columnBeyond = (node: string, way: 1 | -1): boolean => {
+    const here = nodeById.get(node)
+    if (!here) return false
+    return model.members.some((m) => {
+      if (m.role !== 'column') return false
+      if (m.i !== node && m.j !== node) return false
+      const far = nodeById.get(m.i === node ? m.j : m.i)
+      return !!far && way * (far.y - here.y) > 1e-6
+    })
+  }
+
+  /** Is there a beam framing in ACROSS this one at a node — somewhere for a
+   *  hook to turn when neither vertical way has concrete? */
+  const transverseAt = (memberId: string, node: string, other: string): boolean => {
+    const a = nodeById.get(node), o = nodeById.get(other)
+    if (!a || !o) return false
+    const dx = a.x - o.x, dz = a.z - o.z
+    const len = Math.hypot(dx, dz)
+    if (len < 1e-9) return false
+    return model.members.some((m) => {
+      if (m.id === memberId || (m.role !== 'beam' && m.role !== 'girder')) return false
+      const far = m.i === node ? m.j : m.j === node ? m.i : null
+      if (!far) return false
+      const f = nodeById.get(far); if (!f) return false
+      const ex = f.x - a.x, ez = f.z - a.z
+      const el = Math.hypot(ex, ez)
+      if (el < 1e-9) return false
+      return Math.abs((dx * ex + dz * ez) / (len * el)) < 0.9   // not along this beam
+    })
+  }
+
   /** Supporting column width at a node, mm — how much joint the sheet draws. */
   const colWidthAt = (node: string): number | undefined => {
     const sec = colSectionAt(node)
@@ -300,6 +339,14 @@ export function beamDetailBundles(model: StructuralModel, design: StructureDesig
         colB: colWidthAt(mem.i) ?? colWidthAt(mem.j),
         continuousLeft: continuesPast(mem.id, mem.i, mem.j),
         continuousRight: continuesPast(mem.id, mem.j, mem.i),
+        // What each joint has to anchor into, so the sheet turns the hooks the
+        // way the cage does instead of always top-down / bottom-up.
+        columnAboveLeft: columnBeyond(mem.i, 1),
+        columnAboveRight: columnBeyond(mem.j, 1),
+        columnBelowLeft: columnBeyond(mem.i, -1),
+        columnBelowRight: columnBeyond(mem.j, -1),
+        sideBeamLeft: transverseAt(mem.id, mem.i, mem.j),
+        sideBeamRight: transverseAt(mem.id, mem.j, mem.i),
         cover: sec.cover,
         hookAnchorage: hookAnchorageAt(colSectionAt(mem.i) ?? colSectionAt(mem.j)),
         columnCage: (() => {

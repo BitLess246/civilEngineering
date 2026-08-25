@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { PlanPrimitive } from './planRenderer'
+import { buildBeamCage } from './beamCage'
 import {
   buildBeamDetail, continuousTopSteel, barExtension, zoneSpacing, hoopPositions, wrapNote,
   FIRST_HOOP, HOOP_ZONE_DEPTHS, HOOK_END_COVER, EXTRA_TOP_FRACTION, EXTRA_BOTTOM_FRACTION,
@@ -651,5 +652,103 @@ describe('buildBeamDetail — the end hook is dimensioned, not drawn by eye', ()
     const cols = drawn.primitives.filter((p) => p.kind === 'rect' && p.fill === '#f1f5f9') as { w: number }[]
     expect(cols.length).toBeGreaterThan(0)
     for (const c of cols) expect(c.w).toBeCloseTo(0.25, 9)
+  })
+})
+
+describe('the elevation turns its hooks the way the CAGE does', () => {
+  /** Every hook path drawn at a given bar level. */
+  const hooks = (d: { primitives: PlanPrimitive[] }, barZ: number) =>
+    d.primitives.filter((p): p is Extract<PlanPrimitive, { kind: 'path' }> =>
+      p.kind === 'path' && p.stroke === REBAR_INK && Array.isArray(p.cmds) && p.cmds.length === 3)
+      .filter((p) => {
+        const last = p.cmds[p.cmds.length - 1] as { y?: number }
+        return Math.abs((last.y ?? 0) - -barZ) < 1e-6
+      })
+  /** The sheet's notes, which are drawn as text rather than returned. */
+  const said = (d: { primitives: PlanPrimitive[] }, re: RegExp) =>
+    d.primitives.some((p) => p.kind === 'text' && re.test(p.text))
+
+  /** A 300 deep beam on ⌀28 bars: two 12db tails are longer than the depth. */
+  const shallow = {
+    ...b, h: 300, barDia: 28,
+    sections: [
+      { label: 'End i', x: 0, hogging: true, bars: 2, stirrupSpacing: 110 },
+      { label: 'End j', x: 6, hogging: true, bars: 2, stirrupSpacing: 110 },
+      { label: 'Mid', x: 3, hogging: false, bars: 2, stirrupSpacing: 200 },
+    ],
+  }
+  const yBotShallow = (40 + 10 + 28 / 2) / 1000
+
+  it('turns the bottom hook DOWN where turning up has nothing to sit in', () => {
+    // The point of wiring the sheet to `beamAnchorage`: by the old rule this
+    // tail went up out of the top of the beam, into air.
+    const d = buildBeamDetail({ ...shallow, columnAboveLeft: false, columnAboveRight: false })
+    const h = hooks(d, yBotShallow)
+    expect(h.length).toBe(2)
+    // screen y grows downward, so a tail that starts BELOW the bar runs down
+    for (const p of h) expect((p.cmds[0] as { y: number }).y).toBeGreaterThan(-yBotShallow)
+    expect(said(d, /TURNED DOWN/)).toBe(true)
+  })
+
+  it('turns it UP in a beam deep enough to take the tail', () => {
+    const d = buildBeamDetail(b)                    // 500 deep, ⌀16
+    const h = hooks(d, (40 + 10 + b.barDia / 2) / 1000)
+    expect(h.length).toBe(2)
+    for (const p of h) {
+      expect((p.cmds[0] as { y: number }).y).toBeLessThan(-(40 + 10 + b.barDia / 2) / 1000)
+    }
+  })
+
+  it('stands the bottom hook one diameter deeper in than the top one', () => {
+    // Top and bottom share one lane in an elevation, so the stagger always
+    // applies — and it is the same stagger `endAnchors` gives the 3D cage.
+    const d = buildBeamDetail(b)
+    const ins = (40 + 10 + b.barDia / 2) / 1000
+    const topX = hooks(d, b.h / 1000 - ins).map((p) => (p.cmds[0] as { x: number }).x)
+    const botX = hooks(d, ins).map((p) => (p.cmds[0] as { x: number }).x)
+    expect(topX).toHaveLength(2)
+    expect(botX).toHaveLength(2)
+    expect(botX[0] - topX[0]).toBeCloseTo(b.barDia / 1000, 6)   // left end, further in
+    expect(topX[1] - botX[1]).toBeCloseTo(b.barDia / 1000, 6)   // right end, mirrored
+  })
+})
+
+describe('the sheet and the 3D cage are the SAME bar', () => {
+  it('turns the bottom hook the same way in both, over depth and bar size', () => {
+    // The failure this guards against is the one the repo has hit before: two
+    // views of one joint drawn from two rules, and nobody notices until it is
+    // built. Both now ask `beamAnchorage`, so this holds by construction —
+    // which is worth a test precisely because it is easy to break by adding a
+    // special case to one of them.
+    for (const [h, dia] of [[300, 28], [350, 25], [400, 20], [500, 16], [600, 25], [750, 32]] as const) {
+      for (const above of [true, false]) {
+        const sections = [
+          { label: 'i', x: 0, hogging: true, bars: 3, stirrupSpacing: 110 },
+          { label: 'm', x: 3, hogging: false, bars: 3, stirrupSpacing: 200 },
+          { label: 'j', x: 6, hogging: true, bars: 3, stirrupSpacing: 110 },
+        ]
+        const ins = (40 + 10 + dia / 2) / 1000
+        const d = buildBeamDetail({
+          mark: 'B', L: 6, b: 300, h, barDia: dia, stirrupDia: 10, legs: 2,
+          sections, colB: 400, columnAboveLeft: above, columnAboveRight: above,
+        })
+        const hooks = d.primitives.filter((p): p is Extract<PlanPrimitive, { kind: 'path' }> =>
+          p.kind === 'path' && Array.isArray(p.cmds) && p.cmds.length === 3
+          && Math.abs(((p.cmds[2] as { y?: number }).y ?? 0) + ins) < 1e-6)
+        expect(hooks.length, `h=${h} ⌀${dia}`).toBe(2)
+        const onSheet = (hooks[0].cmds[0] as { y: number }).y > -ins ? 'down' : 'up'
+
+        const cage = buildBeamCage({
+          mark: 'B', L: 6, colBLeft: 400, colBRight: 400, b: 300, h, cover: 40,
+          barDia: dia, stirrupDia: 10, topBars: 3, botBars: 3, sEnd: 110, sMid: 200,
+          colCover: 40, colTieDia: 10, colBarDia: 20,
+          columnAboveLeft: above, columnAboveRight: above,
+          axis: { x0: 0, z0: 0, x1: 6, z1: 0 }, ySoffit: 0,
+        })
+        const bot = cage.runs.find((r) => r.mark === 'B-B1')!
+        const inCage = bot.path[0][1] < bot.path[1][1] ? 'down' : 'up'
+        expect(inCage, `h=${h} ⌀${dia} above=${above}`).toBe(onSheet)
+      }
+    }
   })
 })

@@ -44,6 +44,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { PlanPrimitive, PathCmd, Drawing } from './planRenderer'
 import { hookClearToFace, hookFit, type HookFitResult } from './devLength'
+import { endAnchors, type Anchor, type AnchorBar, type JointRoom } from './beamAnchorage'
 import { jointHookLdh } from './beamColumnJoint'
 import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader } from './detailSheet'
 import { buildColumnCage } from './columnCage'
@@ -97,6 +98,24 @@ export interface BeamDetailInput {
    *  bars with a hook; a continuous one runs them through. */
   continuousLeft?: boolean
   continuousRight?: boolean
+  /**
+   * What each support has to anchor INTO, so the sheet turns the hooks the way
+   * `beamAnchorage` does rather than always top-down / bottom-up.
+   *
+   * Left unsaid, a column is assumed above and below — the ordinary interior
+   * joint, and the detail the sheet has always drawn. It matters at a ROOF,
+   * where a tail turned up leaves the concrete, and the 3D cage and this
+   * elevation would otherwise show different bars.
+   */
+  columnAboveLeft?: boolean
+  columnAboveRight?: boolean
+  columnBelowLeft?: boolean
+  columnBelowRight?: boolean
+  /** A transverse beam to turn a tail into, where neither vertical way works.
+   *  In an elevation that tail runs out of the page, so the bar is drawn
+   *  stopping at its bend and the note says where it goes. */
+  sideBeamLeft?: boolean
+  sideBeamRight?: boolean
   /** Clear cover to the stirrup, mm (default 40 — §420.6.1.3.1). */
   cover?: number
   /**
@@ -586,8 +605,8 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   // How far a straight bar is drawn: to the stub end where the member carries
   // on, and to the START OF ITS BEND where it hooks. Running it to the cover
   // line instead left a stub of bar poking out past the hook it belongs to.
-  const barEnd = (cx: number, dir: 1 | -1, cont: boolean, down: boolean) =>
-    cont ? cx - dir * (face + stub) : hookGeom(cx, dir, down).turn
+  const barEnd = (cx: number, dir: 1 | -1, cont: boolean, role: 'top' | 'bottom') =>
+    cont ? cx - dir * (face + stub) : hookGeom(cx, dir, role).turn
 
   // ── longitudinal steel ──────────────────────────────────────────────────
   // Bars sit at their real centroid — clear cover, then the hoop, then half a
@@ -609,46 +628,80 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   // measured to the OUTSIDE of the bend (§425.4.3). Drawing a square corner
   // asks for a bar nobody can bend and hides how much depth the bend eats.
   //
-  // `dir` points INTO the span from the support centreline `cx`; `down` turns
-  // the tail towards the soffit, which is what a top bar does.
+  // ── which way each hook turns, and how deep it stands ───────────────────
   //
-  // The turned leg's centreline, and the station where the straight bar starts
-  // to bend. The top and bottom hooks are staggered by one bar diameter so
-  // their tails pass rather than collide: in a beam of ordinary depth two 12db
-  // tails are longer than the gap between the two bar layers.
-  const hookGeom = (cx: number, dir: 1 | -1, down: boolean) => {
+  // `beamAnchorage` decides, not this sheet: the elevation and the 3D cage
+  // have to be the same bar, and the rule this drawing used to apply — top
+  // down, bottom up — turns a tail up out of a roof joint into nothing.
+  //
+  // The two faces share one lane here, because an elevation looks along the
+  // beam, so the stagger always bites: the top bar holds the far face of the
+  // core and the bottom bar steps back a diameter. That is what the sheet
+  // already drew by hand; now it comes from the same place the cage does.
+  const clearEnd = anch?.clear ?? HOOK_END_COVER
+  const hookIn = Math.max(0, (i.hookAnchorage?.colH ?? i.colB ?? 400) / 2000
+    - (clearEnd + i.barDia / 2) / 1000)
+  const tailLen = hook90(i.barDia).ext / 1000
+  const anchorBars: AnchorBar[] = [
+    { role: 'top', y: yTop, v: 0, dia: i.barDia, tail: tailLen },
+    { role: 'bottom', y: yBot, v: 0, dia: i.barDia, tail: tailLen },
+  ]
+  const roomAt = (above: boolean, below: boolean, side: boolean): JointRoom => ({
+    above, below, ...(side ? { side: 1 as const } : {}),
+    // the cover line either side — as far as a tail may go on this beam's own
+    // concrete before it is relying on the column
+    yTop: hM - cov, yBot: cov, face: hookIn,
+  })
+  const endPlan = (cont: boolean, above?: boolean, below?: boolean, side?: boolean) =>
+    cont ? null : endAnchors(anchorBars, roomAt(above ?? true, below ?? true, side ?? false))
+  const planL = endPlan(!!i.continuousLeft, i.columnAboveLeft, i.columnBelowLeft, i.sideBeamLeft)
+  const planR = endPlan(!!i.continuousRight, i.columnAboveRight, i.columnBelowRight, i.sideBeamRight)
+  const anchorOf = (dir: 1 | -1, role: 'top' | 'bottom'): Anchor => {
+    const plan = dir > 0 ? planL : planR
+    const fallback: Anchor = { dir: role === 'top' ? 'down' : 'up', u: hookIn }
+    return plan?.[role === 'top' ? 0 : 1] ?? fallback
+  }
+
+  // A 90° standard hook is a BEND, not a corner. `dir` points INTO the span
+  // from the support centreline `cx`; the leg's own setback from the far face
+  // is whatever the anchorage gave it.
+  const hookGeom = (cx: number, dir: 1 | -1, role: 'top' | 'bottom') => {
+    const a = anchorOf(dir, role)
     const hk = hook90(i.barDia)
     const r = hk.radius / 1000
-    const hOut = cx - dir * (face - (anch?.clear ?? HOOK_END_COVER) / 1000)
-    const stagger = down ? 0 : i.barDia / 1000
-    const hx = hOut + dir * (hk.outside / 1000 + stagger)
-    return { hk, r, hx, turn: hx + dir * r }
+    const hOut = cx - dir * (face - clearEnd / 1000)
+    const hx = hOut + dir * (hk.outside / 1000 + (hookIn - a.u))
+    return { hk, r, hx, turn: hx + dir * r, a }
   }
-  const hookCmds = (cx: number, dir: 1 | -1, z: number, down: boolean): PathCmd[] => {
-    const { hk, r, hx, turn } = hookGeom(cx, dir, down)
-    const sgn = down ? 1 : -1                        // screen y grows downward
+  const hookCmds = (cx: number, dir: 1 | -1, z: number, role: 'top' | 'bottom'): PathCmd[] => {
+    const { hk, r, hx, turn, a } = hookGeom(cx, dir, role)
+    // A tail turned into a transverse beam runs out of the page. Drawing it as
+    // a vertical leg would be drawing a bar that is not there, so the bar is
+    // shown stopping at its bend and the note carries the rest.
+    if (a.dir === 'side') return [{ c: 'M', x: hx, y: Y(z) }, { c: 'L', x: turn, y: Y(z) }]
+    const sgn = a.dir === 'down' ? 1 : -1            // screen y grows downward
     // Sweep: the bend's centre sits on the INSIDE of the corner, so the arc
     // bulges away from it. Inverted, the bar appeared to curl back into the
     // corner it was turning out of — a fillet no bender could make.
     return [
       { c: 'M', x: hx, y: Y(z) + sgn * (hk.ext / 1000 + r) },
       { c: 'L', x: hx, y: Y(z) + sgn * r },
-      { c: 'A', rx: r, ry: r, x: turn, y: Y(z), large: 0, sweep: (dir > 0) === down ? 1 : 0 },
+      { c: 'A', rx: r, ry: r, x: turn, y: Y(z), large: 0, sweep: (dir > 0) === (a.dir === 'down') ? 1 : 0 },
     ]
   }
 
   // THROUGH bars — the pair that runs the whole length and is never cranked.
   // At an end support they have nowhere to go, so they hook into the column;
   // at a continuous one they run straight on through the joint.
-  for (const [z, down] of [[yTop, true], [yBot, false]] as const) {
+  for (const [z, role] of [[yTop, 'top'], [yBot, 'bottom']] as const) {
     P.push({
       kind: 'line', stroke: REBAR, width: 1.8,
-      x1: barEnd(0, 1, !!i.continuousLeft, down), y1: Y(z),
-      x2: barEnd(L, -1, !!i.continuousRight, down), y2: Y(z),
+      x1: barEnd(0, 1, !!i.continuousLeft, role), y1: Y(z),
+      x2: barEnd(L, -1, !!i.continuousRight, role), y2: Y(z),
     })
     for (const [cont, cx, dir] of [[i.continuousLeft, 0, 1], [i.continuousRight, L, -1]] as const) {
       if (cont) continue
-      P.push({ kind: 'path', stroke: REBAR, width: 2.2, cap: 'round', join: 'round', fill: 'none', cmds: hookCmds(cx, dir, z, down) })
+      P.push({ kind: 'path', stroke: REBAR, width: 2.2, cap: 'round', join: 'round', fill: 'none', cmds: hookCmds(cx, dir, z, role) })
     }
   }
 
@@ -671,11 +724,11 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
     [i.continuousRight, L, -1, crank.top[1], extraTopR],
   ] as const) {
     if (n <= 0) continue
-    const startX = barEnd(cx, dir, !!cont, true)   // through the joint, or its bend
+    const startX = barEnd(cx, dir, !!cont, 'top')  // through the joint, or its bend
     const cmds: PathCmd[] = [{ c: 'M', x: startX, y: Y(yTop2) }]
     // At an end support the extra bar hooks down into the column exactly as the
     // through bar above it does — same bend, same clear to the tail.
-    if (!cont) { cmds.length = 0; cmds.push(...hookCmds(cx, dir, yTop2, true)) }
+    if (!cont) { cmds.length = 0; cmds.push(...hookCmds(cx, dir, yTop2, 'top')) }
     cmds.push(
       { c: 'L', x: ce.at, y: Y(yTop2) },                 // straight run to the cut-off
       { c: 'L', x: ce.tip, y: Y(yTop2 - ce.drop) },      // the crank, turned down
@@ -822,7 +875,7 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   // own centreline instead would overstate the tail by the bend radius.
   for (const [cont, cx, dir] of [[i.continuousLeft, 0, 1], [i.continuousRight, L, -1]] as const) {
     if (cont) continue
-    const { hx, hk } = hookGeom(cx, dir, true)
+    const { hx, hk } = hookGeom(cx, dir, 'top')
     const r = hk.radius / 1000, ext = hk.ext / 1000
     const bendC = yTop2 - r                              // bend centre = tangent level
     // One leader for the hook, two lines. These used to be a rotated ℓext
@@ -871,6 +924,14 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
     `HOOPS @ ${Math.round(sEndUsed)} OVER 2h = ${Math.round(zone * 1000)} FROM EACH SUPPORT FACE, FIRST AT ${FIRST_HOOP} (§418.6.4.1/§418.6.4.4)`,
     `HOOPS @ ${Math.round(sMid)} THROUGH THE MIDDLE — SPACING IS WIDEST WHERE THE SHEAR IS LOWEST`,
     `AT AN END SUPPORT BEAM BARS ARE HOOKED INTO THE COLUMN, ${Math.round(anch?.clear ?? HOOK_END_COVER)} CLEAR TO THE END OF THE HOOK (§425.4.3 / §418.8.3)`,
+    ...(planL || planR ? [
+      `THE TOP HOOK STANDS AT THE FAR FACE OF THE CONFINED CORE AND THE BOTTOM HOOK ${i.barDia} FURTHER IN, SO THE TWO TAILS PASS RATHER THAN MEET (§418.8.4.1)`,
+    ] : []),
+    // Anything the anchorage had to change, in the words it changed it for.
+    ...[...new Set([...(planL ?? []), ...(planR ?? [])].flatMap((a) => a.note ?? []))]
+      .map((n) => n.toUpperCase()),
+    ...([...(planL ?? []), ...(planR ?? [])].some((a) => a.dir === 'side')
+      ? [`A HOOK SHOWN STOPPING AT ITS BEND TURNS INTO THE TRANSVERSE BEAM, OUT OF THE PLANE OF THIS ELEVATION`] : []),
     `90° STANDARD HOOK: ${hookBendDiameter(i.barDia) / i.barDia}db INSIDE BEND ⌀${Math.round(hookBendDiameter(i.barDia))}, ℓext = 12db = ${Math.round(hook90(i.barDia).ext)}, OVERALL ${Math.round(hook90(i.barDia).depth)} DEEP (TABLE 425.3.1) — ℓdh IS MEASURED TO THE OUTSIDE OF THE BEND`,
     `TOP BARS EXTEND ${Math.round(barExtension(i.h - 60, i.barDia) * 1000)} MIN. PAST THE POINT NO LONGER REQUIRED — max(d, 12db) §409.7.3.8.4`,
   ]

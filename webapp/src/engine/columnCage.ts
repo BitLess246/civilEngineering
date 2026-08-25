@@ -246,16 +246,23 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
       // is what makes the joint close: the column bar hooks over the beam's
       // bars and the beam's bars hook down past the column's.
       const yh = y1 + Math.max(0, i.topHookRise)
-      // Inward along the face the bar sits on — a corner bar on its longer one,
-      // which is the way it is bent on site and the way it stays clear of the
-      // bar turning in from the other face.
-      const ax = Math.abs(dx) >= Math.abs(dz)
-      const reach = Math.min(HOOK_EXTENSION * i.barDia, 2 * Math.abs(ax ? dx : dz)) / 1000
-      if (reach < (HOOK_EXTENSION * i.barDia) / 1000 - 1e-9) {
-        notes.push(`${i.mark}: the top hook reaches ${Math.round(reach * 1000)} mm, short of the ${HOOK_EXTENSION}·db extension — the column is too narrow to turn the bar in`)
+      // Inward, along whichever axis leaves the most room: from where the bar
+      // stands to the bar line on the far side. Turning along the axis the bar
+      // sits FURTHEST out on looks right for a corner bar and is wrong for one
+      // mid-face, which has no run at all that way and the whole half-width the
+      // other.
+      const runX = Math.abs(dx) + xhF
+      const runZ = Math.abs(dz) + zbF
+      const ax = runX >= runZ
+      const room = ax ? runX : runZ
+      const want = HOOK_EXTENSION * i.barDia
+      const reach = Math.min(want, room) / 1000
+      if (reach < want / 1000 - 1e-9) {
+        notes.push(`the top hook turns in ${Math.round(reach * 1000)} mm, short of the ${HOOK_EXTENSION}db = ${Math.round(want)} mm extension Table 425.3.1 asks for — the column is not deep enough to lay the bar across`)
       }
-      const tx = ax ? -Math.sign(dx) * reach : 0
-      const tz = ax ? 0 : -Math.sign(dz) * reach
+      const away = (v: number) => (v !== 0 ? -Math.sign(v) : 1)
+      const tx = ax ? away(dx) * reach : 0
+      const tz = ax ? 0 : away(dz) * reach
       path.push([x, yh, z], [x + tx, yh, z + tz])
       bendDia.push(hookBendDiameter(i.barDia))
     } else {

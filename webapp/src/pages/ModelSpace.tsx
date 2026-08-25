@@ -1637,10 +1637,38 @@ export default function ModelSpace() {
     () => new Map((design?.footings ?? []).map((f) => [f.node, f.pedestal])),
     [design],
   )
-  const rebarCages = useMemo(
-    () => (showRebar && model && design ? buildStructureCages(model, design).cages : []),
+  const rebarBuild = useMemo(
+    () => (showRebar && model && design ? buildStructureCages(model, design) : null),
     [showRebar, model, design],
   )
+  const rebarCages = rebarBuild?.cages ?? []
+  /**
+   * What the cage builder had to DECIDE, and what it could not place.
+   *
+   * These used to be built and thrown away: a hook turned the other way
+   * because there was no concrete for it, a bar stranded outside the 150 mm a
+   * tie can restrain, a member the design named that the model has not got.
+   * The 3D view showed the result and never said why, which is the one thing a
+   * reviewer needs. Grouped by the note itself, since a whole floor of columns
+   * reaches the same one.
+   */
+  const rebarNotes = useMemo(() => {
+    const by = new Map<string, string[]>()
+    for (const c of rebarBuild?.cages ?? []) {
+      for (const n of c.notes ?? []) {
+        const at = by.get(n) ?? []
+        if (!at.includes(c.member)) at.push(c.member)
+        by.set(n, at)
+      }
+    }
+    for (const u of rebarBuild?.unplaced ?? []) {
+      const n = 'no cage: the design names it but the model has no member with those nodes'
+      const at = by.get(n) ?? []
+      at.push(u)
+      by.set(n, at)
+    }
+    return [...by.entries()]
+  }, [rebarBuild])
 
   const reportProps = (d: StructureDesign): [string, string][] => {
     const distinct = (role: MemberRole) => {
@@ -2286,6 +2314,19 @@ export default function ModelSpace() {
               </span>
             )}
           </label>
+          {showRebar && rebarNotes.length > 0 && (
+            <div className="no-print mt-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-900">
+              <div className="font-medium">What the detailing had to decide</div>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                {rebarNotes.map(([note, at]) => (
+                  <li key={note}>
+                    <span className="font-mono">{at.slice(0, 4).join(', ')}{at.length > 4 ? ` +${at.length - 4} more` : ''}</span>
+                    {' — '}{note}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <label className="no-print mt-2 flex items-center gap-2 text-xs text-slate-600">
             <input type="checkbox" checked={showLoads} onChange={(e) => setShowLoads(e.target.checked)} />
             Show load diagrams on the model

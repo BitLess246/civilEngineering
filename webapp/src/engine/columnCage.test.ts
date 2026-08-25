@@ -231,11 +231,11 @@ describe('a column that STOPS hooks its bars in — §425.4.2 roof joint', () =>
       const [x, , z] = r.path[r.path.length - 2]
       const [hx, hy, hz] = r.path[r.path.length - 1]
       expect(hy).toBeCloseTo(Math.max(col.yBottom, col.yTop) + 0.17, 9)
-      // …horizontal, 12·db long, and heading INWARD
+      // …horizontal, 12·db long, and laid ACROSS the core rather than out of it
       expect(Math.hypot(hx - x, hz - z)).toBeCloseTo((12 * col.barDia) / 1000, 9)
-      const before = Math.hypot(x - col.centre[0], z - col.centre[1])
-      const after = Math.hypot(hx - col.centre[0], hz - col.centre[1])
-      expect(after).toBeLessThan(before)
+      const xhF = (col.h / 2 - 62) / 1000, zbF = (col.b / 2 - 62) / 1000
+      expect(Math.abs(hx - col.centre[0])).toBeLessThanOrEqual(xhF + 1e-9)
+      expect(Math.abs(hz - col.centre[1])).toBeLessThanOrEqual(zbF + 1e-9)
       expect(r.bendDia[r.bendDia.length - 1]).toBeGreaterThan(0)
     }
   })
@@ -252,7 +252,7 @@ describe('a column that STOPS hooks its bars in — §425.4.2 roof joint', () =>
     // 12·db has to fit between the bar and the far side of the core. A ⌀25 bar
     // in a 300 column cannot turn 300 mm in, and the detail is short.
     const cage = buildColumnCage({ ...col, b: 300, h: 300, barDia: 25, spliceLap: 0, topHookRise: 0.1 })
-    expect((cage.notes ?? []).some((n) => /short of the 12·db extension/.test(n))).toBe(true)
+    expect((cage.notes ?? []).some((n) => /short of the 12db/.test(n))).toBe(true)
   })
 })
 
