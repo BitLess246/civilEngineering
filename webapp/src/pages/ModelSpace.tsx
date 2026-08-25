@@ -9,6 +9,7 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { SceneText } from '../components/SceneText'
 import { RebarWireframe } from '../components/RebarWireframe'
+import { ghostKey, ghostMaterial } from '../components/ghostMaterial'
 import { buildStructureCages } from '../engine/cageBuilder'
 import { REBAR_ROLE_COLOR } from '../engine/rebarWire'
 import { ProjectsPanel } from '../components/ProjectsPanel'
@@ -164,9 +165,11 @@ function Member3D({ a, b, role, selected, tint = 0, sec, ghost = false, onPick }
       <boxGeometry args={[len, ty, tz]} />
       {/* Ghosted while the cages are shown — solid concrete hides the steel
           inside it, which made "show reinforcement cages" look like it did
-          nothing at all. `depthWrite` off so the bars behind still draw. */}
-      <meshStandardMaterial color={color} transparent={ghost} opacity={ghost ? 0.18 : 1}
-        depthWrite={!ghost} />
+          nothing at all. The `key` is what makes the toggle work rather than
+          merely look wired: three will not apply a transparent false → true
+          change to a material that already exists, so the material has to be
+          rebuilt. See components/ghostMaterial.ts. */}
+      <meshStandardMaterial key={ghostKey(ghost)} color={color} {...ghostMaterial(ghost)} />
     </mesh>
   )
 }
