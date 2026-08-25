@@ -175,6 +175,18 @@ export interface FootingScheduleRow {
   barDia: number
   /** Ranked alternatives and the reason this mat was adopted. */
   selection: RebarSelection
+  /**
+   * Length of column between the base node and the TOP of the pad, m — the
+   * pedestal, H − Dc.
+   *
+   * `H` is the founding depth: the pad's SOFFIT is that far below the base
+   * node, so unless the pad happens to be exactly that thick there is a stub of
+   * column below the ground node holding it up. Nothing carried that length, so
+   * the 3D view stood the pad's top at the node, the take-off bought neither
+   * its concrete nor its bars, and the cage's dowels lapped into a column that
+   * started nowhere.
+   */
+  pedestal: number
   ok: boolean
   gov?: string
 }
@@ -183,6 +195,9 @@ export interface CombinedScheduleRow {
   spacing: number
   dl1: number; ll1: number; dl2: number; ll2: number
   design: CombinedFootingResult
+  /** Column between the base nodes and the pad's top, m — H − Dc, as for an
+   *  isolated pad. Both columns on a combined pad sit on the same level. */
+  pedestal: number
   ok: boolean
 }
 export interface SlabScheduleRow {
@@ -1274,6 +1289,7 @@ function designFromRuns(
       : base
     return {
       node, P, Pu, design: d, barDia, selection: choice.selection,
+      pedestal: Math.max(0, soil.H - d.Dc / 1000),
       ok: d.qNet > 0 && d.punchOK && d.beamOK && d.barsFit && choice.db !== null,
       gov,
     }
@@ -1313,8 +1329,10 @@ function designFromRuns(
         gammaSoil: soil.gammaSoil, gammaConc: soil.gammaConc, surcharge: 0,
         H: soil.H, barDia: fsA.barDia, cover: 75,
       }),
+      pedestal: 0,
       ok: false,
     }
+    row.pedestal = Math.max(0, soil.H - row.design.Dc / 1000)
     row.ok = row.design.qNet > 0 && row.design.Dc > 0
     combined.push(row)
     paired.add(nodeA); paired.add(nodeB)
@@ -1503,7 +1521,65 @@ function designFromRuns(
   return partialDesign
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// THE SUPPORT BELONGS AT THE TOP OF THE FOOTING, NOT AT GROUND LEVEL
+//
+// A column's boundary condition is the column–footing interface. The stump
+// between the natural ground line and the pad carries the same axial force,
+// shear and moment as the rest of the column, plus lateral earth pressure and
+// its own weight, and it is part of the bottom storey's UNBRACED LENGTH — which
+// is measured from the top of the footing up to the ground-floor beam, not from
+// the NGL. Restrained at the NGL, that length was simply absent: the stump was
+// unengineered and the bottom column was checked short, so its slenderness was
+// understated by however deep the footing was buried.
+//
+// Depth of footing is a GEOTECHNICAL number, measured NGL → underside of pad;
+// the structural length starts one pad thickness above that. So the level to
+// support at is H − Dc below the base node, and Dc is not known until the pad
+// has been designed. Hence two passes: design once to size the pads, lower the
+// bases onto them, and design again on the model that produces. Only ONE extra
+// pass is taken — the pad is sized by axial load, which a longer column barely
+// changes, so a third would return the same pads.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** The model with each supported base node dropped onto the top of its pad, or
+ *  null when nothing moves (no footings, or the pad fills the whole depth). */
+export function lowerBasesToFootings(
+  model: StructuralModel, design: StructureDesign,
+): StructuralModel | null {
+  const drop = new Map<string, number>()
+  for (const f of design.footings) if (f.pedestal > 1e-6) drop.set(f.node, f.pedestal)
+  for (const cf of design.combined) {
+    const ped = Math.max(0, cf.pedestal)
+    if (ped > 1e-6) for (const n of cf.nodes) drop.set(n, ped)
+  }
+  if (drop.size === 0) return null
+  return {
+    ...model,
+    nodes: model.nodes.map((n) => {
+      const d = drop.get(n.id)
+      return d ? { ...n, y: n.y - d } : n
+    }),
+  }
+}
+
+/**
+ * Design the structure, with the column bases supported at the top of their
+ * footings (see above). Two passes: the first sizes the pads, the second is the
+ * one that is returned.
+ */
 export function designStructure(
+  model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}, opts: AnalyzeOptions = {},
+  onProgress?: ProgressFn,
+): StructureDesign | null {
+  const first = designStructureOnce(model, soil, plan, opts, onProgress)
+  if (!first) return null
+  const lowered = lowerBasesToFootings(model, first)
+  return lowered ? designStructureOnce(lowered, soil, plan, opts, onProgress) ?? first : first
+}
+
+/** One pass, on the model exactly as given. */
+export function designStructureOnce(
   model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}, opts: AnalyzeOptions = {},
   onProgress?: ProgressFn,
 ): StructureDesign | null {
@@ -1578,7 +1654,19 @@ export async function designStructureAsync(
 ): Promise<StructureDesign | null> {
   const pool = new FramePool()
   try {
-    return await designStructureWithPool(model, soil, plan, opts, pool, onProgress)
+    const first = await designStructureWithPool(model, soil, plan, opts, pool, onProgress)
+    if (!first) return null
+    // Second pass with the bases on the pads — the same two-pass the sync entry
+    // runs, and for the same reason: the support level is not known until the
+    // pads it sits on have been sized.
+    const lowered = lowerBasesToFootings(model, first)
+    if (!lowered) return first
+    const pool2 = new FramePool()
+    try {
+      return (await designStructureWithPool(lowered, soil, plan, opts, pool2, onProgress)) ?? first
+    } finally {
+      pool2.terminate()
+    }
   } finally {
     pool.terminate()
   }

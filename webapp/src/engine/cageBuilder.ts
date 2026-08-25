@@ -120,6 +120,9 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
     })
   }
 
+  /** Pedestal at a base node, m — the column between the node and the pad top. */
+  const pedestalAt = new Map(design.footings.map((f) => [f.node, f.pedestal]))
+
   const cages: RebarCage[] = []
   const unplaced: string[] = []
   /** Splice options for a member, from its own concrete and steel. */
@@ -172,8 +175,14 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
     const ni = mem && pos.get(mem.i), nj = mem && pos.get(mem.j)
     if (!mem || !ni || !nj) { unplaced.push(c.id); continue }
     const sec = secOf(c.id)
-    const yLo = Math.min(ni.y, nj.y), yHi = Math.max(ni.y, nj.y)
+    const yHi = Math.max(ni.y, nj.y)
     const topNode = ni.y >= nj.y ? mem.i : mem.j
+    const baseNode = ni.y >= nj.y ? mem.j : mem.i
+    // A column on a footing does not start at its base node: the pad's top is
+    // the founding depth less its own thickness below that, and the column runs
+    // down to meet it. Drawn from the node, that pedestal was missing from the
+    // cage, the concrete and the bill alike.
+    const yLo = Math.min(ni.y, nj.y) - (pedestalAt.get(baseNode) ?? 0)
     const jd = beamDepthAt(topNode)
     // §25.5.5 compression lap, only where a column actually continues above.
     const lap = columnAbove(c.id, topNode)
@@ -218,8 +227,8 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       B: f.design.B, Dc: f.design.Dc, cover: FOOTING_COVER,
       barDia: f.barDia, bars: f.design.bars,
       centre: [at.x, at.z],
-      // the pad's top sits directly under the column's base node
-      yTop: Math.min(pos.get(col.i)?.y ?? at.y, pos.get(col.j)?.y ?? at.y),
+      // the pad's top is the pedestal below the column's base node
+      yTop: Math.min(pos.get(col.i)?.y ?? at.y, pos.get(col.j)?.y ?? at.y) - f.pedestal,
       colBars: perimeterBars({
         b: sec.b, h: sec.h, cover: sec.cover,
         barDia: sec.barDia, bars: cd?.bars ?? 4, tieDia: sec.tieDia,

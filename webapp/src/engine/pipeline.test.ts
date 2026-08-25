@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { generateGridModel, buildGravityLoads, removeNode, enforceSectionHierarchy, refreshSelfWeight, splitSharedSections, barContinuityGroups } from './modelBuilder'
-import { designStructure, optimizeStructure, selectBarDiameters, designOK, withEv, RC_LIMITS, type LateralCase } from './pipeline'
+import { designStructure, optimizeStructure, selectBarDiameters, designOK, withEv, RC_LIMITS, type LateralCase, designStructureOnce, lowerBasesToFootings } from './pipeline'
 import { nextHeavierW } from './aiscSections'
 import { computeSeismic } from './seismic'
 import { nscpCombos } from './beamAnalysis'
@@ -107,8 +107,15 @@ describe('design pipeline — single-bay single-storey grid', () => {
   })
 
   it('concrete totals: members + slab', () => {
-    // 4 columns ×3 m + (2×6 + 2×5) m of beams = 12 + 22 = 34 m of 0.15 m² section
-    expect(r.totals.concreteMembers).toBeCloseTo(34 * 0.3 * 0.5, 6)
+    // A column runs from the TOP OF ITS FOOTING to the floor, not from the
+    // ground line, so the four of them are longer than 4 × the 3 m storey by
+    // the pedestal H − Dc. Beams are (2×6 + 2×5) = 22 m either way.
+    const colL = r.columns.reduce((s, c) => s + c.L, 0)
+    const beamL = r.beams.reduce((s, b) => s + b.L, 0)
+    expect(beamL).toBeCloseTo(22, 6)
+    expect(colL).toBeGreaterThan(4 * 3 + 1e-6)
+    expect(colL).toBeCloseTo(4 * (3 + r.footings[0].pedestal), 6)
+    expect(r.totals.concreteMembers).toBeCloseTo((colL + beamL) * 0.3 * 0.5, 6)
     expect(r.totals.concreteSlabs).toBeCloseTo(6 * 5 * 0.20, 6)
   })
 
@@ -190,8 +197,11 @@ describe('steel design pipeline (AISC routing + base plates)', () => {
   it('reports steel tonnage and no concrete member volume', () => {
     expect(r.totals.steelKg).toBeGreaterThan(0)
     expect(r.totals.concreteMembers).toBeCloseTo(0, 6)
-    // 34 m of W310x79 (A = 10000 mm²) at 7850 kg/m³
-    expect(r.totals.steelKg).toBeCloseTo(34 * (10000 / 1e6) * 7850, 0)
+    // W310x79, A = 10000 mm², at 7850 kg/m³ — over the members' own lengths,
+    // which for a column reach down to the top of its footing.
+    const L = [...r.steelBeams, ...r.steelColumns].reduce((s, m) => s + m.L, 0)
+    expect(L).toBeGreaterThan(34)
+    expect(r.totals.steelKg).toBeCloseTo(L * (10000 / 1e6) * 7850, 0)
   })
 
   // AUD-001. W310x79 is compact at Fy 345, so the schedule above is a §F2
@@ -847,8 +857,8 @@ describe('optimizeStructure — steel sections', () => {
   it('steel self-weight uses shape area × 78.5 kN/m³, not bounding box × 24', () => {
     // W310x79: A = 10000 mm². Self-weight = 10000/1e6 × 78.5 = 0.785 kN/m
     const r = designStructure(steelModel('W310x79'), soil)!
-    // 34 m of W310x79 (A=10 000 mm²) at 7850 kg/m³ ≈ 2669 kg
-    expect(r.totals.steelKg).toBeCloseTo(34 * (10000 / 1e6) * 7850, 0)
+    const L = [...r.steelBeams, ...r.steelColumns].reduce((s, m) => s + m.L, 0)
+    expect(r.totals.steelKg).toBeCloseTo(L * (10000 / 1e6) * 7850, 0)
   })
 })
 
@@ -1306,6 +1316,78 @@ describe('model space and the calculator pages agree on bars', () => {
       expect(sec.barCount, c.id).toBeDefined()
       expect(c.bars, c.id).toBe(sec.barCount)      // the schedule details what the model stores
       expect(c.ok, c.id).toBe(true)
+    }
+  })
+})
+
+describe('the column base is supported at the top of the footing', () => {
+  // The boundary condition is the column–footing interface, not the natural
+  // ground line. The stump between the two carries the same forces, and it is
+  // part of the bottom storey's unbraced length — measured top-of-footing to
+  // ground-floor beam. Restrained at the NGL that length was simply absent.
+  const m = () => {
+    const g = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section })
+    g.loads = buildGravityLoads(g, 4.8, 2.4)
+    return g
+  }
+
+  it('lowers every base node onto its pad, and only those', () => {
+    const model = m()
+    const first = designStructureOnce(model, soil)!
+    const low = lowerBasesToFootings(model, first)!
+    expect(low).not.toBeNull()
+    const y0 = new Map(model.nodes.map((n) => [n.id, n.y]))
+    const bases = new Set(first.footings.map((f) => f.node))
+    for (const n of low.nodes) {
+      const moved = y0.get(n.id)! - n.y
+      if (bases.has(n.id)) {
+        expect(moved).toBeCloseTo(first.footings.find((f) => f.node === n.id)!.pedestal, 9)
+        expect(moved).toBeGreaterThan(0)
+      } else {
+        expect(moved).toBeCloseTo(0, 12)
+      }
+    }
+  })
+
+  it('leaves the model alone when the pad fills the whole founding depth', () => {
+    const model = m()
+    const first = designStructureOnce(model, soil)!
+    const flush = { ...first, footings: first.footings.map((f) => ({ ...f, pedestal: 0 })), combined: [] }
+    expect(lowerBasesToFootings(model, flush)).toBeNull()
+  })
+
+  it('the ANALYSIS runs on the longer column — the stump is not unengineered', () => {
+    const model = m()
+    const one = designStructureOnce(model, soil)!
+    const two = designStructure(model, soil)!
+    const ped = one.footings[0].pedestal
+    expect(ped).toBeGreaterThan(0)
+    for (const c of two.columns) {
+      const short = one.columns.find((x) => x.id === c.id)!
+      expect(c.L).toBeCloseTo(short.L + ped, 6)
+    }
+  })
+
+  it('and the DESIGN sees it: a longer column is checked as a longer column', () => {
+    // The slenderness check consumes the schedule length, so the bottom column
+    // is no longer checked short by however deep its footing is buried.
+    const model = m()
+    const two = designStructure(model, soil)!
+    for (const c of two.columns) expect(c.L).toBeGreaterThan(3 + 1e-6)
+  })
+
+  it('settles in two passes — a longer column does not resize the pad', () => {
+    // The pad is sized by axial load, which lengthening the column barely
+    // changes, so a third pass would return the same pads. If it did not, the
+    // support level would chase itself.
+    const model = m()
+    const two = designStructure(model, soil)!
+    const low = lowerBasesToFootings(model, two)
+    const three = low ? designStructureOnce(low, soil)! : two
+    for (const f of two.footings) {
+      const again = three.footings.find((x) => x.node === f.node)!
+      expect(again.design.Dc).toBe(f.design.Dc)
+      expect(again.pedestal).toBeCloseTo(f.pedestal, 9)
     }
   })
 })

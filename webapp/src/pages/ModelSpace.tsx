@@ -487,9 +487,14 @@ function GridBubbles3D({ model }: { model: StructuralModel }) {
  *  footprints are visible. bx/bz = plan dimensions (m), dc = depth (m), angle =
  *  plan rotation about Y (combined footings follow the column axis). Overlapping
  *  footings are tinted red. */
-function Footing3D({ cx, cz, bx, bz, bz1, bz2, dc, angle = 0, overlap = false, label }: {
+function Footing3D({ cx, cz, bx, bz, bz1, bz2, dc, yTop = 0, angle = 0, overlap = false, label }: {
   cx: number; cz: number; bx: number; bz: number; bz1?: number; bz2?: number
-  dc: number; angle?: number; overlap?: boolean; label?: string
+  dc: number
+  /** Level of the pad's TOP, m. Below grade by the pedestal the column runs
+   *  down through — the pad was drawn with its top pinned to y = 0, so a pad
+   *  founded 1.5 m down appeared at the surface with nothing under the column. */
+  yTop?: number
+  angle?: number; overlap?: boolean; label?: string
 }) {
   // A tapered pad is drawn tapered. Boxing it on the mean width puts the plan
   // edge in the wrong place at BOTH ends — which is the whole difference
@@ -503,7 +508,7 @@ function Footing3D({ cx, cz, bx, bz, bz1, bz2, dc, angle = 0, overlap = false, l
     return g
   }, [bx, w1, w2, dc])
   return (
-    <group position={[cx, -dc / 2, cz]} rotation={[0, -angle, 0]}>
+    <group position={[cx, yTop - dc / 2, cz]} rotation={[0, -angle, 0]}>
       <mesh geometry={geom ?? undefined}>
         {!geom && <boxGeometry args={[bx, dc, bz]} />}
         <meshStandardMaterial color={overlap ? '#dc2626' : '#b45309'} transparent opacity={overlap ? 0.6 : 0.45}
@@ -1627,6 +1632,11 @@ export default function ModelSpace() {
   // The bar cages, placed. Same objects the detail sheets project and the
   // take-off weighs — a view that built its own would be a fourth description
   // of the same steel, which is the thing this whole model set out to stop.
+  /** Pedestal at each base node, m — how far the column runs below it. */
+  const pedestalAt = useMemo(
+    () => new Map((design?.footings ?? []).map((f) => [f.node, f.pedestal])),
+    [design],
+  )
   const rebarCages = useMemo(
     () => (showRebar && model && design ? buildStructureCages(model, design).cages : []),
     [showRebar, model, design],
@@ -2127,6 +2137,13 @@ export default function ModelSpace() {
                     const contAt = (nid: string) => model.members.some((o) => o.id !== m.id && o.role === 'column' && (o.i === nid || o.j === nid))
                     aV = manI ? a.clone().add(v3(manI)) : (fo?.offI && !contAt(m.i) ? a.clone().sub(v3(fo.offI)) : a)
                     bV = manJ ? bb.clone().add(v3(manJ)) : (fo?.offJ && !contAt(m.j) ? bb.clone().sub(v3(fo.offJ)) : bb)
+                    // …and down to the TOP OF THE PAD, which is the founding
+                    // depth less the pad's own thickness below the base node.
+                    // Drawn from the node, the column floated above a footing
+                    // it never reached.
+                    const lower = a.y <= bb.y ? m.i : m.j
+                    const ped = pedestalAt.get(lower) ?? 0
+                    if (ped > 0) { const t = a.y <= bb.y ? aV : bV; t.y -= ped }
                   } else {
                     aV = manI ? a.clone().add(v3(manI)) : (fo?.offI ? a.clone().add(v3(fo.offI)) : a)
                     bV = manJ ? bb.clone().add(v3(manJ)) : (fo?.offJ ? bb.clone().add(v3(fo.offJ)) : bb)
@@ -2153,7 +2170,13 @@ export default function ModelSpace() {
                 })}
                 {model.supports.map((s) => {
                   const p = nodePos.get(s.node)
-                  return p ? <Support3D key={s.node} p={p} /> : null
+                  if (!p) return null
+                  // The boundary condition is the column–footing interface, not
+                  // the ground line — which is where the design supports it, so
+                  // it is where the symbol belongs. Drawn at the node it sat a
+                  // whole pedestal above the thing actually holding the column.
+                  const ped = pedestalAt.get(s.node) ?? 0
+                  return <Support3D key={s.node} p={ped ? new THREE.Vector3(p.x, p.y - ped, p.z) : p} />
                 })}
                 {showConns && design && (design.joints.length > 0 || design.beamJoints.length > 0) && (
                   <JointConnections3D joints={design.joints} beamJoints={design.beamJoints} model={model} nodePos={nodePos} />
@@ -2161,7 +2184,9 @@ export default function ModelSpace() {
                 {showFootings && design && (() => {
                   const xz = new Map([...nodePos].map(([id, p]) => [id, { x: p.x, z: p.z }]))
                   const { items, overlaps } = footingLayout(
-                    design.footings.map((f) => ({ node: f.node, B: f.design.B, Dc: f.design.Dc })),
+                    design.footings.map((f) => ({
+                      node: f.node, B: f.design.B, Dc: f.design.Dc, pedestal: f.pedestal,
+                    })),
                     design.combined.map((cf) => ({
                       nodes: cf.nodes, Bx: cf.design.Bx,
                       By1: cf.design.By1, By2: cf.design.By2, x1: cf.design.x1,
@@ -2171,7 +2196,7 @@ export default function ModelSpace() {
                   )
                   return <group>{items.map((f) => (
                     <Footing3D key={f.key} cx={f.cx} cz={f.cz} bx={f.bx} bz={f.bz} bz1={f.bz1} bz2={f.bz2}
-                      dc={f.dc} angle={f.angle} overlap={overlaps.has(f.key)} label={f.label} />
+                      dc={f.dc} yTop={f.yTop} angle={f.angle} overlap={overlaps.has(f.key)} label={f.label} />
                   ))}</group>
                 })()}
                 {(model.walls ?? []).map((w) => {

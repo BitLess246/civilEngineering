@@ -61,18 +61,37 @@ describe('the dowels — the lap the column stands on', () => {
     }
   })
 
-  it('turns a 12db hook across the mat, inboard, never out through the cover', () => {
+  it('turns a 12db hook OUTWARD, away from the column', () => {
+    // A starter bar's foot splays out under the pad, so it bears on concrete
+    // outside the column footprint and the group opens up. Turned inboard,
+    // every tail points into the same congested core and several cross.
     const half = 1.0
     for (const d of byRole('dowel')) {
       const [tip, knee] = d.path
       expect(tip[1]).toBeCloseTo(knee[1], 9)                      // the tail is horizontal
       const run = Math.hypot(tip[0] - knee[0], tip[2] - knee[2])
       expect(run).toBeCloseTo((DOWEL_TAIL_DB * 20) / 1000, 9)
-      // inboard: the tail end is closer to the pad centre than the knee
-      expect(Math.hypot(tip[0] - 3, tip[2] - 5)).toBeLessThan(Math.hypot(knee[0] - 3, knee[2] - 5))
-      expect(Math.abs(tip[0] - 3)).toBeLessThan(half - 0.075)
-      expect(Math.abs(tip[2] - 5)).toBeLessThan(half - 0.075)
+      // outward: the tail end is FARTHER from the pad centre than the knee
+      expect(Math.hypot(tip[0] - 3, tip[2] - 5)).toBeGreaterThan(Math.hypot(knee[0] - 3, knee[2] - 5))
+      // …and still inside the concrete
+      expect(Math.abs(tip[0] - 3)).toBeLessThanOrEqual(half - 0.075 + 1e-9)
+      expect(Math.abs(tip[2] - 5)).toBeLessThanOrEqual(half - 0.075 + 1e-9)
       expect(d.bendDia).toHaveLength(1)
+    }
+  })
+
+  it('shortens the tail rather than run it out through the side cover', () => {
+    // A pad barely bigger than its column has no room for the full 12db. The
+    // tail it does have is a real constraint; steel drawn outside the concrete
+    // is not.
+    const tight = buildFootingCage({ ...pad, B: 0.7 })
+    const half = 0.35
+    for (const d of tight.runs.filter((r) => r.role === 'dowel')) {
+      const [tip, knee] = d.path
+      expect(Math.abs(tip[0] - 3)).toBeLessThanOrEqual(half - 0.075 + 1e-9)
+      expect(Math.abs(tip[2] - 5)).toBeLessThanOrEqual(half - 0.075 + 1e-9)
+      expect(Math.hypot(tip[0] - knee[0], tip[2] - knee[2]))
+        .toBeLessThan((DOWEL_TAIL_DB * 20) / 1000)
     }
   })
 
@@ -82,5 +101,42 @@ describe('the dowels — the lap the column stands on', () => {
       expect(d.path[0][1]).toBeGreaterThan(yz)
       expect(d.path[0][1]).toBeCloseTo(yz + (16 + 20) / 2000, 9)
     }
+  })
+})
+
+
+describe('a corner bar goes out along the diagonal', () => {
+  it('corner dowels splay on BOTH axes, mid-face dowels on one', () => {
+    // A corner bar stands on two faces, so the diagonal is the only direction
+    // that takes it away from both. Sent along one axis it runs parallel to the
+    // face it is on, and the four corners splay into two directions, not four.
+    const twelve = perimeterBars({ b: 400, h: 400, cover: 40, barDia: 20, bars: 12, tieDia: 10 })
+    const cage = buildFootingCage({ ...pad, colBars: twelve })
+    const moved = cage.runs.filter((r) => r.role === 'dowel').map((d) => {
+      const [tip, knee] = d.path
+      return [Math.abs(tip[0] - knee[0]) > 1e-9, Math.abs(tip[2] - knee[2]) > 1e-9]
+    })
+    expect(moved.filter(([a, b]) => a && b)).toHaveLength(4)      // the corners
+    expect(moved.filter(([a, b]) => a !== b)).toHaveLength(8)     // the mid-face bars
+  })
+
+  it('the diagonal tail is still 12db long, not 12db on each axis', () => {
+    const cage = buildFootingCage(pad)
+    for (const d of cage.runs.filter((r) => r.role === 'dowel')) {
+      const [tip, knee] = d.path
+      expect(Math.hypot(tip[0] - knee[0], tip[2] - knee[2]))
+        .toBeCloseTo((DOWEL_TAIL_DB * 20) / 1000, 9)
+    }
+  })
+
+  it('every corner splays into its own quadrant', () => {
+    const cage = buildFootingCage(pad)
+    const dirs = cage.runs.filter((r) => r.role === 'dowel').map((d) => {
+      const [tip, knee] = d.path
+      return `${Math.sign(Math.round((tip[0] - knee[0]) * 1e6))},${Math.sign(Math.round((tip[2] - knee[2]) * 1e6))}`
+    })
+    // 8 bars on a square column are four corners plus four mid-face bars; the
+    // corners take the four diagonals between them
+    expect(new Set(dirs.filter((v) => !v.includes('0'))).size).toBe(4)
   })
 })

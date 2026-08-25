@@ -241,6 +241,9 @@ export function estimateTakeoff(
   // ── Columns ──
   for (const c of design.columns) {
     const sec = secOf(c.id)
+    // `c.L` already reaches the top of the footing: the design supports the
+    // column base there rather than at the ground line, so the pedestal is
+    // inside the schedule length. Adding it again here bought it twice.
     const H = c.L
     const tag = `Column ${c.id}`
     const concreteM3 = (sec.b / 1000) * (sec.h / 1000) * H

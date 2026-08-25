@@ -274,3 +274,38 @@ describe('timber (wood-frame) take-off', () => {
     expect(bill.rows.find((r) => r.item.startsWith('Timber — '))!.unitPrice).toBe(55)
   })
 })
+
+
+describe('the pedestal is bought — once', () => {
+  it('a bottom column is costed to the TOP OF ITS FOOTING, and not twice', () => {
+    // The design supports the column base at the pad, so the schedule length
+    // already runs through the pedestal. Adding it again here bought it twice.
+    const model = makeModel()
+    const design = designStructure(model, soil as never)!
+    const t = estimateTakeoff(model, design)
+    const cols = t.byElement.filter((e) => e.kind === 'Column')
+    expect(cols.length).toBeGreaterThan(0)
+    expect(design.footings.some((f) => f.pedestal > 0)).toBe(true)
+    for (const c of cols) {
+      const m = model.members.find((x) => x.id === c.id)!
+      const sec = model.sections.find((x) => x.id === m.section)!
+      const row = design.columns.find((x) => x.id === c.id)!
+      expect(c.concreteM3).toBeCloseTo((sec.b / 1000) * (sec.h / 1000) * row.L, 6)
+    }
+  })
+
+  it('and that length really does include the pedestal', () => {
+    // The storey is 3 m; a bottom column supported at the pad is longer than
+    // that by H − Dc, which is the whole point of moving the support down.
+    const model = makeModel()
+    const design = designStructure(model, soil as never)!
+    const yOf = (n: string) => model.nodes.find((q) => q.id === n)!.y
+    const bases = new Set(design.footings.map((f) => f.node))
+    const bottom = design.columns.filter((c) => {
+      const m = model.members.find((x) => x.id === c.id)!
+      return bases.has(yOf(m.i) <= yOf(m.j) ? m.i : m.j)
+    })
+    expect(bottom.length).toBeGreaterThan(0)
+    for (const c of bottom) expect(c.L).toBeGreaterThan(3 + 1e-6)
+  })
+})

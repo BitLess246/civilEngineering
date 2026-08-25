@@ -84,8 +84,32 @@ describe('buildStructureCages', () => {
       expect(Math.abs(v.path[0][0] - ni.x)).toBeLessThan(0.3)
       expect(Math.abs(v.path[0][2] - ni.z)).toBeLessThan(0.3)
     }
+    // A column on a footing runs BELOW its base node, down to the top of the
+    // pad — the pedestal. Stopping at the node left that length out of the
+    // cage, the concrete and the bill.
+    const ped = design.footings.find((f) => f.node === (ni.y <= nj.y ? mem.i : mem.j))?.pedestal ?? 0
+    expect(ped).toBeGreaterThan(0)
     const ys = verts.flatMap((r) => r.path.map((p) => p[1]))
-    expect(Math.min(...ys)).toBeCloseTo(Math.min(ni.y, nj.y), 6)
+    expect(Math.min(...ys)).toBeCloseTo(Math.min(ni.y, nj.y) - ped, 6)
+  })
+
+  it('stands the pad top exactly where the pedestal ends', () => {
+    // One number, H − Dc, decides both: a pad drawn at one depth and a column
+    // reaching to another leaves a gap nothing is cast in.
+    for (const f of design.footings) {
+      const cage = cages.find((c) => c.member === `F-${f.node}`)
+      if (!cage) continue
+      const node = nodeOf(f.node)
+      const mat = cage.runs.filter((r) => r.role === 'mat')
+      const top = Math.max(...mat.map((r) => r.path[0][1]))
+      // the mat sits inside the pad, whose top is `pedestal` below the node
+      expect(top).toBeLessThan(node.y - f.pedestal)
+      expect(top).toBeGreaterThan(node.y - f.pedestal - f.design.Dc / 1000)
+      // and the dowels rise out of it to lap the column
+      const dowelTop = Math.max(...cage.runs.filter((r) => r.role === 'dowel')
+        .map((r) => Math.max(...r.path.map((p) => p[1]))))
+      expect(dowelTop).toBeGreaterThan(node.y - f.pedestal)
+    }
   })
 
   it('runs the verticals PAST the top node where a column carries on, and not where it does not', () => {
