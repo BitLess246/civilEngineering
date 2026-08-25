@@ -102,13 +102,46 @@ describe('tieLevels', () => {
 describe('buildColumnCage', () => {
   const cage = buildColumnCage(col)
 
-  it('carries one run per vertical and one per tie', () => {
+  it('carries one run per vertical, and one PERIMETER hoop per tie level', () => {
     const v = cage.runs.filter((r) => r.role === 'vertical')
-    const t = cage.runs.filter((r) => r.role === 'tie')
+    const hoops = cage.runs.filter((r) => r.mark.startsWith('C1-T'))
     expect(v).toHaveLength(12)
-    expect(t).toHaveLength(tieLevels(col).length)
+    expect(hoops).toHaveLength(tieLevels(col).length)
     expect(cage.member).toBe('C1')
     for (const r of cage.runs) expect(r.member).toBe('C1')
+  })
+
+  it('adds the supplementary ties the bars ask for, at every level', () => {
+    // 12 bars is two intermediates per face: a diamond would pass between them,
+    // so it gets an inner rectangle and cross ties (§425.7.2.3).
+    const levels = tieLevels(col).length
+    const extra = cage.runs.filter((r) => r.role === 'tie' && !r.mark.startsWith('C1-T'))
+    expect(extra.length).toBeGreaterThan(0)
+    expect(extra.length % levels).toBe(0)
+    expect(extra.some((r) => r.mark.startsWith('C1-I'))).toBe(true)
+    expect(cage.notes ?? []).toEqual([])
+  })
+
+  it('a symmetric 8-bar column gets exactly one diamond per level', () => {
+    const eight = buildColumnCage({ ...col, b: 400, h: 400, bars: 8 })
+    const levels = tieLevels(col).length
+    const dia = eight.runs.filter((r) => r.mark.includes('-D'))
+    expect(dia).toHaveLength(levels)
+    for (const d of dia) { expect(d.closed).toBe(true); expect(d.path).toHaveLength(4) }
+  })
+
+  it('alternates the hook corner up the column — §418.7.5.3', () => {
+    // Stacked in one corner, every hook in the column lands on the same two
+    // bars and the splitting they resist is unrestrained everywhere else.
+    const hoops = cage.runs.filter((r) => r.mark.startsWith('C1-T'))
+    const starts = hoops.map((r) => `${r.path[0][0].toFixed(4)},${r.path[0][2].toFixed(4)}`)
+    expect(new Set(starts).size).toBe(4)                 // all four corners used
+    expect(starts[0]).not.toBe(starts[1])                // and never twice running
+    for (let k = 1; k < starts.length; k++) expect(starts[k]).not.toBe(starts[k - 1])
+    // the bar itself is unchanged — same four corners, just started elsewhere
+    const asSet = (r: typeof hoops[number]) =>
+      new Set(r.path.map((p) => `${p[0].toFixed(4)},${p[2].toFixed(4)}`))
+    for (const h of hoops) expect(asSet(h)).toEqual(asSet(hoops[0]))
   })
 
   it('runs every vertical the full height of the column', () => {

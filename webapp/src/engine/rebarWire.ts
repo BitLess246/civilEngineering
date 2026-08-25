@@ -142,16 +142,27 @@ export function runPolylines(run: RebarRun): Vec3[][] {
 
   const turn = (HOOK_TURN_DEG * Math.PI) / 180
   const tail = hookTailLength(run.dia)
+  const r = bendRadius(run.bendDia[0] > 0 ? run.bendDia[0] : 4 * run.dia, run.dia) / 1000
   /** Fold `d` back by 135°, whichever way puts the tail inside the core. */
   const fold = (d: Vec3): Vec3 => {
     const a = rotate(d, axis, turn), b = rotate(d, axis, -turn)
     return dot(a, bis) >= dot(b, bis) ? a : b
   }
-  return [
-    spine,
-    [p0, add(p0, mul(fold(uIn), tail))],            // the end that arrives here
-    [p0, add(p0, mul(fold(mul(uOut, -1)), tail))],  // …and the one that leaves
-  ]
+  // A hook is the END OF THE BAR bending away from the leg it is on — so it is
+  // drawn as leg → bend → tail, with the bend rounded like every other. Drawn
+  // as a bare tail springing from the loop's mathematical corner it read as a
+  // single diagonal tube cutting straight across that corner, because the loop
+  // itself is FILLETED there and never goes near the point the tail started at.
+  //
+  // The approach leg is long enough for `filletCorner` to fit the bend into,
+  // and it lies on top of the loop, so the two read as one continuous bar.
+  const lead = Math.max(2.2 * r, tail)
+  const hook = (arrive: Vec3): Vec3[] => {
+    const back = add(p0, mul(arrive, -Math.min(lead, 0.9 * len(sub(p0, arrive === uIn ? pPrev : pNext)))))
+    const tip = add(p0, mul(fold(arrive), tail + r))
+    return [back, ...filletCorner(back, p0, tip, r), tip]
+  }
+  return [spine, hook(uIn), hook(mul(uOut, -1))]
 }
 
 // ─────────────────────────────────────────────────────────────────────────

@@ -33,14 +33,21 @@ const seg = (a: Vec3, b: Vec3) => Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[
 export const OFFSET_SLOPE = 6
 
 /**
- * A unit vector across the bar, for the lapping piece to step aside along.
+ * Which way the lapping piece steps aside, as a unit vector.
  *
- * Horizontal wherever the bar is not vertical, because lapped bars in a beam
- * sit side by side in the SAME layer — stepping one down would move it out of
- * the layer the design gave it an effective depth for. A vertical bar has no
- * horizontal tangent to work from, so it steps along x.
+ * INTO THE SECTION, not sideways. A top bar cranks DOWN behind the bar it laps
+ * and a bottom bar cranks UP, because the face it is on is where the stirrup
+ * is: a bar stepped sideways stays on the cover line and walks straight into
+ * the stirrup's leg, which is the collision the section drawing shows. Stepped
+ * inward it tucks under (or over) its partner and the stirrup passes outside
+ * both.
+ *
+ * Anything else — a vertical column bar, a footing mat bar — has no tension
+ * face to move away from, so it steps horizontally across itself.
  */
-export function acrossBar(a: Vec3, b: Vec3): Vec3 {
+export function stepDirection(role: string, a: Vec3, b: Vec3): Vec3 {
+  if (role === 'top') return [0, -1, 0]
+  if (role === 'bottom') return [0, 1, 0]
   const d: Vec3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
   const h = Math.hypot(d[0], d[2])
   if (h < 1e-9) return [1, 0, 0]
@@ -179,7 +186,7 @@ export function spliceRun(run: RebarRun, o: SpliceOptions): RebarRun[] {
       // laps, and cranks back onto line beyond it. Two bars lapped on the same
       // centreline occupy the same space — impossible to build, and invisible
       // to look at, which is the state the cages were in.
-      ...stepAside(path, bendDia, k > 1 ? o.lap : 0, off, run.dia),
+      ...stepAside(path, bendDia, k > 1 ? o.lap : 0, off, run.dia, run.role),
       // a cut end is not a hook; only the original ends keep theirs
       hookAllowance: undefined,
     })
@@ -197,14 +204,14 @@ export function spliceRun(run: RebarRun, o: SpliceOptions): RebarRun[] {
  * wrong.
  */
 export function stepAside(
-  path: Vec3[], bendDia: number[], lap: number, off: number, dia: number,
+  path: Vec3[], bendDia: number[], lap: number, off: number, dia: number, role = 'bottom',
 ): { path: Vec3[]; bendDia: number[] } {
   const crank = OFFSET_SLOPE * off
   if (lap <= 0 || path.length < 2) return { path, bendDia }
   const first = seg(path[0], path[1])
   if (first < lap + crank + 1e-9) return { path, bendDia }
 
-  const n = acrossBar(path[0], path[1])
+  const n = stepDirection(role, path[0], path[1])
   const shift = (p: Vec3): Vec3 => [p[0] + n[0] * off, p[1] + n[1] * off, p[2] + n[2] * off]
   const at = (s: number) => pointAt(path, s)
   const D = Math.max(6 * dia, 1)                   // §425.3.1 minimum bend

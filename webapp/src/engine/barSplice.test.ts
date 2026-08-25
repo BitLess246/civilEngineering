@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   spliceCentres, spliceRun, spliceCage, pathLength, pointAt, slicePath,
-  stepAside, acrossBar, OFFSET_SLOPE,
+  stepAside, stepDirection, OFFSET_SLOPE,
 } from './barSplice'
 import { cutLength, type RebarCage, type RebarRun, type Vec3 } from './rebarModel'
 
@@ -143,26 +143,38 @@ describe('slicing keeps the bar it cuts from', () => {
 
 
 describe('the lapping piece steps aside', () => {
-  it('offsets one diameter across the bar, and cranks back on line at 1 in 6', () => {
+  it('offsets one diameter off the line, and cranks back at 1 in 6', () => {
     // Two bars lapped on the same centreline occupy the same space: impossible
     // to build, and invisible to look at.
-    const [a, b] = spliceRun(straight(9), OPT)
+    const [a, b] = spliceRun(straight(9), OPT)          // role 'bottom'
     const off = 20 / 1000
-    expect(a.path[0][2]).toBeCloseTo(0, 9)                    // the first piece is on line
-    expect(Math.abs(b.path[0][2])).toBeCloseTo(off, 9)        // the second steps aside
-    expect(Math.abs(b.path[1][2])).toBeCloseTo(off, 9)        // …for the whole lap
+    expect(a.path[0][1]).toBeCloseTo(0, 9)                    // the first piece is on line
+    expect(Math.abs(b.path[0][1])).toBeCloseTo(off, 9)        // the second steps aside
+    expect(Math.abs(b.path[1][1])).toBeCloseTo(off, 9)        // …for the whole lap
     expect(b.path[1][0] - b.path[0][0]).toBeCloseTo(OPT.lap, 9)
-    expect(b.path[2][2]).toBeCloseTo(0, 9)                    // and comes back on line
+    expect(b.path[2][1]).toBeCloseTo(0, 9)                    // and comes back on line
     expect(b.path[2][0] - b.path[1][0]).toBeCloseTo(OFFSET_SLOPE * off, 9)
   })
 
-  it('steps sideways, never down — a lapped beam bar stays in its layer', () => {
-    // Dropping it a diameter would move the bar out of the layer the design
-    // gave it an effective depth for.
-    const [, b] = spliceRun(straight(9), OPT)
-    expect(b.path[0][1]).toBeCloseTo(0, 9)
-    expect(acrossBar([0, 0, 0], [1, 0, 0])[1]).toBe(0)
-    expect(acrossBar([0, 0, 0], [0, 1, 0])).toEqual([1, 0, 0])   // a vertical bar
+  it('a top bar cranks DOWN and a bottom bar UP — away from the stirrup, not into it', () => {
+    // The face the bar is on is where the stirrup leg is. Stepped sideways the
+    // lapping piece stays on the cover line and walks straight into it; stepped
+    // inward it tucks behind its partner and the stirrup passes outside both.
+    expect(stepDirection('top', [0, 0, 0], [1, 0, 0])).toEqual([0, -1, 0])
+    expect(stepDirection('bottom', [0, 0, 0], [1, 0, 0])).toEqual([0, 1, 0])
+    const [, top] = spliceRun({ ...straight(9), role: 'top' }, OPT)
+    const [, bot] = spliceRun(straight(9), OPT)
+    expect(top.path[0][1]).toBeLessThan(0)
+    expect(bot.path[0][1]).toBeGreaterThan(0)
+    // …and neither of them moves sideways, out of its own vertical plane
+    expect(top.path[0][2]).toBeCloseTo(0, 9)
+    expect(bot.path[0][2]).toBeCloseTo(0, 9)
+  })
+
+  it('a bar with no tension face steps horizontally instead', () => {
+    // A column vertical or a footing mat bar has no face to move away from.
+    expect(stepDirection('vertical', [0, 0, 0], [0, 1, 0])).toEqual([1, 0, 0])
+    expect(stepDirection('mat', [0, 0, 0], [1, 0, 0])[1]).toBe(0)
   })
 
   it('leaves the piece alone when the lap will not fit its first straight leg', () => {

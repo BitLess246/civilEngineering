@@ -82,6 +82,10 @@ export interface RebarRun {
 export interface RebarCage {
   member: string
   runs: RebarRun[]
+  /** Anything the placement could not satisfy — e.g. a longitudinal bar left
+   *  more than 150 mm clear of a laterally supported one (§425.7.2.3). Empty
+   *  when the cage is compliant, so a caller can surface it without asking. */
+  notes?: string[]
 }
 
 // ── bend geometry ────────────────────────────────────────────────────────

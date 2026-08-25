@@ -20,6 +20,7 @@ import {
   stirrupBendDiameter, stirrupHookAllowance, placedBarCount, hookBendDiameter,
   type RebarCage, type RebarRun, type Vec3,
 } from './rebarModel'
+import { supplementaryTies } from './columnTies'
 
 export interface ColumnCageInput {
   /** Column mark — every bar in the cage carries it. */
@@ -147,8 +148,17 @@ export function tieLevels(i: Pick<ColumnCageInput, 'yBottom' | 'yTop' | 'lo' | '
  * sit at different levels, so they are separate runs too; `count` is reserved
  * for copies that share a shape AND a position, which in a cage means none.
  */
+/** The same loop, started `k` corners round — how a hook is moved from one
+ *  corner to the next without changing the bar. */
+export function rotateLoop<T>(loop: T[], k: number): T[] {
+  if (loop.length === 0) return loop
+  const n = ((k % loop.length) + loop.length) % loop.length
+  return [...loop.slice(n), ...loop.slice(0, n)]
+}
+
 export function buildColumnCage(i: ColumnCageInput): RebarCage {
   const runs: RebarRun[] = []
+  const notes: string[] = []
   const [cx, cz] = i.centre
   const y0 = Math.min(i.yBottom, i.yTop), y1 = Math.max(i.yBottom, i.yTop)
 
@@ -200,23 +210,48 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
   const tx = Math.max(0, i.h / 2 - i.cover - i.tieDia / 2) / 1000
   const tz = Math.max(0, i.b / 2 - i.cover - i.tieDia / 2) / 1000
   const D = stirrupBendDiameter(i.tieDia)
+  const hoop: Vec3[] = [
+    [cx - tx, 0, cz - tz], [cx + tx, 0, cz - tz],
+    [cx + tx, 0, cz + tz], [cx - tx, 0, cz + tz],
+  ]
+  // §425.7.2.3 / §418.7.5.2 — what the bars themselves ask for beyond the hoop.
+  const extra = supplementaryTies(perimeterBars(i), i.barDia)
+
   tieLevels(i).forEach((y, k) => {
     runs.push({
       mark: `${i.mark}-T${k + 1}`,
       dia: i.tieDia,
       role: 'tie',
       member: i.mark,
-      path: [
-        [cx - tx, y, cz - tz], [cx + tx, y, cz - tz],
-        [cx + tx, y, cz + tz], [cx - tx, y, cz + tz],
-      ] as Vec3[],
+      // §418.7.5.3 — successive ties have their hooks at DIFFERENT corners.
+      // Stacked in one corner every hook in the column lands on the same two
+      // bars, and the splitting they resist is left unrestrained everywhere
+      // else. Rotating the loop's start rotates the corner they meet at.
+      path: rotateLoop(hoop, k).map(([x, , z]) => [x, y, z] as Vec3),
       bendDia: [D, D, D, D],
       closed: true,
       // the two 135° hooks the closed loop's vertices cannot express
       hookAllowance: stirrupHookAllowance(i.tieDia),
       count: 1,
     })
+    extra.ties.forEach((t, j) => {
+      const pts = t.corners.map(([dx, dz]) => [cx + dx / 1000, y, cz + dz / 1000] as Vec3)
+      runs.push({
+        mark: `${i.mark}-${t.kind === 'cross' ? 'X' : t.kind === 'diamond' ? 'D' : 'I'}${k + 1}.${j + 1}`,
+        dia: i.tieDia,
+        role: 'tie',
+        member: i.mark,
+        path: t.closed ? rotateLoop(pts, k) : (k % 2 ? [...pts].reverse() : pts),
+        bendDia: pts.map(() => D),
+        closed: t.closed,
+        // A cross tie is a single bar hooked at BOTH ends (§425.3.2), so it
+        // carries the same allowance as a loop even though it is not one.
+        hookAllowance: stirrupHookAllowance(i.tieDia),
+        count: 1,
+      })
+    })
   })
+  for (const n of extra.notes) notes.push(n)
 
-  return { member: i.mark, runs }
+  return { member: i.mark, runs, ...(notes.length ? { notes } : {}) }
 }

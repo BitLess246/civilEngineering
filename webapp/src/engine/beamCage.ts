@@ -28,6 +28,7 @@ import {
   type RebarCage, type RebarRun, type Vec3,
 } from './rebarModel'
 import { hookClearToFace } from './devLength'
+import { rotateLoop } from './columnCage'
 
 export interface BeamCageInput {
   /** Member mark — every bar in the cage carries it. */
@@ -223,10 +224,16 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
   const sy1 = i.ySoffit + i.h / 1000 - (i.cover + i.stirrupDia / 2) / 1000
   const D = stirrupBendDiameter(i.stirrupDia)
   stirrupStations(i).forEach((u, k) => {
+    const loop = [at(u, -sx, sy0), at(u, sx, sy0), at(u, sx, sy1), at(u, -sx, sy1)]
     runs.push({
       mark: `${i.mark}-S${k + 1}`,
       dia: i.stirrupDia, role: 'stirrup', member: i.mark,
-      path: [at(u, -sx, sy0), at(u, sx, sy0), at(u, sx, sy1), at(u, -sx, sy1)],
+      // §418.6.4 / §425.7.1.6 — successive stirrups meet at DIFFERENT corners.
+      // All the hooks in one corner leaves every other corner bar restrained by
+      // nothing but the bend, and puts the whole column of overlaps down one
+      // line of the cage. Rotating the loop's start moves the corner they close
+      // at without changing the bar.
+      path: rotateLoop(loop, k),
       bendDia: [D, D, D, D],
       closed: true,
       hookAllowance: stirrupHookAllowance(i.stirrupDia),
