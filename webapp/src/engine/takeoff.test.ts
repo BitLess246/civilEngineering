@@ -125,10 +125,16 @@ describe('structure take-off / BOM-BOQ', () => {
   })
 
   it('combined footings contribute reinforcement (longitudinal + transverse)', () => {
-    const cm = makeModel()
-    const plan = { 'n0.0.0': { type: 'combined' as const, with: 'n1.0.0' } }
-    const cd = designStructure(cm, soil, plan)!
-    expect(cd.combined.length).toBe(1)
+    // Combining is decided by clashing pads now, not by a plan — so the model
+    // has to be one where two pads really do collide: interior columns 1.2 m
+    // apart each carrying a 6 m bay, on weak soil.
+    const cm = generateGridModel({ baysX: [6, 1.2, 6], baysZ: [6], storeyH: [3], section, slabThickness: 200 })
+    cm.loads = cm.plates.flatMap((p) => [
+      { kind: 'area' as const, plate: p.id, q: 4.8, cat: 'D' as const },
+      { kind: 'area' as const, plate: p.id, q: 2.4, cat: 'L' as const },
+    ])
+    const cd = designStructure(cm, { ...soil, qAllow: 80 })!
+    expect(cd.combined.length).toBeGreaterThan(0)
     const ct = estimateTakeoff(cm, cd, { concreteClass: 'A' })
     const comb = ct.byElement.find((e) => e.kind === 'Combined footing')!
     expect(comb).toBeTruthy()

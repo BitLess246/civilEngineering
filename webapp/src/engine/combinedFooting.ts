@@ -49,6 +49,20 @@ export interface CombinedFootingResult {
   transverse: TransverseStrip[];
   /** Sampled along x for diagrams. */
   samples: { x: number[]; V: number[]; M: number[]; w: number[] };
+  /**
+   * The shortest pad that would cover both columns with a nominal projection,
+   * m — what the footing would be if it did not also have to centre the
+   * bearing resultant.
+   */
+  naturalLength: number;
+  /** Bx / the wider end. A spread footing is a slab; a strip is a grade beam. */
+  slenderness: number;
+  /**
+   * Practicality warnings. NOT code violations — the pad satisfies bearing,
+   * shear and flexure — but shapes an engineer would reject on sight, and
+   * which the result used to report as simply `ok`.
+   */
+  notes: string[];
 }
 
 const roundUp = (v: number, step: number) => Math.ceil(v / step) * step;
@@ -116,13 +130,19 @@ export function designCombinedFooting(i: CombinedFootingInput): CombinedFootingR
   }
 
   // ── Containment: widen if a column is wider than the slab beneath it ──
+  //
+  // The trigger has to be the SAME condition the loop drives to. It used to
+  // fire only when the pad was narrower than the column itself, while the loop
+  // widened until the pad reached column + 2·PROJ — so a pad anywhere between
+  // those two was left alone with less than the 75 mm projection it is
+  // supposed to have. A 500 mm pad under a 400 mm column never widened.
   let widened = false;
   {
     const PROJ = 0.075;
     const ByAtX = (x: number) => (shape[0] === 'R' ? By : By1 + ((By2 - By1) * x) / Bx);
     const cols = [{ x: x1, c: cx1m }, { x: x2, c: cx2m }];
     const wUnder = (cl: { x: number; c: number }) => Math.min(ByAtX(cl.x - cl.c / 2), ByAtX(cl.x + cl.c / 2));
-    if (cols.some((cl) => wUnder(cl) < cl.c - 1e-9)) {
+    if (cols.some((cl) => wUnder(cl) < cl.c + 2 * PROJ - 1e-9)) {
       widened = true;
       for (let g = 0; g < 400; g++) {
         let viol = false;
@@ -207,8 +227,36 @@ export function designCombinedFooting(i: CombinedFootingInput): CombinedFootingR
     mkTrans('Col 2 strip', Pu2, i.rightRestrict ? By2 : By, cx2m),
   ];
 
+  // ── Practicality ──
+  //
+  // An unrestricted rectangular pad is stretched until it is symmetric about
+  // the bearing resultant, which is what keeps the pressure uniform. With
+  // unequal column loads that can run far past the columns, and the width then
+  // falls out as area/length — so the pad turns into a long thin strip, and a
+  // strip that narrow has almost no punching perimeter, which drives the depth
+  // up in turn. Every step is correct; the result is a grade beam.
+  const naturalLength = sf + cx1m / 2 + cx2m / 2 + 2 * 0.075;
+  const slenderness = Bx / Math.max(By1, By2, 1e-9);
+  const notes: string[] = [];
+  if (Bx > 1.25 * naturalLength) {
+    notes.push(
+      `The pad is ${Bx.toFixed(2)} m long where ${naturalLength.toFixed(2)} m would cover both columns. `
+      + `A rectangular combined footing has to be symmetric about the bearing resultant to keep the pressure `
+      + `uniform, and the two column loads differ enough (${Math.round(Pa1)} / ${Math.round(Pa2)} kN) that this `
+      + `is what that costs. A trapezoidal pad, or two isolated footings, is the usual answer.`,
+    );
+  }
+  if (slenderness > 6) {
+    notes.push(
+      `Length / width is ${slenderness.toFixed(1)} : 1 — this is a grade beam, not a spread footing. `
+      + `Bearing pressure cannot sensibly be taken as uniform across a strip this narrow, and the small `
+      + `punching perimeter is what has driven the depth to ${Math.round(Dc)} mm.`,
+    );
+  }
+
   return {
     shape, Bx, By, By1, By2, x1, x2, Pa, Pu, Pu1, Pu2, qNet, wu1, wu2, widened, barDia: i.barDia,
+    naturalLength, slenderness, notes,
     xPeak, mPeak, dPunch, dBeam: dB, Dc, longSections, transverse, samples,
   };
 }

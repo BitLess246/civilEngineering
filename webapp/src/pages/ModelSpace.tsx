@@ -30,7 +30,7 @@ import { type StructureDesign, type FootingPlan, type OptimizeResult, type Later
 import { type MemberDeflectionResult } from '../engine/memberDeflection'
 import type { SteelJoint } from '../engine/steelConnections'
 import { estimateTakeoff, costBill, type PriceList } from '../engine/takeoff'
-import { footingLayout } from '../engine/footingLayout'
+import { footingLayout, footingPrism } from '../engine/footingLayout'
 import { type ShellNode, type ShellElem, type ElementStress } from '../engine/shell'
 import { solveModelShells, designModelSlabsFE, type SlabFEScheduleRow } from '../engine/shellModel'
 import { useSolver } from '../lib/useSolver'
@@ -134,12 +134,14 @@ const loadFromShear = (xs: number[], Vy: number[]): number[] =>
   })
 
 // ── 3D primitives ─────────────────────────────────────────────────────────
-function Member3D({ a, b, role, selected, tint = 0, sec, onPick }: {
+function Member3D({ a, b, role, selected, tint = 0, sec, ghost = false, onPick }: {
   a: THREE.Vector3; b: THREE.Vector3; role: string; selected: boolean
   /** 0–1 utilisation tint (|M| relative to the model max) after analysis. */
   tint?: number
   /** the member's own section, drawn to scale (mm → m). */
   sec?: { b: number; h: number; material?: string }
+  /** Draw the concrete see-through, so the cage inside it is visible. */
+  ghost?: boolean
   onPick: () => void
 }) {
   const { mid, quat, len } = useMemo(() => {
@@ -160,7 +162,11 @@ function Member3D({ a, b, role, selected, tint = 0, sec, onPick }: {
     <mesh position={mid} quaternion={quat}
       onClick={(e) => { e.stopPropagation(); onPick() }}>
       <boxGeometry args={[len, ty, tz]} />
-      <meshStandardMaterial color={color} />
+      {/* Ghosted while the cages are shown — solid concrete hides the steel
+          inside it, which made "show reinforcement cages" look like it did
+          nothing at all. `depthWrite` off so the bars behind still draw. */}
+      <meshStandardMaterial color={color} transparent={ghost} opacity={ghost ? 0.18 : 1}
+        depthWrite={!ghost} />
     </mesh>
   )
 }
@@ -478,14 +484,27 @@ function GridBubbles3D({ model }: { model: StructuralModel }) {
  *  footprints are visible. bx/bz = plan dimensions (m), dc = depth (m), angle =
  *  plan rotation about Y (combined footings follow the column axis). Overlapping
  *  footings are tinted red. */
-function Footing3D({ cx, cz, bx, bz, dc, angle = 0, overlap = false, label }: {
-  cx: number; cz: number; bx: number; bz: number; dc: number; angle?: number; overlap?: boolean; label?: string
+function Footing3D({ cx, cz, bx, bz, bz1, bz2, dc, angle = 0, overlap = false, label }: {
+  cx: number; cz: number; bx: number; bz: number; bz1?: number; bz2?: number
+  dc: number; angle?: number; overlap?: boolean; label?: string
 }) {
+  // A tapered pad is drawn tapered. Boxing it on the mean width puts the plan
+  // edge in the wrong place at BOTH ends — which is the whole difference
+  // between a trapezoidal footing and a rectangular one.
+  const w1 = bz1 ?? bz, w2 = bz2 ?? bz
+  const geom = useMemo(() => {
+    if (Math.abs(w1 - w2) < 1e-6) return null
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(footingPrism(bx, w1, w2, dc), 3))
+    g.computeVertexNormals()
+    return g
+  }, [bx, w1, w2, dc])
   return (
     <group position={[cx, -dc / 2, cz]} rotation={[0, -angle, 0]}>
-      <mesh>
-        <boxGeometry args={[bx, dc, bz]} />
-        <meshStandardMaterial color={overlap ? '#dc2626' : '#b45309'} transparent opacity={overlap ? 0.6 : 0.45} />
+      <mesh geometry={geom ?? undefined}>
+        {!geom && <boxGeometry args={[bx, dc, bz]} />}
+        <meshStandardMaterial color={overlap ? '#dc2626' : '#b45309'} transparent opacity={overlap ? 0.6 : 0.45}
+          side={THREE.DoubleSide} />
       </mesh>
       {label && (
         <SceneText position={[0, dc / 2 + 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.32}
@@ -1939,26 +1958,6 @@ export default function ModelSpace() {
     return { deflMm: worst * 1000, W: storeyT * GRAVITY } // mm, kN
   }, [model, govRes])
 
-  // immediate grid-neighbour base supports (share an x- or z-line and are the
-  // nearest column either side, nothing between) — the only sensible partners
-  // for a combined footing.
-  const adjacentBases = (nodeA: string): Set<string> => {
-    const out = new Set<string>()
-    const A = nodePos.get(nodeA); if (!A || !model) return out
-    const others = model.supports.map((s) => s.node).filter((id) => id !== nodeA && nodePos.has(id))
-    for (const [axis, other] of [['x', 'z'], ['z', 'x']] as const) {
-      const onLine = others.filter((id) => Math.abs(nodePos.get(id)![axis] - A[axis]) < 1e-4)
-      for (const dir of [1, -1]) {
-        let best: string | null = null, bestD = Infinity
-        for (const id of onLine) {
-          const d = (nodePos.get(id)![other] - A[other]) * dir
-          if (d > 1e-4 && d < bestD) { bestD = d; best = id }
-        }
-        if (best) out.add(best)
-      }
-    }
-    return out
-  }
 
   // human-readable label for the currently-selected element (shown on the 3D view)
   const selInfo: { kind: string; id: string; extra?: string } | null = !selected ? null
@@ -2133,7 +2132,7 @@ export default function ModelSpace() {
                     ? <MemberSteel3D a={aV} b={bV} role={m.role} shapeName={sec.shape} axisRotation={m.axisRotation}
                         tint={tint * 0.85} selected={m.id === selected} onPick={() => setSelected(m.id)} />
                     : <Member3D a={aV} b={bV} role={m.role} tint={tint * 0.85}
-                        sec={sec} selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                        sec={sec} ghost={showRebar} selected={m.id === selected} onPick={() => setSelected(m.id)} />
                   return (
                     <group key={m.id}>
                       {memberEl}
@@ -2160,11 +2159,16 @@ export default function ModelSpace() {
                   const xz = new Map([...nodePos].map(([id, p]) => [id, { x: p.x, z: p.z }]))
                   const { items, overlaps } = footingLayout(
                     design.footings.map((f) => ({ node: f.node, B: f.design.B, Dc: f.design.Dc })),
-                    design.combined.map((cf) => ({ nodes: cf.nodes, Bx: cf.design.Bx, By: cf.design.By, Dc: cf.design.Dc, trapezoid: cf.design.shape.startsWith('Trap') })),
+                    design.combined.map((cf) => ({
+                      nodes: cf.nodes, Bx: cf.design.Bx,
+                      By1: cf.design.By1, By2: cf.design.By2, x1: cf.design.x1,
+                      Dc: cf.design.Dc,
+                    })),
                     xz,
                   )
                   return <group>{items.map((f) => (
-                    <Footing3D key={f.key} cx={f.cx} cz={f.cz} bx={f.bx} bz={f.bz} dc={f.dc} angle={f.angle} overlap={overlaps.has(f.key)} label={f.label} />
+                    <Footing3D key={f.key} cx={f.cx} cz={f.cz} bx={f.bx} bz={f.bz} bz1={f.bz1} bz2={f.bz2}
+                      dc={f.dc} angle={f.angle} overlap={overlaps.has(f.key)} label={f.label} />
                   ))}</group>
                 })()}
                 {(model.walls ?? []).map((w) => {
@@ -2243,6 +2247,7 @@ export default function ModelSpace() {
               disabled={!design} />
             Show reinforcement cages
             {!design && <span className="text-slate-400">— design the structure first</span>}
+            {showRebar && <span className="text-slate-400">— concrete shown see-through</span>}
             {showRebar && rebarCages.length > 0 && (
               <span className="ml-2 flex flex-wrap gap-x-2 gap-y-0.5">
                 {([['top', 'top'], ['bottom', 'bottom'], ['stirrup', 'stirrups'], ['vertical', 'col. verticals'], ['tie', 'ties']] as const).map(([role, label]) => (
@@ -2969,32 +2974,17 @@ export default function ModelSpace() {
                 <div className="py-3.5">
                   <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Footing plan</h3>
                   <p className="mb-2 text-xs text-slate-500">
-                    Each base support gets an isolated square footing by default — pick a partner node to design the
-                    pair as one combined footing instead (close columns / property-line situations).
+                    Every base support gets an isolated square footing. Where two of those pads would physically
+                    collide, the design pairs them as one combined footing — the pairing follows the pads, so it
+                    only happens where a combined footing is the right answer. Overlapping pads are drawn
+                    <span className="mx-1 inline-block h-2 w-3 rounded-sm align-middle" style={{ background: '#dc2626' }} />
+                    red on the model until they are resolved.
                   </p>
-                  <div className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
-                    {model.supports.map((s) => {
-                      const partner = planSel[s.node] ?? ''
-                      const takenBy = Object.entries(planSel).find(([n, p]) => p === s.node && n !== s.node)?.[0]
-                      const adj = adjacentBases(s.node)            // only neighbours can be combined
-                      return (
-                        <label key={s.node} className="flex items-center gap-2 text-xs">
-                          <span className="w-16 font-medium">{s.node}</span>
-                          {takenBy ? (
-                            <span className="text-slate-500">combined with {takenBy}</span>
-                          ) : (
-                            <select value={partner}
-                              onChange={(e) => setPlanSel((p) => ({ ...p, [s.node]: e.target.value }))}
-                              className="flex-1 rounded border border-slate-200 px-1 py-0.5">
-                              <option value="">isolated</option>
-                              {model.supports.filter((o) => o.node !== s.node && !planSel[o.node] && adj.has(o.node))
-                                .map((o) => <option key={o.node} value={o.node}>combine with {o.node}</option>)}
-                            </select>
-                          )}
-                        </label>
-                      )
-                    })}
-                  </div>
+                  <p className="text-xs text-slate-500">
+                    Combining columns that are <em>not</em> in each other's way is what produces a grade beam: the
+                    pad is stretched until it is symmetric about the bearing resultant, and with unequal loads that
+                    runs far past the columns and leaves the width to fall out as area &divide; length.
+                  </p>
                 </div>
               )}
             </div>

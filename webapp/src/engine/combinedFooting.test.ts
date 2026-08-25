@@ -59,3 +59,49 @@ describe('column containment', () => {
     expect(containsBothColumns(r)).toBe(true);
   });
 });
+
+describe('containment and practicality', () => {
+  // Two columns 6 m apart, the second carrying roughly twice the first — the
+  // ordinary interior/exterior pair a frame produces, and the case that made
+  // the engine hand back an 8.2 × 0.5 × 1.0 m strip and call it ok.
+  const lopsided: CombinedFootingInput = {
+    col1Width: 400, col2Width: 400, spacing: 6,
+    dl1: 120, ll1: 40, dl2: 260, ll2: 90,
+    leftRestrict: false, rightRestrict: false, leftOverhang: 0, rightOverhang: 0,
+    fc: 28, fy: 415, qAllow: 200, gammaSoil: 18, gammaConc: 24, surcharge: 0,
+    H: 1.5, barDia: 20, cover: 75,
+  }
+
+  it('gives every column its 75 mm projection, not merely the column width', () => {
+    // The trigger used to fire only when the pad was NARROWER than the column,
+    // while the loop drove to column + 2 × 75. A pad between the two was left
+    // alone: 500 mm under a 400 mm column, with 50 mm of projection.
+    const r = designCombinedFooting(lopsided)
+    const narrowest = Math.min(r.By1, r.By2)
+    expect(narrowest).toBeGreaterThanOrEqual(0.4 + 2 * 0.075 - 1e-9)
+  })
+
+  it('says when the pad has been stretched to centre the resultant', () => {
+    const r = designCombinedFooting(lopsided)
+    expect(r.naturalLength).toBeCloseTo(6 + 0.2 + 0.2 + 0.15, 9)
+    expect(r.Bx).toBeGreaterThan(1.25 * r.naturalLength)
+    expect(r.notes.join(' ')).toContain('symmetric about the bearing resultant')
+  })
+
+  it('says when the result is a grade beam rather than a footing', () => {
+    const r = designCombinedFooting(lopsided)
+    expect(r.slenderness).toBeGreaterThan(6)
+    expect(r.notes.join(' ')).toContain('grade beam')
+  })
+
+  it('stays quiet on a pad that is a sensible shape', () => {
+    // Equal loads put the resultant at midspan, so the rectangle needs no
+    // stretching and the width comes out proportionate.
+    const even = designCombinedFooting({
+      ...lopsided, spacing: 3, dl2: 120, ll2: 40, qAllow: 120,
+    })
+    expect(even.Bx).toBeLessThanOrEqual(1.25 * even.naturalLength + 1e-9)
+    expect(even.slenderness).toBeLessThanOrEqual(6)
+    expect(even.notes).toEqual([])
+  })
+})

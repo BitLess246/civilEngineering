@@ -290,30 +290,72 @@ describe('beam critical sections — interior is the sagging peak', () => {
   })
 })
 
-describe('combined footing plan', () => {
-  const plan = { 'n0.0.0': { type: 'combined' as const, with: 'n1.0.0' } }
-  const r = designStructure(makeModel(), soil, plan)!
+describe('combined footings come from pads that clash, not from a plan', () => {
+  // Combining is no longer a user choice. Two columns share a pad when their
+  // OWN pads will not both fit — which is the only regime a combined footing
+  // is good at. Pairing columns that are not in each other's way produces a
+  // pad stretched to centre its bearing resultant: long, narrow and deep.
 
-  it('pairs the two nodes once and drops them from the isolated schedule', () => {
-    expect(r.combined).toHaveLength(1)
-    expect(r.combined[0].nodes).toEqual(['n0.0.0', 'n1.0.0'])
-    expect(r.footings).toHaveLength(2)
-    expect(r.footings.map((f) => f.node)).not.toContain('n0.0.0')
-    expect(r.footings.map((f) => f.node)).not.toContain('n1.0.0')
+  /**
+   * Two interior columns 1.2 m apart, each carrying a 6 m bay either side, on
+   * weak soil. Shrinking a whole grid does NOT do this — the tributary area
+   * shrinks with the bay, so the pads shrink too and never catch the spacing.
+   * It takes an irregular layout: close columns with big tributaries.
+   */
+  const tightModel = () => {
+    const m = generateGridModel({ baysX: [6, 1.2, 6], baysZ: [6], storeyH: [3], section, slabThickness: 200 })
+    m.loads = m.plates.flatMap((p) => [
+      { kind: 'area' as const, plate: p.id, q: 4.8, cat: 'D' as const },
+      { kind: 'area' as const, plate: p.id, q: 2.4, cat: 'L' as const },
+    ])
+    return m
+  }
+  const weak = { ...soil, qAllow: 80 }
+
+  it('combines the pads that overlap, and drops them from the isolated schedule', () => {
+    const r = designStructure(tightModel(), weak)!
+    expect(r.combined.length).toBeGreaterThan(0)
+    for (const c of r.combined) {
+      expect(r.footings.map((f) => f.node)).not.toContain(c.nodes[0])
+      expect(r.footings.map((f) => f.node)).not.toContain(c.nodes[1])
+    }
+    // …and every pad it did combine really was clashing
+    const c0 = r.combined[0]
+    expect(c0.spacing).toBeGreaterThan(0)
+    expect(c0.design.Bx).toBeGreaterThan(c0.spacing)      // spans both columns
+    expect(c0.ok).toBe(true)
   })
 
-  it('spacing is the plan distance and dl/ll split sums to the service reaction', () => {
-    const c = r.combined[0]
-    expect(c.spacing).toBeCloseTo(6, 9)             // n0.0.0 → n1.0.0 along x
-    // D + L per node ≈ the unfactored gravity reaction: total floor service
-    // load is (4.8+2.4+0.15·24)·30 + member self-weight, shared 4 ways
-    const service = c.dl1 + c.ll1 + c.dl2 + c.ll2
-    expect(service).toBeGreaterThan(0)
-    // each node's split is internally consistent: dl > ll (D = 4.8+3.6 slab+SW vs L = 2.4)
+  it('produces a pad that is a slab, not a grade beam', () => {
+    // The whole point of pairing on clashes. Close columns give a short pad and
+    // a large required area, so the width comes out generous — here wider than
+    // the pad is long. Pairing columns that were NOT clashing gave 8.7 × 0.6.
+    const c = designStructure(tightModel(), weak)!.combined[0]
+    expect(c.design.slenderness).toBeLessThan(3)
+    expect(c.design.notes).toEqual([])
+  })
+
+  it('splits the service load per node and keeps dead above live', () => {
+    const c = designStructure(tightModel(), weak)!.combined[0]
+    expect(c.dl1 + c.ll1 + c.dl2 + c.ll2).toBeGreaterThan(0)
     expect(c.dl1).toBeGreaterThan(c.ll1)
     expect(c.dl2).toBeGreaterThan(c.ll2)
-    expect(c.design.Bx).toBeGreaterThan(c.spacing)  // footing spans both columns
-    expect(c.ok).toBe(true)
+  })
+
+  it('leaves well-separated columns on their own pads', () => {
+    // The case that used to produce a grade beam: 6 m apart, unequal loads,
+    // pads nowhere near each other. Nothing should be combined.
+    const r = designStructure(makeModel(), soil)!
+    expect(r.combined).toHaveLength(0)
+    expect(r.footings.length).toBeGreaterThan(0)
+  })
+
+  it('ignores a footing plan entirely — the pads decide', () => {
+    const withPlan = designStructure(makeModel(), soil,
+      { 'n0.0.0': { type: 'combined' as const, with: 'n1.0.0' } })!
+    const without = designStructure(makeModel(), soil)!
+    expect(withPlan.combined).toHaveLength(without.combined.length)
+    expect(withPlan.footings.length).toBe(without.footings.length)
   })
 })
 
