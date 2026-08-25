@@ -43,6 +43,7 @@ import type { SlabOpening } from './model'
 import { calcDevLength } from './devLength'
 import type { PlanPrimitive, Drawing } from './planRenderer'
 import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader } from './detailSheet'
+import { seeGeneralNotes } from './generalNotes'
 
 // ── code constants ─────────────────────────────────────────────────────────
 
@@ -506,7 +507,6 @@ export function buildSlabOpeningDetail(i: SlabOpeningInput, opts: SlabOpeningDet
 
   // ── notes ──
   const notes: string[] = [
-    `ADD BARS EQUAL IN NUMBER AND SIZE TO THOSE INTERRUPTED — HALF EACH SIDE, TOP & BOTTOM (§408.5.4.2)`,
     `INTERRUPTED: ${r.x.interrupted}-⌀${Math.round(i.barDia)} IN X (MAT @ ${Math.round(r.x.spacing)}), ${r.y.interrupted}-⌀${Math.round(i.barDia)} IN Y (MAT @ ${Math.round(r.y.spacing)})`,
     `PROVIDE: ${bar(r.x.eachSide, i.barDia, r.x.barLength)} IN X AND ${bar(r.y.eachSide, i.barDia, r.y.barLength)} IN Y — EACH SIDE, EACH FACE`,
     `TRIMMER BARS EXTEND ℓd = ${Math.round(r.x.ld)} (X) / ${Math.round(r.y.ld)} (Y) BEYOND EACH FACE OF THE OPENING (§425.4.2)`,
@@ -516,6 +516,7 @@ export function buildSlabOpeningDetail(i: SlabOpeningInput, opts: SlabOpeningDet
       ? `ZONE: MIDDLE ∩ MIDDLE STRIP — §408.5.4.2(A) PERMITS ANY SIZE PROVIDED THE TOTAL PANEL REINFORCEMENT IS MAINTAINED, WHICH THE ADDED BARS DO`
       : `ZONE: ${r.strip.zone.toUpperCase().replace('-', ' ∩ ')} STRIP — LIMIT ${(r.strip.limit * 100).toFixed(1)}% OF THE STRIP, INTERRUPTED ${(Math.max(r.strip.fracX, r.strip.fracY) * 100).toFixed(0)}%`,
     ...r.notes.map((t) => `⚠ ${t.toUpperCase()}`),
+    seeGeneralNotes(),
   ]
   // Wrap to the sheet, then let the wrapped block set the sheet width — a note
   // is only a note if it is on the paper.

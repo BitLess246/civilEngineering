@@ -330,7 +330,9 @@ describe('buildSlabOpeningDetail', () => {
     // Notes are wrapped to the sheet width, so a sentence can span two text
     // primitives — flatten the whitespace before looking for a phrase.
     const all = texts.join(' ').replace(/\s+/g, ' ')
-    expect(all).toContain('EQUAL IN NUMBER AND SIZE')
+    // The RULE — replace what is interrupted, half each side, top and bottom —
+    // is on the general notes sheet. What this sheet carries is the count.
+    expect(all).toContain('SHEET S-01')
     expect(all).toContain('§408.5.4.2')
     expect(all).toContain('§425.4.2')      // ℓd past each face
     expect(all).toContain('§424.3')        // diagonal crack control

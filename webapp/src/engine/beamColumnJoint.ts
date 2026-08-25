@@ -45,6 +45,7 @@
 import type { PlanPrimitive, Drawing } from './planRenderer'
 import { hookClearToFace, hookEmbedmentAvailable } from './devLength'
 import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader } from './detailSheet'
+import { seeGeneralNotes } from './generalNotes'
 
 // ── code constants ─────────────────────────────────────────────────────────
 
@@ -587,8 +588,8 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
     r.halvedHoops
       ? `FOUR BEAMS FRAME IN, EACH ≥ ¾ THE COLUMN WIDTH — JOINT HOOPS MAY BE HALVED AT ≤ ${JOINT_HOOP_SPACING_MAX} (§418.8.3.2)`
       : `COLUMN CONFINEMENT HOOPS CONTINUE THROUGH THE JOINT AT ${Math.round(r.jointHoopSpacing)} (§418.8.3.1)`,
-    `CLASS B SPLICES FOR JOINT HOOPS ARE MADE OUTSIDE THE JOINT`,
     ...r.notes.map((t) => `⚠ ${t.toUpperCase()}`),
+    seeGeneralNotes(),
   ]
   const noteSize = u * 1.15
   const sheetW = Math.max(ch + beamRun, 1.6) + u * 10

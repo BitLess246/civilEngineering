@@ -320,7 +320,11 @@ describe('the four corner bars', () => {
     const long = buildBeamDetail({ ...b, L: 12 })
     const lf = allTextOf(long).join(' ').replace(/\s+/g, ' ')
     expect(lf).toMatch(/CLASS B LAPS? OF/)
-    expect(lf).toContain('ONLY THING THAT MAY INTERRUPT A CORNER BAR')
+    // The RULE that a lap is the only thing that may interrupt a corner bar is
+    // on the general notes sheet now; what belongs here is this beam's length
+    // and how many laps that costs.
+    expect(lf).toContain('CORNER BARS (2 TOP, 2 BOTTOM) RUN THE FULL 12400')
+    expect(lf).toContain('SHEET S-01')
 
     const short = buildBeamDetail({ ...b, L: 4, colB: 300 })
     expect(allTextOf(short).join(' ')).toContain('NO SPLICE REQUIRED')
@@ -349,13 +353,15 @@ describe('hoops and overlaps on a beam with no support design', () => {
   })
 
   it('does not dimension the run of a bar it never draws', () => {
+    // `ss` has no extra TOP bar, so 0.25L is a run nothing takes — but it does
+    // have extra BOTTOM bars, so 0.15L and the crank note both still belong.
     const f2 = allTextOf(buildBeamDetail(ss)).join(' ')
-    expect(f2).not.toContain('0.25L = ')                  // the dimension
-    expect(f2).not.toContain('EXTRA TOP BARS RUN')        // and the note
-    // …and a beam that has extra top bars still gets both
+    expect(f2).not.toContain('0.25L = ')
+    expect(f2).toContain('0.15L')
+    expect(f2).toContain('CRANK AT ')
     const f3 = allTextOf(buildBeamDetail(b)).join(' ')
     expect(f3).toContain('0.25L = ')
-    expect(f3).toContain('EXTRA TOP BARS RUN')
+    expect(f3).toContain('CRANK AT ')
   })
 
   it('does not band an overlap with a bar it never draws', () => {
@@ -538,7 +544,7 @@ describe('buildBeamDetail', () => {
     const titleText = d.primitives.find((p) => p.kind === 'text'
       && (p as { text: string }).text.startsWith('TYPICAL DETAIL')) as { y: number }
     const noteText = d.primitives.find((p) => p.kind === 'text'
-      && (p as { text: string }).text.startsWith('TOP STEEL OVER')) as { y: number }
+      && (p as { text: string }).text.startsWith('FOR MATERIALS')) as { y: number }
     expect(titleText.y).toBeGreaterThan(beamBottom)
     expect(titleText.y).toBeGreaterThan(noteText.y)
   })

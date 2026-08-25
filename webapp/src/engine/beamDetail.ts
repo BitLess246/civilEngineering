@@ -47,6 +47,7 @@ import { hookClearToFace, hookFit, type HookFitResult } from './devLength'
 import { endAnchors, type Anchor, type AnchorBar, type JointRoom } from './beamAnchorage'
 import { jointHookLdh } from './beamColumnJoint'
 import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader } from './detailSheet'
+import { seeGeneralNotes } from './generalNotes'
 import { buildColumnCage } from './columnCage'
 import {
   runToPrimitive, elevationPlane, hookBendDiameter, continuousBars,
@@ -900,40 +901,34 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
 
   // ── notes ───────────────────────────────────────────────────────────────
   const spliceCount = splicesRequired(x1 - x0, crank.lap / 1000)
+  // ── notes: THIS beam, and nothing that is true of every beam ───────────
+  //
+  // The rules — cover, bends, hooks, laps, curtailment fractions, which way a
+  // hook turns and why — are on the general notes sheet, stated once. What is
+  // left here is what a detailer cannot get from S-01: this member's counts,
+  // its lengths, and anything the design had to flag about it.
   const notes = [
-    `${CORNER_BARS_PER_FACE * 2}-⌀${i.barDia} CORNER BARS RUN THE FULL LENGTH — ${CORNER_BARS_PER_FACE} TOP, ${CORNER_BARS_PER_FACE} BOTTOM, ONE IN EACH CORNER OF THE CAGE. THEY ARE WHAT THE STIRRUPS ARE TIED TO AND ARE NEVER CRANKED`,
-    doublyReinforced
-      ? `MIDSPAN IS DOUBLY REINFORCED — ${midComp}-⌀${i.barDia} IN THE COMPRESSION FACE IS COUNTED AS A's IN THE ANALYSIS`
-      : `THE COMPRESSION FACE IS NOT COUNTED IN THE ANALYSIS — THE SECTION IS SINGLY REINFORCED AND ITS ${CORNER_BARS_PER_FACE} BARS ARE THERE TO HOLD THE STIRRUPS`,
-    spliceCount > 0
-      ? `THE CORNER BARS ARE ${Math.round((x1 - x0) * 1000)} LONG AND STOCK IS ${STOCK_BAR_LENGTH * 1000} — ${spliceCount} CLASS B LAP${spliceCount > 1 ? 'S' : ''} OF ${Math.round(crank.lap)} PER BAR, STAGGERED AND PLACED WHERE THAT BAR'S STRESS IS LOWEST (§425.5.2.1). THIS IS THE ONLY THING THAT MAY INTERRUPT A CORNER BAR`
-      : `THE CORNER BARS ARE ${Math.round((x1 - x0) * 1000)} LONG AND FIT ONE ${STOCK_BAR_LENGTH * 1000} STOCK LENGTH — NO SPLICE REQUIRED`,
-    'TOP STEEL OVER A SUPPORT IS THE GREATER OF THE TWO ADJACENT SPANS (§409.7.7)',
+    seeGeneralNotes(),
+    `${CORNER_BARS_PER_FACE * 2}-⌀${i.barDia} CORNER BARS (${CORNER_BARS_PER_FACE} TOP, ${CORNER_BARS_PER_FACE} BOTTOM) RUN THE FULL ${Math.round((x1 - x0) * 1000)}`
+      + (spliceCount > 0
+        ? ` — ${spliceCount} CLASS B LAP${spliceCount > 1 ? 'S' : ''} OF ${Math.round(crank.lap)} PER BAR, STAGGERED, EACH WHERE THAT BAR'S STRESS IS LOWEST`
+        : ` AND FIT ONE ${STOCK_BAR_LENGTH * 1000} STOCK LENGTH — NO SPLICE REQUIRED`),
+    `${thruTop}-⌀${i.barDia} TOP AND ${thruBot}-⌀${i.barDia} BOTTOM RUN THROUGH AND ARE NEVER CRANKED (§409.7.3.8.4 / §409.7.3.8.1)`,
+    ...(doublyReinforced
+      ? [`MIDSPAN IS DOUBLY REINFORCED — ${midComp}-⌀${i.barDia} IN THE COMPRESSION FACE IS COUNTED AS A's IN THE ANALYSIS`]
+      : [`THE SECTION IS SINGLY REINFORCED — THE ${CORNER_BARS_PER_FACE} BARS IN THE COMPRESSION FACE ARE NOT COUNTED IN THE ANALYSIS`]),
     ...(extraTopL + extraTopR + extraBot > 0 ? [
-      `EVERY CURTAILED BAR IS CRANKED WHERE IT STOPS — THE KINK MARKS THE END OF THAT BAR, NOT A BAR CONTINUING BEHIND THE NEXT ONE`,
       `CRANK AT ${crank.angleDeg}°: ${Math.round(crank.rise)} DEEP OVER ${Math.round(crank.run)} OF RUN, INCLINED LENGTH ${Math.round(crank.inclined)}`,
-      ...(extraTopL + extraTopR > 0 ? [`EXTRA TOP BARS RUN 0.25L FROM THE SUPPORT AND CRANK DOWN`] : []),
-      ...(extraBot > 0 ? [`EXTRA BOTTOM BARS RUN TO 0.15L OFF EACH SUPPORT AND CRANK UP`] : []),
-      ...(overlapsShown[0] ? [`THE TWO RUNS OVERLAP ${Math.round(overlapsShown[0].length)} BETWEEN 0.15L AND 0.25L, SO NO LENGTH OF SPAN IS LEFT WITH NEITHER. THEY ARE IN OPPOSITE FACES AND DO NOT SPLICE WITH EACH OTHER`] : []),
-      `CLASS B LAP FOR THE THROUGH BARS' OWN SPLICES: ${Math.round(crank.lap)} (§425.5.2.1)`,
-      `A CRANK THIS SMALL IS A BAR TERMINATOR, NOT SHEAR REINFORCEMENT — §422.5.10.5 AND §409.7.6.2.3 ARE NOT CLAIMED FOR IT`,
-      `${thruTop}-⌀${i.barDia} TOP AND ${thruBot}-⌀${i.barDia} BOTTOM RUN THROUGH STRAIGHT AND ARE NEVER CRANKED (§409.7.3.8.4 / §409.7.3.8.1)`,
-      `EXTRA BARS SHARE THE THROUGH BARS' LAYER — SIDE BY SIDE ACROSS THE ${i.b} WEB AT 25 CLEAR (§425.2.2), NOT STACKED ABOVE THEM`,
+      ...(overlapsShown[0] ? [`THE 0.15L AND 0.25L RUNS OVERLAP ${Math.round(overlapsShown[0].length)}, SO NO LENGTH OF SPAN IS LEFT WITH NEITHER`] : []),
       ...crank.notes,
     ] : []),
-    `HOOPS @ ${Math.round(sEndUsed)} OVER 2h = ${Math.round(zone * 1000)} FROM EACH SUPPORT FACE, FIRST AT ${FIRST_HOOP} (§418.6.4.1/§418.6.4.4)`,
-    `HOOPS @ ${Math.round(sMid)} THROUGH THE MIDDLE — SPACING IS WIDEST WHERE THE SHEAR IS LOWEST`,
-    `AT AN END SUPPORT BEAM BARS ARE HOOKED INTO THE COLUMN, ${Math.round(anch?.clear ?? HOOK_END_COVER)} CLEAR TO THE END OF THE HOOK (§425.4.3 / §418.8.3)`,
-    ...(planL || planR ? [
-      `THE TOP HOOK STANDS AT THE FAR FACE OF THE CONFINED CORE AND THE BOTTOM HOOK ${i.barDia} FURTHER IN, SO THE TWO TAILS PASS RATHER THAN MEET (§418.8.4.1)`,
-    ] : []),
-    // Anything the anchorage had to change, in the words it changed it for.
+    `HOOPS @ ${Math.round(sEndUsed)} OVER 2h = ${Math.round(zone * 1000)} FROM EACH SUPPORT FACE, FIRST AT ${FIRST_HOOP} (§418.6.4.1); @ ${Math.round(sMid)} THROUGH THE MIDDLE — WIDEST WHERE THE SHEAR IS LOWEST`,
+    `TOP BARS EXTEND ${Math.round(barExtension(i.h - 60, i.barDia) * 1000)} MIN. PAST THE POINT NO LONGER REQUIRED — max(d, 12db)`,
+    // Anything the anchorage had to change for THIS beam, in its own words.
     ...[...new Set([...(planL ?? []), ...(planR ?? [])].flatMap((a) => a.note ?? []))]
       .map((n) => n.toUpperCase()),
     ...([...(planL ?? []), ...(planR ?? [])].some((a) => a.dir === 'side')
       ? [`A HOOK SHOWN STOPPING AT ITS BEND TURNS INTO THE TRANSVERSE BEAM, OUT OF THE PLANE OF THIS ELEVATION`] : []),
-    `90° STANDARD HOOK: ${hookBendDiameter(i.barDia) / i.barDia}db INSIDE BEND ⌀${Math.round(hookBendDiameter(i.barDia))}, ℓext = 12db = ${Math.round(hook90(i.barDia).ext)}, OVERALL ${Math.round(hook90(i.barDia).depth)} DEEP (TABLE 425.3.1) — ℓdh IS MEASURED TO THE OUTSIDE OF THE BEND`,
-    `TOP BARS EXTEND ${Math.round(barExtension(i.h - 60, i.barDia) * 1000)} MIN. PAST THE POINT NO LONGER REQUIRED — max(d, 12db) §409.7.3.8.4`,
   ]
   if (anch) {
     notes.push(anch.fits
