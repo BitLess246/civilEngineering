@@ -15,6 +15,8 @@
 // Geometry only. Nothing here decides anything; `engine/stair` does.
 // ─────────────────────────────────────────────────────────────────────────
 
+import { flightGeometry, MARGIN } from './stairLayout'
+
 const INK = '#37526e'
 const CONC = '#eef3f8'
 const STEP = '#dde5ee'
@@ -44,58 +46,38 @@ export function StairElevation({
   span, t, R, G, thetaDeg, mainBars, distBars, support,
 }: StairElevationProps) {
   const th = (thetaDeg * Math.PI) / 180
-  const nSteps = Math.max(1, Math.round((span * 1000 * Math.cos(th)) / Math.max(G, 1)))
-
-  // Horizontal run and rise of the flight, in mm, from the step count so the
-  // drawn staircase and the drawn slope are the same object.
-  const run = nSteps * G
-  const rise = nSteps * R
-
-  const ML = 70, MR = 74, MB = 64
-  const DRAW_W = 470
-  const s = DRAW_W / Math.max(run, 1)
-  // The top margin has to clear what sits ABOVE the soffit's top end: the
-  // waist thickness plus one riser. A fixed 40 clipped the last tread off the
-  // top of the frame on a thick waist.
-  const MT = 18 + t * s + R * s
-  const H = rise * s
-  const W = ML + DRAW_W + MR, HT = MT + H + MB
-
-  // Soffit runs from the bottom-left support up to the top-right. The waist is
-  // offset NORMAL to it — components (sinθ, −cosθ) scaled by t.
-  const x0 = ML, y0 = MT + H          // bottom of the soffit
-  const x1 = ML + DRAW_W, y1 = MT     // top of the soffit
-  const tw = t * s
-  const nx = Math.sin(th) * tw, ny = -Math.cos(th) * tw
-
-  // Step nosings, walked up the flight — from the TOP FACE of the waist, not
-  // from the soffit. Walking from the soffit drew the treads one waist-
-  // thickness low and left a spike where the last one overshot the top of the
-  // slab, which is what the first render showed.
-  const stepPts: string[] = []
-  for (let i = 0; i < nSteps; i++) {
-    const bx = x0 + nx + i * G * s, by = y0 + ny - i * R * s
-    stepPts.push(`${bx},${by}`, `${bx},${by - R * s}`, `${bx + G * s},${by - R * s}`)
-  }
+  const { W, HT, MT, x0, y0, x1, y1, tv, nx, ny, nSteps, profile, flight, scale: s } =
+    flightGeometry(span, t, R, G, thetaDeg)
+  const ML = MARGIN.left
+  const pt = (p: readonly [number, number]) => `${p[0]},${p[1]}`
 
   return (
     <svg viewBox={`0 0 ${W} ${HT}`} className="mx-auto block h-auto w-full"
       style={{ fontFamily: 'Arial, sans-serif' }}>
-      {/* the waist slab — a parallelogram offset normal to the soffit */}
-      <path d={`M${x0} ${y0} L${x1} ${y1} L${x1 + nx} ${y1 + ny} L${x0 + nx} ${y0 + ny} z`}
-        fill={CONC} stroke={INK} strokeWidth={1.6} />
+      {/* the flight, filled as one piece of concrete */}
+      <polygon points={flight.map(pt).join(' ')} fill={CONC} stroke="none" />
 
-      {/* the treads and risers, sitting on top of the waist as dead load */}
-      <polygon points={`${x0 + nx},${y0 + ny} ${stepPts.join(' ')} ${x1 + nx},${y1 + ny}`}
-        fill={STEP} stroke={INK} strokeWidth={1.1} />
+      {/* the step triangles tinted — dead load sitting on the waist, not
+          structure, which is why `stairLoads` counts them separately. Fill
+          only: their lower edge is the waist reference line, not an edge. */}
+      <polygon points={profile.map(pt).join(' ')} fill={STEP} stroke="none" />
+
+      {/* the waist's top face — a reference for t, so light and dashed */}
+      <line x1={x0} y1={y0 - tv} x2={x1} y2={y1 - tv}
+        stroke={INK} strokeWidth={0.7} strokeDasharray="5 4" opacity={0.45} />
+
+      {/* ...and the single concrete outline over the top of all of it, so the
+          risers are full-height vertical faces and the treads horizontal ones */}
+      <polygon points={flight.map(pt).join(' ')} fill="none" stroke={INK}
+        strokeWidth={1.6} strokeLinejoin="miter" />
 
       {/* main steel — parallel to the flight, in the tension face at the soffit */}
-      <line x1={x0 + nx * 0.22} y1={y0 + ny * 0.22} x2={x1 + nx * 0.22} y2={y1 + ny * 0.22}
+      <line x1={x0} y1={y0 - tv * 0.22} x2={x1} y2={y1 - tv * 0.22}
         stroke={MAIN} strokeWidth={2.2} strokeLinecap="round" />
       {/* distribution steel — crossing the main bars, so seen end-on */}
       {Array.from({ length: nSteps }, (_, i) => {
         const f = (i + 0.5) / nSteps
-        return <circle key={i} cx={x0 + (x1 - x0) * f + nx * 0.5} cy={y0 + (y1 - y0) * f + ny * 0.5} r={1.9} fill={DIST} />
+        return <circle key={i} cx={x0 + (x1 - x0) * f} cy={y0 + (y1 - y0) * f - tv * 0.5} r={1.9} fill={DIST} />
       })}
 
       {/* supports: a hatched bearing at each held end */}
@@ -119,13 +101,20 @@ export function StairElevation({
       <g stroke={DIM} strokeWidth={0.9} fill="none">
         {(() => {
           const mx = (x0 + x1) / 2, my = (y0 + y1) / 2
-          const ox = Math.sin(th) * 34, oy = -Math.cos(th) * 34
+          // Label BELOW the soffit, on a leader. Along the +normal it landed
+          // inside a step, crossing the profile it was measuring off — and a
+          // short drop is not enough either, because the label is horizontal
+          // and the soffit is not: over the label's own half-width the soffit
+          // climbs by tanθ × that, and eats the text from the side.
+          const off = 52
+          const ox = -Math.sin(th) * off, oy = Math.cos(th) * off
           return (
             <>
               <line x1={mx} y1={my} x2={mx + nx} y2={my + ny} />
               <line x1={mx - 4} y1={my - 4} x2={mx + 4} y2={my + 4} />
               <line x1={mx + nx - 4} y1={my + ny - 4} x2={mx + nx + 4} y2={my + ny + 4} />
-              <text x={mx + ox} y={my + oy} fontSize={8.5} fill={DIM} stroke="none" textAnchor="middle"
+              <line x1={mx} y1={my} x2={mx + ox} y2={my + oy} strokeDasharray="3 3" opacity={0.7} />
+              <text x={mx + ox} y={my + oy + 10} fontSize={8.5} fill={DIM} stroke="none" textAnchor="middle"
                 paintOrder="stroke" strokeWidth={2.6}>t = {t} mm ⟂</text>
             </>
           )
@@ -134,17 +123,18 @@ export function StairElevation({
 
       {/* riser and going on the first step */}
       <g fontSize={8} fill={DIM}>
-        <text x={x0 + G * s * 0.5} y={y0 - R * s - 5} textAnchor="middle"
+        <text x={x0 + G * s * 0.5} y={y0 - tv - R * s - 5} textAnchor="middle"
           paintOrder="stroke" stroke="#fff" strokeWidth={2.4}>G = {G}</text>
-        <text x={x0 - 6} y={y0 - R * s * 0.5} textAnchor="end"
+        <text x={x0 - 6} y={y0 - tv - R * s * 0.5} textAnchor="end"
           paintOrder="stroke" stroke="#fff" strokeWidth={2.4}>R = {R}</text>
       </g>
 
-      {/* slope */}
-      <g>
-        <path d={`M${x0 + 46} ${y0} A 46 46 0 0 0 ${x0 + 46 * Math.cos(th)} ${y0 - 46 * Math.sin(th)}`}
-          fill="none" stroke={FAINT} strokeWidth={0.9} />
-        <text x={x0 + 54} y={y0 - 14} fontSize={8.5} fill={FAINT}>θ = {thetaDeg.toFixed(1)}°</text>
+      {/* slope — with the horizontal leg it is measured FROM, so the arc has
+          two sides to subtend instead of floating beside the soffit */}
+      <g fill="none" stroke={FAINT} strokeWidth={0.9}>
+        <line x1={x0} y1={y0} x2={x0 + 58} y2={y0} strokeDasharray="4 3" />
+        <path d={`M${x0 + 46} ${y0} A 46 46 0 0 0 ${x0 + 46 * Math.cos(th)} ${y0 - 46 * Math.sin(th)}`} />
+        <text x={x0 + 62} y={y0 - 12} fontSize={8.5} fill={FAINT} stroke="none">θ = {thetaDeg.toFixed(1)}°</text>
       </g>
 
       {/* flight span, ALONG THE SLOPE — the span the moment is computed on */}
@@ -159,14 +149,16 @@ export function StairElevation({
         </text>
       </g>
 
-      {/* legend */}
+      {/* legend — TOP LEFT. On the right it sat on the top bearing and the end
+          of the flight; the flight climbs to the right, so this corner is the
+          one stretch of the frame that is empty whatever the geometry. */}
       <g fontSize={8}>
-        <line x1={W - MR + 4} y1={MT + 6} x2={W - MR + 18} y2={MT + 6} stroke={MAIN} strokeWidth={2.2} />
-        <text x={W - MR + 22} y={MT + 9} fill={MAIN}>main ∥</text>
-        <circle cx={W - MR + 11} cy={MT + 20} r={1.9} fill={DIST} />
-        <text x={W - MR + 22} y={MT + 23} fill={DIST}>dist ⊙</text>
-        {mainBars && <text x={W - MR + 4} y={MT + 38} fill={MAIN}>{mainBars}</text>}
-        {distBars && <text x={W - MR + 4} y={MT + 50} fill={DIST}>{distBars}</text>}
+        <line x1={ML + 2} y1={MT + 6} x2={ML + 16} y2={MT + 6} stroke={MAIN} strokeWidth={2.2} />
+        <text x={ML + 20} y={MT + 9} fill={MAIN}>main ∥</text>
+        <circle cx={ML + 9} cy={MT + 20} r={1.9} fill={DIST} />
+        <text x={ML + 20} y={MT + 23} fill={DIST}>dist ⊙</text>
+        {mainBars && <text x={ML + 2} y={MT + 38} fill={MAIN}>{mainBars}</text>}
+        {distBars && <text x={ML + 2} y={MT + 50} fill={DIST}>{distBars}</text>}
       </g>
 
       <text x={W / 2} y={HT - 8} fontSize={7.5} fill={FAINT} textAnchor="middle">

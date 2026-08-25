@@ -18,6 +18,16 @@ defaults:
 
 jobs:
   review:
+    # DISABLED. This workflow calls an OpenAI-compatible endpoint (DashScope)
+    # with OPENAI_API_KEY unset, so the model returns nothing and the run dies
+    # parsing it — `jq: Cannot iterate over null`, exit 5 — failing the
+    # "review / review" check on every pull request regardless of the diff.
+    #
+    # To re-enable: set the OPENAI_API_KEY secret, then set the repository
+    # variable QWEN_REVIEW_ENABLED=true. The automatic run on pull_request
+    # .opened also has to be restored in qwen-dispatch.yml.
+    if: |-
+      ${{ fromJSON(vars.QWEN_REVIEW_ENABLED || 'false') }}
     runs-on: 'ubuntu-latest'
     timeout-minutes: 7
     permissions:

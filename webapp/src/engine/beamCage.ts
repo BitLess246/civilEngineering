@@ -27,6 +27,7 @@ import {
   hookBendDiameter, KEEP_TOP, KEEP_BOTTOM,
   type RebarCage, type RebarRun, type Vec3,
 } from './rebarModel'
+import { hookClearToFace } from './devLength'
 
 export interface BeamCageInput {
   /** Member mark — every bar in the cage carries it. */
@@ -53,6 +54,14 @@ export interface BeamCageInput {
   /** Whether the beam continues past each support. An end support hooks. */
   continuousLeft?: boolean
   continuousRight?: boolean
+  /**
+   * The supporting column's own cover, tie Ø and vertical-bar Ø, mm — what
+   * decides how far a hooked beam bar can reach into the joint before it runs
+   * into the far-face vertical it turns down behind (`hookClearToFace`).
+   */
+  colCover?: number
+  colTieDia?: number
+  colBarDia?: number
   /** Beam centreline in plan, m, and the level of its SOFFIT. */
   axis: { x0: number; z0: number; x1: number; z1: number }
   ySoffit: number
@@ -129,8 +138,23 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
 
   const hookD = hookBendDiameter(i.barDia)
   const tail = (12 * i.barDia) / 1000             // ℓext = 12db, Table 425.3.1
-  const faceL = (i.colBLeft ?? 0) / 2000
-  const faceR = i.L - (i.colBRight ?? 0) / 2000
+  // ── How far a bar reaches into its support ──────────────────────────────
+  //
+  // §418.8.4.1: a beam bar terminated in a column shall extend to the FAR face
+  // of the confined core and be developed there. This cage stopped every bar at
+  // the NEAR face and turned the hook down on the spot, so the bar had no
+  // embedment in the joint at all — the anchorage the elevation dimensions
+  // (`beamDetail.endHookAnchorage`, which places the hook at `hookClearToFace`
+  // off the far face) and the anchorage the 3D view drew were different bars.
+  //
+  // A bar at a CONTINUOUS support is not anchored, it carries on; it runs to
+  // the column centreline so the next span's bar meets it there instead of
+  // both stopping at their own faces and leaving the joint empty.
+  const clear = hookClearToFace(i.colCover ?? 40, i.colTieDia ?? 10, i.colBarDia ?? i.barDia)
+  /** Centreline of the turned-down leg, m from the support centreline. */
+  const hookIn = (colB: number) => Math.max(0, colB / 2000 - (clear + i.barDia / 2) / 1000)
+  const endL = i.continuousLeft ? 0 : -hookIn(i.colBLeft ?? 0)
+  const endR = i.continuousRight ? i.L : i.L + hookIn(i.colBRight ?? 0)
 
   // ── through bars: the corners, plus the code's continuous share ──
   for (const [role, y, down, n] of [
@@ -142,12 +166,12 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
       const path: Vec3[] = []
       const bends: number[] = []
       if (!i.continuousLeft) {
-        path.push(at(faceL, v, y + (down ? -tail : tail)))
+        path.push(at(endL, v, y + (down ? -tail : tail)))
         bends.push(hookD)
       }
-      path.push(at(faceL, v, y), at(faceR, v, y))
+      path.push(at(endL, v, y), at(endR, v, y))
       if (!i.continuousRight) {
-        path.push(at(faceR, v, y + (down ? -tail : tail)))
+        path.push(at(endR, v, y + (down ? -tail : tail)))
         bends.push(hookD)
       }
       runs.push({
@@ -163,7 +187,7 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
   if (extraTop > 0) {
     const stop = EXTRA_TOP_FRACTION * i.L
     for (const [end, from, to] of [
-      ['L', faceL, stop], ['R', faceR, i.L - stop],
+      ['L', endL, stop], ['R', endR, i.L - stop],
     ] as const) {
       const dir = to > from ? 1 : -1
       for (let k = 0; k < extraTop; k++) {

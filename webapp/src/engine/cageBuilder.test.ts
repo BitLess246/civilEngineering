@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { buildStructureCages } from './cageBuilder'
 import { designStructure } from './pipeline'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
-import { cutLength } from './rebarModel'
+import { cutLength, type RebarCage, type Vec3 } from './rebarModel'
 
 const section = { id: 's1', name: 'C1', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
 const soil = { qAllow: 200, gammaSoil: 18, gammaConc: 24, H: 1.5 }
@@ -17,10 +17,34 @@ const { cages, unplaced } = buildStructureCages(model, design)
 const nodeOf = (id: string) => model.nodes.find((n) => n.id === id)!
 const memOf = (id: string) => model.members.find((m) => m.id === id)!
 
+/** A through bar's pieces, in order — one run when it fits a stock bar, and
+ *  the lapped pieces `…a`, `…b` when it does not. */
+const throughPieces = (cage: RebarCage, mark: string) =>
+  cage.runs
+    .filter((r) => r.mark === mark || (r.mark.startsWith(mark) && /^[a-z]$/.test(r.mark.slice(mark.length))))
+    .sort((a, b) => a.mark.localeCompare(b.mark))
+
+/**
+ * Anchorage hooks on a whole through bar — 0, 1 or 2.
+ *
+ * Counted from GEOMETRY rather than by counting bends: a bar now carries bends
+ * that are not hooks (the step-aside at a lap splice has two of its own), so a
+ * bend tally answers a different question. A hook is the bar's own end turning
+ * out of the line it runs along.
+ */
+const hooksOn = (cage: RebarCage, mark: string): number => {
+  const ps = throughPieces(cage, mark)
+  if (!ps.length) return 0
+  const turns = (a: Vec3, b: Vec3) => Math.abs(a[1] - b[1]) > 1e-6
+  const head = ps[0].path, tail = ps[ps.length - 1].path
+  return (turns(head[0], head[1]) ? 1 : 0)
+    + (turns(tail[tail.length - 1], tail[tail.length - 2]) ? 1 : 0)
+}
+
 describe('buildStructureCages', () => {
   it('places every designed member, and reports any it cannot', () => {
     expect(unplaced).toEqual([])
-    expect(cages).toHaveLength(design.beams.length + design.columns.length)
+    expect(cages).toHaveLength(design.beams.length + design.columns.length + design.footings.length)
     expect(new Set(cages.map((c) => c.member)).size).toBe(cages.length)
   })
 
@@ -50,7 +74,7 @@ describe('buildStructureCages', () => {
     expect(Math.max(...ys)).toBeLessThan(y + 0.5 / 2 + 1e-6)
   })
 
-  it('stands a column cage on its own plan position, between its node levels', () => {
+  it('stands a column cage on its own plan position, and starts at its base', () => {
     const c = design.columns[0]
     const mem = memOf(c.id), ni = nodeOf(mem.i), nj = nodeOf(mem.j)
     const cage = cages.find((x) => x.member === c.id)!
@@ -62,7 +86,35 @@ describe('buildStructureCages', () => {
     }
     const ys = verts.flatMap((r) => r.path.map((p) => p[1]))
     expect(Math.min(...ys)).toBeCloseTo(Math.min(ni.y, nj.y), 6)
-    expect(Math.max(...ys)).toBeCloseTo(Math.max(ni.y, nj.y), 6)
+  })
+
+  it('runs the verticals PAST the top node where a column carries on, and not where it does not', () => {
+    // A column bar does not stop at the floor — the storey above laps onto it
+    // (§25.5.5), so the cage has to project that lap or it claims a splice with
+    // nowhere to happen. At a roof there is nothing to lap and it stops.
+    const yOf = (id: string) => {
+      const m = memOf(id)
+      return { lo: Math.min(nodeOf(m.i).y, nodeOf(m.j).y), hi: Math.max(nodeOf(m.i).y, nodeOf(m.j).y) }
+    }
+    const topOf = (id: string) => {
+      const verts = cages.find((x) => x.member === id)!.runs.filter((r) => r.role === 'vertical')
+      return Math.max(...verts.flatMap((r) => r.path.map((p) => p[1])))
+    }
+    const carriesOnAbove = (id: string) => {
+      const m = memOf(id), hi = yOf(id).hi
+      const node = nodeOf(m.i).y >= nodeOf(m.j).y ? m.i : m.j
+      return model.members.some((o) => o.role === 'column' && o.id !== id
+        && (o.i === node || o.j === node)
+        && Math.max(nodeOf(o.i).y, nodeOf(o.j).y) > hi + 1e-6)
+    }
+    let spliced = 0, capped = 0
+    for (const c of design.columns) {
+      const { hi } = yOf(c.id)
+      if (carriesOnAbove(c.id)) { expect(topOf(c.id)).toBeGreaterThan(hi + 0.29); spliced++ }
+      else { expect(topOf(c.id)).toBeCloseTo(hi, 6); capped++ }
+    }
+    expect(capped).toBeGreaterThan(0)          // the model does have roof columns
+    expect(spliced + capped).toBe(design.columns.length)
   })
 
   it('hooks a beam end exactly where the model has nothing carrying on', () => {
@@ -89,8 +141,10 @@ describe('buildStructureCages', () => {
       })
       const expectedHooks = (carriesOn(mem.i) ? 0 : 1) + (carriesOn(mem.j) ? 0 : 1)
       const cage = cages.find((c) => c.member === b.id)!
-      const through = cage.runs.find((r) => r.mark === `${b.id}-T1`)!
-      expect(through.bendDia).toHaveLength(expectedHooks)
+      // A bar too long for a stock length comes back as lapped pieces, so the
+      // hooks are counted across the whole bar rather than on one run.
+      expect(throughPieces(cage, `${b.id}-T1`).length).toBeGreaterThan(0)
+      expect(hooksOn(cage, `${b.id}-T1`)).toBe(expectedHooks)
     }
   })
 
@@ -102,7 +156,7 @@ describe('buildStructureCages', () => {
     const c3 = buildStructureCages(m3, d3).cages
     const beamIds = new Set(d3.beams.map((b) => b.id))
     const hookCounts = c3.filter((c) => beamIds.has(c.member))
-      .map((c) => c.runs.find((r) => r.mark === `${c.member}-T1`)!.bendDia.length)
+      .map((c) => hooksOn(c, `${c.member}-T1`))
     expect(hookCounts).toContain(0)          // the middle beam of a 3-bay run
     expect(hookCounts).toContain(1)          // and the two either side of it
   })
