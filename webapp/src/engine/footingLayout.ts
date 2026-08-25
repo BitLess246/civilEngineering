@@ -7,7 +7,12 @@
 // Units: metres.
 // ─────────────────────────────────────────────────────────────────────────
 
-export interface FootingIn { node: string; B: number; Dc: number }            // isolated square (mm Dc)
+export interface FootingIn {
+  node: string; B: number; Dc: number                                // isolated square (mm Dc)
+  /** Pedestal below the base node, m (H − Dc) — how far the pad's top sits
+   *  under the node the column stands on. */
+  pedestal?: number
+}
 /**
  * A combined pad, in the frame `designCombinedFooting` works in: `Bx` along the
  * pad's own axis from `nodes[0]` towards `nodes[1]`, `By1`/`By2` the widths at
@@ -20,11 +25,15 @@ export interface FootingIn { node: string; B: number; Dc: number }            //
  */
 export interface CombinedIn {
   nodes: [string, string]
+  /** Pedestal below the base nodes, m — as for an isolated pad. */
+  pedestal?: number
   Bx: number; By1: number; By2: number; x1: number
   Dc: number
 }
 
 export interface Footprint {
+  /** Level of the pad's TOP, m — the base node less its pedestal. */
+  yTop: number
   key: string
   cx: number; cz: number          // plan centre, m
   bx: number; bz: number          // plan dimensions, m (local, before rotation)
@@ -50,7 +59,7 @@ export function footingLayout(
     const p = nodeXZ.get(f.node); if (!p) continue
     items.push({
       key: `ft-${f.node}`, cx: p.x, cz: p.z, bx: f.B, bz: f.B, bz1: f.B, bz2: f.B,
-      dc: f.Dc / 1000, angle: 0,
+      dc: f.Dc / 1000, angle: 0, yTop: -(f.pedestal ?? 0),
       hx: f.B / 2, hz: f.B / 2, label: `${f.node}  ${f.B.toFixed(2)}×${f.B.toFixed(2)}`,
     })
   }
@@ -70,7 +79,7 @@ export function footingLayout(
       key: `cf-${cf.nodes.join('-')}`,
       cx: a.x + ux * off, cz: a.z + uz * off,
       bx: cf.Bx, bz: wide, bz1: cf.By1, bz2: cf.By2,
-      dc: cf.Dc / 1000, angle, hx, hz,
+      dc: cf.Dc / 1000, angle, hx, hz, yTop: -(cf.pedestal ?? 0),
       label: trapezoid
         ? `CTF ${cf.Bx.toFixed(2)}×${cf.By1.toFixed(2)}/${cf.By2.toFixed(2)}`
         : `CRF ${cf.Bx.toFixed(2)}×${cf.By1.toFixed(2)}`,

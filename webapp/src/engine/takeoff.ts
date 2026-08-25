@@ -239,9 +239,19 @@ export function estimateTakeoff(
   }
 
   // ── Columns ──
+  // A column on a footing carries a PEDESTAL below its base node, down to the
+  // top of the pad. Its concrete, its formwork and its bars are real and were
+  // bought by nobody: the schedule length stops at the node.
+  const pedestalOf = (id: string): number => {
+    const m = model.members.find((x) => x.id === id)
+    if (!m) return 0
+    const y = (n: string) => model.nodes.find((q) => q.id === n)?.y ?? 0
+    const base = y(m.i) <= y(m.j) ? m.i : m.j
+    return design.footings.find((f) => f.node === base)?.pedestal ?? 0
+  }
   for (const c of design.columns) {
     const sec = secOf(c.id)
-    const H = c.L
+    const H = c.L + pedestalOf(c.id)
     const tag = `Column ${c.id}`
     const concreteM3 = (sec.b / 1000) * (sec.h / 1000) * H
     const formworkM2 = (2 * (sec.b / 1000 + sec.h / 1000)) * H

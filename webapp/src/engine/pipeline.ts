@@ -175,6 +175,18 @@ export interface FootingScheduleRow {
   barDia: number
   /** Ranked alternatives and the reason this mat was adopted. */
   selection: RebarSelection
+  /**
+   * Length of column between the base node and the TOP of the pad, m — the
+   * pedestal, H − Dc.
+   *
+   * `H` is the founding depth: the pad's SOFFIT is that far below the base
+   * node, so unless the pad happens to be exactly that thick there is a stub of
+   * column below the ground node holding it up. Nothing carried that length, so
+   * the 3D view stood the pad's top at the node, the take-off bought neither
+   * its concrete nor its bars, and the cage's dowels lapped into a column that
+   * started nowhere.
+   */
+  pedestal: number
   ok: boolean
   gov?: string
 }
@@ -1274,6 +1286,7 @@ function designFromRuns(
       : base
     return {
       node, P, Pu, design: d, barDia, selection: choice.selection,
+      pedestal: Math.max(0, soil.H - d.Dc / 1000),
       ok: d.qNet > 0 && d.punchOK && d.beamOK && d.barsFit && choice.db !== null,
       gov,
     }

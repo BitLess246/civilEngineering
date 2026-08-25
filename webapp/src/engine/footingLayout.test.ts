@@ -231,3 +231,28 @@ describe('overlappingPairs — which pads actually clash', () => {
     expect(paired).toEqual(painted)
   })
 })
+
+
+describe('the pad sits at its founding depth', () => {
+  const at = new Map([['n1', { x: 0, z: 0 }], ['n2', { x: 6, z: 0 }]])
+
+  it('reports the pad TOP a pedestal below the base node', () => {
+    // The pad's soffit is the founding depth H down; the pad is Dc thick; so
+    // its top is H − Dc under the node. Pinned to y = 0, a pad founded 1.5 m
+    // down drew at the surface with nothing holding the column up.
+    const [f] = footingLayout([{ node: 'n1', B: 2, Dc: 450, pedestal: 1.05 }], [], at).items
+    expect(f.yTop).toBeCloseTo(-1.05, 9)
+  })
+
+  it('defaults to grade when no pedestal is given, so old callers do not move', () => {
+    const [f] = footingLayout([{ node: 'n1', B: 2, Dc: 450 }], [], at).items
+    expect(f.yTop).toBeCloseTo(0, 12)
+  })
+
+  it('a combined pad is founded the same way', () => {
+    const [c] = footingLayout([], [{
+      nodes: ['n1', 'n2'], Bx: 8, By1: 2, By2: 2, x1: 0.5, Dc: 600, pedestal: 0.9,
+    }], at).items
+    expect(c.yTop).toBeCloseTo(-0.9, 9)
+  })
+})

@@ -274,3 +274,28 @@ describe('timber (wood-frame) take-off', () => {
     expect(bill.rows.find((r) => r.item.startsWith('Timber — '))!.unitPrice).toBe(55)
   })
 })
+
+
+describe('the pedestal is bought', () => {
+  it('a column costs its length BELOW the base node too', () => {
+    const model = makeModel()
+    const design = designStructure(model, soil as never)!
+    // The schedule length stops at the node, but the column runs on down to the
+    // top of the pad. That concrete, formwork and steel were bought by nobody.
+    const t = estimateTakeoff(model, design)
+    const cols = t.byElement.filter((e) => e.kind === 'Column')
+    expect(cols.length).toBeGreaterThan(0)
+    const peds = new Map(design.footings.map((f) => [f.node, f.pedestal]))
+    expect([...peds.values()].some((v) => v > 0)).toBe(true)
+    for (const c of cols) {
+      const m = model.members.find((x) => x.id === c.id)!
+      const yOf = (n: string) => model.nodes.find((q) => q.id === n)!.y
+      const base = yOf(m.i) <= yOf(m.j) ? m.i : m.j
+      const ped = peds.get(base) ?? 0
+      const row = design.columns.find((x) => x.id === c.id)!
+      const sec = model.sections.find((x) => x.id === m.section)!
+      const want = (sec.b / 1000) * (sec.h / 1000) * (row.L + ped)
+      expect(c.concreteM3).toBeCloseTo(want, 6)
+    }
+  })
+})

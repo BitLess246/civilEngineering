@@ -78,14 +78,26 @@ export function buildFootingCage(i: FootingCageInput): RebarCage {
   // standing loose in it. Above the footing it projects the lap the column bar
   // splices onto — the joint the cage was missing entirely.
   const lap = Math.max(0, i.lap) / 1000
-  const tail = (DOWEL_TAIL_DB * i.colBarDia) / 1000
+  const tailWant = (DOWEL_TAIL_DB * i.colBarDia) / 1000
   const D = hookBendDiameter(i.colBarDia)
   const yHook = y1 + (i.barDia + i.colBarDia) / 2000        // sitting on the mat
+  // How far the tail can reach before it hits the side cover.
+  const room = Math.max(0, half - i.cover / 1000)
   i.colBars.forEach(([dx, dz], k) => {
     const x = cx + dx / 1000, z = cz + dz / 1000
-    // turn the tail INBOARD, so it never runs out through the side cover
-    const sx = Math.abs(dx) >= Math.abs(dz) ? -Math.sign(dx) || 1 : 0
-    const sz = sx === 0 ? (-Math.sign(dz) || 1) : 0
+    // The tail turns OUTWARD, away from the column. That is how a starter bar
+    // is bent: the foot splays out under the pad so the bar bears against the
+    // concrete outside the column footprint and the whole group opens up rather
+    // than crowding the little square of pad the column stands on. Turned
+    // inboard — which is what this did — every tail pointed into the same
+    // congested core and several of them crossed.
+    const sx = Math.abs(dx) >= Math.abs(dz) ? Math.sign(dx) || 1 : 0
+    const sz = sx === 0 ? (Math.sign(dz) || 1) : 0
+    // …but never through the cover on the way out. A pad too small for the
+    // full 12db gets the tail it has room for, which is a real constraint
+    // rather than a drawing that runs steel out of the concrete.
+    const reach = sx !== 0 ? room - Math.abs(dx / 1000) : room - Math.abs(dz / 1000)
+    const tail = Math.max(0, Math.min(tailWant, reach))
     runs.push({
       mark: `${i.mark}-D${k + 1}`, dia: i.colBarDia, role: 'dowel', member: i.mark,
       path: [
@@ -93,7 +105,7 @@ export function buildFootingCage(i: FootingCageInput): RebarCage {
         [x, yHook, z],
         [x, i.yTop + lap, z],
       ] as Vec3[],
-      bendDia: [D], count: 1,
+      bendDia: tail > 0 ? [D] : [], count: 1,
     })
   })
 

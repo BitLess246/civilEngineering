@@ -61,18 +61,37 @@ describe('the dowels — the lap the column stands on', () => {
     }
   })
 
-  it('turns a 12db hook across the mat, inboard, never out through the cover', () => {
+  it('turns a 12db hook OUTWARD, away from the column', () => {
+    // A starter bar's foot splays out under the pad, so it bears on concrete
+    // outside the column footprint and the group opens up. Turned inboard,
+    // every tail points into the same congested core and several cross.
     const half = 1.0
     for (const d of byRole('dowel')) {
       const [tip, knee] = d.path
       expect(tip[1]).toBeCloseTo(knee[1], 9)                      // the tail is horizontal
       const run = Math.hypot(tip[0] - knee[0], tip[2] - knee[2])
       expect(run).toBeCloseTo((DOWEL_TAIL_DB * 20) / 1000, 9)
-      // inboard: the tail end is closer to the pad centre than the knee
-      expect(Math.hypot(tip[0] - 3, tip[2] - 5)).toBeLessThan(Math.hypot(knee[0] - 3, knee[2] - 5))
-      expect(Math.abs(tip[0] - 3)).toBeLessThan(half - 0.075)
-      expect(Math.abs(tip[2] - 5)).toBeLessThan(half - 0.075)
+      // outward: the tail end is FARTHER from the pad centre than the knee
+      expect(Math.hypot(tip[0] - 3, tip[2] - 5)).toBeGreaterThan(Math.hypot(knee[0] - 3, knee[2] - 5))
+      // …and still inside the concrete
+      expect(Math.abs(tip[0] - 3)).toBeLessThanOrEqual(half - 0.075 + 1e-9)
+      expect(Math.abs(tip[2] - 5)).toBeLessThanOrEqual(half - 0.075 + 1e-9)
       expect(d.bendDia).toHaveLength(1)
+    }
+  })
+
+  it('shortens the tail rather than run it out through the side cover', () => {
+    // A pad barely bigger than its column has no room for the full 12db. The
+    // tail it does have is a real constraint; steel drawn outside the concrete
+    // is not.
+    const tight = buildFootingCage({ ...pad, B: 0.7 })
+    const half = 0.35
+    for (const d of tight.runs.filter((r) => r.role === 'dowel')) {
+      const [tip, knee] = d.path
+      expect(Math.abs(tip[0] - 3)).toBeLessThanOrEqual(half - 0.075 + 1e-9)
+      expect(Math.abs(tip[2] - 5)).toBeLessThanOrEqual(half - 0.075 + 1e-9)
+      expect(Math.hypot(tip[0] - knee[0], tip[2] - knee[2]))
+        .toBeLessThan((DOWEL_TAIL_DB * 20) / 1000)
     }
   })
 
