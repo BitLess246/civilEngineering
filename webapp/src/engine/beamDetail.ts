@@ -47,11 +47,12 @@ import { hookClearToFace, hookFit, type HookFitResult } from './devLength'
 import { endAnchors, type Anchor, type AnchorBar, type JointRoom } from './beamAnchorage'
 import { jointHookLdh } from './beamColumnJoint'
 import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader } from './detailSheet'
-import { seeGeneralNotes } from './generalNotes'
+import { GENERAL_NOTES_REF } from './generalNotes'
+import { SHEET_INK, SHEET_NOTE, SHEET_GRID, STEEL, STEEL_LIGHT, STEEL_CONTEXT } from './sheetInk'
 import { buildColumnCage } from './columnCage'
 import {
   runToPrimitive, elevationPlane, hookBendDiameter, continuousBars,
-  CORNER_BARS_PER_FACE, KEEP_TOP, KEEP_BOTTOM, splicesRequired, STOCK_BAR_LENGTH,
+  KEEP_TOP, KEEP_BOTTOM, splicesRequired, STOCK_BAR_LENGTH,
 } from './rebarModel'
 
 export interface BeamDetailSection {
@@ -159,19 +160,36 @@ export interface BeamDetailInput {
 }
 
 export interface BeamDetailOptions { detailNo?: string; sheetRef?: string; scale?: string }
-export interface BeamDetailDrawing extends Drawing { title: string }
+export interface BeamDetailDrawing extends Drawing {
+  title: string
+  /**
+   * What the design had to flag about this beam — a splice it needs, a bar
+   * that does not develop, a hook it had to turn the other way.
+   *
+   * NOT printed on the sheet. A construction detail says what to build; an
+   * unresolved development length is a question for the engineer, and set in
+   * a paragraph under the elevation it is neither answered nor actionable.
+   * The caller decides where these belong — the sheet set puts them in the
+   * drawing's warnings, beside the drawing rather than on it.
+   */
+  designNotes: string[]
+}
 
-export const REBAR_INK = '#b45309'
-const INK = '#1e293b', REBAR = REBAR_INK, GRID = '#9aa5b5', NOTE = '#475569', ACCENT = '#0f766e'
-export const CRANK_INK = '#1d4ed8'
-/** Hoops sit behind the longitudinal steel — lighter, so the bars read first. */
-const HOOP = '#c7a17a'
-/** The band marking a lap, painted along the two bars that share it. */
-const LAP = '#0891b2'
-/** Column steel — its own ink, so it never reads as the beam's. */
-const COLBAR = '#7c3aed'
-const CRANK = CRANK_INK   // bent-up bars — their own ink, they are one bar doing two jobs
-const WARN = '#b91c1c'
+// ── ink ──────────────────────────────────────────────────────────────────
+// One accent for steel, dark ink for everything said about it. The sheet used
+// to run five colours at once — orange bars, blue cranks, tan hoops, cyan lap
+// bands, purple column steel — with the callouts printed in the bar colour on
+// top, and at a glance nothing led. A cranked bar is not a different KIND of
+// steel; it is the same bar, and its callout says so.
+export const REBAR_INK = STEEL
+const INK = SHEET_INK, REBAR = STEEL, GRID = SHEET_GRID, NOTE = SHEET_NOTE
+/** Hoops sit behind the longitudinal steel — the same accent, stepped back. */
+const HOOP = STEEL_LIGHT
+/** The band marking an overlap, painted along the two bars that share it. */
+const LAP = STEEL
+/** The supporting column's steel — context, not this beam's, so it stays grey. */
+const COLBAR = STEEL_CONTEXT
+const CRANK = STEEL
 const CONC = '#f1f5f9'
 
 /** Mean glyph width / font size for Arial capitals — note wrapping only. */
@@ -775,17 +793,19 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   }
 
   // ── callouts ────────────────────────────────────────────────────────────
+  // Callouts are ANNOTATION, so they take the sheet's ink, not the bar's. A
+  // label printed in the colour of the thing it labels reads as another one of
+  // them, and every count of bars-by-ink picks it up as steel.
   const call = (x: number, z: number, text: string, anchor: 'start' | 'middle' | 'end' = 'middle') =>
-    P.push({ kind: 'text', x, y: Y(z), text, size: u * 1.5, anchor, color: REBAR, weight: 600 })
-  // The corner bars, and whether the analysis counted them.
-  const topTail = doublyReinforced
-    ? `COUNTED AS A's AT MIDSPAN`
-    : hangerTop ? `STIRRUP HANGERS — NOT COUNTED` : `STRAIGHT, NEVER CRANKED`
-  call(L / 2, hM + colRise + u * 5.6, `${thruTop}-⌀${i.barDia} TOP THRU — ${topTail}`)
+    P.push({ kind: 'text', x, y: Y(z), text, size: u * 1.5, anchor, color: INK, weight: 600 })
+  // What to place, where — not why the analysis chose it. Whether the
+  // compression face was counted is a design fact and belongs in the
+  // calculations, not on a bar bender's drawing.
+  call(L / 2, hM + colRise + u * 5.6, `${thruTop}-⌀${i.barDia} TOP THRU (CORNER) — CONT.`)
   if (extraTopL > 0) call(topRun / 2, hM + colRise + u * 1.4, `${extraTopL}-⌀${i.barDia} EXTRA TOP`)
   if (extraTopR > 0) call(L - topRun / 2, hM + colRise + u * 1.4, `${extraTopR}-⌀${i.barDia} EXTRA TOP`)
-  call(L / 2, -colDrop - u * 3.4, `${thruBot}-⌀${i.barDia} BOT. THRU${extraBot > 0 ? ` + ${extraBot}-⌀${i.barDia} EXTRA` : ''}`)
-  call(L / 2, -colDrop - u * 5.2, `${i.legs ?? 2}L-⌀${i.stirrupDia} HOOPS @ ${Math.round(sEndUsed)} O/ 2h EA. END, @ ${Math.round(sMid)} ELSEWHERE`)
+  call(L / 2, -colDrop - u * 3.4, `${thruBot}-⌀${i.barDia} BOT. THRU (CORNER) — CONT.${extraBot > 0 ? ` + ${extraBot}-⌀${i.barDia} EXTRA` : ''}`)
+  call(L / 2, -colDrop - u * 5.2, `${i.legs ?? 2}L-⌀${i.stirrupDia} HOOPS @ ${Math.round(sEndUsed)} C/C FOR 2h EA. END, @ ${Math.round(sMid)} ELSEWHERE`)
 
   // The crank itself, labelled on the incline it names. One leader per crank
   // so the reader is never left guessing which bar the note is about.
@@ -793,14 +813,34 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   // two labels over each other: at u = L/60 the text is a third of the span
   // wide, so any two of them inside the middle half of the beam collide. The
   // rise and run are in the notes, where there is room for them.
-  const crankAt = extraTopL > 0 ? crank.top[0] : extraBot > 0 ? crank.bot[1] : undefined
+  const crankAt = extraTopL > 0 ? crank.top[0] : extraTopR > 0 ? crank.top[1] : extraBot > 0 ? crank.bot[1] : undefined
   if (crankAt) {
     const mx = (crankAt.at + crankAt.tip) / 2
     const inward = mx < L / 2 ? 1 : -1
     P.push(...leader({
       x: mx, y: Y((yTop2 + yBot2) / 2),
-      tx: mx + inward * L * 0.07, ty: Y(hM + colRise * 0.55),
-      text: `CRANK ${crank.angleDeg}° TYP.`, size: u * 1.3, color: CRANK,
+      tx: mx + inward * L * 0.07, ty: Y(hM + colRise * 0.42),
+      text: `CRANK ${crank.angleDeg}° TYP.`, size: u * 1.3, color: NOTE,
+    }))
+  }
+
+  // ── the extension past the cut-off, ON the bar it controls ──────────────
+  // §409.7.3.8.4 wants max(d, 12db) beyond the point a bar is no longer
+  // required. Said in a paragraph it is a number nobody can act on; dimensioned
+  // at the cut-off it is the length the bar is cut to.
+  // On the OTHER cut-off from the crank label where both exist, and below the
+  // bar rather than above it: two leaders landing on one point printed one
+  // label through the other.
+  if (extraTopL > 0 || extraTopR > 0) {
+    const ext = barExtension(i.h - 60, i.barDia)
+    const right = extraTopR > 0 && extraTopL > 0 ? true : extraTopR > 0
+    const ce = right ? crank.top[1] : crank.top[0]
+    const side = right ? -1 : 1
+    P.push(...leader({
+      x: ce.at, y: Y(yTop2),
+      tx: ce.at + side * L * 0.09, ty: Y(hM + colRise + u * 3.0),
+      text: `EXT = ${Math.round(ext * 1000)} MIN. PAST CUT-OFF`,
+      size: u * 1.2, color: NOTE,
     }))
   }
 
@@ -813,7 +853,7 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
       x: mx, y: Y(hM / 2),
       tx: mx + L * 0.06, ty: Y(-colDrop * 0.42),
       text: `TOP AND BOTTOM EXTRAS OVERLAP ${Math.round(ov0.length)}`,
-      size: u * 1.2, color: LAP,
+      size: u * 1.2, color: NOTE,
     }))
   }
 
@@ -833,39 +873,14 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   P.push({ kind: 'text', x: face, y: Y(-colDrop - u * 8.8), text: `${FIRST_HOOP} FIRST HOOP`, size: u * 1.2, anchor: 'start', color: NOTE })
   P.push({ kind: 'dim', x1: 0, y1: Y(-colDrop - u * 11.0), x2: L, y2: Y(-colDrop - u * 11.0), text: `L = ${Math.round(L * 1000)}`, off: 0, size: u * 1.5 })
 
-  // ℓdh at a hooked end — the anchorage the hook has to achieve, dimensioned
-  // against the room the column leaves it rather than drawn and hoped for.
-  if (anch) {
-    for (const [cont, cx, dir] of [[i.continuousLeft, 0, 1], [i.continuousRight, L, -1]] as const) {
-      if (cont) continue
-      const hx = cx - dir * (face - anch.clear / 1000)   // outside of the bend
-      const faceX = cx + dir * face                       // critical section
-      // Above the SPAN label at u*7.4, which the right-hand dimension used to
-      // print straight through — the two shared a band and an anchor point.
-      const dy = Y(hM + colRise + u * 9.4)
-      P.push({
-        kind: 'dim', x1: hx, y1: dy, x2: faceX, y2: dy,
-        text: `${Math.round(anch.avail)} AVAIL / ℓdh ${Math.round(anch.ldh)} REQ`,
-        off: 0, size: u * 1.25,
-      })
-      if (!anch.fits) {
-        // where ℓdh would have to reach — past the back of the column
-        const need = faceX - dir * (anch.ldh / 1000)
-        P.push({
-          kind: 'line', x1: need, y1: Y(hM + colRise + u * 9.4), x2: need, y2: Y(yTop2 - hookDrop),
-          stroke: WARN, width: 0.8, dash: [u * 0.4, u * 0.3],
-        })
-        // Its own band, centred on the line it belongs to. Anchored to the
-        // dim's end it ran straight through the AVAIL / REQ text, which is
-        // centred on a span far shorter than the label it carries.
-        P.push({
-          kind: 'text', x: need, y: Y(hM + colRise + u * 12.6),
-          text: `ℓdh ${Math.round(anch.shortfall)} SHORT`,
-          size: u * 1.25, anchor: 'middle', color: WARN,
-        })
-      }
-    }
-  }
+  // ℓdh is NOT dimensioned here, and a shortfall is not drawn here.
+  //
+  // How much anchorage the hook achieves against how much the column leaves it
+  // is a design result, and where it does not work the answer is to deepen the
+  // column or change the bar — neither of which anyone reading this sheet can
+  // do. Printed on the elevation it was an alarm nobody on site could act on,
+  // sitting on top of the dimensions they could. It travels as a design note
+  // instead, beside the drawing rather than on it.
 
   // The hook, dimensioned at an end support: the clear cover to the end of the
   // tail, and ℓext itself.
@@ -900,41 +915,39 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   }
 
   // ── notes ───────────────────────────────────────────────────────────────
-  const spliceCount = splicesRequired(x1 - x0, crank.lap / 1000)
-  // ── notes: THIS beam, and nothing that is true of every beam ───────────
+  // ── notes ───────────────────────────────────────────────────────────────
   //
-  // The rules — cover, bends, hooks, laps, curtailment fractions, which way a
-  // hook turns and why — are on the general notes sheet, stated once. What is
-  // left here is what a detailer cannot get from S-01: this member's counts,
-  // its lengths, and anything the design had to flag about it.
-  const notes = [
-    seeGeneralNotes(),
-    `${CORNER_BARS_PER_FACE * 2}-⌀${i.barDia} CORNER BARS (${CORNER_BARS_PER_FACE} TOP, ${CORNER_BARS_PER_FACE} BOTTOM) RUN THE FULL ${Math.round((x1 - x0) * 1000)}`
-      + (spliceCount > 0
-        ? ` — ${spliceCount} CLASS B LAP${spliceCount > 1 ? 'S' : ''} OF ${Math.round(crank.lap)} PER BAR, STAGGERED, EACH WHERE THAT BAR'S STRESS IS LOWEST`
-        : ` AND FIT ONE ${STOCK_BAR_LENGTH * 1000} STOCK LENGTH — NO SPLICE REQUIRED`),
-    `${thruTop}-⌀${i.barDia} TOP AND ${thruBot}-⌀${i.barDia} BOTTOM RUN THROUGH AND ARE NEVER CRANKED (§409.7.3.8.4 / §409.7.3.8.1)`,
+  // A construction detail answers one question: what bars, how many, where,
+  // what spacing, how far do they extend, how do they bend. It does not answer
+  // why the engineer chose them, what the calculation returned, or which code
+  // equation was triggered — that is the design record, and printed here it
+  // buries the four lines an installer actually needs.
+  //
+  // So this sheet carries ONE line. The standing rules are on S-01; the
+  // quantities are callouts and dimensions on the drawing itself; and anything
+  // the design had to flag comes back as `designNotes` for whatever raises it
+  // with the engineer, rather than being set in a paragraph a bar bender is
+  // expected to resolve.
+  const notes = [`REFER TO ${GENERAL_NOTES_REF} FOR GENERAL REINFORCING REQUIREMENTS.`]
+
+  // ── what the design flagged, for the ENGINEER, not for this sheet ───────
+  const spliceCount = splicesRequired(x1 - x0, crank.lap / 1000)
+  const designNotes: string[] = [
+    ...(spliceCount > 0
+      ? [`${i.mark}: corner bars are ${Math.round((x1 - x0) * 1000)} long against ${STOCK_BAR_LENGTH * 1000} stock — ${spliceCount} Class B lap${spliceCount > 1 ? 's' : ''} of ${Math.round(crank.lap)} per bar`]
+      : []),
     ...(doublyReinforced
-      ? [`MIDSPAN IS DOUBLY REINFORCED — ${midComp}-⌀${i.barDia} IN THE COMPRESSION FACE IS COUNTED AS A's IN THE ANALYSIS`]
-      : [`THE SECTION IS SINGLY REINFORCED — THE ${CORNER_BARS_PER_FACE} BARS IN THE COMPRESSION FACE ARE NOT COUNTED IN THE ANALYSIS`]),
-    ...(extraTopL + extraTopR + extraBot > 0 ? [
-      `CRANK AT ${crank.angleDeg}°: ${Math.round(crank.rise)} DEEP OVER ${Math.round(crank.run)} OF RUN, INCLINED LENGTH ${Math.round(crank.inclined)}`,
-      ...(overlapsShown[0] ? [`THE 0.15L AND 0.25L RUNS OVERLAP ${Math.round(overlapsShown[0].length)}, SO NO LENGTH OF SPAN IS LEFT WITH NEITHER`] : []),
-      ...crank.notes,
-    ] : []),
-    `HOOPS @ ${Math.round(sEndUsed)} OVER 2h = ${Math.round(zone * 1000)} FROM EACH SUPPORT FACE, FIRST AT ${FIRST_HOOP} (§418.6.4.1); @ ${Math.round(sMid)} THROUGH THE MIDDLE — WIDEST WHERE THE SHEAR IS LOWEST`,
-    `TOP BARS EXTEND ${Math.round(barExtension(i.h - 60, i.barDia) * 1000)} MIN. PAST THE POINT NO LONGER REQUIRED — max(d, 12db)`,
-    // Anything the anchorage had to change for THIS beam, in its own words.
+      ? [`${i.mark}: midspan is doubly reinforced — ${midComp}-⌀${i.barDia} in the compression face is counted as A's`]
+      : []),
+    ...(hangerTop ? [`${i.mark}: no hogging steel was designed — the top bars are stirrup hangers and take no part in the analysis`] : []),
+    ...crank.notes.map((t) => `${i.mark}: ${t.toLowerCase()}`),
+    // The anchorage decisions, in the words the anchorage made them in.
     ...[...new Set([...(planL ?? []), ...(planR ?? [])].flatMap((a) => a.note ?? []))]
-      .map((n) => n.toUpperCase()),
-    ...([...(planL ?? []), ...(planR ?? [])].some((a) => a.dir === 'side')
-      ? [`A HOOK SHOWN STOPPING AT ITS BEND TURNS INTO THE TRANSVERSE BEAM, OUT OF THE PLANE OF THIS ELEVATION`] : []),
+      .map((t) => `${i.mark}: ${t}`),
+    ...(anch && !anch.fits
+      ? [`${i.mark}: ℓdh ${Math.round(anch.ldh)} exceeds the ${Math.round(anch.avail)} available in the column by ${Math.round(anch.shortfall)} — ⌀${i.barDia} bars do not develop here. Deepen the column to ${Math.round(anch.depthNeeded)}, reduce the bar, or use a headed bar (§425.4.4); a longer tail does not count, ℓdh is measured to the outside of the bend`]
+      : []),
   ]
-  if (anch) {
-    notes.push(anch.fits
-      ? `ℓdh = ${Math.round(anch.ldh)} DEVELOPS IN THE ${Math.round(anch.avail)} AVAILABLE INSIDE THE COLUMN CAGE (§418.8.5.1)`
-      : `ℓdh = ${Math.round(anch.ldh)} EXCEEDS THE ${Math.round(anch.avail)} AVAILABLE BY ${Math.round(anch.shortfall)} — ⌀${i.barDia} BARS DO NOT DEVELOP IN THIS COLUMN. DEEPEN IT TO ${Math.round(anch.depthNeeded)}, REDUCE THE BAR, OR USE A HEADED BAR (§425.4.4). LENGTHENING THE TAIL DOES NOT COUNT — ℓdh IS MEASURED TO THE OUTSIDE OF THE BEND`)
-  }
   const noteSize = u * 1.35
   const sheetW = L + u * 8
   const noteTop = -colDrop - u * 14.5
@@ -949,7 +962,7 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   })
   P.push(...tb.prims)
 
-  P.push({ kind: 'text', x: x1, y: Y(hM + colRise + u * 7.4), text: `SPAN ${L.toFixed(2)} m`, size: u * 1.35, anchor: 'end', color: ACCENT })
+  P.push({ kind: 'text', x: x1, y: Y(hM + colRise + u * 7.4), text: `SPAN ${L.toFixed(2)} m`, size: u * 1.35, anchor: 'end', color: NOTE })
 
   // ── bounds: fit the content, so nothing is ever clipped ─────────────────
   // Seeded with the sheet rectangle so the block never collapses onto the
@@ -960,7 +973,7 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
     minY: Y(hM + colRise + u * 8.6), maxY: tb.bottom + u * 1.5,
   })
 
-  return { primitives: P, title: `TYPICAL DETAIL OF CONTINUOUS BEAM — ${i.mark}`, bounds: b }
+  return { primitives: P, title: `TYPICAL DETAIL OF CONTINUOUS BEAM — ${i.mark}`, designNotes, bounds: b }
 }
 
 // Re-exported so the existing callers and tests keep their import site; the

@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import type { PlanPrimitive } from './planRenderer'
 import { buildBeamCage } from './beamCage'
+import { STEEL_LIGHT, STEEL_CONTEXT } from './sheetInk'
 import {
   buildBeamDetail, continuousTopSteel, barExtension, zoneSpacing, hoopPositions, wrapNote,
   FIRST_HOOP, HOOP_ZONE_DEPTHS, HOOK_END_COVER, EXTRA_TOP_FRACTION, EXTRA_BOTTOM_FRACTION,
-  endHookAnchorage, crankBars, hook90, hookBendDiameter, HOOK_TAIL_DB, REBAR_INK, CRANK_INK,
+  endHookAnchorage, crankBars, hook90, hookBendDiameter, HOOK_TAIL_DB, REBAR_INK,
 } from './beamDetail'
 
 const sections = [
@@ -26,6 +27,20 @@ const noMidStirrups = {
     { label: 'Interior', x: 3, hogging: false, bars: 2, stirrupSpacing: 0 },
   ],
 }
+
+/**
+ * The cranked bars, found by SHAPE rather than by ink.
+ *
+ * All reinforcement is one accent now — a cranked bar is the same bar, not a
+ * different kind of steel — so a filter on colour would catch the hooks too.
+ * A crank is straight segments only; a hook ends in an arc.
+ */
+const crankedPaths = (d: { primitives: PlanPrimitive[] }) =>
+  d.primitives
+    .filter((p): p is Extract<PlanPrimitive, { kind: 'path' }> =>
+      p.kind === 'path' && p.stroke === REBAR_INK)
+    .filter((p) => p.cmds.length >= 3 && p.cmds.every((c) => c.c === 'M' || c.c === 'L'))
+
 
 describe('continuous top steel — §409.7.7', () => {
   it('takes the greater of the two adjacent spans', () => {
@@ -111,7 +126,7 @@ const allTextOf = (d: ReturnType<typeof buildBeamDetail>) =>
   d.primitives.filter((p) => p.kind === 'text' || p.kind === 'dim').map((p) => (p as { text: string }).text)
 /** Vertical hoop lines. Hoops carry their own ink so they sit behind the
  *  longitudinal steel — matching on the bar ink now finds nothing. */
-const HOOP_INK = '#c7a17a'
+const HOOP_INK = STEEL_LIGHT
 const hoopsOf = (d: ReturnType<typeof buildBeamDetail>) =>
   (d.primitives.filter((p) => p.kind === 'line' && p.stroke === HOOP_INK
     && Math.abs(p.x1 - p.x2) < 1e-9) as { x1: number }[]).map((l) => l.x1).sort((a, c) => a - c)
@@ -225,12 +240,11 @@ describe('crankBars — cranked bar ends', () => {
     expect(crankBars({ ...base, ld: 100 }).lap).toBe(300)
   })
 
-  it('draws each cranked bar as one continuous path in its own ink', () => {
+  it('draws each cranked bar as one continuous path, not a bar plus a diagonal', () => {
     // One bar, not a straight bar plus a separate diagonal — two pieces on the
     // sheet get fabricated as two bars.
     const d2 = buildBeamDetail({ ...b, continuousLeft: true, continuousRight: true })
-    const cranks = d2.primitives.filter((p) => p.kind === 'path' && p.stroke === CRANK_INK)
-      .map((p) => (p as Extract<typeof p, { kind: 'path' }>))
+    const cranks = crankedPaths(d2)
     expect(cranks).toHaveLength(3)                          // two top bars, one bottom
     expect(cranks.filter((c) => c.cmds.length === 3)).toHaveLength(2)   // run + crank
     expect(cranks.filter((c) => c.cmds.length === 4)).toHaveLength(1)   // cranked both ends
@@ -240,9 +254,7 @@ describe('crankBars — cranked bar ends', () => {
     // The drawn kink has to be the angle the note quotes, or the sheet says one
     // thing and the bender reads another off the paper.
     const d2 = buildBeamDetail({ ...b, continuousLeft: true, continuousRight: true })
-    const path = d2.primitives.find(
-      (p) => p.kind === 'path' && p.stroke === CRANK_INK && p.cmds.length === 4,
-    ) as Extract<PlanPrimitive, { kind: 'path' }>
+    const path = crankedPaths(d2).find((p) => p.cmds.length === 4)!
     const [p0, p1] = path.cmds                              // the opening crank
     expect(Math.abs(p1.x - p0.x)).toBeCloseTo(Math.abs(p1.y - p0.y), 9)
   })
@@ -275,9 +287,10 @@ describe('the four corner bars', () => {
     const d2 = buildBeamDetail(simplySupported)
     const flat2 = allTextOf(d2).join(' ').replace(/\s+/g, ' ')
     expect(flat2).toContain('2-⌀16 TOP THRU')
-    // and the sheet says why they are there
-    expect(flat2).toContain('STIRRUP HANGERS — NOT COUNTED')
-    expect(flat2).toContain('SINGLY REINFORCED')
+    // WHY they are there is a design fact, not a construction instruction, so
+    // it goes to the engineer rather than onto the bar bender's drawing.
+    expect(flat2).not.toContain('NOT COUNTED')
+    expect(d2.designNotes.join(' ')).toContain('stirrup hangers')
   })
 
   it('draws the top bars as real bars, not as an annotation', () => {
@@ -297,9 +310,9 @@ describe('the four corner bars', () => {
       sections: b.sections.map((sn) => sn.hogging ? sn : { ...sn, compressionBars: 3 }),
     })
     const f = allTextOf(dr).join(' ').replace(/\s+/g, ' ')
-    expect(f).toContain("COUNTED AS A's AT MIDSPAN")
-    expect(f).toContain('DOUBLY REINFORCED')
-    expect(f).not.toContain('SINGLY REINFORCED')
+    expect(f).not.toContain('REINFORCED')                 // not a placing instruction
+    expect(dr.designNotes.join(' ')).toContain("doubly reinforced")
+    expect(dr.designNotes.join(' ')).toContain("counted as A's")
   })
 
   it('never cranks a corner bar', () => {
@@ -319,15 +332,16 @@ describe('the four corner bars', () => {
     // 6 m stock: a 6 m span plus its column widths does not fit in one stick
     const long = buildBeamDetail({ ...b, L: 12 })
     const lf = allTextOf(long).join(' ').replace(/\s+/g, ' ')
-    expect(lf).toMatch(/CLASS B LAPS? OF/)
-    // The RULE that a lap is the only thing that may interrupt a corner bar is
-    // on the general notes sheet now; what belongs here is this beam's length
-    // and how many laps that costs.
-    expect(lf).toContain('CORNER BARS (2 TOP, 2 BOTTOM) RUN THE FULL 12400')
-    expect(lf).toContain('SHEET S-01')
+    // The lap LENGTH is on S-01's schedule of measures and the rule is in its
+    // notes; how many this beam needs is a design fact for the engineer. The
+    // sheet itself carries neither — it says what to place.
+    expect(lf).not.toMatch(/CLASS B/)
+    expect(lf).toContain('REFER TO S-01')
+    expect(long.designNotes.join(' ')).toMatch(/Class B lap/)
+    expect(long.designNotes.join(' ')).toContain('12400 long')
 
     const short = buildBeamDetail({ ...b, L: 4, colB: 300 })
-    expect(allTextOf(short).join(' ')).toContain('NO SPLICE REQUIRED')
+    expect(short.designNotes.join(' ')).not.toMatch(/Class B lap/)
   })
 })
 
@@ -349,7 +363,7 @@ describe('hoops and overlaps on a beam with no support design', () => {
     const near = Math.min(...gaps.slice(0, 3))
     const mid = Math.max(...gaps)
     expect(near).toBeLessThanOrEqual(mid + 1e-9)
-    expect(allTextOf(d2).join(' ')).toContain('HOOPS @ 150 O/ 2h EA. END')
+    expect(allTextOf(d2).join(' ')).toContain('HOOPS @ 150 C/C FOR 2h EA. END')
   })
 
   it('does not dimension the run of a bar it never draws', () => {
@@ -358,10 +372,10 @@ describe('hoops and overlaps on a beam with no support design', () => {
     const f2 = allTextOf(buildBeamDetail(ss)).join(' ')
     expect(f2).not.toContain('0.25L = ')
     expect(f2).toContain('0.15L')
-    expect(f2).toContain('CRANK AT ')
+    expect(f2).toContain('CRANK 45° TYP.')            // labelled on the drawing
     const f3 = allTextOf(buildBeamDetail(b)).join(' ')
     expect(f3).toContain('0.25L = ')
-    expect(f3).toContain('CRANK AT ')
+    expect(f3).toContain('CRANK 45° TYP.')
   })
 
   it('does not band an overlap with a bar it never draws', () => {
@@ -370,17 +384,17 @@ describe('hoops and overlaps on a beam with no support design', () => {
     // bar that is not on the sheet.
     const d2 = buildBeamDetail(ss)
     expect(allTextOf(d2).join(' ')).not.toContain('OVERLAP')
-    const bands = d2.primitives.filter((p) => p.kind === 'line' && p.stroke === '#0891b2')
+    const bands = d2.primitives.filter((p) => p.kind === 'line' && p.stroke === REBAR_INK && p.width === 3.4)
     expect(bands).toHaveLength(0)
     // …but a beam that HAS both bars still gets its band
     const both = buildBeamDetail(b)
-    expect(both.primitives.filter((p) => p.kind === 'line' && p.stroke === '#0891b2').length)
+    expect(both.primitives.filter((p) => p.kind === 'line' && p.stroke === REBAR_INK && p.width === 3.4).length)
       .toBeGreaterThan(0)
   })
 })
 
 describe('the supporting columns\' own steel', () => {
-  const COLBAR = '#7c3aed'
+  const COLBAR = STEEL_CONTEXT
   const withCage = {
     ...b,
     columnCage: { bars: 12, sConfined: 100, sOutside: 150, lo: 600 },
@@ -449,7 +463,7 @@ describe('buildBeamDetail', () => {
     expect(flat).toContain('2-⌀16 EXTRA TOP')
     expect(flat).toContain('4-⌀16 EXTRA TOP')
     // 5 bottom -> max(2, ceil(5/4)) = 2 through, 3 cranked
-    expect(flat).toContain('2-⌀16 BOT. THRU + 3-⌀16 EXTRA')
+    expect(flat).toContain('2-⌀16 BOT. THRU (CORNER) — CONT. + 3-⌀16 EXTRA')
   })
 
   it('applies the continuity rule when an adjacent span is supplied', () => {
@@ -468,10 +482,7 @@ describe('buildBeamDetail', () => {
     // cranked path now, so the straight middle is its third and fourth points
     // The bottom bar is the cranked path with no arc in it — a top bar hooked
     // into an end support also has four commands, but three of them are its hook.
-    const bot = d.primitives.find(
-      (p) => p.kind === 'path' && p.stroke === CRANK_INK
-        && p.cmds.length === 4 && p.cmds.every((c) => c.c !== 'A'),
-    ) as Extract<PlanPrimitive, { kind: 'path' }>
+    const bot = crankedPaths(d).find((p) => p.cmds.length === 4)!
     expect(bot).toBeDefined()
     // cmds[0] is the crank tip, cmds[1] and cmds[2] the straight run it ends
     expect(bot.cmds[1].x).toBeCloseTo(0.15 * b.L, 9)
@@ -501,10 +512,11 @@ describe('buildBeamDetail', () => {
   })
 
   it('states the adopted spacings, and that the widest is where shear is lowest', () => {
+    // The callout states the spacings; the clause and the reasoning are on
+    // S-01, where a rule belongs.
     expect(flat).toContain('HOOPS @ 100')
     expect(flat).toContain('@ 200')
-    expect(flat).toContain('§418.6.4.1')
-    expect(flat).toContain('WIDEST WHERE THE SHEAR IS LOWEST')
+    expect(flat).not.toContain('WIDEST WHERE THE SHEAR IS LOWEST')
     // the no-stirrup beam quotes the code maximum, not the drawing floor
     const bare = textsOf(buildBeamDetail(noMidStirrups)).join(' ')
     expect(bare).toContain('HOOPS @ 110')
@@ -518,9 +530,15 @@ describe('buildBeamDetail', () => {
     // ink, so a bare `kind === 'path'` count would now conflate the two.
     // Both the top and the bottom THROUGH bar hook, so an end support carries
     // two of them — the top turning down, the bottom turning up.
+    // Hooks only: cranked bars share the accent now, so the arc is what tells
+    // them apart — a hook ends in one, a crank is straight all the way.
     const paths = (x: ReturnType<typeof buildBeamDetail>) =>
-      x.primitives.filter((p) => p.kind === 'path' && p.stroke === REBAR_INK)
-    expect(paths(d)).toHaveLength(4)                    // both ends are end supports
+      x.primitives.filter((p) => p.kind === 'path' && p.stroke === REBAR_INK
+        && p.cmds.some((c) => c.c === 'A'))
+    // Two through bars hook at each end, and so does each extra top bar — six
+    // in all here. They were four only because the extras used to be drawn in
+    // a second colour this filter did not catch.
+    expect(paths(d)).toHaveLength(6)
     expect(flat).toContain(`${HOOK_END_COVER} CL.`)
 
     const bothCont = buildBeamDetail({ ...b, continuousLeft: true, continuousRight: true })
@@ -528,7 +546,7 @@ describe('buildBeamDetail', () => {
     expect(textsOf(bothCont).join(' ')).not.toContain('CL.')
 
     const oneEnd = buildBeamDetail({ ...b, continuousRight: true })
-    expect(paths(oneEnd)).toHaveLength(2)
+    expect(paths(oneEnd)).toHaveLength(3)      // two through bars and one extra top
   })
 
   it('marks the 2h hoop zone and the 50 mm first hoop', () => {
@@ -544,7 +562,7 @@ describe('buildBeamDetail', () => {
     const titleText = d.primitives.find((p) => p.kind === 'text'
       && (p as { text: string }).text.startsWith('TYPICAL DETAIL')) as { y: number }
     const noteText = d.primitives.find((p) => p.kind === 'text'
-      && (p as { text: string }).text.startsWith('FOR MATERIALS')) as { y: number }
+      && (p as { text: string }).text.startsWith('REFER TO')) as { y: number }
     expect(titleText.y).toBeGreaterThan(beamBottom)
     expect(titleText.y).toBeGreaterThan(noteText.y)
   })
@@ -624,25 +642,39 @@ describe('buildBeamDetail — the end hook is dimensioned, not drawn by eye', ()
     expect(allTextOf(buildBeamDetail(ends)).join(' ')).toContain(`${HOOK_END_COVER} CL.`)
   })
 
-  it('dimensions ℓdh required against the embedment available', () => {
+  it('does NOT dimension ℓdh on the sheet — it is a design result', () => {
+    // How much anchorage the hook achieves against how much the column leaves
+    // it is a calculation, and the answer where it fails is to deepen the
+    // column or change the bar — neither of which anyone reading this sheet
+    // can do. `endHookAnchorage` still works it out; it just goes elsewhere.
     const flat = allTextOf(buildBeamDetail(tightCol)).join(' ').replace(/\s+/g, ' ')
-    expect(flat).toContain('184 AVAIL / ℓdh 270 REQ')
-    expect(flat).toContain('ℓdh 86 SHORT')
+    expect(flat).not.toContain('AVAIL')
+    expect(flat).not.toMatch(/ℓdh \d+ REQ/)
+    expect(endHookAnchorage(tightCol)!.avail).toBe(184)
   })
 
   it('says the bar does not develop — and that a longer tail is not the fix', () => {
-    const flat = allTextOf(buildBeamDetail(tightCol)).join(' ').replace(/\s+/g, ' ')
-    expect(flat).toContain('DO NOT DEVELOP IN THIS COLUMN')
-    expect(flat).toContain('LENGTHENING THE TAIL DOES NOT COUNT')
-    expect(flat).toContain('336')                  // the depth that would work
+    // A bar that does not develop is an unresolved design question, not a
+    // placing instruction — it goes to the engineer, and the sheet still calls
+    // the shortfall out graphically where the hook is drawn.
+    const dt = buildBeamDetail(tightCol)
+    const flat = allTextOf(dt).join(' ').replace(/\s+/g, ' ')
+    expect(flat).not.toContain('SHORT')            // no alarm nobody here can act on
+    expect(flat).not.toContain('DO NOT DEVELOP')
+    const dn = dt.designNotes.join(' ')
+    expect(dn).toContain('do not develop here')
+    expect(dn).toContain('a longer tail does not count')
+    expect(dn).toContain('336')                    // the depth that would work
   })
 
   it('passes the same bar in a column deep enough for it, with no warning', () => {
     const a = endHookAnchorage(roomyCol)!
     expect(a.avail).toBe(534)
     expect(a.fits).toBe(true)
-    const flat = allTextOf(buildBeamDetail(roomyCol)).join(' ').replace(/\s+/g, ' ')
-    expect(flat).toContain('DEVELOPS IN THE 534 AVAILABLE')
+    const dr2 = buildBeamDetail(roomyCol)
+    const flat = allTextOf(dr2).join(' ').replace(/\s+/g, ' ')
+    // Nothing to say: a bar that develops needs no note either way.
+    expect(dr2.designNotes.join(' ')).not.toMatch(/ℓdh/)
     expect(flat).not.toContain('SHORT')
     // no warning geometry either
     expect(buildBeamDetail(roomyCol).primitives
@@ -670,10 +702,6 @@ describe('the elevation turns its hooks the way the CAGE does', () => {
         const last = p.cmds[p.cmds.length - 1] as { y?: number }
         return Math.abs((last.y ?? 0) - -barZ) < 1e-6
       })
-  /** The sheet's notes, which are drawn as text rather than returned. */
-  const said = (d: { primitives: PlanPrimitive[] }, re: RegExp) =>
-    d.primitives.some((p) => p.kind === 'text' && re.test(p.text))
-
   /** A 300 deep beam on ⌀28 bars: two 12db tails are longer than the depth. */
   const shallow = {
     ...b, h: 300, barDia: 28,
@@ -693,7 +721,8 @@ describe('the elevation turns its hooks the way the CAGE does', () => {
     expect(h.length).toBe(2)
     // screen y grows downward, so a tail that starts BELOW the bar runs down
     for (const p of h) expect((p.cmds[0] as { y: number }).y).toBeGreaterThan(-yBotShallow)
-    expect(said(d, /TURNED DOWN/)).toBe(true)
+    // …and the REASON goes to the engineer, not onto the sheet
+    expect(d.designNotes.join(' ')).toMatch(/turned down/)
   })
 
   it('turns it UP in a beam deep enough to take the tail', () => {

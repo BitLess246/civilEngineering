@@ -44,6 +44,7 @@ import { calcDevLength } from './devLength'
 import type { PlanPrimitive, Drawing } from './planRenderer'
 import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader } from './detailSheet'
 import { seeGeneralNotes } from './generalNotes'
+import { SHEET_INK, SHEET_NOTE, SHEET_GRID, SHEET_ZONE, SHEET_WARN, STEEL } from './sheetInk'
 
 // ── code constants ─────────────────────────────────────────────────────────
 
@@ -334,7 +335,7 @@ export function designSlabOpening(i: SlabOpeningInput): SlabOpeningResult {
 export interface SlabOpeningDetailOptions { detailNo?: string; sheetRef?: string; scale?: string }
 export interface SlabOpeningDrawing extends Drawing { title: string; result: SlabOpeningResult }
 
-const INK = '#1e293b', REBAR = '#b45309', GRID = '#9aa5b5', NOTE = '#475569', ACCENT = '#0f766e', WARN = '#b91c1c'
+const INK = SHEET_INK, REBAR = STEEL, GRID = SHEET_GRID, NOTE = SHEET_NOTE, ACCENT = SHEET_ZONE, WARN = SHEET_WARN
 
 /**
  * Mean glyph width as a fraction of the font size, for Arial CAPITALS — used

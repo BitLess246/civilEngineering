@@ -114,12 +114,16 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
   const ref = (g: SheetGroup) => opts.sheetRefs?.[g] ?? REF[g]
 
   beamDetailBundles(model, design).forEach((b, i) => {
+    const drawing = buildBeamDetail(b.detail, { detailNo: String(i + 1), sheetRef: ref('Beam details') })
     out.push({
       key: `beam-detail-${slug(b.mark)}`, group: 'Beam details',
       title: `${b.mark} — ${b.detail.b}×${b.detail.h}`,
       subtitle: `span ${b.detail.L.toFixed(2)} m`,
-      warnings: [],
-      drawing: buildBeamDetail(b.detail, { detailNo: String(i + 1), sheetRef: ref('Beam details') }),
+      // What the design flagged travels BESIDE the drawing, not on it: a bar
+      // that does not develop is a question for the engineer, and set in a
+      // paragraph under the elevation it is neither answered nor actionable.
+      warnings: drawing.designNotes,
+      drawing,
     })
   })
 

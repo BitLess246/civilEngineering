@@ -1,3 +1,4 @@
+import { STEEL } from './sheetInk'
 import { describe, it, expect } from 'vitest'
 import { buildFootingDetail, type FootingDetailInput } from './footingDetail'
 import { planToSvg, type PlanPrimitive } from './planRenderer'
@@ -32,16 +33,16 @@ describe('footingDetail — column-footing detail sheet', () => {
 
   it('draws each bar as an OUTLINE tube (closed rebar path), both ways', () => {
     // each mat bar is one closed rebar tube (rod → no round-join); plan has 2·bars
-    const rebar = d.primitives.filter((p) => p.kind === 'path' && (p as { stroke?: string }).stroke === '#b45309' && !(p as { join?: string }).join)
+    const rebar = d.primitives.filter((p) => p.kind === 'path' && (p as { stroke?: string }).stroke === STEEL && !(p as { join?: string }).join)
     expect(rebar.length).toBeGreaterThanOrEqual(2 * base.bars)
     expect(rebar.every((p) => (p as { closed?: boolean }).closed)).toBe(true)
     // filled rebar circles = n section bar-ends + colBars plan vertical bars
-    const ends = d.primitives.filter((p) => p.kind === 'circle' && (p as { fill?: string }).fill === '#b45309')
+    const ends = d.primitives.filter((p) => p.kind === 'circle' && (p as { fill?: string }).fill === STEEL)
     expect(ends.length).toBe(base.bars + (base.colBars ?? 8))
   })
 
   it('shows the full ring of column vertical bars in plan (not just corners)', () => {
-    const ends = d.primitives.filter((p) => p.kind === 'circle' && (p as { fill?: string }).fill === '#b45309')
+    const ends = d.primitives.filter((p) => p.kind === 'circle' && (p as { fill?: string }).fill === STEEL)
     // colBars column dots + n section bar-ends; the column ring alone must be colBars
     expect(ends.length - base.bars).toBe(base.colBars)
   })

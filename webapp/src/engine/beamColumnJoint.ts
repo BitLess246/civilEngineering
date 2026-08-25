@@ -46,6 +46,7 @@ import type { PlanPrimitive, Drawing } from './planRenderer'
 import { hookClearToFace, hookEmbedmentAvailable } from './devLength'
 import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader } from './detailSheet'
 import { seeGeneralNotes } from './generalNotes'
+import { SHEET_INK, SHEET_NOTE, SHEET_GRID, SHEET_WARN, STEEL } from './sheetInk'
 
 // ── code constants ─────────────────────────────────────────────────────────
 
@@ -335,7 +336,7 @@ export function designBeamColumnJoint(i: BeamColumnJointInput): BeamColumnJointR
 export interface JointDetailOptions { detailNo?: string; sheetRef?: string; scale?: string }
 export interface JointDetailDrawing extends Drawing { title: string; result: BeamColumnJointResult }
 
-const INK = '#1e293b', REBAR = '#b45309', GRID = '#9aa5b5', NOTE = '#475569', WARN = '#b91c1c'
+const INK = SHEET_INK, REBAR = STEEL, GRID = SHEET_GRID, NOTE = SHEET_NOTE, WARN = SHEET_WARN
 const CONC = '#f1f5f9'
 
 /** Wrap a note to `max` characters a line. */

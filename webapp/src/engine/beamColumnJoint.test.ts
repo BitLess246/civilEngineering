@@ -1,3 +1,4 @@
+import { STEEL } from './sheetInk'
 import { describe, it, expect } from 'vitest'
 import {
   designBeamColumnJoint, buildBeamColumnJointDetail, effectiveJointWidth, jointHookLdh, wrapNote,
@@ -8,7 +9,7 @@ import {
 
 /** Bar paths only. Leaders draw an arrowhead as a filled path in the annotation
  *  ink, so a bare `kind === 'path'` filter counts those as bars too. */
-const REBAR_INK = '#b45309'
+const REBAR_INK = STEEL
 
 // ─────────────────────────────────────────────────────────────────────────
 // WORKED EXAMPLE — the joint the model actually produces, and what it does
@@ -394,7 +395,7 @@ describe('buildBeamColumnJointDetail', () => {
   it('draws the column hoops continuing THROUGH the joint', () => {
     // Horizontal rebar lines inside the joint block (0 ≤ y ≤ beam depth).
     const bh = joint.beamH / 1000
-    const inJoint = d.primitives.filter((p) => p.kind === 'line' && p.stroke === '#b45309'
+    const inJoint = d.primitives.filter((p) => p.kind === 'line' && p.stroke === STEEL
       && Math.abs(p.y1 - p.y2) < 1e-9 && p.y1 > 0 && p.y1 < bh) as unknown[]
     expect(inJoint.length).toBeGreaterThan(0)
     expect(flat).toContain(`JOINT HOOPS ⌀10 @ ${d.result.jointHoopSpacing}`)

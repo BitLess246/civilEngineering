@@ -32,6 +32,7 @@
 import { calcDevLength, hookClearToFace, hookEmbedmentAvailable } from './devLength'
 import type { PlanPrimitive, Drawing } from './planRenderer'
 import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader } from './detailSheet'
+import { SHEET_INK, SHEET_NOTE, SHEET_GRID, SHEET_WARN, STEEL } from './sheetInk'
 
 // ── §422.9 shear friction ──────────────────────────────────────────────────
 
@@ -350,7 +351,7 @@ export function designWallDetail(i: WallDetailInput): WallDetailResult {
 export interface WallDetailOptions { detailNo?: string; sheetRef?: string; scale?: string }
 export interface WallDetailDrawing extends Drawing { title: string; result: WallDetailResult }
 
-const INK = '#1e293b', REBAR = '#b45309', GRID = '#9aa5b5', NOTE = '#475569', WARN = '#b91c1c'
+const INK = SHEET_INK, REBAR = STEEL, GRID = SHEET_GRID, NOTE = SHEET_NOTE, WARN = SHEET_WARN
 const CONC = '#f1f5f9'
 
 /** Title block, notes block and bounds — shared by all three wall sheets. */

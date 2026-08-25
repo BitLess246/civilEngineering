@@ -18,6 +18,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { PlanPrimitive, PathCmd, Drawing } from './planRenderer'
 import { columnSectionPrimitives } from './columnSection'
+import { SHEET_INK, SHEET_GRID, SHEET_ZONE, STEEL } from './sheetInk'
 
 type Pt = [number, number]
 /** Intersection of the infinite lines p1→p2 and p3→p4 (null if parallel). */
@@ -69,7 +70,7 @@ export interface FootingDetailInput {
 export interface FootingDetailOptions { detailNo?: string; sheetRef?: string; scale?: string }
 export interface DetailDrawing extends Drawing { title: string }
 
-const INK = '#1e293b', COL = '#1e293b', REBAR = '#b45309', HATCH = '#94a3b8', GRID = '#9aa5b5', STONE = '#64748b', PANEL = '#0f766e'
+const INK = SHEET_INK, COL = SHEET_INK, REBAR = STEEL, HATCH = '#94a3b8', GRID = SHEET_GRID, STONE = '#64748b', PANEL = SHEET_ZONE
 const RW = 0.8   // rebar outline stroke weight (px) — a thin tube edge, not a filled rod
 
 /** Build a column-footing detail (plan + section) from a designed footing. */

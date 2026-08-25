@@ -1,3 +1,4 @@
+import { STEEL } from './sheetInk'
 import { describe, it, expect } from 'vitest'
 import type { SlabOpening } from './model'
 import {
@@ -234,7 +235,7 @@ describe('buildSlabOpeningDetail', () => {
   const texts = d.primitives.filter((p) => p.kind === 'text').map((p) => (p as { text: string }).text)
   const lines = d.primitives.filter((p) => p.kind === 'line') as
     { x1: number; y1: number; x2: number; y2: number; stroke: string }[]
-  const rebar = lines.filter((l) => l.stroke === '#b45309')
+  const rebar = lines.filter((l) => l.stroke === STEEL)
 
   it('titles with the panel mark and returns finite, ordered bounds', () => {
     expect(d.title).toBe('SLAB OPENING DETAIL — S1/O1')
@@ -275,7 +276,7 @@ describe('buildSlabOpeningDetail', () => {
       { ...panel, opening: { id: 'O2', kind: 'rect', x: 0.2, y: 0.2, w: 1.2, h: 1.2 } },
       { detailNo: '2' },
     )
-    const bars = tight.primitives.filter((p) => p.kind === 'line' && p.stroke === '#b45309') as
+    const bars = tight.primitives.filter((p) => p.kind === 'line' && p.stroke === STEEL) as
       { x1: number; y1: number; x2: number; y2: number }[]
     expect(bars.length).toBeGreaterThan(0)
     for (const l of bars) {

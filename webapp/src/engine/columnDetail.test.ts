@@ -1,3 +1,4 @@
+import { STEEL } from './sheetInk'
 import { describe, it, expect } from 'vitest'
 import {
   buildColumnDetail, clearHeight, spliceWindow, tiePositions,
@@ -107,7 +108,7 @@ describe('buildColumnDetail', () => {
     const expected = tiePositions(2.5, 600, 100, 200).length
     // tie lines are the horizontal rebar-coloured lines inside the column
     const tieLines = d.primitives.filter((p) =>
-      p.kind === 'line' && p.stroke === '#b45309' && Math.abs(p.y1 - p.y2) < 1e-9)
+      p.kind === 'line' && p.stroke === STEEL && Math.abs(p.y1 - p.y2) < 1e-9)
     expect(tieLines).toHaveLength(expected)
   })
 

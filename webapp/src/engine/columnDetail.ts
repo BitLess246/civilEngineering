@@ -21,6 +21,7 @@
 // paints it. Units: geometry m; bar/column/tie sizes mm.
 // ─────────────────────────────────────────────────────────────────────────
 import type { PlanPrimitive, Drawing } from './planRenderer'
+import { SHEET_INK, SHEET_NOTE, SHEET_GRID, SHEET_ZONE, STEEL } from './sheetInk'
 
 export interface ColumnDetailInput {
   /** Column mark (C1, C2 …). */
@@ -54,7 +55,7 @@ export interface ColumnDetailInput {
 export interface ColumnDetailOptions { detailNo?: string; sheetRef?: string; scale?: string }
 export interface ColumnDetailDrawing extends Drawing { title: string }
 
-const INK = '#1e293b', REBAR = '#b45309', GRID = '#9aa5b5', CONF = '#0f766e', NOTE = '#475569'
+const INK = SHEET_INK, REBAR = STEEL, GRID = SHEET_GRID, CONF = SHEET_ZONE, NOTE = SHEET_NOTE
 
 /**
  * Clear height ℓu and the two confinement zones, m.
