@@ -26,6 +26,8 @@ import { buildBeamCage } from './beamCage'
 import { buildColumnCage, perimeterBars } from './columnCage'
 import { calcDevLength } from './devLength'
 import { buildFootingCage } from './footingCage'
+import { spliceCage } from './barSplice'
+import { STOCK_BAR_LENGTH } from './rebarModel'
 import type { RebarCage } from './rebarModel'
 
 const FALLBACK: RectSection = {
@@ -120,6 +122,14 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
 
   const cages: RebarCage[] = []
   const unplaced: string[] = []
+  /** Splice options for a member, from its own concrete and steel. */
+  const spliceOf = (sec: RectSection, barDia: number, prefer?: number[]) => {
+    const dl = calcDevLength({
+      db: barDia, fc: sec.fc, fy: sec.fy,
+      topBar: false, epoxy: 'none', lambda: 1, cbKtr_db: 2.5,
+    })
+    return { stock: STOCK_BAR_LENGTH, lap: dl.ls_B / 1000, prefer }
+  }
 
   for (const b of design.beams) {
     const mem = memById.get(b.id)
@@ -129,7 +139,12 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
     const sag = b.sections.filter((s) => !s.hogging)
     const hog = b.sections.filter((s) => s.hogging)
     const spac = b.sections.map((s) => s.design.sAdopt).filter((v) => v > 0)
-    cages.push(buildBeamCage({
+    // Bottom steel laps near the SUPPORTS and top steel near MIDSPAN — each
+    // where its own bar is least stressed, the standard "50% of splices on each
+    // side of the support" arrangement. One preference list serves both because
+    // the two are complementary points on the same run.
+    const beamSplice = spliceOf(sec, sec.barDia, [0.08, 0.5, 0.92])
+    cages.push(spliceCage(buildBeamCage({
       mark: b.id, L: b.L,
       colBLeft: colWidthAt(mem.i), colBRight: colWidthAt(mem.j),
       b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, stirrupDia: sec.tieDia,
@@ -149,7 +164,7 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       axis: { x0: ni.x, z0: ni.z, x1: nj.x, z1: nj.z },
       // the node sits at the section centroid, so the soffit is h/2 below it
       ySoffit: ni.y - sec.h / 2000,
-    }))
+    }), beamSplice))
   }
 
   for (const c of design.columns) {
@@ -167,7 +182,7 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
           topBar: false, epoxy: 'none', lambda: 1, cbKtr_db: 2.5,
         }).lsc
       : 0
-    cages.push(buildColumnCage({
+    cages.push(spliceCage(buildColumnCage({
       mark: c.id, b: sec.b, h: sec.h, cover: sec.cover, spliceLap: lap,
       barDia: sec.barDia, bars: c.bars, tieDia: sec.tieDia,
       sConfined: c.tieSpacingFinal > 0 ? c.tieSpacingFinal : c.tieSpacing,
@@ -177,7 +192,10 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       yBottom: yLo, yTop: yHi,
       // the joint band at the top, which the joint's own hoops own (§418.8.3)
       jointGap: jd > 0 ? [yHi - jd / 2, yHi + jd / 2] : undefined,
-    }))
+      // A vertical is already lapped at the floor; a stock splice only appears
+      // in a storey tall enough to need one, and belongs low, clear of the
+      // hinge zone at the top.
+    }), spliceOf(sec, sec.barDia, [0.35])))
   }
 
   // ── footings: the mat, and the dowels the column laps onto ──────────────
@@ -195,7 +213,7 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       db: sec.barDia, fc: sec.fc, fy: sec.fy,
       topBar: false, epoxy: 'none', lambda: 1, cbKtr_db: 2.5,
     }).lsc
-    cages.push(buildFootingCage({
+    cages.push(spliceCage(buildFootingCage({
       mark: `F-${f.node}`,
       B: f.design.B, Dc: f.design.Dc, cover: FOOTING_COVER,
       barDia: f.barDia, bars: f.design.bars,
@@ -208,7 +226,7 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       }),
       colBarDia: sec.barDia,
       lap,
-    }))
+    }), spliceOf(sec, f.barDia)))
   }
 
   return { cages, unplaced }

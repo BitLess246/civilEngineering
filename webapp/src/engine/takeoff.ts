@@ -33,7 +33,6 @@ const GI_WIRE_KG_PER_M = 0.0189       // #16 G.I. tie wire, ~1.6 mmØ
 
 const barAreaM2 = (dia: number) => (Math.PI / 4) * (dia / 1000) ** 2
 const kgPerM = (dia: number) => barAreaM2(dia) * STEEL_DENSITY
-const Ld = (dia: number) => (40 * dia) / 1000                       // tension lap/anchorage, m
 /**
  * Cut allowance for ONE 135° seismic hook on a stirrup or tie, mm.
  *
@@ -254,8 +253,11 @@ export function estimateTakeoff(
     for (const r of cage?.runs ?? []) {
       steelKg += add(tag, cutMark(r.role), r.dia, r.count, cutLength(r) / 1000, r.closed === true)
     }
-    // A vertical is lapped into the storey above; the cage draws one storey.
-    steelKg += add(tag, 'Vertical lap', sec.barDia, c.bars, Ld(sec.barDia))
+    // The lap into the storey above is now GEOMETRY: `columnCage` projects the
+    // §25.5.5 compression lap past the top of the column (and nothing at a roof
+    // column, which laps onto nothing), and `barSplice` adds any stock-length
+    // splice the bar needs on top of that. A flat 40db allowance added here as
+    // well billed every column's lap twice.
     const intersections = (cage?.runs ?? []).filter((r) => r.role === 'tie').length * c.bars
     byElement.push({ kind: 'Column', id: c.id, concreteM3, formworkM2, steelKg, intersections })
   }
