@@ -83,21 +83,36 @@ export function buildFootingCage(i: FootingCageInput): RebarCage {
   const yHook = y1 + (i.barDia + i.colBarDia) / 2000        // sitting on the mat
   // How far the tail can reach before it hits the side cover.
   const room = Math.max(0, half - i.cover / 1000)
+  // A bar is on a face when it sits at that face's offset — the same test the
+  // column cage cranks its splices by.
+  const faceX = Math.max(...i.colBars.map(([dx]) => Math.abs(dx)))
+  const faceZ = Math.max(...i.colBars.map(([, dz]) => Math.abs(dz)))
+  const on = (v: number, face: number) => face > 0 && Math.abs(Math.abs(v) - face) < 1e-6
+
   i.colBars.forEach(([dx, dz], k) => {
     const x = cx + dx / 1000, z = cz + dz / 1000
-    // The tail turns OUTWARD, away from the column. That is how a starter bar
-    // is bent: the foot splays out under the pad so the bar bears against the
-    // concrete outside the column footprint and the whole group opens up rather
-    // than crowding the little square of pad the column stands on. Turned
-    // inboard — which is what this did — every tail pointed into the same
-    // congested core and several of them crossed.
-    const sx = Math.abs(dx) >= Math.abs(dz) ? Math.sign(dx) || 1 : 0
-    const sz = sx === 0 ? (Math.sign(dz) || 1) : 0
+    // The tail turns OUTWARD, away from the column: a starter bar's foot splays
+    // out under the pad so it bears on concrete outside the column footprint
+    // and the group opens up, rather than crowding the little square of pad the
+    // column stands on. Turned inboard, every tail pointed into the same
+    // congested core and several crossed.
+    //
+    // A CORNER bar is on two faces, so it goes out along the DIAGONAL — which
+    // is the only direction that takes it away from both. Sent along one axis
+    // it would run parallel to the face it is standing on, and the four corners
+    // of the cage would splay into two directions instead of four.
+    const cx1 = on(dx, faceX), cz1 = on(dz, faceZ)
+    const oz = cz1 ? Math.sign(dz) || 1 : 0
+    // a bar on neither face is not a perimeter bar, but it still needs a way out
+    const ox = cx1 ? Math.sign(dx) || 1 : (oz === 0 ? Math.sign(dx) || 1 : 0)
+    const mag = Math.hypot(ox, oz) || 1
+    const sx = ox / mag, sz = oz / mag
     // …but never through the cover on the way out. A pad too small for the
     // full 12db gets the tail it has room for, which is a real constraint
     // rather than a drawing that runs steel out of the concrete.
-    const reach = sx !== 0 ? room - Math.abs(dx / 1000) : room - Math.abs(dz / 1000)
-    const tail = Math.max(0, Math.min(tailWant, reach))
+    const reachX = sx !== 0 ? (room - Math.abs(dx / 1000)) / Math.abs(sx) : Infinity
+    const reachZ = sz !== 0 ? (room - Math.abs(dz / 1000)) / Math.abs(sz) : Infinity
+    const tail = Math.max(0, Math.min(tailWant, reachX, reachZ))
     runs.push({
       mark: `${i.mark}-D${k + 1}`, dia: i.colBarDia, role: 'dowel', member: i.mark,
       path: [

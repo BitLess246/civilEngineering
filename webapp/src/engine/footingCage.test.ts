@@ -103,3 +103,40 @@ describe('the dowels — the lap the column stands on', () => {
     }
   })
 })
+
+
+describe('a corner bar goes out along the diagonal', () => {
+  it('corner dowels splay on BOTH axes, mid-face dowels on one', () => {
+    // A corner bar stands on two faces, so the diagonal is the only direction
+    // that takes it away from both. Sent along one axis it runs parallel to the
+    // face it is on, and the four corners splay into two directions, not four.
+    const twelve = perimeterBars({ b: 400, h: 400, cover: 40, barDia: 20, bars: 12, tieDia: 10 })
+    const cage = buildFootingCage({ ...pad, colBars: twelve })
+    const moved = cage.runs.filter((r) => r.role === 'dowel').map((d) => {
+      const [tip, knee] = d.path
+      return [Math.abs(tip[0] - knee[0]) > 1e-9, Math.abs(tip[2] - knee[2]) > 1e-9]
+    })
+    expect(moved.filter(([a, b]) => a && b)).toHaveLength(4)      // the corners
+    expect(moved.filter(([a, b]) => a !== b)).toHaveLength(8)     // the mid-face bars
+  })
+
+  it('the diagonal tail is still 12db long, not 12db on each axis', () => {
+    const cage = buildFootingCage(pad)
+    for (const d of cage.runs.filter((r) => r.role === 'dowel')) {
+      const [tip, knee] = d.path
+      expect(Math.hypot(tip[0] - knee[0], tip[2] - knee[2]))
+        .toBeCloseTo((DOWEL_TAIL_DB * 20) / 1000, 9)
+    }
+  })
+
+  it('every corner splays into its own quadrant', () => {
+    const cage = buildFootingCage(pad)
+    const dirs = cage.runs.filter((r) => r.role === 'dowel').map((d) => {
+      const [tip, knee] = d.path
+      return `${Math.sign(Math.round((tip[0] - knee[0]) * 1e6))},${Math.sign(Math.round((tip[2] - knee[2]) * 1e6))}`
+    })
+    // 8 bars on a square column are four corners plus four mid-face bars; the
+    // corners take the four diagonals between them
+    expect(new Set(dirs.filter((v) => !v.includes('0'))).size).toBe(4)
+  })
+})

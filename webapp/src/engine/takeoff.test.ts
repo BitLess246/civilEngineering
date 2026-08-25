@@ -276,26 +276,36 @@ describe('timber (wood-frame) take-off', () => {
 })
 
 
-describe('the pedestal is bought', () => {
-  it('a column costs its length BELOW the base node too', () => {
+describe('the pedestal is bought — once', () => {
+  it('a bottom column is costed to the TOP OF ITS FOOTING, and not twice', () => {
+    // The design supports the column base at the pad, so the schedule length
+    // already runs through the pedestal. Adding it again here bought it twice.
     const model = makeModel()
     const design = designStructure(model, soil as never)!
-    // The schedule length stops at the node, but the column runs on down to the
-    // top of the pad. That concrete, formwork and steel were bought by nobody.
     const t = estimateTakeoff(model, design)
     const cols = t.byElement.filter((e) => e.kind === 'Column')
     expect(cols.length).toBeGreaterThan(0)
-    const peds = new Map(design.footings.map((f) => [f.node, f.pedestal]))
-    expect([...peds.values()].some((v) => v > 0)).toBe(true)
+    expect(design.footings.some((f) => f.pedestal > 0)).toBe(true)
     for (const c of cols) {
       const m = model.members.find((x) => x.id === c.id)!
-      const yOf = (n: string) => model.nodes.find((q) => q.id === n)!.y
-      const base = yOf(m.i) <= yOf(m.j) ? m.i : m.j
-      const ped = peds.get(base) ?? 0
-      const row = design.columns.find((x) => x.id === c.id)!
       const sec = model.sections.find((x) => x.id === m.section)!
-      const want = (sec.b / 1000) * (sec.h / 1000) * (row.L + ped)
-      expect(c.concreteM3).toBeCloseTo(want, 6)
+      const row = design.columns.find((x) => x.id === c.id)!
+      expect(c.concreteM3).toBeCloseTo((sec.b / 1000) * (sec.h / 1000) * row.L, 6)
     }
+  })
+
+  it('and that length really does include the pedestal', () => {
+    // The storey is 3 m; a bottom column supported at the pad is longer than
+    // that by H − Dc, which is the whole point of moving the support down.
+    const model = makeModel()
+    const design = designStructure(model, soil as never)!
+    const yOf = (n: string) => model.nodes.find((q) => q.id === n)!.y
+    const bases = new Set(design.footings.map((f) => f.node))
+    const bottom = design.columns.filter((c) => {
+      const m = model.members.find((x) => x.id === c.id)!
+      return bases.has(yOf(m.i) <= yOf(m.j) ? m.i : m.j)
+    })
+    expect(bottom.length).toBeGreaterThan(0)
+    for (const c of bottom) expect(c.L).toBeGreaterThan(3 + 1e-6)
   })
 })

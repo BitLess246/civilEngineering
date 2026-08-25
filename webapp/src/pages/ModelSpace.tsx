@@ -2170,7 +2170,13 @@ export default function ModelSpace() {
                 })}
                 {model.supports.map((s) => {
                   const p = nodePos.get(s.node)
-                  return p ? <Support3D key={s.node} p={p} /> : null
+                  if (!p) return null
+                  // The boundary condition is the column–footing interface, not
+                  // the ground line — which is where the design supports it, so
+                  // it is where the symbol belongs. Drawn at the node it sat a
+                  // whole pedestal above the thing actually holding the column.
+                  const ped = pedestalAt.get(s.node) ?? 0
+                  return <Support3D key={s.node} p={ped ? new THREE.Vector3(p.x, p.y - ped, p.z) : p} />
                 })}
                 {showConns && design && (design.joints.length > 0 || design.beamJoints.length > 0) && (
                   <JointConnections3D joints={design.joints} beamJoints={design.beamJoints} model={model} nodePos={nodePos} />
