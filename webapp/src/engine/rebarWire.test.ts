@@ -108,8 +108,8 @@ describe('the hook: one curl at the corner, two straight tails', () => {
     expect(a).toHaveLength(2)
     expect(b).toHaveLength(2)
     expect(runPolylines({ ...tie, hookAllowance: undefined })).toHaveLength(1)
-    // an OPEN transverse bar — a cross tie — gets a hook at each end instead
-    expect(runPolylines({ ...tie, closed: false })).toHaveLength(3)
+    // an OPEN transverse bar — a cross tie — comes back as one bar of its own
+    expect(runPolylines({ ...tie, closed: false })).toHaveLength(1)
   })
 
   it('each tail starts ON THE BAR, not at the corner point the loop misses', () => {
@@ -209,52 +209,67 @@ describe('a bar swept as a tube', () => {
 })
 
 
-describe('a cross tie is a single-legged stirrup: 180° at each end', () => {
+describe('a cross tie is a single-legged stirrup', () => {
   const cross = {
     mark: 'C1-X1', dia: 12, role: 'tie' as const, member: 'C1',
     path: [[0, 0, 0], [0.4, 0, 0]] as Vec3[],
     bendDia: [], closed: false, wrapDia: 25,
     hookAllowance: stirrupHookAllowance(12), count: 1,
   }
-  const R = (25 + 12) / 2000                       // wraps the bar it grips
-  const [bar, h0, h1] = runPolylines(cross)
+  const R = (25 + 12) / 2000                       // it wraps the bars it grips
+  const bars = runPolylines(cross)
+  const [bar] = bars
 
-  it('is the leg plus a U at each end', () => {
-    expect(runPolylines(cross)).toHaveLength(3)
-    expect(bar).toHaveLength(2)
-    expect(h0.length).toBeGreaterThan(4)           // an arc, not a straight tail
-    expect(h1.length).toBeGreaterThan(4)
+  it('is ONE continuous bar, not a leg with two hooks bolted on', () => {
+    expect(bars).toHaveLength(1)
+    expect(bar.length).toBeGreaterThan(8)          // tail, arc, leg, arc, tail
     expect(runPolylines({ ...cross, hookAllowance: undefined })).toHaveLength(1)
   })
 
-  it('each U starts at the bar end and turns a full 180°', () => {
-    // A 135° tail folded off the leg is the hook a CLOSED tie's ends carry; on
-    // an open bar it grips nothing.
-    for (const [h, end] of [[h0, cross.path[0]], [h1, cross.path[1]]] as const) {
-      expect(h[0][0]).toBeCloseTo(end[0], 9)
-      expect(h[0][2]).toBeCloseTo(end[2], 9)
-      // it comes back across the leg to twice the bend radius on the far side
-      const across = h.map((q) => q[2])
-      expect(Math.max(...across) - Math.min(...across)).toBeCloseTo(2 * R, 6)
+  it('runs TANGENT to both bars, not from centre to centre', () => {
+    // The steel passes to one side of each bar and comes back along the other.
+    const across = bar.map((q) => q[2])
+    expect(Math.min(...across)).toBeCloseTo(-R, 6)
+    expect(Math.max(...across)).toBeCloseTo(R, 6)
+    // the straight leg runs between the two bars offset a full radius off the
+    // line through their centres — it passes them, it does not end on them
+    const has = (x: number, z: number) =>
+      bar.some((q) => Math.abs(q[0] - x) < 1e-9 && Math.abs(q[2] - z) < 1e-9)
+    expect(has(0, -R)).toBe(true)                  // leg, at the first bar
+    expect(has(0.4, -R)).toBe(true)                // …and at the second
+    expect(has(0, 0)).toBe(false)                  // never on a bar centre
+    expect(has(0.4, 0)).toBe(false)
+  })
+
+  it('turns a full 180° AROUND each bar, at the bar itself', () => {
+    // Turned about a point beside the bar the curl grips nothing and the bar
+    // ends up on the end of a straight leg.
+    for (const b of [cross.path[0], cross.path[1]]) {
+      const round = bar.filter((q) => Math.abs(Math.hypot(q[0] - b[0], q[2] - b[2]) - R) < 1e-6)
+      expect(round.length).toBeGreaterThan(6)      // an arc's worth of points
+      // and it reaches a full radius PAST the bar, which only a 180° turn does
+      const beyond = b[0] === 0 ? Math.min(...bar.map((q) => q[0])) : Math.max(...bar.map((q) => q[0]))
+      expect(Math.abs(beyond - b[0])).toBeCloseTo(R, 6)
     }
   })
 
-  it('the tail runs back beside the leg, inboard, never out past the end', () => {
-    for (const [h, out] of [[h0, -1], [h1, 1]] as const) {
-      const last = h[h.length - 1], prev = h[h.length - 2]
-      expect(Math.sign(last[0] - prev[0])).toBe(-out)     // back toward the leg
-      expect(Math.abs(last[2] - prev[2])).toBeLessThan(1e-9)   // and parallel to it
-      expect(Math.hypot(last[0] - prev[0], last[2] - prev[2]))
-        .toBeCloseTo(hookTailLength(12), 9)
+  it('both tails run back along the leg, on the same side', () => {
+    const first = bar[0], second = bar[1]
+    const last = bar[bar.length - 1], prev = bar[bar.length - 2]
+    expect(first[2]).toBeCloseTo(last[2], 9)            // same side
+    expect(Math.abs(first[2])).toBeCloseTo(R, 6)
+    // each tail points back INBOARD, and is the code length
+    expect(Math.sign(first[0] - second[0])).toBe(1)
+    expect(Math.sign(last[0] - prev[0])).toBe(-1)
+    for (const [a, b] of [[first, second], [last, prev]] as const) {
+      expect(Math.hypot(a[0] - b[0], a[2] - b[2])).toBeCloseTo(hookTailLength(12), 9)
     }
-    // neither U reaches further out than one bend radius past its own end
-    expect(Math.min(...h0.map((q) => q[0]))).toBeGreaterThan(-R - 1e-9)
-    expect(Math.max(...h1.map((q) => q[0]))).toBeLessThan(0.4 + R + 1e-9)
   })
 
-  it('both turn the same way, so the two tails lie on the same side', () => {
-    const side = (h: Vec3[]) => Math.sign(h[h.length - 1][2])
-    expect(side(h0)).toBe(side(h1))
-    expect(side(h0)).not.toBe(0)
+  it('a bar too short to turn round twice is left straight', () => {
+    // Two bars a hair apart cannot take a U at each end; a bar bent through
+    // more than its own length is worse than a plain one.
+    const tiny = { ...cross, path: [[0, 0, 0], [0.03, 0, 0]] as Vec3[] }
+    expect(runPolylines(tiny)[0]).toHaveLength(2)
   })
 })

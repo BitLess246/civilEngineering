@@ -126,52 +126,53 @@ export function hookTailLength(dia: number): number {
  * — joining them would draw a bar running through the core that does not exist.
  */
 /**
- * The two hooks on an open transverse bar — a cross tie, or single-legged
- * stirrup.
+ * An open transverse bar — a cross tie, or single-legged stirrup — as the one
+ * continuous bar it is.
  *
- * Each end turns a FULL 180° around the longitudinal bar it grips and the tail
- * runs back beside the leg it came in on. That U is the whole bar: it is what
- * makes a single leg an anchored stirrup rather than a loose dowel, and it is
- * what the detail draws. A 135° tail folded off the leg — which is what this
- * drew — is the hook a CLOSED tie's ends carry, and on an open bar it grips
- * nothing.
+ * It is specified by the two longitudinal bars it grips. The steel does not run
+ * from centre to centre: it runs TANGENT to both, turns a full 180° AROUND each
+ * one, and comes back along the other side as the tail. That U is the whole
+ * point of the bar — it is what makes a single leg an anchored stirrup rather
+ * than a loose dowel.
  *
- * Both U's turn the same way, so the two tails lie on the same side.
+ * Turning it about a point beside the bar instead of about the bar itself — the
+ * first cut — draws a curl that grips nothing and leaves the bar sitting on the
+ * end of a straight leg.
  */
-export function openEndHooks(run: RebarRun): Vec3[][] {
+export function singleLeggedBar(run: RebarRun): Vec3[] {
   const v = run.path
   const n = v.length
-  if (n < 2) return []
-  const tail = hookTailLength(run.dia)
-  // It bends around the bar it grips, so that bar sets the radius.
-  const r = (run.wrapDia && run.wrapDia > 0
+  if (n < 2) return runPoints(run)
+  const b0 = v[0], b1 = v[n - 1]
+  const d = sub(b1, b0), l = len(d)
+  const R = (run.wrapDia && run.wrapDia > 0
     ? bendRadius(run.wrapDia, run.dia)
     : bendRadius(run.bendDia[0] > 0 ? run.bendDia[0] : 4 * run.dia, run.dia)) / 1000
-  const dir = (a: Vec3, b: Vec3): Vec3 | null => {
-    const d = sub(b, a), l = len(d)
-    return l < 1e-9 ? null : mul(d, 1 / l)
-  }
-  const along = dir(v[0], v[n - 1])
-  if (!along || r <= 0) return []
+  if (l < 1e-9 || R <= 0 || l < 3 * R) return runPoints(run)
+  const u = mul(d, 1 / l)
   // A tie lies in a horizontal plane, so it turns about the vertical; a bar
   // that is itself vertical turns about x instead.
-  const axis: Vec3 = Math.abs(along[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0]
-  const p = rotate(along, axis, Math.PI / 2)      // one side, shared by both ends
+  const axis: Vec3 = Math.abs(u[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0]
+  const p = rotate(u, axis, Math.PI / 2)
+  const off = mul(p, R)                     // the leg's own offset off the bars
+  const tail = hookTailLength(run.dia)
 
   const SEG = 12
-  /** A 180° turn at `e`, bulging along `out`, finishing in a tail back inboard. */
-  const uturn = (e: Vec3, out: Vec3, sign: number): Vec3[] => {
-    const c = add(e, mul(p, r))
-    const arc: Vec3[] = []
-    for (let k = 0; k <= SEG; k++) {
-      arc.push(add(c, rotate(mul(p, -r), axis, (sign * Math.PI * k) / SEG)))
-    }
-    arc.push(add(arc[arc.length - 1], mul(out, -tail)))
-    return arc
+  /** 180° about `c`, from `from` round to −`from`. */
+  const arc = (c: Vec3, from: Vec3): Vec3[] => {
+    const out: Vec3[] = []
+    for (let k = 1; k < SEG; k++) out.push(add(c, rotate(from, axis, (Math.PI * k) / SEG)))
+    return out
   }
   return [
-    uturn(v[0], mul(along, -1), 1),
-    uturn(v[n - 1], along, -1),
+    add(add(b0, off), mul(u, tail)),        // the tail it starts from
+    add(b0, off),
+    ...arc(b0, off),                        // …round the first bar…
+    sub(b0, off),
+    sub(b1, off),                           // …along the leg…
+    ...arc(b1, mul(off, -1)),               // …round the second…
+    add(b1, off),
+    sub(add(b1, off), mul(u, tail)),        // …and the tail it ends in
   ]
 }
 
@@ -182,7 +183,7 @@ export function runPolylines(run: RebarRun): Vec3[][] {
   // A CROSS TIE is a single straight bar hooked at both ends (§425.3.2) — an
   // open run, so the closed-loop path below has nothing to work with. Drawn
   // without them it stopped dead at each bar instead of gripping it.
-  if (!run.closed) return [spine, ...openEndHooks(run)]
+  if (!run.closed) return [singleLeggedBar(run)]
   if (v.length < 3) return [spine]
   const n = v.length
   const p0 = v[0]
