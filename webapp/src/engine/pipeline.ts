@@ -106,6 +106,10 @@ export interface BeamSectionDesign {
   /** T-beam action: effective flange width used for this sagging section
    *  (ACI §6.3.2) — present only when the block stayed inside the slab. */
   bf?: number; hf?: number
+  /** True when only ONE slab panel frames into the member, so Table 6.3.2.1's
+   *  edge-beam row gave bf a single overhang. The section is an L, not a T, and
+   *  the schedule drawing has to say so. */
+  edge?: boolean
 }
 export interface BeamScheduleRow {
   id: string; role: string; L: number
@@ -552,7 +556,7 @@ const beamOK = (d: BeamDesignResult) =>
 function beamDeflectionOf(
   row: BeamScheduleRow, memberId: string, sec: RectSection,
   dRes: F3Result | null, lRes: F3Result | null,
-  flange?: { bf: number; hf: number },
+  flange?: { bf: number; hf: number; edge?: boolean },
 ): MemberDeflectionResult | null {
   const dm = dRes?.members.find((x) => x.id === memberId)
   const lm = lRes?.members.find((x) => x.id === memberId)
@@ -649,7 +653,7 @@ function memberSections(mr: F3MemberResult): { label: string; x: number; Mu: num
  *  panels adjoin when both member end nodes are among the plate corners.
  *  hf = thinnest adjoining slab; sw = clear web-to-web distance approximated
  *  by the panel width across the beam; interior with 2 panels, edge with 1. */
-function memberFlange(model: StructuralModel, m: Member, L: number): { bf: number; hf: number } | null {
+function memberFlange(model: StructuralModel, m: Member, L: number): { bf: number; hf: number; edge: boolean } | null {
   const sec = model.sections.find((x) => x.id === m.section)
   if (!sec || sec.material === 'steel') return null
   const pos = new Map(model.nodes.map((n) => [n.id, n]))
@@ -667,19 +671,20 @@ function memberFlange(model: StructuralModel, m: Member, L: number): { bf: numbe
       return Math.abs(((n.x - a.x) * dz - (n.z - a.z) * dx) / len)
     }))
   const swM = Math.max(0.1, Math.min(...panels.map(across)) - sec.b / 1000)
+  const edge = panels.length < 2
   const { bf } = effectiveFlange({
-    kind: panels.length >= 2 ? 'interior' : 'edge',
+    kind: edge ? 'edge' : 'interior',
     bw: sec.b, h: sec.h, hf, ln: L, sw: swM,
     cover: sec.cover, stirrupDia: sec.tieDia, barDia: sec.barDia,
     fc: sec.fc, fy: sec.fy, Mu: 0,
   })
-  return { bf, hf }
+  return { bf, hf, edge }
 }
 
 /** Design one beam/girder member from a single run's member result. */
 function designBeamRow(
   mr: F3MemberResult, role: string, sec: RectSection, support: BeamSupport = 'both-ends',
-  flange?: { bf: number; hf: number }, system: 'gravity' | 'imf' | 'smf' = 'gravity',
+  flange?: { bf: number; hf: number; edge?: boolean }, system: 'gravity' | 'imf' | 'smf' = 'gravity',
 ): BeamScheduleRow {
   // Transverse stirrup-leg spacing limit hx (§418.6.4.3): 350 mm for seismic
   // frame beams, ~600 mm good-practice for gravity.
@@ -702,7 +707,7 @@ function designBeamRow(
         const rT = designBeam({ ...base, b: flange.bf, bMin: sec.b })
         const aT = (rT.As * sec.fy) / (0.85 * sec.fc * flange.bf)
         if (aT <= flange.hf + 1e-9 && rT.As <= rect.As + 1e-6) {
-          return { label: s.label, x: s.x, Mu: s.Mu, Vu: s.Vu, hogging: false, design: rT, bf: flange.bf, hf: flange.hf }
+          return { label: s.label, x: s.x, Mu: s.Mu, Vu: s.Vu, hogging: false, design: rT, bf: flange.bf, hf: flange.hf, edge: flange.edge }
         }
       }
       return { label: s.label, x: s.x, Mu: s.Mu, Vu: s.Vu, hogging: s.Mu < 0, design: rect }

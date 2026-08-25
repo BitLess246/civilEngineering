@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { designTBeam, effectiveFlange, tBeamCapacity, beta1 } from './tbeam'
+import { designTBeam, effectiveFlange, tBeamCapacity, beta1, blockDepth } from './tbeam'
 
 // Base: interior T, bw 300, h 600, hf 100, cover 40, ⌀10 stirrups, ⌀25 bars,
 // f'c 21, fy 415, ln 6 m, sw 2.7 m → dt = 600−40−10−12.5 = 537.5 mm.
@@ -236,5 +236,129 @@ describe('bar layering — no layer carries a single bar', () => {
       const r = designTBeam({ ...base, Mu })
       expect(r.bars * Ab).toBeGreaterThanOrEqual(r.As - 1e-6)
     }
+  })
+})
+
+
+describe('the block is the primary unknown — a first, steel second', () => {
+  const Ab = (Math.PI / 4) * base.barDia ** 2
+
+  it('blockDepth is the Rn/ρ route stated as a depth — same number, either way', () => {
+    // a = d(1 − √(1 − 2Rn/0.85f'c)) is what the ρ formula is hiding. Solving for
+    // the block directly must not move the answer, only what the answer is called.
+    for (const b of [300, 700, 1800]) {
+      for (const d of [400, 520.8, 600]) {
+        for (const Mu of [100, 250, 400, 700]) {
+          const Rn = (Mu * 1e6) / (0.9 * b * d * d)
+          const disc = 1 - (2 * Rn) / (0.85 * 21)
+          const a = blockDepth(Mu, b, d, 21)
+          if (disc <= 0) { expect(a).toBeNull(); continue }
+          expect(a as number).toBeCloseTo(d * (1 - Math.sqrt(disc)), 9)
+          // and the steel it implies is the ρ formula's As
+          const rho = ((0.85 * 21) / 415) * (1 - Math.sqrt(disc))
+          expect((0.85 * 21 * b * (a as number)) / 415).toBeCloseTo(rho * b * d, 6)
+        }
+      }
+    }
+  })
+
+  it('returns null rather than a fake root once no block can reach the moment', () => {
+    // φ·0.85f'c·b·d²/2 is the most a singly-reinforced rectangle can ever do.
+    const b = 300, d = 500, fc = 21
+    const ceiling = (0.9 * 0.85 * fc * b * d * d) / 2 / 1e6
+    expect(blockDepth(ceiling * 0.95, b, d, fc)).not.toBeNull()
+    expect(blockDepth(ceiling * 1.05, b, d, fc)).toBeNull()
+  })
+
+  it('a,req rises smoothly with Mu while the bar count steps', () => {
+    // This is the ordering itself: the compression block is what responds to the
+    // demand, continuously; the steel only moves when a whole bar is added. The
+    // engine used to expose only the stepped quantity, so raising Mu by 50 kN·m
+    // changed nothing visible until the count happened to tick over.
+    let prevA = 0, steps = 0
+    for (let Mu = 60; Mu <= 900; Mu += 10) {
+      const r = designTBeam({ ...base, Mu })
+      expect(r.aReq).toBeGreaterThan(prevA)              // strictly monotone
+      expect(r.aReq - prevA).toBeLessThan(6)             // and without jumps
+      if (r.bars * Ab !== steps) steps = r.bars * Ab     // the steel, meanwhile, steps
+      prevA = r.aReq
+    }
+    // the same sweep moves the bar count in a handful of discrete jumps only
+    const counts = new Set<number>()
+    for (let Mu = 60; Mu <= 900; Mu += 10) counts.add(designTBeam({ ...base, Mu }).bars)
+    expect(counts.size).toBeLessThan(85 / 3)
+  })
+
+  it('the flange is spent before the web: a,req passes through hf continuously', () => {
+    // At Mu = φMnf the two branches must agree — the rectangular root reaches
+    // exactly hf and the true-T web block starts from exactly hf. A discontinuity
+    // here would mean the section jumps in size at the switch.
+    const inp = { ...base, bfGiven: 700, hf: 75, h: 650 }
+    const at = (Mu: number) => designTBeam({ ...inp, Mu })
+    // Bisect for the switch rather than trusting one run's φMnf: φMnf is quoted
+    // at that run's converged d, and d falls as the cage stacks, so the boundary
+    // moves with the demand.
+    let lo0 = 200, hi0 = 900
+    expect(at(lo0).Asf).toBe(0)
+    expect(at(hi0).Asf).toBeGreaterThan(0)
+    for (let k = 0; k < 60; k++) {
+      const mid = (lo0 + hi0) / 2
+      if (at(mid).Asf > 0) hi0 = mid; else lo0 = mid
+    }
+    const lo = at(lo0), hi = at(hi0)
+    expect(lo.Asf).toBe(0)                     // rectangular branch
+    expect(hi.Asf).toBeGreaterThan(0)          // true-T branch
+    expect(lo.aReq).toBeLessThanOrEqual(inp.hf + 1e-6)
+    expect(hi.aReq).toBeGreaterThanOrEqual(inp.hf - 1e-6)
+    expect(hi.aReq - lo.aReq).toBeLessThan(0.5)
+    expect(hi.As - lo.As).toBeLessThan(5)      // and so does the steel
+  })
+
+  it('As is read off the block by C = T, in whichever branch ran', () => {
+    for (const bfGiven of [500, 700, 1200, 1800]) {
+      for (let Mu = 150; Mu <= 900; Mu += 50) {
+        const r = designTBeam({ ...base, bfGiven, Mu, h: 700 })
+        if (r.minGoverns || r.notes.some((n) => n.includes('inadequate') || n.includes('exceeds'))) continue
+        const trueT = r.Asf > 0
+        const b = trueT ? base.bw : r.bf
+        const steel = (0.85 * base.fc * b * r.aReq) / base.fy + (trueT ? r.Asf : 0)
+        expect(r.As).toBeCloseTo(steel, 6)
+      }
+    }
+  })
+
+  it('the delivered block is never shallower than the required one', () => {
+    // Bars round UP, so the built section always develops at least the block the
+    // moment asked for. aReq > a would mean a cage short of its own demand.
+    for (const bfGiven of [500, 900, 1800]) {
+      for (let Mu = 150; Mu <= 900; Mu += 25) {
+        const r = designTBeam({ ...base, bfGiven, Mu, h: 700 })
+        if (!r.ok) continue
+        expect(r.a).toBeGreaterThanOrEqual(r.aReq - 1e-6)
+      }
+    }
+  })
+
+  it('hogging solves the same way, on the web rectangle', () => {
+    const r = designTBeam({ ...base, Mu: -150 })
+    expect(r.Asf).toBe(0)
+    expect(r.aReq).toBeCloseTo(blockDepth(150, base.bw, r.d, base.fc) as number, 9)
+    expect(r.As).toBeCloseTo((0.85 * base.fc * base.bw * r.aReq) / base.fy, 6)
+  })
+
+  it('aMax is the block at the tension-controlled limit, β1·(3/8)dt', () => {
+    const r = designTBeam(base)
+    expect(r.aMax).toBeCloseTo(beta1(base.fc) * (3 / 8) * r.dt, 9)
+    // and AsMax is the steel that block balances
+    const Cc = r.aMax <= base.hf
+      ? 0.85 * base.fc * r.bf * r.aMax
+      : 0.85 * base.fc * ((r.bf - base.bw) * base.hf + base.bw * r.aMax)
+    expect(r.AsMax).toBeCloseTo(Cc / base.fy, 6)
+  })
+
+  it('analyze runs report no required block — there is no demand to solve for', () => {
+    const r = designTBeam({ ...base, AsGiven: 2500 })
+    expect(r.aReq).toBe(0)
+    expect(r.a).toBeGreaterThan(0)
   })
 })

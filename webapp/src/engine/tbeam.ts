@@ -4,10 +4,20 @@
 // Effective flange width per ACI Table 6.3.2.1 (NSCP §406.3.2): overhang each
 // side ≤ min(8hf, sw/2, ln/8) for interior Ts, ≤ min(6hf, sw/2, ln/12) one
 // side for edge (L) beams; isolated Ts must satisfy hf ≥ bw/2, bf ≤ 4bw
-// (§6.3.2.2). Flexure follows the classic two-couple split: flange overhang
-// couple Asf = 0.85f'c(bf−bw)hf/fy plus a web rectangle for the remainder
-// (§22.2); φ from εt (§21.2.2); As,min per §9.6.1.2 (with the 2bw rule when a
-// flange is in tension on statically determinate spans).
+// (§6.3.2.2).
+//
+// DESIGN ORDER — the compression block is the unknown, the steel follows.
+// Moment equilibrium fixes how deep the block has to be; force equilibrium then
+// says how much steel balances it. So `a` is what grows with Mu (continuously),
+// and As is a consequence (§22.2.2.4.1: C = 0.85f'c·A_block, T = As·fy). The
+// flange is spent first because it is the widest part of the section: while
+// a ≤ hf the section is a plain rectangle of width bf, and only once the block
+// has eaten the whole flange does it push into the web, at which point the
+// overhangs stay full at hf and the web carries the remainder — the classic
+// two-couple split, Asf = 0.85f'c(bf−bw)hf/fy plus a web rectangle.
+//
+// φ from εt (§21.2.2); As,min per §9.6.1.2 (with the 2bw rule when a flange is
+// in tension on statically determinate spans).
 
 import { splitLayers, centroidRise } from './barLayers'
 import { beta1 } from './flexure'
@@ -38,6 +48,11 @@ export interface TBeamResult {
   MnfPhi: number                      // φ·flange-couple capacity at a = hf, kN·m
   tBehavior: boolean                  // a > hf → true T behaviour
   a: number; c: number; et: number; phi: number
+  /** Block depth the DEMAND requires, solved from φMn = Mu (0 on analyze runs).
+   *  `a` above is the block the PROVIDED bars actually develop, so aReq ≤ a. */
+  aReq: number
+  /** Block depth at the tension-controlled limit, a = β1·(3/8)dt. */
+  aMax: number
   Asf: number; Asw: number; As: number      // required (design) or given (analyze)
   AsMin: number; minGoverns: boolean
   AsMax: number                       // tension-controlled cap (εt = 0.005)
@@ -57,6 +72,28 @@ const LAYER_CLEAR = 25       // §425.2.2 clear distance between bar layers, mm
 // `max(0.65, slope)` copy, which returns 0.657 at 55 MPa: the wrong table row,
 // and a `c = a/β1` about 1% short with it.
 export { beta1 }
+
+/**
+ * Depth of the equivalent stress block that makes φMn = Mu for a compression
+ * zone of constant width `b` — ACI 318-14 §22.2.2.4.1.
+ *
+ *   φ·0.85f'c·b·a·(d − a/2) = Mu   ⇒   a² − 2da + 2Mu/(φ·0.85f'c·b) = 0
+ *   ⇒   a = d − √( d² − 2Mu/(φ·0.85f'c·b) )        (the smaller root)
+ *
+ * This is the first thing the design solves: `a` is the primary unknown, and
+ * As = 0.85f'c·b·a/fy falls out of C = T afterwards. Algebraically the same
+ * number the Rn/ρ route gives — a = d(1 − √(1 − 2Rn/0.85f'c)) — but stated as
+ * the block depth it is, so the growth of the compression zone is visible.
+ *
+ * Returns null when the radicand goes negative: no singly-reinforced block of
+ * that width can reach the moment, however much steel is added.
+ *
+ * Units: Mu kN·m, b and d mm, f'c MPa → mm.
+ */
+export function blockDepth(Mu: number, b: number, d: number, fc: number, phi = 0.90): number | null {
+  const disc = d * d - (2 * Mu * 1e6) / (phi * 0.85 * fc * b)
+  return disc > 0 ? d - Math.sqrt(disc) : null
+}
 
 /** Effective flange width, mm — ACI Table 6.3.2.1 / §6.3.2.2. */
 export function effectiveFlange(i: TBeamInput): { bf: number; govern: string; isolatedOK: boolean } {
@@ -153,7 +190,7 @@ export function designTBeam(i: TBeamInput): TBeamResult {
   // forever. That case is not a convergence problem — it is a failed design, so
   // it is reported as one and the loop stops.
   let d = dt
-  let As = 0, Asf = 0, Asw = 0, AsMin = 0
+  let As = 0, Asf = 0, Asw = 0, AsMin = 0, aReq = 0
   let bars = 0
   let layers: number[] = [0]
   let layerIters = 0
@@ -163,44 +200,60 @@ export function designTBeam(i: TBeamInput): TBeamResult {
   for (let iter = 0; iter < 12; iter++) {
     layerIters = iter + 1
     Asf = 0
+    aReq = 0
     inadequate = null
     AsMin = (Math.max(0.25 * Math.sqrt(i.fc), 1.4) / i.fy) * bwMin * d
+
+    // ── The block first, the steel second. Each branch differs only in which
+    //    concrete area supplies C; every one of them solves `a` from the moment
+    //    and then reads As off C = T = 0.85f'c·A_block.
+    const steelFor = (b: number, a: number) => (0.85 * i.fc * b * a) / i.fy
 
     if (analyze) {
       As = i.AsGiven as number
       Asw = As
     } else if (i.Mu < 0) {
-      // flange in tension → rectangular web design, b = bw
-      const Rn = (MuAbs * 1e6) / (0.9 * i.bw * d * d)
-      const disc = 1 - (2 * Rn) / (0.85 * i.fc)
-      if (disc <= 0) inadequate = 'web section inadequate for the hogging moment — enlarge bw/h'
-      const rho = disc > 0 ? ((0.85 * i.fc) / i.fy) * (1 - Math.sqrt(disc)) : AsMax / (i.bw * d)
-      As = Math.max(rho * i.bw * d, AsMin)
-      Asw = As
-    } else if (MuAbs * 1e6 <= 0.9 * 0.85 * i.fc * bf * i.hf * (d - i.hf / 2)) {
-      // a ≤ hf → rectangular with b = bf
-      const Rn = (MuAbs * 1e6) / (0.9 * bf * d * d)
-      const rho = ((0.85 * i.fc) / i.fy) * (1 - Math.sqrt(Math.max(0, 1 - (2 * Rn) / (0.85 * i.fc))))
-      As = Math.max(rho * bf * d, AsMin)
+      // Flange in TENSION: the compression zone is the web rectangle, b = bw.
+      const aw = blockDepth(MuAbs, i.bw, d, i.fc)
+      if (aw === null) {
+        inadequate = 'web section inadequate for the hogging moment — enlarge bw/h'
+        aReq = aTC
+        As = Math.max(AsMax, AsMin)
+      } else {
+        aReq = aw
+        As = Math.max(steelFor(i.bw, aReq), AsMin)
+      }
       Asw = As
     } else {
-      // true T: flange-overhang couple + web rectangle for the remainder
-      Asf = (0.85 * i.fc * (bf - i.bw) * i.hf) / i.fy
-      const Muf = (0.90 * Asf * i.fy * (d - i.hf / 2)) / 1e6
-      const Muw = MuAbs - Muf
-      const Rn = (Muw * 1e6) / (0.9 * i.bw * d * d)
-      const disc = 1 - (2 * Rn) / (0.85 * i.fc)
-      if (disc <= 0) {
-        // The web cannot carry the remainder singly reinforced. Report the most
-        // steel the section may legally hold rather than the meaningless small
-        // number the collapsed radicand gives — Asf alone, which read as a
-        // *lighter* cage the worse the overload got.
-        inadequate = 'web remainder exceeds singly-reinforced capacity — enlarge the section'
-        Asw = Math.max(0, AsMax - Asf)
+      // Sagging: try the whole flange width first. The block only leaves the
+      // flange when the flange can no longer supply C at the depth the moment
+      // needs — i.e. when this root comes back deeper than hf (or not at all).
+      const af = blockDepth(MuAbs, bf, d, i.fc)
+      if (af !== null && af <= i.hf) {
+        aReq = af
+        As = Math.max(steelFor(bf, aReq), AsMin)
+        Asw = As
       } else {
-        Asw = ((0.85 * i.fc) / i.fy) * (1 - Math.sqrt(disc)) * i.bw * d
+        // True T. The overhangs are now spent — full stress over their whole
+        // depth hf — so they contribute a fixed couple and the web block carries
+        // whatever moment is left.
+        Asf = (0.85 * i.fc * (bf - i.bw) * i.hf) / i.fy
+        const Muf = (0.90 * Asf * i.fy * (d - i.hf / 2)) / 1e6
+        const aw = blockDepth(MuAbs - Muf, i.bw, d, i.fc)
+        if (aw === null) {
+          // The web cannot carry the remainder singly reinforced. Report the most
+          // steel the section may legally hold rather than the meaningless small
+          // number the collapsed radicand gives — Asf alone, which read as a
+          // *lighter* cage the worse the overload got.
+          inadequate = 'web remainder exceeds singly-reinforced capacity — enlarge the section'
+          Asw = Math.max(0, AsMax - Asf)
+          aReq = aTC
+        } else {
+          aReq = aw
+          Asw = steelFor(i.bw, aReq)
+        }
+        As = Math.max(Asf + Asw, AsMin)
       }
-      As = Math.max(Asf + Asw, AsMin)
     }
 
     // `splitLayers` — the SAME rule the rectangular-beam engine uses — pairs a
@@ -257,7 +310,7 @@ export function designTBeam(i: TBeamInput): TBeamResult {
     // against a flange thickness that plays no part; a deep enough hogging
     // block was flagged "true T" on that accident alone.
     MnfPhi, tBehavior: i.Mu < 0 ? false : cap.tBehavior,
-    a: cap.a, c: cap.c, et: cap.et, phi: cap.phi,
+    a: cap.a, c: cap.c, et: cap.et, phi: cap.phi, aReq, aMax: aTC,
     Asf, Asw, As, AsMin, minGoverns, AsMax,
     bars, layers, sClear, sClearMin, layerIters,
     phiMn: cap.phiMn, ok, notes,

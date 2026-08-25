@@ -57,15 +57,18 @@ export default function TBeamDesign() {
             ['Type', kind], ['Web bw × h', `${bw} × ${h} mm`], ['Flange bf × hf', `${f0(r.bf)} × ${hf} mm`],
             ["f'c / fy", `${fc} / ${fy} MPa`], ['Mu', `${Mu} kN·m`], ['d / dt', `${f1(r.d)} / ${f1(r.dt)} mm`],
             ['As req / prov', `${f0(r.As)} / ${f0(AsProv)} mm²`],
+            ['a req / prov / max', `${f1(r.aReq)} / ${f1(r.a)} / ${f1(r.aMax)} mm`],
           ]}
           steps={steps}
-          drawing={<TSection bf={r.bf} bw={bw} h={h} hf={hf} a={r.a} bars={r.bars} barDia={barDia} layers={r.layers} cover={cover} stirrupDia={stirrupDia} />}
-          drawingTitle="T-beam section" />
+          drawing={<TSection bf={r.bf} bw={bw} h={h} hf={hf} a={r.a} aReq={r.aReq} edge={kind === 'edge'}
+            bars={r.bars} barDia={barDia} layers={r.layers} cover={cover} stirrupDia={stirrupDia} />}
+          drawingTitle={kind === 'edge' ? 'Edge (L) beam section' : 'T-beam section'} />
       )}
       <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
         <p className="no-print text-[13px] text-[#5c6675]">
-          Flanged-beam flexure: §6.3.2 effective width,
-          rectangular vs true-T stress block, §9.6.1.2 minimum steel, εt/φ per §21.2.2. Positive Mu = flange in compression.
+          Flanged-beam flexure: §6.3.2 effective width, then the compression block solved from the moment
+          (§22.2.2.4.1) and the steel from C = T — the block grows with Mu and fills the flange before it
+          enters the web. §9.6.1.2 minimum steel, εt/φ per §21.2.2. Positive Mu = flange in compression.
         </p>
         <div className="no-print mt-4 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(330px,1fr)]">
           <div className="space-y-4">
@@ -97,6 +100,7 @@ export default function TBeamDesign() {
                 stats={[
                   { label: 'Steel', value: `${r.bars}-⌀${barDia}`, unit: `mm (${f0(AsProv)} mm² prov · ${f0(r.As)} req)` },
                   { label: 'φMn', value: f1(r.phiMn), unit: 'kN·m' },
+                  { label: 'Block a', value: f1(r.aReq), unit: `mm req · ${f1(r.a)} at ${r.bars} bars` },
                   { label: 'εt / φ', value: `${r.et.toFixed(4)} / ${r.phi.toFixed(2)}` },
                 ]}
                 checks={[
@@ -106,8 +110,10 @@ export default function TBeamDesign() {
                 footnote={r.notes.join(' · ') || undefined} />
             )}
             {r && (
-              <DrawingCard pdfDrawing title="Section & stress block" meta={`${f0(r.bf)}×${hf} flange · ${bw}×${h} web`}>
-                <TSection bf={r.bf} bw={bw} h={h} hf={hf} a={r.a} bars={r.bars} barDia={barDia} layers={r.layers} cover={cover} stirrupDia={stirrupDia} />
+              <DrawingCard pdfDrawing title="Section & stress block"
+                meta={`${f0(r.bf)}×${hf} flange ${kind === 'edge' ? 'one side' : 'both sides'} · ${bw}×${h} web`}>
+                <TSection bf={r.bf} bw={bw} h={h} hf={hf} a={r.a} aReq={r.aReq} edge={kind === 'edge'}
+                  bars={r.bars} barDia={barDia} layers={r.layers} cover={cover} stirrupDia={stirrupDia} />
               </DrawingCard>
             )}
           </div>
