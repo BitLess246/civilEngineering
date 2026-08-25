@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { buildPlan, type PlanPrimitive } from './planRenderer'
 import { generateGridModel } from './modelBuilder'
 import type { RectSection } from './model'
-import { footingLayout, type FootingIn, type CombinedIn } from './footingLayout'
+import { footingLayout, footingPrism, type FootingIn, type CombinedIn } from './footingLayout'
 
 const xz = new Map([
   ['n0', { x: 0, z: 0 }],
@@ -118,5 +118,56 @@ describe('the 3D footprint and the 2D plan describe the same pad', () => {
     expect(items[0].bx).toBeCloseTo(cf.Bx, 9)
     expect(items[0].bz1).toBeCloseTo(cf.By1, 9)
     expect(items[0].bz2).toBeCloseTo(cf.By2, 9)
+  })
+})
+
+describe('footingPrism — which axis is the thickness', () => {
+  // The failure this pins: a pad 8.2 m long, 0.5 m wide and 1.0 m thick is a
+  // plausible-looking box whichever way round you build it. Put Bx or By on
+  // the vertical axis and it reads as a wall standing on edge, and nothing in
+  // the scene says otherwise.
+  const bounds = (v: number[]) => {
+    const b = { x: [Infinity, -Infinity], y: [Infinity, -Infinity], z: [Infinity, -Infinity] }
+    for (let k = 0; k < v.length; k += 3) {
+      b.x[0] = Math.min(b.x[0], v[k]); b.x[1] = Math.max(b.x[1], v[k])
+      b.y[0] = Math.min(b.y[0], v[k + 1]); b.y[1] = Math.max(b.y[1], v[k + 1])
+      b.z[0] = Math.min(b.z[0], v[k + 2]); b.z[1] = Math.max(b.z[1], v[k + 2])
+    }
+    return b
+  }
+
+  it('puts the THICKNESS on y, the length on x and the width on z', () => {
+    const b = bounds(footingPrism(8.2, 0.5, 0.5, 1.0))
+    expect(b.x).toEqual([-4.1, 4.1])       // Bx along the pad
+    expect(b.y).toEqual([-0.5, 0.5])       // Dc vertical — 1.0 thick
+    expect(b.z).toEqual([-0.25, 0.25])     // By across it
+  })
+
+  it('is centred on the origin, exactly as the box it replaces', () => {
+    // The scene puts the group at y = −dc/2 so the pad's TOP sits at grade.
+    // A prism centred anywhere else floats above ground or sinks below it.
+    const b = bounds(footingPrism(6, 1.2, 1.2, 0.4))
+    for (const ax of ['x', 'y', 'z'] as const) {
+      expect(b[ax][0] + b[ax][1]).toBeCloseTo(0, 12)
+    }
+  })
+
+  it('tapers between the two end widths and nowhere else', () => {
+    const v = footingPrism(8, 2.4, 1.6, 0.5)
+    const atX = (x: number) => {
+      const zs: number[] = []
+      for (let k = 0; k < v.length; k += 3) if (Math.abs(v[k] - x) < 1e-9) zs.push(v[k + 2])
+      return Math.max(...zs) - Math.min(...zs)
+    }
+    expect(atX(-4)).toBeCloseTo(2.4, 9)
+    expect(atX(4)).toBeCloseTo(1.6, 9)
+  })
+
+  it('closes: every vertex is one of the eight corners', () => {
+    const v = footingPrism(8, 2.4, 1.6, 0.5)
+    expect(v.length).toBe(12 * 3 * 3)      // 12 triangles
+    const uniq = new Set<string>()
+    for (let k = 0; k < v.length; k += 3) uniq.add(`${v[k]},${v[k + 1]},${v[k + 2]}`)
+    expect(uniq.size).toBe(8)
   })
 })

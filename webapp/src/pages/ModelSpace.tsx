@@ -30,7 +30,7 @@ import { type StructureDesign, type FootingPlan, type OptimizeResult, type Later
 import { type MemberDeflectionResult } from '../engine/memberDeflection'
 import type { SteelJoint } from '../engine/steelConnections'
 import { estimateTakeoff, costBill, type PriceList } from '../engine/takeoff'
-import { footingLayout } from '../engine/footingLayout'
+import { footingLayout, footingPrism } from '../engine/footingLayout'
 import { type ShellNode, type ShellElem, type ElementStress } from '../engine/shell'
 import { solveModelShells, designModelSlabsFE, type SlabFEScheduleRow } from '../engine/shellModel'
 import { useSolver } from '../lib/useSolver'
@@ -494,20 +494,17 @@ function Footing3D({ cx, cz, bx, bz, bz1, bz2, dc, angle = 0, overlap = false, l
   const w1 = bz1 ?? bz, w2 = bz2 ?? bz
   const geom = useMemo(() => {
     if (Math.abs(w1 - w2) < 1e-6) return null
-    const sh = new THREE.Shape()
-    sh.moveTo(-bx / 2, -w1 / 2); sh.lineTo(-bx / 2, w1 / 2)
-    sh.lineTo(bx / 2, w2 / 2); sh.lineTo(bx / 2, -w2 / 2); sh.closePath()
-    const g = new THREE.ExtrudeGeometry(sh, { depth: dc, bevelEnabled: false })
-    // extruded along +Z, so stand it up and centre it on the pad's own depth
-    g.rotateX(-Math.PI / 2)
-    g.translate(0, dc / 2, 0)
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute(footingPrism(bx, w1, w2, dc), 3))
+    g.computeVertexNormals()
     return g
   }, [bx, w1, w2, dc])
   return (
     <group position={[cx, -dc / 2, cz]} rotation={[0, -angle, 0]}>
       <mesh geometry={geom ?? undefined}>
         {!geom && <boxGeometry args={[bx, dc, bz]} />}
-        <meshStandardMaterial color={overlap ? '#dc2626' : '#b45309'} transparent opacity={overlap ? 0.6 : 0.45} />
+        <meshStandardMaterial color={overlap ? '#dc2626' : '#b45309'} transparent opacity={overlap ? 0.6 : 0.45}
+          side={THREE.DoubleSide} />
       </mesh>
       {label && (
         <SceneText position={[0, dc / 2 + 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.32}

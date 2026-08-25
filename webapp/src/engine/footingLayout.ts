@@ -86,3 +86,31 @@ export function footingLayout(
     }
   return { items, overlaps }
 }
+
+/**
+ * The triangles of a tapered footing prism, as flat [x, y, z] triples.
+ *
+ * `bx` runs along the pad, `w1`/`w2` are the widths at its two ends, and `dc`
+ * is the THICKNESS — which is the vertical one. Getting that mapping wrong is
+ * the failure the caller cannot see coming: a footing 8.2 m long, 0.5 m wide
+ * and 1.0 m thick is a plausible-looking box whichever way round you build it,
+ * and it reads as a wall standing on edge rather than a slab lying down.
+ *
+ * Centred on the origin exactly as `boxGeometry` is, so a pad with equal end
+ * widths is indistinguishable from the box it replaces — which is what the
+ * test asserts.
+ */
+export function footingPrism(bx: number, w1: number, w2: number, dc: number): number[] {
+  const hx = bx / 2, hy = dc / 2, a = w1 / 2, b = w2 / 2
+  const V: [number, number, number][] = [
+    [-hx, hy, -a], [-hx, hy, a], [hx, hy, b], [hx, hy, -b],       // top, −x end first
+    [-hx, -hy, -a], [-hx, -hy, a], [hx, -hy, b], [hx, -hy, -b],   // and underneath
+  ]
+  const quad = (p: number, q: number, r: number, s: number) => [p, q, r, p, r, s]
+  const idx = [
+    ...quad(0, 1, 2, 3), ...quad(7, 6, 5, 4),   // top, bottom
+    ...quad(4, 5, 1, 0), ...quad(3, 2, 6, 7),   // the two ends
+    ...quad(5, 6, 2, 1), ...quad(0, 3, 7, 4),   // the two sides
+  ]
+  return idx.flatMap((k) => V[k])
+}
