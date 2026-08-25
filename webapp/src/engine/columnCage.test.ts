@@ -3,7 +3,7 @@ import {
   buildColumnCage, perimeterBars, placedBarCount, tieLevels, barInset, OFFSET_BEND_SLOPE,
   type ColumnCageInput,
 } from './columnCage'
-import { cutLength, stirrupBendDiameter, stirrupHookAllowance,} from './rebarModel'
+import { cutLength, stirrupBendDiameter, stirrupHookAllowance, polylineLength } from './rebarModel'
 
 // ─────────────────────────────────────────────────────────────────────────
 // WORKED EXAMPLE — a 400×600 SMF column, ⌀20 verticals, ⌀12 ties.
@@ -166,19 +166,27 @@ describe('buildColumnCage', () => {
     expect(stirrupBendDiameter(12)).toBe(48)
   })
 
-  it('develops a tie as its perimeter, less the four bends, PLUS both hooks', () => {
-    // Two corrections, and they pull opposite ways. The bar cuts each corner,
-    // so it is shorter than the rectangle by the bend deduction — but a closed
-    // tie also has two 135° hooks anchoring it into the core, which no vertex
-    // of a closed loop can express and which more than cancel the saving.
-    // Counting only the deduction buys every tie in the job short.
+  it('develops a tie as its perimeter, less the bends, PLUS the closure', () => {
+    // Three corrections, and they do not pull the same way. The bar cuts each
+    // corner, so it is shorter than the rectangle by the bend deduction — but
+    // a tie is ONE bar, so the corner it closes at is not a corner at all: no
+    // 90° bend is made there, and instead each end sweeps 135° around the
+    // corner longitudinal bar and runs its extension into the core.
     const t = cage.runs.find((r) => r.role === 'tie')!
     const perimeter = 2 * (0.508 + 0.308) * 1000     // 2(2·0.254 + 2·0.154) mm
     const bends = 4 * (48 / 2 + 12 / 2) * (2 - Math.PI / 2)
-    const hooks = stirrupHookAllowance(12)           // 2 × (max(6·12, 75) + 3·12)
-    expect(t.hookAllowance).toBeCloseTo(hooks, 9)
-    expect(cutLength(t)).toBeCloseTo(perimeter - bends + hooks, 6)
+    // R is the WRAP radius the hook is drawn to, (20 + 12)/2 = 16 mm
+    const closure = 16 * ((3 * Math.PI) / 2 - Math.PI / 2) + 2 * Math.max(6 * 12, 75)
+    expect(closure).toBeCloseTo(200.27, 2)
+    expect(t.hookAllowance).toBeCloseTo(closure, 9)
+    // …and the bar leans a diameter aside over its run, so the stock it comes
+    // from is the hypotenuse — 0.04 mm on a 1.6 m tie
+    const flat = perimeter - bends + closure
+    expect(cutLength(t)).toBeCloseTo(Math.hypot(flat, 12), 6)
+    expect(cutLength(t)).toBeGreaterThan(flat)
     expect(cutLength(t)).toBeGreaterThan(perimeter)
+    // the old rule of thumb bought a 90° bend nobody makes
+    expect(closure).toBeLessThan(stirrupHookAllowance(12))
   })
 
   it('rounds an odd bar count UP to one it can actually place', () => {
@@ -210,6 +218,59 @@ describe('buildColumnCage', () => {
     const zs = off.runs.filter((r) => r.role === 'vertical').map((r) => r.path[0][2])
     expect((Math.min(...xs) + Math.max(...xs)) / 2).toBeCloseTo(6, 9)
     expect((Math.min(...zs) + Math.max(...zs)) / 2).toBeCloseTo(4.5, 9)
+  })
+})
+
+describe('a column that STOPS hooks its bars in — §425.4.2 roof joint', () => {
+  it('carries the bar past the top and turns it 12·db inward', () => {
+    // A bar that just ends is not anchored. With nothing above to lap onto it
+    // develops itself instead: up under the beam's top steel, then across.
+    const cage = buildColumnCage({ ...col, spliceLap: 0, topHookRise: 0.17 })
+    const v = cage.runs.filter((r) => r.role === 'vertical')
+    for (const r of v) {
+      const [x, , z] = r.path[r.path.length - 2]
+      const [hx, hy, hz] = r.path[r.path.length - 1]
+      expect(hy).toBeCloseTo(Math.max(col.yBottom, col.yTop) + 0.17, 9)
+      // …horizontal, 12·db long, and heading INWARD
+      expect(Math.hypot(hx - x, hz - z)).toBeCloseTo((12 * col.barDia) / 1000, 9)
+      const before = Math.hypot(x - col.centre[0], z - col.centre[1])
+      const after = Math.hypot(hx - col.centre[0], hz - col.centre[1])
+      expect(after).toBeLessThan(before)
+      expect(r.bendDia[r.bendDia.length - 1]).toBeGreaterThan(0)
+    }
+  })
+
+  it('runs the bar on into the lap instead wherever a column continues', () => {
+    const cage = buildColumnCage({ ...col, spliceLap: 600, topHookRise: 0.17 })
+    for (const r of cage.runs.filter((x) => x.role === 'vertical')) {
+      const top = r.path[r.path.length - 1]
+      expect(top[1]).toBeCloseTo(Math.max(col.yBottom, col.yTop) + 0.6, 9)
+    }
+  })
+
+  it('says so when the column is too narrow for the full extension', () => {
+    // 12·db has to fit between the bar and the far side of the core. A ⌀25 bar
+    // in a 300 column cannot turn 300 mm in, and the detail is short.
+    const cage = buildColumnCage({ ...col, b: 300, h: 300, barDia: 25, spliceLap: 0, topHookRise: 0.1 })
+    expect((cage.notes ?? []).some((n) => /short of the 12·db extension/.test(n))).toBe(true)
+  })
+})
+
+describe('a CROSS TIE is billed as the single-legged bar it is', () => {
+  it('buys the leg between the bars, plus a full turn round each and two tails', () => {
+    // Its path is the two longitudinal bars it grips, so the polyline buys the
+    // centre-to-centre leg and nothing else. The steel also turns a full 180°
+    // around each bar — 2·πR, not the 6·dt the old rule of thumb guessed — and
+    // runs a §425.3.2 extension off each.
+    const cage = buildColumnCage({ ...col, bars: 10 })
+    const x = cage.runs.find((r) => r.role === 'tie' && r.closed === false)
+    expect(x).toBeDefined()
+    const R = (col.barDia + col.tieDia) / 2
+    expect(x!.hookAllowance).toBeCloseTo(2 * Math.PI * R + 2 * Math.max(6 * col.tieDia, 75), 9)
+    // an open run has no interior vertex, so nothing is deducted and no lean
+    // applies: the bar is straight between its two turns
+    const leg = polylineLength(x!.path) * 1000
+    expect(cutLength(x!)).toBeCloseTo(leg + x!.hookAllowance!, 9)
   })
 })
 

@@ -23,12 +23,13 @@
 // Units: geometry m, bar sizes mm. Model space, y up.
 // ─────────────────────────────────────────────────────────────────────────
 import {
-  continuousBars, stirrupBendDiameter, stirrupHookAllowance,
+  continuousBars, stirrupBendDiameter, closedTieClosureAllowance, turnAngles,
   hookBendDiameter, KEEP_TOP, KEEP_BOTTOM,
   type RebarCage, type RebarRun, type Vec3,
 } from './rebarModel'
 import { hookClearToFace } from './devLength'
 import { rotateLoop } from './columnCage'
+import { endAnchors, type AnchorBar, type JointRoom } from './beamAnchorage'
 
 export interface BeamCageInput {
   /** Member mark — every bar in the cage carries it. */
@@ -55,6 +56,26 @@ export interface BeamCageInput {
   /** Whether the beam continues past each support. An end support hooks. */
   continuousLeft?: boolean
   continuousRight?: boolean
+  /**
+   * Whether a column carries on ABOVE each support, and BELOW it.
+   *
+   * A hooked tail has to be embedded in something. One turned up out of the
+   * top of the joint needs the column above to be there — at a roof joint it
+   * is not, and the bar has to turn the other way instead. Below defaults to
+   * true, which is a beam framing into a column that continues down; a beam on
+   * a wall or a hanger should say otherwise.
+   */
+  columnAboveLeft?: boolean
+  columnAboveRight?: boolean
+  columnBelowLeft?: boolean
+  columnBelowRight?: boolean
+  /**
+   * A transverse beam at each support to turn a tail sideways into, and which
+   * way across this beam (+1 / −1). The last resort where neither vertical
+   * direction has concrete or is clear.
+   */
+  sideBeamLeft?: 1 | -1
+  sideBeamRight?: 1 | -1
   /**
    * The supporting column's own cover, tie Ø and vertical-bar Ø, mm — what
    * decides how far a hooked beam bar can reach into the joint before it runs
@@ -117,6 +138,7 @@ export function stirrupStations(i: Pick<BeamCageInput,
  */
 export function buildBeamCage(i: BeamCageInput): RebarCage {
   const runs: RebarRun[] = []
+  const notes: string[] = []
   const { x0, z0, x1, z1 } = i.axis
   const dx = x1 - x0, dz = z1 - z0
   const span = Math.hypot(dx, dz) || 1
@@ -154,33 +176,73 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
   const clear = hookClearToFace(i.colCover ?? 40, i.colTieDia ?? 10, i.colBarDia ?? i.barDia)
   /** Centreline of the turned-down leg, m from the support centreline. */
   const hookIn = (colB: number) => Math.max(0, colB / 2000 - (clear + i.barDia / 2) / 1000)
-  const endL = i.continuousLeft ? 0 : -hookIn(i.colBLeft ?? 0)
-  const endR = i.continuousRight ? i.L : i.L + hookIn(i.colBRight ?? 0)
-
   // ── through bars: the corners, plus the code's continuous share ──
-  for (const [role, y, down, n] of [
-    ['top', yTop, true, thruTop], ['bottom', yBot, false, thruBot],
-  ] as const) {
-    for (let k = 0; k < n; k++) {
-      // spread across the web between the two corner positions
-      const v = n === 1 ? 0 : -half + (2 * half * k) / (n - 1)
-      const path: Vec3[] = []
-      const bends: number[] = []
-      if (!i.continuousLeft) {
-        path.push(at(endL, v, y + (down ? -tail : tail)))
-        bends.push(hookD)
-      }
-      path.push(at(endL, v, y), at(endR, v, y))
-      if (!i.continuousRight) {
-        path.push(at(endR, v, y + (down ? -tail : tail)))
-        bends.push(hookD)
-      }
-      runs.push({
-        mark: `${i.mark}-${role === 'top' ? 'T' : 'B'}${k + 1}`,
-        dia: i.barDia, role, member: i.mark, path, bendDia: bends, count: 1,
-      })
+  //
+  // Which way each one turns where it stops is settled by `endAnchors`, not by
+  // the old rule of top-down / bottom-up: the concrete a tail needs may not be
+  // there, and two hooks given the same embedment stand their legs on the same
+  // line and run at each other.
+  const spread = (n: number, k: number) => (n === 1 ? 0 : -half + (2 * half * k) / (n - 1))
+  const thru: (AnchorBar & { role: 'top' | 'bottom' })[] = [
+    ...Array.from({ length: thruTop }, (_, k) =>
+      ({ role: 'top' as const, y: yTop, v: spread(thruTop, k), dia: i.barDia, tail })),
+    ...Array.from({ length: thruBot }, (_, k) =>
+      ({ role: 'bottom' as const, y: yBot, v: spread(thruBot, k), dia: i.barDia, tail })),
+  ]
+  const roomAt = (colB: number, above: boolean, below: boolean, side?: 1 | -1): JointRoom => ({
+    above, below, side,
+    // the cover line either side: a tail that ends flush with the face has no
+    // cover over it, so that is as far as it may go on the beam's own concrete
+    yTop: i.ySoffit + (i.h - i.cover) / 1000,
+    yBot: i.ySoffit + i.cover / 1000,
+    face: hookIn(colB),
+  })
+  // Top steel first: it is the more heavily stressed face at a support, so it
+  // keeps the far-face position and the bottom bar is the one that steps back.
+  const anchL = i.continuousLeft ? null
+    : endAnchors(thru, roomAt(i.colBLeft ?? 0, i.columnAboveLeft ?? true,
+        i.columnBelowLeft ?? true, i.sideBeamLeft))
+  const anchR = i.continuousRight ? null
+    : endAnchors(thru, roomAt(i.colBRight ?? 0, i.columnAboveRight ?? true,
+        i.columnBelowRight ?? true, i.sideBeamRight))
+  // One note per distinct decision: every bar in a face reaches the same one,
+  // and four copies of it says nothing four times.
+  for (const n of new Set([...(anchL ?? []), ...(anchR ?? [])].flatMap((a) => a.note ?? [])))
+    notes.push(n)
+
+  thru.forEach((bar, m) => {
+    const { role, y, v } = bar
+    const path: Vec3[] = []
+    const bends: number[] = []
+    /** The turned tail's far end, and the leg it turns off. */
+    const hook = (a: { dir: string; u: number }, sign: 1 | -1): [Vec3, Vec3] => {
+      const u = sign < 0 ? -a.u : i.L + a.u
+      const across = a.dir === 'side'
+        ? (sign < 0 ? i.sideBeamLeft : i.sideBeamRight) ?? 1 : 0
+      const dy = a.dir === 'down' ? -tail : a.dir === 'up' ? tail : 0
+      return [at(u, v + across * tail, y + dy), at(u, v, y)]
     }
-  }
+    const endL = anchL ? -anchL[m].u : 0
+    const endR = anchR ? i.L + anchR[m].u : i.L
+    if (anchL) {
+      const [tip, leg] = hook(anchL[m], -1)
+      path.push(tip, leg)
+      bends.push(hookD)
+    } else path.push(at(endL, v, y))
+    path.push(at(endR, v, y))
+    if (anchR) {
+      const [tip] = hook(anchR[m], 1)
+      path.push(tip)
+      bends.push(hookD)
+    }
+    const k = role === 'top' ? m : m - thruTop
+    runs.push({
+      mark: `${i.mark}-${role === 'top' ? 'T' : 'B'}${k + 1}`,
+      dia: i.barDia, role, member: i.mark, path, bendDia: bends, count: 1,
+    })
+  })
+  const endL = anchL ? -anchL[0].u : 0
+  const endR = anchR ? i.L + anchR[0].u : i.L
 
   // ── extra bars: curtailed, and cranked where they stop ──
   const crankRun = Math.min(0.33 * i.h, 0.05 * i.L * 1000) / 1000
@@ -223,6 +285,8 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
   const sy0 = i.ySoffit + (i.cover + i.stirrupDia / 2) / 1000
   const sy1 = i.ySoffit + i.h / 1000 - (i.cover + i.stirrupDia / 2) / 1000
   const D = stirrupBendDiameter(i.stirrupDia)
+  /** Radius the stirrup is bent to where it wraps a corner bar, mm. */
+  const R = (i.barDia + i.stirrupDia) / 2
   stirrupStations(i).forEach((u, k) => {
     const loop = [at(u, -sx, sy0), at(u, sx, sy0), at(u, sx, sy1), at(u, -sx, sy1)]
     runs.push({
@@ -237,10 +301,10 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
       bendDia: [D, D, D, D],
       closed: true,
       wrapDia: i.barDia,
-      hookAllowance: stirrupHookAllowance(i.stirrupDia),
+      hookAllowance: closedTieClosureAllowance(turnAngles(loop, true)[0], R, i.stirrupDia),
       count: 1,
     })
   })
 
-  return { member: i.mark, runs }
+  return { member: i.mark, runs, ...(notes.length ? { notes } : {}) }
 }

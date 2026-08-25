@@ -135,7 +135,15 @@ describe('buildStructureCages', () => {
     for (const c of design.columns) {
       const { hi } = yOf(c.id)
       if (carriesOnAbove(c.id)) { expect(topOf(c.id)).toBeGreaterThan(hi + 0.29); spliced++ }
-      else { expect(topOf(c.id)).toBeCloseTo(hi, 6); capped++ }
+      else {
+        // A roof column laps onto nothing, so it does not run on into a splice
+        // — but it does not simply stop either: it carries far enough past the
+        // node to turn its bars in under the beam's top steel, well short of
+        // the lap it would have needed to continue.
+        expect(topOf(c.id)).toBeGreaterThanOrEqual(hi - 1e-9)
+        expect(topOf(c.id)).toBeLessThan(hi + 0.29)
+        capped++
+      }
     }
     expect(capped).toBeGreaterThan(0)          // the model does have roof columns
     expect(spliced + capped).toBe(design.columns.length)

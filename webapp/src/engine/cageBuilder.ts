@@ -108,16 +108,55 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
     return d
   }
 
-  /** Does another column carry on ABOVE this node? A roof column laps nothing. */
-  const columnAbove = (memberId: string, node: string): boolean => {
+  /** Does a column reach out of this node, up (`+1`) or down (`−1`)? */
+  const columnBeyond = (node: string, way: 1 | -1, exclude?: string): boolean => {
     const here = pos.get(node)
     if (!here) return false
     return model.members.some((m) => {
-      if (m.id === memberId || m.role !== 'column') return false
+      if (m.id === exclude || m.role !== 'column') return false
       if (m.i !== node && m.j !== node) return false
       const other = pos.get(m.i === node ? m.j : m.i)
-      return !!other && other.y > here.y + 1e-6
+      return !!other && way * (other.y - here.y) > 1e-6
     })
+  }
+  /** Does another column carry on ABOVE this node? A roof column laps nothing. */
+  const columnAbove = (memberId: string, node: string) => columnBeyond(node, 1, memberId)
+
+  /**
+   * A transverse beam at a node, and which way it runs across `mem` — where a
+   * bar with nowhere vertical to hook can turn instead.
+   */
+  const sideBeamAt = (mem: { id: string; i: string; j: string }, node: string): 1 | -1 | undefined => {
+    const here = pos.get(node), a = pos.get(mem.i), b = pos.get(mem.j)
+    if (!here || !a || !b) return undefined
+    const ux = b.x - a.x, uz = b.z - a.z
+    const l = Math.hypot(ux, uz) || 1
+    const px = -uz / l, pz = ux / l                 // across the beam, in plan
+    for (const o of beamsAtNode.get(node) ?? []) {
+      if (o.id === mem.id) continue
+      const far = pos.get(o.i === node ? o.j : o.i)
+      if (!far) continue
+      const across = (far.x - here.x) * px + (far.z - here.z) * pz
+      if (Math.abs(across) > 1e-6) return across > 0 ? 1 : -1
+    }
+    return undefined
+  }
+
+  /**
+   * How far above a node the top steel of the beams framing in sits, m, less
+   * half a column bar — where a roof column's hook has to run to pass UNDER
+   * that steel and hold it. The deepest beam decides.
+   */
+  const beamTopSteelRise = (node: string, colBarDia: number): number | undefined => {
+    const list = beamsAtNode.get(node) ?? []
+    if (!list.length) return undefined
+    let deep: RectSection | undefined
+    for (const m of list) {
+      const bs = secOf(m.id)
+      if (!deep || bs.h > deep.h) deep = bs
+    }
+    if (!deep) return undefined
+    return Math.max(0, (deep.h / 2 - (deep.cover + deep.tieDia + deep.barDia + colBarDia / 2)) / 1000)
   }
 
   /** Pedestal at a base node, m — the column between the node and the pad top. */
@@ -157,6 +196,14 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       sMid: spac.length ? Math.max(...spac) : 0,
       continuousLeft: carriesOn(mem, mem.i),
       continuousRight: carriesOn(mem, mem.j),
+      // Which way a hooked bar may turn: a tail leaving the top of the joint
+      // needs a column above to sit in, and at a roof there is none.
+      columnAboveLeft: columnBeyond(mem.i, 1),
+      columnAboveRight: columnBeyond(mem.j, 1),
+      columnBelowLeft: columnBeyond(mem.i, -1),
+      columnBelowRight: columnBeyond(mem.j, -1),
+      sideBeamLeft: sideBeamAt(mem, mem.i),
+      sideBeamRight: sideBeamAt(mem, mem.j),
       // The support's own detailing, so the hook lands at the far face of the
       // confined core rather than at some assumed cover (§418.8.4.1).
       ...(() => {
@@ -201,6 +248,9 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       yBottom: yLo, yTop: yHi,
       // the joint band at the top, which the joint's own hoops own (§418.8.3)
       jointGap: jd > 0 ? [yHi - jd / 2, yHi + jd / 2] : undefined,
+      // Nothing above to lap onto: the bar develops itself instead, turning in
+      // under the beam's top steel (§425.4.2 and the standard roof detail).
+      topHookRise: lap > 0 ? undefined : beamTopSteelRise(topNode, sec.barDia),
       // A vertical is already lapped at the floor; a stock splice only appears
       // in a storey tall enough to need one, and belongs low, clear of the
       // hinge zone at the top.

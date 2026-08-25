@@ -17,7 +17,8 @@
 // Units: plan dimensions, covers and bar sizes mm; positions and lengths m.
 // ─────────────────────────────────────────────────────────────────────────
 import {
-  stirrupBendDiameter, stirrupHookAllowance, placedBarCount, hookBendDiameter,
+  stirrupBendDiameter, placedBarCount, hookBendDiameter,
+  closedTieClosureAllowance, crossTieHookAllowance, turnAngles,
   type RebarCage, type RebarRun, type Vec3,
 } from './rebarModel'
 import { supplementaryTies } from './columnTies'
@@ -63,11 +64,27 @@ export interface ColumnCageInput {
    * nothing. Zero or omitted where no column continues above, e.g. at a roof.
    */
   spliceLap?: number
+  /**
+   * How far a column that STOPS here carries its bars above `yTop` before
+   * turning them in, m — and so where the hook's horizontal leg sits.
+   *
+   * A roof column laps onto nothing, and its verticals were drawn simply
+   * ending at the top of the member. A bar that stops is not anchored:
+   * §425.4.2 wants it developed, and the standard roof-joint detail turns it
+   * 90° into the beam and runs ℓext = 12·db across, passing UNDER the beam's
+   * top steel so the column bar and the beam bar hold each other. Set this to
+   * put that leg just below the beam's top bars. Ignored where `spliceLap` is
+   * non-zero, because then the bar carries on instead.
+   */
+  topHookRise?: number
 }
 
 /** ACI 318-14 §10.7.4.1 — the inclined part of an offset bend may not be
  *  steeper than 1 in 6, so the crank runs six diameters for one across. */
 export const OFFSET_BEND_SLOPE = 6
+
+/** Table 425.3.1 — straight extension beyond a standard 90° hook, in bar Ø. */
+export const HOOK_EXTENSION = 12
 
 /** Distance from a face to the centre of the bar behind it, mm. */
 export const barInset = (cover: number, tieDia: number, barDia: number) =>
@@ -222,6 +239,25 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
       const D = hookBendDiameter(i.barDia)
       path.push([x, y1 - crankRun, z], [x + ox, y1, z + oz], [x + ox, y1 + lap, z + oz])
       bendDia.push(D, D)
+    } else if (lap <= 0 && i.topHookRise != null) {
+      // ── the roof hook ────────────────────────────────────────────────────
+      // Nothing above to lap onto, so the bar has to develop itself. It turns
+      // 90° in under the beam's top steel and runs its extension across, which
+      // is what makes the joint close: the column bar hooks over the beam's
+      // bars and the beam's bars hook down past the column's.
+      const yh = y1 + Math.max(0, i.topHookRise)
+      // Inward along the face the bar sits on — a corner bar on its longer one,
+      // which is the way it is bent on site and the way it stays clear of the
+      // bar turning in from the other face.
+      const ax = Math.abs(dx) >= Math.abs(dz)
+      const reach = Math.min(HOOK_EXTENSION * i.barDia, 2 * Math.abs(ax ? dx : dz)) / 1000
+      if (reach < (HOOK_EXTENSION * i.barDia) / 1000 - 1e-9) {
+        notes.push(`${i.mark}: the top hook reaches ${Math.round(reach * 1000)} mm, short of the ${HOOK_EXTENSION}·db extension — the column is too narrow to turn the bar in`)
+      }
+      const tx = ax ? -Math.sign(dx) * reach : 0
+      const tz = ax ? 0 : -Math.sign(dz) * reach
+      path.push([x, yh, z], [x + tx, yh, z + tz])
+      bendDia.push(hookBendDiameter(i.barDia))
     } else {
       path.push([x, y1 + lap, z])
     }
@@ -241,7 +277,8 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
   const tx = Math.max(0, i.h / 2 - i.cover - i.tieDia / 2) / 1000
   const tz = Math.max(0, i.b / 2 - i.cover - i.tieDia / 2) / 1000
   const D = stirrupBendDiameter(i.tieDia)
-  /** Centre-to-centre radius of a tie bent around a longitudinal bar, mm. */
+  /** Centre-to-centre radius of a tie bent around a longitudinal bar, mm —
+   *  what it is drawn to, and so what its hooks are billed at. */
   const R = (i.barDia + i.tieDia) / 2
   const hoop: Vec3[] = [
     [cx - tx, 0, cz - tz], [cx + tx, 0, cz - tz],
@@ -276,8 +313,9 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
       bendDia: [D, D, D, D],
       closed: true,
       wrapDia: i.barDia,
-      // the two 135° hooks the closed loop's vertices cannot express
-      hookAllowance: stirrupHookAllowance(i.tieDia),
+      // the two 135° hooks the closed loop's vertices cannot express — and
+      // the 90° bend it deducts at that corner, which the bar never makes
+      hookAllowance: closedTieClosureAllowance(turnAngles(hoop, true)[0], R, i.tieDia),
       count: 1,
     })
     extra.ties.forEach((t, j) => {
@@ -296,9 +334,11 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
         bendDia: pts.map(() => D),
         closed: t.closed,
         wrapDia: i.barDia,
-        // A cross tie is a single bar hooked at BOTH ends (§425.3.2), so it
-        // carries the same allowance as a loop even though it is not one.
-        hookAllowance: stirrupHookAllowance(i.tieDia),
+        // A cross tie is a single bar hooked at BOTH ends (§425.3.2), but it
+        // is not a loop: each end turns a full 180° around the bar it grips.
+        hookAllowance: t.closed
+          ? closedTieClosureAllowance(turnAngles(pts, true)[0], R, i.tieDia)
+          : crossTieHookAllowance(R, i.tieDia),
         count: 1,
       })
     })

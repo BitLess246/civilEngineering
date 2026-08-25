@@ -54,15 +54,21 @@ describe('structure take-off / BOM-BOQ', () => {
     //     = 4 · 25 · (2 − π/2) = 42.92 mm
     //     …never deducted at all, though a bent bar really is shorter than the
     //     sharp-cornered rectangle drawn through its corners.
-    //   plus two 135° hooks = 2[max(6·10, 75) + 3·10] = 210 mm
-    //     …this part was right, and the extension alone (2 × 75) would have cut
-    //     every stirrup 60 mm short.
+    //   plus the CLOSURE, which is not a bend: a tie is one bar, so at the
+    //     corner it closes at no 90° bend is made and each end instead sweeps
+    //     135° around the corner bar at the wrap radius R = (20 + 10)/2 = 15
+    //     and runs an extension. R(3π/2 − π/2) + 2·max(6·10, 75) = 197.1 mm
+    //     …the old rule of thumb bought 210: a 90° bend nobody makes, plus a
+    //     3·dt guess for two sweeps that are 47 mm of arc.
+    //   and finally the lean: the bar steps a diameter aside over its run, so
+    //     the stock is the hypotenuse — 0.04 mm here.
     const perimeter = 2 * (210 + 410)
     const bends = 4 * 25 * (2 - Math.PI / 2)
-    const hooks = 2 * (Math.max(6 * 10, 75) + 3 * 10)
+    const closure = 15 * ((3 * Math.PI) / 2 - Math.PI / 2) + 2 * Math.max(6 * 10, 75)
+    const flat = perimeter - bends + closure
     const stirrup = t.cutList.find((c) => c.mark === 'Stirrup' && c.dia === 10)!
     expect(stirrup).toBeDefined()
-    expect(stirrup.cutLengthM).toBeCloseTo((perimeter - bends + hooks) / 1000, 6)
+    expect(stirrup.cutLengthM).toBeCloseTo(Math.hypot(flat, 10) / 1000, 6)
     expect(stirrup.tie).toBe(true)
   })
 

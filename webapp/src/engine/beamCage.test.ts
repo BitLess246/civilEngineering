@@ -141,7 +141,11 @@ describe('buildBeamCage — stirrups', () => {
     const s = byRole('stirrup')[0]
     expect(s.closed).toBe(true)
     expect(s.path).toHaveLength(4)
-    expect(s.hookAllowance).toBeCloseTo(stirrupHookAllowance(12), 9)
+    // one bar: no 90° bend at the closure, two 135° sweeps round the corner
+    // bar at R = (20 + 12)/2, and two extensions
+    const closure = 16 * ((3 * Math.PI) / 2 - Math.PI / 2) + 2 * Math.max(6 * 12, 75)
+    expect(s.hookAllowance).toBeCloseTo(closure, 9)
+    expect(closure).toBeLessThan(stirrupHookAllowance(12))
     // 300 − 2(40) − 12 = 208 across, 550 − 2(40) − 12 = 458 deep
     const perim = 2 * (0.208 + 0.458) * 1000
     expect(cutLength(s)).toBeGreaterThan(perim)       // the hooks outweigh the bends

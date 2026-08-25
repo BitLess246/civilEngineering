@@ -205,7 +205,14 @@ export function cutLength(run: RebarRun): number {
     if (D == null || D <= 0) continue
     ded += bendDeduction(D, run.dia, turns[k])
   }
-  return Math.max(0, straight - ded + (run.hookAllowance ?? 0))
+  const flat = Math.max(0, straight - ded + (run.hookAllowance ?? 0))
+  // A CLOSED tie cannot close on itself, so it leans one diameter aside over
+  // its run (`closedTieBar`). The bar is then a shallow helix rather than a
+  // plane curve, and the stock it is cut from is the hypotenuse. On a 1.5 m
+  // tie that is four hundredths of a millimetre — real, and far below what a
+  // bar is cut to, but it costs nothing to be right about.
+  if (run.closed && run.hookAllowance) return Math.hypot(flat, run.dia)
+  return flat
 }
 
 /** Fabricated weight of a run — every copy of it, kg. */
@@ -309,6 +316,49 @@ export function cageToPrimitives(cage: RebarCage, plane: ViewPlane, style: (r: R
  */
 export function stirrupHookAllowance(dt: number): number {
   return 2 * (Math.max(6 * dt, 75) + 3 * dt)
+}
+
+/** §425.3.2 — straight extension beyond a seismic hook's bend, mm. */
+export const hookExtension = (dt: number) => Math.max(6 * dt, 75)
+
+/** §425.3.2 — a seismic hook turns 135°. */
+const SEISMIC_HOOK_TURN = (135 * Math.PI) / 180
+
+/**
+ * Cut allowance for the closure of a CLOSED tie, mm — the exact figure for the
+ * shape `closedTieBar` draws, replacing the 3·dt rule of thumb.
+ *
+ * A tie is one bar, so the corner it closes at is not a corner: it is where the
+ * bar is cut, and each end turns 135° AROUND the corner longitudinal bar before
+ * running its extension into the core. So against the polyline the bill has to
+ *
+ *   • drop the 90° bend `cutLength` deducts there, which is not made:  +R·θ₀
+ *   • pay for two 135° arcs at the wrap radius instead:              −2·R·(3π/4)
+ *   • pay for the two extensions:                                    −2·ℓext
+ *
+ * giving R·(3π/2 − θ₀) + 2·ℓext. For a rectangular ⌀10 tie on ⌀20 bars that is
+ * 47 mm rather than the old rule's 60 — the rule of thumb was buying a 90° bend
+ * that nobody makes.
+ *
+ * `turn0Deg` is the loop's own deviation at that corner (90° for a rectangle);
+ * `R` the centreline radius the hook is bent to, which is the WRAP radius where
+ * the tie is drawn hugging a bar.
+ */
+export function closedTieClosureAllowance(turn0Deg: number, R: number, dt: number): number {
+  const t0 = (Math.abs(turn0Deg) * Math.PI) / 180
+  return Math.max(0, R * (2 * SEISMIC_HOOK_TURN - t0)) + 2 * hookExtension(dt)
+}
+
+/**
+ * Cut allowance for a CROSS TIE — a single-legged stirrup, mm.
+ *
+ * Its path is the two longitudinal bars it grips, so the polyline buys the leg
+ * between their centres and nothing else. The steel also turns a full 180°
+ * around each bar and runs an extension off each: 2·πR + 2·ℓext. The old rule
+ * of thumb bought 6·dt for the two turns where a ⌀10 tie on ⌀20 bars needs 94.
+ */
+export function crossTieHookAllowance(R: number, dt: number): number {
+  return 2 * Math.PI * R + 2 * hookExtension(dt)
 }
 
 // ── the four corner bars ─────────────────────────────────────────────────
