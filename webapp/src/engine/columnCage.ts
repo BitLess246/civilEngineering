@@ -17,7 +17,7 @@
 // Units: plan dimensions, covers and bar sizes mm; positions and lengths m.
 // ─────────────────────────────────────────────────────────────────────────
 import {
-  stirrupBendDiameter, stirrupHookAllowance, placedBarCount,
+  stirrupBendDiameter, stirrupHookAllowance, placedBarCount, hookBendDiameter,
   type RebarCage, type RebarRun, type Vec3,
 } from './rebarModel'
 
@@ -56,7 +56,17 @@ export interface ColumnCageInput {
    * steel twice and pay for it twice.
    */
   jointGap?: [number, number]
+  /**
+   * Lap splice projecting ABOVE `yTop`, mm — the compression splice of §25.5.5,
+   * which the caller computes (`devLength.lsc`) because this module designs
+   * nothing. Zero or omitted where no column continues above, e.g. at a roof.
+   */
+  spliceLap?: number
 }
+
+/** ACI 318-14 §10.7.4.1 — the inclined part of an offset bend may not be
+ *  steeper than 1 in 6, so the crank runs six diameters for one across. */
+export const OFFSET_BEND_SLOPE = 6
 
 /** Distance from a face to the centre of the bar behind it, mm. */
 export const barInset = (cover: number, tieDia: number, barDia: number) =>
@@ -142,17 +152,45 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
   const [cx, cz] = i.centre
   const y0 = Math.min(i.yBottom, i.yTop), y1 = Math.max(i.yBottom, i.yTop)
 
+  // ── verticals, with the lap splice that carries them into the storey above ──
+  //
+  // A column bar does not stop at the floor: it runs on past it and the column
+  // above laps onto it (§25.5.5). To leave room for that bar the projecting
+  // part is CRANKED one diameter inboard, on the 1-in-6 offset bend §10.7.4.1
+  // allows, which is the kink you see on every column cage on site. Drawn
+  // straight to the top of the member, the cage claimed a splice that had
+  // nowhere to happen.
+  const ins = barInset(i.cover, i.tieDia, i.barDia)
+  const xhF = Math.max(0, i.h / 2 - ins), zbF = Math.max(0, i.b / 2 - ins)
+  const lap = Math.max(0, i.spliceLap ?? 0) / 1000
+  const onFace = (v: number, face: number) => face > 0 && Math.abs(Math.abs(v) - face) < 1e-6
+
   perimeterBars(i).forEach(([dx, dz], k) => {
+    const x = cx + dx / 1000, z = cz + dz / 1000
+    const path: Vec3[] = [[x, y0, z]]
+    const bendDia: number[] = []
+    // A bar is cranked only on the faces it actually sits against: a corner bar
+    // moves in on both axes, a mid-face bar only off its own face.
+    const ox = onFace(dx, xhF) ? (-Math.sign(dx) * i.barDia) / 1000 : 0
+    const oz = onFace(dz, zbF) ? (-Math.sign(dz) * i.barDia) / 1000 : 0
+    // 1 in 6 applies to the BAR, so the run is six times the resultant offset.
+    // Six diameters per axis would put a corner bar — which moves in on both —
+    // on a 1-in-4.2 slope, steeper than §10.7.4.1 permits.
+    const crankRun = OFFSET_BEND_SLOPE * Math.hypot(ox, oz)
+    if (lap > 0 && crankRun > 0 && y1 - y0 > crankRun && (ox !== 0 || oz !== 0)) {
+      const D = hookBendDiameter(i.barDia)
+      path.push([x, y1 - crankRun, z], [x + ox, y1, z + oz], [x + ox, y1 + lap, z + oz])
+      bendDia.push(D, D)
+    } else {
+      path.push([x, y1 + lap, z])
+    }
     runs.push({
       mark: `${i.mark}-V${k + 1}`,
       dia: i.barDia,
       role: 'vertical',
       member: i.mark,
-      path: [
-        [cx + dx / 1000, y0, cz + dz / 1000],
-        [cx + dx / 1000, y1, cz + dz / 1000],
-      ] as Vec3[],
-      bendDia: [],
+      path,
+      bendDia,
       count: 1,
     })
   })

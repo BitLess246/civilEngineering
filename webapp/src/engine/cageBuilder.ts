@@ -24,6 +24,7 @@ import type { StructuralModel, RectSection } from './model'
 import type { StructureDesign } from './pipeline'
 import { buildBeamCage } from './beamCage'
 import { buildColumnCage } from './columnCage'
+import { calcDevLength } from './devLength'
 import type { RebarCage } from './rebarModel'
 
 const FALLBACK: RectSection = {
@@ -97,6 +98,18 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
     return d
   }
 
+  /** Does another column carry on ABOVE this node? A roof column laps nothing. */
+  const columnAbove = (memberId: string, node: string): boolean => {
+    const here = pos.get(node)
+    if (!here) return false
+    return model.members.some((m) => {
+      if (m.id === memberId || m.role !== 'column') return false
+      if (m.i !== node && m.j !== node) return false
+      const other = pos.get(m.i === node ? m.j : m.i)
+      return !!other && other.y > here.y + 1e-6
+    })
+  }
+
   const cages: RebarCage[] = []
   const unplaced: string[] = []
 
@@ -132,8 +145,15 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
     const yLo = Math.min(ni.y, nj.y), yHi = Math.max(ni.y, nj.y)
     const topNode = ni.y >= nj.y ? mem.i : mem.j
     const jd = beamDepthAt(topNode)
+    // §25.5.5 compression lap, only where a column actually continues above.
+    const lap = columnAbove(c.id, topNode)
+      ? calcDevLength({
+          db: sec.barDia, fc: sec.fc, fy: sec.fy,
+          topBar: false, epoxy: 'none', lambda: 1, cbKtr_db: 2.5,
+        }).lsc
+      : 0
     cages.push(buildColumnCage({
-      mark: c.id, b: sec.b, h: sec.h, cover: sec.cover,
+      mark: c.id, b: sec.b, h: sec.h, cover: sec.cover, spliceLap: lap,
       barDia: sec.barDia, bars: c.bars, tieDia: sec.tieDia,
       sConfined: c.tieSpacingFinal > 0 ? c.tieSpacingFinal : c.tieSpacing,
       sOutside: c.seismicSOut ?? c.tieSpacing,

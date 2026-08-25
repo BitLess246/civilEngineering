@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  buildColumnCage, perimeterBars, placedBarCount, tieLevels, barInset, type ColumnCageInput,
+  buildColumnCage, perimeterBars, placedBarCount, tieLevels, barInset, OFFSET_BEND_SLOPE,
+  type ColumnCageInput,
 } from './columnCage'
 import { cutLength, stirrupBendDiameter, stirrupHookAllowance,} from './rebarModel'
 
@@ -176,5 +177,79 @@ describe('buildColumnCage', () => {
     const zs = off.runs.filter((r) => r.role === 'vertical').map((r) => r.path[0][2])
     expect((Math.min(...xs) + Math.max(...xs)) / 2).toBeCloseTo(6, 9)
     expect((Math.min(...zs) + Math.max(...zs)) / 2).toBeCloseTo(4.5, 9)
+  })
+})
+
+describe('lap splice into the storey above — §25.5.5 / §10.7.4.1', () => {
+  const base = {
+    mark: 'C1', b: 400, h: 400, cover: 40, barDia: 20, bars: 8, tieDia: 10,
+    sConfined: 100, sOutside: 200, lo: 600,
+    centre: [0, 0] as [number, number], yBottom: 0, yTop: 3,
+  }
+  const verts = (c: ReturnType<typeof buildColumnCage>) => c.runs.filter((r) => r.role === 'vertical')
+
+  it('stops at the top of the column when nothing laps onto it', () => {
+    for (const v of verts(buildColumnCage(base))) {
+      expect(Math.max(...v.path.map((p) => p[1]))).toBeCloseTo(3, 9)
+      expect(v.path.length).toBe(2)                     // straight, no crank
+    }
+  })
+
+  it('projects exactly the lap it is given, above the top of the column', () => {
+    for (const v of verts(buildColumnCage({ ...base, spliceLap: 620 }))) {
+      expect(Math.max(...v.path.map((p) => p[1]))).toBeCloseTo(3.62, 9)
+      expect(Math.min(...v.path.map((p) => p[1]))).toBeCloseTo(0, 9)
+    }
+  })
+
+  it('cranks the projecting part one bar diameter INBOARD, at 1 in 6', () => {
+    // ACI 318-14 §10.7.4.1: the inclined part of an offset bend is no steeper
+    // than 1 in 6. Without the offset the lapping bar above has nowhere to sit.
+    const cage = buildColumnCage({ ...base, spliceLap: 620 })
+    for (const v of verts(cage)) {
+      expect(v.path.length).toBe(4)
+      const [start, kinkLo, kinkHi, top] = v.path
+      // the crank happens inside the column, finishing at its top
+      expect(kinkHi[1]).toBeCloseTo(3, 9)
+      expect(kinkLo[1]).toBeLessThan(3)
+      // A corner bar moves in on BOTH axes, so its resultant offset is db√2 —
+      // and 1 in 6 is a limit on the bar, not on each axis separately. Six
+      // diameters of run per axis would be a 1-in-4.2 slope and illegal.
+      const across = Math.hypot(kinkHi[0] - kinkLo[0], kinkHi[2] - kinkLo[2])
+      const along = kinkHi[1] - kinkLo[1]
+      // one diameter per face the bar sits against: db on a face, db√2 on a corner
+      const one = 20 / 1000
+      expect([one, one * Math.SQRT2].some((e) => Math.abs(across - e) < 1e-9)).toBe(true)
+      expect(along / across).toBeCloseTo(OFFSET_BEND_SLOPE, 6)
+      expect(top[0]).toBeCloseTo(kinkHi[0], 9)
+      expect(top[2]).toBeCloseTo(kinkHi[2], 9)
+      // …and it moves TOWARD the column centre, never out through the cover
+      expect(Math.hypot(kinkHi[0], kinkHi[2])).toBeLessThan(Math.hypot(start[0], start[2]))
+      expect(v.bendDia.length).toBe(2)
+    }
+  })
+
+  it('a mid-face bar cranks off its own face only, not diagonally', () => {
+    // 12 bars on a square column puts one bar in the middle of each face. It
+    // sits against one face, so it moves in on one axis; a corner bar sits
+    // against two and moves in on both.
+    const cage = buildColumnCage({ ...base, bars: 12, spliceLap: 620 })
+    const moved = verts(cage).map((v) => {
+      const lo = v.path[1], hi = v.path[2]
+      return [Math.abs(hi[0] - lo[0]) > 1e-9, Math.abs(hi[2] - lo[2]) > 1e-9]
+    })
+    expect(moved.filter(([a, b]) => a && b).length).toBe(4)          // the corners
+    expect(moved.filter(([a, b]) => a !== b).length).toBe(8)         // the mid-face bars
+    expect(moved.every(([a, b]) => a || b)).toBe(true)               // none stays put
+  })
+
+  it('a column too short for the crank still gets its lap, straight', () => {
+    // Guard rather than geometry: a stub shorter than the offset bend cannot
+    // hold one, and a bar bent over its whole length would be worse than none.
+    const cage = buildColumnCage({ ...base, yTop: 0.1, spliceLap: 620 })
+    for (const v of verts(cage)) {
+      expect(v.path.length).toBe(2)
+      expect(Math.max(...v.path.map((p) => p[1]))).toBeCloseTo(0.72, 9)
+    }
   })
 })

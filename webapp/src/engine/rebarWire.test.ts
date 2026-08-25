@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { runPoints, filletCorner, REBAR_ROLE_COLOR } from './rebarWire'
-import { bendRadius, hookBendDiameter, stirrupBendDiameter, type RebarRun } from './rebarModel'
+import {
+  runPoints, runPolylines, filletCorner, tubeFromPolyline, hookTailLength, REBAR_ROLE_COLOR,
+} from './rebarWire'
+import {
+  bendRadius, hookBendDiameter, stirrupBendDiameter, stirrupHookAllowance,
+  type RebarRun, type Vec3,
+} from './rebarModel'
 
 const straight: RebarRun = {
   mark: 'X1', dia: 20, role: 'top', member: 'B1',
@@ -83,5 +88,118 @@ describe('runPoints', () => {
     expect(new Set(Object.values(REBAR_ROLE_COLOR)).size).toBeGreaterThan(6)
     expect(REBAR_ROLE_COLOR.top).not.toBe(REBAR_ROLE_COLOR.bottom)
     expect(REBAR_ROLE_COLOR.stirrup).not.toBe(REBAR_ROLE_COLOR.vertical)
+  })
+})
+
+describe('hook tails on a closed tie', () => {
+  const tie = {
+    mark: 'T1', dia: 10, role: 'tie' as const, member: 'C1',
+    path: [[0, 0, 0], [0.3, 0, 0], [0.3, 0, 0.3], [0, 0, 0.3]] as Vec3[],
+    bendDia: [40, 40, 40, 40], closed: true,
+    hookAllowance: stirrupHookAllowance(10), count: 1,
+  }
+
+  it('a closed tie that carries hooks draws them — the loop plus two tails', () => {
+    // Stored as a length for the bill, the two 135° hooks were never drawn, so
+    // every tie in the 3D view was a bare rectangle with no ends.
+    expect(runPolylines(tie).length).toBe(3)
+    expect(runPolylines({ ...tie, hookAllowance: undefined }).length).toBe(1)
+    expect(runPolylines({ ...tie, closed: false }).length).toBe(1)
+  })
+
+  it('each tail is max(6d_t, 75 mm) long and starts at the corner the ends meet at', () => {
+    const [, a, b] = runPolylines(tie)
+    for (const t of [a, b]) {
+      expect(t.length).toBe(2)
+      expect(t[0]).toEqual(tie.path[0])
+      expect(Math.hypot(t[1][0] - t[0][0], t[1][1] - t[0][1], t[1][2] - t[0][2]))
+        .toBeCloseTo(hookTailLength(10), 9)
+    }
+  })
+
+  it('both tails turn 135° from the leg they fold off', () => {
+    const [, a, b] = runPolylines(tie)
+    const dir = (p: Vec3[]) => {
+      const d = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]]
+      const l = Math.hypot(...d)
+      return d.map((c) => c / l)
+    }
+    // the leg arriving at the corner, and the one leaving it
+    const arrive = [0, 0, -1]                          // from path[3] to path[0]
+    const leave = [1, 0, 0]                            // from path[0] to path[1]
+    const turnOf = (u: number[], v: number[]) =>
+      (Math.acos(Math.max(-1, Math.min(1, u[0] * v[0] + u[1] * v[1] + u[2] * v[2]))) * 180) / Math.PI
+    expect(turnOf(arrive, dir(a))).toBeCloseTo(135, 6)
+    expect(turnOf(leave.map((c) => -c), dir(b))).toBeCloseTo(135, 6)
+  })
+
+  it('the tails point INTO the core, never out through the cover', () => {
+    // The tie is in the y = 0 plane with its core at (0.15, 0, 0.15); a hook
+    // folded the wrong way leaves the section entirely.
+    const [, a, b] = runPolylines(tie)
+    const core = [0.15, 0, 0.15]
+    for (const t of [a, b]) {
+      const before = Math.hypot(t[0][0] - core[0], t[0][2] - core[2])
+      const after = Math.hypot(t[1][0] - core[0], t[1][2] - core[2])
+      expect(after).toBeLessThan(before)
+      expect(Math.abs(t[1][1])).toBeLessThan(1e-9)     // and stay in the tie's plane
+    }
+  })
+})
+
+describe('a bar swept as a tube', () => {
+  const straight: Vec3[] = [[0, 0, 0], [2, 0, 0]]
+
+  it('sits exactly one radius off the centreline, all the way round', () => {
+    const t = tubeFromPolyline(straight, 0.01, 8)
+    for (let v = 0; v < 8; v++) {
+      const o = v * 3
+      // first ring: x = 0, and the point is 0.01 from the axis
+      expect(t.positions[o]).toBeCloseTo(0, 9)
+      expect(Math.hypot(t.positions[o + 1], t.positions[o + 2])).toBeCloseTo(0.01, 9)
+    }
+  })
+
+  it('is a closed surface: every ring joined, both ends capped', () => {
+    const radial = 8
+    const t = tubeFromPolyline(straight, 0.01, radial)
+    // 2 rings + 2 cap centres
+    expect(t.positions.length / 3).toBe(2 * radial + 2)
+    // (rings−1) quads + 2 cap fans
+    expect(t.indices.length).toBe(1 * radial * 6 + radial * 6)
+    expect(Math.max(...t.indices)).toBeLessThan(t.positions.length / 3)
+  })
+
+  it('carries a unit normal at every vertex, and no NaN anywhere', () => {
+    const bent: Vec3[] = [[0, 0, 0], [1, 0, 0], [1, 1, 0], [1, 1, 1]]
+    const t = tubeFromPolyline(bent, 0.012, 8)
+    expect([...t.positions].every(Number.isFinite)).toBe(true)
+    const rings = t.positions.length / 3 - 2
+    for (let v = 0; v < rings; v++) {
+      const o = v * 3
+      expect(Math.hypot(t.normals[o], t.normals[o + 1], t.normals[o + 2])).toBeCloseTo(1, 6)
+    }
+  })
+
+  it('does not twist about its own axis through a bend', () => {
+    // Frenet frames flip through 180° at an inflection and are undefined on a
+    // straight, which is most of a bar; parallel transport is why the ring
+    // stays put. A twist shows up as the frame rotating relative to the bend.
+    const s: Vec3[] = [[0, 0, 0], [1, 0, 0], [1, 1, 0], [2, 1, 0], [2, 2, 0]]
+    const t = tubeFromPolyline(s, 0.01, 4)
+    // the tie is planar in z, so vertex 0 of every ring must stay off-plane by
+    // the same amount — a twist would swing it into the plane and back
+    const z0 = t.positions[2]
+    for (let i = 0; i < s.length; i++) {
+      expect(Math.abs(t.positions[i * 4 * 3 + 2])).toBeCloseTo(Math.abs(z0), 6)
+    }
+  })
+
+  it('ignores repeated points and refuses degenerate input', () => {
+    const dup: Vec3[] = [[0, 0, 0], [0, 0, 0], [1, 0, 0]]
+    expect(tubeFromPolyline(dup, 0.01, 6).positions.length / 3).toBe(2 * 6 + 2)
+    expect(tubeFromPolyline([[0, 0, 0]], 0.01, 6).indices.length).toBe(0)
+    expect(tubeFromPolyline(straight, 0, 6).indices.length).toBe(0)
+    expect(tubeFromPolyline(straight, 0.01, 2).indices.length).toBe(0)
   })
 })

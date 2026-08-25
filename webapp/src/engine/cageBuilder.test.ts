@@ -50,7 +50,7 @@ describe('buildStructureCages', () => {
     expect(Math.max(...ys)).toBeLessThan(y + 0.5 / 2 + 1e-6)
   })
 
-  it('stands a column cage on its own plan position, between its node levels', () => {
+  it('stands a column cage on its own plan position, and starts at its base', () => {
     const c = design.columns[0]
     const mem = memOf(c.id), ni = nodeOf(mem.i), nj = nodeOf(mem.j)
     const cage = cages.find((x) => x.member === c.id)!
@@ -62,7 +62,35 @@ describe('buildStructureCages', () => {
     }
     const ys = verts.flatMap((r) => r.path.map((p) => p[1]))
     expect(Math.min(...ys)).toBeCloseTo(Math.min(ni.y, nj.y), 6)
-    expect(Math.max(...ys)).toBeCloseTo(Math.max(ni.y, nj.y), 6)
+  })
+
+  it('runs the verticals PAST the top node where a column carries on, and not where it does not', () => {
+    // A column bar does not stop at the floor — the storey above laps onto it
+    // (§25.5.5), so the cage has to project that lap or it claims a splice with
+    // nowhere to happen. At a roof there is nothing to lap and it stops.
+    const yOf = (id: string) => {
+      const m = memOf(id)
+      return { lo: Math.min(nodeOf(m.i).y, nodeOf(m.j).y), hi: Math.max(nodeOf(m.i).y, nodeOf(m.j).y) }
+    }
+    const topOf = (id: string) => {
+      const verts = cages.find((x) => x.member === id)!.runs.filter((r) => r.role === 'vertical')
+      return Math.max(...verts.flatMap((r) => r.path.map((p) => p[1])))
+    }
+    const carriesOnAbove = (id: string) => {
+      const m = memOf(id), hi = yOf(id).hi
+      const node = nodeOf(m.i).y >= nodeOf(m.j).y ? m.i : m.j
+      return model.members.some((o) => o.role === 'column' && o.id !== id
+        && (o.i === node || o.j === node)
+        && Math.max(nodeOf(o.i).y, nodeOf(o.j).y) > hi + 1e-6)
+    }
+    let spliced = 0, capped = 0
+    for (const c of design.columns) {
+      const { hi } = yOf(c.id)
+      if (carriesOnAbove(c.id)) { expect(topOf(c.id)).toBeGreaterThan(hi + 0.29); spliced++ }
+      else { expect(topOf(c.id)).toBeCloseTo(hi, 6); capped++ }
+    }
+    expect(capped).toBeGreaterThan(0)          // the model does have roof columns
+    expect(spliced + capped).toBe(design.columns.length)
   })
 
   it('hooks a beam end exactly where the model has nothing carrying on', () => {
