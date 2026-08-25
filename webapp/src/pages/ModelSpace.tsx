@@ -134,12 +134,14 @@ const loadFromShear = (xs: number[], Vy: number[]): number[] =>
   })
 
 // ── 3D primitives ─────────────────────────────────────────────────────────
-function Member3D({ a, b, role, selected, tint = 0, sec, onPick }: {
+function Member3D({ a, b, role, selected, tint = 0, sec, ghost = false, onPick }: {
   a: THREE.Vector3; b: THREE.Vector3; role: string; selected: boolean
   /** 0–1 utilisation tint (|M| relative to the model max) after analysis. */
   tint?: number
   /** the member's own section, drawn to scale (mm → m). */
   sec?: { b: number; h: number; material?: string }
+  /** Draw the concrete see-through, so the cage inside it is visible. */
+  ghost?: boolean
   onPick: () => void
 }) {
   const { mid, quat, len } = useMemo(() => {
@@ -160,7 +162,11 @@ function Member3D({ a, b, role, selected, tint = 0, sec, onPick }: {
     <mesh position={mid} quaternion={quat}
       onClick={(e) => { e.stopPropagation(); onPick() }}>
       <boxGeometry args={[len, ty, tz]} />
-      <meshStandardMaterial color={color} />
+      {/* Ghosted while the cages are shown — solid concrete hides the steel
+          inside it, which made "show reinforcement cages" look like it did
+          nothing at all. `depthWrite` off so the bars behind still draw. */}
+      <meshStandardMaterial color={color} transparent={ghost} opacity={ghost ? 0.18 : 1}
+        depthWrite={!ghost} />
     </mesh>
   )
 }
@@ -478,13 +484,29 @@ function GridBubbles3D({ model }: { model: StructuralModel }) {
  *  footprints are visible. bx/bz = plan dimensions (m), dc = depth (m), angle =
  *  plan rotation about Y (combined footings follow the column axis). Overlapping
  *  footings are tinted red. */
-function Footing3D({ cx, cz, bx, bz, dc, angle = 0, overlap = false, label }: {
-  cx: number; cz: number; bx: number; bz: number; dc: number; angle?: number; overlap?: boolean; label?: string
+function Footing3D({ cx, cz, bx, bz, bz1, bz2, dc, angle = 0, overlap = false, label }: {
+  cx: number; cz: number; bx: number; bz: number; bz1?: number; bz2?: number
+  dc: number; angle?: number; overlap?: boolean; label?: string
 }) {
+  // A tapered pad is drawn tapered. Boxing it on the mean width puts the plan
+  // edge in the wrong place at BOTH ends — which is the whole difference
+  // between a trapezoidal footing and a rectangular one.
+  const w1 = bz1 ?? bz, w2 = bz2 ?? bz
+  const geom = useMemo(() => {
+    if (Math.abs(w1 - w2) < 1e-6) return null
+    const sh = new THREE.Shape()
+    sh.moveTo(-bx / 2, -w1 / 2); sh.lineTo(-bx / 2, w1 / 2)
+    sh.lineTo(bx / 2, w2 / 2); sh.lineTo(bx / 2, -w2 / 2); sh.closePath()
+    const g = new THREE.ExtrudeGeometry(sh, { depth: dc, bevelEnabled: false })
+    // extruded along +Z, so stand it up and centre it on the pad's own depth
+    g.rotateX(-Math.PI / 2)
+    g.translate(0, dc / 2, 0)
+    return g
+  }, [bx, w1, w2, dc])
   return (
     <group position={[cx, -dc / 2, cz]} rotation={[0, -angle, 0]}>
-      <mesh>
-        <boxGeometry args={[bx, dc, bz]} />
+      <mesh geometry={geom ?? undefined}>
+        {!geom && <boxGeometry args={[bx, dc, bz]} />}
         <meshStandardMaterial color={overlap ? '#dc2626' : '#b45309'} transparent opacity={overlap ? 0.6 : 0.45} />
       </mesh>
       {label && (
@@ -2133,7 +2155,7 @@ export default function ModelSpace() {
                     ? <MemberSteel3D a={aV} b={bV} role={m.role} shapeName={sec.shape} axisRotation={m.axisRotation}
                         tint={tint * 0.85} selected={m.id === selected} onPick={() => setSelected(m.id)} />
                     : <Member3D a={aV} b={bV} role={m.role} tint={tint * 0.85}
-                        sec={sec} selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                        sec={sec} ghost={showRebar} selected={m.id === selected} onPick={() => setSelected(m.id)} />
                   return (
                     <group key={m.id}>
                       {memberEl}
@@ -2160,11 +2182,16 @@ export default function ModelSpace() {
                   const xz = new Map([...nodePos].map(([id, p]) => [id, { x: p.x, z: p.z }]))
                   const { items, overlaps } = footingLayout(
                     design.footings.map((f) => ({ node: f.node, B: f.design.B, Dc: f.design.Dc })),
-                    design.combined.map((cf) => ({ nodes: cf.nodes, Bx: cf.design.Bx, By: cf.design.By, Dc: cf.design.Dc, trapezoid: cf.design.shape.startsWith('Trap') })),
+                    design.combined.map((cf) => ({
+                      nodes: cf.nodes, Bx: cf.design.Bx,
+                      By1: cf.design.By1, By2: cf.design.By2, x1: cf.design.x1,
+                      Dc: cf.design.Dc,
+                    })),
                     xz,
                   )
                   return <group>{items.map((f) => (
-                    <Footing3D key={f.key} cx={f.cx} cz={f.cz} bx={f.bx} bz={f.bz} dc={f.dc} angle={f.angle} overlap={overlaps.has(f.key)} label={f.label} />
+                    <Footing3D key={f.key} cx={f.cx} cz={f.cz} bx={f.bx} bz={f.bz} bz1={f.bz1} bz2={f.bz2}
+                      dc={f.dc} angle={f.angle} overlap={overlaps.has(f.key)} label={f.label} />
                   ))}</group>
                 })()}
                 {(model.walls ?? []).map((w) => {
@@ -2243,6 +2270,7 @@ export default function ModelSpace() {
               disabled={!design} />
             Show reinforcement cages
             {!design && <span className="text-slate-400">— design the structure first</span>}
+            {showRebar && <span className="text-slate-400">— concrete shown see-through</span>}
             {showRebar && rebarCages.length > 0 && (
               <span className="ml-2 flex flex-wrap gap-x-2 gap-y-0.5">
                 {([['top', 'top'], ['bottom', 'bottom'], ['stirrup', 'stirrups'], ['vertical', 'col. verticals'], ['tie', 'ties']] as const).map(([role, label]) => (

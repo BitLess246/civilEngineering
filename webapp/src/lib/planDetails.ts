@@ -211,6 +211,19 @@ export function beamDetailBundles(model: StructuralModel, design: StructureDesig
     return col ? (secById.get(col.section) as RectSection | undefined) : undefined
   }
 
+  /**
+   * The column design at a node — what the beam sheet needs to draw the steel
+   * its bars hook into, rather than an empty rectangle.
+   *
+   * Without this the `columnCage` input is simply never supplied, so the column
+   * cage the sheet knows how to draw never appears in the app: the feature is
+   * built, tested and unreachable.
+   */
+  const colDesignAt = (node: string) => {
+    const col = model.members.find((m) => m.role === 'column' && (m.i === node || m.j === node))
+    return col ? design.columns.find((c) => c.id === col.id) : undefined
+  }
+
   /** Supporting column width at a node, mm — how much joint the sheet draws. */
   const colWidthAt = (node: string): number | undefined => {
     const sec = colSectionAt(node)
@@ -277,6 +290,10 @@ export function beamDetailBundles(model: StructuralModel, design: StructureDesig
         sections: r.sections.map((s) => ({
           label: s.label, x: s.x, hogging: s.hogging,
           bars: s.design.bars, stirrupSpacing: s.design.sAdopt,
+          // Compression steel the analysis actually counted. Supplied, the
+          // sheet says that face is A's; omitted, it says the two bars there
+          // are stirrup hangers taking no part in the design.
+          compressionBars: (s.design as { comprBars?: number }).comprBars ?? 0,
         })),
         adjacentTopLeft: worstTop.get(mem.section),
         adjacentTopRight: worstTop.get(mem.section),
@@ -285,6 +302,17 @@ export function beamDetailBundles(model: StructuralModel, design: StructureDesig
         continuousRight: continuesPast(mem.id, mem.j, mem.i),
         cover: sec.cover,
         hookAnchorage: hookAnchorageAt(colSectionAt(mem.i) ?? colSectionAt(mem.j)),
+        columnCage: (() => {
+          const cd = colDesignAt(mem.i) ?? colDesignAt(mem.j)
+          if (!cd) return undefined
+          return {
+            bars: cd.bars,
+            sConfined: cd.tieSpacingFinal > 0 ? cd.tieSpacingFinal : cd.tieSpacing,
+            sOutside: cd.seismicSOut ?? cd.tieSpacing,
+            lo: cd.seismicLoZone ?? 0,
+            storey: cd.L,
+          }
+        })(),
       },
     })
   }
