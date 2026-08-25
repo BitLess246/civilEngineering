@@ -5,6 +5,8 @@ import { BRAND_MARK, BRAND_TAIL } from '../lib/brand'
 import { SIDEBAR_GROUPS, ALL_TOOLS } from '../lib/tools'
 import { CommandPalette } from '../components/CommandPalette'
 import { usePaletteHotkey } from '../lib/usePaletteHotkey'
+import { PipelineDiagram } from '../components/PipelineDiagram'
+import { WorkedSolutionPreview } from '../components/WorkedSolutionPreview'
 
 // Home — search-first tool directory on the drawing-sheet workbench theme
 // (docs/design/uiux-2026-07/Redesign - Home): dark hero with drafting grid,
@@ -85,6 +87,48 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
                 className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-semibold text-[#b6c2d0] hover:border-[#5b9bd5] hover:bg-[#0f4c92]/35 hover:text-white">{c}</Link>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ── What the app does, in three registers ───────────────────────────
+          This replaced a 5.6 MB screen recording. The video's caption was doing
+          the real work — explaining the SEQUENCE — so the caption became a
+          diagram, the claim it made became a real worked solution, and the
+          "watch me use it" became an invitation to use it. Under 10 KB, no
+          playback, and it reads on mobile data. */}
+      <section className="mx-auto max-w-[1200px] px-6 pt-9">
+        <h2 className="text-[19px] font-extrabold tracking-tight">Model to signed report, in one place</h2>
+        <p className="mt-1.5 max-w-[760px] text-[13.5px] leading-relaxed text-[#5c6675]">
+          Generate the geometry, build the NSCP §208 seismic and §207B wind cases, analyse,
+          design every member, then take the schedules, the quantities and the report out the
+          other end.
+        </p>
+        <div className="mt-5">
+          <PipelineDiagram />
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-[1200px] px-6 pt-10">
+        <div className="mb-3.5 flex items-baseline gap-3.5">
+          <h2 className="text-[19px] font-extrabold tracking-tight">Every number, defensible</h2>
+          <span className="font-mono text-[11px] text-[#a39d8d]">one schedule row, opened</span>
+        </div>
+        <WorkedSolutionPreview />
+      </section>
+
+      <section className="mx-auto max-w-[1200px] px-6 pt-10">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-lg border border-[#e3e1da] bg-[#f7f5ef] px-6 py-5">
+          <div className="min-w-[260px] flex-1">
+            <h2 className="text-[17px] font-extrabold tracking-tight">Rather than watch a demo, run one</h2>
+            <p className="mt-1 text-[13px] leading-relaxed text-[#5c6675]">
+              The workbench walks you through it — a guided pass over geometry, loading, analysis
+              and design, on a model it builds for you and clears afterwards.
+            </p>
+          </div>
+          <Link to="/model?tour=1"
+            className="whitespace-nowrap rounded-lg bg-[#0f4c92] px-5 py-3 text-sm font-bold text-white hover:bg-[#135caf]">
+            Run the guided walkthrough
+          </Link>
         </div>
       </section>
 
