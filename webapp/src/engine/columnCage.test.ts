@@ -213,6 +213,33 @@ describe('buildColumnCage', () => {
   })
 })
 
+describe('a tie SET is a stack, not a plane', () => {
+  const cage = buildColumnCage(col)
+
+  it('lays every tie at a level a diameter above the last', () => {
+    // The hoop and its supplementary ties are separate bars resting on one
+    // another. Placed at one y they occupied the same steel at every shared
+    // corner — four bars in one bar's space.
+    const level = tieLevels(col)[0]
+    const set = cage.runs.filter((r) => r.role === 'tie' && Math.abs(r.path[0][1] - level) < 0.05)
+    const ys = [...new Set(set.map((r) => Math.round(r.path[0][1] * 1e6) / 1e6))].sort((a, b) => a - b)
+    expect(ys).toHaveLength(set.length)
+    for (let k = 1; k < ys.length; k++) expect(ys[k] - ys[k - 1]).toBeCloseTo(col.tieDia / 1000, 9)
+  })
+
+  it('centres the stack on the level, so the SPACING is set-to-set', () => {
+    // `sConfined` on a schedule is the pitch of the sets. Stacking upwards from
+    // the level would have quietly shortened every gap by the stack's height.
+    const levels = tieLevels(col)
+    for (const level of levels) {
+      const set = cage.runs.filter((r) => r.role === 'tie' && Math.abs(r.path[0][1] - level) < 0.05)
+      const ys = set.map((r) => r.path[0][1])
+      const mid = (Math.min(...ys) + Math.max(...ys)) / 2
+      expect(mid).toBeCloseTo(level, 9)
+    }
+  })
+})
+
 describe('lap splice into the storey above — §25.5.5 / §10.7.4.1', () => {
   const base = {
     mark: 'C1', b: 400, h: 400, cover: 40, barDia: 20, bars: 8, tieDia: 10,

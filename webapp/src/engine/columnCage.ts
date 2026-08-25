@@ -250,7 +250,19 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
   // §425.7.2.3 / §418.7.5.2 — what the bars themselves ask for beyond the hoop.
   const extra = supplementaryTies(perimeterBars(i), i.barDia)
 
+  // ── one SET of ties, stacked ────────────────────────────────────────────
+  //
+  // The hoop and every supplementary tie at a level are separate bars laid on
+  // top of one another, not co-planar: each rests on the last, a diameter
+  // apart. Drawn all at the same y they interpenetrated at every shared corner
+  // — four bars occupying one bar's space. The stack is centred on the level,
+  // so `sConfined` / `sOutside` stay centre-of-set to centre-of-set, which is
+  // what a spacing on a schedule means.
+  const setSize = 1 + extra.ties.length
+  const stackAt = (j: number) => ((j - (setSize - 1) / 2) * i.tieDia) / 1000
+
   tieLevels(i).forEach((y, k) => {
+    const yh = y + stackAt(0)
     runs.push({
       mark: `${i.mark}-T${k + 1}`,
       dia: i.tieDia,
@@ -260,7 +272,7 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
       // Stacked in one corner every hook in the column lands on the same two
       // bars, and the splitting they resist is left unrestrained everywhere
       // else. Rotating the loop's start rotates the corner they meet at.
-      path: rotateLoop(hoop, k).map(([x, , z]) => [x, y, z] as Vec3),
+      path: rotateLoop(hoop, k).map(([x, , z]) => [x, yh, z] as Vec3),
       bendDia: [D, D, D, D],
       closed: true,
       wrapDia: i.barDia,
@@ -273,7 +285,8 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
       // bars — pushing its ends outward to wrap them put the ends, and the
       // hooks beyond them, outside the hoop and through the cover.
       const plan = t.closed ? wrapCorners(t.corners, R) : t.corners
-      const pts = plan.map(([dx, dz]) => [cx + dx / 1000, y, cz + dz / 1000] as Vec3)
+      const yj = y + stackAt(j + 1)
+      const pts = plan.map(([dx, dz]) => [cx + dx / 1000, yj, cz + dz / 1000] as Vec3)
       runs.push({
         mark: `${i.mark}-${t.kind === 'cross' ? 'X' : t.kind === 'diamond' ? 'D' : 'I'}${k + 1}.${j + 1}`,
         dia: i.tieDia,
