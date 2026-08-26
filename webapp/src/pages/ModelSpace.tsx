@@ -135,6 +135,24 @@ const loadFromShear = (xs: number[], Vy: number[]): number[] =>
   })
 
 // ── 3D primitives ─────────────────────────────────────────────────────────
+/**
+ * How far below the node line a member's concrete (or steel section) hangs, m.
+ *
+ * A floor level is the TOP of the beams framing into it: the column below stops
+ * there, the column above starts there, and the beam hangs under the joint.
+ * Drawn centred on the node the beam straddled that interface — half of every
+ * beam ran up through the column starting at the same node — and the cages,
+ * which are built off the soffit, no longer sat inside their own concrete.
+ *
+ * Horizontal members only: a column's node line IS its axis, and a sloping
+ * member has no single level to hang from.
+ */
+const HANGS_BELOW_NODE = new Set(['beam', 'girder'])
+function levelDrop(role: string, depth: number, a: THREE.Vector3, b: THREE.Vector3): number {
+  if (!HANGS_BELOW_NODE.has(role) || Math.abs(a.y - b.y) > 1e-6) return 0
+  return depth / 2
+}
+
 function Member3D({ a, b, role, selected, tint = 0, sec, ghost = false, onPick }: {
   a: THREE.Vector3; b: THREE.Vector3; role: string; selected: boolean
   /** 0–1 utilisation tint (|M| relative to the model max) after analysis. */
@@ -153,6 +171,8 @@ function Member3D({ a, b, role, selected, tint = 0, sec, ghost = false, onPick }
   }, [a, b])
   const ty = sec ? sec.h / 1000 : role === 'column' ? 0.3 : 0.22
   const tz = sec ? sec.b / 1000 : role === 'column' ? 0.3 : 0.22
+  // the node is the top of a beam, not its centroid — see levelDrop
+  const drop = levelDrop(role, ty, a, b)
   const color = useMemo(() => {
     if (selected) return SEL
     const base = new THREE.Color(ROLE_COLOR[role] ?? '#64748b')
@@ -160,7 +180,7 @@ function Member3D({ a, b, role, selected, tint = 0, sec, ghost = false, onPick }
     return tint > 0 ? `#${base.lerp(new THREE.Color('#dc2626'), tint).getHexString()}` : `#${base.getHexString()}`
   }, [selected, role, tint, sec?.material])
   return (
-    <mesh position={mid} quaternion={quat}
+    <mesh position={[mid.x, mid.y - drop, mid.z]} quaternion={quat}
       onClick={(e) => { e.stopPropagation(); onPick() }}>
       <boxGeometry args={[len, ty, tz]} />
       {/* Ghosted while the cages are shown — solid concrete hides the steel
@@ -248,7 +268,11 @@ function MemberSteel3D({ a, b, role, shapeName, selected, tint = 0, axisRotation
     const d0 = role === 'column' ? 90 : 0
     const extra = (axisRotation ?? d0) - d0
     if (extra) quat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), (-extra * Math.PI) / 180))
-    return { shapes, quat, pos: a.clone(), len }
+    // a beam's node line is its TOP, so the section hangs below it — see levelDrop
+    const d = shape ? (effectiveSection(shape, false).base.d ?? 0) / 1000 : 0
+    const pos = a.clone()
+    pos.y -= levelDrop(role, d, a, b)
+    return { shapes, quat, pos, len }
   }, [a, b, shapeName, role, axisRotation])
 
   const color = useMemo(() => {

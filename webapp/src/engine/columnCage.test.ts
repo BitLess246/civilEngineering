@@ -374,3 +374,56 @@ describe('lap splice into the storey above — §25.5.5 / §10.7.4.1', () => {
     }
   })
 })
+
+describe('a column that REDUCES cranks its bars to meet the ones above', () => {
+  const lap = 600
+  /** How far in a bar stands from the centreline, mm. */
+  const inset = (h: number, cover = 40, tie = 12, bar = 20) => h / 2 - (cover + tie + bar / 2)
+
+  it('cranks by the difference in bar line, not by a fixed diameter', () => {
+    // 600 deep reducing to 500: the bar above stands 50 mm further in, so the
+    // bar below has to move 50 — not the 20 it moves when nothing changes.
+    const cage = buildColumnCage({ ...col, spliceLap: lap, above: { b: col.b, h: 500 } })
+    const v = cage.runs.filter((r) => r.role === 'vertical')
+    const onFace = v.filter((r) => Math.abs(Math.abs(r.path[0][0]) - inset(col.h) / 1000) < 1e-9)
+    expect(onFace.length).toBeGreaterThan(0)
+    for (const r of onFace) {
+      const start = r.path[0][0], top = r.path[r.path.length - 1][0]
+      expect(Math.abs(start) - Math.abs(top)).toBeCloseTo(inset(600) / 1000 - inset(500) / 1000, 9)
+      expect(Math.abs(top)).toBeCloseTo(inset(500) / 1000, 9)     // …lands ON the upper bar
+    }
+  })
+
+  it('still steps a diameter clear where the column does NOT change', () => {
+    const cage = buildColumnCage({ ...col, spliceLap: lap })
+    const r = cage.runs.find((x) => x.role === 'vertical'
+      && Math.abs(Math.abs(x.path[0][0]) - inset(col.h) / 1000) < 1e-9)!
+    const start = r.path[0][0], top = r.path[r.path.length - 1][0]
+    expect(Math.abs(start) - Math.abs(top)).toBeCloseTo(col.barDia / 1000, 9)
+  })
+
+  it('holds the 1-in-6 slope however far the bar has to move (§410.7.4.1)', () => {
+    const cage = buildColumnCage({ ...col, spliceLap: lap, above: { b: col.b, h: 500 } })
+    for (const r of cage.runs.filter((x) => x.role === 'vertical')) {
+      // the crank is the segment where x or z changes
+      for (let k = 1; k < r.path.length; k++) {
+        const dx = r.path[k][0] - r.path[k - 1][0], dz = r.path[k][2] - r.path[k - 1][2]
+        const dy = r.path[k][1] - r.path[k - 1][1]
+        const across = Math.hypot(dx, dz)
+        if (across < 1e-9) continue
+        expect(dy / across).toBeGreaterThanOrEqual(OFFSET_BEND_SLOPE - 1e-6)
+      }
+    }
+  })
+
+  it('refuses the bend §410.7.4.5 forbids, and says to dowel instead', () => {
+    // 600 → 400 moves a bar 100 mm, past the 75 mm limit.
+    const cage = buildColumnCage({ ...col, spliceLap: lap, above: { b: col.b, h: 400 } })
+    expect((cage.notes ?? []).some((n) => /may not be bent/.test(n))).toBe(true)
+    for (const r of cage.runs.filter((x) => x.role === 'vertical')) {
+      // straight to the top: no crank drawn that nobody may make
+      const xs = new Set(r.path.map((p) => Math.round(p[0] * 1e6)))
+      expect(xs.size).toBe(1)
+    }
+  })
+})

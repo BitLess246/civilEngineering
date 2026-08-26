@@ -65,8 +65,19 @@ export interface ColumnCageInput {
    */
   spliceLap?: number
   /**
-   * How far a column that STOPS here carries its bars above `yTop` before
-   * turning them in, m — and so where the hook's horizontal leg sits.
+   * The column ABOVE, where it is not the same size — its plan dimensions and
+   * cover/bar/tie, mm. The projecting bar is cranked to meet the bar it laps
+   * onto, not merely a diameter inboard.
+   *
+   * A reduction in column size is the ordinary case that needs this: the bar
+   * above stands further in, and the bar below has to reach it. Cranked by a
+   * fixed diameter the two never met, and the drawing showed a lap between
+   * bars in different places.
+   */
+  above?: { b: number; h: number; cover?: number; barDia?: number; tieDia?: number }
+  /**
+   * Where a column that STOPS here turns its bars in, m relative to `yTop` —
+   * negative to turn them in below it, which is where the beam's top steel is.
    *
    * A roof column laps onto nothing, and its verticals were drawn simply
    * ending at the top of the member. A bar that stops is not anchored:
@@ -82,6 +93,10 @@ export interface ColumnCageInput {
 /** ACI 318-14 §10.7.4.1 — the inclined part of an offset bend may not be
  *  steeper than 1 in 6, so the crank runs six diameters for one across. */
 export const OFFSET_BEND_SLOPE = 6
+
+/** §410.7.4.5 — past this offset the bar may not be bent at all: the column
+ *  above is dowelled instead, and the dowels lap with the bars below. mm. */
+export const OFFSET_DOWEL_LIMIT = 75
 
 /** Table 425.3.1 — straight extension beyond a standard 90° hook, in bar Ø. */
 export const HOOK_EXTENSION = 12
@@ -226,6 +241,13 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
   // nowhere to happen.
   const ins = barInset(i.cover, i.tieDia, i.barDia)
   const xhF = Math.max(0, i.h / 2 - ins), zbF = Math.max(0, i.b / 2 - ins)
+  // Where the bars of the column ABOVE stand. Same size unless told otherwise.
+  const up = i.above
+  const upIns = up
+    ? barInset(up.cover ?? i.cover, up.tieDia ?? i.tieDia, up.barDia ?? i.barDia)
+    : ins
+  const upXhF = up ? Math.max(0, up.h / 2 - upIns) : xhF
+  const upZbF = up ? Math.max(0, up.b / 2 - upIns) : zbF
   const lap = Math.max(0, i.spliceLap ?? 0) / 1000
   const onFace = (v: number, face: number) => face > 0 && Math.abs(Math.abs(v) - face) < 1e-6
 
@@ -233,15 +255,34 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
     const x = cx + dx / 1000, z = cz + dz / 1000
     const path: Vec3[] = [[x, y0, z]]
     const bendDia: number[] = []
-    // A bar is cranked only on the faces it actually sits against: a corner bar
-    // moves in on both axes, a mid-face bar only off its own face.
-    const ox = onFace(dx, xhF) ? (-Math.sign(dx) * i.barDia) / 1000 : 0
-    const oz = onFace(dz, zbF) ? (-Math.sign(dz) * i.barDia) / 1000 : 0
+    // How far the bar has to move to meet the one it laps onto.
+    //
+    // Where the column above is the same size that is one diameter, to stand
+    // clear of it. Where the column above is SMALLER the bar has to reach all
+    // the way in to the upper bar's own line, which is what makes the crank on
+    // a size reduction the shape it is — and what a fixed one-diameter offset
+    // never drew.
+    const step = (v: number, face: number, upFace: number) => {
+      if (!onFace(v, face)) return 0
+      const target = Math.min(Math.abs(v), upFace)          // the bar above
+      return (-Math.sign(v) * Math.max(i.barDia, Math.abs(v) - target)) / 1000
+    }
+    const ox = step(dx, xhF, upXhF)
+    const oz = step(dz, zbF, upZbF)
     // 1 in 6 applies to the BAR, so the run is six times the resultant offset.
     // Six diameters per axis would put a corner bar — which moves in on both —
     // on a 1-in-4.2 slope, steeper than §10.7.4.1 permits.
     const crankRun = OFFSET_BEND_SLOPE * Math.hypot(ox, oz)
-    if (lap > 0 && crankRun > 0 && y1 - y0 > crankRun && (ox !== 0 || oz !== 0)) {
+    // §410.7.4.5 — past 75 mm the bar may not be bent to reach the one above;
+    // the column above is dowelled and the dowels lap with these bars. The
+    // cage says so rather than drawing a bend nobody is allowed to make.
+    const offsetMm = Math.hypot(ox, oz) * 1000
+    if (offsetMm > OFFSET_DOWEL_LIMIT + 1e-9) {
+      if (!notes.some((n) => n.includes('may not be bent'))) {
+        notes.push(`the column reduces by more than the bars can be cranked — a ${Math.round(offsetMm)} mm offset, past the ${OFFSET_DOWEL_LIMIT} mm of §410.7.4.5, so the bars may not be bent; dowel the column above and lap the dowels with these bars`)
+      }
+      path.push([x, y1 + lap, z])
+    } else if (lap > 0 && crankRun > 0 && y1 - y0 > crankRun && (ox !== 0 || oz !== 0)) {
       const D = hookBendDiameter(i.barDia)
       path.push([x, y1 - crankRun, z], [x + ox, y1, z + oz], [x + ox, y1 + lap, z + oz])
       bendDia.push(D, D)
@@ -251,7 +292,9 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
       // 90° in under the beam's top steel and runs its extension across, which
       // is what makes the joint close: the column bar hooks over the beam's
       // bars and the beam's bars hook down past the column's.
-      const yh = y1 + Math.max(0, i.topHookRise)
+      // Not clamped to zero: the node is the TOP of the beam, so the hook
+      // turns in BELOW it, under the beam's own top steel.
+      const yh = y1 + i.topHookRise
       // Inward, along whichever axis leaves the most room: from where the bar
       // stands to the bar line on the far side. Turning along the axis the bar
       // sits FURTHEST out on looks right for a corner bar and is wrong for one

@@ -123,6 +123,26 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
   const columnAbove = (memberId: string, node: string) => columnBeyond(node, 1, memberId)
 
   /**
+   * The section of the column continuing ABOVE a node — what the projecting
+   * bars have to be cranked to meet.
+   *
+   * Where the storey above is smaller its bars stand further in, and a bar
+   * cranked by a fixed diameter never reaches them. Same size, this changes
+   * nothing.
+   */
+  const sectionAbove = (memberId: string, node: string): RectSection | undefined => {
+    const here = pos.get(node)
+    if (!here) return undefined
+    const up = model.members.find((m) => {
+      if (m.id === memberId || m.role !== 'column') return false
+      if (m.i !== node && m.j !== node) return false
+      const other = pos.get(m.i === node ? m.j : m.i)
+      return !!other && other.y > here.y + 1e-6
+    })
+    return up ? secOf(up.id) : undefined
+  }
+
+  /**
    * A transverse beam at a node, and which way it runs across `mem` — where a
    * bar with nowhere vertical to hook can turn instead.
    */
@@ -143,9 +163,10 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
   }
 
   /**
-   * How far above a node the top steel of the beams framing in sits, m, less
-   * half a column bar — where a roof column's hook has to run to pass UNDER
-   * that steel and hold it. The deepest beam decides.
+   * Where a roof column's hook has to run to pass UNDER the top steel of the
+   * beams framing in, m relative to the node — NEGATIVE, because the node is
+   * the top of the beam and that steel is just below it. The deepest beam
+   * decides.
    */
   const beamTopSteelRise = (node: string, colBarDia: number): number | undefined => {
     const list = beamsAtNode.get(node) ?? []
@@ -156,7 +177,10 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       if (!deep || bs.h > deep.h) deep = bs
     }
     if (!deep) return undefined
-    return Math.max(0, (deep.h / 2 - (deep.cover + deep.tieDia + deep.barDia + colBarDia / 2)) / 1000)
+    // The beam's top steel sits just under the node, which is the top of the
+    // beam; the column's hook has to go UNDER that steel, so the rise is
+    // negative — the bar turns in below the node, not above it.
+    return -(deep.cover + deep.tieDia + deep.barDia + colBarDia / 2) / 1000
   }
 
   /** Pedestal at a base node, m — the column between the node and the pad top. */
@@ -212,8 +236,12 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
         return c ? { colCover: c.cover, colTieDia: c.tieDia, colBarDia: c.barDia } : {}
       })(),
       axis: { x0: ni.x, z0: ni.z, x1: nj.x, z1: nj.z },
-      // the node sits at the section centroid, so the soffit is h/2 below it
-      ySoffit: ni.y - sec.h / 2000,
+      // THE NODE IS THE TOP OF THE BEAM.
+      //
+      // It used to be read as the beam's centroid, so half the beam was drawn
+      // above the node — through the column that starts there. A floor level is
+      // the top of the beam, the columns meet at it, and the beam hangs below.
+      ySoffit: ni.y - sec.h / 1000,
     }), beamSplice))
   }
 
@@ -254,13 +282,21 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       // own (§418.8.3). Only the top used to be cleared, so at every floor the
       // column starting there re-filled the band the column below had left
       // empty and the joint came out with both sets through it.
+      // The beam hangs BELOW its node, so the joint band is the depth under it.
       jointGaps: [
-        ...(jd > 0 ? [[yHi - jd / 2, yHi + jd / 2] as [number, number]] : []),
-        ...(baseJd > 0 ? [[yLo0 - baseJd / 2, yLo0 + baseJd / 2] as [number, number]] : []),
+        ...(jd > 0 ? [[yHi - jd, yHi] as [number, number]] : []),
+        ...(baseJd > 0 ? [[yLo0 - baseJd, yLo0] as [number, number]] : []),
       ],
       // Nothing above to lap onto: the bar develops itself instead, turning in
       // under the beam's top steel (§425.4.2 and the standard roof detail).
       topHookRise: lap > 0 ? undefined : beamTopSteelRise(topNode, sec.barDia),
+      // The bars above, so a reduction in column size cranks to meet them.
+      ...(() => {
+        const up = sectionAbove(c.id, topNode)
+        return up && (up.b !== sec.b || (up.h ?? up.b) !== (sec.h ?? sec.b))
+          ? { above: { b: up.b, h: up.h ?? up.b, cover: up.cover, barDia: up.barDia, tieDia: up.tieDia } }
+          : {}
+      })(),
       // A vertical is already lapped at the floor; a stock splice only appears
       // in a storey tall enough to need one, and belongs low, clear of the
       // hinge zone at the top.
