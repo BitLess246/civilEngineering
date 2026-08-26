@@ -1,5 +1,6 @@
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { scrollTop } from '../lib/useScrollTop'
+import { endDrops } from '../lib/baseDrop'
 import { Link } from 'react-router-dom'
 import { GuidedTour } from '../components/GuidedTour'
 import { TourButton } from '../components/TourButton'
@@ -2197,9 +2198,18 @@ export default function ModelSpace() {
                     // depth less the pad's own thickness below the base node.
                     // Drawn from the node, the column floated above a footing
                     // it never reached.
-                    const lower = a.y <= bb.y ? m.i : m.j
-                    const ped = pedestalAt.get(lower) ?? 0
-                    if (ped > 0) { const t = a.y <= bb.y ? aV : bV; t.y -= ped }
+                    //
+                    // CLONE FIRST. Where the column has no offset of its own,
+                    // `aV`/`bV` still ARE the `nodePos` vector — and `nodePos`
+                    // is memoised on the model, so it outlives the render.
+                    // Subtracting in place therefore sank the base a whole
+                    // pedestal on EVERY render: the supports crept downwards
+                    // each time the tab was switched, and the support symbol,
+                    // which reads the same map and subtracts the pedestal
+                    // again, followed them down twice as fast.
+                    const drops = endDrops(a.y, bb.y, pedestalAt.get(m.i) ?? 0, pedestalAt.get(m.j) ?? 0)
+                    if (drops.i > 0) aV = aV.clone().setY(aV.y - drops.i)
+                    if (drops.j > 0) bV = bV.clone().setY(bV.y - drops.j)
                   } else {
                     aV = manI ? a.clone().add(v3(manI)) : (fo?.offI ? a.clone().add(v3(fo.offI)) : a)
                     bV = manJ ? bb.clone().add(v3(manJ)) : (fo?.offJ ? bb.clone().add(v3(fo.offJ)) : bb)
