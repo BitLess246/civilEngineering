@@ -158,7 +158,7 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
       key: `slab-opening-${slug(b.mark)}`, group: 'Slab opening details',
       title: `${b.mark} — ${w}×${h} opening`,
       subtitle: `${d.result.x.eachSide}-⌀${b.detail.barDia} + ${d.result.y.eachSide}-⌀${b.detail.barDia} ea. side`,
-      warnings: d.result.notes,
+      warnings: d.designNotes,
       drawing: d,
     })
   })
@@ -171,7 +171,7 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
       key: `beam-column-joint-${slug(b.mark)}`, group: 'Beam–column joint details',
       title: d.title,
       subtitle: `col ${b.detail.colB}×${b.detail.colH} · beam ${b.detail.beamB}×${b.detail.beamH} ⌀${b.detail.beamBarDia}`,
-      warnings: d.result.notes,
+      warnings: d.designNotes,
       drawing: d,
     })
   })

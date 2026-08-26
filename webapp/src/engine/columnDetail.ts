@@ -21,7 +21,8 @@
 // paints it. Units: geometry m; bar/column/tie sizes mm.
 // ─────────────────────────────────────────────────────────────────────────
 import type { PlanPrimitive, Drawing } from './planRenderer'
-import { SHEET_INK, SHEET_NOTE, SHEET_GRID, SHEET_ZONE, STEEL } from './sheetInk'
+import { SHEET_INK, SHEET_NOTE, SHEET_ZONE, STEEL } from './sheetInk'
+import { titleBlock } from './detailSheet'
 
 export interface ColumnDetailInput {
   /** Column mark (C1, C2 …). */
@@ -55,7 +56,7 @@ export interface ColumnDetailInput {
 export interface ColumnDetailOptions { detailNo?: string; sheetRef?: string; scale?: string }
 export interface ColumnDetailDrawing extends Drawing { title: string }
 
-const INK = SHEET_INK, REBAR = STEEL, GRID = SHEET_GRID, CONF = SHEET_ZONE, NOTE = SHEET_NOTE
+const INK = SHEET_INK, REBAR = STEEL, CONF = SHEET_ZONE, NOTE = SHEET_NOTE
 
 /**
  * Clear height ℓu and the two confinement zones, m.
@@ -208,23 +209,16 @@ export function buildColumnDetail(c: ColumnDetailInput, opts: ColumnDetailOption
   const title = `TYPICAL COLUMN DETAIL — ${c.mark}`
   const noteBot = -lu * 0.16 - (notes.length - 1) * lu * 0.055
   const sheetL = x0 - bM * 1.6, sheetR = x1 + bM * 3.4
-  const rad = bM * 0.30
-  const bx = sheetL + rad + bM * 0.1
-  const blockTop = noteBot - lu * 0.10
-  P.push({ kind: 'line', x1: sheetL, y1: Y(blockTop), x2: sheetR, y2: Y(blockTop), stroke: INK, width: 1.0 })
-  // AIA detail bubble: detail number over sheet reference, split by a diameter
-  const cy = blockTop - rad - bM * 0.12
-  P.push({ kind: 'circle', cx: bx, cy: Y(cy), r: rad, stroke: INK, fill: '#fff', width: 0.9 })
-  P.push({ kind: 'line', x1: bx - rad, y1: Y(cy), x2: bx + rad, y2: Y(cy), stroke: INK, width: 0.9 })
-  P.push({ kind: 'text', x: bx, y: Y(cy + rad * 0.48), text: opts.detailNo ?? '1', size: rad * 0.90, anchor: 'middle', color: INK, weight: 700 })
-  P.push({ kind: 'text', x: bx, y: Y(cy - rad * 0.52), text: opts.sheetRef ?? 'S-06', size: rad * 0.58, anchor: 'middle', color: INK, weight: 600 })
-  const tx = bx + rad + bM * 0.25
-  P.push({ kind: 'text', x: tx, y: Y(cy + rad * 0.30), text: title, size: rad * 0.78, anchor: 'start', color: INK, weight: 700 })
-  P.push({ kind: 'line', x1: tx, y1: Y(cy - rad * 0.10), x2: sheetR, y2: Y(cy - rad * 0.10), stroke: GRID, width: 0.6 })
-  P.push({ kind: 'text', x: tx, y: Y(cy - rad * 0.62), text: 'SCALE', size: rad * 0.58, anchor: 'start', color: NOTE, weight: 600 })
-  P.push({ kind: 'text', x: sheetR, y: Y(cy - rad * 0.62), text: opts.scale ?? 'NTS', size: rad * 0.58, anchor: 'end', color: NOTE, weight: 600 })
-  const blockBot = cy - rad - bM * 0.12
-  P.push({ kind: 'line', x1: sheetL, y1: Y(blockBot), x2: sheetR, y2: Y(blockBot), stroke: INK, width: 1.0 })
+  // The house block, the same one the framing and foundation plans draw: ONE
+  // rule, through the tag and on under the title. This sheet had grown its own
+  // — a rule above, a rule below, a hairline under the title, and a chord that
+  // stopped at the circle instead of being the rule itself.
+  const tb = titleBlock({
+    x: sheetL, w: sheetR - sheetL, top: Y(noteBot) + lu * 0.10,
+    u: (bM * 0.30) / 2.6, title,
+    detailNo: opts.detailNo, sheetRef: opts.sheetRef ?? 'S-06', scale: opts.scale,
+  })
+  P.push(...tb.prims)
 
   return {
     primitives: P,
@@ -233,7 +227,7 @@ export function buildColumnDetail(c: ColumnDetailInput, opts: ColumnDetailOption
       // The title no longer sits above the column, so the sheet stops reserving
       // a band of empty paper up there; it ends under the title block instead.
       minX: x0 - bM * 2.0, maxX: x1 + bM * 3.4,
-      minY: Y(lu + bd + lu * 0.12), maxY: Y(blockBot - lu * 0.05),
+      minY: Y(lu + bd + lu * 0.12), maxY: tb.bottom + lu * 0.05,
     },
   }
 }

@@ -132,6 +132,10 @@ const hoopsOf = (d: ReturnType<typeof buildBeamDetail>) =>
     && Math.abs(p.x1 - p.x2) < 1e-9) as { x1: number }[]).map((l) => l.x1).sort((a, c) => a - c)
 /** …only the ones in the SPAN. The joint hoops sit inside the columns, so a
  *  naive "first few hoops" window measures the gap across the support face. */
+/** Leader arrowheads: a closed, filled three-point path. */
+const arrowheadsOf = (d: { primitives: PlanPrimitive[] }) =>
+  d.primitives.filter((p) => p.kind === 'path' && p.closed === true && p.cmds.length === 3).length
+
 const spanHoopsOf = (d: ReturnType<typeof buildBeamDetail>, L: number, face: number) =>
   hoopsOf(d).filter((x) => x > face + 1e-9 && x < L - face - 1e-9)
 
@@ -383,13 +387,13 @@ describe('hoops and overlaps on a beam with no support design', () => {
     // bottom extra to overlap with. Banding it anyway claimed a lap against a
     // bar that is not on the sheet.
     const d2 = buildBeamDetail(ss)
+    // No band is drawn any more — there is no bar at mid-depth to draw — so
+    // what tells the reader is the note, and the arms it points with.
     expect(allTextOf(d2).join(' ')).not.toContain('OVERLAP')
-    const bands = d2.primitives.filter((p) => p.kind === 'line' && p.stroke === REBAR_INK && p.width === 3.4)
-    expect(bands).toHaveLength(0)
-    // …but a beam that HAS both bars still gets its band
+    // …and a beam that HAS both bars gets the note, with one arm per end
     const both = buildBeamDetail(b)
-    expect(both.primitives.filter((p) => p.kind === 'line' && p.stroke === REBAR_INK && p.width === 3.4).length)
-      .toBeGreaterThan(0)
+    expect(allTextOf(both).join(' ')).toContain('OVERLAP')
+    expect(arrowheadsOf(both)).toBeGreaterThanOrEqual(arrowheadsOf(d2) + 2)
   })
 })
 

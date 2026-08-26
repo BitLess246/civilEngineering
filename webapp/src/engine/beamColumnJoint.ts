@@ -334,7 +334,13 @@ export function designBeamColumnJoint(i: BeamColumnJointInput): BeamColumnJointR
 // ── the sheet ──────────────────────────────────────────────────────────────
 
 export interface JointDetailOptions { detailNo?: string; sheetRef?: string; scale?: string }
-export interface JointDetailDrawing extends Drawing { title: string; result: BeamColumnJointResult }
+export interface JointDetailDrawing extends Drawing {
+  title: string
+  result: BeamColumnJointResult
+  /** The checks, for the engineer. Not printed on the sheet — see `beamDetail`
+   *  for why a design result under a detail is a note nobody can act on. */
+  designNotes: string[]
+}
 
 const INK = SHEET_INK, REBAR = STEEL, GRID = SHEET_GRID, NOTE = SHEET_NOTE, WARN = SHEET_WARN
 const CONC = '#f1f5f9'
@@ -568,41 +574,50 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
   // ═══ notes and the title block, below both views ═════════════════════════
   const bodyBottom = py + cb + spanRun + u * 3.4
   const L = r.ldhInputs
+  // ── notes: what to BUILD in this joint ──────────────────────────────────
+  //
+  // Not how the joint was checked. Vu = T + C − Vcol, φVn and the Aj it was
+  // worked on are results: nobody tying steel can act on them, and where they
+  // fail the answer is to enlarge the joint, which is not a site decision.
+  // They go out as design notes, beside the drawing.
   const notes = [
-    // The free body, written out — not "Vu = 1.25fyAs", which is only the T term.
-    `JOINT SHEAR Vu = T + C − Vcol = ${Math.round(r.forces.T)} + ${Math.round(r.forces.C)} − ${Math.round(r.forces.Vcol)} = ${Math.round(r.Vu)} kN, BEAM STEEL AT 1.25fy (§418.8.2.1)`,
-    `φVn = ${Math.round(r.phiVn)} kN (γ = ${r.gamma.toFixed(1)}, φ = 0.85, Aj = bj·h = ${Math.round(r.bj)}×${Math.round(i.colH)} mm) — §418.8.4.3 / §421.2.4.3`,
-    // §418.8.2.3 only where bars actually pass through, per direction.
-    r.through.main.applies
-      ? `⌀${Math.round(r.through.main.dia)} BEAM BARS EXTEND THROUGH THE JOINT — §418.8.2.3 NEEDS ${Math.round(r.through.main.required)} OF COLUMN DEPTH PARALLEL TO THEM, PROVIDED ${Math.round(r.through.main.provided)}`
-      : `⌀${Math.round(i.beamBarDia)} BEAM BARS TERMINATE IN THE JOINT WITH STANDARD 90° HOOKS. §418.8.2.3's 20db JOINT-DEPTH RULE APPLIES TO REINFORCEMENT EXTENDING THROUGH THE JOINT, NOT TO TERMINATED HOOKED BARS — THEY ARE GOVERNED BY §418.8.2.2 AND §418.8.5`,
+    ...(r.through.main.applies
+      ? [`⌀${Math.round(r.through.main.dia)} BEAM BARS RUN CONTINUOUS THROUGH THE JOINT`]
+      : [`⌀${Math.round(i.beamBarDia)} BEAM BARS TERMINATE IN THE JOINT WITH STANDARD 90° HOOKS`]),
     ...(r.through.spandrel.applies
-      ? [`SPANDREL ⌀${Math.round(r.through.spandrel.dia)} BARS EXTEND THROUGH — §418.8.2.3 NEEDS ${Math.round(r.through.spandrel.required)} OF COLUMN WIDTH PARALLEL TO THEM, PROVIDED ${Math.round(r.through.spandrel.provided)}`]
-      : []),
-    // The anchorage notes belong only on a sheet that DRAWS terminated bars.
+      ? [`SPANDREL ⌀${Math.round(r.through.spandrel.dia)} BARS RUN CONTINUOUS THROUGH`] : []),
     ...(r.terminated
       ? [
-        `ℓdh = fy·db/(5.4λ√f'c) = ${L.fy}(${Math.round(L.db)}) / (5.4·${L.lambda.toFixed(2)}·√${L.fc}) = ${Math.round(r.ldh)}, TAIL 12db = ${Math.round(r.hookTail)} (§418.8.5.1 / §425.3.1)`,
-        `TERMINATED BARS EXTEND TO THE FAR FACE OF THE CONFINED CORE, ${Math.round(r.ldhClear)} CLEAR TO THE END OF THE HOOK (§418.8.2.2)`,
+        `TERMINATED BARS: ℓdh ${Math.round(r.ldh)}, TAIL 12db = ${Math.round(r.hookTail)}, TO THE FAR FACE OF THE CONFINED CORE WITH ${Math.round(r.ldhClear)} CLEAR TO THE END OF THE HOOK`,
       ]
-      : [`BEAM BARS RUN CONTINUOUS THROUGH THE JOINT — NO ANCHORAGE IS DEVELOPED IN IT`]),
+      : []),
     r.halvedHoops
-      ? `FOUR BEAMS FRAME IN, EACH ≥ ¾ THE COLUMN WIDTH — JOINT HOOPS MAY BE HALVED AT ≤ ${JOINT_HOOP_SPACING_MAX} (§418.8.3.2)`
-      : `COLUMN CONFINEMENT HOOPS CONTINUE THROUGH THE JOINT AT ${Math.round(r.jointHoopSpacing)} (§418.8.3.1)`,
-    ...r.notes.map((t) => `⚠ ${t.toUpperCase()}`),
+      ? `JOINT HOOPS @ ${JOINT_HOOP_SPACING_MAX} — FOUR BEAMS FRAME IN, EACH ≥ ¾ THE COLUMN WIDTH (§418.8.3.2)`
+      : `COLUMN CONFINEMENT HOOPS CONTINUE THROUGH THE JOINT @ ${Math.round(r.jointHoopSpacing)} (§418.8.3.1)`,
+    `JOINT HOOP SPLICES ARE MADE OUTSIDE THE JOINT`,
     seeGeneralNotes(),
   ]
+
+  /** The checks, for the engineer — not for the steel fixer. */
+  const designNotes: string[] = [
+    `${mark}: joint shear Vu = T + C − Vcol = ${Math.round(r.forces.T)} + ${Math.round(r.forces.C)} − ${Math.round(r.forces.Vcol)} = ${Math.round(r.Vu)} kN, beam steel at 1.25fy (§418.8.2.1)`,
+    `${mark}: φVn = ${Math.round(r.phiVn)} kN (γ = ${r.gamma.toFixed(1)}, φ = 0.85, Aj = bj·h = ${Math.round(r.bj)}×${Math.round(i.colH)} mm) — §418.8.4.3 / §421.2.4.3`,
+    ...(r.through.main.applies
+      ? [`${mark}: §418.8.2.3 needs ${Math.round(r.through.main.required)} of column depth parallel to the ⌀${Math.round(r.through.main.dia)} bars passing through; ${Math.round(r.through.main.provided)} provided`]
+      : [`${mark}: the terminated hooked bars are governed by §418.8.2.2 and §418.8.5, not by §418.8.2.3's 20db joint-depth rule, which applies to reinforcement extending THROUGH the joint`]),
+    ...(r.through.spandrel.applies
+      ? [`${mark}: §418.8.2.3 needs ${Math.round(r.through.spandrel.required)} of column width parallel to the spandrel bars; ${Math.round(r.through.spandrel.provided)} provided`] : []),
+    ...(r.terminated
+      ? [`${mark}: ℓdh = fy·db/(5.4λ√f'c) = ${L.fy}(${Math.round(L.db)}) / (5.4·${L.lambda.toFixed(2)}·√${L.fc}) = ${Math.round(r.ldh)}`] : []),
+    ...r.notes.map((t) => `${mark}: ${t}`),
+  ]
+
   const noteSize = u * 1.15
   const sheetW = Math.max(ch + beamRun, 1.6) + u * 10
   const step = u * 1.8
-  const plain = notes.filter((t) => !t.startsWith('⚠'))
-  const warn = notes.filter((t) => t.startsWith('⚠'))
-  const nb = notesBlock({ x: jx, w: sheetW, top: bodyBottom, size: noteSize, lines: plain, color: NOTE, step })
+  const nb = notesBlock({ x: jx, w: sheetW, top: bodyBottom, size: noteSize, lines: notes, color: NOTE, step })
   P.push(...nb.prims)
-  const wb = warn.length
-    ? notesBlock({ x: jx, w: sheetW, top: nb.bottom + step, size: noteSize, lines: warn, color: WARN, step })
-    : { prims: [], bottom: nb.bottom }
-  P.push(...wb.prims)
+  const wb = nb
 
   const title = `TYPICAL BEAM–COLUMN JOINT — ${mark}`
   const tb = titleBlock({
@@ -617,7 +632,7 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
     minY: jy - colRun - u * 4.0, maxY: tb.bottom + u * 2.0,
   })
 
-  return { primitives: P, title, result: r, bounds: b }
+  return { primitives: P, title, result: r, designNotes, bounds: b }
 }
 
 // Re-exported so the existing callers and tests keep their import site; the

@@ -19,6 +19,7 @@
 import type { PlanPrimitive, PathCmd, Drawing } from './planRenderer'
 import { columnSectionPrimitives } from './columnSection'
 import { SHEET_INK, SHEET_GRID, SHEET_ZONE, STEEL } from './sheetInk'
+import { titleBlock } from './detailSheet'
 
 type Pt = [number, number]
 /** Intersection of the infinite lines p1→p2 and p3→p4 (null if parallel). */
@@ -293,15 +294,13 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   const title = `COLUMN FOOTING DETAIL — ${f.mark}`
   // title sits below BOTH views (the plan runs deeper than the section here)
   const tbR = ts * 1.2, tbY = Math.max(hp + ts * 2.5, gravBot + ts * 2.4) + ts * 2.6, tbX = -hp
-  P.push({ kind: 'circle', cx: tbX + tbR, cy: tbY, r: tbR, stroke: INK, fill: '#fff', width: 1 })
-  P.push({ kind: 'line', x1: tbX, y1: tbY, x2: tbX + 2 * tbR, y2: tbY, stroke: INK, width: 1 })
-  P.push({ kind: 'text', x: tbX + tbR, y: tbY - tbR * 0.5, text: detailNo, size: tbR * 0.72, anchor: 'middle', color: INK, weight: 700 })
-  P.push({ kind: 'text', x: tbX + tbR, y: tbY + tbR * 0.5, text: sheetRef, size: tbR * 0.58, anchor: 'middle', color: INK, weight: 700 })
-  const lnX0 = tbX + 2 * tbR + ts * 0.3, lnX1 = secR
-  P.push({ kind: 'line', x1: lnX0, y1: tbY, x2: lnX1, y2: tbY, stroke: INK, width: 1.4 })
-  P.push({ kind: 'text', x: lnX0 + ts * 0.15, y: tbY - tbR * 0.55, text: title, size: tbR * 0.75, anchor: 'start', color: INK, weight: 700 })
-  P.push({ kind: 'text', x: lnX0 + ts * 0.15, y: tbY + tbR * 0.55, text: 'SCALE', size: tbR * 0.4, anchor: 'start', color: INK, weight: 600 })
-  P.push({ kind: 'text', x: lnX1 - ts * 0.3, y: tbY + tbR * 0.55, text: scale, size: tbR * 0.4, anchor: 'end', color: INK, weight: 600 })
+  // The house block. This sheet used to draw the rule in two pieces — one
+  // across the tag, one under the title, at different widths and with a gap
+  // between them — so the bisector read as cut at both ends.
+  P.push(...titleBlock({
+    x: tbX, w: secR - tbX, top: tbY - tbR, u: tbR / 2.6,
+    title, detailNo, sheetRef, scale,
+  }).prims)
 
   // ══ bounds ══
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity

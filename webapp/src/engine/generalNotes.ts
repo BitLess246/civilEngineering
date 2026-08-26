@@ -43,7 +43,7 @@ export const GENERAL_NOTES_REF = 'S-01'
 
 /** The one line a detail sheet carries instead of the rulebook. */
 export const seeGeneralNotes = (ref = GENERAL_NOTES_REF) =>
-  `FOR MATERIALS, COVER, BENDS, HOOKS, LAPS AND CONSTRUCTION CHECKS SEE GENERAL STRUCTURAL NOTES, SHEET ${ref}`
+  `REFER TO ${ref} FOR GENERAL REINFORCING REQUIREMENTS.`
 
 export interface GeneralNotesInput {
   /** Concrete strengths in the job, MPa — the lowest governs the table. */

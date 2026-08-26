@@ -401,15 +401,21 @@ describe('buildBeamColumnJointDetail', () => {
     expect(flat).toContain(`JOINT HOOPS ⌀10 @ ${d.result.jointHoopSpacing}`)
   })
 
-  it('states the joint checks, and prints the failures in red', () => {
-    expect(flat).toContain('§418.8.4')
-    expect(flat).toContain('§418.8.2.3')
-    expect(flat).toContain('§418.8.5.1')
-    expect(flat).toContain('NOT TO TERMINATED HOOKED BARS')
-    const warn = d.primitives.filter((p) => p.kind === 'text' && p.color === '#b91c1c') as { text: string }[]
+  it('states the joint CHECKS to the engineer, and the placing on the sheet', () => {
+    // Vu = T + C − Vcol, φVn and the Aj they were worked on are results. Where
+    // they fail the answer is to enlarge the joint, which nobody tying steel
+    // can do — so they travel beside the drawing, not on it.
+    const dn = d.designNotes.join(' ')
+    expect(dn).toContain('§418.8.4')
+    expect(dn).toContain('§418.8.2.3')
+    expect(dn).toContain('§418.8.5.1')
+    expect(dn).toContain('not by §418.8.2.3')
     expect(d.result.ok).toBe(false)
-    expect(warn.length).toBeGreaterThan(0)
-    expect(warn.map((w) => w.text).join(' ')).toContain('⚠')
+    expect(d.designNotes.length).toBeGreaterThan(3)
+    // the sheet says what to build, and points at the rules
+    expect(flat).toContain('TERMINATE IN THE JOINT WITH STANDARD 90° HOOKS')
+    expect(flat).toContain('REFER TO S-01')
+    expect(flat).not.toContain('φVn')
   })
 
   it('drops the warnings when the joint works', () => {

@@ -46,8 +46,8 @@ import type { PlanPrimitive, PathCmd, Drawing } from './planRenderer'
 import { hookClearToFace, hookFit, type HookFitResult } from './devLength'
 import { endAnchors, type Anchor, type AnchorBar, type JointRoom } from './beamAnchorage'
 import { jointHookLdh } from './beamColumnJoint'
-import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader } from './detailSheet'
-import { GENERAL_NOTES_REF } from './generalNotes'
+import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader, multiLeader } from './detailSheet'
+import { seeGeneralNotes } from './generalNotes'
 import { SHEET_INK, SHEET_NOTE, SHEET_GRID, STEEL, STEEL_LIGHT, STEEL_CONTEXT } from './sheetInk'
 import { buildColumnCage } from './columnCage'
 import {
@@ -185,8 +185,6 @@ export const REBAR_INK = STEEL
 const INK = SHEET_INK, REBAR = STEEL, GRID = SHEET_GRID, NOTE = SHEET_NOTE
 /** Hoops sit behind the longitudinal steel — the same accent, stepped back. */
 const HOOP = STEEL_LIGHT
-/** The band marking an overlap, painted along the two bars that share it. */
-const LAP = STEEL
 /** The supporting column's steel — context, not this beam's, so it stays grey. */
 const COLBAR = STEEL_CONTEXT
 const CRANK = STEEL
@@ -775,9 +773,12 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   // extra to overlap with, and banding it anyway claimed a lap with a bar the
   // sheet does not draw.
   const overlapsShown = crank.overlaps.filter((_, k) => extraBot > 0 && (k === 0 ? extraTopL : extraTopR) > 0)
-  for (const ov of overlapsShown) {
-    P.push({ kind: 'line', x1: ov.from, y1: Y(hM / 2), x2: ov.to, y2: Y(hM / 2), stroke: LAP, width: 3.4 })
-  }
+  // The overlap is NOT drawn as a band.
+  //
+  // A line stretched between the two cut-offs at mid-depth stood in for the
+  // fact that the runs overlap — but there is no bar at mid-depth, so on a
+  // sheet where every other blue line is steel it read as one. What the note
+  // means is the two bars themselves, so the note points AT them.
 
   // ── hoops ───────────────────────────────────────────────────────────────
   // Drawn to the cover line, OUTSIDE the bars they enclose.
@@ -804,8 +805,8 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   call(L / 2, hM + colRise + u * 5.6, `${thruTop}-⌀${i.barDia} TOP THRU (CORNER) — CONT.`)
   if (extraTopL > 0) call(topRun / 2, hM + colRise + u * 1.4, `${extraTopL}-⌀${i.barDia} EXTRA TOP`)
   if (extraTopR > 0) call(L - topRun / 2, hM + colRise + u * 1.4, `${extraTopR}-⌀${i.barDia} EXTRA TOP`)
-  call(L / 2, -colDrop - u * 3.4, `${thruBot}-⌀${i.barDia} BOT. THRU (CORNER) — CONT.${extraBot > 0 ? ` + ${extraBot}-⌀${i.barDia} EXTRA` : ''}`)
-  call(L / 2, -colDrop - u * 5.2, `${i.legs ?? 2}L-⌀${i.stirrupDia} HOOPS @ ${Math.round(sEndUsed)} C/C FOR 2h EA. END, @ ${Math.round(sMid)} ELSEWHERE`)
+  call(L / 2, -colDrop - u * 4.4, `${thruBot}-⌀${i.barDia} BOT. THRU (CORNER) — CONT.${extraBot > 0 ? ` + ${extraBot}-⌀${i.barDia} EXTRA` : ''}`)
+  call(L / 2, -colDrop - u * 6.2, `${i.legs ?? 2}L-⌀${i.stirrupDia} HOOPS @ ${Math.round(sEndUsed)} C/C FOR 2h EA. END, @ ${Math.round(sMid)} ELSEWHERE`)
 
   // The crank itself, labelled on the incline it names. One leader per crank
   // so the reader is never left guessing which bar the note is about.
@@ -844,15 +845,17 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
     }))
   }
 
-  // One overlap callout with a leader onto the band it names. Labelling every
-  // band put text on top of the bars and hoops it was meant to describe.
-  const ov0 = overlapsShown[0]
-  if (ov0) {
-    const mx = (ov0.from + ov0.to) / 2
-    P.push(...leader({
-      x: mx, y: Y(hM / 2),
-      tx: mx + L * 0.06, ty: Y(-colDrop * 0.42),
-      text: `TOP AND BOTTOM EXTRAS OVERLAP ${Math.round(ov0.length)}`,
+  // ONE label for the overlap, with an arm to each end that has one. Labelling
+  // each end printed the same sentence twice and put text on top of the bars
+  // and hoops it was meant to describe.
+  if (overlapsShown.length) {
+    P.push(...multiLeader({
+      targets: overlapsShown.map((ov) => ({ x: (ov.from + ov.to) / 2, y: Y(yBot2) })),
+      // In the clear lane between the 0.15L dimensions, which sit at the ENDS,
+      // and the centred callouts below — so neither the label nor its arms
+      // cross text they do not belong to.
+      tx: L / 2, ty: Y(-colDrop - u * 2.6),
+      text: `TOP AND BOTTOM EXTRAS OVERLAP ${Math.round(overlapsShown[0].length)}`,
       size: u * 1.2, color: NOTE,
     }))
   }
@@ -869,9 +872,9 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   }
   // the 2h hoop zone at the left support, and the 50 mm first hoop
   const zone = Math.min(HOOP_ZONE_DEPTHS * hM, L / 2 - face)
-  P.push({ kind: 'dim', x1: face, y1: Y(-colDrop - u * 7.0), x2: face + zone, y2: Y(-colDrop - u * 7.0), text: `2h = ${Math.round(zone * 1000)}`, off: 0, size: u * 1.3 })
-  P.push({ kind: 'text', x: face, y: Y(-colDrop - u * 8.8), text: `${FIRST_HOOP} FIRST HOOP`, size: u * 1.2, anchor: 'start', color: NOTE })
-  P.push({ kind: 'dim', x1: 0, y1: Y(-colDrop - u * 11.0), x2: L, y2: Y(-colDrop - u * 11.0), text: `L = ${Math.round(L * 1000)}`, off: 0, size: u * 1.5 })
+  P.push({ kind: 'dim', x1: face, y1: Y(-colDrop - u * 8.0), x2: face + zone, y2: Y(-colDrop - u * 8.0), text: `2h = ${Math.round(zone * 1000)}`, off: 0, size: u * 1.3 })
+  P.push({ kind: 'text', x: face, y: Y(-colDrop - u * 9.8), text: `${FIRST_HOOP} FIRST HOOP`, size: u * 1.2, anchor: 'start', color: NOTE })
+  P.push({ kind: 'dim', x1: 0, y1: Y(-colDrop - u * 12.0), x2: L, y2: Y(-colDrop - u * 12.0), text: `L = ${Math.round(L * 1000)}`, off: 0, size: u * 1.5 })
 
   // ℓdh is NOT dimensioned here, and a shortfall is not drawn here.
   //
@@ -928,7 +931,7 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   // the design had to flag comes back as `designNotes` for whatever raises it
   // with the engineer, rather than being set in a paragraph a bar bender is
   // expected to resolve.
-  const notes = [`REFER TO ${GENERAL_NOTES_REF} FOR GENERAL REINFORCING REQUIREMENTS.`]
+  const notes = [seeGeneralNotes()]
 
   // ── what the design flagged, for the ENGINEER, not for this sheet ───────
   const spliceCount = splicesRequired(x1 - x0, crank.lap / 1000)
@@ -950,7 +953,7 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   ]
   const noteSize = u * 1.35
   const sheetW = L + u * 8
-  const noteTop = -colDrop - u * 14.5
+  const noteTop = -colDrop - u * 15.5
   const nb = notesBlock({ x: x0, w: sheetW, top: Y(noteTop), size: noteSize, lines: notes, color: NOTE, step: u * 2.0 })
   P.push(...nb.prims)
 
