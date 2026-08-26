@@ -11,11 +11,19 @@
 // feature only ever reaches new signups.
 //
 // ── IT IS DISMISSIBLE, AND SKIPPING IS A REAL ANSWER ────────────────────────
-// "Show me everything" stores `hidden: []` rather than storing nothing. Storing
+// "Show me everything" stores `ALL_PREFS` rather than storing nothing. Storing
 // nothing would re-open this dialog on the next page load, which is how a
 // one-time question turns into a thing people learn to dismiss without reading.
 // Escape and the backdrop do the same, because a modal you cannot leave without
 // answering is a wall, and this is a convenience.
+//
+// `ALL_PREFS` is `{ chosen: null }`, NOT the list of today's groups. A TICKED
+// SELECTION IS A STANDING INSTRUCTION: a group that ships later is not in it,
+// so it stays hidden. That is deliberate — somebody who said "I do concrete"
+// should not find a masonry section in their sidebar next month. But somebody
+// who clicked "show me everything" meant all of it, not these eleven, and
+// freezing that into a list would make the button they clicked a lie the day
+// the twelfth group appears.
 //
 // Nothing here is destructive: hiding a group changes navigation only. Every
 // route, bookmark, deep link and ⌘K result keeps working, and the whole answer
@@ -24,7 +32,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { DisciplinePicker } from './DisciplinePicker'
-import { prefsFromChosen, NO_PREFS, CHOOSABLE_GROUPS } from '../lib/toolPrefs'
+import { prefsFromChosen, ALL_PREFS, CHOOSABLE_GROUPS } from '../lib/toolPrefs'
 import { setToolPrefs } from '../lib/useToolPrefs'
 
 export function WelcomeDialog({ onClose }: { onClose: () => void }) {
@@ -36,7 +44,7 @@ export function WelcomeDialog({ onClose }: { onClose: () => void }) {
   // Skipping still WRITES, so the question is not asked again. See the note
   // above. Declared before the effect that uses it, and memoised so the key
   // listener is not torn down and rebuilt on every keystroke.
-  const skip = useCallback(() => { setToolPrefs(NO_PREFS); onClose() }, [onClose])
+  const skip = useCallback(() => { setToolPrefs(ALL_PREFS); onClose() }, [onClose])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') skip() }

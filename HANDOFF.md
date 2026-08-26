@@ -2404,17 +2404,34 @@ storage rule and the same non-negotiable safety property.
 | Collapsed sidebar groups | `civeng-nav-collapsed` | `lib/navCollapse.ts` |
 | Disciplines you use | `civeng-tool-prefs` | `lib/toolPrefs.ts` |
 
-## The one rule both share: STORE THE NEGATIVE
+## They store OPPOSITE things, on purpose
 
-Both store what is **hidden/collapsed**, never what is chosen. The reason is the
-same in both cases and it is a launch-day property:
+| | Stores | A group added later is |
+|---|---|---|
+| `navCollapse` | the **collapsed** set | expanded (it hides nothing) |
+| `toolPrefs` | the **chosen** set | **hidden** |
 
-> When a new group ships, it must appear for people who already answered.
+`toolPrefs` storing the positive set is a product decision, taken deliberately
+after the alternative shipped and was reversed: **a selection is a standing
+instruction, not a snapshot.** Somebody who said "I do concrete" should not find
+a masonry section in their sidebar next month because we shipped one.
 
-Store the positive set and every future module is invisible to every existing
-user, and nothing reports it — the feature launches to new signups only. Storing
-the negative means an unknown label defaults to shown. Both modules have a test
-named for this; do not "simplify" either one into storing the chosen set.
+The cost is real: **a new module does not announce itself in the nav of anyone
+who has answered.** It is still discoverable — unticked in the profile picker,
+and ⌘K finds it tagged `HIDDEN` — but nothing pushes it. If a launch needs to
+reach existing users, that is a release note's job, not a reason to override a
+preference they set.
+
+**"Everything" is stored as `chosen: null`, never as the list of today's
+groups.** Ticking every box, or clicking "show me everything", means *all of
+it* — freezing that into a list would quietly turn the answer into a filter the
+day the next group ships, and the button they clicked would have lied. `null`
+and a full list look identical on screen today and mean different things
+tomorrow; `prefsFromChosen` collapses a full selection to `null` for exactly
+this reason.
+
+`navCollapse` keeps storing the negative because collapsing hides nothing —
+a new group appearing expanded costs a user one click, not a missing feature.
 
 ## Three things that will look like bugs but are deliberate
 
