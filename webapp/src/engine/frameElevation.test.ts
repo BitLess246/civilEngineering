@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  buildFrameElevation, clipToBand, runInk, pitchRuns, pitchNote,
+  buildFrameElevation, clipToBand, runInk, pitchRuns, pitchNote, angledLeader,
   type FrameElevationInput, type ElevationMember,
 } from './frameElevation'
 import { elevationPlane, type RebarCage, type RebarRun } from './rebarModel'
@@ -216,6 +216,51 @@ describe('buildFrameElevation', () => {
     expect(textsOf(d).some((t) => /^\d+@\d+(, \d+@\d+)*$/.test(t))).toBe(true)
   })
 
+  it('places every callout AGAINST its beam, not out at the band edge', () => {
+    // The band is half a storey either side; a label parked out there makes the
+    // reader hunt for which member it names.
+    const beam = bundles.find((x) => x.key === 'frame-a-3-20')!.input
+      .members.find((m) => m.role === 'beam')!
+    const yTop = -beam.yTop, yBot = -beam.yBot        // page-Y
+    const labels = d.primitives.filter((p) => p.kind === 'text'
+      && (/STIRRUPS/.test(p.text) || /THRU/.test(p.text) || /^bx/.test(p.text))) as { y: number }[]
+    expect(labels.length).toBeGreaterThan(0)
+    for (const t of labels) {
+      // within one beam depth of the concrete, above it or below it
+      expect(t.y).toBeGreaterThan(yTop - (yBot - yTop))
+      expect(t.y).toBeLessThan(yBot + (yBot - yTop))
+    }
+  })
+
+  it('keeps every callout inside the sheet it is drawn on', () => {
+    const us = d.primitives.filter((p) => p.kind === 'rect').flatMap((p) => {
+      const r = p as { x: number; w: number }
+      return [r.x, r.x + r.w]
+    })
+    const uMin = Math.min(...us), uMax = Math.max(...us)
+    for (const p of d.primitives) {
+      if (p.kind !== 'text' || !/STIRRUPS|THRU/.test(p.text)) continue
+      const w = p.text.length * 0.63 * p.size
+      const lo = p.anchor === 'end' ? p.x - w : p.x
+      expect(lo).toBeGreaterThanOrEqual(uMin - 1e-6)
+      expect(lo + w).toBeLessThanOrEqual(uMax + 1e-6)
+    }
+  })
+
+  it('keeps every callout in its OWN bay, clear of the columns', () => {
+    // Bounded to the sheet rather than the beam, a label slides across the
+    // column and names a member a bay away as far as the eye can tell.
+    const beams = bundles.find((x) => x.key === 'frame-a-3-20')!.input
+      .members.filter((m) => m.role === 'beam').sort((a, b) => a.u0 - b.u0)
+    for (const p of d.primitives) {
+      if (p.kind !== 'text' || !/STIRRUPS|THRU|^bx/.test(p.text)) continue
+      const w = p.text.length * 0.63 * p.size
+      const lo = p.anchor === 'end' ? p.x - w : p.x
+      const owner = beams.find((b) => lo >= b.u0 - 1e-6 && lo + w <= b.u1 + 1e-6)
+      expect(owner, `"${p.text}" straddles a bay`).toBeDefined()
+    }
+  })
+
   it('counts the bars off the cage, not off the design input', () => {
     expect(textsOf(d).some((t) => /\d-⌀20 TOP THRU/.test(t))).toBe(true)
   })
@@ -252,5 +297,67 @@ describe('buildFrameElevation — a column that steps in', () => {
     expect(d.designNotes).toHaveLength(1)
     expect(d.designNotes[0]).toContain('grid 1')
     expect(d.designNotes[0]).toContain('§410.7.4.1')
+  })
+})
+
+describe('angledLeader — the leg runs at 45°', () => {
+  /** The inclined leg: the one plain line between the knee and the arrowhead. */
+  const leg = (prims: ReturnType<typeof angledLeader>) => {
+    const l = prims.find((p) => p.kind === 'line') as
+      { x1: number; y1: number; x2: number; y2: number }
+    return { dx: l.x2 - l.x1, dy: l.y2 - l.y1 }
+  }
+
+  it('makes the leg 45° whatever the label says', () => {
+    // `leader` puts its knee a fixed distance from the text anchor, so moving
+    // the label in close to the member flattens the leg to a glancing wedge —
+    // 27° on the first attempt at this. The knee is placed one rise from the
+    // target instead, which fixes the angle at 45° by construction.
+    for (const text of ['B1', 'B1  300×500 — a very much longer callout indeed']) {
+      const { dx, dy } = leg(angledLeader({ x: 5, y: 0, ty: -0.4, side: 'right', text, size: 0.1 }))
+      expect(Math.abs(Math.abs(dx) - Math.abs(dy))).toBeLessThan(1e-9)
+    }
+  })
+
+  it('holds 45° however far the label is placed from the target', () => {
+    for (const ty of [-0.2, -0.6, -1.5]) {
+      const { dx, dy } = leg(angledLeader({ x: 5, y: 0, ty, side: 'right', text: 'B1', size: 0.1 }))
+      expect(Math.abs(dx)).toBeCloseTo(Math.abs(dy), 9)
+    }
+  })
+
+  it('turns OBTUSE at the knee — the leg carries on AWAY from the label', () => {
+    // With the target on the NEAR side of the knee the leg doubles back
+    // underneath its own landing: a near reversal, which reads as a line
+    // folded on itself rather than one stroke running out to a point. The
+    // landing and the leg have to lean the same way.
+    for (const side of ['left', 'right'] as const) {
+      const p = angledLeader({ x: 5, y: 0, ty: -0.4, side, text: 'B1', size: 0.1 })
+      const l = p.find((q) => q.kind === 'line') as { x1: number; x2: number }
+      const t = p.find((q) => q.kind === 'text') as { x: number }
+      // out from the text anchor to the knee, then ON in the same direction
+      expect(Math.sign(l.x1 - t.x)).toBe(Math.sign(l.x2 - l.x1))
+    }
+  })
+
+  it('runs the leg the way the label is, on each side', () => {
+    const r = leg(angledLeader({ x: 5, y: 0, ty: -0.4, side: 'right', text: 'B1', size: 0.1 }))
+    const l = leg(angledLeader({ x: 5, y: 0, ty: -0.4, side: 'left', text: 'B1', size: 0.1 }))
+    expect(Math.sign(r.dx)).toBe(-Math.sign(l.dx))
+  })
+
+  it('flips to the other side rather than run the label off the sheet', () => {
+    const within: [number, number] = [0, 6]
+    const near = angledLeader({ x: 5.6, y: 0, ty: -0.4, side: 'left', within, text: 'A LONG CALLOUT', size: 0.1 })
+    const xs = near.filter((p) => p.kind === 'text').map((p) => (p as { x: number }).x)
+    // asked for 'left' (label to the RIGHT) it would overrun 6.0, so it went left
+    expect(Math.max(...xs)).toBeLessThanOrEqual(6 + 1e-9)
+  })
+
+  it('keeps the side it was asked for when that side fits', () => {
+    const within: [number, number] = [0, 12]
+    const a = angledLeader({ x: 6, y: 0, ty: -0.4, side: 'left', within, text: 'B1', size: 0.1 })
+    const b = angledLeader({ x: 6, y: 0, ty: -0.4, side: 'left', text: 'B1', size: 0.1 })
+    expect(leg(a)).toEqual(leg(b))
   })
 })

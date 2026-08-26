@@ -29,7 +29,7 @@ import type { Drawing, PlanPrimitive } from './planRenderer'
 import {
   cageToPrimitives, projectPath, type RebarCage, type RebarRun, type ViewPlane,
 } from './rebarModel'
-import { titleBlock, notesBlock, sheetBounds, leader } from './detailSheet'
+import { titleBlock, notesBlock, sheetBounds, leader, leaderKnee, textWidth } from './detailSheet'
 import { seeGeneralNotes } from './generalNotes'
 import {
   SHEET_INK, SHEET_NOTE, SHEET_GRID, STEEL, STEEL_LIGHT,
@@ -233,6 +233,69 @@ export function runInk(run: RebarRun): string {
 }
 
 /**
+ * A leader whose inclined leg runs at 45°, with its label placed immediately
+ * beside the thing it names.
+ *
+ * THE ANGLE IS NOT DECORATION. `leader` puts its knee a fixed distance from the
+ * text anchor, so as soon as the label is moved in close to the member — which
+ * is where a label belongs — the leg flattens: a 1.5-unit rise over a 2.9-unit
+ * knee offset arrives at a horizontal bar at 27°, a glancing wedge that does
+ * not read as pointing AT anything. The eye cannot tell which of the bars under
+ * it is meant.
+ *
+ * So the caller does not choose `tx` at all. It says where the label sits
+ * vertically and which way it runs, and the knee is put exactly one vertical
+ * rise from the target — which makes the leg 45° whatever the label says and
+ * however close it sits.
+ *
+ * AND THE LEG CONTINUES AWAY FROM THE LABEL. Put on the near side of the knee,
+ * the target makes the leg double back underneath its own landing: the turn at
+ * the knee is a near reversal, an acute wedge that reads as a line folded on
+ * itself rather than as one stroke running out to a point. The target goes on
+ * the FAR side, so the landing and the leg lean the same way and meet at an
+ * obtuse angle — landing out, leg on out and down, arrowhead at the end of the
+ * movement, which is how a leader is drafted.
+ *
+ * `side` names which way the LANDING runs, as it does in `leader`: 'right'
+ * puts the label to the LEFT and sends the leg off to the right.
+ */
+export function angledLeader(o: {
+  /** The point named — an actual bar, not the middle of the concrete. */
+  x: number; y: number
+  /** Baseline of the label, page-Y. */
+  ty: number
+  /** Preferred side. Flipped if the label would fall outside `within`. */
+  side: 'left' | 'right'
+  /** The sheet's own extent, m. A label that runs off it is worse than one on
+   *  the side the caller did not ask for. */
+  within?: [number, number]
+  text: string
+  text2?: string
+  size: number
+  color?: string
+}): PlanPrimitive[] {
+  const rise = Math.abs(o.ty - o.y)
+  const knee = leaderKnee(o.size)
+  const anchor = (side: 'left' | 'right') =>
+    side === 'right' ? o.x - rise - knee : o.x + rise + knee
+  // The label runs AWAY from the landing: 'right' lands to the right of the
+  // anchor and sets the text to its left, and the other way round.
+  const w = Math.max(textWidth(o.text, o.size), o.text2 ? textWidth(o.text2, o.size) : 0)
+  const span = (side: 'left' | 'right'): [number, number] => {
+    const tx = anchor(side)
+    return side === 'right' ? [tx - w, tx] : [tx, tx + w]
+  }
+  const fits = (side: 'left' | 'right') => {
+    if (!o.within) return true
+    const [a, b] = span(side)
+    return a >= o.within[0] - 1e-9 && b <= o.within[1] + 1e-9
+  }
+  const other = o.side === 'right' ? 'left' : 'right'
+  const side = fits(o.side) || !fits(other) ? o.side : other
+  return leader({ ...o, side, tx: anchor(side) })
+}
+
+/**
  * The sheet.
  *
  * Order matters: concrete first so the steel sits on it, then the datum lines,
@@ -325,8 +388,8 @@ export function buildFrameElevation(
     })
   }
   for (const m of beams) {
-    const mid = (m.u0 + m.u1) / 2
     const own = i.cages.filter((c) => c.member === m.mark)
+    const depth = Y(m.yBot) - Y(m.yTop)             // page height of the beam
     const top = faceTally(own, i.plane, 'top', m.u0, m.u1)
     const bot = faceTally(own, i.plane, 'bottom', m.u0, m.u1)
     P.push({
@@ -338,9 +401,16 @@ export function buildFrameElevation(
     const face = (t: FaceTally, what: string) => t.thru || t.extra
       ? [`${t.thru}-⌀${t.dia} ${what} THRU`, ...(t.extra ? [`+ ${t.extra} EXTRA`] : [])].join(' ')
       : ''
-    P.push(...leader({
-      x: mid, y: Y(m.yTop) + (Y(m.yBot) - Y(m.yTop)) * 0.3,
-      tx: mid, ty: lo - u * 2.2, side: 'right',
+    // ABOVE the beam, a type unit clear of it — not half a storey away at the
+    // edge of the band, where the reader has to hunt for which member it names.
+    // It points at the TOP STEEL, a third of the way along, so two adjacent
+    // beams' labels sit in their own bays instead of meeting over the column.
+    P.push(...angledLeader({
+      x: m.u0 + (m.u1 - m.u0) / 3, y: Y(m.yTop) + depth * 0.12,
+      // Bounded to its OWN bay, not to the sheet: a label free to slide the
+      // width of the drawing ends up over the next beam's column, naming a
+      // member two bays away as far as the eye can tell.
+      ty: Y(m.yTop) - u * 2.6, side: 'right', within: [m.u0, m.u1],
       text: `${m.mark}  ${m.bw}×${m.d}`,
       text2: [face(top, 'TOP'), face(bot, 'BOT.')].filter(Boolean).join(' · '),
       size: u * 0.85, color: SHEET_INK,
@@ -351,9 +421,13 @@ export function buildFrameElevation(
       .filter((v) => v >= m.u0 - 1e-6 && v <= m.u1 + 1e-6)
     const dia = own[0]?.runs.find((r) => r.role === 'stirrup')?.dia
     if (stirrups.length > 1 && dia) {
-      P.push(...leader({
-        x: stirrups[Math.floor(stirrups.length / 2)], y: Y(m.yBot) - u * 0.3,
-        tx: mid, ty: hi + u * 3.4, side: 'right',
+      // BELOW the soffit, pointing at a real stirrup two thirds along — the
+      // opposite third from the bar callout, so the two legs never cross.
+      const at = stirrups.reduce((best, v) =>
+        Math.abs(v - (m.u0 + (2 * (m.u1 - m.u0)) / 3)) < Math.abs(best - (m.u0 + (2 * (m.u1 - m.u0)) / 3)) ? v : best)
+      P.push(...angledLeader({
+        x: at, y: Y(m.yBot) - depth * 0.12,
+        ty: Y(m.yBot) + u * 1.6, side: 'left', within: [m.u0, m.u1],
         text: `2L-⌀${dia} STIRRUPS, ${stirrups.length} No.`,
         text2: pitchNote(pitchRuns(stirrups)),
         size: u * 0.8, color: SHEET_INK,
@@ -414,8 +488,8 @@ export function buildFrameElevation(
     const above = at((m) => m.yBot >= i.y - 1e-6)
     if (!below || !above) continue
     if (below.bw === above.bw && below.d === above.d) continue
-    P.push(...leader({
-      x: g.u, y: Y(i.y) - u * 1.2, tx: g.u + u * 3, ty: Y(i.y) - u * 4, side: 'right',
+    P.push(...angledLeader({
+      x: g.u, y: Y(i.y) - u * 1.2, ty: Y(i.y) - u * 4.4, side: 'left', within: [uMin, uMax],
       text: `COLUMN REDUCES ${below.bw}×${below.d} → ${above.bw}×${above.d}`,
       size: u * 0.72, color: SHEET_INK,
     }))

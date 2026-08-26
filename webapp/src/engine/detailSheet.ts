@@ -222,6 +222,18 @@ export interface LeaderOpts {
  * a glance you could not tell a leader from a dimension extension or from a
  * bar. This is the one shape they all use now.
  */
+/**
+ * Horizontal distance from a leader's TEXT ANCHOR to its knee — where the
+ * landing ends and the inclined leg begins.
+ *
+ * Exported because the angle of that leg is a drafting decision the caller
+ * makes, not the leader: to set a leg at 45° you have to know where the knee
+ * will be before you choose where the text goes. Derived here, once, so a
+ * caller cannot compute it from stale proportions.
+ */
+export const leaderKnee = (size: number, landing?: number) =>
+  size * 0.34 + size * 1.30 * 0.29 + (landing ?? size * 2.2)
+
 export function leader(o: LeaderOpts): PlanPrimitive[] {
   const ink = NOTE                        // the leader itself, always
   const color = o.color ?? NOTE           // the label
@@ -230,7 +242,6 @@ export function leader(o: LeaderOpts): PlanPrimitive[] {
   const d = -s                            // towards the label
   const gap = o.size * 0.34               // glyph to label
   const gh = o.size * 1.30                // full height of the glyph
-  const land = o.landing ?? o.size * 2.2
 
   // The glyph the landing ends on: one continuous stroke that runs up, across,
   // all the way down, across again, and part-way back up. It separates the
@@ -239,7 +250,7 @@ export function leader(o: LeaderOpts): PlanPrimitive[] {
   // reference: 0.14 and 0.15 of the height for the two steps, the last riser
   // stopping a tenth of the height above the landing.
   const gEnd = o.tx + s * (gap + gh * 0.29)      // where the landing meets it
-  const kneeX = gEnd + s * land
+  const kneeX = o.tx + s * leaderKnee(o.size, o.landing)
   const up = o.ty - gh * 0.5, dn = o.ty + gh * 0.5
 
   // The leg stops at the back of the arrowhead so the two do not overprint.
