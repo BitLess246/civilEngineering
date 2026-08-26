@@ -2,6 +2,8 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { SIDEBAR_GROUPS, ALL_TOOLS } from '../lib/tools'
 import { loadCollapsed, saveCollapsed, toggleCollapsed } from '../lib/navCollapse'
+import { useToolPrefs } from '../lib/useToolPrefs'
+import { visibleGroups } from '../lib/toolPrefs'
 import { CommandPalette } from './CommandPalette'
 import { usePaletteHotkey } from '../lib/usePaletteHotkey'
 import { SiteFooter } from './SiteFooter'
@@ -43,10 +45,19 @@ function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }) {
   // Lazy initialiser: localStorage is read once on mount, not on every render.
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => loadCollapsed())
 
+  // Trimmed to the disciplines this browser chose. `activeGroup` is still
+  // resolved against the FULL catalog, not the trimmed list: the tool you are
+  // on may belong to a group you have hidden — you reached it by link or by
+  // ⌘K — and the breadcrumb and the marker should still name it correctly.
+  const prefs = useToolPrefs()
+  const groups = useMemo(() => visibleGroups(SIDEBAR_GROUPS, prefs), [prefs])
   const activeGroup = useMemo(
     () => SIDEBAR_GROUPS.find((g) => g.tools.some((t) => t.to === pathname))?.label,
     [pathname],
   )
+  // Standing on a tool whose group is hidden. Saying so beats a sidebar that
+  // silently does not contain the page you are looking at.
+  const activeIsHidden = !!activeGroup && !groups.some((g) => g.label === activeGroup)
 
   // A collapsed group is NOT force-opened when you navigate into it. Doing that
   // means the user's explicit collapse is silently undone by an ordinary
@@ -69,7 +80,18 @@ function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }) {
         <div className="mt-3"><SearchBox onOpen={onOpenPalette} compact /></div>
       </div>
       <nav className="flex-1 px-2.5 pb-4 pt-1">
-        {SIDEBAR_GROUPS.map((g) => {
+        {activeIsHidden && (
+          <div className="mt-3 rounded-md border border-white/10 bg-white/[.04] px-2.5 py-2">
+            <p className="text-[11px] leading-relaxed text-[#9db0c5]">
+              You are in <span className="font-semibold text-white">{activeGroup}</span>, which is
+              hidden by your preferences.
+            </p>
+            <Link to="/profile" className="mt-1 inline-block text-[11px] font-semibold text-[#5b9bd5] hover:underline">
+              Show it again →
+            </Link>
+          </div>
+        )}
+        {groups.map((g) => {
           const open = !collapsed.has(g.label)
           const panelId = `navgroup-${g.label.replace(/\W+/g, '-').toLowerCase()}`
           // A collapsed group still marks itself when it holds the active

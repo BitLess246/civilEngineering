@@ -2391,3 +2391,94 @@ and the report tracked them.
 If the images are replaced, **re-read the captions off the new screenshots**. A
 caption describing the previous screenshot is the kind of small lie that costs
 more trust than it saves effort.
+
+---
+
+# Navigation preferences — collapsible groups + first-run picker (PRs #644, #645, August 2026)
+
+Two per-browser view preferences, both in `localStorage`, both with the same
+storage rule and the same non-negotiable safety property.
+
+| | Key | Module |
+|---|---|---|
+| Collapsed sidebar groups | `civeng-nav-collapsed` | `lib/navCollapse.ts` |
+| Disciplines you use | `civeng-tool-prefs` | `lib/toolPrefs.ts` |
+
+## They store OPPOSITE things, on purpose
+
+| | Stores | A group added later is |
+|---|---|---|
+| `navCollapse` | the **collapsed** set | expanded (it hides nothing) |
+| `toolPrefs` | the **chosen** set | **hidden** |
+
+`toolPrefs` storing the positive set is a product decision, taken deliberately
+after the alternative shipped and was reversed: **a selection is a standing
+instruction, not a snapshot.** Somebody who said "I do concrete" should not find
+a masonry section in their sidebar next month because we shipped one.
+
+The cost is real: **a new module does not announce itself in the nav of anyone
+who has answered.** It is still discoverable — unticked in the profile picker,
+and ⌘K finds it tagged `HIDDEN` — but nothing pushes it. If a launch needs to
+reach existing users, that is a release note's job, not a reason to override a
+preference they set.
+
+**"Everything" is stored as `chosen: null`, never as the list of today's
+groups.** Ticking every box, or clicking "show me everything", means *all of
+it* — freezing that into a list would quietly turn the answer into a filter the
+day the next group ships, and the button they clicked would have lied. `null`
+and a full list look identical on screen today and mean different things
+tomorrow; `prefsFromChosen` collapses a full selection to `null` for exactly
+this reason.
+
+`navCollapse` keeps storing the negative because collapsing hides nothing —
+a new group appearing expanded costs a user one click, not a missing feature.
+
+## Three things that will look like bugs but are deliberate
+
+**A collapsed group is not force-opened when you navigate into it.** Standard
+tree-nav behaviour, deliberately not done: it silently undoes the user's own
+collapse on every visit. The header marks itself instead. The first attempt did
+force it open from an effect and `react-hooks/set-state-in-effect` rejected it —
+the behaviour went, not the lint rule.
+
+**Hiding a discipline is not removing it.** Nothing touches routing. Hidden
+tools keep their URLs, bookmarks, deep links and report links, still render, and
+still turn up in ⌘K — tagged `HIDDEN` and sorted after visible hits. If you are
+standing on a tool whose group is hidden, the sidebar says so and links to the
+profile. A preference that could strand a bookmark is a bug, not a setting.
+
+**An empty selection is refused, and also ignored.** Save is disabled at zero
+in both the dialog and the profile, *and* `visibleGroups` ignores a stored
+preference that would leave nothing — including one that leaves only pinned
+groups. A nav rendering nothing has no route back to the setting that emptied
+it, so the guard is in the pure layer too, not just the UI.
+
+`PINNED_GROUPS = ['Reference']` (Documentation, Validation, Plans) can never be
+hidden — app pages, not a discipline.
+
+## Who gets asked
+
+Anyone whose browser has no stored answer, which is everyone the day this ships,
+existing accounts included. Suppressed on the auth and legal routes: somebody
+mid password-reset or reading the terms is in the middle of something with its
+own stakes. **Skipping writes `{hidden: []}`** rather than writing nothing — a
+"remind me later" would re-ask on every page load, which is how a one-time
+question becomes something people dismiss without reading. Escape and the
+backdrop do the same.
+
+## Live updates
+
+`useToolPrefs` is `useSyncExternalStore` over a module-level cache, not a
+context. `getSnapshot` **must** keep returning the cached object — parsing
+localStorage per call returns a fresh reference each time and React re-renders
+forever. Profile's Save publishes through `setToolPrefs`, so the sidebar and the
+home directory change on the click rather than on the next reload. A `storage`
+listener keeps two tabs in agreement.
+
+## Left open
+
+Nothing enforces that the two dismissal paths and the profile stay in sync
+beyond the shared `DisciplinePicker`; the picker is the guard. And the
+preference is per browser, like the letterhead — a second machine starts with
+the full catalog and asks again. If it should follow the login instead,
+`user_metadata` is now a safe home for it (see `auth/profile.ts` for why).

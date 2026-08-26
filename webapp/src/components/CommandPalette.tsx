@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ALL_TOOLS } from '../lib/tools'
+import { useToolPrefs } from '../lib/useToolPrefs'
+import { isHidden } from '../lib/toolPrefs'
 
 // ⌘K command palette — fuzzy tool finder over the registry. Opened by the
 // sidebar / home search boxes or Ctrl/⌘+K anywhere; arrow keys + Enter
@@ -21,12 +23,23 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
+  // THE PALETTE SEARCHES EVERYTHING, INCLUDING HIDDEN GROUPS.
+  //
+  // Hiding a discipline trims navigation; it does not take the tools away. This
+  // is the escape hatch that makes that true — somebody who hid Geotechnical
+  // and now needs bearing capacity once should find it by typing, not by going
+  // to their profile to re-enable a whole discipline first.
+  //
+  // Hidden hits sort AFTER visible ones, so the ranking still reflects the
+  // stated preference, and they are tagged so the result is not confusing.
+  const prefs = useToolPrefs()
   const hits = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    if (!needle) return ALL_TOOLS
-    return ALL_TOOLS.filter((t) =>
+    const matched = !needle ? ALL_TOOLS : ALL_TOOLS.filter((t) =>
       `${t.name} ${t.sub} ${t.groupLabel}`.toLowerCase().includes(needle))
-  }, [q])
+    const marked = matched.map((t) => ({ ...t, hidden: isHidden(t.groupLabel, prefs) }))
+    return [...marked.filter((t) => !t.hidden), ...marked.filter((t) => t.hidden)]
+  }, [q, prefs])
 
   useEffect(() => { inputRef.current?.focus() }, [])
   useEffect(() => {
@@ -59,6 +72,10 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
               className={`flex w-full items-baseline gap-3 px-4 py-2 text-left ${i === sel ? 'bg-[#eaf1f9]' : ''}`}>
               <span className={`text-[13px] font-semibold ${i === sel ? 'text-[#0f4c92]' : 'text-[#0f1b2a]'}`}>{t.name}</span>
               <span className="font-mono text-[10.5px] text-[#8b8574]">{t.sub}</span>
+              {t.hidden && (
+                <span className="rounded border border-[#e3e1da] bg-[#f7f5ef] px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-[#a39d8d]"
+                  title="Not in your sidebar — still works">hidden</span>
+              )}
               <span className="ml-auto font-mono text-[9.5px] uppercase tracking-widest text-[#a39d8d]">{t.groupLabel}</span>
             </button>
           ))}

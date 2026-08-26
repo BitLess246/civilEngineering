@@ -1,7 +1,10 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useCallback, useState } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { useScrollTopOnChange } from './lib/useScrollTop'
+import { WelcomeDialog } from './components/WelcomeDialog'
+import { useToolPrefs } from './lib/useToolPrefs'
+import { hasAnswered } from './lib/toolPrefs'
 import Home from './pages/Home'
 import FoundationDesign from './pages/FoundationDesign'
 import PileCapDesign from './pages/PileCapDesign'
@@ -82,18 +85,50 @@ function PageLoading({ what }: { what: string }) {
     </div>
   )
 }
+/**
+ * Should the first-run question be on screen?
+ *
+ * Mounted at the app root rather than inside a page, because there is no single
+ * entry point: people arrive on the home page, on a deep link to a calculator,
+ * or on a bookmark, and the question is the same wherever they land.
+ *
+ * It is suppressed on the auth and legal routes. Somebody halfway through a
+ * password reset, or reading the terms before they buy, is in the middle of
+ * something with its own stakes, and a modal about sidebar preferences on top
+ * of it is an interruption at the worst possible moment. They get asked on the
+ * next ordinary page instead — the answer is not urgent.
+ */
+const NO_ASK_ROUTES = [
+  '/signin', '/signup', '/forgot-password', '/reset-password',
+  '/terms', '/privacy', '/refunds', '/contact',
+]
+
 export default function App() {
   const nav = useNavigate()
   // react-router does NOT reset scroll on a route change — that is left to the
   // app. Without this, leaving a page you had scrolled deep into drops you into
   // the middle of the next one. Keyed on pathname, so a query-string or hash
   // change (an in-page anchor) does not yank the viewport.
-  useScrollTopOnChange(useLocation().pathname)
+  const { pathname } = useLocation()
+  useScrollTopOnChange(pathname)
+
+  // `dismissed` is local to this mount and separate from the stored answer.
+  // Both closing paths write a preference, so the stored value alone would be
+  // enough — this just avoids the dialog flickering for the render between the
+  // click and the store update.
+  const prefs = useToolPrefs()
+  const [dismissed, setDismissed] = useState(false)
+  // Stable identity: the dialog memoises its Escape handler on this, and an
+  // inline arrow here would change every render, tearing the key listener down
+  // and rebuilding it each time — quietly defeating the memo on the other side.
+  const closePrefs = useCallback(() => { setDismissed(true) }, [])
+  const askPrefs = !hasAnswered(prefs) && !dismissed && !NO_ASK_ROUTES.includes(pathname)
 
   // Home carries its own hero navigation; every tool route lives inside the
   // workbench shell (sidebar + breadcrumb header + command palette).
   return (
     <>
+      {askPrefs && <WelcomeDialog onClose={closePrefs} />}
       <Routes>
         <Route path="/" element={<Home onAuth={(m) => nav(m === 'signup' ? '/signup' : '/signin')} />} />
         <Route path="*" element={
