@@ -1,5 +1,6 @@
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { scrollTop } from '../lib/useScrollTop'
+import { endDrops } from '../lib/baseDrop'
 import { Link, useSearchParams } from 'react-router-dom'
 import { GuidedTour } from '../components/GuidedTour'
 import { TourButton } from '../components/TourButton'
@@ -135,6 +136,24 @@ const loadFromShear = (xs: number[], Vy: number[]): number[] =>
   })
 
 // ── 3D primitives ─────────────────────────────────────────────────────────
+/**
+ * How far below the node line a member's concrete (or steel section) hangs, m.
+ *
+ * A floor level is the TOP of the beams framing into it: the column below stops
+ * there, the column above starts there, and the beam hangs under the joint.
+ * Drawn centred on the node the beam straddled that interface — half of every
+ * beam ran up through the column starting at the same node — and the cages,
+ * which are built off the soffit, no longer sat inside their own concrete.
+ *
+ * Horizontal members only: a column's node line IS its axis, and a sloping
+ * member has no single level to hang from.
+ */
+const HANGS_BELOW_NODE = new Set(['beam', 'girder'])
+function levelDrop(role: string, depth: number, a: THREE.Vector3, b: THREE.Vector3): number {
+  if (!HANGS_BELOW_NODE.has(role) || Math.abs(a.y - b.y) > 1e-6) return 0
+  return depth / 2
+}
+
 function Member3D({ a, b, role, selected, tint = 0, sec, ghost = false, onPick }: {
   a: THREE.Vector3; b: THREE.Vector3; role: string; selected: boolean
   /** 0–1 utilisation tint (|M| relative to the model max) after analysis. */
@@ -153,6 +172,8 @@ function Member3D({ a, b, role, selected, tint = 0, sec, ghost = false, onPick }
   }, [a, b])
   const ty = sec ? sec.h / 1000 : role === 'column' ? 0.3 : 0.22
   const tz = sec ? sec.b / 1000 : role === 'column' ? 0.3 : 0.22
+  // the node is the top of a beam, not its centroid — see levelDrop
+  const drop = levelDrop(role, ty, a, b)
   const color = useMemo(() => {
     if (selected) return SEL
     const base = new THREE.Color(ROLE_COLOR[role] ?? '#64748b')
@@ -160,7 +181,7 @@ function Member3D({ a, b, role, selected, tint = 0, sec, ghost = false, onPick }
     return tint > 0 ? `#${base.lerp(new THREE.Color('#dc2626'), tint).getHexString()}` : `#${base.getHexString()}`
   }, [selected, role, tint, sec?.material])
   return (
-    <mesh position={mid} quaternion={quat}
+    <mesh position={[mid.x, mid.y - drop, mid.z]} quaternion={quat}
       onClick={(e) => { e.stopPropagation(); onPick() }}>
       <boxGeometry args={[len, ty, tz]} />
       {/* Ghosted while the cages are shown — solid concrete hides the steel
@@ -248,7 +269,11 @@ function MemberSteel3D({ a, b, role, shapeName, selected, tint = 0, axisRotation
     const d0 = role === 'column' ? 90 : 0
     const extra = (axisRotation ?? d0) - d0
     if (extra) quat.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), (-extra * Math.PI) / 180))
-    return { shapes, quat, pos: a.clone(), len }
+    // a beam's node line is its TOP, so the section hangs below it — see levelDrop
+    const d = shape ? (effectiveSection(shape, false).base.d ?? 0) / 1000 : 0
+    const pos = a.clone()
+    pos.y -= levelDrop(role, d, a, b)
+    return { shapes, quat, pos, len }
   }, [a, b, shapeName, role, axisRotation])
 
   const color = useMemo(() => {
@@ -1070,6 +1095,10 @@ export default function ModelSpace() {
   const [pDelta, setPDelta] = useState(b('pDelta', false))
   const [cracked, setCracked] = useState(b('cracked', true))       // ACI §6.6.3.1.1 cracked EI (0.35/0.70 Ig)
   const [shearDef, setShearDef] = useState(b('shearDef', true))    // Timoshenko shear deformation (deep girders / squat columns)
+  // The node as the TOP of the beam rather than its axis — the convention the
+  // cages and the frame elevations use. OFF by default: it is a real
+  // eccentricity, not a redraw, and it moves the column moments.
+  const [beamTopSteel, setBeamTopSteel] = useState(b('beamTopSteel', false))
   const [allAround, setAllAround] = useState(b('allAround', true)) // column P–M bars on all four faces
   const [tBeamOn, setTBeamOn] = useState(b('tBeamOn', true))       // §6.3.2 flanged sagging design
   const [tryBars, setTryBars] = useState(b('tryBars', true))        // let design/optimize pick bar Ø from a ladder
@@ -1250,7 +1279,7 @@ export default function ModelSpace() {
         baysX, baysZ, storeyH, colB, colH, girB, girH, beaB, beaH,
         fc, fy, barDia, tieDia, cover, slabThk, gammaC, qD, qL,
         qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs, methodB, accTor, orth30, evOn, rsaRegular,
-        Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, shearDef, tryBars,
+        Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, shearDef, beamTopSteel, tryBars,
         concreteClass: classPin ?? undefined, prices, planSel,
         material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu,
         woodSpeciesId, woodGrade, woodWet, matSource, customId,
@@ -1259,7 +1288,7 @@ export default function ModelSpace() {
   }, [baysX, baysZ, storeyH, colB, colH, girB, girH, beaB, beaH,
     fc, fy, barDia, tieDia, cover, slabThk, gammaC, qD, qL,
     qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs, methodB, accTor, orth30, evOn, rsaRegular,
-    Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, shearDef, tryBars,
+    Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, shearDef, beamTopSteel, tryBars,
     classPin, prices, planSel,
     material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu,
     woodSpeciesId, woodGrade, woodWet, matSource, customId])
@@ -1305,13 +1334,13 @@ export default function ModelSpace() {
   const hasELoads = model?.loads.some((l) => l.cat === 'E') ?? false
   const seismicSystem: 'gravity' | 'imf' | 'smf' = hasELoads ? (Rw >= 8 ? 'smf' : Rw >= 5 ? 'imf' : 'gravity') : 'gravity'
   // §208.4.1 vertical seismic component folded into the E-combo D factors.
-  const anaOpts = { f1: fLive, pDelta, lateral, seismicSystem, crackedSections: cracked, shearDeformation: shearDef, Ev: evOn ? 0.5 * Ca * Ie : undefined, colLayout: (allAround ? 'all-around' as const : 'two-face' as const), tBeamAction: tBeamOn }
+  const anaOpts = { f1: fLive, pDelta, lateral, seismicSystem, crackedSections: cracked, shearDeformation: shearDef, beamTopOfSteel: beamTopSteel, Ev: evOn ? 0.5 * Ca * Ie : undefined, colLayout: (allAround ? 'all-around' as const : 'two-face' as const), tBeamAction: tBeamOn }
 
   const analyze = () => {
     if (!model || busy || meshErrors) return   // §1 fail-fast: don't solve a singular mesh
     // 3D FEM + storey drift run in the worker so the UI stays responsive.
     run('analyze', {
-      model, opts: anaOpts, drift: { hasSeis: !!seis, T: seis?.T ?? 0, R: Rw, axis: primAxis, pDelta }, crackedSections: cracked, shearDeformation: shearDef,
+      model, opts: anaOpts, drift: { hasSeis: !!seis, T: seis?.T ?? 0, R: Rw, axis: primAxis, pDelta }, crackedSections: cracked, shearDeformation: shearDef, beamTopOfSteel: beamTopSteel,
     }).then((r) => {
       const res = r as { analysis: F3Analysis | null; orphans: number; drift: DriftRow[] | null; irregularities: IrregularityFlag[] | null }
       setOrphans(res.orphans)
@@ -1637,10 +1666,38 @@ export default function ModelSpace() {
     () => new Map((design?.footings ?? []).map((f) => [f.node, f.pedestal])),
     [design],
   )
-  const rebarCages = useMemo(
-    () => (showRebar && model && design ? buildStructureCages(model, design).cages : []),
+  const rebarBuild = useMemo(
+    () => (showRebar && model && design ? buildStructureCages(model, design) : null),
     [showRebar, model, design],
   )
+  const rebarCages = rebarBuild?.cages ?? []
+  /**
+   * What the cage builder had to DECIDE, and what it could not place.
+   *
+   * These used to be built and thrown away: a hook turned the other way
+   * because there was no concrete for it, a bar stranded outside the 150 mm a
+   * tie can restrain, a member the design named that the model has not got.
+   * The 3D view showed the result and never said why, which is the one thing a
+   * reviewer needs. Grouped by the note itself, since a whole floor of columns
+   * reaches the same one.
+   */
+  const rebarNotes = useMemo(() => {
+    const by = new Map<string, string[]>()
+    for (const c of rebarBuild?.cages ?? []) {
+      for (const n of c.notes ?? []) {
+        const at = by.get(n) ?? []
+        if (!at.includes(c.member)) at.push(c.member)
+        by.set(n, at)
+      }
+    }
+    for (const u of rebarBuild?.unplaced ?? []) {
+      const n = 'no cage: the design names it but the model has no member with those nodes'
+      const at = by.get(n) ?? []
+      at.push(u)
+      by.set(n, at)
+    }
+    return [...by.entries()]
+  }, [rebarBuild])
 
   const reportProps = (d: StructureDesign): [string, string][] => {
     const distinct = (role: MemberRole) => {
@@ -2157,9 +2214,18 @@ export default function ModelSpace() {
                     // depth less the pad's own thickness below the base node.
                     // Drawn from the node, the column floated above a footing
                     // it never reached.
-                    const lower = a.y <= bb.y ? m.i : m.j
-                    const ped = pedestalAt.get(lower) ?? 0
-                    if (ped > 0) { const t = a.y <= bb.y ? aV : bV; t.y -= ped }
+                    //
+                    // CLONE FIRST. Where the column has no offset of its own,
+                    // `aV`/`bV` still ARE the `nodePos` vector — and `nodePos`
+                    // is memoised on the model, so it outlives the render.
+                    // Subtracting in place therefore sank the base a whole
+                    // pedestal on EVERY render: the supports crept downwards
+                    // each time the tab was switched, and the support symbol,
+                    // which reads the same map and subtracts the pedestal
+                    // again, followed them down twice as fast.
+                    const drops = endDrops(a.y, bb.y, pedestalAt.get(m.i) ?? 0, pedestalAt.get(m.j) ?? 0)
+                    if (drops.i > 0) aV = aV.clone().setY(aV.y - drops.i)
+                    if (drops.j > 0) bV = bV.clone().setY(bV.y - drops.j)
                   } else {
                     aV = manI ? a.clone().add(v3(manI)) : (fo?.offI ? a.clone().add(v3(fo.offI)) : a)
                     bV = manJ ? bb.clone().add(v3(manJ)) : (fo?.offJ ? bb.clone().add(v3(fo.offJ)) : bb)
@@ -2302,6 +2368,19 @@ export default function ModelSpace() {
               </span>
             )}
           </label>
+          {showRebar && rebarNotes.length > 0 && (
+            <div className="no-print mt-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-900">
+              <div className="font-medium">What the detailing had to decide</div>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                {rebarNotes.map(([note, at]) => (
+                  <li key={note}>
+                    <span className="font-mono">{at.slice(0, 4).join(', ')}{at.length > 4 ? ` +${at.length - 4} more` : ''}</span>
+                    {' — '}{note}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <label className="no-print mt-2 flex items-center gap-2 text-xs text-slate-600">
             <input type="checkbox" checked={showLoads} onChange={(e) => setShowLoads(e.target.checked)} />
             Show load diagrams on the model
@@ -3596,6 +3675,10 @@ export default function ModelSpace() {
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={shearDef} onChange={(e) => setShearDef(e.target.checked)} />
                   <span>Shear deformation <span className="text-slate-500">(Timoshenko)</span></span>
+                </label>
+                <label className="col-span-full flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={beamTopSteel} onChange={(e) => setBeamTopSteel(e.target.checked)} />
+                  <span>Beams framed at top of steel <span className="text-slate-500">(node = top of beam; matches the drawings, moves the column moments)</span></span>
                 </label>
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={allAround} onChange={(e) => setAllAround(e.target.checked)} />

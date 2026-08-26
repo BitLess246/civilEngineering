@@ -23,7 +23,10 @@ export type PlanPrimitive =
   | { kind: 'rect'; x: number; y: number; w: number; h: number; stroke?: string; fill?: string; width?: number; dash?: number[] }
   | { kind: 'circle'; cx: number; cy: number; r: number; stroke?: string; fill?: string; width?: number }
   | { kind: 'text'; x: number; y: number; text: string; size: number; anchor?: 'start' | 'middle' | 'end'; rotate?: number; color?: string; weight?: number }
-  | { kind: 'dim'; x1: number; y1: number; x2: number; y2: number; text: string; off: number; size: number }
+  // `ext` is where the FEATURE is, on the axis the dimension does not run
+  // along: the extension lines are drawn from there out to the dimension line,
+  // so the reader can see what is being measured rather than infer it.
+  | { kind: 'dim'; x1: number; y1: number; x2: number; y2: number; text: string; off: number; size: number; ext?: number }
   // world-space path (coords in m, arc radii in m) — used for outlined rebar tubes
   | { kind: 'path'; cmds: PathCmd[]; stroke?: string; fill?: string; width?: number; dash?: number[]; closed?: boolean; fillRule?: 'evenodd' | 'nonzero'; opacity?: number; join?: 'round' | 'miter' | 'bevel'; cap?: 'round' | 'butt' | 'square' }
 
@@ -100,6 +103,39 @@ export interface PlanOptions {
 }
 
 const INK = '#1e293b', GRID = '#94a3b8', BEAM = '#0f4c92', COL = '#1e293b', PANEL = '#0f766e'
+/** Extension lines are the palest thing on the sheet — they carry no meaning
+ *  of their own, they only say WHICH feature the dimension belongs to. */
+const EXT_INK = '#9aa5b5'
+
+/**
+ * The two extension lines of a dimension, or none where it does not say what
+ * it measures.
+ *
+ * They run from the feature out to the dimension line, on the axis the
+ * dimension does NOT run along. Drafting convention, and the reason they read
+ * as extension lines rather than as more geometry: a small GAP off the feature
+ * so the line never touches the thing it points at, and a small OVERSHOOT past
+ * the dimension line so the two visibly meet.
+ *
+ * A dimension with no `ext` is left alone — some are drawn hard against what
+ * they measure and would only gain a stub.
+ */
+export function extensionLines(
+  p: Extract<PlanPrimitive, { kind: 'dim' }>,
+): { x1: number; y1: number; x2: number; y2: number; dash: number }[] {
+  if (p.ext == null) return []
+  const vertical = Math.abs(p.y2 - p.y1) > Math.abs(p.x2 - p.x1)
+  const at = vertical ? p.x1 : p.y1                 // where the dimension line sits
+  const span = at - p.ext
+  const gap = p.size * 0.45, over = p.size * 0.55
+  if (Math.abs(span) < gap + over) return []        // too close to be worth drawing
+  const dir = Math.sign(span)
+  const from = p.ext + dir * gap, to = at + dir * over
+  const dash = p.size * 0.5
+  return vertical
+    ? [{ x1: from, y1: p.y1, x2: to, y2: p.y1, dash }, { x1: from, y1: p.y2, x2: to, y2: p.y2, dash }]
+    : [{ x1: p.x1, y1: from, x2: p.x1, y2: to, dash }, { x1: p.x2, y1: from, x2: p.x2, y2: to, dash }]
+}
 
 const uniq = (vals: number[]): number[] => {
   const out: number[] = []
@@ -396,6 +432,9 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
   const dimOffTop = z0 - ext * 0.75 - dimTextH * 1.5
   for (let i = 0; i < xs.length - 1; i++)
     P.push({ kind: 'dim', x1: xs[i], y1: dimOffTop, x2: xs[i + 1], y2: dimOffTop, text: `${Math.round((xs[i + 1] - xs[i]) * 1000)} mm`, off: 0, size: dimTextH })
+  // No `ext` on either grid dimension: the grid LINES already run from the
+  // bubbles through the dimension line and into the plan, so they are the
+  // extension lines. Adding more would draw the same stroke twice.
   const dimOffLeft = x0 - ext * 0.75 - dimTextH * 1.5
   for (let i = 0; i < zs.length - 1; i++)
     P.push({ kind: 'dim', x1: dimOffLeft, y1: zs[i], x2: dimOffLeft, y2: zs[i + 1], text: `${Math.round((zs[i + 1] - zs[i]) * 1000)} mm`, off: 0, size: dimTextH })
@@ -459,7 +498,11 @@ export function buildPlan(model: StructuralModel, opts: PlanOptions = {}): PlanD
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
   const acc = (x: number, y: number) => { minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y) }
   for (const pr of P) {
-    if (pr.kind === 'line' || pr.kind === 'dim') { acc(pr.x1, pr.y1); acc(pr.x2, pr.y2) }
+    if (pr.kind === 'line' || pr.kind === 'dim') {
+      acc(pr.x1, pr.y1); acc(pr.x2, pr.y2)
+      // an extension line reaches back to the feature, so it sets the extent
+      if (pr.kind === 'dim') for (const e of extensionLines(pr)) { acc(e.x1, e.y1); acc(e.x2, e.y2) }
+    }
     else if (pr.kind === 'rect') { acc(pr.x, pr.y); acc(pr.x + pr.w, pr.y + pr.h) }
     else if (pr.kind === 'circle') { acc(pr.cx - pr.r, pr.cy - pr.r); acc(pr.cx + pr.r, pr.cy + pr.r) }
     else if (pr.kind === 'path') { for (const cmd of pr.cmds) acc(cmd.x, cmd.y) }
@@ -512,6 +555,10 @@ export function planToSvg(d: Drawing, pxWidth = 1100): string {
       const x1 = X(p.x1), y1 = Y(p.y1), x2 = X(p.x2), y2 = Y(p.y2)
       const fs = L(p.size)
       const tick = fs * 0.45
+      // Extension lines first, so the dimension line and its ticks sit on top.
+      for (const e of extensionLines(p)) {
+        out.push(`<line x1="${X(e.x1).toFixed(1)}" y1="${Y(e.y1).toFixed(1)}" x2="${X(e.x2).toFixed(1)}" y2="${Y(e.y2).toFixed(1)}" stroke="${EXT_INK}" stroke-width="0.6" stroke-dasharray="${L(e.dash).toFixed(1)},${L(e.dash * 0.7).toFixed(1)}"/>`)
+      }
       out.push(`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${INK}" stroke-width="0.8"/>`)
       // 45° ticks at both ends
       for (const [tx, ty] of [[x1, y1], [x2, y2]] as const)

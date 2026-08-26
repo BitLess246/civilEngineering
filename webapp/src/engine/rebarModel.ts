@@ -70,6 +70,17 @@ export interface RebarRun {
   /** True for a stirrup, tie or hoop: the last vertex joins back to the first. */
   closed?: boolean
   /**
+   * Diameter of the longitudinal bar this transverse bar is bent AROUND, mm.
+   *
+   * A tie is not bent to some abstract radius: it is bent around the bar it
+   * restrains, and that bar sits INSIDE the curl. Set, the drawing rounds each
+   * corner to (wrapDia + dia)/2 — centre to centre — so the corner arc wraps
+   * the bar instead of passing behind it. `bendDia` is untouched, because the
+   * FABRICATED bend is still whatever §425.3.2 requires and that is what the
+   * cut length is measured against.
+   */
+  wrapDia?: number
+  /**
    * Developed length beyond the polyline, mm — the anchoring hooks a closed
    * tie's two free ends carry, which no vertex of a closed loop can express.
    * See `stirrupHookAllowance`.
@@ -82,6 +93,10 @@ export interface RebarRun {
 export interface RebarCage {
   member: string
   runs: RebarRun[]
+  /** Anything the placement could not satisfy — e.g. a longitudinal bar left
+   *  more than 150 mm clear of a laterally supported one (§425.7.2.3). Empty
+   *  when the cage is compliant, so a caller can surface it without asking. */
+  notes?: string[]
 }
 
 // ── bend geometry ────────────────────────────────────────────────────────
@@ -190,7 +205,14 @@ export function cutLength(run: RebarRun): number {
     if (D == null || D <= 0) continue
     ded += bendDeduction(D, run.dia, turns[k])
   }
-  return Math.max(0, straight - ded + (run.hookAllowance ?? 0))
+  const flat = Math.max(0, straight - ded + (run.hookAllowance ?? 0))
+  // A CLOSED tie cannot close on itself, so it leans one diameter aside over
+  // its run (`closedTieBar`). The bar is then a shallow helix rather than a
+  // plane curve, and the stock it is cut from is the hypotenuse. On a 1.5 m
+  // tie that is four hundredths of a millimetre — real, and far below what a
+  // bar is cut to, but it costs nothing to be right about.
+  if (run.closed && run.hookAllowance) return Math.hypot(flat, run.dia)
+  return flat
 }
 
 /** Fabricated weight of a run — every copy of it, kg. */
@@ -294,6 +316,83 @@ export function cageToPrimitives(cage: RebarCage, plane: ViewPlane, style: (r: R
  */
 export function stirrupHookAllowance(dt: number): number {
   return 2 * (Math.max(6 * dt, 75) + 3 * dt)
+}
+
+/** §425.3.2 — straight extension beyond a seismic hook's bend, mm. */
+/** Table 425.3.1 — the straight tail beyond a 90° standard hook, in bar Ø. */
+export const HOOK_TAIL_DB = 12
+
+export interface Hook90 {
+  /** Inside bend diameter D, mm. */
+  bendDia: number
+  /** Bar-centreline bend radius, mm — D/2 + db/2. */
+  radius: number
+  /** Straight tail ℓext beyond the bend, mm. */
+  ext: number
+  /** Overall height of the hook from the straight bar's centreline to the far
+   *  end of the tail, mm — radius + ℓext. What has to fit inside the member. */
+  depth: number
+  /** Horizontal distance from the straight bar's centreline turn point to the
+   *  OUTSIDE of the turned-down leg, mm. ℓdh is measured to this face
+   *  (§425.4.3), not to the bar centreline. */
+  outside: number
+}
+
+/**
+ * The fabricated dimensions of a 90° standard hook on a `db` bar.
+ *
+ * Lived in the typical beam detail while that sheet existed. It is not a
+ * drawing rule — it is the shape of the bar — so it belongs beside the bend
+ * diameter it is built from, where the schedule of measures and any future
+ * sheet can reach it without depending on a drawing module.
+ */
+export function hook90(db: number): Hook90 {
+  const bendDia = hookBendDiameter(db)
+  const radius = bendDia / 2 + db / 2
+  const ext = HOOK_TAIL_DB * db
+  return { bendDia, radius, ext, depth: radius + ext, outside: radius + db / 2 }
+}
+
+export const hookExtension = (dt: number) => Math.max(6 * dt, 75)
+
+/** §425.3.2 — a seismic hook turns 135°. */
+const SEISMIC_HOOK_TURN = (135 * Math.PI) / 180
+
+/**
+ * Cut allowance for the closure of a CLOSED tie, mm — the exact figure for the
+ * shape `closedTieBar` draws, replacing the 3·dt rule of thumb.
+ *
+ * A tie is one bar, so the corner it closes at is not a corner: it is where the
+ * bar is cut, and each end turns 135° AROUND the corner longitudinal bar before
+ * running its extension into the core. So against the polyline the bill has to
+ *
+ *   • drop the 90° bend `cutLength` deducts there, which is not made:  +R·θ₀
+ *   • pay for two 135° arcs at the wrap radius instead:              −2·R·(3π/4)
+ *   • pay for the two extensions:                                    −2·ℓext
+ *
+ * giving R·(3π/2 − θ₀) + 2·ℓext. For a rectangular ⌀10 tie on ⌀20 bars that is
+ * 47 mm rather than the old rule's 60 — the rule of thumb was buying a 90° bend
+ * that nobody makes.
+ *
+ * `turn0Deg` is the loop's own deviation at that corner (90° for a rectangle);
+ * `R` the centreline radius the hook is bent to, which is the WRAP radius where
+ * the tie is drawn hugging a bar.
+ */
+export function closedTieClosureAllowance(turn0Deg: number, R: number, dt: number): number {
+  const t0 = (Math.abs(turn0Deg) * Math.PI) / 180
+  return Math.max(0, R * (2 * SEISMIC_HOOK_TURN - t0)) + 2 * hookExtension(dt)
+}
+
+/**
+ * Cut allowance for a CROSS TIE — a single-legged stirrup, mm.
+ *
+ * Its path is the two longitudinal bars it grips, so the polyline buys the leg
+ * between their centres and nothing else. The steel also turns a full 180°
+ * around each bar and runs an extension off each: 2·πR + 2·ℓext. The old rule
+ * of thumb bought 6·dt for the two turns where a ⌀10 tie on ⌀20 bars needs 94.
+ */
+export function crossTieHookAllowance(R: number, dt: number): number {
+  return 2 * Math.PI * R + 2 * hookExtension(dt)
 }
 
 // ── the four corner bars ─────────────────────────────────────────────────

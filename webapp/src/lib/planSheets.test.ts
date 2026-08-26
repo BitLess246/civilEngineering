@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel } from '../engine/modelBuilder'
 import { designStructure } from '../engine/pipeline'
-import { buildSheetSet, planSheets, detailSheets, groupSheets, floorName, type PlanSheet } from './planSheets'
+import { buildSheetSet, planSheets, detailSheets, groupSheets, generalNotesSheet, floorName, type PlanSheet } from './planSheets'
 import { planToSvg } from '../engine/planRenderer'
 import { paintDrawing, paintedSize } from './drawingPdf'
 import { M, CONTENT_W, PAGE_W, PAGE_H } from './pdfKit'
@@ -38,7 +38,7 @@ describe('the sheet set', () => {
 
   it('covers every group once the model has one of each thing', () => {
     const groups = new Set(sheets.map((s) => s.group))
-    for (const g of ['Plans', 'Beam details', 'Column details', 'Footing details', 'Slab opening details', 'Wall standard details', 'Beam–column joint details']) {
+    for (const g of ['Plans', 'Frame elevations', 'Column details', 'Footing details', 'Slab opening details', 'Wall standard details', 'Beam–column joint details']) {
       expect(groups.has(g as PlanSheet['group']), `missing ${g}`).toBe(true)
     }
   })
@@ -70,7 +70,7 @@ describe('the sheet set', () => {
     for (const j of joints) expect(j.title).toContain('BEAM–COLUMN JOINT')
     // the joint sheet follows the beam and column details it depends on
     const iJoint = sheets.findIndex((s) => s.group === 'Beam–column joint details')
-    expect(iJoint).toBeGreaterThan(sheets.findIndex((s) => s.group === 'Beam details'))
+    expect(iJoint).toBeGreaterThan(sheets.findIndex((s) => s.group === 'Frame elevations'))
     expect(iJoint).toBeGreaterThan(sheets.findIndex((s) => s.group === 'Column details'))
   })
 
@@ -117,8 +117,10 @@ describe('the sheet set', () => {
 
   it('drops the design-only sheets when there is no design', () => {
     const only = buildSheetSet(model, null, soil)
-    expect(only.every((s) => s.group === 'Plans')).toBe(true)
-    // …and the framing plans still come through, since they need only the model
+    // The general notes need only the model — its covers, bar sizes and
+    // materials — so they are on the set before anything is designed.
+    expect(only.every((s) => s.group === 'Plans' || s.group === 'General notes')).toBe(true)
+    expect(only[0].group).toBe('General notes')
     expect(only.length).toBeGreaterThan(0)
     expect(only.some((s) => s.key === 'foundation-plan')).toBe(false)
   })
@@ -129,7 +131,8 @@ describe('grouping', () => {
     const { model, design } = full()
     const sheets = buildSheetSet(model, design, soil)
     const groups = groupSheets(sheets)
-    expect(groups.map((g) => g.group)[0]).toBe('Plans')
+    // The rules come first, then the plans, then the details.
+    expect(groups.map((g) => g.group).slice(0, 2)).toEqual(['General notes', 'Plans'])
     expect(groups.flatMap((g) => g.sheets)).toEqual(sheets)
     for (const g of groups) expect(g.sheets.every((s) => s.group === g.group)).toBe(true)
   })
@@ -137,6 +140,7 @@ describe('grouping', () => {
   it('splits plans from details the same way the two builders do', () => {
     const { model, design } = full()
     expect(buildSheetSet(model, design, soil)).toEqual([
+      generalNotesSheet(model),
       ...planSheets(model, design, soil),
       ...detailSheets(model, design, soil),
     ])

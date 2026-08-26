@@ -62,16 +62,23 @@ describe('buildStructureCages', () => {
     expect(Math.max(...zs)).toBeLessThanOrEqual(Math.max(ni.z, nj.z) + 0.3)
   })
 
-  it('hangs the beam steel off the node as the section CENTROID, not its top', () => {
-    // The 3D scene centres a member's box on the node line, so the soffit is
-    // h/2 below the node. Treating the node as the top would bury every beam
-    // cage half a section into the slab.
+  it('hangs the whole beam BELOW the node — the node is the TOP of the beam', () => {
+    // A floor level is the top of the beam: the column below stops there, the
+    // column above starts there, and the beam hangs under the pair. Read as the
+    // centroid, half of every beam was drawn up through the column starting at
+    // that node.
     const b = design.beams[0]
     const mem = memOf(b.id), y = nodeOf(mem.i).y
     const cage = cages.find((c) => c.member === b.id)!
     const ys = cage.runs.flatMap((r) => r.path.map((p) => p[1]))
-    expect(Math.min(...ys)).toBeGreaterThan(y - 0.5 / 2 - 1e-6)
-    expect(Math.max(...ys)).toBeLessThan(y + 0.5 / 2 + 1e-6)
+    expect(Math.max(...ys)).toBeLessThanOrEqual(y + 1e-6)     // nothing above the level
+    expect(Math.min(...ys)).toBeGreaterThan(y - 0.5 - 1e-6)   // nothing below the soffit
+    // …and it hangs the FULL depth: the top steel sits one cover inset under
+    // the node and the bottom steel one inset over the soffit — not h/2 either
+    // side of the node, which is what the centroid reading gave.
+    expect(Math.max(...ys)).toBeLessThan(y - 0.02)            // inside the cover
+    expect(Math.max(...ys)).toBeGreaterThan(y - 0.1)          // …and only just
+    expect(Math.min(...ys)).toBeLessThan(y - 0.4)             // steel down at the soffit
   })
 
   it('stands a column cage on its own plan position, and starts at its base', () => {
@@ -135,7 +142,15 @@ describe('buildStructureCages', () => {
     for (const c of design.columns) {
       const { hi } = yOf(c.id)
       if (carriesOnAbove(c.id)) { expect(topOf(c.id)).toBeGreaterThan(hi + 0.29); spliced++ }
-      else { expect(topOf(c.id)).toBeCloseTo(hi, 6); capped++ }
+      else {
+        // A roof column laps onto nothing, so it does not run on into a
+        // splice — it turns its bars in JUST BELOW the node, under the top
+        // steel of the beams framing in, since the node is the top of the beam
+        // and there is no concrete above it to hook into.
+        expect(topOf(c.id)).toBeLessThan(hi - 1e-9)
+        expect(topOf(c.id)).toBeGreaterThan(hi - 0.2)
+        capped++
+      }
     }
     expect(capped).toBeGreaterThan(0)          // the model does have roof columns
     expect(spliced + capped).toBe(design.columns.length)
