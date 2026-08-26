@@ -8,6 +8,8 @@ import { usePaletteHotkey } from '../lib/usePaletteHotkey'
 import { PipelineDiagram } from '../components/PipelineDiagram'
 import { WorkedSolutionPreview } from '../components/WorkedSolutionPreview'
 import { Storyboard, ReportComparison } from '../components/Storyboard'
+import { useToolPrefs } from '../lib/useToolPrefs'
+import { visibleGroups } from '../lib/toolPrefs'
 
 // Home — search-first tool directory on the drawing-sheet workbench theme
 // (docs/design/uiux-2026-07/Redesign - Home): dark hero with drafting grid,
@@ -33,13 +35,22 @@ const chipTo: Record<string, string> = {
 export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') => void }) {
   const [palette, setPalette] = useState(false)
   usePaletteHotkey(setPalette)
-  const toolCount = ALL_TOOLS.length
-  const groups = useMemo(() => SIDEBAR_GROUPS.map((g, i) => ({
+  const prefs = useToolPrefs()
+
+  // The DIRECTORY is trimmed to the disciplines this browser chose; the hero
+  // still advertises the whole catalog, because that count is a claim about the
+  // product, not about this reader's sidebar. Numbering and anchors are derived
+  // AFTER the filter, so a trimmed directory reads 01, 02, 03 rather than
+  // skipping the numbers of hidden groups.
+  const groups = useMemo(() => visibleGroups(SIDEBAR_GROUPS, prefs).map((g, i) => ({
     num: String(i + 1).padStart(2, '0'),
     heading: g.label === 'Analysis' ? 'Analysis & Modelling' : g.label === 'Steel' ? 'Steel & Connections' : g.label === 'Estimates' ? 'Quantity Take-Off' : g.label,
     anchor: `dir-${i}`,
     tools: g.tools,
-  })), [])
+  })), [prefs])
+  const toolCount = ALL_TOOLS.length
+  const shownCount = useMemo(() => groups.reduce((n, g) => n + g.tools.length, 0), [groups])
+  const trimmed = shownCount < toolCount
 
   const searchBox = (big: boolean) => (
     <button type="button" onClick={() => setPalette(true)}
@@ -169,9 +180,21 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
 
       {/* Tool directory with sticky rail */}
       <section id="tools" className="mx-auto max-w-[1200px] px-6 pb-16 pt-9">
-        <div className="mb-4 flex items-baseline gap-3.5">
+        <div className="mb-4 flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
           <h2 className="text-[19px] font-extrabold tracking-tight">Tool directory</h2>
-          <span className="font-mono text-[11px] text-[#a39d8d]">{toolCount} tools · {groups.length} disciplines</span>
+          <span className="font-mono text-[11px] text-[#a39d8d]">{shownCount} tools · {groups.length} disciplines</span>
+          {/* SAY SO WHEN THE LIST IS TRIMMED. A directory quietly missing the
+              geotechnical tools is indistinguishable from an app that never had
+              them, and "where did they go?" is a support mail rather than a
+              click. The count above is the shown count for the same reason —
+              claiming 52 above a list of 21 would be the tell that something is
+              wrong without saying what. */}
+          {trimmed && (
+            <span className="font-mono text-[11px] text-[#a39d8d]">
+              · {toolCount - shownCount} hidden by your preferences —{' '}
+              <Link to="/profile" className="text-[#0f4c92] underline">change</Link>
+            </span>
+          )}
         </div>
         <div className="grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <div className="sticky top-[72px] hidden flex-col gap-0.5 lg:flex">

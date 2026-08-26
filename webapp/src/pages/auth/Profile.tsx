@@ -9,6 +9,84 @@ import { openPortalSession, portalMessage } from '../../lib/billing/portal'
 import {
   fetchBillingHistory, rowAmount, rowDate, statusLabel, needsAttention, type HistoryRow,
 } from '../../lib/billing/history'
+import { DisciplinePicker } from '../../components/DisciplinePicker'
+import { useToolPrefs, setToolPrefs } from '../../lib/useToolPrefs'
+import { chosenFromPrefs, prefsFromChosen, CHOOSABLE_GROUPS } from '../../lib/toolPrefs'
+
+/**
+ * "Tools you use" — the answer to the first-run question, changeable.
+ *
+ * Saving publishes through `setToolPrefs`, so the sidebar and the home
+ * directory update on the same click rather than on the next reload. A Save
+ * button whose effect only appears after F5 reads as a broken Save button.
+ *
+ * The picker is the SAME component the first-run dialog uses, so the two lists
+ * cannot drift apart — this page exists to change an answer that one took.
+ */
+function ToolPreferences() {
+  const prefs = useToolPrefs()
+  const [chosen, setChosen] = useState<ReadonlySet<string>>(() => chosenFromPrefs(prefs, CHOOSABLE_GROUPS))
+  const [saved, setSaved] = useState(false)
+
+  const toggle = (label: string) => {
+    setChosen((s) => {
+      const next = new Set(s)
+      if (!next.delete(label)) next.add(label)
+      return next
+    })
+    setSaved(false)
+  }
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault()
+    setToolPrefs(prefsFromChosen(chosen, CHOOSABLE_GROUPS))
+    setSaved(true)
+  }
+
+  const none = chosen.size === 0
+  const all = chosen.size === CHOOSABLE_GROUPS.length
+
+  return (
+    <form onSubmit={submit} className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-[1.02rem] font-bold text-[#0056b3]">Tools you use</h2>
+      <p className="mt-1 text-[13px] leading-6 text-slate-600">
+        The home page and the sidebar show the disciplines you tick. <strong>Nothing is removed</strong> —
+        unticked tools keep working, stay reachable by link, and still turn up in ⌘K search.
+      </p>
+
+      <div className="mb-3 mt-4 flex items-center justify-between gap-3">
+        <span className="text-[12px] font-semibold text-slate-500">
+          {chosen.size} of {CHOOSABLE_GROUPS.length} selected
+        </span>
+        <button type="button"
+          onClick={() => { setChosen(all ? new Set() : new Set(CHOOSABLE_GROUPS)); setSaved(false) }}
+          className="text-[12px] font-semibold text-[#0056b3] hover:underline">
+          {all ? 'Clear all' : 'Select all'}
+        </button>
+      </div>
+
+      <DisciplinePicker chosen={chosen} onToggle={toggle} />
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button type="submit" disabled={none}
+          className="rounded-md bg-[#0056b3] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0f4c92] disabled:cursor-not-allowed disabled:opacity-50">
+          Save
+        </button>
+        {saved && <span role="status" className="text-[13px] font-medium text-emerald-700">Saved</span>}
+        {none && (
+          <span className="text-[13px] font-medium text-amber-700">
+            Pick at least one — hiding everything would leave nothing to navigate.
+          </span>
+        )}
+      </div>
+
+      <p className="mt-4 border-t border-slate-100 pt-3 text-[12px] leading-5 text-slate-500">
+        Stored in this browser, like the letterhead below. A different computer starts with the
+        full catalog and asks again.
+      </p>
+    </form>
+  )
+}
 
 /**
  * "Manage subscription" — the way out.
@@ -222,6 +300,9 @@ export default function Profile() {
             : <>Paid plans are not open for sign-up yet — see <Link to="/pricing" className="text-[#0056b3] underline">Plans</Link> for what they include.</>}
         </p>
       </section>
+
+      {/* ── Tools you use ── */}
+      <ToolPreferences />
 
       {/* ── Letterhead ── */}
       <form onSubmit={submit} className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
