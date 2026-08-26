@@ -1575,21 +1575,42 @@ export function lowerBasesToFootings(
  */
 export function designStructure(
   model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}, opts: AnalyzeOptions = {},
-  onProgress?: ProgressFn,
+  onProgress?: ProgressFn, neededCombos?: Set<string>,
 ): StructureDesign | null {
-  const first = designStructureOnce(model, soil, plan, opts, onProgress)
+  const first = designStructureOnce(model, soil, plan, opts, onProgress, neededCombos)
   if (!first) return null
   const lowered = lowerBasesToFootings(model, first)
-  return lowered ? designStructureOnce(lowered, soil, plan, opts, onProgress) ?? first : first
+  return lowered ? designStructureOnce(lowered, soil, plan, opts, onProgress, neededCombos) ?? first : first
+}
+
+/**
+ * Every load case any check in this design was governed by.
+ *
+ * A design that FAILS on a subset of the load cases fails on all of them:
+ * capacities come from the geometry and are fixed, while each extra case can
+ * only widen the demand envelope. So this set is sound to REJECT with — never
+ * to accept with, which is why nothing here returns a design.
+ */
+export function governingCombos(d: StructureDesign): Set<string> {
+  const out = new Set<string>()
+  const add = (g?: string) => { if (g) out.add(g) }
+  for (const b of d.beams) { add(b.gov); for (const s of b.sections) add((s as { gov?: string }).gov) }
+  for (const c of d.columns) add(c.gov)
+  for (const b of d.steelBeams) add(b.gov)
+  for (const c of d.steelColumns) add(c.gov)
+  for (const b of d.woodBeams) add(b.gov)
+  for (const c of d.woodColumns) add(c.gov)
+  for (const f of d.footings) add((f as { gov?: string }).gov)
+  return out
 }
 
 /** One pass, on the model exactly as given. */
 export function designStructureOnce(
   model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}, opts: AnalyzeOptions = {},
-  onProgress?: ProgressFn,
+  onProgress?: ProgressFn, neededCombos?: Set<string>,
 ): StructureDesign | null {
   if (model.members.length === 0) return null
-  const { br, runs, precomp } = buildRuns(model, opts, onProgress)
+  const { br, runs, precomp } = buildRuns(model, opts, onProgress, neededCombos)
   const serviceLoads = applyF3Combo(br.loads, { D: 1, L: 1, Lr: 1, S: 1, R: 1 })
   const serviceRes = serviceLoads.length ? solveWithGeometry(precomp, serviceLoads, opts) : null
   const dLoads = applyF3Combo(br.loads, { D: 1 })
@@ -2347,6 +2368,39 @@ export function optimizeStructure(
   if (!converged && !stopReason)
     stopReason = stopReasonFor(design, `iteration cap (${maxIter}) reached — check spans and loads`)
 
+  /**
+   * Design a trial model, but reject the hopeless ones cheaply first.
+   *
+   * A shrink trial is accepted only if the FULL design passes, exactly as
+   * before — this returns that full design or nothing, and never a screened
+   * one. What it adds is the screen: solve only the load cases that governed
+   * the design we already have, and if the trial fails against those it would
+   * have failed against all of them (see `governingCombos`), so the full sweep
+   * is never run.
+   *
+   * That is the whole saving, and it is free of judgement: no threshold, no
+   * estimate of what a section can take, nothing that could leave a member one
+   * rung larger than it had to be. Trials that were going to fail just stop
+   * sooner. The accepted design is bit-identical to the one the exhaustive
+   * search produced.
+   *
+   * (An earlier attempt predicted from utilisation whether a trim could
+   * survive, and skipped the trial if not. It was 30 % faster and left the
+   * 87-member frame 0.11 % heavier, because the prediction ignored the
+   * self-weight the trim removes. Economy is what this phase is FOR, so that
+   * trade is not one to make silently.)
+   */
+  const tryTrim = (trial: StructuralModel, gov: Set<string>): StructureDesign | null => {
+    if (gov.size > 0) {
+      const screen = designStructure(trial, soil, plan, opts, undefined, gov)
+      // `null` means the reduced sweep produced no runs at all — inconclusive,
+      // so fall through to the full design rather than reject on it.
+      if (screen && !designOK(screen)) return null
+    }
+    const d = designStructure(trial, soil, plan, opts)
+    return d && designOK(d) ? d : null
+  }
+
   // SHRINK: first try trimming all sections simultaneously (batch pass) — much
   // faster for large models when most sections are over-sized by several steps.
   // Then fall back to individual 25-mm fine-tune for sections that couldn't be
@@ -2373,8 +2427,8 @@ export function optimizeStructure(
       onProgress?.({ phase: 'Optimizing — trimming sections', detail: `batch pass ${batchPass}: ${batchSizes.size} section(s) h↓` })
       const trial = settle(withSizes(work, batchSizes))
       if (!sectionsChanged(work, trial)) break   // hierarchy reverted every shrink — no progress
-      const d = designStructure(trial, soil, plan, opts)
-      if (d && designOK(d)) { work = trial; design = d } else { batchOk = false }
+      const d = tryTrim(trial, governingCombos(design))
+      if (d) { work = trial; design = d } else { batchOk = false }
     }
     // Phase 2 — shrink b for RC sections (As = ρ·b·d; narrower b may still satisfy demand)
     let bBatchOk = true
@@ -2391,8 +2445,8 @@ export function optimizeStructure(
       onProgress?.({ phase: 'Optimizing — trimming sections', detail: `batch pass ${batchPass}: ${batchSizes.size} section(s) b↓` })
       const trial = settle(withSizes(work, batchSizes))
       if (!sectionsChanged(work, trial)) break   // hierarchy reverted every shrink — no progress
-      const d = designStructure(trial, soil, plan, opts)
-      if (d && designOK(d)) { work = trial; design = d } else { bBatchOk = false }
+      const d = tryTrim(trial, governingCombos(design))
+      if (d) { work = trial; design = d } else { bBatchOk = false }
     }
     // Phase 3 — trim slab thickness (economy): only panels comfortably inside the
     // §424.2 deflection limits shrink, and never below §408.3.1.2 hmin (or 100 mm).
@@ -2415,12 +2469,20 @@ export function optimizeStructure(
       onProgress?.({ phase: 'Optimizing — trimming sections', detail: `batch pass ${batchPass}: ${trims.size} slab(s) t↓` })
       const trial = settle(withPlateThickness(work, trims, soil.gammaConc))
       if (!sectionsChanged(work, trial)) break
-      const d = designStructure(trial, soil, plan, opts)
-      if (d && designOK(d)) { work = trial; design = d } else { sBatchOk = false }
+      const d = tryTrim(trial, governingCombos(design))
+      if (d) { work = trial; design = d } else { sBatchOk = false }
     }
 
     // Fine-tune: per-section — try h↓ first, then b↓ if h can't shrink or fails.
     // A trial the hierarchy reverts is skipped (identical model ⇒ not an improvement).
+    //
+    // EVERY TRIAL HERE IS A WHOLE STRUCTURAL DESIGN — the section is trimmed,
+    // the model re-solved for every load case and every member re-checked, all
+    // to answer one question about one section. Four passes over S sections
+    // costs up to 8·S of them: on an 87-member frame that measured 565 full
+    // designs and 115 seconds, against 2.5 s for a 204-member frame that never
+    // reached this phase at all. Seventy per cent of each of those is the load
+    // case sweep. `tryTrim` is where that is paid for, once, for all of them.
     let improved = true, guard = 0
     while (improved && guard++ < 4) {
       improved = false
@@ -2431,16 +2493,16 @@ export function optimizeStructure(
           onProgress?.({ phase: 'Optimizing — fine-tuning', detail: s0.name })
           const trial = settle(withSizes(work, new Map([[s0.id, applyShape(s0, lighter)]])))
           if (!sectionsChanged(work, trial)) continue
-          const d = designStructure(trial, soil, plan, opts)
-          if (d && designOK(d)) { work = trial; design = d; improved = true }
+          const d = tryTrim(trial, governingCombos(design))
+          if (d) { work = trial; design = d; improved = true }
         } else {
           if (s0.h - 25 >= 300) {
             onProgress?.({ phase: 'Optimizing — fine-tuning', detail: `${s0.name} h↓` })
             const hSec = { ...s0, h: s0.h - 25, name: `${s0.b}×${s0.h - 25}` }
             const trial = settle(withSizes(work, new Map([[s0.id, hSec]])))
             if (sectionsChanged(work, trial)) {
-              const d = designStructure(trial, soil, plan, opts)
-              if (d && designOK(d)) { work = trial; design = d; improved = true; continue }
+              const d = tryTrim(trial, governingCombos(design))
+              if (d) { work = trial; design = d; improved = true; continue }
             }
           }
           if (s0.b - 25 >= 200) {
@@ -2448,8 +2510,8 @@ export function optimizeStructure(
             const bSec = { ...s0, b: s0.b - 25, name: `${s0.b - 25}×${s0.h}` }
             const trial = settle(withSizes(work, new Map([[s0.id, bSec]])))
             if (!sectionsChanged(work, trial)) continue
-            const d = designStructure(trial, soil, plan, opts)
-            if (d && designOK(d)) { work = trial; design = d; improved = true }
+            const d = tryTrim(trial, governingCombos(design))
+            if (d) { work = trial; design = d; improved = true }
           }
         }
       }

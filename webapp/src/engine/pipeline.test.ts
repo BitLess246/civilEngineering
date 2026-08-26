@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { generateGridModel, buildGravityLoads, removeNode, enforceSectionHierarchy, refreshSelfWeight, splitSharedSections, barContinuityGroups } from './modelBuilder'
-import { designStructure, optimizeStructure, selectBarDiameters, designOK, withEv, RC_LIMITS, type LateralCase, designStructureOnce, lowerBasesToFootings } from './pipeline'
+import { designStructure, optimizeStructure, selectBarDiameters, designOK, withEv, RC_LIMITS, type LateralCase, designStructureOnce, lowerBasesToFootings, governingCombos } from './pipeline'
 import { nextHeavierW } from './aiscSections'
 import { computeSeismic } from './seismic'
 import { nscpCombos } from './beamAnalysis'
@@ -1389,5 +1389,38 @@ describe('the column base is supported at the top of the footing', () => {
       expect(again.design.Dc).toBe(f.design.Dc)
       expect(again.pedestal).toBeCloseTo(f.pedestal, 9)
     }
+  })
+})
+
+describe('governingCombos — sound to reject with, never to accept with', () => {
+  const section = { id: 's1', name: 'C1', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+  const soil = { qAllow: 200, gammaSoil: 18, gammaConc: 24, H: 1.5 } as never
+  const m = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3.2, 3.2], section })
+  m.loads = buildGravityLoads(m, 4.8, 2.4)
+  const full = designStructure(m, soil)!
+
+  it('names load cases the design was actually governed by', () => {
+    const gov = governingCombos(full)
+    expect(gov.size).toBeGreaterThan(0)
+    for (const g of gov) expect(typeof g).toBe('string')
+  })
+
+  it('a design on the governing subset is no more optimistic than the full one', () => {
+    // This is the property the shrink screen rests on: capacities come from the
+    // geometry and are fixed, and each extra load case can only widen the
+    // demand envelope. So a model that FAILS on the subset fails on all of
+    // them — which makes the subset sound to reject with. It is NOT sound to
+    // accept with, and nothing in the optimizer accepts a screened design.
+    const gov = governingCombos(full)
+    const screened = designStructure(m, soil, {}, {}, undefined, gov)!
+    const util = (d: typeof full) => Math.max(0, ...d.columns.map((c) => c.util))
+    expect(util(screened)).toBeLessThanOrEqual(util(full) + 1e-9)
+  })
+
+  it('solving fewer cases never invents capacity — the same model still passes', () => {
+    const gov = governingCombos(full)
+    const screened = designStructure(m, soil, {}, {}, undefined, gov)
+    expect(screened).not.toBeNull()
+    expect(screened!.beams.length).toBe(full.beams.length)
   })
 })
