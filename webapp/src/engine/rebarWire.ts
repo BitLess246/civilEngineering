@@ -83,9 +83,14 @@ export function runPoints(run: RebarRun): Vec3[] {
   if (!closed) out.push(v[0])
   const lo = closed ? 0 : 1
   const hi = closed ? n - 1 : n - 2
+  // A tie bent around a bar curls at (wrapDia + dia)/2 — the two in contact.
+  // The fabricated bend may legally be looser, but drawn at that looser radius
+  // the arc sweeps INSIDE the bar and the bar ends up behind the tie instead of
+  // nestled in it.
+  const wrap = run.wrapDia && run.wrapDia > 0 ? bendRadius(run.wrapDia, run.dia) / 1000 : 0
   for (let k = lo; k <= hi; k++) {
     const D = run.bendDia[closed ? k : k - 1]
-    const r = D > 0 ? bendRadius(D, run.dia) / 1000 : 0
+    const r = wrap > 0 ? wrap : (D > 0 ? bendRadius(D, run.dia) / 1000 : 0)
     out.push(...(r > 0 ? filletCorner(at(k - 1), at(k), at(k + 1), r) : [at(k)]))
   }
   if (!closed) out.push(v[n - 1]); else out.push(out[0])
@@ -120,38 +125,200 @@ export function hookTailLength(dia: number): number {
  * Separate polylines rather than one, because a hook genuinely leaves the loop
  * — joining them would draw a bar running through the core that does not exist.
  */
-export function runPolylines(run: RebarRun): Vec3[][] {
-  const spine = runPoints(run)
+/**
+ * An open transverse bar — a cross tie, or single-legged stirrup — as the one
+ * continuous bar it is.
+ *
+ * It is specified by the two longitudinal bars it grips. The steel does not run
+ * from centre to centre: it runs TANGENT to both, turns a full 180° AROUND each
+ * one, and comes back along the other side as the tail. That U is the whole
+ * point of the bar — it is what makes a single leg an anchored stirrup rather
+ * than a loose dowel.
+ *
+ * Turning it about a point beside the bar instead of about the bar itself — the
+ * first cut — draws a curl that grips nothing and leaves the bar sitting on the
+ * end of a straight leg.
+ */
+export function singleLeggedBar(run: RebarRun): Vec3[] {
   const v = run.path
-  if (!run.closed || !run.hookAllowance || v.length < 3) return [spine]
+  const n = v.length
+  if (n < 2) return runPoints(run)
+  const b0 = v[0], b1 = v[n - 1]
+  const d = sub(b1, b0), l = len(d)
+  const R = (run.wrapDia && run.wrapDia > 0
+    ? bendRadius(run.wrapDia, run.dia)
+    : bendRadius(run.bendDia[0] > 0 ? run.bendDia[0] : 4 * run.dia, run.dia)) / 1000
+  if (l < 1e-9 || R <= 0 || l < 3 * R) return runPoints(run)
+  const u = mul(d, 1 / l)
+  // A tie lies in a horizontal plane, so it turns about the vertical; a bar
+  // that is itself vertical turns about x instead.
+  const axis: Vec3 = Math.abs(u[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0]
+  const p = rotate(u, axis, Math.PI / 2)
+  const off = mul(p, R)                     // the leg's own offset off the bars
+  const tail = hookTailLength(run.dia)
 
-  const p0 = v[0], pNext = v[1], pPrev = v[v.length - 1]
-  const dOut = sub(pNext, p0), dIn = sub(p0, pPrev)
+  const SEG = 12
+  /** 180° about `c`, from `from` round to −`from`. */
+  const arc = (c: Vec3, from: Vec3): Vec3[] => {
+    const out: Vec3[] = []
+    for (let k = 1; k < SEG; k++) out.push(add(c, rotate(from, axis, (Math.PI * k) / SEG)))
+    return out
+  }
+  return [
+    add(add(b0, off), mul(u, tail)),        // the tail it starts from
+    add(b0, off),
+    ...arc(b0, off),                        // …round the first bar…
+    sub(b0, off),
+    sub(b1, off),                           // …along the leg…
+    ...arc(b1, mul(off, -1)),               // …round the second…
+    add(b1, off),
+    sub(add(b1, off), mul(u, tail)),        // …and the tail it ends in
+  ]
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// A CLOSED TIE IS STILL ONE BAR
+//
+// A tie is cut from straight stock and bent — nothing is welded, so it cannot
+// close on itself. Both ends finish at the SAME corner, which means they have
+// to pass each other, and steel cannot occupy steel: over its run the bar
+// drifts one diameter to the side, so the end tail comes back TANGENT to the
+// start tail instead of through it. Every tie on site is this shallow single
+// turn of a helix; drawn as a flat closed rectangle it was a ring, which is a
+// different product.
+//
+// Corner 0 is therefore not a corner at all. It is where the bar is cut, so
+// each end turns 135° there and runs its tail into the core (§425.3.2) — two
+// hooks, one either side of the drift, each bent around the corner bar.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** The least a closed tie can step aside over its run, m: one bar diameter. */
+export const selfClearance = (dia: number) => dia / 1000
+
+/**
+ * A closed tie as the single continuous bar it is: hook tail, round the loop
+ * through every other corner, hook tail — drifting `selfClearance` along the
+ * loop normal so the two ends lie against each other rather than in each other.
+ */
+export function closedTieBar(run: RebarRun): Vec3[] {
+  const v = run.path
+  const n = v.length
+  if (n < 3) return runPoints(run)
+  const c0 = v[0]
+  const dOut = sub(v[1], c0), dIn = sub(c0, v[n - 1])
   const lOut = len(dOut), lIn = len(dIn)
-  if (lOut < 1e-9 || lIn < 1e-9) return [spine]
-  const uOut = mul(dOut, 1 / lOut), uIn = mul(dIn, 1 / lIn)
+  if (lOut < 1e-9 || lIn < 1e-9) return runPoints(run)
+  const uOut = mul(dOut, 1 / lOut)          // the leg the bar leaves along
+  const uIn = mul(dIn, 1 / lIn)             // the leg it comes back on
 
-  // The loop's plane, and the direction into the core at this corner.
-  const nrm = cross(uOut, mul(uIn, -1))
+  // Turning uIn by the corner's deviation gives uOut, so this axis is also the
+  // one every arc below sweeps about, in the loop's own direction of travel.
+  const nrm = cross(uIn, uOut)
   const lnrm = len(nrm)
-  if (lnrm < 1e-9) return [spine]
+  if (lnrm < 1e-9) return runPoints(run)
   const axis = mul(nrm, 1 / lnrm)
-  const inward = sub(mul(uOut, 1), uIn)      // corner bisector, pointing inboard
-  const lb = len(inward)
-  const bis = lb > 1e-9 ? mul(inward, 1 / lb) : uOut
+
+  const r = (run.wrapDia && run.wrapDia > 0
+    ? bendRadius(run.wrapDia, run.dia)
+    : bendRadius(run.bendDia[0] > 0 ? run.bendDia[0] : 4 * run.dia, run.dia)) / 1000
+  if (r <= 0) return runPoints(run)
+
+  // ── the corner bar both hooks are bent around ───────────────────────────
+  //
+  // Not the corner POINT: a tie's corners sit on the cover line precisely so
+  // that a bend of this radius centres on the longitudinal bar in the corner.
+  // Both ends hook around that same bar — that is what a corner bar is for —
+  // so the two arcs share a centre and differ only in where they start.
+  const back = mul(uIn, -1)
+  const bisv = add(back, uOut)
+  const lbis = len(bisv)
+  if (lbis < 1e-9) return runPoints(run)
+  const theta = Math.acos(Math.min(1, Math.max(-1, dot(back, uOut))))   // included
+  if (theta < 1e-6 || theta > Math.PI - 1e-6) return runPoints(run)
+  const t = r / Math.tan(theta / 2)
+  if (t > 0.45 * lIn || t > 0.45 * lOut) return runPoints(run)
+  const W = add(c0, mul(mul(bisv, 1 / lbis), r / Math.sin(theta / 2)))
+  const pOut = add(c0, mul(uOut, t))        // where the leaving leg touches it
+  const pIn = add(c0, mul(back, t))         // …and where the arriving leg does
 
   const turn = (HOOK_TURN_DEG * Math.PI) / 180
   const tail = hookTailLength(run.dia)
-  /** Fold `d` back by 135°, whichever way puts the tail inside the core. */
-  const fold = (d: Vec3): Vec3 => {
-    const a = rotate(d, axis, turn), b = rotate(d, axis, -turn)
-    return dot(a, bis) >= dot(b, bis) ? a : b
+  const SEG = 8
+  /** Forward tangent where the radius vector is `rad`. */
+  const tang = (rad: Vec3): Vec3 => {
+    const q = rotate(rad, axis, Math.PI / 2)
+    return mul(q, 1 / len(q))
   }
-  return [
-    spine,
-    [p0, add(p0, mul(fold(uIn), tail))],            // the end that arrives here
-    [p0, add(p0, mul(fold(mul(uOut, -1)), tail))],  // …and the one that leaves
-  ]
+  // The bar STARTS with a tail, sweeps 135° round the bar and comes out at
+  // `pOut` running along the loop; it ENDS by arriving at `pIn` and sweeping
+  // the same 135° on round. The two arcs overlap through the corner — which is
+  // exactly where a tie's two ends pass each other, and why it has to step
+  // aside.
+  const rOut = sub(pOut, W), rIn = sub(pIn, W)
+  const hookIn: Vec3[] = []
+  for (let k = 0; k <= SEG; k++) hookIn.push(add(W, rotate(rOut, axis, -turn * (1 - k / SEG))))
+  const hookOut: Vec3[] = []
+  for (let k = 0; k <= SEG; k++) hookOut.push(add(W, rotate(rIn, axis, (turn * k) / SEG)))
+  const aEnd = sub(hookIn[0], mul(tang(sub(hookIn[0], W)), tail))
+  const bEnd = add(hookOut[SEG], mul(tang(sub(hookOut[SEG], W)), tail))
+
+  const flat: Vec3[] = [aEnd, ...hookIn]
+  for (let k = 1; k <= n - 1; k++) {
+    const D = run.bendDia[k]
+    const rk = run.wrapDia && run.wrapDia > 0 ? r : (D > 0 ? bendRadius(D, run.dia) / 1000 : 0)
+    const next = k === n - 1 ? c0 : v[k + 1]
+    flat.push(...(rk > 0 ? filletCorner(v[k - 1], v[k], next, rk) : [v[k]]))
+  }
+  flat.push(...hookOut, bEnd)
+
+  // ── the drift ───────────────────────────────────────────────────────────
+  // Spread over the whole run rather than kinked at one place: the bar is bent
+  // at its corners and nowhere else, so the only way it can step aside is to
+  // lean the whole way round. It ends up at ±½ of the lean either side of the
+  // nominal plane, which is what the level it is placed at means.
+  const cum = [0]
+  for (let k = 1; k < flat.length; k++) cum.push(cum[k - 1] + len(sub(flat[k], flat[k - 1])))
+  const total = cum[cum.length - 1]
+  if (total < 1e-9) return flat
+  const step = leanFor(flat, cum, total, run.dia)
+  return flat.map((p, k) => add(p, mul(axis, step * (cum[k] / total - 0.5))))
+}
+
+/**
+ * How far the bar has to lean, m.
+ *
+ * A diameter across the closure is the floor, but not always enough: each hook
+ * sweeps 135°, which carries it back across the leg the OTHER end arrives on,
+ * and those two cross closer together along the bar than its two ends do. Sized
+ * off the tightest such pass, so nowhere does the bar come nearer to itself
+ * than its own diameter — the whole point of leaning in the first place.
+ *
+ * Only parts of the run a third of it apart or more are compared: anything
+ * nearer than that is the same leg or the same bend, where the bar is meant to
+ * be next to itself.
+ */
+function leanFor(flat: Vec3[], cum: number[], total: number, dia: number): number {
+  const d = selfClearance(dia)
+  let need = d
+  for (let i = 0; i < flat.length; i++) {
+    for (let j = i + 1; j < flat.length; j++) {
+      const dp = (cum[j] - cum[i]) / total
+      if (dp < 1 / 3) continue
+      const gap = len(sub(flat[j], flat[i]))
+      if (gap >= d) continue                  // already clear in the plane
+      need = Math.max(need, Math.sqrt(d * d - gap * gap) / dp)
+    }
+  }
+  return need
+}
+
+export function runPolylines(run: RebarRun): Vec3[][] {
+  if (!run.hookAllowance) return [runPoints(run)]
+  // A CROSS TIE is a single straight bar hooked at both ends (§425.3.2) — an
+  // open run, so the closed-loop path below has nothing to work with. Drawn
+  // without them it stopped dead at each bar instead of gripping it.
+  if (!run.closed) return [singleLeggedBar(run)]
+  return [closedTieBar(run)]
 }
 
 // ─────────────────────────────────────────────────────────────────────────

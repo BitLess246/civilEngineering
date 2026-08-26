@@ -43,6 +43,8 @@ import type { SlabOpening } from './model'
 import { calcDevLength } from './devLength'
 import type { PlanPrimitive, Drawing } from './planRenderer'
 import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader } from './detailSheet'
+import { seeGeneralNotes } from './generalNotes'
+import { SHEET_INK, SHEET_NOTE, SHEET_GRID, SHEET_ZONE, SHEET_WARN, STEEL } from './sheetInk'
 
 // ── code constants ─────────────────────────────────────────────────────────
 
@@ -331,9 +333,14 @@ export function designSlabOpening(i: SlabOpeningInput): SlabOpeningResult {
 // ── the detail sheet ───────────────────────────────────────────────────────
 
 export interface SlabOpeningDetailOptions { detailNo?: string; sheetRef?: string; scale?: string }
-export interface SlabOpeningDrawing extends Drawing { title: string; result: SlabOpeningResult }
+export interface SlabOpeningDrawing extends Drawing {
+  title: string
+  result: SlabOpeningResult
+  /** Why this arrangement, and what limits it — for the engineer, not the sheet. */
+  designNotes: string[]
+}
 
-const INK = '#1e293b', REBAR = '#b45309', GRID = '#9aa5b5', NOTE = '#475569', ACCENT = '#0f766e', WARN = '#b91c1c'
+const INK = SHEET_INK, REBAR = STEEL, GRID = SHEET_GRID, NOTE = SHEET_NOTE, ACCENT = SHEET_ZONE, WARN = SHEET_WARN
 
 /**
  * Mean glyph width as a fraction of the font size, for Arial CAPITALS — used
@@ -452,9 +459,11 @@ export function buildSlabOpeningDetail(i: SlabOpeningInput, opts: SlabOpeningDet
 
   // ── dimensions: a full chain each way, so the opening is set out ──
   const dimY = ly + u * 3.2, dimX = lx + u * 3.2
+  // `ext` reaches back to the far edge of the panel, so each link of the chain
+  // is tied to the opening face or panel edge it is set out from.
   const chain = (a: number, c: number, horiz: boolean) => P.push(horiz
-    ? { kind: 'dim', x1: a, y1: dimY, x2: c, y2: dimY, text: `${Math.round((c - a) * 1000)}`, off: 0, size: u * 1.5 }
-    : { kind: 'dim', x1: dimX, y1: a, x2: dimX, y2: c, text: `${Math.round((c - a) * 1000)}`, off: 0, size: u * 1.5 })
+    ? { kind: 'dim', x1: a, y1: dimY, x2: c, y2: dimY, text: `${Math.round((c - a) * 1000)}`, off: 0, size: u * 1.5, ext: ly }
+    : { kind: 'dim', x1: dimX, y1: a, x2: dimX, y2: c, text: `${Math.round((c - a) * 1000)}`, off: 0, size: u * 1.5, ext: lx })
   chain(0, b.x0, true); chain(b.x0, b.x1, true); chain(b.x1, lx, true)
   chain(0, b.y0, false); chain(b.y0, b.y1, false); chain(b.y1, ly, false)
 
@@ -504,29 +513,33 @@ export function buildSlabOpeningDetail(i: SlabOpeningInput, opts: SlabOpeningDet
     size: u * 1.3, color: REBAR,
   }))
 
-  // ── notes ──
+  // ── notes: what to place around this opening ───────────────────────────
   const notes: string[] = [
-    `ADD BARS EQUAL IN NUMBER AND SIZE TO THOSE INTERRUPTED — HALF EACH SIDE, TOP & BOTTOM (§408.5.4.2)`,
     `INTERRUPTED: ${r.x.interrupted}-⌀${Math.round(i.barDia)} IN X (MAT @ ${Math.round(r.x.spacing)}), ${r.y.interrupted}-⌀${Math.round(i.barDia)} IN Y (MAT @ ${Math.round(r.y.spacing)})`,
     `PROVIDE: ${bar(r.x.eachSide, i.barDia, r.x.barLength)} IN X AND ${bar(r.y.eachSide, i.barDia, r.y.barLength)} IN Y — EACH SIDE, EACH FACE`,
-    `TRIMMER BARS EXTEND ℓd = ${Math.round(r.x.ld)} (X) / ${Math.round(r.y.ld)} (Y) BEYOND EACH FACE OF THE OPENING (§425.4.2)`,
-    `${r.diagonal.perFace}-⌀${Math.round(r.diagonal.dia)} × ${Math.round(r.diagonal.length)} DIAGONAL AT EVERY RE-ENTRANT CORNER, EACH FACE — CRACK CONTROL (§424.3)`,
-    `KEEP OPENING ${Math.round(r.shearClear * 1000)} MIN. CLEAR OF THE COLUMN — 4h BEYOND THE CRITICAL SECTION (§422.6.4.3)`,
-    r.strip.zone === 'middle-middle'
-      ? `ZONE: MIDDLE ∩ MIDDLE STRIP — §408.5.4.2(A) PERMITS ANY SIZE PROVIDED THE TOTAL PANEL REINFORCEMENT IS MAINTAINED, WHICH THE ADDED BARS DO`
-      : `ZONE: ${r.strip.zone.toUpperCase().replace('-', ' ∩ ')} STRIP — LIMIT ${(r.strip.limit * 100).toFixed(1)}% OF THE STRIP, INTERRUPTED ${(Math.max(r.strip.fracX, r.strip.fracY) * 100).toFixed(0)}%`,
-    ...r.notes.map((t) => `⚠ ${t.toUpperCase()}`),
+    `TRIMMER BARS EXTEND ℓd = ${Math.round(r.x.ld)} (X) / ${Math.round(r.y.ld)} (Y) BEYOND EACH FACE OF THE OPENING`,
+    `${r.diagonal.perFace}-⌀${Math.round(r.diagonal.dia)} × ${Math.round(r.diagonal.length)} DIAGONAL AT EVERY RE-ENTRANT CORNER, EACH FACE`,
+    `KEEP OPENING ${Math.round(r.shearClear * 1000)} MIN. CLEAR OF THE COLUMN`,
+    seeGeneralNotes(),
   ]
-  // Wrap to the sheet, then let the wrapped block set the sheet width — a note
-  // is only a note if it is on the paper.
+
+  /** Why this arrangement, and what it is limited by — for the engineer. */
+  const designNotes: string[] = [
+    r.strip.zone === 'middle-middle'
+      ? `${i.mark}: middle ∩ middle strip — §408.5.4.2(a) permits any size provided the total panel reinforcement is maintained, which the added bars do`
+      : `${i.mark}: ${r.strip.zone.replace('-', ' ∩ ')} strip — limit ${(r.strip.limit * 100).toFixed(1)}% of the strip, interrupted ${(Math.max(r.strip.fracX, r.strip.fracY) * 100).toFixed(0)}%`,
+    `${i.mark}: the opening is ${Math.round(r.shearClear * 1000)} from the column face — 4h beyond the critical section (§422.6.4.3)`,
+    ...r.notes.map((t) => `${i.mark}: ${t}`),
+  ]
+
   const noteSize = u * 1.15
   // The notes are anchored at x = 0, so the width they may use is what lies to
   // the RIGHT of the panel origin — not the full sheet, which also spans the
   // left margin the title bubble sits in.
   const sheetW = lx + u * 8.5
   const noteTop = ly + u * 6.4
-  const plain = notes.filter((t) => !t.startsWith('⚠'))
-  const warn = notes.filter((t) => t.startsWith('⚠'))
+  const plain = notes
+  const warn: string[] = []
   const nb = notesBlock({ x: 0, w: sheetW, top: noteTop, size: noteSize, lines: plain, color: NOTE, step: u * 1.8 })
   P.push(...nb.prims)
   const wb = warn.length
@@ -548,6 +561,7 @@ export function buildSlabOpeningDetail(i: SlabOpeningInput, opts: SlabOpeningDet
     primitives: P,
     title,
     result: r,
+    designNotes,
     bounds: { minX: sb.minX - u, minY: sb.minY - u, maxX: sb.maxX + u, maxY: sb.maxY + u },
   }
 }

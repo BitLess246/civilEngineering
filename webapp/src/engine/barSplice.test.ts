@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   spliceCentres, spliceRun, spliceCage, pathLength, pointAt, slicePath,
-  stepAside, acrossBar, OFFSET_SLOPE,
+  stepAside, stepDirection, OFFSET_SLOPE,
 } from './barSplice'
 import { cutLength, type RebarCage, type RebarRun, type Vec3 } from './rebarModel'
 
@@ -143,26 +143,38 @@ describe('slicing keeps the bar it cuts from', () => {
 
 
 describe('the lapping piece steps aside', () => {
-  it('offsets one diameter across the bar, and cranks back on line at 1 in 6', () => {
+  it('offsets one diameter off the line, and cranks back at 1 in 6', () => {
     // Two bars lapped on the same centreline occupy the same space: impossible
     // to build, and invisible to look at.
-    const [a, b] = spliceRun(straight(9), OPT)
+    const [a, b] = spliceRun(straight(9), OPT)          // role 'bottom'
     const off = 20 / 1000
-    expect(a.path[0][2]).toBeCloseTo(0, 9)                    // the first piece is on line
-    expect(Math.abs(b.path[0][2])).toBeCloseTo(off, 9)        // the second steps aside
-    expect(Math.abs(b.path[1][2])).toBeCloseTo(off, 9)        // …for the whole lap
+    expect(a.path[0][1]).toBeCloseTo(0, 9)                    // the first piece is on line
+    expect(Math.abs(b.path[0][1])).toBeCloseTo(off, 9)        // the second steps aside
+    expect(Math.abs(b.path[1][1])).toBeCloseTo(off, 9)        // …for the whole lap
     expect(b.path[1][0] - b.path[0][0]).toBeCloseTo(OPT.lap, 9)
-    expect(b.path[2][2]).toBeCloseTo(0, 9)                    // and comes back on line
+    expect(b.path[2][1]).toBeCloseTo(0, 9)                    // and comes back on line
     expect(b.path[2][0] - b.path[1][0]).toBeCloseTo(OFFSET_SLOPE * off, 9)
   })
 
-  it('steps sideways, never down — a lapped beam bar stays in its layer', () => {
-    // Dropping it a diameter would move the bar out of the layer the design
-    // gave it an effective depth for.
-    const [, b] = spliceRun(straight(9), OPT)
-    expect(b.path[0][1]).toBeCloseTo(0, 9)
-    expect(acrossBar([0, 0, 0], [1, 0, 0])[1]).toBe(0)
-    expect(acrossBar([0, 0, 0], [0, 1, 0])).toEqual([1, 0, 0])   // a vertical bar
+  it('a top bar cranks DOWN and a bottom bar UP — away from the stirrup, not into it', () => {
+    // The face the bar is on is where the stirrup leg is. Stepped sideways the
+    // lapping piece stays on the cover line and walks straight into it; stepped
+    // inward it tucks behind its partner and the stirrup passes outside both.
+    expect(stepDirection('top', [0, 0, 0], [1, 0, 0])).toEqual([0, -1, 0])
+    expect(stepDirection('bottom', [0, 0, 0], [1, 0, 0])).toEqual([0, 1, 0])
+    const [, top] = spliceRun({ ...straight(9), role: 'top' }, OPT)
+    const [, bot] = spliceRun(straight(9), OPT)
+    expect(top.path[0][1]).toBeLessThan(0)
+    expect(bot.path[0][1]).toBeGreaterThan(0)
+    // …and neither of them moves sideways, out of its own vertical plane
+    expect(top.path[0][2]).toBeCloseTo(0, 9)
+    expect(bot.path[0][2]).toBeCloseTo(0, 9)
+  })
+
+  it('a bar with no tension face steps horizontally instead', () => {
+    // A column vertical or a footing mat bar has no face to move away from.
+    expect(stepDirection('vertical', [0, 0, 0], [0, 1, 0])).toEqual([1, 0, 0])
+    expect(stepDirection('mat', [0, 0, 0], [1, 0, 0])[1]).toBe(0)
   })
 
   it('leaves the piece alone when the lap will not fit its first straight leg', () => {
@@ -171,5 +183,42 @@ describe('the lapping piece steps aside', () => {
     const short = stepAside([[0, 0, 0], [0.3, 0, 0], [0.3, 1, 0]], [160], 0.6, 0.02, 20)
     expect(short.path).toHaveLength(3)
     expect(short.bendDia).toEqual([160])
+  })
+})
+
+describe('splice zones per face — the two are opposite', () => {
+  const run = (role: RebarRun['role']): RebarRun => ({
+    mark: `X-${role}`, dia: 20, role, member: 'B1', count: 1, bendDia: [],
+    path: [[0, 0, 0], [13, 0, 0]],
+  })
+
+  it('laps top steel in the middle half and bottom steel in an end quarter', () => {
+    // A top bar is in tension over the supports and a bottom bar at midspan, so
+    // the zone each may be spliced in is the OTHER one's forbidden region. One
+    // shared preference list offered both bars both zones.
+    const o = {
+      stock: 12, lap: 0.9,
+      preferByRole: { top: [0.5], bottom: [0.125, 0.875] },
+    }
+    const cage: RebarCage = { member: 'B1', runs: [run('top'), run('bottom')] }
+    const out = spliceCage(cage, o)
+    const joins = (role: RebarRun['role']) => {
+      const ps = out.runs.filter((r) => r.role === role)
+      expect(ps.length).toBeGreaterThan(1)
+      return ps.map((r) => r.path[r.path.length - 1][0])
+    }
+    // the top bar's joint lands in the middle half, [3.25, 9.75]
+    const t = joins('top')[0]
+    expect(t).toBeGreaterThan(13 * 0.25)
+    expect(t).toBeLessThan(13 * 0.75)
+    // the bottom bar's in an end quarter — outside that band
+    const bt = joins('bottom')[0]
+    expect(bt < 13 * 0.25 || bt > 13 * 0.75).toBe(true)
+  })
+
+  it('falls back to the shared list for a role it names no zone for', () => {
+    const c = spliceCentres(18, { stock: 12, lap: 0.9, prefer: [0.5] })
+    expect(c).toHaveLength(1)
+    expect(c[0]).toBeCloseTo(9, 9)
   })
 })

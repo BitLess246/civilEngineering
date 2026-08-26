@@ -16,9 +16,9 @@
 // pass the result in.
 // ─────────────────────────────────────────────────────────────────────────
 import type { PlanPrimitive } from './planRenderer'
+import { extensionLines } from './planRenderer'
 
 const INK = '#1e293b'
-const GRID = '#cbd5e1'
 const NOTE = '#475569'
 
 /** Mean glyph advance as a fraction of font size, for the uppercase-heavy text
@@ -90,6 +90,8 @@ export function measureBounds(prims: PlanPrimitive[], seed?: Bounds): Bounds {
       const hw = (vertical ? p.size : tw) / 2, hh = (vertical ? tw : p.size) / 2
       xs = [p.x1 - tick, p.x2 + tick, mx - hw, mx + hw]
       ys = [p.y1 - tick, p.y2 + tick, my - p.size * 0.35 - hh, my - p.size * 0.35 + hh]
+      // …and the extension lines, which reach back to the feature
+      for (const e of extensionLines(p)) { xs.push(e.x1, e.x2); ys.push(e.y1, e.y2) }
     }
     else if (p.kind === 'rect') { xs = [p.x, p.x + p.w]; ys = [p.y, p.y + p.h] }
     else if (p.kind === 'circle') { xs = [p.cx - p.r, p.cx + p.r]; ys = [p.cy - p.r, p.cy + p.r] }
@@ -151,34 +153,34 @@ export interface TitleOpts {
 }
 
 /**
- * The title block: detail bubble, title, and the scale line — always at the
- * BOTTOM of the sheet, below the drawing and its notes.
+ * The title block: detail bubble, title, and the scale line.
  *
- * The bubble is the AIA convention: detail number over sheet reference, split
- * by a diameter. Rules top and bottom bracket the block so it reads as one
- * object rather than as more notes.
+ * ONE continuous rule, from the left edge to the right. It passes through the
+ * tag circle — the chord IS the rule, not a separate stroke stopping at the
+ * circle's edge — and carries on under the title, with the title above it and
+ * SCALE below. That is how the framing and foundation plans draw it, and the
+ * detail sheets had drifted into a different block: a rule above, a rule
+ * below, a short chord cut off at the circle, and a fourth hairline under the
+ * title. Four lines where the plans have one, and a bisector that stopped
+ * short at both ends.
  */
 export function titleBlock(o: TitleOpts): { prims: PlanPrimitive[]; bottom: number } {
-  const { x, w, top, u } = o
+  const { x, w, u } = o
   const r = u * 2.6
-  const bx = x + r
-  const cy = top + r + u * 0.8
+  const cy = o.top + r                    // the rule, and the circle's centre
+  const cx = x + r
   const right = x + w
-  const tx = bx + r + u * 1.6
+  const tx = x + 2 * r + u * 0.8          // where the title column starts
   const P: PlanPrimitive[] = [
-    { kind: 'line', x1: x, y1: top, x2: right, y2: top, stroke: INK, width: 1.0 },
-    { kind: 'circle', cx: bx, cy, r, stroke: INK, fill: '#fff', width: 0.9 },
-    { kind: 'line', x1: bx - r, y1: cy, x2: bx + r, y2: cy, stroke: INK, width: 0.9 },
-    { kind: 'text', x: bx, y: cy - r * 0.48, text: o.detailNo ?? '1', size: u * 2.0, anchor: 'middle', color: INK, weight: 700 },
-    { kind: 'text', x: bx, y: cy + r * 0.52, text: o.sheetRef ?? 'S-1', size: u * 1.3, anchor: 'middle', color: INK, weight: 600 },
-    { kind: 'text', x: tx, y: cy - r * 0.30, text: o.title, size: u * 2.4, anchor: 'start', color: INK, weight: 700 },
-    { kind: 'line', x1: tx, y1: cy + r * 0.10, x2: right, y2: cy + r * 0.10, stroke: GRID, width: 0.6 },
-    { kind: 'text', x: tx, y: cy + r * 0.62, text: 'SCALE', size: u * 1.3, anchor: 'start', color: NOTE, weight: 600 },
-    { kind: 'text', x: right, y: cy + r * 0.62, text: o.scale ?? 'NTS', size: u * 1.3, anchor: 'end', color: NOTE, weight: 600 },
+    { kind: 'line', x1: x, y1: cy, x2: right, y2: cy, stroke: INK, width: 1.2 },
+    { kind: 'circle', cx, cy, r, stroke: INK, fill: 'none', width: 1 },
+    { kind: 'text', x: cx, y: cy - r * 0.5, text: o.detailNo ?? '1', size: r * 0.75, anchor: 'middle', color: INK, weight: 700 },
+    { kind: 'text', x: cx, y: cy + r * 0.5, text: o.sheetRef ?? 'S-1', size: r * 0.6, anchor: 'middle', color: INK, weight: 700 },
+    { kind: 'text', x: tx, y: cy - r * 0.55, text: o.title, size: r * 0.95, anchor: 'start', color: INK, weight: 700 },
+    { kind: 'text', x: tx, y: cy + r * 0.55, text: 'SCALE', size: r * 0.4, anchor: 'start', color: INK, weight: 600 },
+    { kind: 'text', x: right, y: cy + r * 0.55, text: o.scale ?? 'NTS', size: r * 0.4, anchor: 'end', color: INK, weight: 600 },
   ]
-  const bottom = cy + r + u * 0.8
-  P.push({ kind: 'line', x1: x, y1: bottom, x2: right, y2: bottom, stroke: INK, width: 1.0 })
-  return { prims: P, bottom }
+  return { prims: P, bottom: cy + r }
 }
 
 // ── Leaders ───────────────────────────────────────────────────────────────
@@ -220,6 +222,18 @@ export interface LeaderOpts {
  * a glance you could not tell a leader from a dimension extension or from a
  * bar. This is the one shape they all use now.
  */
+/**
+ * Horizontal distance from a leader's TEXT ANCHOR to its knee — where the
+ * landing ends and the inclined leg begins.
+ *
+ * Exported because the angle of that leg is a drafting decision the caller
+ * makes, not the leader: to set a leg at 45° you have to know where the knee
+ * will be before you choose where the text goes. Derived here, once, so a
+ * caller cannot compute it from stale proportions.
+ */
+export const leaderKnee = (size: number, landing?: number) =>
+  size * 0.34 + size * 1.30 * 0.29 + (landing ?? size * 2.2)
+
 export function leader(o: LeaderOpts): PlanPrimitive[] {
   const ink = NOTE                        // the leader itself, always
   const color = o.color ?? NOTE           // the label
@@ -228,7 +242,6 @@ export function leader(o: LeaderOpts): PlanPrimitive[] {
   const d = -s                            // towards the label
   const gap = o.size * 0.34               // glyph to label
   const gh = o.size * 1.30                // full height of the glyph
-  const land = o.landing ?? o.size * 2.2
 
   // The glyph the landing ends on: one continuous stroke that runs up, across,
   // all the way down, across again, and part-way back up. It separates the
@@ -237,7 +250,7 @@ export function leader(o: LeaderOpts): PlanPrimitive[] {
   // reference: 0.14 and 0.15 of the height for the two steps, the last riser
   // stopping a tenth of the height above the landing.
   const gEnd = o.tx + s * (gap + gh * 0.29)      // where the landing meets it
-  const kneeX = gEnd + s * land
+  const kneeX = o.tx + s * leaderKnee(o.size, o.landing)
   const up = o.ty - gh * 0.5, dn = o.ty + gh * 0.5
 
   // The leg stops at the back of the arrowhead so the two do not overprint.
@@ -279,4 +292,54 @@ export function leader(o: LeaderOpts): PlanPrimitive[] {
       anchor: (side === 'left' ? 'start' : 'end') as 'start' | 'end', color, weight: o.weight ?? 600,
     }] : []),
   ]
+}
+
+export interface MultiLeaderOpts {
+  /** Every point the label names. */
+  targets: { x: number; y: number }[]
+  /** The label's CENTRE — arms come off whichever edge of it they need. */
+  tx: number
+  ty: number
+  text: string
+  size: number
+  color?: string
+  weight?: number
+  landing?: number
+  arrow?: number
+}
+
+/**
+ * One label, an arm to each thing it names.
+ *
+ * A note that describes two places on a drawing has two honest ways to be
+ * drawn: twice, or once with two leaders. Printed twice it is the same
+ * sentence taking up the sheet twice; drawn once with no leader at all — or
+ * with a line stretched between the two places to stand in for one — the
+ * reader has to guess which bars it means, and the stand-in line reads as
+ * steel that is not there.
+ *
+ * Arms leave the edge of the label nearest their target, so neither crosses
+ * the text it belongs to.
+ */
+export function multiLeader(o: MultiLeaderOpts): PlanPrimitive[] {
+  const color = o.color ?? NOTE
+  const half = textWidth(o.text, o.size) / 2
+  const P: PlanPrimitive[] = [{
+    kind: 'text', x: o.tx, y: o.ty, text: o.text, size: o.size,
+    anchor: 'middle', color, weight: o.weight ?? 600,
+  }]
+  for (const t of o.targets) {
+    // `leader`'s own convention: `side` names which way the LANDING runs from
+    // the label, and it runs towards the target. Naming the side the label is
+    // on instead sent every arm out of the wrong edge and back across the text.
+    const side: 'left' | 'right' = t.x <= o.tx ? 'left' : 'right'
+    const edge = o.tx + (side === 'left' ? -half : half)
+    // The label is already placed, so the arm is what is left of a leader
+    // drawn with no label of its own.
+    P.push(...leader({
+      x: t.x, y: t.y, tx: edge, ty: o.ty, text: '', size: o.size,
+      side, landing: o.landing, arrow: o.arrow,
+    }).filter((p) => p.kind !== 'text'))
+  }
+  return P
 }

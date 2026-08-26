@@ -8,12 +8,13 @@ import type { StructureDesign } from '../engine/pipeline'
 import type { PlanFooting } from '../engine/planRenderer'
 import type { FootingDetailInput } from '../engine/footingDetail'
 import type { ColumnDetailInput } from '../engine/columnDetail'
-import type { BeamDetailInput } from '../engine/beamDetail'
 import type { SlabOpeningInput } from '../engine/slabOpening'
 import type { WallDetailInput } from '../engine/wallDetail'
 import type { BeamColumnJointInput, JointConfinement } from '../engine/beamColumnJoint'
 import type { SlabDirResult } from '../engine/slabDDM'
 import type { ColumnSchematicProps } from '../components/ColumnSchematic'
+import type { FrameElevationInput, ElevationMember } from '../engine/frameElevation'
+import { elevationPlane, type RebarCage, type Vec3 } from '../engine/rebarModel'
 
 export interface SoilInput { qAllow?: number; gammaSoil?: number; gammaConc?: number; H?: number }
 
@@ -161,158 +162,6 @@ export function columnDetailBundles(model: StructuralModel, design: StructureDes
         sConf: r.seismicSConf ?? r.tieSpacingFinal,
         sOut: r.seismicSOut ?? r.tieSpacingFinal,
         cover: sec.cover ?? 40,
-      },
-    })
-  }
-  return out
-}
-
-// ── Typical beam details ────────────────────────────────────────────────────
-
-export interface BeamDetailBundle { mark: string; detail: BeamDetailInput }
-
-/**
- * What a hooked beam bar anchors into, from the supporting column's section.
- *
- * The beam's direction relative to the column is not resolved here, so the
- * SMALLER column dimension is what the hook is checked against — the sheet
- * would rather warn about a bar that in fact develops than pass one that does
- * not. Without f'c and fy there is no ℓdh to dimension, so the sheet falls
- * back to drawing the hook undimensioned.
- */
-function hookAnchorageAt(sec: RectSection | undefined): BeamDetailInput['hookAnchorage'] {
-  if (!sec || !Number.isFinite(sec.fc) || !Number.isFinite(sec.fy)) return undefined
-  return {
-    colH: Math.min(sec.b, sec.h ?? sec.b),
-    colBarDia: sec.barDia ?? 20,
-    colTieDia: sec.tieDia ?? 10,
-    colCover: sec.cover ?? 40,
-    fc: sec.fc, fy: sec.fy,
-  }
-}
-
-/**
- * One typical beam detail per distinct beam TYPE.
- *
- * Grouped on section + the critical-section bar counts, so a floor of identical
- * beams yields one sheet. The adjacent-span top steel is resolved across the
- * whole schedule: the greatest hogging count found at any support of the same
- * section is carried in, which is the continuity rule §409.7.7 states and the
- * reason a support cannot be detailed from one span alone.
- */
-export function beamDetailBundles(model: StructuralModel, design: StructureDesign): BeamDetailBundle[] {
-  const secById = new Map(model.sections.map((s) => [s.id, s]))
-  const memById = new Map(model.members.map((m) => [m.id, m]))
-  const nodeById = new Map(model.nodes.map((n) => [n.id, n]))
-
-  /** The supporting column's section at a node — the cage a hook anchors into. */
-  const colSectionAt = (node: string): RectSection | undefined => {
-    const col = model.members.find((m) => m.role === 'column' && (m.i === node || m.j === node))
-    return col ? (secById.get(col.section) as RectSection | undefined) : undefined
-  }
-
-  /**
-   * The column design at a node — what the beam sheet needs to draw the steel
-   * its bars hook into, rather than an empty rectangle.
-   *
-   * Without this the `columnCage` input is simply never supplied, so the column
-   * cage the sheet knows how to draw never appears in the app: the feature is
-   * built, tested and unreachable.
-   */
-  const colDesignAt = (node: string) => {
-    const col = model.members.find((m) => m.role === 'column' && (m.i === node || m.j === node))
-    return col ? design.columns.find((c) => c.id === col.id) : undefined
-  }
-
-  /** Supporting column width at a node, mm — how much joint the sheet draws. */
-  const colWidthAt = (node: string): number | undefined => {
-    const sec = colSectionAt(node)
-    return sec ? Math.min(sec.b, sec.h ?? sec.b) : undefined
-  }
-
-  /**
-   * Does the beam CONTINUE past this end?
-   *
-   * The sheet detail turns on it: a beam that stops at a support has to hook
-   * its bars down into the column (§425.4.3), and one that runs through does
-   * not. "Another beam touches this node" is not enough — a beam framing in at
-   * right angles is a different member. Continuity means another beam leaves
-   * the node along the SAME line.
-   */
-  const continuesPast = (memberId: string, node: string, other: string): boolean => {
-    const a = nodeById.get(node), o = nodeById.get(other)
-    if (!a || !o) return false
-    const dx = a.x - o.x, dz = a.z - o.z
-    const len = Math.hypot(dx, dz)
-    if (len < 1e-9) return false
-    return model.members.some((m) => {
-      if (m.id === memberId || (m.role !== 'beam' && m.role !== 'girder')) return false
-      const far = m.i === node ? m.j : m.j === node ? m.i : null
-      if (!far) return false
-      const f = nodeById.get(far); if (!f) return false
-      const ex = f.x - a.x, ez = f.z - a.z
-      const el = Math.hypot(ex, ez)
-      if (el < 1e-9) return false
-      // collinear and pointing AWAY — the span carries on past the support
-      return (dx * ex + dz * ez) / (len * el) > 0.9
-    })
-  }
-
-  // greatest hogging bar count anywhere on each section — the continuity feed
-  const worstTop = new Map<string, number>()
-  for (const r of design.beams) {
-    const secId = memById.get(r.id)?.section
-    if (!secId) continue
-    for (const s of r.sections) {
-      if (!s.hogging) continue
-      worstTop.set(secId, Math.max(worstTop.get(secId) ?? 0, s.design.bars))
-    }
-  }
-
-  const seen = new Set<string>()
-  const out: BeamDetailBundle[] = []
-  for (const r of design.beams) {
-    const mem = memById.get(r.id)
-    if (!mem) continue
-    const sec = secById.get(mem.section) as RectSection | undefined
-    if (!sec) continue
-    const key = `${sec.b}x${sec.h}-${r.sections.map((s) => `${s.hogging ? 'H' : 'S'}${s.design.bars}`).join('.')}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    const mark = `${r.role === 'girder' ? 'G' : 'B'}${seen.size}`
-    out.push({
-      mark,
-      detail: {
-        mark, L: r.L, b: sec.b, h: sec.h ?? sec.b,
-        barDia: sec.barDia ?? 16,
-        stirrupDia: sec.tieDia ?? 10,
-        legs: 2,
-        sections: r.sections.map((s) => ({
-          label: s.label, x: s.x, hogging: s.hogging,
-          bars: s.design.bars, stirrupSpacing: s.design.sAdopt,
-          // Compression steel the analysis actually counted. Supplied, the
-          // sheet says that face is A's; omitted, it says the two bars there
-          // are stirrup hangers taking no part in the design.
-          compressionBars: (s.design as { comprBars?: number }).comprBars ?? 0,
-        })),
-        adjacentTopLeft: worstTop.get(mem.section),
-        adjacentTopRight: worstTop.get(mem.section),
-        colB: colWidthAt(mem.i) ?? colWidthAt(mem.j),
-        continuousLeft: continuesPast(mem.id, mem.i, mem.j),
-        continuousRight: continuesPast(mem.id, mem.j, mem.i),
-        cover: sec.cover,
-        hookAnchorage: hookAnchorageAt(colSectionAt(mem.i) ?? colSectionAt(mem.j)),
-        columnCage: (() => {
-          const cd = colDesignAt(mem.i) ?? colDesignAt(mem.j)
-          if (!cd) return undefined
-          return {
-            bars: cd.bars,
-            sConfined: cd.tieSpacingFinal > 0 ? cd.tieSpacingFinal : cd.tieSpacing,
-            sOutside: cd.seismicSOut ?? cd.tieSpacing,
-            lo: cd.seismicLoZone ?? 0,
-            storey: cd.L,
-          }
-        })(),
       },
     })
   }
@@ -539,6 +388,182 @@ export function jointDetailBundles(model: StructuralModel, design: StructureDesi
         fc: colSec.fc, fy: colSec.fy, cover: colSec.cover ?? 40,
       },
     })
+  }
+  return out
+}
+
+// ── Frame elevations ──────────────────────────────────────────────────────
+// One sheet per grid line per level: the whole line captured at that floor,
+// with the columns carried half a storey below the beams and half a storey
+// above, and every bar taken from the cages `buildStructureCages` built.
+
+/** A grid line: the members on it, and the axis they run along. */
+interface GridLine {
+  label: string
+  /** Constant plan coordinate the line sits at, m. */
+  at: number
+  /** The line runs in x (a lettered line) or in z (a numbered one). */
+  axis: 'x' | 'z'
+}
+
+export interface FrameElevationBundle {
+  key: string
+  line: string
+  level: string
+  input: FrameElevationInput
+}
+
+/**
+ * The grid lines of the model, from where its columns actually stand.
+ *
+ * Read off the COLUMNS rather than from a stored grid, because the model has no
+ * stored grid: a frame imported or edited node by node still has lines, and
+ * they are wherever two or more columns share a plan coordinate.
+ */
+export function gridLines(model: StructuralModel): GridLine[] {
+  const nodeById = new Map(model.nodes.map((n) => [n.id, n]))
+  const cols = model.members.filter((m) => m.role === 'column')
+  const feet = new Set<string>()
+  for (const c of cols) for (const id of [c.i, c.j]) feet.add(id)
+  const pts = [...feet].map((id) => nodeById.get(id)!).filter(Boolean)
+
+  const uniq = (vs: number[]) => [...new Set(vs.map((v) => Math.round(v * 1e6) / 1e6))].sort((a, b) => a - b)
+  const xs = uniq(pts.map((p) => p.x))
+  const zs = uniq(pts.map((p) => p.z))
+  const out: GridLine[] = []
+  // A line in x is labelled by letter and identified by its z; a line in z by
+  // number and its x — the same convention the framing plan's bubbles use.
+  zs.forEach((z, k) => {
+    if (pts.filter((p) => Math.abs(p.z - z) < 1e-6).length < 2) return
+    out.push({ label: String.fromCharCode(65 + k), at: z, axis: 'x' })
+  })
+  xs.forEach((x, k) => {
+    if (pts.filter((p) => Math.abs(p.x - x) < 1e-6).length < 2) return
+    out.push({ label: String(k + 1), at: x, axis: 'z' })
+  })
+  return out
+}
+
+/**
+ * Every frame elevation the model has — one per grid line per framed level.
+ *
+ * The band is half the storey below the beams and half the storey above, so
+ * the joint sits in the middle of the sheet with its neighbours' detailing
+ * either side. Where there is no storey one way (a base, a roof) the band is
+ * half the storey that does exist, which keeps the sheet the same shape.
+ */
+export function frameElevationBundles(
+  model: StructuralModel, design: StructureDesign, cages: RebarCage[],
+): FrameElevationBundle[] {
+  const nodeById = new Map(model.nodes.map((n) => [n.id, n]))
+  const secById = new Map(model.sections.map((s) => [s.id, s]))
+  const sec = (m: { section: string }) => secById.get(m.section) as RectSection | undefined
+  const pos = (id: string) => nodeById.get(id)
+  const isBeam = (r: string) => r === 'beam' || r === 'girder'
+
+  const levels = [...new Set(model.nodes.map((n) => Math.round(n.y * 1e6) / 1e6))].sort((a, b) => a - b)
+  const out: FrameElevationBundle[] = []
+
+  for (const g of gridLines(model)) {
+    const onLine = (id: string) => {
+      const n = pos(id)
+      return !!n && Math.abs((g.axis === 'x' ? n.z : n.x) - g.at) < 1e-6
+    }
+    const along: Vec3 = g.axis === 'x' ? [1, 0, 0] : [0, 0, 1]
+    const coord = (id: string) => {
+      const n = pos(id)!
+      return g.axis === 'x' ? n.x : n.z
+    }
+    const members = model.members.filter((m) => onLine(m.i) && onLine(m.j))
+    const cols = members.filter((m) => m.role === 'column')
+
+    for (const y of levels) {
+      const beams = members.filter((m) => isBeam(m.role)
+        && Math.abs(pos(m.i)!.y - y) < 1e-6 && Math.abs(pos(m.j)!.y - y) < 1e-6)
+      if (!beams.length) continue
+
+      // The columns meeting this level, split into the one below and the one
+      // above at each grid position.
+      const touching = cols.filter((c) => {
+        const a = pos(c.i)!.y, b = pos(c.j)!.y
+        return Math.abs(a - y) < 1e-6 || Math.abs(b - y) < 1e-6
+      })
+      const hOf = (c: (typeof cols)[number]) => Math.abs(pos(c.j)!.y - pos(c.i)!.y)
+      const below = touching.filter((c) => Math.max(pos(c.i)!.y, pos(c.j)!.y) <= y + 1e-6)
+      const above = touching.filter((c) => Math.min(pos(c.i)!.y, pos(c.j)!.y) >= y - 1e-6)
+      const halfDown = below.length ? Math.max(...below.map(hOf)) / 2 : 0
+      const halfUp = above.length ? Math.max(...above.map(hOf)) / 2 : 0
+      const yLo = y - (halfDown || halfUp)
+      const yHi = y + (halfUp || halfDown)
+
+      const origin: Vec3 = g.axis === 'x' ? [0, 0, g.at] : [g.at, 0, 0]
+      const plane = elevationPlane(along, origin)
+
+      const bars = (id: string) => {
+        const b = design.beams.find((x) => x.id === id)
+        if (b) {
+          const top = Math.max(0, ...b.sections.filter((s) => s.hogging).map((s) => s.design.bars))
+          const bot = Math.max(0, ...b.sections.filter((s) => !s.hogging).map((s) => s.design.bars))
+          return `${top}-TOP / ${bot}-BOT`
+        }
+        const c = design.columns.find((x) => x.id === id)
+        return c ? `${c.bars}-⌀${sec(model.members.find((m) => m.id === id)!)?.barDia ?? 0}` : undefined
+      }
+
+      const elMembers: ElevationMember[] = []
+      for (const m of beams) {
+        const s = sec(m)
+        if (!s) continue
+        const u0 = Math.min(coord(m.i), coord(m.j)), u1 = Math.max(coord(m.i), coord(m.j))
+        // The node is the TOP of the beam, so it hangs below the level.
+        elMembers.push({
+          mark: m.id, role: 'beam', u0, u1, yBot: y - s.h / 1000, yTop: y,
+          bw: s.b, d: s.h, note: bars(m.id),
+        })
+      }
+      for (const c of touching) {
+        const s = sec(c)
+        if (!s) continue
+        const cu = coord(c.i)
+        const lo = Math.min(pos(c.i)!.y, pos(c.j)!.y), hi = Math.max(pos(c.i)!.y, pos(c.j)!.y)
+        // WHICH SECTION DIMENSION IS IN VIEW.
+        //
+        // `columnCage` lays its bars out as [along h, across b] and puts the
+        // first on global X, so a column's h runs east–west and its b
+        // north–south. An elevation along x therefore sees h and one along z
+        // sees b. Drawn as b either way, a 300×500 column on a lettered line
+        // came out 300 wide with its bars spread 410 — the steel outside its
+        // own concrete, which is what the sheet was showing.
+        const face = g.axis === 'x' ? (s.h ?? s.b) : s.b
+        elMembers.push({
+          mark: c.id, role: 'column',
+          u0: cu - face / 2000, u1: cu + face / 2000,
+          yBot: Math.max(lo, yLo), yTop: Math.min(hi, yHi),
+          bw: s.b, d: s.h ?? s.b, note: bars(c.id),
+        })
+      }
+      if (!elMembers.length) continue
+
+      const ids = new Set([...beams, ...touching].map((m) => m.id))
+      const grids = [...new Set(touching.map((c) => Math.round(coord(c.i) * 1e6) / 1e6))]
+        .sort((a, b) => a - b)
+        .map((u, k) => ({ u, label: g.axis === 'x' ? String(k + 1) : String.fromCharCode(65 + k) }))
+
+      out.push({
+        // The key is also the SVG download stem, so it is slugged here rather
+        // than carrying a letter and a decimal point into a filename.
+        key: `frame-${g.label}-${y.toFixed(2)}`.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        line: g.label,
+        level: `EL ${y.toFixed(2)}`,
+        input: {
+          line: g.label, y, yLo, yHi, plane,
+          members: elMembers,
+          grids,
+          cages: cages.filter((c) => ids.has(c.member)),
+          subject: new Set(beams.map((m) => m.id)),
+        },
+      })
+    }
   }
   return out
 }

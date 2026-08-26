@@ -1,3 +1,4 @@
+import { STEEL } from './sheetInk'
 import { describe, it, expect } from 'vitest'
 import type { SlabOpening } from './model'
 import {
@@ -234,7 +235,7 @@ describe('buildSlabOpeningDetail', () => {
   const texts = d.primitives.filter((p) => p.kind === 'text').map((p) => (p as { text: string }).text)
   const lines = d.primitives.filter((p) => p.kind === 'line') as
     { x1: number; y1: number; x2: number; y2: number; stroke: string }[]
-  const rebar = lines.filter((l) => l.stroke === '#b45309')
+  const rebar = lines.filter((l) => l.stroke === STEEL)
 
   it('titles with the panel mark and returns finite, ordered bounds', () => {
     expect(d.title).toBe('SLAB OPENING DETAIL — S1/O1')
@@ -275,7 +276,7 @@ describe('buildSlabOpeningDetail', () => {
       { ...panel, opening: { id: 'O2', kind: 'rect', x: 0.2, y: 0.2, w: 1.2, h: 1.2 } },
       { detailNo: '2' },
     )
-    const bars = tight.primitives.filter((p) => p.kind === 'line' && p.stroke === '#b45309') as
+    const bars = tight.primitives.filter((p) => p.kind === 'line' && p.stroke === STEEL) as
       { x1: number; y1: number; x2: number; y2: number }[]
     expect(bars.length).toBeGreaterThan(0)
     for (const l of bars) {
@@ -330,11 +331,15 @@ describe('buildSlabOpeningDetail', () => {
     // Notes are wrapped to the sheet width, so a sentence can span two text
     // primitives — flatten the whitespace before looking for a phrase.
     const all = texts.join(' ').replace(/\s+/g, ' ')
-    expect(all).toContain('EQUAL IN NUMBER AND SIZE')
-    expect(all).toContain('§408.5.4.2')
-    expect(all).toContain('§425.4.2')      // ℓd past each face
-    expect(all).toContain('§424.3')        // diagonal crack control
-    expect(all).toContain('§422.6.4.3')    // clear of the column
+    // The RULE — replace what is interrupted, half each side, top and bottom —
+    // is on the general notes sheet. What this sheet carries is the count.
+    // Clauses belong on S-01 and in the design notes; the sheet states the
+    // bars, the lengths and the clearances — what someone has to place.
+    expect(all).toContain('REFER TO S-01')
+    expect(all).not.toMatch(/§4\d\d\./)
+    expect(all).toContain('TRIMMER BARS EXTEND ℓd')
+    expect(all).toContain('DIAGONAL AT EVERY RE-ENTRANT CORNER')
+    expect(all).toContain('KEEP OPENING')
     // the bar marks on the drawing, and the full sentence in the notes
     expect(texts).toContain('3-⌀12 × 1730')
     expect(texts).toContain('3-⌀12 × 1530')
@@ -348,10 +353,12 @@ describe('buildSlabOpeningDetail', () => {
       { ...panel, opening: { id: 'O2', kind: 'rect', x: 0.2, y: 0.2, w: 1.2, h: 1.2 } },
       { detailNo: '2' },
     )
+    // The failing rule is a design result — it goes beside the sheet, where
+    // the engineer sees it, not into the paragraph a bar bender is reading.
     const t = bad.primitives.filter((p) => p.kind === 'text').map((p) => (p as { text: string }).text).join(' ').replace(/\s+/g, ' ')
     expect(bad.result.ok).toBe(false)
-    expect(t).toContain('⚠')
-    expect(t).toContain('§408.5.4.2(B)')
+    expect(t).not.toContain('⚠')
+    expect(bad.designNotes.join(' ')).toContain('§408.5.4.2(b)')
   })
 
   it('survives a degenerate panel without throwing', () => {

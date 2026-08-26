@@ -33,14 +33,21 @@ const seg = (a: Vec3, b: Vec3) => Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[
 export const OFFSET_SLOPE = 6
 
 /**
- * A unit vector across the bar, for the lapping piece to step aside along.
+ * Which way the lapping piece steps aside, as a unit vector.
  *
- * Horizontal wherever the bar is not vertical, because lapped bars in a beam
- * sit side by side in the SAME layer — stepping one down would move it out of
- * the layer the design gave it an effective depth for. A vertical bar has no
- * horizontal tangent to work from, so it steps along x.
+ * INTO THE SECTION, not sideways. A top bar cranks DOWN behind the bar it laps
+ * and a bottom bar cranks UP, because the face it is on is where the stirrup
+ * is: a bar stepped sideways stays on the cover line and walks straight into
+ * the stirrup's leg, which is the collision the section drawing shows. Stepped
+ * inward it tucks under (or over) its partner and the stirrup passes outside
+ * both.
+ *
+ * Anything else — a vertical column bar, a footing mat bar — has no tension
+ * face to move away from, so it steps horizontally across itself.
  */
-export function acrossBar(a: Vec3, b: Vec3): Vec3 {
+export function stepDirection(role: string, a: Vec3, b: Vec3): Vec3 {
+  if (role === 'top') return [0, -1, 0]
+  if (role === 'bottom') return [0, 1, 0]
   const d: Vec3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
   const h = Math.hypot(d[0], d[2])
   if (h < 1e-9) return [1, 0, 0]
@@ -103,6 +110,16 @@ export interface SpliceOptions {
   lap: number
   /** Preferred splice positions as a fraction of the run, best first. */
   prefer?: number[]
+  /**
+   * Preferred positions PER ROLE, which is how a beam is actually spliced: the
+   * two faces want OPPOSITE zones, not one shared list.
+   *
+   * Top steel laps in the MIDDLE HALF and bottom steel in the END QUARTERS —
+   * each where its own bar is in compression rather than tension. One list for
+   * both offered every bar both zones, so half the splices landed in the zone
+   * the standard bar-bending sheet marks "avoid splicing in this region".
+   */
+  preferByRole?: Record<string, number[]>
   /** Shift every splice on this bar by this much, m — how staggering is applied. */
   stagger?: number
 }
@@ -132,7 +149,11 @@ export function spliceCentres(L: number, o: SpliceOptions): number[] {
   if (o.prefer?.length) {
     const cand = out.map((s) => {
       const want = o.prefer!.map((f) => f * L)
-      return want.reduce((best, w) => (Math.abs(w - s) < Math.abs(best - s) ? w : best), s)
+      // Seeded with the FIRST preference, not with `s`. Seeded with `s` the
+      // comparison was `|w − s| < 0`, false for every w, so the preference could
+      // never win and every splice stayed wherever the even division put it —
+      // the whole mechanism was inert.
+      return want.reduce((best, w) => (Math.abs(w - s) < Math.abs(best - s) ? w : best))
     })
     const sorted = [...cand].sort((a, b) => a - b)
     if (fits(sorted)) out = sorted
@@ -152,8 +173,16 @@ export function spliceCentres(L: number, o: SpliceOptions): number[] {
  * A closed run is never split: a tie is cut nested from stock and its lap is
  * the hooked overlap already in `hookAllowance`.
  */
-export function spliceRun(run: RebarRun, o: SpliceOptions): RebarRun[] {
-  if (run.closed) return [run]
+/**
+ * Where ONE run is lapped, as arc length along its own path, m.
+ *
+ * Split out of `spliceRun` so that anything which has to know where the laps
+ * fall — the hoops, which §425.5.2 closes up through a splice — asks the same
+ * function that puts them there. Derived twice, the hoops would be tightened
+ * over a lap the bar does not have.
+ */
+export function runSpliceCentres(run: RebarRun, o: SpliceOptions): number[] {
+  if (run.closed) return []
   const L = pathLength(run.path)
   // Judge against the FABRICATED length — bends and hooks are bar too, which is
   // the whole point of "consider all lengths, bend, hook, crank, anchor".
@@ -161,7 +190,14 @@ export function spliceRun(run: RebarRun, o: SpliceOptions): RebarRun[] {
   const off = run.dia / 1000                       // one diameter, m
   // The stepped-aside piece is fractionally longer than the straight one it
   // replaces, so the allowance comes off the stock before the cuts are chosen.
-  const centres = spliceCentres(L, { ...o, stock: o.stock - Math.max(0, made - L) - off })
+  return spliceCentres(L, { ...o, stock: o.stock - Math.max(0, made - L) - off })
+}
+
+export function spliceRun(run: RebarRun, o: SpliceOptions): RebarRun[] {
+  if (run.closed) return [run]
+  const L = pathLength(run.path)
+  const off = run.dia / 1000                       // one diameter, m
+  const centres = runSpliceCentres(run, o)
   if (!centres.length) return [run]
 
   const cuts = [0, ...centres, L]
@@ -179,7 +215,7 @@ export function spliceRun(run: RebarRun, o: SpliceOptions): RebarRun[] {
       // laps, and cranks back onto line beyond it. Two bars lapped on the same
       // centreline occupy the same space — impossible to build, and invisible
       // to look at, which is the state the cages were in.
-      ...stepAside(path, bendDia, k > 1 ? o.lap : 0, off, run.dia),
+      ...stepAside(path, bendDia, k > 1 ? o.lap : 0, off, run.dia, run.role),
       // a cut end is not a hook; only the original ends keep theirs
       hookAllowance: undefined,
     })
@@ -197,14 +233,14 @@ export function spliceRun(run: RebarRun, o: SpliceOptions): RebarRun[] {
  * wrong.
  */
 export function stepAside(
-  path: Vec3[], bendDia: number[], lap: number, off: number, dia: number,
+  path: Vec3[], bendDia: number[], lap: number, off: number, dia: number, role = 'bottom',
 ): { path: Vec3[]; bendDia: number[] } {
   const crank = OFFSET_SLOPE * off
   if (lap <= 0 || path.length < 2) return { path, bendDia }
   const first = seg(path[0], path[1])
   if (first < lap + crank + 1e-9) return { path, bendDia }
 
-  const n = acrossBar(path[0], path[1])
+  const n = stepDirection(role, path[0], path[1])
   const shift = (p: Vec3): Vec3 => [p[0] + n[0] * off, p[1] + n[1] * off, p[2] + n[2] * off]
   const at = (s: number) => pointAt(path, s)
   const D = Math.max(6 * dia, 1)                   // §425.3.1 minimum bend
@@ -232,7 +268,8 @@ export function spliceCage(cage: RebarCage, o: SpliceOptions): RebarCage {
     if (NEVER_SPLICED.has(r.role)) { runs.push(r); continue }
     const k = byRole.get(r.role) ?? 0
     byRole.set(r.role, k + 1)
-    runs.push(...spliceRun(r, { ...o, stagger: k % 2 === 0 ? -o.lap / 2 : o.lap / 2 }))
+    const prefer = o.preferByRole?.[r.role] ?? o.prefer
+    runs.push(...spliceRun(r, { ...o, prefer, stagger: k % 2 === 0 ? -o.lap / 2 : o.lap / 2 }))
   }
   return { ...cage, runs }
 }

@@ -19,6 +19,7 @@
 
 import type { jsPDF } from 'jspdf'
 import type { Drawing, PlanPrimitive, PathCmd } from '../engine/planRenderer'
+import { extensionLines } from '../engine/planRenderer'
 
 export type RGB = [number, number, number]
 
@@ -130,6 +131,11 @@ export function paintDrawing(doc: jsPDF, d: Drawing, box: PaintBox): PaintResult
         break
       }
       case 'dim': {
+        // Extension lines first, in the pale grey and broken, so the dimension
+        // line lands on top of them.
+        for (const e of extensionLines(p)) {
+          if (setStroke('#9aa5b5', 0.15, [e.dash, e.dash * 0.7])) doc.line(X(e.x1), Y(e.y1), X(e.x2), Y(e.y2))
+        }
         if (!setStroke('#5c6675', 0.2)) break
         doc.line(X(p.x1), Y(p.y1), X(p.x2), Y(p.y2))
         doc.setTextColor(92, 102, 117)
