@@ -88,6 +88,18 @@ export interface ColumnCageInput {
    * non-zero, because then the bar carries on instead.
    */
   topHookRise?: number
+  /**
+   * How far ABOVE `yTop` the lap onto the column above begins, m —
+   * ACI 318-14 §18.7.4.3 / NSCP §418.7.4.3.
+   *
+   * A column lap splice must sit within the CENTRE HALF of the member length,
+   * so the bars below run on past the floor into the middle of the storey above
+   * before lapping. Left at zero the lap starts at the floor itself, which is
+   * the end quarter — the high-tensile-stress zone under lateral load, and
+   * exactly where the rule forbids it. The 2D column sheet has drawn the centre
+   * -half splice window all along; only the cage disagreed.
+   */
+  spliceRise?: number
 }
 
 /** ACI 318-14 §10.7.4.1 — the inclined part of an offset bend may not be
@@ -249,6 +261,9 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
   const upXhF = up ? Math.max(0, up.h / 2 - upIns) : xhF
   const upZbF = up ? Math.max(0, up.b / 2 - upIns) : zbF
   const lap = Math.max(0, i.spliceLap ?? 0) / 1000
+  // §418.7.4.3 — the lap onto the column above starts inside the CENTRE HALF of
+  // that column, not at the floor. Only meaningful where there IS a lap.
+  const rise = lap > 0 ? Math.max(0, i.spliceRise ?? 0) : 0
   const onFace = (v: number, face: number) => face > 0 && Math.abs(Math.abs(v) - face) < 1e-6
 
   perimeterBars(i).forEach(([dx, dz], k) => {
@@ -281,10 +296,12 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
       if (!notes.some((n) => n.includes('may not be bent'))) {
         notes.push(`the column reduces by more than the bars can be cranked — a ${Math.round(offsetMm)} mm offset, past the ${OFFSET_DOWEL_LIMIT} mm of §410.7.4.5, so the bars may not be bent; dowel the column above and lap the dowels with these bars`)
       }
-      path.push([x, y1 + lap, z])
+      path.push([x, y1 + rise + lap, z])
     } else if (lap > 0 && crankRun > 0 && y1 - y0 > crankRun && (ox !== 0 || oz !== 0)) {
       const D = hookBendDiameter(i.barDia)
-      path.push([x, y1 - crankRun, z], [x + ox, y1, z + oz], [x + ox, y1 + lap, z + oz])
+      // the crank is finished by the floor; the straight run above it carries
+      // the bar up into the splice window
+      path.push([x, y1 - crankRun, z], [x + ox, y1, z + oz], [x + ox, y1 + rise + lap, z + oz])
       bendDia.push(D, D)
     } else if (lap <= 0 && i.topHookRise != null) {
       // ── the roof hook ────────────────────────────────────────────────────
@@ -315,7 +332,7 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
       path.push([x, yh, z], [x + tx, yh, z + tz])
       bendDia.push(hookBendDiameter(i.barDia))
     } else {
-      path.push([x, y1 + lap, z])
+      path.push([x, y1 + rise + lap, z])
     }
     runs.push({
       mark: `${i.mark}-V${k + 1}`,

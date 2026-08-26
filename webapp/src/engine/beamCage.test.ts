@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  buildBeamCage, stirrupStations, EXTRA_TOP_FRACTION, EXTRA_BOTTOM_FRACTION,
-  type BeamCageInput,
+  buildBeamCage, stirrupStations, curtailments, topCutoff, botCutoff, effectiveDepth,
+  INFLECTION_FRACTION, type BeamCageInput,
 } from './beamCage'
 import { cutLength, runWeight, stirrupHookAllowance, CORNER_BARS_PER_FACE } from './rebarModel'
 
@@ -77,14 +77,45 @@ describe('buildBeamCage — longitudinal steel', () => {
     expect(bot.path[0][1]).toBeCloseTo(bot.path[1][1] + 0.24, 9)
   })
 
-  it('curtails the extras where the sheet curtails them', () => {
-    expect(EXTRA_TOP_FRACTION).toBe(0.25)
-    expect(EXTRA_BOTTOM_FRACTION).toBe(0.15)
-    const xt = marked('XTL')[0]
-    expect(xt.path[1][0]).toBeCloseTo(1.5, 9)         // 0.25L
+  it('runs a cut TOP bar PAST the inflection point — §409.7.3.3, §409.7.3.8.4', () => {
+    // ℓn = 6000 − 2(200) = 5600; d = 550 − 40 − 12 − 10 = 488.
+    // The extension is max(d, 12db, ℓn/16) = max(488, 240, 350) = 488, so the
+    // bar stops 1400 + 488 = 1888 past the face, i.e. 2088 from the centreline.
+    // Cut at ℓn/4 — the fixed 0.25L this replaces — it ended 588 mm short, at
+    // the exact point it was still required to resist flexure.
+    const d = effectiveDepth(550, 40, 12, 20)
+    expect(d).toBe(488)
+    expect(topCutoff(5600, d, 20)).toBeCloseTo(1888, 9)
+    expect(marked('XTL')[0].path[1][0]).toBeCloseTo(2.088, 9)
+    expect(marked('XTR')[0].path[1][0]).toBeCloseTo(6 - 2.088, 9)
+  })
+
+  it('runs a cut BOTTOM bar past the inflection point the OTHER way', () => {
+    // Back towards the support by max(d, 12db) = 488, so it starts
+    // 1400 − 488 = 912 past the face — 1112 from the centreline.
+    expect(botCutoff(5600, 488, 20)).toBeCloseTo(912, 9)
     const xb = marked('XB')[0]
-    expect(xb.path[1][0]).toBeCloseTo(0.9, 9)         // 0.15L
-    expect(xb.path[2][0]).toBeCloseTo(5.1, 9)
+    expect(xb.path[1][0]).toBeCloseTo(1.112, 9)
+    expect(xb.path[2][0]).toBeCloseTo(6 - 1.112, 9)
+    // …and the two really do overlap, so no length of span has neither bar
+    expect(xb.path[1][0]).toBeLessThan(marked('XTL')[0].path[1][0])
+  })
+
+  it('never runs the two cut top bars past each other at midspan', () => {
+    // A span short enough that ℓn/4 + d reaches beyond the centre would draw
+    // two cut bars crossing — which is one through bar, not a pair of cut ones.
+    // ℓn = 1600: the cut-off is 400 + 488 = 888 past the face, 1088 from the
+    // centreline — past the 1000 midspan, so both are pulled back to it.
+    const short = curtailments({ L: 2, h: 550, cover: 40, stirrupDia: 12, barDia: 20, colBLeft: 400, colBRight: 400 })
+    expect(short.topL).toBeCloseTo(1, 9)
+    expect(short.topR).toBeCloseTo(1, 9)
+    // …and the bottom bar's extension reaches the face, so it simply starts
+    // there rather than at a negative distance outboard of its own support.
+    expect(short.botL).toBeCloseTo(0.2, 9)
+  })
+
+  it('keeps ℓn/4 as the detailing inflection point', () => {
+    expect(INFLECTION_FRACTION).toBe(0.25)
   })
 
   it('cranks an extra bar towards the opposite face', () => {

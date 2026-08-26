@@ -185,3 +185,40 @@ describe('the lapping piece steps aside', () => {
     expect(short.bendDia).toEqual([160])
   })
 })
+
+describe('splice zones per face — the two are opposite', () => {
+  const run = (role: RebarRun['role']): RebarRun => ({
+    mark: `X-${role}`, dia: 20, role, member: 'B1', count: 1, bendDia: [],
+    path: [[0, 0, 0], [13, 0, 0]],
+  })
+
+  it('laps top steel in the middle half and bottom steel in an end quarter', () => {
+    // A top bar is in tension over the supports and a bottom bar at midspan, so
+    // the zone each may be spliced in is the OTHER one's forbidden region. One
+    // shared preference list offered both bars both zones.
+    const o = {
+      stock: 12, lap: 0.9,
+      preferByRole: { top: [0.5], bottom: [0.125, 0.875] },
+    }
+    const cage: RebarCage = { member: 'B1', runs: [run('top'), run('bottom')] }
+    const out = spliceCage(cage, o)
+    const joins = (role: RebarRun['role']) => {
+      const ps = out.runs.filter((r) => r.role === role)
+      expect(ps.length).toBeGreaterThan(1)
+      return ps.map((r) => r.path[r.path.length - 1][0])
+    }
+    // the top bar's joint lands in the middle half, [3.25, 9.75]
+    const t = joins('top')[0]
+    expect(t).toBeGreaterThan(13 * 0.25)
+    expect(t).toBeLessThan(13 * 0.75)
+    // the bottom bar's in an end quarter — outside that band
+    const bt = joins('bottom')[0]
+    expect(bt < 13 * 0.25 || bt > 13 * 0.75).toBe(true)
+  })
+
+  it('falls back to the shared list for a role it names no zone for', () => {
+    const c = spliceCentres(18, { stock: 12, lap: 0.9, prefer: [0.5] })
+    expect(c).toHaveLength(1)
+    expect(c[0]).toBeCloseTo(9, 9)
+  })
+})

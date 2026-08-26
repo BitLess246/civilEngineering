@@ -91,10 +91,70 @@ export interface BeamCageInput {
 
 /** §418.6.4.1 — stirrups are closely spaced over 2h from each support face. */
 export const HOOP_ZONE_DEPTHS = 2
-/** Extra TOP bars run this fraction of the span from the support centreline. */
-export const EXTRA_TOP_FRACTION = 0.25
-/** Extra BOTTOM bars start this fraction of the span off each support. */
-export const EXTRA_BOTTOM_FRACTION = 0.15
+/**
+ * The detailing point of inflection of a continuous span, as a fraction of the
+ * CLEAR span from each face. 0.211ℓn is the exact value for a fully fixed end
+ * under a uniform load; ℓn/4 is what the standard bar-bending sheet draws, and
+ * it is the more conservative of the two for the top steel.
+ */
+export const INFLECTION_FRACTION = 0.25
+
+/**
+ * Where a curtailed TOP bar stops, mm PAST THE FACE of its support —
+ * §409.7.3.3 with §409.7.3.8.4.
+ *
+ * The bar does not stop at the point of inflection: that is the point at which
+ * it is no longer required, and §409.7.3.3 makes it carry on past there by the
+ * greater of d and 12db. §409.7.3.8.4 then puts a floor of ℓn/16 under the
+ * third of the negative steel that has to reach furthest — detailed here for
+ * every top bar, because they are cut to one length.
+ *
+ * Cut at ℓn/4 exactly, as the fixed 0.25L this replaces did, the bar ended
+ * where it was still working.
+ */
+export function topCutoff(ln: number, d: number, db: number): number {
+  return INFLECTION_FRACTION * ln + Math.max(d, 12 * db, ln / 16)
+}
+
+/**
+ * Where a curtailed BOTTOM bar starts, mm past the face of its support —
+ * §409.7.3.3.
+ *
+ * Positive steel is no longer required outboard of the inflection point, so it
+ * runs on past it the OTHER way, back towards the support, by the greater of d
+ * and 12db. Never negative: on a span short enough that the extension reaches
+ * the face, the bar simply runs to the face.
+ */
+export function botCutoff(ln: number, d: number, db: number): number {
+  return Math.max(0, INFLECTION_FRACTION * ln - Math.max(d, 12 * db))
+}
+
+/** Effective depth d, mm — to the centroid of one layer of tension steel. */
+export const effectiveDepth = (h: number, cover: number, stirrupDia: number, barDia: number) =>
+  h - cover - stirrupDia - barDia / 2
+
+/**
+ * Both curtailments for one beam, m from the LEFT support centreline, which is
+ * the datum the cage and the elevation are both laid out on.
+ *
+ * `topL`/`topR` are where a curtailed top bar stops; `botL`/`botR` where the
+ * curtailed bottom bar starts and ends. A top bar is never run past midspan —
+ * two of them meeting there is a through bar, not a pair of cut ones.
+ */
+export function curtailments(i: {
+  L: number; h: number; cover: number; stirrupDia: number; barDia: number
+  colBLeft?: number; colBRight?: number
+}) {
+  const fL = (i.colBLeft ?? 0) / 2000, fR = i.L - (i.colBRight ?? 0) / 2000   // the two faces, m
+  const ln = Math.max(0, (fR - fL) * 1000)                        // clear span, mm
+  const d = effectiveDepth(i.h, i.cover, i.stirrupDia, i.barDia)
+  const t = topCutoff(ln, d, i.barDia) / 1000
+  const b = botCutoff(ln, d, i.barDia) / 1000
+  return {
+    topL: Math.min(fL + t, i.L / 2), topR: Math.max(fR - t, i.L / 2),
+    botL: fL + b, botR: fR - b,
+  }
+}
 
 /**
  * Where the stirrups go, m along the span from the left support centreline.
@@ -259,10 +319,10 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
   // ── extra bars: curtailed, and cranked where they stop ──
   const crankRun = Math.min(0.33 * i.h, 0.05 * i.L * 1000) / 1000
   const crankD = hookBendDiameter(i.barDia)
+  const cut = curtailments(i)
   if (extraTop > 0) {
-    const stop = EXTRA_TOP_FRACTION * i.L
     for (const [end, from, to] of [
-      ['L', endL, stop], ['R', endR, i.L - stop],
+      ['L', endL, cut.topL], ['R', endR, cut.topR],
     ] as const) {
       const dir = to > from ? 1 : -1
       for (let k = 0; k < extraTop; k++) {
@@ -277,7 +337,7 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
     }
   }
   if (extraBot > 0) {
-    const a = EXTRA_BOTTOM_FRACTION * i.L, b2 = i.L - a
+    const a = cut.botL, b2 = cut.botR
     for (let k = 0; k < extraBot; k++) {
       const v = extraBot === 1 ? 0 : -half + (2 * half * k) / (extraBot - 1)
       runs.push({

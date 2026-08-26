@@ -130,16 +130,37 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
    * cranked by a fixed diameter never reaches them. Same size, this changes
    * nothing.
    */
-  const sectionAbove = (memberId: string, node: string): RectSection | undefined => {
+  const memberAbove = (memberId: string, node: string) => {
     const here = pos.get(node)
     if (!here) return undefined
-    const up = model.members.find((m) => {
+    return model.members.find((m) => {
       if (m.id === memberId || m.role !== 'column') return false
       if (m.i !== node && m.j !== node) return false
       const other = pos.get(m.i === node ? m.j : m.i)
       return !!other && other.y > here.y + 1e-6
     })
+  }
+  const sectionAbove = (memberId: string, node: string): RectSection | undefined => {
+    const up = memberAbove(memberId, node)
     return up ? secOf(up.id) : undefined
+  }
+
+  /**
+   * How far past the floor the bars run before they lap, m — §418.7.4.3.
+   *
+   * A column lap splice belongs in the CENTRE HALF of the column it sits in, so
+   * the bars below carry on up into the storey above and lap there. A quarter
+   * of that column's height puts the lap at the bottom of its middle half; if
+   * the lap is long enough to run out the top of the window it is centred on
+   * the storey instead, which is the best that height allows.
+   */
+  const spliceRiseAbove = (memberId: string, node: string, lap: number): number => {
+    const up = memberAbove(memberId, node)
+    const a = up && pos.get(up.i), b = up && pos.get(up.j)
+    if (!a || !b) return 0
+    const hStorey = Math.abs(b.y - a.y)
+    if (hStorey <= 0) return 0
+    return lap <= hStorey / 2 ? hStorey / 4 : Math.max(0, (hStorey - lap) / 2)
   }
 
   /**
@@ -189,12 +210,15 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
   const cages: RebarCage[] = []
   const unplaced: string[] = []
   /** Splice options for a member, from its own concrete and steel. */
-  const spliceOf = (sec: RectSection, barDia: number, prefer?: number[]) => {
+  const spliceOf = (
+    sec: RectSection, barDia: number,
+    prefer?: number[], preferByRole?: Record<string, number[]>,
+  ) => {
     const dl = calcDevLength({
       db: barDia, fc: sec.fc, fy: sec.fy,
       topBar: false, epoxy: 'none', lambda: 1, cbKtr_db: 2.5,
     })
-    return { stock: STOCK_BAR_LENGTH, lap: dl.ls_B / 1000, prefer }
+    return { stock: STOCK_BAR_LENGTH, lap: dl.ls_B / 1000, prefer, preferByRole }
   }
 
   for (const b of design.beams) {
@@ -205,11 +229,20 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
     const sag = b.sections.filter((s) => !s.hogging)
     const hog = b.sections.filter((s) => s.hogging)
     const spac = b.sections.map((s) => s.design.sAdopt).filter((v) => v > 0)
-    // Bottom steel laps near the SUPPORTS and top steel near MIDSPAN — each
-    // where its own bar is least stressed, the standard "50% of splices on each
-    // side of the support" arrangement. One preference list serves both because
-    // the two are complementary points on the same run.
-    const beamSplice = spliceOf(sec, sec.barDia, [0.08, 0.5, 0.92])
+    // WHERE EACH FACE MAY BE SPLICED — and the two faces are OPPOSITE.
+    //
+    // A top bar is in tension over the supports, so it laps in the MIDDLE HALF
+    // and never in an end quarter. A bottom bar is in tension at midspan, so it
+    // laps in an END QUARTER and never in the middle half. That is the standard
+    // bar-bending sheet's "avoid splicing in this region" on both faces.
+    //
+    // One shared list used to serve both, which offered every bar both zones —
+    // so whichever the geometry picked, half the splices landed in the zone the
+    // rule exists to keep them out of.
+    const beamSplice = spliceOf(sec, sec.barDia, [0.5], {
+      top: [0.5],                       // middle half
+      bottom: [0.125, 0.875],           // end quarters
+    })
     cages.push(spliceCage(buildBeamCage({
       mark: b.id, L: b.L,
       colBLeft: colWidthAt(mem.i), colBRight: colWidthAt(mem.j),
@@ -272,6 +305,7 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       : 0
     cages.push(spliceCage(buildColumnCage({
       mark: c.id, b: sec.b, h: sec.h, cover: sec.cover, spliceLap: lap,
+      spliceRise: lap > 0 ? spliceRiseAbove(c.id, topNode, lap / 1000) : 0,
       barDia: sec.barDia, bars: c.bars, tieDia: sec.tieDia,
       sConfined: c.tieSpacingFinal > 0 ? c.tieSpacingFinal : c.tieSpacing,
       sOutside: c.seismicSOut ?? c.tieSpacing,

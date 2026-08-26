@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import type { PlanPrimitive } from './planRenderer'
-import { buildBeamCage, stirrupStations } from './beamCage'
+import { buildBeamCage, stirrupStations, curtailments } from './beamCage'
 import { STEEL_LIGHT, STEEL_CONTEXT } from './sheetInk'
 import {
   buildBeamDetail, continuousTopSteel, barExtension, zoneSpacing, hoopPositions, wrapNote,
-  FIRST_HOOP, HOOP_ZONE_DEPTHS, HOOK_END_COVER, EXTRA_TOP_FRACTION, EXTRA_BOTTOM_FRACTION,
+  FIRST_HOOP, HOOP_ZONE_DEPTHS, HOOK_END_COVER,
   endHookAnchorage, crankBars, hook90, hookBendDiameter, HOOK_TAIL_DB, REBAR_INK,
 } from './beamDetail'
 
@@ -371,14 +371,22 @@ describe('hoops and overlaps on a beam with no support design', () => {
   })
 
   it('does not dimension the run of a bar it never draws', () => {
-    // `ss` has no extra TOP bar, so 0.25L is a run nothing takes — but it does
-    // have extra BOTTOM bars, so 0.15L and the crank note both still belong.
+    // `ss` has no extra TOP bar, so the top cut-off is a run nothing takes —
+    // but it does have extra BOTTOM bars, so that dimension and the crank note
+    // both still belong.
+    const mm = (v: number) => `${Math.round(v * 1000)}`
+    const cutOf = (x: typeof b) => curtailments({
+      L: x.L, h: x.h, cover: 40, stirrupDia: x.stirrupDia, barDia: x.barDia,
+      colBLeft: x.colB, colBRight: x.colB,
+    })
+    const c2 = cutOf(ss as typeof b)
     const f2 = allTextOf(buildBeamDetail(ss)).join(' ')
-    expect(f2).not.toContain('0.25L = ')
-    expect(f2).toContain('0.15L')
+    expect(f2).not.toContain(mm(c2.topL))
+    expect(f2).toContain(mm(c2.botL))
     expect(f2).toContain('CRANK 45° TYP.')            // labelled on the drawing
+    const c3 = cutOf(b)
     const f3 = allTextOf(buildBeamDetail(b)).join(' ')
-    expect(f3).toContain('0.25L = ')
+    expect(f3).toContain(mm(c3.topL))
     expect(f3).toContain('CRANK 45° TYP.')
   })
 
@@ -477,20 +485,27 @@ describe('buildBeamDetail', () => {
     expect(cont).toContain('5-⌀16 EXTRA TOP')
   })
 
-  it('runs extra top bars 0.25L and starts extra bottom bars 0.15L off the support', () => {
-    expect(EXTRA_TOP_FRACTION).toBe(0.25)
-    expect(EXTRA_BOTTOM_FRACTION).toBe(0.15)
-    expect(flat).toContain(`0.25L = ${Math.round(0.25 * b.L * 1000)}`)
-    expect(flat).toContain('0.15L')
-    // the extra bottom bar really does run 0.15L in to 0.15L short — it is one
-    // cranked path now, so the straight middle is its third and fourth points
+  it('cuts the extras where §409.7.3.3 cuts them, and dimensions them in mm', () => {
+    // The sheet takes the cage's own derivation, so the drawing and the bar it
+    // draws stop in the same place. ℓn = 6000 − 400 = 5600, d = 500 − 40 − 10 −
+    // 8 = 442, so the top bar runs 1400 + 442 past the face and the bottom bar
+    // starts 1400 − 442 past it.
+    const cut = curtailments({ L: b.L, h: b.h, cover: 40, stirrupDia: b.stirrupDia, barDia: b.barDia, colBLeft: b.colB, colBRight: b.colB })
+    expect(cut.topL).toBeCloseTo(0.2 + 1.842, 9)
+    expect(cut.botL).toBeCloseTo(0.2 + 0.958, 9)
+    // dimensioned as a plain length, not as a fraction of the span — a fraction
+    // is the reason for the number, and the reason belongs on S-01
+    expect(flat).toContain(`${Math.round(cut.topL * 1000)}`)
+    expect(flat).not.toContain('0.25L')
+    expect(flat).not.toContain('0.15L')
+    // the extra bottom bar really does run cut-off to cut-off — it is one
+    // cranked path, so the straight middle is its second and third points.
     // The bottom bar is the cranked path with no arc in it — a top bar hooked
     // into an end support also has four commands, but three of them are its hook.
     const bot = crankedPaths(d).find((p) => p.cmds.length === 4)!
     expect(bot).toBeDefined()
-    // cmds[0] is the crank tip, cmds[1] and cmds[2] the straight run it ends
-    expect(bot.cmds[1].x).toBeCloseTo(0.15 * b.L, 9)
-    expect(bot.cmds[2].x).toBeCloseTo(b.L - 0.15 * b.L, 9)
+    expect(bot.cmds[1].x).toBeCloseTo(cut.botL, 9)
+    expect(bot.cmds[2].x).toBeCloseTo(b.L - cut.botL, 9)
   })
 
   it('HOOPS ARE TIGHTEST AT THE SUPPORTS — including when midspan needs none', () => {

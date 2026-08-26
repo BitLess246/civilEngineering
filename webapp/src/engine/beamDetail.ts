@@ -50,7 +50,7 @@ import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader, multi
 import { seeGeneralNotes } from './generalNotes'
 import { SHEET_INK, SHEET_NOTE, SHEET_GRID, STEEL, STEEL_LIGHT, STEEL_CONTEXT } from './sheetInk'
 import { buildColumnCage } from './columnCage'
-import { stirrupStations } from './beamCage'
+import { stirrupStations, curtailments } from './beamCage'
 import {
   runToPrimitive, elevationPlane, hookBendDiameter, continuousBars,
   KEEP_TOP, KEEP_BOTTOM, splicesRequired, STOCK_BAR_LENGTH,
@@ -199,10 +199,6 @@ const CONC = '#f1f5f9'
 export const HOOP_ZONE_DEPTHS = 2
 /** §418.6.4.4 — the first hoop sits 50 mm from the face of the support, mm. */
 export const FIRST_HOOP = 50
-/** Extra TOP bars run this fraction of the span from the support centreline. */
-export const EXTRA_TOP_FRACTION = 0.25
-/** Extra BOTTOM bars start this fraction of the span off each support. */
-export const EXTRA_BOTTOM_FRACTION = 0.15
 /** §418.8.3 — clear cover to the end of a beam-bar hook in the joint, mm. */
 export const HOOK_END_COVER = 60
 
@@ -346,11 +342,14 @@ export interface CrankResult {
  * tells the reader — and the bar bender — that the bar ENDS here rather than
  * continuing behind the bar drawn beyond it.
  *
- *   • the EXTRA TOP bar runs from the support to 0.25L, then cranks DOWN;
- *   • the EXTRA BOTTOM bar runs through midspan to 0.15L off each support,
+ *   • the EXTRA TOP bar runs from the support past the inflection point, then
+ *     cranks DOWN;
+ *   • the EXTRA BOTTOM bar runs through midspan and back past the inflection
+ *     point the other way,
  *     then cranks UP.
  *
- * Because 0.15L is inboard of 0.25L, the two runs overlap between them, so no
+ * Because the bottom bar starts inboard of where the top bar stops, the two
+ * runs overlap between them, so no
  * station along the span is left with neither bar present. They are in opposite
  * faces and do NOT splice with one another — the overlap is continuity of
  * reinforcement, not a lap. The Class B figure returned is for the through
@@ -716,8 +715,14 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
     }
   }
 
-  const topRun = EXTRA_TOP_FRACTION * L
-  const botStart = EXTRA_BOTTOM_FRACTION * L
+  // §409.7.3.3 / §409.7.3.8.4, from the cage's own derivation so the sheet and
+  // the cage cut every bar in the same place.
+  const cut = curtailments({
+    L, h: i.h, cover: i.cover ?? 40, stirrupDia: i.stirrupDia, barDia: i.barDia,
+    colBLeft: i.colB ?? 400, colBRight: i.colB ?? 400,
+  })
+  const topRun = cut.topL
+  const botStart = cut.botL
   const crank = crankBars({
     L, h: i.h, cover: i.cover ?? 40, stirrupDia: i.stirrupDia, barDia: i.barDia,
     topRun, botStart, colB: i.colB ?? 400, ld: anch ? anch.ldh / 0.7 : undefined,
@@ -729,7 +734,7 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   // than continuing behind whatever is drawn beyond it.
   const CR = { stroke: CRANK, width: 2.0, cap: 'round', join: 'round' } as const
 
-  // EXTRA top bars: support → 0.25L → crank DOWN.
+  // EXTRA top bars: support → the §409.7.3.3 cut-off → crank DOWN.
   for (const [cont, cx, dir, ce, n] of [
     [i.continuousLeft, 0, 1, crank.top[0], extraTopL],
     [i.continuousRight, L, -1, crank.top[1], extraTopR],
@@ -845,7 +850,7 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   if (overlapsShown.length) {
     P.push(...multiLeader({
       targets: overlapsShown.map((ov) => ({ x: (ov.from + ov.to) / 2, y: Y(yBot2) })),
-      // In the clear lane between the 0.15L dimensions, which sit at the ENDS,
+      // In the clear lane between the bottom-bar dimensions, which sit at the ENDS,
       // and the centred callouts below — so neither the label nor its arms
       // cross text they do not belong to.
       tx: L / 2, ty: Y(-colDrop - u * 2.6),
@@ -858,11 +863,11 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   const dimTop = hM + colRise + u * 3.6
   // Only where the bar being dimensioned exists. A beam with no hogging steel
   // has no extra top bar, and dimensioning its run described nothing.
-  if (extraTopL > 0) P.push({ kind: 'dim', x1: 0, y1: Y(dimTop), x2: topRun, y2: Y(dimTop), text: `0.25L = ${Math.round(topRun * 1000)}`, off: 0, size: u * 1.35, ext: Y(yTop2) })
-  if (extraTopR > 0) P.push({ kind: 'dim', x1: L - topRun, y1: Y(dimTop), x2: L, y2: Y(dimTop), text: `0.25L = ${Math.round(topRun * 1000)}`, off: 0, size: u * 1.35, ext: Y(yTop2) })
+  if (extraTopL > 0) P.push({ kind: 'dim', x1: 0, y1: Y(dimTop), x2: topRun, y2: Y(dimTop), text: `${Math.round(topRun * 1000)}`, off: 0, size: u * 1.35, ext: Y(yTop2) })
+  if (extraTopR > 0) P.push({ kind: 'dim', x1: L - topRun, y1: Y(dimTop), x2: L, y2: Y(dimTop), text: `${Math.round(topRun * 1000)}`, off: 0, size: u * 1.35, ext: Y(yTop2) })
   if (botM > 0) {
-    P.push({ kind: 'dim', x1: 0, y1: Y(-colDrop - u * 1.6), x2: botStart, y2: Y(-colDrop - u * 1.6), text: `0.15L`, off: 0, size: u * 1.3, ext: Y(yBot2) })
-    P.push({ kind: 'dim', x1: L - botStart, y1: Y(-colDrop - u * 1.6), x2: L, y2: Y(-colDrop - u * 1.6), text: `0.15L`, off: 0, size: u * 1.3, ext: Y(yBot2) })
+    P.push({ kind: 'dim', x1: 0, y1: Y(-colDrop - u * 1.6), x2: botStart, y2: Y(-colDrop - u * 1.6), text: `${Math.round(botStart * 1000)}`, off: 0, size: u * 1.3, ext: Y(yBot2) })
+    P.push({ kind: 'dim', x1: L - botStart, y1: Y(-colDrop - u * 1.6), x2: L, y2: Y(-colDrop - u * 1.6), text: `${Math.round(botStart * 1000)}`, off: 0, size: u * 1.3, ext: Y(yBot2) })
   }
   // the 2h hoop zone at the left support, and the 50 mm first hoop
   const zone = Math.min(HOOP_ZONE_DEPTHS * hM, L / 2 - face)

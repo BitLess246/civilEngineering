@@ -110,6 +110,16 @@ export interface SpliceOptions {
   lap: number
   /** Preferred splice positions as a fraction of the run, best first. */
   prefer?: number[]
+  /**
+   * Preferred positions PER ROLE, which is how a beam is actually spliced: the
+   * two faces want OPPOSITE zones, not one shared list.
+   *
+   * Top steel laps in the MIDDLE HALF and bottom steel in the END QUARTERS —
+   * each where its own bar is in compression rather than tension. One list for
+   * both offered every bar both zones, so half the splices landed in the zone
+   * the standard bar-bending sheet marks "avoid splicing in this region".
+   */
+  preferByRole?: Record<string, number[]>
   /** Shift every splice on this bar by this much, m — how staggering is applied. */
   stagger?: number
 }
@@ -139,7 +149,11 @@ export function spliceCentres(L: number, o: SpliceOptions): number[] {
   if (o.prefer?.length) {
     const cand = out.map((s) => {
       const want = o.prefer!.map((f) => f * L)
-      return want.reduce((best, w) => (Math.abs(w - s) < Math.abs(best - s) ? w : best), s)
+      // Seeded with the FIRST preference, not with `s`. Seeded with `s` the
+      // comparison was `|w − s| < 0`, false for every w, so the preference could
+      // never win and every splice stayed wherever the even division put it —
+      // the whole mechanism was inert.
+      return want.reduce((best, w) => (Math.abs(w - s) < Math.abs(best - s) ? w : best))
     })
     const sorted = [...cand].sort((a, b) => a - b)
     if (fits(sorted)) out = sorted
@@ -239,7 +253,8 @@ export function spliceCage(cage: RebarCage, o: SpliceOptions): RebarCage {
     if (NEVER_SPLICED.has(r.role)) { runs.push(r); continue }
     const k = byRole.get(r.role) ?? 0
     byRole.set(r.role, k + 1)
-    runs.push(...spliceRun(r, { ...o, stagger: k % 2 === 0 ? -o.lap / 2 : o.lap / 2 }))
+    const prefer = o.preferByRole?.[r.role] ?? o.prefer
+    runs.push(...spliceRun(r, { ...o, prefer, stagger: k % 2 === 0 ? -o.lap / 2 : o.lap / 2 }))
   }
   return { ...cage, runs }
 }

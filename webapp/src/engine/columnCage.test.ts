@@ -427,3 +427,45 @@ describe('a column that REDUCES cranks its bars to meet the ones above', () => {
     }
   })
 })
+
+describe('lap splice location — §418.7.4.3', () => {
+  const base = {
+    mark: 'C1', b: 400, h: 400, cover: 40, barDia: 20, bars: 8, tieDia: 10,
+    sConfined: 100, sOutside: 150, lo: 0.6, centre: [0, 0] as [number, number],
+    yBottom: 0, yTop: 3, spliceLap: 600,
+  }
+
+  it('starts the lap inside the CENTRE HALF of the column above, not at the floor', () => {
+    // Left at the floor the lap sits in the storey's bottom quarter — the
+    // high-tensile-stress zone under lateral load, which is precisely where
+    // §418.7.4.3 does not allow it. A 3 m storey puts the window at 0.75.
+    const at = buildColumnCage({ ...base, spliceRise: 0.75 })
+    const v = at.runs.find((r) => r.role === 'vertical')!
+    const top = Math.max(...v.path.map((p) => p[1]))
+    expect(top).toBeCloseTo(3 + 0.75 + 0.6, 9)          // rise, then the lap
+    expect(top - 3).toBeGreaterThan(3 / 4)               // starts past h/4
+    expect(top - 3).toBeLessThanOrEqual(3 * 0.75 + 1e-9) // and ends by 3h/4
+  })
+
+  it('ignores the rise where there is nothing to lap onto', () => {
+    // A roof column has no splice, so a rise would just be bar hanging in air.
+    const roof = buildColumnCage({ ...base, spliceLap: 0, spliceRise: 0.75 })
+    const v = roof.runs.find((r) => r.role === 'vertical')!
+    expect(Math.max(...v.path.map((p) => p[1]))).toBeCloseTo(3, 9)
+  })
+
+  it('carries the cranked bar up into the window too, crank finished by the floor', () => {
+    const step = buildColumnCage({
+      ...base, spliceRise: 0.75, above: { b: 300, h: 300, cover: 40, barDia: 20, tieDia: 10 },
+    })
+    const v = step.runs.find((r) => r.role === 'vertical')!
+    expect(Math.max(...v.path.map((p) => p[1]))).toBeCloseTo(3 + 0.75 + 0.6, 9)
+    // the offset is complete AT the floor — nothing bends inside the joint above
+    const atFloor = v.path.find((p) => Math.abs(p[1] - 3) < 1e-9)!
+    const above = v.path.filter((p) => p[1] > 3 + 1e-9)
+    for (const p of above) {
+      expect(p[0]).toBeCloseTo(atFloor[0], 9)
+      expect(p[2]).toBeCloseTo(atFloor[2], 9)
+    }
+  })
+})
