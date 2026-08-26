@@ -52,12 +52,12 @@ export interface ColumnCageInput {
   yBottom: number
   yTop: number
   /**
-   * A band of the column carrying no ties of its own, m — the depth of a beam
-   * framing in. The joint's own hoops belong to the joint (§418.8.3) and are
+   * Bands of the column carrying no ties of their own, m — the depth of a beam
+   * framing in, at each end that has one. The joint's own hoops belong to the joint (§418.8.3) and are
    * drawn by whatever owns it, so placing column ties there too would draw the
    * steel twice and pay for it twice.
    */
-  jointGap?: [number, number]
+  jointGaps?: [number, number][]
   /**
    * Lap splice projecting ABOVE `yTop`, mm — the compression splice of §25.5.5,
    * which the caller computes (`devLength.lsc`) because this module designs
@@ -136,10 +136,16 @@ export function perimeterBars(i: Pick<ColumnCageInput, 'b' | 'h' | 'cover' | 'ba
  *
  * Tight within `lo` of each end — that is where the plastic hinge forms and
  * where §418.7.5 asks for the close spacing — and wider through the middle.
- * A tie that would land inside `jointGap` is dropped: that band belongs to the
- * joint hoops.
+ * A tie that would land inside a `jointGaps` band is dropped: that band belongs
+ * to the joint hoops.
+ *
+ * There is one band at each END that has a joint, not just at the top. A column
+ * only ever cleared the joint above it, so at every floor the column starting
+ * there filled the band the column below had deliberately left empty — the
+ * joint came out with column ties AND joint hoops through it, drawn twice and
+ * paid for twice.
  */
-export function tieLevels(i: Pick<ColumnCageInput, 'yBottom' | 'yTop' | 'lo' | 'sConfined' | 'sOutside' | 'jointGap'>): number[] {
+export function tieLevels(i: Pick<ColumnCageInput, 'yBottom' | 'yTop' | 'lo' | 'sConfined' | 'sOutside' | 'jointGaps'>): number[] {
   const y0 = Math.min(i.yBottom, i.yTop), y1 = Math.max(i.yBottom, i.yTop)
   const H = y1 - y0
   if (H <= 0) return []
@@ -152,8 +158,8 @@ export function tieLevels(i: Pick<ColumnCageInput, 'yBottom' | 'yTop' | 'lo' | '
   for (let y = y0; y <= y1 + 1e-9; y += spacingAt(y)) out.push(Math.min(y, y1))
   if (out.length === 0 || Math.abs(out[out.length - 1] - y1) > 1e-9) out.push(y1)
 
-  const gap = i.jointGap
-  return out.filter((y) => !gap || y < Math.min(...gap) - 1e-9 || y > Math.max(...gap) + 1e-9)
+  const gaps = i.jointGaps ?? []
+  return out.filter((y) => gaps.every((g) => y < Math.min(...g) - 1e-9 || y > Math.max(...g) + 1e-9))
 }
 
 /**

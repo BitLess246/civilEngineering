@@ -88,7 +88,7 @@ describe('tieLevels', () => {
   it('leaves the joint band to the joint hoops', () => {
     // §418.8.3: the hoops through a beam-column joint belong to the joint, and
     // placing column ties there too draws — and pays for — the steel twice
-    const y = tieLevels({ ...col, jointGap: [1.4, 1.9] })
+    const y = tieLevels({ ...col, jointGaps: [[1.4, 1.9]] })
     expect(y.some((v) => v > 1.4 && v < 1.9)).toBe(false)
     expect(y.some((v) => v < 1.4)).toBe(true)
     expect(y.some((v) => v > 1.9)).toBe(true)

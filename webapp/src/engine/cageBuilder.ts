@@ -231,6 +231,10 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
     // cage, the concrete and the bill alike.
     const yLo = Math.min(ni.y, nj.y) - (pedestalAt.get(baseNode) ?? 0)
     const jd = beamDepthAt(topNode)
+    // …and the joint at the BASE, where a column starts at a floor rather than
+    // on a footing. `yLo` is the pedestal bottom; the joint is at the node.
+    const yLo0 = Math.min(ni.y, nj.y)
+    const baseJd = beamDepthAt(baseNode)
     // §25.5.5 compression lap, only where a column actually continues above.
     const lap = columnAbove(c.id, topNode)
       ? calcDevLength({
@@ -246,8 +250,14 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       lo: c.seismicLoZone ?? 0,
       centre: [ni.x, ni.z],
       yBottom: yLo, yTop: yHi,
-      // the joint band at the top, which the joint's own hoops own (§418.8.3)
-      jointGap: jd > 0 ? [yHi - jd / 2, yHi + jd / 2] : undefined,
+      // The joint band at EACH end that has one, which the joint's own hoops
+      // own (§418.8.3). Only the top used to be cleared, so at every floor the
+      // column starting there re-filled the band the column below had left
+      // empty and the joint came out with both sets through it.
+      jointGaps: [
+        ...(jd > 0 ? [[yHi - jd / 2, yHi + jd / 2] as [number, number]] : []),
+        ...(baseJd > 0 ? [[yLo0 - baseJd / 2, yLo0 + baseJd / 2] as [number, number]] : []),
+      ],
       // Nothing above to lap onto: the bar develops itself instead, turning in
       // under the beam's top steel (§425.4.2 and the standard roof detail).
       topHookRise: lap > 0 ? undefined : beamTopSteelRise(topNode, sec.barDia),

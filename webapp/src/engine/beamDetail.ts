@@ -50,6 +50,7 @@ import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader, multi
 import { seeGeneralNotes } from './generalNotes'
 import { SHEET_INK, SHEET_NOTE, SHEET_GRID, STEEL, STEEL_LIGHT, STEEL_CONTEXT } from './sheetInk'
 import { buildColumnCage } from './columnCage'
+import { stirrupStations } from './beamCage'
 import {
   runToPrimitive, elevationPlane, hookBendDiameter, continuousBars,
   KEEP_TOP, KEEP_BOTTOM, splicesRequired, STOCK_BAR_LENGTH,
@@ -425,26 +426,19 @@ export function zoneSpacing(designed: number, h: number, cover = 40): number {
  * the transition.
  */
 export function hoopPositions(L: number, h: number, sEnd: number, sMid: number, faceOffset = 0): number[] {
-  if (!(L > 0)) return []
-  const zone = Math.min(HOOP_ZONE_DEPTHS * h, L / 2 - faceOffset)
-  const se = Math.max(sEnd, 25) / 1000, sm = Math.max(sMid, 25) / 1000
-  const first = FIRST_HOOP / 1000
-  const left: number[] = [], right: number[] = []
-  for (let x = faceOffset + first; x <= faceOffset + Math.max(zone, 0) + 1e-9; x += se) left.push(x)
-  for (let x = L - faceOffset - first; x >= L - faceOffset - Math.max(zone, 0) - 1e-9; x -= se) right.push(x)
-  if (!left.length) left.push(faceOffset + first)
-  if (!right.length) right.push(L - faceOffset - first)
-
-  const lastL = left[left.length - 1], firstR = Math.min(...right)
-  const mid: number[] = []
-  const gap = firstR - lastL
-  if (gap > sm + 1e-9) {
-    const n = Math.ceil(gap / sm - 1e-9)
-    for (let k = 1; k < n; k++) mid.push(lastL + (gap * k) / n)
-  }
-  return [...new Set([...left, ...mid, ...right].map((x) => Math.round(x * 1e6) / 1e6))]
-    .filter((x) => x >= 0 && x <= L)
-    .sort((a, b) => a - b)
+  // ONE layout, the cage's.
+  //
+  // This used to lay the hoops out itself, and the two answers had drifted:
+  // on the sample frame's 6 m beam the sheet drew 31 hoops from −84 to 6084 —
+  // through the joints and past both support centrelines — where the cage
+  // placed 52 between the support faces. The take-off bills the cage, so the
+  // sheet was showing a different beam from the one being paid for. The cage's
+  // version is also the better one: it takes each support's own width instead
+  // of one offset for both, and it steps the middle at the spacing designed
+  // rather than at whatever divides the remaining gap.
+  // `h` here is METRES, as every other argument of this function is; the cage
+  // takes it in mm like the rest of its section dimensions.
+  return stirrupStations({ L, h: h * 1000, sEnd, sMid, colBLeft: faceOffset * 2000, colBRight: faceOffset * 2000 })
 }
 
 /** Wrap a note to `max` characters a line. */
@@ -593,7 +587,7 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
         lo: cc.lo ?? 0,
         centre: [cx, 0],
         yBottom: -colDrop, yTop: hM + colRise,
-        jointGap: [0, hM],
+        jointGaps: [[0, hM]],
       })
       for (const run of cage.runs) {
         P.push(runToPrimitive(run, plane, {

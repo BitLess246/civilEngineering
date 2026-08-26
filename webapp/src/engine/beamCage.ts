@@ -122,10 +122,22 @@ export function stirrupStations(i: Pick<BeamCageInput,
   let lastL = faceL, firstR = faceR
   for (let x = faceL + 0.05; x < faceL + zone; x += sE) { push(x); lastL = x }
   for (let x = faceR - 0.05; x > faceR - zone; x -= sE) { push(x); firstR = x }
-  // The middle picks up a full spacing after the last end-zone stirrup, not at
-  // the nominal zone boundary — starting there can drop a stirrup a few
-  // millimetres from its neighbour, which is a drawing artefact, not a detail.
-  for (let x = lastL + sM; x < firstR - sM * 0.5; x += sM) push(x)
+  // The middle is DIVIDED, not stepped.
+  //
+  // Stepping at sM from the last end-zone hoop leaves whatever is left over
+  // against the far end zone: on the sample frame's beam that was a 70 mm gap
+  // beside a 110 mm one, tighter in the middle than at the supports, which is
+  // the opposite of the rule the zones exist for. It is also asymmetric — the
+  // same beam laid out from the other end gives different hoops.
+  //
+  // Dividing the remaining gap into equal parts at no more than sM gives a
+  // spacing that is never coarser than designed, closes exactly on both end
+  // zones, and is symmetric about midspan for a symmetric beam.
+  const gap = firstR - lastL
+  if (gap > sM + 1e-9) {
+    const n = Math.ceil(gap / sM - 1e-9)
+    for (let k = 1; k < n; k++) push(lastL + (gap * k) / n)
+  }
   return [...new Set(out.map((v) => Math.round(v * 1e6) / 1e6))].sort((p, q) => p - q)
 }
 

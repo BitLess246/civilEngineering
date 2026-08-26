@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { PlanPrimitive } from './planRenderer'
-import { buildBeamCage } from './beamCage'
+import { buildBeamCage, stirrupStations } from './beamCage'
 import { STEEL_LIGHT, STEEL_CONTEXT } from './sheetInk'
 import {
   buildBeamDetail, continuousTopSteel, barExtension, zoneSpacing, hoopPositions, wrapNote,
@@ -788,6 +788,36 @@ describe('the sheet and the 3D cage are the SAME bar', () => {
         const inCage = bot.path[0][1] < bot.path[1][1] ? 'down' : 'up'
         expect(inCage, `h=${h} ⌀${dia} above=${above}`).toBe(onSheet)
       }
+    }
+  })
+})
+
+describe('the sheet and the CAGE place the same stirrups', () => {
+  it('lays them out with one function, not two that drift', () => {
+    // The sheet used to lay its own hoops out. On this beam it drew 27 between
+    // the support faces where the cage placed 54 at different stations — and
+    // the take-off bills the cage, so the drawing showed a different beam from
+    // the one being paid for.
+    for (const fixture of [b, noMidStirrups, { ...b, L: 9, colB: 300 }]) {
+      const face = (fixture.colB ?? 400) / 2000
+      const sheet = hoopPositions(fixture.L, fixture.h / 1000,
+        Math.min(...fixture.sections.map((s) => s.stirrupSpacing).filter((v) => v > 0)),
+        Math.max(...fixture.sections.map((s) => s.stirrupSpacing)), face)
+      const cage = stirrupStations({
+        L: fixture.L, h: fixture.h,
+        sEnd: Math.min(...fixture.sections.map((s) => s.stirrupSpacing).filter((v) => v > 0)),
+        sMid: Math.max(...fixture.sections.map((s) => s.stirrupSpacing)),
+        colBLeft: fixture.colB ?? 400, colBRight: fixture.colB ?? 400,
+      })
+      expect(sheet, `${fixture.mark} L=${fixture.L}`).toEqual(cage)
+    }
+  })
+
+  it('keeps every hoop between the support faces', () => {
+    const face = (b.colB ?? 400) / 2000
+    for (const x of hoopPositions(b.L, b.h / 1000, 100, 200, face)) {
+      expect(x).toBeGreaterThanOrEqual(face - 1e-9)
+      expect(x).toBeLessThanOrEqual(b.L - face + 1e-9)
     }
   })
 })

@@ -111,7 +111,11 @@ describe('stirrupStations', () => {
       return w.length < 2 ? Infinity : Math.min(...w.slice(1).map((v, k) => v - w[k]))
     }
     expect(gap(0.2, 1.25)).toBeCloseTo(0.1, 6)        // 2h = 1100 from the face
-    expect(gap(2.5, 3.5)).toBeCloseTo(0.2, 6)
+    // The middle DIVIDES the gap it is given, so it comes out at or a little
+    // under the designed spacing — never over it, and never a short remainder
+    // hard against an end zone.
+    expect(gap(2.5, 3.5)).toBeLessThanOrEqual(0.2 + 1e-9)
+    expect(gap(2.5, 3.5)).toBeGreaterThan(0.2 * 0.9)
     // and no two stirrups ever end up crowded together at a zone boundary
     const gaps = x.slice(1).map((v, k) => v - x[k])
     expect(Math.min(...gaps)).toBeGreaterThanOrEqual(0.1 - 1e-9)
