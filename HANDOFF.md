@@ -2335,3 +2335,59 @@ metered.
 
 `vite dev` does not serve `/api/*`, so local development falls back to the
 browser; `vercel dev` exercises the real endpoints.
+
+---
+
+# Landing page media — the video is gone (PRs #640, #642, August 2026)
+
+`webapp/public/demo/model-space.mp4` and its poster are **deleted**. The home
+page carried an 87-second, 5.6 MB screen recording; it is replaced by four
+blocks that together weigh about 770 KB.
+
+| Block | Component | What it is |
+|---|---|---|
+| Pipeline | `PipelineDiagram.tsx` | inline SVG, ~4 KB, six steps, `aria-hidden` |
+| Worked solution | `WorkedSolutionPreview.tsx` | one opened schedule row, as HTML |
+| Storyboard | `Storyboard.tsx` → `Storyboard` | three screenshots: model, rebar, failing schedule |
+| Before/after | `Storyboard.tsx` → `ReportComparison` | the same report, CHECK FAILED beside DESIGN OK |
+| CTA | `Home.tsx` | `/model?tour=1`, consumed on arrival by `ModelSpace` |
+
+## Three things here will bite if you do not know them
+
+**The worked-solution numbers are the engine's, and a test enforces it.**
+`workedSolutionData.ts` holds `designBeam`'s real output as literals so the
+landing page does not pull the design engine into its bundle;
+`workedSolutionPreview.test.ts` re-runs the engine over `DEMO_INPUT` and
+asserts every displayed figure still matches. **If it fails, fix the component,
+not the test** — the alternative is a commercial landing page advertising
+arithmetic the app no longer produces, in the one place this audience is best
+equipped to catch it. It also asserts the case stays worth showing: passing,
+singly reinforced, one layer, and genuinely needing stirrups.
+
+**`public/` is invisible to the build, so `storyboard.test.ts` is the only
+guard.** A missing image there fails silently — build succeeds, deploy
+succeeds, and the first person to find out is a visitor looking at
+broken-image icons. The test globs `public/demo` with Vite (**not `node:fs`** —
+this project deliberately carries no `@types/node`) and names each absent file.
+Five files are required. Do not delete the test to make a red build green.
+
+**Screenshots go in as webp, and somebody has to check.** Two of the five
+arrived as 1.4 MB JPEGs; shipped as supplied the storyboard would have weighed
+~4 MB and undone the entire reason the video was removed. Re-encode with
+`sharp` — 1280 px q80 for the landscape tiles, ~1000 px for the A4 pages —
+which took those two to **70 KB and 69 KB**. Nothing automated enforces the
+size budget yet; if the assets ever grow again, that is the gap.
+
+## Left open
+
+The captions quote figures read off the screenshots (21 failed columns, 1.59 →
+0.76, 175.0 → 232.1 m³, 392 → 413 pages) but **do not claim what caused the
+change** — whether the optimiser or a manual resize produced the second report
+was asked and never answered, and the screenshots do not evidence it. A test
+asserts the word "optimiser" stays out of the captions. If the answer ever
+arrives, the captions can say it; until then they state that the numbers moved
+and the report tracked them.
+
+If the images are replaced, **re-read the captions off the new screenshots**. A
+caption describing the previous screenshot is the kind of small lie that costs
+more trust than it saves effort.
