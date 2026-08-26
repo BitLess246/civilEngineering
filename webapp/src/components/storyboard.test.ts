@@ -14,7 +14,9 @@
 // assertion to unblock a merge; the whole point is that it blocks one.
 
 import { describe, it, expect } from 'vitest'
-import { PANELS } from './storyboardData'
+import { PANELS, COMPARISON } from './storyboardData'
+
+const ALL = [...PANELS, ...COMPARISON]
 
 // Eager URL glob: every file that actually exists under public/demo.
 const FILES = import.meta.glob('../../public/demo/*', { eager: true, query: '?url', import: 'default' })
@@ -33,7 +35,7 @@ describe('every storyboard panel has its image', () => {
     ).toBeGreaterThan(0)
   })
 
-  it.each(PANELS.map((p) => [p.src.split('/').pop()!, p.label] as const))(
+  it.each(ALL.map((p) => [p.src.split('/').pop()!, p.label] as const))(
     '%s exists (%s)',
     (file) => {
       expect(
@@ -45,17 +47,32 @@ describe('every storyboard panel has its image', () => {
 })
 
 describe('the panels are described for people who cannot see them', () => {
-  it.each(PANELS.map((p) => [p.label, p] as const))('%s has real alt text', (_label, p) => {
+  it.each(ALL.map((p) => [p.label, p] as const))('%s has real alt text', (_label, p) => {
     // Alt text that repeats the caption is useless to a screen-reader user —
     // they get the caption anyway. It has to describe the IMAGE.
     expect(p.alt.length).toBeGreaterThan(40)
     expect(p.alt).not.toBe(p.caption)
   })
 
+  it('the comparison keeps both halves — a before with no after says nothing', () => {
+    expect(COMPARISON).toHaveLength(2)
+    expect(COMPARISON[0].label).toMatch(/before/i)
+    expect(COMPARISON[1].label).toMatch(/after/i)
+  })
+
+  it('does not claim WHY the design changed between the two reports', () => {
+    // The screenshots show that the numbers moved, not what moved them. Saying
+    // "the optimiser did this" would be asserting a mechanism the images do
+    // not evidence — and it is the sort of claim a reader can neither check
+    // nor forgive.
+    const text = COMPARISON.map((p) => p.label + p.caption + p.alt).join(' ')
+    expect(text).not.toMatch(/optimis|optimiz/i)
+  })
+
   it('leads with the failure panel somewhere in the set', () => {
     // The credibility beat. If a future edit leaves only passing screenshots,
     // the storyboard stops doing the one job it was chosen for.
-    const mentionsFailure = PANELS.some((p) => /fail|over capacity/i.test(p.label + p.caption))
+    const mentionsFailure = ALL.some((p) => /fail|over capacity/i.test(p.label + p.caption))
     expect(mentionsFailure, 'no panel shows something failing').toBe(true)
   })
 })

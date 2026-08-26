@@ -7,7 +7,7 @@ import { CommandPalette } from '../components/CommandPalette'
 import { usePaletteHotkey } from '../lib/usePaletteHotkey'
 import { PipelineDiagram } from '../components/PipelineDiagram'
 import { WorkedSolutionPreview } from '../components/WorkedSolutionPreview'
-import { Storyboard } from '../components/Storyboard'
+import { Storyboard, ReportComparison } from '../components/Storyboard'
 
 // Home — search-first tool directory on the drawing-sheet workbench theme
 // (docs/design/uiux-2026-07/Redesign - Home): dark hero with drafting grid,
@@ -123,6 +123,14 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
           <span className="font-mono text-[11px] text-[#a39d8d]">real output · not mockups</span>
         </div>
         <Storyboard />
+      </section>
+
+      <section className="mx-auto max-w-[1200px] px-6 pt-10">
+        <div className="mb-3.5 flex items-baseline gap-3.5">
+          <h2 className="text-[19px] font-extrabold tracking-tight">Fix it, re-run it, re-issue it</h2>
+          <span className="font-mono text-[11px] text-[#a39d8d]">the same report, twice</span>
+        </div>
+        <ReportComparison />
       </section>
 
       <section className="mx-auto max-w-[1200px] px-6 pt-10">

@@ -45,12 +45,38 @@ export const PANELS: readonly Panel[] = [
     label: 'It tells you what fails',
     caption: '21 columns over capacity — each with its utilisation and the seismic combination that governed it.',
   },
+] as const
+
+// ── The same report, before and after the failures were dealt with ──────────
+//
+// A PAIR, not two more panels in the grid above. The whole value is in the
+// comparison, and a comparison only works when both halves are the same size
+// and side by side — an orphaned fifth tile in a three-column grid would show
+// the same two images and say nothing.
+//
+// WHAT CHANGED BETWEEN THEM IS STATED, NOT EXPLAINED. Reading the two pages:
+// the summary goes from three FAIL rows to all PASS, the governing column
+// ratio from 1.59 to 0.76, concrete from 175.0 to 232.1 m³, and the report
+// from 392 to 413 pages. Whether the optimiser or an engineer resized those
+// sections is not something these screenshots show, so the captions do not
+// claim it. The honest version is the stronger one anyway: the numbers moved,
+// and the report tracked them.
+export const COMPARISON: readonly Panel[] = [
   {
-    src: '/demo/story-report.webp',
-    alt: 'Page one of the exported PDF calculation report: letterhead, a DESIGN OK '
-      + 'banner, the 3D model figure, and a design summary table with every check '
-      + 'passing at a peak utilisation of 0.76.',
-    label: 'The deliverable',
-    caption: 'Every check passing at 0.76, with the model, the summary and 400-plus pages of workings behind it.',
+    src: '/demo/story-report-failed.webp',
+    alt: 'Page one of the calculation report with a red CHECK FAILED banner. The '
+      + 'design summary table shows RC columns failing at a ratio of 1.59, strong '
+      + 'column / weak beam failing, and slabs failing. 175.0 cubic metres of '
+      + 'concrete, 392 pages.',
+    label: 'Before — CHECK FAILED',
+    caption: 'Three checks failing, governing column at 1.59, 175.0 m³ of concrete, 392 pages.',
+  },
+  {
+    src: '/demo/story-report-ok.webp',
+    alt: 'Page one of the same calculation report with a green DESIGN OK banner. '
+      + 'Every row of the design summary passes, the governing column ratio is '
+      + '0.76. 232.1 cubic metres of concrete, 413 pages.',
+    label: 'After — DESIGN OK',
+    caption: 'Every check passing, governing column at 0.76, 232.1 m³, 413 pages — the same report, re-run.',
   },
 ] as const
