@@ -54,13 +54,25 @@ export const PANELS: readonly Panel[] = [
 // and side by side — an orphaned fifth tile in a three-column grid would show
 // the same two images and say nothing.
 //
-// WHAT CHANGED BETWEEN THEM IS STATED, NOT EXPLAINED. Reading the two pages:
-// the summary goes from three FAIL rows to all PASS, the governing column
-// ratio from 1.59 to 0.76, concrete from 175.0 to 232.1 m³, and the report
-// from 392 to 413 pages. Whether the optimiser or an engineer resized those
-// sections is not something these screenshots show, so the captions do not
-// claim it. The honest version is the stronger one anyway: the numbers moved,
-// and the report tracked them.
+// Reading the two pages: the summary goes from three FAIL rows to all PASS, the
+// governing column ratio from 1.59 to 0.76, concrete from 175.0 to 232.1 m³,
+// and the report from 392 to 413 pages.
+//
+// WHAT MOVED THEM IS THE OPTIMISER, confirmed by the author of the app — it
+// resizes each failing member to the most utilised section that still passes,
+// subject to keeping bar continuity through the frame. The captions carried no
+// mechanism until that was confirmed, because the screenshots alone do not
+// evidence one.
+//
+// SAY WHAT IT OPTIMISES FOR, THOUGH. Concrete goes UP, 175.0 → 232.1 m³, and a
+// reader who assumes "optimise" means "less material" will read that as the
+// tool making things worse. It is optimising utilisation against the code
+// checks, not volume: the sections that were failing had to grow. The caption
+// has to say that in the same breath or the number argues against us.
+//
+// The continuity constraint is worth naming for the same reason. Without it the
+// cheapest answer is a different section on every member, which is not a thing
+// anyone can build — bars have to run through.
 export const COMPARISON: readonly Panel[] = [
   {
     src: '/demo/story-report-failed.webp',
@@ -77,6 +89,21 @@ export const COMPARISON: readonly Panel[] = [
       + 'Every row of the design summary passes, the governing column ratio is '
       + '0.76. 232.1 cubic metres of concrete, 413 pages.',
     label: 'After — DESIGN OK',
-    caption: 'Every check passing, governing column at 0.76, 232.1 m³, 413 pages — the same report, re-run.',
+    caption: 'Every check passing, governing column at 0.76, 232.1 m³ of concrete, 413 pages.',
   },
 ] as const
+
+/**
+ * What moved the design, printed under the pair rather than inside either half.
+ *
+ * It belongs to the TRANSITION, not to one of the two pages: neither screenshot
+ * shows the optimiser, and hanging four lines off the "after" caption while the
+ * "before" keeps one leaves the two halves visibly lopsided — which undercuts a
+ * comparison whose whole argument is that these are the same report twice.
+ */
+export const COMPARISON_NOTE =
+  'Nobody resized those sections by hand. The optimiser takes each failing member to the most '
+  + 'utilised section that still passes, subject to keeping bar continuity through the frame — '
+  + 'so it cannot just pick a different section per member, which is not a thing anyone can build. '
+  + 'It optimises against the code checks, not against volume: the concrete goes up, because the '
+  + 'sections that were failing had to grow.'
