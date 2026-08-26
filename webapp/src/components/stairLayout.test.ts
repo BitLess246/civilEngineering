@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { flightGeometry, along, MARGIN, DRAW_W, type Pt } from './stairLayout'
+import { flightGeometry, along, barPath, lapBar, MARGIN, DRAW_W, type Pt } from './stairLayout'
 
 // span m, t/R/G mm. θ = atan(R/G), the same value `stairGeometry` hands the page.
 const theta = (R: number, G: number) => (Math.atan2(R, G) * 180) / Math.PI
@@ -201,5 +201,63 @@ describe('along', () => {
 
   it('does not divide by zero on a degenerate segment', () => {
     expect(along([5, 5], [5, 5], 450, 1)).toEqual([5, 5])
+  })
+})
+
+describe('barPath — a bar is bent, and it does not stop in mid-air', () => {
+  const straight: Pt[] = [[0, 0], [100, 0]]
+  const bent: Pt[] = [[0, 0], [100, 0], [160, -60]]
+
+  it('returns 90° into the slab at each free end', () => {
+    // A bar ending at the cover line has nothing developing it. The return is
+    // perpendicular to the run, and `hookSign` picks which way.
+    const down = barPath(straight, 5, 12, 1)
+    expect(down.d.startsWith('M0,12 L0,0')).toBe(true)      // starts below, comes up
+    expect(down.d.endsWith('L100,0 L100,12')).toBe(true)    // and turns back down
+    const up = barPath(straight, 5, 12, -1)
+    expect(up.d.startsWith('M0,-12 L0,0')).toBe(true)
+  })
+
+  it('omits the hook when none is asked for', () => {
+    expect(barPath(straight, 5, 0).d).toBe('M0,0 L100,0')
+  })
+
+  it('turns an interior corner through a radius, tangent to both legs', () => {
+    // The vertex is the quadratic's control point, so the curve leaves and
+    // rejoins each leg along that leg — which is what a bending machine does.
+    const p = barPath(bent, 10, 0)
+    expect(p.d).toContain('Q100,0')
+    expect(p.bends).toEqual([[100, 0]])
+    // …and the curve starts 10 back along the first leg
+    expect(p.d).toContain('L90,0')
+  })
+
+  it('never eats more than half a leg, however large the radius', () => {
+    // A radius wider than the segment would run the curve past the next corner
+    // and fold the bar back on itself.
+    const p = barPath(bent, 999, 0)
+    expect(p.d).toContain('L50,0')
+  })
+
+  it('says nothing about a bar with fewer than two points', () => {
+    expect(barPath([[0, 0]], 5, 12)).toEqual({ d: '', bends: [] })
+  })
+})
+
+describe('lapBar — the bar that carries a re-entrant corner', () => {
+  it('reaches the stated distance along BOTH legs', () => {
+    // Main steel is not bent round the inside of a kink; a separate bar laps
+    // past it, and this is the bar the 450 dimension measures.
+    const lb = lapBar([100, 0], [0, 0], [100, -100], 450, 0.1)
+    expect(lb).toHaveLength(3)
+    expect(lb[0]).toEqual([55, 0])            // 450 mm × 0.1 = 45 units back
+    expect(lb[1]).toEqual([100, 0])
+    expect(lb[2]).toEqual([100, -45])
+  })
+
+  it('stops at the end of a leg shorter than the lap', () => {
+    const lb = lapBar([10, 0], [0, 0], [20, 0], 9999, 1)
+    expect(lb[0]).toEqual([0, 0])
+    expect(lb[2]).toEqual([20, 0])
   })
 })

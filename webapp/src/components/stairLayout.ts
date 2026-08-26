@@ -144,3 +144,84 @@ export function flightGeometry(
     },
   }
 }
+
+// ── how a bar is actually bent ────────────────────────────────────────────
+// The elevation drew each layer as a bare polyline: sharp corners, and both
+// ends stopping dead in mid-air. Neither is a bar. Reinforcement turns through
+// a radius, and where it reaches a free edge it returns 90° into the slab
+// rather than ending at the cover line where there is nothing to develop it.
+
+/** A drawn bar: an SVG path, and the corners worth marking. */
+export interface BarPath {
+  d: string
+  bends: Pt[]
+}
+
+const towards = (a: Pt, b: Pt, d: number): Pt => {
+  const dx = b[0] - a[0], dy = b[1] - a[1]
+  const L = Math.hypot(dx, dy) || 1
+  const f = Math.min(0.5, d / L)                 // never past the segment's middle
+  return [a[0] + dx * f, a[1] + dy * f]
+}
+
+/**
+ * A bar along `pts`, bent through radius `r` at every interior corner and
+ * returned 90° into the slab at each end.
+ *
+ * `hookSign` is which way the return turns, as a sign on the perpendicular:
+ * +1 is clockwise from the run direction (down, for a bar running left to
+ * right), −1 anticlockwise. A top bar hooks DOWN into the slab and a bottom bar
+ * UP — in both cases away from the face it is covering, which is the only way a
+ * hook has concrete around it.
+ *
+ * Units are SVG, not mm: the caller has already scaled.
+ */
+export function barPath(pts: Pt[], r: number, hook = 0, hookSign: 1 | -1 = 1): BarPath {
+  if (pts.length < 2) return { d: '', bends: [] }
+  const perp = (a: Pt, b: Pt): Pt => {
+    const dx = b[0] - a[0], dy = b[1] - a[1]
+    const L = Math.hypot(dx, dy) || 1
+    return [(-dy / L) * hookSign, (dx / L) * hookSign]
+  }
+  const bends: Pt[] = []
+  let d = ''
+
+  if (hook > 0) {
+    const n = perp(pts[0], pts[1])
+    d += `M${pts[0][0] + n[0] * hook},${pts[0][1] + n[1] * hook} L${pts[0][0]},${pts[0][1]} `
+  } else {
+    d += `M${pts[0][0]},${pts[0][1]} `
+  }
+
+  for (let i = 1; i < pts.length - 1; i++) {
+    const a = towards(pts[i], pts[i - 1], r)
+    const b = towards(pts[i], pts[i + 1], r)
+    // Quadratic through the corner: the vertex is the control point, so the
+    // curve leaves and rejoins the two legs tangentially — which is what a
+    // bending machine does.
+    d += `L${a[0]},${a[1]} Q${pts[i][0]},${pts[i][1]} ${b[0]},${b[1]} `
+    bends.push(pts[i])
+  }
+
+  const last = pts[pts.length - 1]
+  d += `L${last[0]},${last[1]}`
+  if (hook > 0) {
+    const n = perp(pts[pts.length - 2], last)
+    d += ` L${last[0] + n[0] * hook},${last[1] + n[1] * hook}`
+  }
+  return { d, bends }
+}
+
+/**
+ * The lapping bar across one corner: a straight run reaching `ext` mm along
+ * each leg.
+ *
+ * At a stair's re-entrant corner the main steel cannot simply be bent round the
+ * inside — the bend would try to straighten under tension and drive the cover
+ * off. The detail is a separate bar lapped past the corner on both legs, and
+ * this is that bar. It is what the 450 dimension on the reference sheet
+ * measures.
+ */
+export function lapBar(corner: Pt, back: Pt, fwd: Pt, ext: number, scale: number): Pt[] {
+  return [along(corner, back, ext, scale), corner, along(corner, fwd, ext, scale)]
+}

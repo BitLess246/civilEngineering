@@ -15,7 +15,7 @@
 // Geometry only. Nothing here decides anything; `engine/stair` does.
 // ─────────────────────────────────────────────────────────────────────────
 
-import { flightGeometry, along, MARGIN, type Pt } from './stairLayout'
+import { flightGeometry, along, barPath, lapBar, MARGIN, type Pt } from './stairLayout'
 
 const INK = '#37526e'
 const CONC = '#eef3f8'
@@ -65,8 +65,17 @@ export function StairElevation({
   // landing reads as a bent bar rather than two bars meeting.
   const cov = tv * 0.18
   const inset = (line: Pt[], dir: 1 | -1): Pt[] => line.map(([x, y]) => [x, y + dir * cov] as Pt)
-  const botBar = inset(soffitLine, -1)
-  const topBar = inset(topLine, 1)
+  const botLine = inset(soffitLine, -1)
+  const topLineBar = inset(topLine, 1)
+  // Bend radius and end hook, in drawing units. A bar turns through a radius
+  // and returns 90° into the slab at a free edge; drawn as a bare polyline it
+  // was neither.
+  const rBend = Math.max(3, tv * 0.35)
+  const hookLen = Math.max(6, tv * 0.55)
+  // The top bar hooks DOWN into the slab and the bottom bar UP — each away from
+  // the face it covers, which is the only side with concrete to develop into.
+  const botBar = barPath(botLine, rBend, landing > 0 ? hookLen : 0, -1)
+  const topBar = barPath(topLineBar, rBend, landing > 0 ? hookLen : 0, 1)
 
   /** The 450 extension each side of a corner, as a dimension line. */
   const extAt = (line: Pt[], k: number, label: string, side: 1 | -1) => {
@@ -105,12 +114,35 @@ export function StairElevation({
           support, and a stair turns at a re-entrant corner where a bar bent
           round the inside would push the cover off. So both layers are drawn,
           each running landing-to-landing as one bent bar. */}
-      <polyline points={poly(botBar)} fill="none" stroke={MAIN} strokeWidth={2.2}
+      <path d={botBar.d} fill="none" stroke={MAIN} strokeWidth={2.2}
         strokeLinecap="round" strokeLinejoin="round" />
-      <polyline points={poly(topBar)} fill="none" stroke={MAIN} strokeWidth={2.2}
+      <path d={topBar.d} fill="none" stroke={MAIN} strokeWidth={2.2}
         strokeLinecap="round" strokeLinejoin="round" />
-      {/* the bend points, so the turns read as turns */}
-      {(landing > 0 ? [botBar[1], botBar[2], topBar[1], topBar[2]] : []).map((p, i) => (
+
+      {/* ── the lapping bars across each re-entrant corner ────────────────
+          Main steel is not bent round the inside of a stair's kink: the bend
+          would straighten under tension and push the cover off. A separate bar
+          laps past the corner on both legs instead, and it is that bar the 450
+          dimension measures. */}
+      {landing > 0 && (() => {
+        // Offset INTO the slab so the lap reads as a second bar beside the
+        // first. Laid on the same line it is exactly hidden by it, and the 450
+        // dimension then points at nothing.
+        const lap = 3.2
+        const shift = (pts: Pt[], dy: number): Pt[] => pts.map(([x, y]) => [x, y + dy] as Pt)
+        return [
+          shift(lapBar(botLine[1], botLine[0], botLine[2], ext, s), -lap),
+          shift(lapBar(botLine[2], botLine[1], botLine[3], ext, s), -lap),
+          shift(lapBar(topLineBar[1], topLineBar[0], topLineBar[2], ext, s), lap),
+          shift(lapBar(topLineBar[2], topLineBar[1], topLineBar[3], ext, s), lap),
+        ].map((lb, i) => (
+          <polyline key={i} points={poly(lb)} fill="none" stroke={MAIN} strokeWidth={1.6}
+            strokeLinecap="round" strokeLinejoin="round" />
+        ))
+      })()}
+
+      {/* the bends, so the turns read as turns */}
+      {[...botBar.bends, ...topBar.bends].map((p, i) => (
         <circle key={i} cx={p[0]} cy={p[1]} r={2.4} fill="#00b7d4" />
       ))}
       {/* distribution steel — crossing the main bars, so seen end-on */}
@@ -121,8 +153,8 @@ export function StairElevation({
 
       {/* ── the anchorage extension each side of every corner ────────────── */}
       {landing > 0 && [
-        extAt(botBar, 1, `${ext}`, 1), extAt(botBar, 2, `${ext}`, 1),
-        extAt(topBar, 1, `${ext}`, -1), extAt(topBar, 2, `${ext}`, -1),
+        extAt(botLine, 1, `${ext}`, 1), extAt(botLine, 2, `${ext}`, 1),
+        extAt(topLineBar, 1, `${ext}`, -1), extAt(topLineBar, 2, `${ext}`, -1),
       ].map((e, i) => (
         <g key={i} stroke={DIM} strokeWidth={0.8} fill="none">
           {[e.back, e.fwd].map((q, j) => (
