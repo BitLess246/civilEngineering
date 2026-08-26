@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { scrollTop } from '../lib/useScrollTop'
 import { endDrops } from '../lib/baseDrop'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { GuidedTour } from '../components/GuidedTour'
 import { TourButton } from '../components/TourButton'
 import { MODEL_STEPS } from '../lib/modelTour'
@@ -1956,6 +1956,22 @@ export default function ModelSpace() {
       save(null)              // clears the model, results and the autosave key
     },
   })
+
+  // ── ?tour=1 — the landing page's "Run it yourself, guided" link ─────────
+  // The Guide button lives in this component's state, so a link from outside
+  // cannot reach it. This is that door. The parameter is consumed on arrival:
+  // leaving it in the URL would restart the walkthrough on every refresh, and
+  // would be shared to somebody who did not ask for it.
+  const [params, setParams] = useSearchParams()
+  const tourParam = params.get('tour')
+  const tourStart = tour.start
+  useEffect(() => {
+    if (tourParam !== '1') return
+    const next = new URLSearchParams(params)
+    next.delete('tour')
+    setParams(next, { replace: true })
+    tourStart()
+  }, [tourParam, params, setParams, tourStart])
 
   const nodePos = useMemo(() => {
     const map = new Map<string, THREE.Vector3>()
