@@ -19,7 +19,6 @@ import type { Drawing } from '../engine/planRenderer'
 import { buildPlan } from '../engine/planRenderer'
 import { buildFootingDetail } from '../engine/footingDetail'
 import { buildColumnDetail } from '../engine/columnDetail'
-import { buildBeamDetail } from '../engine/beamDetail'
 import { buildSlabOpeningDetail } from '../engine/slabOpening'
 import { buildWallCornerDetail, buildWallIntersectionDetail, buildWallJointDetail } from '../engine/wallDetail'
 import { buildBeamColumnJointDetail } from '../engine/beamColumnJoint'
@@ -30,7 +29,7 @@ import { FOOTING_COVER } from '../engine/cageBuilder'
  *  what `slabDDM` details to; the model carries no per-slab cover. */
 const SLAB_COVER = 20
 import {
-  footingsForPlan, footingDetailBundles, columnDetailBundles, beamDetailBundles,
+  footingsForPlan, footingDetailBundles, columnDetailBundles,
   slabOpeningBundles, wallDetailBundles, jointDetailBundles, frameElevationBundles,
   type SoilInput,
 } from './planDetails'
@@ -39,7 +38,7 @@ import { buildStructureCages } from '../engine/cageBuilder'
 
 export type SheetGroup =
   | 'General notes'
-  | 'Plans' | 'Beam details' | 'Column details' | 'Footing details'
+  | 'Plans' | 'Column details' | 'Footing details'
   | 'Slab opening details' | 'Wall standard details' | 'Beam–column joint details'
   | 'Frame elevations'
 
@@ -73,7 +72,6 @@ const REF: Record<SheetGroup, string> = {
   'Footing details': 'S-05',
   'Column details': 'S-06',
   'Frame elevations': 'S-04',
-  'Beam details': 'S-07',
   'Slab opening details': 'S-08',
   'Wall standard details': 'S-09',
   'Beam–column joint details': 'S-10',
@@ -136,19 +134,6 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
     })
   })
 
-  beamDetailBundles(model, design).forEach((b, i) => {
-    const drawing = buildBeamDetail(b.detail, { detailNo: String(i + 1), sheetRef: ref('Beam details') })
-    out.push({
-      key: `beam-detail-${slug(b.mark)}`, group: 'Beam details',
-      title: `${b.mark} — ${b.detail.b}×${b.detail.h}`,
-      subtitle: `span ${b.detail.L.toFixed(2)} m`,
-      // What the design flagged travels BESIDE the drawing, not on it: a bar
-      // that does not develop is a question for the engineer, and set in a
-      // paragraph under the elevation it is neither answered nor actionable.
-      warnings: drawing.designNotes,
-      drawing,
-    })
-  })
 
   columnDetailBundles(model, design).forEach((b, i) => {
     out.push({

@@ -319,6 +319,40 @@ export function stirrupHookAllowance(dt: number): number {
 }
 
 /** §425.3.2 — straight extension beyond a seismic hook's bend, mm. */
+/** Table 425.3.1 — the straight tail beyond a 90° standard hook, in bar Ø. */
+export const HOOK_TAIL_DB = 12
+
+export interface Hook90 {
+  /** Inside bend diameter D, mm. */
+  bendDia: number
+  /** Bar-centreline bend radius, mm — D/2 + db/2. */
+  radius: number
+  /** Straight tail ℓext beyond the bend, mm. */
+  ext: number
+  /** Overall height of the hook from the straight bar's centreline to the far
+   *  end of the tail, mm — radius + ℓext. What has to fit inside the member. */
+  depth: number
+  /** Horizontal distance from the straight bar's centreline turn point to the
+   *  OUTSIDE of the turned-down leg, mm. ℓdh is measured to this face
+   *  (§425.4.3), not to the bar centreline. */
+  outside: number
+}
+
+/**
+ * The fabricated dimensions of a 90° standard hook on a `db` bar.
+ *
+ * Lived in the typical beam detail while that sheet existed. It is not a
+ * drawing rule — it is the shape of the bar — so it belongs beside the bend
+ * diameter it is built from, where the schedule of measures and any future
+ * sheet can reach it without depending on a drawing module.
+ */
+export function hook90(db: number): Hook90 {
+  const bendDia = hookBendDiameter(db)
+  const radius = bendDia / 2 + db / 2
+  const ext = HOOK_TAIL_DB * db
+  return { bendDia, radius, ext, depth: radius + ext, outside: radius + db / 2 }
+}
+
 export const hookExtension = (dt: number) => Math.max(6 * dt, 75)
 
 /** §425.3.2 — a seismic hook turns 135°. */

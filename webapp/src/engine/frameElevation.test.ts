@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  buildFrameElevation, clipToBand, runInk,
+  buildFrameElevation, clipToBand, runInk, pitchRuns, pitchNote,
   type FrameElevationInput, type ElevationMember,
 } from './frameElevation'
 import { elevationPlane, type RebarCage, type RebarRun } from './rebarModel'
@@ -46,6 +46,28 @@ describe('clipToBand', () => {
 
   it('drops a run entirely outside', () => {
     expect(clipToBand([[0, 8], [3, 9]], -1, 1)).toEqual([])
+  })
+})
+
+describe('pitchRuns', () => {
+  it('groups stations into runs of constant pitch', () => {
+    const st = [0, 0.1, 0.2, 0.3, 0.5, 0.7, 0.9, 1.0, 1.1]
+    expect(pitchRuns(st)).toEqual([
+      { count: 3, pitch: 100 }, { count: 3, pitch: 200 }, { count: 2, pitch: 100 },
+    ])
+    expect(pitchNote(pitchRuns(st))).toBe('3@100, 3@200, 2@100')
+  })
+
+  it('tolerates the millimetre or two a divided gap lands on', () => {
+    // A middle span DIVIDED into n equal parts gives pitches a hair apart.
+    // "11@218, 1@219" describes the same layout worse than "12@218".
+    const st = [0, 0.218, 0.436, 0.655, 0.873]
+    expect(pitchRuns(st)).toHaveLength(1)
+    expect(pitchRuns(st)[0].count).toBe(4)
+  })
+
+  it('says nothing about a single bar, which has no pitch', () => {
+    expect(pitchRuns([0.5])).toEqual([])
   })
 })
 
@@ -167,8 +189,35 @@ describe('buildFrameElevation', () => {
   })
 
   it('says nothing about a column step where there is none', () => {
-    expect(d.designNotes).toEqual([])
     expect(textsOf(d).some((t) => t.includes('REDUCES'))).toBe(false)
+    expect(d.designNotes.some((n) => n.includes('reduces'))).toBe(false)
+  })
+
+  it('carries what the CAGES flagged, so retiring a sheet cannot retire a check', () => {
+    // The ℓdh check used to live on the typical beam detail and existed only
+    // for as long as that sheet did. It is the cage's now, and reaches every
+    // view of the same bar.
+    expect(d.designNotes.some((n) => /ℓdh \d+ exceeds/.test(n))).toBe(true)
+    // …named by the member it is about, so it is actionable
+    expect(d.designNotes.every((n) => /^[\w.]+: /.test(n))).toBe(true)
+    // …and counted once each, not once per bar in the face
+    expect(new Set(d.designNotes).size).toBe(d.designNotes.length)
+  })
+
+  it('reports the laps it had to introduce, counted off the pieces it cut', () => {
+    expect(d.designNotes.some((n) => /1 lap per bar/.test(n))).toBe(true)
+  })
+
+  it('schedules the stirrups it actually drew', () => {
+    const sched = textsOf(d).filter((t) => t.includes('STIRRUPS'))
+    expect(sched.length).toBe(2)                     // one per beam
+    expect(sched[0]).toMatch(/2L-⌀\d+ STIRRUPS, \d+ No\./)
+    // the pitch line beside it parses as runs of constant spacing
+    expect(textsOf(d).some((t) => /^\d+@\d+(, \d+@\d+)*$/.test(t))).toBe(true)
+  })
+
+  it('counts the bars off the cage, not off the design input', () => {
+    expect(textsOf(d).some((t) => /\d-⌀20 TOP THRU/.test(t))).toBe(true)
   })
 })
 

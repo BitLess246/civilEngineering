@@ -28,8 +28,7 @@
 import type { Drawing, PlanPrimitive } from './planRenderer'
 import { calcDevLength } from './devLength'
 import { jointHookLdh } from './beamColumnJoint'
-import { hookBendDiameter, stirrupBendDiameter, STOCK_BAR_LENGTH } from './rebarModel'
-import { hook90 } from './beamDetail'
+import { hookBendDiameter, stirrupBendDiameter, hook90, STOCK_BAR_LENGTH } from './rebarModel'
 import { notesBlock, titleBlock, sheetBounds, wrapCols, wrapNote } from './detailSheet'
 
 const INK = '#0f172a'

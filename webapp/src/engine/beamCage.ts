@@ -27,7 +27,8 @@ import {
   hookBendDiameter, KEEP_TOP, KEEP_BOTTOM,
   type RebarCage, type RebarRun, type Vec3,
 } from './rebarModel'
-import { hookClearToFace } from './devLength'
+import { hookClearToFace, hookFit } from './devLength'
+import { jointHookLdh } from './beamColumnJoint'
 import { rotateLoop } from './columnCage'
 import { endAnchors, type AnchorBar, type JointRoom } from './beamAnchorage'
 
@@ -84,6 +85,20 @@ export interface BeamCageInput {
   colCover?: number
   colTieDia?: number
   colBarDia?: number
+  /**
+   * The column concrete a hooked end bar has to develop in — its f'c and fy,
+   * MPa, and the depth it has to develop across, mm.
+   *
+   * Given, the cage checks ℓdh against the room it actually has and says so
+   * when the bar does not develop. Omitted, it places the hook as before and
+   * makes no claim about it.
+   *
+   * THE CHECK LIVES HERE, not on a drawing. It used to be the typical beam
+   * detail's, so it existed only for as long as that sheet did — retiring the
+   * sheet would have silently retired a design check with it, and no other view
+   * of the same bar knew the bar did not develop.
+   */
+  jointConcrete?: { fc: number; fy: number; colH: number }
   /** Beam centreline in plan, m, and the level of its SOFFIT. */
   axis: { x0: number; z0: number; x1: number; z1: number }
   ySoffit: number
@@ -246,6 +261,19 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
   // the column centreline so the next span's bar meets it there instead of
   // both stopping at their own faces and leaving the joint empty.
   const clear = hookClearToFace(i.colCover ?? 40, i.colTieDia ?? 10, i.colBarDia ?? i.barDia)
+  // §418.8.5.1 — does the hook actually develop in the column it turns into?
+  // Only asked at an END support: a bar at a continuous support is not anchored.
+  const jc = i.jointConcrete
+  if (jc && (!i.continuousLeft || !i.continuousRight)) {
+    const ldh = jointHookLdh(i.barDia, jc.fy, jc.fc)
+    const fit = hookFit({
+      ldh, memberDepth: jc.colH,
+      cover: i.colCover ?? 40, tieDia: i.colTieDia ?? 10, farBarDia: i.colBarDia ?? i.barDia,
+    })
+    if (!fit.fits) {
+      notes.push(`ℓdh ${Math.round(ldh)} exceeds the ${Math.round(fit.avail)} available in the column by ${Math.round(fit.shortfall)} — ⌀${i.barDia} bars do not develop here. Deepen the column to ${Math.round(fit.depthNeeded)}, reduce the bar, or use a headed bar (§425.4.4); a longer tail does not count, ℓdh is measured to the outside of the bend`)
+    }
+  }
   /** Centreline of the turned-down leg, m from the support centreline. */
   const hookIn = (colB: number) => Math.max(0, colB / 2000 - (clear + i.barDia / 2) / 1000)
   // ── through bars: the corners, plus the code's continuous share ──

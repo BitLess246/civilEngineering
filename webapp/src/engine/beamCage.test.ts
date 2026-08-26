@@ -214,3 +214,38 @@ describe('buildBeamCage — placement', () => {
     expect(runWeight(t)).toBeCloseTo((cutLength(t) / 1000) * 2.466, 2)
   })
 })
+
+describe('buildBeamCage — the hook has to develop (§418.8.5.1)', () => {
+  // This check used to live on the typical beam detail, so it existed only for
+  // as long as that sheet did. It is the CAGE's now: retiring a drawing must
+  // never retire a design check, and every view of the same bar gets it.
+  const ends = { ...beam, continuousLeft: false, continuousRight: false,
+    colCover: 40, colTieDia: 10, colBarDia: 20 }
+
+  it('says so when ℓdh does not fit the column it turns into', () => {
+    // ⌀20, fy 415, f'c 28 → ℓdh = 415·20/(5.4·√28) = 290. A 400 column gives
+    // 400 − 40 − 10 − 20 = 330 … so it fits; a 300 column gives 230 and does not.
+    const c = buildBeamCage({ ...ends, jointConcrete: { fc: 28, fy: 415, colH: 300 } })
+    const note = (c.notes ?? []).find((n) => n.includes('ℓdh'))
+    expect(note).toBeDefined()
+    expect(note).toContain('290')                 // what the bar needs
+    expect(note).toContain('230')                 // what the column has
+    expect(note).toContain('§425.4.4')            // and the way out
+  })
+
+  it('stays quiet where the bar does develop', () => {
+    const c = buildBeamCage({ ...ends, jointConcrete: { fc: 28, fy: 415, colH: 400 } })
+    expect((c.notes ?? []).some((n) => n.includes('ℓdh'))).toBe(false)
+  })
+
+  it('asks nothing at a support the bar is not anchored in', () => {
+    // A bar at a continuous support carries on; there is no hook to develop.
+    const c = buildBeamCage({ ...beam, colCover: 40, colTieDia: 10, colBarDia: 20,
+      jointConcrete: { fc: 28, fy: 415, colH: 300 } })
+    expect((c.notes ?? []).some((n) => n.includes('ℓdh'))).toBe(false)
+  })
+
+  it('makes no claim at all when it was given no column concrete', () => {
+    expect((buildBeamCage(ends).notes ?? []).some((n) => n.includes('ℓdh'))).toBe(false)
+  })
+})

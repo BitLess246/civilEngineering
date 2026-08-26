@@ -5,7 +5,7 @@ import {
 } from './generalNotes'
 import { calcDevLength } from './devLength'
 import { hookBendDiameter } from './rebarModel'
-import { hook90 } from './beamDetail'
+import { hook90 } from './rebarModel'
 
 const job: GeneralNotesInput = {
   fc: [28, 32], fy: [415], barDias: [12, 16, 20, 25, 28, 32], tieDias: [10, 12],

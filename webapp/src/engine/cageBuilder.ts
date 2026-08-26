@@ -268,6 +268,15 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
         const c = cs && secOf(cs.id)
         return c ? { colCover: c.cover, colTieDia: c.tieDia, colBarDia: c.barDia } : {}
       })(),
+      // The column concrete the end hooks develop in, so the cage itself can
+      // say when a bar does not develop — see `BeamCageInput.jointConcrete`.
+      ...(() => {
+        const col = colAt(mem.i) ?? colAt(mem.j)
+        const cs = col && secOf(col.id)
+        return cs && Number.isFinite(cs.fc) && Number.isFinite(cs.fy)
+          ? { jointConcrete: { fc: cs.fc, fy: cs.fy, colH: Math.min(cs.b, cs.h ?? cs.b) } }
+          : {}
+      })(),
       axis: { x0: ni.x, z0: ni.z, x1: nj.x, z1: nj.z },
       // THE NODE IS THE TOP OF THE BEAM.
       //

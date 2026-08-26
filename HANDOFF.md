@@ -234,6 +234,50 @@ design in `lib/planDetails.ts` and listed in `PlansPanel`.
   extents** (not just anchors) against the sheet bounds, which is the assertion
   that would have caught the overflow.
 
+## Per-member drawings — the typical beam detail retired (Aug 2026)
+
+Three phases, on `claude/slab-opening-trimmer-bars-nubqu7`.
+
+**Phase 1 — the node is the TOP of the beam.** It was read as the section
+CENTROID, so half of every beam was drawn up through the column starting at
+the same node. `cageBuilder.ySoffit = y − h`, joint bands are the depth BELOW
+each node, a roof column's top hook turns in below the node, and `levelDrop`
+in `ModelSpace` hangs the concrete box (and a steel section's extrusion) to
+match. Column bars now crank to the bar line of the section ABOVE
+(`ColumnCageInput.above`), with the §410.7.4.5 dowel guard past 75 mm.
+**Open**: the analysis still takes the node as the member AXIS, so drawn and
+analysed beams sit h/2 apart. Reconciling them is a layer-2 change (member
+end offsets through `modelBridge`) and has NOT been done.
+
+**Audit against the NSCP/ACI bar-detailing standard** — four real violations:
+- cut bars stopped AT the inflection point. `curtailments()` in `beamCage`
+  now derives ℓn/4 ± max(d, 12db[, ℓn/16]) per §409.7.3.3 / §409.7.3.8.4, and
+  the sheet takes the cage's own numbers.
+- `spliceCentres` seeded its preference reduce with the even-division
+  position, making the test `|w − s| < 0` — the whole mechanism was inert.
+- one shared splice-preference list served both beam faces, which want
+  OPPOSITE zones (top: middle half; bottom: end quarters). Now per role.
+- column bars lapped AT the floor; §418.7.4.3 wants the centre half of the
+  storey. `spliceRise` carries them a quarter storey up first.
+**Still open**: hoops are not closed to 100 c/c through a lap splice — the
+stirrup layout runs before splice positions are known.
+
+**Phase 2 — `frameElevation.ts` (S-04).** One sheet per grid line per framed
+level: the whole line, columns carried half a storey each side of the beams.
+Every bar comes from the `RebarCage` objects, not from a parallel drawing
+rule, so the sheet cannot disagree with the steel. `clipToBand` cuts each
+polyline per segment at the sheet edge. One accent hue; weight, not colour,
+separates the level's beams from the columns.
+
+**Phase 3 — `beamDetail.ts` DELETED.** The typical detail was a second source
+of truth for the same bars. `hook90` moved to `rebarModel` (it is the shape of
+a bar, not a drawing rule) and the ℓdh check moved to `beamCage` as a cage
+note — a check that lives on a drawing dies with it, and every other view of
+the same bar knew nothing. The elevation reads its schedules back OFF the
+cage: `transverseStations` + `pitchRuns` give "4@220, 18@213, 4@220",
+`faceTally` counts THRU vs EXTRA and dimensions the curtailments.
+`RebarCage.notes` and the lap tally become the sheet's `designNotes`.
+
 ## Continue from your phone / cloud (PC off)
 The local terminal session needs your PC on. To keep working without it:
 1. Open **claude.ai/code** (mobile browser) or the **Claude app**, same account.
