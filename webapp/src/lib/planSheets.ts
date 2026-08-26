@@ -31,13 +31,17 @@ import { FOOTING_COVER } from '../engine/cageBuilder'
 const SLAB_COVER = 20
 import {
   footingsForPlan, footingDetailBundles, columnDetailBundles, beamDetailBundles,
-  slabOpeningBundles, wallDetailBundles, jointDetailBundles, type SoilInput,
+  slabOpeningBundles, wallDetailBundles, jointDetailBundles, frameElevationBundles,
+  type SoilInput,
 } from './planDetails'
+import { buildFrameElevation } from '../engine/frameElevation'
+import { buildStructureCages } from '../engine/cageBuilder'
 
 export type SheetGroup =
   | 'General notes'
   | 'Plans' | 'Beam details' | 'Column details' | 'Footing details'
   | 'Slab opening details' | 'Wall standard details' | 'Beam–column joint details'
+  | 'Frame elevations'
 
 export interface PlanSheet {
   /** Stable identity — also the SVG download file stem. */
@@ -68,6 +72,7 @@ const REF: Record<SheetGroup, string> = {
   'Plans': 'S-03',
   'Footing details': 'S-05',
   'Column details': 'S-06',
+  'Frame elevations': 'S-04',
   'Beam details': 'S-07',
   'Slab opening details': 'S-08',
   'Wall standard details': 'S-09',
@@ -112,6 +117,24 @@ export function planSheets(model: StructuralModel, design: StructureDesign | nul
 export function detailSheets(model: StructuralModel, design: StructureDesign, soil: SoilInput = {}, opts: SheetSetOptions = {}): PlanSheet[] {
   const out: PlanSheet[] = []
   const ref = (g: SheetGroup) => opts.sheetRefs?.[g] ?? REF[g]
+
+  // FRAME ELEVATIONS come before the per-member details: they are the sheets
+  // that show a member in its frame, and the typical details that follow are
+  // read against them. Every bar on them is the cage's own — the same objects
+  // the 3D scene paints and the bar schedule counts.
+  const { cages } = buildStructureCages(model, design)
+  frameElevationBundles(model, design, cages).forEach((b, i) => {
+    const drawing = buildFrameElevation(b.input, {
+      detailNo: String(i + 1), sheetRef: ref('Frame elevations'), project: model.name,
+    })
+    out.push({
+      key: b.key, group: 'Frame elevations',
+      title: `Grid ${b.line} — ${b.level}`,
+      subtitle: `${b.input.members.filter((m) => m.role === 'beam').length} beams, ${b.input.grids.length} columns`,
+      warnings: drawing.designNotes,
+      drawing,
+    })
+  })
 
   beamDetailBundles(model, design).forEach((b, i) => {
     const drawing = buildBeamDetail(b.detail, { detailNo: String(i + 1), sheetRef: ref('Beam details') })

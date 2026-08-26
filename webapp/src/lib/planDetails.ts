@@ -14,6 +14,8 @@ import type { WallDetailInput } from '../engine/wallDetail'
 import type { BeamColumnJointInput, JointConfinement } from '../engine/beamColumnJoint'
 import type { SlabDirResult } from '../engine/slabDDM'
 import type { ColumnSchematicProps } from '../components/ColumnSchematic'
+import type { FrameElevationInput, ElevationMember } from '../engine/frameElevation'
+import { elevationPlane, type RebarCage, type Vec3 } from '../engine/rebarModel'
 
 export interface SoilInput { qAllow?: number; gammaSoil?: number; gammaConc?: number; H?: number }
 
@@ -586,6 +588,173 @@ export function jointDetailBundles(model: StructuralModel, design: StructureDesi
         fc: colSec.fc, fy: colSec.fy, cover: colSec.cover ?? 40,
       },
     })
+  }
+  return out
+}
+
+// ── Frame elevations ──────────────────────────────────────────────────────
+// One sheet per grid line per level: the whole line captured at that floor,
+// with the columns carried half a storey below the beams and half a storey
+// above, and every bar taken from the cages `buildStructureCages` built.
+
+/** A grid line: the members on it, and the axis they run along. */
+interface GridLine {
+  label: string
+  /** Constant plan coordinate the line sits at, m. */
+  at: number
+  /** The line runs in x (a lettered line) or in z (a numbered one). */
+  axis: 'x' | 'z'
+}
+
+export interface FrameElevationBundle {
+  key: string
+  line: string
+  level: string
+  input: FrameElevationInput
+}
+
+/**
+ * The grid lines of the model, from where its columns actually stand.
+ *
+ * Read off the COLUMNS rather than from a stored grid, because the model has no
+ * stored grid: a frame imported or edited node by node still has lines, and
+ * they are wherever two or more columns share a plan coordinate.
+ */
+export function gridLines(model: StructuralModel): GridLine[] {
+  const nodeById = new Map(model.nodes.map((n) => [n.id, n]))
+  const cols = model.members.filter((m) => m.role === 'column')
+  const feet = new Set<string>()
+  for (const c of cols) for (const id of [c.i, c.j]) feet.add(id)
+  const pts = [...feet].map((id) => nodeById.get(id)!).filter(Boolean)
+
+  const uniq = (vs: number[]) => [...new Set(vs.map((v) => Math.round(v * 1e6) / 1e6))].sort((a, b) => a - b)
+  const xs = uniq(pts.map((p) => p.x))
+  const zs = uniq(pts.map((p) => p.z))
+  const out: GridLine[] = []
+  // A line in x is labelled by letter and identified by its z; a line in z by
+  // number and its x — the same convention the framing plan's bubbles use.
+  zs.forEach((z, k) => {
+    if (pts.filter((p) => Math.abs(p.z - z) < 1e-6).length < 2) return
+    out.push({ label: String.fromCharCode(65 + k), at: z, axis: 'x' })
+  })
+  xs.forEach((x, k) => {
+    if (pts.filter((p) => Math.abs(p.x - x) < 1e-6).length < 2) return
+    out.push({ label: String(k + 1), at: x, axis: 'z' })
+  })
+  return out
+}
+
+/**
+ * Every frame elevation the model has — one per grid line per framed level.
+ *
+ * The band is half the storey below the beams and half the storey above, so
+ * the joint sits in the middle of the sheet with its neighbours' detailing
+ * either side. Where there is no storey one way (a base, a roof) the band is
+ * half the storey that does exist, which keeps the sheet the same shape.
+ */
+export function frameElevationBundles(
+  model: StructuralModel, design: StructureDesign, cages: RebarCage[],
+): FrameElevationBundle[] {
+  const nodeById = new Map(model.nodes.map((n) => [n.id, n]))
+  const secById = new Map(model.sections.map((s) => [s.id, s]))
+  const sec = (m: { section: string }) => secById.get(m.section) as RectSection | undefined
+  const pos = (id: string) => nodeById.get(id)
+  const isBeam = (r: string) => r === 'beam' || r === 'girder'
+
+  const levels = [...new Set(model.nodes.map((n) => Math.round(n.y * 1e6) / 1e6))].sort((a, b) => a - b)
+  const out: FrameElevationBundle[] = []
+
+  for (const g of gridLines(model)) {
+    const onLine = (id: string) => {
+      const n = pos(id)
+      return !!n && Math.abs((g.axis === 'x' ? n.z : n.x) - g.at) < 1e-6
+    }
+    const along: Vec3 = g.axis === 'x' ? [1, 0, 0] : [0, 0, 1]
+    const coord = (id: string) => {
+      const n = pos(id)!
+      return g.axis === 'x' ? n.x : n.z
+    }
+    const members = model.members.filter((m) => onLine(m.i) && onLine(m.j))
+    const cols = members.filter((m) => m.role === 'column')
+
+    for (const y of levels) {
+      const beams = members.filter((m) => isBeam(m.role)
+        && Math.abs(pos(m.i)!.y - y) < 1e-6 && Math.abs(pos(m.j)!.y - y) < 1e-6)
+      if (!beams.length) continue
+
+      // The columns meeting this level, split into the one below and the one
+      // above at each grid position.
+      const touching = cols.filter((c) => {
+        const a = pos(c.i)!.y, b = pos(c.j)!.y
+        return Math.abs(a - y) < 1e-6 || Math.abs(b - y) < 1e-6
+      })
+      const hOf = (c: (typeof cols)[number]) => Math.abs(pos(c.j)!.y - pos(c.i)!.y)
+      const below = touching.filter((c) => Math.max(pos(c.i)!.y, pos(c.j)!.y) <= y + 1e-6)
+      const above = touching.filter((c) => Math.min(pos(c.i)!.y, pos(c.j)!.y) >= y - 1e-6)
+      const halfDown = below.length ? Math.max(...below.map(hOf)) / 2 : 0
+      const halfUp = above.length ? Math.max(...above.map(hOf)) / 2 : 0
+      const yLo = y - (halfDown || halfUp)
+      const yHi = y + (halfUp || halfDown)
+
+      const origin: Vec3 = g.axis === 'x' ? [0, 0, g.at] : [g.at, 0, 0]
+      const plane = elevationPlane(along, origin)
+
+      const bars = (id: string) => {
+        const b = design.beams.find((x) => x.id === id)
+        if (b) {
+          const top = Math.max(0, ...b.sections.filter((s) => s.hogging).map((s) => s.design.bars))
+          const bot = Math.max(0, ...b.sections.filter((s) => !s.hogging).map((s) => s.design.bars))
+          return `${top}-TOP / ${bot}-BOT`
+        }
+        const c = design.columns.find((x) => x.id === id)
+        return c ? `${c.bars}-⌀${sec(model.members.find((m) => m.id === id)!)?.barDia ?? 0}` : undefined
+      }
+
+      const elMembers: ElevationMember[] = []
+      for (const m of beams) {
+        const s = sec(m)
+        if (!s) continue
+        const u0 = Math.min(coord(m.i), coord(m.j)), u1 = Math.max(coord(m.i), coord(m.j))
+        // The node is the TOP of the beam, so it hangs below the level.
+        elMembers.push({
+          mark: m.id, role: 'beam', u0, u1, yBot: y - s.h / 1000, yTop: y,
+          bw: s.b, d: s.h, note: bars(m.id),
+        })
+      }
+      for (const c of touching) {
+        const s = sec(c)
+        if (!s) continue
+        const cu = coord(c.i)
+        const lo = Math.min(pos(c.i)!.y, pos(c.j)!.y), hi = Math.max(pos(c.i)!.y, pos(c.j)!.y)
+        elMembers.push({
+          mark: c.id, role: 'column',
+          u0: cu - s.b / 2000, u1: cu + s.b / 2000,
+          yBot: Math.max(lo, yLo), yTop: Math.min(hi, yHi),
+          bw: s.b, d: s.h ?? s.b, note: bars(c.id),
+        })
+      }
+      if (!elMembers.length) continue
+
+      const ids = new Set([...beams, ...touching].map((m) => m.id))
+      const grids = [...new Set(touching.map((c) => Math.round(coord(c.i) * 1e6) / 1e6))]
+        .sort((a, b) => a - b)
+        .map((u, k) => ({ u, label: g.axis === 'x' ? String(k + 1) : String.fromCharCode(65 + k) }))
+
+      out.push({
+        // The key is also the SVG download stem, so it is slugged here rather
+        // than carrying a letter and a decimal point into a filename.
+        key: `frame-${g.label}-${y.toFixed(2)}`.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        line: g.label,
+        level: `EL ${y.toFixed(2)}`,
+        input: {
+          line: g.label, y, yLo, yHi, plane,
+          members: elMembers,
+          grids,
+          cages: cages.filter((c) => ids.has(c.member)),
+          subject: new Set(beams.map((m) => m.id)),
+        },
+      })
+    }
   }
   return out
 }
