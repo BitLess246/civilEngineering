@@ -164,7 +164,7 @@ export function buildColumnDetail(c: ColumnDetailInput, opts: ColumnDetailOption
     for (const x of [x0 + cov, x1 - cov]) {
       P.push({ kind: 'line', x1: x + bM * 0.055, y1: Y(zs), x2: x + bM * 0.055, y2: Y(zs + lap), stroke: REBAR, width: 1.1, dash: [0.05, 0.04] })
     }
-    P.push({ kind: 'dim', x1: x1 + bM * 0.28, y1: Y(zs), x2: x1 + bM * 0.28, y2: Y(zs + lap), text: `${Math.round(lap * 1000)}`, off: 0, size: 0.05 })
+    P.push({ kind: 'dim', x1: x1 + bM * 0.28, y1: Y(zs), x2: x1 + bM * 0.28, y2: Y(zs + lap), text: `${Math.round(lap * 1000)}`, off: 0, size: 0.05, ext: x1 })
     P.push({
       kind: 'text', x: x1 + bM * 0.45, y: Y(zs + lap / 2),
       text: lapIsTension ? 'CLASS (B) SPLICE' : 'COMPRESSION SPLICE', size: 0.05, anchor: 'start', color: REBAR, weight: 600,
@@ -185,10 +185,10 @@ export function buildColumnDetail(c: ColumnDetailInput, opts: ColumnDetailOption
   // ── dimensions & annotation ──
   const dimX = x0 - bM * 0.85
   if (loM > 0) {
-    P.push({ kind: 'dim', x1: dimX, y1: Y(0), x2: dimX, y2: Y(loM), text: `ℓo = ${Math.round(loM * 1000)}`, off: 0, size: 0.05 })
-    P.push({ kind: 'dim', x1: dimX, y1: Y(lu - loM), x2: dimX, y2: Y(lu), text: `ℓo = ${Math.round(loM * 1000)}`, off: 0, size: 0.05 })
+    P.push({ kind: 'dim', x1: dimX, y1: Y(0), x2: dimX, y2: Y(loM), text: `ℓo = ${Math.round(loM * 1000)}`, off: 0, size: 0.05, ext: x0 })
+    P.push({ kind: 'dim', x1: dimX, y1: Y(lu - loM), x2: dimX, y2: Y(lu), text: `ℓo = ${Math.round(loM * 1000)}`, off: 0, size: 0.05, ext: x0 })
   }
-  P.push({ kind: 'dim', x1: dimX - bM * 0.5, y1: Y(0), x2: dimX - bM * 0.5, y2: Y(lu), text: `ℓu = ${Math.round(lu * 1000)}`, off: 0, size: 0.05 })
+  P.push({ kind: 'dim', x1: dimX - bM * 0.5, y1: Y(0), x2: dimX - bM * 0.5, y2: Y(lu), text: `ℓu = ${Math.round(lu * 1000)}`, off: 0, size: 0.05, ext: x0 })
 
   const notes: string[] = [
     `TIES ⌀${c.tieDia} — ${Math.round(c.sConf)} C/C WITHIN ℓo, ${Math.round(c.sOut)} C/C ELSEWHERE`,

@@ -864,17 +864,17 @@ export function buildBeamDetail(i: BeamDetailInput, opts: BeamDetailOptions = {}
   const dimTop = hM + colRise + u * 3.6
   // Only where the bar being dimensioned exists. A beam with no hogging steel
   // has no extra top bar, and dimensioning its run described nothing.
-  if (extraTopL > 0) P.push({ kind: 'dim', x1: 0, y1: Y(dimTop), x2: topRun, y2: Y(dimTop), text: `0.25L = ${Math.round(topRun * 1000)}`, off: 0, size: u * 1.35 })
-  if (extraTopR > 0) P.push({ kind: 'dim', x1: L - topRun, y1: Y(dimTop), x2: L, y2: Y(dimTop), text: `0.25L = ${Math.round(topRun * 1000)}`, off: 0, size: u * 1.35 })
+  if (extraTopL > 0) P.push({ kind: 'dim', x1: 0, y1: Y(dimTop), x2: topRun, y2: Y(dimTop), text: `0.25L = ${Math.round(topRun * 1000)}`, off: 0, size: u * 1.35, ext: Y(yTop2) })
+  if (extraTopR > 0) P.push({ kind: 'dim', x1: L - topRun, y1: Y(dimTop), x2: L, y2: Y(dimTop), text: `0.25L = ${Math.round(topRun * 1000)}`, off: 0, size: u * 1.35, ext: Y(yTop2) })
   if (botM > 0) {
-    P.push({ kind: 'dim', x1: 0, y1: Y(-colDrop - u * 1.6), x2: botStart, y2: Y(-colDrop - u * 1.6), text: `0.15L`, off: 0, size: u * 1.3 })
-    P.push({ kind: 'dim', x1: L - botStart, y1: Y(-colDrop - u * 1.6), x2: L, y2: Y(-colDrop - u * 1.6), text: `0.15L`, off: 0, size: u * 1.3 })
+    P.push({ kind: 'dim', x1: 0, y1: Y(-colDrop - u * 1.6), x2: botStart, y2: Y(-colDrop - u * 1.6), text: `0.15L`, off: 0, size: u * 1.3, ext: Y(yBot2) })
+    P.push({ kind: 'dim', x1: L - botStart, y1: Y(-colDrop - u * 1.6), x2: L, y2: Y(-colDrop - u * 1.6), text: `0.15L`, off: 0, size: u * 1.3, ext: Y(yBot2) })
   }
   // the 2h hoop zone at the left support, and the 50 mm first hoop
   const zone = Math.min(HOOP_ZONE_DEPTHS * hM, L / 2 - face)
-  P.push({ kind: 'dim', x1: face, y1: Y(-colDrop - u * 8.0), x2: face + zone, y2: Y(-colDrop - u * 8.0), text: `2h = ${Math.round(zone * 1000)}`, off: 0, size: u * 1.3 })
+  P.push({ kind: 'dim', x1: face, y1: Y(-colDrop - u * 8.0), x2: face + zone, y2: Y(-colDrop - u * 8.0), text: `2h = ${Math.round(zone * 1000)}`, off: 0, size: u * 1.3, ext: Y(0) })
   P.push({ kind: 'text', x: face, y: Y(-colDrop - u * 9.8), text: `${FIRST_HOOP} FIRST HOOP`, size: u * 1.2, anchor: 'start', color: NOTE })
-  P.push({ kind: 'dim', x1: 0, y1: Y(-colDrop - u * 12.0), x2: L, y2: Y(-colDrop - u * 12.0), text: `L = ${Math.round(L * 1000)}`, off: 0, size: u * 1.5 })
+  P.push({ kind: 'dim', x1: 0, y1: Y(-colDrop - u * 12.0), x2: L, y2: Y(-colDrop - u * 12.0), text: `L = ${Math.round(L * 1000)}`, off: 0, size: u * 1.5, ext: Y(-colDrop) })
 
   // ℓdh is NOT dimensioned here, and a shortfall is not drawn here.
   //

@@ -459,8 +459,8 @@ export function buildWallCornerDetail(i: WallDetailInput, opts: WallDetailOption
   }
 
   // ── dimensions: the leg, which IS the lap ──
-  P.push({ kind: 'dim', x1: cov, y1: t + u * 1.6, x2: leg + cov, y2: t + u * 1.6, text: `${Math.round(r.cornerLeg)}`, off: 0, size: u * 1.4 })
-  P.push({ kind: 'dim', x1: -u * 2.2, y1: 0, x2: -u * 2.2, y2: t, text: `${Math.round(i.t)}`, off: 0, size: u * 1.5 })
+  P.push({ kind: 'dim', x1: cov, y1: t + u * 1.6, x2: leg + cov, y2: t + u * 1.6, text: `${Math.round(r.cornerLeg)}`, off: 0, size: u * 1.4, ext: t })
+  P.push({ kind: 'dim', x1: -u * 2.2, y1: 0, x2: -u * 2.2, y2: t, text: `${Math.round(i.t)}`, off: 0, size: u * 1.5, ext: 0 })
 
   // ── callouts ──
   P.push({
@@ -546,8 +546,8 @@ export function buildWallIntersectionDetail(i: WallDetailInput, opts: WallDetail
   // wall, the way the bar does. Where it overruns the far face the drawing says
   // so by itself — which is the point of dimensioning it here rather than
   // anywhere convenient.
-  P.push({ kind: 'dim', x1: -u * 2.6, y1: t, x2: -u * 2.6, y2: t - ldh, text: `ℓdh = ${Math.round(r.ldh)}`, off: 0, size: u * 1.4 })
-  P.push({ kind: 'dim', x1: -u * 7.0, y1: 0, x2: -u * 7.0, y2: t, text: `t = ${Math.round(i.t)}`, off: 0, size: u * 1.4 })
+  P.push({ kind: 'dim', x1: -u * 2.6, y1: t, x2: -u * 2.6, y2: t - ldh, text: `ℓdh = ${Math.round(r.ldh)}`, off: 0, size: u * 1.4, ext: 0 })
+  P.push({ kind: 'dim', x1: -u * 7.0, y1: 0, x2: -u * 7.0, y2: t, text: `t = ${Math.round(i.t)}`, off: 0, size: u * 1.4, ext: 0 })
   if (!r.ldhFits) {
     P.push({ kind: 'line', x1: -u * 3.6, y1: t - ldh, x2: 0, y2: t - ldh, stroke: WARN, width: 0.7, dash: [u * 0.8, u * 0.6] })
     P.push({ kind: 'text', x: -u * 3.8, y: t - ldh, text: `OVERRUNS — AVAIL. ${Math.round(r.ldhAvail)}`, size: u * 1.15, anchor: 'end', color: WARN, weight: 600 })
@@ -624,7 +624,7 @@ export function buildWallJointDetail(i: WallDetailInput, opts: WallDetailOptions
     P.push({ kind: 'line', x1: x, y1: H * 0.04, x2: x, y2: H * 0.96, stroke: REBAR, width: 1.2 })
   }
   // the lap above the joint, marked on one bar
-  P.push({ kind: 'dim', x1: -u * 2.4, y1: jy - lapAbove, x2: -u * 2.4, y2: jy, text: `LAP ${Math.round(r.lapB)}`, off: 0, size: u * 1.3 })
+  P.push({ kind: 'dim', x1: -u * 2.4, y1: jy - lapAbove, x2: -u * 2.4, y2: jy, text: `LAP ${Math.round(r.lapB)}`, off: 0, size: u * 1.3, ext: 0 })
 
   // ── horizontal bars, dashed on the far face ──
   const rows = Math.max(2, drawCount(H, i.spacing))
@@ -634,7 +634,7 @@ export function buildWallJointDetail(i: WallDetailInput, opts: WallDetailOptions
     P.push({ kind: 'line', x1: W * 0.03, y1: y, x2: W * 0.97, y2: y, stroke: REBAR, width: 0.6, dash: [u * 0.9, u * 0.7] })
   }
 
-  P.push({ kind: 'dim', x1: 0, y1: H + u * 2.4, x2: W, y2: H + u * 2.4, text: `ℓw = ${Math.round(W * 1000)}`, off: 0, size: u * 1.4 })
+  P.push({ kind: 'dim', x1: 0, y1: H + u * 2.4, x2: W, y2: H + u * 2.4, text: `ℓw = ${Math.round(W * 1000)}`, off: 0, size: u * 1.4, ext: H })
 
   const j = r.joint
   const notes = [

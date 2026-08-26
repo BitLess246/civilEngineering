@@ -498,7 +498,7 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
     text: `COLUMN HOOPS ⌀${Math.round(i.hoopDia)} @ ${Math.round(i.hoopSpacing)}`, size: u * 1.05, side: 'right',
   }))
   // the joint depth, which is the §418.8.2.3 dimension
-  P.push({ kind: 'dim', x1: jx, y1: jy + bh + colRun + u * 1.6, x2: jx + ch, y2: jy + bh + colRun + u * 1.6, text: `h = ${Math.round(i.colH)}`, off: 0, size: u * 1.2 })
+  P.push({ kind: 'dim', x1: jx, y1: jy + bh + colRun + u * 1.6, x2: jx + ch, y2: jy + bh + colRun + u * 1.6, text: `h = ${Math.round(i.colH)}`, off: 0, size: u * 1.2, ext: jy + bh + colRun })
 
   // ═══ VIEW 2 — PLAN SECTION X-X ═══════════════════════════════════════════
   const spandrel = Math.max(bb * 1.1, cb * 0.55)        // spandrel beam width in plan
@@ -568,8 +568,8 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
     tx: jx + (ch + spandrel) / 2 + u * 0.8, ty: py - spanRun * 0.72,
     text: 'SPANDREL BEAM HOOPS', size: u * 1.05, side: 'left',
   }))
-  P.push({ kind: 'dim', x1: jx, y1: py + cb + spanRun + u * 1.6, x2: jx + ch, y2: py + cb + spanRun + u * 1.6, text: `${Math.round(i.colH)}`, off: 0, size: u * 1.2 })
-  P.push({ kind: 'dim', x1: jx - u * 3.2, y1: py, x2: jx - u * 3.2, y2: py + cb, text: `${Math.round(i.colB)}`, off: 0, size: u * 1.2 })
+  P.push({ kind: 'dim', x1: jx, y1: py + cb + spanRun + u * 1.6, x2: jx + ch, y2: py + cb + spanRun + u * 1.6, text: `${Math.round(i.colH)}`, off: 0, size: u * 1.2, ext: py + cb })
+  P.push({ kind: 'dim', x1: jx - u * 3.2, y1: py, x2: jx - u * 3.2, y2: py + cb, text: `${Math.round(i.colB)}`, off: 0, size: u * 1.2, ext: jx })
 
   // ═══ notes and the title block, below both views ═════════════════════════
   const bodyBottom = py + cb + spanRun + u * 3.4

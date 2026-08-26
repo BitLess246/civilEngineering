@@ -16,6 +16,7 @@
 // pass the result in.
 // ─────────────────────────────────────────────────────────────────────────
 import type { PlanPrimitive } from './planRenderer'
+import { extensionLines } from './planRenderer'
 
 const INK = '#1e293b'
 const NOTE = '#475569'
@@ -89,6 +90,8 @@ export function measureBounds(prims: PlanPrimitive[], seed?: Bounds): Bounds {
       const hw = (vertical ? p.size : tw) / 2, hh = (vertical ? tw : p.size) / 2
       xs = [p.x1 - tick, p.x2 + tick, mx - hw, mx + hw]
       ys = [p.y1 - tick, p.y2 + tick, my - p.size * 0.35 - hh, my - p.size * 0.35 + hh]
+      // …and the extension lines, which reach back to the feature
+      for (const e of extensionLines(p)) { xs.push(e.x1, e.x2); ys.push(e.y1, e.y2) }
     }
     else if (p.kind === 'rect') { xs = [p.x, p.x + p.w]; ys = [p.y, p.y + p.h] }
     else if (p.kind === 'circle') { xs = [p.cx - p.r, p.cx + p.r]; ys = [p.cy - p.r, p.cy + p.r] }

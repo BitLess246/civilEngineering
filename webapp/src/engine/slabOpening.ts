@@ -459,9 +459,11 @@ export function buildSlabOpeningDetail(i: SlabOpeningInput, opts: SlabOpeningDet
 
   // ── dimensions: a full chain each way, so the opening is set out ──
   const dimY = ly + u * 3.2, dimX = lx + u * 3.2
+  // `ext` reaches back to the far edge of the panel, so each link of the chain
+  // is tied to the opening face or panel edge it is set out from.
   const chain = (a: number, c: number, horiz: boolean) => P.push(horiz
-    ? { kind: 'dim', x1: a, y1: dimY, x2: c, y2: dimY, text: `${Math.round((c - a) * 1000)}`, off: 0, size: u * 1.5 }
-    : { kind: 'dim', x1: dimX, y1: a, x2: dimX, y2: c, text: `${Math.round((c - a) * 1000)}`, off: 0, size: u * 1.5 })
+    ? { kind: 'dim', x1: a, y1: dimY, x2: c, y2: dimY, text: `${Math.round((c - a) * 1000)}`, off: 0, size: u * 1.5, ext: ly }
+    : { kind: 'dim', x1: dimX, y1: a, x2: dimX, y2: c, text: `${Math.round((c - a) * 1000)}`, off: 0, size: u * 1.5, ext: lx })
   chain(0, b.x0, true); chain(b.x0, b.x1, true); chain(b.x1, lx, true)
   chain(0, b.y0, false); chain(b.y0, b.y1, false); chain(b.y1, ly, false)
 
