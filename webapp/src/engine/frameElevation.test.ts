@@ -190,6 +190,22 @@ describe('buildFrameElevation', () => {
     }
   })
 
+  it('puts the grid bubbles ABOVE the drawing, where a reader looks first', () => {
+    // Below, they had the span dimensions and every beam's schedule stacked on
+    // top of them, and the framing plans carry theirs above.
+    const beams = bundles.find((x) => x.key === 'frame-a-3-20')!.input.members
+    const top = Math.min(...beams.map((m) => -m.yTop))     // page-Y of the highest concrete
+    const circles = d.primitives.filter((p) => p.kind === 'circle') as { cy: number; cx: number }[]
+    // one per grid position, all of them above the concrete. The fourth circle
+    // on the sheet is the title block's own detail bubble, far below.
+    expect(circles.filter((c) => c.cy < top)).toHaveLength(3)
+    expect(circles.filter((c) => c.cy > top)).toHaveLength(1)
+    // …and the span dimensions stay BELOW it, so the two never share a lane
+    const dims = d.primitives.filter((p) => p.kind === 'dim'
+      && Math.abs((p as { y1: number; y2: number }).y1 - (p as { y2: number }).y2) < 1e-9) as { y1: number }[]
+    expect(Math.max(...dims.map((x) => x.y1))).toBeGreaterThan(top)
+  })
+
   it('carries the general-notes pointer and nothing else in prose', () => {
     // The rulebook lives on S-01; this sheet says so in one line and stops.
     const notes = textsOf(d).filter((t) => t.startsWith('REFER TO'))

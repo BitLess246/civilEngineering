@@ -172,3 +172,66 @@ describe('the sheet', () => {
     expect(Math.abs(endL - endR)).toBeLessThan(d.bounds.maxY * 0.25)
   })
 })
+
+describe('what the per-member elevations added to the rules', () => {
+  const all = generalNoteSections(job).flatMap((x) => x.lines).join(' ')
+  const checks = constructionChecks().flatMap((x) => x.lines).join(' ')
+
+  it('states the level convention, which is a setting-out instruction', () => {
+    // The node is the TOP of the beam, so a soffit is its own depth below the
+    // stated level. Formwork set from the soffit is a whole beam depth out, and
+    // nothing else on the sheet says so.
+    expect(all).toMatch(/A FLOOR LEVEL IS THE TOP OF THE BEAMS AT IT/)
+    expect(all).toMatch(/SET THE FORMWORK OFF THE LEVEL, NOT OFF THE SOFFIT/)
+    expect(checks).toMatch(/SOFFIT LEVEL SET FROM THE FLOOR LEVEL LESS THE BEAM DEPTH/)
+  })
+
+  it('sends the reader to the frame elevations, and says there is no typical beam', () => {
+    expect(all).toMatch(/FRAME ELEVATION: ONE SHEET PER GRID LINE PER FLOOR/)
+    expect(all).toMatch(/THERE IS NO "TYPICAL BEAM" SHEET/)
+  })
+
+  it('says how to read a stirrup schedule — spaces, in order, from the left face', () => {
+    expect(all).toMatch(/MEANS SPACES, NOT BARS, LAID OUT FROM THE LEFT SUPPORT FACE/)
+    expect(all).toMatch(/EXACT NUMBER OF STIRRUPS IN THAT BEAM/)
+    expect(checks).toMatch(/HOOP COUNT AGAINST THE TOTAL ON THE ELEVATION/)
+  })
+
+  it('names both splice zones, and which face each belongs to', () => {
+    expect(all).toMatch(/TOP STEEL IS LAPPED IN THE MIDDLE HALF OF THE SPAN/)
+    expect(all).toMatch(/BEAM BOTTOM STEEL IN AN END QUARTER/)
+    expect(all).toMatch(/COLUMN VERTICALS ARE LAPPED WITHIN THE CENTRE HALF OF THE STOREY/)
+    expect(checks).toMatch(/NEVER THE OTHER WAY ROUND/)
+  })
+
+  it('makes the closed-up hoops at a lap a hold point, not a saving', () => {
+    expect(all).toMatch(/CLOSED UP TO 100 C\/C THROUGH THE LENGTH OF EVERY LAP SPLICE/)
+    expect(all).toMatch(/NOT EXTRA STEEL TO BE SAVED/)
+    expect(checks).toMatch(/CLOSED-UP 100 C\/C BAND PRESENT AT EVERY LAP/)
+  })
+
+  it('forbids trimming a column projection to suit the formwork', () => {
+    expect(all).toMatch(/MAY NOT BE CUT BACK TO SUIT FORMWORK/)
+    expect(checks).toMatch(/PROJECTION ABOVE THE FLOOR MEASURED AND RECORDED/)
+  })
+
+  it('tells the bender to cut to the figure, not to the nearest half metre', () => {
+    expect(all).toMatch(/CUT TO THE FIGURE SHOWN/)
+  })
+
+  it('actually prints the new rules on the sheet, not just in the data', () => {
+    // The notes are numbered and wrapped into two balanced columns, so a line
+    // added to `generalNoteSections` without checking is a line that can be
+    // silently dropped or pushed off the sheet.
+    const flat = textOf(buildGeneralNotes(job)).join(' ').replace(/\s+/g, ' ')
+    for (const phrase of [
+      'A FLOOR LEVEL IS THE TOP OF THE BEAMS AT IT',
+      'THERE IS NO "TYPICAL BEAM" SHEET',
+      'MEANS SPACES, NOT BARS',
+      'MAY NOT BE CUT BACK TO SUIT FORMWORK',
+      'CUT TO THE FIGURE SHOWN',
+    ]) {
+      expect(flat, phrase).toContain(phrase.split(' ').slice(0, 4).join(' '))
+    }
+  })
+})

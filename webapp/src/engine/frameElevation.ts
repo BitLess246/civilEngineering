@@ -356,10 +356,14 @@ export function buildFrameElevation(
     kind: 'text', x: uMax + u * 2.7, y: Y(i.y) - u * 0.3,
     text: `EL ${i.y.toFixed(2)}`, size: u * 0.85, anchor: 'start', color: SHEET_NOTE,
   })
-  const bubbleY = hi + u * 9.8, r = u * 1.05
+  // The bubbles go ABOVE the drawing, where the framing plans carry them and
+  // where a reader looks for them: a grid reference is the first thing you find
+  // on a sheet, not the last. Below, they had the span dimensions and every
+  // beam's schedule stacked on top of them.
+  const bubbleY = lo - u * 3.4, r = u * 1.05
   for (const g of i.grids) {
     P.push({
-      kind: 'line', x1: g.u, y1: lo - u * 1.2, x2: g.u, y2: bubbleY - r,
+      kind: 'line', x1: g.u, y1: bubbleY + r, x2: g.u, y2: hi + u * 1.2,
       stroke: SHEET_GRID, width: 0.6, dash: [u * 0.45, u * 0.3],
     })
     P.push({ kind: 'circle', cx: g.u, cy: bubbleY, r, stroke: SHEET_INK, fill: '#fff', width: 0.8 })
@@ -574,7 +578,7 @@ export function buildFrameElevation(
 
   const bandNote = notesBlock({
     lines: [seeGeneralNotes()],
-    x: uMin, top: hi + u * 12.2, w: uMax - uMin, size: u * 0.8, color: SHEET_NOTE,
+    x: uMin, top: hi + u * 9.6, w: uMax - uMin, size: u * 0.8, color: SHEET_NOTE,
   })
   P.push(...bandNote.prims)
 
