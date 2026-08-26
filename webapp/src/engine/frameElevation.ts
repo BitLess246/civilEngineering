@@ -285,14 +285,30 @@ export function angledLeader(o: {
     const tx = anchor(side)
     return side === 'right' ? [tx - w, tx] : [tx, tx + w]
   }
-  const fits = (side: 'left' | 'right') => {
-    if (!o.within) return true
+  const over = (side: 'left' | 'right') => {
+    if (!o.within) return 0
     const [a, b] = span(side)
-    return a >= o.within[0] - 1e-9 && b <= o.within[1] + 1e-9
+    return Math.max(0, o.within[0] - a) + Math.max(0, b - o.within[1])
   }
   const other = o.side === 'right' ? 'left' : 'right'
-  const side = fits(o.side) || !fits(other) ? o.side : other
-  return leader({ ...o, side, tx: anchor(side) })
+  const side = over(o.side) <= over(other) ? o.side : other
+
+  // A LABEL WIDER THAN THE ROOM ITS 45° LEG LEAVES.
+  //
+  // A long schedule under a short bay can overrun on both sides, and then the
+  // choice is between a label lying across the next column and a leg at some
+  // other angle. The angle gives: the anchor slides back inside, and the leg
+  // simply gets steeper. What does NOT give is the TURN — the knee may never
+  // pass the target, because that is the fold this function exists to prevent.
+  // With no room even for that, the 45° stands and the overrun is reported by
+  // the sheet's own bounds rather than hidden by a folded leader.
+  let tx = anchor(side)
+  if (o.within && over(side) > 0) {
+    const lo = side === 'right' ? o.within[0] + w : o.x + knee
+    const hi = side === 'right' ? o.x - knee : o.within[1] - w
+    if (lo <= hi) tx = Math.min(hi, Math.max(lo, tx))
+  }
+  return leader({ ...o, side, tx })
 }
 
 /**
@@ -340,7 +356,7 @@ export function buildFrameElevation(
     kind: 'text', x: uMax + u * 2.7, y: Y(i.y) - u * 0.3,
     text: `EL ${i.y.toFixed(2)}`, size: u * 0.85, anchor: 'start', color: SHEET_NOTE,
   })
-  const bubbleY = hi + u * 8.6, r = u * 1.05
+  const bubbleY = hi + u * 9.8, r = u * 1.05
   for (const g of i.grids) {
     P.push({
       kind: 'line', x1: g.u, y1: lo - u * 1.2, x2: g.u, y2: bubbleY - r,
@@ -376,7 +392,7 @@ export function buildFrameElevation(
   // ── annotation ─────────────────────────────────────────────────────────
   // Beams get a leader to the middle of their own span; columns a mark under
   // the bubble. Every callout is one line: the size, and the steel in it.
-  const dimY = hi + u * 6.4
+  const dimY = hi + u * 7.6
   const beams = i.members.filter((x) => x.role === 'beam').sort((a, b) => a.u0 - b.u0)
   // The depth is dimensioned ONCE, clear of the sheet at its left edge. Drawn
   // per beam it lands on the column between them, which is where the reader is
@@ -396,38 +412,71 @@ export function buildFrameElevation(
       kind: 'dim', x1: m.u0, y1: dimY, x2: m.u1, y2: dimY,
       text: `${Math.round((m.u1 - m.u0) * 1000)}`, off: 0, size: u * 0.85, ext: Y(m.yBot),
     })
-    // ABOVE the beam: what it is, and what is in it. Counted off the cage, so
-    // "4-⌀20 TOP THRU" means four bars really do run through on the sheet.
+    // Counted off the cage, so "4-⌀20 TOP THRU" means four bars really do run
+    // through on the sheet.
     const face = (t: FaceTally, what: string) => t.thru || t.extra
       ? [`${t.thru}-⌀${t.dia} ${what} THRU`, ...(t.extra ? [`+ ${t.extra} EXTRA`] : [])].join(' ')
       : ''
-    // ABOVE the beam, a type unit clear of it — not half a storey away at the
-    // edge of the band, where the reader has to hunt for which member it names.
-    // It points at the TOP STEEL, a third of the way along, so two adjacent
-    // beams' labels sit in their own bays instead of meeting over the column.
-    P.push(...angledLeader({
-      x: m.u0 + (m.u1 - m.u0) / 3, y: Y(m.yTop) + depth * 0.12,
-      // Bounded to its OWN bay, not to the sheet: a label free to slide the
-      // width of the drawing ends up over the next beam's column, naming a
-      // member two bays away as far as the eye can tell.
-      ty: Y(m.yTop) - u * 2.6, side: 'right', within: [m.u0, m.u1],
-      text: `${m.mark}  ${m.bw}×${m.d}`,
-      text2: [face(top, 'TOP'), face(bot, 'BOT.')].filter(Boolean).join(' · '),
-      size: u * 0.85, color: SHEET_INK,
-    }))
+    // A LEADER NAMES WHAT IT POINTS AT, and nothing else.
+    //
+    // One callout used to point at the top steel and then recite both faces,
+    // so the reader was told about a bar the arrow was nowhere near and had no
+    // way to tell which of the two the arrowhead meant. Each face gets its own
+    // leader to its own bars now, and the member's mark — which is about the
+    // MEMBER, not about any one bar — is a plain label with no arrow at all.
+    //
+    // Each is bounded to its OWN bay: a label free to slide the width of the
+    // drawing ends up over the next beam's column, naming a member two bays
+    // away as far as the eye can tell.
+    const span = m.u1 - m.u0
+    // The CLEAR span, not the bay: a beam runs centreline to centreline, so
+    // half a column sits inside each end of it and a label allowed the full bay
+    // comes to rest on top of one.
+    const bracket = (u: number) => i.members.filter((x) => x.role === 'column'
+      && x.u0 <= u + 1e-6 && x.u1 >= u - 1e-6)
+    const left = bracket(m.u0), right = bracket(m.u1)
+    const room: [number, number] = [
+      left.length ? Math.max(...left.map((c) => c.u1)) : m.u0,
+      right.length ? Math.min(...right.map((c) => c.u0)) : m.u1,
+    ]
+    P.push({
+      kind: 'text', x: (m.u0 + m.u1) / 2, y: Y(m.yTop) - u * 4.4,
+      text: `${m.mark}  ${m.bw}×${m.d}`, size: u * 0.9,
+      anchor: 'middle', color: SHEET_INK, weight: 700,
+    })
+    if (top.thru || top.extra) {
+      P.push(...angledLeader({
+        x: m.u0 + span * 0.3, y: Y(m.yTop) + depth * 0.12,
+        ty: Y(m.yTop) - u * 1.9, side: 'right', within: room,
+        text: face(top, 'TOP'), size: u * 0.85, color: SHEET_INK,
+      }))
+    }
+    if (bot.thru || bot.extra) {
+      P.push(...angledLeader({
+        x: m.u0 + span * 0.7, y: Y(m.yBot) - depth * 0.12,
+        ty: Y(m.yBot) + u * 1.9, side: 'left', within: room,
+        text: face(bot, 'BOT.'), size: u * 0.85, color: SHEET_INK,
+      }))
+    }
 
     // BELOW the beam: the stirrup schedule, measured off the stirrups.
     const stirrups = own.flatMap((c) => transverseStations(c, i.plane))
       .filter((v) => v >= m.u0 - 1e-6 && v <= m.u1 + 1e-6)
     const dia = own[0]?.runs.find((r) => r.role === 'stirrup')?.dia
     if (stirrups.length > 1 && dia) {
-      // BELOW the soffit, pointing at a real stirrup two thirds along — the
-      // opposite third from the bar callout, so the two legs never cross.
+      // ON a stirrup, at MID-DEPTH near the middle of the span.
+      //
+      // At the cover line a stirrup's leg lies on top of the longitudinal bar
+      // it wraps, so an arrow landing there names either of them equally — the
+      // callout said STIRRUPS while pointing at what looked like the bottom
+      // bar. Halfway down the web the vertical legs stand alone, and an arrow
+      // on one can only be pointing at a stirrup.
+      const mid = (m.u0 + m.u1) / 2
       const at = stirrups.reduce((best, v) =>
-        Math.abs(v - (m.u0 + (2 * (m.u1 - m.u0)) / 3)) < Math.abs(best - (m.u0 + (2 * (m.u1 - m.u0)) / 3)) ? v : best)
+        Math.abs(v - mid) < Math.abs(best - mid) ? v : best)
       P.push(...angledLeader({
-        x: at, y: Y(m.yBot) - depth * 0.12,
-        ty: Y(m.yBot) + u * 1.6, side: 'left', within: [m.u0, m.u1],
+        x: at, y: (Y(m.yTop) + Y(m.yBot)) / 2,
+        ty: Y(m.yBot) + u * 4.6, side: 'right', within: room,
         text: `2L-⌀${dia} STIRRUPS, ${stirrups.length} No.`,
         text2: pitchNote(pitchRuns(stirrups)),
         size: u * 0.8, color: SHEET_INK,
@@ -525,7 +574,7 @@ export function buildFrameElevation(
 
   const bandNote = notesBlock({
     lines: [seeGeneralNotes()],
-    x: uMin, top: hi + u * 11, w: uMax - uMin, size: u * 0.8, color: SHEET_NOTE,
+    x: uMin, top: hi + u * 12.2, w: uMax - uMin, size: u * 0.8, color: SHEET_NOTE,
   })
   P.push(...bandNote.prims)
 

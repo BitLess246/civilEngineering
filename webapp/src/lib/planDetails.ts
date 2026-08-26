@@ -526,9 +526,18 @@ export function frameElevationBundles(
         if (!s) continue
         const cu = coord(c.i)
         const lo = Math.min(pos(c.i)!.y, pos(c.j)!.y), hi = Math.max(pos(c.i)!.y, pos(c.j)!.y)
+        // WHICH SECTION DIMENSION IS IN VIEW.
+        //
+        // `columnCage` lays its bars out as [along h, across b] and puts the
+        // first on global X, so a column's h runs east–west and its b
+        // north–south. An elevation along x therefore sees h and one along z
+        // sees b. Drawn as b either way, a 300×500 column on a lettered line
+        // came out 300 wide with its bars spread 410 — the steel outside its
+        // own concrete, which is what the sheet was showing.
+        const face = g.axis === 'x' ? (s.h ?? s.b) : s.b
         elMembers.push({
           mark: c.id, role: 'column',
-          u0: cu - s.b / 2000, u1: cu + s.b / 2000,
+          u0: cu - face / 2000, u1: cu + face / 2000,
           yBot: Math.max(lo, yLo), yTop: Math.min(hi, yHi),
           bw: s.b, d: s.h ?? s.b, note: bars(c.id),
         })

@@ -137,6 +137,24 @@ describe('frameElevationBundles', () => {
     }
   })
 
+  it('draws the column face that is actually IN VIEW, so its bars fit inside it', () => {
+    // `columnCage` puts the section's h on global X and its b on global Z, so a
+    // lettered line (running in x) sees h and a numbered one sees b. Drawn as b
+    // either way, a 300×500 column on grid A came out 300 wide with its bars
+    // spread 410 — the steel outside its own concrete.
+    for (const [key, want] of [['frame-a-3-20', 500], ['frame-1-3-20', 300]] as const) {
+      const b = bundles.find((x) => x.key === key)!.input
+      const col = b.members.find((m) => m.role === 'column')!
+      expect(Math.round((col.u1 - col.u0) * 1000)).toBe(want)
+      // and every bar of that column's cage really is inside it
+      const cage = b.cages.find((c) => c.member === col.mark)!
+      const us = cage.runs.flatMap((r) => r.path.map((p) =>
+        (p[0] - b.plane.origin[0]) * b.plane.u[0] + (p[2] - b.plane.origin[2]) * b.plane.u[2]))
+      expect(Math.min(...us)).toBeGreaterThanOrEqual(col.u0 - 1e-9)
+      expect(Math.max(...us)).toBeLessThanOrEqual(col.u1 + 1e-9)
+    }
+  })
+
   it('carries the CAGES of everything it draws, and nothing it does not', () => {
     const b = bundles.find((x) => x.key === 'frame-a-3-20')!
     const drawn = new Set(b.input.members.map((m) => m.mark))
@@ -225,11 +243,41 @@ describe('buildFrameElevation', () => {
     const labels = d.primitives.filter((p) => p.kind === 'text'
       && (/STIRRUPS/.test(p.text) || /THRU/.test(p.text) || /^bx/.test(p.text))) as { y: number }[]
     expect(labels.length).toBeGreaterThan(0)
+    const depth = yBot - yTop
     for (const t of labels) {
-      // within one beam depth of the concrete, above it or below it
-      expect(t.y).toBeGreaterThan(yTop - (yBot - yTop))
-      expect(t.y).toBeLessThan(yBot + (yBot - yTop))
+      // within a couple of beam depths of the concrete — the band edge is more
+      // than three away, which is where these used to sit
+      expect(t.y).toBeGreaterThan(yTop - 2 * depth)
+      expect(t.y).toBeLessThan(yBot + 2 * depth)
     }
+  })
+
+  it('gives each FACE its own leader, pointing at its own bars', () => {
+    // One callout that pointed at the top steel and then recited both faces
+    // told the reader about a bar the arrow was nowhere near.
+    const beam = bundles.find((x) => x.key === 'frame-a-3-20')!.input
+      .members.filter((m) => m.role === 'beam').sort((a, b) => a.u0 - b.u0)[0]
+    const yTop = -beam.yTop, yBot = -beam.yBot, depth = yBot - yTop
+    // the arrowhead is the only FILLED path on the sheet — one per leader
+    const heads = d.primitives.filter((p) => p.kind === 'path' && p.fill && p.fill !== 'none'
+      && p.cmds[0].x >= beam.u0 && p.cmds[0].x <= beam.u1) as { cmds: { x: number; y: number }[] }[]
+    const at = (lo: number, hi: number) => heads.filter((h) => h.cmds[0].y > lo && h.cmds[0].y < hi)
+    expect(at(yTop - 1e-9, yTop + depth * 0.3)).toHaveLength(1)         // top steel
+    expect(at(yBot - depth * 0.3, yBot + 1e-9)).toHaveLength(1)         // bottom steel
+    expect(at(yTop + depth * 0.4, yTop + depth * 0.6)).toHaveLength(1)  // a stirrup, mid-depth
+    // …and each says what it is
+    const t = textsOf(d)
+    expect(t.some((x) => /^\d-⌀\d+ TOP THRU/.test(x))).toBe(true)
+    expect(t.some((x) => /^\d-⌀\d+ BOT\. THRU/.test(x))).toBe(true)
+    expect(t.some((x) => /STIRRUPS/.test(x))).toBe(true)
+    // no label names a face it does not point at
+    expect(t.some((x) => /TOP THRU/.test(x) && /BOT\./.test(x))).toBe(false)
+  })
+
+  it('names the member with a plain label, since a mark points at no one bar', () => {
+    const marks = textsOf(d).filter((x) => /^bx[\d.]+ /.test(x))
+    expect(marks).toHaveLength(2)
+    expect(marks[0]).toMatch(/^bx[\d.]+ {2}300×500$/)
   })
 
   it('keeps every callout inside the sheet it is drawn on', () => {
