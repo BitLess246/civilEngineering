@@ -18,6 +18,8 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { PlanPrimitive, PathCmd, Drawing } from './planRenderer'
 import { columnSectionPrimitives } from './columnSection'
+import { SHEET_INK, SHEET_ZONE, STEEL } from './sheetInk'
+import { titleBlock } from './detailSheet'
 
 type Pt = [number, number]
 /** Intersection of the infinite lines p1→p2 and p3→p4 (null if parallel). */
@@ -69,7 +71,7 @@ export interface FootingDetailInput {
 export interface FootingDetailOptions { detailNo?: string; sheetRef?: string; scale?: string }
 export interface DetailDrawing extends Drawing { title: string }
 
-const INK = '#1e293b', COL = '#1e293b', REBAR = '#b45309', HATCH = '#94a3b8', GRID = '#9aa5b5', STONE = '#64748b', PANEL = '#0f766e'
+const INK = SHEET_INK, COL = SHEET_INK, REBAR = STEEL, HATCH = '#94a3b8', STONE = '#64748b', PANEL = SHEET_ZONE
 const RW = 0.8   // rebar outline stroke weight (px) — a thin tube edge, not a filled rod
 
 /** Build a column-footing detail (plan + section) from a designed footing. */
@@ -104,9 +106,6 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
     cmds.push({ c: 'A', rx: r, ry: r, x: L[0][0], y: L[0][1], sweep: 1 })
     P.push({ kind: 'path', cmds, stroke: REBAR, width: RW, fill, closed: true })
   }
-  const ext = (x1: number, y1: number, x2: number, y2: number) =>   // dashed dimension extension line
-    P.push({ kind: 'line', x1, y1, x2, y2, stroke: GRID, width: 0.6, dash: [0.05, 0.04] })
-
   const B = f.B, H = f.H
   const c = f.cover / 1000
   const cw = f.colB / 1000, cd = (f.colH ?? f.colB) / 1000
@@ -174,16 +173,12 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   const pTop = -hp - ts * 1.2, pTop2 = -hp - ts * 2.6
   const xseg = [[-hp, -cw / 2], [-cw / 2, cw / 2], [cw / 2, hp]] as const
   for (const [a, b] of xseg)
-    P.push({ kind: 'dim', x1: a, y1: pTop, x2: b, y2: pTop, text: `${Math.round((b - a) * 1000)}`, off: 0, size: ts * 0.6 })
-  P.push({ kind: 'dim', x1: -hp, y1: pTop2, x2: hp, y2: pTop2, text: `${Math.round(B * 1000)} mm`, off: 0, size: ts * 0.7 })
+    P.push({ kind: 'dim', x1: a, y1: pTop, x2: b, y2: pTop, text: `${Math.round((b - a) * 1000)}`, off: 0, size: ts * 0.6, ext: -hp })
+  P.push({ kind: 'dim', x1: -hp, y1: pTop2, x2: hp, y2: pTop2, text: `${Math.round(B * 1000)} mm`, off: 0, size: ts * 0.7, ext: -hp })
   const pL = -hp - ts * 1.2
   const zseg = [[-hp, -cd / 2], [-cd / 2, cd / 2], [cd / 2, hp]] as const
   for (const [a, b] of zseg)
-    P.push({ kind: 'dim', x1: pL, y1: a, x2: pL, y2: b, text: `${Math.round((b - a) * 1000)}`, off: 0, size: ts * 0.6 })
-  // dashed extension lines at every dimension boundary
-  for (const x of [-hp, -cw / 2, cw / 2, hp]) ext(x, pTop, x, -hp)
-  for (const x of [-hp, hp]) ext(x, pTop2, x, pTop)
-  for (const z of [-hp, -cd / 2, cd / 2, hp]) ext(pL, z, -hp, z)
+    P.push({ kind: 'dim', x1: pL, y1: a, x2: pL, y2: b, text: `${Math.round((b - a) * 1000)}`, off: 0, size: ts * 0.6, ext: -hp })
   void edge
   // labels
   P.push({ kind: 'text', x: 0, y: hp + ts * 1.4, text: `${n}-${f.barDia}mmØ BOTHWAY`, size: ts * 0.7, anchor: 'middle', color: REBAR, weight: 700 })
@@ -257,14 +252,10 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   // depth dimension chain (embedment / footing / gravel) + overall
   const dX = secL - ts * 1.4
   for (const [a, b] of [[gradeZ, footTop], [footTop, footBot], [footBot, gravBot]] as const)
-    P.push({ kind: 'dim', x1: dX, y1: a, x2: dX, y2: b, text: `${Math.round((b - a) * 1000)}`, off: 0, size: ts * 0.6 })
-  P.push({ kind: 'dim', x1: dX - ts * 1.4, y1: gradeZ, x2: dX - ts * 1.4, y2: gravBot, text: `${Math.round((gravBot - gradeZ) * 1000)} mm`, off: 0, size: ts * 0.7 })
+    P.push({ kind: 'dim', x1: dX, y1: a, x2: dX, y2: b, text: `${Math.round((b - a) * 1000)}`, off: 0, size: ts * 0.6, ext: secL })
+  P.push({ kind: 'dim', x1: dX - ts * 1.4, y1: gradeZ, x2: dX - ts * 1.4, y2: gravBot, text: `${Math.round((gravBot - gradeZ) * 1000)} mm`, off: 0, size: ts * 0.7, ext: secL })
   // width dimension below the gravel
-  P.push({ kind: 'dim', x1: secL, y1: gravBot + ts * 1.2, x2: secR, y2: gravBot + ts * 1.2, text: `${Math.round(B * 1000)} mm`, off: 0, size: ts * 0.7 })
-  // dashed extension lines at every section dimension boundary
-  for (const zb of [gradeZ, footTop, footBot, gravBot]) ext(dX, zb, secL, zb)
-  for (const zb of [gradeZ, gravBot]) ext(dX - ts * 1.4, zb, dX, zb)
-  for (const xb of [secL, secR]) ext(xb, gravBot + ts * 1.2, xb, gravBot)
+  P.push({ kind: 'dim', x1: secL, y1: gravBot + ts * 1.2, x2: secR, y2: gravBot + ts * 1.2, text: `${Math.round(B * 1000)} mm`, off: 0, size: ts * 0.7, ext: gravBot })
   // callouts — each leader starts ON the element it names (a dot marks the tap)
   const lead = (ex: number, ey: number, tx: number, ty: number) => {
     P.push({ kind: 'line', x1: ex, y1: ey, x2: tx, y2: ty, stroke: INK, width: 0.5 })
@@ -292,15 +283,13 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   const title = `COLUMN FOOTING DETAIL — ${f.mark}`
   // title sits below BOTH views (the plan runs deeper than the section here)
   const tbR = ts * 1.2, tbY = Math.max(hp + ts * 2.5, gravBot + ts * 2.4) + ts * 2.6, tbX = -hp
-  P.push({ kind: 'circle', cx: tbX + tbR, cy: tbY, r: tbR, stroke: INK, fill: '#fff', width: 1 })
-  P.push({ kind: 'line', x1: tbX, y1: tbY, x2: tbX + 2 * tbR, y2: tbY, stroke: INK, width: 1 })
-  P.push({ kind: 'text', x: tbX + tbR, y: tbY - tbR * 0.5, text: detailNo, size: tbR * 0.72, anchor: 'middle', color: INK, weight: 700 })
-  P.push({ kind: 'text', x: tbX + tbR, y: tbY + tbR * 0.5, text: sheetRef, size: tbR * 0.58, anchor: 'middle', color: INK, weight: 700 })
-  const lnX0 = tbX + 2 * tbR + ts * 0.3, lnX1 = secR
-  P.push({ kind: 'line', x1: lnX0, y1: tbY, x2: lnX1, y2: tbY, stroke: INK, width: 1.4 })
-  P.push({ kind: 'text', x: lnX0 + ts * 0.15, y: tbY - tbR * 0.55, text: title, size: tbR * 0.75, anchor: 'start', color: INK, weight: 700 })
-  P.push({ kind: 'text', x: lnX0 + ts * 0.15, y: tbY + tbR * 0.55, text: 'SCALE', size: tbR * 0.4, anchor: 'start', color: INK, weight: 600 })
-  P.push({ kind: 'text', x: lnX1 - ts * 0.3, y: tbY + tbR * 0.55, text: scale, size: tbR * 0.4, anchor: 'end', color: INK, weight: 600 })
+  // The house block. This sheet used to draw the rule in two pieces — one
+  // across the tag, one under the title, at different widths and with a gap
+  // between them — so the bisector read as cut at both ends.
+  P.push(...titleBlock({
+    x: tbX, w: secR - tbX, top: tbY - tbR, u: tbR / 2.6,
+    title, detailNo, sheetRef, scale,
+  }).prims)
 
   // ══ bounds ══
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity

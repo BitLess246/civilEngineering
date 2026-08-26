@@ -1,3 +1,4 @@
+import { STEEL } from './sheetInk'
 import { describe, it, expect } from 'vitest'
 import {
   shearFrictionSteel, wallMinRatios, wallMaxSpacing, designWallDetail, wrapNote,
@@ -8,7 +9,7 @@ import {
 
 /** Bar paths only. Leaders draw an arrowhead as a filled path in the annotation
  *  ink, so a bare `kind === 'path'` filter counts those as bars too. */
-const REBAR_INK = '#b45309'
+const REBAR_INK = STEEL
 /** The construction-joint line is outline ink, not bar ink. */
 const INK = '#1e293b'
 
@@ -288,7 +289,7 @@ describe('buildWallCornerDetail', () => {
 
   it('draws two curtains of bars on a thick wall and one on a thin one', () => {
     const dots = (x: ReturnType<typeof buildWallCornerDetail>) =>
-      x.primitives.filter((p) => p.kind === 'circle' && p.fill === '#b45309').length
+      x.primitives.filter((p) => p.kind === 'circle' && p.fill === STEEL).length
     const thick = buildWallCornerDetail({ ...wall, t: 300 })
     expect(thick.result.curtains).toBe(2)
     expect(dots(thick)).toBeGreaterThan(dots(d))

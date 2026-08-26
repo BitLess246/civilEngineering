@@ -90,6 +90,11 @@ export interface AnalyzeOptions {
   /** Timoshenko shear deformation: bridge shear areas into the frame elements
    *  (Φ = 12EI/(G·As·L²)). Default off at the API level; UI enables it. */
   shearDeformation?: boolean
+  /** Solve each horizontal beam on its own CENTROID — half its depth below the
+   *  floor level, which is where the detailing and the drawings put it. Default
+   *  OFF everywhere, UI included: it is a real eccentricity and it moves the
+   *  answers (statics is exact either way). See `beamAxisOffsets`. */
+  beamTopOfSteel?: boolean
   /** Column P–M bar layout: 'all-around' models the real cage (side bars as
    *  their own strain layers). Default 'two-face' at the API level; the Model
    *  Space UI enables all-around. */
@@ -991,7 +996,7 @@ function buildRuns(model: StructuralModel, opts: AnalyzeOptions, onProgress?: Pr
   // slab tributary line loads and member self-weight; lateral cases are pure
   // node loads applied on top per direction.
   const gravityModel = { ...model, loads: model.loads.filter((l) => l.cat !== 'E' && l.cat !== 'W') }
-  const br = modelToFrame3D(gravityModel, { useShells: false, crackedSections: opts.crackedSections, shearDeformation: opts.shearDeformation })
+  const br = modelToFrame3D(gravityModel, { useShells: false, crackedSections: opts.crackedSections, shearDeformation: opts.shearDeformation, beamTopOfSteel: opts.beamTopOfSteel })
 
   const lateral = opts.lateral?.length ? opts.lateral : defaultLateralCases(model)
   // expand every combo into its directional variants up front so progress has a total
@@ -1602,7 +1607,7 @@ async function buildRunsParallel(
   neededCombos?: Set<string>,
 ): Promise<{ br: BridgeResult; runs: FrameRun[] }> {
   const gravityModel = { ...model, loads: model.loads.filter((l) => l.cat !== 'E' && l.cat !== 'W') }
-  const br = modelToFrame3D(gravityModel, { useShells: false, crackedSections: opts.crackedSections, shearDeformation: opts.shearDeformation })
+  const br = modelToFrame3D(gravityModel, { useShells: false, crackedSections: opts.crackedSections, shearDeformation: opts.shearDeformation, beamTopOfSteel: opts.beamTopOfSteel })
 
   const lateral = opts.lateral?.length ? opts.lateral : defaultLateralCases(model)
   const tasks = buildComboTasks(lateral, opts)

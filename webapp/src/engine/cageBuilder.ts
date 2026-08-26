@@ -108,16 +108,100 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
     return d
   }
 
-  /** Does another column carry on ABOVE this node? A roof column laps nothing. */
-  const columnAbove = (memberId: string, node: string): boolean => {
+  /** Does a column reach out of this node, up (`+1`) or down (`−1`)? */
+  const columnBeyond = (node: string, way: 1 | -1, exclude?: string): boolean => {
     const here = pos.get(node)
     if (!here) return false
     return model.members.some((m) => {
+      if (m.id === exclude || m.role !== 'column') return false
+      if (m.i !== node && m.j !== node) return false
+      const other = pos.get(m.i === node ? m.j : m.i)
+      return !!other && way * (other.y - here.y) > 1e-6
+    })
+  }
+  /** Does another column carry on ABOVE this node? A roof column laps nothing. */
+  const columnAbove = (memberId: string, node: string) => columnBeyond(node, 1, memberId)
+
+  /**
+   * The section of the column continuing ABOVE a node — what the projecting
+   * bars have to be cranked to meet.
+   *
+   * Where the storey above is smaller its bars stand further in, and a bar
+   * cranked by a fixed diameter never reaches them. Same size, this changes
+   * nothing.
+   */
+  const memberAbove = (memberId: string, node: string) => {
+    const here = pos.get(node)
+    if (!here) return undefined
+    return model.members.find((m) => {
       if (m.id === memberId || m.role !== 'column') return false
       if (m.i !== node && m.j !== node) return false
       const other = pos.get(m.i === node ? m.j : m.i)
       return !!other && other.y > here.y + 1e-6
     })
+  }
+  const sectionAbove = (memberId: string, node: string): RectSection | undefined => {
+    const up = memberAbove(memberId, node)
+    return up ? secOf(up.id) : undefined
+  }
+
+  /**
+   * How far past the floor the bars run before they lap, m — §418.7.4.3.
+   *
+   * A column lap splice belongs in the CENTRE HALF of the column it sits in, so
+   * the bars below carry on up into the storey above and lap there. A quarter
+   * of that column's height puts the lap at the bottom of its middle half; if
+   * the lap is long enough to run out the top of the window it is centred on
+   * the storey instead, which is the best that height allows.
+   */
+  const spliceRiseAbove = (memberId: string, node: string, lap: number): number => {
+    const up = memberAbove(memberId, node)
+    const a = up && pos.get(up.i), b = up && pos.get(up.j)
+    if (!a || !b) return 0
+    const hStorey = Math.abs(b.y - a.y)
+    if (hStorey <= 0) return 0
+    return lap <= hStorey / 2 ? hStorey / 4 : Math.max(0, (hStorey - lap) / 2)
+  }
+
+  /**
+   * A transverse beam at a node, and which way it runs across `mem` — where a
+   * bar with nowhere vertical to hook can turn instead.
+   */
+  const sideBeamAt = (mem: { id: string; i: string; j: string }, node: string): 1 | -1 | undefined => {
+    const here = pos.get(node), a = pos.get(mem.i), b = pos.get(mem.j)
+    if (!here || !a || !b) return undefined
+    const ux = b.x - a.x, uz = b.z - a.z
+    const l = Math.hypot(ux, uz) || 1
+    const px = -uz / l, pz = ux / l                 // across the beam, in plan
+    for (const o of beamsAtNode.get(node) ?? []) {
+      if (o.id === mem.id) continue
+      const far = pos.get(o.i === node ? o.j : o.i)
+      if (!far) continue
+      const across = (far.x - here.x) * px + (far.z - here.z) * pz
+      if (Math.abs(across) > 1e-6) return across > 0 ? 1 : -1
+    }
+    return undefined
+  }
+
+  /**
+   * Where a roof column's hook has to run to pass UNDER the top steel of the
+   * beams framing in, m relative to the node — NEGATIVE, because the node is
+   * the top of the beam and that steel is just below it. The deepest beam
+   * decides.
+   */
+  const beamTopSteelRise = (node: string, colBarDia: number): number | undefined => {
+    const list = beamsAtNode.get(node) ?? []
+    if (!list.length) return undefined
+    let deep: RectSection | undefined
+    for (const m of list) {
+      const bs = secOf(m.id)
+      if (!deep || bs.h > deep.h) deep = bs
+    }
+    if (!deep) return undefined
+    // The beam's top steel sits just under the node, which is the top of the
+    // beam; the column's hook has to go UNDER that steel, so the rise is
+    // negative — the bar turns in below the node, not above it.
+    return -(deep.cover + deep.tieDia + deep.barDia + colBarDia / 2) / 1000
   }
 
   /** Pedestal at a base node, m — the column between the node and the pad top. */
@@ -126,12 +210,15 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
   const cages: RebarCage[] = []
   const unplaced: string[] = []
   /** Splice options for a member, from its own concrete and steel. */
-  const spliceOf = (sec: RectSection, barDia: number, prefer?: number[]) => {
+  const spliceOf = (
+    sec: RectSection, barDia: number,
+    prefer?: number[], preferByRole?: Record<string, number[]>,
+  ) => {
     const dl = calcDevLength({
       db: barDia, fc: sec.fc, fy: sec.fy,
       topBar: false, epoxy: 'none', lambda: 1, cbKtr_db: 2.5,
     })
-    return { stock: STOCK_BAR_LENGTH, lap: dl.ls_B / 1000, prefer }
+    return { stock: STOCK_BAR_LENGTH, lap: dl.ls_B / 1000, prefer, preferByRole }
   }
 
   for (const b of design.beams) {
@@ -142,12 +229,24 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
     const sag = b.sections.filter((s) => !s.hogging)
     const hog = b.sections.filter((s) => s.hogging)
     const spac = b.sections.map((s) => s.design.sAdopt).filter((v) => v > 0)
-    // Bottom steel laps near the SUPPORTS and top steel near MIDSPAN — each
-    // where its own bar is least stressed, the standard "50% of splices on each
-    // side of the support" arrangement. One preference list serves both because
-    // the two are complementary points on the same run.
-    const beamSplice = spliceOf(sec, sec.barDia, [0.08, 0.5, 0.92])
+    // WHERE EACH FACE MAY BE SPLICED — and the two faces are OPPOSITE.
+    //
+    // A top bar is in tension over the supports, so it laps in the MIDDLE HALF
+    // and never in an end quarter. A bottom bar is in tension at midspan, so it
+    // laps in an END QUARTER and never in the middle half. That is the standard
+    // bar-bending sheet's "avoid splicing in this region" on both faces.
+    //
+    // One shared list used to serve both, which offered every bar both zones —
+    // so whichever the geometry picked, half the splices landed in the zone the
+    // rule exists to keep them out of.
+    const beamSplice = spliceOf(sec, sec.barDia, [0.5], {
+      top: [0.5],                       // middle half
+      bottom: [0.125, 0.875],           // end quarters
+    })
     cages.push(spliceCage(buildBeamCage({
+      // The cage is told how its bars WILL be lapped, so it can close the
+      // stirrups up through each lap before it places them.
+      splice: beamSplice,
       mark: b.id, L: b.L,
       colBLeft: colWidthAt(mem.i), colBRight: colWidthAt(mem.j),
       b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, stirrupDia: sec.tieDia,
@@ -157,6 +256,14 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       sMid: spac.length ? Math.max(...spac) : 0,
       continuousLeft: carriesOn(mem, mem.i),
       continuousRight: carriesOn(mem, mem.j),
+      // Which way a hooked bar may turn: a tail leaving the top of the joint
+      // needs a column above to sit in, and at a roof there is none.
+      columnAboveLeft: columnBeyond(mem.i, 1),
+      columnAboveRight: columnBeyond(mem.j, 1),
+      columnBelowLeft: columnBeyond(mem.i, -1),
+      columnBelowRight: columnBeyond(mem.j, -1),
+      sideBeamLeft: sideBeamAt(mem, mem.i),
+      sideBeamRight: sideBeamAt(mem, mem.j),
       // The support's own detailing, so the hook lands at the far face of the
       // confined core rather than at some assumed cover (§418.8.4.1).
       ...(() => {
@@ -164,9 +271,22 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
         const c = cs && secOf(cs.id)
         return c ? { colCover: c.cover, colTieDia: c.tieDia, colBarDia: c.barDia } : {}
       })(),
+      // The column concrete the end hooks develop in, so the cage itself can
+      // say when a bar does not develop — see `BeamCageInput.jointConcrete`.
+      ...(() => {
+        const col = colAt(mem.i) ?? colAt(mem.j)
+        const cs = col && secOf(col.id)
+        return cs && Number.isFinite(cs.fc) && Number.isFinite(cs.fy)
+          ? { jointConcrete: { fc: cs.fc, fy: cs.fy, colH: Math.min(cs.b, cs.h ?? cs.b) } }
+          : {}
+      })(),
       axis: { x0: ni.x, z0: ni.z, x1: nj.x, z1: nj.z },
-      // the node sits at the section centroid, so the soffit is h/2 below it
-      ySoffit: ni.y - sec.h / 2000,
+      // THE NODE IS THE TOP OF THE BEAM.
+      //
+      // It used to be read as the beam's centroid, so half the beam was drawn
+      // above the node — through the column that starts there. A floor level is
+      // the top of the beam, the columns meet at it, and the beam hangs below.
+      ySoffit: ni.y - sec.h / 1000,
     }), beamSplice))
   }
 
@@ -184,6 +304,10 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
     // cage, the concrete and the bill alike.
     const yLo = Math.min(ni.y, nj.y) - (pedestalAt.get(baseNode) ?? 0)
     const jd = beamDepthAt(topNode)
+    // …and the joint at the BASE, where a column starts at a floor rather than
+    // on a footing. `yLo` is the pedestal bottom; the joint is at the node.
+    const yLo0 = Math.min(ni.y, nj.y)
+    const baseJd = beamDepthAt(baseNode)
     // §25.5.5 compression lap, only where a column actually continues above.
     const lap = columnAbove(c.id, topNode)
       ? calcDevLength({
@@ -193,14 +317,32 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       : 0
     cages.push(spliceCage(buildColumnCage({
       mark: c.id, b: sec.b, h: sec.h, cover: sec.cover, spliceLap: lap,
+      spliceRise: lap > 0 ? spliceRiseAbove(c.id, topNode, lap / 1000) : 0,
       barDia: sec.barDia, bars: c.bars, tieDia: sec.tieDia,
       sConfined: c.tieSpacingFinal > 0 ? c.tieSpacingFinal : c.tieSpacing,
       sOutside: c.seismicSOut ?? c.tieSpacing,
       lo: c.seismicLoZone ?? 0,
       centre: [ni.x, ni.z],
       yBottom: yLo, yTop: yHi,
-      // the joint band at the top, which the joint's own hoops own (§418.8.3)
-      jointGap: jd > 0 ? [yHi - jd / 2, yHi + jd / 2] : undefined,
+      // The joint band at EACH end that has one, which the joint's own hoops
+      // own (§418.8.3). Only the top used to be cleared, so at every floor the
+      // column starting there re-filled the band the column below had left
+      // empty and the joint came out with both sets through it.
+      // The beam hangs BELOW its node, so the joint band is the depth under it.
+      jointGaps: [
+        ...(jd > 0 ? [[yHi - jd, yHi] as [number, number]] : []),
+        ...(baseJd > 0 ? [[yLo0 - baseJd, yLo0] as [number, number]] : []),
+      ],
+      // Nothing above to lap onto: the bar develops itself instead, turning in
+      // under the beam's top steel (§425.4.2 and the standard roof detail).
+      topHookRise: lap > 0 ? undefined : beamTopSteelRise(topNode, sec.barDia),
+      // The bars above, so a reduction in column size cranks to meet them.
+      ...(() => {
+        const up = sectionAbove(c.id, topNode)
+        return up && (up.b !== sec.b || (up.h ?? up.b) !== (sec.h ?? sec.b))
+          ? { above: { b: up.b, h: up.h ?? up.b, cover: up.cover, barDia: up.barDia, tieDia: up.tieDia } }
+          : {}
+      })(),
       // A vertical is already lapped at the floor; a stock splice only appears
       // in a storey tall enough to need one, and belongs low, clear of the
       // hinge zone at the top.

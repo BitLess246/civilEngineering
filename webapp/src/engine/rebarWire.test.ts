@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   runPoints, runPolylines, filletCorner, tubeFromPolyline, hookTailLength, REBAR_ROLE_COLOR,
+  selfClearance, HOOK_TURN_DEG,
 } from './rebarWire'
 import {
   bendRadius, hookBendDiameter, stirrupBendDiameter, stirrupHookAllowance,
@@ -91,58 +92,86 @@ describe('runPoints', () => {
   })
 })
 
-describe('hook tails on a closed tie', () => {
+describe('the hook: one curl at the corner, two straight tails', () => {
   const tie = {
     mark: 'T1', dia: 10, role: 'tie' as const, member: 'C1',
     path: [[0, 0, 0], [0.3, 0, 0], [0.3, 0, 0.3], [0, 0, 0.3]] as Vec3[],
     bendDia: [40, 40, 40, 40], closed: true,
     hookAllowance: stirrupHookAllowance(10), count: 1,
   }
+  const [bar, ...rest] = runPolylines(tie)
+  const sub = (p: Vec3, q: Vec3): Vec3 => [q[0] - p[0], q[1] - p[1], q[2] - p[2]]
+  const unit = (p: Vec3, q: Vec3): Vec3 => {
+    const d = sub(p, q), l = Math.hypot(d[0], d[1], d[2])
+    return [d[0] / l, d[1] / l, d[2] / l]
+  }
+  const turnOf = (u: Vec3, w: Vec3) =>
+    (Math.acos(Math.max(-1, Math.min(1, u[0] * w[0] + u[1] * w[1] + u[2] * w[2]))) * 180) / Math.PI
 
-  it('a closed tie that carries hooks draws them — the loop plus two tails', () => {
-    // Stored as a length for the bill, the two 135° hooks were never drawn, so
-    // every tie in the 3D view was a bare rectangle with no ends.
-    expect(runPolylines(tie).length).toBe(3)
-    expect(runPolylines({ ...tie, hookAllowance: undefined }).length).toBe(1)
-    expect(runPolylines({ ...tie, closed: false }).length).toBe(1)
+  it('is ONE bar — a tie is cut from stock and bent, never joined', () => {
+    expect(rest).toHaveLength(0)
+    expect(bar.length).toBeGreaterThan(8)
+    // a closed run with no hooks is still just its own loop
+    expect(runPolylines({ ...tie, hookAllowance: undefined })).toHaveLength(1)
+    // an OPEN transverse bar — a cross tie — comes back as one bar too
+    expect(runPolylines({ ...tie, closed: false })).toHaveLength(1)
   })
 
-  it('each tail is max(6d_t, 75 mm) long and starts at the corner the ends meet at', () => {
-    const [, a, b] = runPolylines(tie)
-    for (const t of [a, b]) {
-      expect(t.length).toBe(2)
-      expect(t[0]).toEqual(tie.path[0])
-      expect(Math.hypot(t[1][0] - t[0][0], t[1][1] - t[0][1], t[1][2] - t[0][2]))
-        .toBeCloseTo(hookTailLength(10), 9)
-    }
+  it('steps aside far enough to lie TANGENT to itself, never through itself', () => {
+    // Steel cannot pass through steel. Both ends finish at corner 0 and each
+    // hook sweeps 135° back across the leg the other arrives on, so the bar
+    // leans out of plane until its closest pass with itself is exactly its own
+    // diameter — touching, not overlapping.
+    const y0 = bar[0][1], y1 = bar[bar.length - 1][1]
+    expect(Math.abs(y1 - y0)).toBeGreaterThanOrEqual(selfClearance(10) - 1e-12)
+    expect(y0).toBeCloseTo(-y1, 9)                  // centred on the level it sits at
+    const cum = [0]
+    for (let k = 1; k < bar.length; k++)
+      cum.push(cum[k - 1] + Math.hypot(...bar[k].map((c, a) => c - bar[k - 1][a])))
+    const total = cum[cum.length - 1]
+    let closest = Infinity
+    for (let a = 0; a < bar.length; a++)
+      for (let b = a + 1; b < bar.length; b++) {
+        if ((cum[b] - cum[a]) / total < 1 / 3) continue
+        closest = Math.min(closest, Math.hypot(...bar[b].map((c, k) => c - bar[a][k])))
+      }
+    expect(closest).toBeGreaterThanOrEqual(selfClearance(10) - 1e-9)
+    expect(closest).toBeLessThan(selfClearance(10) * 1.001)   // and no further than it must
   })
 
-  it('both tails turn 135° from the leg they fold off', () => {
-    const [, a, b] = runPolylines(tie)
-    const dir = (p: Vec3[]) => {
-      const d = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]]
-      const l = Math.hypot(...d)
-      return d.map((c) => c / l)
-    }
-    // the leg arriving at the corner, and the one leaving it
-    const arrive = [0, 0, -1]                          // from path[3] to path[0]
-    const leave = [1, 0, 0]                            // from path[0] to path[1]
-    const turnOf = (u: number[], v: number[]) =>
-      (Math.acos(Math.max(-1, Math.min(1, u[0] * v[0] + u[1] * v[1] + u[2] * v[2]))) * 180) / Math.PI
-    expect(turnOf(arrive, dir(a))).toBeCloseTo(135, 6)
-    expect(turnOf(leave.map((c) => -c), dir(b))).toBeCloseTo(135, 6)
+  it('leans the whole way round rather than kinking at one place', () => {
+    // The bar is bent at its corners and nowhere else, so the step aside can
+    // only be a lean — a kink somewhere along a leg is a bend nobody made.
+    const way = Math.sign(bar[bar.length - 1][1] - bar[0][1])
+    for (let k = 1; k < bar.length; k++)
+      expect(way * (bar[k][1] - bar[k - 1][1])).toBeGreaterThan(-1e-12)
   })
 
-  it('the tails point INTO the core, never out through the cover', () => {
-    // The tie is in the y = 0 plane with its core at (0.15, 0, 0.15); a hook
-    // folded the wrong way leaves the section entirely.
-    const [, a, b] = runPolylines(tie)
-    const core = [0.15, 0, 0.15]
-    for (const t of [a, b]) {
-      const before = Math.hypot(t[0][0] - core[0], t[0][2] - core[2])
-      const after = Math.hypot(t[1][0] - core[0], t[1][2] - core[2])
-      expect(after).toBeLessThan(before)
-      expect(Math.abs(t[1][1])).toBeLessThan(1e-9)     // and stay in the tie's plane
+  it('turns 135° at each end and leaves max(6d_t, 75 mm) of straight tail', () => {
+    const first = unit(bar[0], bar[1])
+    const last = unit(bar[bar.length - 2], bar[bar.length - 1])
+    // the leg each hook belongs to: the bar leaves corner 0 along +x and
+    // comes back to it along −z
+    expect(turnOf([1, 0, 0], first)).toBeCloseTo(HOOK_TURN_DEG, 1)
+    expect(turnOf([0, 0, -1], last)).toBeCloseTo(HOOK_TURN_DEG, 1)
+    const flat = (p: Vec3, q: Vec3) => Math.hypot(q[0] - p[0], q[2] - p[2])
+    expect(flat(bar[0], bar[1])).toBeCloseTo(hookTailLength(10), 3)
+    expect(flat(bar[bar.length - 2], bar[bar.length - 1])).toBeCloseTo(hookTailLength(10), 3)
+  })
+
+  it('both tails point INTO the core, never out through the cover', () => {
+    const core = [0.15, 0.15]
+    const closer = (p: Vec3, q: Vec3) =>
+      Math.hypot(q[0] - core[0], q[2] - core[1]) < Math.hypot(p[0] - core[0], p[2] - core[1])
+    expect(closer(bar[1], bar[0])).toBe(true)                       // start tail runs inboard
+    expect(closer(bar[bar.length - 2], bar[bar.length - 1])).toBe(true)
+  })
+
+  it('still reaches every other corner of the loop', () => {
+    for (const c of [[0.3, 0], [0.3, 0.3], [0, 0.3]]) {
+      const near = Math.min(...bar.map((p) => Math.hypot(p[0] - c[0], p[2] - c[1])))
+      // filleted, so the bar passes near the corner rather than through it
+      expect(near).toBeLessThan(0.03)
     }
   })
 })
@@ -201,5 +230,71 @@ describe('a bar swept as a tube', () => {
     expect(tubeFromPolyline([[0, 0, 0]], 0.01, 6).indices.length).toBe(0)
     expect(tubeFromPolyline(straight, 0, 6).indices.length).toBe(0)
     expect(tubeFromPolyline(straight, 0.01, 2).indices.length).toBe(0)
+  })
+})
+
+
+describe('a cross tie is a single-legged stirrup', () => {
+  const cross = {
+    mark: 'C1-X1', dia: 12, role: 'tie' as const, member: 'C1',
+    path: [[0, 0, 0], [0.4, 0, 0]] as Vec3[],
+    bendDia: [], closed: false, wrapDia: 25,
+    hookAllowance: stirrupHookAllowance(12), count: 1,
+  }
+  const R = (25 + 12) / 2000                       // it wraps the bars it grips
+  const bars = runPolylines(cross)
+  const [bar] = bars
+
+  it('is ONE continuous bar, not a leg with two hooks bolted on', () => {
+    expect(bars).toHaveLength(1)
+    expect(bar.length).toBeGreaterThan(8)          // tail, arc, leg, arc, tail
+    expect(runPolylines({ ...cross, hookAllowance: undefined })).toHaveLength(1)
+  })
+
+  it('runs TANGENT to both bars, not from centre to centre', () => {
+    // The steel passes to one side of each bar and comes back along the other.
+    const across = bar.map((q) => q[2])
+    expect(Math.min(...across)).toBeCloseTo(-R, 6)
+    expect(Math.max(...across)).toBeCloseTo(R, 6)
+    // the straight leg runs between the two bars offset a full radius off the
+    // line through their centres — it passes them, it does not end on them
+    const has = (x: number, z: number) =>
+      bar.some((q) => Math.abs(q[0] - x) < 1e-9 && Math.abs(q[2] - z) < 1e-9)
+    expect(has(0, -R)).toBe(true)                  // leg, at the first bar
+    expect(has(0.4, -R)).toBe(true)                // …and at the second
+    expect(has(0, 0)).toBe(false)                  // never on a bar centre
+    expect(has(0.4, 0)).toBe(false)
+  })
+
+  it('turns a full 180° AROUND each bar, at the bar itself', () => {
+    // Turned about a point beside the bar the curl grips nothing and the bar
+    // ends up on the end of a straight leg.
+    for (const b of [cross.path[0], cross.path[1]]) {
+      const round = bar.filter((q) => Math.abs(Math.hypot(q[0] - b[0], q[2] - b[2]) - R) < 1e-6)
+      expect(round.length).toBeGreaterThan(6)      // an arc's worth of points
+      // and it reaches a full radius PAST the bar, which only a 180° turn does
+      const beyond = b[0] === 0 ? Math.min(...bar.map((q) => q[0])) : Math.max(...bar.map((q) => q[0]))
+      expect(Math.abs(beyond - b[0])).toBeCloseTo(R, 6)
+    }
+  })
+
+  it('both tails run back along the leg, on the same side', () => {
+    const first = bar[0], second = bar[1]
+    const last = bar[bar.length - 1], prev = bar[bar.length - 2]
+    expect(first[2]).toBeCloseTo(last[2], 9)            // same side
+    expect(Math.abs(first[2])).toBeCloseTo(R, 6)
+    // each tail points back INBOARD, and is the code length
+    expect(Math.sign(first[0] - second[0])).toBe(1)
+    expect(Math.sign(last[0] - prev[0])).toBe(-1)
+    for (const [a, b] of [[first, second], [last, prev]] as const) {
+      expect(Math.hypot(a[0] - b[0], a[2] - b[2])).toBeCloseTo(hookTailLength(12), 9)
+    }
+  })
+
+  it('a bar too short to turn round twice is left straight', () => {
+    // Two bars a hair apart cannot take a U at each end; a bar bent through
+    // more than its own length is worse than a plain one.
+    const tiny = { ...cross, path: [[0, 0, 0], [0.03, 0, 0]] as Vec3[] }
+    expect(runPolylines(tiny)[0]).toHaveLength(2)
   })
 })

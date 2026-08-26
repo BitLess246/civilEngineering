@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel } from './modelBuilder'
-import { buildPlan, planToSvg, type PlanPrimitive } from './planRenderer'
+import { buildPlan, planToSvg, extensionLines, type PlanPrimitive } from './planRenderer'
+import { measureBounds } from './detailSheet'
 import type { RectSection } from './model'
 
 const section: RectSection = { id: 'S1', name: '400×400', b: 400, h: 400, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
@@ -195,5 +196,59 @@ describe('planRenderer — foundation plan with designed footings', () => {
 
   it('tags each footing with its ELEV when foundingElev is given', () => {
     expect(texts(f.primitives).some((s) => s === 'EL -1.50 m')).toBe(true)
+  })
+})
+
+describe('dimension extension lines', () => {
+  const dim = (o: Partial<Extract<PlanPrimitive, { kind: 'dim' }>> = {}) => ({
+    kind: 'dim' as const, x1: 0, y1: 10, x2: 4, y2: 10, text: '4000', off: 0, size: 1, ...o,
+  })
+
+  it('draws nothing for a dimension that does not say what it measures', () => {
+    expect(extensionLines(dim())).toEqual([])
+  })
+
+  it('runs one line from each END of the dimension back towards the feature', () => {
+    // A horizontal dimension at y = 10 measuring something at y = 2: the lines
+    // are vertical, one under each end.
+    const e = extensionLines(dim({ ext: 2 }))
+    expect(e).toHaveLength(2)
+    expect(e.map((l) => l.x1)).toEqual([0, 4])
+    for (const l of e) expect(l.x1).toBe(l.x2)          // vertical
+  })
+
+  it('leaves a gap off the feature and overshoots the dimension line', () => {
+    // Drafting convention, and what makes it read as an extension line rather
+    // than as more geometry: it never touches the thing it points at, and it
+    // visibly crosses the dimension it belongs to.
+    const [l] = extensionLines(dim({ ext: 2, size: 1 }))
+    expect(l.y1).toBeCloseTo(2 + 0.45, 9)              // gap off the feature
+    expect(l.y2).toBeCloseTo(10 + 0.55, 9)             // past the dimension line
+  })
+
+  it('works the other way round when the feature is BEYOND the dimension', () => {
+    const [l] = extensionLines(dim({ ext: 20 }))
+    expect(l.y1).toBeCloseTo(20 - 0.45, 9)
+    expect(l.y2).toBeCloseTo(10 - 0.55, 9)
+  })
+
+  it('turns with a VERTICAL dimension', () => {
+    const e = extensionLines(dim({ x1: 10, y1: 0, x2: 10, y2: 4, ext: 2 }))
+    expect(e).toHaveLength(2)
+    expect(e.map((l) => l.y1)).toEqual([0, 4])
+    for (const l of e) expect(l.y1).toBe(l.y2)         // horizontal
+  })
+
+  it('draws nothing where the dimension sits hard against what it measures', () => {
+    // Gap plus overshoot would be longer than the line itself — a stub that
+    // reads as a tick, not an extension line.
+    expect(extensionLines(dim({ ext: 9.5 }))).toEqual([])
+  })
+
+  it('is counted in the sheet bounds, so it is never clipped', () => {
+    const near = measureBounds([dim({ ext: 2 })])
+    const far = measureBounds([dim({ ext: -30 })])
+    expect(far.minY).toBeLessThan(near.minY)
+    expect(far.minY).toBeLessThanOrEqual(-30 + 0.45)
   })
 })

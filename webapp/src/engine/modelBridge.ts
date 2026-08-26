@@ -9,6 +9,7 @@ import type { F3Node, F3Member, F3Support, F3Load, F3DiaphragmGroup, F3Shell } f
 import { rectJ, defaultAxisRotation } from './frame3d'
 import { buildDiaphragmGroups } from './diaphragm'
 import { autoRigidOffsets } from './rigidEndZones'
+import { beamAxisOffsets, addOffsets } from './beamAxisOffsets'
 import { distributePanel, type AreaLoad } from './tributary'
 import type { BeamLoad } from './beamAnalysis'
 import { shapeByName, torsionJ, type AiscShape } from './aiscSections'
@@ -251,6 +252,18 @@ export interface BridgeOpts {
    *  Off by default at the API level so closed-form Euler benchmarks stay
    *  anchored; the Model Space UI enables it by default. */
   shearDeformation?: boolean
+  /**
+   * Solve the frame on each horizontal beam's CENTROID rather than on the node
+   * line, by hanging it half its depth below the level — which is where the
+   * detailing and the drawings put it (`cageBuilder`, `frameElevation`).
+   *
+   * Off by default: a beam framed half a depth below the joint is a real
+   * eccentricity, not a redraw. Statics is untouched — a rigid arm carries
+   * force without consuming any — but each column now sees the couple of the
+   * beam's end forces on that arm, and the answers move with it. See
+   * `beamAxisOffsets`.
+   */
+  beamTopOfSteel?: boolean
 }
 
 export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): BridgeResult {
@@ -263,10 +276,15 @@ export function modelToFrame3D(model: StructuralModel, opts?: BridgeOpts): Bridg
   // Automatic rigid end zones from connectivity (ETABS-style); manual member
   // offsets always win over the auto value, per end.
   const auto = model.rigidEndZones ? autoRigidOffsets(model, model.rigidZoneFactor ?? 0.5) : null
+  // …and the drop from the floor level to a beam's own centroid, which is the
+  // one the drawings hang it from. Independent of the rigid arm — that one runs
+  // along the member, this one runs down — so the two SUM.
+  const drop = opts?.beamTopOfSteel ? beamAxisOffsets(model) : null
   const members: F3Member[] = model.members.map((m) => {
     const a = auto?.get(m.id)
-    const offI = m.offsets?.iEnd ?? a?.offI
-    const offJ = m.offsets?.jEnd ?? a?.offJ
+    const d = drop?.get(m.id)
+    const offI = addOffsets(m.offsets?.iEnd ?? a?.offI, d)
+    const offJ = addOffsets(m.offsets?.jEnd ?? a?.offJ, d)
     // local-axis rotation: explicit wins; verticals default to 90° so the
     // analysis strong-axis orientation matches the drawn one (depth d → X)
     const ni = nm.get(m.i), nj = nm.get(m.j)

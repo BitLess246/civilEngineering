@@ -19,18 +19,28 @@ import type { Drawing } from '../engine/planRenderer'
 import { buildPlan } from '../engine/planRenderer'
 import { buildFootingDetail } from '../engine/footingDetail'
 import { buildColumnDetail } from '../engine/columnDetail'
-import { buildBeamDetail } from '../engine/beamDetail'
 import { buildSlabOpeningDetail } from '../engine/slabOpening'
 import { buildWallCornerDetail, buildWallIntersectionDetail, buildWallJointDetail } from '../engine/wallDetail'
 import { buildBeamColumnJointDetail } from '../engine/beamColumnJoint'
+import { buildGeneralNotes, GENERAL_NOTES_REF, type GeneralNotesInput } from '../engine/generalNotes'
+import { FOOTING_COVER } from '../engine/cageBuilder'
+
+/** §420.6.1.3.1 — clear cover to slab steel not exposed to earth, mm. This is
+ *  what `slabDDM` details to; the model carries no per-slab cover. */
+const SLAB_COVER = 20
 import {
-  footingsForPlan, footingDetailBundles, columnDetailBundles, beamDetailBundles,
-  slabOpeningBundles, wallDetailBundles, jointDetailBundles, type SoilInput,
+  footingsForPlan, footingDetailBundles, columnDetailBundles,
+  slabOpeningBundles, wallDetailBundles, jointDetailBundles, frameElevationBundles,
+  type SoilInput,
 } from './planDetails'
+import { buildFrameElevation } from '../engine/frameElevation'
+import { buildStructureCages } from '../engine/cageBuilder'
 
 export type SheetGroup =
-  | 'Plans' | 'Beam details' | 'Column details' | 'Footing details'
+  | 'General notes'
+  | 'Plans' | 'Column details' | 'Footing details'
   | 'Slab opening details' | 'Wall standard details' | 'Beam–column joint details'
+  | 'Frame elevations'
 
 export interface PlanSheet {
   /** Stable identity — also the SVG download file stem. */
@@ -57,10 +67,11 @@ const FLOOR_ORD = ['Ground', 'Second', 'Third', 'Fourth', 'Fifth', 'Sixth', 'Sev
 export function floorName(k: number): string { return `${FLOOR_ORD[k - 1] ?? `${k}th`} Floor` }
 
 const REF: Record<SheetGroup, string> = {
-  'Plans': 'S-02',
+  'General notes': GENERAL_NOTES_REF,
+  'Plans': 'S-03',
   'Footing details': 'S-05',
   'Column details': 'S-06',
-  'Beam details': 'S-07',
+  'Frame elevations': 'S-04',
   'Slab opening details': 'S-08',
   'Wall standard details': 'S-09',
   'Beam–column joint details': 'S-10',
@@ -82,7 +93,7 @@ export function planSheets(model: StructuralModel, design: StructureDesign | nul
   idxs.forEach((level, i) => {
     const name = floorName(level)
     const d = buildPlan(model, {
-      kind: 'framing', level, detailNo: '1', sheetRef: `S-${2 + i}`,
+      kind: 'framing', level, detailNo: '1', sheetRef: `S-${3 + i}`,
       title: `${name} FRAMING PLAN`.toUpperCase(),
     })
     if (!d) return
@@ -91,7 +102,7 @@ export function planSheets(model: StructuralModel, design: StructureDesign | nul
 
   if (design) {
     const d = buildPlan(model, {
-      kind: 'foundation', detailNo: '1', sheetRef: 'S-1',
+      kind: 'foundation', detailNo: '1', sheetRef: 'S-02',
       footings: footingsForPlan(design),
       foundingElev: soil.H != null ? -Math.abs(soil.H) : undefined,
     })
@@ -105,15 +116,24 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
   const out: PlanSheet[] = []
   const ref = (g: SheetGroup) => opts.sheetRefs?.[g] ?? REF[g]
 
-  beamDetailBundles(model, design).forEach((b, i) => {
+  // FRAME ELEVATIONS come before the per-member details: they are the sheets
+  // that show a member in its frame, and the typical details that follow are
+  // read against them. Every bar on them is the cage's own — the same objects
+  // the 3D scene paints and the bar schedule counts.
+  const { cages } = buildStructureCages(model, design)
+  frameElevationBundles(model, design, cages).forEach((b, i) => {
+    const drawing = buildFrameElevation(b.input, {
+      detailNo: String(i + 1), sheetRef: ref('Frame elevations'), project: model.name,
+    })
     out.push({
-      key: `beam-detail-${slug(b.mark)}`, group: 'Beam details',
-      title: `${b.mark} — ${b.detail.b}×${b.detail.h}`,
-      subtitle: `span ${b.detail.L.toFixed(2)} m`,
-      warnings: [],
-      drawing: buildBeamDetail(b.detail, { detailNo: String(i + 1), sheetRef: ref('Beam details') }),
+      key: b.key, group: 'Frame elevations',
+      title: `Grid ${b.line} — ${b.level}`,
+      subtitle: `${b.input.members.filter((m) => m.role === 'beam').length} beams, ${b.input.grids.length} columns`,
+      warnings: drawing.designNotes,
+      drawing,
     })
   })
+
 
   columnDetailBundles(model, design).forEach((b, i) => {
     out.push({
@@ -146,7 +166,7 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
       key: `slab-opening-${slug(b.mark)}`, group: 'Slab opening details',
       title: `${b.mark} — ${w}×${h} opening`,
       subtitle: `${d.result.x.eachSide}-⌀${b.detail.barDia} + ${d.result.y.eachSide}-⌀${b.detail.barDia} ea. side`,
-      warnings: d.result.notes,
+      warnings: d.designNotes,
       drawing: d,
     })
   })
@@ -159,7 +179,7 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
       key: `beam-column-joint-${slug(b.mark)}`, group: 'Beam–column joint details',
       title: d.title,
       subtitle: `col ${b.detail.colB}×${b.detail.colH} · beam ${b.detail.beamB}×${b.detail.beamH} ⌀${b.detail.beamBarDia}`,
-      warnings: d.result.notes,
+      warnings: d.designNotes,
       drawing: d,
     })
   })
@@ -186,9 +206,46 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
   return out
 }
 
-/** Plans then details — the whole set, in sheet order. */
+/**
+ * The GENERAL NOTES sheet — the rules, once, on the first sheet.
+ *
+ * Its inputs are read off the model rather than typed: the cover, bar sizes and
+ * material strengths the schedule of measures quotes are the ones the job
+ * actually uses, so a table row can never describe a bar nobody detailed.
+ */
+export function generalNotesSheet(model: StructuralModel): PlanSheet {
+  const secs = model.sections as Partial<Record<keyof GeneralNotesInput, never>> &
+    { fc?: number; fy?: number; barDia?: number; tieDia?: number; cover?: number; role?: string }[]
+  const num = (pick: (s: typeof secs[number]) => number | undefined) =>
+    [...new Set(secs.map(pick).filter((v): v is number => typeof v === 'number' && v > 0))]
+  const covers = num((s) => s.cover)
+  // One cover per member kind. The model carries a cover per SECTION, not per
+  // role, so the beam/column figure is what the sections say and the slab and
+  // footing figures are the code minima this app details to.
+  const cover = {
+    beam: Math.min(...covers, 40), column: Math.max(...covers, 40),
+    slab: SLAB_COVER, footing: FOOTING_COVER,
+  }
+  const i: GeneralNotesInput = {
+    fc: num((s) => s.fc), fy: num((s) => s.fy),
+    barDias: num((s) => s.barDia), tieDias: num((s) => s.tieDia),
+    cover, seismic: true,
+  }
+  return {
+    key: 'general-notes', group: 'General notes', title: 'General structural notes',
+    subtitle: 'materials, cover, bends, laps, and the construction hold points',
+    warnings: [],
+    // The ref is NOT overridable: every detail sheet carries a line pointing
+    // at it by name, and a set where the pointer and the sheet disagree is
+    // worse than one with no pointer at all.
+    drawing: buildGeneralNotes(i, { detailNo: '1', sheetRef: GENERAL_NOTES_REF, project: model.name }),
+  }
+}
+
+/** Notes, then plans, then details — the whole set, in sheet order. */
 export function buildSheetSet(model: StructuralModel, design: StructureDesign | null, soil: SoilInput = {}, opts: SheetSetOptions = {}): PlanSheet[] {
   return [
+    generalNotesSheet(model),
     ...planSheets(model, design, soil),
     ...(design ? detailSheets(model, design, soil, opts) : []),
   ]

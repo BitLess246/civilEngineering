@@ -17,9 +17,11 @@
 // Units: plan dimensions, covers and bar sizes mm; positions and lengths m.
 // ─────────────────────────────────────────────────────────────────────────
 import {
-  stirrupBendDiameter, stirrupHookAllowance, placedBarCount, hookBendDiameter,
+  stirrupBendDiameter, placedBarCount, hookBendDiameter,
+  closedTieClosureAllowance, crossTieHookAllowance, turnAngles,
   type RebarCage, type RebarRun, type Vec3,
 } from './rebarModel'
+import { supplementaryTies } from './columnTies'
 
 export interface ColumnCageInput {
   /** Column mark — every bar in the cage carries it. */
@@ -50,23 +52,66 @@ export interface ColumnCageInput {
   yBottom: number
   yTop: number
   /**
-   * A band of the column carrying no ties of its own, m — the depth of a beam
-   * framing in. The joint's own hoops belong to the joint (§418.8.3) and are
+   * Bands of the column carrying no ties of their own, m — the depth of a beam
+   * framing in, at each end that has one. The joint's own hoops belong to the joint (§418.8.3) and are
    * drawn by whatever owns it, so placing column ties there too would draw the
    * steel twice and pay for it twice.
    */
-  jointGap?: [number, number]
+  jointGaps?: [number, number][]
   /**
    * Lap splice projecting ABOVE `yTop`, mm — the compression splice of §25.5.5,
    * which the caller computes (`devLength.lsc`) because this module designs
    * nothing. Zero or omitted where no column continues above, e.g. at a roof.
    */
   spliceLap?: number
+  /**
+   * The column ABOVE, where it is not the same size — its plan dimensions and
+   * cover/bar/tie, mm. The projecting bar is cranked to meet the bar it laps
+   * onto, not merely a diameter inboard.
+   *
+   * A reduction in column size is the ordinary case that needs this: the bar
+   * above stands further in, and the bar below has to reach it. Cranked by a
+   * fixed diameter the two never met, and the drawing showed a lap between
+   * bars in different places.
+   */
+  above?: { b: number; h: number; cover?: number; barDia?: number; tieDia?: number }
+  /**
+   * Where a column that STOPS here turns its bars in, m relative to `yTop` —
+   * negative to turn them in below it, which is where the beam's top steel is.
+   *
+   * A roof column laps onto nothing, and its verticals were drawn simply
+   * ending at the top of the member. A bar that stops is not anchored:
+   * §425.4.2 wants it developed, and the standard roof-joint detail turns it
+   * 90° into the beam and runs ℓext = 12·db across, passing UNDER the beam's
+   * top steel so the column bar and the beam bar hold each other. Set this to
+   * put that leg just below the beam's top bars. Ignored where `spliceLap` is
+   * non-zero, because then the bar carries on instead.
+   */
+  topHookRise?: number
+  /**
+   * How far ABOVE `yTop` the lap onto the column above begins, m —
+   * ACI 318-14 §18.7.4.3 / NSCP §418.7.4.3.
+   *
+   * A column lap splice must sit within the CENTRE HALF of the member length,
+   * so the bars below run on past the floor into the middle of the storey above
+   * before lapping. Left at zero the lap starts at the floor itself, which is
+   * the end quarter — the high-tensile-stress zone under lateral load, and
+   * exactly where the rule forbids it. The 2D column sheet has drawn the centre
+   * -half splice window all along; only the cage disagreed.
+   */
+  spliceRise?: number
 }
 
 /** ACI 318-14 §10.7.4.1 — the inclined part of an offset bend may not be
  *  steeper than 1 in 6, so the crank runs six diameters for one across. */
 export const OFFSET_BEND_SLOPE = 6
+
+/** §410.7.4.5 — past this offset the bar may not be bent at all: the column
+ *  above is dowelled instead, and the dowels lap with the bars below. mm. */
+export const OFFSET_DOWEL_LIMIT = 75
+
+/** Table 425.3.1 — straight extension beyond a standard 90° hook, in bar Ø. */
+export const HOOK_EXTENSION = 12
 
 /** Distance from a face to the centre of the bar behind it, mm. */
 export const barInset = (cover: number, tieDia: number, barDia: number) =>
@@ -118,10 +163,16 @@ export function perimeterBars(i: Pick<ColumnCageInput, 'b' | 'h' | 'cover' | 'ba
  *
  * Tight within `lo` of each end — that is where the plastic hinge forms and
  * where §418.7.5 asks for the close spacing — and wider through the middle.
- * A tie that would land inside `jointGap` is dropped: that band belongs to the
- * joint hoops.
+ * A tie that would land inside a `jointGaps` band is dropped: that band belongs
+ * to the joint hoops.
+ *
+ * There is one band at each END that has a joint, not just at the top. A column
+ * only ever cleared the joint above it, so at every floor the column starting
+ * there filled the band the column below had deliberately left empty — the
+ * joint came out with column ties AND joint hoops through it, drawn twice and
+ * paid for twice.
  */
-export function tieLevels(i: Pick<ColumnCageInput, 'yBottom' | 'yTop' | 'lo' | 'sConfined' | 'sOutside' | 'jointGap'>): number[] {
+export function tieLevels(i: Pick<ColumnCageInput, 'yBottom' | 'yTop' | 'lo' | 'sConfined' | 'sOutside' | 'jointGaps'>): number[] {
   const y0 = Math.min(i.yBottom, i.yTop), y1 = Math.max(i.yBottom, i.yTop)
   const H = y1 - y0
   if (H <= 0) return []
@@ -134,8 +185,8 @@ export function tieLevels(i: Pick<ColumnCageInput, 'yBottom' | 'yTop' | 'lo' | '
   for (let y = y0; y <= y1 + 1e-9; y += spacingAt(y)) out.push(Math.min(y, y1))
   if (out.length === 0 || Math.abs(out[out.length - 1] - y1) > 1e-9) out.push(y1)
 
-  const gap = i.jointGap
-  return out.filter((y) => !gap || y < Math.min(...gap) - 1e-9 || y > Math.max(...gap) + 1e-9)
+  const gaps = i.jointGaps ?? []
+  return out.filter((y) => gaps.every((g) => y < Math.min(...g) - 1e-9 || y > Math.max(...g) + 1e-9))
 }
 
 /**
@@ -147,8 +198,48 @@ export function tieLevels(i: Pick<ColumnCageInput, 'yBottom' | 'yTop' | 'lo' | '
  * sit at different levels, so they are separate runs too; `count` is reserved
  * for copies that share a shape AND a position, which in a cage means none.
  */
+/** The same loop, started `k` corners round — how a hook is moved from one
+ *  corner to the next without changing the bar. */
+export function rotateLoop<T>(loop: T[], k: number): T[] {
+  if (loop.length === 0) return loop
+  const n = ((k % loop.length) + loop.length) % loop.length
+  return [...loop.slice(n), ...loop.slice(0, n)]
+}
+
+/**
+ * Push a tie's corners OUT off the bars they wrap.
+ *
+ * A supplementary tie is specified by the bars it engages, but the bar sits
+ * inside the curl — so the tie's own corner is further out, by exactly enough
+ * that its arc of radius `R` is centred on the bar. For an included angle θ
+ * that offset is R/sin(θ/2) along the outward bisector.
+ *
+ * Placed ON the bars, as they were, the tie's centreline ran straight through
+ * them: two bars in the same space, and the restraint drawn as an intersection
+ * rather than a grip.
+ */
+export function wrapCorners(pts: [number, number][], R: number): [number, number][] {
+  const n = pts.length
+  if (n < 3) return pts
+  return pts.map((c, i) => {
+    const p = pts[(i - 1 + n) % n], q = pts[(i + 1) % n]
+    const u = [p[0] - c[0], p[1] - c[1]], v = [q[0] - c[0], q[1] - c[1]]
+    const lu = Math.hypot(u[0], u[1]), lv = Math.hypot(v[0], v[1])
+    if (lu < 1e-9 || lv < 1e-9) return c
+    const un = [u[0] / lu, u[1] / lu], vn = [v[0] / lv, v[1] / lv]
+    const theta = Math.acos(Math.min(1, Math.max(-1, un[0] * vn[0] + un[1] * vn[1])))
+    const bx = un[0] + vn[0], bz = un[1] + vn[1]
+    const lb = Math.hypot(bx, bz)
+    const sin = Math.sin(theta / 2)
+    if (lb < 1e-9 || sin < 1e-6) return c
+    const d = R / sin
+    return [c[0] - (bx / lb) * d, c[1] - (bz / lb) * d] as [number, number]
+  })
+}
+
 export function buildColumnCage(i: ColumnCageInput): RebarCage {
   const runs: RebarRun[] = []
+  const notes: string[] = []
   const [cx, cz] = i.centre
   const y0 = Math.min(i.yBottom, i.yTop), y1 = Math.max(i.yBottom, i.yTop)
 
@@ -162,27 +253,86 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
   // nowhere to happen.
   const ins = barInset(i.cover, i.tieDia, i.barDia)
   const xhF = Math.max(0, i.h / 2 - ins), zbF = Math.max(0, i.b / 2 - ins)
+  // Where the bars of the column ABOVE stand. Same size unless told otherwise.
+  const up = i.above
+  const upIns = up
+    ? barInset(up.cover ?? i.cover, up.tieDia ?? i.tieDia, up.barDia ?? i.barDia)
+    : ins
+  const upXhF = up ? Math.max(0, up.h / 2 - upIns) : xhF
+  const upZbF = up ? Math.max(0, up.b / 2 - upIns) : zbF
   const lap = Math.max(0, i.spliceLap ?? 0) / 1000
+  // §418.7.4.3 — the lap onto the column above starts inside the CENTRE HALF of
+  // that column, not at the floor. Only meaningful where there IS a lap.
+  const rise = lap > 0 ? Math.max(0, i.spliceRise ?? 0) : 0
   const onFace = (v: number, face: number) => face > 0 && Math.abs(Math.abs(v) - face) < 1e-6
 
   perimeterBars(i).forEach(([dx, dz], k) => {
     const x = cx + dx / 1000, z = cz + dz / 1000
     const path: Vec3[] = [[x, y0, z]]
     const bendDia: number[] = []
-    // A bar is cranked only on the faces it actually sits against: a corner bar
-    // moves in on both axes, a mid-face bar only off its own face.
-    const ox = onFace(dx, xhF) ? (-Math.sign(dx) * i.barDia) / 1000 : 0
-    const oz = onFace(dz, zbF) ? (-Math.sign(dz) * i.barDia) / 1000 : 0
+    // How far the bar has to move to meet the one it laps onto.
+    //
+    // Where the column above is the same size that is one diameter, to stand
+    // clear of it. Where the column above is SMALLER the bar has to reach all
+    // the way in to the upper bar's own line, which is what makes the crank on
+    // a size reduction the shape it is — and what a fixed one-diameter offset
+    // never drew.
+    const step = (v: number, face: number, upFace: number) => {
+      if (!onFace(v, face)) return 0
+      const target = Math.min(Math.abs(v), upFace)          // the bar above
+      return (-Math.sign(v) * Math.max(i.barDia, Math.abs(v) - target)) / 1000
+    }
+    const ox = step(dx, xhF, upXhF)
+    const oz = step(dz, zbF, upZbF)
     // 1 in 6 applies to the BAR, so the run is six times the resultant offset.
     // Six diameters per axis would put a corner bar — which moves in on both —
     // on a 1-in-4.2 slope, steeper than §10.7.4.1 permits.
     const crankRun = OFFSET_BEND_SLOPE * Math.hypot(ox, oz)
-    if (lap > 0 && crankRun > 0 && y1 - y0 > crankRun && (ox !== 0 || oz !== 0)) {
+    // §410.7.4.5 — past 75 mm the bar may not be bent to reach the one above;
+    // the column above is dowelled and the dowels lap with these bars. The
+    // cage says so rather than drawing a bend nobody is allowed to make.
+    const offsetMm = Math.hypot(ox, oz) * 1000
+    if (offsetMm > OFFSET_DOWEL_LIMIT + 1e-9) {
+      if (!notes.some((n) => n.includes('may not be bent'))) {
+        notes.push(`the column reduces by more than the bars can be cranked — a ${Math.round(offsetMm)} mm offset, past the ${OFFSET_DOWEL_LIMIT} mm of §410.7.4.5, so the bars may not be bent; dowel the column above and lap the dowels with these bars`)
+      }
+      path.push([x, y1 + rise + lap, z])
+    } else if (lap > 0 && crankRun > 0 && y1 - y0 > crankRun && (ox !== 0 || oz !== 0)) {
       const D = hookBendDiameter(i.barDia)
-      path.push([x, y1 - crankRun, z], [x + ox, y1, z + oz], [x + ox, y1 + lap, z + oz])
+      // the crank is finished by the floor; the straight run above it carries
+      // the bar up into the splice window
+      path.push([x, y1 - crankRun, z], [x + ox, y1, z + oz], [x + ox, y1 + rise + lap, z + oz])
       bendDia.push(D, D)
+    } else if (lap <= 0 && i.topHookRise != null) {
+      // ── the roof hook ────────────────────────────────────────────────────
+      // Nothing above to lap onto, so the bar has to develop itself. It turns
+      // 90° in under the beam's top steel and runs its extension across, which
+      // is what makes the joint close: the column bar hooks over the beam's
+      // bars and the beam's bars hook down past the column's.
+      // Not clamped to zero: the node is the TOP of the beam, so the hook
+      // turns in BELOW it, under the beam's own top steel.
+      const yh = y1 + i.topHookRise
+      // Inward, along whichever axis leaves the most room: from where the bar
+      // stands to the bar line on the far side. Turning along the axis the bar
+      // sits FURTHEST out on looks right for a corner bar and is wrong for one
+      // mid-face, which has no run at all that way and the whole half-width the
+      // other.
+      const runX = Math.abs(dx) + xhF
+      const runZ = Math.abs(dz) + zbF
+      const ax = runX >= runZ
+      const room = ax ? runX : runZ
+      const want = HOOK_EXTENSION * i.barDia
+      const reach = Math.min(want, room) / 1000
+      if (reach < want / 1000 - 1e-9) {
+        notes.push(`the top hook turns in ${Math.round(reach * 1000)} mm, short of the ${HOOK_EXTENSION}db = ${Math.round(want)} mm extension Table 425.3.1 asks for — the column is not deep enough to lay the bar across`)
+      }
+      const away = (v: number) => (v !== 0 ? -Math.sign(v) : 1)
+      const tx = ax ? away(dx) * reach : 0
+      const tz = ax ? 0 : away(dz) * reach
+      path.push([x, yh, z], [x + tx, yh, z + tz])
+      bendDia.push(hookBendDiameter(i.barDia))
     } else {
-      path.push([x, y1 + lap, z])
+      path.push([x, y1 + rise + lap, z])
     }
     runs.push({
       mark: `${i.mark}-V${k + 1}`,
@@ -200,23 +350,73 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
   const tx = Math.max(0, i.h / 2 - i.cover - i.tieDia / 2) / 1000
   const tz = Math.max(0, i.b / 2 - i.cover - i.tieDia / 2) / 1000
   const D = stirrupBendDiameter(i.tieDia)
+  /** Centre-to-centre radius of a tie bent around a longitudinal bar, mm —
+   *  what it is drawn to, and so what its hooks are billed at. */
+  const R = (i.barDia + i.tieDia) / 2
+  const hoop: Vec3[] = [
+    [cx - tx, 0, cz - tz], [cx + tx, 0, cz - tz],
+    [cx + tx, 0, cz + tz], [cx - tx, 0, cz + tz],
+  ]
+  // §425.7.2.3 / §418.7.5.2 — what the bars themselves ask for beyond the hoop.
+  const extra = supplementaryTies(perimeterBars(i), i.barDia)
+
+  // ── one SET of ties, stacked ────────────────────────────────────────────
+  //
+  // The hoop and every supplementary tie at a level are separate bars laid on
+  // top of one another, not co-planar: each rests on the last, a diameter
+  // apart. Drawn all at the same y they interpenetrated at every shared corner
+  // — four bars occupying one bar's space. The stack is centred on the level,
+  // so `sConfined` / `sOutside` stay centre-of-set to centre-of-set, which is
+  // what a spacing on a schedule means.
+  const setSize = 1 + extra.ties.length
+  const stackAt = (j: number) => ((j - (setSize - 1) / 2) * i.tieDia) / 1000
+
   tieLevels(i).forEach((y, k) => {
+    const yh = y + stackAt(0)
     runs.push({
       mark: `${i.mark}-T${k + 1}`,
       dia: i.tieDia,
       role: 'tie',
       member: i.mark,
-      path: [
-        [cx - tx, y, cz - tz], [cx + tx, y, cz - tz],
-        [cx + tx, y, cz + tz], [cx - tx, y, cz + tz],
-      ] as Vec3[],
+      // §418.7.5.3 — successive ties have their hooks at DIFFERENT corners.
+      // Stacked in one corner every hook in the column lands on the same two
+      // bars, and the splitting they resist is left unrestrained everywhere
+      // else. Rotating the loop's start rotates the corner they meet at.
+      path: rotateLoop(hoop, k).map(([x, , z]) => [x, yh, z] as Vec3),
       bendDia: [D, D, D, D],
       closed: true,
-      // the two 135° hooks the closed loop's vertices cannot express
-      hookAllowance: stirrupHookAllowance(i.tieDia),
+      wrapDia: i.barDia,
+      // the two 135° hooks the closed loop's vertices cannot express — and
+      // the 90° bend it deducts at that corner, which the bar never makes
+      hookAllowance: closedTieClosureAllowance(turnAngles(hoop, true)[0], R, i.tieDia),
       count: 1,
     })
+    extra.ties.forEach((t, j) => {
+      // Closed ties wrap the bars at their corners. A cross tie ENDS at its
+      // bars — pushing its ends outward to wrap them put the ends, and the
+      // hooks beyond them, outside the hoop and through the cover.
+      const plan = t.closed ? wrapCorners(t.corners, R) : t.corners
+      const yj = y + stackAt(j + 1)
+      const pts = plan.map(([dx, dz]) => [cx + dx / 1000, yj, cz + dz / 1000] as Vec3)
+      runs.push({
+        mark: `${i.mark}-${t.kind === 'cross' ? 'X' : t.kind === 'diamond' ? 'D' : 'I'}${k + 1}.${j + 1}`,
+        dia: i.tieDia,
+        role: 'tie',
+        member: i.mark,
+        path: t.closed ? rotateLoop(pts, k) : (k % 2 ? [...pts].reverse() : pts),
+        bendDia: pts.map(() => D),
+        closed: t.closed,
+        wrapDia: i.barDia,
+        // A cross tie is a single bar hooked at BOTH ends (§425.3.2), but it
+        // is not a loop: each end turns a full 180° around the bar it grips.
+        hookAllowance: t.closed
+          ? closedTieClosureAllowance(turnAngles(pts, true)[0], R, i.tieDia)
+          : crossTieHookAllowance(R, i.tieDia),
+        count: 1,
+      })
+    })
   })
+  for (const n of extra.notes) notes.push(n)
 
-  return { member: i.mark, runs }
+  return { member: i.mark, runs, ...(notes.length ? { notes } : {}) }
 }
