@@ -24,8 +24,14 @@ export function WorkedSolution({ steps, title = 'Calculation report — worked s
       </div>
       <ol className="px-1 py-1.5">
         {steps.map((s, i) => (
-          <li key={i} className="print-avoid-break grid grid-cols-[1fr_120px] gap-4 border-b border-[#f3f1ea] px-3 py-3 last:border-0">
-            <div>
+          // minmax(0,…) on the wide track, not 1fr: a grid track's automatic
+          // minimum is its CONTENT, so one long equation stretched the column
+          // past the card instead of scrolling inside it, and carried the
+          // clause margin out over the border with it. `min-w-0` says the same
+          // thing to the child, which is what actually lets `overflow-x-auto`
+          // below take effect.
+          <li key={i} className="print-avoid-break grid grid-cols-[minmax(0,1fr)_120px] gap-4 border-b border-[#f3f1ea] px-3 py-3 last:border-0">
+            <div className="min-w-0">
               <h3 className="text-[12.5px] font-bold text-[#0f1b2a]">
                 <span className="mr-1.5 font-mono font-semibold text-[#a39d8d]">{i + 1}</span>{s.title}
               </h3>

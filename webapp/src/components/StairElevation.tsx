@@ -15,7 +15,7 @@
 // Geometry only. Nothing here decides anything; `engine/stair` does.
 // ─────────────────────────────────────────────────────────────────────────
 
-import { flightGeometry, MARGIN } from './stairLayout'
+import { flightGeometry, along, MARGIN, type Pt } from './stairLayout'
 
 const INK = '#37526e'
 const CONC = '#eef3f8'
@@ -40,20 +40,49 @@ export interface StairElevationProps {
   distBars?: string
   /** How the flight is held, so the supports draw correctly. */
   support: 'simple' | 'one-end' | 'both-ends'
+  /** Landing length each end, mm. 0 draws the flight alone, as before. */
+  landing?: number
+  /** How far the steel carries past each re-entrant corner, mm. */
+  ext?: number
+  /** Landing bar callout, where it differs from the flight's. */
+  landingBars?: string
 }
 
 export function StairElevation({
   span, t, R, G, thetaDeg, mainBars, distBars, support,
+  landing = 0, ext = 450, landingBars,
 }: StairElevationProps) {
   const th = (thetaDeg * Math.PI) / 180
-  const { W, HT, MT, x0, y0, x1, y1, tv, nx, ny, nSteps, profile, flight, scale: s } =
-    flightGeometry(span, t, R, G, thetaDeg)
+  const g = flightGeometry(span, t, R, G, thetaDeg, landing)
+  const { W, HT, MT, x0, y0, x1, y1, tv, nx, ny, nSteps, profile, flight, scale: s } = g
+  const { lowLanding, upLanding, soffitLine, topLine } = g
   const ML = MARGIN.left
-  const pt = (p: readonly [number, number]) => `${p[0]},${p[1]}`
+  const pt = (p: Pt) => `${p[0]},${p[1]}`
+  const poly = (ps: Pt[]) => ps.map(pt).join(' ')
+
+  // The bar layers: the two faces pulled in by the cover, which is what the
+  // steel actually follows. Drawn as ONE polyline each so the turn at the
+  // landing reads as a bent bar rather than two bars meeting.
+  const cov = tv * 0.18
+  const inset = (line: Pt[], dir: 1 | -1): Pt[] => line.map(([x, y]) => [x, y + dir * cov] as Pt)
+  const botBar = inset(soffitLine, -1)
+  const topBar = inset(topLine, 1)
+
+  /** The 450 extension each side of a corner, as a dimension line. */
+  const extAt = (line: Pt[], k: number, label: string, side: 1 | -1) => {
+    const a = line[k]
+    const back = along(a, line[k - 1], ext, s)
+    const fwd = along(a, line[k + 1], ext, s)
+    return { a, back, fwd, label, side }
+  }
 
   return (
     <svg viewBox={`0 0 ${W} ${HT}`} className="mx-auto block h-auto w-full"
       style={{ fontFamily: 'Arial, sans-serif' }}>
+      {/* the landings, same waist, butting the flight's vertical end faces */}
+      {lowLanding.length > 0 && <polygon points={poly(lowLanding)} fill={CONC} stroke={INK} strokeWidth={1.6} />}
+      {upLanding.length > 0 && <polygon points={poly(upLanding)} fill={CONC} stroke={INK} strokeWidth={1.6} />}
+
       {/* the flight, filled as one piece of concrete */}
       <polygon points={flight.map(pt).join(' ')} fill={CONC} stroke="none" />
 
@@ -71,17 +100,60 @@ export function StairElevation({
       <polygon points={flight.map(pt).join(' ')} fill="none" stroke={INK}
         strokeWidth={1.6} strokeLinejoin="miter" />
 
-      {/* main steel — parallel to the flight, in the tension face at the soffit */}
-      <line x1={x0} y1={y0 - tv * 0.22} x2={x1} y2={y1 - tv * 0.22}
-        stroke={MAIN} strokeWidth={2.2} strokeLinecap="round" />
+      {/* ── main steel: BOTH faces, carried through the landings ──────────
+          The flight's tension face is the soffit at midspan and the TOP at each
+          support, and a stair turns at a re-entrant corner where a bar bent
+          round the inside would push the cover off. So both layers are drawn,
+          each running landing-to-landing as one bent bar. */}
+      <polyline points={poly(botBar)} fill="none" stroke={MAIN} strokeWidth={2.2}
+        strokeLinecap="round" strokeLinejoin="round" />
+      <polyline points={poly(topBar)} fill="none" stroke={MAIN} strokeWidth={2.2}
+        strokeLinecap="round" strokeLinejoin="round" />
+      {/* the bend points, so the turns read as turns */}
+      {(landing > 0 ? [botBar[1], botBar[2], topBar[1], topBar[2]] : []).map((p, i) => (
+        <circle key={i} cx={p[0]} cy={p[1]} r={2.4} fill="#00b7d4" />
+      ))}
       {/* distribution steel — crossing the main bars, so seen end-on */}
       {Array.from({ length: nSteps }, (_, i) => {
         const f = (i + 0.5) / nSteps
         return <circle key={i} cx={x0 + (x1 - x0) * f} cy={y0 + (y1 - y0) * f - tv * 0.5} r={1.9} fill={DIST} />
       })}
 
-      {/* supports: a hatched bearing at each held end */}
-      {([['bottom', x0, y0], ['top', x1, y1]] as const).map(([which, bx, by]) => {
+      {/* ── the anchorage extension each side of every corner ────────────── */}
+      {landing > 0 && [
+        extAt(botBar, 1, `${ext}`, 1), extAt(botBar, 2, `${ext}`, 1),
+        extAt(topBar, 1, `${ext}`, -1), extAt(topBar, 2, `${ext}`, -1),
+      ].map((e, i) => (
+        <g key={i} stroke={DIM} strokeWidth={0.8} fill="none">
+          {[e.back, e.fwd].map((q, j) => (
+            <g key={j}>
+              <line x1={e.a[0]} y1={e.a[1] + e.side * 22} x2={q[0]} y2={q[1] + e.side * 22} />
+              <line x1={q[0]} y1={q[1]} x2={q[0]} y2={q[1] + e.side * 25} strokeDasharray="3 2" opacity={0.6} />
+              <text x={(e.a[0] + q[0]) / 2} y={(e.a[1] + q[1]) / 2 + e.side * 22 - 3}
+                fontSize={7} fill={DIM} stroke="#fff" strokeWidth={2.4} paintOrder="stroke"
+                textAnchor="middle">{e.label}</text>
+            </g>
+          ))}
+          <line x1={e.a[0]} y1={e.a[1]} x2={e.a[0]} y2={e.a[1] + e.side * 25} strokeDasharray="3 2" opacity={0.6} />
+        </g>
+      ))}
+
+      {/* ── spacing per zone, where the reference sheet puts it ──────────── */}
+      {landing > 0 && mainBars && (
+        <g fontSize={7.5} fill={MAIN} stroke="#fff" strokeWidth={2.4} paintOrder="stroke">
+          <text x={(x0 + x1) / 2} y={(y0 + y1) / 2 - tv - 8} textAnchor="middle"
+            transform={`rotate(${-thetaDeg} ${(x0 + x1) / 2} ${(y0 + y1) / 2 - tv - 8})`}>{mainBars}</text>
+          <text x={x0 - landing * s * 0.5} y={y0 - tv - 14}
+            textAnchor="middle">{landingBars ?? mainBars}</text>
+          <text x={x1 + landing * s * 0.5} y={y1 - tv - 14} textAnchor="middle">{landingBars ?? mainBars}</text>
+        </g>
+      )}
+
+      {/* Supports: a bearing block at each held end — but ONLY when the flight
+          is drawn alone. With the landings on, the landing IS what holds the
+          flight, and a block drawn under the kink sits on top of the very
+          anchorage dimensions that corner exists to show. */}
+      {landing === 0 && ([['bottom', x0, y0], ['top', x1, y1]] as const).map(([which, bx, by]) => {
         const held = support === 'both-ends' || (support === 'one-end' && which === 'top') || support === 'simple'
         if (!held) return null
         const fixed = support === 'both-ends' || (support === 'one-end' && which === 'top')
@@ -123,9 +195,9 @@ export function StairElevation({
 
       {/* riser and going on the first step */}
       <g fontSize={8} fill={DIM}>
-        <text x={x0 + G * s * 0.5} y={y0 - tv - R * s - 5} textAnchor="middle"
+        <text x={x0 + G * s * 3.5} y={y0 - tv - R * s * 4 - 5} textAnchor="middle"
           paintOrder="stroke" stroke="#fff" strokeWidth={2.4}>G = {G}</text>
-        <text x={x0 - 6} y={y0 - tv - R * s * 0.5} textAnchor="end"
+        <text x={x0 + G * s * 3 - 5} y={y0 - tv - R * s * 3.5} textAnchor="end"
           paintOrder="stroke" stroke="#fff" strokeWidth={2.4}>R = {R}</text>
       </g>
 

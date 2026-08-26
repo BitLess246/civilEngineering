@@ -36,7 +36,12 @@ function BeamTab() {
     [shapeName, Fy, span, Lb, Cb, wD, wL, basis]
   )
   const { data: res, loading, error, cause } = useCalcResult<BeamCalcResult>(
-    () => calcBeam(input), [input]
+    // No debounce: the steel calculators are cheap and the 250 ms default
+    // just held the answer back a quarter of a second behind every
+    // keystroke, with a "computing…" badge sitting where the number
+    // should be. 0 still defers to a task, so a burst of synchronous
+    // changes coalesces into one call.
+    () => calcBeam(input), [input], 0,
   )
 
   // Against the AVAILABLE strength on the chosen basis, never the phi one:

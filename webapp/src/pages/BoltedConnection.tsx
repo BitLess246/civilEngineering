@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 // type-only imports — no engine code bundled into the browser from here
 import type { BoltGrade } from '../engine/steelDesign'
 import { calcConnection } from '../lib/calcApi'
@@ -12,10 +12,9 @@ import type { SolutionStep } from '../lib/solution'
 import { f1, f2, f3 } from '../lib/format'
 import { sn1, sn2 } from '../lib/solution'
 import { PageHeader } from '../components/calc'
-import { CalcBadge, TrialWall, Spinner, Verdict, BasisPick, BasisNote } from '../components/steelUi'
+import { CalcBadge, TrialWall, Verdict, BasisPick, BasisNote } from '../components/steelUi'
 import { capacityLabel, demandLabel, factorLabel, SAFETY, type DesignBasis } from '../engine/designBasis'
 
-const ConnectionViewer3D = lazy(() => import('../components/SteelViewer3D').then(m => ({ default: m.ConnectionViewer3D })))
 
 function BoltedConnectionCalc() {
   const [Vu,         setVu]         = useState(150)
@@ -280,7 +279,7 @@ function BoltedConnectionCalc() {
         </Card>
       </div>
 
-      {/* ── 2D drawing + 3D ── */}
+      {/* ── 2D drawing ── */}
       <div className="space-y-4">
         {res && (
           <ConnectionDrawing
@@ -290,11 +289,6 @@ function BoltedConnectionCalc() {
             Vu={Vu} Hu={Hu} ex_load={res.geom.Cx + ex_load} ey_load={res.geom.Cy + ey_load}
             connType="bolt"
           />
-        )}
-        {res && (
-          <Suspense fallback={<Spinner />}>
-            <ConnectionViewer3D geom={res.geom} db={db} t_plate={tPlate} critical={res.eccentric.critical} />
-          </Suspense>
         )}
       </div>
 
@@ -435,7 +429,7 @@ export default function BoltedConnection() {
         <p className="no-print mt-1 text-slate-600">
           Eccentrically-loaded bolt group by the elastic method — φRn per bolt in shear and
           bearing (§J3.6 / §J3.10), block shear on the shear tab (§J4.3), out-of-plane tension
-          with the §J3.7 interaction, and prying (§J3.9). 2D layout, 3D scene and a
+          with the §J3.7 interaction, and prying (§J3.9). 2D layout and a
           step-by-step solution.
         </p>
         <ReportControls title="Bolted Connection Report" />

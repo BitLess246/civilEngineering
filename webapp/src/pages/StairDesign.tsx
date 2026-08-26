@@ -120,7 +120,9 @@ export default function StairDesign() {
         [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
         <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Flight elevation</h2>
         <StairElevation span={span} t={t} R={R} G={G} thetaDeg={r.geom.thetaDeg} support={support}
-          mainBars={`⌀${barDia} @ ${f0(r.mainSpacing)} mm`}
+          landing={1200} ext={450}
+          mainBars={`⌀${barDia} @ ${f0(r.mainSpacing)} C/C`}
+          landingBars={`⌀10 @ ${f0(r.distSpacing)} C/C`}
           distBars={`⌀10 @ ${f0(r.distSpacing)} mm`} />
       </section>
 
