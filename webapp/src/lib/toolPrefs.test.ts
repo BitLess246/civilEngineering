@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   loadPrefs, savePrefs, hasAnswered, prefsFromChosen, chosenFromPrefs,
-  visibleGroups, isHidden, PINNED_GROUPS, NO_PREFS,
+  visibleGroups, isHidden, PINNED_GROUPS, CHOOSABLE_GROUPS, NO_PREFS,
 } from './toolPrefs'
 import { SIDEBAR_GROUPS } from './tools'
 
@@ -158,6 +158,20 @@ describe('the checkbox state round-trips', () => {
 })
 
 describe('against the real catalog', () => {
+  it('every group is either offerable or pinned — none falls through', () => {
+    // A group in neither list would be permanently visible and impossible to
+    // turn off, with nothing on screen explaining why. Since both lists are
+    // derived from SIDEBAR_GROUPS this holds by construction today; the test is
+    // here so that a future hand-written exception has to face it.
+    const covered = new Set([...CHOOSABLE_GROUPS, ...PINNED_GROUPS])
+    expect([...ALL].filter((l) => !covered.has(l))).toEqual([])
+  })
+
+  it('offers everything except the pinned groups', () => {
+    expect([...CHOOSABLE_GROUPS]).toEqual(ALL.filter((l) => !PINNED_GROUPS.includes(l)))
+    expect(CHOOSABLE_GROUPS.length).toBeGreaterThan(0)
+  })
+
   it('every pinned label is actually a group', () => {
     // A typo here would silently pin nothing, and Reference would become
     // hideable without any test noticing.

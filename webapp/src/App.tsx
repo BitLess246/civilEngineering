@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useCallback, useState } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { useScrollTopOnChange } from './lib/useScrollTop'
@@ -118,13 +118,17 @@ export default function App() {
   // click and the store update.
   const prefs = useToolPrefs()
   const [dismissed, setDismissed] = useState(false)
+  // Stable identity: the dialog memoises its Escape handler on this, and an
+  // inline arrow here would change every render, tearing the key listener down
+  // and rebuilding it each time — quietly defeating the memo on the other side.
+  const closePrefs = useCallback(() => { setDismissed(true) }, [])
   const askPrefs = !hasAnswered(prefs) && !dismissed && !NO_ASK_ROUTES.includes(pathname)
 
   // Home carries its own hero navigation; every tool route lives inside the
   // workbench shell (sidebar + breadcrumb header + command palette).
   return (
     <>
-      {askPrefs && <WelcomeDialog onClose={() => setDismissed(true)} />}
+      {askPrefs && <WelcomeDialog onClose={closePrefs} />}
       <Routes>
         <Route path="/" element={<Home onAuth={(m) => nav(m === 'signup' ? '/signup' : '/signin')} />} />
         <Route path="*" element={

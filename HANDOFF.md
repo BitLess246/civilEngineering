@@ -2391,3 +2391,77 @@ and the report tracked them.
 If the images are replaced, **re-read the captions off the new screenshots**. A
 caption describing the previous screenshot is the kind of small lie that costs
 more trust than it saves effort.
+
+---
+
+# Navigation preferences — collapsible groups + first-run picker (PRs #644, #645, August 2026)
+
+Two per-browser view preferences, both in `localStorage`, both with the same
+storage rule and the same non-negotiable safety property.
+
+| | Key | Module |
+|---|---|---|
+| Collapsed sidebar groups | `civeng-nav-collapsed` | `lib/navCollapse.ts` |
+| Disciplines you use | `civeng-tool-prefs` | `lib/toolPrefs.ts` |
+
+## The one rule both share: STORE THE NEGATIVE
+
+Both store what is **hidden/collapsed**, never what is chosen. The reason is the
+same in both cases and it is a launch-day property:
+
+> When a new group ships, it must appear for people who already answered.
+
+Store the positive set and every future module is invisible to every existing
+user, and nothing reports it — the feature launches to new signups only. Storing
+the negative means an unknown label defaults to shown. Both modules have a test
+named for this; do not "simplify" either one into storing the chosen set.
+
+## Three things that will look like bugs but are deliberate
+
+**A collapsed group is not force-opened when you navigate into it.** Standard
+tree-nav behaviour, deliberately not done: it silently undoes the user's own
+collapse on every visit. The header marks itself instead. The first attempt did
+force it open from an effect and `react-hooks/set-state-in-effect` rejected it —
+the behaviour went, not the lint rule.
+
+**Hiding a discipline is not removing it.** Nothing touches routing. Hidden
+tools keep their URLs, bookmarks, deep links and report links, still render, and
+still turn up in ⌘K — tagged `HIDDEN` and sorted after visible hits. If you are
+standing on a tool whose group is hidden, the sidebar says so and links to the
+profile. A preference that could strand a bookmark is a bug, not a setting.
+
+**An empty selection is refused, and also ignored.** Save is disabled at zero
+in both the dialog and the profile, *and* `visibleGroups` ignores a stored
+preference that would leave nothing — including one that leaves only pinned
+groups. A nav rendering nothing has no route back to the setting that emptied
+it, so the guard is in the pure layer too, not just the UI.
+
+`PINNED_GROUPS = ['Reference']` (Documentation, Validation, Plans) can never be
+hidden — app pages, not a discipline.
+
+## Who gets asked
+
+Anyone whose browser has no stored answer, which is everyone the day this ships,
+existing accounts included. Suppressed on the auth and legal routes: somebody
+mid password-reset or reading the terms is in the middle of something with its
+own stakes. **Skipping writes `{hidden: []}`** rather than writing nothing — a
+"remind me later" would re-ask on every page load, which is how a one-time
+question becomes something people dismiss without reading. Escape and the
+backdrop do the same.
+
+## Live updates
+
+`useToolPrefs` is `useSyncExternalStore` over a module-level cache, not a
+context. `getSnapshot` **must** keep returning the cached object — parsing
+localStorage per call returns a fresh reference each time and React re-renders
+forever. Profile's Save publishes through `setToolPrefs`, so the sidebar and the
+home directory change on the click rather than on the next reload. A `storage`
+listener keeps two tabs in agreement.
+
+## Left open
+
+Nothing enforces that the two dismissal paths and the profile stay in sync
+beyond the shared `DisciplinePicker`; the picker is the guard. And the
+preference is per browser, like the letterhead — a second machine starts with
+the full catalog and asks again. If it should follow the login instead,
+`user_metadata` is now a safe home for it (see `auth/profile.ts` for why).
