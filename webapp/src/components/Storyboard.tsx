@@ -11,7 +11,7 @@
 // reserve the box so nothing below jumps as each one arrives, which is the
 // failure the removed video's poster attribute existed to prevent.
 
-import { PANELS, COMPARISON, type Panel } from './storyboardData'
+import { PANELS, COMPARISON, COMPARISON_NOTE, type Panel } from './storyboardData'
 
 function Tile({ p, ratio }: { p: Panel; ratio: string }) {
   return (
@@ -47,11 +47,20 @@ export function Storyboard() {
  * `object-contain` and a portrait ratio, unlike the tiles above: these are A4
  * pages, and cropping one to a landscape box would cut off the summary table
  * that carries the whole comparison.
+ *
+ * The note sits UNDER the pair because it explains the step between them, which
+ * is in neither screenshot. Keeping the two captions short and parallel is what
+ * lets a reader diff them at a glance.
  */
 export function ReportComparison() {
   return (
-    <div className="grid gap-3.5 sm:grid-cols-2">
-      {COMPARISON.map((p) => <Tile key={p.src} p={p} ratio="aspect-[3/4] object-contain" />)}
-    </div>
+    <>
+      <div className="grid gap-3.5 sm:grid-cols-2">
+        {COMPARISON.map((p) => <Tile key={p.src} p={p} ratio="aspect-[3/4] object-contain" />)}
+      </div>
+      <p className="mt-3.5 rounded-lg border border-[#e3e1da] bg-[#f7f5ef] px-5 py-3.5 text-[12.5px] leading-relaxed text-[#5c6675]">
+        {COMPARISON_NOTE}
+      </p>
+    </>
   )
 }
