@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildBeamCage, stirrupStations, curtailments, topCutoff, botCutoff, effectiveDepth,
-  INFLECTION_FRACTION, type BeamCageInput,
+  tightenOver, mergeBands, SPLICE_HOOP_SPACING, INFLECTION_FRACTION, type BeamCageInput,
 } from './beamCage'
 import { cutLength, runWeight, stirrupHookAllowance, CORNER_BARS_PER_FACE } from './rebarModel'
 
@@ -247,5 +247,86 @@ describe('buildBeamCage — the hook has to develop (§418.8.5.1)', () => {
 
   it('makes no claim at all when it was given no column concrete', () => {
     expect((buildBeamCage(ends).notes ?? []).some((n) => n.includes('ℓdh'))).toBe(false)
+  })
+})
+
+describe('mergeBands', () => {
+  it('merges overlapping and touching bands, drops empty ones', () => {
+    expect(mergeBands([[2, 3], [0, 1], [0.9, 2.1], [5, 5]]))
+      .toEqual([[0, 3]])
+    expect(mergeBands([[0, 1], [4, 5]])).toEqual([[0, 1], [4, 5]])
+  })
+})
+
+describe('tightenOver — hoops through a lap splice', () => {
+  const grid = (n: number, s: number) => Array.from({ length: n }, (_, k) => k * s)
+
+  it('re-lays the bracketed stretch at the pitch asked for, not a third of it', () => {
+    // Subdividing a 0.22 gap to reach 0.1 gives 0.073 — 37% more stirrups than
+    // the rule asks for. Laying between the two stations that BRACKET the band
+    // lands as near 0.1 as those ends allow.
+    const out = tightenOver(grid(11, 0.22), [[1.0, 1.3]], 0.1)
+    const gaps = out.slice(1).map((v, k) => v - out[k])
+    const inside = gaps.filter((_, k) => out[k] >= 0.88 - 1e-9 && out[k + 1] <= 1.32 + 1e-9)
+    expect(Math.max(...inside)).toBeLessThanOrEqual(0.1 + 1e-9)
+    expect(Math.max(...inside)).toBeGreaterThan(0.085)
+  })
+
+  it('leaves everything outside the band exactly where it was', () => {
+    const base = grid(11, 0.22)
+    const out = tightenOver(base, [[1.0, 1.3]], 0.1)
+    for (const v of base.filter((x) => x <= 0.88 + 1e-9 || x >= 1.32 - 1e-9)) {
+      expect(out.some((o) => Math.abs(o - v) < 1e-9)).toBe(true)
+    }
+  })
+
+  it('never makes a gap coarser than it found it', () => {
+    const base = grid(11, 0.22)
+    const out = tightenOver(base, [[1.0, 1.3]], 0.1)
+    const gaps = out.slice(1).map((v, k) => v - out[k])
+    expect(Math.max(...gaps)).toBeLessThanOrEqual(0.22 + 1e-9)
+  })
+
+  it('does nothing without a band, or with a band off the end of the run', () => {
+    const base = grid(11, 0.22)
+    expect(tightenOver(base, [], 0.1)).toEqual(base)
+    expect(tightenOver(base, [[-1, -0.5]], 0.1)).toEqual(base)
+    expect(tightenOver(base, [[9, 10]], 0.1)).toEqual(base)
+  })
+})
+
+describe('buildBeamCage — the hoops know where the laps are', () => {
+  // The stirrup layout used to run before anything knew a lap existed, so a
+  // splice sat in whatever spacing the shear design happened to give it.
+  const stock = 6, lap = 0.54
+  const withSplice = buildBeamCage({ ...beam, splice: { stock, lap, prefer: [0.5] } })
+  const withOut = buildBeamCage(beam)
+  const along = (c: ReturnType<typeof buildBeamCage>) =>
+    c.runs.filter((r) => r.role === 'stirrup')
+      .map((r) => r.path.reduce((a, p) => a + p[0], 0) / r.path.length)
+      .sort((a, b) => a - b)
+
+  it('closes the hoops up to 100 through the lap and nowhere else', () => {
+    expect(SPLICE_HOOP_SPACING).toBe(100)
+    const st = along(withSplice)
+    expect(st.length).toBeGreaterThan(along(withOut).length)
+    const near = st.filter((v) => v > 2.6 && v < 3.4)
+    const gaps = near.slice(1).map((v, k) => v - near[k])
+    expect(Math.max(...gaps)).toBeLessThanOrEqual(0.1 + 1e-9)
+    // …and the middle of the OTHER half is still at the designed spacing
+    const away = st.filter((v) => v > 1.4 && v < 2.0)
+    const g2 = away.slice(1).map((v, k) => v - away[k])
+    expect(Math.max(...g2)).toBeGreaterThan(0.15)
+  })
+
+  it('leaves the layout alone when the bars fit a stock length', () => {
+    // Nothing is lapped, so nothing is closed up — the schedule must not claim
+    // a splice zone the bar does not have.
+    const long = buildBeamCage({ ...beam, splice: { stock: 20, lap } })
+    expect(along(long)).toEqual(along(withOut))
+  })
+
+  it('makes no claim at all when it was told nothing about splicing', () => {
+    expect(along(withOut)).toEqual(stirrupStations(beam))
   })
 })

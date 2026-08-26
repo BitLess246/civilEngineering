@@ -173,8 +173,16 @@ export function spliceCentres(L: number, o: SpliceOptions): number[] {
  * A closed run is never split: a tie is cut nested from stock and its lap is
  * the hooked overlap already in `hookAllowance`.
  */
-export function spliceRun(run: RebarRun, o: SpliceOptions): RebarRun[] {
-  if (run.closed) return [run]
+/**
+ * Where ONE run is lapped, as arc length along its own path, m.
+ *
+ * Split out of `spliceRun` so that anything which has to know where the laps
+ * fall — the hoops, which §425.5.2 closes up through a splice — asks the same
+ * function that puts them there. Derived twice, the hoops would be tightened
+ * over a lap the bar does not have.
+ */
+export function runSpliceCentres(run: RebarRun, o: SpliceOptions): number[] {
+  if (run.closed) return []
   const L = pathLength(run.path)
   // Judge against the FABRICATED length — bends and hooks are bar too, which is
   // the whole point of "consider all lengths, bend, hook, crank, anchor".
@@ -182,7 +190,14 @@ export function spliceRun(run: RebarRun, o: SpliceOptions): RebarRun[] {
   const off = run.dia / 1000                       // one diameter, m
   // The stepped-aside piece is fractionally longer than the straight one it
   // replaces, so the allowance comes off the stock before the cuts are chosen.
-  const centres = spliceCentres(L, { ...o, stock: o.stock - Math.max(0, made - L) - off })
+  return spliceCentres(L, { ...o, stock: o.stock - Math.max(0, made - L) - off })
+}
+
+export function spliceRun(run: RebarRun, o: SpliceOptions): RebarRun[] {
+  if (run.closed) return [run]
+  const L = pathLength(run.path)
+  const off = run.dia / 1000                       // one diameter, m
+  const centres = runSpliceCentres(run, o)
   if (!centres.length) return [run]
 
   const cuts = [0, ...centres, L]

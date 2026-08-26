@@ -31,6 +31,7 @@ import { hookClearToFace, hookFit } from './devLength'
 import { jointHookLdh } from './beamColumnJoint'
 import { rotateLoop } from './columnCage'
 import { endAnchors, type AnchorBar, type JointRoom } from './beamAnchorage'
+import { runSpliceCentres, pointAt, type SpliceOptions } from './barSplice'
 
 export interface BeamCageInput {
   /** Member mark — every bar in the cage carries it. */
@@ -99,6 +100,18 @@ export interface BeamCageInput {
    * of the same bar knew the bar did not develop.
    */
   jointConcrete?: { fc: number; fy: number; colH: number }
+  /**
+   * How the longitudinal bars will be lapped — the SAME options `spliceCage`
+   * is given afterwards.
+   *
+   * Supplied, the cage works out where its own bars come to a lap and closes
+   * the stirrups up through each one (§425.5.2 / the standard bar-bending
+   * sheet's "close spacing of stirrups in the splicing, s = 100 mm"). A lap is
+   * the one place along a beam where two bars share the concrete and the
+   * transverse steel has to hold them together, and the stirrups were laid out
+   * before anything knew a lap existed. Omitted, the layout is as before.
+   */
+  splice?: SpliceOptions
   /** Beam centreline in plan, m, and the level of its SOFFIT. */
   axis: { x0: number; z0: number; x1: number; z1: number }
   ySoffit: number
@@ -172,6 +185,55 @@ export function curtailments(i: {
 }
 
 /**
+ * Hoops are closed up to this pitch through the length of a lap splice, mm.
+ *
+ * A lap is where two bars share one line of concrete and rely on the transverse
+ * steel to hold them together while the force passes from one to the other.
+ */
+export const SPLICE_HOOP_SPACING = 100
+
+/**
+ * The stations re-laid at `s` through each band, everything outside untouched.
+ *
+ * RE-LAID between the two stations that bracket the band, not subdivided.
+ * Subdividing can only ever thirds or halve a gap, so asking for 100 through a
+ * beam pitched at 220 gave 73 — 37% more stirrups than the rule asks for, on a
+ * drawing whose whole complaint about the last one was uneconomical steel.
+ * Dividing the bracketed stretch instead lands as near 100 as its two ends
+ * allow, and never coarser.
+ */
+export function tightenOver(stations: number[], bands: [number, number][], s: number): number[] {
+  if (!bands.length || s <= 0) return stations
+  let out = [...stations].sort((a, b) => a - b)
+  for (const [lo, hi] of mergeBands(bands)) {
+    const below = out.filter((v) => v <= lo + 1e-9)
+    const above = out.filter((v) => v >= hi - 1e-9)
+    // A band running off the end of the run has no pair to lay between; the end
+    // zone there is already at its own tighter spacing.
+    if (!below.length || !above.length) continue
+    const a = below[below.length - 1], b = above[0]
+    if (b - a <= s + 1e-9) continue
+    const n = Math.ceil((b - a) / s - 1e-9)
+    out = out.filter((v) => v <= a + 1e-9 || v >= b - 1e-9)
+    for (let k = 1; k < n; k++) out.push(a + ((b - a) * k) / n)
+    out.sort((x, y) => x - y)
+  }
+  return out
+}
+
+/** Overlapping bands merged into disjoint ones, in order. */
+export function mergeBands(bands: [number, number][]): [number, number][] {
+  const sorted = [...bands].filter(([a, b]) => b > a).sort((x, y) => x[0] - y[0])
+  const out: [number, number][] = []
+  for (const [a, b] of sorted) {
+    const last = out[out.length - 1]
+    if (last && a <= last[1] + 1e-9) last[1] = Math.max(last[1], b)
+    else out.push([a, b])
+  }
+  return out
+}
+
+/**
  * Where the stirrups go, m along the span from the left support centreline.
  *
  * Tight over 2h from each support face, the designed spacing between. The two
@@ -180,7 +242,8 @@ export function curtailments(i: {
  * happened to reach.
  */
 export function stirrupStations(i: Pick<BeamCageInput,
-  'L' | 'h' | 'sEnd' | 'sMid' | 'colBLeft' | 'colBRight'>): number[] {
+  'L' | 'h' | 'sEnd' | 'sMid' | 'colBLeft' | 'colBRight'>,
+  spliceBands: [number, number][] = []): number[] {
   const hM = i.h / 1000
   const faceL = (i.colBLeft ?? 0) / 2000
   const faceR = i.L - (i.colBRight ?? 0) / 2000
@@ -213,7 +276,10 @@ export function stirrupStations(i: Pick<BeamCageInput,
     const n = Math.ceil(gap / sM - 1e-9)
     for (let k = 1; k < n; k++) push(lastL + (gap * k) / n)
   }
-  return [...new Set(out.map((v) => Math.round(v * 1e6) / 1e6))].sort((p, q) => p - q)
+  const base = [...new Set(out.map((v) => Math.round(v * 1e6) / 1e6))].sort((p, q) => p - q)
+  // …and closed up through every lap, last, so a splice can only ever add
+  // stirrups to a layout the code rules have already settled.
+  return tightenOver(base, mergeBands(spliceBands), SPLICE_HOOP_SPACING / 1000)
 }
 
 /**
@@ -380,6 +446,30 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
     }
   }
 
+  // ── where the bars come to a lap ────────────────────────────────────────
+  // Asked of the SAME function that will cut them, so the hoops cannot be
+  // closed up over a splice the bar does not have — or miss one it does.
+  const spliceBands: [number, number][] = []
+  if (i.splice) {
+    const lap = i.splice.lap
+    // The stagger each bar will actually get: `spliceCage` counts the runs of a
+    // role in order and alternates. Assuming both positions for every bar bands
+    // a lap that a single-bar face never has.
+    const byRole = new Map<string, number>()
+    for (const r of runs) {
+      if (r.role !== 'top' && r.role !== 'bottom') continue
+      const k = byRole.get(r.role) ?? 0
+      byRole.set(r.role, k + 1)
+      const prefer = i.splice.preferByRole?.[r.role] ?? i.splice.prefer
+      const stagger = k % 2 === 0 ? -lap / 2 : lap / 2
+      for (const c of runSpliceCentres(r, { ...i.splice, prefer, stagger })) {
+        const p = pointAt(r.path, c)
+        const u = (p[0] - x0) * ux + (p[2] - z0) * uz
+        spliceBands.push([u - lap / 2, u + lap / 2])
+      }
+    }
+  }
+
   // ── stirrups ──
   const sx = Math.max(0, i.b / 2000 - i.cover / 1000 - i.stirrupDia / 2000)
   const sy0 = i.ySoffit + (i.cover + i.stirrupDia / 2) / 1000
@@ -387,7 +477,7 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
   const D = stirrupBendDiameter(i.stirrupDia)
   /** Radius the stirrup is bent to where it wraps a corner bar, mm. */
   const R = (i.barDia + i.stirrupDia) / 2
-  stirrupStations(i).forEach((u, k) => {
+  stirrupStations(i, spliceBands).forEach((u, k) => {
     const loop = [at(u, -sx, sy0), at(u, sx, sy0), at(u, sx, sy1), at(u, -sx, sy1)]
     runs.push({
       mark: `${i.mark}-S${k + 1}`,

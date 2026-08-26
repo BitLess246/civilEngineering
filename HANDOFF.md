@@ -245,9 +245,16 @@ each node, a roof column's top hook turns in below the node, and `levelDrop`
 in `ModelSpace` hangs the concrete box (and a steel section's extrusion) to
 match. Column bars now crank to the bar line of the section ABOVE
 (`ColumnCageInput.above`), with the §410.7.4.5 dowel guard past 75 mm.
-**Open**: the analysis still takes the node as the member AXIS, so drawn and
-analysed beams sit h/2 apart. Reconciling them is a layer-2 change (member
-end offsets through `modelBridge`) and has NOT been done.
+✔ **Reconciled** — `beamAxisOffsets.ts` + `BridgeOpts.beamTopOfSteel` hang each
+horizontal beam on a rigid arm h/2 below its node, so the analysis solves on
+the same line the drawings use. Both ends drop by the same vector, so the beam
+translates rather than tilts and its length is unchanged; statics is exact
+(ΣR identical to the last digit — a rigid arm carries force without consuming
+any). What moves is the couple each column sees from the beam's end forces on
+that arm: 0.4% on the beam moment, 15% on the column moment for the sample
+frame. **OFF by default everywhere, UI included** — it is a real eccentricity,
+not a redraw, so turning it on is an engineering decision. Toggle: "Beams
+framed at top of steel" in Model Space.
 
 **Audit against the NSCP/ACI bar-detailing standard** — four real violations:
 - cut bars stopped AT the inflection point. `curtailments()` in `beamCage`
@@ -259,8 +266,13 @@ end offsets through `modelBridge`) and has NOT been done.
   OPPOSITE zones (top: middle half; bottom: end quarters). Now per role.
 - column bars lapped AT the floor; §418.7.4.3 wants the centre half of the
   storey. `spliceRise` carries them a quarter storey up first.
-**Still open**: hoops are not closed to 100 c/c through a lap splice — the
-stirrup layout runs before splice positions are known.
+- ✔ hoops are now closed up to 100 c/c through every lap. `buildBeamCage`
+  takes the same `SpliceOptions` `spliceCage` will get and asks
+  `runSpliceCentres` — the function that actually cuts the bars — where the
+  laps land, so the hoops cannot be tightened over a splice the bar does not
+  have. `tightenOver` RE-LAYS the bracketed stretch rather than subdividing
+  it: subdividing a 220 pitch to reach 100 gives 73, which is 37% more
+  stirrups than the rule asks for. 27 → 35 hoops on the sample beam.
 
 **Phase 2 — `frameElevation.ts` (S-04).** One sheet per grid line per framed
 level: the whole line, columns carried half a storey each side of the beams.

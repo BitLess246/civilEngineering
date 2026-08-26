@@ -244,6 +244,9 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       bottom: [0.125, 0.875],           // end quarters
     })
     cages.push(spliceCage(buildBeamCage({
+      // The cage is told how its bars WILL be lapped, so it can close the
+      // stirrups up through each lap before it places them.
+      splice: beamSplice,
       mark: b.id, L: b.L,
       colBLeft: colWidthAt(mem.i), colBRight: colWidthAt(mem.j),
       b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, stirrupDia: sec.tieDia,

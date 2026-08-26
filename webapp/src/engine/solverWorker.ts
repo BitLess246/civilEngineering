@@ -23,7 +23,7 @@ import type { SolveProgress } from './progress'
 
 type DriftReq = { hasSeis: boolean; T: number; R: number; axis: 'x' | 'z'; pDelta: boolean }
 export type SolverRequest =
-  | { id: number; kind: 'analyze'; model: StructuralModel; opts: F3AnalyzeOpts; drift: DriftReq; crackedSections?: boolean; shearDeformation?: boolean }
+  | { id: number; kind: 'analyze'; model: StructuralModel; opts: F3AnalyzeOpts; drift: DriftReq; crackedSections?: boolean; shearDeformation?: boolean; beamTopOfSteel?: boolean }
   | { id: number; kind: 'design'; model: StructuralModel; soil: SoilOptions; plan: FootingPlan; opts: AnalyzeOptions; tryBars: boolean }
   | { id: number; kind: 'optimize'; model: StructuralModel; soil: SoilOptions; plan: FootingPlan; opts: AnalyzeOptions; tryBars: boolean; maxIter: number }
   | { id: number; kind: 'modal'; model: StructuralModel; nModes: number }
@@ -45,7 +45,7 @@ ctx.onmessage = async (e: MessageEvent<SolverRequest>) => {
   const onProgress = (p: SolveProgress) => ctx.postMessage({ id: msg.id, progress: p })
   try {
     if (msg.kind === 'analyze') {
-      const br = modelToFrame3D(msg.model, { crackedSections: msg.crackedSections, shearDeformation: msg.shearDeformation })
+      const br = modelToFrame3D(msg.model, { crackedSections: msg.crackedSections, shearDeformation: msg.shearDeformation, beamTopOfSteel: msg.beamTopOfSteel })
       // Tension/compression-only members break superposition: the shared-LU
       // combo sweep is only valid while every combo sees the same structure.
       // When any member is limited, each combo gets its own active set instead.

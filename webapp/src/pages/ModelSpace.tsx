@@ -1094,6 +1094,10 @@ export default function ModelSpace() {
   const [pDelta, setPDelta] = useState(b('pDelta', false))
   const [cracked, setCracked] = useState(b('cracked', true))       // ACI §6.6.3.1.1 cracked EI (0.35/0.70 Ig)
   const [shearDef, setShearDef] = useState(b('shearDef', true))    // Timoshenko shear deformation (deep girders / squat columns)
+  // The node as the TOP of the beam rather than its axis — the convention the
+  // cages and the frame elevations use. OFF by default: it is a real
+  // eccentricity, not a redraw, and it moves the column moments.
+  const [beamTopSteel, setBeamTopSteel] = useState(b('beamTopSteel', false))
   const [allAround, setAllAround] = useState(b('allAround', true)) // column P–M bars on all four faces
   const [tBeamOn, setTBeamOn] = useState(b('tBeamOn', true))       // §6.3.2 flanged sagging design
   const [tryBars, setTryBars] = useState(b('tryBars', true))        // let design/optimize pick bar Ø from a ladder
@@ -1274,7 +1278,7 @@ export default function ModelSpace() {
         baysX, baysZ, storeyH, colB, colH, girB, girH, beaB, beaH,
         fc, fy, barDia, tieDia, cover, slabThk, gammaC, qD, qL,
         qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs, methodB, accTor, orth30, evOn, rsaRegular,
-        Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, shearDef, tryBars,
+        Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, shearDef, beamTopSteel, tryBars,
         concreteClass: classPin ?? undefined, prices, planSel,
         material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu,
         woodSpeciesId, woodGrade, woodWet, matSource, customId,
@@ -1283,7 +1287,7 @@ export default function ModelSpace() {
   }, [baysX, baysZ, storeyH, colB, colH, girB, girH, beaB, beaH,
     fc, fy, barDia, tieDia, cover, slabThk, gammaC, qD, qL,
     qa, Hf, gammaSoil, Ca, Cv, Rw, Ie, Zf, Nv, eDirs, methodB, accTor, orth30, evOn, rsaRegular,
-    Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, shearDef, tryBars,
+    Vw, expo, Kzt, wDirs, assembly, pDelta, cracked, shearDef, beamTopSteel, tryBars,
     classPin, prices, planSel,
     material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu,
     woodSpeciesId, woodGrade, woodWet, matSource, customId])
@@ -1329,13 +1333,13 @@ export default function ModelSpace() {
   const hasELoads = model?.loads.some((l) => l.cat === 'E') ?? false
   const seismicSystem: 'gravity' | 'imf' | 'smf' = hasELoads ? (Rw >= 8 ? 'smf' : Rw >= 5 ? 'imf' : 'gravity') : 'gravity'
   // §208.4.1 vertical seismic component folded into the E-combo D factors.
-  const anaOpts = { f1: fLive, pDelta, lateral, seismicSystem, crackedSections: cracked, shearDeformation: shearDef, Ev: evOn ? 0.5 * Ca * Ie : undefined, colLayout: (allAround ? 'all-around' as const : 'two-face' as const), tBeamAction: tBeamOn }
+  const anaOpts = { f1: fLive, pDelta, lateral, seismicSystem, crackedSections: cracked, shearDeformation: shearDef, beamTopOfSteel: beamTopSteel, Ev: evOn ? 0.5 * Ca * Ie : undefined, colLayout: (allAround ? 'all-around' as const : 'two-face' as const), tBeamAction: tBeamOn }
 
   const analyze = () => {
     if (!model || busy || meshErrors) return   // §1 fail-fast: don't solve a singular mesh
     // 3D FEM + storey drift run in the worker so the UI stays responsive.
     run('analyze', {
-      model, opts: anaOpts, drift: { hasSeis: !!seis, T: seis?.T ?? 0, R: Rw, axis: primAxis, pDelta }, crackedSections: cracked, shearDeformation: shearDef,
+      model, opts: anaOpts, drift: { hasSeis: !!seis, T: seis?.T ?? 0, R: Rw, axis: primAxis, pDelta }, crackedSections: cracked, shearDeformation: shearDef, beamTopOfSteel: beamTopSteel,
     }).then((r) => {
       const res = r as { analysis: F3Analysis | null; orphans: number; drift: DriftRow[] | null; irregularities: IrregularityFlag[] | null }
       setOrphans(res.orphans)
@@ -3645,6 +3649,10 @@ export default function ModelSpace() {
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={shearDef} onChange={(e) => setShearDef(e.target.checked)} />
                   <span>Shear deformation <span className="text-slate-500">(Timoshenko)</span></span>
+                </label>
+                <label className="col-span-full flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={beamTopSteel} onChange={(e) => setBeamTopSteel(e.target.checked)} />
+                  <span>Beams framed at top of steel <span className="text-slate-500">(node = top of beam; matches the drawings, moves the column moments)</span></span>
                 </label>
                 <label className="col-span-full flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={allAround} onChange={(e) => setAllAround(e.target.checked)} />
