@@ -88,34 +88,6 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
         </div>
       </section>
 
-      {/* Product demo — a real recording of /model, not a mockup */}
-      <section className="mx-auto max-w-[1200px] px-6 pt-9">
-        <div className="mb-3.5 flex items-baseline gap-3.5">
-          <h2 className="text-[19px] font-extrabold tracking-tight">See it run</h2>
-          <span className="font-mono text-[11px] text-[#a39d8d]">3×3 bay · 3 storeys · 87 s · no sound</span>
-        </div>
-        <figure className="m-0 overflow-hidden rounded-lg border border-[#e3e1da] bg-[#0f1b2a]">
-          {/* Click to play: the file is 4.3 MB and most visitors are on mobile
-              data, so it loads its poster and metadata only until asked. */}
-          <video
-            className="block aspect-video w-full"
-            src="/demo/model-space.mp4"
-            poster="/demo/model-space-poster.jpg"
-            width={1280}
-            height={720}
-            controls
-            playsInline
-            preload="metadata"
-          >
-            Your browser cannot play this video.
-          </video>
-          <figcaption className="border-t border-[#e3e1da] bg-white px-5 py-3 text-[12.5px] leading-relaxed text-[#5c6675]">
-            Generate a space frame from four numbers, build the NSCP §208 seismic and §207B wind cases,
-            analyse, design every member — then open any schedule row for its worked solution, and export the report.
-          </figcaption>
-        </figure>
-      </section>
-
       {/* Sample cards */}
       <section className="mx-auto max-w-[1200px] px-6 pb-2 pt-9">
         <div className="grid gap-3.5 md:grid-cols-3">
