@@ -228,7 +228,27 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
     const sec = secOf(b.id)
     const sag = b.sections.filter((s) => !s.hogging)
     const hog = b.sections.filter((s) => s.hogging)
+    // WHICH SPACING GOES WHERE — positionally, not by extremes.
+    //
+    // `sEnd` and `sMid` are documented as "the spacing at the supports and
+    // through the middle", and taking min/max of every section instead read
+    // them as extremes. Midspan needs no shear steel, so its `sAdopt` is 0 and
+    // was filtered out; `max` then fell back to an END value and the middle
+    // was detailed to a support's requirement. Conservative, but it also meant
+    // the two were equal on a symmetric beam, so the 2h zone the whole layout
+    // exists to create never appeared.
+    //
+    // At a support the spacing is `sHinge` — `sAdopt` capped by §418.6.4.4
+    // (SMF) or §418.4.2 (IMF), which shear demand alone never reaches.
+    const atEnds = b.sections.filter((s) => s.hogging)
+    const atMid = b.sections.filter((s) => !s.hogging)
+    const ends = atEnds.map((s) => s.design.sHinge).filter((v) => v > 0)
+    const mids = atMid.map((s) => s.design.sAdopt).filter((v) => v > 0)
+    // Fall back across the two rather than to a default: a beam with only
+    // hogging sections still needs a middle, and vice versa.
     const spac = b.sections.map((s) => s.design.sAdopt).filter((v) => v > 0)
+    const sEndMm = ends.length ? Math.min(...ends) : (spac.length ? Math.min(...spac) : 0)
+    const sMidMm = mids.length ? Math.max(...mids) : (spac.length ? Math.max(...spac) : 0)
     // WHERE EACH FACE MAY BE SPLICED — and the two faces are OPPOSITE.
     //
     // A top bar is in tension over the supports, so it laps in the MIDDLE HALF
@@ -252,8 +272,8 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, stirrupDia: sec.tieDia,
       topBars: Math.max(0, ...hog.map((s) => s.design.bars)),
       botBars: Math.max(0, ...sag.map((s) => s.design.bars)),
-      sEnd: spac.length ? Math.min(...spac) : 0,
-      sMid: spac.length ? Math.max(...spac) : 0,
+      sEnd: sEndMm,
+      sMid: sMidMm,
       continuousLeft: carriesOn(mem, mem.i),
       continuousRight: carriesOn(mem, mem.j),
       // Which way a hooked bar may turn: a tail leaving the top of the joint

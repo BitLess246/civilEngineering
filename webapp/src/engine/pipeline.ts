@@ -719,6 +719,9 @@ function designBeamRow(
         b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia,
         comprBarDia: 16, stirrupDia: sec.tieDia,
         fc: sec.fc, fy: sec.fy, Mu: Math.abs(s.Mu), Vu: s.Vu, legSpacingLimit,
+        // The hinge-zone hoop cap is a property of the SYSTEM, not of the
+        // shear at this section — see BeamDesignInput.system.
+        system,
       }
       const rect = designBeam(base)
       // T-beam action (§6.3.2): sagging compression lives in the slab, so the

@@ -44,6 +44,20 @@ export interface BeamDesignInput {
   bMin?: number
   legs?: number        // stirrup legs — explicit override (else auto: width + shear)
   legSpacingLimit?: number  // max transverse leg spacing hx, mm (350 seismic, 600 gravity)
+  /**
+   * The seismic system this beam belongs to.
+   *
+   * It caps the hoop spacing in the HINGE ZONE — the 2h at each support face —
+   * which shear demand alone does not. Columns have had this since they were
+   * written (`columnDesign`'s `seismicSConf`); beams were left with the gravity
+   * limits of §409.7.6.2.2, so a special moment frame was detailed exactly as a
+   * gravity frame: on a 300×500 beam, 220 mm where §418.6.4.4 allows 110.
+   *
+   * The cap is returned, not applied, because this function designs a SECTION
+   * and does not know where along the span it sits. The caller knows which of
+   * its sections are at a support, and applies it there.
+   */
+  system?: 'gravity' | 'imf' | 'smf'
   lambda?: number      // lightweight factor (default 1)
 }
 
@@ -99,6 +113,21 @@ export interface BeamDesignResult {
   Av: number
   VsReq: number; VsMax: number
   sReq: number; sMax: number; sAdopt: number
+  /**
+   * Maximum hoop spacing in the 2h hinge zone, mm — the seismic cap, or
+   * undefined on a gravity frame where there is none.
+   *
+   * SMF §418.6.4.4: the smallest of d/4, 6·db of the smallest longitudinal
+   * bar, and 150 mm.
+   * IMF §418.4.2: the smallest of d/4, 8·db, 24·d_hoop and 300 mm.
+   *
+   * `sAdopt` is NOT reduced by it here — see `BeamDesignInput.system`.
+   */
+  seismicSConf?: number
+  /** What set `sHinge` — the clause, or the shear demand that beat it. */
+  hingeGovern?: string
+  /** The spacing to use at a support: `sAdopt` capped by `seismicSConf`. */
+  sHinge: number
 }
 
 const PHI_FLEX = 0.90
@@ -292,7 +321,37 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
     sAdopt = roundDown(Math.min(sReq, sCap, sMinArea), 10)
   }
 
+  // ── the hinge zone (§418.6.4.4 SMF / §418.4.2 IMF) ──────────────────────
+  //
+  // Over 2h from each support face the hoops confine a plastic hinge, and the
+  // spacing there is a DETAILING limit — it does not fall out of the shear
+  // demand, which on a lightly loaded beam is satisfied by the §409.7.6.2.2
+  // gravity maximum of d/2. Left uncapped, a special moment frame came out
+  // detailed exactly like a gravity frame.
+  //
+  // Returned rather than applied to `sAdopt`: this designs a section and does
+  // not know whether that section is at a support or at midspan. The caller
+  // does, and `sHinge` is what it uses at the two ends.
+  const sys = i.system ?? 'gravity'
+  const dHoop = i.stirrupDia ?? 10
+  const seismicSConf = sys === 'smf'
+    ? Math.min(d / 4, 6 * i.barDia, 150)
+    : sys === 'imf'
+      ? Math.min(d / 4, 8 * i.barDia, 24 * dHoop, 300)
+      : undefined
+  // A zone with no shear steel at all still needs its hoops: the confinement
+  // is required by the hinge, not by Vu, so an `sAdopt` of 0 takes the cap.
+  const sHinge = seismicSConf === undefined
+    ? sAdopt
+    : roundDown(sAdopt > 0 ? Math.min(sAdopt, seismicSConf) : seismicSConf, 10)
+  const hingeGovern = seismicSConf === undefined
+    ? undefined
+    : (sAdopt > 0 && sAdopt <= seismicSConf
+      ? 'shear demand'
+      : sys === 'smf' ? '§418.6.4.4 SMF conf.' : '§418.4.2 IMF conf.')
+
   return {
+    seismicSConf, hingeGovern, sHinge,
     d, dt, dPrime,
     rhoB, rhoMax: rhoMaxV, rhoMin: rMin,
     AsMax, aMax, MnMax, phiMnMax,

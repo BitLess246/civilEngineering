@@ -261,3 +261,52 @@ describe('buildStructureCages', () => {
     }
   })
 })
+
+describe('a seismic frame gets a confined hinge zone, a gravity one does not', () => {
+  /** The gaps between consecutive stirrups along the first beam, mm. */
+  const hoopGaps = (system: 'gravity' | 'imf' | 'smf') => {
+    const m = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3.2, 3.2], section })
+    m.loads = buildGravityLoads(m, 4.8, 2.4)
+    const d = designStructure(m, soil, {}, { seismicSystem: system })!
+    const row = d.beams[0]
+    const cage = buildStructureCages(m, d).cages.find((c) => c.member === row.id)!
+    const beam = m.members.find((x) => x.id === row.id)!
+    const ni = m.nodes.find((n) => n.id === beam.i)!, nj = m.nodes.find((n) => n.id === beam.j)!
+    const L = Math.hypot(nj.x - ni.x, nj.y - ni.y, nj.z - ni.z)
+    const ux = (nj.x - ni.x) / L, uz = (nj.z - ni.z) / L
+    const at = cage.runs.filter((r) => r.role === 'stirrup')
+      .map((r) => (r.path[0][0] - ni.x) * ux + (r.path[0][2] - ni.z) * uz)
+      .sort((p, q) => p - q)
+    return { L, at, gaps: at.slice(1).map((v, k) => Math.round((v - at[k]) * 1000)) }
+  }
+
+  it('lays the 2h zone at the §418.6.4.4 spacing on an SMF, not the gravity maximum', () => {
+    // The beam is lightly loaded, so shear alone is satisfied at d/2 = 220 and
+    // says nothing about the hinge. Before the cap existed, `smf` produced a
+    // layout identical to `gravity` — 220 mm through the plastic hinge, twice
+    // what §418.6.4.4 allows.
+    const g = hoopGaps('gravity'), s = hoopGaps('smf')
+    const inZone = (r: ReturnType<typeof hoopGaps>) =>
+      [...new Set(r.gaps.filter((_, k) => r.at[k] * 1000 < 2 * 500))]
+    expect(inZone(g)).toEqual([220])
+    expect(inZone(s)).toEqual([110])
+    expect(s.at.length).toBeGreaterThan(g.at.length)   // and it costs hoops
+  })
+
+  it('does the same for an intermediate frame', () => {
+    const r = hoopGaps('imf')
+    expect([...new Set(r.gaps.filter((_, k) => r.at[k] * 1000 < 2 * 500))]).toEqual([110])
+  })
+
+  it('leaves a gravity frame’s quantities untouched', () => {
+    // The cap applies to seismic systems only. A gravity frame must come out
+    // of this change with exactly the hoops it had.
+    expect(hoopGaps('gravity').at.length).toBe(35)
+  })
+
+  it('confines BOTH ends, not just the one the layout starts from', () => {
+    const r = hoopGaps('smf')
+    const far = r.gaps.filter((_, k) => (r.L - r.at[k]) * 1000 < 2 * 500)
+    expect([...new Set(far)]).toEqual([110])
+  })
+})
