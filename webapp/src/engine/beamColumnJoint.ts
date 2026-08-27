@@ -181,6 +181,17 @@ export interface BeamColumnJointInput {
   /** The beam framing in: width, overall depth, bar Ø, and the bar counts. */
   beamB: number
   beamH: number
+  /**
+   * Depth of the SHALLOWEST beam framing into the joint, mm — §415.4.2.2 caps
+   * the joint hoop spacing at half of it, and on a joint where beams of
+   * different depths meet that is not the one this check is drawn for.
+   * Defaults to `beamH`.
+   */
+  shallowestBeamH?: number
+  /** Legs of the hoop set through the joint, and the hoop yield. §415.4.2 is
+   *  an AREA rule, so it needs both. Default 2 legs, fyt = 415. */
+  hoopLegs?: number
+  fyt?: number
   beamBarDia: number
   topBars: number
   botBars: number
@@ -248,8 +259,60 @@ export interface BeamColumnJointResult {
    *  relaxation was available. */
   jointHoopSpacing: number
   halvedHoops: boolean
+  /** §415.4.2 — the transverse steel a joint needs whatever else applies. */
+  joint415: Joint415
+  /** Which rule set the spacing through the joint. */
+  spacingGovern: string
   ok: boolean
   notes: string[]
+}
+
+/**
+ * §415.4.2 — the transverse reinforcement a beam–column joint needs.
+ *
+ * §418.4.4 sends an intermediate moment frame's joints straight here, and
+ * §415.2.3 brings every moment-transferring joint under §415.4. Two things
+ * come out of it, and neither was being asked:
+ *
+ *   §415.4.2    the area of ALL LEGS in each principal direction is at least
+ *               the greater of 0.062·√f'c·b·s/fyt and 0.35·b·s/fyt, where b is
+ *               the column dimension PERPENDICULAR to the direction considered
+ *   §415.4.2.2  the spacing s is at most HALF the depth of the shallowest beam
+ *               framing into the joint
+ *
+ * §415.4.2.1 puts that steel within the column height over at least the
+ * deepest beam framing in, which is the band `jointHoopSpacing` already fills.
+ *
+ * The area rule is the one with teeth: it can demand more legs than the column
+ * happens to carry, and nothing else in the joint check looks at leg area at
+ * all.
+ */
+export interface Joint415 {
+  /** Spacing cap from §415.4.2.2, mm — half the shallowest beam's depth. */
+  sMax: number
+  /** Required leg area at the adopted spacing, mm². */
+  AvReq: number
+  /** Leg area provided by the hoop set at that spacing, mm². */
+  AvProv: number
+  /** Legs the hoop set has, and the least it needs. */
+  legs: number
+  legsReq: number
+  ok: boolean
+}
+
+export function jointTransverse(
+  i: { colB: number; colH: number; beamH: number; hoopDia: number; fc: number },
+  s: number, legs: number, fyt: number, shallowestBeamH: number = i.beamH,
+): Joint415 {
+  const sMax = shallowestBeamH / 2
+  // b is measured PERPENDICULAR to the direction the legs resist in. The
+  // governing direction is the wider one — it asks for the most steel.
+  const b = Math.max(i.colB, i.colH)
+  const AvReq = Math.max(0.062 * Math.sqrt(i.fc) * b * s / fyt, (0.35 * b * s) / fyt)
+  const aLeg = (Math.PI / 4) * i.hoopDia ** 2
+  const AvProv = legs * aLeg
+  const legsReq = Math.max(2, Math.ceil(AvReq / Math.max(aLeg, 1e-9) - 1e-9))
+  return { sMax, AvReq, AvProv, legs, legsReq, ok: AvProv >= AvReq - 1e-9 }
 }
 
 /**
@@ -299,9 +362,24 @@ export function designBeamColumnJoint(i: BeamColumnJointInput): BeamColumnJointR
 
   // §418.8.3.2 — four beams, each ≥ ¾ the column width: half the hoops, ≤150.
   const halvedHoops = confinement === 'four-faces' && !!i.wideBeams
-  const jointHoopSpacing = halvedHoops
-    ? Math.min(JOINT_HOOP_SPACING_MAX, 2 * i.hoopSpacing)
-    : i.hoopSpacing
+  // §415.4.2.2 caps the spacing at half the shallowest beam's depth whatever
+  // §418.8.3 allows — the relaxation of §418.8.3.2 doubles the column spacing
+  // and could otherwise step straight past it.
+  const s415 = (i.shallowestBeamH ?? i.beamH) / 2
+  const jointHoopSpacing = Math.min(
+    halvedHoops ? Math.min(JOINT_HOOP_SPACING_MAX, 2 * i.hoopSpacing) : i.hoopSpacing,
+    s415,
+  )
+  const joint415 = jointTransverse(
+    { colB: i.colB, colH: i.colH, beamH: i.beamH, hoopDia: i.hoopDia, fc: i.fc ?? 28 },
+    jointHoopSpacing, i.hoopLegs ?? 2, i.fyt ?? 415, i.shallowestBeamH ?? i.beamH,
+  )
+  const spacingGovern = jointHoopSpacing >= s415 - 1e-9
+    ? '§415.4.2.2 (half the shallowest beam)'
+    : halvedHoops ? '§418.8.3.2' : '§418.8.3.1 (column confinement)'
+  if (!joint415.ok) {
+    notes.push(`§415.4.2 wants ${Math.round(joint415.AvReq)} mm² of hoop leg through the joint at ${Math.round(jointHoopSpacing)} centres and ${joint415.legs} legs of ⌀${Math.round(i.hoopDia)} give ${Math.round(joint415.AvProv)} mm² — provide ${joint415.legsReq} legs, or close the hoops up`)
+  }
 
   if (main.applies && !main.ok) {
     notes.push(`⌀${Math.round(main.dia)} beam bars pass THROUGH the joint, so §418.8.2.3 needs a column depth of ${Math.round(main.required)} mm parallel to them — ${Math.round(main.provided)} mm provided`)
@@ -324,7 +402,7 @@ export function designBeamColumnJoint(i: BeamColumnJointInput): BeamColumnJointR
     forces, Vu: forces.Vu, shearOK,
     through: { main, spandrel }, terminated,
     ldh, ldhInputs: { db: i.beamBarDia, fy, fc, lambda }, ldhAvail, ldhClear, ldhFits, hookTail,
-    jointHoopSpacing, halvedHoops,
+    jointHoopSpacing, halvedHoops, joint415, spacingGovern,
     ok: shearOK && main.ok && spandrel.ok && ldhFits,
     notes,
   }
@@ -594,6 +672,7 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
     r.halvedHoops
       ? `JOINT HOOPS @ ${JOINT_HOOP_SPACING_MAX} — FOUR BEAMS FRAME IN, EACH ≥ ¾ THE COLUMN WIDTH (§418.8.3.2)`
       : `COLUMN CONFINEMENT HOOPS CONTINUE THROUGH THE JOINT @ ${Math.round(r.jointHoopSpacing)} (§418.8.3.1)`,
+    `JOINT HOOPS: ${r.joint415.legs} LEGS ⌀${Math.round(i.hoopDia)} — Av ${Math.round(r.joint415.AvProv)} ≥ ${Math.round(r.joint415.AvReq)} mm² (§415.4.2), s ≤ ${Math.round(r.joint415.sMax)} = ½ THE SHALLOWEST BEAM (§415.4.2.2)`,
     `JOINT HOOP SPLICES ARE MADE OUTSIDE THE JOINT`,
     seeGeneralNotes(),
   ]

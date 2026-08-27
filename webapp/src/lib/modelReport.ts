@@ -266,7 +266,7 @@ export function buildModelReport(
           f1(Math.abs(s.Mu)), f1(s.Vu), d.mode,
           `${d.bars}⌀${sec?.barDia}${d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}${s.hogging ? ' top' : ''}`,
           // A HOGGING section is in the 2h hinge zone, so the spacing it is
-          // built at is `sHinge` — `sAdopt` capped by §418.6.4.4 / §418.4.2.
+          // built at is `sHinge` — `sAdopt` capped by §418.6.4.4 / §418.4.2.4.
           // Reporting `sAdopt` there printed @220 in the schedule while the
           // cage laid the hoops at @110, which is the schedule disagreeing
           // with the drawing about the same bar.

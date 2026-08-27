@@ -219,7 +219,7 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
     ['Stirrup design', '§22.5 · §9.7.6.2.2', r.region !== 'inadequate'],
     ['Section check (shear)', '§22.5.1.2', r.region !== 'inadequate'],
     ['Stirrup detailing', '§407.3.2 · §425.3.2', undefined],
-    ['Hinge-zone confinement', '§418.6.4.4 · §418.4.2', undefined],
+    ['Hinge-zone confinement', '§418.6.4.4 · §418.4.2.4', undefined],
   ]
   // The 2h zone at each support is confined by DETAILING, not by Vu: on a
   // lightly loaded beam the shear rules are satisfied at d/2 and say nothing

@@ -119,7 +119,7 @@ export interface BeamDesignResult {
    *
    * SMF §418.6.4.4: the smallest of d/4, 6·db of the smallest longitudinal
    * bar, and 150 mm.
-   * IMF §418.4.2: the smallest of d/4, 8·db, 24·d_hoop and 300 mm.
+   * IMF §418.4.2.4: the smallest of d/4, 8·db, 24·d_hoop and 300 mm.
    *
    * `sAdopt` is NOT reduced by it here — see `BeamDesignInput.system`.
    */
@@ -321,7 +321,7 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
     sAdopt = roundDown(Math.min(sReq, sCap, sMinArea), 10)
   }
 
-  // ── the hinge zone (§418.6.4.4 SMF / §418.4.2 IMF) ──────────────────────
+  // ── the hinge zone (§418.6.4.4 SMF / §418.4.2.4 IMF) ────────────────────
   //
   // Over 2h from each support face the hoops confine a plastic hinge, and the
   // spacing there is a DETAILING limit — it does not fall out of the shear
@@ -348,7 +348,7 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
     ? undefined
     : (sAdopt > 0 && sAdopt <= seismicSConf
       ? 'shear demand'
-      : sys === 'smf' ? '§418.6.4.4 SMF conf.' : '§418.4.2 IMF conf.')
+      : sys === 'smf' ? '§418.6.4.4 SMF conf.' : '§418.4.2.4 IMF conf.')
 
   return {
     seismicSConf, hingeGovern, sHinge,

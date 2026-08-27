@@ -239,7 +239,7 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
     // exists to create never appeared.
     //
     // At a support the spacing is `sHinge` — `sAdopt` capped by §418.6.4.4
-    // (SMF) or §418.4.2 (IMF), which shear demand alone never reaches.
+    // (SMF) or §418.4.2.4 (IMF), which shear demand alone never reaches.
     const atEnds = b.sections.filter((s) => s.hogging)
     const atMid = b.sections.filter((s) => !s.hogging)
     const ends = atEnds.map((s) => s.design.sHinge).filter((v) => v > 0)

@@ -4,6 +4,7 @@ import {
   designBeamColumnJoint, buildBeamColumnJointDetail, effectiveJointWidth, jointHookLdh, wrapNote,
   JOINT_GAMMA, PHI_JOINT, THROUGH_BAR_DIAS, THROUGH_BAR_DIAS_LIGHTWEIGHT, PROBABLE_FY,
   JOINT_HOOP_SPACING_MAX, throughBarCheck, jointForces,
+  jointTransverse,
   type BeamColumnJointInput,
 } from './beamColumnJoint'
 
@@ -460,5 +461,73 @@ describe('buildBeamColumnJointDetail', () => {
     })
     expect(bare.primitives.length).toBeGreaterThan(0)
     for (const v of Object.values(bare.bounds)) expect(Number.isFinite(v)).toBe(true)
+  })
+})
+
+describe('§415.4.2 — the transverse steel a joint needs', () => {
+  // §418.4.4 sends an intermediate frame's joints straight to §415, and
+  // §415.2.3 brings every moment-transferring joint under §415.4. Neither the
+  // area rule nor the spacing cap was being asked.
+  const base = {
+    colB: 400, colH: 400, colBarDia: 25, colBars: 8, hoopDia: 10, hoopSpacing: 110,
+    beamB: 300, beamH: 500, beamBarDia: 20, topBars: 3, botBars: 2,
+    fc: 28, interior: true,
+  }
+
+  it('caps the spacing at half the SHALLOWEST beam (§415.4.2.2)', () => {
+    // A shallow beam framing into a column whose confinement spacing is wider
+    // than half its depth: the joint takes the beam's rule, not the column's.
+    const r = designBeamColumnJoint({ ...base, beamH: 200, hoopSpacing: 150 })
+    expect(r.jointHoopSpacing).toBeCloseTo(100, 6)
+    expect(r.spacingGovern).toContain('§415.4.2.2')
+  })
+
+  it('measures that against the shallowest beam, not the one drawn', () => {
+    const r = designBeamColumnJoint({ ...base, beamH: 600, shallowestBeamH: 300, hoopSpacing: 200 })
+    expect(r.jointHoopSpacing).toBeCloseTo(150, 6)      // 300/2, not 600/2
+  })
+
+  it('does not let §418.8.3.2’s relaxation step past it', () => {
+    // The four-wide-beam relaxation doubles the column spacing to a 150 cap.
+    // §415.4.2.2 still applies underneath, and on a shallow beam it is tighter.
+    const r = designBeamColumnJoint({
+      ...base, beamH: 250, wideBeams: true, interior: true, spandrel: true,
+      spandrelB: 300, spandrelH: 250, hoopSpacing: 140,
+    } as Parameters<typeof designBeamColumnJoint>[0])
+    expect(r.jointHoopSpacing).toBeLessThanOrEqual(125 + 1e-9)
+  })
+
+  it('asks for leg AREA, greater of the two expressions (§415.4.2)', () => {
+    const j = jointTransverse({ colB: 400, colH: 400, beamH: 500, hoopDia: 10, fc: 28 }, 110, 2, 415)
+    const b = 400
+    const want = Math.max(0.062 * Math.sqrt(28) * b * 110 / 415, 0.35 * b * 110 / 415)
+    expect(j.AvReq).toBeCloseTo(want, 6)
+    expect(want).toBeCloseTo(0.35 * b * 110 / 415, 6)   // 0.35 governs at f'c = 28
+    expect(j.AvProv).toBeCloseTo(2 * (Math.PI / 4) * 100, 6)
+    expect(j.ok).toBe(true)
+  })
+
+  it('takes b as the column dimension perpendicular to the legs — the worse one', () => {
+    const wide = jointTransverse({ colB: 900, colH: 400, beamH: 500, hoopDia: 10, fc: 28 }, 150, 2, 415)
+    const narrow = jointTransverse({ colB: 400, colH: 400, beamH: 500, hoopDia: 10, fc: 28 }, 150, 2, 415)
+    expect(wide.AvReq).toBeGreaterThan(narrow.AvReq)
+  })
+
+  it('demands more legs when two cannot carry the area, and says so', () => {
+    // A large column at a wide spacing: 0.35·b·s/fyt outruns a 2-leg ⌀10 set.
+    const j = jointTransverse({ colB: 1400, colH: 1400, beamH: 900, hoopDia: 10, fc: 28 }, 250, 2, 415)
+    expect(j.ok).toBe(false)
+    expect(j.legsReq).toBeGreaterThan(2)
+    const fixed = jointTransverse({ colB: 1400, colH: 1400, beamH: 900, hoopDia: 10, fc: 28 }, 250, j.legsReq, 415)
+    expect(fixed.ok).toBe(true)
+    const r = designBeamColumnJoint({ ...base, colB: 1400, colH: 1400, beamH: 900, hoopSpacing: 250 })
+    expect(r.notes.some((n) => n.includes('§415.4.2'))).toBe(true)
+  })
+
+  it('scales with f’c once 0.062·√f’c passes 0.35', () => {
+    const lo = jointTransverse({ colB: 400, colH: 400, beamH: 500, hoopDia: 10, fc: 28 }, 110, 2, 415)
+    const hi = jointTransverse({ colB: 400, colH: 400, beamH: 500, hoopDia: 10, fc: 60 }, 110, 2, 415)
+    expect(0.062 * Math.sqrt(60)).toBeGreaterThan(0.35)
+    expect(hi.AvReq).toBeGreaterThan(lo.AvReq)
   })
 })

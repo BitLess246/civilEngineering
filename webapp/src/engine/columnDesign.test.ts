@@ -74,8 +74,17 @@ describe('axial — tied, IMF seismic §418.4.3', () => {
     expect(r.seismicSConf).toBeCloseTo(expected, 6)
   })
 
-  it('IMF hinge zone lo = max(bMax, 450)', () => {
-    expect(r.seismicLoZone).toBeCloseTo(Math.max(400, 450), 6)
+  it('IMF hinge zone lo = max(clear span/6, bMax, 450) — §418.4.3.3 (e)(f)(g)', () => {
+    // The clear-span term was missing, and this test encoded its absence. On a
+    // 4 m column 300 square the clause asks for 4000/6 = 667 and the code gave
+    // max(300, 450) = 450 — a confined length a third short of the rule.
+    expect(r.seismicLoZone).toBeCloseTo(Math.max(3000 / 6, 400, 450), 6)
+    const tall = designAxialColumn({
+      shape: 'tied', b: 300, h: 300, cover: 40, barDia: 20, tieDia: 10,
+      fc: 28, fy: 415, Pu: 800, numBars: 8, system: 'imf', columnLength: 4000,
+    })
+    expect(tall.seismicLoZone).toBeCloseTo(4000 / 6, 6)
+    expect(tall.seismicLoZone!).toBeGreaterThan(450)
   })
 })
 

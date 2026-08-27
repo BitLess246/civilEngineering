@@ -151,10 +151,19 @@ export function designAxialColumn(i: AxialColumnInput): AxialColumnResult {
       // §418.7.5.5 — spacing outside lo
       seismicSOut = Math.min(6 * i.barDia, 150)
     } else {
-      // IMF §418.4.3 — hinge zone = max(bMax, 450); s ≤ min(8db, 24dt, bMin/2, 300)
-      seismicLoZone = Math.max(bMax, 450)
+      // IMF §418.4.3.3 — spacing so over a length lo from each joint face.
+      //
+      // lo is the LARGEST of (e) one-sixth of the clear span, (f) the maximum
+      // cross-sectional dimension, (g) 450 mm. (e) was missing: on a 4 m clear
+      // column 300 mm square, lo came out max(300, 450) = 450 where the clause
+      // asks for 4000/6 = 667 — the confined length was a third short. The SMF
+      // branch above has carried Lu/6 all along; this one simply never did.
+      const Lu = i.columnLength ?? 3000
+      seismicLoZone = Math.max(bMax, Lu / 6, 450)
+      // so ≤ smallest of (a) 8db, (b) 24·d_hoop, (c) half the smallest column
+      // dimension, (d) 300 mm.
       seismicSConf  = Math.min(8 * i.barDia, 24 * i.tieDia, bMin / 2, 300)
-      seismicSOut   = tieSpacing   // outside hinge: ordinary §425.7.2 applies
+      seismicSOut   = tieSpacing   // outside lo: §410.7.6.5.2 / ordinary §425.7.2
     }
   }
 
@@ -162,7 +171,7 @@ export function designAxialColumn(i: AxialColumnInput): AxialColumnResult {
     ? Math.min(tieSpacing, seismicSConf)
     : tieSpacing
   const tieSpacingLabel = seismicSConf !== undefined && seismicSConf < tieSpacing
-    ? (system === 'smf' ? '§418.7.5 SMF conf.' : '§418.4.3 IMF conf.')
+    ? (system === 'smf' ? '§418.7.5 SMF conf.' : '§418.4.3.3 IMF conf.')
     : `§425.7.2 (${tieGovern})`
 
   // §425.7.3 spiral

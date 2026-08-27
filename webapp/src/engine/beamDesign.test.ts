@@ -244,7 +244,7 @@ describe('beam design — compression NA check', () => {
   })
 })
 
-describe('hinge-zone confinement — §418.6.4.4 (SMF) / §418.4.2 (IMF)', () => {
+describe('hinge-zone confinement — §418.6.4.4 (SMF) / §418.4.2.4 (IMF)', () => {
   // A 300 × 500 beam, lightly loaded: the shear rules are satisfied by the
   // §409.7.6.2.2 gravity maximum of d/2 = 220 and say nothing at all about the
   // hinge. That is the case this exists for — on a special moment frame the
@@ -275,7 +275,7 @@ describe('hinge-zone confinement — §418.6.4.4 (SMF) / §418.4.2 (IMF)', () =>
     const r = designBeam({ ...base, system: 'imf' })
     expect(r.seismicSConf).toBeCloseTo(Math.min(r.d / 4, 8 * 20, 24 * 10, 300), 6)
     expect(r.sHinge).toBe(110)
-    expect(r.hingeGovern).toContain('§418.4.2')
+    expect(r.hingeGovern).toContain("§418.4.2.4")
   })
 
   it('lets shear demand govern when it is tighter than the cap', () => {
