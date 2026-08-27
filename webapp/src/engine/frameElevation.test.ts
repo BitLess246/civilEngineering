@@ -5,6 +5,7 @@ import {
 } from './frameElevation'
 import { elevationPlane, type RebarCage, type RebarRun } from './rebarModel'
 import { STEEL, STEEL_LIGHT } from './sheetInk'
+import { textWidth } from './detailSheet'
 import { designStructure } from './pipeline'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { buildStructureCages } from './cageBuilder'
@@ -446,5 +447,68 @@ describe('angledLeader — the leg runs at 45°', () => {
     const a = angledLeader({ x: 6, y: 0, ty: -0.4, side: 'left', within, text: 'B1', size: 0.1 })
     const b = angledLeader({ x: 6, y: 0, ty: -0.4, side: 'left', text: 'B1', size: 0.1 })
     expect(leg(a)).toEqual(leg(b))
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// NO TWO LABELS MAY PRINT THROUGH EACH OTHER
+//
+// The two face callouts used to share one baseline and rely on being sent to
+// opposite sides of it to stay apart. `angledLeader` flips a side whose label
+// would leave the bay, and a deep beam makes the BOT leader's 45° leg long
+// enough that its preferred side always overruns — so both landed on the same
+// side of the same line and printed through each other on EVERY sheet of every
+// frame, gravity and seismic alike.
+//
+// Asserted on the drawn text's own boxes rather than on the baselines, because
+// separate baselines are the fix and testing for them would only be testing
+// that the fix is present. This asks the question the reader asks.
+// ─────────────────────────────────────────────────────────────────────────
+describe('buildFrameElevation — label collisions', () => {
+  /** A drawn label's box: full advance width, cap height up, a short
+   *  descender down. Deliberately generous — a near miss is still a clash. */
+  const boxes = (d: { primitives: { kind: string }[] }) =>
+    (d.primitives.filter((p) => p.kind === 'text') as unknown as
+      { x: number; y: number; text: string; size: number; anchor?: string }[])
+      .map((t) => {
+        const w = textWidth(t.text, t.size)
+        const x0 = t.anchor === 'middle' ? t.x - w / 2 : t.anchor === 'end' ? t.x - w : t.x
+        return { t: t.text, x0, x1: x0 + w, y0: t.y - t.size * 0.72, y1: t.y + t.size * 0.22 }
+      })
+
+  const clashes = (d: { primitives: { kind: string }[] }) => {
+    const b = boxes(d), out: string[] = []
+    for (let i = 0; i < b.length; i++) for (let j = i + 1; j < b.length; j++) {
+      const p = b[i], q = b[j]
+      if (p.x0 < q.x1 && q.x0 < p.x1 && p.y0 < q.y1 && q.y0 < p.y1) out.push(`"${p.t}" ∩ "${q.t}"`)
+    }
+    return out
+  }
+
+  it('no label overlaps another on any sheet of the reference frame', () => {
+    for (const b of bundles) expect(clashes(buildFrameElevation(b.input))).toEqual([])
+  })
+
+  it('holds on a deep, heavily reinforced SMF frame — the case that broke it', () => {
+    // 350×650 at 8 m under 14 kPa SDL + 20 kPa LL: 7 top bars and a leader leg
+    // long enough to force the flip that caused the overprint.
+    const sec = { id: 's1', name: 'C1', b: 350, h: 650, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+    const m = generateGridModel({ baysX: [8, 8], baysZ: [8], storeyH: [3.5, 3.5], section: sec })
+    m.loads = buildGravityLoads(m, 14, 20)
+    const d = designStructure(m, { qAllow: 300, gammaSoil: 18, gammaConc: 24, H: 1.5 } as never,
+      {}, { seismicSystem: 'smf' })!
+    const cs = buildStructureCages(m, d).cages
+    for (const b of frameElevationBundles(m, d, cs)) {
+      expect(clashes(buildFrameElevation(b.input))).toEqual([])
+    }
+  })
+
+  it('the two face callouts are on SEPARATE lines, top above bottom', () => {
+    const d = buildFrameElevation(bundles[0].input)
+    const at = (s: string) => boxes(d).find((b) => b.t.includes(s))!
+    const top = at('TOP THRU'), bot = at('BOT. THRU')
+    expect(top).toBeTruthy(); expect(bot).toBeTruthy()
+    // Page-Y grows downward, so the TOP callout's baseline is the LARGER one.
+    expect(top.y0).toBeGreaterThan(bot.y1)
   })
 })

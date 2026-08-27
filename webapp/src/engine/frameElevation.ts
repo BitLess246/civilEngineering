@@ -503,21 +503,34 @@ export function buildFrameElevation(
       text: `${m.mark}  ${m.bw}×${m.d}`, size: u * 0.9,
       anchor: 'middle', color: SHEET_INK, weight: 700,
     })
-    if (top.thru || top.extra) {
-      P.push(...angledLeader({
-        x: m.u0 + span * 0.3, y: Y(m.yTop) + depth * 0.12,
-        ty: Y(m.yTop) - u * 1.9, side: 'right', within: room,
-        text: face(top, 'TOP'), size: u * 0.85, color: SHEET_INK,
-      }))
-    }
     // BOTH face callouts go ABOVE the beam. The space under it belongs to the
     // sections now, and a leader crossing them would name a bar in one drawing
     // while lying across another.
+    //
+    // ON THEIR OWN LINES, and that is not cosmetic. They used to share one
+    // baseline and rely on being sent to opposite sides — TOP's label to the
+    // left of its anchor, BOT's to the right — to stay apart. But `angledLeader`
+    // flips a side whose label would leave the bay, and a deep beam makes BOT's
+    // 45° leg long enough that its preferred side always overruns: both labels
+    // ended up on the same side of the same baseline, printing through each
+    // other ("3-⌀20 TOP THRU + 8 EXTRA" over "4-⌀20 BOT. THRU", overlapping to
+    // within 8 mm on an 8 m bay). Stacked, the horizontal clamp is free to put
+    // each wherever the bay allows and they still cannot collide.
+    const noteSize = u * 0.85
+    const line = noteSize * 1.30                  // the glyph height `leader` sets
+    const topLine = Y(m.yTop) - u * 1.9
+    if (top.thru || top.extra) {
+      P.push(...angledLeader({
+        x: m.u0 + span * 0.3, y: Y(m.yTop) + depth * 0.12,
+        ty: topLine, side: 'right', within: room,
+        text: face(top, 'TOP'), size: noteSize, color: SHEET_INK,
+      }))
+    }
     if (bot.thru || bot.extra) {
       P.push(...angledLeader({
         x: m.u0 + span * 0.7, y: Y(m.yBot) - depth * 0.12,
-        ty: Y(m.yTop) - u * 1.9, side: 'left', within: room,
-        text: face(bot, 'BOT.'), size: u * 0.85, color: SHEET_INK,
+        ty: topLine - line, side: 'left', within: room,
+        text: face(bot, 'BOT.'), size: noteSize, color: SHEET_INK,
       }))
     }
 
