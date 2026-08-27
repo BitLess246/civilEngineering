@@ -9,7 +9,6 @@ const complete: SiteConfig = {
   legalName: 'Example Engineering Services',
   address: { line1: '12 Rizal Street', city: 'Cebu City', province: 'Cebu', postalCode: '6000', country: 'Philippines' },
   supportEmail: 'support@example.ph',
-  supportPhone: '+63 32 000 0000',
   siteUrl: 'https://example.ph',
 }
 
@@ -30,7 +29,7 @@ describe('missingSiteFields', () => {
   it('treats whitespace as blank', () => {
     // '   ' in a config file looks filled in a diff and is not.
     expect(missingSiteFields({ ...complete, legalName: '   ' })).toContain('Registered business name')
-    expect(missingSiteFields({ ...complete, supportPhone: '\t' })).toContain('Customer service number')
+    expect(missingSiteFields({ ...complete, supportEmail: '\t' })).toContain('Support email')
   })
 
   it('requires a whole address, not just a street', () => {
@@ -42,6 +41,15 @@ describe('missingSiteFields', () => {
 
   it('does NOT demand a TIN — publishing it is a deliberate choice', () => {
     expect(missingSiteFields({ ...complete, tin: '' })).toEqual([])
+  })
+
+  it('does not ask for a phone number, and no page prints one', () => {
+    // Support is by email. This is here so that re-adding a support number is a
+    // deliberate edit to siteConfig rather than a number typed straight into
+    // one page — which is the four-right-one-stale failure this module exists
+    // to prevent.
+    expect(Object.keys(complete)).not.toContain('supportPhone')
+    expect(missingSiteFields(complete)).toEqual([])
   })
 })
 
@@ -180,5 +188,39 @@ describe('the legal pages do not contradict themselves', () => {
     // independent and both have to survive.
     expect(layout).toMatch(/missingSiteFields\(\)/)
     expect(layout).toMatch(/This document is incomplete/)
+  })
+})
+
+// ── No page prints a support telephone number ────────────────────────────────
+//
+// Removing `supportPhone` from the config stops the five places that READ it,
+// but nothing stops somebody typing a number straight into a page later — and a
+// number in one page is exactly the "right in four places, stale in the fifth"
+// problem this module exists to prevent. It is the worst case of it, too: a
+// stale customer-service number on a Refund Policy sends a payer to a line
+// nobody answers.
+//
+// Reuses the PAGES/COMPONENTS globs above, so it covers the legal pages and the
+// footer — every surface that used to print the number.
+describe('the public pages carry no telephone number', () => {
+  const SOURCES = { ...PAGES, ...COMPONENTS }
+
+  it('the config has no phone field to read', () => {
+    expect(Object.keys(SITE)).not.toContain('supportPhone')
+  })
+
+  it('no page links one with tel:', () => {
+    const offenders = Object.entries(SOURCES)
+      .filter(([, src]) => /tel:/.test(src))
+      .map(([path]) => path.split('/').pop()!)
+    expect(offenders, `links a phone number; support is by email: ${offenders.join(', ')}`).toEqual([])
+  })
+
+  it('no page carries the number that used to be published', () => {
+    // In the spacing it was written in, and with none at all.
+    const offenders = Object.entries(SOURCES)
+      .filter(([, src]) => /\+?63\s*992\s*280\s*4146/.test(src))
+      .map(([path]) => path.split('/').pop()!)
+    expect(offenders, `still prints the removed number: ${offenders.join(', ')}`).toEqual([])
   })
 })

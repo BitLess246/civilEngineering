@@ -13,9 +13,15 @@
 // pages show that list rather than pretending.
 //
 // THESE MUST MATCH THE PROVIDER APPLICATION CHARACTER FOR CHARACTER. The legal
-// name, address and phone number are checked against the registration during
-// onboarding, so "CivEngg Website Application Service" in one place and
-// "CIVENGG WEBSITE APPLICATION SERVICE" in the other is a held application.
+// name and address are checked against the registration during onboarding, so
+// "CivEngg Website Application Service" in one place and "CIVENGG WEBSITE
+// APPLICATION SERVICE" in the other is a held application.
+//
+// THERE IS DELIBERATELY NO SUPPORT PHONE NUMBER. Support is by email, and the
+// contact channels the public pages state are the email address and the
+// registered postal address. If a phone number is ever wanted back, it belongs
+// here and in `REQUIRED` — not typed into one page, which is exactly the
+// four-right-one-stale problem this file exists to prevent.
 // ─────────────────────────────────────────────────────────────────────────
 
 export interface PostalAddress {
@@ -38,8 +44,6 @@ export interface SiteConfig {
   address: PostalAddress
   /** Where customers reach a human. */
   supportEmail: string
-  /** Customer-service number given to the payment provider; shown to payers. */
-  supportPhone: string
   /** BIR Tax Identification Number. */
   tin: string
   /** Public site origin, used for canonical links. */
@@ -66,7 +70,6 @@ export const SITE: SiteConfig = {
     postalCode: '2600',
     country: 'Philippines',
   },
-  supportPhone: '+63 992 280 4146',
   // BIR TIN. Kept here because the provider application and the BIR need it;
   // NOTHING RENDERS IT, and publishing it is a deliberate choice rather than a
   // default — see `missingSiteFields`, which excludes it on purpose.
@@ -93,7 +96,6 @@ const REQUIRED: [keyof SiteConfig | 'address', string][] = [
   ['legalName', 'Registered business name'],
   ['address', 'Registered business address'],
   ['supportEmail', 'Support email'],
-  ['supportPhone', 'Customer service number'],
   ['siteUrl', 'Public site URL'],
 ]
 

@@ -50,11 +50,6 @@ export default function Contact() {
           <Row label="Email">
             <a href={`mailto:${SITE.supportEmail}`} className="text-[#0056b3] underline">{SITE.supportEmail}</a>
           </Row>
-          <Row label="Phone">
-            {SITE.supportPhone.trim()
-              ? <a href={`tel:${SITE.supportPhone.replace(/\s+/g, '')}`} className="text-[#0056b3] underline">{SITE.supportPhone}</a>
-              : <Unset what="customer service number" />}
-          </Row>
           <Row label="Support hours">{SITE.supportHours}</Row>
         </dl>
       </section>

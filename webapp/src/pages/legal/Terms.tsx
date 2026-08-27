@@ -17,7 +17,6 @@ export default function Terms() {
         </p>
         <p>
           Contact: <a href={`mailto:${SITE.supportEmail}`} className="text-[#0056b3] underline">{SITE.supportEmail}</a>
-          {' · '}<Detail value={SITE.supportPhone} what="customer service number" />
         </p>
       </Clause>
 
