@@ -9,7 +9,7 @@
 // vectors (Gauss + Hermite for the distributed ones).
 // Units: coordinates m; E,G MPa; A mm²; I,J mm⁴; forces kN, kN·m.
 // ─────────────────────────────────────────────────────────────────────────
-import { luFactor, luSolve, symFactor, symSolve, matVec, hermite, gauss5Vec } from './fem'
+import { luFactor, luSolve, symFactor, symSolve, matVec, matVecT, hermite, gauss5Vec } from './fem'
 import type { SymFactor } from './fem'
 import { nscpCombos, type Combo, type LoadCategory } from './beamAnalysis'
 import type { ProgressFn } from './progress'
@@ -256,9 +256,68 @@ function tMatrix(R: [V3, V3, V3]): number[][] {
   return T
 }
 
-const mul = (A: number[][], B: number[][]): number[][] =>
-  A.map((row) => B[0].map((_, j) => row.reduce((s, v, k) => s + v * B[k][j], 0)))
-const transpose = (A: number[][]): number[][] => A[0].map((_, j) => A.map((row) => row[j]))
+// Written as plain loops rather than map/reduce: these run once per member per
+// load case, and the closure the reducer allocates for each of the 144 entries
+// cost more than the arithmetic did.
+const mul = (A: number[][], B: number[][]): number[][] => {
+  const n = A.length, m = B[0].length, p = B.length
+  const C: number[][] = Array.from({ length: n }, () => new Array<number>(m).fill(0))
+  for (let i = 0; i < n; i++) {
+    const Ai = A[i], Ci = C[i]
+    for (let j = 0; j < m; j++) {
+      let s = 0
+      for (let k = 0; k < p; k++) s += Ai[k] * B[k][j]
+      Ci[j] = s
+    }
+  }
+  return C
+}
+const transpose = (A: number[][]): number[][] => {
+  const n = A.length, m = A[0].length
+  const C: number[][] = Array.from({ length: m }, () => new Array<number>(n).fill(0))
+  for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) C[j][i] = A[i][j]
+  return C
+}
+
+/**
+ * Tᵀ·k·T for a member whose transform is the plain rotation — T block-diagonal
+ * with the same 3×3 R in all four blocks.
+ *
+ * BIT-IDENTICAL to the general 12×12 triple product, not an approximation of
+ * it: the terms it skips are multiplications by the exact zeros that make up
+ * three quarters of T, and adding 0·x to a running sum changes nothing. What
+ * it saves is real though — 16 3×3 congruences instead of two dense 12×12
+ * products, and no 12×12 T built at all.
+ *
+ * Members WITH rigid offsets have T = rotation · rigid-link, which is not
+ * block-diagonal, and still take the general path.
+ */
+function congruence3(R: [V3, V3, V3], k: number[][]): number[][] {
+  const out: number[][] = Array.from({ length: 12 }, () => new Array<number>(12).fill(0))
+  const tmp = [new Array<number>(3).fill(0), new Array<number>(3).fill(0), new Array<number>(3).fill(0)]
+  for (let bi = 0; bi < 4; bi++) {
+    const oi = 3 * bi
+    for (let bj = 0; bj < 4; bj++) {
+      const oj = 3 * bj
+      for (let r = 0; r < 3; r++) {                    // tmp = Rᵀ · k_block
+        for (let c = 0; c < 3; c++) {
+          let s = 0
+          for (let q = 0; q < 3; q++) s += R[q][r] * k[oi + q][oj + c]
+          tmp[r][c] = s
+        }
+      }
+      for (let r = 0; r < 3; r++) {                    // out_block = tmp · R
+        const tr = tmp[r], orow = out[oi + r]
+        for (let c = 0; c < 3; c++) {
+          let s = 0
+          for (let q = 0; q < 3; q++) s += tr[q] * R[q][c]
+          orow[oj + c] = s
+        }
+      }
+    }
+  }
+  return out
+}
 
 /**
  * Rigid-link (member offset) transformation H mapping NODE DOFs → member-END DOFs, in
@@ -494,7 +553,8 @@ function prepMemberGeom(m: F3Member, nm: Map<string, F3Node>, idx: Map<string, n
   // are present (Teff = T·H). With no offsets H = I, so this is exactly the rotation.
   const hasOffset = (m.offI && m.offI.some((v) => v !== 0)) || (m.offJ && m.offJ.some((v) => v !== 0))
   const T = hasOffset ? mul(tMatrix(R), rigidLinkH(offI, offJ)) : tMatrix(R)
-  const kg = mul(mul(transpose(T), klEff), T)   // uses condensed stiffness when releases exist
+  // uses condensed stiffness when releases exist
+  const kg = hasOffset ? mul(mul(transpose(T), klEff), T) : congruence3(R, klEff)
   const ii = idx.get(m.i)!, jj = idx.get(m.j)!
   const dofs = [...Array.from({ length: 6 }, (_, k) => 6 * ii + k), ...Array.from({ length: 6 }, (_, k) => 6 * jj + k)]
   const gl: V3 = [R[0][1] * -1, R[1][1] * -1, R[2][1] * -1]
@@ -859,12 +919,24 @@ export function solveWithGeometry(
   // (K + Kg)·d − F, or the secondary P-Δ shear/moment never reaches supports.
   let geoAxial: ((mi: number) => number) | null = null
 
-  const mloads = members.map((m, i) => computeMemberLoads(geoms[i], m, loads))
+  // Bucket the member loads by the member they act on, once. `computeMemberLoads`
+  // used to scan the WHOLE load list for every member, which is O(members ×
+  // loads) per load case — on a frame where nearly every member carries its own
+  // self-weight those two counts grow together, so the sweep grew quadratically
+  // in the model. Each member now sees only its own loads, in the order it saw
+  // them before.
+  const byMember = new Map<string, F3Load[]>()
+  for (const ld of loads) {
+    if (!('member' in ld) || typeof ld.member !== 'string') continue
+    const cur = byMember.get(ld.member)
+    if (cur) cur.push(ld); else byMember.set(ld.member, [ld])
+  }
+  const mloads = members.map((m, i) => computeMemberLoads(geoms[i], m, byMember.get(m.id) ?? []))
 
   // Assemble global load vector F (use condensed feqEff so released DOFs get no moment)
   const F = new Array(ndof).fill(0)
   geoms.forEach((g, i) => {
-    const fg = matVec(transpose(g.T), mloads[i].feqEff)
+    const fg = matVecT(g.T, mloads[i].feqEff)
     for (let a = 0; a < 12; a++) F[g.dofs[a]] += fg[a]
   })
   for (const ld of loads) {

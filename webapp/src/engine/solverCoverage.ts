@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 515
+export const SOLVER_TEST_COUNT = 518
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -363,6 +363,18 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "symFactor / symSolve — cheap when sound, safe when not",
         "name": "survives a JSON round-trip — the factor crosses to a worker"
+      },
+      {
+        "suite": "matVecT — Kᵀ·d without building Kᵀ",
+        "name": "matches matVec(transpose(K), d) BIT for bit, not merely closely"
+      },
+      {
+        "suite": "matVecT — Kᵀ·d without building Kᵀ",
+        "name": "handles a rectangular K, which matVec cannot"
+      },
+      {
+        "suite": "matVecT — Kᵀ·d without building Kᵀ",
+        "name": "is the transpose product, checked against a hand-worked case"
       }
     ]
   },

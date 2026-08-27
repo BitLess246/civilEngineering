@@ -72,6 +72,16 @@ export function matVec(K: number[][], d: number[]): number[] {
   return r
 }
 
+/** Kᵀ·d without materialising Kᵀ. Same terms in the same order as
+ *  `matVec(transpose(K), d)`, so the result is bit-identical — it just does
+ *  not allocate a second matrix to get there. */
+export function matVecT(K: number[][], d: number[]): number[] {
+  const n = K.length, m = K[0].length
+  const r = new Array(m).fill(0)
+  for (let i = 0; i < m; i++) { let s = 0; for (let j = 0; j < n; j++) s += K[j][i] * d[j]; r[i] = s }
+  return r
+}
+
 /** Hermite cubic shape functions for a beam element of length le at ξ ∈ [0,1]. */
 export function hermite(xi: number, le: number): [number, number, number, number] {
   return [

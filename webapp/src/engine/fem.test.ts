@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   solveLinear, luFactor, luSolve, matVec, hermite, gauss5Vec,
-  isSymmetric, rcmOrder, skylineFactor, skylineSolve, symFactor, symSolve,
+  isSymmetric, rcmOrder, skylineFactor, skylineSolve, symFactor, symSolve, matVecT,
 } from './fem'
 
 describe('solveLinear — Gaussian elimination with partial pivoting', () => {
@@ -337,5 +337,38 @@ describe('symFactor / symSolve — cheap when sound, safe when not', () => {
     const x = symSolve(back, b)
     const r = matVec(A, x)
     for (let i = 0; i < 25; i++) expect(r[i]).toBeCloseTo(b[i], 8)
+  })
+})
+
+describe('matVecT — Kᵀ·d without building Kᵀ', () => {
+  const T = (n: number, m: number) =>
+    Array.from({ length: n }, (_, i) => Array.from({ length: m }, (_, j) => Math.sin(3 * i + 7 * j) * 4 - 1))
+  const transpose = (A: number[][]) => A[0].map((_, j) => A.map((r) => r[j]))
+
+  it('matches matVec(transpose(K), d) BIT for bit, not merely closely', () => {
+    // The point of the helper is that it is a drop-in for the allocating form
+    // it replaces — the member transform T is 12×12. Anything short of exact
+    // equality would be a change to the solver's answers smuggled in as an
+    // optimisation. (`matVec` is square-only, so the square sizes are the
+    // whole of what it can be compared against.)
+    for (const n of [12, 6, 1]) {
+      const K = T(n, n)
+      const d = Array.from({ length: n }, (_, i) => Math.cos(i) * 10)
+      expect(matVecT(K, d)).toEqual(matVec(transpose(K), d))
+    }
+  })
+
+  it('handles a rectangular K, which matVec cannot', () => {
+    const K = T(9, 5)
+    const d = Array.from({ length: 9 }, (_, i) => Math.cos(i) * 10)
+    const want = Array.from({ length: 5 }, (_, j) =>
+      Array.from({ length: 9 }, (_, i) => K[i][j] * d[i]).reduce((a, b) => a + b, 0))
+    expect(matVecT(K, d)).toHaveLength(5)
+    matVecT(K, d).forEach((v, j) => expect(v).toBeCloseTo(want[j], 12))
+  })
+
+  it('is the transpose product, checked against a hand-worked case', () => {
+    // K = [[1,2],[3,4],[5,6]] (3×2), d = [1,1,1] ⇒ Kᵀd = [1+3+5, 2+4+6]
+    expect(matVecT([[1, 2], [3, 4], [5, 6]], [1, 1, 1])).toEqual([9, 12])
   })
 })
