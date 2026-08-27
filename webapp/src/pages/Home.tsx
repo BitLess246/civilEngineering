@@ -5,6 +5,11 @@ import { BRAND_MARK, BRAND_TAIL } from '../lib/brand'
 import { SIDEBAR_GROUPS, ALL_TOOLS } from '../lib/tools'
 import { CommandPalette } from '../components/CommandPalette'
 import { usePaletteHotkey } from '../lib/usePaletteHotkey'
+import { PipelineDiagram } from '../components/PipelineDiagram'
+import { WorkedSolutionPreview } from '../components/WorkedSolutionPreview'
+import { Storyboard, ReportComparison } from '../components/Storyboard'
+import { useToolPrefs } from '../lib/useToolPrefs'
+import { visibleGroups } from '../lib/toolPrefs'
 
 // Home — search-first tool directory on the drawing-sheet workbench theme
 // (docs/design/uiux-2026-07/Redesign - Home): dark hero with drafting grid,
@@ -30,13 +35,22 @@ const chipTo: Record<string, string> = {
 export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') => void }) {
   const [palette, setPalette] = useState(false)
   usePaletteHotkey(setPalette)
-  const toolCount = ALL_TOOLS.length
-  const groups = useMemo(() => SIDEBAR_GROUPS.map((g, i) => ({
+  const prefs = useToolPrefs()
+
+  // The DIRECTORY is trimmed to the disciplines this browser chose; the hero
+  // still advertises the whole catalog, because that count is a claim about the
+  // product, not about this reader's sidebar. Numbering and anchors are derived
+  // AFTER the filter, so a trimmed directory reads 01, 02, 03 rather than
+  // skipping the numbers of hidden groups.
+  const groups = useMemo(() => visibleGroups(SIDEBAR_GROUPS, prefs).map((g, i) => ({
     num: String(i + 1).padStart(2, '0'),
     heading: g.label === 'Analysis' ? 'Analysis & Modelling' : g.label === 'Steel' ? 'Steel & Connections' : g.label === 'Estimates' ? 'Quantity Take-Off' : g.label,
     anchor: `dir-${i}`,
     tools: g.tools,
-  })), [])
+  })), [prefs])
+  const toolCount = ALL_TOOLS.length
+  const shownCount = useMemo(() => groups.reduce((n, g) => n + g.tools.length, 0), [groups])
+  const trimmed = shownCount < toolCount
 
   const searchBox = (big: boolean) => (
     <button type="button" onClick={() => setPalette(true)}
@@ -88,32 +102,62 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
         </div>
       </section>
 
-      {/* Product demo — a real recording of /model, not a mockup */}
+      {/* ── What the app does, in three registers ───────────────────────────
+          This replaced a 5.6 MB screen recording. The video's caption was doing
+          the real work — explaining the SEQUENCE — so the caption became a
+          diagram, the claim it made became a real worked solution, and the
+          "watch me use it" became an invitation to use it. Under 10 KB, no
+          playback, and it reads on mobile data. */}
       <section className="mx-auto max-w-[1200px] px-6 pt-9">
-        <div className="mb-3.5 flex items-baseline gap-3.5">
-          <h2 className="text-[19px] font-extrabold tracking-tight">See it run</h2>
-          <span className="font-mono text-[11px] text-[#a39d8d]">3×3 bay · 3 storeys · 87 s · no sound</span>
+        <h2 className="text-[19px] font-extrabold tracking-tight">Model to signed report, in one place</h2>
+        <p className="mt-1.5 max-w-[760px] text-[13.5px] leading-relaxed text-[#5c6675]">
+          Generate the geometry, build the NSCP §208 seismic and §207B wind cases, analyse,
+          design every member, then take the schedules, the quantities and the report out the
+          other end.
+        </p>
+        <div className="mt-5">
+          <PipelineDiagram />
         </div>
-        <figure className="m-0 overflow-hidden rounded-lg border border-[#e3e1da] bg-[#0f1b2a]">
-          {/* Click to play: the file is 4.3 MB and most visitors are on mobile
-              data, so it loads its poster and metadata only until asked. */}
-          <video
-            className="block aspect-video w-full"
-            src="/demo/model-space.mp4"
-            poster="/demo/model-space-poster.jpg"
-            width={1280}
-            height={720}
-            controls
-            playsInline
-            preload="metadata"
-          >
-            Your browser cannot play this video.
-          </video>
-          <figcaption className="border-t border-[#e3e1da] bg-white px-5 py-3 text-[12.5px] leading-relaxed text-[#5c6675]">
-            Generate a space frame from four numbers, build the NSCP §208 seismic and §207B wind cases,
-            analyse, design every member — then open any schedule row for its worked solution, and export the report.
-          </figcaption>
-        </figure>
+      </section>
+
+      <section className="mx-auto max-w-[1200px] px-6 pt-10">
+        <div className="mb-3.5 flex items-baseline gap-3.5">
+          <h2 className="text-[19px] font-extrabold tracking-tight">Every number, defensible</h2>
+          <span className="font-mono text-[11px] text-[#a39d8d]">one schedule row, opened</span>
+        </div>
+        <WorkedSolutionPreview />
+      </section>
+
+      <section className="mx-auto max-w-[1200px] px-6 pt-10">
+        <div className="mb-3.5 flex items-baseline gap-3.5">
+          <h2 className="text-[19px] font-extrabold tracking-tight">What it looks like doing the work</h2>
+          <span className="font-mono text-[11px] text-[#a39d8d]">real output · not mockups</span>
+        </div>
+        <Storyboard />
+      </section>
+
+      <section className="mx-auto max-w-[1200px] px-6 pt-10">
+        <div className="mb-3.5 flex items-baseline gap-3.5">
+          <h2 className="text-[19px] font-extrabold tracking-tight">It resizes what failed, then re-issues</h2>
+          <span className="font-mono text-[11px] text-[#a39d8d]">the same report, twice</span>
+        </div>
+        <ReportComparison />
+      </section>
+
+      <section className="mx-auto max-w-[1200px] px-6 pt-10">
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-lg border border-[#e3e1da] bg-[#f7f5ef] px-6 py-5">
+          <div className="min-w-[260px] flex-1">
+            <h2 className="text-[17px] font-extrabold tracking-tight">Rather than watch a demo, run one</h2>
+            <p className="mt-1 text-[13px] leading-relaxed text-[#5c6675]">
+              The workbench walks you through it — a guided pass over geometry, loading, analysis
+              and design, on a model it builds for you and clears afterwards.
+            </p>
+          </div>
+          <Link to="/model?tour=1"
+            className="whitespace-nowrap rounded-lg bg-[#0f4c92] px-5 py-3 text-sm font-bold text-white hover:bg-[#135caf]">
+            Run the guided walkthrough
+          </Link>
+        </div>
       </section>
 
       {/* Sample cards */}
@@ -136,9 +180,21 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
 
       {/* Tool directory with sticky rail */}
       <section id="tools" className="mx-auto max-w-[1200px] px-6 pb-16 pt-9">
-        <div className="mb-4 flex items-baseline gap-3.5">
+        <div className="mb-4 flex flex-wrap items-baseline gap-x-3.5 gap-y-1">
           <h2 className="text-[19px] font-extrabold tracking-tight">Tool directory</h2>
-          <span className="font-mono text-[11px] text-[#a39d8d]">{toolCount} tools · {groups.length} disciplines</span>
+          <span className="font-mono text-[11px] text-[#a39d8d]">{shownCount} tools · {groups.length} disciplines</span>
+          {/* SAY SO WHEN THE LIST IS TRIMMED. A directory quietly missing the
+              geotechnical tools is indistinguishable from an app that never had
+              them, and "where did they go?" is a support mail rather than a
+              click. The count above is the shown count for the same reason —
+              claiming 52 above a list of 21 would be the tell that something is
+              wrong without saying what. */}
+          {trimmed && (
+            <span className="font-mono text-[11px] text-[#a39d8d]">
+              · {toolCount - shownCount} hidden by your preferences —{' '}
+              <Link to="/profile" className="text-[#0f4c92] underline">change</Link>
+            </span>
+          )}
         </div>
         <div className="grid items-start gap-6 lg:grid-cols-[200px_1fr]">
           <div className="sticky top-[72px] hidden flex-col gap-0.5 lg:flex">

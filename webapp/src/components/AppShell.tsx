@@ -1,6 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { SIDEBAR_GROUPS, ALL_TOOLS } from '../lib/tools'
+import { loadCollapsed, saveCollapsed, toggleCollapsed } from '../lib/navCollapse'
+import { useToolPrefs } from '../lib/useToolPrefs'
+import { visibleGroups } from '../lib/toolPrefs'
 import { CommandPalette } from './CommandPalette'
 import { usePaletteHotkey } from '../lib/usePaletteHotkey'
 import { SiteFooter } from './SiteFooter'
@@ -25,9 +28,47 @@ function SearchBox({ onOpen, compact }: { onOpen: () => void; compact?: boolean 
   )
 }
 
+/** Chevron for a group header. Rotates rather than swapping glyphs, so the
+ *  open and closed states are visibly the same control. */
+function Caret({ open }: { open: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor"
+      strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+      className={`transition-transform duration-150 ${open ? 'rotate-90' : ''}`}>
+      <polyline points="9 6 15 12 9 18" />
+    </svg>
+  )
+}
+
 function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }) {
   const { pathname } = useLocation()
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  // Lazy initialiser: localStorage is read once on mount, not on every render.
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => loadCollapsed())
+
+  // Trimmed to the disciplines this browser chose. `activeGroup` is still
+  // resolved against the FULL catalog, not the trimmed list: the tool you are
+  // on may belong to a group you have hidden — you reached it by link or by
+  // ⌘K — and the breadcrumb and the marker should still name it correctly.
+  const prefs = useToolPrefs()
+  const groups = useMemo(() => visibleGroups(SIDEBAR_GROUPS, prefs), [prefs])
+  const activeGroup = useMemo(
+    () => SIDEBAR_GROUPS.find((g) => g.tools.some((t) => t.to === pathname))?.label,
+    [pathname],
+  )
+  // Standing on a tool whose group is hidden. Saying so beats a sidebar that
+  // silently does not contain the page you are looking at.
+  const activeIsHidden = !!activeGroup && !groups.some((g) => g.label === activeGroup)
+
+  // A collapsed group is NOT force-opened when you navigate into it. Doing that
+  // means the user's explicit collapse is silently undone by an ordinary
+  // navigation, and it has to be re-done every time. Instead the header marks
+  // itself (dot + lit label) when it holds the active route, so a shut group
+  // never hides where you are — which was the only reason to force it open.
+  const toggle = (label: string) => setCollapsed((c) => {
+    const next = toggleCollapsed(c, label)
+    saveCollapsed(next)
+    return next
+  })
 
   return (
     <aside className="no-print sticky top-0 hidden h-screen w-[230px] flex-none flex-col overflow-y-auto bg-[#0f1b2a] text-[#e8eaed] lg:flex">
@@ -39,29 +80,52 @@ function Sidebar({ onOpenPalette }: { onOpenPalette: () => void }) {
         <div className="mt-3"><SearchBox onOpen={onOpenPalette} compact /></div>
       </div>
       <nav className="flex-1 px-2.5 pb-4 pt-1">
-        {SIDEBAR_GROUPS.map((g) => {
-          const isActiveGroup = g.tools.some((t) => t.to === pathname)
-          const open = isActiveGroup || g.tools.length <= 3 || expanded.has(g.label)
-          const shown = open ? g.tools : g.tools.slice(0, 2)
+        {activeIsHidden && (
+          <div className="mt-3 rounded-md border border-white/10 bg-white/[.04] px-2.5 py-2">
+            <p className="text-[11px] leading-relaxed text-[#9db0c5]">
+              You are in <span className="font-semibold text-white">{activeGroup}</span>, which is
+              hidden by your preferences.
+            </p>
+            <Link to="/profile" className="mt-1 inline-block text-[11px] font-semibold text-[#5b9bd5] hover:underline">
+              Show it again →
+            </Link>
+          </div>
+        )}
+        {groups.map((g) => {
+          const open = !collapsed.has(g.label)
+          const panelId = `navgroup-${g.label.replace(/\W+/g, '-').toLowerCase()}`
+          // A collapsed group still marks itself when it holds the active
+          // route, so a shut group never hides the fact that you are inside it.
+          const holdsActive = g.label === activeGroup
           return (
             <div key={g.label} className="mt-3">
-              <div className="flex items-baseline justify-between px-2 pb-1">
-                <span className="text-[9.5px] font-bold uppercase tracking-[.18em] text-[#7d8ea3]">{g.label}</span>
-                <span className="font-mono text-[9.5px] text-[#55677c]">{String(g.tools.length).padStart(2, '0')}</span>
-              </div>
-              {shown.map((t) => {
-                const active = t.to === pathname
-                return (
-                  <Link key={t.to + t.name} to={t.to}
-                    className={`flex items-center gap-2 rounded-md border-l-2 px-2 py-1.5 text-[12.5px] font-medium ${
-                      active ? 'border-[#5b9bd5] bg-[#0f4c92]/55 text-white' : 'border-transparent text-[#b6c2d0] hover:bg-white/5 hover:text-white'}`}>
-                    {t.name}
-                  </Link>
-                )
-              })}
-              {shown.length < g.tools.length && (
-                <button type="button" onClick={() => setExpanded((s) => new Set(s).add(g.label))}
-                  className="px-2 pt-1 text-[11px] text-[#55677c] hover:text-[#9db0c5]">▸ {g.tools.length - shown.length} more</button>
+              <button type="button" onClick={() => toggle(g.label)}
+                aria-expanded={open} aria-controls={panelId}
+                className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left hover:bg-white/5">
+                <span className={open ? 'text-[#7d8ea3]' : 'text-[#55677c]'}><Caret open={open} /></span>
+                <span className={`text-[9.5px] font-bold uppercase tracking-[.18em] ${
+                  holdsActive ? 'text-[#9db8d6]' : 'text-[#7d8ea3]'}`}>{g.label}</span>
+                {!open && holdsActive && (
+                  <span className="h-1 w-1 rounded-full bg-[#5b9bd5]" aria-hidden="true" />
+                )}
+                <span className="ml-auto font-mono text-[9.5px] text-[#55677c]">{String(g.tools.length).padStart(2, '0')}</span>
+              </button>
+              {/* Unmounted rather than hidden with CSS: a collapsed group's
+                  links must not stay in the tab order or be read out. */}
+              {open && (
+                <div id={panelId}>
+                  {g.tools.map((t) => {
+                    const active = t.to === pathname
+                    return (
+                      <Link key={t.to + t.name} to={t.to}
+                        aria-current={active ? 'page' : undefined}
+                        className={`flex items-center gap-2 rounded-md border-l-2 px-2 py-1.5 text-[12.5px] font-medium ${
+                          active ? 'border-[#5b9bd5] bg-[#0f4c92]/55 text-white' : 'border-transparent text-[#b6c2d0] hover:bg-white/5 hover:text-white'}`}>
+                        {t.name}
+                      </Link>
+                    )
+                  })}
+                </div>
               )}
             </div>
           )

@@ -2335,3 +2335,150 @@ metered.
 
 `vite dev` does not serve `/api/*`, so local development falls back to the
 browser; `vercel dev` exercises the real endpoints.
+
+---
+
+# Landing page media — the video is gone (PRs #640, #642, August 2026)
+
+`webapp/public/demo/model-space.mp4` and its poster are **deleted**. The home
+page carried an 87-second, 5.6 MB screen recording; it is replaced by four
+blocks that together weigh about 770 KB.
+
+| Block | Component | What it is |
+|---|---|---|
+| Pipeline | `PipelineDiagram.tsx` | inline SVG, ~4 KB, six steps, `aria-hidden` |
+| Worked solution | `WorkedSolutionPreview.tsx` | one opened schedule row, as HTML |
+| Storyboard | `Storyboard.tsx` → `Storyboard` | three screenshots: model, rebar, failing schedule |
+| Before/after | `Storyboard.tsx` → `ReportComparison` | the same report, CHECK FAILED beside DESIGN OK |
+| CTA | `Home.tsx` | `/model?tour=1`, consumed on arrival by `ModelSpace` |
+
+## Three things here will bite if you do not know them
+
+**The worked-solution numbers are the engine's, and a test enforces it.**
+`workedSolutionData.ts` holds `designBeam`'s real output as literals so the
+landing page does not pull the design engine into its bundle;
+`workedSolutionPreview.test.ts` re-runs the engine over `DEMO_INPUT` and
+asserts every displayed figure still matches. **If it fails, fix the component,
+not the test** — the alternative is a commercial landing page advertising
+arithmetic the app no longer produces, in the one place this audience is best
+equipped to catch it. It also asserts the case stays worth showing: passing,
+singly reinforced, one layer, and genuinely needing stirrups.
+
+**`public/` is invisible to the build, so `storyboard.test.ts` is the only
+guard.** A missing image there fails silently — build succeeds, deploy
+succeeds, and the first person to find out is a visitor looking at
+broken-image icons. The test globs `public/demo` with Vite (**not `node:fs`** —
+this project deliberately carries no `@types/node`) and names each absent file.
+Five files are required. Do not delete the test to make a red build green.
+
+**Screenshots go in as webp, and somebody has to check.** Two of the five
+arrived as 1.4 MB JPEGs; shipped as supplied the storyboard would have weighed
+~4 MB and undone the entire reason the video was removed. Re-encode with
+`sharp` — 1280 px q80 for the landscape tiles, ~1000 px for the A4 pages —
+which took those two to **70 KB and 69 KB**. Nothing automated enforces the
+size budget yet; if the assets ever grow again, that is the gap.
+
+## Left open
+
+The captions quote figures read off the screenshots (21 failed columns, 1.59 →
+0.76, 175.0 → 232.1 m³, 392 → 413 pages) but **do not claim what caused the
+change** — whether the optimiser or a manual resize produced the second report
+was asked and never answered, and the screenshots do not evidence it. A test
+asserts the word "optimiser" stays out of the captions. If the answer ever
+arrives, the captions can say it; until then they state that the numbers moved
+and the report tracked them.
+
+If the images are replaced, **re-read the captions off the new screenshots**. A
+caption describing the previous screenshot is the kind of small lie that costs
+more trust than it saves effort.
+
+---
+
+# Navigation preferences — collapsible groups + first-run picker (PRs #644, #645, August 2026)
+
+Two per-browser view preferences, both in `localStorage`, both with the same
+storage rule and the same non-negotiable safety property.
+
+| | Key | Module |
+|---|---|---|
+| Collapsed sidebar groups | `civeng-nav-collapsed` | `lib/navCollapse.ts` |
+| Disciplines you use | `civeng-tool-prefs` | `lib/toolPrefs.ts` |
+
+## They store OPPOSITE things, on purpose
+
+| | Stores | A group added later is |
+|---|---|---|
+| `navCollapse` | the **collapsed** set | expanded (it hides nothing) |
+| `toolPrefs` | the **chosen** set | **hidden** |
+
+`toolPrefs` storing the positive set is a product decision, taken deliberately
+after the alternative shipped and was reversed: **a selection is a standing
+instruction, not a snapshot.** Somebody who said "I do concrete" should not find
+a masonry section in their sidebar next month because we shipped one.
+
+The cost is real: **a new module does not announce itself in the nav of anyone
+who has answered.** It is still discoverable — unticked in the profile picker,
+and ⌘K finds it tagged `HIDDEN` — but nothing pushes it. If a launch needs to
+reach existing users, that is a release note's job, not a reason to override a
+preference they set.
+
+**"Everything" is stored as `chosen: null`, never as the list of today's
+groups.** Ticking every box, or clicking "show me everything", means *all of
+it* — freezing that into a list would quietly turn the answer into a filter the
+day the next group ships, and the button they clicked would have lied. `null`
+and a full list look identical on screen today and mean different things
+tomorrow; `prefsFromChosen` collapses a full selection to `null` for exactly
+this reason.
+
+`navCollapse` keeps storing the negative because collapsing hides nothing —
+a new group appearing expanded costs a user one click, not a missing feature.
+
+## Three things that will look like bugs but are deliberate
+
+**A collapsed group is not force-opened when you navigate into it.** Standard
+tree-nav behaviour, deliberately not done: it silently undoes the user's own
+collapse on every visit. The header marks itself instead. The first attempt did
+force it open from an effect and `react-hooks/set-state-in-effect` rejected it —
+the behaviour went, not the lint rule.
+
+**Hiding a discipline is not removing it.** Nothing touches routing. Hidden
+tools keep their URLs, bookmarks, deep links and report links, still render, and
+still turn up in ⌘K — tagged `HIDDEN` and sorted after visible hits. If you are
+standing on a tool whose group is hidden, the sidebar says so and links to the
+profile. A preference that could strand a bookmark is a bug, not a setting.
+
+**An empty selection is refused, and also ignored.** Save is disabled at zero
+in both the dialog and the profile, *and* `visibleGroups` ignores a stored
+preference that would leave nothing — including one that leaves only pinned
+groups. A nav rendering nothing has no route back to the setting that emptied
+it, so the guard is in the pure layer too, not just the UI.
+
+`PINNED_GROUPS = ['Reference']` (Documentation, Validation, Plans) can never be
+hidden — app pages, not a discipline.
+
+## Who gets asked
+
+Anyone whose browser has no stored answer, which is everyone the day this ships,
+existing accounts included. Suppressed on the auth and legal routes: somebody
+mid password-reset or reading the terms is in the middle of something with its
+own stakes. **Skipping writes `{hidden: []}`** rather than writing nothing — a
+"remind me later" would re-ask on every page load, which is how a one-time
+question becomes something people dismiss without reading. Escape and the
+backdrop do the same.
+
+## Live updates
+
+`useToolPrefs` is `useSyncExternalStore` over a module-level cache, not a
+context. `getSnapshot` **must** keep returning the cached object — parsing
+localStorage per call returns a fresh reference each time and React re-renders
+forever. Profile's Save publishes through `setToolPrefs`, so the sidebar and the
+home directory change on the click rather than on the next reload. A `storage`
+listener keeps two tabs in agreement.
+
+## Left open
+
+Nothing enforces that the two dismissal paths and the profile stay in sync
+beyond the shared `DisciplinePicker`; the picker is the guard. And the
+preference is per browser, like the letterhead — a second machine starts with
+the full catalog and asks again. If it should follow the login instead,
+`user_metadata` is now a safe home for it (see `auth/profile.ts` for why).
