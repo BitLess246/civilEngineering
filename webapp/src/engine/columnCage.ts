@@ -98,6 +98,12 @@ export interface ColumnCageInput {
    * the end quarter — the high-tensile-stress zone under lateral load, and
    * exactly where the rule forbids it. The 2D column sheet has drawn the centre
    * -half splice window all along; only the cage disagreed.
+   *
+   * METRES — unlike `spliceLap` beside it, which is mm. The cage's vertical
+   * extents (`yBottom`, `yTop`, `centre`) are all metres and this is measured
+   * against them, so it belongs to that group; but the two sit next to each
+   * other in the same interface and the mismatch has caught a caller, which is
+   * why it is spelt out here.
    */
   spliceRise?: number
 }

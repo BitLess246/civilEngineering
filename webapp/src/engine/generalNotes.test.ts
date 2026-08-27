@@ -289,6 +289,38 @@ describe('the sheet is a drawing, not a specification', () => {
     }
   })
 
+  it('draws the CAGE’s own tie, not a second opinion about one', () => {
+    // The figures project `buildColumnCage`, so the closure the sheet shows is
+    // the closure the 3-D model shows. A hand-drawn approximation beside it is
+    // one more place for the detail to disagree with itself.
+    const fig = secs.find((s) => s.head === 'BENDS AND HOOKS')!.figure!
+    const paths = fig.draw(0, 0, 60).filter((p) => p.kind === 'path')
+    expect(paths).toHaveLength(1)                       // one bar, bent
+    // A closed tie carries its fillets AND its two 135° hook tails, so it has
+    // far more vertices than the four corners of a rectangle.
+    const cmds = (paths[0] as { cmds: unknown[] }).cmds
+    expect(cmds.length).toBeGreaterThan(20)
+    // and the four longitudinal bars it grips
+    expect(fig.draw(0, 0, 60).filter((p) => p.kind === 'circle')).toHaveLength(4)
+  })
+
+  it('leaves the joint band of the column figure empty', () => {
+    // §418.8.3 — column ties stop at the joint and the joint's own hoops take
+    // over. The cage is told where the joint is and drops its ties there, so
+    // the figure states the rule by having nothing in that band.
+    const fig = secs.find((s) => s.head === 'COLUMNS — LAPS AND SPLICES')!.figure!
+    const prims = fig.draw(0, 0, 60)
+    const band = prims.find((p) => p.kind === 'rect' && 'fill' in p && p.fill === '#f1f5f9')
+    expect(band).toBeDefined()
+    const { y: by, h: bh } = band as { y: number; h: number }
+    const ties = prims.filter((p) => p.kind === 'line' && 'stroke' in p && p.stroke === '#b45309')
+    expect(ties.length).toBeGreaterThan(8)              // the cage really placed ties
+    for (const t of ties) {
+      const ty = (t as { y1: number }).y1
+      expect(ty < by - 1e-6 || ty > by + bh + 1e-6, `tie at ${ty} inside joint ${by}..${by + bh}`).toBe(true)
+    }
+  })
+
   it('turns the hold points into a checklist, not a second copy of the rules', () => {
     const lines = constructionChecks().flatMap((c) => c.lines)
     // one thing to look at per line, tickable while standing in the formwork

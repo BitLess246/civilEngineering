@@ -30,6 +30,9 @@ import { calcDevLength } from './devLength'
 import { jointHookLdh } from './beamColumnJoint'
 import { hookBendDiameter, stirrupBendDiameter, hook90, STOCK_BAR_LENGTH } from './rebarModel'
 import { notesBlock, titleBlock, sheetBounds, wrapCols, wrapNote, type Bounds } from './detailSheet'
+import { buildColumnCage, type ColumnCageInput } from './columnCage'
+import { runPolylines } from './rebarWire'
+import type { RebarCage, Vec3 } from './rebarModel'
 
 const INK = '#0f172a'
 const NOTE = '#475569'
@@ -130,119 +133,152 @@ export function measureRows(i: GeneralNotesInput): MeasureRow[] {
 /** §425.3.2 — the tail beyond a 135° seismic hook on transverse steel, mm. */
 export const seismicHookTail = (dt: number) => Math.max(6 * dt, 75)
 
+/** A polyline as the renderer's path commands. */
+const poly = (pts: [number, number][]): PathCmd[] =>
+  pts.map(([x, y], k) => ({ c: k === 0 ? 'M' as const : 'L' as const, x, y }))
+
 // ── the two figures ──────────────────────────────────────────────────────
 //
 // A rule that fits in a 30-mm square is drawn, not written. These two replaced
 // the paragraphs that used to describe them: how a stirrup actually closes,
-// and where a column's zones fall up a storey. Both are schematic — they carry
-// the ARRANGEMENT, never a dimension, because every real dimension on this job
-// is either in the schedule below or on the member's own sheet.
-
-/** A polyline as the renderer's path commands. */
-const poly = (pts: [number, number][]): PathCmd[] =>
-  pts.map(([x, y], k) => ({ c: k === 0 ? 'M' as const : 'L' as const, x, y }))
+// and where a column's zones fall up a storey.
+//
+// Neither is drawn by hand here. Both build a REAL cage through the same
+// `buildColumnCage` the 3-D model uses and project its runs flat, so the
+// closure the sheet shows is the closure the model shows — the helix drift
+// that lets the two ends pass, the 135° hooks bent round the corner bar, the
+// 1-in-6 crank into the splice window, the tie spacing that tightens inside
+// ℓo. A sketch drawn independently is a second opinion about the detail, and
+// this set has had enough of those.
+//
+// Units in: the cage is metres. Units out: type units, scaled to the box.
 
 const FIG = '#334155'
 const FIGL = '#64748b'
 const ACCENT = '#b45309'
 
-/** How a stirrup closes: one bar bent, its two ends hooked 135° round the same
- *  corner bar, tails turned into the core. */
+/** A tie the way the cage builds one, for a column of the given bars. */
+function figureCage(o: Partial<ColumnCageInput> = {}): RebarCage {
+  return buildColumnCage({
+    mark: 'FIG', b: 400, h: 400, cover: 40, barDia: 20, bars: 4, tieDia: 10,
+    sConfined: 100, sOutside: 200, lo: 600,
+    // spliceLap is mm, spliceRise is metres — see ColumnCageInput.
+    centre: [0, 0], yBottom: 0, yTop: 3.0, spliceLap: 700, spliceRise: 0.75,
+    ...o,
+  } as ColumnCageInput)
+}
+
+/** Project a run's polylines onto a plane and fit them to a box, in type
+ *  units. `pick` chooses the two cage axes that become (x, y) on the sheet. */
+function project(
+  polys: Vec3[][], pick: (p: Vec3) => [number, number],
+  x: number, y: number, w: number, h: number,
+  /** Scale the two axes independently. A plan keeps its aspect; a column
+   *  ELEVATION cannot — 0.4 m of width against 4 m of height fits the box as a
+   *  line, which is what the first cut of this figure drew. Stretching it is
+   *  honest here because the figure carries no dimension: it is a diagram of
+   *  which zone is where, and the caption says the sizes are on the schedule. */
+  fitXY = false,
+): { cmds: PathCmd[][]; at: (p: Vec3) => [number, number] } {
+  const flat = polys.flat().map(pick)
+  const xs = flat.map((p) => p[0]), ys = flat.map((p) => p[1])
+  const x0 = Math.min(...xs), x1 = Math.max(...xs)
+  const y0 = Math.min(...ys), y1 = Math.max(...ys)
+  const sx = w / Math.max(x1 - x0, 1e-9), sy = h / Math.max(y1 - y0, 1e-9)
+  const kx = fitXY ? sx : Math.min(sx, sy), ky = fitXY ? sy : Math.min(sx, sy)
+  const ox = x + (w - (x1 - x0) * kx) / 2, oy = y + (h - (y1 - y0) * ky) / 2
+  // The sheet's y runs DOWN and the cage's runs up, so the vertical flips.
+  const at = (p: Vec3): [number, number] => {
+    const [a, b] = pick(p)
+    return [ox + (a - x0) * kx, oy + (y1 - b) * ky]
+  }
+  return { cmds: polys.map((pl) => poly(pl.map(at))), at }
+}
+
+/** How a stirrup or tie closes — the cage's own tie, seen in plan. */
 function stirrupHookFigure(dt: number): NonNullable<NoteSection['figure']> {
   return {
     h: 25,
     draw: (x, y, w) => {
       const P: PlanPrimitive[] = []
-      const s = 15                                   // stirrup side, type units
-      const ox = x + 2, oy = y + 4
-      const rr = 2.0                                 // corner radius, drawn as a chamfer
-      const rb = 1.15                                // longitudinal bar radius
-      const inset = rb + 0.35                        // bar centre in from the inner face
-      const bx = ox + s - inset, by = oy + inset     // the corner bar both ends grip
-
-      // The stirrup body: one bar bent right round, from one end at the top of
-      // the closing corner to the other end coming up the right leg.
-      P.push({
-        kind: 'path',
-        cmds: poly([
-          [bx - 3.6, oy], [ox + rr, oy], [ox, oy + rr], [ox, oy + s - rr],
-          [ox + rr, oy + s], [ox + s - rr, oy + s], [ox + s, oy + s - rr], [ox + s, by + 2.6],
-        ]),
-        stroke: FIG, width: 1.2,
-      })
-      // the four corner longitudinal bars it ties to
-      for (const [cx, cy] of [
-        [ox + inset, oy + inset], [bx, by],
-        [ox + inset, oy + s - inset], [bx, oy + s - inset],
-      ] as [number, number][]) {
-        P.push({ kind: 'circle', cx, cy, r: rb, stroke: FIG, width: 1, fill: '#ffffff' })
+      const box = 15
+      const cage = figureCage({ tieDia: dt })
+      const tie = cage.runs.find((r) => r.role === 'tie' && r.closed)
+      if (!tie) return P
+      const { cmds, at } = project(runPolylines(tie), (p) => [p[0], p[2]], x + 2, y + 3, box, box)
+      // the four longitudinal bars the tie grips, at their real plan positions
+      for (const v of cage.runs.filter((r) => r.role === 'vertical')) {
+        const [cx, cy] = at(v.path[0])
+        P.push({ kind: 'circle', cx, cy, r: 1.15, stroke: FIG, width: 1, fill: '#ffffff' })
       }
-      // Both ends turn 135° round the SAME corner bar — one over its top, one
-      // down its outer face — and both tails point back into the core. That is
-      // the whole content of the paragraph this figure replaced.
-      P.push({
-        kind: 'path',
-        cmds: poly([[bx - 3.6, oy], [bx + 0.6, oy], [bx + 2.0, by + 0.3], [bx - 0.2, by + 2.6]]),
-        stroke: ACCENT, width: 1.25,
-      })
-      P.push({
-        kind: 'path',
-        cmds: poly([[ox + s, by + 2.6], [bx + 1.9, by - 0.5], [bx + 0.2, by - 2.0], [bx - 2.4, by + 0.6]]),
-        stroke: ACCENT, width: 1.25,
-      })
-      const lx = ox + s + 4.5
+      for (const c of cmds) P.push({ kind: 'path', cmds: c, stroke: ACCENT, width: 1.15 })
+      const lx = x + box + 6.5
       const cap = ['135° SEISMIC HOOKS,', `TAIL max(6·dt, 75) = ${seismicHookTail(dt)}`, 'BOTH ENDS ROUND THE SAME', 'CORNER BAR, TURNED INTO', 'THE CORE.']
-      cap.forEach((t, k) => P.push({ kind: 'text', x: lx, y: oy + 3.4 + k * 2.2, text: t, size: 1.2, anchor: 'start', color: FIGL, weight: 600 }))
-      P.push({ kind: 'text', x, y: oy + s + 4.4, text: 'TYPICAL STIRRUP / TIE CLOSURE — CORNERS ALTERNATE ALONG THE MEMBER', size: 1.15, anchor: 'start', color: FIGL, weight: 600 })
+      cap.forEach((t, k) => P.push({ kind: 'text', x: lx, y: y + 6.4 + k * 2.2, text: t, size: 1.2, anchor: 'start', color: FIGL, weight: 600 }))
+      P.push({ kind: 'text', x, y: y + box + 7.4, text: 'TYPICAL STIRRUP / TIE CLOSURE — CORNERS ALTERNATE ALONG THE MEMBER', size: 1.15, anchor: 'start', color: FIGL, weight: 600 })
       void w
       return P
     },
   }
 }
 
-/** Where a column's zones fall up one storey: confined length at each end,
- *  the splice window in the centre half, and the tie sets between them. */
+/** A column storey as the cage builds it, seen in elevation: the ties
+ *  tightening inside ℓo at each end, and the verticals cranking into the
+ *  splice window above the floor. */
 function columnFigure(): NonNullable<NoteSection['figure']> {
   return {
     h: 48,
     draw: (x, y, w) => {
       const P: PlanPrimitive[] = []
-      const cw = 9                                   // column width on the sketch
-      const H = 34                                   // storey height on the sketch
-      const ox = x + 3, oy = y + 5
-      const L = ox, R = ox + cw
-      // floor bands top and bottom
-      for (const fy of [oy, oy + H]) {
-        P.push({ kind: 'rect', x: ox - 4.5, y: fy - 1.6, w: cw + 9, h: 3.2, fill: BAND, stroke: RULE, width: 0.6 })
-      }
-      P.push({ kind: 'line', x1: L, y1: oy, x2: L, y2: oy + H, stroke: FIG, width: 1.1 })
-      P.push({ kind: 'line', x1: R, y1: oy, x2: R, y2: oy + H, stroke: FIG, width: 1.1 })
-      // the splice window — the centre half of the storey
-      const sTop = oy + H * 0.25, sBot = oy + H * 0.75
-      P.push({ kind: 'rect', x: L, y: sTop, w: cw, h: sBot - sTop, fill: '#fef3c7' })
-      // verticals, cranked one diameter inboard at the splice
-      for (const f of [0.28, 0.72]) {
-        const bx = L + cw * f
-        const inb = bx + (f < 0.5 ? 0.9 : -0.9)   // one bar diameter inboard
-        P.push({ kind: 'path', cmds: poly([[bx, oy + H], [bx, sBot], [inb, sBot - 3], [inb, sTop]]), stroke: FIG, width: 0.9 })
-        P.push({ kind: 'line', x1: bx, y1: sTop + 4, x2: bx, y2: oy, stroke: FIG, width: 0.9 })
-      }
-      // tie sets: close at each end (confined length), wider between
-      const tie = (ty: number) => P.push({ kind: 'line', x1: L, y1: ty, x2: R, y2: ty, stroke: ACCENT, width: 0.8 })
-      for (let k = 0; k <= 6; k++) tie(oy + 1.6 + k * 1.5)
-      for (let k = 0; k <= 6; k++) tie(oy + H - 1.6 - k * 1.5)
-      for (let k = 1; k <= 5; k++) tie(oy + H * 0.30 + k * ((H * 0.40) / 6))
-      const lx = R + 7
-      const cap = (ty: number, t: string) => {
-        P.push({ kind: 'line', x1: R + 1.5, y1: ty, x2: lx - 1.2, y2: ty, stroke: RULE, width: 0.5 })
+      const H = 33, bw = 11
+      // A beam frames in at the top, so that band carries the JOINT's own
+      // hoops and none of the column's (§418.8.3) — the cage leaves it empty
+      // when told where the joint is, which states one more rule for free.
+      const joint: [number, number] = [2.45, 3.0]
+      const cage = figureCage({ jointGaps: [joint] })
+      const runs = cage.runs.filter((r) => r.role === 'vertical' || (r.role === 'tie' && r.closed))
+      const polys = runs.map((r) => runPolylines(r)[0])
+      const { at } = project(polys, (p) => [p[0], p[1]], x + 3, y + 4, bw, H, true)
+
+      // the joint band at the top, and the floor the column stands on
+      const topL = at([-0.2, joint[1], 0]), topR = at([0.2, joint[1], 0])
+      const jotL = at([-0.2, joint[0], 0])
+      const botL = at([-0.2, 0, 0]), botR = at([0.2, 0, 0])
+      P.push({ kind: 'rect', x: topL[0] - 3, y: topL[1], w: topR[0] - topL[0] + 6, h: jotL[1] - topL[1], fill: BAND, stroke: RULE, width: 0.6 })
+      P.push({ kind: 'line', x1: botL[0] - 3, y1: botL[1], x2: botR[0] + 3, y2: botL[1], stroke: RULE, width: 1 })
+      // §418.7.4.3 splice window — the centre half of the storey above the floor
+      const wTop = at([0, 3.0 + 0.75 + 0.7, 0]), wBot = at([0, 3.0 + 0.75, 0])
+      P.push({ kind: 'rect', x: topL[0], y: wTop[1], w: topR[0] - topL[0], h: wBot[1] - wTop[1], fill: '#fef3c7' })
+
+      runs.forEach((r, k) => {
+        const pts = polys[k].map(at)
+        if (r.role !== 'tie') {
+          P.push({ kind: 'path', cmds: poly(pts), stroke: FIG, width: 0.95 })
+          return
+        }
+        // A tie is a horizontal loop, and an elevation of a horizontal loop is
+        // a LINE. Drawn as the full projected polyline its 135° hooks come out
+        // as stubs a millimetre long — real geometry, but at this size it reads
+        // as a wobble rather than as a hook. The extent is still taken from the
+        // cage's own bar, so the line is where the steel is; the hooks are the
+        // plan figure's job, where they can be seen.
+        const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1])
+        const my = ys.reduce((a, b) => a + b, 0) / ys.length
+        P.push({ kind: 'line', x1: Math.min(...xs), y1: my, x2: Math.max(...xs), y2: my, stroke: ACCENT, width: 0.75 })
+      })
+
+      const lx = x + 3 + bw + 8
+      const cap = (p: Vec3, t: string) => {
+        const [, ty] = at(p)
+        P.push({ kind: 'line', x1: x + 3 + bw + 2, y1: ty, x2: lx - 1.2, y2: ty, stroke: RULE, width: 0.5 })
         P.push({ kind: 'text', x: lx, y: ty + 0.5, text: t, size: 1.2, anchor: 'start', color: FIGL, weight: 600 })
       }
-      cap(oy + H - 4.5, 'CONFINED LENGTH ℓo — TIES CLOSE UP')
-      cap((sTop + sBot) / 2, 'SPLICE WINDOW — CENTRE HALF (§418.7.4.3)')
-      cap(oy + 4.5, 'CONFINED LENGTH ℓo — TIES CLOSE UP')
-      P.push({ kind: 'text', x: ox - 4.5, y: oy - 3.4, text: 'FLOOR ABOVE', size: 1.15, anchor: 'start', color: FIGL, weight: 600 })
-      P.push({ kind: 'text', x: ox - 4.5, y: oy + H + 3.6, text: 'FLOOR BELOW', size: 1.15, anchor: 'start', color: FIGL, weight: 600 })
-      P.push({ kind: 'text', x, y: y + H + 11.5, text: 'COLUMN ZONES, ONE STOREY — SPACINGS AND BAR SIZES PER THE MEMBER’S SCHEDULE', size: 1.15, anchor: 'start', color: FIGL, weight: 600 })
+      cap([0, 3.0 + 0.75 + 0.35, 0], 'SPLICE WINDOW — CENTRE HALF (§418.7.4.3)')
+      cap([0, (joint[0] + joint[1]) / 2, 0], 'JOINT — ITS OWN HOOPS (§418.8.3)')
+      cap([0, 2.05, 0], 'CONFINED LENGTH ℓo — TIES CLOSE UP')
+      cap([0, 0.3, 0], 'CONFINED LENGTH ℓo — TIES CLOSE UP')
+      P.push({ kind: 'text', x: botL[0] - 3, y: botL[1] + 3.6, text: 'FLOOR BELOW', size: 1.15, anchor: 'start', color: FIGL, weight: 600 })
+      P.push({ kind: 'text', x, y: y + H + 13.5, text: 'COLUMN ZONES, ONE STOREY — SPACINGS AND BAR SIZES PER THE MEMBER’S SCHEDULE', size: 1.15, anchor: 'start', color: FIGL, weight: 600 })
       void w
       return P
     },
