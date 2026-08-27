@@ -42,7 +42,12 @@ function ColumnTab() {
     [shapeName, Fy, L, Kx, Ky, Pu, Mux, Muy, basis]
   )
   const { data: res, loading, error, cause } = useCalcResult<ColumnCalcResult>(
-    () => calcColumn(input), [input]
+    // No debounce: the steel calculators are cheap and the 250 ms default
+    // just held the answer back a quarter of a second behind every
+    // keystroke, with a "computing…" badge sitting where the number
+    // should be. 0 still defers to a task, so a burst of synchronous
+    // changes coalesces into one call.
+    () => calcColumn(input), [input], 0,
   )
 
   const steps = useMemo((): SolutionStep[] => {

@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 496
+export const SOLVER_TEST_COUNT = 522
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -303,6 +303,78 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "gauss5Vec — 5-point Gauss quadrature",
         "name": "handles a vector-valued integrand"
+      },
+      {
+        "suite": "isSymmetric",
+        "name": "accepts a symmetric matrix and rejects a nudged one"
+      },
+      {
+        "suite": "isSymmetric",
+        "name": "rejects a non-square matrix rather than reading past a row"
+      },
+      {
+        "suite": "rcmOrder",
+        "name": "is a permutation of every index"
+      },
+      {
+        "suite": "rcmOrder",
+        "name": "tightens the profile of a deliberately scrambled band matrix"
+      },
+      {
+        "suite": "rcmOrder",
+        "name": "handles a disconnected pattern — every component gets ordered"
+      },
+      {
+        "suite": "skylineFactor / skylineSolve",
+        "name": "reproduces the dense LU answer to near machine precision"
+      },
+      {
+        "suite": "skylineFactor / skylineSolve",
+        "name": "actually satisfies A·x = b, reordered or not"
+      },
+      {
+        "suite": "skylineFactor / skylineSolve",
+        "name": "stores only the envelope, not the square"
+      },
+      {
+        "suite": "skylineFactor / skylineSolve",
+        "name": "refuses a matrix that is not positive definite instead of mis-factoring it"
+      },
+      {
+        "suite": "skylineFactor / skylineSolve",
+        "name": "handles the empty system the same way luFactor does"
+      },
+      {
+        "suite": "symFactor / symSolve — cheap when sound, safe when not",
+        "name": "takes the skyline path on a symmetric positive-definite matrix"
+      },
+      {
+        "suite": "symFactor / symSolve — cheap when sound, safe when not",
+        "name": "falls back to dense LU when the matrix is asymmetric, and still solves it"
+      },
+      {
+        "suite": "symFactor / symSolve — cheap when sound, safe when not",
+        "name": "falls back to dense LU when symmetric but indefinite, and still solves it"
+      },
+      {
+        "suite": "symFactor / symSolve — cheap when sound, safe when not",
+        "name": "returns null on a genuinely singular matrix, like luFactor"
+      },
+      {
+        "suite": "symFactor / symSolve — cheap when sound, safe when not",
+        "name": "survives a JSON round-trip — the factor crosses to a worker"
+      },
+      {
+        "suite": "matVecT — Kᵀ·d without building Kᵀ",
+        "name": "matches matVec(transpose(K), d) BIT for bit, not merely closely"
+      },
+      {
+        "suite": "matVecT — Kᵀ·d without building Kᵀ",
+        "name": "handles a rectangular K, which matVec cannot"
+      },
+      {
+        "suite": "matVecT — Kᵀ·d without building Kᵀ",
+        "name": "is the transpose product, checked against a hand-worked case"
       }
     ]
   },
@@ -539,6 +611,38 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "frame3d — Timoshenko shear deformation (Φ = 12EI/(G·As·L²))",
         "name": "fixed-fixed centre load across two elements: δ = PL³/192EI + PL/4GAs"
+      },
+      {
+        "suite": "internal-force diagrams — the distributed load is integrated exactly",
+        "name": "full-span UDL: M(x) = −w(L−x)²/2 to machine precision"
+      },
+      {
+        "suite": "internal-force diagrams — the distributed load is integrated exactly",
+        "name": "triangular VDL: M(x) = −(w0/L)[(L³−x³)/3 − x(L²−x²)/2] to machine precision"
+      },
+      {
+        "suite": "internal-force diagrams — the distributed load is integrated exactly",
+        "name": "part-span UDL: the shear is the load actually to the right of the station"
+      },
+      {
+        "suite": "internal-force diagrams — the distributed load is integrated exactly",
+        "name": "superposes segments — two part-span loads add, they do not interfere"
+      },
+      {
+        "suite": "solveWithGeometry — recovering only the members a caller reads",
+        "name": "an omitted filter recovers every member, exactly as before"
+      },
+      {
+        "suite": "solveWithGeometry — recovering only the members a caller reads",
+        "name": "a filter recovers exactly its members, and their results are unchanged"
+      },
+      {
+        "suite": "solveWithGeometry — recovering only the members a caller reads",
+        "name": "an EMPTY filter recovers nothing but leaves the solve untouched"
+      },
+      {
+        "suite": "solveWithGeometry — recovering only the members a caller reads",
+        "name": "the envelopes describe the members actually recovered"
       }
     ]
   },

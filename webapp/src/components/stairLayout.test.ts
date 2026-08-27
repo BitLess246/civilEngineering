@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { flightGeometry, MARGIN, DRAW_W, type Pt } from './stairLayout'
+import { flightGeometry, along, barPath, lapBar, MARGIN, DRAW_W, type Pt } from './stairLayout'
 
 // span m, t/R/G mm. θ = atan(R/G), the same value `stairGeometry` hands the page.
 const theta = (R: number, G: number) => (Math.atan2(R, G) * 180) / Math.PI
@@ -136,5 +136,128 @@ describe('the frame holds the drawing', () => {
     expect(g.nSteps).toBeGreaterThanOrEqual(1)
     expect(g.profile.length).toBe(2 * g.nSteps + 1)
     expect(Number.isFinite(g.HT)).toBe(true)
+  })
+})
+
+describe('landings and the steel that runs through them', () => {
+  const g = (landing: number) => flightGeometry(3.5, 125, 175, 280, 32, landing)
+
+  it('draws no landing, and changes nothing, when none is asked for', () => {
+    const a = g(0)
+    expect(a.lowLanding).toEqual([])
+    expect(a.upLanding).toEqual([])
+    // the flight alone still fills the drawing width, as it always did
+    expect(a.x1 - a.x0).toBeCloseTo(DRAW_W, 6)
+  })
+
+  it('shares ONE scale across landing + flight + landing', () => {
+    // Drawn to its own scale a landing would misreport the 450 extension the
+    // whole detail exists to dimension.
+    const b = g(1200)
+    const run = b.nSteps * 280
+    expect(b.scale).toBeCloseTo(DRAW_W / (run + 2 * 1200), 9)
+    expect(b.x1 - b.x0).toBeCloseTo(run * b.scale, 6)
+    expect(b.x0 - MARGIN.left).toBeCloseTo(1200 * b.scale, 6)
+  })
+
+  it('butts each landing onto the flight at the same level and thickness', () => {
+    const b = g(1200)
+    // lower landing: soffit level with the flight's bottom, top a waist above
+    expect(b.lowLanding[1]).toEqual([b.x0, b.y0])
+    expect(b.lowLanding[2]).toEqual([b.x0, b.y0 - b.tv])
+    // upper landing: level with the flight's top
+    expect(b.upLanding[0]).toEqual([b.x1, b.y1])
+    expect(b.upLanding[3]).toEqual([b.x1, b.y1 - b.tv])
+  })
+
+  it('runs both faces landing-to-landing as one bent line', () => {
+    const b = g(1200)
+    expect(b.soffitLine).toHaveLength(4)
+    expect(b.topLine).toHaveLength(4)
+    // the two interior points are the re-entrant corners
+    expect(b.soffitLine[1]).toEqual(b.kinks.lowSoffit)
+    expect(b.soffitLine[2]).toEqual(b.kinks.upSoffit)
+    expect(b.topLine[1]).toEqual(b.kinks.lowTop)
+    // and the top face is exactly one VERTICAL waist above the soffit
+    expect(b.topLine[1][1]).toBeCloseTo(b.soffitLine[1][1] - b.tv, 9)
+  })
+
+  it('opens the frame up for the callouts a landing brings with it', () => {
+    // Without the extra margin the upper landing's spacing label is cut off by
+    // the viewBox — it sits above the flight's own top corner.
+    expect(g(1200).MT).toBeGreaterThan(g(0).MT)
+  })
+})
+
+describe('along', () => {
+  it('steps a real distance in mm, scaled', () => {
+    const p = along([0, 0], [100, 0], 450, 0.1)   // 450 mm at 0.1 units/mm
+    expect(p[0]).toBeCloseTo(45, 9)
+  })
+
+  it('never overshoots the far end', () => {
+    expect(along([0, 0], [10, 0], 9999, 1)).toEqual([10, 0])
+  })
+
+  it('does not divide by zero on a degenerate segment', () => {
+    expect(along([5, 5], [5, 5], 450, 1)).toEqual([5, 5])
+  })
+})
+
+describe('barPath — a bar is bent, and it does not stop in mid-air', () => {
+  const straight: Pt[] = [[0, 0], [100, 0]]
+  const bent: Pt[] = [[0, 0], [100, 0], [160, -60]]
+
+  it('returns 90° into the slab at each free end', () => {
+    // A bar ending at the cover line has nothing developing it. The return is
+    // perpendicular to the run, and `hookSign` picks which way.
+    const down = barPath(straight, 5, 12, 1)
+    expect(down.d.startsWith('M0,12 L0,0')).toBe(true)      // starts below, comes up
+    expect(down.d.endsWith('L100,0 L100,12')).toBe(true)    // and turns back down
+    const up = barPath(straight, 5, 12, -1)
+    expect(up.d.startsWith('M0,-12 L0,0')).toBe(true)
+  })
+
+  it('omits the hook when none is asked for', () => {
+    expect(barPath(straight, 5, 0).d).toBe('M0,0 L100,0')
+  })
+
+  it('turns an interior corner through a radius, tangent to both legs', () => {
+    // The vertex is the quadratic's control point, so the curve leaves and
+    // rejoins each leg along that leg — which is what a bending machine does.
+    const p = barPath(bent, 10, 0)
+    expect(p.d).toContain('Q100,0')
+    expect(p.bends).toEqual([[100, 0]])
+    // …and the curve starts 10 back along the first leg
+    expect(p.d).toContain('L90,0')
+  })
+
+  it('never eats more than half a leg, however large the radius', () => {
+    // A radius wider than the segment would run the curve past the next corner
+    // and fold the bar back on itself.
+    const p = barPath(bent, 999, 0)
+    expect(p.d).toContain('L50,0')
+  })
+
+  it('says nothing about a bar with fewer than two points', () => {
+    expect(barPath([[0, 0]], 5, 12)).toEqual({ d: '', bends: [] })
+  })
+})
+
+describe('lapBar — the bar that carries a re-entrant corner', () => {
+  it('reaches the stated distance along BOTH legs', () => {
+    // Main steel is not bent round the inside of a kink; a separate bar laps
+    // past it, and this is the bar the 450 dimension measures.
+    const lb = lapBar([100, 0], [0, 0], [100, -100], 450, 0.1)
+    expect(lb).toHaveLength(3)
+    expect(lb[0]).toEqual([55, 0])            // 450 mm × 0.1 = 45 units back
+    expect(lb[1]).toEqual([100, 0])
+    expect(lb[2]).toEqual([100, -45])
+  })
+
+  it('stops at the end of a leg shorter than the lap', () => {
+    const lb = lapBar([10, 0], [0, 0], [20, 0], 9999, 1)
+    expect(lb[0]).toEqual([0, 0])
+    expect(lb[2]).toEqual([20, 0])
   })
 })

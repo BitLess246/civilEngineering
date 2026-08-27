@@ -6,7 +6,7 @@ import type { FramePrecompSerial, FramePrecomp, F3Load, PDeltaOpts, F3Result } f
 
 type InMsg =
   | { kind: 'init'; serial: FramePrecompSerial }
-  | { kind: 'solve'; id: number; loads: F3Load[]; opts?: PDeltaOpts }
+  | { kind: 'solve'; id: number; loads: F3Load[]; opts?: PDeltaOpts; recover?: string[] }
 
 type OutMsg =
   | { kind: 'ready' }
@@ -20,7 +20,9 @@ ctx.onmessage = ({ data }: MessageEvent<InMsg>) => {
     precomp = deserializePrecomp(data.serial)
     ctx.postMessage({ kind: 'ready' } satisfies OutMsg)
   } else {
-    const result = precomp ? solveWithGeometry(precomp, data.loads, data.opts) : null
+    const result = precomp
+      ? solveWithGeometry(precomp, data.loads, data.opts, data.recover ? new Set(data.recover) : undefined)
+      : null
     ctx.postMessage({ kind: 'result', id: data.id, result } satisfies OutMsg)
   }
 }

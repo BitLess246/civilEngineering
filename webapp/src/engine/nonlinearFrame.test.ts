@@ -301,7 +301,8 @@ describe('nonlinearFrame — multi-hinge convergence', () => {
       Math.max(...push(3, 4, steps).steps.filter((s) => s.converged).map((s) => Math.abs(s.lambda)))
     const a = peak(30), b = peak(60)
     expect(Math.abs(a - b) / a).toBeLessThan(2e-3)
-  })
+    // ~3 s unloaded; under a full parallel suite it exceeds the 5 s default.
+  }, 60_000)
 
   it('reports the residual it actually achieved', () => {
     const r = push(2, 3, 20)

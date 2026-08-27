@@ -508,6 +508,28 @@ export interface SlabRebarChoice extends MatRebarChoice {
   designs: Map<number, SlabDesignResult>
   /** Spacing adopted for each strip at the chosen diameter, mm. */
   strips: { label: string; b: number; AsReq: number; spacing: number; bars: number }[]
+  /**
+   * The thickness at which a compliant mat first becomes possible, mm — set
+   * only when nothing complied and the panel is too thin to be detailed at
+   * any bar or spacing. `null` whenever a mat WAS found, and also when the
+   * blocker is something depth cannot cure.
+   *
+   * Two of the gates are a section question, not a bar question:
+   *
+   *   §22.2     As,prov ≥ As,req
+   *   §21.2.2   ρ = As,prov/(b·d) ≤ ρ at εt = 0.005
+   *
+   * Together they can only BOTH hold if the steel the moment demands is
+   * itself tension-controlled — ρreq = As,req/(b·d) ≤ ρmax. No choice of bar
+   * or spacing escapes that; it is fixed by the depth. A panel in that squeeze
+   * rejects its thin mats on §22.2 and its thick ones on §21.2.2, and the
+   * answer to both is the same: a deeper slab.
+   *
+   * As,req ≈ Mu/(φ·fy·jd) ∝ 1/d, so ρreq ∝ 1/d², and the depth that clears the
+   * limit is d·√(ρreq/ρmax). That extra depth is added to the panel thickness
+   * and rounded up to the 25-mm step slabs are actually built in.
+   */
+  minThickness: number | null
 }
 
 /** Flatten a DDM panel into the strips its steel is actually detailed on. */
@@ -570,42 +592,20 @@ export function applySlabMats(
 export function optimizeSlabRebar(
   i: SlabInput, opts: MatRebarOptions = {},
 ): SlabRebarChoice {
-  const sizes = opts.sizes ?? MAT_BAR_SIZES
-  const designs = new Map<number, SlabDesignResult>()
-  const candidates: Candidate[] = []
-  let govStrip: MatStrip | null = null
-  let sec: MatSection | null = null
-
-  for (const db of sizes) {
-    let r: SlabDesignResult
-    try {
-      r = designSlabDDM({ ...i, barDia: db })
-    } catch {
-      continue
-    }
-    designs.set(db, r)
-    const s: MatSection = {
-      h: r.h, cover: i.cover ?? 20, fc: i.fc, fy: i.fy, kind: 'two-way',
-    }
-    sec ??= s
-    const strips = slabStrips(r)
-    if (strips.length === 0) continue
-    const gov = strips.reduce((a, c) => (c.AsReq / c.b > a.AsReq / a.b ? c : a))
-    govStrip ??= gov
-    candidates.push(...matCandidates([gov], s, db, opts))
-  }
+  const { designs, candidates, govStrip, sec } = matSearch(i, opts)
 
   if (!sec || !govStrip || candidates.length === 0) {
     return {
       selection: { best: null, ranked: [], rejected: [], margin: 'no candidates were generated' },
       db: null, spacing: null, bars: null, blocker: null,
-      design: null, designs, strips: [],
+      design: null, designs, strips: [], minThickness: null,
     }
   }
 
   const selection = selectRebar(candidates, matContext(govStrip, sec))
   const best = selection.best?.layout ?? null
   const design = best ? designs.get(best.db) ?? null : null
+  const minThickness = best ? null : thicknessForMat(i, opts)
 
   // Re-cut every strip at the adopted diameter to its own best spacing.
   const strips: SlabRebarChoice['strips'] = []
@@ -630,6 +630,77 @@ export function optimizeSlabRebar(
     spacing: best?.spacing ?? null,
     bars: best?.bars ?? null,
     blocker: dominantBlocker(selection),
-    design, designs, strips,
+    design, designs, strips, minThickness,
   }
+}
+
+/** The candidate set for one panel at one thickness — the part of the panel
+ *  search that depends on nothing but the input, so it can be re-run at a
+ *  trial thickness without re-entering `optimizeSlabRebar`. */
+function matSearch(i: SlabInput, opts: MatRebarOptions): {
+  designs: Map<number, SlabDesignResult>
+  candidates: Candidate[]
+  govStrip: MatStrip | null
+  sec: MatSection | null
+} {
+  const sizes = opts.sizes ?? MAT_BAR_SIZES
+  const designs = new Map<number, SlabDesignResult>()
+  const candidates: Candidate[] = []
+  let govStrip: MatStrip | null = null
+  let sec: MatSection | null = null
+
+  for (const db of sizes) {
+    let r: SlabDesignResult
+    try {
+      r = designSlabDDM({ ...i, barDia: db })
+    } catch {
+      continue
+    }
+    designs.set(db, r)
+    const s: MatSection = {
+      h: r.h, cover: i.cover ?? 20, fc: i.fc, fy: i.fy, kind: 'two-way',
+    }
+    sec ??= s
+    const strips = slabStrips(r)
+    if (strips.length === 0) continue
+    const gov = strips.reduce((a, c) => (c.AsReq / c.b > a.AsReq / a.b ? c : a))
+    govStrip ??= gov
+    candidates.push(...matCandidates([gov], s, db, opts))
+  }
+  return { designs, candidates, govStrip, sec }
+}
+
+/** How far above the panel's own thickness `thicknessForMat` will look,
+ *  in 25-mm steps. Ten steps is 250 mm of slab; a panel still undetailable
+ *  after that is not a thickness problem. */
+const MAT_THICKNESS_PROBES = 10
+
+/**
+ * The panel thickness at which a compliant mat becomes possible, mm.
+ *
+ * SEARCHED, not estimated, because the squeeze that makes a panel
+ * undetailable runs ACROSS diameters and no single closed form sees it. A
+ * 150-mm interior panel on a 6 × 5 m bay rejects ⌀10/⌀12/⌀16 on §22.2 —
+ * the steel it needs will not fit within the §8.7.2.2 spacing — and rejects
+ * ⌀20/⌀25 on §21.2.2, because at the depth those bars leave, the steel it
+ * needs is no longer tension-controlled. Read at any ONE diameter the panel
+ * looks curable by a different bar; only the whole set shows that depth is
+ * the only way out.
+ *
+ * So the mat search itself is re-run at 25-mm increments and the first
+ * thickness that yields a compliant layout is returned. Each probe is closed
+ * form — a DDM design per diameter and its candidate mats, no analysis — and
+ * only failing panels probe at all. Returns null if none of the probes
+ * complies, which is the honest answer that depth is not the obstacle.
+ */
+function thicknessForMat(i: SlabInput, opts: MatRebarOptions): number | null {
+  const h0 = i.h ?? 0
+  if (!Number.isFinite(h0) || h0 <= 0) return null
+  for (let k = 1; k <= MAT_THICKNESS_PROBES; k++) {
+    const h = Math.ceil(h0 / 25) * 25 + 25 * k
+    const { candidates, govStrip, sec } = matSearch({ ...i, h }, opts)
+    if (!sec || !govStrip || candidates.length === 0) continue
+    if (selectRebar(candidates, matContext(govStrip, sec)).best) return h
+  }
+  return null
 }

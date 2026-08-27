@@ -7,6 +7,7 @@ interface PendingTask {
   id: number
   loads: F3Load[]
   opts?: PDeltaOpts
+  recover?: string[]
   resolve: (r: F3Result | null) => void
 }
 
@@ -46,15 +47,20 @@ export class FramePool {
     )
   }
 
-  solve(loads: F3Load[], opts?: PDeltaOpts): Promise<F3Result | null> {
+  /** `recover` names the members this solve needs internal forces for; omit for
+   *  all of them, pass an empty list for none. See `RecoverFilter`. A Set does
+   *  not survive postMessage structured-clone in every runtime, so it crosses as
+   *  an array. */
+  solve(loads: F3Load[], opts?: PDeltaOpts, recover?: ReadonlySet<string>): Promise<F3Result | null> {
     const id = this.seq++
+    const rec = recover ? [...recover] : undefined
     return new Promise((resolve) => {
       if (this.idle.length > 0) {
         const wi = this.idle.shift()!
         this.pending.set(id, resolve)
-        this.ws[wi].postMessage({ kind: 'solve', id, loads, opts })
+        this.ws[wi].postMessage({ kind: 'solve', id, loads, opts, recover: rec })
       } else {
-        this.queue.push({ id, loads, opts, resolve })
+        this.queue.push({ id, loads, opts, recover: rec, resolve })
       }
     })
   }
@@ -64,9 +70,9 @@ export class FramePool {
     const cb = this.pending.get(data.id)
     if (cb) { this.pending.delete(data.id); cb(data.result ?? null) }
     if (this.queue.length > 0) {
-      const { id, loads, opts, resolve } = this.queue.shift()!
+      const { id, loads, opts, recover, resolve } = this.queue.shift()!
       this.pending.set(id, resolve)
-      this.ws[wi].postMessage({ kind: 'solve', id, loads, opts })
+      this.ws[wi].postMessage({ kind: 'solve', id, loads, opts, recover })
     } else {
       this.idle.push(wi)
     }

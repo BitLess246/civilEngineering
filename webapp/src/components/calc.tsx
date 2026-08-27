@@ -300,8 +300,12 @@ export function PrintReport({ docTitle, docCode, badges, ok, governing, lh, onLh
 
       {steps && steps.length > 0 && <SectionRule n={3} title="Worked Solution" />}
       {(steps ?? []).map((st, i) => (
-        <div key={i} className="print-avoid-break grid grid-cols-[1fr_110px] gap-4 border-b border-[#f3f1ea] py-3">
-          <div>
+        // minmax(0,…) rather than 1fr — see WorkedSolution: a track's automatic
+        // minimum is its content, so a long equation widens the column instead
+        // of scrolling inside it, and on a printed page there is no scrolling
+        // to fall back on.
+        <div key={i} className="print-avoid-break grid grid-cols-[minmax(0,1fr)_110px] gap-4 border-b border-[#f3f1ea] py-3">
+          <div className="min-w-0">
             <h3 className="text-[11.5px] font-bold"><span className="mr-1.5 font-mono font-semibold text-[#a39d8d]">3.{i + 1}</span>{st.title}</h3>
             <div className="mt-1 space-y-1">
               {st.lines.map((ln, j) => 'text' in ln

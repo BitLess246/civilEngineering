@@ -9,8 +9,8 @@
 // vectors (Gauss + Hermite for the distributed ones).
 // Units: coordinates m; E,G MPa; A mm²; I,J mm⁴; forces kN, kN·m.
 // ─────────────────────────────────────────────────────────────────────────
-import { luFactor, luSolve, matVec, hermite, gauss5Vec } from './fem'
-import type { LUFactor } from './fem'
+import { luFactor, luSolve, symFactor, symSolve, matVec, matVecT, hermite, gauss5Vec } from './fem'
+import type { SymFactor } from './fem'
 import { nscpCombos, type Combo, type LoadCategory } from './beamAnalysis'
 import type { ProgressFn } from './progress'
 import { triShell } from './shell'
@@ -256,9 +256,68 @@ function tMatrix(R: [V3, V3, V3]): number[][] {
   return T
 }
 
-const mul = (A: number[][], B: number[][]): number[][] =>
-  A.map((row) => B[0].map((_, j) => row.reduce((s, v, k) => s + v * B[k][j], 0)))
-const transpose = (A: number[][]): number[][] => A[0].map((_, j) => A.map((row) => row[j]))
+// Written as plain loops rather than map/reduce: these run once per member per
+// load case, and the closure the reducer allocates for each of the 144 entries
+// cost more than the arithmetic did.
+const mul = (A: number[][], B: number[][]): number[][] => {
+  const n = A.length, m = B[0].length, p = B.length
+  const C: number[][] = Array.from({ length: n }, () => new Array<number>(m).fill(0))
+  for (let i = 0; i < n; i++) {
+    const Ai = A[i], Ci = C[i]
+    for (let j = 0; j < m; j++) {
+      let s = 0
+      for (let k = 0; k < p; k++) s += Ai[k] * B[k][j]
+      Ci[j] = s
+    }
+  }
+  return C
+}
+const transpose = (A: number[][]): number[][] => {
+  const n = A.length, m = A[0].length
+  const C: number[][] = Array.from({ length: m }, () => new Array<number>(n).fill(0))
+  for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) C[j][i] = A[i][j]
+  return C
+}
+
+/**
+ * Tᵀ·k·T for a member whose transform is the plain rotation — T block-diagonal
+ * with the same 3×3 R in all four blocks.
+ *
+ * BIT-IDENTICAL to the general 12×12 triple product, not an approximation of
+ * it: the terms it skips are multiplications by the exact zeros that make up
+ * three quarters of T, and adding 0·x to a running sum changes nothing. What
+ * it saves is real though — 16 3×3 congruences instead of two dense 12×12
+ * products, and no 12×12 T built at all.
+ *
+ * Members WITH rigid offsets have T = rotation · rigid-link, which is not
+ * block-diagonal, and still take the general path.
+ */
+function congruence3(R: [V3, V3, V3], k: number[][]): number[][] {
+  const out: number[][] = Array.from({ length: 12 }, () => new Array<number>(12).fill(0))
+  const tmp = [new Array<number>(3).fill(0), new Array<number>(3).fill(0), new Array<number>(3).fill(0)]
+  for (let bi = 0; bi < 4; bi++) {
+    const oi = 3 * bi
+    for (let bj = 0; bj < 4; bj++) {
+      const oj = 3 * bj
+      for (let r = 0; r < 3; r++) {                    // tmp = Rᵀ · k_block
+        for (let c = 0; c < 3; c++) {
+          let s = 0
+          for (let q = 0; q < 3; q++) s += R[q][r] * k[oi + q][oj + c]
+          tmp[r][c] = s
+        }
+      }
+      for (let r = 0; r < 3; r++) {                    // out_block = tmp · R
+        const tr = tmp[r], orow = out[oi + r]
+        for (let c = 0; c < 3; c++) {
+          let s = 0
+          for (let q = 0; q < 3; q++) s += tr[q] * R[q][c]
+          orow[oj + c] = s
+        }
+      }
+    }
+  }
+  return out
+}
 
 /**
  * Rigid-link (member offset) transformation H mapping NODE DOFs → member-END DOFs, in
@@ -320,10 +379,66 @@ function prepShellGeom(sh: F3Shell, nm: Map<string, F3Node>, idx: Map<string, nu
 interface MemberLoads {
   feq: number[]         // original fixed-end forces (for postprocessMember)
   feqEff: number[]      // condensed feq (for global load vector assembly)
-  qy: (x: number) => number
-  qz: (x: number) => number
-  p: (x: number) => number
+  /** Distributed load as the LINEAR SEGMENTS it is actually made of, already
+   *  resolved into the member's three local directions (`w1`/`w2` are the
+   *  global intensity at each end; `gl` projects it). Kept as data rather than
+   *  as an intensity closure so the diagrams can integrate it in closed form —
+   *  see `distShear`/`distMoment`. */
+  dists: { x1: number; x2: number; w1: number; w2: number }[]
+  gl: V3
   pts: { a: number; Py: number; Pz: number; Pa: number }[]
+}
+
+// ── Diagram quadrature, done exactly ─────────────────────────────────────
+//
+// The internal-force diagrams need ∫₀ˣ w and ∫₀ˣ w(m)·(x−m) dm at every
+// sampling station. `w` is piecewise LINEAR — a list of segments — so both
+// integrals have a closed form, and there is nothing to approximate.
+//
+// This used to be a trapezoid/midpoint sweep of up to 60 sub-intervals,
+// re-run from zero at every station: ~25 stations × 4 integrals × 60 steps ×
+// 2 evaluations ≈ 12 000 closure calls per member per load case, which is
+// where essentially all of a solve went once the factorisation stopped being
+// the bottleneck (99.8% of a combo solve at 204 members). It was also only
+// approximate — the partition never lined up with a partial-length load's
+// kinks, so any VDL or part-span UDL carried an O(Δ) error the closed form
+// simply does not have.
+//
+// For one segment [a,b] with w(m) = w1 + s·(m−a), s = (w2−w1)/(b−a), taking
+// c = min(b,x), U = c−a and X = x−a:
+//
+//   ∫ₐᶜ w dm            = w1·U + s·U²/2
+//   ∫ₐᶜ w·(x−m) dm      = w1·X·U − w1·U²/2 + s·X·U²/2 − s·U³/3
+//
+// Units: w in kN/m, x in m ⇒ shear kN, moment kN·m.
+
+/** ∫₀ˣ of the distributed intensity in local direction `comp`. */
+function distShear(ml: MemberLoads, comp: number, x: number): number {
+  const g = ml.gl[comp]
+  if (g === 0) return 0
+  let s = 0
+  for (const d of ml.dists) {
+    if (d.x2 <= d.x1 || x <= d.x1) continue
+    const c = Math.min(d.x2, x), U = c - d.x1
+    const slope = (d.w2 - d.w1) / Math.max(d.x2 - d.x1, 1e-12)
+    s += d.w1 * U + (slope * U * U) / 2
+  }
+  return s * g
+}
+
+/** ∫₀ˣ of the distributed intensity times its lever (x−m) — the moment it
+ *  contributes at station x, in local direction `comp`. */
+function distMoment(ml: MemberLoads, comp: number, x: number): number {
+  const g = ml.gl[comp]
+  if (g === 0) return 0
+  let s = 0
+  for (const d of ml.dists) {
+    if (d.x2 <= d.x1 || x <= d.x1) continue
+    const c = Math.min(d.x2, x), U = c - d.x1, X = x - d.x1
+    const slope = (d.w2 - d.w1) / Math.max(d.x2 - d.x1, 1e-12)
+    s += d.w1 * X * U - (d.w1 * U * U) / 2 + (slope * X * U * U) / 2 - (slope * U * U * U) / 3
+  }
+  return s * g
 }
 
 /** Pre-factored frame: assemble K once and LU-factor it; reuse for every load case.
@@ -340,7 +455,10 @@ export interface FramePrecomp {
   ndof: number
   free: number[]
   freeIdx: Map<number, number>   // global DOF → position in free[]
-  Kff: LUFactor | null           // factored K (K_ind when diaphragm active)
+  /** Factored K (K_ind when a diaphragm is active). Skyline LDLᵀ under an RCM
+   *  reordering where the block is symmetric positive definite — which is the
+   *  ordinary case — and the dense pivoting LU where it is not. */
+  Kff: SymFactor | null
   Kff_raw: number[][]            // un-factored nf×nf elastic stiffness (P-Δ baseline)
   /** Diaphragm constraint transformation rows (present when rigid floor diaphragm active).
    *  diaT[k] = sparse row of T for the k-th free DOF; T maps free→independent DOFs. */
@@ -435,7 +553,8 @@ function prepMemberGeom(m: F3Member, nm: Map<string, F3Node>, idx: Map<string, n
   // are present (Teff = T·H). With no offsets H = I, so this is exactly the rotation.
   const hasOffset = (m.offI && m.offI.some((v) => v !== 0)) || (m.offJ && m.offJ.some((v) => v !== 0))
   const T = hasOffset ? mul(tMatrix(R), rigidLinkH(offI, offJ)) : tMatrix(R)
-  const kg = mul(mul(transpose(T), klEff), T)   // uses condensed stiffness when releases exist
+  // uses condensed stiffness when releases exist
+  const kg = hasOffset ? mul(mul(transpose(T), klEff), T) : congruence3(R, klEff)
   const ii = idx.get(m.i)!, jj = idx.get(m.j)!
   const dofs = [...Array.from({ length: 6 }, (_, k) => 6 * ii + k), ...Array.from({ length: 6 }, (_, k) => 6 * jj + k)]
   const gl: V3 = [R[0][1] * -1, R[1][1] * -1, R[2][1] * -1]
@@ -486,15 +605,6 @@ function computeMemberLoads(geom: MemberGeom, m: F3Member, loads: F3Load[]): Mem
     feq[2] += fe[6]; feq[4] += fe[7]; feq[8] += fe[8]; feq[10] += fe[9]
   }
 
-  const intensity = (x: number, comp: number) => {
-    let s = 0
-    for (const dd of dists) if (dd.x1 <= x && x <= dd.x2) {
-      const w = dd.w1 + ((dd.w2 - dd.w1) * (x - dd.x1)) / Math.max(dd.x2 - dd.x1, 1e-12)
-      s += w * gl[comp]
-    }
-    return s
-  }
-
   // Condense feq when member has releases: feqEff[ret] = feq[ret] - k_rf · k_ff⁻¹ · feq[rel]
   let feqEff = feq
   if (geom.relIdx && geom.relIdx.length > 0 && geom.retIdx && geom.kff_inv && geom.kfr) {
@@ -510,14 +620,7 @@ function computeMemberLoads(geom: MemberGeom, m: F3Member, loads: F3Load[]): Mem
     })
   }
 
-  return {
-    feq,
-    feqEff,
-    p: (x) => intensity(x, 0),
-    qy: (x) => intensity(x, 1),
-    qz: (x) => intensity(x, 2),
-    pts,
-  }
+  return { feq, feqEff, dists, gl, pts }
 }
 
 type TEntry = { ind: number; coeff: number }
@@ -701,12 +804,12 @@ export function precomputeFrame(
     const dia = buildDiaphragmT(nodes, idx, freeIdx, diaphragms, nf)
     if (dia) {
       const K_ind = applyTtoK(Kff_raw, dia.Trow, dia.ni)
-      const Kff_ind = luFactor(K_ind)
+      const Kff_ind = symFactor(K_ind)
       return { nm, idx, nodes, members, supports, geoms, shellGeoms, ndof, free, freeIdx,
                Kff: Kff_ind, Kff_raw, diaT: dia.Trow, diaNi: dia.ni }
     }
   }
-  const Kff = luFactor(Kff_raw)   // null if singular; {n:0} if nf===0
+  const Kff = symFactor(Kff_raw)   // null if singular; {n:0} if nf===0
   return { nm, idx, nodes, members, supports, geoms, shellGeoms, ndof, free, freeIdx, Kff, Kff_raw }
 }
 
@@ -720,7 +823,7 @@ export interface FramePrecompSerial {
   ndof: number
   free: number[]
   freeIdxEntries: [number, number][]
-  Kff: LUFactor | null
+  Kff: SymFactor | null
   Kff_raw: number[][]
   diaT?: { ind: number; coeff: number }[][]
   diaNi?: number
@@ -774,38 +877,18 @@ function postprocessMember(m: F3Member, g: MemberGeom, ml: MemberLoads, d: numbe
   const xs = [...xsSet].sort((a, b) => a - b)
 
   const NN: number[] = [], Vy: number[] = [], Vz: number[] = [], TT: number[] = [], My: number[] = [], Mz: number[] = []
-  const STEPS = 60
-  const integ = (fn: (x: number) => number, x: number) => {
-    let s = 0
-    const n = Math.max(2, Math.ceil((x / Math.max(g.L, 1e-9)) * STEPS))
-    for (let k = 1; k <= n; k++) {
-      const x0 = (x * (k - 1)) / n, x1 = (x * k) / n
-      s += 0.5 * (fn(x0) + fn(x1)) * (x1 - x0)
-    }
-    return s
-  }
-  const integM = (fn: (x: number) => number, x: number) => {
-    let s = 0
-    const n = Math.max(2, Math.ceil((x / Math.max(g.L, 1e-9)) * STEPS))
-    for (let k = 1; k <= n; k++) {
-      const x0 = (x * (k - 1)) / n, x1 = (x * k) / n
-      const mid = (x0 + x1) / 2
-      s += fn(mid) * (x - mid) * (x1 - x0)
-    }
-    return s
-  }
   for (const x of xs) {
-    let n = -(f[0] + integ(ml.p, x))
-    let vy = f[1] + integ(ml.qy, x)
-    let vz = f[2] + integ(ml.qz, x)
-    let mz = -f[5] + f[1] * x + integM(ml.qy, x)
+    let n = -(f[0] + distShear(ml, 0, x))
+    let vy = f[1] + distShear(ml, 1, x)
+    let vz = f[2] + distShear(ml, 2, x)
+    let mz = -f[5] + f[1] * x + distMoment(ml, 1, x)
     // `f` holds the local end forces ON the member, so the internal moment at
     // the i-end is the NEGATIVE of the stored end moment — for both axes. This
     // line used `+f[4]`, which left the i-end magnitude right (|±f[4]| is the
     // same) and every other station wrong by 2·f[4]: a fixed-base column came
     // back with a carry-over of 0.25 instead of the slope-deflection 0.50.
     // Caught by the STAAD.Pro cross-check on the Gridframe model.
-    let my = -f[4] - f[2] * x - integM(ml.qz, x)
+    let my = -f[4] - f[2] * x - distMoment(ml, 2, x)
     for (const pt of ml.pts) {
       if (pt.a <= x) {
         n -= pt.Pa
@@ -827,8 +910,27 @@ function postprocessMember(m: F3Member, g: MemberGeom, ml: MemberLoads, d: numbe
 
 /** Solve one load case using a pre-factored frame — O(n²) first-order solve;
  *  P-Δ re-factors the tangent stiffness per iteration (unchanged cost vs. before). */
+/**
+ * Which members this solve needs internal forces for.
+ *
+ * Recovering a member's diagrams is the expensive half of a load case — the
+ * linear solve itself is under 1% of it — and not every solve is asked for
+ * them. The service run exists only for its support reactions, and the D-only
+ * and L-only runs only for the moment diagrams of the FLEXURAL members whose
+ * §424.2 deflection is computed from them. Handing back diagrams for every
+ * column in those runs is work nothing reads.
+ *
+ * Omit for all members (the default). A set recovers exactly its members; an
+ * EMPTY set recovers none, leaving displacements and reactions, which are
+ * unaffected — recovery is strictly downstream of the solve.
+ *
+ * `Mmax`/`Vmax`/`Nmax` are envelopes over the members actually recovered, so a
+ * filtered run reports the maxima of what it was asked for and no more.
+ */
+export type RecoverFilter = ReadonlySet<string>
+
 export function solveWithGeometry(
-  precomp: FramePrecomp, loads: F3Load[], opts?: PDeltaOpts,
+  precomp: FramePrecomp, loads: F3Load[], opts?: PDeltaOpts, recover?: RecoverFilter,
 ): F3Result | null {
   const { idx, members, geoms, shellGeoms, ndof, free, freeIdx, Kff, Kff_raw, supports, diaT, diaNi } = precomp
   let pdStatus: F3PDeltaStatus | undefined
@@ -836,12 +938,24 @@ export function solveWithGeometry(
   // (K + Kg)·d − F, or the secondary P-Δ shear/moment never reaches supports.
   let geoAxial: ((mi: number) => number) | null = null
 
-  const mloads = members.map((m, i) => computeMemberLoads(geoms[i], m, loads))
+  // Bucket the member loads by the member they act on, once. `computeMemberLoads`
+  // used to scan the WHOLE load list for every member, which is O(members ×
+  // loads) per load case — on a frame where nearly every member carries its own
+  // self-weight those two counts grow together, so the sweep grew quadratically
+  // in the model. Each member now sees only its own loads, in the order it saw
+  // them before.
+  const byMember = new Map<string, F3Load[]>()
+  for (const ld of loads) {
+    if (!('member' in ld) || typeof ld.member !== 'string') continue
+    const cur = byMember.get(ld.member)
+    if (cur) cur.push(ld); else byMember.set(ld.member, [ld])
+  }
+  const mloads = members.map((m, i) => computeMemberLoads(geoms[i], m, byMember.get(m.id) ?? []))
 
   // Assemble global load vector F (use condensed feqEff so released DOFs get no moment)
   const F = new Array(ndof).fill(0)
   geoms.forEach((g, i) => {
-    const fg = matVec(transpose(g.T), mloads[i].feqEff)
+    const fg = matVecT(g.T, mloads[i].feqEff)
     for (let a = 0; a < 12; a++) F[g.dofs[a]] += fg[a]
   })
   for (const ld of loads) {
@@ -907,7 +1021,7 @@ export function solveWithGeometry(
     } else if (diaT && diaNi !== undefined) {
       // Constrained solve: transform load to independent DOFs, solve, recover full d_f
       const Ff_ind = applyTtoLoad(Ff, diaT, diaNi)
-      const d_ind = luSolve(Kff, Ff_ind)   // Kff is already K_ind = T^T K T
+      const d_ind = symSolve(Kff, Ff_ind)   // Kff is already K_ind = T^T K T
       const d0 = applyTrecover(d_ind, diaT)
       free.forEach((dof, k) => (d[dof] = d0[k]))
 
@@ -932,7 +1046,7 @@ export function solveWithGeometry(
         geoAxial = axialFromState
       }
     } else {
-      const d0 = luSolve(Kff, Ff)
+      const d0 = symSolve(Kff, Ff)
       free.forEach((dof, k) => (d[dof] = d0[k]))
 
       // P-Δ: iterate K + Kg(N); Kg depends on load-case axial forces so Kff_raw
@@ -1005,8 +1119,9 @@ export function solveWithGeometry(
       }
     })
 
-  const results: F3MemberResult[] = members.map((m, mi) =>
-    postprocessMember(m, geoms[mi], mloads[mi], d))
+  const results: F3MemberResult[] = recover
+    ? members.flatMap((m, mi) => (recover.has(m.id) ? [postprocessMember(m, geoms[mi], mloads[mi], d)] : []))
+    : members.map((m, mi) => postprocessMember(m, geoms[mi], mloads[mi], d))
 
   return {
     d, reactions, members: results,

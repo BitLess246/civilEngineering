@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { solveLinear, luFactor, luSolve, matVec, hermite, gauss5Vec } from './fem'
+import {
+  solveLinear, luFactor, luSolve, matVec, hermite, gauss5Vec,
+  isSymmetric, rcmOrder, skylineFactor, skylineSolve, symFactor, symSolve, matVecT,
+} from './fem'
 
 describe('solveLinear — Gaussian elimination with partial pivoting', () => {
   it('solves a 1×1 system', () => {
@@ -182,5 +185,190 @@ describe('gauss5Vec — 5-point Gauss quadrature', () => {
     expect(r[0]).toBeCloseTo(1, 10)
     expect(r[1]).toBeCloseTo(0.5, 10)
     expect(r[2]).toBeCloseTo(1 / 3, 9)
+  })
+})
+
+// ── Symmetric skyline factorisation ──────────────────────────────────────
+
+/** A random SPD matrix with a chosen sparsity pattern: B·Bᵀ masked, plus a
+ *  dominant diagonal so the masking cannot cost positive-definiteness. */
+function spd(n: number, couple: (i: number, j: number) => boolean, seed = 1): number[][] {
+  let s = seed
+  const rnd = () => { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648 }
+  const A: number[][] = Array.from({ length: n }, () => new Array<number>(n).fill(0))
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (!couple(i, j)) continue
+      const v = rnd() - 0.5
+      A[i][j] = v; A[j][i] = v
+    }
+  }
+  for (let i = 0; i < n; i++) A[i][i] = n + 1 + rnd()      // diagonally dominant ⇒ SPD
+  return A
+}
+
+const band = (w: number) => (i: number, j: number) => Math.abs(i - j) <= w
+
+describe('isSymmetric', () => {
+  it('accepts a symmetric matrix and rejects a nudged one', () => {
+    const A = spd(8, band(2))
+    expect(isSymmetric(A)).toBe(true)
+    A[3][5] += 1
+    expect(isSymmetric(A)).toBe(false)
+  })
+
+  it('rejects a non-square matrix rather than reading past a row', () => {
+    expect(isSymmetric([[1, 2], [2]])).toBe(false)
+  })
+})
+
+describe('rcmOrder', () => {
+  it('is a permutation of every index', () => {
+    const p = rcmOrder(spd(30, band(3)))
+    expect([...p].sort((a, b) => a - b)).toEqual(Array.from({ length: 30 }, (_, i) => i))
+  })
+
+  it('tightens the profile of a deliberately scrambled band matrix', () => {
+    // A banded matrix whose rows have been shuffled has a terrible envelope;
+    // RCM is what recovers it. Profile = Σ (j − topmost non-zero of column j).
+    const n = 60
+    const A0 = spd(n, band(2))
+    const shuffle = Array.from({ length: n }, (_, i) => (i * 37) % n)
+    const A: number[][] = Array.from({ length: n }, (_, i) =>
+      Array.from({ length: n }, (_, j) => A0[shuffle[i]][shuffle[j]]))
+    const profile = (M: number[][], p: number[]) => {
+      let t = 0
+      for (let j = 0; j < n; j++) {
+        let top = 0
+        while (top < j && M[p[top]][p[j]] === 0) top++
+        t += j - top
+      }
+      return t
+    }
+    const natural = profile(A, Array.from({ length: n }, (_, i) => i))
+    const reordered = profile(A, rcmOrder(A))
+    expect(reordered).toBeLessThan(natural / 2)
+  })
+
+  it('handles a disconnected pattern — every component gets ordered', () => {
+    const A = spd(20, (i, j) => Math.floor(i / 10) === Math.floor(j / 10) && band(2)(i, j))
+    expect([...rcmOrder(A)].sort((a, b) => a - b)).toEqual(Array.from({ length: 20 }, (_, i) => i))
+  })
+})
+
+describe('skylineFactor / skylineSolve', () => {
+  it('reproduces the dense LU answer to near machine precision', () => {
+    for (const [n, w] of [[1, 0], [2, 1], [9, 2], [40, 3], [80, 5]] as const) {
+      const A = spd(n, band(w))
+      const b = Array.from({ length: n }, (_, i) => Math.sin(i + 1) * 10)
+      const dense = luSolve(luFactor(A)!, b)
+      const sky = skylineSolve(skylineFactor(A, rcmOrder(A))!, b)
+      for (let i = 0; i < n; i++) expect(sky[i]).toBeCloseTo(dense[i], 8)
+    }
+  })
+
+  it('actually satisfies A·x = b, reordered or not', () => {
+    const A = spd(50, band(4))
+    const b = Array.from({ length: 50 }, (_, i) => (i % 7) - 3)
+    for (const perm of [undefined, rcmOrder(A)]) {
+      const x = skylineSolve(skylineFactor(A, perm)!, b)
+      const r = matVec(A, x)
+      for (let i = 0; i < 50; i++) expect(r[i]).toBeCloseTo(b[i], 8)
+    }
+  })
+
+  it('stores only the envelope, not the square', () => {
+    // The whole point: a banded 200×200 must not cost 200² of storage.
+    const n = 200
+    const f = skylineFactor(spd(n, band(3)))!
+    expect(f.v.length).toBeLessThan(n * n / 10)
+    expect(f.diag[n - 1]).toBe(f.v.length - 1)
+  })
+
+  it('refuses a matrix that is not positive definite instead of mis-factoring it', () => {
+    // Symmetric but indefinite: LDLᵀ without pivoting has no business here.
+    expect(skylineFactor([[0, 1], [1, 0]])).toBeNull()
+    expect(skylineFactor([[-2, 0], [0, -3]])).toBeNull()
+  })
+
+  it('handles the empty system the same way luFactor does', () => {
+    const f = skylineFactor([])!
+    expect(f.n).toBe(0)
+    expect(skylineSolve(f, [])).toEqual([])
+  })
+})
+
+describe('symFactor / symSolve — cheap when sound, safe when not', () => {
+  it('takes the skyline path on a symmetric positive-definite matrix', () => {
+    const f = symFactor(spd(30, band(3)))!
+    expect(f.kind).toBe('skyline')
+  })
+
+  it('falls back to dense LU when the matrix is asymmetric, and still solves it', () => {
+    const A = [[4, 1, 0], [3, 5, 1], [0, 2, 6]]
+    const f = symFactor(A)!
+    expect(f.kind).toBe('lu')
+    const b = [7, 8, 9]
+    const x = symSolve(f, b)
+    const r = matVec(A, x)
+    for (let i = 0; i < 3; i++) expect(r[i]).toBeCloseTo(b[i], 8)
+  })
+
+  it('falls back to dense LU when symmetric but indefinite, and still solves it', () => {
+    const A = [[0, 1, 0], [1, 0, 0], [0, 0, 2]]
+    const f = symFactor(A)!
+    expect(f.kind).toBe('lu')
+    const b = [3, 4, 5]
+    const x = symSolve(f, b)
+    const r = matVec(A, x)
+    for (let i = 0; i < 3; i++) expect(r[i]).toBeCloseTo(b[i], 8)
+  })
+
+  it('returns null on a genuinely singular matrix, like luFactor', () => {
+    expect(symFactor([[1, 1], [1, 1]])).toBeNull()
+    expect(luFactor([[1, 1], [1, 1]])).toBeNull()
+  })
+
+  it('survives a JSON round-trip — the factor crosses to a worker', () => {
+    const A = spd(25, band(3))
+    const b = Array.from({ length: 25 }, (_, i) => i - 12)
+    const f = symFactor(A)!
+    const back = JSON.parse(JSON.stringify(f)) as typeof f
+    const x = symSolve(back, b)
+    const r = matVec(A, x)
+    for (let i = 0; i < 25; i++) expect(r[i]).toBeCloseTo(b[i], 8)
+  })
+})
+
+describe('matVecT — Kᵀ·d without building Kᵀ', () => {
+  const T = (n: number, m: number) =>
+    Array.from({ length: n }, (_, i) => Array.from({ length: m }, (_, j) => Math.sin(3 * i + 7 * j) * 4 - 1))
+  const transpose = (A: number[][]) => A[0].map((_, j) => A.map((r) => r[j]))
+
+  it('matches matVec(transpose(K), d) BIT for bit, not merely closely', () => {
+    // The point of the helper is that it is a drop-in for the allocating form
+    // it replaces — the member transform T is 12×12. Anything short of exact
+    // equality would be a change to the solver's answers smuggled in as an
+    // optimisation. (`matVec` is square-only, so the square sizes are the
+    // whole of what it can be compared against.)
+    for (const n of [12, 6, 1]) {
+      const K = T(n, n)
+      const d = Array.from({ length: n }, (_, i) => Math.cos(i) * 10)
+      expect(matVecT(K, d)).toEqual(matVec(transpose(K), d))
+    }
+  })
+
+  it('handles a rectangular K, which matVec cannot', () => {
+    const K = T(9, 5)
+    const d = Array.from({ length: 9 }, (_, i) => Math.cos(i) * 10)
+    const want = Array.from({ length: 5 }, (_, j) =>
+      Array.from({ length: 9 }, (_, i) => K[i][j] * d[i]).reduce((a, b) => a + b, 0))
+    expect(matVecT(K, d)).toHaveLength(5)
+    matVecT(K, d).forEach((v, j) => expect(v).toBeCloseTo(want[j], 12))
+  })
+
+  it('is the transpose product, checked against a hand-worked case', () => {
+    // K = [[1,2],[3,4],[5,6]] (3×2), d = [1,1,1] ⇒ Kᵀd = [1+3+5, 2+4+6]
+    expect(matVecT([[1, 2], [3, 4], [5, 6]], [1, 1, 1])).toEqual([9, 12])
   })
 })
