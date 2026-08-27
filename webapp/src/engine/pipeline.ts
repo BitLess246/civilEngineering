@@ -220,6 +220,9 @@ export interface SlabScheduleRow {
   barDia: number
   /** Ranked alternatives and the reason this mat was adopted. */
   selection: RebarSelection
+  /** When no mat complied, the thickness that would let one — see
+   *  `SlabRebarChoice.minThickness`. `null` whenever a mat was found. */
+  minThickness: number | null
   ok: boolean
 }
 /** A plate carrying a timber deck-on-joist floor, designed by the woodSlab
@@ -1457,6 +1460,7 @@ function designFromRuns(
     // dead-end the optimizer; serviceability violations DO fail the design.
     slabs.push({
       plate: p.id, lx, ly: lz, design, barDia, selection: mat.selection,
+      minThickness: mat.minThickness,
       ok: design.h >= design.hmin - 1e-9
         && design.deflection.liveOK && design.deflection.totalOK
         // No compliant mat is a design failure, not a detailing note: on a
@@ -2149,7 +2153,19 @@ function buildGrowActions(design: StructureDesign, model: StructuralModel, memSe
     }
   }
   // Slabs: §408.3.1.2 hmin directly; §424.2 deflection via Ie ≈ h³ ⇒ target
-  // h ≈ h·∛(δ/δlim). 25-mm steps, capped like the section jump.
+  // h ≈ h·∛(δ/δlim); and the thickness the mat search says it needs, straight.
+  //
+  // That last term must be here because a panel's `ok` is a FOUR-way
+  // conjunction — hmin, the two deflection limits, and "a compliant mat
+  // exists" — and a growth rule derived from only three of them leaves the
+  // fourth with no way to be satisfied. It is not hypothetical: a fully
+  // interior panel has the smallest deflections of any panel on the floor, so
+  // it sails through the two terms that make its neighbours grow and fails
+  // only on the mat. `f` then came out ≤ 1, no plate action was emitted, and
+  // with every member already passing the optimizer exited on `act.n === 0`
+  // reporting that growing could not fix a check that growing fixes in one
+  // 25-mm step. Any grid with an interior bay in both directions (≥ 3 × 3)
+  // hit it.
   const plates = new Map<string, number>()
   for (const s of design.slabs) {
     if (s.ok) continue
@@ -2158,6 +2174,7 @@ function buildGrowActions(design: StructureDesign, model: StructuralModel, memSe
       d.hmin / Math.max(d.h, 1),
       Math.cbrt(d.deflection.total / Math.max(d.deflection.limitTotal, 1e-9)),
       Math.cbrt(d.deflection.immLive / Math.max(d.deflection.limitLive, 1e-9)),
+      (s.minThickness ?? 0) / Math.max(d.h, 1),
     )
     if (f <= 1 + 1e-9) continue
     const steps = Math.max(1, Math.min(10, Math.ceil(((f - 1) * d.h) / 25)))

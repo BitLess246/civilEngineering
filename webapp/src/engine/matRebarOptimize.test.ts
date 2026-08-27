@@ -405,3 +405,57 @@ describe('rectangular and eccentric footings search too', () => {
     expect(c.design).toBe(c.designs.get(c.db!))
   })
 })
+
+describe('optimizeSlabRebar — the thickness an undetailable panel needs', () => {
+  // A 6 × 5 m INTERIOR panel at 150 mm. Its deflections are the smallest on the
+  // floor, so it clears §408.3.1.2 and §424.2 while every edge panel around it
+  // does not — and it is the one panel whose only failing term is "no mat
+  // complies". D is 8.4 kPa: 4.8 imposed dead plus the panel's own 0.15 × 24.
+  const panel: SlabInput = {
+    lx: 6, ly: 5, colWidth: 300, D: 8.4, L: 2.4, fc: 28, fy: 415,
+    h: 150, cover: 20, barDia: 12, exterior: { x: false, y: false }, withBeams: true,
+  }
+
+  it('rejects every diameter at 150 mm — thin ones on §22.2, thick ones on §21.2.2', () => {
+    const mat = optimizeSlabRebar(panel)
+    expect(mat.db).toBeNull()
+    expect(mat.selection.ranked).toHaveLength(0)
+
+    // The squeeze runs ACROSS diameters, which is why no closed form at a
+    // single db can see it: the small bars cannot fit the steel, and at the
+    // depth the big bars leave, the steel is past the tension-controlled limit.
+    const rhoMax = rhoTensionControlled(panel.fc, panel.fy)
+    const rhoReq = (db: number) => {
+      const strips = slabStrips(mat.designs.get(db)!)
+      const g = strips.reduce((a, c) => (c.AsReq / c.b > a.AsReq / a.b ? c : a))
+      return g.AsReq / (g.b * g.d)
+    }
+    expect(rhoReq(10)).toBeLessThan(rhoMax)      // would be fine — will not fit
+    expect(rhoReq(25)).toBeGreaterThan(rhoMax)   // would fit — not tension-controlled
+    const gates = new Set(mat.selection.rejected.map((c) => c.failedGate?.id))
+    expect(gates).toContain('flexural-capacity')
+    expect(gates).toContain('tension-controlled')
+  })
+
+  it('reports the thickness that clears it, and that thickness really does', () => {
+    const mat = optimizeSlabRebar(panel)
+    expect(mat.minThickness).toBe(175)
+    // Not merely a bigger number: the panel is detailable there and was not one
+    // step below, so it is the FIRST thickness that works.
+    expect(optimizeSlabRebar({ ...panel, h: 175 }).db).not.toBeNull()
+    expect(optimizeSlabRebar({ ...panel, h: 150 }).db).toBeNull()
+  })
+
+  it('is null whenever a mat WAS found — it is a diagnosis, not a suggestion', () => {
+    for (const h of [175, 200, 225]) {
+      const mat = optimizeSlabRebar({ ...panel, h })
+      expect(mat.db).not.toBeNull()
+      expect(mat.minThickness).toBeNull()
+    }
+  })
+
+  it('is null when depth is not the obstacle', () => {
+    // Degenerate span: no candidates, so no thickness can be honestly named.
+    expect(optimizeSlabRebar({ ...panel, lx: 0, ly: 0 }).minThickness).toBeNull()
+  })
+})

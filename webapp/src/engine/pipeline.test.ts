@@ -749,6 +749,39 @@ describe('optimizeStructure — termination guards (hierarchy revert / catalog t
     expect(r.stopReason).toContain('grow')
   }, 120_000)
 
+  it('an interior panel that no mat can detail is GROWN, not declared unfixable', () => {
+    // Regression. A panel's `ok` is a four-way conjunction — §408.3.1.2 hmin,
+    // the two §424.2 deflection limits, and "a compliant mat exists" — but the
+    // grow rule was derived from only the first three, so the fourth had no way
+    // to be satisfied.
+    //
+    // It needed a FULLY INTERIOR panel to show up, which is why a 3 × 3 grid is
+    // the smallest model that reproduces it: an interior panel has the smallest
+    // deflections on the floor, so it sails through the terms that make every
+    // edge panel around it grow, and is left as the only panel failing solely
+    // on the mat. `buildGrowActions` then emitted nothing, and with all members
+    // already passing the optimizer exited on `act.n === 0` insisting that
+    // growing could not fix a check that growing fixes in one 25-mm step.
+    const m = generateGridModel({ baysX: [6, 6, 6], baysZ: [5, 5, 5], storeyH: [3.2], section })
+    // 4.8 kPa superimposed dead + 2.4 live, with the panel's own weight folded
+    // in as the app does it — the interior panel needs the real D to be caught
+    // in the squeeze between "the bars will not fit" and "the steel is no
+    // longer tension-controlled".
+    m.loads = buildGravityLoads(m, 4.8, 2.4)
+    const r = optimizeStructure(m, soil)!
+    expect(r.converged).toBe(true)
+    expect(r.stopReason).toBeUndefined()
+    expect(r.design.slabs.every((x) => x.ok)).toBe(true)
+    // and every panel is detailable — the term that used to be un-growable
+    for (const sl of r.design.slabs) {
+      expect(sl.minThickness).toBeNull()
+      expect(sl.selection.best).not.toBeNull()
+    }
+    // the interior panel is the one that had to grow past the 150-mm seed
+    const interior = r.design.slabs.find((x) => x.plate.startsWith('s1.1.'))!
+    expect(interior.design.h).toBeGreaterThan(150)
+  }, 180_000)
+
   it('failures the sections cannot fix (footings on bad soil) get an explanatory stopReason', () => {
     // qAllow below the overburden ⇒ every isolated footing fails (qNet ≤ 0)
     // while all members pass: the grow loop must bail with a reason, not iterate.
