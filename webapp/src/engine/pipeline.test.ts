@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { generateGridModel, buildGravityLoads, removeNode, enforceSectionHierarchy, refreshSelfWeight, splitSharedSections, barContinuityGroups } from './modelBuilder'
-import { designStructure, optimizeStructure, selectBarDiameters, designOK, withEv, RC_LIMITS, type LateralCase, designStructureOnce, lowerBasesToFootings, governingCombos } from './pipeline'
+import { designStructure, optimizeStructure, selectBarDiameters, designOK, withEv, RC_LIMITS, type LateralCase, designStructureOnce, lowerBasesToFootings, governingCombos, pedestalDrops } from './pipeline'
 import { nextHeavierW } from './aiscSections'
 import { computeSeismic } from './seismic'
 import { nscpCombos } from './beamAnalysis'
@@ -1380,6 +1380,73 @@ describe('the column base is supported at the top of the footing', () => {
         expect(moved).toBeCloseTo(0, 12)
       }
     }
+  })
+
+  // A frame whose pads settle in ONE pass — the ordinary case, and the one the
+  // optimizer trims against. `m()` above is deliberately small and does not:
+  // see the self-consistency test at the end of this block.
+  const settled = () => {
+    const g = generateGridModel({ baysX: [6, 6, 6], baysZ: [5, 5], storeyH: [3.2, 3.2, 3.2], section })
+    g.loads = buildGravityLoads(g, 4.8, 2.4)
+    return g
+  }
+
+  it('a correct pedestal seed reproduces the two-pass answer exactly', () => {
+    // The first pass exists only to learn how deep the pads are. A caller that
+    // already knows can skip it — and the optimizer, trimming one section on a
+    // structure it just designed, always does. Same answer, half the solves.
+    const model = settled()
+    const twoPass = designStructure(model, soil)!
+    const seeded = designStructure(model, soil, {}, {}, undefined, undefined, pedestalDrops(twoPass))!
+    expect(seeded.columns.map((c) => c.L)).toEqual(twoPass.columns.map((c) => c.L))
+    expect(seeded.columns.map((c) => c.util)).toEqual(twoPass.columns.map((c) => c.util))
+    expect(seeded.footings.map((f) => f.pedestal)).toEqual(twoPass.footings.map((f) => f.pedestal))
+    expect(designOK(seeded)).toBe(designOK(twoPass))
+  })
+
+  it('a WRONG seed is caught and falls back to the two passes, not trusted', () => {
+    // The whole safety of the shortcut is this: the design is accepted only if
+    // the footings it produces want exactly the pedestals it was handed. A seed
+    // that is off must not survive that test.
+    const model = settled()
+    const twoPass = designStructure(model, soil)!
+    const wrong = new Map([...pedestalDrops(twoPass)].map(([k, v]) => [k, v + 0.35]))
+    const out = designStructure(model, soil, {}, {}, undefined, undefined, wrong)!
+    // it came back as the honest two-pass result, NOT the one built on the lie
+    expect(out.columns.map((c) => c.L)).toEqual(twoPass.columns.map((c) => c.L))
+    expect([...pedestalDrops(out)]).toEqual([...pedestalDrops(twoPass)])
+  })
+
+  it('an empty seed is a claim that nothing moves, and is checked like any other', () => {
+    const model = settled()
+    const twoPass = designStructure(model, soil)!
+    expect(pedestalDrops(twoPass).size).toBeGreaterThan(0)      // this frame DOES have pedestals
+    const out = designStructure(model, soil, {}, {}, undefined, undefined, new Map())!
+    expect(out.columns.map((c) => c.L)).toEqual(twoPass.columns.map((c) => c.L))
+  })
+
+  it('a design returned from a seed stands on the pads its own schedule quotes', () => {
+    // The property the check buys, stated directly: the model the seeded design
+    // was analysed on has its bases exactly at the top of the footings that same
+    // design produced.
+    //
+    // The plain two-pass does NOT guarantee this. It designs on the drops from
+    // the pass BEFORE it and never re-reads its own, so on a frame where one
+    // pass does not settle the pads, the columns are analysed at one pedestal
+    // and scheduled at another. `m()` is such a frame — pass 1 wants 1.350 and
+    // the design built on 1.350 wants 1.325 — and the seeded path is what
+    // closes that gap.
+    const model = m()
+    const seeded = designStructure(model, soil, {}, {}, undefined, undefined,
+      pedestalDrops(designStructure(model, soil)!))!
+    const twoPass = designStructure(model, soil)!
+    // the frame this is asserted on really is one that does not settle in a pass
+    expect(pedestalDrops(twoPass).get(twoPass.footings[0].node))
+      .not.toBeCloseTo(pedestalDrops(designStructureOnce(model, soil)!).get(twoPass.footings[0].node)!, 6)
+    // and the seeded design's schedule agrees with the model it was solved on
+    const drops = pedestalDrops(seeded)
+    expect(seeded.footings.length).toBeGreaterThan(0)
+    for (const f of seeded.footings) expect(drops.get(f.node)).toBeCloseTo(f.pedestal, 9)
   })
 
   it('leaves the model alone when the pad fills the whole founding depth', () => {
