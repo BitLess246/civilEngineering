@@ -31,6 +31,7 @@ import {
 } from './rebarModel'
 import { titleBlock, notesBlock, sheetBounds, leader, leaderKnee, textWidth } from './detailSheet'
 import { seeGeneralNotes } from './generalNotes'
+import { spanSections, sectionTally, type BeamSection } from './beamSection'
 import {
   SHEET_INK, SHEET_NOTE, SHEET_GRID, STEEL, STEEL_LIGHT,
 } from './sheetInk'
@@ -318,6 +319,53 @@ export function angledLeader(o: {
  * then the steel, then the annotation. Nothing is drawn twice — a bar that
  * belongs to two cages does not exist.
  */
+// ─────────────────────────────────────────────────────────────────────────
+// THE SECTIONS UNDER THE SPAN
+//
+// An elevation says where a bar starts and stops. It cannot say how many are
+// in a layer, which face they are on, or how the stirrup wraps them — and
+// those are the questions a fixer standing at the formwork actually has. So
+// each span carries its own three cuts, at the two support faces and midspan,
+// drawn UNDER the station they were taken from: no leader is needed, because
+// the section sits where the cut is.
+//
+// They differ from one another, which is the point. A bar curtailed before
+// midspan is absent from that cut; the hoop spacing changes between the end
+// zone and the middle. A single "typical section" printed once could say
+// none of that.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** One cut, drawn in a box whose top-left is (x, y). Returns its width. */
+function drawSection(
+  P: PlanPrimitive[], sec: BeamSection, cx: number, top: number, k: number, u: number,
+): number {
+  const w = sec.b * k, h = sec.h * k
+  const x0 = cx - w / 2
+  P.push({ kind: 'rect', x: x0, y: top, w, h, fill: CONCRETE, stroke: SHEET_INK, width: 0.7 })
+  // The stirrup, from the cage — so its bend radius and cover are the cage's.
+  if (sec.stirrup.length > 2) {
+    const pts = sec.stirrup.map(([a, up]) => ({ x: cx + a * k, y: top + (sec.h - up) * k }))
+    P.push({ kind: 'path', cmds: [...pts, pts[0]].map((q, n) => ({ c: n === 0 ? 'M' as const : 'L' as const, x: q.x, y: q.y })), stroke: STEEL, width: 0.8 })
+  }
+  for (const b of sec.bars) {
+    P.push({
+      kind: 'circle', cx: cx + b.across * k, cy: top + (sec.h - b.up) * k,
+      r: Math.max(u * 0.16, (b.dia / 2000) * k), fill: STEEL, stroke: STEEL, width: 0.5,
+    })
+  }
+  const t = sectionTally(sec)
+  const lines = [
+    `${sec.label} — ${Math.round(sec.b * 1000)}×${Math.round(sec.h * 1000)}`,
+    [t.top && `${t.top} T`, t.bot && `${t.bot} B`].filter(Boolean).join(', '),
+    sec.stirrupDia && sec.spacing ? `⌀${sec.stirrupDia} @ ${sec.spacing}` : '',
+  ].filter(Boolean)
+  lines.forEach((ln, n) => P.push({
+    kind: 'text', x: cx, y: top + h + u * (1.5 + n * 1.15), text: ln,
+    size: u * 0.72, anchor: 'middle', color: n === 0 ? SHEET_INK : SHEET_NOTE, weight: n === 0 ? 700 : 500,
+  }))
+  return w
+}
+
 export function buildFrameElevation(
   i: FrameElevationInput, o: FrameElevationOptions = {},
 ): FrameElevationDrawing {
@@ -360,7 +408,11 @@ export function buildFrameElevation(
   // where a reader looks for them: a grid reference is the first thing you find
   // on a sheet, not the last. Below, they had the span dimensions and every
   // beam's schedule stacked on top of them.
-  const bubbleY = lo - u * 3.4, r = u * 1.05
+  // The span dimensions sit with the bubbles, between them and the frame: a
+  // dimension between two grids belongs beside the grids it is measured to,
+  // and the space UNDER the beam is now the sections'.
+  const bubbleY = lo - u * 7.4, r = u * 1.05
+  const dimY = lo - u * 3.2
   for (const g of i.grids) {
     P.push({
       kind: 'line', x1: g.u, y1: bubbleY + r, x2: g.u, y2: hi + u * 1.2,
@@ -396,8 +448,11 @@ export function buildFrameElevation(
   // ── annotation ─────────────────────────────────────────────────────────
   // Beams get a leader to the middle of their own span; columns a mark under
   // the bubble. Every callout is one line: the size, and the steel in it.
-  const dimY = hi + u * 7.6
   const beams = i.members.filter((x) => x.role === 'beam').sort((a, b) => a.u0 - b.u0)
+  // One band for every span's cuts, so they line up across the sheet instead
+  // of stepping with each beam's own soffit.
+  const sectionTop = hi + u * 2.6
+  let sectionsBottom = hi
   // The depth is dimensioned ONCE, clear of the sheet at its left edge. Drawn
   // per beam it lands on the column between them, which is where the reader is
   // trying to look at the joint.
@@ -414,7 +469,7 @@ export function buildFrameElevation(
     const bot = faceTally(own, i.plane, 'bottom', m.u0, m.u1)
     P.push({
       kind: 'dim', x1: m.u0, y1: dimY, x2: m.u1, y2: dimY,
-      text: `${Math.round((m.u1 - m.u0) * 1000)}`, off: 0, size: u * 0.85, ext: Y(m.yBot),
+      text: `${Math.round((m.u1 - m.u0) * 1000)}`, off: 0, size: u * 0.85, ext: dimY,
     })
     // Counted off the cage, so "4-⌀20 TOP THRU" means four bars really do run
     // through on the sheet.
@@ -455,15 +510,18 @@ export function buildFrameElevation(
         text: face(top, 'TOP'), size: u * 0.85, color: SHEET_INK,
       }))
     }
+    // BOTH face callouts go ABOVE the beam. The space under it belongs to the
+    // sections now, and a leader crossing them would name a bar in one drawing
+    // while lying across another.
     if (bot.thru || bot.extra) {
       P.push(...angledLeader({
         x: m.u0 + span * 0.7, y: Y(m.yBot) - depth * 0.12,
-        ty: Y(m.yBot) + u * 1.9, side: 'left', within: room,
+        ty: Y(m.yTop) - u * 1.9, side: 'left', within: room,
         text: face(bot, 'BOT.'), size: u * 0.85, color: SHEET_INK,
       }))
     }
 
-    // BELOW the beam: the stirrup schedule, measured off the stirrups.
+    // The stirrup schedule, measured off the stirrups themselves.
     const stirrups = own.flatMap((c) => transverseStations(c, i.plane))
       .filter((v) => v >= m.u0 - 1e-6 && v <= m.u1 + 1e-6)
     const dia = own[0]?.runs.find((r) => r.role === 'stirrup')?.dia
@@ -480,11 +538,32 @@ export function buildFrameElevation(
         Math.abs(v - mid) < Math.abs(best - mid) ? v : best)
       P.push(...angledLeader({
         x: at, y: (Y(m.yTop) + Y(m.yBot)) / 2,
-        ty: Y(m.yBot) + u * 4.6, side: 'right', within: room,
+        ty: Y(m.yTop) - u * 6.6, side: 'right', within: room,
         text: `2L-⌀${dia} STIRRUPS, ${stirrups.length} No.`,
         text2: pitchNote(pitchRuns(stirrups)),
         size: u * 0.8, color: SHEET_INK,
       }))
+    }
+
+    // ── the three cuts, under the stations they were taken at ────────────
+    //
+    // The support FACES, not the centrelines: half a column sits inside each
+    // end of the beam and the hogging steel is checked where it really starts.
+    // `room` already holds those two faces.
+    if (own.length && room[1] > room[0]) {
+      const cut = {
+        cage: own[0], along: i.plane.u, origin: i.plane.origin,
+        b: m.bw / 1000, h: m.d / 1000, soffit: m.yBot,
+      }
+      const secs = spanSections(cut, room[0], room[1])
+      // Sized so the deepest beam on the sheet still fits the band, and never
+      // so wide that two cuts on a short span touch.
+      const k = Math.min((u * 9) / Math.max(m.d / 1000, 1e-6), (room[1] - room[0]) / 4 / Math.max(m.bw / 1000, 1e-6))
+      for (const sc of secs) {
+        const cx = Math.min(Math.max(sc.at, room[0] + (m.bw / 1000) * k), room[1] - (m.bw / 1000) * k)
+        drawSection(P, sc, cx, sectionTop, k, u)
+        sectionsBottom = Math.max(sectionsBottom, sectionTop + (m.d / 1000) * k + u * 4.5)
+      }
     }
 
     // Where a curtailed bar stops — the one dimension the elevation exists to
@@ -578,7 +657,7 @@ export function buildFrameElevation(
 
   const bandNote = notesBlock({
     lines: [seeGeneralNotes()],
-    x: uMin, top: hi + u * 9.6, w: uMax - uMin, size: u * 0.8, color: SHEET_NOTE,
+    x: uMin, top: Math.max(hi + u * 9.6, sectionsBottom + u * 2.2), w: uMax - uMin, size: u * 0.8, color: SHEET_NOTE,
   })
   P.push(...bandNote.prims)
 

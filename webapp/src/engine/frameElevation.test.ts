@@ -176,34 +176,57 @@ describe('buildFrameElevation', () => {
 
   it('draws EVERY bar of every cage it was given, clipped to the band', () => {
     // the STEEL paths only — a leader's own arm lands outside the band by
-    // design, since that is where its text sits
-    const paths = d.primitives.filter((p) => p.kind === 'path'
-      && (p.stroke === STEEL || p.stroke === STEEL_LIGHT))
-    expect(paths.length).toBeGreaterThan(100)
+    // design, since that is where its text sits.
+    //
+    // The sheet now carries a SECOND view: the three cuts under each span.
+    // Their stirrups are steel paths too, and they belong below the elevation,
+    // so the two are separated here rather than lumped together.
     const band = [-(3.2 + 1.6), -(3.2 - 1.6)]
-    for (const p of paths) {
-      if (p.kind !== 'path') continue
+    const paths = d.primitives.filter((p) => p.kind === 'path'
+      && (p.stroke === STEEL || p.stroke === STEEL_LIGHT)) as { cmds: { y: number }[] }[]
+    const inBand = paths.filter((p) => Math.min(...p.cmds.map((c) => c.y)) <= band[1] + 1e-6)
+    const below = paths.filter((p) => Math.min(...p.cmds.map((c) => c.y)) > band[1] + 1e-6)
+    expect(inBand.length).toBeGreaterThan(100)
+    for (const p of inBand) {
       for (const c of p.cmds) {
         expect(c.y).toBeGreaterThanOrEqual(band[0] - 1e-6)
         expect(c.y).toBeLessThanOrEqual(band[1] + 1e-6)
       }
     }
+    // one stirrup outline per cut, and every one of them clear of the frame
+    expect(below.length).toBeGreaterThanOrEqual(3)
+    for (const p of below) for (const c of p.cmds) expect(c.y).toBeGreaterThan(band[1])
   })
 
-  it('puts the grid bubbles ABOVE the drawing, where a reader looks first', () => {
-    // Below, they had the span dimensions and every beam's schedule stacked on
-    // top of them, and the framing plans carry theirs above.
+  it('puts the grid bubbles ABOVE the drawing, with the span dimensions under them', () => {
+    // A dimension between two grids belongs beside the grids it is measured
+    // to, and the space under the beam is the sections'. So the order down the
+    // sheet is bubbles, then span dimensions, then the frame.
     const beams = bundles.find((x) => x.key === 'frame-a-3-20')!.input.members
     const top = Math.min(...beams.map((m) => -m.yTop))     // page-Y of the highest concrete
-    const circles = d.primitives.filter((p) => p.kind === 'circle') as { cy: number; cx: number }[]
-    // one per grid position, all of them above the concrete. The fourth circle
-    // on the sheet is the title block's own detail bubble, far below.
-    expect(circles.filter((c) => c.cy < top)).toHaveLength(3)
-    expect(circles.filter((c) => c.cy > top)).toHaveLength(1)
-    // …and the span dimensions stay BELOW it, so the two never share a lane
+    const circles = d.primitives.filter((p) => p.kind === 'circle') as { cy: number; r: number }[]
+    // the bubbles are the big circles above the concrete; the small ones below
+    // it are bars in the sections, and one is the title block's detail bubble
+    const bubbles = circles.filter((c) => c.cy < top)
+    expect(bubbles).toHaveLength(3)
     const dims = d.primitives.filter((p) => p.kind === 'dim'
       && Math.abs((p as { y1: number; y2: number }).y1 - (p as { y2: number }).y2) < 1e-9) as { y1: number }[]
-    expect(Math.max(...dims.map((x) => x.y1))).toBeGreaterThan(top)
+    const spanDims = dims.filter((x) => x.y1 < top)
+    expect(spanDims.length).toBeGreaterThanOrEqual(2)      // one per span
+    // under the bubbles, over the frame
+    for (const x of spanDims) expect(x.y1).toBeGreaterThan(Math.max(...bubbles.map((b) => b.cy)))
+  })
+
+  it('cuts each span at both faces and midspan, under the stations they came from', () => {
+    // An elevation cannot say how many bars are in a layer or which face they
+    // are on. Three cuts per span can, and they sit where the cut is so no
+    // leader is needed to tie them to it.
+    const labels = textsOf(d).filter((t) => /^[ABC] — \d+×\d+$/.test(t))
+    expect(labels).toHaveLength(6)                          // two spans, three each
+    expect(labels.slice(0, 3).map((t) => t[0])).toEqual(['A', 'B', 'C'])
+    // and each carries its own steel and its own spacing
+    expect(textsOf(d).filter((t) => /⌀\d+ @ \d+/.test(t))).toHaveLength(6)
+    expect(textsOf(d).filter((t) => /⌀\d+ T, .*⌀\d+ B/.test(t)).length).toBeGreaterThanOrEqual(6)
   })
 
   it('carries the general-notes pointer and nothing else in prose', () => {

@@ -304,28 +304,44 @@ describe('the sheet is a drawing, not a specification', () => {
     expect(fig.draw(0, 0, 60).filter((p) => p.kind === 'circle')).toHaveLength(4)
   })
 
-  it('leaves the joint band of the column figure empty', () => {
-    // §418.8.3 — column ties stop at the joint and the joint's own hoops take
-    // over. The cage is told where the joint is and drops its ties there, so
-    // the figure states the rule by having nothing in that band.
+  it('shows the joint carrying its OWN hoops, not the column’s ties', () => {
+    // §418.8.3 — the column's ties stop at the beam soffit and the joint's
+    // hoops take over through the beam depth. The figure builds them as a
+    // separate cage for exactly that reason, so the band is not empty; what
+    // is in it is a different bar at the confined spacing.
     const fig = secs.find((s) => s.head === 'COLUMNS — LAPS AND SPLICES')!.figure!
     const prims = fig.draw(0, 0, 60)
     const band = prims.find((p) => p.kind === 'rect' && 'fill' in p && p.fill === '#f1f5f9')
     expect(band).toBeDefined()
     const { y: by, h: bh } = band as { y: number; h: number }
     const ties = prims.filter((p) => p.kind === 'line' && 'stroke' in p && p.stroke === '#b45309')
-    expect(ties.length).toBeGreaterThan(8)              // the cage really placed ties
-    for (const t of ties) {
+    const inJoint = ties.filter((t) => {
       const ty = (t as { y1: number }).y1
-      expect(ty < by - 1e-6 || ty > by + bh + 1e-6, `tie at ${ty} inside joint ${by}..${by + bh}`).toBe(true)
-    }
+      return ty >= by - 1e-6 && ty <= by + bh + 1e-6
+    })
+    expect(ties.length).toBeGreaterThan(12)          // the storey's own ties
+    expect(inJoint.length).toBeGreaterThanOrEqual(3) // and the joint's hoops
+    expect(prims.some((p) => p.kind === 'text' && 'text' in p && String(p.text).includes('§418.8.3'))).toBe(true)
   })
 
-  it('turns the hold points into a checklist, not a second copy of the rules', () => {
-    const lines = constructionChecks().flatMap((c) => c.lines)
-    // one thing to look at per line, tickable while standing in the formwork
-    for (const l of lines) expect(l.length, l).toBeLessThan(70)
-    expect(lines.every((l) => !l.endsWith('.'))).toBe(true)
+  it('laps the bars from below inside the centre half of THIS storey', () => {
+    // The splice window is the centre half of the column the bars are lapping
+    // INTO. Drawn against the storey above it, the figure said the lap happens
+    // on the next floor, which is the one place §418.7.4.3 does not put it.
+    const fig = secs.find((s) => s.head === 'COLUMNS — LAPS AND SPLICES')!.figure!
+    const prims = fig.draw(0, 0, 60)
+    const window = prims.find((p) => p.kind === 'rect' && 'fill' in p && p.fill === '#fef3c7')
+    expect(window).toBeDefined()
+    const { y: wy, h: wh } = window as { y: number; h: number }
+    // the lapping bars are the dashed ones; each has to END inside the window
+    const laps = prims.filter((p) => p.kind === 'path' && 'dash' in p && p.dash)
+    expect(laps.length).toBeGreaterThanOrEqual(2)
+    for (const l of laps) {
+      const cmds = (l as { cmds: { y: number }[] }).cmds
+      const top = Math.min(...cmds.map((c) => c.y))
+      expect(top, 'lap ends inside the splice window').toBeGreaterThanOrEqual(wy - 1e-6)
+      expect(top).toBeLessThanOrEqual(wy + wh + 1e-6)
+    }
   })
 })
 

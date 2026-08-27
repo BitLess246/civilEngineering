@@ -165,16 +165,24 @@ const FIG = '#334155'
 const FIGL = '#64748b'
 const ACCENT = '#b45309'
 
-/** A tie the way the cage builds one, for a column of the given bars. */
+/** A cage the way the model builds one. The default is the column the two
+ *  figures are drawn from: one storey, its beam framing in at the top. */
 function figureCage(o: Partial<ColumnCageInput> = {}): RebarCage {
   return buildColumnCage({
-    mark: 'FIG', b: 400, h: 400, cover: 40, barDia: 20, bars: 4, tieDia: 10,
+    mark: 'FIG', b: 300, h: 300, cover: 40, barDia: 25, bars: 4, tieDia: 10,
     sConfined: 100, sOutside: 200, lo: 600,
     // spliceLap is mm, spliceRise is metres — see ColumnCageInput.
-    centre: [0, 0], yBottom: 0, yTop: 3.0, spliceLap: 700, spliceRise: 0.75,
+    centre: [0, 0], yBottom: 0, yTop: COL_SOFFIT, spliceLap: 0,
     ...o,
   } as ColumnCageInput)
 }
+
+// The storey the column figure is drawn over, m. The beam frames in at the
+// top, so the column proper stops at its SOFFIT and the band above it is the
+// joint — which carries its own hoops (§418.8.3), not the column's ties.
+const COL_FLOOR = 3.0            // top of the beams = the floor level
+const COL_BEAM = 0.5             // beam depth
+const COL_SOFFIT = COL_FLOOR - COL_BEAM
 
 /** Project a run's polylines onto a plane and fit them to a box, in type
  *  units. `pick` chooses the two cage axes that become (x, y) on the sheet. */
@@ -187,7 +195,7 @@ function project(
    *  honest here because the figure carries no dimension: it is a diagram of
    *  which zone is where, and the caption says the sizes are on the schedule. */
   fitXY = false,
-): { cmds: PathCmd[][]; at: (p: Vec3) => [number, number] } {
+): { cmds: PathCmd[][]; at: (p: Vec3) => [number, number]; kx: number; ky: number } {
   const flat = polys.flat().map(pick)
   const xs = flat.map((p) => p[0]), ys = flat.map((p) => p[1])
   const x0 = Math.min(...xs), x1 = Math.max(...xs)
@@ -200,7 +208,7 @@ function project(
     const [a, b] = pick(p)
     return [ox + (a - x0) * kx, oy + (y1 - b) * ky]
   }
-  return { cmds: polys.map((pl) => poly(pl.map(at))), at }
+  return { cmds: polys.map((pl) => poly(pl.map(at))), at, kx, ky }
 }
 
 /** How a stirrup or tie closes — the cage's own tie, seen in plan. */
@@ -213,11 +221,15 @@ function stirrupHookFigure(dt: number): NonNullable<NoteSection['figure']> {
       const cage = figureCage({ tieDia: dt })
       const tie = cage.runs.find((r) => r.role === 'tie' && r.closed)
       if (!tie) return P
-      const { cmds, at } = project(runPolylines(tie), (p) => [p[0], p[2]], x + 2, y + 3, box, box)
-      // the four longitudinal bars the tie grips, at their real plan positions
+      const { cmds, at, kx } = project(runPolylines(tie), (p) => [p[0], p[2]], x + 2, y + 3, box, box)
+      // The four longitudinal bars the tie grips, at their real plan positions
+      // AND their real size. Drawn at an arbitrary radius the circles ran
+      // through the tie instead of sitting inside its bend — the cage has the
+      // tie's inner face tangent to the bar, and the figure has to be drawn to
+      // the same scale to show it.
       for (const v of cage.runs.filter((r) => r.role === 'vertical')) {
         const [cx, cy] = at(v.path[0])
-        P.push({ kind: 'circle', cx, cy, r: 1.15, stroke: FIG, width: 1, fill: '#ffffff' })
+        P.push({ kind: 'circle', cx, cy, r: (v.dia / 2 / 1000) * kx, stroke: FIG, width: 0.9, fill: '#ffffff' })
       }
       for (const c of cmds) P.push({ kind: 'path', cmds: c, stroke: ACCENT, width: 1.15 })
       const lx = x + box + 6.5
@@ -230,63 +242,88 @@ function stirrupHookFigure(dt: number): NonNullable<NoteSection['figure']> {
   }
 }
 
-/** A column storey as the cage builds it, seen in elevation: the ties
- *  tightening inside ℓo at each end, and the verticals cranking into the
- *  splice window above the floor. */
+/**
+ * A column storey as the cage builds it, in elevation.
+ *
+ * Three cages, because that is three different pieces of steel: the column's
+ * own bars and ties over the storey; the bars coming UP from the storey below,
+ * which lap inside this storey's centre half; and the joint's hoops, which are
+ * not the column's ties at all (§418.8.3) and are why the column's stop at the
+ * beam soffit.
+ */
 function columnFigure(): NonNullable<NoteSection['figure']> {
   return {
-    h: 48,
+    h: 47,
     draw: (x, y, w) => {
       const P: PlanPrimitive[] = []
-      const H = 33, bw = 11
-      // A beam frames in at the top, so that band carries the JOINT's own
-      // hoops and none of the column's (§418.8.3) — the cage leaves it empty
-      // when told where the joint is, which states one more rule for free.
-      const joint: [number, number] = [2.45, 3.0]
-      const cage = figureCage({ jointGaps: [joint] })
-      const runs = cage.runs.filter((r) => r.role === 'vertical' || (r.role === 'tie' && r.closed))
-      const polys = runs.map((r) => runPolylines(r)[0])
-      const { at } = project(polys, (p) => [p[0], p[1]], x + 3, y + 4, bw, H, true)
+      const H = 36, bw = 12
+      const S = 100                                  // confined tie spacing, mm
 
-      // the joint band at the top, and the floor the column stands on
-      const topL = at([-0.2, joint[1], 0]), topR = at([0.2, joint[1], 0])
-      const jotL = at([-0.2, joint[0], 0])
-      const botL = at([-0.2, 0, 0]), botR = at([0.2, 0, 0])
-      P.push({ kind: 'rect', x: topL[0] - 3, y: topL[1], w: topR[0] - topL[0] + 6, h: jotL[1] - topL[1], fill: BAND, stroke: RULE, width: 0.6 })
-      P.push({ kind: 'line', x1: botL[0] - 3, y1: botL[1], x2: botR[0] + 3, y2: botL[1], stroke: RULE, width: 1 })
-      // §418.7.4.3 splice window — the centre half of the storey above the floor
-      const wTop = at([0, 3.0 + 0.75 + 0.7, 0]), wBot = at([0, 3.0 + 0.75, 0])
-      P.push({ kind: 'rect', x: topL[0], y: wTop[1], w: topR[0] - topL[0], h: wBot[1] - wTop[1], fill: '#fef3c7' })
+      const col = figureCage()                       // 0 → soffit
+      // The joint band: hoops at the column's confined spacing right through
+      // it (§418.8.3.1). `lo` past the band's own length makes every level
+      // confined, which is what the clause asks for.
+      const joint = figureCage({ yBottom: COL_SOFFIT, yTop: COL_FLOOR, lo: 2 })
+      // The storey BELOW, drawn only for the bars it projects up into this
+      // one: they rise past the floor and lap inside the centre half here.
+      const below = figureCage({
+        yBottom: -0.12, yTop: 0, spliceLap: 700, spliceRise: COL_FLOOR / 4,
+      })
 
-      runs.forEach((r, k) => {
+      const colRuns = col.runs.filter((r) => r.role === 'vertical' || r.role === 'tie')
+      const jointRuns = joint.runs.filter((r) => r.role === 'tie')
+      const lapRuns = below.runs.filter((r) => r.role === 'vertical')
+      const all = [...colRuns, ...jointRuns, ...lapRuns]
+      const polys = all.map((r) => runPolylines(r)[0])
+      const { at } = project(polys, (p) => [p[0], p[1]], x + 3, y + 5, bw, H, true)
+
+      const L = at([-0.15, 0, 0])[0], R = at([0.15, 0, 0])[0]
+      const band = (y0: number, y1: number, fill: string, pad = 0) => {
+        const a = at([0, y1, 0])[1], b = at([0, y0, 0])[1]
+        P.push({ kind: 'rect', x: L - pad, y: a, w: R - L + pad * 2, h: b - a, fill })
+      }
+      // §418.7.4.3 — the lap sits in the CENTRE HALF of this storey, which is
+      // the window shaded here; the bars from below finish inside it.
+      band(COL_FLOOR / 4, (COL_FLOOR * 3) / 4, '#fef3c7')
+      band(COL_SOFFIT, COL_FLOOR, BAND, 3.2)         // the joint
+
+      const lapSet = new Set(lapRuns)
+      all.forEach((r, k) => {
         const pts = polys[k].map(at)
         if (r.role !== 'tie') {
-          P.push({ kind: 'path', cmds: poly(pts), stroke: FIG, width: 0.95 })
+          // The bar coming up from below is a DIFFERENT bar from the one it
+          // laps onto, and drawn in the same ink at the same width the two
+          // were indistinguishable — the lap, which is the whole point of the
+          // figure, showed as nothing at all.
+          const lap = lapSet.has(r)
+          P.push({
+            kind: 'path', cmds: poly(pts),
+            stroke: lap ? ACCENT : FIG, width: lap ? 1.3 : 0.9,
+            ...(lap ? { dash: [1.6, 1.1] } : {}),
+          })
           return
         }
-        // A tie is a horizontal loop, and an elevation of a horizontal loop is
-        // a LINE. Drawn as the full projected polyline its 135° hooks come out
-        // as stubs a millimetre long — real geometry, but at this size it reads
-        // as a wobble rather than as a hook. The extent is still taken from the
-        // cage's own bar, so the line is where the steel is; the hooks are the
-        // plan figure's job, where they can be seen.
+        // An elevation of a horizontal loop is a line; its 135° hooks project
+        // as millimetre stubs that read as a wobble at this size. The extent
+        // is still the cage's own bar — the hooks are the plan figure's job.
         const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1])
         const my = ys.reduce((a, b) => a + b, 0) / ys.length
         P.push({ kind: 'line', x1: Math.min(...xs), y1: my, x2: Math.max(...xs), y2: my, stroke: ACCENT, width: 0.75 })
       })
+      P.push({ kind: 'line', x1: L - 3.2, y1: at([0, 0, 0])[1], x2: R + 3.2, y2: at([0, 0, 0])[1], stroke: RULE, width: 1 })
 
       const lx = x + 3 + bw + 8
-      const cap = (p: Vec3, t: string) => {
-        const [, ty] = at(p)
-        P.push({ kind: 'line', x1: x + 3 + bw + 2, y1: ty, x2: lx - 1.2, y2: ty, stroke: RULE, width: 0.5 })
+      const cap = (yy: number, t: string) => {
+        const ty = at([0, yy, 0])[1]
+        P.push({ kind: 'line', x1: x + 3 + bw + 3.4, y1: ty, x2: lx - 1.2, y2: ty, stroke: RULE, width: 0.5 })
         P.push({ kind: 'text', x: lx, y: ty + 0.5, text: t, size: 1.2, anchor: 'start', color: FIGL, weight: 600 })
       }
-      cap([0, 3.0 + 0.75 + 0.35, 0], 'SPLICE WINDOW — CENTRE HALF (§418.7.4.3)')
-      cap([0, (joint[0] + joint[1]) / 2, 0], 'JOINT — ITS OWN HOOPS (§418.8.3)')
-      cap([0, 2.05, 0], 'CONFINED LENGTH ℓo — TIES CLOSE UP')
-      cap([0, 0.3, 0], 'CONFINED LENGTH ℓo — TIES CLOSE UP')
-      P.push({ kind: 'text', x: botL[0] - 3, y: botL[1] + 3.6, text: 'FLOOR BELOW', size: 1.15, anchor: 'start', color: FIGL, weight: 600 })
-      P.push({ kind: 'text', x, y: y + H + 13.5, text: 'COLUMN ZONES, ONE STOREY — SPACINGS AND BAR SIZES PER THE MEMBER’S SCHEDULE', size: 1.15, anchor: 'start', color: FIGL, weight: 600 })
+      cap((COL_SOFFIT + COL_FLOOR) / 2, `JOINT — HOOPS @ ${S} THROUGH IT (§418.8.3.1)`)
+      cap(COL_SOFFIT - 0.3, `CONFINED LENGTH ℓo — TIES @ ${S}`)
+      cap(COL_FLOOR / 2, 'BARS FROM BELOW LAP HERE — CENTRE HALF (§418.7.4.3)')
+      cap(0.3, `CONFINED LENGTH ℓo — TIES @ ${S}`)
+      P.push({ kind: 'text', x: L - 3.2, y: at([0, 0, 0])[1] + 3.6, text: 'FLOOR BELOW', size: 1.15, anchor: 'start', color: FIGL, weight: 600 })
+      P.push({ kind: 'text', x, y: y + H + 10, text: 'COLUMN ZONES, ONE STOREY — SPACINGS AND BAR SIZES PER THE MEMBER’S SCHEDULE', size: 1.15, anchor: 'start', color: FIGL, weight: 600 })
       void w
       return P
     },
