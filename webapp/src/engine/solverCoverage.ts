@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 518
+export const SOLVER_TEST_COUNT = 522
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -627,6 +627,22 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "internal-force diagrams — the distributed load is integrated exactly",
         "name": "superposes segments — two part-span loads add, they do not interfere"
+      },
+      {
+        "suite": "solveWithGeometry — recovering only the members a caller reads",
+        "name": "an omitted filter recovers every member, exactly as before"
+      },
+      {
+        "suite": "solveWithGeometry — recovering only the members a caller reads",
+        "name": "a filter recovers exactly its members, and their results are unchanged"
+      },
+      {
+        "suite": "solveWithGeometry — recovering only the members a caller reads",
+        "name": "an EMPTY filter recovers nothing but leaves the solve untouched"
+      },
+      {
+        "suite": "solveWithGeometry — recovering only the members a caller reads",
+        "name": "the envelopes describe the members actually recovered"
       }
     ]
   },

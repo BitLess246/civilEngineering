@@ -821,3 +821,56 @@ describe('internal-force diagrams — the distributed load is integrated exactly
     }
   })
 })
+
+describe('solveWithGeometry — recovering only the members a caller reads', () => {
+  // Recovering a member's diagrams is the expensive half of a load case. Some
+  // runs are read only for their reactions (the service run) or only for the
+  // flexural members' moment diagrams (the D-only and L-only runs), and a
+  // filter lets those runs stop producing what nothing looks at.
+  const rsec = { E: 200e6, G: 77e6, A: 0.01, Iy: 1e-4, Iz: 1e-4, J: 2e-4 }
+  const rnodes: F3Node[] = [
+    { id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: 0, y: 3, z: 0 },
+    { id: 'c', x: 6, y: 3, z: 0 }, { id: 'd', x: 6, y: 0, z: 0 },
+  ]
+  const rmembers: F3Member[] = [
+    { id: 'colL', i: 'a', j: 'b', ...rsec },
+    { id: 'beam', i: 'b', j: 'c', ...rsec },
+    { id: 'colR', i: 'd', j: 'c', ...rsec },
+  ]
+  const rsupports: F3Support[] = [{ node: 'a', fixity: 'fixed' }, { node: 'd', fixity: 'fixed' }]
+  // positive w acts along −global Y in this engine: 20 kN/m downward
+  const rloads: F3Load[] = [{ kind: 'member-udl', member: 'beam', w: 20, cat: 'D' }]
+  const rprecomp = precomputeFrame(rnodes, rmembers, rsupports)
+
+  it('an omitted filter recovers every member, exactly as before', () => {
+    const r = solveWithGeometry(rprecomp, rloads)!
+    expect(r.members.map((m) => m.id)).toEqual(['colL', 'beam', 'colR'])
+  })
+
+  it('a filter recovers exactly its members, and their results are unchanged', () => {
+    const all = solveWithGeometry(rprecomp, rloads)!
+    const some = solveWithGeometry(rprecomp, rloads, undefined, new Set(['beam']))!
+    expect(some.members.map((m) => m.id)).toEqual(['beam'])
+    // recovery is strictly downstream of the solve, so the member that WAS
+    // recovered must be identical to its unfiltered self
+    expect(some.members[0]).toEqual(all.members.find((m) => m.id === 'beam'))
+  })
+
+  it('an EMPTY filter recovers nothing but leaves the solve untouched', () => {
+    const all = solveWithGeometry(rprecomp, rloads)!
+    const none = solveWithGeometry(rprecomp, rloads, undefined, new Set<string>())!
+    expect(none.members).toEqual([])
+    // displacements and reactions are what such a run is for — identical
+    expect(none.d).toEqual(all.d)
+    expect(none.reactions).toEqual(all.reactions)
+    // and equilibrium still closes on them
+    expect(none.reactions.reduce((t, r) => t + r.F[1], 0)).toBeCloseTo(20 * 6, 6)
+  })
+
+  it('the envelopes describe the members actually recovered', () => {
+    const none = solveWithGeometry(rprecomp, rloads, undefined, new Set<string>())!
+    expect([none.Mmax, none.Vmax, none.Nmax]).toEqual([0, 0, 0])
+    const beamOnly = solveWithGeometry(rprecomp, rloads, undefined, new Set(['beam']))!
+    expect(beamOnly.Mmax).toBeCloseTo(Math.max(...beamOnly.members[0].Mz.map(Math.abs)), 9)
+  })
+})

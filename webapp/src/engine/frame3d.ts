@@ -910,8 +910,27 @@ function postprocessMember(m: F3Member, g: MemberGeom, ml: MemberLoads, d: numbe
 
 /** Solve one load case using a pre-factored frame — O(n²) first-order solve;
  *  P-Δ re-factors the tangent stiffness per iteration (unchanged cost vs. before). */
+/**
+ * Which members this solve needs internal forces for.
+ *
+ * Recovering a member's diagrams is the expensive half of a load case — the
+ * linear solve itself is under 1% of it — and not every solve is asked for
+ * them. The service run exists only for its support reactions, and the D-only
+ * and L-only runs only for the moment diagrams of the FLEXURAL members whose
+ * §424.2 deflection is computed from them. Handing back diagrams for every
+ * column in those runs is work nothing reads.
+ *
+ * Omit for all members (the default). A set recovers exactly its members; an
+ * EMPTY set recovers none, leaving displacements and reactions, which are
+ * unaffected — recovery is strictly downstream of the solve.
+ *
+ * `Mmax`/`Vmax`/`Nmax` are envelopes over the members actually recovered, so a
+ * filtered run reports the maxima of what it was asked for and no more.
+ */
+export type RecoverFilter = ReadonlySet<string>
+
 export function solveWithGeometry(
-  precomp: FramePrecomp, loads: F3Load[], opts?: PDeltaOpts,
+  precomp: FramePrecomp, loads: F3Load[], opts?: PDeltaOpts, recover?: RecoverFilter,
 ): F3Result | null {
   const { idx, members, geoms, shellGeoms, ndof, free, freeIdx, Kff, Kff_raw, supports, diaT, diaNi } = precomp
   let pdStatus: F3PDeltaStatus | undefined
@@ -1100,8 +1119,9 @@ export function solveWithGeometry(
       }
     })
 
-  const results: F3MemberResult[] = members.map((m, mi) =>
-    postprocessMember(m, geoms[mi], mloads[mi], d))
+  const results: F3MemberResult[] = recover
+    ? members.flatMap((m, mi) => (recover.has(m.id) ? [postprocessMember(m, geoms[mi], mloads[mi], d)] : []))
+    : members.map((m, mi) => postprocessMember(m, geoms[mi], mloads[mi], d))
 
   return {
     d, reactions, members: results,

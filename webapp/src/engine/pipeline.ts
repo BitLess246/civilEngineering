@@ -1651,6 +1651,15 @@ export function governingCombos(d: StructureDesign): Set<string> {
   return out
 }
 
+/** Recover no member at all — the caller wants displacements and reactions. */
+const NO_MEMBERS: ReadonlySet<string> = new Set<string>()
+
+/** The members whose diagrams the D-only / L-only service runs are read for:
+ *  the flexural ones, whose §424.2 deflection is integrated from them (and, for
+ *  a prestressed section, whose sagging peak sets the equivalent UDLs). */
+const flexuralIds = (model: StructuralModel): ReadonlySet<string> =>
+  new Set(model.members.filter((m) => m.role === 'beam' || m.role === 'girder').map((m) => m.id))
+
 /** One pass, on the model exactly as given. */
 export function designStructureOnce(
   model: StructuralModel, soil: SoilOptions, plan: FootingPlan = {}, opts: AnalyzeOptions = {},
@@ -1659,11 +1668,18 @@ export function designStructureOnce(
   if (model.members.length === 0) return null
   const { br, runs, precomp } = buildRuns(model, opts, onProgress, neededCombos)
   const serviceLoads = applyF3Combo(br.loads, { D: 1, L: 1, Lr: 1, S: 1, R: 1 })
-  const serviceRes = serviceLoads.length ? solveWithGeometry(precomp, serviceLoads, opts) : null
+  // The service run is read for its support REACTIONS and nothing else — see
+  // `designFromRuns`. Recovering a diagram for every member of it was work
+  // nothing looked at.
+  const serviceRes = serviceLoads.length ? solveWithGeometry(precomp, serviceLoads, opts, NO_MEMBERS) : null
   const dLoads = applyF3Combo(br.loads, { D: 1 })
   const lLoads = applyF3Combo(br.loads, { L: 1 })
-  const dRes = dLoads.length ? solveWithGeometry(precomp, dLoads, opts) : null
-  const lRes = lLoads.length ? solveWithGeometry(precomp, lLoads, opts) : null
+  // The D-only and L-only runs are read for reactions, and for the moment
+  // diagrams of the FLEXURAL members whose §424.2 deflection is integrated from
+  // them. A column's diagram in these runs has no reader.
+  const flexural = flexuralIds(model)
+  const dRes = dLoads.length ? solveWithGeometry(precomp, dLoads, opts, flexural) : null
+  const lRes = lLoads.length ? solveWithGeometry(precomp, lLoads, opts, flexural) : null
   return designFromRuns(model, soil, plan, opts, br, runs, serviceRes, dRes, lRes, onProgress)
 }
 
@@ -1710,10 +1726,13 @@ async function designStructureWithPool(
   const serviceLoads = applyF3Combo(br.loads, { D: 1, L: 1, Lr: 1, S: 1, R: 1 })
   const dLoads = applyF3Combo(br.loads, { D: 1 })
   const lLoads = applyF3Combo(br.loads, { L: 1 })
+  // Same reads as the sync path: the service run for reactions only, the D/L
+  // runs for the flexural members' moment diagrams.
+  const flexural = flexuralIds(model)
   const [serviceRes, dRes, lRes] = await Promise.all([
-    serviceLoads.length ? pool.solve(serviceLoads, opts) : Promise.resolve(null),
-    dLoads.length ? pool.solve(dLoads, opts) : Promise.resolve(null),
-    lLoads.length ? pool.solve(lLoads, opts) : Promise.resolve(null),
+    serviceLoads.length ? pool.solve(serviceLoads, opts, NO_MEMBERS) : Promise.resolve(null),
+    dLoads.length ? pool.solve(dLoads, opts, flexural) : Promise.resolve(null),
+    lLoads.length ? pool.solve(lLoads, opts, flexural) : Promise.resolve(null),
   ])
 
   return designFromRuns(model, soil, plan, opts, br, runs, serviceRes, dRes, lRes, onProgress)
