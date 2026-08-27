@@ -28,6 +28,7 @@ import { overlappingPairs } from './footingLayout'
 import { designSlabDDM, type SlabDesignResult } from './slabDDM'
 import { designShearWall, type ShearWallResult } from './shearWallDesign'
 import { checkModelSCWB, type SCWBJointRow } from './scwb'
+import { momentRatioLimits } from './beamMomentRatios'
 import { shapeByName, nextHeavierW, nextLighterW, type AiscShape } from './aiscSections'
 import { deriveWSection, beamFlexure, beamFlexureScope, beamShear, columnAxial, combinedLoading, weakAxisFlexure } from './steelDesign'
 import type { PlateClass, FlexureClause } from './steelDesign'
@@ -353,6 +354,11 @@ export interface PrestressedScheduleRow {
 export interface StructureDesign {
   govName: string
   cases: string[]   // every load case (combo × direction) run for the envelope
+  /** The lateral system the schedules were detailed to (`DesignOpts.seismicSystem`).
+   *  Carried on the result because the DETAILING checks downstream — hinge-zone
+   *  hoops, the §418.6.3.2/§418.4.2.2 moment ratios — need to know which set of
+   *  §418 rules the bars were placed under, and a cage on its own cannot say. */
+  system: 'gravity' | 'imf' | 'smf'
   beams: BeamScheduleRow[]
   /** Members whose section carries prestressing (RectSection.ps). */
   prestressed: PrestressedScheduleRow[]
@@ -712,13 +718,49 @@ function designBeamRow(
   // Transverse stirrup-leg spacing limit hx (§418.6.4.3): 350 mm for seismic
   // frame beams, ~600 mm good-practice for gravity.
   const legSpacingLimit = system === 'smf' || system === 'imf' ? 350 : 600
-  const sections: BeamSectionDesign[] = memberSections(mr)
-    .filter((s) => Math.abs(s.Mu) > 1e-6 || s.Vu > 1e-6)
+  const raw = memberSections(mr).filter((s) => Math.abs(s.Mu) > 1e-6 || s.Vu > 1e-6)
+  // §418.6.3.2 (SMF) / §418.4.2.2 (IMF) — the SAGGING steel floor.
+  //
+  // A moment-frame beam's positive strength at a joint face must be at least a
+  // fixed fraction of its negative strength there (½ SMF, ⅓ IMF), because the
+  // frame is expected to reverse. Nothing in a section design sees that: each
+  // section is designed against its own moment, and the sagging demand at a
+  // support under gravity is nil, so the bottom face got the §409.6.1.2
+  // minimum and a real SMF frame came out at Mn+/Mn− ≈ 0.3.
+  //
+  // The floor is set on AREA rather than on Mn, and that is the conservative
+  // side: Mn(As) is concave — the stress block deepens as steel is added — so
+  // As⁺ = r·As⁻ delivers Mn⁺ slightly MORE than r·Mn⁻ at equal d, and the top
+  // steel going to a second layer at a support only widens the margin. The
+  // strength itself is then verified on the placed cage by
+  // `structureMomentRatios`, which is where curtailment is visible too.
+  //
+  // The floor is set from the hogging BAR COUNT rather than its area, because
+  // that is the number the cage curtails on: `beamCage` keeps
+  // ceil(atFace · topBars) bottom bars running into the support, and if the
+  // schedule had been floored on area the two could round apart by one bar —
+  // the schedule and the cage would then be describing different beams.
+  const lim = momentRatioLimits(system)
+  const Ab = (Math.PI / 4) * sec.barDia * sec.barDia
+  const AsFloor = lim
+    ? lim.atFace * Ab * Math.max(0, ...raw.filter((s) => s.Mu < 0).map((s) => designBeam({
+      b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia,
+      comprBarDia: 16, stirrupDia: sec.tieDia,
+      fc: sec.fc, fy: sec.fy, Mu: Math.abs(s.Mu), Vu: s.Vu, legSpacingLimit, system,
+    }).bars))
+    : 0
+  const sections: BeamSectionDesign[] = raw
     .map((s) => {
       const base = {
         b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia,
         comprBarDia: 16, stirrupDia: sec.tieDia,
         fc: sec.fc, fy: sec.fy, Mu: Math.abs(s.Mu), Vu: s.Vu, legSpacingLimit,
+        // The hinge-zone hoop cap is a property of the SYSTEM, not of the
+        // shear at this section — see BeamDesignInput.system.
+        system,
+        // Only the BOTTOM face carries the ratio floor; a hogging section is
+        // the thing the floor is measured from.
+        ...(s.Mu > 0 && AsFloor > 0 ? { AsFloor } : {}),
       }
       const rect = designBeam(base)
       // T-beam action (§6.3.2): sagging compression lives in the slab, so the
@@ -1510,6 +1552,7 @@ function designFromRuns(
 
   const partialDesign = {
     govName: runs[govIdx].name,
+    system: opts.seismicSystem ?? 'gravity',
     cases: runs.map((r) => r.name),
     beams, prestressed, columns, steelBeams, steelColumns, woodBeams, woodColumns, basePlates,
     joints: [] as SteelJoint[],

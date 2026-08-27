@@ -5,6 +5,7 @@ import {
 } from './frameElevation'
 import { elevationPlane, type RebarCage, type RebarRun } from './rebarModel'
 import { STEEL, STEEL_LIGHT } from './sheetInk'
+import { textWidth } from './detailSheet'
 import { designStructure } from './pipeline'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { buildStructureCages } from './cageBuilder'
@@ -176,34 +177,57 @@ describe('buildFrameElevation', () => {
 
   it('draws EVERY bar of every cage it was given, clipped to the band', () => {
     // the STEEL paths only — a leader's own arm lands outside the band by
-    // design, since that is where its text sits
-    const paths = d.primitives.filter((p) => p.kind === 'path'
-      && (p.stroke === STEEL || p.stroke === STEEL_LIGHT))
-    expect(paths.length).toBeGreaterThan(100)
+    // design, since that is where its text sits.
+    //
+    // The sheet now carries a SECOND view: the three cuts under each span.
+    // Their stirrups are steel paths too, and they belong below the elevation,
+    // so the two are separated here rather than lumped together.
     const band = [-(3.2 + 1.6), -(3.2 - 1.6)]
-    for (const p of paths) {
-      if (p.kind !== 'path') continue
+    const paths = d.primitives.filter((p) => p.kind === 'path'
+      && (p.stroke === STEEL || p.stroke === STEEL_LIGHT)) as { cmds: { y: number }[] }[]
+    const inBand = paths.filter((p) => Math.min(...p.cmds.map((c) => c.y)) <= band[1] + 1e-6)
+    const below = paths.filter((p) => Math.min(...p.cmds.map((c) => c.y)) > band[1] + 1e-6)
+    expect(inBand.length).toBeGreaterThan(100)
+    for (const p of inBand) {
       for (const c of p.cmds) {
         expect(c.y).toBeGreaterThanOrEqual(band[0] - 1e-6)
         expect(c.y).toBeLessThanOrEqual(band[1] + 1e-6)
       }
     }
+    // one stirrup outline per cut, and every one of them clear of the frame
+    expect(below.length).toBeGreaterThanOrEqual(3)
+    for (const p of below) for (const c of p.cmds) expect(c.y).toBeGreaterThan(band[1])
   })
 
-  it('puts the grid bubbles ABOVE the drawing, where a reader looks first', () => {
-    // Below, they had the span dimensions and every beam's schedule stacked on
-    // top of them, and the framing plans carry theirs above.
+  it('puts the grid bubbles ABOVE the drawing, with the span dimensions under them', () => {
+    // A dimension between two grids belongs beside the grids it is measured
+    // to, and the space under the beam is the sections'. So the order down the
+    // sheet is bubbles, then span dimensions, then the frame.
     const beams = bundles.find((x) => x.key === 'frame-a-3-20')!.input.members
     const top = Math.min(...beams.map((m) => -m.yTop))     // page-Y of the highest concrete
-    const circles = d.primitives.filter((p) => p.kind === 'circle') as { cy: number; cx: number }[]
-    // one per grid position, all of them above the concrete. The fourth circle
-    // on the sheet is the title block's own detail bubble, far below.
-    expect(circles.filter((c) => c.cy < top)).toHaveLength(3)
-    expect(circles.filter((c) => c.cy > top)).toHaveLength(1)
-    // …and the span dimensions stay BELOW it, so the two never share a lane
+    const circles = d.primitives.filter((p) => p.kind === 'circle') as { cy: number; r: number }[]
+    // the bubbles are the big circles above the concrete; the small ones below
+    // it are bars in the sections, and one is the title block's detail bubble
+    const bubbles = circles.filter((c) => c.cy < top)
+    expect(bubbles).toHaveLength(3)
     const dims = d.primitives.filter((p) => p.kind === 'dim'
       && Math.abs((p as { y1: number; y2: number }).y1 - (p as { y2: number }).y2) < 1e-9) as { y1: number }[]
-    expect(Math.max(...dims.map((x) => x.y1))).toBeGreaterThan(top)
+    const spanDims = dims.filter((x) => x.y1 < top)
+    expect(spanDims.length).toBeGreaterThanOrEqual(2)      // one per span
+    // under the bubbles, over the frame
+    for (const x of spanDims) expect(x.y1).toBeGreaterThan(Math.max(...bubbles.map((b) => b.cy)))
+  })
+
+  it('cuts each span at both faces and midspan, under the stations they came from', () => {
+    // An elevation cannot say how many bars are in a layer or which face they
+    // are on. Three cuts per span can, and they sit where the cut is so no
+    // leader is needed to tie them to it.
+    const labels = textsOf(d).filter((t) => /^[ABC] — \d+×\d+$/.test(t))
+    expect(labels).toHaveLength(6)                          // two spans, three each
+    expect(labels.slice(0, 3).map((t) => t[0])).toEqual(['A', 'B', 'C'])
+    // and each carries its own steel and its own spacing
+    expect(textsOf(d).filter((t) => /⌀\d+ @ \d+/.test(t))).toHaveLength(6)
+    expect(textsOf(d).filter((t) => /⌀\d+ T, .*⌀\d+ B/.test(t)).length).toBeGreaterThanOrEqual(6)
   })
 
   it('carries the general-notes pointer and nothing else in prose', () => {
@@ -423,5 +447,68 @@ describe('angledLeader — the leg runs at 45°', () => {
     const a = angledLeader({ x: 6, y: 0, ty: -0.4, side: 'left', within, text: 'B1', size: 0.1 })
     const b = angledLeader({ x: 6, y: 0, ty: -0.4, side: 'left', text: 'B1', size: 0.1 })
     expect(leg(a)).toEqual(leg(b))
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// NO TWO LABELS MAY PRINT THROUGH EACH OTHER
+//
+// The two face callouts used to share one baseline and rely on being sent to
+// opposite sides of it to stay apart. `angledLeader` flips a side whose label
+// would leave the bay, and a deep beam makes the BOT leader's 45° leg long
+// enough that its preferred side always overruns — so both landed on the same
+// side of the same line and printed through each other on EVERY sheet of every
+// frame, gravity and seismic alike.
+//
+// Asserted on the drawn text's own boxes rather than on the baselines, because
+// separate baselines are the fix and testing for them would only be testing
+// that the fix is present. This asks the question the reader asks.
+// ─────────────────────────────────────────────────────────────────────────
+describe('buildFrameElevation — label collisions', () => {
+  /** A drawn label's box: full advance width, cap height up, a short
+   *  descender down. Deliberately generous — a near miss is still a clash. */
+  const boxes = (d: { primitives: { kind: string }[] }) =>
+    (d.primitives.filter((p) => p.kind === 'text') as unknown as
+      { x: number; y: number; text: string; size: number; anchor?: string }[])
+      .map((t) => {
+        const w = textWidth(t.text, t.size)
+        const x0 = t.anchor === 'middle' ? t.x - w / 2 : t.anchor === 'end' ? t.x - w : t.x
+        return { t: t.text, x0, x1: x0 + w, y0: t.y - t.size * 0.72, y1: t.y + t.size * 0.22 }
+      })
+
+  const clashes = (d: { primitives: { kind: string }[] }) => {
+    const b = boxes(d), out: string[] = []
+    for (let i = 0; i < b.length; i++) for (let j = i + 1; j < b.length; j++) {
+      const p = b[i], q = b[j]
+      if (p.x0 < q.x1 && q.x0 < p.x1 && p.y0 < q.y1 && q.y0 < p.y1) out.push(`"${p.t}" ∩ "${q.t}"`)
+    }
+    return out
+  }
+
+  it('no label overlaps another on any sheet of the reference frame', () => {
+    for (const b of bundles) expect(clashes(buildFrameElevation(b.input))).toEqual([])
+  })
+
+  it('holds on a deep, heavily reinforced SMF frame — the case that broke it', () => {
+    // 350×650 at 8 m under 14 kPa SDL + 20 kPa LL: 7 top bars and a leader leg
+    // long enough to force the flip that caused the overprint.
+    const sec = { id: 's1', name: 'C1', b: 350, h: 650, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+    const m = generateGridModel({ baysX: [8, 8], baysZ: [8], storeyH: [3.5, 3.5], section: sec })
+    m.loads = buildGravityLoads(m, 14, 20)
+    const d = designStructure(m, { qAllow: 300, gammaSoil: 18, gammaConc: 24, H: 1.5 } as never,
+      {}, { seismicSystem: 'smf' })!
+    const cs = buildStructureCages(m, d).cages
+    for (const b of frameElevationBundles(m, d, cs)) {
+      expect(clashes(buildFrameElevation(b.input))).toEqual([])
+    }
+  })
+
+  it('the two face callouts are on SEPARATE lines, top above bottom', () => {
+    const d = buildFrameElevation(bundles[0].input)
+    const at = (s: string) => boxes(d).find((b) => b.t.includes(s))!
+    const top = at('TOP THRU'), bot = at('BOT. THRU')
+    expect(top).toBeTruthy(); expect(bot).toBeTruthy()
+    // Page-Y grows downward, so the TOP callout's baseline is the LARGER one.
+    expect(top.y0).toBeGreaterThan(bot.y1)
   })
 })

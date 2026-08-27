@@ -243,3 +243,102 @@ describe('beam design — compression NA check', () => {
     expect(r.dPrimeExtreme).toBe(0)
   })
 })
+
+describe('hinge-zone confinement — §418.6.4.4 (SMF) / §418.4.2.4 (IMF)', () => {
+  // A 300 × 500 beam, lightly loaded: the shear rules are satisfied by the
+  // §409.7.6.2.2 gravity maximum of d/2 = 220 and say nothing at all about the
+  // hinge. That is the case this exists for — on a special moment frame the
+  // beam was detailed exactly like a gravity beam.
+  const base = {
+    b: 300, h: 500, cover: 40, barDia: 20, stirrupDia: 10,
+    fc: 28, fy: 415, Mu: 120, Vu: 72,
+  }
+
+  it('leaves a gravity beam exactly as it was', () => {
+    const r = designBeam(base)
+    expect(r.seismicSConf).toBeUndefined()
+    expect(r.sHinge).toBe(r.sAdopt)
+    expect(r.hingeGovern).toBeUndefined()
+  })
+
+  it('caps an SMF beam at min(d/4, 6db, 150)', () => {
+    const r = designBeam({ ...base, system: 'smf' })
+    expect(r.sAdopt).toBe(220)                        // what shear alone asked for
+    const want = Math.min(r.d / 4, 6 * 20, 150)
+    expect(r.seismicSConf).toBeCloseTo(want, 6)
+    expect(want).toBeCloseTo(110, 6)                  // d/4 governs on this section
+    expect(r.sHinge).toBe(110)
+    expect(r.hingeGovern).toContain('§418.6.4.4')
+  })
+
+  it('caps an IMF beam at min(d/4, 8db, 24·dh, 300)', () => {
+    const r = designBeam({ ...base, system: 'imf' })
+    expect(r.seismicSConf).toBeCloseTo(Math.min(r.d / 4, 8 * 20, 24 * 10, 300), 6)
+    expect(r.sHinge).toBe(110)
+    expect(r.hingeGovern).toContain("§418.4.2.4")
+  })
+
+  it('lets shear demand govern when it is tighter than the cap', () => {
+    // A heavily loaded beam already needs closer hoops than the detailing
+    // limit; the cap is a maximum, not a target.
+    const r = designBeam({ ...base, Vu: 420, system: 'smf' })
+    expect(r.sAdopt).toBeGreaterThan(0)
+    expect(r.sAdopt).toBeLessThan(r.seismicSConf!)
+    expect(r.sHinge).toBe(r.sAdopt)
+    expect(r.hingeGovern).toBe('shear demand')
+  })
+
+  it('still confines a zone that needs NO shear steel at all', () => {
+    // The confinement is required by the hinge, not by Vu. A beam whose shear
+    // is under ½φVc gets sAdopt = 0, and taking that literally would leave the
+    // hinge with no hoops in the one place they matter most.
+    const r = designBeam({ ...base, Vu: 1, system: 'smf' })
+    expect(r.region).toBe('none')
+    expect(r.sAdopt).toBe(0)
+    expect(r.sHinge).toBe(110)
+    expect(r.hingeGovern).toContain('§418.6.4.4')
+  })
+
+  it('scales with the section, not with a constant', () => {
+    // A shallow beam is capped by d/4; a deep one by 6db or the 150 floor.
+    const shallow = designBeam({ ...base, h: 350, system: 'smf' })
+    const deep = designBeam({ ...base, h: 900, system: 'smf' })
+    expect(shallow.seismicSConf).toBeCloseTo(shallow.d / 4, 6)
+    expect(deep.seismicSConf).toBeCloseTo(Math.min(6 * 20, 150), 6)
+    expect(shallow.seismicSConf!).toBeLessThan(deep.seismicSConf!)
+  })
+})
+
+describe('AsFloor — an externally imposed minimum (§418.6.3.2 / §418.4.2.2)', () => {
+  it('raises the steel and says so', () => {
+    const free = designBeam(base)
+    const floored = designBeam({ ...base, AsFloor: free.As * 1.5 })
+    expect(free.asFloorGoverns).toBe(false)
+    expect(floored.asFloorGoverns).toBe(true)
+    expect(floored.As).toBeCloseTo(free.As * 1.5, 6)
+    expect(floored.bars).toBeGreaterThanOrEqual(free.bars)
+  })
+
+  it('never LOWERS the steel — a floor below the demand does nothing', () => {
+    const free = designBeam(base)
+    const floored = designBeam({ ...base, AsFloor: free.As * 0.5 })
+    expect(floored.asFloorGoverns).toBe(false)
+    expect(floored.As).toBeCloseTo(free.As, 9)
+  })
+
+  it('beats the §409.6.1.2 minimum when it is the larger of the two', () => {
+    // A tiny moment, so the section is min-steel governed on its own.
+    const min = designBeam({ ...base, Mu: 5 })
+    expect(min.usedMin).toBe(true)
+    const floored = designBeam({ ...base, Mu: 5, AsFloor: min.As * 2 })
+    expect(floored.usedMin).toBe(false)          // the floor took over, not ρmin
+    expect(floored.asFloorGoverns).toBe(true)
+    expect(floored.As).toBeCloseTo(min.As * 2, 6)
+  })
+
+  it('leaves ρ inside ρmax — the floor is a fraction of a section that already passed', () => {
+    const r = designBeam({ ...base, AsFloor: 1500 })
+    expect(r.rho).toBeLessThanOrEqual(r.rhoMax)
+    expect(r.flexOK).toBe(true)
+  })
+})

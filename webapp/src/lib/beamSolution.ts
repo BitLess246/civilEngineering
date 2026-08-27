@@ -219,7 +219,21 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
     ['Stirrup design', '§22.5 · §9.7.6.2.2', r.region !== 'inadequate'],
     ['Section check (shear)', '§22.5.1.2', r.region !== 'inadequate'],
     ['Stirrup detailing', '§407.3.2 · §425.3.2', undefined],
+    ['Hinge-zone confinement', '§418.6.4.4 · §418.4.2.4', undefined],
   ]
+  // The 2h zone at each support is confined by DETAILING, not by Vu: on a
+  // lightly loaded beam the shear rules are satisfied at d/2 and say nothing
+  // about the hinge. Shown only where a seismic system actually imposes it.
+  if (r.seismicSConf !== undefined) {
+    steps.push({
+      title: 'Hinge-zone confinement',
+      lines: [
+        txt('Over 2h from each support face the hoops confine a plastic hinge. The spacing there is a detailing limit and does not come from the shear demand, which the gravity maximum of d/2 already satisfies.'),
+        eq(String.raw`s_{hinge} = \min(s_{adopt},\ ${sn0(r.seismicSConf)}) = \mathbf{${sn0(r.sHinge)}}\ \text{mm}`),
+      ],
+      note: `Governed by ${r.hingeGovern}. Outside the zone, ⌀${i.stirrupDia} @ ${sn0(r.sAdopt)} mm.`,
+    })
+  }
   return steps.map((st) => {
     const hit = notes.find(([k]) => st.title.startsWith(k))
     return hit ? { ...st, clause: hit[1], ...(hit[2] === undefined ? {} : { pass: hit[2] }) } : st
