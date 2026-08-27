@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildGeneralNotes, measureRows, generalNoteSections, constructionChecks,
-  seismicHookTail, seeGeneralNotes, GENERAL_NOTES_REF, type GeneralNotesInput,
+  seismicHookTail, seeGeneralNotes, seeSchedule, GENERAL_NOTES_REF, SCHEDULE_NAME,
+  PAPER, fitPaper, type GeneralNotesInput, type PaperSize,
 } from './generalNotes'
 import { calcDevLength } from './devLength'
 import { hookBendDiameter } from './rebarModel'
@@ -87,9 +88,13 @@ describe('the notes themselves', () => {
   it('covers every trade the set details', () => {
     const heads = secs.map((s) => s.head)
     for (const h of ['MATERIALS', 'CLEAR COVER', 'BENDS AND HOOKS', 'DEVELOPMENT AND SPLICES',
-      'BEAMS', 'COLUMNS', 'BEAM–COLUMN JOINTS', 'FOOTINGS AND SLABS']) {
+      'BEAMS', 'ANCHORAGE AT A BEAM END', 'BEAM–COLUMN JOINTS', 'FOOTINGS AND SLABS']) {
       expect(heads).toContain(h)
     }
+    // Columns are split in two — the bars, then the splices — because one
+    // section of eleven rules reads as a wall of text.
+    expect(heads.filter((h) => h.startsWith('COLUMNS'))).toEqual(
+      ['COLUMNS — REINFORCEMENT', 'COLUMNS — LAPS AND SPLICES'])
   })
 
   it('carries the rules the detail sheets stopped repeating', () => {
@@ -121,7 +126,7 @@ describe('the construction checks', () => {
     const all = checks.flatMap((c) => c.lines).join(' ')
     expect(all).toContain('COVER')
     expect(all).toContain('LAP LENGTH AND LAP POSITION')
-    expect(all).toContain('TOP STEEL IS TOP STEEL')
+    expect(all).toContain('TOP STEEL IS IN THE TOP')
   })
 })
 
@@ -182,31 +187,35 @@ describe('what the per-member elevations added to the rules', () => {
     // stated level. Formwork set from the soffit is a whole beam depth out, and
     // nothing else on the sheet says so.
     expect(all).toMatch(/A FLOOR LEVEL IS THE TOP OF THE BEAMS AT IT/)
-    expect(all).toMatch(/SET THE FORMWORK OFF THE LEVEL, NOT OFF THE SOFFIT/)
+    expect(all).toMatch(/SET FORMWORK FROM THE LEVEL/)
     expect(checks).toMatch(/SOFFIT LEVEL SET FROM THE FLOOR LEVEL LESS THE BEAM DEPTH/)
   })
 
-  it('sends the reader to the frame elevations, and says there is no typical beam', () => {
-    expect(all).toMatch(/FRAME ELEVATION: ONE SHEET PER GRID LINE PER FLOOR/)
-    expect(all).toMatch(/THERE IS NO "TYPICAL BEAM" SHEET/)
+  it('says where beams are drawn — as a sheet convention, not as a numbered rule', () => {
+    // It is a DRAWING convention, so it belongs under the title with the
+    // sheet's own identity rather than in the list of code requirements the
+    // reader has to comply with.
+    expect(all).not.toMatch(/FRAME ELEVATION/)
+    const flat = textOf(buildGeneralNotes(job)).join(' ')
+    expect(flat).toMatch(/ONE SHEET PER GRID LINE PER FLOOR/)
+    expect(flat).toMatch(/THERE IS NO TYPICAL BEAM SHEET/)
   })
 
   it('says how to read a stirrup schedule — spaces, in order, from the left face', () => {
-    expect(all).toMatch(/MEANS SPACES, NOT BARS, LAID OUT FROM THE LEFT SUPPORT FACE/)
-    expect(all).toMatch(/EXACT NUMBER OF STIRRUPS IN THAT BEAM/)
+    expect(all).toMatch(/READS SPACES, IN ORDER, FROM THE LEFT SUPPORT FACE/)
+    expect(all).toMatch(/THE TOTAL IS THE EXACT NUMBER IN THAT BEAM/)
     expect(checks).toMatch(/HOOP COUNT AGAINST THE TOTAL ON THE ELEVATION/)
   })
 
   it('names both splice zones, and which face each belongs to', () => {
-    expect(all).toMatch(/TOP STEEL IS LAPPED IN THE MIDDLE HALF OF THE SPAN/)
+    expect(all).toMatch(/BEAM TOP STEEL IN THE MIDDLE HALF OF THE SPAN/)
     expect(all).toMatch(/BEAM BOTTOM STEEL IN AN END QUARTER/)
-    expect(all).toMatch(/COLUMN VERTICALS ARE LAPPED WITHIN THE CENTRE HALF OF THE STOREY/)
-    expect(checks).toMatch(/NEVER THE OTHER WAY ROUND/)
+    expect(all).toMatch(/VERTICALS ARE LAPPED WITHIN THE CENTRE HALF OF THE STOREY/)
+    expect(checks).toMatch(/SPLICES STAGGERED AND IN THE ZONES SHOWN/)
   })
 
   it('makes the closed-up hoops at a lap a hold point, not a saving', () => {
-    expect(all).toMatch(/CLOSED UP TO 100 C\/C THROUGH THE LENGTH OF EVERY LAP SPLICE/)
-    expect(all).toMatch(/NOT EXTRA STEEL TO BE SAVED/)
+    expect(all).toMatch(/CLOSED UP TO 100 C\/C THROUGH THE FULL LENGTH OF EVERY LAP SPLICE/)
     expect(checks).toMatch(/CLOSED-UP 100 C\/C BAND PRESENT AT EVERY LAP/)
   })
 
@@ -226,12 +235,99 @@ describe('what the per-member elevations added to the rules', () => {
     const flat = textOf(buildGeneralNotes(job)).join(' ').replace(/\s+/g, ' ')
     for (const phrase of [
       'A FLOOR LEVEL IS THE TOP OF THE BEAMS AT IT',
-      'THERE IS NO "TYPICAL BEAM" SHEET',
-      'MEANS SPACES, NOT BARS',
+      'THERE IS NO TYPICAL BEAM SHEET',
+      'READS SPACES, IN ORDER',
       'MAY NOT BE CUT BACK TO SUIT FORMWORK',
       'CUT TO THE FIGURE SHOWN',
     ]) {
       expect(flat, phrase).toContain(phrase.split(' ').slice(0, 4).join(' '))
     }
+  })
+})
+
+describe('the sheet is a drawing, not a specification', () => {
+  const secs = generalNoteSections(job)
+  const all = secs.flatMap((s) => s.lines).join(' ')
+
+  it('states requirements, not justifications or warnings about ignoring them', () => {
+    // A note that argues its own case reads as design philosophy, and on a
+    // drawing it competes with the rules for the reader's attention. The
+    // requirement, its dimension and its clause are the whole job.
+    for (const preaching of [
+      'NOT OPTIONAL',
+      'MAY NOT BE RELAXED',
+      'WIDEST WHERE THE SHEAR IS LOWEST',
+      'DOES NOT DEVELOP A BAR THAT DOES NOT FIT',
+      'THE HOOK GRIPS THAT BAR',
+      'NOT MUCH OF A RULE',
+      'IS NOT THE SPLICE THAT WAS DESIGNED',
+      'NOT EXTRA STEEL TO BE SAVED',
+    ]) expect(all, preaching).not.toContain(preaching)
+  })
+
+  it('sends the reader to the schedule instead of restating a length', () => {
+    // Every standard measure is worked once, in the table, for this job's own
+    // materials. A note that re-derives one is a second place to be wrong.
+    const refs = secs.flatMap((s) => s.lines).filter((l) => l.includes(SCHEDULE_NAME))
+    expect(refs.length).toBeGreaterThanOrEqual(4)
+    expect(seeSchedule('ℓdh')).toBe(`ℓdh PER ${SCHEDULE_NAME}. SEE ${GENERAL_NOTES_REF}.`)
+  })
+
+  it('keeps every note short enough to read as a rule', () => {
+    // The old sheet had paragraphs of 300+ characters. Nothing here should
+    // need more than about two printed lines of a column.
+    const longest = secs.flatMap((s) => s.lines).reduce((a, b) => (b.length > a.length ? b : a))
+    expect(longest.length, longest).toBeLessThan(230)
+  })
+
+  it('draws the two rules that are better drawn than written', () => {
+    const withFig = secs.filter((s) => s.figure)
+    expect(withFig.map((s) => s.head)).toEqual(['BENDS AND HOOKS', 'COLUMNS — LAPS AND SPLICES'])
+    for (const s of withFig) {
+      expect(s.figure!.h).toBeGreaterThan(0)
+      expect(s.figure!.draw(0, 0, 60).length).toBeGreaterThan(5)
+    }
+  })
+
+  it('turns the hold points into a checklist, not a second copy of the rules', () => {
+    const lines = constructionChecks().flatMap((c) => c.lines)
+    // one thing to look at per line, tickable while standing in the formwork
+    for (const l of lines) expect(l.length, l).toBeLessThan(70)
+    expect(lines.every((l) => !l.endsWith('.'))).toBe(true)
+  })
+})
+
+describe('the sheet fills a landscape page', () => {
+  it('comes out at the chosen paper’s own proportion', () => {
+    for (const p of Object.keys(PAPER) as PaperSize[]) {
+      const b = buildGeneralNotes(job, { paper: p }).bounds
+      const got = (b.maxX - b.minX) / (b.maxY - b.minY)
+      expect(got, p).toBeCloseTo(PAPER[p].w / PAPER[p].h, 2)
+      expect(got, p).toBeGreaterThan(1)         // landscape, every size
+    }
+  })
+
+  it('fills the page rather than padding a tall sheet out sideways', () => {
+    // The failure this guards is a sheet laid out too narrow: `fitPaper` then
+    // buys the aspect ratio with a fifth of the paper in blank margin. The
+    // width is solved for instead, so the padding left over is small.
+    const d = buildGeneralNotes(job, { paper: 'A3' })
+    const xs = d.primitives.flatMap((p) => ('x' in p && typeof p.x === 'number' ? [p.x] : []))
+    const used = Math.max(...xs) - Math.min(...xs)
+    expect(used / (d.bounds.maxX - d.bounds.minX)).toBeGreaterThan(0.85)
+  })
+
+  it('never crops the drawing to make it fit', () => {
+    const d = buildGeneralNotes(job, { paper: 'A4' })
+    const inner = fitPaper({ minX: 0, minY: 0, maxX: 10, maxY: 10 }, PAPER.A4)
+    expect(inner.minX).toBeLessThanOrEqual(0)
+    expect(inner.maxX).toBeGreaterThanOrEqual(10)
+    expect(inner.minY).toBeLessThanOrEqual(0)
+    expect(inner.maxY).toBeGreaterThanOrEqual(10)
+    expect(d.bounds.maxX - d.bounds.minX).toBeGreaterThan(0)
+  })
+
+  it('defaults to A3', () => {
+    expect(buildGeneralNotes(job).bounds).toEqual(buildGeneralNotes(job, { paper: 'A3' }).bounds)
   })
 })
