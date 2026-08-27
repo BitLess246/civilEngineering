@@ -46,9 +46,17 @@ export const GENERAL_NOTES_REF = 'S-01'
 /** The table of standard lengths, named once so every reference matches. */
 export const SCHEDULE_NAME = 'SCHEDULE OF MEASURES'
 
-/** The one line a detail sheet carries instead of the rulebook. */
+/**
+ * The one line a detail sheet carries instead of the rulebook.
+ *
+ * It names what it defers. "Refer to S-01 for general reinforcing
+ * requirements" tells a steel fixer holding a bar nothing about where to find
+ * the lap length for it, so the number gets guessed or the sheet gets a
+ * paragraph of its own — which is how the rules ended up printed thirty times
+ * in the first place.
+ */
 export const seeGeneralNotes = (ref = GENERAL_NOTES_REF) =>
-  `REFER TO ${ref} FOR GENERAL REINFORCING REQUIREMENTS.`
+  `REFER TO ${ref} FOR GENERAL REINFORCING REQUIREMENTS. STANDARD BENDS, HOOKS, ℓd, ℓdh AND LAP LENGTHS PER THE ${SCHEDULE_NAME}.`
 
 /** What a detail sheet writes instead of restating a standard length: the
  *  measure is on S-01, worked for this job's materials, once. */
