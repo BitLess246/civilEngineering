@@ -174,7 +174,8 @@ describe('runBiaxialPushover — skew push on the real 3-D model', () => {
     const ax2 = push({ angleDeg: 0, surface: { kind: 'power', alpha: 2 } }).peakShear
     const ax4 = push({ angleDeg: 0, surface: { kind: 'power', alpha: 4 } }).peakShear
     expect(Math.abs(ax4 - ax2) / ax2).toBeLessThan(1e-9)
-  })
+    // ~3 s unloaded; under a full parallel suite it exceeds the 5 s default.
+  }, 60_000)
 
   it('is independent of the hinge penalty stiffness once converged', () => {
     // `rigidity` is a numerical device, not a property of the structure, so a

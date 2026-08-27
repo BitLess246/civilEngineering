@@ -20,8 +20,8 @@ import type { StructuralModel } from './model'
 import { precomputeFrame, kgLocal, solveWithGeometry } from './frame3d'
 import type { MemberGeom } from './frame3d'
 import { modelToFrame3D } from './modelBridge'
-import { luSolve, matVec } from './fem'
-import type { LUFactor } from './fem'
+import { symSolve, matVec } from './fem'
+import type { SymFactor } from './fem'
 import { validateMesh, hasMeshErrors } from './meshValidation'
 import { applyF3Combo } from './frame3d'
 import type { LoadCategory } from './beamAnalysis'
@@ -89,7 +89,7 @@ const _scale = (a: number[], s: number): number[] => a.map((v) => v * s)
  * Ksff = −Kgff (positive for compressive members).
  */
 function inversePowerIter(
-  Kff: LUFactor,
+  Kff: SymFactor,
   Ksff: number[][],   // −Kgff (positive for compressive loads)
   Kff_raw: number[][],
   nModes: number,
@@ -130,7 +130,7 @@ function inversePowerIter(
 
     for (let it = 0; it < maxIter; it++) {
       const Ksx = matVec(Ksff, x)
-      const z = luSolve(Kff, Ksx)
+      const z = symSolve(Kff, Ksx)
       if (!z) break
 
       // Deflate z against found modes

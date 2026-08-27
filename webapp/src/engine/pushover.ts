@@ -291,7 +291,13 @@ export function pushoverAnalysis(input: PushoverInput): PushoverResult {
       const dLamToTarget = (Math.abs(input.targetDisp) - Math.abs(roofDisp)) / Math.abs(dRoof)
       if (dLamToTarget >= 0 && dLamToTarget < dLam) {
         lambda += dLamToTarget
-        roofDisp += dRoof * dLamToTarget
+        // Land ON the target, not merely near it. Δλ was solved for precisely
+        // so that |roofDisp| reaches |targetDisp|, but accumulating
+        // roofDisp + dRoof·Δλ can finish an ulp short of it, and every reader
+        // downstream — "did the pushover reach the target drift?" — sees that
+        // as a no. Take the sign from the step and the magnitude from the ask.
+        const reached = roofDisp + dRoof * dLamToTarget
+        roofDisp = Math.sign(reached || dRoof || 1) * Math.abs(input.targetDisp)
         curve.push({
           event, lambda, baseShear: lambda * Vref, roofDisp,
           newHinge: null, numHinges: slots.filter((s) => s.hinged).length,

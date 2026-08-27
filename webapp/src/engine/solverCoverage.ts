@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 496
+export const SOLVER_TEST_COUNT = 511
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -303,6 +303,66 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "gauss5Vec — 5-point Gauss quadrature",
         "name": "handles a vector-valued integrand"
+      },
+      {
+        "suite": "isSymmetric",
+        "name": "accepts a symmetric matrix and rejects a nudged one"
+      },
+      {
+        "suite": "isSymmetric",
+        "name": "rejects a non-square matrix rather than reading past a row"
+      },
+      {
+        "suite": "rcmOrder",
+        "name": "is a permutation of every index"
+      },
+      {
+        "suite": "rcmOrder",
+        "name": "tightens the profile of a deliberately scrambled band matrix"
+      },
+      {
+        "suite": "rcmOrder",
+        "name": "handles a disconnected pattern — every component gets ordered"
+      },
+      {
+        "suite": "skylineFactor / skylineSolve",
+        "name": "reproduces the dense LU answer to near machine precision"
+      },
+      {
+        "suite": "skylineFactor / skylineSolve",
+        "name": "actually satisfies A·x = b, reordered or not"
+      },
+      {
+        "suite": "skylineFactor / skylineSolve",
+        "name": "stores only the envelope, not the square"
+      },
+      {
+        "suite": "skylineFactor / skylineSolve",
+        "name": "refuses a matrix that is not positive definite instead of mis-factoring it"
+      },
+      {
+        "suite": "skylineFactor / skylineSolve",
+        "name": "handles the empty system the same way luFactor does"
+      },
+      {
+        "suite": "symFactor / symSolve — cheap when sound, safe when not",
+        "name": "takes the skyline path on a symmetric positive-definite matrix"
+      },
+      {
+        "suite": "symFactor / symSolve — cheap when sound, safe when not",
+        "name": "falls back to dense LU when the matrix is asymmetric, and still solves it"
+      },
+      {
+        "suite": "symFactor / symSolve — cheap when sound, safe when not",
+        "name": "falls back to dense LU when symmetric but indefinite, and still solves it"
+      },
+      {
+        "suite": "symFactor / symSolve — cheap when sound, safe when not",
+        "name": "returns null on a genuinely singular matrix, like luFactor"
+      },
+      {
+        "suite": "symFactor / symSolve — cheap when sound, safe when not",
+        "name": "survives a JSON round-trip — the factor crosses to a worker"
       }
     ]
   },

@@ -25,7 +25,7 @@
 import type { StructuralModel } from './model'
 import { precomputeFrame } from './frame3d'
 import { modelToFrame3D } from './modelBridge'
-import { luSolve } from './fem'
+import { symSolve } from './fem'
 import { GAMMA_C, GAMMA_S } from './modelBuilder'
 import { shapeByName } from './aiscSections'
 import { sdlItemKPa } from './deadLoads'
@@ -178,7 +178,7 @@ interface MassDof { fpos: number; dir: 0 | 1 | 2; mass: number; nodeId: string }
  */
 export function modalAnalysis(model: StructuralModel, nModes = 12): ModalResult | null {
   // A mesh with errors (e.g. no supports → rigid-body modes) makes K singular
-  // in ways luFactor's pivot tolerance may not catch; gate on validation.
+  // in ways the factorisation's pivot tolerance may not catch; gate on validation.
   if (hasMeshErrors(validateMesh(model))) return null
   const br = modelToFrame3D(model, { useShells: false })
   const precomp = precomputeFrame(br.nodes, br.members, br.supports)
@@ -210,7 +210,7 @@ export function modalAnalysis(model: StructuralModel, nModes = 12): ModalResult 
   for (let b = 0; b < p; b++) {
     e.fill(0)
     e[massDofs[b].fpos] = 1
-    const x = luSolve(precomp.Kff, e)
+    const x = symSolve(precomp.Kff, e)
     for (let a = 0; a < p; a++) Fmm[a][b] = x[massDofs[a].fpos]
   }
 

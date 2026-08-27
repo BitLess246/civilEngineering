@@ -9,8 +9,8 @@
 // vectors (Gauss + Hermite for the distributed ones).
 // Units: coordinates m; E,G MPa; A mm²; I,J mm⁴; forces kN, kN·m.
 // ─────────────────────────────────────────────────────────────────────────
-import { luFactor, luSolve, matVec, hermite, gauss5Vec } from './fem'
-import type { LUFactor } from './fem'
+import { luFactor, luSolve, symFactor, symSolve, matVec, hermite, gauss5Vec } from './fem'
+import type { SymFactor } from './fem'
 import { nscpCombos, type Combo, type LoadCategory } from './beamAnalysis'
 import type { ProgressFn } from './progress'
 import { triShell } from './shell'
@@ -340,7 +340,10 @@ export interface FramePrecomp {
   ndof: number
   free: number[]
   freeIdx: Map<number, number>   // global DOF → position in free[]
-  Kff: LUFactor | null           // factored K (K_ind when diaphragm active)
+  /** Factored K (K_ind when a diaphragm is active). Skyline LDLᵀ under an RCM
+   *  reordering where the block is symmetric positive definite — which is the
+   *  ordinary case — and the dense pivoting LU where it is not. */
+  Kff: SymFactor | null
   Kff_raw: number[][]            // un-factored nf×nf elastic stiffness (P-Δ baseline)
   /** Diaphragm constraint transformation rows (present when rigid floor diaphragm active).
    *  diaT[k] = sparse row of T for the k-th free DOF; T maps free→independent DOFs. */
@@ -701,12 +704,12 @@ export function precomputeFrame(
     const dia = buildDiaphragmT(nodes, idx, freeIdx, diaphragms, nf)
     if (dia) {
       const K_ind = applyTtoK(Kff_raw, dia.Trow, dia.ni)
-      const Kff_ind = luFactor(K_ind)
+      const Kff_ind = symFactor(K_ind)
       return { nm, idx, nodes, members, supports, geoms, shellGeoms, ndof, free, freeIdx,
                Kff: Kff_ind, Kff_raw, diaT: dia.Trow, diaNi: dia.ni }
     }
   }
-  const Kff = luFactor(Kff_raw)   // null if singular; {n:0} if nf===0
+  const Kff = symFactor(Kff_raw)   // null if singular; {n:0} if nf===0
   return { nm, idx, nodes, members, supports, geoms, shellGeoms, ndof, free, freeIdx, Kff, Kff_raw }
 }
 
@@ -720,7 +723,7 @@ export interface FramePrecompSerial {
   ndof: number
   free: number[]
   freeIdxEntries: [number, number][]
-  Kff: LUFactor | null
+  Kff: SymFactor | null
   Kff_raw: number[][]
   diaT?: { ind: number; coeff: number }[][]
   diaNi?: number
@@ -907,7 +910,7 @@ export function solveWithGeometry(
     } else if (diaT && diaNi !== undefined) {
       // Constrained solve: transform load to independent DOFs, solve, recover full d_f
       const Ff_ind = applyTtoLoad(Ff, diaT, diaNi)
-      const d_ind = luSolve(Kff, Ff_ind)   // Kff is already K_ind = T^T K T
+      const d_ind = symSolve(Kff, Ff_ind)   // Kff is already K_ind = T^T K T
       const d0 = applyTrecover(d_ind, diaT)
       free.forEach((dof, k) => (d[dof] = d0[k]))
 
@@ -932,7 +935,7 @@ export function solveWithGeometry(
         geoAxial = axialFromState
       }
     } else {
-      const d0 = luSolve(Kff, Ff)
+      const d0 = symSolve(Kff, Ff)
       free.forEach((dof, k) => (d[dof] = d0[k]))
 
       // P-Δ: iterate K + Kg(N); Kg depends on load-case axial forces so Kff_raw
