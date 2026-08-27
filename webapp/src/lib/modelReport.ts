@@ -10,6 +10,7 @@ import type {
 } from '../engine/pipeline'
 import { designOK } from '../engine/pipeline'
 import type { IrregularityFlag } from '../engine/irregularity'
+import type { BeamRatioRow } from '../engine/cageBuilder'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution,
   woodBeamRowSolution, woodColumnRowSolution, woodSlabRowSolution } from './modelSpaceSolutions'
 import { connectionRowSolution } from './connectionSolution'
@@ -102,6 +103,10 @@ export function steelColumnRowSolution(r: SteelColumnScheduleRow): SolutionStep[
 export function buildModelReport(
   model: StructuralModel, design: StructureDesign, props: [string, string][], soil: SoilOptions,
   irregular?: IrregularityFlag[] | null,
+  /** §418.6.3.2/§418.4.2.2 moment-strength ratios, measured on the placed
+   *  cages (`structureMomentRatios`). Omitted → the section is left out, which
+   *  is also what a gravity design gets. */
+  ratios?: BeamRatioRow[] | null,
 ): ModelReport {
   const sectionFor = (memberId: string): RectSection | undefined => {
     const m = model.members.find((x) => x.id === memberId)
@@ -175,6 +180,21 @@ export function buildModelReport(
   if (design.scwb.length) {
     const w = design.scwb.reduce((a, b) => (b.ratio < a.ratio ? b : a))
     checks.push({ name: 'Strong column / weak beam', detail: `${design.scwb.length} joints · min ΣMnc/ΣMnb = ${f2(w.ratio)} at ${w.node} (≥ 1.20)`, ratio: null, ok: design.scwb.every((j) => j.ok) })
+  }
+  if (ratios && ratios.length) {
+    // The tightest of every check on every beam — the one bar count that came
+    // closest to breaking the strength envelope the system requires.
+    const all = ratios.flatMap((r) => r.ratios.checks
+      .filter((c) => c.required > 0).map((c) => ({ id: r.id, u: c.provided / c.required, c })))
+    const w = all.reduce((a, b) => (b.u < a.u ? b : a))
+    const failing = ratios.filter((r) => !r.ratios.ok)
+    checks.push({
+      name: `Beam moment-strength ratios (${ratios[0].ratios.clause})`,
+      detail: `${ratios.length} beams · tightest ${w.c.rule} at ${w.id} ${w.c.where}`
+        + ` (${f1(w.c.provided)} / ${f1(w.c.required)} kN·m)`
+        + `${failing.length ? ` · ${failing.length} failing` : ''}`,
+      ratio: w.u > 0 ? 1 / w.u : null, ok: failing.length === 0,
+    })
   }
   if (design.slabs.length)
     checks.push({ name: 'Slabs (DDM)', detail: `${design.slabs.length} panels`, ratio: null, ok: design.slabs.every((s) => s.ok) })
@@ -312,6 +332,19 @@ export function buildModelReport(
     rows: design.prestressed.map((p) => [p.id, f2(p.L), p.design.lossPct.toFixed(1), f1(p.design.fse),
       p.design.transferOK ? 'PASS' : 'FAIL', p.design.serviceOK ? 'PASS' : 'FAIL',
       f1(p.design.phiMn), f1(p.design.Mu), p.design.crackingOK ? 'PASS' : 'FAIL', p.ok ? 'PASS' : 'FAIL']),
+  })
+  if (ratios && ratios.length) tables.push({
+    title: `Beam moment-strength ratios (NSCP ${ratios[0].ratios.clause})`,
+    head: ['Beam', 'Ln (m)', 'Mn− face i', 'Mn+ face i', 'Mn− face j', 'Mn+ face j',
+      'min Mn along', 'Status'],
+    right: [1, 2, 3, 4, 5, 6],
+    rows: ratios.map((r) => {
+      const st = r.ratios.stations
+      const a = st[0], z = st[st.length - 1]
+      const along = Math.min(...st.flatMap((x) => [x.MnNeg, x.MnPos]))
+      return [r.id, f2(r.Ln), f1(a.MnNeg), f1(a.MnPos), f1(z.MnNeg), f1(z.MnPos),
+        f1(along), r.ratios.ok ? 'PASS' : 'FAIL']
+    }),
   })
   if (design.scwb.length) tables.push({
     title: 'Strong-column / weak-beam joints (NSCP §418.7.3.2)',

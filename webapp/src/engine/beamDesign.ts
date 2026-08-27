@@ -58,6 +58,21 @@ export interface BeamDesignInput {
    * its sections are at a support, and applies it there.
    */
   system?: 'gravity' | 'imf' | 'smf'
+  /**
+   * An externally imposed floor on the tension steel, mm² — a minimum that
+   * comes from somewhere this function cannot see.
+   *
+   * The one that uses it is §418.6.3.2 / §418.4.2.2: a moment-frame beam's
+   * SAGGING strength at a joint face must be at least a fixed fraction of its
+   * HOGGING strength there, and a section designed against its own moment
+   * knows nothing about the other face. The caller designs the hogging
+   * sections first and passes the fraction of their steel down.
+   *
+   * Applied like the §409.6.1.2 minimum — it raises As, it never lowers it —
+   * and reported separately through `asFloorGoverns` so the schedule can say
+   * which rule put the bar there.
+   */
+  AsFloor?: number
   lambda?: number      // lightweight factor (default 1)
 }
 
@@ -75,6 +90,8 @@ export interface BeamDesignResult {
   mode: FlexureMode
   // Flexure
   As: number; rho: number; usedMin: boolean
+  /** `AsFloor` governed the tension steel — neither the moment nor §409.6.1.2 did. */
+  asFloorGoverns: boolean
   bars: number
   // Bar layout (§407.7)
   sMinClear: number    // required clear spacing = max(db, 25, 4/3·d_agg), mm
@@ -180,7 +197,7 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
   let layerIters = 0
   let mode: FlexureMode = 'SRRB'
   let rhoB = 0, rhoMaxV = 0, AsMax = 0, aMax = 0, MnMax = 0, phiMnMax = 0
-  let As = 0, rho = 0, usedMin = false, bars = 0, yBar = 0, comprYBar = 0
+  let As = 0, rho = 0, usedMin = false, asFloorGoverns = false, bars = 0, yBar = 0, comprYBar = 0
   let As1 = 0, As2 = 0, MnResid = 0, cNA = 0, fsPrime = i.fy, fsYields = true
   let AsPrime = 0, comprEffective = true, comprBars = 0
   let flexOK = true
@@ -206,6 +223,8 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
       const AsCalc = rhoCalc * i.b * d
       usedMin = AsCalc < AsMinArea
       As = usedMin ? AsMinArea : AsCalc
+      asFloorGoverns = (i.AsFloor ?? 0) > As + 1e-9
+      if (asFloorGoverns) { As = i.AsFloor as number; usedMin = false }
       rho = As / (i.b * d)
       As1 = 0; As2 = 0; MnResid = 0; cNA = 0; fsPrime = i.fy; fsYields = true; AsPrime = 0
       comprEffective = true
@@ -215,6 +234,8 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
       MnResid = i.Mu / PHI_FLEX - MnMax
       As2 = (MnResid * 1e6) / (i.fy * (d - dPrime))
       As = As1 + As2
+      asFloorGoverns = (i.AsFloor ?? 0) > As + 1e-9
+      if (asFloorGoverns) As = i.AsFloor as number
       rho = As / (i.b * d)
       usedMin = false
       // f's = 600(1 − d'/c) ≤ fy at c = a_max/β1; A's accounts for the
@@ -355,7 +376,7 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
     d, dt, dPrime,
     rhoB, rhoMax: rhoMaxV, rhoMin: rMin,
     AsMax, aMax, MnMax, phiMnMax,
-    mode, As, rho, usedMin, bars,
+    mode, As, rho, usedMin, asFloorGoverns, bars,
     sMinClear, maxPerLayer, layers, sClear, yBar, layerIters,
     As1, As2, MnResid, cNA, fsPrime, fsYields, AsPrime, comprBars, comprEffective, flexOK,
     comprSMinClear, comprMaxPerLayer, comprLayers, comprSClear, comprYBar,

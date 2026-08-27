@@ -308,3 +308,37 @@ describe('hinge-zone confinement — §418.6.4.4 (SMF) / §418.4.2.4 (IMF)', () 
     expect(shallow.seismicSConf!).toBeLessThan(deep.seismicSConf!)
   })
 })
+
+describe('AsFloor — an externally imposed minimum (§418.6.3.2 / §418.4.2.2)', () => {
+  it('raises the steel and says so', () => {
+    const free = designBeam(base)
+    const floored = designBeam({ ...base, AsFloor: free.As * 1.5 })
+    expect(free.asFloorGoverns).toBe(false)
+    expect(floored.asFloorGoverns).toBe(true)
+    expect(floored.As).toBeCloseTo(free.As * 1.5, 6)
+    expect(floored.bars).toBeGreaterThanOrEqual(free.bars)
+  })
+
+  it('never LOWERS the steel — a floor below the demand does nothing', () => {
+    const free = designBeam(base)
+    const floored = designBeam({ ...base, AsFloor: free.As * 0.5 })
+    expect(floored.asFloorGoverns).toBe(false)
+    expect(floored.As).toBeCloseTo(free.As, 9)
+  })
+
+  it('beats the §409.6.1.2 minimum when it is the larger of the two', () => {
+    // A tiny moment, so the section is min-steel governed on its own.
+    const min = designBeam({ ...base, Mu: 5 })
+    expect(min.usedMin).toBe(true)
+    const floored = designBeam({ ...base, Mu: 5, AsFloor: min.As * 2 })
+    expect(floored.usedMin).toBe(false)          // the floor took over, not ρmin
+    expect(floored.asFloorGoverns).toBe(true)
+    expect(floored.As).toBeCloseTo(min.As * 2, 6)
+  })
+
+  it('leaves ρ inside ρmax — the floor is a fraction of a section that already passed', () => {
+    const r = designBeam({ ...base, AsFloor: 1500 })
+    expect(r.rho).toBeLessThanOrEqual(r.rhoMax)
+    expect(r.flexOK).toBe(true)
+  })
+})

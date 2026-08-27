@@ -29,6 +29,7 @@ import { buildFootingCage } from './footingCage'
 import { spliceCage } from './barSplice'
 import { STOCK_BAR_LENGTH } from './rebarModel'
 import type { RebarCage } from './rebarModel'
+import { beamMomentRatios, momentRatioLimits, type BeamMomentRatios } from './beamMomentRatios'
 
 const FALLBACK: RectSection = {
   id: '', name: '', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40,
@@ -274,6 +275,8 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       botBars: Math.max(0, ...sag.map((s) => s.design.bars)),
       sEnd: sEndMm,
       sMid: sMidMm,
+      // Which §418 curtailment the faces obey — see `BeamCageInput.system`.
+      system: design.system,
       continuousLeft: carriesOn(mem, mem.i),
       continuousRight: carriesOn(mem, mem.j),
       // Which way a hooked bar may turn: a tail leaving the top of the joint
@@ -401,4 +404,73 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
   }
 
   return { cages, unplaced }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE MOMENT-STRENGTH RATIOS, ON THE PLACED CAGES
+//
+// §418.6.3.2 (SMF) and §418.4.2.2 (IMF) are rules about the strength a beam
+// PROVIDES, so they can only be checked once the bars exist. That is here and
+// not in the pipeline: the pipeline designs each section against its own
+// demand and never learns what ran through from the neighbouring one, and the
+// optimizer would pay for a cage on every trial if the check lived in
+// `designOK`. A caller that wants the check asks for it.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** One beam's ratio check, against the span it was measured on. */
+export interface BeamRatioRow {
+  /** Member id — the same mark the cage carries. */
+  id: string
+  /** Clear span checked, m (support face to support face). */
+  Ln: number
+  ratios: BeamMomentRatios
+}
+
+/**
+ * Check every concrete beam's strength envelope against the ratios its lateral
+ * system imposes. Empty for a gravity design, which has no reversal rule.
+ *
+ * The stations are the two JOINT FACES and the span between them — half the
+ * column sits inside each end of the beam, and "at the face of the joint" is
+ * where the clause measures.
+ */
+export function structureMomentRatios(
+  model: StructuralModel, design: StructureDesign, cages: RebarCage[],
+): BeamRatioRow[] {
+  if (!momentRatioLimits(design.system)) return []
+  const pos = new Map(model.nodes.map((n) => [n.id, n]))
+  const memById = new Map(model.members.map((m) => [m.id, m]))
+  const secById = new Map(model.sections.map((s) => [s.id, s]))
+  const byMember = new Map<string, RebarCage>()
+  for (const c of cages) if (!byMember.has(c.member)) byMember.set(c.member, c)
+
+  /** Half the plan width of the column at a node, m — 0 where none frames in. */
+  const halfCol = (node: string): number => {
+    const col = model.members.find((m) => m.role === 'column' && (m.i === node || m.j === node))
+    const cs = col && secById.get(memById.get(col.id)?.section ?? '')
+    return cs ? Math.min(cs.b, cs.h) / 2000 : 0
+  }
+
+  const rows: BeamRatioRow[] = []
+  for (const b of design.beams) {
+    const mem = memById.get(b.id)
+    const ni = mem && pos.get(mem.i), nj = mem && pos.get(mem.j)
+    const cage = byMember.get(b.id)
+    const sec = secById.get(mem?.section ?? '')
+    if (!mem || !ni || !nj || !cage || !sec) continue
+    const dx = nj.x - ni.x, dz = nj.z - ni.z
+    const span = Math.hypot(dx, dz)
+    if (span < 1e-6) continue                        // a vertical member is no beam
+    const u0 = halfCol(mem.i), u1 = span - halfCol(mem.j)
+    if (!(u1 > u0)) continue
+    const r = beamMomentRatios(
+      {
+        cage, along: [dx / span, 0, dz / span], origin: [ni.x, ni.y, ni.z],
+        b: sec.b / 1000, h: sec.h / 1000, soffit: ni.y - sec.h / 1000,
+      },
+      u0, u1, sec.fc, sec.fy, design.system,
+    )
+    if (r.applies) rows.push({ id: b.id, Ln: u1 - u0, ratios: r })
+  }
+  return rows
 }

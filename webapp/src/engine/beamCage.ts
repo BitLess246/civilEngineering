@@ -24,7 +24,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import {
   continuousBars, stirrupBendDiameter, closedTieClosureAllowance, turnAngles,
-  hookBendDiameter, KEEP_TOP, KEEP_BOTTOM,
+  hookBendDiameter, KEEP_TOP, KEEP_BOTTOM, CORNER_BARS_PER_FACE,
   type RebarCage, type RebarRun, type Vec3,
 } from './rebarModel'
 import { hookClearToFace, hookFit } from './devLength'
@@ -32,6 +32,7 @@ import { jointHookLdh } from './beamColumnJoint'
 import { rotateLoop } from './columnCage'
 import { endAnchors, type AnchorBar, type JointRoom } from './beamAnchorage'
 import { runSpliceCentres, pointAt, type SpliceOptions } from './barSplice'
+import { momentRatioLimits } from './beamMomentRatios'
 
 export interface BeamCageInput {
   /** Member mark — every bar in the cage carries it. */
@@ -55,6 +56,21 @@ export interface BeamCageInput {
   /** Stirrup spacing at the supports and through the middle, mm. */
   sEnd: number
   sMid: number
+  /**
+   * The seismic system, which decides how much steel is CONTINUOUS.
+   *
+   * A gravity beam curtails on §409.7.3.8: a third of the top steel past the
+   * inflection point, a quarter of the bottom into the support. A moment frame
+   * cannot — §418.6.3.2 (SMF) and §418.4.2.2 (IMF) fix the shape of the whole
+   * strength envelope, and both sentences are about bars that REACH the place
+   * being checked. So the continuous share becomes whichever is larger, the
+   * gravity fraction or the seismic one.
+   *
+   * Same Ø throughout the cage, so the strength ratios read straight across as
+   * bar counts; `designBeamRow` sets the sagging steel from the same counts,
+   * which is what keeps the schedule and the cage talking about one beam.
+   */
+  system?: 'gravity' | 'imf' | 'smf'
   /** Whether the beam continues past each support. An end support hooks. */
   continuousLeft?: boolean
   continuousRight?: boolean
@@ -307,8 +323,22 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
   const at = (u: number, v: number, y: number): Vec3 =>
     [x0 + ux * u + px * v, y, z0 + uz * u + pz * v]
 
-  const thruTop = continuousBars(i.topBars, KEEP_TOP)
-  const thruBot = continuousBars(i.botBars, KEEP_BOTTOM)
+  // §418.6.3.2 / §418.4.2.2 in bar counts — see `BeamCageInput.system`.
+  //   · at a joint face:  bottom ≥ atFace · top
+  //   · at ANY section:   both faces ≥ along · the larger end count
+  // A gravity frame gets `null` and keeps the §409.7.3.8 fractions alone.
+  const ratio = momentRatioLimits(i.system ?? 'gravity')
+  const peakBars = Math.max(i.topBars, i.botBars)
+  const needBot = ratio ? Math.ceil(Math.max(ratio.atFace * i.topBars, ratio.along * peakBars)) : 0
+  const needTop = ratio ? Math.ceil(ratio.along * peakBars) : 0
+  // Never above what the face HAS: the count the ratio asks for is provided by
+  // `BeamDesignInput.AsFloor` upstream, so this clamp only guards a cage built
+  // from bar counts that never went through the design.
+  const keep = (designed: number, gravityShare: number, need: number) =>
+    Math.min(Math.max(CORNER_BARS_PER_FACE, designed),
+      Math.max(continuousBars(designed, gravityShare), need))
+  const thruTop = keep(i.topBars, KEEP_TOP, needTop)
+  const thruBot = keep(i.botBars, KEEP_BOTTOM, needBot)
   const extraTop = Math.max(0, i.topBars - thruTop)
   const extraBot = Math.max(0, i.botBars - thruBot)
 

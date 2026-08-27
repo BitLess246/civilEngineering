@@ -90,7 +90,7 @@ describe('checkModelSCWB — joint walk over a concrete frame', () => {
     return {
       columns: [col('cA'), col('cB')], beams: [beam('bL'), beam('bR')],
       steelBeams: [], steelColumns: [], basePlates: [], joints: [], slabs: [], walls: [],
-      footings: [], combined: [], govName: '', cases: [], orphanEdges: 0,
+      footings: [], combined: [], govName: '', system: 'gravity', cases: [], orphanEdges: 0,
       totals: { concreteMembers: 0, concreteSlabs: 0, concrete: 0, steelKg: 0 },
     } as unknown as StructureDesign
   }

@@ -11,7 +11,7 @@ import { OrbitControls } from '@react-three/drei'
 import { SceneText } from '../components/SceneText'
 import { RebarWireframe } from '../components/RebarWireframe'
 import { ghostKey, ghostMaterial } from '../components/ghostMaterial'
-import { buildStructureCages } from '../engine/cageBuilder'
+import { buildStructureCages, structureMomentRatios } from '../engine/cageBuilder'
 import { REBAR_ROLE_COLOR } from '../engine/rebarWire'
 import { ProjectsPanel } from '../components/ProjectsPanel'
 // The session keys are shared with the Projects panel, which saves and
@@ -1672,6 +1672,19 @@ export default function ModelSpace() {
   )
   const rebarCages = rebarBuild?.cages ?? []
   /**
+   * §418.6.3.2 / §418.4.2.2 on the placed bars.
+   *
+   * Built on its own cages rather than on `rebarBuild`'s, because the check
+   * belongs to the schedule and must not blink out when the 3D rebar layer is
+   * switched off. Gravity designs skip it — there is no reversal rule.
+   */
+  const momentRatios = useMemo(
+    () => (model && design && design.system !== 'gravity'
+      ? structureMomentRatios(model, design, buildStructureCages(model, design).cages)
+      : []),
+    [model, design],
+  )
+  /**
    * What the cage builder had to DECIDE, and what it could not place.
    *
    * These used to be built and thrown away: a hook turned the other way
@@ -1762,7 +1775,12 @@ export default function ModelSpace() {
         ...(design.woodBeams.length || design.woodColumns.length ? ['NDS §3 / NSCP §6'] : [])]
       await generateModelPdf({
         lh, modelImg: img, badges,
-        report: buildModelReport(model, design, reportProps(design), soil, irregular),
+        report: buildModelReport(model, design, reportProps(design), soil, irregular,
+          // §418.6.3.2/§418.4.2.2 is measured on the PLACED bars, so the cages
+          // have to exist first; a gravity frame has no such clause and the
+          // section is left out rather than printed empty.
+          design.system === 'gravity' ? null
+            : structureMomentRatios(model, design, buildStructureCages(model, design).cages)),
         // The same sheet set the Plans tab renders — one list, two outputs.
         sheets: buildSheetSet(model, design, soil),
         fileName: `structure-report${lh.sheet ? '-' + lh.sheet.split('·')[0].trim() : ''}.pdf`,
@@ -4842,6 +4860,55 @@ export default function ModelSpace() {
               </tbody>
             </table>
           </div>}
+
+          {/* Beam moment-strength ratios — NSCP §418.6.3.2 (SMF) / §418.4.2.2 (IMF) */}
+          {momentRatios.length > 0 && report !== 'draw-only' && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">
+                Beam moment-strength ratios — NSCP {momentRatios[0].ratios.clause}
+                <SchedChip items={momentRatios} ok={(r) => r.ratios.ok} />
+              </h3>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="sched-head text-left uppercase tracking-wide text-slate-500">
+                    <th className="py-1 pr-2 font-semibold">Beam</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Ln (m)</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Mn− / Mn+ face i</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Mn− / Mn+ face j</th>
+                    <th className="py-1 pr-2 text-right font-semibold">min Mn along</th>
+                    <th className="py-1 pr-2 text-right font-semibold">Tightest</th>
+                    <th className="py-1 font-semibold">OK</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {momentRatios.map((r) => {
+                    const st = r.ratios.stations
+                    const a = st[0], z = st[st.length - 1]
+                    const along = Math.min(...st.flatMap((x) => [x.MnNeg, x.MnPos]))
+                    const util = Math.min(...r.ratios.checks
+                      .filter((c) => c.required > 0).map((c) => c.provided / c.required))
+                    return (
+                      <tr key={r.id} className="border-t border-slate-100">
+                        <td className="py-1 pr-2 font-medium">{r.id}</td>
+                        <td className="py-1 pr-2 text-right font-mono">{r.Ln.toFixed(2)}</td>
+                        <td className="py-1 pr-2 text-right font-mono">{f1(a.MnNeg)} / {f1(a.MnPos)}</td>
+                        <td className="py-1 pr-2 text-right font-mono">{f1(z.MnNeg)} / {f1(z.MnPos)}</td>
+                        <td className="py-1 pr-2 text-right font-mono">{f1(along)}</td>
+                        <td className="py-1 pr-2 text-right font-mono">{Number.isFinite(util) ? util.toFixed(2) : '—'}</td>
+                        <td className={`py-1 font-semibold ${r.ratios.ok ? 'text-emerald-600' : 'text-red-600'}`}>{r.ratios.ok ? '✓' : '✗'}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              <p className="mt-2 text-[10px] text-slate-500">
+                Mn+ at a joint face ≥ {momentRatios[0].ratios.system === 'smf' ? '½' : '⅓'}·Mn− there, and Mn
+                at ANY section ≥ {momentRatios[0].ratios.system === 'smf' ? '¼' : '⅕'}·the largest Mn at either
+                face ({momentRatios[0].ratios.clause}). Measured on the bars as placed — a curtailed bar is
+                absent from the sections past its cut-off, which is where the second sentence bites.
+              </p>
+            </div>
+          )}
 
           {/* Strong-column/weak-beam joint check — NSCP §418.7.3.2 (SMF only) */}
           {design.scwb.length > 0 && report !== 'draw-only' && (

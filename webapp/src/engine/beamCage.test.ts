@@ -330,3 +330,49 @@ describe('buildBeamCage — the hoops know where the laps are', () => {
     expect(along(withOut)).toEqual(stirrupStations(beam))
   })
 })
+
+describe('buildBeamCage — how much steel is CONTINUOUS (§418.6.3.2 / §418.4.2.2)', () => {
+  /** Bars of `role` that reach a station `at` m from the left support centreline. */
+  const reaching = (i: BeamCageInput, role: 'top' | 'bottom', at: number) =>
+    buildBeamCage(i).runs.filter((r) => r.role === role
+      && Math.min(...r.path.map((p) => p[0])) <= at + 1e-6
+      && Math.max(...r.path.map((p) => p[0])) >= at - 1e-6).length
+
+  // Just inside the left joint face: the station the "at face of joint"
+  // sentence measures at.
+  const face = (beam.colBLeft ?? 0) / 2000 + 0.05
+
+  it('a gravity beam keeps the §409.7.3.8 shares — a quarter of the bottom', () => {
+    // 6 bottom bars, KEEP_BOTTOM = ¼ → ceil(1.5) = 2, floored at the corners.
+    expect(reaching(beam, 'bottom', face)).toBe(CORNER_BARS_PER_FACE)
+    expect(reaching(beam, 'top', face)).toBe(6)          // top steel is IN tension here
+  })
+
+  it('an SMF runs half the top count through the bottom face', () => {
+    // atFace = ½ of 6 top bars → 3 bottom bars must reach the joint face.
+    expect(reaching({ ...beam, system: 'smf' }, 'bottom', face)).toBe(3)
+  })
+
+  it('an IMF runs a third — ⅓ of 6 is 2, which the corners already give', () => {
+    expect(reaching({ ...beam, system: 'imf' }, 'bottom', face)).toBe(2)
+    // …and with 9 top bars, ⅓ is 3, which they do not.
+    expect(reaching({ ...beam, system: 'imf', topBars: 9, botBars: 9 }, 'bottom', face)).toBe(3)
+  })
+
+  it('the "any section" sentence holds the TOP steel through midspan too', () => {
+    // along = ¼ of max(9, 9) → 3 top bars past the inflection point, where the
+    // gravity share (⅓ of 9 = 3) happens to agree; at 8 bars it does not.
+    const mid = beam.L / 2
+    expect(reaching({ ...beam, topBars: 4, botBars: 12, system: 'smf' }, 'top', mid)).toBe(3)
+    expect(reaching({ ...beam, topBars: 4, botBars: 12, system: 'gravity' }, 'top', mid))
+      .toBe(CORNER_BARS_PER_FACE)                                                // ⌈4/3⌉ → 2
+  })
+
+  it('never asks a face for more bars than it has', () => {
+    // 2 bottom bars against 12 top ones: the clause wants 6, the face has 2.
+    // The cage cannot invent steel — `BeamDesignInput.AsFloor` is what supplies
+    // it upstream — so it runs everything it has and stops there.
+    const c = { ...beam, topBars: 12, botBars: 2, system: 'smf' as const }
+    expect(reaching(c, 'bottom', face)).toBe(2)
+  })
+})

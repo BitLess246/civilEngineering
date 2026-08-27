@@ -164,7 +164,7 @@ describe('structure take-off / BOM-BOQ', () => {
 describe('structural steel — per-shape unit weight + costed BOM line items (A2)', () => {
   const STEEL_DENSITY = 7850
   const emptyDesign: StructureDesign = {
-    govName: '', cases: [], beams: [], prestressed: [], columns: [], steelBeams: [], steelColumns: [],
+    govName: '', system: 'gravity', cases: [], beams: [], prestressed: [], columns: [], steelBeams: [], steelColumns: [],
     woodBeams: [], woodColumns: [],
     basePlates: [], joints: [], beamJoints: [], slabs: [], woodSlabs: [], walls: [], footings: [], combined: [], scwb: [],
     totals: { concreteMembers: 0, concreteSlabs: 0, concrete: 0, steelKg: 0, woodVolume: 0 }, orphanEdges: 0,
