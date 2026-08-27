@@ -320,10 +320,66 @@ function prepShellGeom(sh: F3Shell, nm: Map<string, F3Node>, idx: Map<string, nu
 interface MemberLoads {
   feq: number[]         // original fixed-end forces (for postprocessMember)
   feqEff: number[]      // condensed feq (for global load vector assembly)
-  qy: (x: number) => number
-  qz: (x: number) => number
-  p: (x: number) => number
+  /** Distributed load as the LINEAR SEGMENTS it is actually made of, already
+   *  resolved into the member's three local directions (`w1`/`w2` are the
+   *  global intensity at each end; `gl` projects it). Kept as data rather than
+   *  as an intensity closure so the diagrams can integrate it in closed form —
+   *  see `distShear`/`distMoment`. */
+  dists: { x1: number; x2: number; w1: number; w2: number }[]
+  gl: V3
   pts: { a: number; Py: number; Pz: number; Pa: number }[]
+}
+
+// ── Diagram quadrature, done exactly ─────────────────────────────────────
+//
+// The internal-force diagrams need ∫₀ˣ w and ∫₀ˣ w(m)·(x−m) dm at every
+// sampling station. `w` is piecewise LINEAR — a list of segments — so both
+// integrals have a closed form, and there is nothing to approximate.
+//
+// This used to be a trapezoid/midpoint sweep of up to 60 sub-intervals,
+// re-run from zero at every station: ~25 stations × 4 integrals × 60 steps ×
+// 2 evaluations ≈ 12 000 closure calls per member per load case, which is
+// where essentially all of a solve went once the factorisation stopped being
+// the bottleneck (99.8% of a combo solve at 204 members). It was also only
+// approximate — the partition never lined up with a partial-length load's
+// kinks, so any VDL or part-span UDL carried an O(Δ) error the closed form
+// simply does not have.
+//
+// For one segment [a,b] with w(m) = w1 + s·(m−a), s = (w2−w1)/(b−a), taking
+// c = min(b,x), U = c−a and X = x−a:
+//
+//   ∫ₐᶜ w dm            = w1·U + s·U²/2
+//   ∫ₐᶜ w·(x−m) dm      = w1·X·U − w1·U²/2 + s·X·U²/2 − s·U³/3
+//
+// Units: w in kN/m, x in m ⇒ shear kN, moment kN·m.
+
+/** ∫₀ˣ of the distributed intensity in local direction `comp`. */
+function distShear(ml: MemberLoads, comp: number, x: number): number {
+  const g = ml.gl[comp]
+  if (g === 0) return 0
+  let s = 0
+  for (const d of ml.dists) {
+    if (d.x2 <= d.x1 || x <= d.x1) continue
+    const c = Math.min(d.x2, x), U = c - d.x1
+    const slope = (d.w2 - d.w1) / Math.max(d.x2 - d.x1, 1e-12)
+    s += d.w1 * U + (slope * U * U) / 2
+  }
+  return s * g
+}
+
+/** ∫₀ˣ of the distributed intensity times its lever (x−m) — the moment it
+ *  contributes at station x, in local direction `comp`. */
+function distMoment(ml: MemberLoads, comp: number, x: number): number {
+  const g = ml.gl[comp]
+  if (g === 0) return 0
+  let s = 0
+  for (const d of ml.dists) {
+    if (d.x2 <= d.x1 || x <= d.x1) continue
+    const c = Math.min(d.x2, x), U = c - d.x1, X = x - d.x1
+    const slope = (d.w2 - d.w1) / Math.max(d.x2 - d.x1, 1e-12)
+    s += d.w1 * X * U - (d.w1 * U * U) / 2 + (slope * X * U * U) / 2 - (slope * U * U * U) / 3
+  }
+  return s * g
 }
 
 /** Pre-factored frame: assemble K once and LU-factor it; reuse for every load case.
@@ -489,15 +545,6 @@ function computeMemberLoads(geom: MemberGeom, m: F3Member, loads: F3Load[]): Mem
     feq[2] += fe[6]; feq[4] += fe[7]; feq[8] += fe[8]; feq[10] += fe[9]
   }
 
-  const intensity = (x: number, comp: number) => {
-    let s = 0
-    for (const dd of dists) if (dd.x1 <= x && x <= dd.x2) {
-      const w = dd.w1 + ((dd.w2 - dd.w1) * (x - dd.x1)) / Math.max(dd.x2 - dd.x1, 1e-12)
-      s += w * gl[comp]
-    }
-    return s
-  }
-
   // Condense feq when member has releases: feqEff[ret] = feq[ret] - k_rf · k_ff⁻¹ · feq[rel]
   let feqEff = feq
   if (geom.relIdx && geom.relIdx.length > 0 && geom.retIdx && geom.kff_inv && geom.kfr) {
@@ -513,14 +560,7 @@ function computeMemberLoads(geom: MemberGeom, m: F3Member, loads: F3Load[]): Mem
     })
   }
 
-  return {
-    feq,
-    feqEff,
-    p: (x) => intensity(x, 0),
-    qy: (x) => intensity(x, 1),
-    qz: (x) => intensity(x, 2),
-    pts,
-  }
+  return { feq, feqEff, dists, gl, pts }
 }
 
 type TEntry = { ind: number; coeff: number }
@@ -777,38 +817,18 @@ function postprocessMember(m: F3Member, g: MemberGeom, ml: MemberLoads, d: numbe
   const xs = [...xsSet].sort((a, b) => a - b)
 
   const NN: number[] = [], Vy: number[] = [], Vz: number[] = [], TT: number[] = [], My: number[] = [], Mz: number[] = []
-  const STEPS = 60
-  const integ = (fn: (x: number) => number, x: number) => {
-    let s = 0
-    const n = Math.max(2, Math.ceil((x / Math.max(g.L, 1e-9)) * STEPS))
-    for (let k = 1; k <= n; k++) {
-      const x0 = (x * (k - 1)) / n, x1 = (x * k) / n
-      s += 0.5 * (fn(x0) + fn(x1)) * (x1 - x0)
-    }
-    return s
-  }
-  const integM = (fn: (x: number) => number, x: number) => {
-    let s = 0
-    const n = Math.max(2, Math.ceil((x / Math.max(g.L, 1e-9)) * STEPS))
-    for (let k = 1; k <= n; k++) {
-      const x0 = (x * (k - 1)) / n, x1 = (x * k) / n
-      const mid = (x0 + x1) / 2
-      s += fn(mid) * (x - mid) * (x1 - x0)
-    }
-    return s
-  }
   for (const x of xs) {
-    let n = -(f[0] + integ(ml.p, x))
-    let vy = f[1] + integ(ml.qy, x)
-    let vz = f[2] + integ(ml.qz, x)
-    let mz = -f[5] + f[1] * x + integM(ml.qy, x)
+    let n = -(f[0] + distShear(ml, 0, x))
+    let vy = f[1] + distShear(ml, 1, x)
+    let vz = f[2] + distShear(ml, 2, x)
+    let mz = -f[5] + f[1] * x + distMoment(ml, 1, x)
     // `f` holds the local end forces ON the member, so the internal moment at
     // the i-end is the NEGATIVE of the stored end moment — for both axes. This
     // line used `+f[4]`, which left the i-end magnitude right (|±f[4]| is the
     // same) and every other station wrong by 2·f[4]: a fixed-base column came
     // back with a carry-over of 0.25 instead of the slope-deflection 0.50.
     // Caught by the STAAD.Pro cross-check on the Gridframe model.
-    let my = -f[4] - f[2] * x - integM(ml.qz, x)
+    let my = -f[4] - f[2] * x - distMoment(ml, 2, x)
     for (const pt of ml.pts) {
       if (pt.a <= x) {
         n -= pt.Pa

@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 511
+export const SOLVER_TEST_COUNT = 515
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -599,6 +599,22 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "frame3d — Timoshenko shear deformation (Φ = 12EI/(G·As·L²))",
         "name": "fixed-fixed centre load across two elements: δ = PL³/192EI + PL/4GAs"
+      },
+      {
+        "suite": "internal-force diagrams — the distributed load is integrated exactly",
+        "name": "full-span UDL: M(x) = −w(L−x)²/2 to machine precision"
+      },
+      {
+        "suite": "internal-force diagrams — the distributed load is integrated exactly",
+        "name": "triangular VDL: M(x) = −(w0/L)[(L³−x³)/3 − x(L²−x²)/2] to machine precision"
+      },
+      {
+        "suite": "internal-force diagrams — the distributed load is integrated exactly",
+        "name": "part-span UDL: the shear is the load actually to the right of the station"
+      },
+      {
+        "suite": "internal-force diagrams — the distributed load is integrated exactly",
+        "name": "superposes segments — two part-span loads add, they do not interfere"
       }
     ]
   },

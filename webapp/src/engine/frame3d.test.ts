@@ -748,3 +748,76 @@ describe('frame3d — Timoshenko shear deformation (Φ = 12EI/(G·As·L²))', ()
     expect(r.reactions[0].F[1]).toBeCloseTo(P / 2, 6)
   })
 })
+
+describe('internal-force diagrams — the distributed load is integrated exactly', () => {
+  // A cantilever isolates the diagram integration: the end forces are pure
+  // statics, so any departure from beam theory is the quadrature and nothing
+  // else. These used to be a trapezoid/midpoint sweep of the intensity, which
+  // is exact for a FULL-SPAN UDL and only approximate for anything else —
+  // a triangular load carried up to 2% error on the moment, and a part-span
+  // UDL a standing 2.5–10% error on the shear, because the uniform partition
+  // never lines up with the load's kinks. The segments are piecewise linear,
+  // so both integrals have a closed form and there is nothing to approximate.
+  const L = 6
+  const sec = { E: 200e6, G: 77e6, A: 0.01, Iy: 1e-4, Iz: 1e-4, J: 2e-4 }
+  const nodes: F3Node[] = [{ id: 'a', x: 0, y: 0, z: 0 }, { id: 'b', x: L, y: 0, z: 0 }]
+  const members: F3Member[] = [{ id: 'm', i: 'a', j: 'b', ...sec }]
+  const fixed: F3Support[] = [{ node: 'a', fixity: 'fixed' }]
+  const diag = (ld: F3Load) => solveFrame3D(nodes, members, fixed, [ld])!.members[0]
+  /** Worst absolute departure of |Mz| from a closed-form M(x), over every station. */
+  const worstM = (mm: ReturnType<typeof diag>, exact: (x: number) => number) =>
+    mm.xs.reduce((w, x, k) => Math.max(w, Math.abs(Math.abs(mm.Mz[k]) - Math.abs(exact(x)))), 0)
+  const worstV = (mm: ReturnType<typeof diag>, exact: (x: number) => number) =>
+    mm.xs.reduce((w, x, k) => Math.max(w, Math.abs(Math.abs(mm.Vy[k]) - Math.abs(exact(x)))), 0)
+
+  it('full-span UDL: M(x) = −w(L−x)²/2 to machine precision', () => {
+    const w = 10
+    const mm = diag({ kind: 'member-udl', member: 'm', w: -w, cat: 'D' })
+    expect(worstM(mm, (x) => -w * (L - x) ** 2 / 2)).toBeLessThan(1e-9)
+    expect(worstV(mm, (x) => w * (L - x))).toBeLessThan(1e-9)
+    expect(Math.max(...mm.Mz.map(Math.abs))).toBeCloseTo(w * L * L / 2, 9)
+  })
+
+  it('triangular VDL: M(x) = −(w0/L)[(L³−x³)/3 − x(L²−x²)/2] to machine precision', () => {
+    // The old midpoint rule integrates a QUADRATIC integrand here and was ~2%
+    // out near the fixed end, where the moment is smallest and the relative
+    // error largest.
+    const w0 = 12
+    const mm = diag({ kind: 'member-vdl', member: 'm', x1: 0, x2: L, w1: 0, w2: -w0, cat: 'D' })
+    expect(worstM(mm, (x) => -(w0 / L) * ((L ** 3 - x ** 3) / 3 - x * (L ** 2 - x ** 2) / 2))).toBeLessThan(1e-9)
+    expect(worstV(mm, (x) => w0 * (L * L - x * x) / (2 * L))).toBeLessThan(1e-9)
+    // total load and its resultant at the support: W = w0·L/2 at 2L/3
+    expect(Math.max(...mm.Mz.map(Math.abs))).toBeCloseTo((w0 * L / 2) * (2 * L / 3), 9)
+  })
+
+  it('part-span UDL: the shear is the load actually to the right of the station', () => {
+    // The case the uniform partition could never resolve — the kinks at a and
+    // b fall inside a sub-interval, so the trapezoid carried load that is not
+    // there. Statics says the shear at x is exactly w·(b − max(a,x)).
+    const w = 15, a = L / 3, b = 2 * L / 3
+    const mm = diag({ kind: 'member-vdl', member: 'm', x1: a, x2: b, w1: -w, w2: -w, cat: 'D' })
+    expect(worstV(mm, (x) => w * Math.max(0, b - Math.max(a, x)))).toBeLessThan(1e-9)
+    expect(worstM(mm, (x) => {
+      const lo = Math.max(a, x)
+      return lo >= b ? 0 : -w * (b - lo) * ((lo + b) / 2 - x)
+    })).toBeLessThan(1e-9)
+    // beyond the loaded length the shear is zero, not a residue of the sweep
+    const past = mm.xs.map((x, k) => (x > b + 1e-9 ? Math.abs(mm.Vy[k]) : 0))
+    expect(Math.max(...past)).toBeLessThan(1e-9)
+  })
+
+  it('superposes segments — two part-span loads add, they do not interfere', () => {
+    const w = 9
+    const one = diag({ kind: 'member-vdl', member: 'm', x1: 0, x2: L / 2, w1: -w, w2: -w, cat: 'D' })
+    const two = diag({ kind: 'member-vdl', member: 'm', x1: L / 2, x2: L, w1: -w, w2: -w, cat: 'D' })
+    const both = diag({ kind: 'member-udl', member: 'm', w: -w, cat: 'D' })
+    // the two halves at their common stations must sum to the full-span answer
+    for (const x of [0, 1, 2, 3, 4, 5, 6]) {
+      const at = (mm: typeof one) => {
+        const k = mm.xs.findIndex((v) => Math.abs(v - x) < 1e-6)
+        return k >= 0 ? mm.Mz[k] : NaN
+      }
+      expect(at(one) + at(two)).toBeCloseTo(at(both), 8)
+    }
+  })
+})
