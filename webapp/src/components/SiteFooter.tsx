@@ -53,7 +53,6 @@ export function SiteFooter() {
             <div>
               <a href={`mailto:${SITE.supportEmail}`} className="hover:text-[#0056b3]">{SITE.supportEmail}</a>
             </div>
-            {SITE.supportPhone.trim() && <div>{SITE.supportPhone}</div>}
           </address>
         </div>
       </div>

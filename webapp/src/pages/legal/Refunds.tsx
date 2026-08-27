@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { LegalLayout, Clause, Detail } from './LegalLayout'
+import { LegalLayout, Clause } from './LegalLayout'
 import { SITE, businessName } from '../../lib/siteConfig'
 
 export default function Refunds() {
@@ -90,8 +90,7 @@ export default function Refunds() {
           reference number — the date and amount is enough.
         </p>
         <p>
-          You can also call <Detail value={SITE.supportPhone} what="customer service number" /> during{' '}
-          {SITE.supportHours}.
+          Requests are handled during {SITE.supportHours}.
         </p>
       </Clause>
 

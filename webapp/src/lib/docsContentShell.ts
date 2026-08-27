@@ -227,7 +227,7 @@ export const SHELL_TOOLS: DocTool[] = [
           { kind: 'output', name: 'Terms and Conditions', what: 'What the service is, what an account gets you, how subscriptions renew, and the professional-responsibility clause: the software computes, it does not practise engineering, and every result must be checked before construction use.' },
           { kind: 'output', name: 'Privacy Policy', what: 'What is collected and why, under the Data Privacy Act of 2012 (RA 10173), including your rights as a data subject and how to exercise them. Calculations run in your browser; card details never reach us.' },
           { kind: 'output', name: 'Refund Policy', what: '14 days on a first subscription payment, no reason needed; a surprise renewal refunded if unused; refunds regardless of age when a defect stops you using what you paid for.' },
-          { kind: 'output', name: 'Contact', what: 'Business name, registered address, email, phone and support hours, plus what to include in a bug report or a billing question.' },
+          { kind: 'output', name: 'Contact', what: 'Business name, registered address, email and support hours, plus what to include in a bug report or a billing question.' },
         ],
         notes: [
           'Every business detail on these pages comes from one file, `lib/siteConfig.ts`. Anything still blank is rendered as a visible red marker and listed in a banner at the top of the page \u2014 an unfinished policy says it is unfinished rather than reading as confident and wrong.',
