@@ -892,8 +892,30 @@ function Sec({ title, hint, grid = true, children }: {
         <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">{title}</p>
         {hint && <span className="text-[10.5px] text-[#a39d8d]">{hint}</span>}
       </div>
-      {grid ? <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">{children}</div> : children}
+      {/* Column count follows THE RAIL, not the viewport. `lg:` is where the
+          panel stops being full-width and becomes a fixed 380 px column, so
+          three columns there would be ~110 px per field — the widening of the
+          viewport is exactly when the panel has least room. */}
+      {grid ? <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-2">{children}</div> : children}
     </section>
+  )
+}
+/**
+ * Legend chips for a display toggle — the colour, then what it means.
+ *
+ * On its own line under the label rather than inline beside it: in a 380 px
+ * rail an inline legend wraps between the swatch and its own word, which reads
+ * as a different control rather than as a key.
+ */
+function Swatches({ items }: { items: readonly (readonly [string, string])[] }) {
+  return (
+    <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 pl-6 text-[11px] text-slate-500">
+      {items.map(([color, label]) => (
+        <span key={label} className="inline-flex items-center gap-1">
+          <span className="inline-block h-2 w-3 rounded-sm" style={{ background: color }} />{label}
+        </span>
+      ))}
+    </div>
   )
 }
 function TabBtn({ id, label, active, onClick }: { id: Tab; label: string; active: boolean; onClick: (t: Tab) => void }) {
@@ -2268,25 +2290,36 @@ export default function ModelSpace() {
           </div>
           <input ref={fileRef} type="file" accept=".json" className="sr-only"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f) }} />
-          <button type="button" onClick={analyze} disabled={!model || !!busy || meshErrors}
-            className="rounded-md bg-[#1a7f4b] px-4 py-2 text-[12.5px] font-bold text-white hover:bg-[#14603a] disabled:opacity-40">
-            ▶ Analyze
-          </button>
-          <button type="button" onClick={runPipeline} disabled={!model || !!busy || meshErrors}
-            className="rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-bold text-white hover:bg-[#0d3f78] disabled:opacity-40">
-            Design all
-          </button>
           <button type="button" onClick={() => void exportPdf()} disabled={!design || exporting || !reportsGate.allowed}
             title={!reportsGate.allowed ? reportsGate.message
-              : design ? 'Download the calculation report as a PDF' : 'Run “Design all” first'}
+              : design ? 'Download the calculation report as a PDF' : 'Run “Design structure” in the Design tab first'}
             className="rounded-md border border-[#0f4c92] bg-white px-3.5 py-2 text-[12.5px] font-bold text-[#0f4c92] hover:bg-[#eaf1f9] disabled:opacity-40">
             {exporting ? '⏳ Building PDF…' : '⎙ Export PDF'}
           </button>
         </div>
       </div>
 
-      {/* ── Main split: sticky 3D (60%) | tabbed controls (40%) ── */}
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr] lg:items-start">
+      {/* ── Tab ribbon ──────────────────────────────────────────────────────
+          Eleven tabs wrapped to three lines inside a 2/5-width panel and stole
+          the height the controls under them needed. Across the full width they
+          are one row, they stay put when the rail narrows, and the panel below
+          starts with content instead of navigation. */}
+      <div className="no-print mt-3 flex items-center gap-2 rounded-lg border border-[#e3e1da] bg-white px-3 py-2"
+        data-tour="tab-bar">
+        {/* The tabs wrap inside their OWN box. Wrapping them in the ribbon
+            itself sent `ml-auto` Guide to a second row on its own as soon as
+            the tabs nearly filled the first — a lone button on an empty line,
+            which reads as a mistake rather than as a layout. */}
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
+          {TABS.map((t) => <TabBtn key={t.id} id={t.id} label={t.label} active={tab === t.id} onClick={pickTab} />)}
+        </div>
+        <TourButton onClick={tour.start} label="Guide" />
+      </div>
+
+      {/* ── Main split: the viewport takes the width, the controls a fixed rail
+          (mockup: minmax(0,1fr) 360px). At 3fr/2fr the panel ran to about 660 px
+          and the page named after its 3D view gave that view 60% of the screen. ── */}
+      <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
         {/* LEFT — sticky 3D viewport */}
         <div className="no-print lg:sticky lg:top-4">
           <div className="relative h-[80vh] min-h-[460px] overflow-hidden rounded-lg border border-[#e3e1da] bg-[#0f1b2a]">
@@ -2455,95 +2488,114 @@ export default function ModelSpace() {
               </div>
             )}
           </div>
-          {design && (design.joints.length > 0 || design.beamJoints.length > 0) && (
-            <label className="no-print mt-2 flex items-center gap-2 text-xs text-slate-600">
-              <input type="checkbox" checked={showConns} onChange={(e) => setShowConns(e.target.checked)} />
-              Show designed steel connections
-              <span className="ml-1 inline-flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm" style={{ background: '#334155' }} />plates</span>
-              <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm" style={{ background: '#d4a017' }} />bolts / welds</span>
-            </label>
-          )}
-          {design && (
-            <label className="no-print mt-2 flex items-center gap-2 text-xs text-slate-600">
-              <input type="checkbox" checked={showFootings} onChange={(e) => setShowFootings(e.target.checked)} />
-              Show designed footings to scale
-              <span className="ml-1 inline-flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm" style={{ background: '#b45309' }} />ok</span>
-              <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm" style={{ background: '#dc2626' }} />overlap</span>
-            </label>
-          )}
-          <label className="no-print mt-2 flex items-center gap-2 text-xs text-slate-600">
-            <input type="checkbox" checked={showRebar} onChange={(e) => setShowRebar(e.target.checked)}
-              disabled={!design} />
-            Show reinforcement cages
-            {!design && <span className="text-slate-400">— design the structure first</span>}
-            {showRebar && <span className="text-slate-400">— concrete shown see-through</span>}
-            {showRebar && rebarCages.length > 0 && (
-              <span className="ml-2 flex flex-wrap gap-x-2 gap-y-0.5">
-                {([['top', 'top'], ['bottom', 'bottom'], ['stirrup', 'stirrups'], ['vertical', 'col. verticals'], ['tie', 'ties'], ['mat', 'footing mat'], ['chair', 'slab chairs']] as const).map(([role, label]) => (
-                  <span key={role} className="inline-flex items-center gap-1">
-                    <span className="inline-block h-2 w-3 rounded-sm" style={{ background: REBAR_ROLE_COLOR[role] }} />{label}
-                  </span>
-                ))}
-              </span>
-            )}
-          </label>
-          {showRebar && rebarNotes.length > 0 && (
-            <div className="no-print mt-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-900">
-              <div className="font-medium">What the detailing had to decide</div>
-              <ul className="mt-1 list-disc space-y-0.5 pl-4">
-                {rebarNotes.map(([note, at]) => (
-                  <li key={note}>
-                    <span className="font-mono">{at.slice(0, 4).join(', ')}{at.length > 4 ? ` +${at.length - 4} more` : ''}</span>
-                    {' — '}{note}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <label className="no-print mt-2 flex items-center gap-2 text-xs text-slate-600">
-            <input type="checkbox" checked={showLoads} onChange={(e) => setShowLoads(e.target.checked)} />
-            Show load diagrams on the model
-            {showLoads && model && model.loads.length > 0 && (
-              <span className="ml-2 flex flex-wrap gap-x-2 gap-y-0.5">
-                {[...new Set(model.loads.map((l) => l.cat))].map((cat) => (
-                  <span key={cat} className="inline-flex items-center gap-1">
-                    <span className="inline-block h-2 w-3 rounded-sm" style={{ background: LOAD_COLOR[cat] ?? '#64748b' }} />{cat}
-                  </span>
-                ))}
-              </span>
-            )}
-          </label>
-          {govRes && (
-            <div className="no-print mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
-              <span className="font-medium">Force diagram:</span>
-              <button type="button" onClick={() => setForceDiag(null)}
-                className={`rounded px-1.5 py-0.5 font-semibold ${forceDiag === null ? 'bg-slate-200 text-slate-700' : 'text-slate-500 hover:text-slate-600'}`}>off</button>
-              {(['N', 'Vy', 'Vz', 'My', 'Mz', 'T'] as DiagramComp[]).map((c) => (
-                <button key={c} type="button" onClick={() => setForceDiag(c)}
-                  title={`Draw ${c} on every member (governing combo)`}
-                  className="rounded px-1.5 py-0.5 font-semibold transition"
-                  style={forceDiag === c
-                    ? { background: DIAG_COLOR[c], color: '#fff' }
-                    : { color: DIAG_COLOR[c] }}>
-                  {DIAG_LABEL[c]}
-                </button>
-              ))}
-              {forceDiag && (
-                <label className="ml-1 inline-flex items-center gap-1">
-                  <span className="text-slate-500">scale</span>
-                  <input type="range" min={0.3} max={3} step={0.1} value={forceDiagScale}
-                    onChange={(e) => setForceDiagScale(Number(e.target.value))} className="h-1 w-20" />
-                </label>
-              )}
-            </div>
-          )}
         </div>
 
-        {/* RIGHT — tabbed controls: one flat panel, hairline-separated sections (mockup) */}
+        {/* RIGHT — the active tab's controls: one flat panel, hairline-separated
+            sections (mockup). The tab bar is NOT here: it is the ribbon under
+            the header, so switching tabs does not depend on how wide this rail
+            happens to be. */}
         <div className="no-print overflow-hidden rounded-lg border border-[#e3e1da] bg-white">
-          <div className="flex flex-wrap items-center gap-0.5 border-b border-[#eeece5] px-3 py-2.5" data-tour="tab-bar">
-            {TABS.map((t) => <TabBtn key={t.id} id={t.id} label={t.label} active={tab === t.id} onClick={pickTab} />)}
-            <span className="ml-auto"><TourButton onClick={tour.start} label="Guide" /></span>
+          {/* ── DISPLAY — the overlays on the 3D view ────────────────────────
+              These are VIEW state, and under the canvas they were a stack of
+              checkboxes whose legends wrapped inline: five of them pushed the
+              model up off the top of the screen, and they scrolled away from
+              the view they control. In the panel they sit beside it, and the
+              legend of each one gets its own line instead of fighting the
+              label for width.
+              
+              FIRST in the panel, not last. The mockup put Display at the foot,
+              but that was drawn against a panel with three fields in it: with
+              the Geometry tab's node and member tables above it, measuring the
+              rendered page put this section 2204 px down — a control for the
+              viewport, two screens below the viewport. It is short, it is
+              global to every tab, and it belongs where it can be reached
+              without scrolling past the thing it is not about. */}
+          <div className="divide-y divide-[#eeece5] border-b border-[#eeece5] bg-[#fbfaf7] px-4 py-1" data-tour="display-panel">
+            <Sec title="Display" grid={false}>
+              <div className="space-y-2.5 text-xs text-slate-600">
+                {design && (design.joints.length > 0 || design.beamJoints.length > 0) && (
+                  <div>
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={showConns} onChange={(e) => setShowConns(e.target.checked)} />
+                      Show designed steel connections
+                    </label>
+                    <Swatches items={[['#334155', 'plates'], ['#d4a017', 'bolts / welds']]} />
+                  </div>
+                )}
+                {design && (
+                  <div>
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={showFootings} onChange={(e) => setShowFootings(e.target.checked)} />
+                      Show designed footings to scale
+                    </label>
+                    <Swatches items={[['#b45309', 'ok'], ['#dc2626', 'overlap']]} />
+                  </div>
+                )}
+                <div>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={showRebar} onChange={(e) => setShowRebar(e.target.checked)}
+                      disabled={!design} />
+                    Show reinforcement cages
+                  </label>
+                  {!design && <p className="pl-6 text-[11px] text-slate-400">design the structure first</p>}
+                  {showRebar && <p className="pl-6 text-[11px] text-slate-400">concrete shown see-through</p>}
+                  {showRebar && rebarCages.length > 0 && (
+                    <Swatches items={([['top', 'top'], ['bottom', 'bottom'], ['stirrup', 'stirrups'],
+                      ['vertical', 'col. verticals'], ['tie', 'ties'], ['mat', 'footing mat'], ['chair', 'slab chairs']] as const)
+                      .map(([role, label]) => [REBAR_ROLE_COLOR[role], label] as const)} />
+                  )}
+                  {showRebar && rebarNotes.length > 0 && (
+                    <div className="mt-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-900">
+                      <div className="font-medium">What the detailing had to decide</div>
+                      <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                        {rebarNotes.map(([note, at]) => (
+                          <li key={note}>
+                            <span className="font-mono">{at.slice(0, 4).join(', ')}{at.length > 4 ? ` +${at.length - 4} more` : ''}</span>
+                            {' — '}{note}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={showLoads} onChange={(e) => setShowLoads(e.target.checked)} />
+                    Show load diagrams on the model
+                  </label>
+                  {showLoads && model && model.loads.length > 0 && (
+                    <Swatches items={[...new Set(model.loads.map((l) => l.cat))]
+                      .map((cat) => [LOAD_COLOR[cat] ?? '#64748b', cat] as const)} />
+                  )}
+                </div>
+                {govRes && (
+                  <div className="border-t border-[#eeece5] pt-2.5">
+                    <p className="mb-1 font-medium">Force diagram</p>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <button type="button" onClick={() => setForceDiag(null)}
+                        className={`rounded px-1.5 py-0.5 font-semibold ${forceDiag === null ? 'bg-slate-200 text-slate-700' : 'text-slate-500 hover:text-slate-600'}`}>off</button>
+                      {(['N', 'Vy', 'Vz', 'My', 'Mz', 'T'] as DiagramComp[]).map((c) => (
+                        <button key={c} type="button" onClick={() => setForceDiag(c)}
+                          title={`Draw ${c} on every member (governing combo)`}
+                          className="rounded px-1.5 py-0.5 font-semibold transition"
+                          style={forceDiag === c
+                            ? { background: DIAG_COLOR[c], color: '#fff' }
+                            : { color: DIAG_COLOR[c] }}>
+                          {DIAG_LABEL[c]}
+                        </button>
+                      ))}
+                    </div>
+                    {forceDiag && (
+                      <label className="mt-1.5 flex items-center gap-1.5">
+                        <span className="text-slate-500">scale</span>
+                        <input type="range" min={0.3} max={3} step={0.1} value={forceDiagScale}
+                          onChange={(e) => setForceDiagScale(Number(e.target.value))} className="h-1 flex-1" />
+                      </label>
+                    )}
+                  </div>
+                )}
+              </div>
+            </Sec>
           </div>
 
           {/* ── GEOMETRY ── */}
@@ -4732,6 +4784,7 @@ export default function ModelSpace() {
               <PlansPanel model={model} design={design} soil={soil} />
             </div>
           )}
+
         </div>
       </div>
 
