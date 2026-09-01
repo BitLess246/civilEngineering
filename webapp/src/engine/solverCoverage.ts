@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 522
+export const SOLVER_TEST_COUNT = 523
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -1647,6 +1647,10 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "plasticMoment",
         "name": "concrete: ρ·b·d²·fy·(1−0.59ρfy/fc)"
+      },
+      {
+        "suite": "plasticMoment",
+        "name": "concrete: an over-reinforced ρ no longer inflates the hinge"
       },
       {
         "suite": "plasticMoment",

@@ -118,3 +118,26 @@ describe('checkModelSCWB — joint walk over a concrete frame', () => {
     expect(rows.some((r) => r.node === 'l')).toBe(false)   // beam end, no column
   })
 })
+
+describe('concreteBeamMn — the steel is not assumed to yield', () => {
+  it('matches As·fy·(d − a/2) while it does yield', () => {
+    const b = 300, d = 540, As = 1500, fc = 28, fy = 415
+    const a = (As * fy) / (0.85 * fc * b)
+    expect(concreteBeamMn(b, d, As, fc, fy)).toBeCloseTo((As * fy * (d - a / 2)) / 1e6, 9)
+  })
+  it('falls BELOW it when the section is over-reinforced', () => {
+    // 2-⌀32 in a 200×300 at fy 550 — ρ = 0.034, nowhere near yield.
+    const b = 200, d = 234, As = 1608, fc = 21, fy = 550
+    const assumed = (As * fy * (d - (As * fy) / (0.85 * fc * b) / 2)) / 1e6
+    const real = concreteBeamMn(b, d, As, fc, fy)
+    expect(real).toBeLessThan(assumed)
+    expect(real).toBeGreaterThan(0)
+  })
+  it('lowering Mnb can only RAISE the §418.7.3.2 ratio — the safe direction', () => {
+    // ΣMnc/ΣMnb ≥ 6/5 has Mnb in the denominator, so overstating the beams was
+    // making joints look worse than they are, not better.
+    const heavy = concreteBeamMn(200, 234, 1608, 21, 550)
+    const assumed = (1608 * 550 * (234 - (1608 * 550) / (0.85 * 21 * 200) / 2)) / 1e6
+    expect(1 / heavy).toBeGreaterThan(1 / assumed)
+  })
+})

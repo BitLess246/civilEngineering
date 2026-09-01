@@ -147,3 +147,97 @@ export function matLayout(params: {
     clearOK: clear >= minClearSpacing(db, params.aggregate) - 1e-9,
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// ANALYSIS — the capacity a section HAS, which is not the design's inverse.
+//
+// Everything above answers "what steel does this moment need?", and the answer
+// is bounded: ρ is capped at the tension-controlled limit, so the steel yields
+// by construction and As·fy is exact. Analysis asks the opposite question —
+// "what can this steel carry?" — with As handed in, and there is nothing to
+// stop it being over-reinforced. There the steel does NOT reach fy, and
+// assuming it does overstates the capacity, in the unsafe direction.
+//
+// Both questions used to be answered with As·fy. On a sweep of ~9800 designs
+// the engine ACCEPTS, 68 of them (0.7%) sit below yield — the worst a 200×300
+// with f'c 21, fy 550 and ⌀32 bars, where §9.6.1.2's two-bar minimum alone
+// puts ρ at 0.034: capacity reported 87.7 kN·m against a true 51.7, and φ
+// taken as 0.90 where εt makes it 0.65.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Steel modulus and the §22.2.2.1 extreme-fibre concrete strain. */
+export const ES_STEEL = 200000
+export const ECU = 0.003
+
+/**
+ * Stress in tension steel whose centroid is at depth `d`, for a neutral axis
+ * at `c` — similar triangles on the linear strain diagram, capped at yield.
+ */
+export function steelStress(c: number, d: number, fy: number): number {
+  if (!(c > 0)) return fy
+  return Math.min(fy, (ES_STEEL * ECU * (d - c)) / c)
+}
+
+/** §21.2.2 strength-reduction factor from the strain in the extreme layer. */
+export function phiFromStrain(et: number, fy: number): number {
+  const ety = fy / ES_STEEL
+  if (et >= 0.005) return 0.90
+  if (et <= ety) return 0.65
+  return 0.65 + (0.25 * (et - ety)) / (0.005 - ety)
+}
+
+export interface RectCapacity {
+  /** Equivalent stress-block depth and neutral axis, mm. */
+  a: number; c: number
+  /** Steel stress at equilibrium, MPa, and whether it reached fy. */
+  fs: number; fsYields: boolean
+  /** Strain in the EXTREME tension layer, and the φ it gives. */
+  et: number; phi: number
+  /** Nominal and design flexural strength, kN·m. */
+  Mn: number; phiMn: number
+}
+
+/**
+ * Capacity of a singly-reinforced rectangular section, solved rather than
+ * assumed.
+ *
+ * Equilibrium is C(c) = T(c) with C = 0.85f'c·b·β1·c rising in c and
+ * T = As·min(fy, Es·εcu(d − c)/c) falling, so there is exactly one root.
+ * While the steel yields that root is the familiar a = As·fy/(0.85f'c·b);
+ * when it does not, substituting fs back in leaves a quadratic
+ *
+ *     0.85f'c·b·β1·c² + Es·εcu·As·c − Es·εcu·As·d = 0
+ *
+ * whose positive root always exists (A > 0, D > 0) and is strictly less than
+ * d, so the steel is always in tension. Exact in one step — no iteration.
+ *
+ * `d` is the steel CENTROID, where the resultant acts; `dt` is the extreme
+ * layer, where §21.2.2 measures εt. Pass dt = d for a single layer.
+ *
+ * Compression steel is not modelled: this is the singly-reinforced case. A
+ * doubly-reinforced section holds its own neutral axis and must not be put
+ * through here.
+ */
+export function rectCapacity(
+  b: number, d: number, dt: number, As: number, fc: number, fy: number,
+): RectCapacity {
+  if (!(As > 0 && b > 0 && d > 0)) {
+    return { a: 0, c: 0, fs: fy, fsYields: true, et: 0.005, phi: 0.90, Mn: 0, phiMn: 0 }
+  }
+  const b1 = beta1(fc)
+  let a = (As * fy) / (0.85 * fc * b)          // the yield assumption…
+  let c = a / b1
+  let fs = fy
+  const fsYields = steelStress(c, d, fy) >= fy
+  if (!fsYields) {                              // …and the correction when it fails
+    const K = ES_STEEL * ECU * As
+    const A = 0.85 * fc * b * b1
+    c = (-K + Math.sqrt(K * K + 4 * A * K * d)) / (2 * A)
+    a = b1 * c
+    fs = steelStress(c, d, fy)
+  }
+  const Mn = (As * fs * (d - a / 2)) / 1e6
+  const et = (ECU * (dt - c)) / c
+  const phi = phiFromStrain(et, fy)
+  return { a, c, fs, fsYields, et, phi, Mn, phiMn: phi * Mn }
+}

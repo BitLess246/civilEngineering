@@ -20,6 +20,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, RectSection } from './model'
 import { beta1 } from './loads'
+import { rectCapacity } from './flexure'
 import type { StructureDesign } from './pipeline'
 
 /** SCWB strength ratio required by NSCP §418.7.3.2 (= ACI 318-14 §18.7.3.2). */
@@ -28,11 +29,22 @@ export const SCWB_FACTOR = 6 / 5
 const ES = 200000   // steel modulus, MPa
 const ECU = 0.003   // ultimate concrete strain
 
-/** Nominal flexural strength of a singly-reinforced rectangular beam, kN·m. */
+/**
+ * Nominal flexural strength of a singly-reinforced rectangular beam, kN·m.
+ *
+ * Delegates to `rectCapacity`, which SOLVES the steel stress instead of taking
+ * it as fy. This used to assume yield, and the assumption is reachable from
+ * the pipeline: on a heavily loaded frame the cut sections `beamMomentRatios`
+ * feeds in come back as low as fs/fy = 0.75, and every kN·m of the difference
+ * was being handed to the §418.7.3.2 ratio as if the beam could deliver it.
+ *
+ * `dt` is taken as `d` — the caller passes a face's steel centroid and cannot
+ * say how it is layered. That only affects φ, which this function does not
+ * return.
+ */
 export function concreteBeamMn(b: number, d: number, As: number, fc: number, fy: number): number {
   if (As <= 0 || b <= 0 || d <= 0) return 0
-  const a = (As * fy) / (0.85 * fc * b)
-  return (As * fy * (d - a / 2)) / 1e6
+  return rectCapacity(b, d, d, As, fc, fy).Mn
 }
 
 /**

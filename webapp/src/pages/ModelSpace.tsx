@@ -4188,8 +4188,15 @@ export default function ModelSpace() {
                   options={[['x', '+X'], ['z', '+Z']]} />
                 <Pick label="Lateral pattern" value={poPattern} onChange={setPoPattern}
                   options={[['triangular', 'Inverted triangle (mass×h)'], ['uniform', 'Uniform (mass)']]} />
+                {/* Bounded: 0.1–5%. Below §9.6.1.2's minimum the hinge is a
+                    fiction, and the upper end is already past every code cap
+                    (§18.6.3.1 stops at 2.5%). Mp is solved from C = T, so an
+                    over-reinforced ρ returns the LOWER strength it really has
+                    — it used to return a larger one, and above ρ ≈ 6.5% a
+                    negative one. */}
                 <Num label="Concrete ρ (tension)" unit="%" value={poRho} onChange={setPoRho} step="0.1"
-                  hint="assumed steel ratio for Mp (concrete only)" />
+                  min={0.1} max={5}
+                  hint="assumed steel ratio for Mp (concrete only) · 0.1–5%" />
                 <Num label="Mp scale" value={poMpScale} onChange={setPoMpScale} step="0.1"
                   hint="multiplier on every member capacity" />
                 <label className="col-span-full flex items-center gap-2 text-sm">
@@ -4296,7 +4303,8 @@ export default function ModelSpace() {
                 <Num label="Post-yield ratio b" unit="%" value={nlB} onChange={setNlB} step="0.5"
                   hint="storey spring hardening (0 = elastic-perfectly-plastic)" />
                 <Num label="Concrete ρ (tension)" unit="%" value={nlRho} onChange={setNlRho} step="0.1"
-                  hint="assumed steel ratio for Mp (concrete only)" />
+                  min={0.1} max={5}
+                  hint="assumed steel ratio for Mp (concrete only) · 0.1–5%" />
                 {nlKindModel === 'hinges' ? (
                   <>
                     <p className="col-span-full text-[11px] text-slate-500">

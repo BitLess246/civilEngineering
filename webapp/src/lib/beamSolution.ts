@@ -3,6 +3,7 @@
 // equations. Mirrors engine/beamDesign.ts (ρ_max,TC with dt/d, DRRB with
 // displaced concrete, §407.7 bar layout with Varignon d-iteration).
 import { S_MIN_STIRRUP, type BeamDesignInput, type BeamDesignResult } from '../engine/beamDesign'
+import { rectCapacity } from '../engine/flexure'
 import { type SolutionStep, type SolutionLine, sn0, sn1, sn2, sn3, sn4 } from './solution'
 
 const txt = (text: string): SolutionLine => ({ text })
@@ -248,8 +249,15 @@ export function beamProvidedCapacities(
   i: BeamDesignInput & { fyt: number; legs: number }, r: BeamDesignResult,
 ): { phiMn: number; phiVn: number } {
   const AsProv = r.bars * (Math.PI / 4) * i.barDia ** 2               // provided bars, mm²
-  const a = (AsProv * i.fy) / (0.85 * i.fc * i.b)                     // mm
-  const phiMn = (0.9 * AsProv * i.fy * (r.d - a / 2)) / 1e6           // kN·m (tension steel only — conservative for DRRB)
+  // SOLVED, not assumed — both the steel stress and φ. This read
+  // 0.9·As·fy·(d − a/2), which is right only while the steel yields and φ is
+  // 0.90, and neither holds on an over-reinforced section: a 200×300 in f'c 21
+  // with fy 550 and ⌀32 bars, where §9.6.1.2's two-bar minimum alone puts ρ at
+  // 0.034, was reported at 87.7 kN·m against a true 51.7.
+  //
+  // Tension steel only, as before — for a DRRB section the compression steel
+  // holds the neutral axis and this understates, which is the safe side.
+  const phiMn = rectCapacity(i.b, r.d, r.dt, AsProv, i.fc, i.fy).phiMn
   const Av = i.legs * (Math.PI / 4) * i.stirrupDia ** 2               // mm²
   const phiVs = r.sAdopt > 0 ? (0.75 * Av * i.fyt * r.d) / r.sAdopt / 1e3 : 0   // kN
   return { phiMn, phiVn: r.phiVc + phiVs }
