@@ -52,7 +52,7 @@ const CUT_MARK: Record<RebarRole, string> = {
   top: 'Top main', bottom: 'Bottom main', side: 'Side face',
   stirrup: 'Stirrup', tie: 'Tie', hoop: 'Hoop',
   vertical: 'Vertical', mat: 'Mat', dowel: 'Dowel',
-  diagonal: 'Diagonal', trimmer: 'Trimmer',
+  diagonal: 'Diagonal', trimmer: 'Trimmer', chair: 'Chair',
 }
 const cutMark = (role: RebarRole) => CUT_MARK[role] ?? role
 
