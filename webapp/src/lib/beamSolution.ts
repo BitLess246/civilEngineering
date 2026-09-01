@@ -16,6 +16,15 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
   const d = r.d
   const Ab = (Math.PI / 4) * i.barDia * i.barDia
   const multiLayer = r.layers.length > 1
+  // Flanged action (§406.3.2): the width the compression block actually acts
+  // on, and the moment left for it after the overhang couple. For a plain
+  // rectangle these collapse to b and Mu, so every equation below is written
+  // once and reads correctly in all three cases.
+  const bF = r.bFlex
+  const MuFlex = i.Mu - r.Muf
+  const flanged = r.flangeAction !== 'none'
+  const bSym = flanged ? 'b_f' : 'b'
+  const MSym = r.flangeAction === 'true-T' ? 'M_{uw}' : 'M_u'
 
   const steps: SolutionStep[] = []
 
@@ -37,26 +46,57 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
     ],
   })
 
+  if (flanged && i.flange) {
+    const fl = i.flange
+    const kind = fl.kind === 'L' ? 'L-beam (one-sided flange)' : 'T-beam'
+    const aF = (r.a).toFixed(0)
+    steps.push({
+      title: `Flanged action — ${kind}`,
+      lines: [
+        txt('The slab acts with the web in sagging, so the compression zone is the flange first (§406.3.2). Assume the block stays inside the slab and check it: while a ≤ h_f the section is simply a rectangle of width b_f, because the concrete below the block does not participate whatever its shape.'),
+        eq(String.raw`b_f = ${sn0(fl.bf)}\ \text{mm},\quad h_f = ${sn0(fl.hf)}\ \text{mm},\quad b_w = ${sn0(i.b)}\ \text{mm}`),
+        ...(r.flangeAction === 'flange'
+          ? [
+              eq(String.raw`a = ${aF}\ \text{mm} \le h_f = ${sn0(fl.hf)}\ \text{mm}`),
+              txt('The block fits inside the flange — design as a rectangle b_f × d.'),
+            ]
+          : [
+              eq(String.raw`a > h_f \Rightarrow \textbf{true T}`),
+              txt('The block leaves the slab, so the overhangs are spent at full stress over their whole depth h_f and become a FIXED couple; the web rectangle carries the rest. Substituting b_f for b past this point would credit concrete that is not there — below the flange and outside the web.'),
+              eq(String.raw`A_{sf} = \dfrac{0.85 f'_c (b_f - b_w) h_f}{f_y} = \dfrac{0.85(${sn0(i.fc)})(${sn0(fl.bf)} - ${sn0(i.b)})(${sn0(fl.hf)})}{${sn0(i.fy)}} = ${sn0(r.Asf)}\ \text{mm}^2`),
+              eq(String.raw`\phi M_{uf} = \phi A_{sf} f_y\!\left(d - \tfrac{h_f}{2}\right) = ${sn1(r.Muf)}\ \text{kN·m}`),
+              eq(String.raw`M_{uw} = M_u - \phi M_{uf} = ${sn1(i.Mu)} - ${sn1(r.Muf)} = ${sn1(MuFlex)}\ \text{kN·m}\quad\text{on } b_w`),
+            ]),
+      ],
+      note: r.flangeAction === 'flange'
+        ? 'Rectangular behaviour — b = b_f in everything that follows.'
+        : 'True T — the steps below carry the web width b_w and the web moment M_uw; A_sf is added back at the end.',
+    })
+  }
+
   steps.push({
     title: 'SRRB / DRRB classification',
     lines: [
       txt('Capacity of the section at ρ_max (the singly-reinforced ceiling, still tension-controlled so φ = 0.90). If Mu fits under φMn_max the beam is singly reinforced; otherwise compression steel carries the excess.'),
-      eq(String.raw`A_{s,max} = \rho_{max} b d = ${sn0(r.AsMax)}\ \text{mm}^2,\quad a_{max} = \tfrac{A_{s,max} f_y}{0.85 f'_c b} = ${sn1(r.aMax)}\ \text{mm}`),
+      eq(String.raw`A_{s,max} = \rho_{max} ${bSym} d = ${sn0(r.AsMax)}\ \text{mm}^2,\quad a_{max} = \tfrac{A_{s,max} f_y}{0.85 f'_c ${bSym}} = ${sn1(r.aMax)}\ \text{mm}`),
       eq(String.raw`\phi M_{n,max} = 0.90\,A_{s,max} f_y (d - \tfrac{a_{max}}{2}) = ${sn1(r.phiMnMax)}\ \text{kN·m}`),
-      eq(String.raw`M_u = ${sn1(i.Mu)}\ \text{kN·m} \;${i.Mu <= r.phiMnMax ? '\\le' : '>'}\; \phi M_{n,max} \Rightarrow \textbf{${r.mode}}`),
+      eq(String.raw`${MSym} = ${sn1(MuFlex)}\ \text{kN·m} \;${MuFlex <= r.phiMnMax ? '\\le' : '>'}\; \phi M_{n,max} \Rightarrow \textbf{${r.mode}}`),
     ],
     note: r.mode === 'SRRB' ? 'Singly reinforced — tension steel only.' : 'Doubly reinforced — add compression steel for the moment beyond the ceiling.',
   })
 
   if (r.mode === 'SRRB') {
-    const Rn = (i.Mu * 1e6) / (0.9 * i.b * d * d)
+    const Rn = (MuFlex * 1e6) / (0.9 * bF * d * d)
+    const rhoCalc = (0.85 * i.fc / i.fy) * (1 - Math.sqrt(Math.max(0, 1 - (2 * Rn) / (0.85 * i.fc))))
     steps.push({
       title: 'Tension steel (SRRB)',
       lines: [
-        txt('Solve the design strength equation for ρ via the coefficient of resistance Rₙ, then floor at ρ_min (§409.6.1).'),
-        eq(String.raw`R_n = \dfrac{M_u}{\phi b d^2} = \dfrac{${sn0(i.Mu)}\times 10^6}{0.9(${sn0(i.b)})(${sn1(d)})^2} = ${sn3(Rn)}\ \text{MPa}`),
-        eq(String.raw`\rho = \tfrac{0.85 f'_c}{f_y}\!\left(1-\sqrt{1-\tfrac{2R_n}{0.85 f'_c}}\right) = ${sn4(r.rho)}`),
-        eq(String.raw`A_s = \rho b d = ${sn0(r.As)}\ \text{mm}^2`),
+        txt('Solve the design strength equation for ρ via the coefficient of resistance Rₙ, then floor at ρ_min (§409.6.1). ρ_min is a WEB property — it is what keeps a lightly loaded section from failing the moment it cracks — so it never scales with the flange.'),
+        eq(String.raw`R_n = \dfrac{${MSym}}{\phi ${bSym} d^2} = \dfrac{${sn0(MuFlex)}\times 10^6}{0.9(${sn0(bF)})(${sn1(d)})^2} = ${sn3(Rn)}\ \text{MPa}`),
+        eq(String.raw`\rho = \tfrac{0.85 f'_c}{f_y}\!\left(1-\sqrt{1-\tfrac{2R_n}{0.85 f'_c}}\right) = ${sn4(rhoCalc)}`),
+        eq(r.flangeAction === 'true-T'
+          ? String.raw`A_s = \rho b_w d + A_{sf} = ${sn0(rhoCalc * bF * d)} + ${sn0(r.Asf)} = ${sn0(r.As)}\ \text{mm}^2`
+          : String.raw`A_s = \rho ${bSym} d = ${sn0(r.As)}\ \text{mm}^2`),
       ],
       note: r.usedMin ? 'ρ_min governs.' : 'Computed ρ governs.',
     })
@@ -66,9 +106,11 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
       lines: [
         txt('Split the demand: As1 pairs with the concrete at the ρ_max couple; the excess moment M2 = Mu/φ − Mn,max is carried by a steel couple As2 acting over the lever arm (d − d′).'),
         eq(String.raw`A_{s1} = A_{s,max} = ${sn0(r.As1)}\ \text{mm}^2`),
-        eq(String.raw`M_2 = \tfrac{M_u}{\phi} - M_{n,max} = \tfrac{${sn1(i.Mu)}}{0.90} - ${sn1(r.MnMax)} = ${sn1(r.MnResid)}\ \text{kN·m}`),
+        eq(String.raw`M_2 = \tfrac{${MSym}}{\phi} - M_{n,max} = \tfrac{${sn1(MuFlex)}}{0.90} - ${sn1(r.MnMax)} = ${sn1(r.MnResid)}\ \text{kN·m}`),
         eq(String.raw`A_{s2} = \dfrac{M_2}{f_y (d - d')} = \dfrac{${sn1(r.MnResid)}\times 10^6}{${sn0(i.fy)}(${sn1(d)} - ${sn1(r.dPrime)})} = ${sn0(r.As2)}\ \text{mm}^2`),
-        eq(String.raw`A_s = A_{s1} + A_{s2} = \mathbf{${sn0(r.As)}}\ \text{mm}^2`),
+        eq(r.flangeAction === 'true-T'
+          ? String.raw`A_s = A_{s1} + A_{s2} + A_{sf} = ${sn0(r.As1)} + ${sn0(r.As2)} + ${sn0(r.Asf)} = \mathbf{${sn0(r.As)}}\ \text{mm}^2`
+          : String.raw`A_s = A_{s1} + A_{s2} = \mathbf{${sn0(r.As)}}\ \text{mm}^2`),
       ],
     })
     steps.push({

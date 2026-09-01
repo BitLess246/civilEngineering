@@ -53,6 +53,19 @@ export function TSection({ bf, bw, h, hf, a = 0, aReq = 0, bars = 0, barDia = 0,
         // Nudge clear of the flange soffit when the label would land on it.
         const raw = y0 + A + 10
         const aLabelY = Math.abs(raw - (y0 + hff)) < 5 ? raw + 7 : raw
+        // Room the label has before it runs into the web outline: the overhang
+        // it sits over. Below the soffit the label is out over air, and a text
+        // wider than the overhang crosses the web line — which is what the long
+        // "a = 114  (req 101)" form did on a modest 2:1 flange.
+        const room = (edge ? oR : Math.max(oL, oR)) + 6
+        const fits = (t: string) => t.length * 4.7 <= room
+        // Separate a,req rule whenever the two are far enough apart to draw —
+        // and when it IS drawn the value belongs to it alone, so the main label
+        // does not carry a parenthetical repeat of the same number.
+        const reqRule = aReq > 0 && A - Ar > 4
+        const suffix = aReq > 0 && !reqRule && a - aReq > 0.5
+          && fits(`a = ${a.toFixed(0)}  (req ${aReq.toFixed(0)})`)
+          ? `  (req ${aReq.toFixed(0)})` : ''
         return (
           <g>
             <rect x={x0} y={y0} width={w} height={Math.min(A, hff)} fill="#0f4c92" opacity="0.16" />
@@ -62,7 +75,7 @@ export function TSection({ bf, bw, h, hf, a = 0, aReq = 0, bars = 0, barDia = 0,
                 count has pushed the delivered block clear of it. a,req is the
                 quantity that tracks Mu continuously; `a` only moves when a whole
                 bar is added, so without this the drawing looks inert as Mu rises. */}
-            {aReq > 0 && A - Ar > 12 && (
+            {reqRule && (
               <g opacity="0.85">
                 <line x1={x0 - 6} y1={y0 + Ar} x2={x0 + w + 6} y2={y0 + Ar} stroke="#0f4c92" strokeWidth="0.9" strokeDasharray="2 3" />
                 <text x={lx} y={y0 + Math.max(Ar, 10) - 4} fontSize="8" fontFamily="IBM Plex Mono, monospace" fill="#0f4c92"
@@ -76,7 +89,7 @@ export function TSection({ bf, bw, h, hf, a = 0, aReq = 0, bars = 0, barDia = 0,
                 is too close to draw, so a,req is never off the drawing. */}
             <text x={lx} y={aLabelY} fontSize="8.5" fontFamily="IBM Plex Mono, monospace" fill="#0f4c92"
               textAnchor={anchor} paintOrder="stroke" stroke="#fff" strokeWidth="2.6">
-              a = {a.toFixed(0)}{aReq > 0 && a - aReq > 0.5 ? `  (req ${aReq.toFixed(0)})` : ''}
+              a = {a.toFixed(0)}{suffix}
             </text>
           </g>
         )

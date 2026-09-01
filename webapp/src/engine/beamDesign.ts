@@ -56,6 +56,24 @@ export interface BeamDesignInput {
    *  flanged sagging section passes bf as b but keeps the WEB width here —
    *  min steel is a web property, it must not scale with the flange. */
   bMin?: number
+  /**
+   * The slab acting with the web, for T and L action (§6.3.2 / §22.2).
+   *
+   * `b` stays the WEB here — the flange is described, not substituted. The
+   * caller used to pass bf AS b, which is only right while the stress block
+   * stays inside the slab; past that the section is not a wide rectangle, it
+   * is an overhang couple plus a web block, and substituting bf silently
+   * over-credits the concrete below the flange. With the flange described the
+   * engine picks:
+   *
+   *   a ≤ hf   a rectangle of width bf, exactly as before
+   *   a > hf   TRUE T — the overhangs at full stress over hf contribute a
+   *            fixed couple, and the web rectangle carries what is left
+   *
+   * `kind` is reported, not used: an L (one-sided, spandrel) differs from a T
+   * only in the effective width, which the caller has already resolved.
+   */
+  flange?: { bf: number; hf: number; kind?: 'T' | 'L' }
   legs?: number        // stirrup legs — explicit override (else auto: width + shear)
   legSpacingLimit?: number  // max transverse leg spacing hx, mm (350 seismic, 600 gravity)
   /**
@@ -106,6 +124,32 @@ export interface BeamDesignResult {
   As: number; rho: number; usedMin: boolean
   /** `AsFloor` governed the tension steel — neither the moment nor §409.6.1.2 did. */
   asFloorGoverns: boolean
+  /**
+   * How the compression zone resolved on a flanged section.
+   *
+   * `none`      no flange given — a plain rectangle of width b.
+   * `flange`    the block stayed inside the slab; a rectangle of width bf.
+   * `true-T`    the block entered the web; overhang couple + web rectangle.
+   */
+  flangeAction: 'none' | 'flange' | 'true-T'
+  /** Width the flexure solve actually acted on, mm — bf or the web. */
+  bFlex: number
+  /** Steel balancing the overhangs at full stress, mm² — true-T only. */
+  Asf: number
+  /** Moment the overhang couple carries, kN·m — true-T only. */
+  Muf: number
+  /** Tension steel the chosen bars actually deliver, mm² (`bars` × A_b). */
+  AsProv: number
+  /** Depth of the equivalent stress block measured from the compression face,
+   *  mm — the block the PROVIDED bars develop. On a true T that is the web
+   *  block (the overhangs are already spent over their full depth h_f), so
+   *  a > h_f there by construction; on a `flange` section it is a rectangle of
+   *  width b_f and a ≤ h_f. Doubly-reinforced sections sit at the ρ_max
+   *  ceiling by definition, so a = a_max. */
+  a: number
+  /** The block the MOMENT requires (from the computed A_s, before the bar
+   *  count is rounded up), mm. aReq ≤ a. */
+  aReq: number
   bars: number
   // Bar layout (§407.7)
   sMinClear: number    // required clear spacing = max(db, 25, 4/3·d_agg), mm
@@ -216,26 +260,58 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
   let As1 = 0, As2 = 0, MnResid = 0, cNA = 0, fsPrime = i.fy, fsYields = true
   let AsPrime = 0, comprEffective = true, comprBars = 0
   let flexOK = true
+  let flangeAction: 'none' | 'flange' | 'true-T' = 'none'
+  let bFlex = i.b, Asf = 0, Muf = 0
+
+  // The slab, if there is one. Hogging puts it in tension, so it plays no part.
+  const fl = i.flange && i.flange.bf > i.b && i.Mu > 0 ? i.flange : undefined
 
   for (let iter = 0; iter < 12; iter++) {
     layerIters = iter + 1
+
+    // ── WHICH CONCRETE CARRIES THE BLOCK ──────────────────────────────────
+    //
+    // Try the whole flange first: the section is a rectangle of width bf for
+    // as long as the block fits inside the slab. Once it does not, the
+    // overhangs are spent — full stress over their whole depth hf — and they
+    // become a FIXED couple, leaving the web rectangle to carry the rest.
+    // Substituting bf for b past that point credits concrete that is not
+    // there, below the flange and outside the web.
+    flangeAction = 'none'; bFlex = i.b; Asf = 0; Muf = 0
+    let MuFlex = i.Mu
+    if (fl) {
+      const RnF = (i.Mu * 1e6) / (PHI_FLEX * fl.bf * d * d)
+      const rhoF = (0.85 * i.fc / i.fy) * (1 - Math.sqrt(Math.max(0, 1 - (2 * RnF) / (0.85 * i.fc))))
+      const aF = (rhoF * i.fy * d) / (0.85 * i.fc)          // = As·fy/(0.85f'c·bf)
+      if (Number.isFinite(aF) && aF <= fl.hf + 1e-9) {
+        flangeAction = 'flange'; bFlex = fl.bf
+      } else {
+        flangeAction = 'true-T'
+        Asf = (0.85 * i.fc * (fl.bf - i.b) * fl.hf) / i.fy
+        Muf = (PHI_FLEX * Asf * i.fy * (d - fl.hf / 2)) / 1e6
+        MuFlex = Math.max(0, i.Mu - Muf)
+        bFlex = i.b
+      }
+    }
 
     // ρ limits at the current d (reference: both carry dt/d).
     rhoB = 0.85 * b1 * (i.fc / i.fy) * (600 / (600 + i.fy)) * (dt / d)
     rhoMaxV = 0.85 * (i.fc / i.fy) * b1 * (3 / 8) * (dt / d)
 
-    // Singly-reinforced ceiling at ρ_max (ε_t = 0.005 → φ = 0.90).
-    AsMax = rhoMaxV * i.b * d
-    aMax = (AsMax * i.fy) / (0.85 * i.fc * i.b)
+    // Singly-reinforced ceiling at ρ_max (ε_t = 0.005 → φ = 0.90), on the
+    // width the block actually acts on.
+    AsMax = rhoMaxV * bFlex * d
+    aMax = (AsMax * i.fy) / (0.85 * i.fc * bFlex)
     MnMax = (AsMax * i.fy * (d - aMax / 2)) / 1e6
     phiMnMax = PHI_FLEX * MnMax
 
-    if (i.Mu <= phiMnMax) {
+    if (MuFlex <= phiMnMax) {
       mode = 'SRRB'
-      const Rn = (i.Mu * 1e6) / (PHI_FLEX * i.b * d * d)
+      const Rn = (MuFlex * 1e6) / (PHI_FLEX * bFlex * d * d)
       const rhoCalc = (0.85 * i.fc / i.fy) * (1 - Math.sqrt(Math.max(0, 1 - (2 * Rn) / (0.85 * i.fc))))
+      // Minimum steel is a WEB property and must not scale with the flange.
       const AsMinArea = rMin * (i.bMin ?? i.b) * d
-      const AsCalc = rhoCalc * i.b * d
+      const AsCalc = rhoCalc * bFlex * d + Asf
       usedMin = AsCalc < AsMinArea
       As = usedMin ? AsMinArea : AsCalc
       asFloorGoverns = (i.AsFloor ?? 0) > As + 1e-9
@@ -246,9 +322,13 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
     } else {
       mode = 'DRRB'
       As1 = AsMax
-      MnResid = i.Mu / PHI_FLEX - MnMax
+      // The residual is what is left of the moment THE BLOCK must carry —
+      // on a true T that is already net of the overhang couple, so the
+      // compression steel sizes against the web's shortfall, not the whole
+      // section's.
+      MnResid = MuFlex / PHI_FLEX - MnMax
       As2 = (MnResid * 1e6) / (i.fy * (d - dPrime))
-      As = As1 + As2
+      As = As1 + As2 + Asf
       asFloorGoverns = (i.AsFloor ?? 0) > As + 1e-9
       if (asFloorGoverns) As = i.AsFloor as number
       rho = As / (i.b * d)
@@ -390,12 +470,24 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
       ? 'shear demand'
       : sys === 'smf' ? '§418.6.4.4 SMF conf.' : '§418.4.2.4 IMF conf.')
 
+  // Equivalent stress block, §22.2.2.4.1 — reported so the section drawing and
+  // the worked solution read the block off the engine instead of re-deriving a
+  // bf-wide rectangle that a true T does not have.
+  const AsProv = bars * Ab
+  const blockDepth = (asteel: number) => mode === 'DRRB'
+    ? aMax
+    : Math.max(0, ((asteel - Asf) * i.fy) / (0.85 * i.fc * bFlex))
+  const aReq = blockDepth(As)
+  const aProv = blockDepth(Math.max(As, AsProv))
+
   return {
+    AsProv, a: aProv, aReq,
     seismicSConf, hingeGovern, sHinge,
     d, dt, dPrime,
     rhoB, rhoMax: rhoMaxV, rhoMin: rMin,
     AsMax, aMax, MnMax, phiMnMax,
     mode, As, rho, usedMin, asFloorGoverns, bars,
+    flangeAction, bFlex, Asf, Muf,
     sMinClear, maxPerLayer, layers, sClear, yBar, layerIters,
     As1, As2, MnResid, cNA, fsPrime, fsYields, AsPrime, comprBars, comprEffective, flexOK,
     comprSMinClear, comprMaxPerLayer, comprLayers, comprSClear, comprYBar,

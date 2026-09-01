@@ -363,3 +363,93 @@ describe('dGiven — the effective depth stated rather than derived', () => {
     expect(b.d).toBe(a.d); expect(b.As).toBe(a.As); expect(b.bars).toBe(a.bars)
   })
 })
+
+describe('flanged action — §406.3.2 / Table 406.3.2.1', () => {
+  const flanged = (Mu: number, bf: number, hf = 120, kind: 'T' | 'L' = 'T') =>
+    designBeam({ ...base, b: 300, h: 600, barDia: 25, Mu, Vu: 200, flange: { bf, hf, kind } })
+
+  it('no flange given → a plain rectangle of width b', () => {
+    const r = designBeam({ ...base, Mu: 400 })
+    expect(r.flangeAction).toBe('none')
+    expect(r.bFlex).toBe(base.b)
+    expect(r.Asf).toBe(0)
+    expect(r.Muf).toBe(0)
+  })
+
+  it('block inside the slab → rectangle of width bf, and a ≤ hf', () => {
+    const r = flanged(300, 1000)
+    expect(r.flangeAction).toBe('flange')
+    expect(r.bFlex).toBe(1000)
+    expect(r.a).toBeLessThanOrEqual(120)
+    expect(r.Asf).toBe(0)
+  })
+
+  it('block past the slab → true T: overhang couple + web block, a > hf', () => {
+    const r = flanged(900, 600)
+    expect(r.flangeAction).toBe('true-T')
+    expect(r.bFlex).toBe(300)               // the web carries the block
+    expect(r.a).toBeGreaterThan(120)
+    // Asf = 0.85 f'c (bf − bw) hf / fy, §406.3.2 two-couple split
+    expect(r.Asf).toBeCloseTo((0.85 * 28 * (600 - 300) * 120) / 415, 6)
+    // φMuf = φ Asf fy (d − hf/2)
+    expect(r.Muf).toBeCloseTo((0.9 * r.Asf * 415 * (r.d - 60)) / 1e6, 6)
+  })
+
+  it('singly-reinforced true T: the web block equilibrates the steel left to it', () => {
+    const r = flanged(600, 500)
+    expect(r.flangeAction).toBe('true-T')
+    expect(r.mode).toBe('SRRB')
+    // C_web = 0.85 f'c bw a  must equal  T_web = (As − Asf) fy
+    const Cweb = 0.85 * 28 * 300 * r.a
+    expect(Cweb).toBeCloseTo((Math.max(r.As, r.AsProv) - r.Asf) * 415, 3)
+  })
+
+  it('doubly-reinforced true T: ΣF = 0 over flange, web block and A′s', () => {
+    const r = flanged(900, 600)
+    expect(r.mode).toBe('DRRB')
+    const Cflange = 0.85 * 28 * (600 - 300) * 120
+    const Cweb = 0.85 * 28 * 300 * r.aMax
+    const Csteel = r.AsPrime * (r.fsPrime - 0.85 * 28)
+    expect(r.As * 415).toBeCloseTo(Cflange + Cweb + Csteel, 3)
+  })
+
+  it('a hogging section ignores the slab — the flange is in tension', () => {
+    const r = designBeam({ ...base, b: 300, h: 600, barDia: 25, Mu: 0, Vu: 200, flange: { bf: 1000, hf: 120 } })
+    expect(r.flangeAction).toBe('none')
+  })
+
+  it('a flange no wider than the web is not a flange', () => {
+    const r = flanged(300, 300)
+    expect(r.flangeAction).toBe('none')
+    expect(r.bFlex).toBe(300)
+  })
+
+  it('minimum steel stays a WEB property — it does not scale with bf', () => {
+    const wide = flanged(60, 1800)
+    const narrow = flanged(60, 400)
+    expect(wide.usedMin && narrow.usedMin).toBe(true)
+    expect(wide.As).toBeCloseTo(narrow.As, 6)
+  })
+
+  it('kind is carried through untouched — L and T differ only in how bf was derived', () => {
+    const T = flanged(900, 600, 120, 'T')
+    const L = flanged(900, 600, 120, 'L')
+    expect(L.As).toBeCloseTo(T.As, 9)
+  })
+
+  it('flanged action never costs more TOTAL steel than the bare web rectangle', () => {
+    for (const Mu of [200, 400, 700, 1000, 1400]) {
+      const T = flanged(Mu, 900)
+      const W = designBeam({ ...base, b: 300, h: 600, barDia: 25, Mu, Vu: 200 })
+      if (!T.flexOK || !W.flexOK) continue
+      expect(T.As + T.AsPrime).toBeLessThanOrEqual(W.As + W.AsPrime + 1e-6)
+    }
+  })
+
+  it('aReq ≤ a — the bar count is rounded up, the requirement is not', () => {
+    for (const [Mu, bf] of [[300, 1000], [600, 800], [900, 600]] as const) {
+      const r = flanged(Mu, bf)
+      expect(r.aReq).toBeLessThanOrEqual(r.a + 1e-9)
+    }
+  })
+})

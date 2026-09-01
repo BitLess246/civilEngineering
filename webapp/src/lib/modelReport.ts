@@ -30,6 +30,9 @@ export interface ReportSection {
   comprLayers?: number[]    // beam: compression bars per layer (top-first)
   hogging?: boolean         // beam: tension steel at the top
   bf?: number; hf?: number  // beam: T-flange (sagging flanged section)
+  /** beam: the flange projects on ONE side only — Table 406.3.2.1's edge row,
+   *  an L (spandrel) rather than a symmetric T. */
+  edge?: boolean
   fourFace?: boolean        // column: bars distributed on all four faces
   legs?: number             // stirrup legs: 2 perimeter + interior crossties
 }
@@ -282,7 +285,8 @@ export function buildModelReport(
         const d = s.design
         return [
           k === 0 ? `${bm.id} (${bm.role} ${sec?.name ?? ''}, ${f1(bm.L)} m)` : '',
-          `${s.label}${s.hogging ? ' (hog)' : s.bf ? ` · T bf=${Math.round(s.bf)}` : ''}`,
+          `${s.label}${s.hogging ? ' (hog)' : s.bf
+            ? ` · ${s.flangeKind ?? 'T'}${s.design.flangeAction === 'true-T' ? '(true)' : ''} bf=${Math.round(s.bf)}` : ''}`,
           f1(Math.abs(s.Mu)), f1(s.Vu), d.mode,
           `${d.bars}⌀${sec?.barDia}${d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}${s.hogging ? ' top' : ''}`,
           // A HOGGING section is in the 2h hinge zone, so the spacing it is
@@ -467,7 +471,7 @@ export function buildModelReport(
         section: {
           kind: 'beam' as const, b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, stirrupDia: sec.tieDia,
           bars: s.design.bars, layers: s.design.layers, comprLayers: s.design.comprLayers,
-          hogging: s.hogging, bf: s.bf, hf: s.hf, legs: s.design.legs,
+          hogging: s.hogging, bf: s.bf, hf: s.hf, edge: s.edge, legs: s.design.legs,
         },
       }))
     }),
