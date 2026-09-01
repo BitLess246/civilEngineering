@@ -37,6 +37,7 @@ import EarthPressure from './pages/EarthPressure'
 import BearingCapacity from './pages/BearingCapacity'
 import SoilNail from './pages/SoilNail'
 import StairDesign from './pages/StairDesign'
+import LintelDesign from './pages/LintelDesign'
 import WoodSlab from './pages/WoodSlab'
 import Micropile from './pages/Micropile'
 import SlopeStability from './pages/SlopeStability'
@@ -188,6 +189,7 @@ export default function App() {
         <Route path="/bearing-capacity" element={<BearingCapacity />} />
         <Route path="/soil-nail" element={<SoilNail />} />
         <Route path="/stair" element={<StairDesign />} />
+        <Route path="/lintel" element={<LintelDesign />} />
         <Route path="/wood-slab" element={<WoodSlab />} />
         <Route path="/micropile" element={<Micropile />} />
         <Route path="/slope" element={<SlopeStability />} />

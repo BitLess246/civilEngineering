@@ -290,6 +290,41 @@ export const SITE_TOOLS: DocTool[] = [
     ],
   },
   {
+    id: 'lintel-design',
+    name: 'Lintel Beam',
+    route: '/lintel',
+    group: 'Concrete design',
+    summary: 'RC lintel over an opening, loaded by the masonry that actually reaches it.',
+    basis: 'ACI 318-14 §6.3.2.1 effective span, §22.8.3.2 bearing; the arching triangle is a stated assumption, not a code clause.',
+    sections: [
+      {
+        id: 'lt-in',
+        title: 'Inputs',
+        controls: [
+          { kind: 'field', name: 'Clear opening', unit: 'm', what: 'Width of the hole the lintel spans.' },
+          { kind: 'field', name: 'Bearing each end', unit: 'mm', what: 'Length of lintel sitting on each jamb — it sets both the effective span and the bearing area.' },
+          { kind: 'field', name: 'Width b / Depth h', unit: 'mm', what: 'The lintel section. Its depth also enters the effective span, which is the clear opening plus h.' },
+          { kind: 'field', name: 'Wall thickness', unit: 'mm', what: 'Thickness of masonry the arching triangle is cut from.' },
+          { kind: 'field', name: 'Wall height above', unit: 'm', what: 'Height of wall standing on the lintel. Below the triangle height there is no room for the arch, and the whole rectangle bears instead.' },
+          { kind: 'field', name: 'Masonry unit wt', unit: 'kN/m³', what: 'Unit weight of the wall — around 21 for grouted CHB.' },
+          { kind: 'field', name: 'Arch base angle', unit: '°', what: '60° gives the usual equilateral triangle. A shallower arch is a heavier lintel, which is why this is an input.' },
+          { kind: 'field', name: 'Other dead line load / Live line load', unit: 'kN/m', what: 'Anything else reaching the lintel. Where an arch forms, a load applied above its apex is carried round to the jambs and is reported as excluded rather than dropped.' },
+          ...fcfy,
+        ],
+      },
+      {
+        id: 'lt-out',
+        title: 'What it reports',
+        controls: [
+          { kind: 'output', name: 'Arch forms', what: 'Whether the wall above is tall enough for the triangle to close. It decides the whole load case.' },
+          { kind: 'output', name: 'Masonry on the lintel', unit: 'kN', what: 'The triangle, or the whole rectangle when no arch can form.' },
+          { kind: 'output', name: 'Design moment Mu', unit: 'kN·m', what: 'The triangle is a TRIANGULAR load — Wℓ/6 — not the Wℓ/8 a smeared uniform load would give.' },
+          { kind: 'output', name: 'Bearing stress', unit: 'MPa', what: 'End reaction over the bearing area, against §22.8.3.2 φ(0.85 f′c).' },
+        ],
+      },
+    ],
+  },
+  {
     id: 'stair-design',
     name: 'Stair Design',
     route: '/stair',
