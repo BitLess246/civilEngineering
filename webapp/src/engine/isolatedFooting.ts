@@ -106,11 +106,27 @@ export interface ColumnOffset {
   ey: number;
   /** Resultant eccentricity including the applied moment, m. */
   e: number;
-  /** Service pressures under the trapezoid, kPa. `qMin` < 0 means uplift. */
+  /**
+   * Corner pressures, kPa — BIAXIAL, both eccentricities acting together:
+   *
+   *     q = P/A · (1 ± 6e_x/B ± 6e_y/L)
+   *
+   * Taking only the governing axis, as this first did, understates a corner
+   * column's peak by 72% on a square pad with both faces flush: the two terms
+   * add, they do not compete. `qMin` < 0 means the base lifts there.
+   */
   qMax: number;
   qMin: number;
-  /** e ≤ B/6 — the resultant stays in the kern and the whole base bears. */
+  /**
+   * Whether the resultant stays in the kern, so the whole base bears.
+   *
+   * Biaxially the kern is a RHOMBUS, not a pair of independent middle thirds:
+   * q_min ≥ 0 requires e_x/B + e_y/L ≤ 1/6, which is stricter than either axis
+   * on its own and is what a corner column actually has to satisfy.
+   */
   kernOK: boolean;
+  /** e_x/B + e_y/L, against the 1/6 the kern allows — the utilisation. */
+  kernRatio: number;
   /**
    * Moment a strap or tie beam must take at the column to bring the resultant
    * back to the pad centroid, kN·m. Zero when the pad already balances.
@@ -208,26 +224,32 @@ export function designSquareFooting(i: SquareFootingInput): SquareFootingResult 
  */
 export function columnOffset(
   i: Pick<SquareFootingInput, 'serviceLoad' | 'columnWidth' | 'columnWidthY' | 'position'>,
-  B: number, cyMm?: number,
+  B: number, cyMm?: number, L = B,
 ): ColumnOffset | null {
   const position = i.position ?? 'interior';
   if (position === 'interior') return null;
   const cx = i.columnWidth / 1000;
   const cy = (cyMm ?? i.columnWidthY ?? i.columnWidth) / 1000;
+  // The column centroid sits c/2 in from the face it is flush with, so the
+  // offset is (B − c)/2 — the exact form of the (B/2) idealisation that drops
+  // the column's own width.
   const ex = Math.max(0, (B - cx) / 2);
-  const ey = position === 'corner' ? Math.max(0, (B - cy) / 2) : 0;
+  const ey = position === 'corner' ? Math.max(0, (L - cy) / 2) : 0;
   const e = Math.hypot(ex, ey);
   const P = i.serviceLoad;
-  const A = B * B;
-  // Trapezoid on the governing axis. Beyond the kern this is the linear
-  // extrapolation, so qMin goes negative — reported rather than clipped,
-  // because a negative here IS the finding: the base lifts.
-  const eGov = Math.max(ex, ey);
-  const qMax = A > 0 ? (P / A) * (1 + (6 * eGov) / B) : 0;
-  const qMin = A > 0 ? (P / A) * (1 - (6 * eGov) / B) : 0;
+  const A = B * L;
+  // Biaxial, both terms. Beyond the kern this is the linear extrapolation, so
+  // qMin goes negative — reported rather than clipped, because the negative IS
+  // the finding: that part of the base lifts off the soil.
+  const kx = A > 0 ? (6 * ex) / B : 0;
+  const ky = A > 0 ? (6 * ey) / L : 0;
+  const qMax = A > 0 ? (P / A) * (1 + kx + ky) : 0;
+  const qMin = A > 0 ? (P / A) * (1 - kx - ky) : 0;
+  const kernRatio = B > 0 && L > 0 ? (ex / B + ey / L) / (1 / 6) : 0;
   return {
     ex, ey, e, qMax, qMin,
-    kernOK: eGov <= B / 6 + 1e-9,
+    kernOK: kernRatio <= 1 + 1e-9,
+    kernRatio,
     restraint: P * e,
   };
 }

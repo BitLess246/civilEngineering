@@ -273,7 +273,7 @@ export default function FoundationDesign() {
       // The rectangular and eccentric paths do not carry the property-line
       // geometry yet; `columnOffset` is a pure function of B and c, so it is
       // derived here rather than left absent and silently drawn centred.
-      offset: columnOffset({ serviceLoad, columnWidth: colWidth, columnWidthY: colWidthY, position: form.position }, globalThis.Math.min(r.Bx, r.By)),
+      offset: columnOffset({ serviceLoad, columnWidth: colWidth, columnWidthY: colWidthY, position: form.position }, r.Bx, colWidthY, r.By),
     }
   }, [form, dbEff, valid, rect, ecc, serviceLoad, ultimateLoad, colWidth, colWidthY])
 
@@ -357,7 +357,7 @@ export default function FoundationDesign() {
               { name: 'One-way (beam) shear — d req/prov', ratio: beamRatio, ok: view.beamOK },
               ...(view.offset ? [{
                 name: `Resultant in the kern — e/(B/6) · ${form.position} column`,
-                ratio: view.offset.e / (globalThis.Math.min(view.Bx, view.By) / 6),
+                ratio: view.offset.kernRatio,
                 ok: view.offset.kernOK,
               }] : []),
             ]}
@@ -551,13 +551,13 @@ export default function FoundationDesign() {
                 // kern check is stated as e/(B/6) — over 1.00 is uplift.
                 ...(view.offset ? [{
                   name: `Resultant in the kern — e/(B/6) · ${form.position} column`,
-                  ratio: view.offset.e / (globalThis.Math.min(view.Bx, view.By) / 6),
+                  ratio: view.offset.kernRatio,
                 }] : []),
               ]}
               footnote={view.offset && !view.offset.kernOK
                 ? `Column flush with the ${form.position === 'corner' ? 'two free edges' : 'free edge'}: the load sits `
-                  + `${view.offset.e.toFixed(2)} m off the pad centroid against a kern of `
-                  + `${(globalThis.Math.min(view.Bx, view.By) / 6).toFixed(2)} m, so part of the base lifts. `
+                  + `${view.offset.e.toFixed(2)} m off the pad centroid — e_x/B + e_y/L is `
+                  + `${(view.offset.kernRatio / 6).toFixed(3)} against the 1/6 the kern allows, so part of the base lifts. `
                   + `A pad cannot be sized out of this — the offset grows with B. Tie it to an interior footing `
                   + `with a strap taking ${f0(view.offset.restraint)} kN·m, or use a combined footing.`
                 : view.long.usedMin

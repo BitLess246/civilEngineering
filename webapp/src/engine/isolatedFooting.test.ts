@@ -143,3 +143,48 @@ describe('columnOffset — a column at a free edge', () => {
     expect(at('corner').Dc).toBeGreaterThan(at('edge').Dc)
   })
 })
+
+describe('columnOffset — biaxial, not one axis at a time', () => {
+  const base = {
+    serviceLoad: 900, ultimateLoad: 1300, columnWidth: 400, fc: 21, fy: 415,
+    qAllow: 200, gammaSoil: 18, gammaConc: 24, H: 1.5, barDia: 20, cover: 75,
+  }
+
+  it('a corner sums both eccentricity terms', () => {
+    // q = P/A(1 ± 6e_x/B ± 6e_y/L). Taking only the governing axis, as this
+    // first did, understates a square corner pad's peak by 72% — the two terms
+    // add, they do not compete.
+    const r = designSquareFooting({ ...base, position: 'corner' })
+    const o = r.offset!
+    const PA = base.serviceLoad / (r.B * r.B)
+    expect(o.qMax).toBeCloseTo(PA * (1 + (6 * o.ex) / r.B + (6 * o.ey) / r.B), 6)
+    expect(o.qMin).toBeCloseTo(PA * (1 - (6 * o.ex) / r.B - (6 * o.ey) / r.B), 6)
+    // and it is strictly worse than the single-axis reading it replaced
+    expect(o.qMax).toBeGreaterThan(PA * (1 + (6 * Math.max(o.ex, o.ey)) / r.B))
+  })
+
+  it('an edge keeps one term — ey is zero, so the two forms coincide there', () => {
+    const r = designSquareFooting({ ...base, position: 'edge' })
+    const o = r.offset!
+    expect(o.ey).toBe(0)
+    const PA = base.serviceLoad / (r.B * r.B)
+    expect(o.qMax).toBeCloseTo(PA * (1 + (6 * o.ex) / r.B), 6)
+  })
+
+  it('the kern is a RHOMBUS: e_x/B + e_y/L ≤ 1/6, not each axis alone', () => {
+    const r = designSquareFooting({ ...base, position: 'corner' })
+    const o = r.offset!
+    expect(o.kernRatio).toBeCloseTo((o.ex / r.B + o.ey / r.B) / (1 / 6), 9)
+    // a corner is worse than an edge at the same offset, which the per-axis
+    // test could not see
+    const e = designSquareFooting({ ...base, position: 'edge' }).offset!
+    expect(o.kernRatio).toBeGreaterThan(e.kernRatio)
+  })
+
+  it('kernOK is exactly the condition q_min ≥ 0', () => {
+    for (const P of [200, 900, 4000]) {
+      const r = designSquareFooting({ ...base, serviceLoad: P, ultimateLoad: P * 1.45, position: 'corner' })
+      expect(r.offset!.kernOK).toBe(r.offset!.qMin >= -1e-9)
+    }
+  })
+})
