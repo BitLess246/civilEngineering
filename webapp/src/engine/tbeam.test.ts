@@ -97,16 +97,31 @@ describe('how `a` is derived — C = T in both branches', () => {
     a <= hf ? 0.85 * fc * bf * a : 0.85 * fc * ((bf - bw) * hf + bw * a)
 
   it('equilibrium holds exactly, flange block and web block alike', () => {
+    // T is As·fs, NOT As·fy. This assertion used to say fy, which is only true
+    // while the steel yields — so it PINNED the missing stress check: the
+    // heavily reinforced rows below (bf 300 / As 12000) passed only because the
+    // engine was solving the same wrong equation the test was.
     const sec = { bw: 300, hf: 100, fc: 21, fy: 415 }
+    const d = 600
     for (const bf of [300, 600, 1200, 1800]) {          // 300 = the hogging case
       for (const As of [1500, 3000, 4500, 8000, 12000]) {
-        const cap = tBeamCapacity(sec, bf, 600, 620, As)
-        const T = As * sec.fy
-        expect(compression(bf, sec.bw, sec.hf, sec.fc, cap.a)).toBeCloseTo(T, 6)
+        const cap = tBeamCapacity(sec, bf, d, 620, As)
+        expect(compression(bf, sec.bw, sec.hf, sec.fc, cap.a)).toBeCloseTo(As * cap.fs, 6)
+        // …and fs is itself on the strain diagram, capped at yield.
+        expect(cap.fs).toBeCloseTo(Math.min(sec.fy, (600 * (d - cap.c)) / cap.c), 9)
+        expect(cap.fsYields).toBe(cap.fs >= sec.fy - 1e-9)
         expect(cap.tBehavior).toBe(cap.a > sec.hf)
         expect(cap.c * beta1(sec.fc)).toBeCloseTo(cap.a, 9)   // a = β1·c
+        expect(cap.c).toBeLessThan(d)                         // steel stays in tension
       }
     }
+  })
+
+  it('covers both sides of yield — the sweep is not vacuous', () => {
+    const sec = { bw: 300, hf: 100, fc: 21, fy: 415 }
+    const at = (bf: number, As: number) => tBeamCapacity(sec, bf, 600, 620, As).fsYields
+    expect(at(1800, 1500)).toBe(true)      // lightly reinforced: yields
+    expect(at(300, 12000)).toBe(false)     // narrow web, huge As: does not
   })
 
   it('β1 is the ACI Table 22.2.2.4.3 step, not the sloped row clamped', () => {
@@ -360,5 +375,82 @@ describe('the block is the primary unknown — a first, steel second', () => {
     const r = designTBeam({ ...base, AsGiven: 2500 })
     expect(r.aReq).toBe(0)
     expect(r.a).toBeGreaterThan(0)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE WORKED LECTURE — one section, two steel areas, both sides of yield.
+//
+// bf 800 · hf 100 · bw 300 · d 435 · f'c 28 · fy 345, NSCP 2015. The pair is
+// the point: MORE steel gives LESS design strength, because the section goes
+// compression-controlled and φ falls 0.90 → 0.65. Any engine that gets both
+// rows right has to solve for fs rather than assume it.
+//
+//   As = 6000  steel yields          φ = 0.90   Mu = 708.048 kN·m
+//   As = 9000  fs = 322.922 < fy     φ = 0.65   Mu = 648.999 kN·m
+//
+// Every intermediate below is the lecture's own printed value, not a
+// back-computed one — Aconc, a, c, fs and ȳ are each written on the board.
+// ─────────────────────────────────────────────────────────────────────────
+describe('tBeamCapacity — the worked T-beam analysis', () => {
+  const sec = { bw: 300, hf: 100, fc: 28, fy: 345 }
+  const bf = 800, d = 435, dt = 435
+  const at = (As: number) => tBeamCapacity(sec, bf, d, dt, As)
+
+  it('As = 6000: the steel yields and φ = 0.90 → Mu = 708.048 kN·m', () => {
+    const r = at(6000)
+    expect(r.fsYields).toBe(true)
+    expect(r.fs).toBeCloseTo(345, 9)
+    expect(r.Aconc).toBeCloseTo(86974.79, 2)
+    expect(r.a).toBeCloseTo(123.249, 3)
+    expect(r.c).toBeCloseTo(144.999, 3)
+    expect(r.yBar).toBeCloseTo(54.942, 3)
+    expect(r.phi).toBeCloseTo(0.90, 9)
+    expect(r.Mn).toBeCloseTo(786.720, 3)
+    expect(r.phiMn).toBeCloseTo(708.048, 3)
+    expect(r.trial).toBeUndefined()                  // no correction was needed
+  })
+
+  it('As = 9000: the steel does NOT yield → fs 322.922, φ = 0.65, Mu = 648.999', () => {
+    const r = at(9000)
+    expect(r.fsYields).toBe(false)
+    // the assumption the lecture writes down and then crosses out
+    expect(r.trial!.a).toBeCloseTo(268.207, 3)
+    expect(r.trial!.c).toBeCloseTo(315.538, 3)
+    expect(r.trial!.fs).toBeCloseTo(227.159, 3)
+    // …and what actually solves equilibrium
+    expect(r.c).toBeCloseTo(282.797, 3)
+    expect(r.a).toBeCloseTo(240.378, 3)
+    expect(r.fs).toBeCloseTo(322.922, 3)
+    expect(r.Aconc).toBeCloseTo(122113.354, 2)
+    expect(r.yBar).toBeCloseTo(91.450, 3)
+    expect(r.Mn).toBeCloseTo(998.460, 3)
+    expect(r.phi).toBeCloseTo(0.65, 9)
+    expect(r.phiMn).toBeCloseTo(648.999, 3)
+  })
+
+  it('the correction is what makes it right — the assumption alone is 3.6% HIGH', () => {
+    // What the engine returned before the stress check existed: the trial block
+    // carried straight through to Mn. Reconstructed here from the trial values
+    // so the size and the SIGN of the error stay on the record.
+    const r = at(9000)
+    const Cover = 0.85 * sec.fc * (bf - sec.bw) * sec.hf
+    const T = 9000 * sec.fy
+    const MnAssumed = (Cover * (d - sec.hf / 2) + (T - Cover) * (d - r.trial!.a / 2)) / 1e6
+    expect(0.65 * MnAssumed).toBeCloseTo(672.338, 3)
+    expect(0.65 * MnAssumed).toBeGreaterThan(r.phiMn)
+    expect((0.65 * MnAssumed) / r.phiMn - 1).toBeCloseTo(0.036, 3)
+  })
+
+  it('more steel, LESS design strength — the pair the lecture is built on', () => {
+    expect(at(9000).Mn).toBeGreaterThan(at(6000).Mn)      // nominal still rises
+    expect(at(9000).phiMn).toBeLessThan(at(6000).phiMn)   // but φ falls further
+  })
+
+  it('the two routes to Mn agree — two couples, and T(d − ȳ)', () => {
+    for (const As of [3000, 6000, 9000, 12000]) {
+      const r = at(As)
+      expect((As * r.fs * (d - r.yBar)) / 1e6).toBeCloseTo(r.Mn, 6)
+    }
   })
 })

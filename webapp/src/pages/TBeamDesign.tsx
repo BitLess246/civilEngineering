@@ -19,12 +19,18 @@ export default function TBeamDesign() {
   const [cover, setCover] = useState(40); const [stirrupDia, setStirrupDia] = useState(10); const [barDia, setBarDia] = useState(25)
   const [fc, setFc] = useState(21); const [fy, setFy] = useState(415)
   const [Mu, setMu] = useState(400)
+  // ANALYSE, not only design. The engine has always taken a given As; the page
+  // never offered it, so the one case where the steel may not reach fy — a
+  // section handed to you, not one you sized — could not be entered at all.
+  const [mode, setMode] = useState<'design' | 'analyze'>('design')
+  const [AsGiven, setAsGiven] = useState(3000)
   const [lh, setLh] = useState<LetterheadState>(() => initialLetterhead(''))
 
   const inp = useMemo(() => ({
     kind, bw, h, hf, bfGiven: bfGiven > 0 ? bfGiven : undefined, ln, sw,
     cover, stirrupDia, barDia, fc, fy, Mu,
-  }), [kind, bw, h, hf, bfGiven, ln, sw, cover, stirrupDia, barDia, fc, fy, Mu])
+    ...(mode === 'analyze' && AsGiven > 0 ? { AsGiven } : {}),
+  }), [kind, bw, h, hf, bfGiven, ln, sw, cover, stirrupDia, barDia, fc, fy, Mu, mode, AsGiven])
   const r = useMemo(() => { try { return designTBeam(inp) } catch { return null } }, [inp])
   const steps = useMemo(() => (r ? buildTBeamSolution(inp, r) : []), [inp, r])
   const badges = ['ACI 318-14', 'NSCP 2015']
@@ -32,7 +38,9 @@ export default function TBeamDesign() {
   // — the bar count beside the area REQUIRED, which reads as the area those bars
   // supply and is not. The tension-controlled ratio has the same problem: the cap
   // applies to the steel that gets built.
-  const AsProv = r ? r.bars * (Math.PI / 4) * barDia ** 2 : 0
+  const AsProv = mode === 'analyze' && AsGiven > 0
+    ? AsGiven
+    : r ? r.bars * (Math.PI / 4) * barDia ** 2 : 0
 
   return (
     <div className="min-h-screen">
@@ -57,6 +65,8 @@ export default function TBeamDesign() {
             ['Type', kind], ['Web bw × h', `${bw} × ${h} mm`], ['Flange bf × hf', `${f0(r.bf)} × ${hf} mm`],
             ["f'c / fy", `${fc} / ${fy} MPa`], ['Mu', `${Mu} kN·m`], ['d / dt', `${f1(r.d)} / ${f1(r.dt)} mm`],
             ['As req / prov', `${f0(r.As)} / ${f0(AsProv)} mm²`],
+            ['fs', `${f1(r.fs)} MPa ${r.fsYields ? '(yields)' : `< fy = ${f0(fy)} — over-reinforced`}`],
+            ['Mn / φMn', `${f1(r.Mn)} / ${f1(r.phiMn)} kN·m`],
             ['a req / prov / max', `${f1(r.aReq)} / ${f1(r.a)} / ${f1(r.aMax)} mm`],
           ]}
           steps={steps}
@@ -90,18 +100,35 @@ export default function TBeamDesign() {
               <Num label="Bar ⌀" unit="mm" value={barDia} onChange={setBarDia} />
             </Card>
             <Card title="Demand" hint="+ sagging / − hogging">
+              <Pick label="Mode" value={mode} onChange={(v) => setMode(v as 'design' | 'analyze')}
+                options={[['design', 'Design — size As from Mu'], ['analyze', 'Analyse — φMn of a given As']]} />
               <Num label="Mu" unit="kN·m" value={Mu} onChange={setMu} />
+              {mode === 'analyze' && <Num label="As provided" unit="mm²" value={AsGiven} onChange={setAsGiven} />}
             </Card>
           </div>
           <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
             {r && (
               <VerdictPanel ok={r.ok} headline={r.ok ? 'DESIGN OK' : 'CHECK FAILED'}
                 governing={`${r.tBehavior ? 'true T (a > hf)' : Mu < 0 ? 'web rectangle (hogging)' : 'rectangular (a ≤ hf)'} · bf ${f0(r.bf)} mm`}
-                stats={[
-                  { label: 'Steel', value: `${r.bars}-⌀${barDia}`, unit: `mm (${f0(AsProv)} mm² prov · ${f0(r.As)} req)` },
+                // Each stat gets ~150 px, so the value carries the number and
+                // the unit carries a SHORT qualifier — the long parenthetical
+                // that used to trail "Steel" (and called a bar schedule "mm")
+                // simply did not fit, and pushed the panel off its own card.
+                stats={mode === 'analyze' ? [
+                  { label: 'As', value: f0(AsProv), unit: 'mm² given' },
                   { label: 'φMn', value: f1(r.phiMn), unit: 'kN·m' },
-                  { label: 'Block a', value: f1(r.aReq), unit: `mm req · ${f1(r.a)} at ${r.bars} bars` },
+                  { label: 'Block a', value: f1(r.a), unit: 'mm' },
                   { label: 'εt / φ', value: `${r.et.toFixed(4)} / ${r.phi.toFixed(2)}` },
+                  // The stress the steel actually reaches. An over-reinforced
+                  // section settles below fy, and its capacity is smaller than
+                  // assuming yield would say — see `tBeamCapacity`.
+                  { label: 'fs', value: f1(r.fs), unit: r.fsYields ? 'MPa — yields' : 'MPa < fy' },
+                ] : [
+                  { label: 'Steel', value: `${r.bars}-⌀${barDia}`, unit: `${f0(AsProv)} mm²` },
+                  { label: 'φMn', value: f1(r.phiMn), unit: 'kN·m' },
+                  { label: 'Block a req/prov', value: `${f1(r.aReq)} / ${f1(r.a)}`, unit: 'mm' },
+                  { label: 'εt / φ', value: `${r.et.toFixed(4)} / ${r.phi.toFixed(2)}` },
+                  { label: 'fs', value: f1(r.fs), unit: r.fsYields ? 'MPa — yields' : 'MPa < fy' },
                 ]}
                 checks={[
                   { name: 'Flexure Mu/φMn', ratio: r.phiMn > 0 ? Math.abs(Mu) / r.phiMn : 99 },

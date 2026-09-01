@@ -60,11 +60,25 @@ export interface TBeamResult {
   /** Passes taken by the layout ↔ effective-depth loop (see `designTBeam`). */
   layerIters: number
   phiMn: number                       // capacity at the FINAL As, kN·m
+  /** Nominal strength before φ, kN·m — φMn/φ, stated so the worked solution
+   *  can show the two separately. */
+  Mn: number
+  /** Steel stress at equilibrium, MPa, and whether it reached fy. An
+   *  over-reinforced section settles below yield and its capacity has to be
+   *  solved for — see `tBeamCapacity`. */
+  fs: number; fsYields: boolean
+  /** Compression block: its area, and its centroid below the top fibre. The
+   *  lever arm is d − ȳ. */
+  Aconc: number; yBar: number
+  /** What assuming yield would have given, when it turned out not to hold. */
+  fsTrial?: { a: number; c: number; fs: number }
   ok: boolean
   notes: string[]
 }
 
 const ES = 200000
+/** §22.2.2.1 — the concrete strain at the extreme compression fibre. */
+const ECU = 0.003
 const LAYER_CLEAR = 25       // §425.2.2 clear distance between bar layers, mm
 
 // β1 comes from `flexure` — the ACI Table 22.2.2.4.3 form, which is a FLAT 0.65
@@ -114,28 +128,116 @@ export function effectiveFlange(i: TBeamInput): { bf: number; govern: string; is
   return { bf, govern: `overhang = ${govern} (Table 6.3.2.1)`, isolatedOK: true }
 }
 
-/** φMn of a T section with steel As (positive moment). Returns a possibly
- *  web-penetrating stress block from force equilibrium. */
+/** The positive root of A·c² + B·c − D = 0 (A > 0, D > 0), which is the only
+ *  one a neutral axis can be. */
+const posRoot = (A: number, B: number, D: number) =>
+  (-B + Math.sqrt(B * B + 4 * A * D)) / (2 * A)
+
+export interface TBeamCapacity {
+  a: number; c: number; et: number; phi: number; phiMn: number; tBehavior: boolean
+  /** Stress in the tension steel at equilibrium, MPa — `fy` when it yields. */
+  fs: number
+  /** Did the steel reach fy? False ⇒ the section is over-reinforced and the
+   *  capacity was solved with fs < fy (see `tBeamCapacity`). */
+  fsYields: boolean
+  /** Centroid of the COMPRESSION AREA below the top fibre, mm — Varignon over
+   *  the flange rectangle and the web strip. The lever arm is d − ȳ. */
+  yBar: number
+  /** Area of the compression block, mm² — bf·a, or bf·hf + (a − hf)bw. */
+  Aconc: number
+  /** Nominal strength before φ, kN·m. */
+  Mn: number
+  /** The block the YIELD assumption gave, present only when that assumption
+   *  failed — the line the worked solution writes and then crosses out. */
+  trial?: { a: number; c: number; fs: number }
+}
+
+/**
+ * φMn of a T section with steel As.
+ *
+ * THE STEEL DOES NOT ALWAYS YIELD, and that is the whole of this function.
+ * Equilibrium is C(c) = T(c) with
+ *
+ *     C(c) = 0.85f'c · A_block(a = β1 c)        (rises with c)
+ *     T(c) = As · fs,   fs = min(fy, Es·εcu·(d − c)/c)   (falls with c)
+ *
+ * so there is exactly one root. Assuming fs = fy and stopping — which is what
+ * this did — solves a DIFFERENT equation whenever the section is
+ * over-reinforced, and hands back a c too deep and an Mn too large. On the
+ * worked section below (bf 800, hf 100, bw 300, d 435, f'c 28, fy 345) at
+ * As = 9000 mm² it returned c = 315.5 mm and φMn = 672.3 kN·m against a true
+ * 282.8 mm and 649.0 — 3.6% UNCONSERVATIVE, in the direction that matters.
+ *
+ * When the yield assumption fails, fs = Es·εcu(d − c)/c goes back into
+ * equilibrium and the result is a quadratic in c, exact in one step — no
+ * iteration:
+ *
+ *   block inside the flange:  0.85f'c·bf·β1·c² + K·c − K·d = 0
+ *   block into the web:       0.85f'c·β1·bw·c² + [0.85f'c·hf(bf − bw) + K]·c − K·d = 0
+ *                             with K = Es·εcu·As
+ *
+ * Both have A > 0 and D = K·d > 0, so the positive root always exists and is
+ * strictly less than d — the steel is always in tension.
+ *
+ * `d` is the depth to the steel CENTROID, where the resultant T acts, so fs is
+ * measured there. `dt` is the extreme layer, where §21.2.2 measures εt for φ.
+ * They differ only for a stacked cage.
+ */
 export function tBeamCapacity(
   i: Pick<TBeamInput, 'bw' | 'hf' | 'fc' | 'fy'>, bf: number, d: number, dt: number, As: number,
-): { a: number; c: number; et: number; phi: number; phiMn: number; tBehavior: boolean } {
-  const T = As * i.fy
-  const Cflange = 0.85 * i.fc * bf * i.hf
-  let a: number, Mn: number
-  if (T <= Cflange) {
-    a = T / (0.85 * i.fc * bf)
-    Mn = T * (d - a / 2)
-  } else {
-    // block into the web: overhangs full at hf, web block depth a
-    const Cover = 0.85 * i.fc * (bf - i.bw) * i.hf
-    a = (T - Cover) / (0.85 * i.fc * i.bw)
-    Mn = Cover * (d - i.hf / 2) + (T - Cover) * (d - a / 2)
+): TBeamCapacity {
+  const b1 = beta1(i.fc)
+  const k = 0.85 * i.fc
+  const Cover = k * (bf - i.bw) * i.hf      // the overhangs, fully stressed
+  const Cflange = k * bf * i.hf             // the whole flange, fully stressed
+
+  /** Block depth that carries a compressive force T, mm. */
+  const depthFor = (T: number) => T <= Cflange
+    ? T / (k * bf)
+    : i.hf + (T - Cflange) / (k * i.bw)
+
+  // ── steps 2–4: assume the steel yields, and find the block that balances it
+  let fs = i.fy
+  let a = depthFor(As * i.fy)
+  let c = a / b1
+
+  // ── step 5: the stress check the assumption has to survive
+  const fsElastic = (cc: number) => (ES * ECU * (d - cc)) / cc
+  const fsYields = fsElastic(c) >= i.fy
+  const trial = { a, c, fs: fsElastic(c) }
+  if (!fsYields) {
+    // ── step 6: it did not, so re-solve with fs on the strain diagram.
+    const K = ES * ECU * As
+    // Try the flange-only branch; if its own block leaves the flange it was the
+    // wrong branch, and the web one is the answer. C(c) is monotone, so no
+    // third possibility exists.
+    c = posRoot(k * bf * b1, K, K * d)
+    if (b1 * c > i.hf) c = posRoot(k * b1 * i.bw, Cover + K, K * d)
+    a = b1 * c
+    fs = fsElastic(c)
   }
-  const c = a / beta1(i.fc)
-  const et = (0.003 * (dt - c)) / c
+
+  // Mn as the two couples the block really is: the overhangs at full stress
+  // over hf, and the web strip. Identical to T(d − ȳ) by construction — the
+  // test asserts they agree, which is what makes ȳ safe to print.
+  const T = As * fs
+  const Mn = a <= i.hf
+    ? T * (d - a / 2)
+    : Cover * (d - i.hf / 2) + (T - Cover) * (d - a / 2)
+
+  const Aconc = a <= i.hf ? bf * a : bf * i.hf + (a - i.hf) * i.bw
+  const yBar = a <= i.hf
+    ? a / 2
+    : (bf * i.hf * (i.hf / 2) + (a - i.hf) * i.bw * (i.hf + (a - i.hf) / 2)) / Aconc
+
+  const et = (ECU * (dt - c)) / c
   const ety = i.fy / ES
   const phi = et >= 0.005 ? 0.90 : et <= ety ? 0.65 : 0.65 + (0.25 * (et - ety)) / (0.005 - ety)
-  return { a, c, et, phi, phiMn: (phi * Mn) / 1e6, tBehavior: a > i.hf }
+  return {
+    a, c, et, phi, phiMn: (phi * Mn) / 1e6, tBehavior: a > i.hf,
+    fs, fsYields, yBar, Aconc, Mn: Mn / 1e6,
+    ...(fsYields ? {} : { trial }),
+  }
 }
 
 export function designTBeam(i: TBeamInput): TBeamResult {
@@ -313,6 +415,9 @@ export function designTBeam(i: TBeamInput): TBeamResult {
     a: cap.a, c: cap.c, et: cap.et, phi: cap.phi, aReq, aMax: aTC,
     Asf, Asw, As, AsMin, minGoverns, AsMax,
     bars, layers, sClear, sClearMin, layerIters,
-    phiMn: cap.phiMn, ok, notes,
+    phiMn: cap.phiMn, Mn: cap.Mn,
+    fs: cap.fs, fsYields: cap.fsYields, Aconc: cap.Aconc, yBar: cap.yBar,
+    ...(cap.trial ? { fsTrial: cap.trial } : {}),
+    ok, notes,
   }
 }

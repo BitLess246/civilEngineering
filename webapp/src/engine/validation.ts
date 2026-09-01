@@ -29,6 +29,7 @@ import { generateGridModel } from './modelBuilder'
 import { solveFrame3D, rectJ, type F3Node, type F3Member, type F3Support } from './frame3d'
 import { solveActiveSet, type AxialMode } from './axialOnly'
 import { memberServiceDeflection, tSectionGross } from './memberDeflection'
+import { tBeamCapacity } from './tbeam'
 import { arcLengthFrame } from './arcLength'
 import { biaxialProbe, newBiaxialState } from './biaxialHinge'
 import { nonlinearFrame3D, type NL3Input } from './nonlinearFrame3d'
@@ -325,6 +326,43 @@ const tBeamGross = (() => {
   const Itop = (bf * hf ** 3) / 12 + Af * yf ** 2 + (b * hw ** 3) / 12 + Aw * yw ** 2
   const yBar = (Af * yf + Aw * yw) / A
   return { manual: (Itop - A * yBar ** 2) / 1e6, software: tSectionGross({ b, h, bf, hf }).Ig / 1e6 }
+})()
+
+// ── 12c. Over-reinforced T-beam — the steel that does not reach fy ──────────
+// The reference is a FIXED-POINT iteration on c, which is a genuinely different
+// method from the engine's closed-form quadratic: guess c, read fs off the
+// strain diagram, find the block that force balances it, read the new c. It
+// converges to the same neutral axis only if both are solving the same
+// equilibrium — and the published lecture answer (φMn = 648.999 kN·m at
+// As = 9000, bf 800 · hf 100 · bw 300 · d 435, f'c 28, fy 345) is the third,
+// external, agreement.
+const tBeamNoYield = (() => {
+  const bf = 800, hf = 100, bw = 300, d = 435, fc = 28, fy = 345, As = 9000
+  const k = 0.85 * fc, b1 = 0.85
+  // C(c) rises with c and T(c) falls, so the residual is strictly increasing
+  // and BISECTION cannot miss the root — no starting guess, no convergence
+  // question. (A fixed-point iteration on c = a(T(c))/β1 was tried first and
+  // orbits: the map's slope is steeply negative, so it never settles.)
+  const resid = (c: number) => {
+    const a = b1 * c
+    const Cc = a <= hf ? k * bf * a : k * (bf * hf + (a - hf) * bw)
+    return Cc - As * Math.min(fy, (600 * (d - c)) / c)
+  }
+  let lo = 1e-6, hi = d
+  for (let n = 0; n < 200; n++) {
+    const mid = (lo + hi) / 2
+    if (resid(mid) < 0) lo = mid; else hi = mid
+  }
+  const c = (lo + hi) / 2
+  const fs = Math.min(fy, (600 * (d - c)) / c)
+  const a = b1 * c
+  const Aconc = bf * hf + (a - hf) * bw
+  const yBar = (bf * hf * (hf / 2) + (a - hf) * bw * (hf + (a - hf) / 2)) / Aconc
+  const phi = 0.65                                    // εt < εty: compression-controlled
+  return {
+    manual: (phi * As * fs * (d - yBar)) / 1e6,
+    software: tBeamCapacity({ bw, hf, fc, fy }, bf, d, d, As).phiMn,
+  }
 })()
 
 // ── 13c-bis. Biaxial hinge — the return map must land on the published surface
@@ -849,6 +887,12 @@ export const VALIDATION_CASES: ValidationCase[] = [
     id: 'consolidation-tv90', category: 'Geotech', title: 'Consolidation time factor at U = 90%',
     reference: 'Terzaghi', formula: 'Tv = 1.781 − 0.933·log₁₀(100 − U%)',
     manual: tv90.manual, software: tv90.software, unit: '—', tol: 1e-9,
+  },
+  {
+    id: 'tbeam-no-yield', category: 'RC', title: 'Over-reinforced T-beam — φMn when fs < fy',
+    reference: 'NSCP 2015 §422.2 (worked lecture: 648.999 kN·m)',
+    formula: 'C(c) = T(c), fs = min(fy, 600(d−c)/c); bf 800 · hf 100 · bw 300 · d 435, As 9000',
+    manual: tBeamNoYield.manual, software: tBeamNoYield.software, unit: 'kN·m', tol: 1e-6,
   },
   {
     id: 'tbeam-gross-inertia', category: 'RC', title: 'T-section gross inertia — composite section',
