@@ -223,6 +223,49 @@ export type ModelLoad =
 
 export interface Storey { id: string; name: string; elevation: number /* m */ }
 
+/**
+ * A straight stair flight bearing on two members at different levels.
+ *
+ * MODELLED AS LOAD, NOT AS STIFFNESS. The flight is designed by `engine/stair`
+ * and its reactions are put onto the two members it bears on — the same route
+ * a `Wall` takes for its self weight. It is NOT meshed into the frame, so it
+ * contributes no stiffness. That is the usual idealisation and it is
+ * conservative for the frame; it is NOT conservative for the stair itself,
+ * because a real flight is an inclined strut that attracts storey shear and can
+ * shorten the columns it frames into. Meshing it is a separate piece of work.
+ *
+ * THE GEOMETRY IS DERIVED, NOT DECLARED. Rise and run come from where the two
+ * supports actually are, so the only thing to choose is how many risers to
+ * climb it in; R = rise/risers and G = run/risers then close by construction.
+ * Equal risers are not optional in any stair, and a model that let R, G and the
+ * support levels be stated independently would let them disagree.
+ *
+ * `low` and `high` are member ids; the flight bears on the TOP of each.
+ * JSON-serialisable, like everything else in this file.
+ */
+export interface Stair {
+  id: string
+  /** The member the flight starts from — the lower of the two. */
+  low: string
+  /** The member it lands on. */
+  high: string
+  /** Plan width of the flight, m. */
+  width: number
+  /** Where the flight sits along the low member's axis: the offset of its
+   *  centre from that member's midpoint, m. 0 centres it. */
+  offset?: number
+  /** Waist thickness, mm — measured NORMAL to the soffit, which is what makes
+   *  the 1/cosθ slope factor appear in the load. */
+  waist: number
+  /** How many risers climb the rise. R = rise/risers, so they are equal. */
+  risers: number
+  /** Finishes (dead) and live load on the flight, kPa of PLAN area. */
+  finishes: number
+  live: number
+  /** End condition for the flight's own flexural design. */
+  support: 'simple' | 'one-end' | 'both-ends'
+}
+
 export interface StructuralModel {
   version: 1
   name: string
@@ -231,6 +274,8 @@ export interface StructuralModel {
   members: Member[]
   plates: Plate[]
   walls?: Wall[]
+  /** Stair flights bearing on the frame. Absent means none. */
+  stairs?: Stair[]
   supports: NodeSupport[]
   loads: ModelLoad[]
   storeys: Storey[]

@@ -10,6 +10,7 @@ import type { StructuralModel, RectSection, Node, Member, Plate, NodeSupport, Me
 import { sdlTotal } from './deadLoads'
 import { shapeByName } from './aiscSections'
 import { woodRefOf, woodUnitWeight } from './woodDesign'
+import { allStairFrameLoads } from './stairPlacement'
 
 /** Timber self-weight line load basis (kN/m³) from the section's material (γ ≈
  *  G·9.81); fallback G = 0.5 (~4.9 kN/m³) when the material is unset/unknown. */
@@ -181,7 +182,12 @@ export function buildGravityLoads(model: StructuralModel, sdl: number, ll: numbe
         ...(slabLl > 0 ? [{ kind: 'area' as const, plate: p.id, q: slabLl, cat: 'L' as const }] : []),
       ]
     })
-  return [...memberSW, ...wallSW, ...plateLoads, ...kept]
+  // Stair flights: designed by `engine/stair`, put onto the frame as the
+  // reactions of the two members they bear on. Generated here rather than
+  // stored, so a flight that moves or changes cannot leave a stale load behind
+  // — `kept` has already dropped every D and L load before this runs.
+  const stairSW = allStairFrameLoads(model, gammaC)
+  return [...memberSW, ...wallSW, ...plateLoads, ...stairSW, ...kept]
 }
 
 /**
