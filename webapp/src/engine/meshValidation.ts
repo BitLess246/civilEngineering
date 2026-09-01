@@ -23,6 +23,7 @@ import type { StructuralModel } from './model'
 import { RHO_MIN, RHO_MAX } from './columnDesign'
 import { barContinuityGroups } from './modelBuilder'
 import { WOOD_SPECIES } from './woodDesign'
+import { placeStair, RISER_RANGE, GOING_RANGE, PACE_RANGE } from './stairPlacement'
 
 export type MeshSeverity = 'error' | 'warning'
 export interface MeshIssue {
@@ -305,6 +306,83 @@ export function validateMesh(model: StructuralModel): MeshIssue[] {
         })
     }
   }
+  // ── Stairs (L1 rule for StructuralModel.stairs) ─────────────────────────
+  //
+  // A flight's geometry is DERIVED from its two supports, so the errors here
+  // are all "this cannot be placed at all"; anything that places is a real
+  // stair, and whether it is a comfortable one is a warning. That split is the
+  // point: a broken model must stop the run, an unusual stair must not.
+  for (const st of model.stairs ?? []) {
+    const refs = [st.id, st.low, st.high]
+    const miss = [st.low, st.high].filter((id) => !model.members.some((m) => m.id === id))
+    if (miss.length) {
+      issues.push({ severity: 'error', code: 'STAIR_MISSING_MEMBER', refs,
+        message: `stair ${st.id} bears on ${miss.join(' and ')}, which ${miss.length > 1 ? 'are' : 'is'} not in the model` })
+      continue
+    }
+    if (!(st.risers >= 2)) {
+      issues.push({ severity: 'error', code: 'STAIR_RISERS', refs,
+        message: `stair ${st.id}: ${st.risers} risers — a flight needs at least 2` })
+      continue
+    }
+    if (!(st.width > 0)) {
+      issues.push({ severity: 'error', code: 'STAIR_WIDTH', refs,
+        message: `stair ${st.id}: width ${st.width} m` })
+      continue
+    }
+    const p = placeStair(model, st)
+    if (!p) {
+      // placeStair returns null for exactly three reasons, and saying which
+      // saves the modeller from guessing.
+      const line = (id: string) => {
+        const m = model.members.find((x) => x.id === id)!
+        const a = nodeById.get(m.i), b = nodeById.get(m.j)
+        return a && b ? { a, b } : null
+      }
+      const lo = line(st.low), hi = line(st.high)
+      const vertical = [lo, hi].some((l) => l && Math.hypot(l.b.x - l.a.x, l.b.z - l.a.z) < 1e-9)
+      const why = vertical
+        ? 'one of its supports is vertical in plan — a column cannot carry a flight the way a beam does'
+        : 'the two supports are at the same level, or the higher one is named as the lower'
+      issues.push({ severity: 'error', code: 'STAIR_UNPLACEABLE', refs,
+        message: `stair ${st.id} cannot be placed: ${why}` })
+      continue
+    }
+    // Supports that are not parallel in plan make the run ambiguous: the
+    // flight is set out square to the LOW one, so a skewed high support means
+    // the landing edge is not where the drawing says.
+    const dir = (id: string) => {
+      const m = model.members.find((x) => x.id === id)!
+      const a = nodeById.get(m.i)!, b = nodeById.get(m.j)!
+      const L = Math.hypot(b.x - a.x, b.z - a.z)
+      return [(b.x - a.x) / L, (b.z - a.z) / L] as const
+    }
+    const [ux, uz] = dir(st.low), [vx, vz] = dir(st.high)
+    const par = Math.abs(ux * vx + uz * vz)
+    if (par < Math.cos((5 * Math.PI) / 180)) {
+      issues.push({ severity: 'error', code: 'STAIR_SUPPORTS_SKEW', refs,
+        message: `stair ${st.id}: its two supports are ${(Math.acos(Math.min(1, par)) * 180 / Math.PI).toFixed(0)}° out of parallel — the run it is set out square to the lower one does not reach the upper one` })
+    }
+    // Usability. Ranges, not clauses: these are the proportions ordinary
+    // stairs are built in, and 2R + G is Blondel's pace rule of thumb.
+    if (!p.usable.riserOK) {
+      issues.push({ severity: 'warning', code: 'STAIR_RISER_UNUSUAL', refs,
+        message: `stair ${st.id}: ${p.R.toFixed(0)} mm risers (rise ${p.rise.toFixed(3)} m over ${st.risers}) — outside the ${RISER_RANGE[0]}–${RISER_RANGE[1]} mm stairs are usually built in; change the riser count` })
+    }
+    if (!p.usable.goingOK) {
+      issues.push({ severity: 'warning', code: 'STAIR_GOING_UNUSUAL', refs,
+        message: `stair ${st.id}: ${p.G.toFixed(0)} mm going (run ${p.run.toFixed(3)} m over ${st.risers}) — outside the ${GOING_RANGE[0]}–${GOING_RANGE[1]} mm stairs are usually built in; move the supports or change the riser count` })
+    }
+    if (!p.usable.paceOK) {
+      issues.push({ severity: 'warning', code: 'STAIR_PACE', refs,
+        message: `stair ${st.id}: 2R + G = ${p.usable.pace.toFixed(0)} mm, outside the ${PACE_RANGE[0]}–${PACE_RANGE[1]} mm pace rule (a comfort rule of thumb, not a code clause)` })
+    }
+    if (p.waist <= 0) {
+      issues.push({ severity: 'error', code: 'STAIR_WAIST', refs,
+        message: `stair ${st.id}: waist ${p.waist} mm` })
+    }
+  }
+
   return issues
 }
 
