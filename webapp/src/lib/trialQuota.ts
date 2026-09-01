@@ -35,6 +35,7 @@ export const GUEST_TRIAL_ROUTES: readonly string[] = [
   // RC members and details
   '/beam-analysis', '/beam-design', '/tbeam-design', '/column-design', '/slab-design',
   '/prestressed-beam', '/torsion', '/dev-length', '/punching-shear', '/stair', '/water-tank',
+  '/lintel',
   // foundations
   '/foundation', '/combined', '/pile-cap', '/retaining-wall',
   // steel, timber and connections

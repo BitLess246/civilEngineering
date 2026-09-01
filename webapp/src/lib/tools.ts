@@ -22,6 +22,7 @@ export const TOOL_CATEGORIES: ToolCategory[] = [
       { to: '/column-design', name: 'Column Design',      sub: 'RC column · biaxial',       group: 'Concrete' },
       { to: '/slab-design',   name: 'Slab Design',        sub: 'Two-way DDM · ACI 318',     group: 'Concrete' },
       { to: '/stair',         name: 'Stair Design',       sub: 'RC waist slab · NSCP',      group: 'Concrete' },
+      { to: '/lintel',        name: 'Lintel Beam',        sub: 'opening · masonry arching',  group: 'Concrete' },
       { to: '/water-tank',    name: 'Water Tank',         sub: 'Circular · IS 3370/ACI 350', group: 'Concrete' },
       { to: '/torsion',       name: 'Torsion Design',     sub: 'RC torsion · ACI 318-14',   group: 'Concrete' },
       { to: '/dev-length',    name: 'Dev & Splice',       sub: 'ACI 318-14 §25.4–25.5',     group: 'Concrete' },
