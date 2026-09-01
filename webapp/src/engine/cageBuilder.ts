@@ -27,6 +27,8 @@ import { buildColumnCage, perimeterBars } from './columnCage'
 import { calcDevLength } from './devLength'
 import { buildFootingCage } from './footingCage'
 import { buildSlabCage, type SlabCageDir } from './slabCage'
+import { buildStairCage } from './stairCage'
+import { placeStair } from './stairPlacement'
 import { spliceCage } from './barSplice'
 import { STOCK_BAR_LENGTH } from './rebarModel'
 import type { RebarCage } from './rebarModel'
@@ -474,6 +476,24 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
         xLo: edgeShared(x0, z0, x0, z1), xHi: edgeShared(x1, z0, x1, z1),
         zLo: edgeShared(x0, z0, x1, z0), zHi: edgeShared(x0, z1, x1, z1),
       },
+    }))
+  }
+
+  // ── stairs: the steel in each flight ────────────────────────────────────
+  //
+  // A flight is a one-way slab spanning up the slope, and its cage comes from
+  // the same `designStair` row the schedule prints — so the bars drawn are the
+  // bars designed. Placement is `placeStair`'s, the same geometry the loads
+  // were built on.
+  for (const st of design.stairs) {
+    const model_st = (model.stairs ?? []).find((x) => x.id === st.id)
+    const p = model_st && placeStair(model, model_st)
+    if (!model_st || !p) { unplaced.push(`stair@${st.id}`); continue }
+    cages.push(buildStairCage({
+      mark: st.id, placed: p, cover: 20,
+      mainDia: 12, distDia: 10,
+      mainSpacing: st.design.mainSpacing, distSpacing: st.design.distSpacing,
+      support: model_st.support,
     }))
   }
 
