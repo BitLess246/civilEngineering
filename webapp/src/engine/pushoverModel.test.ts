@@ -13,8 +13,36 @@ describe('plasticMoment', () => {
     }
     const rho = 0.015
     const d = 500 - 40 - 10 - 10           // 440
-    const expected = (rho * 300 * d * d * 415 * (1 - (0.59 * rho * 415) / 28)) / 1e6
-    expect(plasticMoment(s, rho)).toBeCloseTo(expected, 6)
+    // The textbook form carries a ROUNDED 0.59 where the algebra gives
+    // 1/1.7 = 0.588235… — As·fy·(d − a/2) with a = As·fy/(0.85f'c·b) is the
+    // same expression exactly. The engine now solves C = T, so it lands on the
+    // exact one; the 0.59 version is 0.045% low and is asserted as such rather
+    // than as the answer.
+    const exact = (rho * 300 * d * d * 415 * (1 - (rho * 415) / (1.7 * 28))) / 1e6
+    const rounded = (rho * 300 * d * d * 415 * (1 - (0.59 * rho * 415) / 28)) / 1e6
+    expect(plasticMoment(s, rho)).toBeCloseTo(exact, 6)
+    expect(rounded / exact).toBeCloseTo(0.99955, 5)
+  })
+
+  it('concrete: an over-reinforced ρ no longer inflates the hinge', () => {
+    // ρ is a caller's modelling choice, not a designed area, so nothing bounds
+    // it. The old closed form assumed the steel reached fy at any ρ: it peaked,
+    // turned over, and went NEGATIVE — a negative plastic moment handed
+    // straight to the hinges.
+    const s: RectSection = {
+      id: 'S', name: '300×600', b: 300, h: 600, fc: 21, fy: 550,
+      barDia: 20, tieDia: 10, cover: 40, material: 'concrete',
+    }
+    const d = 540
+    const oldForm = (r: number) => (r * 300 * d * d * 550 * (1 - (0.59 * r * 550) / 21)) / 1e6
+    expect(oldForm(0.065)).toBeLessThan(0)                    // the old one, negative
+    expect(plasticMoment(s, 0.065)).toBeGreaterThan(0)        // …and the new one, not
+    // monotone in ρ, and asymptotic rather than parabolic
+    const seq = [0.02, 0.04, 0.06, 0.08, 0.12].map((r) => plasticMoment(s, r))
+    expect(seq.every((v, i) => i === 0 || v > seq[i - 1])).toBe(true)
+    expect(seq[4] / seq[0]).toBeLessThan(1.5)                 // it flattens out
+    // and it is BELOW the yield assumption wherever the steel does not yield
+    for (const r of [0.025, 0.03, 0.04]) expect(plasticMoment(s, r)).toBeLessThan(oldForm(r))
   })
 
   it('steel W: Mp = Fy·Zx', () => {

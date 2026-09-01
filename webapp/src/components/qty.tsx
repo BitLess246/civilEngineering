@@ -1,22 +1,34 @@
 import type { ReactNode } from 'react'
+import { clampTo } from '../lib/clamp'
 import type { ConcreteClass } from '../engine/quantities'
 import { ReportControls } from './ReportControls'
 
 /** Numeric input. */
-export function Num({ label, unit, value, onChange, step = 'any', hint, disabled }: {
+export function Num({ label, unit, value, onChange, step = 'any', hint, disabled, min, max }: {
   label: ReactNode; unit?: string; value: number; onChange: (v: number) => void
   step?: string; hint?: string
   /** Read-only: something upstream owns this value (e.g. an optimiser). */
   disabled?: boolean
+  /**
+   * Bounds, enforced on the VALUE and not only on the spinner.
+   *
+   * The `min`/`max` attributes alone are advisory — a typed or pasted number
+   * passes straight through them — so anything outside is clamped before it
+   * reaches the caller. Omit both and nothing is clamped, which is what every
+   * existing input does.
+   */
+  min?: number; max?: number
 }) {
+
   return (
     <label className={`flex flex-col text-sm ${disabled ? 'opacity-70' : ''}`}>
       <span className="mb-1 text-[11.5px] font-semibold text-[#5c6675]">{label}</span>
       <span className={`flex overflow-hidden rounded-md border border-[#d6d3c9] ${
         disabled ? 'bg-[#f2f0ea]' : 'bg-[#fcfbf8]'
       } focus-within:border-[#0f4c92] focus-within:shadow-[0_0_0_3px_rgba(15,76,146,.14)]`}>
-        <input type="number" inputMode="decimal" step={step} value={Number.isFinite(value) ? value : ''}
-          disabled={disabled} onChange={(e) => onChange(parseFloat(e.target.value))}
+        <input type="number" inputMode="decimal" step={step} min={min} max={max}
+          value={Number.isFinite(value) ? value : ''}
+          disabled={disabled} onChange={(e) => onChange(clampTo(parseFloat(e.target.value), min, max))}
           className="min-w-0 flex-1 !rounded-none !border-0 !bg-transparent text-[13px] !shadow-none disabled:cursor-not-allowed" />
         {unit && <span className="flex items-center border-l border-[#eeece5] bg-[#f7f6f1] px-2.5 font-mono text-[10.5px] text-[#a39d8d]">{unit}</span>}
       </span>

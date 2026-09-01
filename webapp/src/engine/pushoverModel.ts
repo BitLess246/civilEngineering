@@ -8,11 +8,13 @@
 // Plastic moment (kN·m):
 //   steel W/WT : Mp = Fy·Zx                       (exact plastic capacity)
 //   steel other: Mp ≈ 1.1·Fy·Sx, Sx = Ix/(d/2)    (shape factor on elastic)
-//   concrete   : Mn = ρ·b·d²·fy·(1 − 0.59·ρ·fy/f′c)   (assumed tension ratio ρ)
+//   concrete   : C = T solved for the neutral axis at an assumed ρ, with
+//                fs = min(fy, 600(d−c)/c) — see `flexure.rectCapacity`
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, RectSection } from './model'
 import { shapeByName } from './aiscSections'
 import { deriveWSection } from './steelDesign'
+import { rectCapacity } from './flexure'
 import { modelToFrame3D } from './modelBridge'
 import { buildSeismicMass, GRAVITY } from './modal'
 import { pushoverAnalysis, type PushoverResult } from './pushover'
@@ -46,10 +48,22 @@ export function plasticMoment(s: RectSection, rho = 0.015): number {
     const Sx = (s.b * s.h ** 2) / 6     // rectangular bounding box
     return (1.1 * Fy * Sx) / 1e6
   }
-  // concrete — assumed tension steel ratio ρ
+  // Concrete — the hinge strength of an ASSUMED tension steel ratio ρ.
+  //
+  // This was ρbd²fy(1 − 0.59ρfy/f'c), which is As·fy·(d − a/2) written out:
+  // exact while the steel yields, and silently wrong when it does not. ρ here
+  // is a caller's modelling choice, not a designed area, so nothing bounds it
+  // — at ρ = 3% with fy 550 the formula overstates the hinge by 14–24%, in the
+  // direction that makes a frame look stronger than it is. It stops yielding
+  // above ρ ≈ 2.0% on f'c 28 / fy 550, which is inside the range a user can
+  // ask for.
+  //
+  // `rectCapacity` solves the steel stress instead, so an over-reinforced ρ now
+  // returns the lower strength it really has. Where the steel does yield the
+  // two agree to 0.05% — the old constant is 0.59 where the algebra gives
+  // 1/1.7 = 0.588235, and that rounding is the whole of the difference.
   const d = Math.max(s.h - s.cover - s.tieDia - s.barDia / 2, 0.5 * s.h)
-  const Mn = rho * s.b * d * d * s.fy * (1 - (0.59 * rho * s.fy) / Math.max(s.fc, 1))
-  return Mn / 1e6
+  return rectCapacity(s.b, d, d, rho * s.b * d, Math.max(s.fc, 1), s.fy).Mn
 }
 
 export type PushoverPattern = 'uniform' | 'triangular'
