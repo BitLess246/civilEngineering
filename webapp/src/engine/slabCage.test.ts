@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { buildSlabCage, bandLines, strips, type SlabCageInput, type SlabCageDir } from './slabCage'
+import { buildSlabCage, bandLines, strips, extraTopSpacing,
+  type SlabCageInput, type SlabCageDir } from './slabCage'
 import { DEFAULT_EXT } from './slabBarDetail'
 import type { RebarRun } from './rebarModel'
 
@@ -10,7 +11,7 @@ const panel = (over: Partial<SlabCageInput> = {}): SlabCageInput => ({
   mark: 'S1', x0: 0, x1: 6, z0: 0, z1: 5, yTop: 3,
   h: 200, cover: 20, barDia: 12,
   x: dir({ ln: 5.7 }), z: dir({ ln: 4.7 }),
-  support: 0.3, ...over,
+  support: 0.3, detail: 'straight', ...over,
 })
 
 const len = (r: RebarRun) => r.path.slice(1).reduce((L, p, k) =>
@@ -230,5 +231,120 @@ describe('slab cage — spacing comes from the design, per strip', () => {
     const c = buildSlabCage(panel({ x1: 0 }))
     expect(c.runs).toHaveLength(0)
     expect(c.notes).toEqual(['degenerate panel'])
+  })
+})
+
+describe('bent bars — the arrangement the reference detail shows', () => {
+  const bentPanel = (over: Partial<SlabCageInput> = {}) => panel({ detail: 'bent', ...over })
+  const c = buildSlabCage(bentPanel())
+  const mainX = c.runs.filter((r) => r.mark.includes('-MX'))
+
+  it('every main bar is ONE bar: top over a support, bottom through midspan', () => {
+    expect(mainX.length).toBeGreaterThan(0)
+    for (const r of mainX) {
+      const ys = r.path.map((p) => p[1])
+      expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(0.05)   // it changes level
+      expect(r.bendDia.length).toBe(r.path.length - 2)                  // a bend at every corner
+    }
+  })
+
+  it('alternate bars crank at opposite ends, so each support gets half of them', () => {
+    // The whole point of the arrangement: midspan keeps every bar in the
+    // bottom, and each support receives every other one as top steel.
+    const cranksAtLow = (r: typeof mainX[number]) => r.path[0][0] < 3
+    const lo = mainX.filter(cranksAtLow).length
+    const hi = mainX.length - lo
+    expect(Math.abs(lo - hi)).toBeLessThanOrEqual(1)
+  })
+
+  it('the top leg reaches the same extension a straight top bar would', () => {
+    // So the two details put steel over the same length of support and can be
+    // compared; the figure's 0.30 ln from the FACE.
+    const r = mainX.find((x) => x.path[0][0] < 3)!
+    const crankTop = r.path.find((p, k) => k > 0 && p[1] === r.path[0][1])!
+    expect(crankTop[0]).toBeCloseTo(0.3 / 2 + DEFAULT_EXT.column.topLong * 5.7, 6)
+  })
+
+  it('the crank climbs between the two layers at the stated angle', () => {
+    const r = mainX.find((x) => x.path[0][0] < 3)!
+    const [a, b] = [r.path[r.path.length - 3], r.path[r.path.length - 2]]
+    const climb = a[1] - b[1], run = Math.abs(b[0] - a[0])
+    expect(climb).toBeGreaterThan(0)
+    expect(run).toBeCloseTo(climb, 9)                                   // 45° by default
+    const steep = buildSlabCage(bentPanel({ crankDeg: 60 }))
+    const q = steep.runs.filter((x) => x.mark.includes('-MX'))[0]
+    const [a2, b2] = [q.path[q.path.length - 3], q.path[q.path.length - 2]]
+    expect(Math.abs(b2[0] - a2[0])).toBeLessThan(run)                   // steeper → shorter run
+  })
+
+  it('the far end stays in the bottom and carries into the far support', () => {
+    // The signed form of this had a double negative and pulled the bar 150 mm
+    // SHORT of the support instead of 150 mm into it.
+    const r = mainX.find((x) => x.path[0][0] < 3)!
+    const last = r.path[r.path.length - 1]
+    expect(last[0]).toBeCloseTo(6 + DEFAULT_EXT.column.supportEmbed / 1000, 9)
+    expect(last[1]).toBeCloseTo(r.path[r.path.length - 2][1], 12)       // still on the bottom
+  })
+
+  it('midspan keeps every bar, at the spacing the design asked for', () => {
+    // Counted where it matters: a cut at midspan must find the full bottom mat.
+    const atMid = mainX.filter((r) => {
+      const xs = r.path.map((p) => p[0])
+      return Math.min(...xs) < 3 && Math.max(...xs) > 3
+    })
+    expect(atMid.length).toBe(mainX.length)
+  })
+})
+
+describe('extraTopSpacing — the top steel the cranks do not cover', () => {
+  it('makes up the shortfall by area, not by bar count', () => {
+    // Cranked bars deliver top steel at twice the bottom spacing; areas add,
+    // so 1/s_extra = 1/s_top − 1/(2 s_bot).
+    expect(extraTopSpacing(200, 150)).toBeCloseTo(240, 9)
+    const combined = 1 / (2 * 200) + 1 / 240
+    expect(1 / combined).toBeCloseTo(150, 9)
+  })
+
+  it('asks for none when the cranked half already carries it', () => {
+    // An ordinary outcome on a lightly loaded panel, and not an omission.
+    expect(extraTopSpacing(200, 500)).toBeNull()
+    expect(extraTopSpacing(200, 400)).toBeNull()
+  })
+
+  it('says nothing about a degenerate spacing', () => {
+    expect(extraTopSpacing(0, 150)).toBeNull()
+    expect(extraTopSpacing(200, 0)).toBeNull()
+  })
+
+  it('the cage draws exactly that, and drops the straight bars when none is needed', () => {
+    const needed = buildSlabCage(panel({ detail: 'bent' }))
+    expect(needed.runs.some((r) => r.role === 'top')).toBe(true)
+    const covered = buildSlabCage(panel({
+      detail: 'bent',
+      x: { ln: 5.7, csWidth: 2.5, botCs: 150, botMs: 150, topCs: 400, topMs: 400 },
+      z: { ln: 4.7, csWidth: 2.5, botCs: 150, botMs: 150, topCs: 400, topMs: 400 },
+    }))
+    expect(covered.runs.some((r) => r.role === 'top')).toBe(false)
+    expect(covered.runs.some((r) => r.mark.includes('-M'))).toBe(true)
+  })
+})
+
+describe('the two details are both built, and they differ', () => {
+  it('bent is the default, and straight is still available', () => {
+    const bent = buildSlabCage(panel({ detail: undefined }))
+    const straight = buildSlabCage(panel({ detail: 'straight' }))
+    expect(bent.runs.some((r) => r.mark.includes('-M'))).toBe(true)
+    expect(straight.runs.some((r) => r.mark.includes('-M'))).toBe(false)
+    // A straight bottom bar is two points; a cranked one is at least four.
+    const straightBot = straight.runs.filter((r) => r.role === 'bottom')
+    expect(straightBot.every((r) => r.path.length === 2)).toBe(true)
+  })
+
+  it('both put a bar in the bottom at midspan at the same spacing', () => {
+    // The details differ in how the top steel gets there, not in the mat the
+    // span is designed on.
+    const count = (d: 'bent' | 'straight') => buildSlabCage(panel({ detail: d })).runs
+      .filter((r) => r.role === 'bottom' && r.mark.includes(d === 'bent' ? '-M' : '-B')).length
+    expect(count('bent')).toBe(count('straight'))
   })
 })

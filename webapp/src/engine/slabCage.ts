@@ -89,6 +89,44 @@ export interface SlabCageInput {
    * Defaults to continuous everywhere, which is the interior-panel case.
    */
   edges?: { xLo?: boolean; xHi?: boolean; zLo?: boolean; zHi?: boolean }
+  /**
+   * How the main steel is arranged. Both are real details and both are built.
+   *
+   * `bent` (default) — the traditional two-way-slab arrangement, and the one
+   *   the reference detail shows: every main bar is CRANKED. It lies in the
+   *   bottom through midspan, bends up near a support and finishes as top steel
+   *   over it. Alternate bars crank at opposite ends, so each support gets half
+   *   the bottom bars arriving as top steel and midspan keeps all of them.
+   * `straight` — separate straight mats, top and bottom, which is what ACI
+   *   Fig. 8.7.4.1.3 draws for a slab WITHOUT beams.
+   *
+   * They are not interchangeable on site and they are not the same bar
+   *   schedule, so this is stated rather than assumed.
+   */
+  detail?: 'bent' | 'straight'
+  /**
+   * Angle the crank climbs at, degrees from the horizontal. 45° is what a
+   *   bar bender sets up for; a shallower crank needs a longer run.
+   */
+  crankDeg?: number
+}
+
+/**
+ * Spacing of the EXTRA straight top bars a bent-bar layout still needs, mm.
+ *
+ * The cranked bars deliver top steel at twice the bottom spacing, because only
+ * alternate bars turn up at any one support. Where the design asked for more
+ * than that, the shortfall is made up with straight top bars, and this is the
+ * spacing of them: areas add, so 1/s_extra = 1/s_top − 1/(2·s_bot).
+ *
+ * `null` when the cranked bars already carry it — a real and common outcome on
+ * a lightly loaded panel, and the reason this is computed rather than assumed
+ * one way or the other.
+ */
+export function extraTopSpacing(botSpacing: number, topSpacing: number): number | null {
+  if (!(botSpacing > 0) || !(topSpacing > 0)) return null
+  const need = 1 / topSpacing - 1 / (2 * botSpacing)
+  return need > 1e-9 ? 1 / need : null
 }
 
 /** Bar centres across a band, at `spacing`, kept inside it and symmetric. */
@@ -176,53 +214,111 @@ export function buildSlabCage(i: SlabCageInput): RebarCage {
       contLo: cont(ed.zLo), contHi: cont(ed.zHi) },
   ]
 
+  const bent = (i.detail ?? 'bent') === 'bent'
+  const crank = ((i.crankDeg ?? 45) * Math.PI) / 180
+
   for (const dir of dirs) {
     const at = (u: number, v: number, y: number): Vec3 =>
       dir.run === 'x' ? [u, y, v] : [v, y, u]
     const yB = yBottom(dir.short), yT = yTopMat(dir.short)
     const embed = ext.column.supportEmbed / 1000
+    // The crank climbs from the bottom layer to the top one; at 45° it needs
+    // that much horizontal run to do it.
+    const climb = yT - yB
+    const crankRun = climb / Math.max(Math.tan(crank), 1e-6)
+
+    /** Where a top leg stops at one end: the centreline when the slab carries
+     *  on (the neighbour draws the other half), else the far face with a hook
+     *  turned down into the support — the only anchorage a free edge has. */
+    const topEnd = (face: number, sign: 1 | -1, continuous: boolean, v: number) =>
+      continuous
+        ? { pts: [at(face, v, yT)], bends: [] as number[] }
+        : { pts: [at(face - sign * (sup / 2 - c), v, yT - hook), at(face - sign * (sup / 2 - c), v, yT)], bends: [bend] }
 
     for (const { band, strip } of strips(dir.aLo, dir.aHi, dir.d.csWidth)) {
       const e = ext[strip]
-      // ── bottom mat: the full panel, carried into both supports ─────────
-      for (const v of bandLines(band[0], band[1], strip === 'column' ? dir.d.botCs : dir.d.botMs)) {
-        push({
-          tag: `B${dir.run.toUpperCase()}`, dia: i.barDia, role: 'bottom',
-          path: [at(dir.lo - embed, v, yB), at(dir.hi + embed, v, yB)],
-          bendDia: [],
-        })
-      }
-      // ── top mat: over each support only ────────────────────────────────
-      // Into the span by the figure's extension from the FACE; back over the
-      // support and `embed` into the next panel, where the real bar carries on.
-      // Half the bars run the long extension and half the short (§8.7.4.1.3
-      // splits the column strip 50/50); the middle strip runs one length.
+      const botSpacing = strip === 'column' ? dir.d.botCs : dir.d.botMs
       const topSpacing = strip === 'column' ? dir.d.topCs : dir.d.topMs
-      const lines = bandLines(band[0], band[1], topSpacing)
-      lines.forEach((v, k) => {
-        const long = strip === 'middle' || k % 2 === 0
-        const reach = (long ? e.topLong : e.topShort) * dir.d.ln
-        for (const [face, sign, cont] of [
-          [dir.lo, 1, dir.contLo], [dir.hi, -1, dir.contHi],
-        ] as const) {
-          const inner = face + sign * (sup / 2 + reach)
-          if (cont) {
-            // Half of one bar; the next panel draws the other half.
+
+      if (!bent) {
+        // ── straight mats: the ACI Fig. 8.7.4.1.3 arrangement ─────────────
+        for (const v of bandLines(band[0], band[1], botSpacing)) {
+          push({
+            tag: `B${dir.run.toUpperCase()}`, dia: i.barDia, role: 'bottom',
+            path: [at(dir.lo - embed, v, yB), at(dir.hi + embed, v, yB)], bendDia: [],
+          })
+        }
+        bandLines(band[0], band[1], topSpacing).forEach((v, k) => {
+          const reach = ((strip === 'middle' || k % 2 === 0) ? e.topLong : e.topShort) * dir.d.ln
+          for (const [face, sign, cont] of [
+            [dir.lo, 1, dir.contLo], [dir.hi, -1, dir.contHi],
+          ] as const) {
+            const end = topEnd(face, sign, cont, v)
             push({
               tag: `T${dir.run.toUpperCase()}`, dia: i.barDia, role: 'top',
-              path: [at(face, v, yT), at(inner, v, yT)], bendDia: [],
-            })
-          } else {
-            // Free edge: to the far face and turn down into the support.
-            const outer = face - sign * (sup / 2 - c)
-            push({
-              tag: `T${dir.run.toUpperCase()}`, dia: i.barDia, role: 'top',
-              path: [at(outer, v, yT - hook), at(outer, v, yT), at(inner, v, yT)],
-              bendDia: [bend],
+              path: [...end.pts, at(face + sign * (sup / 2 + reach), v, yT)],
+              bendDia: end.bends,
             })
           }
-        }
+        })
+        continue
+      }
+
+      // ── bent bars: one bar, bottom at midspan, top over one support ─────
+      //
+      // Alternate bars crank at opposite ends. Midspan therefore keeps every
+      // bar in the bottom — the spacing the design asked for — while each
+      // support receives half of them as top steel, which is where the factor
+      // of two in `extraTopSpacing` comes from.
+      bandLines(band[0], band[1], botSpacing).forEach((v, k) => {
+        const atLow = k % 2 === 0
+        const face = atLow ? dir.lo : dir.hi
+        const sign: 1 | -1 = atLow ? 1 : -1
+        const cont = atLow ? dir.contLo : dir.contHi
+        // The far end stays in the BOTTOM and carries on into the far support,
+        // the way any continuous bottom bar does. Written out rather than
+        // signed: the signed form read `farFace - farSign * -embed`, whose
+        // double negative pulled the bar 150 mm SHORT of the support instead
+        // of 150 mm into it.
+        const farEnd = atLow ? dir.hi + embed : dir.lo - embed
+        // The top leg reaches the same distance past the face as a straight top
+        // bar would — the figure's extension, so both details put steel over
+        // the same length of support and the two are comparable.
+        const reach = e.topLong * dir.d.ln
+        const upper = face + sign * (sup / 2 + reach)
+        const end = topEnd(face, sign, cont, v)
+        push({
+          tag: `M${dir.run.toUpperCase()}`, dia: i.barDia, role: 'bottom',
+          path: [
+            ...end.pts,                                          // over the support, on top
+            at(upper, v, yT),                                    // start of the crank
+            at(upper + sign * crankRun, v, yB),                  // …and its foot
+            at(farEnd, v, yB),                                   // through midspan into the far support
+          ],
+          bendDia: [...end.bends, bend, bend],
+        })
       })
+
+      // ── the top steel the cranks do not cover ───────────────────────────
+      // Straight bars over each support, at the spacing that makes up the
+      // difference. None where the cranked half already carries it, which is
+      // an ordinary outcome and not an omission.
+      const sExtra = extraTopSpacing(botSpacing, topSpacing)
+      if (sExtra !== null) {
+        bandLines(band[0], band[1], sExtra).forEach((v, k) => {
+          const reach = ((strip === 'middle' || k % 2 === 0) ? e.topLong : e.topShort) * dir.d.ln
+          for (const [face, sign, cont] of [
+            [dir.lo, 1, dir.contLo], [dir.hi, -1, dir.contHi],
+          ] as const) {
+            const end = topEnd(face, sign, cont, v)
+            push({
+              tag: `T${dir.run.toUpperCase()}`, dia: i.barDia, role: 'top',
+              path: [...end.pts, at(face + sign * (sup / 2 + reach), v, yT)],
+              bendDia: end.bends,
+            })
+          }
+        })
+      }
     }
   }
 
