@@ -100,10 +100,18 @@ export function VerdictPanel({ ok, headline, governing, stats, checks, footnote 
           {governing && <p className={`mt-px truncate text-[11px] ${ok ? 'text-[#4d7a5f]' : 'text-[#a95b47]'}`}>{governing}</p>}
         </div>
       </div>
+      {/* WRAPS, rather than forcing one row.
+          `repeat(N, 1fr)` is `minmax(auto, 1fr)`: a track cannot shrink below
+          its content, so a panel with several long stats grew WIDER than the
+          card and the last of them ran off the right edge — `truncate` never
+          fired, because every cell was already as wide as its text. auto-fit at
+          a 150 px floor keeps three-stat panels on one row exactly as before
+          and gives the wider ones a second row. The per-cell bottom border
+          replaces the container's, so a wrapped row is divided too. */}
       {stats.length > 0 && (
-        <div className="grid border-b border-[#eeece5]" style={{ gridTemplateColumns: `repeat(${stats.length}, 1fr)` }}>
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
           {stats.map((s, i) => (
-            <div key={s.label} className={`px-3.5 py-3 ${i < stats.length - 1 ? 'border-r border-[#eeece5]' : ''}`}>
+            <div key={s.label} className={`border-b border-[#eeece5] px-3.5 py-3 ${i < stats.length - 1 ? 'border-r border-[#eeece5]' : ''}`}>
               <p className="text-[10px] font-semibold uppercase tracking-widest text-[#a39d8d]">{s.label}</p>
               <p className="mt-0.5 truncate font-mono text-[15px] font-semibold text-[#0f1b2a]">
                 {s.value}{s.unit && <span className="text-[11px] text-[#a39d8d]"> {s.unit}</span>}

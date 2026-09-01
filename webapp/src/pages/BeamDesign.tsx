@@ -90,7 +90,12 @@ export default function BeamDesign() {
   const sectionGeomOK = useMemo(() => {
     const keys: (keyof FormState)[] = ['b', 'h', 'cover', 'barDia', 'stirrupDia', 'fc', 'fy', 'fyt', 'legs']
     return keys.every((k) => Number.isFinite(f[k] as number)) && f.b > 0 && f.h > 0 && f.fc > 0 && f.fy > 0
-      && f.h - f.cover - f.stirrupDia - f.barDia / 2 > 0
+      // The derived depth only has to be positive when it is the one being
+      // used; a given d stands on its own, and must itself be inside the
+      // section.
+      && (f.dGiven && f.dGiven > 0
+        ? f.dGiven < f.h
+        : f.h - f.cover - f.stirrupDia - f.barDia / 2 > 0)
   }, [f])
 
   // ── Bar selection ────────────────────────────────────────────────────
@@ -259,6 +264,10 @@ export default function BeamDesign() {
               hint={autoBar ? 'follows the tension bar' : undefined} />
             <Num label={<>Stirrup <KTex tex="d_s" /></>} unit="mm" value={f.stirrupDia} onChange={set('stirrupDia')} />
             <Num label="Stirrup legs" value={f.legs} onChange={set('legs')} />
+            {/* A textbook problem states d; a drawing states h and the cover.
+                0 keeps the derived value — see `BeamDesignInput.dGiven`. */}
+            <Num label={<>Effective depth <KTex tex="d" /> (0 = derive)</>} unit="mm"
+              value={f.dGiven ?? 0} onChange={set('dGiven')} />
           </Card>
           <Card title="Materials">
             <Num label={<KTex tex="f'_c" />} unit="MPa" value={f.fc} onChange={set('fc')} />

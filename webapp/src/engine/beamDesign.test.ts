@@ -342,3 +342,24 @@ describe('AsFloor — an externally imposed minimum (§418.6.3.2 / §418.4.2.2)'
     expect(r.flexOK).toBe(true)
   })
 })
+
+describe('dGiven — the effective depth stated rather than derived', () => {
+  it('is used verbatim, and pins dt with it', () => {
+    const r = designBeam({ ...base, dGiven: 500 })
+    expect(r.d).toBeCloseTo(500, 9)
+    expect(r.dt).toBeCloseTo(500, 9)
+  })
+  it('holds d against a stack that would otherwise pull it down', () => {
+    // A moment big enough to need two layers in a 300 mm web.
+    const free = designBeam({ ...base, Mu: 700, h: 700 })
+    const pinned = designBeam({ ...base, Mu: 700, h: 700, dGiven: 640 })
+    expect(free.layers.length).toBeGreaterThan(1)
+    expect(free.d).toBeLessThan(free.dt)
+    expect(pinned.d).toBe(pinned.dt)
+    expect(pinned.yBar).toBe(0)
+  })
+  it('changes nothing when absent or zero', () => {
+    const a = designBeam(base), b = designBeam({ ...base, dGiven: 0 })
+    expect(b.d).toBe(a.d); expect(b.As).toBe(a.As); expect(b.bars).toBe(a.bars)
+  })
+})

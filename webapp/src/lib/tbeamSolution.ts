@@ -3,6 +3,15 @@ import type { TBeamInput, TBeamResult } from '../engine/tbeam'
 import { beta1 } from '../engine/tbeam'
 import { type SolutionStep, type SolutionLine, sn0, sn1, sn2, sn4 } from './solution'
 
+/** A coefficient in the equilibrium quadratic, as the worked solution writes
+ *  it: plain below 10⁴, otherwise a 3-figure mantissa × 10ⁿ. Raw, they run to
+ *  ten digits and the equation stops being readable. */
+const sci = (v: number): string => {
+  if (Math.abs(v) < 1e4) return v.toFixed(1)
+  const e = Math.floor(Math.log10(Math.abs(v)))
+  return String.raw`${(v / 10 ** e).toFixed(3)} \times 10^{${e}}`
+}
+
 const txt = (text: string): SolutionLine => ({ text })
 const eq = (tex: string): SolutionLine => ({ tex })
 
@@ -11,11 +20,6 @@ export function buildTBeamSolution(i: TBeamInput, r: TBeamResult): SolutionStep[
   // Steel the capacity was actually computed on — the detailed cage, or the
   // area handed in for an analyze run.
   const AsProv = i.AsGiven && i.AsGiven > 0 ? i.AsGiven : r.bars * (Math.PI / 4) * i.barDia ** 2
-  // C recomputed from the reported a, to show the equilibrium closing.
-  const bComp = hog ? i.bw : r.bf
-  const Ccheck = r.tBehavior
-    ? 0.85 * i.fc * ((bComp - i.bw) * i.hf + i.bw * r.a)
-    : 0.85 * i.fc * bComp * r.a
   const webCapped = r.notes.some((n) => n.includes('singly-reinforced'))
   // Radicand collapsed — the reported block is the tension-controlled ceiling,
   // not a depth that solves the moment. Sagging and hogging both land here.
@@ -44,10 +48,25 @@ export function buildTBeamSolution(i: TBeamInput, r: TBeamResult): SolutionStep[
       ],
     },
     {
-      title: hog ? 'Hogging — flange in tension, web rectangle resists' : 'Rectangular or T behaviour?',
-      clause: 'ACI 318-14 §22.2',
+      // A REAL T-BEAM IS AN OUTCOME, NOT A FAILURE. This step decides which of
+      // two geometries the section has; both are valid, so it is marked as a
+      // check that RESOLVED. Reading "true T" as a red mark is what made a
+      // perfectly ordinary flanged beam look like a failed one.
+      title: hog ? 'Hogging — flange in tension, web rectangle resists'
+        : analyze ? `Real T-beam check — ${r.tBehavior ? 'TRUE T-BEAM' : 'rectangular (a ≤ hf)'}`
+          : 'Rectangular or T behaviour?',
+      clause: 'ACI 318-14 §22.2 / NSCP §422.2',
+      pass: hog ? undefined : true,
       lines: hog ? [
         txt('Negative moment puts the flange in tension — compression lives in the web, so the section designs as a rectangle b = bw.'),
+      ] : analyze ? [
+        // ANALYSING a given As: the moment is not what sets the block — the
+        // steel is. Comparing Mu against the flange couple here would answer a
+        // question nobody asked, and it contradicted the equilibrium below
+        // whenever the two disagreed.
+        txt('The steel is given, so the block is whatever balances it — the moment plays no part. Take C = T with the steel at yield and read off the concrete area it needs; if that is more than the flange holds, the block must push into the web and the section is a REAL T-beam.'),
+        eq(String.raw`0.85 f'_c A_{conc} = A_s f_y \;\Rightarrow\; A_{conc} = \dfrac{${sn0(AsProv)}(${sn0(i.fy)})}{0.85(${sn0(i.fc)})} = ${sn2(AsProv * i.fy / (0.85 * i.fc))}\ \text{mm}^2`),
+        eq(String.raw`A_{conc} = ${sn2(AsProv * i.fy / (0.85 * i.fc))} \;${r.tBehavior ? '>' : '\\le'}\; b_f h_f = ${sn0(r.bf * i.hf)}\ \text{mm}^2 \;\Rightarrow\; ${r.tBehavior ? String.raw`\textbf{real T-beam}\ \checkmark` : String.raw`\text{rectangular, } b = b_f`}`),
       ] : [
         txt('The compression block is what grows with the moment, and it spends the widest concrete first: while it is no deeper than hf the section is a plain rectangle of width bf. Only when the flange is used up does the block push into the narrow web.'),
         eq(String.raw`\phi M_{n,f} = 0.90(0.85 f'_c)\,b_f h_f (d - \tfrac{h_f}{2}) = ${sn1(r.MnfPhi)}\ \text{kN·m}\ ${Math.abs(i.Mu) <= r.MnfPhi ? String.raw`\ge M_u \Rightarrow \text{block stays in the flange}` : String.raw`< M_u \Rightarrow \textbf{true T}`}`),
@@ -110,26 +129,79 @@ export function buildTBeamSolution(i: TBeamInput, r: TBeamResult): SolutionStep[
       txt(`A smaller d demands more steel, which can add another bar and drop d again, so As and the layout are solved together — ${r.layerIters} pass${r.layerIters === 1 ? '' : 'es'} here. Every As above is the converged value, at this d.`),
     ],
   })
+  // The block the YIELD assumption gives — the answer when the steel does
+  // reach fy, and the line that gets crossed out when it does not.
+  const tr = r.fsTrial ?? { a: r.a, c: r.c, fs: r.fs }
+  const trT = tr.a > i.hf
+  const bComp2 = hog ? i.bw : r.bf
+  const Ctrial = trT
+    ? 0.85 * i.fc * ((bComp2 - i.bw) * i.hf + i.bw * tr.a)
+    : 0.85 * i.fc * bComp2 * tr.a
+  const Es = 200000, ecu = 0.003
   steps.push(
     {
-      title: 'Block depth at the bars actually detailed',
+      title: 'Block depth, assuming the steel yields',
       clause: 'ACI 318-14 §22.2.2.4',
       lines: [
         txt(analyze
-          ? 'This a comes from horizontal equilibrium of the given steel, C = T, and it is the value the capacity below is computed on. Which concrete area supplies C is the only difference between the two cases.'
-          : `Rounding up to whole bars gives more steel than the moment asked for, so the block the built section develops is a little deeper than a,req = ${sn1(r.aReq)} mm. This one comes from horizontal equilibrium, C = T, and it is the value the capacity below is computed on.`),
+          ? 'Take fs = fy for now — an ASSUMPTION, checked in the next step. Horizontal equilibrium C = T then fixes the block; which concrete area supplies C is the only difference between the two cases.'
+          : `Rounding up to whole bars gives more steel than the moment asked for, so the block the built section develops is a little deeper than a,req = ${sn1(r.aReq)} mm. Take fs = fy for now — an ASSUMPTION, checked in the next step.`),
         eq(String.raw`T = A_{s,prov} f_y = ${sn0(AsProv)} \times ${sn0(i.fy)} = ${sn1((AsProv * i.fy) / 1e3)}\ \text{kN}`),
-        ...(r.tBehavior ? [
+        ...(trT ? [
           txt('The flange alone cannot supply C, so the overhangs are fully stressed over their whole depth hf and only the web carries the remainder:'),
           eq(String.raw`C = \underbrace{0.85 f'_c (b_f - b_w) h_f}_{\text{overhangs, full}} + \underbrace{0.85 f'_c\, b_w\, a}_{\text{web}} = T`),
-          eq(String.raw`a = \dfrac{T - 0.85 f'_c (b_f - b_w) h_f}{0.85 f'_c\, b_w} = ${sn1(r.a)}\ \text{mm} \;>\; h_f = ${sn0(i.hf)}\ \text{mm}`),
+          eq(String.raw`a = \dfrac{T - 0.85 f'_c (b_f - b_w) h_f}{0.85 f'_c\, b_w} = ${sn1(tr.a)}\ \text{mm} \;>\; h_f = ${sn0(i.hf)}\ \text{mm}`),
         ] : [
           txt(hog
             ? `The flange is in tension, so the compression zone is the web alone — a plain rectangle of width b = bw = ${sn0(i.bw)} mm.`
             : `The block stays inside the flange, so the compression zone is a plain rectangle of width b = bf = ${sn0(r.bf)} mm.`),
-          eq(String.raw`C = 0.85 f'_c\, b\, a = T \;\Rightarrow\; a = \dfrac{T}{0.85 f'_c\, b} = ${sn1(r.a)}\ \text{mm}${hog ? '' : String.raw` \;\le\; h_f = ${sn0(i.hf)}\ \text{mm}`}`),
+          eq(String.raw`C = 0.85 f'_c\, b\, a = T \;\Rightarrow\; a = \dfrac{T}{0.85 f'_c\, b} = ${sn1(tr.a)}\ \text{mm}${hog ? '' : String.raw` \;\le\; h_f = ${sn0(i.hf)}\ \text{mm}`}`),
         ]),
-        eq(String.raw`\text{check: } C = ${sn1(Ccheck / 1e3)}\ \text{kN} = T = ${sn1((AsProv * i.fy) / 1e3)}\ \text{kN}\ \checkmark`),
+        eq(String.raw`\text{check: } C = ${sn1(Ctrial / 1e3)}\ \text{kN} = T = ${sn1((AsProv * i.fy) / 1e3)}\ \text{kN}\ \checkmark`),
+        eq(String.raw`c = a/\beta_1 = ${sn1(tr.a)}/${sn2(beta1(i.fc))} = ${sn1(tr.c)}\ \text{mm}`),
+      ],
+    },
+    {
+      title: 'Stress check — does the steel actually reach fy?',
+      clause: 'ACI 318-14 §22.2.1.2',
+      pass: r.fsYields,
+      lines: [
+        txt('Strain is linear across the depth, so where the neutral axis landed decides the steel stress. The assumption above only stands if it comes back at or above fy — and a heavily reinforced section is exactly where it does not.'),
+        eq(String.raw`f_s = E_s \varepsilon_{cu} \dfrac{d - c}{c} = ${sn0(Es * ecu)}\left(\dfrac{${sn1(r.d)} - ${sn1(tr.c)}}{${sn1(tr.c)}}\right) = ${sn1(tr.fs)}\ \text{MPa}`),
+        eq(String.raw`f_s = ${sn1(tr.fs)} \;${r.fsYields ? '\\ge' : '<'}\; f_y = ${sn0(i.fy)}\ \text{MPa}\ ${r.fsYields
+          ? String.raw`\checkmark\ \text{the steel yields — the block above stands}`
+          : String.raw`\times\ \text{the steel does NOT yield}`}`),
+      ],
+    },
+  )
+  if (!r.fsYields) {
+    const k = 0.85 * i.fc, b1v = beta1(i.fc), K = Es * ecu * AsProv
+    const web = r.tBehavior
+    const A2 = web ? k * b1v * i.bw : k * bComp2 * b1v
+    const B2 = web ? k * i.hf * (bComp2 - i.bw) + K : K
+    steps.push({
+      title: 'Re-solve with fs on the strain diagram',
+      clause: 'ACI 318-14 §22.2.1.2 / §22.2.2.4.1',
+      lines: [
+        txt('Put fs = Es·εcu(d − c)/c back into C = T. The unknown c now appears on both sides, and clearing the fraction leaves a quadratic — exact in one step, no iteration.'),
+        eq(String.raw`0.85f'_c\left[${web ? String.raw`b_f h_f + (\beta_1 c - h_f) b_w` : String.raw`b_f \beta_1 c`}\right] = A_s\, E_s \varepsilon_{cu} \dfrac{d - c}{c}`),
+        eq(String.raw`${sci(A2)}\,c^2 + ${sci(B2)}\,c - ${sci(K * r.d)} = 0 \;\Longrightarrow\; c = ${sn1(r.c)}\ \text{mm}`),
+        eq(String.raw`a = \beta_1 c = ${sn2(b1v)}(${sn1(r.c)}) = ${sn1(r.a)}\ \text{mm},\qquad f_s = ${sn0(Es * ecu)}\left(\dfrac{${sn1(r.d)} - ${sn1(r.c)}}{${sn1(r.c)}}\right) = ${sn1(r.fs)}\ \text{MPa}`),
+        txt(`The block is shallower than the yield assumption gave (${sn1(r.a)} against ${sn1(tr.a)} mm), and the tension it balances is smaller — so the capacity is LOWER. Stopping at the assumption overstates it.`),
+      ],
+    })
+  }
+  steps.push(
+    {
+      title: 'Lever arm — centroid of the compression block',
+      clause: 'Varignon / ACI 318-14 §22.2',
+      lines: [
+        txt(r.tBehavior
+          ? 'The block is an inverted T of two rectangles — the full flange and the web strip below it — so the compressive resultant acts at their combined centroid, not at a/2.'
+          : 'The block is a single rectangle, so its resultant acts at mid-depth.'),
+        eq(String.raw`A_{conc} = ${r.tBehavior ? String.raw`b_f h_f + (a - h_f) b_w` : String.raw`b\,a`} = ${sn1(r.Aconc)}\ \text{mm}^2`),
+        eq(String.raw`A_{conc}\,\bar{y} = \sum A_n y_n \;\Longrightarrow\; \bar{y} = ${sn1(r.yBar)}\ \text{mm}`),
+        eq(String.raw`M_n = T\,(d - \bar{y}) = ${sn0(AsProv)}(${sn1(r.fs)})(${sn1(r.d)} - ${sn1(r.yBar)}) = ${sn1(r.Mn)}\ \text{kN·m}`),
       ],
     },
     {
@@ -137,9 +209,8 @@ export function buildTBeamSolution(i: TBeamInput, r: TBeamResult): SolutionStep[
       clause: 'ACI 318-14 §21.2.2',
       pass: r.ok,
       lines: [
-        eq(String.raw`c = a/\beta_1 = ${sn1(r.a)}/${sn2(beta1(i.fc))} = ${sn1(r.c)}\ \text{mm}`),
-        eq(String.raw`\varepsilon_t = 0.003\,\tfrac{d_t - c}{c} = ${sn4(r.et)} \Rightarrow \phi = ${sn2(r.phi)}`),
-        eq(String.raw`\phi M_n = ${sn1(r.phiMn)}\ \text{kN·m}\ ${r.phiMn >= Math.abs(i.Mu) ? '\\ge' : '<'}\ M_u = ${sn1(Math.abs(i.Mu))}\ \text{kN·m}\ ${r.ok ? '\\checkmark' : '\\times'}`),
+        eq(String.raw`\varepsilon_t = 0.003\,\tfrac{d_t - c}{c} = 0.003\left(\tfrac{${sn1(r.dt)} - ${sn1(r.c)}}{${sn1(r.c)}}\right) = ${sn4(r.et)} \Rightarrow \phi = ${sn2(r.phi)}${r.fsYields ? '' : String.raw`\ (\text{compression-controlled: } f_s < f_y)`}`),
+        eq(String.raw`\phi M_n = ${sn2(r.phi)} \times ${sn1(r.Mn)} = ${sn1(r.phiMn)}\ \text{kN·m}\ ${r.phiMn >= Math.abs(i.Mu) ? '\\ge' : '<'}\ M_u = ${sn1(Math.abs(i.Mu))}\ \text{kN·m}\ ${r.ok ? '\\checkmark' : '\\times'}`),
       ],
       note: r.notes.join(' · ') || undefined,
     },
