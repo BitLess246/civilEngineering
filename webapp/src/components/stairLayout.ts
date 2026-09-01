@@ -165,30 +165,50 @@ const towards = (a: Pt, b: Pt, d: number): Pt => {
 }
 
 /**
- * A bar along `pts`, bent through radius `r` at every interior corner and
- * returned 90° into the slab at each end.
+ * The unit normal to a→b whose SCREEN-Y sign is `dy` (−1 up the page, +1 down).
  *
- * `hookSign` is which way the return turns, as a sign on the perpendicular:
- * +1 is clockwise from the run direction (down, for a bar running left to
- * right), −1 anticlockwise. A top bar hooks DOWN into the slab and a bottom bar
- * UP — in both cases away from the face it is covering, which is the only way a
- * hook has concrete around it.
+ * A hook is named by where it goes — a top bar's hook turns DOWN into the slab,
+ * a soffit bar's UP — and that is a fact about the page, not about which way
+ * the bar happens to run. Signing the perpendicular instead (the old `hookSign`)
+ * makes the answer flip with the run direction, so the same "soffit bar" sign
+ * hooked up on the bar drawn left-to-right and down on the one drawn
+ * right-to-left, out through the cover it was meant to hide inside.
+ */
+export function normalToward(a: Pt, b: Pt, dy: -1 | 1): Pt {
+  const dx = b[0] - a[0], dyy = b[1] - a[1]
+  const L = Math.hypot(dx, dyy) || 1
+  const p: Pt = [-dyy / L, dx / L]
+  return p[1] * dy >= 0 ? p : [-p[0], -p[1]]
+}
+
+export interface BarPathOpts {
+  /** Hook length at the first / last point, SVG units. 0 = none (a buried end
+   *  needs no hook: it is already surrounded by concrete). */
+  hookStart?: number
+  hookEnd?: number
+  /** Screen-y direction the hooks turn: −1 up the page, +1 down. */
+  hookDy?: -1 | 1
+}
+
+/**
+ * A bar along `pts`, bent through radius `r` at every interior corner, with an
+ * optional 90° return into the slab at either end.
+ *
+ * Ends are asked for separately because a stair's crossed bars have ONE free
+ * end each: the other stops buried in the adjoining member, where a hook would
+ * be drawing an anchorage the bar does not need.
  *
  * Units are SVG, not mm: the caller has already scaled.
  */
-export function barPath(pts: Pt[], r: number, hook = 0, hookSign: 1 | -1 = 1): BarPath {
+export function barPath(pts: Pt[], r: number, opts: BarPathOpts = {}): BarPath {
   if (pts.length < 2) return { d: '', bends: [] }
-  const perp = (a: Pt, b: Pt): Pt => {
-    const dx = b[0] - a[0], dy = b[1] - a[1]
-    const L = Math.hypot(dx, dy) || 1
-    return [(-dy / L) * hookSign, (dx / L) * hookSign]
-  }
+  const { hookStart = 0, hookEnd = 0, hookDy = 1 } = opts
   const bends: Pt[] = []
   let d = ''
 
-  if (hook > 0) {
-    const n = perp(pts[0], pts[1])
-    d += `M${pts[0][0] + n[0] * hook},${pts[0][1] + n[1] * hook} L${pts[0][0]},${pts[0][1]} `
+  if (hookStart > 0) {
+    const n = normalToward(pts[0], pts[1], hookDy)
+    d += `M${pts[0][0] + n[0] * hookStart},${pts[0][1] + n[1] * hookStart} L${pts[0][0]},${pts[0][1]} `
   } else {
     d += `M${pts[0][0]},${pts[0][1]} `
   }
@@ -205,23 +225,205 @@ export function barPath(pts: Pt[], r: number, hook = 0, hookSign: 1 | -1 = 1): B
 
   const last = pts[pts.length - 1]
   d += `L${last[0]},${last[1]}`
-  if (hook > 0) {
-    const n = perp(pts[pts.length - 2], last)
-    d += ` L${last[0] + n[0] * hook},${last[1] + n[1] * hook}`
+  if (hookEnd > 0) {
+    const n = normalToward(pts[pts.length - 2], last, hookDy)
+    d += ` L${last[0] + n[0] * hookEnd},${last[1] + n[1] * hookEnd}`
   }
   return { d, bends }
 }
 
-/**
- * The lapping bar across one corner: a straight run reaching `ext` mm along
- * each leg.
- *
- * At a stair's re-entrant corner the main steel cannot simply be bent round the
- * inside — the bend would try to straighten under tension and drive the cover
- * off. The detail is a separate bar lapped past the corner on both legs, and
- * this is that bar. It is what the 450 dimension on the reference sheet
- * measures.
- */
-export function lapBar(corner: Pt, back: Pt, fwd: Pt, ext: number, scale: number): Pt[] {
-  return [along(corner, back, ext, scale), corner, along(corner, fwd, ext, scale)]
+/** Unit vector a→b. */
+const unit = (a: Pt, b: Pt): Pt => {
+  const dx = b[0] - a[0], dy = b[1] - a[1]
+  const L = Math.hypot(dx, dy) || 1
+  return [dx / L, dy / L]
 }
+
+/**
+ * Where a ray from `p` along unit `d` first meets the infinite line through `q`
+ * along `e` — and how far along the ray that is. Null when they are parallel or
+ * the meeting is behind the start.
+ */
+export function rayMeetsLine(p: Pt, d: Pt, q: Pt, e: Pt): { at: Pt; dist: number } | null {
+  const den = d[0] * e[1] - d[1] * e[0]
+  if (Math.abs(den) < 1e-9) return null
+  const dist = ((q[0] - p[0]) * e[1] - (q[1] - p[1]) * e[0]) / den
+  if (dist <= 1e-9) return null
+  return { at: [p[0] + d[0] * dist, p[1] + d[1] * dist], dist }
+}
+
+/**
+ * The part of a crossed bar that lies BEYOND a kink: it carries straight on in
+ * the direction it arrived, and when it reaches the far face of the member it
+ * has run into, it turns and follows that face for whatever anchorage is left.
+ * Total length past the corner is always `ext`.
+ *
+ * The turn matters and is not a detail: a 150 waist has only about 240 mm of
+ * straight run before a horizontal bar entering the flight comes out through
+ * the soffit, so a bar drawn straight for 450 leaves the concrete altogether.
+ * Turning it at the far face keeps the anchorage inside the section, and the
+ * turn is safe wherever it lands: at the soffit the concrete is above the bend,
+ * at a top face it is below — the side the resultant pushes towards.
+ *
+ * Returns the points after the corner: one when the straight run is enough, two
+ * when it has to turn.
+ */
+export function crossPast(
+  corner: Pt, from: Pt, face: { p: Pt; dir: Pt }, ext: number, scale: number,
+): Pt[] {
+  const d = unit(from, corner)
+  const total = ext * scale
+  const e0 = unit([0, 0], face.dir)
+  const hit = rayMeetsLine(corner, d, face.p, e0)
+  if (!hit || hit.dist >= total) return [[corner[0] + d[0] * total, corner[1] + d[1] * total]]
+  // Follow the face AWAY from the corner — the sense that carries on into the
+  // member, not back out of it. Taken from the arrival direction, so `face.dir`
+  // may be given either way round. (A bar arriving exactly perpendicular to the
+  // face would leave this undecided; on a stair it never is — the arrival is
+  // either horizontal or on the slope, and the face it meets is the other, so
+  // the dot product is cos θ.)
+  const e: Pt = e0[0] * d[0] + e0[1] * d[1] >= 0 ? e0 : [-e0[0], -e0[1]]
+  const rest = total - hit.dist
+  return [hit.at, [hit.at[0] + e[0] * rest, hit.at[1] + e[1] * rest]]
+}
+
+export type BarFace = 'top' | 'soffit'
+
+export interface StairBar {
+  id: string
+  /** Polyline through the bar's own points, SVG units. */
+  pts: Pt[]
+  face: BarFace
+  /** Hook at each end: 1 = free edge, hook it; 0 = buried, nothing to hook. */
+  hookStart: 0 | 1
+  hookEnd: 0 | 1
+  /** The kink this bar runs STRAIGHT past, and the run beyond it — the two or
+   *  three points the anchorage dimension follows. Present only on a crossed
+   *  bar; a bar that turns the corner has no anchorage past it to measure. */
+  anchor?: { corner: Pt; run: Pt[] }
+}
+
+/**
+ * Which bar turns a kink and which two cross it — the one detailing decision
+ * this drawing exists to make.
+ *
+ * At a bend the tension either side has a resultant along the bisector, towards
+ * the OUTSIDE of the turn. Where that outside is concrete the bar bears on it
+ * and the bend is fine; where it is the cover, the resultant drives the cover
+ * off and the bar straightens. On a flight rising to the right, turning through
+ * θ:
+ *
+ *   bottom kink   both layers turn UP, so the resultant is UP. The soffit bar
+ *                 has the whole waist above it — SAFE, one bent bar. The top
+ *                 bar has only its cover, so it is NOT bent there: the
+ *                 landing's bar carries straight on into the flight and the
+ *                 flight's carries straight on down into the landing, each
+ *                 turning only once it is deep enough to bear on concrete.
+ *   top kink      both layers turn DOWN — the mirror. The TOP bar turns at the
+ *                 corner; the soffit pair cross it.
+ *
+ * So each kink has exactly one bar bent AT it, on the face where the concrete
+ * is on the inside of the turn. Every other bend in the flight is buried.
+ *
+ * The old `lapBar` recognised the problem and then drew the lapping bar bent
+ * around the same re-entrant corner, which has the identical resultant.
+ *
+ * `bot` / `top` are the two bar LINES (the faces pulled in by the cover);
+ * `ext` is the anchorage carried past each kink, mm, measured ALONG the bar.
+ */
+export function stairBars(
+  bot: Pt[], top: Pt[], ext: number, scale: number, gap = 0,
+): StairBar[] {
+  // No landings: a plain flight, two straight bars, nothing to turn.
+  if (bot.length < 4 || top.length < 4) {
+    return [
+      { id: 'soffit', pts: [bot[0], bot[bot.length - 1]], face: 'soffit', hookStart: 0, hookEnd: 0 },
+      { id: 'top', pts: [top[0], top[top.length - 1]], face: 'top', hookStart: 0, hookEnd: 0 },
+    ]
+  }
+  const [b0, b1, b2, b3] = bot
+  const [t0, t1, t2, t3] = top
+  const dir = (a: Pt, b: Pt): Pt => [b[0] - a[0], b[1] - a[1]]
+
+  // The four far faces a crossed bar can run into — each pulled `gap` further
+  // INTO the member than the layer already lying on it. Two bars cannot occupy
+  // one line: turned onto the face itself the lapping bar sits exactly under
+  // the layer it laps, and the drawing shows one bar where there are two.
+  const inset = (p: Pt, d: Pt, into: -1 | 1): { p: Pt; dir: Pt } => {
+    const L = Math.hypot(d[0], d[1]) || 1
+    let n: Pt = [-d[1] / L, d[0] / L]
+    if (n[1] * into < 0) n = [-n[0], -n[1]]
+    return { p: [p[0] + n[0] * gap, p[1] + n[1] * gap], dir: d }
+  }
+  // A soffit is reached from above, so its bar line steps UP the page (−1);
+  // a top face is reached from below, so its line steps DOWN (+1).
+  const flightSoffit = inset(b1, dir(b1, b2), -1)
+  const flightTop = inset(t2, dir(t2, t1), 1)
+  const lowSoffit = inset(b1, dir(b1, b0), -1)
+  const upTop = inset(t2, dir(t2, t3), 1)
+
+  // Past the TOP kink, on the soffit: the flight's bar carries on up into the
+  // landing, the landing's carries on down under the flight.
+  const soffitOn = crossPast(b2, b1, upTop, ext, scale)
+  const soffitIn = crossPast(b2, b3, flightTop, ext, scale)
+  // Past the BOTTOM kink, on the top face: the landing's bar carries on into
+  // the flight, the flight's carries on down into the landing.
+  const topOn = crossPast(t1, t0, flightSoffit, ext, scale)
+  const topIn = crossPast(t1, t2, lowSoffit, ext, scale)
+
+  return [
+    // Bent at the bottom kink (concrete above the turn), straight past the top
+    // one. b2 is collinear between b1 and the run beyond it, so it is not a
+    // vertex: the bar has no bend at that corner, which is the whole point.
+    { id: 'soffit-through', pts: [b0, b1, ...soffitOn], face: 'soffit', hookStart: 1, hookEnd: 0,
+      anchor: { corner: b2, run: soffitOn } },
+    { id: 'soffit-lap', pts: [b3, ...soffitIn], face: 'soffit', hookStart: 1, hookEnd: 0,
+      anchor: { corner: b2, run: soffitIn } },
+    { id: 'top-lap', pts: [t0, ...topOn], face: 'top', hookStart: 1, hookEnd: 0,
+      anchor: { corner: t1, run: topOn } },
+    // Starts buried under the lower landing, comes up through the bottom kink
+    // without bending at it, and turns at the TOP kink where the waist is on
+    // the inside of the turn.
+    { id: 'top-through', pts: [...[...topIn].reverse(), t2, t3], face: 'top', hookStart: 0, hookEnd: 1,
+      anchor: { corner: t1, run: topIn } },
+  ]
+}
+
+/**
+ * `pts` moved sideways by `dist`, each vertex along the average of the normals
+ * of the legs meeting there — a witness line for a BENT bar.
+ *
+ * A bent anchorage cannot be dimensioned by the straight line between its ends:
+ * that chord is far shorter than the bar, and a dimension drawn on it would
+ * print 450 beside a line measuring 380. Following the bar's own shape says
+ * which bar is meant and where it goes.
+ *
+ * It does NOT preserve length, and no parallel offset does: offset round the
+ * inside of a corner the legs get shorter, round the outside longer. The
+ * dimension is read off its end ticks and its number, both of which sit on the
+ * bar's true ends — the line between them traces the path, it does not measure
+ * itself. The number is the developed length ALONG the bar, which is the
+ * quantity an anchorage is specified in.
+ *
+ * `side` is which way to step off: −1 turns the normal to the page's up.
+ */
+export function offsetPath(pts: Pt[], dist: number, side: -1 | 1): Pt[] {
+  if (pts.length < 2) return [...pts]
+  const nOf = (a: Pt, b: Pt): Pt => {
+    const dx = b[0] - a[0], dy = b[1] - a[1]
+    const L = Math.hypot(dx, dy) || 1
+    const n: Pt = [-dy / L, dx / L]
+    return n[1] * side >= 0 ? n : [-n[0], -n[1]]
+  }
+  return pts.map((p, i) => {
+    const a = i === 0 ? nOf(pts[0], pts[1]) : nOf(pts[i - 1], pts[i])
+    const b = i === pts.length - 1 ? a : nOf(pts[i], pts[i + 1])
+    const mx = a[0] + b[0], my = a[1] + b[1]
+    const L = Math.hypot(mx, my) || 1
+    return [p[0] + (mx / L) * dist, p[1] + (my / L) * dist] as Pt
+  })
+}
+
+/** Total length of a polyline, SVG units. */
+export const pathLength = (pts: Pt[]): number =>
+  pts.slice(1).reduce((L, p, i) => L + Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]), 0)
