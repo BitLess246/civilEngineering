@@ -454,3 +454,31 @@ describe('tBeamCapacity — the worked T-beam analysis', () => {
     }
   })
 })
+
+describe('dGiven — the effective depth stated rather than derived', () => {
+  const base = {
+    kind: 'interior' as const, bw: 300, h: 500, hf: 100, bfGiven: 800,
+    cover: 40, stirrupDia: 12, barDia: 26, fc: 28, fy: 345, Mu: 500,
+  }
+  it('is used verbatim, and pins dt with it', () => {
+    const r = designTBeam({ ...base, AsGiven: 9000, dGiven: 435 })
+    expect(r.d).toBeCloseTo(435, 9)
+    expect(r.dt).toBeCloseTo(435, 9)     // single-layer reading — the conservative one
+  })
+  it('stops the stack from moving d — 18 bars in 5 layers no longer drop it', () => {
+    const free = designTBeam({ ...base, AsGiven: 9000 })
+    const pinned = designTBeam({ ...base, AsGiven: 9000, dGiven: 435 })
+    expect(free.layers.length).toBeGreaterThan(1)
+    expect(free.d).toBeLessThan(free.dt)          // the stack pulled d down
+    expect(pinned.d).toBe(pinned.dt)              // …and now it does not
+  })
+  it('reproduces the published pair exactly', () => {
+    expect(designTBeam({ ...base, AsGiven: 6000, dGiven: 435 }).phiMn).toBeCloseTo(708.048, 3)
+    expect(designTBeam({ ...base, AsGiven: 9000, dGiven: 435 }).phiMn).toBeCloseTo(648.999, 3)
+  })
+  it('changes nothing when absent or zero', () => {
+    const a = designTBeam({ ...base, Mu: 400 })
+    const b = designTBeam({ ...base, Mu: 400, dGiven: 0 })
+    expect(b.d).toBe(a.d); expect(b.dt).toBe(a.dt); expect(b.phiMn).toBe(a.phiMn)
+  })
+})

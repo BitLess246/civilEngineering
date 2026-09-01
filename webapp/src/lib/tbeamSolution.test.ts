@@ -79,16 +79,42 @@ describe('T-beam worked solution — the stress check and its correction', () =>
     expect(step(12000).pass).toBe(false)
   })
 
-  it('an analyze run does not test the moment against the flange couple', () => {
-    // The block on an analyze run comes from the STEEL, so quoting φMn,f ≥ Mu
+  it('an analyze run decides T-vs-rectangular from the STEEL, not the moment', () => {
+    // The block on an analyze run comes from the steel, so quoting φMn,f ≥ Mu
     // there answered a question nobody asked — and contradicted the
-    // equilibrium two steps later whenever the two disagreed.
+    // equilibrium two steps later whenever the two disagreed. The comparison
+    // is the code's own: Aconc from C = T against bf·hf.
     const i = { ...base, AsGiven: 9000 }
     const step = buildTBeamSolution(i, designTBeam(i))
-      .find((s) => s.title === 'Rectangular or T behaviour?')!
+      .find((s) => s.title.startsWith('Real T-beam check'))!
     const tex = step.lines.map((l) => ('tex' in l ? l.tex : '')).join(' ')
-    expect(tex).toContain('C_{flange,max}')
+    expect(tex).toContain('A_{conc}')
+    expect(tex).toContain('b_f h_f')
     expect(tex).not.toContain('M_u')
+  })
+
+  it('a real T-beam is reported as a check that PASSED, not as a failure', () => {
+    // Both geometries are valid outcomes. Marking "true T" as anything but
+    // resolved made an ordinary flanged beam read as a failed one.
+    for (const As of [2000, 9000]) {
+      const i = { ...base, AsGiven: As }
+      const step = buildTBeamSolution(i, designTBeam(i))
+        .find((s) => s.title.startsWith('Real T-beam check'))!
+      expect(step.pass).toBe(true)
+    }
+    const heavy = { ...base, AsGiven: 9000 }
+    expect(designTBeam(heavy).tBehavior).toBe(true)
+    expect(buildTBeamSolution(heavy, designTBeam(heavy))
+      .find((s) => s.title.startsWith('Real T-beam check'))!.title).toContain('TRUE T-BEAM')
+  })
+
+  it('a given d is used verbatim, and reproduces the lecture', () => {
+    // bf 800 · hf 100 · bw 300 · d 435, f'c 28, fy 345 — the published pair.
+    const at = (AsGiven: number) => designTBeam({ ...base, AsGiven, dGiven: 435 })
+    expect(at(6000).d).toBeCloseTo(435, 9)
+    expect(at(6000).dt).toBeCloseTo(435, 9)
+    expect(at(6000).phiMn).toBeCloseTo(708.048, 3)
+    expect(at(9000).phiMn).toBeCloseTo(648.999, 3)
   })
 
   it('prints the lever arm as the block centroid, not as a/2', () => {

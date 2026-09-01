@@ -31,6 +31,19 @@ export interface TBeamInput {
   ln?: number                         // clear span, m (for bf table)
   sw?: number                         // clear web-to-web spacing, m
   cover: number; stirrupDia: number; barDia: number
+  /**
+   * Effective depth d, mm — given rather than derived.
+   *
+   * A textbook problem states d; a drawing states h and the cover. When this
+   * is set it pins BOTH the steel centroid (where T acts) and dt (where
+   * §21.2.2 measures εt), because d alone cannot say how the bars are
+   * arranged — and equating the two is the single-layer reading, which is the
+   * conservative one: a smaller dt lowers εt, which lowers φ.
+   *
+   * The layout↔depth iteration is skipped while this is set; stacking bars no
+   * longer moves d, because the caller has already said where the steel is.
+   */
+  dGiven?: number
   fc: number; fy: number
   /** Nominal maximum aggregate size, mm — §25.2.1's 4/3·d_agg term. Default 20. */
   aggregate?: number
@@ -244,7 +257,8 @@ export function designTBeam(i: TBeamInput): TBeamResult {
   const notes: string[] = []
   const { bf, govern, isolatedOK } = effectiveFlange(i)
   const Ab = (Math.PI / 4) * i.barDia ** 2
-  const dt = i.h - i.cover - i.stirrupDia - i.barDia / 2
+  const dFixed = !!(i.dGiven && i.dGiven > 0)
+  const dt = dFixed ? (i.dGiven as number) : i.h - i.cover - i.stirrupDia - i.barDia / 2
   const b1 = beta1(i.fc)
 
   // tension-controlled steel cap (c = 3/8·dt): block may enter the web. Anchored
@@ -365,7 +379,7 @@ export function designTBeam(i: TBeamInput): TBeamResult {
     // demand) is what As-provided must be computed from.
     const split = splitLayers(Math.max(2, Math.ceil(As / Ab)), perLayer)
     const newLayers = split.layers
-    const dNew = dt - centroidRise(newLayers, pitch)
+    const dNew = dFixed ? dt : dt - centroidRise(newLayers, pitch)
     const same = newLayers.length === layers.length && newLayers.every((k, j) => k === layers[j])
     bars = split.bars
     layers = newLayers
@@ -388,9 +402,13 @@ export function designTBeam(i: TBeamInput): TBeamResult {
   if (!converged) notes.push('bar layout did not settle in 12 passes — check the reported capacity')
   const minGoverns = !analyze && As <= AsMin + 1e-9
   const sClear = layers[0] > 1 ? (web - layers[0] * i.barDia) / (layers[0] - 1) : web
-  if (layers.length > 1) {
+  // Only when the layout is what SET d. With `dGiven` the caller has already
+  // said where the steel is, so the stack moves nothing and the note read
+  // "d reduced to the group centroid (435.0 → 435.0 mm)".
+  if (layers.length > 1 && !dFixed) {
     notes.push(`${layers.length} bar layers — d reduced to the group centroid (${dt.toFixed(1)} → ${d.toFixed(1)} mm)`)
   }
+  if (dFixed) notes.push(`d = ${dt.toFixed(1)} mm taken as given (dt = d, single-layer reading)`)
 
   // φ·capacity with the block exactly filling the flange — the T/rect switch
   const MnfPhi = (0.90 * 0.85 * i.fc * bf * i.hf * (d - i.hf / 2)) / 1e6

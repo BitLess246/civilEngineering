@@ -48,8 +48,15 @@ export function buildTBeamSolution(i: TBeamInput, r: TBeamResult): SolutionStep[
       ],
     },
     {
-      title: hog ? 'Hogging — flange in tension, web rectangle resists' : 'Rectangular or T behaviour?',
-      clause: 'ACI 318-14 §22.2',
+      // A REAL T-BEAM IS AN OUTCOME, NOT A FAILURE. This step decides which of
+      // two geometries the section has; both are valid, so it is marked as a
+      // check that RESOLVED. Reading "true T" as a red mark is what made a
+      // perfectly ordinary flanged beam look like a failed one.
+      title: hog ? 'Hogging — flange in tension, web rectangle resists'
+        : analyze ? `Real T-beam check — ${r.tBehavior ? 'TRUE T-BEAM' : 'rectangular (a ≤ hf)'}`
+          : 'Rectangular or T behaviour?',
+      clause: 'ACI 318-14 §22.2 / NSCP §422.2',
+      pass: hog ? undefined : true,
       lines: hog ? [
         txt('Negative moment puts the flange in tension — compression lives in the web, so the section designs as a rectangle b = bw.'),
       ] : analyze ? [
@@ -57,8 +64,9 @@ export function buildTBeamSolution(i: TBeamInput, r: TBeamResult): SolutionStep[
         // steel is. Comparing Mu against the flange couple here would answer a
         // question nobody asked, and it contradicted the equilibrium below
         // whenever the two disagreed.
-        txt('The steel is given, so the block is whatever balances it — the moment plays no part. The flange can supply at most 0.85f\u2032c·bf·hf; past that the block has to push into the narrow web.'),
-        eq(String.raw`C_{flange,max} = 0.85 f'_c b_f h_f = ${sn1((0.85 * i.fc * r.bf * i.hf) / 1e3)}\ \text{kN}\ ${AsProv * i.fy > 0.85 * i.fc * r.bf * i.hf ? String.raw`< A_s f_y \Rightarrow \textbf{true T}` : String.raw`\ge A_s f_y \Rightarrow \text{block stays in the flange}`}`),
+        txt('The steel is given, so the block is whatever balances it — the moment plays no part. Take C = T with the steel at yield and read off the concrete area it needs; if that is more than the flange holds, the block must push into the web and the section is a REAL T-beam.'),
+        eq(String.raw`0.85 f'_c A_{conc} = A_s f_y \;\Rightarrow\; A_{conc} = \dfrac{${sn0(AsProv)}(${sn0(i.fy)})}{0.85(${sn0(i.fc)})} = ${sn2(AsProv * i.fy / (0.85 * i.fc))}\ \text{mm}^2`),
+        eq(String.raw`A_{conc} = ${sn2(AsProv * i.fy / (0.85 * i.fc))} \;${r.tBehavior ? '>' : '\\le'}\; b_f h_f = ${sn0(r.bf * i.hf)}\ \text{mm}^2 \;\Rightarrow\; ${r.tBehavior ? String.raw`\textbf{real T-beam}\ \checkmark` : String.raw`\text{rectangular, } b = b_f`}`),
       ] : [
         txt('The compression block is what grows with the moment, and it spends the widest concrete first: while it is no deeper than hf the section is a plain rectangle of width bf. Only when the flange is used up does the block push into the narrow web.'),
         eq(String.raw`\phi M_{n,f} = 0.90(0.85 f'_c)\,b_f h_f (d - \tfrac{h_f}{2}) = ${sn1(r.MnfPhi)}\ \text{kN·m}\ ${Math.abs(i.Mu) <= r.MnfPhi ? String.raw`\ge M_u \Rightarrow \text{block stays in the flange}` : String.raw`< M_u \Rightarrow \textbf{true T}`}`),

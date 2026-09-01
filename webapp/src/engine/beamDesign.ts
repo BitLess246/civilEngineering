@@ -34,6 +34,19 @@ export interface BeamDesignInput {
    * clause, which is the safe direction, but the number belongs here.
    */
   aggregate?: number
+  /**
+   * Effective depth d, mm — given rather than derived.
+   *
+   * A textbook problem states d; a drawing states h and the cover. When this
+   * is set it pins BOTH the steel centroid (where T acts) and dt (where
+   * §21.2.2 measures εt), because d alone cannot say how the bars are
+   * arranged — and equating the two is the single-layer reading, which is the
+   * conservative one: a smaller dt lowers εt, which lowers φ.
+   *
+   * The layout↔depth iteration is skipped while this is set; stacking bars no
+   * longer moves d, because the caller has already said where the steel is.
+   */
+  dGiven?: number
   fc: number; fy: number
   fyt?: number         // stirrup yield (default fy)
   Mu: number           // factored moment, kN·m
@@ -172,7 +185,8 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
   const AbC = (Math.PI / 4) * dbC * dbC
 
   // Extreme tension layer & compression-steel base depth — fixed by the section.
-  const dt = i.h - i.cover - i.stirrupDia - i.barDia / 2
+  const dFixed = !!(i.dGiven && i.dGiven > 0)
+  const dt = dFixed ? (i.dGiven as number) : i.h - i.cover - i.stirrupDia - i.barDia / 2
   const dPrimeBase = i.cover + i.stirrupDia + dbC / 2
 
   // §407.7.1 / ACI 318-14 §25.2.1 — clear spacing ≥ max(db, 25 mm, 4/3·d_agg);
@@ -252,7 +266,7 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
     const tenSplit = splitLayers(Math.max(2, Math.ceil(As / Ab)), maxPerLayer)
     bars = tenSplit.bars
     const newLayers = tenSplit.layers
-    yBar = centroidRise(newLayers, pitch)
+    yBar = dFixed ? 0 : centroidRise(newLayers, pitch)
     const dNew = dt - yBar
 
     // Compression side: same technique, layered downward from the top face —
