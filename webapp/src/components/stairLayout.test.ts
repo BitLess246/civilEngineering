@@ -368,7 +368,12 @@ describe('stairBars — which bar turns a kink, and which two cross it', () => {
 
   it('a lapping bar is placed CLEAR of the layer it laps past, not on top of it', () => {
     // Laid on the far face itself it is hidden under the bar already there.
-    const turned = byId('top-through').pts[1]              // where it meets the landing soffit
+    // Read off the anchorage itself rather than a position in `pts`: the
+    // crossed bar's run past the corner is `anchor.run`, and its FIRST point is
+    // where it met the far face and turned. Taking `pts[1]` instead made this
+    // depend on which end the bar happens to be written from, and a later
+    // refactor that reversed it left the assertion passing on the wrong point.
+    const turned = byId('top-through').anchor!.run[0]       // where it meets the landing soffit
     const soffitBar = bot[0][1]
     expect(Math.abs(turned[1] - soffitBar)).toBeGreaterThan(2)
   })
