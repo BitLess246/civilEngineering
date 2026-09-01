@@ -83,14 +83,6 @@ export const MODEL_STEPS: readonly TourStep[] = [
     why: 'Cracked sections (ACI §6.6.3.1.1) are on by default here and off at the API level, so closed-form benchmarks stay gross-section.',
   },
   {
-    id: 'display',
-    tab: 'analysis',
-    anchor: 'display-panel',
-    title: 'What the viewport draws is set here',
-    body: 'At the top of the panel, on every tab: load arrows, force diagrams along each member, and — once the structure is designed — footings at their real size, steel connections and the bar cages themselves. Each toggle carries its own colour key.',
-    why: 'It stays on whichever tab you move to, because what the 3D view is drawing is not a property of which tab is open.',
-  },
-  {
     id: 'modal',
     tab: 'modal',
     anchor: 'modal-panel',
@@ -119,6 +111,14 @@ export const MODEL_STEPS: readonly TourStep[] = [
     anchor: 'plans-panel',
     title: 'Take the drawings and the take-off',
     body: 'Framing and foundation plans, footing details and the bill of quantities are generated from the model and the design — not redrawn. Every sheet exports to SVG.',
+  },
+  {
+    id: 'display',
+    tab: 'display',
+    anchor: 'display-panel',
+    title: 'What the viewport draws is set on its own tab',
+    body: 'Load arrows, force diagrams along each member, and — once the structure is designed — footings at their real size, steel connections and the bar cages themselves. Each toggle carries its own colour key.',
+    why: 'The toggles stay on whatever you switch to afterwards: what the 3D view is drawing is not a property of which tab is open. Display is last in the ribbon because it is not a step — it applies at whatever stage you are at.',
   },
   {
     id: 'io',

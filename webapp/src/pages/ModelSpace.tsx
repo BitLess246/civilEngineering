@@ -867,7 +867,7 @@ function DirPicker({ value, onChange }: { value: string[]; onChange: (v: string[
 }
 
 // ── Right-panel tabs ────────────────────────────────────────────────────────
-type Tab = 'geometry' | 'properties' | 'supports' | 'loading' | 'analysis' | 'modal' | 'pushover' | 'nonlinear' | 'design' | 'plans' | 'projects'
+type Tab = 'geometry' | 'properties' | 'supports' | 'loading' | 'analysis' | 'modal' | 'pushover' | 'nonlinear' | 'design' | 'plans' | 'projects' | 'display'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'geometry', label: 'Geometry' },
   { id: 'properties', label: 'Properties' },
@@ -880,6 +880,11 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'design', label: 'Design' },
   { id: 'plans', label: 'Plans' },
   { id: 'projects', label: 'Projects' },
+  // Last, because it is not a step. Geometry → … → Design is a sequence each of
+  // whose tabs needs the ones before it; Display changes how the model is DRAWN
+  // and applies at whatever stage you are at, so it sits with the other
+  // non-steps rather than interrupting the order.
+  { id: 'display', label: 'Display' },
 ]
 /** Flat panel section (3D Model Space mockup): uppercase mini-title, no card
  *  chrome — hairline separation comes from the parent's divide-y. */
@@ -2495,108 +2500,6 @@ export default function ModelSpace() {
             the header, so switching tabs does not depend on how wide this rail
             happens to be. */}
         <div className="no-print overflow-hidden rounded-lg border border-[#e3e1da] bg-white">
-          {/* ── DISPLAY — the overlays on the 3D view ────────────────────────
-              These are VIEW state, and under the canvas they were a stack of
-              checkboxes whose legends wrapped inline: five of them pushed the
-              model up off the top of the screen, and they scrolled away from
-              the view they control. In the panel they sit beside it, and the
-              legend of each one gets its own line instead of fighting the
-              label for width.
-              
-              FIRST in the panel, not last. The mockup put Display at the foot,
-              but that was drawn against a panel with three fields in it: with
-              the Geometry tab's node and member tables above it, measuring the
-              rendered page put this section 2204 px down — a control for the
-              viewport, two screens below the viewport. It is short, it is
-              global to every tab, and it belongs where it can be reached
-              without scrolling past the thing it is not about. */}
-          <div className="divide-y divide-[#eeece5] border-b border-[#eeece5] bg-[#fbfaf7] px-4 py-1" data-tour="display-panel">
-            <Sec title="Display" grid={false}>
-              <div className="space-y-2.5 text-xs text-slate-600">
-                {design && (design.joints.length > 0 || design.beamJoints.length > 0) && (
-                  <div>
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" checked={showConns} onChange={(e) => setShowConns(e.target.checked)} />
-                      Show designed steel connections
-                    </label>
-                    <Swatches items={[['#334155', 'plates'], ['#d4a017', 'bolts / welds']]} />
-                  </div>
-                )}
-                {design && (
-                  <div>
-                    <label className="flex items-center gap-2">
-                      <input type="checkbox" checked={showFootings} onChange={(e) => setShowFootings(e.target.checked)} />
-                      Show designed footings to scale
-                    </label>
-                    <Swatches items={[['#b45309', 'ok'], ['#dc2626', 'overlap']]} />
-                  </div>
-                )}
-                <div>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={showRebar} onChange={(e) => setShowRebar(e.target.checked)}
-                      disabled={!design} />
-                    Show reinforcement cages
-                  </label>
-                  {!design && <p className="pl-6 text-[11px] text-slate-400">design the structure first</p>}
-                  {showRebar && <p className="pl-6 text-[11px] text-slate-400">concrete shown see-through</p>}
-                  {showRebar && rebarCages.length > 0 && (
-                    <Swatches items={([['top', 'top'], ['bottom', 'bottom'], ['stirrup', 'stirrups'],
-                      ['vertical', 'col. verticals'], ['tie', 'ties'], ['mat', 'footing mat'], ['chair', 'slab chairs']] as const)
-                      .map(([role, label]) => [REBAR_ROLE_COLOR[role], label] as const)} />
-                  )}
-                  {showRebar && rebarNotes.length > 0 && (
-                    <div className="mt-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-900">
-                      <div className="font-medium">What the detailing had to decide</div>
-                      <ul className="mt-1 list-disc space-y-0.5 pl-4">
-                        {rebarNotes.map(([note, at]) => (
-                          <li key={note}>
-                            <span className="font-mono">{at.slice(0, 4).join(', ')}{at.length > 4 ? ` +${at.length - 4} more` : ''}</span>
-                            {' — '}{note}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <label className="flex items-center gap-2">
-                    <input type="checkbox" checked={showLoads} onChange={(e) => setShowLoads(e.target.checked)} />
-                    Show load diagrams on the model
-                  </label>
-                  {showLoads && model && model.loads.length > 0 && (
-                    <Swatches items={[...new Set(model.loads.map((l) => l.cat))]
-                      .map((cat) => [LOAD_COLOR[cat] ?? '#64748b', cat] as const)} />
-                  )}
-                </div>
-                {govRes && (
-                  <div className="border-t border-[#eeece5] pt-2.5">
-                    <p className="mb-1 font-medium">Force diagram</p>
-                    <div className="flex flex-wrap items-center gap-1">
-                      <button type="button" onClick={() => setForceDiag(null)}
-                        className={`rounded px-1.5 py-0.5 font-semibold ${forceDiag === null ? 'bg-slate-200 text-slate-700' : 'text-slate-500 hover:text-slate-600'}`}>off</button>
-                      {(['N', 'Vy', 'Vz', 'My', 'Mz', 'T'] as DiagramComp[]).map((c) => (
-                        <button key={c} type="button" onClick={() => setForceDiag(c)}
-                          title={`Draw ${c} on every member (governing combo)`}
-                          className="rounded px-1.5 py-0.5 font-semibold transition"
-                          style={forceDiag === c
-                            ? { background: DIAG_COLOR[c], color: '#fff' }
-                            : { color: DIAG_COLOR[c] }}>
-                          {DIAG_LABEL[c]}
-                        </button>
-                      ))}
-                    </div>
-                    {forceDiag && (
-                      <label className="mt-1.5 flex items-center gap-1.5">
-                        <span className="text-slate-500">scale</span>
-                        <input type="range" min={0.3} max={3} step={0.1} value={forceDiagScale}
-                          onChange={(e) => setForceDiagScale(Number(e.target.value))} className="h-1 flex-1" />
-                      </label>
-                    )}
-                  </div>
-                )}
-              </div>
-            </Sec>
-          </div>
 
           {/* ── GEOMETRY ── */}
           {tab === 'geometry' && (
@@ -4783,6 +4686,134 @@ export default function ModelSpace() {
             <div className="px-4 py-3" data-tour="plans-panel">
               <PlansPanel model={model} design={design} soil={soil} />
             </div>
+          )}
+
+          {/* ── DISPLAY — the overlays on the 3D view ────────────────────────
+              These are VIEW state, and under the canvas they were a stack of
+              checkboxes whose legends wrapped inline: five of them pushed the
+              model up off the top of the screen, and they scrolled away from
+              the view they control. In the panel they sit beside it, and the
+              legend of each one gets its own line instead of fighting the
+              label for width.
+
+              ITS OWN TAB. Pinned to the top of the panel these cost every other
+              tab 300 px of height before its first field; at the foot of it they
+              measured 2204 px down the rendered page, which is a control for the
+              viewport two screens below the viewport. A tab costs nothing
+              anywhere else, and pays for it with a round trip — so the panel
+              says what each toggle is WAITING for rather than offering a dead
+              checkbox with no explanation. */}
+          {tab === 'display' && (
+          <div className="divide-y divide-[#eeece5] px-4 py-1" data-tour="display-panel">
+            <Sec title="Display" grid={false}>
+              <div className="space-y-2.5 text-xs text-slate-600">
+                <p className="text-[11px] leading-snug text-slate-500">
+                  What the 3D view draws. These apply on every tab.
+                </p>
+                {design && (design.joints.length > 0 || design.beamJoints.length > 0) && (
+                  <div>
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={showConns} onChange={(e) => setShowConns(e.target.checked)} />
+                      Show designed steel connections
+                    </label>
+                    <Swatches items={[['#334155', 'plates'], ['#d4a017', 'bolts / welds']]} />
+                  </div>
+                )}
+                {design && (
+                  <div>
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={showFootings} onChange={(e) => setShowFootings(e.target.checked)} />
+                      Show designed footings to scale
+                    </label>
+                    <Swatches items={[['#b45309', 'ok'], ['#dc2626', 'overlap']]} />
+                  </div>
+                )}
+                <div>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={showRebar} onChange={(e) => setShowRebar(e.target.checked)}
+                      disabled={!design} />
+                    Show reinforcement cages
+                  </label>
+                  {!design && <p className="pl-6 text-[11px] text-slate-400">design the structure first</p>}
+                  {showRebar && <p className="pl-6 text-[11px] text-slate-400">concrete shown see-through</p>}
+                  {showRebar && rebarCages.length > 0 && (
+                    <Swatches items={([['top', 'top'], ['bottom', 'bottom'], ['stirrup', 'stirrups'],
+                      ['vertical', 'col. verticals'], ['tie', 'ties'], ['mat', 'footing mat'], ['chair', 'slab chairs']] as const)
+                      .map(([role, label]) => [REBAR_ROLE_COLOR[role], label] as const)} />
+                  )}
+                  {showRebar && rebarNotes.length > 0 && (
+                    <div className="mt-1.5 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] leading-snug text-amber-900">
+                      <div className="font-medium">What the detailing had to decide</div>
+                      <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                        {rebarNotes.map(([note, at]) => (
+                          <li key={note}>
+                            <span className="font-mono">{at.slice(0, 4).join(', ')}{at.length > 4 ? ` +${at.length - 4} more` : ''}</span>
+                            {' — '}{note}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={showLoads} onChange={(e) => setShowLoads(e.target.checked)} />
+                    Show load diagrams on the model
+                  </label>
+                  {showLoads && model && model.loads.length > 0 && (
+                    <Swatches items={[...new Set(model.loads.map((l) => l.cat))]
+                      .map((cat) => [LOAD_COLOR[cat] ?? '#64748b', cat] as const)} />
+                  )}
+                </div>
+                {!design && (
+                  <p className="rounded border border-[#e3e1da] bg-[#faf9f6] px-2 py-1.5 text-[11px] leading-snug text-slate-500">
+                    Footings, steel connections and the bar cages appear here once the
+                    structure has been designed — they are drawn from the design, so
+                    there is nothing to draw until it has run.
+                  </p>
+                )}
+                {/* Says "again" because designing legitimately clears the
+                    analysis: the pipeline re-applies the section materials and
+                    rebuilds the loads, so the model it saves is not the one the
+                    earlier run solved. Without the second sentence this hint
+                    tells someone who has just pressed Analyze that they have
+                    not — which is how it read the first time it was measured. */}
+                {!govRes && (
+                  <p className="rounded border border-[#e3e1da] bg-[#faf9f6] px-2 py-1.5 text-[11px] leading-snug text-slate-500">
+                    Force diagrams need analysis results — run Analyze on the Analysis tab.
+                    Designing re-applies the section materials and rebuilds the loads, so
+                    the earlier run no longer describes this model; analyse again to draw them.
+                  </p>
+                )}
+                {govRes && (
+                  <div className="border-t border-[#eeece5] pt-2.5">
+                    <p className="mb-1 font-medium">Force diagram</p>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <button type="button" onClick={() => setForceDiag(null)}
+                        className={`rounded px-1.5 py-0.5 font-semibold ${forceDiag === null ? 'bg-slate-200 text-slate-700' : 'text-slate-500 hover:text-slate-600'}`}>off</button>
+                      {(['N', 'Vy', 'Vz', 'My', 'Mz', 'T'] as DiagramComp[]).map((c) => (
+                        <button key={c} type="button" onClick={() => setForceDiag(c)}
+                          title={`Draw ${c} on every member (governing combo)`}
+                          className="rounded px-1.5 py-0.5 font-semibold transition"
+                          style={forceDiag === c
+                            ? { background: DIAG_COLOR[c], color: '#fff' }
+                            : { color: DIAG_COLOR[c] }}>
+                          {DIAG_LABEL[c]}
+                        </button>
+                      ))}
+                    </div>
+                    {forceDiag && (
+                      <label className="mt-1.5 flex items-center gap-1.5">
+                        <span className="text-slate-500">scale</span>
+                        <input type="range" min={0.3} max={3} step={0.1} value={forceDiagScale}
+                          onChange={(e) => setForceDiagScale(Number(e.target.value))} className="h-1 flex-1" />
+                      </label>
+                    )}
+                  </div>
+                )}
+              </div>
+            </Sec>
+          </div>
           )}
 
         </div>
