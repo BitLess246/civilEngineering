@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { stairGeometry, stairLoads, designStair } from './stair'
+import { stairGeometry, stairLoads, landingLoads, designStair } from './stair'
 import { flexuralSteel, rhoMin } from './flexure'
 
 describe('stairGeometry', () => {
@@ -93,5 +93,32 @@ describe('the verdict includes the span/depth minimum', () => {
     expect(designStair({ ...base, t, support: 'one-end' }).tMin).toBeCloseTo(4000 / 24, 9)
     expect(designStair({ ...base, t, support: 'both-ends' }).tMin).toBeCloseTo(4000 / 28, 9)
     expect(designStair({ ...base, t, support: 'both-ends' }).ok).toBe(true)
+  })
+})
+
+describe('landingLoads — a landing is a flat slab, not a flat flight', () => {
+  it('drops the two things that make a flight heavy per plan metre', () => {
+    const l = landingLoads({ t: 150, finishes: 1.5, live: 4.8 })
+    expect(l.waist).toBeCloseTo(24 * 0.15, 12)     // vertical thickness, no 1/cosθ
+    expect(l.steps).toBe(0)                        // nothing triangular on top
+    expect(l.dead).toBeCloseTo(24 * 0.15 + 1.5, 12)
+    expect(l.wu).toBeCloseTo(1.2 * l.dead + 1.6 * 4.8, 12)
+  })
+
+  it('is lighter than the flight it continues, at every slope', () => {
+    // Which is what makes designing a stair-with-landing on the flight's own
+    // load over the whole span conservative rather than an error to correct.
+    for (const [R, G] of [[150, 300], [175, 275], [190, 250]]) {
+      const flight = stairLoads({ t: 150, R, G, finishes: 1.5, live: 4.8 })
+      const land = landingLoads({ t: 150, finishes: 1.5, live: 4.8 })
+      expect(land.dead).toBeLessThan(flight.dead)
+    }
+  })
+
+  it('at zero slope and no treads the two agree — the slab is the same slab', () => {
+    // A degenerate flight (R = 0) is a flat slab, and the two formulae must
+    // meet there or one of them has a term the other is missing.
+    const flat = stairLoads({ t: 150, R: 0, G: 300, finishes: 1.5, live: 4.8 })
+    expect(flat.dead).toBeCloseTo(landingLoads({ t: 150, finishes: 1.5, live: 4.8 }).dead, 12)
   })
 })

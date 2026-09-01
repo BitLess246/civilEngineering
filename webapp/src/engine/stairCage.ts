@@ -6,14 +6,14 @@
 // distribution bars across them, and an anchorage into each of the two beams
 // it bears on.
 //
-// NO KINKS HERE, AND THAT IS NOT AN OMISSION. `StairElevation` draws a flight
-// WITH its landings, so it has two re-entrant corners and needs the crossed-bar
-// detail that `stairLayout.stairBars` works out — the bar that cannot be bent
-// round the inside of a kink without pushing the cover off. A `Stair` in the
-// model is a bare flight between two beams: the landings are slabs in their own
-// right, so there is no kink in this geometry and no crossing to draw. When
-// landings are modelled as part of a flight, this is where that rule comes in,
-// and it should come from one shared module so the two drawings cannot disagree.
+// NO KINKS HERE YET. `StairElevation` draws a flight WITH its landings, so it
+// has two re-entrant corners and needs the crossed-bar detail that
+// `stairLayout.stairBars` works out — the bar that cannot be bent round the
+// inside of a kink without pushing the cover off. A `Stair` can now carry a
+// landing, so that kink is real in this geometry too; until the detail is
+// lifted into one module shared with `stairLayout` (so the two drawings cannot
+// disagree), this builds the SLOPING part and says in its notes that the
+// landing is bare.
 //
 // WHICH FACE IS IN TENSION. A simply supported flight is in sag throughout, so
 // the steel that matters is the bottom. Continuity at an end puts that end in
@@ -195,6 +195,14 @@ export function buildStairCage(i: StairCageInput): RebarCage {
   if (p.waist < needed) {
     notes.push(`waist ${p.waist} mm is thinner than the ${Math.round(needed)} mm `
       + `two covers + two main bars + two distribution bars need`)
+  }
+  // A landing is part of this slab and is not yet reinforced here: the bars
+  // below run the SLOPING part only, and where a landing is they stop at its
+  // inner edge instead of carrying on into the beam. Saying so beats drawing a
+  // cage that quietly leaves the landing bare.
+  if (p.landings.length) {
+    notes.push(`the ${p.landings.map((l) => l.at).join(' and ')} landing is not `
+      + 'reinforced in this cage — the bars shown stop where the slope does')
   }
   if (!ends.low && !ends.high) {
     notes.push('simply supported both ends — no top steel over either bearing, '

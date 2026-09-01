@@ -23,7 +23,7 @@ import type { StructuralModel } from './model'
 import { RHO_MIN, RHO_MAX } from './columnDesign'
 import { barContinuityGroups } from './modelBuilder'
 import { WOOD_SPECIES } from './woodDesign'
-import { placeStair, RISER_RANGE, GOING_RANGE, PACE_RANGE } from './stairPlacement'
+import { placeStair, landingDepth, RISER_RANGE, GOING_RANGE, PACE_RANGE } from './stairPlacement'
 
 export type MeshSeverity = 'error' | 'warning'
 export interface MeshIssue {
@@ -330,6 +330,35 @@ export function validateMesh(model: StructuralModel): MeshIssue[] {
         message: `stair ${st.id}: width ${st.width} m` })
       continue
     }
+    // Landings, checked BEFORE placement. They eat into the run, so a landing
+    // deeper than the gap makes the flight unplaceable — and the `why` below
+    // would then blame the supports for something the landing did.
+    const lands = st.landings ?? []
+    let landingBroken = false
+    for (const at of ['low', 'high'] as const) {
+      const declared = lands.filter((l) => l.at === at)
+      if (declared.length > 1) {
+        landingBroken = true
+        issues.push({ severity: 'error', code: 'STAIR_LANDING_DUPLICATE', refs,
+          message: `stair ${st.id}: ${declared.length} landings at its ${at} end — a flight has at most one landing per end` })
+      }
+      if (declared.some((l) => !(l.depth > 0))) {
+        landingBroken = true
+        issues.push({ severity: 'error', code: 'STAIR_LANDING_DEPTH', refs,
+          message: `stair ${st.id}: ${at} landing depth ${declared[0].depth} m — a landing with no depth is not a landing; remove it or give it one` })
+      }
+    }
+    if (landingBroken) continue
+    if (lands.length) {
+      // The same stair without its landings: the run the frame actually gives.
+      const bare = placeStair(model, { ...st, landings: [] })
+      const total = landingDepth(st, 'low') + landingDepth(st, 'high')
+      if (bare && total >= bare.run - 1e-9) {
+        issues.push({ severity: 'error', code: 'STAIR_LANDING_TOO_DEEP', refs,
+          message: `stair ${st.id}: ${total.toFixed(3)} m of landing in a ${bare.run.toFixed(3)} m run leaves nothing to slope — shorten the landings or move the supports apart` })
+        continue
+      }
+    }
     const p = placeStair(model, st)
     if (!p) {
       // placeStair returns null for exactly three reasons, and saying which
@@ -380,6 +409,19 @@ export function validateMesh(model: StructuralModel): MeshIssue[] {
     if (p.waist <= 0) {
       issues.push({ severity: 'error', code: 'STAIR_WAIST', refs,
         message: `stair ${st.id}: waist ${p.waist} mm` })
+    }
+    // A landing narrower than the stair is one somebody has to turn sideways
+    // on; the usual rule is that it is at least as deep as the flight is wide.
+    // A rule of good practice, so a warning, like the pace rule above it.
+    for (const l of p.landings) {
+      if (l.depth < p.width - 1e-9) {
+        issues.push({ severity: 'warning', code: 'STAIR_LANDING_SHALLOW', refs,
+          message: `stair ${st.id}: ${l.at} landing is ${l.depth.toFixed(3)} m deep on a ${p.width.toFixed(3)} m wide flight — a landing is normally at least as deep as the stair is wide` })
+      }
+      if (l.thickness < p.waist - 1e-9) {
+        issues.push({ severity: 'warning', code: 'STAIR_LANDING_THIN', refs,
+          message: `stair ${st.id}: ${l.at} landing is ${l.thickness} mm against a ${p.waist} mm waist — flight and landing are one slab, and the thin part is where it will crack` })
+      }
     }
   }
 

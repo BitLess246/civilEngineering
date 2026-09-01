@@ -13,6 +13,14 @@
 // from "do these four numbers agree?" into the question worth asking: "is the
 // stair this frame implies a usable one?"
 //
+// LANDINGS AND THE BREAK BEAM. A flight may carry a flat landing at either
+// end. The landing is not a second span: flight and landing are one one-way
+// slab, so the landing eats into the run and the flight climbs the whole rise
+// over what is left — R and G change, the span between the supports does not.
+// The member at that end IS the landing beam, which is what a stair between
+// floors breaks on: two flights meeting on a beam at mid height, one of them
+// carrying the half-landing.
+//
 // THE LOAD PATH. The flight is not meshed. Its reactions go onto the two
 // members it bears on, as point loads spread across the bearing width — the
 // total and the split between supports are then exact, and the local bending
@@ -26,7 +34,7 @@
 // y up.
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, Stair, RectSection, ModelLoad } from './model'
-import { stairGeometry, stairLoads } from './stair'
+import { stairGeometry, stairLoads, landingLoads, type StairLoads } from './stair'
 
 export type Vec3 = [number, number, number]
 
@@ -41,24 +49,50 @@ export interface StairUsability {
   goingOK: boolean
 }
 
+/** A flat landing, placed: where its two edges are and how thick it is. */
+export interface PlacedLanding {
+  at: 'low' | 'high'
+  /** Plan depth along the run, m, and slab thickness, mm. */
+  depth: number
+  thickness: number
+  /** TOP surface. `outer` is the edge over the beam, `inner` the edge the
+   *  sloping flight starts from; each left-to-right across the width. */
+  outer: [Vec3, Vec3]
+  inner: [Vec3, Vec3]
+}
+
 export interface PlacedStair {
   id: string
   /** Vertical climb and horizontal travel between the two supports, m. */
   rise: number
   run: number
-  /** Derived and therefore equal: R = rise/risers, G = run/risers. mm. */
+  /** The part of `run` that actually slopes — `run` less the landings. */
+  flightRun: number
+  /** Derived and therefore equal: R = rise/risers, G = flightRun/risers. mm. */
   R: number
   G: number
   thetaDeg: number
-  /** Span of the waist along its own slope, m — what the flight is designed for. */
+  /** Span of the SLOPING part along its own slope, m. */
   slopeSpan: number
+  /** Developed length of the whole slab, m: landing + slope + landing. What a
+   *  bar running the length of the stair has to be, and what the elevation
+   *  dimensions — NOT what it is designed for, which is `run` (the loads are
+   *  per unit of PLAN area, so the span that belongs with them is horizontal). */
+  totalSpan: number
   /** Unit vectors: down the flight in plan, and across its width. */
   runDir: Vec3
   widthDir: Vec3
   /** The waist's TOP surface, four corners: low edge then high edge, each
-   *  left-to-right across the width. */
+   *  left-to-right across the width. With a landing at that end this is the
+   *  landing's INNER edge — where the slope starts, not where it bears. */
   lowEdge: [Vec3, Vec3]
   highEdge: [Vec3, Vec3]
+  /** Where the slab actually bears, on each member. Same as `lowEdge` /
+   *  `highEdge` unless a landing carries the bearing out from under the slope. */
+  bearLow: [Vec3, Vec3]
+  bearHigh: [Vec3, Vec3]
+  /** The landings, in the order low then high. Empty for a bare flight. */
+  landings: PlacedLanding[]
   width: number
   waist: number
   usable: StairUsability
@@ -102,6 +136,18 @@ function bearing(line: { a: Vec3; b: Vec3; sec: RectSection }): { mid: Vec3; top
   return { mid, top: mid[1] + line.sec.h / 2000 }
 }
 
+/** Depth of the landing at one end, m — 0 when there is none. */
+export function landingDepth(s: Stair, at: 'low' | 'high'): number {
+  const l = (s.landings ?? []).find((x) => x.at === at)
+  return l && l.depth > 0 ? l.depth : 0
+}
+
+/** Thickness of the landing at one end, mm — the waist unless it says otherwise. */
+export function landingThickness(s: Stair, at: 'low' | 'high'): number {
+  const l = (s.landings ?? []).find((x) => x.at === at)
+  return l && l.thickness && l.thickness > 0 ? l.thickness : s.waist
+}
+
 /**
  * Place one flight, or say why it cannot be placed.
  *
@@ -130,23 +176,47 @@ export function placeStair(model: StructuralModel, s: Stair): PlacedStair | null
   const run = Math.abs(along)
   if (!(run > 1e-6)) return null                      // the supports sit on the same line
 
+  // The landings eat into the run before R and G are struck, which is the whole
+  // reason they are part of THIS calculation and not a decoration on top of it:
+  // the flight climbs the same rise over a shorter run, so it is steeper.
+  const dLo = landingDepth(s, 'low'), dHi = landingDepth(s, 'high')
+  const flightRun = run - dLo - dHi
+  if (!(flightRun > 1e-6)) return null                // the landings leave no flight
+
   const R = (rise * 1000) / s.risers
-  const G = (run * 1000) / s.risers
+  const G = (flightRun * 1000) / s.risers
   const { thetaDeg } = stairGeometry(R, G)
-  const slopeSpan = Math.hypot(run, rise)
+  const slopeSpan = Math.hypot(flightRun, rise)
 
   // Across the width, along the low member's own axis, shifted by `offset`.
   const widthDir = uLo
   const centre = add(bLo.mid, mul(widthDir, s.offset ?? 0))
   const half = mul(widthDir, s.width / 2)
-  const lowMid: Vec3 = [centre[0], bLo.top, centre[2]]
-  const highMid: Vec3 = add([centre[0], bHi.top, centre[2]], mul(runDir, run))
+  const bearLoMid: Vec3 = [centre[0], bLo.top, centre[2]]
+  const bearHiMid: Vec3 = add([centre[0], bHi.top, centre[2]], mul(runDir, run))
+  // The slope starts past the low landing and stops short of the high one.
+  const lowMid: Vec3 = add(bearLoMid, mul(runDir, dLo))
+  const highMid: Vec3 = sub(bearHiMid, mul(runDir, dHi))
+  const edge = (mid: Vec3): [Vec3, Vec3] => [sub(mid, half), add(mid, half)]
+
+  const landings: PlacedLanding[] = []
+  for (const [at, depth, outer, inner] of [
+    ['low', dLo, bearLoMid, lowMid], ['high', dHi, bearHiMid, highMid],
+  ] as const) {
+    if (depth <= 0) continue
+    landings.push({
+      at, depth, thickness: landingThickness(s, at),
+      outer: edge(outer), inner: edge(inner),
+    })
+  }
 
   const pace = 2 * R + G
   return {
-    id: s.id, rise, run, R, G, thetaDeg, slopeSpan, runDir, widthDir,
-    lowEdge: [sub(lowMid, half), add(lowMid, half)],
-    highEdge: [sub(highMid, half), add(highMid, half)],
+    id: s.id, rise, run, flightRun, R, G, thetaDeg, slopeSpan,
+    totalSpan: dLo + slopeSpan + dHi, runDir, widthDir,
+    lowEdge: edge(lowMid), highEdge: edge(highMid),
+    bearLow: edge(bearLoMid), bearHigh: edge(bearHiMid),
+    landings,
     width: s.width, waist: s.waist,
     usable: {
       pace,
@@ -195,37 +265,75 @@ export interface StairFrameLoad {
 }
 
 /**
+ * The slab in plan, as strips of uniform load: the low landing, the sloping
+ * flight, and the high landing, each with its `x` measured from the low
+ * support along the run.
+ *
+ * `stairLoads` and `landingLoads` both give kPa of PLAN area, which is why the
+ * run and not the slope span is what a strip is measured over.
+ */
+export function stairStrips(p: PlacedStair, s: Stair, gammaC?: number): {
+  x0: number; len: number; q: StairLoads
+}[] {
+  const flight = stairLoads({ t: s.waist, R: p.R, G: p.G, finishes: s.finishes, live: s.live, gammaC })
+  const strips: { x0: number; len: number; q: StairLoads }[] = []
+  const lo = p.landings.find((l) => l.at === 'low')
+  const hi = p.landings.find((l) => l.at === 'high')
+  const land = (l: PlacedLanding) =>
+    landingLoads({ t: l.thickness, finishes: s.finishes, live: s.live, gammaC })
+  if (lo) strips.push({ x0: 0, len: lo.depth, q: land(lo) })
+  strips.push({ x0: lo?.depth ?? 0, len: p.flightRun, q: flight })
+  if (hi) strips.push({ x0: p.run - hi.depth, len: hi.depth, q: land(hi) })
+  return strips
+}
+
+/**
  * One flight's reactions, as loads on the two members it bears on.
  *
- * A uniformly loaded flight puts half its weight on each support whatever its
- * end fixity — symmetry, not an assumption about continuity. `stairLoads`
- * already gives the dead components per PLAN area (waist × 1/cosθ, treads at
- * an average R/2, finishes), which is why the run and not the slope span is
- * what the reaction is computed over.
+ * A BARE flight is uniformly loaded and puts half its weight on each support
+ * whatever its end fixity — symmetry, not an assumption about continuity. A
+ * flight WITH a landing is not uniformly loaded (a landing is flat and carries
+ * no treads, so it is the lighter strip), so that symmetry argument is gone and
+ * the split is taken by statics instead: ΣM about the low support over a simply
+ * supported span. Continuity moves the split a little; the total is exact
+ * either way, and the total is what must not be lost.
  */
 export function stairFrameLoads(
   model: StructuralModel, s: Stair, gammaC?: number,
 ): StairFrameLoad | null {
   const p = placeStair(model, s)
   if (!p) return null
-  const q = stairLoads({ t: s.waist, R: p.R, G: p.G, finishes: s.finishes, live: s.live, gammaC })
-  const area = p.run * s.width                        // PLAN area of the flight, m²
-  const totalD = q.dead * area, totalL = q.live * area
+  const strips = stairStrips(p, s, gammaC)
+
+  /** Total and the share of it reaching the HIGH support, kN. */
+  const split = (pick: (q: StairLoads) => number) => {
+    let W = 0, moment = 0
+    for (const st of strips) {
+      const w = pick(st.q) * st.len * s.width          // kN on this strip
+      W += w
+      moment += w * (st.x0 + st.len / 2)               // about the low support
+    }
+    return { W, hi: p.run > 1e-9 ? moment / p.run : W / 2 }
+  }
+  const D = split((q) => q.dead), L = split((q) => q.live)
 
   const loads: ModelLoad[] = []
-  for (const [id, edge] of [[s.low, p.lowEdge], [s.high, p.highEdge]] as const) {
+  for (const [id, edge, d, l] of [
+    [s.low, p.bearLow, D.W - D.hi, L.W - L.hi],
+    [s.high, p.bearHigh, D.hi, L.hi],
+  ] as const) {
     const line = memberLine(model, id)
     if (!line) continue
     const centre = mul(add(edge[0], edge[1]), 0.5)
     const ts = bearingStations(line.a, line.b, centre, s.width)
     if (!ts.length) continue
     for (const t of ts) {
-      // Half the flight to this support, split equally between its stations.
-      if (totalD > 0) loads.push({ kind: 'member-point', member: id, t, P: totalD / 2 / ts.length, cat: 'D' })
-      if (totalL > 0) loads.push({ kind: 'member-point', member: id, t, P: totalL / 2 / ts.length, cat: 'L' })
+      // This support's share, split equally between its stations.
+      if (d > 0) loads.push({ kind: 'member-point', member: id, t, P: d / ts.length, cat: 'D' })
+      if (l > 0) loads.push({ kind: 'member-point', member: id, t, P: l / ts.length, cat: 'L' })
     }
   }
-  return { stair: s.id, loads, totalD, totalL }
+  return { stair: s.id, loads, totalD: D.W, totalL: L.W }
 }
 
 /** Every stair's reactions, ready to concatenate into the model's load set. */
@@ -242,11 +350,17 @@ const norm = (a: Vec3): Vec3 => {
   return [a[0] / L, a[1] / L, a[2] / L]
 }
 
-export interface FlightSolid {
-  /** The waist as a prism: four TOP corners then the four beneath them, each
-   *  ring low-edge-first and left-to-right across the width. */
+/** Four top corners and the four beneath them, each ring in run order and
+ *  left-to-right across the width. */
+export interface SolidPrism {
   top: [Vec3, Vec3, Vec3, Vec3]
   bottom: [Vec3, Vec3, Vec3, Vec3]
+}
+
+export interface FlightSolid extends SolidPrism {
+  /** The landings, each a flat prism — thickness measured VERTICALLY, because
+   *  a landing is flat and the 1/cosθ the waist gets does not apply to it. */
+  landings: (SolidPrism & { at: 'low' | 'high' })[]
   /** Unit normal to the soffit, pointing up out of the slab — the direction
    *  the waist thickness is measured along, and the reason a stair has a
    *  1/cosθ slope factor at all. */
@@ -280,11 +394,20 @@ export function flightSolid(p: PlacedStair): FlightSolid {
     p.lowEdge[0], p.lowEdge[1], p.highEdge[1], p.highEdge[0],
   ]
   const R = p.R / 1000, G = p.G / 1000
-  const n = Math.max(1, Math.round(p.run / Math.max(G, 1e-9)))
+  // Over the SLOPING part only: a landing has no treads on it.
+  const n = Math.max(1, Math.round(p.flightRun / Math.max(G, 1e-9)))
   const lowMid = mul(add(p.lowEdge[0], p.lowEdge[1]), 0.5)
+  const ring = (a: [Vec3, Vec3], b: [Vec3, Vec3]): [Vec3, Vec3, Vec3, Vec3] =>
+    [a[0], a[1], b[1], b[0]]
   return {
     top,
     bottom: top.map((q) => add(q, down)) as [Vec3, Vec3, Vec3, Vec3],
+    landings: p.landings.map((l) => {
+      // Run order: the low landing's outer edge comes first, the high one's last.
+      const face = l.at === 'low' ? ring(l.outer, l.inner) : ring(l.inner, l.outer)
+      const drop: Vec3 = [0, -l.thickness / 1000, 0]
+      return { at: l.at, top: face, bottom: face.map((q) => add(q, drop)) as [Vec3, Vec3, Vec3, Vec3] }
+    }),
     normal,
     steps: Array.from({ length: n }, (_, i) => ({
       at: add(add(lowMid, mul(p.runDir, i * G)), [0, i * R, 0] as Vec3),
