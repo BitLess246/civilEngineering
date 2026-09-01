@@ -41,6 +41,25 @@ export function stairLoads(p: {
   return { waist, steps, finishes: p.finishes, dead, live: p.live, wu }
 }
 
+/**
+ * Gravity load on a flat LANDING, kPa — the same shape as `stairLoads`, with
+ * the two things that make a flight a flight taken out.
+ *
+ * A landing is a flat slab: its thickness is measured vertically, so there is
+ * no 1/cosθ slope factor, and it carries no treads, so there is no γc·R/2. It
+ * is therefore always the LIGHTER of the two, which is why designing a flight
+ * with landings on the flight's own load over the whole span is conservative
+ * rather than a thing to be corrected for.
+ */
+export function landingLoads(p: {
+  t: number; finishes: number; live: number; gammaC?: number
+}): StairLoads {
+  const gc = p.gammaC ?? GAMMA_C
+  const waist = gc * (p.t / 1000)                         // kPa, flat slab
+  const dead = waist + p.finishes
+  return { waist, steps: 0, finishes: p.finishes, dead, live: p.live, wu: 1.2 * dead + 1.6 * p.live }
+}
+
 /** Span coefficient k in Mu = wu·Ln²/k. */
 const momentDenom = (s: StairSupport): number => (s === 'simple' ? 8 : s === 'one-end' ? 9 : 11)
 /** Minimum one-way slab thickness denominator (Table 409.3.1.1). */

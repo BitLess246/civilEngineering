@@ -243,12 +243,40 @@ export interface Storey { id: string; name: string; elevation: number /* m */ }
  * `low` and `high` are member ids; the flight bears on the TOP of each.
  * JSON-serialisable, like everything else in this file.
  */
+/**
+ * A flat landing at one end of a flight — the half-landing a stair breaks at.
+ *
+ * A landing is NOT a separate span. The flight and its landing are one one-way
+ * slab: the landing is the flat part of it, between the beam it bears on and
+ * the foot (or head) of the sloping part. So `depth` eats into the run the
+ * flight has, which is why R and G change when a landing is added and the
+ * span between the supports does not.
+ *
+ * WHERE THE BREAK BEAM IS. The member at that end of the flight IS the landing
+ * beam: a stair between floors is two `Stair`s meeting on a beam at mid height,
+ * the lower one carrying the landing and the upper one starting off it (or the
+ * other way round). A shared half-landing belongs to ONE of the two flights —
+ * modelling it on both would put the same slab into the frame twice.
+ */
+export interface StairLanding {
+  /** Which end of the flight the landing is at. */
+  at: 'low' | 'high'
+  /** Plan depth of the landing, m, measured along the flight's run. */
+  depth: number
+  /** Landing slab thickness, mm. Defaults to the flight's waist. Measured
+   *  vertically: a landing is flat, so it has no slope factor. */
+  thickness?: number
+}
+
 export interface Stair {
   id: string
   /** The member the flight starts from — the lower of the two. */
   low: string
   /** The member it lands on. */
   high: string
+  /** Flat landings at the ends of the flight, at most one per end. Absent
+   *  means the flight runs the whole way between its two supports. */
+  landings?: StairLanding[]
   /** Plan width of the flight, m. */
   width: number
   /** Where the flight sits along the low member's axis: the offset of its

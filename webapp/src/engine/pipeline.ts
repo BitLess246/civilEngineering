@@ -248,18 +248,31 @@ export interface WoodSlabScheduleRow {
  * area through w·L²/denom, so the length that belongs in it is the horizontal
  * one. `slopeSpan` rides along because it is what gets cut and what the
  * elevation dimensions.
+ *
+ * WITH A LANDING that span does not change: flight and landing are one one-way
+ * slab between the same two beams, and the landing only takes run away from
+ * the sloping part. What it does change is the LOAD, and only downwards — a
+ * flat landing carries no treads and gets no 1/cosθ — so the design here, which
+ * puts the flight's own load over the whole span, is conservative on a stair
+ * with landings and exact on one without. The reactions in `totalD`/`totalL`
+ * are NOT approximated that way: they come from the real stepped load.
  */
 export interface StairScheduleRow {
   id: string
-  /** The two members it bears on. */
+  /** The two members it bears on — with a landing, the one at that end is the
+   *  landing beam the stair breaks on. */
   low: string
   high: string
   /** Placed geometry, all of it derived from where those members are. */
   rise: number; run: number; slopeSpan: number
+  /** The sloping part of the run, and the developed length of the whole slab. */
+  flightRun: number; totalSpan: number
   R: number; G: number; thetaDeg: number
   risers: number
   width: number
   waist: number
+  /** Flat landings at the ends, in the order low then high. */
+  landings: { at: 'low' | 'high'; depth: number; thickness: number }[]
   design: StairDesign
   /** Reactions the flight delivers to the frame, kN — the same numbers
    *  `stairFrameLoads` put on the members, reported so the schedule and the
@@ -1637,8 +1650,11 @@ function designFromRuns(
     stairs.push({
       id: st.id, low: st.low, high: st.high,
       rise: p.rise, run: p.run, slopeSpan: p.slopeSpan,
+      flightRun: p.flightRun, totalSpan: p.totalSpan,
       R: p.R, G: p.G, thetaDeg: p.thetaDeg, risers: st.risers,
-      width: st.width, waist: st.waist, design,
+      width: st.width, waist: st.waist,
+      landings: p.landings.map((l) => ({ at: l.at, depth: l.depth, thickness: l.thickness })),
+      design,
       totalD: fl?.totalD ?? 0, totalL: fl?.totalL ?? 0,
       usable: p.usable,
       ok: design.ok,

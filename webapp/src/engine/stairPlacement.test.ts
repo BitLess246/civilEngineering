@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
   placeStair, stairFrameLoads, bearingStations, planDir, allStairFrameLoads,
-  flightSolid, RISER_RANGE, GOING_RANGE, PACE_RANGE, type Vec3,
+  flightSolid, landingDepth, landingThickness, stairStrips,
+  RISER_RANGE, GOING_RANGE, PACE_RANGE, type Vec3,
 } from './stairPlacement'
-import { stairLoads } from './stair'
+import { stairLoads, landingLoads } from './stair'
 import { validateMesh } from './meshValidation'
 import type { StructuralModel, Stair } from './model'
 
@@ -382,5 +383,222 @@ describe('flightSolid — the flight as something you can draw', () => {
       expect(along).toBeGreaterThanOrEqual(-1e-9)
       expect(along + st.run).toBeLessThanOrEqual(p.run + 1e-9)
     }
+  })
+})
+
+// ── the half-landing, and the beam the stair breaks on ────────────────────
+//
+// The same two beams pushed 4.2 m apart in plan, so that a 1.2 m landing still
+// leaves a 3.0 m flight: 10 risers over a 1.5 m rise is R = 150 and G = 300,
+// the same comfortable stair as the bare fixture, now reached across a landing.
+function landingFrame(over: Partial<Stair> = {}) {
+  const f = frame({ landings: [{ at: 'low', depth: 1.2 }], ...over })
+  f.model.nodes = f.model.nodes.map((n) => (n.id.startsWith('h') ? { ...n, x: 4.2 } : n))
+  return f
+}
+
+describe('landings — the flat part of the same one-way slab', () => {
+  const { model, stair } = landingFrame()
+  const p = placeStair(model, stair)!
+
+  it('eats into the run, so the flight climbs the same rise over less of it', () => {
+    expect(p.run).toBeCloseTo(4.2, 12)             // the frame is what it is
+    expect(p.flightRun).toBeCloseTo(3.0, 12)       // …the landing takes 1.2 of it
+    expect(p.rise).toBeCloseTo(1.5, 12)            // the climb is untouched
+    expect(p.R).toBeCloseTo(150, 12)
+    // G comes off the SLOPING run, not the whole one — 4.2/10 would be 420 mm,
+    // a going nobody builds, off a stair that is actually 300.
+    expect(p.G).toBeCloseTo(300, 12)
+  })
+
+  it('separates the three lengths a stair has, and keeps them straight', () => {
+    expect(p.slopeSpan).toBeCloseTo(Math.hypot(3, 1.5), 12)          // the slope only
+    expect(p.totalSpan).toBeCloseTo(1.2 + Math.hypot(3, 1.5), 12)    // developed length
+    expect(p.run).toBeCloseTo(4.2, 12)                               // what it is designed on
+  })
+
+  it('bears on the beam at the landing, and slopes from the landing edge', () => {
+    const [l] = p.landings
+    expect(l.at).toBe('low')
+    expect(l.depth).toBeCloseTo(1.2, 12)
+    expect(l.thickness).toBe(150)                  // defaults to the waist
+    // The landing is FLAT: both its edges sit at the low bearing level.
+    for (const q of [...l.outer, ...l.inner]) expect(q[1]).toBeCloseTo(3.25, 12)
+    // Its inner edge is where the waist starts; its outer edge is the bearing.
+    expect(l.inner).toEqual(p.lowEdge)
+    expect(l.outer).toEqual(p.bearLow)
+    const d = Math.hypot(l.inner[0][0] - l.outer[0][0], l.inner[0][2] - l.outer[0][2])
+    expect(d).toBeCloseTo(1.2, 12)
+    // Nothing at the high end, so bearing and slope edge are the same there.
+    expect(p.bearHigh).toEqual(p.highEdge)
+  })
+
+  it('takes a landing at each end', () => {
+    const f = landingFrame({ landings: [{ at: 'low', depth: 1.2 }, { at: 'high', depth: 1.0 }] })
+    const q = placeStair(f.model, f.stair)!
+    expect(q.flightRun).toBeCloseTo(2.0, 12)
+    expect(q.landings.map((l) => l.at)).toEqual(['low', 'high'])
+    expect(q.totalSpan).toBeCloseTo(1.2 + Math.hypot(2, 1.5) + 1.0, 12)
+    const gap = Math.hypot(
+      q.bearHigh[0][0] - q.highEdge[0][0], q.bearHigh[0][2] - q.highEdge[0][2])
+    expect(gap).toBeCloseTo(1.0, 12)
+  })
+
+  it('refuses landings that leave nothing to slope', () => {
+    const f = landingFrame({ landings: [{ at: 'low', depth: 2.5 }, { at: 'high', depth: 2.5 }] })
+    expect(placeStair(f.model, f.stair)).toBeNull()
+  })
+
+  it('a bare flight is the same stair it always was', () => {
+    const bare = placeStair(frame().model, frame().stair)!
+    expect(bare.landings).toEqual([])
+    expect(bare.flightRun).toBeCloseTo(bare.run, 12)
+    expect(bare.totalSpan).toBeCloseTo(bare.slopeSpan, 12)
+    expect(bare.bearLow).toEqual(bare.lowEdge)
+    expect(bare.bearHigh).toEqual(bare.highEdge)
+  })
+
+  it('reads the declared depth and thickness, and defaults the thickness', () => {
+    const s2: Stair = { ...stair, landings: [{ at: 'low', depth: 1.2, thickness: 200 }] }
+    expect(landingDepth(s2, 'low')).toBe(1.2)
+    expect(landingDepth(s2, 'high')).toBe(0)
+    expect(landingThickness(s2, 'low')).toBe(200)
+    expect(landingThickness(s2, 'high')).toBe(150)   // the waist, for an end with none
+    expect(landingThickness(stair, 'low')).toBe(150)
+  })
+})
+
+describe('the landing as a solid — flat, and no treads on it', () => {
+  const { model, stair } = landingFrame({ landings: [{ at: 'low', depth: 1.2, thickness: 200 }] })
+  const p = placeStair(model, stair)!
+  const solid = flightSolid(p)
+
+  it('is its own thickness, measured VERTICALLY — it has no slope to lean off', () => {
+    const [l] = solid.landings
+    expect(l.at).toBe('low')
+    for (let i = 0; i < 4; i++) {
+      expect(l.top[i][1] - l.bottom[i][1]).toBeCloseTo(0.2, 12)
+      expect(l.top[i][0]).toBeCloseTo(l.bottom[i][0], 12)
+      expect(l.top[i][2]).toBeCloseTo(l.bottom[i][2], 12)
+    }
+    // …while the waist beside it is still measured normal to its own soffit.
+    expect(solid.top[0][1] - solid.bottom[0][1]).toBeCloseTo(
+      0.15 * Math.cos((p.thetaDeg * Math.PI) / 180), 9)
+  })
+
+  it('runs its corners in run order, outer edge first at the low end', () => {
+    const [l] = solid.landings
+    const o = p.bearLow[0]
+    const along = (q: Vec3) => (q[0] - o[0]) * p.runDir[0] + (q[2] - o[2]) * p.runDir[2]
+    expect(l.top.map(along).map((u) => +u.toFixed(9))).toEqual([0, 0, 1.2, 1.2])
+  })
+
+  it('puts the high landing the other way round, still in run order', () => {
+    const f = landingFrame({ landings: [{ at: 'high', depth: 1.2 }] })
+    const q = placeStair(f.model, f.stair)!
+    const [l] = flightSolid(q).landings
+    const o = q.bearLow[0]
+    const along = (v: Vec3) => (v[0] - o[0]) * q.runDir[0] + (v[2] - o[2]) * q.runDir[2]
+    expect(l.top.map(along).map((u) => +u.toFixed(9))).toEqual([3, 3, 4.2, 4.2])
+  })
+
+  it('lays treads over the sloping part only, starting at the landing edge', () => {
+    expect(solid.steps).toHaveLength(stair.risers)
+    const o = p.bearLow[0]
+    const along = (q: Vec3) => (q[0] - o[0]) * p.runDir[0] + (q[2] - o[2]) * p.runDir[2]
+    // The first tread rises off the landing's inner edge, 1.2 m in — not off
+    // the beam, where a flight without a landing would have started.
+    expect(along(solid.steps[0].at)).toBeCloseTo(1.2, 9)
+    const last = solid.steps[solid.steps.length - 1]
+    expect(along(last.at) + last.run).toBeCloseTo(4.2, 9)
+    expect(last.at[1] + last.rise).toBeCloseTo(p.highEdge[0][1], 9)
+  })
+})
+
+describe('what a stair with a landing puts on the frame', () => {
+  const { model, stair } = landingFrame()
+  const fl = stairFrameLoads(model, stair)!
+  const sum = (member: string, cat: 'D' | 'L') => fl.loads
+    .filter((l) => l.kind === 'member-point' && l.member === member && l.cat === cat)
+    .reduce((s, l) => s + (l as { P: number }).P, 0)
+
+  it('weighs the landing as the flat slab it is — no treads, no slope factor', () => {
+    const [land] = stairStrips(placeStair(model, stair)!, stair).filter((s) => s.len === 1.2)
+    expect(land.q.steps).toBe(0)
+    expect(land.q.waist).toBeCloseTo(24 * 0.15, 12)           // NOT t/cosθ
+    expect(land.q.dead).toBeCloseTo(24 * 0.15 + 1.5, 12)
+    // A landing is therefore always lighter than the flight of the same waist,
+    // which is why designing on the flight's load is the conservative way round.
+    expect(land.q.dead).toBeLessThan(
+      stairLoads({ t: 150, R: 150, G: 300, finishes: 1.5, live: 4.8 }).dead)
+  })
+
+  it('adds the two strips up, each over its own plan length', () => {
+    const flight = stairLoads({ t: 150, R: 150, G: 300, finishes: 1.5, live: 4.8 })
+    const land = landingLoads({ t: 150, finishes: 1.5, live: 4.8 })
+    expect(fl.totalD).toBeCloseTo((land.dead * 1.2 + flight.dead * 3.0) * 1.2, 9)
+    expect(fl.totalL).toBeCloseTo(4.8 * 4.2 * 1.2, 9)          // live is live, everywhere
+    expect(sum('bLow', 'D') + sum('bHigh', 'D')).toBeCloseTo(fl.totalD, 9)
+    expect(sum('bLow', 'L') + sum('bHigh', 'L')).toBeCloseTo(fl.totalL, 9)
+  })
+
+  it('splits it by statics, not in half — the heavy part is not in the middle', () => {
+    // The landing is the lighter strip and it sits at the LOW end, so the
+    // flight's weight is shifted towards the high support and the high support
+    // takes more than half of it. Halving would have hidden that.
+    const flight = stairLoads({ t: 150, R: 150, G: 300, finishes: 1.5, live: 4.8 })
+    const land = landingLoads({ t: 150, finishes: 1.5, live: 4.8 })
+    const wLand = land.dead * 1.2 * 1.2, wFlight = flight.dead * 3.0 * 1.2
+    const hi = (wLand * 0.6 + wFlight * 2.7) / 4.2                // ΣM about the low support
+    expect(sum('bHigh', 'D')).toBeCloseTo(hi, 9)
+    expect(sum('bLow', 'D')).toBeCloseTo(wLand + wFlight - hi, 9)
+    expect(sum('bHigh', 'D')).toBeGreaterThan(sum('bLow', 'D'))
+    // The live load IS uniform over the whole plan, so it still halves.
+    expect(sum('bHigh', 'L')).toBeCloseTo(sum('bLow', 'L'), 9)
+  })
+
+  it('lands the low reaction over the landing, where the slab actually bears', () => {
+    const pts = fl.loads.filter((l) => l.kind === 'member-point' && l.member === 'bLow' && l.cat === 'D')
+    const t = pts.reduce((s, l) => s + (l as { t: number; P: number }).t * (l as { P: number }).P, 0)
+      / pts.reduce((s, l) => s + (l as { P: number }).P, 0)
+    expect(t).toBeCloseTo(0.5, 9)
+  })
+})
+
+describe('landing validation', () => {
+  const codesOf = (m: StructuralModel) => validateMesh(m).filter((i) => i.code.startsWith('STAIR'))
+
+  it('a well-formed landing raises nothing', () => {
+    expect(codesOf(landingFrame().model)).toEqual([])
+  })
+
+  it('stops a landing that leaves no flight, and blames the landing for it', () => {
+    const f = landingFrame({ landings: [{ at: 'low', depth: 2.5 }, { at: 'high', depth: 2.5 }] })
+    const [i] = codesOf(f.model)
+    expect(i.code).toBe('STAIR_LANDING_TOO_DEEP')
+    expect(i.severity).toBe('error')
+    expect(i.message).toContain('5.000')          // the landings
+    expect(i.message).toContain('4.200')          // …in the run the frame gives
+  })
+
+  it('stops two landings at one end, and a landing with no depth', () => {
+    const twice = landingFrame({ landings: [{ at: 'low', depth: 1 }, { at: 'low', depth: 1 }] })
+    expect(codesOf(twice.model)[0].code).toBe('STAIR_LANDING_DUPLICATE')
+    const flat = landingFrame({ landings: [{ at: 'low', depth: 0 }] })
+    expect(codesOf(flat.model)[0].code).toBe('STAIR_LANDING_DEPTH')
+  })
+
+  it('WARNS on a landing shallower than the stair is wide, and does not stop', () => {
+    const f = landingFrame({ width: 1.5, landings: [{ at: 'low', depth: 1.2 }] })
+    const i = codesOf(f.model).find((x) => x.code === 'STAIR_LANDING_SHALLOW')!
+    expect(i.severity).toBe('warning')
+    expect(i.message).toContain('1.200')
+  })
+
+  it('WARNS on a landing thinner than the waist it continues', () => {
+    const f = landingFrame({ landings: [{ at: 'low', depth: 1.2, thickness: 100 }] })
+    const i = codesOf(f.model).find((x) => x.code === 'STAIR_LANDING_THIN')!
+    expect(i.severity).toBe('warning')
+    expect(i.message).toContain('100 mm')
   })
 })
