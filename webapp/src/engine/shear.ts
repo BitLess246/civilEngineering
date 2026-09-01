@@ -27,9 +27,17 @@ export function twoWayVc(params: {
   const lambda = params.lambda ?? 1;
   const position = params.position ?? 'interior';
   const base = (lambda * Math.sqrt(fc) * bo * d) / 1000; // √fc·bo·d → kN (N/mm²·mm² = N, ÷1000)
-  const vc1 = (1 / 3) * base;
-  const vc2 = (1 / 6) * (1 + 2 / betaC) * base;
-  const vc3 = (1 / 12) * (2 + (ALPHA_S[position] * d) / bo) * base;
+  // NSCP 2015 Table 422.6.5.2 / ACI 318M-14, as the SI code PRINTS them.
+  //
+  // These were 1/3, 1/6 and 1/12 — the exact conversions of the inch-pound
+  // 4√f'c, 2(1+2/β)√f'c and (2 + αs·d/bo)√f'c. The metric code rounds them to
+  // 0.33, 0.17 and 0.083, and since this engine cites NSCP the printed values
+  // are the ones to use. It matters by about 1%, and the sign is the point:
+  // 1/3 = 0.3333 EXCEEDS the code's 0.33, so the old form claimed a punching
+  // capacity the code does not give.
+  const vc1 = 0.33 * base;
+  const vc2 = 0.17 * (1 + 2 / betaC) * base;
+  const vc3 = 0.083 * (2 + (ALPHA_S[position] * d) / bo) * base;
   return Math.min(vc1, vc2, vc3);
 }
 
@@ -93,10 +101,12 @@ export function punchingDepth(params: {
   return 3000;
 }
 
-/** One-way (beam) shear strength Vc = (1/6)λ√fc·b·d, kN (b, d in mm). */
+/** One-way (beam) shear strength Vc = 0.17λ√fc·b·d, kN (b, d in mm) — §422.5.5.1. */
 export function oneWayVc(params: { fc: number; b: number; d: number; lambda?: number }): number {
   const lambda = params.lambda ?? 1;
-  return ((1 / 6) * lambda * Math.sqrt(params.fc) * params.b * params.d) / 1000;
+  // §422.5.5.1 as the SI code prints it: 0.17, not the 1/6 that the
+  // inch-pound 2√f'c converts to exactly. 2% apart, and conservative here.
+  return (0.17 * lambda * Math.sqrt(params.fc) * params.b * params.d) / 1000;
 }
 
 /**

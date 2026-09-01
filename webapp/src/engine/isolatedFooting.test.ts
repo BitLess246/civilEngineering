@@ -150,6 +150,12 @@ describe('columnOffset — biaxial, not one axis at a time', () => {
     qAllow: 200, gammaSoil: 18, gammaConc: 24, H: 1.5, barDia: 20, cover: 75,
   }
 
+  it('a corner is biaxial, where no closed form exists — flagged, not guessed', () => {
+    const o = designSquareFooting({ ...base, position: 'corner' }).offset!
+    expect(o.bearing).toBe('partial-biaxial')
+    expect(o.contactLength).toBeNull()
+  })
+
   it('a corner sums both eccentricity terms', () => {
     // q = P/A(1 ± 6e_x/B ± 6e_y/L). Taking only the governing axis, as this
     // first did, understates a square corner pad's peak by 72% — the two terms
@@ -163,12 +169,21 @@ describe('columnOffset — biaxial, not one axis at a time', () => {
     expect(o.qMax).toBeGreaterThan(PA * (1 + (6 * Math.max(o.ex, o.ey)) / r.B))
   })
 
-  it('an edge keeps one term — ey is zero, so the two forms coincide there', () => {
+  it('an edge is uniaxial, so the base redistributes onto a triangle', () => {
+    // Only one eccentricity, so once the resultant leaves the kern the block
+    // has a closed form: length 3(B/2 − e), volume P, hence the peak.
     const r = designSquareFooting({ ...base, position: 'edge' })
     const o = r.offset!
     expect(o.ey).toBe(0)
+    expect(o.bearing).toBe('partial-uniaxial')
+    expect(o.contactLength).toBeCloseTo(3 * (r.B / 2 - o.ex), 9)
+    expect(o.qMax).toBeCloseTo((2 * base.serviceLoad) / (o.contactLength! * r.B), 6)
+    // …and the volume under the triangle is the load, which is the check
+    expect(0.5 * o.qMax * o.contactLength! * r.B).toBeCloseTo(base.serviceLoad, 6)
+    // the linear extrapolation is much SMALLER — reporting it as the peak
+    // understated the demand by more than half
     const PA = base.serviceLoad / (r.B * r.B)
-    expect(o.qMax).toBeCloseTo(PA * (1 + (6 * o.ex) / r.B), 6)
+    expect(o.qMax).toBeGreaterThan(PA * (1 + (6 * o.ex) / r.B))
   })
 
   it('the kern is a RHOMBUS: e_x/B + e_y/L ≤ 1/6, not each axis alone', () => {

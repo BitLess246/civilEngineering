@@ -100,6 +100,20 @@ export interface SquareFootingResult {
  * eccentricity that results is the honest order: it is not circular, and it
  * says plainly what the pad needs.
  */
+/**
+ * Which bearing regime the pad is in.
+ *
+ * `full`             resultant inside the kern; the linear trapezoid is exact.
+ * `partial-uniaxial` lifts about one axis; the triangular block has a closed
+ *                    form, so `qMax` is still exact.
+ * `partial-biaxial`  lifts about both; the contact area is a polygon with no
+ *                    closed form, so `qMax` is reported as the linear value
+ *                    and is a LOWER BOUND on the truth. A pad in this state
+ *                    has already failed the kern check — the number is there
+ *                    to show the scale, not to design on.
+ */
+export type BearingState = 'full' | 'partial-uniaxial' | 'partial-biaxial';
+
 export interface ColumnOffset {
   /** Column centroid from the pad centroid, m — +x toward the free edge. */
   ex: number;
@@ -107,16 +121,26 @@ export interface ColumnOffset {
   /** Resultant eccentricity including the applied moment, m. */
   e: number;
   /**
-   * Corner pressures, kPa — BIAXIAL, both eccentricities acting together:
+   * The peak bearing pressure the soil ACTUALLY sees, kPa.
    *
-   *     q = P/A · (1 ± 6e_x/B ± 6e_y/L)
+   * Inside the kern this is the linear trapezoid, q = P/A(1 + 6e_x/B + 6e_y/L)
+   * — biaxial, both terms, because they add rather than compete.
    *
-   * Taking only the governing axis, as this first did, understates a corner
-   * column's peak by 72% on a square pad with both faces flush: the two terms
-   * add, they do not compete. `qMin` < 0 means the base lifts there.
+   * Outside it the linear formula is no longer the answer. Soil takes no
+   * tension, so the block redistributes onto whatever is still in contact, and
+   * the peak RISES well above the extrapolation: on the worked 2.0 × 3.0 pad
+   * the linear value is 510 kPa where the triangular block that actually
+   * forms peaks at 1000. Reporting the extrapolation as the peak understates
+   * the demand by half, which is the wrong direction. See `bearing`.
    */
   qMax: number;
+  /** Minimum linear ordinate, kPa — negative means that corner lifts. It is
+   *  the SIGN that carries the finding; the magnitude is fictitious. */
   qMin: number;
+  /** How `qMax` was arrived at, and therefore how far to trust it. */
+  bearing: BearingState;
+  /** Length still in contact, m — uniaxial partial bearing only. */
+  contactLength: number | null;
   /**
    * Whether the resultant stays in the kern, so the whole base bears.
    *
@@ -243,13 +267,30 @@ export function columnOffset(
   // the finding: that part of the base lifts off the soil.
   const kx = A > 0 ? (6 * ex) / B : 0;
   const ky = A > 0 ? (6 * ey) / L : 0;
-  const qMax = A > 0 ? (P / A) * (1 + kx + ky) : 0;
+  const qLinMax = A > 0 ? (P / A) * (1 + kx + ky) : 0;
   const qMin = A > 0 ? (P / A) * (1 - kx - ky) : 0;
   const kernRatio = B > 0 && L > 0 ? (ex / B + ey / L) / (1 / 6) : 0;
+  const kernOK = kernRatio <= 1 + 1e-9;
+
+  // ── the redistribution, when the base lifts ────────────────────────────
+  // Soil carries no tension, so once q_min goes negative the pressure is not
+  // the extrapolated trapezoid — it collapses onto the contact area and the
+  // peak goes UP. Uniaxially that is a triangle of length 3(B/2 − e) whose
+  // volume must still be P, which fixes the peak exactly.
+  const uniaxial = ey <= 1e-12 || ex <= 1e-12;
+  const bearing: BearingState = kernOK ? 'full'
+    : uniaxial ? 'partial-uniaxial' : 'partial-biaxial';
+  let qMax = qLinMax;
+  let contactLength: number | null = null;
+  if (bearing === 'partial-uniaxial') {
+    // Which axis is eccentric decides which dimension the triangle runs along.
+    const [ecc, along, across] = ex > ey ? [ex, B, L] : [ey, L, B];
+    contactLength = Math.max(1e-9, 3 * (along / 2 - ecc));
+    qMax = (2 * P) / (contactLength * across);
+  }
   return {
-    ex, ey, e, qMax, qMin,
-    kernOK: kernRatio <= 1 + 1e-9,
-    kernRatio,
+    ex, ey, e, qMax, qMin, bearing, contactLength,
+    kernOK, kernRatio,
     restraint: P * e,
   };
 }

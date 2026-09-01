@@ -2,10 +2,14 @@ import { describe, it, expect } from 'vitest';
 import { twoWayVc, punchingDepth, oneWayVc, oneWayShearDepth, criticalSection } from './shear';
 
 describe('twoWayVc', () => {
-  it('takes the (1/3)√fc·bo·d term for a square interior column', () => {
-    // base = √28 · 2800 · 400 / 1000 = 5926.48 kN ; vc1 = base/3 = 1975.49
+  it('takes the 0.33√fc·bo·d term for a square interior column', () => {
+    // NSCP Table 422.6.5.2(a) as the SI code PRINTS it — 0.33, not the 1/3 the
+    // inch-pound 4√f'c converts to exactly. 1/3 = 0.3333 exceeds it, so the old
+    // form claimed a punching capacity the code does not give.
+    // base = √28 · 2800 · 400 / 1000 = 5926.48 kN ; vc1 = 0.33·base = 1955.74
     const vc = twoWayVc({ fc: 28, bo: 2800, d: 400, betaC: 1, position: 'interior' });
-    expect(vc).toBeCloseTo(1975.49, 1);
+    expect(vc).toBeCloseTo(1955.74, 1);
+    expect(vc).toBeLessThan((1 / 3) * 5926.48);        // strictly below the old value
   });
 });
 
@@ -24,9 +28,9 @@ describe('punchingDepth', () => {
 });
 
 describe('oneWayVc / oneWayShearDepth', () => {
-  it('Vc = (1/6)√fc·b·d', () => {
-    // √28 · 1000 · 300 / 6000 = 264.6 kN
-    expect(oneWayVc({ fc: 28, b: 1000, d: 300 })).toBeCloseTo(264.57, 1);
+  it('Vc = 0.17λ√fc·b·d — §422.5.5.1 as printed, not the 1/6 conversion', () => {
+    // 0.17 · √28 · 1000 · 300 / 1000 = 269.87 kN  (the 1/6 form gives 264.57)
+    expect(oneWayVc({ fc: 28, b: 1000, d: 300 })).toBeCloseTo(269.87, 1);
   });
   it('returns a depth that satisfies one-way shear', () => {
     const p = { qu: 200, B: 2.5, c: 0.4, fc: 28 };
