@@ -20,7 +20,7 @@ import { ProjectsPanel } from '../components/ProjectsPanel'
 import { AUTOSAVE_KEY, INPUTS_KEY } from '../lib/modelSpaceSession'
 import * as THREE from 'three'
 import { generateGridModel, removeElements, removeNode, buildGravityLoads, splitSharedSections } from '../engine/modelBuilder'
-import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole, MemberReleases, NodeSupport, SupportFixity, WoodDeck } from '../engine/model'
+import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole, MemberReleases, NodeSupport, SupportFixity, WoodDeck, StairLanding } from '../engine/model'
 import { distributePanel } from '../engine/tributary'
 import { type F3Analysis, type F3MemberResult, type V3 } from '../engine/frame3d'
 import { type ActiveSetAnalysis, type AxialMode } from '../engine/axialOnly'
@@ -595,10 +595,17 @@ function Stair3D({ p }: { p: PlacedStair }) {
     const quad = (...q: THREE.Vector3[]) => {
       for (const k of [0, 1, 2, 0, 2, 3]) pos.push(q[k].x, q[k].y, q[k].z)
     }
-    const top = solid.top.map(v), bot = solid.bottom.map(v)
-    quad(...top)
-    quad(bot[3], bot[2], bot[1], bot[0])
-    for (let i = 0; i < 4; i++) quad(top[i], bot[i], bot[(i + 1) % 4], top[(i + 1) % 4])
+    const prism = (topQ: readonly [number, number, number][], botQ: readonly [number, number, number][]) => {
+      const T = topQ.map(v), B = botQ.map(v)
+      quad(...T)
+      quad(B[3], B[2], B[1], B[0])
+      for (let i = 0; i < 4; i++) quad(T[i], B[i], B[(i + 1) % 4], T[(i + 1) % 4])
+    }
+    prism(solid.top, solid.bottom)
+    // The landings are the same slab, so they are the same geometry — a flight
+    // that breaks on a beam is one piece of concrete with a flat bit at the end,
+    // not a flight with something else stuck to it.
+    for (const l of solid.landings) prism(l.top, l.bottom)
     const waist = new THREE.BufferGeometry()
     waist.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
     waist.computeVertexNormals()
@@ -1279,6 +1286,11 @@ export default function ModelSpace() {
   const [stWidth, setStWidth] = useState(1.2); const [stWaist, setStWaist] = useState(150)
   const [stRisers, setStRisers] = useState(10)
   const [stFin, setStFin] = useState(1.5); const [stLive, setStLive] = useState(4.8)
+  // Half-landings, m of PLAN depth at each end — 0 is none. A stair between
+  // floors is two flights meeting on a beam at mid height, and the landing
+  // belongs to ONE of them: put it on both and the same slab is in the model
+  // twice.
+  const [stLandLo, setStLandLo] = useState(0); const [stLandHi, setStLandHi] = useState(0)
   const fileRef = useRef<HTMLInputElement>(null)
   const controlsRef = useRef<React.ComponentRef<typeof OrbitControls>>(null)
   const { busy, run: runSolver, progress } = useSolver()   // off-thread FEM/design/optimise
@@ -1931,6 +1943,11 @@ export default function ModelSpace() {
   /** A flight between two beams. Everything else about it — R, G, θ, the run —
    *  is derived from where those two beams are, so there is nothing else to
    *  type and nothing that can disagree. */
+  /** The landings the panel's fields describe — only the ends given a depth. */
+  const stLandings = (): StairLanding[] => ([
+    ...(stLandLo > 0 ? [{ at: 'low' as const, depth: stLandLo }] : []),
+    ...(stLandHi > 0 ? [{ at: 'high' as const, depth: stLandHi }] : []),
+  ])
   const addStair = () => {
     if (!model || !stLow || !stHigh || stLow === stHigh) return
     let k = model.stairs?.length ?? 0
@@ -1938,6 +1955,7 @@ export default function ModelSpace() {
     const stairs = [...(model.stairs ?? []), {
       id: `st${k}`, low: stLow, high: stHigh, width: stWidth, waist: stWaist,
       risers: stRisers, finishes: stFin, live: stLive, support: 'simple' as const,
+      landings: stLandings(),
     }]
     const m2 = { ...model, stairs }
     save({ ...m2, loads: buildGravityLoads(m2, qD, qL, gammaC) })
@@ -2969,6 +2987,7 @@ export default function ModelSpace() {
                             <th className="py-1 pr-1 font-semibold">R / G</th>
                             <th className="py-1 pr-1 font-semibold">θ</th>
                             <th className="py-1 pr-1 font-semibold">w (m)</th>
+                            <th className="py-1 pr-1 font-semibold">Landing</th>
                             <th className="py-1" />
                           </tr>
                         </thead>
@@ -2985,6 +3004,11 @@ export default function ModelSpace() {
                                 </td>
                                 <td className="py-0.5 pr-1">{p ? `${p.thetaDeg.toFixed(1)}°` : '—'}</td>
                                 <td className="py-0.5 pr-1">{f1(st.width)}</td>
+                                <td className="py-0.5 pr-1 text-slate-500">
+                                  {(st.landings ?? []).length
+                                    ? (st.landings ?? []).map((l) => `${f1(l.depth)}${l.at === 'low' ? '↓' : '↑'}`).join(' ')
+                                    : '—'}
+                                </td>
                                 <td className="py-0.5 text-right">
                                   <button type="button" onClick={() => removeStair(st.id)} className="rounded px-1.5 text-red-500 hover:bg-red-50">✕</button>
                                 </td>
@@ -3005,14 +3029,27 @@ export default function ModelSpace() {
                     <label className="inline-flex items-center gap-1">risers <input type="number" step="1" value={stRisers} onChange={(e) => setStRisers(Math.max(2, parseInt(e.target.value) || 2))} className="w-12 rounded border border-slate-200 px-1 py-0.5" /></label>
                     <label className="inline-flex items-center gap-1">w <input type="number" step="0.1" value={stWidth} onChange={(e) => setStWidth(parseFloat(e.target.value) || 0)} className="w-12 rounded border border-slate-200 px-1 py-0.5" /></label>
                     <label className="inline-flex items-center gap-1">waist <input type="number" step="10" value={stWaist} onChange={(e) => setStWaist(parseFloat(e.target.value) || 0)} className="w-14 rounded border border-slate-200 px-1 py-0.5" /></label>
+                    <label className="inline-flex items-center gap-1" title="Plan depth of a flat half-landing at the LOW end, m — 0 for none. It eats into the run, so the flight gets steeper; the beam at that end is the landing beam.">
+                      land↓ <input type="number" step="0.1" min="0" value={stLandLo} onChange={(e) => setStLandLo(Math.max(0, parseFloat(e.target.value) || 0))} className="w-12 rounded border border-slate-200 px-1 py-0.5" />
+                    </label>
+                    <label className="inline-flex items-center gap-1" title="Plan depth of a flat half-landing at the HIGH end, m — 0 for none.">
+                      land↑ <input type="number" step="0.1" min="0" value={stLandHi} onChange={(e) => setStLandHi(Math.max(0, parseFloat(e.target.value) || 0))} className="w-12 rounded border border-slate-200 px-1 py-0.5" />
+                    </label>
                     <label className="inline-flex items-center gap-1">fin <input type="number" step="0.5" value={stFin} onChange={(e) => setStFin(parseFloat(e.target.value) || 0)} className="w-12 rounded border border-slate-200 px-1 py-0.5" /></label>
                     <label className="inline-flex items-center gap-1">LL <input type="number" step="0.5" value={stLive} onChange={(e) => setStLive(parseFloat(e.target.value) || 0)} className="w-12 rounded border border-slate-200 px-1 py-0.5" /></label>
                     {(() => {
                       const trial = stLow && stHigh && stLow !== stHigh
+                        ? placeStair(model, { id: '_t', low: stLow, high: stHigh, width: stWidth, waist: stWaist, risers: stRisers, finishes: stFin, live: stLive, support: 'simple', landings: stLandings() })
+                        : null
+                      // A landing that leaves nothing to slope is unplaceable, and
+                      // saying "these two beams cannot carry a flight" about it
+                      // blames the frame for what the landing did.
+                      const bare = stLow && stHigh && stLow !== stHigh
                         ? placeStair(model, { id: '_t', low: stLow, high: stHigh, width: stWidth, waist: stWaist, risers: stRisers, finishes: stFin, live: stLive, support: 'simple' })
                         : null
                       const why = !stLow || !stHigh ? 'Pick the two beams the flight runs between'
                         : stLow === stHigh ? 'A flight needs two different beams'
+                        : !trial && bare ? `${(stLandLo + stLandHi).toFixed(2)} m of landing in a ${bare.run.toFixed(2)} m run leaves nothing to slope`
                         : !trial ? 'These two cannot carry a flight: same level, named the wrong way round, or one of them is vertical in plan'
                         : undefined
                       return (
@@ -3025,13 +3062,14 @@ export default function ModelSpace() {
                           {trial && (
                             <span className="text-[11px] text-slate-500">
                               → R {trial.R.toFixed(0)} · G {trial.G.toFixed(0)} · θ {trial.thetaDeg.toFixed(1)}° · run {trial.run.toFixed(2)} m
+                              {trial.landings.length > 0 && ` (${trial.flightRun.toFixed(2)} of it sloping)`}
                             </span>
                           )}
                         </>
                       )
                     })()}
                   </div>
-                  <p className="mt-1 text-[11px] text-slate-500">A flight is placed by the two beams it bears on: the rise and run come from where they are, and R = rise/risers, G = run/risers, so the risers are equal by construction. Its weight reaches the frame as reactions on those two beams — the flight itself is NOT meshed, so it adds no stiffness. That is conservative for the frame and not for the stair, which in reality braces the storey it climbs.</p>
+                  <p className="mt-1 text-[11px] text-slate-500">A flight is placed by the two beams it bears on: the rise and run come from where they are, and R = rise/risers, G = run/risers, so the risers are equal by construction. A <strong>half-landing</strong> at either end is part of the same one-way slab, so it eats into the run and the flight climbs the same rise over what is left — and the beam at that end is the <strong>landing beam</strong> the stair breaks on. Between floors that is two flights meeting on a beam at mid height, with the landing given to ONE of them: modelled on both, the same slab is in the frame twice. Its weight reaches the frame as reactions on those two beams — the flight itself is NOT meshed, so it adds no stiffness. That is conservative for the frame and not for the stair, which in reality braces the storey it climbs.</p>
                 </div>
               )}
             </div>
@@ -5239,7 +5277,7 @@ export default function ModelSpace() {
               <table className="w-full border-collapse text-[13px]">
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-slate-500">
-                    {['Flight', 'Bears on', 'Rise / run (m)', 'Risers', 'R / G (mm)', 'θ', 'Waist', 'Mu (kN·m/m)', 'Main', 'Dist.', 'Reaction D+L (kN)', ''].map((h) => (
+                    {['Flight', 'Bears on', 'Rise / run (m)', 'Landing (m)', 'Risers', 'R / G (mm)', 'θ', 'Waist', 'Mu (kN·m/m)', 'Main', 'Dist.', 'Reaction D+L (kN)', ''].map((h) => (
                       <th key={h} className="py-1 pr-3 font-semibold">{h}</th>
                     ))}
                   </tr>
@@ -5252,6 +5290,13 @@ export default function ModelSpace() {
                         <td className="py-1 pr-3 font-medium">{st.id}</td>
                         <td className="py-1 pr-3 font-mono text-[12px]">{st.low} → {st.high}</td>
                         <td className="py-1 pr-3">{f2(st.rise)} / {f2(st.run)}</td>
+                        <td className="py-1 pr-3" title={st.landings.length
+                          ? `${f2(st.flightRun)} m of the run slopes; the slab develops ${f2(st.totalSpan)} m landing to landing`
+                          : undefined}>
+                          {st.landings.length
+                            ? st.landings.map((l) => `${f2(l.depth)} ${l.at}`).join(' + ')
+                            : '—'}
+                        </td>
                         <td className="py-1 pr-3">{st.risers}</td>
                         <td className={`py-1 pr-3 ${odd ? 'font-semibold text-amber-700' : ''}`}>{f0(st.R)} / {f0(st.G)}</td>
                         <td className="py-1 pr-3">{f1(st.thetaDeg)}°</td>
@@ -5269,7 +5314,7 @@ export default function ModelSpace() {
                 </tbody>
               </table>
               <p className="mt-1.5 text-[11px] text-slate-500">
-                Rise, run, R and G are derived from where the two supporting beams are — R = rise/risers, so the risers are equal by construction. An amber R/G is outside the proportions stairs are usually built in (a comfort read, not a code check). The flight is designed on its PLAN run, which is the length its kPa-of-plan-area load works through. It is not meshed into the frame: it contributes load, not stiffness.
+                Rise, run, R and G are derived from where the two supporting beams are — R = rise/risers, so the risers are equal by construction. An amber R/G is outside the proportions stairs are usually built in (a comfort read, not a code check). The flight is designed on its PLAN run, which is the length its kPa-of-plan-area load works through — a half-landing does not change that span, only how much of it slopes, and a flat landing is the lighter strip, so the design is conservative on a stair that has one. The reactions are not: they come from the real stepped load. It is not meshed into the frame: it contributes load, not stiffness.
               </p>
             </div>
           )}
