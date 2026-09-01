@@ -61,7 +61,7 @@ export default function StairDesign() {
       { name: 'Waist thickness t/tmin', ratio: t > 0 ? r.tMin / t : 0, ok: r.tMinOK },
     ],
     data: [
-      ['Span', `${f2(span)} m`],
+      ['Span (plan)', `${f2(span)} m`],
       ['Waist thickness t', `${t} mm`],
       ['Riser / going', `${R} / ${G} mm`],
       ['Inclination θ', `${f2(r.geom.thetaDeg)}°`],
@@ -91,7 +91,12 @@ export default function StairDesign() {
       <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Geometry &amp; loads</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Field label="Flight span" unit="m" value={span} onChange={setSpan} />
+          {/* PLAN, not along the slope: the load is kPa of plan area, so the
+              moment is w·L_plan²/denom — and the drawing's span dimension is a
+              horizontal line. The field used to say neither, and the same
+              number was read one way by the calculation and the other by the
+              drawing. */}
+          <Field label="Flight span (plan)" unit="m" value={span} onChange={setSpan} />
           <Field label="Waist t" unit="mm" value={t} onChange={setT} />
           <Field label="Riser R" unit="mm" value={R} onChange={setR} />
           <Field label="Going G" unit="mm" value={G} onChange={setG} />
@@ -119,7 +124,7 @@ export default function StairDesign() {
       <section data-pdf-drawing className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm
         [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
         <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Flight elevation</h2>
-        <StairElevation span={span} t={t} R={R} G={G} thetaDeg={r.geom.thetaDeg} support={support}
+        <StairElevation run={span} t={t} R={R} G={G} thetaDeg={r.geom.thetaDeg} support={support}
           landing={1200} ext={450}
           mainBars={`⌀${barDia} @ ${f0(r.mainSpacing)} C/C`}
           landingBars={`⌀10 @ ${f0(r.distSpacing)} C/C`}

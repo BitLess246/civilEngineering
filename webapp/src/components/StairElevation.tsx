@@ -26,8 +26,10 @@ const DIM = '#1f77b4'
 const FAINT = '#a39d8d'
 
 export interface StairElevationProps {
-  /** Clear flight span along the SLOPE, m. */
-  span: number
+  /** Flight length in PLAN, m — the horizontal distance between the landings.
+   *  The same quantity `designStair` computes Mu on, so the drawing and the
+   *  calculation describe one stair. */
+  run: number
   /** Waist thickness, mm — normal to the soffit. */
   t: number
   /** Riser and going, mm. */
@@ -49,11 +51,11 @@ export interface StairElevationProps {
 }
 
 export function StairElevation({
-  span, t, R, G, thetaDeg, mainBars, distBars, support,
+  run, t, R, G, thetaDeg, mainBars, distBars, support,
   landing = 0, ext = 450, landingBars,
 }: StairElevationProps) {
   const th = (thetaDeg * Math.PI) / 180
-  const g = flightGeometry(span, t, R, G, thetaDeg, landing)
+  const g = flightGeometry(run, t, R, G, thetaDeg, landing)
   const { W, HT, MT, x0, y0, x1, y1, tv, nx, ny, nSteps, profile, flight, scale: s } = g
   const { lowLanding, upLanding, soffitLine, topLine } = g
   const ML = MARGIN.left
@@ -191,22 +193,22 @@ export function StairElevation({
           its lettered callouts. */}
       {landing > 0 && mainBars && (() => {
         const lw = landing * s
-        const notes: { at: Pt; to: Pt; text: string; anchor: 'start' | 'end' }[] = [
+        const notes: { at: Pt; to: Pt; text: string }[] = [
           // the flight — down-right into the empty quadrant under the soffit.
           // Pointed at a bar two thirds up and landed just past the flight's
           // own foot: aimed at midspan and landed off the far corner it drew a
           // leader longer than the flight it labelled.
           { at: [x0 + (x1 - x0) * 0.72, y0 + (y1 - y0) * 0.72 + cov * 0.5],
-            to: [x0 + (x1 - x0) * 0.86, y0 + 24], text: mainBars, anchor: 'start' },
+            to: [x0 + (x1 - x0) * 0.86, y0 + 24], text: mainBars },
           // the lower landing — BELOW its own slab. Above it, the leader walked
           // left into the legend as the landing grew: at 1.5 m of landing the
           // callout and the legend's distribution line printed over each other.
           // Under the landing is empty whatever the geometry.
           { at: [x0 - lw * 0.5, y0 - cov], to: [x0 - lw * 0.85, y0 + 26],
-            text: landingBars ?? mainBars, anchor: 'start' },
+            text: landingBars ?? mainBars },
           // the upper landing — up-right, above its own slab
           { at: [x1 + lw * 0.55, y1 - tv + cov], to: [x1 + lw * 0.35, y1 - tv - 30],
-            text: landingBars ?? mainBars, anchor: 'start' },
+            text: landingBars ?? mainBars },
         ]
         return notes.map((n, i) => {
           const dx = n.to[0] - n.at[0], dy = n.to[1] - n.at[1]
@@ -215,15 +217,20 @@ export function StairElevation({
           // solid arrowhead on the bar, the way a CAD leader terminates
           const bx = n.at[0] + (dx / L) * head, by = n.at[1] + (dy / L) * head
           const px = (-dy / L) * 2, py = (dx / L) * 2
-          const tx = n.anchor === 'end' ? n.to[0] - 3 : n.to[0] + 3
+          // Shoulder and text run AWAY from the arrow. Anchored on a fixed
+          // side, the text sat over the leader's own diagonal wherever the
+          // leader happened to come from the same side — the landing callout
+          // did exactly that once the flight grew a step longer.
+          const anchor: 'start' | 'end' = dx <= 0 ? 'end' : 'start'
+          const tx = anchor === 'end' ? n.to[0] - 3 : n.to[0] + 3
           return (
             <g key={i}>
               <polygon points={`${n.at[0]},${n.at[1]} ${bx + px},${by + py} ${bx - px},${by - py}`} fill={MAIN} />
-              <polyline points={`${bx},${by} ${n.to[0]},${n.to[1]} ${tx + (n.anchor === 'end' ? -14 : 14)},${n.to[1]}`}
+              <polyline points={`${bx},${by} ${n.to[0]},${n.to[1]} ${tx + (anchor === 'end' ? -14 : 14)},${n.to[1]}`}
                 fill="none" stroke={MAIN} strokeWidth={0.8} />
               {/* Clear of its own shoulder: at 3 the descender band of the
                   text sat on the line it is landed on. */}
-              <text x={tx} y={n.to[1] - 4.5} fontSize={7.5} fill={MAIN} textAnchor={n.anchor}
+              <text x={tx} y={n.to[1] - 4.5} fontSize={7.5} fill={MAIN} textAnchor={anchor}
                 stroke="#fff" strokeWidth={2.4} paintOrder="stroke">{n.text}</text>
             </g>
           )
@@ -318,7 +325,11 @@ export function StairElevation({
         <text x={x0 + 52} y={y0 + 11} fontSize={8.5} fill={FAINT} stroke="none">θ = {thetaDeg.toFixed(1)}°</text>
       </g>
 
-      {/* flight span, ALONG THE SLOPE — the span the moment is computed on */}
+      {/* The flight in PLAN — which is what a horizontal dimension line can
+          measure, and the span `designStair` computes Mu on. Printed from what
+          was DRAWN rather than from the input: rounding to whole steps moves
+          the geometry, and this line used to carry the raw input against a
+          drawing that had neither that plan run nor that slope length. */}
       <g>
         <line x1={x0} y1={HT - 30} x2={x1} y2={HT - 30} stroke={DIM} strokeWidth={0.9} />
         {[x0, x1].map((x, i) => (
@@ -326,7 +337,7 @@ export function StairElevation({
         ))}
         <text x={(x0 + x1) / 2} y={HT - 34} fontSize={9} fill={DIM} textAnchor="middle"
           paintOrder="stroke" stroke="#fff" strokeWidth={2.6}>
-          flight span = {span.toFixed(2)} m along the slope · {nSteps} risers
+          flight run = {g.drawn.run.toFixed(2)} m in plan · {nSteps} risers · slope {g.drawn.slope.toFixed(2)} m
         </text>
       </g>
 

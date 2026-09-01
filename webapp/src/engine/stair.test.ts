@@ -62,3 +62,36 @@ describe('designStair', () => {
     expect(r.mainSpacing).toBeLessThanOrEqual(Math.min(3 * 150, 450))
   })
 })
+
+describe('the verdict includes the span/depth minimum', () => {
+  const base = {
+    span: 4, R: 165, G: 280, fc: 28, fy: 415, barDia: 12, cover: 20,
+    finishes: 1.5, live: 4.8,
+  }
+
+  it('a waist under Table 407.3.1.1 ℓ/20 is NOT ok, however the steel came out', () => {
+    // `ok` used to mean only "a design came out", so this returned true with
+    // `tMinOK: false` printed beside it — a contradiction a reader could see
+    // and a caller could not.
+    const thin = designStair({ ...base, t: 150, support: 'simple' })
+    expect(thin.tMin).toBeCloseTo(200, 9)          // 4000 / 20
+    expect(thin.tMinOK).toBe(false)
+    expect(thin.ok).toBe(false)
+    expect(thin.AsMain).toBeGreaterThan(0)         // …and it is not for want of steel
+  })
+
+  it('the same flight passes once the waist reaches the minimum', () => {
+    const thick = designStair({ ...base, t: 200, support: 'simple' })
+    expect(thick.tMinOK).toBe(true)
+    expect(thick.ok).toBe(true)
+  })
+
+  it('continuity lowers the minimum, so a thinner waist can pass', () => {
+    // ℓ/20 simple, ℓ/24 one end, ℓ/28 both — the one-way slab ratios.
+    const t = 150
+    expect(designStair({ ...base, t, support: 'simple' }).tMin).toBeCloseTo(200, 9)
+    expect(designStair({ ...base, t, support: 'one-end' }).tMin).toBeCloseTo(4000 / 24, 9)
+    expect(designStair({ ...base, t, support: 'both-ends' }).tMin).toBeCloseTo(4000 / 28, 9)
+    expect(designStair({ ...base, t, support: 'both-ends' }).ok).toBe(true)
+  })
+})

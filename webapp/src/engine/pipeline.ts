@@ -26,6 +26,8 @@ import { designSquareFooting, type SquareFootingResult } from './isolatedFooting
 import { designCombinedFooting, type CombinedFootingResult } from './combinedFooting'
 import { overlappingPairs } from './footingLayout'
 import { designSlabDDM, type SlabDesignResult } from './slabDDM'
+import { designStair, type StairDesign } from './stair'
+import { placeStair, stairFrameLoads, type StairUsability } from './stairPlacement'
 import { designShearWall, type ShearWallResult } from './shearWallDesign'
 import { checkModelSCWB, type SCWBJointRow } from './scwb'
 import { momentRatioLimits } from './beamMomentRatios'
@@ -239,6 +241,36 @@ export interface WoodSlabScheduleRow {
   design: WoodSlabResult
   ok: boolean
 }
+/**
+ * One stair flight, designed on the geometry the frame gives it.
+ *
+ * The span is the flight's PLAN run — `designStair` puts a load in kPa of plan
+ * area through w·L²/denom, so the length that belongs in it is the horizontal
+ * one. `slopeSpan` rides along because it is what gets cut and what the
+ * elevation dimensions.
+ */
+export interface StairScheduleRow {
+  id: string
+  /** The two members it bears on. */
+  low: string
+  high: string
+  /** Placed geometry, all of it derived from where those members are. */
+  rise: number; run: number; slopeSpan: number
+  R: number; G: number; thetaDeg: number
+  risers: number
+  width: number
+  waist: number
+  design: StairDesign
+  /** Reactions the flight delivers to the frame, kN — the same numbers
+   *  `stairFrameLoads` put on the members, reported so the schedule and the
+   *  load set can be read against each other. */
+  totalD: number; totalL: number
+  /** 2R + G and the riser/going ranges — a comfort read, not a code check, and
+   *  kept out of `ok` for that reason. */
+  usable: StairUsability
+  ok: boolean
+}
+
 export interface WallScheduleRow {
   id: string
   member: string
@@ -380,6 +412,8 @@ export interface StructureDesign {
   /** Plates carrying a timber deck (Plate.deck), designed by the woodSlab engine. */
   woodSlabs: WoodSlabScheduleRow[]
   walls: WallScheduleRow[]
+  /** Stair flights bearing on the frame (`StructuralModel.stairs`). */
+  stairs: StairScheduleRow[]
   footings: FootingScheduleRow[]
   combined: CombinedScheduleRow[]
   /** Strong-column/weak-beam joint checks (NSCP §418.7.3.2); only populated for
@@ -405,6 +439,7 @@ export function designOK(d: StructureDesign): boolean {
     && d.basePlates.every((p) => p.ok)
     && d.footings.every((f) => f.ok) && d.combined.every((c) => c.ok)
     && d.slabs.every((s) => s.ok) && d.woodSlabs.every((s) => s.ok) && d.walls.every((w) => w.ok)
+    && d.stairs.every((s) => s.ok)
     && d.joints.every((j) => j.ok) && d.beamJoints.every((j) => j.ok) && d.scwb.every((j) => j.ok)
     && d.unchecked.length === 0
     && d.pDeltaIssues.length === 0
@@ -1579,6 +1614,37 @@ function designFromRuns(
     walls.push({ id: w.id, member: w.member, lw, hw, thickness: w.thickness, Vu, design, barDia: wallBarDia, fc: sec.fc, fy: sec.fy, ok: design.shearOK, gov })
   }
 
+  // ── stairs ───────────────────────────────────────────────────────────────
+  // Designed on the geometry the frame gives them, not on numbers typed twice:
+  // `placeStair` derives rise, run, R and G from where the two supports are.
+  // The flight is NOT in the analysis — its weight reached the frame as the
+  // reactions `buildGravityLoads` put on those two members — so this is a
+  // design of the flight itself, downstream of the solve like every other row.
+  const stairs: StairScheduleRow[] = []
+  for (const st of model.stairs ?? []) {
+    const p = placeStair(model, st)
+    if (!p) continue                         // meshValidation says why; not silently designed
+    const sec = model.sections.find((x) => x.id === model.members.find((m) => m.id === st.low)?.section)
+      ?? model.sections[0]
+    if (!sec) continue
+    const barDia = 12
+    const design = designStair({
+      span: p.run, t: st.waist, R: p.R, G: p.G,
+      fc: sec.fc, fy: sec.fy, barDia, cover: 20,
+      finishes: st.finishes, live: st.live, support: st.support,
+    })
+    const fl = stairFrameLoads(model, st)
+    stairs.push({
+      id: st.id, low: st.low, high: st.high,
+      rise: p.rise, run: p.run, slopeSpan: p.slopeSpan,
+      R: p.R, G: p.G, thetaDeg: p.thetaDeg, risers: st.risers,
+      width: st.width, waist: st.waist, design,
+      totalD: fl?.totalD ?? 0, totalL: fl?.totalL ?? 0,
+      usable: p.usable,
+      ok: design.ok,
+    })
+  }
+
   const partialDesign = {
     govName: runs[govIdx].name,
     system: opts.seismicSystem ?? 'gravity',
@@ -1586,7 +1652,7 @@ function designFromRuns(
     beams, prestressed, columns, steelBeams, steelColumns, woodBeams, woodColumns, basePlates,
     joints: [] as SteelJoint[],
     beamJoints: [] as BeamBeamJoint[],
-    slabs, woodSlabs, walls, footings, combined,
+    slabs, woodSlabs, walls, stairs, footings, combined,
     scwb: [] as SCWBJointRow[],
     totals: { concreteMembers, concreteSlabs, concrete: concreteMembers + concreteSlabs, steelKg, woodVolume },
     orphanEdges: br.orphanEdges.length,

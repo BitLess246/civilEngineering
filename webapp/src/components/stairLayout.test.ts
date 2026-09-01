@@ -412,3 +412,34 @@ describe('offsetPath — dimensioning a bent bar', () => {
     expect(offsetPath(line, 10, -1)[0][1]).toBeCloseTo(-10, 9)
   })
 })
+
+describe('the span the drawing is set out on is the PLAN run', () => {
+  it('lays out the number of steps the run buys, not the run projected again', () => {
+    // The old form took `span` as a slope length and multiplied by cosθ here,
+    // so a 3.5 m input at θ 26.57° drew a 3.0 m run — 14% short of the number
+    // printed beside it, and 4% off the slope length it claimed instead.
+    const g = flightGeometry(3.5, 150, 150, 300, 26.565)
+    expect(g.nSteps).toBe(12)                      // 3500 / 300, rounded
+    expect(g.drawn.run).toBeCloseTo(3.6, 9)        // 12 × 300
+  })
+
+  it('reports what it DREW, so the label and the line cannot disagree', () => {
+    for (const [run, R, G] of [[3.5, 150, 300], [4.0, 175, 275], [3.0, 125, 320]] as const) {
+      const th = (Math.atan2(R, G) * 180) / Math.PI
+      const g = flightGeometry(run, 150, R, G, th)
+      // the drawn geometry is self-consistent: run, rise and slope are one triangle
+      expect(g.drawn.run).toBeCloseTo((g.nSteps * G) / 1000, 12)
+      expect(g.drawn.rise).toBeCloseTo((g.nSteps * R) / 1000, 12)
+      expect(g.drawn.slope).toBeCloseTo(Math.hypot(g.drawn.run, g.drawn.rise), 12)
+      // …and it is the input, to within one step of rounding
+      expect(Math.abs(g.drawn.run - run)).toBeLessThanOrEqual(G / 2000 + 1e-9)
+    }
+  })
+
+  it('the drawn run is the horizontal extent of the flight on the page', () => {
+    // Which is the whole reason the span dimension may be labelled with it: the
+    // line is horizontal, so it measures a horizontal distance.
+    const g = flightGeometry(3.5, 150, 150, 300, 26.565)
+    expect((g.x1 - g.x0) / g.scale / 1000).toBeCloseTo(g.drawn.run, 9)
+  })
+})
