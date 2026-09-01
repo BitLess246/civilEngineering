@@ -21,6 +21,9 @@ export const DEMO_RESULT = {
   d: 440,
   rhoMin: 0.0034, rho: 0.0090, rhoMax: 0.0183,
   As: 1188.6, bars: 4, sClear: 40, sMinClear: 26.7,
-  Vc: 116.4, phiVc: 87.3, VsReq: 43.6,
-  sReq: 658, sMax: 220, sAdopt: 220, legs: 2,
+  // Vc, and everything downstream of it, moved when the one-way expression was
+  // routed through the shared §422.5.5.1 form: 0.17 as the SI code prints it,
+  // where this engine had carried its own /6. About 2%.
+  Vc: 118.7, phiVc: 89.1, VsReq: 41.3,
+  sReq: 695, sMax: 220, sAdopt: 220, legs: 2,
 } as const

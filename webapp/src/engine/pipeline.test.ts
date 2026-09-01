@@ -27,6 +27,16 @@ function makeModel() {
   return m
 }
 
+/** A grid of the given bays with a uniform slab and area loads on every panel. */
+function grid(baysX: number[], baysZ: number[], slabThickness: number, qD: number, qL: number) {
+  const m = generateGridModel({ baysX, baysZ, storeyH: [3], section, slabThickness })
+  m.loads = m.plates.flatMap((p) => [
+    { kind: 'area' as const, plate: p.id, q: qD, cat: 'D' as const },
+    { kind: 'area' as const, plate: p.id, q: qL, cat: 'L' as const },
+  ])
+  return m
+}
+
 // big +X seismic case so the lateral system is exercised
 function seismicXcase(m: ReturnType<typeof makeModel>): LateralCase {
   const base = computeSeismic(m, { Ca: 0.44, Cv: 0.64, I: 1, R: 8.5, dir: 'x' })!.loads
@@ -1050,12 +1060,61 @@ describe('engine integrations — all-around columns & T-beam action', () => {
           expect(s.Mu).toBeGreaterThan(0)
           expect(s.bf).toBeGreaterThan(300)
           const sTwo = two.sections.find((x) => x.label === s.label)
-          if (sTwo) expect(s.design.As).toBeLessThanOrEqual(sTwo.design.As + 1e-6)
+          // TOTAL steel — tension plus compression. A true T can want slightly
+          // more tension bars while shedding the compression cage entirely.
+          if (sTwo) {
+            expect(s.design.As + s.design.AsPrime)
+              .toBeLessThanOrEqual(sTwo.design.As + sTwo.design.AsPrime + 1e-6)
+          }
         }
         if (s.hogging) expect(s.bf).toBeUndefined()
       }
     }
     expect(flanged).toBeGreaterThan(0)                       // slabs adjoin the grid beams
+  })
+
+  it('every flanged row names its shape, and the kind agrees with the edge flag', () => {
+    const rows = rInt.beams.flatMap((b) => b.sections).filter((s) => s.bf !== undefined)
+    expect(rows.length).toBeGreaterThan(0)
+    for (const s of rows) {
+      expect(s.flangeKind === 'T' || s.flangeKind === 'L').toBe(true)
+      // Table 406.3.2.1: one slab panel → one overhang → an L (spandrel).
+      expect(s.flangeKind).toBe(s.edge ? 'L' : 'T')
+      expect(s.design.flangeAction === 'flange' || s.design.flangeAction === 'true-T').toBe(true)
+    }
+  })
+
+  it('an L row is a spandrel and a T row is interior — bf reflects the overhang count', () => {
+    // Two bays each way, so interior beams see slab on BOTH sides and the
+    // perimeter sees one: Table 406.3.2.1's two rows in the same model.
+    const m = grid([6, 6], [5, 5], 200, 4.8, 2.4)
+    const r = designStructure(m, soil, {}, { tBeamAction: true })!
+    const rows = r.beams.flatMap((b) => b.sections).filter((s) => s.bf !== undefined)
+    const Ls = rows.filter((s) => s.flangeKind === 'L')
+    const Ts = rows.filter((s) => s.flangeKind === 'T')
+    expect(Ls.length).toBeGreaterThan(0)
+    expect(Ts.length).toBeGreaterThan(0)
+    for (const s of rows) expect(s.flangeKind).toBe(s.edge ? 'L' : 'T')
+    // The edge row adds ONE overhang, the interior row two, so the widest L on
+    // this grid cannot reach the widest T.
+    expect(Math.max(...Ls.map((s) => s.bf!))).toBeLessThan(Math.max(...Ts.map((s) => s.bf!)))
+  })
+
+  it('the true-T branch reaches the schedule when the block leaves the slab', () => {
+    // Same grid on a thin slab, loaded until the block outgrows h_f.
+    const m = grid([6, 6], [5, 5], 75, 80, 60)
+    const r = designStructure(m, soil, {}, { tBeamAction: true })!
+    const trueT = r.beams.flatMap((b) => b.sections).filter((s) => s.design.flangeAction === 'true-T')
+    expect(trueT.length).toBeGreaterThan(0)
+    for (const s of trueT) {
+      // Overhangs spent at full stress over h_f; the block itself is on the web.
+      expect(s.design.bFlex).toBeLessThan(s.bf!)
+      expect(s.design.a).toBeGreaterThan(s.hf!)
+      expect(s.design.Muf).toBeGreaterThan(0)
+      expect(s.design.Asf).toBeCloseTo(
+        (0.85 * section.fc * (s.bf! - s.design.bFlex) * s.hf!) / section.fy, 6,
+      )
+    }
   })
 })
 

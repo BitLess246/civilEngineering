@@ -18,6 +18,10 @@ export function beamSectionSolution(sec: RectSection, s: BeamSectionDesign): Sol
     b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia,
     comprBarDia: 16, stirrupDia: sec.tieDia, fc: sec.fc, fy: sec.fy,
     Mu: Math.abs(s.Mu), Vu: s.Vu,
+    // The schedule row already knows whether the slab acted with this section;
+    // without it the printed solution re-derived a bare web rectangle and
+    // contradicted the steel the same row reports.
+    ...(s.bf && s.hf ? { flange: { bf: s.bf, hf: s.hf, kind: s.flangeKind } } : {}),
   }, s.design)
 }
 

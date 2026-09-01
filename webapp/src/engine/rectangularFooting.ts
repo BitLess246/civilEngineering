@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { netBearing } from './bearing';
 import { punchingDepth, oneWayShearDepth, type ColumnPosition } from './shear';
-import { flexuralSteel, matLayout } from './flexure';
+import { flexuralSteel, matLayout, type AsMinBasis } from './flexure';
 
 /** How the plan dimensions are determined. */
 export type RectSizing =
@@ -28,6 +28,8 @@ export interface RectFootingInput {
   cover: number;         // mm
   surcharge?: number;    // kPa
   position?: ColumnPosition;
+  /** Minimum-steel rule — see `flexure.AsMinBasis`. Default `max`. */
+  asMinBasis?: AsMinBasis;
   lambda?: number;
   sizing: RectSizing;
   /** Detailed design (size plan & D_c) or analyze a given section. Default 'design'. */
@@ -137,7 +139,7 @@ export function designRectangularFooting(i: RectFootingInput): RectFootingResult
   const armX = (Bx - cxm) / 2;
   const MuLong = qu * By * (armX * armX) / 2;
   const bLong = By * 1000;
-  const flexLong = flexuralSteel({ Mu: MuLong, b: bLong, d: dFlex, fc: i.fc, fy: i.fy });
+  const flexLong = flexuralSteel({ Mu: MuLong, b: bLong, d: dFlex, h: DcMm, fc: i.fc, fy: i.fy, asMinBasis: i.asMinBasis });
   // Detailed as a one-way slab (ACI 318-14 §13.3.2.1): §7.7.2.3's maximum
   // spacing sets the bar count whenever the required area does not.
   const layoutLong = matLayout({
@@ -149,7 +151,7 @@ export function designRectangularFooting(i: RectFootingInput): RectFootingResult
   const armY = (By - cym) / 2;
   const MuShort = qu * Bx * (armY * armY) / 2;
   const bShort = Bx * 1000;
-  const flexShort = flexuralSteel({ Mu: MuShort, b: bShort, d: dFlex, fc: i.fc, fy: i.fy });
+  const flexShort = flexuralSteel({ Mu: MuShort, b: bShort, d: dFlex, h: DcMm, fc: i.fc, fy: i.fy, asMinBasis: i.asMinBasis });
   const layoutShort = matLayout({
     As: flexShort.As, db: i.barDia, b: bShort, cover: i.cover, h: DcMm, kind: 'one-way',
   });

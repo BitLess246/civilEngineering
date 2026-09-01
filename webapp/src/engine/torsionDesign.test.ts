@@ -79,8 +79,9 @@ describe('designTorsion — shear concrete capacity', () => {
   const sqrtFc = Math.sqrt(28)
   const d = 600 - 40 - 12 - 20 / 2  // 538
 
-  it('Vc = λ·√f\'c·b·d / (6·1000)  (kN)', () => {
-    const expected = 1 * sqrtFc * 400 * d / (6 * 1000)
+  it('Vc = 0.17·λ·√f\'c·b·d  (kN) — §422.5.5.1 as the SI code prints it', () => {
+    // 0.17, not the 1/6 the inch-pound 2√f'c converts to exactly.
+    const expected = 0.17 * 1 * sqrtFc * 400 * d / 1000
     expect(r.Vc).toBeCloseTo(expected, 9)
   })
 

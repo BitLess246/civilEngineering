@@ -4,6 +4,7 @@
 // SI units throughout: lengths mm, forces kN, moments kN·m, stress MPa.
 // φ = 0.75 for shear and torsion (§21.2.1).
 // ─────────────────────────────────────────────────────────────────────────
+import { oneWayVc } from './shear'
 
 const PHI = 0.75
 
@@ -92,7 +93,9 @@ export function designTorsion(i: TorsionInput): TorsionResult {
   const torsionNeeded = i.Tu >= Tu_th - 1e-9
 
   // Shear concrete capacity
-  const Vc    = (lambda * sqrtFc * b * d) / (6 * 1000)  // kN
+  // §422.5.5.1 through the shared expression; the (2/3)√f'c below is
+  // §22.7.7.1's section limit — a different clause, left as it is.
+  const Vc    = oneWayVc({ fc, b, d, lambda })          // kN
   const phiVc = PHI * Vc
 
   // Interaction check §22.7.7.1 (all terms in MPa)

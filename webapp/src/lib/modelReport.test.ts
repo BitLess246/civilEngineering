@@ -204,3 +204,30 @@ describe('buildModelReport — timber deck (wood slab on a plate)', () => {
     expect(grp.items[0].steps.length).toBeGreaterThan(0)
   })
 })
+
+describe('buildModelReport — flanged beam rows name the shape they are', () => {
+  const model = generateGridModel({ baysX: [6, 6], baysZ: [5, 5], storeyH: [3], section, slabThickness: 200 })
+  model.loads = model.plates.flatMap((p) => [
+    { kind: 'area' as const, plate: p.id, q: 4.8, cat: 'D' as const },
+    { kind: 'area' as const, plate: p.id, q: 2.4, cat: 'L' as const },
+  ])
+  const design = designStructure(model, soil, {}, { tBeamAction: true })!
+  const rpt = buildModelReport(model, design, [], soil)
+
+  it('the schedule marks an interior row T and a spandrel L (Table 406.3.2.1)', () => {
+    const beams = rpt.tables.find((t) => /beam/i.test(t.title))!
+    const flanged = beams.rows.filter((r) => r.some((c) => /bf=/.test(String(c))))
+    expect(flanged.length).toBeGreaterThan(0)
+    const cells = flanged.map((r) => r.find((c) => /bf=/.test(String(c)))!)
+    expect(cells.some((c) => /(^|\s)T(\(true\))? bf=/.test(String(c)))).toBe(true)
+    expect(cells.some((c) => /(^|\s)L(\(true\))? bf=/.test(String(c)))).toBe(true)
+  })
+
+  it('the section figure carries the edge flag, so an L is not drawn as a symmetric T', () => {
+    const figs = rpt.groups.flatMap((g) => g.items).map((i) => i.section)
+      .filter((s) => s && s.kind === 'beam' && s.bf)
+    expect(figs.length).toBeGreaterThan(0)
+    expect(figs.some((s) => s!.edge === true)).toBe(true)
+    expect(figs.some((s) => s!.edge === false)).toBe(true)
+  })
+})

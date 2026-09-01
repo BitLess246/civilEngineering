@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { netBearing, squareSize } from './bearing';
 import { punchingDepth, oneWayShearDepth, type ColumnPosition } from './shear';
-import { flexuralSteel, matLayout } from './flexure';
+import { flexuralSteel, matLayout, type AsMinBasis } from './flexure';
 
 export interface SquareFootingInput {
   /** Service (unfactored) axial load P, kN. */
@@ -35,6 +35,16 @@ export interface SquareFootingInput {
   surcharge?: number;
   /** Column position (α_s for punching), default interior. */
   position?: ColumnPosition;
+  /**
+   * Which minimum steel rule the mat is held to — see `flexure.AsMinBasis`.
+   *
+   * Default `max`, the greater of §9.6.1.2's beam rule and §24.4.3.2's
+   * shrinkage rule. §13.3.2.1 sends footings to the slab rule alone, which is
+   * the lighter of the two here; taking the larger is what most offices detail
+   * to and is the reading that cannot be wrong in the unsafe direction, so it
+   * is the default and the slab-only reading is opt-in.
+   */
+  asMinBasis?: AsMinBasis;
   /** Lightweight-concrete factor λ (default 1). */
   lambda?: number;
   /** Detailed design (size B & D_c) or analyze a given section. Default 'design'. */
@@ -67,6 +77,11 @@ export interface SquareFootingResult {
   steelArea: number;
   rho: number;
   usedMinSteel: boolean;
+  /** Which minimum was larger, and both candidates (mm²) — so a sheet can show
+   *  the comparison rather than a bare number. */
+  minGoverning: 'beam' | 'slab';
+  asMinBeam: number;
+  asMinSlab: number;
   bars: number;
   /** Centre-to-centre spacing, mm. */
   barSpacing: number;
@@ -100,17 +115,57 @@ export interface SquareFootingResult {
  * eccentricity that results is the honest order: it is not circular, and it
  * says plainly what the pad needs.
  */
+/**
+ * Which bearing regime the pad is in.
+ *
+ * `full`             resultant inside the kern; the linear trapezoid is exact.
+ * `partial-uniaxial` lifts about one axis; the triangular block has a closed
+ *                    form, so `qMax` is still exact.
+ * `partial-biaxial`  lifts about both; the contact area is a polygon with no
+ *                    closed form, so `qMax` is reported as the linear value
+ *                    and is a LOWER BOUND on the truth. A pad in this state
+ *                    has already failed the kern check — the number is there
+ *                    to show the scale, not to design on.
+ */
+export type BearingState = 'full' | 'partial-uniaxial' | 'partial-biaxial';
+
 export interface ColumnOffset {
   /** Column centroid from the pad centroid, m — +x toward the free edge. */
   ex: number;
   ey: number;
   /** Resultant eccentricity including the applied moment, m. */
   e: number;
-  /** Service pressures under the trapezoid, kPa. `qMin` < 0 means uplift. */
+  /**
+   * The peak bearing pressure the soil ACTUALLY sees, kPa.
+   *
+   * Inside the kern this is the linear trapezoid, q = P/A(1 + 6e_x/B + 6e_y/L)
+   * — biaxial, both terms, because they add rather than compete.
+   *
+   * Outside it the linear formula is no longer the answer. Soil takes no
+   * tension, so the block redistributes onto whatever is still in contact, and
+   * the peak RISES well above the extrapolation: on the worked 2.0 × 3.0 pad
+   * the linear value is 510 kPa where the triangular block that actually
+   * forms peaks at 1000. Reporting the extrapolation as the peak understates
+   * the demand by half, which is the wrong direction. See `bearing`.
+   */
   qMax: number;
+  /** Minimum linear ordinate, kPa — negative means that corner lifts. It is
+   *  the SIGN that carries the finding; the magnitude is fictitious. */
   qMin: number;
-  /** e ≤ B/6 — the resultant stays in the kern and the whole base bears. */
+  /** How `qMax` was arrived at, and therefore how far to trust it. */
+  bearing: BearingState;
+  /** Length still in contact, m — uniaxial partial bearing only. */
+  contactLength: number | null;
+  /**
+   * Whether the resultant stays in the kern, so the whole base bears.
+   *
+   * Biaxially the kern is a RHOMBUS, not a pair of independent middle thirds:
+   * q_min ≥ 0 requires e_x/B + e_y/L ≤ 1/6, which is stricter than either axis
+   * on its own and is what a corner column actually has to satisfy.
+   */
   kernOK: boolean;
+  /** e_x/B + e_y/L, against the 1/6 the kern allows — the utilisation. */
+  kernRatio: number;
   /**
    * Moment a strap or tie beam must take at the column to bring the resultant
    * back to the pad centroid, kN·m. Zero when the pad already balances.
@@ -179,7 +234,12 @@ export function designSquareFooting(i: SquareFootingInput): SquareFootingResult 
   const arm = (B - cm) / 2;                         // cantilever from column face, m
   const Mu = qu * B * (arm * arm) / 2;              // kN·m over the full width B
   const b = B * 1000;                               // design width, mm
-  const flex = flexuralSteel({ Mu, b, d: dFlex, fc: i.fc, fy: i.fy });
+  // `h` lets the §24.4.3.2 gross-section minimum enter the comparison at all —
+  // without it only the beam rule can apply, which is how the slab rule that
+  // §13.3.2.1 actually points at was silently never considered.
+  const flex = flexuralSteel({
+    Mu, b, d: dFlex, h: DcMm, fc: i.fc, fy: i.fy, asMinBasis: i.asMinBasis,
+  });
   // A footing is detailed as a one-way slab (ACI 318-14 §13.3.2.1), so the
   // §7.7.2.3 maximum spacing sets the bar count whenever the area does not.
   const layout = matLayout({
@@ -189,6 +249,7 @@ export function designSquareFooting(i: SquareFootingInput): SquareFootingResult 
   return {
     B, Dc: DcMm, qNet, qu, dPunch, dBeam, dFlex,
     steelArea: flex.As, rho: flex.rho, usedMinSteel: flex.usedMin,
+    minGoverning: flex.minGoverning, asMinBeam: flex.asMinBeam, asMinSlab: flex.asMinSlab,
     bars: layout.n, barSpacing: layout.spacing,
     barSpacingMax: layout.sMax, spacingGoverned: layout.spacingGoverned,
     barsFit: layout.clearOK,
@@ -208,26 +269,49 @@ export function designSquareFooting(i: SquareFootingInput): SquareFootingResult 
  */
 export function columnOffset(
   i: Pick<SquareFootingInput, 'serviceLoad' | 'columnWidth' | 'columnWidthY' | 'position'>,
-  B: number, cyMm?: number,
+  B: number, cyMm?: number, L = B,
 ): ColumnOffset | null {
   const position = i.position ?? 'interior';
   if (position === 'interior') return null;
   const cx = i.columnWidth / 1000;
   const cy = (cyMm ?? i.columnWidthY ?? i.columnWidth) / 1000;
+  // The column centroid sits c/2 in from the face it is flush with, so the
+  // offset is (B − c)/2 — the exact form of the (B/2) idealisation that drops
+  // the column's own width.
   const ex = Math.max(0, (B - cx) / 2);
-  const ey = position === 'corner' ? Math.max(0, (B - cy) / 2) : 0;
+  const ey = position === 'corner' ? Math.max(0, (L - cy) / 2) : 0;
   const e = Math.hypot(ex, ey);
   const P = i.serviceLoad;
-  const A = B * B;
-  // Trapezoid on the governing axis. Beyond the kern this is the linear
-  // extrapolation, so qMin goes negative — reported rather than clipped,
-  // because a negative here IS the finding: the base lifts.
-  const eGov = Math.max(ex, ey);
-  const qMax = A > 0 ? (P / A) * (1 + (6 * eGov) / B) : 0;
-  const qMin = A > 0 ? (P / A) * (1 - (6 * eGov) / B) : 0;
+  const A = B * L;
+  // Biaxial, both terms. Beyond the kern this is the linear extrapolation, so
+  // qMin goes negative — reported rather than clipped, because the negative IS
+  // the finding: that part of the base lifts off the soil.
+  const kx = A > 0 ? (6 * ex) / B : 0;
+  const ky = A > 0 ? (6 * ey) / L : 0;
+  const qLinMax = A > 0 ? (P / A) * (1 + kx + ky) : 0;
+  const qMin = A > 0 ? (P / A) * (1 - kx - ky) : 0;
+  const kernRatio = B > 0 && L > 0 ? (ex / B + ey / L) / (1 / 6) : 0;
+  const kernOK = kernRatio <= 1 + 1e-9;
+
+  // ── the redistribution, when the base lifts ────────────────────────────
+  // Soil carries no tension, so once q_min goes negative the pressure is not
+  // the extrapolated trapezoid — it collapses onto the contact area and the
+  // peak goes UP. Uniaxially that is a triangle of length 3(B/2 − e) whose
+  // volume must still be P, which fixes the peak exactly.
+  const uniaxial = ey <= 1e-12 || ex <= 1e-12;
+  const bearing: BearingState = kernOK ? 'full'
+    : uniaxial ? 'partial-uniaxial' : 'partial-biaxial';
+  let qMax = qLinMax;
+  let contactLength: number | null = null;
+  if (bearing === 'partial-uniaxial') {
+    // Which axis is eccentric decides which dimension the triangle runs along.
+    const [ecc, along, across] = ex > ey ? [ex, B, L] : [ey, L, B];
+    contactLength = Math.max(1e-9, 3 * (along / 2 - ecc));
+    qMax = (2 * P) / (contactLength * across);
+  }
   return {
-    ex, ey, e, qMax, qMin,
-    kernOK: eGov <= B / 6 + 1e-9,
+    ex, ey, e, qMax, qMin, bearing, contactLength,
+    kernOK, kernRatio,
     restraint: P * e,
   };
 }

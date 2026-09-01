@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  rhoMin, flexuralSteel, barLayout, matLayout, maxBarSpacing, minClearSpacing, rectCapacity,
+  rhoMin, flexuralSteel, barLayout, matLayout, maxBarSpacing, minClearSpacing, rectCapacity, rhoShrinkage, flexuralAsMin,
 } from './flexure';
 import { tBeamCapacity } from './tbeam';
 
@@ -187,5 +187,64 @@ describe('rectCapacity', () => {
   it('is zero-safe', () => {
     expect(rectCapacity(300, 500, 500, 0, 28, 415).Mn).toBe(0)
     expect(rectCapacity(0, 500, 500, 1000, 28, 415).Mn).toBe(0)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// TWO MINIMA, and which one a footing is held to.
+//
+// §9.6.1.2 is the beam rule on b·d. §24.4.3.2 is the shrinkage rule on the
+// GROSS section b·h, and §13.3.2.1 sends footings there. They disagree, and
+// the engine only ever applied the beam one — the slab rule could not even
+// enter the comparison, because `flexuralSteel` was never told h.
+// ─────────────────────────────────────────────────────────────────────────
+describe('minimum steel', () => {
+  it('ρ_sh is BANDED on fy — 0.0018 is the Grade-420 row, not a constant', () => {
+    expect(rhoShrinkage(275)).toBeCloseTo(0.0020, 9)
+    expect(rhoShrinkage(415)).toBeCloseTo(0.0020, 9)     // Grade 415 is below 420
+    expect(rhoShrinkage(420)).toBeCloseTo(0.0018, 9)
+    expect(rhoShrinkage(550)).toBeCloseTo(Math.max((0.0018 * 420) / 550, 0.0014), 9)
+    expect(rhoShrinkage(700)).toBeCloseTo(0.0014, 9)     // floored
+  })
+
+  it('compares both and takes the greater by default', () => {
+    const m = flexuralAsMin({ fc: 21, fy: 415, b: 2000, d: 515, h: 600 })
+    expect(m.beam).toBeCloseTo(rhoMin(21, 415) * 2000 * 515, 6)
+    expect(m.slab).toBeCloseTo(0.0020 * 2000 * 600, 6)
+    expect(m.As).toBe(Math.max(m.beam, m.slab))
+    expect(m.governs).toBe('beam')
+  })
+
+  it('each basis can be asked for on its own', () => {
+    const at = (basis: 'max' | 'beam' | 'slab') =>
+      flexuralAsMin({ fc: 21, fy: 415, b: 2000, d: 515, h: 600, basis })
+    expect(at('beam').As).toBeGreaterThan(at('slab').As)
+    expect(at('max').As).toBe(at('beam').As)
+  })
+
+  it('without h the slab rule cannot apply — the old behaviour, unchanged', () => {
+    const m = flexuralAsMin({ fc: 21, fy: 415, b: 2000, d: 515 })
+    expect(m.slab).toBe(0)
+    expect(m.As).toBeCloseTo(rhoMin(21, 415) * 2000 * 515, 6)
+  })
+
+  it('the slab rule CAN govern — a thick section with light flexural depth', () => {
+    // h well above d is where the gross-section rule bites: a 1200 mm raft
+    // with 400 mm of cover and ducts.
+    const m = flexuralAsMin({ fc: 28, fy: 420, b: 1000, d: 500, h: 1200 })
+    expect(m.slab).toBeGreaterThan(m.beam)
+    expect(m.governs).toBe('slab')
+  })
+
+  it('flexuralSteel reports both candidates so a sheet can show the comparison', () => {
+    const r = flexuralSteel({ Mu: 474, b: 2000, d: 515, h: 600, fc: 21, fy: 415 })
+    expect(r.asMinBeam).toBeGreaterThan(0)
+    expect(r.asMinSlab).toBeGreaterThan(0)
+    expect(r.usedMin).toBe(true)
+    expect(r.As).toBe(Math.max(r.asMinBeam, r.asMinSlab))
+    // …and the slab-only basis lets the moment govern instead
+    const slabOnly = flexuralSteel({ Mu: 474, b: 2000, d: 515, h: 600, fc: 21, fy: 415, asMinBasis: 'slab' })
+    expect(slabOnly.usedMin).toBe(false)
+    expect(slabOnly.As).toBeLessThan(r.As)
   })
 })

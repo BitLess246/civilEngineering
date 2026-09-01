@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { designSquareFooting, columnOffset, type ColumnOffset } from '../engine/isolatedFooting'
+import type { AsMinBasis } from '../engine/flexure'
 import {
   optimizeFootingRebar, optimizeRectFootingRebar, optimizeEccentricFootingRebar,
 } from '../engine/matRebarOptimize'
@@ -63,6 +64,7 @@ interface FormState {
   cover: number
   surcharge: number
   position: ColumnPosition
+  asMinBasis: AsMinBasis
 }
 
 const DEFAULTS: FormState = {
@@ -96,9 +98,14 @@ const DEFAULTS: FormState = {
   cover: 75,
   surcharge: 0,
   position: 'interior',
+  asMinBasis: 'max',
 }
 
-interface DirSteel { As: number; bars: number; spacing: number; usedMin: boolean; rho: number }
+interface DirSteel {
+  As: number; bars: number; spacing: number; usedMin: boolean; rho: number
+  /** Both minimum-steel candidates and which was larger, for the solution sheet. */
+  minGoverning?: 'beam' | 'slab'; asMinBeam?: number; asMinSlab?: number
+}
 interface View {
   type: FootingType
   loading: LoadingType
@@ -194,7 +201,7 @@ export default function FoundationDesign() {
       serviceLoad, ultimateLoad, columnWidth: colWidth, columnWidthY: colWidthY,
       fc: form.fc, fy: form.fy, qAllow: form.qAllow, gammaSoil: form.gammaSoil,
       gammaConc: form.gammaConc, H: form.H, barDia: form.barDia, cover: form.cover,
-      surcharge: form.surcharge, position: form.position,
+      surcharge: form.surcharge, position: form.position, asMinBasis: form.asMinBasis,
       analysis: form.analysisMethod, solutionMethod: form.solutionMethod,
     }
     try {
@@ -224,7 +231,7 @@ export default function FoundationDesign() {
     const common = {
       serviceLoad, ultimateLoad, columnWidth: colWidth, columnWidthY: colWidthY,
       fc: form.fc, fy: form.fy, qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc,
-      H: form.H, barDia: dbEff, cover: form.cover, surcharge: form.surcharge, position: form.position,
+      H: form.H, barDia: dbEff, cover: form.cover, surcharge: form.surcharge, position: form.position, asMinBasis: form.asMinBasis,
     }
     const methods = {
       analysis: form.analysisMethod, solutionMethod: form.solutionMethod,
@@ -239,7 +246,8 @@ export default function FoundationDesign() {
         Bx: r.B, By: r.B, Dc: r.Dc, qNet: r.qNet, qu: r.quMax,
         dPunch: r.dPunch, dBeamLong: r.dBeam, dBeamShort: r.dBeam, dProvided: r.dProvided,
         punchOK: r.punchOK, beamOK: r.beamOK && r.bearingOK,
-        long: { As: r.steelArea, bars: r.bars, spacing: r.barSpacing, usedMin: r.usedMinSteel, rho: r.rho },
+        long: { As: r.steelArea, bars: r.bars, spacing: r.barSpacing, usedMin: r.usedMinSteel, rho: r.rho,
+          minGoverning: r.minGoverning, asMinBeam: r.asMinBeam, asMinSlab: r.asMinSlab },
         short: null,
         ecc: { e: r.e, qMax: r.qMaxService, qMin: r.qMinService, kernOK: r.kernOK },
         // The applied-moment eccentricity and the geometric one are separate
@@ -254,7 +262,8 @@ export default function FoundationDesign() {
         Bx: r.B, By: r.B, Dc: r.Dc, qNet: r.qNet, qu: r.qu,
         dPunch: r.dPunch, dBeamLong: r.dBeam, dBeamShort: r.dBeam, dProvided: r.dProvided,
         punchOK: r.punchOK, beamOK: r.beamOK,
-        long: { As: r.steelArea, bars: r.bars, spacing: r.barSpacing, usedMin: r.usedMinSteel, rho: r.rho },
+        long: { As: r.steelArea, bars: r.bars, spacing: r.barSpacing, usedMin: r.usedMinSteel, rho: r.rho,
+          minGoverning: r.minGoverning, asMinBeam: r.asMinBeam, asMinSlab: r.asMinSlab },
         short: null, ecc: null, offset: r.offset,
       }
     }
@@ -273,7 +282,7 @@ export default function FoundationDesign() {
       // The rectangular and eccentric paths do not carry the property-line
       // geometry yet; `columnOffset` is a pure function of B and c, so it is
       // derived here rather than left absent and silently drawn centred.
-      offset: columnOffset({ serviceLoad, columnWidth: colWidth, columnWidthY: colWidthY, position: form.position }, globalThis.Math.min(r.Bx, r.By)),
+      offset: columnOffset({ serviceLoad, columnWidth: colWidth, columnWidthY: colWidthY, position: form.position }, r.Bx, colWidthY, r.By),
     }
   }, [form, dbEff, valid, rect, ecc, serviceLoad, ultimateLoad, colWidth, colWidthY])
 
@@ -306,7 +315,7 @@ export default function FoundationDesign() {
       columnWidth: colWidth, columnWidthY: colWidthY, fc: form.fc, fy: form.fy,
       column: circular ? { shape: 'circular' as const, dia: form.columnWidth } : null,
       qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc, H: form.H,
-      barDia: dbEff, cover: form.cover, surcharge: form.surcharge, position: form.position,
+      barDia: dbEff, cover: form.cover, surcharge: form.surcharge, position: form.position, asMinBasis: form.asMinBasis,
       Bx: view.Bx, By: view.By, Dc: view.Dc, qNet: view.qNet, qu: view.qu,
       dPunch: view.dPunch, dBeamLong: view.dBeamLong, dBeamShort: view.dBeamShort, dProvided: view.dProvided,
       punchOK: view.punchOK, beamOK: view.beamOK,
@@ -357,7 +366,7 @@ export default function FoundationDesign() {
               { name: 'One-way (beam) shear — d req/prov', ratio: beamRatio, ok: view.beamOK },
               ...(view.offset ? [{
                 name: `Resultant in the kern — e/(B/6) · ${form.position} column`,
-                ratio: view.offset.e / (globalThis.Math.min(view.Bx, view.By) / 6),
+                ratio: view.offset.kernRatio,
                 ok: view.offset.kernOK,
               }] : []),
             ]}
@@ -487,6 +496,15 @@ export default function FoundationDesign() {
             )}
             <Select label="Column position" value={form.position} onChange={set('position')}
               options={[['interior', 'Interior'], ['edge', 'Edge'], ['corner', 'Corner']]} />
+            {/* §13.3.2.1 sends footings to the SLAB minimum; most offices
+                detail to the greater of that and the beam rule. Both are
+                offered because the clause is genuinely read both ways. */}
+            <Select label="Minimum steel" value={form.asMinBasis} onChange={set('asMinBasis')}
+              options={[
+                ['max', 'Greater of both (default)'],
+                ['slab', 'Slab §24.4.3.2 only (§13.3.2.1)'],
+                ['beam', 'Beam §9.6.1.2 only'],
+              ]} />
             {circular && (
               <p className="col-span-full text-xs text-slate-500">
                 Circular column → equivalent square c = D·√(π/4) = {f0(colWidth)} mm (equal area, legacy convention).
@@ -551,17 +569,18 @@ export default function FoundationDesign() {
                 // kern check is stated as e/(B/6) — over 1.00 is uplift.
                 ...(view.offset ? [{
                   name: `Resultant in the kern — e/(B/6) · ${form.position} column`,
-                  ratio: view.offset.e / (globalThis.Math.min(view.Bx, view.By) / 6),
+                  ratio: view.offset.kernRatio,
                 }] : []),
               ]}
               footnote={view.offset && !view.offset.kernOK
                 ? `Column flush with the ${form.position === 'corner' ? 'two free edges' : 'free edge'}: the load sits `
-                  + `${view.offset.e.toFixed(2)} m off the pad centroid against a kern of `
-                  + `${(globalThis.Math.min(view.Bx, view.By) / 6).toFixed(2)} m, so part of the base lifts. `
+                  + `${view.offset.e.toFixed(2)} m off the pad centroid — e_x/B + e_y/L is `
+                  + `${(view.offset.kernRatio / 6).toFixed(3)} against the 1/6 the kern allows, so part of the base lifts. `
                   + `A pad cannot be sized out of this — the offset grows with B. Tie it to an interior footing `
                   + `with a strap taking ${f0(view.offset.restraint)} kN·m, or use a combined footing.`
                 : view.long.usedMin
-                  ? 'Flexure: As,min = 0.0018·b·h governs (ρmin) — §24.4.3.2'
+                  ? `Flexure: minimum steel governs — ${view.long.minGoverning === 'slab'
+                      ? '§24.4.3.2 shrinkage on b·h' : '§9.6.1.2 flexural on b·d'}`
                   : `Flexure: ρ = ${view.long.rho.toFixed(4)} — §24.4.3.2 satisfied`}
             />
           )}

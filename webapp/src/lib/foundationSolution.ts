@@ -9,7 +9,16 @@
 import type { ColumnPosition } from '../engine/shear'
 import { type SolutionStep, type SolutionLine, sn0, sn1, sn2, sn3, sn4 } from './solution'
 
-interface SteelCtx { As: number; rho: number; usedMin: boolean; bars: number; spacing: number }
+/** How the sheet names the minimum it adopted. */
+const basisLabel = (b?: 'max' | 'beam' | 'slab') =>
+  b === 'slab' ? String.raw`A_{s,slab}` : b === 'beam' ? String.raw`A_{s,beam}`
+    : String.raw`\max(A_{s,beam},\ A_{s,slab})`
+
+interface SteelCtx {
+  As: number; rho: number; usedMin: boolean; bars: number; spacing: number
+  /** The two candidate minima and which was larger — §9.6.1.2 vs §24.4.3.2. */
+  minGoverning?: 'beam' | 'slab'; asMinBeam?: number; asMinSlab?: number
+}
 
 export interface SolutionCtx {
   type: 'square' | 'rectangular'
@@ -26,7 +35,9 @@ export interface SolutionCtx {
   /** Present when the column is circular (columnWidth is the equivalent square). */
   column?: { shape: 'circular'; dia: number } | null
   qAllow: number; gammaSoil: number; gammaConc: number; H: number
-  barDia: number; cover: number; surcharge: number; position: ColumnPosition
+  barDia: number; cover: number
+  /** Which minimum-steel rule the mat was held to. */
+  asMinBasis?: 'max' | 'beam' | 'slab'; surcharge: number; position: ColumnPosition
   Bx: number; By: number; Dc: number; qNet: number; qu: number
   dPunch: number; dBeamLong: number; dBeamShort: number; dProvided: number
   punchOK: boolean; beamOK: boolean
@@ -213,9 +224,27 @@ function flexureStep(c: SolutionCtx, span: number, width: number, steel: SteelCt
       txt('The footing cantilevers from the column face; the design moment is the soil pressure acting over that cantilever (ACI §13.2). ρ is found from Rₙ and floored at ρ_min.'),
       eq(String.raw`a = \tfrac{${label === 'short (y)' ? 'B_y' : 'B'}-c}{2} = ${sn3(arm)}\ \text{m},\quad M_u = \tfrac{q_u\,b\,a^2}{2} = ${sn1(Mu)}\ \text{kN·m}`),
       eq(String.raw`R_n = \dfrac{M_u}{\phi b d^2} = ${sn3(Rn)}\ \text{MPa},\quad \rho = \tfrac{0.85 f'_c}{f_y}\!\left(1-\sqrt{1-\tfrac{2R_n}{0.85 f'_c}}\right) = ${sn4(rhoCalc)}`),
-      eq(String.raw`\rho_{min} = \max(\tfrac{1.4}{f_y}, \tfrac{\sqrt{f'_c}}{4 f_y}) = ${sn4(rMin)} \Rightarrow A_s = \rho b d = ${sn0(steel.As)}\ \text{mm}^2`),
+      // WHICH minimum, and why there are two. §9.6.1.2 is the beam rule on
+      // b·d; §24.4.3.2 is the shrinkage rule on the GROSS section, and
+      // §13.3.2.1 sends footings to that one. They disagree, so the sheet
+      // shows both rather than printing a single unexplained floor.
+      eq(String.raw`\rho_{min}\,(\S 9.6.1.2) = \max(\tfrac{1.4}{f_y}, \tfrac{\sqrt{f'_c}}{4 f_y}) = ${sn4(rMin)} \Rightarrow A_{s,beam} = ${sn0(steel.asMinBeam ?? rMin * b * d)}\ \text{mm}^2`),
+      ...(steel.asMinSlab
+        ? [eq(String.raw`A_{s,slab}\,(\S 24.4.3.2) = \rho_{sh}\,b h = ${sn0(steel.asMinSlab)}\ \text{mm}^2 \quad\text{— } \rho_{sh}\text{ is banded on } f_y,\ 0.0020 \text{ below } 420\ \text{MPa}`),
+          eq(String.raw`A_{s,min} = ${basisLabel(c.asMinBasis)} = ${sn0(Math.max(
+            c.asMinBasis === 'slab' ? steel.asMinSlab : 0,
+            c.asMinBasis === 'beam' ? (steel.asMinBeam ?? 0) : 0,
+            c.asMinBasis === 'slab' || c.asMinBasis === 'beam' ? 0 : Math.max(steel.asMinBeam ?? 0, steel.asMinSlab),
+          ))}\ \text{mm}^2 \;\Rightarrow\; \textbf{${steel.minGoverning === 'slab' ? String.raw`\S 24.4.3.2` : String.raw`\S 9.6.1.2`}}\text{ is the larger}`)]
+        : []),
+      eq(String.raw`A_s = \max(\rho b d,\ A_{s,min}) = ${sn0(steel.As)}\ \text{mm}^2`),
     ],
-    note: steel.usedMin ? 'ρ_min governs.' : 'Computed ρ governs.',
+    note: steel.usedMin
+      ? `Minimum steel governs (${steel.minGoverning === 'slab' ? '§24.4.3.2 shrinkage' : '§9.6.1.2 flexural'}).`
+      + (c.asMinBasis === 'slab' ? ' Held to the slab rule alone — §13.3.2.1.'
+        : c.asMinBasis === 'beam' ? ' Held to the beam rule alone.'
+        : ' Held to the greater of the two, which is the usual detailing practice; §13.3.2.1 alone would allow the slab rule.')
+      : 'Computed ρ governs — neither minimum bites.',
   }
 }
 

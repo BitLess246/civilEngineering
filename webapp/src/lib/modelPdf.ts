@@ -58,7 +58,9 @@ export async function generateModelPdf({ lh, report, modelImg, badges, sheets, f
     const s = Math.min(availW / drawW, availH / sec.h)
     const wv = drawW * s, hv = sec.h * s, bwv = sec.b * s
     const bx = x + padL + (availW - wv) / 2, by = topY + padT + (availH - hv) / 2
-    const webX = bx + (wv - bwv) / 2
+    // An L (edge) beam's overhang is all on one side — Table 406.3.2.1's edge
+    // row — so its web sits flush with the flange, not centred under it.
+    const webX = flanged && sec.edge ? bx : bx + (wv - bwv) / 2
     doc.setLineWidth(0.25); doc.setDrawColor(...INK); doc.setFillColor(...CONC)
     if (flanged) {
       const hfv = sec.hf! * s
@@ -291,7 +293,7 @@ export async function generateModelPdf({ lh, report, modelImg, badges, sheets, f
         for (const w of doc.splitTextToSize(item.sub, leftW)) { doc.text(w, M, sh.y); sh.y += 3 }
       }
       if (fig) {
-        const cap = `${fig.bars}⌀${fig.barDia}${flanged ? ` · T bf=${Math.round(fig.bf!)}` : ''} · ${fig.b}×${fig.h}`
+        const cap = `${fig.bars}⌀${fig.barDia}${flanged ? ` · ${fig.edge ? 'L' : 'T'} bf=${Math.round(fig.bf!)}` : ''} · ${fig.b}×${fig.h}`
         setF('mono', 'bold', 6.6, INK)
         doc.text(cap, M, sh.y + 0.6); sh.y += 3.6
       }
