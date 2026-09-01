@@ -84,6 +84,38 @@ export interface SquareFootingResult {
   /** Capacity checks — always true for 'design'; meaningful for 'analyze'. */
   punchOK: boolean;
   beamOK: boolean;
+  /** Property-line geometry — present whenever `position` is not interior. */
+  offset: ColumnOffset | null;
+}
+
+/**
+ * What an off-centre column does to the pad, once the column is at a free edge
+ * rather than merely near one.
+ *
+ * A pad whose column face is flush with a property line carries its load a
+ * distance (B − c)/2 from its own centroid, and that distance GROWS with B —
+ * so the footing cannot be sized out of the problem, which is why a real
+ * property-line footing is strapped or tied to an interior column rather than
+ * left to stand alone. Sizing B from bearing and then reporting the
+ * eccentricity that results is the honest order: it is not circular, and it
+ * says plainly what the pad needs.
+ */
+export interface ColumnOffset {
+  /** Column centroid from the pad centroid, m — +x toward the free edge. */
+  ex: number;
+  ey: number;
+  /** Resultant eccentricity including the applied moment, m. */
+  e: number;
+  /** Service pressures under the trapezoid, kPa. `qMin` < 0 means uplift. */
+  qMax: number;
+  qMin: number;
+  /** e ≤ B/6 — the resultant stays in the kern and the whole base bears. */
+  kernOK: boolean;
+  /**
+   * Moment a strap or tie beam must take at the column to bring the resultant
+   * back to the pad centroid, kN·m. Zero when the pad already balances.
+   */
+  restraint: number;
 }
 
 function roundUp(v: number, step: number): number {
@@ -161,5 +193,41 @@ export function designSquareFooting(i: SquareFootingInput): SquareFootingResult 
     barSpacingMax: layout.sMax, spacingGoverned: layout.spacingGoverned,
     barsFit: layout.clearOK,
     analysis, method, dProvided: DcMm - i.cover - i.barDia, punchOK, beamOK,
+    offset: columnOffset(i, B, cy),
+  };
+}
+
+/**
+ * The property-line consequences of an edge or corner column — see
+ * `ColumnOffset`. Null for an interior column, where there are none.
+ *
+ * The column face is taken FLUSH with each free edge, which is what "at the
+ * edge" means for a pad: the centroid then sits (B − c)/2 from the pad's own,
+ * toward that edge. On a corner both axes are offset and the resultant is the
+ * vector sum, checked on the governing axis.
+ */
+export function columnOffset(
+  i: Pick<SquareFootingInput, 'serviceLoad' | 'columnWidth' | 'columnWidthY' | 'position'>,
+  B: number, cyMm?: number,
+): ColumnOffset | null {
+  const position = i.position ?? 'interior';
+  if (position === 'interior') return null;
+  const cx = i.columnWidth / 1000;
+  const cy = (cyMm ?? i.columnWidthY ?? i.columnWidth) / 1000;
+  const ex = Math.max(0, (B - cx) / 2);
+  const ey = position === 'corner' ? Math.max(0, (B - cy) / 2) : 0;
+  const e = Math.hypot(ex, ey);
+  const P = i.serviceLoad;
+  const A = B * B;
+  // Trapezoid on the governing axis. Beyond the kern this is the linear
+  // extrapolation, so qMin goes negative — reported rather than clipped,
+  // because a negative here IS the finding: the base lifts.
+  const eGov = Math.max(ex, ey);
+  const qMax = A > 0 ? (P / A) * (1 + (6 * eGov) / B) : 0;
+  const qMin = A > 0 ? (P / A) * (1 - (6 * eGov) / B) : 0;
+  return {
+    ex, ey, e, qMax, qMin,
+    kernOK: eGov <= B / 6 + 1e-9,
+    restraint: P * e,
   };
 }

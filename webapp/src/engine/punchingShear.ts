@@ -6,8 +6,10 @@
 //
 // Critical perimeter b0 at d/2 from column face (§22.6.4.1):
 //   Interior : b0 = 2(c1+d) + 2(c2+d)
-//   Edge     : b0 = 2(c1/2+d) + (c2+d)   c1 ∥ free edge, c2 ⊥ free edge
-//   Corner   : b0 = (c1/2+d) + (c2/2+d)
+//   Edge     : b0 = (c1+d) + 2(c2+d/2)   c1 ∥ free edge, c2 ⊥ free edge
+//   Corner   : b0 = (c1+d/2) + (c2+d/2)
+// The section runs d/2 past the far column face and stops AT the free edge —
+// so an edge halves the d term in that direction, never the column dimension.
 //
 // Three Vc equations §22.6.5.2 (SI equivalents of ACI 318M-14):
 //   Vc1 = (0.17 + 0.33/βc) λ √f'c b0 d
@@ -15,6 +17,8 @@
 //   Vc3 = 0.33 λ √f'c b0 d
 //   Vc  = min(Vc1, Vc2, Vc3)
 // ─────────────────────────────────────────────────────────────────────────
+
+import { criticalSection } from './shear'
 
 const PHI = 0.75
 
@@ -50,11 +54,16 @@ export function designPunchingShear(i: PunchingInput): PunchingResult {
   const { c1, c2, d, fc, lambda, position } = i
   const sqrtFc = Math.sqrt(Math.max(fc, 1))
 
-  // Critical perimeter (§22.6.4.1)
-  const b0 =
-    position === 'interior' ? 2 * (c1 + d) + 2 * (c2 + d)
-    : position === 'edge'   ? 2 * (c1 / 2 + d) + (c2 + d)
-    :                         (c1 / 2 + d) + (c2 / 2 + d)
+  // Critical perimeter (§22.6.4.1) — from the shared geometry, so this page
+  // and the footing engines cannot disagree about the same clause.
+  //
+  // The edge and corner forms here were `c/2 + d` where the section gives
+  // `c + d/2`: the section extends d/2 PAST the far face and stops AT the free
+  // edge, which halves the d term, not the column. b0 came out 19% short at an
+  // edge and 30% at a corner — conservative, but not the clause. `criticalSection`
+  // truncates in its x, and this module names the ⊥ dimension c2, so the two
+  // are passed the other way round.
+  const b0 = criticalSection(c2, c1, d, position).bo
 
   // Column aspect ratio
   const betac = Math.max(c1, c2) / Math.min(c1, c2)
