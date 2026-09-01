@@ -2378,7 +2378,7 @@ export default function ModelSpace() {
             {showRebar && <span className="text-slate-400">— concrete shown see-through</span>}
             {showRebar && rebarCages.length > 0 && (
               <span className="ml-2 flex flex-wrap gap-x-2 gap-y-0.5">
-                {([['top', 'top'], ['bottom', 'bottom'], ['stirrup', 'stirrups'], ['vertical', 'col. verticals'], ['tie', 'ties']] as const).map(([role, label]) => (
+                {([['top', 'top'], ['bottom', 'bottom'], ['stirrup', 'stirrups'], ['vertical', 'col. verticals'], ['tie', 'ties'], ['mat', 'footing mat'], ['chair', 'slab chairs']] as const).map(([role, label]) => (
                   <span key={role} className="inline-flex items-center gap-1">
                     <span className="inline-block h-2 w-3 rounded-sm" style={{ background: REBAR_ROLE_COLOR[role] }} />{label}
                   </span>

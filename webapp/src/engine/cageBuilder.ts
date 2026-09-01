@@ -26,6 +26,7 @@ import { buildBeamCage } from './beamCage'
 import { buildColumnCage, perimeterBars } from './columnCage'
 import { calcDevLength } from './devLength'
 import { buildFootingCage } from './footingCage'
+import { buildSlabCage, type SlabCageDir } from './slabCage'
 import { spliceCage } from './barSplice'
 import { STOCK_BAR_LENGTH } from './rebarModel'
 import type { RebarCage } from './rebarModel'
@@ -401,6 +402,79 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       colBarDia: sec.barDia,
       lap,
     }), spliceOf(sec, f.barDia)))
+  }
+
+  // ── slabs: both mats of every designed panel ────────────────────────────
+  //
+  // The one element covering the whole floor was the one drawn bare. Each
+  // panel's steel comes from its OWN DDM strips — the spacing the design
+  // adopted, per strip, per direction — so the cage cannot disagree with the
+  // schedule beside it.
+  //
+  // A panel is placed only when its four corners really do make an axis-aligned
+  // rectangle: the DDM is a rectangular-panel method, and a mat laid out on a
+  // skewed quadrilateral as though it were rectangular would be steel drawn
+  // where there is no concrete. Anything else is reported, not guessed at.
+  //
+  // NOT billed here. `takeoff` still measures slab steel from the DDM strip
+  // areas and never asks for a plate's cage, so nothing is counted twice;
+  // moving that bill onto these bars would replace its 0.3·ln approximation
+  // with real cut lengths, and is a change to the ESTIMATE rather than to the
+  // drawing.
+  for (const sl of design.slabs) {
+    const pl = model.plates.find((p) => p.id === sl.plate)
+    const ns = pl?.corners.map((cid) => pos.get(cid))
+    if (!pl || !ns || ns.some((p) => !p)) { unplaced.push(`slab@${sl.plate}`); continue }
+    const xs = ns.map((p) => p!.x), zs = ns.map((p) => p!.z), ys = ns.map((p) => p!.y)
+    const x0 = Math.min(...xs), x1 = Math.max(...xs)
+    const z0 = Math.min(...zs), z1 = Math.max(...zs)
+    const rect = ns.every((p) =>
+      (Math.abs(p!.x - x0) < 1e-6 || Math.abs(p!.x - x1) < 1e-6)
+      && (Math.abs(p!.z - z0) < 1e-6 || Math.abs(p!.z - z1) < 1e-6))
+    const flat = Math.max(...ys) - Math.min(...ys) < 1e-6
+    if (!rect || !flat || x1 - x0 < 1e-6 || z1 - z0 < 1e-6) {
+      unplaced.push(`slab@${sl.plate}`); continue
+    }
+    const sec = model.sections[0] ?? FALLBACK
+    // The DDM names its directions by the panel's own short/long sides, so map
+    // each back onto the model axis it actually runs along before placing bars.
+    const dd = sl.design
+    const dirFor = (len: number): SlabCageDir => {
+      const r = Math.abs(dd.x.l1 - len) <= Math.abs(dd.y.l1 - len) ? dd.x : dd.y
+      const at = (name: string) => r.locations.find((l) => l.name === name)
+      const pos1 = at('+M'), neg = at('Int −M') ?? at('Ext −M') ?? at('Support −M')
+      return {
+        ln: r.ln, csWidth: r.csWidth,
+        botCs: pos1?.column.spacing ?? 200, botMs: pos1?.middle.spacing ?? 250,
+        topCs: neg?.column.spacing ?? 200, topMs: neg?.middle.spacing ?? 250,
+      }
+    }
+    // Which edges another panel carries on past. It decides what the top mat
+    // does there — half a shared bar at a continuous edge, a bar turned down
+    // into the support at a free one — and without it every interior support
+    // is drawn with two top mats, one from each side.
+    const shares = (a: string, b: string) => model.plates.some((q) =>
+      q.id !== pl.id && q.role !== 'wall' && q.corners.includes(a) && q.corners.includes(b))
+    const cornerAt = (fx: number, fz: number) =>
+      pl.corners.find((cid) => {
+        const q = pos.get(cid)!
+        return Math.abs(q.x - fx) < 1e-6 && Math.abs(q.z - fz) < 1e-6
+      })
+    const edgeShared = (fx0: number, fz0: number, fx1: number, fz1: number) => {
+      const a = cornerAt(fx0, fz0), b = cornerAt(fx1, fz1)
+      return a !== undefined && b !== undefined && shares(a, b)
+    }
+    cages.push(buildSlabCage({
+      mark: sl.plate,
+      x0, x1, z0, z1, yTop: ys[0]!,
+      h: dd.h, cover: 20, barDia: sl.barDia,
+      x: dirFor(x1 - x0), z: dirFor(z1 - z0),
+      support: Math.min(sec.b, sec.h) / 1000,
+      edges: {
+        xLo: edgeShared(x0, z0, x0, z1), xHi: edgeShared(x1, z0, x1, z1),
+        zLo: edgeShared(x0, z0, x1, z0), zHi: edgeShared(x0, z1, x1, z1),
+      },
+    }))
   }
 
   return { cages, unplaced }

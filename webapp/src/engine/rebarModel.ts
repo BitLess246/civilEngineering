@@ -42,6 +42,11 @@ export type RebarRole =
   | 'vertical'                     // column and wall verticals
   | 'mat'                          // footing and slab mats
   | 'dowel' | 'diagonal' | 'trimmer'
+  /** Standing bar support between a slab's two mats — the Z-shaped chair that
+   *  holds the top steel at the depth the design assumed. Not decoration: laid
+   *  on the bottom mat instead, the top steel has none of the d it was sized
+   *  for over the support. */
+  | 'chair'
 
 /**
  * One bar shape, and how many identical copies of it the member carries.

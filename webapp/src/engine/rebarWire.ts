@@ -24,6 +24,7 @@ export const REBAR_ROLE_COLOR: Record<RebarRole, string> = {
   dowel: '#c026d3',
   diagonal: '#ca8a04',
   trimmer: '#db2777',
+  chair: '#0ea5e9',
 }
 
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]]

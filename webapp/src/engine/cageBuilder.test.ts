@@ -3,6 +3,7 @@ import { buildStructureCages } from './cageBuilder'
 import { designStructure } from './pipeline'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { cutLength, type RebarCage, type Vec3 } from './rebarModel'
+import { estimateTakeoff } from './takeoff'
 
 const section = { id: 's1', name: 'C1', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
 const soil = { qAllow: 200, gammaSoil: 18, gammaConc: 24, H: 1.5 }
@@ -44,7 +45,10 @@ const hooksOn = (cage: RebarCage, mark: string): number => {
 describe('buildStructureCages', () => {
   it('places every designed member, and reports any it cannot', () => {
     expect(unplaced).toEqual([])
-    expect(cages).toHaveLength(design.beams.length + design.columns.length + design.footings.length)
+    // Slabs are in this count now: `generateGridModel` lays a panel in every
+    // bay, and every designed panel gets its mats.
+    expect(cages).toHaveLength(
+      design.beams.length + design.columns.length + design.footings.length + design.slabs.length)
     expect(new Set(cages.map((c) => c.member)).size).toBe(cages.length)
   })
 
@@ -308,5 +312,64 @@ describe('a seismic frame gets a confined hinge zone, a gravity one does not', (
     const r = hoopGaps('smf')
     const far = r.gaps.filter((_, k) => (r.L - r.at[k]) * 1000 < 2 * 500)
     expect([...new Set(far)]).toEqual([110])
+  })
+})
+
+describe('slab cages — the floor is no longer drawn bare', () => {
+  // The module's frame carries no plates, so this needs its own: a 2 × 2 grid
+  // of panels, which is what gives an interior support with a panel each side.
+  const smodel = generateGridModel({ baysX: [6, 6], baysZ: [5, 5], storeyH: [3], section, slabThickness: 200 })
+  smodel.loads = smodel.plates.flatMap((p) => [
+    { kind: 'area' as const, plate: p.id, q: 4.8, cat: 'D' as const },
+    { kind: 'area' as const, plate: p.id, q: 2.4, cat: 'L' as const },
+  ])
+  const sdesign = designStructure(smodel, soil as never)!
+  const { cages: scages, unplaced: sunplaced } = buildStructureCages(smodel, sdesign)
+  const slabOf = (plate: string) => scages.find((c) => c.member === plate)
+
+  it('every designed panel gets one, placed on its own plate', () => {
+    expect(sdesign.slabs.length).toBeGreaterThan(0)
+    for (const s of sdesign.slabs) expect(slabOf(s.plate)).toBeDefined()
+    expect(sunplaced.filter((u) => u.startsWith('slab@'))).toHaveLength(0)
+  })
+
+  it('the bars sit inside the panel they belong to', () => {
+    for (const s of sdesign.slabs) {
+      const pl = smodel.plates.find((p) => p.id === s.plate)!
+      const ns = pl.corners.map((c) => smodel.nodes.find((n) => n.id === c)!)
+      const x0 = Math.min(...ns.map((n) => n.x)), x1 = Math.max(...ns.map((n) => n.x))
+      const z0 = Math.min(...ns.map((n) => n.z)), z1 = Math.max(...ns.map((n) => n.z))
+      const y = ns[0].y, h = s.design.h / 1000
+      for (const r of slabOf(s.plate)!.runs) for (const p of r.path) {
+        // Laterally, only the support embedment and the top mat's run into the
+        // next panel go past the edge, and never by more than a support.
+        expect(p[0]).toBeGreaterThan(x0 - 0.5); expect(p[0]).toBeLessThan(x1 + 0.5)
+        expect(p[2]).toBeGreaterThan(z0 - 0.5); expect(p[2]).toBeLessThan(z1 + 0.5)
+        expect(p[1]).toBeLessThanOrEqual(y + 1e-9)
+        expect(p[1]).toBeGreaterThanOrEqual(y - h - 1e-9)
+      }
+    }
+  })
+
+  it('an interior support carries ONE top mat, not one from each side', () => {
+    // Each panel draws its half of the shared bar and stops at the centreline.
+    // Run past it and the two panels' mats overlap the whole way across.
+    const shared = 6                                    // the interior grid line, m
+    const crossing = sdesign.slabs.flatMap((s) => slabOf(s.plate)!.runs)
+      .filter((r) => r.role === 'top')
+      .filter((r) => {
+        const xs = r.path.map((p) => p[0])
+        return Math.min(...xs) < shared - 1e-6 && Math.max(...xs) > shared + 1e-6
+      })
+    expect(crossing).toHaveLength(0)
+  })
+
+  it('the take-off does not bill them — it measures slabs from the DDM strips', () => {
+    // Two sources for one quantity is how a bill starts disagreeing with a
+    // drawing; the slab cage is for the view, and `takeoff` never asks for it.
+    const q = estimateTakeoff(smodel, sdesign)
+    const slabRows = q.byElement.filter((e) => e.kind === 'Slab')
+    expect(slabRows.length).toBe(sdesign.slabs.length)
+    expect(q.cutList.some((c) => c.mark === 'Chair')).toBe(false)
   })
 })
