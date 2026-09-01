@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { designSquareFooting } from '../engine/isolatedFooting'
+import { designSquareFooting, columnOffset, type ColumnOffset } from '../engine/isolatedFooting'
 import {
   optimizeFootingRebar, optimizeRectFootingRebar, optimizeEccentricFootingRebar,
 } from '../engine/matRebarOptimize'
@@ -109,6 +109,8 @@ interface View {
   long: DirSteel
   short: (DirSteel & { bandBars: number; bandFraction: number }) | null
   ecc: { e: number; qMax: number; qMin: number; kernOK: boolean } | null
+  /** Property-line geometry when the column is at a free edge — null otherwise. */
+  offset: ColumnOffset | null
 }
 
 
@@ -240,6 +242,9 @@ export default function FoundationDesign() {
         long: { As: r.steelArea, bars: r.bars, spacing: r.barSpacing, usedMin: r.usedMinSteel, rho: r.rho },
         short: null,
         ecc: { e: r.e, qMax: r.qMaxService, qMin: r.qMinService, kernOK: r.kernOK },
+        // The applied-moment eccentricity and the geometric one are separate
+        // facts; the drawing shows the pad's own offset when there is one.
+        offset: columnOffset({ serviceLoad, columnWidth: colWidth, columnWidthY: colWidthY, position: form.position }, r.B),
       }
     }
     if (!rect) {
@@ -250,7 +255,7 @@ export default function FoundationDesign() {
         dPunch: r.dPunch, dBeamLong: r.dBeam, dBeamShort: r.dBeam, dProvided: r.dProvided,
         punchOK: r.punchOK, beamOK: r.beamOK,
         long: { As: r.steelArea, bars: r.bars, spacing: r.barSpacing, usedMin: r.usedMinSteel, rho: r.rho },
-        short: null, ecc: null,
+        short: null, ecc: null, offset: r.offset,
       }
     }
     const sizing = form.sizingMode === 'ratio'
@@ -265,6 +270,10 @@ export default function FoundationDesign() {
       dPunch: r.dPunch, dBeamLong: r.dBeamLong, dBeamShort: r.dBeamShort, dProvided: r.dProvided,
       punchOK: r.punchOK, beamOK: r.beamOK,
       long: r.long, short: r.short, ecc: null,
+      // The rectangular and eccentric paths do not carry the property-line
+      // geometry yet; `columnOffset` is a pure function of B and c, so it is
+      // derived here rather than left absent and silently drawn centred.
+      offset: columnOffset({ serviceLoad, columnWidth: colWidth, columnWidthY: colWidthY, position: form.position }, globalThis.Math.min(r.Bx, r.By)),
     }
   }, [form, dbEff, valid, rect, ecc, serviceLoad, ultimateLoad, colWidth, colWidthY])
 
@@ -314,7 +323,11 @@ export default function FoundationDesign() {
   // d, so this is the honest "how close to the limit" bar for the report).
   const punchRatio = view ? view.dPunch / view.dProvided : 0
   const beamRatio = view ? globalThis.Math.max(view.dBeamLong, view.dBeamShort) / view.dProvided : 0
-  const allOK = !!view && view.punchOK && view.beamOK && (!view.ecc || view.ecc.kernOK)
+  // A pad whose resultant leaves the kern is not an OK design however its
+  // shear checks land — it lifts off the soil. The banner used to read
+  // "DESIGN OK — all checks pass" beside a drawing showing uplift.
+  const allOK = !!view && view.punchOK && view.beamOK
+    && (!view.ecc || view.ecc.kernOK) && (!view.offset || view.offset.kernOK)
   const governing = punchRatio >= beamRatio ? 'two-way punching shear' : 'one-way beam shear'
 
   return (
@@ -342,6 +355,11 @@ export default function FoundationDesign() {
             checks={[
               { name: 'Two-way (punching) shear — d req/prov', ratio: punchRatio, ok: view.punchOK },
               { name: 'One-way (beam) shear — d req/prov', ratio: beamRatio, ok: view.beamOK },
+              ...(view.offset ? [{
+                name: `Resultant in the kern — e/(B/6) · ${form.position} column`,
+                ratio: view.offset.e / (globalThis.Math.min(view.Bx, view.By) / 6),
+                ok: view.offset.kernOK,
+              }] : []),
             ]}
             data={[
               ['Service load P', `${f0(serviceLoad)} kN`], ['Ultimate load Pu', `${f0(ultimateLoad)} kN`],
@@ -353,7 +371,8 @@ export default function FoundationDesign() {
             ]}
             steps={solutionSteps}
             drawingTitle="Isolated Footing"
-            drawing={<FootingSchematic Bx={view.Bx} By={view.By} Dc={view.Dc} columnWidth={colWidth} H={form.H} />}
+            drawing={<FootingSchematic Bx={view.Bx} By={view.By} Dc={view.Dc} columnWidth={colWidth} H={form.H}
+              position={form.position} d={view.dProvided} pressure={view.offset ?? view.ecc} />}
           />
         )}
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
@@ -516,7 +535,9 @@ export default function FoundationDesign() {
               ok={allOK}
               headline={allOK
                 ? (view.analysis === 'analyze' ? 'SECTION OK — all checks pass' : 'DESIGN OK — all checks pass')
-                : 'CHECK FAILED — section inadequate'}
+                : view.offset && !view.offset.kernOK
+                  ? 'CHECK FAILED — resultant outside the kern'
+                  : 'CHECK FAILED — section inadequate'}
               governing={`Governing: ${governing} · d req/prov ${globalThis.Math.max(punchRatio, beamRatio).toFixed(2)}`}
               stats={[
                 { label: 'Plan size', value: view.type === 'square' ? `${f2(view.Bx)} × ${f2(view.By)}` : `${f2(view.Bx)} × ${f2(view.By)}`, unit: 'm' },
@@ -526,16 +547,29 @@ export default function FoundationDesign() {
               checks={[
                 { name: 'Punching shear (d req / prov)', ratio: punchRatio },
                 { name: 'Beam shear (d req / prov)', ratio: beamRatio },
+                // VerdictCheck reads pass/fail off the ratio itself, so the
+                // kern check is stated as e/(B/6) — over 1.00 is uplift.
+                ...(view.offset ? [{
+                  name: `Resultant in the kern — e/(B/6) · ${form.position} column`,
+                  ratio: view.offset.e / (globalThis.Math.min(view.Bx, view.By) / 6),
+                }] : []),
               ]}
-              footnote={view.long.usedMin
-                ? 'Flexure: As,min = 0.0018·b·h governs (ρmin) — §24.4.3.2'
-                : `Flexure: ρ = ${view.long.rho.toFixed(4)} — §24.4.3.2 satisfied`}
+              footnote={view.offset && !view.offset.kernOK
+                ? `Column flush with the ${form.position === 'corner' ? 'two free edges' : 'free edge'}: the load sits `
+                  + `${view.offset.e.toFixed(2)} m off the pad centroid against a kern of `
+                  + `${(globalThis.Math.min(view.Bx, view.By) / 6).toFixed(2)} m, so part of the base lifts. `
+                  + `A pad cannot be sized out of this — the offset grows with B. Tie it to an interior footing `
+                  + `with a strap taking ${f0(view.offset.restraint)} kN·m, or use a combined footing.`
+                : view.long.usedMin
+                  ? 'Flexure: As,min = 0.0018·b·h governs (ρmin) — §24.4.3.2'
+                  : `Flexure: ρ = ${view.long.rho.toFixed(4)} — §24.4.3.2 satisfied`}
             />
           )}
 
           <DrawingCard pdfDrawing title="Drawing" meta="plan · section">
             {view ? (
-              <FootingSchematic Bx={view.Bx} By={view.By} Dc={view.Dc} columnWidth={colWidth} H={form.H} />
+              <FootingSchematic Bx={view.Bx} By={view.By} Dc={view.Dc} columnWidth={colWidth} H={form.H}
+                position={form.position} d={view.dProvided} pressure={view.offset ?? view.ecc} />
             ) : (
               <p className="py-8 text-center text-sm text-[#a39d8d]">Enter valid inputs — net bearing must be positive.</p>
             )}

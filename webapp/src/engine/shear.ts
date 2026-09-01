@@ -34,6 +34,42 @@ export function twoWayVc(params: {
 }
 
 /**
+ * The §22.6.4.1 critical section at d/2 from the column faces — its plan
+ * extent, its enclosed area, and the length of it that actually resists.
+ *
+ * TRUNCATED AT A FREE EDGE, which is the whole reason αs has three values.
+ * An interior column is wrapped on four sides; an edge column's section stops
+ * at the slab edge and only three sides resist; a corner column keeps two.
+ * `punchingDepth` used the interior perimeter for all three and varied αs
+ * alone, so choosing "edge" or "corner" bought a small penalty on one of the
+ * three Vc expressions while quietly keeping a perimeter that is 44% (edge)
+ * or 126% (corner) longer than the section has — unconservative, and in the
+ * common case αs is not governing so the choice changed nothing at all.
+ *
+ * Convention: for `edge` the free edge is perpendicular to x, so the section
+ * loses its extension in +x; for `corner` it loses +x and +y. The column face
+ * is taken flush with the free edge, which is what "at the edge" means for a
+ * pad footing.
+ *
+ * Cross-check on c = 500, d = 150: interior 4(c+d) = 2600; the edge section
+ * is that less one whole side (c+d = 650) and less d/2 off each of the two
+ * remaining perpendicular sides (150) → 1800, which is what the formula gives.
+ *
+ * Lengths mm; `Ao` in mm².
+ */
+export function criticalSection(
+  cx: number, cy: number, d: number, position: ColumnPosition = 'interior',
+): { ax: number; ay: number; bo: number; Ao: number } {
+  // Extent of the section in each direction — a free edge removes one d/2.
+  const ax = position === 'interior' ? cx + d : cx + d / 2
+  const ay = position === 'corner' ? cy + d / 2 : cy + d
+  const bo = position === 'interior' ? 2 * (ax + ay)
+    : position === 'edge' ? ay + 2 * ax        // three sides: the far one, and both flanks
+    : ax + ay                                  // corner: two sides
+  return { ax, ay, bo, Ao: ax * ay }
+}
+
+/**
  * Smallest effective depth d (mm) that satisfies punching shear for a
  * rectangular column cx × cy (mm; cy defaults to cx → square) under factored
  * column load Pu (kN) on net pressure qu (kPa).
@@ -46,11 +82,10 @@ export function punchingDepth(params: {
   const cx = params.c, cy = params.cy ?? params.c;
   const betaC = Math.max(cx, cy) / Math.min(cx, cy);
   for (let d = 50; d <= 3000; d += 1) {
-    const critX = cx + d, critY = cy + d;       // mm
-    const Ao = critX * critY * 1e-6;            // m²
-    const Vu = params.Pu - params.qu * Ao;      // kN
+    const cs = criticalSection(cx, cy, d, params.position);
+    const Vu = params.Pu - params.qu * cs.Ao * 1e-6;   // kN (Ao mm² → m²)
     const cap = phi * twoWayVc({
-      fc: params.fc, bo: 2 * (critX + critY), d, betaC,
+      fc: params.fc, bo: cs.bo, d, betaC,
       position: params.position, lambda: params.lambda,
     });
     if (cap >= Vu) return d;

@@ -13,14 +13,36 @@ describe('designPunchingShear — critical perimeter b0', () => {
     expect(r.b0).toBeCloseTo(2 * (500 + 150) + 2 * (500 + 150), 9)  // 2600 mm
   })
 
-  it('edge: b0 = 2(c1/2+d) + (c2+d)  (c1 ∥ free edge)', () => {
+  // These two asserted `c/2 + d` where the geometry gives `c + d/2`. The
+  // section runs d/2 PAST the far column face and stops AT the free edge, so
+  // an edge halves the d term in that direction, never the column dimension.
+  // b0 came out 19% short at an edge and 30% at a corner.
+  it('edge: b0 = (c1+d) + 2(c2+d/2)  (c1 ∥ free edge, c2 ⊥ it)', () => {
     const r = designPunchingShear({ ...BASE, position: 'edge' })
-    expect(r.b0).toBeCloseTo(2 * (250 + 150) + (500 + 150), 9)       // 1450 mm
+    expect(r.b0).toBeCloseTo((500 + 150) + 2 * (500 + 75), 9)        // 1800 mm
   })
 
-  it('corner: b0 = (c1/2+d) + (c2/2+d)', () => {
+  it('corner: b0 = (c1+d/2) + (c2+d/2)', () => {
     const r = designPunchingShear({ ...BASE, position: 'corner' })
-    expect(r.b0).toBeCloseTo((250 + 150) + (250 + 150), 9)           // 800 mm
+    expect(r.b0).toBeCloseTo((500 + 75) + (500 + 75), 9)             // 1150 mm
+  })
+
+  it('is the interior section less what each free edge removes', () => {
+    // A second derivation: drop one whole side, and d/2 off each side that
+    // survives. Agreement with the formula is the check.
+    const d = 150, c = 500
+    const interior = designPunchingShear(BASE).b0
+    expect(designPunchingShear({ ...BASE, position: 'edge' }).b0)
+      .toBeCloseTo(interior - (c + d) - d, 9)
+  })
+
+  it('orientation matters for a rectangular column', () => {
+    // c1 ∥ the free edge and c2 ⊥ it are not interchangeable — swapping them
+    // is a different footing, and the old formula gave the same answer to both
+    // for a square column, which is where the transposition hid.
+    const a = designPunchingShear({ ...BASE, c1: 300, c2: 600, position: 'edge' }).b0
+    const b = designPunchingShear({ ...BASE, c1: 600, c2: 300, position: 'edge' }).b0
+    expect(a).not.toBeCloseTo(b, 6)
   })
 
   it('b0 increases with d (thicker slab → larger perimeter)', () => {
