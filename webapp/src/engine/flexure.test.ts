@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-  rhoMin, flexuralSteel, barLayout, matLayout, maxBarSpacing, minClearSpacing,
+  rhoMin, flexuralSteel, barLayout, matLayout, maxBarSpacing, minClearSpacing, rectCapacity,
 } from './flexure';
+import { tBeamCapacity } from './tbeam';
 
 describe('rhoMin', () => {
   it('max(1.4/fy, √fc/(4fy))', () => {
@@ -115,3 +116,76 @@ describe('matLayout', () => {
     expect(two.n).toBeGreaterThan(one.n);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// rectCapacity — ANALYSIS, where the steel may not reach fy.
+//
+// Everything else in this module answers "what steel does this moment need?",
+// and ρ is capped so As·fy is exact. This answers the opposite question with
+// As handed in, and nothing stops it being over-reinforced.
+// ─────────────────────────────────────────────────────────────────────────
+describe('rectCapacity', () => {
+  it('reduces to As·fy·(d − a/2) while the steel yields', () => {
+    const b = 300, d = 540, As = 1500, fc = 28, fy = 415
+    const r = rectCapacity(b, d, d, As, fc, fy)
+    expect(r.fsYields).toBe(true)
+    expect(r.fs).toBeCloseTo(fy, 9)
+    const a = (As * fy) / (0.85 * fc * b)
+    expect(r.a).toBeCloseTo(a, 9)
+    expect(r.Mn).toBeCloseTo((As * fy * (d - a / 2)) / 1e6, 9)
+  })
+
+  it('solves fs when the section is over-reinforced, and equilibrium closes', () => {
+    const b = 200, d = 234, As = 1608, fc = 21, fy = 550     // 2-⌀32 in a 200×300
+    const r = rectCapacity(b, d, d, As, fc, fy)
+    expect(r.fsYields).toBe(false)
+    expect(r.fs).toBeLessThan(fy)
+    // C = T at the reported block…
+    expect(0.85 * fc * b * r.a).toBeCloseTo(As * r.fs, 6)
+    // …and fs is on the strain diagram at the reported neutral axis.
+    expect(r.fs).toBeCloseTo((600 * (d - r.c)) / r.c, 9)
+  })
+
+  it('always puts the neutral axis inside d — the steel never goes compressive', () => {
+    for (const b of [150, 300, 600])
+      for (const d of [200, 400, 800])
+        for (const As of [500, 2000, 8000, 30000])
+          for (const fc of [21, 35, 55])
+            for (const fy of [275, 415, 550]) {
+              const r = rectCapacity(b, d, d, As, fc, fy)
+              expect(r.c).toBeGreaterThan(0)
+              expect(r.c).toBeLessThan(d)
+              expect(r.fs).toBeGreaterThan(0)
+              expect(0.85 * fc * b * r.a).toBeCloseTo(As * r.fs, 4)
+            }
+  })
+
+  it('φ follows εt at the EXTREME layer, not at the centroid', () => {
+    const light = rectCapacity(300, 540, 560, 1200, 28, 415)
+    expect(light.phi).toBeCloseTo(0.90, 9)
+    const heavy = rectCapacity(200, 234, 234, 1608, 21, 550)
+    expect(heavy.phi).toBeCloseTo(0.65, 9)                 // compression-controlled
+    // dt > d raises εt, so it can only raise φ
+    const atD = rectCapacity(300, 400, 400, 6000, 28, 415)
+    const atDt = rectCapacity(300, 400, 450, 6000, 28, 415)
+    expect(atDt.phi).toBeGreaterThanOrEqual(atD.phi)
+    expect(atDt.Mn).toBeCloseTo(atD.Mn, 9)                 // …and cannot touch Mn
+  })
+
+  it('agrees with the T-beam solver on a section that is a rectangle', () => {
+    // `tBeamCapacity` reaches the same equilibrium by different code: give it a
+    // flange it never leaves (hf ≥ a) at bf = b and the two must coincide.
+    for (const As of [1000, 4000, 9000]) {
+      const r = rectCapacity(400, 500, 500, As, 28, 415)
+      const t = tBeamCapacity({ bw: 400, hf: 500, fc: 28, fy: 415 }, 400, 500, 500, As)
+      expect(t.fs).toBeCloseTo(r.fs, 9)
+      expect(t.c).toBeCloseTo(r.c, 9)
+      expect(t.phiMn).toBeCloseTo(r.phiMn, 9)
+    }
+  })
+
+  it('is zero-safe', () => {
+    expect(rectCapacity(300, 500, 500, 0, 28, 415).Mn).toBe(0)
+    expect(rectCapacity(0, 500, 500, 1000, 28, 415).Mn).toBe(0)
+  })
+})
