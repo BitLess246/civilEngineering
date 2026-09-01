@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { designSquareFooting, columnOffset, type ColumnOffset } from '../engine/isolatedFooting'
+import type { AsMinBasis } from '../engine/flexure'
 import {
   optimizeFootingRebar, optimizeRectFootingRebar, optimizeEccentricFootingRebar,
 } from '../engine/matRebarOptimize'
@@ -63,6 +64,7 @@ interface FormState {
   cover: number
   surcharge: number
   position: ColumnPosition
+  asMinBasis: AsMinBasis
 }
 
 const DEFAULTS: FormState = {
@@ -96,9 +98,14 @@ const DEFAULTS: FormState = {
   cover: 75,
   surcharge: 0,
   position: 'interior',
+  asMinBasis: 'max',
 }
 
-interface DirSteel { As: number; bars: number; spacing: number; usedMin: boolean; rho: number }
+interface DirSteel {
+  As: number; bars: number; spacing: number; usedMin: boolean; rho: number
+  /** Both minimum-steel candidates and which was larger, for the solution sheet. */
+  minGoverning?: 'beam' | 'slab'; asMinBeam?: number; asMinSlab?: number
+}
 interface View {
   type: FootingType
   loading: LoadingType
@@ -194,7 +201,7 @@ export default function FoundationDesign() {
       serviceLoad, ultimateLoad, columnWidth: colWidth, columnWidthY: colWidthY,
       fc: form.fc, fy: form.fy, qAllow: form.qAllow, gammaSoil: form.gammaSoil,
       gammaConc: form.gammaConc, H: form.H, barDia: form.barDia, cover: form.cover,
-      surcharge: form.surcharge, position: form.position,
+      surcharge: form.surcharge, position: form.position, asMinBasis: form.asMinBasis,
       analysis: form.analysisMethod, solutionMethod: form.solutionMethod,
     }
     try {
@@ -224,7 +231,7 @@ export default function FoundationDesign() {
     const common = {
       serviceLoad, ultimateLoad, columnWidth: colWidth, columnWidthY: colWidthY,
       fc: form.fc, fy: form.fy, qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc,
-      H: form.H, barDia: dbEff, cover: form.cover, surcharge: form.surcharge, position: form.position,
+      H: form.H, barDia: dbEff, cover: form.cover, surcharge: form.surcharge, position: form.position, asMinBasis: form.asMinBasis,
     }
     const methods = {
       analysis: form.analysisMethod, solutionMethod: form.solutionMethod,
@@ -239,7 +246,8 @@ export default function FoundationDesign() {
         Bx: r.B, By: r.B, Dc: r.Dc, qNet: r.qNet, qu: r.quMax,
         dPunch: r.dPunch, dBeamLong: r.dBeam, dBeamShort: r.dBeam, dProvided: r.dProvided,
         punchOK: r.punchOK, beamOK: r.beamOK && r.bearingOK,
-        long: { As: r.steelArea, bars: r.bars, spacing: r.barSpacing, usedMin: r.usedMinSteel, rho: r.rho },
+        long: { As: r.steelArea, bars: r.bars, spacing: r.barSpacing, usedMin: r.usedMinSteel, rho: r.rho,
+          minGoverning: r.minGoverning, asMinBeam: r.asMinBeam, asMinSlab: r.asMinSlab },
         short: null,
         ecc: { e: r.e, qMax: r.qMaxService, qMin: r.qMinService, kernOK: r.kernOK },
         // The applied-moment eccentricity and the geometric one are separate
@@ -254,7 +262,8 @@ export default function FoundationDesign() {
         Bx: r.B, By: r.B, Dc: r.Dc, qNet: r.qNet, qu: r.qu,
         dPunch: r.dPunch, dBeamLong: r.dBeam, dBeamShort: r.dBeam, dProvided: r.dProvided,
         punchOK: r.punchOK, beamOK: r.beamOK,
-        long: { As: r.steelArea, bars: r.bars, spacing: r.barSpacing, usedMin: r.usedMinSteel, rho: r.rho },
+        long: { As: r.steelArea, bars: r.bars, spacing: r.barSpacing, usedMin: r.usedMinSteel, rho: r.rho,
+          minGoverning: r.minGoverning, asMinBeam: r.asMinBeam, asMinSlab: r.asMinSlab },
         short: null, ecc: null, offset: r.offset,
       }
     }
@@ -306,7 +315,7 @@ export default function FoundationDesign() {
       columnWidth: colWidth, columnWidthY: colWidthY, fc: form.fc, fy: form.fy,
       column: circular ? { shape: 'circular' as const, dia: form.columnWidth } : null,
       qAllow: form.qAllow, gammaSoil: form.gammaSoil, gammaConc: form.gammaConc, H: form.H,
-      barDia: dbEff, cover: form.cover, surcharge: form.surcharge, position: form.position,
+      barDia: dbEff, cover: form.cover, surcharge: form.surcharge, position: form.position, asMinBasis: form.asMinBasis,
       Bx: view.Bx, By: view.By, Dc: view.Dc, qNet: view.qNet, qu: view.qu,
       dPunch: view.dPunch, dBeamLong: view.dBeamLong, dBeamShort: view.dBeamShort, dProvided: view.dProvided,
       punchOK: view.punchOK, beamOK: view.beamOK,
@@ -487,6 +496,15 @@ export default function FoundationDesign() {
             )}
             <Select label="Column position" value={form.position} onChange={set('position')}
               options={[['interior', 'Interior'], ['edge', 'Edge'], ['corner', 'Corner']]} />
+            {/* §13.3.2.1 sends footings to the SLAB minimum; most offices
+                detail to the greater of that and the beam rule. Both are
+                offered because the clause is genuinely read both ways. */}
+            <Select label="Minimum steel" value={form.asMinBasis} onChange={set('asMinBasis')}
+              options={[
+                ['max', 'Greater of both (default)'],
+                ['slab', 'Slab §24.4.3.2 only (§13.3.2.1)'],
+                ['beam', 'Beam §9.6.1.2 only'],
+              ]} />
             {circular && (
               <p className="col-span-full text-xs text-slate-500">
                 Circular column → equivalent square c = D·√(π/4) = {f0(colWidth)} mm (equal area, legacy convention).
@@ -561,7 +579,8 @@ export default function FoundationDesign() {
                   + `A pad cannot be sized out of this — the offset grows with B. Tie it to an interior footing `
                   + `with a strap taking ${f0(view.offset.restraint)} kN·m, or use a combined footing.`
                 : view.long.usedMin
-                  ? 'Flexure: As,min = 0.0018·b·h governs (ρmin) — §24.4.3.2'
+                  ? `Flexure: minimum steel governs — ${view.long.minGoverning === 'slab'
+                      ? '§24.4.3.2 shrinkage on b·h' : '§9.6.1.2 flexural on b·d'}`
                   : `Flexure: ρ = ${view.long.rho.toFixed(4)} — §24.4.3.2 satisfied`}
             />
           )}

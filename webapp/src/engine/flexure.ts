@@ -11,26 +11,80 @@ export interface FlexuralSteel {
   rho: number;
   /** Required steel area, mm². */
   As: number;
-  /** True when ρ_min governed. */
+  /** True when a minimum governed rather than the moment. */
   usedMin: boolean;
+  /** Which minimum was the larger — meaningful whether or not it governed. */
+  minGoverning: 'beam' | 'slab';
+  /** The two candidates, mm², so a solution sheet can show the comparison. */
+  asMinBeam: number;
+  asMinSlab: number;
 }
 
-/** Minimum flexural ratio ρ_min = max(1.4/fy, √f′c/(4 fy)). */
+/** Minimum flexural ratio ρ_min = max(1.4/fy, √f′c/(4 fy)) — §9.6.1.2, BEAMS. */
 export function rhoMin(fc: number, fy: number): number {
   return Math.max(1.4 / fy, Math.sqrt(fc) / (4 * fy));
 }
 
+/**
+ * Shrinkage-and-temperature ratio — NSCP 2015 Table 424.4.3.2 / ACI 318-14
+ * Table 24.4.3.2. This is the minimum a SLAB carries, and §13.3.2.1 sends
+ * footings here (via §7.6.1.1 / §8.6.1.1) rather than to the beam rule.
+ *
+ * The table is banded on fy, and 0.0018 is the Grade-420 row, not a universal
+ * value: below 420 MPa it is 0.0020. Applying 0.0018 to Grade 415 — which is
+ * what "0.0018·A_g" usually means in practice — is 10% light.
+ */
+export function rhoShrinkage(fy: number): number {
+  if (fy < 420) return 0.0020;
+  return Math.max((0.0018 * 420) / fy, 0.0014);
+}
+
+/**
+ * Which minimum a section is held to.
+ *
+ * `beam`  §9.6.1.2, on b·d — the flexural minimum.
+ * `slab`  §24.4.3.2, on the GROSS area b·h — where §13.3.2.1 points footings.
+ * `max`   the greater of the two, which is what most offices detail to and
+ *         what this engine defaults to: the clause a footing is sent to is
+ *         genuinely contested, and taking the larger is the reading that
+ *         cannot be wrong in the unsafe direction.
+ */
+export type AsMinBasis = 'max' | 'beam' | 'slab';
+
+/**
+ * Minimum steel, mm². `h` is needed for the slab basis (it acts on the gross
+ * section); omit it and only the beam rule can apply.
+ */
+export function flexuralAsMin(params: {
+  fc: number; fy: number; b: number; d: number; h?: number; basis?: AsMinBasis;
+}): { As: number; governs: 'beam' | 'slab'; beam: number; slab: number } {
+  const { fc, fy, b, d } = params;
+  const basis = params.basis ?? 'max';
+  const beam = rhoMin(fc, fy) * b * d;
+  const slab = params.h && params.h > 0 ? rhoShrinkage(fy) * b * params.h : 0;
+  if (basis === 'beam') return { As: beam, governs: 'beam', beam, slab };
+  if (basis === 'slab') return { As: slab, governs: 'slab', beam, slab };
+  return slab > beam
+    ? { As: slab, governs: 'slab', beam, slab }
+    : { As: beam, governs: 'beam', beam, slab };
+}
+
 export function flexuralSteel(params: {
   Mu: number; b: number; d: number; fc: number; fy: number; phi?: number;
+  /** Gross depth, mm — enables the §24.4.3.2 slab minimum. */
+  h?: number;
+  /** Which minimum to hold the section to. Default `max`. */
+  asMinBasis?: AsMinBasis;
 }): FlexuralSteel {
   const { Mu, b, d, fc, fy } = params;
   const phi = params.phi ?? PHI_FLEXURE;
   const Rn = (Mu * 1e6) / (phi * b * d * d);                       // MPa
   const rhoCalc = (0.85 * fc / fy) * (1 - Math.sqrt(Math.max(0, 1 - (2 * Rn) / (0.85 * fc))));
-  const rMin = rhoMin(fc, fy);
-  const usedMin = rhoCalc < rMin;
-  const rho = usedMin ? rMin : rhoCalc;
-  return { rho, As: rho * b * d, usedMin };
+  const AsCalc = rhoCalc * b * d;
+  const min = flexuralAsMin({ fc, fy, b, d, h: params.h, basis: params.asMinBasis });
+  const usedMin = AsCalc < min.As;
+  const As = usedMin ? min.As : AsCalc;
+  return { rho: As / (b * d), As, usedMin, minGoverning: min.governs, asMinBeam: min.beam, asMinSlab: min.slab };
 }
 
 export interface BarLayout {

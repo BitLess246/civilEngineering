@@ -16,6 +16,7 @@ import { beta1 } from './loads'
 import { Ec as concreteEc } from './slabDeflection'
 import { crackedInertia, deflCoeff, longTermMultiplier, minBeamThickness, type BeamSupport } from './beamDeflection'
 import { splitLayers, centroidRise } from './barLayers'
+import { oneWayVc } from './shear'
 
 export interface BeamDesignInput {
   b: number            // web width, mm
@@ -316,7 +317,11 @@ export function designBeam(i: BeamDesignInput): BeamDesignResult {
   const stirrupHookExt = Math.max(6 * i.stirrupDia, 75)
 
   // ── Shear (NSCP 2015 §422.5 / §409.4) ──
-  const Vc = (lambda * Math.sqrt(i.fc) * i.b * d) / 6 / 1000
+  // Through the shared §422.5.5.1 expression, so a beam and a footing cannot
+  // disagree about the same clause. This carried its own /6 copy — the exact
+  // conversion of the inch-pound 2√f'c — where the SI code prints 0.17, so
+  // fixing `shear.ts` reached every footing and no beam at all.
+  const Vc = oneWayVc({ fc: i.fc, b: i.b, d, lambda })
   const phiVc = PHI_SHEAR * Vc
   const VsMax = (2 / 3) * Math.sqrt(i.fc) * i.b * d / 1000
   const avPerLeg = (Math.PI / 4) * i.stirrupDia * i.stirrupDia

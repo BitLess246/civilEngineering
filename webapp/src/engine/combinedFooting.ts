@@ -190,7 +190,9 @@ export function designCombinedFooting(i: CombinedFootingInput): CombinedFootingR
   const xface = Pu2 >= Pu1 ? x2 - cx2m / 2 - dBeam_m : x1 + cx1m / 2 + dBeam_m;
   const VuBeam = Math.abs(Vat(xface));
   const ByBeam = ByAt(xface);
-  const dB = (VuBeam * 1000) / (0.75 * (1 / 6) * Math.sqrt(i.fc) * (ByBeam * 1000));
+  // 0.17, the §422.5.5.1 coefficient the SI code prints — not the 1/6 the
+  // inch-pound 2√f'c converts to. Inverted here because d is the unknown.
+  const dB = (VuBeam * 1000) / (0.75 * 0.17 * Math.sqrt(i.fc) * (ByBeam * 1000));
   const Dc_beam = roundUp(dB + i.cover + i.barDia, 25);
   const Dc = Math.max(Dc_punch, Dc_beam);
 

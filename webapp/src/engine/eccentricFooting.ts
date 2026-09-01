@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { netBearing } from './bearing';
 import { punchingDepth, oneWayShearDepth, type ColumnPosition } from './shear';
-import { flexuralSteel, matLayout } from './flexure';
+import { flexuralSteel, matLayout, type AsMinBasis } from './flexure';
 
 export interface EccentricFootingInput {
   serviceLoad: number;    // P, kN
@@ -25,6 +25,8 @@ export interface EccentricFootingInput {
   cover: number;
   surcharge?: number;
   position?: ColumnPosition;
+  /** Minimum-steel rule — see `flexure.AsMinBasis`. Default `max`. */
+  asMinBasis?: AsMinBasis;
   lambda?: number;
   /** Detailed design (size B & D_c) or analyze a given section. Default 'design'. */
   analysis?: 'design' | 'analyze';
@@ -51,6 +53,9 @@ export interface EccentricFootingResult {
   steelArea: number;
   rho: number;
   usedMinSteel: boolean;
+  minGoverning: 'beam' | 'slab';
+  asMinBeam: number;
+  asMinSlab: number;
   bars: number;
   barSpacing: number;
   analysis: 'design' | 'analyze';
@@ -134,7 +139,7 @@ export function designEccentricSquareFooting(i: EccentricFootingInput): Eccentri
   const arm = (B - cm) / 2;
   const Mu = quMax * B * (arm * arm) / 2;   // conservative: peak pressure across the width
   const b = B * 1000;
-  const flex = flexuralSteel({ Mu, b, d: dFlex, fc: i.fc, fy: i.fy });
+  const flex = flexuralSteel({ Mu, b, d: dFlex, h: DcMm, fc: i.fc, fy: i.fy, asMinBasis: i.asMinBasis });
   // Detailed as a one-way slab (ACI 318-14 §13.3.2.1): §7.7.2.3's maximum
   // spacing sets the bar count whenever the required area does not.
   const layout = matLayout({
@@ -145,7 +150,8 @@ export function designEccentricSquareFooting(i: EccentricFootingInput): Eccentri
   return {
     B, Dc: DcMm, e, eU, qNet, qMaxService, qMinService, quMax,
     dPunch, dBeam, dFlex, kernOK: e <= B / 6 + 1e-9,
-    steelArea: flex.As, rho: flex.rho, usedMinSteel: flex.usedMin, bars: layout.n, barSpacing: layout.spacing,
+    steelArea: flex.As, rho: flex.rho, usedMinSteel: flex.usedMin,
+    minGoverning: flex.minGoverning, asMinBeam: flex.asMinBeam, asMinSlab: flex.asMinSlab, bars: layout.n, barSpacing: layout.spacing,
     analysis, method, dProvided: DcMm - i.cover - i.barDia, punchOK, beamOK, bearingOK,
   };
 }

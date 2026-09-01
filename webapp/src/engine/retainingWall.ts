@@ -5,6 +5,7 @@
 // RC design: ACI 318-14 §22.5 (shear) + §22.2 (flexure), φ=0.75/0.90.
 // SI units throughout: geometry mm, forces kN/m, moments kN·m/m, σ kPa.
 // ─────────────────────────────────────────────────────────────────────────
+import { oneWayVc } from './shear'
 //
 // Wall cross-section (per unit length):
 //
@@ -271,7 +272,9 @@ export function designRetainingWall(i: RetainingWallInput): RetainingWallResult 
   const rho_min = Math.max(0.25 * sqrtFc / i.fy, 1.4 / i.fy)
 
   // §22.5.5.1 one-way shear: φVc = φ·(λ√f'c/6)·b·d, kN/m with λ = 1.
-  const phiVcOf = (d: number) => 0.75 * (sqrtFc / 6) * b * d / 1000
+  // §422.5.5.1 through the shared expression — this carried its own /6, the
+  // exact conversion of the inch-pound 2√f'c, where the SI code prints 0.17.
+  const phiVcOf = (d: number) => 0.75 * oneWayVc({ fc: i.fc, b, d, lambda: 1 })
 
   // ── STEM — factored, §5.3.1(e) ──────────────────────────────────────────
   const d_stem = i.ts - i.cover - i.barDia / 2

@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { netBearing, squareSize } from './bearing';
 import { punchingDepth, oneWayShearDepth, type ColumnPosition } from './shear';
-import { flexuralSteel, matLayout } from './flexure';
+import { flexuralSteel, matLayout, type AsMinBasis } from './flexure';
 
 export interface SquareFootingInput {
   /** Service (unfactored) axial load P, kN. */
@@ -35,6 +35,16 @@ export interface SquareFootingInput {
   surcharge?: number;
   /** Column position (α_s for punching), default interior. */
   position?: ColumnPosition;
+  /**
+   * Which minimum steel rule the mat is held to — see `flexure.AsMinBasis`.
+   *
+   * Default `max`, the greater of §9.6.1.2's beam rule and §24.4.3.2's
+   * shrinkage rule. §13.3.2.1 sends footings to the slab rule alone, which is
+   * the lighter of the two here; taking the larger is what most offices detail
+   * to and is the reading that cannot be wrong in the unsafe direction, so it
+   * is the default and the slab-only reading is opt-in.
+   */
+  asMinBasis?: AsMinBasis;
   /** Lightweight-concrete factor λ (default 1). */
   lambda?: number;
   /** Detailed design (size B & D_c) or analyze a given section. Default 'design'. */
@@ -67,6 +77,11 @@ export interface SquareFootingResult {
   steelArea: number;
   rho: number;
   usedMinSteel: boolean;
+  /** Which minimum was larger, and both candidates (mm²) — so a sheet can show
+   *  the comparison rather than a bare number. */
+  minGoverning: 'beam' | 'slab';
+  asMinBeam: number;
+  asMinSlab: number;
   bars: number;
   /** Centre-to-centre spacing, mm. */
   barSpacing: number;
@@ -219,7 +234,12 @@ export function designSquareFooting(i: SquareFootingInput): SquareFootingResult 
   const arm = (B - cm) / 2;                         // cantilever from column face, m
   const Mu = qu * B * (arm * arm) / 2;              // kN·m over the full width B
   const b = B * 1000;                               // design width, mm
-  const flex = flexuralSteel({ Mu, b, d: dFlex, fc: i.fc, fy: i.fy });
+  // `h` lets the §24.4.3.2 gross-section minimum enter the comparison at all —
+  // without it only the beam rule can apply, which is how the slab rule that
+  // §13.3.2.1 actually points at was silently never considered.
+  const flex = flexuralSteel({
+    Mu, b, d: dFlex, h: DcMm, fc: i.fc, fy: i.fy, asMinBasis: i.asMinBasis,
+  });
   // A footing is detailed as a one-way slab (ACI 318-14 §13.3.2.1), so the
   // §7.7.2.3 maximum spacing sets the bar count whenever the area does not.
   const layout = matLayout({
@@ -229,6 +249,7 @@ export function designSquareFooting(i: SquareFootingInput): SquareFootingResult 
   return {
     B, Dc: DcMm, qNet, qu, dPunch, dBeam, dFlex,
     steelArea: flex.As, rho: flex.rho, usedMinSteel: flex.usedMin,
+    minGoverning: flex.minGoverning, asMinBeam: flex.asMinBeam, asMinSlab: flex.asMinSlab,
     bars: layout.n, barSpacing: layout.spacing,
     barSpacingMax: layout.sMax, spacingGoverned: layout.spacingGoverned,
     barsFit: layout.clearOK,

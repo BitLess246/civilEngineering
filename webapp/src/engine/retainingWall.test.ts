@@ -187,8 +187,9 @@ describe('designRetainingWall — stem design', () => {
       LF.H * r2.Pa_stem * (hs / 3) + LF.L * r2.Pq_stem * (hs / 2), 6)
   })
 
-  it('Vc_stem = φ·(√f\'c/6)·b·d / 1000  (kN/m, b=1000 mm)', () => {
-    const expected = 0.75 * (Math.sqrt(28) / 6) * 1000 * r.d_stem / 1000
+  it("Vc_stem = φ·0.17√f'c·b·d / 1000  (kN/m, b=1000 mm) — §422.5.5.1", () => {
+    // 0.17 as the SI code prints it; this engine carried its own √f'c/6.
+    const expected = 0.75 * 0.17 * Math.sqrt(28) * 1000 * r.d_stem / 1000
     expect(r.Vc_stem).toBeCloseTo(expected, 6)
   })
 
@@ -295,8 +296,9 @@ describe('designRetainingWall — toe and heel', () => {
   })
 
   it('both cantilevers pass shear on a 500 mm base', () => {
-    // φVc = 0.75(√28/6)(1000)(417)/1000 = 275.8 kN/m
-    expect(r.toe.phiVc).toBeCloseTo(275.8, 0)
+    // φVc = 0.75(0.17√28)(1000)(417)/1000 = 281.3 kN/m — the §422.5.5.1
+    // coefficient, where this engine used to carry its own √f'c/6.
+    expect(r.toe.phiVc).toBeCloseTo(281.3, 0)
     expect(r.toe.shearOK).toBe(true)
     expect(r.heel.shearOK).toBe(true)
   })
