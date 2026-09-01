@@ -232,3 +232,63 @@ export function stairFrameLoads(
 export function allStairFrameLoads(model: StructuralModel, gammaC?: number): ModelLoad[] {
   return (model.stairs ?? []).flatMap((s) => stairFrameLoads(model, s, gammaC)?.loads ?? [])
 }
+
+// ── the flight as a solid ─────────────────────────────────────────────────
+
+const cross = (a: Vec3, b: Vec3): Vec3 =>
+  [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+const norm = (a: Vec3): Vec3 => {
+  const L = Math.hypot(a[0], a[1], a[2]) || 1
+  return [a[0] / L, a[1] / L, a[2] / L]
+}
+
+export interface FlightSolid {
+  /** The waist as a prism: four TOP corners then the four beneath them, each
+   *  ring low-edge-first and left-to-right across the width. */
+  top: [Vec3, Vec3, Vec3, Vec3]
+  bottom: [Vec3, Vec3, Vec3, Vec3]
+  /** Unit normal to the soffit, pointing up out of the slab — the direction
+   *  the waist thickness is measured along, and the reason a stair has a
+   *  1/cosθ slope factor at all. */
+  normal: Vec3
+  /**
+   * One box per tread, sitting ON the waist.
+   *
+   * `at` is the MID-WIDTH point of the edge the tread rises from — the flight's
+   * centreline, not a corner. A renderer builds a box centred on its origin and
+   * puts it here, so an `at` on the low edge draws every tread half off the
+   * side of the waist. Which is exactly what it did.
+   */
+  steps: { at: Vec3; run: number; rise: number; width: number }[]
+}
+
+/**
+ * The flight as something you can draw: the waist prism and the treads on top.
+ *
+ * Kept out of the 3D component so it can be checked without a renderer — the
+ * waist being measured NORMAL to the soffit is the one thing this drawing
+ * exists to show, and measuring it vertically instead is exactly the mistake
+ * the 2D elevation had to have fixed.
+ */
+export function flightSolid(p: PlacedStair): FlightSolid {
+  const slope = norm(sub(p.highEdge[0], p.lowEdge[0]))
+  let normal = norm(cross(p.widthDir, slope))
+  if (normal[1] < 0) normal = mul(normal, -1)
+  const t = p.waist / 1000
+  const down = mul(normal, -t)
+  const top: [Vec3, Vec3, Vec3, Vec3] = [
+    p.lowEdge[0], p.lowEdge[1], p.highEdge[1], p.highEdge[0],
+  ]
+  const R = p.R / 1000, G = p.G / 1000
+  const n = Math.max(1, Math.round(p.run / Math.max(G, 1e-9)))
+  const lowMid = mul(add(p.lowEdge[0], p.lowEdge[1]), 0.5)
+  return {
+    top,
+    bottom: top.map((q) => add(q, down)) as [Vec3, Vec3, Vec3, Vec3],
+    normal,
+    steps: Array.from({ length: n }, (_, i) => ({
+      at: add(add(lowMid, mul(p.runDir, i * G)), [0, i * R, 0] as Vec3),
+      run: G, rise: R, width: p.width,
+    })),
+  }
+}

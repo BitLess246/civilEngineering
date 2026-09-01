@@ -94,6 +94,12 @@ export function designStair(p: {
     AsMain, mainSpacing: spacing(p.barDia, AsMain),
     AsDist, distSpacing: spacing(distDia, AsDist),
     tMin, tMinOK: p.t >= tMin - 1e-9,
-    ok: flex.As > 0 && d > 0,
+    // The span/depth minimum is part of the verdict, not a note beside it.
+    // `ok` used to mean only "a design came out" — steel and a depth — so a
+    // waist below Table 407.3.1.1's ℓ/20…ℓ/28 came back OK with `tMinOK: false`
+    // right next to it. The page printed both and a reader could see the
+    // contradiction; nothing reading `ok` programmatically could. The RC beam
+    // path already folds its own `thickOK` into the row's verdict this way.
+    ok: flex.As > 0 && d > 0 && p.t >= tMin - 1e-9,
   }
 }

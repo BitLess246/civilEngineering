@@ -31,6 +31,11 @@ export interface FlightGeometry {
   /** Waist offset vector — normal to the soffit, pointing up out of the slab. */
   nx: number; ny: number
   nSteps: number
+  /** What was actually DRAWN, after rounding to whole steps: plan run, rise and
+   *  slope length, m. The label prints these, not the input — rounding moves
+   *  the geometry, and a dimension whose number came from the input while its
+   *  line came from the drawing is a dimension that lies. */
+  drawn: { run: number; rise: number; slope: number }
   /** Stepped top surface, bottom → top: riser (up R), tread (across G), … */
   profile: Pt[]
   /** The whole flight as ONE boundary: soffit, top end face, back down the
@@ -57,17 +62,32 @@ export function along(a: Pt, b: Pt, d: number, scale: number): Pt {
   return [a[0] + dx * f, a[1] + dy * f]
 }
 
+/**
+ * `run` is the flight's PLAN length — the horizontal distance between the two
+ * landings, which is what a horizontal dimension line on this drawing can
+ * measure and what `designStair` computes Mu on (its load is kPa of PLAN area,
+ * so the moment is w·L_plan²/denom).
+ *
+ * It used to be documented as the length along the SLOPE and then projected
+ * here, `span·cosθ`. The page fed the same number to both this and
+ * `designStair`, so one of them had it wrong whichever way the user read the
+ * field — and the drawing then labelled its horizontal span dimension with the
+ * raw input, which matched neither the plan run it was drawn over nor the slope
+ * length it claimed: at span 3.5 with R 150 / G 300 the drawing came out with a
+ * 3.000 run and a 3.354 slope, printed "3.50 m along the slope", and handed
+ * `designStair` a span 36% longer in moment than the flight it had drawn.
+ */
 export function flightGeometry(
-  span: number, t: number, R: number, G: number, thetaDeg: number, landing = 0,
+  run: number, t: number, R: number, G: number, thetaDeg: number, landing = 0,
 ): FlightGeometry {
   const th = (thetaDeg * Math.PI) / 180
-  const nSteps = Math.max(1, Math.round((span * 1000 * Math.cos(th)) / Math.max(G, 1)))
-  const run = nSteps * G, rise = nSteps * R
+  const nSteps = Math.max(1, Math.round((run * 1000) / Math.max(G, 1)))
+  const runMm = nSteps * G, rise = nSteps * R
   // The landings share the drawing width with the flight, so the whole
   // assembly is to ONE scale — a landing drawn to its own would misreport the
   // 450 extension it exists to dimension.
   const land = Math.max(0, landing)
-  const scale = DRAW_W / Math.max(run + 2 * land, 1)
+  const scale = DRAW_W / Math.max(runMm + 2 * land, 1)
 
   // ── Where the waist's top face sits ────────────────────────────────────
   // The soffit runs (cosθ, −sinθ) on screen. A normal to it is (−sinθ, −cosθ):
@@ -98,7 +118,7 @@ export function flightGeometry(
   const HT = MT + H + MARGIN.bottom + pad
   const lw = land * scale
   const x0 = MARGIN.left + lw, y0 = MT + H
-  const x1 = x0 + run * scale, y1 = MT
+  const x1 = x0 + runMm * scale, y1 = MT
 
   // Each step is riser-then-tread: UP by R, then ACROSS by G. The point a riser
   // starts from is the step's INNER corner — where a tread meets the next riser
@@ -137,6 +157,11 @@ export function flightGeometry(
 
   return {
     scale, W, HT, MT, x0, y0, x1, y1, tw, tv, nx, ny, nSteps, profile, flight,
+    drawn: {
+      run: runMm / 1000,
+      rise: rise / 1000,
+      slope: Math.hypot(runMm, rise) / 1000,
+    },
     lowLanding, upLanding, soffitLine, topLine,
     kinks: {
       lowSoffit: [x0, y0], lowTop: [x0, y0 - tv],

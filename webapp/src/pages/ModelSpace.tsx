@@ -12,6 +12,7 @@ import { SceneText } from '../components/SceneText'
 import { RebarWireframe } from '../components/RebarWireframe'
 import { ghostKey, ghostMaterial } from '../components/ghostMaterial'
 import { buildStructureCages, structureMomentRatios } from '../engine/cageBuilder'
+import { placeStair, flightSolid, type PlacedStair } from '../engine/stairPlacement'
 import { REBAR_ROLE_COLOR } from '../engine/rebarWire'
 import { ProjectsPanel } from '../components/ProjectsPanel'
 // The session keys are shared with the Projects panel, which saves and
@@ -572,6 +573,60 @@ function Wall3D({ tA, tB, bA, bB, shear }: { tA: THREE.Vector3; tB: THREE.Vector
         <primitive object={new THREE.Line(x1, new THREE.LineBasicMaterial({ color }))} />
         <primitive object={new THREE.Line(x2, new THREE.LineBasicMaterial({ color }))} />
       </>}
+    </group>
+  )
+}
+
+/**
+ * One stair flight: the waist as an inclined slab, the treads as boxes on top.
+ *
+ * Drawn from `placeStair` — the same geometry the loads and the schedule are
+ * built on, so the picture cannot show a stair the calculation does not have.
+ * Translucent like the walls, because the flight is NOT in the analysis: it is
+ * load on the two members it bears on, not stiffness in the frame.
+ */
+function Stair3D({ p }: { p: PlacedStair }) {
+  const geo = useMemo(() => {
+    // The solid is worked out in `stairPlacement` — including the waist being
+    // measured NORMAL to the soffit — so it can be checked without a renderer.
+    const solid = flightSolid(p)
+    const v = (a: readonly [number, number, number]) => new THREE.Vector3(a[0], a[1], a[2])
+    const pos: number[] = []
+    const quad = (...q: THREE.Vector3[]) => {
+      for (const k of [0, 1, 2, 0, 2, 3]) pos.push(q[k].x, q[k].y, q[k].z)
+    }
+    const top = solid.top.map(v), bot = solid.bottom.map(v)
+    quad(...top)
+    quad(bot[3], bot[2], bot[1], bot[0])
+    for (let i = 0; i < 4; i++) quad(top[i], bot[i], bot[(i + 1) % 4], top[(i + 1) % 4])
+    const waist = new THREE.BufferGeometry()
+    waist.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    waist.computeVertexNormals()
+
+    // Treads: dead load sitting on the waist, not structure — which is why
+    // they are separate geometry rather than part of the slab.
+    const runDir = v(p.runDir), widthDir = v(p.widthDir)
+    const basis = new THREE.Matrix4().makeBasis(runDir, new THREE.Vector3(0, 1, 0), widthDir)
+    const steps = solid.steps.map((st) => {
+      const box = new THREE.BoxGeometry(st.run, st.rise, st.width)
+      box.applyMatrix4(basis)
+      box.translate(
+        st.at[0] + (runDir.x * st.run) / 2, st.at[1] + st.rise / 2, st.at[2] + (runDir.z * st.run) / 2,
+      )
+      return box
+    })
+    return { waist, steps }
+  }, [p])
+  return (
+    <group>
+      <mesh geometry={geo.waist}>
+        <meshStandardMaterial color="#94a3b8" transparent opacity={0.5} side={THREE.DoubleSide} roughness={0.8} />
+      </mesh>
+      {geo.steps.map((g, i) => (
+        <mesh key={i} geometry={g}>
+          <meshStandardMaterial color="#cbd5e1" transparent opacity={0.42} roughness={0.9} />
+        </mesh>
+      ))}
     </group>
   )
 }
@@ -1220,6 +1275,10 @@ export default function ModelSpace() {
   // wall-add form
   const [wallMember, setWallMember] = useState(''); const [wallH, setWallH] = useState(3)
   const [wallT, setWallT] = useState(150); const [wallShear, setWallShear] = useState(false)
+  const [stLow, setStLow] = useState(''); const [stHigh, setStHigh] = useState('')
+  const [stWidth, setStWidth] = useState(1.2); const [stWaist, setStWaist] = useState(150)
+  const [stRisers, setStRisers] = useState(10)
+  const [stFin, setStFin] = useState(1.5); const [stLive, setStLive] = useState(4.8)
   const fileRef = useRef<HTMLInputElement>(null)
   const controlsRef = useRef<React.ComponentRef<typeof OrbitControls>>(null)
   const { busy, run: runSolver, progress } = useSolver()   // off-thread FEM/design/optimise
@@ -1868,6 +1927,26 @@ export default function ModelSpace() {
     const m2 = { ...model, walls: (model.walls ?? []).filter((w) => w.id !== id) }
     save({ ...m2, loads: buildGravityLoads(m2, qD, qL, gammaC) })
   }
+
+  /** A flight between two beams. Everything else about it — R, G, θ, the run —
+   *  is derived from where those two beams are, so there is nothing else to
+   *  type and nothing that can disagree. */
+  const addStair = () => {
+    if (!model || !stLow || !stHigh || stLow === stHigh) return
+    let k = model.stairs?.length ?? 0
+    while ((model.stairs ?? []).some((x) => x.id === `st${k}`)) k++
+    const stairs = [...(model.stairs ?? []), {
+      id: `st${k}`, low: stLow, high: stHigh, width: stWidth, waist: stWaist,
+      risers: stRisers, finishes: stFin, live: stLive, support: 'simple' as const,
+    }]
+    const m2 = { ...model, stairs }
+    save({ ...m2, loads: buildGravityLoads(m2, qD, qL, gammaC) })
+  }
+  const removeStair = (id: string) => {
+    if (!model) return
+    const m2 = { ...model, stairs: (model.stairs ?? []).filter((x) => x.id !== id) }
+    save({ ...m2, loads: buildGravityLoads(m2, qD, qL, gammaC) })
+  }
   const updLoad = (idx: number, v: number) => {
     if (!model || !Number.isFinite(v)) return
     save({
@@ -2314,6 +2393,10 @@ export default function ModelSpace() {
                   const bA = below(tA), bB = below(tB)
                   if (!bA || !bB) return null
                   return <Wall3D key={w.id} tA={tA} tB={tB} bA={bA} bB={bB} shear={w.shearWall} />
+                })}
+                {(model.stairs ?? []).map((st) => {
+                  const p = placeStair(model, st)
+                  return p ? <Stair3D key={st.id} p={p} /> : null
                 })}
                 {showLoads && <Loads3D model={model} nodePos={nodePos} />}
                 {showRebar && rebarCages.length > 0 && <RebarWireframe cages={rebarCages} />}
@@ -2875,6 +2958,80 @@ export default function ModelSpace() {
                     })()}
                   </div>
                   <p className="mt-1 text-[11px] text-slate-500">A wall adds its self-weight (t·h·γc) as a line load on the chosen beam. A “shear wall” also braces the storey below it — modelled as an equivalent X of diagonal struts (shear + flexure stiffness) so it carries seismic/wind in the analysis.</p>
+
+                  <h3 className="mb-2 mt-4 text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Stairs (between two beams)</h3>
+                  {(model.stairs ?? []).length > 0 && (
+                    <div className="mb-2 max-h-48 overflow-auto">
+                      <table className="w-full border-collapse text-xs">
+                        <thead>
+                          <tr className="text-left uppercase tracking-wide text-slate-500">
+                            <th className="py-1 pr-2 font-semibold">From → to</th>
+                            <th className="py-1 pr-1 font-semibold">R / G</th>
+                            <th className="py-1 pr-1 font-semibold">θ</th>
+                            <th className="py-1 pr-1 font-semibold">w (m)</th>
+                            <th className="py-1" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(model.stairs ?? []).map((st) => {
+                            const p = placeStair(model, st)
+                            const odd = p && !(p.usable.riserOK && p.usable.goingOK && p.usable.paceOK)
+                            return (
+                              <tr key={st.id} className="border-t border-slate-100">
+                                <td className="py-0.5 pr-2 font-medium">{st.low} → {st.high}</td>
+                                <td className={`py-0.5 pr-1 ${odd ? 'font-semibold text-amber-700' : ''}`}
+                                  title={odd ? 'Outside the proportions stairs are usually built in — a comfort read, not a code check' : undefined}>
+                                  {p ? `${p.R.toFixed(0)}/${p.G.toFixed(0)}` : '—'}
+                                </td>
+                                <td className="py-0.5 pr-1">{p ? `${p.thetaDeg.toFixed(1)}°` : '—'}</td>
+                                <td className="py-0.5 pr-1">{f1(st.width)}</td>
+                                <td className="py-0.5 text-right">
+                                  <button type="button" onClick={() => removeStair(st.id)} className="rounded px-1.5 text-red-500 hover:bg-red-50">✕</button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <div className="flex flex-wrap items-center gap-1 border-t border-slate-100 pt-2 text-xs">
+                    {([['from', stLow, setStLow], ['to', stHigh, setStHigh]] as const).map(([lbl, val, set]) => (
+                      <select key={lbl} value={val} onChange={(e) => set(e.target.value)} className="max-w-[6rem] rounded border border-slate-200 px-1 py-0.5">
+                        <option value="">{lbl} beam…</option>
+                        {model.members.filter((m) => m.role === 'beam' || m.role === 'girder').map((m) => <option key={m.id} value={m.id}>{m.id}</option>)}
+                      </select>
+                    ))}
+                    <label className="inline-flex items-center gap-1">risers <input type="number" step="1" value={stRisers} onChange={(e) => setStRisers(Math.max(2, parseInt(e.target.value) || 2))} className="w-12 rounded border border-slate-200 px-1 py-0.5" /></label>
+                    <label className="inline-flex items-center gap-1">w <input type="number" step="0.1" value={stWidth} onChange={(e) => setStWidth(parseFloat(e.target.value) || 0)} className="w-12 rounded border border-slate-200 px-1 py-0.5" /></label>
+                    <label className="inline-flex items-center gap-1">waist <input type="number" step="10" value={stWaist} onChange={(e) => setStWaist(parseFloat(e.target.value) || 0)} className="w-14 rounded border border-slate-200 px-1 py-0.5" /></label>
+                    <label className="inline-flex items-center gap-1">fin <input type="number" step="0.5" value={stFin} onChange={(e) => setStFin(parseFloat(e.target.value) || 0)} className="w-12 rounded border border-slate-200 px-1 py-0.5" /></label>
+                    <label className="inline-flex items-center gap-1">LL <input type="number" step="0.5" value={stLive} onChange={(e) => setStLive(parseFloat(e.target.value) || 0)} className="w-12 rounded border border-slate-200 px-1 py-0.5" /></label>
+                    {(() => {
+                      const trial = stLow && stHigh && stLow !== stHigh
+                        ? placeStair(model, { id: '_t', low: stLow, high: stHigh, width: stWidth, waist: stWaist, risers: stRisers, finishes: stFin, live: stLive, support: 'simple' })
+                        : null
+                      const why = !stLow || !stHigh ? 'Pick the two beams the flight runs between'
+                        : stLow === stHigh ? 'A flight needs two different beams'
+                        : !trial ? 'These two cannot carry a flight: same level, named the wrong way round, or one of them is vertical in plan'
+                        : undefined
+                      return (
+                        <>
+                          <button type="button" onClick={addStair} disabled={!trial}
+                            title={why}
+                            className="rounded-md border border-slate-300 px-2 py-1 font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50 disabled:opacity-40">
+                            + Add stair
+                          </button>
+                          {trial && (
+                            <span className="text-[11px] text-slate-500">
+                              → R {trial.R.toFixed(0)} · G {trial.G.toFixed(0)} · θ {trial.thetaDeg.toFixed(1)}° · run {trial.run.toFixed(2)} m
+                            </span>
+                          )}
+                        </>
+                      )
+                    })()}
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-500">A flight is placed by the two beams it bears on: the rise and run come from where they are, and R = rise/risers, G = run/risers, so the risers are equal by construction. Its weight reaches the frame as reactions on those two beams — the flight itself is NOT meshed, so it adds no stiffness. That is conservative for the frame and not for the stair, which in reality braces the storey it climbs.</p>
                 </div>
               )}
             </div>
@@ -5076,6 +5233,47 @@ export default function ModelSpace() {
           )}
 
           {/* Shear-wall schedule (full width) — in-plane reinforcement */}
+          {design.stairs.length > 0 && report !== 'draw-only' && (
+            <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Stair schedule<SchedChip items={design.stairs} ok={(st) => st.ok} /></h3>
+              <table className="w-full border-collapse text-[13px]">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-slate-500">
+                    {['Flight', 'Bears on', 'Rise / run (m)', 'Risers', 'R / G (mm)', 'θ', 'Waist', 'Mu (kN·m/m)', 'Main', 'Dist.', 'Reaction D+L (kN)', ''].map((h) => (
+                      <th key={h} className="py-1 pr-3 font-semibold">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {design.stairs.map((st) => {
+                    const odd = !(st.usable.riserOK && st.usable.goingOK && st.usable.paceOK)
+                    return (
+                      <tr key={st.id} className="border-b border-slate-100">
+                        <td className="py-1 pr-3 font-medium">{st.id}</td>
+                        <td className="py-1 pr-3 font-mono text-[12px]">{st.low} → {st.high}</td>
+                        <td className="py-1 pr-3">{f2(st.rise)} / {f2(st.run)}</td>
+                        <td className="py-1 pr-3">{st.risers}</td>
+                        <td className={`py-1 pr-3 ${odd ? 'font-semibold text-amber-700' : ''}`}>{f0(st.R)} / {f0(st.G)}</td>
+                        <td className="py-1 pr-3">{f1(st.thetaDeg)}°</td>
+                        <td className="py-1 pr-3">{st.waist} mm{st.design.tMinOK ? '' : <span className="ml-1 text-red-600" title={`below the ${f0(st.design.tMin)} mm span/depth minimum`}>&lt; min</span>}</td>
+                        <td className="py-1 pr-3">{f2(st.design.Mu)}</td>
+                        <td className="py-1 pr-3">⌀12 @ {f0(st.design.mainSpacing)}</td>
+                        <td className="py-1 pr-3">⌀10 @ {f0(st.design.distSpacing)}</td>
+                        <td className="py-1 pr-3">{f1(st.totalD)} + {f1(st.totalL)}</td>
+                        <td className="py-1">{st.ok
+                          ? <span className="font-semibold text-emerald-600">OK</span>
+                          : <span className="font-semibold text-red-600">CHECK</span>}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              <p className="mt-1.5 text-[11px] text-slate-500">
+                Rise, run, R and G are derived from where the two supporting beams are — R = rise/risers, so the risers are equal by construction. An amber R/G is outside the proportions stairs are usually built in (a comfort read, not a code check). The flight is designed on its PLAN run, which is the length its kPa-of-plan-area load works through. It is not meshed into the frame: it contributes load, not stiffness.
+              </p>
+            </div>
+          )}
+
           {design.walls.length > 0 && report !== 'draw-only' && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <h3 className="mb-2 text-[1.02rem] font-bold text-[#0f4c92]">Shear-wall schedule (in-plane)<SchedChip items={design.walls} ok={(w) => w.ok} /></h3>

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   placeStair, stairFrameLoads, bearingStations, planDir, allStairFrameLoads,
-  RISER_RANGE, GOING_RANGE, PACE_RANGE, type Vec3,
+  flightSolid, RISER_RANGE, GOING_RANGE, PACE_RANGE, type Vec3,
 } from './stairPlacement'
 import { stairLoads } from './stair'
 import { validateMesh } from './meshValidation'
@@ -278,5 +278,109 @@ describe('stair validation — a broken model stops, an odd stair warns', () => 
     expect(RISER_RANGE[0]).toBeLessThan(RISER_RANGE[1])
     expect(GOING_RANGE[0]).toBeLessThan(GOING_RANGE[1])
     expect(PACE_RANGE[0]).toBeLessThan(PACE_RANGE[1])
+  })
+})
+
+describe('flightSolid — the flight as something you can draw', () => {
+  const { model, stair } = frame()
+  const p = placeStair(model, stair)!
+  const solid = flightSolid(p)
+
+  it('measures the waist NORMAL to the soffit, not vertically', () => {
+    // The one thing this drawing exists to show. Measured vertically the slab
+    // is t/cosθ thick and every face built off it leans.
+    const slope: Vec3 = [
+      p.highEdge[0][0] - p.lowEdge[0][0],
+      p.highEdge[0][1] - p.lowEdge[0][1],
+      p.highEdge[0][2] - p.lowEdge[0][2],
+    ]
+    const dot = solid.normal[0] * slope[0] + solid.normal[1] * slope[1] + solid.normal[2] * slope[2]
+    expect(dot).toBeCloseTo(0, 9)                                   // ⟂ to the soffit
+    const across = solid.normal[0] * p.widthDir[0] + solid.normal[2] * p.widthDir[2]
+    expect(across).toBeCloseTo(0, 9)                                // …and to the width
+    expect(solid.normal[1]).toBeGreaterThan(0)                      // up out of the slab
+  })
+
+  it('the prism is exactly the waist thick, everywhere', () => {
+    for (let i = 0; i < 4; i++) {
+      const d = Math.hypot(
+        solid.top[i][0] - solid.bottom[i][0],
+        solid.top[i][1] - solid.bottom[i][1],
+        solid.top[i][2] - solid.bottom[i][2],
+      )
+      expect(d).toBeCloseTo(0.15, 12)
+    }
+    // …and the vertical thickness is the larger t/cosθ, which is what makes
+    // the flight heavier per plan metre than a flat slab of the same t.
+    const vert = solid.top[0][1] - solid.bottom[0][1]
+    expect(vert).toBeCloseTo(0.15 * Math.cos((p.thetaDeg * Math.PI) / 180), 9)
+  })
+
+  it('the top face is the four bearing corners, in order round the flight', () => {
+    expect(solid.top[0]).toEqual(p.lowEdge[0])
+    expect(solid.top[1]).toEqual(p.lowEdge[1])
+    expect(solid.top[2]).toEqual(p.highEdge[1])
+    expect(solid.top[3]).toEqual(p.highEdge[0])
+  })
+
+  it('centres each tread on the flight, not on one edge of it', () => {
+    // A renderer builds a box centred on its origin, so a step positioned by a
+    // CORNER comes out half off the side of the waist — which is what the
+    // projected view showed before this.
+    const mid: Vec3 = [
+      (p.lowEdge[0][0] + p.lowEdge[1][0]) / 2,
+      (p.lowEdge[0][1] + p.lowEdge[1][1]) / 2,
+      (p.lowEdge[0][2] + p.lowEdge[1][2]) / 2,
+    ]
+    const off = (q: Vec3) => (q[0] - mid[0]) * p.widthDir[0] + (q[2] - mid[2]) * p.widthDir[2]
+    for (const st of solid.steps) expect(off(st.at)).toBeCloseTo(0, 9)
+  })
+
+  it('lays one tread per going, climbing one riser each', () => {
+    expect(solid.steps).toHaveLength(stair.risers)
+    solid.steps.forEach((st, i) => {
+      expect(st.rise).toBeCloseTo(p.R / 1000, 12)
+      expect(st.run).toBeCloseTo(p.G / 1000, 12)
+      expect(st.at[1]).toBeCloseTo(p.lowEdge[0][1] + (i * p.R) / 1000, 9)
+    })
+    // the last tread arrives at the top bearing level
+    const last = solid.steps[solid.steps.length - 1]
+    expect(last.at[1] + last.rise).toBeCloseTo(p.highEdge[0][1], 9)
+  })
+
+  it('every tread sits ON the waist — its footprint is inside the slab, exactly', () => {
+    // Definitive where an isometric is only suggestive: put each tread's four
+    // base corners into the flight's own run/width coordinates and check they
+    // land inside the waist's top face.
+    const o = p.lowEdge[0]
+    const uv = (q: Vec3) => {
+      const d: Vec3 = [q[0] - o[0], q[1] - o[1], q[2] - o[2]]
+      return {
+        u: d[0] * p.runDir[0] + d[2] * p.runDir[2],
+        v: d[0] * p.widthDir[0] + d[2] * p.widthDir[2],
+      }
+    }
+    for (const st of solid.steps) {
+      for (const du of [0, st.run]) for (const dv of [-st.width / 2, st.width / 2]) {
+        const c: Vec3 = [
+          st.at[0] + p.runDir[0] * du + p.widthDir[0] * dv,
+          st.at[1],
+          st.at[2] + p.runDir[2] * du + p.widthDir[2] * dv,
+        ]
+        const { u, v } = uv(c)
+        expect(u).toBeGreaterThanOrEqual(-1e-9)
+        expect(u).toBeLessThanOrEqual(p.run + 1e-9)
+        expect(v).toBeGreaterThanOrEqual(-1e-9)
+        expect(v).toBeLessThanOrEqual(p.width + 1e-9)
+      }
+    }
+  })
+
+  it('every tread sits between the two supports, never past them', () => {
+    for (const st of solid.steps) {
+      const along = (st.at[0] - p.lowEdge[0][0]) * p.runDir[0] + (st.at[2] - p.lowEdge[0][2]) * p.runDir[2]
+      expect(along).toBeGreaterThanOrEqual(-1e-9)
+      expect(along + st.run).toBeLessThanOrEqual(p.run + 1e-9)
+    }
   })
 })
