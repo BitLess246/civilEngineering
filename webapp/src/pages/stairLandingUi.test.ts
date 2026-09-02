@@ -5,8 +5,14 @@
 // lost: a field that nothing reads, a preview computed from different numbers
 // than the thing it previews, a schedule column added to the header and not to
 // the row. Each of those is a real defect and each is visible in the source.
+//
+// TWO sources, because `Stair3D` now lives with the rest of the 3D scene. That
+// split is exactly what this style of test is fragile to — and catching the
+// move rather than silently passing against a file that no longer contains the
+// code is the guard working, not failing.
 import { describe, it, expect } from 'vitest'
 import src from './ModelSpace.tsx?raw'
+import scene from '../components/modelSpace/scene.tsx?raw'
 
 describe('the half-landing reaches the model space', () => {
   it('has a field for each end, and both are bounded at zero', () => {
@@ -33,8 +39,8 @@ describe('the half-landing reaches the model space', () => {
   })
 
   it('draws the landings as part of the same solid, not as the flight alone', () => {
-    expect(src).toContain('prism(solid.top, solid.bottom)')
-    expect(src).toContain('for (const l of solid.landings) prism(l.top, l.bottom)')
+    expect(scene).toContain('prism(solid.top, solid.bottom)')
+    expect(scene).toContain('for (const l of solid.landings) prism(l.top, l.bottom)')
   })
 
   it('shows the landing in both tables — header AND row', () => {
