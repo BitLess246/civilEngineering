@@ -92,10 +92,13 @@ describe('the material the style adds up to', () => {
     expect(g.depthWrite).toBe(false)          // bars BEHIND it still draw
   })
 
-  it('a wireframe face is fainter still, but never gone', () => {
+  it('a wireframe face is not drawn at all — the outline is the drawing', () => {
+    // It is still IN the scene, invisible, because it is the pick target: a
+    // 1 px line is close to unclickable. But at any opacity above zero it
+    // shades what is behind it and the skeleton reads as fogged solid.
     const w = surfaceMaterial('wire')
     expect(w.opacity).toBe(WIRE_OPACITY)
-    expect(w.opacity).toBeGreaterThan(0)      // the face is what a click picks
+    expect(w.opacity).toBe(0)
     expect(w.opacity).toBeLessThan(GHOST_OPACITY)
     expect(w.depthWrite).toBe(false)          // force ribbons behind it draw
   })

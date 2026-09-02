@@ -29,15 +29,19 @@ export type SurfaceStyle = 'solid' | 'ghost' | 'wire'
 export const GHOST_OPACITY = 0.18
 
 /**
- * How much of the surface is left in wireframe, where the EDGES carry the
- * shape.
+ * How much of the surface is left in wireframe: none of it.
  *
- * Not zero, and that is deliberate: the face is still what a click picks a
- * member by, and an `opacity: 0` face is picked exactly as well as a visible
- * one but gives the eye nothing at all to judge which side of a column it is
- * looking at. This is a hint of a face, not a face.
+ * Wireframe here means the SKELETON — one line per member, node to node, and a
+ * plate as its own outline. A face left at even a few per cent still shades
+ * everything behind it and still reads as a solid seen through fog, which is
+ * the thing the mode exists to get rid of.
+ *
+ * The face is kept in the scene rather than removed because it is the PICK
+ * TARGET: a 1 px line is close to unclickable, so an invisible sleeve carries
+ * the selection instead. Invisible, not absent — `visible: false` would take
+ * the raycast with it.
  */
-export const WIRE_OPACITY = 0.06
+export const WIRE_OPACITY = 0
 
 /**
  * The mode the viewport actually draws in.
@@ -73,9 +77,14 @@ export function ghostConcrete(showRebar: boolean, drawn: number): boolean {
  * The style one structural solid is drawn in.
  *
  * Wireframe wins over ghosting: they are both ways of seeing THROUGH the
- * concrete, and edges plus an 18% face is neither one thing nor the other. In
- * wireframe the cage is already fully visible, so the ghosting has nothing left
- * to do.
+ * concrete, and a skeleton with an 18% face on it is neither one thing nor the
+ * other. In wireframe the cage is already fully visible, so the ghosting has
+ * nothing left to do.
+ *
+ * `wire` is only ever asked of the things that are NOT line elements — a
+ * footing pad, a stair waist. A member and a plate have nodes, so in wireframe
+ * they are drawn from them (`MemberStick3D`, `Slab3D`'s outline) rather than
+ * being the same solid with a different material.
  */
 export function surfaceStyleFor(mode: ViewMode, ghosted: boolean): SurfaceStyle {
   if (mode === 'wireframe') return 'wire'

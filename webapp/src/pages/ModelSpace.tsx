@@ -90,7 +90,7 @@ import { f0, f1, f2 } from '../lib/format'
 import { usePlanGate } from '../lib/auth/usePlan'
 import { UpgradeNotice } from '../components/UpgradeNotice'
 import type { SolverKind } from '../lib/featureGate'
-import { Footing3D, GridBubbles3D, Loads3D, Member3D, MemberForceDiagram3D, MemberSteel3D, ModeShapePlayer, RigidArm3D, Slab3D, SlackMember3D, Stair3D, Support3D, Wall3D } from '../components/modelSpace/scene'
+import { Footing3D, GridBubbles3D, Loads3D, Member3D, MemberForceDiagram3D, MemberStick3D, MemberSteel3D, ModeShapePlayer, Nodes3D, RigidArm3D, Slab3D, SlackMember3D, Stair3D, Support3D, Wall3D } from '../components/modelSpace/scene'
 import { DIAG_COLOR, DIAG_LABEL, LOAD_COLOR } from '../components/modelSpace/sceneTokens'
 import { DirPicker, Rule, SchedChip, Sec, SolverProgress, Swatches, TabBtn } from '../components/modelSpace/panelKit'
 import { TAB_GROUPS, UTILITY_TABS, type Tab } from '../components/modelSpace/tabs'
@@ -940,6 +940,9 @@ export default function ModelSpace() {
    */
   const drawMode = effectiveViewMode(viewMode, forceDiag !== null)
   const surface = surfaceStyleFor(drawMode, ghostConcrete(showRebar, drawnCages))
+  /** Draw the model as its SKELETON — one line per member, node to node —
+   *  rather than as solids with a different material. */
+  const skeleton = drawMode === 'wireframe'
   /**
    * §418.6.3.2 / §418.4.2.2 on the placed bars.
    *
@@ -1577,17 +1580,31 @@ export default function ModelSpace() {
                     aV = manI ? a.clone().add(v3(manI)) : (fo?.offI ? a.clone().add(v3(fo.offI)) : a)
                     bV = manJ ? bb.clone().add(v3(manJ)) : (fo?.offJ ? bb.clone().add(v3(fo.offJ)) : bb)
                   }
-                  const memberEl = sec?.material === 'steel' && sec.shape
-                    ? <MemberSteel3D a={aV} b={bV} role={m.role} shapeName={sec.shape} axisRotation={m.axisRotation}
-                        tint={tint * 0.85} style={surface} selected={m.id === selected} onPick={() => setSelected(m.id)} />
-                    : <Member3D a={aV} b={bV} role={m.role} tint={tint * 0.85}
-                        sec={sec} style={surface} selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                  // The skeleton runs NODE TO NODE — `a`/`bb`, not the face
+                  // offsets and pedestal drops that put the concrete where the
+                  // concrete is. Those describe the solid; the line is the
+                  // other description of the same member, the one the
+                  // stiffness matrix is assembled from.
+                  const memberEl = skeleton
+                    ? <MemberStick3D a={a} b={bb} role={m.role} tint={tint * 0.85} material={sec?.material}
+                        selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                    : sec?.material === 'steel' && sec.shape
+                      ? <MemberSteel3D a={aV} b={bV} role={m.role} shapeName={sec.shape} axisRotation={m.axisRotation}
+                          tint={tint * 0.85} style={surface} selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                      : <Member3D a={aV} b={bV} role={m.role} tint={tint * 0.85}
+                          sec={sec} style={surface} selected={m.id === selected} onPick={() => setSelected(m.id)} />
                   return (
                     <group key={m.id}>
                       {memberEl}
-                      {manI && <RigidArm3D a={a} b={aV} />}
-                      {manJ && <RigidArm3D a={bb} b={bV} />}
-                      {inactiveIds.has(m.id) && <SlackMember3D a={aV} b={bV} />}
+                      {/* A rigid arm bridges the node to the SOLID's offset
+                          end. The skeleton has no gap for it to bridge — the
+                          line already starts at the node — so drawn there it
+                          is a stub lying inside its own member. */}
+                      {!skeleton && manI && <RigidArm3D a={a} b={aV} />}
+                      {!skeleton && manJ && <RigidArm3D a={bb} b={bV} />}
+                      {inactiveIds.has(m.id) && (skeleton
+                        ? <SlackMember3D a={a} b={bb} />
+                        : <SlackMember3D a={aV} b={bV} />)}
                     </group>
                   )
                 })}
@@ -1650,6 +1667,9 @@ export default function ModelSpace() {
                   const p = placeStair(model, st)
                   return p ? <Stair3D key={st.id} p={p} style={surface} /> : null
                 })}
+                {/* The joints. Without them two collinear beams read as one
+                    line, and the count of elements is not visible at all. */}
+                {skeleton && <Nodes3D nodePos={nodePos} />}
                 {showLoads && <Loads3D model={model} nodePos={nodePos} />}
                 {showRebar && rebarCages.length > 0 && <RebarWireframe cages={rebarCages} kinds={cageKinds} />}
                 {forceDiag && forceDiagInfo && forceDiagInfo.scale > 0 && model.members.map((m) => {
@@ -3975,7 +3995,8 @@ export default function ModelSpace() {
                   )}
                   {drawMode === 'wireframe' && (
                     <p className="mt-1 text-[11px] leading-snug text-slate-500">
-                      Edges only. Members stay clickable.
+                      One line per member, node to node, with a marker at each joint.
+                      Members and panels stay clickable.
                     </p>
                   )}
                 </div>

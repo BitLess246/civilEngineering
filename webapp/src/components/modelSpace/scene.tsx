@@ -23,25 +23,131 @@ import { memberDiagramRibbon, type DiagramComp } from '../../engine/memberDiagra
 import { footingPrism } from '../../engine/footingLayout'
 import { shapeByName, effectiveSection } from '../../engine/aiscSections'
 import { buildSectionShapes } from '../../lib/sectionShapes3d'
-import { ROLE_COLOR, SEL, LOAD_COLOR, levelDrop, DIAG_COLOR, UP, TRIB_COLOR, slabTributaryPolys, type TribKind } from './sceneTokens'
+import { SEL, LOAD_COLOR, levelDrop, memberColor, DIAG_COLOR, UP, TRIB_COLOR, slabTributaryPolys, type TribKind } from './sceneTokens'
 
 /**
  * The EDGES of the mesh this sits inside, drawn only in wireframe.
  *
- * Nothing in solid or ghost mode — a returned `null` mounts no line geometry at
- * all, rather than a hidden one per member on a model that is thousands of
- * them.
+ * For the things that are NOT line elements — a footing pad, a stair waist. A
+ * member and a plate are drawn from their nodes instead (`MemberStick3D`,
+ * and `Slab3D`'s own wire branch): a skeleton is node-to-node lines, and a box
+ * reduced to its twelve edges is still a box.
  *
- * The edges carry the shape in wireframe; the face behind them is left at a
- * few per cent (`WIRE_OPACITY`) so a click still picks the member and the eye
- * can still tell which side of a column it is looking at. `threshold` is the
- * angle below which two faces count as one surface: 15° keeps a box to its
- * twelve real edges instead of drawing the triangulation diagonal across every
- * face, which is what a raw `wireframe: true` material would have given.
+ * Nothing in solid or ghost mode — a returned `null` mounts no line geometry at
+ * all, rather than a hidden one per pad. `threshold` is the angle below which
+ * two faces count as one surface: 15° keeps a pad to its real edges instead of
+ * drawing the triangulation diagonal across every face, which is what a raw
+ * `wireframe: true` material would have given.
  */
 function WireEdges({ style, color }: { style: SurfaceStyle; color: string }) {
   if (style !== 'wire') return null
   return <Edges threshold={15} color={color} />
+}
+
+/**
+ * How wide the invisible sleeve around a skeleton line is, m.
+ *
+ * A 1 px line is very hard to hit with a mouse, and in wireframe the line is
+ * all there is — so the pick target is its own geometry rather than the face,
+ * which no longer exists. Wide enough to click without hunting, narrow enough
+ * that it does not swallow the member next to it.
+ */
+const STICK_PICK = 0.14
+
+/**
+ * A member as a SINGLE LINE from node to node — the skeleton.
+ *
+ * This is what wireframe means for a member: not the solid with its faces
+ * dropped (a box reduced to twelve edges is still a box, and twelve lines per
+ * member is a thicket) but the analytical model itself, one line per element,
+ * the way a frame is drawn everywhere else in engineering.
+ *
+ * Drawn between the NODES, not between the member's physical ends. The solid
+ * view offsets each end to the face of its support and hangs a beam under the
+ * node line, because that is where the concrete is; the skeleton is the other
+ * description of the same member — the one the stiffness matrix is assembled
+ * from — and it runs node to node by definition.
+ */
+export function MemberStick3D({ a, b, role, selected, tint = 0, material, onPick }: {
+  a: THREE.Vector3; b: THREE.Vector3; role: string; selected: boolean
+  /** 0–1 utilisation tint, exactly as the solid takes it — see `memberColor`. */
+  tint?: number
+  material?: string
+  onPick: () => void
+}) {
+  const { line, mid, quat, len } = useMemo(() => {
+    const dir = new THREE.Vector3().subVectors(b, a)
+    const len = dir.length()
+    const quat = len > 1e-9
+      ? new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir.clone().normalize())
+      : new THREE.Quaternion()
+    return {
+      line: new THREE.BufferGeometry().setFromPoints([a, b]),
+      mid: new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5), quat, len,
+    }
+  }, [a, b])
+  const color = memberColor(role, selected, tint, material)
+  return (
+    <group>
+      <lineSegments geometry={line}>
+        <lineBasicMaterial color={color} />
+      </lineSegments>
+      {/* The pick target. Invisible rather than absent: a line this thin is
+          almost unclickable, and selection has to keep working in wireframe. */}
+      <mesh position={mid} quaternion={quat} onClick={(e) => { e.stopPropagation(); onPick() }}>
+        <boxGeometry args={[len, STICK_PICK, STICK_PICK]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+    </group>
+  )
+}
+
+/**
+ * The JOINTS of the skeleton: a small marker at every node.
+ *
+ * Node-to-node lines alone do not say where one element ends and the next
+ * begins — two collinear beams read as one. The markers are what make it a
+ * skeleton rather than a set of lines, and they are the thing being counted
+ * when a mesh is checked by eye.
+ *
+ * One merged geometry, not one mesh per node: a real model is hundreds of them.
+ */
+export function Nodes3D({ nodePos, size = 0.07 }: {
+  nodePos: Map<string, THREE.Vector3>; size?: number
+}) {
+  const geom = useMemo(() => {
+    const parts: THREE.BufferGeometry[] = []
+    for (const p of nodePos.values()) {
+      const g = new THREE.BoxGeometry(size, size, size)
+      g.translate(p.x, p.y, p.z)
+      parts.push(g)
+    }
+    if (!parts.length) return null
+    // Concatenated by hand — three's merge helper is in an addon this project
+    // does not pull in, and a position/normal concat is all that is needed.
+    let nv = 0
+    for (const g of parts) nv += g.getAttribute('position').count
+    const pos = new Float32Array(nv * 3), nrm = new Float32Array(nv * 3)
+    let o = 0
+    for (const g of parts) {
+      const gp = g.getAttribute('position') as THREE.BufferAttribute
+      const gn = g.getAttribute('normal') as THREE.BufferAttribute
+      pos.set(gp.array as Float32Array, o)
+      nrm.set(gn.array as Float32Array, o)
+      o += gp.array.length
+      g.dispose()
+    }
+    const out = new THREE.BufferGeometry()
+    out.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    out.setAttribute('normal', new THREE.BufferAttribute(nrm, 3))
+    return out
+  }, [nodePos, size])
+  if (!geom) return null
+  return (
+    <mesh geometry={geom}>
+      <meshBasicMaterial color="#334155" />
+    </mesh>
+  )
 }
 
 export function Member3D({ a, b, role, selected, tint = 0, sec, style = 'solid', onPick }: {
@@ -65,12 +171,7 @@ export function Member3D({ a, b, role, selected, tint = 0, sec, style = 'solid',
   const tz = sec ? sec.b / 1000 : role === 'column' ? 0.3 : 0.22
   // the node is the top of a beam, not its centroid — see levelDrop
   const drop = levelDrop(role, ty, a, b)
-  const color = useMemo(() => {
-    if (selected) return SEL
-    const base = new THREE.Color(ROLE_COLOR[role] ?? '#64748b')
-    if (sec?.material === 'wood') base.lerp(new THREE.Color('#a86b34'), 0.6)   // timber brown tint
-    return tint > 0 ? `#${base.lerp(new THREE.Color('#dc2626'), tint).getHexString()}` : `#${base.getHexString()}`
-  }, [selected, role, tint, sec?.material])
+  const color = memberColor(role, selected, tint, sec?.material)
   return (
     <mesh position={[mid.x, mid.y - drop, mid.z]} quaternion={quat}
       onClick={(e) => { e.stopPropagation(); onPick() }}>
@@ -82,7 +183,6 @@ export function Member3D({ a, b, role, selected, tint = 0, sec, style = 'solid',
           transparent false → true change to a material that already exists, so
           the material has to be rebuilt. See modelSpace/viewMode.ts. */}
       <meshStandardMaterial key={surfaceKey(style)} color={color} {...surfaceMaterial(style)} />
-      <WireEdges style={style} color={color} />
     </mesh>
   )
 }
@@ -199,7 +299,6 @@ export function MemberSteel3D({ a, b, role, shapeName, selected, tint = 0, axisR
           <extrudeGeometry args={[sh, { depth: len, bevelEnabled: false, steps: 1 }]} />
           <meshStandardMaterial key={surfaceKey(style)} color={color} metalness={0.35} roughness={0.5}
             {...surfaceMaterial(style)} />
-          <WireEdges style={style} color={color} />
         </mesh>
       ))}
     </group>
@@ -277,6 +376,28 @@ export function Slab3D({ corners, thickness, selected, shell, deck, style = 'sol
     return { fill, diag }
   }, [shell, corners])
 
+  // Skeleton mode: the panel's DIAGONALS, and not its outline.
+  //
+  // A panel's four edges run corner node to corner node — which is exactly
+  // where the beams framing it are already drawn. Outlining it too puts two
+  // lines through the same points in two different colours: they z-fight, and
+  // whichever loses is silently invisible. That was not theoretical — it ate
+  // the amber on a SELECTED girder, so clicking a beam in wireframe looked
+  // like it had done nothing.
+  //
+  // The X is the panel, then. It says a plate is here and which four nodes it
+  // spans without redrawing a single line the frame already owns.
+  const wireGeo = useMemo(() => {
+    if (corners.length < 4) return null
+    const [c0, c1, c2, c3] = corners
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.Float32BufferAttribute([
+      c0.x, c0.y, c0.z, c2.x, c2.y, c2.z,
+      c1.x, c1.y, c1.z, c3.x, c3.y, c3.z,
+    ], 3))
+    return g
+  }, [corners])
+
   if (shellGeo) {
     return (
       <group onClick={(e) => { e.stopPropagation(); onPick() }}>
@@ -289,15 +410,30 @@ export function Slab3D({ corners, thickness, selected, shell, deck, style = 'sol
     )
   }
 
+  if (style === 'wire' && wireGeo) {
+    return (
+      <group>
+        <lineSegments geometry={wireGeo}>
+          <lineBasicMaterial color={selected ? SEL : '#4a7fb5'} />
+        </lineSegments>
+        {/* Same invisible pick target as a member's — the outline is too thin
+            to click, and a panel has to stay selectable in wireframe. */}
+        <mesh position={[mid.x, mid.y - thick / 2, mid.z]}
+          onClick={(e) => { e.stopPropagation(); onPick() }}>
+          <boxGeometry args={[sx * 0.96, thick, sz * 0.96]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      </group>
+    )
+  }
+
   if (deckGeo) {
     return (
       <group onClick={(e) => { e.stopPropagation(); onPick() }}>
         <mesh position={[mid.x, mid.y - thick / 2, mid.z]}>
           <boxGeometry args={[sx * 0.96, thick, sz * 0.96]} />
           <meshStandardMaterial key={surfaceKey(style)} color={selected ? SEL : '#c8a06a'}
-            transparent opacity={style === 'wire' ? WIRE_OPACITY : selected ? 0.6 : 0.3}
-            depthWrite={style === 'solid'} />
-          <WireEdges style={style} color={selected ? SEL : '#7a4a1e'} />
+            transparent opacity={selected ? 0.6 : 0.3} depthWrite={style === 'solid'} />
         </mesh>
         <lineSegments geometry={deckGeo}>
           <lineBasicMaterial color={selected ? SEL : '#7a4a1e'} />
@@ -311,9 +447,7 @@ export function Slab3D({ corners, thickness, selected, shell, deck, style = 'sol
       onClick={(e) => { e.stopPropagation(); onPick() }}>
       <boxGeometry args={[sx * 0.96, thick, sz * 0.96]} />
       <meshStandardMaterial key={surfaceKey(style)} color={selected ? SEL : '#7ba6d4'}
-        transparent opacity={style === 'wire' ? WIRE_OPACITY : selected ? 0.85 : 0.45}
-        depthWrite={style === 'solid'} />
-      <WireEdges style={style} color={selected ? SEL : '#4a7fb5'} />
+        transparent opacity={selected ? 0.85 : 0.45} depthWrite={style === 'solid'} />
     </mesh>
   )
 }
