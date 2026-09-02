@@ -10,6 +10,8 @@
 import { type ReactNode } from 'react'
 import type { SolveProgress } from '../../engine/progress'
 import { LAT_DIRS, type Tab } from './tabs'
+import { useSyncExternalStore } from 'react'
+import { isCollapsed, sectionsSnapshot, subscribeSections, toggleSectionInStore } from './sectionState'
 
 /** Live solver-progress card: phase, detail, and a determinate (current/total)
  *  or indeterminate bar. Renders nothing when idle. */
@@ -57,20 +59,50 @@ export function DirPicker({ value, onChange }: { value: string[]; onChange: (v: 
 
 // ── Right-panel tabs ────────────────────────────────────────────────────────
 
-export function Sec({ title, hint, grid = true, children }: {
-  title: ReactNode; hint?: ReactNode; grid?: boolean; children: ReactNode
+/**
+ * A panel section: uppercase mini-title, no card chrome — hairline separation
+ * comes from the parent's divide-y.
+ *
+ * COLLAPSIBLE. The title row is the control: clicking it folds the section away
+ * and leaves the heading and its chevron, so a tab carrying ten sections can be
+ * reduced to the one being worked in. Which are folded is remembered in
+ * `sectionState` — see there for why that state does not live in this component.
+ *
+ * `id` defaults to the title, which is right for the three dozen sections whose
+ * title is a fixed string. It is NOT right where the title carries an element's
+ * name ("Member — bx1.1.1"): the key would change with the selection, so folding
+ * one member's panel would leave the next one open. Those callers pass an `id`.
+ */
+export function Sec({ id, title, hint, grid = true, children }: {
+  id?: string; title: ReactNode; hint?: ReactNode; grid?: boolean; children: ReactNode
 }) {
+  const key = id ?? (typeof title === 'string' ? title : '')
+  const state = useSyncExternalStore(subscribeSections, sectionsSnapshot, sectionsSnapshot)
+  const folded = isCollapsed(state, key)
   return (
     <section className="py-3.5">
       <div className="mb-2 flex items-baseline justify-between gap-2">
-        <p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">{title}</p>
+        <button type="button" onClick={() => toggleSectionInStore(key)} aria-expanded={!folded}
+          className="group flex min-w-0 items-baseline gap-1.5 text-left">
+          <span aria-hidden
+            className={`shrink-0 text-[8px] leading-none text-[#c3bdae] transition-transform group-hover:text-[#0f4c92] ${folded ? '' : 'rotate-90'}`}>
+            ▶
+          </span>
+          <span className="text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d] group-hover:text-[#0f4c92]">
+            {title}
+          </span>
+        </button>
         {hint && <span className="text-[10.5px] text-[#a39d8d]">{hint}</span>}
       </div>
       {/* Column count follows THE RAIL, not the viewport. `lg:` is where the
           panel stops being full-width and becomes a fixed 380 px column, so
           three columns there would be ~110 px per field — the widening of the
           viewport is exactly when the panel has least room. */}
-      {grid ? <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-2">{children}</div> : children}
+      {/* Unmounted rather than hidden: these sections hold live inputs and 3D
+          previews, and a folded one should cost nothing to keep folded. */}
+      {!folded && (grid
+        ? <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-2">{children}</div>
+        : children)}
     </section>
   )
 }
