@@ -868,23 +868,59 @@ function DirPicker({ value, onChange }: { value: string[]; onChange: (v: string[
 
 // ── Right-panel tabs ────────────────────────────────────────────────────────
 type Tab = 'geometry' | 'properties' | 'supports' | 'loading' | 'analysis' | 'modal' | 'pushover' | 'nonlinear' | 'design' | 'plans' | 'projects' | 'display'
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'geometry', label: 'Geometry' },
-  { id: 'properties', label: 'Properties' },
-  { id: 'supports', label: 'Supports' },
-  { id: 'loading', label: 'Loading' },
-  { id: 'analysis', label: 'Analysis' },
-  { id: 'modal', label: 'Modal' },
-  { id: 'pushover', label: 'Pushover' },
-  { id: 'nonlinear', label: 'Nonlinear' },
-  { id: 'design', label: 'Design' },
-  { id: 'plans', label: 'Plans' },
-  { id: 'projects', label: 'Projects' },
-  // Last, because it is not a step. Geometry → … → Design is a sequence each of
-  // whose tabs needs the ones before it; Display changes how the model is DRAWN
-  // and applies at whatever stage you are at, so it sits with the other
-  // non-steps rather than interrupting the order.
+/**
+ * The ribbon, in groups.
+ *
+ * Twelve tabs in one undifferentiated row is a list to be read rather than a
+ * shape to be recognised, and it hides the one thing about this page that is
+ * worth knowing before anything else: the tabs are a SEQUENCE. Three groups say
+ * what the sequence is — build a model, solve it, design from the results —
+ * each of which needs the one before it.
+ *
+ * Display and Projects are in neither: one changes how the model is drawn and
+ * the other opens a different model altogether, and both apply at whatever
+ * stage you are at. They sit past a divider on the right rather than
+ * interrupting the order, which is also why the guide can say "left to right"
+ * and be telling the truth.
+ *
+ * A group is a flex container of its own, so a narrow ribbon wraps between
+ * GROUPS rather than splitting one across two lines.
+ */
+const TAB_GROUPS: { label: string; tabs: { id: Tab; label: string }[] }[] = [
+  {
+    label: 'Model',
+    tabs: [
+      { id: 'geometry', label: 'Geometry' },
+      { id: 'properties', label: 'Properties' },
+      { id: 'supports', label: 'Supports' },
+      { id: 'loading', label: 'Loading' },
+    ],
+  },
+  {
+    label: 'Analyse',
+    tabs: [
+      { id: 'analysis', label: 'Analysis' },
+      { id: 'modal', label: 'Modal' },
+      { id: 'pushover', label: 'Pushover' },
+      { id: 'nonlinear', label: 'Nonlinear' },
+    ],
+  },
+  {
+    // "Results" rather than "Design", which would have put the word twice in a
+    // row over the tab of the same name — the label and the tab under it read
+    // as a stutter, which is visible the moment the ribbon is rendered. Both
+    // tabs here are where what came out is read: the schedules, and the sheets.
+    label: 'Results',
+    tabs: [
+      { id: 'design', label: 'Design' },
+      { id: 'plans', label: 'Plans' },
+    ],
+  },
+]
+/** Neither a step nor in sequence — see `TAB_GROUPS`. */
+const UTILITY_TABS: { id: Tab; label: string }[] = [
   { id: 'display', label: 'Display' },
+  { id: 'projects', label: 'Projects' },
 ]
 /** Flat panel section (3D Model Space mockup): uppercase mini-title, no card
  *  chrome — hairline separation comes from the parent's divide-y. */
@@ -922,6 +958,10 @@ function Swatches({ items }: { items: readonly (readonly [string, string])[] }) 
       ))}
     </div>
   )
+}
+/** Hairline between two ribbon groups. */
+function Rule() {
+  return <span aria-hidden className="mx-1.5 h-4 w-px shrink-0 bg-[#e3e1da]" />
 }
 function TabBtn({ id, label, active, onClick }: { id: Tab; label: string; active: boolean; onClick: (t: Tab) => void }) {
   return (
@@ -2315,8 +2355,23 @@ export default function ModelSpace() {
             itself sent `ml-auto` Guide to a second row on its own as soon as
             the tabs nearly filled the first — a lone button on an empty line,
             which reads as a mistake rather than as a layout. */}
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
-          {TABS.map((t) => <TabBtn key={t.id} id={t.id} label={t.label} active={tab === t.id} onClick={pickTab} />)}
+        {/* Gap separates the LABELLED groups — their own labels already mark
+            where each begins, and a rule between them dangles at the start of
+            the line whenever the ribbon wraps there, which is what 1150 px
+            showed. The one rule that stays is before the utilities, which have
+            no label to do the separating. */}
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3.5 gap-y-1">
+          {TAB_GROUPS.map((g) => (
+            <div key={g.label} role="group" aria-label={g.label}
+              className="flex flex-wrap items-center gap-0.5">
+              <span className="mr-0.5 text-[9.5px] font-bold uppercase tracking-[.14em] text-[#a39d8d]">{g.label}</span>
+              {g.tabs.map((t) => <TabBtn key={t.id} id={t.id} label={t.label} active={tab === t.id} onClick={pickTab} />)}
+            </div>
+          ))}
+          <div className="flex flex-wrap items-center gap-0.5">
+            <Rule />
+            {UTILITY_TABS.map((t) => <TabBtn key={t.id} id={t.id} label={t.label} active={tab === t.id} onClick={pickTab} />)}
+          </div>
         </div>
         <TourButton onClick={tour.start} label="Guide" />
       </div>
@@ -4680,7 +4735,6 @@ export default function ModelSpace() {
               </Sec>
             </div>
           )}
-          {tab === 'projects' && <ProjectsPanel />}
 
           {tab === 'plans' && model && (
             <div className="px-4 py-3" data-tour="plans-panel">
@@ -4815,6 +4869,8 @@ export default function ModelSpace() {
             </Sec>
           </div>
           )}
+
+          {tab === 'projects' && <ProjectsPanel />}
 
         </div>
       </div>

@@ -13,14 +13,20 @@ export const MODEL_TOOLS: DocTool[] = [
       {
         id: 'ms-toolbar',
         title: 'Top toolbar',
-        body: 'Always visible, above the viewport. These run the whole model rather than one panel.',
+        body: 'Always visible, above the viewport: the actions that apply to the whole page rather than to one panel. Running the model is NOT here — Analyze lives on the Analysis tab and Design structure on the Design tab, each beside the results it produces.',
         controls: [
-          { kind: 'button', name: '▶ Analyze', what: 'Runs the 3D FEM over every NSCP load combination, plus the storey-drift and irregularity checks when a seismic case exists. Runs in a Web Worker, so the page stays responsive; results populate the Analysis tab.' },
-          { kind: 'button', name: 'Design all', what: 'Analyses, then designs every member — RC beams/columns, steel members, timber, footings, connections, shear walls — and fills the Design tab and schedules.' },
           { kind: 'button', name: '⎙ Export PDF', what: 'Builds the full calculation report: project data, governing combination, every schedule with its worked solution, drawings and the bill of quantities.' },
           { kind: 'button', name: 'Import / Export ▾', what: 'Saves the model to a JSON file or loads one back. Also offers CSV import of nodes/members.' },
           { kind: 'choice', name: 'CSV units', what: 'Whether coordinates in an imported CSV are metres or millimetres. Set this before importing — it is applied at parse time.' },
           { kind: 'output', name: 'autosaved', what: 'The model is written to browser storage on every edit; the badge confirms the last save. Clearing site data discards it, so export anything you need to keep.' },
+        ],
+      },
+      {
+        id: 'ms-ribbon',
+        title: 'Tab ribbon',
+        body: 'The full-width row under the header, in three labelled groups plus two utilities. The groups are the sequence — MODEL builds the frame, ANALYSE solves it, RESULTS is where the design and the drawings are read — and each needs the one before it. Display and Projects sit past the divider on the right because they are neither: one changes how the model is drawn, the other opens a different model, and both apply at whatever stage you are at.',
+        controls: [
+          { kind: 'button', name: 'Guide', what: 'Starts the guided walkthrough, which visits the tabs in the order the ribbon shows them.' },
         ],
       },
       {
@@ -36,7 +42,7 @@ export const MODEL_TOOLS: DocTool[] = [
       {
         id: 'ms-display',
         title: 'Display',
-        body: 'The overlays the viewport draws. Its own tab, last in the ribbon because it is not a step in the sequence — and the toggles stay on whatever tab you switch to afterwards, because what the 3D view is drawing is not a property of which tab is open. Each toggle carries its own colour key, and says what it is waiting for when it has nothing to draw yet.',
+        body: 'The overlays the viewport draws. Its own tab, past the divider on the right of the ribbon because it is not a step in the sequence — and the toggles stay on whatever tab you switch to afterwards, because what the 3D view is drawing is not a property of which tab is open. Each toggle carries its own colour key, and says what it is waiting for when it has nothing to draw yet.',
         controls: [
           { kind: 'toggle', name: 'Show load diagrams on the model', what: 'Draws the applied loads as arrows on the model. The key below it names the load categories present, one colour each.' },
           { kind: 'toggle', name: 'Show designed footings to scale', what: 'Draws each designed footing at its computed plan size. Overlapping footings are highlighted, which is the cue to switch to a combined footing.' },

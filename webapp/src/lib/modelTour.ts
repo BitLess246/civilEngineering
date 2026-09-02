@@ -41,8 +41,8 @@ export const MODEL_STEPS: readonly TourStep[] = [
     tab: 'geometry',
     anchor: 'tab-bar',
     title: 'The tabs are a sequence, not a menu',
-    body: 'Geometry → Properties → Supports → Loading → Analysis → Design. Each tab needs the ones before it, so they are worked left to right.',
-    why: 'Modal, Pushover and Nonlinear are extra analyses rather than steps — skip them until a static solve works. Esc leaves the guide at any point.',
+    body: 'Three labelled groups, worked left to right: MODEL builds the frame, ANALYSE solves it, RESULTS is where the design and the drawings are read. Each group needs the one before it.',
+    why: 'Past the divider on the right, Display and Projects are in no group because they are not steps — one changes how the model is drawn, the other opens a different model, and both apply at whatever stage you are at. Within ANALYSE, only Analysis is a step: Modal, Pushover and Nonlinear are extra analyses, so skip them until a static solve works. Esc leaves the guide at any point.',
   },
   {
     id: 'grid',
