@@ -113,6 +113,14 @@ export const MODEL_STEPS: readonly TourStep[] = [
     body: 'Framing and foundation plans, footing details and the bill of quantities are generated from the model and the design — not redrawn. Every sheet exports to SVG.',
   },
   {
+    id: 'display',
+    tab: 'display',
+    anchor: 'display-panel',
+    title: 'What the viewport draws is set on its own tab',
+    body: 'Load arrows, force diagrams along each member, and — once the structure is designed — footings at their real size, steel connections and the bar cages themselves. Each toggle carries its own colour key.',
+    why: 'The toggles stay on whatever you switch to afterwards: what the 3D view is drawing is not a property of which tab is open. Display is last in the ribbon because it is not a step — it applies at whatever stage you are at.',
+  },
+  {
     id: 'io',
     anchor: 'io-menu',
     title: 'Save the model before you close the tab',

@@ -26,14 +26,23 @@ export const MODEL_TOOLS: DocTool[] = [
       {
         id: 'ms-viewport',
         title: 'Viewport',
-        body: 'The 3D scene. Orbit by dragging, pan with Shift+drag, zoom with the scroll wheel. Clicking a member or slab selects it and opens its detail panel.',
+        body: 'The 3D scene. Orbit by dragging, pan with Shift+drag, zoom with the scroll wheel. Clicking a member or slab selects it and opens its detail panel. What the scene DRAWS is set on the Display tab, not here.',
         controls: [
-          { kind: 'toggle', name: 'Show load diagrams on the model', what: 'Draws the applied loads as arrows on the model. The D / L chips beside it choose which load category is shown.' },
-          { kind: 'toggle', name: 'Show designed footings to scale', what: 'Draws each designed footing at its computed plan size. Overlapping footings are highlighted, which is the cue to switch to a combined footing.' },
-          { kind: 'toggle', name: 'Show connections', what: 'Draws the designed steel joints at their nodes.' },
           { kind: 'output', name: 'Member tint', what: 'Members are shaded red in proportion to |M| relative to the model maximum for the governing combination — a quick read of where the demand is.' },
           { kind: 'output', name: 'Dashed red sleeve', what: 'Marks a tension/compression-only member that dropped out of the governing combination\'s active set.' },
           { kind: 'output', name: 'Purple arm', what: 'A rigid end offset between a node and the flexible member end.' },
+        ],
+      },
+      {
+        id: 'ms-display',
+        title: 'Display',
+        body: 'The overlays the viewport draws. Its own tab, last in the ribbon because it is not a step in the sequence — and the toggles stay on whatever tab you switch to afterwards, because what the 3D view is drawing is not a property of which tab is open. Each toggle carries its own colour key, and says what it is waiting for when it has nothing to draw yet.',
+        controls: [
+          { kind: 'toggle', name: 'Show load diagrams on the model', what: 'Draws the applied loads as arrows on the model. The key below it names the load categories present, one colour each.' },
+          { kind: 'toggle', name: 'Show designed footings to scale', what: 'Draws each designed footing at its computed plan size. Overlapping footings are highlighted, which is the cue to switch to a combined footing.' },
+          { kind: 'toggle', name: 'Show designed steel connections', what: 'Draws the designed steel joints at their nodes — plates in slate, bolts and welds in gold.' },
+          { kind: 'toggle', name: 'Show reinforcement cages', what: 'Draws the designed bars in 3D, colour-coded by role, with the concrete shown see-through. Needs a design first; any detailing decision the cage builder had to make is listed underneath.' },
+          { kind: 'choice', name: 'Force diagram', what: 'Draws N, Vy, Vz, My, Mz or T along every member for the governing combination, with a scale slider. Available once the analysis has run.' },
         ],
       },
       {
