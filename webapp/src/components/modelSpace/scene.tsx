@@ -12,7 +12,8 @@
 import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { SceneText } from '../../components/SceneText'
-import { ghostKey, ghostMaterial } from '../../components/ghostMaterial'
+import { Edges } from '@react-three/drei'
+import { surfaceKey, surfaceMaterial, WIRE_OPACITY, type SurfaceStyle } from './viewMode'
 import { flightSolid, type PlacedStair } from '../../engine/stairPlacement'
 import * as THREE from 'three'
 import type { StructuralModel, WoodDeck } from '../../engine/model'
@@ -24,14 +25,34 @@ import { shapeByName, effectiveSection } from '../../engine/aiscSections'
 import { buildSectionShapes } from '../../lib/sectionShapes3d'
 import { ROLE_COLOR, SEL, LOAD_COLOR, levelDrop, DIAG_COLOR, UP, TRIB_COLOR, slabTributaryPolys, type TribKind } from './sceneTokens'
 
-export function Member3D({ a, b, role, selected, tint = 0, sec, ghost = false, onPick }: {
+/**
+ * The EDGES of the mesh this sits inside, drawn only in wireframe.
+ *
+ * Nothing in solid or ghost mode — a returned `null` mounts no line geometry at
+ * all, rather than a hidden one per member on a model that is thousands of
+ * them.
+ *
+ * The edges carry the shape in wireframe; the face behind them is left at a
+ * few per cent (`WIRE_OPACITY`) so a click still picks the member and the eye
+ * can still tell which side of a column it is looking at. `threshold` is the
+ * angle below which two faces count as one surface: 15° keeps a box to its
+ * twelve real edges instead of drawing the triangulation diagonal across every
+ * face, which is what a raw `wireframe: true` material would have given.
+ */
+function WireEdges({ style, color }: { style: SurfaceStyle; color: string }) {
+  if (style !== 'wire') return null
+  return <Edges threshold={15} color={color} />
+}
+
+export function Member3D({ a, b, role, selected, tint = 0, sec, style = 'solid', onPick }: {
   a: THREE.Vector3; b: THREE.Vector3; role: string; selected: boolean
   /** 0–1 utilisation tint (|M| relative to the model max) after analysis. */
   tint?: number
   /** the member's own section, drawn to scale (mm → m). */
   sec?: { b: number; h: number; material?: string }
-  /** Draw the concrete see-through, so the cage inside it is visible. */
-  ghost?: boolean
+  /** Solid concrete, ghosted (a cage is being read through it) or wireframe —
+   *  see `viewMode`, which decides which of the three this is. */
+  style?: SurfaceStyle
   onPick: () => void
 }) {
   const { mid, quat, len } = useMemo(() => {
@@ -54,13 +75,14 @@ export function Member3D({ a, b, role, selected, tint = 0, sec, ghost = false, o
     <mesh position={[mid.x, mid.y - drop, mid.z]} quaternion={quat}
       onClick={(e) => { e.stopPropagation(); onPick() }}>
       <boxGeometry args={[len, ty, tz]} />
-      {/* Ghosted while the cages are shown — solid concrete hides the steel
-          inside it, which made "show reinforcement cages" look like it did
-          nothing at all. The `key` is what makes the toggle work rather than
-          merely look wired: three will not apply a transparent false → true
-          change to a material that already exists, so the material has to be
-          rebuilt. See components/ghostMaterial.ts. */}
-      <meshStandardMaterial key={ghostKey(ghost)} color={color} {...ghostMaterial(ghost)} />
+      {/* See-through while the cages are shown, and again in wireframe — solid
+          concrete hides the steel inside it, which made "show reinforcement
+          cages" look like it did nothing at all. The `key` is what makes the
+          change work rather than merely look wired: three will not apply a
+          transparent false → true change to a material that already exists, so
+          the material has to be rebuilt. See modelSpace/viewMode.ts. */}
+      <meshStandardMaterial key={surfaceKey(style)} color={color} {...surfaceMaterial(style)} />
+      <WireEdges style={style} color={color} />
     </mesh>
   )
 }
@@ -125,11 +147,14 @@ export function SlackMember3D({ a, b }: { a: THREE.Vector3; b: THREE.Vector3 }) 
  *  extrude (+Z) runs along the member and its strong axis (depth d) stays
  *  vertical for beams/girders. Falls back to the box Member3D if the shape is
  *  unknown. */
-export function MemberSteel3D({ a, b, role, shapeName, selected, tint = 0, axisRotation, onPick }: {
+export function MemberSteel3D({ a, b, role, shapeName, selected, tint = 0, axisRotation, style = 'solid', onPick }: {
   a: THREE.Vector3; b: THREE.Vector3; role: string; shapeName: string
   selected: boolean; tint?: number
   /** Explicit local-axis rotation (°). Absent ⇒ the role default (columns 90). */
   axisRotation?: number
+  /** See `viewMode`. A steel section wireframes to its own profile outline,
+   *  which is the one drawing where the shape is still readable end-on. */
+  style?: SurfaceStyle
   onPick: () => void
 }) {
   const { shapes, quat, pos, len } = useMemo(() => {
@@ -165,14 +190,16 @@ export function MemberSteel3D({ a, b, role, shapeName, selected, tint = 0, axisR
   }, [selected, tint])
 
   if (shapes.length === 0) {
-    return <Member3D a={a} b={b} role={role} selected={selected} tint={tint} onPick={onPick} />
+    return <Member3D a={a} b={b} role={role} selected={selected} tint={tint} style={style} onPick={onPick} />
   }
   return (
     <group position={pos} quaternion={quat} onClick={(e) => { e.stopPropagation(); onPick() }}>
       {shapes.map((sh, i) => (
         <mesh key={i}>
           <extrudeGeometry args={[sh, { depth: len, bevelEnabled: false, steps: 1 }]} />
-          <meshStandardMaterial color={color} metalness={0.35} roughness={0.5} />
+          <meshStandardMaterial key={surfaceKey(style)} color={color} metalness={0.35} roughness={0.5}
+            {...surfaceMaterial(style)} />
+          <WireEdges style={style} color={color} />
         </mesh>
       ))}
     </group>
@@ -185,9 +212,13 @@ export function MemberSteel3D({ a, b, role, shapeName, selected, tint = 0, axisR
  */
 const SLAB_FALLBACK_T = 0.125
 
-export function Slab3D({ corners, thickness, selected, shell, deck, onPick }: {
+export function Slab3D({ corners, thickness, selected, shell, deck, style = 'solid', onPick }: {
   corners: THREE.Vector3[]; thickness?: number
-  selected: boolean; shell?: boolean; deck?: WoodDeck; onPick: () => void
+  selected: boolean; shell?: boolean; deck?: WoodDeck
+  /** See `viewMode`. A floor is the largest thing in the model and the one
+   *  that hides most of what is under it, so it wireframes with the rest. */
+  style?: SurfaceStyle
+  onPick: () => void
 }) {
   // The node line of a floor is the TOP of the beams framing into it — see
   // `levelDrop` — so it is the top of the SLAB too: a floor is one surface, and
@@ -263,7 +294,10 @@ export function Slab3D({ corners, thickness, selected, shell, deck, onPick }: {
       <group onClick={(e) => { e.stopPropagation(); onPick() }}>
         <mesh position={[mid.x, mid.y - thick / 2, mid.z]}>
           <boxGeometry args={[sx * 0.96, thick, sz * 0.96]} />
-          <meshStandardMaterial color={selected ? SEL : '#c8a06a'} transparent opacity={selected ? 0.6 : 0.3} />
+          <meshStandardMaterial key={surfaceKey(style)} color={selected ? SEL : '#c8a06a'}
+            transparent opacity={style === 'wire' ? WIRE_OPACITY : selected ? 0.6 : 0.3}
+            depthWrite={style === 'solid'} />
+          <WireEdges style={style} color={selected ? SEL : '#7a4a1e'} />
         </mesh>
         <lineSegments geometry={deckGeo}>
           <lineBasicMaterial color={selected ? SEL : '#7a4a1e'} />
@@ -276,7 +310,10 @@ export function Slab3D({ corners, thickness, selected, shell, deck, onPick }: {
     <mesh position={[mid.x, mid.y - thick / 2, mid.z]}
       onClick={(e) => { e.stopPropagation(); onPick() }}>
       <boxGeometry args={[sx * 0.96, thick, sz * 0.96]} />
-      <meshStandardMaterial color={selected ? SEL : '#7ba6d4'} transparent opacity={selected ? 0.85 : 0.45} />
+      <meshStandardMaterial key={surfaceKey(style)} color={selected ? SEL : '#7ba6d4'}
+        transparent opacity={style === 'wire' ? WIRE_OPACITY : selected ? 0.85 : 0.45}
+        depthWrite={style === 'solid'} />
+      <WireEdges style={style} color={selected ? SEL : '#4a7fb5'} />
     </mesh>
   )
 }
@@ -399,9 +436,11 @@ export function GridBubbles3D({ model }: { model: StructuralModel }) {
  *  footprints are visible. bx/bz = plan dimensions (m), dc = depth (m), angle =
  *  plan rotation about Y (combined footings follow the column axis). Overlapping
  *  footings are tinted red. */
-export function Footing3D({ cx, cz, bx, bz, bz1, bz2, dc, yTop = 0, angle = 0, overlap = false, label }: {
+export function Footing3D({ cx, cz, bx, bz, bz1, bz2, dc, yTop = 0, angle = 0, overlap = false, label, style = 'solid' }: {
   cx: number; cz: number; bx: number; bz: number; bz1?: number; bz2?: number
   dc: number
+  /** See `viewMode`. */
+  style?: SurfaceStyle
   /** Level of the pad's TOP, m. Below grade by the pedestal the column runs
    *  down through — the pad was drawn with its top pinned to y = 0, so a pad
    *  founded 1.5 m down appeared at the surface with nothing under the column. */
@@ -423,8 +462,10 @@ export function Footing3D({ cx, cz, bx, bz, bz1, bz2, dc, yTop = 0, angle = 0, o
     <group position={[cx, yTop - dc / 2, cz]} rotation={[0, -angle, 0]}>
       <mesh geometry={geom ?? undefined}>
         {!geom && <boxGeometry args={[bx, dc, bz]} />}
-        <meshStandardMaterial color={overlap ? '#dc2626' : '#b45309'} transparent opacity={overlap ? 0.6 : 0.45}
-          side={THREE.DoubleSide} />
+        <meshStandardMaterial key={surfaceKey(style)} color={overlap ? '#dc2626' : '#b45309'}
+          transparent opacity={style === 'wire' ? WIRE_OPACITY : overlap ? 0.6 : 0.45}
+          depthWrite={style === 'solid'} side={THREE.DoubleSide} />
+        <WireEdges style={style} color={overlap ? '#991b1b' : '#7c2d12'} />
       </mesh>
       {label && (
         <SceneText position={[0, dc / 2 + 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]} fontSize={0.32}
@@ -483,7 +524,7 @@ export function Wall3D({ tA, tB, bA, bB, shear }: { tA: THREE.Vector3; tB: THREE
  * Translucent like the walls, because the flight is NOT in the analysis: it is
  * load on the two members it bears on, not stiffness in the frame.
  */
-export function Stair3D({ p }: { p: PlacedStair }) {
+export function Stair3D({ p, style = 'solid' }: { p: PlacedStair; style?: SurfaceStyle }) {
   const geo = useMemo(() => {
     // The solid is worked out in `stairPlacement` — including the waist being
     // measured NORMAL to the soffit — so it can be checked without a renderer.
@@ -525,11 +566,17 @@ export function Stair3D({ p }: { p: PlacedStair }) {
   return (
     <group>
       <mesh geometry={geo.waist}>
-        <meshStandardMaterial color="#94a3b8" transparent opacity={0.5} side={THREE.DoubleSide} roughness={0.8} />
+        <meshStandardMaterial key={surfaceKey(style)} color="#94a3b8"
+          transparent opacity={style === 'wire' ? WIRE_OPACITY : 0.5}
+          depthWrite={style === 'solid'} side={THREE.DoubleSide} roughness={0.8} />
+        <WireEdges style={style} color="#64748b" />
       </mesh>
       {geo.steps.map((g, i) => (
         <mesh key={i} geometry={g}>
-          <meshStandardMaterial color="#cbd5e1" transparent opacity={0.42} roughness={0.9} />
+          <meshStandardMaterial key={surfaceKey(style)} color="#cbd5e1"
+            transparent opacity={style === 'wire' ? WIRE_OPACITY : 0.42}
+            depthWrite={style === 'solid'} roughness={0.9} />
+          <WireEdges style={style} color="#94a3b8" />
         </mesh>
       ))}
     </group>
