@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { scrollTop } from '../lib/useScrollTop'
 import { endDrops } from '../lib/baseDrop'
 import { Link, useSearchParams } from 'react-router-dom'
@@ -18,6 +18,7 @@ import { ProjectsPanel } from '../components/ProjectsPanel'
 // The session keys are shared with the Projects panel, which saves and
 // restores exactly what the page autosaves — see lib/modelSpaceSession.
 import { AUTOSAVE_KEY, INPUTS_KEY } from '../lib/modelSpaceSession'
+import { emptyHistory, recordHistory, undoHistory, redoHistory, isTypingTarget, type History } from '../lib/history'
 import * as THREE from 'three'
 import { generateGridModel, removeElements, removeNode, buildGravityLoads, splitSharedSections } from '../engine/modelBuilder'
 import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole, MemberReleases, NodeSupport, SupportFixity, WoodDeck, StairLanding } from '../engine/model'
@@ -1269,6 +1270,16 @@ export default function ModelSpace() {
    * `react-hooks/set-state-in-effect` is there to stop.
    */
   const [armDelete, setArmDelete] = useState<string | null>(null)
+  /**
+   * Whether the viewport's navigation hint has been earned out.
+   *
+   * "orbit: drag · pan: ⇧drag · zoom: scroll" was pinned to the canvas forever,
+   * so it went on telling someone who had been orbiting for an hour how to
+   * orbit. It fades on the first real camera interaction — which is the proof
+   * that it has been read — and stays gone: knowing how to orbit is not a fact
+   * you can stop knowing when the model changes.
+   */
+  const [navHintDone, setNavHintDone] = useState(false)
   // Thermal load inputs
   const [thMember, setThMember] = useState('')
   const [thDeltaT, setThDeltaT] = useState(30)
@@ -1426,6 +1437,7 @@ export default function ModelSpace() {
     return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up) }
   }, [])
 
+
   // Persist the design inputs so a reload restores them alongside the autosaved
   // model (keeps the Geometry/Properties tabs + report inputs in sync with it).
   useEffect(() => {
@@ -1448,7 +1460,21 @@ export default function ModelSpace() {
     material, colFam, girFam, beaFam, colShape, girShape, beaShape, steelFy, steelFu,
     woodSpeciesId, woodGrade, woodWet, matSource, customId])
 
-  const save = (m: StructuralModel | null) => {
+  /**
+   * Undo history — see `lib/history`. Holds the models that CAME BEFORE; the
+   * present is `model` itself, so there is only ever one copy of it.
+   */
+  const [hist, setHist] = useState<History<StructuralModel | null>>(emptyHistory)
+
+  /**
+   * Put a model on screen: state, autosave, and every derived result dropped
+   * because it belonged to the model being replaced.
+   *
+   * Split out of `save` so that undo can restore a model WITHOUT recording the
+   * restore as a new edit — which would push the value you just left onto the
+   * past and make undo a loop between two models.
+   */
+  const applyModel = useCallback((m: StructuralModel | null) => {
     setModel(m)
     setAnalysis(null)             // geometry changed — results are stale
     setModal(null)
@@ -1462,7 +1488,50 @@ export default function ModelSpace() {
       if (m) sessionStorage.setItem(AUTOSAVE_KEY, JSON.stringify(m))
       else sessionStorage.removeItem(AUTOSAVE_KEY)
     } catch { /* quota — ignore */ }
+    // Every dependency is a setState function, which React keeps stable — so
+    // this identity never changes and the key handler below rebinds only when
+    // the history or the model actually moves.
+  }, [])
+
+  /** An EDIT: what is on screen becomes undoable, then the new model applies. */
+  const save = (m: StructuralModel | null) => {
+    setHist((h) => recordHistory(h, model))
+    applyModel(m)
   }
+
+  // Memoised on the history and the model, because the keyboard handler below
+  // takes them as dependencies: bound once it would close over the first
+  // render's history and undo the same step forever, and rebound every render
+  // it would swap the listener on every keystroke elsewhere on the page.
+  const undo = useCallback(() => {
+    const step = undoHistory(hist, model)
+    if (!step) return
+    setHist(step.history)
+    applyModel(step.value)
+    setSelected(null)          // the selected id may not exist in that model
+  }, [hist, model, applyModel])
+  const redo = useCallback(() => {
+    const step = redoHistory(hist, model)
+    if (!step) return
+    setHist(step.history)
+    applyModel(step.value)
+    setSelected(null)
+  }, [hist, model, applyModel])
+
+  // ⌘Z / ⌃Z and ⌘⇧Z / ⌃Y. Not while typing: inside a number field ⌘Z is the
+  // browser's own undo of the characters, and taking it would make an edit to
+  // a bay width impossible to unpick a character at a time.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return
+      if (isTypingTarget(e.target)) return
+      const k = e.key.toLowerCase()
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
+      else if ((k === 'z' && e.shiftKey) || k === 'y') { e.preventDefault(); redo() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [undo, redo])
 
   /** save() for node-load-only edits (E/W case generation): mass and stiffness
    *  are untouched, so the modal result — which Method B and the RSA E-cases
@@ -2375,6 +2444,16 @@ export default function ModelSpace() {
           </div>
           <input ref={fileRef} type="file" accept=".json" className="sr-only"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f) }} />
+          <div className="flex items-center">
+            {([['↶', 'Undo', undo, hist.past.length], ['↷', 'Redo', redo, hist.future.length]] as const).map(([glyph, label, run, depth], i) => (
+              <button key={label} type="button" onClick={run} disabled={depth === 0}
+                title={`${label} (${label === 'Undo' ? '⌘Z' : '⌘⇧Z'}) — ${depth} step${depth === 1 ? '' : 's'}`}
+                aria-label={label}
+                className={`border border-[#d6d3c9] bg-white px-2.5 py-2 text-[13px] font-semibold text-[#3d4a5c] hover:border-[#0f4c92] hover:text-[#0f4c92] disabled:opacity-35 ${i === 0 ? 'rounded-l-md' : '-ml-px rounded-r-md'}`}>
+                {glyph}
+              </button>
+            ))}
+          </div>
           <button type="button" onClick={() => void exportPdf()} disabled={!design || exporting || !reportsGate.allowed}
             title={!reportsGate.allowed ? reportsGate.message
               : design ? 'Download the calculation report as a PDF' : 'Run “Design structure” in the Design tab first'}
@@ -2419,10 +2498,18 @@ export default function ModelSpace() {
       {/* ── Main split: the viewport takes the width, the controls a fixed rail
           (mockup: minmax(0,1fr) 360px). At 3fr/2fr the panel ran to about 660 px
           and the page named after its 3D view gave that view 60% of the screen. ── */}
-      <div className="mt-3 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_380px] lg:items-start">
+      {/* Both columns are as tall as the space under the ribbon and each
+          scrolls its OWN content. The page was one column: header, ribbon,
+          canvas, panel and the entire report stack, so reading a schedule
+          scrolled the 3D view off the top of the screen — on the page whose
+          subject is that view. The viewport was already `sticky`, which is the
+          same intent written in a way that only worked while nothing above it
+          moved. The report below still scrolls the page normally; it is a
+          document, and it should. */}
+      <div className="mt-3 grid grid-cols-1 gap-4 lg:h-[calc(100vh-9.5rem)] lg:min-h-[520px] lg:grid-cols-[minmax(0,1fr)_380px]">
         {/* LEFT — sticky 3D viewport */}
-        <div className="no-print lg:sticky lg:top-4">
-          <div className="relative h-[80vh] min-h-[460px] overflow-hidden rounded-lg border border-[#e3e1da] bg-[#0f1b2a]">
+        <div className="no-print lg:flex lg:min-h-0 lg:flex-col">
+          <div className="relative h-[80vh] min-h-[460px] overflow-hidden rounded-lg border border-[#e3e1da] bg-[#0f1b2a] lg:h-full lg:min-h-0">
             {model ? (
               <Canvas camera={{ position: [14, 11, 14], fov: 45 }} gl={{ preserveDrawingBuffer: true }} onPointerMissed={() => setSelected(null)}>
                 {/* Outer net only: it stops ANY suspension in here from bubbling
@@ -2567,7 +2654,8 @@ export default function ModelSpace() {
                     amp={modeAmp}
                   />
                 )}
-                <OrbitControls ref={controlsRef} makeDefault enablePan target={[6, 3, 2.5]} />
+                <OrbitControls ref={controlsRef} makeDefault enablePan target={[6, 3, 2.5]}
+                  onStart={() => setNavHintDone(true)} />
                 </Suspense>
               </Canvas>
             ) : (
@@ -2583,7 +2671,8 @@ export default function ModelSpace() {
               </div>
             )}
             {model && (
-              <div className="no-print pointer-events-none absolute left-3 top-3 rounded border border-white/15 bg-[#0f1b2a]/80 px-2 py-1 font-mono text-[10px] text-[#9db0c5]">
+              <div aria-hidden={navHintDone}
+                className={`no-print pointer-events-none absolute left-3 top-3 rounded border border-white/15 bg-[#0f1b2a]/80 px-2 py-1 font-mono text-[10px] text-[#9db0c5] transition-opacity duration-700 ${navHintDone ? 'opacity-0' : 'opacity-100'}`}>
                 orbit: drag · pan: ⇧drag · zoom: scroll
               </div>
             )}
@@ -2594,7 +2683,7 @@ export default function ModelSpace() {
             sections (mockup). The tab bar is NOT here: it is the ribbon under
             the header, so switching tabs does not depend on how wide this rail
             happens to be. */}
-        <div className="no-print overflow-hidden rounded-lg border border-[#e3e1da] bg-white">
+        <div className="no-print overflow-hidden rounded-lg border border-[#e3e1da] bg-white lg:flex lg:min-h-0 lg:flex-col lg:overflow-y-auto">
           {/* ── SELECTION — what is picked, wherever you are ────────────────
               This detail already existed, at the BOTTOM of the Analysis tab.
               So clicking a member in the 3D view gave you a chip on the canvas
