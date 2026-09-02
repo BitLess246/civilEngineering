@@ -1698,7 +1698,7 @@ export default function ModelSpace() {
           {(selMember || selPlate) && (
             <div className="divide-y divide-[#eeece5] border-b border-[#eeece5] bg-[#fbfaf7] px-4 py-1">
             {selMember && model && (
-              <Sec grid={false} title={`Member — ${selMember.id}`}>
+              <Sec id="sel-member" grid={false} title={`Member — ${selMember.id}`}>
                 <Row label="Role" value={selMember.role} />
                 <Row label="Length" value={`${f2(memberLen)} m`} />
                 <Row label="Section" value={sectionFor(selMember.id)?.name ?? selMember.section} />
@@ -1767,7 +1767,7 @@ export default function ModelSpace() {
             )}
 
             {selPlate && plateInfo && model && (
-              <Sec grid={false} title={`Slab — ${selPlate.id}`}>
+              <Sec id="sel-slab" grid={false} title={`Slab — ${selPlate.id}`}>
                 <Row label="Panel" value={`${f2(plateInfo.lx)} × ${f2(plateInfo.lz)} m`}
                   sub={`t = ${selPlate.thickness} mm`} />
                 {plateInfo.areaLoads.map((l, i) => (
@@ -1829,12 +1829,10 @@ export default function ModelSpace() {
               )}
 
               {model && (
-                <div className="py-3.5">
-                  <div className="mb-2 flex items-center justify-between">
-                    <h3 className="text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Nodes</h3>
+                <Sec grid={false} title="Nodes" hint={<>
                     <button type="button" onClick={addNode}
                       className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50">+ Add node</button>
-                  </div>
+                </>}>
                   <div className="max-h-72 overflow-auto">
                     <table className="w-full border-collapse text-xs">
                       <thead>
@@ -1872,12 +1870,11 @@ export default function ModelSpace() {
                     </table>
                   </div>
                   <p className="mt-1 text-[11px] text-slate-500">Coordinates in m (y = up). Removing a node also removes everything attached to it.</p>
-                </div>
+                </Sec>
               )}
 
               {model && (
-                <div className="py-3.5">
-                  <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Beams &amp; columns</h3>
+                <Sec grid={false} title="Beams & columns">
                   <div className="max-h-72 overflow-auto">
                     <table className="w-full border-collapse text-xs">
                       <thead>
@@ -2126,13 +2123,12 @@ export default function ModelSpace() {
                       </div>
                     )
                   })()}
-                </div>
+                </Sec>
               )}
 
               {/* ── Plates (slabs) ── */}
               {model && (
-                <div className="py-3.5">
-                  <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Slabs / plates</h3>
+                <Sec grid={false} title="Slabs / plates">
                   {model.plates.filter((p) => p.role !== 'wall').length === 0 ? (
                     <p className="text-xs text-slate-500">No slabs — generate a grid or add members forming closed panels.</p>
                   ) : (
@@ -2167,13 +2163,12 @@ export default function ModelSpace() {
                     </div>
                   )}
                   <p className="mt-1 text-[11px] text-slate-500">Thickness drives slab self-weight (t·γc) → tributary line loads on the edge beams.</p>
-                </div>
+                </Sec>
               )}
 
               {/* ── Walls ── */}
-              {model && (
-                <div className="py-3.5">
-                  <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Walls (on beams)</h3>
+              {model && (<>
+                <Sec grid={false} title="Walls (on beams)">
                   {(model.walls ?? []).length > 0 && (
                     <div className="mb-2 max-h-48 overflow-auto">
                       <table className="w-full border-collapse text-xs">
@@ -2225,7 +2220,9 @@ export default function ModelSpace() {
                   </div>
                   <p className="mt-1 text-[11px] text-slate-500">A wall adds its self-weight (t·h·γc) as a line load on the chosen beam. A “shear wall” also braces the storey below it — modelled as an equivalent X of diagonal struts (shear + flexure stiffness) so it carries seismic/wind in the analysis.</p>
 
-                  <h3 className="mb-2 mt-4 text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Stairs (between two beams)</h3>
+                </Sec>
+
+                <Sec grid={false} title="Stairs (between two beams)">
                   {(model.stairs ?? []).length > 0 && (
                     <div className="mb-2 max-h-48 overflow-auto">
                       <table className="w-full border-collapse text-xs">
@@ -2318,8 +2315,8 @@ export default function ModelSpace() {
                     })()}
                   </div>
                   <p className="mt-1 text-[11px] text-slate-500">A flight is placed by the two beams it bears on: the rise and run come from where they are, and R = rise/risers, G = run/risers, so the risers are equal by construction. A <strong>half-landing</strong> at either end is part of the same one-way slab, so it eats into the run and the flight climbs the same rise over what is left — and the beam at that end is the <strong>landing beam</strong> the stair breaks on. Between floors that is two flights meeting on a beam at mid height, with the landing given to ONE of them: modelled on both, the same slab is in the frame twice. Its weight reaches the frame as reactions on those two beams — the flight itself is NOT meshed, so it adds no stiffness. That is conservative for the frame and not for the stair, which in reality braces the storey it climbs.</p>
-                </div>
-              )}
+                </Sec>
+              </>)}
             </div>
           )}
 
@@ -2507,8 +2504,7 @@ export default function ModelSpace() {
                 </p>
               </Sec>
               {model && model.supports.length > 0 && (
-                <div className="py-3.5">
-                  <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Support fixity</h3>
+                <Sec grid={false} title="Support fixity">
                   <p className="mb-2 text-xs text-slate-500">
                     Fixed = all 6 DOFs clamped. Pin = 3 translations free to rotate. Spring = translational springs (kN/m).
                   </p>
@@ -2552,11 +2548,10 @@ export default function ModelSpace() {
                       </tbody>
                     </table>
                   </div>
-                </div>
+                </Sec>
               )}
               {model && model.supports.length > 0 && (
-                <div className="py-3.5">
-                  <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Footing plan</h3>
+                <Sec grid={false} title="Footing plan">
                   <p className="mb-2 text-xs text-slate-500">
                     Every base support gets an isolated square footing. Where two of those pads would physically
                     collide, the design pairs them as one combined footing — the pairing follows the pads, so it
@@ -2569,7 +2564,7 @@ export default function ModelSpace() {
                     pad is stretched until it is symmetric about the bearing resultant, and with unequal loads that
                     runs far past the columns and leaves the width to fall out as area &divide; length.
                   </p>
-                </div>
+                </Sec>
               )}
             </div>
           )}
@@ -2586,8 +2581,7 @@ export default function ModelSpace() {
               </Sec>
 
               {/* NSCP 204 superimposed-dead-load composer (per slab) */}
-              <div className="py-3.5">
-                <h3 className="mb-1 text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Superimposed dead load — NSCP 204</h3>
+              <Sec grid={false} title="Superimposed dead load — NSCP 204">
                 <p className="mb-2 text-[11px] text-slate-500">
                   Build the SDL from finishes/ceilings/partitions (Table 204-1, kPa) and material layers
                   (Table 204-2, γ × thickness). Then apply it to every slab, or to the slab selected in the 3D view.
@@ -2644,11 +2638,10 @@ export default function ModelSpace() {
                   </button>
                   <span className="text-[11px] text-slate-500">Empty composition clears a slab back to the default SDL.</span>
                 </div>
-              </div>
+              </Sec>
 
               {/* NSCP 205-1 / 206 live-load occupancy (per slab) */}
-              <div className="py-3.5">
-                <h3 className="mb-1 text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Live load — NSCP 205 / 206</h3>
+              <Sec grid={false} title="Live load — NSCP 205 / 206">
                 <p className="mb-2 text-[11px] text-slate-500">
                   Pick the occupancy (Table 205-1) or other minimum load (§206); its uniform live load overrides the
                   default LL for the chosen slabs.
@@ -2673,12 +2666,11 @@ export default function ModelSpace() {
                     Apply to selected{selPlate && selPlate.role !== 'wall' ? ` (${selPlate.id})` : ''}
                   </button>
                 </div>
-              </div>
+              </Sec>
 
               {/* Persistent per-panel editor — every slab's SDL & live load */}
               {model && model.plates.filter((p) => p.role !== 'wall').length > 0 && (
-                <div className="py-3.5">
-                  <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Per-panel loads</h3>
+                <Sec grid={false} title="Per-panel loads">
                   <div className="max-h-64 overflow-auto">
                     <table className="w-full border-collapse text-[11px]">
                       <thead>
@@ -2780,17 +2772,15 @@ export default function ModelSpace() {
                       </div>
                     )
                   })()}
-                </div>
+                </Sec>
               )}
 
               {model && (
-                <div className="py-3.5">
-                  <div className="mb-2 flex items-center justify-between">
-                    <h3 className="text-[10px] font-bold uppercase tracking-[.12em] text-[#a39d8d]">Loads</h3>
+                <Sec grid={false} title="Loads" hint={<>
                     <button type="button" onClick={rebuildGravity}
                       title="Regenerate dead (member self-weight + slab self-weight + SDL) and live loads from the inputs; keeps E loads"
                       className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-[#0f4c92] hover:border-[#0f4c92] hover:bg-blue-50">↻ Rebuild D + L</button>
-                  </div>
+                </>}>
                   <div className="max-h-72 overflow-auto">
                     <table className="w-full border-collapse text-xs">
                       <thead>
@@ -2839,7 +2829,7 @@ export default function ModelSpace() {
                     Dead = self-weight (members from b×h, slabs from t, γc = 24 kN/m³) + the SDL input; live = the LL
                     input. “Rebuild” regenerates both after you edit the frame.
                   </p>
-                </div>
+                </Sec>
               )}
 
               {model && (
@@ -3207,7 +3197,7 @@ export default function ModelSpace() {
               {model && <ValidationPanel issues={meshIssues} />}
 
               {gov && govRes && (
-                <Sec grid={false} title={`Analysis — ${gov.combo.name} governs`}>
+                <Sec id="analysis-governing" grid={false} title={`Analysis — ${gov.combo.name} governs`}>
                   <Row label="ΣRy (gravity)" value={`${f1(govRes.reactions.reduce((s, q) => s + q.F[1], 0))} kN`} />
                   <Row label="Extremes" value={`M ${f1(govRes.Mmax)} kN·m`}
                     sub={`V ${f1(govRes.Vmax)} · N ${f1(govRes.Nmax)} kN`} />
@@ -3304,7 +3294,7 @@ export default function ModelSpace() {
               )}
 
               {drift && seis && (
-                <Sec grid={false} title={`Storey drift — ${(eDirs[0] ?? '+X').replace(/[+-]/, '')} (ΔM = 0.7·R·Δs)`}>
+                <Sec id="storey-drift" grid={false} title={`Storey drift — ${(eDirs[0] ?? '+X').replace(/[+-]/, '')} (ΔM = 0.7·R·Δs)`}>
                   {drift.map((row) => (
                     <Row key={row.elevation} alert={!row.ok}
                       label={`Level ${f1(row.elevation)} m`}
@@ -3318,7 +3308,7 @@ export default function ModelSpace() {
               )}
 
               {irregular && seis && (
-                <Sec grid={false} title={`Structural irregularities — ${(eDirs[0] ?? '+X').replace(/[+-]/, '')}`}>
+                <Sec id="irregularities" grid={false} title={`Structural irregularities — ${(eDirs[0] ?? '+X').replace(/[+-]/, '')}`}>
                   {irregular.length === 0
                     ? <Row label="NSCP Table 208-9 / 208-10" value="Regular ✓" sub="Torsional, soft-storey, mass & vertical-geometric checks all pass" />
                     : irregular.map((f, i) => (
