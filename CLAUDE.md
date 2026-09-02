@@ -141,11 +141,20 @@ mm, forces kN, stress MPa) and state them at module boundaries.
 
 ---
 
-# Known engine gaps — priority backlog (audit, July 2026)
+# Known engine gaps — priority backlog
 
 Ordered: correctness first, then code completeness, then new capability.
 
+**Reconciled against the code, September 2026.** The July list had four items
+sitting open that had in fact shipped — they are struck through below with the
+module that closed them, rather than deleted, because "we already have this" is
+the single most useful thing this list can tell you. Check the code before
+starting anything here; a stale backlog is how work gets done twice.
+
 ## P1 — results correctness
+
+All shipped.
+
 1. ~~**Cracked-section stiffness modifiers** (ACI 318-14 §6.6.3.1.1: 0.35Ig
    beams, 0.70Ig columns, 0.25Ig walls/flat plates)~~ — ✔ shipped (#327):
    per-role factors via `BridgeOpts.crackedSections` in `modelBridge` section
@@ -159,44 +168,98 @@ Ordered: correctness first, then code completeness, then new capability.
    `withEv` (E-combo D-factor shift) in `pipeline.ts`/`seismic.ts`.
 
 ## P2 — the v1.0 gate
+
 4. ~~**Fill `docs/ValidationMap.md`**~~ — ✔ shipped: every row now carries
    its vitest evidence (✅), or an equivalent-method verification with the
-   external cross-check flagged (🔶); ETABS/STAAD/PCA/Excel remain as the
-   map's X001–X004 open items (need external licenses). Roadmap Phase-2
-   checkboxes synced.
+   external cross-check flagged (🔶). Roadmap Phase-2 checkboxes synced.
+5. **The external cross-checks that are left.** X002 (STAAD) is ✔ done —
+   `docs/benchmarks/staad-gridframe-2026-08-19.anl`, total reaction agreeing to
+   0.001%. Still open, and all of them procurement or authoring rather than
+   engineering: **X001** ETABS and **X003** PCA/spColumn need licenses and
+   reference results checked into `docs/benchmarks/`; **X004** Excel
+   verification sheets, which the `/validation` manual-vs-software tables can
+   seed. The **Validation Manual** chapters (`docs/validation/`) are the same
+   kind of work and gate the same release.
 
 ## P3 — analysis completeness
-5. ~~**Timoshenko shear deformation** in frame elements~~ — ✔ shipped:
+
+6. ~~**Timoshenko shear deformation** in frame elements~~ — ✔ shipped:
    Φ-modified `kLocal` + per-family shear areas in the bridge (opt-in
    `shearDeformation`, UI default on). FEMs stay Euler; modal/pushover/
    buckling still run the Euler element (follow-up if needed).
-6. ~~**Direct-integration time-history** on the full MDOF system with Rayleigh
+7. ~~**Direct-integration time-history** on the full MDOF system with Rayleigh
    damping~~ — ✔ shipped (#432): `directTimeHistory.ts` — Newmark-β on the full
    free-DOF system with `C = αM + βK`, K̂ LU-factored once and reused per step;
    `rayleighCoeffs` inverts the two-anchor ζ(ω) curve. Unblocks nonlinear TH.
-7. Tension-only / compression-only members (braces, uplift springs);
-   consistent-mass option beside lumped.
-8. Irregularity auto-flags (torsional, soft-storey, mass — NSCP Table 208-9/10).
+8. ~~**Tension-only / compression-only members**~~ — ✔ shipped: `axialOnly.ts`
+   drives an ACTIVE-SET iteration around the linear solver (deactivate a member
+   violating its mode, re-activate one whose end displacements allow it, repeat
+   to a fixed point), so L3 stays frozen. `Member.axialMode`, a `meshValidation`
+   rule for the axial-release contradiction, and the slack overlay in the
+   viewport.
+9. ~~**Irregularity auto-flags**~~ — ✔ shipped: `irregularity.ts` — NSCP
+   Table 208-9 (vertical) and 208-10 (plan), the checks derivable from the
+   existing E-case displacement field and storey weights: torsional 1a/1b, soft
+   storey, mass, vertical geometric. Pure post-processing, no solver change.
+10. **Consistent-mass option beside lumped.** `modal.ts` is lumped-only —
+    documented as such, and the rotational DOFs carry no inertia at all as a
+    result. The frequencies it produces are what every dynamic result
+    downstream is built on, so this is worth doing before the modal work is
+    leaned on any harder.
 
 ## P4 — design & geotech capability
-9. ~~Steel **moment connections, shear tabs, block shear, prying**~~ — ✔ shipped:
-   `steelConnections.ts` (shear-tab, moment-flange-weld, moment-web-plate) +
-   `steelDesign.ts` block shear §J4.3 (`shearTabBlockShear`) and prying §J3.9.
-10. ~~Thread cracked deflection (`beamDeflection`/`slabDeflection`) into
+
+11. ~~Steel **moment connections, shear tabs, block shear, prying**~~ — ✔ shipped:
+    `steelConnections.ts` (shear-tab, moment-flange-weld, moment-web-plate) +
+    `steelDesign.ts` block shear §J4.3 (`shearTabBlockShear`) and prying §J3.9.
+12. ~~Thread cracked deflection (`beamDeflection`/`slabDeflection`) into
     model-space serviceability results.~~ — ✔ shipped (#446):
     `memberDeflection.ts` double-integrates each beam's own FEM moment diagram
     (D-only and L-only service solves) over Ec·Ie with Branson's Ie, so §424.2
     deflections carry the model's real load pattern and end restraint instead of
     an assumed UDL. Surfaced per member in the RC beam schedule and the PDF
     report; per §409.3.1.1 a row passes on EITHER h ≥ hMin or the computed
-    check. Open: proper T-section gross properties (the web rectangle is used,
-    which is the conservative side).
-11. **Slope stability by method of slices** (Bishop simplified / Janbu) —
-    infinite slope alone can't cover global stability of protected slopes.
-12. Settlement (immediate + consolidation), laterally loaded piles
-    (Broms / p-y), pressure grouting (Roadmap Phase 3 leftovers).
-13. **Offset framing / beam-on-girder-flange bearing** — `designBeamBeamJoints`
+    check. **Open follow-up:** proper T-section gross properties — the web
+    rectangle is used, which is the conservative side.
+13. ~~**Slope stability by method of slices**~~ — ✔ shipped: `slopeStability.ts`
+    — Fellenius/OMS, Bishop's Simplified and Janbu's Simplified over one set of
+    vertical slices, with a grid search for the critical circle.
+14. ~~**Settlement** (immediate + consolidation) and **laterally loaded piles**~~
+    — ✔ shipped: `settlement.ts` (stress distribution, elastic settlement,
+    1-D consolidation and its time rate) and `lateralPile.ts` (Broms ultimate
+    capacity for short/long piles in clay and sand, plus p-y analysis).
+15. **Pressure grouting** — the last Roadmap Phase 3 item with no module. Note
+    that `soilNail`, `micropile` and `rockAnchor` all already size grouted bond
+    lengths, so the gap is the grouting operation itself (pressures, takes,
+    stage design), not grout-bond capacity.
+16. **Offset framing / beam-on-girder-flange bearing** — `designBeamBeamJoints`
     assumes every supported beam meets the girder WEB (coplanar nodes). A beam
     bearing on a girder TOP FLANGE (seat/bearing detail, stiffener check per
     AISC §J10) can't arise until the model supports vertically offset framing;
     add the pairing + detail when it does.
+
+## P5 — validation-map corrections
+
+Both are recorded in `docs/AuditRemediation.md`, and neither is a wrong answer
+in the shipped app; they are claims the map makes that its evidence does not
+support.
+
+17. **E4 — ValidationMap row C003 is an algebraic tautology.** It "verifies" a
+    result against a rearrangement of the same expression, so it cannot fail.
+    Needs an independent reference, or the row demoted.
+18. **E5 — `Cv1` uses the superseded AISC 360-10 form.** Conservative, so not a
+    correctness risk; either move it to 360-16 or have the map say which
+    edition it follows.
+
+---
+
+# Not engine work, but on the same board
+
+`docs/AuditRemediation.md` is the live status board for the August 2026 audits —
+12 of 18 findings shipped. What is open there is reliability and gate work
+rather than calculation: **R6** every Model Space solver failure is invisible,
+**R7** unknown URLs render an empty shell and `/about` is missing, **R8** the
+calculation fetch has no timeout, **S5** no rate limiting and members are never
+metered, **S6** `guest-quota`'s CORS lets any site burn a visitor's trial, and
+**R9** `update()` is not a functional update. Read that file before picking any
+of them up — each row carries how far it was actually verified.

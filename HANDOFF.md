@@ -57,6 +57,25 @@ Actions tab. `--no-verify-jwt` goes to `billing-webhook` and nothing else, and
 `_shared/deploy.test.ts` fails if that list ever grows. Migrations are still
 applied by hand, deliberately.
 
+## Deployment — where production actually is
+
+**Vercel serves the app** (`webapp/`), with Supabase for auth/data and five
+Edge Functions for billing and the guest trial. `.github/workflows/supabase-functions.yml`
+deploys the functions on merge; migrations are applied by hand, deliberately.
+
+**GitHub Pages is not part of this and no longer runs.** `static.yml` used to
+upload `path: '.'` — the whole repository, unbuilt — on every push to main. It
+answered 404 at the root (no `index.html`) so it read as dead, but it was not:
+every file in the repo was fetchable from `bitless246.github.io/civilEngineering/…`,
+including `CLAUDE.md`, `HANDOFF.md` and `docs/Billing.md`. No credentials were
+ever in it — only env-var names — but the source, the pricing and competitive
+strategy docs and the audit findings were public through it regardless of the
+repository's own visibility.
+
+The deploy job is gone (Sept 2026). Deleting it stops future publishes; it does
+**not** unpublish what is already served. That is *Settings → Pages → Source:
+None*, and it has to be done by hand in the repository settings.
+
 ## What this is
 `civilEngineering` — a React 19 + TypeScript + Vite app (Tailwind v4, KaTeX,
 react-three-fiber) of structural-design tools and material take-off estimators
@@ -805,10 +824,11 @@ backlog — and this fix round. Remaining work lives in #325's unticked boxes.
   the next N-vs-kN slip fails loud.
 
 **Process / UI:**
-- **#320 — real CI gate**: `tsc -b` + lint + `npm test` gate the Pages deploy;
-  optimizer-test timeout headroom; Roadmap truth-up. (Lint ran with
+- **#320 — real CI gate**: `tsc -b` + lint + `npm test` gate every merge to
+  main; optimizer-test timeout headroom; Roadmap truth-up. (Lint ran with
   `continue-on-error` until #445 cleared the backlog — it now blocks, with
-  `--max-warnings 0`.)
+  `--max-warnings 0`. The gate originally guarded a Pages deploy, which was
+  removed in Sept 2026 — see “Deployment” below.)
 - **#331 — discoverability**: searchable “All tools” grid on Home; Structural
   dropdown sub-grouped into 6 disciplines (two-column panel); ARIA menu
   semantics.
