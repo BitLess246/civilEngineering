@@ -13,6 +13,7 @@ import { buildStructureCages, structureMomentRatios } from '../engine/cageBuilde
 import { placeStair } from '../engine/stairPlacement'
 import { REBAR_ROLE_COLOR } from '../engine/rebarWire'
 import type { CageKind } from '../engine/rebarModel'
+import { effectiveViewMode, ghostConcrete, surfaceStyleFor, type ViewMode } from '../components/modelSpace/viewMode'
 import { ProjectsPanel } from '../components/ProjectsPanel'
 import { AUTOSAVE_KEY, INPUTS_KEY } from '../lib/modelSpaceSession'
 import { emptyHistory, recordHistory, undoHistory, redoHistory, isTypingTarget, type History } from '../lib/history'
@@ -255,6 +256,7 @@ export default function ModelSpace() {
   const [showFootings, setShowFootings] = useState(true)   // designed footing footprints
   const [showConns, setShowConns] = useState(true)         // designed steel joint hardware
   const [showRebar, setShowRebar] = useState(false)        // the designed bar cages, in 3D
+  const [viewMode, setViewMode] = useState<ViewMode>('solid')   // solid concrete, or edges only
   // WHICH cages. A whole building's steel at once is a solid wall of bar, and
   // the panel someone is actually looking at is behind it — so the kinds are
   // separable. All on is the same view as before this existed.
@@ -925,6 +927,19 @@ export default function ModelSpace() {
     for (const c of rebarBuild?.cages ?? []) if (c.kind) by.set(c.kind, (by.get(c.kind) ?? 0) + 1)
     return by
   }, [rebarBuild])
+  /** How many cages the viewport is really drawing, after the kind filter —
+   *  the number the ghosting has to be decided on rather than the checkbox. */
+  const drawnCages = cageKinds.reduce((n, k) => n + (cagesByKind.get(k) ?? 0), 0)
+  /**
+   * How the concrete is drawn right now — see `components/modelSpace/viewMode`.
+   *
+   * Derived every render from three things that can each change on their own:
+   * the mode the user picked, whether a force diagram is up (which forces
+   * wireframe, because the ribbon runs inside the member), and whether there is
+   * actually a cage behind the concrete to see.
+   */
+  const drawMode = effectiveViewMode(viewMode, forceDiag !== null)
+  const surface = surfaceStyleFor(drawMode, ghostConcrete(showRebar, drawnCages))
   /**
    * §418.6.3.2 / §418.4.2.2 on the placed bars.
    *
@@ -1564,9 +1579,9 @@ export default function ModelSpace() {
                   }
                   const memberEl = sec?.material === 'steel' && sec.shape
                     ? <MemberSteel3D a={aV} b={bV} role={m.role} shapeName={sec.shape} axisRotation={m.axisRotation}
-                        tint={tint * 0.85} selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                        tint={tint * 0.85} style={surface} selected={m.id === selected} onPick={() => setSelected(m.id)} />
                     : <Member3D a={aV} b={bV} role={m.role} tint={tint * 0.85}
-                        sec={sec} ghost={showRebar} selected={m.id === selected} onPick={() => setSelected(m.id)} />
+                        sec={sec} style={surface} selected={m.id === selected} onPick={() => setSelected(m.id)} />
                   return (
                     <group key={m.id}>
                       {memberEl}
@@ -1580,7 +1595,7 @@ export default function ModelSpace() {
                   const cs = p.corners.map((c) => nodePos.get(c))
                   if (cs.some((c) => !c)) return null
                   return <Slab3D key={p.id} corners={cs as THREE.Vector3[]} shell={model.shellElements} deck={p.deck}
-                    thickness={p.thickness / 1000}
+                    thickness={p.thickness / 1000} style={surface}
                     selected={p.id === selected} onPick={() => setSelected(p.id)} />
                 })}
                 {model.supports.map((s) => {
@@ -1611,7 +1626,8 @@ export default function ModelSpace() {
                   )
                   return <group>{items.map((f) => (
                     <Footing3D key={f.key} cx={f.cx} cz={f.cz} bx={f.bx} bz={f.bz} bz1={f.bz1} bz2={f.bz2}
-                      dc={f.dc} yTop={f.yTop} angle={f.angle} overlap={overlaps.has(f.key)} label={f.label} />
+                      dc={f.dc} yTop={f.yTop} angle={f.angle} overlap={overlaps.has(f.key)} label={f.label}
+                      style={surface} />
                   ))}</group>
                 })()}
                 {(model.walls ?? []).map((w) => {
@@ -1632,7 +1648,7 @@ export default function ModelSpace() {
                 })}
                 {(model.stairs ?? []).map((st) => {
                   const p = placeStair(model, st)
-                  return p ? <Stair3D key={st.id} p={p} /> : null
+                  return p ? <Stair3D key={st.id} p={p} style={surface} /> : null
                 })}
                 {showLoads && <Loads3D model={model} nodePos={nodePos} />}
                 {showRebar && rebarCages.length > 0 && <RebarWireframe cages={rebarCages} kinds={cageKinds} />}
@@ -3934,6 +3950,35 @@ export default function ModelSpace() {
                 <p className="text-[11px] leading-snug text-slate-500">
                   What the 3D view draws. These apply on every tab.
                 </p>
+                {/* First, because it governs everything under it: this is HOW
+                    the model is drawn, the rest is WHAT is drawn on it. */}
+                <div>
+                  <p className="mb-1 font-medium">Model</p>
+                  <div className="inline-flex rounded-md border border-[#cddcf0] p-0.5">
+                    {(['solid', 'wireframe'] as ViewMode[]).map((v) => (
+                      <button key={v} type="button" onClick={() => setViewMode(v)}
+                        aria-pressed={viewMode === v}
+                        className={`rounded px-2.5 py-0.5 text-[11.5px] font-semibold capitalize transition ${
+                          viewMode === v ? 'bg-[#0f4c92] text-white' : 'text-[#5c6675] hover:bg-[#eaf1f9]'}`}>
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Said, not silently done. The buttons keep showing the
+                      user's own choice — it comes back when the diagram goes
+                      off — so without this line the control looks broken. */}
+                  {forceDiag !== null && viewMode === 'solid' && (
+                    <p className="mt-1 text-[11px] leading-snug text-slate-500">
+                      Drawn wireframe while the {DIAG_LABEL[forceDiag]} diagram is up — the ribbon
+                      runs along the member axis, inside its own concrete.
+                    </p>
+                  )}
+                  {drawMode === 'wireframe' && (
+                    <p className="mt-1 text-[11px] leading-snug text-slate-500">
+                      Edges only. Members stay clickable.
+                    </p>
+                  )}
+                </div>
                 {design && (design.joints.length > 0 || design.beamJoints.length > 0) && (
                   <div>
                     <label className="flex items-center gap-2">

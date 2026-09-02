@@ -35,6 +35,7 @@ export const MODEL_TOOLS: DocTool[] = [
         title: 'Display',
         body: 'The overlays the viewport draws. Its own tab, past the divider on the right of the ribbon because it is not a step in the sequence — and the toggles stay on whatever tab you switch to afterwards, because what the 3D view is drawing is not a property of which tab is open. Each toggle carries its own colour key, and says what it is waiting for when it has nothing to draw yet.',
         controls: [
+          { kind: 'choice', name: 'Model — solid / wireframe', what: 'How the model itself is drawn. Wireframe keeps the edges and drops the faces, so what is inside or behind the concrete is readable; members stay clickable. Switching a force diagram on draws wireframe on its own whatever is picked here, because the ribbon runs along the member axis and would otherwise be inside its own concrete — the choice is not overwritten and comes back when the diagram goes off.' },
           { kind: 'toggle', name: 'Show load diagrams on the model', what: 'Draws the applied loads as arrows on the model. The key below it names the load categories present, one colour each.' },
           { kind: 'toggle', name: 'Show designed footings to scale', what: 'Draws each designed footing at its computed plan size. Overlapping footings are highlighted, which is the cue to switch to a combined footing.' },
           { kind: 'toggle', name: 'Show designed steel connections', what: 'Draws the designed steel joints at their nodes — plates in slate, bolts and welds in gold.' },
