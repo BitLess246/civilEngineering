@@ -11,28 +11,19 @@ export const MODEL_TOOLS: DocTool[] = [
     basis: 'NSCP 2015 (§203 combinations, §207 wind, §208 seismic, §409/§424 RC), ACI 318-14, AISC 360-16, NDS for timber.',
     sections: [
       {
-        id: 'ms-toolbar',
-        title: 'Top toolbar',
-        body: 'Always visible, above the viewport: the actions that apply to the whole page rather than to one panel. Running the model is NOT here — Analyze lives on the Analysis tab and Design structure on the Design tab, each beside the results it produces.',
-        controls: [
-          { kind: 'button', name: '⎙ Export PDF', what: 'Builds the full calculation report: project data, governing combination, every schedule with its worked solution, drawings and the bill of quantities.' },
-          { kind: 'button', name: 'Import / Export ▾', what: 'Saves the model to a JSON file or loads one back. Also offers CSV import of nodes/members.' },
-          { kind: 'choice', name: 'CSV units', what: 'Whether coordinates in an imported CSV are metres or millimetres. Set this before importing — it is applied at parse time.' },
-          { kind: 'output', name: 'autosaved', what: 'The model is written to browser storage on every edit; the badge confirms the last save. Clearing site data discards it, so export anything you need to keep.' },
-        ],
-      },
-      {
         id: 'ms-ribbon',
         title: 'Tab ribbon',
         body: 'The full-width row under the header, in three labelled groups plus two utilities. The groups are the sequence — MODEL builds the frame, ANALYSE solves it, RESULTS is where the design and the drawings are read — and each needs the one before it. Display and Projects sit past the divider on the right because they are neither: one changes how the model is drawn, the other opens a different model, and both apply at whatever stage you are at.',
         controls: [
+          { kind: 'button', name: '↶ / ↷', what: 'Undo and redo the last model edits — ⌘Z and ⌘⇧Z. Each button says how many steps it has. Ignored while you are typing in a field, where ⌘Z is the browser\'s own undo of the characters.' },
+          { kind: 'button', name: '⎙ PDF', what: 'Builds the full calculation report: project data, governing combination, every schedule with its worked solution, drawings and the bill of quantities. Needs a design first.' },
           { kind: 'button', name: 'Guide', what: 'Starts the guided walkthrough, which visits the tabs in the order the ribbon shows them.' },
         ],
       },
       {
         id: 'ms-viewport',
         title: 'Viewport',
-        body: 'The 3D scene. Orbit by dragging, pan with Shift+drag, zoom with the scroll wheel. Clicking a member or slab selects it and opens its detail panel. What the scene DRAWS is set on the Display tab, not here.',
+        body: 'The 3D scene, with the model\'s name and its autosave badge in the top-left corner and the selection chip under them. Orbit by dragging, pan with Shift+drag, zoom with the scroll wheel. Clicking a member or slab selects it and opens its detail panel. What the scene DRAWS is set on the Display tab, not here.',
         controls: [
           { kind: 'output', name: 'Member tint', what: 'Members are shaded red in proportion to |M| relative to the model maximum for the governing combination — a quick read of where the demand is.' },
           { kind: 'output', name: 'Dashed red sleeve', what: 'Marks a tension/compression-only member that dropped out of the governing combination\'s active set.' },

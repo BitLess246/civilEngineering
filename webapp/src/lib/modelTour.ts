@@ -121,10 +121,12 @@ export const MODEL_STEPS: readonly TourStep[] = [
     why: 'The toggles stay on whatever you switch to afterwards: what the 3D view is drawing is not a property of which tab is open. Display is last in the ribbon because it is not a step — it applies at whatever stage you are at.',
   },
   {
-    id: 'io',
-    anchor: 'io-menu',
+    id: 'save',
+    tab: 'projects',
+    anchor: 'projects-panel',
     title: 'Save the model before you close the tab',
-    body: 'Import / Export writes the whole model to a JSON file and reads it back. The autosave only survives the browser session — it is not a saved project.',
+    body: 'Projects saves the whole model and its design inputs under a name, and opens them again later. The autosave beside the model name only survives the browser session — it is not a saved project.',
+    why: 'Opening a project reloads the page on purpose: Model Space keeps around sixty design fields, and letting its own restore path run means a field added later is restored for free instead of being silently missed.',
   },
 ]
 

@@ -347,7 +347,6 @@ export default function ModelSpace() {
   const [modelImg, setModelImg] = useState<string | null>(null)   // 3D snapshot for the PDF report
   const [lh, setLh] = useState<LetterheadState>(() => initialLetterhead(''))
   const [exporting, setExporting] = useState(false)               // PDF build in flight
-  const [ioMenu, setIoMenu] = useState(false)                     // Import/Export dropdown
   // Mix class for the take-off. It FOLLOWS the design f′c rather than sitting
   // at a hard-coded 'A' — a model designed for 28 MPa was being priced with a
   // 9-bag Class A mix, which is not the concrete that was designed. The user
@@ -390,7 +389,6 @@ export default function ModelSpace() {
   // belongs to ONE of them: put it on both and the same slab is in the model
   // twice.
   const [stLandLo, setStLandLo] = useState(0); const [stLandHi, setStLandHi] = useState(0)
-  const fileRef = useRef<HTMLInputElement>(null)
   const controlsRef = useRef<React.ComponentRef<typeof OrbitControls>>(null)
   const { busy, run: runSolver, progress } = useSolver()   // off-thread FEM/design/optimise
   const gate = usePlanGate()
@@ -1378,39 +1376,30 @@ export default function ModelSpace() {
     return null
   }
 
-  const download = () => {
-    if (!model) return
-    const blob = new Blob([JSON.stringify(model, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = `${model.name.replace(/\s+/g, '-')}.model.json`; a.click()
-    URL.revokeObjectURL(url)
-  }
-  const upload = async (f: File) => {
-    try {
-      const m = JSON.parse(await f.text()) as StructuralModel
-      if (m.version !== 1 || !Array.isArray(m.nodes)) throw new Error('not a model file')
-      setSelected(null)
-      save(splitSharedSections(m))   // migrate shared-section models to per-member
-    } catch { alert('Could not read that file as a structural model (.model.json).') }
-  }
 
   // Panel action button (mockup "Regenerate grid model" style — flat light blue).
   const btn =
     'rounded-md border border-[#cddcf0] bg-[#eaf1f9] px-4 py-2 text-[12px] font-semibold text-[#0f4c92] transition hover:bg-[#dce9f7] disabled:opacity-40'
 
-  // Model name for the workspace header: bays × storeys from the live model.
+  /**
+   * What this model IS, in a phrase: bays × bays · storeys, off the live model.
+   *
+   * It used to head a strip above the workspace. It is now drawn in the corner
+   * of the viewport, where the thing it names actually is — a title bar that
+   * describes the picture, sitting above the picture, is a caption in the wrong
+   * place and a row of vertical space nothing else could use.
+   */
   const modelName = model
     ? `${globalThis.Math.max(1, [...new Set(model.nodes.map((n) => n.x))].length - 1)}×${globalThis.Math.max(1, [...new Set(model.nodes.map((n) => n.z))].length - 1)} Bay · ${[...new Set(model.storeys.map((q) => q.elevation))].length} Storey${[...new Set(model.storeys.map((q) => q.elevation))].length === 1 ? '' : 's'}`
     : '3D Model Space'
 
   return (
-    <div className="mx-auto max-w-[1700px] p-4">
+    <div className="mx-auto max-w-[1700px]">
       {/* Backstop message from the gated `run`. The buttons for off-plan
           features are already disabled, so reaching this means a path was
           missed — it is shown rather than swallowed so that shows up. */}
       {planBlock && (
-        <div className="no-print mb-3 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+        <div className="no-print mx-4 mt-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
           <span aria-hidden>🔒</span>
           <div className="min-w-0 flex-1">
             <p className="text-[12.5px] leading-6 text-amber-900">{planBlock}</p>
@@ -1420,59 +1409,19 @@ export default function ModelSpace() {
             className="text-[11px] font-semibold text-amber-900/70 hover:text-amber-900" aria-label="Dismiss">✕</button>
         </div>
       )}
-      {/* ── Workspace header (docs/design/uiux-2026-07) ── */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-          <h1 className="text-[21px] font-extrabold tracking-tight text-[#0f1b2a]">{modelName}</h1>
-          {model && <span className="rounded border border-[#cddcf0] bg-[#eaf1f9] px-1.5 py-px font-mono text-[10px] font-medium text-[#0f4c92]">autosaved</span>}
-        </div>
-        <div className="no-print ml-auto flex flex-wrap items-center gap-2">
-          {/* Import / Export dropdown (mockup header: one combined button) */}
-          <div className="relative" onMouseLeave={() => setIoMenu(false)} data-tour="io-menu">
-            <button type="button" onClick={() => setIoMenu((v) => !v)}
-              className="rounded-md border border-[#d6d3c9] bg-white px-3 py-2 text-[12.5px] font-semibold text-[#3d4a5c] hover:border-[#0f4c92] hover:text-[#0f4c92]">
-              Import / Export ▾
-            </button>
-            {ioMenu && (
-              <div className="absolute right-0 top-full z-30 w-44 overflow-hidden rounded-md border border-[#e3e1da] bg-white py-1 shadow-lg">
-                <button type="button" disabled={!model} onClick={() => { setIoMenu(false); download() }}
-                  className="block w-full px-3.5 py-2 text-left text-[12.5px] font-semibold text-[#3d4a5c] hover:bg-[#eaf1f9] hover:text-[#0f4c92] disabled:opacity-40">
-                  ⬇ Export model JSON
-                </button>
-                <button type="button" onClick={() => { setIoMenu(false); fileRef.current?.click() }}
-                  className="block w-full px-3.5 py-2 text-left text-[12.5px] font-semibold text-[#3d4a5c] hover:bg-[#eaf1f9] hover:text-[#0f4c92]">
-                  ⬆ Import model JSON…
-                </button>
-              </div>
-            )}
-          </div>
-          <input ref={fileRef} type="file" accept=".json" className="sr-only"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f) }} />
-          <div className="flex items-center">
-            {([['↶', 'Undo', undo, hist.past.length], ['↷', 'Redo', redo, hist.future.length]] as const).map(([glyph, label, run, depth], i) => (
-              <button key={label} type="button" onClick={run} disabled={depth === 0}
-                title={`${label} (${label === 'Undo' ? '⌘Z' : '⌘⇧Z'}) — ${depth} step${depth === 1 ? '' : 's'}`}
-                aria-label={label}
-                className={`border border-[#d6d3c9] bg-white px-2.5 py-2 text-[13px] font-semibold text-[#3d4a5c] hover:border-[#0f4c92] hover:text-[#0f4c92] disabled:opacity-35 ${i === 0 ? 'rounded-l-md' : '-ml-px rounded-r-md'}`}>
-                {glyph}
-              </button>
-            ))}
-          </div>
-          <button type="button" onClick={() => void exportPdf()} disabled={!design || exporting || !reportsGate.allowed}
-            title={!reportsGate.allowed ? reportsGate.message
-              : design ? 'Download the calculation report as a PDF' : 'Run “Design structure” in the Design tab first'}
-            className="rounded-md border border-[#0f4c92] bg-white px-3.5 py-2 text-[12.5px] font-bold text-[#0f4c92] hover:bg-[#eaf1f9] disabled:opacity-40">
-            {exporting ? '⏳ Building PDF…' : '⎙ Export PDF'}
-          </button>
-        </div>
-      </div>
-
       {/* ── Tab ribbon ──────────────────────────────────────────────────────
           Eleven tabs wrapped to three lines inside a 2/5-width panel and stole
           the height the controls under them needed. Across the full width they
           are one row, they stay put when the rail narrows, and the panel below
-          starts with content instead of navigation. */}
-      <div className="no-print mt-3 flex items-center gap-2 rounded-lg border border-[#e3e1da] bg-white px-3 py-2"
+          starts with content instead of navigation.
+
+          NOW THE TOP OF THE PAGE, square and edge to edge. It used to sit under
+          a header strip carrying the model's name and four buttons; the name
+          has moved into the viewport it names, so the ribbon is the workspace's
+          own chrome and reads as a toolbar rather than a card floating under
+          one. The two actions that were in that strip and are still global —
+          undo/redo and the PDF — come with it. */}
+      <div className="no-print flex items-center gap-2 border-b border-[#e3e1da] bg-white px-3 py-2"
         data-tour="tab-bar">
         {/* The tabs wrap inside their OWN box. Wrapping them in the ribbon
             itself sent `ml-auto` Guide to a second row on its own as soon as
@@ -1496,6 +1445,22 @@ export default function ModelSpace() {
             {UTILITY_TABS.map((t) => <TabBtn key={t.id} id={t.id} label={t.label} active={tab === t.id} onClick={pickTab} />)}
           </div>
         </div>
+        <div className="flex items-center">
+          {([['↶', 'Undo', undo, hist.past.length], ['↷', 'Redo', redo, hist.future.length]] as const).map(([glyph, label, run, depth], i) => (
+            <button key={label} type="button" onClick={run} disabled={depth === 0}
+              title={`${label} (${label === 'Undo' ? '⌘Z' : '⌘⇧Z'}) — ${depth} step${depth === 1 ? '' : 's'}`}
+              aria-label={label}
+              className={`border border-[#d6d3c9] bg-white px-2 py-1 text-[13px] font-semibold text-[#3d4a5c] hover:border-[#0f4c92] hover:text-[#0f4c92] disabled:opacity-35 ${i === 0 ? 'rounded-l-md' : '-ml-px rounded-r-md'}`}>
+              {glyph}
+            </button>
+          ))}
+        </div>
+        <button type="button" onClick={() => void exportPdf()} disabled={!design || exporting || !reportsGate.allowed}
+          title={!reportsGate.allowed ? reportsGate.message
+            : design ? 'Download the calculation report as a PDF' : 'Run “Design structure” in the Design tab first'}
+          className="rounded-md border border-[#0f4c92] bg-white px-2.5 py-1 text-[11.5px] font-bold text-[#0f4c92] hover:bg-[#eaf1f9] disabled:opacity-40">
+          {exporting ? '⏳ PDF…' : '⎙ PDF'}
+        </button>
         <TourButton onClick={tour.start} label="Guide" />
       </div>
 
@@ -1510,7 +1475,7 @@ export default function ModelSpace() {
           same intent written in a way that only worked while nothing above it
           moved. The report below still scrolls the page normally; it is a
           document, and it should. */}
-      <div className="mt-3 grid grid-cols-1 gap-4 lg:h-[calc(100vh-9.5rem)] lg:min-h-[520px] lg:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="grid grid-cols-1 gap-4 p-4 lg:h-[calc(100vh-6.5rem)] lg:min-h-[520px] lg:grid-cols-[minmax(0,1fr)_380px]">
         {/* LEFT — sticky 3D viewport */}
         <div className="no-print lg:flex lg:min-h-0 lg:flex-col">
           <div className="relative h-[80vh] min-h-[460px] overflow-hidden rounded-lg border border-[#e3e1da] bg-[#0f1b2a] lg:h-full lg:min-h-0">
@@ -1667,8 +1632,19 @@ export default function ModelSpace() {
                 Set the grid and hit “Regenerate grid model”.
               </div>
             )}
+            {/* The model's own name, in the corner of the model. */}
+            <div className="no-print pointer-events-none absolute left-3 top-3 flex items-center gap-2">
+              <h1 className="rounded-md bg-white/85 px-2.5 py-1 text-[15px] font-extrabold tracking-tight text-[#0f1b2a] shadow-sm backdrop-blur">
+                {modelName}
+              </h1>
+              {model && (
+                <span className="rounded border border-[#cddcf0] bg-[#eaf1f9]/90 px-1.5 py-px font-mono text-[10px] font-medium text-[#0f4c92] backdrop-blur">
+                  autosaved
+                </span>
+              )}
+            </div>
             {model && selInfo && (
-              <div className="no-print absolute left-3 top-11 flex items-center gap-2 rounded-md border border-[#0f4c92]/30 bg-white/95 px-2.5 py-1 text-xs shadow-sm backdrop-blur">
+              <div className="no-print absolute left-3 top-12 flex items-center gap-2 rounded-md border border-[#0f4c92]/30 bg-white/95 px-2.5 py-1 text-xs shadow-sm backdrop-blur">
                 <span className="font-semibold text-[#0f4c92]">▣ {selInfo.kind} {selInfo.id}</span>
                 {selInfo.extra && <span className="text-slate-500">{selInfo.extra}</span>}
                 <button type="button" onClick={() => setSelected(null)} className="ml-0.5 text-slate-500 hover:text-red-500" title="Deselect">✕</button>
@@ -1676,7 +1652,7 @@ export default function ModelSpace() {
             )}
             {model && (
               <div aria-hidden={navHintDone}
-                className={`no-print pointer-events-none absolute left-3 top-3 rounded border border-white/15 bg-[#0f1b2a]/80 px-2 py-1 font-mono text-[10px] text-[#9db0c5] transition-opacity duration-700 ${navHintDone ? 'opacity-0' : 'opacity-100'}`}>
+                className={`no-print pointer-events-none absolute bottom-3 left-3 rounded border border-white/15 bg-[#0f1b2a]/80 px-2 py-1 font-mono text-[10px] text-[#9db0c5] transition-opacity duration-700 ${navHintDone ? 'opacity-0' : 'opacity-100'}`}>
                 orbit: drag · pan: ⇧drag · zoom: scroll
               </div>
             )}
@@ -4035,7 +4011,9 @@ export default function ModelSpace() {
           </div>
           )}
 
-          {tab === 'projects' && <ProjectsPanel />}
+          {tab === 'projects' && (
+            <div data-tour="projects-panel"><ProjectsPanel /></div>
+          )}
 
         </div>
       </div>
