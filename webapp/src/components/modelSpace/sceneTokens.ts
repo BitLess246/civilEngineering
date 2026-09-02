@@ -16,6 +16,24 @@ export const ROLE_COLOR: Record<string, string> = {
 
 export const SEL = '#f59e0b'
 
+/**
+ * What colour one member is drawn in — role, then material, then how hard it is
+ * working, then whether it is the selected one.
+ *
+ * Shared rather than repeated because the SKELETON has to agree with the solid:
+ * a member that is red-tinted as a box has to be red-tinted as a line, or
+ * switching to wireframe quietly loses the utilisation reading.
+ */
+export function memberColor(
+  role: string, selected: boolean, tint = 0, material?: string,
+): string {
+  if (selected) return SEL
+  const base = new THREE.Color(ROLE_COLOR[role] ?? '#64748b')
+  if (material === 'wood') base.lerp(new THREE.Color('#a86b34'), 0.6)   // timber brown tint
+  if (tint > 0) base.lerp(new THREE.Color('#dc2626'), tint)
+  return `#${base.getHexString()}`
+}
+
 // Load-diagram colours by NSCP category (dead, live, wind, seismic, …).
 
 // Load-diagram colours by NSCP category (dead, live, wind, seismic, …).
