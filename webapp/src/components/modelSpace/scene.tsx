@@ -179,9 +179,24 @@ export function MemberSteel3D({ a, b, role, shapeName, selected, tint = 0, axisR
   )
 }
 
-export function Slab3D({ corners, selected, shell, deck, onPick }: {
-  corners: THREE.Vector3[]; selected: boolean; shell?: boolean; deck?: WoodDeck; onPick: () => void
+/**
+ * Thickness to draw a panel at when the plate has not been given one, m. Only a
+ * fallback — every plate in the model carries `thickness`.
+ */
+const SLAB_FALLBACK_T = 0.125
+
+export function Slab3D({ corners, thickness, selected, shell, deck, onPick }: {
+  corners: THREE.Vector3[]; thickness?: number
+  selected: boolean; shell?: boolean; deck?: WoodDeck; onPick: () => void
 }) {
+  // The node line of a floor is the TOP of the beams framing into it — see
+  // `levelDrop` — so it is the top of the SLAB too: a floor is one surface, and
+  // the beams hang under it. Drawn from the node UPWARD, the panel stood a
+  // whole slab thickness proud of the beams it sits on, and the cage — which
+  // `slabCage` builds downward from the same level, correctly — hung below the
+  // concrete it belongs to. So the box hangs below the node, at the plate's own
+  // thickness rather than a fixed 100 mm.
+  const thick = Math.max(0.02, thickness ?? SLAB_FALLBACK_T)
   const { mid, sx, sz } = useMemo(() => {
     const mid = corners.reduce((s, c) => s.add(c.clone()), new THREE.Vector3()).multiplyScalar(0.25)
     const sx = Math.abs(corners[1].x - corners[0].x) || Math.abs(corners[2].x - corners[0].x)
@@ -191,7 +206,8 @@ export function Slab3D({ corners, selected, shell, deck, onPick }: {
 
   // Timber deck: joist lines spanning the shorter edge, repeated at the joist
   // spacing along the longer edge (matching the woodSlab design), drawn just
-  // above a faint wood-tinted panel so the deck-on-joist framing is visible.
+  // UNDER the faint wood-tinted deck panel — which is where a joist is, and the
+  // only place it stays visible now the panel hangs below the node line.
   const deckGeo = useMemo(() => {
     if (!deck || shell || corners.length < 4) return null
     const [c0, c1, , c3] = corners
@@ -206,12 +222,12 @@ export function Slab3D({ corners, selected, shell, deck, onPick }: {
       const t = Math.min(1, (i * spacing) / repLen)
       const b = c0.clone().add(repVec.clone().multiplyScalar(t))
       const e = b.clone().add(spanVec)
-      pts.push(b.x, b.y + 0.11, b.z, e.x, e.y + 0.11, e.z)
+      pts.push(b.x, b.y - thick - 0.01, b.z, e.x, e.y - thick - 0.01, e.z)
     }
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3))
     return g
-  }, [deck, shell, corners])
+  }, [deck, shell, corners, thick])
 
   // Shell mode: draw the real triangulated panel (two triangles on the c0–c2
   // diagonal, the exact mesh the solver assembles) — works for any orientation,
@@ -245,8 +261,8 @@ export function Slab3D({ corners, selected, shell, deck, onPick }: {
   if (deckGeo) {
     return (
       <group onClick={(e) => { e.stopPropagation(); onPick() }}>
-        <mesh position={[mid.x, mid.y + 0.05, mid.z]}>
-          <boxGeometry args={[sx * 0.96, 0.06, sz * 0.96]} />
+        <mesh position={[mid.x, mid.y - thick / 2, mid.z]}>
+          <boxGeometry args={[sx * 0.96, thick, sz * 0.96]} />
           <meshStandardMaterial color={selected ? SEL : '#c8a06a'} transparent opacity={selected ? 0.6 : 0.3} />
         </mesh>
         <lineSegments geometry={deckGeo}>
@@ -257,9 +273,9 @@ export function Slab3D({ corners, selected, shell, deck, onPick }: {
   }
 
   return (
-    <mesh position={[mid.x, mid.y + 0.05, mid.z]}
+    <mesh position={[mid.x, mid.y - thick / 2, mid.z]}
       onClick={(e) => { e.stopPropagation(); onPick() }}>
-      <boxGeometry args={[sx * 0.96, 0.1, sz * 0.96]} />
+      <boxGeometry args={[sx * 0.96, thick, sz * 0.96]} />
       <meshStandardMaterial color={selected ? SEL : '#7ba6d4'} transparent opacity={selected ? 0.85 : 0.45} />
     </mesh>
   )

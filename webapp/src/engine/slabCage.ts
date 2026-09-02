@@ -68,8 +68,19 @@ export interface SlabCageInput {
   x: SlabCageDir
   z: SlabCageDir
   /** Support width at the panel edges, m — the top mat's extension is measured
-   *  from the FACE, and the bottom mat embeds past it. */
+   *  from the FACE, and the bottom mat embeds past it, but never past that
+   *  support's own far face less cover. The panel edge is the CENTRELINE, so
+   *  this is what says how much concrete a bar has to end in. */
   support?: number
+  /**
+   * Per-edge support width, m, where the model knows the beam that frames each
+   * edge. Overrides `support` on the edges given.
+   *
+   * A panel is rarely framed by four identical beams, and one width for all
+   * four decides where the bottom mat stops on every edge from whichever beam
+   * happened to be measured. `xLo` is the edge at `x0`, `xHi` the one at `x1`.
+   */
+  edgeSupport?: { xLo?: number; xHi?: number; zLo?: number; zHi?: number }
   /** Extensions to use; defaults to the flat-plate figure. */
   ext?: Record<'column' | 'middle', SlabBarExtensions>
   /** Chair grid spacing, m. 0 draws none. */
@@ -186,6 +197,8 @@ export function buildSlabCage(i: SlabCageInput): RebarCage {
   // through the bottom steel and out of the soffit.
   const depthForHook = (i.h - 2 * i.cover - 2 * i.barDia) / 1000
   const hook = Math.min(hookExt(i.barDia), Math.max(0, depthForHook))
+  /** Support widths, mm, too narrow to take the full bottom-bar embedment. */
+  const narrow = new Set<number>()
 
   const lenX = i.x1 - i.x0, lenZ = i.z1 - i.z0
   if (lenX <= 0 || lenZ <= 0) return { member: i.mark, runs: [], notes: ['degenerate panel'] }
@@ -207,11 +220,12 @@ export function buildSlabCage(i: SlabCageInput): RebarCage {
   // out along, and the one the strips are measured across.
   const ed = i.edges ?? {}
   const cont = (v: boolean | undefined) => v !== false
+  const es = i.edgeSupport ?? {}
   const dirs = [
     { d: i.x, run: 'x' as const, lo: i.x0, hi: i.x1, aLo: i.z0, aHi: i.z1, short: xIsShort,
-      contLo: cont(ed.xLo), contHi: cont(ed.xHi) },
+      contLo: cont(ed.xLo), contHi: cont(ed.xHi), supLo: es.xLo ?? sup, supHi: es.xHi ?? sup },
     { d: i.z, run: 'z' as const, lo: i.z0, hi: i.z1, aLo: i.x0, aHi: i.x1, short: !xIsShort,
-      contLo: cont(ed.zLo), contHi: cont(ed.zHi) },
+      contLo: cont(ed.zLo), contHi: cont(ed.zHi), supLo: es.zLo ?? sup, supHi: es.zHi ?? sup },
   ]
 
   const bent = (i.detail ?? 'bent') === 'bent'
@@ -221,7 +235,24 @@ export function buildSlabCage(i: SlabCageInput): RebarCage {
     const at = (u: number, v: number, y: number): Vec3 =>
       dir.run === 'x' ? [u, y, v] : [v, y, u]
     const yB = yBottom(dir.short), yT = yTopMat(dir.short)
-    const embed = ext.column.supportEmbed / 1000
+    /**
+     * How far a continuous bottom bar carries PAST the panel edge, m.
+     *
+     * §408.7.4.1.3 asks for 150 mm into the support, but the support is a beam
+     * of finite width and the panel edge is its CENTRELINE. 150 mm past a
+     * 250 mm beam puts the end of the bar 25 mm OUTSIDE the beam it is meant to
+     * be anchored in — no cover, no concrete, which is exactly what the cage
+     * was drawing. Where the beam is too narrow for the full embedment the bar
+     * stops at its far face less cover instead. `slabBarDetail` already reads
+     * the figure this way (`Math.min(embed, face)`) for the elevation; this is
+     * the same reading applied to the placed bars.
+     */
+    const embedInto = (s: number) => {
+      const want = ext.column.supportEmbed / 1000
+      const room = Math.max(0, s / 2 - c)
+      if (room < want - 1e-9) narrow.add(Math.round(s * 1000))
+      return Math.min(want, room)
+    }
     // The crank climbs from the bottom layer to the top one; at 45° it needs
     // that much horizontal run to do it.
     const climb = yT - yB
@@ -230,10 +261,10 @@ export function buildSlabCage(i: SlabCageInput): RebarCage {
     /** Where a top leg stops at one end: the centreline when the slab carries
      *  on (the neighbour draws the other half), else the far face with a hook
      *  turned down into the support — the only anchorage a free edge has. */
-    const topEnd = (face: number, sign: 1 | -1, continuous: boolean, v: number) =>
+    const topEnd = (face: number, sign: 1 | -1, continuous: boolean, v: number, s: number) =>
       continuous
         ? { pts: [at(face, v, yT)], bends: [] as number[] }
-        : { pts: [at(face - sign * (sup / 2 - c), v, yT - hook), at(face - sign * (sup / 2 - c), v, yT)], bends: [bend] }
+        : { pts: [at(face - sign * (s / 2 - c), v, yT - hook), at(face - sign * (s / 2 - c), v, yT)], bends: [bend] }
 
     for (const { band, strip } of strips(dir.aLo, dir.aHi, dir.d.csWidth)) {
       const e = ext[strip]
@@ -245,18 +276,19 @@ export function buildSlabCage(i: SlabCageInput): RebarCage {
         for (const v of bandLines(band[0], band[1], botSpacing)) {
           push({
             tag: `B${dir.run.toUpperCase()}`, dia: i.barDia, role: 'bottom',
-            path: [at(dir.lo - embed, v, yB), at(dir.hi + embed, v, yB)], bendDia: [],
+            path: [at(dir.lo - embedInto(dir.supLo), v, yB), at(dir.hi + embedInto(dir.supHi), v, yB)],
+            bendDia: [],
           })
         }
         bandLines(band[0], band[1], topSpacing).forEach((v, k) => {
           const reach = ((strip === 'middle' || k % 2 === 0) ? e.topLong : e.topShort) * dir.d.ln
-          for (const [face, sign, cont] of [
-            [dir.lo, 1, dir.contLo], [dir.hi, -1, dir.contHi],
+          for (const [face, sign, cont, s] of [
+            [dir.lo, 1, dir.contLo, dir.supLo], [dir.hi, -1, dir.contHi, dir.supHi],
           ] as const) {
-            const end = topEnd(face, sign, cont, v)
+            const end = topEnd(face, sign, cont, v, s)
             push({
               tag: `T${dir.run.toUpperCase()}`, dia: i.barDia, role: 'top',
-              path: [...end.pts, at(face + sign * (sup / 2 + reach), v, yT)],
+              path: [...end.pts, at(face + sign * (s / 2 + reach), v, yT)],
               bendDia: end.bends,
             })
           }
@@ -275,18 +307,21 @@ export function buildSlabCage(i: SlabCageInput): RebarCage {
         const face = atLow ? dir.lo : dir.hi
         const sign: 1 | -1 = atLow ? 1 : -1
         const cont = atLow ? dir.contLo : dir.contHi
+        const s = atLow ? dir.supLo : dir.supHi
         // The far end stays in the BOTTOM and carries on into the far support,
         // the way any continuous bottom bar does. Written out rather than
         // signed: the signed form read `farFace - farSign * -embed`, whose
         // double negative pulled the bar 150 mm SHORT of the support instead
         // of 150 mm into it.
-        const farEnd = atLow ? dir.hi + embed : dir.lo - embed
+        const farEnd = atLow
+          ? dir.hi + embedInto(dir.supHi)
+          : dir.lo - embedInto(dir.supLo)
         // The top leg reaches the same distance past the face as a straight top
         // bar would — the figure's extension, so both details put steel over
         // the same length of support and the two are comparable.
         const reach = e.topLong * dir.d.ln
-        const upper = face + sign * (sup / 2 + reach)
-        const end = topEnd(face, sign, cont, v)
+        const upper = face + sign * (s / 2 + reach)
+        const end = topEnd(face, sign, cont, v, s)
         push({
           tag: `M${dir.run.toUpperCase()}`, dia: i.barDia, role: 'bottom',
           path: [
@@ -307,13 +342,13 @@ export function buildSlabCage(i: SlabCageInput): RebarCage {
       if (sExtra !== null) {
         bandLines(band[0], band[1], sExtra).forEach((v, k) => {
           const reach = ((strip === 'middle' || k % 2 === 0) ? e.topLong : e.topShort) * dir.d.ln
-          for (const [face, sign, cont] of [
-            [dir.lo, 1, dir.contLo], [dir.hi, -1, dir.contHi],
+          for (const [face, sign, cont, s] of [
+            [dir.lo, 1, dir.contLo, dir.supLo], [dir.hi, -1, dir.contHi, dir.supHi],
           ] as const) {
-            const end = topEnd(face, sign, cont, v)
+            const end = topEnd(face, sign, cont, v, s)
             push({
               tag: `T${dir.run.toUpperCase()}`, dia: i.barDia, role: 'top',
-              path: [...end.pts, at(face + sign * (sup / 2 + reach), v, yT)],
+              path: [...end.pts, at(face + sign * (s / 2 + reach), v, yT)],
               bendDia: end.bends,
             })
           }
@@ -327,6 +362,15 @@ export function buildSlabCage(i: SlabCageInput): RebarCage {
   if (hook < hookExt(i.barDia) - 1e-9) {
     notes.push(`⌀${i.barDia} hook needs ${Math.round(hookExt(i.barDia) * 1000)} mm `
       + `of ℓext (§425.3.1); a ${i.h} mm slab leaves ${Math.round(hook * 1000)} mm between the mats`)
+  }
+
+  // A support too narrow for §408.7.4.1.3's embedment is a real finding too: the
+  // bottom bar is stopped at the beam's far face less cover rather than drawn
+  // outside it, and the structural-integrity anchorage (§408.7.4.2) is then
+  // shorter than the figure asks for.
+  for (const w of [...narrow].sort((a, b) => a - b)) {
+    notes.push(`bottom bars carry ${Math.round(w / 2 - i.cover)} mm into a ${w} mm support, `
+      + `not the ${ext.column.supportEmbed} mm of §408.7.4.1.3 — the beam is not wide enough`)
   }
 
   // ── chairs ─────────────────────────────────────────────────────────────
