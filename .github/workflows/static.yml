@@ -1,6 +1,24 @@
-# CI (typecheck + lint + tests) on every push/PR to main; Pages deploy only
-# runs on push to main and only after CI passes.
-name: CI and deploy to Pages
+# CI — typecheck + lint + tests on every push/PR to main.
+#
+# THIS USED TO ALSO DEPLOY TO GITHUB PAGES, and that deploy was removed.
+#
+# It uploaded `path: '.'` — the whole repository, unbuilt — on every push to
+# main. Production is Vercel (see README), so the Pages site served nothing
+# anyone used, and because there is no index.html at the repo root it answered
+# 404 and looked dead. It was not: every file in the repo was fetchable from it
+# (`…/CLAUDE.md`, `…/HANDOFF.md`, `…/docs/Billing.md` all returned 200), so the
+# job was quietly publishing the source, the pricing and competitive strategy
+# docs, and the audit findings, to anyone with the URL.
+#
+# Deleting the job stops future publishes. It does NOT unpublish the site that
+# is already there — that is Settings → Pages → Source: None in the repository
+# settings, and it has to be done by hand.
+#
+# The workflow FILE keeps its name. `static.yml` no longer describes what it
+# does, but the job id `ci` is what branch protection requires by name and what
+# docs/Roadmap.md points at, and renaming for tidiness is not worth breaking
+# either.
+name: CI
 
 on:
   push:
@@ -11,11 +29,10 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+# Read-only: nothing here publishes any more. The `pages: write` and
+# `id-token: write` grants the deploy needed went with it.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 jobs:
   ci:
@@ -42,31 +59,3 @@ jobs:
         run: npm run lint
       - name: Test
         run: npm test
-
-  deploy:
-    # Deploy only from pushes to main (and manual dispatch), never from PRs,
-    # and only once CI is green.
-    needs: ci
-    if: github.event_name != 'pull_request'
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    # Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-    # However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
-    concurrency:
-      group: "pages"
-      cancel-in-progress: false
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          # Upload entire repository
-          path: '.'
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
