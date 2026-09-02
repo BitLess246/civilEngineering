@@ -72,8 +72,18 @@ export const MODEL_TOOLS: DocTool[] = [
         ],
       },
       {
+        id: 'ms-selection',
+        title: 'Selection panel',
+        body: 'Whatever is selected in the 3D view, at the top of the control panel and on every tab. For a member: role, length, section, the design verdict with its utilisation, the governing forces, and the six force diagrams behind a disclosure. For a slab: panel size, its area loads and the tributary split. It used to live at the foot of the Analysis tab, so clicking a member gave you a chip on the canvas and nothing else unless you were on that one tab.',
+        controls: [
+          { kind: 'output', name: 'Design', what: 'The verdict from whichever schedule this member landed in — RC or steel, beam or column — with the utilisation where that schedule reports one. Blank until the structure has been designed.' },
+          { kind: 'button', name: '▸ Show force diagrams', what: 'Unfolds Mz, My, Vy, Vz, N and T along the selected member for the governing combination. Folded by default because the panel now shows on every tab.' },
+          { kind: 'button', name: 'Delete member / Delete slab', what: 'Removes the element and everything attached to it. Asks once — the button arms, then confirms — because it now sits two lines under the thing it deletes rather than at the foot of a tab.' },
+        ],
+      },
+      {
         id: 'ms-member-detail',
-        title: 'Selected-member panel',
+        title: 'Selected-member overrides',
         body: 'Appears in the Geometry tab when a member is selected. These are per-member overrides — each one is optional and blank means "use the model default".',
         controls: [
           { kind: 'toggle', name: 'End releases (Fx…Mz, i and j)', what: 'Ticking a box releases that force or moment at that end. Mz is in-plane bending, My out-of-plane. Used for pinned ends and for genuine hinges.' },
