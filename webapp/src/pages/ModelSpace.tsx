@@ -1252,6 +1252,23 @@ export default function ModelSpace() {
   const [modeAmp, setModeAmp] = useState(1.5)
   const [forceDiag, setForceDiag] = useState<DiagramComp | null>(null)   // inline 3D BMD/SFD overlay
   const [forceDiagScale, setForceDiagScale] = useState(1)                // user offset multiplier
+  // The selected member's six force diagrams, folded away by default: the
+  // selection panel shows on every tab now, and six charts is not a summary.
+  const [selDiagrams, setSelDiagrams] = useState(false)
+  /**
+   * Which element's Delete has been armed, if any.
+   *
+   * Delete used to sit at the bottom of the Analysis tab, behind a scroll; it
+   * is now two lines under the thing it deletes, on every tab. That is the
+   * point of moving the panel, and it is also how a model loses a member to a
+   * mis-aimed click — so the button asks once.
+   *
+   * It holds the ID rather than a boolean, so selecting something else disarms
+   * it by simply no longer matching. Clearing it from an effect on `selected`
+   * would be the same fact written as a cascading render, which is what
+   * `react-hooks/set-state-in-effect` is there to stop.
+   */
+  const [armDelete, setArmDelete] = useState<string | null>(null)
   // Thermal load inputs
   const [thMember, setThMember] = useState('')
   const [thDeltaT, setThDeltaT] = useState(30)
@@ -2265,6 +2282,29 @@ export default function ModelSpace() {
     return (id: string) => map.get(id) ?? 0
   }, [model, nodePos])
 
+  /**
+   * The design verdict for one member, whatever kind it turned out to be.
+   *
+   * The schedules are split by material and role, so "is this member OK?" is
+   * six lookups. Asked once here, because the person who just clicked a member
+   * is asking exactly that and should not have to know which schedule it lands
+   * in to find out.
+   */
+  const memberDesign = (id: string): { kind: string; ok: boolean; util?: number } | null => {
+    if (!design) return null
+    const rc = design.beams.find((b) => b.id === id)
+    if (rc) return { kind: 'RC beam', ok: rc.ok }
+    const col = design.columns.find((c) => c.id === id)
+    if (col) return { kind: 'RC column', ok: col.ok, util: col.util }
+    const sb = design.steelBeams.find((b) => b.id === id)
+    if (sb) return { kind: 'Steel beam', ok: sb.ok, util: Math.max(sb.utilM, sb.utilV) }
+    const sc = design.steelColumns.find((c) => c.id === id)
+    if (sc) return { kind: 'Steel column', ok: sc.ok, util: sc.ratio }
+    const ps = design.prestressed.find((b) => b.id === id)
+    if (ps) return { kind: 'Prestressed beam', ok: ps.ok }
+    return null
+  }
+
   const download = () => {
     if (!model) return
     const blob = new Blob([JSON.stringify(model, null, 2)], { type: 'application/json' })
@@ -2555,6 +2595,111 @@ export default function ModelSpace() {
             the header, so switching tabs does not depend on how wide this rail
             happens to be. */}
         <div className="no-print overflow-hidden rounded-lg border border-[#e3e1da] bg-white">
+          {/* ── SELECTION — what is picked, wherever you are ────────────────
+              This detail already existed, at the BOTTOM of the Analysis tab.
+              So clicking a member in the 3D view gave you a chip on the canvas
+              and nothing else, unless you happened to be on that one tab and
+              scrolled past everything above it. Selection is not an analysis
+              concern — it is a mode, and the panel should say what is in it.
+              MOVED here rather than copied, so there is still only one of it. */}
+          {(selMember || selPlate) && (
+            <div className="divide-y divide-[#eeece5] border-b border-[#eeece5] bg-[#fbfaf7] px-4 py-1">
+            {selMember && model && (
+              <Sec grid={false} title={`Member — ${selMember.id}`}>
+                <Row label="Role" value={selMember.role} />
+                <Row label="Length" value={`${f2(memberLen)} m`} />
+                <Row label="Section" value={sectionFor(selMember.id)?.name ?? selMember.section} />
+                {(() => {
+                  const d = memberDesign(selMember.id)
+                  if (!d) return null
+                  return <Row alert={!d.ok} label="Design"
+                    value={`${d.ok ? 'OK' : 'CHECK'}${d.util !== undefined ? ` · ${f2(d.util)}` : ''}`}
+                    sub={d.util !== undefined ? `${d.kind} — utilisation` : d.kind} />
+                })()}
+                {selMember.axialMode && selMember.axialMode !== 'both' && (
+                  <Row alert={inactiveIds.has(selMember.id)} label="Axial mode" value={selMember.axialMode}
+                    sub={!axialSets ? 'run Analyze to resolve the active set'
+                      : inactiveIds.has(selMember.id) ? 'switched OFF in the governing combination'
+                      : 'active in the governing combination'} />
+                )}
+                {(() => {
+                  const mr = govRes?.members.find((m) => m.id === selMember.id)
+                  if (!mr) return null
+                  return (
+                    <div className="mt-2 space-y-2">
+                      <Row label="Forces (governing)" value={`M ${f1(mr.Mmax)} kN·m`}
+                        sub={`V ${f1(mr.Vmax)} · N ${f1(mr.Nmax)} · T ${f1(mr.Tmax)} kN`} />
+                      <button type="button" onClick={() => setSelDiagrams((v) => !v)}
+                        className="text-[11px] font-semibold text-[#0f4c92] hover:underline">
+                        {selDiagrams ? '▾ Hide force diagrams' : '▸ Show force diagrams'}
+                      </button>
+                      {selDiagrams && <>
+                      <Diagram xs={mr.xs} ys={mr.Mz} title="Mz — strong-axis moment" unit="kN·m" color="#d62728" decimals={1} />
+                      <Diagram xs={mr.xs} ys={mr.My} title="My — weak-axis moment" unit="kN·m" color="#ea580c" decimals={1} />
+                      <Diagram xs={mr.xs} ys={mr.Vy} title="Vy — shear (x′-y′)" unit="kN" color="#1f77b4" decimals={1} />
+                      <Diagram xs={mr.xs} ys={mr.Vz} title="Vz — shear (x′-z′)" unit="kN" color="#0e7490" decimals={1} />
+                      <Diagram xs={mr.xs} ys={mr.N} title="N — axial (+tension)" unit="kN" color="#7c3aed" decimals={1} />
+                      <Diagram xs={mr.xs} ys={mr.T} title="T — torsion" unit="kN·m" color="#b45309" decimals={1} />
+                      </>}
+                    </div>
+                  )
+                })()}
+                {selMember.role === 'column' && columnKs.get(selMember.id) && (() => {
+                  const k = columnKs.get(selMember.id)!
+                  return (
+                    <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                      <p className="mb-1 text-[11px] font-semibold text-[#0f4c92]">Effective length K — AISC alignment chart (C-C2)</p>
+                      <Row label="K — X-sway" value={`sway ${f2(k.Kx.sway)} · braced ${f2(k.Kx.braced)}`}
+                        sub={`G: ${f2(k.Gi.x)} (i) · ${f2(k.Gj.x)} (j)`} />
+                      <Row label="K — Z-sway" value={`sway ${f2(k.Kz.sway)} · braced ${f2(k.Kz.braced)}`}
+                        sub={`G: ${f2(k.Gi.z)} (i) · ${f2(k.Gj.z)} (j)`} />
+                      <p className="mt-1 text-[10px] text-slate-500">
+                        G = Σ(EI/L)<sub>col</sub> / Σ(EI/L)<sub>beam</sub> at each joint; fixed base G = 1.0, pinned/no-beam G = 10.
+                      </p>
+                    </div>
+                  )
+                })()}
+                {armDelete === selMember.id ? (
+                  <div className="mt-2 flex items-center gap-2">
+                    <button type="button" onClick={() => { save(removeElements(model, new Set([selMember.id]))); setSelected(null) }}
+                      className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700">Delete member — confirm</button>
+                    <button type="button" onClick={() => setArmDelete(null)}
+                      className="text-sm font-semibold text-slate-500 hover:text-slate-700">Cancel</button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setArmDelete(selMember.id)}
+                    className="mt-2 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50">Delete member</button>
+                )}
+              </Sec>
+            )}
+
+            {selPlate && plateInfo && model && (
+              <Sec grid={false} title={`Slab — ${selPlate.id}`}>
+                <Row label="Panel" value={`${f2(plateInfo.lx)} × ${f2(plateInfo.lz)} m`}
+                  sub={`t = ${selPlate.thickness} mm`} />
+                {plateInfo.areaLoads.map((l, i) => (
+                  <Row key={i} label={`q (${l.cat})`} value={`${f2(l.q)} kPa`} />
+                ))}
+                {plateInfo.trib && (
+                  <Row label="Tributary" value={plateInfo.trib.behaviour}
+                    sub={`peak ${f1(plateInfo.trib.edges[0].peak)} kN/m on long edges`} />
+                )}
+                {armDelete === selPlate.id ? (
+                  <div className="mt-2 flex items-center gap-2">
+                    <button type="button" onClick={() => { save(removeElements(model, new Set([selPlate.id]))); setSelected(null) }}
+                      className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700">Delete slab — confirm</button>
+                    <button type="button" onClick={() => setArmDelete(null)}
+                      className="text-sm font-semibold text-slate-500 hover:text-slate-700">Cancel</button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setArmDelete(selPlate.id)}
+                    className="mt-2 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50">Delete slab</button>
+                )}
+              </Sec>
+            )}
+            </div>
+          )}
+
 
           {/* ── GEOMETRY ── */}
           {tab === 'geometry' && (
@@ -4143,69 +4288,6 @@ export default function ModelSpace() {
                       </>
                     )
                   })()}
-                </Sec>
-              )}
-
-              {selMember && model && (
-                <Sec grid={false} title={`Member — ${selMember.id}`}>
-                  <Row label="Role" value={selMember.role} />
-                  <Row label="Length" value={`${f2(memberLen)} m`} />
-                  <Row label="Section" value={sectionFor(selMember.id)?.name ?? selMember.section} />
-                  {selMember.axialMode && selMember.axialMode !== 'both' && (
-                    <Row alert={inactiveIds.has(selMember.id)} label="Axial mode" value={selMember.axialMode}
-                      sub={!axialSets ? 'run Analyze to resolve the active set'
-                        : inactiveIds.has(selMember.id) ? 'switched OFF in the governing combination'
-                        : 'active in the governing combination'} />
-                  )}
-                  {(() => {
-                    const mr = govRes?.members.find((m) => m.id === selMember.id)
-                    if (!mr) return null
-                    return (
-                      <div className="mt-2 space-y-2">
-                        <Row label="Forces (governing)" value={`M ${f1(mr.Mmax)} kN·m`}
-                          sub={`V ${f1(mr.Vmax)} · N ${f1(mr.Nmax)} · T ${f1(mr.Tmax)} kN`} />
-                        <Diagram xs={mr.xs} ys={mr.Mz} title="Mz — strong-axis moment" unit="kN·m" color="#d62728" decimals={1} />
-                        <Diagram xs={mr.xs} ys={mr.My} title="My — weak-axis moment" unit="kN·m" color="#ea580c" decimals={1} />
-                        <Diagram xs={mr.xs} ys={mr.Vy} title="Vy — shear (x′-y′)" unit="kN" color="#1f77b4" decimals={1} />
-                        <Diagram xs={mr.xs} ys={mr.Vz} title="Vz — shear (x′-z′)" unit="kN" color="#0e7490" decimals={1} />
-                        <Diagram xs={mr.xs} ys={mr.N} title="N — axial (+tension)" unit="kN" color="#7c3aed" decimals={1} />
-                        <Diagram xs={mr.xs} ys={mr.T} title="T — torsion" unit="kN·m" color="#b45309" decimals={1} />
-                      </div>
-                    )
-                  })()}
-                  {selMember.role === 'column' && columnKs.get(selMember.id) && (() => {
-                    const k = columnKs.get(selMember.id)!
-                    return (
-                      <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
-                        <p className="mb-1 text-[11px] font-semibold text-[#0f4c92]">Effective length K — AISC alignment chart (C-C2)</p>
-                        <Row label="K — X-sway" value={`sway ${f2(k.Kx.sway)} · braced ${f2(k.Kx.braced)}`}
-                          sub={`G: ${f2(k.Gi.x)} (i) · ${f2(k.Gj.x)} (j)`} />
-                        <Row label="K — Z-sway" value={`sway ${f2(k.Kz.sway)} · braced ${f2(k.Kz.braced)}`}
-                          sub={`G: ${f2(k.Gi.z)} (i) · ${f2(k.Gj.z)} (j)`} />
-                        <p className="mt-1 text-[10px] text-slate-500">
-                          G = Σ(EI/L)<sub>col</sub> / Σ(EI/L)<sub>beam</sub> at each joint; fixed base G = 1.0, pinned/no-beam G = 10.
-                        </p>
-                      </div>
-                    )
-                  })()}
-                  <button type="button" onClick={() => { save(removeElements(model, new Set([selMember.id]))); setSelected(null) }}
-                    className="mt-2 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50">Delete member</button>
-                </Sec>
-              )}
-
-              {selPlate && plateInfo && model && (
-                <Sec grid={false} title={`Slab — ${selPlate.id}`}>
-                  <Row label="Panel" value={`${f2(plateInfo.lx)} × ${f2(plateInfo.lz)} m`}
-                    sub={`t = ${selPlate.thickness} mm`} />
-                  {plateInfo.areaLoads.map((l, i) => (
-                    <Row key={i} label={`q (${l.cat})`} value={`${f2(l.q)} kPa`} />
-                  ))}
-                  {plateInfo.trib && (
-                    <Row label="Tributary" value={plateInfo.trib.behaviour}
-                      sub={`peak ${f1(plateInfo.trib.edges[0].peak)} kN/m on long edges`} />
-                  )}
-                  <button type="button" onClick={() => { save(removeElements(model, new Set([selPlate.id]))); setSelected(null) }}
-                    className="mt-2 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50">Delete slab</button>
                 </Sec>
               )}
             </div>
