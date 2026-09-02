@@ -87,10 +87,25 @@ describe('slab cage — the two mats of a panel', () => {
   it('the bottom mat runs the FULL panel and carries into both supports', () => {
     // §408.7.4.1.3 gives the bottom bars as continuous, embedded into the
     // support; §408.7.4.2 wants them through the column core.
+    //
+    // 130 mm, not the figure's 150: the panel edge is the support's CENTRELINE,
+    // so a 300 mm support has 150 mm of concrete beyond it and the bar has to
+    // stop a cover short of its far face. See the narrow-support block below.
     const bot = c.runs.filter((r) => r.role === 'bottom')
-    const embed = DEFAULT_EXT.column.supportEmbed / 1000
+    const embed = 0.3 / 2 - 0.02
     const spans = new Set(bot.map((r) => +len(r).toFixed(6)))
     expect(spans).toEqual(new Set([6 + 2 * embed, 5 + 2 * embed]))
+  })
+
+  it('takes the FULL §408.7.4.1.3 embedment where the support is wide enough', () => {
+    // 500 mm of support leaves 250 − 20 = 230 mm beyond the centreline, so the
+    // clamp does not bite and the figure's 150 mm is what is drawn.
+    const wide = buildSlabCage(panel({ support: 0.5 }))
+    const embed = DEFAULT_EXT.column.supportEmbed / 1000
+    const spans = new Set(wide.runs.filter((r) => r.role === 'bottom')
+      .map((r) => +len(r).toFixed(6)))
+    expect(spans).toEqual(new Set([6 + 2 * embed, 5 + 2 * embed]))
+    expect(wide.notes?.some((n) => n.includes('into a'))).toBeFalsy()
   })
 
   it('the top mat exists only over the supports — never across mid-span', () => {
@@ -282,7 +297,7 @@ describe('bent bars — the arrangement the reference detail shows', () => {
     // SHORT of the support instead of 150 mm into it.
     const r = mainX.find((x) => x.path[0][0] < 3)!
     const last = r.path[r.path.length - 1]
-    expect(last[0]).toBeCloseTo(6 + DEFAULT_EXT.column.supportEmbed / 1000, 9)
+    expect(last[0]).toBeCloseTo(6 + (0.3 / 2 - 0.02), 9)
     expect(last[1]).toBeCloseTo(r.path[r.path.length - 2][1], 12)       // still on the bottom
   })
 
@@ -346,5 +361,57 @@ describe('the two details are both built, and they differ', () => {
     const count = (d: 'bent' | 'straight') => buildSlabCage(panel({ detail: d })).runs
       .filter((r) => r.role === 'bottom' && r.mark.includes(d === 'bent' ? '-M' : '-B')).length
     expect(count('bent')).toBe(count('straight'))
+  })
+})
+
+describe('the cage stays inside the beam it is supported on', () => {
+  // The reported defect: slab bars drawn OUTSIDE the beam, on the side. The
+  // panel edge is the supporting beam's centreline, so anything the cage runs
+  // past that edge has only half the beam's width to live in.
+  const outside = (c: { runs: RebarRun[] }, edge: number, sign: 1 | -1, s: number) =>
+    c.runs.some((r) => r.path.some((p) => sign * (p[0] - (edge + sign * s / 2)) > 1e-9))
+
+  it('stops a bottom bar a cover short of a narrow support, not 150 mm past it', () => {
+    // A 250 mm beam gives 125 mm beyond the centreline; the figure's 150 mm
+    // would end the bar 25 mm OUTSIDE the concrete, with no cover at all.
+    const c = buildSlabCage(panel({ support: 0.25 }))
+    const xs = c.runs.flatMap((r) => r.path.map((p) => p[0]))
+    expect(Math.min(...xs)).toBeCloseTo(-(0.25 / 2 - 0.02), 9)
+    expect(Math.max(...xs)).toBeCloseTo(6 + (0.25 / 2 - 0.02), 9)
+    expect(outside(c, 0, -1, 0.25)).toBe(false)
+    expect(outside(c, 6, 1, 0.25)).toBe(false)
+  })
+
+  it('says so, rather than quietly detailing less than §408.7.4.1.3 asks for', () => {
+    const c = buildSlabCage(panel({ support: 0.25 }))
+    expect(c.notes?.some((n) => n.includes('105 mm into a 250 mm support'))).toBe(true)
+  })
+
+  it('measures each edge against its OWN beam', () => {
+    // A 600-wide girder on one side and a 250 beam on the other: one embedment
+    // for both edges is wrong at whichever edge it was not measured from.
+    const c = buildSlabCage(panel({ support: 0.6, edgeSupport: { xHi: 0.25 } }))
+    const xs = c.runs.flatMap((r) => r.path.map((p) => p[0]))
+    expect(Math.min(...xs)).toBeCloseTo(-0.15, 9)                 // 600 beam: the full 150
+    expect(Math.max(...xs)).toBeCloseTo(6 + (0.25 / 2 - 0.02), 9) // 250 beam: clamped
+    expect(outside(c, 6, 1, 0.25)).toBe(false)
+  })
+
+  it('turns a free edge down inside its own support too', () => {
+    // The hook at a discontinuous edge is set from the face of that edge's
+    // beam, so it cannot be placed by a neighbour's width either.
+    const c = buildSlabCage(panel({
+      support: 0.6, edgeSupport: { xLo: 0.25 }, edges: { xLo: false },
+    }))
+    expect(outside(c, 0, -1, 0.25)).toBe(false)
+  })
+
+  it('never draws steel above the top of the slab or below its soffit', () => {
+    // The slab's top face is the level handed in; the beams framing it hang
+    // below that same line, so a bar above `yTop` is a bar in fresh air.
+    const c = buildSlabCage(panel())
+    const ys = c.runs.flatMap((r) => r.path.map((p) => p[1]))
+    expect(Math.max(...ys)).toBeLessThanOrEqual(3 - 0.02 + 1e-9)
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(3 - 0.2 + 0.02 - 1e-9)
   })
 })

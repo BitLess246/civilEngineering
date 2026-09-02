@@ -31,7 +31,7 @@ import { buildStairCage } from './stairCage'
 import { placeStair } from './stairPlacement'
 import { spliceCage } from './barSplice'
 import { STOCK_BAR_LENGTH } from './rebarModel'
-import type { RebarCage } from './rebarModel'
+import type { CageKind, RebarCage } from './rebarModel'
 import { beamMomentRatios, momentRatioLimits, type BeamMomentRatios } from './beamMomentRatios'
 
 const FALLBACK: RectSection = {
@@ -212,6 +212,9 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
   const pedestalAt = new Map(design.footings.map((f) => [f.node, f.pedestal]))
 
   const cages: RebarCage[] = []
+  /** Push a cage, tagged with the kind of element it belongs to — the tag a
+   *  viewer filters on, so it is stated here rather than guessed from the mark. */
+  const add = (kind: CageKind, cage: RebarCage) => { cages.push({ ...cage, kind }) }
   const unplaced: string[] = []
   /** Splice options for a member, from its own concrete and steel. */
   const spliceOf = (
@@ -267,7 +270,7 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       top: [0.5],                       // middle half
       bottom: [0.125, 0.875],           // end quarters
     })
-    cages.push(spliceCage(buildBeamCage({
+    add('beam', spliceCage(buildBeamCage({
       // The cage is told how its bars WILL be lapped, so it can close the
       // stirrups up through each lap before it places them.
       splice: beamSplice,
@@ -341,7 +344,7 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
           topBar: false, epoxy: 'none', lambda: 1, cbKtr_db: 2.5,
         }).lsc
       : 0
-    cages.push(spliceCage(buildColumnCage({
+    add('column', spliceCage(buildColumnCage({
       mark: c.id, b: sec.b, h: sec.h, cover: sec.cover, spliceLap: lap,
       spliceRise: lap > 0 ? spliceRiseAbove(c.id, topNode, lap / 1000) : 0,
       barDia: sec.barDia, bars: c.bars, tieDia: sec.tieDia,
@@ -390,7 +393,7 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       db: sec.barDia, fc: sec.fc, fy: sec.fy,
       topBar: false, epoxy: 'none', lambda: 1, cbKtr_db: 2.5,
     }).lsc
-    cages.push(spliceCage(buildFootingCage({
+    add('footing', spliceCage(buildFootingCage({
       mark: `F-${f.node}`,
       B: f.design.B, Dc: f.design.Dc, cover: FOOTING_COVER,
       barDia: f.barDia, bars: f.design.bars,
@@ -438,6 +441,39 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       unplaced.push(`slab@${sl.plate}`); continue
     }
     const sec = model.sections[0] ?? FALLBACK
+    /**
+     * Width of the beam framing one edge of the panel, m.
+     *
+     * The panel's edge is the supporting beam's CENTRELINE, so this width is
+     * what decides how far the bottom mat may carry past that edge before it
+     * leaves the concrete. One width for all four edges — which is what
+     * `model.sections[0]` was — has no reason to be the width of the beam the
+     * bar actually ends in, and where it was the wider of them the bar was
+     * drawn outside the narrower beam's face.
+     *
+     * The narrowest beam on the edge decides, for the same reason. `undefined`
+     * where no beam runs along the edge at the panel's own level (a wall, or an
+     * unsupported edge), and `buildSlabCage` falls back to `support`.
+     */
+    const edgeWidth = (axis: 'x' | 'z', at: number, lo: number, hi: number): number | undefined => {
+      const y = ys[0]!
+      let w: number | undefined
+      for (const m of model.members) {
+        if (!isBeam(m.role)) continue
+        const a = pos.get(m.i), b = pos.get(m.j)
+        if (!a || !b) continue
+        const on = (p: { x: number; y: number; z: number }) =>
+          Math.abs((axis === 'x' ? p.x : p.z) - at) < 1e-6 && Math.abs(p.y - y) < 1e-6
+        if (!on(a) || !on(b)) continue
+        // Only the stretch of the line the panel actually sits against: a beam
+        // further along the same gridline supports a different panel.
+        const u0 = axis === 'x' ? a.z : a.x, u1 = axis === 'x' ? b.z : b.x
+        if (Math.min(u0, u1) > hi - 1e-6 || Math.max(u0, u1) < lo + 1e-6) continue
+        const bw = secOf(m.id).b / 1000
+        w = w === undefined ? bw : Math.min(w, bw)
+      }
+      return w
+    }
     // The DDM names its directions by the panel's own short/long sides, so map
     // each back onto the model axis it actually runs along before placing bars.
     const dd = sl.design
@@ -466,17 +502,29 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       const a = cornerAt(fx0, fz0), b = cornerAt(fx1, fz1)
       return a !== undefined && b !== undefined && shares(a, b)
     }
-    cages.push(buildSlabCage({
+    // Slab bars are spliced like every other bar: a mat across a 9 m panel is
+    // two stock bars lapped, not one 9 m piece, and the lap is steel that has
+    // to be drawn and paid for. Bottom bars lap near the supports (the end
+    // eighths) and top bars near midspan — §25.5.2's arrangement, the same one
+    // the beams use.
+    add('slab', spliceCage(buildSlabCage({
       mark: sl.plate,
       x0, x1, z0, z1, yTop: ys[0]!,
       h: dd.h, cover: 20, barDia: sl.barDia,
       x: dirFor(x1 - x0), z: dirFor(z1 - z0),
       support: Math.min(sec.b, sec.h) / 1000,
+      edgeSupport: {
+        xLo: edgeWidth('x', x0, z0, z1), xHi: edgeWidth('x', x1, z0, z1),
+        zLo: edgeWidth('z', z0, x0, x1), zHi: edgeWidth('z', z1, x0, x1),
+      },
       edges: {
         xLo: edgeShared(x0, z0, x0, z1), xHi: edgeShared(x1, z0, x1, z1),
         zLo: edgeShared(x0, z0, x1, z0), zHi: edgeShared(x0, z1, x1, z1),
       },
-    }))
+    }), spliceOf(sec, sl.barDia, [0.5], {
+      top: [0.5],                       // middle half
+      bottom: [0.125, 0.875],           // end eighths, over the supports
+    })))
   }
 
   // ── stairs: the steel in each flight ────────────────────────────────────
@@ -489,7 +537,7 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
     const model_st = (model.stairs ?? []).find((x) => x.id === st.id)
     const p = model_st && placeStair(model, model_st)
     if (!model_st || !p) { unplaced.push(`stair@${st.id}`); continue }
-    cages.push(buildStairCage({
+    add('stair', buildStairCage({
       mark: st.id, placed: p, cover: 20,
       mainDia: 12, distDia: 10,
       mainSpacing: st.design.mainSpacing, distSpacing: st.design.distSpacing,

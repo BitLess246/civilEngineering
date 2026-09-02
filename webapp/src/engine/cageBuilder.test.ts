@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { buildStructureCages } from './cageBuilder'
 import { designStructure } from './pipeline'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
-import { cutLength, type RebarCage, type Vec3 } from './rebarModel'
+import { cutLength, STOCK_BAR_LENGTH, type RebarCage, type Vec3 } from './rebarModel'
 import { estimateTakeoff } from './takeoff'
 
 const section = { id: 's1', name: 'C1', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
@@ -266,6 +266,25 @@ describe('buildStructureCages', () => {
   })
 })
 
+describe('every cage says what kind of element it belongs to', () => {
+  // Carried on the cage rather than re-derived from the mark, so a view can
+  // hide one kind of steel without looking each mark back up in the model.
+  it('tags beams, columns and footings', () => {
+    const kinds = new Set(cages.map((c) => c.kind))
+    expect(kinds.has('beam')).toBe(true)
+    expect(kinds.has('column')).toBe(true)
+    expect(kinds.has('footing')).toBe(true)
+    expect(cages.every((c) => c.kind !== undefined)).toBe(true)
+  })
+
+  it('names the right one — a footing cage is marked for its node', () => {
+    for (const f of design.footings) {
+      const c = cages.find((x) => x.member === `F-${f.node}`) ?? cages.find((x) => x.member.includes(f.node))
+      if (c) expect(c.kind).toBe('footing')
+    }
+  })
+})
+
 describe('a seismic frame gets a confined hinge zone, a gravity one does not', () => {
   /** The gaps between consecutive stirrups along the first beam, mm. */
   const hoopGaps = (system: 'gravity' | 'imf' | 'smf') => {
@@ -362,6 +381,41 @@ describe('slab cages — the floor is no longer drawn bare', () => {
         return Math.min(...xs) < shared - 1e-6 && Math.max(...xs) > shared + 1e-6
       })
     expect(crossing).toHaveLength(0)
+  })
+
+  it('tags every slab cage as a slab', () => {
+    for (const sl of sdesign.slabs) expect(slabOf(sl.plate)!.kind).toBe('slab')
+  })
+
+  it('stops the bottom mat inside the beam it is anchored in', () => {
+    // The reported defect: bars drawn outside the beam, on the side. The panel
+    // edge is the beam's CENTRELINE, so a 300 mm beam leaves 150 mm — and the
+    // bar has to stop a 20 mm cover short of that.
+    const reach = 0.3 / 2 - 0.02
+    for (const s of sdesign.slabs) {
+      const pl = smodel.plates.find((p) => p.id === s.plate)!
+      const ns = pl.corners.map((c) => smodel.nodes.find((n) => n.id === c)!)
+      const x0 = Math.min(...ns.map((n) => n.x)), x1 = Math.max(...ns.map((n) => n.x))
+      const z0 = Math.min(...ns.map((n) => n.z)), z1 = Math.max(...ns.map((n) => n.z))
+      for (const r of slabOf(s.plate)!.runs) for (const p of r.path) {
+        expect(p[0]).toBeGreaterThanOrEqual(x0 - reach - 1e-9)
+        expect(p[0]).toBeLessThanOrEqual(x1 + reach + 1e-9)
+        expect(p[2]).toBeGreaterThanOrEqual(z0 - reach - 1e-9)
+        expect(p[2]).toBeLessThanOrEqual(z1 + reach + 1e-9)
+      }
+    }
+  })
+
+  it('laps a mat bar that will not come out of one stock bar', () => {
+    // A 6 m panel plus two embedments is 6.26 m of bar, and a stock bar is 6 m:
+    // drawn as one piece it is a bar nobody can buy. Beams and columns have
+    // been spliced since `barSplice` landed; the slab mats were not.
+    const runLen = (r: RebarCage['runs'][number]) => r.path.slice(1).reduce(
+      (L, p, k) => L + Math.hypot(p[0] - r.path[k][0], p[1] - r.path[k][1], p[2] - r.path[k][2]), 0)
+    const all = sdesign.slabs.flatMap((s) => slabOf(s.plate)!.runs)
+    expect(all.every((r) => runLen(r) <= STOCK_BAR_LENGTH + 1e-6)).toBe(true)
+    // …and the long ones really were cut, not just short by luck.
+    expect(all.some((r) => r.role === 'bottom' && runLen(r) > STOCK_BAR_LENGTH * 0.5)).toBe(true)
   })
 
   it('the take-off does not bill them — it measures slabs from the DDM strips', () => {

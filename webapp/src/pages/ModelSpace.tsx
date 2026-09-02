@@ -12,6 +12,7 @@ import { RebarWireframe } from '../components/RebarWireframe'
 import { buildStructureCages, structureMomentRatios } from '../engine/cageBuilder'
 import { placeStair } from '../engine/stairPlacement'
 import { REBAR_ROLE_COLOR } from '../engine/rebarWire'
+import type { CageKind } from '../engine/rebarModel'
 import { ProjectsPanel } from '../components/ProjectsPanel'
 import { AUTOSAVE_KEY, INPUTS_KEY } from '../lib/modelSpaceSession'
 import { emptyHistory, recordHistory, undoHistory, redoHistory, isTypingTarget, type History } from '../lib/history'
@@ -146,6 +147,20 @@ const loadFromShear = (xs: number[], Vy: number[]): number[] =>
  */
 
 // ── Page ──────────────────────────────────────────────────────────────────
+/**
+ * The cage kinds the Display tab can switch off, in the order they are listed.
+ *
+ * Every kind `cageBuilder` tags — a list that misses one would silently make
+ * that steel un-hideable, which is worse than not offering the control.
+ */
+const CAGE_KIND_LABEL: Record<CageKind, string> = {
+  beam: 'Beams', column: 'Columns', slab: 'Slabs', stair: 'Stairs', footing: 'Footings',
+}
+/** …in the order they are listed. A `Record` keyed on the union, so adding a
+ *  kind to `cageBuilder` and forgetting its checkbox is a type error rather
+ *  than steel that quietly cannot be switched off. */
+const CAGE_KINDS = Object.keys(CAGE_KIND_LABEL) as CageKind[]
+
 export default function ModelSpace() {
   // design inputs restored from the last session (so they match the autosaved
   // 3D model after a reload), with the factory defaults as fallback.
@@ -240,6 +255,12 @@ export default function ModelSpace() {
   const [showFootings, setShowFootings] = useState(true)   // designed footing footprints
   const [showConns, setShowConns] = useState(true)         // designed steel joint hardware
   const [showRebar, setShowRebar] = useState(false)        // the designed bar cages, in 3D
+  // WHICH cages. A whole building's steel at once is a solid wall of bar, and
+  // the panel someone is actually looking at is behind it — so the kinds are
+  // separable. All on is the same view as before this existed.
+  const [cageKinds, setCageKinds] = useState<CageKind[]>([...CAGE_KINDS])
+  const toggleCageKind = (k: CageKind) =>
+    setCageKinds((v) => (v.includes(k) ? v.filter((x) => x !== k) : [...v, k]))
 
   const [model, setModel] = useState<StructuralModel | null>(() => {
     try {
@@ -897,6 +918,13 @@ export default function ModelSpace() {
     [showRebar, model, design],
   )
   const rebarCages = rebarBuild?.cages ?? []
+  /** How many cages of each kind were placed — the count beside each Display
+   *  checkbox, and what decides which checkboxes there are anything to show. */
+  const cagesByKind = useMemo(() => {
+    const by = new Map<CageKind, number>()
+    for (const c of rebarBuild?.cages ?? []) if (c.kind) by.set(c.kind, (by.get(c.kind) ?? 0) + 1)
+    return by
+  }, [rebarBuild])
   /**
    * §418.6.3.2 / §418.4.2.2 on the placed bars.
    *
@@ -1552,6 +1580,7 @@ export default function ModelSpace() {
                   const cs = p.corners.map((c) => nodePos.get(c))
                   if (cs.some((c) => !c)) return null
                   return <Slab3D key={p.id} corners={cs as THREE.Vector3[]} shell={model.shellElements} deck={p.deck}
+                    thickness={p.thickness / 1000}
                     selected={p.id === selected} onPick={() => setSelected(p.id)} />
                 })}
                 {model.supports.map((s) => {
@@ -1606,7 +1635,7 @@ export default function ModelSpace() {
                   return p ? <Stair3D key={st.id} p={p} /> : null
                 })}
                 {showLoads && <Loads3D model={model} nodePos={nodePos} />}
-                {showRebar && rebarCages.length > 0 && <RebarWireframe cages={rebarCages} />}
+                {showRebar && rebarCages.length > 0 && <RebarWireframe cages={rebarCages} kinds={cageKinds} />}
                 {forceDiag && forceDiagInfo && forceDiagInfo.scale > 0 && model.members.map((m) => {
                   const mr = forceDiagInfo.byId.get(m.id)
                   const a = nodePos.get(m.i), bb = nodePos.get(m.j)
@@ -3931,6 +3960,22 @@ export default function ModelSpace() {
                   </label>
                   {!design && <p className="pl-6 text-[11px] text-slate-400">design the structure first</p>}
                   {showRebar && <p className="pl-6 text-[11px] text-slate-400">concrete shown see-through</p>}
+                  {showRebar && cagesByKind.size > 0 && (
+                    <div className="mt-1.5 pl-6">
+                      <div className="mb-1 text-[11px] text-slate-500">Cages to show</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {CAGE_KINDS.filter((k) => cagesByKind.has(k)).map((k) => (
+                          <label key={k} className={`inline-flex cursor-pointer items-center gap-1 rounded border px-2 py-0.5 text-xs ${
+                            cageKinds.includes(k) ? 'border-[#0f4c92] bg-blue-50 text-[#0f4c92]' : 'border-slate-200 text-slate-500'}`}>
+                            <input type="checkbox" className="sr-only" checked={cageKinds.includes(k)}
+                              onChange={() => toggleCageKind(k)} />
+                            {CAGE_KIND_LABEL[k]}
+                            <span className="tabular-nums opacity-60">{cagesByKind.get(k)}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {showRebar && rebarCages.length > 0 && (
                     <Swatches items={([['top', 'top'], ['bottom', 'bottom'], ['stirrup', 'stirrups'],
                       ['vertical', 'col. verticals'], ['tie', 'ties'], ['mat', 'footing mat'], ['chair', 'slab chairs']] as const)

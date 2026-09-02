@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import * as THREE from 'three'
-import type { RebarCage, RebarRole, RebarRun } from '../engine/rebarModel'
+import type { CageKind, RebarCage, RebarRole, RebarRun } from '../engine/rebarModel'
 import { runPolylines, tubeFromPolyline, REBAR_ROLE_COLOR } from '../engine/rebarWire'
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -75,6 +75,10 @@ export interface RebarWireframeProps {
   roles?: RebarRole[]
   /** Only these members. Omitted, the whole structure. */
   members?: string[]
+  /** Only cages of these kinds — beams, columns, slabs, … Omitted, every kind.
+   *  A cage with no `kind` is always drawn: it has not claimed to be anything,
+   *  so hiding it would be hiding steel on a guess. */
+  kinds?: CageKind[]
 }
 
 /**
@@ -84,13 +88,15 @@ export interface RebarWireframeProps {
  * feed the view, the sheets and the take-off — a view that rebuilt its own
  * subset is exactly how the three drifted apart in the first place.
  */
-export function RebarWireframe({ cages, roles, members }: RebarWireframeProps) {
+export function RebarWireframe({ cages, roles, members, kinds }: RebarWireframeProps) {
   const byRole = useMemo(() => {
     const roleSet = roles ? new Set(roles) : null
     const memSet = members ? new Set(members) : null
+    const kindSet = kinds ? new Set(kinds) : null
     const map = new Map<RebarRole, RebarRun[]>()
     for (const c of cages) {
       if (memSet && !memSet.has(c.member)) continue
+      if (kindSet && c.kind && !kindSet.has(c.kind)) continue
       for (const r of c.runs) {
         if (roleSet && !roleSet.has(r.role)) continue
         const list = map.get(r.role) ?? []
@@ -99,6 +105,6 @@ export function RebarWireframe({ cages, roles, members }: RebarWireframeProps) {
       }
     }
     return [...map]
-  }, [cages, roles, members])
+  }, [cages, roles, members, kinds])
   return <group>{byRole.map(([role, runs]) => <RoleMesh key={role} role={role} runs={runs} />)}</group>
 }

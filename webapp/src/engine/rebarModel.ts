@@ -95,8 +95,21 @@ export interface RebarRun {
   count: number
 }
 
+/**
+ * What kind of element a cage belongs to.
+ *
+ * Carried on the cage rather than re-derived from the mark: a viewer that wants
+ * only the slab steel would otherwise have to look each mark back up in the
+ * model, and a mark that matches nothing (a stair, a footing named for its
+ * node) is exactly where that guess goes wrong.
+ */
+export type CageKind = 'beam' | 'column' | 'footing' | 'slab' | 'stair'
+
 export interface RebarCage {
   member: string
+  /** Which element this is the steel for. Absent on cages built directly by a
+   *  single-element builder, which already know what they are. */
+  kind?: CageKind
   runs: RebarRun[]
   /** Anything the placement could not satisfy — e.g. a longitudinal bar left
    *  more than 150 mm clear of a laterally supported one (§425.7.2.3). Empty

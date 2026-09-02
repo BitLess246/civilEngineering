@@ -39,6 +39,7 @@ export const MODEL_TOOLS: DocTool[] = [
           { kind: 'toggle', name: 'Show designed footings to scale', what: 'Draws each designed footing at its computed plan size. Overlapping footings are highlighted, which is the cue to switch to a combined footing.' },
           { kind: 'toggle', name: 'Show designed steel connections', what: 'Draws the designed steel joints at their nodes — plates in slate, bolts and welds in gold.' },
           { kind: 'toggle', name: 'Show reinforcement cages', what: 'Draws the designed bars in 3D, colour-coded by role, with the concrete shown see-through. Needs a design first; any detailing decision the cage builder had to make is listed underneath.' },
+          { kind: 'choice', name: 'Cages to show', what: 'Which kinds of steel the cage layer draws — beams, columns, slabs, stairs, footings — with the number of cages of each kind placed. A whole building at once is a solid wall of bar; switch the rest off to look at one.' },
           { kind: 'choice', name: 'Force diagram', what: 'Draws N, Vy, Vz, My, Mz or T along every member for the governing combination, with a scale slider. Available once the analysis has run.' },
         ],
       },
