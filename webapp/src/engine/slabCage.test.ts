@@ -415,3 +415,87 @@ describe('the cage stays inside the beam it is supported on', () => {
     expect(Math.min(...ys)).toBeGreaterThanOrEqual(3 - 0.2 + 0.02 - 1e-9)
   })
 })
+
+describe('the slab steel meets the beam steel, the way it is tied on site', () => {
+  // Two details from a site photograph, and both need one number the cage was
+  // never given: the level of the beam's own top bar.
+  const BAR_TOP = 3 - 0.05          // yTop 3, beam cover 40 + 10 mm stirrup
+  const withBeam = (over: Partial<SlabCageInput> = {}) =>
+    buildSlabCage(panel({ supportBarTop: BAR_TOP, ...over }))
+
+  const tops = (c: { runs: RebarRun[] }) =>
+    c.runs.filter((r) => r.role === 'top').flatMap((r) => r.path.map((p) => p[1]))
+
+  it('lays the top mat ON the beam bar, not at its own cover', () => {
+    // The outer layer of the top mat is the SHORT span, and it rests on the
+    // beam bar: one bar radius above the top of it. Placed from the slab's own
+    // 20 mm cover it floated 18 mm higher, where no bar can be once the beam
+    // cage is in.
+    const c = withBeam()
+    expect(Math.max(...tops(c))).toBeCloseTo(BAR_TOP + 0.012 / 2, 9)
+  })
+
+  it('keeps the long span tucked a diameter under the short one', () => {
+    const c = withBeam()
+    const levels = [...new Set(tops(c).map((y) => +y.toFixed(6)))].sort((a, b) => b - a)
+    expect(levels[0] - levels[1]).toBeCloseTo(0.012, 9)
+  })
+
+  it('still obeys the slab\'s own cover if the beam bar sits too high', () => {
+    // Resting and covering are one `Math.min`, so a beam bar high enough to
+    // push the mat out through the top face simply stops governing.
+    const c = withBeam({ supportBarTop: 3 })      // flush with the slab's top face
+    expect(Math.max(...tops(c))).toBeCloseTo(3 - 0.02 - 0.012 / 2, 9)
+  })
+
+  it('turns the bottom bar up onto that bar at an edge the slab stops at', () => {
+    const c = withBeam({ detail: 'straight', edges: { xLo: false } })
+    const bx = c.runs.filter((r) => r.role === 'bottom' && r.mark.includes('-BX'))
+    expect(bx.length).toBeGreaterThan(0)
+    for (const r of bx) {
+      // The leg is vertical: two points at the same place in plan.
+      const [a, b] = r.path
+      expect(a[0]).toBeCloseTo(b[0], 9)
+      expect(a[2]).toBeCloseTo(b[2], 9)
+      expect(a[1]).toBeGreaterThan(b[1])            // it comes DOWN to the mat
+      expect(a[1]).toBeGreaterThanOrEqual(BAR_TOP - 1e-9)   // reaching the beam's bar
+      expect(r.bendDia.length).toBeGreaterThan(0)   // and it is a bend, not a corner
+    }
+  })
+
+  it('leaves a continuous edge straight — there is nothing to anchor', () => {
+    // "Unless they can be continuous": the panel next door carries the same
+    // bar on, so a hook there would be a bend in the middle of a bar.
+    const c = withBeam({ detail: 'straight' })      // every edge continuous
+    for (const r of c.runs.filter((x) => x.role === 'bottom')) {
+      expect(r.path).toHaveLength(2)
+      expect(r.path[0][1]).toBeCloseTo(r.path[1][1], 9)
+    }
+  })
+
+  it('hooks the far end of a CRANKED bar too', () => {
+    // A bent bar is top steel over one support and bottom steel into the far
+    // one; the far end is a bottom bar ending at a free edge like any other.
+    const c = withBeam({ detail: 'bent', edges: { xLo: false, xHi: false } })
+    const m = c.runs.filter((r) => r.mark.includes('-MX'))
+    expect(m.length).toBeGreaterThan(0)
+    for (const r of m) {
+      const last = r.path[r.path.length - 1], prev = r.path[r.path.length - 2]
+      expect(last[0]).toBeCloseTo(prev[0], 9)       // ends on a vertical leg
+      expect(last[1]).toBeGreaterThan(prev[1])
+    }
+  })
+
+  it('says so when the slab is too shallow to give the leg its ℓext', () => {
+    const c = withBeam({ detail: 'straight', edges: { xLo: false } })
+    expect(c.notes?.some((n) => n.includes('§425.3.1') && n.includes('onto the beam'))).toBe(true)
+  })
+
+  it('changes nothing at all when there is no beam level to work from', () => {
+    // Every caller that cannot measure a beam still gets the cage it got
+    // before — cover-derived levels, straight embedment, no hooks.
+    const plain = buildSlabCage(panel({ detail: 'straight', edges: { xLo: false } }))
+    expect(Math.max(...tops(plain))).toBeCloseTo(3 - 0.02 - 0.012 / 2, 9)
+    for (const r of plain.runs.filter((x) => x.role === 'bottom')) expect(r.path).toHaveLength(2)
+  })
+})

@@ -406,6 +406,21 @@ describe('slab cages — the floor is no longer drawn bare', () => {
     }
   })
 
+  it('rests the top mat on the framing beams\' top bars', () => {
+    // The level is not the slab's own cover: it is cover + stirrup below the
+    // node, which is where `beamCage` puts the top of a beam's top bar. The
+    // frame's section is 40 mm cover with a 10 mm tie, so 50 mm down — and the
+    // outer layer of the mat sits one bar radius above that.
+    const barTop = 0.05
+    for (const s of sdesign.slabs) {
+      const ns = smodel.plates.find((p) => p.id === s.plate)!.corners
+        .map((c) => smodel.nodes.find((n) => n.id === c)!)
+      const ys = slabOf(s.plate)!.runs.filter((r) => r.role === 'top')
+        .flatMap((r) => r.path.map((p) => p[1]))
+      expect(Math.max(...ys)).toBeCloseTo(ns[0].y - barTop + s.barDia / 2000, 6)
+    }
+  })
+
   it('laps a mat bar that will not come out of one stock bar', () => {
     // A 6 m panel plus two embedments is 6.26 m of bar, and a stock bar is 6 m:
     // drawn as one piece it is a bar nobody can buy. Beams and columns have
