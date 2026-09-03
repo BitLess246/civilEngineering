@@ -22,7 +22,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, RectSection } from './model'
 import type { StructureDesign } from './pipeline'
-import { buildBeamCage } from './beamCage'
+import { buildBeamCage, effectiveDepth } from './beamCage'
 import { buildColumnCage, perimeterBars } from './columnCage'
 import { calcDevLength } from './devLength'
 import { buildFootingCage } from './footingCage'
@@ -254,8 +254,27 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
     // Fall back across the two rather than to a default: a beam with only
     // hogging sections still needs a middle, and vice versa.
     const spac = b.sections.map((s) => s.design.sAdopt).filter((v) => v > 0)
-    const sEndMm = ends.length ? Math.min(...ends) : (spac.length ? Math.min(...spac) : 0)
-    const sMidMm = mids.length ? Math.max(...mids) : (spac.length ? Math.max(...spac) : 0)
+    /**
+     * What a beam that needs NO shear steel is still detailed with, mm.
+     *
+     * §409.6.3.1 excuses a beam from shear reinforcement where Vu ≤ φVc/2, and
+     * `beamDesign` says so honestly: region "none", `sAdopt` 0, `sHinge` 0. A
+     * drawing cannot be built from that — the longitudinal bars still need
+     * something to hang in — so the detailing decision is made here, where the
+     * section is known, and it is the §409.7.6.2.2 maximum: d/2, capped at
+     * 600 mm.
+     *
+     * Passing the design's 0 straight through is what produced a stirrup every
+     * 25 mm on the beam with the least shear in the frame: `stirrupStations`
+     * clamped 0 to its floor and laid the whole span out at it. The zero was
+     * never a spacing; it was the absence of one.
+     */
+    const nominalMm = (() => {
+      const d = effectiveDepth(sec.h, sec.cover, sec.tieDia, sec.barDia)
+      return Math.max(10, Math.floor(Math.min(d / 2, 600) / 10) * 10)
+    })()
+    const sEndMm = ends.length ? Math.min(...ends) : (spac.length ? Math.min(...spac) : nominalMm)
+    const sMidMm = mids.length ? Math.max(...mids) : (spac.length ? Math.max(...spac) : nominalMm)
     // WHERE EACH FACE MAY BE SPLICED — and the two faces are OPPOSITE.
     //
     // A top bar is in tension over the supports, so it laps in the MIDDLE HALF

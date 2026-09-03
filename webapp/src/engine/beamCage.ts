@@ -266,8 +266,21 @@ export function stirrupStations(i: Pick<BeamCageInput,
   const clear = Math.max(0, faceR - faceL)
   if (clear <= 0) return []
   const zone = Math.min(HOOP_ZONE_DEPTHS * hM, clear / 2)
-  const sE = Math.max(0.025, (i.sEnd > 0 ? i.sEnd : i.sMid) / 1000)
-  const sM = Math.max(0.025, (i.sMid > 0 ? i.sMid : i.sEnd) / 1000)
+  // A ZERO SPACING IS A CALLER WITH NO DESIGN, NOT A SPACING OF ZERO.
+  //
+  // The floor here used to be 25 mm, which is a sane guard against a divide by
+  // nothing and a catastrophic answer to `sEnd = sMid = 0`: a beam whose shear
+  // design came back "none required" (Vu ≤ φVc/2, §409.6.3.1) was handed 0 and
+  // detailed with a stirrup every 25 mm — 189 of them on a 6 m beam, on the
+  // beam that needed the fewest. It looked like the cage disagreeing with its
+  // own worked solution, and it was.
+  //
+  // `cageBuilder` now supplies the §409.7.6.2.2 nominal instead, so 0 should
+  // never arrive. This stays as defence for any other caller, and falls back to
+  // something a beam could actually be built with rather than to the floor.
+  const nominal = Math.min(i.h / 2000, 0.6)
+  const sE = Math.max(0.025, (i.sEnd > 0 ? i.sEnd : i.sMid > 0 ? i.sMid : nominal * 1000) / 1000)
+  const sM = Math.max(0.025, (i.sMid > 0 ? i.sMid : i.sEnd > 0 ? i.sEnd : nominal * 1000) / 1000)
   const out: number[] = []
   const push = (x: number) => { if (x >= faceL - 1e-9 && x <= faceR + 1e-9) out.push(x) }
   // Each end zone is laid out from ITS OWN support, so the first stirrup lands
