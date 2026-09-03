@@ -5,7 +5,11 @@
 // §424.2 serviceability read-out. Pure SVG from numbers: no model, no state,
 // no analysis — which is why they can live away from the page.
 // ─────────────────────────────────────────────────────────────────────────
-import { type ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
+import { planToSvg, type Drawing } from '../../engine/planRenderer'
+import { memberSectionDetail } from '../../engine/memberSection'
+import type { StructuralModel } from '../../engine/model'
+import type { RebarCage } from '../../engine/rebarModel'
 import { type MemberDeflectionResult } from '../../engine/memberDeflection'
 import { DimBelow, DimSide } from '../../components/dims'
 import { f0, f1, f2 } from '../../lib/format'
@@ -52,10 +56,100 @@ export function BeamServiceability({ r, id, L }: { r: MemberDeflectionResult; id
 }
 
 // ── Element drawings for the schedule accordions ─────────────────────────────
-/** Rebar elevation of a beam/girder: outline, stirrup ticks, top steel over the
- *  hogging ends and bottom steel over the sagging mid-span. */
 
-// ── Element drawings for the schedule accordions ─────────────────────────────
+/**
+ * A section through the member's OWN CAGE, painted with the plan renderer.
+ *
+ * What stood here was a drawing about the design: `BeamSchematic` and
+ * `ColumnSchematic` each took b, h, a bar count and a cover and laid the steel
+ * out themselves. Three modules had a bar layout — those two and `columnCage`
+ * — and only the last one is the steel that gets built, scheduled and weighed,
+ * so a schedule row could show a tie arrangement the 3D view did not have.
+ *
+ * This draws the cut (`memberSectionDetail`): if a bar is on it, the plane
+ * passed through it. Same `Drawing` type and same `planToSvg` the Plans tab
+ * uses, so the figure in the worked solution and the sheet in the drawing set
+ * are one object rendered twice.
+ */
+export function CageSectionFigure({ drawing, width = 300 }: { drawing: Drawing; width?: number }): ReactNode {
+  const svg = useMemo(() => planToSvg(drawing, width), [drawing, width])
+  // Engine-generated markup — every string in it comes from `planToSvg`, which
+  // escapes the text it is given.
+  return <div className="[&>svg]:h-auto [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: svg }} />
+}
+
+/** The design numbers a section callout prints. Structural rather than the
+ *  pipeline's own types, so this file stays free of the design pipeline. */
+export interface SectionRowDesign {
+  bars: number; sAdopt: number; legs: number; layers: number[]
+  comprBars: number; comprLayers: number[]
+}
+export interface BeamRowSection {
+  x: number; label: string; hogging: boolean
+  bf?: number; hf?: number; edge?: boolean; flangeKind?: string
+  design: SectionRowDesign & { flangeAction?: string }
+}
+export interface SectionRect { b: number; h: number; cover: number; barDia: number; tieDia: number }
+
+/**
+ * The SECTION figure in a beam's schedule row — cut through that beam's cage,
+ * at the station the row is about.
+ *
+ * The station is the row's own `x`, so the drawing follows the design along the
+ * span: at a support it shows the top steel the hogging check sized, at midspan
+ * the bottom steel, and where a bar laps it shows both pieces. A drawing made
+ * from the bar COUNT could show none of that.
+ */
+export function BeamCageSection({ model, cages, beam, sec, rect }: {
+  model: StructuralModel; cages: RebarCage[]
+  beam: { id: string; L: number }; sec: BeamRowSection; rect: SectionRect
+}): ReactNode {
+  const d = sec.design
+  const drawing = useMemo(() => memberSectionDetail(
+    model, cages, beam.id, beam.L > 0 ? sec.x / beam.L : 0.5,
+    {
+      title: `SECTION — ${sec.label}`,
+      notes: [
+        `${d.bars}-⌀${rect.barDia}${sec.hogging ? ' TOP' : ' BOT'}${d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}`,
+        ...(d.comprBars > 0 ? [`${d.comprBars}-⌀${rect.barDia} COMPR.`] : []),
+        d.sAdopt > 0
+          ? `STIRRUPS ${d.legs}L-⌀${rect.tieDia} @ ${Math.round(d.sAdopt)}`
+          : `STIRRUPS ⌀${rect.tieDia} @ MIN. (§409.6.3.1)`,
+        ...(sec.bf ? [`${sec.flangeKind ?? (sec.edge ? 'L' : 'T')}-BEAM · bf ${Math.round(sec.bf)}${d.flangeAction === 'true-T' ? ' · TRUE T' : ''}`] : []),
+      ],
+    },
+  ), [model, cages, beam.id, beam.L, sec, rect, d])
+  if (!drawing) return null
+  return <CageSectionFigure drawing={drawing} />
+}
+
+/**
+ * The SECTION figure in a column's schedule row — cut at mid-height, which is
+ * the length between the confinement zones and so the column's general section.
+ *
+ * The tie set it draws is the one the cage placed there: the hoop AND the cross
+ * ties threaded through it, at the spacing the design adopted. `ColumnSchematic`
+ * drew a tie arrangement of its own, from a bar layout of its own, and neither
+ * had to agree with the cage.
+ */
+export function ColumnCageSection({ model, cages, col, rect }: {
+  model: StructuralModel; cages: RebarCage[]
+  col: { id: string; bars: number; tieSpacingFinal: number; seismicSConf?: number; seismicSOut?: number }
+  rect: SectionRect
+}): ReactNode {
+  const drawing = useMemo(() => memberSectionDetail(model, cages, col.id, 0.5, {
+    title: 'SECTION — MID-HEIGHT',
+    notes: [
+      `${col.bars}-⌀${rect.barDia} VERT.`,
+      col.seismicSConf !== undefined
+        ? `TIES ⌀${rect.tieDia} @ ${Math.round(col.seismicSConf)} IN ℓo, @ ${Math.round(col.seismicSOut ?? col.tieSpacingFinal)} ELSEWHERE`
+        : `TIES ⌀${rect.tieDia} @ ${Math.round(col.tieSpacingFinal)}`,
+    ],
+  }), [model, cages, col, rect])
+  if (!drawing) return null
+  return <CageSectionFigure drawing={drawing} />
+}
+
 /** Rebar elevation of a beam/girder: outline, stirrup ticks, top steel over the
  *  hogging ends and bottom steel over the sagging mid-span. */
 export function BeamRebarElevation({ L, h, sections }: {
@@ -100,10 +194,6 @@ export function BeamRebarElevation({ L, h, sections }: {
 /** Rebar elevation of a column, drawn to scale (height ∝ Lh, width ∝ b), with
  *  longitudinal bars, ties at spacing and dimension lines. viewBox width
  *  matches ColumnSchematic (320) so its text matches the section below it. */
-
-/** Rebar elevation of a column, drawn to scale (height ∝ Lh, width ∝ b), with
- *  longitudinal bars, ties at spacing and dimension lines. viewBox width
- *  matches ColumnSchematic (320) so its text matches the section below it. */
 export function ColumnElevation({ Lh, b, barDia, tieDia, bars, tieSpacing }: { Lh: number; b: number; barDia: number; tieDia: number; bars: number; tieSpacing: number }): ReactNode {
   const W = 320, top = 24, availH = 230
   const scl = availH / Math.max(Lh, 0.5)                 // px per metre
@@ -128,9 +218,6 @@ export function ColumnElevation({ Lh, b, barDia, tieDia, bars, tieSpacing }: { L
     </svg>
   )
 }
-
-/** W-shape cross-section SVG: top flange + web + bottom flange, scaled to fit
- *  a fixed viewbox so all dimensions are labelled. d/bf/tf/tw all in mm. */
 
 /** W-shape cross-section SVG: top flange + web + bottom flange, scaled to fit
  *  a fixed viewbox so all dimensions are labelled. d/bf/tf/tw all in mm. */

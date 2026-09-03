@@ -74,9 +74,6 @@ import { parseAccelerogram } from '../engine/accelerogram'
 import type { TimeHistoryModelResult, GroundMotionKind, CsvAccelerogramOpts } from '../engine/timeHistoryModel'
 import type { NonlinearModelResult } from '../engine/nonlinearModel'
 import type { NonlinearFrameModelResult } from '../engine/nonlinearFrameModel'
-import { BeamSchematic } from '../components/BeamSchematic'
-import { TSection } from '../components/TSection'
-import { ColumnSchematic } from '../components/ColumnSchematic'
 import { FootingSchematic } from '../components/FootingSchematic'
 import { HintButton, SeismicHint, WindHint } from '../components/LoadHints'
 import { Num, Pick, Row } from '../components/qty'
@@ -94,7 +91,9 @@ import { Footing3D, GridBubbles3D, Loads3D, Member3D, MemberForceDiagram3D, Memb
 import { DIAG_COLOR, DIAG_LABEL, LOAD_COLOR } from '../components/modelSpace/sceneTokens'
 import { DirPicker, Rule, SchedChip, Sec, SolverProgress, Swatches, TabBtn } from '../components/modelSpace/panelKit'
 import { TAB_GROUPS, UTILITY_TABS, type Tab } from '../components/modelSpace/tabs'
-import { BeamRebarElevation, BeamServiceability, ColumnElevation, WShapeSection } from '../components/modelSpace/figures'
+import {
+  BeamCageSection, BeamRebarElevation, BeamServiceability, ColumnCageSection, ColumnElevation, WShapeSection,
+} from '../components/modelSpace/figures'
 
 /** A sensible default timber deck (DFL No.2 joists 50×200 @ 400, 25 mm plank). */
 const DEFAULT_DECK: WoodDeck = {
@@ -915,11 +914,23 @@ export default function ModelSpace() {
     () => new Map((design?.footings ?? []).map((f) => [f.node, f.pedestal])),
     [design],
   )
-  const rebarBuild = useMemo(
-    () => (showRebar && model && design ? buildStructureCages(model, design) : null),
-    [showRebar, model, design],
+  /**
+   * The placed cages — ONE build, shared.
+   *
+   * There were three: this one gated on the 3D toggle, a second inside
+   * `momentRatios` and a third in the PDF path, each calling
+   * `buildStructureCages` again on the same model. The gate is the part that
+   * mattered, though: the schedule's own section drawings are cut from these
+   * cages, and a drawing that appeared only when the 3D rebar layer happened
+   * to be switched on would be a drawing nobody could rely on.
+   */
+  const cageBuild = useMemo(
+    () => (model && design ? buildStructureCages(model, design) : null),
+    [model, design],
   )
+  const rebarBuild = showRebar ? cageBuild : null
   const rebarCages = rebarBuild?.cages ?? []
+  const scheduleCages = cageBuild?.cages ?? []
   /** How many cages of each kind were placed — the count beside each Display
    *  checkbox, and what decides which checkboxes there are anything to show. */
   const cagesByKind = useMemo(() => {
@@ -951,10 +962,10 @@ export default function ModelSpace() {
    * switched off. Gravity designs skip it — there is no reversal rule.
    */
   const momentRatios = useMemo(
-    () => (model && design && design.system !== 'gravity'
-      ? structureMomentRatios(model, design, buildStructureCages(model, design).cages)
+    () => (model && design && design.system !== 'gravity' && cageBuild
+      ? structureMomentRatios(model, design, cageBuild.cages)
       : []),
-    [model, design],
+    [model, design, cageBuild],
   )
   /**
    * What the cage builder had to DECIDE, and what it could not place.
@@ -1051,8 +1062,8 @@ export default function ModelSpace() {
           // §418.6.3.2/§418.4.2.2 is measured on the PLACED bars, so the cages
           // have to exist first; a gravity frame has no such clause and the
           // section is left out rather than printed empty.
-          design.system === 'gravity' ? null
-            : structureMomentRatios(model, design, buildStructureCages(model, design).cages)),
+          design.system === 'gravity' || !cageBuild ? null
+            : structureMomentRatios(model, design, cageBuild.cages)),
         // The same sheet set the Plans tab renders — one list, two outputs.
         sheets: buildSheetSet(model, design, soil),
         fileName: `structure-report${lh.sheet ? '-' + lh.sheet.split('·')[0].trim() : ''}.pdf`,
@@ -4335,17 +4346,7 @@ export default function ModelSpace() {
                             <div className="space-y-3 self-start rounded-lg border border-slate-200 bg-white p-3">
                               <BeamRebarElevation L={bm.L} h={sec.h} sections={bm.sections} />
                               <div className="border-t border-slate-100 pt-2">
-                                <p className="mb-1 text-[11px] font-semibold text-[#0f4c92]">SECTION — {s.label}{s.bf ? ` (${s.flangeKind ?? (s.edge ? 'L' : 'T')}-beam${d.flangeAction === 'true-T' ? ', true T' : ''})` : ''}</p>
-                                {s.bf && s.hf ? (
-                                  <TSection bf={s.bf} bw={sec.b} h={sec.h} hf={s.hf} edge={s.edge}
-                                    a={d.a} aReq={d.aReq}
-                                    bars={d.bars} barDia={sec.barDia} layers={d.layers} cover={sec.cover} stirrupDia={sec.tieDia} legs={d.legs} />
-                                ) : (
-                                  <BeamSchematic b={sec.b} h={sec.h} cover={sec.cover} barDia={sec.barDia} stirrupDia={sec.tieDia}
-                                    bars={d.bars} d={d.d} dPrime={d.comprLayers.length > 0 ? d.dPrime : undefined}
-                                    layers={d.layers} comprLayers={d.comprLayers} comprBars={d.comprBars} comprBarDia={16}
-                                    naDepth={d.cNA} flexOK={d.flexOK} hogging={s.hogging} />
-                                )}
+                                <BeamCageSection model={model} cages={scheduleCages} beam={bm} sec={s} rect={sec} />
                               </div>
                             </div>
                             )}
@@ -4431,9 +4432,7 @@ export default function ModelSpace() {
                             <div className="space-y-3 self-start rounded-lg border border-slate-200 bg-white p-3">
                               <ColumnElevation Lh={c.L} b={cs.b} barDia={cs.barDia} tieDia={cs.tieDia} bars={c.bars} tieSpacing={c.tieSpacingFinal} />
                               <div className="border-t border-slate-100 pt-2">
-                                <p className="mb-1 text-[11px] font-semibold text-[#0f4c92]">SECTION</p>
-                                <ColumnSchematic shape="tied" b={cs.b} h={cs.h} cover={cs.cover}
-                                  barDia={cs.barDia} tieDia={cs.tieDia} bars={c.bars} tieSpacing={c.tieSpacingFinal} />
+                                <ColumnCageSection model={model} cages={scheduleCages} col={c} rect={cs} />
                               </div>
                               {c.seismicSConf !== undefined && (
                                 <div className="border-t border-slate-100 pt-2 text-[11px] text-slate-600">
