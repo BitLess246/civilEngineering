@@ -120,7 +120,9 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
   // that show a member in its frame, and the typical details that follow are
   // read against them. Every bar on them is the cage's own — the same objects
   // the 3D scene paints and the bar schedule counts.
-  const { cages } = buildStructureCages(model, design)
+  // Built with the sheet set's own detailing options, so the mat bars the
+  // footing sheet draws are the mat bars its cage has.
+  const { cages } = buildStructureCages(model, design, { hookedMatBars: opts.hookedMatBars })
   frameElevationBundles(model, design, cages).forEach((b, i) => {
     const drawing = buildFrameElevation(b.input, {
       detailNo: String(i + 1), sheetRef: ref('Frame elevations'), project: model.name,
@@ -145,7 +147,7 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
     })
   })
 
-  footingDetailBundles(model, design, soil).forEach((b, i) => {
+  footingDetailBundles(model, design, soil, cages).forEach((b, i) => {
     out.push({
       key: `footing-detail-${slug(b.mark)}`, group: 'Footing details',
       title: `${b.mark} — ${Math.round(b.detail.B * 1000)}×${Math.round(b.detail.B * 1000)}`,

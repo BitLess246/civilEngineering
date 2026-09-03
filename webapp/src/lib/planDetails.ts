@@ -65,7 +65,9 @@ export interface FootingDetailBundle {
 /** One detail sheet per distinct footing type (grouped by side × thickness, in
  *  the same order the plan marks them WF-1, WF-2…). Each bundle carries the
  *  engine detail input plus the props for the report's column cross-section. */
-export function footingDetailBundles(model: StructuralModel, design: StructureDesign, soil: SoilInput = {}): FootingDetailBundle[] {
+export function footingDetailBundles(
+  model: StructuralModel, design: StructureDesign, soil: SoilInput = {}, cages: RebarCage[] = [],
+): FootingDetailBundle[] {
   const secById = new Map(model.sections.map((s) => [s.id, s]))
   const colRowById = new Map(design.columns.map((c) => [c.id, c]))
   // the base column member sitting at a footing node (lowest y among its ends)
@@ -85,6 +87,21 @@ export function footingDetailBundles(model: StructuralModel, design: StructureDe
     const colRow = mem ? colRowById.get(mem.id) : undefined
     const colBars = Math.max(4, colRow?.bars ?? 8)
     const tieSpacing = colRow?.tieSpacingFinal
+    // The PLACED steel for this footing and the column on it. The sheet draws
+    // from these when they are there; a caller with a design but no model
+    // (the standalone foundation calculator) passes none and gets the numeric
+    // drawing. `yTop` is the pad's top — the base node less the pedestal, the
+    // same level `cageBuilder` placed the cage at, because the sheet's own zero
+    // is that face.
+    const at = model.nodes.find((nd) => nd.id === r.node)
+    const detailCages = at && mem
+      ? {
+        footing: cages.find((cc) => cc.member === `F-${r.node}`),
+        column: cages.find((cc) => cc.member === mem.id),
+        centre: [at.x, at.z] as [number, number],
+        yTop: at.y - r.pedestal,
+      }
+      : undefined
     bundles.push({
       mark,
       detail: {
@@ -94,6 +111,7 @@ export function footingDetailBundles(model: StructuralModel, design: StructureDe
         colB, colH, colBars, colBarDia, tieDia, colCover: sec?.cover ?? 40,
         foundingElev: soil.H != null ? -Math.abs(soil.H) : undefined,
         endHook: 'none',
+        ...(detailCages?.footing || detailCages?.column ? { cages: detailCages } : {}),
       },
       column: {
         shape: 'tied', b: colB, h: colH,
