@@ -11,7 +11,7 @@ The application lives in **[`webapp/`](webapp/)** (React 19 + Vite + TypeScript)
 cd webapp
 npm install
 npm run dev      # dev server
-npm test         # vitest run (5,340 tests across 279 files)
+npm test         # vitest run (5,345 tests across 280 files)
 npx tsc -b       # typecheck
 npm run build    # typecheck + production build
 ```
@@ -126,7 +126,7 @@ Engine modules cite the governing clause inline (e.g. `§F2`,
 
 ## Verification
 
-- **5,340 unit tests** across 279 files. Engine logic is validated against hand
+- **5,345 unit tests** across 280 files. Engine logic is validated against hand
   calculations, closed-form solutions and textbook worked examples, not against
   itself.
 - **CI gates every merge** — `tsc -b`, ESLint at `--max-warnings 0`, and the

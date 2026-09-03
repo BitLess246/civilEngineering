@@ -70,6 +70,7 @@ import ScheduleDashboard from './pages/ScheduleDashboard'
 import ScheduleResources from './pages/ScheduleResources'
 import ScheduleReports from './pages/ScheduleReports'
 import ScheduleDaily from './pages/ScheduleDaily'
+import { ModelSpaceSkeleton } from './components/ModelSpaceSkeleton'
 
 
 /**
@@ -78,6 +79,10 @@ import ScheduleDaily from './pages/ScheduleDaily'
  * It reserves roughly a screen of height. The bare `<p>` it replaces had none,
  * so the footer rendered directly beneath the one-line message and then jumped
  * down the moment the chunk arrived — the page appeared to load backwards.
+ *
+ * Reserving height is the floor, not the goal: `/model` gets
+ * `ModelSpaceSkeleton` instead, which is the workspace's own shape at its own
+ * size, so nothing moves at all when the chunk lands.
  */
 function PageLoading({ what }: { what: string }) {
   return (
@@ -156,7 +161,7 @@ export default function App() {
             starts before the gate has an answer. */}
         <Route path="/model" element={
           <RequireAuth>
-            <Suspense fallback={<PageLoading what="3D model space" />}>
+            <Suspense fallback={<ModelSpaceSkeleton />}>
               <ModelSpace />
             </Suspense>
           </RequireAuth>
