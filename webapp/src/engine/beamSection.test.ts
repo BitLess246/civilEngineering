@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { cutBeam, spanSections, sectionTally, type CutInput } from './beamSection'
+import { cutBeam, spanSections, sectionTally, stationZones, type CutInput } from './beamSection'
 import type { RebarCage, Vec3 } from './rebarModel'
 
 /** A beam along +x from the origin, soffit at y = 0, 300 × 500. */
@@ -63,13 +63,46 @@ describe('cutting a beam', () => {
     expect(cutBeam(cut, 3.5, 'B').spacing).toBe(1000)    // the wide middle
   })
 
-  it('takes the stirrup outline from a real hoop', () => {
+  it('takes the stirrup outline from a real hoop, AS BENT', () => {
+    // `run.path` is the loop's four corners — the bar's specification, and all
+    // the cut length needs. The drawn bar is `runPolylines`: those corners
+    // filleted to the bend the tie is really made to. Taking the corners put a
+    // square-cornered rectangle on every section box in the drawing set.
     const s = cutBeam(cut, 0.5, 'A')
     expect(s.stirrupDia).toBe(10)
-    expect(s.stirrup).toHaveLength(4)
+    expect(s.stirrup.length).toBeGreaterThan(4)              // the four bends
     const ups = s.stirrup.map(([, up]) => Math.round(up * 1000))
+    // A fillet stays inside its corner, so the outline is where it always was.
     expect(Math.min(...ups)).toBe(50)
     expect(Math.max(...ups)).toBe(450)
+    const across = s.stirrup.map(([a]) => Math.round(a * 1000))
+    expect(Math.min(...across)).toBe(-100)
+    expect(Math.max(...across)).toBe(100)
+  })
+
+  it('draws the two 135° hooks a real stirrup carries', () => {
+    // §425.3.2. They are what happens at the two free ends a closed loop
+    // pretends it does not have, so no vertex of `run.path` can express them
+    // and the section boxes never showed them — the one detail an inspector
+    // looks for first. `hookAllowance` on the run is what says they are there.
+    const hooked: CutInput = {
+      ...cut,
+      cage: {
+        member: 'B1',
+        runs: cage.runs.map((r) => (r.role === 'stirrup'
+          ? { ...r, wrapDia: 20, hookAllowance: 120 } : r)),
+      },
+    }
+    const s = cutBeam(hooked, 0.5, 'A')
+    const plain = cutBeam(cut, 0.5, 'A')
+    expect(s.stirrup.length).toBeGreaterThan(plain.stirrup.length)
+    // Both tails turn INTO the core, so the polyline's two ends sit inboard of
+    // the cover line they start from rather than on it.
+    const first = s.stirrup[0]!, last = s.stirrup[s.stirrup.length - 1]!
+    for (const [a, up] of [first, last]) {
+      expect(Math.abs(a)).toBeLessThan(0.1 - 1e-6)
+      expect(up).toBeGreaterThan(0.05 + 1e-6)
+    }
   })
 
   it('is empty of bars where the beam has none, without throwing', () => {
@@ -102,5 +135,41 @@ describe('sectionTally', () => {
   it('says nothing about a face that has no bars', () => {
     expect(sectionTally(cutBeam({ ...cut, cage: { member: 'B1', runs: [] } }, 3, 'B')))
       .toEqual({ top: '', bot: '' })
+  })
+})
+
+
+describe('stationZones — the stretch each design section speaks for', () => {
+  // A beam is designed at three stations and each one's steel is provided over
+  // a REGION, not at a point. The region is the half-way split to its
+  // neighbours — the same reading the curtailment follows.
+  it('splits the span half-way between neighbouring stations', () => {
+    expect(stationZones([0, 3, 6], 0, 6)).toEqual([[0, 1.5], [1.5, 4.5], [4.5, 6]])
+  })
+
+  it('runs the outermost zones out to the ends, not to the stations', () => {
+    const z = stationZones([0.2, 3, 5.8], 0, 6)
+    expect(z[0][0]).toBe(0)
+    expect(z[2][1]).toBe(6)
+  })
+
+  it('keeps the caller’s order, though the stations arrive unsorted', () => {
+    // `memberSections` pushes End i, End j, then the interior — so the array a
+    // schedule row indexes into is [0, L, x]. A caller holding row k needs the
+    // zone for THAT row, not for the k-th sorted one.
+    const z = stationZones([0, 6, 3], 0, 6)
+    expect(z[0]).toEqual([0, 1.5])       // End i
+    expect(z[1]).toEqual([4.5, 6])       // End j
+    expect(z[2]).toEqual([1.5, 4.5])     // the interior
+  })
+
+  it('clamps to the span, and copes with one station or none', () => {
+    expect(stationZones([3], 0, 6)).toEqual([[0, 6]])
+    expect(stationZones([], 0, 6)).toEqual([])
+    expect(stationZones([-1, 7], 0, 6)).toEqual([[0, 3], [3, 6]])
+  })
+
+  it('does not care which way round the span is given', () => {
+    expect(stationZones([0, 3, 6], 6, 0)).toEqual(stationZones([0, 3, 6], 0, 6))
   })
 })
