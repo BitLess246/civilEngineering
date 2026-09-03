@@ -356,9 +356,9 @@ describe('joints and column laps, on the placed frame', () => {
 
   it('staggers the column laps so a section does not cut every bar', () => {
     // §25.5.2: all the bars lapping at one level is the arrangement the stagger
-    // exists to avoid. `perimeterBars` walks the perimeter in order, so
-    // alternating on its index puts each bar in the opposite group from the
-    // two either side of it.
+    // exists to avoid. Which bars are the "alternate" ones is `spliceGroups`'
+    // job — walking the perimeter, so that neighbours ALONG A FACE differ; see
+    // its own tests, which is where the face-by-face property is asserted.
     for (const c of design.columns) {
       const tops = colOf(c.id).runs.filter((r) => r.role === 'vertical')
         .map((r) => +Math.max(...r.path.map((p) => p[1])).toFixed(4))
@@ -367,6 +367,33 @@ describe('joints and column laps, on the placed frame', () => {
       if (levels.length === 1) continue
       expect(levels.length).toBeGreaterThanOrEqual(2)
     }
+  })
+
+  it('splits the bars evenly between the two lap levels', () => {
+    // Two levels is not enough on its own — one bar high and the rest low
+    // still cuts nearly all of them. Half at each is what §25.5.2 asks for.
+    let checked = 0
+    for (const c of design.columns) {
+      // Count each bar LINE once: a bar long enough to be split at stock
+      // length contributes several runs, and only its top piece carries the
+      // lap. Group by the plan position of the piece that reaches highest.
+      const tops = new Map<string, number>()
+      for (const r of colOf(c.id).runs.filter((v) => v.role === 'vertical')) {
+        // `spliceCage` suffixes the pieces of a split bar a, b, c…; the mark
+        // it splits always ends in the bar's own number.
+        const key = r.mark.replace(/[a-z]$/, '')
+        const y = Math.max(...r.path.map((p) => p[1]))
+        if (y > (tops.get(key) ?? -Infinity)) tops.set(key, y)
+      }
+      const levels = [...new Set([...tops.values()].map((y) => +y.toFixed(4)))]
+      if (levels.length < 2) continue
+      expect(levels).toHaveLength(2)
+      const lo = Math.min(...levels)
+      const nLow = [...tops.values()].filter((y) => Math.abs(y - lo) < 1e-4).length
+      expect(nLow * 2).toBe(tops.size)
+      checked++
+    }
+    expect(checked).toBeGreaterThan(0)
   })
 
   it('has at least one column where the stagger really is two levels', () => {
