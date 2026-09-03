@@ -8,6 +8,8 @@
 import { useMemo, type ReactNode } from 'react'
 import { planToSvg, type Drawing } from '../../engine/planRenderer'
 import { memberSectionDetail } from '../../engine/memberSection'
+import { buildFrameElevation } from '../../engine/frameElevation'
+import type { FrameElevationBundle } from '../../lib/planDetails'
 import type { StructuralModel } from '../../engine/model'
 import type { RebarCage } from '../../engine/rebarModel'
 import { type MemberDeflectionResult } from '../../engine/memberDeflection'
@@ -58,7 +60,7 @@ export function BeamServiceability({ r, id, L }: { r: MemberDeflectionResult; id
 // ── Element drawings for the schedule accordions ─────────────────────────────
 
 /**
- * A section through the member's OWN CAGE, painted with the plan renderer.
+ * An engine `Drawing`, painted with the plan renderer.
  *
  * What stood here was a drawing about the design: `BeamSchematic` and
  * `ColumnSchematic` each took b, h, a bar count and a cover and laid the steel
@@ -71,7 +73,7 @@ export function BeamServiceability({ r, id, L }: { r: MemberDeflectionResult; id
  * uses, so the figure in the worked solution and the sheet in the drawing set
  * are one object rendered twice.
  */
-export function CageSectionFigure({ drawing, width = 300 }: { drawing: Drawing; width?: number }): ReactNode {
+export function SheetFigure({ drawing, width = 300 }: { drawing: Drawing; width?: number }): ReactNode {
   const svg = useMemo(() => planToSvg(drawing, width), [drawing, width])
   // Engine-generated markup — every string in it comes from `planToSvg`, which
   // escapes the text it is given.
@@ -120,7 +122,7 @@ export function BeamCageSection({ model, cages, beam, sec, rect }: {
     },
   ), [model, cages, beam.id, beam.L, sec, rect, d])
   if (!drawing) return null
-  return <CageSectionFigure drawing={drawing} />
+  return <SheetFigure drawing={drawing} />
 }
 
 /**
@@ -147,7 +149,37 @@ export function ColumnCageSection({ model, cages, col, rect }: {
     ],
   }), [model, cages, col, rect])
   if (!drawing) return null
-  return <CageSectionFigure drawing={drawing} />
+  return <SheetFigure drawing={drawing} />
+}
+
+/**
+ * The beam's ELEVATION in its schedule row — the drawing set's own sheet for
+ * the grid line and level it is on, with the stretch this row speaks for
+ * washed over.
+ *
+ * What stood here was a compact figure of its own: a rectangle, a ladder of
+ * evenly pitched ticks and two red lines standing for "top steel" and "bottom
+ * steel". None of it was the cage — the ticks were `L / min(sAdopt)` and the
+ * bar lines were fractions of the span — so it could not show a curtailment,
+ * a lap, a crank at a column, or the change of stirrup pitch between the end
+ * zone and the middle, all of which the sheet in the drawing set does show.
+ *
+ * The wash is the point of putting it in a schedule row rather than just
+ * linking to the sheet: a row headed "End i" is about the steel over that
+ * support, and on an elevation carrying three different arrangements there is
+ * otherwise nothing to say which third is being discussed.
+ */
+export function BeamElevationFigure({ bundle, zone, label, width = 900 }: {
+  bundle: FrameElevationBundle
+  zone?: [number, number]
+  label?: string
+  width?: number
+}): ReactNode {
+  const drawing = useMemo(() => buildFrameElevation(
+    zone ? { ...bundle.input, highlight: [{ u0: zone[0], u1: zone[1], label }] } : bundle.input,
+    { sheetRef: 'S-04' },
+  ), [bundle, zone, label])
+  return <SheetFigure drawing={drawing} width={width} />
 }
 
 /** Rebar elevation of a beam/girder: outline, stirrup ticks, top steel over the

@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel } from '../engine/modelBuilder'
 import { designStructure } from '../engine/pipeline'
-import { footingsForPlan, footingDetailBundles, slabOpeningBundles, wallDetailBundles, jointDetailBundles } from './planDetails'
+import {
+  footingsForPlan, footingDetailBundles, slabOpeningBundles, wallDetailBundles, jointDetailBundles,
+  elevationBundleByMember, beamSectionZones,
+} from './planDetails'
+import { buildStructureCages } from '../engine/cageBuilder'
+import { projectPoint } from '../engine/rebarModel'
 import { designSlabOpening } from '../engine/slabOpening'
 import { designWallDetail } from '../engine/wallDetail'
 import { designBeamColumnJoint } from '../engine/beamColumnJoint'
@@ -224,5 +229,82 @@ describe('planDetails — beam–column joints', () => {
     // the hooked bars merely because they are large.
     expect(r.through.main.applies).toBe(!!jointDetailBundles(model, design)[0].detail.barsThrough)
     expect(r.ldh).toBeGreaterThanOrEqual(150)
+  })
+})
+
+
+describe('the elevation a schedule row belongs to', () => {
+  const { model, design } = designed()
+  const { cages } = buildStructureCages(model, design)
+  const index = elevationBundleByMember(model, design, cages)
+
+  it('gives every designed beam a sheet', () => {
+    for (const b of design.beams) expect(index.get(b.id)).toBeDefined()
+  })
+
+  it('indexes beams only — a column is on two sheets, so naming one is a guess', () => {
+    // A column is carried half a storey below the level and half a storey
+    // above it, so it appears as context on the sheets either side. Answering
+    // "which sheet is this column's" with either would be a coin toss.
+    for (const c of design.columns) expect(index.get(c.id)).toBeUndefined()
+  })
+
+  it('puts the beam it indexes on the sheet it points at', () => {
+    for (const b of design.beams.slice(0, 6)) {
+      const bundle = index.get(b.id)!
+      expect(bundle.input.members.some((m) => m.mark === b.id && m.role === 'beam')).toBe(true)
+    }
+  })
+})
+
+describe('beamSectionZones — where a row’s section sits on its elevation', () => {
+  const { model, design } = designed()
+  const { cages } = buildStructureCages(model, design)
+  const index = elevationBundleByMember(model, design, cages)
+
+  it('lands inside the beam’s own stretch of the sheet, in the sheet’s own u', () => {
+    for (const b of design.beams.slice(0, 8)) {
+      const bundle = index.get(b.id)!
+      const el = bundle.input.members.find((m) => m.mark === b.id)!
+      const zones = beamSectionZones(model, bundle, b.id, b.sections.map((s) => s.x))!
+      expect(zones).toHaveLength(b.sections.length)
+      for (const [a, z] of zones) {
+        expect(a).toBeGreaterThanOrEqual(Math.min(el.u0, el.u1) - 1e-6)
+        expect(z).toBeLessThanOrEqual(Math.max(el.u0, el.u1) + 1e-6)
+        expect(z).toBeGreaterThan(a)
+      }
+    }
+  })
+
+  it('covers the whole span between them, with no gap and no overlap', () => {
+    const b = design.beams[0]!
+    const bundle = index.get(b.id)!
+    const zones = beamSectionZones(model, bundle, b.id, b.sections.map((s) => s.x))!
+    const sorted = [...zones].sort((p, q) => p[0] - q[0])
+    for (let k = 1; k < sorted.length; k++) expect(sorted[k][0]).toBeCloseTo(sorted[k - 1][1], 9)
+  })
+
+  it('attaches End i to the i-node’s END of the sheet, whichever way the beam runs', () => {
+    // The station is measured from the i-node along the BEAM; u runs along the
+    // GRID LINE. A beam modelled j→i has its End i at the right of the sheet,
+    // and reading the station as a distance from the left edge would wash the
+    // wrong support.
+    for (const b of design.beams.slice(0, 8)) {
+      const m = model.members.find((x) => x.id === b.id)!
+      const ni = model.nodes.find((n) => n.id === m.i)!
+      const bundle = index.get(b.id)!
+      const uI = projectPoint([ni.x, ni.y, ni.z], bundle.input.plane)[0]
+      const zones = beamSectionZones(model, bundle, b.id, b.sections.map((s) => s.x))!
+      const endI = b.sections.findIndex((s) => s.x === 0)
+      if (endI < 0) continue
+      const [a, z] = zones[endI]!
+      expect(uI).toBeGreaterThanOrEqual(a - 1e-6)
+      expect(uI).toBeLessThanOrEqual(z + 1e-6)
+    }
+  })
+
+  it('is null for a member the model does not have', () => {
+    const bundle = index.get(design.beams[0]!.id)!
+    expect(beamSectionZones(model, bundle, 'nope', [0, 3, 6])).toBeNull()
   })
 })

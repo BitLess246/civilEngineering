@@ -19,6 +19,7 @@
 // into a box without knowing where in the world the beam is.
 // ─────────────────────────────────────────────────────────────────────────
 import type { RebarCage, RebarRun, Vec3 } from './rebarModel'
+import { runPolylines } from './rebarWire'
 
 /** One bar, cut. */
 export interface SectionBar {
@@ -117,8 +118,18 @@ export function cutBeam(i: CutInput, at: number, label: string): BeamSection {
   }
   const sorted = [...hoops].sort((p, q) => Math.abs(stationOf(p) - at) - Math.abs(stationOf(q) - at))
   const near = sorted[0]
+  // The stirrup AS DRAWN, not as stored.
+  //
+  // `run.path` is the closed loop's four corners — the bar's specification,
+  // which is all the cut length needs. What gets BUILT and what the 3D view
+  // paints is `runPolylines`: the corners filleted to the bend the tie is
+  // really made to, and the two 135° hooks (§425.3.2) that a closed loop's
+  // vertices cannot express, because they are what happens at the two free
+  // ends the loop pretends it does not have. Drawn from the corners, every
+  // section box on every elevation showed a square-cornered rectangle with no
+  // hooks — the one detail an inspector looks for first.
   const stirrup: [number, number][] = near
-    ? near.path.map((p) => {
+    ? (runPolylines(near)[0] ?? []).map((p) => {
       const d: Vec3 = [p[0] - i.origin[0], p[1] - i.origin[1], p[2] - i.origin[2]]
       return [dot(d, ax) - c, p[1] - i.soffit] as [number, number]
     })
@@ -162,6 +173,35 @@ export function spanSections(
     cutBeam(i, (a + b) / 2, 'B'),
     cutBeam(i, b - eps, 'C'),
   ]
+}
+
+/**
+ * The stretch of span each design section speaks for, m.
+ *
+ * A beam is designed at three stations — the two ends and the worst interior
+ * point — and each one's steel is provided over a REGION, not at a point. The
+ * region is the half-way split to its neighbours, which is the reading the
+ * curtailment already follows: the hogging steel runs from the support to
+ * somewhere before the point of contraflexure, and the sagging steel from
+ * there on.
+ *
+ * Stations arrive unsorted (`memberSections` pushes End i, End j, then the
+ * interior), so they are sorted here and the zones come back in the order the
+ * caller gave them — a caller holding one section row needs the zone for THAT
+ * row, not for the k-th sorted one.
+ */
+export function stationZones(stations: number[], u0: number, u1: number): [number, number][] {
+  const lo = Math.min(u0, u1), hi = Math.max(u0, u1)
+  const order = stations.map((x, k) => [x, k] as const).sort((a, b) => a[0] - b[0])
+  const out: [number, number][] = new Array(stations.length)
+  order.forEach(([x, k], n) => {
+    const prev = n > 0 ? order[n - 1]![0] : null
+    const next = n < order.length - 1 ? order[n + 1]![0] : null
+    const a = prev == null ? lo : (prev + x) / 2
+    const b = next == null ? hi : (x + next) / 2
+    out[k] = [Math.max(lo, Math.min(hi, a)), Math.max(lo, Math.min(hi, b))]
+  })
+  return out
 }
 
 /** How the section's bars group into a callout: "3-⌀20 TOP, 2-⌀20 BOT." */

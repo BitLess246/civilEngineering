@@ -69,6 +69,17 @@ export interface FrameElevationInput {
   cages: RebarCage[]
   /** Which cages belong to THIS level — drawn as the subject, not context. */
   subject: Set<string>
+  /**
+   * Stretches of the line to call out, m along the plane's u.
+   *
+   * The schedule uses this to say WHICH PART of the beam the section it is
+   * showing speaks for: a row headed "End i" is about the steel over that
+   * support and not about the span, and on an elevation carrying three
+   * different arrangements there is otherwise nothing to say which third is
+   * being discussed. Empty or absent on the drawing-set sheets, which are
+   * about the whole line.
+   */
+  highlight?: { u0: number; u1: number; label?: string }[]
 }
 
 export interface FrameElevationOptions {
@@ -342,10 +353,16 @@ function drawSection(
   const w = sec.b * k, h = sec.h * k
   const x0 = cx - w / 2
   P.push({ kind: 'rect', x: x0, y: top, w, h, fill: CONCRETE, stroke: SHEET_INK, width: 0.7 })
-  // The stirrup, from the cage — so its bend radius and cover are the cage's.
+  // The stirrup, from the cage — so its bend radius, cover and HOOKS are the
+  // cage's. Not closed back to its own start: the polyline is the bar as bent,
+  // and it begins and ends at the two 135° hook tails, so joining them would
+  // draw a chord straight across the core that no bar follows.
   if (sec.stirrup.length > 2) {
     const pts = sec.stirrup.map(([a, up]) => ({ x: cx + a * k, y: top + (sec.h - up) * k }))
-    P.push({ kind: 'path', cmds: [...pts, pts[0]].map((q, n) => ({ c: n === 0 ? 'M' as const : 'L' as const, x: q.x, y: q.y })), stroke: STEEL, width: 0.8 })
+    P.push({
+      kind: 'path', stroke: STEEL, width: 0.8, fill: 'none', cap: 'round', join: 'round',
+      cmds: pts.map((q, n) => ({ c: n === 0 ? 'M' as const : 'L' as const, x: q.x, y: q.y })),
+    })
   }
   for (const b of sec.bars) {
     P.push({
@@ -423,6 +440,29 @@ export function buildFrameElevation(
       kind: 'text', x: g.u, y: bubbleY, text: g.label,
       size: r * 1.05, anchor: 'middle', color: SHEET_INK, weight: 700,
     })
+  }
+
+  // ── the zone this sheet is about, if it is about one ───────────────────
+  // Between the concrete and the steel: a wash the bars read THROUGH, so it
+  // says which stretch is being discussed without hiding what is in it.
+  for (const z of i.highlight ?? []) {
+    const a = Math.min(z.u0, z.u1), b = Math.max(z.u0, z.u1)
+    if (!(b > a)) continue
+    P.push({
+      kind: 'rect', x: a, y: lo, w: b - a, h: hi - lo,
+      fill: 'rgba(29,78,216,0.09)', stroke: STEEL, width: 0.7, dash: [u * 0.5, u * 0.35],
+    })
+    if (z.label) {
+      // INSIDE the band, near its top. Above it is the row of span dimensions
+      // between the grid bubbles, and a label placed there landed on top of a
+      // dimension figure — on a sheet whose whole job is to be read, two
+      // strings in the same place is the worst possible outcome. The top of
+      // the band is the storey above the beams, which is empty.
+      P.push({
+        kind: 'text', x: (a + b) / 2, y: lo + u * 1.3, text: z.label,
+        size: u * 0.8, anchor: 'middle', color: STEEL, weight: 700,
+      })
+    }
   }
 
   // ── the steel, straight off the cages ──────────────────────────────────

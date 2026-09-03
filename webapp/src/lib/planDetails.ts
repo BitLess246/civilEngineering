@@ -14,7 +14,8 @@ import type { BeamColumnJointInput, JointConfinement } from '../engine/beamColum
 import type { SlabDirResult } from '../engine/slabDDM'
 import type { ColumnSchematicProps } from '../components/ColumnSchematic'
 import type { FrameElevationInput, ElevationMember } from '../engine/frameElevation'
-import { elevationPlane, type RebarCage, type Vec3 } from '../engine/rebarModel'
+import { elevationPlane, projectPoint, type RebarCage, type Vec3 } from '../engine/rebarModel'
+import { stationZones } from '../engine/beamSection'
 
 export interface SoilInput { qAllow?: number; gammaSoil?: number; gammaConc?: number; H?: number }
 
@@ -441,6 +442,60 @@ export function gridLines(model: StructuralModel): GridLine[] {
     if (pts.filter((p) => Math.abs(p.x - x) < 1e-6).length < 2) return
     out.push({ label: String(k + 1), at: x, axis: 'z' })
   })
+  return out
+}
+
+/**
+ * Where each of a beam's design sections sits ON ITS ELEVATION, m along the
+ * sheet's u.
+ *
+ * Two changes of coordinate, and both are easy to skip. A design station is
+ * measured from the beam's i-node in metres along the beam; the sheet's u runs
+ * along the GRID LINE, whose direction is the plane's, not the member's — so a
+ * beam modelled j→i has its "End i" at the RIGHT of the sheet, and reading the
+ * station as a distance from the left edge would wash the wrong support.
+ * Projecting both nodes and interpolating between them keeps the two ends
+ * attached to the right ends.
+ */
+export function beamSectionZones(
+  model: StructuralModel, bundle: FrameElevationBundle, beamId: string, stations: number[],
+): [number, number][] | null {
+  const m = model.members.find((x) => x.id === beamId)
+  if (!m) return null
+  const ni = model.nodes.find((n) => n.id === m.i)
+  const nj = model.nodes.find((n) => n.id === m.j)
+  if (!ni || !nj) return null
+  const L = Math.hypot(nj.x - ni.x, nj.y - ni.y, nj.z - ni.z)
+  if (L <= 1e-9) return null
+  const uI = projectPoint([ni.x, ni.y, ni.z], bundle.input.plane)[0]
+  const uJ = projectPoint([nj.x, nj.y, nj.z], bundle.input.plane)[0]
+  const us = stations.map((x) => uI + (uJ - uI) * (x / L))
+  return stationZones(us, Math.min(uI, uJ), Math.max(uI, uJ))
+}
+
+/**
+ * Every frame elevation, indexed by the members drawn on it as the SUBJECT.
+ *
+ * The drawing set groups these by grid line and level; a schedule row is about
+ * one member and needs the sheet that member is on. Built once and looked up,
+ * because assembling the bundles walks every member of every line at every
+ * level and a schedule expands a row on every click.
+ *
+ * Context members — the columns carried half a storey above and below — are
+ * NOT indexed: a column appears on the sheets of both the level under it and
+ * the level over it, and answering "which sheet is this column's" with either
+ * would be a coin toss. Beams have one level and one line, so they are
+ * unambiguous.
+ */
+export function elevationBundleByMember(
+  model: StructuralModel, design: StructureDesign, cages: RebarCage[],
+): Map<string, FrameElevationBundle> {
+  const out = new Map<string, FrameElevationBundle>()
+  for (const b of frameElevationBundles(model, design, cages)) {
+    for (const m of b.input.members) {
+      if (m.role === 'beam' && !out.has(m.mark)) out.set(m.mark, b)
+    }
+  }
   return out
 }
 

@@ -10,6 +10,7 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { RebarWireframe } from '../components/RebarWireframe'
 import { buildStructureCages, structureMomentRatios } from '../engine/cageBuilder'
+import { beamSectionZones, elevationBundleByMember, type FrameElevationBundle } from '../lib/planDetails'
 import { placeStair } from '../engine/stairPlacement'
 import { REBAR_ROLE_COLOR } from '../engine/rebarWire'
 import type { CageKind } from '../engine/rebarModel'
@@ -92,7 +93,7 @@ import { DIAG_COLOR, DIAG_LABEL, LOAD_COLOR } from '../components/modelSpace/sce
 import { DirPicker, Rule, SchedChip, Sec, SolverProgress, Swatches, TabBtn } from '../components/modelSpace/panelKit'
 import { TAB_GROUPS, UTILITY_TABS, type Tab } from '../components/modelSpace/tabs'
 import {
-  BeamCageSection, BeamRebarElevation, BeamServiceability, ColumnCageSection, ColumnElevation, WShapeSection,
+  BeamCageSection, BeamElevationFigure, BeamServiceability, ColumnCageSection, ColumnElevation, WShapeSection,
 } from '../components/modelSpace/figures'
 
 /** A sensible default timber deck (DFL No.2 joists 50×200 @ 400, 25 mm plank). */
@@ -931,6 +932,22 @@ export default function ModelSpace() {
   const rebarBuild = showRebar ? cageBuild : null
   const rebarCages = rebarBuild?.cages ?? []
   const scheduleCages = cageBuild?.cages ?? []
+  /** The drawing set's frame elevations, indexed by the beam each one is the
+   *  sheet for. Assembled once: it walks every member of every grid line at
+   *  every level, and a schedule expands a row on every click. */
+  const elevationOf = useMemo(
+    () => (model && design && cageBuild
+      ? elevationBundleByMember(model, design, cageBuild.cages)
+      : new Map<string, FrameElevationBundle>()),
+    [model, design, cageBuild],
+  )
+  /** The stretch of the elevation a beam's k-th design section speaks for —
+   *  see `beamSectionZones`, which does the two changes of coordinate. */
+  const beamZone = (bm: { id: string; sections: { x: number }[] }, k: number): [number, number] | undefined => {
+    const b = elevationOf.get(bm.id)
+    if (!b || !model) return undefined
+    return beamSectionZones(model, b, bm.id, bm.sections.map((x) => x.x))?.[k]
+  }
   /** How many cages of each kind were placed — the count beside each Display
    *  checkbox, and what decides which checkboxes there are anything to show. */
   const cagesByKind = useMemo(() => {
@@ -4340,12 +4357,20 @@ export default function ModelSpace() {
                                 color="#d62728" vlines={[{ x: s.x, label: s.label.split(' ')[0] }]} />
                             </div>
                           )}
+                          {wantDraw && elevationOf.get(bm.id) && (
+                            <div className="mb-3 overflow-x-auto rounded-lg border border-slate-200 bg-white p-3">
+                              <BeamElevationFigure
+                                bundle={elevationOf.get(bm.id)!}
+                                zone={beamZone(bm, k)}
+                                label={`${bm.id} · ${s.label}`}
+                              />
+                            </div>
+                          )}
                           <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.7fr_1fr]">
                             {wantSol && <WorkedSolution steps={beamSectionSolution(sec, s)} title={`${bm.id} · ${s.label} — worked solution`} />}
                             {wantDraw && (
                             <div className="space-y-3 self-start rounded-lg border border-slate-200 bg-white p-3">
-                              <BeamRebarElevation L={bm.L} h={sec.h} sections={bm.sections} />
-                              <div className="border-t border-slate-100 pt-2">
+                              <div>
                                 <BeamCageSection model={model} cages={scheduleCages} beam={bm} sec={s} rect={sec} />
                               </div>
                             </div>
