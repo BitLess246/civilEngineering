@@ -22,7 +22,7 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, RectSection } from './model'
 import type { StructureDesign } from './pipeline'
-import { buildBeamCage } from './beamCage'
+import { buildBeamCage, effectiveDepth } from './beamCage'
 import { buildColumnCage, perimeterBars } from './columnCage'
 import { calcDevLength } from './devLength'
 import { buildFootingCage } from './footingCage'
@@ -254,8 +254,27 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
     // Fall back across the two rather than to a default: a beam with only
     // hogging sections still needs a middle, and vice versa.
     const spac = b.sections.map((s) => s.design.sAdopt).filter((v) => v > 0)
-    const sEndMm = ends.length ? Math.min(...ends) : (spac.length ? Math.min(...spac) : 0)
-    const sMidMm = mids.length ? Math.max(...mids) : (spac.length ? Math.max(...spac) : 0)
+    /**
+     * What a beam that needs NO shear steel is still detailed with, mm.
+     *
+     * §409.6.3.1 excuses a beam from shear reinforcement where Vu ≤ φVc/2, and
+     * `beamDesign` says so honestly: region "none", `sAdopt` 0, `sHinge` 0. A
+     * drawing cannot be built from that — the longitudinal bars still need
+     * something to hang in — so the detailing decision is made here, where the
+     * section is known, and it is the §409.7.6.2.2 maximum: d/2, capped at
+     * 600 mm.
+     *
+     * Passing the design's 0 straight through is what produced a stirrup every
+     * 25 mm on the beam with the least shear in the frame: `stirrupStations`
+     * clamped 0 to its floor and laid the whole span out at it. The zero was
+     * never a spacing; it was the absence of one.
+     */
+    const nominalMm = (() => {
+      const d = effectiveDepth(sec.h, sec.cover, sec.tieDia, sec.barDia)
+      return Math.max(10, Math.floor(Math.min(d / 2, 600) / 10) * 10)
+    })()
+    const sEndMm = ends.length ? Math.min(...ends) : (spac.length ? Math.min(...spac) : nominalMm)
+    const sMidMm = mids.length ? Math.max(...mids) : (spac.length ? Math.max(...spac) : nominalMm)
     // WHERE EACH FACE MAY BE SPLICED — and the two faces are OPPOSITE.
     //
     // A top bar is in tension over the supports, so it laps in the MIDDLE HALF
@@ -455,9 +474,9 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
      * where no beam runs along the edge at the panel's own level (a wall, or an
      * unsupported edge), and `buildSlabCage` falls back to `support`.
      */
-    const edgeWidth = (axis: 'x' | 'z', at: number, lo: number, hi: number): number | undefined => {
+    const edgeBeams = (axis: 'x' | 'z', at: number, lo: number, hi: number): RectSection[] => {
       const y = ys[0]!
-      let w: number | undefined
+      const out: RectSection[] = []
       for (const m of model.members) {
         if (!isBeam(m.role)) continue
         const a = pos.get(m.i), b = pos.get(m.j)
@@ -469,11 +488,37 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
         // further along the same gridline supports a different panel.
         const u0 = axis === 'x' ? a.z : a.x, u1 = axis === 'x' ? b.z : b.x
         if (Math.min(u0, u1) > hi - 1e-6 || Math.max(u0, u1) < lo + 1e-6) continue
-        const bw = secOf(m.id).b / 1000
-        w = w === undefined ? bw : Math.min(w, bw)
+        out.push(secOf(m.id))
       }
-      return w
+      return out
     }
+    /** Narrowest beam on an edge — see `edgeBeams`. */
+    const edgeWidth = (axis: 'x' | 'z', at: number, lo: number, hi: number): number | undefined => {
+      const w = edgeBeams(axis, at, lo, hi).map((sec) => sec.b / 1000)
+      return w.length ? Math.min(...w) : undefined
+    }
+    /**
+     * Level of the TOP of the framing beams' top bars, m — what the slab's top
+     * mat rests on, and what its bottom bar hooks over at a free edge.
+     *
+     * A beam's node line IS its top face (`levelDrop`), and `beamCage` insets
+     * its top bar by cover + stirrup + half a diameter from there, so the top
+     * of that bar is cover + stirrup below the node.
+     *
+     * The HIGHEST across the four edges, not the average or the nearest: the
+     * mat is one plane laid across all of them, so it comes to rest on
+     * whichever bar stands proudest. With one section for the whole frame — the
+     * usual case — every edge gives the same answer and the choice does not
+     * arise.
+     */
+    const supportBarTop = (() => {
+      const secs = [
+        ...edgeBeams('x', x0, z0, z1), ...edgeBeams('x', x1, z0, z1),
+        ...edgeBeams('z', z0, x0, x1), ...edgeBeams('z', z1, x0, x1),
+      ]
+      if (!secs.length) return undefined
+      return ys[0]! - Math.min(...secs.map((sec) => (sec.cover + sec.tieDia) / 1000))
+    })()
     // The DDM names its directions by the panel's own short/long sides, so map
     // each back onto the model axis it actually runs along before placing bars.
     const dd = sl.design
@@ -513,6 +558,7 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
       h: dd.h, cover: 20, barDia: sl.barDia,
       x: dirFor(x1 - x0), z: dirFor(z1 - z0),
       support: Math.min(sec.b, sec.h) / 1000,
+      supportBarTop,
       edgeSupport: {
         xLo: edgeWidth('x', x0, z0, z1), xHi: edgeWidth('x', x1, z0, z1),
         zLo: edgeWidth('z', z0, x0, x1), zHi: edgeWidth('z', z1, x0, x1),

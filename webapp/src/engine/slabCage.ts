@@ -81,6 +81,27 @@ export interface SlabCageInput {
    * happened to be measured. `xLo` is the edge at `x0`, `xHi` the one at `x1`.
    */
   edgeSupport?: { xLo?: number; xHi?: number; zLo?: number; zHi?: number }
+  /**
+   * Level of the TOP of the supporting beams' top bars, m — the bar the slab
+   * steel is tied against.
+   *
+   * A monolithic floor is one pour, and on site the slab's top mat is LAID ON
+   * the beams' top bars: they are the highest steel in the section and the mat
+   * rests on them. Placed from the slab's own cover alone the mat floated
+   * above that line — 20 mm slab cover puts it higher than 40 mm beam cover
+   * plus a stirrup does — which is not where a bar can physically be once the
+   * beam cage is in. The reference photograph is unambiguous about it.
+   *
+   * The bottom mat uses the same level for the other end of the same
+   * relationship: at an edge where the slab stops, its bottom bar turns up and
+   * hooks on that bar (§408.7.4.2's anchorage into the support), which is the
+   * detail the site photograph shows.
+   *
+   * Omitted, both fall back to what they did before — cover-derived levels and
+   * a straight embedment — so a caller with no beam to measure gets a cage,
+   * not an exception.
+   */
+  supportBarTop?: number
   /** Extensions to use; defaults to the flat-plate figure. */
   ext?: Record<'column' | 'middle', SlabBarExtensions>
   /** Chair grid spacing, m. 0 draws none. */
@@ -175,6 +196,29 @@ export function strips(lo: number, hi: number, csWidth: number): {
   return out
 }
 
+/**
+ * The bottom-bar grid lines a support does NOT receive a cranked bar on, and
+ * the `need` of them that are actually wanted.
+ *
+ * Alternate bars crank up at alternate ends, so at one support the free
+ * positions are exactly the bars that turned up at the OTHER one. An extra
+ * straight top bar goes there — on the bottom mat's own setting-out grid, in a
+ * gap, never beside a bar already at that level.
+ *
+ * Asking for more than the gaps can hold returns every gap: the layout is then
+ * as tight as the bottom pitch allows, which is a real limit of the bent-bar
+ * arrangement and not something to fix by doubling bars up.
+ */
+export function everyOther(lines: number[], atLow: boolean, need: number): number[] {
+  const free = lines.filter((_, k) => (k % 2 === 0) !== atLow)
+  if (need <= 0) return []
+  if (need >= free.length) return free
+  // Spread the wanted count evenly through the free positions rather than
+  // taking the first `need` of them, which would crowd one side of the band.
+  return Array.from({ length: need }, (_, j) =>
+    free[Math.min(free.length - 1, Math.round(((j + 0.5) * free.length) / need - 0.5))])
+}
+
 /** §425.3.1 ℓext on a 90° hook, m — 12db, and never under 150 mm. */
 const hookExt = (db: number) => Math.max(12 * db, 150) / 1000
 
@@ -199,6 +243,17 @@ export function buildSlabCage(i: SlabCageInput): RebarCage {
   const hook = Math.min(hookExt(i.barDia), Math.max(0, depthForHook))
   /** Support widths, mm, too narrow to take the full bottom-bar embedment. */
   const narrow = new Set<number>()
+  /** Upturned-leg lengths, mm, shorter than §425.3.1 asks for. */
+  const shortHook = new Set<number>()
+  /**
+   * How far the top mat reaches into the panel from each support, as
+   * `[axis, lo, hi]` in plan — the bands a chair has something to hold up in.
+   *
+   * Collected while the top bars are placed rather than re-derived afterwards:
+   * the reach depends on the strip and on which alternate bar it is, and a
+   * second copy of that arithmetic is a second thing to get wrong.
+   */
+  const topSpan: { run: 'x' | 'z'; lo: number; hi: number }[] = []
 
   const lenX = i.x1 - i.x0, lenZ = i.z1 - i.z0
   if (lenX <= 0 || lenZ <= 0) return { member: i.mark, runs: [], notes: ['degenerate panel'] }
@@ -208,7 +263,22 @@ export function buildSlabCage(i: SlabCageInput): RebarCage {
 
   /** Levels of the two layers, m. Outer = short span. */
   const yBottom = (short: boolean) => yBot + c + (short ? 0 : db) + db / 2
-  const yTopMat = (short: boolean) => yTop - c - (short ? 0 : db) - db / 2
+  /**
+   * The top mat sits on the beams' top bars where it can, and at its own cover
+   * where it cannot.
+   *
+   * `Math.min` is the whole rule, and it reads correctly in both directions:
+   * resting on the beam bar is normally the LOWER of the two (slab cover is
+   * thinner than a beam's cover plus its stirrup), so it governs; if a beam
+   * ever sat so high that resting on it broke the slab's own cover, the cover
+   * line is lower and governs instead. Neither is a special case.
+   */
+  const yTopMat = (short: boolean) => {
+    const byCover = yTop - c - (short ? 0 : db) - db / 2
+    if (i.supportBarTop === undefined) return byCover
+    const resting = i.supportBarTop + db / 2 - (short ? 0 : db)
+    return Math.min(byCover, resting)
+  }
 
   let n = 0
   const push = (r: Omit<RebarRun, 'member' | 'count' | 'mark'> & { tag: string }) => {
@@ -258,6 +328,36 @@ export function buildSlabCage(i: SlabCageInput): RebarCage {
     const climb = yT - yB
     const crankRun = climb / Math.max(Math.tan(crank), 1e-6)
 
+    /**
+     * Where a BOTTOM bar stops at one end.
+     *
+     * Continuous edge: straight through into the support, because the panel
+     * next door carries the same bar on and there is nothing to anchor.
+     *
+     * Discontinuous edge: the bar reaches the support and TURNS UP, finishing
+     * on the beam's own top bar — which is the site detail, and the anchorage
+     * §408.7.4.2 asks for at a free edge. Run straight into the support, a
+     * bottom bar at the end of a slab is developed by nothing but bond over the
+     * width of one beam.
+     *
+     * The leg reaches the beam's top bar. Where that is a shorter leg than
+     * §425.3.1's ℓext, it is raised toward the top mat — but never past it,
+     * which would put the end of a bar in the cover.
+     */
+    const upTo = (yB: number): number | null => {
+      if (i.supportBarTop === undefined) return null
+      const ceiling = yTopMat(true)
+      const wanted = Math.max(i.supportBarTop, yB + hookExt(i.barDia))
+      return Math.min(ceiling, wanted)
+    }
+    const botEnd = (face: number, sign: 1 | -1, continuous: boolean, v: number, s: number, yB: number) => {
+      const end = face - sign * embedInto(s)
+      const up = continuous ? null : upTo(yB)
+      if (up === null || up <= yB + 1e-9) return { pts: [at(end, v, yB)], bends: [] as number[] }
+      if (up - yB < hookExt(i.barDia) - 1e-9) shortHook.add(Math.round((up - yB) * 1000))
+      return { pts: [at(end, v, yB), at(end, v, up)], bends: [bend] }
+    }
+
     /** Where a top leg stops at one end: the centreline when the slab carries
      *  on (the neighbour draws the other half), else the far face with a hook
      *  turned down into the support — the only anchorage a free edge has. */
@@ -265,6 +365,14 @@ export function buildSlabCage(i: SlabCageInput): RebarCage {
       continuous
         ? { pts: [at(face, v, yT)], bends: [] as number[] }
         : { pts: [at(face - sign * (s / 2 - c), v, yT - hook), at(face - sign * (s / 2 - c), v, yT)], bends: [bend] }
+
+    /** Record how far a top bar just placed at this face reaches into the
+     *  panel — see `topSpan`. */
+    const noteTop = (face: number, sign: 1 | -1, cont: boolean, s: number, reach: number) => {
+      const near = cont ? face : face - sign * (s / 2 - c)
+      const far = face + sign * (s / 2 + reach)
+      topSpan.push({ run: dir.run, lo: Math.min(near, far), hi: Math.max(near, far) })
+    }
 
     for (const { band, strip } of strips(dir.aLo, dir.aHi, dir.d.csWidth)) {
       const e = ext[strip]
@@ -274,10 +382,15 @@ export function buildSlabCage(i: SlabCageInput): RebarCage {
       if (!bent) {
         // ── straight mats: the ACI Fig. 8.7.4.1.3 arrangement ─────────────
         for (const v of bandLines(band[0], band[1], botSpacing)) {
+          // Written from the LOW end outward: the low end's hook leg is drawn
+          // first (top of the leg, then down to the mat) so the path reads
+          // along the bar in one direction, which is what `rebarWire` sweeps.
+          const lo = botEnd(dir.lo, 1, dir.contLo, v, dir.supLo, yB)
+          const hi = botEnd(dir.hi, -1, dir.contHi, v, dir.supHi, yB)
           push({
             tag: `B${dir.run.toUpperCase()}`, dia: i.barDia, role: 'bottom',
-            path: [at(dir.lo - embedInto(dir.supLo), v, yB), at(dir.hi + embedInto(dir.supHi), v, yB)],
-            bendDia: [],
+            path: [...[...lo.pts].reverse(), ...hi.pts],
+            bendDia: [...lo.bends, ...hi.bends],
           })
         }
         bandLines(band[0], band[1], topSpacing).forEach((v, k) => {
@@ -291,6 +404,7 @@ export function buildSlabCage(i: SlabCageInput): RebarCage {
               path: [...end.pts, at(face + sign * (s / 2 + reach), v, yT)],
               bendDia: end.bends,
             })
+            noteTop(face, sign, cont, s, reach)
           }
         })
         continue
@@ -313,46 +427,65 @@ export function buildSlabCage(i: SlabCageInput): RebarCage {
         // signed: the signed form read `farFace - farSign * -embed`, whose
         // double negative pulled the bar 150 mm SHORT of the support instead
         // of 150 mm into it.
-        const farEnd = atLow
-          ? dir.hi + embedInto(dir.supHi)
-          : dir.lo - embedInto(dir.supLo)
+        const far = atLow
+          ? botEnd(dir.hi, -1, dir.contHi, v, dir.supHi, yB)
+          : botEnd(dir.lo, 1, dir.contLo, v, dir.supLo, yB)
         // The top leg reaches the same distance past the face as a straight top
         // bar would — the figure's extension, so both details put steel over
         // the same length of support and the two are comparable.
         const reach = e.topLong * dir.d.ln
         const upper = face + sign * (s / 2 + reach)
         const end = topEnd(face, sign, cont, v, s)
+        noteTop(face, sign, cont, s, reach)
         push({
           tag: `M${dir.run.toUpperCase()}`, dia: i.barDia, role: 'bottom',
           path: [
             ...end.pts,                                          // over the support, on top
             at(upper, v, yT),                                    // start of the crank
             at(upper + sign * crankRun, v, yB),                  // …and its foot
-            at(farEnd, v, yB),                                   // through midspan into the far support
+            ...far.pts,                                          // through midspan into the far support
           ],
-          bendDia: [...end.bends, bend, bend],
+          bendDia: [...end.bends, bend, bend, ...far.bends],
         })
       })
 
       // ── the top steel the cranks do not cover ───────────────────────────
-      // Straight bars over each support, at the spacing that makes up the
-      // difference. None where the cranked half already carries it, which is
-      // an ordinary outcome and not an omission.
+      //
+      // Straight bars over each support, making up what the cranked half does
+      // not carry. None where it already does, which is an ordinary outcome
+      // and not an omission.
+      //
+      // WHERE they go is the part that was wrong. `bandLines` at the extra
+      // spacing laid them out on their OWN even grid, independent of the
+      // cranked bars they sit beside — so on the sample panel a straight top
+      // bar landed 21 mm from a cranked one at the start of the band and
+      // drifted from there. Two bars at the same level, 21 mm apart, is not a
+      // detail anyone would set out.
+      //
+      // They belong on the SAME grid as the bottom mat, in the gaps the cranks
+      // left: at one support the bars that turn up are the alternate ones, so
+      // the free positions are exactly the bars that cranked at the FAR end.
+      // An extra bar there sits over one of those, at the bottom-bar pitch,
+      // which is how a real bar schedule is set out.
       const sExtra = extraTopSpacing(botSpacing, topSpacing)
       if (sExtra !== null) {
-        bandLines(band[0], band[1], sExtra).forEach((v, k) => {
-          const reach = ((strip === 'middle' || k % 2 === 0) ? e.topLong : e.topShort) * dir.d.ln
-          for (const [face, sign, cont, s] of [
-            [dir.lo, 1, dir.contLo, dir.supLo], [dir.hi, -1, dir.contHi, dir.supHi],
-          ] as const) {
+        const grid = bandLines(band[0], band[1], botSpacing)
+        const need = Math.max(0, Math.round((band[1] - band[0]) / (sExtra / 1000)))
+        for (const [face, sign, cont, s, atLow] of [
+          [dir.lo, 1, dir.contLo, dir.supLo, true],
+          [dir.hi, -1, dir.contHi, dir.supHi, false],
+        ] as const) {
+          everyOther(grid, atLow, need).forEach((v, k) => {
+            const reach = ((strip === 'middle' || k % 2 === 0) ? e.topLong : e.topShort) * dir.d.ln
             const end = topEnd(face, sign, cont, v, s)
             push({
               tag: `T${dir.run.toUpperCase()}`, dia: i.barDia, role: 'top',
               path: [...end.pts, at(face + sign * (s / 2 + reach), v, yT)],
               bendDia: end.bends,
             })
-          }
-        })
+            noteTop(face, sign, cont, s, reach)
+          })
+        }
       }
     }
   }
@@ -373,6 +506,17 @@ export function buildSlabCage(i: SlabCageInput): RebarCage {
       + `not the ${ext.column.supportEmbed} mm of §408.7.4.1.3 — the beam is not wide enough`)
   }
 
+  // The upturned leg is bounded by the slab's own depth: it starts on the
+  // bottom mat and stops on the beam's top bar. A thin slab therefore cannot
+  // always give §425.3.1 its ℓext, and that is a finding about the slab, not a
+  // drawing to fudge — the bar wants a smaller diameter or a different
+  // anchorage.
+  for (const leg of [...shortHook].sort((a, b) => a - b)) {
+    notes.push(`bottom bars hook up ${leg} mm onto the beam's top bar, short of `
+      + `⌀${i.barDia}'s ${Math.round(hookExt(i.barDia) * 1000)} mm ℓext (§425.3.1) — `
+      + `a ${i.h} mm slab has no more depth to turn into`)
+  }
+
   // ── chairs ─────────────────────────────────────────────────────────────
   // A standing Z between the mats: a foot on the bottom steel, the rise, and a
   // head under the top steel. Without them the top mat is not where the design
@@ -381,9 +525,28 @@ export function buildSlabCage(i: SlabCageInput): RebarCage {
   if (cs > 0) {
     const rise = yTopMat(false) - yBottom(false) - db
     const foot = Math.min(0.15, lenX / 6, lenZ / 6)
+    /**
+     * Is there any top steel over this point for a chair to hold up?
+     *
+     * The top mat exists only in bands over the supports — that cut-off is the
+     * whole point of the figure, and a test asserts midspan is bare. The chairs
+     * were nonetheless laid on a grid across the WHOLE panel, so the middle of
+     * every panel got a row of standing bars under nothing at all. A chair is
+     * not a spacer for the concrete; it exists to hold the top mat at the level
+     * the negative-moment capacity was designed at, and where there is no top
+     * mat it is steel bought, bent, placed and paid for to do nothing.
+     *
+     * Either direction counts: a point at midspan along X can still be inside
+     * the band of the Z-direction top mat, and that mat needs holding up too.
+     */
+    const underTop = (x: number, z: number) =>
+      topSpan.some((t) => (t.run === 'x'
+        ? x >= t.lo - 1e-9 && x <= t.hi + 1e-9
+        : z >= t.lo - 1e-9 && z <= t.hi + 1e-9))
     if (rise > db) {
       for (const x of bandLines(i.x0, i.x1, cs * 1000)) {
         for (const z of bandLines(i.z0, i.z1, cs * 1000)) {
+          if (!underTop(x, z)) continue
           push({
             tag: 'CH', dia: Math.min(i.barDia, 12), role: 'chair',
             path: [

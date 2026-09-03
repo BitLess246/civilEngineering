@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildSlabCage, bandLines, strips, extraTopSpacing,
+import { buildSlabCage, bandLines, strips, extraTopSpacing, everyOther,
   type SlabCageInput, type SlabCageDir } from './slabCage'
 import { DEFAULT_EXT } from './slabBarDetail'
 import type { RebarRun } from './rebarModel'
@@ -413,5 +413,174 @@ describe('the cage stays inside the beam it is supported on', () => {
     const ys = c.runs.flatMap((r) => r.path.map((p) => p[1]))
     expect(Math.max(...ys)).toBeLessThanOrEqual(3 - 0.02 + 1e-9)
     expect(Math.min(...ys)).toBeGreaterThanOrEqual(3 - 0.2 + 0.02 - 1e-9)
+  })
+})
+
+describe('the slab steel meets the beam steel, the way it is tied on site', () => {
+  // Two details from a site photograph, and both need one number the cage was
+  // never given: the level of the beam's own top bar.
+  const BAR_TOP = 3 - 0.05          // yTop 3, beam cover 40 + 10 mm stirrup
+  const withBeam = (over: Partial<SlabCageInput> = {}) =>
+    buildSlabCage(panel({ supportBarTop: BAR_TOP, ...over }))
+
+  const tops = (c: { runs: RebarRun[] }) =>
+    c.runs.filter((r) => r.role === 'top').flatMap((r) => r.path.map((p) => p[1]))
+
+  it('lays the top mat ON the beam bar, not at its own cover', () => {
+    // The outer layer of the top mat is the SHORT span, and it rests on the
+    // beam bar: one bar radius above the top of it. Placed from the slab's own
+    // 20 mm cover it floated 18 mm higher, where no bar can be once the beam
+    // cage is in.
+    const c = withBeam()
+    expect(Math.max(...tops(c))).toBeCloseTo(BAR_TOP + 0.012 / 2, 9)
+  })
+
+  it('keeps the long span tucked a diameter under the short one', () => {
+    const c = withBeam()
+    const levels = [...new Set(tops(c).map((y) => +y.toFixed(6)))].sort((a, b) => b - a)
+    expect(levels[0] - levels[1]).toBeCloseTo(0.012, 9)
+  })
+
+  it('still obeys the slab\'s own cover if the beam bar sits too high', () => {
+    // Resting and covering are one `Math.min`, so a beam bar high enough to
+    // push the mat out through the top face simply stops governing.
+    const c = withBeam({ supportBarTop: 3 })      // flush with the slab's top face
+    expect(Math.max(...tops(c))).toBeCloseTo(3 - 0.02 - 0.012 / 2, 9)
+  })
+
+  it('turns the bottom bar up onto that bar at an edge the slab stops at', () => {
+    const c = withBeam({ detail: 'straight', edges: { xLo: false } })
+    const bx = c.runs.filter((r) => r.role === 'bottom' && r.mark.includes('-BX'))
+    expect(bx.length).toBeGreaterThan(0)
+    for (const r of bx) {
+      // The leg is vertical: two points at the same place in plan.
+      const [a, b] = r.path
+      expect(a[0]).toBeCloseTo(b[0], 9)
+      expect(a[2]).toBeCloseTo(b[2], 9)
+      expect(a[1]).toBeGreaterThan(b[1])            // it comes DOWN to the mat
+      expect(a[1]).toBeGreaterThanOrEqual(BAR_TOP - 1e-9)   // reaching the beam's bar
+      expect(r.bendDia.length).toBeGreaterThan(0)   // and it is a bend, not a corner
+    }
+  })
+
+  it('leaves a continuous edge straight — there is nothing to anchor', () => {
+    // "Unless they can be continuous": the panel next door carries the same
+    // bar on, so a hook there would be a bend in the middle of a bar.
+    const c = withBeam({ detail: 'straight' })      // every edge continuous
+    for (const r of c.runs.filter((x) => x.role === 'bottom')) {
+      expect(r.path).toHaveLength(2)
+      expect(r.path[0][1]).toBeCloseTo(r.path[1][1], 9)
+    }
+  })
+
+  it('hooks the far end of a CRANKED bar too', () => {
+    // A bent bar is top steel over one support and bottom steel into the far
+    // one; the far end is a bottom bar ending at a free edge like any other.
+    const c = withBeam({ detail: 'bent', edges: { xLo: false, xHi: false } })
+    const m = c.runs.filter((r) => r.mark.includes('-MX'))
+    expect(m.length).toBeGreaterThan(0)
+    for (const r of m) {
+      const last = r.path[r.path.length - 1], prev = r.path[r.path.length - 2]
+      expect(last[0]).toBeCloseTo(prev[0], 9)       // ends on a vertical leg
+      expect(last[1]).toBeGreaterThan(prev[1])
+    }
+  })
+
+  it('says so when the slab is too shallow to give the leg its ℓext', () => {
+    const c = withBeam({ detail: 'straight', edges: { xLo: false } })
+    expect(c.notes?.some((n) => n.includes('§425.3.1') && n.includes('onto the beam'))).toBe(true)
+  })
+
+  it('changes nothing at all when there is no beam level to work from', () => {
+    // Every caller that cannot measure a beam still gets the cage it got
+    // before — cover-derived levels, straight embedment, no hooks.
+    const plain = buildSlabCage(panel({ detail: 'straight', edges: { xLo: false } }))
+    expect(Math.max(...tops(plain))).toBeCloseTo(3 - 0.02 - 0.012 / 2, 9)
+    for (const r of plain.runs.filter((x) => x.role === 'bottom')) expect(r.path).toHaveLength(2)
+  })
+})
+
+describe('everyOther — where an extra top bar goes', () => {
+  const grid = [0.125, 0.375, 0.625, 0.875, 1.125, 1.375]
+
+  it('takes the gaps the cranks left, not a grid of its own', () => {
+    // At the LOW support the bars that crank up are the even-indexed ones, so
+    // the free positions are the odd ones — which is where the bars that
+    // cranked at the FAR end are lying in the bottom.
+    expect(everyOther(grid, true, 3)).toEqual([0.375, 0.875, 1.375])
+    expect(everyOther(grid, false, 3)).toEqual([0.125, 0.625, 1.125])
+  })
+
+  it('never lands on a position a cranked bar already occupies', () => {
+    for (const atLow of [true, false]) {
+      const cranked = grid.filter((_, k) => (k % 2 === 0) === atLow)
+      for (const v of everyOther(grid, atLow, 3)) expect(cranked).not.toContain(v)
+    }
+  })
+
+  it('spreads a smaller count through the band instead of crowding one end', () => {
+    const one = everyOther(grid, true, 1)
+    expect(one).toHaveLength(1)
+    expect(one[0]).toBeGreaterThan(grid[0])
+    expect(one[0]).toBeLessThan(grid[grid.length - 1])
+  })
+
+  it('stops at the gaps it has when asked for more', () => {
+    // The bent arrangement cannot put top bars closer than the bottom pitch
+    // without doubling them up, which is a real limit of the detail.
+    expect(everyOther(grid, true, 99)).toHaveLength(3)
+    expect(everyOther(grid, true, 0)).toEqual([])
+  })
+})
+
+describe('the two kinds of top bar are set out on one grid', () => {
+  // Reported from the 3D view: "the red and blue top bar is not properly
+  // spaced or distributed with each other". They were on two independent even
+  // grids — the cranked bars on the bottom mat's pitch, the extra straight
+  // bars on their own — so at the start of a band they sat 21 mm apart.
+  const c = buildSlabCage(panel({ detail: 'bent' }))
+  const nearLoTop = (r: RebarRun) => r.path[0][0] < 1              // x0 = 0
+  const zOf = (tag: string) => [...new Set(c.runs
+    .filter((r) => r.mark.includes(tag) && nearLoTop(r))
+    .map((r) => +r.path[0][2].toFixed(4)))].sort((a, b) => a - b)
+
+  it('puts every extra straight bar on the bottom mat\'s own setting-out grid', () => {
+    const bottomGrid = new Set(c.runs.filter((r) => r.mark.includes('-MX'))
+      .map((r) => +r.path[0][2].toFixed(4)))
+    for (const z of zOf('-TX')) expect(bottomGrid).toContain(z)
+  })
+
+  it('never places one beside a cranked bar at the same support', () => {
+    const cranked = zOf('-MX'), extra = zOf('-TX')
+    for (const z of extra) expect(cranked).not.toContain(z)
+    // …and the nearest neighbour is a full grid pitch away, not 21 mm.
+    for (const z of extra) {
+      const near = Math.min(...cranked.map((q) => Math.abs(q - z)))
+      expect(near).toBeGreaterThan(0.2)
+    }
+  })
+})
+
+describe('chairs stand where the top mat is, and nowhere else', () => {
+  // The top mat exists only in bands over the supports — asserted above — but
+  // the chairs were laid on a grid across the WHOLE panel, so the middle of
+  // every panel carried a row of standing bars under nothing at all.
+  const c = buildSlabCage(panel({ chairSpacing: 0.6 }))
+  const chairs = c.runs.filter((r) => r.role === 'chair').map((r) => r.path[1])
+
+  it('places none at the centre of the panel, where there is no top steel', () => {
+    const atCentre = chairs.filter((p) => Math.abs(p[0] - 3) < 0.5 && Math.abs(p[2] - 2.5) < 0.5)
+    expect(atCentre).toEqual([])
+  })
+
+  it('still places them over the supports, where the mat needs holding up', () => {
+    expect(chairs.length).toBeGreaterThan(0)
+    expect(chairs.some((p) => p[0] < 1.5 || p[0] > 4.5)).toBe(true)
+  })
+
+  it('keeps a chair at midspan in ONE direction if the other has top steel there', () => {
+    // A point halfway along X can still be inside the Z-direction top band,
+    // and that mat needs a chair as much as any other.
+    expect(chairs.some((p) => Math.abs(p[0] - 3) < 0.5 && (p[2] < 1.2 || p[2] > 3.8))).toBe(true)
   })
 })

@@ -266,6 +266,60 @@ describe('buildStructureCages', () => {
   })
 })
 
+describe('a beam that needs no shear steel still gets a buildable cage', () => {
+  // Reported from the 3D view: a beam whose slab had been deleted showed a
+  // wall of stirrups while its own worked solution said none were required.
+  //
+  // §409.6.3.1 excuses a beam from shear reinforcement at Vu ≤ φVc/2, and
+  // `beamDesign` says so honestly — region "none", `sAdopt` 0, `sHinge` 0. The
+  // cage passed that 0 to `stirrupStations`, which clamped it to its 25 mm
+  // floor and laid the entire span out at it: 189 hoops on a 6 m beam, on the
+  // beam carrying the least shear in the frame.
+  // The reported steps, exactly: a loaded floor with ONE PANEL DELETED, so the
+  // beams that framed it lose their tributary load and come out needing no
+  // shear steel at all.
+  const gap = generateGridModel({ baysX: [6, 6], baysZ: [5, 5], storeyH: [3], section, slabThickness: 150 })
+  gap.loads = gap.plates.flatMap((p) => [
+    { kind: 'area' as const, plate: p.id, q: 4.8, cat: 'D' as const },
+    { kind: 'area' as const, plate: p.id, q: 2.4, cat: 'L' as const },
+  ])
+  const dropped = gap.plates[0].id
+  gap.plates = gap.plates.filter((p) => p.id !== dropped)
+  gap.loads = gap.loads.filter((l) => !('plate' in l) || l.plate !== dropped)
+  const gdesign = designStructure(gap, soil as never)!
+  const { cages: gcages } = buildStructureCages(gap, gdesign)
+
+  const noShear = gdesign.beams.filter((b) => b.sections.every((s) => s.design.sAdopt === 0))
+
+  it('has such a beam to test — the design really does ask for nothing', () => {
+    expect(noShear.length).toBeGreaterThan(0)
+  })
+
+  it('details it at the §409.7.6.2.2 maximum, not at a placeholder', () => {
+    // d/2 for this 500 mm section with 40 cover, a 10 tie and 20 bars is
+    // 220 mm. The lap bands are closer by design and are not the spacing.
+    for (const b of noShear) {
+      const st = gcages.find((c) => c.member === b.id)!.runs.filter((r) => r.role === 'stirrup')
+      const xs = st.map((r) => r.path[0][0]).sort((p, q) => p - q)
+      const gaps = xs.slice(1).map((v, k) => v - xs[k])
+      expect(Math.max(...gaps)).toBeLessThanOrEqual(0.221)
+      expect(Math.max(...gaps)).toBeGreaterThan(0.15)     // NOT the 25 mm floor
+      expect(st.length).toBeLessThan(60)                  // it was 189
+    }
+  })
+
+  it('never draws a stirrup every 25 mm anywhere in the frame', () => {
+    // The floor is a guard against a degenerate input, and reaching it means a
+    // caller had no design rather than a beam that wants hoops at 25 mm.
+    for (const c of gcages) {
+      const xs = c.runs.filter((r) => r.role === 'stirrup')
+        .map((r) => r.path[0][0]).sort((p, q) => p - q)
+      const gaps = xs.slice(1).map((v, k) => +(v - xs[k]).toFixed(4)).filter((g) => g > 1e-6)
+      if (gaps.length) expect(Math.min(...gaps)).toBeGreaterThan(0.03)
+    }
+  })
+})
+
 describe('every cage says what kind of element it belongs to', () => {
   // Carried on the cage rather than re-derived from the mark, so a view can
   // hide one kind of steel without looking each mark back up in the model.
@@ -403,6 +457,21 @@ describe('slab cages — the floor is no longer drawn bare', () => {
         expect(p[2]).toBeGreaterThanOrEqual(z0 - reach - 1e-9)
         expect(p[2]).toBeLessThanOrEqual(z1 + reach + 1e-9)
       }
+    }
+  })
+
+  it('rests the top mat on the framing beams\' top bars', () => {
+    // The level is not the slab's own cover: it is cover + stirrup below the
+    // node, which is where `beamCage` puts the top of a beam's top bar. The
+    // frame's section is 40 mm cover with a 10 mm tie, so 50 mm down — and the
+    // outer layer of the mat sits one bar radius above that.
+    const barTop = 0.05
+    for (const s of sdesign.slabs) {
+      const ns = smodel.plates.find((p) => p.id === s.plate)!.corners
+        .map((c) => smodel.nodes.find((n) => n.id === c)!)
+      const ys = slabOf(s.plate)!.runs.filter((r) => r.role === 'top')
+        .flatMap((r) => r.path.map((p) => p[1]))
+      expect(Math.max(...ys)).toBeCloseTo(ns[0].y - barTop + s.barDia / 2000, 6)
     }
   })
 
