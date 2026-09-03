@@ -147,7 +147,15 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen bg-[#f4f3ef]">
       <Sidebar onOpenPalette={() => setPalette(true)} />
-      <div className="min-w-0 flex-1">
+      {/* A COLUMN, so the footer can be pushed to the bottom.
+          This div is stretched to the full height of a `min-h-screen` row, but
+          its children stacked in normal block flow — so on any page shorter
+          than the viewport (sign-in, a 404, a lazy page still loading) the
+          footer rendered directly under the content with dead space beneath
+          it, riding up the screen. As a column with the content region taking
+          the slack, a short page puts the footer on the bottom edge and a long
+          one pushes it below the fold, which is what a footer is for. */}
+      <div className="flex min-w-0 flex-1 flex-col">
         <header className="no-print sticky top-0 z-40 border-b border-[#e3e1da] bg-white/95 backdrop-blur">
           <div className="flex h-11 items-center gap-3 px-4 sm:px-6">
             <Link to="/" className="flex items-baseline gap-1.5 lg:hidden">
@@ -181,9 +189,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             from is barely better than the blank page it replaced. Keying it on
             the location rebuilds it on every navigation, so one broken page
             does not poison the content area for the rest of the session. */}
-        <ErrorBoundary key={pathname}>
-          <TrialGate>{children}</TrialGate>
-        </ErrorBoundary>
+        {/* `flex-1` is what absorbs the slack above the footer; `min-h-0`
+            keeps a page that scrolls inside itself (Model Space) from being
+            blown out by its own content. */}
+        <main className="min-h-0 flex-1">
+          <ErrorBoundary key={pathname}>
+            <TrialGate>{children}</TrialGate>
+          </ErrorBoundary>
+        </main>
         <SiteFooter />
       </div>
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
