@@ -59,6 +59,29 @@ export interface ColumnCageInput {
    */
   jointGaps?: [number, number][]
   /**
+   * Spacing of the hoops THROUGH a joint band, mm.
+   *
+   * §418.8.3.1: the column's confinement carries on through the joint — the
+   * joint is the most heavily worked part of the column and the one place the
+   * bars of two beams and two columns all pass at once. Defaults to the
+   * column's own confined spacing, which is the strict requirement; §418.8.3.2
+   * permits half the amount at 150 mm where beams frame in on all four sides
+   * and each is at least 3/4 of the column width, and that relaxation is the
+   * caller's to claim because only the caller knows the framing.
+   */
+  jointHoopSpacing?: number
+  /**
+   * How much higher the ALTERNATE bars start their lap, m.
+   *
+   * Every bar lapping at one level puts a section through the column that cuts
+   * EVERY bar at a splice. §25.5.2 is written the other way round — a lap is
+   * Class B unless no more than half the bars are spliced within one lap
+   * length — and the standard column detail staggers alternate bars by a full
+   * lap for exactly that reason. Zero (the default) is the unstaggered
+   * arrangement, and the cage says so in a note when there was no room for it.
+   */
+  spliceStagger?: number
+  /**
    * Lap splice projecting ABOVE `yTop`, mm — the compression splice of §25.5.5,
    * which the caller computes (`devLength.lsc`) because this module designs
    * nothing. Zero or omitted where no column continues above, e.g. at a roof.
@@ -196,6 +219,36 @@ export function tieLevels(i: Pick<ColumnCageInput, 'yBottom' | 'yTop' | 'lo' | '
 }
 
 /**
+ * Where the hoops go INSIDE each joint band, m.
+ *
+ * `tieLevels` deliberately leaves these bands empty because the joint's hoops
+ * own them (§418.8.3) — but nothing filled them, so a joint came out of the
+ * viewer as a bare gap in the cage with the beam bars passing through it. The
+ * general notes said "column ties stop at the joint and the joint hoops take
+ * over"; the joint hoops were never drawn.
+ *
+ * Divided rather than stepped from the bottom of the band. A joint is one beam
+ * deep — a few hundred millimetres — and stepping at the spacing leaves a
+ * remainder that is the difference between a hoop and none. Centring the set
+ * in the band also keeps the first one clear of the last column tie at the
+ * band's edge.
+ */
+export function jointHoopLevels(i: Pick<ColumnCageInput,
+  'jointGaps' | 'sConfined' | 'jointHoopSpacing'>): number[] {
+  const want = i.jointHoopSpacing && i.jointHoopSpacing > 0 ? i.jointHoopSpacing : i.sConfined
+  const s = Math.max(0.02, want / 1000)
+  const out: number[] = []
+  for (const g of i.jointGaps ?? []) {
+    const lo = Math.min(...g), hi = Math.max(...g)
+    const H = hi - lo
+    if (H <= 1e-9) continue
+    const n = Math.max(1, Math.round(H / s))
+    for (let k = 0; k < n; k++) out.push(lo + (H * (k + 0.5)) / n)
+  }
+  return out.sort((a, b) => a - b)
+}
+
+/**
  * The cage: one run per vertical bar, one per tie.
  *
  * Verticals are separate runs rather than one run with a count because they
@@ -270,10 +323,21 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
   // §418.7.4.3 — the lap onto the column above starts inside the CENTRE HALF of
   // that column, not at the floor. Only meaningful where there IS a lap.
   const rise = lap > 0 ? Math.max(0, i.spliceRise ?? 0) : 0
+  // Alternate bars lap a stagger higher — see `spliceStagger`. `perimeterBars`
+  // walks the perimeter in order, so alternating on its index puts every bar
+  // in the opposite group from the two either side of it, which is what
+  // "staggered relative to the adjacent bars" means on a section.
+  const stag = lap > 0 ? Math.max(0, i.spliceStagger ?? 0) : 0
+  if (lap > 0 && stag < lap - 1e-9) {
+    notes.push(stag <= 1e-9
+      ? `column bars all lap at one level — a section here cuts every bar at a splice (§25.5.2); the storey above has no room to stagger them by the ${Math.round(lap * 1000)} mm lap inside the centre half (§418.7.4.3)`
+      : `column laps are staggered ${Math.round(stag * 1000)} mm, short of the ${Math.round(lap * 1000)} mm lap — a section still cuts more than half the bars (§25.5.2)`)
+  }
   const onFace = (v: number, face: number) => face > 0 && Math.abs(Math.abs(v) - face) < 1e-6
 
   perimeterBars(i).forEach(([dx, dz], k) => {
     const x = cx + dx / 1000, z = cz + dz / 1000
+    const riseK = rise + (k % 2 ? stag : 0)
     const path: Vec3[] = [[x, y0, z]]
     const bendDia: number[] = []
     // How far the bar has to move to meet the one it laps onto.
@@ -302,12 +366,12 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
       if (!notes.some((n) => n.includes('may not be bent'))) {
         notes.push(`the column reduces by more than the bars can be cranked — a ${Math.round(offsetMm)} mm offset, past the ${OFFSET_DOWEL_LIMIT} mm of §410.7.4.5, so the bars may not be bent; dowel the column above and lap the dowels with these bars`)
       }
-      path.push([x, y1 + rise + lap, z])
+      path.push([x, y1 + riseK + lap, z])
     } else if (lap > 0 && crankRun > 0 && y1 - y0 > crankRun && (ox !== 0 || oz !== 0)) {
       const D = hookBendDiameter(i.barDia)
       // the crank is finished by the floor; the straight run above it carries
       // the bar up into the splice window
-      path.push([x, y1 - crankRun, z], [x + ox, y1, z + oz], [x + ox, y1 + rise + lap, z + oz])
+      path.push([x, y1 - crankRun, z], [x + ox, y1, z + oz], [x + ox, y1 + riseK + lap, z + oz])
       bendDia.push(D, D)
     } else if (lap <= 0 && i.topHookRise != null) {
       // ── the roof hook ────────────────────────────────────────────────────
@@ -338,7 +402,7 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
       path.push([x, yh, z], [x + tx, yh, z + tz])
       bendDia.push(hookBendDiameter(i.barDia))
     } else {
-      path.push([x, y1 + rise + lap, z])
+      path.push([x, y1 + riseK + lap, z])
     }
     runs.push({
       mark: `${i.mark}-V${k + 1}`,
@@ -377,12 +441,24 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
   const setSize = 1 + extra.ties.length
   const stackAt = (j: number) => ((j - (setSize - 1) / 2) * i.tieDia) / 1000
 
-  tieLevels(i).forEach((y, k) => {
+  // THE JOINT'S OWN HOOPS ARE THE COLUMN'S TIES, CONTINUED.
+  //
+  // Same loop, same cross ties, same rotating hook corner — the only
+  // differences are the spacing (§418.8.3) and the role, so that a viewer can
+  // tell joint steel from column steel. Building them from one list keeps the
+  // hook rotation running unbroken up the column, which is the point of it:
+  // rotating only within each stretch would put the same corner at the top of
+  // one and the bottom of the next.
+  const jointSet = new Set(jointHoopLevels(i).map((y) => y.toFixed(9)))
+  const levels = [...tieLevels(i), ...jointHoopLevels(i)].sort((a, b) => a - b)
+
+  levels.forEach((y, k) => {
+    const inJoint = jointSet.has(y.toFixed(9))
     const yh = y + stackAt(0)
     runs.push({
-      mark: `${i.mark}-T${k + 1}`,
+      mark: `${i.mark}-${inJoint ? 'J' : 'T'}${k + 1}`,
       dia: i.tieDia,
-      role: 'tie',
+      role: inJoint ? 'hoop' : 'tie',
       member: i.mark,
       // §418.7.5.3 — successive ties have their hooks at DIFFERENT corners.
       // Stacked in one corner every hook in the column lands on the same two
@@ -407,7 +483,7 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
       runs.push({
         mark: `${i.mark}-${t.kind === 'cross' ? 'X' : t.kind === 'diamond' ? 'D' : 'I'}${k + 1}.${j + 1}`,
         dia: i.tieDia,
-        role: 'tie',
+        role: inJoint ? 'hoop' : 'tie',
         member: i.mark,
         path: t.closed ? rotateLoop(pts, k) : (k % 2 ? [...pts].reverse() : pts),
         bendDia: pts.map(() => D),

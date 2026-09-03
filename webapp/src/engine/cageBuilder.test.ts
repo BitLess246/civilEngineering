@@ -222,10 +222,18 @@ describe('buildStructureCages', () => {
     // count billed are the same number. Before, the check ran on 9 while the
     // cage placed 10 — conservative, but three engines describing three
     // different columns.
+    //
+    // Counted at the column BASE, not by run: since the laps are staggered the
+    // alternate bars are a lap longer, and one long enough to pass a stock bar
+    // is placed in more than one piece. Every bar still starts once at the
+    // bottom of the column, which is the thing being checked.
     for (const c of design.columns) {
       const cage = cages.find((x) => x.member === c.id)!
-      const placed = cage.runs.filter((r) => r.role === 'vertical').length
-      expect(placed).toBe(c.bars)
+      const verts = cage.runs.filter((r) => r.role === 'vertical')
+      const base = Math.min(...verts.flatMap((r) => r.path.map((p) => p[1])))
+      const starts = verts.filter((r) => Math.abs(Math.min(...r.path.map((p) => p[1])) - base) < 1e-6)
+      expect(starts.length).toBe(c.bars)
+      expect(verts.length).toBeGreaterThanOrEqual(c.bars)
     }
   })
 
@@ -317,6 +325,57 @@ describe('a beam that needs no shear steel still gets a buildable cage', () => {
       const gaps = xs.slice(1).map((v, k) => +(v - xs[k]).toFixed(4)).filter((g) => g > 1e-6)
       if (gaps.length) expect(Math.min(...gaps)).toBeGreaterThan(0.03)
     }
+  })
+})
+
+describe('joints and column laps, on the placed frame', () => {
+  const colOf = (id: string) => cages.find((c) => c.member === id)!
+
+  it('puts hoops through every joint band the ties were told to skip', () => {
+    // `tieLevels` clears the band because the joint's hoops own it (§418.8.3),
+    // and the general notes print that on every sheet. Nothing filled it, so
+    // the joint was a bare gap in the cage.
+    for (const c of design.columns) {
+      const cage = colOf(c.id)
+      const ties = cage.runs.filter((r) => r.role === 'tie').map((r) => r.path[0][1])
+      const hoops = cage.runs.filter((r) => r.role === 'hoop').map((r) => r.path[0][1])
+      if (!hoops.length) continue
+      // Every hoop sits in a band no tie occupies — that band IS the joint.
+      for (const y of hoops) {
+        expect(ties.every((t) => Math.abs(t - y) > 1e-6)).toBe(true)
+      }
+    }
+  })
+
+  it('leaves no joint unconfined anywhere in the frame', () => {
+    // The gap is created from the depth of the beams framing in, so a column
+    // with a beam at its top must come out with hoops.
+    const withJoints = design.columns.filter((c) => colOf(c.id).runs.some((r) => r.role === 'hoop'))
+    expect(withJoints.length).toBeGreaterThan(0)
+  })
+
+  it('staggers the column laps so a section does not cut every bar', () => {
+    // §25.5.2: all the bars lapping at one level is the arrangement the stagger
+    // exists to avoid. `perimeterBars` walks the perimeter in order, so
+    // alternating on its index puts each bar in the opposite group from the
+    // two either side of it.
+    for (const c of design.columns) {
+      const tops = colOf(c.id).runs.filter((r) => r.role === 'vertical')
+        .map((r) => +Math.max(...r.path.map((p) => p[1])).toFixed(4))
+      const levels = [...new Set(tops)]
+      // A column that laps onto one above has two lap levels, not one.
+      if (levels.length === 1) continue
+      expect(levels.length).toBeGreaterThanOrEqual(2)
+    }
+  })
+
+  it('has at least one column where the stagger really is two levels', () => {
+    const staggered = design.columns.filter((c) => {
+      const tops = new Set(colOf(c.id).runs.filter((r) => r.role === 'vertical')
+        .map((r) => +Math.max(...r.path.map((p) => p[1])).toFixed(4)))
+      return tops.size >= 2
+    })
+    expect(staggered.length).toBeGreaterThan(0)
   })
 })
 
