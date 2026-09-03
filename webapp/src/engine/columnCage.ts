@@ -188,6 +188,46 @@ export function perimeterBars(i: Pick<ColumnCageInput, 'b' | 'h' | 'cover' | 'ba
 }
 
 /**
+ * Which splice group each bar of `perimeterBars` belongs to — 0 laps at the
+ * base rise, 1 laps a stagger higher.
+ *
+ * §25.5.2 wants the bars a section cuts at a lap to be no more than half of
+ * them, and "half" has to mean half of EACH FACE: a section through a column
+ * is read face by face, and two bars side by side on the same face lapping at
+ * the same level is the crowding the rule is about — even if the opposite face
+ * laps somewhere else and the tally still says 50%.
+ *
+ * That is why this cannot alternate on the `perimeterBars` index. That function
+ * emits MIRROR PAIRS — the four corners as (+x,+z), (+x,−z), (−x,+z), (−x,−z),
+ * then each intermediate bar next to its reflection — so an index parity puts
+ * every bar of one face in one group and every bar of the face opposite it in
+ * the other. Whole faces lapping at one level each, which is the arrangement
+ * the stagger was added to prevent.
+ *
+ * So the bars are ranked by POLAR ANGLE about the section centre first. The
+ * centre is inside a convex section, so the angle increases monotonically as
+ * you walk the boundary: ranking by it recovers the true perimeter order, and
+ * alternating on THAT rank puts every bar in the opposite group from the bar
+ * either side of it along its own face, corners included.
+ *
+ * The alternation closes cleanly all the way round because `perimeterBars`
+ * always places an EVEN number: four corners, and every intermediate bar with
+ * its mirror. An odd request is rounded up there for exactly that reason, so
+ * there is no wrap-around pair left sharing a level and no case to warn about.
+ * A caller passing its own odd list gets one such pair, at the walk's seam.
+ */
+export function spliceGroups(bars: readonly (readonly [number, number])[]): number[] {
+  const rank = bars.map((_, k) => k).sort((a, b) => {
+    const A = Math.atan2(bars[a]![1], bars[a]![0])
+    const B = Math.atan2(bars[b]![1], bars[b]![0])
+    return A - B || a - b
+  })
+  const g = new Array<number>(bars.length).fill(0)
+  rank.forEach((idx, r) => { g[idx] = r % 2 })
+  return g
+}
+
+/**
  * Tie levels up the column, m.
  *
  * Tight within `lo` of each end — that is where the plastic hinge forms and
@@ -323,10 +363,14 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
   // §418.7.4.3 — the lap onto the column above starts inside the CENTRE HALF of
   // that column, not at the floor. Only meaningful where there IS a lap.
   const rise = lap > 0 ? Math.max(0, i.spliceRise ?? 0) : 0
-  // Alternate bars lap a stagger higher — see `spliceStagger`. `perimeterBars`
-  // walks the perimeter in order, so alternating on its index puts every bar
-  // in the opposite group from the two either side of it, which is what
+  // Alternate bars lap a stagger higher — see `spliceStagger`. Which bar is
+  // "alternate" is decided by `spliceGroups`, walking the perimeter, NOT by the
+  // `perimeterBars` index: that index runs in mirror pairs, and alternating on
+  // it laps one whole face low and the face opposite it high. Along each face
+  // the two neighbours of any bar are now in the other group, which is what
   // "staggered relative to the adjacent bars" means on a section.
+  const bars = perimeterBars(i)
+  const grp = spliceGroups(bars)
   const stag = lap > 0 ? Math.max(0, i.spliceStagger ?? 0) : 0
   if (lap > 0 && stag < lap - 1e-9) {
     notes.push(stag <= 1e-9
@@ -335,9 +379,9 @@ export function buildColumnCage(i: ColumnCageInput): RebarCage {
   }
   const onFace = (v: number, face: number) => face > 0 && Math.abs(Math.abs(v) - face) < 1e-6
 
-  perimeterBars(i).forEach(([dx, dz], k) => {
+  bars.forEach(([dx, dz], k) => {
     const x = cx + dx / 1000, z = cz + dz / 1000
-    const riseK = rise + (k % 2 ? stag : 0)
+    const riseK = rise + (grp[k] ? stag : 0)
     const path: Vec3[] = [[x, y0, z]]
     const bendDia: number[] = []
     // How far the bar has to move to meet the one it laps onto.

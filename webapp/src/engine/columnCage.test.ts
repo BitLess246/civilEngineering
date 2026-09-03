@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildColumnCage, perimeterBars, placedBarCount, tieLevels, barInset, OFFSET_BEND_SLOPE,
-  jointHoopLevels, type ColumnCageInput,
+  jointHoopLevels, spliceGroups, type ColumnCageInput,
 } from './columnCage'
 import { cutLength, stirrupBendDiameter, stirrupHookAllowance, polylineLength } from './rebarModel'
 
@@ -510,5 +510,105 @@ describe('the joint is not a hole in the cage', () => {
   it('draws none where there is no joint', () => {
     expect(jointHoopLevels({ jointGaps: [], sConfined: 100 })).toEqual([])
     expect(jointHoopLevels({ sConfined: 100 })).toEqual([])
+  })
+})
+
+
+describe('spliceGroups — the laps stagger ALONG EACH FACE', () => {
+  // The property that matters is read off a SECTION, face by face: two bars
+  // side by side on the same face must not lap at the same level. Alternating
+  // on the `perimeterBars` index looks like it does that and does not — that
+  // function emits mirror pairs, so an index parity laps one whole face low
+  // and the face opposite it high, which is what this test exists to catch.
+  /** The four faces, each as [bar, index] pairs ordered along the face. */
+  const faces = (bars: [number, number][]) => {
+    const xh = Math.max(...bars.map(([x]) => x))
+    const zb = Math.max(...bars.map(([, z]) => z))
+    const near = (a: number, b: number) => Math.abs(a - b) < 1e-6
+    const tagged = bars.map((p, k) => [p, k] as const)
+    const along = (
+      keep: (p: readonly [number, number]) => boolean,
+      by: (p: readonly [number, number]) => number,
+    ) => tagged.filter(([p]) => keep(p)).sort((a, b) => by(a[0]) - by(b[0]))
+    return [
+      along(([x]) => near(x, xh), ([, z]) => z),
+      along(([x]) => near(x, -xh), ([, z]) => z),
+      along(([, z]) => near(z, zb), ([x]) => x),
+      along(([, z]) => near(z, -zb), ([x]) => x),
+    ]
+  }
+
+  for (const n of [4, 6, 8, 10, 12, 16, 20]) {
+    it(`alternates along every face of a ${n}-bar column`, () => {
+      const bars = perimeterBars({ ...col, bars: n })
+      const g = spliceGroups(bars)
+      let sameOnAFace = 0
+      for (const face of faces(bars)) {
+        for (let k = 1; k < face.length; k++) {
+          if (g[face[k]![1]] === g[face[k - 1]![1]]) sameOnAFace++
+        }
+      }
+      // `perimeterBars` always places an even number, so the walk closes and
+      // NO pair anywhere on the column may share a level.
+      expect(bars.length % 2).toBe(0)
+      expect(sameOnAFace).toBe(0)
+    })
+  }
+
+  it('splits the bars evenly between the two levels', () => {
+    for (const n of [4, 8, 12, 16]) {
+      const g = spliceGroups(perimeterBars({ ...col, bars: n }))
+      expect(g.filter((x) => x === 1).length).toBe(g.length / 2)
+    }
+  })
+
+  it('is not the index parity — that is the defect it replaces', () => {
+    // A square column, whose four mid-face bars make the failure plainest.
+    const bars = perimeterBars({ ...col, b: 600, h: 600, bars: 8 })
+    const g = spliceGroups(bars)
+    const zb = Math.max(...bars.map(([, z]) => z))
+    const topFace = bars.map((p, k) => [p, k] as const)
+      .filter(([[, z]]) => Math.abs(z - zb) < 1e-6)
+    expect(topFace.length).toBeGreaterThanOrEqual(3)
+    // index parity would have put every one of them in group 0
+    expect(new Set(topFace.map(([, k]) => g[k])).size).toBe(2)
+  })
+})
+
+describe('the cage places the bars at the two staggered levels', () => {
+  // `spliceLap` is mm; `spliceRise` and `spliceStagger` are METRES, as their
+  // docstrings say — the cage's own vertical axis.
+  const staggered = { ...col, spliceLap: 900, spliceRise: 0.4, spliceStagger: 0.9 }
+
+  it('laps neighbours on a face at different heights', () => {
+    const cage = buildColumnCage(staggered)
+    const bars = perimeterBars(staggered)
+    const g = spliceGroups(bars)
+    const tops = new Map<number, number>()
+    cage.runs.filter((r) => r.role === 'vertical').forEach((r) => {
+      const k = +r.mark.split('-V')[1]! - 1
+      tops.set(k, Math.max(...r.path.map((p) => p[1])))
+    })
+    const lows = [...tops].filter(([k]) => g[k] === 0).map(([, y]) => y)
+    const highs = [...tops].filter(([k]) => g[k] === 1).map(([, y]) => y)
+    expect(new Set(lows.map((y) => y.toFixed(4))).size).toBe(1)
+    expect(new Set(highs.map((y) => y.toFixed(4))).size).toBe(1)
+    expect(highs[0]! - lows[0]!).toBeCloseTo(0.9, 6)
+  })
+
+  it('places an even number of bars, so the alternation has no seam', () => {
+    // The reason there is no "odd count" case to warn about: an odd request is
+    // rounded up by `perimeterBars`, which places the four corners and then
+    // every intermediate bar together with its mirror.
+    for (let n = 4; n <= 24; n++) {
+      expect(perimeterBars({ ...col, bars: n }).length % 2).toBe(0)
+    }
+  })
+
+  it('does not stagger when there is nothing to lap onto', () => {
+    const cage = buildColumnCage({ ...col, spliceStagger: 0.9 })   // no spliceLap
+    const tops = cage.runs.filter((r) => r.role === 'vertical')
+      .map((r) => Math.max(...r.path.map((p) => p[1])).toFixed(4))
+    expect(new Set(tops).size).toBe(1)
   })
 })
