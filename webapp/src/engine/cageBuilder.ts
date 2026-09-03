@@ -168,6 +168,26 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
   }
 
   /**
+   * How much higher the ALTERNATE bars lap, m — §25.5.2's stagger.
+   *
+   * A full lap is what makes the stagger mean something: two groups a lap
+   * apart, so a section through the column cuts at most half the bars at a
+   * splice. Both zones still have to sit inside the centre half of the column
+   * above (§418.7.4.3), so the headroom above the first zone is what there is
+   * to work with — and where that is less than a lap, this returns what fits
+   * and the cage says the stagger is short rather than pretending otherwise.
+   */
+  const spliceStaggerAbove = (memberId: string, node: string, lap: number): number => {
+    const up = memberAbove(memberId, node)
+    const a = up && pos.get(up.i), b = up && pos.get(up.j)
+    if (!a || !b) return 0
+    const hStorey = Math.abs(b.y - a.y)
+    if (hStorey <= 0) return 0
+    const rise = spliceRiseAbove(memberId, node, lap)
+    return Math.max(0, Math.min(lap, (3 * hStorey) / 4 - (rise + lap)))
+  }
+
+  /**
    * A transverse beam at a node, and which way it runs across `mem` — where a
    * bar with nowhere vertical to hook can turn instead.
    */
@@ -366,6 +386,7 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
     add('column', spliceCage(buildColumnCage({
       mark: c.id, b: sec.b, h: sec.h, cover: sec.cover, spliceLap: lap,
       spliceRise: lap > 0 ? spliceRiseAbove(c.id, topNode, lap / 1000) : 0,
+      spliceStagger: lap > 0 ? spliceStaggerAbove(c.id, topNode, lap / 1000) : 0,
       barDia: sec.barDia, bars: c.bars, tieDia: sec.tieDia,
       sConfined: c.tieSpacingFinal > 0 ? c.tieSpacingFinal : c.tieSpacing,
       sOutside: c.seismicSOut ?? c.tieSpacing,

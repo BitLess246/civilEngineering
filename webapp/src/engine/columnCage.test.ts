@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildColumnCage, perimeterBars, placedBarCount, tieLevels, barInset, OFFSET_BEND_SLOPE,
-  type ColumnCageInput,
+  jointHoopLevels, type ColumnCageInput,
 } from './columnCage'
 import { cutLength, stirrupBendDiameter, stirrupHookAllowance, polylineLength } from './rebarModel'
 
@@ -467,5 +467,48 @@ describe('lap splice location — §418.7.4.3', () => {
       expect(p[0]).toBeCloseTo(atFloor[0], 9)
       expect(p[2]).toBeCloseTo(atFloor[2], 9)
     }
+  })
+})
+
+describe('the joint is not a hole in the cage', () => {
+  // Reported from the 3D view: "there are no ties visible in the column at
+  // joints". `tieLevels` clears those bands deliberately — the joint's own
+  // hoops own them (§418.8.3) — and the general notes say so on every sheet.
+  // Nothing drew them, so a joint came out as a bare gap with the beam bars
+  // passing through it.
+  const gaps: [number, number][] = [[2.6, 3.0]]
+
+  it('fills each band at the joint spacing', () => {
+    const ys = jointHoopLevels({ jointGaps: gaps, sConfined: 100, jointHoopSpacing: 100 })
+    expect(ys.length).toBe(4)                       // 400 mm of joint at 100
+    for (const y of ys) {
+      expect(y).toBeGreaterThan(2.6)
+      expect(y).toBeLessThan(3.0)
+    }
+  })
+
+  it('centres the set in the band rather than stepping from its edge', () => {
+    // A joint is one beam deep; stepping leaves a remainder that is the
+    // difference between a hoop and none, and butts the first one against the
+    // last column tie at the band edge.
+    const ys = jointHoopLevels({ jointGaps: gaps, sConfined: 100, jointHoopSpacing: 100 })
+    expect(ys[0] - 2.6).toBeCloseTo(3.0 - ys[ys.length - 1], 9)
+    expect(ys[0] - 2.6).toBeCloseTo(0.05, 9)
+  })
+
+  it('continues the column\'s own confinement when told nothing else', () => {
+    // §418.8.3.1 is the strict requirement; the §418.8.3.2 relaxation is the
+    // caller's to claim, because only the caller knows the framing.
+    expect(jointHoopLevels({ jointGaps: gaps, sConfined: 100 }))
+      .toEqual(jointHoopLevels({ jointGaps: gaps, sConfined: 100, jointHoopSpacing: 100 }))
+  })
+
+  it('puts at least one hoop in a band too shallow for the spacing', () => {
+    expect(jointHoopLevels({ jointGaps: [[2.9, 3.0]], sConfined: 300 })).toHaveLength(1)
+  })
+
+  it('draws none where there is no joint', () => {
+    expect(jointHoopLevels({ jointGaps: [], sConfined: 100 })).toEqual([])
+    expect(jointHoopLevels({ sConfined: 100 })).toEqual([])
   })
 })
