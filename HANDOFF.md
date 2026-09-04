@@ -309,6 +309,38 @@ cage: `transverseStations` + `pitchRuns` give "4@220, 18@213, 4@220",
 `faceTally` counts THRU vs EXTRA and dimensions the curtailments.
 `RebarCage.notes` and the lap tally become the sheet's `designNotes`.
 
+## Per-joint details, and the steel drawings that do not exist yet (Sep 2026)
+
+**The typical detail keeps being the defect.** Three sheets in a row have been
+rewritten from "one per TYPE" to "one per THING": the column detail (#681, one
+sheet per column line, footing to roof), the schedule figures that described
+steel instead of drawing it (#683), and now the beam–column joint (#687). The
+joint bundles used to be deduplicated by a key over the two sections, the bar
+counts and the confinement class, so a frame printed `J1`, `J2` — and neither
+was a joint anybody could point at. Each joint is now `J-A1@3.00`, and the two
+views draw THAT joint: the far beam only where a beam frames in opposite, a
+spandrel per side that has one, and at a roof joint no column above, with the
+column's own bars turned into the confined core per §418.8.2.2.
+
+The grid convention that names all of it is `modelGrid(model)` in
+`lib/planDetails.ts` — hoisted out of `columnStackBundles` because two sheet
+sets now name the same position (`C-A1` and `J-A1@3.50`) and they must not
+disagree about which one is A1. Use it for anything else that names a position.
+
+**Every drawing in the app is reinforced concrete.** A steel frame is modelled,
+analysed (`steelSectionProps`), designed (§F2/§G2.1/§E3/§H1-1, base plates,
+connections) and scheduled end to end — and then prints no steel drawing. The
+phased plan for closing that is
+[`docs/SteelDrawingsPlan.md`](docs/SteelDrawingsPlan.md): S1 material-aware
+plans + steel general notes, S2 the drawn shape section, S3 framing elevations,
+S4 connection details into the sheet set, S5 base plates and the anchor rod
+plan, S6 bracing and trusses, S7 the take-off. One PR per phase.
+
+**A design gap found while writing it:** `MemberRole` admits `'brace'` and the
+pipeline's member loop branches only on `beam`/`girder` and `column`, so a brace
+is never designed AND never reaches `unchecked` — the list that exists so a
+skipped member cannot read as OK. Fix that before S6 draws a braced bay.
+
 ## Continue from your phone / cloud (PC off)
 The local terminal session needs your PC on. To keep working without it:
 1. Open **claude.ai/code** (mobile browser) or the **Claude app**, same account.
