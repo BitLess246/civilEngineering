@@ -6,6 +6,7 @@ import {
 import { elevationPlane, type RebarCage, type RebarRun } from './rebarModel'
 import { STEEL, STEEL_LIGHT } from './sheetInk'
 import { textWidth } from './detailSheet'
+import type { PlanPrimitive } from './planRenderer'
 import { designStructure } from './pipeline'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { buildStructureCages } from './cageBuilder'
@@ -389,11 +390,14 @@ describe('buildFrameElevation — a column that steps in', () => {
 })
 
 describe('angledLeader — the leg runs at 45°', () => {
-  /** The inclined leg: the one plain line between the knee and the arrowhead. */
+  /** The inclined leg — now the last segment of the leader's single stroke,
+   *  which runs label-gap → knee → back of the arrowhead. */
+  const stroke = (prims: ReturnType<typeof angledLeader>) =>
+    prims.find((p): p is Extract<PlanPrimitive, { kind: 'path' }> =>
+      p.kind === 'path' && p.fill === 'none' && p.cmds.length === 3)!
   const leg = (prims: ReturnType<typeof angledLeader>) => {
-    const l = prims.find((p) => p.kind === 'line') as
-      { x1: number; y1: number; x2: number; y2: number }
-    return { dx: l.x2 - l.x1, dy: l.y2 - l.y1 }
+    const c = stroke(prims).cmds
+    return { dx: c[2]!.x - c[1]!.x, dy: c[2]!.y - c[1]!.y }
   }
 
   it('makes the leg 45° whatever the label says', () => {
@@ -421,10 +425,10 @@ describe('angledLeader — the leg runs at 45°', () => {
     // landing and the leg have to lean the same way.
     for (const side of ['left', 'right'] as const) {
       const p = angledLeader({ x: 5, y: 0, ty: -0.4, side, text: 'B1', size: 0.1 })
-      const l = p.find((q) => q.kind === 'line') as { x1: number; x2: number }
+      const c = stroke(p).cmds
       const t = p.find((q) => q.kind === 'text') as { x: number }
       // out from the text anchor to the knee, then ON in the same direction
-      expect(Math.sign(l.x1 - t.x)).toBe(Math.sign(l.x2 - l.x1))
+      expect(Math.sign(c[1]!.x - t.x)).toBe(Math.sign(c[2]!.x - c[1]!.x))
     }
   })
 
