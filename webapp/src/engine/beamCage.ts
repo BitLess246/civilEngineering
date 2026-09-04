@@ -41,6 +41,17 @@ export interface BeamCageInput {
   L: number
   colBLeft?: number
   colBRight?: number
+  /**
+   * The furthest from the beam's CENTRELINE an outer longitudinal bar may sit,
+   * mm — the line the supporting column's own verticals leave it.
+   *
+   * A beam's bars have to pass INSIDE the column's, which every joint sheet
+   * says in a note and no cage enforced: a 300 beam framing a 300 column put
+   * its outer top bar at |z| = 90.0 and the column put its outer vertical at
+   * |z| = 90.0, two ⌀20 bars on one line. Left out, the bars sit at the beam's
+   * own cover, which is right for a beam wider than what supports it.
+   */
+  maxBarOffset?: number
   /** Web width and overall depth, mm. */
   b: number
   h: number
@@ -330,7 +341,14 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
   const inset = (i.cover + i.stirrupDia + i.barDia / 2) / 1000
   const yBot = i.ySoffit + inset
   const yTop = i.ySoffit + i.h / 1000 - inset
-  const half = Math.max(0, i.b / 2000 - inset)    // corner bars sit at the web faces
+  // Corner bars sit at the web faces — unless the column they run into stands
+  // its own verticals inside that line, in which case they move in to clear
+  // them. Two bars cannot occupy one position, and the beam's are the ones
+  // with somewhere to go.
+  const half = Math.max(0, Math.min(
+    i.b / 2000 - inset,
+    i.maxBarOffset != null ? i.maxBarOffset / 1000 : Infinity,
+  ))
 
   /** A point at `u` along the span, `v` across it, at height `y`. */
   const at = (u: number, v: number, y: number): Vec3 =>

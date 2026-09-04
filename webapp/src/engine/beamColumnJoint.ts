@@ -808,6 +808,27 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
             kind: 'path', stroke: REBAR, width: main ? 1.8 : 0.8, cap: 'round', fill: 'none',
             cmds: piece.map(([x, y], k) => ({ c: k === 0 ? 'M' : 'L', x, y } as const)),
           })
+          // WHERE A BAR TURNS OUT OF THE CUT, SAY SO.
+          //
+          // A hook turns DOWN, square to a plan, so it projects to a point: the
+          // bar simply stops, and stopping is what a bar drawn to the edge of
+          // the view does too. The section shows the hook; the plan showed a
+          // line ending in the middle of a column with nothing to say which of
+          // the two it meant. A short tick across the bar is the difference.
+          if (!main) continue
+          for (const end of [piece[0]!, piece[piece.length - 1]!]) {
+            const onEdge = Math.abs(end[0] - winLo) < 1e-9 || Math.abs(end[0] - winHi) < 1e-9
+              || Math.abs(end[1] - winTop) < 1e-9 || Math.abs(end[1] - winBot) < 1e-9
+            if (onEdge) continue                       // it runs out of the view
+            const other = piece.length > 1 && end === piece[0] ? piece[1]! : piece[piece.length - 2]!
+            const dx = end[0] - other[0], dy = end[1] - other[1]
+            const L = Math.hypot(dx, dy) || 1
+            const tx = -dy / L * u * 0.5, tyy = dx / L * u * 0.5
+            P.push({
+              kind: 'line', x1: end[0] - tx, y1: end[1] - tyy, x2: end[0] + tx, y2: end[1] + tyy,
+              stroke: REBAR, width: 1.4,
+            })
+          }
         }
       }
     }
