@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  crossSectionPlane, memberCut, cutCage, cutCages, cutPrimitives, cutBounds, type CageCut,
+  crossSectionPlane, memberCut, cutCage, cutCages, cutPrimitives, cutBounds, sliceCage,
+  type CageCut,
 } from './cageSection'
 import { buildBeamCage, type BeamCageInput } from './beamCage'
 import { buildColumnCage, perimeterBars, barInset, type ColumnCageInput } from './columnCage'
@@ -179,6 +180,51 @@ describe('cutting a column cage', () => {
     const wide = cutCage(colCage, { ...cut, reach: 0.35 })
     expect(wide.ties.length).toBeGreaterThan(res.ties.length)
     expect(new Set(wide.ties.map((t) => t.offset.toFixed(6))).size).toBeGreaterThan(1)
+  })
+})
+
+describe('slicing — the part of a bar that LIES in a plan section', () => {
+  // A beam's top bar runs along the cut for six metres and then hooks down out
+  // of it. `cutCage` asks whether a run lies in the plane AS A WHOLE, so it
+  // classifies a hooked bar as neither flat nor crossing — and those are
+  // exactly the bars a beam-column joint's plan section is about.
+  const yTop = 3 + beam.h / 1000 - (beam.cover + beam.stirrupDia + beam.barDia / 2) / 1000
+  const cut: CageCut = {
+    at: [3, yTop, 0], normal: [0, 1, 0],
+    plane: { origin: [3, yTop, 0], u: [1, 0, 0], v: [0, 0, 1] },
+  }
+
+  it('returns the straight length of a bar the plane cut drops', () => {
+    const hooked = buildBeamCage({ ...beam, continuousLeft: false, continuousRight: false })
+    const flats = cutCage(hooked, cut).ties.filter((t) => t.role === 'top')
+    const sliced = sliceCage(hooked, cut, 0.05).filter((t) => t.role === 'top')
+    expect(flats).toHaveLength(0)                   // the plane sees none of them
+    expect(sliced.length).toBeGreaterThan(0)
+    // each piece runs ALONG the beam and stops where the bar turns down
+    for (const t of sliced) {
+      const us = t.pts.map((p) => p[0])
+      // u is measured from the cut's origin at midspan, so the bar runs ±3 m
+      // — a little past each end, where it carries on into its support
+      expect(Math.max(...us) - Math.min(...us)).toBeGreaterThan(1)
+      expect(Math.max(...us)).toBeLessThanOrEqual(3 + (beam.colBRight ?? 0) / 1000)
+      expect(Math.min(...us)).toBeGreaterThanOrEqual(-3 - (beam.colBLeft ?? 0) / 1000)
+    }
+  })
+
+  it('keeps only what is inside the slice', () => {
+    // the bottom bars are half a metre lower: no thickness reaches them
+    const roles = new Set(sliceCage(beamCage, cut, 0.05).map((t) => t.role))
+    expect(roles.has('top')).toBe(true)
+    expect(roles.has('bottom')).toBe(false)
+    // and a slice of no thickness still returns the bars lying exactly in it
+    expect(sliceCage(beamCage, cut, 0).some((t) => t.role === 'top')).toBe(true)
+  })
+
+  it('takes a filter, so a caller can slice one kind of steel', () => {
+    const all = sliceCage(beamCage, cut, 0.05)
+    const bars = sliceCage(beamCage, cut, 0.05, (r) => r.role === 'top')
+    expect(all.length).toBeGreaterThan(bars.length)
+    expect(bars.every((t) => t.role === 'top')).toBe(true)
   })
 })
 

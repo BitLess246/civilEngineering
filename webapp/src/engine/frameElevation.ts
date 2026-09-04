@@ -98,22 +98,30 @@ export interface FrameElevationDrawing extends Drawing {
 const CONCRETE = '#e2e8f0'
 
 /**
- * A polyline cut to a horizontal band, as the pieces that survive.
+ * A polyline cut to a band, as the pieces that survive.
  *
  * Per segment, so a bar that leaves the band and comes back gives two pieces
  * rather than one straight line joining its two ends. Endpoints are
  * interpolated onto the band edge, which is what makes a clipped bar read as
  * running OUT of the sheet instead of stopping just inside it.
+ *
+ * `axis` picks which coordinate the band is measured on: 1, the default, is the
+ * horizontal band an elevation wants, and 0 the vertical one a PLAN wants when
+ * it draws a six-metre beam bar into a window a few hundred wide.
  */
 export function clipToBand(
-  pts: [number, number][], lo: number, hi: number,
+  pts: [number, number][], lo: number, hi: number, axis: 0 | 1 = 1,
 ): [number, number][][] {
   const out: [number, number][][] = []
   let cur: [number, number][] = []
-  const inside = (p: [number, number]) => p[1] >= lo - 1e-9 && p[1] <= hi + 1e-9
+  const other = axis === 1 ? 0 : 1
+  const inside = (p: [number, number]) => p[axis] >= lo - 1e-9 && p[axis] <= hi + 1e-9
   const cross = (a: [number, number], b: [number, number], y: number): [number, number] => {
-    const t = Math.abs(b[1] - a[1]) < 1e-12 ? 0 : (y - a[1]) / (b[1] - a[1])
-    return [a[0] + (b[0] - a[0]) * t, y]
+    const t = Math.abs(b[axis] - a[axis]) < 1e-12 ? 0 : (y - a[axis]) / (b[axis] - a[axis])
+    const p: [number, number] = [0, 0]
+    p[axis] = y
+    p[other] = a[other] + (b[other] - a[other]) * t
+    return p
   }
   const flush = () => { if (cur.length > 1) out.push(cur); cur = [] }
 
@@ -125,12 +133,12 @@ export function clipToBand(
     if (ai && bi) { cur.push(b); continue }
     // the edge this segment leaves or enters through
     const edge = (from: [number, number], to: [number, number]) =>
-      cross(from, to, to[1] < lo ? lo : hi)
+      cross(from, to, to[axis] < lo ? lo : hi)
     if (ai && !bi) { cur.push(edge(a, b)); flush(); continue }
     if (!ai && bi) { cur = [edge(b, a), b]; continue }
     // both outside: it still crosses the band if the two are on opposite sides
-    if ((a[1] < lo && b[1] > hi) || (a[1] > hi && b[1] < lo)) {
-      out.push([cross(a, b, a[1] < lo ? lo : hi), cross(a, b, a[1] < lo ? hi : lo)])
+    if ((a[axis] < lo && b[axis] > hi) || (a[axis] > hi && b[axis] < lo)) {
+      out.push([cross(a, b, a[axis] < lo ? lo : hi), cross(a, b, a[axis] < lo ? hi : lo)])
     }
   }
   flush()
