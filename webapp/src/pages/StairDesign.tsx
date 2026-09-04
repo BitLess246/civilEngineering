@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { designStair, type StairSupport } from '../engine/stair'
 import { ReportControls } from '../components/ReportControls'
 import { buildStairSolution } from '../lib/stairSolution'
-import { StairElevation } from '../components/StairElevation'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { PageHeader } from '../components/calc'
 
@@ -119,16 +118,6 @@ export default function StairDesign() {
           <Field label="Main bar Ø" unit="mm" value={barDia} onChange={setBarDia} />
           <Field label="Cover" unit="mm" value={cover} onChange={setCover} />
         </div>
-      </section>
-
-      <section data-pdf-drawing className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm
-        [background-image:linear-gradient(#f0eee7_1px,transparent_1px),linear-gradient(90deg,#f0eee7_1px,transparent_1px)] [background-size:22px_22px]">
-        <h2 className="mb-3 text-[1.05rem] font-bold text-[#0056b3]">Flight elevation</h2>
-        <StairElevation run={span} t={t} R={R} G={G} thetaDeg={r.geom.thetaDeg} support={support}
-          landing={1200} ext={450}
-          mainBars={`⌀${barDia} @ ${f0(r.mainSpacing)} C/C`}
-          landingBars={`⌀10 @ ${f0(r.distSpacing)} C/C`}
-          distBars={`⌀10 @ ${f0(r.distSpacing)} mm`} />
       </section>
 
       <section className="mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
