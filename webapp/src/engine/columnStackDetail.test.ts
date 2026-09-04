@@ -6,6 +6,7 @@ import { designStructure } from './pipeline'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { STEEL, STEEL_LIGHT } from './sheetInk'
 import type { RebarCage, Vec3 } from './rebarModel'
+import type { PlanPrimitive } from './planRenderer'
 
 // A 2-bay, 2-storey frame on footings — so every stack has a pad under it, two
 // column members over it, and a real cage for all three.
@@ -190,8 +191,10 @@ describe('the storey a schedule row is about', () => {
     const extra = lit.primitives.filter((p) => p.kind === 'rect').length
       - plain.primitives.filter((p) => p.kind === 'rect').length
     expect(extra).toBe(1)
-    const band = lit.primitives.find((p) => p.kind === 'rect'
-      && typeof p.fill === 'string' && p.fill.startsWith('rgba(29,78,216'))!
+    const band = lit.primitives.find(
+      (p): p is Extract<PlanPrimitive, { kind: 'rect' }> =>
+        p.kind === 'rect' && typeof p.fill === 'string' && p.fill.startsWith('rgba(29,78,216'),
+    )!
     // page y is −level, so the band's top edge is the storey's TOP
     expect(band.y).toBeCloseTo(-storey.yTop, 9)
     expect(band.h).toBeCloseTo(storey.yTop - storey.yBot, 9)
