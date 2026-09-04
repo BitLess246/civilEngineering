@@ -214,15 +214,6 @@ export interface LeaderOpts {
 }
 
 /**
- * The house leader: filled arrowhead, one inclined leg, a horizontal landing,
- * and the label sitting on the landing.
- *
- * Every sheet used to draw its own — a bare hairline from somewhere near the
- * text to somewhere near the target, with no arrowhead and no landing, so at
- * a glance you could not tell a leader from a dimension extension or from a
- * bar. This is the one shape they all use now.
- */
-/**
  * Horizontal distance from a leader's TEXT ANCHOR to its knee — where the
  * landing ends and the inclined leg begins.
  *
@@ -232,26 +223,51 @@ export interface LeaderOpts {
  * caller cannot compute it from stale proportions.
  */
 export const leaderKnee = (size: number, landing?: number) =>
-  size * 0.34 + size * 1.30 * 0.29 + (landing ?? size * 2.2)
+  size * LEADER_GAP + (landing ?? size * 2.2)
 
+/** Text height to the start of the landing — the gap that keeps a landing off
+ *  the last letter of its label. */
+const LEADER_GAP = 0.42
+
+/**
+ * The house leader: filled arrowhead, one inclined leg, a horizontal landing,
+ * and the label sitting on the landing.
+ *
+ * Every sheet used to draw its own — a bare hairline from somewhere near the
+ * text to somewhere near the target, with no arrowhead and no landing, so at
+ * a glance you could not tell a leader from a dimension extension or from a
+ * bar. This is the one shape they all use now.
+ *
+ * TWO THINGS IT USED TO GET WRONG, both visible at a glance on any sheet:
+ *
+ * The landing ended on a GLYPH — a stroke that ran up, across, down, across
+ * and part-way back up, meant to separate the leader from its label. At sheet
+ * scale it printed as a small closed tick that reads as neither text nor
+ * steel: a smudge between the words and the line. A gap does that job, which
+ * is what every drafting standard uses.
+ *
+ * And the landing ran to whichever side `side` named, even when the target
+ * was the other way — so the leg left the knee, doubled back UNDER the label
+ * and crossed it on the way to what it points at. 56 of the 134 leaders in
+ * the sheet set were drawn that way. The landing now always runs TOWARDS the
+ * target; `side` is honoured only where the target is near enough to straight
+ * above or below the label for either side to be a real choice.
+ */
 export function leader(o: LeaderOpts): PlanPrimitive[] {
   const ink = NOTE                        // the leader itself, always
   const color = o.color ?? NOTE           // the label
-  const side = o.side ?? (o.x <= o.tx ? 'left' : 'right')
+  const gap = o.size * LEADER_GAP         // label to landing
+  const knee = leaderKnee(o.size, o.landing)
+  // Which way the landing runs. The target decides, because a landing pointing
+  // away from what it names is not a leader; the caller's preference only
+  // breaks the tie when the target is roughly above or below the label.
+  const toward: 'left' | 'right' = o.x <= o.tx ? 'left' : 'right'
+  const straightUp = Math.abs(o.x - o.tx) <= knee
+  const side = straightUp ? (o.side ?? toward) : toward
   const s = side === 'left' ? -1 : 1      // away from the label
-  const d = -s                            // towards the label
-  const gap = o.size * 0.34               // glyph to label
-  const gh = o.size * 1.30                // full height of the glyph
 
-  // The glyph the landing ends on: one continuous stroke that runs up, across,
-  // all the way down, across again, and part-way back up. It separates the
-  // leader from its label, so a landing never runs into the first letter and a
-  // leader never reads as a dimension line. Proportions are taken off the
-  // reference: 0.14 and 0.15 of the height for the two steps, the last riser
-  // stopping a tenth of the height above the landing.
-  const gEnd = o.tx + s * (gap + gh * 0.29)      // where the landing meets it
-  const kneeX = o.tx + s * leaderKnee(o.size, o.landing)
-  const up = o.ty - gh * 0.5, dn = o.ty + gh * 0.5
+  const gEnd = o.tx + s * gap             // where the landing starts
+  const kneeX = o.tx + s * knee
 
   // The leg stops at the back of the arrowhead so the two do not overprint.
   const dx = o.x - kneeX, dy = o.y - o.ty
@@ -259,7 +275,7 @@ export function leader(o: LeaderOpts): PlanPrimitive[] {
   const ux = dx / len, uy = dy / len
   const a = Math.min(o.arrow ?? o.size * 0.285, len * 0.6)
   const bx = o.x - ux * a, by = o.y - uy * a
-  const hw = a * 0.26
+  const hw = a * 0.2
 
   return [
     {
@@ -270,17 +286,15 @@ export function leader(o: LeaderOpts): PlanPrimitive[] {
         { c: 'L', x: bx + uy * hw, y: by - ux * hw },
       ],
     },
-    { kind: 'line', x1: kneeX, y1: o.ty, x2: bx, y2: by, stroke: ink, width: 0.7 },
+    // Landing and leg as ONE stroke: drawn as two primitives they met at the
+    // knee only as closely as two round caps allow, and at print weight that
+    // shows as a nick in the corner.
     {
       kind: 'path', stroke: ink, width: 0.7, fill: 'none', cap: 'round', join: 'round',
       cmds: [
-        { c: 'M', x: kneeX, y: o.ty },                          // the landing
-        { c: 'L', x: gEnd, y: o.ty },
-        { c: 'L', x: gEnd, y: up },                             // up
-        { c: 'L', x: gEnd + d * gh * 0.14, y: up },             // across
-        { c: 'L', x: gEnd + d * gh * 0.14, y: dn },             // all the way down
-        { c: 'L', x: gEnd + d * gh * 0.29, y: dn },             // across again
-        { c: 'L', x: gEnd + d * gh * 0.29, y: o.ty - gh * 0.1 },// part-way back up
+        { c: 'M', x: gEnd, y: o.ty },
+        { c: 'L', x: kneeX, y: o.ty },
+        { c: 'L', x: bx, y: by },
       ],
     },
     {

@@ -19,7 +19,7 @@
 import type { PlanPrimitive, PathCmd, Drawing } from './planRenderer'
 import { columnSectionPrimitives } from './columnSection'
 import { SHEET_INK, SHEET_ZONE, STEEL } from './sheetInk'
-import { titleBlock } from './detailSheet'
+import { titleBlock, leader } from './detailSheet'
 import { projectPath, type RebarCage, type RebarRun, type ViewPlane } from './rebarModel'
 import { runPolylines } from './rebarWire'
 import { cutCage, cutPrimitives, type CageCut } from './cageSection'
@@ -276,7 +276,12 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
       for (let z = gradeZ + step; z < footTop - 1e-6; z += step)
         P.push({ kind: 'line', x1: x, y1: z, x2: x + step * 0.5, y2: z - step * 0.5, stroke: HATCH, width: 0.4 })
   }
-  P.push({ kind: 'text', x: secL - ts, y: gradeZ - ts * 0.5, text: 'NATURAL GRADE LINE', size: ts * 0.5, anchor: 'start', color: INK, weight: 600 })
+  // Right-aligned CLEAR of the column: run out from the left edge it was
+  // nineteen characters long and printed straight through it. The clearance is
+  // measured to the column's outermost STEEL, not to its concrete — the bars
+  // and the ties stand outside the rectangle in this view, and aligning to the
+  // rect left the last letter under the outer tie line.
+  P.push({ kind: 'text', x: cl - ts * 1.4, y: gradeZ - ts * 0.5, text: 'NATURAL GRADE LINE', size: ts * 0.5, anchor: 'end', color: INK, weight: 600 })
   // footing + column
   P.push({ kind: 'rect', x: secL, y: footTop, w: B, h: H, stroke: INK, fill: 'none', width: 1.5 })
   P.push({ kind: 'rect', x: cl, y: colTop, w: cw, h: -colTop, stroke: INK, fill: 'none', width: 1.5 })
@@ -402,18 +407,17 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   // width dimension below the gravel
   P.push({ kind: 'dim', x1: secL, y1: gravBot + ts * 1.2, x2: secR, y2: gravBot + ts * 1.2, text: `${Math.round(B * 1000)} mm`, off: 0, size: ts * 0.7, ext: gravBot })
   // callouts — each leader starts ON the element it names (a dot marks the tap)
-  const lead = (ex: number, ey: number, tx: number, ty: number) => {
-    P.push({ kind: 'line', x1: ex, y1: ey, x2: tx, y2: ty, stroke: INK, width: 0.5 })
-    P.push({ kind: 'circle', cx: ex, cy: ey, r: ts * 0.06, stroke: INK, fill: INK, width: 0.4 })
-  }
+  // THE HOUSE LEADER, like every other sheet. This one used to draw its own:
+  // a hairline from the text to a filled dot on the bar, with no landing and
+  // no arrowhead — so on the one sheet where a callout crosses hatching it was
+  // also the one callout that could not be told from the hatching.
+  const callout = (ex: number, ey: number, tx: number, ty: number, text: string, size: number, color?: string, text2?: string) =>
+    P.push(...leader({ x: ex, y: ey, tx, ty, text, text2, size, color, weight: 600 }))
   // → a column vertical bar
   const rightVx = secVx.length ? Math.max(...secVx) : cr - c
   const vy = colTop * 0.6
-  lead(rightVx, vy, secR + ts * 0.7, vy)
-  P.push({ kind: 'text', x: secR + ts * 0.9, y: vy, text: `${colBars}-${colBarDia}mmØ VERT. BARS`, size: ts * 0.55, anchor: 'start', color: REBAR, weight: 600 })
   // → a lateral tie
   const tieY = tieZs.length ? tieZs[Math.floor(tieZs.length * 0.55)] : gradeZ * 0.55
-  lead(stX1, tieY, secR + ts * 0.7, tieY)
   // The callout says what is DRAWN. With cages, the ties on the sheet are the
   // ones the column cage placed, so the schedule is measured off their levels
   // (`pitchRuns`, the same reader the frame elevations use) instead of printing
@@ -449,10 +453,17 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   const tieLines = cg
     ? [`LATERAL TIES = ⌀${tieDia}`, ...(drawnPitch ? [`${drawnPitch} mm O.C.`] : [])]
     : [`LATERAL TIES = ⌀${tieDia}`, drawnPitch, `REST @ ${tieRest} mm O.C.`]
-  tieLines.forEach((s, i) => P.push({ kind: 'text', x: secR + ts * 0.9, y: tieY + (i - 1) * ts * 0.72, text: s, size: ts * 0.5, anchor: 'start', color: INK, weight: 500 }))
+  callout(rightVx, vy, secR + ts * 0.9, vy, `${colBars}-${colBarDia}mmØ VERT. BARS`, ts * 0.55, REBAR)
+  callout(stX1, tieY, secR + ts * 0.9, tieY, tieLines[0]!, ts * 0.5, INK, tieLines[1])
+  // a third line, where the schedule needs one, under the leader's own two
+  if (tieLines[2]) {
+    P.push({
+      kind: 'text', x: secR + ts * 0.9, y: tieY + ts * 0.5 * 2.5, text: tieLines[2],
+      size: ts * 0.5, anchor: 'start', color: INK, weight: 600,
+    })
+  }
   // → the bottom mat bar
-  lead(secR - c, zLong, secR + ts * 0.7, zLong + ts * 0.7)
-  P.push({ kind: 'text', x: secR + ts * 0.9, y: zLong + ts * 0.7, text: `${n}-${f.barDia}mmØ BOTHWAY`, size: ts * 0.55, anchor: 'start', color: REBAR, weight: 600 })
+  callout(secR - c, zLong, secR + ts * 0.9, zLong + ts * 0.7, `${n}-${f.barDia}mmØ BOTHWAY`, ts * 0.55, REBAR)
   if (f.foundingElev != null)
     P.push({ kind: 'text', x: secL, y: footTop - ts * 0.5, text: `T.O.F. EL ${f.foundingElev.toFixed(2)} m`, size: ts * 0.5, anchor: 'start', color: PANEL, weight: 600 })
   P.push({ kind: 'text', x: sx0, y: gravBot + ts * 2.4, text: 'SECTION A-A', size: ts * 0.85, anchor: 'middle', color: INK, weight: 700 })
