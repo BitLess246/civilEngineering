@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel } from '../engine/modelBuilder'
 import { designStructure } from '../engine/pipeline'
+import { buildStructureCages } from '../engine/cageBuilder'
 import { buildSheetSet, planSheets, detailSheets, groupSheets, generalNotesSheet, floorName, type PlanSheet } from './planSheets'
 import { planToSvg } from '../engine/planRenderer'
 import { paintDrawing, paintedSize } from './drawingPdf'
@@ -101,18 +102,43 @@ describe('the sheet set', () => {
     }
   })
 
-  it('honours the 90° mat-hook option', () => {
+  it('asks the CAGE for the 90° mat hook, and the cage answers by pad depth', () => {
+    // The option used to be a drawing switch: the sheet drew a hook of
+    // min(120, 0.07·B) — a length off the pad's WIDTH, which has nothing to do
+    // with whether a bar can be turned up — and the cage never had that steel,
+    // so the 3D view and the take-off knew nothing about it.
+    //
+    // It now reaches `buildFootingCage`, and this frame's 150 mm pads CANNOT
+    // take a hook: 75 mm cover puts the bar near mid-depth, leaving 35 mm
+    // against the 150 mm a ⌀10 hook needs (§425.3.1). So the honest answer for
+    // this model is that nothing changes, and the cage says why.
     const straight = buildSheetSet(model, design, soil, { hookedMatBars: false })
     const hooked = buildSheetSet(model, design, soil, { hookedMatBars: true })
-    const foot = (set: PlanSheet[]) => set.find((s) => s.group === 'Footing details')!
-    // A hook does not add PRIMITIVES — it lengthens the bar paths, which is why
-    // a primitive count is the wrong thing to assert on here.
-    const cmds = (set: PlanSheet[]) => foot(set).drawing.primitives
-      .reduce((n, p) => n + (p.kind === 'path' ? p.cmds.length : 0), 0)
-    expect(cmds(hooked)).toBeGreaterThan(cmds(straight))
-    // and nothing outside the footing sheets moves
     const others = (set: PlanSheet[]) => set.filter((s) => s.group !== 'Footing details').map((s) => s.key)
     expect(others(hooked)).toEqual(others(straight))
+
+    const { cages } = buildStructureCages(model, design, { hookedMatBars: true })
+    const f = cages.find((c) => c.member.startsWith('F-'))!
+    expect(f.notes?.some((n) => /left straight/.test(n))).toBe(true)
+    expect(f.runs.filter((r) => r.role === 'mat').every((r) => r.path.length === 2)).toBe(true)
+  })
+
+  it('hooks the mat where the pad IS deep enough', () => {
+    // Same footing, made deep enough for the turn-up — the bars gain the two
+    // vertices a hook is, and the cage stops reporting a shortfall.
+    const deep = {
+      ...design,
+      footings: design.footings.map((f) => ({ ...f, design: { ...f.design, Dc: 600 } })),
+    }
+    const { cages } = buildStructureCages(model, deep, { hookedMatBars: true })
+    const f = cages.find((c) => c.member.startsWith('F-'))!
+    expect(f.notes?.some((n) => /left straight/.test(n))).toBeFalsy()
+    expect(f.runs.filter((r) => r.role === 'mat').every((r) => r.path.length === 4)).toBe(true)
+    // and the sheet draws the longer bar, because it draws what the cage has
+    const cmds = (h: boolean) => buildSheetSet(model, deep, soil, { hookedMatBars: h })
+      .find((s) => s.group === 'Footing details')!.drawing.primitives
+      .reduce((n, p) => n + (p.kind === 'path' ? p.cmds.length : 0), 0)
+    expect(cmds(true)).toBeGreaterThan(cmds(false))
   })
 
   it('drops the design-only sheets when there is no design', () => {

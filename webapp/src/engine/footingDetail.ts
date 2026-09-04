@@ -20,6 +20,10 @@ import type { PlanPrimitive, PathCmd, Drawing } from './planRenderer'
 import { columnSectionPrimitives } from './columnSection'
 import { SHEET_INK, SHEET_ZONE, STEEL } from './sheetInk'
 import { titleBlock } from './detailSheet'
+import { projectPath, type RebarCage, type RebarRun, type ViewPlane } from './rebarModel'
+import { runPolylines } from './rebarWire'
+import { cutCage, cutPrimitives, type CageCut } from './cageSection'
+import { clipToBand, pitchNote, pitchRuns } from './frameElevation'
 
 type Pt = [number, number]
 /** Intersection of the infinite lines p1→p2 and p3→p4 (null if parallel). */
@@ -66,6 +70,40 @@ export interface FootingDetailInput {
   aboveGrade?: number
   /** Top-of-footing elevation, m (−down); its magnitude is the embedment. */
   foundingElev?: number
+  /**
+   * The PLACED cages, in model space — draw the steel from these instead of
+   * from the numbers above.
+   *
+   * Everything else in this interface describes the steel a second time: a bar
+   * count and a spacing for the mat, a bar count and a tie schedule for the
+   * column, and the sheet then laid both out with rules of its own. That is
+   * three descriptions of one cage — the third, after `columnSection`'s and
+   * `ColumnSchematic`'s — and the sheet's column cross-section really did
+   * disagree with the cage, drawing a plain tie around a bar layout the cage
+   * does not have.
+   *
+   * Supplied, the mat, the dowels, the column verticals and the column ties
+   * are all read off the cages: the plan's column is a CUT just above the pad
+   * (so its tie set is the one placed there, cross ties and all) and the
+   * section is both cages projected onto it. Omitted, the numeric drawing
+   * stands — the standalone foundation calculator has a design but no model to
+   * build cages from.
+   */
+  cages?: FootingDetailCages
+}
+
+/** The cages a footing sheet can draw from, and where they sit. */
+export interface FootingDetailCages {
+  /** The footing's own cage — the mat, and the dowels the column laps onto. */
+  footing?: RebarCage
+  /** The column standing on it. Its ties are the ties on this sheet. */
+  column?: RebarCage
+  /** Plan centre of the footing in MODEL space, m. The sheet is drawn about
+   *  its own origin, so this is what the model coordinates are measured from. */
+  centre: [number, number]
+  /** Level of the TOP of the footing, m — the sheet's own zero, with the
+   *  sheet's y running DOWN from it. */
+  yTop: number
 }
 
 export interface FootingDetailOptions { detailNo?: string; sheetRef?: string; scale?: string }
@@ -126,6 +164,7 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   const hg = f.gravel ?? 0.1
   const aboveGrade = f.aboveGrade ?? 0.3
   const embed = f.foundingElev != null ? Math.abs(f.foundingElev) : Math.max(1.0, H * 3)
+  const cg = f.cages
 
   // Column bar x-positions visible in the SECTION cut — 4 corners + the rest
   // split between faces (mirrors ColumnSchematic's 'all-around' layers).
@@ -147,19 +186,58 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   // wraps AROUND it instead of landing on top of it
   const guard = hookLen ? rMain * 2.8 : 0
   const matPos = (i: number) => (i === 0 ? barX(0) + guard : i === n - 1 ? barX(n - 1) - guard : barX(i))
-  for (let i = 0; i < n; i++) {   // ∥x bars — bottom layer (hollow)
-    const p = matPos(i)
-    rod(hookLen ? [[xo, p + hd(p)], [xo, p], [xf, p], [xf, p + hd(p)]] : [[xo, p], [xf, p]], rMain)
+  if (cg) {
+    // THE MAT, AS PLACED. Same layering as before — the bars running ∥z rest on
+    // the ∥x bars, so the ∥x layer is drawn hollow first and the ∥z layer over
+    // it white-filled, masking the lines beneath at every crossing. Which is
+    // which comes off the run's own direction, not off its mark.
+    const plan: ViewPlane = { origin: [cg.centre[0], cg.yTop, cg.centre[1]], u: [1, 0, 0], v: [0, 0, 1] }
+    const mats = (cg.footing?.runs ?? []).filter((r) => r.role === 'mat')
+    const alongU = (r: RebarRun) => {
+      const pts = projectPath(runPolylines(r)[0] ?? [], plan)
+      if (pts.length < 2) return true
+      const du = Math.abs(pts[pts.length - 1]![0] - pts[0]![0])
+      const dv = Math.abs(pts[pts.length - 1]![1] - pts[0]![1])
+      return du >= dv
+    }
+    for (const pass of [true, false]) {
+      for (const r of mats) {
+        if (alongU(r) !== pass) continue
+        const pts = projectPath(runPolylines(r)[0] ?? [], plan) as Pt[]
+        if (pts.length > 1) rod(pts, Math.max(r.dia / 2000, B * 0.007), pass ? 'none' : '#fff')
+      }
+    }
+    // THE COLUMN, AS A CUT just above the pad — so its bars are where the cage
+    // put them and its tie set is the one really placed there, cross ties and
+    // all. `columnSectionPrimitives` laid out its own nx/ny bar split and drew
+    // a plain rectangle round it, which is how the sheet came to disagree with
+    // the steel it was detailing.
+    P.push({ kind: 'rect', x: -cw / 2, y: -cd / 2, w: cw, h: cd, stroke: COL, fill: '#fff', width: 1.2 })
+    if (cg.column) {
+      const above = cg.yTop + 0.05
+      const cut: CageCut = {
+        at: [cg.centre[0], above, cg.centre[1]], normal: [0, 1, 0],
+        plane: { origin: [cg.centre[0], above, cg.centre[1]], u: [1, 0, 0], v: [0, 0, 1] },
+      }
+      P.push(...cutPrimitives(cutCage(cg.column, cut), {
+        bar: REBAR, tie: REBAR, tieWidth: 1.3, minBarRadius: B * 0.007,
+      }))
+    }
+  } else {
+    for (let i = 0; i < n; i++) {   // ∥x bars — bottom layer (hollow)
+      const p = matPos(i)
+      rod(hookLen ? [[xo, p + hd(p)], [xo, p], [xf, p], [xf, p + hd(p)]] : [[xo, p], [xf, p]], rMain)
+    }
+    for (let i = 0; i < n; i++) {   // ∥y bars — top layer (white-filled → masks the ∥x lines under it)
+      const p = matPos(i)
+      rod(hookLen ? [[p + hd(p), xo], [p, xo], [p, xf], [p + hd(p), xf]] : [[p, xo], [p, xf]], rMain, '#fff')
+    }
+    // column — the tied column CROSS-SECTION drawn in the footing sheet's palette
+    // (orange bars/ties on a white column), i.e. the report's ColumnSchematic
+    // rendered by the engine, placed where the column sits in the plan
+    columnSectionPrimitives(P, 0, 0, cw, { b: f.colB, h: f.colH ?? f.colB, cover: f.colCover ?? 40, barDia: colBarDia, tieDia, bars: colBars },
+      { concrete: '#fff', outline: COL, rebar: REBAR }, 1.3)
   }
-  for (let i = 0; i < n; i++) {   // ∥y bars — top layer (white-filled → masks the ∥x lines under it)
-    const p = matPos(i)
-    rod(hookLen ? [[p + hd(p), xo], [p, xo], [p, xf], [p + hd(p), xf]] : [[p, xo], [p, xf]], rMain, '#fff')
-  }
-  // column — the tied column CROSS-SECTION drawn in the footing sheet's palette
-  // (orange bars/ties on a white column), i.e. the report's ColumnSchematic
-  // rendered by the engine, placed where the column sits in the plan
-  columnSectionPrimitives(P, 0, 0, cw, { b: f.colB, h: f.colH ?? f.colB, cover: f.colCover ?? 40, barDia: colBarDia, tieDia, bars: colBars },
-    { concrete: '#fff', outline: COL, rebar: REBAR }, 1.3)
   // A–A cut line through the centre
   const aExt = hp + ts * 1.6
   P.push({ kind: 'line', x1: -aExt, y1: 0, x2: aExt, y2: 0, stroke: INK, width: 0.6, dash: [0.12, 0.06, 0.03, 0.06] })
@@ -222,11 +300,13 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   const rDot = rMain * 0.9
   const zPerp = zLong - rMain - rDot                 // perpendicular bars sit tangent on top
   const upHook = hookLen ? Math.min(hookLen, H * 0.45) : 0
-  // the longitudinal bar's hook clears (guards) the outer perpendicular bar
-  rod(upHook ? [[secL + c, zLong - upHook], [secL + c, zLong], [secR - c, zLong], [secR - c, zLong - upHook]]
-             : [[secL + c, zLong], [secR - c, zLong]], rMain)
-  for (let i = 0; i < n; i++)
-    P.push({ kind: 'circle', cx: sx0 + matPos(i), cy: zPerp, r: rDot, stroke: REBAR, fill: REBAR, width: 0.4 })
+  if (!cg) {
+    // the longitudinal bar's hook clears (guards) the outer perpendicular bar
+    rod(upHook ? [[secL + c, zLong - upHook], [secL + c, zLong], [secR - c, zLong], [secR - c, zLong - upHook]]
+               : [[secL + c, zLong], [secR - c, zLong]], rMain)
+    for (let i = 0; i < n; i++)
+      P.push({ kind: 'circle', cx: sx0 + matPos(i), cy: zPerp, r: rDot, stroke: REBAR, fill: REBAR, width: 0.4 })
+  }
   // LATERAL TIES first (each a thin closed tube whose ends hook around the outer
   // vertical bars) — then the vertical bars are drawn OVER them white-filled, so
   // the ties read as wrapping around / passing behind the bars (as in the report)
@@ -234,20 +314,85 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   const xL = secVx[0], xR = secVx[secVx.length - 1]
   const g = rMain * 1.3      // tie reaches just OUTSIDE the corner bar…
   const tw = rTie * 3.2      // …then hooks up around it (stays clear of the white-filled bar)
-  let z = 0
   const stopZ = -(embed + aboveGrade) + c
   const tieZs: number[] = []
-  const drawTie = () => { if (-z > stopZ) { rod([[xL - g, -z + tw], [xL - g, -z], [xR + g, -z], [xR + g, -z + tw]], rTie); tieZs.push(-z) } }
-  for (const [count, sp] of tieSched) for (let k = 0; k < count; k++) { z += sp / 1000; drawTie() }
-  while (-z > stopZ) { z += tieRest / 1000; drawTie() }
-  const stX1 = xR + g
-  // column vertical bars (white-filled, on top of the ties) — one per section
-  // x-position from the plan layout; the two outer bars foot out onto the mat
-  for (const dx of secVx) {
-    const outer = Math.abs(dx - sx0) > cw / 2 - cInset - 1e-6
-    const dir = dx < sx0 ? -1 : 1
-    rod(outer ? [[dx, colTop + c], [dx, zLong], [dx + dir * (cw * 0.3), zLong]]
-              : [[dx, colTop + c], [dx, zLong]], rMain, '#fff')
+  let stX1 = xR + g
+  if (cg) {
+    // ── the section, straight off the cages ───────────────────────────────
+    //
+    // The sheet's own axes: x runs east from the footing's centre, offset to
+    // the section's origin; y runs DOWN from the top of the pad, which is the
+    // sheet's zero. Both cages are projected onto that, and clipped to the
+    // band the sheet draws — a column bar carrying on up past the sheet is cut
+    // at the edge and shown running out, which is what it does.
+    const S: ViewPlane = {
+      origin: [cg.centre[0], cg.yTop, cg.centre[1]],
+      u: [1, 0, 0], v: [0, -1, 0],
+    }
+    const band: [number, number] = [colTop, gravBot]
+    // A bar crossing the plane rather than lying in it — a mat bar running
+    // north–south, seen end-on — is a DOT, not a rod. Told apart by how far it
+    // travels along the sheet: a bar seen end-on goes nowhere.
+    const draw = (cage: RebarCage, fill: string) => {
+      for (const r of cage.runs) {
+        const pts = projectPath(runPolylines(r)[0] ?? [], S).map(([a, b]) => [sx0 + a, b] as Pt)
+        if (pts.length < 2) continue
+        const uLo = Math.min(...pts.map((q) => q[0])), uHi = Math.max(...pts.map((q) => q[0]))
+        const rr = Math.max(r.dia / 2000, B * 0.007)
+        // A TIE seen edge-on is one horizontal bar, and has to be drawn as one.
+        // Its loop projects to a line traversed twice — out along the top leg
+        // and back along the bottom — and an outlined rod mitres its corners,
+        // so a segment that doubles back sends the two offset sides to an
+        // intersection far outside the column. The first render put every tie
+        // through both faces of the concrete.
+        if (r.role === 'tie' || r.role === 'hoop') {
+          const v = pts.reduce((a, q) => a + q[1], 0) / pts.length
+          if (v < band[0] || v > band[1]) continue
+          rod([[uLo, v], [uHi, v]], rr, fill)
+          // The level for the SCHEDULE comes off the run's specified path, not
+          // off the drawn loop: a closed tie leans half a diameter either side
+          // of its level so its two ends can pass (`selfClearance`), and a mean
+          // taken over the drawn points inherits that lean. It reported a 300
+          // spacing as 295 — a small number, and the wrong one to print on a
+          // drawing when the cage knows the right one.
+          tieZs.push(projectPath([r.path[0]!], S)[0]![1])
+          continue
+        }
+        // A bar CROSSING the plane — a mat bar running north–south, seen
+        // end-on — is a dot: it goes nowhere along the sheet.
+        if (uHi - uLo < rr) {
+          const mid = pts[Math.floor(pts.length / 2)]!
+          if (mid[1] >= band[0] && mid[1] <= band[1]) {
+            P.push({ kind: 'circle', cx: mid[0], cy: mid[1], r: rr * 0.9, stroke: REBAR, fill: REBAR, width: 0.4 })
+          }
+          continue
+        }
+        for (const piece of clipToBand(pts, band[0], band[1])) {
+          if (piece.length > 1) rod(piece as Pt[], rr, fill)
+        }
+      }
+    }
+    // Ties first, then the verticals white-filled over them — so a vertical
+    // reads as passing IN FRONT of the tie that wraps it, which is the
+    // convention the rest of this sheet already draws to.
+    if (cg.column) draw({ ...cg.column, runs: cg.column.runs.filter((r) => r.role === 'tie' || r.role === 'hoop') }, 'none')
+    if (cg.footing) draw({ ...cg.footing, runs: cg.footing.runs.filter((r) => r.role === 'mat') }, 'none')
+    if (cg.footing) draw({ ...cg.footing, runs: cg.footing.runs.filter((r) => r.role === 'dowel') }, '#fff')
+    if (cg.column) draw({ ...cg.column, runs: cg.column.runs.filter((r) => r.role === 'vertical') }, '#fff')
+    stX1 = sx0 + cw / 2
+  } else {
+    let z = 0
+    const drawTie = () => { if (-z > stopZ) { rod([[xL - g, -z + tw], [xL - g, -z], [xR + g, -z], [xR + g, -z + tw]], rTie); tieZs.push(-z) } }
+    for (const [count, sp] of tieSched) for (let k = 0; k < count; k++) { z += sp / 1000; drawTie() }
+    while (-z > stopZ) { z += tieRest / 1000; drawTie() }
+    // column vertical bars (white-filled, on top of the ties) — one per section
+    // x-position from the plan layout; the two outer bars foot out onto the mat
+    for (const dx of secVx) {
+      const outer = Math.abs(dx - sx0) > cw / 2 - cInset - 1e-6
+      const dir = dx < sx0 ? -1 : 1
+      rod(outer ? [[dx, colTop + c], [dx, zLong], [dx + dir * (cw * 0.3), zLong]]
+                : [[dx, colTop + c], [dx, zLong]], rMain, '#fff')
+    }
   }
   // depth dimension chain (embedment / footing / gravel) + overall
   const dX = secL - ts * 1.4
@@ -269,7 +414,41 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   // → a lateral tie
   const tieY = tieZs.length ? tieZs[Math.floor(tieZs.length * 0.55)] : gradeZ * 0.55
   lead(stX1, tieY, secR + ts * 0.7, tieY)
-  const tieLines = [`LATERAL TIES = ⌀${tieDia}`, `${tieSched.map(([cc, ss]) => `${cc}@${ss}`).join(', ')},`, `REST @ ${tieRest} mm O.C.`]
+  // The callout says what is DRAWN. With cages, the ties on the sheet are the
+  // ones the column cage placed, so the schedule is measured off their levels
+  // (`pitchRuns`, the same reader the frame elevations use) instead of printing
+  // the nominal schedule the drawing no longer follows.
+  // A tie SET is a hoop plus the cross ties threaded through it, and the cage
+  // stacks them a diameter apart so they do not interpenetrate. Read level by
+  // level the spacing therefore alternates 10, 310, 10, 310 … which is a true
+  // description of the bars and a useless description of the SPACING. The
+  // levels are clustered back into their sets first — anything within a few
+  // diameters of the last is the same set — and the pitch measured between
+  // set centres, which is what "ties at 300 c/c" means.
+  const setLevels = (zs: number[]): number[] => {
+    const sorted = [...zs].sort((a, b) => a - b)
+    const groups: number[][] = []
+    let group: number[] = []
+    for (const z of sorted) {
+      if (group.length && z - group[group.length - 1]! > (4 * tieDia) / 1000) { groups.push(group); group = [] }
+      group.push(z)
+    }
+    if (group.length) groups.push(group)
+    // A set the SHEET'S WINDOW cut in half is not a set, and its surviving
+    // members do not average to its level. The band stops at the top of the
+    // drawn column, and it fell between a hoop and the cross tie stacked on it
+    // — so that set contributed one bar 5 mm off centre and the schedule read
+    // 6@295 for ties the cage places at 300. Only full sets are measured.
+    const full = Math.max(...groups.map((g) => g.length))
+    return groups.filter((g) => g.length === full)
+      .map((g) => g.reduce((a, b) => a + b, 0) / g.length)
+  }
+  const drawnPitch = cg
+    ? pitchNote(pitchRuns(setLevels(tieZs), 0.012))
+    : `${tieSched.map(([cc, ss]) => `${cc}@${ss}`).join(', ')},`
+  const tieLines = cg
+    ? [`LATERAL TIES = ⌀${tieDia}`, ...(drawnPitch ? [`${drawnPitch} mm O.C.`] : [])]
+    : [`LATERAL TIES = ⌀${tieDia}`, drawnPitch, `REST @ ${tieRest} mm O.C.`]
   tieLines.forEach((s, i) => P.push({ kind: 'text', x: secR + ts * 0.9, y: tieY + (i - 1) * ts * 0.72, text: s, size: ts * 0.5, anchor: 'start', color: INK, weight: 500 }))
   // → the bottom mat bar
   lead(secR - c, zLong, secR + ts * 0.7, zLong + ts * 0.7)

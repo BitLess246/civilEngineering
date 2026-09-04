@@ -2,6 +2,10 @@ import { STEEL } from './sheetInk'
 import { describe, it, expect } from 'vitest'
 import { buildFootingDetail, type FootingDetailInput } from './footingDetail'
 import { planToSvg, type PlanPrimitive } from './planRenderer'
+import { buildStructureCages } from './cageBuilder'
+import { designStructure } from './pipeline'
+import { generateGridModel, buildGravityLoads } from './modelBuilder'
+import { footingDetailBundles } from '../lib/planDetails'
 
 const base: FootingDetailInput = {
   mark: 'WF-1', B: 1.2, H: 0.35, cover: 75, barDia: 16, bars: 8, barSpacing: 150,
@@ -82,5 +86,81 @@ describe('footingDetail — column-footing detail sheet', () => {
     const svg = planToSvg(d, 1200)
     expect(svg.startsWith('<svg')).toBe(true)
     expect(svg.trimEnd().endsWith('</svg>')).toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// DRAWN FROM THE CAGES
+//
+// The sheet's own inputs describe the steel a SECOND time — a bar count for
+// the mat, a bar count and a tie schedule for the column — and it then laid
+// both out with rules of its own. `columnSectionPrimitives` in particular has
+// its own nx/ny bar split, so the sheet's column cross-section could disagree
+// with the cage, and did.
+// ─────────────────────────────────────────────────────────────────────────
+describe('the footing sheet, drawn from the placed cages', () => {
+  const section = { id: 's1', name: 'C1', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+  const soil = { qAllow: 200, gammaSoil: 18, gammaConc: 24, H: 1.5 }
+  const model = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3], section })
+  model.loads = buildGravityLoads(model, 4.8, 2.4)
+  const design = designStructure(model, soil as never)!
+  const { cages } = buildStructureCages(model, design)
+  const bundle = footingDetailBundles(model, design, soil, cages)[0]!
+  const withCages = buildFootingDetail(bundle.detail)
+  const numeric = buildFootingDetail({ ...bundle.detail, cages: undefined })
+
+  it('is handed the cages when there is a model to build them from', () => {
+    expect(bundle.detail.cages?.footing).toBeDefined()
+    expect(bundle.detail.cages?.column).toBeDefined()
+  })
+
+  it('draws the column with the cage\'s own tie set, not a layout of its own', () => {
+    // The cage's cross ties and diamond ties have no counterpart in
+    // `columnSectionPrimitives`, which draws one rounded rectangle plus its own
+    // interior cross ties from a bar split it invents. Comparing the STROKED
+    // path count between the two drawings is enough to show they are different
+    // drawings — and the cage one is the one that matches the 3D view.
+    const paths = (d: typeof withCages) => d.primitives.filter((p) => p.kind === 'path').length
+    expect(paths(withCages)).not.toBe(paths(numeric))
+  })
+
+  it('reports the tie spacing the cage really placed, not the nominal schedule', () => {
+    // The numeric sheet prints its default `tieSchedule` — "2@50, 2@75, …" —
+    // whatever the column actually has. Measured off the drawn ties instead,
+    // the callout can only say what is on the sheet.
+    const t = texts(withCages.primitives).join(' | ')
+    expect(t).toMatch(/\d+@\d+ mm O\.C\./)
+    expect(t).not.toContain('2@50, 2@75')
+    expect(texts(numeric.primitives).join(' | ')).toContain('2@50, 2@75')
+  })
+
+  it('measures that spacing per SET, not per bar', () => {
+    // A hoop and the cross ties threaded through it are stacked a diameter
+    // apart so they do not interpenetrate, so bar-by-bar the spacing reads
+    // "1@10, 1@310, 1@10, 1@310 …" — a true description of the bars and a
+    // useless one of the spacing.
+    const t = texts(withCages.primitives).join(' | ')
+    expect(t).not.toMatch(/1@10,/)
+    const m = /(\d+)@(\d+) mm O\.C\./.exec(t)!
+    expect(Number(m[2])).toBeGreaterThan(50)
+  })
+
+  it('keeps every drawn bar inside the sheet\'s own bounds', () => {
+    for (const p of withCages.primitives) {
+      if (p.kind !== 'path') continue
+      for (const c of p.cmds) {
+        expect(c.x).toBeGreaterThanOrEqual(withCages.bounds.minX - 1e-6)
+        expect(c.x).toBeLessThanOrEqual(withCages.bounds.maxX + 1e-6)
+        expect(c.y).toBeGreaterThanOrEqual(withCages.bounds.minY - 1e-6)
+        expect(c.y).toBeLessThanOrEqual(withCages.bounds.maxY + 1e-6)
+      }
+    }
+  })
+
+  it('still draws the numeric sheet for a caller with no model', () => {
+    // The standalone foundation calculator has a design and no model, so it
+    // has no cages — and must still get a sheet.
+    expect(texts(numeric.primitives)).toContain('PLAN')
+    expect(numeric.primitives.filter((p) => p.kind === 'path').length).toBeGreaterThan(10)
   })
 })

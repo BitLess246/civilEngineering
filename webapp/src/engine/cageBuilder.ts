@@ -75,7 +75,21 @@ export interface StructureCages {
  *  ground gets 75 mm cover. */
 export const FOOTING_COVER = 75
 
-export function buildStructureCages(model: StructuralModel, design: StructureDesign): StructureCages {
+export interface StructureCageOptions {
+  /**
+   * Turn the footing mat bars up at each end with a 90° hook (§425.3.1).
+   *
+   * A detailing choice the Plans tab offers. It used to be a DRAWING switch —
+   * the footing sheet drew the hooks and the cage never had them, so the 3D
+   * view and the take-off knew nothing about that steel. It reaches the cage
+   * now, so whatever is drawn is also weighed.
+   */
+  hookedMatBars?: boolean
+}
+
+export function buildStructureCages(
+  model: StructuralModel, design: StructureDesign, opts: StructureCageOptions = {},
+): StructureCages {
   const pos = new Map(model.nodes.map((n) => [n.id, n]))
   const memById = new Map(model.members.map((m) => [m.id, m]))
   const secById = new Map(model.sections.map((s) => [s.id, s]))
@@ -435,6 +449,7 @@ export function buildStructureCages(model: StructuralModel, design: StructureDes
     }).lsc
     add('footing', spliceCage(buildFootingCage({
       mark: `F-${f.node}`,
+      matEndHook: opts.hookedMatBars ? '90' : 'none',
       B: f.design.B, Dc: f.design.Dc, cover: FOOTING_COVER,
       barDia: f.barDia, bars: f.design.bars,
       centre: [at.x, at.z],

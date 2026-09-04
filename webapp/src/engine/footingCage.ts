@@ -38,10 +38,28 @@ export interface FootingCageInput {
   colBarDia: number
   /** Lap the dowel projects ABOVE the footing, mm (§25.5.5 compression lap). */
   lap: number
+  /**
+   * Turn the mat bars UP at each end with a 90° hook, or leave them straight.
+   *
+   * A choice, not a rule: §413.3.3.3 lets a footing's flexural steel be
+   * developed by embedment where the pad is wide enough, and a straight bar is
+   * what most pads get. Where it is not wide enough the bar is hooked, and the
+   * hook is STEEL — it changes the cut length and the tonnage, so it belongs
+   * here and not in a drawing switch. The sheet's own `endHook` used to draw
+   * these hooks without the cage having them, so the drawing showed a bar the
+   * 3D view and the take-off did not know about.
+   */
+  matEndHook?: '90' | 'none'
 }
 
 /** §425.3.1 ℓext on the 90° hook that turns the dowel onto the mat. */
 export const DOWEL_TAIL_DB = 12
+/** §425.3.1 ℓext on a 90° hook, in bar diameters. */
+export const HOOK_EXT_DB = 12
+/** §420.6.1.3.1 — cover to the TOP of a footing, which is not cast against
+ *  earth, mm. The `cover` on the input is the 75 mm against-earth figure for
+ *  the bottom and sides; a bar turned up has the other one to live within. */
+export const MAT_TOP_COVER = 40
 
 export function buildFootingCage(i: FootingCageInput): RebarCage {
   const runs: RebarRun[] = []
@@ -58,17 +76,48 @@ export function buildFootingCage(i: FootingCageInput): RebarCage {
   const y0 = yBot + (i.cover + i.barDia / 2) / 1000
   const y1 = y0 + i.barDia / 1000
   const spread = (k: number) => (n === 1 ? 0 : -edge + (2 * edge * k) / (n - 1))
+  // ── the mat's end hooks, where the pad can take them ────────────────────
+  //
+  // §425.3.1 gives the straight extension beyond a 90° bend as 12db, and the
+  // bar turns UP, which is the only direction a pad offers any concrete in. So
+  // whether a hook FITS is a property of the pad: the depth left above the
+  // bar's own line, less the top cover.
+  //
+  // On this app's own demo frame it does not fit and never could — a 150 mm pad
+  // with 75 mm cover leaves the bar at mid-depth with 35 mm of room, against
+  // the 150 mm a ⌀10 hook needs. The footing SHEET drew one anyway, at
+  // min(120, 0.07·B) — a length taken from the pad's WIDTH, which has nothing
+  // to do with whether the bar can be turned up. It drew a 60 mm hook into a
+  // pad with no room for one, and neither the 3D view nor the take-off knew
+  // that steel existed.
+  const hooked = i.matEndHook === '90'
+  const ext = Math.max(HOOK_EXT_DB * i.barDia, 150) / 1000
+  const hookD = hookBendDiameter(i.barDia)
+  /** Depth above a bar at level `y` that a turned-up leg has to live in, m. */
+  const turnUpRoom = (y: number) => i.yTop - MAT_TOP_COVER / 1000 - y
+  const notes: string[] = []
+  const fits0 = hooked && turnUpRoom(y0) >= ext - 1e-9
+  const fits1 = hooked && turnUpRoom(y1) >= ext - 1e-9
+  if (hooked && !(fits0 && fits1)) {
+    notes.push(`mat bars left straight — a ${i.barDia} mm 90° hook needs ${Math.round(ext * 1000)} mm of turn-up (§425.3.1) and the ${Math.round(i.Dc)} mm pad offers ${Math.round(Math.min(turnUpRoom(y0), turnUpRoom(y1)) * 1000)} mm above the bar`)
+  }
   for (let k = 0; k < n; k++) {
     const t = spread(k)
     runs.push({
       mark: `${i.mark}-MX${k + 1}`, dia: i.barDia, role: 'mat', member: i.mark,
-      path: [[cx - edge, y0, cz + t], [cx + edge, y0, cz + t]] as Vec3[],
-      bendDia: [], count: 1,
+      path: (fits0
+        ? [[cx - edge, y0 + ext, cz + t], [cx - edge, y0, cz + t], [cx + edge, y0, cz + t], [cx + edge, y0 + ext, cz + t]]
+        : [[cx - edge, y0, cz + t], [cx + edge, y0, cz + t]]) as Vec3[],
+      bendDia: fits0 ? [hookD, hookD] : [],
+      count: 1,
     })
     runs.push({
       mark: `${i.mark}-MZ${k + 1}`, dia: i.barDia, role: 'mat', member: i.mark,
-      path: [[cx + t, y1, cz - edge], [cx + t, y1, cz + edge]] as Vec3[],
-      bendDia: [], count: 1,
+      path: (fits1
+        ? [[cx + t, y1 + ext, cz - edge], [cx + t, y1, cz - edge], [cx + t, y1, cz + edge], [cx + t, y1 + ext, cz + edge]]
+        : [[cx + t, y1, cz - edge], [cx + t, y1, cz + edge]]) as Vec3[],
+      bendDia: fits1 ? [hookD, hookD] : [],
+      count: 1,
     })
   }
 
@@ -124,5 +173,5 @@ export function buildFootingCage(i: FootingCageInput): RebarCage {
     })
   })
 
-  return { member: i.mark, runs }
+  return { member: i.mark, runs, ...(notes.length ? { notes } : {}) }
 }
