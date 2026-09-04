@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { buildColumnStackDetail, tieSetLevels } from './columnStackDetail'
-import { columnStackBundles } from '../lib/planDetails'
+import { columnStackBundles, columnStackByMember } from '../lib/planDetails'
 import { buildStructureCages } from './cageBuilder'
 import { designStructure } from './pipeline'
 import { generateGridModel, buildGravityLoads } from './modelBuilder'
 import { STEEL, STEEL_LIGHT } from './sheetInk'
 import type { RebarCage, Vec3 } from './rebarModel'
+import type { PlanPrimitive } from './planRenderer'
 
 // A 2-bay, 2-storey frame on footings — so every stack has a pad under it, two
 // column members over it, and a real cage for all three.
@@ -169,5 +170,76 @@ describe('the sheet itself', () => {
     const bare = buildColumnStackDetail({ ...bundles[0]!.input, cages: [] })
     expect(bare.designNotes.length).toBe(bundles[0]!.input.segments.length)
     expect(bare.designNotes[0]).toMatch(/no cage/)
+  })
+})
+
+
+describe('the storey a schedule row is about', () => {
+  // A column sheet runs footing to roof and carries a different arrangement at
+  // every level, so on its own it says nothing about which storey the row that
+  // opened it is discussing. The wash is what a schedule row adds over a link
+  // to the drawing.
+  const bundle = bundles[0]!
+  const storey = bundle.input.segments[1]!
+
+  it('washes only that storey, across the full width of the stack', () => {
+    const plain = buildColumnStackDetail(bundle.input)
+    const lit = buildColumnStackDetail({
+      ...bundle.input,
+      highlight: { yBot: storey.yBot, yTop: storey.yTop, label: storey.mark },
+    })
+    const extra = lit.primitives.filter((p) => p.kind === 'rect').length
+      - plain.primitives.filter((p) => p.kind === 'rect').length
+    expect(extra).toBe(1)
+    const band = lit.primitives.find(
+      (p): p is Extract<PlanPrimitive, { kind: 'rect' }> =>
+        p.kind === 'rect' && typeof p.fill === 'string' && p.fill.startsWith('rgba(29,78,216'),
+    )!
+    // page y is −level, so the band's top edge is the storey's TOP
+    expect(band.y).toBeCloseTo(-storey.yTop, 9)
+    expect(band.h).toBeCloseTo(storey.yTop - storey.yBot, 9)
+    expect(band.w).toBeGreaterThan(storey.face / 1000)
+  })
+
+  it('labels it, so the reader knows which member is being discussed', () => {
+    const lit = buildColumnStackDetail({
+      ...bundle.input,
+      highlight: { yBot: storey.yBot, yTop: storey.yTop, label: storey.mark },
+    })
+    const texts = lit.primitives.filter((p) => p.kind === 'text').map((p) => (p as { text: string }).text)
+    expect(texts).toContain(storey.mark)
+  })
+
+  it('draws nothing extra on the drawing-set sheets, which are about the whole column', () => {
+    const plain = buildColumnStackDetail(bundle.input)
+    expect(plain.primitives.some((p) => p.kind === 'rect'
+      && typeof p.fill === 'string' && p.fill.startsWith('rgba(29,78,216'))).toBe(false)
+  })
+
+  it('ignores a degenerate band rather than drawing a zero-height rectangle', () => {
+    const flat = buildColumnStackDetail({
+      ...bundle.input, highlight: { yBot: 3, yTop: 3, label: 'x' },
+    })
+    expect(flat.primitives.filter((p) => p.kind === 'rect').length)
+      .toBe(buildColumnStackDetail(bundle.input).primitives.filter((p) => p.kind === 'rect').length)
+  })
+})
+
+describe('finding the sheet a column row belongs to', () => {
+  it('indexes every member of every stack, unambiguously', () => {
+    // Unlike a beam elevation — where a column appears on the sheets either
+    // side of it — a column member belongs to exactly one stack: the one
+    // standing over its own base node.
+    const index = columnStackByMember(model, design, cages)
+    for (const c of design.columns) {
+      const b = index.get(c.id)
+      expect(b, c.id).toBeDefined()
+      expect(b!.input.segments.some((s) => s.mark === c.id)).toBe(true)
+    }
+    // …and every indexed member resolves to a storey with real extent
+    for (const [id, b] of index) {
+      const seg = b.input.segments.find((s) => s.mark === id)!
+      expect(seg.yTop).toBeGreaterThan(seg.yBot)
+    }
   })
 })

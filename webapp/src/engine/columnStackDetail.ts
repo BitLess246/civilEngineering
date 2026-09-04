@@ -73,6 +73,16 @@ export interface ColumnStackDetailInput {
   footing?: { B: number; Dc: number; yTop: number }
   /** Every cage the sheet draws: the column members' and the footing's. */
   cages: RebarCage[]
+  /**
+   * A stretch of the stack to call out, world levels m.
+   *
+   * The schedule uses it to say WHICH STOREY the row it is expanding is about:
+   * a column sheet runs footing to roof and carries a different arrangement at
+   * every level, so on its own it says nothing about which one is being
+   * discussed. Absent on the drawing-set sheets, which are about the whole
+   * column.
+   */
+  highlight?: { yBot: number; yTop: number; label?: string }
 }
 
 export interface ColumnStackDetailOptions {
@@ -186,9 +196,30 @@ export function buildColumnStackDetail(
     }
   }
 
-  // ── the steel, straight off the cages ──────────────────────────────────
   const left = i.u - widest / 2
   const right = i.u + widest / 2
+
+  // ── the storey this sheet is about, if it is about one ─────────────────
+  // Between the concrete and the steel: a wash the bars read THROUGH, so it
+  // says which storey is being discussed without hiding what is in it.
+  if (i.highlight) {
+    const a = Math.min(i.highlight.yBot, i.highlight.yTop)
+    const b = Math.max(i.highlight.yBot, i.highlight.yTop)
+    if (b > a) {
+      P.push({
+        kind: 'rect', x: left - u * 0.9, y: Y(b), w: (right - left) + u * 1.8, h: b - a,
+        fill: 'rgba(29,78,216,0.09)', stroke: STEEL, width: 0.7, dash: [u * 0.5, u * 0.35],
+      })
+      if (i.highlight.label) {
+        P.push({
+          kind: 'text', x: right + u * 1.2, y: Y(b) + u * 1.2,
+          text: i.highlight.label, size: u * 0.8, anchor: 'start', color: STEEL, weight: 700,
+        })
+      }
+    }
+  }
+
+  // ── the steel, straight off the cages ──────────────────────────────────
   for (const cage of i.cages) {
     for (const r of cage.runs) {
       const pts = projectPath(runPolylines(r)[0] ?? [], i.plane)

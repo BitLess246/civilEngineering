@@ -11,7 +11,10 @@ import { OrbitControls } from '@react-three/drei'
 import { RebarWireframe } from '../components/RebarWireframe'
 import { buildStructureCages, structureMomentRatios } from '../engine/cageBuilder'
 
-import { beamSectionZones, elevationBundleByMember, type FrameElevationBundle } from '../lib/planDetails'
+import {
+  beamSectionZones, columnStackByMember, elevationBundleByMember,
+  type ColumnStackBundle, type FrameElevationBundle,
+} from '../lib/planDetails'
 import { placeStair } from '../engine/stairPlacement'
 import { REBAR_ROLE_COLOR } from '../engine/rebarWire'
 import type { CageKind } from '../engine/rebarModel'
@@ -94,7 +97,7 @@ import { DIAG_COLOR, DIAG_LABEL, LOAD_COLOR } from '../components/modelSpace/sce
 import { DirPicker, Rule, SchedChip, Sec, SolverProgress, Swatches, TabBtn } from '../components/modelSpace/panelKit'
 import { TAB_GROUPS, UTILITY_TABS, type Tab } from '../components/modelSpace/tabs'
 import {
-  BeamCageSection, BeamElevationFigure, BeamServiceability, ColumnCageSection, ColumnElevation, WShapeSection,
+  BeamCageSection, BeamElevationFigure, BeamServiceability, ColumnCageSection, ColumnElevationFigure, WShapeSection,
 } from '../components/modelSpace/figures'
 
 /** How the biaxial utilisation in the column schedule was arrived at. The
@@ -952,6 +955,19 @@ export default function ModelSpace() {
       : new Map<string, FrameElevationBundle>()),
     [model, design, cageBuild],
   )
+  /** The drawing set's column sheets, indexed by the member each storey of a
+   *  stack belongs to. Assembled once, like the beam elevations. */
+  const columnStackOf = useMemo(
+    () => (model && design && cageBuild
+      ? columnStackByMember(model, design, cageBuild.cages)
+      : new Map<string, ColumnStackBundle>()),
+    [model, design, cageBuild],
+  )
+  /** The storey a column row is about — one member of its stack. */
+  const columnStorey = (memberId: string): { yBot: number; yTop: number } | undefined => {
+    const seg = columnStackOf.get(memberId)?.input.segments.find((x) => x.mark === memberId)
+    return seg ? { yBot: seg.yBot, yTop: seg.yTop } : undefined
+  }
   /** The stretch of the elevation a beam's k-th design section speaks for —
    *  see `beamSectionZones`, which does the two changes of coordinate. */
   const beamZone = (bm: { id: string; sections: { x: number }[] }, k: number): [number, number] | undefined => {
@@ -4470,7 +4486,13 @@ export default function ModelSpace() {
                             {wantSol && <WorkedSolution steps={columnRowSolution(cs, c)} title={`${c.id} — worked solution`} />}
                             {wantDraw && (
                             <div className="space-y-3 self-start rounded-lg border border-slate-200 bg-white p-3">
-                              <ColumnElevation Lh={c.L} b={cs.b} barDia={cs.barDia} tieDia={cs.tieDia} bars={c.bars} tieSpacing={c.tieSpacingFinal} />
+                              {columnStackOf.get(c.id) && (
+                                <ColumnElevationFigure
+                                  bundle={columnStackOf.get(c.id)!}
+                                  storey={columnStorey(c.id)}
+                                  label={c.id}
+                                />
+                              )}
                               <div className="border-t border-slate-100 pt-2">
                                 <ColumnCageSection model={model} cages={scheduleCages} col={c} rect={cs} />
                               </div>

@@ -232,6 +232,27 @@ export function columnStackBundles(
   return out.sort((a, b) => a.mark.localeCompare(b.mark))
 }
 
+/**
+ * Every column stack sheet, indexed by each MEMBER drawn on it.
+ *
+ * A stack sheet is per column LINE; a schedule row is one member — one storey
+ * of that line. Unlike the beam elevations, indexing by member is unambiguous
+ * here: a column member belongs to exactly one stack, the one standing over its
+ * own base node.
+ *
+ * Built once and looked up, because assembling the bundles walks every column
+ * chain in the model and a schedule expands a row on every click.
+ */
+export function columnStackByMember(
+  model: StructuralModel, design: StructureDesign, cages: RebarCage[],
+): Map<string, ColumnStackBundle> {
+  const out = new Map<string, ColumnStackBundle>()
+  for (const b of columnStackBundles(model, design, cages)) {
+    for (const s of b.input.segments) out.set(s.mark, b)
+  }
+  return out
+}
+
 // ── Slab opening details ────────────────────────────────────────────────────
 
 export interface SlabOpeningBundle { mark: string; plate: string; opening: string; detail: SlabOpeningInput }
