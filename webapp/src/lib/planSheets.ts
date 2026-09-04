@@ -18,7 +18,7 @@ import type { StructureDesign } from '../engine/pipeline'
 import type { Drawing } from '../engine/planRenderer'
 import { buildPlan } from '../engine/planRenderer'
 import { buildFootingDetail } from '../engine/footingDetail'
-import { buildColumnDetail } from '../engine/columnDetail'
+import { buildColumnStackDetail } from '../engine/columnStackDetail'
 import { buildSlabOpeningDetail } from '../engine/slabOpening'
 import { buildWallCornerDetail, buildWallIntersectionDetail, buildWallJointDetail } from '../engine/wallDetail'
 import { buildBeamColumnJointDetail } from '../engine/beamColumnJoint'
@@ -29,8 +29,9 @@ import { FOOTING_COVER } from '../engine/cageBuilder'
  *  what `slabDDM` details to; the model carries no per-slab cover. */
 const SLAB_COVER = 20
 import {
-  footingsForPlan, footingDetailBundles, columnDetailBundles,
+  footingsForPlan, footingDetailBundles,
   slabOpeningBundles, wallDetailBundles, jointDetailBundles, frameElevationBundles,
+  columnStackBundles,
   type SoilInput,
 } from './planDetails'
 import { buildFrameElevation } from '../engine/frameElevation'
@@ -137,13 +138,25 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
   })
 
 
-  columnDetailBundles(model, design).forEach((b, i) => {
+  // ONE SHEET PER COLUMN, footing to top — not one per column TYPE.
+  //
+  // What was here deduplicated by section and tie schedule and drew a single
+  // storey of it, so a twelve-storey building printed three sheets and none of
+  // them was a column anybody could point at. A column starts on a footing and
+  // ends at a roof; its section steps, its bars crank where it does, and its
+  // splices and confinement change at every floor. That is all about the whole
+  // stack, and a one-storey typical detail is the drawing that cannot show it.
+  columnStackBundles(model, design, cages).forEach((b, i) => {
+    const drawing = buildColumnStackDetail(b.input, {
+      detailNo: String(i + 1), sheetRef: ref('Column details'), project: model.name,
+    })
+    const top = b.input.segments[b.input.segments.length - 1]!
     out.push({
-      key: `column-detail-${slug(b.mark)}`, group: 'Column details',
-      title: `${b.mark} — ${b.detail.b}×${b.detail.h ?? b.detail.b}`,
-      subtitle: `${b.detail.bars}-⌀${b.detail.barDia}`,
-      warnings: [],
-      drawing: buildColumnDetail(b.detail, { detailNo: String(i + 1), sheetRef: ref('Column details') }),
+      key: b.key, group: 'Column details',
+      title: `${b.mark} — grid ${b.grid}`,
+      subtitle: `${b.input.segments.length} storey${b.input.segments.length === 1 ? '' : 's'} · ${Math.round(top.face)}×${Math.round(top.depth)} · ${top.bars}-⌀${top.barDia}`,
+      warnings: drawing.designNotes,
+      drawing,
     })
   })
 
