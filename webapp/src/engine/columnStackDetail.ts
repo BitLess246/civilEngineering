@@ -319,14 +319,17 @@ export function buildColumnStackDetail(
   // ── notes and the title block ──────────────────────────────────────────
   const sheetL = dimX - u * 5.2
   const sheetR = right + u * 16
+  // ONE NOTE, the one every sheet in the set carries.
+  //
+  // Three more used to sit here: that the sheet is drawn from the placed cage,
+  // that the tie spacings are measured off the bars, and where the lap splices
+  // lie. The first two are the AUTHOR talking about how the drawing was made,
+  // which is not something a sheet says to the person building from it; the
+  // third restates a rule the general notes already carry, on every sheet that
+  // shows a splice. What belongs on the drawing is on the drawing.
   const nb = notesBlock({
     x: sheetL, w: sheetR - sheetL, top: Y(yLo) + u * 3.2, size: u * 0.72,
-    lines: [
-      `COLUMN ${i.mark} ON GRID ${i.grid} — DRAWN FROM THE PLACED CAGE; EVERY BAR SHOWN IS SCHEDULED AND WEIGHED.`,
-      'TIE SPACINGS ARE MEASURED OFF THE BARS DRAWN, SET TO SET.',
-      'LAP SPLICES LIE IN THE CENTRE HALF OF EACH STOREY (§418.7.4.3); ALTERNATE BARS LAP A LAP HIGHER (§25.5.2).',
-      seeGeneralNotes(),
-    ],
+    lines: [seeGeneralNotes()],
   })
   P.push(...nb.prims)
   const title = `COLUMN DETAIL — ${i.mark}`
