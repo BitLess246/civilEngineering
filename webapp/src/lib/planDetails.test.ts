@@ -190,10 +190,58 @@ describe('planDetails — wall standard details', () => {
 describe('planDetails — beam–column joints', () => {
   const { model, design } = designed()
 
-  it('bundles one joint per distinct beam-into-column type', () => {
+  it('bundles one detail PER JOINT, named for where the joint is', () => {
+    const bundles = jointDetailBundles(model, design)
+    // The 2×1-bay grid frames at one level, so every one of its six columns
+    // has a joint at its top — six sheets, not the two the old dedupe by
+    // "joint type" emitted.
+    const framed = model.nodes.filter((n) => n.y > 0)
+    expect(bundles).toHaveLength(framed.length)
+    expect(new Set(bundles.map((b) => b.node)).size).toBe(bundles.length)
+    expect(new Set(bundles.map((b) => b.mark)).size).toBe(bundles.length)
+    for (const b of bundles) {
+      // the mark is the position: grid line, then the elevation it sits at
+      const at = model.nodes.find((n) => n.id === b.node)!
+      expect(b.mark).toBe(`J-${b.grid}@${at.y.toFixed(2)}`)
+      expect(b.grid).toMatch(/^[A-B][1-3]$/)
+      expect(b.level).toBe('GROUND FLOOR')
+    }
+    // and the marks cover the framed grid itself, not an invented numbering
+    expect(bundles.map((b) => b.grid).sort())
+      .toEqual(['A1', 'A2', 'A3', 'B1', 'B2', 'B3'])
+  })
+
+  it('keeps a corner and an interior joint apart even on the same sections', () => {
+    const bundles = jointDetailBundles(model, design)
+    // Every column here is the same 400×400 carrying the same beams, so the
+    // old key deduplicated these two into one "typical" sheet — but a joint
+    // with two beams and one with three are different details (Table 418.8.4.3
+    // confines them differently, and §418.8.2.2/.2.3 anchor their bars
+    // differently), and only one of them could ever have been drawn.
+    const corner = bundles.find((b) => b.grid === 'A1')!
+    const edge = bundles.find((b) => b.grid === 'A2')!
+    expect(corner.detail.colB).toBe(edge.detail.colB)
+    expect(corner.detail.beamB).toBe(edge.detail.beamB)
+    expect(corner.detail.confinement).not.toBe(edge.detail.confinement)
+  })
+
+  it('tells the sheet which faces are framed, and whether a column is above', () => {
+    const beamsAt = (id: string) => model.members
+      .filter((m) => (m.role === 'beam' || m.role === 'girder') && (m.i === id || m.j === id)).length
+    for (const b of jointDetailBundles(model, design)) {
+      const f = b.detail.framedFaces!
+      // the near beam is the one the section is cut along; every OTHER beam
+      // arriving has to land on a drawn face, or the sheet is drawing a joint
+      // the frame does not have
+      expect([f.far, f.spandrelPos, f.spandrelNeg].filter(Boolean)).toHaveLength(beamsAt(b.node) - 1)
+      // one storey: every joint here is a roof joint, so no column continues up
+      expect(b.detail.columnAbove).toBe(false)
+    }
+  })
+
+  it('carries geometry off the two sections that meet', () => {
     const bundles = jointDetailBundles(model, design)
     expect(bundles.length).toBeGreaterThan(0)
-    expect(new Set(bundles.map((b) => b.mark)).size).toBe(bundles.length)
     for (const b of bundles) {
       // geometry off the two sections that meet, not invented
       expect(b.detail.colB).toBe(section.b)

@@ -212,6 +212,26 @@ export interface BeamColumnJointInput {
   spandrelThrough?: boolean
   /** Confinement class for γ — Table 418.8.4.3. */
   confinement?: JointConfinement
+  /**
+   * The beams that ACTUALLY arrive, beside the one the sheet is drawn for.
+   *
+   * The near beam — right of the column in both views — is the one the section
+   * is cut along and is always framed. These say whether this joint also has a
+   * beam on the opposite face, and a spandrel on each side of the cut
+   * (`spandrelPos` is the side to the LEFT of the near beam's direction, drawn
+   * at the top of the plan). Left out, the typical arrangement is drawn — a far
+   * beam iff `interior`, a spandrel both ways — so a caller that knows only the
+   * joint's type still gets a sheet.
+   */
+  framedFaces?: { far?: boolean; spandrelPos?: boolean; spandrelNeg?: boolean }
+  /**
+   * The column continues ABOVE the joint. False at a roof joint, where the
+   * column stops here and its own longitudinal bars are reinforcement
+   * terminated in a joint — they extend to the far face of the confined core
+   * and are developed there (§418.8.2.2), which is a different detail from the
+   * continuous column the typical sheet drew.
+   */
+  columnAbove?: boolean
   /** Every framing beam covers ≥ ¾ of the column width (§418.8.3.2). */
   wideBeams?: boolean
   /** Column shear from the analysis, kN — part of the joint free body. */
@@ -447,32 +467,71 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
   const beamRun = Math.max(ch * 2.4, 1.0)              // how much beam is drawn
   const colRun = Math.max(bh * 1.6, 0.9)               // how much column is drawn
 
+  // WHAT THIS JOINT ACTUALLY IS. The sheet is drawn per joint, so the views
+  // frame only the members that really arrive: a corner joint gets no far beam
+  // and one spandrel, a roof joint no column above.
+  const far = i.framedFaces?.far ?? !!i.interior
+  const spanPos = i.framedFaces?.spandrelPos ?? true
+  const spanNeg = i.framedFaces?.spandrelNeg ?? true
+  const colAbove = i.columnAbove ?? true
+  const leftRun = far ? beamRun : 0                    // beam drawn the other way
+  /** Where a bar that passes through the joint stops — inside the far beam
+   *  when there is one, just past the column face when there is not. */
+  const throughEnd = far ? -beamRun * 0.96 : -beamRun * 0.10
+
   // ═══ VIEW 1 — VERTICAL SECTION Y-Y ═══════════════════════════════════════
   // Column vertical, beam framing in from the right. Origin at the joint's
   // top-left corner; y increases DOWN.
   const jx = 0, jy = 0                                  // joint top-left
-  P.push({ kind: 'text', x: jx + ch / 2, y: jy - colRun - u * 2.2, text: 'VERTICAL SECTION Y-Y', size: u * 1.5, anchor: 'middle', color: INK, weight: 700 })
+  const colTop = colAbove ? jy - colRun : jy             // top of the drawn column
+  // At a roof joint the column above is gone, so the ℓdh dimension — which is
+  // set out above the beam — comes up to where the view title sits. The title
+  // clears it rather than being overprinted by its own drawing.
+  const titleY = colTop - (!colAbove && r.terminated ? u * 5.4 : u * 2.2)
+  P.push({ kind: 'text', x: jx + ch / 2, y: titleY, text: 'VERTICAL SECTION Y-Y', size: u * 1.5, anchor: 'middle', color: INK, weight: 700 })
 
-  // column above and below the joint, and the joint block itself
-  P.push({ kind: 'rect', x: jx, y: jy - colRun, w: ch, h: colRun, stroke: INK, width: 1.2, fill: CONC })
+  // column above (only where the column carries on) and below, and the joint
+  if (colAbove) P.push({ kind: 'rect', x: jx, y: jy - colRun, w: ch, h: colRun, stroke: INK, width: 1.2, fill: CONC })
   P.push({ kind: 'rect', x: jx, y: jy + bh, w: ch, h: colRun, stroke: INK, width: 1.2, fill: CONC })
   P.push({ kind: 'rect', x: jx, y: jy, w: ch, h: bh, stroke: INK, width: 1.4, fill: '#e8eef5' })
-  // the beam framing in from the right
+  // the beam framing in from the right, and the one opposite where there is one
   P.push({ kind: 'rect', x: jx + ch, y: jy, w: beamRun, h: bh, stroke: INK, width: 1.2, fill: CONC })
+  if (far) P.push({ kind: 'rect', x: jx - beamRun, y: jy, w: beamRun, h: bh, stroke: INK, width: 1.2, fill: CONC })
   // break lines where column and beam carry on
   const brk = (x0: number, y0: number, x1: number, y1: number) =>
     P.push({ kind: 'line', x1: x0, y1: y0, x2: x1, y2: y1, stroke: GRID, width: 0.9, dash: [u * 0.5, u * 0.4] })
-  brk(jx - u * 0.3, jy - colRun, jx + ch + u * 0.3, jy - colRun)
+  if (colAbove) brk(jx - u * 0.3, jy - colRun, jx + ch + u * 0.3, jy - colRun)
   brk(jx - u * 0.3, jy + bh + colRun, jx + ch + u * 0.3, jy + bh + colRun)
   brk(jx + ch + beamRun, jy - u * 0.3, jx + ch + beamRun, jy + bh + u * 0.3)
+  if (far) brk(jx - beamRun, jy - u * 0.3, jx - beamRun, jy + bh + u * 0.3)
 
-  // column bars, both faces, running the full height
-  for (const x of [jx + cov, jx + ch - cov]) {
-    P.push({ kind: 'line', x1: x, y1: jy - colRun, x2: x, y2: jy + bh + colRun, stroke: REBAR, width: 1.5 })
+  // column bars, both faces, running the full height drawn
+  const colBarTail = Math.max(12 * i.colBarDia / 1000, u * 0.6)
+  for (const [x, dir] of [[jx + cov, 1], [jx + ch - cov, -1]] as const) {
+    P.push({ kind: 'line', x1: x, y1: colAbove ? colTop : jy + bh, x2: x, y2: jy + bh + colRun, stroke: REBAR, width: 1.5 })
+    // At a ROOF joint the column stops here, so its bars are reinforcement
+    // terminated in a joint: turned into the confined core, not run off the
+    // top of the drawing as though a column continued (§418.8.2.2).
+    if (!colAbove) {
+      // The turn sits just UNDER the beam's own top bars — where it is built,
+      // and where it can be read: drawn on the beam's top bar line the two
+      // coincide and the hook disappears into it.
+      const hookY = jy + cov + (i.beamBarDia + i.colBarDia) / 1000
+      P.push({
+        kind: 'path', stroke: REBAR, width: 1.8, cap: 'round', join: 'round',
+        cmds: [
+          { c: 'M', x, y: jy + bh },
+          { c: 'L', x, y: hookY },
+          { c: 'L', x: x + dir * Math.min(colBarTail, ch - 2 * cov), y: hookY },
+        ],
+      })
+    }
   }
-  // column hoops above and below, at the confinement spacing
+  // column hoops above (where there is a column above) and below
   const sCol = Math.max(i.hoopSpacing, 40) / 1000
-  for (const [y0, y1, dir] of [[jy - sCol / 2, jy - colRun, -1], [jy + bh + sCol / 2, jy + bh + colRun, 1]] as const) {
+  const hoopBands: (readonly [number, number, 1 | -1])[] = [[jy + bh + sCol / 2, jy + bh + colRun, 1]]
+  if (colAbove) hoopBands.push([jy - sCol / 2, jy - colRun, -1])
+  for (const [y0, y1, dir] of hoopBands) {
     for (let y = y0; dir < 0 ? y > y1 : y < y1; y += dir * sCol) {
       P.push({ kind: 'line', x1: jx + cov * 0.6, y1: y, x2: jx + ch - cov * 0.6, y2: y, stroke: REBAR, width: 0.8 })
     }
@@ -484,10 +543,15 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
   for (const y of jointHoopYs) {
     P.push({ kind: 'line', x1: jx + cov * 0.6, y1: y, x2: jx + ch - cov * 0.6, y2: y, stroke: REBAR, width: 1.0 })
   }
-  // beam hoops along the drawn beam
+  // beam hoops along each drawn beam
   const sBeam = sJoint
   for (let x = jx + ch + sBeam / 2; x < jx + ch + beamRun; x += sBeam) {
     P.push({ kind: 'line', x1: x, y1: jy + cov * 0.6, x2: x, y2: jy + bh - cov * 0.6, stroke: REBAR, width: 0.8 })
+  }
+  if (far) {
+    for (let x = jx - sBeam / 2; x > jx - beamRun; x -= sBeam) {
+      P.push({ kind: 'line', x1: x, y1: jy + cov * 0.6, x2: x, y2: jy + bh - cov * 0.6, stroke: REBAR, width: 0.8 })
+    }
   }
 
   // Beam top and bottom bars, hooked DOWN / UP into the confined core.
@@ -524,7 +588,7 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
         kind: 'path', stroke: REBAR, width: 2.0, cap: 'round',
         cmds: [
           { c: 'M', x: jx + ch + beamRun * 0.96, y: yBar },
-          { c: 'L', x: jx - beamRun * 0.10, y: yBar },
+          { c: 'L', x: jx + throughEnd, y: yBar },
         ],
       })
   }
@@ -552,7 +616,7 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
   if (r.terminated) {
     P.push(...leader({
       x: hookX, y: jy + cov,
-      tx: jx - u * 1.2, ty: jy + bh * 0.45,
+      tx: jx - leftRun - u * 1.2, ty: jy + bh * 0.45,
       text: `${Math.round(clear * 1000)} CL. TO END OF HOOKS`, size: u * 1.05, side: 'right',
     }))
   }
@@ -570,9 +634,12 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
     tx: jx + ch + beamRun, ty: jy + bh + u * 1.6,
     text: `BEAM HOOPS`, size: u * 1.05, side: 'right',
   }))
+  // Pointed at a column that is DRAWN: at a roof joint there is none above, and
+  // this callout used to lead off into the blank space where one used to be.
+  const hoopY = colAbove ? jy - colRun * 0.42 : jy + bh + colRun * 0.42
   P.push(...leader({
-    x: jx + ch * 0.5, y: jy - colRun * 0.42,
-    tx: jx - u * 1.8, ty: jy - colRun * 0.55,
+    x: jx + ch * 0.5, y: hoopY,
+    tx: jx - leftRun - u * 1.8, ty: hoopY - colRun * 0.13,
     text: `COLUMN HOOPS ⌀${Math.round(i.hoopDia)} @ ${Math.round(i.hoopSpacing)}`, size: u * 1.05, side: 'right',
   }))
   // the joint depth, which is the §418.8.2.3 dimension
@@ -584,14 +651,25 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
   // The plan's spandrel runs UP from the plan's own top edge, so the gap between
   // the views has to clear it — sized off the column alone, it drew the spandrel
   // straight through the vertical section above.
-  const py = jy + bh + colRun + spanRun + u * 7.0
-  P.push({ kind: 'text', x: jx + ch / 2, y: py - spanRun - u * 2.2, text: 'PLAN SECTION X-X', size: u * 1.5, anchor: 'middle', color: INK, weight: 700 })
-  // spandrel running across the column, then the column, then the beam
-  P.push({ kind: 'rect', x: jx + (ch - spandrel) / 2, y: py - spanRun, w: spandrel, h: spanRun, stroke: INK, width: 1.1, fill: CONC })
-  P.push({ kind: 'rect', x: jx + (ch - spandrel) / 2, y: py + cb, w: spandrel, h: spanRun, stroke: INK, width: 1.1, fill: CONC })
+  const spanUp = spanPos ? spanRun : 0                  // spandrel above the plan
+  const py = jy + bh + colRun + spanUp + u * 7.0
+  P.push({ kind: 'text', x: jx + ch / 2, y: py - spanUp - u * 2.2, text: 'PLAN SECTION X-X', size: u * 1.5, anchor: 'middle', color: INK, weight: 700 })
+  // the spandrels this joint really has, then the column, then the beams
+  if (spanPos) {
+    P.push({ kind: 'rect', x: jx + (ch - spandrel) / 2, y: py - spanRun, w: spandrel, h: spanRun, stroke: INK, width: 1.1, fill: CONC })
+    brk(jx + (ch - spandrel) / 2 - u * 0.3, py - spanRun, jx + (ch + spandrel) / 2 + u * 0.3, py - spanRun)
+  }
+  if (spanNeg) {
+    P.push({ kind: 'rect', x: jx + (ch - spandrel) / 2, y: py + cb, w: spandrel, h: spanRun, stroke: INK, width: 1.1, fill: CONC })
+    brk(jx + (ch - spandrel) / 2 - u * 0.3, py + cb + spanRun, jx + (ch + spandrel) / 2 + u * 0.3, py + cb + spanRun)
+  }
   P.push({ kind: 'rect', x: jx, y: py, w: ch, h: cb, stroke: INK, width: 1.4, fill: '#e8eef5' })
   P.push({ kind: 'rect', x: jx + ch, y: py + (cb - bb) / 2, w: beamRun, h: bb, stroke: INK, width: 1.2, fill: CONC })
   brk(jx + ch + beamRun, py + (cb - bb) / 2 - u * 0.3, jx + ch + beamRun, py + (cb + bb) / 2 + u * 0.3)
+  if (far) {
+    P.push({ kind: 'rect', x: jx - beamRun, y: py + (cb - bb) / 2, w: beamRun, h: bb, stroke: INK, width: 1.2, fill: CONC })
+    brk(jx - beamRun, py + (cb - bb) / 2 - u * 0.3, jx - beamRun, py + (cb + bb) / 2 + u * 0.3)
+  }
 
   // the column hoop, as a rounded rectangle inside the cover
   P.push({
@@ -617,7 +695,7 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
       kind: 'path', stroke: REBAR, width: 1.8, cap: 'round',
       cmds: [
         { c: 'M', x: jx + ch + beamRun * 0.96, y },
-        { c: 'L', x: r.terminated ? hookX : jx - beamRun * 0.10, y },
+        { c: 'L', x: r.terminated ? hookX : jx + throughEnd, y },
       ],
     })
   }
@@ -625,8 +703,17 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
   for (let x = jx + ch + sBeam / 2; x < jx + ch + beamRun; x += sBeam) {
     P.push({ kind: 'line', x1: x, y1: py + (cb - bb) / 2 + cov * 0.4, x2: x, y2: py + (cb + bb) / 2 - cov * 0.4, stroke: REBAR, width: 0.8 })
   }
-  // spandrel hoops
-  for (const [y0, y1] of [[py - spanRun, py], [py + cb, py + cb + spanRun]] as const) {
+  if (far) {
+    for (let x = jx - sBeam / 2; x > jx - beamRun; x -= sBeam) {
+      P.push({ kind: 'line', x1: x, y1: py + (cb - bb) / 2 + cov * 0.4, x2: x, y2: py + (cb + bb) / 2 - cov * 0.4, stroke: REBAR, width: 0.8 })
+    }
+  }
+  // spandrel hoops, in whichever spandrels are there
+  const spanBands = [
+    ...(spanPos ? [[py - spanRun, py] as const] : []),
+    ...(spanNeg ? [[py + cb, py + cb + spanRun] as const] : []),
+  ]
+  for (const [y0, y1] of spanBands) {
     for (let y = y0 + sBeam / 2; y < y1; y += sBeam) {
       P.push({ kind: 'line', x1: jx + (ch - spandrel) / 2 + cov * 0.4, y1: y, x2: jx + (ch + spandrel) / 2 - cov * 0.4, y2: y, stroke: REBAR, width: 0.7 })
     }
@@ -641,16 +728,20 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
     tx: jx + ch + beamRun, ty: py + (cb - bb) / 2 - u * 1.2,
     text: 'BEAM BARS', size: u * 1.05, side: 'right',
   }))
-  P.push(...leader({
-    x: jx + (ch + spandrel) / 2 - u * 0.4, y: py - spanRun * 0.5,
-    tx: jx + (ch + spandrel) / 2 + u * 0.8, ty: py - spanRun * 0.72,
-    text: 'SPANDREL BEAM HOOPS', size: u * 1.05, side: 'left',
-  }))
-  P.push({ kind: 'dim', x1: jx, y1: py + cb + spanRun + u * 1.6, x2: jx + ch, y2: py + cb + spanRun + u * 1.6, text: `${Math.round(i.colH)}`, off: 0, size: u * 1.2, ext: py + cb })
-  P.push({ kind: 'dim', x1: jx - u * 3.2, y1: py, x2: jx - u * 3.2, y2: py + cb, text: `${Math.round(i.colB)}`, off: 0, size: u * 1.2, ext: jx })
+  if (spanPos || spanNeg) {
+    const sy = spanPos ? py - spanRun * 0.5 : py + cb + spanRun * 0.5
+    P.push(...leader({
+      x: jx + (ch + spandrel) / 2 - u * 0.4, y: sy,
+      tx: jx + (ch + spandrel) / 2 + u * 0.8, ty: sy - spanRun * 0.22,
+      text: 'SPANDREL BEAM HOOPS', size: u * 1.05, side: 'left',
+    }))
+  }
+  const planBottom = py + cb + (spanNeg ? spanRun : 0)
+  P.push({ kind: 'dim', x1: jx, y1: planBottom + u * 1.6, x2: jx + ch, y2: planBottom + u * 1.6, text: `${Math.round(i.colH)}`, off: 0, size: u * 1.2, ext: py + cb })
+  P.push({ kind: 'dim', x1: jx - leftRun - u * 3.2, y1: py, x2: jx - leftRun - u * 3.2, y2: py + cb, text: `${Math.round(i.colB)}`, off: 0, size: u * 1.2, ext: jx - leftRun })
 
   // ═══ notes and the title block, below both views ═════════════════════════
-  const bodyBottom = py + cb + spanRun + u * 3.4
+  const bodyBottom = planBottom + u * 3.4
   const L = r.ldhInputs
   // ── notes: what to BUILD in this joint ──────────────────────────────────
   //
@@ -674,6 +765,7 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
       : `COLUMN CONFINEMENT HOOPS CONTINUE THROUGH THE JOINT @ ${Math.round(r.jointHoopSpacing)} (§418.8.3.1)`,
     `JOINT HOOPS: ${r.joint415.legs} LEGS ⌀${Math.round(i.hoopDia)} — Av ${Math.round(r.joint415.AvProv)} ≥ ${Math.round(r.joint415.AvReq)} mm² (§415.4.2), s ≤ ${Math.round(r.joint415.sMax)} = ½ THE SHALLOWEST BEAM (§415.4.2.2)`,
     `JOINT HOOP SPLICES ARE MADE OUTSIDE THE JOINT`,
+    ...(colAbove ? [] : [`COLUMN TERMINATES AT THIS JOINT — COLUMN BARS EXTEND TO THE FAR FACE OF THE CONFINED CORE AND TURN ${Math.round(12 * i.colBarDia)} INTO IT (§418.8.2.2)`]),
     seeGeneralNotes(),
   ]
 
@@ -692,23 +784,30 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
   ]
 
   const noteSize = u * 1.15
-  const sheetW = Math.max(ch + beamRun, 1.6) + u * 10
+  // The blocks span what is DRAWN: a joint with a beam the other way reaches
+  // beamRun to the left of the column, and a title block starting at the column
+  // would sit off to one side of its own drawing.
+  const bodyLeft = jx - leftRun
+  const sheetW = Math.max(ch + beamRun + leftRun, 1.6) + u * 10
   const step = u * 1.8
-  const nb = notesBlock({ x: jx, w: sheetW, top: bodyBottom, size: noteSize, lines: notes, color: NOTE, step })
+  const nb = notesBlock({ x: bodyLeft, w: sheetW, top: bodyBottom, size: noteSize, lines: notes, color: NOTE, step })
   P.push(...nb.prims)
   const wb = nb
 
-  const title = `TYPICAL BEAM–COLUMN JOINT — ${mark}`
+  // Not "TYPICAL": one sheet is drawn per joint, from the beams that really
+  // arrive at it. A corner and an interior joint on the same two sections are
+  // different details, and a typical sheet could only ever show one of them.
+  const title = `BEAM–COLUMN JOINT — ${mark}`
   const tb = titleBlock({
-    x: jx, w: sheetW, top: wb.bottom + u * 1.6, u: u * 0.85,
+    x: bodyLeft, w: sheetW, top: wb.bottom + u * 1.6, u: u * 0.85,
     title, detailNo: opts.detailNo, sheetRef: opts.sheetRef ?? 'S-10', scale: opts.scale,
   })
   P.push(...tb.prims)
 
   // ── bounds fitted to the content, text extents included ─────────────────
   const b = measureBounds(P, {
-    minX: jx - u * 2.4, maxX: jx + sheetW,
-    minY: jy - colRun - u * 4.0, maxY: tb.bottom + u * 2.0,
+    minX: bodyLeft - u * 2.4, maxX: bodyLeft + sheetW,
+    minY: colTop - u * 4.0, maxY: tb.bottom + u * 2.0,
   })
 
   return { primitives: P, title, result: r, designNotes, bounds: b }

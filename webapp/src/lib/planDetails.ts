@@ -160,20 +160,7 @@ export function columnStackBundles(
   // A stack starts where a column has nothing under it.
   const bases = [...startingAt.keys()].filter((id) => !tops.has(id))
 
-  const round6 = (v: number) => Math.round(v * 1e6) / 1e6
-  const levels = [...new Set(model.nodes.map((n) => round6(n.y)))].sort((a, b) => a - b)
-  const ORD = ['GROUND', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'SIXTH', 'SEVENTH',
-    'EIGHTH', 'NINTH', 'TENTH', 'ELEVENTH', 'TWELFTH']
-  const floorOf = (y: number) => {
-    const k = levels.indexOf(round6(y))
-    return k <= 0 ? 'BASE' : `${ORD[k - 1] ?? `${k}TH`} FLOOR`
-  }
-  // Grid reference, the same convention the framing plans' bubbles use: a
-  // lettered line for the z ordinate, a numbered one for the x.
-  const xs = [...new Set(model.nodes.map((n) => round6(n.x)))].sort((a, b) => a - b)
-  const zs = [...new Set(model.nodes.map((n) => round6(n.z)))].sort((a, b) => a - b)
-  const gridRef = (x: number, z: number) =>
-    `${String.fromCharCode(65 + Math.max(0, zs.indexOf(round6(z))))}${1 + Math.max(0, xs.indexOf(round6(x)))}`
+  const { floorOf, gridRef, levels } = modelGrid(model)
 
   const out: ColumnStackBundle[] = []
   for (const base of bases) {
@@ -378,10 +365,18 @@ export function wallDetailBundles(design: StructureDesign): WallDetailBundle[] {
 
 // ── Beam–column joints ──────────────────────────────────────────────────────
 
-export interface JointDetailBundle { mark: string; node: string; detail: BeamColumnJointInput }
+export interface JointDetailBundle {
+  mark: string
+  node: string
+  /** Grid position of THIS joint — 'A1'. */
+  grid: string
+  /** The floor the joint sits at — 'SECOND FLOOR', or '' if it is off-grid. */
+  level: string
+  detail: BeamColumnJointInput
+}
 
 /**
- * One joint detail per distinct beam-into-column TYPE.
+ * One joint detail PER JOINT.
  *
  * The joint is the one piece of the frame neither member design looks at: the
  * beam sheet designs the beam, the column sheet the column, and §418.8 is about
@@ -393,6 +388,38 @@ export interface JointDetailBundle { mark: string; node: string; detail: BeamCol
  * confirm would quietly weaken every joint on the sheet; omitting it is the
  * conservative side and it is stated in the notes.
  */
+/**
+ * How a model names its own positions — the convention the framing plans'
+ * bubbles already use: a LETTERED line for the z ordinate, a NUMBERED one for
+ * the x, and floors counted up from the base.
+ *
+ * Shared, because two sheet sets name the same joint: the column stack detail
+ * calls it C-A1 and the joint detail calls it J-A1@3.50, and if those two ever
+ * disagreed about which position is A1 the drawing set would be describing two
+ * different buildings.
+ */
+export function modelGrid(model: StructuralModel): {
+  floorOf: (y: number) => string
+  gridRef: (x: number, z: number) => string
+  levels: number[]
+} {
+  const round6 = (v: number) => Math.round(v * 1e6) / 1e6
+  const levels = [...new Set(model.nodes.map((n) => round6(n.y)))].sort((a, b) => a - b)
+  const ORD = ['GROUND', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'SIXTH', 'SEVENTH',
+    'EIGHTH', 'NINTH', 'TENTH', 'ELEVENTH', 'TWELFTH']
+  const xs = [...new Set(model.nodes.map((n) => round6(n.x)))].sort((a, b) => a - b)
+  const zs = [...new Set(model.nodes.map((n) => round6(n.z)))].sort((a, b) => a - b)
+  return {
+    levels,
+    floorOf: (y) => {
+      const k = levels.indexOf(round6(y))
+      return k <= 0 ? 'BASE' : `${ORD[k - 1] ?? `${k}TH`} FLOOR`
+    },
+    gridRef: (x, z) =>
+      `${String.fromCharCode(65 + Math.max(0, zs.indexOf(round6(z))))}${1 + Math.max(0, xs.indexOf(round6(x)))}`,
+  }
+}
+
 export function jointDetailBundles(model: StructuralModel, design: StructureDesign): JointDetailBundle[] {
   const secById = new Map(model.sections.map((s) => [s.id, s]))
   const memById = new Map(model.members.map((m) => [m.id, m]))
@@ -410,7 +437,7 @@ export function jointDetailBundles(model: StructuralModel, design: StructureDesi
       return { m, ux: dx / len, uz: dz / len }
     })
 
-  const seen = new Set<string>()
+  const { floorOf, gridRef } = modelGrid(model)
   const out: JointDetailBundle[] = []
   for (const colRow of design.columns) {
     const col = memById.get(colRow.id); if (!col) continue
@@ -451,12 +478,41 @@ export function jointDetailBundles(model: StructuralModel, design: StructureDesi
       : undefined
     const wideBeams = framing.every((f) => ((secById.get(f.m.section) as RectSection | undefined)?.b ?? 0) >= 0.75 * colSec.b)
 
-    const key = `${colSec.b}x${colSec.h ?? colSec.b}-${beamSec.b}x${beamSec.h}-${beamSec.barDia ?? 16}-${topBars}.${botBars}-${confinement}-${interior ? 'through' : 'hooked'}-${spandrelThrough ? spandrelBarDia : 0}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    const mark = `J${seen.size}`
+    // WHICH FACES ARE FRAMED — the drawing shows this joint's own members, so
+    // it needs them per face rather than per type. The section is cut along the
+    // lead beam, so the sides of the cut are the sign of the cross product of
+    // the lead direction with each perpendicular beam's.
+    const side = (f: { ux: number; uz: number }) => lead.ux * f.uz - lead.uz * f.ux
+    const framedFaces = {
+      far: interior,
+      spandrelPos: perpendicular.some((f) => side(f) > 0.1),
+      spandrelNeg: perpendicular.some((f) => side(f) < -0.1),
+    }
+    // A column carries on above only if another column starts at this node.
+    const columnAbove = model.members.some((m) =>
+      m.role === 'column' && m.id !== col.id
+      && [m.i, m.j].includes(node)
+      && (nodeById.get(m.i === node ? m.j : m.i)?.y ?? -Infinity) > (nodeById.get(node)?.y ?? 0) + 1e-6)
+
+    // NAMED FOR THE JOINT IT IS, not for a type it belongs to.
+    //
+    // These used to be deduplicated by a key over the two sections, the bar
+    // counts and the confinement class, so a frame emitted two or three sheets
+    // called J1, J2 — and none of them was a joint anybody could point at. But
+    // what the sheet is ABOUT varies joint by joint: how many beams arrive
+    // (Table 418.8.4.3's confinement class), whether the near beam continues
+    // past the column so its bars run through (§418.8.2.3) or stops and hooks
+    // (§418.8.2.2), and whether a spandrel passes through the other way. A
+    // corner joint and an interior joint on the same two sections are different
+    // details, and the typical sheet showed one of them.
+    const at = nodeById.get(node)
+    const grid = at ? gridRef(at.x, at.z) : node
+    // Grid line and elevation together — the two things that let a builder
+    // stand at the joint the sheet is drawing, and unique across the frame.
+    const mark = at ? `J-${grid}@${at.y.toFixed(2)}` : `J-${grid}`
     out.push({
-      mark, node,
+      mark, node, grid,
+      level: at ? floorOf(at.y) : '',
       detail: {
         mark,
         colB: colSec.b, colH: colSec.h ?? colSec.b,
@@ -466,7 +522,7 @@ export function jointDetailBundles(model: StructuralModel, design: StructureDesi
         beamB: beamSec.b, beamH: beamSec.h ?? beamSec.b,
         beamBarDia: beamSec.barDia ?? 16,
         topBars, botBars,
-        interior, confinement, wideBeams,
+        interior, confinement, wideBeams, framedFaces, columnAbove,
         // the near beam's bars pass through only if the beam itself continues
         barsThrough: interior,
         spandrelBarDia, spandrelThrough,
