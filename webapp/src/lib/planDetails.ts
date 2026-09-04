@@ -476,7 +476,20 @@ export function jointDetailBundles(model: StructuralModel, design: StructureDesi
     const spandrelBarDia = spandrelThrough
       ? Math.max(...perpendicular.map((f) => (secById.get(f.m.section) as RectSection | undefined)?.barDia ?? 0))
       : undefined
-    const wideBeams = framing.every((f) => ((secById.get(f.m.section) as RectSection | undefined)?.b ?? 0) >= 0.75 * colSec.b)
+    // ORIENTED TO THE BEAM, not to the world axes.
+    //
+    // `columnCage` lays a column section out with h across x and b across z, so
+    // which of the two is the depth PARALLEL to the beam's bars depends on which
+    // way the beam runs — and §418.8.2.3 (20db of joint depth parallel to bars
+    // passing through) and §418.8.4.3 (Aj = bj·h, bj measured across the beam)
+    // both ask for it in the beam's own frame. Taken as h and b regardless, a
+    // 300×500 column under a beam running along z was checked on 500 mm of
+    // depth it does not have that way, and drawn 500 wide when it is 300.
+    const secH = colSec.h ?? colSec.b
+    const alongX = Math.abs(lead.ux) >= Math.abs(lead.uz)
+    const colDepth = alongX ? secH : colSec.b        // parallel to the beam
+    const colWidth = alongX ? colSec.b : secH        // across it
+    const wideBeams = framing.every((f) => ((secById.get(f.m.section) as RectSection | undefined)?.b ?? 0) >= 0.75 * colWidth)
 
     // WHICH FACES ARE FRAMED — the drawing shows this joint's own members, so
     // it needs them per face rather than per type. The section is cut along the
@@ -515,7 +528,7 @@ export function jointDetailBundles(model: StructuralModel, design: StructureDesi
       level: at ? floorOf(at.y) : '',
       detail: {
         mark,
-        colB: colSec.b, colH: colSec.h ?? colSec.b,
+        colB: colWidth, colH: colDepth,
         colBarDia: colSec.barDia ?? 20, colBars: Math.max(4, colRow.bars),
         hoopDia: colSec.tieDia ?? 10,
         hoopSpacing: colRow.seismicSConf ?? colRow.tieSpacingFinal,

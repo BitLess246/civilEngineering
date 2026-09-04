@@ -239,6 +239,45 @@ describe('planDetails — beam–column joints', () => {
     }
   })
 
+  it('takes the column depth PARALLEL to the beam, not the section\'s h', () => {
+    // `columnCage` lays a section out with h across x and b across z, so which
+    // dimension is the joint's DEPTH depends on which way the beam runs — and
+    // §418.8.2.3 (20db of depth parallel to the bars passing through) and
+    // §418.8.4.3 (Aj = bj·h) both ask for it in the beam's frame. Taken as h
+    // regardless, a 300×500 column under a beam running along z was checked on
+    // 500 mm of depth it does not have that way, and drawn 500 wide when it is
+    // 300 — passing a §418.8.2.3 check it fails.
+    const m = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3], section, slabThickness: 150 })
+    // a DEEPER girder in the z direction, so the lead beam at every joint runs
+    // that way and the two dimensions have to swap
+    const deep: RectSection = { ...section, id: 'sZ', name: 'G-deep', h: 700 }
+    m.sections = [...m.sections, deep]
+    const nodeAt = new Map(m.nodes.map((n) => [n.id, n]))
+    for (const mem of m.members) {
+      if (mem.role !== 'beam' && mem.role !== 'girder') continue
+      const a = nodeAt.get(mem.i)!, b = nodeAt.get(mem.j)!
+      if (Math.abs(b.z - a.z) > Math.abs(b.x - a.x)) mem.section = 'sZ'
+    }
+    m.loads = m.plates.flatMap((p): ModelLoad[] => [
+      { kind: 'area', plate: p.id, q: 4.0, cat: 'D' },
+      { kind: 'area', plate: p.id, q: 2.4, cat: 'L' },
+    ])
+    const d = designStructure(m, soil)!
+    const bundles = jointDetailBundles(m, d)
+    expect(bundles.length).toBeGreaterThan(0)
+    for (const b of bundles) {
+      // every lead beam here runs along z, so the depth is the section's b
+      expect(b.detail.beamH).toBe(deep.h)
+      expect(b.detail.colH).toBe(section.b)          // 300 along the beam
+      expect(b.detail.colB).toBe(section.h)          // 500 across it
+    }
+    // and the x-running case is unchanged — same section, lead along x
+    for (const b of jointDetailBundles(model, design)) {
+      expect(b.detail.colH).toBe(section.h)
+      expect(b.detail.colB).toBe(section.b)
+    }
+  })
+
   it('carries geometry off the two sections that meet', () => {
     const bundles = jointDetailBundles(model, design)
     expect(bundles.length).toBeGreaterThan(0)

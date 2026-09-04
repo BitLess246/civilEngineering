@@ -59,6 +59,17 @@ export interface ColumnCageInput {
    */
   jointGaps?: [number, number][]
   /**
+   * Which of those bands THIS cage hoops, m — a subset of `jointGaps`.
+   *
+   * Clearing a band and filling it are two different questions, and a joint is
+   * shared by two columns: the column below has the band at its top, the column
+   * above has the same band at its base, and BOTH must clear it or the joint
+   * gets a storey's ties through it. Only one may fill it. Left out, every
+   * cleared band is filled — the behaviour before this field, and right for a
+   * caller placing a single column.
+   */
+  jointFill?: [number, number][]
+  /**
    * Spacing of the hoops THROUGH a joint band, mm.
    *
    * §418.8.3.1: the column's confinement carries on through the joint — the
@@ -267,6 +278,9 @@ export function tieLevels(i: Pick<ColumnCageInput, 'yBottom' | 'yTop' | 'lo' | '
  * general notes said "column ties stop at the joint and the joint hoops take
  * over"; the joint hoops were never drawn.
  *
+ * A band is filled by ONE of the two columns that meet at the joint (see
+ * `jointFill`); both clear it, and the caller says which one hoops it.
+ *
  * Divided rather than stepped from the bottom of the band. A joint is one beam
  * deep — a few hundred millimetres — and stepping at the spacing leaves a
  * remainder that is the difference between a hoop and none. Centring the set
@@ -274,11 +288,13 @@ export function tieLevels(i: Pick<ColumnCageInput, 'yBottom' | 'yTop' | 'lo' | '
  * band's edge.
  */
 export function jointHoopLevels(i: Pick<ColumnCageInput,
-  'jointGaps' | 'sConfined' | 'jointHoopSpacing'>): number[] {
+  'jointGaps' | 'jointFill' | 'sConfined' | 'jointHoopSpacing'>): number[] {
   const want = i.jointHoopSpacing && i.jointHoopSpacing > 0 ? i.jointHoopSpacing : i.sConfined
   const s = Math.max(0.02, want / 1000)
   const out: number[] = []
-  for (const g of i.jointGaps ?? []) {
+  // The bands this cage fills, which is not the same list as the bands it
+  // clears — see `jointFill`.
+  for (const g of i.jointFill ?? i.jointGaps ?? []) {
     const lo = Math.min(...g), hi = Math.max(...g)
     const H = hi - lo
     if (H <= 1e-9) continue

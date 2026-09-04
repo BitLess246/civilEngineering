@@ -139,6 +139,8 @@ export function buildStructureCages(
   }
   /** Does another column carry on ABOVE this node? A roof column laps nothing. */
   const columnAbove = (memberId: string, node: string) => columnBeyond(node, 1, memberId)
+  /** …and BELOW it, which decides who hoops the joint at a column's base. */
+  const columnBelow = (memberId: string, node: string) => columnBeyond(node, -1, memberId)
 
   /**
    * The section of the column continuing ABOVE a node — what the projecting
@@ -415,6 +417,17 @@ export function buildStructureCages(
       jointGaps: [
         ...(jd > 0 ? [[yHi - jd, yHi] as [number, number]] : []),
         ...(baseJd > 0 ? [[yLo0 - baseJd, yLo0] as [number, number]] : []),
+      ],
+      // BOTH columns clear the band; exactly one hoops it. A floor joint is one
+      // band shared by the column below (at its top) and the column above (at
+      // its base), and each was filling it — every joint hoop in a multi-storey
+      // frame was placed, drawn and BILLED twice. The column below owns it,
+      // because it always exists; the base band is filled only where no column
+      // continues down, which is the grade-beam joint nobody else would hoop.
+      jointFill: [
+        ...(jd > 0 ? [[yHi - jd, yHi] as [number, number]] : []),
+        ...(baseJd > 0 && !columnBelow(c.id, baseNode)
+          ? [[yLo0 - baseJd, yLo0] as [number, number]] : []),
       ],
       // Nothing above to lap onto: the bar develops itself instead, turning in
       // under the beam's top steel (§425.4.2 and the standard roof detail).
