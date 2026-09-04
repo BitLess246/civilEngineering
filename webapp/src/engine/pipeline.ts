@@ -20,7 +20,7 @@ import { effectiveFlange } from './tbeam'
 import { designPrestressed, type PrestressedResult } from './prestressedBeam'
 import { minBeamThickness, type BeamSupport } from './beamDeflection'
 import { memberServiceDeflection, type MemberDeflectionResult } from './memberDeflection'
-import { designAxialColumn, capacityAtEccentricity, interaction, breslerReciprocal, type BarLayout } from './columnDesign'
+import { designAxialColumn, capacityAtEccentricity, interaction, breslerReciprocal, type BarLayout, type PMPoint } from './columnDesign'
 import { calcDevLength } from './devLength'
 import { designSquareFooting, type SquareFootingResult } from './isolatedFooting'
 import { designCombinedFooting, type CombinedFootingResult } from './combinedFooting'
@@ -153,6 +153,10 @@ export interface ColumnScheduleRow {
   /** P–M bar layout used for the check (mirrors AnalyzeOptions.colLayout). */
   layout?: BarLayout
   bars: number; phiPn: number; util: number
+  /** The uniaxial points the biaxial combination was built from — so the
+   *  worked solution can show the arithmetic behind `util` rather than
+   *  recomputing a different check beside it. */
+  biaxial?: BiaxialCapacity['detail']
   /** Gravity-only tie spacing (§425.7.2), mm. */
   tieSpacing: number
   /** Final governing tie spacing (seismic confinement if applicable), mm. */
@@ -897,6 +901,26 @@ export interface BiaxialCapacity {
   /** Pu/φPn, or the load-contour sum when that governs. */
   util: number
   method: BiaxialMethod
+  /**
+   * The uniaxial points the combination was built from.
+   *
+   * Carried so the WORKED SOLUTION can show the reader the arithmetic the
+   * schedule row used, rather than recomputing something near it. It used to
+   * recompute a uniaxial check at e = Mux/Pu and print that utilisation beside
+   * a row showing the biaxial one — two different numbers for one column, and
+   * on a column bending only about its weak axis it printed no P–M step at all
+   * because the step was gated on Mux.
+   */
+  detail: {
+    /** Demand eccentricities about each axis, m. */
+    eX: number
+    eY: number
+    /** Capacity on the strong axis, and on the section turned on its side. */
+    px?: PMPoint
+    py?: PMPoint
+    /** Squash load, kN — Bresler's third term. */
+    Po?: number
+  }
 }
 
 /**
@@ -947,17 +971,19 @@ export function pmCapacityBiaxial(
   const eY = Pu > 1e-9 ? Muy / Pu : 0
   const tinyX = eX <= 1e-4, tinyY = eY <= 1e-4
 
-  if (tinyX && tinyY) return { phiPn: phiPnMax, util: phiPnMax > 1e-9 ? Pu / phiPnMax : Infinity, method: 'uniaxial-x' }
+  const base = { eX, eY }
+  if (tinyX && tinyY) return { phiPn: phiPnMax, util: phiPnMax > 1e-9 ? Pu / phiPnMax : Infinity, method: 'uniaxial-x', detail: base }
   if (tinyY) {
+    const px0 = capacityAtEccentricity(strong, eX)
     const phiPn = pmCapacity(sec, barDia, numBars, Pu, Mux, phiPnMax, layout)
-    return { phiPn, util: phiPn > 1e-9 ? Pu / phiPn : Infinity, method: 'uniaxial-x' }
+    return { phiPn, util: phiPn > 1e-9 ? Pu / phiPn : Infinity, method: 'uniaxial-x', detail: { ...base, px: px0 } }
   }
   if (tinyX) {
     // Bending about the WEAK axis only — still wrong to check against the deep
     // section, which is the second half of the old defect.
     const cap = capacityAtEccentricity(weak, eY)
     const phiPn = Math.min(cap.phi * cap.Pn, 0.65 * interaction(weak).PnMax)
-    return { phiPn, util: phiPn > 1e-9 ? Pu / phiPn : Infinity, method: 'uniaxial-y' }
+    return { phiPn, util: phiPn > 1e-9 ? Pu / phiPn : Infinity, method: 'uniaxial-y', detail: { ...base, py: cap } }
   }
 
   const px = capacityAtEccentricity(strong, eX)
@@ -971,7 +997,7 @@ export function pmCapacityBiaxial(
     // φ from the governing uniaxial point; both are compression-controlled here.
     const phi = Math.min(px.phi, py.phi)
     const phiPn = Math.min(phi * Pn, 0.65 * interaction(strong).PnMax)
-    return { phiPn, util: phiPn > 1e-9 ? Pu / phiPn : Infinity, method: 'bresler' }
+    return { phiPn, util: phiPn > 1e-9 ? Pu / phiPn : Infinity, method: 'bresler', detail: { ...base, px, py, Po } }
   }
 
   // Tension-controlled: a linear moment contour, which is the conservative
@@ -979,7 +1005,7 @@ export function pmCapacityBiaxial(
   const phiMnx = px.phi * px.Mn
   const phiMny = py.phi * py.Mn
   const util = (phiMnx > 1e-9 ? Mux / phiMnx : Infinity) + (phiMny > 1e-9 ? Muy / phiMny : Infinity)
-  return { phiPn: util > 1e-9 ? Pu / util : Infinity, util, method: 'load-contour' }
+  return { phiPn: util > 1e-9 ? Pu / util : Infinity, util, method: 'load-contour', detail: { ...base, px, py } }
 }
 
 /** Utilisation Pu/φPn for a given cage under P and M. */
@@ -1015,7 +1041,7 @@ function designColumnFromPM(
   const bi = pmCapacityBiaxial(sec, sec.barDia, ax.bars, Pu, Mux, Muy, ax.phiPnMax, layout)
   const { phiPn, util } = bi
   return {
-    e, bars: ax.bars, Ast: ax.Ast, phiPn, util, biaxialMethod: bi.method,
+    e, bars: ax.bars, Ast: ax.Ast, phiPn, util, biaxialMethod: bi.method, biaxial: bi.detail,
     tieSpacing: ax.tieSpacing,
     tieSpacingFinal: ax.tieSpacingFinal,
     tieSpacingLabel: ax.tieSpacingLabel,
@@ -1040,7 +1066,7 @@ function designColumnRow(
   const r = designColumnFromPM(sec, Pu, Mux, system, mr.L * 1000, layout, Muy)   // L m → mm
   return {
     id: mr.id, L: mr.L, Pu, Mu: Mux, Muy, biaxialMethod: r.biaxialMethod,
-    e: r.e, bars: r.bars, phiPn: r.phiPn, util: r.util, layout,
+    e: r.e, bars: r.bars, phiPn: r.phiPn, util: r.util, biaxial: r.biaxial, layout,
     tieSpacing: r.tieSpacing,
     tieSpacingFinal: r.tieSpacingFinal,
     tieSpacingLabel: r.tieSpacingLabel,

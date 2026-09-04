@@ -6,6 +6,10 @@ import {
   type SlendernessInput, type SlendernessResult,
 } from '../engine/columnDesign'
 import { beta1 } from '../engine/loads'
+import type { BiaxialCapacity, BiaxialMethod } from '../engine/pipeline'
+
+/** The uniaxial points a biaxial combination was built from. */
+type BiaxialDetail = BiaxialCapacity['detail']
 import { type SolutionStep, type SolutionLine, sn0, sn1, sn2, sn3, sn4 } from './solution'
 
 const txt = (text: string): SolutionLine => ({ text })
@@ -103,6 +107,16 @@ export function axialColumnSolution(i: AxialColumnInput, r: AxialColumnResult, s
 
 export function eccentricColumnSolution(
   i: InteractionInput, r: InteractionResult, Pu: number, Mu: number, cap: PMPoint,
+  /**
+   * True when this ray is one INPUT to a biaxial combination rather than the
+   * answer on its own.
+   *
+   * The last line then reports a strong-axis RATIO instead of "the"
+   * utilisation. Two lines both headed "utilisation", the first of them lower,
+   * is how a reader ends up quoting the wrong one — and on a column with real
+   * Muy the strong-axis ratio can be half the number the schedule prints.
+   */
+  partOfBiaxial = false,
 ): SolutionStep[] {
   const e = Pu > 1e-9 ? Mu / Pu : 0
   const compr = e <= r.balanced.eb
@@ -140,16 +154,93 @@ export function eccentricColumnSolution(
         : `e > eb — tension-controlled side of the interaction diagram.`,
     },
     {
-      title: 'Capacity along the demand ray (strain compatibility)',
+      title: partOfBiaxial
+        ? 'Capacity along the strong-axis demand ray (strain compatibility)'
+        : 'Capacity along the demand ray (strain compatibility)',
       lines: [
         txt('Sweep the neutral axis until Mn/Pn equals the demand eccentricity: fs = 600(c − d)/c clamped at ±fy on each face, displaced concrete deducted for bars inside the stress block, φ from εt (§421.2: 0.65 compression- to 0.90 tension-controlled).'),
         eq(String.raw`c = ${sn1(cap.c)}\ \text{mm},\quad \varepsilon_t = ${sn4(cap.et)},\quad \phi = ${sn3(cap.phi)}`),
         eq(String.raw`P_n = ${sn1(cap.Pn)}\ \text{kN},\quad M_n = ${sn1(cap.Mn)}\ \text{kN·m}`),
-        eq(String.raw`\phi P_n = ${sn1(cap.phi * cap.Pn)}\ \text{kN} \;${util <= 1 ? '\\ge' : '<'}\; P_u = ${sn1(Pu)}\ \text{kN}\quad(\text{utilisation } ${sn2(util)})\ ${util <= 1 ? '\\checkmark' : '\\times'}`),
+        partOfBiaxial
+          ? eq(String.raw`\phi P_{nx} = ${sn1(cap.phi * cap.Pn)}\ \text{kN}\quad\left(\dfrac{P_u}{\phi P_{nx}} = ${sn2(util)}\right)`)
+          : eq(String.raw`\phi P_n = ${sn1(cap.phi * cap.Pn)}\ \text{kN} \;${util <= 1 ? '\\ge' : '<'}\; P_u = ${sn1(Pu)}\ \text{kN}\quad(\text{utilisation } ${sn2(util)})\ ${util <= 1 ? '\\checkmark' : '\\times'}`),
       ],
-      note: util <= 1 ? 'Section is adequate at this eccentricity.' : 'Section is NOT adequate — add steel or enlarge the section.',
+      note: partOfBiaxial
+        ? 'The STRONG-AXIS ray only — one of the two points the biaxial check below combines. It is not the column\u2019s utilisation.'
+        : util <= 1 ? 'Section is adequate at this eccentricity.' : 'Section is NOT adequate — add steel or enlarge the section.',
     },
   ]
+}
+
+/**
+ * The BIAXIAL check — the one the schedule row reports.
+ *
+ * `eccentricColumnSolution` above evaluates the section along ONE demand ray,
+ * about the strong axis. That is a genuine part of the calculation (it is
+ * `pmCapacityBiaxial`'s own `px`), but it is not the answer: a column bends
+ * about both axes at once, and the pipeline combines the two — Bresler's
+ * reciprocal load in the compression-controlled regime, a linear load contour
+ * below it (§208.8.1's orthogonal effects produce simultaneous Mx and Mz
+ * deliberately, so this is the normal case, not a corner).
+ *
+ * Printing the uniaxial utilisation and leaving it there is what put 0.27 under
+ * a row reading 81%. Worse, the eccentric step was gated on e = Mux/Pu, so a
+ * column whose only moment is about its WEAK axis got no P–M step at all while
+ * its row still showed a utilisation.
+ *
+ * So this step ends on the row's own `util`, and every number in it comes from
+ * the same `pmCapacityBiaxial` call the row was built from — passed in rather
+ * than recomputed, because a second evaluation is exactly how the two drifted
+ * apart in the first place.
+ */
+export function biaxialColumnSolution(
+  Pu: number, Mux: number, Muy: number,
+  phiPn: number, util: number, method: BiaxialMethod,
+  detail: BiaxialDetail | undefined,
+): SolutionStep[] {
+  const ok = util <= 1 + 1e-9
+  const lines: SolutionLine[] = []
+  const px = detail?.px, py = detail?.py
+
+  if (method === 'uniaxial-x' && !(Muy > 0)) {
+    lines.push(txt('The weak-axis moment is negligible, so the check is the uniaxial one above.'))
+  } else if (method === 'uniaxial-y') {
+    lines.push(txt('The strong-axis moment is negligible: the column bends about its WEAK axis alone, so the section is turned on its side and checked there. Checking it against the deep section instead would measure every lever arm from the wrong dimension.'))
+  } else if (method === 'bresler') {
+    lines.push(txt("Compression-controlled (Pu ≥ 0.1 f′c Ag), so Bresler's reciprocal load combines the two uniaxial capacities."))
+  } else {
+    lines.push(txt('Tension-controlled (Pu < 0.1 f′c Ag), where the reciprocal form becomes unconservative. A linear moment contour (α = 1) governs instead — the conservative member of the PCA load-contour family.'))
+  }
+
+  lines.push(eq(String.raw`M_{ux} = ${sn1(Mux)}\ \text{kN·m},\qquad M_{uy} = ${sn1(Muy)}\ \text{kN·m},\qquad P_u = ${sn1(Pu)}\ \text{kN}`))
+  if (detail) {
+    lines.push(eq(String.raw`e_x = \dfrac{M_{ux}}{P_u} = ${sn0(detail.eX * 1000)}\ \text{mm},\qquad e_y = \dfrac{M_{uy}}{P_u} = ${sn0(detail.eY * 1000)}\ \text{mm}`))
+  }
+
+  if (method === 'bresler' && px && py && detail?.Po) {
+    lines.push(eq(String.raw`P_{nx} = ${sn1(px.Pn)}\ \text{kN},\qquad P_{ny} = ${sn1(py.Pn)}\ \text{kN},\qquad P_o = ${sn1(detail.Po)}\ \text{kN}`))
+    lines.push(eq(String.raw`\dfrac{1}{P_n} = \dfrac{1}{P_{nx}} + \dfrac{1}{P_{ny}} - \dfrac{1}{P_o}`))
+  } else if (method === 'load-contour' && px && py) {
+    lines.push(eq(String.raw`\phi M_{nx} = ${sn1(px.phi * px.Mn)}\ \text{kN·m},\qquad \phi M_{ny} = ${sn1(py.phi * py.Mn)}\ \text{kN·m}`))
+    lines.push(eq(String.raw`\dfrac{M_{ux}}{\phi M_{nx}} + \dfrac{M_{uy}}{\phi M_{ny}} = ${sn2(util)}`))
+  }
+
+  lines.push(eq(String.raw`\phi P_n = ${sn1(phiPn)}\ \text{kN} \;${ok ? '\\ge' : '<'}\; P_u = ${sn1(Pu)}\ \text{kN}\quad(\text{utilisation } ${sn2(util)})\ ${ok ? '\\checkmark' : '\\times'}`))
+
+  const MethodName: Record<BiaxialMethod, string> = {
+    'bresler': "Bresler reciprocal load",
+    'load-contour': 'linear load contour',
+    'uniaxial-x': 'uniaxial, strong axis',
+    'uniaxial-y': 'uniaxial, weak axis',
+  }
+  return [{
+    title: `Biaxial check — ${MethodName[method]}`,
+    clause: 'ACI 318-14 §22.4 · PCA load contour',
+    lines,
+    note: ok
+      ? 'This is the utilisation the column schedule reports.'
+      : 'NOT adequate under the combined demand — add steel or enlarge the section. This is the utilisation the column schedule reports.',
+  }]
 }
 
 export function slendernessSolution(i: SlendernessInput, r: SlendernessResult): SolutionStep[] {

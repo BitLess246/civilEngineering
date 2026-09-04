@@ -10,6 +10,7 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import { RebarWireframe } from '../components/RebarWireframe'
 import { buildStructureCages, structureMomentRatios } from '../engine/cageBuilder'
+
 import { beamSectionZones, elevationBundleByMember, type FrameElevationBundle } from '../lib/planDetails'
 import { placeStair } from '../engine/stairPlacement'
 import { REBAR_ROLE_COLOR } from '../engine/rebarWire'
@@ -28,7 +29,7 @@ import { diagramScale, type DiagramComp } from '../engine/memberDiagram3d'
 import { validateMesh, hasMeshErrors } from '../engine/meshValidation'
 import { type ModalResult } from '../engine/modal'
 import { computeResponseSpectrum, rsaEquivalentLoads, type ResponseSpectrumResult, type RsaLateralResult } from '../engine/responseSpectrum'
-import { type StructureDesign, type FootingPlan, type OptimizeResult, type LateralCase } from '../engine/pipeline'
+import { type StructureDesign, type FootingPlan, type OptimizeResult, type LateralCase, type BiaxialMethod } from '../engine/pipeline'
 import type { SteelJoint } from '../engine/steelConnections'
 import { estimateTakeoff, costBill, type PriceList } from '../engine/takeoff'
 import { footingLayout } from '../engine/footingLayout'
@@ -95,6 +96,16 @@ import { TAB_GROUPS, UTILITY_TABS, type Tab } from '../components/modelSpace/tab
 import {
   BeamCageSection, BeamElevationFigure, BeamServiceability, ColumnCageSection, ColumnElevation, WShapeSection,
 } from '../components/modelSpace/figures'
+
+/** How the biaxial utilisation in the column schedule was arrived at. The
+ *  column shows one number and it comes from Mux AND Muy, so the row says
+ *  which rule combined them. */
+const BIAXIAL_LABEL: Record<BiaxialMethod, string> = {
+  'bresler': 'Bresler reciprocal load (compression-controlled)',
+  'load-contour': 'linear load contour (tension-controlled)',
+  'uniaxial-x': 'uniaxial — strong axis; Muy negligible',
+  'uniaxial-y': 'uniaxial — weak axis; Mux negligible',
+}
 
 /** A sensible default timber deck (DFL No.2 joists 50×200 @ 400, 25 mm plank). */
 const DEFAULT_DECK: WoodDeck = {
@@ -4427,7 +4438,8 @@ export default function ModelSpace() {
                   <th className="py-1 pr-2 font-semibold">Column</th>
                   <th className="py-1 pr-2 font-semibold">Section</th>
                   <th className="py-1 pr-2 text-right font-semibold">Pu (kN)</th>
-                  <th className="py-1 pr-2 text-right font-semibold">Mu</th>
+                  <th className="py-1 pr-2 text-right font-semibold" title="Strong-axis moment, about h (from Mz)">Mux</th>
+                  <th className="py-1 pr-2 text-right font-semibold" title="Weak-axis moment, about b (from My). The utilisation is the BIAXIAL check and consumes both.">Muy</th>
                   <th className="py-1 pr-2 font-semibold">Bars</th>
                   <th className="py-1 pr-2 text-right font-semibold">Util</th>
                   <th className="py-1 font-semibold">Case</th>
@@ -4444,13 +4456,16 @@ export default function ModelSpace() {
                       <td className="py-1 pr-2">{cs?.name}</td>
                       <td className="py-1 pr-2 text-right">{f1(c.Pu)}</td>
                       <td className="py-1 pr-2 text-right">{f1(c.Mu)}</td>
+                      <td className="py-1 pr-2 text-right">{f1(c.Muy)}</td>
                       <td className="py-1 pr-2">{c.bars}⌀{cs?.barDia} · ties @{Math.round(c.tieSpacingFinal)}{c.seismicSConf !== undefined ? ' ✱' : ''}</td>
-                      <td className="py-1 pr-2 text-right">{(c.util * 100).toFixed(0)}%</td>
+                      <td className="py-1 pr-2 text-right" title={`${BIAXIAL_LABEL[c.biaxialMethod]} — φPn ${f1(c.phiPn)} kN`}>
+                        {(c.util * 100).toFixed(0)}%
+                      </td>
                       <td className="py-1 text-slate-500">{c.gov}</td>
                     </tr>,
                     open && model && cs && (
                       <tr key={`${key}:sol`}>
-                        <td colSpan={7} className="bg-slate-50/60 px-2 pb-2">
+                        <td colSpan={8} className="bg-slate-50/60 px-2 pb-2">
                           <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.7fr_1fr]">
                             {wantSol && <WorkedSolution steps={columnRowSolution(cs, c)} title={`${c.id} — worked solution`} />}
                             {wantDraw && (

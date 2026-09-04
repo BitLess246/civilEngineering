@@ -13,8 +13,25 @@
 //
 // COORDINATES. A `Drawing` carries its own bounds in its own units. This fits
 // it into a target box in millimetres of paper, preserving aspect ratio, and
-// scales stroke widths and font sizes by the same factor — so a drawing does
-// not arrive with hairlines at one size and slabs of ink at another.
+// scales GEOMETRY — coordinates, radii, text sizes, dash patterns — by that
+// factor.
+//
+// STROKE WIDTHS ARE NOT GEOMETRY. `PlanPrimitive.width` is a PEN WEIGHT in
+// pixels, which is how `planToSvg` uses it: `stroke-width="${p.width}"`, raw,
+// whatever the drawing's scale. Everything else on a primitive is in the
+// drawing's own units — `text.size` 0.05 is 50 mm of building, `dash` [0.06,
+// 0.05] is 60 and 50 mm of building — but `width` 1.2 is 1.2 px of ink.
+//
+// Scaling it as though it were metres is what this file used to do, and the
+// error grows with the drawing: a framing plan 18 m across, fitted to 170 mm
+// of paper, has a scale of 10.7 mm per metre, so a 1.2 "unit" outline printed
+// at 12.9 mm wide. Frame elevations reached 19.7 mm. The sheets came out as
+// slabs of solid colour, and only the small drawings (a notes sheet, scale
+// 0.65) looked nearly right — which is why it survived: the defect is
+// invisible on exactly the drawings whose bounds are small.
+//
+// A pen weight converts through the SAME px-per-drawing relationship the
+// screen uses, so a printed sheet has the line weights of the sheet on screen.
 // ─────────────────────────────────────────────────────────────────────────
 
 import type { jsPDF } from 'jspdf'
@@ -51,9 +68,21 @@ export interface PaintResult {
   /** Actual drawn size, mm. */
   width: number
   height: number
-  /** Scale applied, target mm per drawing unit. */
+  /** Scale applied to GEOMETRY, target mm per drawing unit. */
   scale: number
+  /** Millimetres of paper per PIXEL of pen weight — see the header. */
+  penScale: number
 }
+
+/**
+ * The width `planToSvg` gives a drawing on screen, less its padding — the
+ * reference a pen weight in pixels is measured against.
+ *
+ * `planToSvg(d, pxWidth = 1100)` pads 24 px each side, so the drawing's own
+ * bounds span 1052 px. Printing a 1.2 px line therefore means 1.2/1052 of the
+ * drawn width: 0.19 mm on a 170 mm sheet, which is a drafting pen.
+ */
+export const SVG_REFERENCE_PX = 1100 - 2 * 24
 
 /** Where a drawing will land, without painting it — for page-break decisions. */
 export function paintedSize(d: Drawing, box: PaintBox): PaintResult {
@@ -62,7 +91,8 @@ export function paintedSize(d: Drawing, box: PaintBox): PaintResult {
   const dh = Math.max(b.maxY - b.minY, 1e-9)
   let scale = box.w / dw
   if (box.maxH != null && dh * scale > box.maxH) scale = box.maxH / dh
-  return { width: dw * scale, height: dh * scale, scale }
+  const width = dw * scale
+  return { width, height: dh * scale, scale, penScale: width / SVG_REFERENCE_PX }
 }
 
 /**
@@ -79,12 +109,15 @@ export function paintDrawing(doc: jsPDF, d: Drawing, box: PaintBox): PaintResult
   const X = (v: number) => box.x + (v - b.minX) * fit.scale
   const Y = (v: number) => box.y + (v - b.minY) * fit.scale
   const L = (v: number) => v * fit.scale
+  /** A pen weight in px → mm of paper. Floored at a hairline so a 0.3 px rule
+   *  on a small drawing still marks the page. */
+  const pen = (w: number | undefined) => Math.max((w ?? 1) * fit.penScale, 0.05)
 
   const setStroke = (c: string | undefined, w: number | undefined, dash?: number[]) => {
     const rgb = parseColor(c)
     if (!rgb) return false
     doc.setDrawColor(...rgb)
-    doc.setLineWidth(Math.max(L(w ?? 0.3), 0.05))
+    doc.setLineWidth(pen(w))
     // jsPDF throws on an empty pattern; [] means "solid".
     doc.setLineDashPattern(dash ? dash.map((v) => L(v)) : [], 0)
     return true
@@ -134,9 +167,9 @@ export function paintDrawing(doc: jsPDF, d: Drawing, box: PaintBox): PaintResult
         // Extension lines first, in the pale grey and broken, so the dimension
         // line lands on top of them.
         for (const e of extensionLines(p)) {
-          if (setStroke('#9aa5b5', 0.15, [e.dash, e.dash * 0.7])) doc.line(X(e.x1), Y(e.y1), X(e.x2), Y(e.y2))
+          if (setStroke('#9aa5b5', 0.6, [e.dash, e.dash * 0.7])) doc.line(X(e.x1), Y(e.y1), X(e.x2), Y(e.y2))
         }
-        if (!setStroke('#5c6675', 0.2)) break
+        if (!setStroke('#5c6675', 0.8)) break
         doc.line(X(p.x1), Y(p.y1), X(p.x2), Y(p.y2))
         doc.setTextColor(92, 102, 117)
         doc.setFont('sans', 'normal')

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseColor, paintedSize, paintDrawing } from './drawingPdf'
+import { parseColor, paintedSize, paintDrawing, SVG_REFERENCE_PX } from './drawingPdf'
 import type { jsPDF } from 'jspdf'
 import type { Drawing } from '../engine/planRenderer'
 import { buildBoreholeLog } from '../engine/soils/logRenderer'
@@ -78,16 +78,65 @@ describe('painting primitives', () => {
     expect(of(doc, 'line')[0].args).toEqual([10, 20, 110, 70])
   })
 
-  it('scales stroke width by the SAME factor as the geometry', () => {
-    // Otherwise a drawing arrives with hairlines at one size and slabs of ink
-    // at another.
+  it('treats stroke width as a PEN WEIGHT in px, not as geometry', () => {
+    // This is the one quantity on a primitive that is NOT in the drawing's own
+    // units. `planToSvg` emits it raw — `stroke-width="${p.width}"` — whatever
+    // the scale, while `text.size` and `dash` are lengths in the drawing and
+    // do scale. Scaling the pen with the geometry is what made a framing plan
+    // print as slabs of solid colour.
     const d: Drawing = {
       bounds: BOX,
-      primitives: [{ kind: 'line', x1: 0, y1: 0, x2: 1, y2: 1, stroke: '#000', width: 0.4 }],
+      primitives: [{ kind: 'line', x1: 0, y1: 0, x2: 1, y2: 1, stroke: '#000', width: 1.2 }],
+    }
+    const doc = fakeDoc()
+    const fit = paintDrawing(doc, d, { x: 0, y: 0, w: 200 })
+    // 1.2 px of the 1052 px the same drawing spans on screen, on 200 mm of paper
+    expect(of(doc, 'setLineWidth')[0].args[0]).toBeCloseTo((1.2 * 200) / SVG_REFERENCE_PX, 9)
+    expect(fit.penScale).toBeCloseTo(200 / SVG_REFERENCE_PX, 12)
+  })
+
+  it('gives the same pen to the same weight however big the drawing is', () => {
+    // The defect grew with the drawing's world size: a notes sheet whose
+    // bounds are fractions of a unit looked nearly right while an 18 m framing
+    // plan came out unreadable. Two drawings of wildly different extent, drawn
+    // into the same box, must now print the same weight.
+    const pen = (span: number) => {
+      const d: Drawing = {
+        bounds: { minX: 0, minY: 0, maxX: span, maxY: span },
+        primitives: [{ kind: 'line', x1: 0, y1: 0, x2: span, y2: span, stroke: '#000', width: 1.4 }],
+      }
+      const doc = fakeDoc()
+      paintDrawing(doc, d, { x: 0, y: 0, w: 170 })
+      return of(doc, 'setLineWidth')[0].args[0] as number
+    }
+    expect(pen(0.65)).toBeCloseTo(pen(18), 12)
+    // …and it is a drafting weight, not a slab: well under a millimetre.
+    expect(pen(18)).toBeLessThan(0.4)
+    expect(pen(18)).toBeGreaterThan(0.1)
+  })
+
+  it('still scales dashes and text, which ARE lengths in the drawing', () => {
+    const d: Drawing = {
+      bounds: BOX,
+      primitives: [
+        { kind: 'line', x1: 0, y1: 0, x2: 1, y2: 1, stroke: '#000', width: 1, dash: [0.4, 0.2] },
+        { kind: 'text', x: 0, y: 0, text: 'A', size: 0.5 },
+      ],
     }
     const doc = fakeDoc()
     paintDrawing(doc, d, { x: 0, y: 0, w: 200 })   // scale 2
-    expect(of(doc, 'setLineWidth')[0].args[0]).toBeCloseTo(0.8, 9)
+    expect(of(doc, 'setLineDashPattern')[0].args[0]).toEqual([0.8, 0.4])
+    expect(of(doc, 'setFontSize')[0].args[0]).toBeCloseTo(1.0 * 2.834645, 6)
+  })
+
+  it('never lets a pen vanish — a hairline still marks the page', () => {
+    const d: Drawing = {
+      bounds: BOX,
+      primitives: [{ kind: 'line', x1: 0, y1: 0, x2: 1, y2: 1, stroke: '#000', width: 0.05 }],
+    }
+    const doc = fakeDoc()
+    paintDrawing(doc, d, { x: 0, y: 0, w: 20 })
+    expect(of(doc, 'setLineWidth')[0].args[0]).toBeGreaterThanOrEqual(0.05)
   })
 
   it('picks the right jsPDF paint style for fill / stroke / both', () => {
