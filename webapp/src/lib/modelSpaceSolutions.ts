@@ -7,7 +7,7 @@ import type { BeamSectionDesign, ColumnScheduleRow, FootingScheduleRow, Combined
 import type { CombinedFootingInput } from '../engine/combinedFooting'
 import { designAxialColumn, interaction, capacityAtEccentricity } from '../engine/columnDesign'
 import { buildBeamSolution } from './beamSolution'
-import { axialColumnSolution, eccentricColumnSolution, type SeismicTieOverride } from './columnSolution'
+import { axialColumnSolution, biaxialColumnSolution, eccentricColumnSolution, type SeismicTieOverride } from './columnSolution'
 import { buildFoundationSolution, type SolutionCtx } from './foundationSolution'
 import { buildCombinedFootingSolution } from './combinedFootingSolution'
 import type { SolutionStep } from './solution'
@@ -37,9 +37,30 @@ export function columnRowSolution(sec: RectSection, row: ColumnScheduleRow): Sol
   }
   const ax = designAxialColumn(base)
   const steps: SolutionStep[] = []
-  if (row.e > 1e-4 && row.Pu > 0) {
+  // THE STEP IS GATED ON BOTH AXES, not on e = Mux/Pu.
+  //
+  // Gated on the strong axis alone, a column whose only moment is about its
+  // WEAK axis got no P–M step at all while its schedule row still reported a
+  // utilisation — the frame's own c1.0.1 has Mux = 0, Muy = 50.6 and a row
+  // reading 50%, against a worked solution that showed nothing but the axial
+  // check.
+  if (row.Pu > 0 && (row.Mu > 1e-9 || row.Muy > 1e-9)) {
     const ic = { b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, tieDia: sec.tieDia, fc: sec.fc, fy: sec.fy, numBars: ax.bars, layout: row.layout }
-    steps.push(...eccentricColumnSolution(ic, interaction(ic), row.Pu, row.Mu, capacityAtEccentricity(ic, row.e)))
+    // The strong-axis ray first, where there is one — it is the biaxial
+    // combination's own `px`, and it is where the balanced point and the
+    // strain-compatibility sweep are explained.
+    if (row.e > 1e-4) {
+      steps.push(...eccentricColumnSolution(
+        ic, interaction(ic), row.Pu, row.Mu, capacityAtEccentricity(ic, row.e),
+        // one input to the combination, not the answer — see the flag's docs
+        row.Muy > 1e-9,
+      ))
+    }
+    // …then the combination the ROW reports. Every number in it comes from the
+    // row itself, so the printed utilisation is the printed utilisation.
+    steps.push(...biaxialColumnSolution(
+      row.Pu, row.Mu, row.Muy, row.phiPn, row.util, row.biaxialMethod, row.biaxial,
+    ))
   }
   const seismic: SeismicTieOverride | undefined =
     row.seismicSConf !== undefined && row.seismicLoZone !== undefined
