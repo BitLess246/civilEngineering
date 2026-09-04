@@ -1,5 +1,6 @@
 import { STEEL } from './sheetInk'
 import { describe, it, expect } from 'vitest'
+import type { PlanPrimitive } from './planRenderer'
 import {
   designBeamColumnJoint, buildBeamColumnJointDetail, effectiveJointWidth, jointHookLdh, wrapNote,
   JOINT_GAMMA, PHI_JOINT, THROUGH_BAR_DIAS, THROUGH_BAR_DIAS_LIGHTWEIGHT, PROBABLE_FY,
@@ -322,7 +323,7 @@ describe('buildBeamColumnJointDetail', () => {
   const flat = textOf(d).join(' ').replace(/\s+/g, ' ')
 
   it('titles and returns finite, ordered bounds', () => {
-    expect(d.title).toBe('TYPICAL BEAM–COLUMN JOINT — J1')
+    expect(d.title).toBe('BEAM–COLUMN JOINT — J1')
     for (const v of Object.values(d.bounds)) expect(Number.isFinite(v)).toBe(true)
     expect(d.bounds.maxX).toBeGreaterThan(d.bounds.minX)
     expect(d.bounds.maxY).toBeGreaterThan(d.bounds.minY)
@@ -428,7 +429,7 @@ describe('buildBeamColumnJointDetail', () => {
 
   it('puts the title block below both views and the notes', () => {
     const titleText = d.primitives.find((p) => p.kind === 'text'
-      && (p as { text: string }).text.startsWith('TYPICAL BEAM')) as { y: number }
+      && (p as { text: string }).text.startsWith('BEAM–COLUMN JOINT')) as { y: number }
     const planText = d.primitives.find((p) => p.kind === 'text'
       && (p as { text: string }).text === 'PLAN SECTION X-X') as { y: number }
     expect(titleText.y).toBeGreaterThan(planText.y)
@@ -461,6 +462,65 @@ describe('buildBeamColumnJointDetail', () => {
     })
     expect(bare.primitives.length).toBeGreaterThan(0)
     for (const v of Object.values(bare.bounds)) expect(Number.isFinite(v)).toBe(true)
+  })
+})
+
+describe('the joint sheet draws the joint that is there', () => {
+  // These used to be one "typical" arrangement whatever the joint was: a beam
+  // from the right, a spandrel each way, and a column carrying on above. On a
+  // per-joint sheet each of those is a fact about THAT joint.
+  const rects = (x: ReturnType<typeof buildBeamColumnJointDetail>) =>
+    x.primitives.filter((p): p is Extract<PlanPrimitive, { kind: 'rect' }> => p.kind === 'rect')
+  const both = buildBeamColumnJointDetail(good)
+
+  it('draws the far beam only where a beam frames in opposite', () => {
+    const corner = buildBeamColumnJointDetail({ ...good, framedFaces: { far: false } })
+    // one rect the other side of the column in each view — section and plan
+    expect(rects(both).filter((p) => p.x < -1e-9)).toHaveLength(2)
+    expect(rects(corner).filter((p) => p.x < -1e-9)).toHaveLength(0)
+    // and the sheet is no wider than the joint it draws
+    expect(corner.bounds.minX).toBeGreaterThan(both.bounds.minX)
+  })
+
+  it('draws a spandrel per side that has one', () => {
+    const one = buildBeamColumnJointDetail({ ...good, framedFaces: { spandrelNeg: false } })
+    const none = buildBeamColumnJointDetail({ ...good, framedFaces: { spandrelPos: false, spandrelNeg: false } })
+    expect(rects(both).length - rects(one).length).toBe(1)
+    expect(rects(both).length - rects(none).length).toBe(2)
+    // nothing is labelled that is not drawn
+    expect(textOf(none).join(' ')).not.toContain('SPANDREL BEAM HOOPS')
+    expect(textOf(one).join(' ')).toContain('SPANDREL BEAM HOOPS')
+  })
+
+  it('stops the column at a roof joint and hooks its bars into the core', () => {
+    const roof = buildBeamColumnJointDetail({ ...good, columnAbove: false })
+    // nothing is drawn above the joint any more, so the sheet starts lower
+    expect(roof.bounds.minY).toBeGreaterThan(both.bounds.minY)
+    expect(rects(roof).filter((p) => p.y < -1e-9)).toHaveLength(0)
+    expect(rects(both).filter((p) => p.y < -1e-9)).toHaveLength(1)
+    // §418.8.2.2 reaches the column's own bars once they terminate here
+    const flat = textOf(roof).join(' ').replace(/\s+/g, ' ')
+    expect(flat).toContain('COLUMN TERMINATES AT THIS JOINT')
+    expect(flat).toContain(`TURN ${12 * good.colBarDia} INTO IT`)
+    expect(textOf(both).join(' ')).not.toContain('COLUMN TERMINATES')
+  })
+
+  it('keeps every primitive inside the bounds in each of those cases', () => {
+    for (const x of [
+      buildBeamColumnJointDetail({ ...good, columnAbove: false, framedFaces: { far: false, spandrelNeg: false } }),
+      buildBeamColumnJointDetail({ ...joint, framedFaces: { far: true } }),
+    ]) {
+      for (const p of x.primitives) {
+        const xs = p.kind === 'rect' ? [p.x, p.x + p.w]
+          : p.kind === 'circle' ? [p.cx - p.r, p.cx + p.r]
+            : p.kind === 'path' ? p.cmds.map((c) => c.x)
+              : p.kind === 'text' ? [p.x] : [p.x1, p.x2]
+        for (const v of xs) {
+          expect(v).toBeGreaterThanOrEqual(x.bounds.minX - 1e-9)
+          expect(v).toBeLessThanOrEqual(x.bounds.maxX + 1e-9)
+        }
+      }
+    }
   })
 })
 

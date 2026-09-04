@@ -188,12 +188,17 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
 
   // The joint comes after the members that meet in it — the sheet only makes
   // sense once the beam and column details have said what they are.
+  // ONE SHEET PER JOINT, not one per joint TYPE. What the sheet is about — how
+  // many beams arrive, whether the near beam's bars run through or hook, what
+  // confinement class Table 418.8.4.3 gives it — varies joint by joint, so a
+  // corner and an interior joint on the same two sections are different
+  // details and a typical sheet could only show one of them.
   jointDetailBundles(model, design).forEach((b, i) => {
     const d = buildBeamColumnJointDetail(b.detail, { detailNo: String(i + 1), sheetRef: ref('Beam–column joint details') })
     out.push({
       key: `beam-column-joint-${slug(b.mark)}`, group: 'Beam–column joint details',
-      title: d.title,
-      subtitle: `col ${b.detail.colB}×${b.detail.colH} · beam ${b.detail.beamB}×${b.detail.beamH} ⌀${b.detail.beamBarDia}`,
+      title: `${d.title}${b.level ? ` · ${b.level}` : ''}`,
+      subtitle: `col ${b.detail.colB}×${b.detail.colH} · beam ${b.detail.beamB}×${b.detail.beamH} ⌀${b.detail.beamBarDia} · ${b.detail.confinement}`,
       warnings: d.designNotes,
       drawing: d,
     })

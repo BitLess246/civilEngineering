@@ -65,10 +65,13 @@ describe('the sheet set', () => {
     expect(plans.filter((s) => s.key === 'foundation-plan')).toHaveLength(1)
   })
 
-  it('carries a beam–column joint sheet, after the members that meet in it', () => {
+  it('carries one beam–column joint sheet per joint, after the members that meet in it', () => {
     const joints = sheets.filter((s) => s.group === 'Beam–column joint details')
-    expect(joints.length).toBeGreaterThan(0)
-    for (const j of joints) expect(j.title).toContain('BEAM–COLUMN JOINT')
+    // one per framed node, each named for the joint it draws rather than for a
+    // "typical" type several joints were folded into
+    expect(joints).toHaveLength(model.nodes.filter((n) => n.y > 0).length)
+    for (const j of joints) expect(j.title).toMatch(/^BEAM–COLUMN JOINT — J-[A-Z]\d+@[\d.]+ · [A-Z]+ FLOOR$/)
+    expect(new Set(joints.map((s) => s.key)).size).toBe(joints.length)
     // the joint sheet follows the beam and column details it depends on
     const iJoint = sheets.findIndex((s) => s.group === 'Beam–column joint details')
     expect(iJoint).toBeGreaterThan(sheets.findIndex((s) => s.group === 'Frame elevations'))
