@@ -1,19 +1,32 @@
 // ─────────────────────────────────────────────────────────────────────────
-// SCHEDULE FIGURES — the little drawings a schedule row expands into.
+// SCHEDULE FIGURES — the drawings a schedule row expands into.
 //
-// A beam's bar elevation, a column's tie elevation, a W-shape section and the
-// §424.2 serviceability read-out. Pure SVG from numbers: no model, no state,
-// no analysis — which is why they can live away from the page.
+// These used to be little SVGs drawn from numbers: a rectangle scaled to the
+// member, a ladder of evenly pitched ticks for the transverse steel, and a
+// line or two standing for "the bars". Nothing in them came from the cage, so
+// none of them could show a curtailment, a lap, a crank, or a spacing that
+// changes along the member — and each was a second description of steel the
+// drawing set already describes.
+//
+// So a row now expands into the SHEET. The beam's is its grid line's frame
+// elevation, the column's is its own stack detail footing-to-roof, and both
+// carry a wash over the stretch the row speaks for — which is what a schedule
+// row adds over a link to the drawing. The sections are cuts through the same
+// cages. `SheetFigure` paints any of them with the plan renderer, so what the
+// accordion shows and what the Plans tab shows are one object.
+//
+// The two that remain pure geometry — the W-shape section and the §424.2
+// serviceability read-out — are still just numbers.
 // ─────────────────────────────────────────────────────────────────────────
 import { useMemo, type ReactNode } from 'react'
 import { planToSvg, type Drawing } from '../../engine/planRenderer'
 import { memberSectionDetail } from '../../engine/memberSection'
 import { buildFrameElevation } from '../../engine/frameElevation'
-import type { FrameElevationBundle } from '../../lib/planDetails'
+import { buildColumnStackDetail } from '../../engine/columnStackDetail'
+import type { ColumnStackBundle, FrameElevationBundle } from '../../lib/planDetails'
 import type { StructuralModel } from '../../engine/model'
 import type { RebarCage } from '../../engine/rebarModel'
 import { type MemberDeflectionResult } from '../../engine/memberDeflection'
-import { DimBelow, DimSide } from '../../components/dims'
 import { f0, f1, f2 } from '../../lib/format'
 
 /** §424.2 computed service deflection for one beam, integrated from its own
@@ -182,77 +195,38 @@ export function BeamElevationFigure({ bundle, zone, label, width = 900 }: {
   return <SheetFigure drawing={drawing} width={width} />
 }
 
-/** Rebar elevation of a beam/girder: outline, stirrup ticks, top steel over the
- *  hogging ends and bottom steel over the sagging mid-span. */
-export function BeamRebarElevation({ L, h, sections }: {
-  L: number; h: number; sections: { x: number; hogging: boolean; design: { bars: number; sAdopt: number } }[]
+/**
+ * The column's ELEVATION in its schedule row — the drawing set's own sheet for
+ * the whole column line, with the storey this row speaks for washed over.
+ *
+ * What stood here was a figure of its own: a rectangle scaled to one storey,
+ * two red lines standing for "the bars", and a ladder of evenly pitched ticks
+ * at L / tieSpacingFinal. None of it came from the cage, so it could not show
+ * the confinement tightening at each end, the lap splice in the centre half of
+ * the storey, the crank where the section steps, the dowels the column stands
+ * on, or the joint hoops through the floor — all of which `columnStackDetail`
+ * shows, because that one is drawn from the placed cages.
+ *
+ * It also could not show the COLUMN. A schedule row is one storey; the sheet
+ * is footing to roof, which is the thing that gets built. The wash is what
+ * keeps the row's own subject legible on it.
+ */
+export function ColumnElevationFigure({ bundle, storey, label, width = 320 }: {
+  bundle: ColumnStackBundle
+  storey?: { yBot: number; yTop: number }
+  label?: string
+  width?: number
 }): ReactNode {
-  // viewBox width matches BeamSchematic (330) so text renders the same size.
-  const W = 330, padL = 44, padR = 18, top = 22, bh = 62
-  const x0 = padL, x1 = W - padR, yTop = top, yBot = top + bh
-  const dimY = yBot + 22, H = dimY + 14
-  const sx = (x: number) => x0 + (x1 - x0) * (L > 0 ? Math.max(0, Math.min(1, x / L)) : 0)
-  const sList = sections.map((s) => s.design.sAdopt).filter((v) => v > 0)
-  const sm = sList.length ? Math.min(...sList) / 1000 : 0
-  const nStir = sm > 0 ? Math.min(40, Math.max(2, Math.round(L / sm))) : 0
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
-      style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
-      <text x={x0} y={13} fontSize={11} fontWeight={700} fill="#0f4c92">ELEVATION — rebar{sm > 0 ? ` (stirrups @${Math.round(sm * 1000)})` : ''}</text>
-      <rect x={x0} y={yTop} width={x1 - x0} height={bh} fill="#fff" stroke="#37526e" strokeWidth={1.4} />
-      {Array.from({ length: nStir + 1 }, (_, k) => {
-        const x = sx((L * k) / Math.max(nStir, 1))
-        return <line key={k} x1={x} y1={yTop + 4} x2={x} y2={yBot - 4} stroke="#94a3b8" strokeWidth={0.7} />
-      })}
-      {sections.map((s, i) => {
-        const y = s.hogging ? yTop + 7 : yBot - 7
-        const c = sx(s.x), half = (x1 - x0) * (s.hogging ? 0.16 : 0.3)
-        const xa = Math.max(x0 + 3, c - half), xb = Math.min(x1 - 3, c + half)
-        return (
-          <g key={i}>
-            <line x1={xa} y1={y} x2={xb} y2={y} stroke="#dc2626" strokeWidth={2} />
-            <text x={(xa + xb) / 2} y={s.hogging ? y - 3 : y + 9} fontSize={8.5} fill="#dc2626" textAnchor="middle">
-              {s.design.bars}⌀ {s.hogging ? 'top' : 'bot'}
-            </text>
-          </g>
-        )
-      })}
-      <DimBelow xA={x0} xB={x1} featY={yBot} dY={dimY} label={`L = ${L} m`} />
-      <DimSide yA={yTop} yB={yBot} featX={x0} dX={x0 - 16} label={`h = ${h}`} side="left" />
-    </svg>
-  )
+  const drawing = useMemo(() => buildColumnStackDetail(
+    storey ? { ...bundle.input, highlight: { ...storey, label } } : bundle.input,
+    { sheetRef: 'S-06' },
+  ), [bundle, storey, label])
+  return <SheetFigure drawing={drawing} width={width} />
 }
 
-/** Rebar elevation of a column, drawn to scale (height ∝ Lh, width ∝ b), with
- *  longitudinal bars, ties at spacing and dimension lines. viewBox width
- *  matches ColumnSchematic (320) so its text matches the section below it. */
-export function ColumnElevation({ Lh, b, barDia, tieDia, bars, tieSpacing }: { Lh: number; b: number; barDia: number; tieDia: number; bars: number; tieSpacing: number }): ReactNode {
-  const W = 320, top = 24, availH = 230
-  const scl = availH / Math.max(Lh, 0.5)                 // px per metre
-  const colW = Math.max(30, (b / 1000) * scl)            // to scale with height
-  const cx = W * 0.46, x0 = cx - colW / 2, x1 = cx + colW / 2, y0 = top, y1 = top + availH
-  const dimY = y1 + 20, H = dimY + 16
-  const sm = tieSpacing / 1000
-  const n = sm > 0 ? Math.min(40, Math.max(2, Math.round(Lh / sm))) : 0
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"
-      style={{ width: '100%', height: 'auto', fontFamily: 'Arial, sans-serif' }}>
-      <text x={12} y={14} fontSize={11} fontWeight={700} fill="#0f4c92">ELEVATION — {bars}⌀{barDia} · ties ⌀{tieDia} @{Math.round(tieSpacing)} mm</text>
-      <rect x={x0} y={y0} width={colW} height={availH} fill="#fff" stroke="#37526e" strokeWidth={1.4} />
-      <line x1={x0 + 6} y1={y0} x2={x0 + 6} y2={y1} stroke="#dc2626" strokeWidth={1.6} />
-      <line x1={x1 - 6} y1={y0} x2={x1 - 6} y2={y1} stroke="#dc2626" strokeWidth={1.6} />
-      {Array.from({ length: n + 1 }, (_, k) => {
-        const y = y0 + (availH * k) / n
-        return <line key={k} x1={x0 + 3} y1={y} x2={x1 - 3} y2={y} stroke="#94a3b8" strokeWidth={0.7} />
-      })}
-      <DimSide yA={y0} yB={y1} featX={x0} dX={x0 - 14} label={`H = ${Lh} m`} side="left" />
-      <DimBelow xA={x0} xB={x1} featY={y1} dY={dimY} label={`b = ${b} mm`} />
-    </svg>
-  )
-}
-
-/** W-shape cross-section SVG: top flange + web + bottom flange, scaled to fit
- *  a fixed viewbox so all dimensions are labelled. d/bf/tf/tw all in mm. */
+/** W-shape cross-section: top flange + web + bottom flange, scaled to fit a
+ *  fixed viewbox so every dimension is labelled. d/bf/tf/tw all in mm. A rolled
+ *  section has no cage, so this one really is a drawing from numbers. */
 export function WShapeSection({ shape, d, bf, tf, tw }: { shape: string; d: number; bf: number; tf: number; tw: number }): ReactNode {
   const VW = 200, VH = 200
   const pad = 28          // room for labels
