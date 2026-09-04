@@ -251,6 +251,16 @@ export function buildColumnStackDetail(
     })
   }
   if (i.footing) {
+    // The TOP OF FOOTING is an elevation like any other, and it was the one
+    // label on the sheet with nothing tying it to the level it names: the text
+    // sat out to the right of the drawing with no line reaching back to the
+    // face it is the elevation OF. Same broken line as the floors, in the
+    // founding-level ink rather than the grid grey, so it reads as the datum
+    // the structure starts from and not as another floor.
+    P.push({
+      kind: 'line', x1: left - u * 1.2, y1: Y(i.footing.yTop), x2: right + u * 5.2, y2: Y(i.footing.yTop),
+      stroke: SHEET_ZONE, width: 0.6, dash: [u * 0.6, u * 0.35],
+    })
     P.push({
       kind: 'text', x: right + u * 5.4, y: Y(i.footing.yTop) - u * 0.35,
       text: `T.O.F.  EL ${i.footing.yTop.toFixed(2)}`, size: u * 0.78, anchor: 'start', color: SHEET_ZONE, weight: 600,

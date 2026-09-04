@@ -122,6 +122,32 @@ describe('the sheet itself', () => {
     expect(texts.some((t) => t.startsWith('T.O.F.'))).toBe(true)
   })
 
+  it('draws the T.O.F. its own broken line, like every other elevation', () => {
+    // It was the one label on the sheet with nothing tying it to the level it
+    // names: the text sat out to the right with no line reaching back to the
+    // face it is the elevation OF.
+    const f = bundles[0]!.input.footing!
+    const lines = d.primitives.filter((p): p is Extract<PlanPrimitive, { kind: 'line' }> => p.kind === 'line')
+    const tof = lines.find((p) => Math.abs(p.y1 - -f.yTop) < 1e-9 && Math.abs(p.y2 - -f.yTop) < 1e-9)
+    expect(tof, 'no line at the top of footing').toBeDefined()
+    expect(tof!.dash, 'the elevation line is broken, not solid').toBeDefined()
+    expect(tof!.dash!.length).toBeGreaterThan(1)
+    // it reaches from left of the drawing out to where the label starts
+    const label = d.primitives.find((p): p is Extract<PlanPrimitive, { kind: 'text' }> =>
+      p.kind === 'text' && p.text.startsWith('T.O.F.'))!
+    expect(tof!.x1).toBeLessThan(label.x)
+    expect(tof!.x2).toBeLessThanOrEqual(label.x + 1e-9)
+    expect(tof!.x2 - tof!.x1).toBeGreaterThan(0)
+  })
+
+  it('inks the T.O.F. as a datum, not as another floor', () => {
+    const f = bundles[0]!.input.footing!
+    const at = (y: number) => d.primitives.find((p): p is Extract<PlanPrimitive, { kind: 'line' }> =>
+      p.kind === 'line' && Math.abs(p.y1 - -y) < 1e-9 && Math.abs(p.y2 - -y) < 1e-9)
+    const floor = bundles[0]!.input.levels.find((lv) => lv.y > f.yTop && at(lv.y))!
+    expect(at(f.yTop)!.stroke).not.toBe(at(floor.y)!.stroke)
+  })
+
   it('dimensions every storey, the pedestal and the whole stack', () => {
     for (const s of bundles[0]!.input.segments) {
       expect(dims).toContain(String(Math.round((s.yTop - s.yBot) * 1000)))
