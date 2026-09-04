@@ -7,14 +7,14 @@ import type { StructuralModel, RectSection } from '../engine/model'
 import type { StructureDesign } from '../engine/pipeline'
 import type { PlanFooting } from '../engine/planRenderer'
 import type { FootingDetailInput } from '../engine/footingDetail'
-import type { ColumnDetailInput } from '../engine/columnDetail'
 import type { SlabOpeningInput } from '../engine/slabOpening'
 import type { WallDetailInput } from '../engine/wallDetail'
 import type { BeamColumnJointInput, JointConfinement } from '../engine/beamColumnJoint'
 import type { SlabDirResult } from '../engine/slabDDM'
 import type { ColumnSchematicProps } from '../components/ColumnSchematic'
 import type { FrameElevationInput, ElevationMember } from '../engine/frameElevation'
-import { elevationPlane, projectPoint, type RebarCage, type Vec3 } from '../engine/rebarModel'
+import type { ColumnStackDetailInput, ColumnStackSegment } from '../engine/columnStackDetail'
+import { elevationPlane, projectPoint, type RebarCage, type Vec3, type ViewPlane } from '../engine/rebarModel'
 import { stationZones } from '../engine/beamSection'
 
 export interface SoilInput { qAllow?: number; gammaSoil?: number; gammaConc?: number; H?: number }
@@ -122,69 +122,114 @@ export function footingDetailBundles(
   return bundles
 }
 
-// ── Typical column details ──────────────────────────────────────────────────
-
-export interface ColumnDetailBundle { mark: string; detail: ColumnDetailInput }
-
 /**
- * One typical column detail per distinct column TYPE, from the design.
+ * One detail PER COLUMN LINE — the whole stack, footing to top.
  *
- * Grouped by section and tie schedule rather than per member: a 12-storey frame
- * has one detail per column type, not per column. Every figure comes off
- * `ColumnScheduleRow` — the confinement zone and both tie spacings were already
- * being computed by `columnDesign` and shown only as schedule numbers.
+ * The typical-detail bundles above group by section and tie schedule, so a
+ * twelve-storey building emits three sheets and none of them is a column you
+ * can point at on site. These are keyed by the BASE NODE instead: every column
+ * member standing over one plan position, in order, with the footing under it
+ * and the cages that belong to all of them.
  *
- * `lapB`/`lapC` now come off the schedule row — `pipeline` computes them once
- * per column from the adopted section via `calcDevLength` (§425.5), so the
- * sheet prints the real splice length instead of omitting it.
- *
- * A column that CHANGES SECTION between storeys also gets its §410.7.4 offset
- * check, since the crank is part of this detail and nothing checked it before.
+ * The stack is walked node by node rather than by plan coordinate, because a
+ * column that steps has different section widths at each storey and only the
+ * node chain says which member sits on which.
  */
-export function columnDetailBundles(model: StructuralModel, design: StructureDesign): ColumnDetailBundle[] {
-  const secById = new Map(model.sections.map((s) => [s.id, s]))
-  const memById = new Map(model.members.map((m) => [m.id, m]))
-  const nodeById = new Map(model.nodes.map((n) => [n.id, n]))
-  // deepest beam framing in anywhere — the band the column passes through
-  const beamDepth = Math.max(
-    300,
-    ...model.members
-      .filter((m) => m.role === 'beam')
-      .map((m) => (secById.get(m.section) as RectSection | undefined)?.h ?? 0),
-  )
+export interface ColumnStackBundle {
+  key: string
+  mark: string
+  grid: string
+  input: ColumnStackDetailInput
+}
 
-  const seen = new Set<string>()
-  const out: ColumnDetailBundle[] = []
-  for (const r of design.columns) {
-    const mem = memById.get(r.id)
-    if (!mem) continue
-    const sec = secById.get(mem.section) as RectSection | undefined
-    if (!sec) continue
-    const key = `${sec.b}x${sec.h ?? sec.b}-${r.bars}-${Math.round(r.tieSpacingFinal)}-${Math.round(r.seismicLoZone ?? 0)}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    const ni = nodeById.get(mem.i), nj = nodeById.get(mem.j)
-    const storey = ni && nj ? Math.abs(nj.y - ni.y) : r.L
+export function columnStackBundles(
+  model: StructuralModel, design: StructureDesign, cages: RebarCage[],
+): ColumnStackBundle[] {
+  const nodeById = new Map(model.nodes.map((n) => [n.id, n]))
+  const secById = new Map(model.sections.map((s) => [s.id, s]))
+  const rowById = new Map(design.columns.map((c) => [c.id, c]))
+  const cols = model.members.filter((m) => m.role === 'column')
+  const lower = (m: (typeof cols)[number]) =>
+    (nodeById.get(m.i)!.y <= nodeById.get(m.j)!.y ? m.i : m.j)
+  const upper = (m: (typeof cols)[number]) =>
+    (nodeById.get(m.i)!.y <= nodeById.get(m.j)!.y ? m.j : m.i)
+
+  const startingAt = new Map<string, (typeof cols)[number]>()
+  const tops = new Set<string>()
+  for (const m of cols) { startingAt.set(lower(m), m); tops.add(upper(m)) }
+  // A stack starts where a column has nothing under it.
+  const bases = [...startingAt.keys()].filter((id) => !tops.has(id))
+
+  const round6 = (v: number) => Math.round(v * 1e6) / 1e6
+  const levels = [...new Set(model.nodes.map((n) => round6(n.y)))].sort((a, b) => a - b)
+  const ORD = ['GROUND', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'SIXTH', 'SEVENTH',
+    'EIGHTH', 'NINTH', 'TENTH', 'ELEVENTH', 'TWELFTH']
+  const floorOf = (y: number) => {
+    const k = levels.indexOf(round6(y))
+    return k <= 0 ? 'BASE' : `${ORD[k - 1] ?? `${k}TH`} FLOOR`
+  }
+  // Grid reference, the same convention the framing plans' bubbles use: a
+  // lettered line for the z ordinate, a numbered one for the x.
+  const xs = [...new Set(model.nodes.map((n) => round6(n.x)))].sort((a, b) => a - b)
+  const zs = [...new Set(model.nodes.map((n) => round6(n.z)))].sort((a, b) => a - b)
+  const gridRef = (x: number, z: number) =>
+    `${String.fromCharCode(65 + Math.max(0, zs.indexOf(round6(z))))}${1 + Math.max(0, xs.indexOf(round6(x)))}`
+
+  const out: ColumnStackBundle[] = []
+  for (const base of bases) {
+    const chain: (typeof cols)[number][] = []
+    let at: string | undefined = base
+    while (at) {
+      const m: (typeof cols)[number] | undefined = startingAt.get(at)
+      if (!m || chain.includes(m)) break
+      chain.push(m)
+      at = upper(m)
+    }
+    if (!chain.length) continue
+    const n0 = nodeById.get(base)!
+    // The sheet is read looking along z, so the face in view is the section's
+    // h — `columnCage` lays its bars out as [along h, across b] and puts the
+    // first on global X. Drawn as b, a 300×500 column would come out 300 wide
+    // with its bars spread 410: the steel outside its own concrete.
+    const plane: ViewPlane = { origin: [0, 0, n0.z], u: [1, 0, 0], v: [0, -1, 0] }
+
+    const segments: ColumnStackSegment[] = []
+    for (const m of chain) {
+      const sec = secById.get(m.section) as RectSection | undefined
+      if (!sec) continue
+      const row = rowById.get(m.id)
+      const a = nodeById.get(lower(m))!, b = nodeById.get(upper(m))!
+      segments.push({
+        mark: m.id, yBot: a.y, yTop: b.y,
+        face: sec.h ?? sec.b, depth: sec.b,
+        bars: Math.max(4, row?.bars ?? 4),
+        barDia: sec.barDia ?? 20, tieDia: sec.tieDia ?? 10,
+        loZone: row?.seismicLoZone,
+      })
+    }
+    if (!segments.length) continue
+
+    const foot = design.footings.find((f) => f.node === base)
+    const stackCages = cages.filter((c) => chain.some((m) => m.id === c.member)
+      || c.member === `F-${base}`)
+    const grid = gridRef(n0.x, n0.z)
+    const mark = `C-${grid}`
     out.push({
-      mark: `C${seen.size}`,
-      detail: {
-        mark: `C${seen.size}`,
-        b: sec.b, h: sec.h ?? sec.b,
-        storey: storey > 0 ? storey : r.L,
-        beamDepth,
-        bars: Math.max(4, r.bars),
-        barDia: sec.barDia ?? 20,
-        tieDia: sec.tieDia ?? 10,
-        loZone: r.seismicLoZone,
-        lapB: r.lapB,
-        lapC: r.lapC,
-        sConf: r.seismicSConf ?? r.tieSpacingFinal,
-        sOut: r.seismicSOut ?? r.tieSpacingFinal,
-        cover: sec.cover ?? 40,
+      key: `column-detail-${mark.toLowerCase()}`,
+      mark, grid,
+      input: {
+        mark, grid, u: n0.x, plane, segments,
+        levels: levels
+          .filter((y) => y >= segments[0]!.yBot - 1e-6)
+          .map((y) => ({ y, label: floorOf(y) })),
+        ...(foot
+          ? { footing: { B: foot.design.B, Dc: foot.design.Dc / 1000, yTop: n0.y - foot.pedestal } }
+          : {}),
+        cages: stackCages,
       },
     })
   }
-  return out
+  return out.sort((a, b) => a.mark.localeCompare(b.mark))
 }
 
 // ── Slab opening details ────────────────────────────────────────────────────
