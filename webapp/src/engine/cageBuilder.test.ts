@@ -347,6 +347,43 @@ describe('joints and column laps, on the placed frame', () => {
     }
   })
 
+  it('hoops each joint band ONCE — the two columns that share it do not both fill it', () => {
+    // A floor joint is one band, and TWO columns have it: the column below at
+    // its top, the column above at its base. Both must CLEAR it, or a storey's
+    // ties run through the joint — and both were also FILLING it, so every
+    // joint hoop in a multi-storey frame was placed, drawn and billed twice.
+    // The column below owns it; the base band is filled only where no column
+    // continues down.
+    // keyed by the PLAN POSITION of the column line and the level, so two
+    // members of the same stack collide and two different stacks do not
+    const byLevel = new Map<string, string[]>()
+    for (const c of design.columns) {
+      const at = nodeOf(memOf(c.id).i)
+      for (const r of colOf(c.id).runs) {
+        if (r.role !== 'hoop') continue
+        const k = `${at.x.toFixed(3)},${at.z.toFixed(3)}@${r.path[0][1].toFixed(4)}`
+        byLevel.set(k, [...(byLevel.get(k) ?? []), c.id])
+      }
+    }
+    // no level of any column line carries hoops contributed by two members
+    for (const [k, members] of byLevel) {
+      expect(new Set(members).size, `${k} hooped by ${[...new Set(members)].join(' + ')}`).toBe(1)
+    }
+  })
+
+  it('still hoops the joint at a column TOP, roof included', () => {
+    // The fix must not trade a double for a hole: every column with a beam at
+    // its top keeps its band, at the roof as much as at a floor.
+    const topY = (id: string) => Math.max(...[memOf(id).i, memOf(id).j].map((n) => nodeOf(n).y))
+    const roof = Math.max(...design.columns.map((c) => topY(c.id)))
+    const roofCols = design.columns.filter((c) => Math.abs(topY(c.id) - roof) < 1e-9)
+    expect(roofCols.length).toBeGreaterThan(0)
+    for (const c of roofCols) {
+      const hoops = colOf(c.id).runs.filter((r) => r.role === 'hoop').map((r) => r.path[0][1])
+      expect(hoops.some((y) => y > roof - 1 && y < roof), `${c.id} roof joint`).toBe(true)
+    }
+  })
+
   it('leaves no joint unconfined anywhere in the frame', () => {
     // The gap is created from the depth of the beams framing in, so a column
     // with a beam at its top must come out with hoops.

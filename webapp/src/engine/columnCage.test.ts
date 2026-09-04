@@ -511,6 +511,26 @@ describe('the joint is not a hole in the cage', () => {
     expect(jointHoopLevels({ jointGaps: [], sConfined: 100 })).toEqual([])
     expect(jointHoopLevels({ sConfined: 100 })).toEqual([])
   })
+
+  it('fills only the bands it OWNS, while clearing every one it is given', () => {
+    // Clearing a band and hooping it are different questions. A floor joint is
+    // one band shared by two columns — the one below has it at its top, the one
+    // above at its base — and both must clear it or a storey's ties run through
+    // the joint. Only one may fill it, or the hoops are placed twice.
+    const two: [number, number][] = [[2.6, 3.0], [5.6, 6.0]]
+    const mine: [number, number][] = [[5.6, 6.0]]
+    const filled = jointHoopLevels({ jointGaps: two, jointFill: mine, sConfined: 100 })
+    expect(filled).toHaveLength(4)
+    for (const y of filled) { expect(y).toBeGreaterThan(5.6); expect(y).toBeLessThan(6.0) }
+    // and the ties still keep OUT of both bands — clearing is unchanged
+    const ties = tieLevels({ yBottom: 0, yTop: 6, lo: 0.5, sConfined: 100, sOutside: 200, jointGaps: two })
+    for (const [lo, hi] of two) {
+      expect(ties.some((y) => y > lo + 1e-9 && y < hi - 1e-9)).toBe(false)
+    }
+    // absent, every cleared band is filled — what a single-column caller wants
+    expect(jointHoopLevels({ jointGaps: two, sConfined: 100 })).toHaveLength(8)
+    expect(jointHoopLevels({ jointGaps: two, jointFill: [], sConfined: 100 })).toEqual([])
+  })
 })
 
 
