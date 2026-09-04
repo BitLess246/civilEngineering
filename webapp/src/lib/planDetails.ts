@@ -9,14 +9,11 @@ import type { PlanFooting } from '../engine/planRenderer'
 import type { FootingDetailInput } from '../engine/footingDetail'
 import type { SlabOpeningInput } from '../engine/slabOpening'
 import type { WallDetailInput } from '../engine/wallDetail'
-import type { BeamColumnJointInput, JointConfinement } from '../engine/beamColumnJoint'
 import type { SlabDirResult } from '../engine/slabDDM'
 import type { ColumnSchematicProps } from '../components/ColumnSchematic'
 import type { FrameElevationInput, ElevationMember } from '../engine/frameElevation'
 import type { ColumnStackDetailInput, ColumnStackSegment } from '../engine/columnStackDetail'
 import { elevationPlane, projectPoint, type RebarCage, type Vec3, type ViewPlane } from '../engine/rebarModel'
-import { cutCage, sliceCages, type CageCut } from '../engine/cageSection'
-import { tieSetLevels } from '../engine/columnStackDetail'
 import { stationZones } from '../engine/beamSection'
 
 export interface SoilInput { qAllow?: number; gammaSoil?: number; gammaConc?: number; H?: number }
@@ -123,6 +120,38 @@ export function footingDetailBundles(
   }
   return bundles
 }
+
+/**
+ * How a model names its own positions — the convention the framing plans'
+ * bubbles already use: a LETTERED line for the z ordinate, a NUMBERED one for
+ * the x, and floors counted up from the base.
+ *
+ * Shared, because two sheet sets name the same joint: the framing plan's bubbles
+ * and the column stack detail must agree about which position is A1, or the
+ * drawing set is describing two different buildings.
+ */
+export function modelGrid(model: StructuralModel): {
+  floorOf: (y: number) => string
+  gridRef: (x: number, z: number) => string
+  levels: number[]
+} {
+  const round6 = (v: number) => Math.round(v * 1e6) / 1e6
+  const levels = [...new Set(model.nodes.map((n) => round6(n.y)))].sort((a, b) => a - b)
+  const ORD = ['GROUND', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'SIXTH', 'SEVENTH',
+    'EIGHTH', 'NINTH', 'TENTH', 'ELEVENTH', 'TWELFTH']
+  const xs = [...new Set(model.nodes.map((n) => round6(n.x)))].sort((a, b) => a - b)
+  const zs = [...new Set(model.nodes.map((n) => round6(n.z)))].sort((a, b) => a - b)
+  return {
+    levels,
+    floorOf: (y) => {
+      const k = levels.indexOf(round6(y))
+      return k <= 0 ? 'BASE' : `${ORD[k - 1] ?? `${k}TH`} FLOOR`
+    },
+    gridRef: (x, z) =>
+      `${String.fromCharCode(65 + Math.max(0, zs.indexOf(round6(z))))}${1 + Math.max(0, xs.indexOf(round6(x)))}`,
+  }
+}
+
 
 /**
  * One detail PER COLUMN LINE — the whole stack, footing to top.
@@ -365,262 +394,10 @@ export function wallDetailBundles(design: StructureDesign): WallDetailBundle[] {
   return out
 }
 
-// ── Beam–column joints ──────────────────────────────────────────────────────
-
-export interface JointDetailBundle {
-  mark: string
-  node: string
-  /** Grid position of THIS joint — 'A1'. */
-  grid: string
-  /** The floor the joint sits at — 'SECOND FLOOR', or '' if it is off-grid. */
-  level: string
-  detail: BeamColumnJointInput
-}
-
-/**
- * One joint detail PER JOINT.
- *
- * The joint is the one piece of the frame neither member design looks at: the
- * beam sheet designs the beam, the column sheet the column, and §418.8 is about
- * the block they share. Everything here comes off the two schedule rows that
- * meet at the node — this adds no new analysis.
- *
- * `Vcol` is deliberately NOT passed. §418.8.2.1 allows the column shear to be
- * subtracted from the joint demand, but taking a credit the schedule cannot
- * confirm would quietly weaken every joint on the sheet; omitting it is the
- * conservative side and it is stated in the notes.
- */
-/**
- * How a model names its own positions — the convention the framing plans'
- * bubbles already use: a LETTERED line for the z ordinate, a NUMBERED one for
- * the x, and floors counted up from the base.
- *
- * Shared, because two sheet sets name the same joint: the column stack detail
- * calls it C-A1 and the joint detail calls it J-A1@3.50, and if those two ever
- * disagreed about which position is A1 the drawing set would be describing two
- * different buildings.
- */
-export function modelGrid(model: StructuralModel): {
-  floorOf: (y: number) => string
-  gridRef: (x: number, z: number) => string
-  levels: number[]
-} {
-  const round6 = (v: number) => Math.round(v * 1e6) / 1e6
-  const levels = [...new Set(model.nodes.map((n) => round6(n.y)))].sort((a, b) => a - b)
-  const ORD = ['GROUND', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'SIXTH', 'SEVENTH',
-    'EIGHTH', 'NINTH', 'TENTH', 'ELEVENTH', 'TWELFTH']
-  const xs = [...new Set(model.nodes.map((n) => round6(n.x)))].sort((a, b) => a - b)
-  const zs = [...new Set(model.nodes.map((n) => round6(n.z)))].sort((a, b) => a - b)
-  return {
-    levels,
-    floorOf: (y) => {
-      const k = levels.indexOf(round6(y))
-      return k <= 0 ? 'BASE' : `${ORD[k - 1] ?? `${k}TH`} FLOOR`
-    },
-    gridRef: (x, z) =>
-      `${String.fromCharCode(65 + Math.max(0, zs.indexOf(round6(z))))}${1 + Math.max(0, xs.indexOf(round6(x)))}`,
-  }
-}
-
-export function jointDetailBundles(
-  model: StructuralModel, design: StructureDesign, cages: RebarCage[] = [],
-): JointDetailBundle[] {
-  const secById = new Map(model.sections.map((s) => [s.id, s]))
-  const memById = new Map(model.members.map((m) => [m.id, m]))
-  const nodeById = new Map(model.nodes.map((n) => [n.id, n]))
-  const beamRowById = new Map(design.beams.map((r) => [r.id, r]))
-  const isBeam = (role: string) => role === 'beam' || role === 'girder'
-
-  /** Beams framing into a node, with their plan directions. */
-  const beamsAt = (node: string) => model.members
-    .filter((m) => isBeam(m.role) && (m.i === node || m.j === node))
-    .map((m) => {
-      const a = nodeById.get(node), f = nodeById.get(m.i === node ? m.j : m.i)
-      const dx = a && f ? f.x - a.x : 0, dz = a && f ? f.z - a.z : 0
-      const len = Math.hypot(dx, dz) || 1
-      return { m, ux: dx / len, uz: dz / len }
-    })
-
-  const { floorOf, gridRef } = modelGrid(model)
-  const out: JointDetailBundle[] = []
-  for (const colRow of design.columns) {
-    const col = memById.get(colRow.id); if (!col) continue
-    const colSec = secById.get(col.section) as RectSection | undefined; if (!colSec) continue
-    // the joint is at the column's TOP node — where the beams frame in
-    const ni = nodeById.get(col.i), nj = nodeById.get(col.j)
-    if (!ni || !nj) continue
-    const node = ni.y >= nj.y ? col.i : col.j
-    const framing = beamsAt(node)
-    if (!framing.length) continue
-
-    // the deepest beam decides the detail; its own row carries the bar counts
-    const lead = framing.reduce((best, f) => {
-      const hb = (secById.get(f.m.section) as RectSection | undefined)?.h ?? 0
-      const hbest = (secById.get(best.m.section) as RectSection | undefined)?.h ?? 0
-      return hb > hbest ? f : best
-    })
-    const beamSec = secById.get(lead.m.section) as RectSection | undefined; if (!beamSec) continue
-    const beamRow = beamRowById.get(lead.m.id)
-    const topBars = Math.max(2, ...(beamRow?.sections ?? []).filter((s) => s.hogging).map((s) => s.design.bars))
-    const botBars = Math.max(2, ...(beamRow?.sections ?? []).filter((s) => !s.hogging).map((s) => s.design.bars))
-
-    // Confinement class — Table 418.8.4.3, from how many beams actually arrive.
-    const n = framing.length
-    const opposite = framing.some((f) => framing.some((g) => f !== g && f.ux * g.ux + f.uz * g.uz < -0.9))
-    const confinement: JointConfinement =
-      n >= 4 ? 'four-faces' : n === 3 ? 'three-faces' : n === 2 && opposite ? 'two-opposite' : 'other'
-    const interior = framing.some((f) => f !== lead && f.ux * lead.ux + f.uz * lead.uz < -0.9)
-    // §418.8.2.3 is conditioned on bars EXTENDING THROUGH the joint, so the
-    // bundler has to say, per direction, whether they do. A beam continuing
-    // past the column runs its bars through; one that stops there hooks them,
-    // and the 20db rule is not about those (§418.8.2.2 / §418.8.5 are).
-    const perpendicular = framing.filter((f) => Math.abs(f.ux * lead.ux + f.uz * lead.uz) < 0.1)
-    const spandrelThrough = perpendicular.some((f) =>
-      perpendicular.some((g) => f !== g && f.ux * g.ux + f.uz * g.uz < -0.9))
-    const spandrelBarDia = spandrelThrough
-      ? Math.max(...perpendicular.map((f) => (secById.get(f.m.section) as RectSection | undefined)?.barDia ?? 0))
-      : undefined
-    // ORIENTED TO THE BEAM, not to the world axes.
-    //
-    // `columnCage` lays a column section out with h across x and b across z, so
-    // which of the two is the depth PARALLEL to the beam's bars depends on which
-    // way the beam runs — and §418.8.2.3 (20db of joint depth parallel to bars
-    // passing through) and §418.8.4.3 (Aj = bj·h, bj measured across the beam)
-    // both ask for it in the beam's own frame. Taken as h and b regardless, a
-    // 300×500 column under a beam running along z was checked on 500 mm of
-    // depth it does not have that way, and drawn 500 wide when it is 300.
-    const secH = colSec.h ?? colSec.b
-    const alongX = Math.abs(lead.ux) >= Math.abs(lead.uz)
-    const colDepth = alongX ? secH : colSec.b        // parallel to the beam
-    const colWidth = alongX ? colSec.b : secH        // across it
-    const wideBeams = framing.every((f) => ((secById.get(f.m.section) as RectSection | undefined)?.b ?? 0) >= 0.75 * colWidth)
-
-    // WHICH FACES ARE FRAMED — the drawing shows this joint's own members, so
-    // it needs them per face rather than per type. The section is cut along the
-    // lead beam, so the sides of the cut are the sign of the cross product of
-    // the lead direction with each perpendicular beam's.
-    const side = (f: { ux: number; uz: number }) => lead.ux * f.uz - lead.uz * f.ux
-    const framedFaces = {
-      far: interior,
-      spandrelPos: perpendicular.some((f) => side(f) > 0.1),
-      spandrelNeg: perpendicular.some((f) => side(f) < -0.1),
-    }
-    // A column carries on above only if another column starts at this node.
-    const columnAbove = model.members.some((m) =>
-      m.role === 'column' && m.id !== col.id
-      && [m.i, m.j].includes(node)
-      && (nodeById.get(m.i === node ? m.j : m.i)?.y ?? -Infinity) > (nodeById.get(node)?.y ?? 0) + 1e-6)
-
-    // NAMED FOR THE JOINT IT IS, not for a type it belongs to.
-    //
-    // These used to be deduplicated by a key over the two sections, the bar
-    // counts and the confinement class, so a frame emitted two or three sheets
-    // called J1, J2 — and none of them was a joint anybody could point at. But
-    // what the sheet is ABOUT varies joint by joint: how many beams arrive
-    // (Table 418.8.4.3's confinement class), whether the near beam continues
-    // past the column so its bars run through (§418.8.2.3) or stops and hooks
-    // (§418.8.2.2), and whether a spandrel passes through the other way. A
-    // corner joint and an interior joint on the same two sections are different
-    // details, and the typical sheet showed one of them.
-    const at = nodeById.get(node)
-    const grid = at ? gridRef(at.x, at.z) : node
-
-    // ── the joint's steel, cut out of the placed cage ─────────────────────
-    //
-    // The plan is cut at the beam's TOP STEEL, because that is the level the
-    // plan section exists to answer for: whether the beam bars pass INSIDE the
-    // column verticals, and how the spandrel crosses them. Cut at mid-depth the
-    // plane would meet no longitudinal steel at all — a beam bar runs parallel
-    // to it.
-    //
-    // The frame is the BEAM's: u along the beam (the sheet's +x, towards the
-    // near beam) and v across it, chosen so that +v is the side the sheet draws
-    // at the bottom — the same sign `side()` gives `spandrelNeg` above, or the
-    // spandrel would be drawn on one side and its steel on the other.
-    const colCage = cages.find((c) => c.member === col.id)
-    const cageCut = at && colCage ? (() => {
-      const leadCage = cages.find((c) => c.member === lead.m.id)
-      const topSteel = (leadCage?.runs ?? [])
-        .filter((rr) => rr.role === 'top')
-        .map((rr) => Math.max(...rr.path.map((pt) => pt[1])))
-      // failing a cage to read it from, a bar diameter under the beam's top
-      const yBars = topSteel.length ? Math.max(...topSteel)
-        : at.y - ((colSec.cover ?? 40) + (colSec.tieDia ?? 10) + (beamSec.barDia ?? 16) / 2) / 1000
-      // TWO LEVELS, which is what a joint's plan section is.
-      //
-      // The column is cut at the joint's MID-DEPTH: its verticals and a joint
-      // hoop are there at every joint, which is not true higher up — at a ROOF
-      // joint the column bars turn in UNDER the beam's top steel and stop
-      // (measured: verticals to 2.920, top steel at 2.940), so a cut taken at
-      // the bar level passes over the column entirely and the plan came out
-      // with a hoop and no bars in it. The beam steel is sliced at its own
-      // level. Both share one plane ORIENTATION and plan origin, so the two
-      // land in one frame; only the height differs, and for a horizontal plane
-      // that does not touch the projected coordinates at all.
-      const yMid = at.y - (beamSec.h ?? beamSec.b) / 2000
-      const frame = (y: number): CageCut => {
-        const origin: Vec3 = [at.x, y, at.z]
-        return {
-          at: origin, normal: [0, 1, 0],
-          plane: { origin, u: [lead.ux, 0, lead.uz], v: [lead.uz, 0, -lead.ux] },
-        }
-      }
-      const cut = frame(yMid), barCut = frame(yBars)
-      const beamCages = framing
-        .map((f) => cages.find((c) => c.member === f.m.id))
-        .filter((c): c is RebarCage => !!c)
-      // The beams are SLICED, the column CUT. A beam's top bar runs along the
-      // plane and then hooks down out of it, so asking whether it lies in the
-      // plane drops exactly the bars entering the joint; a 50 mm slice keeps
-      // the straight length and lets the hook stop where it turns. The column
-      // is a true cut: its verticals cross the plane, and it wants its NEAREST
-      // hoop set and nothing else, which is what `cutCage` gives unasked.
-      const beam = beamCages.length
-        ? sliceCages(beamCages, barCut, 0.05) : undefined
-      const band: [number, number] = [at.y - (beamSec.h ?? beamSec.b) / 1000, at.y]
-      // The beam's own bar lines, as depths below the joint top — the section
-      // draws its hooked bars on these rather than at nominal cover.
-      const barLine = (role: 'top' | 'bottom') => {
-        const ys = (leadCage?.runs ?? []).filter((rr) => rr.role === role)
-          .map((rr) => role === 'top'
-            ? Math.max(...rr.path.map((pt) => pt[1]))
-            : Math.min(...rr.path.map((pt) => pt[1])))
-        return ys.length ? at.y - (role === 'top' ? Math.max(...ys) : Math.min(...ys)) : undefined
-      }
-      const top = barLine('top'), bottom = barLine('bottom')
-      return {
-        column: cutCage(colCage, cut),
-        ...(beam?.length ? { beam } : {}),
-        hoopDepths: tieSetLevels([colCage], band[0], band[1]).map((y) => at.y - y),
-        ...(top != null && bottom != null ? { beamBarDepths: { top, bottom } } : {}),
-      }
-    })() : undefined
-    // Grid line and elevation together — the two things that let a builder
-    // stand at the joint the sheet is drawing, and unique across the frame.
-    const mark = at ? `J-${grid}@${at.y.toFixed(2)}` : `J-${grid}`
-    out.push({
-      mark, node, grid,
-      level: at ? floorOf(at.y) : '',
-      detail: {
-        mark,
-        colB: colWidth, colH: colDepth,
-        colBarDia: colSec.barDia ?? 20, colBars: Math.max(4, colRow.bars),
-        hoopDia: colSec.tieDia ?? 10,
-        hoopSpacing: colRow.seismicSConf ?? colRow.tieSpacingFinal,
-        beamB: beamSec.b, beamH: beamSec.h ?? beamSec.b,
-        beamBarDia: beamSec.barDia ?? 16,
-        topBars, botBars,
-        interior, confinement, wideBeams, framedFaces, columnAbove,
-        ...(cageCut ? { cage: cageCut } : {}),
-        // the near beam's bars pass through only if the beam itself continues
-        barsThrough: interior,
-        spandrelBarDia, spandrelThrough,
-        fc: colSec.fc, fy: colSec.fy, cover: colSec.cover ?? 40,
-      },
-    })
-  }
-  return out
-}
+// Beam–column joints had a bundler and a two-view sheet here. Both are gone:
+// the sheet drew a schematic of a joint rather than the joint the model has,
+// and the frame elevations and the 3D cage already show that steel from the
+// placed bars. `designBeamColumnJoint` keeps the §418.8 checks themselves.
 
 // ── Frame elevations ──────────────────────────────────────────────────────
 // One sheet per grid line per level: the whole line captured at that floor,
