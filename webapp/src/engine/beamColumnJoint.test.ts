@@ -596,6 +596,24 @@ describe('the sheet draws the CAGE where it is given one', () => {
     }
   })
 
+  it('ticks a bar that TURNS OUT of the cut, and not one that runs off the sheet', () => {
+    // A hook turns down, square to a plan, so it projects to a point: the bar
+    // simply stops — and so does a bar drawn to the edge of the view. The
+    // section shows the hook; the plan showed a line ending in the middle of a
+    // column with nothing to say which of the two it meant.
+    const ends = (pts: [number, number][]) => buildBeamColumnJointDetail({
+      ...good, cage: { ...cage, beam: [{ pts, dia: 20, role: 'top', mark: 'T1', offset: 0 }] },
+    }).primitives.filter((p): p is Extract<PlanPrimitive, { kind: 'line' }> =>
+      p.kind === 'line' && p.stroke === STEEL && p.width === 1.4)
+    // a bar that stops 0.05 short of the column centre — hooked
+    const hooked = ends([[-0.05, 0.09], [6, 0.09]])
+    // …and one that crosses the whole window, so both ends are the view's
+    const through = ends([[-6, 0.09], [6, 0.09]])
+    expect(hooked.length).toBeGreaterThan(through.length)
+    // the tick is square to the bar it ends
+    for (const t of hooked) expect(Math.abs(t.x2 - t.x1)).toBeLessThan(1e-9)
+  })
+
   it('draws the beam steel the cut found, clipped to the sheet', () => {
     const long: [number, number][] = [[-6, 0.09], [6, 0.09]]
     const d = buildBeamColumnJointDetail({

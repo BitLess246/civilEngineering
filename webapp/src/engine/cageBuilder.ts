@@ -118,6 +118,27 @@ export function buildStructureCages(
     const cs = secOf(col.id)
     return Math.min(cs.b, cs.h)
   }
+  /**
+   * How far from the column's centre a BEAM bar may sit and still pass inside
+   * that column's verticals, mm — `Infinity` where no column frames in.
+   *
+   * The column's own outer bar sits `cover + tie + Ø/2` in from its face; a
+   * beam bar has to clear it by half of each diameter. The narrow face is the
+   * one that governs whichever way the beam runs, which is the conservative
+   * reading and avoids asking the node which direction is which.
+   */
+  const beamBarRoomAt = (node: string, beamBarDia: number, alongX: boolean): number => {
+    const col = colAt(node)
+    if (!col) return Infinity
+    const cs = secOf(col.id)
+    // The face that matters is the one ACROSS the beam, and `columnCage` reads
+    // h across x and b across z — so a beam running along x is bounded by the
+    // column's b, and one running along z by its h. Taking the narrow face
+    // either way pulled a z-running beam's bars 100 mm too far in.
+    const face = alongX ? cs.b : (cs.h ?? cs.b)
+    const colBarOffset = face / 2 - ((cs.cover ?? 40) + (cs.tieDia ?? 10) + (cs.barDia ?? 20) / 2)
+    return Math.max(0, colBarOffset - ((cs.barDia ?? 20) + beamBarDia) / 2)
+  }
   /** Depth of the deepest beam framing into a node, m — the joint band. */
   const beamDepthAt = (node: string): number => {
     const list = beamsAtNode.get(node) ?? []
@@ -269,6 +290,8 @@ export function buildStructureCages(
     const ni = mem && pos.get(mem.i), nj = mem && pos.get(mem.j)
     if (!mem || !ni || !nj) { unplaced.push(b.id); continue }
     const sec = secOf(b.id)
+    /** Which way this beam runs in plan — the column face across it depends on it. */
+    const beamAlongX = Math.abs(nj.x - ni.x) >= Math.abs(nj.z - ni.z)
     const sag = b.sections.filter((s) => !s.hogging)
     const hog = b.sections.filter((s) => s.hogging)
     // WHICH SPACING GOES WHERE — positionally, not by extremes.
@@ -331,6 +354,11 @@ export function buildStructureCages(
       splice: beamSplice,
       mark: b.id, L: b.L,
       colBLeft: colWidthAt(mem.i), colBRight: colWidthAt(mem.j),
+      // The bars have to fit THROUGH both joints, so the tighter column wins.
+      maxBarOffset: Math.min(
+        beamBarRoomAt(mem.i, sec.barDia, beamAlongX),
+        beamBarRoomAt(mem.j, sec.barDia, beamAlongX),
+      ),
       b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, stirrupDia: sec.tieDia,
       topBars: Math.max(0, ...hog.map((s) => s.design.bars)),
       botBars: Math.max(0, ...sag.map((s) => s.design.bars)),

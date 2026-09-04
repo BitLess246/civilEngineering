@@ -384,6 +384,61 @@ describe('joints and column laps, on the placed frame', () => {
     }
   })
 
+  it('passes the beam\'s bars INSIDE the column\'s verticals', () => {
+    // Every joint sheet carries the note "BEAM BARS running in, INSIDE the
+    // column bars", and no cage enforced it. Measured on this frame before the
+    // fix: the 300-wide beam put its outer top bar at |z| = 90.0 and the 300
+    // column put its outer vertical at |z| = 90.0 — two ⌀20 bars on one line.
+    const zAt = (path: readonly (readonly [number, number, number])[], y: number) => {
+      for (let k = 1; k < path.length; k++) {
+        const a = path[k - 1]!, b = path[k]!
+        if ((a[1] - y) * (b[1] - y) <= 0 && Math.abs(b[1] - a[1]) > 1e-9) {
+          const t = (y - a[1]) / (b[1] - a[1])
+          return a[2] + (b[2] - a[2]) * t
+        }
+      }
+      return null
+    }
+    for (const b of design.beams) {
+      const mem = memOf(b.id)
+      const ni = nodeOf(mem.i), nj = nodeOf(mem.j)
+      if (Math.abs(nj.x - ni.x) < Math.abs(nj.z - ni.z)) continue   // x-running only
+      const beam = cages.find((c) => c.member === b.id)!
+      const mains = beam.runs.filter((r) => r.role === 'top' || r.role === 'bottom')
+      if (!mains.length) continue
+      const beamZ = Math.max(...mains.map((r) => Math.abs(r.path[0]![2])))
+      // the column under this beam's end, cut where the beam frames in
+      const col = cages.find((c) => {
+        const m = model.members.find((x) => x.id === c.member)
+        return !!m && m.role === 'column' && (m.i === mem.i || m.j === mem.i)
+          && Math.max(nodeOf(m.i).y, nodeOf(m.j).y) === ni.y
+      })
+      if (!col) continue
+      const zs = col.runs.filter((r) => r.role === 'vertical')
+        .map((r) => zAt(r.path, ni.y - 0.25)).filter((z): z is number => z != null)
+      if (!zs.length) continue
+      const colZ = Math.max(...zs.map(Math.abs))
+      const dia = 20 / 1000                                    // both ⌀20 here
+      expect(beamZ, `${b.id} against its column`).toBeLessThanOrEqual(colZ - dia + 1e-9)
+    }
+  })
+
+  it('leaves a beam its own cover where the column is wide enough', () => {
+    // The clearance is the column face ACROSS the beam, and `columnCage` reads
+    // h across x and b across z — so the z-running beams here are bounded by
+    // the column's 500 face, which is no bound at all, and they keep the cover
+    // they were designed to.
+    const zBeam = design.beams.find((b) => {
+      const m = memOf(b.id)
+      return Math.abs(nodeOf(m.j).z - nodeOf(m.i).z) > Math.abs(nodeOf(m.j).x - nodeOf(m.i).x)
+    })!
+    const cage = cages.find((c) => c.member === zBeam.id)!
+    const own = section.b / 2 - (section.cover + section.tieDia + section.barDia / 2)
+    const across = Math.max(...cage.runs.filter((r) => r.role === 'top')
+      .map((r) => Math.abs(r.path[0]![0]) * 1000))
+    expect(across).toBeCloseTo(own, 6)
+  })
+
   it('leaves no joint unconfined anywhere in the frame', () => {
     // The gap is created from the depth of the beams framing in, so a column
     // with a beam at its top must come out with hoops.
