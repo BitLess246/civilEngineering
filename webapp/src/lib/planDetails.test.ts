@@ -278,6 +278,52 @@ describe('planDetails — beam–column joints', () => {
     }
   })
 
+  it('cuts the joint out of the PLACED cage rather than describing it', () => {
+    const { cages } = buildStructureCages(model, design)
+    const bundles = jointDetailBundles(model, design, cages)
+    expect(bundles.length).toBeGreaterThan(0)
+    for (const b of bundles) {
+      const c = b.detail.cage!
+      expect(c).toBeDefined()
+      // The transverse steel is the cage's OWN hoop — its 135° returns and its
+      // cross ties — not a rectangle at cover. A 300×500 column here carries a
+      // perimeter hoop AND a cross tie, and the rectangle was neither.
+      expect(c.column.ties.length).toBeGreaterThan(1)
+      expect(c.column.ties.every((t) => t.role === 'hoop' || t.role === 'tie')).toBe(true)
+      // …and the bars are the cage's bars, at the cage's own count
+      expect(c.column.bars.length).toBeGreaterThan(3)
+      expect(c.column.bars.every((x) => x.role === 'vertical')).toBe(true)
+      // the hoops through the joint are LEVELS the cage placed, inside the band
+      expect(c.hoopDepths!.length).toBeGreaterThan(0)
+      for (const d of c.hoopDepths!) {
+        expect(d).toBeGreaterThan(0)
+        expect(d).toBeLessThan(b.detail.beamH / 1000)
+      }
+      // the beam's steel arrives as sliced pieces, mains among them
+      expect(c.beam!.some((t) => t.role === 'top')).toBe(true)
+    }
+  })
+
+  it('places the cut steel INSIDE the column it is cut from', () => {
+    // The cut arrives in the beam's frame — u along the beam, v across — and
+    // the sheet draws the column colH along u by colB across v. Get the two
+    // frames out of step and the cage lands outside its own concrete.
+    const { cages } = buildStructureCages(model, design)
+    for (const b of jointDetailBundles(model, design, cages)) {
+      const halfU = b.detail.colH / 2000, halfV = b.detail.colB / 2000
+      for (const bar of b.detail.cage!.column.bars) {
+        expect(Math.abs(bar.u)).toBeLessThan(halfU)
+        expect(Math.abs(bar.v)).toBeLessThan(halfV)
+      }
+      for (const t of b.detail.cage!.column.ties) {
+        for (const [u, v] of t.pts) {
+          expect(Math.abs(u)).toBeLessThan(halfU)
+          expect(Math.abs(v)).toBeLessThan(halfV)
+        }
+      }
+    }
+  })
+
   it('carries geometry off the two sections that meet', () => {
     const bundles = jointDetailBundles(model, design)
     expect(bundles.length).toBeGreaterThan(0)

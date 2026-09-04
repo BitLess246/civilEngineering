@@ -15,6 +15,8 @@ import type { ColumnSchematicProps } from '../components/ColumnSchematic'
 import type { FrameElevationInput, ElevationMember } from '../engine/frameElevation'
 import type { ColumnStackDetailInput, ColumnStackSegment } from '../engine/columnStackDetail'
 import { elevationPlane, projectPoint, type RebarCage, type Vec3, type ViewPlane } from '../engine/rebarModel'
+import { cutCage, sliceCages, type CageCut } from '../engine/cageSection'
+import { tieSetLevels } from '../engine/columnStackDetail'
 import { stationZones } from '../engine/beamSection'
 
 export interface SoilInput { qAllow?: number; gammaSoil?: number; gammaConc?: number; H?: number }
@@ -420,7 +422,9 @@ export function modelGrid(model: StructuralModel): {
   }
 }
 
-export function jointDetailBundles(model: StructuralModel, design: StructureDesign): JointDetailBundle[] {
+export function jointDetailBundles(
+  model: StructuralModel, design: StructureDesign, cages: RebarCage[] = [],
+): JointDetailBundle[] {
   const secById = new Map(model.sections.map((s) => [s.id, s]))
   const memById = new Map(model.members.map((m) => [m.id, m]))
   const nodeById = new Map(model.nodes.map((n) => [n.id, n]))
@@ -520,6 +524,77 @@ export function jointDetailBundles(model: StructuralModel, design: StructureDesi
     // details, and the typical sheet showed one of them.
     const at = nodeById.get(node)
     const grid = at ? gridRef(at.x, at.z) : node
+
+    // ── the joint's steel, cut out of the placed cage ─────────────────────
+    //
+    // The plan is cut at the beam's TOP STEEL, because that is the level the
+    // plan section exists to answer for: whether the beam bars pass INSIDE the
+    // column verticals, and how the spandrel crosses them. Cut at mid-depth the
+    // plane would meet no longitudinal steel at all — a beam bar runs parallel
+    // to it.
+    //
+    // The frame is the BEAM's: u along the beam (the sheet's +x, towards the
+    // near beam) and v across it, chosen so that +v is the side the sheet draws
+    // at the bottom — the same sign `side()` gives `spandrelNeg` above, or the
+    // spandrel would be drawn on one side and its steel on the other.
+    const colCage = cages.find((c) => c.member === col.id)
+    const cageCut = at && colCage ? (() => {
+      const leadCage = cages.find((c) => c.member === lead.m.id)
+      const topSteel = (leadCage?.runs ?? [])
+        .filter((rr) => rr.role === 'top')
+        .map((rr) => Math.max(...rr.path.map((pt) => pt[1])))
+      // failing a cage to read it from, a bar diameter under the beam's top
+      const yBars = topSteel.length ? Math.max(...topSteel)
+        : at.y - ((colSec.cover ?? 40) + (colSec.tieDia ?? 10) + (beamSec.barDia ?? 16) / 2) / 1000
+      // TWO LEVELS, which is what a joint's plan section is.
+      //
+      // The column is cut at the joint's MID-DEPTH: its verticals and a joint
+      // hoop are there at every joint, which is not true higher up — at a ROOF
+      // joint the column bars turn in UNDER the beam's top steel and stop
+      // (measured: verticals to 2.920, top steel at 2.940), so a cut taken at
+      // the bar level passes over the column entirely and the plan came out
+      // with a hoop and no bars in it. The beam steel is sliced at its own
+      // level. Both share one plane ORIENTATION and plan origin, so the two
+      // land in one frame; only the height differs, and for a horizontal plane
+      // that does not touch the projected coordinates at all.
+      const yMid = at.y - (beamSec.h ?? beamSec.b) / 2000
+      const frame = (y: number): CageCut => {
+        const origin: Vec3 = [at.x, y, at.z]
+        return {
+          at: origin, normal: [0, 1, 0],
+          plane: { origin, u: [lead.ux, 0, lead.uz], v: [lead.uz, 0, -lead.ux] },
+        }
+      }
+      const cut = frame(yMid), barCut = frame(yBars)
+      const beamCages = framing
+        .map((f) => cages.find((c) => c.member === f.m.id))
+        .filter((c): c is RebarCage => !!c)
+      // The beams are SLICED, the column CUT. A beam's top bar runs along the
+      // plane and then hooks down out of it, so asking whether it lies in the
+      // plane drops exactly the bars entering the joint; a 50 mm slice keeps
+      // the straight length and lets the hook stop where it turns. The column
+      // is a true cut: its verticals cross the plane, and it wants its NEAREST
+      // hoop set and nothing else, which is what `cutCage` gives unasked.
+      const beam = beamCages.length
+        ? sliceCages(beamCages, barCut, 0.05) : undefined
+      const band: [number, number] = [at.y - (beamSec.h ?? beamSec.b) / 1000, at.y]
+      // The beam's own bar lines, as depths below the joint top — the section
+      // draws its hooked bars on these rather than at nominal cover.
+      const barLine = (role: 'top' | 'bottom') => {
+        const ys = (leadCage?.runs ?? []).filter((rr) => rr.role === role)
+          .map((rr) => role === 'top'
+            ? Math.max(...rr.path.map((pt) => pt[1]))
+            : Math.min(...rr.path.map((pt) => pt[1])))
+        return ys.length ? at.y - (role === 'top' ? Math.max(...ys) : Math.min(...ys)) : undefined
+      }
+      const top = barLine('top'), bottom = barLine('bottom')
+      return {
+        column: cutCage(colCage, cut),
+        ...(beam?.length ? { beam } : {}),
+        hoopDepths: tieSetLevels([colCage], band[0], band[1]).map((y) => at.y - y),
+        ...(top != null && bottom != null ? { beamBarDepths: { top, bottom } } : {}),
+      }
+    })() : undefined
     // Grid line and elevation together — the two things that let a builder
     // stand at the joint the sheet is drawing, and unique across the frame.
     const mark = at ? `J-${grid}@${at.y.toFixed(2)}` : `J-${grid}`
@@ -536,6 +611,7 @@ export function jointDetailBundles(model: StructuralModel, design: StructureDesi
         beamBarDia: beamSec.barDia ?? 16,
         topBars, botBars,
         interior, confinement, wideBeams, framedFaces, columnAbove,
+        ...(cageCut ? { cage: cageCut } : {}),
         // the near beam's bars pass through only if the beam itself continues
         barsThrough: interior,
         spandrelBarDia, spandrelThrough,

@@ -192,8 +192,10 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
   // many beams arrive, whether the near beam's bars run through or hook, what
   // confinement class Table 418.8.4.3 gives it — varies joint by joint, so a
   // corner and an interior joint on the same two sections are different
-  // details and a typical sheet could only show one of them.
-  jointDetailBundles(model, design).forEach((b, i) => {
+  // details and a typical sheet could only show one of them. Its two views are
+  // CUT from the same cages the elevations and the column details draw, so the
+  // hoop on the joint sheet is the hoop the column has.
+  jointDetailBundles(model, design, cages).forEach((b, i) => {
     const d = buildBeamColumnJointDetail(b.detail, { detailNo: String(i + 1), sheetRef: ref('Beam–column joint details') })
     out.push({
       key: `beam-column-joint-${slug(b.mark)}`, group: 'Beam–column joint details',

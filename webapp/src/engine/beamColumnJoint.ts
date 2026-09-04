@@ -43,6 +43,8 @@
 // Units: sections mm; forces kN; stresses MPa; drawing geometry m.
 // ─────────────────────────────────────────────────────────────────────────
 import type { PlanPrimitive, Drawing } from './planRenderer'
+import { cutPrimitives, type CageCutResult, type CutTie } from './cageSection'
+import { clipToBand } from './frameElevation'
 import { hookClearToFace, hookEmbedmentAvailable } from './devLength'
 import { GLYPH_W, wrapNote, measureBounds, notesBlock, titleBlock, leader } from './detailSheet'
 import { seeGeneralNotes } from './generalNotes'
@@ -243,6 +245,51 @@ export interface BeamColumnJointInput {
   lambda?: number
   /** Clear cover to the hoop, mm (default 40). */
   cover?: number
+  /**
+   * THE JOINT'S OWN STEEL, cut from the placed cage.
+   *
+   * Without it the two views are drawn from the numbers above — a hoop as a
+   * rectangle at cover, verticals spread evenly on four faces, joint hoops at
+   * the computed spacing. That is a description of a cage, not the cage: the
+   * frame's 8-⌀20 column carries a perimeter hoop, a DIAMOND tie and a cross
+   * tie, and a rectangle is none of them. Given the cut, every piece of steel
+   * on the sheet is the piece `cageBuilder` placed, `takeoff` weighs and the
+   * viewer paints.
+   *
+   * Kept optional because the check does not need it: `designBeamColumnJoint`
+   * is pure §418.8 arithmetic and a caller with no model still gets a sheet.
+   */
+  cage?: JointCageCut
+}
+
+/**
+ * The placed steel at one joint, as cut planes rather than as numbers.
+ *
+ * Coordinates are METRES RELATIVE TO THE JOINT CENTRE, in the beam's own
+ * frame: `u` runs along the beam (the sheet's +x, towards the near beam) and
+ * `v` across it (the sheet's +y, down the page). That is the frame both views
+ * are drawn in, so the sheet only has to translate.
+ */
+export interface JointCageCut {
+  /**
+   * A horizontal cut through the column at the level of the beam's TOP STEEL —
+   * the level the plan section exists to show, where the beam bars pass inside
+   * the column verticals. Its ties are the joint hoop set, its bars the column
+   * verticals.
+   */
+  column: CageCutResult
+  /**
+   * The beam steel lying in a SLICE about that cut — the top bars running in
+   * and the stirrup legs they pass. Sliced rather than cut because a bar that
+   * hooks down leaves the plane, and those are the bars the joint is about.
+   */
+  beam?: CutTie[]
+  /** Depths BELOW the top of the joint at which hoop sets sit, m — the levels
+   *  `columnCage` placed, not a spacing divided into the band. */
+  hoopDepths?: number[]
+  /** Depths below the top of the joint of the beam's own top and bottom bar
+   *  lines, m — where the section draws the bars that hook into the joint. */
+  beamBarDepths?: { top: number; bottom: number }
 }
 
 export interface BeamColumnJointResult {
@@ -505,9 +552,23 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
   brk(jx + ch + beamRun, jy - u * 0.3, jx + ch + beamRun, jy + bh + u * 0.3)
   if (far) brk(jx - beamRun, jy - u * 0.3, jx - beamRun, jy + bh + u * 0.3)
 
-  // column bars, both faces, running the full height drawn
+  // column bars, running the full height drawn.
+  //
+  // In elevation a section shows the two FACES, so the bars are taken at the
+  // extreme u of the cut — the real cover-to-cover spread of the cage, which a
+  // cranked or offset column does not read as `cover` on both sides.
   const colBarTail = Math.max(12 * i.colBarDia / 1000, u * 0.6)
-  for (const [x, dir] of [[jx + cov, 1], [jx + ch - cov, -1]] as const) {
+  const cutUs = i.cage?.column.bars.map((b) => b.u) ?? []
+  const faceXs: [number, 1 | -1][] = cutUs.length
+    ? [[jx + ch / 2 + Math.min(...cutUs), 1], [jx + ch / 2 + Math.max(...cutUs), -1]]
+    : [[jx + cov, 1], [jx + ch - cov, -1]]
+  // A tie is drawn BETWEEN the bars it ties, so where the cut has moved the
+  // verticals the ties follow them — drawn to the nominal cover instead, they
+  // stuck out past the very bars they restrain.
+  const [tieL, tieR] = cutUs.length
+    ? [faceXs[0]![0], faceXs[1]![0]] as const
+    : [jx + cov * 0.6, jx + ch - cov * 0.6] as const
+  for (const [x, dir] of faceXs) {
     P.push({ kind: 'line', x1: x, y1: colAbove ? colTop : jy + bh, x2: x, y2: jy + bh + colRun, stroke: REBAR, width: 1.5 })
     // At a ROOF joint the column stops here, so its bars are reinforcement
     // terminated in a joint: turned into the confined core, not run off the
@@ -516,7 +577,8 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
       // The turn sits just UNDER the beam's own top bars — where it is built,
       // and where it can be read: drawn on the beam's top bar line the two
       // coincide and the hook disappears into it.
-      const hookY = jy + cov + (i.beamBarDia + i.colBarDia) / 1000
+      const hookY = jy + (i.cage?.beamBarDepths?.top ?? cov)
+        + (i.beamBarDia + i.colBarDia) / 2000
       P.push({
         kind: 'path', stroke: REBAR, width: 1.8, cap: 'round', join: 'round',
         cmds: [
@@ -533,15 +595,24 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
   if (colAbove) hoopBands.push([jy - sCol / 2, jy - colRun, -1])
   for (const [y0, y1, dir] of hoopBands) {
     for (let y = y0; dir < 0 ? y > y1 : y < y1; y += dir * sCol) {
-      P.push({ kind: 'line', x1: jx + cov * 0.6, y1: y, x2: jx + ch - cov * 0.6, y2: y, stroke: REBAR, width: 0.8 })
+      P.push({ kind: 'line', x1: tieL, y1: y, x2: tieR, y2: y, stroke: REBAR, width: 0.8 })
     }
   }
-  // JOINT hoops — the column confinement continuing THROUGH the joint
+  // JOINT hoops — the column confinement continuing THROUGH the joint.
+  //
+  // At the levels the CAGE placed them, where there is a cage. The spacing
+  // `designBeamColumnJoint` computes is what the joint may have; `columnCage`
+  // divides the band and is what it does have, and a sheet that steps its own
+  // ladder can show a hoop the column has not got.
   const sJoint = Math.max(r.jointHoopSpacing, 40) / 1000
   const jointHoopYs: number[] = []
-  for (let y = jy + sJoint / 2; y < jy + bh; y += sJoint) jointHoopYs.push(y)
+  if (i.cage?.hoopDepths?.length) {
+    for (const d of i.cage.hoopDepths) if (d >= -1e-9 && d <= bh + 1e-9) jointHoopYs.push(jy + d)
+  } else {
+    for (let y = jy + sJoint / 2; y < jy + bh; y += sJoint) jointHoopYs.push(y)
+  }
   for (const y of jointHoopYs) {
-    P.push({ kind: 'line', x1: jx + cov * 0.6, y1: y, x2: jx + ch - cov * 0.6, y2: y, stroke: REBAR, width: 1.0 })
+    P.push({ kind: 'line', x1: tieL, y1: y, x2: tieR, y2: y, stroke: REBAR, width: 1.0 })
   }
   // beam hoops along each drawn beam
   const sBeam = sJoint
@@ -569,9 +640,15 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
   // reads as a closed loop, so they are separated by a bar diameter — the usual
   // convention for two bars that coincide in view.
   const hookSep = i.beamBarDia / 1000
+  // The bar LINES come from the cage where there is one — a beam's top steel
+  // sits where `beamCage` put it, which is not `cover` once there are two
+  // layers or a different stirrup. The HOOK on the end of them is still
+  // `devLength`'s: that is the §418.8.5.1 check the sheet exists to show, and
+  // it is shared with the beam elevation so one bar cannot carry two lengths.
+  const dTop = i.cage?.beamBarDepths?.top, dBot = i.cage?.beamBarDepths?.bottom
   for (const [yBar, dir, sx] of [
-    [jy + cov, 1, 0],
-    [jy + bh - cov, -1, hookSep],
+    [dTop != null ? jy + dTop : jy + cov, 1, 0],
+    [dBot != null ? jy + dBot : jy + bh - cov, -1, hookSep],
   ] as const) {
     P.push(r.terminated
       // hooked: in to 60 mm clear of the far face, then turned into the core
@@ -653,6 +730,15 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
   // straight through the vertical section above.
   const spanUp = spanPos ? spanRun : 0                  // spandrel above the plan
   const py = jy + bh + colRun + spanUp + u * 7.0
+  // The cut arrives in the beam's own frame, metres from the joint centre, and
+  // the plan draws that centre at the middle of the column box.
+  const planX = (uu: number) => jx + ch / 2 + uu
+  const planY = (vv: number) => py + cb / 2 + vv
+  const placedCut = (c: CageCutResult): CageCutResult => ({
+    station: c.station,
+    bars: c.bars.map((b) => ({ ...b, u: planX(b.u), v: planY(b.v) })),
+    ties: c.ties.map((t) => ({ ...t, pts: t.pts.map(([uu, vv]) => [planX(uu), planY(vv)] as [number, number]) })),
+  })
   P.push({ kind: 'text', x: jx + ch / 2, y: py - spanUp - u * 2.2, text: 'PLAN SECTION X-X', size: u * 1.5, anchor: 'middle', color: INK, weight: 700 })
   // the spandrels this joint really has, then the column, then the beams
   if (spanPos) {
@@ -671,41 +757,84 @@ export function buildBeamColumnJointDetail(i: BeamColumnJointInput, opts: JointD
     brk(jx - beamRun, py + (cb - bb) / 2 - u * 0.3, jx - beamRun, py + (cb + bb) / 2 + u * 0.3)
   }
 
-  // the column hoop, as a rounded rectangle inside the cover
-  P.push({
-    kind: 'rect', x: jx + cov, y: py + cov, w: ch - 2 * cov, h: cb - 2 * cov,
-    stroke: REBAR, width: 1.6, fill: 'none',
-  })
-  // column bars around that hoop
-  const nPerSide = Math.max(2, Math.ceil(Math.max(i.colBars, 4) / 4) + 1)
+  // ── the column's steel in the joint ─────────────────────────────────────
+  //
+  // Cut, where there is a cage to cut. The hoop drawn here is `runPolylines` of
+  // the hoop the cage bends — the 135° returns, the cross ties and the DIAMOND
+  // tie included — and the bars are where `perimeterBars` put them. Drawn from
+  // the numbers, this was a rectangle at cover with a fourth bar layout inside
+  // it, and the frame's own 8-⌀20 column has neither.
   const rBar = Math.max(i.colBarDia, 8) / 2000
-  for (let k = 0; k < nPerSide; k++) {
-    const f = nPerSide === 1 ? 0.5 : k / (nPerSide - 1)
-    for (const y of [py + cov, py + cb - cov]) {
-      P.push({ kind: 'circle', cx: jx + cov + (ch - 2 * cov) * f, cy: y, r: rBar, fill: REBAR, stroke: REBAR, width: 0.5 })
-    }
-    for (const x of [jx + cov, jx + ch - cov]) {
-      P.push({ kind: 'circle', cx: x, cy: py + cov + (cb - 2 * cov) * f, r: rBar, fill: REBAR, stroke: REBAR, width: 0.5 })
-    }
-  }
-  // BEAM BARS running in, INSIDE the column bars, hooked at 60 mm clear
-  for (const t of [0.26, 0.74]) {
-    const y = py + (cb - bb) / 2 + bb * t
+  if (i.cage) {
+    P.push(...cutPrimitives(placedCut(i.cage.column), {
+      bar: REBAR, tie: REBAR, tieWidth: 1.6, minBarRadius: rBar,
+    }))
+  } else {
     P.push({
-      kind: 'path', stroke: REBAR, width: 1.8, cap: 'round',
-      cmds: [
-        { c: 'M', x: jx + ch + beamRun * 0.96, y },
-        { c: 'L', x: r.terminated ? hookX : jx + throughEnd, y },
-      ],
+      kind: 'rect', x: jx + cov, y: py + cov, w: ch - 2 * cov, h: cb - 2 * cov,
+      stroke: REBAR, width: 1.6, fill: 'none',
     })
+    const nPerSide = Math.max(2, Math.ceil(Math.max(i.colBars, 4) / 4) + 1)
+    for (let k = 0; k < nPerSide; k++) {
+      const f = nPerSide === 1 ? 0.5 : k / (nPerSide - 1)
+      for (const y of [py + cov, py + cb - cov]) {
+        P.push({ kind: 'circle', cx: jx + cov + (ch - 2 * cov) * f, cy: y, r: rBar, fill: REBAR, stroke: REBAR, width: 0.5 })
+      }
+      for (const x of [jx + cov, jx + ch - cov]) {
+        P.push({ kind: 'circle', cx: x, cy: py + cov + (cb - 2 * cov) * f, r: rBar, fill: REBAR, stroke: REBAR, width: 0.5 })
+      }
+    }
   }
-  // beam hoops in plan — across the beam width
-  for (let x = jx + ch + sBeam / 2; x < jx + ch + beamRun; x += sBeam) {
-    P.push({ kind: 'line', x1: x, y1: py + (cb - bb) / 2 + cov * 0.4, x2: x, y2: py + (cb + bb) / 2 - cov * 0.4, stroke: REBAR, width: 0.8 })
+
+  // ── the beam bars running in ────────────────────────────────────────────
+  //
+  // From the cut too, and CLIPPED to the drawn window: a beam bar is six metres
+  // long and the sheet shows two of them. Every bar the beam really has, at the
+  // spacing it really has — the pair of lines at 26% and 74% of the width was
+  // the same two lines whether the beam carried 2 bars or 7.
+  const beamCut = i.cage?.beam
+  const winLo = jx + throughEnd, winHi = jx + ch + beamRun * 0.96
+  // …and to the plan's own window BOTH ways. The spandrel's bars run the other
+  // direction and are just as long: clipped in x alone they were drawn five
+  // metres up the page, off the top of the sheet.
+  const winTop = py - spanUp, winBot = py + cb + (spanNeg ? spanRun : 0)
+  if (beamCut?.length) {
+    for (const t of beamCut) {
+      const pts = t.pts.map(([u, v]) => [planX(u), planY(v)] as [number, number])
+      const main = t.role === 'top' || t.role === 'bottom' || t.role === 'side'
+      for (const inX of clipToBand(pts, winLo, winHi, 0)) {
+        for (const piece of clipToBand(inX, winTop, winBot, 1)) {
+          P.push({
+            kind: 'path', stroke: REBAR, width: main ? 1.8 : 0.8, cap: 'round', fill: 'none',
+            cmds: piece.map(([x, y], k) => ({ c: k === 0 ? 'M' : 'L', x, y } as const)),
+          })
+        }
+      }
+    }
+  } else {
+    for (const t of [0.26, 0.74]) {
+      const y = py + (cb - bb) / 2 + bb * t
+      P.push({
+        kind: 'path', stroke: REBAR, width: 1.8, cap: 'round',
+        cmds: [
+          { c: 'M', x: winHi, y },
+          { c: 'L', x: r.terminated ? hookX : winLo, y },
+        ],
+      })
+    }
   }
-  if (far) {
-    for (let x = jx - sBeam / 2; x > jx - beamRun; x -= sBeam) {
+  // beam hoops in plan — across the beam width. Only where the cut has not
+  // already drawn the real ones: a sliced stirrup is its own top leg, at the
+  // pitch the cage placed, and a ladder stepped beside it would be a second
+  // opinion about the same steel.
+  if (!beamCut?.length) {
+    for (let x = jx + ch + sBeam / 2; x < jx + ch + beamRun; x += sBeam) {
       P.push({ kind: 'line', x1: x, y1: py + (cb - bb) / 2 + cov * 0.4, x2: x, y2: py + (cb + bb) / 2 - cov * 0.4, stroke: REBAR, width: 0.8 })
+    }
+    if (far) {
+      for (let x = jx - sBeam / 2; x > jx - beamRun; x -= sBeam) {
+        P.push({ kind: 'line', x1: x, y1: py + (cb - bb) / 2 + cov * 0.4, x2: x, y2: py + (cb + bb) / 2 - cov * 0.4, stroke: REBAR, width: 0.8 })
+      }
     }
   }
   // spandrel hoops, in whichever spandrels are there

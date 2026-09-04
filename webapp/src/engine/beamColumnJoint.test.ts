@@ -524,6 +524,95 @@ describe('the joint sheet draws the joint that is there', () => {
   })
 })
 
+describe('the sheet draws the CAGE where it is given one', () => {
+  // A hand-made cut standing in for `cageBuilder`'s: a hoop that is NOT a
+  // rectangle at cover (it has the 135° return a real one has), a cross tie,
+  // four bars, and two hoop levels that are not the computed spacing.
+  const hoop: [number, number][] = [
+    [-0.2, -0.1], [0.2, -0.1], [0.2, 0.1], [-0.2, 0.1], [-0.2, -0.1], [-0.15, -0.05],
+  ]
+  const cage = {
+    column: {
+      station: 0.02,
+      bars: [
+        { u: -0.2, v: -0.1, dia: 20, role: 'vertical' as const, mark: 'V1' },
+        { u: 0.2, v: -0.1, dia: 20, role: 'vertical' as const, mark: 'V2' },
+        { u: 0.2, v: 0.1, dia: 20, role: 'vertical' as const, mark: 'V3' },
+        { u: -0.2, v: 0.1, dia: 20, role: 'vertical' as const, mark: 'V4' },
+      ],
+      ties: [
+        { pts: hoop, dia: 10, role: 'hoop' as const, mark: 'J1', offset: 0.02 },
+        { pts: [[0, -0.1], [0, 0.1]] as [number, number][], dia: 10, role: 'hoop' as const, mark: 'X1', offset: 0.03 },
+      ],
+    },
+    hoopDepths: [0.07, 0.33],
+    beamBarDepths: { top: 0.06, bottom: 0.44 },
+  }
+  const withCage = buildBeamColumnJointDetail({ ...good, cage })
+  const without = buildBeamColumnJointDetail(good)
+
+  it('drops the rectangle-at-cover and draws the hoop the cage bends', () => {
+    // The parametric plan drew ONE unfilled rect — the "hoop" — and the cut
+    // draws none, because a hoop is a polyline with hooks on it.
+    const openRects = (d: ReturnType<typeof buildBeamColumnJointDetail>) =>
+      d.primitives.filter((p): p is Extract<PlanPrimitive, { kind: 'rect' }> =>
+        p.kind === 'rect' && p.fill === 'none')
+    expect(openRects(without)).toHaveLength(1)
+    expect(openRects(withCage)).toHaveLength(0)
+    // and the drawn polyline IS the cut's, translated — same number of vertices
+    const paths = withCage.primitives.filter((p) => p.kind === 'path')
+    expect(paths.some((p) => p.kind === 'path' && p.cmds.length === hoop.length)).toBe(true)
+  })
+
+  it('puts the joint hoops at the levels the cage placed, not at the spacing', () => {
+    // §418.8.3.1 gives the spacing the joint MAY have; `columnCage` divides the
+    // band and is what it does have. 0.07 and 0.33 are neither of the levels a
+    // 250 mm ladder would step to in this 500 beam.
+    const inJoint = (d: ReturnType<typeof buildBeamColumnJointDetail>) =>
+      d.primitives.filter((p): p is Extract<PlanPrimitive, { kind: 'line' }> =>
+        p.kind === 'line' && p.y1 === p.y2 && p.y1 > 0 && p.y1 < good.beamH / 1000)
+        .map((p) => +p.y1.toFixed(4))
+    expect([...new Set(inJoint(withCage))].sort()).toEqual([0.07, 0.33])
+    expect([...new Set(inJoint(without))].sort()).not.toEqual([0.07, 0.33])
+  })
+
+  it('stands the section\'s verticals on the cut, and its ties between them', () => {
+    const ch = good.colH / 1000
+    // the cut's extreme u, placed about the column's centre
+    const want = [ch / 2 - 0.2, ch / 2 + 0.2]
+    const verticals = withCage.primitives.filter((p): p is Extract<PlanPrimitive, { kind: 'line' }> =>
+      p.kind === 'line' && p.x1 === p.x2 && Math.abs(p.y2 - p.y1) > 0.5)
+    for (const w of want) expect(verticals.some((v) => Math.abs(v.x1 - w) < 1e-9)).toBe(true)
+    // and no tie tick reaches outside the bars it ties — a tie drawn to the
+    // nominal cover stuck out past the very verticals it restrains
+    // …in the section, at or above the joint: the plan is laid out well below
+    // it and its spandrel hoops are horizontal steel too
+    const ticks = withCage.primitives.filter((p): p is Extract<PlanPrimitive, { kind: 'line' }> =>
+      p.kind === 'line' && p.stroke === STEEL && p.y1 === p.y2 && p.x1 < p.x2
+      && p.y1 <= good.beamH / 1000 + 1e-9)
+    for (const t of ticks) {
+      expect(t.x1).toBeGreaterThanOrEqual(want[0]! - 1e-9)
+      expect(t.x2).toBeLessThanOrEqual(want[1]! + 1e-9)
+    }
+  })
+
+  it('draws the beam steel the cut found, clipped to the sheet', () => {
+    const long: [number, number][] = [[-6, 0.09], [6, 0.09]]
+    const d = buildBeamColumnJointDetail({
+      ...good, cage: { ...cage, beam: [{ pts: long, dia: 20, role: 'top', mark: 'T1', offset: 0 }] },
+    })
+    // the six-metre bar is drawn, and does not run off the sheet
+    const drawn = d.primitives.filter((p) => p.kind === 'path'
+      && p.cmds.length === 2 && Math.abs(p.cmds[0]!.y - p.cmds[1]!.y) < 1e-9
+      && Math.abs(p.cmds[1]!.x - p.cmds[0]!.x) > 0.5)
+    expect(drawn.length).toBeGreaterThan(0)
+    for (const p of d.primitives) {
+      if (p.kind !== 'path') continue
+      for (const c of p.cmds) expect(c.x).toBeLessThanOrEqual(d.bounds.maxX + 1e-9)
+    }
+  })
+})
+
 describe('§415.4.2 — the transverse steel a joint needs', () => {
   // §418.4.4 sends an intermediate frame's joints straight to §415, and
   // §415.2.3 brings every moment-transferring joint under §415.4. Neither the
