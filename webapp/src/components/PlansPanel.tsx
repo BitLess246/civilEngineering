@@ -17,6 +17,20 @@ function download(name: string, svg: string): void {
   URL.revokeObjectURL(url)
 }
 
+/**
+ * One sheet.
+ *
+ * The design findings a sheet carries — a hook that does not develop, a bar the
+ * offset rule will not let anyone bend — are NOT printed under it here. They
+ * are `RebarCage.notes`, and the Display tab already lists them once each with
+ * every member they apply to; repeated per sheet they came out as a wall of
+ * amber under every elevation, the same three findings over and over, with the
+ * lap counts ("shown on the elevation") mixed in among them saying nothing the
+ * drawing does not.
+ *
+ * `PlanSheet.warnings` is still carried, because the sheet set is also the
+ * PDF's, and a caller that wants to collect them still can.
+ */
 function Sheet({ sheet, svg }: { sheet: PlanSheet; svg: string }): JSX.Element {
   return (
     <div className="space-y-1">
@@ -33,11 +47,6 @@ function Sheet({ sheet, svg }: { sheet: PlanSheet; svg: string }): JSX.Element {
         </div>
         <RawSvg svg={svg} className="overflow-x-auto p-3" />
       </div>
-      {sheet.warnings.length > 0 && (
-        <ul className="space-y-0.5 px-1 text-[11px] leading-snug text-amber-700">
-          {sheet.warnings.map((w) => <li key={w}>⚠ {w}</li>)}
-        </ul>
-      )}
     </div>
   )
 }

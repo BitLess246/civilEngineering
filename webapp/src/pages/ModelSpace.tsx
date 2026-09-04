@@ -4133,45 +4133,49 @@ export default function ModelSpace() {
                     there is nothing to draw until it has run.
                   </p>
                 )}
-                {/* Says "again" because designing legitimately clears the
+                {/* THE CONTROL STAYS, DISABLED — it does not disappear.
+                    An option that vanishes when it cannot be used tells you
+                    nothing: you cannot tell whether the app has no force
+                    diagrams, or has them somewhere else, or wants something
+                    from you first. The reinforcement-cage option beside it
+                    already greys out and says "design the structure first";
+                    this is the same, in the same place, for the same reason.
+
+                    Says "again" because designing legitimately CLEARS the
                     analysis: the pipeline re-applies the section materials and
                     rebuilds the loads, so the model it saves is not the one the
-                    earlier run solved. Without the second sentence this hint
-                    tells someone who has just pressed Analyze that they have
-                    not — which is how it read the first time it was measured. */}
-                {!govRes && (
-                  <p className="rounded border border-[#e3e1da] bg-[#faf9f6] px-2 py-1.5 text-[11px] leading-snug text-slate-500">
-                    Force diagrams need analysis results — run Analyze on the Analysis tab.
-                    Designing re-applies the section materials and rebuilds the loads, so
-                    the earlier run no longer describes this model; analyse again to draw them.
-                  </p>
-                )}
-                {govRes && (
-                  <div className="border-t border-[#eeece5] pt-2.5">
-                    <p className="mb-1 font-medium">Force diagram</p>
-                    <div className="flex flex-wrap items-center gap-1">
-                      <button type="button" onClick={() => setForceDiag(null)}
-                        className={`rounded px-1.5 py-0.5 font-semibold ${forceDiag === null ? 'bg-slate-200 text-slate-700' : 'text-slate-500 hover:text-slate-600'}`}>off</button>
-                      {(['N', 'Vy', 'Vz', 'My', 'Mz', 'T'] as DiagramComp[]).map((c) => (
-                        <button key={c} type="button" onClick={() => setForceDiag(c)}
-                          title={`Draw ${c} on every member (governing combo)`}
-                          className="rounded px-1.5 py-0.5 font-semibold transition"
-                          style={forceDiag === c
-                            ? { background: DIAG_COLOR[c], color: '#fff' }
-                            : { color: DIAG_COLOR[c] }}>
-                          {DIAG_LABEL[c]}
-                        </button>
-                      ))}
-                    </div>
-                    {forceDiag && (
-                      <label className="mt-1.5 flex items-center gap-1.5">
-                        <span className="text-slate-500">scale</span>
-                        <input type="range" min={0.3} max={3} step={0.1} value={forceDiagScale}
-                          onChange={(e) => setForceDiagScale(Number(e.target.value))} className="h-1 flex-1" />
-                      </label>
-                    )}
+                    earlier run solved. Without that, the hint tells someone who
+                    has just pressed Analyze that they have not — which is how
+                    it read the first time it was measured. */}
+                <div className="border-t border-[#eeece5] pt-2.5">
+                  <p className="mb-1 font-medium">Force diagram</p>
+                  <div className={`flex flex-wrap items-center gap-1 ${govRes ? '' : 'opacity-45'}`}>
+                    <button type="button" onClick={() => setForceDiag(null)} disabled={!govRes}
+                      className={`rounded px-1.5 py-0.5 font-semibold ${forceDiag === null ? 'bg-slate-200 text-slate-700' : 'text-slate-500 hover:text-slate-600'} disabled:cursor-not-allowed disabled:hover:text-slate-500`}>off</button>
+                    {(['N', 'Vy', 'Vz', 'My', 'Mz', 'T'] as DiagramComp[]).map((c) => (
+                      <button key={c} type="button" onClick={() => setForceDiag(c)} disabled={!govRes}
+                        title={govRes ? `Draw ${c} on every member (governing combo)` : 'Needs analysis results'}
+                        className="rounded px-1.5 py-0.5 font-semibold transition disabled:cursor-not-allowed"
+                        style={forceDiag === c
+                          ? { background: DIAG_COLOR[c], color: '#fff' }
+                          : { color: DIAG_COLOR[c] }}>
+                        {DIAG_LABEL[c]}
+                      </button>
+                    ))}
                   </div>
-                )}
+                  {!govRes && (
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      analyse the model first — designing rebuilds the loads, so analyse again after it
+                    </p>
+                  )}
+                  {govRes && forceDiag && (
+                    <label className="mt-1.5 flex items-center gap-1.5">
+                      <span className="text-slate-500">scale</span>
+                      <input type="range" min={0.3} max={3} step={0.1} value={forceDiagScale}
+                        onChange={(e) => setForceDiagScale(Number(e.target.value))} className="h-1 flex-1" />
+                    </label>
+                  )}
+                </div>
               </div>
             </Sec>
           </div>
