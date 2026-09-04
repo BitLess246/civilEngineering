@@ -65,12 +65,7 @@ export function PlansPanel({ model, design, soil }: { model: StructuralModel; de
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-[11px] leading-snug text-slate-500">
-          Structural plans drafted from the model — grid, framing marks &amp; schedule, foundation footings, and the
-          typical beam, column, footing, slab-opening and wall details. Export any sheet as SVG; the PDF report
-          carries the same set.
-        </p>
+      <div className="flex items-center justify-end">
         <label className="flex shrink-0 items-center gap-1.5 pl-3 text-[11px] text-slate-600">
           <input type="checkbox" checked={hooked} onChange={(e) => setHooked(e.target.checked)} />
           90° mat hooks

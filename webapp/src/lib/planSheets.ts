@@ -21,7 +21,6 @@ import { buildFootingDetail } from '../engine/footingDetail'
 import { buildColumnStackDetail } from '../engine/columnStackDetail'
 import { buildSlabOpeningDetail } from '../engine/slabOpening'
 import { buildWallCornerDetail, buildWallIntersectionDetail, buildWallJointDetail } from '../engine/wallDetail'
-import { buildBeamColumnJointDetail } from '../engine/beamColumnJoint'
 import { buildGeneralNotes, GENERAL_NOTES_REF, type GeneralNotesInput } from '../engine/generalNotes'
 import { FOOTING_COVER } from '../engine/cageBuilder'
 
@@ -30,7 +29,7 @@ import { FOOTING_COVER } from '../engine/cageBuilder'
 const SLAB_COVER = 20
 import {
   footingsForPlan, footingDetailBundles,
-  slabOpeningBundles, wallDetailBundles, jointDetailBundles, frameElevationBundles,
+  slabOpeningBundles, wallDetailBundles, frameElevationBundles,
   columnStackBundles,
   type SoilInput,
 } from './planDetails'
@@ -40,7 +39,7 @@ import { buildStructureCages } from '../engine/cageBuilder'
 export type SheetGroup =
   | 'General notes'
   | 'Plans' | 'Column details' | 'Footing details'
-  | 'Slab opening details' | 'Wall standard details' | 'Beam–column joint details'
+  | 'Slab opening details' | 'Wall standard details'
   | 'Frame elevations'
 
 export interface PlanSheet {
@@ -75,7 +74,6 @@ const REF: Record<SheetGroup, string> = {
   'Frame elevations': 'S-04',
   'Slab opening details': 'S-08',
   'Wall standard details': 'S-09',
-  'Beam–column joint details': 'S-10',
 }
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -181,26 +179,6 @@ export function detailSheets(model: StructuralModel, design: StructureDesign, so
       key: `slab-opening-${slug(b.mark)}`, group: 'Slab opening details',
       title: `${b.mark} — ${w}×${h} opening`,
       subtitle: `${d.result.x.eachSide}-⌀${b.detail.barDia} + ${d.result.y.eachSide}-⌀${b.detail.barDia} ea. side`,
-      warnings: d.designNotes,
-      drawing: d,
-    })
-  })
-
-  // The joint comes after the members that meet in it — the sheet only makes
-  // sense once the beam and column details have said what they are.
-  // ONE SHEET PER JOINT, not one per joint TYPE. What the sheet is about — how
-  // many beams arrive, whether the near beam's bars run through or hook, what
-  // confinement class Table 418.8.4.3 gives it — varies joint by joint, so a
-  // corner and an interior joint on the same two sections are different
-  // details and a typical sheet could only show one of them. Its two views are
-  // CUT from the same cages the elevations and the column details draw, so the
-  // hoop on the joint sheet is the hoop the column has.
-  jointDetailBundles(model, design, cages).forEach((b, i) => {
-    const d = buildBeamColumnJointDetail(b.detail, { detailNo: String(i + 1), sheetRef: ref('Beam–column joint details') })
-    out.push({
-      key: `beam-column-joint-${slug(b.mark)}`, group: 'Beam–column joint details',
-      title: `${d.title}${b.level ? ` · ${b.level}` : ''}`,
-      subtitle: `col ${b.detail.colB}×${b.detail.colH} · beam ${b.detail.beamB}×${b.detail.beamH} ⌀${b.detail.beamBarDia} · ${b.detail.confinement}`,
       warnings: d.designNotes,
       drawing: d,
     })

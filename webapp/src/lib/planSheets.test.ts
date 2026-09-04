@@ -39,7 +39,7 @@ describe('the sheet set', () => {
 
   it('covers every group once the model has one of each thing', () => {
     const groups = new Set(sheets.map((s) => s.group))
-    for (const g of ['Plans', 'Frame elevations', 'Column details', 'Footing details', 'Slab opening details', 'Wall standard details', 'Beam–column joint details']) {
+    for (const g of ['Plans', 'Frame elevations', 'Column details', 'Footing details', 'Slab opening details', 'Wall standard details']) {
       expect(groups.has(g as PlanSheet['group']), `missing ${g}`).toBe(true)
     }
   })
@@ -65,17 +65,13 @@ describe('the sheet set', () => {
     expect(plans.filter((s) => s.key === 'foundation-plan')).toHaveLength(1)
   })
 
-  it('carries one beam–column joint sheet per joint, after the members that meet in it', () => {
-    const joints = sheets.filter((s) => s.group === 'Beam–column joint details')
-    // one per framed node, each named for the joint it draws rather than for a
-    // "typical" type several joints were folded into
-    expect(joints).toHaveLength(model.nodes.filter((n) => n.y > 0).length)
-    for (const j of joints) expect(j.title).toMatch(/^BEAM–COLUMN JOINT — J-[A-Z]\d+@[\d.]+ · [A-Z]+ FLOOR$/)
-    expect(new Set(joints.map((s) => s.key)).size).toBe(joints.length)
-    // the joint sheet follows the beam and column details it depends on
-    const iJoint = sheets.findIndex((s) => s.group === 'Beam–column joint details')
-    expect(iJoint).toBeGreaterThan(sheets.findIndex((s) => s.group === 'Frame elevations'))
-    expect(iJoint).toBeGreaterThan(sheets.findIndex((s) => s.group === 'Column details'))
+  it('carries NO beam–column joint sheet', () => {
+    // Withdrawn: the two views were a schematic of a joint rather than the
+    // joint the model has, and the frame elevations and the 3D cage — which
+    // are drawn from the placed bars — already show the same steel in a form
+    // that agrees with itself.
+    expect(sheets.some((s) => s.key.startsWith('beam-column-joint'))).toBe(false)
+    expect(sheets.some((s) => /joint/i.test(s.group) && !/wall/i.test(s.group))).toBe(false)
   })
 
   it('carries three sheets per wall type — corner, intersection, joint', () => {
