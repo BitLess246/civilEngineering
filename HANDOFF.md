@@ -379,6 +379,24 @@ drafting ones:
 - The beam–column joint sheet and the Plans-tab paragraph were already gone
   (#693).
 
+## The report's worked solutions carry the schedule's own figures (Sep 2026)
+
+`modelPdf` drew a cross-section of its own beside each worked solution —
+130 lines of jsPDF laying bars out from a count, a cover and a stirrup Ø.
+It could show neither a lap, a crank, nor the stirrup set the cage placed,
+and it did not have to agree with the accordion or the drawing set about any
+of it. Gone. `lib/scheduleFigures.ts` now DECIDES the figures a schedule row
+expands into — the cut through the placed cage at the row's station with the
+row's callout under it, and the sheet the member is on (frame elevation or
+column stack) with the row's stretch washed — and both callers paint them:
+`components/modelSpace/figures` with `planToSvg`, `modelPdf` with
+`paintDrawing`. `buildModelReport` takes the cages as its last argument and
+puts `ReportSolution.figures` on every RC beam section and column; without
+cages there are no figures, which is what steel and timber get. `ReportSection`
+is gone with the drawing that used it. `buildModelPdf` returns the unsaved
+document (`generateModelPdf` is build + save), which is what a combined PDF
+needs and how the pages get looked at from a test.
+
 ## Continue from your phone / cloud (PC off)
 The local terminal session needs your PC on. To keep working without it:
 1. Open **claude.ai/code** (mobile browser) or the **Claude app**, same account.

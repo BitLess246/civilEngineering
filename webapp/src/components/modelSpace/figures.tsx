@@ -20,14 +20,17 @@
 // ─────────────────────────────────────────────────────────────────────────
 import { useMemo, type ReactNode } from 'react'
 import { planToSvg, type Drawing } from '../../engine/planRenderer'
-import { memberSectionDetail } from '../../engine/memberSection'
-import { buildFrameElevation } from '../../engine/frameElevation'
-import { buildColumnStackDetail } from '../../engine/columnStackDetail'
 import type { ColumnStackBundle, FrameElevationBundle } from '../../lib/planDetails'
+import {
+  beamSectionDrawing, columnSectionDrawing, beamElevationDrawing, columnElevationDrawing,
+  type BeamRowSection, type SectionRect, type ColumnRow,
+} from '../../lib/scheduleFigures'
 import type { StructuralModel } from '../../engine/model'
 import type { RebarCage } from '../../engine/rebarModel'
 import { type MemberDeflectionResult } from '../../engine/memberDeflection'
 import { f0, f1, f2 } from '../../lib/format'
+
+export type { BeamRowSection, SectionRect, SectionRowDesign } from '../../lib/scheduleFigures'
 
 /** §424.2 computed service deflection for one beam, integrated from its own
  *  D-only / L-only moment diagrams. Shown once per member in the accordion (and
@@ -93,47 +96,17 @@ export function SheetFigure({ drawing, width = 300 }: { drawing: Drawing; width?
   return <div className="[&>svg]:h-auto [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: svg }} />
 }
 
-/** The design numbers a section callout prints. Structural rather than the
- *  pipeline's own types, so this file stays free of the design pipeline. */
-export interface SectionRowDesign {
-  bars: number; sAdopt: number; legs: number; layers: number[]
-  comprBars: number; comprLayers: number[]
-}
-export interface BeamRowSection {
-  x: number; label: string; hogging: boolean
-  bf?: number; hf?: number; edge?: boolean; flangeKind?: string
-  design: SectionRowDesign & { flangeAction?: string }
-}
-export interface SectionRect { b: number; h: number; cover: number; barDia: number; tieDia: number }
-
 /**
  * The SECTION figure in a beam's schedule row — cut through that beam's cage,
- * at the station the row is about.
- *
- * The station is the row's own `x`, so the drawing follows the design along the
- * span: at a support it shows the top steel the hogging check sized, at midspan
- * the bottom steel, and where a bar laps it shows both pieces. A drawing made
- * from the bar COUNT could show none of that.
+ * at the station the row is about. Decided in `scheduleFigures`, which is
+ * where the PDF report gets the same cut with the same callout.
  */
 export function BeamCageSection({ model, cages, beam, sec, rect }: {
   model: StructuralModel; cages: RebarCage[]
   beam: { id: string; L: number }; sec: BeamRowSection; rect: SectionRect
 }): ReactNode {
-  const d = sec.design
-  const drawing = useMemo(() => memberSectionDetail(
-    model, cages, beam.id, beam.L > 0 ? sec.x / beam.L : 0.5,
-    {
-      title: `SECTION — ${sec.label}`,
-      notes: [
-        `${d.bars}-⌀${rect.barDia}${sec.hogging ? ' TOP' : ' BOT'}${d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}`,
-        ...(d.comprBars > 0 ? [`${d.comprBars}-⌀${rect.barDia} COMPR.`] : []),
-        d.sAdopt > 0
-          ? `STIRRUPS ${d.legs}L-⌀${rect.tieDia} @ ${Math.round(d.sAdopt)}`
-          : `STIRRUPS ⌀${rect.tieDia} @ MIN. (§409.6.3.1)`,
-        ...(sec.bf ? [`${sec.flangeKind ?? (sec.edge ? 'L' : 'T')}-BEAM · bf ${Math.round(sec.bf)}${d.flangeAction === 'true-T' ? ' · TRUE T' : ''}`] : []),
-      ],
-    },
-  ), [model, cages, beam.id, beam.L, sec, rect, d])
+  const drawing = useMemo(() => beamSectionDrawing(model, cages, beam, sec, rect),
+    [model, cages, beam, sec, rect])
   if (!drawing) return null
   return <SheetFigure drawing={drawing} />
 }
@@ -141,26 +114,13 @@ export function BeamCageSection({ model, cages, beam, sec, rect }: {
 /**
  * The SECTION figure in a column's schedule row — cut at mid-height, which is
  * the length between the confinement zones and so the column's general section.
- *
- * The tie set it draws is the one the cage placed there: the hoop AND the cross
- * ties threaded through it, at the spacing the design adopted. `ColumnSchematic`
- * drew a tie arrangement of its own, from a bar layout of its own, and neither
- * had to agree with the cage.
  */
 export function ColumnCageSection({ model, cages, col, rect }: {
   model: StructuralModel; cages: RebarCage[]
-  col: { id: string; bars: number; tieSpacingFinal: number; seismicSConf?: number; seismicSOut?: number }
+  col: ColumnRow
   rect: SectionRect
 }): ReactNode {
-  const drawing = useMemo(() => memberSectionDetail(model, cages, col.id, 0.5, {
-    title: 'SECTION — MID-HEIGHT',
-    notes: [
-      `${col.bars}-⌀${rect.barDia} VERT.`,
-      col.seismicSConf !== undefined
-        ? `TIES ⌀${rect.tieDia} @ ${Math.round(col.seismicSConf)} IN ℓo, @ ${Math.round(col.seismicSOut ?? col.tieSpacingFinal)} ELSEWHERE`
-        : `TIES ⌀${rect.tieDia} @ ${Math.round(col.tieSpacingFinal)}`,
-    ],
-  }), [model, cages, col, rect])
+  const drawing = useMemo(() => columnSectionDrawing(model, cages, col, rect), [model, cages, col, rect])
   if (!drawing) return null
   return <SheetFigure drawing={drawing} />
 }
@@ -188,10 +148,7 @@ export function BeamElevationFigure({ bundle, zone, label, width = 900 }: {
   label?: string
   width?: number
 }): ReactNode {
-  const drawing = useMemo(() => buildFrameElevation(
-    zone ? { ...bundle.input, highlight: [{ u0: zone[0], u1: zone[1], label }] } : bundle.input,
-    { sheetRef: 'S-04' },
-  ), [bundle, zone, label])
+  const drawing = useMemo(() => beamElevationDrawing(bundle, zone, label), [bundle, zone, label])
   return <SheetFigure drawing={drawing} width={width} />
 }
 
@@ -217,10 +174,7 @@ export function ColumnElevationFigure({ bundle, storey, label, width = 320 }: {
   label?: string
   width?: number
 }): ReactNode {
-  const drawing = useMemo(() => buildColumnStackDetail(
-    storey ? { ...bundle.input, highlight: { ...storey, label } } : bundle.input,
-    { sheetRef: 'S-06' },
-  ), [bundle, storey, label])
+  const drawing = useMemo(() => columnElevationDrawing(bundle, storey, label), [bundle, storey, label])
   return <SheetFigure drawing={drawing} width={width} />
 }
 

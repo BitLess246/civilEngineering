@@ -1107,7 +1107,11 @@ export default function ModelSpace() {
           // have to exist first; a gravity frame has no such clause and the
           // section is left out rather than printed empty.
           design.system === 'gravity' || !cageBuild ? null
-            : structureMomentRatios(model, design, cageBuild.cages)),
+            : structureMomentRatios(model, design, cageBuild.cages),
+          // The worked solutions carry the schedule's own figures — the cut
+          // through the placed cage and the sheet it is on — so the report
+          // shows the steel that gets built, not a section drawn from a count.
+          cageBuild?.cages ?? null),
         // The same sheet set the Plans tab renders — one list, two outputs.
         sheets: buildSheetSet(model, design, soil),
         fileName: `structure-report${lh.sheet ? '-' + lh.sheet.split('·')[0].trim() : ''}.pdf`,
