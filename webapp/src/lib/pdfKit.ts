@@ -137,7 +137,10 @@ export interface Sheet {
   signatures(preparedBy: string): void
   disclaimer(text: string): void
   /** Footer (and continuation-page header strip) on every page. Call last. */
-  pageFooters(docLabel: string, sheet: string, today: string, project: string): void
+  /** Footer (and continuation-page header strip) on every page. Call last.
+   *  `noStripOn` names pages that carry their own document header — the
+   *  first page of a document bound after another — and get no strip. */
+  pageFooters(docLabel: string, sheet: string, today: string, project: string, noStripOn?: ReadonlySet<number>): void
 }
 
 export interface BrandHeader {
@@ -408,11 +411,11 @@ export function createSheet(): Sheet {
       doc.text(doc.splitTextToSize(text, CONTENT_W), M, s.y)
     },
 
-    pageFooters(docLabel, sheet, today, project) {
+    pageFooters(docLabel, sheet, today, project, noStripOn) {
       const pages = doc.getNumberOfPages()
       for (let p = 1; p <= pages; p++) {
         doc.setPage(p)
-        if (p > 1) {
+        if (p > 1 && !noStripOn?.has(p)) {
           s.setF('mono', 'normal', 5.6, FAINT)
           doc.text(docLabel, M, M - 5)
           doc.text(`${sheet} · ${today}`, M + CONTENT_W, M - 5, { align: 'right' })

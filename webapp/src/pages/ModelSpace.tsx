@@ -99,6 +99,8 @@ import { TAB_GROUPS, UTILITY_TABS, type Tab } from '../components/modelSpace/tab
 import {
   BeamCageSection, BeamElevationFigure, BeamServiceability, ColumnCageSection, ColumnElevationFigure, WShapeSection,
 } from '../components/modelSpace/figures'
+import { ExportReportDialog, type ExportOptions } from '../components/ExportReportDialog'
+import { appendixAvailability, type AppendixInput } from '../lib/analysisAppendix'
 
 /** How the biaxial utilisation in the column schedule was arrived at. The
  *  column shows one number and it comes from Mux AND Muy, so the row says
@@ -384,6 +386,11 @@ export default function ModelSpace() {
   const [modelImg, setModelImg] = useState<string | null>(null)   // 3D snapshot for the PDF report
   const [lh, setLh] = useState<LetterheadState>(() => initialLetterhead(''))
   const [exporting, setExporting] = useState(false)               // PDF build in flight
+  const [exportOpen, setExportOpen] = useState(false)             // the export dialog
+  /** The sections the model had before the optimizer last ran — the
+   *  appendix's "initial vs final" table needs them, and the result carries
+   *  only the sections after. */
+  const [optBefore, setOptBefore] = useState<RectSection[] | null>(null)
   // Mix class for the take-off. It FOLLOWS the design f′c rather than sitting
   // at a hard-coded 'A' — a model designed for 28 MPa was being priced with a
   // 9-bag Class A mix, which is not the concrete that was designed. The user
@@ -900,6 +907,7 @@ export default function ModelSpace() {
 
   const optimize = () => {
     if (!model || busy || meshErrors) return
+    const before = model.sections
     run('optimize', {
       model: applyMaterial(model), soil, plan: footingPlan(), opts: anaOpts, tryBars, maxIter: 30,
     }).then((raw) => {
@@ -907,6 +915,7 @@ export default function ModelSpace() {
       if (!r) return
       save(r.model)        // adopt the optimised per-member sections
       setOpt(r)
+      setOptBefore(before)
       setDesign(r.design)
       requestAnimationFrame(captureModel)
     }).catch((e) => console.error('optimize failed', e))
@@ -1078,29 +1087,49 @@ export default function ModelSpace() {
     ]
   }
 
-  /** Direct PDF export — grabs a fresh 3D snapshot, assembles the report
-   *  payload and lazy-loads the jsPDF renderer (fonts stay out of the main
-   *  bundle). Replaces the old print-the-page path. */
-  const exportPdf = async () => {
+  /** Everything the analysis appendix can be built from — every result the
+   *  page holds, or null where it was never run. Assembled here so the export
+   *  dialog can grey out what is not there before anything is generated. */
+  const appendixInput = (): AppendixInput | null => model ? {
+    model, design, analysis, lateral: [...eCases, ...wCases],
+    seismic: seisXZ, wind, modal, rsa, drift, irregular,
+    pushover: po, biaxial: bx, nonlinear: nl, nonlinearHinge: nlHinge,
+    optimization: opt ? { result: opt, before: optBefore ?? undefined } : null,
+    cages: cageBuild?.cages ?? null,
+  } : null
+
+  /** Opens the export dialog. The gate is checked HERE, before the dialog,
+   *  for the same reason `run` has a backstop: there are TWO buttons that
+   *  reach this and a check that lives only on the buttons is one refactor
+   *  away from being bypassed. */
+  const openExport = () => {
     if (!model || !design || exporting) return
-    // Backstop, for the same reason `run` has one: there are TWO buttons that
-    // reach this (the workspace header and the results bar), and a check that
-    // lives only on the buttons is one refactor away from being bypassed. The
-    // second one was in fact missed on the first pass here.
     const v = gate.action('reports')
     if (!v.allowed) { setPlanBlock(v.message); return }
+    setExportOpen(true)
+  }
+
+  /** Direct PDF export — grabs a fresh 3D snapshot, assembles the report
+   *  payload and the appendix, and lazy-loads the jsPDF renderers (fonts
+   *  stay out of the main bundle). Writes whichever files the dialog asked
+   *  for: the design report, the analysis appendix, or the two bound as one. */
+  const exportPdf = async (o: ExportOptions) => {
+    if (!model || !design || exporting) return
     setExporting(true)
     try {
       let img = modelImg
       const c = document.querySelector('canvas') as HTMLCanvasElement | null
       if (c) { try { img = c.toDataURL('image/png') } catch { /* tainted — keep the last snapshot */ } }
-      const [{ buildModelReport }, { generateModelPdf }, { buildSheetSet }] = await Promise.all([
+      const [{ buildModelReport }, { generateModelPdf }, { buildSheetSet }, { buildAnalysisAppendix, analysisStatus }, appendixPdf] = await Promise.all([
         import('../lib/modelReport'), import('../lib/modelPdf'), import('../lib/planSheets'),
+        import('../lib/analysisAppendix'), import('../lib/appendixPdf'),
       ])
       const badges = ['NSCP 2015', 'ACI 318-14',
         ...(design.steelBeams.length || design.steelColumns.length ? ['AISC 360-16'] : []),
         ...(design.woodBeams.length || design.woodColumns.length ? ['NDS §3 / NSCP §6'] : [])]
-      await generateModelPdf({
+      const ai = appendixInput()!
+      const stem = `structure-report${lh.sheet ? '-' + lh.sheet.split('·')[0].trim() : ''}`
+      const reportInput = {
         lh, modelImg: img, badges,
         report: buildModelReport(model, design, reportProps(design), soil, irregular,
           // §418.6.3.2/§418.4.2.2 is measured on the PLACED bars, so the cages
@@ -1114,8 +1143,16 @@ export default function ModelSpace() {
           cageBuild?.cages ?? null),
         // The same sheet set the Plans tab renders — one list, two outputs.
         sheets: buildSheetSet(model, design, soil),
-        fileName: `structure-report${lh.sheet ? '-' + lh.sheet.split('·')[0].trim() : ''}.pdf`,
-      })
+        status: analysisStatus(ai),
+        sections: o.reportSections,
+      }
+      const appendixInputPdf = {
+        lh, badges, appendix: buildAnalysisAppendix(ai), include: o.appendixSections,
+      }
+      if (o.outputs.report) await generateModelPdf({ ...reportInput, fileName: `${stem}.pdf` })
+      if (o.outputs.appendix) appendixPdf.generateAnalysisAppendixPdf({ ...appendixInputPdf, fileName: `${stem}-analysis-appendix.pdf` })
+      if (o.outputs.combined) await appendixPdf.generateCombinedPdf(reportInput, appendixInputPdf, `${stem}-combined.pdf`)
+      setExportOpen(false)
     } catch (e) {
       console.error('PDF export failed', e)
     } finally { setExporting(false) }
@@ -1503,6 +1540,21 @@ export default function ModelSpace() {
       {/* Backstop message from the gated `run`. The buttons for off-plan
           features are already disabled, so reaching this means a path was
           missed — it is shown rather than swallowed so that shows up. */}
+      {exportOpen && (() => {
+        const ai = appendixInput()
+        const avail = ai ? appendixAvailability(ai) : { model: true, loading: true, analysis: false, modal: false, nonlinear: false, pushover: false, optimization: false }
+        return (
+          <ExportReportDialog
+            available={avail} busy={exporting}
+            unavailable={{
+              analysis: 'run Analyze (3D FEM)', modal: 'run the modal analysis', nonlinear: 'run a nonlinear time-history',
+              pushover: 'run a pushover', optimization: 'run Optimize',
+            }}
+            onClose={() => setExportOpen(false)}
+            onGenerate={(o) => void exportPdf(o)}
+          />
+        )
+      })()}
       {planBlock && (
         <div className="no-print mx-4 mt-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
           <span aria-hidden>🔒</span>
@@ -1560,7 +1612,7 @@ export default function ModelSpace() {
             </button>
           ))}
         </div>
-        <button type="button" onClick={() => void exportPdf()} disabled={!design || exporting || !reportsGate.allowed}
+        <button type="button" onClick={openExport} disabled={!design || exporting || !reportsGate.allowed}
           title={!reportsGate.allowed ? reportsGate.message
             : design ? 'Download the calculation report as a PDF' : 'Run “Design structure” in the Design tab first'}
           className="rounded-md border border-[#0f4c92] bg-white px-2.5 py-1 text-[11.5px] font-bold text-[#0f4c92] hover:bg-[#eaf1f9] disabled:opacity-40">
@@ -4306,7 +4358,7 @@ export default function ModelSpace() {
                 {label}
               </button>
             ))}
-            <button type="button" onClick={() => void exportPdf()} disabled={exporting || !reportsGate.allowed}
+            <button type="button" onClick={openExport} disabled={exporting || !reportsGate.allowed}
               title={reportsGate.allowed ? 'Download the calculation report as a PDF' : reportsGate.message}
               className="mb-1 ml-auto rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-bold text-white hover:bg-[#0d3f78] disabled:opacity-40">
               {exporting ? '⏳ Building PDF…' : '⎙ Export PDF report'}

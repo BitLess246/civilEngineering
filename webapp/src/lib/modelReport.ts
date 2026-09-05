@@ -326,14 +326,18 @@ export function buildModelReport(
       ]
     }),
   })
+  // Both moments and the biaxial method, as the on-screen schedule shows
+  // them: the utilisation is the BIAXIAL check and consumes Mux AND Muy, so a
+  // row that printed one moment beside it was showing half its demand.
   if (design.columns.length) tables.push({
-    title: 'RC column schedule',
-    head: ['Column', 'Section', 'Pu (kN)', 'Mu (kN·m)', 'Bars / ties', 'Util', 'Case'],
-    right: [2, 3, 5],
+    title: 'RC column schedule — biaxial check',
+    head: ['Column', 'Section', 'Pu (kN)', 'Mux (kN·m)', 'Muy (kN·m)', 'Bars / ties', 'Method', 'Util', 'Case'],
+    right: [2, 3, 4, 7],
     rows: design.columns.map((c) => {
       const cs = sectionFor(c.id)
-      return [c.id, cs?.name ?? '', f1(c.Pu), f1(c.Mu),
+      return [c.id, cs?.name ?? '', f1(c.Pu), f1(c.Mu), f1(c.Muy),
         `${c.bars}⌀${cs?.barDia} · ties @${Math.round(c.tieSpacingFinal)}${c.seismicSConf !== undefined ? ' (seismic)' : ''}`,
+        c.biaxialMethod,
         `${(c.util * 100).toFixed(0)}%`, c.gov ?? '']
     }),
   })
