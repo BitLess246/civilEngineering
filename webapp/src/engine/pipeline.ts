@@ -1973,6 +1973,7 @@ export async function optimizeStructureAsync(
     if (!design) return null
     ;({ m: work, d: design } = await detail(work, design, 'Optimize · initial'))
     const initialDesign = design   // pre-optimization state, for the report's initial-vs-final table
+    const initialModel = work      // its geometry, for the same table
     steps.push({ iter: 0, grown: 0, fails: countFails(design), ok: designOK(design) })
 
     let iter = 0
@@ -2145,7 +2146,7 @@ export async function optimizeStructureAsync(
         note: 'economy — shrink batches + fine-tune, every trial a full re-design' })
     }
 
-    return { design, model: work, steps, converged, stopReason, initialDesign }
+    return { design, model: work, steps, converged, stopReason, initialDesign, initialModel }
   } finally {
     pool.terminate()
   }
@@ -2317,6 +2318,9 @@ export interface OptimizeResult {
    *  trim) — the "initial" side of the report's initial-vs-final comparison.
    *  Captured before the loop and never mutated afterwards. */
   initialDesign?: StructureDesign
+  /** The model that produced `initialDesign` — the section geometry the
+   *  initial-vs-final table diffs against. Same object count rules. */
+  initialModel?: StructuralModel
 }
 
 /** Geometry delta between two settled models — section b/h/shape, slab and
@@ -2651,6 +2655,7 @@ export function optimizeStructure(
   if (!design) return null
   ;({ m: work, d: design } = detail(work, design, 'Optimize · initial'))
   const initialDesign = design   // pre-optimization state, for the report's initial-vs-final table
+  const initialModel = work      // its geometry, for the same table
   steps.push({ iter: 0, grown: 0, fails: countFails(design), ok: designOK(design) })
 
   // GROW: jump each failing section by the estimated steps needed to satisfy
@@ -2850,5 +2855,5 @@ export function optimizeStructure(
       note: 'economy — shrink batches + fine-tune, every trial a full re-design' })
   }
 
-  return { design, model: work, steps, converged, stopReason, initialDesign }
+  return { design, model: work, steps, converged, stopReason, initialDesign, initialModel }
 }

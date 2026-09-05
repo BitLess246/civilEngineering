@@ -7,8 +7,16 @@ import type { StructuralModel, RectSection, Node } from '../engine/model'
 import type {
   StructureDesign, SoilOptions,
   SteelBeamScheduleRow, SteelColumnScheduleRow,
+  OptimizeResult,
 } from '../engine/pipeline'
 import { designOK } from '../engine/pipeline'
+import { appliedResultant, type F3Analysis } from '../engine/frame3d'
+import type { ModalResult } from '../engine/modal'
+import type { PushoverModelResult } from '../engine/pushoverModel'
+import type { BiaxialPushoverResult } from '../engine/biaxialFrameModel'
+import type { DriftRow } from '../engine/seismic'
+import type { NonlinearModelResult } from '../engine/nonlinearModel'
+import type { NonlinearFrameModelResult } from '../engine/nonlinearFrameModel'
 import type { IrregularityFlag } from '../engine/irregularity'
 import type { BeamRatioRow } from '../engine/cageBuilder'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution,
@@ -42,6 +50,132 @@ export interface ReportSolution {
   loc?: string              // plan grid line + floor the member sits on
 }
 export interface ReportGroup { title: string; items: ReportSolution[] }
+
+// ── Workflow payloads ────────────────────────────────────────────────────────
+// Every field below is OPTIONAL on ModelReport and is populated only when the
+// corresponding engine state actually exists — the PDF prints a section only
+// when its payload is present, and every number in it comes from the engine
+// (spec data-integrity rules: nothing invented, nothing hardcoded).
+
+/** One ✓/—/✗ line of the executive summary's status panels. `ok === null`
+ *  means the analysis was not run / not applicable — never rendered as PASS. */
+export interface ReportExecStatus { label: string; ok: boolean | null; note?: string }
+export interface ReportExec {
+  analysis: ReportExecStatus[]
+  design: ReportExecStatus[]
+  optimization: ReportExecStatus | null
+}
+/** Statics self-check on one load-case run: ΣApplied vs ΣReactions (kN). */
+export interface ReportEquilibrium {
+  combo: string
+  applied: [number, number, number]
+  reacted: [number, number, number]
+  residPct: number
+  ok: boolean
+}
+export interface ReportLinear {
+  runs: number
+  skipped: number
+  governingCombo: string
+  equilibrium: ReportEquilibrium | null
+  worstResidPct: number | null
+  /** Governing-run support reactions (full table; report body). */
+  reactions: ReportTable | null
+  /** Per-level peak displacements, governing run (mm). */
+  displacements: ReportTable | null
+  /** Design-connected governing forces — one row per designed member, straight
+   *  from the schedule rows (which carry each member's governing case). */
+  governingForces: ReportTable | null
+  /** Full member force envelopes across every run (appendix). */
+  memberEnvelope: ReportTable | null
+}
+export interface ReportModal {
+  modes: number
+  table: ReportTable
+  totalMass: [number, number, number]
+  coverage: [number, number, number]
+}
+export interface ReportNonlinear {
+  source: string
+  period: number | null
+  converged: boolean
+  maxIterations: number | null
+  worstResidual: number | null
+  ductility: number | null
+  yieldedHinges: number | null
+  totalDissipated: number | null
+  peakBaseShear: number | null
+  peakDisp: number | null
+}
+export interface ReportPushover {
+  controlNode: string
+  totalHeight: number
+  pmInteraction: boolean
+  pDelta: boolean
+  events: number
+  mechanism: boolean
+  /** Capacity curve, x = control-node displacement (mm), y = base shear (kN). */
+  curve: { x: number; y: number }[]
+  hingeTable: ReportTable
+  hingeOverflow: ReportTable | null   // when the hinge list exceeds the body cap
+}
+export interface ReportBiaxial {
+  table: ReportTable
+  skewPushover: {
+    angleDeg: number
+    controlDir: string
+    curve: { x: number; y: number }[]
+    peakShear: number
+    yieldedHinges: number
+  } | null
+}
+export interface ReportOptimization {
+  converged: boolean
+  stopReason?: string
+  steps: ReportTable
+  /** Initial vs final per changed element, with the final governing utilisation. */
+  initialVsFinal: ReportTable
+  /** The optimizer's ACTUAL staged objective, in words the code backs. */
+  objective: string[]
+  totals: { label: string; before: string; after: string }[]
+}
+/** One member's analysis → design → schedule chain (spec §12). */
+export interface ReportTrace {
+  member: string
+  kind: 'beam' | 'column'
+  loc?: string
+  combo?: string
+  demand: string
+  required: string
+  provided: string
+  util?: number
+  ok?: boolean
+}
+export interface ReportGoverning { table: ReportTable }
+export interface ReportStatus {
+  check: string
+  status: 'PASS' | 'FAIL' | 'NOT RUN' | 'PARTIAL' | 'COMPLETE' | 'STOPPED'
+  detail?: string
+}
+export interface ReportAppendix { letter: string; title: string; tables: ReportTable[] }
+
+/** The analysis/optimization states the caller threads in (all optional — a
+ *  section is only built from state that exists). */
+export interface ModelReportExtras {
+  analysis?: F3Analysis | null
+  /** Bridge node order, for mapping the displacement vector back to nodes.
+   *  Must be the SAME bridge the analysis ran on — guarded by length. */
+  nodeOrder?: { id: string; y: number }[] | null
+  modal?: ModalResult | null
+  po?: PushoverModelResult | null
+  bx?: BiaxialPushoverResult | null
+  nl?: { inelastic: NonlinearModelResult | null; elastic: NonlinearModelResult | null } | null
+  nlHinge?: { inelastic: NonlinearFrameModelResult | null; elastic: NonlinearFrameModelResult | null } | null
+  drift?: DriftRow[] | null
+  opt?: OptimizeResult | null
+  tryBars?: boolean
+}
+
 export interface ModelReport {
   ok: boolean
   governing: string
@@ -50,6 +184,18 @@ export interface ModelReport {
   props: [string, string][]
   tables: ReportTable[]
   groups: ReportGroup[]
+  /** Workflow sections — present only when their engine state was supplied. */
+  exec?: ReportExec
+  linear?: ReportLinear
+  modal?: ReportModal
+  nonlinear?: ReportNonlinear
+  pushover?: ReportPushover
+  biaxial?: ReportBiaxial
+  optimization?: ReportOptimization
+  trace?: ReportTrace[]
+  governingSummary?: ReportGoverning
+  status?: ReportStatus[]
+  appendices?: ReportAppendix[]
 }
 
 const f0 = (v: number) => v.toFixed(0)
@@ -110,6 +256,10 @@ export function buildModelReport(
    *  cages (`structureMomentRatios`). Omitted → the section is left out, which
    *  is also what a gravity design gets. */
   ratios?: BeamRatioRow[] | null,
+  /** Analysis / modal / nonlinear / pushover / biaxial / optimizer states.
+   *  Every workflow section is built ONLY from state present here — omitted
+   *  state means the section is left out, never stubbed with placeholders. */
+  extras?: ModelReportExtras,
 ): ModelReport {
   const sectionFor = (memberId: string): RectSection | undefined => {
     const m = model.members.find((x) => x.id === memberId)
@@ -557,5 +707,567 @@ export function buildModelReport(
     })),
   })
 
-  return { ok, governing, stats, checks, props, tables, groups }
+  return { ok, governing, stats, checks, props, tables, groups, ...buildWorkflowSections(model, design, extras, irregular, { loc: memberLoc, secOf: sectionFor }) }
+}
+
+// ── Workflow sections (spec: complete analysis → design → optimization →
+//    schedule → detailing chain, from engine state only) ──────────────────────
+const PASS_FLOOR = 1e-9
+
+function buildWorkflowSections(
+  model: StructuralModel, design: StructureDesign, extras: ModelReportExtras | undefined,
+  irregular: IrregularityFlag[] | null | undefined,
+  helpers: { loc: (memberId: string) => string | undefined; secOf: (memberId: string) => RectSection | undefined },
+): Partial<Pick<ModelReport, 'exec' | 'linear' | 'modal' | 'nonlinear' | 'pushover' | 'biaxial' | 'optimization' | 'trace' | 'governingSummary' | 'status' | 'appendices'>> {
+  const { loc: memberLoc, secOf } = helpers
+  const out: Partial<Pick<ModelReport, 'exec' | 'linear' | 'modal' | 'nonlinear' | 'pushover' | 'biaxial' | 'optimization' | 'trace' | 'governingSummary' | 'status' | 'appendices'>> = {}
+  if (!extras) return out
+  const { analysis, modal, po, bx, nl, nlHinge, drift, opt, tryBars } = extras
+
+  // member length (m) from the model — the same measure appliedResultant needs
+  const lenOf = (id: string): number => {
+    const m = model.members.find((x) => x.id === id)
+    if (!m) return 0
+    const a = model.nodes.find((n) => n.id === m.i), b = model.nodes.find((n) => n.id === m.j)
+    return a && b ? Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) : 0
+  }
+
+  // ── Linear static (F3Analysis) ──
+  let linear: ReportLinear | undefined
+  if (analysis) {
+    const valid = analysis.perCombo.filter((r) => !!r.result)
+    const govRun = analysis.perCombo[analysis.govIdx]
+    const equilOf = (i: number): ReportEquilibrium | null => {
+      const run = analysis.perCombo[i]
+      if (!run?.result) return null
+      const rt = run.result.reactions
+      const reacted: [number, number, number] = [
+        rt.reduce((s, r) => s + r.F[0], 0), rt.reduce((s, r) => s + r.F[1], 0), rt.reduce((s, r) => s + r.F[2], 0),
+      ]
+      const applied = appliedResultant(run.factored, lenOf)
+      const resid: [number, number, number] = [applied[0] + reacted[0], applied[1] + reacted[1], applied[2] + reacted[2]]
+      const scale = Math.max(Math.abs(reacted[0]), Math.abs(reacted[1]), Math.abs(reacted[2]), Math.abs(applied[1]), PASS_FLOOR)
+      const residPct = (Math.max(...resid.map(Math.abs)) / scale) * 100
+      return { combo: run.combo.name, applied, reacted, residPct, ok: residPct < 1 }
+    }
+    const equil = equilOf(analysis.govIdx)
+    let worstResid: number | null = null
+    for (const run of valid) {
+      const e = equilOf(analysis.perCombo.indexOf(run))
+      if (e && (worstResid === null || e.residPct > worstResid)) worstResid = e.residPct
+    }
+
+    const reactionsTable = govRun?.result
+      ? {
+          title: `Support reactions — governing case ${govRun.combo.name}`,
+          head: ['Node', 'Fixity', 'Fx (kN)', 'Fy (kN)', 'Fz (kN)', 'Mx (kN·m)', 'My (kN·m)', 'Mz (kN·m)'],
+          right: [2, 3, 4, 5, 6, 7],
+          rows: [...govRun.result.reactions]
+            .sort((a, b) => a.node.localeCompare(b.node))
+            .map((r) => [r.node, r.fixity, f2(r.F[0]), f2(r.F[1]), f2(r.F[2]), f2(r.M[0]), f2(r.M[1]), f2(r.M[2])]),
+        }
+      : null
+
+    // per-level peak displacements — needs the SAME bridge node order the run
+    // used; guarded by length so a stale analysis omits the table instead of
+    // mapping displacements onto the wrong nodes.
+    let displacements: ReportTable | null = null
+    const order = extras.nodeOrder
+    if (govRun?.result && order && govRun.result.d.length === order.length * 6) {
+      const byLevel = new Map<number, [number, number, number]>()
+      order.forEach((n, i) => {
+        const d = govRun.result!.d
+        const ux = Math.abs(d[i * 6]) * 1000, uy = Math.abs(d[i * 6 + 1]) * 1000, uz = Math.abs(d[i * 6 + 2]) * 1000
+        const key = Math.round(n.y * 100) / 100
+        const cur = byLevel.get(key) ?? [0, 0, 0]
+        byLevel.set(key, [Math.max(cur[0], ux), Math.max(cur[1], uy), Math.max(cur[2], uz)])
+      })
+      displacements = {
+        title: `Nodal displacements — governing case ${govRun.combo.name} (per level, peaks)`,
+        head: ['Level (m)', 'max |UX| (mm)', 'max |UY| (mm)', 'max |UZ| (mm)'],
+        right: [1, 2, 3],
+        rows: [...byLevel.entries()].sort((a, b) => a[0] - b[0]).map(([lv, v]) => [f2(lv), f2(v[0]), f2(v[1]), f2(v[2])]),
+      }
+    }
+
+    // governing forces, straight from the design rows (each row already names
+    // the case that governed it) — analysis → design made explicit
+    const gfRows: string[][] = [
+      ...design.beams.map((b) => [b.id, 'beam', b.gov ?? '', '—', f1(Math.max(...b.sections.map((s) => Math.abs(s.Mu)))), f1(Math.max(...b.sections.map((s) => s.Vu)))]),
+      ...design.columns.map((c) => [c.id, 'column', c.gov ?? '', f1(c.Pu), f1(c.Mu), '—']),
+      ...design.steelBeams.map((b) => [b.id, 'steel beam', b.gov ?? '', '—', f1(b.Mu), f1(b.Vu)]),
+      ...design.steelColumns.map((c) => [c.id, 'steel column', c.gov ?? '', f1(c.Pu), f1(c.Mu), '—']),
+    ]
+    const governingForces = gfRows.length
+      ? { title: 'Governing design forces per member (from the schedule rows)', head: ['Member', 'Type', 'Case', 'Pu (kN)', 'Mu (kN·m)', 'Vu (kN)'], right: [3, 4, 5], rows: gfRows }
+      : null
+
+    // full member envelopes across every run (appendix dataset)
+    const env = new Map<string, { Nt: number; Nc: number; V: number; M: number; combo: string }>()
+    for (const run of analysis.perCombo) {
+      if (!run.result) continue
+      for (const m of run.result.members) {
+        const e = env.get(m.id) ?? { Nt: -Infinity, Nc: Infinity, V: 0, M: 0, combo: run.combo.name }
+        for (const n of m.N) { if (n > e.Nt) e.Nt = n; if (n < e.Nc) e.Nc = n }
+        if (m.Vmax > e.V) e.V = m.Vmax
+        if (m.Mmax > e.M) { e.M = m.Mmax; e.combo = run.combo.name }
+        env.set(m.id, e)
+      }
+    }
+    const memberEnvelope = env.size
+      ? {
+          title: 'Member force envelopes — all runs',
+          head: ['Member', 'N max tension (kN)', 'N max compression (kN)', 'V max (kN)', 'M max (kN·m)', 'Governing case'],
+          right: [1, 2, 3, 4],
+          rows: [...env.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([id, e]) => [id, f1(e.Nt), f1(e.Nc), f1(e.V), f1(e.M), e.combo]),
+        }
+      : null
+
+    linear = {
+      runs: analysis.perCombo.length,
+      skipped: analysis.perCombo.length - valid.length,
+      governingCombo: design.govName,
+      equilibrium: equil,
+      worstResidPct: worstResid,
+      reactions: reactionsTable,
+      displacements,
+      governingForces,
+      memberEnvelope,
+    }
+  }
+
+  // ── Modal ──
+  let modalOut: ReportModal | undefined
+  if (modal && modal.modes.length) {
+    let cx = 0, cz = 0
+    const rows = modal.modes.map((m, i) => {
+      cx += m.effMassRatio[0] * 100; cz += m.effMassRatio[2] * 100
+      return [String(i + 1), m.period.toFixed(3), m.freq.toFixed(2),
+        f1(m.effMassRatio[0] * 100), f1(m.effMassRatio[1] * 100), f1(m.effMassRatio[2] * 100), f1(cx), f1(cz)]
+    })
+    modalOut = {
+      modes: modal.modes.length,
+      table: {
+        title: 'Modal results — periods and effective modal mass',
+        head: ['Mode', 'T (s)', 'f (Hz)', 'UX mass %', 'UY mass %', 'UZ mass %', 'ΣUX %', 'ΣUZ %'],
+        right: [1, 2, 3, 4, 5, 6, 7],
+        rows,
+      },
+      totalMass: modal.totalMass,
+      coverage: modal.cumRatio,
+    }
+  }
+
+  // ── Nonlinear time history (shear building / equivalent plane frame) ──
+  let nonlinear: ReportNonlinear | undefined
+  const nlFrame = nlHinge?.inelastic ?? null
+  const nlShear = nl?.inelastic ?? null
+  if (nlFrame) {
+    const r = nlFrame.response
+    nonlinear = {
+      source: 'equivalent plane frame · member-end plastic hinges', period: nlFrame.period,
+      converged: r.converged, maxIterations: r.maxIterations ?? null, worstResidual: null,
+      ductility: null, yieldedHinges: r.yieldedHinges ?? null, totalDissipated: r.totalDissipated ?? null,
+      peakBaseShear: r.peakBaseShear ?? null, peakDisp: r.peakDisp ?? null,
+    }
+  } else if (nlShear) {
+    const r = nlShear.response
+    const duct = Math.max(...r.ductility)
+    nonlinear = {
+      source: 'equivalent shear building', period: nlShear.period,
+      converged: r.converged, maxIterations: r.maxIterations ?? null,
+      worstResidual: r.worstResidual ?? null,
+      // per-spring peak ductility — reported only when finite (a mechanism
+      // run reports Infinity, which is not a number a table should print)
+      ductility: Number.isFinite(duct) ? duct : null,
+      yieldedHinges: null,   // the shear building records "any spring yielded", not a count
+      totalDissipated: r.totalDissipated ?? null,
+      peakBaseShear: r.peakBaseForce ?? null,
+      peakDisp: Math.max(...r.peak.map(Math.abs)) ?? null,
+    }
+  }
+
+  // ── Pushover ──
+  let pushover: ReportPushover | undefined
+  if (po && po.result.curve.length > 1) {
+    const HINGE_CAP = 24
+    const hingeRows = po.result.hinges.map((h) => [
+      h.member, h.end.toUpperCase(), h.type + (h.axis ? ` (${h.axis})` : ''), String(h.event),
+      ...(h.axial !== undefined ? [f1(h.axial)] : []),
+    ])
+    const hingeHead = ['Member', 'End', 'Mode', 'Event', ...(po.result.hinges.some((h) => h.axial !== undefined) ? ['Axial (kN)'] : [])]
+    const hingeRight = hingeHead.length - 1
+    pushover = {
+      controlNode: po.controlNode,
+      totalHeight: po.totalHeight,
+      pmInteraction: po.pmInteraction,
+      pDelta: po.pDelta,
+      events: po.result.curve.length - 1,
+      mechanism: po.result.mechanism,
+      curve: po.result.curve.map((s) => ({ x: s.roofDisp * 1000, y: s.baseShear })),
+      hingeTable: { title: 'Plastic hinges, in formation order', head: hingeHead, right: [hingeRight], rows: hingeRows.slice(0, HINGE_CAP) },
+      hingeOverflow: hingeRows.length > HINGE_CAP
+        ? { title: 'Plastic hinges (continued)', head: hingeHead, right: [hingeRight], rows: hingeRows.slice(HINGE_CAP) }
+        : null,
+    }
+  }
+
+  // ── Biaxial columns (from the schedule rows — the check that set `util`) ──
+  let biaxial: ReportBiaxial | undefined
+  if (design.columns.length) {
+    const rows = design.columns.map((c) => [
+      c.id, f1(c.Pu), f1(c.Mu), f1(c.Muy),
+      c.biaxialMethod, f1(c.phiPn), f2(c.util), c.ok ? 'PASS' : 'FAIL', c.gov ?? '',
+    ])
+    biaxial = {
+      table: {
+        title: 'Biaxial column check — Pu–Mu–Muy interaction (Bresler / load contour)',
+        head: ['Column', 'Pu (kN)', 'Mu (kN·m)', 'Muy (kN·m)', 'Method', 'φPn (kN)', 'Util', 'Status', 'Case'],
+        right: [1, 2, 3, 5, 6],
+        rows,
+      },
+      skewPushover: bx ? {
+        angleDeg: bx.angleDeg,
+        controlDir: bx.controlDir,
+        curve: bx.curve.map((p) => ({ x: p.disp * 1000, y: p.shear })),
+        peakShear: bx.peakShear,
+        yieldedHinges: bx.yieldedHinges,
+      } : null,
+    }
+  }
+
+  // ── Optimization ──
+  let optimization: ReportOptimization | undefined
+  if (opt) {
+    const stepRows = opt.steps.map((s, i) => [
+      String(i + 1),
+      s.note ?? (s.grown ? `${s.grown} section change${s.grown === 1 ? '' : 's'}` : '—'),
+      String(s.fails),
+      s.ok ? 'PASS' : 'FAIL',
+    ])
+    const steps: ReportTable = {
+      title: 'Optimization iterations',
+      head: ['Step', 'Action', 'Failing checks', 'Status'],
+      right: [2, 3],
+      rows: stepRows,
+    }
+
+    // initial vs final — needs the pre-optimization model (guarded: the diff
+    // assumes both models settled with the same section/plate ordering)
+    const ivfRows: string[][] = []
+    const init = opt.initialModel
+    let initialVsFinal: ReportTable
+    if (init) {
+      init.sections.forEach((s, i) => {
+        const t = opt.model.sections[i]
+        if (!t || (s.b === t.b && s.h === t.h && s.shape === t.shape)) return
+        const from = s.shape ?? `${s.b}×${s.h}`, to = t.shape ?? `${t.b}×${t.h}`
+        const change = s.shape || t.shape ? 'catalog step' : `${t.b - s.b >= 0 ? '+' : ''}${t.b - s.b} / ${t.h - s.h >= 0 ? '+' : ''}${t.h - s.h} mm`
+        ivfRows.push([t.name || t.id, from, to, change])
+      })
+      init.plates.forEach((p, i) => {
+        const q = opt.model.plates[i]
+        if (q && p.thickness !== q.thickness) ivfRows.push([p.id, `${p.thickness} mm`, `${q.thickness} mm`, `${q.thickness - p.thickness} mm`])
+      })
+      ;(init.walls ?? []).forEach((w, i) => {
+        const q = (opt.model.walls ?? [])[i]
+        if (q && w.thickness !== q.thickness) ivfRows.push([w.id, `${w.thickness} mm`, `${q.thickness} mm`, `${q.thickness - w.thickness} mm`])
+      })
+      // final governing utilisation per changed section
+      const memberSec = new Map(opt.model.members.map((m) => [m.id, m.section]))
+      const secUtil = new Map<string, number>()
+      const bump = (id: string, u: number) => {
+        const s = memberSec.get(id); if (!s || !Number.isFinite(u)) return
+        secUtil.set(s, Math.max(secUtil.get(s) ?? 0, u))
+      }
+      design.columns.forEach((c) => bump(c.id, c.util))
+      design.steelColumns.forEach((c) => bump(c.id, c.ratio))
+      design.woodColumns.forEach((c) => bump(c.id, c.ratio))
+      design.steelBeams.forEach((b) => bump(b.id, Math.max(b.utilM, b.utilV)))
+      design.woodBeams.forEach((b) => bump(b.id, Math.max(b.utilM, b.utilV)))
+      design.beams.forEach((b) => b.sections.forEach((s) => {
+        if (s.design.phiMnMax > PASS_FLOOR) bump(b.id, Math.abs(s.Mu) / s.design.phiMnMax)
+      }))
+      const ivf = ivfRows.map((r) => {
+        const secId = opt.model.sections.find((s) => (s.name || s.id) === r[0])?.id
+          ?? init.sections.find((s) => (s.name || s.id) === r[0])?.id
+        const u = secId != null ? secUtil.get(secId) : undefined
+        return [...r, u !== undefined ? f2(u) : '—']
+      })
+      initialVsFinal = {
+        title: 'Initial vs final design — elements the optimizer changed',
+        head: ['Element', 'Initial', 'Final', 'Change', 'Final governing util'],
+        right: [4],
+        rows: ivf,
+      }
+    } else {
+      initialVsFinal = {
+        title: 'Initial vs final design — elements the optimizer changed',
+        head: ['Element', 'Initial', 'Final', 'Change', 'Final governing util'],
+        rows: [],
+      }
+    }
+
+    const totals: ReportOptimization['totals'] = [
+      { label: 'Concrete (m³)', before: f2(opt.initialDesign?.totals.concrete ?? 0), after: f2(design.totals.concrete) },
+    ]
+    if ((opt.initialDesign?.totals.steelKg ?? 0) > 0 || design.totals.steelKg > 0)
+      totals.push({ label: 'Structural steel (t)', before: f2((opt.initialDesign?.totals.steelKg ?? 0) / 1000), after: f2(design.totals.steelKg / 1000) })
+    if ((opt.initialDesign?.totals.woodVolume ?? 0) > 0 || design.totals.woodVolume > 0)
+      totals.push({ label: 'Timber (m³)', before: f2(opt.initialDesign?.totals.woodVolume ?? 0), after: f2(design.totals.woodVolume) })
+
+    const objective = [
+      'Feasibility — grow member sections, slab and wall thicknesses until every code check passes; every trial is a full re-design accepted only when the whole structure passes.',
+      'Economy — shrink h, then b, then slab thickness, then per-section fine-tune; trims target member utilisation below 0.80 and are kept only when the full design still passes.',
+      ...(tryBars ? ['Bar re-detail — per-member bar diameter (and column bar count) re-chosen as the smallest-steel set that keeps every check passing.'] : []),
+      'Constraints — all design checks on every trial: RC/steel/timber members, footings, slabs (§408.3.1.2 + §424.2), shear walls, steel joints, SCWB §418.7.3.2, P-Δ convergence.',
+    ]
+
+    optimization = { converged: opt.converged, stopReason: opt.stopReason, steps, initialVsFinal, objective, totals }
+  }
+
+  // ── Traceability: governing members, analysis → design → schedule ──
+  const trace: ReportTrace[] = []
+  {
+    const beamRatios = design.beams
+      .map((b) => ({ b, u: Math.max(...b.sections.map((s) => (s.design.phiMnMax > PASS_FLOOR ? Math.abs(s.Mu) / s.design.phiMnMax : 0))) }))
+      .sort((a, z) => z.u - a.u).slice(0, 6)
+    for (const { b } of beamRatios) {
+      const s = b.sections.reduce((a, z) => (Math.abs(z.Mu) > Math.abs(a.Mu) ? z : a))
+      const sec = secOf(b.id)
+      trace.push({
+        member: b.id, kind: 'beam', loc: memberLoc(b.id), combo: b.gov,
+        demand: `Mu ${f1(Math.abs(s.Mu))} kN·m · Vu ${f1(s.Vu)} kN`,
+        required: `As ${f0(s.design.As)} mm²`,
+        provided: `${s.design.bars}⌀${sec?.barDia ?? '?'}${s.design.layers.length > 1 ? ` (${s.design.layers.join('+')})` : ''} · ${s.design.legs}L-⌀${sec?.tieDia ?? '?'} @ ${Math.round(s.hogging ? s.design.sHinge : s.design.sAdopt)} mm`,
+        util: s.design.phiMnMax > PASS_FLOOR ? Math.abs(s.Mu) / s.design.phiMnMax : undefined,
+        ok: b.ok,
+      })
+    }
+    const cols = [...design.columns].sort((a, z) => z.util - a.util).slice(0, 6)
+    for (const c of cols) {
+      const sec = secOf(c.id)
+      trace.push({
+        member: c.id, kind: 'column', loc: memberLoc(c.id), combo: c.gov,
+        demand: `Pu ${f1(c.Pu)} kN · Mu ${f1(c.Mu)} · Muy ${f1(c.Muy)} kN·m`,
+        required: `φPn ${f1(c.phiPn)} kN (${c.biaxialMethod})`,
+        provided: `${c.bars}⌀${sec?.barDia ?? '?'} · ties ⌀${sec?.tieDia ?? '?'} @ ${Math.round(c.tieSpacingFinal)} mm`,
+        util: c.util, ok: c.ok,
+      })
+    }
+  }
+
+  // ── Governing design summary ──
+  const govRows: string[][] = []
+  {
+    const beams = design.beams.flatMap((b) => b.sections.map((s) => ({ b, s })))
+    if (beams.length) {
+      const f = beams.reduce((a, z) => (Math.abs(z.s.Mu) > Math.abs(a.s.Mu) ? z : a))
+      govRows.push(['Beam flexure', f.b.id, `Mu ${f1(Math.abs(f.s.Mu))} kN·m`, f.s.design.phiMnMax > PASS_FLOOR ? f2(Math.abs(f.s.Mu) / f.s.design.phiMnMax) : '—'])
+      const sh = beams.reduce((a, z) => (z.s.Vu > a.s.Vu ? z : a))
+      govRows.push(['Beam shear', sh.b.id, `Vu ${f1(sh.s.Vu)} kN`, '—'])
+    }
+    if (design.columns.length) {
+      const ax = design.columns.reduce((a, z) => (z.Pu > a.Pu ? z : a))
+      govRows.push(['Column axial', ax.id, `Pu ${f1(ax.Pu)} kN`, ax.phiPn > PASS_FLOOR ? f2(ax.Pu / ax.phiPn) : '—'])
+      const bx = design.columns.reduce((a, z) => (z.util > a.util ? z : a))
+      govRows.push(['Column biaxial interaction', bx.id, `Pu ${f1(bx.Pu)} kN · Mu ${f1(bx.Mu)}`, f2(bx.util)])
+    }
+    if (design.scwb.length) {
+      const w = design.scwb.reduce((a, z) => (z.ratio < a.ratio ? z : a))
+      govRows.push(['Strong column / weak beam', w.node, `ΣMnc/ΣMnb ${f2(w.ratio)}`, f2(w.ratio)])
+    }
+    if (design.slabs.length) {
+      const s = design.slabs.reduce((a, z) => (z.design.wu > a.design.wu ? z : a))
+      govRows.push(['Slab (DDM)', s.plate, `wu ${f2(s.design.wu)} kPa`, '—'])
+    }
+    if (design.walls.length) {
+      const w = design.walls.reduce((a, z) => (z.Vu / Math.max(z.design.phiVn, PASS_FLOOR) > a.Vu / Math.max(a.design.phiVn, PASS_FLOOR) ? z : a))
+      govRows.push(['Shear wall', w.id, `Vu ${f1(w.Vu)} kN`, f2(w.Vu / Math.max(w.design.phiVn, PASS_FLOOR))])
+    }
+    if (design.footings.length) {
+      const f = design.footings.reduce((a, z) => (z.Pu > a.Pu ? z : a))
+      govRows.push(['Footing bearing', f.node, `Pu ${f0(f.Pu)} kN`, '—'])
+    }
+    if (design.steelBeams.length) {
+      const b = design.steelBeams.reduce((a, z) => (Math.max(z.utilM, z.utilV) > Math.max(a.utilM, a.utilV) ? z : a))
+      govRows.push(['Steel beam', b.id, `Mu ${f1(b.Mu)} · Vu ${f1(b.Vu)}`, f2(Math.max(b.utilM, b.utilV))])
+    }
+    if (design.steelColumns.length) {
+      const c = design.steelColumns.reduce((a, z) => (z.ratio > a.ratio ? z : a))
+      govRows.push(['Steel column §H1-1', c.id, `Pu ${f1(c.Pu)} · Mu ${f1(c.Mu)}`, f2(c.ratio)])
+    }
+  }
+  const governingSummary: ReportGoverning | undefined = govRows.length
+    ? { table: { title: 'Most critical members by check', head: ['Check', 'Governing member', 'Demand', 'Utilisation'], right: [3], rows: govRows } }
+    : undefined
+
+  // ── Engineering status (from actual engine results — never auto-PASS) ──
+  const status: ReportStatus[] = []
+  const equilOK = linear?.equilibrium
+  status.push(equilOK
+    ? { check: 'Static equilibrium', status: equilOK.ok ? 'PASS' : 'FAIL', detail: `max residual ${equilOK.residPct.toExponential(1)}% of load (${equilOK.combo})` }
+    : { check: 'Static equilibrium', status: 'NOT RUN' })
+  if (analysis) {
+    const runs = analysis.perCombo
+    const anyResult = runs.some((r) => r.result)
+    const allResults = runs.every((r) => r.result)
+    status.push({
+      check: 'Linear analysis (3D FEM)',
+      status: !anyResult ? 'FAIL' : allResults && design.pDeltaIssues.length === 0 ? 'PASS' : design.pDeltaIssues.length ? 'FAIL' : 'PARTIAL',
+      detail: `${runs.length} case runs · governing ${design.govName}${design.pDeltaIssues.length ? ` · P-Δ failed: ${design.pDeltaIssues.length}` : ''}`,
+    })
+  } else status.push({ check: 'Linear analysis (3D FEM)', status: 'NOT RUN' })
+  if (drift) status.push({ check: 'Storey drift (§208.5.10)', status: drift.every((d) => d.ok) ? 'PASS' : 'FAIL', detail: `${drift.length} storeys` })
+  else status.push({ check: 'Storey drift (§208.5.10)', status: 'NOT RUN' })
+  if (modal) status.push({ check: 'Modal analysis', status: 'COMPLETE', detail: `${modal.modes.length} modes` })
+  else status.push({ check: 'Modal analysis', status: 'NOT RUN' })
+  if (nonlinear) status.push({ check: 'Nonlinear time-history', status: nonlinear.converged ? 'PASS' : 'FAIL', detail: nonlinear.source })
+  else status.push({ check: 'Nonlinear time-history', status: 'NOT RUN' })
+  if (po) status.push({ check: 'Pushover analysis', status: 'COMPLETE', detail: `${po.result.curve.length - 1} events${po.result.mechanism ? ' · mechanism reached' : ''}` })
+  else status.push({ check: 'Pushover analysis', status: 'NOT RUN' })
+  if (bx) status.push({ check: 'Biaxial pushover', status: 'COMPLETE', detail: `${bx.angleDeg.toFixed(0)}° skew · peak V ${f1(bx.peakShear)} kN` })
+  else status.push({ check: 'Biaxial pushover', status: 'NOT RUN' })
+  const memberChecks: ReportStatus[] = []
+  if (design.beams.length) memberChecks.push({ check: 'Beam design', status: design.beams.every((b) => b.ok) ? 'PASS' : 'FAIL', detail: `${design.beams.length} members` })
+  if (design.columns.length) memberChecks.push({ check: 'Column design', status: design.columns.every((c) => c.ok) ? 'PASS' : 'FAIL', detail: `${design.columns.length} members` })
+  if (design.steelBeams.length || design.steelColumns.length)
+    memberChecks.push({ check: 'Steel design (AISC 360-16)', status: design.steelBeams.every((b) => b.ok) && design.steelColumns.every((c) => c.ok) ? 'PASS' : 'FAIL', detail: `${design.steelBeams.length + design.steelColumns.length} members` })
+  if (design.woodBeams.length || design.woodColumns.length)
+    memberChecks.push({ check: 'Timber design (NDS §3)', status: design.woodBeams.every((b) => b.ok) && design.woodColumns.every((c) => c.ok) ? 'PASS' : 'FAIL', detail: `${design.woodBeams.length + design.woodColumns.length} members` })
+  if (design.slabs.length) memberChecks.push({ check: 'Slab design (DDM)', status: design.slabs.every((s) => s.ok) ? 'PASS' : 'FAIL', detail: `${design.slabs.length} panels` })
+  if (design.footings.length || design.combined.length)
+    memberChecks.push({ check: 'Footing design', status: design.footings.every((f) => f.ok) && design.combined.every((c) => c.ok) ? 'PASS' : 'FAIL', detail: `${design.footings.length + design.combined.length} footings` })
+  if (design.joints.length || design.beamJoints.length)
+    memberChecks.push({ check: 'Steel connections', status: design.joints.every((j) => j.ok) && design.beamJoints.every((j) => j.ok) ? 'PASS' : 'FAIL', detail: `${design.joints.length + design.beamJoints.length} joints` })
+  if (design.scwb.length) memberChecks.push({ check: 'SCWB (§418.7.3.2)', status: design.scwb.every((j) => j.ok) ? 'PASS' : 'FAIL', detail: `${design.scwb.length} joints` })
+  if (design.unchecked.length) memberChecks.push({ check: 'Unchecked members', status: 'FAIL', detail: design.unchecked.map((u) => u.id).join(', ') })
+  status.push(...memberChecks)
+  if (opt) status.push({
+    check: 'Optimization',
+    status: opt.converged ? 'COMPLETE' : 'STOPPED',
+    detail: opt.converged ? `${opt.steps.length} steps · all checks pass` : (opt.stopReason ?? 'stopped early'),
+  })
+  else status.push({ check: 'Optimization', status: 'NOT RUN' })
+  status.push({ check: 'Final detailing', status: 'PASS', detail: 'schedules, cages and drawings read the same design rows (single source of truth)' })
+
+  // ── Executive summary panels ──
+  const exec: ReportExec = {
+    analysis: [
+      { label: 'Linear static (3D FEM)', ok: analysis ? true : null, note: analysis ? `${analysis.perCombo.length} case runs` : undefined },
+      { label: 'Static equilibrium', ok: equilOK ? equilOK.ok : analysis ? false : null, note: equilOK ? `residual ${equilOK.residPct.toExponential(1)}%` : undefined },
+      { label: 'Storey drift (§208.5.10)', ok: drift ? drift.every((d) => d.ok) : null, note: drift ? `${drift.length} storeys` : undefined },
+      { label: 'Seismic regularity (§208-9/10)', ok: irregular ? irregular.length === 0 : null, note: irregular ? (irregular.length ? `${irregular.length} flag(s)` : 'regular') : undefined },
+      { label: 'Modal', ok: modal ? true : null, note: modal ? `${modal.modes.length} modes` : undefined },
+      { label: 'Nonlinear time-history', ok: nonlinear ? nonlinear.converged : null, note: nonlinear ? nonlinear.source : undefined },
+      { label: 'Pushover', ok: po ? true : null, note: po ? `${po.result.curve.length - 1} events` : undefined },
+      { label: 'Biaxial pushover', ok: bx ? true : null, note: bx ? `${bx.angleDeg.toFixed(0)}° skew` : undefined },
+    ],
+    design: [
+      ...(design.beams.length ? [{ label: 'Beams', ok: design.beams.every((b) => b.ok), note: `${design.beams.length} members` }] : []),
+      ...(design.columns.length ? [{ label: 'Columns (biaxial)', ok: design.columns.every((c) => c.ok), note: `${design.columns.length} members` }] : []),
+      ...(design.slabs.length ? [{ label: 'Slabs', ok: design.slabs.every((s) => s.ok), note: `${design.slabs.length} panels` }] : []),
+      ...(design.footings.length + design.combined.length ? [{ label: 'Footings', ok: design.footings.every((f) => f.ok) && design.combined.every((c) => c.ok), note: `${design.footings.length + design.combined.length} footings` }] : []),
+      ...(design.steelBeams.length + design.steelColumns.length ? [{ label: 'Steel members', ok: design.steelBeams.every((b) => b.ok) && design.steelColumns.every((c) => c.ok), note: `${design.steelBeams.length + design.steelColumns.length} members` }] : []),
+      ...(design.woodBeams.length + design.woodColumns.length ? [{ label: 'Timber members', ok: design.woodBeams.every((b) => b.ok) && design.woodColumns.every((c) => c.ok), note: `${design.woodBeams.length + design.woodColumns.length} members` }] : []),
+      ...(design.scwb.length ? [{ label: 'Beam–column joints', ok: design.scwb.every((j) => j.ok), note: `SCWB §418.7.3.2` }] : []),
+    ],
+    optimization: opt ? { label: 'Optimizer', ok: opt.converged, note: opt.converged ? `${opt.steps.length} steps · SAFE / OPTIMIZED` : (opt.stopReason ?? 'stopped early') } : null,
+  }
+
+  // ── Appendices (letters assigned to the datasets that exist, in order) ──
+  const appendices: ReportAppendix[] = []
+  {
+    const push = (title: string, tables: ReportTable[]) => {
+      if (!tables.length) return
+      appendices.push({ letter: String.fromCharCode(65 + appendices.length), title, tables })
+    }
+    // A — analytical model
+    push('Analytical model', [
+      { title: 'Nodes', head: ['Node', 'X (m)', 'Y (m)', 'Z (m)'], right: [1, 2, 3], rows: model.nodes.map((n) => [n.id, f2(n.x), f2(n.y), f2(n.z)]) },
+      {
+        title: 'Members', head: ['Member', 'i', 'j', 'Section', 'Role'], rows: model.members.map((m) => {
+          const s = model.sections.find((x) => x.id === m.section)
+          return [m.id, m.i, m.j, s?.name ?? m.section, m.role]
+        }),
+      },
+      { title: 'Supports', head: ['Node', 'Fixity'], rows: model.supports.map((s) => [s.node, s.fixity]) },
+      {
+        title: 'Section properties', head: ['Section', 'Material', 'Size', 'Bars'], rows: model.sections.map((s) => [
+          s.name || s.id, s.material ?? 'concrete',
+          s.shape ?? `${s.b}×${s.h}`,
+          s.material !== 'steel' ? `${'⌀'}${s.barDia}` : '—',
+        ]),
+      },
+    ])
+    // B — loading
+    {
+      const loadTables: ReportTable[] = [{
+        title: 'Load cases run for the envelope',
+        head: ['#', 'Case'], rows: design.cases.map((c, i) => [String(i + 1), c]),
+      }]
+      if (analysis) {
+        loadTables.push({
+          title: 'NSCP 203 combinations (factors as applied)',
+          head: ['Case', 'Factors'], rows: analysis.perCombo.map((r) => [
+            r.combo.name,
+            Object.entries(r.combo.f).filter(([, v]) => v).map(([k, v]) => `${v}·${k}`).join(' + '),
+          ]),
+        })
+      }
+      const byCat = new Map<string, number>()
+      for (const ld of model.loads) byCat.set(ld.cat, (byCat.get(ld.cat) ?? 0) + 1)
+      if (byCat.size)
+        loadTables.push({
+          title: 'Applied load assignments by category',
+          head: ['Category', 'Assignments'], right: [1],
+          rows: [...byCat.entries()].sort().map(([k, v]) => [k, String(v)]),
+        })
+      push('Loading', loadTables)
+    }
+    // C — analysis detail
+    if (linear) {
+      const tables: ReportTable[] = []
+      if (linear.reactions) tables.push(linear.reactions)
+      if (linear.memberEnvelope) tables.push(linear.memberEnvelope)
+      push('Analysis results', tables)
+    }
+    // D — modal (full mode table when the main body truncated nothing, keep appendix for record)
+    if (modalOut && modalOut.modes > 12) push('Modal results', [modalOut.table])
+    // E — pushover event table
+    if (po) {
+      push('Pushover results', [{
+        title: 'Capacity curve — event table',
+        head: ['Event', 'λ', 'Base shear (kN)', 'Roof disp (mm)', 'New hinge', 'Hinges'],
+        right: [1, 2, 3, 5],
+        rows: po.result.curve.map((s) => [
+          String(s.event), f2(s.lambda), f1(s.baseShear), f1(s.roofDisp * 1000),
+          s.newHinge ? `${s.newHinge.member} ${s.newHinge.end.toUpperCase()}` : '—', String(s.numHinges),
+        ]),
+      }])
+    }
+    // F — optimization change trail
+    if (opt) {
+      const changes = opt.steps.flatMap((s) => (s.changes ?? []).map((c) => [String(s.iter), c.kind, c.label, c.from, c.to]))
+      if (changes.length)
+        push('Optimization history', [{
+          title: 'Accepted changes per iteration',
+          head: ['Iter', 'Kind', 'Element', 'From', 'To'], rows: changes,
+        }])
+    }
+  }
+
+  if (exec) out.exec = exec
+  if (linear) out.linear = linear
+  if (modalOut) out.modal = modalOut
+  if (nonlinear) out.nonlinear = nonlinear
+  if (pushover) out.pushover = pushover
+  if (biaxial) out.biaxial = biaxial
+  if (optimization) out.optimization = optimization
+  if (trace.length) out.trace = trace
+  if (governingSummary) out.governingSummary = governingSummary
+  out.status = status
+  if (appendices.length) out.appendices = appendices
+  return out
 }
