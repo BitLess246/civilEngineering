@@ -29,7 +29,7 @@ import type { Drawing, PlanPrimitive } from './planRenderer'
 import {
   cageToPrimitives, projectPath, type RebarCage, type RebarRun, type ViewPlane,
 } from './rebarModel'
-import { titleBlock, notesBlock, sheetBounds, leader, leaderKnee, textWidth } from './detailSheet'
+import { titleBlock, notesBlock, sheetBounds, leader, leaderKnee, leaderLines, textWidth } from './detailSheet'
 import { seeGeneralNotes } from './generalNotes'
 import { spanSections, sectionTally, type BeamSection } from './beamSection'
 import {
@@ -283,6 +283,7 @@ export function angledLeader(o: {
   within?: [number, number]
   text: string
   text2?: string
+  lines?: string[]
   size: number
   color?: string
 }): PlanPrimitive[] {
@@ -292,18 +293,14 @@ export function angledLeader(o: {
     side === 'right' ? o.x - rise - knee : o.x + rise + knee
   // The label runs AWAY from the landing: 'right' lands to the right of the
   // anchor and sets the text to its left, and the other way round.
-  const w = Math.max(textWidth(o.text, o.size), o.text2 ? textWidth(o.text2, o.size) : 0)
-  const span = (side: 'left' | 'right'): [number, number] => {
-    const tx = anchor(side)
-    return side === 'right' ? [tx - w, tx] : [tx, tx + w]
-  }
-  const over = (side: 'left' | 'right') => {
+  const w = Math.max(...leaderLines(o).map((t) => textWidth(t, o.size)))
+  const span = (side: 'left' | 'right', tx: number): [number, number] =>
+    side === 'right' ? [tx - w, tx] : [tx, tx + w]
+  const over = (side: 'left' | 'right', tx: number) => {
     if (!o.within) return 0
-    const [a, b] = span(side)
+    const [a, b] = span(side, tx)
     return Math.max(0, o.within[0] - a) + Math.max(0, b - o.within[1])
   }
-  const other = o.side === 'right' ? 'left' : 'right'
-  const side = over(o.side) <= over(other) ? o.side : other
 
   // A LABEL WIDER THAN THE ROOM ITS 45° LEG LEAVES.
   //
@@ -314,13 +311,43 @@ export function angledLeader(o: {
   // pass the target, because that is the fold this function exists to prevent.
   // With no room even for that, the 45° stands and the overrun is reported by
   // the sheet's own bounds rather than hidden by a folded leader.
-  let tx = anchor(side)
-  if (o.within && over(side) > 0) {
-    const lo = side === 'right' ? o.within[0] + w : o.x + knee
-    const hi = side === 'right' ? o.x - knee : o.within[1] - w
-    if (lo <= hi) tx = Math.min(hi, Math.max(lo, tx))
+  const place = (side: 'left' | 'right'): { tx: number; over: number } => {
+    let tx = anchor(side)
+    if (o.within && over(side, tx) > 0) {
+      const lo = side === 'right' ? o.within[0] + w : o.x + knee
+      const hi = side === 'right' ? o.x - knee : o.within[1] - w
+      if (lo <= hi) tx = Math.min(hi, Math.max(lo, tx))
+    }
+    return { tx, over: over(side, tx) }
   }
-  return leader({ ...o, side, tx })
+  // The side is chosen on what is left over AFTER the slide, not before it.
+  // Compared raw, a label that overran both sides by the same amount stayed
+  // on the side it was asked for — where the leg left no room to slide — when
+  // the other side could have taken it entirely.
+  const other = o.side === 'right' ? 'left' : 'right'
+  const a = place(o.side), b = place(other)
+  const side = a.over <= b.over ? o.side : other
+  return leader({ ...o, side, tx: (side === o.side ? a : b).tx })
+}
+
+/**
+ * A pitch schedule broken into lines a leader can carry.
+ *
+ * "7@100, 12@220, 7@100" is one run per group and reads on one line; through
+ * two laps and two end zones it is seven groups, and at the type size the sheet
+ * is now set in that line ran the width of a bay. Broken at the commas, never
+ * inside a group, so a bender reading "12@220" never finds it split.
+ */
+export function wrapPitch(note: string, maxChars = 20): string[] {
+  const out: string[] = []
+  let cur = ''
+  for (const part of note.split(', ')) {
+    const next = cur ? `${cur}, ${part}` : part
+    if (cur && next.length > maxChars) { out.push(`${cur},`); cur = part }
+    else cur = next
+  }
+  if (cur) out.push(cur)
+  return out
 }
 
 /**
@@ -396,9 +423,15 @@ export function buildFrameElevation(
   const uMax = Math.max(...i.members.map((m) => m.u1))
   // Type is sized off the WHOLE sheet, not one bay: a three-bay elevation and a
   // one-bay one print at the same size, so the same annotation has to read at
-  // the same weight on both. `beamDetail` uses L/60 for a single span, which is
-  // this on a two-bay line.
-  const u = Math.max(1e-6, (uMax - uMin) / 110)
+  // the same weight on both.
+  //
+  // L/85, up from L/110. At L/110 a callout came out at a third of the title
+  // block's type — the sheet read as a heading with some fine print under it,
+  // and the bar counts, which are what the sheet is FOR, were the fine print.
+  // The title block does not scale with this: it is handed a smaller unit
+  // below, so the annotation grows and the block stays where it was.
+  const u = Math.max(1e-6, (uMax - uMin) / 85)
+  const titleU = u * 0.72
 
   // ── concrete ───────────────────────────────────────────────────────────
   // Clipped to the band, so a column carried half a storey shows a cut end
@@ -428,8 +461,17 @@ export function buildFrameElevation(
   // The span dimensions sit with the bubbles, between them and the frame: a
   // dimension between two grids belongs beside the grids it is measured to,
   // and the space UNDER the beam is now the sections'.
-  const bubbleY = lo - u * 7.4, r = u * 1.05
-  const dimY = lo - u * 3.2
+  //
+  // ABOVE THE DRAWING — not above the BAND. The band is half a storey each
+  // side of the beams whether or not anything is drawn there, and at a roof
+  // nothing is: no column carries on above, so the bubbles and the span
+  // dimensions stood half a storey over the beams with nothing between. They
+  // stack off the top of the concrete instead, held off it by the room the
+  // callouts over the beam take, so a roof sheet reads as tight as a floor's.
+  const concreteTop = Math.min(...i.members.map((m) => Math.max(Y(m.yTop), lo)))
+  const sheetTop = Math.min(concreteTop, Y(i.y) - u * 7.4)
+  const bubbleY = sheetTop - u * 4.6, r = u * 1.05
+  const dimY = sheetTop - u * 2.4
   for (const g of i.grids) {
     P.push({
       kind: 'line', x1: g.u, y1: bubbleY + r, x2: g.u, y2: hi + u * 1.2,
@@ -449,17 +491,20 @@ export function buildFrameElevation(
     const a = Math.min(z.u0, z.u1), b = Math.max(z.u0, z.u1)
     if (!(b > a)) continue
     P.push({
-      kind: 'rect', x: a, y: lo, w: b - a, h: hi - lo,
+      kind: 'rect', x: a, y: sheetTop, w: b - a, h: hi - sheetTop,
       fill: 'rgba(29,78,216,0.09)', stroke: STEEL, width: 0.7, dash: [u * 0.5, u * 0.35],
     })
     if (z.label) {
-      // INSIDE the band, near its top. Above it is the row of span dimensions
-      // between the grid bubbles, and a label placed there landed on top of a
-      // dimension figure — on a sheet whose whole job is to be read, two
-      // strings in the same place is the worst possible outcome. The top of
-      // the band is the storey above the beams, which is empty.
+      // UNDER THE SOFFIT. It used to sit at the top of the band, which on a
+      // floor sheet is the empty storey above the beams — and on a roof sheet,
+      // now that the band is drawn no taller than its callouts, is the
+      // stirrup callout's own line. Under the deepest beam is empty on both:
+      // the sections start a good way further down, and the one thing that
+      // lives there, the first-stirrup dimension, sits closer to the soffit
+      // than this and at the support rather than the zone's middle.
+      const soffit = Math.max(...i.members.filter((m) => m.role === 'beam').map((m) => Y(m.yBot)))
       P.push({
-        kind: 'text', x: (a + b) / 2, y: lo + u * 1.3, text: z.label,
+        kind: 'text', x: (a + b) / 2, y: soffit + u * 3.2, text: z.label,
         size: u * 0.8, anchor: 'middle', color: STEEL, weight: 700,
       })
     }
@@ -593,7 +638,7 @@ export function buildFrameElevation(
         x: at, y: (Y(m.yTop) + Y(m.yBot)) / 2,
         ty: Y(m.yTop) - u * 6.6, side: 'right', within: room,
         text: `2L-⌀${dia} STIRRUPS, ${stirrups.length} No.`,
-        text2: pitchNote(pitchRuns(stirrups)),
+        lines: wrapPitch(pitchNote(pitchRuns(stirrups))),
         size: u * 0.8, color: SHEET_INK,
       }))
     }
@@ -626,7 +671,7 @@ export function buildFrameElevation(
         const near = c - m.u0 <= m.u1 - c
         P.push({
           kind: 'dim',
-          x1: near ? m.u0 : c, y1: lo - u * 0.9, x2: near ? c : m.u1, y2: lo - u * 0.9,
+          x1: near ? m.u0 : c, y1: sheetTop - u * 0.9, x2: near ? c : m.u1, y2: sheetTop - u * 0.9,
           text: `${Math.round(Math.abs(near ? c - m.u0 : m.u1 - c) * 1000)}`,
           off: 0, size: u * 0.75, ext: Y(t === top ? m.yTop : m.yBot),
         })
@@ -716,7 +761,7 @@ export function buildFrameElevation(
 
   const title = `FRAME ELEVATION — GRID ${i.line} @ EL ${i.y.toFixed(2)}`
   const tb = titleBlock({
-    x: uMin, top: bandNote.bottom + u * 1.2, w: uMax - uMin, u,
+    x: uMin, top: bandNote.bottom + u * 1.2, w: uMax - uMin, u: titleU,
     title, scale: 'NTS', detailNo: o.detailNo ?? '1', sheetRef: o.sheetRef ?? '',
   })
   P.push(...tb.prims)

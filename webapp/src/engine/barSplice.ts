@@ -120,8 +120,50 @@ export interface SpliceOptions {
    * the standard bar-bending sheet marks "avoid splicing in this region".
    */
   preferByRole?: Record<string, number[]>
+  /**
+   * Where a lap may NOT go — the CRITICAL SECTIONS — as fractions of the run,
+   * each `[from, to]`. Unlike `prefer`, which is a wish the geometry may
+   * decline, this is a GUARD: a lap whose whole length would overlap one of
+   * these is moved out, and if no stock length can be cut that keeps every lap
+   * out, the bar is spliced anyway and the offence is REPORTED
+   * (`spliceViolations`) — never silently accepted.
+   *
+   * What goes in it, for a beam:
+   *   - the bottom steel's middle half, where the positive moment peaks, and
+   *     the top steel's end quarters, where the negative moment does. ACI
+   *     318-14 §25.5.2.1 does not forbid a lap there — it only makes it a
+   *     Class B lap — but every standard bar-bending sheet marks both as
+   *     "avoid splicing in this region", and a §25.5.2.1 Class A lap (As ≥ 2×
+   *     required and half the bars lapped) is only ever available AWAY from
+   *     the peak;
+   *   - for a special moment frame, NSCP 2015 §418.6.3.3 (ACI §18.6.3.3): no
+   *     lap within the joint, within 2h of the joint face, or within 2h of a
+   *     section where flexural yielding is likely. Those are the hinge zones,
+   *     and a lap there is the bar's weakest point sitting at its most
+   *     demanded one.
+   * Fractions are of the run's ARC LENGTH, as `prefer` is, so a hooked end
+   * makes them a little conservative — the hook is bar, and the zone stretches
+   * by the hook's length.
+   */
+  avoid?: [number, number][]
+  /** Critical sections PER ROLE, for the same reason `preferByRole` exists —
+   *  the two faces of a beam are critical at opposite places. */
+  avoidByRole?: Record<string, [number, number][]>
   /** Shift every splice on this bar by this much, m — how staggering is applied. */
   stagger?: number
+}
+
+/**
+ * The laps, of the given centres, that lie in a critical section — m along the
+ * run. Empty means every lap is clear. Judged on the WHOLE lap, not its centre:
+ * the clause says no lap within the zone, and a lap whose end reaches into it
+ * is within it.
+ */
+export function spliceViolations(L: number, centres: number[], o: SpliceOptions): number[] {
+  const zones = (o.avoid ?? []).map(([a, b]): [number, number] => [a * L, b * L])
+  if (!zones.length) return []
+  const half = o.lap / 2
+  return centres.filter((c) => zones.some(([a, b]) => c + half > a + 1e-9 && c - half < b - 1e-9))
 }
 
 /** Splice centres, m along the run — the decision, separated so it is testable
@@ -129,8 +171,7 @@ export interface SpliceOptions {
 export function spliceCentres(L: number, o: SpliceOptions): number[] {
   const usable = o.stock - o.lap
   if (usable <= 0 || L <= o.stock + 1e-9) return []
-  const n = Math.max(2, Math.ceil(L / usable - 1e-9))
-  const even = Array.from({ length: n - 1 }, (_, j) => ((j + 1) * L) / n)
+  const nMin = Math.max(2, Math.ceil(L / usable - 1e-9))
 
   /** Do these centres give pieces that all fit a stock bar? */
   const fits = (c: number[]): boolean => {
@@ -142,29 +183,72 @@ export function spliceCentres(L: number, o: SpliceOptions): number[] {
     }
     return true
   }
+  const zones = (o.avoid ?? []).map(([a, b]): [number, number] => [a * L, b * L])
+  const clear = (c: number[]) => spliceViolations(L, c, o).length === 0
 
-  let out = even
-  // Preference: move each splice to the nearest preferred position, keeping it
-  // only while every piece still fits. Geometry first, preference second.
-  if (o.prefer?.length) {
-    const cand = out.map((s) => {
-      const want = o.prefer!.map((f) => f * L)
-      // Seeded with the FIRST preference, not with `s`. Seeded with `s` the
-      // comparison was `|w − s| < 0`, false for every w, so the preference could
-      // never win and every splice stayed wherever the even division put it —
-      // the whole mechanism was inert.
-      return want.reduce((best, w) => (Math.abs(w - s) < Math.abs(best - s) ? w : best))
-    })
-    const sorted = [...cand].sort((a, b) => a - b)
-    if (fits(sorted)) out = sorted
+  /** The layout for `n` pieces: even division, then preference, then stagger,
+   *  then pushed out of the critical sections — each step kept only while the
+   *  pieces still fit a stock bar. */
+  const layout = (n: number): number[] => {
+    const even = Array.from({ length: n - 1 }, (_, j) => ((j + 1) * L) / n)
+    let out = even
+    // Preference: move each splice to the nearest preferred position, keeping it
+    // only while every piece still fits. Geometry first, preference second.
+    if (o.prefer?.length) {
+      const cand = out.map((s) => {
+        const want = o.prefer!.map((f) => f * L)
+        // Seeded with the FIRST preference, not with `s`. Seeded with `s` the
+        // comparison was `|w − s| < 0`, false for every w, so the preference could
+        // never win and every splice stayed wherever the even division put it —
+        // the whole mechanism was inert.
+        return want.reduce((best, w) => (Math.abs(w - s) < Math.abs(best - s) ? w : best))
+      })
+      const sorted = [...cand].sort((a, b) => a - b)
+      if (fits(sorted)) out = sorted
+    }
+    // Stagger: the whole bar's splices shift together, so neighbouring bars lap
+    // at different sections. Dropped whole if it would overrun a stock length.
+    if (o.stagger) {
+      const moved = out.map((s) => s + o.stagger!)
+      if (moved.every((s) => s > 0 && s < L) && fits(moved)) out = moved
+    }
+    // The guard. A lap in a critical section is walked to the nearest edge of
+    // that section — the lap's END on the edge, not its centre — on whichever
+    // side keeps every piece a stock bar. Splices are tried in order, each
+    // against the layout as amended so far, so moving one cannot push another
+    // back into a zone unseen.
+    if (zones.length) {
+      const half = o.lap / 2
+      for (let k = 0; k < out.length; k++) {
+        const c = out[k]
+        const hit = zones.filter(([a, b]) => c + half > a + 1e-9 && c - half < b - 1e-9)
+        if (!hit.length) continue
+        // Both edges of every zone hit, nearest first; the first that fits and
+        // is itself clear of every zone wins.
+        const edges = hit.flatMap(([a, b]) => [a - half, b + half])
+          .filter((e) => e > 0 && e < L)
+          .sort((p, q) => Math.abs(p - c) - Math.abs(q - c))
+        for (const e of edges) {
+          const trial = out.map((v, j) => (j === k ? e : v))
+          if (fits(trial) && !spliceViolations(L, [e], o).length) { out = trial; break }
+        }
+      }
+    }
+    return out
   }
-  // Stagger: the whole bar's splices shift together, so neighbouring bars lap
-  // at different sections. Dropped whole if it would overrun a stock length.
-  if (o.stagger) {
-    const moved = out.map((s) => s + o.stagger!)
-    if (moved.every((s) => s > 0 && s < L) && fits(moved)) out = moved
+
+  // One more piece than the geometry strictly needs is a legitimate answer to
+  // a critical section the minimum count cannot avoid — a 20 m bar in 12 m
+  // stock is two pieces lapped at midspan or three pieces lapped in the end
+  // quarters, and the second is the beam that gets built. Tried up to two
+  // extra; beyond that the laps themselves take over the bar.
+  const first = layout(nMin)
+  if (!zones.length || clear(first)) return first
+  for (let n = nMin + 1; n <= nMin + 2; n++) {
+    const alt = layout(n)
+    if (fits(alt) && clear(alt)) return alt
   }
-  return out
+  return first
 }
 
 /**
@@ -264,12 +348,28 @@ const NEVER_SPLICED = new Set(['stirrup', 'tie', 'hoop'])
 export function spliceCage(cage: RebarCage, o: SpliceOptions): RebarCage {
   const byRole = new Map<string, number>()
   const runs: RebarRun[] = []
+  const notes: string[] = [...(cage.notes ?? [])]
   for (const r of cage.runs) {
     if (NEVER_SPLICED.has(r.role)) { runs.push(r); continue }
     const k = byRole.get(r.role) ?? 0
     byRole.set(r.role, k + 1)
-    const prefer = o.preferByRole?.[r.role] ?? o.prefer
-    runs.push(...spliceRun(r, { ...o, prefer, stagger: k % 2 === 0 ? -o.lap / 2 : o.lap / 2 }))
+    const opts: SpliceOptions = {
+      ...o,
+      prefer: o.preferByRole?.[r.role] ?? o.prefer,
+      avoid: o.avoidByRole?.[r.role] ?? o.avoid,
+      stagger: k % 2 === 0 ? -o.lap / 2 : o.lap / 2,
+    }
+    // A lap the guard could not keep out of a critical section is placed —
+    // the bar still has to be two pieces — and SAID. The note travels with the
+    // cage, so every view of the bar carries it: the elevation, the Display
+    // tab, the report.
+    const bad = spliceViolations(pathLength(r.path), runSpliceCentres(r, opts), opts)
+    if (bad.length) {
+      notes.push(`${r.mark}: lap splice at ${bad.map((c) => c.toFixed(2)).join(', ')} m along the bar lies in a critical section (${
+        r.role === 'bottom' ? 'the midspan positive-moment region' : r.role === 'top' ? 'the negative-moment region at the support' : 'a restricted zone'
+      }) — no cut of a ${o.stock} m stock bar keeps every lap out of it. Use a longer bar, a mechanical or welded splice (§425.5.7), or accept a Class B lap there (§425.5.2.1)`)
+    }
+    runs.push(...spliceRun(r, opts))
   }
-  return { ...cage, runs }
+  return { ...cage, runs, ...(notes.length ? { notes } : {}) }
 }

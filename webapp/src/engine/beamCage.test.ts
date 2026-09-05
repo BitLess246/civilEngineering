@@ -376,3 +376,25 @@ describe('buildBeamCage — how much steel is CONTINUOUS (§418.6.3.2 / §418.4.
     expect(reaching(c, 'bottom', face)).toBe(2)
   })
 })
+
+describe('hoops through an SMF lap — §418.6.3.3, the smaller of d/4 and 100', () => {
+  // 300 deep: d = 300 − 40 − 10 − 10 = 240, d/4 = 60. At a flat 100 the hoops
+  // through the lap were nearly twice the pitch the clause allows.
+  const shallow: BeamCageInput = {
+    mark: 'B', L: 7, b: 250, h: 300, cover: 40, barDia: 20, stirrupDia: 10,
+    topBars: 3, botBars: 3, sEnd: 100, sMid: 150, colBLeft: 300, colBRight: 300,
+    axis: { x0: 0, z0: 0, x1: 7, z1: 0 }, ySoffit: 0,
+    splice: { stock: 6, lap: 0.9, prefer: [0.5] },
+  }
+  const along = (c: ReturnType<typeof buildBeamCage>) =>
+    c.runs.filter((r) => r.role === 'stirrup').map((r) => r.path[0][0]).sort((a, b) => a - b)
+  const minGap = (xs: number[]) => Math.min(...xs.slice(1).map((v, k) => v - xs[k]))
+
+  it('closes up to d/4 in an SMF, and to 100 otherwise', () => {
+    const smf = along(buildBeamCage({ ...shallow, system: 'smf' }))
+    const grav = along(buildBeamCage({ ...shallow, system: 'gravity' }))
+    expect(minGap(smf)).toBeLessThanOrEqual(0.06 + 1e-6)
+    expect(minGap(grav)).toBeGreaterThan(0.06 + 1e-6)
+    expect(minGap(grav)).toBeLessThanOrEqual(0.1 + 1e-6)
+  })
+})

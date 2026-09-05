@@ -674,3 +674,94 @@ describe('slab cages — the floor is no longer drawn bare', () => {
     expect(q.cutList.some((c) => c.mark === 'Chair')).toBe(false)
   })
 })
+
+
+// ─────────────────────────────────────────────────────────────────────────
+// WHERE THE BEAM BARS LAP — the critical sections are guarded, not preferred
+//
+// Stock is 6 m, so an 8 m bay laps every through bar, and the laps of a
+// 6 m bay too. The fixtures are short enough for a clear cut to EXIST;
+// where none does (SMF at 6 m stock with the middle-half rule kept) the guard
+// reports rather than places, which the last case checks.
+// ─────────────────────────────────────────────────────────────────────────
+describe('beam lap splices keep out of the critical sections', () => {
+  const sec = { id: 's1', name: 'C1', b: 350, h: 600, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
+  const frame = (system: 'gravity' | 'smf') => {
+    const m = generateGridModel({ baysX: [8], baysZ: [6], storeyH: [3.5], section: sec })
+    m.loads = buildGravityLoads(m, 4.8, 2.4)
+    const d = designStructure(m, soil as never, {}, { seismicSystem: system })!
+    return { m, d, cs: buildStructureCages(m, d).cages }
+  }
+
+  /** Lap centres of every bar of a role in a cage, m from the beam's i-end,
+   *  read off the pieces `spliceCage` actually cut. */
+  const laps = (cage: RebarCage, role: 'top' | 'bottom') => {
+    const groups = new Map<string, { lo: number; hi: number }[]>()
+    for (const r of cage.runs) {
+      if (r.role !== role || !/[a-z]$/.test(r.mark)) continue
+      const k = r.mark.slice(0, -1)
+      const xs = r.path.map((p) => p[0])
+      groups.set(k, [...(groups.get(k) ?? []), { lo: Math.min(...xs), hi: Math.max(...xs) }])
+    }
+    const out: { bar: string; at: number }[] = []
+    for (const [bar, ps] of groups) {
+      ps.sort((a, b) => a.lo - b.lo)
+      for (let k = 1; k < ps.length; k++) out.push({ bar, at: (ps[k - 1].hi + ps[k].lo) / 2 })
+    }
+    return out
+  }
+
+  it('laps every through bar — the fixture is long enough to mean something', () => {
+    const { d, cs } = frame('gravity')
+    const cage = cs.find((c) => c.member === d.beams[0].id)!
+    expect(laps(cage, 'bottom').length).toBeGreaterThan(0)
+    expect(laps(cage, 'top').length).toBeGreaterThan(0)
+  })
+
+  it('gravity: never laps a bottom bar in the middle half, nor a top bar in an end quarter', () => {
+    const { d, cs } = frame('gravity')
+    for (const beam of d.beams.filter((x) => x.L > 7)) {   // the 8 m bays, which run along x
+      const cage = cs.find((c) => c.member === beam.id)!
+      const L = beam.L
+      for (const { bar, at } of laps(cage, 'bottom')) {
+        expect(at < 0.25 * L || at > 0.75 * L, `${bar} laps at ${(at / L).toFixed(2)}L — midspan`).toBe(true)
+      }
+      for (const { bar, at } of laps(cage, 'top')) {
+        expect(at > 0.25 * L && at < 0.75 * L, `${bar} laps at ${(at / L).toFixed(2)}L — over a support`).toBe(true)
+      }
+      expect((cage.notes ?? []).filter((n) => /critical section/.test(n))).toEqual([])
+    }
+  })
+
+  it('SMF: keeps every lap 2h clear of the joint face (§418.6.3.3), top steel in the middle half', () => {
+    const { d, cs } = frame('smf')
+    const zone = 0.175 + 2 * 0.6                         // half the 350 column + 2h
+    for (const beam of d.beams.filter((x) => x.L > 7)) {   // the 8 m bays, which run along x
+      const cage = cs.find((c) => c.member === beam.id)!
+      for (const role of ['top', 'bottom'] as const) {
+        for (const { bar, at } of laps(cage, role)) {
+          expect(at, `${bar} laps ${at.toFixed(2)} m from the left face`).toBeGreaterThan(zone)
+          expect(at, `${bar} laps ${(beam.L - at).toFixed(2)} m from the right face`).toBeLessThan(beam.L - zone)
+        }
+      }
+      for (const { bar, at } of laps(cage, 'top')) {
+        expect(at > 0.25 * beam.L && at < 0.75 * beam.L, `${bar} laps over a support`).toBe(true)
+      }
+      expect((cage.notes ?? []).filter((n) => /critical section/.test(n))).toEqual([])
+    }
+  })
+
+  it('reports a lap it could not keep out, rather than placing it in silence', () => {
+    // A 6 m bay in an SMF with a 400 column and a 450 beam: 2h + half the
+    // column is 1.1 m each end, and a 6 m stick cannot span what is left
+    // without lapping inside it. The bar is still cut — and the cage says so.
+    const s = { ...sec, b: 250, h: 450 }
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3.5], column: { ...s, b: 400, h: 400, id: 'C' }, girder: s, beam: s })
+    m.loads = buildGravityLoads(m, 4.8, 2.4)
+    const d = designStructure(m, soil as never, {}, { seismicSystem: 'smf' })!
+    const cage = buildStructureCages(m, d).cages.find((c) => c.member === d.beams[0].id)!
+    const bad = laps(cage, 'bottom').filter(({ at }) => at < 1.1 || at > d.beams[0].L - 1.1)
+    if (bad.length) expect((cage.notes ?? []).some((n) => /critical section/.test(n))).toBe(true)
+    else expect((cage.notes ?? []).filter((n) => /critical section/.test(n))).toEqual([])
+  })
+})
