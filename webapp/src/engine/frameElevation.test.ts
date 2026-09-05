@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  buildFrameElevation, clipToBand, runInk, pitchRuns, pitchNote, angledLeader,
+  buildFrameElevation, clipToBand, runInk, pitchRuns, pitchNote, angledLeader, wrapPitch,
   type FrameElevationInput, type ElevationMember,
 } from './frameElevation'
 import { elevationPlane, type RebarCage, type RebarRun } from './rebarModel'
@@ -514,5 +514,76 @@ describe('buildFrameElevation — label collisions', () => {
     expect(top).toBeTruthy(); expect(bot).toBeTruthy()
     // Page-Y grows downward, so the TOP callout's baseline is the LARGER one.
     expect(top.y0).toBeGreaterThan(bot.y1)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE ROOF, AND THE SIZE OF THE TYPE — from the user's review of the render
+// ─────────────────────────────────────────────────────────────────────────
+describe('buildFrameElevation — annotation above the drawing', () => {
+  const unitOf = (input: FrameElevationInput) => {
+    const us = input.members.flatMap((m) => [m.u0, m.u1])
+    return (Math.max(...us) - Math.min(...us)) / 85
+  }
+  const bubblesOf = (d: { primitives: PlanPrimitive[] }, above: number) =>
+    (d.primitives.filter((p) => p.kind === 'circle') as { cy: number; r: number }[])
+      .filter((c) => c.cy < above)
+
+  it('stacks the bubbles and span dimensions off the CONCRETE, not off the band', () => {
+    // A roof has no column above, so the band's top half-storey is empty. The
+    // bubbles used to sit above THAT — half a storey plus their own offset
+    // over the beams, with nothing between. They stack off the beams now.
+    const roof = bundles.find((x) => x.key === 'frame-a-6-40')!.input
+    const d = buildFrameElevation(roof)
+    const u = unitOf(roof)
+    const beamTop = -roof.y
+    const bubbles = bubblesOf(d, beamTop)
+    expect(bubbles).toHaveLength(3)
+    for (const b of bubbles) {
+      // the callout stack (7.4u) + the dimension row + the bubble row (4.6u)
+      expect(beamTop - b.cy).toBeCloseTo(12 * u, 6)
+      // …which is INSIDE the band's empty top half, where they used to be above it
+      expect(beamTop - b.cy).toBeLessThan(roof.yHi - roof.y + 4.6 * u)
+    }
+  })
+
+  it('still clears the columns above on a floor sheet', () => {
+    const floor = bundles.find((x) => x.key === 'frame-a-3-20')!.input
+    const d = buildFrameElevation(floor)
+    const bandTop = -floor.yHi
+    for (const b of bubblesOf(d, -floor.y)) expect(b.cy + b.r).toBeLessThan(bandTop)
+  })
+
+  it('sets the annotation no smaller than half the title — a sheet is read, not headed', () => {
+    const d = buildFrameElevation(bundles[0].input)
+    const texts = d.primitives.filter((p) => p.kind === 'text') as { text: string; size: number }[]
+    const title = texts.find((t) => t.text.startsWith('FRAME ELEVATION'))!
+    const callout = texts.find((t) => /THRU/.test(t.text))!
+    expect(title.size / callout.size).toBeLessThanOrEqual(2.2)
+    expect(title.size / callout.size).toBeGreaterThan(1.4)
+  })
+
+  it('puts the zone label under the soffit, clear of the callouts over the beam', () => {
+    const floor = bundles.find((x) => x.key === 'frame-a-3-20')!.input
+    const beam = floor.members.find((m) => m.role === 'beam')!
+    const d = buildFrameElevation({ ...floor, highlight: [{ u0: beam.u0, u1: beam.u0 + 2, label: 'End i' }] })
+    const label = (d.primitives.filter((p) => p.kind === 'text') as { text: string; y: number }[])
+      .find((t) => t.text === 'End i')!
+    expect(label.y).toBeGreaterThan(-beam.yBot)
+  })
+})
+
+describe('wrapPitch', () => {
+  it('breaks a long schedule at the commas, never inside a group', () => {
+    const lines = wrapPitch('7@100, 12@220, 7@100, 5@100, 9@213, 5@100', 20)
+    expect(lines.length).toBeGreaterThan(1)
+    for (const l of lines) {
+      expect(l.length).toBeLessThanOrEqual(21)
+      expect(l).toMatch(/^\d+@\d+(, \d+@\d+)*,?$/)
+    }
+    expect(lines.join(' ').replace(/,\s*/g, ', ')).toBe('7@100, 12@220, 7@100, 5@100, 9@213, 5@100')
+  })
+  it('leaves a short one alone', () => {
+    expect(wrapPitch('7@100, 12@220, 7@100')).toEqual(['7@100, 12@220, 7@100'])
   })
 })

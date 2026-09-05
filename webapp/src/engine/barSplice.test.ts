@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  spliceCentres, spliceRun, spliceCage, pathLength, pointAt, slicePath,
+  spliceCentres, spliceRun, spliceCage, spliceViolations, pathLength, pointAt, slicePath,
   stepAside, stepDirection, OFFSET_SLOPE,
 } from './barSplice'
 import { cutLength, type RebarCage, type RebarRun, type Vec3 } from './rebarModel'
@@ -220,5 +220,95 @@ describe('splice zones per face — the two are opposite', () => {
     const c = spliceCentres(18, { stock: 12, lap: 0.9, prefer: [0.5] })
     expect(c).toHaveLength(1)
     expect(c[0]).toBeCloseTo(9, 9)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE GUARD — a preference is declined; a critical section is not
+//
+// `prefer` is dropped the moment the pieces it produces stop fitting a stock
+// bar, and the fallback is the even division: for a two-piece bar that is
+// EXACTLY midspan, the one place a bottom bar must not lap. So the critical
+// sections are named separately, and a lap in one is moved out, or the bar is
+// cut into one more piece, or — when nothing fits — the lap is placed and
+// REPORTED. Never accepted in silence.
+// ─────────────────────────────────────────────────────────────────────────
+describe('critical sections — the guard the preference is not', () => {
+  it('a bottom bar whose even division lands at midspan is walked out of the middle half', () => {
+    // 20 m in 12 m stock: two pieces lap at 10 m, in the middle half [5, 15].
+    // Neither edge fits a two-piece cut (4.5 + 15.5), so it goes to THREE
+    // pieces, both laps in the end quarters.
+    const c = spliceCentres(20, { stock: 12, lap: 1, prefer: [0.125, 0.875], avoid: [[0.25, 0.75]] })
+    expect(c.length).toBeGreaterThanOrEqual(2)
+    for (const s of c) expect(s + 0.5 <= 5 + 1e-9 || s - 0.5 >= 15 - 1e-9, `lap at ${s} is in the middle half`).toBe(true)
+    expect(spliceViolations(20, c, { stock: 12, lap: 1, avoid: [[0.25, 0.75]] })).toEqual([])
+  })
+
+  it('a top bar is kept out of the end quarters', () => {
+    // 14 m in 12 m stock: two pieces; the preference [0.5] puts the lap at 7,
+    // which is clear. Force the even division somewhere bad with a stagger of
+    // +3.5 → 10.5, inside [10.5, 14]'s reach — the guard brings it back.
+    const o = { stock: 12, lap: 1, prefer: [0.5], avoid: [[0, 0.25], [0.75, 1]] as [number, number][], stagger: 3.5 }
+    const c = spliceCentres(14, o)
+    expect(c).toHaveLength(1)
+    expect(c[0] - 0.5).toBeGreaterThanOrEqual(3.5 - 1e-9)
+    expect(c[0] + 0.5).toBeLessThanOrEqual(10.5 + 1e-9)
+  })
+
+  it('judges the WHOLE lap, not its centre', () => {
+    // centre at 4.9 with a 1 m lap reaches to 5.4 — into a zone starting at 5
+    expect(spliceViolations(20, [4.9], { stock: 12, lap: 1, avoid: [[0.25, 0.75]] })).toEqual([4.9])
+    expect(spliceViolations(20, [4.5], { stock: 12, lap: 1, avoid: [[0.25, 0.75]] })).toEqual([])
+  })
+
+  it('places the lap anyway when no stock cut can avoid the zone — and says so', () => {
+    // 13 m bar, 12 m stock, and 90% of the bar forbidden: there is no answer.
+    // The bar is still two pieces (it cannot be one), and the offence is
+    // reported rather than the bar left impossibly long.
+    const o = { stock: 12, lap: 1, avoid: [[0.05, 0.95]] as [number, number][] }
+    const c = spliceCentres(13, o)
+    expect(c).toHaveLength(1)
+    expect(spliceViolations(13, c, o)).toHaveLength(1)
+    const cage: RebarCage = { member: 'B1', runs: [straight(13)] }
+    const out = spliceCage(cage, o)
+    expect(out.runs.length).toBe(2)
+    expect(out.notes?.some((n) => /critical section/.test(n))).toBe(true)
+  })
+
+  it('carries no note when every lap is clear', () => {
+    // 12.5 m stock, not 12: the middle piece has to span the whole forbidden
+    // half plus a half-lap each end, 11 m, and `runSpliceCentres` keeps one
+    // diameter of stock back for the step-aside — at exactly 12 m nothing fits,
+    // and a note is the RIGHT answer there, not a test failure.
+    const cage: RebarCage = { member: 'B1', runs: [straight(20)] }
+    const out = spliceCage(cage, { stock: 12.5, lap: 1, prefer: [0.125, 0.875], avoid: [[0.25, 0.75]] })
+    expect(out.notes ?? []).toEqual([])
+  })
+
+  it('resolves the zones per role, as it does the preferences', () => {
+    const run = (role: RebarRun['role']): RebarRun => ({
+      mark: `X-${role}`, dia: 20, role, member: 'B1', count: 1, bendDia: [],
+      path: [[0, 0, 0], [20, 0, 0]],
+    })
+    const o = {
+      stock: 12.5, lap: 1,
+      preferByRole: { top: [0.5], bottom: [0.125, 0.875] },
+      avoidByRole: { top: [[0, 0.25], [0.75, 1]] as [number, number][], bottom: [[0.25, 0.75]] as [number, number][] },
+    }
+    const out = spliceCage({ member: 'B1', runs: [run('top'), run('bottom')] }, o)
+    const lapsOf = (role: RebarRun['role']) => {
+      // a lap is where consecutive pieces overlap; its centre is the midpoint
+      const ps = out.runs.filter((r) => r.role === role)
+      const centres: number[] = []
+      for (let k = 1; k < ps.length; k++) {
+        const endPrev = Math.max(...ps[k - 1].path.map((p) => p[0]))
+        const startNext = Math.min(...ps[k].path.map((p) => p[0]))
+        centres.push((endPrev + startNext) / 2)
+      }
+      return centres
+    }
+    for (const c of lapsOf('top')) { expect(c - 0.5).toBeGreaterThan(5 - 1e-6); expect(c + 0.5).toBeLessThan(15 + 1e-6) }
+    for (const c of lapsOf('bottom')) expect(c + 0.5 <= 5 + 1e-6 || c - 0.5 >= 15 - 1e-6).toBe(true)
+    expect(out.notes ?? []).toEqual([])
   })
 })

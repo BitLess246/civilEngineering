@@ -270,7 +270,10 @@ export function mergeBands(bands: [number, number][]): [number, number][] {
  */
 export function stirrupStations(i: Pick<BeamCageInput,
   'L' | 'h' | 'sEnd' | 'sMid' | 'colBLeft' | 'colBRight'>,
-  spliceBands: [number, number][] = []): number[] {
+  spliceBands: [number, number][] = [],
+  /** Pitch the hoops close up to through a lap, m. `SPLICE_HOOP_SPACING` by
+   *  default; an SMF beam hands in min(d/4, 100) per §418.6.3.3. */
+  lapPitch = SPLICE_HOOP_SPACING / 1000): number[] {
   const hM = i.h / 1000
   const faceL = (i.colBLeft ?? 0) / 2000
   const faceR = i.L - (i.colBRight ?? 0) / 2000
@@ -319,7 +322,7 @@ export function stirrupStations(i: Pick<BeamCageInput,
   const base = [...new Set(out.map((v) => Math.round(v * 1e6) / 1e6))].sort((p, q) => p - q)
   // …and closed up through every lap, last, so a splice can only ever add
   // stirrups to a layout the code rules have already settled.
-  return tightenOver(base, mergeBands(spliceBands), SPLICE_HOOP_SPACING / 1000)
+  return tightenOver(base, mergeBands(spliceBands), lapPitch)
 }
 
 /**
@@ -522,8 +525,12 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
       const k = byRole.get(r.role) ?? 0
       byRole.set(r.role, k + 1)
       const prefer = i.splice.preferByRole?.[r.role] ?? i.splice.prefer
+      // …and the critical sections, resolved per role the same way `spliceCage`
+      // resolves them: a hoop band over a lap the guard then moved would be
+      // tightened over nothing.
+      const avoid = i.splice.avoidByRole?.[r.role] ?? i.splice.avoid
       const stagger = k % 2 === 0 ? -lap / 2 : lap / 2
-      for (const c of runSpliceCentres(r, { ...i.splice, prefer, stagger })) {
+      for (const c of runSpliceCentres(r, { ...i.splice, prefer, avoid, stagger })) {
         const p = pointAt(r.path, c)
         const u = (p[0] - x0) * ux + (p[2] - z0) * uz
         spliceBands.push([u - lap / 2, u + lap / 2])
@@ -538,7 +545,13 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
   const D = stirrupBendDiameter(i.stirrupDia)
   /** Radius the stirrup is bent to where it wraps a corner bar, mm. */
   const R = (i.barDia + i.stirrupDia) / 2
-  stirrupStations(i, spliceBands).forEach((u, k) => {
+  // §418.6.3.3 — an SMF lap is enclosed by hoops at no more than d/4 and
+  // 100 mm. At 100 flat a 300-deep beam (d ≈ 240) got hoops at 100 through
+  // its laps where the clause asks for 60.
+  const lapPitch = i.system === 'smf'
+    ? Math.min(SPLICE_HOOP_SPACING, effectiveDepth(i.h, i.cover, i.stirrupDia, i.barDia) / 4) / 1000
+    : SPLICE_HOOP_SPACING / 1000
+  stirrupStations(i, spliceBands, lapPitch).forEach((u, k) => {
     const loop = [at(u, -sx, sy0), at(u, sx, sy0), at(u, sx, sy1), at(u, -sx, sy1)]
     runs.push({
       mark: `${i.mark}-S${k + 1}`,

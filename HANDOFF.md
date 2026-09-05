@@ -341,6 +341,44 @@ pipeline's member loop branches only on `beam`/`girder` and `column`, so a brace
 is never designed AND never reaches `unchecked` — the list that exists so a
 skipped member cannot read as OK. Fix that before S6 draws a braced bay.
 
+## Review round on the drawing set (Sep 2026)
+
+From the user's review of the rendered sheets, one detailing defect and three
+drafting ones:
+
+- **Beam laps had a PREFERENCE and no GUARD.** `barSplice` moved a lap to a
+  preferred fraction only while the pieces still fit a stock bar, and fell
+  back to the even division otherwise — which for a two-piece bar is EXACTLY
+  midspan. On the reference SMF frame the bottom bars were lapping at 0.43L
+  and 0.57L. `SpliceOptions.avoid`/`avoidByRole` now name the critical
+  sections: gravity and IMF get the bar-bending sheet's rule (bottom steel out
+  of the middle half, top steel out of the end quarters — §425.5.2.1 only makes
+  such a lap Class B, so this is practice, not a clause, and the comment says
+  so); an SMF gets §418.6.3.3 (no lap in the joint or within 2h of its face)
+  and the bottom bar's middle-half rule STANDS DOWN there, because the clause
+  sends bottom laps to the middle and keeping both would flag every correctly
+  detailed beam. The guard walks a lap to the zone edge, or cuts one more
+  piece, and where no cut of the stock keeps every lap clear it places the lap
+  and writes a `RebarCage.notes` line. The hoops over an SMF lap are now
+  min(d/4, 100) (§418.6.3.3), not 100 flat. Zones are fractions of the run,
+  taken over the span plus a 24db hook allowance each end so a hooked bar's
+  2h is not short by the hook.
+  **Worth knowing:** stock is 6 m (`STOCK_BAR_LENGTH`), so every 6 m bay laps
+  every through bar. An SMF at 6 m bays with a 450 beam and a 400 column has
+  1.1 m of hinge zone each end and cannot be lapped clear of it with a 6 m
+  stick — the note is the correct answer, and the real fix is a longer stock
+  (7.5/9/12 m are all commercial) chosen per bar. Not done.
+- **Frame elevation type was a third of the title's.** `u` is L/85 (was
+  L/110) and the title block is handed 0.72u, so annotation grows and the block
+  stays put; the pitch schedule wraps at the commas (`wrapPitch`, leaders take
+  `lines`), and `angledLeader` picks its side on the overrun LEFT AFTER the
+  slide rather than before it.
+- **Roof sheets stacked the bubbles off the BAND**, half a storey above beams
+  with nothing between. They stack off the top of the drawn concrete now, held
+  off by the callout stack; the zone wash label moved under the soffit.
+- The beam–column joint sheet and the Plans-tab paragraph were already gone
+  (#693).
+
 ## Continue from your phone / cloud (PC off)
 The local terminal session needs your PC on. To keep working without it:
 1. Open **claude.ai/code** (mobile browser) or the **Claude app**, same account.

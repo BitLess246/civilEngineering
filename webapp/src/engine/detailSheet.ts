@@ -211,7 +211,14 @@ export interface LeaderOpts {
   arrow?: number
   /** Second landing/text line, printed under the first. */
   text2?: string
+  /** Further lines under the first, in order — `text2` is the one-line case.
+   *  A pitch schedule that ran the width of a bay on one line wraps here. */
+  lines?: string[]
 }
+
+/** Every line a leader prints, first line first. */
+export const leaderLines = (o: { text: string; text2?: string; lines?: string[] }): string[] =>
+  [o.text, ...(o.lines ?? (o.text2 ? [o.text2] : []))]
 
 /**
  * Horizontal distance from a leader's TEXT ANCHOR to its knee — where the
@@ -297,14 +304,10 @@ export function leader(o: LeaderOpts): PlanPrimitive[] {
         { c: 'L', x: bx, y: by },
       ],
     },
-    {
-      kind: 'text', x: o.tx, y: o.ty, text: o.text, size: o.size,
+    ...leaderLines(o).map((text, k): PlanPrimitive => ({
+      kind: 'text', x: o.tx, y: o.ty + o.size * 1.25 * k, text, size: o.size,
       anchor: side === 'left' ? 'start' : 'end', color, weight: o.weight ?? 600,
-    },
-    ...(o.text2 ? [{
-      kind: 'text' as const, x: o.tx, y: o.ty + o.size * 1.25, text: o.text2, size: o.size,
-      anchor: (side === 'left' ? 'start' : 'end') as 'start' | 'end', color, weight: o.weight ?? 600,
-    }] : []),
+    })),
   ]
 }
 

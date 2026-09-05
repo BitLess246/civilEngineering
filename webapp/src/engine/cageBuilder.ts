@@ -22,14 +22,14 @@
 // ─────────────────────────────────────────────────────────────────────────
 import type { StructuralModel, RectSection } from './model'
 import type { StructureDesign } from './pipeline'
-import { buildBeamCage, effectiveDepth } from './beamCage'
+import { buildBeamCage, effectiveDepth, HOOP_ZONE_DEPTHS } from './beamCage'
 import { buildColumnCage, perimeterBars } from './columnCage'
 import { calcDevLength } from './devLength'
 import { buildFootingCage } from './footingCage'
 import { buildSlabCage, type SlabCageDir } from './slabCage'
 import { buildStairCage } from './stairCage'
 import { placeStair } from './stairPlacement'
-import { spliceCage } from './barSplice'
+import { spliceCage, type SpliceOptions } from './barSplice'
 import { STOCK_BAR_LENGTH } from './rebarModel'
 import type { CageKind, RebarCage } from './rebarModel'
 import { beamMomentRatios, momentRatioLimits, type BeamMomentRatios } from './beamMomentRatios'
@@ -277,12 +277,13 @@ export function buildStructureCages(
   const spliceOf = (
     sec: RectSection, barDia: number,
     prefer?: number[], preferByRole?: Record<string, number[]>,
-  ) => {
+    avoidByRole?: Record<string, [number, number][]>,
+  ): SpliceOptions => {
     const dl = calcDevLength({
       db: barDia, fc: sec.fc, fy: sec.fy,
       topBar: false, epoxy: 'none', lambda: 1, cbKtr_db: 2.5,
     })
-    return { stock: STOCK_BAR_LENGTH, lap: dl.ls_B / 1000, prefer, preferByRole }
+    return { stock: STOCK_BAR_LENGTH, lap: dl.ls_B / 1000, prefer, preferByRole, avoidByRole }
   }
 
   for (const b of design.beams) {
@@ -344,9 +345,59 @@ export function buildStructureCages(
     // One shared list used to serve both, which offered every bar both zones —
     // so whichever the geometry picked, half the splices landed in the zone the
     // rule exists to keep them out of.
+    //
+    //
+    // The preference says where a lap should go; the GUARD says where it may
+    // not, and the two are not the same thing. A preference is declined the
+    // moment the pieces stop fitting a stock bar, and the fallback is the even
+    // division — which for a two-piece bar is EXACTLY midspan, the one place a
+    // bottom bar must not lap. So the critical sections are named as well.
+    //
+    //   GRAVITY and IMF: the bottom steel's middle half and the top steel's
+    //   end quarters — the regions the standard bar-bending sheet hatches
+    //   "avoid splicing". §425.5.2.1 does not forbid a lap there (it makes it
+    //   Class B), and §418.4.2 places no lap for an IMF beam, so this is the
+    //   detailing rule and not a clause; it is a guard because a lap at the
+    //   peak moment is the bar's weakest point at its most demanded one.
+    //
+    //   SMF: §418.6.3.3 — no lap in the joint, within 2h of its face, or
+    //   within 2h of a section that yields under sway. Those are the ENDS, and
+    //   they swallow the end quarters, so the middle is where §418.6.3.3 sends
+    //   the bottom steel as well as the top (with hoops at ≤ d/4 and 100 over
+    //   the lap, which `stirrupStations` closes up). The bottom bar's
+    //   middle-half rule therefore stands down in an SMF: kept, it would
+    //   forbid every position the clause allows, and the guard would report a
+    //   violation on every beam of every frame that is detailed correctly.
+    //
+    // The guard would rather cut one more piece than lap in a critical
+    // section, and reports the lap it could not keep out rather than placing
+    // it in silence.
+    const smf = design.system === 'smf'
+    const hingeZone = smf
+      ? Math.max(colWidthAt(mem.i), colWidthAt(mem.j)) / 2000 + HOOP_ZONE_DEPTHS * sec.h / 1000
+      : 0
+    // The zones are fractions of the RUN, and a run is longer than the span
+    // where its ends hook: the bend, the 12db tail and the reach into the
+    // joint are all bar. A fraction of the span applied to that run lands
+    // short of 2h by the hook's length. So the fraction is taken over the span
+    // plus a hook allowance each end — 24db, an upper bound on what `beamCage`
+    // bends — which is exact for a hooked bar and conservative for one that
+    // runs through (the fraction of a shorter run covers more of it).
+    const hook = (24 * sec.barDia) / 1000
+    const hinge = hingeZone > 0 && b.L > 0 ? Math.min(0.5, (hingeZone + hook) / (b.L + 2 * hook)) : 0
+    const hingeEnds: [number, number][] = hinge > 0 ? [[0, hinge], [1 - hinge, 1]] : []
+    const lapFrac = spliceOf(sec, sec.barDia).lap / (b.L + 2 * hook)
     const beamSplice = spliceOf(sec, sec.barDia, [0.5], {
       top: [0.5],                       // middle half
-      bottom: [0.125, 0.875],           // end quarters
+      // Bottom steel laps as near the supports as it may: the end quarters,
+      // or in an SMF just past the hinge zone — the first place §418.6.3.3
+      // allows, and the furthest from midspan that is.
+      bottom: smf && hinge > 0
+        ? [hinge + lapFrac / 2 + 0.01, 1 - hinge - lapFrac / 2 - 0.01]
+        : [0.125, 0.875],
+    }, {
+      top: [[0, 0.25], [0.75, 1], ...hingeEnds],
+      bottom: smf ? hingeEnds : [[0.25, 0.75]],
     })
     add('beam', spliceCage(buildBeamCage({
       // The cage is told how its bars WILL be lapped, so it can close the
