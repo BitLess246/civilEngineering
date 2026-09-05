@@ -1972,6 +1972,7 @@ export async function optimizeStructureAsync(
     let design = await designStructureWithPool(work, soil, plan, opts, pool, sub('Optimize · initial'))
     if (!design) return null
     ;({ m: work, d: design } = await detail(work, design, 'Optimize · initial'))
+    const initialDesign = design   // pre-optimization state, for the report's initial-vs-final table
     steps.push({ iter: 0, grown: 0, fails: countFails(design), ok: designOK(design) })
 
     let iter = 0
@@ -1992,13 +1993,15 @@ export async function optimizeStructureAsync(
         stopReason = stopReasonFor(design, 'no failing section can grow any further (top of the W catalog, an unsupported shape family, or the cast-in-place size limit)')
         break
       }
+      const growChanges = diffDesignGeometry(work, grown)
       work = grown
       const d = await designStructureWithPool(work, soil, plan, opts, pool, sub(`Optimize iter ${iter}`))
       if (!d) break
       ;({ m: work, d: design } = await detail(work, d, `Optimize iter ${iter}`))
-      steps.push({ iter, grown: act.n, fails: countFails(design), ok: designOK(design) })
+      steps.push({ iter, grown: act.n, fails: countFails(design), ok: designOK(design), changes: growChanges })
     }
     const converged = designOK(design)
+    const preEconomy = work
     if (!converged && !stopReason)
       stopReason = stopReasonFor(design, `iteration cap (${maxIter}) reached — check spans and loads`)
 
@@ -2137,10 +2140,12 @@ export async function optimizeStructureAsync(
           if (d) { work = m2; design = d }
         }
       }
-      steps.push({ iter: iter + 1, grown: 0, fails: 0, ok: true })
+      steps.push({ iter: iter + 1, grown: 0, fails: 0, ok: true,
+        changes: diffDesignGeometry(preEconomy, work),
+        note: 'economy — shrink batches + fine-tune, every trial a full re-design' })
     }
 
-    return { design, model: work, steps, converged, stopReason }
+    return { design, model: work, steps, converged, stopReason, initialDesign }
   } finally {
     pool.terminate()
   }
@@ -2282,7 +2287,25 @@ export function selectBarDiameters(
 }
 
 // ── Optimisation loop ─────────────────────────────────────────────────────
-export interface OptimizeStep { iter: number; grown: number; fails: number; ok: boolean }
+export interface OptimizeStep {
+  iter: number; grown: number; fails: number; ok: boolean
+  /** The accepted geometry changes this iteration made (grow step / economy
+   *  pass), for the report's iteration trail. Optional so existing steps and
+   *  callers stay valid; the trail prints only when present. */
+  changes?: OptimizeStepChange[]
+  /** Phase label for aggregate steps (e.g. the economy pass). */
+  note?: string
+}
+/** One accepted optimizer change, recorded so the report can show what the
+ *  optimizer actually did rather than a bare "grown: 6". `label` is the human
+ *  section/plate name, `from`/`to` are the geometry before/after. */
+export interface OptimizeStepChange {
+  sectionId: string
+  kind: 'section' | 'slab' | 'wall' | 'deck'
+  label: string
+  from: string
+  to: string
+}
 export interface OptimizeResult {
   design: StructureDesign
   model: StructuralModel   // model carrying the optimised per-member sections
@@ -2290,6 +2313,39 @@ export interface OptimizeResult {
   converged: boolean
   /** Why the optimizer stopped short, when converged is false. */
   stopReason?: string
+  /** The design the optimizer started from (iteration 0, before any grow or
+   *  trim) — the "initial" side of the report's initial-vs-final comparison.
+   *  Captured before the loop and never mutated afterwards. */
+  initialDesign?: StructureDesign
+}
+
+/** Geometry delta between two settled models — section b/h/shape, slab and
+ *  wall thicknesses, deck joist layout. Index-based, exactly the assumption
+ *  `sectionsChanged` already guards. */
+const diffDesignGeometry = (a: StructuralModel, b: StructuralModel): OptimizeStepChange[] => {
+  const out: OptimizeStepChange[] = []
+  const secLabel = (s: RectSection) => s.shape ?? `${s.b}×${s.h}`
+  a.sections.forEach((s, i) => {
+    const t = b.sections[i]
+    if (!t || (s.b === t.b && s.h === t.h && s.shape === t.shape)) return
+    out.push({ sectionId: s.id, kind: 'section', label: t.name || secLabel(t), from: secLabel(s), to: secLabel(t) })
+  })
+  a.plates.forEach((p, i) => {
+    const q = b.plates[i]
+    if (!q) return
+    if (p.thickness !== q.thickness)
+      out.push({ sectionId: p.id, kind: 'slab', label: p.id, from: `${p.thickness} mm`, to: `${q.thickness} mm` })
+    if (p.deck && q.deck && (p.deck.joistD !== q.deck.joistD || p.deck.joistSpacing !== q.deck.joistSpacing
+      || p.deck.deckThickness !== q.deck.deckThickness))
+      out.push({ sectionId: p.id, kind: 'deck', label: `${p.id} deck`,
+        from: `${p.deck.deckThickness} mm @ ${p.deck.joistSpacing} mm`, to: `${q.deck.deckThickness} mm @ ${q.deck.joistSpacing} mm` })
+  })
+  ;(a.walls ?? []).forEach((w, i) => {
+    const q = (b.walls ?? [])[i]
+    if (q && w.thickness !== q.thickness)
+      out.push({ sectionId: w.id, kind: 'wall', label: w.id, from: `${w.thickness} mm`, to: `${q.thickness} mm` })
+  })
+  return out
 }
 
 /** Human-readable reason for a non-converged stop. `why` explains the loop exit;
@@ -2594,6 +2650,7 @@ export function optimizeStructure(
   let design = designStructure(work, soil, plan, opts, sub('Optimize · initial'))
   if (!design) return null
   ;({ m: work, d: design } = detail(work, design, 'Optimize · initial'))
+  const initialDesign = design   // pre-optimization state, for the report's initial-vs-final table
   steps.push({ iter: 0, grown: 0, fails: countFails(design), ok: designOK(design) })
 
   // GROW: jump each failing section by the estimated steps needed to satisfy
@@ -2617,13 +2674,15 @@ export function optimizeStructure(
       stopReason = stopReasonFor(design, 'no failing section can grow any further (top of the W catalog, an unsupported shape family, or the cast-in-place size limit)')
       break
     }
+    const growChanges = diffDesignGeometry(work, grown)
     work = grown
     const d = designStructure(work, soil, plan, opts, sub(`Optimize iter ${iter}`))
     if (!d) break
     ;({ m: work, d: design } = detail(work, d, `Optimize iter ${iter}`))
-    steps.push({ iter, grown: act.n, fails: countFails(design), ok: designOK(design) })
+    steps.push({ iter, grown: act.n, fails: countFails(design), ok: designOK(design), changes: growChanges })
   }
   const converged = designOK(design)
+  const preEconomy = work
   if (!converged && !stopReason)
     stopReason = stopReasonFor(design, `iteration cap (${maxIter}) reached — check spans and loads`)
 
@@ -2786,8 +2845,10 @@ export function optimizeStructure(
       const m2 = selectBarDiameters(work, soil, plan, opts, design)
       if (m2 !== work) { const d = designStructure(m2, soil, plan, opts); if (d) { work = m2; design = d } }
     }
-    steps.push({ iter: iter + 1, grown: 0, fails: 0, ok: true })
+    steps.push({ iter: iter + 1, grown: 0, fails: 0, ok: true,
+      changes: diffDesignGeometry(preEconomy, work),
+      note: 'economy — shrink batches + fine-tune, every trial a full re-design' })
   }
 
-  return { design, model: work, steps, converged, stopReason }
+  return { design, model: work, steps, converged, stopReason, initialDesign }
 }
