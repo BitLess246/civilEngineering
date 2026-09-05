@@ -27,6 +27,7 @@ import { generateGridModel, removeElements, removeNode, buildGravityLoads, split
 import type { StructuralModel, Member, Plate, RectSection, ModelLoad, MemberRole, MemberReleases, NodeSupport, SupportFixity, WoodDeck, StairLanding } from '../engine/model'
 import { distributePanel } from '../engine/tributary'
 import { type F3Analysis, type F3MemberResult } from '../engine/frame3d'
+import { modelToFrame3D } from '../engine/modelBridge'
 import { type ActiveSetAnalysis, type AxialMode } from '../engine/axialOnly'
 import { diagramScale, type DiagramComp } from '../engine/memberDiagram3d'
 import { validateMesh, hasMeshErrors } from '../engine/meshValidation'
@@ -921,6 +922,14 @@ export default function ModelSpace() {
 
   /** Project & design inputs — shown in the schedules block and printed as
    *  §2 of the PDF calculation report. */
+  /** The SAME bridge the analyze worker builds — its node order maps the
+   *  displacement vector back to nodes for the report. Guarded in the report
+   *  by a length check, so a stale analysis omits displacements rather than
+   *  mis-mapping them. */
+  const analysisBridge = useMemo(
+    () => (model ? modelToFrame3D(model, { crackedSections: cracked, shearDeformation: shearDef, beamTopOfSteel: beamTopSteel }) : null),
+    [model, cracked, shearDef, beamTopSteel],
+  )
   // The bar cages, placed. Same objects the detail sheets project and the
   // take-off weighs — a view that built its own would be a fourth description
   // of the same steel, which is the thing this whole model set out to stop.
@@ -1107,7 +1116,14 @@ export default function ModelSpace() {
           // have to exist first; a gravity frame has no such clause and the
           // section is left out rather than printed empty.
           design.system === 'gravity' || !cageBuild ? null
-            : structureMomentRatios(model, design, cageBuild.cages)),
+            : structureMomentRatios(model, design, cageBuild.cages),
+          // Workflow states — each report section is built only from state
+          // that exists; an analysis never run leaves its section out.
+          {
+            analysis,
+            nodeOrder: analysisBridge?.nodes ?? null,
+            modal, po, bx, nl, nlHinge, drift, opt, tryBars,
+          }),
         // The same sheet set the Plans tab renders — one list, two outputs.
         sheets: buildSheetSet(model, design, soil),
         fileName: `structure-report${lh.sheet ? '-' + lh.sheet.split('·')[0].trim() : ''}.pdf`,
