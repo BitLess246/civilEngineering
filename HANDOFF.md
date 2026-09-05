@@ -397,6 +397,37 @@ is gone with the drawing that used it. `buildModelPdf` returns the unsaved
 document (`generateModelPdf` is build + save), which is what a combined PDF
 needs and how the pages get looked at from a test.
 
+## Export dialog, the Analysis Appendix and the combined PDF (Sep 2026)
+
+The export button opens `components/ExportReportDialog` instead of
+downloading straight away: tick the report sections, tick the appendix
+sections, choose the files — Structure Design Report, Analysis Appendix,
+Combined PDF — and Generate. An appendix section whose result was never run
+is greyed out with what to run.
+
+- **`lib/analysisAppendix.ts`** (pure) builds the appendix from what the page
+  holds: A analytical model, B loading (cases, every assignment, the static
+  seismic and wind tables, the combinations actually run with their factors),
+  C linear static analysis (the ΣApplied-vs-ΣReactions check per combination,
+  reactions, displacement envelope, member forces and the governing envelope
+  that the design reads), D modal / RSA / drift / irregularities, E nonlinear
+  time-history (hinge model and shear building), F pushover with the capacity
+  curve as a `Drawing`, G optimization (objective as implemented, iteration
+  history, initial-vs-final sections — `ModelSpace` keeps `optBefore` for
+  that). `analysisStatus` is the §15 table: every verdict from its own result,
+  NOT RUN where nothing ran, and never PASS because a section exists. It also
+  prints in the design report as its own section.
+- **`lib/appendixPdf.ts`** paints it on the `pdfKit` chrome; `buildCombinedPdf`
+  runs `buildModelPdfInto` and then the appendix on the same sheet, with one
+  run of footers (`pageFooters` learned `noStripOn` for the appendix's first
+  page). `ModelPdfInput.sections` prints a subset with the numbering following
+  what is printed.
+- What the .md brief asked for and is NOT here: mode-shape figures, a
+  pushover target displacement / performance point (the engine computes
+  neither), and a per-member traceability block — the worked solutions already
+  carry the governing combination, the design steps and the cage figures, so
+  the chain is there without a second rendering of it.
+
 ## Continue from your phone / cloud (PC off)
 The local terminal session needs your PC on. To keep working without it:
 1. Open **claude.ai/code** (mobile browser) or the **Claude app**, same account.

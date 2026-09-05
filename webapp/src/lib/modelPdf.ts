@@ -20,12 +20,27 @@
 import type { LetterheadState } from '../components/calc'
 import type { ModelReport } from './modelReport'
 import type { PlanSheet } from './planSheets'
+import type { StatusRow } from './analysisAppendix'
 import { COMPUTED_BY, docLabel as brandDocLabel } from './brand'
 import { paintDrawing, paintedSize } from './drawingPdf'
 import {
   createSheet, autoTable, type Sheet,
   INK, MUTED, FAINT, BRAND, HAIR, M, CONTENT_W, PAGE_W,
 } from './pdfKit'
+
+/** The sections of the design report, in print order — what the export
+ *  dialog offers, and what `buildModelPdf` prints when told a subset. */
+export type ReportSectionKey = 'snapshot' | 'summary' | 'status' | 'project' | 'schedules' | 'solutions' | 'drawings'
+export const REPORT_SECTION_TITLES: Record<ReportSectionKey, { label: string; hint?: string }> = {
+  snapshot: { label: '3D model snapshot', hint: 'the analysis view as it stands' },
+  summary: { label: 'Design summary', hint: 'verdict, governing checks, quantities' },
+  status: { label: 'Analysis & design status', hint: 'every analysis and check, as the engine reported it' },
+  project: { label: 'Project & design data' },
+  schedules: { label: 'Member schedules', hint: 'beams, columns, slabs, footings, walls, connections' },
+  solutions: { label: 'Worked solutions', hint: 'every member, with its cage figures' },
+  drawings: { label: 'Drawings', hint: 'the plan and detail sheet set' },
+}
+export const ALL_REPORT_SECTIONS: ReportSectionKey[] = ['snapshot', 'summary', 'status', 'project', 'schedules', 'solutions', 'drawings']
 
 export interface ModelPdfInput {
   lh: LetterheadState
@@ -36,6 +51,12 @@ export interface ModelPdfInput {
    *  `Drawing` objects the Plans tab shows, painted as vectors here. Omitted
    *  (or empty) simply leaves the section out. */
   sheets?: PlanSheet[]
+  /** The analysis & design status rows (`analysisStatus`) — printed as a
+   *  table in the summary when given. */
+  status?: StatusRow[]
+  /** Which sections to print. Omitted → all of them. Numbering follows the
+   *  sections actually printed, so a report without schedules has no gap. */
+  sections?: ReportSectionKey[]
   fileName?: string
 }
 
@@ -50,19 +71,35 @@ export async function generateModelPdf(input: ModelPdfInput): Promise<void> {
  * that wants to bind it with something else, or a test that wants to look
  * at the pages it made without a browser to download them into.
  */
-export async function buildModelPdf({ lh, report, modelImg, badges, sheets }: ModelPdfInput): Promise<{ doc: Sheet['doc']; today: string }> {
+export async function buildModelPdf(input: ModelPdfInput): Promise<{ doc: Sheet['doc']; today: string }> {
   const sh = createSheet()
+  const { today, sheet, docLabel } = await buildModelPdfInto(sh, input)
+  sh.pageFooters(docLabel, sheet, today, input.lh.project)
+  return { doc: sh.doc, today }
+}
+
+/**
+ * Paint the report into a sheet the caller owns, through its signatures and
+ * disclaimer but WITHOUT the page footers — the caller adds those once it
+ * has finished with the document, which for a combined PDF is after the
+ * appendix. Returns what the footers need.
+ */
+export async function buildModelPdfInto(
+  sh: Sheet, { lh, report, modelImg, badges, sheets, status, sections }: ModelPdfInput,
+): Promise<{ today: string; sheet: string; docLabel: string }> {
   const { doc } = sh
   const setF = sh.setF
   const ensure = sh.ensure
-  const rule = sh.rule
   const tableTheme = sh.tableTheme
   const lastY = sh.lastY
+  const want = new Set<ReportSectionKey>(sections ?? ALL_REPORT_SECTIONS)
+  // Numbered in print order over the sections actually printed.
+  let n = 0
+  const rule = (title: string) => sh.rule(++n, title)
 
   const today = new Date().toISOString().slice(0, 10)
   const sheet = lh.sheet || 'S-3D'
   const docLabel = brandDocLabel('Structure — Calculation Report')
-
 
   sh.brandHeader({
     docLabel, title: 'Structure — Design Calculation', sheet, today,
@@ -75,23 +112,49 @@ export async function buildModelPdf({ lh, report, modelImg, badges, sheets }: Mo
   ])
 
   // ── 3D model snapshot ──
-  if (modelImg) await sh.figure(modelImg, 'FIG 1 · 3D STRUCTURAL MODEL — ANALYSIS SNAPSHOT')
+  if (modelImg && want.has('snapshot')) await sh.figure(modelImg, 'FIG 1 · 3D STRUCTURAL MODEL — ANALYSIS SNAPSHOT')
 
-  // ── 1 · Design summary ──
-  rule(1, 'Design Summary')
-  sh.statCards(report.stats)
-  ensure(20)
-  autoTable(doc, {
-    ...tableTheme([2]),
-    startY: sh.y,
-    head: [['Check', 'Scope / governing', 'Ratio', 'Status']],
-    body: report.checks.map((c) => [c.name, c.detail, c.ratio === null ? '—' : c.ratio.toFixed(2), c.ok ? 'PASS' : 'FAIL']),
-    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 44 }, 2: { halign: 'right', font: 'mono', cellWidth: 14 }, 3: { halign: 'right', cellWidth: 16 } },
-  })
-  sh.y = (lastY() ?? sh.y) + 4
+  // ── Design summary ──
+  if (want.has('summary')) {
+    rule('Design Summary')
+    sh.statCards(report.stats)
+    ensure(20)
+    autoTable(doc, {
+      ...tableTheme([2]),
+      startY: sh.y,
+      head: [['Check', 'Scope / governing', 'Ratio', 'Status']],
+      body: report.checks.map((c) => [c.name, c.detail, c.ratio === null ? '—' : c.ratio.toFixed(2), c.ok ? 'PASS' : 'FAIL']),
+      columnStyles: { 0: { fontStyle: 'bold', cellWidth: 44 }, 2: { halign: 'right', font: 'mono', cellWidth: 14 }, 3: { halign: 'right', cellWidth: 16 } },
+    })
+    sh.y = (lastY() ?? sh.y) + 4
+  }
 
-  // ── 2 · Project & design data ──
-  rule(2, 'Project & Design Data')
+  // ── Analysis & design status ──
+  if (status && want.has('status')) {
+    rule('Analysis & Design Status')
+    setF('sans', 'normal', 6.6, MUTED)
+    for (const w of doc.splitTextToSize('What was run, and what it found. A check that was not run says so; nothing is marked PASS because its section exists. The full results are in the Analysis Appendix.', CONTENT_W)) { doc.text(w, M, sh.y); sh.y += 3.2 }
+    sh.y += 2
+    ensure(20)
+    autoTable(doc, {
+      ...tableTheme(),
+      startY: sh.y,
+      head: [['Check', 'Status', 'Detail']],
+      body: status.map((r) => [r.check, r.verdict, r.detail]),
+      columnStyles: { 0: { fontStyle: 'bold', cellWidth: 48 }, 1: { font: 'mono', fontStyle: 'bold', cellWidth: 22 } },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      didParseCell: (d: any) => {
+        if (d.section !== 'body' || d.column.index !== 1) return
+        const v = String(d.cell.raw)
+        d.cell.styles.textColor = v === 'PASS' || v === 'COMPLETE' ? [20, 96, 58] : v === 'FAIL' ? [194, 64, 42] : v === 'ADVISORY' ? [180, 120, 20] : [163, 157, 141]
+      },
+    })
+    sh.y = (lastY() ?? sh.y) + 4
+  }
+
+  // ── Project & design data ──
+  if (want.has('project')) {
+  rule('Project & Design Data')
   {
     const half = Math.ceil(report.props.length / 2)
     const rows: string[][] = []
@@ -111,13 +174,16 @@ export async function buildModelPdf({ lh, report, modelImg, badges, sheets }: Mo
     })
     sh.y = (lastY() ?? sh.y) + 4
   }
+  }
 
-  // ── 3 · Member schedules ──
-  rule(3, 'Member Schedules')
+  // ── Member schedules ──
+  if (want.has('schedules')) {
+  ensure(44)                 // the heading with its first table, never alone
+  rule('Member Schedules')
   report.tables.forEach((t, i) => {
     ensure(24)
     setF('sans', 'bold', 8, INK)
-    doc.text(`3.${i + 1}  ${t.title}`, M, sh.y)
+    doc.text(`${n}.${i + 1}  ${t.title}`, M, sh.y)
     sh.y += 2.5
     autoTable(doc, {
       ...tableTheme(t.right ?? []),
@@ -128,16 +194,18 @@ export async function buildModelPdf({ lh, report, modelImg, badges, sheets }: Mo
     })
     sh.y = (lastY() ?? sh.y) + 5.5
   })
+  }
 
-  // ── 4 · Worked solutions (every member) ──
-  rule(4, 'Worked Solutions')
+  // ── Worked solutions (every member) ──
+  if (want.has('solutions')) {
+  rule('Worked Solutions')
   report.groups.forEach((g, gi) => {
     // Enough for the heading AND the first item's header block, so a group
     // title is never left alone at the foot of a page.
     ensure(60)
     sh.y += 1.5
     setF('sans', 'bold', 8.6, BRAND)
-    doc.text(`4.${gi + 1}  ${g.title}`, M, sh.y)
+    doc.text(`${n}.${gi + 1}  ${g.title}`, M, sh.y)
     sh.y += 1.6
     doc.setDrawColor(...HAIR); doc.setLineWidth(0.3)
     doc.line(M, sh.y, M + CONTENT_W, sh.y)
@@ -221,15 +289,16 @@ export async function buildModelPdf({ lh, report, modelImg, badges, sheets }: Mo
       sh.y += 2
     })
   })
+  }
 
-  // ── 5 · Drawings (the same sheets the Plans tab shows) ──
+  // ── Drawings (the same sheets the Plans tab shows) ──
   //
   // Painted as VECTORS through the shared `paintDrawing`, not rasterised: a
   // 261 mm dimension has to stay readable when the sheet is printed, and a
   // screenshot of the tab would not be.
-  if (sheets?.length) {
-    rule(5, 'Drawings')
-    let n = 0
+  if (sheets?.length && want.has('drawings')) {
+    rule('Drawings')
+    let k = 0
     let lastGroup = ''
     for (const s of sheets) {
       if (s.group !== lastGroup) {
@@ -240,7 +309,7 @@ export async function buildModelPdf({ lh, report, modelImg, badges, sheets }: Mo
         doc.text(s.group.toUpperCase(), M, sh.y, { charSpace: 0.2 })
         sh.y += 3
       }
-      n += 1
+      k += 1
       const box = { x: M, y: sh.y, w: CONTENT_W, maxH: 150 }
       const size = paintedSize(s.drawing, box)
       // Keep a sheet with its caption rather than orphaning the caption on the
@@ -251,7 +320,7 @@ export async function buildModelPdf({ lh, report, modelImg, badges, sheets }: Mo
       sh.y = placed.y + size.height + 3.5
 
       setF('sans', 'bold', 7, INK)
-      doc.text(`5.${n}  ${s.title}${s.subtitle ? ` · ${s.subtitle}` : ''}`, M, sh.y)
+      doc.text(`${n}.${k}  ${s.title}${s.subtitle ? ` · ${s.subtitle}` : ''}`, M, sh.y)
       sh.y += 3.4
       for (const w of s.warnings) {
         setF('sans', 'normal', 6.4, MUTED)
@@ -267,7 +336,6 @@ export async function buildModelPdf({ lh, report, modelImg, badges, sheets }: Mo
     + 'Load factors per NSCP 2015 §203.3; strength reduction factors per ACI 318-14 Table 21.2.1; '
     + `steel design per AISC 360-16 LRFD. Project: ${lh.project || '—'}.`,
   )
-  sh.pageFooters(docLabel, sheet, today, lh.project)
 
-  return { doc, today }
+  return { today, sheet, docLabel }
 }
