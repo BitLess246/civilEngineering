@@ -11,33 +11,35 @@ import type {
 import { designOK } from '../engine/pipeline'
 import type { IrregularityFlag } from '../engine/irregularity'
 import type { BeamRatioRow } from '../engine/cageBuilder'
+import type { RebarCage } from '../engine/rebarModel'
+import type { Drawing } from '../engine/planRenderer'
 import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution,
   woodBeamRowSolution, woodColumnRowSolution, woodSlabRowSolution } from './modelSpaceSolutions'
 import { connectionRowSolution } from './connectionSolution'
 import { buildPrestressedSolution } from './prestressedSolution'
 import type { SolutionStep, SolutionLine } from './solution'
+import { beamSectionZones, columnStackByMember, elevationBundleByMember } from './planDetails'
+import {
+  beamElevationDrawing, beamSectionDrawing, columnElevationDrawing, columnSectionDrawing, columnStoreyOf,
+} from './scheduleFigures'
 
 export interface ReportStat { label: string; value: string; unit?: string }
 export interface ReportCheck { name: string; detail: string; ratio: number | null; ok: boolean }
 export interface ReportTable { title: string; head: string[]; rows: string[][]; right?: number[] }
-/** Cross-section geometry for a member, drawn (vector) in the PDF report so the
- *  reader can see the bar layout in the section. */
-export interface ReportSection {
-  kind: 'beam' | 'column'
-  b: number; h: number; cover: number; barDia: number; stirrupDia: number
-  bars: number
-  layers?: number[]         // beam: tension bars per layer (bottom-first)
-  comprLayers?: number[]    // beam: compression bars per layer (top-first)
-  hogging?: boolean         // beam: tension steel at the top
-  bf?: number; hf?: number  // beam: T-flange (sagging flanged section)
-  /** beam: the flange projects on ONE side only — Table 406.3.2.1's edge row,
-   *  an L (spandrel) rather than a symmetric T. */
-  edge?: boolean
-  fourFace?: boolean        // column: bars distributed on all four faces
-  legs?: number             // stirrup legs: 2 perimeter + interior crossties
-}
+/**
+ * A drawing that goes with a worked solution — the SAME `Drawing` the
+ * schedule row expands into on screen, painted as vectors in the PDF.
+ *
+ * `section` is a cut through the member's placed cage at the station the
+ * solution is about; `elevation` is the drawing set's own sheet for the
+ * member with the stretch this solution speaks for washed over. The report
+ * used to draw a section of its own from the bar count and a cover, and it
+ * could show neither a lap, a crank, nor the stirrup set the cage placed.
+ */
+export interface ReportFigure { kind: 'section' | 'elevation'; caption: string; drawing: Drawing }
 export interface ReportSolution {
-  title: string; sub?: string; steps: SolutionStep[]; section?: ReportSection
+  title: string; sub?: string; steps: SolutionStep[]
+  figures?: ReportFigure[]
   details?: string          // demand summary (Mu/Vu for beams, Pu/Mu for columns)
   loc?: string              // plan grid line + floor the member sits on
 }
@@ -110,6 +112,12 @@ export function buildModelReport(
    *  cages (`structureMomentRatios`). Omitted → the section is left out, which
    *  is also what a gravity design gets. */
   ratios?: BeamRatioRow[] | null,
+  /** The placed cages (`buildStructureCages`). Given, every RC beam section
+   *  and column solution carries the schedule's own figures — the frame
+   *  elevation or column stack with the row's stretch washed, and the cut
+   *  through the cage at the row's station. Omitted → no figures, which is
+   *  also what a steel or timber member gets. */
+  cages?: RebarCage[] | null,
 ): ModelReport {
   const sectionFor = (memberId: string): RectSection | undefined => {
     const m = model.members.find((x) => x.id === memberId)
@@ -456,23 +464,52 @@ export function buildModelReport(
   })
 
   // ── Worked solutions — every member (user-selected depth) ──
+  //
+  // The figures are the schedule's: `elevationOf` / `stackOf` are the drawing
+  // set's sheets indexed by member, built once here exactly as `ModelSpace`
+  // builds them for the accordion, and the cuts come from the same cages.
+  const elevationOf = cages ? elevationBundleByMember(model, design, cages) : null
+  const stackOf = cages ? columnStackByMember(model, design, cages) : null
+  const beamFigures = (bm: StructureDesign['beams'][number], k: number, sec: RectSection): ReportFigure[] => {
+    if (!cages) return []
+    const s = bm.sections[k]
+    const out: ReportFigure[] = []
+    const bundle = elevationOf?.get(bm.id)
+    if (bundle) {
+      const zone = beamSectionZones(model, bundle, bm.id, bm.sections.map((x) => x.x))?.[k]
+      const d = beamElevationDrawing(bundle, zone, `${bm.id} · ${s.label}`)
+      out.push({ kind: 'elevation', caption: `${d.title} — ${bm.id} ${s.label} washed`, drawing: d })
+    }
+    const cut = beamSectionDrawing(model, cages, bm, s, sec)
+    if (cut) out.push({ kind: 'section', caption: cut.title, drawing: cut })
+    return out
+  }
+  const columnFigures = (c: StructureDesign['columns'][number], cs: RectSection): ReportFigure[] => {
+    if (!cages) return []
+    const out: ReportFigure[] = []
+    const bundle = stackOf?.get(c.id)
+    if (bundle) {
+      const d = columnElevationDrawing(bundle, columnStoreyOf(bundle, c.id), c.id)
+      out.push({ kind: 'elevation', caption: `${d.title} — storey ${c.id} washed`, drawing: d })
+    }
+    const cut = columnSectionDrawing(model, cages, c, cs)
+    if (cut) out.push({ kind: 'section', caption: cut.title, drawing: cut })
+    return out
+  }
+
   const groups: ReportGroup[] = []
   if (design.beams.length) groups.push({
     title: 'RC beams & girders',
     items: design.beams.flatMap((bm) => {
       const sec = sectionFor(bm.id)
       if (!sec) return []
-      return bm.sections.map((s) => ({
+      return bm.sections.map((s, k) => ({
         title: `${bm.id} · ${s.label}`,
         sub: `${bm.role} ${sec.name} · L = ${f1(bm.L)} m · ${bm.gov ?? ''}`,
         details: `Mu ${f1(Math.abs(s.Mu))} kN·m · Vu ${f1(s.Vu)} kN`,
         loc: memberLoc(bm.id),
         steps: beamSectionSolution(sec, s),
-        section: {
-          kind: 'beam' as const, b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia, stirrupDia: sec.tieDia,
-          bars: s.design.bars, layers: s.design.layers, comprLayers: s.design.comprLayers,
-          hogging: s.hogging, bf: s.bf, hf: s.hf, edge: s.edge, legs: s.design.legs,
-        },
+        figures: beamFigures(bm, k, sec),
       }))
     }),
   })
@@ -500,10 +537,7 @@ export function buildModelReport(
         details: `Pu ${f1(c.Pu)} kN · Mu ${f1(c.Mu)} kN·m`,
         loc: memberLoc(c.id),
         steps: columnRowSolution(cs, c),
-        section: {
-          kind: 'column' as const, b: cs.b, h: cs.h, cover: cs.cover, barDia: cs.barDia, stirrupDia: cs.tieDia,
-          bars: c.bars, fourFace: c.layout === 'all-around',
-        },
+        figures: columnFigures(c, cs),
       }] : []
     }),
   })

@@ -6,18 +6,24 @@
 // reports looking like sheets from one set instead of two lookalikes that
 // drift apart.
 //
-// What stays here is what only this report has: the reinforcement cross-section
-// drawing and the member schedules. Rendered with jsPDF + autotable as crisp
-// vector text; formulas arrive as LaTeX from the solution builders and are
-// converted by texToPlain. This module (and the embedded font subsets) is
-// loaded lazily via dynamic import.
+// What stays here is what only this report has: the member schedules, the
+// worked solutions with the schedule's own figures beside them, and the
+// drawing set. Every figure is an engine `Drawing` painted through
+// `paintDrawing` — the cut through a member's placed cage and the sheet it is
+// on, the same objects the Plans tab and the schedule accordion show. The
+// report used to draw a cross-section of its own here from a bar count and a
+// cover, and it could show neither a lap, a crank, nor the stirrup set the
+// cage actually placed. Rendered with jsPDF + autotable as crisp vector text;
+// formulas arrive as LaTeX from the solution builders and are converted by
+// texToPlain. This module (and the embedded font subsets) is loaded lazily
+// via dynamic import.
 import type { LetterheadState } from '../components/calc'
-import type { ModelReport, ReportSection } from './modelReport'
+import type { ModelReport } from './modelReport'
 import type { PlanSheet } from './planSheets'
 import { COMPUTED_BY, docLabel as brandDocLabel } from './brand'
 import { paintDrawing, paintedSize } from './drawingPdf'
 import {
-  createSheet, autoTable,
+  createSheet, autoTable, type Sheet,
   INK, MUTED, FAINT, BRAND, HAIR, M, CONTENT_W, PAGE_W,
 } from './pdfKit'
 
@@ -33,7 +39,18 @@ export interface ModelPdfInput {
   fileName?: string
 }
 
-export async function generateModelPdf({ lh, report, modelImg, badges, sheets, fileName }: ModelPdfInput): Promise<void> {
+/** Build and download the report. */
+export async function generateModelPdf(input: ModelPdfInput): Promise<void> {
+  const { doc, today } = await buildModelPdf(input)
+  doc.save(input.fileName ?? `structure-report-${today}.pdf`)
+}
+
+/**
+ * Build the report as a document and hand it back unsaved — for a caller
+ * that wants to bind it with something else, or a test that wants to look
+ * at the pages it made without a browser to download them into.
+ */
+export async function buildModelPdf({ lh, report, modelImg, badges, sheets }: ModelPdfInput): Promise<{ doc: Sheet['doc']; today: string }> {
   const sh = createSheet()
   const { doc } = sh
   const setF = sh.setF
@@ -45,145 +62,6 @@ export async function generateModelPdf({ lh, report, modelImg, badges, sheets, f
   const today = new Date().toISOString().slice(0, 10)
   const sheet = lh.sheet || 'S-3D'
   const docLabel = brandDocLabel('Structure — Calculation Report')
-
-  const CONC: [number, number, number] = [238, 243, 248]
-  /** Vector cross-section (bar layout + stirrup hooks + dimension lines) drawn
-   *  into a boxW×boxH mm cell at (x, topY). Gutters are reserved on the bottom
-   *  (width dimension) and right (height dimension) so the callouts stay clear. */
-  const drawSection = (sec: ReportSection, x: number, topY: number, boxW: number, boxH: number) => {
-    const padL = 2.5, padR = 8, padT = 3, padB = 6.5     // gutters for dim callouts
-    const availW = boxW - padL - padR, availH = boxH - padT - padB
-    const flanged = sec.kind === 'beam' && !!sec.bf && sec.bf > sec.b && !sec.hogging && !!sec.hf
-    const drawW = flanged ? sec.bf! : sec.b
-    const s = Math.min(availW / drawW, availH / sec.h)
-    const wv = drawW * s, hv = sec.h * s, bwv = sec.b * s
-    const bx = x + padL + (availW - wv) / 2, by = topY + padT + (availH - hv) / 2
-    // An L (edge) beam's overhang is all on one side — Table 406.3.2.1's edge
-    // row — so its web sits flush with the flange, not centred under it.
-    const webX = flanged && sec.edge ? bx : bx + (wv - bwv) / 2
-    doc.setLineWidth(0.25); doc.setDrawColor(...INK); doc.setFillColor(...CONC)
-    if (flanged) {
-      const hfv = sec.hf! * s
-      doc.rect(webX, by, bwv, hv, 'FD')       // web (full height)
-      doc.rect(bx, by, wv, hfv, 'FD')         // flange cap
-    } else {
-      doc.rect(webX, by, bwv, hv, 'FD')
-    }
-    // tie / stirrup — bend radius r = 4ds/2 = 2ds (ACI 318-14 §407.3.2)
-    const ins = (sec.cover + sec.stirrupDia / 2) * s
-    const stX = webX + ins, stY = by + ins, stW = bwv - 2 * ins, stH = hv - 2 * ins
-    const cr = Math.max(0.4, Math.min(1.4, 2 * sec.stirrupDia * s))
-    doc.setDrawColor(...MUTED); doc.setLineWidth(0.35)
-    doc.roundedRect(stX, stY, stW, stH, cr, cr, 'S')
-    // bars
-    const br = Math.max(0.5, (sec.barDia / 2) * s)
-    const barIns = (sec.cover + sec.stirrupDia + sec.barDia / 2) * s
-    const bx1 = webX + barIns, bx2 = webX + bwv - barIns
-    const spanX = (n: number, i: number) => (n <= 1 ? (bx1 + bx2) / 2 : bx1 + ((bx2 - bx1) * i) / (n - 1))
-    // C-tie: an interior crosstie that arcs around bar A and bar B (the two bars
-    // it grips) at the tie radius, joined by a leg on the far side with a short
-    // hook tail, the opening facing `openDir` (toward the section centre). u is
-    // the unit A→B axis; used vertically (beams/columns) and horizontally (cols).
-    const cTie = (
-      A: [number, number], B: [number, number], u: [number, number], openDir: [number, number], rw: number, stub: number,
-    ) => {
-      const NS = 8, pts: [number, number][] = []
-      const P = (Q: [number, number], vx: number, vy: number): [number, number] => [Q[0] + vx, Q[1] + vy]
-      pts.push(P(A, openDir[0] * rw + u[0] * stub, openDir[1] * rw + u[1] * stub))
-      for (let j = 0; j <= NS; j++) { const t = (Math.PI * j) / NS, c = Math.cos(t), sn = Math.sin(t)
-        pts.push(P(A, (openDir[0] * c - u[0] * sn) * rw, (openDir[1] * c - u[1] * sn) * rw)) }
-      pts.push(P(B, -openDir[0] * rw, -openDir[1] * rw))
-      for (let j = 0; j <= NS; j++) { const t = (Math.PI * j) / NS, c = Math.cos(t), sn = Math.sin(t)
-        pts.push(P(B, (-openDir[0] * c + u[0] * sn) * rw, (-openDir[1] * c + u[1] * sn) * rw)) }
-      pts.push(P(B, openDir[0] * rw - u[0] * stub, openDir[1] * rw - u[1] * stub))
-      doc.setDrawColor(...MUTED); doc.setLineWidth(0.35)
-      for (let j = 0; j < pts.length - 1; j++) doc.line(pts[j][0], pts[j][1], pts[j + 1][0], pts[j + 1][1])
-    }
-    // column bar grid (shared by the crossties and the bar circles below)
-    let colNx = 0, colNy = 0
-    if (sec.kind === 'column') {
-      const N = Math.max(4, 2 * Math.round(sec.bars / 2))
-      const bwIn = sec.b - 2 * barIns / s, hIn = sec.h - 2 * barIns / s
-      colNx = sec.fourFace ? Math.max(2, Math.min(N / 2, 2 + Math.round(((N - 4) / 2) * (bwIn / (bwIn + hIn))))) : N / 2
-      colNy = sec.fourFace ? N / 2 + 2 - colNx : 2
-    }
-    // 135° stirrup hooks — the tie is a bent bar with a 135° hook at BOTH ends,
-    // meeting at the tension-side corner (bottom for sagging, top for hogging;
-    // top for columns). Each free end is a single hairline stroke — same weight
-    // as the tie — that bends 45° into the core, the two straddling the corner
-    // bar they hook around. Tail ext = max(6ds, 75) mm (ACI 318-14 §425.3.2).
-    const hookBottom = sec.kind === 'beam' ? !sec.hogging : false
-    const dirX = 1 / Math.SQRT2, dirY = (hookBottom ? -1 : 1) / Math.SQRT2
-    const hLen = Math.max(6 * sec.stirrupDia, 75) * s                     // straight tail
-    const cornerBarY = hookBottom ? by + hv - barIns : by + barIns
-    const edgeY = hookBottom ? stY + stH : stY                           // near tie horizontal leg
-    doc.setDrawColor(...MUTED); doc.setLineWidth(0.35)
-    // one end bends off the horizontal leg (above/below the bar), the other off
-    // the vertical leg (beside it); they straddle the corner bar into the core
-    doc.line(bx1, edgeY, bx1 + dirX * hLen, edgeY + dirY * hLen)
-    doc.line(stX, cornerBarY, stX + dirX * hLen, cornerBarY + dirY * hLen)
-    // interior crossties — each added leg is a C-tie gripping an interior bar
-    // pair (§25.7.2.3). Drawn before the bars so the bars sit on top.
-    const yTopB = by + barIns, yBotB = by + hv - barIns
-    const rwC = br + (sec.stirrupDia / 2) * s, stubC = (br + (sec.stirrupDia / 2) * s) * 1.6
-    const midX = (bx1 + bx2) / 2, midY = (yTopB + yBotB) / 2
-    if (sec.kind === 'beam' && (sec.legs ?? 2) > 2) {
-      const nCross = (sec.legs ?? 2) - 2
-      const n0 = (sec.layers && sec.layers[0]) || sec.bars
-      for (let k = 0; k < nCross; k++) {
-        const idx = Math.min(n0 - 2, Math.max(1, Math.round(((n0 - 1) * (k + 1)) / (nCross + 1))))
-        const xc = spanX(n0, idx)
-        cTie([xc, yTopB], [xc, yBotB], [0, 1], [xc <= midX ? 1 : -1, 0], rwC, stubC)  // vertical
-      }
-    } else if (sec.kind === 'column') {
-      // vertical C-ties grip interior top/bottom-face bars; horizontal C-ties
-      // grip interior side-face bars — the added legs of a tied column cage.
-      for (let i = 1; i <= colNx - 2; i++) {
-        const xc = spanX(colNx, i)
-        cTie([xc, yTopB], [xc, yBotB], [0, 1], [xc <= midX ? 1 : -1, 0], rwC, stubC)
-      }
-      for (let k = 1; k <= colNy - 2; k++) {
-        const yy = yTopB + ((yBotB - yTopB) * k) / (colNy - 1)
-        cTie([bx1, yy], [bx2, yy], [1, 0], [0, yy <= midY ? 1 : -1], rwC, stubC)  // horizontal
-      }
-    }
-    doc.setFillColor(...INK); doc.setDrawColor(...INK); doc.setLineWidth(0.25)
-    if (sec.kind === 'beam') {
-      const pitch = (sec.barDia + 25) * s
-      const tenBottom = !sec.hogging
-      ;(sec.layers ?? [sec.bars]).forEach((n, li) => {
-        const yb = tenBottom ? by + hv - barIns - li * pitch : by + barIns + li * pitch
-        for (let i = 0; i < n; i++) doc.circle(spanX(n, i), yb, br, 'F')
-      })
-      ;(sec.comprLayers ?? []).forEach((n, li) => {
-        const yb = tenBottom ? by + barIns + li * pitch : by + hv - barIns - li * pitch
-        for (let i = 0; i < n; i++) doc.circle(spanX(n, i), yb, br, 'S')   // hollow
-      })
-    } else {
-      // column — bars around the perimeter (all-around) or two faces
-      const yTop = by + barIns, yBot = by + hv - barIns
-      for (let i = 0; i < colNx; i++) { doc.circle(spanX(colNx, i), yTop, br, 'F'); doc.circle(spanX(colNx, i), yBot, br, 'F') }
-      for (let k = 1; k <= colNy - 2; k++) {
-        const yy = yTop + ((yBot - yTop) * k) / (colNy - 1)
-        doc.circle(bx1, yy, br, 'F'); doc.circle(bx2, yy, br, 'F')
-      }
-    }
-    // dimension lines — width below, height on the right (bf across the top for
-    // flanged sections). Ticks + centred value, true mm from the design.
-    doc.setDrawColor(...FAINT); doc.setLineWidth(0.12)
-    setF('mono', 'normal', 4.3, MUTED)
-    const hDim = (x0: number, x1: number, yd: number, val: number) => {
-      doc.line(x0, yd, x1, yd); doc.line(x0, yd - 0.9, x0, yd + 0.9); doc.line(x1, yd - 0.9, x1, yd + 0.9)
-      doc.text(`${Math.round(val)} mm`, (x0 + x1) / 2, yd + 2.4, { align: 'center' })
-    }
-    const wDimY = by + hv + 3.4
-    hDim(webX, webX + bwv, wDimY, sec.b)                       // web width b
-    if (flanged) hDim(bx, bx + wv, by - 2, sec.bf!)            // flange width bf (above)
-    // height h on the right
-    const vx = webX + bwv + 3.6
-    doc.line(vx, by, vx, by + hv); doc.line(vx - 0.9, by, vx + 0.9, by); doc.line(vx - 0.9, by + hv, vx + 0.9, by + hv)
-    doc.text(`${Math.round(sec.h)} mm`, vx + 1.4, by + hv / 2, { align: 'center', angle: 90 })
-  }
 
 
   sh.brandHeader({
@@ -254,7 +132,9 @@ export async function generateModelPdf({ lh, report, modelImg, badges, sheets, f
   // ── 4 · Worked solutions (every member) ──
   rule(4, 'Worked Solutions')
   report.groups.forEach((g, gi) => {
-    ensure(18)
+    // Enough for the heading AND the first item's header block, so a group
+    // title is never left alone at the foot of a page.
+    ensure(60)
     sh.y += 1.5
     setF('sans', 'bold', 8.6, BRAND)
     doc.text(`4.${gi + 1}  ${g.title}`, M, sh.y)
@@ -263,39 +143,58 @@ export async function generateModelPdf({ lh, report, modelImg, badges, sheets, f
     doc.line(M, sh.y, M + CONTENT_W, sh.y)
     sh.y += 4.5
     g.items.forEach((item) => {
-      const fig = item.section
-      const boxW = 46, boxH = 34
-      ensure(fig ? boxH + 5 : 20)
+      // THE SCHEDULE'S OWN FIGURES, painted as vectors. The cut through the
+      // placed cage sits beside the name, where the hand-drawn section used
+      // to; the sheet the member is on (elevation or column stack, with this
+      // solution's stretch washed) goes full width under the header.
+      const cuts = (item.figures ?? []).filter((f) => f.kind === 'section')
+      const sheets = (item.figures ?? []).filter((f) => f.kind === 'elevation')
+      const boxW = 58, boxPad = 2
+      const cutBox = { x: 0, y: 0, w: boxW - 2 * boxPad, maxH: 44 }
+      const cutSizes = cuts.map((f) => paintedSize(f.drawing, cutBox))
+      const boxH = cuts.length ? cutSizes.reduce((s, z) => s + z.height, 0) + boxPad * (cuts.length + 1) : 0
+      // A frame elevation is wide and takes the content width; a column stack
+      // is tall and narrow, and fitted to 75 mm it came out 30 mm wide with
+      // its callouts unreadable — it gets the height it needs instead.
+      const sheetBoxes = sheets.map((f) => {
+        const b = f.drawing.bounds
+        const tall = (b.maxY - b.minY) > 1.2 * (b.maxX - b.minX)
+        return { x: M, y: 0, w: CONTENT_W, maxH: tall ? 120 : 75 }
+      })
+      const sheetSizes = sheets.map((f, k) => paintedSize(f.drawing, sheetBoxes[k]))
+      // The header and the sheet under it move to the next page TOGETHER: a
+      // header left at the foot of one page with its elevation at the head
+      // of the next reads as two items, and leaves a page-third blank.
+      const need = (cuts.length ? boxH + 5 : 20) + sheetSizes.reduce((s, z) => s + z.height + 9, 0)
+      ensure(Math.min(need, 200))
       const headTop = sh.y
-      const leftW = fig ? CONTENT_W - boxW - 6 : CONTENT_W
-      // cross-section figure — drawn BESIDE the name (top-right of the block)
-      if (fig) {
+      const leftW = cuts.length ? CONTENT_W - boxW - 6 : CONTENT_W
+      if (cuts.length) {
         const fx = M + CONTENT_W - boxW
         setF('sans', 'bold', 5, FAINT)
         doc.text('SECTION', fx + 1, headTop + 1.5)
         doc.setDrawColor(...HAIR); doc.setLineWidth(0.2)
         doc.roundedRect(fx, headTop + 2.5, boxW, boxH, 1, 1, 'S')
-        drawSection(fig, fx, headTop + 2.5, boxW, boxH)
+        let fy = headTop + 2.5 + boxPad
+        cuts.forEach((f, k) => {
+          const z = cutSizes[k]
+          paintDrawing(doc, f.drawing, { ...cutBox, x: fx + (boxW - z.width) / 2, y: fy })
+          fy += z.height + boxPad
+        })
       }
-      // left stack — name, sub, bar callout, demand summary, plan location.
-      // Vertically centre it against the figure so the block reads as one card
-      // rather than leaving a tall blank band beside a short caption.
-      const flanged = !!fig && fig.kind === 'beam' && !!fig.bf && fig.bf > fig.b && !fig.hogging && !!fig.hf
+      // left stack — name, sub, demand summary, plan location. Vertically
+      // centred against the figure so the block reads as one card rather than
+      // leaving a tall blank band beside a short caption.
       const subN = item.sub ? doc.splitTextToSize(item.sub, leftW).length : 0
       const locN = item.loc ? doc.splitTextToSize(item.loc, leftW).length : 0
-      const stackH = 4.4 + subN * 3 + (fig ? 3.6 : 0) + (item.details ? 3.3 : 0) + locN * 3.3
-      if (fig) sh.y = headTop + 2.5 + Math.max(0, (boxH - stackH) / 2)
+      const stackH = 4.4 + subN * 3 + (item.details ? 3.3 : 0) + locN * 3.3
+      if (cuts.length) sh.y = headTop + 2.5 + Math.max(0, (boxH - stackH) / 2)
       setF('sans', 'bold', 7.8, INK)
       doc.text(item.title, M, sh.y + 1)
       sh.y += 4.4
       if (item.sub) {
         setF('mono', 'normal', 5.8, FAINT)
         for (const w of doc.splitTextToSize(item.sub, leftW)) { doc.text(w, M, sh.y); sh.y += 3 }
-      }
-      if (fig) {
-        const cap = `${fig.bars}⌀${fig.barDia}${flanged ? ` · ${fig.edge ? 'L' : 'T'} bf=${Math.round(fig.bf!)}` : ''} · ${fig.b}×${fig.h}`
-        setF('mono', 'bold', 6.6, INK)
-        doc.text(cap, M, sh.y + 0.6); sh.y += 3.6
       }
       if (item.details) {
         setF('sans', 'normal', 6.4, MUTED)
@@ -305,9 +204,19 @@ export async function generateModelPdf({ lh, report, modelImg, badges, sheets, f
         setF('sans', 'normal', 6.4, BRAND)
         for (const w of doc.splitTextToSize(item.loc, leftW)) { doc.text(w, M, sh.y + 0.4); sh.y += 3.3 }
       }
-      // clear the figure box before the steps begin
-      if (fig) sh.y = Math.max(sh.y, headTop + 2.5 + boxH)
+      // clear the figure box before anything else begins
+      if (cuts.length) sh.y = Math.max(sh.y, headTop + 2.5 + boxH)
       sh.y += 2.5
+      // the sheet, kept with its caption — the same rule the drawings section uses
+      sheets.forEach((f, k) => {
+        const z = sheetSizes[k]
+        ensure(z.height + 9)
+        paintDrawing(doc, f.drawing, { ...sheetBoxes[k], y: sh.y, x: M + (CONTENT_W - z.width) / 2 })
+        sh.y += z.height + 2
+        setF('sans', 'normal', 6, MUTED)
+        doc.text(f.caption, M, sh.y)
+        sh.y += 4
+      })
       sh.solutionSteps(item.steps)
       sh.y += 2
     })
@@ -360,5 +269,5 @@ export async function generateModelPdf({ lh, report, modelImg, badges, sheets, f
   )
   sh.pageFooters(docLabel, sheet, today, lh.project)
 
-  doc.save(fileName ?? `structure-report-${today}.pdf`)
+  return { doc, today }
 }

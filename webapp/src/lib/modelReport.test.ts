@@ -3,6 +3,7 @@ import { generateGridModel } from '../engine/modelBuilder'
 import { designStructure, designOK } from '../engine/pipeline'
 import type { RectSection } from '../engine/model'
 import { buildModelReport } from './modelReport'
+import { buildStructureCages } from '../engine/cageBuilder'
 import { texToPlain } from './texText'
 import type { IrregularityFlag } from '../engine/irregularity'
 
@@ -69,7 +70,7 @@ describe('buildModelReport', () => {
     for (const it of beams) {
       expect(it.details).toMatch(/^Mu .* kN·m · Vu .* kN$/)
       expect(it.loc).toMatch(/·/)                       // "<floor> · <grid>"
-      expect(it.section?.kind).toBe('beam')
+      expect(it.figures ?? []).toEqual([])              // no cages given → no figures
     }
     const cols = rpt.groups.find((g) => g.title === 'RC columns')!.items
     for (const it of cols) {
@@ -223,11 +224,73 @@ describe('buildModelReport — flanged beam rows name the shape they are', () =>
     expect(cells.some((c) => /(^|\s)L(\(true\))? bf=/.test(String(c)))).toBe(true)
   })
 
-  it('the section figure carries the edge flag, so an L is not drawn as a symmetric T', () => {
-    const figs = rpt.groups.flatMap((g) => g.items).map((i) => i.section)
-      .filter((s) => s && s.kind === 'beam' && s.bf)
-    expect(figs.length).toBeGreaterThan(0)
-    expect(figs.some((s) => s!.edge === true)).toBe(true)
-    expect(figs.some((s) => s!.edge === false)).toBe(true)
+  it('the section figure names the shape — an L is not captioned as a symmetric T', () => {
+    // The cut is the cage's; what the design decided about the flange is the
+    // callout under it, and it has to say L for a spandrel and T for an
+    // interior beam — the same words the schedule row prints.
+    const { cages } = buildStructureCages(model, design)
+    const withFigs = buildModelReport(model, design, [], soil, undefined, undefined, cages)
+    const notes = withFigs.groups.flatMap((g) => g.items)
+      .flatMap((i) => (i.figures ?? []).filter((f) => f.kind === 'section'))
+      .flatMap((f) => f.drawing.primitives.filter((p) => p.kind === 'text').map((p) => (p as { text: string }).text))
+      .filter((t) => /-BEAM · bf/.test(t))
+    expect(notes.length).toBeGreaterThan(0)
+    expect(notes.some((t) => /^L-BEAM/.test(t))).toBe(true)
+    expect(notes.some((t) => /^T-BEAM/.test(t))).toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE FIGURES ARE THE SCHEDULE'S — the same drawings the accordion shows
+// ─────────────────────────────────────────────────────────────────────────
+describe('buildModelReport — worked-solution figures from the cages', () => {
+  const m = generateGridModel({ baysX: [6, 6], baysZ: [5], storeyH: [3.2, 3.2], section, slabThickness: 150 })
+  m.loads = m.plates.flatMap((p) => [
+    { kind: 'area' as const, plate: p.id, q: 4.8, cat: 'D' as const },
+    { kind: 'area' as const, plate: p.id, q: 2.4, cat: 'L' as const },
+  ])
+  const design = designStructure(m, soil)!
+  const { cages } = buildStructureCages(m, design)
+  const rpt = buildModelReport(m, design, [], soil, undefined, undefined, cages)
+  const items = (title: string) => rpt.groups.find((g) => g.title === title)?.items ?? []
+  const texts = (d: { primitives: { kind: string }[] }) =>
+    d.primitives.filter((p) => p.kind === 'text').map((p) => (p as unknown as { text: string }).text)
+
+  it('every beam section carries its grid line\'s elevation, washed, and a cut at its station', () => {
+    for (const it of items('RC beams & girders')) {
+      const kinds = (it.figures ?? []).map((f) => f.kind)
+      expect(kinds).toEqual(['elevation', 'section'])
+      const [elev, cut] = it.figures!
+      expect(texts(elev.drawing).some((t) => t.startsWith('FRAME ELEVATION'))).toBe(true)
+      expect(texts(elev.drawing)).toContain(it.title)          // the wash is labelled with this row
+      expect(texts(cut.drawing).some((t) => /^\d+-⌀\d+ (TOP|BOT)/.test(t))).toBe(true)
+      expect(texts(cut.drawing).some((t) => /^STIRRUPS/.test(t))).toBe(true)
+    }
+  })
+
+  it('every column carries its stack sheet with its storey washed, and the mid-height cut', () => {
+    for (const it of items('RC columns')) {
+      const kinds = (it.figures ?? []).map((f) => f.kind)
+      expect(kinds).toEqual(['elevation', 'section'])
+      const [elev, cut] = it.figures!
+      expect(texts(elev.drawing).some((t) => t.startsWith('COLUMN DETAIL'))).toBe(true)
+      expect(texts(elev.drawing)).toContain(it.title)
+      expect(texts(cut.drawing).some((t) => /VERT\.$/.test(t))).toBe(true)
+      expect(texts(cut.drawing).some((t) => /^TIES/.test(t))).toBe(true)
+    }
+  })
+
+  it('the cut at a support shows the TOP steel the hogging check sized — the drawing follows the station', () => {
+    const bm = design.beams[0]
+    const its = items('RC beams & girders').filter((i) => i.title.startsWith(`${bm.id} ·`))
+    const hog = its.find((i) => bm.sections.find((s) => `${bm.id} · ${s.label}` === i.title)?.hogging)
+    const sag = its.find((i) => !bm.sections.find((s) => `${bm.id} · ${s.label}` === i.title)?.hogging)
+    expect(hog && sag).toBeTruthy()
+    expect(texts(hog!.figures![1].drawing).some((t) => / TOP/.test(t))).toBe(true)
+    expect(texts(sag!.figures![1].drawing).some((t) => / BOT/.test(t))).toBe(true)
+  })
+
+  it('footings, which have no cage figure yet, carry none rather than a stale one', () => {
+    for (const it of items('Isolated footings')) expect(it.figures ?? []).toEqual([])
   })
 })
