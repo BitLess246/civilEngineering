@@ -261,3 +261,11 @@ export function groupSheets(sheets: PlanSheet[]): { group: SheetGroup; sheets: P
   }
   return out
 }
+
+/** One step through the set, clamped to it. The ends are walls, not a
+ *  carousel: wrapping from the last wall detail back to General notes would
+ *  put a sheet nobody asked for on the screen. Lives here with the set itself,
+ *  so the fullscreen viewer and any future caller step the same way. */
+export function stepIndex(index: number, count: number, delta: -1 | 1): number {
+  return Math.min(count - 1, Math.max(0, index + delta))
+}
