@@ -294,3 +294,31 @@ describe('buildModelReport — worked-solution figures from the cages', () => {
     for (const it of items('Isolated footings')) expect(it.figures ?? []).toEqual([])
   })
 })
+
+describe('traceability — the twelve governing members', () => {
+  const model = makeModel()
+  const design = designStructure(model, soil)!
+  const rpt = buildModelReport(model, design, [['Column grid', '6 m × 5 m']], soil)
+
+  it('walks each governing member from its governing case to the bars the schedule carries', () => {
+    expect(rpt.trace).toBeTruthy()
+    const t = rpt.trace!
+    expect(t.head).toEqual(['Member', 'Location', 'Governing case', 'Demand (analysis)', 'Required (design)', 'Provided (schedule)', 'Util', 'Check'])
+    expect(t.rows.length).toBeGreaterThan(0)
+    expect(t.rows.length).toBeLessThanOrEqual(12)
+    expect(t.rows.some((r) => r[0].startsWith('Beam '))).toBe(true)
+    expect(t.rows.some((r) => r[0].startsWith('Column '))).toBe(true)
+    for (const row of t.rows) {
+      expect(row[3]).toMatch(/Mu |Pu /)          // demand, as the analysis found it
+      expect(row[4]).toMatch(/As |φPn /)         // required steel, as the design computed it
+      expect(row[5]).toMatch(/⌀/)                // provided bars, as the schedule carries them
+      expect(row[6]).toMatch(/^\d[\d.]*$|^—$/)   // utilisation: a bare number, or — when the design has no ratio
+      expect(['PASS', 'FAIL']).toContain(row[7]) // verdict from the design's own check
+    }
+  })
+
+  it('the columns it lists are the design\'s most-stressed ones', () => {
+    const worst = [...design.columns].sort((a, z) => z.util - a.util)[0]
+    expect(rpt.trace!.rows.map((r) => r[0])).toContain(`Column ${worst.id}`)
+  })
+})

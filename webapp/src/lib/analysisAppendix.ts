@@ -658,8 +658,14 @@ function optimizationSection(i: AppendixInput): AppendixSection {
     rows: r.steps.map((s, k) => [k === 0 ? '0 (initial)' : String(s.iter), s.grown ? String(s.grown) : '—', String(s.fails), s.ok ? 'PASS' : 'grow failing']),
     note: r.stopReason,
   }]
-  if (o.before) {
-    const beforeById = new Map(o.before.map((s) => [s.id, s]))
+  // The engine carries the pre-optimization state on the result itself
+  // (initialModel, captured by the pipeline before the grow loop) — that is
+  // the single source of truth for the initial-vs-final table. The
+  // caller-supplied `before` stays as a fallback for saved runs made before
+  // the field existed.
+  const beforeSections = r.initialModel?.sections ?? o.before
+  if (beforeSections) {
+    const beforeById = new Map(beforeSections.map((s) => [s.id, s]))
     const changed = r.model.sections.filter((s) => {
       const b = beforeById.get(s.id)
       return b && (b.b !== s.b || b.h !== s.h || b.shape !== s.shape || b.barDia !== s.barDia || b.barCount !== s.barCount)
@@ -686,6 +692,33 @@ function optimizationSection(i: AppendixInput): AppendixSection {
         : [['—', '—', '—', 'no section changed', '—']],
       note: 'Utilisation is the final design\'s own: the biaxial ratio for an RC column, the strength ratio for a steel member. RC beams are sized per section and carry no single ratio.',
     })
+  }
+  // What the optimizer actually did, iteration by iteration — the accepted
+  // geometry changes recorded on the steps themselves by the pipeline (grow
+  // steps and the economy pass), not a reconstruction from the two ends.
+  const trail = r.steps.flatMap((s) => (s.changes ?? []).map((c) => [
+    s.note ? `${s.iter} · ${s.note}` : String(s.iter), c.kind, c.label, c.from, c.to,
+  ]))
+  if (trail.length)
+    tables.push({
+      title: `G.${tables.length + 1} What each iteration changed`,
+      head: ['Iteration', 'Kind', 'Element', 'From', 'To'],
+      rows: trail,
+      note: 'Recorded on the optimizer\'s own steps — grow moves and the economy pass — so the trail is what the loop accepted, not a before/after guess.',
+    })
+  // Quantities, initial vs final — from the two designs the pipeline kept. Only
+  // printed when the engine carried the initial design (older saved runs did not).
+  const t0 = r.initialDesign?.totals
+  if (t0) {
+    const qty: string[][] = []
+    if (t0.concrete > 0 || r.design.totals.concrete > 0)
+      qty.push(['Concrete', `${f2(t0.concrete)} m³`, `${f2(r.design.totals.concrete)} m³`])
+    if (t0.steelKg > 0 || r.design.totals.steelKg > 0)
+      qty.push(['Structural steel', `${f2(t0.steelKg / 1000)} t`, `${f2(r.design.totals.steelKg / 1000)} t`])
+    if (t0.woodVolume > 0 || r.design.totals.woodVolume > 0)
+      qty.push(['Timber', `${f2(t0.woodVolume)} m³`, `${f2(r.design.totals.woodVolume)} m³`])
+    if (qty.length)
+      tables.push({ title: `G.${tables.length + 1} Quantities, initial vs final`, head: ['Material', 'Initial', 'Final'], rows: qty })
   }
   return {
     key: 'optimization', letter: LETTERS.optimization, title: APPENDIX_TITLES.optimization, available: true,

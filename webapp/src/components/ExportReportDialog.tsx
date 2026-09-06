@@ -21,7 +21,7 @@ export interface ExportOptions {
   outputs: { report: boolean; appendix: boolean; combined: boolean }
 }
 
-const REPORT_KEYS: ReportSectionKey[] = ['snapshot', 'summary', 'status', 'project', 'schedules', 'solutions', 'drawings']
+const REPORT_KEYS: ReportSectionKey[] = ['snapshot', 'summary', 'status', 'project', 'trace', 'schedules', 'solutions', 'drawings']
 const APPENDIX_KEYS: AppendixKey[] = ['model', 'loading', 'analysis', 'modal', 'nonlinear', 'pushover', 'optimization']
 
 export function ExportReportDialog({ available, unavailable, busy, onClose, onGenerate }: {
