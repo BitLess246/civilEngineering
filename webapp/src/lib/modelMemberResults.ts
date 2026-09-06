@@ -15,6 +15,57 @@
 import type { StructureDesign, SoilOptions } from '../engine/pipeline'
 import type { StructuralModel, RectSection } from '../engine/model'
 import type { SolutionStep } from './solution'
+
+/** Everything a calculator needs to load one saved member into its own
+ *  fields. The card assembles it; the page's loader maps it onto its form. */
+export interface MemberLoadRequest {
+  model: StructuralModel
+  design: StructureDesign
+  kind: MemberKind
+  /** The selected row's id — member id, node id, or the joined node pair of
+   *  a combined pad, exactly as `memberRows` produced it. */
+  id: string
+  /** The member's section (or, for footings, the supporting column's) read
+   *  from the project's model — the cage the schedule actually details. */
+  section?: RectSection
+  /** Second column of a combined pad (kind `combined` only). */
+  section2?: RectSection
+  /** Soil rebuilt from the project's inputs (footing kinds use it). */
+  soil: SoilOptions
+}
+
+/** The section a member carries in the model — the adopted one, because the
+ *  bar-selection pass rewrites sections before the model is saved. */
+export function memberSection(model: StructuralModel, memberId: string): RectSection | undefined {
+  const m = model.members.find((x) => x.id === memberId)
+  return m ? model.sections.find((x) => x.id === m.section) : undefined
+}
+
+/** The column section standing on a base node — how footings name their
+ *  supporting member (`role === 'column'` ending at or starting from it). */
+export function columnSectionAtNode(model: StructuralModel, node: string): RectSection | undefined {
+  const m = model.members.find((x) => x.role === 'column' && (x.i === node || x.j === node))
+  return m ? model.sections.find((x) => x.id === m.section) : undefined
+}
+
+/** Service dead/live loads back-solved from a factored total, keeping the
+ *  page's default dead:live split.
+ *
+ *  The model's schedule stores the FACTORED demand, but the standalone pages
+ *  input service D and L and factor them themselves (wu = 1.2D + 1.6L). With
+ *  the live share fixed at `liveRatio` of the dead load the solve is exact
+ *  for that combination — and the values land in visible fields the engineer
+ *  can adjust, not in a hidden override. The default ratios are each page's
+ *  own defaults: 0.4 for the slab (5:2 kPa), 5/3 for the steel beam (15:25
+ *  kN/m). The 1.4D branch can never govern a back-solved pair, because
+ *  1.2 + 1.6r > 1.4 for every r > 1/8. */
+export function backSolvedServiceLoads(
+  factored: number, liveRatio: number,
+): { dead: number; live: number } {
+  if (!(factored > 0) || !(liveRatio >= 0)) return { dead: 0, live: 0 }
+  const dead = factored / (1.2 + 1.6 * liveRatio)
+  return { dead, live: dead * liveRatio }
+}
 import {
   beamSectionSolution, columnRowSolution, footingRowSolution, combinedRowSolution,
 } from './modelSpaceSolutions'
@@ -51,8 +102,7 @@ export function soilFromInputs(inputs: Record<string, unknown>): SoilOptions {
 }
 
 const sectionNameOf = (model: StructuralModel, memberId: string): string => {
-  const m = model.members.find((x) => x.id === memberId)
-  const s = m ? model.sections.find((x) => x.id === m.section) : undefined
+  const s = memberSection(model, memberId)
   return s ? (s.name || `${s.b}×${s.h}`) : '—'
 }
 

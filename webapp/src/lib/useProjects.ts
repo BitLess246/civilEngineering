@@ -212,3 +212,15 @@ export function useProjects(): ProjectsApi {
 /** Conflicts in the latest report, for the panel. Re-exported so the component
  *  imports one module rather than reaching into the engine. */
 export { conflictsIn }
+
+/** The saved project a given name points at, if any — the identity a save
+ *  overwrites. Names are matched on the exact trimmed string: a structural
+ *  model named "Tower A" is not "tower a", and clobbering the wrong project
+ *  because two names differ only by case is not a risk worth taking. First
+ *  match wins; after name-keyed saving there should only ever be one. */
+export function projectByName(
+  list: ReadonlyArray<{ id: string; name: string }>, name: string,
+): { id: string; name: string } | undefined {
+  const wanted = name.trim()
+  return wanted ? list.find((p) => p.name === wanted) : undefined
+}

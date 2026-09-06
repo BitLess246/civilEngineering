@@ -2,7 +2,11 @@ import { describe, it, expect } from 'vitest'
 import { generateGridModel } from '../engine/modelBuilder'
 import { designStructure, type StructureDesign } from '../engine/pipeline'
 import type { RectSection } from '../engine/model'
-import { memberRows, memberSolution, soilFromInputs, type MemberKind } from './modelMemberResults'
+import {
+  memberRows, memberSolution, soilFromInputs,
+  memberSection, columnSectionAtNode, backSolvedServiceLoads,
+  type MemberKind,
+} from './modelMemberResults'
 
 // The calculators read a saved project's design through these helpers. The
 // rows must be the design's own — same members, same verdicts — and the
@@ -94,5 +98,46 @@ describe('soilFromInputs — the opaque bag, read defensively', () => {
       qAllow: 150, gammaSoil: 17, gammaConc: 25, H: 2,
     })
     expect(soilFromInputs({ qa: 'nonsense' })).toEqual({ qAllow: 200, gammaSoil: 18, gammaConc: 24, H: 1.5 })
+  })
+})
+
+describe('memberSection / columnSectionAtNode — the adopted cage, not a stale one', () => {
+  const { model, design } = makeDesign()
+
+  it('a beam member resolves to its section, an unknown id to undefined', () => {
+    const b = design.beams[0]
+    if (!b) return
+    const sec = memberSection(model, b.id)
+    expect(sec).toBeDefined()
+    expect(model.sections.some((s) => s.id === sec!.id)).toBe(true)
+    expect(memberSection(model, 'no-such-member')).toBeUndefined()
+  })
+
+  it('a base node resolves to the column standing on it — how footings name theirs', () => {
+    const f = design.footings[0]
+    if (!f) return
+    const sec = columnSectionAtNode(model, f.node)
+    expect(sec).toBeDefined()
+    const colMember = model.members.find((m) => m.role === 'column' && (m.i === f.node || m.j === f.node))
+    expect(colMember).toBeDefined()
+    expect(sec!.id).toBe(colMember!.section)
+  })
+})
+
+describe('backSolvedServiceLoads — service D/L from a factored total', () => {
+  it('reproduces the factored total through the page\'s own combination', () => {
+    for (const [wu, r] of [[7.6, 0.4], [58, 5 / 3], [123.4, 0.4]] as const) {
+      const { dead, live } = backSolvedServiceLoads(wu, r)
+      expect(1.2 * dead + 1.6 * live).toBeCloseTo(wu, 9)
+      expect(live).toBeCloseTo(dead * r, 9)
+    }
+  })
+  it('the 1.4D branch can never govern a back-solved pair', () => {
+    const { dead } = backSolvedServiceLoads(50, 0.4)
+    expect(1.4 * dead).toBeLessThan(50)
+  })
+  it('a non-positive demand answers zeros, not NaNs', () => {
+    expect(backSolvedServiceLoads(0, 0.4)).toEqual({ dead: 0, live: 0 })
+    expect(backSolvedServiceLoads(-5, 0.4)).toEqual({ dead: 0, live: 0 })
   })
 })

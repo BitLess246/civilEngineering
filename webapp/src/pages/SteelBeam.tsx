@@ -11,6 +11,7 @@ import { f1, f2 } from '../lib/format'
 import { sn1, sn2 } from '../lib/solution'
 import { PageHeader } from '../components/calc'
 import { ModelMemberResults } from '../components/ModelMemberResults'
+import { backSolvedServiceLoads, type MemberLoadRequest } from '../lib/modelMemberResults'
 import { ShapePick, CalcBadge, TrialWall, Spinner, Verdict, ZoneBadge, BasisPick, BasisNote } from '../components/steelUi'
 import { capacityLabel, demandLabel, factorLabel, comboLabel, SAFETY, type DesignBasis } from '../engine/designBasis'
 import { GRADES, shapeOrFirst, type Grade } from '../lib/steelShapes'
@@ -122,8 +123,28 @@ function BeamTab() {
     ]
   }, [res, shape, Fy, wD, wL, span, Lb, utilM, shearLS])
 
+  /** Saved-model girder → the page's own fields. Shape, span, unbraced length
+   *  and grade are the schedule's own facts; the service line loads are
+   *  back-solved from the saved factored Mu over a simple span at this page's
+   *  default 15:25 split, so the §F2 flexure check reproduces the schedule's
+   *  Mn and LTB zone. Shear and deflection stay the page's own uniform-load
+   *  reading of that demand — visible in the fields, adjustable at will. */
+  const loadSaved = (req: MemberLoadRequest) => {
+    const b = req.design.steelBeams.find((x) => x.id === req.id)
+    if (!b || !(b.L > 0)) return
+    setShapeName(b.shape)
+    const sec = req.section
+    if (sec?.steelFy) setGrade(sec.steelFy >= 300 ? 'A572G50' : 'A36')
+    setSpan(b.L)
+    setLb(b.Lb > 0 ? b.Lb : b.L)
+    const r1 = (v: number) => Number(v.toFixed(1))
+    const { dead, live } = backSolvedServiceLoads((8 * Math.abs(b.Mu)) / (b.L * b.L), 5 / 3)
+    setWD(r1(dead)); setWL(r1(live))
+  }
+
   return (
     <div>
+      <ModelMemberResults kind="steelBeam" onLoad={loadSaved} />
       <TrialWall cause={cause} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
       <div className="space-y-5">
@@ -197,7 +218,6 @@ export default function SteelBeam() {
   return (
     <div>
       <PageHeader title="Steel Beam Design" badges={['AISC 360-16']} />
-      <ModelMemberResults kind="steelBeam" />
       <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
         <p className="no-print mt-1 text-slate-600">AISC 360-16 §F2/§F3 flexure — lateral-torsional buckling, plus §F3.2 flange local buckling when the flange is not compact — §G2.1 shear, and service deflections against L/360 and L/240. 3D scene and a step-by-step solution.</p>
         <ReportControls title="Steel Beam Design Report" />
