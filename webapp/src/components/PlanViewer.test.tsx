@@ -106,6 +106,16 @@ describe('PlanViewer wiring (source guards)', () => {
     expect(planViewerSrc).toMatch(/viewBox="0 0/)
     expect(planViewerSrc).toMatch(/aspectRatio: ratio/)
   })
+
+  it('the sheet actually FILLS the screen — width-driven fit, not shrink-to-fit', () => {
+    // The regression this pins: the injected svg has only a viewBox, so its
+    // intrinsic size is 300×150. A sheet box without a width shrink-wraps to
+    // that and the "fullscreen" plan opens thumbnail-sized. The box must fill
+    // the stage's width and be capped by the stage's height (the svg inside
+    // letterboxes itself); the stage clips the overflow either way.
+    expect(planViewerSrc).toMatch(/"w-full max-h-full/)
+    expect(planViewerSrc).toMatch(/overflow-hidden/)
+  })
 })
 
 describe('PlansPanel wiring (source guards)', () => {

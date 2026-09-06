@@ -81,11 +81,15 @@ export function PlanViewer({ sheets, index, onNavigate, onClose }: {
         </div>
       </div>
 
-      {/* The sheet, scaled to fit. The sheet box stops the mousedown; a click
-          on the dark letterbox around it is a click on the backdrop — out. */}
-      <div className="relative min-h-0 flex-1">
-        <div className="absolute inset-0 flex items-center justify-center p-8 md:p-12">
-          <div className="max-h-full max-w-full [&>svg]:h-full [&>svg]:w-full"
+      {/* The sheet, scaled to fit. The box fills the stage's width and takes
+          its height from the drawing's own ratio, capped by the stage — so a
+          wide framing plan fills by width, a tall detail by height, and the
+          svg inside (which letterboxes itself) always draws as large as the
+          box allows. The sheet box stops the mousedown; a click on the dark
+          letterbox around it is a click on the backdrop — out. */}
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        <div className="absolute inset-0 flex items-center justify-center p-4 md:p-8">
+          <div className="w-full max-h-full [&>svg]:h-full [&>svg]:w-full"
             style={ratio ? { aspectRatio: ratio } : undefined}
             onMouseDown={(e) => e.stopPropagation()}
             dangerouslySetInnerHTML={{ __html: at.svg }} />
