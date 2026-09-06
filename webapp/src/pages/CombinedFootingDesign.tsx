@@ -3,6 +3,8 @@ import { designCombinedFooting, type CombinedFootingInput } from '../engine/comb
 import { designFlexibleCombinedFooting } from '../engine/flexibleCombinedFooting'
 import { CombinedFootingSchematic } from '../components/CombinedFootingSchematic'
 import { PageHeader, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import { ModelMemberResults } from '../components/ModelMemberResults'
+import type { MemberLoadRequest } from '../lib/modelMemberResults'
 import { Card } from '../components/qty'
 import { initialLetterhead } from '../lib/letterhead'
 import { Diagram } from '../components/Diagram'
@@ -161,6 +163,26 @@ export default function CombinedFootingDesign() {
     ? [{ x: result.x1, label: 'C1' }, { x: result.x2, label: 'C2' }]
     : []
 
+  /** Saved-model pad → the page's own fields. Column service loads, spacing
+   *  and the mat's diameter are the schedule's own facts; the column widths,
+   *  materials and soil come from the model and the project's inputs. The
+   *  page's rigid-method solution then re-derives the schedule's checks. */
+  const loadSaved = (req: MemberLoadRequest) => {
+    const c = req.design.combined.find((x) => x.nodes.join(' + ') === req.id)
+    if (!c) return
+    setForm((s) => ({
+      ...s,
+      method: 'rigid',
+      col1Width: req.section?.b ?? s.col1Width,
+      col2Width: req.section2?.b ?? s.col2Width,
+      spacing: c.spacing,
+      dl1: c.dl1, ll1: c.ll1, dl2: c.dl2, ll2: c.ll2,
+      fc: req.section?.fc ?? s.fc, fy: req.section?.fy ?? s.fy,
+      qAllow: req.soil.qAllow, gammaSoil: req.soil.gammaSoil, gammaConc: req.soil.gammaConc, H: req.soil.H,
+      barDia: c.design.barDia > 0 ? c.design.barDia : s.barDia,
+    }))
+  }
+
   return (
     <div>
       <PageHeader title="Combined Footing" badges={['ACI 318-14', 'NSCP 2015']} />
@@ -191,6 +213,7 @@ export default function CombinedFootingDesign() {
             x1={result.x1} x2={result.x2} col1Width={form.col1Width} col2Width={form.col2Width} />}
         />
       )}
+      <ModelMemberResults kind="combined" onLoad={loadSaved} />
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
 
       <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">

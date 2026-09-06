@@ -14,6 +14,8 @@ import { f0, f1, f2 } from '../lib/format'
 import 'katex/dist/katex.min.css'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { PageHeader } from '../components/calc'
+import { ModelMemberResults } from '../components/ModelMemberResults'
+import { backSolvedServiceLoads, type MemberLoadRequest } from '../lib/modelMemberResults'
 
 interface FormState {
   lx: number; ly: number
@@ -186,9 +188,27 @@ export default function SlabDesign() {
     steps: solution ?? undefined,
   } : undefined
 
+  /** Saved-model panel → the page's own fields. Dimensions, thickness and the
+   *  mat's diameter are the schedule's own facts; the service D/L pair is
+   *  back-solved from the panel's factored wu at this page's default 5:2 split
+   *  — the DDM is linear in wu, so the page's solution reproduces the saved
+   *  panel's moments and mats. */
+  const loadSaved = (req: MemberLoadRequest) => {
+    const s = req.design.slabs.find((x) => x.plate === req.id)
+    if (!s) return
+    setAutoBar(false)
+    const r2 = (v: number) => Number(v.toFixed(2))
+    const { dead, live } = backSolvedServiceLoads(s.design.wu, 0.4)
+    setF((f) => ({
+      ...f, lx: s.lx, ly: s.ly, h: s.design.h, barDia: s.barDia,
+      D: r2(dead), L: r2(live),
+    }))
+  }
+
   return (
         <div>
       <PageHeader title="Two-Way Slab Design" badges={['ACI 318-14 §8.10', 'NSCP 2015 §408.10']} />
+      <ModelMemberResults kind="slab" onLoad={loadSaved} />
       <div className="mx-auto max-w-[1500px] p-6">
       <p className="no-print mt-1 text-slate-600">
         Direct Design Method — NSCP 2015 §408.10 / ACI 318-14 §8.10. Square or rectangular interior and end panels;

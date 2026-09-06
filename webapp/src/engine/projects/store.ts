@@ -186,5 +186,10 @@ export function createStore(backend: StorageBackend = defaultBackend()): Project
  * open beats silently dropping fields this build does not know about.
  */
 function migrate(stored: StoredProject): StoredProject {
+  if (stored.version >= PROJECT_SCHEMA_VERSION) return stored
+  // v1 → v2 adds the optional `results` bundle. A v1 project has none — it
+  // was saved before results were kept — and absent reads as "no results
+  // yet" everywhere, so there is nothing to synthesise here.
+  if (stored.version < 2) return { ...stored, version: 2 }
   return stored
 }

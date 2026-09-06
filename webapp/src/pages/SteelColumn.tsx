@@ -10,6 +10,8 @@ import type { SolutionStep } from '../lib/solution'
 import { f1 } from '../lib/format'
 import { sn1, sn2, sn3 } from '../lib/solution'
 import { PageHeader } from '../components/calc'
+import { ModelMemberResults } from '../components/ModelMemberResults'
+import type { MemberLoadRequest } from '../lib/modelMemberResults'
 import { ShapePick, CalcBadge, TrialWall, Spinner, Verdict, BasisPick, BasisNote } from '../components/steelUi'
 import { capacityLabel, demandLabel, factorLabel, comboLabel, requiredFromDL, SAFETY, type DesignBasis } from '../engine/designBasis'
 import { GRADES, shapeOrFirst, type Grade } from '../lib/steelShapes'
@@ -97,8 +99,23 @@ function ColumnTab() {
     ]
   }, [res, shape, Pu, Mux, Muy, Kx, Ky, L, Fy, dead, live, dlMode])
 
+  /** Saved-model column → the page's own fields. Shape, length, effective
+   *  length factors and the P/M demands all come straight from the schedule —
+   *  direct-input mode, so the §E3/§H1-1 check is the schedule's own. */
+  const loadSaved = (req: MemberLoadRequest) => {
+    const c = req.design.steelColumns.find((x) => x.id === req.id)
+    if (!c) return
+    setShapeName(c.shape)
+    const sec = req.section
+    if (sec?.steelFy) setGrade(sec.steelFy >= 300 ? 'A572G50' : 'A36')
+    setL(c.L); setKx(c.Kx); setKy(c.Ky)
+    setDlMode('direct')
+    setPuDir(c.Pu); setMux(c.Mu); setMuy(c.Muy)
+  }
+
   return (
     <div>
+      <ModelMemberResults kind="steelColumn" onLoad={loadSaved} />
       <TrialWall cause={cause} />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.4fr_1fr]">
       <div className="space-y-5">

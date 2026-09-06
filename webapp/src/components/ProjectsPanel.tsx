@@ -15,8 +15,8 @@
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useProjects, conflictsIn } from '../lib/useProjects'
-import { readSession, writeSession, readOpenId, writeOpenId } from '../lib/modelSpaceSession'
+import { useProjects, projectByName, conflictsIn } from '../lib/useProjects'
+import { readSession, writeSession, readOpenId, writeOpenId, readSessionDesign } from '../lib/modelSpaceSession'
 import { SaveAlert } from './SaveAlert'
 
 const when = (iso: string): string => {
@@ -34,23 +34,49 @@ const BTN_QUIET = 'rounded border border-[#d6d3c9] px-2 py-1 text-[11px] font-se
 export function ProjectsPanel() {
   const api = useProjects()
   const [openId, setOpenId] = useState<string | null>(() => readOpenId())
-  const [name, setName] = useState('')
+  // The name field is the SAVE TARGET, not a live rename: it starts as the
+  // open project's name (so the default save overwrites it) and from then on
+  // it belongs to the engineer. A saved project only ever changes when this
+  // form says so.
+  const [name, setName] = useState(() => {
+    const id = readOpenId()
+    const p = id ? api.load(id) : null
+    return p?.meta.name ?? ''
+  })
   const [renaming, setRenaming] = useState<string | null>(null)
   const [renameTo, setRenameTo] = useState('')
   const [confirming, setConfirming] = useState<string | null>(null)
 
   const conflicts = api.report ? conflictsIn(api.report) : []
 
-  const attach = (id: string | null) => { setOpenId(id); writeOpenId(id) }
+  const attach = (id: string | null) => {
+    setOpenId(id); writeOpenId(id)
+    if (id) { const p = api.load(id); if (p) setName(p.meta.name) }
+  }
+
+  /** Which saved project this save lands on, if the name is taken. */
+  const target = projectByName(api.list, name)
 
   const saveCurrent = () => {
     const snap = readSession()
-    if (openId) {
-      const existing = api.load(openId)
-      if (existing) { api.save(openId, { ...existing, ...snap }); return }
+    // Results ride along only while the session still holds a valid design:
+    // the key is dropped the moment the model is edited or a run fails, so an
+    // absent key means the honest thing to save is NO results — not stale
+    // ones. Opening a project seeds the key from its own saved results, so a
+    // save made right after opening keeps them.
+    const design = readSessionDesign()
+    const seed = { ...snap, results: design ? { design } : undefined }
+    // THE NAME IS THE IDENTITY. Saving over an existing name overwrites that
+    // project — that is how the work you opened stays the work you saved;
+    // saving under a new name starts a new project and leaves the old one
+    // exactly as it was. Overwriting is not a new project, so the plan's
+    // create-quota never blocks it.
+    if (target) {
+      const doc = api.load(target.id)
+      if (doc) { api.save(target.id, { ...doc, ...seed }); attach(target.id); return }
     }
-    const id = api.create(name.trim() || 'Untitled project', snap)
-    if (id) { attach(id); setName('') }
+    const id = api.create(name.trim() || 'Untitled project', seed)
+    if (id) attach(id)
   }
 
   /**
@@ -62,7 +88,9 @@ export function ProjectsPanel() {
   const open = (id: string) => {
     const p = api.load(id)
     if (!p) return
-    writeSession({ model: p.model, inputs: p.inputs })
+    // The saved design seeds the session so a save made before any new run
+    // keeps the project's results rather than stripping them.
+    writeSession({ model: p.model, inputs: p.inputs, design: p.results?.design ?? null })
     writeOpenId(id)
     window.location.reload()
   }
@@ -81,14 +109,14 @@ export function ProjectsPanel() {
         <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#7a7568]">Save this project</p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <input
-            value={openId ? (api.load(openId)?.meta.name ?? '') : name}
-            onChange={(e) => (openId ? api.rename(openId, e.target.value) : setName(e.target.value))}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             placeholder="Project name"
             className="min-w-[180px] flex-1 rounded border border-[#d6d3c9] px-2 py-1 text-[12.5px]"
           />
           <button type="button" onClick={saveCurrent} className={BTN}
-            disabled={!openId && !api.canCreate.ok}>
-            {openId ? 'Save changes' : 'Save as new'}
+            disabled={!target && !api.canCreate.ok}>
+            {target ? (target.id === openId ? 'Save changes' : 'Overwrite') : 'Save as new'}
           </button>
           {openId && (
             <button type="button" onClick={() => attach(null)} className={BTN_QUIET}>
@@ -96,7 +124,12 @@ export function ProjectsPanel() {
             </button>
           )}
         </div>
-        {!openId && !api.canCreate.ok && (
+        {target && target.id !== openId && (
+          <p className="mt-1.5 text-[11.5px] leading-5 text-[#7a7568]">
+            A project named “{target.name}” already exists — saving overwrites it.
+          </p>
+        )}
+        {!target && !api.canCreate.ok && (
           <p className="mt-1.5 text-[11.5px] leading-5 text-amber-800">
             🔒 {api.canCreate.message}{' '}
             <Link to="/pricing" className="font-semibold underline">See plans</Link>

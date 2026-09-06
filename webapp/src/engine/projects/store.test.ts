@@ -153,3 +153,50 @@ describe('canSaveNew', () => {
     expect(v.message).toContain('free account')
   })
 })
+
+describe('schema 2 — results ride with the project', () => {
+  const design = { beams: [{ id: 'B1', ok: true }], columns: [], slabs: [], footings: [], combined: [] } as never
+
+  it('saves and loads a project carrying its design results', () => {
+    const store = createStore(memoryBackend())
+    const p = { ...emptyProject('Tower', T(0)), results: { design } }
+    store.save('p1', p)
+    const back = store.load('p1')!
+    expect(back.results?.design).toEqual(design)   // deep: the store is JSON on disk
+    expect(isProject(back)).toBe(true)
+  })
+
+  it('still accepts a project without results — absence reads as none', () => {
+    const store = createStore(memoryBackend())
+    store.save('p1', emptyProject('Bare', T(0)))
+    expect(store.load('p1')!.results).toBeUndefined()
+  })
+
+  it('a v1 record migrates on read, keeping its model and inputs, without results', () => {
+    const p = { ...emptyProject('Legacy', T(0)), model: withModel(emptyProject('Legacy', T(0)), 2, 1).model }
+    const v1 = JSON.stringify({ version: 1, project: p })
+    const store = createStore(memoryBackend({ 'projects:legacy': v1 }))
+    const back = store.load('legacy')!
+    expect(back.meta.name).toBe('Legacy')
+    expect(back.model?.members).toHaveLength(1)
+    expect(back.results).toBeUndefined()
+  })
+
+  it('re-saving a migrated project survives a second migrate pass, still without results', () => {
+    const p = emptyProject('Legacy', T(0))
+    const store = createStore(memoryBackend({ 'projects:legacy': JSON.stringify({ version: 1, project: p }) }))
+    const back = store.load('legacy')!
+    store.save('legacy', back, T(9))   // explicit now — save stamps updatedAt
+    const again = store.load('legacy')!
+    expect(again.meta.updatedAt).toBe(T(9))
+    expect(again.results).toBeUndefined()
+    expect(again.meta.name).toBe('Legacy')
+  })
+
+  it('a results value that is not an object fails the shape check', () => {
+    const p = emptyProject('x', T(0))
+    expect(isProject({ ...p, results: 42 })).toBe(false)
+    expect(isProject({ ...p, results: [1, 2] })).toBe(false)
+    expect(isProject({ ...p, results: { design: null } })).toBe(true)
+  })
+})

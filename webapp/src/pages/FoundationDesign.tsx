@@ -21,6 +21,8 @@ import { WorkedSolution } from '../components/WorkedSolution'
 import { buildFoundationSolution, type SolutionCtx } from '../lib/foundationSolution'
 import { Math } from '../lib/math'
 import { PageHeader, CalcSection, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import { ModelMemberResults } from '../components/ModelMemberResults'
+import type { MemberLoadRequest } from '../lib/modelMemberResults'
 import { initialLetterhead } from '../lib/letterhead'
 import { f0, f2, f3 } from '../lib/format'
 import 'katex/dist/katex.min.css'
@@ -339,11 +341,34 @@ export default function FoundationDesign() {
     && (!view.ecc || view.ecc.kernOK) && (!view.offset || view.offset.kernOK)
   const governing = punchRatio >= beamRatio ? 'two-way punching shear' : 'one-way beam shear'
 
+  /** Saved-model pad → the page's own fields. The pad's adopted B and Dc are
+   *  checked as-given (analyze mode — the schedule's pad is a fact, not a
+   *  suggestion), the column's loads are direct, and the soil is the
+   *  project's own — so the page re-derives the schedule's checks. */
+  const loadSaved = (req: MemberLoadRequest) => {
+    const f = req.design.footings.find((x) => x.node === req.id)
+    const sec = req.section
+    if (!f || !sec) return
+    setAutoBar(false)
+    setForm((s) => ({
+      ...s,
+      footingType: 'square', loadingType: 'concentric', analysisMethod: 'analyze',
+      solutionMethod: 'iteration', columnShape: 'square',
+      givenB: f.design.B, givenDc: f.design.Dc,
+      columnWidth: sec.b, columnWidthY: sec.h,
+      loadInput: 'direct', serviceLoad: f.P, ultimateLoad: f.Pu,
+      fc: sec.fc, fy: sec.fy,
+      qAllow: req.soil.qAllow, gammaSoil: req.soil.gammaSoil, gammaConc: req.soil.gammaConc, H: req.soil.H,
+      barDia: f.barDia, surcharge: 0, position: 'interior',
+    }))
+  }
+
   return (
     <div>
       <PageHeader title="Isolated Footing" badges={['ACI 318-14', 'NSCP 2015']}
         actions={
-          <button type="button" onClick={() => { const prev = document.title; document.title = `Foundation Design Report${lh.project ? ` — ${lh.project}` : ''}`; window.print(); window.setTimeout(() => { document.title = prev }, 500) }}
+          <button type="button" onClick={() =>
+            { const prev = document.title; document.title = `Foundation Design Report${lh.project ? ` — ${lh.project}` : ''}`; window.print(); window.setTimeout(() => { document.title = prev }, 500) }}
             className="inline-flex items-center gap-2 rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-[#0d3f78]">
             ⎙ Export report
           </button>
@@ -384,6 +409,7 @@ export default function FoundationDesign() {
               position={form.position} d={view.dProvided} pressure={view.offset ?? view.ecc} />}
           />
         )}
+      <ModelMemberResults kind="footing" onLoad={loadSaved} />
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
       <div className="no-print"><ExcelImport onResult={setBatch} /></div>
 

@@ -10,6 +10,8 @@ import {
   PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport,
   type LetterheadState, type VerdictStat, type VerdictCheck,
 } from '../components/calc'
+import { ModelMemberResults } from '../components/ModelMemberResults'
+import type { MemberLoadRequest } from '../lib/modelMemberResults'
 import { initialLetterhead } from '../lib/letterhead'
 import { InteractionDiagram } from '../components/InteractionDiagram'
 import { WorkedSolution } from '../components/WorkedSolution'
@@ -186,6 +188,27 @@ export default function ColumnDesign() {
       .filter((p) => p.Pn > -100)   // drop deep-tension rows
   }, [inter])
 
+  /** Saved-model column → the page's own fields. The scheduled cage goes to
+   *  ANALYZE mode — its bars are a fact to check, not a suggestion — and the
+   *  saved frame's system and storey length come along so slenderness and
+   *  confinement match the model. The worked solution stays the page's own. */
+  const loadSaved = (req: MemberLoadRequest) => {
+    const c = req.design.columns.find((x) => x.id === req.id)
+    const sec = req.section
+    if (!c || !sec) return
+    setMode(Math.abs(c.Mu) > 1e-9 ? 'eccentric' : 'axial')
+    setSystem(req.design.system)
+    setB(sec.b); setH(sec.h); setCover(sec.cover)
+    setBarDia(sec.barDia); setTieDia(sec.tieDia)
+    setFc(sec.fc); setFy(sec.fy)
+    setBarMode('analyze'); setAutoBar(false)
+    setNumBars(c.bars > 0 ? c.bars : (sec.barCount ?? 8))
+    setLayout(c.layout ?? 'all-around')
+    setLoadInput('direct')
+    setPuDirect(c.Pu); setMu(c.Mu)
+    setColLen(Math.round(c.L * 1000)); setLu(c.L)
+  }
+
   return (
     <div>
       <PageHeader title="RC Column" badges={['ACI 318-14', 'NSCP 2015']} />
@@ -225,6 +248,7 @@ export default function ColumnDesign() {
             tieSpacing={tied ? axial.tieSpacingFinal : axial.spiralPitch} />}
         />
       )}
+      <ModelMemberResults kind="column" onLoad={loadSaved} />
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
 
       <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">

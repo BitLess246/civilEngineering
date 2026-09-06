@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import { ModelMemberResults } from '../components/ModelMemberResults'
+import type { MemberLoadRequest } from '../lib/modelMemberResults'
 import { initialLetterhead } from '../lib/letterhead'
 import { designBeam, beamServiceDeflection, type BeamDesignInput, type BeamDesignResult } from '../engine/beamDesign'
 import type { BeamSupport } from '../engine/beamDeflection'
@@ -217,6 +219,25 @@ export default function BeamDesign() {
     drawingTitle: 'Beam Section',
   } : null
 
+  /** Saved-model member → the page's own fields. Geometry, materials and the
+   *  cage come from the project's (bar-selection-adopted) section; the demands
+   *  from the member's governing section, sign kept so hogging loads hogging.
+   *  The worked solution below stays the page's own — it solves what the
+   *  fields now say, visibly. */
+  const loadSaved = (req: MemberLoadRequest) => {
+    const b = req.design.beams.find((x) => x.id === req.id)
+    const sec = req.section
+    if (!b || !sec || !b.sections.length) return
+    const worst = b.sections.reduce((a, z) => (Math.abs(z.Mu) > Math.abs(a.Mu) ? z : a))
+    setMulti(false)
+    setAutoBar(false)
+    setF((s) => ({
+      ...s, b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia,
+      stirrupDia: sec.tieDia, fc: sec.fc, fy: sec.fy,
+      Mu: worst.Mu, Vu: worst.Vu, dGiven: 0,
+    }))
+  }
+
   return (
     <div>
       <PageHeader title="Rectangular RC Beam" badges={['ACI 318-14', 'NSCP 2015']}
@@ -230,7 +251,7 @@ export default function BeamDesign() {
             ))}
           </div>
         } />
-        {/* PrintReport carries the letterhead card AND the export button in one; this
+      {/* PrintReport carries the letterhead card AND the export button in one; this
           bare one is the fallback for when the design has not solved. */}
       {!(reportData) && <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>}
         {reportData && (
@@ -241,6 +262,7 @@ export default function BeamDesign() {
               naDepth={r!.cNA} flexOK={r!.flexOK} hogging={hogging} />}
           />
         )}
+      <ModelMemberResults kind="beam" onLoad={loadSaved} />
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
 
       <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">
