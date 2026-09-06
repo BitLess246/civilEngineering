@@ -22,9 +22,15 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import type { StructuralModel } from '../model'
+import type { StructureDesign } from '../pipeline'
 
-/** On-disk schema version. Bump and add a migration when the shape changes. */
-export const PROJECT_SCHEMA_VERSION = 1
+/** On-disk schema version. Bump and add a migration when the shape changes.
+ *
+ *  1 — the model and its design inputs.
+ *  2 — adds the optional `results` bundle: the design the pipeline produced
+ *      for the saved model, so the standalone calculators can show a member's
+ *      actual results without recomputing anything. */
+export const PROJECT_SCHEMA_VERSION = 2
 
 /** Longest project name we will store — long enough for a real one, short
  *  enough that a listing stays readable and the column cannot be abused. */
@@ -41,6 +47,22 @@ export interface ProjectMeta {
   updatedAt: string
 }
 
+/**
+ * Results carried alongside the model, written by Model Space when a run
+ * finishes and the project is saved.
+ *
+ * Only the DESIGN is kept — the thing the calculators read. The raw analysis
+ * (per-combination member forces for every node) is an order of magnitude
+ * larger and none of the calculators need it; the design rows already carry
+ * each member's governing demands, capacities and utilisation.
+ */
+export interface ProjectResults {
+  /** The `StructureDesign` from the last Design or Optimize run on this
+   *  model. Null means the last run produced nothing usable (or the model
+   *  changed after the run) — the calculators say so rather than guessing. */
+  design?: StructureDesign | null
+}
+
 export interface Project {
   meta: ProjectMeta
   /**
@@ -53,6 +75,10 @@ export interface Project {
   model: StructuralModel | null
   /** Model Space's design inputs. Opaque here — see the header. */
   inputs: Record<string, unknown>
+  /** Results of the last design run on this model, when one was saved with
+   *  the project. Absent for projects saved before results were kept, and
+   *  absent until a run finishes — both read as "no results yet". */
+  results?: ProjectResults
 }
 
 /** Listing entry — enough for a picker without parsing every full document. */
@@ -86,6 +112,7 @@ export function isProject(v: unknown): v is Project {
   if (!str(m.name) || !str(m.client) || !str(m.location) || !str(m.notes)) return false
   if (!str(m.createdAt) || !str(m.updatedAt)) return false
   if (!p.inputs || typeof p.inputs !== 'object' || Array.isArray(p.inputs)) return false
+  if (p.results !== undefined && (typeof p.results !== 'object' || Array.isArray(p.results))) return false
   if (p.model === null || p.model === undefined) return true
   const mo = p.model as Partial<StructuralModel>
   return Array.isArray(mo.nodes) && Array.isArray(mo.members)

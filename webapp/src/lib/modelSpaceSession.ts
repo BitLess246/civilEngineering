@@ -16,9 +16,14 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 import type { StructuralModel } from '../engine/model'
+import type { StructureDesign } from '../engine/pipeline'
 
 export const AUTOSAVE_KEY = 'model-space-autosave'
 export const INPUTS_KEY = 'model-space-inputs'
+/** The design the page's last successful Design/Optimize run produced. Kept
+ *  under its own key so a model edit can drop it without re-serialising the
+ *  model, and so the Projects panel can save it into the project document. */
+export const DESIGN_KEY = 'model-space-design'
 
 /** Which saved project the open session belongs to, if any. Survives the
  *  reload that opening performs, which is the only reason it is stored. */
@@ -27,6 +32,10 @@ export const OPEN_ID_KEY = 'projects:open-id'
 export interface SessionSnapshot {
   model: StructuralModel | null
   inputs: Record<string, unknown>
+  /** The design from the session's last run, when one is still valid. Opening
+   *  a project seeds this from the project's saved results so a save right
+   *  after opening does not strip them; editing the model clears it. */
+  design?: StructureDesign | null
 }
 
 const store = (): Storage | undefined =>
@@ -56,7 +65,33 @@ export function writeSession(snap: SessionSnapshot): void {
     if (snap.model) s?.setItem(AUTOSAVE_KEY, JSON.stringify(snap.model))
     else s?.removeItem(AUTOSAVE_KEY)
     s?.setItem(INPUTS_KEY, JSON.stringify(snap.inputs))
+    // `design` is optional in more than the TypeScript sense: absent means
+    // "leave whatever is recorded", null means "the session has no valid
+    // design" — opening a project without results must clear, not keep.
+    if ('design' in snap) writeSessionDesign(snap.design ?? null)
   } catch { /* quota — the caller reloads either way and gets what fitted */ }
+}
+
+/** The design from the session's last successful run, or null when none is
+ *  valid (never run, model edited since, or a corrupt/oversized entry). */
+export function readSessionDesign(): StructureDesign | null {
+  try {
+    const raw = store()?.getItem(DESIGN_KEY)
+    if (!raw) return null
+    const v = JSON.parse(raw)
+    return v && typeof v === 'object' ? (v as StructureDesign) : null
+  } catch { return null }
+}
+
+/** Record (or clear) the design of the session's last run. Model Space calls
+ *  this when a run lands; `applyModel` clears it because a geometry edit
+ *  makes every member result stale. */
+export function writeSessionDesign(d: StructureDesign | null): void {
+  const s = store()
+  try {
+    if (d) s?.setItem(DESIGN_KEY, JSON.stringify(d))
+    else s?.removeItem(DESIGN_KEY)
+  } catch { /* quota — the results are recomputable; the model is not */ }
 }
 
 export function readOpenId(): string | null {

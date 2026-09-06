@@ -20,7 +20,7 @@ import { REBAR_ROLE_COLOR } from '../engine/rebarWire'
 import type { CageKind } from '../engine/rebarModel'
 import { effectiveViewMode, ghostConcrete, surfaceStyleFor, type ViewMode } from '../components/modelSpace/viewMode'
 import { ProjectsPanel } from '../components/ProjectsPanel'
-import { AUTOSAVE_KEY, INPUTS_KEY } from '../lib/modelSpaceSession'
+import { AUTOSAVE_KEY, INPUTS_KEY, DESIGN_KEY, writeSessionDesign } from '../lib/modelSpaceSession'
 import { emptyHistory, recordHistory, undoHistory, redoHistory, isTypingTarget, type History } from '../lib/history'
 import * as THREE from 'three'
 import { generateGridModel, removeElements, removeNode, buildGravityLoads, splitSharedSections } from '../engine/modelBuilder'
@@ -534,6 +534,9 @@ export default function ModelSpace() {
       if (m) sessionStorage.setItem(AUTOSAVE_KEY, JSON.stringify(m))
       else sessionStorage.removeItem(AUTOSAVE_KEY)
     } catch { /* quota — ignore */ }
+    // A geometry edit invalidates every member result the last run produced —
+    // including the copy the calculators read from a saved project.
+    try { sessionStorage.removeItem(DESIGN_KEY) } catch { /* ignore */ }
     // Every dependency is a setState function, which React keeps stable — so
     // this identity never changes and the key handler below rebinds only when
     // the history or the model actually moves.
@@ -901,6 +904,7 @@ export default function ModelSpace() {
       const res = r as { model: StructuralModel; design: StructureDesign | null }
       save(res.model)
       setDesign(res.design)
+      writeSessionDesign(res.design)   // the calculators' window onto this run
       requestAnimationFrame(captureModel)   // refresh the printable 3D snapshot
     }).catch((e) => console.error('design failed', e))
   }
@@ -917,6 +921,7 @@ export default function ModelSpace() {
       setOpt(r)
       setOptBefore(before)
       setDesign(r.design)
+      writeSessionDesign(r.design)   // the optimised design is what the calculators should show
       requestAnimationFrame(captureModel)
     }).catch((e) => console.error('optimize failed', e))
   }

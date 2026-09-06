@@ -3,6 +3,7 @@ import { designCombinedFooting, type CombinedFootingInput } from '../engine/comb
 import { designFlexibleCombinedFooting } from '../engine/flexibleCombinedFooting'
 import { CombinedFootingSchematic } from '../components/CombinedFootingSchematic'
 import { PageHeader, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import { ModelMemberResults } from '../components/ModelMemberResults'
 import { Card } from '../components/qty'
 import { initialLetterhead } from '../lib/letterhead'
 import { Diagram } from '../components/Diagram'
@@ -164,6 +165,7 @@ export default function CombinedFootingDesign() {
   return (
     <div>
       <PageHeader title="Combined Footing" badges={['ACI 318-14', 'NSCP 2015']} />
+      <ModelMemberResults kind="combined" />
       {/* PrintReport carries the letterhead card AND the export button in one; this
           bare one is the fallback for when the design has not solved. */}
       {!(result && solutionSteps) && <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>}

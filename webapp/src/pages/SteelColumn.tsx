@@ -10,6 +10,7 @@ import type { SolutionStep } from '../lib/solution'
 import { f1 } from '../lib/format'
 import { sn1, sn2, sn3 } from '../lib/solution'
 import { PageHeader } from '../components/calc'
+import { ModelMemberResults } from '../components/ModelMemberResults'
 import { ShapePick, CalcBadge, TrialWall, Spinner, Verdict, BasisPick, BasisNote } from '../components/steelUi'
 import { capacityLabel, demandLabel, factorLabel, comboLabel, requiredFromDL, SAFETY, type DesignBasis } from '../engine/designBasis'
 import { GRADES, shapeOrFirst, type Grade } from '../lib/steelShapes'
@@ -164,6 +165,7 @@ export default function SteelColumn() {
   return (
     <div>
       <PageHeader title="Steel Column Design" badges={['AISC 360-16']} />
+      <ModelMemberResults kind="steelColumn" />
       <div className="mx-auto max-w-[1500px] px-5 py-5 sm:px-7">
         <p className="no-print mt-1 text-slate-600">AISC 360-16 §E3 flexural buckling, weak-axis flexure, and the §H1-1 combined axial-plus-bending interaction. 3D scene and a step-by-step solution.</p>
         <ReportControls title="Steel Column Design Report" />

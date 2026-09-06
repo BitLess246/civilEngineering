@@ -10,6 +10,7 @@ import {
   PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport,
   type LetterheadState, type VerdictStat, type VerdictCheck,
 } from '../components/calc'
+import { ModelMemberResults } from '../components/ModelMemberResults'
 import { initialLetterhead } from '../lib/letterhead'
 import { InteractionDiagram } from '../components/InteractionDiagram'
 import { WorkedSolution } from '../components/WorkedSolution'
@@ -189,6 +190,7 @@ export default function ColumnDesign() {
   return (
     <div>
       <PageHeader title="RC Column" badges={['ACI 318-14', 'NSCP 2015']} />
+      <ModelMemberResults kind="column" />
       {/* PrintReport carries the letterhead card AND the export button in one; this
           bare one is the fallback for when the design has not solved. It lives HERE,
           under the page header, because the report card had been rendering at the very

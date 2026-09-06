@@ -21,6 +21,7 @@ import { WorkedSolution } from '../components/WorkedSolution'
 import { buildFoundationSolution, type SolutionCtx } from '../lib/foundationSolution'
 import { Math } from '../lib/math'
 import { PageHeader, CalcSection, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import { ModelMemberResults } from '../components/ModelMemberResults'
 import { initialLetterhead } from '../lib/letterhead'
 import { f0, f2, f3 } from '../lib/format'
 import 'katex/dist/katex.min.css'
@@ -343,11 +344,13 @@ export default function FoundationDesign() {
     <div>
       <PageHeader title="Isolated Footing" badges={['ACI 318-14', 'NSCP 2015']}
         actions={
-          <button type="button" onClick={() => { const prev = document.title; document.title = `Foundation Design Report${lh.project ? ` — ${lh.project}` : ''}`; window.print(); window.setTimeout(() => { document.title = prev }, 500) }}
+          <button type="button" onClick={() =>
+            { const prev = document.title; document.title = `Foundation Design Report${lh.project ? ` — ${lh.project}` : ''}`; window.print(); window.setTimeout(() => { document.title = prev }, 500) }}
             className="inline-flex items-center gap-2 rounded-md bg-[#0f4c92] px-4 py-2 text-[12.5px] font-semibold text-white hover:bg-[#0d3f78]">
             ⎙ Export report
           </button>
         } />
+      <ModelMemberResults kind="footing" />
         {/* PrintReport carries the letterhead card AND the export button in one; this
           bare one is the fallback for when the design has not solved. */}
       {!(view && solutionSteps) && <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>}

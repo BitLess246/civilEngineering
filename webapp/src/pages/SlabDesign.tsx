@@ -14,6 +14,7 @@ import { f0, f1, f2 } from '../lib/format'
 import 'katex/dist/katex.min.css'
 import { WorkedSolution } from '../components/WorkedSolution'
 import { PageHeader } from '../components/calc'
+import { ModelMemberResults } from '../components/ModelMemberResults'
 
 interface FormState {
   lx: number; ly: number
@@ -189,6 +190,7 @@ export default function SlabDesign() {
   return (
         <div>
       <PageHeader title="Two-Way Slab Design" badges={['ACI 318-14 §8.10', 'NSCP 2015 §408.10']} />
+      <ModelMemberResults kind="slab" />
       <div className="mx-auto max-w-[1500px] p-6">
       <p className="no-print mt-1 text-slate-600">
         Direct Design Method — NSCP 2015 §408.10 / ACI 318-14 §8.10. Square or rectangular interior and end panels;

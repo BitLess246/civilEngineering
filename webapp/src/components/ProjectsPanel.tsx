@@ -16,7 +16,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useProjects, conflictsIn } from '../lib/useProjects'
-import { readSession, writeSession, readOpenId, writeOpenId } from '../lib/modelSpaceSession'
+import { readSession, writeSession, readOpenId, writeOpenId, readSessionDesign } from '../lib/modelSpaceSession'
 import { SaveAlert } from './SaveAlert'
 
 const when = (iso: string): string => {
@@ -45,11 +45,17 @@ export function ProjectsPanel() {
 
   const saveCurrent = () => {
     const snap = readSession()
+    // Results ride along only while the session still holds a valid design:
+    // the key is dropped the moment the model is edited or a run fails, so an
+    // absent key means the honest thing to save is NO results — not stale
+    // ones. Opening a project seeds the key from its own saved results, so a
+    // save made right after opening keeps them.
+    const design = readSessionDesign()
     if (openId) {
       const existing = api.load(openId)
-      if (existing) { api.save(openId, { ...existing, ...snap }); return }
+      if (existing) { api.save(openId, { ...existing, ...snap, results: design ? { design } : undefined }); return }
     }
-    const id = api.create(name.trim() || 'Untitled project', snap)
+    const id = api.create(name.trim() || 'Untitled project', { ...snap, results: design ? { design } : undefined })
     if (id) { attach(id); setName('') }
   }
 
@@ -62,7 +68,9 @@ export function ProjectsPanel() {
   const open = (id: string) => {
     const p = api.load(id)
     if (!p) return
-    writeSession({ model: p.model, inputs: p.inputs })
+    // The saved design seeds the session so a save made before any new run
+    // keeps the project's results rather than stripping them.
+    writeSession({ model: p.model, inputs: p.inputs, design: p.results?.design ?? null })
     writeOpenId(id)
     window.location.reload()
   }

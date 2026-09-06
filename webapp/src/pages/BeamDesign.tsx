@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport, type LetterheadState } from '../components/calc'
+import { ModelMemberResults } from '../components/ModelMemberResults'
 import { initialLetterhead } from '../lib/letterhead'
 import { designBeam, beamServiceDeflection, type BeamDesignInput, type BeamDesignResult } from '../engine/beamDesign'
 import type { BeamSupport } from '../engine/beamDeflection'
@@ -230,6 +231,7 @@ export default function BeamDesign() {
             ))}
           </div>
         } />
+      <ModelMemberResults kind="beam" />
         {/* PrintReport carries the letterhead card AND the export button in one; this
           bare one is the fallback for when the design has not solved. */}
       {!(reportData) && <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7"><LetterheadCard lh={lh} onChange={(patch) => setLh((v) => ({ ...v, ...patch }))} /></div>}
