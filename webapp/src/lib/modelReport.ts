@@ -52,6 +52,9 @@ export interface ModelReport {
   props: [string, string][]
   tables: ReportTable[]
   groups: ReportGroup[]
+  /** The twelve governing members — governing case → demand → required steel →
+   *  the bars the schedule and cage carry. Left out when nothing was designed. */
+  trace?: ReportTable
 }
 
 const f0 = (v: number) => v.toFixed(0)
@@ -595,5 +598,49 @@ export function buildModelReport(
     })),
   })
 
-  return { ok, governing, stats, checks, props, tables, groups }
+  // ── Traceability: the twelve governing members, analysis → design → schedule ──
+  // For each of the six most-stressed RC beams and six most-stressed RC columns:
+  // the governing load case, the demand the analysis found, the steel the design
+  // requires, and the bars the schedule actually carries — one row, one member,
+  // so a reader can walk the chain without leaving the report.
+  const PASS_FLOOR = 1e-9
+  const traceRows: string[][] = []
+  const topBeams = design.beams
+    .map((b) => ({ b, u: Math.max(0, ...b.sections.map((s) => (s.design.phiMnMax > PASS_FLOOR ? Math.abs(s.Mu) / s.design.phiMnMax : 0))) }))
+    .sort((a, z) => z.u - a.u).slice(0, 6)
+  for (const { b } of topBeams) {
+    const s = b.sections.reduce((a, z) => (Math.abs(z.Mu) > Math.abs(a.Mu) ? z : a))
+    const sec = sectionFor(b.id)
+    const d = s.design
+    traceRows.push([
+      `Beam ${b.id}`, memberLoc(b.id) ?? '—', b.gov ?? '—',
+      `Mu ${f1(Math.abs(s.Mu))} · Vu ${f1(s.Vu)} kN·m`,
+      `As ${f0(d.As)} mm²`,
+      `${d.bars}⌀${sec?.barDia ?? '?'}${d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''} · ${d.legs}L-⌀${sec?.tieDia ?? '?'} @ ${Math.round(s.hogging ? d.sHinge : d.sAdopt)} mm`,
+      d.phiMnMax > PASS_FLOOR ? f2(Math.abs(s.Mu) / d.phiMnMax) : '—',
+      b.ok ? 'PASS' : 'FAIL',
+    ])
+  }
+  const topCols = [...design.columns].sort((a, z) => z.util - a.util).slice(0, 6)
+  for (const c of topCols) {
+    const sec = sectionFor(c.id)
+    traceRows.push([
+      `Column ${c.id}`, memberLoc(c.id) ?? '—', c.gov ?? '—',
+      `Pu ${f1(c.Pu)} · Mu ${f1(c.Mu)} · Muy ${f1(c.Muy)} kN·m`,
+      `φPn ${f1(c.phiPn)} kN (${c.biaxialMethod})`,
+      `${c.bars}⌀${sec?.barDia ?? '?'} · ties ⌀${sec?.tieDia ?? '?'} @ ${Math.round(c.tieSpacingFinal)} mm`,
+      f2(c.util),
+      c.ok ? 'PASS' : 'FAIL',
+    ])
+  }
+  const trace: ReportTable | undefined = traceRows.length
+    ? {
+      title: 'Governing members — governing case → demand → required steel → bars as scheduled',
+      head: ['Member', 'Location', 'Governing case', 'Demand (analysis)', 'Required (design)', 'Provided (schedule)', 'Util', 'Check'],
+      right: [6],
+      rows: traceRows,
+    }
+    : undefined
+
+  return { ok, governing, stats, checks, props, tables, groups, trace }
 }

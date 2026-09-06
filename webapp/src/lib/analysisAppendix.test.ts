@@ -191,3 +191,59 @@ describe('the status table', () => {
     expect(['PASS', 'ADVISORY']).toContain(at('Final detailing').verdict)
   })
 })
+
+describe('G · the optimizer trail the pipeline records', () => {
+  const optimizeSmall = () => {
+    const m = generateGridModel({ baysX: [7], baysZ: [6], storeyH: [3], section: { ...section, b: 200, h: 300 }, slabThickness: 150 })
+    m.loads = buildGravityLoads(m, 6, 4)
+    return { before: m.sections, result: optimizeStructure(m, soil, {}, 6)! }
+  }
+
+  it('G.2 reads the engine\'s own initial model, not whatever the caller passes', () => {
+    const { result } = optimizeSmall()
+    // a deliberately WRONG before — every entry 999×999. If the table read the
+    // caller's sections instead of the result's initialModel, it would show them.
+    const wrongBefore = result.model.sections.map((s) => ({ ...s, b: 999, h: 999 }))
+    const ap = buildAnalysisAppendix({ model: result.model, design: result.design, optimization: { result, before: wrongBefore } })
+    const s = ap.sections[6]
+    const diff = s.tables.find((x) => x.title.startsWith('G.2'))!
+    expect(diff.rows.length).toBeGreaterThan(0)
+    for (const row of diff.rows) {
+      expect(row.join(' ')).not.toContain('999')
+      expect(row.join(' ')).not.toContain('no section changed')
+    }
+  }, 60000)
+
+  it('the trail lists the accepted changes per step, with from ≠ to, and quantities both ends', () => {
+    const { result } = optimizeSmall()
+    const ap = buildAnalysisAppendix({ model: result.model, design: result.design, optimization: { result } })
+    const s = ap.sections[6]
+    const trail = s.tables.find((x) => x.title.startsWith('G.3'))!
+    expect(trail.head).toEqual(['Iteration', 'Kind', 'Element', 'From', 'To'])
+    const grown = trail.rows.filter((r) => r[1] === 'section')
+    expect(grown.length).toBeGreaterThan(0)
+    for (const r of grown) expect(r[3]).not.toBe(r[4])
+    const qty = s.tables.find((x) => x.title.startsWith('G.4'))!
+    expect(qty.head).toEqual(['Material', 'Initial', 'Final'])
+    expect(qty.rows.map((r) => r[0])).toContain('Concrete')
+    // the two ends are the pipeline's own designs — concrete exists on both
+    const concrete = qty.rows.find((r) => r[0] === 'Concrete')!
+    expect(parseFloat(concrete[1])).toBeGreaterThan(0)
+    expect(parseFloat(concrete[2])).toBeGreaterThan(0)
+  }, 60000)
+
+  it('a saved run from before the engine carried the initial state still prints G.2 from the caller\'s sections, with no quantities row', () => {
+    const { before, result } = optimizeSmall()
+    const legacy = structuredClone(result) as unknown as Record<string, unknown>
+    delete legacy.initialDesign
+    delete legacy.initialModel
+    const ap = buildAnalysisAppendix({
+      model: result.model, design: result.design,
+      optimization: { result: legacy as unknown as typeof result, before },
+    })
+    const s = ap.sections[6]
+    const diff = s.tables.find((x) => x.title.startsWith('G.2'))!
+    expect(diff.rows.length).toBeGreaterThan(0)
+    expect(s.tables.find((x) => x.title.startsWith('G.4'))).toBeUndefined()
+  }, 60000)
+})

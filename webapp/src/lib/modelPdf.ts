@@ -30,17 +30,18 @@ import {
 
 /** The sections of the design report, in print order — what the export
  *  dialog offers, and what `buildModelPdf` prints when told a subset. */
-export type ReportSectionKey = 'snapshot' | 'summary' | 'status' | 'project' | 'schedules' | 'solutions' | 'drawings'
+export type ReportSectionKey = 'snapshot' | 'summary' | 'status' | 'project' | 'trace' | 'schedules' | 'solutions' | 'drawings'
 export const REPORT_SECTION_TITLES: Record<ReportSectionKey, { label: string; hint?: string }> = {
   snapshot: { label: '3D model snapshot', hint: 'the analysis view as it stands' },
   summary: { label: 'Design summary', hint: 'verdict, governing checks, quantities' },
   status: { label: 'Analysis & design status', hint: 'every analysis and check, as the engine reported it' },
   project: { label: 'Project & design data' },
+  trace: { label: 'Traceability — governing members', hint: 'governing case → demand → required steel → the bars as scheduled' },
   schedules: { label: 'Member schedules', hint: 'beams, columns, slabs, footings, walls, connections' },
   solutions: { label: 'Worked solutions', hint: 'every member, with its cage figures' },
   drawings: { label: 'Drawings', hint: 'the plan and detail sheet set' },
 }
-export const ALL_REPORT_SECTIONS: ReportSectionKey[] = ['snapshot', 'summary', 'status', 'project', 'schedules', 'solutions', 'drawings']
+export const ALL_REPORT_SECTIONS: ReportSectionKey[] = ['snapshot', 'summary', 'status', 'project', 'trace', 'schedules', 'solutions', 'drawings']
 
 export interface ModelPdfInput {
   lh: LetterheadState
@@ -174,6 +175,23 @@ export async function buildModelPdfInto(
     })
     sh.y = (lastY() ?? sh.y) + 4
   }
+  }
+
+  // ── Traceability ──
+  // The twelve governing members, walked from the governing load case through
+  // the required steel to the bars the schedule carries — the chain between
+  // the analysis, the design, and the schedules that follow this section.
+  if (want.has('trace') && report.trace) {
+  ensure(40)                 // the heading with its table, never alone
+  rule(REPORT_SECTION_TITLES.trace.label)
+  autoTable(doc, {
+    ...tableTheme(report.trace.right ?? []),
+    startY: sh.y,
+    head: [report.trace.head],
+    body: report.trace.rows,
+    rowPageBreak: 'avoid',
+  })
+  sh.y = (lastY() ?? sh.y) + 5.5
   }
 
   // ── Member schedules ──
