@@ -102,8 +102,11 @@ export function Row({ label, value, sub, alert }: {
     <div className={`flex items-baseline justify-between gap-3 border-b py-1.5 last:border-0 ${
       alert ? 'border-[#efd4cc] bg-[#fbeeea] px-2 -mx-2 rounded' : 'border-[#f3f1ea]'}`}>
       <span className={`text-[12px] ${alert ? 'text-[#8f2f1e]' : 'text-[#5c6675]'}`}>{label}</span>
-      <span className={`text-right font-mono text-[12.5px] font-semibold ${alert ? 'text-[#c2402a]' : 'text-[#0f1b2a]'}`}>{value}</span>
-      {sub ? <span className={`w-32 text-right text-[10.5px] ${alert ? 'text-[#c2402a]' : 'text-[#a39d8d]'}`}>{sub}</span> : null}
+      <span className={`min-w-0 text-right font-mono text-[12.5px] font-semibold ${alert ? 'text-[#c2402a]' : 'text-[#0f1b2a]'}`}>{value}</span>
+      {/* w-32 + truncate: the sub is secondary info (joined elevations, clause
+          notes) — a long one must ellipsize, not push the row wide and shove
+          the value out of the card. */}
+      {sub ? <span className={`w-32 shrink-0 truncate text-right text-[10.5px] ${alert ? 'text-[#c2402a]' : 'text-[#a39d8d]'}`}>{sub}</span> : null}
     </div>
   )
 }

@@ -17,6 +17,7 @@
 import type { StructuralModel, RectSection } from './model'
 import type { StructureDesign } from './pipeline'
 import { computePert, type PertResult } from './schedule/pert'
+import { computeCPM, type CpmResult } from './schedule/cpm'
 import type { RelationType } from './schedule/model'
 import { shapeByName } from './aiscSections'
 
@@ -56,8 +57,15 @@ export interface ModelActivity {
 
 export interface ModelSchedule {
   activities: ModelActivity[]
-  pert: PertResult                    // .cpm carries ES/EF/LS/LF/float/critical
+  /** Per-activity PERT statistics (TE/σ²) — feeds the uncertainty summary. */
+  pert: PertResult
+  /** THE solve behind the diagram, Gantt and table: CPM on the PLAIN
+   *  durations, identical to what the /schedule module runs. */
+  cpm: CpmResult
+  /** Project duration in working days = the CPM length (an integer — all
+   *  generated and edited durations are whole days). */
   projectDays: number
+  /** PERT σ along the displayed critical path (uncertainty summary). */
   projectSd: number
   criticalPath: string[]
   frame: FrameMaterial
@@ -80,13 +88,33 @@ export function withDuration(a: ModelActivity, duration: number): ModelActivity 
   return { ...a, duration: d, o: Math.max(1, Math.round(d * 0.8)), m: d, p: Math.max(1, Math.round(d * 1.5)) }
 }
 
-/** Solve CPM + PERT for a set of activities (base or user-edited). */
+/** Solve the model's construction schedule.
+ *
+ *  Two layers, ON PURPOSE:
+ *  · `cpm` — the deterministic solve on the PLAIN durations (M). This is what
+ *    the diagram, mini-Gantt and activity table display, and it is exactly
+ *    the solve the /schedule module runs (useScheduleSolve → computeCPM), so
+ *    the critical path, every float and the project duration AGREE between
+ *    the Model Space tab and the scheduler pages. It used to run on the PERT
+ *    expected times TE = (O+4M+P)/6 instead — fractional dates everywhere and
+ *    criticality that could swap against the scheduler on near-parallel
+ *    branches.
+ *  · `pert` — the three-point layer kept for the uncertainty summary (σ, P80).
+ *    σ is summed along the DISPLAYED (deterministic) critical path so the
+ *    P80 card answers "how sure are we about THIS duration?".
+ */
 export function solveModelSchedule(activities: ModelActivity[]): Omit<ModelSchedule, 'activities' | 'frame'> {
   const pert = computePert(activities.map((a) => ({
     id: a.id, optimistic: a.o, mostLikely: a.m, pessimistic: a.p,
     predecessors: a.predecessors.map((l) => ({ predecessor: l.id, type: l.type, lag: l.lag })),
   })))
-  return { pert, projectDays: pert.projectTe, projectSd: pert.projectSd, criticalPath: pert.cpm.criticalPath }
+  const cpm = computeCPM(activities.map((a) => ({
+    id: a.id, duration: a.duration,
+    predecessors: a.predecessors.map((l) => ({ predecessor: l.id, type: l.type, lag: l.lag })),
+  })))
+  const projectVariance = cpm.criticalPath.reduce(
+    (sum, id) => sum + (pert.activities.get(id)?.variance ?? 0), 0)
+  return { pert, cpm, projectDays: cpm.duration, projectSd: Math.sqrt(projectVariance), criticalPath: cpm.criticalPath }
 }
 
 /** Derive the construction activities (split trades, overlaps, parallel branches)

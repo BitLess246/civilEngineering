@@ -20,7 +20,7 @@ import { REBAR_ROLE_COLOR } from '../engine/rebarWire'
 import type { CageKind } from '../engine/rebarModel'
 import { effectiveViewMode, ghostConcrete, surfaceStyleFor, type ViewMode } from '../components/modelSpace/viewMode'
 import { ProjectsPanel } from '../components/ProjectsPanel'
-import { AUTOSAVE_KEY, INPUTS_KEY, DESIGN_KEY, writeSessionDesign } from '../lib/modelSpaceSession'
+import { AUTOSAVE_KEY, INPUTS_KEY, DESIGN_KEY, readSessionDesign, writeSessionDesign } from '../lib/modelSpaceSession'
 import { emptyHistory, recordHistory, undoHistory, redoHistory, isTypingTarget, type History } from '../lib/history'
 import * as THREE from 'three'
 import { generateGridModel, removeElements, removeNode, buildGravityLoads, splitSharedSections } from '../engine/modelBuilder'
@@ -378,7 +378,15 @@ export default function ModelSpace() {
   const [thCsvUnits, setThCsvUnits] = useState<'g' | 'ms2'>('g')
   const [thCsvDt, setThCsvDt] = useState(0.02)  // s, for one-column CSV
   const [th, setTh] = useState<TimeHistoryModelResult | null>(null)
-  const [design, setDesign] = useState<StructureDesign | null>(null)
+  // The design comes back from the session when one is still valid — i.e. the
+  // last run's results survive a refresh, a navigate-away-and-back, and above
+  // all OPENING A SAVED PROJECT: ProjectsPanel.open seeds DESIGN_KEY from the
+  // project's stored results before reloading, and this init is what finally
+  // reads it. It used to init null and the seeded session design sat unused —
+  // reopening a designed project brought the geometry back with all its
+  // schedules, plans and 3D design overlays blank. applyModel still clears the
+  // key on every geometry edit, so a stale design can never attach here.
+  const [design, setDesign] = useState<StructureDesign | null>(() => readSessionDesign())
   const [opt, setOpt] = useState<OptimizeResult | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)   // open schedule-row solution
   const [report] = useState<'' | 'schedules' | 'drawings' | 'solutions' | 'full' | 'sol-only' | 'draw-only'>('')  // consolidated report template (interactive on screen; PDF carries everything)
@@ -594,6 +602,10 @@ export default function ModelSpace() {
     setDrift(null)
     setIrregular(null)
     try { sessionStorage.setItem(AUTOSAVE_KEY, JSON.stringify(m)) } catch { /* quota — ignore */ }
+    // The session design must go too: load-bearing state was just replaced
+    // (new loads), and leaving the old design recorded here would resurrect
+    // it on the next mount — design init reads the session (see useState above).
+    try { sessionStorage.removeItem(DESIGN_KEY) } catch { /* ignore */ }
   }
 
   // §203.3.1: f₁ = 1.0 for assembly/garage or live load > 4.8 kPa, else 0.5.
@@ -1981,7 +1993,7 @@ export default function ModelSpace() {
                     sub={`${model.members.filter((m) => m.role === 'column').length} col · ${model.members.filter((m) => m.role !== 'column').length} bm`} />
                   <Row label="Slabs / loads" value={`${model.plates.length} / ${model.loads.length}`} />
                   <Row label="Storeys" value={`${model.storeys.length}`}
-                    sub={model.storeys.map((s) => `${s.elevation} m`).join(' · ')} />
+                    sub={model.storeys.map((s) => `${f1(s.elevation)} m`).join(' · ')} />
                 </Sec>
               )}
 
@@ -2008,7 +2020,7 @@ export default function ModelSpace() {
                             <td className="py-0.5 pr-2 font-medium">{n.id}</td>
                             {(['x', 'y', 'z'] as const).map((k) => (
                               <td key={k} className="py-0.5 pr-1">
-                                <input type="number" step="0.5" value={n[k]}
+                                <input type="number" step="0.5" value={Number(n[k].toFixed(2))}
                                   onChange={(e) => updNode(n.id, k, parseFloat(e.target.value))}
                                   className="w-14 rounded border border-slate-200 px-1 py-0.5" />
                               </td>
