@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { generateGridModel } from './modelBuilder'
 import { designStructure } from './pipeline'
 import { buildModelSchedule, buildModelActivities, solveModelSchedule, withDuration } from './modelSchedule'
+import { computeCPM } from './schedule/cpm'
 import type { RectSection, ModelLoad } from './model'
 
 const section: RectSection = { id: 'S1', name: '400×400', b: 400, h: 400, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
@@ -40,7 +41,7 @@ describe('buildModelSchedule — non-linear CPM/PERT from the model', () => {
   })
 
   it('has parallel branches — backfill and finishes run off the critical path', () => {
-    const cpm = sch.pert.cpm.activities
+    const cpm = sch.cpm.activities
     // BACK and CF1 both depend on FTGP → they overlap in time
     expect(by.get('BACK')!.predecessors[0].id).toBe('FTGP')
     expect(by.get('CF1')!.predecessors[0].id).toBe('FTGP')
@@ -76,9 +77,33 @@ describe('buildModelSchedule — non-linear CPM/PERT from the model', () => {
     const s1 = solveModelSchedule(edited)
     expect(s1.projectDays).toBeGreaterThan(s0.projectDays)
     // a non-critical (parallel) activity has slack, so bumping it a little keeps the project length
-    const slackId = [...s0.pert.cpm.activities.values()].find((c) => c.totalFloat > 2)!.id
+    const slackId = [...s0.cpm.activities.values()].find((c) => c.totalFloat > 2)!.id
     const edited2 = b.activities.map((a) => (a.id === slackId ? withDuration(a, a.duration + 1) : a))
     expect(solveModelSchedule(edited2).projectDays).toBeCloseTo(s0.projectDays, 6)
+  })
+
+  it('solves the displayed CPM on PLAIN durations — identical to the /schedule module', () => {
+    // The Model Space schedule tab and the standalone scheduler must agree:
+    // same engine call the scheduler makes (computeCPM on activity.duration),
+    // so the critical path, floats and duration match its network diagram.
+    const b = buildModelActivities(model, design)!
+    const s = solveModelSchedule(b.activities)
+    const reference = computeCPM(b.activities.map((a) => ({
+      id: a.id, duration: a.duration,
+      predecessors: a.predecessors.map((l) => ({ predecessor: l.id, type: l.type, lag: l.lag })),
+    })))
+    expect(s.cpm.duration).toBe(reference.duration)
+    expect(s.projectDays).toBe(reference.duration)
+    expect(s.criticalPath).toEqual(reference.criticalPath)
+    for (const [id, c] of reference.activities) {
+      expect(s.cpm.activities.get(id)).toEqual(c)
+    }
+    // whole-day durations in ⇒ whole-day dates out: the diagram cells and
+    // table never show a 4.166666666666667 that overflows its box.
+    expect(Number.isInteger(s.projectDays))
+    for (const c of s.cpm.activities.values()) {
+      for (const v of [c.es, c.ef, c.ls, c.lf, c.totalFloat]) expect(Number.isInteger(v))
+    }
   })
 
   it('a steel frame schedules by erection tonnage & deck area', () => {

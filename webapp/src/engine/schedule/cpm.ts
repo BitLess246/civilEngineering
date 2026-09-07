@@ -152,6 +152,36 @@ export function wouldCreateCycle(
   return findCycle(probe) !== null
 }
 
+/** Float tolerance of the binding-link test (matches computeCPM's default ε). */
+const BINDING_EPS = 1e-6
+
+/**
+ * Is this dependency the one actually DRIVING its successor's dates?
+ *
+ * Both endpoints being critical is not enough to call a link critical: in a
+ * diamond with equal-length branches, a slack link can join two critical
+ * nodes. A link binds when the predecessor's constraint is exactly met by
+ * the successor's schedule — the same rule the /schedule network diagram
+ * applies, so both views color the same links red.
+ */
+export function isBindingLink(
+  dep: Pick<Dependency, 'type' | 'lag'>,
+  predId: string,
+  succId: string,
+  activities: Map<string, CpmActivity>,
+): boolean {
+  const p = activities.get(predId)
+  const s = activities.get(succId)
+  if (!p || !s) return false
+  const lag = dep.lag ?? 0
+  switch (dep.type) {
+    case 'FS': return Math.abs(p.ef + lag - s.es) < BINDING_EPS
+    case 'SS': return Math.abs(p.es + lag - s.es) < BINDING_EPS
+    case 'FF': return Math.abs(p.ef + lag - s.ef) < BINDING_EPS
+    case 'SF': return Math.abs(p.es + lag - s.ef) < BINDING_EPS
+  }
+}
+
 /** Kahn topological order. Throws `ScheduleCycleError` on a cycle. */
 export function topoOrder(activities: CpmActivityInput[]): string[] {
   const ids = new Set(activities.map((a) => a.id))

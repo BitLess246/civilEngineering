@@ -34,6 +34,7 @@
 
 import type { Dependency } from '../engine/schedule/model'
 import type { CpmResult as Cpm } from '../engine/schedule/cpm'
+import { isBindingLink } from '../engine/schedule/cpm'
 
 /** Minimal activity shape the layout needs. */
 export interface NetActivity {
@@ -234,19 +235,9 @@ export function layoutNetwork(activities: NetActivity[], cpm: Cpm, opts: LayoutO
   // AND the link is *binding* — the predecessor's constraint exactly sets the
   // successor's driving date. (Two critical nodes can be joined by a slack
   // link in a diamond with equal-length paths; that link is not critical.)
+  // The test lives in the engine (isBindingLink) so the Model Space
+  // critical-path diagram colors links with the SAME rule.
   const critical = new Set(nodes.filter((n) => n.critical).map((n) => n.id))
-  const EPS = 1e-6
-  const isBinding = (dep: Dependency, predId: string, succId: string): boolean => {
-    const p = cpm.activities.get(predId), s = cpm.activities.get(succId)
-    if (!p || !s) return false
-    const lag = dep.lag ?? 0
-    switch (dep.type) {
-      case 'FS': return Math.abs(p.ef + lag - s.es) < EPS
-      case 'SS': return Math.abs(p.es + lag - s.es) < EPS
-      case 'FF': return Math.abs(p.ef + lag - s.ef) < EPS
-      case 'SF': return Math.abs(p.es + lag - s.ef) < EPS
-    }
-  }
 
   const edges: NetEdge[] = links.map((l) => {
     const a = nodeById.get(l.from)!, b = nodeById.get(l.to)!
@@ -265,7 +256,7 @@ export function layoutNetwork(activities: NetActivity[], cpm: Cpm, opts: LayoutO
     points.push({ x: b.x, y: b.y + b.h / 2 })
     return {
       from: l.from, to: l.to, type: l.dep.type,
-      critical: critical.has(l.to) && critical.has(l.from) && isBinding(l.dep, l.from, l.to),
+      critical: critical.has(l.to) && critical.has(l.from) && isBindingLink(l.dep, l.from, l.to, cpm.activities),
       span: (col.get(l.to) ?? 0) - (col.get(l.from) ?? 0),
       points,
     }

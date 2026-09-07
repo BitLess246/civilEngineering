@@ -1,8 +1,14 @@
 import { useMemo, type JSX } from 'react'
 import type { ModelActivity } from '../engine/modelSchedule'
 import type { CpmActivity } from '../engine/schedule/cpm'
+import { isBindingLink } from '../engine/schedule/cpm'
 
 const BOX_W = 148, BOX_H = 66, COL_W = 214, ROW_H = 108, PAD = 18
+
+/** Day numbers are whole (durations and lags are integer days); show one
+ *  decimal only if a value ever comes back fractional — a raw
+ *  9.500000000000002 does not fit a 44px cell third and never looked right. */
+const fmtDay = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1))
 
 /** Editable Activity-on-Node critical-path diagram: each activity is a node box
  *  (ES | DUR | EF · name · LS | TF | LF) with arrows to its successors, the
@@ -42,7 +48,9 @@ export function CriticalPathDiagram({ activities, cpm, critical, onEditDuration 
   }, [activities, cpm])
 
   const cell = (v: number | string, cls: string) =>
-    <div className={`flex items-center justify-center text-[10.5px] font-semibold ${cls}`}>{v}</div>
+    <div className={`flex items-center justify-center text-[10.5px] font-semibold ${cls}`}>
+      {typeof v === 'number' ? fmtDay(v) : v}
+    </div>
 
   return (
     <div className="overflow-auto rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -58,11 +66,14 @@ export function CriticalPathDiagram({ activities, cpm, critical, onEditDuration 
             </marker>
           </defs>
           {activities.flatMap((a) => {
-            const to = layout.pos.get(a.id); if (!to) return []
+            const to = layout.pos.get(a.id), tc = cpm.get(a.id); if (!to || !tc) return []
             return a.predecessors.map((l) => {
-              const from = layout.pos.get(l.id); if (!from) return null
+              const from = layout.pos.get(l.id), fc = cpm.get(l.id); if (!from || !fc) return null
               const x1 = from.x + BOX_W, y1 = from.y + BOX_H / 2, x2 = to.x, y2 = to.y + BOX_H / 2
-              const isCrit = critical.has(a.id) && critical.has(l.id)
+              // Same rule as the /schedule network diagram: red needs BOTH
+              // endpoints critical AND the link actually binding them — two
+              // critical nodes can be joined by slack in an equal diamond.
+              const isCrit = critical.has(a.id) && critical.has(l.id) && isBindingLink(l, l.id, a.id, cpm)
               const mx = (x1 + x2) / 2
               return (
                 <path key={`${l.id}->${a.id}`} d={`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2 - 2},${y2}`}
