@@ -213,7 +213,11 @@ export default function CombinedFootingDesign() {
             x1={result.x1} x2={result.x2} col1Width={form.col1Width} col2Width={form.col2Width} />}
         />
       )}
-      <ModelMemberResults kind="combined" onLoad={loadSaved} />
+      {/* Same container as the letterhead — keeps the card aligned with the
+          rest of the page and out of the printed report. */}
+      <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7">
+        <ModelMemberResults kind="combined" onLoad={loadSaved} />
+      </div>
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
 
       <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">

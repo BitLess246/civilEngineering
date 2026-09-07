@@ -208,8 +208,15 @@ export default function SlabDesign() {
   return (
         <div>
       <PageHeader title="Two-Way Slab Design" badges={['ACI 318-14 §8.10', 'NSCP 2015 §408.10']} />
-      <ModelMemberResults kind="slab" onLoad={loadSaved} />
-      <div className="mx-auto max-w-[1500px] p-6">
+      {/* Same container as the letterhead cards on the other calculators —
+          keeps the card aligned with the rest of the page and out of print. */}
+      <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7">
+        <ModelMemberResults kind="slab" onLoad={loadSaved} />
+      </div>
+      {/* px-5 sm:px-7 (not p-6): the saved-project card above now follows the
+          app-wide horizontal rail, so this container matches it instead of
+          sitting 4px off — the mismatch this page used to have. */}
+      <div className="mx-auto max-w-[1500px] px-5 py-6 sm:px-7">
       <p className="no-print mt-1 text-slate-600">
         Direct Design Method — NSCP 2015 §408.10 / ACI 318-14 §8.10. Square or rectangular interior and end panels;
         column-strip / middle-strip flexure; temp/shrinkage minimum; §408.7.2.2 spacing; mid-panel deflection by
