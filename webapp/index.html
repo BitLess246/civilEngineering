@@ -5,6 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Civil Engineering</title>
+    <!-- Google tag (gtag.js) — GA4. The initial load is counted by gtag('config')
+         below; route changes inside the SPA are counted by usePageViews() in
+         src/lib/analytics.ts, which deliberately skips that first render. -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-0QVMMMBZKX"></script>
+    <script>
+      window.dataLayer = window.dataLayer || []
+      function gtag() { dataLayer.push(arguments) }
+      gtag('js', new Date())
+      gtag('config', 'G-0QVMMMBZKX')
+    </script>
   </head>
   <body>
     <div id="root"></div>
