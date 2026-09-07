@@ -262,7 +262,13 @@ export default function BeamDesign() {
               naDepth={r!.cNA} flexOK={r!.flexOK} hogging={hogging} />}
           />
         )}
-      <ModelMemberResults kind="beam" onLoad={loadSaved} />
+      {/* The saved-project card sits in the SAME container as the letterhead
+          above — without it the card runs edge to edge while every other card
+          obeys the 1500px rail, and the misalignment reads as a broken layout.
+          no-print: a dropdown is meaningless on paper. */}
+      <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7">
+        <ModelMemberResults kind="beam" onLoad={loadSaved} />
+      </div>
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
 
       <div className="no-print mt-5 grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,1fr)]">

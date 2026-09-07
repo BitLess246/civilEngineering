@@ -409,7 +409,11 @@ export default function FoundationDesign() {
               position={form.position} d={view.dProvided} pressure={view.offset ?? view.ecc} />}
           />
         )}
-      <ModelMemberResults kind="footing" onLoad={loadSaved} />
+      {/* Same container as the letterhead — keeps the card aligned with the
+          rest of the page and out of the printed report. */}
+      <div className="no-print mx-auto max-w-[1500px] px-5 pt-5 sm:px-7">
+        <ModelMemberResults kind="footing" onLoad={loadSaved} />
+      </div>
       <div className="mx-auto max-w-[1500px] px-5 pb-8 sm:px-7">
       <div className="no-print"><ExcelImport onResult={setBatch} /></div>
 
