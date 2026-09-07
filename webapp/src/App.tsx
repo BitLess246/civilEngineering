@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useState } from 'react'
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { useScrollTopOnChange } from './lib/useScrollTop'
+import { usePageViews } from './lib/analytics'
 import { WelcomeDialog } from './components/WelcomeDialog'
 import { useToolPrefs } from './lib/useToolPrefs'
 import { hasAnswered } from './lib/toolPrefs'
@@ -117,6 +118,9 @@ export default function App() {
   // change (an in-page anchor) does not yank the viewport.
   const { pathname } = useLocation()
   useScrollTopOnChange(pathname)
+  // GA4 counts SPA navigations — the initial load is counted by the gtag
+  // snippet in index.html, so this skips its first render (see analytics.ts).
+  usePageViews()
 
   // `dismissed` is local to this mount and separate from the stored answer.
   // Both closing paths write a preference, so the stored value alone would be
