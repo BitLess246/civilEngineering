@@ -148,33 +148,53 @@ describe('the lapping piece steps aside', () => {
     // to build, and invisible to look at.
     const [a, b] = spliceRun(straight(9), OPT)          // role 'bottom'
     const off = 20 / 1000
-    expect(a.path[0][1]).toBeCloseTo(0, 9)                    // the first piece is on line
-    expect(Math.abs(b.path[0][1])).toBeCloseTo(off, 9)        // the second steps aside
-    expect(Math.abs(b.path[1][1])).toBeCloseTo(off, 9)        // …for the whole lap
+    expect(a.path[0][2]).toBeCloseTo(0, 9)                    // the first piece is on line
+    expect(Math.abs(b.path[0][2])).toBeCloseTo(off, 9)        // the second steps aside
+    expect(Math.abs(b.path[1][2])).toBeCloseTo(off, 9)        // …for the whole lap
     expect(b.path[1][0] - b.path[0][0]).toBeCloseTo(OPT.lap, 9)
-    expect(b.path[2][1]).toBeCloseTo(0, 9)                    // and comes back on line
+    expect(b.path[2][2]).toBeCloseTo(0, 9)                    // and comes back on line
     expect(b.path[2][0] - b.path[1][0]).toBeCloseTo(OFFSET_SLOPE * off, 9)
   })
 
-  it('a top bar cranks DOWN and a bottom bar UP — away from the stirrup, not into it', () => {
-    // The face the bar is on is where the stirrup leg is. Stepped sideways the
-    // lapping piece stays on the cover line and walks straight into it; stepped
-    // inward it tucks behind its partner and the stirrup passes outside both.
-    expect(stepDirection('top', [0, 0, 0], [1, 0, 0])).toEqual([0, -1, 0])
-    expect(stepDirection('bottom', [0, 0, 0], [1, 0, 0])).toEqual([0, 1, 0])
-    const [, top] = spliceRun({ ...straight(9), role: 'top' }, OPT)
-    const [, bot] = spliceRun(straight(9), OPT)
-    expect(top.path[0][1]).toBeLessThan(0)
-    expect(bot.path[0][1]).toBeGreaterThan(0)
-    // …and neither of them moves sideways, out of its own vertical plane
-    expect(top.path[0][2]).toBeCloseTo(0, 9)
-    expect(bot.path[0][2]).toBeCloseTo(0, 9)
+  it('steps BESIDE the bar it laps, never above or below it', () => {
+    // A step across the layer costs the section a bar diameter of effective
+    // depth, and lifts the bar off the perimeter the stirrup was bent around.
+    // Beside, the pair is an ordinary contact lap: d is untouched and the loop
+    // still passes outside both.
+    for (const role of ['top', 'bottom', 'vertical', 'mat'] as const) {
+      const [, second] = spliceRun({ ...straight(9), role }, OPT)
+      expect(second.path[0][1]).toBeCloseTo(0, 9)             // y never moves
+      expect(Math.abs(second.path[0][2])).toBeCloseTo(20 / 1000, 9)
+    }
   })
 
-  it('a bar with no tension face steps horizontally instead', () => {
-    // A column vertical or a footing mat bar has no face to move away from.
-    expect(stepDirection('vertical', [0, 0, 0], [0, 1, 0])).toEqual([1, 0, 0])
-    expect(stepDirection('mat', [0, 0, 0], [1, 0, 0])[1]).toBe(0)
+  it('steps INWARD — towards the centre line, away from the cover', () => {
+    // The bar it laps stays on the cover line; the piece that steps has to go
+    // the other way, into the cage.
+    const dir = (...a: Parameters<typeof stepDirection>) => stepDirection(...a).map((v) => v + 0)
+    expect(dir([0, 0, 0], [1, 0, 0], [5, 0, 3])).toEqual([0, 0, 1])
+    expect(dir([0, 0, 0], [1, 0, 0], [5, 0, -3])).toEqual([0, 0, -1])
+    // a vertical bar heads straight for the axis
+    expect(dir([3, 0, 4], [3, 3, 4], [0, 0, 0])).toEqual([-0.6, 0, -0.8])
+    // and with nothing to aim at, the step is still transverse
+    expect(stepDirection([0, 0, 0], [1, 0, 0])[1]).toBe(0)
+    expect(stepDirection([0, 0, 0], [0, 1, 0])).toEqual([1, 0, 0])
+  })
+
+  it('a whole face steps towards the middle of the beam, from either side', () => {
+    // Four bars across a 300 web: the two near each face turn inwards, so no
+    // lapping piece is ever pushed out through the stirrup leg.
+    const zs = [-0.09, -0.03, 0.03, 0.09]
+    const cage: RebarCage = {
+      member: 'B1',
+      runs: zs.map((z, k) => bar(`B1-B${k + 1}`, [[0, 0, z], [9, 0, z]])),
+    }
+    const out = spliceCage(cage, OPT)
+    zs.forEach((z, k) => {
+      const [, second] = out.runs.filter((r) => r.mark.startsWith(`B1-B${k + 1}`))
+      expect(Math.abs(second.path[0][2])).toBeLessThan(Math.abs(z))   // moved inward
+      expect(second.path[0][1]).toBeCloseTo(0, 9)                     // and not down
+    })
   })
 
   it('leaves the piece alone when the lap will not fit its first straight leg', () => {

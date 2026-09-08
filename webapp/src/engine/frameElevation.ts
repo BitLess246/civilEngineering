@@ -749,7 +749,12 @@ export function buildFrameElevation(
     }
     const laps = Math.max(0, ...[...pieces.values()].map((n) => n - 1))
     if (laps > 0) {
-      notes.push(`${cage.member}: bars run longer than a stock length — ${laps} lap${laps > 1 ? 's' : ''} per bar, shown on the elevation`)
+      // A lap is a CONTACT splice — the lapping piece steps one diameter to the
+      // SIDE of the bar it laps, in the same layer, so in elevation the two
+      // bars project onto each other and the lap is not a thing you can see.
+      // Saying it was "shown on the elevation" sent the reader looking for a
+      // crank that is deliberately not there.
+      notes.push(`${cage.member}: bars run longer than a stock length — ${laps} lap${laps > 1 ? 's' : ''} per bar. Laps are contact splices, the lapping bar set beside its partner in the same layer, so they project onto one line here; the section shows the pair`)
     }
   }
 

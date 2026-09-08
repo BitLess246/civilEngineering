@@ -35,23 +35,53 @@ export const OFFSET_SLOPE = 6
 /**
  * Which way the lapping piece steps aside, as a unit vector.
  *
- * INTO THE SECTION, not sideways. A top bar cranks DOWN behind the bar it laps
- * and a bottom bar cranks UP, because the face it is on is where the stirrup
- * is: a bar stepped sideways stays on the cover line and walks straight into
- * the stirrup's leg, which is the collision the section drawing shows. Stepped
- * inward it tucks under (or over) its partner and the stirrup passes outside
- * both.
+ * BESIDE THE BAR IT LAPS, AND INWARD — never above or below it. The pair then
+ * sits side by side in the same layer, which is the ordinary contact lap
+ * splice, and two things stay true that a step across the layer breaks:
  *
- * Anything else — a vertical column bar, a footing mat bar — has no tension
- * face to move away from, so it steps horizontally across itself.
+ *   THE EFFECTIVE DEPTH IS UNCHANGED. A bar stepped towards the opposite face
+ *   moves d by a bar diameter over the lap — on a 300 mm beam with ⌀20 bars
+ *   that is 7% of d, given away at a section that has a lap in it already.
+ *
+ *   THE STIRRUP STILL FITS. The tie is a closed loop drawn round the PERIMETER
+ *   of the steel. A bar lifted off its layer stands proud of that perimeter and
+ *   the loop no longer passes it; stepped inward it moves into the cage, away
+ *   from the leg, and the loop is exactly the loop that was detailed.
+ *
+ * `toward` is any point on the member's own centre line (`spliceCage` supplies
+ * the cage's plan centroid). The step is the transverse direction pointing at
+ * it — horizontal for a bar with a horizontal run, so y never moves; for a
+ * vertical bar, straight in towards the axis. Without it the sign is arbitrary
+ * but the step is still transverse, so the two invariants above hold either
+ * way. A bar sitting ON the centre line has no inward side and keeps the
+ * default sign.
  */
-export function stepDirection(role: string, a: Vec3, b: Vec3): Vec3 {
-  if (role === 'top') return [0, -1, 0]
-  if (role === 'bottom') return [0, 1, 0]
+export function stepDirection(a: Vec3, b: Vec3, toward?: Vec3): Vec3 {
   const d: Vec3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
   const h = Math.hypot(d[0], d[2])
-  if (h < 1e-9) return [1, 0, 0]
-  return [-d[2] / h, 0, d[0] / h]
+  if (h < 1e-9) {
+    // A vertical bar — a column bar, a dowel. Every horizontal direction is
+    // transverse to it, so head straight for the axis.
+    const t: Vec3 = toward ? [toward[0] - a[0], 0, toward[2] - a[2]] : [0, 0, 0]
+    const m = Math.hypot(t[0], t[2])
+    return m > 1e-9 ? [t[0] / m, 0, t[2] / m] : [1, 0, 0]
+  }
+  const n: Vec3 = [-d[2] / h, 0, d[0] / h]
+  if (!toward) return n
+  const dot = n[0] * (toward[0] - a[0]) + n[2] * (toward[2] - a[2])
+  return dot < -1e-12 ? [-n[0], 0, -n[2]] : n
+}
+
+/**
+ * A point on the cage's own centre line in plan — the mean of every point of
+ * every run, which for a beam is a point on its axis and for a column its
+ * axis. Only the transverse component of it is ever used, so where along the
+ * member it falls does not matter.
+ */
+export function cagePlanCentre(cage: RebarCage): Vec3 {
+  let x = 0, z = 0, n = 0
+  for (const r of cage.runs) for (const p of r.path) { x += p[0]; z += p[2]; n++ }
+  return n ? [x / n, 0, z / n] : [0, 0, 0]
 }
 
 /** Developed length of a polyline, m. */
@@ -177,6 +207,13 @@ export interface SpliceOptions {
   avoidByRole?: Record<string, Avoid[]>
   /** Shift every splice on this bar by this much, m — how staggering is applied. */
   stagger?: number
+  /**
+   * A point on the member's centre line, so the lapping piece knows which way
+   * INWARD is — see `stepDirection`. `spliceCage` fills it in from the cage;
+   * `spliceRun` on its own may be left without it, and then only the sign of
+   * the step is arbitrary.
+   */
+  toward?: Vec3
 }
 
 /**
@@ -340,7 +377,7 @@ export function spliceRun(run: RebarRun, o: SpliceOptions): RebarRun[] {
       // laps, and cranks back onto line beyond it. Two bars lapped on the same
       // centreline occupy the same space — impossible to build, and invisible
       // to look at, which is the state the cages were in.
-      ...stepAside(path, bendDia, k > 1 ? o.lap : 0, off, run.dia, run.role),
+      ...stepAside(path, bendDia, k > 1 ? o.lap : 0, off, run.dia, o.toward),
       // a cut end is not a hook; only the original ends keep theirs
       hookAllowance: undefined,
     })
@@ -349,8 +386,10 @@ export function spliceRun(run: RebarRun, o: SpliceOptions): RebarRun[] {
 }
 
 /**
- * Offset the first `lap` of a piece one diameter across the bar, cranking back
- * onto line over the §10.7.4.1 slope.
+ * Offset the first `lap` of a piece one diameter to the side, cranking back
+ * onto line over the §10.7.4.1 slope. One diameter is exactly the contact lap:
+ * over the lap the two pieces lie against each other, and past the crank the
+ * bar is back on the line it was detailed on.
  *
  * Left alone when the lap does not fit inside the piece's first straight leg —
  * a crank folded through a bend the bar already has would move the bar
@@ -358,14 +397,14 @@ export function spliceRun(run: RebarRun, o: SpliceOptions): RebarRun[] {
  * wrong.
  */
 export function stepAside(
-  path: Vec3[], bendDia: number[], lap: number, off: number, dia: number, role = 'bottom',
+  path: Vec3[], bendDia: number[], lap: number, off: number, dia: number, toward?: Vec3,
 ): { path: Vec3[]; bendDia: number[] } {
   const crank = OFFSET_SLOPE * off
   if (lap <= 0 || path.length < 2) return { path, bendDia }
   const first = seg(path[0], path[1])
   if (first < lap + crank + 1e-9) return { path, bendDia }
 
-  const n = stepDirection(role, path[0], path[1])
+  const n = stepDirection(path[0], path[1], toward)
   const shift = (p: Vec3): Vec3 => [p[0] + n[0] * off, p[1] + n[1] * off, p[2] + n[2] * off]
   const at = (s: number) => pointAt(path, s)
   const D = Math.max(6 * dia, 1)                   // §425.3.1 minimum bend
@@ -388,6 +427,8 @@ const NEVER_SPLICED = new Set(['stirrup', 'tie', 'hoop'])
  */
 export function spliceCage(cage: RebarCage, o: SpliceOptions): RebarCage {
   const byRole = new Map<string, number>()
+  // Which way the lapping pieces step: sideways, towards this point.
+  const toward = o.toward ?? cagePlanCentre(cage)
   const runs: RebarRun[] = []
   const notes: string[] = [...(cage.notes ?? [])]
   for (const r of cage.runs) {
@@ -396,6 +437,7 @@ export function spliceCage(cage: RebarCage, o: SpliceOptions): RebarCage {
     byRole.set(r.role, k + 1)
     const opts: SpliceOptions = {
       ...o,
+      toward,
       prefer: o.preferByRole?.[r.role] ?? o.prefer,
       avoid: o.avoidByRole?.[r.role] ?? o.avoid,
       stagger: k % 2 === 0 ? -o.lap / 2 : o.lap / 2,
