@@ -413,11 +413,39 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
   // there, and two hooks given the same embedment stand their legs on the same
   // line and run at each other.
   const spread = (n: number, k: number) => (n === 1 ? 0 : -half + (2 * half * k) / (n - 1))
+  /**
+   * ONE LAYOUT FOR THE FACE — where all `n` bars of it sit, and which of those
+   * places the `t` CONTINUOUS ones take.
+   *
+   * Every bar in a face sits on the same even grid; the continuous ones take
+   * the outermost places, working inward, because a corner bar is the one that
+   * runs through. Laid out separately — the through bars spread over −half…
+   * +half and the curtailed ones spread over it again — the two sets shared a
+   * range and could land on one another: a 4-bar face with 2 continuous and 2
+   * curtailed put all four on two lines, and the section drew two dots under a
+   * callout that said four. Swept over every count pair from 2 to 10 a side,
+   * 18 of 5562 bar pairs were coincident; with one layout, none can be.
+   */
+  const faceLayout = (n: number, t: number): { thru: number[]; extra: number[] } => {
+    if (n <= 0) return { thru: [], extra: [] }
+    const pos = Array.from({ length: n }, (_, k) => spread(n, k))
+    const order: number[] = []
+    for (let a = 0, b = n - 1; a <= b; a++, b--) { order.push(a); if (b !== a) order.push(b) }
+    const take = Math.max(0, Math.min(n, t))
+    const asc = (x: number, y: number) => x - y
+    return {
+      thru: order.slice(0, take).sort(asc).map((k) => pos[k]!),
+      extra: order.slice(take).sort(asc).map((k) => pos[k]!),
+    }
+  }
+  // The face holds at least the bars that run through it: `keep` floors the
+  // continuous count at the corner bars even when the analysis asked for none,
+  // and a face of fewer places than that would drop them.
+  const topFace = faceLayout(Math.max(i.topBars, thruTop), thruTop)
+  const botFace = faceLayout(Math.max(i.botBars, thruBot), thruBot)
   const thru: (AnchorBar & { role: 'top' | 'bottom' })[] = [
-    ...Array.from({ length: thruTop }, (_, k) =>
-      ({ role: 'top' as const, y: yTop, v: spread(thruTop, k), dia: i.barDia, tail })),
-    ...Array.from({ length: thruBot }, (_, k) =>
-      ({ role: 'bottom' as const, y: yBot, v: spread(thruBot, k), dia: i.barDia, tail })),
+    ...topFace.thru.map((v) => ({ role: 'top' as const, y: yTop, v, dia: i.barDia, tail })),
+    ...botFace.thru.map((v) => ({ role: 'bottom' as const, y: yBot, v, dia: i.barDia, tail })),
   ]
   const roomAt = (colB: number, above: boolean, below: boolean, side?: 1 | -1): JointRoom => ({
     above, below, side,
@@ -484,7 +512,7 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
     ] as const) {
       const dir = to > from ? 1 : -1
       for (let k = 0; k < extraTop; k++) {
-        const v = extraTop === 1 ? 0 : -half + (2 * half * k) / (extraTop - 1)
+        const v = topFace.extra[k] ?? 0
         runs.push({
           mark: `${i.mark}-XT${end}${k + 1}`,
           dia: i.barDia, role: 'top', member: i.mark,
@@ -497,7 +525,7 @@ export function buildBeamCage(i: BeamCageInput): RebarCage {
   if (extraBot > 0) {
     const a = cut.botL, b2 = cut.botR
     for (let k = 0; k < extraBot; k++) {
-      const v = extraBot === 1 ? 0 : -half + (2 * half * k) / (extraBot - 1)
+      const v = botFace.extra[k] ?? 0
       runs.push({
         mark: `${i.mark}-XB${k + 1}`,
         dia: i.barDia, role: 'bottom', member: i.mark,

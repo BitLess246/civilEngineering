@@ -6,6 +6,9 @@ import {
 } from '../engine/columnDesign'
 import { factoredLoad } from '../engine/loads'
 import { ColumnSchematic } from '../components/ColumnSchematic'
+import { SheetFigure } from '../components/modelSpace/figures'
+import { calcColumnSection } from '../lib/calcFigures'
+import { columnSectionNotes } from '../lib/scheduleFigures'
 import {
   PageHeader, VerdictPanel, DrawingCard, LetterheadCard, PrintReport,
   type LetterheadState, type VerdictStat, type VerdictCheck,
@@ -97,6 +100,24 @@ export default function ColumnDesign() {
       EI: EIin > 0 ? EIin : undefined, fc, b, betaD: 0.6,
     })
   }, [eccentric, slenderOn, Pu, M1, M2, kEff, Lu, h, EIin, fc, b])
+
+  // THE SAME CUT THE DRAWING SET MAKES, from the cage this page has designed —
+  // hoop, cross ties and all, at the spacing the check adopted. A spiral column
+  // has no cage to cut (`columnCage` builds rectangular tied cages), so it
+  // keeps the drawn schematic and this stays null.
+  const sectionFigure = useMemo(() => {
+    if (!tied || !(b > 0 && h > 0)) return null
+    const bars = axial?.bars ?? numBars
+    if (!(bars >= 4)) return null
+    const spacing = axial?.tieSpacingFinal ?? 0
+    if (!(spacing > 0)) return null
+    const rect = { b, h, cover, barDia: dbEff, tieDia }
+    return calcColumnSection({
+      ...rect, bars, spacing,
+      title: `SECTION — ${Math.round(b)}×${Math.round(h)}`,
+      notes: columnSectionNotes({ id: '', bars, tieSpacingFinal: spacing }, rect),
+    })
+  }, [tied, b, h, cover, dbEff, tieDia, axial, numBars])
 
   const unstable = slender !== null && !slender.stable
   const MuEff = slender ? slender.Mc : Mu
@@ -243,9 +264,9 @@ export default function ColumnDesign() {
           ]}
           steps={solution}
           drawingTitle="Column Section"
-          drawing={<ColumnSchematic shape={tied ? 'tied' : 'spiral'} b={b} h={h} D={D} cover={cover}
-            barDia={barDia} tieDia={tieDia} bars={axial.bars}
-            tieSpacing={tied ? axial.tieSpacingFinal : axial.spiralPitch} />}
+          drawing={sectionFigure ? <SheetFigure drawing={sectionFigure} width={420} />
+            : <ColumnSchematic shape="spiral" b={b} h={h} D={D} cover={cover}
+              barDia={dbEff} tieDia={tieDia} bars={axial?.bars ?? numBars} tieSpacing={axial?.spiralPitch} />}
         />
       )}
       {/* Same container as the letterhead — keeps the card aligned with the
@@ -362,9 +383,15 @@ export default function ColumnDesign() {
               draw the same kind of thing and should look like it. */}
           <DrawingCard pdfDrawing title="Section"
             meta={`${tied ? `${f0(b)} × ${f0(h)}` : `⌀${f0(D)}`} · ${axial?.bars ?? numBars} ⌀${dbEff} · to scale`}>
-            <ColumnSchematic shape={tied ? 'tied' : 'spiral'} b={b} h={h} D={D} cover={cover}
-              barDia={dbEff} tieDia={tieDia} bars={axial?.bars ?? numBars}
-              tieSpacing={axial ? (tied ? axial.tieSpacingFinal : axial.spiralPitch) : undefined} />
+            {sectionFigure ? <SheetFigure drawing={sectionFigure} width={420} /> : (
+              // A SPIRAL column keeps the drawn schematic: `columnCage` builds
+              // rectangular tied cages, so there is no spiral cage to cut, and
+              // a rectangle standing in for one would be worse than a picture
+              // that says what it is.
+              <ColumnSchematic shape="spiral" b={b} h={h} D={D} cover={cover}
+                barDia={dbEff} tieDia={tieDia} bars={axial?.bars ?? numBars}
+                tieSpacing={axial?.spiralPitch} />
+            )}
           </DrawingCard>
 
           {axial && (
