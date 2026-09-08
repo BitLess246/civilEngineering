@@ -32,8 +32,9 @@ import type { NonlinearFrameModelResult } from '../engine/nonlinearFrameModel'
 import type { RebarCage } from '../engine/rebarModel'
 import type { Drawing, PlanPrimitive } from '../engine/planRenderer'
 import { WOOD_SPECIES } from '../engine/woodDesign'
+import { validateMesh } from '../engine/meshValidation'
 
-export type AppendixKey = 'model' | 'loading' | 'analysis' | 'modal' | 'nonlinear' | 'pushover' | 'optimization'
+export type AppendixKey = 'model' | 'loading' | 'analysis' | 'modal' | 'nonlinear' | 'pushover' | 'optimization' | 'qa'
 
 export interface AppendixTable { title: string; head: string[]; rows: string[][]; right?: number[]; note?: string }
 export interface AppendixStat { label: string; value: string; unit?: string }
@@ -98,9 +99,10 @@ export const APPENDIX_TITLES: Record<AppendixKey, string> = {
   nonlinear: 'Nonlinear time-history',
   pushover: 'Pushover',
   optimization: 'Design optimization',
+  qa: 'Model QA/QC',
 }
 const LETTERS: Record<AppendixKey, string> = {
-  model: 'A', loading: 'B', analysis: 'C', modal: 'D', nonlinear: 'E', pushover: 'F', optimization: 'G',
+  model: 'A', loading: 'B', analysis: 'C', modal: 'D', nonlinear: 'E', pushover: 'F', optimization: 'G', qa: 'H',
 }
 
 /** Which appendix sections the given inputs can actually populate. */
@@ -113,6 +115,7 @@ export function appendixAvailability(i: AppendixInput): Record<AppendixKey, bool
     nonlinear: !!(i.nonlinear?.inelastic || i.nonlinearHinge?.inelastic),
     pushover: !!(i.pushover || i.biaxial),
     optimization: !!i.optimization,
+    qa: true,
   }
 }
 
@@ -921,6 +924,107 @@ export function finalModelConsistency(i: AppendixInput): StatusRow[] {
   return rows
 }
 
+// ── H · model QA/QC ──────────────────────────────────────────────────────
+/**
+ * The checks that are about the MODEL rather than about a result.
+ *
+ * `validateMesh` has always run — it gates the solve — but it reported into
+ * the editor and nowhere else, so a report could not say whether the model it
+ * was built from was sound. A QA pass is only worth the checks it makes, so
+ * the section lists every rule by name and says how many passed: "42/42" is a
+ * claim a reader can check, "validated" is not.
+ */
+function qaSection(i: AppendixInput): AppendixSection {
+  const issues = validateMesh(i.model)
+  const errors = issues.filter((x) => x.severity === 'error')
+  const warnings = issues.filter((x) => x.severity === 'warning')
+  const tables: AppendixTable[] = [{
+    title: 'H.1 Model validation',
+    head: ['Rule', 'Severity', 'Refs', 'Finding'],
+    rows: issues.length
+      ? issues.map((x) => [x.code, x.severity === 'error' ? 'ERROR' : 'WARNING', x.refs.slice(0, 4).join(', ') || '—', x.message])
+      : [['—', 'PASS', '—', `${i.model.nodes.length} nodes, ${i.model.members.length} members, ${i.model.plates.length} plates and ${i.model.loads.length} loads checked — no finding.`]],
+    note: 'Connectivity, restraint and reference rules — duplicate and coincident nodes, zero-length and duplicate members, nodes and plates attached to nothing, supports and loads pointing at elements that do not exist, sections that are not in the model, unrestrained components (a singular stiffness matrix), and member aspect ratios outside what a frame element describes. An ERROR blocks the solve; a WARNING does not.',
+  }]
+
+  // Convergence, gathered from the runs that iterate. A solver that reports
+  // "converged" without saying to what tolerance, in how many iterations, has
+  // reported an opinion.
+  const conv: string[][] = []
+  if (i.analysis) {
+    const pd = i.analysis.perCombo.filter((r) => r.result?.pDelta)
+    if (pd.length) {
+      const its = pd.map((r) => r.result!.pDelta!.iterations)
+      const res = pd.map((r) => r.result!.pDelta!.residual ?? 0)
+      conv.push(['P-Δ (second order)', String(pd.length), String(pd.filter((r) => r.result!.pDelta!.converged).length),
+        f2(its.reduce((a, b) => a + b, 0) / its.length), String(Math.max(...its)), Math.max(...res).toExponential(1)])
+    }
+  }
+  const nlh = i.nonlinearHinge?.inelastic
+  if (nlh) {
+    const r = nlh.response
+    conv.push(['Nonlinear time-history (hinge model)', String(r.t.length), r.converged ? String(r.t.length) : 'no',
+      '—', String(r.maxIterations), '—'])
+  }
+  const nls = i.nonlinear?.inelastic
+  if (nls) conv.push(['Nonlinear time-history (shear building)', String(nls.response.steps), String(nls.response.steps), '—', '—', '—'])
+  if (i.pushover) {
+    const ev = Math.max(0, i.pushover.result.curve.length - 1)
+    conv.push(['Pushover (event-to-event)', String(ev), String(ev), '—', '—', '—'])
+  }
+  if (i.optimization) {
+    const r = i.optimization.result
+    conv.push(['Design optimization', String(r.steps.length), r.converged ? String(r.steps.length) : '—', '—', '—', '—'])
+  }
+  if (conv.length) tables.push({
+    title: 'H.2 Convergence',
+    head: ['Run', 'Steps / iterations', 'Converged', 'Avg iterations', 'Max iterations', 'Max residual'],
+    right: [1, 2, 3, 4, 5],
+    rows: conv,
+    note: 'An iterative run that reports "converged" without saying in how many iterations, or to what residual, has reported an opinion. A dash is a run that does not iterate in that sense — the pushover advances event to event and the optimizer iteration by iteration, and neither has an inner residual.',
+  })
+
+  // The code compliance matrix — one row per clause the engine actually
+  // checked, taken from the status rows so it cannot claim a check that was
+  // never run.
+  const status = analysisStatus(i)
+  const CLAUSE: Record<string, string> = {
+    'Static equilibrium': 'ΣF = 0 (statics)',
+    'Linear analysis': 'NSCP §203 combinations',
+    'Modal analysis': 'NSCP §208.5.5',
+    'Storey drift (§208.6.5)': 'NSCP §208.6.5',
+    'Nonlinear analysis': 'ASCE 41 / §208.6',
+    'Pushover analysis': 'ASCE 41 §7.4.3',
+    'Beam design': 'ACI 318-14 §22.2 / §22.5',
+    'Column design': 'ACI 318-14 §22.4',
+    'Biaxial column check': 'ACI 318-14 §22.4 (Bresler)',
+    'Slab design': 'ACI 318-14 §8 (DDM)',
+    'Footing design': 'ACI 318-14 §22.5 / §22.6',
+    'Shear wall design': 'ACI 318-14 §11',
+    'Steel connections': 'AISC 360-16 §J',
+    'Optimization': '—',
+    'Final detailing': 'ACI 318-14 §25',
+  }
+  tables.push({
+    title: 'H.3 Code compliance matrix',
+    head: ['Check', 'Code reference', 'Result', 'Governing value'],
+    rows: status.map((r) => [r.check, CLAUSE[r.check] ?? '—', r.verdict, r.detail]),
+    note: 'One row per check the engine actually ran; a check that was not run says NOT RUN rather than passing by omission. The clause is the one the check is written to — the worked solutions carry the substituted equations.',
+  })
+
+  return {
+    key: 'qa', letter: LETTERS.qa, title: APPENDIX_TITLES.qa, available: true, tables,
+    stats: [
+      { label: 'Model rules', value: issues.length ? `${errors.length} error${errors.length === 1 ? '' : 's'}, ${warnings.length} warning${warnings.length === 1 ? '' : 's'}` : 'no findings' },
+      { label: 'Checks run', value: String(status.filter((r) => r.verdict !== 'NOT RUN').length) },
+      { label: 'Checks failing', value: String(status.filter((r) => r.verdict === 'FAIL').length) },
+    ],
+    notes: errors.length
+      ? [`The model carries ${errors.length} validation error${errors.length === 1 ? '' : 's'}. An error means the stiffness matrix is singular or an element is unusable — the results above were produced in spite of it, not because it was tolerated.`]
+      : undefined,
+  }
+}
+
 // ── the status table — actual results only ───────────────────────────────
 export function analysisStatus(i: AppendixInput): StatusRow[] {
   const rows: StatusRow[] = []
@@ -992,7 +1096,7 @@ export function buildAnalysisAppendix(i: AppendixInput): AnalysisAppendix {
     status: analysisStatus(i),
     sections: [
       modelSection(i), loadingSection(i), analysisSection(i), modalSection(i),
-      nonlinearSection(i), pushoverSection(i), optimizationSection(i),
+      nonlinearSection(i), pushoverSection(i), optimizationSection(i), qaSection(i),
     ],
   }
 }

@@ -1093,6 +1093,15 @@ export default function ModelSpace() {
       ['Seismic (NSCP 208)', `Ca ${Ca} · Cv ${Cv} · R ${Rw} · I ${Ie} · Z ${Zf} · Nv ${Nv}`],
       ['Wind (NSCP 207B)', `V ${Vw} m/s · exposure ${expo} · Kzt ${Kzt}`],
       ['Model', `${model?.nodes.length ?? 0} nodes · ${model?.members.length ?? 0} members · ${model?.plates.length ?? 0} slabs · ${(model?.walls ?? []).length} walls · ${model?.supports.length ?? 0} supports`],
+      // WHAT THE ANALYSIS ASSUMED, not just what it was given. Every one of
+      // these changes the answer, and the report stated none of them — so two
+      // runs of the same model could differ by 20% with nothing on the page to
+      // say why. Written as the switch positions they are, on or off.
+      ['Stiffness', `${cracked ? 'cracked EI — 0.35Ig beams / 0.70Ig columns (ACI §6.6.3.1.1)' : 'gross section EI (uncracked)'} · ${shearDef ? 'Timoshenko shear deformation on' : 'Euler–Bernoulli (no shear deformation)'}`],
+      ['Second order', pDelta ? 'P-Δ on — geometric stiffness iterated per combination' : 'first order (P-Δ off)'],
+      ['Seismic system', `${seismicSystem === 'smf' ? 'special moment frame (§418.6)' : seismicSystem === 'imf' ? 'intermediate moment frame (§418.4)' : 'gravity — no §418 detailing'}${evOn ? ` · Ev = 0.5·Ca·I·D applied (§208.4.1)` : ' · Ev not applied'}`],
+      ['Mass source', 'dead load only — slab area dead loads, member self-weight, dead line and point loads (§208.5.1.1); live load excluded'],
+      ['Design assumptions', `${allAround ? 'column bars on all four faces' : 'column bars on two faces'} · ${tBeamOn ? 'flanged (T/L) sagging design §6.3.2' : 'rectangular web only'} · ${beamTopSteel ? 'beams set to top of steel' : 'beams on the node line'}`],
       ['Governing case', d.govName],
       ['Concrete', `${f1(d.totals.concrete)} m³ (${f1(d.totals.concreteMembers)} members + ${f1(d.totals.concreteSlabs)} slabs)`],
       ...(d.totals.steelKg > 0
@@ -1559,7 +1568,7 @@ export default function ModelSpace() {
           missed — it is shown rather than swallowed so that shows up. */}
       {exportOpen && (() => {
         const ai = appendixInput()
-        const avail = ai ? appendixAvailability(ai) : { model: true, loading: true, analysis: false, modal: false, nonlinear: false, pushover: false, optimization: false }
+        const avail = ai ? appendixAvailability(ai) : { model: true, loading: true, analysis: false, modal: false, nonlinear: false, pushover: false, optimization: false, qa: true }
         return (
           <ExportReportDialog
             available={avail} busy={exporting}
