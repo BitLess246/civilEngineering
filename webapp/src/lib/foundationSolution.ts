@@ -6,7 +6,7 @@
 // (iteration / approximate). Computed with the same engine formulas so the
 // steps always agree with the Results panel.
 // ─────────────────────────────────────────────────────────────────────────
-import type { ColumnPosition } from '../engine/shear'
+import { ALPHA_S, criticalSection, oneWayVc, twoWayVc, type ColumnPosition } from '../engine/shear'
 import { type SolutionStep, type SolutionLine, sn0, sn1, sn2, sn3, sn4 } from './solution'
 
 /** How the sheet names the minimum it adopted. */
@@ -45,7 +45,6 @@ export interface SolutionCtx {
   ecc: { e: number; qMax: number; qMin: number; kernOK: boolean } | null
 }
 
-const ALPHA_S: Record<ColumnPosition, number> = { interior: 40, edge: 30, corner: 20 }
 const txt = (text: string): SolutionLine => ({ text })
 const eq = (tex: string): SolutionLine => ({ tex })
 
@@ -138,17 +137,28 @@ function punchingStep(c: SolutionCtx): SolutionStep {
   const cx = c.columnWidth, cyDim = c.columnWidthY ?? c.columnWidth
   const rectCol = Math.abs(cx - cyDim) > 1e-9
   const d = c.analysis === 'analyze' ? c.dProvided : c.dPunch
-  const critX = cx + d, critY = cyDim + d
-  const bo = 2 * (critX + critY), Ao = critX * critY * 1e-6
+  // The section, from the engine: at a free edge it is TRUNCATED, which is why
+  // α_s has three values. Recomputed here as the interior perimeter, the sheet
+  // printed a b₀ up to 126% longer than the one the check used.
+  const cs = criticalSection(cx, cyDim, d, c.position)
+  const critX = cs.ax, critY = cs.ay
+  const bo = cs.bo, Ao = cs.Ao * 1e-6
   const betaC = Math.max(cx, cyDim) / Math.min(cx, cyDim)
   const Vu = c.ultimateLoad - c.qu * Ao
+  // §422.6.5.2 AS THE SI CODE PRINTS IT — 0.33, 0.17, 0.083, and NOT the 1/3,
+  // 1/6, 1/12 the inch-pound forms convert to. The engine settled that (1/3
+  // exceeds 0.33, so it claimed a capacity the code does not give); the sheet
+  // still printed the old forms, so it could report a punching capacity the
+  // check had refused and a one-way capacity 2% under the one it allowed. Both
+  // now come from the engine, which is the only way the two can agree.
   const base = (Math.sqrt(c.fc) * bo * d) / 1000
-  const vc1 = base / 3, vc2 = (1 / 6) * (1 + 2 / betaC) * base, vc3 = (1 / 12) * (2 + (ALPHA_S[c.position] * d) / bo) * base
-  const vc = Math.min(vc1, vc2, vc3)
+  const vc1 = 0.33 * base, vc2 = 0.17 * (1 + 2 / betaC) * base
+  const vc3 = 0.083 * (2 + (ALPHA_S[c.position] * d) / bo) * base
+  const vc = twoWayVc({ fc: c.fc, bo, d, betaC, position: c.position })
   const phiVc = 0.75 * vc
   const pass = phiVc >= Vu
   return {
-    title: 'Two-way (punching) shear',
+    title: `Two-way (punching) shear${c.analysis === 'design' ? ' — required depth' : ''}`,
     lines: [
       txt(`Two-way (punching) shear acts on a critical perimeter b₀ at d/2 from the column face (ACI §22.6). V_c is the least of three expressions; α_s = ${ALPHA_S[c.position]} for an ${c.position} column${rectCol ? `; β = ${betaC.toFixed(2)} for the ${cx}×${cyDim} mm column` : ''}.`),
       eq(rectCol
@@ -157,7 +167,7 @@ function punchingStep(c: SolutionCtx): SolutionStep {
       eq(rectCol
         ? String.raw`V_u = P_u - q_u(c_x+d)(c_y+d) = ${sn0(c.ultimateLoad)} - ${sn2(c.qu)}(${sn3(Ao)}) = ${sn1(Vu)}\ \text{kN}`
         : String.raw`V_u = P_u - q_u(c+d)^2 = ${sn0(c.ultimateLoad)} - ${sn2(c.qu)}(${sn3(Ao)}) = ${sn1(Vu)}\ \text{kN}`),
-      eq(String.raw`V_{c} = \min\!\left(\tfrac{1}{3}, \tfrac{1}{6}(1{+}\tfrac{2}{\beta}), \tfrac{1}{12}(2{+}\tfrac{\alpha_s d}{b_o})\right)\sqrt{f'_c}\,b_o d`),
+      eq(String.raw`V_{c} = \min\!\left(0.33,\; 0.17(1{+}\tfrac{2}{\beta}),\; 0.083(2{+}\tfrac{\alpha_s d}{b_o})\right)\sqrt{f'_c}\,b_o d`),
       eq(String.raw`= \min(${sn1(vc1)},\ ${sn1(vc2)},\ ${sn1(vc3)}) = ${sn1(vc)}\ \text{kN}`),
       eq(String.raw`\phi V_c = 0.75 V_c = ${sn1(phiVc)}\ \text{kN} \;${pass ? '\\ge' : '<'}\; V_u = ${sn1(Vu)}\ \text{kN}\;${pass ? '\\checkmark' : '\\times'}`),
     ],
@@ -172,15 +182,15 @@ function oneWayStep(c: SolutionCtx, B: number, dReq: number, label: string, cDim
   const d = c.analysis === 'analyze' ? c.dProvided : dReq
   const arm = (B - cm) / 2 - d / 1000
   const Vu = c.qu * B * Math.max(0, arm)
-  const phiVc = (0.75 * (1 / 6) * Math.sqrt(c.fc) * (B * 1000) * d) / 1000
+  const phiVc = 0.75 * oneWayVc({ fc: c.fc, b: B * 1000, d })
   const pass = phiVc >= Vu
   return {
-    title: `One-way (beam) shear${label ? ` — ${label}` : ''}`,
+    title: `One-way (beam) shear${label ? ` — ${label}` : ''}${c.analysis === 'design' ? ' — required depth' : ''}`,
     lines: [
       txt('One-way shear is checked on a section a distance d from the column face (ACI §22.5); the soil pressure beyond that section produces V_u.'),
       eq(String.raw`a_v = \tfrac{B-c}{2} - d = \tfrac{${sn2(B)}-${sn3(cm)}}{2} - ${sn3(d / 1000)} = ${sn3(arm)}\ \text{m}`),
       eq(String.raw`V_u = q_u B\,a_v = ${sn2(c.qu)}(${sn2(B)})(${sn3(arm)}) = ${sn1(Vu)}\ \text{kN}`),
-      eq(String.raw`\phi V_c = 0.75\cdot\tfrac{1}{6}\sqrt{f'_c}\,B d = ${sn1(phiVc)}\ \text{kN} \;${pass ? '\\ge' : '<'}\; V_u\;${pass ? '\\checkmark' : '\\times'}`),
+      eq(String.raw`\phi V_c = 0.75\cdot 0.17\sqrt{f'_c}\,B d = ${sn1(phiVc)}\ \text{kN} \;${pass ? '\\ge' : '<'}\; V_u\;${pass ? '\\checkmark' : '\\times'}`),
     ],
     note: c.analysis === 'design' ? `Required d = ${sn0(dReq)} mm.` : undefined,
   }
@@ -204,8 +214,67 @@ function thicknessStep(c: SolutionCtx): SolutionStep {
     lines: [
       txt('The thickness is set by the larger shear requirement plus cover and one bar diameter, rounded up to 25 mm.'),
       eq(String.raw`D_c = \max(d_{punch},d_{beam}) + cover + d_b = \max(${sn0(c.dPunch)},${sn0(Math.max(c.dBeamLong, c.dBeamShort))}) + ${sn0(c.cover)} + ${sn0(c.barDia)} \to \mathbf{${sn0(c.Dc)}}\ \text{mm}`),
-      eq(String.raw`d = D_c - cover - \tfrac{d_b}{2} = ${sn1(dFlex)}\ \text{mm}`),
+      // TWO EFFECTIVE DEPTHS, and the sheet printed one of them unlabelled
+      // next to the other. Flexure is checked on the layer nearest the tension
+      // face; shear is checked on the mean of the two mats, because it is
+      // resisted across the whole section. They differ by half a bar, and a
+      // reader comparing the thickness step with the shear re-check had no way
+      // to know which was which.
+      eq(String.raw`d_{flex} = D_c - cover - \tfrac{d_b}{2} = ${sn1(dFlex)}\ \text{mm}\qquad\text{(bottom mat, for flexure)}`),
+      eq(String.raw`d_{shear} = D_c - cover - d_b = ${sn0(c.dProvided)}\ \text{mm}\qquad\text{(mean of the two mats, for shear)}`),
     ],
+  }
+}
+
+/**
+ * BOTH SHEAR CHECKS AGAIN, at the thickness the sheet just adopted.
+ *
+ * Without this the chain broke where a reader looks hardest. The two steps
+ * above solve for the depth each check NEEDS, so they are written at the
+ * required d and read as marginal by construction — and one of them printed
+ * `φVc = 81.0 < Vu = 82.1  ×` immediately before the thickness step raised D_c
+ * and the schedule said PASS. Nothing was wrong with the footing; the sheet
+ * simply never showed the check that passed.
+ *
+ * So: required depth → adopt D_c → recheck at the provided d → PASS. The
+ * provided depth is `D_c − cover − d_b`, the same one `isolatedFooting`
+ * measures shear on, and it is ≥ both requirements by construction of D_c, so
+ * this step confirms rather than decides.
+ */
+function shearRecheckStep(c: SolutionCtx): SolutionStep {
+  const d = c.dProvided
+  const cx = c.columnWidth, cyDim = c.columnWidthY ?? c.columnWidth
+  const cs = criticalSection(cx, cyDim, d, c.position)
+  const betaC = Math.max(cx, cyDim) / Math.min(cx, cyDim)
+  const VuP = c.ultimateLoad - c.qu * cs.Ao * 1e-6
+  const phiVcP = 0.75 * twoWayVc({ fc: c.fc, bo: cs.bo, d, betaC, position: c.position })
+  const one = (B: number, cDimMm: number) => {
+    const arm = (B - cDimMm / 1000) / 2 - d / 1000
+    return {
+      Vu: c.qu * B * Math.max(0, arm),
+      phiVc: 0.75 * oneWayVc({ fc: c.fc, b: B * 1000, d }),
+      arm, B,
+    }
+  }
+  const rect = c.type !== 'square'
+  const longs = one(c.Bx, c.columnWidth)
+  const shorts = rect ? one(c.By, cyDim) : null
+  const all = [{ n: 'punching', ok: phiVcP >= VuP }, { n: 'one-way', ok: longs.phiVc >= longs.Vu },
+    ...(shorts ? [{ n: 'one-way (short)', ok: shorts.phiVc >= shorts.Vu }] : [])]
+  const pass = all.every((x) => x.ok)
+  const mark = (ok: boolean) => (ok ? '\\ge' : '<')
+  const tick = (ok: boolean) => (ok ? '\\checkmark' : '\\times')
+  return {
+    title: 'Shear re-check at the adopted thickness',
+    lines: [
+      txt(`Both checks again at the thickness adopted above — the depth that will be built, not the depth each check needed. d = D_c − cover − d_b = ${sn0(c.Dc)} − ${sn0(c.cover)} − ${sn0(c.barDia)} = ${sn0(d)} mm.`),
+      eq(String.raw`\text{Punching:}\quad V_u = ${sn1(VuP)}\ \text{kN},\qquad \phi V_c = ${sn1(phiVcP)}\ \text{kN} \;${mark(phiVcP >= VuP)}\; V_u\;${tick(phiVcP >= VuP)}`),
+      eq(String.raw`\text{One-way${rect ? ' (long, x)' : ''}:}\quad a_v = ${sn3(longs.arm)}\ \text{m},\quad V_u = ${sn1(longs.Vu)}\ \text{kN},\qquad \phi V_c = ${sn1(longs.phiVc)}\ \text{kN} \;${mark(longs.phiVc >= longs.Vu)}\; V_u\;${tick(longs.phiVc >= longs.Vu)}`),
+      ...(shorts ? [eq(String.raw`\text{One-way (short, y):}\quad a_v = ${sn3(shorts.arm)}\ \text{m},\quad V_u = ${sn1(shorts.Vu)}\ \text{kN},\qquad \phi V_c = ${sn1(shorts.phiVc)}\ \text{kN} \;${mark(shorts.phiVc >= shorts.Vu)}\; V_u\;${tick(shorts.phiVc >= shorts.Vu)}`)] : []),
+    ],
+    note: pass
+      ? `The adopted D_c = ${sn0(c.Dc)} mm satisfies both shear checks — this is the section that is detailed.`
+      : `The adopted D_c = ${sn0(c.Dc)} mm does NOT satisfy ${all.filter((x) => !x.ok).map((x) => x.n).join(' and ')} — increase the thickness.`,
   }
 }
 
@@ -304,6 +373,7 @@ export function buildFoundationSolution(c: SolutionCtx): SolutionStep[] {
 
   if (c.type === 'square') {
     steps.push(oneWayStep(c, c.Bx, c.dBeamLong, ''), thicknessStep(c))
+    if (c.analysis === 'design') steps.push(shearRecheckStep(c))
     steps.push(flexureStep(c, c.Bx, c.Bx, c.long, ''), barsStep(c, c.long, ''), devLengthStep(c))
   } else {
     const cy = c.columnWidthY ?? c.columnWidth
@@ -311,6 +381,7 @@ export function buildFoundationSolution(c: SolutionCtx): SolutionStep[] {
       oneWayStep(c, c.Bx, c.dBeamLong, 'long (x)', c.columnWidth),
       oneWayStep(c, c.By, c.dBeamShort, 'short (y)', cy),
       thicknessStep(c),
+      ...(c.analysis === 'design' ? [shearRecheckStep(c)] : []),
       flexureStep(c, c.Bx, c.By, c.long, 'long (x)', c.columnWidth),
       barsStep(c, c.long, 'long (x)'),
     )

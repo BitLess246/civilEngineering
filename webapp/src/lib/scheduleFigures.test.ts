@@ -5,7 +5,8 @@ import { buildStructureCages } from '../engine/cageBuilder'
 import { elevationBundleByMember, columnStackByMember, beamSectionZones } from './planDetails'
 import {
   beamSectionNotes, beamSectionDrawing, columnSectionNotes, columnSectionDrawing,
-  beamElevationDrawing, columnElevationDrawing, columnStoreyOf, type SectionRowDesign,
+  beamElevationDrawing, columnElevationDrawing, columnStoreyOf, stirrupNote,
+  type SectionRowDesign,
 } from './scheduleFigures'
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -120,5 +121,40 @@ describe('which bars the check did not use', () => {
     const plain = row({}).join(' ')
     expect(plain).not.toContain('NOT COUNTED')
     expect(plain).not.toContain('ALONE')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// A BEAM HAS TWO STIRRUP SPACINGS, and the sheets each printed one of them.
+// §418.6.4.4 / §418.4.2.4 cap the pitch for 2h from each support face; the
+// shear demand sets it through the rest of the span. The schedule reported the
+// hinge pitch on a hogging row and this callout reported the adopted pitch on
+// every row, so one page said @70 and the next said @140 about the same beam,
+// with nothing to say they were two regions.
+// ─────────────────────────────────────────────────────────────────────────
+describe('stirrupNote — both regions, or one where there is one', () => {
+  const rect = { b: 250, h: 350, cover: 40, barDia: 28, tieDia: 10 }
+  const d = (over: Partial<SectionRowDesign>): SectionRowDesign =>
+    ({ bars: 2, sAdopt: 140, legs: 2, layers: [2], comprBars: 0, comprLayers: [], ...over })
+
+  it('names the hinge zone and the rest of the span when they differ', () => {
+    expect(stirrupNote(d({ sHinge: 70 }), rect))
+      .toBe('STIRRUPS 2L-⌀10 @ 70 WITHIN 2h OF EACH SUPPORT, @ 140 ELSEWHERE')
+  })
+
+  it('says it once where no cap applies', () => {
+    expect(stirrupNote(d({ sHinge: 140 }), rect)).toBe('STIRRUPS 2L-⌀10 @ 140')
+    expect(stirrupNote(d({}), rect)).toBe('STIRRUPS 2L-⌀10 @ 140')          // no hinge supplied
+  })
+
+  it('still says minimum where the design adopted none', () => {
+    expect(stirrupNote(d({ sAdopt: 0, sHinge: 70 }), rect)).toBe('STIRRUPS ⌀10 @ MIN. (§409.6.3.1)')
+  })
+
+  it('is what the section callout prints, so the two cannot drift', () => {
+    const note = beamSectionNotes(
+      { x: 0, label: 'End i', hogging: true, design: d({ sHinge: 70 }) }, rect,
+    ).find((t) => t.startsWith('STIRRUPS'))
+    expect(note).toBe(stirrupNote(d({ sHinge: 70 }), rect))
   })
 })

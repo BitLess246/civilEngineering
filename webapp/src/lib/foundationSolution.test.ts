@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { designSquareFooting, type SquareFootingInput } from '../engine/isolatedFooting'
+import { oneWayVc, twoWayVc, criticalSection } from '../engine/shear'
 import { buildFoundationSolution, type SolutionCtx } from './foundationSolution'
 
 const input: SquareFootingInput = {
@@ -32,7 +33,7 @@ describe('foundation worked solution', () => {
     const steps = buildFoundationSolution(squareCtx())
     const titles = steps.map((s) => s.title)
     expect(titles[0]).toBe('Service & factored loads')
-    expect(titles).toContain('Two-way (punching) shear')
+    expect(titles.some((t) => t.startsWith('Two-way (punching) shear'))).toBe(true)
     expect(titles[titles.length - 1]).toMatch(/Development length/)
     // each step carries an explanatory sentence (commentary), not just equations
     expect(steps.every((s) => s.lines.some((l) => 'text' in l))).toBe(true)
@@ -72,5 +73,74 @@ describe('foundation worked solution', () => {
     expect(tex).toContain('840.0')          // 1.4D
     expect(tex).toContain('1360.0')         // 1.2D + 1.6L (governs)
     expect(loads.note).toContain('1.2D + 1.6L governs')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// TRIAL → ADOPT → RE-CHECK
+//
+// The two shear steps solve for the depth each check NEEDS, so they are
+// written at the required d and read as marginal by construction. One of them
+// printed `φVc = 81.0 < Vu = 82.1 ×` immediately before the thickness step
+// raised D_c and the schedule said PASS — nothing wrong with the footing, but
+// the sheet never showed the check that passed.
+//
+// And the "<" was not even real: the sheet hand-rolled Vc as 1/6√f'c bd where
+// the engine uses §422.5.5.1's 0.17, and 1/3, 1/6, 1/12 for punching where the
+// engine uses 0.33, 0.17, 0.083 — the forms it had already rejected for
+// claiming a capacity the code does not give.
+// ─────────────────────────────────────────────────────────────────────────
+describe('the footing shear chain', () => {
+  const c = squareCtx()
+  const steps = buildFoundationSolution(c)
+  const titles = steps.map((s) => s.title)
+
+  it('names the two shear steps as the REQUIRED depth, then re-checks the adopted one', () => {
+    const iPunch = titles.findIndex((t) => t.startsWith('Two-way (punching) shear'))
+    const iOne = titles.findIndex((t) => t.startsWith('One-way (beam) shear'))
+    const iThick = titles.indexOf('Slab thickness')
+    const iRe = titles.indexOf('Shear re-check at the adopted thickness')
+    expect(iPunch).toBeGreaterThanOrEqual(0)
+    expect(titles[iPunch]).toMatch(/required depth$/)
+    expect(titles[iOne]).toMatch(/required depth$/)
+    // trial → adopt → re-check, in that order
+    expect(iOne).toBeGreaterThan(iPunch)
+    expect(iThick).toBeGreaterThan(iOne)
+    expect(iRe).toBe(iThick + 1)
+  })
+
+  it('re-checks at the depth that will be BUILT, and passes there', () => {
+    const re = steps.find((s) => s.title === 'Shear re-check at the adopted thickness')!
+    const words = re.lines.filter((l): l is { text: string } => 'text' in l).map((l) => l.text).join(' ')
+    expect(words).toContain(`= ${c.dProvided} mm`)     // d = Dc − cover − db, spelt out
+    const tex = texOf(re)
+    expect(tex).not.toContain('\\times')             // both checks pass
+    expect(re.note).toContain('this is the section that is detailed')
+    // …and the numbers are the engine's, at that depth
+    const cs = criticalSection(c.columnWidth, c.columnWidth, c.dProvided, c.position)
+    const phiP = 0.75 * twoWayVc({ fc: c.fc, bo: cs.bo, d: c.dProvided, betaC: 1, position: c.position })
+    const VuP = c.ultimateLoad - c.qu * cs.Ao * 1e-6
+    expect(phiP).toBeGreaterThanOrEqual(VuP)
+  })
+
+  it('prints the code\'s coefficients, not the inch-pound conversions', () => {
+    const punch = steps.find((s) => s.title.startsWith('Two-way (punching) shear'))!
+    const one = steps.find((s) => s.title.startsWith('One-way (beam) shear'))!
+    expect(texOf(punch)).toContain('0.33')
+    expect(texOf(punch)).toContain('0.083')
+    expect(texOf(punch)).not.toContain('tfrac{1}{3}')
+    expect(texOf(one)).toContain('0.17')
+    expect(texOf(one)).not.toContain('tfrac{1}{6}')
+    // and the printed φVc is the engine's, so a required depth never reads as failing
+    const d = c.dPunch
+    const cs = criticalSection(c.columnWidth, c.columnWidth, d, c.position)
+    expect(texOf(punch)).toContain(String(Math.round(cs.bo)))
+    expect(0.75 * oneWayVc({ fc: c.fc, b: c.Bx * 1000, d: c.dBeamLong })).toBeGreaterThan(0)
+  })
+
+  it('labels the two effective depths, which differ by half a bar', () => {
+    const t = texOf(steps.find((s) => s.title === 'Slab thickness')!)
+    expect(t).toContain('d_{flex}')
+    expect(t).toContain('d_{shear}')
   })
 })

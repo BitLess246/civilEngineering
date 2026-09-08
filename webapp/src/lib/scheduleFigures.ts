@@ -48,6 +48,17 @@ export interface SectionRowDesign {
   /** §410 — false when f's ≤ 0.85f'c, so the compression steel is present and
    *  deliberately not counted even under a doubly-reinforced check. */
   comprEffective?: boolean
+  /**
+   * The spacing inside the 2h hinge zone, mm — `sAdopt` capped by §418.6.4.4
+   * (SMF) or §418.4.2.4 (IMF). Equal to `sAdopt` where no cap applies.
+   *
+   * A BEAM HAS TWO STIRRUP SPACINGS and the sheets each printed one of them.
+   * The schedule reported the hinge spacing on a hogging row, this callout
+   * reported the adopted spacing on every row, and the two are the same beam:
+   * one page said "@70", the next said "@140", and nothing said they were the
+   * support zone and the rest of the span. Both now say both.
+   */
+  sHinge?: number
 }
 export interface BeamRowSection {
   x: number; label: string; hogging: boolean
@@ -92,6 +103,24 @@ export function barsNotCounted(d: SectionRowDesign, hogging: boolean): string[] 
   return [`φMn FROM THE ${hogging ? 'TOP' : 'BOTTOM'} STEEL ALONE — BARS ON THE OTHER FACE ARE CONTINUITY/DETAILING (§409.7.3.8), NOT COUNTED`]
 }
 
+/**
+ * A beam's stirrup spacing, in the fewest words that describe BOTH regions.
+ *
+ * Where §418 caps the hinge zone below the spacing the shear demand adopted,
+ * the beam is built at two pitches — tight for 2h from each support face, the
+ * adopted pitch through the rest of the span — and a note that gives one of
+ * them describes half the beam. Shared, so the schedule row, the section
+ * callout and the drawing cannot each pick a different half.
+ */
+export function stirrupNote(d: SectionRowDesign, rect: SectionRect): string {
+  if (d.sAdopt <= 0) return `STIRRUPS ⌀${rect.tieDia} @ MIN. (§409.6.3.1)`
+  const set = `STIRRUPS ${d.legs}L-⌀${rect.tieDia}`
+  const hinge = d.sHinge
+  return hinge != null && hinge > 0 && hinge < d.sAdopt - 1
+    ? `${set} @ ${Math.round(hinge)} WITHIN 2h OF EACH SUPPORT, @ ${Math.round(d.sAdopt)} ELSEWHERE`
+    : `${set} @ ${Math.round(d.sAdopt)}`
+}
+
 /** What a beam section's callout says, line by line — the schedule's own
  *  words for the row, printed under the cut that shows them. */
 export function beamSectionNotes(sec: BeamRowSection, rect: SectionRect): string[] {
@@ -108,9 +137,7 @@ export function beamSectionNotes(sec: BeamRowSection, rect: SectionRect): string
     // beside a φMn computed from two of those four bars, nothing on the sheet
     // said which two.
     ...(barsNotCounted(d, sec.hogging) ?? []),
-    d.sAdopt > 0
-      ? `STIRRUPS ${d.legs}L-⌀${rect.tieDia} @ ${Math.round(d.sAdopt)}`
-      : `STIRRUPS ⌀${rect.tieDia} @ MIN. (§409.6.3.1)`,
+    stirrupNote(d, rect),
     ...(sec.bf ? [`${sec.flangeKind ?? (sec.edge ? 'L' : 'T')}-BEAM · bf ${Math.round(sec.bf)}${d.flangeAction === 'true-T' ? ' · TRUE T' : ''}`] : []),
   ]
 }

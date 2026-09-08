@@ -5,7 +5,9 @@
 // ─────────────────────────────────────────────────────────────────────────
 
 export type ColumnPosition = 'interior' | 'edge' | 'corner';
-const ALPHA_S: Record<ColumnPosition, number> = { interior: 40, edge: 30, corner: 20 };
+/** §422.6.5.3 — α_s by where the column stands. Exported because the worked
+ *  solution has to PRINT the same number the check used. */
+export const ALPHA_S: Record<ColumnPosition, number> = { interior: 40, edge: 30, corner: 20 };
 
 const PHI_SHEAR = 0.75;
 
