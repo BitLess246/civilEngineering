@@ -20,10 +20,18 @@ export interface ColumnSectionInput {
   cover: number; barDia: number; tieDia: number
   bars: number
 }
-export interface ColumnSectionColors { concrete?: string; outline?: string; rebar?: string }
+export interface ColumnSectionColors {
+  concrete?: string
+  outline?: string
+  rebar?: string
+  /** Ties and crossties. Defaults to `rebar`, which is what the report has
+   *  always drawn; a sheet following the set's section convention passes the
+   *  tint instead, so the bars it is about read first. */
+  tie?: string
+}
 type Pt = [number, number]
 
-const REPORT: Required<ColumnSectionColors> = { concrete: '#eef3f8', outline: '#37526e', rebar: '#37526e' }
+const REPORT: Required<Omit<ColumnSectionColors, 'tie'>> = { concrete: '#eef3f8', outline: '#37526e', rebar: '#37526e' }
 
 /** Clockwise rounded-rectangle path commands. */
 function roundRect(x: number, y: number, w: number, h: number, rr: number): PathCmd[] {
@@ -44,6 +52,7 @@ export function columnSectionPrimitives(
   colors: ColumnSectionColors = {}, sw = 1.4,
 ): void {
   const { concrete, outline, rebar } = { ...REPORT, ...colors }
+  const tieInk = colors.tie ?? rebar
   const b = p.b, h = p.h ?? p.b
   const sc = side / b
   const W = b * sc, Hh = h * sc, hw = W / 2, hh = Hh / 2
@@ -66,11 +75,11 @@ export function columnSectionPrimitives(
   const midX = (x1 + x2) / 2, midY = (yT + yB) / 2
 
   const stroke = (pts: Pt[], closed = false) =>
-    P.push({ kind: 'path', stroke: rebar, width: sw, fill: 'none', join: 'round', cap: 'round', closed, cmds: pts.map((q, i) => ({ c: i === 0 ? 'M' : 'L', x: q[0], y: q[1] })) })
+    P.push({ kind: 'path', stroke: tieInk, width: sw, fill: 'none', join: 'round', cap: 'round', closed, cmds: pts.map((q, i) => ({ c: i === 0 ? 'M' : 'L', x: q[0], y: q[1] })) })
 
   // perimeter tie — a rounded rectangle hugging the bars
   const tRr = Math.max(br, 2.5 * p.tieDia * sc)
-  P.push({ kind: 'path', cmds: roundRect(cx - hw + inset, cy - hh + inset, W - 2 * inset, Hh - 2 * inset, tRr), stroke: rebar, width: sw, fill: 'none', join: 'round', closed: true })
+  P.push({ kind: 'path', cmds: roundRect(cx - hw + inset, cy - hh + inset, W - 2 * inset, Hh - 2 * inset, tRr), stroke: tieInk, width: sw, fill: 'none', join: 'round', closed: true })
 
   // §425.3.2 — the seismic-hook EXTENSION beyond the bend, max(6·db, 75) mm on
   // the TIE diameter. It used to be `rw * 1.6`, a pure drawing constant: the

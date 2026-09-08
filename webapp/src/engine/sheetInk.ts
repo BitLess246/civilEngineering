@@ -31,6 +31,11 @@ export const STEEL_LIGHT = '#93b4f5'
  *  column's own bars on a beam sheet. Grey, so it never reads as this member's
  *  steel, but darker than the grid so it does not read as an extension line. */
 export const STEEL_CONTEXT = '#64748b'
+/** Cut concrete. Every section on the set is filled with it, so a member the
+ *  plane passes through is told apart at a glance from one drawn in elevation
+ *  behind it. Declared here because three sheets draw cut concrete and had
+ *  each decided for themselves whether it was filled at all. */
+export const SHEET_CONCRETE = '#eef3f8'
 /** A zone the sheet wants to name — a confinement band, a panel. */
 export const SHEET_ZONE = '#0f766e'
 /** Something the design flagged. */

@@ -81,7 +81,15 @@ export function footingDetailBundles(
     const mark = `WF-${seen.size}`
     const mem = colAt(r.node)
     const sec: RectSection | undefined = mem ? secById.get(mem.section) : undefined
-    const colB = sec?.b ?? 400, colH = sec?.h ?? colB
+    // THE SHEET'S AXES, NOT THE SECTION'S NAMES. `FootingDetailInput.colB` is
+    // the column's width along the sheet's x and `colH` its depth along the
+    // sheet's y; a `RectSection` names them the other way round, because a
+    // modelled column carries `h` across WORLD X and `b` across world z (the
+    // convention `columnCage` and `modelBridge` both place bars to). Handed
+    // over unswapped, the footing sheet drew a 300×500 column as 500 deep by
+    // 300 wide while cutting its cage at the true orientation, so the bars
+    // stood 55 mm outside the concrete in plan and in section A–A.
+    const colB = sec?.h ?? 400, colH = sec?.b ?? colB
     const colBarDia = sec?.barDia ?? 16, tieDia = sec?.tieDia ?? 10
     const colRow = mem ? colRowById.get(mem.id) : undefined
     const colBars = Math.max(4, colRow?.bars ?? 8)
