@@ -27,8 +27,7 @@ function RawSvg({ svg, className, ...rest }:
  * They are `RebarCage.notes`, and the Display tab already lists them once each
  * with every member they apply to; repeated per sheet they came out as a wall
  * of amber under every elevation, the same three findings over and over, with
- * the lap counts ("shown on the elevation") mixed in among them saying nothing
- * the drawing does not.
+ * the lap counts mixed in among them saying nothing the drawing does not.
  *
  * `PlanSheet.warnings` is still carried, because the sheet set is also the
  * PDF's, and a caller that wants to collect them still can.
