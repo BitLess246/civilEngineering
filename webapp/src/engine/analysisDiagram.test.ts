@@ -6,8 +6,10 @@ import type { RectSection } from './model'
 import {
   projectView, fitView, supportSymbol, modelDiagram, loadDiagram, deflectedDiagram,
   forceDiagram, reactionDiagram, memberDeflectedCurve, displacedNodes, autoAmplification,
-  signRuns, bestView, DIAGRAM_W, DIAGRAM_H,
+  signRuns, bestView, modeShapeDiagram, seriesDrawing, hingeDiagram, planeFrameDiagram,
+  DIAGRAM_W, DIAGRAM_H,
 } from './analysisDiagram'
+import { modalAnalysis } from './modal'
 
 const section: RectSection = { id: 's1', name: '300×500', b: 300, h: 500, fc: 28, fy: 415, barDia: 20, tieDia: 10, cover: 40 }
 
@@ -227,6 +229,17 @@ describe('bestView', () => {
 // ─────────────────────────────────────────────────────────────────────────
 // THE FIGURES — every one reports the engine's own numbers, never its own
 // ─────────────────────────────────────────────────────────────────────────
+
+// Narrow a primitive list to one kind, keeping the union member's real type —
+// hand-written predicates over a partial shape are not assignable to
+// `PlanPrimitive` and only compile because vitest does not typecheck.
+type Prim = import('./planRenderer').PlanPrimitive
+const of = <K extends Prim['kind']>(d: { primitives: Prim[] }, kind: K): Extract<Prim, { kind: K }>[] =>
+  d.primitives.filter((p): p is Extract<Prim, { kind: K }> => p.kind === kind)
+const strokedLines = (d: { primitives: Prim[] }, stroke: string) => of(d, 'line').filter((p) => p.stroke === stroke)
+const filledCircles = (d: { primitives: Prim[] }, fill?: string) =>
+  of(d, 'circle').filter((p) => (fill == null ? true : p.fill === fill))
+
 const texts = (d: { primitives: { kind: string }[] }) =>
   d.primitives.filter((p): p is { kind: 'text'; text: string } => p.kind === 'text').map((p) => p.text)
 
@@ -276,9 +289,7 @@ describe('loadDiagram', () => {
     expect(t).toMatch(/DEAD \(D\)/)
   })
 
-  const arrowLengths = (d: { primitives: { kind: string }[] }) => d.primitives
-    .filter((p): p is { kind: 'line'; x1: number; y1: number; x2: number; y2: number; stroke: string } =>
-      p.kind === 'line' && (p as { stroke?: string }).stroke === '#b45309')
+  const arrowLengths = (d: { primitives: Prim[] }) => strokedLines(d, '#b45309')
     .map((p) => Math.hypot(p.x2 - p.x1, p.y2 - p.y1))
     .sort((a, b) => b - a)
 
@@ -354,5 +365,153 @@ describe('reactionDiagram', () => {
   it('one arrow per support', () => {
     const d = reactionDiagram(m, r)
     expect(d.primitives.filter((p) => p.kind === 'line' && p.stroke === '#b91c1c')).toHaveLength(r.reactions.length)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// MODE SHAPES — a mode has no amplitude, so the figure must not imply one
+// ─────────────────────────────────────────────────────────────────────────
+describe('modeShapeDiagram', () => {
+  const m = frame()
+  const modal = modalAnalysis(m, 4)!
+
+  it('draws the peak at the asked fraction of the model diagonal, whatever the shape', () => {
+    const mode = modal.modes[0]
+    const d = modeShapeDiagram(m, mode, 1, { targetFraction: 0.07 })
+    expect(d.bounds).toEqual({ minX: 0, minY: 0, maxX: DIAGRAM_W, maxY: DIAGRAM_H })
+    // scaling the eigenvector must not change the picture — it is normalised
+    const doubled = { ...mode, shape: Object.fromEntries(Object.entries(mode.shape).map(([k, v]) => [k, [v[0] * 2, v[1] * 2, v[2] * 2] as [number, number, number]])) }
+    const d2 = modeShapeDiagram(m, doubled, 1, { targetFraction: 0.07 })
+    const line = (x: { primitives: Prim[] }) => JSON.stringify(strokedLines(x, '#7c3aed'))
+    expect(line(d2)).toBe(line(d))
+  })
+
+  it('reports the period and the effective mass, and never an amplification factor', () => {
+    const t = texts(modeShapeDiagram(m, modal.modes[0], 1)).join(' ')
+    expect(t).toContain(modal.modes[0].period.toFixed(3))
+    expect(t).toMatch(/effective mass/)
+    expect(t).toMatch(/unit-normalised/)
+    // "×1.0" beside a unit eigenvector is noise, not information
+    expect(t).not.toMatch(/drawn at ×/)
+  })
+
+  it('NAMES a torsional mode — the one thing the period table cannot say', () => {
+    const torsional = { period: 0.4, shape: modal.modes[0].shape, effMassRatio: [0, 0, 0] as [number, number, number] }
+    expect(texts(modeShapeDiagram(m, torsional, 2)).join(' ')).toMatch(/TORSIONAL/)
+    const sway = { period: 0.4, shape: modal.modes[0].shape, effMassRatio: [0.8, 0, 0] as [number, number, number] }
+    expect(texts(modeShapeDiagram(m, sway, 1)).join(' ')).not.toMatch(/TORSIONAL/)
+  })
+
+  it('draws straight chords — the lumped-mass eigenproblem has no rotations to curve with', () => {
+    const d = modeShapeDiagram(m, modal.modes[0], 1)
+    expect(strokedLines(d, '#7c3aed')).toHaveLength(m.members.length)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// TRACES — a response history straddles zero, which the capacity curve never did
+// ─────────────────────────────────────────────────────────────────────────
+describe('seriesDrawing', () => {
+  const t = [0, 1, 2, 3, 4]
+  const y = [0, 5, -8, 3, -1]
+
+  it('puts the zero line WHERE ZERO IS, not at the bottom of the box', () => {
+    const d = seriesDrawing([{ xs: t, ys: y }], { title: 'T', xLabel: 'x', yLabel: 'y' })
+    const zero = strokedLines(d, '#1e293b').find((r) => Math.abs(r.y1 - r.y2) < 1e-9)!
+    const grid = strokedLines(d, '#9aa5b5')
+    const lo = Math.max(...grid.map((g) => g.y1)), hi = Math.min(...grid.map((g) => g.y1))
+    // strictly between the extremes: the data goes both sides of it
+    expect(zero.y1).toBeGreaterThan(hi)
+    expect(zero.y1).toBeLessThan(lo)
+  })
+
+  it('marks and prints the peak of the first series, with its time', () => {
+    const d = seriesDrawing([{ xs: t, ys: y }], { title: 'T', xLabel: 'x', yLabel: 'y', markPeak: true })
+    expect(texts(d).join(' ')).toContain('-8.00 @ 2.00')
+  })
+
+  it('the rotated axis label is anchored at its START — a centred one slides off the box', () => {
+    const d = seriesDrawing([{ xs: t, ys: y }], { title: 'T', xLabel: 'time', yLabel: 'displacement (mm)' })
+    const rot = of(d, 'text').find((p) => p.rotate != null)!
+    expect(rot.text).toBe('displacement (mm)')
+    expect(rot.anchor).toBe('start')
+    expect(rot.x).toBeGreaterThan(0)
+  })
+
+  it('draws each series, and the dashed reference as dashed', () => {
+    const d = seriesDrawing([
+      { xs: t, ys: y, label: 'inelastic' },
+      { xs: t, ys: y.map((v) => v * 1.4), label: 'elastic', dashed: true },
+    ], { title: 'T', xLabel: 'x', yLabel: 'y' })
+    const paths = of(d, 'path')
+    expect(paths).toHaveLength(2)
+    expect(paths.filter((p) => p.dash)).toHaveLength(1)
+    expect(texts(d)).toContain('inelastic')
+    expect(texts(d)).toContain('elastic')
+  })
+
+  it('an empty series draws axes and no trace, rather than dividing by zero', () => {
+    const d = seriesDrawing([{ xs: [], ys: [] }], { title: 'T', xLabel: 'x', yLabel: 'y' })
+    expect(d.primitives.filter((p) => p.kind === 'path')).toHaveLength(0)
+    expect(d.primitives.every((p) => Object.values(p).every((v) => typeof v !== 'number' || Number.isFinite(v)))).toBe(true)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// HINGES — the pattern is the answer, so the marker must say WHERE and WHEN
+// ─────────────────────────────────────────────────────────────────────────
+describe('hingeDiagram', () => {
+  const m = frame()
+  const marks = [
+    { member: m.members[0].id, end: 'i' as const, order: 1 },
+    { member: m.members[0].id, end: 'j' as const, order: 2 },
+    { member: m.members[1].id, end: 'i' as const, order: 12 },
+  ]
+
+  it('separates the two hinges of one member instead of stacking them on its nodes', () => {
+    const d = hingeDiagram(m, marks)
+    const dots = filledCircles(d)
+    expect(dots).toHaveLength(3)
+    expect(Math.hypot(dots[0].cx - dots[1].cx, dots[0].cy - dots[1].cy)).toBeGreaterThan(2 * dots[0].r)
+  })
+
+  it('numbers them in formation order and grows the marker for a two-digit number', () => {
+    const d = hingeDiagram(m, marks)
+    expect(texts(d)).toContain('1')
+    expect(texts(d)).toContain('12')
+    const dots = filledCircles(d)
+    expect(dots[2].r).toBeGreaterThan(dots[0].r)
+  })
+
+  it('colours the first to yield differently from the last — the sequence IS the finding', () => {
+    const d = hingeDiagram(m, marks)
+    const fills = filledCircles(d).map((p) => p.fill)
+    expect(fills[0]).not.toBe(fills[2])
+  })
+
+  it('ignores a hinge on a member the model does not have, and says how many it drew', () => {
+    const d = hingeDiagram(m, [...marks, { member: 'not-a-member', end: 'i' as const, order: 4 }])
+    expect(d.primitives.filter((p) => p.kind === 'circle')).toHaveLength(3)
+    expect(texts(d).join(' ')).toContain('3 hinges')
+  })
+})
+
+describe('planeFrameDiagram', () => {
+  const f = {
+    nodes: [{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 0, y: 3 }, { id: 'c', x: 6, y: 3 }, { id: 'd', x: 6, y: 0 }],
+    members: [{ id: 'm1', i: 'a', j: 'b' }, { id: 'm2', i: 'b', j: 'c' }, { id: 'm3', i: 'c', j: 'd' }],
+    supports: [{ node: 'a' }, { node: 'd' }],
+  }
+  it('draws the CONDENSED frame, not the model — every member and every base', () => {
+    const d = planeFrameDiagram(f, [{ member: 'm2', end: 'i' }])
+    expect(strokedLines(d, '#334155')).toHaveLength(3)
+    // one hinge marker, and it is not on a node
+    const hinge = filledCircles(d, '#b91c1c')
+    expect(hinge).toHaveLength(1)
+  })
+  it('is happy with no hinges at all — an elastic record still gets its frame', () => {
+    const d = planeFrameDiagram(f, [], { title: 'EQUIVALENT FRAME — NO HINGE YIELDED' })
+    expect(texts(d)).toContain('EQUIVALENT FRAME — NO HINGE YIELDED')
+    expect(filledCircles(d, '#b91c1c')).toHaveLength(0)
   })
 })

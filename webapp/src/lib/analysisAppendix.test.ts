@@ -15,6 +15,7 @@ import {
 } from './analysisAppendix'
 import { computeSeismic } from '../engine/seismic'
 import { storeyWeightBreakdown } from '../engine/seismic'
+import { DIAGRAM_W } from '../engine/analysisDiagram'
 
 // ─────────────────────────────────────────────────────────────────────────
 // The appendix reports ONLY what the engine produced. These build every
@@ -535,5 +536,67 @@ describe('the figures', () => {
     expect(ap2.sections.find((s) => s.key === 'analysis')!.figures).toBeUndefined()
     // …but the model figure does not need an analysis to be drawn
     expect(ap2.sections.find((s) => s.key === 'model')!.figures).toHaveLength(1)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// D, E and F get their pictures too. The dynamics sections were the worst
+// of it: a mode is a SHAPE and D.1 could only give its period, a response
+// history reported as three peak numbers cannot say whether the structure
+// rang down or ratcheted, and a pushover's whole finding is the PATTERN of
+// hinges, which F.2 lists one row at a time.
+// ─────────────────────────────────────────────────────────────────────────
+describe('the dynamics figures', () => {
+  const ap = buildAnalysisAppendix(full)
+  const sec = (k: string) => ap.sections.find((s) => s.key === k)!
+  const captions = (k: string) => (sec(k).figures ?? []).map((f) => f.caption)
+
+  it('D draws the first three modes, each naming its own period', () => {
+    const caps = captions('modal')
+    expect(caps).toHaveLength(3)
+    caps.forEach((c, k) => {
+      expect(c).toContain(`Mode ${k + 1}`)
+      expect(c).toContain(modal.modes[k].period.toFixed(3))
+    })
+    // three, not one per mode solved — a fourth rarely changes the reading
+    expect(modal.modes.length).toBeGreaterThan(3)
+  })
+
+  it('D says the shape is normalised and drawn as chords, so neither is mistaken for a result', () => {
+    expect(captions('modal')[0]).toMatch(/normalised/)
+    expect(captions('modal')[0]).toMatch(/straight chords/)
+  })
+
+  it('E draws both traces and the frame the history actually ran on', () => {
+    const caps = captions('nonlinear')
+    expect(caps).toHaveLength(3)
+    expect(caps[0]).toMatch(/Control-node displacement/)
+    expect(caps[1]).toMatch(/Base shear/)
+    expect(caps[2]).toMatch(/EQUIVALENT PLANE FRAME/)
+    // and it says WHY that frame is not the model — its member ids are its own
+    expect(caps[2]).toMatch(/combined|condensed/i)
+  })
+
+  it('E adapts when nothing yielded, instead of printing an empty hinge map', () => {
+    const yielded = nonlinearHinge.inelastic!.response.hinges.some((h) => h.yielded)
+    const cap = captions('nonlinear')[2]
+    expect(cap).toMatch(yielded ? /Where the hinges yielded/ : /No hinge yielded/)
+  })
+
+  it('F draws the hinge locations numbered in formation order', () => {
+    const caps = captions('pushover')
+    const hingeFig = caps.find((c) => c.startsWith('F.2f'))!
+    expect(hingeFig).toMatch(/yield sequence/)
+    expect(hingeFig).toContain(`${pushover!.result.hinges.length} hinge`)
+    // and it tells the reader what to look FOR, which the table cannot
+    expect(hingeFig).toMatch(/beams with the columns intact/)
+    expect(hingeFig).toMatch(/soft|one storey|row of them/)
+  })
+
+  it('the pushover curve uses the shared chart renderer, at the appendix\'s own type size', () => {
+    // it used to draw its own 100 × 60 box, which the painter then magnified
+    // 1.8× — pushover figures carried type half again as large as every other
+    const curve = sec('pushover').figures!.find((f) => f.caption.startsWith('F.1'))!
+    expect(curve.drawing.bounds.maxX).toBe(DIAGRAM_W)
   })
 })
