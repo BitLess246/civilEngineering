@@ -14,11 +14,21 @@
 //     mat, footing on a gravel base, natural-grade line with soil hatch, and a
 //     chained depth dimension.
 //
+// DRAWN IN THE SET'S SECTION STYLE. The beam and column details (`sectionDetail`)
+// settled the conventions for cut concrete: a pale fill so the plane's members
+// are told from the ones behind, a dashed cover hairline, the steel in ONE
+// accent with the transverse steel a tint of it, and a bar seen end-on as a
+// filled dot. This sheet had its own — white concrete, no cover line, and every
+// bar as a hollow outlined tube in the primary accent, ties included — so the
+// one sheet a reader reaches by clicking a footing looked like it came from a
+// different set. Same conventions here now; only what this sheet alone has (the
+// grade line, the soil hatch, the gravel bed) is still its own.
+//
 // Units: geometry m; bar/column sizes mm.
 // ─────────────────────────────────────────────────────────────────────────
 import type { PlanPrimitive, PathCmd, Drawing } from './planRenderer'
 import { columnSectionPrimitives } from './columnSection'
-import { SHEET_INK, SHEET_ZONE, STEEL } from './sheetInk'
+import { SHEET_CONCRETE, SHEET_GRID, SHEET_INK, SHEET_ZONE, STEEL, STEEL_LIGHT } from './sheetInk'
 import { titleBlock, leader } from './detailSheet'
 import { projectPath, type RebarCage, type RebarRun, type ViewPlane } from './rebarModel'
 import { runPolylines } from './rebarWire'
@@ -26,13 +36,6 @@ import { cutCage, cutPrimitives, type CageCut } from './cageSection'
 import { clipToBand, pitchNote, pitchRuns } from './frameElevation'
 
 type Pt = [number, number]
-/** Intersection of the infinite lines p1→p2 and p3→p4 (null if parallel). */
-function lineX(p1: Pt, p2: Pt, p3: Pt, p4: Pt): Pt | null {
-  const d = (p1[0] - p2[0]) * (p3[1] - p4[1]) - (p1[1] - p2[1]) * (p3[0] - p4[0])
-  if (Math.abs(d) < 1e-9) return null
-  const t = ((p1[0] - p3[0]) * (p3[1] - p4[1]) - (p1[1] - p3[1]) * (p3[0] - p4[0])) / d
-  return [p1[0] + t * (p2[0] - p1[0]), p1[1] + t * (p2[1] - p1[1])]
-}
 
 export interface FootingDetailInput {
   /** Footing mark (WF-1…). */
@@ -109,40 +112,27 @@ export interface FootingDetailCages {
 export interface FootingDetailOptions { detailNo?: string; sheetRef?: string; scale?: string }
 export interface DetailDrawing extends Drawing { title: string }
 
-const INK = SHEET_INK, COL = SHEET_INK, REBAR = STEEL, HATCH = '#94a3b8', STONE = '#64748b', PANEL = SHEET_ZONE
-const RW = 0.8   // rebar outline stroke weight (px) — a thin tube edge, not a filled rod
+const INK = SHEET_INK, COL = SHEET_INK, REBAR = STEEL, TIE_INK = STEEL_LIGHT
+const HATCH = '#94a3b8', STONE = '#64748b', PANEL = SHEET_ZONE
+const BARW = 2.0   // longitudinal steel, px — the accent, and the heaviest line on the sheet
+const TIEW = 1.5   // transverse steel, px — `sectionDetail`'s tie weight
 
 /** Build a column-footing detail (plan + section) from a designed footing. */
 export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOptions = {}): DetailDrawing {
   const P: PlanPrimitive[] = []
-  // Draw a reinforcing bar as its OUTLINE (a thin-stroked tube of radius `r`
-  // about the centreline `pts`): offset both sides with mitred corners and cap
-  // the two free ends with a semicircle — so the bar reads as a rod of real
-  // diameter with rounded (hooked) ends, not a single centreline.
-  const rod = (pts: Pt[], r: number, fill: string = 'none') => {
-    const ns = pts.length - 1
-    const nrm: Pt[] = []
-    for (let i = 0; i < ns; i++) {
-      const dx = pts[i + 1][0] - pts[i][0], dy = pts[i + 1][1] - pts[i][1]
-      const l = Math.hypot(dx, dy) || 1
-      nrm.push([-dy / l, dx / l])   // left normal
-    }
-    const side = (s: number): Pt[] => pts.map((p, i) => {
-      if (i === 0) return [p[0] + s * r * nrm[0][0], p[1] + s * r * nrm[0][1]]
-      if (i === ns) return [p[0] + s * r * nrm[ns - 1][0], p[1] + s * r * nrm[ns - 1][1]]
-      const a0: Pt = [pts[i - 1][0] + s * r * nrm[i - 1][0], pts[i - 1][1] + s * r * nrm[i - 1][1]]
-      const a1: Pt = [p[0] + s * r * nrm[i - 1][0], p[1] + s * r * nrm[i - 1][1]]
-      const b0: Pt = [p[0] + s * r * nrm[i][0], p[1] + s * r * nrm[i][1]]
-      const b1: Pt = [pts[i + 1][0] + s * r * nrm[i][0], pts[i + 1][1] + s * r * nrm[i][1]]
-      return lineX(a0, a1, b0, b1) ?? b0
-    })
-    const L = side(1), R = side(-1)
-    const cmds: PathCmd[] = [{ c: 'M', x: L[0][0], y: L[0][1] }]
-    for (let i = 1; i < L.length; i++) cmds.push({ c: 'L', x: L[i][0], y: L[i][1] })
-    cmds.push({ c: 'A', rx: r, ry: r, x: R[R.length - 1][0], y: R[R.length - 1][1], sweep: 1 })
-    for (let i = R.length - 2; i >= 0; i--) cmds.push({ c: 'L', x: R[i][0], y: R[i][1] })
-    cmds.push({ c: 'A', rx: r, ry: r, x: L[0][0], y: L[0][1], sweep: 1 })
-    P.push({ kind: 'path', cmds, stroke: REBAR, width: RW, fill, closed: true })
+  // A BAR LYING IN THE VIEW, as the rest of the set draws one: a stroked
+  // polyline in the accent, round-capped and round-jointed so a hook or a
+  // crank reads as a bend rather than a mitre.
+  //
+  // `over` gives the bar a white casing first. The mat is two layers and the
+  // column verticals pass in front of the ties they are wrapped by, and the
+  // outlined tube this replaced carried that reading in its white FILL. A
+  // casing stroke does the same thing with the stroke the set uses.
+  const wire = (pts: Pt[], color: string, width: number, over = false) => {
+    if (pts.length < 2) return
+    const cmds: PathCmd[] = pts.map((q, k) => ({ c: k === 0 ? 'M' : 'L', x: q[0], y: q[1] } as PathCmd))
+    if (over) P.push({ kind: 'path', cmds, stroke: '#fff', width: width + 2.2, fill: 'none', cap: 'round', join: 'round' })
+    P.push({ kind: 'path', cmds, stroke: color, width, fill: 'none', cap: 'round', join: 'round' })
   }
   const B = f.B, H = f.H
   const c = f.cover / 1000
@@ -155,7 +145,11 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   const ts = B * 0.075
   const gap = B * 1.05
   const hookLen = (f.endHook ?? 'none') === '90' ? Math.min(0.12, B * 0.07) : 0   // mat-bar end hook (0 = straight)
-  const rMain = Math.max(bd / 2, B * 0.007)    // drawn bar radius (mat/dowels)
+  const rMain = Math.max(bd / 2, B * 0.007)    // mat/dowel radius — layering geometry
+  // A DOT for a bar seen end-on, floored the way `sectionDetail` floors one: a
+  // ⌀12 mat bar in an 850 pad is 1/70 of the view, which at the size this sheet
+  // prints is under a pixel. Drawn true to size it is honest and invisible.
+  const rBar = Math.max(bd / 2, B / 100)
   const colBars = f.colBars ?? 8, colBarDia = f.colBarDia ?? f.barDia
   const tieDia = f.tieDia ?? 10
   const rTie = Math.max(tieDia / 2000, B * 0.005)   // lateral ties thinner
@@ -175,7 +169,10 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   const rowFx = Array.from({ length: nx }, (_, i) => (nx === 1 ? 0 : -cw / 2 + cInset + ((cw - 2 * cInset) * i) / (nx - 1)))   // bar x, column-local
 
   // ══ PLAN (centred at origin) ═══════════════════════════════════════════
-  P.push({ kind: 'rect', x: -hp, y: -hp, w: B, h: B, stroke: INK, fill: 'none', width: 1.4 })
+  // Cut concrete and its cover hairline, as every section on the set draws
+  // them — a plan of a footing IS a section through the pad.
+  P.push({ kind: 'rect', x: -hp, y: -hp, w: B, h: B, stroke: INK, fill: SHEET_CONCRETE, width: 1.3 })
+  P.push({ kind: 'rect', x: -hp + c, y: -hp + c, w: B - 2 * c, h: B - 2 * c, stroke: SHEET_GRID, fill: 'none', width: 0.5, dash: [B * 0.024, B * 0.019] })
   // bottom mat, both ways.  Layering (matches the section): the ∥y bars sit ON
   // TOP of the ∥x bars, so the ∥x bars are drawn first (hollow) and the ∥y bars
   // over them WHITE-FILLED — masking the ∥x lines at each crossing so the
@@ -204,7 +201,7 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
       for (const r of mats) {
         if (alongU(r) !== pass) continue
         const pts = projectPath(runPolylines(r)[0] ?? [], plan) as Pt[]
-        if (pts.length > 1) rod(pts, Math.max(r.dia / 2000, B * 0.007), pass ? 'none' : '#fff')
+        if (pts.length > 1) wire(pts, REBAR, BARW, !pass)
       }
     }
     // THE COLUMN, AS A CUT just above the pad — so its bars are where the cage
@@ -212,7 +209,10 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
     // all. `columnSectionPrimitives` laid out its own nx/ny bar split and drew
     // a plain rectangle round it, which is how the sheet came to disagree with
     // the steel it was detailing.
-    P.push({ kind: 'rect', x: -cw / 2, y: -cd / 2, w: cw, h: cd, stroke: COL, fill: '#fff', width: 1.2 })
+    P.push({ kind: 'rect', x: -cw / 2, y: -cd / 2, w: cw, h: cd, stroke: COL, fill: SHEET_CONCRETE, width: 1.3 })
+    const ccp = (f.colCover ?? 40) / 1000
+    if (cw > 2 * ccp && cd > 2 * ccp)
+      P.push({ kind: 'rect', x: -cw / 2 + ccp, y: -cd / 2 + ccp, w: cw - 2 * ccp, h: cd - 2 * ccp, stroke: SHEET_GRID, fill: 'none', width: 0.5, dash: [B * 0.024, B * 0.019] })
     if (cg.column) {
       const above = cg.yTop + 0.05
       const cut: CageCut = {
@@ -220,26 +220,31 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
         plane: { origin: [cg.centre[0], above, cg.centre[1]], u: [1, 0, 0], v: [0, 0, 1] },
       }
       P.push(...cutPrimitives(cutCage(cg.column, cut), {
-        bar: REBAR, tie: REBAR, tieWidth: 1.3, minBarRadius: B * 0.007,
+        bar: REBAR, tie: TIE_INK, tieWidth: TIEW, minBarRadius: rBar,
       }))
     }
   } else {
     for (let i = 0; i < n; i++) {   // ∥x bars — bottom layer (hollow)
       const p = matPos(i)
-      rod(hookLen ? [[xo, p + hd(p)], [xo, p], [xf, p], [xf, p + hd(p)]] : [[xo, p], [xf, p]], rMain)
+      wire(hookLen ? [[xo, p + hd(p)], [xo, p], [xf, p], [xf, p + hd(p)]] : [[xo, p], [xf, p]], REBAR, BARW)
     }
-    for (let i = 0; i < n; i++) {   // ∥y bars — top layer (white-filled → masks the ∥x lines under it)
+    for (let i = 0; i < n; i++) {   // ∥y bars — top layer (cased, so it masks the ∥x lines under it)
       const p = matPos(i)
-      rod(hookLen ? [[p + hd(p), xo], [p, xo], [p, xf], [p + hd(p), xf]] : [[p, xo], [p, xf]], rMain, '#fff')
+      wire(hookLen ? [[p + hd(p), xo], [p, xo], [p, xf], [p + hd(p), xf]] : [[p, xo], [p, xf]], REBAR, BARW, true)
     }
-    // column — the tied column CROSS-SECTION drawn in the footing sheet's palette
-    // (orange bars/ties on a white column), i.e. the report's ColumnSchematic
-    // rendered by the engine, placed where the column sits in the plan
+    // column — the tied column CROSS-SECTION in the sheet's palette, i.e. the
+    // report's ColumnSchematic rendered by the engine, placed where the column
+    // sits in the plan
     columnSectionPrimitives(P, 0, 0, cw, { b: f.colB, h: f.colH ?? f.colB, cover: f.colCover ?? 40, barDia: colBarDia, tieDia, bars: colBars },
-      { concrete: '#fff', outline: COL, rebar: REBAR }, 1.3)
+      { concrete: SHEET_CONCRETE, outline: COL, rebar: REBAR, tie: TIE_INK }, TIEW)
   }
-  // A–A cut line through the centre
-  const aExt = hp + ts * 1.6
+  // A–A cut line through the centre.
+  //
+  // Clear of the left dimension chain, which stands at hp + 1.2·ts: the marker
+  // used to sit at 1.6·ts and its bold A printed straight through the middle
+  // sub-dimension's text — on the sheet as rendered, "500" and "A" on the same
+  // three characters.
+  const aExt = hp + ts * 3.0
   P.push({ kind: 'line', x1: -aExt, y1: 0, x2: aExt, y2: 0, stroke: INK, width: 0.6, dash: [0.12, 0.06, 0.03, 0.06] })
   for (const sxp of [-1, 1]) {
     P.push({ kind: 'text', x: sxp * aExt, y: -ts * 0.6, text: 'A', size: ts * 0.9, anchor: 'middle', color: INK, weight: 700 })
@@ -282,9 +287,14 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   // and the ties stand outside the rectangle in this view, and aligning to the
   // rect left the last letter under the outer tie line.
   P.push({ kind: 'text', x: cl - ts * 1.4, y: gradeZ - ts * 0.5, text: 'NATURAL GRADE LINE', size: ts * 0.5, anchor: 'end', color: INK, weight: 600 })
-  // footing + column
-  P.push({ kind: 'rect', x: secL, y: footTop, w: B, h: H, stroke: INK, fill: 'none', width: 1.5 })
-  P.push({ kind: 'rect', x: cl, y: colTop, w: cw, h: -colTop, stroke: INK, fill: 'none', width: 1.5 })
+  // footing + column — cut concrete, each with its own cover hairline
+  P.push({ kind: 'rect', x: secL, y: footTop, w: B, h: H, stroke: INK, fill: SHEET_CONCRETE, width: 1.3 })
+  P.push({ kind: 'rect', x: cl, y: colTop, w: cw, h: -colTop, stroke: INK, fill: SHEET_CONCRETE, width: 1.3 })
+  const dashPat: [number, number] = [B * 0.024, B * 0.019]
+  P.push({ kind: 'rect', x: secL + c, y: footTop + c, w: B - 2 * c, h: H - 2 * c, stroke: SHEET_GRID, fill: 'none', width: 0.5, dash: dashPat })
+  const cc = (f.colCover ?? 40) / 1000
+  if (cw > 2 * cc)
+    P.push({ kind: 'rect', x: cl + cc, y: colTop + cc, w: cw - 2 * cc, h: -colTop - cc, stroke: SHEET_GRID, fill: 'none', width: 0.5, dash: dashPat })
   // gravel bedding — packed aggregate between two lines (two staggered rows of
   // rounded stones of mixed size, so it can't be mistaken for reinforcement)
   P.push({ kind: 'line', x1: secL, y1: footBot, x2: secR, y2: footBot, stroke: INK, width: 0.9 })
@@ -307,10 +317,10 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   const upHook = hookLen ? Math.min(hookLen, H * 0.45) : 0
   if (!cg) {
     // the longitudinal bar's hook clears (guards) the outer perpendicular bar
-    rod(upHook ? [[secL + c, zLong - upHook], [secL + c, zLong], [secR - c, zLong], [secR - c, zLong - upHook]]
-               : [[secL + c, zLong], [secR - c, zLong]], rMain)
+    wire(upHook ? [[secL + c, zLong - upHook], [secL + c, zLong], [secR - c, zLong], [secR - c, zLong - upHook]]
+                : [[secL + c, zLong], [secR - c, zLong]], REBAR, BARW)
     for (let i = 0; i < n; i++)
-      P.push({ kind: 'circle', cx: sx0 + matPos(i), cy: zPerp, r: rDot, stroke: REBAR, fill: REBAR, width: 0.4 })
+      P.push({ kind: 'circle', cx: sx0 + matPos(i), cy: zPerp, r: rBar, fill: REBAR })
   }
   // LATERAL TIES first (each a thin closed tube whose ends hook around the outer
   // vertical bars) — then the vertical bars are drawn OVER them white-filled, so
@@ -336,24 +346,21 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
     }
     const band: [number, number] = [colTop, gravBot]
     // A bar crossing the plane rather than lying in it — a mat bar running
-    // north–south, seen end-on — is a DOT, not a rod. Told apart by how far it
+    // north–south, seen end-on — is a DOT, not a line. Told apart by how far it
     // travels along the sheet: a bar seen end-on goes nowhere.
-    const draw = (cage: RebarCage, fill: string) => {
+    const draw = (cage: RebarCage, over: boolean) => {
       for (const r of cage.runs) {
         const pts = projectPath(runPolylines(r)[0] ?? [], S).map(([a, b]) => [sx0 + a, b] as Pt)
         if (pts.length < 2) continue
         const uLo = Math.min(...pts.map((q) => q[0])), uHi = Math.max(...pts.map((q) => q[0]))
         const rr = Math.max(r.dia / 2000, B * 0.007)
-        // A TIE seen edge-on is one horizontal bar, and has to be drawn as one.
-        // Its loop projects to a line traversed twice — out along the top leg
-        // and back along the bottom — and an outlined rod mitres its corners,
-        // so a segment that doubles back sends the two offset sides to an
-        // intersection far outside the column. The first render put every tie
-        // through both faces of the concrete.
+        // A TIE seen edge-on is one horizontal bar, and has to be drawn as one:
+        // its loop projects to a line traversed twice, out along the top leg
+        // and back along the bottom.
         if (r.role === 'tie' || r.role === 'hoop') {
           const v = pts.reduce((a, q) => a + q[1], 0) / pts.length
           if (v < band[0] || v > band[1]) continue
-          rod([[uLo, v], [uHi, v]], rr, fill)
+          wire([[uLo, v], [uHi, v]], TIE_INK, TIEW)
           // The level for the SCHEDULE comes off the run's specified path, not
           // off the drawn loop: a closed tie leans half a diameter either side
           // of its level so its two ends can pass (`selfClearance`), and a mean
@@ -368,26 +375,26 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
         if (uHi - uLo < rr) {
           const mid = pts[Math.floor(pts.length / 2)]!
           if (mid[1] >= band[0] && mid[1] <= band[1]) {
-            P.push({ kind: 'circle', cx: mid[0], cy: mid[1], r: rr * 0.9, stroke: REBAR, fill: REBAR, width: 0.4 })
+            P.push({ kind: 'circle', cx: mid[0], cy: mid[1], r: rBar, fill: REBAR })
           }
           continue
         }
         for (const piece of clipToBand(pts, band[0], band[1])) {
-          if (piece.length > 1) rod(piece as Pt[], rr, fill)
+          if (piece.length > 1) wire(piece as Pt[], REBAR, BARW, over)
         }
       }
     }
     // Ties first, then the verticals white-filled over them — so a vertical
     // reads as passing IN FRONT of the tie that wraps it, which is the
     // convention the rest of this sheet already draws to.
-    if (cg.column) draw({ ...cg.column, runs: cg.column.runs.filter((r) => r.role === 'tie' || r.role === 'hoop') }, 'none')
-    if (cg.footing) draw({ ...cg.footing, runs: cg.footing.runs.filter((r) => r.role === 'mat') }, 'none')
-    if (cg.footing) draw({ ...cg.footing, runs: cg.footing.runs.filter((r) => r.role === 'dowel') }, '#fff')
-    if (cg.column) draw({ ...cg.column, runs: cg.column.runs.filter((r) => r.role === 'vertical') }, '#fff')
+    if (cg.column) draw({ ...cg.column, runs: cg.column.runs.filter((r) => r.role === 'tie' || r.role === 'hoop') }, false)
+    if (cg.footing) draw({ ...cg.footing, runs: cg.footing.runs.filter((r) => r.role === 'mat') }, false)
+    if (cg.footing) draw({ ...cg.footing, runs: cg.footing.runs.filter((r) => r.role === 'dowel') }, true)
+    if (cg.column) draw({ ...cg.column, runs: cg.column.runs.filter((r) => r.role === 'vertical') }, true)
     stX1 = sx0 + cw / 2
   } else {
     let z = 0
-    const drawTie = () => { if (-z > stopZ) { rod([[xL - g, -z + tw], [xL - g, -z], [xR + g, -z], [xR + g, -z + tw]], rTie); tieZs.push(-z) } }
+    const drawTie = () => { if (-z > stopZ) { wire([[xL - g, -z + tw], [xL - g, -z], [xR + g, -z], [xR + g, -z + tw]], TIE_INK, TIEW); tieZs.push(-z) } }
     for (const [count, sp] of tieSched) for (let k = 0; k < count; k++) { z += sp / 1000; drawTie() }
     while (-z > stopZ) { z += tieRest / 1000; drawTie() }
     // column vertical bars (white-filled, on top of the ties) — one per section
@@ -395,8 +402,8 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
     for (const dx of secVx) {
       const outer = Math.abs(dx - sx0) > cw / 2 - cInset - 1e-6
       const dir = dx < sx0 ? -1 : 1
-      rod(outer ? [[dx, colTop + c], [dx, zLong], [dx + dir * (cw * 0.3), zLong]]
-                : [[dx, colTop + c], [dx, zLong]], rMain, '#fff')
+      wire(outer ? [[dx, colTop + c], [dx, zLong], [dx + dir * (cw * 0.3), zLong]]
+                 : [[dx, colTop + c], [dx, zLong]], REBAR, BARW, true)
     }
   }
   // depth dimension chain (embedment / footing / gravel) + overall
@@ -464,8 +471,11 @@ export function buildFootingDetail(f: FootingDetailInput, opts: FootingDetailOpt
   }
   // → the bottom mat bar
   callout(secR - c, zLong, secR + ts * 0.9, zLong + ts * 0.7, `${n}-${f.barDia}mmØ BOTHWAY`, ts * 0.55, REBAR)
+  // Right-aligned clear of the column, as the grade label is: run out from the
+  // footing's left edge it was fourteen characters long and printed through the
+  // column it labels the level of.
   if (f.foundingElev != null)
-    P.push({ kind: 'text', x: secL, y: footTop - ts * 0.5, text: `T.O.F. EL ${f.foundingElev.toFixed(2)} m`, size: ts * 0.5, anchor: 'start', color: PANEL, weight: 600 })
+    P.push({ kind: 'text', x: cl - ts * 0.5, y: footTop - ts * 0.5, text: `T.O.F. EL ${f.foundingElev.toFixed(2)} m`, size: ts * 0.5, anchor: 'end', color: PANEL, weight: 600 })
   P.push({ kind: 'text', x: sx0, y: gravBot + ts * 2.4, text: 'SECTION A-A', size: ts * 0.85, anchor: 'middle', color: INK, weight: 700 })
 
   // ══ detail-tag title block ═════════════════════════════════════════════

@@ -1,4 +1,4 @@
-import { STEEL } from './sheetInk'
+import { SHEET_CONCRETE, SHEET_GRID, STEEL, STEEL_LIGHT } from './sheetInk'
 import { describe, it, expect } from 'vitest'
 import { buildFootingDetail, type FootingDetailInput } from './footingDetail'
 import { planToSvg, type PlanPrimitive } from './planRenderer'
@@ -35,14 +35,28 @@ describe('footingDetail — column-footing detail sheet', () => {
     expect(t.some((s) => s === '8-16mmØ VERT. BARS')).toBe(true)
   })
 
-  it('draws each bar as an OUTLINE tube (closed rebar path), both ways', () => {
-    // each mat bar is one closed rebar tube (rod → no round-join); plan has 2·bars
-    const rebar = d.primitives.filter((p) => p.kind === 'path' && (p as { stroke?: string }).stroke === STEEL && !(p as { join?: string }).join)
-    expect(rebar.length).toBeGreaterThanOrEqual(2 * base.bars)
-    expect(rebar.every((p) => (p as { closed?: boolean }).closed)).toBe(true)
+  it('draws a bar the way the rest of the set does — a line, and a dot where it is cut', () => {
+    // `sectionDetail` settled the conventions for the beam and column details:
+    // steel is a STROKED line in the one accent, transverse steel a tint of it,
+    // and a bar seen end-on a filled dot. This sheet used to outline every bar
+    // as a hollow tube — ties included — in the primary accent.
+    const rebar = d.primitives.filter((p) => p.kind === 'path' && (p as { stroke?: string }).stroke === STEEL)
+    expect(rebar.length).toBeGreaterThanOrEqual(2 * base.bars)      // plan has 2·bars
+    expect(rebar.every((p) => (p as { fill?: string }).fill === 'none')).toBe(true)
+    expect(rebar.some((p) => (p as { closed?: boolean }).closed)).toBe(false)
+    // …and the transverse steel steps back into the tint
+    expect(d.primitives.some((p) => p.kind === 'path' && (p as { stroke?: string }).stroke === STEEL_LIGHT)).toBe(true)
     // filled rebar circles = n section bar-ends + colBars plan vertical bars
     const ends = d.primitives.filter((p) => p.kind === 'circle' && (p as { fill?: string }).fill === STEEL)
     expect(ends.length).toBe(base.bars + (base.colBars ?? 8))
+  })
+
+  it('fills the cut concrete and rules its cover line, like every section on the set', () => {
+    const rects = d.primitives.filter((p) => p.kind === 'rect') as
+      { fill?: string; stroke?: string; dash?: number[] }[]
+    // the pad in plan, the pad in section, and the column in section
+    expect(rects.filter((r) => r.fill === SHEET_CONCRETE).length).toBe(3)
+    expect(rects.filter((r) => r.stroke === SHEET_GRID && r.dash).length).toBe(3)
   })
 
   it('shows the full ring of column vertical bars in plan (not just corners)', () => {
@@ -154,6 +168,25 @@ describe('the footing sheet, drawn from the placed cages', () => {
         expect(c.y).toBeGreaterThanOrEqual(withCages.bounds.minY - 1e-6)
         expect(c.y).toBeLessThanOrEqual(withCages.bounds.maxY + 1e-6)
       }
+    }
+  })
+
+  it('draws the column at the orientation its cage is actually placed in', () => {
+    // A modelled column carries `h` across WORLD X and `b` across world z, and
+    // `FootingDetailInput` names its own axes the other way round. Handed over
+    // unswapped, the sheet cut the cage at the true orientation and drew the
+    // concrete turned 90° to it — a 300×500 column as 300 wide by 500 deep —
+    // so its own bars stood 55 mm outside the concrete, in plan and in section.
+    const cw = bundle.detail.colB / 1000, cd = (bundle.detail.colH ?? bundle.detail.colB) / 1000
+    const dots = withCages.primitives.filter(
+      (p) => p.kind === 'circle' && (p as { fill?: string }).fill === STEEL,
+    ) as { cx: number; cy: number }[]
+    // the PLAN is drawn about the origin; the section sits off to the right
+    const inPlan = dots.filter((q) => Math.abs(q.cx) < bundle.detail.B / 2)
+    expect(inPlan.length).toBeGreaterThanOrEqual(4)
+    for (const q of inPlan) {
+      expect(Math.abs(q.cx)).toBeLessThanOrEqual(cw / 2)
+      expect(Math.abs(q.cy)).toBeLessThanOrEqual(cd / 2)
     }
   })
 

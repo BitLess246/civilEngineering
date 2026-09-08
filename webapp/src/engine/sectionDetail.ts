@@ -26,7 +26,7 @@
 import type { Drawing, PlanPrimitive } from './planRenderer'
 import { cutCages, cutPrimitives, type CageCut, type CageCutResult } from './cageSection'
 import type { RebarCage } from './rebarModel'
-import { SHEET_GRID, SHEET_INK, SHEET_NOTE, STEEL, STEEL_LIGHT } from './sheetInk'
+import { SHEET_CONCRETE, SHEET_GRID, SHEET_INK, SHEET_NOTE, STEEL, STEEL_LIGHT } from './sheetInk'
 
 /** The concrete, in the cut plane's own coordinates, m. */
 export interface SectionOutline { u0: number; v0: number; u1: number; v1: number }
@@ -53,7 +53,6 @@ export interface SectionDetailDrawing extends Drawing {
   result: CageCutResult
 }
 
-const CONCRETE = '#eef3f8'
 
 /**
  * Build a section through one or more cages.
@@ -68,7 +67,7 @@ export function buildSectionDetail(i: SectionDetailInput): SectionDetailDrawing 
   const res = cutCages(i.cages, i.cut)
 
   // ── concrete ──
-  P.push({ kind: 'rect', x: u0, y: v0, w, h, fill: CONCRETE, stroke: SHEET_INK, width: 1.3 })
+  P.push({ kind: 'rect', x: u0, y: v0, w, h, fill: SHEET_CONCRETE, stroke: SHEET_INK, width: 1.3 })
   if (i.cover != null && i.cover > 0) {
     const c = i.cover / 1000
     if (w > 2 * c && h > 2 * c) {
