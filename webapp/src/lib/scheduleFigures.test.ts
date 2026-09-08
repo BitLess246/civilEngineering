@@ -5,7 +5,7 @@ import { buildStructureCages } from '../engine/cageBuilder'
 import { elevationBundleByMember, columnStackByMember, beamSectionZones } from './planDetails'
 import {
   beamSectionNotes, beamSectionDrawing, columnSectionNotes, columnSectionDrawing,
-  beamElevationDrawing, columnElevationDrawing, columnStoreyOf,
+  beamElevationDrawing, columnElevationDrawing, columnStoreyOf, type SectionRowDesign,
 } from './scheduleFigures'
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -88,5 +88,37 @@ describe('the drawings', () => {
     expect(d.title).toMatch(/^COLUMN DETAIL/)
     expect(texts(d)).toContain(col.id)
     expect(columnStoreyOf(undefined, col.id)).toBeUndefined()
+  })
+})
+
+describe('which bars the check did not use', () => {
+  // A cut is drawn from the cage, so it shows every bar that is there. On a
+  // singly-reinforced check the far face earned nothing — it is the §409.7.3.8
+  // continuous share and the stirrup hangers — and nothing said so.
+  const rect = { b: 250, h: 300, cover: 40, barDia: 20, tieDia: 10 }
+  const row = (over: Partial<SectionRowDesign>, hogging = false) => beamSectionNotes(
+    { x: 0, label: 'S', hogging, design: { bars: 2, sAdopt: 200, legs: 2, layers: [2], comprBars: 0, comprLayers: [], ...over } },
+    rect,
+  )
+
+  it('names the face the capacity came from, and calls the other one detailing', () => {
+    expect(row({ mode: 'SRRB' }).join(' ')).toContain('φMn FROM THE BOTTOM STEEL ALONE')
+    expect(row({ mode: 'SRRB' }, true).join(' ')).toContain('φMn FROM THE TOP STEEL ALONE')
+    expect(row({ mode: 'SRRB' }).join(' ')).toContain('NOT COUNTED')
+  })
+
+  it('says instead whether the compression steel counted, when there is some', () => {
+    expect(row({ mode: 'DRRB', comprBars: 3 }).join(' ')).toContain('COUNTED (DOUBLY REINFORCED)')
+    expect(row({ mode: 'DRRB', comprBars: 3, comprEffective: false }).join(' '))
+      .toContain('NOT COUNTED: f\'s')
+    // and a doubly-reinforced section makes no claim about the other face
+    expect(row({ mode: 'DRRB', comprBars: 3 }).join(' ')).not.toContain('ALONE')
+  })
+
+  it('says nothing at all when the caller did not supply a mode', () => {
+    // Silence beats a claim the caller never made — every existing caller.
+    const plain = row({}).join(' ')
+    expect(plain).not.toContain('NOT COUNTED')
+    expect(plain).not.toContain('ALONE')
   })
 })
