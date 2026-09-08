@@ -484,10 +484,25 @@ findings and an explicit priority order. One PR per phase.
    lettered. Two painter bugs fell out of rendering it: a caption was split at
    6 pt and drawn at whatever font the drawing left (so it ran past the right
    margin), and the cursor advanced a flat 5 mm for a caption of any height.
-   **5b (next)** — mode shapes 1–3, the nonlinear roof-displacement and
-   base-shear traces with hinge status, and the pushover hinge locations and
-   yield sequence. All three are figures on results the engine already
-   produces, drawn with the same module.
+   **5b** — the dynamics sections, which were the worst of it: a mode is a
+   SHAPE and D.1 could only give its period; a response history reported as
+   three peak numbers cannot say whether the structure rang down or ratcheted
+   one way and stayed there; and a pushover's whole finding is the PATTERN of
+   hinges, which F.2 lists one row at a time. Added **D.1f–D.3f** the first
+   three mode shapes (unit-normalised, straight chords — the lumped-mass
+   eigenproblem carries no end rotations to curve with — and a mode with no
+   translational mass is NAMED torsional), **E.1f/E.2f** the roof-displacement
+   and base-shear traces with the elastic reference overlaid dashed and the
+   peak marked, **E.3f** the equivalent plane frame the history actually ran
+   on (its member ids are the condensed frame's, so its hinges must never be
+   drawn on the model), and **F.2f** the pushover hinge locations numbered in
+   formation order and coloured first-to-last. `seriesDrawing` is now the one
+   chart renderer: `capacityCurveDrawing` drew its own 100 × 60 box that the
+   painter then magnified 1.8×, so every pushover figure carried type half
+   again as large as the rest of the appendix. And rotated axis labels are
+   anchored at their START — jsPDF applies alignment in unrotated space and
+   then turns the result, so a centred vertical label slid half its own width
+   into the page margin, which is where every chart's y-caption was printing.
 
 Also still open from the review: **item 15**, a design snapshot / version block
 (project ID, analysis ID, design version, model revision, engine version, model

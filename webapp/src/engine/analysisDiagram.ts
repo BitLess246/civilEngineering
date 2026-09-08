@@ -101,9 +101,13 @@ const BEAM_INK = '#334155'
 const GHOST = SHEET_GRID
 const LOAD_INK = '#b45309'
 const DEF_INK = '#0f4c92'
+const MODE_INK = '#7c3aed'
+const TRACE_INKS = ['#0f4c92', '#b45309', '#0f766e']
 
 const f1 = (v: number) => v.toFixed(1)
 const f2 = (v: number) => v.toFixed(2)
+const f3 = (v: number) => v.toFixed(3)
+const pct = (v: number) => `${(v * 100).toFixed(0)}%`
 
 /** Title strip + a one-line legend, in the same place on every figure. */
 function frameChrome(P: PlanPrimitive[], fit: DiagramFit, title: string, legend?: string): void {
@@ -677,3 +681,269 @@ export function bestView(model: StructuralModel): DiagramView {
 }
 
 export { SHEET_GRID }
+
+// ── mode shapes ──────────────────────────────────────────────────────────
+/**
+ * D.x — one mode shape, drawn over the model it belongs to.
+ *
+ * `Mode.shape` is a UNITLESS node-displacement vector normalised so the
+ * largest component is 1, which is the only sensible normalisation for a
+ * picture: a mode has no amplitude of its own. So the amplification here is
+ * simply "draw the peak at `targetFraction` of the model diagonal", and the
+ * figure says the shape is normalised rather than implying millimetres.
+ *
+ * STRAIGHT CHORDS, not the cubic the deflected shape uses. The eigenproblem
+ * is solved on the translational mass DOFs alone (`modal.ts` is lumped-mass),
+ * so there are no end rotations to interpolate with — drawing a curve would
+ * be inventing curvature the analysis never computed.
+ */
+export function modeShapeDiagram(
+  model: StructuralModel, mode: { period: number; shape: Record<string, [number, number, number]>; effMassRatio: [number, number, number] },
+  index: number, o: ModelDiagramOpts & { targetFraction?: number } = {},
+): Drawing {
+  const view = o.view ?? 'iso'
+  const xs = model.nodes.map((n) => n.x), ys = model.nodes.map((n) => n.y), zs = model.nodes.map((n) => n.z)
+  const span = model.nodes.length
+    ? Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), Math.max(...zs) - Math.min(...zs))
+    : 1
+  const peak = Math.max(1e-12, ...Object.values(mode.shape).map((v) => Math.hypot(v[0], v[1], v[2])))
+  const amp = ((o.targetFraction ?? 0.07) * span) / peak
+  const moved = model.nodes.map((n) => {
+    const s = mode.shape[n.id] ?? [0, 0, 0]
+    return { id: n.id, x: n.x + amp * s[0], y: n.y + amp * s[1], z: n.z + amp * s[2] }
+  })
+  const fit = fitView([...model.nodes, ...moved], view, { w: o.w, h: o.h })
+  const P: PlanPrimitive[] = [...wireframe(model, fit, true)]
+  const byId = new Map(moved.map((n) => [n.id, n]))
+  for (const m of model.members) {
+    const a = byId.get(m.i), b = byId.get(m.j)
+    if (!a || !b) continue
+    const [x1, y1] = fit.at(a), [x2, y2] = fit.at(b)
+    P.push({ kind: 'line', x1, y1, x2, y2, stroke: MODE_INK, width: 0.7 })
+  }
+  for (const s of model.supports) {
+    const n = model.nodes.find((x) => x.id === s.node)
+    if (!n) continue
+    const [x, y] = fit.at(n)
+    P.push(...supportSymbol(x, y, s.fixity))
+  }
+  const [rx, ry, rz] = mode.effMassRatio
+  // A MODE SHAPE HAS NO AMPLIFICATION FACTOR, because it has no amplitude:
+  // printing "×1.0" beside a unit-normalised eigenvector says nothing. What
+  // the reader needs is that the peak was drawn at a chosen fraction of the
+  // structure — and, when no direction carries mass, that the mode is
+  // torsional, which is the single most useful thing a mode figure can say.
+  const torsional = Math.max(rx, ry, rz) < 0.05
+  frameChrome(P, fit, `MODE ${index} — T = ${f3(mode.period)} s`,
+    `effective mass ${pct(rx)} X · ${pct(ry)} Y · ${pct(rz)} Z`
+    + `${torsional ? ' — no translational mass, a TORSIONAL mode' : ''}`
+    + ` · unit-normalised shape, peak drawn at ${pct(o.targetFraction ?? 0.07)} of the model diagonal`)
+  return { primitives: P, bounds: { minX: 0, minY: 0, maxX: fit.box.w, maxY: fit.box.h } }
+}
+
+// ── time-history traces ──────────────────────────────────────────────────
+export interface Series {
+  xs: number[]
+  ys: number[]
+  label?: string
+  color?: string
+  /** Drawn dashed — the elastic reference against the inelastic run. */
+  dashed?: boolean
+  /** Dot at each station; `true` in the parallel array makes it an EVENT dot
+   *  (larger, in the warning ink) — which is how a pushover curve marks the
+   *  step where a new hinge formed. */
+  dots?: boolean[]
+}
+
+export interface SeriesOpts {
+  title: string
+  xLabel: string
+  yLabel: string
+  w?: number; h?: number
+  /** Mark the largest |y| on the first series and print it. */
+  markPeak?: boolean
+  note?: string
+}
+
+/**
+ * A signed XY plot — the trace figure for a time history.
+ *
+ * `capacityCurveDrawing` cannot serve: it assumes both axes start at zero and
+ * rise, which is true of a pushover curve and false of every response
+ * history, where the interesting half of the record is below the axis. Here
+ * the y range spans the data and the zero line is drawn where zero actually
+ * falls.
+ */
+export function seriesDrawing(series: Series[], o: SeriesOpts): Drawing {
+  const W = o.w ?? DIAGRAM_W, H = o.h ?? 78
+  const L = 20, R = 4, T = 10, B = 13
+  const all = series.filter((s) => s.xs.length > 0)
+  const xMin = all.length ? Math.min(...all.flatMap((s) => s.xs)) : 0
+  const xMax = all.length ? Math.max(...all.flatMap((s) => s.xs)) : 1
+  const yLo = Math.min(0, ...all.flatMap((s) => s.ys))
+  const yHi = Math.max(0, ...all.flatMap((s) => s.ys))
+  const dx = Math.max(xMax - xMin, 1e-9), dy = Math.max(yHi - yLo, 1e-9)
+  const X = (v: number) => L + ((W - L - R) * (v - xMin)) / dx
+  const Y = (v: number) => H - B - ((H - B - T) * (v - yLo)) / dy
+  const P: PlanPrimitive[] = []
+  P.push({ kind: 'text', x: 2, y: 5, text: o.title, size: 3.2, anchor: 'start', color: SHEET_INK, weight: 700 })
+  for (const f of [0, 0.25, 0.5, 0.75, 1]) {
+    const yv = yLo + dy * f
+    P.push({ kind: 'line', x1: L, y1: Y(yv), x2: W - R, y2: Y(yv), stroke: SHEET_GRID, width: 0.25 })
+    P.push({ kind: 'text', x: L - 1.2, y: Y(yv) + 0.7, text: f2(yv), size: 2.1, anchor: 'end', color: SHEET_NOTE })
+    P.push({ kind: 'text', x: X(xMin + dx * f), y: H - B + 3.2, text: f2(xMin + dx * f), size: 2.1, anchor: 'middle', color: SHEET_NOTE })
+  }
+  // THE ZERO LINE WHERE ZERO IS. A response history straddles it; drawing the
+  // axis at the bottom of the box would put the baseline somewhere the data
+  // never goes and make every trace look one-sided.
+  P.push({ kind: 'line', x1: L, y1: Y(0), x2: W - R, y2: Y(0), stroke: SHEET_INK, width: 0.5 })
+  P.push({ kind: 'line', x1: L, y1: T, x2: L, y2: H - B, stroke: SHEET_INK, width: 0.5 })
+  series.forEach((s, k) => {
+    if (s.xs.length < 2) return
+    const ink = s.color ?? TRACE_INKS[k % TRACE_INKS.length]
+    P.push({
+      kind: 'path', stroke: ink, width: s.dashed ? 0.4 : 0.6, fill: 'none', join: 'round',
+      ...(s.dashed ? { dash: [1.4, 1.1] } : {}),
+      cmds: s.xs.map((x, n) => ({ c: (n === 0 ? 'M' : 'L') as 'M' | 'L', x: X(x), y: Y(s.ys[n] ?? 0) })),
+    })
+    if (s.dots) s.xs.forEach((x, n) => {
+      const marked = s.dots![n]
+      P.push({
+        kind: 'circle', cx: X(x), cy: Y(s.ys[n] ?? 0), r: marked ? 0.9 : 0.55,
+        fill: marked ? SHEET_WARN : ink, stroke: 'none',
+      })
+    })
+    if (s.label) P.push({
+      kind: 'text', x: W - R, y: T + 3 + k * 3.2, text: s.label, size: 2.3, anchor: 'end',
+      color: ink, weight: 600,
+    })
+  })
+  if (o.markPeak && all[0]) {
+    const s = all[0]
+    let best = 0
+    for (let k = 1; k < s.ys.length; k++) if (Math.abs(s.ys[k]!) > Math.abs(s.ys[best]!)) best = k
+    const px = X(s.xs[best]!), py = Y(s.ys[best]!)
+    P.push({ kind: 'circle', cx: px, cy: py, r: 0.9, fill: SHEET_WARN, stroke: 'none' })
+    P.push({
+      kind: 'text', x: px, y: py + (s.ys[best]! >= 0 ? -2 : 3.4),
+      text: `${f2(s.ys[best]!)} @ ${f2(s.xs[best]!)}`, size: 2.2, anchor: 'middle', color: SHEET_WARN,
+    })
+  }
+  P.push({ kind: 'text', x: (L + W - R) / 2, y: H - 1.5, text: o.xLabel, size: 2.5, anchor: 'middle', color: SHEET_INK, weight: 600 })
+  // ROTATED TEXT IS ANCHORED AT ITS START, never centred. jsPDF applies the
+  // alignment offset in UNROTATED space and then turns the result, so a
+  // centred vertical label slides half its own width to the left — off the
+  // drawing box and into the page margin, which is exactly where the y-axis
+  // caption of every chart in this appendix was printing.
+  P.push({ kind: 'text', x: 4.2, y: H - B, text: o.yLabel, size: 2.5, anchor: 'start', color: SHEET_INK, weight: 600, rotate: -90 })
+  if (o.note) P.push({ kind: 'text', x: 2, y: H - 5.5, text: o.note, size: 2.2, anchor: 'start', color: SHEET_NOTE })
+  return { primitives: P, bounds: { minX: 0, minY: 0, maxX: W, maxY: H } }
+}
+
+// ── hinges ───────────────────────────────────────────────────────────────
+export interface HingeMark {
+  member: string
+  end: 'i' | 'j'
+  /** Order it formed in — printed beside the marker. Omitted ⇒ no number. */
+  order?: number
+  /** How far into yield, for the fill. 1 = at capacity. */
+  utilisation?: number
+}
+
+/** Where a hinge marker sits: `inset` of the member's length in from its end,
+ *  so two hinges at one joint do not stack on the node. */
+const HINGE_INSET = 0.13
+
+/**
+ * F.x — WHERE THE HINGES FORMED, and in what order.
+ *
+ * The pushover table lists `bx0.1.2 @ i` sixteen times; the figure says
+ * whether the sequence is a beam mechanism (hinges in the beams, columns
+ * intact — what a capacity design is FOR) or a soft storey (a row of hinges
+ * at one level). That judgement is the whole reason a pushover is run, and it
+ * cannot be made from the table.
+ *
+ * Markers are inset from the member end rather than drawn on the node, so the
+ * two hinges either side of a joint are told apart.
+ */
+export function hingeDiagram(
+  model: StructuralModel, hinges: HingeMark[], o: ModelDiagramOpts & { caseName?: string; subtitle?: string } = {},
+): Drawing {
+  const view = o.view ?? 'iso'
+  const fit = fitView(model.nodes, view, { w: o.w, h: o.h })
+  const byId = new Map(model.nodes.map((n) => [n.id, n]))
+  const memById = new Map(model.members.map((m) => [m.id, m]))
+  const P: PlanPrimitive[] = [...wireframe(model, fit)]
+  let drawn = 0
+  const orders = hinges.map((h) => h.order).filter((n): n is number => n != null)
+  const maxOrder = orders.length ? Math.max(...orders) : 0
+  for (const h of hinges) {
+    const m = memById.get(h.member)
+    const a = m && byId.get(m.i), b = m && byId.get(m.j)
+    if (!a || !b) continue
+    const t = h.end === 'i' ? HINGE_INSET : 1 - HINGE_INSET
+    const [x, y] = fit.at({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t })
+    // Early hinges are the ones that set the mechanism, so they read hottest.
+    const f = maxOrder > 0 && h.order != null ? (h.order - 1) / Math.max(1, maxOrder - 1) : 0
+    const ink = f < 0.34 ? '#b91c1c' : f < 0.67 ? '#d97706' : '#0f766e'
+    // The marker grows with the number it has to hold — a two-digit order in
+    // a disc sized for one digit prints outside its own dot.
+    const label = h.order != null ? String(h.order) : ''
+    const r = 1.35 + 0.32 * Math.max(0, label.length - 1)
+    P.push({ kind: 'circle', cx: x, cy: y, r, fill: ink, stroke: '#ffffff', width: 0.3 })
+    if (label)
+      P.push({ kind: 'text', x, y: y + 0.65, text: label, size: 1.8, anchor: 'middle', color: '#ffffff', weight: 700 })
+    drawn++
+  }
+  frameChrome(P, fit, `PLASTIC HINGES${o.caseName ? ` — ${o.caseName}` : ''}`,
+    o.subtitle ?? `${drawn} hinge${drawn === 1 ? '' : 's'} drawn at the member end they formed at · red = first to yield, teal = last`)
+  return { primitives: P, bounds: { minX: 0, minY: 0, maxX: fit.box.w, maxY: fit.box.h } }
+}
+
+/**
+ * The EQUIVALENT PLANE FRAME the nonlinear time history actually ran on —
+ * not the model.
+ *
+ * `nonlinearFrameModel` condenses the building by combining every frame line
+ * parallel to the loading direction, so its member ids are the condensed
+ * frame's and mean nothing on the 3-D model. Drawing its hinges on the model
+ * would put them on members that were never analysed. This draws the frame
+ * that was.
+ */
+export function planeFrameDiagram(
+  frame: { nodes: { id: string; x: number; y: number }[]; members: { id: string; i: string; j: string }[]; supports?: { node: string }[] },
+  hinges: HingeMark[] = [], o: { w?: number; h?: number; title?: string; legend?: string } = {},
+): Drawing {
+  const pts = frame.nodes.map((n) => ({ x: n.x, y: n.y, z: 0 }))
+  const fit = fitView(pts, 'xy', { w: o.w, h: o.h })
+  const byId = new Map(frame.nodes.map((n) => [n.id, { x: n.x, y: n.y, z: 0 }]))
+  const P: PlanPrimitive[] = []
+  for (const m of frame.members) {
+    const a = byId.get(m.i), b = byId.get(m.j)
+    if (!a || !b) continue
+    const [x1, y1] = fit.at(a), [x2, y2] = fit.at(b)
+    P.push({ kind: 'line', x1, y1, x2, y2, stroke: BEAM_INK, width: 0.6 })
+  }
+  for (const n of frame.nodes) {
+    const [x, y] = fit.at({ x: n.x, y: n.y, z: 0 })
+    P.push({ kind: 'circle', cx: x, cy: y, r: 0.6, fill: SHEET_INK, stroke: 'none' })
+  }
+  for (const s of frame.supports ?? []) {
+    const n = byId.get(s.node)
+    if (!n) continue
+    const [x, y] = fit.at(n)
+    P.push(...supportSymbol(x, y, 'fixed'))
+  }
+  const memById = new Map(frame.members.map((m) => [m.id, m]))
+  for (const h of hinges) {
+    const m = memById.get(h.member)
+    const a = m && byId.get(m.i), b = m && byId.get(m.j)
+    if (!a || !b) continue
+    const t = h.end === 'i' ? HINGE_INSET : 1 - HINGE_INSET
+    const [x, y] = fit.at({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: 0 })
+    P.push({ kind: 'circle', cx: x, cy: y, r: 1.4, fill: SHEET_WARN, stroke: '#ffffff', width: 0.3 })
+  }
+  P.push({ kind: 'text', x: 2, y: 5, text: o.title ?? 'EQUIVALENT PLANE FRAME', size: 3.2, anchor: 'start', color: SHEET_INK, weight: 700 })
+  if (o.legend) P.push({ kind: 'text', x: 2, y: fit.box.h - 1.5, text: o.legend, size: 2.4, anchor: 'start', color: SHEET_NOTE })
+  return { primitives: P, bounds: { minX: 0, minY: 0, maxX: fit.box.w, maxY: fit.box.h } }
+}

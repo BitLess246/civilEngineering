@@ -31,12 +31,13 @@ import type { BiaxialPushoverResult } from '../engine/biaxialFrameModel'
 import type { NonlinearModelResult } from '../engine/nonlinearModel'
 import type { NonlinearFrameModelResult } from '../engine/nonlinearFrameModel'
 import type { RebarCage } from '../engine/rebarModel'
-import type { Drawing, PlanPrimitive } from '../engine/planRenderer'
+import type { Drawing } from '../engine/planRenderer'
 import { WOOD_SPECIES } from '../engine/woodDesign'
 import { validateMesh } from '../engine/meshValidation'
 import {
   modelDiagram, loadDiagram, deflectedDiagram, reactionDiagram, forceDiagram,
-  bestView, CATEGORY_LABEL, type DiagramView,
+  modeShapeDiagram, seriesDrawing, hingeDiagram, planeFrameDiagram,
+  bestView, CATEGORY_LABEL, type DiagramView, type HingeMark,
 } from '../engine/analysisDiagram'
 
 export type AppendixKey = 'model' | 'loading' | 'analysis' | 'modal' | 'nonlinear' | 'pushover' | 'optimization' | 'qa'
@@ -597,11 +598,27 @@ function modalSection(i: AppendixInput): AppendixSection {
         : [['—', 'Regular', 'torsional, soft-storey, mass and vertical-geometric checks all pass', '—', '—', 'Regular']],
     })
   }
+  // THE FIRST THREE MODES, DRAWN. D.1 lists the periods and the effective mass
+  // and cannot say what a mode IS — whether the fundamental is a sway, a
+  // torsion or a single soft storey, which is the thing that decides whether
+  // the model is behaving. Three, because a fourth rarely changes the reading
+  // and each one is a figure.
+  const figures: AppendixFigure[] = []
+  if (i.modal && i.model.nodes.length) {
+    const view = bestView(i.model)
+    i.modal.modes.slice(0, 3).forEach((mo, k) => {
+      figures.push({
+        caption: `D.${k + 1}f Mode ${k + 1} — T = ${f3(mo.period)} s, effective mass ${pct(mo.effMassRatio[0])} X / ${pct(mo.effMassRatio[1])} Y / ${pct(mo.effMassRatio[2])} Z. The shape is normalised to a unit peak and drawn at the amplification printed on the figure; a mode has no amplitude of its own. Members are drawn as straight chords because the lumped-mass eigenproblem carries no end rotations to curve them with.`,
+        drawing: modeShapeDiagram(i.model, mo, k + 1, { view }),
+      })
+    })
+  }
   const available = tables.length > 0
   return {
     key: 'modal', letter: LETTERS.modal, title: APPENDIX_TITLES.modal, available,
     unavailable: available ? undefined : 'No modal, response-spectrum, drift or regularity run.',
     stats: stats.length ? stats : undefined, tables, notes: notes.length ? notes : undefined,
+    figures: figures.length ? figures : undefined,
   }
 }
 
@@ -610,6 +627,7 @@ function nonlinearSection(i: AppendixInput): AppendixSection {
   const tables: AppendixTable[] = []
   const stats: AppendixStat[] = []
   const notes: string[] = []
+  const figures: AppendixFigure[] = []
   const h = i.nonlinearHinge
   if (h?.inelastic) {
     const ie = h.inelastic, el = h.elastic
@@ -629,6 +647,43 @@ function nonlinearSection(i: AppendixInput): AppendixSection {
       notes.push(`Elastic reference run: peak displacement ${mm(el.response.peakDisp)} mm, peak base shear ${f1(el.response.peakBaseShear)} kN — inelastic/elastic displacement ratio ${f2(r.peakDisp / Math.max(el.response.peakDisp, 1e-9))}, base-shear ratio ${f2(r.peakBaseShear / Math.max(el.response.peakBaseShear, 1e-9))}.`)
     }
     notes.push(`Rayleigh damping C = αM + βK with α ${ie.rayleigh.alpha.toExponential(3)}, β ${ie.rayleigh.beta.toExponential(3)}.`)
+    // TWO TRACES AND A FRAME. A response history reported as three peak
+    // numbers cannot say whether the structure rang down or ratcheted one way
+    // and stayed there — and a permanent offset at the end of the record is
+    // the difference between damage and collapse. The elastic reference is
+    // overlaid dashed, because the inelastic/elastic ratio in the note is
+    // exactly the comparison the reader wants to see rather than be told.
+    figures.push({
+      caption: `E.1f Control-node displacement — the inelastic run against its elastic reference. The marked point is the peak; where the trace ends away from zero, that is the permanent offset left by the record.`,
+      drawing: seriesDrawing([
+        { xs: r.t, ys: r.disp.map((v) => v * 1000), label: 'inelastic' },
+        ...(el?.response ? [{ xs: el.response.t, ys: el.response.disp.map((v) => v * 1000), label: 'elastic', dashed: true }] : []),
+      ], { title: 'ROOF DISPLACEMENT HISTORY', xLabel: 'time (s)', yLabel: 'displacement (mm)', markPeak: true }),
+    })
+    figures.push({
+      caption: `E.2f Base shear — the same two runs. Yielding caps the inelastic trace below the elastic demand; the height of the gap is what the hinges bought.`,
+      drawing: seriesDrawing([
+        { xs: r.t, ys: r.baseShear, label: 'inelastic' },
+        ...(el?.response ? [{ xs: el.response.t, ys: el.response.baseShear, label: 'elastic', dashed: true }] : []),
+      ], { title: 'BASE SHEAR HISTORY', xLabel: 'time (s)', yLabel: 'base shear (kN)', markPeak: true }),
+    })
+    // THE FRAME THE HISTORY ACTUALLY RAN ON. E.1's table lists hinges on
+    // members called `6000|0~6000|3000`, which exist nowhere in the model —
+    // `nonlinearFrameModel` condenses the building by combining every frame
+    // line parallel to the shaking, and those are the condensed frame's own
+    // ids. The figure is worth printing whether or not anything yielded,
+    // because until now nothing in the report showed the reader that the
+    // time history ran on a reduced structure at all.
+    const marks: HingeMark[] = r.hinges.filter((x) => x.yielded).map((x) => ({ member: x.member, end: x.end }))
+    figures.push({
+      caption: marks.length
+        ? `E.3f Where the hinges yielded — on the EQUIVALENT PLANE FRAME the history ran on, not on the 3-D model. ${ie.frame.framesCombined} frame line${ie.frame.framesCombined === 1 ? '' : 's'} parallel to the shaking were combined into it, so its member ids are its own; drawing these on the model would put them on members that were never analysed.`
+        : `E.3f The EQUIVALENT PLANE FRAME the history ran on — ${ie.frame.framesCombined} frame line${ie.frame.framesCombined === 1 ? '' : 's'} parallel to the shaking combined into one, ${ie.frame.transverseDropped} transverse member${ie.frame.transverseDropped === 1 ? '' : 's'} dropped as carrying no in-plane stiffness. No hinge yielded under this record, so the run is elastic and E.1's rotations are all zero.`,
+      drawing: planeFrameDiagram(ie.frame, marks, {
+        title: marks.length ? 'YIELDED HINGES — EQUIVALENT FRAME' : 'EQUIVALENT FRAME — NO HINGE YIELDED',
+        legend: `${marks.length} of ${r.hinges.length} hinges yielded · ${ie.frame.framesCombined} frame line(s) combined, ${ie.frame.transverseDropped} transverse member(s) dropped`,
+      }),
+    })
     const yielded = r.hinges.filter((x) => x.yielded)
     tables.push({
       title: 'E.1 Plastic hinges — member-end hinge model',
@@ -663,6 +718,7 @@ function nonlinearSection(i: AppendixInput): AppendixSection {
     key: 'nonlinear', letter: LETTERS.nonlinear, title: APPENDIX_TITLES.nonlinear, available,
     unavailable: available ? undefined : 'No nonlinear time-history has been run.',
     stats: available ? stats : undefined, tables, notes: notes.length ? notes : undefined,
+    figures: figures.length ? figures : undefined,
   }
 }
 
@@ -676,28 +732,16 @@ function nonlinearSection(i: AppendixInput): AppendixSection {
 export function capacityCurveDrawing(
   pts: { x: number; y: number; mark?: boolean }[], o: { title: string; xLabel: string; yLabel: string },
 ): Drawing {
-  const W = 100, H = 60, L = 14, R = 3, T = 8, B = 12
-  const xMax = Math.max(1e-9, ...pts.map((p) => p.x)), yMax = Math.max(1e-9, ...pts.map((p) => p.y))
-  const X = (v: number) => L + ((W - L - R) * v) / xMax
-  const Y = (v: number) => H - B - ((H - B - T) * v) / yMax
-  const P: PlanPrimitive[] = []
-  const INK = '#1e293b', GRID = '#cbd5e1', LINE = '#0f4c92', DOT = '#dc2626'
-  P.push({ kind: 'text', x: L, y: T - 4, text: o.title, size: 3.2, anchor: 'start', color: INK, weight: 700 })
-  for (const f of [0, 0.25, 0.5, 0.75, 1]) {
-    P.push({ kind: 'line', x1: L, y1: Y(yMax * f), x2: W - R, y2: Y(yMax * f), stroke: GRID, width: 0.5 })
-    P.push({ kind: 'text', x: L - 1.2, y: Y(yMax * f), text: f1(yMax * f), size: 2.2, anchor: 'end', color: INK })
-    P.push({ kind: 'text', x: X(xMax * f), y: H - B + 3, text: f1(xMax * f), size: 2.2, anchor: 'middle', color: INK })
-  }
-  P.push({ kind: 'line', x1: L, y1: Y(0), x2: W - R, y2: Y(0), stroke: INK, width: 1 })
-  P.push({ kind: 'line', x1: L, y1: Y(0), x2: L, y2: T, stroke: INK, width: 1 })
-  if (pts.length > 1) P.push({
-    kind: 'path', stroke: LINE, width: 1.6, fill: 'none', join: 'round', cap: 'round',
-    cmds: pts.map((p, k) => ({ c: k === 0 ? 'M' as const : 'L' as const, x: X(p.x), y: Y(p.y) })),
-  })
-  for (const p of pts) P.push({ kind: 'circle', cx: X(p.x), cy: Y(p.y), r: p.mark ? 0.9 : 0.6, fill: p.mark ? DOT : LINE, stroke: 'none' })
-  P.push({ kind: 'text', x: (L + W - R) / 2, y: H - 1.5, text: o.xLabel, size: 2.6, anchor: 'middle', color: INK, weight: 600 })
-  P.push({ kind: 'text', x: 3, y: (T + H - B) / 2, text: o.yLabel, size: 2.6, anchor: 'middle', color: INK, weight: 600, rotate: -90 })
-  return { primitives: P, bounds: { minX: 0, minY: 0, maxX: W, maxY: H } }
+  // ONE CHART RENDERER. This drew its own axes in a 100 × 60 box, which the
+  // painter then magnified 1.8× to fill the page — so the pushover figures
+  // carried type half again as large as every other figure in the appendix,
+  // and they inherited the centred-rotated-label defect on their own copy of
+  // it. `seriesDrawing` is the same chart with a signed y-axis; an event is a
+  // marked dot.
+  return seriesDrawing(
+    [{ xs: pts.map((p) => p.x), ys: pts.map((p) => p.y), dots: pts.map((p) => !!p.mark) }],
+    { title: o.title, xLabel: o.xLabel, yLabel: o.yLabel },
+  )
 }
 
 function pushoverSection(i: AppendixInput): AppendixSection {
@@ -738,6 +782,23 @@ function pushoverSection(i: AppendixInput): AppendixSection {
           p.newHinge ? `${p.newHinge.member} @${p.newHinge.end}` : '—',
           p.newHinge ? (p.newHinge.type === 'moment' ? `M${p.newHinge.axis ?? ''}` : p.newHinge.type === 'shear' ? `V${p.newHinge.axis ?? ''}` : 'axial') + (h?.Mpc != null ? ` (Mpc ${f1(h.Mpc)})` : '') : '—',
           String(p.numHinges)]
+      }),
+    })
+    // WHERE, AND IN WHAT ORDER. F.2 lists sixteen rows of `bx0.1.2 @ i` and
+    // cannot say whether the sequence is a beam mechanism — hinges in the
+    // beams with the columns intact, which is what a capacity design is FOR —
+    // or a soft storey, a row of hinges at one level. That judgement is the
+    // whole reason a pushover is run, and the table cannot support it.
+    //
+    // These hinges belong to the MODEL: `runPushoverModel` pushes
+    // `modelToFrame3D` directly, so the ids are the model's own. (The
+    // nonlinear time history in E does not, and its figure says so.)
+    const marks: HingeMark[] = po.result.hinges.map((x, k) => ({ member: x.member, end: x.end, order: k + 1 }))
+    if (marks.length) figures.push({
+      caption: `F.2f Hinge locations and yield sequence — ${marks.length} hinge${marks.length === 1 ? '' : 's'} numbered in the order they formed, drawn at the member end they formed at. Read the pattern, not the count: hinges in the beams with the columns intact is the intended mechanism; a row of them at one storey is not. The run ${po.result.mechanism ? 'ended in a collapse mechanism' : 'reached the last event without forming a mechanism'}.`,
+      drawing: hingeDiagram(i.model, marks, {
+        view: bestView(i.model),
+        subtitle: `${marks.length} hinges · numbered in formation order · red = first to yield, teal = last · control node ${po.controlNode}`,
       }),
     })
     notes.push('Event-to-event plastic-hinge method: the lateral pattern is normalised to Σ = 1, so the load factor λ is the base shear. No target displacement or performance point is computed — the curve is reported to the last event or the collapse mechanism, whichever came first.')
