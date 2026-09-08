@@ -168,6 +168,39 @@ describe('cutting a column cage', () => {
       .toBeLessThanOrEqual((placed.length * col.tieDia) / 1000 + 1e-9)
   })
 
+  it('takes the WHOLE nearest set even when the cut lands midway between two', () => {
+    // The failing case, and the ordinary one: a section drawn at mid-storey
+    // rarely lands ON a set. Ranked by distance alone the two neighbouring
+    // sets INTERLEAVE — the cross tie below is exactly as near as the hoop
+    // above — so a chain grown outward from the nearest RUN broke on its first
+    // step across the cut and the section drew a cross tie with no hoop around
+    // it. Measured over a designed frame, 8 of 30 column sections.
+    const setOf = (mark: string) => /-[A-Z](\d+)/.exec(mark)?.[1]
+    const ties = colCage.runs.filter((r) => r.role === 'tie')
+    const bySet = new Map<string, number[]>()
+    for (const r of ties) {
+      const k = setOf(r.mark)!
+      bySet.set(k, [...(bySet.get(k) ?? []), r.path[0]![1]])
+    }
+    const centres = [...bySet.entries()]
+      .map(([k, ys]) => ({ k, y: ys.reduce((a, b) => a + b, 0) / ys.length }))
+      .sort((a, b) => a.y - b.y)
+    const lower = centres[3]!, upper = centres[4]!
+    const mid = (lower.y + upper.y) / 2
+    const between = cutCage(colCage, memberCut([0, 0, 0], [0, 3, 0], mid / 3))
+
+    // one set, whole, and it is one of the two the cut sits between
+    const k = setOf(between.ties[0]!.mark)
+    expect(new Set(between.ties.map((t) => setOf(t.mark))).size).toBe(1)
+    expect([lower.k, upper.k]).toContain(k)
+    expect(between.ties).toHaveLength(ties.filter((r) => setOf(r.mark) === k).length)
+    // …and the HOOP is in it: the run that spans the core, which is the one
+    // that used to go missing.
+    const widest = Math.max(...between.ties.map(
+      (t) => Math.max(...t.pts.map((q) => q[0])) - Math.min(...t.pts.map((q) => q[0]))))
+    expect(widest).toBeGreaterThan((col.h - 2 * col.cover - 2 * col.tieDia) / 1000)
+  })
+
   it('shows the JOINT hoops where the ties stop — §418.8.3.1', () => {
     const withJoint = buildColumnCage({ ...col, jointGaps: [[2.4, 2.9]] })
     const inJoint = cutCage(withJoint, memberCut([0, 0, 0], [0, 3, 0], 2.65 / 3))
