@@ -463,6 +463,57 @@ export function designOK(d: StructureDesign): boolean {
     && d.pDeltaIssues.length === 0
 }
 
+/**
+ * PEAK DEMAND/CAPACITY OVER THE WHOLE DESIGN.
+ *
+ * `designOK` answers pass/fail; this answers *by how much*, which is the
+ * number an initial-vs-final comparison needs — a design can go from 2.4 to
+ * 0.87 without either end changing the pass/fail verdict of a single member
+ * type.
+ *
+ * NOT Mu/φMnMax FOR RC BEAMS. `sectionUtilMap` grows sections on that ratio,
+ * and it is the right signal to grow on — but it is not a demand/capacity
+ * ratio. φMnMax is the SINGLY-reinforced ceiling at ρmax; a section above it
+ * is not failing, it goes doubly reinforced (`mode: 'DRRB'`) and passes. Read
+ * as a utilisation it puts 1.38 next to a design the same report calls SAFE.
+ *
+ * So an RC beam is rated on the ratio whose >1 IS a failure: §422.5.1.2's
+ * absolute shear ceiling, Vu/φ(Vc + Vs,max) — the point at which `region`
+ * becomes 'inadequate' and no stirrup arrangement saves the section. RC beam
+ * FLEXURE has no scalar D/C at all (it is a bar-layout feasibility question —
+ * `flexOK`, `comprEffective`, `jointFit`), which is why the report says RC
+ * beams carry no single ratio and counts them in `failingChecks` instead.
+ *
+ * Everything else rates on its own governing ratio: RC columns biaxially,
+ * steel on strength (and deflection where a limit is set), timber on its own.
+ * Returns 0 for a design with no ratio-bearing member.
+ */
+/** φ for shear, §421.2.1 — the same 0.75 `beamDesign` applies to Vc and Vs. */
+const PHI_V = 0.75
+
+export function peakUtilisation(d: StructureDesign): number {
+  let mx = 0
+  const bump = (u: number) => { if (Number.isFinite(u) && u > mx) mx = u }
+  for (const b of d.beams)
+    for (const sec of b.sections) {
+      const cap = sec.design.phiVc + PHI_V * sec.design.VsMax   // φVc + φVs,max, kN
+      bump(cap > 1e-9 ? Math.abs(sec.Vu) / cap : 0)
+    }
+  for (const c of d.columns) bump(c.util)
+  for (const b of d.steelBeams) bump(Math.max(b.utilM, b.utilV, b.deflLim > 0 ? b.defl / b.deflLim : 0))
+  for (const c of d.steelColumns) bump(c.ratio)
+  for (const b of d.woodBeams) bump(Math.max(b.utilM, b.utilV))
+  for (const c of d.woodColumns) bump(c.ratio)
+  return mx
+}
+
+/** How many of the pipeline's checks a design fails — the number the optimizer
+ *  drives to zero, exported so the report can print it for a design the
+ *  optimizer never saw (the "initial" side of a saved run, say). */
+export function failingChecks(d: StructureDesign): number {
+  return countFails(d)
+}
+
 // ── Steel member design (reuses steelDesign engine) ──────────────────────────
 /** Design a steel beam/girder from a member result. Lb defaults to the full
  *  member length (conservative; the slab braces the top flange for sagging but

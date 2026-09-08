@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { generateGridModel, buildGravityLoads } from '../engine/modelBuilder'
-import { designStructure, optimizeStructure } from '../engine/pipeline'
+import { designStructure, optimizeStructure, peakUtilisation } from '../engine/pipeline'
 import { modelToFrame3D } from '../engine/modelBridge'
 import { analyzeFrame3D } from '../engine/frame3d'
 import { modalAnalysis } from '../engine/modal'
@@ -169,10 +169,10 @@ describe('G · optimization', () => {
     const ap = buildAnalysisAppendix({ model: result.model, design: result.design, optimization: { result, before: m.sections } })
     const s = ap.sections[6]
     expect(s.available).toBe(true)
-    const hist = s.tables.find((x) => x.title.startsWith('G.1'))!
+    const hist = s.tables.find((x) => x.title.includes('Iteration history'))!
     expect(hist.rows).toHaveLength(result.steps.length)
     expect(hist.rows[0][0]).toBe('0 (initial)')
-    const diff = s.tables.find((x) => x.title.startsWith('G.2'))!
+    const diff = s.tables.find((x) => x.title.includes('Initial vs final design'))!
     expect(diff.rows.length).toBeGreaterThan(0)
     expect(s.notes![0]).toMatch(/GROWS/)
 
@@ -188,7 +188,7 @@ describe('G · optimization', () => {
       const iGrown = hist.head.indexOf('Sections grown')
       const iChanged = hist.head.indexOf('Geometry changes')
       // and each column carries its OWN number
-      const trail = s.tables.find((x) => x.title.startsWith('G.3'))
+      const trail = s.tables.find((x) => x.title.includes('What each iteration changed'))
       const listed = trail ? trail.rows.length : 0
       const counted = hist.rows.reduce((n, r) => n + (Number(r[iChanged]) || 0), 0)
       expect(counted).toBe(listed)
@@ -224,14 +224,14 @@ describe('G · the optimizer trail the pipeline records', () => {
     return { before: m.sections, result: optimizeStructure(m, soil, {}, 6)! }
   }
 
-  it('G.2 reads the engine\'s own initial model, not whatever the caller passes', () => {
+  it('the initial-vs-final table reads the engine\'s own initial model, not whatever the caller passes', () => {
     const { result } = optimizeSmall()
     // a deliberately WRONG before — every entry 999×999. If the table read the
     // caller's sections instead of the result's initialModel, it would show them.
     const wrongBefore = result.model.sections.map((s) => ({ ...s, b: 999, h: 999 }))
     const ap = buildAnalysisAppendix({ model: result.model, design: result.design, optimization: { result, before: wrongBefore } })
     const s = ap.sections[6]
-    const diff = s.tables.find((x) => x.title.startsWith('G.2'))!
+    const diff = s.tables.find((x) => x.title.includes('Initial vs final design'))!
     expect(diff.rows.length).toBeGreaterThan(0)
     for (const row of diff.rows) {
       expect(row.join(' ')).not.toContain('999')
@@ -243,13 +243,13 @@ describe('G · the optimizer trail the pipeline records', () => {
     const { result } = optimizeSmall()
     const ap = buildAnalysisAppendix({ model: result.model, design: result.design, optimization: { result } })
     const s = ap.sections[6]
-    const trail = s.tables.find((x) => x.title.startsWith('G.3'))!
+    const trail = s.tables.find((x) => x.title.includes('What each iteration changed'))!
     expect(trail.head).toEqual(['Iteration', 'Kind', 'Element', 'From', 'To'])
     const grown = trail.rows.filter((r) => r[1] === 'section')
     expect(grown.length).toBeGreaterThan(0)
     for (const r of grown) expect(r[3]).not.toBe(r[4])
-    const qty = s.tables.find((x) => x.title.startsWith('G.4'))!
-    expect(qty.head).toEqual(['Material', 'Initial', 'Final'])
+    const qty = s.tables.find((x) => x.title.includes('Material quantities'))!
+    expect(qty.head).toEqual(['Item', 'Initial', 'Final', 'Change'])
     expect(qty.rows.map((r) => r[0])).toContain('Concrete')
     // the two ends are the pipeline's own designs — concrete exists on both
     const concrete = qty.rows.find((r) => r[0] === 'Concrete')!
@@ -257,7 +257,74 @@ describe('G · the optimizer trail the pipeline records', () => {
     expect(parseFloat(concrete[2])).toBeGreaterThan(0)
   }, 60000)
 
-  it('a saved run from before the engine carried the initial state still prints G.2 from the caller\'s sections, with no quantities row', () => {
+  // ─────────────────────────────────────────────────────────────────────
+  // "ECONOMY" IS NOT AN OBJECTIVE FUNCTION.
+  //
+  // The section claimed the optimizer weighed economy and then printed a
+  // quantities table where the concrete went UP, with nothing to reconcile
+  // the two. Both halves are fixed here: the objective is written down
+  // (minimum SECTION SIZE subject to compliance — cost is not a term), and
+  // the quantities note says why growing into compliance costs concrete.
+  // ─────────────────────────────────────────────────────────────────────
+  it('states the objective and its constraints before any result', () => {
+    const { result } = optimizeSmall()
+    const ap = buildAnalysisAppendix({ model: result.model, design: result.design, optimization: { result } })
+    const s = ap.sections[6]
+    const obj = s.tables[0]
+    expect(obj.title).toContain('Objective function and constraints')
+    expect(obj.head).toEqual(['Role', 'Term', 'How it is measured'])
+    const roles = obj.rows.map((r) => r[0])
+    expect(roles).toContain('Objective')
+    expect(roles).toContain('Constraint')
+    // and it says what is NOT being minimised, which is the claim that was wrong
+    const excluded = obj.rows.find((r) => r[0] === 'Not in the objective')!
+    expect(excluded[1]).toMatch(/cost/i)
+    expect(excluded[1]).toMatch(/[Cc]oncrete volume/)
+    expect(obj.note).toMatch(/outcomes/i)
+  }, 60000)
+
+  it('the quantities table weighs the reinforcement and explains the concrete', () => {
+    const { result } = optimizeSmall()
+    const ap = buildAnalysisAppendix({ model: result.model, design: result.design, optimization: { result } })
+    const s = ap.sections[6]
+    const qty = s.tables.find((x) => x.title.includes('Material quantities'))!
+    const items = qty.rows.map((r) => r[0])
+    expect(items).toContain('Reinforcement — total fabricated')
+    expect(items).toContain('Reinforcement — total purchased (laps + off-cuts)')
+    expect(items).toContain('Reinforcement intensity')
+    expect(items).toContain('Formwork')
+    // one row per bar Ø the take-off actually found, weighed not guessed
+    const perDia = qty.rows.filter((r) => /^Reinforcement ⌀\d+$/.test(r[0]))
+    expect(perDia.length).toBeGreaterThan(0)
+    for (const r of perDia) expect(r[1]).toMatch(/ kg$/)
+    // the per-Ø weights add up to the fabricated total (rounding aside)
+    const total = parseFloat(qty.rows.find((r) => r[0] === 'Reinforcement — total fabricated')![2])
+    const summed = perDia.reduce((n, r) => n + parseFloat(r[2]), 0)
+    expect(Math.abs(summed - total)).toBeLessThanOrEqual(perDia.length)
+    // and the note reconciles the direction the volume moved with the checks —
+    // whichever way it moved, the note has to say why, never just print it
+    const fails0 = result.steps[0].fails
+    const concrete = qty.rows.find((r) => r[0] === 'Concrete')!
+    const rose = parseFloat(concrete[2]) > parseFloat(concrete[1])
+    expect(qty.note).toMatch(rose ? /Concrete rises because/ : /shrink phase took back more/)
+    if (rose) {
+      expect(qty.note).toContain(`${fails0} check`)
+      expect(qty.note).toMatch(/intensity/)
+    }
+    expect(qty.note).toContain(`failing ${fails0} check`)
+  }, 60000)
+
+  it('the stats carry how far the design travelled, not only whether it arrived', () => {
+    const { result } = optimizeSmall()
+    const ap = buildAnalysisAppendix({ model: result.model, design: result.design, optimization: { result } })
+    const peak = ap.sections[6].stats!.find((x) => x.label === 'Peak utilisation')!
+    expect(peak.value).toMatch(/^\d+\.\d\d → \d+\.\d\d$/)
+    const [a, b] = peak.value.split(' → ').map(Number)
+    expect(a).toBeCloseTo(peakUtilisation(result.initialDesign!), 2)
+    expect(b).toBeCloseTo(peakUtilisation(result.design), 2)
+  }, 60000)
+
+  it('a saved run from before the engine carried the initial state still prints the section diff from the caller\'s sections, with no quantities table', () => {
     const { before, result } = optimizeSmall()
     const legacy = structuredClone(result) as unknown as Record<string, unknown>
     delete legacy.initialDesign
@@ -267,9 +334,9 @@ describe('G · the optimizer trail the pipeline records', () => {
       optimization: { result: legacy as unknown as typeof result, before },
     })
     const s = ap.sections[6]
-    const diff = s.tables.find((x) => x.title.startsWith('G.2'))!
+    const diff = s.tables.find((x) => x.title.includes('Initial vs final design'))!
     expect(diff.rows.length).toBeGreaterThan(0)
-    expect(s.tables.find((x) => x.title.startsWith('G.4'))).toBeUndefined()
+    expect(s.tables.find((x) => x.title.includes('Material quantities'))).toBeUndefined()
   }, 60000)
 })
 

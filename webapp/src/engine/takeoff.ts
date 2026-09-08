@@ -32,7 +32,10 @@ const TIE_WIRE_ROLL = 2385            // m per roll (#16 G.I.)
 const GI_WIRE_KG_PER_M = 0.0189       // #16 G.I. tie wire, ~1.6 mmØ
 
 const barAreaM2 = (dia: number) => (Math.PI / 4) * (dia / 1000) ** 2
-const kgPerM = (dia: number) => barAreaM2(dia) * STEEL_DENSITY
+/** Mass per metre of a plain round bar, kg/m (ρ = 7850 kg/m³) — exported so a
+ *  report can weigh a per-Ø length without re-deriving the density. */
+export const barKgPerM = (dia: number) => barAreaM2(dia) * STEEL_DENSITY
+const kgPerM = barKgPerM
 /**
  * Cut allowance for ONE 135° seismic hook on a stirrup or tie, mm.
  *

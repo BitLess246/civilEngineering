@@ -428,6 +428,54 @@ is greyed out with what to run.
   carry the governing combination, the design steps and the cage figures, so
   the chain is there without a second rendering of it.
 
+## Report review — five phases (Sep 2026)
+
+A read of the 134-page combined Design Report + Analysis Appendix produced 15
+findings and an explicit priority order. One PR per phase.
+
+1. **Inconsistencies (#715) — DONE.** The footing sheet solved the two shear
+   checks for the depth each one NEEDS, printed them as marginal, then adopted
+   a larger `Dc` — so the sheet never showed the check that passed. The steps
+   are now titled *— required depth*, and a **Shear re-check at the adopted
+   thickness** step follows the thickness step. Both shear steps also print the
+   engine's own §422.5.5.1 / Table 422.6.5.2 coefficients (0.17, 0.33, 0.083),
+   not the inch-pound 1/6, 1/3, 1/12 the sheet had hand-rolled. Beam stirrup
+   cells say both regions (`stirrupNote`): hinge spacing within 2h of each
+   support, `sAdopt` elsewhere.
+2. **Traceability (#716) — DONE.** B.6 mass-source table, D.2b seismic
+   reconciliation (W → V → storey forces, from `storeyWeightBreakdown`, which
+   now counts member-point and node dead loads too), the governing-design
+   summary on the report's front section, and a design-status chip that says
+   ACCEPTABLE / NOT ACCEPTABLE with the counts under it.
+3. **QA/QC (#717) — DONE.** Appendix H (`qaSection`): mesh validation, the
+   analysis-status table and `finalModelConsistency` — five joins between the
+   analysed model, the design, the optimizer's output and the placed cages,
+   each reporting the count it compared. Five new `meshValidation` rules.
+4. **Optimizer reporting (this PR) — DONE.** The section led with the word
+   "economy" and no objective behind it, then printed a quantities table where
+   the concrete rose 34 → 43 m³ with nothing to explain it. Now: **G.1
+   Objective function and constraints** (`OPTIMIZER_TERMS`) states that the
+   objective is minimum SECTION SIZE subject to full compliance and that cost,
+   volume and steel weight are **outcomes, not terms**; the quantities table is
+   rebuilt on `estimateTakeoff` at both ends — concrete, formwork,
+   reinforcement per bar Ø, fabricated vs purchased, and **intensity kg/m³**,
+   which is where the optimisation actually shows (on the reference frame
+   38 → 74 m³ concrete but 242 → 119 kg/m³ steel); and its note reconciles the
+   rise with the failing-check count at iteration 0. The design report gained
+   the same **Material quantities** table and a Reinforcement summary stat.
+   `peakUtilisation` puts a number on how far the design travelled — and
+   deliberately does NOT rate RC beams on Mu/φMnMax, which is the singly-
+   reinforced ceiling, not a D/C: reading it as one printed 1.38 beside a
+   design the same page called SAFE.
+5. **Diagrams — OPEN.** Analytical model with node/member IDs and support
+   symbols; load-case diagrams (D, L, seismic X/Z, wind); deformed shape and
+   moment/shear/axial diagrams; mode shapes 1–3; nonlinear roof-displacement
+   and base-shear traces; pushover hinge locations and yield sequence.
+
+Also still open from the review: **item 15**, a design snapshot / version block
+(project ID, analysis ID, design version, model revision, engine version, model
+and result hashes) — not yet assigned to a phase.
+
 ## Continue from your phone / cloud (PC off)
 The local terminal session needs your PC on. To keep working without it:
 1. Open **claude.ai/code** (mobile browser) or the **Claude app**, same account.
