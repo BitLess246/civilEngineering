@@ -73,9 +73,11 @@ export function centroidRise(layers: number[], pitch: number): number {
  * way pulled a z-running beam's bars 100 mm too far in.
  *
  * Shared, because two layers need the same number and used to derive it once
- * each: the CAGE places the bars at it, and the DESIGN has to lay them out in
- * the width it leaves — otherwise the schedule checks §407.7.1 across a web
- * the bars are not allowed to use, and passes a spacing the cage cannot build.
+ * each: the CAGE cranks the bars to it at each joint, and the DESIGN has to lay
+ * them out in the width it leaves — otherwise the schedule checks §407.7.1
+ * across a web the bars are not allowed to use, and passes a spacing the cage
+ * cannot build. Cranking buys the SPAN its width back; the layer still has to
+ * fit through the joint, so this is still the width the layout is set in.
  */
 export function jointBarRoom(
   face: number, colCover: number, colTieDia: number, colBarDia: number, beamBarDia: number,
