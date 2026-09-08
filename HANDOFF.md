@@ -524,6 +524,44 @@ Appendix H (Model QA/QC, #717) could not be ticked, never reached `include`,
 and was silently dropped from every exported appendix. Both lists now come
 from `APPENDIX_TITLES`/`LETTERS`, with a test pinning them together.
 
+## Consistent mass in `modal.ts` (Sep 2026)
+
+Backlog P3-10, closed. `modal.ts` was lumped-only, so the rotational DOFs
+carried no inertia at all — and the response spectrum, drift, pushover and
+every time history are built on the frequencies that produces.
+
+- **`ModalOptions.massModel`**, `'lumped'` (default, unchanged) or
+  `'consistent'`. Reported back on `ModalResult` as `massModel` and
+  `activeDofs`, printed in the appendix's D.1 note and in the report's
+  assumptions, and selectable in the Modal panel. **Lumped stays the default**
+  — switching it would silently move every period already published.
+- **One solver for both.** K φ = ω² M φ goes through the Cholesky factor
+  M = L Lᵀ: the eigenvalues of Ã = Lᵀ K⁻¹ L are 1/ω² and φ = L⁻ᵀ ψ. The old
+  M^½ F M^½ is exactly the diagonal special case, so the pre-existing SDOF and
+  Chopra anchors still pass and no published number moved.
+- **`consistentMassLocal`** is each member's 12×12 ∫ρNᵀN matrix over the same
+  cubics and through the same element transform (`geom.T`, rigid links and all)
+  as its stiffness. Slab and superimposed dead mass stays lumped translational
+  at the panel corners — a tributary panel has no element to carry a
+  consistent matrix, and inventing a rotational inertia for it would be a
+  number with no derivation.
+- **Anchored from both sides.** Continuum cantilever ω₁ = 3.5160152 √(EI/m̄L⁴);
+  one consistent element gives the textbook 3.53273, one lumped element exactly
+  √6 = 2.44949. Consistent bounds from above, lumped from below, at every mesh
+  size; one consistent element beats eight lumped ones. Both reach 100%
+  cumulative participation when every mode is asked for, so mass is refined and
+  not lost. On a real frame with slabs the two agree within a quarter of a
+  percent, because lumped slab mass dominates member self-mass.
+- **Cost**: both are O(p³). Lumped puts p at the massive translational DOFs;
+  consistent puts it at every free DOF, roughly double, so it is the slower.
+
+*Found on the way and NOT changed here:* `memberMassPerLength` weighs a
+**timber** member at GAMMA_C (24 kN/m³) rather than its species density,
+because the original `buildSeismicMass` did. That overstates the seismic mass
+of a wood-frame model several-fold. It is a one-line fix with a wide blast
+radius — every seismic weight, base shear and period on a timber model — so it
+wants its own PR and its own before/after numbers.
+
 ## Continue from your phone / cloud (PC off)
 The local terminal session needs your PC on. To keep working without it:
 1. Open **claude.ai/code** (mobile browser) or the **Claude app**, same account.

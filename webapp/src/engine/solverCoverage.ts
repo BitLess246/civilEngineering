@@ -27,7 +27,7 @@ export interface SolverModuleCoverage {
 }
 
 /** Total solver-engine cases in the manifest. */
-export const SOLVER_TEST_COUNT = 523
+export const SOLVER_TEST_COUNT = 544
 
 export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
   {
@@ -859,6 +859,90 @@ export const SOLVER_COVERAGE: SolverModuleCoverage[] = [
       {
         "suite": "modalAnalysis — generated grid",
         "name": "returns null for a model with no supports (singular K)"
+      },
+      {
+        "suite": "consistentMassLocal — the 12×12 element matrix",
+        "name": "is symmetric and positive definite"
+      },
+      {
+        "suite": "consistentMassLocal — the 12×12 element matrix",
+        "name": "rigid-body translation does work = the element mass, on all three axes"
+      },
+      {
+        "suite": "consistentMassLocal — the 12×12 element matrix",
+        "name": "rigid twist about its own axis does work = m·r², the polar inertia"
+      },
+      {
+        "suite": "consistentMassLocal — the 12×12 element matrix",
+        "name": "carries the textbook coefficients, with the two bending planes opposed in sign"
+      },
+      {
+        "suite": "consistentMassLocal — the 12×12 element matrix",
+        "name": "a weightless or zero-length element contributes nothing"
+      },
+      {
+        "suite": "cholesky",
+        "name": "factors an SPD matrix so that L Lᵀ reproduces it"
+      },
+      {
+        "suite": "cholesky",
+        "name": "returns null rather than a fudge when the matrix is not positive definite"
+      },
+      {
+        "suite": "the mass split — lumped and consistent weigh the same members",
+        "name": "member + non-member mass adds back up to the whole"
+      },
+      {
+        "suite": "the mass split — lumped and consistent weigh the same members",
+        "name": "one expression for a member's weight, so the two models cannot disagree about it"
+      },
+      {
+        "suite": "modalAnalysis — the cantilever closed forms",
+        "name": "ONE consistent element gives 3.53273 — the textbook single-element value"
+      },
+      {
+        "suite": "modalAnalysis — the cantilever closed forms",
+        "name": "ONE lumped element gives √6 = 2.44949 — half the mass on a cantilever tip"
+      },
+      {
+        "suite": "modalAnalysis — the cantilever closed forms",
+        "name": "BOUNDS the exact answer: consistent from above, lumped from below"
+      },
+      {
+        "suite": "modalAnalysis — the cantilever closed forms",
+        "name": "both converge to it, and consistent converges far faster"
+      },
+      {
+        "suite": "modalAnalysis — the cantilever closed forms",
+        "name": "a square section gives the same frequency in both bending planes — the sign check, on a real solve"
+      },
+      {
+        "suite": "modalAnalysis — the mass model is a reported choice",
+        "name": "defaults to lumped, and says so"
+      },
+      {
+        "suite": "modalAnalysis — the mass model is a reported choice",
+        "name": "lumped solves the massive TRANSLATIONAL DOFs; consistent solves every free one"
+      },
+      {
+        "suite": "modalAnalysis — the mass model is a reported choice",
+        "name": "NEITHER MODEL LOSES MASS: asked for every mode, both reach 100% in all three directions"
+      },
+      {
+        "suite": "modalAnalysis — the mass model is a reported choice",
+        "name": "agrees with lumped on a real building to a fraction of a percent — slab mass dominates"
+      },
+      {
+        "suite": "modalAnalysis — the mass model is a reported choice",
+        "name": "still refuses a singular model under either mass matrix"
+      },
+      {
+        "suite": "modalAnalysis — the mass model is a reported choice",
+        "name": "survives a released member — a rotational DOF the stiffness condensed away still carries inertia"
+      },
+      {
+        "suite": "modalAnalysis — the mass model is a reported choice",
+        "name": "refuses a release that creates a mechanism, under BOTH mass models"
       }
     ]
   },

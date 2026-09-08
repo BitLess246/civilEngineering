@@ -10,7 +10,7 @@ import type { StructuralModel } from './model'
 import { modelToFrame3D } from './modelBridge'
 import { analyzeFrame3D, solveFrame3D, applyF3Combo, type F3AnalyzeOpts } from './frame3d'
 import { analyzeActiveSet, solveActiveSet, axialModes } from './axialOnly'
-import { modalAnalysis } from './modal'
+import { modalAnalysis, type MassModel } from './modal'
 import { runPushoverModel, type PushoverModelOpts } from './pushoverModel'
 import { runBiaxialPushover, type BiaxialPushoverOpts } from './biaxialFrameModel'
 import { runTimeHistoryModel, makeGroundMotion, type TimeHistoryModelOpts, type GroundMotionSpec } from './timeHistoryModel'
@@ -26,7 +26,7 @@ export type SolverRequest =
   | { id: number; kind: 'analyze'; model: StructuralModel; opts: F3AnalyzeOpts; drift: DriftReq; crackedSections?: boolean; shearDeformation?: boolean; beamTopOfSteel?: boolean }
   | { id: number; kind: 'design'; model: StructuralModel; soil: SoilOptions; plan: FootingPlan; opts: AnalyzeOptions; tryBars: boolean }
   | { id: number; kind: 'optimize'; model: StructuralModel; soil: SoilOptions; plan: FootingPlan; opts: AnalyzeOptions; tryBars: boolean; maxIter: number }
-  | { id: number; kind: 'modal'; model: StructuralModel; nModes: number }
+  | { id: number; kind: 'modal'; model: StructuralModel; nModes: number; massModel?: MassModel }
   | { id: number; kind: 'pushover'; model: StructuralModel; opts: PushoverModelOpts }
   | { id: number; kind: 'biaxialPushover'; model: StructuralModel; opts: BiaxialPushoverOpts }
   | { id: number; kind: 'timeHistory'; model: StructuralModel; opts: TimeHistoryModelOpts }
@@ -84,7 +84,7 @@ ctx.onmessage = async (e: MessageEvent<SolverRequest>) => {
       ctx.postMessage({ id: msg.id, ok: true, result: { analysis, orphans: br.orphanEdges.length, drift, irregularities } })
     } else if (msg.kind === 'modal') {
       onProgress({ phase: 'Modal analysis' })
-      const modal = modalAnalysis(msg.model, msg.nModes)
+      const modal = modalAnalysis(msg.model, msg.nModes, msg.massModel ? { massModel: msg.massModel } : {})
       ctx.postMessage({ id: msg.id, ok: true, result: { modal } })
     } else if (msg.kind === 'pushover') {
       onProgress({ phase: 'Pushover (event-to-event)' })

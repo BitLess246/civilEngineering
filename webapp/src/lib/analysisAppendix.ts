@@ -525,12 +525,19 @@ function modalSection(i: AppendixInput): AppendixSection {
         cx += mo.effMassRatio[0]; cy += mo.effMassRatio[1]; cz += mo.effMassRatio[2]
         return [String(k + 1), f3(mo.period), f3(mo.freq), f2(mo.omega), pct(mo.effMassRatio[0]), pct(mo.effMassRatio[1]), pct(mo.effMassRatio[2]), pct(cx), pct(cy), pct(cz)]
       }),
-      note: `Total lumped mass X ${f1(md.totalMass[0])} · Y ${f1(md.totalMass[1])} · Z ${f1(md.totalMass[2])} t. Effective modal mass as a share of the total; the governing mode in each direction is the one with the largest share.`,
+      note: `Total free mass X ${f1(md.totalMass[0])} · Y ${f1(md.totalMass[1])} · Z ${f1(md.totalMass[2])} t, measured on the mass matrix these modes were solved on. Effective modal mass as a share of the total; the governing mode in each direction is the one with the largest share. `
+        + ((md.massModel ?? 'lumped') === 'consistent'
+          ? 'CONSISTENT mass: each member contributes its own 12×12 element mass matrix, so the rotational DOFs carry inertia and the two ends are coupled. Slab and superimposed dead mass stays lumped at the panel corners. Consistent mass bounds the true frequencies from above.'
+          : 'LUMPED mass: member self-mass and slab self-weight + superimposed dead are lumped to the nodes, and only the three translational DOFs carry mass — the rotational DOFs carry none. Lumped mass bounds the true frequencies from below.'),
     })
     stats.push(
       { label: 'Modes', value: String(md.modes.length) },
       { label: 'T1', value: md.modes[0] ? f3(md.modes[0].period) : '—', unit: 's' },
       { label: 'Σ mass X / Z', value: `${pct(md.cumRatio[0])} / ${pct(md.cumRatio[2])}` },
+      // The mass matrix is a modelling choice and every dynamic result below
+      // inherits it, so it is reported rather than assumed. `massModel` is
+      // absent on runs saved before the option existed — those were lumped.
+      { label: 'Mass matrix', value: (md.massModel ?? 'lumped') === 'consistent' ? 'consistent' : 'lumped' },
     )
     if (md.cumRatio[0] < 0.9 || md.cumRatio[2] < 0.9)
       notes.push(`Cumulative effective mass is below 90% in ${md.cumRatio[0] < 0.9 ? 'X' : ''}${md.cumRatio[0] < 0.9 && md.cumRatio[2] < 0.9 ? ' and ' : ''}${md.cumRatio[2] < 0.9 ? 'Z' : ''} — NSCP §208.5.5 asks for enough modes to reach 90%. Increase the number of modes.`)

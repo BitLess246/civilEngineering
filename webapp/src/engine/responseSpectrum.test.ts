@@ -95,7 +95,7 @@ describe('computeResponseSpectrum', () => {
   })
 
   it('single mode: CQC = SRSS = Sa·effMass', () => {
-    const modal1 = { modes: [modal.modes[0]], totalMass: modal.totalMass, cumRatio: modal.cumRatio }
+    const modal1 = { ...modal, modes: [modal.modes[0]] }
     const rsa = computeResponseSpectrum(modal1, p)
     expect(rsa.cqc[0]).toBeCloseTo(rsa.srss[0], 9)
     const expected = modal.modes[0].effMass[0] * nscp208Spectrum(modal.modes[0].period, Ca, Cv, I, R)
@@ -112,7 +112,7 @@ describe('computeResponseSpectrum', () => {
   })
 
   it('empty modes → zero base shears', () => {
-    const emptyModal = { modes: [], totalMass: [0, 0, 0] as [number,number,number], cumRatio: [0,0,0] as [number,number,number] }
+    const emptyModal = { ...modal, modes: [], totalMass: [0, 0, 0] as [number,number,number], cumRatio: [0,0,0] as [number,number,number] }
     const rsa = computeResponseSpectrum(emptyModal, p)
     expect(rsa.srss).toEqual([0, 0, 0])
     expect(rsa.cqc).toEqual([0, 0, 0])
@@ -137,7 +137,7 @@ describe('rsaEquivalentLoads', () => {
   })
 
   it('single mode: base shear = Sa·effMass (hand calc)', () => {
-    const modal1 = { modes: [modal.modes[0]], totalMass: modal.totalMass, cumRatio: modal.cumRatio }
+    const modal1 = { ...modal, modes: [modal.modes[0]] }
     const eq = rsaEquivalentLoads(model, modal1, { ...p, dir: 'x' })!
     const expected = modal.modes[0].effMass[0] * nscp208Spectrum(modal.modes[0].period, Ca, Cv, I, R)
     expect(rel(eq.Vdyn, expected)).toBeLessThan(1e-9)
@@ -185,7 +185,7 @@ describe('rsaEquivalentLoads', () => {
   })
 
   it('null for empty modes', () => {
-    const emptyModal = { modes: [], totalMass: [0, 0, 0] as [number,number,number], cumRatio: [0,0,0] as [number,number,number] }
+    const emptyModal = { ...modal, modes: [], totalMass: [0, 0, 0] as [number,number,number], cumRatio: [0,0,0] as [number,number,number] }
     expect(rsaEquivalentLoads(model, emptyModal, { ...p, dir: 'x' })).toBeNull()
   })
 })
