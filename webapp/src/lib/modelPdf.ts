@@ -21,6 +21,7 @@ import type { LetterheadState } from '../components/calc'
 import type { ModelReport } from './modelReport'
 import type { PlanSheet } from './planSheets'
 import type { StatusRow } from './analysisAppendix'
+import { snapshotRows, snapshotStamp, type DesignSnapshot } from '../engine/designSnapshot'
 import { COMPUTED_BY, docLabel as brandDocLabel } from './brand'
 import { paintDrawing, paintedSize } from './drawingPdf'
 import {
@@ -58,6 +59,10 @@ export interface ModelPdfInput {
   /** Which sections to print. Omitted → all of them. Numbering follows the
    *  sections actually printed, so a report without schedules has no gap. */
   sections?: ReportSectionKey[]
+  /** Identity of the run this document reports (`buildDesignSnapshot`). Built
+   *  ONCE per export and handed to the report AND the appendix, because the
+   *  whole point is that the two carry the same id. */
+  snapshot?: DesignSnapshot | null
   fileName?: string
 }
 
@@ -74,9 +79,43 @@ export async function generateModelPdf(input: ModelPdfInput): Promise<void> {
  */
 export async function buildModelPdf(input: ModelPdfInput): Promise<{ doc: Sheet['doc']; today: string }> {
   const sh = createSheet()
-  const { today, sheet, docLabel } = await buildModelPdfInto(sh, input)
-  sh.pageFooters(docLabel, sheet, today, input.lh.project)
+  const { today, sheet, docLabel, stamp } = await buildModelPdfInto(sh, input)
+  sh.pageFooters(docLabel, sheet, today, input.lh.project, undefined, stamp)
   return { doc: sh.doc, today }
+}
+
+/**
+ * The snapshot block: two columns of label/value in mono, under a rule.
+ *
+ * Deliberately plain and deliberately early. It is not a design result and
+ * must not look like one — it is the answer to "which calculation is this",
+ * and the reader needs it before anything it identifies.
+ */
+function paintSnapshot(sh: Sheet, s: DesignSnapshot): void {
+  const { doc } = sh
+  const rows = snapshotRows(s)
+  const half = Math.ceil(rows.length / 2)
+  const body: string[][] = []
+  for (let i = 0; i < half; i++) {
+    const a = rows[i], b = rows[half + i]
+    body.push([a[0], a[1], b?.[0] ?? '', b?.[1] ?? ''])
+  }
+  sh.y += 3
+  sh.ensure(10 + body.length * 4)
+  sh.setF('sans', 'bold', 7, INK)
+  doc.text('DESIGN SNAPSHOT', M, sh.y)
+  sh.y += 2.2
+  autoTable(doc, {
+    ...sh.tableTheme(),
+    startY: sh.y,
+    body,
+    styles: { ...(sh.tableTheme().styles as object), fontSize: 6.2, cellPadding: { top: 0.9, bottom: 0.9, left: 0, right: 2 } },
+    columnStyles: {
+      0: { textColor: MUTED, cellWidth: 24 }, 1: { font: 'mono', cellWidth: 64 },
+      2: { textColor: MUTED, cellWidth: 24 }, 3: { font: 'mono' },
+    },
+  })
+  sh.y = (sh.lastY() ?? sh.y) + 4
 }
 
 /**
@@ -86,8 +125,8 @@ export async function buildModelPdf(input: ModelPdfInput): Promise<{ doc: Sheet[
  * appendix. Returns what the footers need.
  */
 export async function buildModelPdfInto(
-  sh: Sheet, { lh, report, modelImg, badges, sheets, status, sections }: ModelPdfInput,
-): Promise<{ today: string; sheet: string; docLabel: string }> {
+  sh: Sheet, { lh, report, modelImg, badges, sheets, status, sections, snapshot }: ModelPdfInput,
+): Promise<{ today: string; sheet: string; docLabel: string; stamp?: string }> {
   const { doc } = sh
   const setF = sh.setF
   const ensure = sh.ensure
@@ -124,6 +163,13 @@ export async function buildModelPdfInto(
     ['PREPARED BY', lh.preparedBy || '—', false], ['DATE', today, true],
     ['ELEMENT', 'Structure — 3D Model Space', false], ['CODES', badges.join(' · '), true],
   ])
+
+  // ── DESIGN SNAPSHOT ──
+  // Printed unconditionally and before anything else, because it identifies
+  // the document. It is not a section a user can deselect: a calculation
+  // report whose provenance is optional is a report that cannot be relied on
+  // later, when two revisions of the same frame are lying on the same desk.
+  if (snapshot) paintSnapshot(sh, snapshot)
 
   // ── 3D model snapshot ──
   if (modelImg && want.has('snapshot')) await sh.figure(modelImg, 'FIG 1 · 3D STRUCTURAL MODEL — ANALYSIS SNAPSHOT')
@@ -385,5 +431,5 @@ export async function buildModelPdfInto(
     + `steel design per AISC 360-16 LRFD. Project: ${lh.project || '—'}.`,
   )
 
-  return { today, sheet, docLabel }
+  return { today, sheet, docLabel, ...(snapshot ? { stamp: snapshotStamp(snapshot) } : {}) }
 }

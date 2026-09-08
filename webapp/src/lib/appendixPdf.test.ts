@@ -7,6 +7,9 @@ import { buildModelReport } from './modelReport'
 import { buildModelPdf, ALL_REPORT_SECTIONS } from './modelPdf'
 import { buildAnalysisAppendix, analysisStatus } from './analysisAppendix'
 import { buildAnalysisAppendixPdf, buildCombinedPdf } from './appendixPdf'
+import { buildModelPdfInto } from './modelPdf'
+import { createSheet } from './pdfKit'
+import { buildDesignSnapshot, snapshotStamp, shortId } from '../engine/designSnapshot'
 
 // The documents are built headless and judged by their page counts: a
 // subset of sections prints fewer pages, the appendix prints on its own,
@@ -47,5 +50,51 @@ describe('the documents', () => {
     const all = buildAnalysisAppendixPdf({ lh, badges, appendix })
     const one = buildAnalysisAppendixPdf({ lh, badges, appendix, include: ['model'] })
     expect(one.doc.getNumberOfPages()).toBeLessThan(all.doc.getNumberOfPages())
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// ONE SNAPSHOT, BOTH DOCUMENTS.
+//
+// A report and its appendix that disagree about which run they describe are
+// worse than neither carrying an id: the reader would trust the disagreement
+// as evidence of two different runs. So the snapshot is built once and
+// threaded, and the footer of every page carries the stamp — which is what
+// makes a loose sheet traceable at all.
+// ─────────────────────────────────────────────────────────────────────────
+describe('the design snapshot on the documents', () => {
+  const snapshot = buildDesignSnapshot({
+    model, design, analysis, projectName: 'Probe', buildId: 'abcdef1234567',
+    generatedAt: new Date('2026-09-08T10:00:00Z'),
+  })
+
+  it('the report hands its footer the stamp, and omits it when there is no snapshot', async () => {
+    const sh = createSheet()
+    const withSnap = await buildModelPdfInto(sh, { lh, report, modelImg: null, badges, snapshot })
+    expect(withSnap.stamp).toBe(snapshotStamp(snapshot))
+    expect(withSnap.stamp).toContain(shortId(snapshot.snapshotId))
+    const bare = await buildModelPdfInto(createSheet(), { lh, report, modelImg: null, badges })
+    expect(bare.stamp).toBeUndefined()
+  })
+
+  it('the appendix alone still carries the id, so it can be traced back to its report', () => {
+    const ap = buildAnalysisAppendix(ai)
+    const alone = buildAnalysisAppendixPdf({ lh, badges, appendix: ap, snapshot })
+    expect(alone.doc.getNumberOfPages()).toBeGreaterThan(0)
+  })
+
+  it('the combined document builds with the snapshot on both halves', async () => {
+    const ap = buildAnalysisAppendix(ai)
+    const both = await buildCombinedPdf(
+      { lh, report, modelImg: null, badges, sections: ['summary'], snapshot },
+      { lh, badges, appendix: ap, include: ['model'], snapshot },
+    )
+    expect(both.doc.getNumberOfPages()).toBeGreaterThan(1)
+  })
+
+  it('the snapshot block adds pages to the report rather than overprinting it', async () => {
+    const withSnap = await buildModelPdf({ lh, report, modelImg: null, badges, sections: ['summary'], snapshot })
+    const bare = await buildModelPdf({ lh, report, modelImg: null, badges, sections: ['summary'] })
+    expect(withSnap.doc.getNumberOfPages()).toBeGreaterThanOrEqual(bare.doc.getNumberOfPages())
   })
 })

@@ -504,9 +504,25 @@ findings and an explicit priority order. One PR per phase.
    then turns the result, so a centred vertical label slid half its own width
    into the page margin, which is where every chart's y-caption was printing.
 
-Also still open from the review: **item 15**, a design snapshot / version block
-(project ID, analysis ID, design version, model revision, engine version, model
-and result hashes) — not yet assigned to a phase.
+**Item 15 — design snapshot / version block — DONE.** A calculation report is
+evidence and evidence has to be identifiable; two reports on "the same
+building" a week apart were indistinguishable, and there was no way to tell
+whether a drawing set belonged to the report beside it. `engine/designSnapshot.ts`
+digests what was actually analysed, designed and detailed — four 64-bit
+fingerprints plus one id over all of them — and both PDFs stamp it: a DESIGN
+SNAPSHOT block on the report's first page, a two-line strip on the appendix,
+and `SNAPSHOT xxxx-xxxx-xxxx · MODEL … · ENGINE …` centred in every page
+footer. The snapshot is built ONCE per export in `ModelSpace` and handed to
+both documents, because a report and its appendix that disagree about which
+run they describe are worse than neither carrying an id. `ENGINE_VERSION` is
+hand-maintained (bumped when a change moves a number a previous report
+printed); the commit sha comes from CI through a `vite.config.ts` define.
+
+**A defect that fell out of it:** `ExportReportDialog` carried a hand-written
+list of seven appendix keys and a hand-written `['A'..'G']` to letter them, so
+Appendix H (Model QA/QC, #717) could not be ticked, never reached `include`,
+and was silently dropped from every exported appendix. Both lists now come
+from `APPENDIX_TITLES`/`LETTERS`, with a test pinning them together.
 
 ## Continue from your phone / cloud (PC off)
 The local terminal session needs your PC on. To keep working without it:

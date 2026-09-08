@@ -11,7 +11,7 @@
 // leave is a wall.
 import { useCallback, useEffect, useState } from 'react'
 import type { AppendixKey } from '../lib/analysisAppendix'
-import { APPENDIX_TITLES } from '../lib/analysisAppendix'
+import { APPENDIX_TITLES, LETTERS } from '../lib/analysisAppendix'
 import type { ReportSectionKey } from '../lib/modelPdf'
 import { REPORT_SECTION_TITLES } from '../lib/modelPdf'
 
@@ -22,7 +22,12 @@ export interface ExportOptions {
 }
 
 const REPORT_KEYS: ReportSectionKey[] = ['snapshot', 'summary', 'status', 'project', 'trace', 'schedules', 'solutions', 'drawings']
-const APPENDIX_KEYS: AppendixKey[] = ['model', 'loading', 'analysis', 'modal', 'nonlinear', 'pushover', 'optimization']
+// EVERY key, from the source of truth. This was a hand-written list of seven
+// and the appendix grew an eighth (H — Model QA/QC): the section could not be
+// ticked, so it was never in `include`, so it never printed. A section that
+// exists, is available, and is silently dropped from every export is the
+// worst of the three possible bugs here.
+const APPENDIX_KEYS = Object.keys(APPENDIX_TITLES) as AppendixKey[]
 
 export function ExportReportDialog({ available, unavailable, busy, onClose, onGenerate }: {
   /** Which appendix sections have data behind them. */
@@ -87,7 +92,7 @@ export function ExportReportDialog({ available, unavailable, busy, onClose, onGe
               k,
               appendix.has(k) && available[k],
               () => setAppendix((s) => toggle(s, k)),
-              `${['A', 'B', 'C', 'D', 'E', 'F', 'G'][APPENDIX_KEYS.indexOf(k)]} · ${APPENDIX_TITLES[k]}`,
+              `${LETTERS[k]} · ${APPENDIX_TITLES[k]}`,
               available[k] ? undefined : (unavailable?.[k] ?? 'not run'),
               !available[k],
             ))}

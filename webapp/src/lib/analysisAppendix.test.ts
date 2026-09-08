@@ -11,7 +11,7 @@ import { makeGroundMotion } from '../engine/timeHistoryModel'
 import { buildStructureCages } from '../engine/cageBuilder'
 import {
   buildAnalysisAppendix, analysisStatus, appendixAvailability, equilibriumRows, comboExpression,
-  capacityCurveDrawing, finalModelConsistency, type AppendixInput,
+  capacityCurveDrawing, finalModelConsistency, APPENDIX_TITLES, LETTERS, type AppendixInput,
 } from './analysisAppendix'
 import { computeSeismic } from '../engine/seismic'
 import { storeyWeightBreakdown } from '../engine/seismic'
@@ -598,5 +598,30 @@ describe('the dynamics figures', () => {
     // 1.8× — pushover figures carried type half again as large as every other
     const curve = sec('pushover').figures!.find((f) => f.caption.startsWith('F.1'))!
     expect(curve.drawing.bounds.maxX).toBe(DIAGRAM_W)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// APPENDIX H COULD NOT BE TICKED, SO IT NEVER PRINTED.
+//
+// `ExportReportDialog` carried a hand-written list of seven keys and a
+// hand-written ['A'..'G'] to letter them. Appendix H (Model QA/QC) shipped
+// after it, so the section existed, was available, was built — and was
+// absent from `include` on every export, which drops it. This pins the list
+// to its source of truth so the next section cannot repeat it.
+// ─────────────────────────────────────────────────────────────────────────
+describe('the export dialog and the appendix agree on what exists', () => {
+  it('every appendix section has a title and a letter, and the letters are the print order', () => {
+    const keys = Object.keys(APPENDIX_TITLES) as (keyof typeof APPENDIX_TITLES)[]
+    const letters = keys.map((k) => LETTERS[k])
+    expect(letters).toEqual(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'])
+    // …and the built appendix comes back in that same order
+    expect(buildAnalysisAppendix(bare).sections.map((s) => s.letter)).toEqual(letters)
+  })
+
+  it('availability answers for every key — a section with no entry can never be ticked', () => {
+    const a = appendixAvailability(full)
+    for (const k of Object.keys(APPENDIX_TITLES) as (keyof typeof APPENDIX_TITLES)[])
+      expect(typeof a[k]).toBe('boolean')
   })
 })

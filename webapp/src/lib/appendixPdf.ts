@@ -16,6 +16,7 @@ import { paintDrawing, paintedSize } from './drawingPdf'
 import { createSheet, autoTable, type Sheet, INK, MUTED, FAINT, M, CONTENT_W, PAGE_W } from './pdfKit'
 import type { AnalysisAppendix, AppendixKey, AppendixSection, StatusRow } from './analysisAppendix'
 import { buildModelPdfInto, type ModelPdfInput } from './modelPdf'
+import { snapshotStamp, shortId, type DesignSnapshot } from '../engine/designSnapshot'
 
 export interface AppendixPdfInput {
   lh: LetterheadState
@@ -23,6 +24,11 @@ export interface AppendixPdfInput {
   badges: string[]
   /** Which sections to print. Omitted → every section. */
   include?: AppendixKey[]
+  /** The SAME snapshot the design report carries. A report and its appendix
+   *  that disagree about which run they describe are worse than neither
+   *  carrying an id at all, so this is built once per export and passed to
+   *  both rather than derived twice. */
+  snapshot?: DesignSnapshot | null
   fileName?: string
 }
 
@@ -107,6 +113,26 @@ function paintSection(sh: Sheet, s: AppendixSection): void {
   }
 }
 
+/**
+ * The appendix's own snapshot line — one strip, not the report's full block.
+ *
+ * The appendix is bound behind the report in the combined document, where the
+ * full block is already on page 1; repeating it there would be noise. What it
+ * must carry is the ID, so a reader holding the appendix ALONE — which is how
+ * it is exported when the checkbox for it is ticked on its own — can tell
+ * which report it belongs to.
+ */
+function paintSnapshotStrip(sh: Sheet, s: DesignSnapshot): void {
+  const { doc } = sh
+  sh.ensure(9)
+  sh.setF('mono', 'normal', 6, MUTED)
+  doc.text(snapshotStamp(s), M, sh.y)
+  sh.y += 3.2
+  sh.setF('sans', 'normal', 6, FAINT)
+  doc.text(`Project ${s.projectName} · ${s.projectId} · analysis ${s.analysisDigest ? shortId(s.analysisDigest) : 'not run'} · design ${s.designDigest ? shortId(s.designDigest) : 'not run'} · ${s.codeBasis}`, M, sh.y)
+  sh.y += 5
+}
+
 /** Paint the appendix into `sh`, starting at its current cursor: its own
  *  brand header, the status table, then every included section. */
 export function paintAnalysisAppendix(sh: Sheet, i: AppendixPdfInput, today: string, sheet: string): void {
@@ -128,6 +154,7 @@ export function paintAnalysisAppendix(sh: Sheet, i: AppendixPdfInput, today: str
     ['PREPARED BY', i.lh.preparedBy || '—', false], ['DATE', today, true],
     ['ELEMENT', 'Structure — 3D Model Space', false], ['CONTENTS', i.appendix.sections.filter((s) => wanted.has(s.key)).map((s) => s.letter).join(' · '), true],
   ])
+  if (i.snapshot) paintSnapshotStrip(sh, i.snapshot)
   sh.rule(0, 'Analysis & design status')
   sh.setF('sans', 'normal', 6.6, MUTED)
   for (const w of sh.doc.splitTextToSize('Every status below is the engine\'s own result. A check that was not run says so; nothing is marked PASS because its section exists.', CONTENT_W)) { sh.doc.text(w, M, sh.y); sh.y += 3.2 }
@@ -142,7 +169,8 @@ export function buildAnalysisAppendixPdf(i: AppendixPdfInput): { doc: Sheet['doc
   const today = new Date().toISOString().slice(0, 10)
   const sheet = i.lh.sheet || 'S-3D'
   paintAnalysisAppendix(sh, i, today, sheet)
-  sh.pageFooters(brandDocLabel('Structure — Analysis Appendix'), sheet, today, i.lh.project)
+  sh.pageFooters(brandDocLabel('Structure — Analysis Appendix'), sheet, today, i.lh.project,
+    undefined, i.snapshot ? snapshotStamp(i.snapshot) : undefined)
   return { doc: sh.doc, today }
 }
 
@@ -158,14 +186,15 @@ export function generateAnalysisAppendixPdf(i: AppendixPdfInput): void {
  */
 export async function buildCombinedPdf(report: ModelPdfInput, appendix: AppendixPdfInput): Promise<{ doc: Sheet['doc']; today: string }> {
   const sh = createSheet()
-  const { today, sheet, docLabel } = await buildModelPdfInto(sh, report)
+  const { today, sheet, docLabel, stamp } = await buildModelPdfInto(sh, report)
   sh.doc.addPage()
   sh.y = M
   // The appendix's first page carries the appendix's own header; the running
   // strip every other continuation page gets would print on top of it.
   const appendixStart = sh.doc.getNumberOfPages()
   paintAnalysisAppendix(sh, appendix, today, sheet)
-  sh.pageFooters(docLabel, sheet, today, report.lh.project, new Set([appendixStart]))
+  sh.pageFooters(docLabel, sheet, today, report.lh.project, new Set([appendixStart]),
+    stamp ?? (appendix.snapshot ? snapshotStamp(appendix.snapshot) : undefined))
   return { doc: sh.doc, today }
 }
 

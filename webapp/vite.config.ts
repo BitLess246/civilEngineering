@@ -12,6 +12,14 @@ export default defineConfig(({ command }) => ({
   base: '/',
   plugins: [react(), tailwindcss()],
   esbuild: command === 'build' ? { drop: ['console', 'debugger'] } : {},
+  // The commit the running build came from, so a printed report can name it.
+  // Vercel and GitHub Actions each expose it under their own name and neither
+  // carries the VITE_ prefix Vite forwards automatically, so it is mapped in
+  // here. Empty locally and in the test run — the snapshot then simply omits
+  // the build line rather than printing a guess.
+  define: {
+    __BUILD_SHA__: JSON.stringify(process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.GITHUB_SHA ?? ''),
+  },
   build: {
     outDir: 'dist',
     assetsDir: 'assets',

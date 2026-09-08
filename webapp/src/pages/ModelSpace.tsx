@@ -20,7 +20,7 @@ import { REBAR_ROLE_COLOR } from '../engine/rebarWire'
 import type { CageKind } from '../engine/rebarModel'
 import { effectiveViewMode, ghostConcrete, surfaceStyleFor, type ViewMode } from '../components/modelSpace/viewMode'
 import { ProjectsPanel } from '../components/ProjectsPanel'
-import { AUTOSAVE_KEY, INPUTS_KEY, DESIGN_KEY, readSessionDesign, writeSessionDesign } from '../lib/modelSpaceSession'
+import { AUTOSAVE_KEY, INPUTS_KEY, DESIGN_KEY, readSessionDesign, writeSessionDesign, readOpenId } from '../lib/modelSpaceSession'
 import { emptyHistory, recordHistory, undoHistory, redoHistory, isTypingTarget, type History } from '../lib/history'
 import * as THREE from 'three'
 import { generateGridModel, removeElements, removeNode, buildGravityLoads, splitSharedSections } from '../engine/modelBuilder'
@@ -101,6 +101,8 @@ import {
 } from '../components/modelSpace/figures'
 import { ExportReportDialog, type ExportOptions } from '../components/ExportReportDialog'
 import { appendixAvailability, type AppendixInput } from '../lib/analysisAppendix'
+import { buildDesignSnapshot } from '../engine/designSnapshot'
+import { buildSha } from '../lib/buildInfo'
 
 /** How the biaxial utilisation in the column schedule was arrived at. The
  *  column shows one number and it comes from Mux AND Muy, so the row says
@@ -1155,6 +1157,16 @@ export default function ModelSpace() {
         ...(design.woodBeams.length || design.woodColumns.length ? ['NDS §3 / NSCP §6'] : [])]
       const ai = appendixInput()!
       const stem = `structure-report${lh.sheet ? '-' + lh.sheet.split('·')[0].trim() : ''}`
+      // ONE SNAPSHOT PER EXPORT, handed to both documents. A report and its
+      // appendix that disagree about which run they describe would be worse
+      // than neither carrying an id, so it is built here — the one place that
+      // holds the model, the design, the cages, the project and the optimizer
+      // state at the same time — and never derived twice.
+      const snapshot = buildDesignSnapshot({
+        model, design, analysis, cages: cageBuild?.cages ?? null,
+        projectId: readOpenId(), projectName: lh.project,
+        buildId: buildSha(), optimized: !!opt,
+      })
       const reportInput = {
         lh, modelImg: img, badges,
         report: buildModelReport(model, design, reportProps(design), soil, irregular,
@@ -1171,9 +1183,10 @@ export default function ModelSpace() {
         sheets: buildSheetSet(model, design, soil),
         status: analysisStatus(ai),
         sections: o.reportSections,
+        snapshot,
       }
       const appendixInputPdf = {
-        lh, badges, appendix: buildAnalysisAppendix(ai), include: o.appendixSections,
+        lh, badges, appendix: buildAnalysisAppendix(ai), include: o.appendixSections, snapshot,
       }
       if (o.outputs.report) await generateModelPdf({ ...reportInput, fileName: `${stem}.pdf` })
       if (o.outputs.appendix) appendixPdf.generateAnalysisAppendixPdf({ ...appendixInputPdf, fileName: `${stem}-analysis-appendix.pdf` })

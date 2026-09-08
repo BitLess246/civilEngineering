@@ -113,7 +113,11 @@ export const APPENDIX_TITLES: Record<AppendixKey, string> = {
   optimization: 'Design optimization',
   qa: 'Model QA/QC',
 }
-const LETTERS: Record<AppendixKey, string> = {
+/** The letter each section prints under. Exported because the export dialog
+ *  labels its checkboxes with them, and a second hard-coded copy of an
+ *  ordered list is a copy that goes stale the next time a section is added —
+ *  which is exactly what happened when H was. */
+export const LETTERS: Record<AppendixKey, string> = {
   model: 'A', loading: 'B', analysis: 'C', modal: 'D', nonlinear: 'E', pushover: 'F', optimization: 'G', qa: 'H',
 }
 
