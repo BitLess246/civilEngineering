@@ -52,6 +52,40 @@ describe('beam design — bar layout & layers (§407.7, Varignon)', () => {
     expect(r.layers.every((k) => k <= r.maxPerLayer)).toBe(true)
   })
 
+  it('lays the bars out in the width the JOINT leaves, not the nominal web', () => {
+    // A beam framing into a column no wider than itself has its bars inside the
+    // column's verticals for their whole length, so the width a layer may use
+    // is the joint band, not b − 2(cover + ds). Checked against the web, the
+    // schedule passed §407.7.1 on a spacing the cage could not build.
+    const free = designBeam({ ...base, b: 250, barDia: 28, Mu: 220 })
+    const tight = designBeam({ ...base, b: 250, barDia: 28, Mu: 220, barRoom: 33 })
+    expect(free.bClear).toBeCloseTo(150, 9)          // 250 − 2(40 + 10)
+    expect(tight.bClear).toBeCloseTo(2 * 33 + 28, 9) // the band, measured the same way
+    expect(free.jointGoverns).toBe(false)
+    expect(tight.jointGoverns).toBe(true)
+    // …so fewer bars fit a layer, the stack gets deeper and d follows it down
+    expect(tight.maxPerLayer).toBeLessThan(free.maxPerLayer)
+    expect(tight.layers.length).toBeGreaterThan(free.layers.length)
+    expect(tight.d).toBeLessThan(free.d)
+    // and both report a spacing that is genuinely available
+    for (const r of [free, tight]) expect(r.sClear).toBeGreaterThanOrEqual(r.sMinClear - 1e-9)
+    expect(tight.sClear).toBeCloseTo((tight.bClear - tight.layers[0]! * 28) / (tight.layers[0]! - 1), 9)
+  })
+
+  it('says so when the joint will not take two bars side by side', () => {
+    // §407.7.1 spacing inside the joint band leaves room for one bar, and a
+    // stirrup needs a bar in each bottom corner — the face cannot be detailed.
+    // Reported rather than laid out: stacking single bars is arithmetic, not a
+    // beam. 250 into a 250 column with ⌀32 bars: room 27, band 86, s_min 32.
+    const r = designBeam({ ...base, b: 250, barDia: 32, Mu: 220, barRoom: 27 })
+    expect(r.bClear).toBeCloseTo(86, 9)
+    expect(r.maxPerLayer).toBe(1)
+    expect(r.jointFit).toBe(false)
+    // the ordinary case is untouched
+    expect(designBeam(base).jointFit).toBe(true)
+    expect(designBeam(base).jointGoverns).toBe(false)
+  })
+
   it('maxPerLayer honours s_min = max(db, 25): n·db + (n−1)s ≤ b − 2(cover+ds)', () => {
     const r = designBeam(base)
     const bw = 300 - 2 * (40 + 10)

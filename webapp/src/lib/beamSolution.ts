@@ -133,11 +133,21 @@ export function buildBeamSolution(i: BeamDesignInput, r: BeamDesignResult): Solu
   }
 
   // ── Bar layout: spacing check → layers → Varignon d ──
-  const bw = i.b - 2 * (i.cover + i.stirrupDia)
+  //
+  // The width comes off the RESULT, not off b: where the beam frames into a
+  // column no wider than itself, its bars are inside the column's verticals
+  // and have less room than the web suggests. Recomputed here from b, the
+  // sheet checked §407.7.1 across a web the bars are not allowed to use.
+  const bw = r.bClear
   steps.push({
     title: 'Bar layout — spacing check & layers (§407.7)',
     lines: [
-      txt(`Minimum clear spacing between parallel bars in a layer is max(d_b, 25 mm) = ${sn0(r.sMinClear)} mm (§407.7.1). The clear web width is b − 2(cover + dₛ) = ${sn0(bw)} mm, so at most ${r.maxPerLayer} bars fit per layer.`),
+      txt(`Minimum clear spacing between parallel bars in a layer is max(d_b, 25 mm) = ${sn0(r.sMinClear)} mm (§407.7.1). ${r.jointGoverns
+        ? `The beam frames into a column no wider than itself, so its bars pass INSIDE the column's verticals: the width available to a layer is 2·(bar room) + d_b = ${sn0(bw)} mm, narrower than the clear web b − 2(cover + dₛ) = ${sn0(i.b - 2 * (i.cover + i.stirrupDia))} mm.`
+        : `The clear web width is b − 2(cover + dₛ) = ${sn0(bw)} mm.`} At most ${r.maxPerLayer} bar${r.maxPerLayer === 1 ? '' : 's'} fit${r.maxPerLayer === 1 ? 's' : ''} per layer.`),
+      ...(r.jointFit ? [] : [
+        txt(`⚠ That leaves room for ${r.maxPerLayer} bar per layer. A stirrup needs a bar in each bottom corner, so this face cannot be detailed. Widening the BEAM does not help — the room is set by the column, not by the web — so widen the column or use a smaller bar.`),
+      ]),
       // A_b appeared here as a bare number for a bar the sheet had not yet
       // named. Both come first now: which bar, and the area it gives.
       txt(`The bar adopted above is ⌀${sn0(i.barDia)}, so one bar carries:`),

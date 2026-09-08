@@ -32,6 +32,7 @@ import { jointHookLdh } from './beamColumnJoint'
 import { rotateLoop } from './columnCage'
 import { endAnchors, type AnchorBar, type JointRoom } from './beamAnchorage'
 import { runSpliceCentres, pointAt, type SpliceOptions } from './barSplice'
+export { jointBarRoom, barLayoutWidth } from './barLayers'
 import { momentRatioLimits } from './beamMomentRatios'
 
 export interface BeamCageInput {

@@ -4,7 +4,7 @@
 // tie to on either side. These tests belong to the rule, not to either engine.
 
 import { describe, it, expect } from 'vitest'
-import { splitLayers, centroidRise } from './barLayers'
+import { splitLayers, centroidRise, jointBarRoom, barLayoutWidth } from './barLayers'
 
 const total = (l: number[]) => l.reduce((s, k) => s + k, 0)
 
@@ -87,5 +87,64 @@ describe('centroidRise', () => {
 
   it('is safe on an empty group', () => {
     expect(centroidRise([], 45)).toBe(0)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE WIDTH THE BARS MAY ACTUALLY USE
+//
+// A beam's bars have to pass INSIDE the column's own verticals, and a straight
+// bar holds that offset for its whole length. The cage has always placed them
+// there; the design laid them out across the nominal web, so §407.7.1 passed a
+// spacing the cage could not build — a 250 beam framing a 250 column with ⌀32
+// bars was reported at 86 mm clear and drawn at 22.
+// ─────────────────────────────────────────────────────────────────────────
+describe('jointBarRoom', () => {
+  it('steps the beam bar inside the column bar by half of each diameter', () => {
+    // 300 column, 40 cover, ⌀10 tie, ⌀20 verticals → its outer bar at 90 mm;
+    // a ⌀20 beam bar clears it at 90 − (20+20)/2 = 70.
+    expect(jointBarRoom(300, 40, 10, 20, 20)).toBeCloseTo(70, 9)
+    // a smaller beam bar needs less room
+    expect(jointBarRoom(300, 40, 10, 20, 12)).toBeCloseTo(74, 9)
+    // and a wider column leaves more
+    expect(jointBarRoom(500, 40, 10, 20, 20)).toBeCloseTo(170, 9)
+  })
+
+  it('never goes negative — a column narrower than its own cover leaves none', () => {
+    expect(jointBarRoom(150, 40, 10, 25, 25)).toBe(0)
+  })
+})
+
+describe('barLayoutWidth', () => {
+  const web = (b: number) => b - 2 * (40 + 10)
+
+  it('is the clear web when nothing constrains the joint', () => {
+    expect(barLayoutWidth(300, 40, 10, 20)).toBeCloseTo(web(300), 9)
+  })
+
+  it('is the clear web when the joint is roomier than the beam', () => {
+    // a 300 beam into a 600 column: room 170, band 2·170+20 = 360 > 200
+    expect(barLayoutWidth(300, 40, 10, 20, jointBarRoom(600, 40, 10, 20, 20)))
+      .toBeCloseTo(200, 9)
+  })
+
+  it('is the JOINT band when the column is no wider than the beam', () => {
+    // 250 beam into a 250 column, ⌀32: room 27, band 2·27+32 = 86 — and the
+    // web says 150, which is the number the check used to be made against.
+    const room = jointBarRoom(250, 40, 10, 32, 32)
+    expect(room).toBeCloseTo(27, 9)
+    expect(barLayoutWidth(250, 40, 10, 32, room)).toBeCloseTo(86, 9)
+    expect(web(250)).toBe(150)
+  })
+
+  it('measures both ends the same way, so the two are comparable', () => {
+    // Unconstrained, the band IS the clear web: bars at ±(b/2 − cover − ds −
+    // db/2) span 2·room + db = b − 2(cover + ds). If that identity breaks the
+    // joint band and the web are being measured differently and the `min` is
+    // comparing two different things.
+    for (const [b, db] of [[250, 20], [300, 25], [450, 32]] as const) {
+      const free = b / 2 - (40 + 10 + db / 2)
+      expect(barLayoutWidth(b, 40, 10, db, free)).toBeCloseTo(b - 2 * (40 + 10), 9)
+    }
   })
 })

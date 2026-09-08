@@ -16,6 +16,7 @@ import { FramePool } from './framePool'
 import { nscpCombos, type Combo } from './beamAnalysis'
 import type { ProgressFn } from './progress'
 import { designBeam, type BeamDesignResult } from './beamDesign'
+import { jointBarRoom } from './barLayers'
 import { effectiveFlange } from './tbeam'
 import { designPrestressed, type PrestressedResult } from './prestressedBeam'
 import { minBeamThickness, type BeamSupport } from './beamDeflection'
@@ -611,7 +612,7 @@ function designSteelColumnRow(
 export const designSteelColumnRowForTest = designSteelColumnRow
 
 const beamOK = (d: BeamDesignResult) =>
-  d.flexOK && d.comprEffective && d.comprNAOK && d.region !== 'inadequate'
+  d.flexOK && d.comprEffective && d.comprNAOK && d.jointFit && d.region !== 'inadequate'
 
 /**
  * §424.2 service deflection for one designed RC beam row.
@@ -777,6 +778,7 @@ function memberFlange(model: StructuralModel, m: Member, L: number): { bf: numbe
 function designBeamRow(
   mr: F3MemberResult, role: string, sec: RectSection, support: BeamSupport = 'both-ends',
   flange?: { bf: number; hf: number; edge?: boolean; kind?: 'T' | 'L' }, system: 'gravity' | 'imf' | 'smf' = 'gravity',
+  barRoom?: number,
 ): BeamScheduleRow {
   // Transverse stirrup-leg spacing limit hx (§418.6.4.3): 350 mm for seismic
   // frame beams, ~600 mm good-practice for gravity.
@@ -810,6 +812,7 @@ function designBeamRow(
       b: sec.b, h: sec.h, cover: sec.cover, barDia: sec.barDia,
       comprBarDia: 16, stirrupDia: sec.tieDia,
       fc: sec.fc, fy: sec.fy, Mu: Math.abs(s.Mu), Vu: s.Vu, legSpacingLimit, system,
+      ...(barRoom != null ? { barRoom } : {}),
     }).bars))
     : 0
   const sections: BeamSectionDesign[] = raw
@@ -821,6 +824,9 @@ function designBeamRow(
         // The hinge-zone hoop cap is a property of the SYSTEM, not of the
         // shear at this section — see BeamDesignInput.system.
         system,
+        // The room the joints leave — the SAME number `cageBuilder` places the
+        // bars at, so the §407.7.1 check and the drawn cage are one layout.
+        ...(barRoom != null ? { barRoom } : {}),
         // Only the BOTTOM face carries the ratio floor; a hogging section is
         // the thing the floor is measured from.
         ...(s.Mu > 0 && AsFloor > 0 ? { AsFloor } : {}),
@@ -1230,6 +1236,32 @@ function designFromRuns(
     return ci && cj ? 'both-ends' : ci || cj ? 'one-end' : 'simple'
   }
 
+  /**
+   * The room a beam's longitudinal bars have between the columns it frames
+   * into, mm — `jointBarRoom` at each end, the tighter winning because the bar
+   * is straight and has to pass both.
+   *
+   * The DESIGN needs it, not just the cage: bars pushed inside the column's
+   * verticals have less width to spread over, and §407.7.1 checked across the
+   * nominal web passes a spacing the cage cannot build.
+   */
+  const beamBarRoom = (mm: (typeof model.members)[number], sec: RectSection): number | undefined => {
+    const ni = model.nodes.find((n) => n.id === mm.i), nj = model.nodes.find((n) => n.id === mm.j)
+    if (!ni || !nj) return undefined
+    const alongX = Math.abs(nj.x - ni.x) >= Math.abs(nj.z - ni.z)
+    let room = Infinity
+    for (const node of [mm.i, mm.j]) {
+      const col = colAtNode(node)
+      if (!col) continue
+      const cs = secOf(col.id)
+      // `columnCage` reads h across world x and b across world z, so the face
+      // ACROSS a beam running along x is the column's b.
+      const face = alongX ? cs.b : (cs.h ?? cs.b)
+      room = Math.min(room, jointBarRoom(face, cs.cover ?? 40, cs.tieDia ?? 10, cs.barDia ?? 20, sec.barDia))
+    }
+    return Number.isFinite(room) ? room : undefined
+  }
+
   // ── Beams & girders — per-member worst case across all runs ──
   const totalMems = model.members.length
   let memDone = 0
@@ -1287,7 +1319,8 @@ function designFromRuns(
         })() : null
         for (const run of runs) {
           const mr = memberOf(run, m.id); if (!mr) continue
-          const row = designBeamRow(mr, role, sec, support, flange ?? undefined, opts.seismicSystem ?? 'gravity')
+          const row = designBeamRow(mr, role, sec, support, flange ?? undefined,
+            opts.seismicSystem ?? 'gravity', beamBarRoom(m, sec))
           if (row.sections.length === 0) continue
           const sev = beamSeverity(row)
           if (sev > bestSev) { bestSev = sev; best = row; gov = run.name }

@@ -639,26 +639,75 @@ describe('optimizer covers every design check (slabs, walls, SCWB)', () => {
     // stiffening frame sheds shear into it, and the optimizer thickens it.
     //
     // The amplification has to be strong enough to fail the wall and weak
-    // enough that the whole structure is still BUILDABLE inside the size caps.
-    // It has been walked down twice for that reason — ×400 first, then ×45.
-    // At ×45 one column now runs out of road: the optimizer grows it to the
-    // 1000×1000 cast-in-place limit with 32 bars and it still comes out at
-    // util 1.07, so the design cannot converge no matter how long it is given.
-    // That case sat a hair under 1.0 before columns started carrying their
-    // placeable bar count, which adds steel — and stiffer columns attract more
-    // seismic force. ×35 fails the wall and leaves the frame buildable.
+    // enough that the whole structure is still BUILDABLE inside the size caps,
+    // and the two used to be tuned with the ONE knob: ×400 first, then ×45,
+    // then ×35, each time because a design change moved the frame's ceiling.
+    // Turning it down far enough to keep the frame buildable then stopped
+    // failing the wall, which is the thing under test.
+    //
+    // So the wall is thinner instead, and the two ends are set separately: a
+    // 30 mm panel fails at ×25, and ×25 leaves the columns road to grow into.
+    // The next time a design change moves the ceiling, thin the WALL and drop
+    // the factor — do not chase it with the factor alone.
     const m = makeModel()
-    m.walls = [{ id: 'w0', member: 'bx0.0.1', height: 3, thickness: 50, shearWall: true }]
+    m.walls = [{ id: 'w0', member: 'bx0.0.1', height: 3, thickness: 30, shearWall: true }]
     const base = computeSeismic(m, { Ca: 0.44, Cv: 0.64, I: 1, R: 8.5, dir: 'x' })!.loads
     const eX: LateralCase = {
       name: 'E+X', kind: 'E',
-      loads: base.map((l) => ({ kind: 'node', node: (l as { node: string }).node, Fx: Math.abs((l as { Fx?: number }).Fx ?? 0) * 35, cat: 'E' })),
+      loads: base.map((l) => ({ kind: 'node', node: (l as { node: string }).node, Fx: Math.abs((l as { Fx?: number }).Fx ?? 0) * 25, cat: 'E' })),
     }
     const r = optimizeStructure(m, soil, {}, 30, { lateral: [eX] })!
     expect(r.converged).toBe(true)
-    expect(r.model.walls![0].thickness).toBeGreaterThan(50)   // grew to pass
+    expect(r.model.walls![0].thickness).toBeGreaterThan(30)   // grew to pass
     expect(r.design.walls.every((w) => w.ok)).toBe(true)
   }, 120_000)
+})
+
+describe('the joint the beam frames into narrows its bar layout', () => {
+  // `cageBuilder` has always PLACED a beam's bars inside the column's own
+  // verticals — a straight bar has to pass the joint — and the design laid them
+  // out across the nominal web. So the schedule checked §407.7.1 over a width
+  // the bars are not allowed to use, and passed a spacing the cage could not
+  // build. The two now read the same number.
+  const narrow: RectSection = { id: 'N', name: '250×350', b: 250, h: 350, fc: 28, fy: 415, barDia: 28, tieDia: 10, cover: 40 }
+
+  it('reports the width the bars really get, and only where the joint is tight', () => {
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section: narrow, slabThickness: 200 })
+    m.loads = m.plates.flatMap((p) => [
+      { kind: 'area' as const, plate: p.id, q: 4.8, cat: 'D' as const },
+      { kind: 'area' as const, plate: p.id, q: 2.4, cat: 'L' as const },
+    ])
+    const d = designStructure(m, soil)!
+    // The grid gives every member the same section, so a beam running along x
+    // frames a column of its own width and the joint governs; the same beam
+    // running along z meets the column's 350 face and is unconstrained.
+    const along = (id: string) => d.beams.find((b) => b.id === id)!.sections[0].design
+    const x = along('bx0.0.1'), z = along('bz0.0.1')
+    expect(x.jointGoverns).toBe(true)
+    expect(z.jointGoverns).toBe(false)
+    expect(x.bClear).toBeLessThan(z.bClear)
+    expect(z.bClear).toBeCloseTo(250 - 2 * (40 + 10), 9)
+    // …and the number the sheet prints is the one the bars are laid out in
+    for (const s of d.beams.flatMap((b) => b.sections)) {
+      expect(s.design.sClear).toBeGreaterThanOrEqual(s.design.sMinClear - 1e-9)
+      expect(s.design.bClear).toBeLessThanOrEqual(250 - 2 * (40 + 10) + 1e-9)
+    }
+  })
+
+  it('fails the row when the joint will not take two bars, rather than drawing it', () => {
+    const big: RectSection = { ...narrow, id: 'B32', barDia: 32 }
+    const m = generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section: big, slabThickness: 200 })
+    m.loads = m.plates.flatMap((p) => [
+      { kind: 'area' as const, plate: p.id, q: 4.8, cat: 'D' as const },
+      { kind: 'area' as const, plate: p.id, q: 2.4, cat: 'L' as const },
+    ])
+    const d = designStructure(m, soil)!
+    const x = d.beams.find((b) => b.id === 'bx0.0.1')!
+    expect(x.sections.every((s) => s.design.jointFit === false)).toBe(true)
+    expect(x.ok).toBe(false)
+    // the z-running beams meet the wider face and are fine
+    expect(d.beams.find((b) => b.id === 'bz0.0.1')!.sections.every((s) => s.design.jointFit)).toBe(true)
+  })
 })
 
 describe('refreshSelfWeight — sw marker semantics', () => {
