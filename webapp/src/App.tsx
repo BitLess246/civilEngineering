@@ -51,6 +51,7 @@ import SignUp from './pages/auth/SignUp'
 import ForgotPassword from './pages/auth/ForgotPassword'
 import ResetPassword from './pages/auth/ResetPassword'
 import { RequireAuth } from './components/RequireAuth'
+import { GuestOnly } from './components/GuestOnly'
 import RockAnchor from './pages/RockAnchor'
 import SeismicWizard from './pages/SeismicWizard'
 import WaterTank from './pages/WaterTank'
@@ -206,9 +207,15 @@ export default function App() {
         <Route path="/lateral-pile" element={<LateralPile />} />
         <Route path="/soils" element={<RequireAuth><SoilInvestigation /></RequireAuth>} />
         <Route path="/pricing" element={<Pricing />} />
-        <Route path="/signin" element={<SignIn />} />
-        <Route path="/signup" element={<SignUp />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
+        {/* Guest-only routes. A signed-in visitor reaching one — a stale
+            bookmark, the back button after signing in, an old email link —
+            gets sent home rather than a sign-in form that reads as "your
+            login did not take". /reset-password stays open on purpose: it is
+            opened by following a fresh recovery link, which a signed-in
+            session says nothing about (see GuestOnly). */}
+        <Route path="/signin" element={<GuestOnly><SignIn /></GuestOnly>} />
+        <Route path="/signup" element={<GuestOnly><SignUp /></GuestOnly>} />
+        <Route path="/forgot-password" element={<GuestOnly><ForgotPassword /></GuestOnly>} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/rock-anchor" element={<RockAnchor />} />

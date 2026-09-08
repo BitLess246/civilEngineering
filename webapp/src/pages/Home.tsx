@@ -10,6 +10,7 @@ import { WorkedSolutionPreview } from '../components/WorkedSolutionPreview'
 import { Storyboard, ReportComparison } from '../components/Storyboard'
 import { useToolPrefs } from '../lib/useToolPrefs'
 import { visibleGroups } from '../lib/toolPrefs'
+import { useAuth } from '../lib/auth/authContext'
 
 // Home — search-first tool directory on the drawing-sheet workbench theme
 // (docs/design/uiux-2026-07/Redesign - Home): dark hero with drafting grid,
@@ -36,6 +37,7 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
   const [palette, setPalette] = useState(false)
   usePaletteHotkey(setPalette)
   const prefs = useToolPrefs()
+  const { user, loading } = useAuth()
 
   // The DIRECTORY is trimmed to the disciplines this browser chose; the hero
   // still advertises the whole catalog, because that count is a claim about the
@@ -236,8 +238,19 @@ export default function Home({ onAuth }: { onAuth: (mode: 'login' | 'signup') =>
             <h2 className="text-xl font-extrabold text-white">Every calculation, code-referenced.</h2>
             <p className="mt-1 text-[13px] text-[#9db0c5]">Clause citations on every worked step. Validated against hand calcs — <Link to="/validation" className="text-[#5b9bd5] hover:underline">see the validation suite</Link>.</p>
           </div>
-          <button onClick={() => onAuth('signup')}
-            className="whitespace-nowrap rounded-md bg-[#0f4c92] px-5 py-3 text-[13px] font-bold text-white hover:bg-[#135caf]">Create free account</button>
+          {/* The ask depends on who is reading. A member has no account left
+              to create, so the button becomes the workbench link — the same
+              destination the hero offers. While the session lookup runs there
+              is no button at all: offering account creation to someone who
+              turns out to be signed in is the exact flash AccountMenu exists
+              to prevent, and a wrong button on the marketing page is worse
+              than a one-frame gap before the right one. */}
+          {!loading && (user ? (
+            <Link to="/model" className="whitespace-nowrap rounded-md bg-[#0f4c92] px-5 py-3 text-[13px] font-bold text-white hover:bg-[#135caf]">Open the workbench</Link>
+          ) : (
+            <button onClick={() => onAuth('signup')}
+              className="whitespace-nowrap rounded-md bg-[#0f4c92] px-5 py-3 text-[13px] font-bold text-white hover:bg-[#135caf]">Create free account</button>
+          ))}
         </div>
       </section>
 
