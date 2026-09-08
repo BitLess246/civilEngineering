@@ -201,11 +201,20 @@ All shipped.
    Table 208-9 (vertical) and 208-10 (plan), the checks derivable from the
    existing E-case displacement field and storey weights: torsional 1a/1b, soft
    storey, mass, vertical geometric. Pure post-processing, no solver change.
-10. **Consistent-mass option beside lumped.** `modal.ts` is lumped-only —
-    documented as such, and the rotational DOFs carry no inertia at all as a
-    result. The frequencies it produces are what every dynamic result
-    downstream is built on, so this is worth doing before the modal work is
-    leaned on any harder.
+10. ~~**Consistent-mass option beside lumped.**~~ — ✔ shipped: `modal.ts`
+    carries `ModalOptions.massModel`, and both models run through ONE solver
+    (Ã = Lᵀ K⁻¹ L via the Cholesky factor of M; the old M^½ F M^½ is its
+    diagonal special case, so no published period moved). `consistentMassLocal`
+    is each member's 12×12 ∫ρNᵀN matrix over the same cubics and the same
+    element transform as its stiffness, so rotational inertia and end-to-end
+    coupling are both carried; slab and superimposed dead mass stays lumped at
+    the panel corners, which is what a tributary idealisation means. Anchored
+    on the cantilever from both sides — one consistent element gives the
+    textbook 3.53273 √(EI/m̄L⁴) against the continuum's 3.5160152, one lumped
+    element exactly √6, and consistent bounds the exact answer from above while
+    lumped bounds it from below. **Lumped stays the default**; the choice is
+    selectable in the modal panel and reported in both the appendix and the
+    report's assumptions.
 
 ## P4 — design & geotech capability
 

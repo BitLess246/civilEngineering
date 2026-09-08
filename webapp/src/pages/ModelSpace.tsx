@@ -30,7 +30,7 @@ import { type F3Analysis, type F3MemberResult } from '../engine/frame3d'
 import { type ActiveSetAnalysis, type AxialMode } from '../engine/axialOnly'
 import { diagramScale, type DiagramComp } from '../engine/memberDiagram3d'
 import { validateMesh, hasMeshErrors } from '../engine/meshValidation'
-import { type ModalResult } from '../engine/modal'
+import { type ModalResult, type MassModel } from '../engine/modal'
 import { computeResponseSpectrum, rsaEquivalentLoads, type ResponseSpectrumResult, type RsaLateralResult } from '../engine/responseSpectrum'
 import { type StructureDesign, type FootingPlan, type OptimizeResult, type LateralCase, type BiaxialMethod } from '../engine/pipeline'
 import type { SteelJoint } from '../engine/steelConnections'
@@ -337,6 +337,9 @@ export default function ModelSpace() {
   const [dg11W, setDg11W] = useState(0)
   const [rsa, setRsa] = useState<ResponseSpectrumResult | null>(null)
   const [nModes, setNModes] = useState(12)
+  // Lumped stays the default: it is what every result in the app was built on,
+  // and switching the default would silently move every published period.
+  const [massModel, setMassModel] = useState<MassModel>('lumped')
   // Pushover (nonlinear static) inputs + result
   const [poDir, setPoDir] = useState<'x' | 'z'>('x')
   const [poPattern, setPoPattern] = useState<'triangular' | 'uniform'>('triangular')
@@ -641,7 +644,7 @@ export default function ModelSpace() {
   const runModal = () => {
     if (!model || busy || meshErrors) return
     setModeShapeIdx(null)    // stale shape from prior run
-    run('modal', { model, nModes }).then((r) => {
+    run('modal', { model, nModes, massModel }).then((r) => {
       const m = (r as { modal: ModalResult | null }).modal
       setModal(m)
       if (m && m.modes.length > 0) {
@@ -1103,6 +1106,12 @@ export default function ModelSpace() {
       ['Second order', pDelta ? 'P-Δ on — geometric stiffness iterated per combination' : 'first order (P-Δ off)'],
       ['Seismic system', `${seismicSystem === 'smf' ? 'special moment frame (§418.6)' : seismicSystem === 'imf' ? 'intermediate moment frame (§418.4)' : 'gravity — no §418 detailing'}${evOn ? ` · Ev = 0.5·Ca·I·D applied (§208.4.1)` : ' · Ev not applied'}`],
       ['Mass source', 'dead load only — slab area dead loads, member self-weight, dead line and point loads (§208.5.1.1); live load excluded'],
+      // The mass MATRIX is a separate statement from the mass SOURCE: the
+      // source says what was weighed, this says how the weight was distributed
+      // to the DOFs, and the periods depend on both.
+      ['Mass matrix', massModel === 'consistent'
+        ? 'consistent — element mass matrices, rotational inertia carried; bounds the frequencies from above'
+        : 'lumped at nodes, translational only — rotational DOFs carry no inertia; bounds the frequencies from below'],
       ['Design assumptions', `${allAround ? 'column bars on all four faces' : 'column bars on two faces'} · ${tBeamOn ? 'flanged (T/L) sagging design §6.3.2' : 'rectangular web only'} · ${beamTopSteel ? 'beams set to top of steel' : 'beams on the node line'}`],
       ['Governing case', d.govName],
       ['Concrete', `${f1(d.totals.concrete)} m³ (${f1(d.totals.concreteMembers)} members + ${f1(d.totals.concreteSlabs)} slabs)`],
@@ -3577,9 +3586,25 @@ export default function ModelSpace() {
                     onChange={(e) => setNModes(Math.max(1, Math.min(50, Math.round(parseFloat(e.target.value) || 1))))}
                     className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0f4c92] focus:outline-none focus:ring-1 focus:ring-[#0f4c92]" />
                 </label>
+                <label className="flex flex-col text-sm">
+                  <span className="mb-1 font-medium text-slate-600">Mass matrix</span>
+                  <select value={massModel} onChange={(e) => setMassModel(e.target.value as MassModel)}
+                    className="rounded-md border border-slate-300 px-2.5 py-1.5 text-slate-800 focus:border-[#0f4c92] focus:outline-none focus:ring-1 focus:ring-[#0f4c92]">
+                    <option value="lumped">Lumped (translational only)</option>
+                    <option value="consistent">Consistent (element mass matrices)</option>
+                  </select>
+                </label>
                 <p className="col-span-full text-[11px] text-slate-500">
-                  Lumped-mass free vibration ([K]−ω²[M]). Mass from member &amp; slab self-weight (dead). Request enough
+                  Free vibration ([K]−ω²[M]). Mass from member &amp; slab self-weight (dead). Request enough
                   modes to accumulate ≥90% of the lateral mass (NSCP 208.5.5).
+                </p>
+                <p className="col-span-full text-[11px] text-slate-500">
+                  <b>Lumped</b> puts the mass at the nodes and gives the rotational DOFs no inertia — it bounds the true
+                  frequencies from <b>below</b>. <b>Consistent</b> integrates each member&apos;s own element mass matrix
+                  over the same shape functions as its stiffness, so rotational inertia and end-to-end coupling are
+                  carried, and it bounds them from <b>above</b>. Slab and superimposed dead mass stays lumped at the
+                  panel corners either way. Consistent solves every free DOF instead of the massive translational ones,
+                  so it is the slower of the two; on a real frame with slabs the two usually agree within a percent.
                 </p>
                 <div className="col-span-full" data-tour="modal-panel">
                   <button type="button" onClick={runModal} disabled={!model || !!busy || meshErrors} className={btn}>
