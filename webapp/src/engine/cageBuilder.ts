@@ -29,7 +29,7 @@ import { buildFootingCage } from './footingCage'
 import { buildSlabCage, type SlabCageDir } from './slabCage'
 import { buildStairCage } from './stairCage'
 import { placeStair } from './stairPlacement'
-import { spliceCage, type SpliceOptions } from './barSplice'
+import { spliceCage, type SpliceOptions, type Avoid } from './barSplice'
 import { STOCK_BAR_LENGTH } from './rebarModel'
 import type { CageKind, RebarCage } from './rebarModel'
 import { beamMomentRatios, momentRatioLimits, type BeamMomentRatios } from './beamMomentRatios'
@@ -277,7 +277,7 @@ export function buildStructureCages(
   const spliceOf = (
     sec: RectSection, barDia: number,
     prefer?: number[], preferByRole?: Record<string, number[]>,
-    avoidByRole?: Record<string, [number, number][]>,
+    avoidByRole?: Record<string, Avoid[]>,
   ): SpliceOptions => {
     const dl = calcDevLength({
       db: barDia, fc: sec.fc, fy: sec.fy,
@@ -385,7 +385,10 @@ export function buildStructureCages(
     // runs through (the fraction of a shorter run covers more of it).
     const hook = (24 * sec.barDia) / 1000
     const hinge = hingeZone > 0 && b.L > 0 ? Math.min(0.5, (hingeZone + hook) / (b.L + 2 * hook)) : 0
-    const hingeEnds: [number, number][] = hinge > 0 ? [[0, hinge], [1 - hinge, 1]] : []
+    const hingeWhy = 'the joint, or within 2h of its face (§418.6.3.3)'
+    const hingeEnds = hinge > 0
+      ? [{ from: 0, to: hinge, why: hingeWhy }, { from: 1 - hinge, to: 1, why: hingeWhy }]
+      : []
     const lapFrac = spliceOf(sec, sec.barDia).lap / (b.L + 2 * hook)
     const beamSplice = spliceOf(sec, sec.barDia, [0.5], {
       top: [0.5],                       // middle half
@@ -396,8 +399,15 @@ export function buildStructureCages(
         ? [hinge + lapFrac / 2 + 0.01, 1 - hinge - lapFrac / 2 - 0.01]
         : [0.125, 0.875],
     }, {
-      top: [[0, 0.25], [0.75, 1], ...hingeEnds],
-      bottom: smf ? hingeEnds : [[0.25, 0.75]],
+      // Each zone says WHAT IT IS, because a bar is kept out of more than one
+      // kind at once and the note has to name the one it broke.
+      top: [
+        { from: 0, to: 0.25, why: 'the negative-moment region at the support' },
+        { from: 0.75, to: 1, why: 'the negative-moment region at the support' },
+        ...hingeEnds,
+      ],
+      bottom: smf ? hingeEnds
+        : [{ from: 0.25, to: 0.75, why: 'the midspan positive-moment region' }],
     })
     add('beam', spliceCage(buildBeamCage({
       // The cage is told how its bars WILL be lapped, so it can close the

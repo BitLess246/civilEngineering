@@ -170,6 +170,26 @@ describe('G · optimization', () => {
     const diff = s.tables.find((x) => x.title.startsWith('G.2'))!
     expect(diff.rows.length).toBeGreaterThan(0)
     expect(s.notes![0]).toMatch(/GROWS/)
+
+    // TWO COUNTS, TWO COLUMNS. `grown` is what the grow step acted on;
+    // `changes` is what came out different once the hierarchy was enforced and
+    // the design re-run — and the economy pass changes geometry while growing
+    // nothing. Under one heading the first was read as the second: a step
+    // reading 6 sat beside a G.3 trail listing 12.
+    expect(hist.head).toContain('Sections grown')
+    expect(hist.head).not.toContain('Sections changed')
+    if (result.steps.some((x) => x.changes?.length)) {
+      expect(hist.head).toContain('Geometry changes')
+      const iGrown = hist.head.indexOf('Sections grown')
+      const iChanged = hist.head.indexOf('Geometry changes')
+      // and each column carries its OWN number
+      const trail = s.tables.find((x) => x.title.startsWith('G.3'))
+      const listed = trail ? trail.rows.length : 0
+      const counted = hist.rows.reduce((n, r) => n + (Number(r[iChanged]) || 0), 0)
+      expect(counted).toBe(listed)
+      expect(hist.rows.some((r) => r[iGrown] !== r[iChanged])).toBe(true)
+      expect(hist.note).toMatch(/geometry changes/i)
+    }
   }, 60000)
 })
 
