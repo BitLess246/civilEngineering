@@ -103,6 +103,32 @@ export function slicePath(
   return { path: out, bendDia: bends }
 }
 
+/**
+ * A zone no lap may fall in, and WHY.
+ *
+ * The bare `[from, to]` pair is still accepted, and is all the placer needs —
+ * but a bar can be kept out of two different kinds of zone at once. An SMF top
+ * bar has both the end quarters (the negative-moment region) and §418.6.3.3's
+ * band 2h from each joint face, and on a deep beam that band reaches nearly to
+ * midspan. Reported by ROLE alone, a lap caught by the second was announced as
+ * being "at the support", which is the wrong end of the beam: measured on a
+ * 1.4 m beam over a 7 m span, a lap at 3.24 m was named a support lap. So a
+ * caller that knows what its zones ARE says so, and the note repeats it.
+ */
+export interface AvoidZone {
+  /** Fractions of the run, as for the bare pair. */
+  from: number
+  to: number
+  /** The phrase the note uses — e.g. 'within 2h of the joint face
+   *  (§418.6.3.3)'. */
+  why: string
+}
+export type Avoid = readonly [number, number] | AvoidZone
+
+/** Either form as one shape. */
+const zoneOf = (a: Avoid): AvoidZone =>
+  Array.isArray(a) ? { from: a[0], to: a[1], why: '' } : a as AvoidZone
+
 export interface SpliceOptions {
   /** Commercial bar length, m. */
   stock: number
@@ -145,10 +171,10 @@ export interface SpliceOptions {
    * makes them a little conservative — the hook is bar, and the zone stretches
    * by the hook's length.
    */
-  avoid?: [number, number][]
+  avoid?: Avoid[]
   /** Critical sections PER ROLE, for the same reason `preferByRole` exists —
    *  the two faces of a beam are critical at opposite places. */
-  avoidByRole?: Record<string, [number, number][]>
+  avoidByRole?: Record<string, Avoid[]>
   /** Shift every splice on this bar by this much, m — how staggering is applied. */
   stagger?: number
 }
@@ -160,10 +186,25 @@ export interface SpliceOptions {
  * is within it.
  */
 export function spliceViolations(L: number, centres: number[], o: SpliceOptions): number[] {
-  const zones = (o.avoid ?? []).map(([a, b]): [number, number] => [a * L, b * L])
+  return violatedZones(L, centres, o).map((v) => v.centre)
+}
+
+/**
+ * The same laps, each with the zone that caught it — so a note can say which
+ * rule the lap broke rather than guess from the bar's role. See `AvoidZone`.
+ */
+export function violatedZones(
+  L: number, centres: number[], o: SpliceOptions,
+): { centre: number; zone: AvoidZone }[] {
+  const zones = (o.avoid ?? []).map(zoneOf)
   if (!zones.length) return []
   const half = o.lap / 2
-  return centres.filter((c) => zones.some(([a, b]) => c + half > a + 1e-9 && c - half < b - 1e-9))
+  const out: { centre: number; zone: AvoidZone }[] = []
+  for (const c of centres) {
+    const hit = zones.find((z) => c + half > z.from * L + 1e-9 && c - half < z.to * L - 1e-9)
+    if (hit) out.push({ centre: c, zone: hit })
+  }
+  return out
 }
 
 /** Splice centres, m along the run — the decision, separated so it is testable
@@ -183,7 +224,7 @@ export function spliceCentres(L: number, o: SpliceOptions): number[] {
     }
     return true
   }
-  const zones = (o.avoid ?? []).map(([a, b]): [number, number] => [a * L, b * L])
+  const zones = (o.avoid ?? []).map(zoneOf).map((z): [number, number] => [z.from * L, z.to * L])
   const clear = (c: number[]) => spliceViolations(L, c, o).length === 0
 
   /** The layout for `n` pieces: even division, then preference, then stagger,
@@ -363,11 +404,16 @@ export function spliceCage(cage: RebarCage, o: SpliceOptions): RebarCage {
     // the bar still has to be two pieces — and SAID. The note travels with the
     // cage, so every view of the bar carries it: the elevation, the Display
     // tab, the report.
-    const bad = spliceViolations(pathLength(r.path), runSpliceCentres(r, opts), opts)
+    const bad = violatedZones(pathLength(r.path), runSpliceCentres(r, opts), opts)
     if (bad.length) {
-      notes.push(`${r.mark}: lap splice at ${bad.map((c) => c.toFixed(2)).join(', ')} m along the bar lies in a critical section (${
-        r.role === 'bottom' ? 'the midspan positive-moment region' : r.role === 'top' ? 'the negative-moment region at the support' : 'a restricted zone'
-      }) — no cut of a ${o.stock} m stock bar keeps every lap out of it. Use a longer bar, a mechanical or welded splice (§425.5.7), or accept a Class B lap there (§425.5.2.1)`)
+      // NAMED BY THE ZONE, not by the role. A bar is kept out of more than one
+      // kind of zone at once, and the role only says which face it is on: an
+      // SMF top bar caught by §418.6.3.3's band was announced as lapping "at
+      // the support" when the band reached to within a few hundred of midspan.
+      const why = [...new Set(bad.map((v) => v.zone.why).filter(Boolean))].join('; ')
+        || (r.role === 'bottom' ? 'the midspan positive-moment region'
+          : r.role === 'top' ? 'the negative-moment region at the support' : 'a restricted zone')
+      notes.push(`${r.mark}: lap splice at ${bad.map((v) => v.centre.toFixed(2)).join(', ')} m along the bar lies in a critical section (${why}) — no cut of a ${o.stock} m stock bar keeps every lap out of it. Use a longer bar, a mechanical or welded splice (§425.5.7), or accept a Class B lap there (§425.5.2.1)`)
     }
     runs.push(...spliceRun(r, opts))
   }

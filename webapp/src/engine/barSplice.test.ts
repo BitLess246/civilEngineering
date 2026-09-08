@@ -312,3 +312,40 @@ describe('critical sections — the guard the preference is not', () => {
     expect(out.notes ?? []).toEqual([])
   })
 })
+
+describe('the note names the zone the lap broke, not the bar\'s face', () => {
+  // A bar is kept out of more than one kind of zone at once, and its ROLE only
+  // says which face it is on. An SMF top bar is kept out of the end quarters
+  // AND out of §418.6.3.3's band 2h from each joint face — and on a deep beam
+  // that band reaches nearly to midspan, so a lap caught by it was announced
+  // as being "at the support", the wrong end of the beam.
+  const bar = (mark: string, role: 'top' | 'bottom'): RebarRun => ({
+    mark, role, dia: 25, member: 'B1', count: 1, bendDia: [],
+    path: [[0, 0, 0], [7, 0, 0]],
+  })
+  const hinge = { from: 0, to: 0.474, why: 'the joint, or within 2h of its face (§418.6.3.3)' }
+  const hingeR = { from: 0.526, to: 1, why: 'the joint, or within 2h of its face (§418.6.3.3)' }
+
+  it('quotes the labelled zone', () => {
+    const out = spliceCage({ member: 'B1', runs: [bar('T1', 'top')] },
+      { stock: 6, lap: 0.96, avoidByRole: { top: [hinge, hingeR] } })
+    const note = (out.notes ?? []).find((n) => n.startsWith('T1:'))
+    expect(note).toBeDefined()
+    expect(note).toContain('§418.6.3.3')
+    expect(note).not.toContain('at the support')
+  })
+
+  it('falls back to the face when a zone carries no label', () => {
+    const out = spliceCage({ member: 'B1', runs: [bar('B1', 'bottom')] },
+      { stock: 6, lap: 0.96, avoidByRole: { bottom: [[0.05, 0.95]] } })
+    expect((out.notes ?? []).find((n) => n.startsWith('B1:')))
+      .toContain('the midspan positive-moment region')
+  })
+
+  it('reports each violated zone once, however many laps hit it', () => {
+    const out = spliceCage({ member: 'B1', runs: [bar('T1', 'top')] },
+      { stock: 4, lap: 0.96, avoidByRole: { top: [hinge, hingeR] } })
+    const note = (out.notes ?? []).find((n) => n.startsWith('T1:')) ?? ''
+    expect(note.match(/§418\.6\.3\.3/g) ?? []).toHaveLength(1)
+  })
+})

@@ -652,11 +652,27 @@ function optimizationSection(i: AppendixInput): AppendixSection {
     { label: 'Failing at end', value: String(r.steps[r.steps.length - 1]?.fails ?? 0) },
     { label: 'Final design', value: designOK(r.design) ? 'SAFE' : 'CHECK FAILED' },
   ]
+  // TWO COUNTS, TWO COLUMNS. `grown` is how many sections the grow step ACTED
+  // on; `changes` is how many came out with different geometry once the size
+  // hierarchy was enforced and the design re-run — and the economy pass changes
+  // geometry while growing nothing at all. Under one heading reading "Sections
+  // changed" the first was taken for the second, and a step reading `6` sat
+  // beside a trail listing 12.
+  const anyChanges = r.steps.some((s) => s.changes?.length)
   const tables: AppendixTable[] = [{
     title: 'G.1 Iteration history',
-    head: ['Iteration', 'Sections changed', 'Failing checks', 'Status'], right: [1, 2],
-    rows: r.steps.map((s, k) => [k === 0 ? '0 (initial)' : String(s.iter), s.grown ? String(s.grown) : '—', String(s.fails), s.ok ? 'PASS' : 'grow failing']),
-    note: r.stopReason,
+    head: ['Iteration', 'Sections grown', ...(anyChanges ? ['Geometry changes'] : []), 'Failing checks', 'Status'],
+    right: anyChanges ? [1, 2, 3] : [1, 2],
+    rows: r.steps.map((s, k) => [
+      k === 0 ? '0 (initial)' : s.note ? `${s.iter} · ${s.note.split(' —')[0]}` : String(s.iter),
+      s.grown ? String(s.grown) : '—',
+      ...(anyChanges ? [s.changes?.length ? String(s.changes.length) : '—'] : []),
+      String(s.fails), s.ok ? 'PASS' : 'grow failing',
+    ]),
+    note: [
+      'Sections grown counts what the grow step acted on; geometry changes counts what came out different once the size hierarchy was enforced and the design re-run — the economy pass changes geometry without growing anything. G.3 lists them.',
+      r.stopReason,
+    ].filter(Boolean).join(' ') || undefined,
   }]
   // The engine carries the pre-optimization state on the result itself
   // (initialModel, captured by the pipeline before the grow loop) — that is
