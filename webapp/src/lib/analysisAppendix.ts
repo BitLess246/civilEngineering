@@ -34,12 +34,22 @@ import type { RebarCage } from '../engine/rebarModel'
 import type { Drawing, PlanPrimitive } from '../engine/planRenderer'
 import { WOOD_SPECIES } from '../engine/woodDesign'
 import { validateMesh } from '../engine/meshValidation'
+import {
+  modelDiagram, loadDiagram, deflectedDiagram, reactionDiagram, forceDiagram,
+  bestView, CATEGORY_LABEL, type DiagramView,
+} from '../engine/analysisDiagram'
 
 export type AppendixKey = 'model' | 'loading' | 'analysis' | 'modal' | 'nonlinear' | 'pushover' | 'optimization' | 'qa'
 
 export interface AppendixTable { title: string; head: string[]; rows: string[][]; right?: number[]; note?: string }
 export interface AppendixStat { label: string; value: string; unit?: string }
-export interface AppendixFigure { caption: string; drawing: Drawing }
+export interface AppendixFigure {
+  caption: string
+  drawing: Drawing
+  /** Height cap on the page, mm. Omitted ⇒ the painter's default. A figure
+   *  carrying node and member ids needs the room; a trace does not. */
+  maxH?: number
+}
 export interface AppendixSection {
   key: AppendixKey
   letter: string
@@ -204,7 +214,16 @@ function modelSection(i: AppendixInput): AppendixSection {
     head: ['Material', 'Used by'],
     rows: materials.map((lab) => [lab, [...new Set(sections.filter((s) => materialLabel(s) === lab).map((s) => s.name))].join(', ')]),
   })
-  return { key: 'model', letter: LETTERS.model, title: APPENDIX_TITLES.model, available: true, stats, tables }
+  // A.1 IS A PICTURE, and it comes first. Every id in every table after it —
+  // reactions at `n0.0.0`, the moment in `bx0.1.2` — is unverifiable until the
+  // reader can find that node or member on the structure. The tables were
+  // complete and the appendix was still not auditable.
+  const view = bestView(i.model)
+  const figures: AppendixFigure[] = i.model.nodes.length ? [{
+    caption: 'A.1 Analytical model — node and member ids, and the support at every restrained joint. Ids are dropped on a large model for legibility; the node and member tables carry them either way.',
+    drawing: modelDiagram(i.model, { view, h: 150 }), maxH: 150,
+  }] : []
+  return { key: 'model', letter: LETTERS.model, title: APPENDIX_TITLES.model, available: true, stats, tables, figures: figures.length ? figures : undefined }
 }
 
 // ── B · loading ──────────────────────────────────────────────────────────
@@ -303,7 +322,17 @@ function loadingSection(i: AppendixInput): AppendixSection {
         + ' Live load is excluded (§208.5.1.1; storage occupancies would add 25%).',
     })
   }
-  return { key: 'loading', letter: LETTERS.loading, title: APPENDIX_TITLES.loading, available: true, tables }
+  // One figure per load category the model actually carries — what was
+  // applied, drawn where it acts, so a table of 400 assignments can be
+  // checked at a glance for the load that went on the wrong member.
+  const view = bestView(i.model)
+  const cats = [...new Set(i.model.loads.map((l) => l.cat))]
+  const figures: AppendixFigure[] = []
+  cats.forEach((c, k) => {
+    const d = loadDiagram(i.model, c, { view })
+    if (d) figures.push({ caption: `B.${k + 1}f ${CATEGORY_LABEL[c] ?? c} — every assignment of this category, drawn on the model. Arrow length is proportional to magnitude within the figure, not to the geometry.`, drawing: d })
+  })
+  return { key: 'loading', letter: LETTERS.loading, title: APPENDIX_TITLES.loading, available: true, tables, figures: figures.length ? figures : undefined }
 }
 
 // ── C · linear static analysis ───────────────────────────────────────────
@@ -336,6 +365,38 @@ export function equilibriumRows(model: StructuralModel, analysis: F3Analysis): E
 }
 
 const abs6 = (v: number[]) => v.reduce((a, b) => Math.max(a, Math.abs(b)), 0)
+
+/**
+ * The four result figures, for the governing combination.
+ *
+ * Mz and Vy are the gravity pair every frame is read on; N is what tells a
+ * column from a tie. My/Vz/T are left to the tables — a figure for each of
+ * the six components would be six pages of mostly-flat ribbon, and the three
+ * drawn here are the ones a reviewer checks by eye.
+ */
+function resultFigures(m: StructuralModel, r: F3Result, caseName: string, view: DiagramView): AppendixFigure[] {
+  const figs: AppendixFigure[] = [
+    {
+      caption: `C.5f Deflected shape — ${caseName}. Each member is drawn on its own cubic shape function (the element's homogeneous solution from its end displacements and rotations), so a span load's extra sag between the nodes is not included. The amplification is printed on the figure.`,
+      drawing: deflectedDiagram(m, r, { view, caseName }),
+    },
+    {
+      caption: `C.6f Support reactions — ${caseName}. The ΣFy printed on the figure is the same sum the equilibrium check in C.1 compares against the applied load.`,
+      drawing: reactionDiagram(m, r, { view, caseName }),
+    },
+  ]
+  const compNote: Record<'Mz' | 'Vy' | 'N', string> = {
+    Mz: 'Ordinates are plotted on the member\'s local transverse axis, so on a horizontal member a sagging moment draws below the axis — the tension side, which is where the bottom steel goes.',
+    Vy: 'Positive shear is drawn on the member\'s +y′ side. A lobe changing colour along a member is the point at which the shear reverses.',
+    N: 'Blue is tension and red compression on the member\'s own axis, which is why every column reads one colour and a tie the other.',
+  }
+  for (const [comp, tag, name] of [['Mz', 'C.7f', 'Bending moment Mz'], ['Vy', 'C.8f', 'Shear Vy'], ['N', 'C.9f', 'Axial force N']] as const)
+    figs.push({
+      caption: `${tag} ${name} — ${caseName}, one scale over the whole structure. ${compNote[comp]}`,
+      drawing: forceDiagram(m, r, comp, { view, caseName }),
+    })
+  return figs
+}
 
 function analysisSection(i: AppendixInput): AppendixSection {
   const a = i.analysis
@@ -433,7 +494,15 @@ function analysisSection(i: AppendixInput): AppendixSection {
   const notes = pd.length
     ? [`P-Δ: ${pd.filter((r) => r.result!.pDelta!.converged).length} of ${pd.length} combinations converged (max ${Math.max(...pd.map((r) => r.result!.pDelta!.iterations))} iterations).`]
     : undefined
-  return { key: 'analysis', letter: LETTERS.analysis, title: APPENDIX_TITLES.analysis, available: true, stats, tables, notes }
+  // THE RESULTS, DRAWN. The envelope tables say the largest moment is 84 kN·m
+  // in bx0.1.2; the diagram says whether it is where a moment should be. A
+  // deflected shape that leans the wrong way, a support that never took load,
+  // a moment diagram that does not close at a joint — none of those are
+  // visible in a column of numbers.
+  const govRes = gov?.result ?? null
+  const view = bestView(m)
+  const figures: AppendixFigure[] = govRes ? resultFigures(m, govRes, gov!.combo.name, view) : []
+  return { key: 'analysis', letter: LETTERS.analysis, title: APPENDIX_TITLES.analysis, available: true, stats, tables, notes, figures: figures.length ? figures : undefined }
 }
 
 // ── D · modal & seismic ──────────────────────────────────────────────────

@@ -69,14 +69,22 @@ function paintSection(sh: Sheet, s: AppendixSection): void {
     sh.y += 2
   }
   for (const f of s.figures ?? []) {
-    const box = { x: M, y: 0, w: CONTENT_W, maxH: 95 }
+    const box = { x: M, y: 0, w: CONTENT_W, maxH: f.maxH ?? 95 }
     const z = paintedSize(f.drawing, box)
-    sh.ensure(z.height + 10)
-    paintDrawing(doc, f.drawing, { ...box, y: sh.y, x: M + (CONTENT_W - z.width) / 2 })
-    sh.y += z.height + 2
     sh.setF('sans', 'normal', 6, MUTED)
-    doc.text(doc.splitTextToSize(f.caption, CONTENT_W), M, sh.y)
-    sh.y += 5
+    // A CAPTION IS AS TALL AS IT IS. The cursor advanced a flat 5 mm, so a
+    // two-line caption ran into the heading under it — and every figure worth
+    // captioning has a two-line caption.
+    const lines: string[] = doc.splitTextToSize(f.caption, CONTENT_W)
+    sh.ensure(z.height + 6 + lines.length * 3)
+    paintDrawing(doc, f.drawing, { ...box, y: sh.y, x: M + (CONTENT_W - z.width) / 2 })
+    sh.y += z.height + 2.5
+    // `paintDrawing` leaves the font wherever the drawing's last text
+    // primitive set it, so the caption has to claim it back — split at 6 pt
+    // and drawn at 9 pt is how the wrap ran off the right margin.
+    sh.setF('sans', 'normal', 6, MUTED)
+    doc.text(lines, M, sh.y)
+    sh.y += lines.length * 3 + 3
   }
   for (const t of s.tables) {
     sh.ensure(24)
