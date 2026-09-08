@@ -85,6 +85,17 @@ describe('every bar the cut finds lands inside the concrete', () => {
     for (const b of design.beams.slice(0, 6)) for (const t of [0.08, 0.5, 0.92]) inside(b.id, t)
   })
 
+  it('…and at the member\'s own ENDS, which is where every End i / End j row asks', () => {
+    // Two separate faults met here. The cut landed on the NODE, where one
+    // span's bars stop and the next span's start, so the crossing test — right
+    // for a shared vertex in the middle of a run, wrong at a run's own end —
+    // returned no steel at all: 14 of 126 sections over three designed frames
+    // drew a stirrup and nothing inside it. And where bars WERE found, the
+    // node is the middle of the joint, so the cut caught them partway down
+    // their end hooks and put dots below the soffit: 36 of them.
+    for (const b of design.beams.slice(0, 6)) for (const t of [0, 1]) inside(b.id, t)
+  })
+
   it('for every column, top and bottom', () => {
     for (const c of design.columns.slice(0, 6)) for (const t of [0.15, 0.5, 0.85]) inside(c.id, t)
   })

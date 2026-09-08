@@ -91,6 +91,33 @@ describe('cutting a beam cage at midspan', () => {
     expect(res.bars.length).toBe(reaching)
   })
 
+  it('draws a bar whose END is on the plane — the section at a member\'s own end', () => {
+    // The half-open rule is right for a shared vertex in the middle of a run
+    // and wrong at a run's own end, where there is no earlier segment to have
+    // counted it. At a column where two spans meet, one span's bars STOP on
+    // the plane (a rounding error short of it, so no sign change) and the
+    // next span's BEGIN there (t = 0, which the half-open test drops), so the
+    // report's `End j` and the next beam's `End i` drew a stirrup and no
+    // steel at all — 14 of 126 sections over three designed frames.
+    const atI = cutCage(beamCage, memberCut([0, 3, 0], [6, 3, 0], 0))
+    const atJ = cutCage(beamCage, memberCut([0, 3, 0], [6, 3, 0], 1))
+    for (const end of [atI, atJ]) {
+      expect(end.bars.length).toBeGreaterThanOrEqual(4)
+      expect(end.bars.some((b) => b.role === 'top')).toBe(true)
+      expect(end.bars.some((b) => b.role === 'bottom')).toBe(true)
+    }
+    // and it is still ONE dot per bar — the end is not counted twice
+    const marks = atJ.bars.map((b) => b.mark)
+    expect(new Set(marks).size).toBe(marks.length)
+  })
+
+  it('does not invent a bar that stops short of the plane', () => {
+    // The tolerance swallows double rounding, not geometry: a cut beyond the
+    // member finds nothing, however little beyond.
+    const past = cutCage(beamCage, { ...memberCut([0, 3, 0], [6, 3, 0], 1), at: [6.001, 3, 0] })
+    expect(past.bars).toHaveLength(0)
+  })
+
   it('shows the support steel at a support and not at midspan', () => {
     const atFace = cutCage(beamCage, memberCut([0, 3, 0], [6, 3, 0], 0.02))
     expect(atFace.bars.filter((b) => b.role === 'top').length)

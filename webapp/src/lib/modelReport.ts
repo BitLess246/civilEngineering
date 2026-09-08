@@ -18,9 +18,9 @@ import { beamSectionSolution, columnRowSolution, footingRowSolution, combinedRow
 import { connectionRowSolution } from './connectionSolution'
 import { buildPrestressedSolution } from './prestressedSolution'
 import type { SolutionStep, SolutionLine } from './solution'
-import { beamSectionZones, columnStackByMember, elevationBundleByMember } from './planDetails'
+import { columnStackByMember } from './planDetails'
 import {
-  beamElevationDrawing, beamSectionDrawing, columnElevationDrawing, columnSectionDrawing, columnStoreyOf,
+  beamSectionDrawing, columnElevationDrawing, columnSectionDrawing, columnStoreyOf,
 } from './scheduleFigures'
 
 export interface ReportStat { label: string; value: string; unit?: string }
@@ -472,24 +472,21 @@ export function buildModelReport(
 
   // ── Worked solutions — every member (user-selected depth) ──
   //
-  // The figures are the schedule's: `elevationOf` / `stackOf` are the drawing
-  // set's sheets indexed by member, built once here exactly as `ModelSpace`
-  // builds them for the accordion, and the cuts come from the same cages.
-  const elevationOf = cages ? elevationBundleByMember(model, design, cages) : null
+  // The figures are the schedule's: `stackOf` is the drawing set's column
+  // sheet indexed by member, built once here exactly as `ModelSpace` builds it
+  // for the accordion, and the cuts come from the same cages.
   const stackOf = cages ? columnStackByMember(model, design, cages) : null
+  // NO FRAME ELEVATION HERE. The whole grid line was printed beside every beam
+  // section row — the same sheet again for each of a beam's three stations, and
+  // again for every beam on that line — at a size where the wash marking which
+  // stretch the row is about is the only thing that changes between them. It is
+  // a SHEET, and it belongs where the sheets are: the Plans tab still carries
+  // it, per grid line and at a size it can be read at. The worked solution
+  // keeps the figure that is about this row alone, its own cut.
   const beamFigures = (bm: StructureDesign['beams'][number], k: number, sec: RectSection): ReportFigure[] => {
     if (!cages) return []
-    const s = bm.sections[k]
-    const out: ReportFigure[] = []
-    const bundle = elevationOf?.get(bm.id)
-    if (bundle) {
-      const zone = beamSectionZones(model, bundle, bm.id, bm.sections.map((x) => x.x))?.[k]
-      const d = beamElevationDrawing(bundle, zone, `${bm.id} · ${s.label}`)
-      out.push({ kind: 'elevation', caption: `${d.title} — ${bm.id} ${s.label} washed`, drawing: d })
-    }
-    const cut = beamSectionDrawing(model, cages, bm, s, sec)
-    if (cut) out.push({ kind: 'section', caption: cut.title, drawing: cut })
-    return out
+    const cut = beamSectionDrawing(model, cages, bm, bm.sections[k], sec)
+    return cut ? [{ kind: 'section', caption: cut.title, drawing: cut }] : []
   }
   const columnFigures = (c: StructureDesign['columns'][number], cs: RectSection): ReportFigure[] => {
     if (!cages) return []

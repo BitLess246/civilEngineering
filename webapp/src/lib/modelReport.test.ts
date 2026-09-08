@@ -256,15 +256,32 @@ describe('buildModelReport — worked-solution figures from the cages', () => {
   const texts = (d: { primitives: { kind: string }[] }) =>
     d.primitives.filter((p) => p.kind === 'text').map((p) => (p as unknown as { text: string }).text)
 
-  it('every beam section carries its grid line\'s elevation, washed, and a cut at its station', () => {
+  it('every beam section carries a cut at its station, and NOT the whole grid line', () => {
+    // The frame elevation is a SHEET, and printing it again beside each of a
+    // beam's three station rows — and again for every beam on the same line —
+    // put the same drawing in the report a dozen times over, differing only in
+    // which stretch is washed. It stays in the Plans tab, where it is one sheet
+    // per grid line at a size it can be read at.
     for (const it of items('RC beams & girders')) {
-      const kinds = (it.figures ?? []).map((f) => f.kind)
-      expect(kinds).toEqual(['elevation', 'section'])
-      const [elev, cut] = it.figures!
-      expect(texts(elev.drawing).some((t) => t.startsWith('FRAME ELEVATION'))).toBe(true)
-      expect(texts(elev.drawing)).toContain(it.title)          // the wash is labelled with this row
+      const figs = it.figures ?? []
+      expect(figs.map((f) => f.kind)).toEqual(['section'])
+      const cut = figs[0]!
+      expect(texts(cut.drawing).some((t) => t.startsWith('FRAME ELEVATION'))).toBe(false)
       expect(texts(cut.drawing).some((t) => /^\d+-⌀\d+ (TOP|BOT)/.test(t))).toBe(true)
       expect(texts(cut.drawing).some((t) => /^STIRRUPS/.test(t))).toBe(true)
+    }
+  })
+
+  it('a section at a beam\'s own END still shows its steel', () => {
+    // `End i` and `End j` are cut on the member's node, which is where one
+    // span's bars stop and the next span's start — the plane is the bar's
+    // boundary, not its interior. The report printed a stirrup and no steel at
+    // all under half the end rows.
+    const ends = items('RC beams & girders').filter((i) => / · End [ij]$/.test(i.title))
+    expect(ends.length).toBeGreaterThan(0)
+    for (const it of ends) {
+      const d = it.figures![0]!.drawing as { primitives: { kind: string }[] }
+      expect(d.primitives.filter((p) => p.kind === 'circle').length).toBeGreaterThanOrEqual(4)
     }
   })
 
@@ -286,8 +303,8 @@ describe('buildModelReport — worked-solution figures from the cages', () => {
     const hog = its.find((i) => bm.sections.find((s) => `${bm.id} · ${s.label}` === i.title)?.hogging)
     const sag = its.find((i) => !bm.sections.find((s) => `${bm.id} · ${s.label}` === i.title)?.hogging)
     expect(hog && sag).toBeTruthy()
-    expect(texts(hog!.figures![1].drawing).some((t) => / TOP/.test(t))).toBe(true)
-    expect(texts(sag!.figures![1].drawing).some((t) => / BOT/.test(t))).toBe(true)
+    expect(texts(hog!.figures![0].drawing).some((t) => / TOP/.test(t))).toBe(true)
+    expect(texts(sag!.figures![0].drawing).some((t) => / BOT/.test(t))).toBe(true)
   })
 
   it('footings, which have no cage figure yet, carry none rather than a stale one', () => {
