@@ -307,6 +307,29 @@ describe('buildModelReport — worked-solution figures from the cages', () => {
     expect(texts(sag!.figures![0].drawing).some((t) => / BOT/.test(t))).toBe(true)
   })
 
+  it('the schedule and the section callout name the SAME two stirrup regions', () => {
+    // One page said @70 and the next said @140 about the same beam. Both are
+    // real — the hinge zone and the rest of the span — and neither page said so.
+    const rows = rpt.tables.find((t) => t.title.startsWith('RC beam'))!.rows
+    const cells = rows.map((r) => r.join(' | ')).join('\n')
+    const twoRegion = cells.match(/@\d+ in 2h, @\d+ elsewhere/g) ?? []
+    const seen = new Set<string>()
+    for (const it of items('RC beams & girders')) {
+      const cut = it.figures?.[0]
+      if (!cut) continue
+      const note = texts(cut.drawing).find((t) => t.startsWith('STIRRUPS'))
+      if (note) seen.add(note)
+    }
+    // where the schedule reports two regions, so does the callout
+    if (twoRegion.length) {
+      expect([...seen].some((n) => /WITHIN 2h OF EACH SUPPORT/.test(n))).toBe(true)
+    }
+    // and neither ever reports a bare hinge pitch with no span pitch beside it
+    for (const n of seen) {
+      if (/WITHIN 2h/.test(n)) expect(n).toMatch(/ELSEWHERE/)
+    }
+  })
+
   it('footings, which have no cage figure yet, carry none rather than a stale one', () => {
     for (const it of items('Isolated footings')) expect(it.figures ?? []).toEqual([])
   })

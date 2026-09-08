@@ -171,7 +171,7 @@ export default function BeamDesign() {
       notes: [
         ...beamSectionNotes(
           { x: 0, label: '', hogging, design: {
-            bars: r.bars, sAdopt: r.sAdopt, legs: fd.legs, layers: r.layers,
+            bars: r.bars, sAdopt: r.sAdopt, sHinge: r.sHinge, legs: fd.legs, layers: r.layers,
             comprBars: r.comprBars, comprLayers: r.comprLayers,
             mode: r.mode, comprEffective: r.comprEffective,
           } },

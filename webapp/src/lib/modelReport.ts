@@ -300,14 +300,18 @@ export function buildModelReport(
             ? ` · ${s.flangeKind ?? 'T'}${s.design.flangeAction === 'true-T' ? '(true)' : ''} bf=${Math.round(s.bf)}` : ''}`,
           f1(Math.abs(s.Mu)), f1(s.Vu), d.mode,
           `${d.bars}⌀${sec?.barDia}${d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''}${s.hogging ? ' top' : ''}`,
-          // A HOGGING section is in the 2h hinge zone, so the spacing it is
-          // built at is `sHinge` — `sAdopt` capped by §418.6.4.4 / §418.4.2.4.
-          // Reporting `sAdopt` there printed @220 in the schedule while the
-          // cage laid the hoops at @110, which is the schedule disagreeing
-          // with the drawing about the same bar.
+          // BOTH SPACINGS, because the beam is built at both. §418.6.4.4 /
+          // §418.4.2.4 cap the pitch for 2h from each support face, and the
+          // shear demand sets it through the rest of the span. Printing one of
+          // them — the hinge pitch on a hogging row, the adopted pitch on the
+          // section callout — had the schedule saying @70 and the drawing @140
+          // about the same beam, with nothing to say they were two regions.
           ((): string => {
-            const sp = s.hogging ? d.sHinge : d.sAdopt
-            return sp > 0 ? `${d.legs}L-⌀${sec?.tieDia}@${Math.round(sp)}` : d.region === 'none' ? 'none' : '⚠'
+            if (d.sAdopt <= 0) return d.region === 'none' ? 'none' : '⚠'
+            const tie = `${d.legs}L-⌀${sec?.tieDia}`
+            return d.sHinge > 0 && d.sHinge < d.sAdopt - 1
+              ? `${tie}@${Math.round(d.sHinge)} in 2h, @${Math.round(d.sAdopt)} elsewhere`
+              : `${tie}@${Math.round(d.sAdopt)}`
           })(),
           k === 0 ? (bm.gov ?? '') : '',
         ]
@@ -613,7 +617,10 @@ export function buildModelReport(
       `Beam ${b.id}`, memberLoc(b.id) ?? '—', b.gov ?? '—',
       `Mu ${f1(Math.abs(s.Mu))} · Vu ${f1(s.Vu)} kN·m`,
       `As ${f0(d.As)} mm²`,
-      `${d.bars}⌀${sec?.barDia ?? '?'}${d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''} · ${d.legs}L-⌀${sec?.tieDia ?? '?'} @ ${Math.round(s.hogging ? d.sHinge : d.sAdopt)} mm`,
+      `${d.bars}⌀${sec?.barDia ?? '?'}${d.layers.length > 1 ? ` (${d.layers.join('+')})` : ''} · ${d.legs}L-⌀${sec?.tieDia ?? '?'} @ ${
+        d.sHinge > 0 && d.sHinge < d.sAdopt - 1
+          ? `${Math.round(d.sHinge)} in 2h / ${Math.round(d.sAdopt)}`
+          : Math.round(d.sAdopt)} mm`,
       d.phiMnMax > PASS_FLOOR ? f2(Math.abs(s.Mu) / d.phiMnMax) : '—',
       b.ok ? 'PASS' : 'FAIL',
     ])
