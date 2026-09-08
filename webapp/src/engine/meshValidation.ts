@@ -156,6 +156,65 @@ export function validateMesh(model: StructuralModel): MeshIssue[] {
   }
 
 
+  // ── the model's OWN references — everything points at something ─────────
+  //
+  // A model QA pass is only worth the checks it actually makes, and these were
+  // the ones a reviewer listed that nothing here made: a plate on a node that
+  // is gone, two plates on the same four corners, a member on a section id the
+  // model does not carry, a load on an element that does not exist, and a
+  // member so slender or so stubby that its result is not a frame element's.
+  const secById = new Map(model.sections.map((x) => [x.id, x]))
+  for (const mm of members) {
+    if (!secById.has(mm.section))
+      issues.push({ severity: 'error', code: 'member-missing-section', refs: [mm.id],
+        message: `Member ${mm.id} references section "${mm.section}", which the model does not carry — it has no properties to be analysed with.` })
+  }
+  const plateKey = new Set<string>()
+  for (const p of model.plates) {
+    const missing = p.corners.filter((id) => !nodeById.has(id))
+    if (missing.length) {
+      issues.push({ severity: 'error', code: 'plate-missing-node', refs: [p.id, ...missing],
+        message: `Plate ${p.id} references missing node(s) ${missing.join(', ')}.` })
+      continue
+    }
+    const key = [...p.corners].sort().join('|')
+    if (plateKey.has(key))
+      issues.push({ severity: 'warning', code: 'duplicate-plate', refs: [p.id],
+        message: `Plate ${p.id} spans the same four corners as another plate — its area loads and its stiffness are counted twice.` })
+    plateKey.add(key)
+    if (!(p.thickness > 0))
+      issues.push({ severity: 'error', code: 'plate-thickness', refs: [p.id],
+        message: `Plate ${p.id} has a thickness of ${p.thickness} mm.` })
+  }
+  const memberIds = new Set(members.map((mm) => mm.id))
+  const plateIds = new Set(model.plates.map((p) => p.id))
+  for (const l of model.loads) {
+    const bad = l.kind === 'area' ? (!plateIds.has(l.plate) && `plate ${l.plate}`)
+      : l.kind === 'node' ? (!nodeById.has(l.node) && `node ${l.node}`)
+        : (!memberIds.has(l.member) && `member ${l.member}`)
+    if (bad)
+      issues.push({ severity: 'error', code: 'load-missing-target', refs: [],
+        message: `A ${l.cat} ${l.kind} load is applied to ${bad}, which does not exist — the load is silently dropped.` })
+  }
+  // A frame element is a LINE element, and the theory behind it stops being
+  // true at the extremes: a member shorter than its own depth is a joint, not a
+  // beam, and one thousands of diameters long is usually a modelling slip.
+  for (const mm of members) {
+    const a = nodeById.get(mm.i), b = nodeById.get(mm.j)
+    const sec = secById.get(mm.section)
+    if (!a || !b || !sec) continue
+    const L = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)
+    const dMax = Math.max(sec.b, sec.h) / 1000
+    if (!(L > 0) || !(dMax > 0)) continue
+    const slender = L / dMax
+    if (slender < 2)
+      issues.push({ severity: 'warning', code: 'member-aspect-stubby', refs: [mm.id],
+        message: `Member ${mm.id} is ${(L * 1000).toFixed(0)} mm long on a ${(dMax * 1000).toFixed(0)} mm section (L/d = ${slender.toFixed(1)}) — below about 2 a frame element is not the right idealisation; it is a joint or a deep member.` })
+    else if (slender > 200)
+      issues.push({ severity: 'warning', code: 'member-aspect-slender', refs: [mm.id],
+        message: `Member ${mm.id} has L/d = ${slender.toFixed(0)} — check the section assignment or the node coordinates.` })
+  }
+
   // ── timber sanity (L1 rule for wood sections) ───────────────────────────
   for (const sec of model.sections) {
     if (sec.material !== 'wood') continue

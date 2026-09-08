@@ -242,3 +242,59 @@ describe('validateMesh — slab openings', () => {
     expect(codes(panel([rect('O1', 1, 1, 1.2, 0.9)]))).not.toContain('OPENING_LARGE')
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE MODEL'S OWN REFERENCES
+//
+// A QA pass is only worth the checks it makes. These are the ones a review
+// listed that nothing here made: a plate on a node that is gone, two plates on
+// the same corners, a member on a section the model does not carry, a load on
+// an element that does not exist, and members outside the aspect ratio a frame
+// element describes.
+// ─────────────────────────────────────────────────────────────────────────
+describe('references — everything points at something', () => {
+  const frame = (): StructuralModel =>
+    generateGridModel({ baysX: [6], baysZ: [5], storeyH: [3], section, slabThickness: 150 })
+  const has = (m: StructuralModel) => validateMesh(m).map((x) => x.code)
+
+  it('catches a member on a section the model does not carry', () => {
+    const m = frame()
+    m.members[0].section = 'not-a-section'
+    expect(has(m)).toContain('member-missing-section')
+  })
+
+  it('catches a plate on a missing node, and two plates on the same corners', () => {
+    const m = frame()
+    if (!m.plates.length) return
+    const p0 = m.plates[0]
+    expect(has({ ...m, plates: [{ ...p0, corners: [p0.corners[0], p0.corners[1], p0.corners[2], 'gone'] }] }))
+      .toContain('plate-missing-node')
+    expect(has({ ...m, plates: [p0, { ...p0, id: `${p0.id}-copy` }] })).toContain('duplicate-plate')
+  })
+
+  it('catches a load applied to an element that is not there', () => {
+    const m = frame()
+    const bad = validateMesh({ ...m, loads: [...m.loads, { kind: 'member-udl', member: 'ghost', w: 5, cat: 'D' }] })
+    const row = bad.find((x) => x.code === 'load-missing-target')!
+    expect(row).toBeDefined()
+    expect(row.message).toContain('ghost')
+    expect(row.message).toContain('silently dropped')
+  })
+
+  it('flags a member the frame-element idealisation does not describe', () => {
+    const m = frame()
+    // a stub: the member is shorter than its own depth
+    const mm = m.members[0]
+    const a = m.nodes.find((n) => n.id === mm.i)!
+    const short = { ...m, nodes: m.nodes.map((n) => (n.id === mm.j ? { ...n, x: a.x + 0.2, y: a.y, z: a.z } : n)) }
+    expect(has(short)).toContain('member-aspect-stubby')
+  })
+
+  it('says nothing about a sound model', () => {
+    const c = has(frame())
+    for (const q of ['member-missing-section', 'plate-missing-node', 'duplicate-plate',
+      'load-missing-target', 'member-aspect-stubby', 'member-aspect-slender']) {
+      expect(c, q).not.toContain(q)
+    }
+  })
+})

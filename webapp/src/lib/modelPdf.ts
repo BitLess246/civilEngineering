@@ -102,9 +102,22 @@ export async function buildModelPdfInto(
   const sheet = lh.sheet || 'S-3D'
   const docLabel = brandDocLabel('Structure — Calculation Report')
 
+  // "DESIGN OK" is a verdict without a subject. What a reviewer opening the
+  // report wants on the first page is what passed, how close it came and what
+  // governed — the chip now says the status and the line under it says the
+  // numbers, instead of the chip carrying both jobs badly.
+  const passed = report.checks.filter((c) => c.ok).length
+  const worstRatio = report.checks.reduce<number | null>(
+    (a, c) => (c.ratio != null && (a == null || c.ratio > a) ? c.ratio : a), null)
   sh.brandHeader({
     docLabel, title: 'Structure — Design Calculation', sheet, today,
-    ok: report.ok, governing: report.governing, badges,
+    ok: report.ok, badges,
+    verdictLabel: report.ok ? 'DESIGN STATUS — ACCEPTABLE' : 'DESIGN STATUS — NOT ACCEPTABLE',
+    governing: [
+      `${passed}/${report.checks.length} design checks passed`,
+      worstRatio != null ? `max utilization ${worstRatio.toFixed(2)}` : null,
+      report.governing,
+    ].filter(Boolean).join(' · '),
   })
   sh.letterheadGrid([
     ['PROJECT', lh.project || '—', false], ['SHEET', sheet, true],

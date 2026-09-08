@@ -49,7 +49,10 @@ export const FOOT_Y = PAGE_H - 12                     // keep-clear line for the
 export interface StatCard { label: string; value: string; unit?: string }
 
 /** Width in mm the verdict chip reserves at the top right, plus its gutter. */
-export const TITLE_RESERVED_W = 56
+/** Width the verdict chip may take, mm — the title is fitted into what is
+ *  left. Widened from 56 when the chip started carrying a status sentence
+ *  rather than a two-word verdict. */
+export const TITLE_RESERVED_W = 72
 
 /**
  * Largest title size (pt) whose rendered width fits `avail`, by stepping down
@@ -258,16 +261,24 @@ export function createSheet(): Sheet {
         doc.text(truncateToWidth((t) => doc.getTextWidth(t), title, avail), M, s.y)
       }
       // verdict chip (top right)
+      //
+      // Sized to the label it carries: "DESIGN OK" and "DESIGN STATUS —
+      // ACCEPTABLE" are not the same width, and a fixed 52 mm clipped the
+      // second one mid-word. `TITLE_RESERVED_W` keeps the title clear of the
+      // widest of them.
       {
-        const w = 52, x = M + CONTENT_W - w, cy = s.y - 9
+        const label = verdictLabel ?? (ok ? 'DESIGN OK' : 'CHECK FAILED')
+        s.setF('sans', 'bold', 8.4, ok ? OK_FG : FAIL_FG)
+        const w = Math.min(TITLE_RESERVED_W - 4, Math.max(52, doc.getTextWidth(label) + 7))
+        const x = M + CONTENT_W - w, cy = s.y - 9
         doc.setFillColor(...(ok ? OK_BG : FAIL_BG))
         doc.setDrawColor(...(ok ? OK_EDGE : FAIL_EDGE))
         doc.setLineWidth(0.25)
-        doc.roundedRect(x, cy, w, 13, 1.6, 1.6, 'FD')
+        doc.roundedRect(x, cy, w, 14.6, 1.6, 1.6, 'FD')
         s.setF('sans', 'bold', 8.4, ok ? OK_FG : FAIL_FG)
-        doc.text(verdictLabel ?? (ok ? 'DESIGN OK' : 'CHECK FAILED'), x + 3.5, cy + 5.4, { charSpace: 0.2 })
+        doc.text(label, x + 3.5, cy + 5.4, { charSpace: 0.2 })
         s.setF('sans', 'normal', 5.6, ok ? [77, 122, 95] : [169, 91, 71])
-        doc.text(doc.splitTextToSize(governing, w - 7).slice(0, 2), x + 3.5, cy + 8.8)
+        doc.text(doc.splitTextToSize(governing, w - 7).slice(0, 3), x + 3.5, cy + 8.8)
       }
       s.y += 4.5
       let bx = M

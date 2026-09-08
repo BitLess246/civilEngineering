@@ -45,6 +45,9 @@ describe('availability — nothing is offered that was not run', () => {
   it('a bare model has only the model and loading sections', () => {
     expect(appendixAvailability(bare)).toEqual({
       model: true, loading: true, analysis: false, modal: false, nonlinear: false, pushover: false, optimization: false,
+      // H is about the MODEL, not about a result, so it is available from the
+      // moment there is a model to validate.
+      qa: true,
     })
   })
   it('every result switches its section on', () => {
@@ -58,7 +61,7 @@ describe('availability — nothing is offered that was not run', () => {
       expect(s.unavailable).toBeTruthy()
       expect(s.tables).toEqual([])
     }
-    expect(ap.sections.map((s) => s.letter)).toEqual(['A', 'B', 'C', 'D', 'E', 'F', 'G'])
+    expect(ap.sections.map((s) => s.letter)).toEqual(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'])
   })
 })
 
@@ -351,5 +354,57 @@ describe('the final-model consistency check', () => {
   it('is carried in the status table, so the report cannot omit it', () => {
     const checks = analysisStatus(full).map((r) => r.check)
     expect(checks).toContain('Design sections = analysis model')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// H · MODEL QA/QC — the checks that are about the MODEL rather than a result.
+// `validateMesh` has always run (it gates the solve) but it reported into the
+// editor and nowhere else, so a report could not say whether the model it was
+// built from was sound.
+// ─────────────────────────────────────────────────────────────────────────
+describe('H · model QA/QC', () => {
+  const qa = (input: AppendixInput = full) =>
+    buildAnalysisAppendix(input).sections.find((s) => s.key === 'qa')!
+
+  it('is available from the moment there is a model, and lists the rules by name', () => {
+    const s = qa(bare)
+    expect(s.available).toBe(true)
+    const v = s.tables.find((t) => t.title.startsWith('H.1'))!
+    expect(v).toBeDefined()
+    // a sound model says so with the counts it checked, not with a word
+    expect(v.rows[0]![3]).toMatch(/\d+ nodes, \d+ members/)
+  })
+
+  it('reports a real finding as a row, with its rule name and refs', () => {
+    const broken = { ...full, model: { ...model, loads: [...model.loads, { kind: 'member-udl' as const, member: 'ghost', w: 5, cat: 'D' as const }] } }
+    const v = qa(broken).tables.find((t) => t.title.startsWith('H.1'))!
+    const row = v.rows.find((r) => r[0] === 'load-missing-target')!
+    expect(row).toBeDefined()
+    expect(row[1]).toBe('ERROR')
+    expect(qa(broken).notes?.[0]).toContain('validation error')
+  })
+
+  it('says how many iterations a converged run actually took', () => {
+    const c = qa().tables.find((t) => t.title.startsWith('H.2'))
+    // the fixture runs a pushover, so there is at least one iterative run
+    expect(c).toBeDefined()
+    expect(c!.rows.some((r) => /Pushover/.test(r[0]!))).toBe(true)
+    // a run that does not iterate in that sense says so rather than inventing one
+    expect(c!.note).toMatch(/dash is a run that does not iterate/)
+  })
+
+  it('builds the compliance matrix FROM the status rows, so it cannot claim a check that never ran', () => {
+    const status = analysisStatus(full)
+    const m = qa().tables.find((t) => t.title.startsWith('H.3'))!
+    expect(m.rows).toHaveLength(status.length)
+    for (const r of status) {
+      const row = m.rows.find((x) => x[0] === r.check)!
+      expect(row[2]).toBe(r.verdict)
+    }
+    // NOT RUN survives into the matrix rather than becoming a pass
+    const bareM = qa(bare).tables.find((t) => t.title.startsWith('H.3'))!
+    expect(bareM.rows.some((r) => r[2] === 'NOT RUN')).toBe(true)
+    expect(bareM.rows.every((r) => r[2] !== 'PASS' || r[1] !== '—')).toBe(true)
   })
 })
