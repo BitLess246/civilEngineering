@@ -7,13 +7,31 @@
     <title>Civil Engineering</title>
     <!-- Google tag (gtag.js) — GA4. The initial load is counted by gtag('config')
          below; route changes inside the SPA are counted by usePageViews() in
-         src/lib/analytics.ts, which deliberately skips that first render. -->
+         src/lib/analytics.ts, which deliberately skips that first render.
+
+         THIS CALL IS THE ONE THAT SEES A CREDENTIAL. A Supabase sign-in comes
+         back through the URL (detectSessionInUrl), so a redirect lands here as
+         `#access_token=…` or `?code=…` — and this script runs in <head>, before
+         the bundle, before the auth client, before anything can strip it. So
+         page_location is set explicitly rather than left to gtag's default of
+         document.location.href. The list mirrors CREDENTIAL_PARAMS in
+         src/lib/analytics.ts, and a test asserts the two agree. -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-0QVMMMBZKX"></script>
     <script>
       window.dataLayer = window.dataLayer || []
       function gtag() { dataLayer.push(arguments) }
       gtag('js', new Date())
-      gtag('config', 'G-0QVMMMBZKX')
+      gtag('config', 'G-0QVMMMBZKX', {
+        page_location: (function () {
+          try {
+            var u = new URL(location.href)
+            u.hash = ''
+            var drop = ['access_token', 'refresh_token', 'provider_token', 'provider_refresh_token', 'id_token', 'code', 'token', 'token_hash']
+            for (var i = 0; i < drop.length; i++) u.searchParams.delete(drop[i])
+            return u.toString()
+          } catch (e) { return String(location.href).split(/[?#]/)[0] }
+        })(),
+      })
     </script>
   </head>
   <body>
