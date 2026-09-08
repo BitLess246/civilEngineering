@@ -475,3 +475,65 @@ describe('H · model QA/QC', () => {
     expect(bareM.rows.every((r) => r[2] !== 'PASS' || r[1] !== '—')).toBe(true)
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────
+// THE TABLES NEEDED A PICTURE TO BE READ AGAINST.
+//
+// The appendix was complete and unauditable: `c0.1.0` in a reaction table
+// means nothing until it can be found on a drawing of the structure, and an
+// envelope saying the peak moment is 97 kN·m says nothing about whether it is
+// where a moment belongs. A is the model, B is what was applied to it, C is
+// what came back.
+// ─────────────────────────────────────────────────────────────────────────
+describe('the figures', () => {
+  const ap = buildAnalysisAppendix(full)
+  const sec = (k: string) => ap.sections.find((s) => s.key === k)!
+  const captions = (k: string) => (sec(k).figures ?? []).map((f) => f.caption)
+
+  it('A opens with the analytical model, and asks for the room to letter it', () => {
+    const figs = sec('model').figures!
+    expect(figs).toHaveLength(1)
+    expect(figs[0].caption).toMatch(/^A\.1 Analytical model/)
+    // ids on a figure squeezed to the default 95 mm are unreadable, so this
+    // one claims a taller slot
+    expect(figs[0].maxH).toBeGreaterThan(95)
+    const t = figs[0].drawing.primitives
+      .flatMap((p) => (p.kind === 'text' ? [p.text] : []))
+    expect(t).toContain(model.nodes[0].id)
+    expect(t).toContain(model.members[0].id)
+  })
+
+  it('B draws one figure per load category the model carries, and none for the rest', () => {
+    const cats = [...new Set(model.loads.map((l) => l.cat))]
+    expect(captions('loading')).toHaveLength(cats.length)
+    for (const c of cats) expect(captions('loading').join(' ')).toContain(c)
+    // nothing invented: a category with no assignment gets no figure
+    expect(captions('loading').join(' ')).not.toMatch(/WIND/)
+  })
+
+  it('C draws the deflected shape, the reactions and the three force diagrams', () => {
+    const caps = captions('analysis')
+    expect(caps).toHaveLength(5)
+    expect(caps[0]).toMatch(/Deflected shape/)
+    expect(caps[1]).toMatch(/Support reactions/)
+    expect(caps.slice(2).join(' ')).toMatch(/Bending moment Mz/)
+    expect(caps.slice(2).join(' ')).toMatch(/Shear Vy/)
+    expect(caps.slice(2).join(' ')).toMatch(/Axial force N/)
+    // every one names the combination it belongs to — a diagram of an unnamed
+    // load case is not evidence of anything
+    const govName = analysis.perCombo[analysis.govIdx].combo.name
+    for (const c of caps) expect(c).toContain(govName)
+  })
+
+  it('C says the deflected shape is the element shape function, not the loaded shape', () => {
+    expect(captions('analysis')[0]).toMatch(/cubic shape function/)
+    expect(captions('analysis')[0]).toMatch(/not included/)
+  })
+
+  it('a model with no analysis carries no result figures at all', () => {
+    const ap2 = buildAnalysisAppendix(bare)
+    expect(ap2.sections.find((s) => s.key === 'analysis')!.figures).toBeUndefined()
+    // …but the model figure does not need an analysis to be drawn
+    expect(ap2.sections.find((s) => s.key === 'model')!.figures).toHaveLength(1)
+  })
+})

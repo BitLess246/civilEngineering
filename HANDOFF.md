@@ -467,10 +467,27 @@ findings and an explicit priority order. One PR per phase.
    deliberately does NOT rate RC beams on Mu/φMnMax, which is the singly-
    reinforced ceiling, not a D/C: reading it as one printed 1.38 beside a
    design the same page called SAFE.
-5. **Diagrams — OPEN.** Analytical model with node/member IDs and support
-   symbols; load-case diagrams (D, L, seismic X/Z, wind); deformed shape and
-   moment/shear/axial diagrams; mode shapes 1–3; nonlinear roof-displacement
-   and base-shear traces; pushover hinge locations and yield sequence.
+5. **Diagrams — 5a DONE, 5b open.** The appendix drew nothing: every result
+   in a table and no picture of the structure it belongs to.
+   **5a (this PR)** — new pure module `engine/analysisDiagram.ts`: a parallel
+   projection (isometric plus the three orthographic views, chosen per model by
+   `bestView`), an isotropic page fit, support symbols per fixity, and five
+   figure builders. Wired in as **A.1** the analytical model with node and
+   member ids and every support; **B.nf** one figure per load category the
+   model actually carries, arrows proportional to magnitude; and **C.5f–C.9f**
+   the deflected shape, the support reactions, and Mz / Vy / N over the whole
+   structure at one scale. Force ribbons come from `memberDiagram3d`, the same
+   builder the 3D viewport uses, so the PDF and the screen cannot disagree; the
+   deflected curve is each element's own cubic shape function, verified against
+   the cantilever closed form. Figures may now claim a taller slot
+   (`AppendixFigure.maxH`) — a model figure squeezed to 95 mm cannot be
+   lettered. Two painter bugs fell out of rendering it: a caption was split at
+   6 pt and drawn at whatever font the drawing left (so it ran past the right
+   margin), and the cursor advanced a flat 5 mm for a caption of any height.
+   **5b (next)** — mode shapes 1–3, the nonlinear roof-displacement and
+   base-shear traces with hinge status, and the pushover hinge locations and
+   yield sequence. All three are figures on results the engine already
+   produces, drawn with the same module.
 
 Also still open from the review: **item 15**, a design snapshot / version block
 (project ID, analysis ID, design version, model revision, engine version, model
